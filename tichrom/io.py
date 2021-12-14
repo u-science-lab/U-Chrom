@@ -1,5 +1,22 @@
+import io
+import gzip
 import pandas as pd
 import fire
+
+
+def open_file(path, mode="r"):
+    if path.endswith(".gz"):
+        mode += "b"
+        return io.TextIOWrapper(gzip.open(path, mode))
+    return open(path, mode)
+
+
+def read_pairs(path):
+    assert path.endswith(".pairs") or path.endswith(".pairs.gz")
+    with open_file(path) as f:
+        df = pd.read_csv(f, sep="\t", header=None)
+    df.columns = ["read", "chr1", "pos1", "chr2", "pos2", "strand1", "strand2"]
+    return df
 
 
 def read_particles(path):
@@ -54,7 +71,6 @@ def export_pdb_coords(file_path, particles, scale=1.0, extended=True):
     write(line_format % 'REMARK 210 Atom number increases every %s bases' % particle_size)
     write(line_format % 'REMARK 210 Residue code indicates chromosome')
     write(line_format % 'REMARK 210 Residue number represents which sequence Mb the atom is in')
-    write(line_format % 'REMARK 210 Chain letter is different every chromosome, where Chr1=a, Chr2=b etc.')
     
     if extended:
         file_obj.write(line_format % 'REMARK 210 Extended PDB format with particle seq. pos. in last column')
@@ -107,7 +123,7 @@ def export_pdb_coords(file_path, particles, scale=1.0, extended=True):
             a = 'C%d' % j
                 
             aName = '%-3s' % a
-            x, y, z = chrom_df[['x', 'y', 'z']].iloc[i] #XYZ coordinates
+            x, y, z = chrom_df[['x', 'y', 'z']].iloc[i]  #XYZ coordinates
              
             seqPrev = seqMb
             pos_chromo[c] = chromo
@@ -130,10 +146,21 @@ def export_pdb_coords(file_path, particles, scale=1.0, extended=True):
     file_obj.close()
 
 
-def particles_to_pdb(path_particles, path_pdb):
+def particles_to_pdb(path_particles, path_pdb, split_by_chrom=False):
     df = read_particles(path_particles)
-    export_pdb_coords(path_pdb, df)
+    if not split_by_chrom:
+        export_pdb_coords(path_pdb, df)
+    else:
+        from os.path import splitext
+        chroms = list(df['chrom'].unique())
+        prefix, suffix = splitext(path_pdb)
+        for chr in chroms:
+            path = f"{prefix}.{chr}.{suffix}"
+            sdf = df[df['chrom'] == chr]
+            export_pdb_coords(path, sdf)
 
 
 if __name__ == "__main__":
-    fire.Fire()
+    fire.Fire({
+        "particles_to_pdb": particles_to_pdb
+    })

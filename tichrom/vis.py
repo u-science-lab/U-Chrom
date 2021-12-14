@@ -64,8 +64,8 @@ def show_in_gui(df):
         window.show()
 
 
-def read_and_draw(path, arch="gpu"):
-    df = read_praticles(path)
+def read_and_draw(path, arch="vulkan"):
+    df = read_particles(path)
     ti.init(arch=getattr(ti, arch))
     show_in_gui(df)
 
