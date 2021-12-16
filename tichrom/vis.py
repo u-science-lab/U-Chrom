@@ -51,7 +51,7 @@ def show_in_gui(df):
     set_indices(indices, num_edge)
 
     def render():
-        camera.track_user_inputs(window, movement_speed=0.03, hold_key=ti.ui.LMB)
+        camera.track_user_inputs(window, movement_speed=0.1, hold_key=ti.ui.LMB)
         scene.set_camera(camera)
         scene.ambient_light((1.0, 1.0, 1.0))
         scene.point_light(pos=(10, 10, 10), color=(0.5, 0.5, 0.5))

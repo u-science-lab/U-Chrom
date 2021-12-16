@@ -41,24 +41,50 @@ def get_restraints(particles, contacts, prams, scale=1.0):
     return restraints
 
 
+@ti.func
+def calc_repulsive(pos, i, j, k1, d_lim, force) -> ti.f32:
+    diff = pos[j] - pos[i]
+    dist = diff.norm()
+    f = 0.0
+    if dist <= d_lim:
+        d = dist - d_lim
+        f = k1*d**2
+        for k in ti.static(range(3)):
+            f_ = f * diff[k]
+            force[i][k] += -f_
+            force[j][k] += f_
+    return f
+
+
 @ti.kernel
 def get_repulsive_force(force: ti.template(), pos: ti.template(), k1: ti.f32, d_lim: ti.f32) -> ti.f32:
     total = 0.0
     for i in range(0, pos.shape[0]-2):
         for j in range(i+2, pos.shape[0]):
-            pos_i = pos[i]
-            pos_j = pos[j]
-            diff = pos_j - pos_i
-            dist = diff.norm()
-            if dist > d_lim:
-                continue
-            d = dist - d_lim
-            f = k1*d**2
+            f = calc_repulsive(pos, i, j, k1, d_lim, force)
             total += f
-            for k in ti.static(range(3)):
-                f_ = f * diff[k]
-                force[i][k] += -f_
-                force[j][k] += f_
+    return total
+
+
+@ti.kernel
+def get_repulsive_force_with_grid(
+        force: ti.template(), pos: ti.template(), grid: ti.template(),
+        start: ti.f32, k1: ti.f32, d_lim: ti.f32) -> ti.f32:
+    total = 0.0
+    for i in pos:
+        I = [0, 0, 0]
+        for d in ti.static(range(3)):
+            I[d] = int((pos[i][d] - start) // d_lim)
+        for gi in range(max(0, I[0]-1), min(I[0]+2, grid.shape[0])):
+            for gj in range(max(0, I[1]-1), min(I[1]+2, grid.shape[1])):
+                for gk in range(max(0, I[2]-1), min(I[2]+2, grid.shape[2])):
+                    # iter over each element in cell
+                    for gl in range(ti.length(grid.parent(), [gi, gj, gk])):
+                        j = grid[gi, gj, gk, gl]
+                        if j < i + 1:
+                            continue
+                        f = calc_repulsive(pos, i, j, k1, d_lim, force)
+                        total += f
     return total
 
 
@@ -180,6 +206,29 @@ def update_vel(force: ti.template(), vel: ti.template(), accel: ti.template(), t
     return temp
 
 
+def init_grid(fb, prams):
+    """3D grid for fast neighbor search."""
+    s = prams['max_radius'] * prams['grid_range_scale']
+    range_ = (-s, s)
+    bin_num = int((range_[1] - range_[0]) // prams['repulsive_lim'])
+    grid = ti.field(ti.i32)
+    fb.dense(ti.ijk, bin_num).dynamic(ti.l, prams['cell_capacity']).place(grid)
+    return grid, range_
+
+
+@ti.kernel
+def pos_to_grid(
+        pos: ti.template(), grid: ti.template(),
+        capacity: ti.i32, d_lim: ti.f32, start: ti.f32, end: ti.f32):
+    for i in pos:
+        I = [0, 0, 0]
+        for d in ti.static(range(3)):
+            I[d] = int((pos[i][d] - start) // d_lim)
+        if ti.length(grid.parent(), I) == capacity:
+            print("[Warning] cell capacity is not engough!")
+        ti.append(grid.parent(), I, i)
+
+
 def run_dyn(particle_size, particles, restraints, prams):
     # init fields
     fb = ti.FieldsBuilder()
@@ -191,6 +240,8 @@ def run_dyn(particle_size, particles, restraints, prams):
     rest_idx = ti.Vector.field(3, ti.i32) # restraint pair, index and type(0: backbone, 1: contact)
     rest_dist = ti.Vector.field(2, ti.f32) # min and max restraint distance
     fb.dense(ti.i, restraints.shape[0]).place(rest_idx, rest_dist)
+    if prams['use_grid']:
+        grid, grid_range = init_grid(fb, prams)
     fb_snode_tree = fb.finalize()
     # load data into fields
     pos.from_numpy(particles[['x', 'y', 'z']].values)
@@ -213,7 +264,12 @@ def run_dyn(particle_size, particles, restraints, prams):
         temp = temp_start * np.exp(-decay * r)
         schedule.append((temp, k1))
         c_temp = update_motion(pos, force, vel, accel, prams['time_step'], temp)
-        t_rep = get_repulsive_force(force, pos, k1, prams['repulsive_lim'])
+        if prams['use_grid']:
+            pos_to_grid(pos, grid, prams['cell_capacity'], prams['repulsive_lim'], grid_range[0], grid_range[1])
+            t_rep = get_repulsive_force_with_grid(force, pos, grid, grid_range[0], k1, prams['repulsive_lim'])
+            grid.parent().deactivate_all()  # clear grid
+        else:
+            t_rep = get_repulsive_force(force, pos, k1, prams['repulsive_lim'])
         t_res = get_restraint_force(force, pos, rest_idx, rest_dist)
         c_temp = update_vel(force, vel, accel, prams['time_step'], temp)
         rmsd = get_rmsd(pos, rest_idx, rest_dist, rmsd_backbone, rmsd_contact)
@@ -236,7 +292,6 @@ default_prams = {
     "lower": 0.8,
     "upper": 1.2,
     "repulsive_lim": 2.0,
-    "max_radius": 10.0,
     "pow": -0.33,
     "hot": 5000.0,
     "cold": 10.0,
@@ -245,6 +300,10 @@ default_prams = {
     "random_seed": 0,
     "time_step": 0.001,
     "size_steps": [8, 4, 2, 0.4, 0.2, 0.1],
+    "use_grid": True,
+    "max_radius": 10.0,
+    "grid_range_scale": 2.0,
+    "cell_capacity": 10000,
 }
 
 
