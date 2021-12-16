@@ -182,14 +182,16 @@ def update_vel(force: ti.template(), vel: ti.template(), accel: ti.template(), t
 
 def run_dyn(particle_size, particles, restraints, prams):
     # init fields
+    fb = ti.FieldsBuilder()
     pos = ti.Vector.field(3, ti.f32)
     vel = ti.Vector.field(3, ti.f32)
     force = ti.Vector.field(3, ti.f32)
     accel = ti.Vector.field(3, ti.f32)
-    ti.root.dense(ti.i, particles.shape[0]).place(pos, force, vel, accel)
+    fb.dense(ti.i, particles.shape[0]).place(pos, force, vel, accel)
     rest_idx = ti.Vector.field(3, ti.i32) # restraint pair, index and type(0: backbone, 1: contact)
     rest_dist = ti.Vector.field(2, ti.f32) # min and max restraint distance
-    ti.root.dense(ti.i, restraints.shape[0]).place(rest_idx, rest_dist)
+    fb.dense(ti.i, restraints.shape[0]).place(rest_idx, rest_dist)
+    fb_snode_tree = fb.finalize()
     # load data into fields
     pos.from_numpy(particles[['x', 'y', 'z']].values)
     rest_idx.from_numpy(restraints[['a', 'b', 'type']].values)
@@ -223,6 +225,8 @@ def run_dyn(particle_size, particles, restraints, prams):
     particles[['x', 'y', 'z']] = pos.to_numpy()
     center = particles[['x', 'y', 'z']].mean(axis=0)
     particles[['x', 'y', 'z']] -= center  # shift center to (0,0,0)
+    # destroy all fields
+    fb_snode_tree.destroy()
     return particles
 
 
