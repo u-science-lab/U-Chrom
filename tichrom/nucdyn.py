@@ -56,113 +56,6 @@ def calc_repulsive(pos, i, j, k1, d_lim, force) -> ti.f32:
     return f
 
 
-@ti.kernel
-def get_repulsive_force(force: ti.template(), pos: ti.template(), k1: ti.f32, d_lim: ti.f32) -> ti.f32:
-    total = 0.0
-    for i in range(0, pos.shape[0]-2):
-        for j in range(i+2, pos.shape[0]):
-            f = calc_repulsive(pos, i, j, k1, d_lim, force)
-            total += f
-    return total
-
-
-@ti.kernel
-def get_repulsive_force_with_grid(
-        force: ti.template(), pos: ti.template(), grid: ti.template(),
-        start: ti.f32, k1: ti.f32, d_lim: ti.f32) -> ti.f32:
-    total = 0.0
-    for i in pos:
-        I = [0, 0, 0]
-        for d in ti.static(range(3)):
-            I[d] = int((pos[i][d] - start) // d_lim)
-        for gi in range(max(0, I[0]-1), min(I[0]+2, grid.shape[0])):
-            for gj in range(max(0, I[1]-1), min(I[1]+2, grid.shape[1])):
-                for gk in range(max(0, I[2]-1), min(I[2]+2, grid.shape[2])):
-                    # iter over each element in cell
-                    for gl in range(ti.length(grid.parent(), [gi, gj, gk])):
-                        j = grid[gi, gj, gk, gl]
-                        if j < i + 1:
-                            continue
-                        f = calc_repulsive(pos, i, j, k1, d_lim, force)
-                        total += f
-    return total
-
-
-@ti.kernel
-def get_restraint_force(
-        force: ti.template(), pos: ti.template(),
-        rest_idx: ti.template(), rest_dist: ti.template(),
-        ) -> ti.f32:
-    total = 0.0
-    k2 = 25.0
-    dist_switch = 0.5
-    asymptote = 1.0
-    exponent = 2.0
-
-    B = asymptote*(dist_switch**2) - exponent*(dist_switch**3)
-    A = dist_switch**2 - asymptote*dist_switch - B/dist_switch
-
-    for i in rest_idx:
-        a, b, tp = rest_idx[i]
-        d_min, d_max = rest_dist[i]
-        pos_a = pos[a]
-        pos_b = pos[b]
-        diff = pos_b - pos_a
-        dist = diff.norm()
-        f = 0.0
-        if dist < d_min:
-            d = d_min - dist
-            f = k2 * 2 * d
-            total += k2 * d * d
-        elif dist > d_max:
-            d = dist - d_max
-            if dist <= d_max + dist_switch:
-                f = - k2 * 2 * d
-                total += k2 * d * d
-            else:
-                f = - k2 * (A + asymptote*d + B/(d**2))
-                total += k2 * (A + asymptote*d + B/d)
-        else:
-            continue
-        for j in ti.static(range(3)):
-            f_ = diff[j] * f / dist
-            force[a][j] += -f_
-            force[b][j] += f_
-    return total
-
-
-@ti.kernel
-def get_rmsd(
-        pos: ti.template(), rest_idx: ti.template(), rest_dist: ti.template(),
-        rmsd_backbone: ti.template(), rmsd_contact: ti.template()) -> ti.f32:
-    total = 0.0
-    backbone = 0.0
-    contact = 0.0
-    for i in rest_idx:
-        a, b, tp = rest_idx[i]
-        d_min, d_max = rest_dist[i]
-        pos_a = pos[a]
-        pos_b = pos[b]
-        diff = pos_b - pos_a
-        dist = diff.norm()
-        viol = 0.0
-        if dist < d_min:
-            viol = d_min - dist
-        elif dist > d_max:
-            viol = dist - d_max
-        else:
-            continue
-        sq = viol * viol
-        if tp == 0:
-            backbone += sq
-        else:
-            contact += sq
-        total += sq
-    rmsd_backbone[None] = ti.sqrt(backbone/rest_idx.shape[0])
-    rmsd_contact[None] = ti.sqrt(contact/rest_idx.shape[0])
-    return ti.sqrt(total/rest_idx.shape[0])
-
-
 @ti.func
 def get_temp(vel):
     kin = 0.0
@@ -174,116 +67,237 @@ def get_temp(vel):
     return kin / (3 * n * BOLTZMANN_K)
 
 
-@ti.kernel
-def update_motion(
-        pos: ti.template(), force: ti.template(),
-        vel: ti.template(), accel: ti.template(),
-        time_step: ti.f32, temp_ref: ti.f32) -> ti.f32:
-    rt_step = 0.5 * time_step**2
-    temp = get_temp(vel)
-    temp = max(temp, 0.001)
-    beta = 10.0 / 20.458
-    r = beta * (temp_ref/temp - 1.0)
-    for i in range(force.shape[0]):
-        for j in ti.static(range(3)):
-            a = force[i][j] + r * vel[i][j]
-            pos[i][j] += time_step * vel[i][j] + rt_step * a
-            vel[i][j] += time_step * a
-            accel[i][j] = a
-            force[i][j] = 0.0
-    return temp
+@ti.data_oriented
+class Grid:
+    def __init__(self, max_radius, range_scale, d_lim, capacity):
+        """3D grid for fast neighbor search."""
+        self.capacity = capacity
+        self.bin_length = d_lim
+        s = max_radius * range_scale
+        self.range = r = (-s, s)
+        self.bin_num = int((r[1] - r[0]) // d_lim)
+
+    def init_data(self, fb):
+        self.data = ti.field(ti.i32)
+        fb.dense(ti.ijk, self.bin_num).dynamic(ti.l, capacity).place(grid)
+
+    @ti.kernel
+    def from_pos(self, pos: ti.template()):
+        for i in pos:
+            I = [0, 0, 0]
+            for d in ti.static(range(3)):
+                I[d] = int((pos[i][d] - start) // d_lim)
+            if ti.length(self.data.parent(), I) == capacity:
+                print("[Warning] cell capacity is not engough!")
+            ti.append(self.data.parent(), I, i)
+    
+    def clear(self):
+        self.data.parent().deactivate_all()  # clear grid
 
 
-@ti.kernel
-def update_vel(force: ti.template(), vel: ti.template(), accel: ti.template(), time_step: ti.f32, temp_ref: ti.f32) -> ti.f32:
-    temp = get_temp(vel)
-    temp = max(temp, 0.001)
-    beta = 10.0 / 20.458
-    r = beta * (temp_ref/temp - 1.0)
-    for i in range(force.shape[0]):
-        for j in ti.static(range(3)):
-            vel[i][j] += 0.5 + time_step * (force[i][j] + r * vel[i][j] - accel[i][j])
-    return temp
+@ti.data_oriented
+class Simulation:
+    def __init__(self, particles, particle_size, restraints, d_lim, time_step, grid=None):
+        self.particles = particles
+        self.particle_size = particle_size
+        self.d_lim = d_lim
+        self.time_step = time_step
+        self.grid = grid
+        self.schedule = []
+        # init fields
+        fb = ti.FieldsBuilder()
+        self.pos = ti.Vector.field(3, ti.f32)
+        self.vel = ti.Vector.field(3, ti.f32)
+        self.force = ti.Vector.field(3, ti.f32)
+        self.accel = ti.Vector.field(3, ti.f32)
+        fb.dense(ti.i, particles.shape[0]).place(self.pos, self.force, self.vel, self.accel)
+        self.rest_idx = ti.Vector.field(3, ti.i32) # restraint pair, index and type(0: backbone, 1: contact)
+        self.rest_dist = ti.Vector.field(2, ti.f32) # min and max restraint distance
+        fb.dense(ti.i, restraints.shape[0]).place(self.rest_idx, self.rest_dist)
+        if self.grid is not None:
+            self.grid.init_data(fb)
+        self.fb_snode_tree = fb.finalize()
+        # load data into fields
+        self.pos.from_numpy(particles[['x', 'y', 'z']].values)
+        self.rest_idx.from_numpy(restraints[['a', 'b', 'type']].values)
+        self.rest_dist.from_numpy(restraints[['d_min', 'd_max']].values)
+        # count value
+        self.rmsd_backbone = ti.field(ti.f32, shape=())
+        self.rmsd_contact = ti.field(ti.f32, shape=())
 
+    @ti.kernel
+    def get_repulsive_force(self, k1: ti.f32) -> ti.f32:
+        total = 0.0
+        d_lim = self.d_lim
+        for i in range(0, self.pos.shape[0]-2):
+            for j in range(i+2, self.pos.shape[0]):
+                f = calc_repulsive(self.pos, i, j, k1, d_lim, self.force)
+                total += f
+        return total
 
-def init_grid(fb, prams):
-    """3D grid for fast neighbor search."""
-    s = prams['max_radius'] * prams['grid_range_scale']
-    range_ = (-s, s)
-    bin_num = int((range_[1] - range_[0]) // prams['repulsive_lim'])
-    grid = ti.field(ti.i32)
-    fb.dense(ti.ijk, bin_num).dynamic(ti.l, prams['cell_capacity']).place(grid)
-    return grid, range_
+    @ti.kernel
+    def get_repulsive_force_with_grid(self, k1: ti.f32) -> ti.f32:
+        total = 0.0
+        start = self.grid.range[0]
+        d_lim = self.d_lim
+        grid = self.grid.data
+        for i in self.pos:
+            I = [0, 0, 0]
+            for d in ti.static(range(3)):
+                I[d] = int((self.pos[i][d] - start) // d_lim)
+            for gi in range(max(0, I[0]-1), min(I[0]+2, grid.shape[0])):
+                for gj in range(max(0, I[1]-1), min(I[1]+2, grid.shape[1])):
+                    for gk in range(max(0, I[2]-1), min(I[2]+2, grid.shape[2])):
+                        # iter over each element in cell
+                        for gl in range(ti.length(grid.parent(), [gi, gj, gk])):
+                            j = grid[gi, gj, gk, gl]
+                            if j < i + 1:
+                                continue
+                            f = calc_repulsive(self.pos, i, j, k1, d_lim, self.force)
+                            total += f
+        return total
 
+    @ti.kernel
+    def get_restraint_force(self) -> ti.f32:
+        total = 0.0
+        k2 = 25.0
+        dist_switch = 0.5
+        asymptote = 1.0
+        exponent = 2.0
 
-@ti.kernel
-def pos_to_grid(
-        pos: ti.template(), grid: ti.template(),
-        capacity: ti.i32, d_lim: ti.f32, start: ti.f32, end: ti.f32):
-    for i in pos:
-        I = [0, 0, 0]
-        for d in ti.static(range(3)):
-            I[d] = int((pos[i][d] - start) // d_lim)
-        if ti.length(grid.parent(), I) == capacity:
-            print("[Warning] cell capacity is not engough!")
-        ti.append(grid.parent(), I, i)
+        B = asymptote*(dist_switch**2) - exponent*(dist_switch**3)
+        A = dist_switch**2 - asymptote*dist_switch - B/dist_switch
 
+        for i in self.rest_idx:
+            a, b, tp = self.rest_idx[i]
+            d_min, d_max = self.rest_dist[i]
+            pos_a = self.pos[a]
+            pos_b = self.pos[b]
+            diff = pos_b - pos_a
+            dist = diff.norm()
+            f = 0.0
+            if dist < d_min:
+                d = d_min - dist
+                f = k2 * 2 * d
+                total += k2 * d * d
+            elif dist > d_max:
+                d = dist - d_max
+                if dist <= d_max + dist_switch:
+                    f = - k2 * 2 * d
+                    total += k2 * d * d
+                else:
+                    f = - k2 * (A + asymptote*d + B/(d**2))
+                    total += k2 * (A + asymptote*d + B/d)
+            else:
+                continue
+            for j in ti.static(range(3)):
+                f_ = diff[j] * f / dist
+                self.force[a][j] += -f_
+                self.force[b][j] += f_
+        return total
 
-def run_dyn(particle_size, particles, restraints, prams):
-    # init fields
-    fb = ti.FieldsBuilder()
-    pos = ti.Vector.field(3, ti.f32)
-    vel = ti.Vector.field(3, ti.f32)
-    force = ti.Vector.field(3, ti.f32)
-    accel = ti.Vector.field(3, ti.f32)
-    fb.dense(ti.i, particles.shape[0]).place(pos, force, vel, accel)
-    rest_idx = ti.Vector.field(3, ti.i32) # restraint pair, index and type(0: backbone, 1: contact)
-    rest_dist = ti.Vector.field(2, ti.f32) # min and max restraint distance
-    fb.dense(ti.i, restraints.shape[0]).place(rest_idx, rest_dist)
-    if prams['use_grid']:
-        grid, grid_range = init_grid(fb, prams)
-    fb_snode_tree = fb.finalize()
-    # load data into fields
-    pos.from_numpy(particles[['x', 'y', 'z']].values)
-    rest_idx.from_numpy(restraints[['a', 'b', 'type']].values)
-    rest_dist.from_numpy(restraints[['d_min', 'd_max']].values)
-    # count value
-    rmsd_backbone = ti.field(ti.f32, shape=())
-    rmsd_contact = ti.field(ti.f32, shape=())
-    # setup annealing schedule
-    num_steps = prams['dyns']
-    temp_start = prams['hot']
-    temp_end = prams['cold']
-    adj = 1.0 / np.arctan(10)
-    decay = np.log(temp_start / temp_end)
-    schedule = []
-    # simulation loop
-    for step in range(num_steps):
-        r = step / num_steps
-        k1 = float(0.5 + adj * np.arctan(r * 20.0 - 10.0) / np.pi)
-        temp = temp_start * np.exp(-decay * r)
-        schedule.append((temp, k1))
-        c_temp = update_motion(pos, force, vel, accel, prams['time_step'], temp)
-        if prams['use_grid']:
-            pos_to_grid(pos, grid, prams['cell_capacity'], prams['repulsive_lim'], grid_range[0], grid_range[1])
-            t_rep = get_repulsive_force_with_grid(force, pos, grid, grid_range[0], k1, prams['repulsive_lim'])
-            grid.parent().deactivate_all()  # clear grid
-        else:
-            t_rep = get_repulsive_force(force, pos, k1, prams['repulsive_lim'])
-        t_res = get_restraint_force(force, pos, rest_idx, rest_dist)
-        c_temp = update_vel(force, vel, accel, prams['time_step'], temp)
-        rmsd = get_rmsd(pos, rest_idx, rest_dist, rmsd_backbone, rmsd_contact)
+    @ti.kernel
+    def update_motion(self, temp_ref: ti.f32) -> ti.f32:
+        time_step = self.time_step
+        rt_step = 0.5 * time_step**2
+        temp = get_temp(self.vel)
+        temp = max(temp, 0.001)
+        beta = 10.0 / 20.458
+        r = beta * (temp_ref/temp - 1.0)
+        for i in range(self.force.shape[0]):
+            for j in ti.static(range(3)):
+                a = self.force[i][j] + r * self.vel[i][j]
+                self.pos[i][j] += time_step * self.vel[i][j] + rt_step * a
+                self.vel[i][j] += time_step * a
+                self.accel[i][j] = a
+                self.force[i][j] = 0.0
+        return temp
+
+    @ti.kernel
+    def update_vel(self, temp_ref: ti.f32) -> ti.f32:
+        time_step = self.time_step
+        temp = get_temp(self.vel)
+        temp = max(temp, 0.001)
+        beta = 10.0 / 20.458
+        r = beta * (temp_ref/temp - 1.0)
+        for i in range(self.force.shape[0]):
+            for j in ti.static(range(3)):
+                self.vel[i][j] += 0.5 + time_step * (self.force[i][j] + r * self.vel[i][j] - self.accel[i][j])
+        return temp
+
+    @ti.kernel
+    def get_rmsd(self) -> ti.f32:
+        total = 0.0
+        backbone = 0.0
+        contact = 0.0
+        for i in self.rest_idx:
+            a, b, tp = self.rest_idx[i]
+            d_min, d_max = self.rest_dist[i]
+            pos_a = self.pos[a]
+            pos_b = self.pos[b]
+            diff = pos_b - pos_a
+            dist = diff.norm()
+            viol = 0.0
+            if dist < d_min:
+                viol = d_min - dist
+            elif dist > d_max:
+                viol = dist - d_max
+            else:
+                continue
+            sq = viol * viol
+            if tp == 0:
+                backbone += sq
+            else:
+                contact += sq
+            total += sq
+        self.rmsd_backbone[None] = ti.sqrt(backbone/self.rest_idx.shape[0])
+        self.rmsd_contact[None] = ti.sqrt(contact/self.rest_idx.shape[0])
+        return ti.sqrt(total/self.rest_idx.shape[0])
+
+    def setup_schedule(self, num_steps, temp_start, temp_end):
+        schedule = []
+        adj = 1.0 / np.arctan(10)
+        decay = np.log(temp_start / temp_end)
+        for step in range(num_steps):
+            r = step / num_steps
+            k1 = float(0.5 + adj * np.arctan(r * 20.0 - 10.0) / np.pi)
+            temp = temp_start * np.exp(-decay * r)
+            schedule.append((temp, k1))
+        self.schedule = schedule
+
+    def log_step(self, step, **kwargs):
+        log_kw = {'total_force': kwargs.get("repulsive", 0) + kwargs.get("restraint", 0)}
+        log_kw.update(kwargs)
+        log_kw['rsmd_backbone'] = self.rmsd_backbone
+        log_kw['rsmd_contact'] = self.rmsd_contact
         print(f"-------------------- step:{step}")
-        print(f"temp:{temp} c_temp:{c_temp} k1:{k1} total_force:{t_rep+t_res} repulsive:{t_rep} restraint:{t_res} rmsd:{rmsd} rmsd_backbone:{rmsd_backbone} rmsd_contact:{rmsd_contact}")
-        rmsd_backbone[None] = 0.0
-        rmsd_contact[None] = 0.0
-    # results
-    particles[['x', 'y', 'z']] = pos.to_numpy()
-    center = particles[['x', 'y', 'z']].mean(axis=0)
-    particles[['x', 'y', 'z']] -= center  # shift center to (0,0,0)
-    # destroy all fields
-    fb_snode_tree.destroy()
-    return particles
+        print(" ".join([f"{k}:{v}" for k, v in log_kw.items()]))
+
+    def run(self):
+        for step, (temp, k1) in enumerate(self.schedule):
+            c_temp = self.update_motion(temp)
+            if self.grid:
+                self.grid.from_pos(self.pos)
+                t_rep = self.get_repulsive_force_with_grid(k1)
+                self.grid.clear()
+            else:
+                t_rep = self.get_repulsive_force(k1)
+            t_res = self.get_restraint_force()
+            c_temp = self.update_vel(temp)
+            rmsd = self.get_rmsd()
+            self.log_step(step, temp=temp, k1=k1, repulsive=t_rep, restraint=t_res, rmsd=rmsd)
+            self.rmsd_backbone[None] = 0.0
+            self.rmsd_contact[None] = 0.0
+
+    def get_results(self, shift_center=True):
+        self.particles[['x', 'y', 'z']] = self.pos.to_numpy()
+        if shift_center:
+            center = self.particles[['x', 'y', 'z']].mean(axis=0)
+            self.particles[['x', 'y', 'z']] -= center  # shift center to (0,0,0)
+        return self.particles
+
+    def destroy_fields(self):
+        self.fb_snode_tree.destroy()
 
 
 default_prams = {
@@ -295,10 +309,9 @@ default_prams = {
     "pow": -0.33,
     "hot": 5000.0,
     "cold": 10.0,
-    "temp_steps": 500,
     "dyns": 100,
     "random_seed": 0,
-    "time_step": 0.001,
+    "time_step": 0.01,
     "size_steps": [8, 4, 2, 0.4, 0.2, 0.1],
     "use_grid": True,
     "max_radius": 10.0,
@@ -314,16 +327,22 @@ def main(in_file, out_file, arch="gpu", **kwargs):
     print(prams)
     ti.init(arch=getattr(ti, arch))
     df = read_pairs(in_file)
+    print(f"num_pairs:{df.shape[0]}")
     Mb = 10**6
     particles = None
     for size in prams['size_steps']:
         particle_size = int(Mb * size)
-        print("====================")
         particles = create_particles(df, particle_size, prev_particles=particles, random_seed=prams['random_seed'], max_radius=prams['max_radius'])
-        print(f"particle_size:{particle_size} num_particles:{particles.shape[0]}")
         contacts = count_contacts(df, particles)
         restraints = get_restraints(particles, contacts, prams)
-        particles = run_dyn(particle_size, particles, restraints, prams)
+        print("====================")
+        print(f"particle_size:{particle_size} num_particles:{particles.shape[0]}")
+        print(f"num_contact:{contacts.shape[0]} num_restraints:{restraints.shape[0]}")
+        simu = Simulation(particles, particle_size, restraints, prams['repulsive_lim'], prams['time_step'])
+        simu.setup_schedule(prams['dyns'], prams['hot'], prams['cold'])
+        simu.run()
+        particles = simu.get_results()
+        simu.destroy_fields()
     particles.to_csv(out_file)
 
 
