@@ -69,40 +69,57 @@ def get_temp(vel):
 
 @ti.data_oriented
 class Grid:
-    def __init__(self, max_radius, range_scale, d_lim, capacity):
+    def __init__(self, max_radius, range_scale, bin_length, capacity):
         """3D grid for fast neighbor search."""
         self.capacity = capacity
-        self.bin_length = d_lim
+        self.bin_length = bin_length
         s = max_radius * range_scale
         self.range = r = (-s, s)
-        self.bin_num = int((r[1] - r[0]) // d_lim)
+        self.bin_num = int((r[1] - r[0]) // bin_length)
+        self.data = ti.field(ti.i32)
 
     def init_data(self, fb):
-        self.data = ti.field(ti.i32)
-        fb.dense(ti.ijk, self.bin_num).dynamic(ti.l, capacity).place(grid)
+        fb.dense(ti.ijk, self.bin_num).dynamic(ti.l, self.capacity).place(self.data)
 
     @ti.kernel
     def from_pos(self, pos: ti.template()):
+        start, d_lim, capacity, bin_num = ti.static(
+            self.range[0], self.bin_length, self.capacity, self.bin_num)
         for i in pos:
             I = [0, 0, 0]
             for d in ti.static(range(3)):
-                I[d] = int((pos[i][d] - start) // d_lim)
+                p = pos[i][d]
+                if p < start:
+                    print("[Warning] position exceed grid range(<). please increase grid_range_scale.")
+                ix = int((p - start) // d_lim)
+                if ix >= bin_num:
+                    print("[Warning] position exceed grid range(>). please increase grid_range_scale.")
+                I[d] = ix
             if ti.length(self.data.parent(), I) == capacity:
-                print("[Warning] cell capacity is not engough!")
+                print("[Warning] cell capacity is not engough! please increase cell_capacity.")
             ti.append(self.data.parent(), I, i)
-    
+
+    @ti.kernel
+    def print_cells_length(self):
+        for i, j, k in self.data.parent().parent():
+            len_ = ti.length(self.data.parent(), [i, j, k])
+            if len_ != 0:
+                print(i, j, k, len_)
+
     def clear(self):
         self.data.parent().deactivate_all()  # clear grid
 
 
 @ti.data_oriented
 class Simulation:
-    def __init__(self, particles, particle_size, restraints, d_lim, time_step, grid=None):
+    def __init__(
+            self, particles, particle_size, restraints, d_lim, time_step, grid, shift_freq):
         self.particles = particles
         self.particle_size = particle_size
         self.d_lim = d_lim
         self.time_step = time_step
         self.grid = grid
+        self.shift_freq = shift_freq
         self.schedule = []
         # init fields
         fb = ti.FieldsBuilder()
@@ -140,7 +157,7 @@ class Simulation:
         total = 0.0
         start = self.grid.range[0]
         d_lim = self.d_lim
-        grid = self.grid.data
+        grid = ti.static(self.grid.data)
         for i in self.pos:
             I = [0, 0, 0]
             for d in ti.static(range(3)):
@@ -254,6 +271,16 @@ class Simulation:
         self.rmsd_contact[None] = ti.sqrt(contact/self.rest_idx.shape[0])
         return ti.sqrt(total/self.rest_idx.shape[0])
 
+    @ti.kernel
+    def shift_to_center(self):
+        pos = ti.static(self.pos)
+        center = ti.Vector([0.0, 0.0, 0.0])
+        for i in pos:
+            center += pos[i]
+        center /= pos.shape[0]
+        for i in pos:
+            pos[i] -= center
+
     def setup_schedule(self, num_steps, temp_start, temp_end):
         schedule = []
         adj = 1.0 / np.arctan(10)
@@ -288,6 +315,8 @@ class Simulation:
             self.log_step(step, temp=temp, k1=k1, repulsive=t_rep, restraint=t_res, rmsd=rmsd)
             self.rmsd_backbone[None] = 0.0
             self.rmsd_contact[None] = 0.0
+            if ((step + 1) % self.shift_freq) == 0:
+                self.shift_to_center()
 
     def get_results(self, shift_center=True):
         self.particles[['x', 'y', 'z']] = self.pos.to_numpy()
@@ -309,23 +338,24 @@ default_prams = {
     "pow": -0.33,
     "hot": 5000.0,
     "cold": 10.0,
-    "dyns": 100,
+    "dyns": 500,
     "random_seed": 0,
     "time_step": 0.01,
     "size_steps": [8, 4, 2, 0.4, 0.2, 0.1],
-    "use_grid": True,
+    "use_grid": False,
     "max_radius": 10.0,
-    "grid_range_scale": 2.0,
+    "grid_range_scale": 5.0,
     "cell_capacity": 10000,
+    "shift_freq": 10,
 }
 
 
-def main(in_file, out_file, arch="gpu", **kwargs):
+def main(in_file, out_file, arch="gpu", device_memory_fraction=0.9, **kwargs):
     prams = copy(default_prams)
     prams.update(kwargs)
     print(in_file)
     print(prams)
-    ti.init(arch=getattr(ti, arch))
+    ti.init(arch=getattr(ti, arch), device_memory_fraction=device_memory_fraction)
     df = read_pairs(in_file)
     print(f"num_pairs:{df.shape[0]}")
     Mb = 10**6
@@ -338,7 +368,10 @@ def main(in_file, out_file, arch="gpu", **kwargs):
         print("====================")
         print(f"particle_size:{particle_size} num_particles:{particles.shape[0]}")
         print(f"num_contact:{contacts.shape[0]} num_restraints:{restraints.shape[0]}")
-        simu = Simulation(particles, particle_size, restraints, prams['repulsive_lim'], prams['time_step'])
+        grid = None
+        if prams['use_grid']:
+            grid = Grid(prams['max_radius'], prams['grid_range_scale'], prams['repulsive_lim'], prams['cell_capacity'])
+        simu = Simulation(particles, particle_size, restraints, prams['repulsive_lim'], prams['time_step'], grid, prams['shift_freq'])
         simu.setup_schedule(prams['dyns'], prams['hot'], prams['cold'])
         simu.run()
         particles = simu.get_results()
