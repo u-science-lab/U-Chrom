@@ -12,7 +12,7 @@ from .io import read_pairs
 def get_restraints(particles, contacts, prams, scale=1.0):
     chroms = set(particles['chrom'].unique())
     restraints = []
-    # backbone restraints
+    # backbone
     for chr in chroms:
         sub_df = particles[particles['chrom'] == chr]
         if sub_df.shape[0] < 3: # skip short chrom
@@ -26,7 +26,7 @@ def get_restraints(particles, contacts, prams, scale=1.0):
             'd_min': prams['bb_lower'],
             'd_max': prams['bb_upper'],
         }))
-    # contact restraints
+    # contact
     d_target = (contacts['count'] * scale) ** prams['pow']
     d_lower = d_target * prams['lower']
     d_upper = d_target * prams['upper']

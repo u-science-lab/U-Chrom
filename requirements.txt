@@ -1,3 +1,5 @@
 taichi
 fire
 pandas
+vispy
+PyQt5
