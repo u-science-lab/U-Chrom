@@ -1,4 +1,6 @@
 import random
+import os.path as osp
+from PyQt5 import QtGui
 
 import numpy as np
 from vispy import scene, app
@@ -12,11 +14,14 @@ setapi("QString", 2)
 import PyQt5
 from PyQt5 import QtCore
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QDoubleSpinBox, QMainWindow, QSpinBox, QWidget, QLabel, 
+from PyQt5.QtWidgets import (QAction, QDoubleSpinBox, QFileDialog, QMainWindow, QMenu, QMenuBar, QSpinBox, QWidget, QLabel, 
                              QGridLayout, QVBoxLayout, QCheckBox,
                              QSplitter)
 
 from ..io import read_particles
+
+
+HERE = osp.dirname(osp.abspath(__file__))
 
 # Provide automatic signal function selection for PyQtX/PySide2
 pyqtsignal = QtCore.pyqtSignal if hasattr(QtCore, 'pyqtSignal') else QtCore.Signal
@@ -124,7 +129,28 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.props)
         splitter.addWidget(self.canvas.native)
         self.setCentralWidget(splitter)
+        self.setWindowIcon(QtGui.QIcon(osp.join(HERE, 'nucbox.svg')))
 
+        self._create_actions()
+        self._create_menubar()
+        self._connect_events()
+
+        self.chr_colormap = {}
+        self.chroms = []
+
+    def _create_actions(self):
+        self.open_action = QAction("&Open...", self)
+
+    def _create_menubar(self):
+        menubar = QMenuBar(self)
+        file_menu = QMenu("&File", self)
+        file_menu.addAction(self.open_action)
+        menubar.addMenu(file_menu)
+        help_menu = QMenu("&Help", self)
+        menubar.addMenu(help_menu)
+        self.setMenuBar(menubar)
+
+    def _connect_events(self):
         self.props.signal_show_model.connect(self.on_toggle_show_model)
         self.props.signal_show_axis.connect(self.on_toggle_show_axis)
         self.props.signal_width.connect(self.on_width_changed)
@@ -132,9 +158,19 @@ class MainWindow(QMainWindow):
         self.props.signal_show_label.connect(self.on_toggle_show_label)
         self.props.signal_label_font_size.connect(self.on_label_size_changed)
         self.props.signal_label_shift.connect(self.on_label_shift_changed)
+        self.open_action.triggered.connect(self.open_file_dialog)
 
-        self.chr_colormap = {}
-        self.chroms = []
+    def open_file_dialog(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        path, _ = QFileDialog.getOpenFileName(self, "Open", "", "All Files (*);;CSV Files(*.csv)", options=options)
+        if path:
+            print(path)
+            df = read_particles(path)
+            self.load_model(df)
+            self.canvas.remove_model()
+            self.canvas.remove_label()
+            self.draw_model()
 
     def draw_model(self):
         self.canvas.draw_model(self.df, self.chr_colormap)
@@ -244,6 +280,7 @@ class Canvas(scene.SceneCanvas):
             label = scene.visuals.Text(chrom, color=c, parent=self.view.scene, bold=bold)
             label.pos = tuple(label_pos)
             label.font_size = font_size
+            label.set_gl_state(depth_test=True)
             labels.append(label)
         self.labels = labels
 
@@ -255,6 +292,12 @@ class Canvas(scene.SceneCanvas):
         for o in self.lines:
             o.parent = None
         self.lines = []
+
+    def remove_label(self):
+        for o in self.labels:
+            o.parent = None
+        self.labels = []
+        self.label_ori_pos = []
 
 
 def read_and_show(path):
