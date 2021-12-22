@@ -1,4 +1,6 @@
 import random
+
+import numpy as np
 from vispy import scene, app
 from vispy.color import Color
 import fire
@@ -27,20 +29,23 @@ def random_color():
 class ObjectWidget(QWidget):
     signal_show_model = pyqtsignal(name='show_model')
     signal_show_axis = pyqtsignal(name='show_axis')
-    signal_width = pyqtsignal(name="width")
+    signal_width = pyqtsignal(name='width')
     signal_opacity = pyqtsignal(name='opacity')
+    signal_show_label = pyqtsignal(name='show_label')
+    signal_label_font_size = pyqtsignal(name="label_font_size")
+    signal_label_shift = pyqtsignal(name="label_shift")
 
     def __init__(self, parent=None):
         super(ObjectWidget, self).__init__(parent)
+
+        l_show_axis = QLabel("Show axis")
+        self.show_axis_ckbox = QCheckBox()
+        self.show_axis_ckbox.toggled.connect(self.signal_show_axis)
 
         l_show_model = QLabel("Show model")
         self.show_model_ckbox = QCheckBox()
         self.show_model_ckbox.setChecked(True)
         self.show_model_ckbox.toggled.connect(self.signal_show_model)
-
-        l_show_axis = QLabel("Show axis")
-        self.show_axis_ckbox = QCheckBox()
-        self.show_axis_ckbox.toggled.connect(self.signal_show_axis)
 
         l_width = QLabel("Width")
         self.width_control = QSpinBox()
@@ -55,16 +60,42 @@ class ObjectWidget(QWidget):
         self.opacity_control.setSingleStep(0.1)
         self.opacity_control.setValue(1.0)
         self.opacity_control.valueChanged.connect(self.signal_opacity)
+ 
+        l_show_label = QLabel("Show label")
+        self.show_label_ckbox = QCheckBox()
+        self.show_label_ckbox.toggled.connect(self.signal_show_label)
+
+        l_label_size = QLabel("Label size")
+        self.label_size_control = QSpinBox()
+        self.label_size_control.setMaximum(10000)
+        self.label_size_control.setMinimum(1)
+        self.label_size_control.setSingleStep(100)
+        self.label_size_control.setValue(1000)
+        self.label_size_control.valueChanged.connect(self.signal_label_font_size)
+
+        l_label_shift = QLabel("Label shift")
+        self.label_shift_control = QDoubleSpinBox()
+        self.label_shift_control.setMaximum(1.0)
+        self.label_shift_control.setMinimum(-1.0)
+        self.label_shift_control.setSingleStep(0.01)
+        self.label_shift_control.setValue(0.05)
+        self.label_shift_control.valueChanged.connect(self.signal_label_shift)
 
         gbox = QGridLayout()
-        gbox.addWidget(l_show_model, 0, 0)
-        gbox.addWidget(self.show_model_ckbox, 0, 1)
-        gbox.addWidget(l_show_axis, 1, 0)
-        gbox.addWidget(self.show_axis_ckbox, 1, 1)
+        gbox.addWidget(l_show_axis, 0, 0)
+        gbox.addWidget(self.show_axis_ckbox, 0, 1)
+        gbox.addWidget(l_show_model, 1, 0)
+        gbox.addWidget(self.show_model_ckbox, 1, 1)
         gbox.addWidget(l_width, 2, 0)
         gbox.addWidget(self.width_control, 2, 1)
         gbox.addWidget(l_opacity, 3, 0)
         gbox.addWidget(self.opacity_control, 3, 1)
+        gbox.addWidget(l_show_label, 4, 0)
+        gbox.addWidget(self.show_label_ckbox, 4, 1)
+        gbox.addWidget(l_label_size, 5, 0)
+        gbox.addWidget(self.label_size_control, 5, 1)
+        gbox.addWidget(l_label_shift, 6, 0)
+        gbox.addWidget(self.label_shift_control, 6, 1)
 
         vbox = QVBoxLayout()
         vbox.addLayout(gbox)
@@ -77,7 +108,7 @@ class ObjectWidget(QWidget):
 
 class MainWindow(QMainWindow):
 
-    def __init__(self, path):
+    def __init__(self):
         QMainWindow.__init__(self)
 
         self.resize(700, 500)
@@ -98,6 +129,9 @@ class MainWindow(QMainWindow):
         self.props.signal_show_axis.connect(self.on_toggle_show_axis)
         self.props.signal_width.connect(self.on_width_changed)
         self.props.signal_opacity.connect(self.on_opacity_changed)
+        self.props.signal_show_label.connect(self.on_toggle_show_label)
+        self.props.signal_label_font_size.connect(self.on_label_size_changed)
+        self.props.signal_label_shift.connect(self.on_label_shift_changed)
 
         self.chr_colormap = {}
         self.chroms = []
@@ -105,6 +139,7 @@ class MainWindow(QMainWindow):
     def draw_model(self):
         self.canvas.draw_model(self.df, self.chr_colormap)
         self.canvas.set_model_props('visible', False)
+        self.canvas.draw_label(self.df, color=self.chr_colormap)
         self.update_view()
 
     def update_view(self):
@@ -112,6 +147,23 @@ class MainWindow(QMainWindow):
         self.on_toggle_show_axis()
         self.on_width_changed()
         self.on_opacity_changed()
+        self.on_toggle_show_label()
+        self.on_label_size_changed()
+        self.on_label_shift_changed()
+
+    def on_label_shift_changed(self):
+        val = self.props.label_shift_control.value()
+        for i, l in enumerate(self.canvas.labels):
+            ori = self.canvas.label_ori_pos[i]
+            l.pos = ori * (1+val)
+
+    def on_label_size_changed(self):
+        val = self.props.label_size_control.value()
+        self.canvas.set_label_props('font_size', val)
+
+    def on_toggle_show_label(self):
+        val = self.props.show_label_ckbox.isChecked()
+        self.canvas.set_label_props('visible', val)
 
     def on_opacity_changed(self):
         val = self.props.opacity_control.value()
@@ -151,6 +203,8 @@ class Canvas(scene.SceneCanvas):
         self.view.camera.distance = 50
 
         self.lines = []
+        self.labels = []
+        self.label_ori_pos = []
 
         # Add a 3D axis to keep us oriented
         self.axis = scene.visuals.XYZAxis(parent=self.view.scene)
@@ -168,20 +222,45 @@ class Canvas(scene.SceneCanvas):
             lines.append(line)
         self.lines = lines
 
+    def set_model_props(self, key, val):
+        for o in self.lines:
+            setattr(o, key, val)
+
+    def draw_label(self, df, shift_factor=0.05, color="#ff0000", font_size=400, bold=True):
+        labels = []
+        for chrom in df['chrom'].unique():
+            sdf = df[df['chrom'] == chrom]
+            pos = sdf[['x', 'y', 'z']].values
+            center = pos.mean(axis=0)
+            norm = np.sqrt(sum([(pos[:, i]-center[i])**2 for i in range(3)]))
+            max_norm_ix = np.argmax(norm)
+            max_norm_pos = pos[max_norm_ix]
+            self.label_ori_pos.append(max_norm_pos)
+            label_pos = max_norm_pos * (1 + shift_factor)
+            if isinstance(color, dict):
+                c = color.get(chrom, "#ff0000")
+            else:
+                c = color
+            label = scene.visuals.Text(chrom, color=c, parent=self.view.scene, bold=bold)
+            label.pos = tuple(label_pos)
+            label.font_size = font_size
+            labels.append(label)
+        self.labels = labels
+
+    def set_label_props(self, key, val):
+        for o in self.labels:
+            setattr(o, key, val)
+
     def remove_model(self):
         for o in self.lines:
             o.parent = None
         self.lines = []
 
-    def set_model_props(self, key, val):
-        for o in self.lines:
-            setattr(o, key, val)
-
 
 def read_and_show(path):
     df = read_particles(path)
     qapp = PyQt5.QtWidgets.QApplication(["1"])
-    win = MainWindow(path)
+    win = MainWindow()
     win.load_model(df)
     win.draw_model()
     win.show()
