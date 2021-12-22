@@ -312,7 +312,7 @@ class Simulation:
             t_res = self.get_restraint_force()
             c_temp = self.update_vel(temp)
             rmsd = self.get_rmsd()
-            self.log_step(step, temp=temp, k1=k1, repulsive=t_rep, restraint=t_res, rmsd=rmsd)
+            self.log_step(step, temp=temp, c_temp=c_temp, k1=k1, repulsive=t_rep, restraint=t_res, rmsd=rmsd)
             self.rmsd_backbone[None] = 0.0
             self.rmsd_contact[None] = 0.0
             if ((step + 1) % self.shift_freq) == 0:
