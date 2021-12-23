@@ -7,10 +7,6 @@ from vispy import scene, app
 from vispy.color import Color
 import fire
 
-from sip import setapi
-setapi("QVariant", 2)
-setapi("QString", 2)
-
 import PyQt5
 from PyQt5 import QtCore
 from PyQt5.QtCore import Qt
@@ -113,30 +109,34 @@ class ObjectWidget(QWidget):
 
 class MainWindow(QMainWindow):
 
-    def __init__(self):
+    def __init__(self, canvas_only=False):
         QMainWindow.__init__(self)
 
         self.resize(700, 500)
         self.setWindowTitle('NucBrowser')
 
-        splitter = QSplitter(Qt.Horizontal)
+        self.splitter = QSplitter(Qt.Horizontal)
 
         self.canvas = Canvas()
         self.canvas.create_native()
         self.canvas.native.setParent(self)
 
         self.props = ObjectWidget()
-        splitter.addWidget(self.props)
-        splitter.addWidget(self.canvas.native)
-        self.setCentralWidget(splitter)
+        self.splitter.addWidget(self.canvas.native)
+        self.setCentralWidget(self.splitter)
         self.setWindowIcon(QtGui.QIcon(osp.join(HERE, 'nucbox.svg')))
 
-        self._create_actions()
-        self._create_menubar()
-        self._connect_events()
+        if not canvas_only:
+            self.add_widgets()
 
         self.chr_colormap = {}
         self.chroms = []
+
+    def add_widgets(self):
+        self.splitter.addWidget(self.props)
+        self._create_actions()
+        self._create_menubar()
+        self._connect_events()
 
     def _create_actions(self):
         self.open_action = QAction("&Open...", self)
@@ -225,6 +225,12 @@ class MainWindow(QMainWindow):
         for c in chroms:
             if c not in self.chr_colormap:
                 self.chr_colormap[c] = random_color()
+
+    def adjust_camera(self, factor=2.0):
+        pos = self.df[['x', 'y', 'z']].values
+        norm = np.sqrt(sum([(pos[:, i])**2 for i in range(3)]))
+        max_norm = np.max(norm)
+        self.canvas.view.camera.distance = max_norm * factor
 
 
 class Canvas(scene.SceneCanvas):

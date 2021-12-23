@@ -113,13 +113,15 @@ class Grid:
 @ti.data_oriented
 class Simulation:
     def __init__(
-            self, particles, particle_size, restraints, d_lim, time_step, grid, shift_freq):
+            self, particles, particle_size, restraints, d_lim, time_step,
+            grid=None, shift_freq=1, step_callback=None):
         self.particles = particles
         self.particle_size = particle_size
         self.d_lim = d_lim
         self.time_step = time_step
         self.grid = grid
         self.shift_freq = shift_freq
+        self.step_callback = step_callback
         self.schedule = []
         # init fields
         fb = ti.FieldsBuilder()
@@ -317,6 +319,8 @@ class Simulation:
             self.rmsd_contact[None] = 0.0
             if ((step + 1) % self.shift_freq) == 0:
                 self.shift_to_center()
+            if self.step_callback:
+                self.step_callback(self, step)
 
     def get_results(self, shift_center=True):
         self.particles[['x', 'y', 'z']] = self.pos.to_numpy()
@@ -350,7 +354,11 @@ default_prams = {
 }
 
 
-def main(in_file, out_file, arch="gpu", device_memory_fraction=0.9, **kwargs):
+def main(
+        in_file, out_file,
+        arch="gpu", device_memory_fraction=0.9,
+        show_step_in_gui=False, show_freq=100,
+        **kwargs):
     prams = copy(default_prams)
     prams.update(kwargs)
     print(in_file)
@@ -358,6 +366,21 @@ def main(in_file, out_file, arch="gpu", device_memory_fraction=0.9, **kwargs):
     ti.init(arch=getattr(ti, arch), device_memory_fraction=device_memory_fraction)
     df = read_pairs(in_file)
     print(f"num_pairs:{df.shape[0]}")
+    step_callback = None
+    if show_step_in_gui:
+        from .gui.vis import MainWindow, PyQt5
+        qapp = PyQt5.QtWidgets.QApplication(["1"])
+        win = MainWindow(canvas_only=True)
+        win.show()
+        def step_callback(simu, step):
+            if step % show_freq != 0: return
+            df = simu.get_results()
+            win.load_model(df)
+            win.canvas.remove_label()
+            win.canvas.remove_model()
+            win.draw_model()
+            win.adjust_camera()
+            qapp.processEvents()
     Mb = 10**6
     particles = None
     for size in prams['size_steps']:
@@ -371,12 +394,16 @@ def main(in_file, out_file, arch="gpu", device_memory_fraction=0.9, **kwargs):
         grid = None
         if prams['use_grid']:
             grid = Grid(prams['max_radius'], prams['grid_range_scale'], prams['repulsive_lim'], prams['cell_capacity'])
-        simu = Simulation(particles, particle_size, restraints, prams['repulsive_lim'], prams['time_step'], grid, prams['shift_freq'])
+        simu = Simulation(particles, particle_size, restraints, prams['repulsive_lim'], prams['time_step'], grid, prams['shift_freq'], step_callback)
         simu.setup_schedule(prams['dyns'], prams['hot'], prams['cold'])
         simu.run()
         particles = simu.get_results()
         simu.destroy_fields()
     particles.to_csv(out_file)
+    if show_step_in_gui:
+        print("Run visualization GUI")
+        win.add_widgets()
+        qapp.exec()
 
 
 if __name__ == "__main__":
