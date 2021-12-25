@@ -14,8 +14,10 @@ def open_file(path, mode="r"):
 def read_pairs(path):
     assert path.endswith(".pairs") or path.endswith(".pairs.gz")
     with open_file(path) as f:
-        df = pd.read_csv(f, sep="\t", header=None)
-    df.columns = ["read", "chr1", "pos1", "chr2", "pos2", "strand1", "strand2"]
+        df = pd.read_csv(f, sep="\t", header=None, comment="#")
+    columns = ["read", "chr1", "pos1", "chr2", "pos2", "strand1", "strand2"]
+    df = df.iloc[:, :len(columns)]
+    df.columns = columns
     return df
 
 

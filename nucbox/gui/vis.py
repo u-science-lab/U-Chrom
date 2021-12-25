@@ -1,7 +1,8 @@
 import random
 import os.path as osp
-from PyQt5 import QtGui
 
+from PyQt5 import QtGui
+import pandas as pd
 import numpy as np
 from vispy import scene, app
 from vispy.color import Color
@@ -10,7 +11,7 @@ import fire
 import PyQt5
 from PyQt5 import QtCore
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QAction, QDoubleSpinBox, QFileDialog, QMainWindow, QMenu, QMenuBar, QSpinBox, QWidget, QLabel, 
+from PyQt5.QtWidgets import (QAction, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLineEdit, QMainWindow, QMenu, QMenuBar, QPushButton, QSpinBox, QTextBrowser, QWidget, QLabel, 
                              QGridLayout, QVBoxLayout, QCheckBox,
                              QSplitter)
 
@@ -35,6 +36,7 @@ class ObjectWidget(QWidget):
     signal_show_label = pyqtsignal(name='show_label')
     signal_label_font_size = pyqtsignal(name="label_font_size")
     signal_label_shift = pyqtsignal(name="label_shift")
+    signal_show_only = pyqtsignal(name="show_only")
 
     def __init__(self, parent=None):
         super(ObjectWidget, self).__init__(parent)
@@ -82,6 +84,10 @@ class ObjectWidget(QWidget):
         self.label_shift_control.setValue(0.05)
         self.label_shift_control.valueChanged.connect(self.signal_label_shift)
 
+        l_show_only = QLabel("Show only")
+        self.show_only_btn = QPushButton("Edit")
+        self.show_only_btn.clicked.connect(self.signal_show_only)
+
         gbox = QGridLayout()
         gbox.addWidget(l_show_axis, 0, 0)
         gbox.addWidget(self.show_axis_ckbox, 0, 1)
@@ -97,6 +103,8 @@ class ObjectWidget(QWidget):
         gbox.addWidget(self.label_size_control, 5, 1)
         gbox.addWidget(l_label_shift, 6, 0)
         gbox.addWidget(self.label_shift_control, 6, 1)
+        gbox.addWidget(l_show_only, 7, 0)
+        gbox.addWidget(self.show_only_btn, 7, 1)
 
         vbox = QVBoxLayout()
         vbox.addLayout(gbox)
@@ -111,6 +119,9 @@ class MainWindow(QMainWindow):
 
     def __init__(self, canvas_only=False):
         QMainWindow.__init__(self)
+
+        self.chr_colormap = {}
+        self.chroms = []
 
         self.resize(700, 500)
         self.setWindowTitle('NucBrowser')
@@ -129,11 +140,9 @@ class MainWindow(QMainWindow):
         if not canvas_only:
             self.add_widgets()
 
-        self.chr_colormap = {}
-        self.chroms = []
-
     def add_widgets(self):
         self.splitter.addWidget(self.props)
+        self.show_only_ranges = RangeList("Show only ranges", self.chroms)
         self._create_actions()
         self._create_menubar()
         self._connect_events()
@@ -159,6 +168,25 @@ class MainWindow(QMainWindow):
         self.props.signal_label_font_size.connect(self.on_label_size_changed)
         self.props.signal_label_shift.connect(self.on_label_shift_changed)
         self.open_action.triggered.connect(self.open_file_dialog)
+        self.props.signal_show_only.connect(self.open_show_only)
+        self.show_only_ranges.signal_item_changed.connect(self.on_show_only_ranges_changed)
+
+    def on_show_only_ranges_changed(self):
+        ranges = self.show_only_ranges.ranges
+        self.remove()
+        df = self.df
+        if len(ranges) == 0:
+            self.draw(df)
+        else:
+            sub_dfs = []
+            for gr in ranges:
+                sdf = df[(df['chrom'] == gr.chr) & (df['start'] >= gr.start) & (df['end'] <= gr.end)]
+                sub_dfs.append(sdf)
+            df_ = pd.concat(sub_dfs)
+            self.draw(df_)
+
+    def open_show_only(self):
+        self.show_only_ranges.show()
 
     def open_file_dialog(self):
         options = QFileDialog.Options()
@@ -168,15 +196,20 @@ class MainWindow(QMainWindow):
             print(path)
             df = read_particles(path)
             self.load_model(df)
-            self.canvas.remove_model()
-            self.canvas.remove_label()
-            self.draw_model()
+            self.remove()
+            self.draw()
 
-    def draw_model(self):
-        self.canvas.draw_model(self.df, self.chr_colormap)
-        self.canvas.set_model_props('visible', False)
-        self.canvas.draw_label(self.df, color=self.chr_colormap)
-        self.update_view()
+    def draw(self, df=None):
+        if df is None:
+            df = self.df
+        self.canvas.draw_model(df, self.chr_colormap)
+        self.on_toggle_show_model()
+        self.canvas.draw_label(df, color=self.chr_colormap)
+        self.on_toggle_show_label()
+
+    def remove(self):
+        self.canvas.remove_model()
+        self.canvas.remove_label()
 
     def update_view(self):
         self.on_toggle_show_model()
@@ -208,7 +241,7 @@ class MainWindow(QMainWindow):
     def on_width_changed(self):
         self.canvas.remove_model()
         width = self.props.width_control.value()
-        self.canvas.draw_model(self.df, self.chr_colormap, width=width)
+        self.canvas.draw_model(self.canvas.df, self.chr_colormap, width=width)
         self.on_opacity_changed()
 
     def on_toggle_show_model(self):
@@ -221,8 +254,10 @@ class MainWindow(QMainWindow):
 
     def load_model(self, df):
         self.df = df
-        self.chroms = chroms = list(df['chrom'].unique())
-        for c in chroms:
+        self.chroms.clear()
+        for chr in list(df['chrom'].unique()):
+            self.chroms.append(chr)
+        for c in self.chroms:
             if c not in self.chr_colormap:
                 self.chr_colormap[c] = random_color()
 
@@ -239,6 +274,7 @@ class Canvas(scene.SceneCanvas):
         scene.SceneCanvas.__init__(self, keys=None)
         self.size = 800, 600
         self.unfreeze()
+        self.df = None
         self.view = self.central_widget.add_view()
         self.view.bgcolor = "#000000"
         self.view.camera = 'turntable'
@@ -255,14 +291,13 @@ class Canvas(scene.SceneCanvas):
         self.freeze()
 
     def draw_model(self, df, chr_colormap, **props):
-        lines = []
+        self.df = df
         for chrom in chr_colormap.keys():
             sdf = df[df['chrom'] == chrom]
             pos = sdf[['x', 'y', 'z']].values
             color = chr_colormap.get(chrom, "#888888")
             line = scene.visuals.Line(pos=pos, parent=self.view.scene, color=Color(color), **props)
-            lines.append(line)
-        self.lines = lines
+            self.lines.append(line)
 
     def set_model_props(self, key, val):
         for o in self.lines:
@@ -297,7 +332,7 @@ class Canvas(scene.SceneCanvas):
     def remove_model(self):
         for o in self.lines:
             o.parent = None
-        self.lines = []
+        self.lines.clear()
 
     def remove_label(self):
         for o in self.labels:
@@ -306,12 +341,107 @@ class Canvas(scene.SceneCanvas):
         self.label_ori_pos = []
 
 
+class GenomeRange(object):
+    SUPER_MAX = 100000000000000000000
+
+    def __init__(self, chr, start=0, end=SUPER_MAX):
+        self.chr = chr
+        if (start is not None) and (end is not None):
+            self.start = int(start)
+            self.end = int(end)
+            assert self.end > self.start >= 0
+
+    @staticmethod
+    def parse_text(text, valid_chr_names=None):
+        if ":" in text:
+            assert "-" in text
+            tp1 = text.split(":")
+            chr = tp1[0]
+            start, end = tp1[1].split("-")
+            gr = GenomeRange(chr, start, end)
+        else:
+            gr = GenomeRange(text)
+        if valid_chr_names is not None:
+            assert gr.chr in valid_chr_names
+        return gr
+
+    def __str__(self):
+        return f"{self.chr}:{self.start}-{self.end}"
+
+    def __repr__(self):
+        return f"GenomeRange({str(self)})"
+
+    def __hash__(self):
+        return hash(str(self))
+
+    def __eq__(self, other):
+        return str(self) == str(other)
+
+    def __gt__(self, other):
+        return (self.start > other.start) and (self.end > other.end)
+
+    def __lt__(self, other):
+        return (self.start < other.start) and (self.end < other.end)
+
+
+class RangeList(QWidget):
+
+    signal_item_changed = pyqtsignal(name="item_changed")
+
+    def __init__(self, title, chr_names=None):
+        super().__init__()
+        self.title = title
+        self.init_UI()
+        self.ranges = set()
+        self.chr_names = chr_names
+
+    def init_UI(self):
+        l = QLabel("Input genome range, like: chr1:10000-200000 press Enter")
+        self.le = QLineEdit()
+        self.le.returnPressed.connect(self.append)
+        self.add_btn = QPushButton("Add")
+        self.add_btn.pressed.connect(self.append)
+        add_hbox = QHBoxLayout()
+        add_hbox.addWidget(self.le, stretch=2)
+        add_hbox.addWidget(self.add_btn, stretch=1)
+        self.tb = QTextBrowser()
+        self.tb.textChanged.connect(self.signal_item_changed)
+        self.clear_btn = QPushButton("Clear")
+        self.clear_btn.pressed.connect(self.clear)
+        vbox = QVBoxLayout()
+        vbox.addWidget(l, 0)
+        vbox.addLayout(add_hbox, 1)
+        vbox.addWidget(self.tb, 2)
+        vbox.addWidget(self.clear_btn, 3)
+        self.setLayout(vbox)
+        self.setWindowTitle(self.title)
+        self.setGeometry(300, 300, 300, 300)
+
+    def append(self):
+        text = self.le.text()
+        try:
+            gr = GenomeRange.parse_text(text, self.chr_names)
+            if gr not in self.ranges:
+                self.ranges.add(gr)
+                self.tb.append(str(gr))
+                self.le.setStyleSheet("")
+        except Exception as e:
+            print(f"{text} is not a valid genome range")
+            print(str(e))
+            self.le.setStyleSheet("border: 1px solid red;")
+
+    def clear(self):
+        self.ranges.clear()
+        self.tb.clear()
+
+
 def read_and_show(path):
     df = read_particles(path)
     qapp = PyQt5.QtWidgets.QApplication(["1"])
     win = MainWindow()
     win.load_model(df)
-    win.draw_model()
+    win.draw()
+    win.update_view()
     win.show()
     app.run()
 

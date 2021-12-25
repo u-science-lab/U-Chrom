@@ -378,7 +378,7 @@ def main(
             win.load_model(df)
             win.canvas.remove_label()
             win.canvas.remove_model()
-            win.draw_model()
+            win.draw()
             win.adjust_camera()
             qapp.processEvents()
     Mb = 10**6
