@@ -26,6 +26,12 @@ def read_particles(path):
     return df
 
 
+def read_3dg(path):
+    df = pd.read_csv(path, sep="\t", comment="#", header=None)
+    df.columns = ["chrom", "start", "x", 'y', 'z']
+    return df
+
+
 def export_pdb_coords(file_path, particles, scale=1.0, extended=True):
     """
     Write chromosome particle coordinates as a PDB format file
@@ -126,6 +132,8 @@ def export_pdb_coords(file_path, particles, scale=1.0, extended=True):
                 
             aName = '%-3s' % a
             x, y, z = chrom_df[['x', 'y', 'z']].iloc[i]  #XYZ coordinates
+            if scale != 1.0:
+                x, y, z = [v*scale for v in [x, y, z]]
              
             seqPrev = seqMb
             pos_chromo[c] = chromo

@@ -182,7 +182,7 @@ class MainWindow(QMainWindow):
             for gr in ranges:
                 sdf = df[(df['chrom'] == gr.chr) & (df['start'] >= gr.start) & (df['end'] <= gr.end)]
                 sub_dfs.append(sdf)
-            df_ = pd.concat(sub_dfs)
+            df_ = pd.concat(sub_dfs).sort_values(by="start")
             self.draw(df_)
 
     def open_show_only(self):
@@ -294,10 +294,27 @@ class Canvas(scene.SceneCanvas):
         self.df = df
         for chrom in chr_colormap.keys():
             sdf = df[df['chrom'] == chrom]
+            if sdf.shape[0] <= 1:
+                continue
             pos = sdf[['x', 'y', 'z']].values
             color = chr_colormap.get(chrom, "#888888")
-            line = scene.visuals.Line(pos=pos, parent=self.view.scene, color=Color(color), **props)
-            self.lines.append(line)
+            # calculate breaks
+            first_row = sdf.iloc[0, :]
+            bin_size = first_row['end'] - first_row['start']
+            starts = sdf['start'].values
+            diff = starts[1:] - starts[:-1]
+            breaks = np.where(diff > (bin_size+10))[0] + 1
+            def draw_line(p):
+                line = scene.visuals.Line(pos=p, parent=self.view.scene, color=Color(color), **props)
+                self.lines.append(line)
+            if breaks.shape[0] <= 0:
+                draw_line(pos)
+            else:
+                ob = 0
+                for b in list(breaks) + [pos.shape[0]]:
+                    s_pos = pos[ob:b]
+                    draw_line(s_pos)
+                    ob = b
 
     def set_model_props(self, key, val):
         for o in self.lines:
