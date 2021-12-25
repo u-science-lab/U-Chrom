@@ -176,14 +176,20 @@ class MainWindow(QMainWindow):
         self.remove()
         df = self.df
         if len(ranges) == 0:
-            self.draw(df)
+            df_ = df
+        elif self.show_only_ranges.reverse_ck.isChecked():
+            ix = np.full(df.shape[0], True)
+            for gr in ranges:
+                sdf = df[(df['chrom'] == gr.chr) & (df['start'] >= gr.start) & (df['end'] <= gr.end)]
+                ix[sdf.index] = False
+            df_ = df[ix]
         else:
             sub_dfs = []
             for gr in ranges:
                 sdf = df[(df['chrom'] == gr.chr) & (df['start'] >= gr.start) & (df['end'] <= gr.end)]
                 sub_dfs.append(sdf)
             df_ = pd.concat(sub_dfs).sort_values(by="start")
-            self.draw(df_)
+        self.draw(df_)
 
     def open_show_only(self):
         self.show_only_ranges.show()
@@ -413,7 +419,13 @@ class RangeList(QWidget):
         self.chr_names = chr_names
 
     def init_UI(self):
-        l = QLabel("Input genome range, like: chr1:10000-200000 press Enter")
+        l_reverse = QLabel("Reverse mode: not show the selected regions")
+        self.reverse_ck = QCheckBox()
+        self.reverse_ck.toggled.connect(self.signal_item_changed)
+        reverse_hbox = QHBoxLayout()
+        reverse_hbox.addWidget(l_reverse)
+        reverse_hbox.addWidget(self.reverse_ck)
+        l = QLabel("Input genome range, like: chr1:10000-200000")
         self.le = QLineEdit()
         self.le.returnPressed.connect(self.append)
         self.add_btn = QPushButton("Add")
@@ -429,7 +441,8 @@ class RangeList(QWidget):
         vbox.addWidget(l, 0)
         vbox.addLayout(add_hbox, 1)
         vbox.addWidget(self.tb, 2)
-        vbox.addWidget(self.clear_btn, 3)
+        vbox.addLayout(reverse_hbox, 3)
+        vbox.addWidget(self.clear_btn, 4)
         self.setLayout(vbox)
         self.setWindowTitle(self.title)
         self.setGeometry(300, 300, 300, 300)
