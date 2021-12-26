@@ -184,6 +184,21 @@ class MainWindow(QMainWindow):
         style = self.props.model_style_select.currentText()
         self.canvas.remove_model()
         self.canvas.draw_model(style=style)
+        if style == 'line':
+            self.props.width_control.setMaximum(20.0)
+            self.props.width_control.setMinimum(1.0)
+            self.props.width_control.setSingleStep(1.0)
+            self.props.width_control.setValue(1.0)
+        elif style == 'points':
+            self.props.width_control.setMaximum(2.0)
+            self.props.width_control.setMinimum(0)
+            self.props.width_control.setSingleStep(0.1)
+            self.props.width_control.setValue(0.5)
+        elif style == 'tube':
+            self.props.width_control.setMaximum(2.0)
+            self.props.width_control.setMinimum(0)
+            self.props.width_control.setSingleStep(0.05)
+            self.props.width_control.setValue(0.1)
 
     def on_show_only_ranges_changed(self):
         ranges = self.show_only_ranges.ranges
@@ -232,6 +247,7 @@ class MainWindow(QMainWindow):
         self.on_toggle_show_label()
 
     def update_view(self):
+        self.on_model_style_change()
         self.on_toggle_show_model()
         self.on_toggle_show_axis()
         self.on_width_changed()
