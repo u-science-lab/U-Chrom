@@ -11,7 +11,7 @@ import fire
 import PyQt5
 from PyQt5 import QtCore
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QAction, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLineEdit, QMainWindow, QMenu, QMenuBar, QPushButton, QSpinBox, QTextBrowser, QWidget, QLabel, 
+from PyQt5.QtWidgets import (QAction, QComboBox, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLineEdit, QMainWindow, QMenu, QMenuBar, QPushButton, QSpinBox, QTextBrowser, QWidget, QLabel, 
                              QGridLayout, QVBoxLayout, QCheckBox,
                              QSplitter)
 
@@ -37,6 +37,7 @@ class ObjectWidget(QWidget):
     signal_label_font_size = pyqtsignal(name="label_font_size")
     signal_label_shift = pyqtsignal(name="label_shift")
     signal_show_only = pyqtsignal(name="show_only")
+    signal_change_style = pyqtsignal(name="change_style")
 
     def __init__(self, parent=None):
         super(ObjectWidget, self).__init__(parent)
@@ -50,17 +51,26 @@ class ObjectWidget(QWidget):
         self.show_model_ckbox.setChecked(True)
         self.show_model_ckbox.toggled.connect(self.signal_show_model)
 
-        l_width = QLabel("Width")
-        self.width_control = QSpinBox()
-        self.width_control.setMaximum(10)
-        self.width_control.setMinimum(1)
+        l_style = QLabel("Model style")
+        self.model_style_select = QComboBox()
+        self.model_style_select.addItem("line")
+        self.model_style_select.addItem("points")
+        self.model_style_select.addItem("tube")
+        self.model_style_select.currentIndexChanged.connect(self.signal_change_style)
+
+        l_width = QLabel("Width/Radius")
+        self.width_control = QDoubleSpinBox()
+        self.width_control.setMaximum(10.0)
+        self.width_control.setMinimum(0.0)
+        self.width_control.setSingleStep(0.2)
+        self.width_control.setValue(1.0)
         self.width_control.valueChanged.connect(self.signal_width)
         
         l_opacity = QLabel("Opacity")
         self.opacity_control = QDoubleSpinBox()
         self.opacity_control.setMaximum(1.0)
         self.opacity_control.setMinimum(0.0)
-        self.opacity_control.setSingleStep(0.1)
+        self.opacity_control.setSingleStep(0.05)
         self.opacity_control.setValue(1.0)
         self.opacity_control.valueChanged.connect(self.signal_opacity)
  
@@ -89,22 +99,20 @@ class ObjectWidget(QWidget):
         self.show_only_btn.clicked.connect(self.signal_show_only)
 
         gbox = QGridLayout()
-        gbox.addWidget(l_show_axis, 0, 0)
-        gbox.addWidget(self.show_axis_ckbox, 0, 1)
-        gbox.addWidget(l_show_model, 1, 0)
-        gbox.addWidget(self.show_model_ckbox, 1, 1)
-        gbox.addWidget(l_width, 2, 0)
-        gbox.addWidget(self.width_control, 2, 1)
-        gbox.addWidget(l_opacity, 3, 0)
-        gbox.addWidget(self.opacity_control, 3, 1)
-        gbox.addWidget(l_show_label, 4, 0)
-        gbox.addWidget(self.show_label_ckbox, 4, 1)
-        gbox.addWidget(l_label_size, 5, 0)
-        gbox.addWidget(self.label_size_control, 5, 1)
-        gbox.addWidget(l_label_shift, 6, 0)
-        gbox.addWidget(self.label_shift_control, 6, 1)
-        gbox.addWidget(l_show_only, 7, 0)
-        gbox.addWidget(self.show_only_btn, 7, 1)
+        layout_table = [
+            [l_show_axis, self.show_axis_ckbox],
+            [l_show_model, self.show_model_ckbox],
+            [l_style, self.model_style_select],
+            [l_width, self.width_control],
+            [l_opacity, self.opacity_control],
+            [l_show_label, self.show_label_ckbox],
+            [l_label_size, self.label_size_control],
+            [l_label_shift, self.label_shift_control],
+            [l_show_only, self.show_only_btn],
+        ]
+        for i, row in enumerate(layout_table):
+            for j, _obj in enumerate(row):
+                gbox.addWidget(_obj, i, j)
 
         vbox = QVBoxLayout()
         vbox.addLayout(gbox)
@@ -170,10 +178,15 @@ class MainWindow(QMainWindow):
         self.open_action.triggered.connect(self.open_file_dialog)
         self.props.signal_show_only.connect(self.open_show_only)
         self.show_only_ranges.signal_item_changed.connect(self.on_show_only_ranges_changed)
+        self.props.signal_change_style.connect(self.on_model_style_change)
+
+    def on_model_style_change(self):
+        style = self.props.model_style_select.currentText()
+        self.canvas.remove_model()
+        self.canvas.draw_model(style=style)
 
     def on_show_only_ranges_changed(self):
         ranges = self.show_only_ranges.ranges
-        self.remove()
         df = self.df
         if len(ranges) == 0:
             df_ = df
@@ -189,7 +202,7 @@ class MainWindow(QMainWindow):
                 sdf = df[(df['chrom'] == gr.chr) & (df['start'] >= gr.start) & (df['end'] <= gr.end)]
                 sub_dfs.append(sdf)
             df_ = pd.concat(sub_dfs).sort_values(by="start")
-        self.draw(df_)
+        self.on_data_changed(df_)
 
     def open_show_only(self):
         self.show_only_ranges.show()
@@ -202,20 +215,21 @@ class MainWindow(QMainWindow):
             print(path)
             df = read_particles(path)
             self.load_model(df)
-            self.remove()
-            self.draw()
+            self.on_data_changed(df=df)
 
-    def draw(self, df=None):
+    def init_draw(self):
+        self.canvas.remove_model()
+        self.canvas.draw_model(df=self.df, chr_colormap=self.chr_colormap, style='line', width=1)
+
+    def on_data_changed(self, df=None):
         if df is None:
             df = self.df
-        self.canvas.draw_model(df, self.chr_colormap)
+        self.canvas.remove_model()
+        self.canvas.remove_label()
+        self.canvas.draw_model(df=df)
         self.on_toggle_show_model()
         self.canvas.draw_label(df, color=self.chr_colormap)
         self.on_toggle_show_label()
-
-    def remove(self):
-        self.canvas.remove_model()
-        self.canvas.remove_label()
 
     def update_view(self):
         self.on_toggle_show_model()
@@ -245,10 +259,15 @@ class MainWindow(QMainWindow):
         self.canvas.set_model_props('opacity', val)
 
     def on_width_changed(self):
-        self.canvas.remove_model()
+        style = self.props.model_style_select.currentText()
         width = self.props.width_control.value()
-        self.canvas.draw_model(self.canvas.df, self.chr_colormap, width=width)
-        self.on_opacity_changed()
+        for l in self.canvas.lines:
+            if style == "line":
+                l.set_data(width=width)
+            else:
+                self.canvas.remove_model()
+                self.canvas.draw_model(width=width)
+                self.on_opacity_changed()
 
     def on_toggle_show_model(self):
         val = self.props.show_model_ckbox.isChecked()
@@ -280,7 +299,7 @@ class Canvas(scene.SceneCanvas):
         scene.SceneCanvas.__init__(self, keys=None)
         self.size = 800, 600
         self.unfreeze()
-        self.df = None
+        self.cache_props = {}
         self.view = self.central_widget.add_view()
         self.view.bgcolor = "#000000"
         self.view.camera = 'turntable'
@@ -296,8 +315,11 @@ class Canvas(scene.SceneCanvas):
 
         self.freeze()
 
-    def draw_model(self, df, chr_colormap, **props):
-        self.df = df
+    def draw_model(self, **props):
+        if len(props) != 0:
+            self.cache_props.update(props)
+        props = self.cache_props
+        df, chr_colormap, width, style = props['df'], props['chr_colormap'], props['width'], props['style']
         for chrom in chr_colormap.keys():
             sdf = df[df['chrom'] == chrom]
             if sdf.shape[0] <= 1:
@@ -311,7 +333,15 @@ class Canvas(scene.SceneCanvas):
             diff = starts[1:] - starts[:-1]
             breaks = np.where(diff > (bin_size+10))[0] + 1
             def draw_line(p):
-                line = scene.visuals.Line(pos=p, parent=self.view.scene, color=Color(color), **props)
+                if style == 'points':
+                    line = scene.visuals.Markers(
+                        pos=p, parent=self.view.scene, size=width,
+                        face_color=Color(color), edge_width=0, spherical=True, scaling=True)
+                elif style == 'tube':
+                    radius = width / 2
+                    line = scene.visuals.Tube(points=p, parent=self.view.scene, color=Color(color), radius=radius)
+                else:
+                    line = scene.visuals.Line(pos=p, parent=self.view.scene, color=Color(color), width=width)
                 self.lines.append(line)
             if breaks.shape[0] <= 0:
                 draw_line(pos)
@@ -470,7 +500,7 @@ def read_and_show(path):
     qapp = PyQt5.QtWidgets.QApplication(["1"])
     win = MainWindow()
     win.load_model(df)
-    win.draw()
+    win.init_draw()
     win.update_view()
     win.show()
     app.run()

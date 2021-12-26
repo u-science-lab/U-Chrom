@@ -372,13 +372,19 @@ def main(
         qapp = PyQt5.QtWidgets.QApplication(["1"])
         win = MainWindow(canvas_only=True)
         win.show()
+        init_drawed = False
         def step_callback(simu, step):
             if step % show_freq != 0: return
             df = simu.get_results()
             win.load_model(df)
             win.canvas.remove_label()
             win.canvas.remove_model()
-            win.draw()
+            nonlocal init_drawed
+            if init_drawed:
+                win.on_data_changed()
+            else:
+                win.init_draw()
+                init_drawed = True
             win.adjust_camera()
             qapp.processEvents()
     Mb = 10**6
