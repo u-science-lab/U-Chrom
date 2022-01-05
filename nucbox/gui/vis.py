@@ -136,17 +136,42 @@ class MainWindow(QMainWindow):
 
         self.splitter = QSplitter(Qt.Horizontal)
 
-        self.canvas = Canvas()
-        self.canvas.create_native()
-        self.canvas.native.setParent(self)
+        self.canvas_grid = []
+        self.vsps = []
+        self.canvas_grid_widget = QSplitter(Qt.Horizontal)
+        self.current_ix = [0, -1]
+        self.canvas = None
+        self.add_canvas('h')
 
-        self.props = ObjectWidget()
-        self.splitter.addWidget(self.canvas.native)
+        self.splitter.addWidget(self.canvas_grid_widget)
         self.setCentralWidget(self.splitter)
         self.setWindowIcon(QtGui.QIcon(osp.join(HERE, 'nucbox.svg')))
-
+        self.props = ObjectWidget()
         if not canvas_only:
             self.add_widgets()
+
+    def add_canvas(self, orientation='h'):
+        canvas = Canvas()
+        canvas.create_native()
+        canvas.native.setParent(self)
+        self.canvas = canvas
+        ix = self.current_ix
+        if orientation == 'h':
+            vsp = QSplitter(Qt.Vertical)
+            vsp.addWidget(canvas.native)
+            self.canvas_grid.append([canvas])
+            self.canvas_grid_widget.addWidget(vsp)
+            self.vsps.append(vsp)
+            ix[1] = len(self.canvas_grid) - 1
+        elif orientation == 'v':
+            vsp = self.vsps[ix[1]]
+            vsp.addWidget(canvas.native)
+            col = self.canvas_grid[ix[1]]
+            col.append(canvas)
+            ix[0] = len(col) - 1
+        else:
+            raise ValueError(f"orientation expect 'h' or 'v', got {orientation}")
+        self.current_ix = ix
 
     def add_widgets(self):
         self.splitter.addWidget(self.props)
@@ -156,13 +181,19 @@ class MainWindow(QMainWindow):
         self._connect_events()
 
     def _create_actions(self):
-        self.open_action = QAction("&Open...", self)
+        self.action_open = QAction("&Open...", self)
+        self.action_add_canvas_hor = QAction("&Add canvas(right)", self)
+        self.action_add_canvas_ver = QAction("&Add canvas(below)", self)
 
     def _create_menubar(self):
         menubar = QMenuBar(self)
         file_menu = QMenu("&File", self)
-        file_menu.addAction(self.open_action)
+        file_menu.addAction(self.action_open)
         menubar.addMenu(file_menu)
+        edit_menu = QMenu("&Edit", self)
+        edit_menu.addAction(self.action_add_canvas_hor)
+        edit_menu.addAction(self.action_add_canvas_ver)
+        menubar.addMenu(edit_menu)
         help_menu = QMenu("&Help", self)
         menubar.addMenu(help_menu)
         self.setMenuBar(menubar)
@@ -175,10 +206,18 @@ class MainWindow(QMainWindow):
         self.props.signal_show_label.connect(self.on_toggle_show_label)
         self.props.signal_label_font_size.connect(self.on_label_size_changed)
         self.props.signal_label_shift.connect(self.on_label_shift_changed)
-        self.open_action.triggered.connect(self.open_file_dialog)
+        self.action_open.triggered.connect(self.open_file_dialog)
         self.props.signal_show_only.connect(self.open_show_only)
         self.show_only_ranges.signal_item_changed.connect(self.on_show_only_ranges_changed)
         self.props.signal_change_style.connect(self.on_model_style_change)
+        self.action_add_canvas_hor.triggered.connect(self.add_canvas_hor)
+        self.action_add_canvas_ver.triggered.connect(self.add_canvas_ver)
+
+    def add_canvas_hor(self):
+        self.add_canvas('h')
+
+    def add_canvas_ver(self):
+        self.add_canvas('v')
 
     def on_model_style_change(self):
         style = self.props.model_style_select.currentText()
@@ -230,11 +269,13 @@ class MainWindow(QMainWindow):
             print(path)
             df = read_particles(path)
             self.load_model(df)
-            self.on_data_changed(df=df)
+            self.init_draw()
+            self.update_view()
 
     def init_draw(self):
         self.canvas.remove_model()
         self.canvas.draw_model(df=self.df, chr_colormap=self.chr_colormap, style='line', width=1)
+        self.canvas.draw_label(self.df, color=self.chr_colormap)
 
     def on_data_changed(self, df=None):
         if df is None:
@@ -311,10 +352,11 @@ class MainWindow(QMainWindow):
 
 class Canvas(scene.SceneCanvas):
 
-    def __init__(self):
+    def __init__(self, grid_ix=None):
         scene.SceneCanvas.__init__(self, keys=None)
         self.size = 800, 600
         self.unfreeze()
+        self.grid_ix = grid_ix
         self.cache_props = {}
         self.view = self.central_widget.add_view()
         self.view.bgcolor = "#000000"
