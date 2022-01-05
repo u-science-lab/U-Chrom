@@ -1,5 +1,7 @@
 import random
+import itertools
 import os.path as osp
+from copy import copy
 
 from PyQt5 import QtGui
 import pandas as pd
@@ -154,6 +156,7 @@ class MainWindow(QMainWindow):
         canvas = Canvas()
         canvas.create_native()
         canvas.native.setParent(self)
+        canvas.view.events.mouse_press.connect(self.change_current_canvas)
         self.canvas = canvas
         ix = self.current_ix
         if orientation == 'h':
@@ -171,7 +174,30 @@ class MainWindow(QMainWindow):
             ix[0] = len(col) - 1
         else:
             raise ValueError(f"orientation expect 'h' or 'v', got {orientation}")
+        canvas.info['grid_ix'] = copy(ix)
         self.current_ix = ix
+        self.update_canvas_border_color()
+
+    def change_current_canvas(self, event):
+        canvas = event.source.canvas
+        self.current_ix = canvas.info['grid_ix']
+        self.canvas = canvas
+        self.update_canvas_border_color()
+        try:
+            self.props.model_style_select.setCurrentText(self.canvas.cache_props['style'])
+            self.props.width_control.setValue(self.canvas.cache_props['width'])
+        except:
+            pass
+
+    def update_canvas_border_color(self):
+        if (len(self.canvas_grid) == 1) and (len(self.canvas_grid[0]) == 1):
+            return
+        for canvas in itertools.chain.from_iterable(self.canvas_grid):
+            if canvas is self.canvas:
+                c = Color("#ff0000")
+            else:
+                c = Color("#000000")
+            canvas.view.border_color = c
 
     def add_widgets(self):
         self.splitter.addWidget(self.props)
@@ -352,11 +378,11 @@ class MainWindow(QMainWindow):
 
 class Canvas(scene.SceneCanvas):
 
-    def __init__(self, grid_ix=None):
+    def __init__(self):
         scene.SceneCanvas.__init__(self, keys=None)
         self.size = 800, 600
         self.unfreeze()
-        self.grid_ix = grid_ix
+        self.info = {}
         self.cache_props = {}
         self.view = self.central_widget.add_view()
         self.view.bgcolor = "#000000"
@@ -377,7 +403,11 @@ class Canvas(scene.SceneCanvas):
         if len(props) != 0:
             self.cache_props.update(props)
         props = self.cache_props
-        df, chr_colormap, width, style = props['df'], props['chr_colormap'], props['width'], props['style']
+        try:
+            df, chr_colormap, width, style = props['df'], props['chr_colormap'], props['width'], props['style']
+        except Exception as e:
+            print(repr(e))
+            return
         for chrom in chr_colormap.keys():
             sdf = df[df['chrom'] == chrom]
             if sdf.shape[0] <= 1:
