@@ -141,7 +141,7 @@ class MainWindow(QMainWindow):
         self.canvas_grid = []
         self.vsps = []
         self.canvas_grid_widget = QSplitter(Qt.Horizontal)
-        self.current_ix = [0, -1]
+        self.current_ix = (0, -1)
         self.canvas = None
         self.add_canvas('h')
 
@@ -165,16 +165,16 @@ class MainWindow(QMainWindow):
             self.canvas_grid.append([canvas])
             self.canvas_grid_widget.addWidget(vsp)
             self.vsps.append(vsp)
-            ix[1] = len(self.canvas_grid) - 1
+            ix = (ix[0], len(self.canvas_grid) - 1)
         elif orientation == 'v':
             vsp = self.vsps[ix[1]]
             vsp.addWidget(canvas.native)
             col = self.canvas_grid[ix[1]]
             col.append(canvas)
-            ix[0] = len(col) - 1
+            ix = (len(col) - 1, ix[1])
         else:
             raise ValueError(f"orientation expect 'h' or 'v', got {orientation}")
-        canvas.info['grid_ix'] = copy(ix)
+        canvas.info['grid_ix'] = ix
         self.current_ix = ix
         self.update_canvas_border_color()
 
