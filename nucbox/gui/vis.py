@@ -30,7 +30,7 @@ def random_color():
     return "#"+''.join([random.choice('0123456789ABCDEF') for j in range(6)])
 
 
-class ObjectWidget(QWidget):
+class ObjPropPanel(QWidget):
     signal_show_model = pyqtsignal(name='show_model')
     signal_show_axis = pyqtsignal(name='show_axis')
     signal_width = pyqtsignal(name='width')
@@ -42,7 +42,7 @@ class ObjectWidget(QWidget):
     signal_change_style = pyqtsignal(name="change_style")
 
     def __init__(self, parent=None):
-        super(ObjectWidget, self).__init__(parent)
+        super(ObjPropPanel, self).__init__(parent)
 
         l_show_axis = QLabel("Show axis")
         self.show_axis_ckbox = QCheckBox()
@@ -149,7 +149,7 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.canvas_grid_widget)
         self.setCentralWidget(self.splitter)
         self.setWindowIcon(QtGui.QIcon(osp.join(HERE, 'nucbox.svg')))
-        self.props = ObjectWidget()
+        self.props = ObjPropPanel()
         if not canvas_only:
             self.add_widgets()
 
@@ -199,13 +199,11 @@ class MainWindow(QMainWindow):
         new = event.source.canvas
         old = self.canvas
         self.canvas = new
-        if new is not old:
-            try:
-                self.props.model_style_select.setCurrentText(new.cache_props['style'])
-                self.props.width_control.setValue(new.cache_props['width'])
-                self.props.opacity_control.setValue(new.cache_props['opacity'])
-            except:
-                pass
+        if (new is not old) and (new.info['df'] is not None):
+            self.props.model_style_select.setCurrentText(new.cache_props['style'])
+            self.props.width_control.setValue(new.cache_props['width'])
+            self.props.opacity_control.setValue(new.cache_props['opacity'])
+            self.show_only_ranges.setRanges(new.info['show_only_ranges'], block_signal=True)
         self.current_ix = new.info['grid_ix']
         self.update_canvas_border_color()
 
@@ -237,7 +235,7 @@ class MainWindow(QMainWindow):
         file_menu = QMenu("&File", self)
         file_menu.addAction(self.action_open)
         menubar.addMenu(file_menu)
-        edit_menu = QMenu("&Edit", self)
+        edit_menu = QMenu("&Canvas", self)
         edit_menu.addAction(self.action_add_canvas_hor)
         edit_menu.addAction(self.action_add_canvas_ver)
         edit_menu.addAction(self.action_change_link_status)
@@ -247,20 +245,34 @@ class MainWindow(QMainWindow):
         self.setMenuBar(menubar)
 
     def _connect_events(self):
-        self.props.signal_show_model.connect(self.on_toggle_show_model)
-        self.props.signal_show_axis.connect(self.on_toggle_show_axis)
-        self.props.signal_width.connect(self.on_width_changed)
-        self.props.signal_opacity.connect(self.on_opacity_changed)
-        self.props.signal_show_label.connect(self.on_toggle_show_label)
-        self.props.signal_label_font_size.connect(self.on_label_size_changed)
-        self.props.signal_label_shift.connect(self.on_label_shift_changed)
+        self.props.signal_show_model.connect(self._all_or_current(self.on_toggle_show_model))
+        self.props.signal_show_axis.connect(self._all_or_current(self.on_toggle_show_axis))
+        self.props.signal_width.connect(self._all_or_current(self.on_width_changed))
+        self.props.signal_opacity.connect(self._all_or_current(self.on_opacity_changed))
+        self.props.signal_show_label.connect(self._all_or_current(self.on_toggle_show_label))
+        self.props.signal_label_font_size.connect(self._all_or_current(self.on_label_size_changed))
+        self.props.signal_label_shift.connect(self._all_or_current(self.on_label_shift_changed))
+        self.props.signal_show_only.connect(self._all_or_current(self.open_show_only))
+        self.props.signal_change_style.connect(self._all_or_current(self.on_model_style_change))
+        self.show_only_ranges.signal_item_changed.connect(self._all_or_current(self.on_show_only_ranges_changed))
         self.action_open.triggered.connect(self.open_file_dialog)
-        self.props.signal_show_only.connect(self.open_show_only)
-        self.show_only_ranges.signal_item_changed.connect(self.on_show_only_ranges_changed)
-        self.props.signal_change_style.connect(self.on_model_style_change)
         self.action_add_canvas_hor.triggered.connect(self.add_canvas_hor)
         self.action_add_canvas_ver.triggered.connect(self.add_canvas_ver)
         self.action_change_link_status.triggered.connect(self.change_canvas_link)
+
+    def _all_or_current(self, f):
+        def wrap(*args, **kwargs):
+            current = self.canvas
+            if self.link_canvas:
+                # apply to all canvas
+                for c in self.get_all_canvas():
+                    self.canvas = c
+                    f(*args, **kwargs)
+                self.canvas = current
+            else:
+                # only current
+                f(*args, **kwargs)
+        return wrap
 
     def change_canvas_link(self):
         self.link_canvas = not self.link_canvas
@@ -297,7 +309,8 @@ class MainWindow(QMainWindow):
 
     def on_show_only_ranges_changed(self):
         ranges = self.show_only_ranges.ranges
-        df = self.df
+        self.canvas.info['show_only_ranges'] = copy(ranges)
+        df = self.canvas.info['df']
         if len(ranges) == 0:
             df_ = df
         elif self.show_only_ranges.reverse_ck.isChecked():
@@ -330,12 +343,12 @@ class MainWindow(QMainWindow):
 
     def init_draw(self):
         self.canvas.remove_model()
-        self.canvas.draw_model(df=self.df, chr_colormap=self.chr_colormap, style='line', width=1)
-        self.canvas.draw_label(self.df, color=self.chr_colormap)
+        self.canvas.draw_model(df=self.canvas.info['df'], chr_colormap=self.chr_colormap, style='line', width=1)
+        self.canvas.draw_label(self.canvas.info['df'], color=self.chr_colormap)
 
     def on_data_changed(self, df=None):
         if df is None:
-            df = self.df
+            df = self.canvas.info['df']
         self.canvas.remove_model()
         self.canvas.remove_label()
         self.canvas.draw_model(df=df)
@@ -393,7 +406,7 @@ class MainWindow(QMainWindow):
         self.canvas.axis.visible = val
 
     def load_model(self, df):
-        self.df = df
+        self.canvas.info['df'] = df
         self.chroms.clear()
         for chr in list(df['chrom'].unique()):
             self.chroms.append(chr)
@@ -402,7 +415,7 @@ class MainWindow(QMainWindow):
                 self.chr_colormap[c] = random_color()
 
     def adjust_camera(self, factor=2.0):
-        pos = self.df[['x', 'y', 'z']].values
+        pos = self.canvas.info['df'][['x', 'y', 'z']].values
         norm = np.sqrt(sum([(pos[:, i])**2 for i in range(3)]))
         max_norm = np.max(norm)
         self.canvas.view.camera.distance = max_norm * factor
@@ -414,7 +427,11 @@ class Canvas(scene.SceneCanvas):
         scene.SceneCanvas.__init__(self, keys=None)
         self.size = 800, 600
         self.unfreeze()
-        self.info = {}
+        self.info = {
+            'grid_ix': None,
+            'df': None,
+            'show_only_ranges': set(),
+        }
         self.cache_props = {}
         self.view = self.central_widget.add_view()
         self.view.bgcolor = "#000000"
@@ -571,7 +588,6 @@ class RangeList(QWidget):
     def init_UI(self):
         l_reverse = QLabel("Reverse mode: not show the selected regions")
         self.reverse_ck = QCheckBox()
-        self.reverse_ck.toggled.connect(self.signal_item_changed)
         reverse_hbox = QHBoxLayout()
         reverse_hbox.addWidget(l_reverse)
         reverse_hbox.addWidget(self.reverse_ck)
@@ -584,7 +600,6 @@ class RangeList(QWidget):
         add_hbox.addWidget(self.le, stretch=2)
         add_hbox.addWidget(self.add_btn, stretch=1)
         self.tb = QTextBrowser()
-        self.tb.textChanged.connect(self.signal_item_changed)
         self.clear_btn = QPushButton("Clear")
         self.clear_btn.pressed.connect(self.clear)
         vbox = QVBoxLayout()
@@ -596,9 +611,19 @@ class RangeList(QWidget):
         self.setLayout(vbox)
         self.setWindowTitle(self.title)
         self.setGeometry(300, 300, 300, 300)
+        self._connect_change()
 
-    def append(self):
-        text = self.le.text()
+    def _connect_change(self):
+        self.reverse_ck.toggled.connect(self.signal_item_changed)
+        self.tb.textChanged.connect(self.signal_item_changed)
+
+    def _disconnect_change(self):
+        self.reverse_ck.toggled.disconnect()
+        self.tb.textChanged.disconnect()
+
+    def append(self, text=None):
+        if text is None:
+            text = self.le.text()
         try:
             gr = GenomeRange.parse_text(text, self.chr_names)
             if gr not in self.ranges:
@@ -613,6 +638,15 @@ class RangeList(QWidget):
     def clear(self):
         self.ranges.clear()
         self.tb.clear()
+
+    def setRanges(self, ranges, block_signal=False):
+        if block_signal:
+            self._disconnect_change()
+        self.clear()
+        for r in ranges:
+            self.append(str(r))
+        if block_signal:
+            self._connect_change()
 
 
 def read_and_show(path):
