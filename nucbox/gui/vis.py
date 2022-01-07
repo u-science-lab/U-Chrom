@@ -556,7 +556,10 @@ class GenomeRange(object):
         return gr
 
     def __str__(self):
-        return f"{self.chr}:{self.start}-{self.end}"
+        if (self.start == 0) and (self.end == self.SUPER_MAX):
+            return self.chr
+        else:
+            return f"{self.chr}:{self.start}-{self.end}"
 
     def __repr__(self):
         return f"GenomeRange({str(self)})"
