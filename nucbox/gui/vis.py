@@ -179,15 +179,18 @@ class MainWindow(QMainWindow):
         self.update_canvas_border_color()
 
     def change_current_canvas(self, event):
-        canvas = event.source.canvas
-        self.current_ix = canvas.info['grid_ix']
-        self.canvas = canvas
+        new = event.source.canvas
+        old = self.canvas
+        self.canvas = new
+        if new is not old:
+            try:
+                self.props.model_style_select.setCurrentText(new.cache_props['style'])
+                self.props.width_control.setValue(new.cache_props['width'])
+                self.props.opacity_control.setValue(new.cache_props['opacity'])
+            except:
+                pass
+        self.current_ix = new.info['grid_ix']
         self.update_canvas_border_color()
-        try:
-            self.props.model_style_select.setCurrentText(self.canvas.cache_props['style'])
-            self.props.width_control.setValue(self.canvas.cache_props['width'])
-        except:
-            pass
 
     def update_canvas_border_color(self):
         if (len(self.canvas_grid) == 1) and (len(self.canvas_grid[0]) == 1):
@@ -340,10 +343,12 @@ class MainWindow(QMainWindow):
     def on_opacity_changed(self):
         val = self.props.opacity_control.value()
         self.canvas.set_model_props('opacity', val)
+        self.canvas.cache_props['opacity'] = val
 
     def on_width_changed(self):
         style = self.props.model_style_select.currentText()
         width = self.props.width_control.value()
+        self.canvas.cache_props['width'] = width
         for l in self.canvas.lines:
             if style == "line":
                 l.set_data(width=width)
