@@ -144,6 +144,7 @@ class MainWindow(QMainWindow):
         self.current_ix = (0, -1)
         self.canvas = None
         self.add_canvas('h')
+        self.link_canvas = False
 
         self.splitter.addWidget(self.canvas_grid_widget)
         self.setCentralWidget(self.splitter)
@@ -157,6 +158,8 @@ class MainWindow(QMainWindow):
         canvas.create_native()
         canvas.native.setParent(self)
         canvas.view.events.mouse_press.connect(self.change_current_canvas)
+        canvas.view.events.mouse_move.connect(self.trigger_other_canvas_mouse_event)
+        canvas.view.events.mouse_wheel.connect(self.trigger_other_canvas_mouse_event)
         self.canvas = canvas
         ix = self.current_ix
         if orientation == 'h':
@@ -178,6 +181,20 @@ class MainWindow(QMainWindow):
         self.current_ix = ix
         self.update_canvas_border_color()
 
+    def get_all_canvas(self):
+        return itertools.chain.from_iterable(self.canvas_grid)
+
+    def trigger_other_canvas_mouse_event(self, event):
+        if not self.link_canvas:
+            return
+        a = event.source.canvas
+        for b in self.get_all_canvas():
+            if b is not a:
+                for wref, name in b.view.events.mouse_move.callbacks:
+                    if name == "viewbox_mouse_event":
+                        wref().viewbox_mouse_event(event)
+                        break
+
     def change_current_canvas(self, event):
         new = event.source.canvas
         old = self.canvas
@@ -195,7 +212,7 @@ class MainWindow(QMainWindow):
     def update_canvas_border_color(self):
         if (len(self.canvas_grid) == 1) and (len(self.canvas_grid[0]) == 1):
             return
-        for canvas in itertools.chain.from_iterable(self.canvas_grid):
+        for canvas in self.get_all_canvas():
             if canvas is self.canvas:
                 c = Color("#ff0000")
             else:
@@ -213,6 +230,7 @@ class MainWindow(QMainWindow):
         self.action_open = QAction("&Open...", self)
         self.action_add_canvas_hor = QAction("&Add canvas(right)", self)
         self.action_add_canvas_ver = QAction("&Add canvas(below)", self)
+        self.action_change_link_status = QAction("&Link canvases", self)
 
     def _create_menubar(self):
         menubar = QMenuBar(self)
@@ -222,6 +240,7 @@ class MainWindow(QMainWindow):
         edit_menu = QMenu("&Edit", self)
         edit_menu.addAction(self.action_add_canvas_hor)
         edit_menu.addAction(self.action_add_canvas_ver)
+        edit_menu.addAction(self.action_change_link_status)
         menubar.addMenu(edit_menu)
         help_menu = QMenu("&Help", self)
         menubar.addMenu(help_menu)
@@ -241,6 +260,14 @@ class MainWindow(QMainWindow):
         self.props.signal_change_style.connect(self.on_model_style_change)
         self.action_add_canvas_hor.triggered.connect(self.add_canvas_hor)
         self.action_add_canvas_ver.triggered.connect(self.add_canvas_ver)
+        self.action_change_link_status.triggered.connect(self.change_canvas_link)
+
+    def change_canvas_link(self):
+        self.link_canvas = not self.link_canvas
+        if self.link_canvas:
+            self.action_change_link_status.setText("&Unlink canvases")
+        else:
+            self.action_change_link_status.setText("&Link canvases")
 
     def add_canvas_hor(self):
         self.add_canvas('h')
