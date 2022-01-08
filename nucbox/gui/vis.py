@@ -157,7 +157,7 @@ class MainWindow(QMainWindow):
         canvas = Canvas()
         canvas.create_native()
         canvas.native.setParent(self)
-        canvas.view.events.mouse_press.connect(self.change_current_canvas)
+        canvas.view.events.mouse_press.connect(self.on_click_canvas)
         canvas.view.events.mouse_move.connect(self.trigger_other_canvas_mouse_event)
         canvas.view.events.mouse_wheel.connect(self.trigger_other_canvas_mouse_event)
         self.canvas = canvas
@@ -177,9 +177,27 @@ class MainWindow(QMainWindow):
             ix = (len(col) - 1, ix[1])
         else:
             raise ValueError(f"orientation expect 'h' or 'v', got {orientation}")
-        canvas.info['grid_ix'] = ix
         self.current_ix = ix
         self.update_canvas_border_color()
+
+    def remove_canvas(self):
+        if len(list(self.get_all_canvas())) == 1:
+            return
+        ix = self.current_ix
+        new_ix = list(ix)
+        col = self.canvas_grid[ix[1]]
+        col.pop(ix[0])
+        if len(col) == 0:
+            self.canvas_grid.pop(ix[1])
+            vsp = self.vsps.pop(ix[1])
+            new_ix[1] = max(0, ix[1]-1)
+            vsp.hide()
+            del vsp
+        new_ix[0] = min(len(col)-1, ix[0])
+        new_ix = tuple(new_ix)
+        self.canvas.native.setVisible(False)
+        del self.canvas
+        self.change_current_canvas(new_ix, force_update_props=True)
 
     def get_all_canvas(self):
         return itertools.chain.from_iterable(self.canvas_grid)
@@ -195,16 +213,27 @@ class MainWindow(QMainWindow):
                         wref().viewbox_mouse_event(event)
                         break
 
-    def change_current_canvas(self, event):
+    def get_canvas_ix(self, canvas):
+        for j, col in enumerate(self.canvas_grid):
+            for i, c in enumerate(col):
+                if c is canvas:
+                    return (i, j)
+        return None
+
+    def on_click_canvas(self, event):
         new = event.source.canvas
-        old = self.canvas
-        self.canvas = new
-        if (new is not old) and (new.info['df'] is not None):
+        new_ix = self.get_canvas_ix(new)
+        self.change_current_canvas(new_ix)
+
+    def change_current_canvas(self, new_ix, force_update_props=False):
+        old_ix = self.current_ix
+        self.canvas = new = self.canvas_grid[new_ix[1]][new_ix[0]]
+        if (force_update_props or (new_ix != old_ix)) and (new.info['df'] is not None):
             self.props.model_style_select.setCurrentText(new.cache_props['style'])
             self.props.width_control.setValue(new.cache_props['width'])
             self.props.opacity_control.setValue(new.cache_props['opacity'])
             self.show_only_ranges.setRanges(new.info['show_only_ranges'], block_signal=True)
-        self.current_ix = new.info['grid_ix']
+        self.current_ix = new_ix
         self.update_canvas_border_color()
 
     def update_canvas_border_color(self):
@@ -228,6 +257,7 @@ class MainWindow(QMainWindow):
         self.action_open = QAction("&Open...", self)
         self.action_add_canvas_hor = QAction("&Add canvas(right)", self)
         self.action_add_canvas_ver = QAction("&Add canvas(below)", self)
+        self.action_remove_canvas = QAction("&Remove canvas", self)
         self.action_change_link_status = QAction("&Link canvases", self)
 
     def _create_menubar(self):
@@ -235,11 +265,12 @@ class MainWindow(QMainWindow):
         file_menu = QMenu("&File", self)
         file_menu.addAction(self.action_open)
         menubar.addMenu(file_menu)
-        edit_menu = QMenu("&Canvas", self)
-        edit_menu.addAction(self.action_add_canvas_hor)
-        edit_menu.addAction(self.action_add_canvas_ver)
-        edit_menu.addAction(self.action_change_link_status)
-        menubar.addMenu(edit_menu)
+        canvas_menu = QMenu("&Canvas", self)
+        canvas_menu.addAction(self.action_add_canvas_hor)
+        canvas_menu.addAction(self.action_add_canvas_ver)
+        canvas_menu.addAction(self.action_remove_canvas)
+        canvas_menu.addAction(self.action_change_link_status)
+        menubar.addMenu(canvas_menu)
         help_menu = QMenu("&Help", self)
         menubar.addMenu(help_menu)
         self.setMenuBar(menubar)
@@ -259,6 +290,7 @@ class MainWindow(QMainWindow):
         self.action_add_canvas_hor.triggered.connect(self.add_canvas_hor)
         self.action_add_canvas_ver.triggered.connect(self.add_canvas_ver)
         self.action_change_link_status.triggered.connect(self.change_canvas_link)
+        self.action_remove_canvas.triggered.connect(self.remove_canvas)
 
     def _all_or_current(self, f):
         def wrap(*args, **kwargs):
@@ -428,7 +460,6 @@ class Canvas(scene.SceneCanvas):
         self.size = 800, 600
         self.unfreeze()
         self.info = {
-            'grid_ix': None,
             'df': None,
             'show_only_ranges': set(),
         }
