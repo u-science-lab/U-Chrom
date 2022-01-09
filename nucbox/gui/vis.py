@@ -683,13 +683,16 @@ class RangeList(QWidget):
             self._connect_change()
 
 
-def read_and_show(path):
-    df = read_particles(path)
+def read_and_show(*paths):
     qapp = PyQt5.QtWidgets.QApplication(["1"])
     win = MainWindow()
-    win.load_model(df)
-    win.init_draw()
-    win.update_view()
+    for i, path in enumerate(paths):
+        if i > 0:
+            win.add_canvas('h')
+        df = read_particles(path)
+        win.load_model(df)
+        win.init_draw()
+        win.update_view()
     win.show()
     app.run()
 
