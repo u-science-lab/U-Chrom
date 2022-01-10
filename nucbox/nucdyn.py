@@ -3,7 +3,6 @@ import fire
 import pandas as pd
 import taichi as ti
 import numpy as np
-from sklearn.neighbors import KDTree
 
 from .particles import create_particles, count_contacts
 from .io import read_pairs
@@ -368,7 +367,7 @@ def main(
     print(f"num_pairs:{df.shape[0]}")
     step_callback = None
     if show_step_in_gui:
-        from .gui.vis import MainWindow, PyQt5
+        from .gui.browser import MainWindow, PyQt5
         qapp = PyQt5.QtWidgets.QApplication(["1"])
         win = MainWindow(canvas_only=True)
         win.show()
