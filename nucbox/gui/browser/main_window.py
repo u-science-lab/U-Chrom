@@ -9,12 +9,13 @@ import numpy as np
 from vispy.color import Color
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QFileDialog, QMainWindow, QSplitter)
+from PyQt5.QtWidgets import (QFileDialog, QMainWindow, QSplitter, QVBoxLayout, QWidget)
 
 from nucbox.io import read_particles
 from .canvas import Canvas
 from .range_list import RangeList
 from .obj_panel import ObjPropPanel
+from .layer_panel import LayerPanel
 from .menubar import MenuBar
 
 
@@ -22,7 +23,16 @@ HERE = osp.dirname(osp.abspath(__file__))
 
 
 def random_color():
-    return "#"+''.join([random.choice('0123456789ABCDEF') for j in range(6)])
+    return "#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6)])
+
+
+class ControlPanel(QWidget):
+    def __init__(self, obj_panel, layer_panel):
+        super().__init__()
+        layout = QVBoxLayout()
+        layout.addWidget(layer_panel, 1)
+        layout.addWidget(obj_panel, 2)
+        self.setLayout(layout)
 
 
 class MainWindow(QMainWindow):
@@ -33,7 +43,7 @@ class MainWindow(QMainWindow):
         self.chr_colormap = {}
         self.chroms = []
 
-        self.resize(1000, 600)
+        self.resize(1100, 700)
         self.setWindowTitle('NucBrowser')
 
         self.splitter = QSplitter(Qt.Horizontal)
@@ -49,7 +59,10 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.canvas_grid_widget)
         self.setCentralWidget(self.splitter)
         self.setWindowIcon(QtGui.QIcon(osp.join(HERE, '../nucbox.svg')))
+        self.menubar = MenuBar(self)
         self.props = ObjPropPanel()
+        self.layer_panel = LayerPanel()
+        self.control_panel = ControlPanel(self.props, self.layer_panel)
         if not canvas_only:
             self.add_widgets()
 
@@ -141,15 +154,14 @@ class MainWindow(QMainWindow):
             return
         for canvas in self.get_all_canvas():
             if canvas is self.canvas:
-                c = Color("#ff0000")
+                c = Color("#888888")
             else:
                 c = Color("#000000")
             canvas.view.border_color = c
 
     def add_widgets(self):
-        self.splitter.addWidget(self.props)
+        self.splitter.addWidget(self.control_panel)
         self.show_only_ranges = RangeList("Show only ranges", self.chroms)
-        self.menubar = MenuBar(self)
         self.setMenuBar(self.menubar)
         self._connect_events()
 

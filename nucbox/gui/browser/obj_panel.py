@@ -73,6 +73,9 @@ class ObjPropPanel(QWidget):
         self.show_only_btn = QPushButton("Edit")
         self.show_only_btn.clicked.connect(self.signal_show_only)
 
+        title_layout = QVBoxLayout()
+        title_layout.addWidget(QLabel("<h2>Properties</h2"))
+
         gbox = QGridLayout()
         layout_table = [
             [l_show_axis, self.show_axis_ckbox],
@@ -90,6 +93,7 @@ class ObjPropPanel(QWidget):
                 gbox.addWidget(_obj, i, j)
 
         vbox = QVBoxLayout()
+        vbox.addLayout(title_layout)
         vbox.addLayout(gbox)
         vbox.addStretch(1)
         self.setLayout(vbox)

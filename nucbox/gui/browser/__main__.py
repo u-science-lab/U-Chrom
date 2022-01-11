@@ -1,13 +1,13 @@
 import fire
 from vispy import app
-import PyQt5
 
 from .main_window import MainWindow
 from nucbox.io import read_particles
+from .utils import get_qapp
 
 
-def read_and_show(*paths):
-    qapp = PyQt5.QtWidgets.QApplication(["1"])
+def read_and_show(*paths, style='qdarkgraystyle'):
+    qapp = get_qapp(style=style)
     win = MainWindow()
     for i, path in enumerate(paths):
         if i > 0:

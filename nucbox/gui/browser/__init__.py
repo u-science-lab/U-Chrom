@@ -1,2 +1,2 @@
 import PyQt5
-from .main_window import MainWindow
+from .utils import get_qapp

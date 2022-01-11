@@ -3,3 +3,4 @@ fire
 pandas
 vispy
 PyQt5
+qdarkgraystyle

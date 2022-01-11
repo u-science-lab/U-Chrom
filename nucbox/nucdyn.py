@@ -367,8 +367,8 @@ def main(
     print(f"num_pairs:{df.shape[0]}")
     step_callback = None
     if show_step_in_gui:
-        from .gui.browser import MainWindow, PyQt5
-        qapp = PyQt5.QtWidgets.QApplication(["1"])
+        from .gui.browser import MainWindow, get_qapp
+        qapp = get_qapp()
         win = MainWindow(canvas_only=True)
         win.show()
         init_drawed = False
