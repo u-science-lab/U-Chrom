@@ -5,7 +5,6 @@ from .utils import pyqtsignal
 
 class ObjPropPanel(QWidget):
     signal_show_model = pyqtsignal(name='show_model')
-    signal_show_axis = pyqtsignal(name='show_axis')
     signal_width = pyqtsignal(name='width')
     signal_opacity = pyqtsignal(name='opacity')
     signal_show_label = pyqtsignal(name='show_label')
@@ -16,10 +15,6 @@ class ObjPropPanel(QWidget):
 
     def __init__(self, parent=None):
         super(ObjPropPanel, self).__init__(parent)
-
-        l_show_axis = QLabel("Show axis")
-        self.show_axis_ckbox = QCheckBox()
-        self.show_axis_ckbox.toggled.connect(self.signal_show_axis)
 
         l_show_model = QLabel("Show model")
         self.show_model_ckbox = QCheckBox()
@@ -78,7 +73,6 @@ class ObjPropPanel(QWidget):
 
         gbox = QGridLayout()
         layout_table = [
-            [l_show_axis, self.show_axis_ckbox],
             [l_show_model, self.show_model_ckbox],
             [l_style, self.model_style_select],
             [l_width, self.width_control],

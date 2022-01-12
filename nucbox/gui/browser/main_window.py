@@ -54,7 +54,6 @@ class MainWindow(QMainWindow):
         self.current_ix = (0, -1)
         self.canvas = None
         self.add_canvas('h')
-        self.link_canvas = False
 
         self.splitter.addWidget(self.canvas_grid_widget)
         self.setCentralWidget(self.splitter)
@@ -65,6 +64,10 @@ class MainWindow(QMainWindow):
         self.control_panel = ControlPanel(self.props, self.layer_panel)
         if not canvas_only:
             self.add_widgets()
+
+    @property
+    def link_canvas(self):
+        return self.menubar.link_canvas
 
     def add_canvas(self, orientation='h'):
         canvas = Canvas()
@@ -141,6 +144,7 @@ class MainWindow(QMainWindow):
     def change_current_canvas(self, new_ix, force_update_props=False):
         old_ix = self.current_ix
         self.canvas = new = self.canvas_grid[new_ix[1]][new_ix[0]]
+        self.menubar.set_show_axis(new.axis.visible)
         if (force_update_props or (new_ix != old_ix)) and (new.info['df'] is not None):
             self.props.model_style_select.setCurrentText(new.cache_props['style'])
             self.props.width_control.setValue(new.cache_props['width'])
@@ -167,7 +171,6 @@ class MainWindow(QMainWindow):
 
     def _connect_events(self):
         self.props.signal_show_model.connect(self._all_or_current(self.on_toggle_show_model))
-        self.props.signal_show_axis.connect(self._all_or_current(self.on_toggle_show_axis))
         self.props.signal_width.connect(self._all_or_current(self.on_width_changed))
         self.props.signal_opacity.connect(self._all_or_current(self.on_opacity_changed))
         self.props.signal_show_label.connect(self._all_or_current(self.on_toggle_show_label))
@@ -179,8 +182,8 @@ class MainWindow(QMainWindow):
         self.menubar.action_open.triggered.connect(self.open_file_dialog)
         self.menubar.action_add_canvas_hor.triggered.connect(self.add_canvas_hor)
         self.menubar.action_add_canvas_ver.triggered.connect(self.add_canvas_ver)
-        self.menubar.action_change_link_status.triggered.connect(self.change_canvas_link)
         self.menubar.action_remove_canvas.triggered.connect(self.remove_canvas)
+        self.menubar.action_show_axis.triggered.connect(self._all_or_current(self.on_toggle_show_axis))
 
     def _all_or_current(self, f):
         def wrap(*args, **kwargs):
@@ -195,13 +198,6 @@ class MainWindow(QMainWindow):
                 # only current
                 f(*args, **kwargs)
         return wrap
-
-    def change_canvas_link(self):
-        self.link_canvas = not self.link_canvas
-        if self.link_canvas:
-            self.menubar.action_change_link_status.setText("&Unlink canvases")
-        else:
-            self.menubar.action_change_link_status.setText("&Link canvases")
 
     def add_canvas_hor(self):
         self.add_canvas('h')
@@ -323,8 +319,8 @@ class MainWindow(QMainWindow):
         val = self.props.show_model_ckbox.isChecked()
         self.canvas.set_model_props('visible', val)
 
-    def on_toggle_show_axis(self):
-        val = self.props.show_axis_ckbox.isChecked()
+    def on_toggle_show_axis(self, *args):
+        val = self.menubar.show_axis
         self.canvas.axis.visible = val
 
     def load_model(self, df):
