@@ -165,6 +165,7 @@ class MainWindow(QMainWindow):
 
     def add_widgets(self):
         self.splitter.addWidget(self.control_panel)
+        self.splitter.setSizes([850, 150])
         self.show_only_ranges = RangeList("Show only ranges", self.chroms)
         self.setMenuBar(self.menubar)
         self._connect_events()
