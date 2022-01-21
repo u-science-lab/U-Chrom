@@ -1,0 +1,117 @@
+import numpy as np
+from PyQt5.QtWidgets import QWidget
+from vispy import scene
+from vispy.color import Color
+
+
+class Layer(object):
+    LABEL = "Layer"
+
+    def __init__(self):
+        self.vis_objs = []
+
+    def remove(self):
+        for o in self.vis_objs:
+            o.parent = None
+        self.vis_objs.clear()
+
+    def set_props(self, key, val):
+        for o in self.vis_objs:
+            setattr(o, key, val)
+
+    def __str__(self):
+        return f"{self.LABEL}"
+
+    def __repr__(self):
+        return str(self)
+
+    def init_props_panel(self) -> QWidget:
+        return QWidget()
+
+
+class ChrLabelLayer(Layer):
+    LABEL = "ChrLabel"
+
+    def __init__(self):
+        super().__init__()
+        self.labels = []
+        self.label_ori_pos = []
+
+    def draw(self, df, shift_factor=0.05, color="#ff0000", font_size=400, bold=True):
+        labels = self.vis_objs
+        for chrom in df['chrom'].unique():
+            sdf = df[df['chrom'] == chrom]
+            pos = sdf[['x', 'y', 'z']].values
+            center = pos.mean(axis=0)
+            norm = np.sqrt(sum([(pos[:, i]-center[i])**2 for i in range(3)]))
+            max_norm_ix = np.argmax(norm)
+            max_norm_pos = pos[max_norm_ix]
+            self.label_ori_pos.append(max_norm_pos)
+            label_pos = max_norm_pos * (1 + shift_factor)
+            if isinstance(color, dict):
+                c = color.get(chrom, "#ff0000")
+            else:
+                c = color
+            label = scene.visuals.Text(chrom, color=c, parent=self.view.scene, bold=bold)
+            label.pos = tuple(label_pos)
+            label.font_size = font_size
+            label.set_gl_state(depth_test=True)
+            labels.append(label)
+
+    def init_props_panel(self) -> QWidget:
+        w = super().init_props_panel()
+        return w
+
+
+class ChromatinLayer(Layer):
+    LABEL = "Chromatin"
+
+    def __init__(self, df, chr_colormap, width=1.0, style='line'):
+        super().__init__()
+        self.cache_props = {}
+        self.draw(df=df, chr_colormap=chr_colormap, width=width, style=style)
+
+    def draw(self, **props):
+        if len(props) != 0:
+            self.cache_props.update(props)
+        props = self.cache_props
+        try:
+            df, chr_colormap, width, style = props['df'], props['chr_colormap'], props['width'], props['style']
+        except Exception as e:
+            print(repr(e))
+            return
+        for chrom in chr_colormap.keys():
+            sdf = df[df['chrom'] == chrom]
+            if sdf.shape[0] <= 1:
+                continue
+            pos = sdf[['x', 'y', 'z']].values
+            color = chr_colormap.get(chrom, "#888888")
+            # calculate breaks
+            first_row = sdf.iloc[0, :]
+            bin_size = first_row['end'] - first_row['start']
+            starts = sdf['start'].values
+            diff = starts[1:] - starts[:-1]
+            breaks = np.where(diff > (bin_size+10))[0] + 1
+            def draw_line(p):
+                if style == 'points':
+                    line = scene.visuals.Markers(
+                        pos=p, parent=self.view.scene, size=width,
+                        face_color=Color(color), edge_width=0, spherical=True, scaling=True)
+                elif style == 'tube':
+                    radius = width / 2
+                    line = scene.visuals.Tube(points=p, parent=self.view.scene, color=Color(color), radius=radius)
+                else:
+                    line = scene.visuals.Line(pos=p, parent=self.view.scene, color=Color(color), width=width)
+                self.vis_objs.append(line)
+            if breaks.shape[0] <= 0:
+                draw_line(pos)
+            else:
+                ob = 0
+                for b in list(breaks) + [pos.shape[0]]:
+                    s_pos = pos[ob:b]
+                    draw_line(s_pos)
+                    ob = b
+
+    def init_props_panel(self) -> QWidget:
+        w = super().init_props_panel()
+        return w
