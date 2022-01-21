@@ -22,4 +22,9 @@ class Canvas(scene.SceneCanvas):
 
         self.freeze()
 
+    def add_chromatin_layer(self, df, chr_colormap):
+        from .layers import ChromatinLayer
+        layer = ChromatinLayer(self, df, chr_colormap)
+        self.layers.append(layer)
+        self.current_layer = layer
 

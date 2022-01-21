@@ -7,8 +7,9 @@ from vispy.color import Color
 class Layer(object):
     LABEL = "Layer"
 
-    def __init__(self):
+    def __init__(self, canvas):
         self.vis_objs = []
+        self.canvas = canvas
 
     def remove(self):
         for o in self.vis_objs:
@@ -32,8 +33,8 @@ class Layer(object):
 class ChrLabelLayer(Layer):
     LABEL = "ChrLabel"
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, canvas):
+        super().__init__(canvas)
         self.labels = []
         self.label_ori_pos = []
 
@@ -52,22 +53,24 @@ class ChrLabelLayer(Layer):
                 c = color.get(chrom, "#ff0000")
             else:
                 c = color
-            label = scene.visuals.Text(chrom, color=c, parent=self.view.scene, bold=bold)
+            label = scene.visuals.Text(chrom, color=c, parent=self.canvas.view.scene, bold=bold)
             label.pos = tuple(label_pos)
             label.font_size = font_size
             label.set_gl_state(depth_test=True)
             labels.append(label)
 
     def init_props_panel(self) -> QWidget:
-        w = super().init_props_panel()
+        from .obj_panel import ChrLabelProps
+        w = ChrLabelProps()
+        w.connect_with(self)
         return w
 
 
 class ChromatinLayer(Layer):
     LABEL = "Chromatin"
 
-    def __init__(self, df, chr_colormap, width=1.0, style='line'):
-        super().__init__()
+    def __init__(self, canvas, df, chr_colormap, width=1.0, style='line'):
+        super().__init__(canvas)
         self.cache_props = {}
         self.draw(df=df, chr_colormap=chr_colormap, width=width, style=style)
 
@@ -95,13 +98,13 @@ class ChromatinLayer(Layer):
             def draw_line(p):
                 if style == 'points':
                     line = scene.visuals.Markers(
-                        pos=p, parent=self.view.scene, size=width,
+                        pos=p, parent=self.canvas.view.scene, size=width,
                         face_color=Color(color), edge_width=0, spherical=True, scaling=True)
                 elif style == 'tube':
                     radius = width / 2
-                    line = scene.visuals.Tube(points=p, parent=self.view.scene, color=Color(color), radius=radius)
+                    line = scene.visuals.Tube(points=p, parent=self.canvas.view.scene, color=Color(color), radius=radius)
                 else:
-                    line = scene.visuals.Line(pos=p, parent=self.view.scene, color=Color(color), width=width)
+                    line = scene.visuals.Line(pos=p, parent=self.canvas.view.scene, color=Color(color), width=width)
                 self.vis_objs.append(line)
             if breaks.shape[0] <= 0:
                 draw_line(pos)
@@ -113,5 +116,7 @@ class ChromatinLayer(Layer):
                     ob = b
 
     def init_props_panel(self) -> QWidget:
-        w = super().init_props_panel()
-        return w
+        from .obj_panel import ChromatinProps
+        w = ChromatinProps()
+        w.connect_with(self)
+

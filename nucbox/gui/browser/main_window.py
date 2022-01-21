@@ -14,7 +14,6 @@ from PyQt5.QtWidgets import (QFileDialog, QMainWindow, QSplitter, QVBoxLayout, Q
 from nucbox.io import read_particles
 from .canvas import Canvas
 from .range_list import RangeList
-from .obj_panel import ObjPropPanel
 from .layer_panel import LayerPanel
 from .menubar import MenuBar
 
@@ -27,12 +26,11 @@ def random_color():
 
 
 class ControlPanel(QWidget):
-    def __init__(self, obj_panel, layer_panel):
+    def __init__(self, layer_panel):
         super().__init__()
-        layout = QVBoxLayout()
-        layout.addWidget(layer_panel, 1)
-        layout.addWidget(obj_panel, 2)
-        self.setLayout(layout)
+        self.layout = QVBoxLayout()
+        self.layout.addWidget(layer_panel, 1)
+        self.setLayout(self.layout)
 
 
 class MainWindow(QMainWindow):
@@ -41,7 +39,6 @@ class MainWindow(QMainWindow):
         QMainWindow.__init__(self)
 
         self.chr_colormap = {}
-        self.chroms = []
 
         self.resize(1100, 700)
         self.setWindowTitle('NucBrowser')
@@ -59,9 +56,8 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.splitter)
         self.setWindowIcon(QtGui.QIcon(osp.join(HERE, '../nucbox.svg')))
         self.menubar = MenuBar(self)
-        self.props = ObjPropPanel()
         self.layer_panel = LayerPanel()
-        self.control_panel = ControlPanel(self.props, self.layer_panel)
+        self.control_panel = ControlPanel(self.layer_panel)
         if not canvas_only:
             self.add_widgets()
 
@@ -113,7 +109,7 @@ class MainWindow(QMainWindow):
         new_ix = tuple(new_ix)
         self.canvas.native.setVisible(False)
         del self.canvas
-        self.change_current_canvas(new_ix, force_update_props=True)
+        self.change_current_canvas(new_ix)
 
     def get_all_canvas(self):
         return itertools.chain.from_iterable(self.canvas_grid)
@@ -141,15 +137,10 @@ class MainWindow(QMainWindow):
         new_ix = self.get_canvas_ix(new)
         self.change_current_canvas(new_ix)
 
-    def change_current_canvas(self, new_ix, force_update_props=False):
+    def change_current_canvas(self, new_ix):
         old_ix = self.current_ix
         self.canvas = new = self.canvas_grid[new_ix[1]][new_ix[0]]
         self.menubar.set_show_axis(new.axis.visible)
-        if (force_update_props or (new_ix != old_ix)) and (new.info['df'] is not None):
-            self.props.model_style_select.setCurrentText(new.cache_props['style'])
-            self.props.width_control.setValue(new.cache_props['width'])
-            self.props.opacity_control.setValue(new.cache_props['opacity'])
-            self.show_only_ranges.setRanges(new.info['show_only_ranges'], block_signal=True)
         self.current_ix = new_ix
         self.update_canvas_border_color()
 
@@ -166,20 +157,11 @@ class MainWindow(QMainWindow):
     def add_widgets(self):
         self.splitter.addWidget(self.control_panel)
         self.splitter.setSizes([850, 150])
-        self.show_only_ranges = RangeList("Show only ranges", self.chroms)
+        self.show_only_ranges = RangeList("Show only ranges", list(self.chr_colormap.keys()))
         self.setMenuBar(self.menubar)
         self._connect_events()
 
     def _connect_events(self):
-        self.props.signal_show_model.connect(self._all_or_current(self.on_toggle_show_model))
-        self.props.signal_width.connect(self._all_or_current(self.on_width_changed))
-        self.props.signal_opacity.connect(self._all_or_current(self.on_opacity_changed))
-        self.props.signal_show_label.connect(self._all_or_current(self.on_toggle_show_label))
-        self.props.signal_label_font_size.connect(self._all_or_current(self.on_label_size_changed))
-        self.props.signal_label_shift.connect(self._all_or_current(self.on_label_shift_changed))
-        self.props.signal_show_only.connect(self._all_or_current(self.open_show_only))
-        self.props.signal_change_style.connect(self._all_or_current(self.on_model_style_change))
-        self.show_only_ranges.signal_item_changed.connect(self._all_or_current(self.on_show_only_ranges_changed))
         self.menubar.action_open.triggered.connect(self.open_file_dialog)
         self.menubar.action_add_canvas_hor.triggered.connect(self.add_canvas_hor)
         self.menubar.action_add_canvas_ver.triggered.connect(self.add_canvas_ver)
@@ -206,46 +188,6 @@ class MainWindow(QMainWindow):
     def add_canvas_ver(self):
         self.add_canvas('v')
 
-    def on_model_style_change(self):
-        style = self.props.model_style_select.currentText()
-        self.canvas.remove_model()
-        self.canvas.draw_model(style=style)
-        if style == 'line':
-            self.props.width_control.setMaximum(20.0)
-            self.props.width_control.setMinimum(1.0)
-            self.props.width_control.setSingleStep(1.0)
-            self.props.width_control.setValue(1.0)
-        elif style == 'points':
-            self.props.width_control.setMaximum(2.0)
-            self.props.width_control.setMinimum(0)
-            self.props.width_control.setSingleStep(0.1)
-            self.props.width_control.setValue(0.5)
-        elif style == 'tube':
-            self.props.width_control.setMaximum(2.0)
-            self.props.width_control.setMinimum(0)
-            self.props.width_control.setSingleStep(0.05)
-            self.props.width_control.setValue(0.1)
-
-    def on_show_only_ranges_changed(self):
-        ranges = self.show_only_ranges.ranges
-        self.canvas.info['show_only_ranges'] = copy(ranges)
-        df = self.canvas.info['df']
-        if len(ranges) == 0:
-            df_ = df
-        elif self.show_only_ranges.reverse_ck.isChecked():
-            ix = np.full(df.shape[0], True)
-            for gr in ranges:
-                sdf = df[(df['chrom'] == gr.chr) & (df['start'] >= gr.start) & (df['end'] <= gr.end)]
-                ix[sdf.index] = False
-            df_ = df[ix]
-        else:
-            sub_dfs = []
-            for gr in ranges:
-                sdf = df[(df['chrom'] == gr.chr) & (df['start'] >= gr.start) & (df['end'] <= gr.end)]
-                sub_dfs.append(sdf)
-            df_ = pd.concat(sub_dfs).sort_values(by="start")
-        self.on_data_changed(df_)
-
     def open_show_only(self):
         self.show_only_ranges.show()
 
@@ -258,80 +200,20 @@ class MainWindow(QMainWindow):
             df = read_particles(path)
             self.load_model(df)
             self.init_draw()
-            self.update_view()
 
     def init_draw(self):
-        self.canvas.remove_model()
-        self.canvas.draw_model(df=self.canvas.info['df'], chr_colormap=self.chr_colormap, style='line', width=1)
-        self.canvas.draw_label(self.canvas.info['df'], color=self.chr_colormap)
-
-    def on_data_changed(self, df=None):
-        if df is None:
-            df = self.canvas.info['df']
-        self.canvas.remove_model()
-        self.canvas.remove_label()
-        self.canvas.draw_model(df=df)
-        self.on_toggle_show_model()
-        self.canvas.draw_label(df, color=self.chr_colormap)
-        self.on_toggle_show_label()
-
-    def update_view(self):
-        self.on_model_style_change()
-        self.on_toggle_show_model()
-        self.on_toggle_show_axis()
-        self.on_width_changed()
-        self.on_opacity_changed()
-        self.on_toggle_show_label()
-        self.on_label_size_changed()
-        self.on_label_shift_changed()
-
-    def on_label_shift_changed(self):
-        val = self.props.label_shift_control.value()
-        for i, l in enumerate(self.canvas.labels):
-            ori = self.canvas.label_ori_pos[i]
-            l.pos = ori * (1+val)
-
-    def on_label_size_changed(self):
-        val = self.props.label_size_control.value()
-        self.canvas.set_label_props('font_size', val)
-
-    def on_toggle_show_label(self):
-        val = self.props.show_label_ckbox.isChecked()
-        self.canvas.set_label_props('visible', val)
-
-    def on_opacity_changed(self):
-        val = self.props.opacity_control.value()
-        self.canvas.set_model_props('opacity', val)
-        self.canvas.cache_props['opacity'] = val
-
-    def on_width_changed(self):
-        style = self.props.model_style_select.currentText()
-        width = self.props.width_control.value()
-        self.canvas.cache_props['width'] = width
-        for l in self.canvas.lines:
-            if style == "line":
-                l.set_data(width=width)
-            else:
-                self.canvas.remove_model()
-                self.canvas.draw_model(width=width)
-                self.on_opacity_changed()
-
-    def on_toggle_show_model(self):
-        val = self.props.show_model_ckbox.isChecked()
-        self.canvas.set_model_props('visible', val)
+        for layer in self.canvas.layers:
+            layer.draw()
 
     def on_toggle_show_axis(self, *args):
         val = self.menubar.show_axis
         self.canvas.axis.visible = val
 
     def load_model(self, df):
-        self.canvas.info['df'] = df
-        self.chroms.clear()
-        for chr in list(df['chrom'].unique()):
-            self.chroms.append(chr)
-        for c in self.chroms:
+        for c in df['chrom'].unique():
             if c not in self.chr_colormap:
                 self.chr_colormap[c] = random_color()
+        self.canvas.add_chromatin_layer(df, self.chr_colormap)
 
     def adjust_camera(self, factor=2.0):
         pos = self.canvas.info['df'][['x', 'y', 'z']].values

@@ -15,7 +15,6 @@ def read_and_show(*paths, style='qdarkgraystyle'):
         df = read_particles(path)
         win.load_model(df)
         win.init_draw()
-        win.update_view()
     win.show()
     app.run()
 
