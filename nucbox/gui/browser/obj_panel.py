@@ -6,13 +6,14 @@ class LayerPropsPanel(QWidget):
     def __init__(self, parent=None, grid_table=[], title="Properties"):
         super().__init__(parent)
         self.top_layout = QVBoxLayout()
-        self.title = QLabel(title)
+        self.title = QLabel(f"<h2>{title}</h2>")
         self.top_layout.addWidget(self.title)
         self.grid_layout = QGridLayout()
         for i, row in enumerate(grid_table):
             for j, _obj in enumerate(row):
                 self.grid_layout.addWidget(_obj, i, j)
         self.top_layout.addLayout(self.grid_layout)
+        self.top_layout.addStretch()
         self.setLayout(self.top_layout)
         self.layers = []
 

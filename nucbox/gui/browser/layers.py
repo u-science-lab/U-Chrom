@@ -10,6 +10,7 @@ class Layer(object):
     def __init__(self, canvas):
         self.vis_objs = []
         self.canvas = canvas
+        self.control_panel = self.init_props_panel()
 
     def remove(self):
         for o in self.vis_objs:
@@ -21,7 +22,7 @@ class Layer(object):
             setattr(o, key, val)
 
     def __str__(self):
-        return f"{self.LABEL}"
+        return f"{self.LABEL} <{id(self)}>"
 
     def __repr__(self):
         return str(self)
@@ -119,4 +120,5 @@ class ChromatinLayer(Layer):
         from .obj_panel import ChromatinProps
         w = ChromatinProps()
         w.connect_with(self)
+        return w
 

@@ -1,10 +1,8 @@
 import random
 import itertools
 import os.path as osp
-from copy import copy
 
 from PyQt5 import QtGui
-import pandas as pd
 import numpy as np
 from vispy.color import Color
 
@@ -23,14 +21,6 @@ HERE = osp.dirname(osp.abspath(__file__))
 
 def random_color():
     return "#"+''.join([random.choice('0123456789ABCDEF') for _ in range(6)])
-
-
-class ControlPanel(QWidget):
-    def __init__(self, layer_panel):
-        super().__init__()
-        self.layout = QVBoxLayout()
-        self.layout.addWidget(layer_panel, 1)
-        self.setLayout(self.layout)
 
 
 class MainWindow(QMainWindow):
@@ -57,7 +47,6 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QtGui.QIcon(osp.join(HERE, '../nucbox.svg')))
         self.menubar = MenuBar(self)
         self.layer_panel = LayerPanel()
-        self.control_panel = ControlPanel(self.layer_panel)
         if not canvas_only:
             self.add_widgets()
 
@@ -155,7 +144,7 @@ class MainWindow(QMainWindow):
             canvas.view.border_color = c
 
     def add_widgets(self):
-        self.splitter.addWidget(self.control_panel)
+        self.splitter.addWidget(self.canvas.control_panel)
         self.splitter.setSizes([850, 150])
         self.show_only_ranges = RangeList("Show only ranges", list(self.chr_colormap.keys()))
         self.setMenuBar(self.menubar)
@@ -202,7 +191,7 @@ class MainWindow(QMainWindow):
             self.init_draw()
 
     def init_draw(self):
-        for layer in self.canvas.layers:
+        for layer in self.canvas.control_panel.layers:
             layer.draw()
 
     def on_toggle_show_axis(self, *args):
@@ -213,7 +202,7 @@ class MainWindow(QMainWindow):
         for c in df['chrom'].unique():
             if c not in self.chr_colormap:
                 self.chr_colormap[c] = random_color()
-        self.canvas.add_chromatin_layer(df, self.chr_colormap)
+        self.canvas.control_panel.add_chromatin_layer(df, self.chr_colormap)
 
     def adjust_camera(self, factor=2.0):
         pos = self.canvas.info['df'][['x', 'y', 'z']].values
