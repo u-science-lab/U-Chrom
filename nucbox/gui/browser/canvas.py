@@ -64,7 +64,6 @@ class CanvasControl(QWidget):
 
     def set_props_panel(self, widget):
         if self.props_stack.indexOf(widget) < 0:
-            print("add")
             self.props_stack.addWidget(widget)
         self.props_stack.setCurrentWidget(widget)
 

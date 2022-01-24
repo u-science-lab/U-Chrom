@@ -7,7 +7,7 @@ import numpy as np
 from vispy.color import Color
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QFileDialog, QMainWindow, QSplitter, QVBoxLayout, QWidget)
+from PyQt5.QtWidgets import (QFileDialog, QMainWindow, QSplitter, QStackedWidget)
 
 from nucbox.io import read_particles
 from .canvas import Canvas
@@ -34,6 +34,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle('NucBrowser')
 
         self.splitter = QSplitter(Qt.Horizontal)
+        self.control_stack = QStackedWidget()
 
         self.canvas_grid = []
         self.vsps = []
@@ -79,6 +80,8 @@ class MainWindow(QMainWindow):
         else:
             raise ValueError(f"orientation expect 'h' or 'v', got {orientation}")
         self.current_ix = ix
+        self.control_stack.addWidget(canvas.control_panel)
+        self.control_stack.setCurrentWidget(canvas.control_panel)
         self.update_canvas_border_color()
 
     def remove_canvas(self):
@@ -96,9 +99,11 @@ class MainWindow(QMainWindow):
             del vsp
         new_ix[0] = min(len(col)-1, ix[0])
         new_ix = tuple(new_ix)
-        self.canvas.native.setVisible(False)
-        del self.canvas
+        current = self.canvas
+        current.native.setVisible(False)
         self.change_current_canvas(new_ix)
+        self.control_stack.removeWidget(current.control_panel)
+        del current
 
     def get_all_canvas(self):
         return itertools.chain.from_iterable(self.canvas_grid)
@@ -131,6 +136,7 @@ class MainWindow(QMainWindow):
         self.canvas = new = self.canvas_grid[new_ix[1]][new_ix[0]]
         self.menubar.set_show_axis(new.axis.visible)
         self.current_ix = new_ix
+        self.control_stack.setCurrentWidget(new.control_panel)
         self.update_canvas_border_color()
 
     def update_canvas_border_color(self):
@@ -144,7 +150,7 @@ class MainWindow(QMainWindow):
             canvas.view.border_color = c
 
     def add_widgets(self):
-        self.splitter.addWidget(self.canvas.control_panel)
+        self.splitter.addWidget(self.control_stack)
         self.splitter.setSizes([850, 150])
         self.show_only_ranges = RangeList("Show only ranges", list(self.chr_colormap.keys()))
         self.setMenuBar(self.menubar)
