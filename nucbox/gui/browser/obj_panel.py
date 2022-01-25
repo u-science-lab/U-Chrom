@@ -1,9 +1,9 @@
 from PyQt5.QtWidgets import (QComboBox, QDoubleSpinBox, QSpinBox, QWidget, QLabel, 
-                             QGridLayout, QVBoxLayout, QCheckBox)
+                             QGridLayout, QVBoxLayout, QCheckBox, QPushButton)
 
 
 class LayerPropsPanel(QWidget):
-    def __init__(self, parent=None, grid_table=[], title="Properties"):
+    def __init__(self, parent=None, grid_table=[], operation_widgets=[], title="Properties"):
         super().__init__(parent)
         self.top_layout = QVBoxLayout()
         self.title = QLabel(f"<h2>{title}</h2>")
@@ -16,6 +16,22 @@ class LayerPropsPanel(QWidget):
         self.top_layout.addStretch()
         self.setLayout(self.top_layout)
         self.layers = []
+        self.operation_widgets = []
+        self.delete_btn = QPushButton("Delete")
+        self.delete_btn.clicked.connect(self.on_delete_btn)
+        self.operation_widgets.append(self.delete_btn)
+        self.operation_widgets += operation_widgets
+        self.operations_panel = QWidget()
+        vbox = QVBoxLayout()
+        for op in self.operation_widgets:
+            vbox.addWidget(op)
+        vbox.addStretch()
+        self.operations_panel.setLayout(vbox)
+
+    def on_delete_btn(self):
+        for layer in self.layers:
+            idx = layer.canvas.control_panel.delete(layer)
+            layer.canvas.control_panel.reset_current(idx)
 
     def connect_with(self, layer):
         self.layers.append(layer)
@@ -59,7 +75,8 @@ class ChromatinProps(LayerPropsPanel):
             [l_opacity, self.opacity_control],
         ]
 
-        super().__init__(grid_table=layout_table)
+        self.subset_btn = QPushButton("Subset")
+        super().__init__(grid_table=layout_table, operation_widgets=[self.subset_btn])
 
     def on_toggle_show_model(self):
         val = self.show_model_ckbox.isChecked()

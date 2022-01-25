@@ -11,8 +11,6 @@ from PyQt5.QtWidgets import (QFileDialog, QMainWindow, QSplitter, QStackedWidget
 
 from nucbox.io import read_particles
 from .canvas import Canvas
-from .range_list import RangeList
-from .layer_panel import LayerPanel
 from .menubar import MenuBar
 
 
@@ -47,7 +45,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.splitter)
         self.setWindowIcon(QtGui.QIcon(osp.join(HERE, '../nucbox.svg')))
         self.menubar = MenuBar(self)
-        self.layer_panel = LayerPanel()
         if not canvas_only:
             self.add_widgets()
 
@@ -152,7 +149,6 @@ class MainWindow(QMainWindow):
     def add_widgets(self):
         self.splitter.addWidget(self.control_stack)
         self.splitter.setSizes([850, 150])
-        self.show_only_ranges = RangeList("Show only ranges", list(self.chr_colormap.keys()))
         self.setMenuBar(self.menubar)
         self._connect_events()
 
@@ -182,9 +178,6 @@ class MainWindow(QMainWindow):
 
     def add_canvas_ver(self):
         self.add_canvas('v')
-
-    def open_show_only(self):
-        self.show_only_ranges.show()
 
     def open_file_dialog(self):
         options = QFileDialog.Options()
