@@ -62,6 +62,12 @@ class CanvasControl(QWidget):
         del list_item
         return idx
 
+    def rename_item(self, layer, new_name: str):
+        idx = self.layers.index(layer)
+        layer.name = new_name
+        list_item = self.layer_control.list.item(idx)
+        list_item.setText(str(layer))
+
     def reset_current(self, idx=0):
         if len(self.layers) > 0:
             new_idx = max(idx-1, 0)

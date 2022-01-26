@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import (QComboBox, QDoubleSpinBox, QSpinBox, QWidget, QLabel, 
-                             QGridLayout, QVBoxLayout, QCheckBox, QPushButton)
+                             QGridLayout, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLineEdit)
+from .range_list import RangeList
 
 
 class LayerPropsPanel(QWidget):
@@ -17,6 +18,10 @@ class LayerPropsPanel(QWidget):
         self.setLayout(self.top_layout)
         self.layers = []
         self.operation_widgets = []
+        self.rename_window = self.__get_rename_window()
+        self.rename_btn = QPushButton("Rename")
+        self.rename_btn.clicked.connect(self.on_rename_btn)
+        self.operation_widgets.append(self.rename_btn)
         self.delete_btn = QPushButton("Delete")
         self.delete_btn.clicked.connect(self.on_delete_btn)
         self.operation_widgets.append(self.delete_btn)
@@ -35,6 +40,28 @@ class LayerPropsPanel(QWidget):
 
     def connect_with(self, layer):
         self.layers.append(layer)
+
+    def on_rename_btn(self):
+        self.rename_window.show()
+
+    def on_rename(self):
+        new_name = self.rename_window.input.text()
+        for layer in self.layers:
+            layer.canvas.control_panel.rename_item(layer, new_name)
+
+    def __get_rename_window(self):
+        win = QWidget()
+        win.setWindowTitle("Rename")
+        hbox = QHBoxLayout()
+        win.input = QLineEdit()
+        win.ok_btn = QPushButton("OK")
+        win.ok_btn.clicked.connect(self.on_rename)
+        win.ok_btn.clicked.connect(win.close)
+        hbox.addWidget(QLabel("Name:"), stretch=1)
+        hbox.addWidget(win.input, stretch=2)
+        hbox.addWidget(win.ok_btn, stretch=1)
+        win.setLayout(hbox)
+        return win
 
 
 class ChromatinProps(LayerPropsPanel):
@@ -75,8 +102,14 @@ class ChromatinProps(LayerPropsPanel):
             [l_opacity, self.opacity_control],
         ]
 
+        self.subset_window = RangeList("Take sub-set")
         self.subset_btn = QPushButton("Subset")
+        self.subset_btn.clicked.connect(self.on_subset_btn)
+
         super().__init__(grid_table=layout_table, operation_widgets=[self.subset_btn])
+
+    def on_subset_btn(self):
+        self.subset_window.show()
 
     def on_toggle_show_model(self):
         val = self.show_model_ckbox.isChecked()
@@ -122,7 +155,6 @@ class ChromatinProps(LayerPropsPanel):
                 self.width_control.setMinimum(0)
                 self.width_control.setSingleStep(0.05)
                 self.width_control.setValue(0.1)
-
 
 
 class ChrLabelProps(LayerPropsPanel):

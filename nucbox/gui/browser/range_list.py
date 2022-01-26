@@ -53,6 +53,7 @@ class GenomeRange(object):
 class RangeList(QWidget):
 
     signal_item_changed = pyqtsignal(name="item_changed")
+    signal_ok = pyqtsignal(name="ok")
 
     def __init__(self, title, chr_names=None):
         super().__init__()
@@ -78,12 +79,18 @@ class RangeList(QWidget):
         self.tb = QTextBrowser()
         self.clear_btn = QPushButton("Clear")
         self.clear_btn.pressed.connect(self.clear)
+        self.ok_btn = QPushButton("OK")
+        self.ok_btn.pressed.connect(self.signal_ok)
+        self.ok_btn.pressed.connect(self.close)
+        hbox_btns = QHBoxLayout()
+        hbox_btns.addWidget(self.clear_btn)
+        hbox_btns.addWidget(self.ok_btn)
         vbox = QVBoxLayout()
         vbox.addWidget(l, 0)
         vbox.addLayout(add_hbox, 1)
         vbox.addWidget(self.tb, 2)
         vbox.addLayout(reverse_hbox, 3)
-        vbox.addWidget(self.clear_btn, 4)
+        vbox.addLayout(hbox_btns, 4)
         self.setLayout(vbox)
         self.setWindowTitle(self.title)
         self.setGeometry(300, 300, 300, 300)

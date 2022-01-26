@@ -8,6 +8,7 @@ class Layer(object):
     LABEL = "Layer"
 
     def __init__(self, canvas):
+        self.name = None
         self.vis_objs = []
         self.canvas = canvas
         self.control_panel = self.init_props_panel()
@@ -22,13 +23,19 @@ class Layer(object):
             setattr(o, key, val)
 
     def __str__(self):
-        return f"{self.LABEL} <{id(self)}>"
+        if self.name is None:
+            return f"{self.LABEL} <{id(self)}>"
+        else:
+            return self.name
 
     def __repr__(self):
         return str(self)
 
     def init_props_panel(self) -> QWidget:
-        return QWidget()
+        from .obj_panel import LayerPropsPanel
+        w = LayerPropsPanel()
+        w.connect_with(self)
+        return w
 
 
 class ChrLabelLayer(Layer):
