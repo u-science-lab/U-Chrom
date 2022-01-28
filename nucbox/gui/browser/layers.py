@@ -79,6 +79,7 @@ class ChromatinLayer(Layer):
 
     def __init__(self, canvas, df, chr_colormap, width=1.0, style='line'):
         self.parent = None
+        self.df = df
         super().__init__(canvas)
         self.cache_props = {}
         self.draw(df=df, chr_colormap=chr_colormap, width=width, style=style)

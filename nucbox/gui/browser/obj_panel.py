@@ -78,8 +78,6 @@ class ChromatinProps(LayerPropsPanel):
         l_style = QLabel("Model style")
         self.model_style_select = QComboBox()
         self.model_style_select.addItem("line")
-        self.model_style_select.addItem("points")
-        self.model_style_select.addItem("tube")
         self.model_style_select.currentIndexChanged.connect(self.on_model_style_change)
 
         l_width = QLabel("Width/Radius")
@@ -111,6 +109,22 @@ class ChromatinProps(LayerPropsPanel):
         self.subset_btn.clicked.connect(self.on_subset_btn)
 
         super().__init__(grid_table=layout_table, operation_widgets=[self.subset_btn])
+
+    def connect_with(self, layer):
+        super().connect_with(layer)
+        layers_row_num = [l.df.shape[0] for l in self.layers]
+        def is_in_list(item):
+            cb = self.model_style_select
+            for i in range(cb.count()):
+                if item == cb.itemText(i):
+                    return True
+            return False
+        points_thresh = 20000
+        if all([n <= points_thresh for n in layers_row_num]) and (not is_in_list('points')):
+            self.model_style_select.addItem('points')
+        tube_thresh = 5000
+        if all([n <= tube_thresh for n in layers_row_num]) and (not is_in_list('tube')):
+            self.model_style_select.addItem('tube')
 
     def update_params(self):
         self.on_opacity_changed()
@@ -149,6 +163,8 @@ class ChromatinProps(LayerPropsPanel):
                 else:
                     layer.remove()
                     layer.draw(width=width)
+                    if layer.parent:
+                        layer.parent.re_render(parent=True)
         self.on_opacity_changed()
 
     def on_opacity_changed(self):

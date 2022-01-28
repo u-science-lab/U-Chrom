@@ -184,10 +184,13 @@ class MainWindow(QMainWindow):
         options |= QFileDialog.DontUseNativeDialog
         path, _ = QFileDialog.getOpenFileName(self, "Open", "", "All Files (*);;CSV Files(*.csv)", options=options)
         if path:
-            print(path)
-            df = read_particles(path)
-            self.load_model(df)
-            self.init_draw()
+            try:
+                print(path)
+                df = read_particles(path)
+                self.load_model(df)
+                self.init_draw()
+            except Exception as e:
+                print(str(e))
 
     def init_draw(self):
         for layer in self.canvas.control_panel.layers:
