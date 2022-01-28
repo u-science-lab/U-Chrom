@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import (QHBoxLayout, QLineEdit, QPushButton, QTextBrowser, QWidget, QLabel, 
                              QVBoxLayout, QCheckBox)
+import pandas as pd
 
 from .utils import pyqtsignal
 
@@ -130,3 +131,11 @@ class RangeList(QWidget):
             self.append(str(r))
         if block_signal:
             self._connect_change()
+
+    def subset_dataframe(self, df: pd.DataFrame):
+        res = []
+        for range in list(self.ranges):
+            sub_df = df[(df['chrom'] == range.chr) & (df['start'] >= range.start) & (df['end'] <= range.end)]
+            res.append(sub_df)
+        res = pd.concat(res).drop_duplicates()
+        return res

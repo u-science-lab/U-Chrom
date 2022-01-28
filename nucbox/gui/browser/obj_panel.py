@@ -103,6 +103,7 @@ class ChromatinProps(LayerPropsPanel):
         ]
 
         self.subset_window = RangeList("Take sub-set")
+        self.subset_window.signal_ok.connect(self.on_take_subset)
         self.subset_btn = QPushButton("Subset")
         self.subset_btn.clicked.connect(self.on_subset_btn)
 
@@ -110,6 +111,15 @@ class ChromatinProps(LayerPropsPanel):
 
     def on_subset_btn(self):
         self.subset_window.show()
+
+    def on_take_subset(self):
+        for layer in self.layers:
+            df = layer.cache_props.get('df')
+            if df is None:
+                continue
+            chr_colormap = layer.cache_props.get('chr_colormap')
+            sub_df = self.subset_window.subset_dataframe(df)
+            layer.canvas.control_panel.add_chromatin_layer(sub_df, chr_colormap)
 
     def on_toggle_show_model(self):
         val = self.show_model_ckbox.isChecked()
