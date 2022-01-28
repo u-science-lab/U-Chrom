@@ -137,5 +137,8 @@ class RangeList(QWidget):
         for range in list(self.ranges):
             sub_df = df[(df['chrom'] == range.chr) & (df['start'] >= range.start) & (df['end'] <= range.end)]
             res.append(sub_df)
-        res = pd.concat(res).drop_duplicates()
+        if res:
+            res = pd.concat(res).drop_duplicates()
+        else:
+            res = pd.DataFrame(columns=df.columns)
         return res

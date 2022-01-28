@@ -49,6 +49,9 @@ class LayerPropsPanel(QWidget):
         for layer in self.layers:
             layer.canvas.control_panel.rename_item(layer, new_name)
 
+    def update_params(self):
+        pass
+
     def __get_rename_window(self):
         win = QWidget()
         win.setWindowTitle("Rename")
@@ -81,9 +84,9 @@ class ChromatinProps(LayerPropsPanel):
 
         l_width = QLabel("Width/Radius")
         self.width_control = QDoubleSpinBox()
-        self.width_control.setMaximum(10.0)
+        self.width_control.setMaximum(20.0)
         self.width_control.setMinimum(0.0)
-        self.width_control.setSingleStep(0.2)
+        self.width_control.setSingleStep(1.0)
         self.width_control.setValue(1.0)
         self.width_control.valueChanged.connect(self.on_width_changed)
 
@@ -109,6 +112,10 @@ class ChromatinProps(LayerPropsPanel):
 
         super().__init__(grid_table=layout_table, operation_widgets=[self.subset_btn])
 
+    def update_params(self):
+        self.on_opacity_changed()
+        self.on_width_changed()
+
     def on_subset_btn(self):
         self.subset_window.show()
 
@@ -119,7 +126,12 @@ class ChromatinProps(LayerPropsPanel):
                 continue
             chr_colormap = layer.cache_props.get('chr_colormap')
             sub_df = self.subset_window.subset_dataframe(df)
-            layer.canvas.control_panel.add_chromatin_layer(sub_df, chr_colormap)
+            if sub_df.shape[0] == 0:
+                continue
+            name = 'subset: ' + ' '.join(sorted([str(r) for r in self.subset_window.ranges]))
+            new_layer = layer.canvas.control_panel.add_chromatin_layer(sub_df, chr_colormap, parent=layer, name=name)
+            # re-render for transparency
+            new_layer.parent.re_render(parent=True)
 
     def on_toggle_show_model(self):
         val = self.show_model_ckbox.isChecked()
@@ -165,6 +177,8 @@ class ChromatinProps(LayerPropsPanel):
                 self.width_control.setMinimum(0)
                 self.width_control.setSingleStep(0.05)
                 self.width_control.setValue(0.1)
+            if layer.parent:
+                layer.parent.re_render(parent=True)
 
 
 class ChrLabelProps(LayerPropsPanel):

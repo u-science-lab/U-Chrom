@@ -78,6 +78,7 @@ class ChromatinLayer(Layer):
     LABEL = "Chromatin"
 
     def __init__(self, canvas, df, chr_colormap, width=1.0, style='line'):
+        self.parent = None
         super().__init__(canvas)
         self.cache_props = {}
         self.draw(df=df, chr_colormap=chr_colormap, width=width, style=style)
@@ -128,4 +129,13 @@ class ChromatinLayer(Layer):
         w = ChromatinProps()
         w.connect_with(self)
         return w
+
+    def re_render(self, parent=False):
+        self.remove()
+        self.draw()
+        self.control_panel.update_params()
+        if parent:
+            if self.parent is None:
+                return
+            self.parent.re_render(parent=True)
 

@@ -99,10 +99,13 @@ class CanvasControl(QWidget):
         except:
             pass
 
-    def add_chromatin_layer(self, df, chr_colormap):
+    def add_chromatin_layer(self, df, chr_colormap, parent=None, name=None):
         from .layers import ChromatinLayer
         layer = ChromatinLayer(self.canvas, df, chr_colormap)
+        layer.parent = parent
+        layer.name = name
         self.layers.append(layer)
         self.current_layer = layer
         self.layer_control.list.addItem(str(layer))
         self.layer_control.list.setCurrentRow(len(self.layers)-1)
+        return layer
