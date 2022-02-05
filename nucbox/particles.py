@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 
-def create_particles(df, particle_size, prev_particles=None, random_seed=0, max_radius=10):
+def create_particles_from_pairs(df, particle_size, prev_particles=None, random_seed=0, max_radius=10):
     np.random.seed(random_seed)
     chroms = sorted(set(df['chr1'].unique()) | \
                     set(df['chr2'].unique()))
@@ -48,11 +48,15 @@ def create_particles(df, particle_size, prev_particles=None, random_seed=0, max_
     return particles
 
 
-def count_contacts(df, particles):
+def load_particles_from_mcool(path):
+    pass
+
+
+def count_contacts(pairs_df, particles):
     """Count contacts between all particles."""
     contacts = {}
     chroms = set(particles['chrom'].unique())
-    for (chr1, chr2), sub_df in df.groupby(by=['chr1', 'chr2']):
+    for (chr1, chr2), sub_df in pairs_df.groupby(by=['chr1', 'chr2']):
         if any([c not in chroms for c in (chr1, chr2)]):
             continue
         idxs = []

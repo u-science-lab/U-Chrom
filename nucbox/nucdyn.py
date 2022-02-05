@@ -4,7 +4,7 @@ import pandas as pd
 import taichi as ti
 import numpy as np
 
-from .particles import create_particles, count_contacts
+from .particles import create_particles_from_pairs, count_contacts
 from .io import read_pairs
 
 
@@ -332,33 +332,36 @@ class Simulation:
         self.fb_snode_tree.destroy()
 
 
-default_prams = {
+default_params = {
     "bb_lower": 0.1,
     "bb_upper": 1.1, 
     "lower": 0.8,
     "upper": 1.2,
     "repulsive_lim": 2.0,
-    "pow": -0.33,
     "hot": 5000.0,
     "cold": 10.0,
     "dyns": 500,
     "random_seed": 0,
     "time_step": 0.01,
-    "size_steps": [8, 4, 2, 0.4, 0.2, 0.1],
-    "use_grid": False,
-    "max_radius": 10.0,
-    "grid_range_scale": 5.0,
-    "cell_capacity": 10000,
-    "shift_freq": 10,
 }
 
 
-def main(
+default_params_single_cell = {**default_params, **{
+    "pow": -0.33,
+    "size_steps": [8, 4, 2, 0.4, 0.2, 0.1],
+    "max_radius": 10.0,
+    "use_grid": False,
+    "grid_range_scale": 5.0,
+    "cell_capacity": 10000,
+    "shift_freq": 10,
+}}
+
+
+def main_single_cell(
         in_file, out_file,
         arch="gpu", device_memory_fraction=0.9,
-        show_step_in_gui=False, show_freq=100,
         **kwargs):
-    prams = copy(default_prams)
+    prams = copy(default_params_single_cell)
     prams.update(kwargs)
     print(in_file)
     print(prams)
@@ -366,31 +369,11 @@ def main(
     df = read_pairs(in_file)
     print(f"num_pairs:{df.shape[0]}")
     step_callback = None
-    if show_step_in_gui:
-        from .gui.browser import MainWindow, get_qapp
-        qapp = get_qapp()
-        win = MainWindow(canvas_only=True)
-        win.show()
-        init_drawed = False
-        def step_callback(simu, step):
-            if step % show_freq != 0: return
-            df = simu.get_results()
-            win.load_model(df)
-            win.canvas.remove_label()
-            win.canvas.remove_model()
-            nonlocal init_drawed
-            if init_drawed:
-                win.on_data_changed()
-            else:
-                win.init_draw()
-                init_drawed = True
-            win.adjust_camera()
-            qapp.processEvents()
     Mb = 10**6
     particles = None
     for size in prams['size_steps']:
         particle_size = int(Mb * size)
-        particles = create_particles(df, particle_size, prev_particles=particles, random_seed=prams['random_seed'], max_radius=prams['max_radius'])
+        particles = create_particles_from_pairs(df, particle_size, prev_particles=particles, random_seed=prams['random_seed'], max_radius=prams['max_radius'])
         contacts = count_contacts(df, particles)
         restraints = get_restraints(particles, contacts, prams)
         print("====================")
@@ -405,11 +388,26 @@ def main(
         particles = simu.get_results()
         simu.destroy_fields()
     particles.to_csv(out_file)
-    if show_step_in_gui:
-        print("Run visualization GUI")
-        win.add_widgets()
-        qapp.exec()
+
+
+default_params_bulk_cell = {**default_params, **{
+
+}}
+
+
+def main_bulk_cell(
+        in_file, out_file,
+        arch="gpu", device_memory_fraction=0.9,
+        **kwargs):
+    prams = copy(default_params_bulk_cell)
+    prams.update(kwargs)
+    print(in_file)
+    print(prams)
+    ti.init(arch=getattr(ti, arch), device_memory_fraction=device_memory_fraction)
 
 
 if __name__ == "__main__":
-    fire.Fire(main)
+    fire.Fire({
+        'single': main_single_cell,
+        'bulk': main_bulk_cell,
+    })

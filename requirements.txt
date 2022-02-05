@@ -4,3 +4,4 @@ pandas
 vispy
 PyQt5
 qdarkgraystyle
+six
