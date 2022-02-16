@@ -3,12 +3,13 @@ import fire
 import pandas as pd
 import taichi as ti
 import numpy as np
+import h5py
 
-from .particles import create_particles_from_pairs, count_contacts
+from .particles import create_particles_from_pairs, count_contacts, load_cool, create_particles_from_cool, create_contacts_from_cool
 from .io import read_pairs
 
 
-def get_restraints(particles, contacts, prams, scale=1.0):
+def get_restraints(particles, contacts, prams):
     chroms = set(particles['chrom'].unique())
     restraints = []
     # backbone
@@ -26,7 +27,7 @@ def get_restraints(particles, contacts, prams, scale=1.0):
             'd_max': prams['bb_upper'],
         }))
     # contact
-    d_target = (contacts['count'] * scale) ** prams['pow']
+    d_target = (contacts['count'] * prams['scale']) ** prams['pow']
     d_lower = d_target * prams['lower']
     d_upper = d_target * prams['upper']
     restraints.append(pd.DataFrame({
@@ -333,28 +334,45 @@ class Simulation:
 
 
 default_params = {
+    "pow": -0.33,
     "bb_lower": 0.1,
     "bb_upper": 1.1, 
     "lower": 0.8,
-    "upper": 1.2,
     "repulsive_lim": 2.0,
     "hot": 5000.0,
     "cold": 10.0,
     "dyns": 500,
     "random_seed": 0,
     "time_step": 0.01,
-}
-
-
-default_params_single_cell = {**default_params, **{
-    "pow": -0.33,
-    "size_steps": [8, 4, 2, 0.4, 0.2, 0.1],
     "max_radius": 10.0,
     "use_grid": False,
     "grid_range_scale": 5.0,
     "cell_capacity": 10000,
     "shift_freq": 10,
+}
+
+
+default_params_single_cell = {**default_params, **{
+    "upper": 1.2,
+    "scale": 1.0,
+    "size_steps": [8, 4, 2, 0.4, 0.2, 0.1],
 }}
+
+
+def run_once(particles, particle_size, contacts, prams, step_callback):
+    restraints = get_restraints(particles, contacts, prams)
+    print("====================")
+    print(f"particle_size:{particle_size} num_particles:{particles.shape[0]}")
+    print(f"num_contact:{contacts.shape[0]} num_restraints:{restraints.shape[0]}")
+    grid = None
+    if prams['use_grid']:
+        grid = Grid(prams['max_radius'], prams['grid_range_scale'], prams['repulsive_lim'], prams['cell_capacity'])
+    simu = Simulation(particles, particle_size, restraints, prams['repulsive_lim'], prams['time_step'], grid, prams['shift_freq'], step_callback)
+    simu.setup_schedule(prams['dyns'], prams['hot'], prams['cold'])
+    simu.run()
+    particles = simu.get_results()
+    simu.destroy_fields()
+    return particles
 
 
 def main_single_cell(
@@ -375,23 +393,15 @@ def main_single_cell(
         particle_size = int(Mb * size)
         particles = create_particles_from_pairs(df, particle_size, prev_particles=particles, random_seed=prams['random_seed'], max_radius=prams['max_radius'])
         contacts = count_contacts(df, particles)
-        restraints = get_restraints(particles, contacts, prams)
-        print("====================")
-        print(f"particle_size:{particle_size} num_particles:{particles.shape[0]}")
-        print(f"num_contact:{contacts.shape[0]} num_restraints:{restraints.shape[0]}")
-        grid = None
-        if prams['use_grid']:
-            grid = Grid(prams['max_radius'], prams['grid_range_scale'], prams['repulsive_lim'], prams['cell_capacity'])
-        simu = Simulation(particles, particle_size, restraints, prams['repulsive_lim'], prams['time_step'], grid, prams['shift_freq'], step_callback)
-        simu.setup_schedule(prams['dyns'], prams['hot'], prams['cold'])
-        simu.run()
-        particles = simu.get_results()
-        simu.destroy_fields()
+        particles = run_once(particles, particle_size, contacts, prams, step_callback)
     particles.to_csv(out_file)
 
 
 default_params_bulk_cell = {**default_params, **{
-
+    "upper": 2.0,
+    "scale": 0.05,
+    "min_skip": 2,
+    "min_count": 1000,
 }}
 
 
@@ -404,6 +414,12 @@ def main_bulk_cell(
     print(in_file)
     print(prams)
     ti.init(arch=getattr(ti, arch), device_memory_fraction=device_memory_fraction)
+    print("Loading data")
+    bin_df, pixel_df, c = load_cool(in_file)
+    particles = create_particles_from_cool(bin_df)
+    contacts = create_contacts_from_cool(pixel_df, prams['min_count'], prams['min_skip'])
+    particles = run_once(particles, c.binsize, contacts, prams, None)
+    particles.to_csv(out_file)
 
 
 if __name__ == "__main__":

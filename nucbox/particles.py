@@ -1,5 +1,20 @@
+import itertools
+
 import pandas as pd
 import numpy as np
+
+from .lib.cooler import Cooler
+import h5py
+
+
+def random_pos(n_particle, max_radius):
+    """Random 3D points inside a sphere"""
+    radius = np.random.randn(n_particle) * max_radius
+    theta, phi = [np.random.randn(n_particle) * (2 * np.pi) for _ in range(2)]
+    x = radius * np.cos(theta) * np.sin(phi)
+    y = radius * np.sin(theta) * np.cos(phi)
+    z = radius * np.cos(phi)
+    return x, y, z
 
 
 def create_particles_from_pairs(df, particle_size, prev_particles=None, random_seed=0, max_radius=10):
@@ -17,12 +32,8 @@ def create_particles_from_pairs(df, particle_size, prev_particles=None, random_s
         starts, ends = [s.astype(np.int64) for s in [space[:-1], space[1:]]]
         pos = {}
         if prev_particles is None:
-            # generate random positions inside a sphere
-            radius = np.random.randn(n_particle) * max_radius
-            theta, phi = [np.random.randn(n_particle) * (2 * np.pi) for _ in range(2)]
-            pos['x'] = radius * np.cos(theta) * np.sin(phi)
-            pos['y'] = radius * np.sin(theta) * np.cos(phi)
-            pos['z'] = radius * np.cos(phi)
+            # generate random positions
+            pos['x'], pos['y'], pos['z'] = random_pos(n_particle, max_radius)
         else:
             # generate positions with interpolation
             prev = prev_particles[prev_particles['chrom'] == chr]
@@ -46,10 +57,6 @@ def create_particles_from_pairs(df, particle_size, prev_particles=None, random_s
         particles[chr] = p_df
     particles = pd.concat(particles.values()).reset_index()
     return particles
-
-
-def load_particles_from_mcool(path):
-    pass
 
 
 def count_contacts(pairs_df, particles):
@@ -81,3 +88,46 @@ def count_contacts(pairs_df, particles):
     contacts = pd.concat(contacts.values()).reset_index(drop=True)
     return contacts
 
+
+def load_cool(path):
+    """Load bins and pixels from cooler."""
+    c = Cooler(path)
+    with h5py.File(c.store) as f:
+        c_root = f['resolutions'][str(c.binsize)]
+        c_bins = c_root['bins']
+        bin_df = pd.DataFrame({
+            'chrom': c.chromsizes.index[c_bins['chrom'][:]],
+            'start': c_bins['start'][:],
+            'end': c_bins['end'][:],
+        })
+        c_pixels = c_root['pixels']
+        pixel_df = pd.DataFrame({
+            'bin1_id': c_pixels['bin1_id'][:],
+            'bin2_id': c_pixels['bin2_id'][:],
+            'count': c_pixels['count'][:],
+        })
+    return bin_df, pixel_df, c
+
+
+def create_particles_from_cool(bin_df, max_radius=10):
+    x, y, z = random_pos(bin_df.shape[0], max_radius)
+    particles = pd.DataFrame({
+        'chrom': bin_df['chrom'],
+        'start': bin_df['start'],
+        'end': bin_df['end'],
+        'x': x,
+        'y': y,
+        'z': z,
+    })
+    return particles
+
+
+def create_contacts_from_cool(pixel_df, min_count=10, min_skip=2):
+    pixel_df = pixel_df[pixel_df['count'] >= min_count]
+    pixel_df = pixel_df[(pixel_df['bin2_id'] - pixel_df['bin1_id']) >= min_skip]
+    contacts = pd.DataFrame({
+        "particle_1": pixel_df['bin1_id'],
+        "particle_2": pixel_df['bin2_id'],
+        "count": pixel_df['count']
+    })
+    return contacts
