@@ -3,10 +3,9 @@ import fire
 import pandas as pd
 import taichi as ti
 import numpy as np
-import h5py
 
-from .particles import create_particles_from_pairs, count_contacts, load_cool, create_particles_from_cool, create_contacts_from_cool
-from .io import read_pairs
+from ..particles import create_particles_from_pairs, count_contacts, load_cool, create_particles_from_cool, create_contacts_from_cool
+from ..io import read_pairs
 
 
 def get_restraints(particles, contacts, prams):
@@ -338,25 +337,22 @@ default_params = {
     "bb_lower": 0.1,
     "bb_upper": 1.1, 
     "lower": 0.8,
+    "upper": 1.2,
+    "scale": 1.0,
     "repulsive_lim": 2.0,
     "hot": 5000.0,
     "cold": 10.0,
     "dyns": 500,
     "random_seed": 0,
     "time_step": 0.01,
+    "size_steps": [8, 4, 2, 0.4, 0.2, 0.1],
     "max_radius": 10.0,
     "use_grid": False,
     "grid_range_scale": 5.0,
     "cell_capacity": 10000,
     "shift_freq": 10,
+    "min_skip": 2,
 }
-
-
-default_params_single_cell = {**default_params, **{
-    "upper": 1.2,
-    "scale": 1.0,
-    "size_steps": [8, 4, 2, 0.4, 0.2, 0.1],
-}}
 
 
 def run_once(particles, particle_size, contacts, prams, step_callback):
@@ -375,15 +371,7 @@ def run_once(particles, particle_size, contacts, prams, step_callback):
     return particles
 
 
-def main_single_cell(
-        in_file, out_file,
-        arch="gpu", device_memory_fraction=0.9,
-        **kwargs):
-    prams = copy(default_params_single_cell)
-    prams.update(kwargs)
-    print(in_file)
-    print(prams)
-    ti.init(arch=getattr(ti, arch), device_memory_fraction=device_memory_fraction)
+def run_input_pairs(in_file, prams):
     df = read_pairs(in_file)
     print(f"num_pairs:{df.shape[0]}")
     step_callback = None
@@ -392,38 +380,37 @@ def main_single_cell(
     for size in prams['size_steps']:
         particle_size = int(Mb * size)
         particles = create_particles_from_pairs(df, particle_size, prev_particles=particles, random_seed=prams['random_seed'], max_radius=prams['max_radius'])
-        contacts = count_contacts(df, particles)
+        contacts = count_contacts(df, particles, prams['min_skip'])
         particles = run_once(particles, particle_size, contacts, prams, step_callback)
-    particles.to_csv(out_file)
+    return particles
 
 
-default_params_bulk_cell = {**default_params, **{
-    "upper": 2.0,
-    "scale": 0.05,
-    "min_skip": 2,
-    "min_count": 1000,
-}}
+def run_input_cool(in_file, prams):
+    print("Loading data")
+    bin_df, pixel_df, c = load_cool(in_file)
+    print(f"num_pixels:{pixel_df.shape[0]}")
+    particles = create_particles_from_cool(bin_df)
+    contacts = create_contacts_from_cool(pixel_df, prams['min_count'], prams['min_skip'])
+    particles = run_once(particles, c.binsize, contacts, prams, None)
+    return particles
 
 
-def main_bulk_cell(
-        in_file, out_file,
-        arch="gpu", device_memory_fraction=0.9,
-        **kwargs):
-    prams = copy(default_params_bulk_cell)
+def main(in_file, out_file,
+         arch="gpu", device_memory_fraction=0.9,
+         **kwargs):
+    input_type = "cool" if in_file.endswith(".cool") or in_file.endswith(".mcool") else "pairs"
+    prams = copy(default_params)
     prams.update(kwargs)
     print(in_file)
     print(prams)
     ti.init(arch=getattr(ti, arch), device_memory_fraction=device_memory_fraction)
-    print("Loading data")
-    bin_df, pixel_df, c = load_cool(in_file)
-    particles = create_particles_from_cool(bin_df)
-    contacts = create_contacts_from_cool(pixel_df, prams['min_count'], prams['min_skip'])
-    particles = run_once(particles, c.binsize, contacts, prams, None)
+    if input_type == "cool":
+        prams.update({"min_count": 10})
+        particles = run_input_cool(in_file, prams)
+    else:
+        particles = run_input_pairs(in_file, prams)
     particles.to_csv(out_file)
 
 
 if __name__ == "__main__":
-    fire.Fire({
-        'single': main_single_cell,
-        'bulk': main_bulk_cell,
-    })
+    fire.Fire(main)

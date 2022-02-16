@@ -1,5 +1,3 @@
-import itertools
-
 import pandas as pd
 import numpy as np
 
@@ -59,7 +57,7 @@ def create_particles_from_pairs(df, particle_size, prev_particles=None, random_s
     return particles
 
 
-def count_contacts(pairs_df, particles):
+def count_contacts(pairs_df, particles, min_skip=2):
     """Count contacts between all particles."""
     contacts = {}
     chroms = set(particles['chrom'].unique())
@@ -82,8 +80,7 @@ def count_contacts(pairs_df, particles):
             "count": cnt,
         })
         if chr1 == chr2:
-            count = count[count['particle_1'] != count['particle_2']]
-            count = count[(count['particle_2'] - count['particle_1']) > 1]
+            count = count[(count['particle_2'] - count['particle_1']) >= min_skip]
         contacts[(chr1, chr2)] = count
     contacts = pd.concat(contacts.values()).reset_index(drop=True)
     return contacts
