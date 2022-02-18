@@ -4,7 +4,7 @@ import pandas as pd
 import taichi as ti
 import numpy as np
 
-from ..particles import create_particles, count_contacts
+from .particles import create_particles, count_contacts
 from ..io import read_pairs
 
 

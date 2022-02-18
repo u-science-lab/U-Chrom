@@ -2,6 +2,9 @@ import io
 import gzip
 import pandas as pd
 import fire
+import h5py
+
+from .lib.cooler import Cooler
 
 
 def open_file(path, mode="r"):
@@ -30,6 +33,32 @@ def read_3dg(path):
     df = pd.read_csv(path, sep="\t", comment="#", header=None)
     df.columns = ["chrom", "start", "x", 'y', 'z']
     return df
+
+
+def load_cool(path):
+    """Load bins and pixels from cooler."""
+    c = Cooler(path)
+    with h5py.File(c.store) as f:
+        c_root = f[c.uri.split("::")[1]] if "::" in c.uri else f
+        c_bins = c_root['bins']
+        bin_df = pd.DataFrame({
+            'chrom': c.chromsizes.index[c_bins['chrom'][:]],
+            'start': c_bins['start'][:],
+            'end': c_bins['end'][:],
+        })
+        c_pixels = c_root['pixels']
+        bin1 = bin_df.loc[c_pixels['bin1_id'][:]].reset_index(drop=True)
+        bin2 = bin_df.loc[c_pixels['bin2_id'][:]].reset_index(drop=True)
+        pixel_df = pd.DataFrame({
+            'chr1': bin1.chrom,
+            'start1': bin1.start,
+            'end1': bin1.end,
+            'chr2': bin2.chrom,
+            'start2': bin2.start,
+            'end2': bin2.end,
+            'count': c_pixels['count'][:],
+        })
+    return pixel_df
 
 
 def export_pdb_coords(file_path, particles, scale=1.0, extended=True):

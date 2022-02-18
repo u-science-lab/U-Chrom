@@ -1,11 +1,16 @@
 from copy import copy
+from functools import partial
+
 import fire
 import pandas as pd
 import taichi as ti
 import numpy as np
 
-from ..particles import create_particles_from_pairs, count_contacts, load_cool, create_particles_from_cool, create_contacts_from_cool
-from ..io import read_pairs
+from .particles import (
+    create_particles_from_pairs, create_contacts_from_pairs,
+    create_particles_from_cool, create_contacts_from_cool
+)
+from ..io import read_pairs, load_cool
 
 
 def get_restraints(particles, contacts, prams):
@@ -371,44 +376,34 @@ def run_once(particles, particle_size, contacts, prams, step_callback):
     return particles
 
 
-def run_input_pairs(in_file, prams):
-    df = read_pairs(in_file)
-    print(f"num_pairs:{df.shape[0]}")
-    step_callback = None
-    Mb = 10**6
-    particles = None
-    for size in prams['size_steps']:
-        particle_size = int(Mb * size)
-        particles = create_particles_from_pairs(df, particle_size, prev_particles=particles, random_seed=prams['random_seed'], max_radius=prams['max_radius'])
-        contacts = count_contacts(df, particles, prams['min_skip'])
-        particles = run_once(particles, particle_size, contacts, prams, step_callback)
-    return particles
-
-
-def run_input_cool(in_file, prams):
-    print("Loading data")
-    bin_df, pixel_df, c = load_cool(in_file)
-    print(f"num_pixels:{pixel_df.shape[0]}")
-    particles = create_particles_from_cool(bin_df)
-    contacts = create_contacts_from_cool(pixel_df, prams['min_count'], prams['min_skip'])
-    particles = run_once(particles, c.binsize, contacts, prams, None)
-    return particles
-
-
 def main(in_file, out_file,
          arch="gpu", device_memory_fraction=0.9,
          **kwargs):
-    input_type = "cool" if in_file.endswith(".cool") or in_file.endswith(".mcool") else "pairs"
+    input_type = "cool" if any([s in in_file for s in [".scool", '.cool', '.mcool']]) else "pairs"
     prams = copy(default_params)
     prams.update(kwargs)
     print(in_file)
     print(prams)
     ti.init(arch=getattr(ti, arch), device_memory_fraction=device_memory_fraction)
     if input_type == "cool":
-        prams.update({"min_count": 10})
-        particles = run_input_cool(in_file, prams)
+        prams.update({"min_count": 0})
+        read_func = load_cool
+        create_particles = create_particles_from_cool
+        create_contacts = partial(create_contacts_from_cool, min_count=prams['min_count'])
     else:
-        particles = run_input_pairs(in_file, prams)
+        read_func = read_pairs
+        create_particles = create_particles_from_pairs
+        create_contacts = create_contacts_from_pairs
+    print("Loading data")
+    df = read_func(in_file)
+    print(f"num_pixels:{df.shape[0]}")
+    particles = None
+    Mb = 10**6
+    for size in prams['size_steps']:
+        particle_size = int(Mb * size)
+        particles = create_particles(df, particle_size, prev_particles=particles, random_seed=prams['random_seed'], max_radius=prams['max_radius'])
+        contacts = create_contacts(df, particles, min_skip=prams['min_skip'])
+        particles = run_once(particles, particle_size, contacts, prams, None)
     particles.to_csv(out_file)
 
 

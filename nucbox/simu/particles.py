@@ -1,8 +1,6 @@
 import pandas as pd
 import numpy as np
-
-from .lib.cooler import Cooler
-import h5py
+from functools import partial
 
 
 def random_pos(n_particle, max_radius):
@@ -15,17 +13,19 @@ def random_pos(n_particle, max_radius):
     return x, y, z
 
 
-def create_particles_from_pairs(df, particle_size, prev_particles=None, random_seed=0, max_radius=10):
+def _create_particles(df, particle_size, prev_particles=None, random_seed=0, max_radius=10, min_label='pos1', max_label='pos2'):
     np.random.seed(random_seed)
     chroms = sorted(set(df['chr1'].unique()) | \
                     set(df['chr2'].unique()))
     particles = {}
     for chr in chroms:
-        min_ = df[df['chr1'] == chr]['pos1'].min()
-        max_ = df[df['chr2'] == chr]['pos2'].max()
+        min_ = df[df['chr1'] == chr][min_label].min()
+        max_ = df[df['chr2'] == chr][max_label].max()
         if any([np.isnan(i) for i in (min_, max_)]):
             continue
         n_particle = (max_ - min_) // particle_size
+        if n_particle <= 3:
+            continue
         space = np.linspace(min_, max_, n_particle+1)
         starts, ends = [s.astype(np.int64) for s in [space[:-1], space[1:]]]
         pos = {}
@@ -57,11 +57,15 @@ def create_particles_from_pairs(df, particle_size, prev_particles=None, random_s
     return particles
 
 
-def count_contacts(pairs_df, particles, min_skip=2):
+create_particles_from_pairs = partial(_create_particles, min_label="pos1", max_label="pos2")
+create_particles_from_cool = partial(_create_particles, min_label='start1', max_label='end2')
+
+
+def count_contacts(df, particles, min_skip=2):
     """Count contacts between all particles."""
     contacts = {}
     chroms = set(particles['chrom'].unique())
-    for (chr1, chr2), sub_df in pairs_df.groupby(by=['chr1', 'chr2']):
+    for (chr1, chr2), sub_df in df.groupby(by=['chr1', 'chr2']):
         if any([c not in chroms for c in (chr1, chr2)]):
             continue
         idxs = []
@@ -69,8 +73,13 @@ def count_contacts(pairs_df, particles, min_skip=2):
             sub_prat = particles[particles['chrom'] == c]
             ix = np.searchsorted(sub_prat['start'], sub_df[p], side='right') - 1
             idxs.append(sub_prat.iloc[ix,:].index)
-        idx_pair = np.sort(np.c_[idxs[0], idxs[1]], axis=0)
-        pair, cnt = np.unique(idx_pair, axis=0, return_counts=True)
+        if not "count" in df.columns:
+            idx_pair = np.sort(np.c_[idxs[0], idxs[1]], axis=0)
+            pair, cnt = np.unique(idx_pair, axis=0, return_counts=True)
+        else:
+            idx_df = pd.DataFrame({"ix1": idxs[0], "ix2": idxs[1], "count": sub_df['count']})
+            gdf = idx_df.groupby(['ix1', 'ix2'], as_index=False).sum()
+            pair, cnt = gdf[['ix1', 'ix2']].values, gdf['count'].values
         count = np.c_[pair, cnt]
         count = pd.DataFrame({
             "chr1": chr1,
@@ -86,45 +95,18 @@ def count_contacts(pairs_df, particles, min_skip=2):
     return contacts
 
 
-def load_cool(path):
-    """Load bins and pixels from cooler."""
-    c = Cooler(path)
-    with h5py.File(c.store) as f:
-        c_root = f['resolutions'][str(c.binsize)]
-        c_bins = c_root['bins']
-        bin_df = pd.DataFrame({
-            'chrom': c.chromsizes.index[c_bins['chrom'][:]],
-            'start': c_bins['start'][:],
-            'end': c_bins['end'][:],
-        })
-        c_pixels = c_root['pixels']
-        pixel_df = pd.DataFrame({
-            'bin1_id': c_pixels['bin1_id'][:],
-            'bin2_id': c_pixels['bin2_id'][:],
-            'count': c_pixels['count'][:],
-        })
-    return bin_df, pixel_df, c
+create_contacts_from_pairs = count_contacts
 
 
-def create_particles_from_cool(bin_df, max_radius=10):
-    x, y, z = random_pos(bin_df.shape[0], max_radius)
-    particles = pd.DataFrame({
-        'chrom': bin_df['chrom'],
-        'start': bin_df['start'],
-        'end': bin_df['end'],
-        'x': x,
-        'y': y,
-        'z': z,
+def create_contacts_from_cool(pixel_df, particles, min_count=0, min_skip=2):
+    if min_count > 0:
+        pixel_df = pixel_df[pixel_df['count'] >= min_count]
+    df = pd.DataFrame({
+        "chr1": pixel_df['chr1'],
+        "pos1": (pixel_df['start1'] + pixel_df['end1']) / 2,
+        "chr2": pixel_df['chr2'],
+        "pos2": (pixel_df['start2'] + pixel_df['end2']) / 2,
+        "count": pixel_df["count"],
     })
-    return particles
-
-
-def create_contacts_from_cool(pixel_df, min_count=10, min_skip=2):
-    pixel_df = pixel_df[pixel_df['count'] >= min_count]
-    pixel_df = pixel_df[(pixel_df['bin2_id'] - pixel_df['bin1_id']) >= min_skip]
-    contacts = pd.DataFrame({
-        "particle_1": pixel_df['bin1_id'],
-        "particle_2": pixel_df['bin2_id'],
-        "count": pixel_df['count']
-    })
+    contacts = count_contacts(df, particles, min_skip=min_skip)
     return contacts
