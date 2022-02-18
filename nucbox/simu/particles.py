@@ -15,8 +15,10 @@ def random_pos(n_particle, max_radius):
 
 def _create_particles(df, particle_size, prev_particles=None, random_seed=0, max_radius=10, min_label='pos1', max_label='pos2'):
     np.random.seed(random_seed)
-    chroms = sorted(set(df['chr1'].unique()) | \
-                    set(df['chr2'].unique()))
+    if prev_particles is None:
+        chroms = sorted(set(df['chr1'].unique()) | set(df['chr2'].unique()))
+    else:
+        chroms = sorted(prev_particles['chrom'].unique())
     particles = {}
     for chr in chroms:
         min_ = df[df['chr1'] == chr][min_label].min()
