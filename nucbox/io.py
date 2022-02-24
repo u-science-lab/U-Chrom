@@ -36,7 +36,7 @@ def read_3dg(path):
 
 
 def load_cool(path):
-    """Load bins and pixels from cooler."""
+    """Load pixels from cooler."""
     c = Cooler(path)
     with h5py.File(c.store) as f:
         c_root = f[c.uri.split("::")[1]] if "::" in c.uri else f
