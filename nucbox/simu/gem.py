@@ -3,8 +3,8 @@ import fire
 import pandas as pd
 import taichi as ti
 
-from .particles import create_particles_from_pairs, create_contacts_from_pairs
-from ..io import read_pairs
+from ..utils.particles import create_particles_from_pairs, create_contacts_from_pairs
+from ..utils.io import read_pairs
 
 
 def get_backbones(particles):
@@ -25,43 +25,13 @@ def get_backbones(particles):
 
 
 @ti.kernel
-def compute_E_physics(
+def compute_E_strach(
         E: ti.template(), pos: ti.template(),
         backbones: ti.template(), half_bond_factor: ti.f32):
     for i in backbones:
         a, b = backbones[i]
         diff = pos[b] - pos[a]
         E[None] += half_bond_factor * (diff.norm() - 2.0) ** 2
-
-
-@ti.kernel
-def compute_E_contact(
-        E: ti.template(), pos: ti.template(),
-        contacts_idx: ti.template(), contacts_val: ti.template(),
-        r0: ti.f32, dr: ti.f32, rt: ti.f32, rtn: ti.f32):
-    for i in contacts_idx:
-        a, b = contacts_idx[i]
-        cnt = contacts_val[i]
-        r = (pos[b] - pos[a]).norm()
-        if r <= rt:
-            e = -2 * ti.log(r) + 0.5 * cnt * ti.log((r0 - r) * (1 / (r0 + r)))
-            E[None] += e
-        else:
-            ecnt1 = -2 * ti.log(rt) + 0.5 * cnt * ti.log((r0 - rt) * (1 / (r0 + rt)))
-            ecnt2 = -2 * ti.log(rtn) + 0.5 * cnt * ti.log((r0 - rtn) * (1 / (r0 + rtn)))
-            E[None] = ecnt1 + ((ecnt1 - ecnt2) / dr) * (r - rt)
-
-
-@ti.kernel
-def compute_E_contact_zero(
-        E: ti.template(),
-        pos: ti.template(),
-        r0: ti.f32):
-    for i in range(0, pos.shape[0]-1):
-        for j in range(i+1, pos.shape[0]):
-            diff = pos[j] - pos[i]
-            r = diff.norm()
-            E[None] += -2 * ti.log(r) + 0.075 * ti.log(1 + ti.exp(-4 * (r - r0)))
 
 
 @ti.data_oriented
@@ -123,16 +93,9 @@ class Simulation:
                 self.pos[i][k] *= factor
 
     def run(self):
-        dr = 0.01
-        r_thresh_ratio = 0.995
-        r_thresh = self.distance_thresh * r_thresh_ratio
-        r_thresh_near = r_thresh - dr
         for step in range(self.steps):
             with ti.Tape(loss=self.E):
                 compute_E_physics(self.E, self.pos, self.backbones, self.bond_factor/2)
-                compute_E_contact(self.E, self.pos, self.contacts_idx, self.contacts_val,
-                    self.distance_thresh, dr, r_thresh, r_thresh_near)
-                compute_E_contact_zero(self.E, self.pos, self.distance_thresh)
             self.step()
             if (step < self.shrunk_max) and (step % self.shrunk_freq == 0):
                 self.shrunk()

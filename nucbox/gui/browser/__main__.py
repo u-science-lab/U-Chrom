@@ -2,7 +2,7 @@ import fire
 from vispy import app
 
 from .main_window import MainWindow
-from nucbox.io import read_particles
+from nucbox.utils.io import read_particles
 from .utils import get_qapp
 
 

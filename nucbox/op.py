@@ -17,8 +17,8 @@ def mark_empty_particles(particles, contacts, threshold=0):
 
 
 def mark_empty(particle_path, contacts_path, out_path, resolution=0.8, threshold=0, min_skip=2, min_count=0):
-    from .io import read_pairs, load_cool, read_particles
-    from .simu.particles import (
+    from .utils.io import read_pairs, load_cool, read_particles
+    from .utils.particles import (
         create_particles_from_pairs, create_contacts_from_pairs,
         create_particles_from_cool, create_contacts_from_cool,
     )

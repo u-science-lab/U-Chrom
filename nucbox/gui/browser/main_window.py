@@ -9,7 +9,7 @@ from vispy.color import Color
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QFileDialog, QMainWindow, QSplitter, QStackedWidget)
 
-from nucbox.io import read_particles
+from nucbox.utils.io import read_particles
 from .canvas import Canvas
 from .menubar import MenuBar
 

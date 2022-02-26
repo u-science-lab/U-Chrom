@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from functools import partial
+from functools import partial, reduce
 
 
 def random_pos(n_particle, max_radius):
@@ -103,12 +103,21 @@ create_contacts_from_pairs = count_contacts
 def create_contacts_from_cool(pixel_df, particles, min_count=0, min_skip=2):
     if min_count > 0:
         pixel_df = pixel_df[pixel_df['count'] >= min_count]
-    df = pd.DataFrame({
-        "chr1": pixel_df['chr1'],
-        "pos1": (pixel_df['start1'] + pixel_df['end1']) / 2,
-        "chr2": pixel_df['chr2'],
-        "pos2": (pixel_df['start2'] + pixel_df['end2']) / 2,
-        "count": pixel_df["count"],
-    })
-    contacts = count_contacts(df, particles, min_skip=min_skip)
+    contacts = count_contacts(pixel_df, particles, min_skip=min_skip)
+    return contacts
+
+
+def filter_contacts(contacts, genome_ranges):
+    from .genome import GenomeRange
+    if type(genome_ranges) is not list:
+        genome_ranges = [genome_ranges]
+    if len(genome_ranges) == 0:
+        return contacts
+    genome_ranges = [(GenomeRange.parse_text(gr) if (type(gr) is not GenomeRange) else gr) for gr in genome_ranges]
+    contacts = contacts[ reduce(lambda a, b: a | b, [contacts['chr1'] == gr.chr for gr in genome_ranges]) ]
+    contacts = contacts[ reduce(lambda a, b: a | b, [contacts['chr2'] == gr.chr for gr in genome_ranges]) ]
+    contacts = contacts[ reduce(lambda a, b: a | b, [contacts['pos1'] >= gr.start for gr in genome_ranges]) ]
+    contacts = contacts[ reduce(lambda a, b: a | b, [contacts['pos1'] <= gr.end   for gr in genome_ranges]) ]
+    contacts = contacts[ reduce(lambda a, b: a | b, [contacts['pos2'] >= gr.start for gr in genome_ranges]) ]
+    contacts = contacts[ reduce(lambda a, b: a | b, [contacts['pos2'] <= gr.end   for gr in genome_ranges]) ]
     return contacts

@@ -6,11 +6,13 @@ import pandas as pd
 import taichi as ti
 import numpy as np
 
-from .particles import (
+from ..utils.particles import (
     create_particles_from_pairs, create_contacts_from_pairs,
     create_particles_from_cool, create_contacts_from_cool,
+    filter_contacts,
 )
-from ..io import read_pairs, load_cool
+from ..utils.io import read_pairs, load_cool
+from ..utils.genome import GenomeRange
 
 
 def get_restraints(particles, contacts, prams):
@@ -338,6 +340,7 @@ class Simulation:
 
 
 default_params = {
+    "genome_ranges": None,
     "pow": -0.33,
     "bb_lower": 0.1,
     "bb_upper": 1.1, 
@@ -397,6 +400,10 @@ def main(in_file, out_file,
     print("Loading data")
     df = read_func(in_file)
     print(f"num_pixels:{df.shape[0]}")
+    if prams['genome_ranges'] is not None:
+        print("Filtering data")
+        df = filter_contacts(df, prams['genome_ranges'])
+        print(f"num_pixels_filtered:{df.shape[0]}")
     particles = None
     Mb = 10**6
     for size in prams['size_steps']:

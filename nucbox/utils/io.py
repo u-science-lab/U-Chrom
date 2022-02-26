@@ -4,7 +4,7 @@ import pandas as pd
 import fire
 import h5py
 
-from .lib.cooler import Cooler
+from ..lib.cooler import Cooler
 
 
 def open_file(path, mode="r"):
@@ -35,7 +35,7 @@ def read_3dg(path):
     return df
 
 
-def load_cool(path):
+def load_cool(path, pos='mid'):
     """Load pixels from cooler."""
     c = Cooler(path)
     with h5py.File(c.store) as f:
@@ -58,6 +58,9 @@ def load_cool(path):
             'end2': bin2.end,
             'count': c_pixels['count'][:],
         })
+        if pos == 'mid':
+            pixel_df['pos1'] = (pixel_df['start1'] + pixel_df['end1']) / 2
+            pixel_df['pos2'] = (pixel_df['start2'] + pixel_df['end2']) / 2
     return pixel_df
 
 
