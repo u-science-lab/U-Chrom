@@ -1,18 +1,12 @@
 from copy import copy
-from functools import partial
 
 import fire
 import pandas as pd
 import taichi as ti
 import numpy as np
 
-from ..utils.particles import (
-    create_particles_from_pairs, create_contacts_from_pairs,
-    create_particles_from_cool, create_contacts_from_cool,
-    filter_contacts,
-)
-from ..utils.io import read_pairs, load_cool
-from ..utils.genome import GenomeRange
+
+from .base import SimulationBase, Grid, deal_input
 
 
 def get_restraints(particles, contacts, prams):
@@ -73,51 +67,9 @@ def get_temp(vel):
     return kin / (3 * n * BOLTZMANN_K)
 
 
-@ti.data_oriented
-class Grid:
-    def __init__(self, max_radius, range_scale, bin_length, capacity):
-        """3D grid for fast neighbor search."""
-        self.capacity = capacity
-        self.bin_length = bin_length
-        s = max_radius * range_scale
-        self.range = r = (-s, s)
-        self.bin_num = int((r[1] - r[0]) // bin_length)
-        self.data = ti.field(ti.i32)
-
-    def init_data(self, fb):
-        fb.dense(ti.ijk, self.bin_num).dynamic(ti.l, self.capacity).place(self.data)
-
-    @ti.kernel
-    def from_pos(self, pos: ti.template()):
-        start, d_lim, capacity, bin_num = ti.static(
-            self.range[0], self.bin_length, self.capacity, self.bin_num)
-        for i in pos:
-            I = [0, 0, 0]
-            for d in ti.static(range(3)):
-                p = pos[i][d]
-                if p < start:
-                    print("[Warning] position exceed grid range(<). please increase grid_range_scale.")
-                ix = int((p - start) // d_lim)
-                if ix >= bin_num:
-                    print("[Warning] position exceed grid range(>). please increase grid_range_scale.")
-                I[d] = ix
-            if ti.length(self.data.parent(), I) == capacity:
-                print("[Warning] cell capacity is not engough! please increase cell_capacity.")
-            ti.append(self.data.parent(), I, i)
-
-    @ti.kernel
-    def print_cells_length(self):
-        for i, j, k in self.data.parent().parent():
-            len_ = ti.length(self.data.parent(), [i, j, k])
-            if len_ != 0:
-                print(i, j, k, len_)
-
-    def clear(self):
-        self.data.parent().deactivate_all()  # clear grid
-
 
 @ti.data_oriented
-class Simulation:
+class Simulation(SimulationBase):
     def __init__(
             self, particles, particle_size, restraints, d_lim, time_step,
             grid=None, shift_freq=1, step_callback=None):
@@ -279,16 +231,6 @@ class Simulation:
         self.rmsd_contact[None] = ti.sqrt(contact/self.rest_idx.shape[0])
         return ti.sqrt(total/self.rest_idx.shape[0])
 
-    @ti.kernel
-    def shift_to_center(self):
-        pos = ti.static(self.pos)
-        center = ti.Vector([0.0, 0.0, 0.0])
-        for i in pos:
-            center += pos[i]
-        center /= pos.shape[0]
-        for i in pos:
-            pos[i] -= center
-
     def setup_schedule(self, num_steps, temp_start, temp_end):
         schedule = []
         adj = 1.0 / np.arctan(10)
@@ -327,13 +269,6 @@ class Simulation:
                 self.shift_to_center()
             if self.step_callback:
                 self.step_callback(self, step)
-
-    def get_results(self, shift_center=True):
-        self.particles[['x', 'y', 'z']] = self.pos.to_numpy()
-        if shift_center:
-            center = self.particles[['x', 'y', 'z']].mean(axis=0)
-            self.particles[['x', 'y', 'z']] -= center  # shift center to (0,0,0)
-        return self.particles
 
     def destroy_fields(self):
         self.fb_snode_tree.destroy()
@@ -382,28 +317,12 @@ def run_once(particles, particle_size, contacts, prams, step_callback):
 def main(in_file, out_file,
          arch="gpu", device_memory_fraction=0.9,
          **kwargs):
-    input_type = "cool" if any([s in in_file for s in [".scool", '.cool', '.mcool']]) else "pairs"
     prams = copy(default_params)
     prams.update(kwargs)
     print(in_file)
+    df, create_particles, create_contacts = deal_input(in_file, prams)
     print(prams)
     ti.init(arch=getattr(ti, arch), device_memory_fraction=device_memory_fraction)
-    if input_type == "cool":
-        prams.update({"min_count": 0})
-        read_func = load_cool
-        create_particles = create_particles_from_cool
-        create_contacts = partial(create_contacts_from_cool, min_count=prams['min_count'])
-    else:
-        read_func = read_pairs
-        create_particles = create_particles_from_pairs
-        create_contacts = create_contacts_from_pairs
-    print("Loading data")
-    df = read_func(in_file)
-    print(f"num_pixels:{df.shape[0]}")
-    if prams['genome_ranges'] is not None:
-        print("Filtering data")
-        df = filter_contacts(df, prams['genome_ranges'])
-        print(f"num_pixels_filtered:{df.shape[0]}")
     particles = None
     Mb = 10**6
     for size in prams['size_steps']:
