@@ -2,3 +2,5 @@ tmp/
 *.pyc
 __pycache__/
 imgui.ini
+
+.vscode/

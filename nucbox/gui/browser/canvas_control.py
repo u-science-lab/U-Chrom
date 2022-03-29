@@ -1,4 +1,3 @@
-from turtle import width
 from PyQt5.QtWidgets import (QListWidget, QWidget, QLabel, QHBoxLayout, QVBoxLayout, QStackedWidget)
 
 
@@ -25,7 +24,7 @@ class LayerPanel(QWidget):
         self.setLayout(vbox)
 
     def set_operations_panel(self, widget=None):
-        if (width is not None) and (self.operation_stack.indexOf(widget) < 0):
+        if (widget is not None) and (self.operation_stack.indexOf(widget) < 0):
             self.operation_stack.addWidget(widget)
         self.operation_stack.setCurrentWidget(widget)
 
