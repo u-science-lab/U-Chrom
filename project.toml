@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "nucbox"
+version = "0.1.0"
+readme = "README.md"
+description = "Ultra fast chromosome 3D reconstraction."
+authors = [
+    {name = "Weize Xu", email = "vet.xwz@gmail.com" },
+]
+dependencies = [
+    "taichi>=1.7.0",
+    "fire>=0.6.0",
+    "pandas>=2.0.3",
+    "vispy>=0.14.2",
+    "PyQt5>=5.15.2",
+    "qdarkgraystyle>=1.0.2",
+    "h5py>=3.10.0",
+    "cooler>=0.9.3",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["nucbox*"]

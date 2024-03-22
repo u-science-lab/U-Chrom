@@ -1,8 +1,8 @@
-taichi>=1.7.0
-fire>=0.6.0
-pandas>=2.0.3
-vispy>=0.14.2
-PyQt5>=5.15.2
-qdarkgraystyle>=1.0.2
-h5py>=3.10.0
-cooler>=0.9.3
+taichi==1.7.0
+fire==0.6.0
+pandas==2.0.3
+vispy==0.14.2
+PyQt5==5.15.2
+qdarkgraystyle==1.0.2
+h5py==3.10.0
+cooler==0.9.3
