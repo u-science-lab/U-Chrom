@@ -5,3 +5,5 @@ vispy
 PyQt5
 qdarkgraystyle
 six
+h5py
+cooler

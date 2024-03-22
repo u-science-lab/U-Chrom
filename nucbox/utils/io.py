@@ -4,7 +4,7 @@ import pandas as pd
 import fire
 import h5py
 
-from ..lib.cooler import Cooler
+from cooler import Cooler
 
 
 def open_file(path, mode="r"):
