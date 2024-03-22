@@ -7,6 +7,7 @@ import numpy as np
 
 
 from .base import SimulationBase, Grid, deal_input
+from ..utils.particles import remove_violated_contacts
 
 
 def get_restraints(particles, contacts, prams):
@@ -278,7 +279,7 @@ default_params = {
     "genome_ranges": None,
     "pow": -0.33,
     "bb_lower": 0.1,
-    "bb_upper": 1.1, 
+    "bb_upper": 1.1,
     "lower": 0.8,
     "upper": 1.2,
     "scale": 1.0,
@@ -295,6 +296,7 @@ default_params = {
     "cell_capacity": 10000,
     "shift_freq": 10,
     "min_skip": 2,
+    "violated_threshold": 5.0,
 }
 
 
@@ -325,10 +327,12 @@ def main(in_file, out_file,
     ti.init(arch=getattr(ti, arch), device_memory_fraction=device_memory_fraction)
     particles = None
     Mb = 10**6
-    for size in prams['size_steps']:
+    for stage, size in enumerate(prams['size_steps']):
         particle_size = int(Mb * size)
         particles = create_particles(df, particle_size, prev_particles=particles, random_seed=prams['random_seed'], max_radius=prams['max_radius'])
         contacts = create_contacts(df, particles, min_skip=prams['min_skip'])
+        if stage > 0:
+            contacts = remove_violated_contacts(contacts, particles, prams['violated_threshold'])
         particles = run_once(particles, particle_size, contacts, prams, None)
     particles.to_csv(out_file)
 

@@ -199,7 +199,7 @@ def particles_to_pdb(path_particles, path_pdb, split_by_chrom=False):
         chroms = list(df['chrom'].unique())
         prefix, suffix = splitext(path_pdb)
         for chr in chroms:
-            path = f"{prefix}.{chr}.{suffix}"
+            path = f"{prefix}.{chr}{suffix}"
             sdf = df[df['chrom'] == chr]
             export_pdb_coords(path, sdf)
 

@@ -75,10 +75,10 @@ def count_contacts(df, particles, min_skip=2):
             sub_prat = particles[particles['chrom'] == c]
             ix = np.searchsorted(sub_prat['start'], sub_df[p], side='right') - 1
             idxs.append(sub_prat.iloc[ix,:].index)
-        if not "count" in df.columns:
+        if not "count" in df.columns:  # pairs
             idx_pair = np.sort(np.c_[idxs[0], idxs[1]], axis=0)
             pair, cnt = np.unique(idx_pair, axis=0, return_counts=True)
-        else:
+        else:  # cool
             idx_df = pd.DataFrame({"ix1": idxs[0], "ix2": idxs[1], "count": sub_df['count']})
             gdf = idx_df.groupby(['ix1', 'ix2'], as_index=False).sum()
             pair, cnt = gdf[['ix1', 'ix2']].values, gdf['count'].values
@@ -120,4 +120,14 @@ def filter_contacts(contacts, genome_ranges):
     contacts = contacts[ reduce(lambda a, b: a | b, [contacts['pos1'] <= gr.end   for gr in genome_ranges]) ]
     contacts = contacts[ reduce(lambda a, b: a | b, [contacts['pos2'] >= gr.start for gr in genome_ranges]) ]
     contacts = contacts[ reduce(lambda a, b: a | b, [contacts['pos2'] <= gr.end   for gr in genome_ranges]) ]
+    return contacts
+
+
+def remove_violated_contacts(contacts, particles, threshold):
+    idx_1 = contacts['particle_1']
+    idx_2 = contacts['particle_2']
+    pos_1 = particles.loc[idx_1, ['x', 'y', 'z']].values
+    pos_2 = particles.loc[idx_2, ['x', 'y', 'z']].values
+    dist = np.linalg.norm(pos_1 - pos_2, axis=1)
+    contacts = contacts[dist <= threshold]
     return contacts
