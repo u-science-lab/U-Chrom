@@ -21,6 +21,8 @@ def read_pairs(path):
     columns = ["read", "chr1", "pos1", "chr2", "pos2", "strand1", "strand2"]
     df = df.iloc[:, :len(columns)]
     df.columns = columns
+    df['chr1'] = df['chr1'].astype(str)
+    df['chr2'] = df['chr2'].astype(str)
     return df
 
 
