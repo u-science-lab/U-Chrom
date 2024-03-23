@@ -1,7 +1,15 @@
+# NucBox
+
+Ultra fast chromosome 3D reconstraction.
+
 ## Install
 
+Install from source:
+
 ```bash
-pip install -e .
+$ git clone https://github.com/Nanguage/NucBox.git
+$ cd NucBox
+$ pip install -e .
 ```
 
 ## Usage

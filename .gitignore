@@ -7,3 +7,4 @@ imgui.ini
 
 .mypy_cache/
 *.csv
+*.egg-info

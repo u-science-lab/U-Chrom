@@ -28,6 +28,7 @@ def read_pairs(path):
 
 def read_particles(path):
     df = pd.read_csv(path, index_col=0, sep=",")
+    df['chrom'] = df['chrom'].astype(str)
     return df
 
 
