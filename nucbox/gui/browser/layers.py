@@ -99,12 +99,6 @@ class ChromatinLayer(Layer):
                 continue
             pos = sdf[['x', 'y', 'z']].values
             color = chr_colormap.get(chrom, "#888888")
-            # calculate breaks
-            first_row = sdf.iloc[0, :]
-            bin_size = first_row['end'] - first_row['start']
-            starts = sdf['start'].values
-            diff = starts[1:] - starts[:-1]
-            breaks = np.where(diff > (bin_size+10))[0] + 1
             def draw_line(p):
                 if style == 'points':
                     line = scene.visuals.Markers(
@@ -116,14 +110,23 @@ class ChromatinLayer(Layer):
                 else:
                     line = scene.visuals.Line(pos=p, parent=self.canvas.view.scene, color=Color(color), width=width)
                 self.vis_objs.append(line)
-            if breaks.shape[0] <= 0:
-                draw_line(pos)
+            if props.get('breaks', False):
+                # calculate breaks
+                first_row = sdf.iloc[0, :]
+                starts = sdf['start'].values
+                diff = starts[1:] - starts[:-1]
+                bin_size = first_row['end'] - first_row['start']
+                breaks = np.where(diff > (bin_size+10))[0] + 1
+                if breaks.shape[0] <= 0:
+                    draw_line(pos)
+                else:
+                    ob = 0
+                    for b in list(breaks) + [pos.shape[0]]:
+                        s_pos = pos[ob:b]
+                        draw_line(s_pos)
+                        ob = b
             else:
-                ob = 0
-                for b in list(breaks) + [pos.shape[0]]:
-                    s_pos = pos[ob:b]
-                    draw_line(s_pos)
-                    ob = b
+                draw_line(pos)
 
     def init_props_panel(self) -> QWidget:
         from .obj_panel import ChromatinProps

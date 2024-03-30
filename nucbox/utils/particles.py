@@ -131,3 +131,52 @@ def remove_violated_contacts(contacts, particles, threshold):
     dist = np.linalg.norm(pos_1 - pos_2, axis=1)
     contacts = contacts[dist <= threshold]
     return contacts
+
+
+def filter_outliers(particles, dist_threshold, k=20):
+    from sklearn.neighbors import KDTree
+    pos = particles[['x', 'y', 'z']].values
+    tree = KDTree(pos)
+    dist = tree.query(pos, k=k)[0][:, -1]
+    particles = particles[dist <= dist_threshold]
+    return particles
+
+
+if __name__ == "__main__":
+    import fire
+
+    def filter_outliers_cmd(in_path, out_path, dist_threshold, k=20):
+        """Filter outliers from particles.
+        
+        Args:
+            in_path (str): Input particles(.csv) file path.
+            out_path (str): Output file path.
+            dist_threshold (float): Maximum distance to the k-th nearest neighbor.
+            k (int): Number of nearest neighbors."""
+        particles = pd.read_csv(in_path)
+        particles = filter_outliers(particles, dist_threshold, k)
+        particles.to_csv(out_path, index=False)
+
+    def plot_knn_dist_curve_cmd(in_path, fig_path=None, k=20):
+        """Plot k-th nearest neighbor distance curve.
+        
+        Args:
+            in_path (str): Input particles(.csv) file path.
+            fig_path (str): Output figure path.
+            k (int): Number of nearest neighbors."""
+        import matplotlib.pyplot as plt
+        particles = pd.read_csv(in_path)
+        pos = particles[['x', 'y', 'z']].values
+        from sklearn.neighbors import KDTree
+        tree = KDTree(pos)
+        dist = tree.query(pos, k=k)[0][:, -1]
+        plt.plot(np.sort(dist))
+        if fig_path is not None:
+            plt.savefig(fig_path)
+        else:
+            plt.show()
+
+    fire.Fire({
+        "filter_outliers": filter_outliers_cmd,
+        "plot_knn_dist_curve": plot_knn_dist_curve_cmd,
+    })

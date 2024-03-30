@@ -201,6 +201,7 @@ class MainWindow(QMainWindow):
         self.canvas.axis.visible = val
 
     def load_model(self, df):
+        random.seed(0)
         for c in df['chrom'].unique():
             if c not in self.chr_colormap:
                 self.chr_colormap[c] = random_color()

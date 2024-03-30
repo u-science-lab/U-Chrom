@@ -301,6 +301,8 @@ default_params = {
 
 
 def run_once(particles, particle_size, contacts, prams, step_callback):
+    counts = pd.concat([contacts['particle_1'], contacts['particle_2']]).value_counts()
+    particles['contact_count'] = particles['index'].map(counts).fillna(0).astype(int)
     restraints = get_restraints(particles, contacts, prams)
     print("====================")
     print(f"particle_size:{particle_size} num_particles:{particles.shape[0]}")
