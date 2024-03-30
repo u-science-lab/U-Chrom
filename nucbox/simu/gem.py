@@ -36,7 +36,7 @@ def get_restraints(contacts, prams):
 
 
 @ti.func
-def vec_angle(a, b) -> ti.f64:
+def vec_angle(a, b) -> ti.f32:
     f1 = a.dot(b) - 0.0001
     f2 = a.norm() * b.norm()
     r = min(max(f1 / f2, -0.999999999), 0.999999999)
@@ -48,7 +48,7 @@ def vec_angle(a, b) -> ti.f64:
 def compute_E_strach(
         E_count: ti.template(),
         E: ti.template(), pos: ti.template(),
-        backbones: ti.template(), half_bond_factor: ti.f64):
+        backbones: ti.template(), half_bond_factor: ti.f32):
     for i in backbones:
         a, b = backbones[i]
         diff = pos[b] - pos[a]
@@ -61,7 +61,7 @@ def compute_E_strach(
 def compute_E_bend(
         E_count: ti.template(),
         E: ti.template(), pos: ti.template(),
-        backbones: ti.template(), half_angle_factor: ti.f64):
+        backbones: ti.template(), half_angle_factor: ti.f32):
     for i in range(0, backbones.shape[0]-1):
         a, b = backbones[i]
         b_, c = backbones[i+1]
@@ -79,7 +79,7 @@ def compute_E_bend(
 def compute_E_exclude(
         E_exclude: ti.template(),
         E: ti.template(), pos: ti.template(),
-        exclude_factor: ti.f64):
+        exclude_factor: ti.f32):
     for j in range(1, pos.shape[0]):
         for i in range(j):
             r = (pos[j] - pos[i]).norm()
@@ -94,7 +94,7 @@ def compute_E_contact(
         E_contact: ti.template(),
         E: ti.template(), pos: ti.template(),
         contact_idx: ti.template(), restraint_distances: ti.template(),
-        contact_factor: ti.f64):
+        contact_factor: ti.f32):
     for i in contact_idx:
         a, b = contact_idx[i]
         r = (pos[b] - pos[a]).norm()
@@ -120,12 +120,12 @@ class Simulation(SimulationBase):
         self.exclude_factor = exclude_factor
         self.contact_factor = contact_factor
         # init fields
-        self.E = ti.field(dtype=ti.f64, shape=(), needs_grad=True)
-        self.pos = ti.Vector.field(3, ti.f64, shape=particles.shape[0], needs_grad=True)
-        self.vel = ti.Vector.field(3, ti.f64, shape=particles.shape[0])
+        self.E = ti.field(dtype=ti.f32, shape=(), needs_grad=True)
+        self.pos = ti.Vector.field(3, ti.f32, shape=particles.shape[0], needs_grad=True)
+        self.vel = ti.Vector.field(3, ti.f32, shape=particles.shape[0])
         self.backbones = ti.Vector.field(2, ti.i32, shape=backbones.shape[0])
         self.contacts_idx = ti.Vector.field(2, ti.i32)
-        self.restraint_distances = ti.field(ti.f64)
+        self.restraint_distances = ti.field(ti.f32)
         ti.root.dense(ti.i, restraints.shape[0]).place(self.contacts_idx, self.restraint_distances)
         # load data into fields
         self.pos.from_numpy(particles[['x', 'y', 'z']].values)
@@ -133,10 +133,10 @@ class Simulation(SimulationBase):
         self.contacts_idx.from_numpy(restraints[['a', 'b']].values)
         self.restraint_distances.from_numpy(restraints['d'].values)
         # count value
-        self.E_strach = ti.field(dtype=ti.f64, shape=())
-        self.E_bend = ti.field(dtype=ti.f64, shape=())
-        self.E_exclude = ti.field(dtype=ti.f64, shape=())
-        self.E_contact = ti.field(dtype=ti.f64, shape=())
+        self.E_strach = ti.field(dtype=ti.f32, shape=())
+        self.E_bend = ti.field(dtype=ti.f32, shape=())
+        self.E_exclude = ti.field(dtype=ti.f32, shape=())
+        self.E_contact = ti.field(dtype=ti.f32, shape=())
 
     @ti.kernel
     def step(self):
@@ -153,7 +153,7 @@ class Simulation(SimulationBase):
             self.E_bend[None] = 0.0
             self.E_exclude[None] = 0.0
             self.E_contact[None] = 0.0
-            with ti.Tape(loss=self.E):
+            with ti.ad.Tape(loss=self.E):
                 compute_E_strach(self.E_strach, self.E, self.pos, self.backbones, self.bond_factor/2)
                 compute_E_bend(self.E_bend, self.E, self.pos, self.backbones, self.angle_factor/2)
                 compute_E_exclude(self.E_exclude, self.E, self.pos, exclude_factor)
