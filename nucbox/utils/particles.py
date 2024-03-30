@@ -171,6 +171,8 @@ if __name__ == "__main__":
         tree = KDTree(pos)
         dist = tree.query(pos, k=k)[0][:, -1]
         plt.plot(np.sort(dist))
+        plt.xlabel("order")
+        plt.ylabel(f"k-th distance(k={k})")
         if fig_path is not None:
             plt.savefig(fig_path)
         else:
