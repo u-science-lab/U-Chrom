@@ -110,7 +110,8 @@ class Simulation(SimulationBase):
             self, particles, backbones, restraints,
             time_step,
             shrunk_freq, shrunk_max,
-            bond_factor, angle_factor, exclude_factor, contact_factor):
+            bond_factor, angle_factor, exclude_factor, contact_factor,
+            early_stop=False) -> None:
         self.particles = particles
         self.time_step = time_step
         self.shrunk_freq = shrunk_freq
@@ -119,6 +120,7 @@ class Simulation(SimulationBase):
         self.angle_factor = angle_factor
         self.exclude_factor = exclude_factor
         self.contact_factor = contact_factor
+        self.early_stop = early_stop
         # init fields
         self.E = ti.field(dtype=ti.f32, shape=(), needs_grad=True)
         self.pos = ti.Vector.field(3, ti.f32, shape=particles.shape[0], needs_grad=True)
@@ -147,8 +149,15 @@ class Simulation(SimulationBase):
             self.pos[i] += time_step * self.vel[i]
 
     def run(self):
+        E_prev = float('inf')
+        E_new = float('inf')
+        stop_count = copy(self.early_stop)
+        if self.early_stop is False:
+            stop_count = float('inf')
         for step, (exclude_factor,) in enumerate(self.schedule):
             self.E[None] = 0.0
+            if step != 0:
+                E_prev = E_new
             self.E_strach[None] = 0.0
             self.E_bend[None] = 0.0
             self.E_exclude[None] = 0.0
@@ -159,6 +168,12 @@ class Simulation(SimulationBase):
                 compute_E_exclude(self.E_exclude, self.E, self.pos, exclude_factor)
                 compute_E_contact(self.E_contact, self.E, self.pos, self.contacts_idx, self.restraint_distances, self.contact_factor)
             self.step()
+            E_new = float(self.E[None])
+            if (E_new > E_prev):
+                stop_count -= 1
+                if stop_count <= 0:
+                    print(f"Early stop at step:{step} E:{E_new} E_prev:{E_prev}")
+                    break
             self.log_step(step)
             if np.isnan(self.E[None]):
                 sys.exit(1)
@@ -193,6 +208,7 @@ default_prams = {
     "steps": 10000,
     "time_step": 0.01,
     "min_skip": 2,
+    "early_stop": 3,
 }
 
 
@@ -215,7 +231,9 @@ def main(in_file, out_file, arch="gpu", **kwargs):
         restraints = get_restraints(contacts, prams)
         simu = Simulation(particles, backbones, restraints,
             prams['time_step'], prams['shrunk_freq'], prams['shrunk_max'],
-            prams['bond_factor'], prams['angle_factor'], prams['exclude_factor'], prams['contact_factor'])
+            prams['bond_factor'], prams['angle_factor'], prams['exclude_factor'],
+            prams['contact_factor'],
+            prams['early_stop'])
         simu.setup_schedule(prams['steps'], 0.0001, 0.01)
         simu.run()
         particles = simu.get_results()
