@@ -82,6 +82,7 @@ class Simulation(SimulationBase):
         self.shift_freq = shift_freq
         self.step_callback = step_callback
         self.schedule = []
+        self.dyns = 0
         # init fields
         fb = ti.FieldsBuilder()
         self.pos = ti.Vector.field(3, ti.f32)
@@ -232,7 +233,7 @@ class Simulation(SimulationBase):
         self.rmsd_contact[None] = ti.sqrt(contact/self.rest_idx.shape[0])
         return ti.sqrt(total/self.rest_idx.shape[0])
 
-    def setup_schedule(self, num_steps, temp_start, temp_end):
+    def setup_schedule(self, num_steps, temp_start, temp_end, dyns=100):
         schedule = []
         adj = 1.0 / np.arctan(10)
         decay = np.log(temp_start / temp_end)
@@ -242,6 +243,7 @@ class Simulation(SimulationBase):
             temp = temp_start * np.exp(-decay * r)
             schedule.append((temp, k1))
         self.schedule = schedule
+        self.dyns = dyns
 
     def log_step(self, step, **kwargs):
         log_kw = {'total_force': kwargs.get("repulsive", 0) + kwargs.get("restraint", 0)}
@@ -253,21 +255,23 @@ class Simulation(SimulationBase):
 
     def run(self):
         for step, (temp, k1) in enumerate(self.schedule):
-            c_temp = self.update_motion(temp)
-            if self.grid:
-                self.grid.from_pos(self.pos)
-                t_rep = self.get_repulsive_force_with_grid(k1)
-                self.grid.clear()
-            else:
-                t_rep = self.get_repulsive_force(k1)
-            t_res = self.get_restraint_force()
-            c_temp = self.update_vel(temp)
-            rmsd = self.get_rmsd()
-            self.log_step(step, temp=temp, c_temp=c_temp, k1=k1, repulsive=t_rep, restraint=t_res, rmsd=rmsd)
-            self.rmsd_backbone[None] = 0.0
-            self.rmsd_contact[None] = 0.0
-            if ((step + 1) % self.shift_freq) == 0:
-                self.shift_to_center()
+            for i_dyn in range(self.dyns):
+                c_temp = self.update_motion(temp)
+                if self.grid:
+                    self.grid.from_pos(self.pos)
+                    t_rep = self.get_repulsive_force_with_grid(k1)
+                    self.grid.clear()
+                else:
+                    t_rep = self.get_repulsive_force(k1)
+                t_res = self.get_restraint_force()
+                c_temp = self.update_vel(temp)
+                if i_dyn == self.dyns - 1:
+                    rmsd = self.get_rmsd()
+                    self.log_step(step, temp=temp, c_temp=c_temp, k1=k1, repulsive=t_rep, restraint=t_res, rmsd=rmsd)
+                    self.rmsd_backbone[None] = 0.0
+                    self.rmsd_contact[None] = 0.0
+                if ((i_dyn + 1) % self.shift_freq) == 0:
+                    self.shift_to_center()
             if self.step_callback:
                 self.step_callback(self, step)
 
@@ -286,7 +290,8 @@ default_params = {
     "repulsive_lim": 2.0,
     "hot": 5000.0,
     "cold": 10.0,
-    "dyns": 500,
+    "temps": 500,
+    "dyns": 100,
     "random_seed": 0,
     "time_step": 0.01,
     "size_steps": [8, 4, 2, 0.4, 0.2, 0.1],
@@ -311,7 +316,7 @@ def run_once(particles, particle_size, contacts, prams, step_callback):
     if prams['use_grid']:
         grid = Grid(prams['max_radius'], prams['grid_range_scale'], prams['repulsive_lim'], prams['cell_capacity'])
     simu = Simulation(particles, particle_size, restraints, prams['repulsive_lim'], prams['time_step'], grid, prams['shift_freq'], step_callback)
-    simu.setup_schedule(prams['dyns'], prams['hot'], prams['cold'])
+    simu.setup_schedule(prams['temps'], prams['hot'], prams['cold'], prams['dyns'])
     simu.run()
     particles = simu.get_results()
     simu.destroy_fields()
