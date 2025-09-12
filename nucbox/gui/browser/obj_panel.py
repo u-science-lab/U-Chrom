@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QComboBox, QDoubleSpinBox, QSpinBox, QWidget, QLabel, 
                              QGridLayout, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLineEdit, QGroupBox, 
-                             QColorDialog, QDialog, QScrollArea)
+                             QColorDialog)
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt
 from .range_list import RangeList
@@ -21,13 +21,6 @@ class LayerPropsPanel(QWidget):
         self.setLayout(self.top_layout)
         self.layers = []
         self.operation_widgets = []
-        self.rename_window = self.__get_rename_window()
-        self.rename_btn = QPushButton("Rename")
-        self.rename_btn.clicked.connect(self.on_rename_btn)
-        self.operation_widgets.append(self.rename_btn)
-        self.delete_btn = QPushButton("Delete")
-        self.delete_btn.clicked.connect(self.on_delete_btn)
-        self.operation_widgets.append(self.delete_btn)
         self.operation_widgets += operation_widgets
         self.operations_panel = QWidget()
         vbox = QVBoxLayout()
@@ -36,38 +29,11 @@ class LayerPropsPanel(QWidget):
         vbox.addStretch()
         self.operations_panel.setLayout(vbox)
 
-    def on_delete_btn(self):
-        for layer in self.layers:
-            idx = layer.canvas.control_panel.delete(layer)
-            layer.canvas.control_panel.reset_current(idx)
-
     def connect_with(self, layer):
         self.layers.append(layer)
 
-    def on_rename_btn(self):
-        self.rename_window.show()
-
-    def on_rename(self):
-        new_name = self.rename_window.input.text()
-        for layer in self.layers:
-            layer.canvas.control_panel.rename_item(layer, new_name)
-
     def update_params(self):
         pass
-
-    def __get_rename_window(self):
-        win = QWidget()
-        win.setWindowTitle("Rename")
-        hbox = QHBoxLayout()
-        win.input = QLineEdit()
-        win.ok_btn = QPushButton("OK")
-        win.ok_btn.clicked.connect(self.on_rename)
-        win.ok_btn.clicked.connect(win.close)
-        hbox.addWidget(QLabel("Name:"), stretch=1)
-        hbox.addWidget(win.input, stretch=2)
-        hbox.addWidget(win.ok_btn, stretch=1)
-        win.setLayout(hbox)
-        return win
 
 
 class ChromatinProps(LayerPropsPanel):
@@ -79,10 +45,8 @@ class ChromatinProps(LayerPropsPanel):
 
         self.subset_window = RangeList("Take sub-set")
         self.subset_window.signal_ok.connect(self.on_take_subset)
-        self.subset_btn = QPushButton("Subset")
-        self.subset_btn.clicked.connect(self.on_subset_btn)
 
-        super().__init__(grid_table=[], operation_widgets=[self.subset_btn])
+        super().__init__(grid_table=[], operation_widgets=[])
         
         # Add grouped controls to layout after parent initialization
         self.add_grouped_layout()
@@ -125,10 +89,6 @@ class ChromatinProps(LayerPropsPanel):
         self.model_color_select.setCurrentText("Rainbow")
         self.model_color_select.currentIndexChanged.connect(self.on_model_color_change)
         
-        # Color editing button for multi-chromosome
-        self.edit_colors_btn = QPushButton("Edit Colors")
-        self.edit_colors_btn.clicked.connect(self.on_edit_colors)
-        self.edit_colors_btn.setVisible(False)  # Initially hidden
 
         # Chromosome management section
         self.chrom_group = QGroupBox("Chromosome Management")
@@ -181,7 +141,6 @@ class ChromatinProps(LayerPropsPanel):
         model_layout.addWidget(self.opacity_control, 2, 1)
         model_layout.addWidget(l_color_mode, 3, 0)
         model_layout.addWidget(self.model_color_select, 3, 1)
-        model_layout.addWidget(self.edit_colors_btn, 3, 2)  # Add edit button next to color select
         model_layout.addWidget(self.l_perf_mode, 4, 0)
         model_layout.addWidget(self.perf_mode_control, 4, 1)
         
@@ -308,15 +267,14 @@ class ChromatinProps(LayerPropsPanel):
         # Update color controls and chromosome management based on chromosome count
         self.model_color_select.blockSignals(True)
         if is_multi_chrom:
-            # Multi-chromosome: only rainbow mode, show edit colors button and chromosome management
+            # Multi-chromosome: only rainbow mode, show chromosome management
             self.model_color_select.clear()
             self.model_color_select.addItem("Rainbow (Multi-chromosome)")
             self.model_color_select.setCurrentIndex(0)
-            self.edit_colors_btn.setVisible(True)
             self.chrom_group.setVisible(True)
             self._update_chromosome_list()
         else:
-            # Single chromosome: allow all color modes, hide edit button and chromosome management
+            # Single chromosome: allow all color modes, hide chromosome management
             self.model_color_select.clear()
             single_color_options = [
                 "White", "Black", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta",
@@ -330,7 +288,6 @@ class ChromatinProps(LayerPropsPanel):
                 if self.model_color_select.itemText(i) == current_color:
                     self.model_color_select.setCurrentIndex(i)
                     break
-            self.edit_colors_btn.setVisible(False)
             self.chrom_group.setVisible(False)
         self.model_color_select.blockSignals(False)
         
@@ -355,8 +312,6 @@ class ChromatinProps(LayerPropsPanel):
         self.on_opacity_changed()
         self.on_width_changed()
 
-    def on_subset_btn(self):
-        self.subset_window.show()
 
     def on_take_subset(self):
         for layer in self.layers:
@@ -493,29 +448,6 @@ class ChromatinProps(LayerPropsPanel):
                 if layer.parent:
                     layer.parent.re_render(parent=True)
 
-    def on_edit_colors(self):
-        # Open color editor for multi-chromosome layers
-        if len(self.layers) == 0:
-            return
-        
-        # Get chromosome colors from the first layer
-        layer = self.layers[0]
-        chr_colormap = layer.cache_props.get('chr_colormap', {})
-        df = layer.df
-        chromosomes = sorted(df['chrom'].unique())
-        
-        # Create color editing dialog
-        dialog = ChromosomeColorDialog(chromosomes, chr_colormap, self)
-        if dialog.exec_() == QColorDialog.Accepted:
-            new_colormap = dialog.get_colormap()
-            
-            # Update all layers with new colormap
-            for layer in self.layers:
-                layer.cache_props['chr_colormap'] = new_colormap
-                layer.remove()
-                layer.draw()
-                if layer.parent:
-                    layer.parent.re_render(parent=True)
 
     def _update_chromosome_list(self):
         # Update the chromosome dropdown list
@@ -664,83 +596,6 @@ class ChrLabelProps(LayerPropsPanel):
                 l.pos = ori * (1+val)
 
 
-class ChromosomeColorDialog(QDialog):
-    def __init__(self, chromosomes, chr_colormap, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Edit Chromosome Colors")
-        self.setModal(True)
-        self.resize(400, 300)
-        
-        self.chromosomes = chromosomes
-        self.colormap = chr_colormap.copy()
-        
-        layout = QVBoxLayout()
-        
-        # Scroll area for chromosome color controls
-        scroll = QScrollArea()
-        scroll_widget = QWidget()
-        scroll_layout = QGridLayout()
-        
-        self.color_buttons = {}
-        self.color_inputs = {}
-        
-        for i, chrom in enumerate(chromosomes):
-            # Chromosome label
-            chrom_label = QLabel(f"Chr {chrom}:")
-            scroll_layout.addWidget(chrom_label, i, 0)
-            
-            # Color button
-            current_color = self.colormap.get(chrom, "#FF0000")
-            color_btn = QPushButton()
-            color_btn.setFixedSize(50, 25)
-            color_btn.setStyleSheet(f"background-color: {current_color}")
-            color_btn.clicked.connect(lambda checked, c=chrom: self.pick_color(c))
-            self.color_buttons[chrom] = color_btn
-            scroll_layout.addWidget(color_btn, i, 1)
-            
-            # Hex input
-            hex_input = QLineEdit(current_color)
-            hex_input.textChanged.connect(lambda text, c=chrom: self.on_hex_changed(c, text))
-            self.color_inputs[chrom] = hex_input
-            scroll_layout.addWidget(hex_input, i, 2)
-        
-        scroll_widget.setLayout(scroll_layout)
-        scroll.setWidget(scroll_widget)
-        layout.addWidget(scroll)
-        
-        # Buttons
-        btn_layout = QHBoxLayout()
-        ok_btn = QPushButton("OK")
-        cancel_btn = QPushButton("Cancel")
-        ok_btn.clicked.connect(self.accept)
-        cancel_btn.clicked.connect(self.reject)
-        btn_layout.addWidget(ok_btn)
-        btn_layout.addWidget(cancel_btn)
-        layout.addLayout(btn_layout)
-        
-        self.setLayout(layout)
-    
-    def pick_color(self, chrom):
-        current_color = QColor(self.colormap.get(chrom, "#FF0000"))
-        color = QColorDialog.getColor(current_color, self)
-        if color.isValid():
-            hex_color = color.name()
-            self.colormap[chrom] = hex_color
-            self.color_buttons[chrom].setStyleSheet(f"background-color: {hex_color}")
-            self.color_inputs[chrom].setText(hex_color)
-    
-    def on_hex_changed(self, chrom, text):
-        try:
-            # Validate hex color
-            if text.startswith('#') and len(text) == 7:
-                color = QColor(text)
-                if color.isValid():
-                    self.colormap[chrom] = text
-                    self.color_buttons[chrom].setStyleSheet(f"background-color: {text}")
-        except:
-            pass
-    
-    def get_colormap(self):
-        return self.colormap
+
 
 

@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import (QListWidget, QWidget, QLabel, QHBoxLayout, QVBoxLayout, QStackedWidget, QListWidgetItem, QCheckBox, QPushButton)
+from PyQt5.QtWidgets import (QListWidget, QWidget, QLabel, QHBoxLayout, QVBoxLayout, QStackedWidget, QListWidgetItem, QCheckBox, QPushButton, QLineEdit, QDialog)
 
 
 class LayerPanel(QWidget):
@@ -26,6 +26,16 @@ class LayerPanel(QWidget):
     def add_list_item(self, layer):
         item = QListWidgetItem()
         row = QWidget()
+        
+        # Main layout - vertical to accommodate two rows
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(2)
+        main_layout.setContentsMargins(4, 2, 4, 2)
+        
+        # Top row: name and show/lock controls
+        top_row = QHBoxLayout()
+        top_row.setSpacing(4)
+        
         name_label = QLabel(str(layer))
         name_label.setObjectName('name_label')
         show_cb = QCheckBox()
@@ -34,19 +44,43 @@ class LayerPanel(QWidget):
         lock_cb.setChecked(False)
         show_label = QLabel('Show')
         lock_label = QLabel('Lock')
-        h = QHBoxLayout()
-        h.addWidget(name_label, 1)
-        h.addWidget(show_label)
-        h.addWidget(show_cb)
-        h.addSpacing(6)
-        h.addWidget(lock_label)
-        h.addWidget(lock_cb)
-        h.setContentsMargins(6, 2, 6, 2)
-        row.setLayout(h)
+        
+        top_row.addWidget(name_label, 1)
+        top_row.addWidget(show_label)
+        top_row.addWidget(show_cb)
+        top_row.addSpacing(6)
+        top_row.addWidget(lock_label)
+        top_row.addWidget(lock_cb)
+        
+        # Bottom row: action buttons
+        bottom_row = QHBoxLayout()
+        bottom_row.setSpacing(2)
+        
+        rename_btn = QPushButton("Rename")
+        rename_btn.setMaximumHeight(20)
+        rename_btn.setObjectName('rename_btn')
+        
+        delete_btn = QPushButton("Delete")
+        delete_btn.setMaximumHeight(20)
+        delete_btn.setObjectName('delete_btn')
+        
+        subset_btn = QPushButton("Subset")
+        subset_btn.setMaximumHeight(20)
+        subset_btn.setObjectName('subset_btn')
+        
+        bottom_row.addWidget(rename_btn)
+        bottom_row.addWidget(delete_btn)
+        bottom_row.addWidget(subset_btn)
+        
+        main_layout.addLayout(top_row)
+        main_layout.addLayout(bottom_row)
+        
+        row.setLayout(main_layout)
         item.setSizeHint(row.sizeHint())
         self.list.addItem(item)
         self.list.setItemWidget(item, row)
-        return item, show_cb, lock_cb
+        
+        return item, show_cb, lock_cb, rename_btn, delete_btn, subset_btn
 
     def set_operations_panel(self, widget=None):
         if (widget is not None) and (self.operation_stack.indexOf(widget) < 0):
@@ -139,8 +173,9 @@ class CanvasControl(QWidget):
         layer.name = name
         self.layers.append(layer)
         self.current_layer = layer
-        # custom list item with visibility and lock buttons
-        item, show_cb, lock_cb = self.layer_control.add_list_item(layer)
+        # custom list item with visibility, lock, and action buttons
+        item, show_cb, lock_cb, rename_btn, delete_btn, subset_btn = self.layer_control.add_list_item(layer)
+        
         def on_toggle_show(val):
             visible = bool(val)
             layer.set_visible(visible)
@@ -149,8 +184,59 @@ class CanvasControl(QWidget):
             layer.set_locked(locked)
             # disable its control panel when locked
             layer.control_panel.setDisabled(locked)
+        def on_rename_layer():
+            self._show_rename_dialog(layer)
+        def on_delete_layer():
+            idx = self.delete(layer)
+            self.reset_current(idx)
+        def on_subset_layer():
+            self._show_subset_dialog(layer)
+            
         show_cb.toggled.connect(on_toggle_show)
         lock_cb.toggled.connect(on_toggle_lock)
+        rename_btn.clicked.connect(on_rename_layer)
+        delete_btn.clicked.connect(on_delete_layer)
+        subset_btn.clicked.connect(on_subset_layer)
         self.layer_control.list.setCurrentRow(len(self.layers)-1)
         self.canvas.set_layer_title(str(layer))
         return layer
+
+    def _show_rename_dialog(self, layer):
+        # Create simple rename dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Rename Layer")
+        dialog.setModal(True)
+        dialog.resize(300, 100)
+        
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel("New name:"))
+        
+        name_input = QLineEdit(str(layer))
+        layout.addWidget(name_input)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        ok_btn = QPushButton("OK")
+        cancel_btn = QPushButton("Cancel")
+        
+        def on_ok():
+            new_name = name_input.text().strip()
+            if new_name:
+                self.rename_item(layer, new_name)
+            dialog.accept()
+        
+        ok_btn.clicked.connect(on_ok)
+        cancel_btn.clicked.connect(dialog.reject)
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+        
+        dialog.setLayout(layout)
+        dialog.exec_()
+
+    def _show_subset_dialog(self, layer):
+        # Show the layer's subset window directly
+        if hasattr(layer, 'control_panel') and hasattr(layer.control_panel, 'subset_window'):
+            layer.control_panel.subset_window.show()
+        else:
+            print(f"Layer {layer} does not support subset creation")
