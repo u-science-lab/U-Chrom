@@ -325,6 +325,8 @@ class PyVistaBackend(RenderingBackend):
                 padding: 10px;
             }}
         """)
+        # Ensure the label resizes to fit the new font size
+        self.overlay_label.adjustSize()
         
         # Position the label
         self._position_overlay(position)
@@ -348,6 +350,8 @@ class PyVistaBackend(RenderingBackend):
         
         if text is not None:
             widget.setText(text)
+            # Text change can alter size
+            widget.adjustSize()
         
         if position is not None:
             overlay['position'] = position
@@ -366,6 +370,11 @@ class PyVistaBackend(RenderingBackend):
                     padding: 10px;
                 }}
             """)
+            # Style change (e.g., font size) can alter size
+            widget.adjustSize()
+
+        # Reposition after any potential size change to keep margins correct
+        self._position_overlay(overlay['position'])
     
     def _position_overlay(self, position: str):
         """Position the overlay label based on position string."""

@@ -216,8 +216,8 @@ class ChromatinProps(LayerPropsPanel):
 
         l_label_font = QLabel("Font size")
         self.label_font_control = QDoubleSpinBox()
-        self.label_font_control.setMaximum(10.0)
-        self.label_font_control.setMinimum(1.0)
+        self.label_font_control.setMaximum(100.0)
+        self.label_font_control.setMinimum(0.5)
         self.label_font_control.setSingleStep(0.5)
         self.label_font_control.setValue(5.0)
         self.label_font_control.valueChanged.connect(self.on_label_font_changed)
