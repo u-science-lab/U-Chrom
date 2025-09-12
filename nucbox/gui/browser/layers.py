@@ -117,8 +117,7 @@ class ChromatinLayer(Layer):
         props = self.cache_props
         try:
             df, chr_colormap, width, style = props['df'], props['chr_colormap'], props['width'], props['style']
-        except Exception as e:
-            print(repr(e))
+        except Exception:
             return
         
         # If layer is not visible, don't draw anything
@@ -127,7 +126,8 @@ class ChromatinLayer(Layer):
         color_mode = props.get('color_mode', 'rainbow')
         single_color = props.get('single_color', '#FFFFFF')
         num_chrom = int(df['chrom'].nunique())
-        for chrom in chr_colormap.keys():
+        # Iterate over chromosomes in the actual data
+        for chrom in df['chrom'].unique():
             sdf = df[df['chrom'] == chrom]
             if sdf.shape[0] <= 1:
                 continue

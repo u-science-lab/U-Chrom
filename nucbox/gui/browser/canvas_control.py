@@ -160,6 +160,13 @@ class CanvasControl(QWidget):
         layer.remove()
         list_item = self.layer_control.list.takeItem(idx)
         del list_item
+        
+        # Force render to ensure deletion is visible
+        if hasattr(self.canvas, 'backend') and hasattr(self.canvas.backend, 'render'):
+            self.canvas.backend.render()
+        elif hasattr(self.canvas, 'update'):
+            self.canvas.update()
+        
         return idx
 
     def rename_item(self, layer, new_name: str):

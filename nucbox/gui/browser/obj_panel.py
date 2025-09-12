@@ -60,6 +60,8 @@ class ChromatinProps(LayerPropsPanel):
         l_style = QLabel("Style")
         self.model_style_select = QComboBox()
         self.model_style_select.addItem("line")
+        self.model_style_select.addItem("tube")
+        self.model_style_select.addItem("points")
         self.model_style_select.currentIndexChanged.connect(self.on_model_style_change)
 
         l_width = QLabel("Width/Radius")
@@ -266,26 +268,19 @@ class ChromatinProps(LayerPropsPanel):
         current_color = self.model_color_select.currentText()
         
         # Check chromosome count and color mode constraints
+        # Tube mode is always supported for all configurations
         disable_tube = False
         is_multi_chrom = False
         if len(self.layers) > 0:
-            disable_tube = True
             for layer in self.layers:
                 try:
                     df = layer.df
                     num_chrom = int(df['chrom'].nunique())
-                    color_mode = layer.cache_props.get('color_mode', 'rainbow')
-                    
                     if num_chrom > 1:
                         is_multi_chrom = True
-                    
-                    # If any layer is NOT (single-chromosome + rainbow), enable tube
-                    if num_chrom != 1 or color_mode != 'rainbow':
-                        disable_tube = False
                         break
                 except Exception:
-                    disable_tube = False
-                    break
+                    pass
         
         # Rebuild the combo with appropriate options
         self.model_style_select.blockSignals(True)  # Prevent triggering events during rebuild
@@ -294,18 +289,10 @@ class ChromatinProps(LayerPropsPanel):
         # Always add basic styles
         self.model_style_select.addItem("line")
         
-        # Add points/tube based on layer constraints and performance
-        layers_row_num = [l.df.shape[0] for l in self.layers] if self.layers else []
-        points_thresh = 20000
-        tube_thresh = 5000
-        
-        if len(layers_row_num) == 0 or all([n <= points_thresh for n in layers_row_num]):
-            self.model_style_select.addItem('points')
-        
-        has_tube_option = False
-        if not disable_tube and (len(layers_row_num) == 0 or all([n <= tube_thresh for n in layers_row_num])):
-            self.model_style_select.addItem('tube')
-            has_tube_option = True
+        # Always add tube and points options
+        self.model_style_select.addItem('tube')
+        self.model_style_select.addItem('points')
+        has_tube_option = True
         
         # Show/hide tube performance controls based on tube availability
         self.l_perf_mode.setVisible(has_tube_option)
@@ -381,15 +368,13 @@ class ChromatinProps(LayerPropsPanel):
         width = self.width_control.value()
         for layer in self.layers:
             layer.cache_props['width'] = width
-            for o in layer.vis_objs:
-                if style == "line":
-                    o.set_data(width=width)
-                else:
-                    layer.remove()
-                    layer.draw(width=width)
-                    if layer.parent:
-                        layer.parent.re_render(parent=True)
-        self.on_opacity_changed()
+            # Only redraw for non-line styles (tube, points need full redraw)
+            if style != "line":
+                layer.remove()
+                layer.draw(width=width)
+        # Single render call at the end instead of multiple re_render calls
+        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
+            self.layers[0].canvas.backend.render()
 
     def on_opacity_changed(self):
         val = self.opacity_control.value()
@@ -399,26 +384,31 @@ class ChromatinProps(LayerPropsPanel):
 
     def on_model_style_change(self):
         style = self.model_style_select.currentText()
+        # Update all layers
         for layer in self.layers:
             layer.remove()
             layer.draw(style=style)
-            if style == 'line':
-                self.width_control.setMaximum(20.0)
-                self.width_control.setMinimum(1.0)
-                self.width_control.setSingleStep(1.0)
-                self.width_control.setValue(1.0)
-            elif style == 'points':
-                self.width_control.setMaximum(2.0)
-                self.width_control.setMinimum(0)
-                self.width_control.setSingleStep(0.1)
-                self.width_control.setValue(0.5)
-            elif style == 'tube':
-                self.width_control.setMaximum(2.0)
-                self.width_control.setMinimum(0)
-                self.width_control.setSingleStep(0.05)
-                self.width_control.setValue(0.1)
-            if layer.parent:
-                layer.parent.re_render(parent=True)
+        
+        # Update width control settings based on style
+        if style == 'line':
+            self.width_control.setMaximum(20.0)
+            self.width_control.setMinimum(1.0)
+            self.width_control.setSingleStep(1.0)
+            self.width_control.setValue(1.0)
+        elif style == 'points':
+            self.width_control.setMaximum(2.0)
+            self.width_control.setMinimum(0)
+            self.width_control.setSingleStep(0.1)
+            self.width_control.setValue(0.5)
+        elif style == 'tube':
+            self.width_control.setMaximum(2.0)
+            self.width_control.setMinimum(0)
+            self.width_control.setSingleStep(0.05)
+            self.width_control.setValue(0.1)
+        
+        # Single render at the end
+        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
+            self.layers[0].canvas.backend.render()
 
     def on_model_color_change(self):
         text = self.model_color_select.currentText()
@@ -438,8 +428,10 @@ class ChromatinProps(LayerPropsPanel):
                 layer.cache_props['single_color'] = hex_color
             layer.remove()
             layer.draw()
-            if layer.parent:
-                layer.parent.re_render(parent=True)
+        
+        # Single render at the end
+        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
+            self.layers[0].canvas.backend.render()
         # Update style availability after color mode change
         self._update_style_availability()
 
