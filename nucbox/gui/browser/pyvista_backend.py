@@ -373,15 +373,28 @@ class PyVistaBackend(RenderingBackend):
         label_size = self.overlay_label.sizeHint()
         
         x, y = 10, 10  # Default margins
+        pos_lower = position.lower()
         
-        if 'right' in position.lower():
+        # Parse position string correctly
+        # Format: "vertical-horizontal" or "vertical horizontal"
+        # e.g., "top-center", "bottom-right", "center"
+        
+        # Horizontal positioning
+        if 'right' in pos_lower:
             x = widget_size.width() - label_size.width() - 10
-        elif 'center' in position.lower():
+        elif 'left' in pos_lower:
+            x = 10
+        elif 'center' in pos_lower or '-center' in pos_lower or ' center' in pos_lower:
+            # Only center horizontally if center is specified for horizontal position
             x = (widget_size.width() - label_size.width()) // 2
         
-        if 'bottom' in position.lower():
+        # Vertical positioning
+        if 'bottom' in pos_lower:
             y = widget_size.height() - label_size.height() - 10
-        elif 'center' in position.lower():
+        elif 'top' in pos_lower:
+            y = 10
+        elif pos_lower == 'center' or pos_lower.startswith('center-') or pos_lower.startswith('center '):
+            # Only center vertically if position is exactly "center" or starts with "center-"
             y = (widget_size.height() - label_size.height()) // 2
         
         self.overlay_label.move(x, y)
