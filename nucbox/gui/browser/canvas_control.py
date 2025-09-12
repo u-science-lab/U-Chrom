@@ -224,10 +224,17 @@ class CanvasControl(QWidget):
         except:
             pass
 
-    def add_chromatin_layer(self, df, chr_colormap, parent=None, name=None):
+    def add_chromatin_layer(self, df, chr_colormap, parent=None, name=None, width=None, style=None):
         from .layers import ChromatinLayer
         from .layers import ChrLabelLayer
-        layer = ChromatinLayer(self.canvas, df, chr_colormap)
+        
+        # Use provided width/style or defaults
+        if width is None:
+            width = parent.cache_props.get('width', 1.0) if parent and hasattr(parent, 'cache_props') else 1.0
+        if style is None:
+            style = parent.cache_props.get('style', 'line') if parent and hasattr(parent, 'cache_props') else 'line'
+        
+        layer = ChromatinLayer(self.canvas, df, chr_colormap, width=width, style=style)
         layer.parent = parent
         if name is not None:
             layer.name = name

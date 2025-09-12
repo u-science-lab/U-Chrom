@@ -132,9 +132,19 @@ class ChromatinProps(LayerPropsPanel):
         self.region_group = QGroupBox("Region Management")
         region_layout = QGridLayout()
         
-        l_region = QLabel("Region (chr:start-end):")
+        # Add chromosome selector for region
+        l_region_chr = QLabel("Chromosome:")
+        self.region_chr_select = QComboBox()
+        self.region_chr_select.currentTextChanged.connect(self.on_region_chr_changed)
+        
+        # Add range display label
+        self.region_range_label = QLabel("Valid range: ")
+        self.region_range_label.setStyleSheet("color: #888888; font-size: 11px;")
+        
+        l_region = QLabel("Start-End:")
         self.region_input = QLineEdit()
-        self.region_input.setPlaceholderText("chr1:100000-200000")
+        self.region_input.setPlaceholderText("100000-200000")
+        self.region_input.setToolTip("Enter the start and end coordinates within the valid range")
         
         l_region_color = QLabel("Color:")
         self.region_color_btn = QPushButton()
@@ -147,12 +157,16 @@ class ChromatinProps(LayerPropsPanel):
         self.region_subset_btn = QPushButton("Create Region Subset")
         self.region_subset_btn.clicked.connect(self.on_create_region_subset)
         
-        region_layout.addWidget(l_region, 0, 0)
-        region_layout.addWidget(self.region_input, 0, 1)
-        region_layout.addWidget(l_region_color, 1, 0)
-        region_layout.addWidget(self.region_color_btn, 1, 1)
-        region_layout.addWidget(self.region_color_hex, 1, 2)
-        region_layout.addWidget(self.region_subset_btn, 2, 0, 1, 3)
+        # Layout: chromosome selector and range display
+        region_layout.addWidget(l_region_chr, 0, 0)
+        region_layout.addWidget(self.region_chr_select, 0, 1, 1, 2)
+        region_layout.addWidget(self.region_range_label, 1, 0, 1, 3)
+        region_layout.addWidget(l_region, 2, 0)
+        region_layout.addWidget(self.region_input, 2, 1, 1, 2)
+        region_layout.addWidget(l_region_color, 3, 0)
+        region_layout.addWidget(self.region_color_btn, 3, 1)
+        region_layout.addWidget(self.region_color_hex, 3, 2)
+        region_layout.addWidget(self.region_subset_btn, 4, 0, 1, 3)
         self.region_group.setLayout(region_layout)
         self.region_group.setVisible(True)
 
@@ -343,6 +357,8 @@ class ChromatinProps(LayerPropsPanel):
         super().connect_with(layer)
         # Update style availability after connecting with layer
         self._update_style_availability()
+        # Update region placeholder with actual data range
+        self._update_region_placeholder()
 
     def update_params(self):
         self.on_opacity_changed()
@@ -468,23 +484,69 @@ class ChromatinProps(LayerPropsPanel):
                 self.region_color_btn.setStyleSheet(f"background-color:{text}")
         except Exception:
             pass
+    
+    def on_region_chr_changed(self):
+        """Update the valid range display when chromosome selection changes."""
+        if len(self.layers) == 0 or not hasattr(self.layers[0], 'df'):
+            return
+        
+        selected_chr = self.region_chr_select.currentText()
+        if not selected_chr:
+            return
+        
+        try:
+            df = self.layers[0].df
+            chr_data = df[df['chrom'] == selected_chr]
+            
+            if len(chr_data) > 0:
+                min_start = int(chr_data['start'].min())
+                max_end = int(chr_data['end'].max())
+                
+                # Update range label
+                self.region_range_label.setText(f"Valid range: {min_start:,} - {max_end:,}")
+                
+                # Update placeholder with example
+                region_size = min(1000000, int((max_end - min_start) * 0.1))
+                example_start = min_start
+                example_end = min_start + region_size
+                self.region_input.setPlaceholderText(f"{example_start}-{example_end}")
+                
+                # Update tooltip
+                self.region_input.setToolTip(
+                    f"Enter coordinates within the range: {min_start:,} - {max_end:,}\n"
+                    f"Example: {example_start}-{example_end}"
+                )
+        except:
+            pass
 
     def on_create_region_subset(self):
+        # Get selected chromosome from dropdown
+        chrom = self.region_chr_select.currentText()
+        if not chrom:
+            QMessageBox.warning(self, "Invalid input", "Please select a chromosome.")
+            return
+        
+        # Get region coordinates
         region = self.region_input.text().strip()
         if len(self.layers) == 0:
             QMessageBox.warning(self, "Invalid input", "No layer is available to create a region subset.")
             return
         if region == "":
-            QMessageBox.warning(self, "Invalid input", "Region is empty. Please enter a region like 'chr1:100000-200000'.")
+            QMessageBox.warning(self, "Invalid input", "Please enter start and end coordinates (e.g., 100000-200000).")
             return
-        # parse region like chr1:100000-200000
+        
+        # Parse coordinates (now just start-end, not chr:start-end)
         try:
-            chrom, pos = region.split(':')
-            start, end = pos.replace(',', '').split('-')
+            pos = region.replace(',', '')
+            if '-' in pos:
+                start, end = pos.split('-')
+            else:
+                QMessageBox.warning(self, "Invalid input", "Please use format: start-end (e.g., 100000-200000)")
+                return
             start = int(start)
             end = int(end)
         except Exception:
-            QMessageBox.warning(self, "Invalid input", "Region format error. Expected 'chr:start-end', e.g. 'chr1:100000-200000'.")
+            QMessageBox.warning(self, "Invalid input", "Coordinate format error. Expected 'start-end', e.g. '100000-200000'.")
             return
         
         # Use the layer currently selected in the canvas control
@@ -494,10 +556,38 @@ class ChromatinProps(LayerPropsPanel):
             return
         df = layer.df
         chr_colormap = layer.cache_props.get('chr_colormap', {})
-        # Normalize chromosome value to handle inputs like 'chr1' vs '1'
+        
+        # Get available chromosomes
+        available_chroms = df['chrom'].unique()
+        
+        # More flexible chromosome matching
         chrom_str = df['chrom'].astype(str)
-        chrom_norm = chrom.lower().replace('chr', '')
-        mask_chr = (chrom_str.str.lower() == chrom.lower()) | (chrom_str.str.lower() == chrom_norm)
+        
+        # Try different matching strategies
+        # 1. Exact match
+        mask_chr = chrom_str == chrom
+        
+        # 2. Case-insensitive match
+        if mask_chr.sum() == 0:
+            mask_chr = chrom_str.str.lower() == chrom.lower()
+        
+        # 3. Try without 'chr' prefix
+        if mask_chr.sum() == 0:
+            chrom_norm = chrom.lower().replace('chr', '')
+            mask_chr = chrom_str.str.lower().str.replace('chr', '') == chrom_norm
+        
+        # 4. Try adding 'chr' prefix if not present
+        if mask_chr.sum() == 0 and not chrom.lower().startswith('chr'):
+            chrom_with_chr = 'chr' + chrom
+            mask_chr = chrom_str.str.lower() == chrom_with_chr.lower()
+        
+        # Check if chromosome exists
+        if mask_chr.sum() == 0:
+            QMessageBox.warning(self, "Chromosome not found", 
+                f"Chromosome '{chrom}' not found in data.\n\n"
+                f"Available chromosomes:\n{', '.join(map(str, sorted(available_chroms)))}")
+            return
+        
         s0, s1 = (start, end) if start <= end else (end, start)
         # Use overlap selection to be robust to bin edges
         try:
@@ -506,16 +596,38 @@ class ChromatinProps(LayerPropsPanel):
         except Exception:
             starts = df['start']
             ends = df['end']
+        
+        # Get the actual data range for this chromosome
+        chr_starts = starts[mask_chr]
+        chr_ends = ends[mask_chr]
+        chr_min = chr_starts.min()
+        chr_max = chr_ends.max()
+        
         pos_overlap = (starts <= s1) & (ends >= s0)
         sub_df = df[mask_chr & pos_overlap].copy()
+        
         if sub_df.shape[0] <= 0:
-            QMessageBox.warning(self, "No data", f"No pixels overlap with region {chrom}:{s0}-{s1}.")
+            # Provide helpful information about the actual data range
+            QMessageBox.warning(self, "No data in region", 
+                f"No data found in region {chrom}:{s0:,}-{s1:,}\n\n"
+                f"The actual data range for {chrom} is:\n"
+                f"{chr_min:,} - {chr_max:,}\n\n"
+                f"Example valid regions:\n"
+                f"  {chrom}:{chr_min:,}-{chr_min + 1000000:,}\n"
+                f"  {chrom}:{chr_max - 1000000:,}-{chr_max:,}")
             return
         name = f"region: {chrom}:{s0}-{s1}"
         # Ensure a valid color map for the new subset layer
-        if not isinstance(chr_colormap, dict) or len(chr_colormap) == 0:
-            # fallback to single color using region color
-            chr_colormap = {chrom: self.region_color_hex.text() or "#FF6A00"}
+        # Always use the region color for region subsets to make them visually distinct
+        region_color = self.region_color_hex.text() or "#FF6A00"
+        # Create a new colormap with just the region's chromosome
+        chr_colormap = {chrom: region_color}
+        # Also handle normalized chromosome names
+        chrom_norm = chrom.lower().replace('chr', '')
+        if chrom_norm != chrom:
+            chr_colormap[chrom_norm] = region_color
+        
+        # add_chromatin_layer will inherit width and style from parent automatically
         new_layer = layer.canvas.control_panel.add_chromatin_layer(sub_df, chr_colormap, parent=layer, name=name)
         if new_layer.parent:
             new_layer.parent.re_render(parent=True)
@@ -590,6 +702,28 @@ class ChromatinProps(LayerPropsPanel):
                     self._update_selected_chromosome_display()
         
         self.chrom_select.blockSignals(False)
+    
+    def _update_region_placeholder(self):
+        """Update region chromosome dropdown and placeholder."""
+        if len(self.layers) == 0 or not hasattr(self.layers[0], 'df'):
+            return
+        
+        try:
+            df = self.layers[0].df
+            chromosomes = sorted(df['chrom'].unique())
+            
+            # Populate chromosome dropdown for region selection
+            self.region_chr_select.blockSignals(True)
+            self.region_chr_select.clear()
+            self.region_chr_select.addItems([str(c) for c in chromosomes])
+            self.region_chr_select.blockSignals(False)
+            
+            # Set first chromosome and update range display
+            if len(chromosomes) > 0:
+                self.region_chr_select.setCurrentIndex(0)
+                self.on_region_chr_changed()
+        except:
+            pass
 
     def _update_selected_chromosome_display(self):
         # Update color display for selected chromosome
