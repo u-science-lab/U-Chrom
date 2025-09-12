@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QComboBox, QDoubleSpinBox, QSpinBox, QWidget, QLabel, 
                              QGridLayout, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLineEdit, QGroupBox, 
-                             QColorDialog, QMessageBox)
+                             QColorDialog, QMessageBox, QScrollArea)
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt
 from .range_list import RangeList
@@ -256,12 +256,28 @@ class ChromatinProps(LayerPropsPanel):
         self.canvas_group.setLayout(canvas_layout)
 
     def add_grouped_layout(self):
-        # Insert group boxes into the Properties panel layout (exclude Chromosome/Region Management)
-        # They are displayed on the Layers panel's right side via operations_panel
-        self.top_layout.insertWidget(1, self.model_group)
-        self.top_layout.insertWidget(2, self.numbers_group)
-        self.top_layout.insertWidget(3, self.label_group)
-        self.top_layout.insertWidget(4, self.canvas_group)
+        # Create a scroll area for the properties
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        # Create a container widget for all group boxes
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setSpacing(5)
+        
+        # Add all group boxes to the container
+        container_layout.addWidget(self.model_group)
+        container_layout.addWidget(self.numbers_group)
+        container_layout.addWidget(self.label_group)
+        container_layout.addWidget(self.canvas_group)
+        container_layout.addStretch()
+        
+        # Set the container as the scroll area's widget
+        scroll_area.setWidget(container)
+        
+        # Add the scroll area to the main layout
+        self.top_layout.insertWidget(1, scroll_area)
 
     def _update_style_availability(self):
         # Rebuild the style combo based on current conditions
