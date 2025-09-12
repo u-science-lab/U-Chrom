@@ -123,7 +123,8 @@ class ChromatinProps(LayerPropsPanel):
         chrom_layout.addWidget(self.create_subset_btn)
         
         self.chrom_group.setLayout(chrom_layout)
-        self.chrom_group.setVisible(False)  # Initially hidden
+        # Hidden by default; will be shown for multi-chromosome datasets
+        self.chrom_group.setVisible(False)
 
         self.l_perf_mode = QLabel("Tube performance")
         self.perf_mode_control = QComboBox()
@@ -268,14 +269,14 @@ class ChromatinProps(LayerPropsPanel):
         # Update color controls and chromosome management based on chromosome count
         self.model_color_select.blockSignals(True)
         if is_multi_chrom:
-            # Multi-chromosome: only rainbow mode, show chromosome management
+            # Multi-chromosome: only rainbow mode
             self.model_color_select.clear()
             self.model_color_select.addItem("Rainbow (Multi-chromosome)")
             self.model_color_select.setCurrentIndex(0)
             self.chrom_group.setVisible(True)
             self._update_chromosome_list()
         else:
-            # Single chromosome: allow all color modes, hide chromosome management
+            # Single chromosome: allow all color modes, but hide Chromosome Management section
             self.model_color_select.clear()
             single_color_options = [
                 "White", "Black", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta",

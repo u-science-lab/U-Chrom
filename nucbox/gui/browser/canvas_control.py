@@ -49,19 +49,21 @@ class LayerPanel(QWidget):
         
         name_label = QLabel(str(layer))
         name_label.setObjectName('name_label')
-        show_cb = QCheckBox()
-        show_cb.setChecked(True)
-        lock_cb = QCheckBox()
-        lock_cb.setChecked(False)
-        show_label = QLabel('Show')
-        lock_label = QLabel('Lock')
+
+        # Show/Hide button with icon
+        show_btn = QToolButton()
+        show_btn.setCheckable(True)
+        show_btn.setChecked(True)
+        show_btn.setIcon(QIcon(self._icon_path('eye.svg')))
+        show_btn.setIconSize(QSize(16, 16))
+        show_btn.setFixedSize(24, 24)
+        show_btn.setAutoRaise(True)
+        show_btn.setToolTip('Hide layer')
+        show_btn.setCursor(Qt.PointingHandCursor)
+        show_btn.setStyleSheet("QToolButton{border:none;background:transparent;} QToolButton:hover{background:transparent;} QToolButton:checked{background:transparent;} QToolButton:pressed{background:transparent;} QToolTip{font-size:12px;color:#fff;background:#222;border:1px solid #555;}")
         
         top_row.addWidget(name_label, 1)
-        top_row.addWidget(show_label)
-        top_row.addWidget(show_cb)
-        top_row.addSpacing(6)
-        top_row.addWidget(lock_label)
-        top_row.addWidget(lock_cb)
+        top_row.addWidget(show_btn)
         
         rename_btn = QToolButton()
         rename_btn.setIcon(QIcon(self._icon_path('rename.svg')))
@@ -70,7 +72,7 @@ class LayerPanel(QWidget):
         rename_btn.setCursor(Qt.PointingHandCursor)
         rename_btn.setFixedSize(24, 24)
         rename_btn.setIconSize(QSize(16, 16))
-        rename_btn.setStyleSheet("QToolButton{border-radius:4px;} QToolButton:hover{background:rgba(255,255,255,0.08);} QToolTip{font-size:12px;color:#fff;background:#222;border:1px solid #555;}")
+        rename_btn.setStyleSheet("QToolButton{border:none;background:transparent;} QToolButton:hover{background:transparent;} QToolButton:pressed{background:transparent;} QToolTip{font-size:12px;color:#fff;background:#222;border:1px solid #555;}")
         rename_btn.setObjectName('rename_btn')
         
         delete_btn = QToolButton()
@@ -80,7 +82,7 @@ class LayerPanel(QWidget):
         delete_btn.setCursor(Qt.PointingHandCursor)
         delete_btn.setFixedSize(24, 24)
         delete_btn.setIconSize(QSize(16, 16))
-        delete_btn.setStyleSheet("QToolButton{border-radius:4px;} QToolButton:hover{background:rgba(255,255,255,0.08);} QToolTip{font-size:12px;color:#fff;background:#222;border:1px solid #555;}")
+        delete_btn.setStyleSheet("QToolButton{border:none;background:transparent;} QToolButton:hover{background:transparent;} QToolButton:pressed{background:transparent;} QToolTip{font-size:12px;color:#fff;background:#222;border:1px solid #555;}")
         delete_btn.setObjectName('delete_btn')
         
         subset_btn = QToolButton()
@@ -90,7 +92,7 @@ class LayerPanel(QWidget):
         subset_btn.setCursor(Qt.PointingHandCursor)
         subset_btn.setFixedSize(24, 24)
         subset_btn.setIconSize(QSize(16, 16))
-        subset_btn.setStyleSheet("QToolButton{border-radius:4px;} QToolButton:hover{background:rgba(255,255,255,0.08);} QToolTip{font-size:12px;color:#fff;background:#222;border:1px solid #555;}")
+        subset_btn.setStyleSheet("QToolButton{border:none;background:transparent;} QToolButton:hover{background:transparent;} QToolButton:pressed{background:transparent;} QToolTip{font-size:12px;color:#fff;background:#222;border:1px solid #555;}")
         subset_btn.setObjectName('subset_btn')
         
         top_row.addSpacing(8)
@@ -105,7 +107,7 @@ class LayerPanel(QWidget):
         self.list.addItem(item)
         self.list.setItemWidget(item, row)
         
-        return item, show_cb, lock_cb, rename_btn, delete_btn, subset_btn
+        return item, show_btn, rename_btn, delete_btn, subset_btn
 
     def set_operations_panel(self, widget=None):
         if (widget is not None) and (self.operation_stack.indexOf(widget) < 0):
@@ -208,17 +210,19 @@ class CanvasControl(QWidget):
         layer.name = name
         self.layers.append(layer)
         self.current_layer = layer
-        # custom list item with visibility, lock, and action buttons
-        item, show_cb, lock_cb, rename_btn, delete_btn, subset_btn = self.layer_control.add_list_item(layer)
+        # custom list item with visibility and action buttons
+        item, show_btn, rename_btn, delete_btn, subset_btn = self.layer_control.add_list_item(layer)
         
-        def on_toggle_show(val):
-            visible = bool(val)
-            layer.set_visible(visible)
-        def on_toggle_lock(val):
-            locked = bool(val)
-            layer.set_locked(locked)
-            # disable its control panel when locked
-            layer.control_panel.setDisabled(locked)
+        def on_toggle_show():
+            checked = show_btn.isChecked()
+            layer.set_visible(checked)
+            # update tooltip and icon based on state
+            if checked:
+                show_btn.setToolTip('Hide layer')
+                show_btn.setIcon(QIcon(self._icon_path('eye.svg')))
+            else:
+                show_btn.setToolTip('Show layer')
+                show_btn.setIcon(QIcon(self._icon_path('eye-off.svg')))
         def on_rename_layer():
             self._show_rename_dialog(layer)
         def on_delete_layer():
@@ -227,8 +231,7 @@ class CanvasControl(QWidget):
         def on_subset_layer():
             self._show_subset_dialog(layer)
             
-        show_cb.toggled.connect(on_toggle_show)
-        lock_cb.toggled.connect(on_toggle_lock)
+        show_btn.clicked.connect(on_toggle_show)
         rename_btn.clicked.connect(on_rename_layer)
         delete_btn.clicked.connect(on_delete_layer)
         subset_btn.clicked.connect(on_subset_layer)
