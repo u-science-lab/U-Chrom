@@ -87,7 +87,7 @@ class ChromatinProps(LayerPropsPanel):
             "Orange", "Purple", "Brown", "Pink", "Gray", "Olive", "Navy", "Lime",
             "Maroon", "Teal", "Silver", "Gold"
         ]
-        items = ["Rainbow"] + [f"Single - {c}" for c in single_color_options]
+        items = ["Rainbow"] + single_color_options
         self.model_color_select.addItems(items)
         self.model_color_select.setCurrentText("Rainbow")
         self.model_color_select.currentIndexChanged.connect(self.on_model_color_change)
@@ -330,7 +330,7 @@ class ChromatinProps(LayerPropsPanel):
                 "Orange", "Purple", "Brown", "Pink", "Gray", "Olive", "Navy", "Lime",
                 "Maroon", "Teal", "Silver", "Gold"
             ]
-            items = ["Rainbow"] + [f"Single - {c}" for c in single_color_options]
+            items = ["Rainbow"] + single_color_options
             self.model_color_select.addItems(items)
             # Restore previous selection if valid
             for i in range(self.model_color_select.count()):
@@ -428,8 +428,8 @@ class ChromatinProps(LayerPropsPanel):
 
     def on_model_color_change(self):
         text = self.model_color_select.currentText()
-        is_single = text.startswith('Single - ')
-        color_name = text.replace('Single - ', '') if is_single else None
+        is_single = text != 'Rainbow' and text != 'Rainbow (Multi-chromosome)'
+        color_name = text if is_single else None
         color_map = {
             "White": "#FFFFFF", "Black": "#000000", "Red": "#FF0000", "Green": "#008000",
             "Blue": "#0000FF", "Yellow": "#FFFF00", "Cyan": "#00FFFF", "Magenta": "#FF00FF",
