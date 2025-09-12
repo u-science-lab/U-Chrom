@@ -46,7 +46,8 @@ class ChromatinProps(LayerPropsPanel):
         self.subset_window = RangeList("Take sub-set")
         self.subset_window.signal_ok.connect(self.on_take_subset)
 
-        super().__init__(grid_table=[], operation_widgets=[])
+        # Move entire Chromosome Management group to the Layers panel's right side
+        super().__init__(grid_table=[], operation_widgets=[self.chrom_group])
         
         # Add grouped controls to layout after parent initialization
         self.add_grouped_layout()
@@ -207,11 +208,11 @@ class ChromatinProps(LayerPropsPanel):
         self.canvas_group.setLayout(canvas_layout)
 
     def add_grouped_layout(self):
-        # Insert group boxes into the main layout
+        # Insert group boxes into the Properties panel layout (exclude Chromosome Management)
+        # Chromosome Management is now shown on the Layers panel's right side via operations_panel
         self.top_layout.insertWidget(1, self.model_group)
-        self.top_layout.insertWidget(2, self.chrom_group)
-        self.top_layout.insertWidget(3, self.label_group)
-        self.top_layout.insertWidget(4, self.canvas_group)
+        self.top_layout.insertWidget(2, self.label_group)
+        self.top_layout.insertWidget(3, self.canvas_group)
 
     def _update_style_availability(self):
         # Rebuild the style combo based on current conditions

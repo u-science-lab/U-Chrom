@@ -197,6 +197,12 @@ class CanvasControl(QWidget):
         rename_btn.clicked.connect(on_rename_layer)
         delete_btn.clicked.connect(on_delete_layer)
         subset_btn.clicked.connect(on_subset_layer)
+        # hide subset for multi-chromosome layers (e.g., initial import of all chromosomes)
+        try:
+            if hasattr(layer, 'df') and (int(layer.df['chrom'].nunique()) > 1):
+                subset_btn.setVisible(False)
+        except Exception:
+            pass
         self.layer_control.list.setCurrentRow(len(self.layers)-1)
         self.canvas.set_layer_title(str(layer))
         return layer
