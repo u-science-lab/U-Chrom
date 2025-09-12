@@ -71,8 +71,8 @@ class CanvasControl(OriginalCanvasControl):
                 show_btn.setToolTip('Show layer')
                 show_btn.setIcon(QIcon(self._icon_path('eye-off.svg')))
             # Update chromosome numbers when visibility changes
-            if layer == self.current_layer and hasattr(self, '_update_chr_numbers_for_current_layer'):
-                self._update_chr_numbers_for_current_layer()
+            if layer == self.current_layer and hasattr(self, '_update_chr_labels_for_current_layer'):
+                self._update_chr_labels_for_current_layer()
         
         def on_rename_layer():
             self._show_rename_dialog(layer)
@@ -91,7 +91,7 @@ class CanvasControl(OriginalCanvasControl):
         self._update_list_item_styles()
         
         # Update chromosome labels
-        self._update_chr_numbers(df, chr_colormap)
+        self._update_chr_labels(df, chr_colormap)
         
         # Single render after all initialization
         if hasattr(self.canvas.backend, 'render'):
@@ -99,7 +99,7 @@ class CanvasControl(OriginalCanvasControl):
         
         return layer
     
-    def _update_chr_numbers(self, df, chr_colormap):
+    def _update_chr_labels(self, df, chr_colormap):
         """Update chromosome number labels using appropriate layer type."""
         if self.use_abstract_layers:
             from .layers_abstract import ChrLabelLayer
@@ -112,26 +112,26 @@ class CanvasControl(OriginalCanvasControl):
                            hasattr(self.current_layer, 'is_visible') and 
                            self.current_layer.is_visible)
             
-            if self.chr_numbers_enabled and layer_visible and int(df['chrom'].nunique()) > 1:
-                if self.chr_number_layer is None:
-                    self.chr_number_layer = ChrLabelLayer(self.canvas)
+            if self.chr_labels_enabled and layer_visible and int(df['chrom'].nunique()) > 1:
+                if self.chr_label_layer is None:
+                    self.chr_label_layer = ChrLabelLayer(self.canvas)
                 else:
-                    self.chr_number_layer.remove()
+                    self.chr_label_layer.remove()
                 
-                if self.chr_number_color_mode == 'follow':
+                if self.chr_label_color_mode == 'follow':
                     color = chr_colormap
-                elif self.chr_number_color_mode == 'white':
+                elif self.chr_label_color_mode == 'white':
                     color = '#FFFFFF'
                 else:
                     color = '#000000'
                 
                 # Get font size from parent class
-                font_size = getattr(self, 'chr_number_font_size', 150)
-                self.chr_number_layer.draw(df, color=color, font_size=font_size)
-                self.chr_number_layer.name = 'Chr numbers'
+                font_size = getattr(self, 'chr_label_font_size', 150)
+                self.chr_label_layer.draw(df, color=color, font_size=font_size)
+                self.chr_label_layer.name = 'Chr labels'
             else:
-                if self.chr_number_layer is not None:
-                    self.chr_number_layer.remove()
-                    self.chr_number_layer = None
+                if self.chr_label_layer is not None:
+                    self.chr_label_layer.remove()
+                    self.chr_label_layer = None
         except Exception:
             pass

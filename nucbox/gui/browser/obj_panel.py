@@ -170,33 +170,33 @@ class ChromatinProps(LayerPropsPanel):
         self.region_group.setLayout(region_layout)
         self.region_group.setVisible(True)
 
-        # Numbers overlay color mode
-        self.numbers_group = QGroupBox("Chromosome Numbers")
-        numbers_layout = QGridLayout()
-        self.numbers_enable = QCheckBox("Enable")
-        self.numbers_enable.setChecked(True)
-        self.numbers_enable.stateChanged.connect(self.on_numbers_enable_change)
-        numbers_layout.addWidget(self.numbers_enable, 0, 0, 1, 2)
+        # Labels overlay color mode
+        self.labels_group = QGroupBox("Chromosome Labels")
+        labels_layout = QGridLayout()
+        self.labels_enable = QCheckBox("Enable")
+        self.labels_enable.setChecked(True)
+        self.labels_enable.stateChanged.connect(self.on_labels_enable_change)
+        labels_layout.addWidget(self.labels_enable, 0, 0, 1, 2)
         
         l_mode = QLabel("Color mode:")
-        self.numbers_mode = QComboBox()
-        self.numbers_mode.addItems(["Follow chromosome", "White", "Black"])
-        self.numbers_mode.currentIndexChanged.connect(self.on_numbers_mode_change)
-        numbers_layout.addWidget(l_mode, 1, 0)
-        numbers_layout.addWidget(self.numbers_mode, 1, 1)
+        self.labels_mode = QComboBox()
+        self.labels_mode.addItems(["Follow chromosome", "White", "Black"])
+        self.labels_mode.currentIndexChanged.connect(self.on_labels_mode_change)
+        labels_layout.addWidget(l_mode, 1, 0)
+        labels_layout.addWidget(self.labels_mode, 1, 1)
         
         l_font_size = QLabel("Font size:")
-        self.numbers_font_size = QSpinBox()
-        self.numbers_font_size.setMinimum(50)
-        self.numbers_font_size.setMaximum(2000)
-        self.numbers_font_size.setSingleStep(50)
-        self.numbers_font_size.setValue(150)
-        self.numbers_font_size.valueChanged.connect(self.on_numbers_font_size_change)
-        numbers_layout.addWidget(l_font_size, 2, 0)
-        numbers_layout.addWidget(self.numbers_font_size, 2, 1)
+        self.labels_font_size = QSpinBox()
+        self.labels_font_size.setMinimum(50)
+        self.labels_font_size.setMaximum(2000)
+        self.labels_font_size.setSingleStep(50)
+        self.labels_font_size.setValue(150)
+        self.labels_font_size.valueChanged.connect(self.on_labels_font_size_change)
+        labels_layout.addWidget(l_font_size, 2, 0)
+        labels_layout.addWidget(self.labels_font_size, 2, 1)
         
-        self.numbers_group.setLayout(numbers_layout)
-        self.numbers_group.setVisible(True)
+        self.labels_group.setLayout(labels_layout)
+        self.labels_group.setVisible(True)
 
 
         # Add to model group layout
@@ -280,7 +280,7 @@ class ChromatinProps(LayerPropsPanel):
         
         # Add all group boxes to the container
         container_layout.addWidget(self.model_group)
-        container_layout.addWidget(self.numbers_group)
+        container_layout.addWidget(self.labels_group)
         container_layout.addWidget(self.label_group)
         container_layout.addWidget(self.canvas_group)
         container_layout.addStretch()
@@ -372,7 +372,7 @@ class ChromatinProps(LayerPropsPanel):
         # Update region placeholder with actual data range
         self._update_region_placeholder()
         # Update chromosome numbers checkbox state based on layer visibility
-        self._update_chr_numbers_checkbox()
+        self._update_chr_labels_checkbox()
 
     def update_params(self):
         self.on_opacity_changed()
@@ -465,8 +465,8 @@ class ChromatinProps(LayerPropsPanel):
         # Update style availability after color mode change
         self._update_style_availability()
 
-    def on_numbers_mode_change(self):
-        mode_text = self.numbers_mode.currentText()
+    def on_labels_mode_change(self):
+        mode_text = self.labels_mode.currentText()
         if mode_text.startswith('Follow'):
             mode_key = 'follow'
         elif mode_text == 'White':
@@ -476,20 +476,20 @@ class ChromatinProps(LayerPropsPanel):
         # apply to the current canvas control
         if len(self.layers) > 0:
             canvas_control = self.layers[0].canvas.control_panel
-            canvas_control.set_chr_number_color_mode(mode_key)
+            canvas_control.set_chr_label_color_mode(mode_key)
 
-    def on_numbers_enable_change(self):
-        enabled = self.numbers_enable.isChecked()
+    def on_labels_enable_change(self):
+        enabled = self.labels_enable.isChecked()
         if len(self.layers) > 0:
             canvas_control = self.layers[0].canvas.control_panel
-            canvas_control.set_chr_numbers_enabled(enabled)
+            canvas_control.set_chr_labels_enabled(enabled)
     
-    def on_numbers_font_size_change(self):
-        font_size = self.numbers_font_size.value()
+    def on_labels_font_size_change(self):
+        font_size = self.labels_font_size.value()
         # Update the chromosome numbers with new font size
         if len(self.layers) > 0:
             canvas_control = self.layers[0].canvas.control_panel
-            canvas_control.set_chr_number_font_size(font_size)
+            canvas_control.set_chr_label_font_size(font_size)
 
     def on_pick_region_color(self):
         current = QColor(self.region_color_hex.text() or "#FF6A00")
@@ -724,18 +724,18 @@ class ChromatinProps(LayerPropsPanel):
         except:
             pass
 
-    def _update_chr_numbers_checkbox(self):
+    def _update_chr_labels_checkbox(self):
         """Update chromosome numbers checkbox based on layer visibility."""
         try:
             if len(self.layers) > 0:
                 layer = self.layers[0]
                 # Enable checkbox only if layer is visible
                 if hasattr(layer, 'is_visible'):
-                    self.numbers_enable.blockSignals(True)
+                    self.labels_enable.blockSignals(True)
                     # If layer is not visible, uncheck the checkbox
                     if not layer.is_visible:
-                        self.numbers_enable.setChecked(False)
-                    self.numbers_enable.blockSignals(False)
+                        self.labels_enable.setChecked(False)
+                    self.labels_enable.blockSignals(False)
         except:
             pass
     
