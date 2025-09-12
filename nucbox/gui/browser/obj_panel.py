@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QComboBox, QDoubleSpinBox, QSpinBox, QWidget, QLabel, 
                              QGridLayout, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLineEdit, QGroupBox, 
-                             QColorDialog)
+                             QColorDialog, QMessageBox)
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt
 from .range_list import RangeList
@@ -443,7 +443,11 @@ class ChromatinProps(LayerPropsPanel):
 
     def on_create_region_subset(self):
         region = self.region_input.text().strip()
-        if len(self.layers) == 0 or region == "":
+        if len(self.layers) == 0:
+            QMessageBox.warning(self, "Invalid input", "No layer is available to create a region subset.")
+            return
+        if region == "":
+            QMessageBox.warning(self, "Invalid input", "Region is empty. Please enter a region like 'chr1:100000-200000'.")
             return
         # parse region like chr1:100000-200000
         try:
@@ -452,17 +456,38 @@ class ChromatinProps(LayerPropsPanel):
             start = int(start)
             end = int(end)
         except Exception:
+            QMessageBox.warning(self, "Invalid input", "Region format error. Expected 'chr:start-end', e.g. 'chr1:100000-200000'.")
             return
         
-        layer = self.layers[0]
+        # Use the layer currently selected in the canvas control
+        layer = self.layers[0].canvas.control_panel.current_layer or self.layers[0]
         if not hasattr(layer, 'df'):
+            QMessageBox.warning(self, "Invalid state", "Current layer has no dataframe to subset from.")
             return
         df = layer.df
         chr_colormap = layer.cache_props.get('chr_colormap', {})
-        sub_df = df[(df['chrom'] == chrom) & (df['start'] >= start) & (df['end'] <= end)].copy()
+        # Normalize chromosome value to handle inputs like 'chr1' vs '1'
+        chrom_str = df['chrom'].astype(str)
+        chrom_norm = chrom.lower().replace('chr', '')
+        mask_chr = (chrom_str.str.lower() == chrom.lower()) | (chrom_str.str.lower() == chrom_norm)
+        s0, s1 = (start, end) if start <= end else (end, start)
+        # Use overlap selection to be robust to bin edges
+        try:
+            starts = df['start'].astype(int)
+            ends = df['end'].astype(int)
+        except Exception:
+            starts = df['start']
+            ends = df['end']
+        pos_overlap = (starts <= s1) & (ends >= s0)
+        sub_df = df[mask_chr & pos_overlap].copy()
         if sub_df.shape[0] <= 0:
+            QMessageBox.warning(self, "No data", f"No pixels overlap with region {chrom}:{s0}-{s1}.")
             return
-        name = f"region: {chrom}:{start}-{end}"
+        name = f"region: {chrom}:{s0}-{s1}"
+        # Ensure a valid color map for the new subset layer
+        if not isinstance(chr_colormap, dict) or len(chr_colormap) == 0:
+            # fallback to single color using region color
+            chr_colormap = {chrom: self.region_color_hex.text() or "#FF6A00"}
         new_layer = layer.canvas.control_panel.add_chromatin_layer(sub_df, chr_colormap, parent=layer, name=name)
         if new_layer.parent:
             new_layer.parent.re_render(parent=True)
