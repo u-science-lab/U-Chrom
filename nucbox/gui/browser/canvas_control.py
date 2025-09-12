@@ -9,6 +9,8 @@ class LayerPanel(QWidget):
         super(LayerPanel, self).__init__(parent)
 
         self.list = QListWidget()
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.list.setMinimumWidth(260)
 
         title_layout = QVBoxLayout()
         title_layout.addWidget(QLabel("<h2>Layers</h2>"))
@@ -18,6 +20,9 @@ class LayerPanel(QWidget):
         hbox = QHBoxLayout()
         hbox.addWidget(self.list)
         hbox.addWidget(self.operation_stack)
+        # Give the list more space than the right-side operations panel
+        hbox.setStretch(0, 3)
+        hbox.setStretch(1, 2)
 
         vbox = QVBoxLayout()
         vbox.addLayout(title_layout)
@@ -103,7 +108,8 @@ class LayerPanel(QWidget):
         main_layout.addLayout(top_row)
         
         row.setLayout(main_layout)
-        item.setSizeHint(row.sizeHint())
+        # Ensure row height is enough to display icons without clipping
+        item.setSizeHint(QSize(row.sizeHint().width(), max(36, row.sizeHint().height())))
         self.list.addItem(item)
         self.list.setItemWidget(item, row)
         
