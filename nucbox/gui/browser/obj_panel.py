@@ -673,7 +673,8 @@ class ChromatinProps(LayerPropsPanel):
             # Filter data for selected chromosome
             subset_df = df[df['chrom'] == selected_chrom].copy()
             if subset_df.shape[0] > 0:
-                name = f'Chr {selected_chrom} subset'
+                # Name the new layer exactly as the chromosome identifier
+                name = str(selected_chrom)
                 new_layer = current_layer.canvas.control_panel.add_chromatin_layer(
                     subset_df, chr_colormap, parent=current_layer, name=name
                 )

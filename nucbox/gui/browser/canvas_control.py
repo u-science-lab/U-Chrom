@@ -222,7 +222,18 @@ class CanvasControl(QWidget):
         from .layers import ChrLabelLayer
         layer = ChromatinLayer(self.canvas, df, chr_colormap)
         layer.parent = parent
-        layer.name = name
+        if name is not None:
+            layer.name = name
+        else:
+            # Derive default name
+            try:
+                if parent is not None and hasattr(df, 'shape'):
+                    # Could be a region or chromosome subset – parent naming already indicates
+                    layer.name = str(parent.name)
+                else:
+                    layer.name = "Chromatin"
+            except Exception:
+                layer.name = "Chromatin"
         self.layers.append(layer)
         self.current_layer = layer
         # custom list item with visibility and action buttons

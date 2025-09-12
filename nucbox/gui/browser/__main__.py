@@ -13,7 +13,7 @@ def read_and_show(*paths, style='qdarkgraystyle'):
         if i > 0:
             win.add_canvas('h')
         df = read_particles(path)
-        win.load_model(df)
+        win.load_model(df, path)
         win.init_draw()
     win.show()
     app.run()

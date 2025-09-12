@@ -187,7 +187,7 @@ class MainWindow(QMainWindow):
             try:
                 print(path)
                 df = read_particles(path)
-                self.load_model(df)
+                self.load_model(df, path)
                 self.init_draw()
             except Exception as e:
                 print(str(e))
@@ -200,12 +200,19 @@ class MainWindow(QMainWindow):
         val = self.menubar.show_axis
         self.canvas.axis.visible = val
 
-    def load_model(self, df):
+    def load_model(self, df, path: str = None):
         random.seed(0)
         for c in df['chrom'].unique():
             if c not in self.chr_colormap:
                 self.chr_colormap[c] = random_color()
-        self.canvas.control_panel.add_chromatin_layer(df, self.chr_colormap)
+        name = None
+        try:
+            if path is not None:
+                base = osp.basename(path)
+                name = osp.splitext(base)[0]
+        except Exception:
+            pass
+        self.canvas.control_panel.add_chromatin_layer(df, self.chr_colormap, name=name)
 
     def adjust_camera(self, factor=2.0):
         pos = self.canvas.info['df'][['x', 'y', 'z']].values
