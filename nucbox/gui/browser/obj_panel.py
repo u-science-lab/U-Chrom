@@ -186,13 +186,6 @@ class ChromatinProps(LayerPropsPanel):
         self.numbers_group.setLayout(numbers_layout)
         self.numbers_group.setVisible(True)
 
-        self.l_perf_mode = QLabel("Tube performance")
-        self.perf_mode_control = QComboBox()
-        self.perf_mode_control.addItems([
-            "Fast (50 segments)", "Balanced (100 segments)", "Quality (200 segments)"
-        ])
-        self.perf_mode_control.setCurrentText("Fast (50 segments)")
-        self.perf_mode_control.currentTextChanged.connect(self.on_perf_mode_changed)
 
         # Add to model group layout
         model_layout.addWidget(l_style, 0, 0)
@@ -203,12 +196,6 @@ class ChromatinProps(LayerPropsPanel):
         model_layout.addWidget(self.opacity_control, 2, 1)
         model_layout.addWidget(l_color_mode, 3, 0)
         model_layout.addWidget(self.model_color_select, 3, 1)
-        model_layout.addWidget(self.l_perf_mode, 4, 0)
-        model_layout.addWidget(self.perf_mode_control, 4, 1)
-        
-        # Initially hide tube performance controls
-        self.l_perf_mode.setVisible(False)
-        self.perf_mode_control.setVisible(False)
         self.model_group.setLayout(model_layout)
 
         # Label Properties Group
@@ -308,9 +295,6 @@ class ChromatinProps(LayerPropsPanel):
         self.model_style_select.addItem('points')
         has_tube_option = True
         
-        # Show/hide tube performance controls based on tube availability
-        self.l_perf_mode.setVisible(has_tube_option)
-        self.perf_mode_control.setVisible(has_tube_option)
         
         # Update color controls and chromosome management based on chromosome count
         self.model_color_select.blockSignals(True)
@@ -663,28 +647,6 @@ class ChromatinProps(LayerPropsPanel):
             return
         canvas = self.layers[0].canvas
         canvas.set_background_color(color_name)
-
-    def on_perf_mode_changed(self):
-        mode_text = self.perf_mode_control.currentText()
-        # Extract segment count from text
-        if "50" in mode_text:
-            segments = 50
-        elif "100" in mode_text:
-            segments = 100
-        elif "200" in mode_text:
-            segments = 200
-        else:
-            segments = 50
-        
-        # Update all layers and re-render if currently using tube
-        current_style = self.model_style_select.currentText()
-        for layer in self.layers:
-            layer.cache_props['tube_gradient_segments'] = segments
-            if current_style == 'tube':
-                layer.remove()
-                layer.draw()
-                if layer.parent:
-                    layer.parent.re_render(parent=True)
 
 
     def _update_chromosome_list(self):
