@@ -154,6 +154,22 @@ class ChromatinProps(LayerPropsPanel):
         self.region_group.setLayout(region_layout)
         self.region_group.setVisible(True)
 
+        # Numbers overlay color mode
+        self.numbers_group = QGroupBox("Chromosome Numbers")
+        numbers_layout = QGridLayout()
+        self.numbers_enable = QCheckBox("Enable")
+        self.numbers_enable.setChecked(True)
+        self.numbers_enable.stateChanged.connect(self.on_numbers_enable_change)
+        numbers_layout.addWidget(self.numbers_enable, 0, 0, 1, 2)
+        l_mode = QLabel("Color mode:")
+        self.numbers_mode = QComboBox()
+        self.numbers_mode.addItems(["Follow chromosome", "White", "Black"])
+        self.numbers_mode.currentIndexChanged.connect(self.on_numbers_mode_change)
+        numbers_layout.addWidget(l_mode, 1, 0)
+        numbers_layout.addWidget(self.numbers_mode, 1, 1)
+        self.numbers_group.setLayout(numbers_layout)
+        self.numbers_group.setVisible(True)
+
         self.l_perf_mode = QLabel("Tube performance")
         self.perf_mode_control = QComboBox()
         self.perf_mode_control.addItems([
@@ -240,8 +256,9 @@ class ChromatinProps(LayerPropsPanel):
         # Insert group boxes into the Properties panel layout (exclude Chromosome/Region Management)
         # They are displayed on the Layers panel's right side via operations_panel
         self.top_layout.insertWidget(1, self.model_group)
-        self.top_layout.insertWidget(2, self.label_group)
-        self.top_layout.insertWidget(3, self.canvas_group)
+        self.top_layout.insertWidget(2, self.numbers_group)
+        self.top_layout.insertWidget(3, self.label_group)
+        self.top_layout.insertWidget(4, self.canvas_group)
 
     def _update_style_availability(self):
         # Rebuild the style combo based on current conditions
@@ -425,6 +442,25 @@ class ChromatinProps(LayerPropsPanel):
                 layer.parent.re_render(parent=True)
         # Update style availability after color mode change
         self._update_style_availability()
+
+    def on_numbers_mode_change(self):
+        mode_text = self.numbers_mode.currentText()
+        if mode_text.startswith('Follow'):
+            mode_key = 'follow'
+        elif mode_text == 'White':
+            mode_key = 'white'
+        else:
+            mode_key = 'black'
+        # apply to the current canvas control
+        if len(self.layers) > 0:
+            canvas_control = self.layers[0].canvas.control_panel
+            canvas_control.set_chr_number_color_mode(mode_key)
+
+    def on_numbers_enable_change(self):
+        enabled = self.numbers_enable.isChecked()
+        if len(self.layers) > 0:
+            canvas_control = self.layers[0].canvas.control_panel
+            canvas_control.set_chr_numbers_enabled(enabled)
 
     def on_pick_region_color(self):
         current = QColor(self.region_color_hex.text() or "#FF6A00")

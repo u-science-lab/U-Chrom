@@ -125,6 +125,10 @@ class CanvasControl(QWidget):
         self.canvas = canvas
         self.layers = []
         self.current_layer = None
+        # Chromosome number label overlay settings
+        self.chr_number_layer = None
+        self.chr_number_color_mode = 'follow'  # 'follow' | 'white' | 'black'
+        self.chr_numbers_enabled = True
 
         self.layer_control = LayerPanel()
         self.props_stack = QStackedWidget()
@@ -202,11 +206,20 @@ class CanvasControl(QWidget):
             self.layer_control.set_operations_panel(control_panel.operations_panel)
             self.canvas.set_layer_title(str(self.current_layer))
             self._update_list_item_styles()
+            # refresh numbers overlay for newly selected layer
+            try:
+                df = self.current_layer.df if hasattr(self.current_layer, 'df') else None
+                cmap = self.current_layer.cache_props.get('chr_colormap', {}) if hasattr(self.current_layer, 'cache_props') else {}
+                if df is not None:
+                    self._update_chr_numbers(df, cmap)
+            except Exception:
+                pass
         except:
             pass
 
     def add_chromatin_layer(self, df, chr_colormap, parent=None, name=None):
         from .layers import ChromatinLayer
+        from .layers import ChrLabelLayer
         layer = ChromatinLayer(self.canvas, df, chr_colormap)
         layer.parent = parent
         layer.name = name
@@ -238,6 +251,9 @@ class CanvasControl(QWidget):
         self.layer_control.list.setCurrentRow(len(self.layers)-1)
         self.canvas.set_layer_title(str(layer))
         self._update_list_item_styles()
+
+        # Update chromosome number labels overlay
+        self._update_chr_numbers(df, chr_colormap)
         return layer
 
     def _show_rename_dialog(self, layer):
@@ -295,5 +311,51 @@ class CanvasControl(QWidget):
                     w.setStyleSheet("background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.25); border-radius: 6px;")
                 else:
                     w.setStyleSheet("background: transparent; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;")
+        except Exception:
+            pass
+
+    # ---------- Chromosome numbers overlay ----------
+    def _update_chr_numbers(self, df, chr_colormap):
+        from .layers import ChrLabelLayer
+        try:
+            if self.chr_numbers_enabled and int(df['chrom'].nunique()) > 1:
+                if self.chr_number_layer is None:
+                    self.chr_number_layer = ChrLabelLayer(self.canvas)
+                else:
+                    self.chr_number_layer.remove()
+                if self.chr_number_color_mode == 'follow':
+                    color = chr_colormap
+                elif self.chr_number_color_mode == 'white':
+                    color = '#FFFFFF'
+                else:
+                    color = '#000000'
+                self.chr_number_layer.draw(df, color=color)
+                self.chr_number_layer.name = 'Chr numbers'
+            else:
+                if self.chr_number_layer is not None:
+                    self.chr_number_layer.remove()
+                    self.chr_number_layer = None
+        except Exception:
+            pass
+
+    def set_chr_number_color_mode(self, mode: str):
+        self.chr_number_color_mode = mode
+        try:
+            layer = self.current_layer
+            if layer is not None and hasattr(layer, 'df'):
+                df = layer.df
+                cmap = layer.cache_props.get('chr_colormap', {}) if hasattr(layer, 'cache_props') else {}
+                self._update_chr_numbers(df, cmap)
+        except Exception:
+            pass
+
+    def set_chr_numbers_enabled(self, enabled: bool):
+        self.chr_numbers_enabled = bool(enabled)
+        try:
+            layer = self.current_layer
+            if layer is not None and hasattr(layer, 'df'):
+                df = layer.df
+                cmap = layer.cache_props.get('chr_colormap', {}) if hasattr(layer, 'cache_props') else {}
+                self._update_chr_numbers(df, cmap)
         except Exception:
             pass

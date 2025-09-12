@@ -73,11 +73,14 @@ class ChrLabelLayer(Layer):
             max_norm_pos = pos[max_norm_ix]
             self.label_ori_pos.append(max_norm_pos)
             label_pos = max_norm_pos * (1 + shift_factor)
+            # when color is dict or a colormap, use its color for label
             if isinstance(color, dict):
-                c = color.get(chrom, "#ff0000")
+                c = color.get(chrom, color.get(str(chrom).lower().replace('chr',''), "#FFFFFF"))
             else:
                 c = color
-            label = scene.visuals.Text(chrom, color=c, parent=self.canvas.view.scene, bold=bold)
+            # Show numeric part only (e.g., chr1 -> 1)
+            chrom_text = str(chrom).lower().replace('chr', '')
+            label = scene.visuals.Text(chrom_text, color=c, parent=self.canvas.view.scene, bold=bold)
             label.pos = tuple(label_pos)
             label.font_size = font_size
             label.set_gl_state(depth_test=True)
