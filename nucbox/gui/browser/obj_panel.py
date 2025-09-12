@@ -81,16 +81,21 @@ class ChromatinProps(LayerPropsPanel):
         self.opacity_control.valueChanged.connect(self.on_opacity_changed)
  
         l_color_mode = QLabel("Color")
-        self.model_color_select = QComboBox()
-        single_color_options = [
-            "White", "Black", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta",
-            "Orange", "Purple", "Brown", "Pink", "Gray", "Olive", "Navy", "Lime",
-            "Maroon", "Teal", "Silver", "Gold"
-        ]
-        items = ["Rainbow"] + single_color_options
-        self.model_color_select.addItems(items)
-        self.model_color_select.setCurrentText("Rainbow")
-        self.model_color_select.currentIndexChanged.connect(self.on_model_color_change)
+        # Mode: Rainbow or Custom HEX
+        self.model_color_mode = QComboBox()
+        self.model_color_mode.addItems(["Rainbow", "Custom"])
+        self.model_color_mode.setCurrentText("Rainbow")
+        self.model_color_mode.currentIndexChanged.connect(self.on_model_color_mode_change)
+        # Custom color controls
+        self.single_color_btn = QPushButton()
+        self.single_color_btn.setFixedSize(50, 25)
+        self.single_color_btn.clicked.connect(self.on_pick_single_color)
+        self.single_color_hex = QLineEdit("#FFFFFF")
+        self.single_color_hex.setPlaceholderText("#FFFFFF")
+        self.single_color_hex.textChanged.connect(self.on_single_color_hex_changed)
+        # Hidden unless Custom mode
+        self.single_color_btn.setVisible(False)
+        self.single_color_hex.setVisible(False)
         
 
         # Chromosome management section
@@ -207,7 +212,9 @@ class ChromatinProps(LayerPropsPanel):
         model_layout.addWidget(l_opacity, 2, 0)
         model_layout.addWidget(self.opacity_control, 2, 1)
         model_layout.addWidget(l_color_mode, 3, 0)
-        model_layout.addWidget(self.model_color_select, 3, 1)
+        model_layout.addWidget(self.model_color_mode, 3, 1)
+        model_layout.addWidget(self.single_color_btn, 4, 0)
+        model_layout.addWidget(self.single_color_hex, 4, 1)
         self.model_group.setLayout(model_layout)
 
         # Layer Label Group
@@ -294,7 +301,11 @@ class ChromatinProps(LayerPropsPanel):
     def _update_style_availability(self):
         # Rebuild the style combo based on current conditions
         current_style = self.model_style_select.currentText()
-        current_color = self.model_color_select.currentText()
+        # Maintain backward-compat variable for legacy reads
+        try:
+            current_color = self.model_color_mode.currentText()
+        except Exception:
+            current_color = "Rainbow"
         
         # Check chromosome count and color mode constraints
         # Tube mode is always supported for all configurations
@@ -325,33 +336,29 @@ class ChromatinProps(LayerPropsPanel):
         
         
         # Update color controls and chromosome management based on chromosome count
-        self.model_color_select.blockSignals(True)
+        self.model_color_mode.blockSignals(True)
         if is_multi_chrom:
             # Multi-chromosome: only rainbow mode; show both Chromosome and Region management on the right panel
-            self.model_color_select.clear()
-            self.model_color_select.addItem("Rainbow (Multi-chromosome)")
-            self.model_color_select.setCurrentIndex(0)
+            self.model_color_mode.setCurrentText("Rainbow")
+            self.single_color_btn.setVisible(False)
+            self.single_color_hex.setVisible(False)
             self.chrom_group.setVisible(True)
             self.region_group.setVisible(True)
             self._update_chromosome_list()
         else:
             # Single chromosome: allow all color modes; hide Chromosome management, keep Region management visible
-            self.model_color_select.clear()
-            single_color_options = [
-                "White", "Black", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta",
-                "Orange", "Purple", "Brown", "Pink", "Gray", "Olive", "Navy", "Lime",
-                "Maroon", "Teal", "Silver", "Gold"
-            ]
-            items = ["Rainbow"] + single_color_options
-            self.model_color_select.addItems(items)
-            # Restore previous selection if valid
-            for i in range(self.model_color_select.count()):
-                if self.model_color_select.itemText(i) == current_color:
-                    self.model_color_select.setCurrentIndex(i)
-                    break
+            # Keep current mode; show custom controls only when Custom selected
+            if current_color not in ["Rainbow", "Rainbow (Multi-chromosome)"]:
+                self.model_color_mode.setCurrentText("Custom")
+                self.single_color_btn.setVisible(True)
+                self.single_color_hex.setVisible(True)
+            else:
+                self.model_color_mode.setCurrentText("Rainbow")
+                self.single_color_btn.setVisible(False)
+                self.single_color_hex.setVisible(False)
             self.chrom_group.setVisible(False)
             self.region_group.setVisible(True)
-        self.model_color_select.blockSignals(False)
+        self.model_color_mode.blockSignals(False)
         
         # Restore selection or fallback to line
         if current_style == 'tube' and disable_tube:
@@ -377,6 +384,20 @@ class ChromatinProps(LayerPropsPanel):
     def update_params(self):
         self.on_opacity_changed()
         self.on_width_changed()
+        # Sync color combo with current layer color settings
+        try:
+            if len(self.layers) > 0:
+                props = getattr(self.layers[0], 'cache_props', {})
+                mode = props.get('color_mode', 'rainbow')
+                if mode == 'single':
+                    self._set_model_color_ui_to_hex(props.get('single_color', '#FFFFFF'))
+                else:
+                    text = 'Rainbow (Multi-chromosome)' if self.chrom_group.isVisible() else 'Rainbow'
+                    idx = self.model_color_mode.findText(text)
+                    if idx >= 0:
+                        self.model_color_mode.setCurrentIndex(idx)
+        except Exception:
+            pass
 
 
     def on_take_subset(self):
@@ -443,22 +464,42 @@ class ChromatinProps(LayerPropsPanel):
         if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
             self.layers[0].canvas.backend.render()
 
-    def on_model_color_change(self):
-        text = self.model_color_select.currentText()
-        is_single = text != 'Rainbow' and text != 'Rainbow (Multi-chromosome)'
-        color_name = text if is_single else None
-        color_map = {
-            "White": "#FFFFFF", "Black": "#000000", "Red": "#FF0000", "Green": "#008000",
-            "Blue": "#0000FF", "Yellow": "#FFFF00", "Cyan": "#00FFFF", "Magenta": "#FF00FF",
-            "Orange": "#FFA500", "Purple": "#800080", "Brown": "#A52A2A", "Pink": "#FFC0CB",
-            "Gray": "#808080", "Olive": "#808000", "Navy": "#000080", "Lime": "#00FF00",
-            "Maroon": "#800000", "Teal": "#008080", "Silver": "#C0C0C0", "Gold": "#FFD700"
-        }
-        hex_color = color_map.get(color_name, "#FFFFFF") if is_single else None
+    def on_model_color_mode_change(self):
+        mode = self.model_color_mode.currentText()
+        is_single = (mode == 'Custom')
+        # Toggle custom controls
+        self.single_color_btn.setVisible(is_single)
+        self.single_color_hex.setVisible(is_single)
         for layer in self.layers:
             layer.cache_props['color_mode'] = 'single' if is_single else 'rainbow'
-            if is_single and hex_color is not None:
-                layer.cache_props['single_color'] = hex_color
+            if not is_single:
+                layer.remove()
+                layer.draw()
+        if not is_single and self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
+            self.layers[0].canvas.backend.render()
+
+    def on_pick_single_color(self):
+        current = QColor(self.single_color_hex.text() or "#FFFFFF")
+        color = QColorDialog.getColor(current, self)
+        if color.isValid():
+            hex_color = color.name()
+            self.single_color_hex.setText(hex_color)
+            self.single_color_btn.setStyleSheet(f"background-color:{hex_color}")
+            self._apply_single_color(hex_color)
+
+    def on_single_color_hex_changed(self):
+        text = self.single_color_hex.text()
+        try:
+            if text.startswith('#') and len(text) == 7 and QColor(text).isValid():
+                self.single_color_btn.setStyleSheet(f"background-color:{text}")
+                self._apply_single_color(text)
+        except Exception:
+            pass
+
+    def _apply_single_color(self, hex_color: str):
+        for layer in self.layers:
+            layer.cache_props['color_mode'] = 'single'
+            layer.cache_props['single_color'] = hex_color
             layer.remove()
             layer.draw()
         
@@ -467,6 +508,34 @@ class ChromatinProps(LayerPropsPanel):
             self.layers[0].canvas.backend.render()
         # Update style availability after color mode change
         self._update_style_availability()
+
+    def _set_model_color_ui_to_hex(self, hex_color: str):
+        """Set the color combo to reflect a specific hex color.
+        If the hex matches a named color, select that; otherwise add/select a custom hex item."""
+        try:
+            color_map = {
+                "White": "#FFFFFF", "Black": "#000000", "Red": "#FF0000", "Green": "#008000",
+                "Blue": "#0000FF", "Yellow": "#FFFF00", "Cyan": "#00FFFF", "Magenta": "#FF00FF",
+                "Orange": "#FFA500", "Purple": "#800080", "Brown": "#A52A2A", "Pink": "#FFC0CB",
+                "Gray": "#808080", "Olive": "#808000", "Navy": "#000080", "Lime": "#00FF00",
+                "Maroon": "#800000", "Teal": "#008080", "Silver": "#C0C0C0", "Gold": "#FFD700"
+            }
+            # Try to find named color
+            for name, val in color_map.items():
+                if val.lower() == (hex_color or '').lower():
+                    idx = self.model_color_mode.findText(name)
+                    if idx >= 0:
+                        self.model_color_mode.setCurrentIndex(idx)
+                        return
+            # Add or select a custom entry
+            # Switch to Custom mode and show controls
+            self.model_color_mode.setCurrentText("Custom")
+            self.single_color_hex.setText(hex_color.upper())
+            self.single_color_btn.setStyleSheet(f"background-color:{hex_color}")
+            self.single_color_btn.setVisible(True)
+            self.single_color_hex.setVisible(True)
+        except Exception:
+            pass
 
     def on_labels_mode_change(self):
         mode_text = self.labels_mode.currentText()
@@ -651,8 +720,18 @@ class ChromatinProps(LayerPropsPanel):
         if chrom_norm != chrom:
             chr_colormap[chrom_norm] = region_color
         
-        # add_chromatin_layer will inherit width and style from parent automatically
+        # add_chromatin_layer will inherit width and style; force subset to use the region color
         new_layer = layer.canvas.control_panel.add_chromatin_layer(sub_df, chr_colormap, parent=layer, name=name)
+        try:
+            new_layer.cache_props['color_mode'] = 'single'
+            new_layer.cache_props['single_color'] = region_color
+            new_layer.remove()
+            new_layer.draw()
+            # Update its UI selection to this color
+            if hasattr(new_layer, 'control_panel') and hasattr(new_layer.control_panel, '_set_model_color_ui_to_hex'):
+                new_layer.control_panel._set_model_color_ui_to_hex(region_color)
+        except Exception:
+            pass
         if new_layer.parent:
             new_layer.parent.re_render(parent=True)
 
@@ -821,6 +900,18 @@ class ChromatinProps(LayerPropsPanel):
                 new_layer = current_layer.canvas.control_panel.add_chromatin_layer(
                     subset_df, chr_colormap, parent=current_layer, name=name
                 )
+                # Apply the chromosome's current color to this new single-chrom layer
+                try:
+                    chrom_color = chr_colormap.get(selected_chrom)
+                    if chrom_color:
+                        new_layer.cache_props['color_mode'] = 'single'
+                        new_layer.cache_props['single_color'] = chrom_color
+                        new_layer.remove()
+                        new_layer.draw()
+                        if hasattr(new_layer, 'control_panel') and hasattr(new_layer.control_panel, '_set_model_color_ui_to_hex'):
+                            new_layer.control_panel._set_model_color_ui_to_hex(chrom_color)
+                except Exception:
+                    pass
                 # Re-render for transparency
                 if new_layer.parent:
                     new_layer.parent.re_render(parent=True)
