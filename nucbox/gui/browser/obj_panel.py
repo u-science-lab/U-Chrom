@@ -47,7 +47,7 @@ class ChromatinProps(LayerPropsPanel):
         self.subset_window.signal_ok.connect(self.on_take_subset)
 
         # Move entire Chromosome Management group to the Layers panel's right side
-        super().__init__(grid_table=[], operation_widgets=[self.chrom_group])
+        super().__init__(grid_table=[], operation_widgets=[self.chrom_group, self.region_group])
         
         # Add grouped controls to layout after parent initialization
         self.add_grouped_layout()
@@ -125,6 +125,34 @@ class ChromatinProps(LayerPropsPanel):
         self.chrom_group.setLayout(chrom_layout)
         # Hidden by default; will be shown for multi-chromosome datasets
         self.chrom_group.setVisible(False)
+
+        # Region Management Group
+        self.region_group = QGroupBox("Region Management")
+        region_layout = QGridLayout()
+        
+        l_region = QLabel("Region (chr:start-end):")
+        self.region_input = QLineEdit()
+        self.region_input.setPlaceholderText("chr1:100000-200000")
+        
+        l_region_color = QLabel("Color:")
+        self.region_color_btn = QPushButton()
+        self.region_color_btn.setFixedSize(50, 20)
+        self.region_color_btn.setStyleSheet("background-color:#FF6A00")
+        self.region_color_btn.clicked.connect(self.on_pick_region_color)
+        self.region_color_hex = QLineEdit("#FF6A00")
+        self.region_color_hex.textChanged.connect(self.on_region_hex_changed)
+        
+        self.region_subset_btn = QPushButton("Create Region Subset")
+        self.region_subset_btn.clicked.connect(self.on_create_region_subset)
+        
+        region_layout.addWidget(l_region, 0, 0)
+        region_layout.addWidget(self.region_input, 0, 1)
+        region_layout.addWidget(l_region_color, 1, 0)
+        region_layout.addWidget(self.region_color_btn, 1, 1)
+        region_layout.addWidget(self.region_color_hex, 1, 2)
+        region_layout.addWidget(self.region_subset_btn, 2, 0, 1, 3)
+        self.region_group.setLayout(region_layout)
+        self.region_group.setVisible(True)
 
         self.l_perf_mode = QLabel("Tube performance")
         self.perf_mode_control = QComboBox()
@@ -209,8 +237,8 @@ class ChromatinProps(LayerPropsPanel):
         self.canvas_group.setLayout(canvas_layout)
 
     def add_grouped_layout(self):
-        # Insert group boxes into the Properties panel layout (exclude Chromosome Management)
-        # Chromosome Management is now shown on the Layers panel's right side via operations_panel
+        # Insert group boxes into the Properties panel layout (exclude Chromosome/Region Management)
+        # They are displayed on the Layers panel's right side via operations_panel
         self.top_layout.insertWidget(1, self.model_group)
         self.top_layout.insertWidget(2, self.label_group)
         self.top_layout.insertWidget(3, self.canvas_group)
@@ -269,14 +297,15 @@ class ChromatinProps(LayerPropsPanel):
         # Update color controls and chromosome management based on chromosome count
         self.model_color_select.blockSignals(True)
         if is_multi_chrom:
-            # Multi-chromosome: only rainbow mode
+            # Multi-chromosome: only rainbow mode; show both Chromosome and Region management on the right panel
             self.model_color_select.clear()
             self.model_color_select.addItem("Rainbow (Multi-chromosome)")
             self.model_color_select.setCurrentIndex(0)
             self.chrom_group.setVisible(True)
+            self.region_group.setVisible(True)
             self._update_chromosome_list()
         else:
-            # Single chromosome: allow all color modes, but hide Chromosome Management section
+            # Single chromosome: allow all color modes; hide Chromosome management, keep Region management visible
             self.model_color_select.clear()
             single_color_options = [
                 "White", "Black", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta",
@@ -291,6 +320,7 @@ class ChromatinProps(LayerPropsPanel):
                     self.model_color_select.setCurrentIndex(i)
                     break
             self.chrom_group.setVisible(False)
+            self.region_group.setVisible(True)
         self.model_color_select.blockSignals(False)
         
         # Restore selection or fallback to line
@@ -395,6 +425,47 @@ class ChromatinProps(LayerPropsPanel):
                 layer.parent.re_render(parent=True)
         # Update style availability after color mode change
         self._update_style_availability()
+
+    def on_pick_region_color(self):
+        current = QColor(self.region_color_hex.text() or "#FF6A00")
+        color = QColorDialog.getColor(current, self)
+        if color.isValid():
+            self.region_color_hex.setText(color.name())
+            self.region_color_btn.setStyleSheet(f"background-color:{color.name()}")
+
+    def on_region_hex_changed(self):
+        text = self.region_color_hex.text()
+        try:
+            if text.startswith('#') and len(text) == 7 and QColor(text).isValid():
+                self.region_color_btn.setStyleSheet(f"background-color:{text}")
+        except Exception:
+            pass
+
+    def on_create_region_subset(self):
+        region = self.region_input.text().strip()
+        if len(self.layers) == 0 or region == "":
+            return
+        # parse region like chr1:100000-200000
+        try:
+            chrom, pos = region.split(':')
+            start, end = pos.replace(',', '').split('-')
+            start = int(start)
+            end = int(end)
+        except Exception:
+            return
+        
+        layer = self.layers[0]
+        if not hasattr(layer, 'df'):
+            return
+        df = layer.df
+        chr_colormap = layer.cache_props.get('chr_colormap', {})
+        sub_df = df[(df['chrom'] == chrom) & (df['start'] >= start) & (df['end'] <= end)].copy()
+        if sub_df.shape[0] <= 0:
+            return
+        name = f"region: {chrom}:{start}-{end}"
+        new_layer = layer.canvas.control_panel.add_chromatin_layer(sub_df, chr_colormap, parent=layer, name=name)
+        if new_layer.parent:
+            new_layer.parent.re_render(parent=True)
 
     def on_label_font_changed(self):
         val = self.label_font_control.value()

@@ -95,20 +95,10 @@ class LayerPanel(QWidget):
         delete_btn.setStyleSheet("QToolButton{border:none;background:transparent;} QToolButton:hover{background:transparent;} QToolButton:pressed{background:transparent;} QToolTip{font-size:12px;color:#fff;background:#222;border:1px solid #555;}")
         delete_btn.setObjectName('delete_btn')
         
-        subset_btn = QToolButton()
-        subset_btn.setIcon(QIcon(self._icon_path('subset.svg')))
-        subset_btn.setToolTip('Create subset')
-        subset_btn.setAutoRaise(True)
-        subset_btn.setCursor(Qt.PointingHandCursor)
-        subset_btn.setFixedSize(24, 24)
-        subset_btn.setIconSize(QSize(16, 16))
-        subset_btn.setStyleSheet("QToolButton{border:none;background:transparent;} QToolButton:hover{background:transparent;} QToolButton:pressed{background:transparent;} QToolTip{font-size:12px;color:#fff;background:#222;border:1px solid #555;}")
-        subset_btn.setObjectName('subset_btn')
-        
         top_row.addSpacing(8)
         top_row.addWidget(rename_btn)
         top_row.addWidget(delete_btn)
-        top_row.addWidget(subset_btn)
+        # subset action moved to Region Management; removed from layer row
         
         main_layout.addLayout(top_row)
         
@@ -118,7 +108,7 @@ class LayerPanel(QWidget):
         self.list.addItem(item)
         self.list.setItemWidget(item, row)
         
-        return item, show_btn, rename_btn, delete_btn, subset_btn
+        return item, show_btn, rename_btn, delete_btn
 
     def set_operations_panel(self, widget=None):
         if (widget is not None) and (self.operation_stack.indexOf(widget) < 0):
@@ -223,7 +213,7 @@ class CanvasControl(QWidget):
         self.layers.append(layer)
         self.current_layer = layer
         # custom list item with visibility and action buttons
-        item, show_btn, rename_btn, delete_btn, subset_btn = self.layer_control.add_list_item(layer)
+        item, show_btn, rename_btn, delete_btn = self.layer_control.add_list_item(layer)
         
         def on_toggle_show():
             checked = show_btn.isChecked()
@@ -240,19 +230,11 @@ class CanvasControl(QWidget):
         def on_delete_layer():
             idx = self.delete(layer)
             self.reset_current(idx)
-        def on_subset_layer():
-            self._show_subset_dialog(layer)
-            
         show_btn.clicked.connect(on_toggle_show)
         rename_btn.clicked.connect(on_rename_layer)
         delete_btn.clicked.connect(on_delete_layer)
-        subset_btn.clicked.connect(on_subset_layer)
         # hide subset for multi-chromosome layers (e.g., initial import of all chromosomes)
-        try:
-            if hasattr(layer, 'df') and (int(layer.df['chrom'].nunique()) > 1):
-                subset_btn.setVisible(False)
-        except Exception:
-            pass
+        # no per-layer subset button; region management handles subsets
         self.layer_control.list.setCurrentRow(len(self.layers)-1)
         self.canvas.set_layer_title(str(layer))
         self._update_list_item_styles()
