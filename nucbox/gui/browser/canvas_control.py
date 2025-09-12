@@ -9,6 +9,11 @@ class LayerPanel(QWidget):
         super(LayerPanel, self).__init__(parent)
 
         self.list = QListWidget()
+        # Style: items blend with background; only selected item shows subtle highlight
+        self.list.setStyleSheet(
+            "QListWidget::item{background:transparent;border:none;padding:4px;}"
+            "QListWidget::item:selected{background:rgba(255,255,255,0.08);}"
+            "QListWidget::item:hover{background:rgba(255,255,255,0.04);}" )
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list.setMinimumWidth(260)
 
@@ -206,6 +211,7 @@ class CanvasControl(QWidget):
             self.set_props_panel(control_panel)
             self.layer_control.set_operations_panel(control_panel.operations_panel)
             self.canvas.set_layer_title(str(self.current_layer))
+            self._update_list_item_styles()
         except:
             pass
 
@@ -249,6 +255,7 @@ class CanvasControl(QWidget):
             pass
         self.layer_control.list.setCurrentRow(len(self.layers)-1)
         self.canvas.set_layer_title(str(layer))
+        self._update_list_item_styles()
         return layer
 
     def _show_rename_dialog(self, layer):
@@ -290,3 +297,21 @@ class CanvasControl(QWidget):
             layer.control_panel.subset_window.show()
         else:
             print(f"Layer {layer} does not support subset creation")
+
+    def _update_list_item_styles(self):
+        # Visually distinguish the selected layer
+        try:
+            current = self.layer_control.list.currentRow()
+            for i in range(len(self.layers)):
+                item = self.layer_control.list.item(i)
+                if item is None:
+                    continue
+                w = self.layer_control.list.itemWidget(item)
+                if w is None:
+                    continue
+                if i == current:
+                    w.setStyleSheet("background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.25); border-radius: 6px;")
+                else:
+                    w.setStyleSheet("background: transparent; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;")
+        except Exception:
+            pass
