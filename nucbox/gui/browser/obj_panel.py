@@ -201,7 +201,7 @@ class ChromatinProps(LayerPropsPanel):
         labels_layout.addWidget(self.labels_font_size, 2, 1)
         
         self.labels_group.setLayout(labels_layout)
-        self.labels_group.setVisible(True)
+        self.labels_group.setVisible(False)
 
 
         # Add to model group layout
@@ -380,6 +380,13 @@ class ChromatinProps(LayerPropsPanel):
         self._update_region_placeholder()
         # Update chromosome numbers checkbox state based on layer visibility
         self._update_chr_labels_checkbox()
+        # Show labels section only for multi-chromosome layers
+        try:
+            if hasattr(layer, 'df'):
+                num = int(layer.df['chrom'].nunique())
+                self.labels_group.setVisible(num > 1)
+        except Exception:
+            self.labels_group.setVisible(False)
 
     def update_params(self):
         self.on_opacity_changed()
@@ -818,6 +825,9 @@ class ChromatinProps(LayerPropsPanel):
                     if not layer.is_visible:
                         self.labels_enable.setChecked(False)
                     self.labels_enable.blockSignals(False)
+                # Also toggle the whole labels group by chromosome count
+                if hasattr(layer, 'df'):
+                    self.labels_group.setVisible(int(layer.df['chrom'].nunique()) > 1)
         except:
             pass
     
