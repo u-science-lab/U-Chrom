@@ -142,7 +142,7 @@ class AbstractCanvas(QObject):
                 text, 
                 position=self._label_position.lower().replace(' ', '-'),
                 color='#FFFFFF',
-                font_size=12
+                font_size=20.0
             )
         elif self._layer_title_handle:
             # Update existing overlay
@@ -151,7 +151,8 @@ class AbstractCanvas(QObject):
     def set_layer_title_font_size(self, size: float):
         """Set layer title font size."""
         if self._layer_title_handle:
-            self.backend.update_text_overlay(self._layer_title_handle, font_size=int(size))
+            # Preserve fractional sizes to avoid visual jumps when stepping by 0.5
+            self.backend.update_text_overlay(self._layer_title_handle, font_size=size)
     
     def set_layer_title_position(self, position: str):
         """Set layer title position."""

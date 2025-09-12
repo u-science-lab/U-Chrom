@@ -161,7 +161,10 @@ class VisPyBackend(RenderingBackend):
         if color is not None:
             self.text_overlay.color = color
         if font_size is not None:
-            self.text_overlay.font_size = font_size
+            # Accept float sizes to avoid rounding artifacts during small increments
+            self.text_overlay.font_size = float(font_size)
+            # Font size affects position margins; recompute
+            self._update_text_position()
         if position is not None:
             self._label_position = position.replace('-', ' ').title()
             self._update_text_anchors()

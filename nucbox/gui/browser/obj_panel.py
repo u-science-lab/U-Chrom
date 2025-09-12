@@ -210,8 +210,8 @@ class ChromatinProps(LayerPropsPanel):
         model_layout.addWidget(self.model_color_select, 3, 1)
         self.model_group.setLayout(model_layout)
 
-        # Label Properties Group
-        self.label_group = QGroupBox("Label Properties")
+        # Layer Label Group
+        self.label_group = QGroupBox("Layer Label")
         label_layout = QGridLayout()
 
         l_label_font = QLabel("Font size")
@@ -219,7 +219,7 @@ class ChromatinProps(LayerPropsPanel):
         self.label_font_control.setMaximum(100.0)
         self.label_font_control.setMinimum(0.5)
         self.label_font_control.setSingleStep(0.5)
-        self.label_font_control.setValue(5.0)
+        self.label_font_control.setValue(20.0)
         self.label_font_control.valueChanged.connect(self.on_label_font_changed)
 
         l_label_pos = QLabel("Position")
