@@ -411,6 +411,9 @@ class ChromatinProps(LayerPropsPanel):
         for layer in self.layers:
             layer.set_props('opacity', val)
             layer.cache_props['opacity'] = val
+        # Lightweight path: backend updates opacity directly; avoid redraw
+        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
+            self.layers[0].canvas.backend.render()
 
     def on_model_style_change(self):
         style = self.model_style_select.currentText()

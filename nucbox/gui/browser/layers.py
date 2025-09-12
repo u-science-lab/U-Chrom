@@ -107,6 +107,7 @@ class ChromatinLayer(Layer):
             'chr_colormap': chr_colormap, # Store the colormap
             'width': width,               # Store width
             'style': style,               # Store style
+            'opacity': 1.0,               # Global opacity for this layer
         }
         super().__init__(canvas)
         self.draw(df=df, chr_colormap=chr_colormap, width=width, style=style)
@@ -125,6 +126,7 @@ class ChromatinLayer(Layer):
             return
         color_mode = props.get('color_mode', 'rainbow')
         single_color = props.get('single_color', '#FFFFFF')
+        opacity = float(props.get('opacity', 1.0))
         num_chrom = int(df['chrom'].nunique())
         # Iterate over chromosomes in the actual data
         for chrom in df['chrom'].unique():
@@ -134,20 +136,25 @@ class ChromatinLayer(Layer):
             pos = sdf[['x', 'y', 'z']].values
             if color_mode == 'single':
                 color = single_color
-                color_rgba = mpl_colors.to_rgba(color)
+                color_rgba = list(mpl_colors.to_rgba(color))
+                color_rgba[3] = opacity
                 colors_rgba = np.tile(color_rgba, (pos.shape[0], 1))
                 per_vertex = True
             else:
                 if num_chrom > 1:
                     # multiple chromosomes -> keep original: one color per chromosome
                     color = chr_colormap.get(chrom, "#888888")
-                    colors_rgba = mpl_colors.to_rgba(color)
+                    colors = list(mpl_colors.to_rgba(color))
+                    colors[3] = opacity
+                    colors_rgba = np.array(colors)
                     per_vertex = False
                 else:
                     # single chromosome -> rainbow gradient along polymer
                     t = np.linspace(0.0, 1.0, pos.shape[0])
                     cmap = cm.get_cmap('rainbow')
                     colors_rgba = cmap(t)
+                    # apply global opacity to all vertices
+                    colors_rgba[:, 3] = opacity
                     per_vertex = True
             def draw_line(p):
                 if style == 'points':

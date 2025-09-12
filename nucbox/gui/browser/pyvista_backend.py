@@ -126,7 +126,7 @@ class PyVistaBackend(RenderingBackend):
             camera.clipping_range = state['clipping_range']
         self.render()
     
-    def add_line(self, points: np.ndarray, color=None, width: float = 1.0) -> Any:
+    def add_line(self, points: np.ndarray, color=None, width: float = 1.0, opacity: float = 1.0) -> Any:
         """Add a line to the scene."""
         if points.shape[0] < 2:
             return None
@@ -161,6 +161,8 @@ class PyVistaBackend(RenderingBackend):
         
         # Add to plotter with a unique name
         name = f'line_{self._handle_counter}'
+        # Use tube rendering for transparency or thicker widths to ensure blending works
+        render_as_tubes = (width > 2.0) or (float(opacity) < 0.999)
         actor = self.plotter.add_mesh(
             line,
             name=name,
@@ -168,7 +170,8 @@ class PyVistaBackend(RenderingBackend):
             scalars=scalars if scalars else None,
             line_width=width,
             rgb=True if scalars else False,
-            render_lines_as_tubes=width > 2.0
+            opacity=float(opacity),
+            render_lines_as_tubes=render_as_tubes
         )
         
         handle = self._handle_counter
@@ -178,7 +181,7 @@ class PyVistaBackend(RenderingBackend):
         # Don't render immediately for better batch performance
         return handle
     
-    def add_tube(self, points: np.ndarray, color=None, radius: float = 0.5) -> Any:
+    def add_tube(self, points: np.ndarray, color=None, radius: float = 0.5, opacity: float = 1.0) -> Any:
         """Add a tube to the scene."""
         if points.shape[0] < 2:
             return None
@@ -221,7 +224,8 @@ class PyVistaBackend(RenderingBackend):
             specular_power=10,     # Lower for faster rendering
             interpolate_before_map=False,  # Disable interpolation
             lighting=True,
-            render_points_as_spheres=False
+            render_points_as_spheres=False,
+            opacity=float(opacity)
         )
         
         handle = self._handle_counter
@@ -231,7 +235,7 @@ class PyVistaBackend(RenderingBackend):
         # Don't render immediately for better batch performance
         return handle
     
-    def add_points(self, points: np.ndarray, color=None, size: float = 1.0) -> Any:
+    def add_points(self, points: np.ndarray, color=None, size: float = 1.0, opacity: float = 1.0) -> Any:
         """Add points to the scene."""
         if points.shape[0] == 0:
             return None
@@ -268,7 +272,8 @@ class PyVistaBackend(RenderingBackend):
             scalars=scalars if scalars else None,
             point_size=size * 10,  # Scale up for visibility
             render_points_as_spheres=True,
-            rgb=True if scalars else False
+            rgb=True if scalars else False,
+            opacity=float(opacity)
         )
         
         handle = self._handle_counter
@@ -277,6 +282,16 @@ class PyVistaBackend(RenderingBackend):
         self.actor_names[actor] = name
         # Don't render immediately for better batch performance
         return handle
+
+    def set_object_opacity(self, handle: Any, opacity: float):
+        """Update opacity of an existing object without full redraw."""
+        if handle in self.objects:
+            actor = self.objects[handle]
+            try:
+                actor.GetProperty().SetOpacity(float(opacity))
+                self.render()
+            except Exception:
+                pass
     
     def add_text(self, text: str, position: Tuple[float, float, float], 
                  color: str = '#FFFFFF', font_size: int = 12, bold: bool = False) -> Any:

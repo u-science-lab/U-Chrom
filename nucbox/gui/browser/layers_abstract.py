@@ -64,8 +64,22 @@ class Layer(object):
 
     def set_props(self, key, val):
         """Set properties on visual objects."""
-        # This would need backend-specific implementation
-        pass
+        # Lightweight property updates without full redraw
+        if key == 'opacity':
+            # Prefer backend-side opacity updates when available
+            if hasattr(self.canvas.backend, 'set_object_opacity'):
+                for handle in self.vis_handles:
+                    try:
+                        self.canvas.backend.set_object_opacity(handle, float(val))
+                    except Exception:
+                        continue
+                # Do not force a redraw here; backend updates are immediate
+                return
+        # Fallback: trigger a redraw for unsupported properties
+        try:
+            self.draw()
+        except Exception:
+            pass
 
     def set_visible(self, visible: bool):
         """Set layer visibility."""
@@ -193,6 +207,7 @@ class ChromatinLayer(Layer):
         
         color_mode = props.get('color_mode', 'rainbow')
         single_color = props.get('single_color', '#FFFFFF')
+        opacity = float(props.get('opacity', 1.0))
         num_chrom = int(df['chrom'].nunique())
         
         # Iterate over chromosomes in the actual data, not just the colormap
@@ -223,7 +238,8 @@ class ChromatinLayer(Layer):
                 handle = self.canvas.backend.add_points(
                     pos,
                     color=colors_rgba,
-                    size=width
+                    size=width,
+                    opacity=opacity
                 )
                 if handle is not None:
                     self.vis_handles.append(handle)
@@ -238,7 +254,8 @@ class ChromatinLayer(Layer):
                     handle = self.canvas.backend.add_tube(
                         pos,
                         color=colors_rgba,
-                        radius=width/2
+                        radius=width/2,
+                        opacity=opacity
                     )
                     if handle is not None:
                         self.vis_handles.append(handle)
@@ -248,7 +265,8 @@ class ChromatinLayer(Layer):
                 handle = self.canvas.backend.add_line(
                     pos,
                     color=colors_rgba,
-                    width=width
+                    width=width,
+                    opacity=opacity
                 )
                 if handle is not None:
                     self.vis_handles.append(handle)
@@ -276,7 +294,8 @@ class ChromatinLayer(Layer):
                     handle = self.canvas.backend.add_tube(
                         seg,
                         color=c,
-                        radius=radius
+                        radius=radius,
+                        opacity=float(props.get('opacity', 1.0))
                     )
                     if handle is not None:
                         self.vis_handles.append(handle)
@@ -293,7 +312,8 @@ class ChromatinLayer(Layer):
                     handle = self.canvas.backend.add_tube(
                         seg,
                         color=c,
-                        radius=radius
+                        radius=radius,
+                        opacity=float(props.get('opacity', 1.0))
                     )
                     if handle is not None:
                         self.vis_handles.append(handle)
