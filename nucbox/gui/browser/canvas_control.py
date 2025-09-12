@@ -52,10 +52,6 @@ class LayerPanel(QWidget):
         top_row.addWidget(lock_label)
         top_row.addWidget(lock_cb)
         
-        # Bottom row: action buttons
-        bottom_row = QHBoxLayout()
-        bottom_row.setSpacing(2)
-        
         rename_btn = QPushButton("Rename")
         rename_btn.setMaximumHeight(20)
         rename_btn.setObjectName('rename_btn')
@@ -68,12 +64,12 @@ class LayerPanel(QWidget):
         subset_btn.setMaximumHeight(20)
         subset_btn.setObjectName('subset_btn')
         
-        bottom_row.addWidget(rename_btn)
-        bottom_row.addWidget(delete_btn)
-        bottom_row.addWidget(subset_btn)
+        top_row.addSpacing(8)
+        top_row.addWidget(rename_btn)
+        top_row.addWidget(delete_btn)
+        top_row.addWidget(subset_btn)
         
         main_layout.addLayout(top_row)
-        main_layout.addLayout(bottom_row)
         
         row.setLayout(main_layout)
         item.setSizeHint(row.sizeHint())
