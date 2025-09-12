@@ -1,4 +1,6 @@
-from PyQt5.QtWidgets import (QListWidget, QWidget, QLabel, QHBoxLayout, QVBoxLayout, QStackedWidget, QListWidgetItem, QCheckBox, QPushButton, QLineEdit, QDialog)
+from PyQt5.QtWidgets import (QListWidget, QWidget, QLabel, QHBoxLayout, QVBoxLayout, QStackedWidget, QListWidgetItem, QCheckBox, QPushButton, QLineEdit, QDialog, QToolButton)
+from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtGui import QIcon
 
 
 class LayerPanel(QWidget):
@@ -22,6 +24,15 @@ class LayerPanel(QWidget):
         vbox.addLayout(hbox)
 
         self.setLayout(vbox)
+
+    def _icon_path(self, name: str) -> str:
+        # Resolve icon path relative to this file
+        try:
+            import os, os.path as osp
+            here = osp.dirname(osp.abspath(__file__))
+            return osp.join(here, '../icons', name)
+        except Exception:
+            return name
 
     def add_list_item(self, layer):
         item = QListWidgetItem()
@@ -52,16 +63,34 @@ class LayerPanel(QWidget):
         top_row.addWidget(lock_label)
         top_row.addWidget(lock_cb)
         
-        rename_btn = QPushButton("Rename")
-        rename_btn.setMaximumHeight(20)
+        rename_btn = QToolButton()
+        rename_btn.setIcon(QIcon(self._icon_path('rename.svg')))
+        rename_btn.setToolTip('Rename layer')
+        rename_btn.setAutoRaise(True)
+        rename_btn.setCursor(Qt.PointingHandCursor)
+        rename_btn.setFixedSize(24, 24)
+        rename_btn.setIconSize(QSize(16, 16))
+        rename_btn.setStyleSheet("QToolButton{border-radius:4px;} QToolButton:hover{background:rgba(255,255,255,0.08);} QToolTip{font-size:12px;color:#fff;background:#222;border:1px solid #555;}")
         rename_btn.setObjectName('rename_btn')
         
-        delete_btn = QPushButton("Delete")
-        delete_btn.setMaximumHeight(20)
+        delete_btn = QToolButton()
+        delete_btn.setIcon(QIcon(self._icon_path('delete.svg')))
+        delete_btn.setToolTip('Delete layer')
+        delete_btn.setAutoRaise(True)
+        delete_btn.setCursor(Qt.PointingHandCursor)
+        delete_btn.setFixedSize(24, 24)
+        delete_btn.setIconSize(QSize(16, 16))
+        delete_btn.setStyleSheet("QToolButton{border-radius:4px;} QToolButton:hover{background:rgba(255,255,255,0.08);} QToolTip{font-size:12px;color:#fff;background:#222;border:1px solid #555;}")
         delete_btn.setObjectName('delete_btn')
         
-        subset_btn = QPushButton("Subset")
-        subset_btn.setMaximumHeight(20)
+        subset_btn = QToolButton()
+        subset_btn.setIcon(QIcon(self._icon_path('subset.svg')))
+        subset_btn.setToolTip('Create subset')
+        subset_btn.setAutoRaise(True)
+        subset_btn.setCursor(Qt.PointingHandCursor)
+        subset_btn.setFixedSize(24, 24)
+        subset_btn.setIconSize(QSize(16, 16))
+        subset_btn.setStyleSheet("QToolButton{border-radius:4px;} QToolButton:hover{background:rgba(255,255,255,0.08);} QToolTip{font-size:12px;color:#fff;background:#222;border:1px solid #555;}")
         subset_btn.setObjectName('subset_btn')
         
         top_row.addSpacing(8)
@@ -102,6 +131,16 @@ class CanvasControl(QWidget):
         self.setLayout(self.layout)
 
         self.connect_events()
+
+    def _icon_path(self, name: str) -> str:
+        # Resolve icon path inside package resources
+        # Icons expected at nucbox/gui/icons/
+        try:
+            import os, os.path as osp
+            here = osp.dirname(osp.abspath(__file__))
+            return osp.join(here, '../icons', name)
+        except Exception:
+            return name
 
     def connect_events(self):
         self.layer_control.list.currentItemChanged.connect(self.change_current)
