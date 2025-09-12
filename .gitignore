@@ -1,0 +1,10 @@
+tmp/
+*.pyc
+__pycache__/
+imgui.ini
+
+.vscode/
+
+.mypy_cache/
+*.csv
+*.egg-info
