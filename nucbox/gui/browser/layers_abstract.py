@@ -111,7 +111,7 @@ class ChrLabelLayer(Layer):
         self.labels = []
         self.label_ori_pos = []
 
-    def draw(self, df, shift_factor=0.05, color="#ff0000", font_size=400, bold=True):
+    def draw(self, df, shift_factor=0.05, color="#ff0000", font_size=150, bold=True):
         """Draw chromosome labels."""
         # Clear existing handles
         self.remove()

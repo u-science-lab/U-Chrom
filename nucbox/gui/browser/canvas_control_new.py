@@ -70,6 +70,9 @@ class CanvasControl(OriginalCanvasControl):
             else:
                 show_btn.setToolTip('Show layer')
                 show_btn.setIcon(QIcon(self._icon_path('eye-off.svg')))
+            # Update chromosome numbers when visibility changes
+            if layer == self.current_layer and hasattr(self, '_update_chr_numbers_for_current_layer'):
+                self._update_chr_numbers_for_current_layer()
         
         def on_rename_layer():
             self._show_rename_dialog(layer)
@@ -104,7 +107,12 @@ class CanvasControl(OriginalCanvasControl):
             from .layers import ChrLabelLayer
         
         try:
-            if self.chr_numbers_enabled and int(df['chrom'].nunique()) > 1:
+            # Check if current layer is visible
+            layer_visible = (self.current_layer and 
+                           hasattr(self.current_layer, 'is_visible') and 
+                           self.current_layer.is_visible)
+            
+            if self.chr_numbers_enabled and layer_visible and int(df['chrom'].nunique()) > 1:
                 if self.chr_number_layer is None:
                     self.chr_number_layer = ChrLabelLayer(self.canvas)
                 else:
@@ -117,7 +125,9 @@ class CanvasControl(OriginalCanvasControl):
                 else:
                     color = '#000000'
                 
-                self.chr_number_layer.draw(df, color=color)
+                # Get font size from parent class
+                font_size = getattr(self, 'chr_number_font_size', 150)
+                self.chr_number_layer.draw(df, color=color, font_size=font_size)
                 self.chr_number_layer.name = 'Chr numbers'
             else:
                 if self.chr_number_layer is not None:

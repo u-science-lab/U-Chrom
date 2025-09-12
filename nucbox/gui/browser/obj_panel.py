@@ -177,12 +177,24 @@ class ChromatinProps(LayerPropsPanel):
         self.numbers_enable.setChecked(True)
         self.numbers_enable.stateChanged.connect(self.on_numbers_enable_change)
         numbers_layout.addWidget(self.numbers_enable, 0, 0, 1, 2)
+        
         l_mode = QLabel("Color mode:")
         self.numbers_mode = QComboBox()
         self.numbers_mode.addItems(["Follow chromosome", "White", "Black"])
         self.numbers_mode.currentIndexChanged.connect(self.on_numbers_mode_change)
         numbers_layout.addWidget(l_mode, 1, 0)
         numbers_layout.addWidget(self.numbers_mode, 1, 1)
+        
+        l_font_size = QLabel("Font size:")
+        self.numbers_font_size = QSpinBox()
+        self.numbers_font_size.setMinimum(50)
+        self.numbers_font_size.setMaximum(2000)
+        self.numbers_font_size.setSingleStep(50)
+        self.numbers_font_size.setValue(150)
+        self.numbers_font_size.valueChanged.connect(self.on_numbers_font_size_change)
+        numbers_layout.addWidget(l_font_size, 2, 0)
+        numbers_layout.addWidget(self.numbers_font_size, 2, 1)
+        
         self.numbers_group.setLayout(numbers_layout)
         self.numbers_group.setVisible(True)
 
@@ -359,6 +371,8 @@ class ChromatinProps(LayerPropsPanel):
         self._update_style_availability()
         # Update region placeholder with actual data range
         self._update_region_placeholder()
+        # Update chromosome numbers checkbox state based on layer visibility
+        self._update_chr_numbers_checkbox()
 
     def update_params(self):
         self.on_opacity_changed()
@@ -469,6 +483,13 @@ class ChromatinProps(LayerPropsPanel):
         if len(self.layers) > 0:
             canvas_control = self.layers[0].canvas.control_panel
             canvas_control.set_chr_numbers_enabled(enabled)
+    
+    def on_numbers_font_size_change(self):
+        font_size = self.numbers_font_size.value()
+        # Update the chromosome numbers with new font size
+        if len(self.layers) > 0:
+            canvas_control = self.layers[0].canvas.control_panel
+            canvas_control.set_chr_number_font_size(font_size)
 
     def on_pick_region_color(self):
         current = QColor(self.region_color_hex.text() or "#FF6A00")
@@ -703,6 +724,21 @@ class ChromatinProps(LayerPropsPanel):
         except:
             pass
 
+    def _update_chr_numbers_checkbox(self):
+        """Update chromosome numbers checkbox based on layer visibility."""
+        try:
+            if len(self.layers) > 0:
+                layer = self.layers[0]
+                # Enable checkbox only if layer is visible
+                if hasattr(layer, 'is_visible'):
+                    self.numbers_enable.blockSignals(True)
+                    # If layer is not visible, uncheck the checkbox
+                    if not layer.is_visible:
+                        self.numbers_enable.setChecked(False)
+                    self.numbers_enable.blockSignals(False)
+        except:
+            pass
+    
     def _update_selected_chromosome_display(self):
         # Update color display for selected chromosome
         selected_chrom = self.chrom_select.currentText()

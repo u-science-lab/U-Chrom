@@ -281,14 +281,27 @@ class PyVistaBackend(RenderingBackend):
     def add_text(self, text: str, position: Tuple[float, float, float], 
                  color: str = '#FFFFFF', font_size: int = 12, bold: bool = False) -> Any:
         """Add 3D text to the scene."""
-        # PyVista text3d
+        # Use add_point_labels for better 3D text rendering
         name = f'text3d_{self._handle_counter}'
-        actor = self.plotter.add_text_3d(
-            text,
-            position,
+        
+        # Convert position to numpy array
+        import numpy as np
+        points = np.array([position], dtype=np.float32)
+        
+        # Scale font_size appropriately (PyVista uses different scale)
+        scaled_font_size = max(12, int(font_size / 10))  # Scale down from backend units
+        
+        # Add the label
+        actor = self.plotter.add_point_labels(
+            points,
+            [text],
             name=name,
-            color=mpl_colors.to_rgb(color),
-            font_size=font_size
+            font_size=scaled_font_size,
+            text_color=mpl_colors.to_rgb(color),
+            always_visible=True,
+            show_points=False,  # Don't show the point markers
+            shape_opacity=0,  # Hide the background shape
+            bold=bold
         )
         
         handle = self._handle_counter
