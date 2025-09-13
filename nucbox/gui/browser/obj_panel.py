@@ -241,12 +241,21 @@ class ChromatinProps(LayerPropsPanel):
         l_label_color = QLabel("Color")
         self.label_color_control = QComboBox()
         self.label_color_control.addItems([
-            "White", "Black", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta",
-            "Orange", "Purple", "Brown", "Pink", "Gray", "Olive", "Navy", "Lime",
-            "Maroon", "Teal", "Silver", "Gold"
+            "Gray", "Custom"
         ])
-        self.label_color_control.setCurrentText("White")
+        self.label_color_control.setCurrentText("Gray")
         self.label_color_control.currentTextChanged.connect(self.on_label_color_changed)
+
+        # Custom label color controls (similar to single color mode)
+        self.label_color_btn = QPushButton()
+        self.label_color_btn.setFixedSize(50, 25)
+        self.label_color_btn.clicked.connect(self.on_pick_label_color)
+        self.label_color_hex = QLineEdit("#808080")  # Default gray color
+        self.label_color_hex.setPlaceholderText("#808080")
+        self.label_color_hex.textChanged.connect(self.on_label_color_hex_changed)
+        # Hidden unless Custom mode
+        self.label_color_btn.setVisible(False)
+        self.label_color_hex.setVisible(False)
 
         # Add to label group layout
         label_layout.addWidget(l_label_font, 0, 0)
@@ -255,6 +264,8 @@ class ChromatinProps(LayerPropsPanel):
         label_layout.addWidget(self.label_position_control, 1, 1)
         label_layout.addWidget(l_label_color, 2, 0)
         label_layout.addWidget(self.label_color_control, 2, 1)
+        label_layout.addWidget(self.label_color_btn, 3, 0)
+        label_layout.addWidget(self.label_color_hex, 3, 1)
         self.label_group.setLayout(label_layout)
 
         # Canvas Properties Group
@@ -760,11 +771,56 @@ class ChromatinProps(LayerPropsPanel):
 
     def on_label_color_changed(self):
         color_name = self.label_color_control.currentText()
-        # apply to current canvas only
+        is_custom = (color_name == 'Custom')
+        
+        # Toggle custom controls visibility
+        self.label_color_btn.setVisible(is_custom)
+        self.label_color_hex.setVisible(is_custom)
+        
+        if len(self.layers) == 0:
+            return
+        
+        canvas = self.layers[0].canvas
+        if is_custom:
+            # Use hex color from input field
+            hex_color = self.label_color_hex.text()
+            from PyQt5.QtGui import QColor
+            if hex_color and QColor(hex_color).isValid():
+                canvas.set_layer_title_color_hex(hex_color)
+        else:
+            # Use predefined color name
+            canvas.set_layer_title_color(color_name)
+    
+    def on_pick_label_color(self):
+        """Open color picker for label color."""
+        from PyQt5.QtWidgets import QColorDialog
+        from PyQt5.QtGui import QColor
+        
+        current = QColor(self.label_color_hex.text() or "#808080")
+        color = QColorDialog.getColor(current, self)
+        if color.isValid():
+            hex_color = color.name()
+            self.label_color_hex.setText(hex_color)
+            self.label_color_btn.setStyleSheet(f"background-color:{hex_color}")
+            self._apply_label_custom_color(hex_color)
+
+    def on_label_color_hex_changed(self):
+        """Handle manual hex color input for label."""
+        text = self.label_color_hex.text()
+        try:
+            from PyQt5.QtGui import QColor
+            if text.startswith('#') and len(text) == 7 and QColor(text).isValid():
+                self.label_color_btn.setStyleSheet(f"background-color:{text}")
+                self._apply_label_custom_color(text)
+        except Exception:
+            pass
+
+    def _apply_label_custom_color(self, hex_color: str):
+        """Apply custom hex color to label."""
         if len(self.layers) == 0:
             return
         canvas = self.layers[0].canvas
-        canvas.set_layer_title_color(color_name)
+        canvas.set_layer_title_color_hex(hex_color)
 
     def on_bg_color_changed(self):
         color_name = self.bg_color_control.currentText()

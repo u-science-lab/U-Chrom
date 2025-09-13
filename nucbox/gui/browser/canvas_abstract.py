@@ -164,13 +164,18 @@ class AbstractCanvas(QObject):
     def set_layer_title_color(self, color_name: str):
         """Set layer title color."""
         color_map = {
-            "White": "#FFFFFF", "Black": "#000000", "Red": "#FF0000", "Green": "#008000",
+            "Gray": "#808080", "White": "#FFFFFF", "Black": "#000000", "Red": "#FF0000", "Green": "#008000",
             "Blue": "#0000FF", "Yellow": "#FFFF00", "Cyan": "#00FFFF", "Magenta": "#FF00FF",
             "Orange": "#FFA500", "Purple": "#800080", "Brown": "#A52A2A", "Pink": "#FFC0CB",
-            "Gray": "#808080", "Olive": "#808000", "Navy": "#000080", "Lime": "#00FF00",
+            "Olive": "#808000", "Navy": "#000080", "Lime": "#00FF00",
             "Maroon": "#800000", "Teal": "#008080", "Silver": "#C0C0C0", "Gold": "#FFD700"
         }
-        hex_color = color_map.get(color_name, "#FFFFFF")
+        hex_color = color_map.get(color_name, "#808080")  # Default to gray
+        if self._layer_title_handle:
+            self.backend.update_text_overlay(self._layer_title_handle, color=hex_color)
+    
+    def set_layer_title_color_hex(self, hex_color: str):
+        """Set layer title color using hex code."""
         if self._layer_title_handle:
             self.backend.update_text_overlay(self._layer_title_handle, color=hex_color)
     
