@@ -119,7 +119,7 @@ class ChromatinProps(LayerPropsPanel):
         color_layout.addWidget(self.chrom_color_btn)
         
         self.chrom_hex_input = QLineEdit()
-        self.chrom_hex_input.setPlaceholderText("#FF0000")
+        self.chrom_hex_input.setPlaceholderText("#CD18FC")
         self.chrom_hex_input.textChanged.connect(self.on_chrom_hex_changed)
         color_layout.addWidget(self.chrom_hex_input)
         chrom_layout.addLayout(color_layout)
@@ -154,9 +154,9 @@ class ChromatinProps(LayerPropsPanel):
         l_region_color = QLabel("Color:")
         self.region_color_btn = QPushButton()
         self.region_color_btn.setFixedSize(50, 20)
-        self.region_color_btn.setStyleSheet("background-color:#FF6A00")
+        self.region_color_btn.setStyleSheet("background-color:#CD18FC")
         self.region_color_btn.clicked.connect(self.on_pick_region_color)
-        self.region_color_hex = QLineEdit("#FF6A00")
+        self.region_color_hex = QLineEdit("#CD18FC")
         self.region_color_hex.textChanged.connect(self.on_region_hex_changed)
         
         self.region_subset_btn = QPushButton("Create Region Subset")
@@ -241,17 +241,17 @@ class ChromatinProps(LayerPropsPanel):
         l_label_color = QLabel("Color")
         self.label_color_control = QComboBox()
         self.label_color_control.addItems([
-            "Gray", "Custom"
+            "Purple", "Custom"
         ])
-        self.label_color_control.setCurrentText("Gray")
+        self.label_color_control.setCurrentText("Purple")
         self.label_color_control.currentTextChanged.connect(self.on_label_color_changed)
 
         # Custom label color controls (similar to single color mode)
         self.label_color_btn = QPushButton()
         self.label_color_btn.setFixedSize(50, 25)
         self.label_color_btn.clicked.connect(self.on_pick_label_color)
-        self.label_color_hex = QLineEdit("#808080")  # Default gray color
-        self.label_color_hex.setPlaceholderText("#808080")
+        self.label_color_hex = QLineEdit("#CD18FC")  # Default purple color
+        self.label_color_hex.setPlaceholderText("#CD18FC")
         self.label_color_hex.textChanged.connect(self.on_label_color_hex_changed)
         # Hidden unless Custom mode
         self.label_color_btn.setVisible(False)
@@ -730,7 +730,7 @@ class ChromatinProps(LayerPropsPanel):
         name = f"region: {chrom}:{s0}-{s1}"
         # Ensure a valid color map for the new subset layer
         # Always use the region color for region subsets to make them visually distinct
-        region_color = self.region_color_hex.text() or "#FF6A00"
+        region_color = self.region_color_hex.text() or "#CD18FC"
         # Create a new colormap with just the region's chromosome
         chr_colormap = {chrom: region_color}
         # Also handle normalized chromosome names
@@ -796,7 +796,7 @@ class ChromatinProps(LayerPropsPanel):
         from PyQt5.QtWidgets import QColorDialog
         from PyQt5.QtGui import QColor
         
-        current = QColor(self.label_color_hex.text() or "#808080")
+        current = QColor(self.label_color_hex.text() or "#CD18FC")
         color = QColorDialog.getColor(current, self)
         if color.isValid():
             hex_color = color.name()
@@ -893,7 +893,7 @@ class ChromatinProps(LayerPropsPanel):
         if selected_chrom and len(self.layers) > 0:
             layer = self.layers[0]
             chr_colormap = layer.cache_props.get('chr_colormap', {})
-            current_color = chr_colormap.get(selected_chrom, "#FF0000")
+            current_color = chr_colormap.get(selected_chrom, "#CD18FC")
             
             self.chrom_color_btn.setStyleSheet(f"background-color: {current_color}")
             self.chrom_hex_input.blockSignals(True)
@@ -910,7 +910,7 @@ class ChromatinProps(LayerPropsPanel):
         if not selected_chrom:
             return
             
-        current_color = self.chrom_hex_input.text() or "#FF0000"
+        current_color = self.chrom_hex_input.text() or "#CD18FC"
         color = QColorDialog.getColor(QColor(current_color), self)
         if color.isValid():
             hex_color = color.name()

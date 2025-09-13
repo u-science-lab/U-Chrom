@@ -141,7 +141,7 @@ class AbstractCanvas(QObject):
             self._layer_title_handle = self.backend.add_text_overlay(
                 text, 
                 position=self._label_position.lower().replace(' ', '-'),
-                color='#FFFFFF',
+                color='#CD18FC',
                 font_size=20.0
             )
         elif self._layer_title_handle:
@@ -164,13 +164,13 @@ class AbstractCanvas(QObject):
     def set_layer_title_color(self, color_name: str):
         """Set layer title color."""
         color_map = {
-            "Gray": "#808080", "White": "#FFFFFF", "Black": "#000000", "Red": "#FF0000", "Green": "#008000",
+            "Purple": "#CD18FC", "Gray": "#808080", "White": "#FFFFFF", "Black": "#000000", "Red": "#FF0000", "Green": "#008000",
             "Blue": "#0000FF", "Yellow": "#FFFF00", "Cyan": "#00FFFF", "Magenta": "#FF00FF",
-            "Orange": "#FFA500", "Purple": "#800080", "Brown": "#A52A2A", "Pink": "#FFC0CB",
+            "Orange": "#FFA500", "Brown": "#A52A2A", "Pink": "#FFC0CB",
             "Olive": "#808000", "Navy": "#000080", "Lime": "#00FF00",
             "Maroon": "#800000", "Teal": "#008080", "Silver": "#C0C0C0", "Gold": "#FFD700"
         }
-        hex_color = color_map.get(color_name, "#808080")  # Default to gray
+        hex_color = color_map.get(color_name, "#CD18FC")  # Default to purple
         if self._layer_title_handle:
             self.backend.update_text_overlay(self._layer_title_handle, color=hex_color)
     

@@ -375,7 +375,16 @@ class PyVistaBackend(RenderingBackend):
         # Update style if needed
         if color is not None or font_size is not None:
             current_color = color or '#FFFFFF'
-            current_size = font_size or 12
+            # Only update font size if explicitly provided, otherwise preserve current size
+            if font_size is not None:
+                current_size = font_size
+            else:
+                # Get current font size from existing stylesheet or use default
+                current_style = widget.styleSheet()
+                import re
+                size_match = re.search(r'font-size:\s*(\d+(?:\.\d+)?)pt', current_style)
+                current_size = float(size_match.group(1)) if size_match else 12
+            
             widget.setStyleSheet(f"""
                 QLabel {{
                     color: {current_color};
