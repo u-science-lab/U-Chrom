@@ -101,29 +101,75 @@ class PyVistaBackend(RenderingBackend):
             self.render()
     
     def get_camera_state(self) -> Dict[str, Any]:
-        """Get the current camera state."""
-        camera = self.plotter.camera
+        """Get the current camera state (robust across PyVista/VTK versions)."""
+        cam = getattr(self.plotter, 'camera', None)
+        if cam is None:
+            return {}
+        def _get(attr_name, default=None):
+            # Try attribute
+            try:
+                val = getattr(cam, attr_name)
+                return val
+            except Exception:
+                pass
+            # Try VTK getter e.g. GetViewUp
+            try:
+                method_name = 'Get' + ''.join([p.capitalize() for p in attr_name.split('_')])
+                method = getattr(cam, method_name, None)
+                if callable(method):
+                    return method()
+            except Exception:
+                pass
+            # Known alias for view_up
+            if attr_name == 'view_up':
+                try:
+                    return getattr(cam, 'up')
+                except Exception:
+                    pass
+            return default
         return {
-            'position': camera.position,
-            'focal_point': camera.focal_point,
-            'view_up': camera.view_up,
-            'clipping_range': camera.clipping_range,
-            'view_angle': camera.view_angle
+            'position': _get('position'),
+            'focal_point': _get('focal_point'),
+            'view_up': _get('view_up'),
+            'clipping_range': _get('clipping_range'),
+            'view_angle': _get('view_angle')
         }
     
     def set_camera_state(self, state: Dict[str, Any]):
-        """Set the camera state."""
-        camera = self.plotter.camera
-        if 'position' in state:
-            camera.position = state['position']
-        if 'focal_point' in state:
-            camera.focal_point = state['focal_point']
-        if 'view_up' in state:
-            camera.view_up = state['view_up']
-        if 'view_angle' in state:
-            camera.view_angle = state['view_angle']
-        if 'clipping_range' in state:
-            camera.clipping_range = state['clipping_range']
+        """Set the camera state (robust across PyVista/VTK versions)."""
+        cam = getattr(self.plotter, 'camera', None)
+        if cam is None or not isinstance(state, dict):
+            return
+        def _set(attr_name, value):
+            try:
+                setattr(cam, attr_name, value)
+                return True
+            except Exception:
+                pass
+            # Try VTK setter e.g. SetViewUp
+            try:
+                method_name = 'Set' + ''.join([p.capitalize() for p in attr_name.split('_')])
+                method = getattr(cam, method_name, None)
+                if callable(method):
+                    method(value)
+                    return True
+            except Exception:
+                pass
+            # Known alias
+            if attr_name == 'view_up':
+                try:
+                    setattr(cam, 'up', value)
+                    return True
+                except Exception:
+                    pass
+            return False
+        for key in ['position', 'focal_point', 'view_up', 'view_angle', 'clipping_range']:
+            if key in state and state[key] is not None:
+                _set(key, state[key])
+        try:
+            self.plotter.reset_camera_clipping_range()
+        except Exception:
+            pass
         self.render()
     
     def add_line(self, points: np.ndarray, color=None, width: float = 1.0, opacity: float = 1.0) -> Any:
