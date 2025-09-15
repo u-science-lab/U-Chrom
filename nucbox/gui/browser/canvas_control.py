@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QListWidget, QWidget, QLabel, QHBoxLayout, QVBoxLayout, QStackedWidget, QListWidgetItem, QCheckBox, QPushButton, QLineEdit, QDialog, QToolButton)
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QSize, QPoint
 from PyQt5.QtGui import QIcon
 
 
@@ -59,6 +59,11 @@ class LayerPanel(QWidget):
         
         name_label = QLabel(str(layer))
         name_label.setObjectName('name_label')
+        # Ensure label shrinks first to keep action buttons visible on narrow widths
+        from PyQt5.QtWidgets import QSizePolicy
+        name_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        name_label.setMinimumWidth(10)
+        name_label.setToolTip(str(layer))
 
         # Show/Hide button with icon
         show_btn = QToolButton()
@@ -140,6 +145,13 @@ class CanvasControl(QWidget):
 
         self.connect_events()
 
+        # Context menu for layer list (useful when action buttons are partially hidden)
+        try:
+            self.layer_control.list.setContextMenuPolicy(Qt.CustomContextMenu)
+            self.layer_control.list.customContextMenuRequested.connect(self._open_layer_context_menu)
+        except Exception:
+            pass
+
     def _icon_path(self, name: str) -> str:
         # Resolve icon path inside package resources
         # Icons expected at nucbox/gui/icons/
@@ -197,6 +209,33 @@ class CanvasControl(QWidget):
             return
         idx = self.delete(self.current_layer)
         self.reset_current(idx)
+
+    def _open_layer_context_menu(self, pos: QPoint):
+        try:
+            from PyQt5.QtWidgets import QMenu
+            index = self.layer_control.list.indexAt(pos)
+            row = index.row()
+            if row < 0 or row >= len(self.layers):
+                return
+            layer = self.layers[row]
+            menu = QMenu(self)
+            act_toggle = menu.addAction('Hide layer' if layer.is_visible else 'Show layer')
+            act_rename = menu.addAction('Rename...')
+            act_delete = menu.addAction('Delete')
+            action = menu.exec_(self.layer_control.list.mapToGlobal(pos))
+            if action == act_toggle:
+                layer.set_visible(not layer.is_visible)
+                # sync UI selection
+                if row == self.layer_control.list.currentRow():
+                    self._update_chr_labels_for_current_layer()
+            elif action == act_rename:
+                self._show_rename_dialog(layer)
+            elif action == act_delete:
+                idx = self.delete(layer)
+                # keep selection reasonable
+                self.reset_current(idx)
+        except Exception:
+            pass
 
     def set_props_panel(self, widget):
         if self.props_stack.indexOf(widget) < 0:

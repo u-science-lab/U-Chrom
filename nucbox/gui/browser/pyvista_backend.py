@@ -7,7 +7,7 @@ import numpy as np
 import pyvista as pv
 from pyvistaqt import QtInteractor
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QPalette, QColor
 from typing import Optional, Tuple, List, Dict, Any
 from matplotlib import colors as mpl_colors
@@ -77,6 +77,10 @@ class PyVistaBackend(RenderingBackend):
         
         # Set up interaction callbacks for performance optimization
         self._setup_interaction_callbacks()
+        
+        # Render batching / debouncing
+        self._render_blocked = 0
+        self._render_scheduled = False
         
     def get_native_widget(self):
         """Return the native Qt widget."""
@@ -403,7 +407,9 @@ class PyVistaBackend(RenderingBackend):
     def update_text_overlay(self, handle: Any, text: str = None, position: str = None,
                            color: str = None, font_size: int = None):
         """Update text overlay properties."""
+        self.begin_update()
         if handle not in self.text_overlays:
+            self.end_update()
             return
             
         overlay = self.text_overlays[handle]
@@ -445,6 +451,7 @@ class PyVistaBackend(RenderingBackend):
 
         # Reposition after any potential size change to keep margins correct
         self._position_overlay(overlay['position'])
+        self.end_update()
     
     def _position_overlay(self, position: str):
         """Position the overlay label based on position string."""
@@ -495,11 +502,13 @@ class PyVistaBackend(RenderingBackend):
     def set_axes_visibility(self, handle: Any, visible: bool):
         """Set axes visibility."""
         if handle:
+            self.begin_update()
             handle.SetVisibility(visible)
-            self.render()
+            self.end_update()
     
     def remove_object(self, handle: Any):
         """Remove an object from the scene."""
+        self.begin_update()
         if handle in self.objects:
             actor = self.objects[handle]
             # Get the name if we have it
@@ -525,16 +534,17 @@ class PyVistaBackend(RenderingBackend):
             if actor in self.actor_names:
                 del self.actor_names[actor]
             
-            # Render immediately to show removal
-            self.plotter.render()
+            # Single render will be handled by end_update()
             
         elif handle in self.text_overlays:
             overlay = self.text_overlays[handle]
             overlay['widget'].hide()
             del self.text_overlays[handle]
+        self.end_update()
     
     def clear_scene(self):
         """Clear all objects from the scene."""
+        self.begin_update()
         # Remove each actor by name for reliability
         for handle, actor in list(self.objects.items()):
             name = self.actor_names.get(actor)
@@ -565,15 +575,36 @@ class PyVistaBackend(RenderingBackend):
                 zlabel='Z',
                 line_width=3
             )
-        
-        # Force complete render
-        self.plotter.render()
+        self.end_update()
     
     def render(self):
-        """Force render update."""
-        # With auto_update=True, this may not be necessary but kept for compatibility
-        if hasattr(self.plotter, 'render'):
-            self.plotter.render()
+        """Debounced render update (coalesces multiple calls in same event loop)."""
+        if self._render_blocked > 0:
+            # Defer rendering until end_update()
+            self._render_scheduled = True
+            return
+        if self._render_scheduled:
+            return
+        self._render_scheduled = True
+        def _do_render():
+            self._render_scheduled = False
+            try:
+                if hasattr(self.plotter, 'render'):
+                    self.plotter.render()
+            except Exception:
+                pass
+        # Schedule at end of event loop to collapse bursts
+        QTimer.singleShot(0, _do_render)
+
+    def begin_update(self):
+        """Start a batch update to suppress intermediate renders."""
+        self._render_blocked += 1
+
+    def end_update(self):
+        """End a batch update and render once if needed."""
+        self._render_blocked = max(0, self._render_blocked - 1)
+        if self._render_blocked == 0 and self._render_scheduled:
+            self.render()
     
     def connect_mouse_events(self, on_click=None, on_move=None, on_wheel=None):
         """Connect mouse event handlers."""
