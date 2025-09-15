@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QComboBox, QDoubleSpinBox, QSpinBox, QWidget, QLabel, 
                              QGridLayout, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLineEdit, QGroupBox, 
-                             QColorDialog, QMessageBox, QScrollArea)
+                             QColorDialog, QMessageBox, QScrollArea, QSizePolicy)
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt
 from .range_list import RangeList
@@ -290,24 +290,42 @@ class ChromatinProps(LayerPropsPanel):
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # Use automatic scrollbar policy - Qt will handle it intelligently
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         
         # Create a container widget for all group boxes
         container = QWidget()
         container_layout = QVBoxLayout(container)
         container_layout.setSpacing(5)
+        container_layout.setContentsMargins(5, 5, 5, 5)  # Add some margins
         
         # Add all group boxes to the container
         container_layout.addWidget(self.model_group)
         container_layout.addWidget(self.labels_group)
         container_layout.addWidget(self.label_group)
         container_layout.addWidget(self.canvas_group)
-        container_layout.addStretch()
+        # Remove addStretch() to prevent unnecessary space that might cause scrolling
+        # container_layout.addStretch()
         
         # Set the container as the scroll area's widget
         scroll_area.setWidget(container)
         
-        # Add the scroll area to the main layout
-        self.top_layout.insertWidget(1, scroll_area)
+        # Set minimum size for the scroll area to prevent it from being too small
+        scroll_area.setMinimumHeight(200)  # Minimum height to show some content
+        
+        # Make the scroll area expand to fill available space
+        # This allows the Properties panel to grow with the window
+        self.top_layout.insertWidget(1, scroll_area, 1)  # stretch factor = 1
+        
+        # Ensure the Properties panel itself can expand
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        
+        # Store reference for potential future use
+        self.scroll_area = scroll_area
+        self.scroll_container = container
+        
+        # Ensure the scroll area can expand to fill available space
+        scroll_area.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
 
     def _update_style_availability(self):
         # Rebuild the style combo based on current conditions
@@ -526,6 +544,7 @@ class ChromatinProps(LayerPropsPanel):
             self.layers[0].canvas.backend.render()
         # Update style availability after color mode change
         self._update_style_availability()
+    
 
     def _set_model_color_ui_to_hex(self, hex_color: str):
         """Set the color combo to reflect a specific hex color.
