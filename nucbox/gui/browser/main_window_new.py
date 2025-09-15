@@ -60,6 +60,12 @@ class MainWindow(QMainWindow):
         
         if not canvas_only:
             self.add_widgets()
+        # Wire up session actions
+        try:
+            self.menubar.action_save_session.triggered.connect(self.save_session)
+            self.menubar.action_load_session.triggered.connect(self.load_session)
+        except Exception:
+            pass
 
     def _add_backend_menu(self):
         """Add menu for switching rendering backends."""
@@ -298,10 +304,263 @@ class MainWindow(QMainWindow):
                 name = osp.splitext(base)[0]
         except Exception:
             pass
-        self.canvas.control_panel.add_chromatin_layer(df, self.chr_colormap, name=name)
+        layer = self.canvas.control_panel.add_chromatin_layer(df, self.chr_colormap, name=name)
+        # annotate data path when available for session restore
+        try:
+            layer.data_path = path
+        except Exception:
+            pass
 
     def adjust_camera(self, factor=2.0):
         pos = self.canvas.info['df'][['x', 'y', 'z']].values
         norm = np.sqrt(sum([(pos[:, i])**2 for i in range(3)]))
         max_norm = np.max(norm)
         self.canvas.view.camera.distance = max_norm * factor
+
+    # ---------------- Session Save/Load -----------------
+    def _collect_layer_state(self, layer):
+        try:
+            props = getattr(layer, 'cache_props', {})
+            # Prefer file path; otherwise fall back to serializing minimal dataframe
+            data_path = getattr(layer, 'data_path', None)
+            df_records = None
+            if data_path is None:
+                try:
+                    df = props.get('df', None)
+                    if df is not None:
+                        # Only keep necessary columns to reduce size
+                        keep_cols = [c for c in ['x','y','z','chrom','pos','start','end'] if c in df.columns]
+                        df_records = df[keep_cols].to_dict(orient='records')
+                except Exception:
+                    df_records = None
+            state = {
+                'type': getattr(layer, 'LABEL', 'Layer'),
+                'name': getattr(layer, 'name', None),
+                'visible': getattr(layer, 'is_visible', True),
+                'locked': getattr(layer, 'locked', False),
+                'data_path': data_path,
+                'df_records': df_records,
+                'style': props.get('style'),
+                'width': props.get('width'),
+                'opacity': props.get('opacity', 1.0),
+                'color_mode': props.get('color_mode', 'rainbow'),
+                'single_color': props.get('single_color', '#FFFFFF'),
+                'chr_colormap': props.get('chr_colormap', {}),
+                # save any additional numeric/boolean/string thresholds or flags in a generic bucket
+                'props': {
+                    k: self._to_jsonable(v)
+                    for k, v in props.items()
+                    if k not in ['df', 'chr_colormap']  # handled separately
+                }
+            }
+            return state
+        except Exception:
+            return None
+
+    def _to_jsonable(self, obj):
+        """Convert common non-JSON-serializable objects (numpy, tuples) into JSON-friendly types."""
+        try:
+            import numpy as _np
+        except Exception:
+            _np = None
+        if obj is None:
+            return None
+        if isinstance(obj, (str, int, float, bool)):
+            return obj
+        # Tuples -> lists
+        if isinstance(obj, (list, tuple)):
+            return [self._to_jsonable(x) for x in obj]
+        # Dict -> dict with converted values (and keys to str)
+        if isinstance(obj, dict):
+            return {str(k): self._to_jsonable(v) for k, v in obj.items()}
+        # Numpy types
+        if _np is not None:
+            if isinstance(obj, _np.generic):
+                return obj.item()
+            if isinstance(obj, _np.ndarray):
+                return obj.tolist()
+        # Fallback to string
+        try:
+            return str(obj)
+        except Exception:
+            return None
+
+    def save_session(self):
+        from PyQt5.QtWidgets import QFileDialog
+        import json
+        # Show both .nbs.json and .json in the first filter so generic json is visible by default
+        path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            'Save Session',
+            '',
+            'NucBox Session (*.nbs.json *.json);;JSON (*.json);;All Files (*)'
+        )
+        if not path:
+            return
+        # If user didn't add an extension, default to .nbs.json; otherwise keep their extension
+        lower = path.lower()
+        if not (lower.endswith('.nbs.json') or lower.endswith('.json')):
+            path = path + '.nbs.json'
+        try:
+            # Collect all canvases and their layers
+            canvases_state = []
+            for canvas in self.get_all_canvas():
+                try:
+                    layers_state = []
+                    for layer in getattr(canvas.control_panel, 'layers', []):
+                        st = self._collect_layer_state(layer)
+                        if st:
+                            layers_state.append(st)
+                    camera_state = getattr(canvas.backend, 'get_camera_state', lambda: {})()
+                    canvases_state.append({
+                        'layers': layers_state,
+                        'camera': self._to_jsonable(camera_state),
+                        'axis_visible': getattr(canvas, 'axis_visible', False)
+                    })
+                except Exception:
+                    continue
+            session = {
+                'nucbox_session': True,
+                'version': 1,
+                'backend': getattr(self, 'backend', None),
+                'canvases': canvases_state
+            }
+            with open(path, 'w') as f:
+                json.dump(self._to_jsonable(session), f, indent=2)
+        except Exception as e:
+            print('Failed to save session:', e)
+
+    def load_session(self):
+        from PyQt5.QtWidgets import QFileDialog
+        import json
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            'Load Session',
+            '',
+            'NucBox Session (*.nbs.json *.json);;JSON (*.json);;All Files (*)'
+        )
+        if not path:
+            return
+        self._load_session_from_path(path)
+
+    def _load_session_from_path(self, path: str):
+        import json
+        try:
+            with open(path, 'r') as f:
+                session = json.load(f)
+            # Backward compatibility: single-canvas format
+            if 'canvases' not in session and 'layers' in session:
+                session = {
+                    'nucbox_session': True,
+                    'backend': session.get('backend'),
+                    'canvases': [{
+                        'layers': session.get('layers', []),
+                        'camera': session.get('camera'),
+                        'axis_visible': session.get('axis_visible', False)
+                    }]
+                }
+            # Clear all canvases layers
+            for canvas in list(self.get_all_canvas()):
+                for layer in list(getattr(canvas.control_panel, 'layers', [])):
+                    canvas.control_panel.delete(layer)
+            # Ensure canvas count matches session
+            target = max(1, len(session.get('canvases', [])))
+            current = len(list(self.get_all_canvas()))
+            while current < target:
+                self.add_canvas('h')
+                current += 1
+            # Populate canvases
+            for idx, c_state in enumerate(session.get('canvases', [])):
+                try:
+                    canvas = list(self.get_all_canvas())[idx]
+                except Exception:
+                    continue
+                for st in c_state.get('layers', []):
+                    data_path = st.get('data_path')
+                    df = None
+                    if data_path:
+                        try:
+                            df = read_particles(data_path)
+                        except Exception as e:
+                            print('Failed to read data for layer', st.get('name'), e)
+                    if df is None and st.get('df_records'):
+                        try:
+                            import pandas as pd
+                            df = pd.DataFrame(st['df_records'])
+                        except Exception as e:
+                            print('Failed to reconstruct dataframe for layer', st.get('name'), e)
+                    if df is None:
+                        continue
+                    chr_colormap = st.get('chr_colormap', {})
+                    layer = canvas.control_panel.add_chromatin_layer(
+                        df, chr_colormap, name=st.get('name'), width=st.get('width'), style=st.get('style')
+                    )
+                    try:
+                        layer.data_path = data_path
+                        # merge generic props first
+                        extra_props = st.get('props', {}) or {}
+                        if isinstance(extra_props, dict):
+                            for k, v in extra_props.items():
+                                layer.cache_props[k] = v
+                        # ensure key props present
+                        layer.cache_props['opacity'] = st.get('opacity', layer.cache_props.get('opacity', 1.0))
+                        layer.cache_props['color_mode'] = st.get('color_mode', layer.cache_props.get('color_mode', 'rainbow'))
+                        layer.cache_props['single_color'] = st.get('single_color', layer.cache_props.get('single_color', '#FFFFFF'))
+                        layer.cache_props['width'] = st.get('width', layer.cache_props.get('width'))
+                        layer.cache_props['style'] = st.get('style', layer.cache_props.get('style'))
+                        # visibility
+                        # restore visibility and update show icon accordingly
+                        target_visible = st.get('visible', True)
+                        if hasattr(canvas, 'control_panel'):
+                            # toggle using the same path as UI to keep icon一致
+                            try:
+                                idx = canvas.control_panel.layers.index(layer)
+                                item = canvas.control_panel.layer_control.list.item(idx)
+                                w = canvas.control_panel.layer_control.list.itemWidget(item)
+                                if w is not None:
+                                    # find the show button (the only QToolButton without objectName)
+                                    from PyQt5.QtWidgets import QToolButton
+                                    btns = w.findChildren(QToolButton)
+                                    if btns:
+                                        show_btn = btns[0]
+                                        if bool(show_btn.isChecked()) != bool(target_visible):
+                                            show_btn.click()
+                                # Fallback: set directly
+                                if hasattr(layer, 'set_visible'):
+                                    layer.set_visible(target_visible)
+                            except Exception:
+                                if hasattr(layer, 'set_visible'):
+                                    layer.set_visible(target_visible)
+                    except Exception:
+                        pass
+                    try:
+                        layer.data_path = data_path
+                        extra_props = st.get('props', {}) or {}
+                        if isinstance(extra_props, dict):
+                            for k, v in extra_props.items():
+                                layer.cache_props[k] = v
+                        layer.cache_props['opacity'] = st.get('opacity', layer.cache_props.get('opacity', 1.0))
+                        layer.cache_props['color_mode'] = st.get('color_mode', layer.cache_props.get('color_mode', 'rainbow'))
+                        layer.cache_props['single_color'] = st.get('single_color', layer.cache_props.get('single_color', '#FFFFFF'))
+                        layer.cache_props['width'] = st.get('width', layer.cache_props.get('width'))
+                        layer.cache_props['style'] = st.get('style', layer.cache_props.get('style'))
+                        if not st.get('visible', True):
+                            layer.set_visible(False)
+                    except Exception:
+                        pass
+                    layer.remove()
+                    layer.draw()
+                # Restore camera per canvas
+                cam = c_state.get('camera')
+                if cam:
+                    try:
+                        canvas.backend.set_camera_state(cam)
+                    except Exception:
+                        pass
+                try:
+                    canvas.axis_visible = c_state.get('axis_visible', False)
+                    canvas.backend.set_axes_visibility(canvas.axis, canvas.axis_visible)
+                except Exception:
+                    pass
+        except Exception as e:
+            print('Failed to load session:', e)
