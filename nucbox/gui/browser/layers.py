@@ -62,7 +62,7 @@ class ChrLabelLayer(Layer):
         self.labels = []
         self.label_ori_pos = []
 
-    def draw(self, df, shift_factor=0.05, color="#ff0000", font_size=400, bold=True):
+    def draw(self, df, shift_factor=0.05, color="#CD18FC", font_size=400, bold=True):
         labels = self.vis_objs
         for chrom in df['chrom'].unique():
             sdf = df[df['chrom'] == chrom]
@@ -107,6 +107,7 @@ class ChromatinLayer(Layer):
             'chr_colormap': chr_colormap, # Store the colormap
             'width': width,               # Store width
             'style': style,               # Store style
+            'opacity': 1.0,               # Global opacity for this layer
         }
         super().__init__(canvas)
         self.draw(df=df, chr_colormap=chr_colormap, width=width, style=style)
@@ -117,8 +118,7 @@ class ChromatinLayer(Layer):
         props = self.cache_props
         try:
             df, chr_colormap, width, style = props['df'], props['chr_colormap'], props['width'], props['style']
-        except Exception as e:
-            print(repr(e))
+        except Exception:
             return
         
         # If layer is not visible, don't draw anything
@@ -126,28 +126,35 @@ class ChromatinLayer(Layer):
             return
         color_mode = props.get('color_mode', 'rainbow')
         single_color = props.get('single_color', '#FFFFFF')
+        opacity = float(props.get('opacity', 1.0))
         num_chrom = int(df['chrom'].nunique())
-        for chrom in chr_colormap.keys():
+        # Iterate over chromosomes in the actual data
+        for chrom in df['chrom'].unique():
             sdf = df[df['chrom'] == chrom]
             if sdf.shape[0] <= 1:
                 continue
             pos = sdf[['x', 'y', 'z']].values
             if color_mode == 'single':
                 color = single_color
-                color_rgba = mpl_colors.to_rgba(color)
+                color_rgba = list(mpl_colors.to_rgba(color))
+                color_rgba[3] = opacity
                 colors_rgba = np.tile(color_rgba, (pos.shape[0], 1))
                 per_vertex = True
             else:
                 if num_chrom > 1:
                     # multiple chromosomes -> keep original: one color per chromosome
                     color = chr_colormap.get(chrom, "#888888")
-                    colors_rgba = mpl_colors.to_rgba(color)
+                    colors = list(mpl_colors.to_rgba(color))
+                    colors[3] = opacity
+                    colors_rgba = np.array(colors)
                     per_vertex = False
                 else:
                     # single chromosome -> rainbow gradient along polymer
                     t = np.linspace(0.0, 1.0, pos.shape[0])
                     cmap = cm.get_cmap('rainbow')
                     colors_rgba = cmap(t)
+                    # apply global opacity to all vertices
+                    colors_rgba[:, 3] = opacity
                     per_vertex = True
             def draw_line(p):
                 if style == 'points':

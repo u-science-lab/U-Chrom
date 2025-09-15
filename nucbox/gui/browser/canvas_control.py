@@ -125,10 +125,11 @@ class CanvasControl(QWidget):
         self.canvas = canvas
         self.layers = []
         self.current_layer = None
-        # Chromosome number label overlay settings
-        self.chr_number_layer = None
-        self.chr_number_color_mode = 'follow'  # 'follow' | 'white' | 'black'
-        self.chr_numbers_enabled = True
+        # Chromosome label overlay settings
+        self.chr_label_layer = None
+        self.chr_label_color_mode = 'follow'  # 'follow' | 'white' | 'black'
+        self.chr_labels_enabled = True
+        self.chr_label_font_size = 150  # Default font size
 
         self.layer_control = LayerPanel()
         self.props_stack = QStackedWidget()
@@ -160,6 +161,13 @@ class CanvasControl(QWidget):
         layer.remove()
         list_item = self.layer_control.list.takeItem(idx)
         del list_item
+        
+        # Force render to ensure deletion is visible
+        if hasattr(self.canvas, 'backend') and hasattr(self.canvas.backend, 'render'):
+            self.canvas.backend.render()
+        elif hasattr(self.canvas, 'update'):
+            self.canvas.update()
+        
         return idx
 
     def rename_item(self, layer, new_name: str):
@@ -206,21 +214,22 @@ class CanvasControl(QWidget):
             self.layer_control.set_operations_panel(control_panel.operations_panel)
             self.canvas.set_layer_title(str(self.current_layer))
             self._update_list_item_styles()
-            # refresh numbers overlay for newly selected layer
-            try:
-                df = self.current_layer.df if hasattr(self.current_layer, 'df') else None
-                cmap = self.current_layer.cache_props.get('chr_colormap', {}) if hasattr(self.current_layer, 'cache_props') else {}
-                if df is not None:
-                    self._update_chr_numbers(df, cmap)
-            except Exception:
-                pass
+            # Update chromosome numbers for the newly selected layer
+            self._update_chr_labels_for_current_layer()
         except:
             pass
 
-    def add_chromatin_layer(self, df, chr_colormap, parent=None, name=None):
+    def add_chromatin_layer(self, df, chr_colormap, parent=None, name=None, width=None, style=None):
         from .layers import ChromatinLayer
         from .layers import ChrLabelLayer
-        layer = ChromatinLayer(self.canvas, df, chr_colormap)
+        
+        # Use provided width/style or defaults
+        if width is None:
+            width = parent.cache_props.get('width', 1.0) if parent and hasattr(parent, 'cache_props') else 1.0
+        if style is None:
+            style = parent.cache_props.get('style', 'line') if parent and hasattr(parent, 'cache_props') else 'line'
+        
+        layer = ChromatinLayer(self.canvas, df, chr_colormap, width=width, style=style)
         layer.parent = parent
         if name is not None:
             layer.name = name
@@ -249,6 +258,9 @@ class CanvasControl(QWidget):
             else:
                 show_btn.setToolTip('Show layer')
                 show_btn.setIcon(QIcon(self._icon_path('eye-off.svg')))
+            # Update chromosome numbers when visibility changes
+            if layer == self.current_layer:
+                self._update_chr_labels_for_current_layer()
         def on_rename_layer():
             self._show_rename_dialog(layer)
         def on_delete_layer():
@@ -263,8 +275,8 @@ class CanvasControl(QWidget):
         self.canvas.set_layer_title(str(layer))
         self._update_list_item_styles()
 
-        # Update chromosome number labels overlay
-        self._update_chr_numbers(df, chr_colormap)
+        # Update chromosome number labels overlay for the new layer
+        self._update_chr_numbers_for_current_layer()
         return layer
 
     def _show_rename_dialog(self, layer):
@@ -325,48 +337,87 @@ class CanvasControl(QWidget):
         except Exception:
             pass
 
-    # ---------- Chromosome numbers overlay ----------
-    def _update_chr_numbers(self, df, chr_colormap):
+    # ---------- Chromosome labels overlay ----------
+    def _update_chr_labels(self, df, chr_colormap):
         from .layers import ChrLabelLayer
         try:
-            if self.chr_numbers_enabled and int(df['chrom'].nunique()) > 1:
-                if self.chr_number_layer is None:
-                    self.chr_number_layer = ChrLabelLayer(self.canvas)
+            # Check if current layer is visible
+            layer_visible = (self.current_layer and 
+                           hasattr(self.current_layer, 'is_visible') and 
+                           self.current_layer.is_visible)
+            
+            if self.chr_labels_enabled and layer_visible and int(df['chrom'].nunique()) > 1:
+                if self.chr_label_layer is None:
+                    self.chr_label_layer = ChrLabelLayer(self.canvas)
                 else:
-                    self.chr_number_layer.remove()
-                if self.chr_number_color_mode == 'follow':
+                    self.chr_label_layer.remove()
+                if self.chr_label_color_mode == 'follow':
                     color = chr_colormap
-                elif self.chr_number_color_mode == 'white':
+                elif self.chr_label_color_mode == 'white':
                     color = '#FFFFFF'
                 else:
                     color = '#000000'
-                self.chr_number_layer.draw(df, color=color)
-                self.chr_number_layer.name = 'Chr numbers'
+                self.chr_label_layer.draw(df, color=color, font_size=self.chr_label_font_size)
+                self.chr_label_layer.name = 'Chr labels'
             else:
-                if self.chr_number_layer is not None:
-                    self.chr_number_layer.remove()
-                    self.chr_number_layer = None
+                if self.chr_label_layer is not None:
+                    self.chr_label_layer.remove()
+                    self.chr_label_layer = None
         except Exception:
             pass
 
-    def set_chr_number_color_mode(self, mode: str):
-        self.chr_number_color_mode = mode
+    def set_chr_label_color_mode(self, mode: str):
+        self.chr_label_color_mode = mode
         try:
             layer = self.current_layer
             if layer is not None and hasattr(layer, 'df'):
                 df = layer.df
                 cmap = layer.cache_props.get('chr_colormap', {}) if hasattr(layer, 'cache_props') else {}
-                self._update_chr_numbers(df, cmap)
+                self._update_chr_labels(df, cmap)
         except Exception:
             pass
 
-    def set_chr_numbers_enabled(self, enabled: bool):
-        self.chr_numbers_enabled = bool(enabled)
+    def set_chr_labels_enabled(self, enabled: bool):
+        self.chr_labels_enabled = bool(enabled)
         try:
             layer = self.current_layer
             if layer is not None and hasattr(layer, 'df'):
                 df = layer.df
                 cmap = layer.cache_props.get('chr_colormap', {}) if hasattr(layer, 'cache_props') else {}
-                self._update_chr_numbers(df, cmap)
+                self._update_chr_labels(df, cmap)
+        except Exception:
+            pass
+    
+    def set_chr_label_font_size(self, font_size: int):
+        self.chr_label_font_size = font_size
+        try:
+            layer = self.current_layer
+            if layer is not None and hasattr(layer, 'df'):
+                df = layer.df
+                cmap = layer.cache_props.get('chr_colormap', {}) if hasattr(layer, 'cache_props') else {}
+                self._update_chr_labels(df, cmap)
+        except Exception:
+            pass
+    
+    def _update_chr_labels_for_current_layer(self):
+        """Update chromosome labels based on the current layer's data and visibility."""
+        try:
+            # Only show chromosome labels if:
+            # 1. Current layer exists and has data
+            # 2. Current layer is visible
+            # 3. Chromosome labels are enabled
+            if (self.current_layer is not None and 
+                hasattr(self.current_layer, 'df') and 
+                hasattr(self.current_layer, 'is_visible') and 
+                self.current_layer.is_visible and
+                self.chr_labels_enabled):
+                df = self.current_layer.df
+                cmap = self.current_layer.cache_props.get('chr_colormap', {}) if hasattr(self.current_layer, 'cache_props') else {}
+                self._update_chr_labels(df, cmap)
+            else:
+                # Layer is hidden or no data, remove chromosome numbers
+                if self.chr_label_layer is not None:
+                    self.chr_label_layer.remove()
+                    self.chr_label_layer = None
         except Exception:
             pass

@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QComboBox, QDoubleSpinBox, QSpinBox, QWidget, QLabel, 
                              QGridLayout, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLineEdit, QGroupBox, 
-                             QColorDialog, QMessageBox)
+                             QColorDialog, QMessageBox, QScrollArea, QSizePolicy)
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt
 from .range_list import RangeList
@@ -60,6 +60,8 @@ class ChromatinProps(LayerPropsPanel):
         l_style = QLabel("Style")
         self.model_style_select = QComboBox()
         self.model_style_select.addItem("line")
+        self.model_style_select.addItem("tube")
+        self.model_style_select.addItem("points")
         self.model_style_select.currentIndexChanged.connect(self.on_model_style_change)
 
         l_width = QLabel("Width/Radius")
@@ -79,16 +81,21 @@ class ChromatinProps(LayerPropsPanel):
         self.opacity_control.valueChanged.connect(self.on_opacity_changed)
  
         l_color_mode = QLabel("Color")
-        self.model_color_select = QComboBox()
-        single_color_options = [
-            "White", "Black", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta",
-            "Orange", "Purple", "Brown", "Pink", "Gray", "Olive", "Navy", "Lime",
-            "Maroon", "Teal", "Silver", "Gold"
-        ]
-        items = ["Rainbow"] + [f"Single - {c}" for c in single_color_options]
-        self.model_color_select.addItems(items)
-        self.model_color_select.setCurrentText("Rainbow")
-        self.model_color_select.currentIndexChanged.connect(self.on_model_color_change)
+        # Mode: Rainbow or Custom HEX
+        self.model_color_mode = QComboBox()
+        self.model_color_mode.addItems(["Rainbow", "Custom"])
+        self.model_color_mode.setCurrentText("Rainbow")
+        self.model_color_mode.currentIndexChanged.connect(self.on_model_color_mode_change)
+        # Custom color controls
+        self.single_color_btn = QPushButton()
+        self.single_color_btn.setFixedSize(50, 25)
+        self.single_color_btn.clicked.connect(self.on_pick_single_color)
+        self.single_color_hex = QLineEdit("#FFFFFF")
+        self.single_color_hex.setPlaceholderText("#FFFFFF")
+        self.single_color_hex.textChanged.connect(self.on_single_color_hex_changed)
+        # Hidden unless Custom mode
+        self.single_color_btn.setVisible(False)
+        self.single_color_hex.setVisible(False)
         
 
         # Chromosome management section
@@ -112,7 +119,7 @@ class ChromatinProps(LayerPropsPanel):
         color_layout.addWidget(self.chrom_color_btn)
         
         self.chrom_hex_input = QLineEdit()
-        self.chrom_hex_input.setPlaceholderText("#FF0000")
+        self.chrom_hex_input.setPlaceholderText("#CD18FC")
         self.chrom_hex_input.textChanged.connect(self.on_chrom_hex_changed)
         color_layout.addWidget(self.chrom_hex_input)
         chrom_layout.addLayout(color_layout)
@@ -130,53 +137,72 @@ class ChromatinProps(LayerPropsPanel):
         self.region_group = QGroupBox("Region Management")
         region_layout = QGridLayout()
         
-        l_region = QLabel("Region (chr:start-end):")
+        # Add chromosome selector for region
+        l_region_chr = QLabel("Chromosome:")
+        self.region_chr_select = QComboBox()
+        self.region_chr_select.currentTextChanged.connect(self.on_region_chr_changed)
+        
+        # Add range display label
+        self.region_range_label = QLabel("Valid range: ")
+        self.region_range_label.setStyleSheet("color: #888888; font-size: 11px;")
+        
+        l_region = QLabel("Start-End:")
         self.region_input = QLineEdit()
-        self.region_input.setPlaceholderText("chr1:100000-200000")
+        self.region_input.setPlaceholderText("100000-200000")
+        self.region_input.setToolTip("Enter the start and end coordinates within the valid range")
         
         l_region_color = QLabel("Color:")
         self.region_color_btn = QPushButton()
         self.region_color_btn.setFixedSize(50, 20)
-        self.region_color_btn.setStyleSheet("background-color:#FF6A00")
+        self.region_color_btn.setStyleSheet("background-color:#CD18FC")
         self.region_color_btn.clicked.connect(self.on_pick_region_color)
-        self.region_color_hex = QLineEdit("#FF6A00")
+        self.region_color_hex = QLineEdit("#CD18FC")
         self.region_color_hex.textChanged.connect(self.on_region_hex_changed)
         
         self.region_subset_btn = QPushButton("Create Region Subset")
         self.region_subset_btn.clicked.connect(self.on_create_region_subset)
         
-        region_layout.addWidget(l_region, 0, 0)
-        region_layout.addWidget(self.region_input, 0, 1)
-        region_layout.addWidget(l_region_color, 1, 0)
-        region_layout.addWidget(self.region_color_btn, 1, 1)
-        region_layout.addWidget(self.region_color_hex, 1, 2)
-        region_layout.addWidget(self.region_subset_btn, 2, 0, 1, 3)
+        # Layout: chromosome selector and range display
+        region_layout.addWidget(l_region_chr, 0, 0)
+        region_layout.addWidget(self.region_chr_select, 0, 1, 1, 2)
+        region_layout.addWidget(self.region_range_label, 1, 0, 1, 3)
+        region_layout.addWidget(l_region, 2, 0)
+        region_layout.addWidget(self.region_input, 2, 1, 1, 2)
+        region_layout.addWidget(l_region_color, 3, 0)
+        region_layout.addWidget(self.region_color_btn, 3, 1)
+        region_layout.addWidget(self.region_color_hex, 3, 2)
+        region_layout.addWidget(self.region_subset_btn, 4, 0, 1, 3)
         self.region_group.setLayout(region_layout)
         self.region_group.setVisible(True)
 
-        # Numbers overlay color mode
-        self.numbers_group = QGroupBox("Chromosome Numbers")
-        numbers_layout = QGridLayout()
-        self.numbers_enable = QCheckBox("Enable")
-        self.numbers_enable.setChecked(True)
-        self.numbers_enable.stateChanged.connect(self.on_numbers_enable_change)
-        numbers_layout.addWidget(self.numbers_enable, 0, 0, 1, 2)
+        # Labels overlay color mode
+        self.labels_group = QGroupBox("Chromosome Labels")
+        labels_layout = QGridLayout()
+        self.labels_enable = QCheckBox("Enable")
+        self.labels_enable.setChecked(True)
+        self.labels_enable.stateChanged.connect(self.on_labels_enable_change)
+        labels_layout.addWidget(self.labels_enable, 0, 0, 1, 2)
+        
         l_mode = QLabel("Color mode:")
-        self.numbers_mode = QComboBox()
-        self.numbers_mode.addItems(["Follow chromosome", "White", "Black"])
-        self.numbers_mode.currentIndexChanged.connect(self.on_numbers_mode_change)
-        numbers_layout.addWidget(l_mode, 1, 0)
-        numbers_layout.addWidget(self.numbers_mode, 1, 1)
-        self.numbers_group.setLayout(numbers_layout)
-        self.numbers_group.setVisible(True)
+        self.labels_mode = QComboBox()
+        self.labels_mode.addItems(["Follow chromosome", "White", "Black"])
+        self.labels_mode.currentIndexChanged.connect(self.on_labels_mode_change)
+        labels_layout.addWidget(l_mode, 1, 0)
+        labels_layout.addWidget(self.labels_mode, 1, 1)
+        
+        l_font_size = QLabel("Font size:")
+        self.labels_font_size = QSpinBox()
+        self.labels_font_size.setMinimum(50)
+        self.labels_font_size.setMaximum(2000)
+        self.labels_font_size.setSingleStep(50)
+        self.labels_font_size.setValue(150)
+        self.labels_font_size.valueChanged.connect(self.on_labels_font_size_change)
+        labels_layout.addWidget(l_font_size, 2, 0)
+        labels_layout.addWidget(self.labels_font_size, 2, 1)
+        
+        self.labels_group.setLayout(labels_layout)
+        self.labels_group.setVisible(False)
 
-        self.l_perf_mode = QLabel("Tube performance")
-        self.perf_mode_control = QComboBox()
-        self.perf_mode_control.addItems([
-            "Fast (50 segments)", "Balanced (100 segments)", "Quality (200 segments)"
-        ])
-        self.perf_mode_control.setCurrentText("Fast (50 segments)")
-        self.perf_mode_control.currentTextChanged.connect(self.on_perf_mode_changed)
 
         # Add to model group layout
         model_layout.addWidget(l_style, 0, 0)
@@ -186,25 +212,21 @@ class ChromatinProps(LayerPropsPanel):
         model_layout.addWidget(l_opacity, 2, 0)
         model_layout.addWidget(self.opacity_control, 2, 1)
         model_layout.addWidget(l_color_mode, 3, 0)
-        model_layout.addWidget(self.model_color_select, 3, 1)
-        model_layout.addWidget(self.l_perf_mode, 4, 0)
-        model_layout.addWidget(self.perf_mode_control, 4, 1)
-        
-        # Initially hide tube performance controls
-        self.l_perf_mode.setVisible(False)
-        self.perf_mode_control.setVisible(False)
+        model_layout.addWidget(self.model_color_mode, 3, 1)
+        model_layout.addWidget(self.single_color_btn, 4, 0)
+        model_layout.addWidget(self.single_color_hex, 4, 1)
         self.model_group.setLayout(model_layout)
 
-        # Label Properties Group
-        self.label_group = QGroupBox("Label Properties")
+        # Layer Label Group
+        self.label_group = QGroupBox("Layer Label")
         label_layout = QGridLayout()
 
         l_label_font = QLabel("Font size")
         self.label_font_control = QDoubleSpinBox()
-        self.label_font_control.setMaximum(10.0)
-        self.label_font_control.setMinimum(1.0)
+        self.label_font_control.setMaximum(100.0)
+        self.label_font_control.setMinimum(0.5)
         self.label_font_control.setSingleStep(0.5)
-        self.label_font_control.setValue(5.0)
+        self.label_font_control.setValue(20.0)
         self.label_font_control.valueChanged.connect(self.on_label_font_changed)
 
         l_label_pos = QLabel("Position")
@@ -219,12 +241,21 @@ class ChromatinProps(LayerPropsPanel):
         l_label_color = QLabel("Color")
         self.label_color_control = QComboBox()
         self.label_color_control.addItems([
-            "White", "Black", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta",
-            "Orange", "Purple", "Brown", "Pink", "Gray", "Olive", "Navy", "Lime",
-            "Maroon", "Teal", "Silver", "Gold"
+            "Purple", "Custom"
         ])
-        self.label_color_control.setCurrentText("White")
+        self.label_color_control.setCurrentText("Purple")
         self.label_color_control.currentTextChanged.connect(self.on_label_color_changed)
+
+        # Custom label color controls (similar to single color mode)
+        self.label_color_btn = QPushButton()
+        self.label_color_btn.setFixedSize(50, 25)
+        self.label_color_btn.clicked.connect(self.on_pick_label_color)
+        self.label_color_hex = QLineEdit("#CD18FC")  # Default purple color
+        self.label_color_hex.setPlaceholderText("#CD18FC")
+        self.label_color_hex.textChanged.connect(self.on_label_color_hex_changed)
+        # Hidden unless Custom mode
+        self.label_color_btn.setVisible(False)
+        self.label_color_hex.setVisible(False)
 
         # Add to label group layout
         label_layout.addWidget(l_label_font, 0, 0)
@@ -233,6 +264,8 @@ class ChromatinProps(LayerPropsPanel):
         label_layout.addWidget(self.label_position_control, 1, 1)
         label_layout.addWidget(l_label_color, 2, 0)
         label_layout.addWidget(self.label_color_control, 2, 1)
+        label_layout.addWidget(self.label_color_btn, 3, 0)
+        label_layout.addWidget(self.label_color_hex, 3, 1)
         self.label_group.setLayout(label_layout)
 
         # Canvas Properties Group
@@ -253,39 +286,70 @@ class ChromatinProps(LayerPropsPanel):
         self.canvas_group.setLayout(canvas_layout)
 
     def add_grouped_layout(self):
-        # Insert group boxes into the Properties panel layout (exclude Chromosome/Region Management)
-        # They are displayed on the Layers panel's right side via operations_panel
-        self.top_layout.insertWidget(1, self.model_group)
-        self.top_layout.insertWidget(2, self.numbers_group)
-        self.top_layout.insertWidget(3, self.label_group)
-        self.top_layout.insertWidget(4, self.canvas_group)
+        # Create a scroll area for the properties
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # Use automatic scrollbar policy - Qt will handle it intelligently
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
+        # Create a container widget for all group boxes
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setSpacing(5)
+        container_layout.setContentsMargins(5, 5, 5, 5)  # Add some margins
+        
+        # Add all group boxes to the container
+        container_layout.addWidget(self.model_group)
+        container_layout.addWidget(self.labels_group)
+        container_layout.addWidget(self.label_group)
+        container_layout.addWidget(self.canvas_group)
+        # Remove addStretch() to prevent unnecessary space that might cause scrolling
+        # container_layout.addStretch()
+        
+        # Set the container as the scroll area's widget
+        scroll_area.setWidget(container)
+        
+        # Set minimum size for the scroll area to prevent it from being too small
+        scroll_area.setMinimumHeight(200)  # Minimum height to show some content
+        
+        # Make the scroll area expand to fill available space
+        # This allows the Properties panel to grow with the window
+        self.top_layout.insertWidget(1, scroll_area, 1)  # stretch factor = 1
+        
+        # Ensure the Properties panel itself can expand
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        
+        # Store reference for potential future use
+        self.scroll_area = scroll_area
+        self.scroll_container = container
+        
+        # Ensure the scroll area can expand to fill available space
+        scroll_area.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
 
     def _update_style_availability(self):
         # Rebuild the style combo based on current conditions
         current_style = self.model_style_select.currentText()
-        current_color = self.model_color_select.currentText()
+        # Maintain backward-compat variable for legacy reads
+        try:
+            current_color = self.model_color_mode.currentText()
+        except Exception:
+            current_color = "Rainbow"
         
         # Check chromosome count and color mode constraints
+        # Tube mode is always supported for all configurations
         disable_tube = False
         is_multi_chrom = False
         if len(self.layers) > 0:
-            disable_tube = True
             for layer in self.layers:
                 try:
                     df = layer.df
                     num_chrom = int(df['chrom'].nunique())
-                    color_mode = layer.cache_props.get('color_mode', 'rainbow')
-                    
                     if num_chrom > 1:
                         is_multi_chrom = True
-                    
-                    # If any layer is NOT (single-chromosome + rainbow), enable tube
-                    if num_chrom != 1 or color_mode != 'rainbow':
-                        disable_tube = False
                         break
                 except Exception:
-                    disable_tube = False
-                    break
+                    pass
         
         # Rebuild the combo with appropriate options
         self.model_style_select.blockSignals(True)  # Prevent triggering events during rebuild
@@ -294,51 +358,36 @@ class ChromatinProps(LayerPropsPanel):
         # Always add basic styles
         self.model_style_select.addItem("line")
         
-        # Add points/tube based on layer constraints and performance
-        layers_row_num = [l.df.shape[0] for l in self.layers] if self.layers else []
-        points_thresh = 20000
-        tube_thresh = 5000
+        # Always add tube and points options
+        self.model_style_select.addItem('tube')
+        self.model_style_select.addItem('points')
+        has_tube_option = True
         
-        if len(layers_row_num) == 0 or all([n <= points_thresh for n in layers_row_num]):
-            self.model_style_select.addItem('points')
-        
-        has_tube_option = False
-        if not disable_tube and (len(layers_row_num) == 0 or all([n <= tube_thresh for n in layers_row_num])):
-            self.model_style_select.addItem('tube')
-            has_tube_option = True
-        
-        # Show/hide tube performance controls based on tube availability
-        self.l_perf_mode.setVisible(has_tube_option)
-        self.perf_mode_control.setVisible(has_tube_option)
         
         # Update color controls and chromosome management based on chromosome count
-        self.model_color_select.blockSignals(True)
+        self.model_color_mode.blockSignals(True)
         if is_multi_chrom:
             # Multi-chromosome: only rainbow mode; show both Chromosome and Region management on the right panel
-            self.model_color_select.clear()
-            self.model_color_select.addItem("Rainbow (Multi-chromosome)")
-            self.model_color_select.setCurrentIndex(0)
+            self.model_color_mode.setCurrentText("Rainbow")
+            self.single_color_btn.setVisible(False)
+            self.single_color_hex.setVisible(False)
             self.chrom_group.setVisible(True)
             self.region_group.setVisible(True)
             self._update_chromosome_list()
         else:
             # Single chromosome: allow all color modes; hide Chromosome management, keep Region management visible
-            self.model_color_select.clear()
-            single_color_options = [
-                "White", "Black", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta",
-                "Orange", "Purple", "Brown", "Pink", "Gray", "Olive", "Navy", "Lime",
-                "Maroon", "Teal", "Silver", "Gold"
-            ]
-            items = ["Rainbow"] + [f"Single - {c}" for c in single_color_options]
-            self.model_color_select.addItems(items)
-            # Restore previous selection if valid
-            for i in range(self.model_color_select.count()):
-                if self.model_color_select.itemText(i) == current_color:
-                    self.model_color_select.setCurrentIndex(i)
-                    break
+            # Keep current mode; show custom controls only when Custom selected
+            if current_color not in ["Rainbow", "Rainbow (Multi-chromosome)"]:
+                self.model_color_mode.setCurrentText("Custom")
+                self.single_color_btn.setVisible(True)
+                self.single_color_hex.setVisible(True)
+            else:
+                self.model_color_mode.setCurrentText("Rainbow")
+                self.single_color_btn.setVisible(False)
+                self.single_color_hex.setVisible(False)
             self.chrom_group.setVisible(False)
             self.region_group.setVisible(True)
-        self.model_color_select.blockSignals(False)
+        self.model_color_mode.blockSignals(False)
         
         # Restore selection or fallback to line
         if current_style == 'tube' and disable_tube:
@@ -356,10 +405,35 @@ class ChromatinProps(LayerPropsPanel):
         super().connect_with(layer)
         # Update style availability after connecting with layer
         self._update_style_availability()
+        # Update region placeholder with actual data range
+        self._update_region_placeholder()
+        # Update chromosome numbers checkbox state based on layer visibility
+        self._update_chr_labels_checkbox()
+        # Show labels section only for multi-chromosome layers
+        try:
+            if hasattr(layer, 'df'):
+                num = int(layer.df['chrom'].nunique())
+                self.labels_group.setVisible(num > 1)
+        except Exception:
+            self.labels_group.setVisible(False)
 
     def update_params(self):
         self.on_opacity_changed()
         self.on_width_changed()
+        # Sync color combo with current layer color settings
+        try:
+            if len(self.layers) > 0:
+                props = getattr(self.layers[0], 'cache_props', {})
+                mode = props.get('color_mode', 'rainbow')
+                if mode == 'single':
+                    self._set_model_color_ui_to_hex(props.get('single_color', '#FFFFFF'))
+                else:
+                    text = 'Rainbow (Multi-chromosome)' if self.chrom_group.isVisible() else 'Rainbow'
+                    idx = self.model_color_mode.findText(text)
+                    if idx >= 0:
+                        self.model_color_mode.setCurrentIndex(idx)
+        except Exception:
+            pass
 
 
     def on_take_subset(self):
@@ -381,70 +455,127 @@ class ChromatinProps(LayerPropsPanel):
         width = self.width_control.value()
         for layer in self.layers:
             layer.cache_props['width'] = width
-            for o in layer.vis_objs:
-                if style == "line":
-                    o.set_data(width=width)
-                else:
-                    layer.remove()
-                    layer.draw(width=width)
-                    if layer.parent:
-                        layer.parent.re_render(parent=True)
-        self.on_opacity_changed()
+            # Only redraw for non-line styles (tube, points need full redraw)
+            if style != "line":
+                layer.remove()
+                layer.draw(width=width)
+        # Single render call at the end instead of multiple re_render calls
+        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
+            self.layers[0].canvas.backend.render()
 
     def on_opacity_changed(self):
         val = self.opacity_control.value()
         for layer in self.layers:
             layer.set_props('opacity', val)
             layer.cache_props['opacity'] = val
+        # Lightweight path: backend updates opacity directly; avoid redraw
+        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
+            self.layers[0].canvas.backend.render()
 
     def on_model_style_change(self):
         style = self.model_style_select.currentText()
+        # Update all layers
         for layer in self.layers:
             layer.remove()
             layer.draw(style=style)
-            if style == 'line':
-                self.width_control.setMaximum(20.0)
-                self.width_control.setMinimum(1.0)
-                self.width_control.setSingleStep(1.0)
-                self.width_control.setValue(1.0)
-            elif style == 'points':
-                self.width_control.setMaximum(2.0)
-                self.width_control.setMinimum(0)
-                self.width_control.setSingleStep(0.1)
-                self.width_control.setValue(0.5)
-            elif style == 'tube':
-                self.width_control.setMaximum(2.0)
-                self.width_control.setMinimum(0)
-                self.width_control.setSingleStep(0.05)
-                self.width_control.setValue(0.1)
-            if layer.parent:
-                layer.parent.re_render(parent=True)
+        
+        # Update width control settings based on style
+        if style == 'line':
+            self.width_control.setMaximum(20.0)
+            self.width_control.setMinimum(1.0)
+            self.width_control.setSingleStep(1.0)
+            self.width_control.setValue(1.0)
+        elif style == 'points':
+            self.width_control.setMaximum(2.0)
+            self.width_control.setMinimum(0)
+            self.width_control.setSingleStep(0.1)
+            self.width_control.setValue(0.5)
+        elif style == 'tube':
+            self.width_control.setMaximum(2.0)
+            self.width_control.setMinimum(0)
+            self.width_control.setSingleStep(0.05)
+            self.width_control.setValue(0.1)
+        
+        # Single render at the end
+        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
+            self.layers[0].canvas.backend.render()
 
-    def on_model_color_change(self):
-        text = self.model_color_select.currentText()
-        is_single = text.startswith('Single - ')
-        color_name = text.replace('Single - ', '') if is_single else None
-        color_map = {
-            "White": "#FFFFFF", "Black": "#000000", "Red": "#FF0000", "Green": "#008000",
-            "Blue": "#0000FF", "Yellow": "#FFFF00", "Cyan": "#00FFFF", "Magenta": "#FF00FF",
-            "Orange": "#FFA500", "Purple": "#800080", "Brown": "#A52A2A", "Pink": "#FFC0CB",
-            "Gray": "#808080", "Olive": "#808000", "Navy": "#000080", "Lime": "#00FF00",
-            "Maroon": "#800000", "Teal": "#008080", "Silver": "#C0C0C0", "Gold": "#FFD700"
-        }
-        hex_color = color_map.get(color_name, "#FFFFFF") if is_single else None
+    def on_model_color_mode_change(self):
+        mode = self.model_color_mode.currentText()
+        is_single = (mode == 'Custom')
+        # Toggle custom controls
+        self.single_color_btn.setVisible(is_single)
+        self.single_color_hex.setVisible(is_single)
         for layer in self.layers:
             layer.cache_props['color_mode'] = 'single' if is_single else 'rainbow'
-            if is_single and hex_color is not None:
-                layer.cache_props['single_color'] = hex_color
+            if not is_single:
+                layer.remove()
+                layer.draw()
+        if not is_single and self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
+            self.layers[0].canvas.backend.render()
+
+    def on_pick_single_color(self):
+        current = QColor(self.single_color_hex.text() or "#FFFFFF")
+        color = QColorDialog.getColor(current, self)
+        if color.isValid():
+            hex_color = color.name()
+            self.single_color_hex.setText(hex_color)
+            self.single_color_btn.setStyleSheet(f"background-color:{hex_color}")
+            self._apply_single_color(hex_color)
+
+    def on_single_color_hex_changed(self):
+        text = self.single_color_hex.text()
+        try:
+            if text.startswith('#') and len(text) == 7 and QColor(text).isValid():
+                self.single_color_btn.setStyleSheet(f"background-color:{text}")
+                self._apply_single_color(text)
+        except Exception:
+            pass
+
+    def _apply_single_color(self, hex_color: str):
+        for layer in self.layers:
+            layer.cache_props['color_mode'] = 'single'
+            layer.cache_props['single_color'] = hex_color
             layer.remove()
             layer.draw()
-            if layer.parent:
-                layer.parent.re_render(parent=True)
+        
+        # Single render at the end
+        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
+            self.layers[0].canvas.backend.render()
         # Update style availability after color mode change
         self._update_style_availability()
+    
 
-    def on_numbers_mode_change(self):
-        mode_text = self.numbers_mode.currentText()
+    def _set_model_color_ui_to_hex(self, hex_color: str):
+        """Set the color combo to reflect a specific hex color.
+        If the hex matches a named color, select that; otherwise add/select a custom hex item."""
+        try:
+            color_map = {
+                "White": "#FFFFFF", "Black": "#000000", "Red": "#FF0000", "Green": "#008000",
+                "Blue": "#0000FF", "Yellow": "#FFFF00", "Cyan": "#00FFFF", "Magenta": "#FF00FF",
+                "Orange": "#FFA500", "Purple": "#800080", "Brown": "#A52A2A", "Pink": "#FFC0CB",
+                "Gray": "#808080", "Olive": "#808000", "Navy": "#000080", "Lime": "#00FF00",
+                "Maroon": "#800000", "Teal": "#008080", "Silver": "#C0C0C0", "Gold": "#FFD700"
+            }
+            # Try to find named color
+            for name, val in color_map.items():
+                if val.lower() == (hex_color or '').lower():
+                    idx = self.model_color_mode.findText(name)
+                    if idx >= 0:
+                        self.model_color_mode.setCurrentIndex(idx)
+                        return
+            # Add or select a custom entry
+            # Switch to Custom mode and show controls
+            self.model_color_mode.setCurrentText("Custom")
+            self.single_color_hex.setText(hex_color.upper())
+            self.single_color_btn.setStyleSheet(f"background-color:{hex_color}")
+            self.single_color_btn.setVisible(True)
+            self.single_color_hex.setVisible(True)
+        except Exception:
+            pass
+
+    def on_labels_mode_change(self):
+        mode_text = self.labels_mode.currentText()
         if mode_text.startswith('Follow'):
             mode_key = 'follow'
         elif mode_text == 'White':
@@ -454,13 +585,20 @@ class ChromatinProps(LayerPropsPanel):
         # apply to the current canvas control
         if len(self.layers) > 0:
             canvas_control = self.layers[0].canvas.control_panel
-            canvas_control.set_chr_number_color_mode(mode_key)
+            canvas_control.set_chr_label_color_mode(mode_key)
 
-    def on_numbers_enable_change(self):
-        enabled = self.numbers_enable.isChecked()
+    def on_labels_enable_change(self):
+        enabled = self.labels_enable.isChecked()
         if len(self.layers) > 0:
             canvas_control = self.layers[0].canvas.control_panel
-            canvas_control.set_chr_numbers_enabled(enabled)
+            canvas_control.set_chr_labels_enabled(enabled)
+    
+    def on_labels_font_size_change(self):
+        font_size = self.labels_font_size.value()
+        # Update the chromosome numbers with new font size
+        if len(self.layers) > 0:
+            canvas_control = self.layers[0].canvas.control_panel
+            canvas_control.set_chr_label_font_size(font_size)
 
     def on_pick_region_color(self):
         current = QColor(self.region_color_hex.text() or "#FF6A00")
@@ -476,23 +614,69 @@ class ChromatinProps(LayerPropsPanel):
                 self.region_color_btn.setStyleSheet(f"background-color:{text}")
         except Exception:
             pass
+    
+    def on_region_chr_changed(self):
+        """Update the valid range display when chromosome selection changes."""
+        if len(self.layers) == 0 or not hasattr(self.layers[0], 'df'):
+            return
+        
+        selected_chr = self.region_chr_select.currentText()
+        if not selected_chr:
+            return
+        
+        try:
+            df = self.layers[0].df
+            chr_data = df[df['chrom'] == selected_chr]
+            
+            if len(chr_data) > 0:
+                min_start = int(chr_data['start'].min())
+                max_end = int(chr_data['end'].max())
+                
+                # Update range label
+                self.region_range_label.setText(f"Valid range: {min_start:,} - {max_end:,}")
+                
+                # Update placeholder with example
+                region_size = min(1000000, int((max_end - min_start) * 0.1))
+                example_start = min_start
+                example_end = min_start + region_size
+                self.region_input.setPlaceholderText(f"{example_start}-{example_end}")
+                
+                # Update tooltip
+                self.region_input.setToolTip(
+                    f"Enter coordinates within the range: {min_start:,} - {max_end:,}\n"
+                    f"Example: {example_start}-{example_end}"
+                )
+        except:
+            pass
 
     def on_create_region_subset(self):
+        # Get selected chromosome from dropdown
+        chrom = self.region_chr_select.currentText()
+        if not chrom:
+            QMessageBox.warning(self, "Invalid input", "Please select a chromosome.")
+            return
+        
+        # Get region coordinates
         region = self.region_input.text().strip()
         if len(self.layers) == 0:
             QMessageBox.warning(self, "Invalid input", "No layer is available to create a region subset.")
             return
         if region == "":
-            QMessageBox.warning(self, "Invalid input", "Region is empty. Please enter a region like 'chr1:100000-200000'.")
+            QMessageBox.warning(self, "Invalid input", "Please enter start and end coordinates (e.g., 100000-200000).")
             return
-        # parse region like chr1:100000-200000
+        
+        # Parse coordinates (now just start-end, not chr:start-end)
         try:
-            chrom, pos = region.split(':')
-            start, end = pos.replace(',', '').split('-')
+            pos = region.replace(',', '')
+            if '-' in pos:
+                start, end = pos.split('-')
+            else:
+                QMessageBox.warning(self, "Invalid input", "Please use format: start-end (e.g., 100000-200000)")
+                return
             start = int(start)
             end = int(end)
         except Exception:
-            QMessageBox.warning(self, "Invalid input", "Region format error. Expected 'chr:start-end', e.g. 'chr1:100000-200000'.")
+            QMessageBox.warning(self, "Invalid input", "Coordinate format error. Expected 'start-end', e.g. '100000-200000'.")
             return
         
         # Use the layer currently selected in the canvas control
@@ -502,10 +686,38 @@ class ChromatinProps(LayerPropsPanel):
             return
         df = layer.df
         chr_colormap = layer.cache_props.get('chr_colormap', {})
-        # Normalize chromosome value to handle inputs like 'chr1' vs '1'
+        
+        # Get available chromosomes
+        available_chroms = df['chrom'].unique()
+        
+        # More flexible chromosome matching
         chrom_str = df['chrom'].astype(str)
-        chrom_norm = chrom.lower().replace('chr', '')
-        mask_chr = (chrom_str.str.lower() == chrom.lower()) | (chrom_str.str.lower() == chrom_norm)
+        
+        # Try different matching strategies
+        # 1. Exact match
+        mask_chr = chrom_str == chrom
+        
+        # 2. Case-insensitive match
+        if mask_chr.sum() == 0:
+            mask_chr = chrom_str.str.lower() == chrom.lower()
+        
+        # 3. Try without 'chr' prefix
+        if mask_chr.sum() == 0:
+            chrom_norm = chrom.lower().replace('chr', '')
+            mask_chr = chrom_str.str.lower().str.replace('chr', '') == chrom_norm
+        
+        # 4. Try adding 'chr' prefix if not present
+        if mask_chr.sum() == 0 and not chrom.lower().startswith('chr'):
+            chrom_with_chr = 'chr' + chrom
+            mask_chr = chrom_str.str.lower() == chrom_with_chr.lower()
+        
+        # Check if chromosome exists
+        if mask_chr.sum() == 0:
+            QMessageBox.warning(self, "Chromosome not found", 
+                f"Chromosome '{chrom}' not found in data.\n\n"
+                f"Available chromosomes:\n{', '.join(map(str, sorted(available_chroms)))}")
+            return
+        
         s0, s1 = (start, end) if start <= end else (end, start)
         # Use overlap selection to be robust to bin edges
         try:
@@ -514,17 +726,49 @@ class ChromatinProps(LayerPropsPanel):
         except Exception:
             starts = df['start']
             ends = df['end']
+        
+        # Get the actual data range for this chromosome
+        chr_starts = starts[mask_chr]
+        chr_ends = ends[mask_chr]
+        chr_min = chr_starts.min()
+        chr_max = chr_ends.max()
+        
         pos_overlap = (starts <= s1) & (ends >= s0)
         sub_df = df[mask_chr & pos_overlap].copy()
+        
         if sub_df.shape[0] <= 0:
-            QMessageBox.warning(self, "No data", f"No pixels overlap with region {chrom}:{s0}-{s1}.")
+            # Provide helpful information about the actual data range
+            QMessageBox.warning(self, "No data in region", 
+                f"No data found in region {chrom}:{s0:,}-{s1:,}\n\n"
+                f"The actual data range for {chrom} is:\n"
+                f"{chr_min:,} - {chr_max:,}\n\n"
+                f"Example valid regions:\n"
+                f"  {chrom}:{chr_min:,}-{chr_min + 1000000:,}\n"
+                f"  {chrom}:{chr_max - 1000000:,}-{chr_max:,}")
             return
         name = f"region: {chrom}:{s0}-{s1}"
         # Ensure a valid color map for the new subset layer
-        if not isinstance(chr_colormap, dict) or len(chr_colormap) == 0:
-            # fallback to single color using region color
-            chr_colormap = {chrom: self.region_color_hex.text() or "#FF6A00"}
+        # Always use the region color for region subsets to make them visually distinct
+        region_color = self.region_color_hex.text() or "#CD18FC"
+        # Create a new colormap with just the region's chromosome
+        chr_colormap = {chrom: region_color}
+        # Also handle normalized chromosome names
+        chrom_norm = chrom.lower().replace('chr', '')
+        if chrom_norm != chrom:
+            chr_colormap[chrom_norm] = region_color
+        
+        # add_chromatin_layer will inherit width and style; force subset to use the region color
         new_layer = layer.canvas.control_panel.add_chromatin_layer(sub_df, chr_colormap, parent=layer, name=name)
+        try:
+            new_layer.cache_props['color_mode'] = 'single'
+            new_layer.cache_props['single_color'] = region_color
+            new_layer.remove()
+            new_layer.draw()
+            # Update its UI selection to this color
+            if hasattr(new_layer, 'control_panel') and hasattr(new_layer.control_panel, '_set_model_color_ui_to_hex'):
+                new_layer.control_panel._set_model_color_ui_to_hex(region_color)
+        except Exception:
+            pass
         if new_layer.parent:
             new_layer.parent.re_render(parent=True)
 
@@ -546,11 +790,56 @@ class ChromatinProps(LayerPropsPanel):
 
     def on_label_color_changed(self):
         color_name = self.label_color_control.currentText()
-        # apply to current canvas only
+        is_custom = (color_name == 'Custom')
+        
+        # Toggle custom controls visibility
+        self.label_color_btn.setVisible(is_custom)
+        self.label_color_hex.setVisible(is_custom)
+        
+        if len(self.layers) == 0:
+            return
+        
+        canvas = self.layers[0].canvas
+        if is_custom:
+            # Use hex color from input field
+            hex_color = self.label_color_hex.text()
+            from PyQt5.QtGui import QColor
+            if hex_color and QColor(hex_color).isValid():
+                canvas.set_layer_title_color_hex(hex_color)
+        else:
+            # Use predefined color name
+            canvas.set_layer_title_color(color_name)
+    
+    def on_pick_label_color(self):
+        """Open color picker for label color."""
+        from PyQt5.QtWidgets import QColorDialog
+        from PyQt5.QtGui import QColor
+        
+        current = QColor(self.label_color_hex.text() or "#CD18FC")
+        color = QColorDialog.getColor(current, self)
+        if color.isValid():
+            hex_color = color.name()
+            self.label_color_hex.setText(hex_color)
+            self.label_color_btn.setStyleSheet(f"background-color:{hex_color}")
+            self._apply_label_custom_color(hex_color)
+
+    def on_label_color_hex_changed(self):
+        """Handle manual hex color input for label."""
+        text = self.label_color_hex.text()
+        try:
+            from PyQt5.QtGui import QColor
+            if text.startswith('#') and len(text) == 7 and QColor(text).isValid():
+                self.label_color_btn.setStyleSheet(f"background-color:{text}")
+                self._apply_label_custom_color(text)
+        except Exception:
+            pass
+
+    def _apply_label_custom_color(self, hex_color: str):
+        """Apply custom hex color to label."""
         if len(self.layers) == 0:
             return
         canvas = self.layers[0].canvas
-        canvas.set_layer_title_color(color_name)
+        canvas.set_layer_title_color_hex(hex_color)
 
     def on_bg_color_changed(self):
         color_name = self.bg_color_control.currentText()
@@ -559,28 +848,6 @@ class ChromatinProps(LayerPropsPanel):
             return
         canvas = self.layers[0].canvas
         canvas.set_background_color(color_name)
-
-    def on_perf_mode_changed(self):
-        mode_text = self.perf_mode_control.currentText()
-        # Extract segment count from text
-        if "50" in mode_text:
-            segments = 50
-        elif "100" in mode_text:
-            segments = 100
-        elif "200" in mode_text:
-            segments = 200
-        else:
-            segments = 50
-        
-        # Update all layers and re-render if currently using tube
-        current_style = self.model_style_select.currentText()
-        for layer in self.layers:
-            layer.cache_props['tube_gradient_segments'] = segments
-            if current_style == 'tube':
-                layer.remove()
-                layer.draw()
-                if layer.parent:
-                    layer.parent.re_render(parent=True)
 
 
     def _update_chromosome_list(self):
@@ -598,14 +865,54 @@ class ChromatinProps(LayerPropsPanel):
                     self._update_selected_chromosome_display()
         
         self.chrom_select.blockSignals(False)
+    
+    def _update_region_placeholder(self):
+        """Update region chromosome dropdown and placeholder."""
+        if len(self.layers) == 0 or not hasattr(self.layers[0], 'df'):
+            return
+        
+        try:
+            df = self.layers[0].df
+            chromosomes = sorted(df['chrom'].unique())
+            
+            # Populate chromosome dropdown for region selection
+            self.region_chr_select.blockSignals(True)
+            self.region_chr_select.clear()
+            self.region_chr_select.addItems([str(c) for c in chromosomes])
+            self.region_chr_select.blockSignals(False)
+            
+            # Set first chromosome and update range display
+            if len(chromosomes) > 0:
+                self.region_chr_select.setCurrentIndex(0)
+                self.on_region_chr_changed()
+        except:
+            pass
 
+    def _update_chr_labels_checkbox(self):
+        """Update chromosome numbers checkbox based on layer visibility."""
+        try:
+            if len(self.layers) > 0:
+                layer = self.layers[0]
+                # Enable checkbox only if layer is visible
+                if hasattr(layer, 'is_visible'):
+                    self.labels_enable.blockSignals(True)
+                    # If layer is not visible, uncheck the checkbox
+                    if not layer.is_visible:
+                        self.labels_enable.setChecked(False)
+                    self.labels_enable.blockSignals(False)
+                # Also toggle the whole labels group by chromosome count
+                if hasattr(layer, 'df'):
+                    self.labels_group.setVisible(int(layer.df['chrom'].nunique()) > 1)
+        except:
+            pass
+    
     def _update_selected_chromosome_display(self):
         # Update color display for selected chromosome
         selected_chrom = self.chrom_select.currentText()
         if selected_chrom and len(self.layers) > 0:
             layer = self.layers[0]
             chr_colormap = layer.cache_props.get('chr_colormap', {})
-            current_color = chr_colormap.get(selected_chrom, "#FF0000")
+            current_color = chr_colormap.get(selected_chrom, "#CD18FC")
             
             self.chrom_color_btn.setStyleSheet(f"background-color: {current_color}")
             self.chrom_hex_input.blockSignals(True)
@@ -622,7 +929,7 @@ class ChromatinProps(LayerPropsPanel):
         if not selected_chrom:
             return
             
-        current_color = self.chrom_hex_input.text() or "#FF0000"
+        current_color = self.chrom_hex_input.text() or "#CD18FC"
         color = QColorDialog.getColor(QColor(current_color), self)
         if color.isValid():
             hex_color = color.name()
@@ -678,6 +985,18 @@ class ChromatinProps(LayerPropsPanel):
                 new_layer = current_layer.canvas.control_panel.add_chromatin_layer(
                     subset_df, chr_colormap, parent=current_layer, name=name
                 )
+                # Apply the chromosome's current color to this new single-chrom layer
+                try:
+                    chrom_color = chr_colormap.get(selected_chrom)
+                    if chrom_color:
+                        new_layer.cache_props['color_mode'] = 'single'
+                        new_layer.cache_props['single_color'] = chrom_color
+                        new_layer.remove()
+                        new_layer.draw()
+                        if hasattr(new_layer, 'control_panel') and hasattr(new_layer.control_panel, '_set_model_color_ui_to_hex'):
+                            new_layer.control_panel._set_model_color_ui_to_hex(chrom_color)
+                except Exception:
+                    pass
                 # Re-render for transparency
                 if new_layer.parent:
                     new_layer.parent.re_render(parent=True)

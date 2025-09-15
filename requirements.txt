@@ -2,6 +2,8 @@ taichi==1.7.0
 fire==0.6.0
 pandas==2.0.3
 vispy==0.14.2
+pyvista==0.43.0
+pyvistaqt==0.11.0
 PyQt5==5.15.2
 qdarkgraystyle==1.0.2
 h5py==3.10.0

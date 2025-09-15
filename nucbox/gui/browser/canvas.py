@@ -21,7 +21,7 @@ class Canvas(scene.SceneCanvas):
         self.axis.visible = False
 
         # top-left overlay for current layer name
-        self.layer_title = scene.visuals.Text('', parent=self.scene, color='#FFFFFF', bold=True, anchor_x='left', anchor_y='top')
+        self.layer_title = scene.visuals.Text('', parent=self.scene, color='#CD18FC', bold=True, anchor_x='left', anchor_y='top')
         self.layer_title.font_size = 5
         # use pixel coordinates; update y on resize
         self.layer_title.transform = scene.transforms.STTransform()
@@ -66,13 +66,17 @@ class Canvas(scene.SceneCanvas):
     def set_layer_title_color(self, color_name: str):
         # Map color names to hex values (matplotlib-inspired)
         color_map = {
-            "White": "#FFFFFF", "Black": "#000000", "Red": "#FF0000", "Green": "#008000",
+            "Purple": "#CD18FC", "Gray": "#808080", "White": "#FFFFFF", "Black": "#000000", "Red": "#FF0000", "Green": "#008000",
             "Blue": "#0000FF", "Yellow": "#FFFF00", "Cyan": "#00FFFF", "Magenta": "#FF00FF",
-            "Orange": "#FFA500", "Purple": "#800080", "Brown": "#A52A2A", "Pink": "#FFC0CB",
-            "Gray": "#808080", "Olive": "#808000", "Navy": "#000080", "Lime": "#00FF00",
+            "Orange": "#FFA500", "Brown": "#A52A2A", "Pink": "#FFC0CB",
+            "Olive": "#808000", "Navy": "#000080", "Lime": "#00FF00",
             "Maroon": "#800000", "Teal": "#008080", "Silver": "#C0C0C0", "Gold": "#FFD700"
         }
-        hex_color = color_map.get(color_name, "#FFFFFF")  # Default to white
+        hex_color = color_map.get(color_name, "#CD18FC")  # Default to purple
+        self.layer_title.color = hex_color
+    
+    def set_layer_title_color_hex(self, hex_color: str):
+        """Set layer title color using hex code."""
         self.layer_title.color = hex_color
 
     def set_background_color(self, color_name: str):
