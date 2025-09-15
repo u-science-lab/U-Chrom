@@ -388,13 +388,26 @@ class MainWindow(QMainWindow):
     def save_session(self):
         from PyQt5.QtWidgets import QFileDialog
         import json
-        # Show both .nbs.json and .json in the first filter so generic json is visible by default
-        path, selected_filter = QFileDialog.getSaveFileName(
-            self,
-            'Save Session',
-            '',
-            'NucBox Session (*.nbs.json *.json);;JSON (*.json);;All Files (*)'
-        )
+        import os
+        import shutil
+        # Use explicit dialog to avoid macOS selection bug
+        dlg = QFileDialog(self, 'Save Session')
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setFileMode(QFileDialog.AnyFile)
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        dlg.setNameFilters(['NucBox Session (*.nbs.json *.json)', 'JSON (*.json)', 'All Files (*)'])
+        if hasattr(self, '_last_session_dir'):
+            dlg.setDirectory(self._last_session_dir)
+        if not dlg.exec_():
+            return
+        files = dlg.selectedFiles()
+        if not files:
+            return
+        path = files[0]
+        try:
+            self._last_session_dir = os.path.dirname(path)
+        except Exception:
+            pass
         if not path:
             return
         # If user didn't add an extension, default to .nbs.json; otherwise keep their extension
@@ -404,12 +417,29 @@ class MainWindow(QMainWindow):
         try:
             # Collect all canvases and their layers
             canvases_state = []
+            # Optional embedded data inside JSON
+            import gzip, base64
             for canvas in self.get_all_canvas():
                 try:
                     layers_state = []
                     for layer in getattr(canvas.control_panel, 'layers', []):
                         st = self._collect_layer_state(layer)
                         if st:
+                            # If original data文件存在，内嵌到JSON（gzip+base64）
+                            data_path = st.get('data_path')
+                            if data_path and os.path.isfile(data_path):
+                                try:
+                                    with open(data_path, 'rb') as fbin:
+                                        raw = fbin.read()
+                                    comp = gzip.compress(raw)
+                                    b64 = base64.b64encode(comp).decode('ascii')
+                                    st['embedded'] = {
+                                        'filename': os.path.basename(data_path),
+                                        'encoding': 'gzip+base64',
+                                        'data': b64
+                                    }
+                                except Exception:
+                                    pass
                             layers_state.append(st)
                     camera_state = getattr(canvas.backend, 'get_camera_state', lambda: {})()
                     canvases_state.append({
@@ -433,18 +463,35 @@ class MainWindow(QMainWindow):
     def load_session(self):
         from PyQt5.QtWidgets import QFileDialog
         import json
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            'Load Session',
-            '',
-            'NucBox Session (*.nbs.json *.json);;JSON (*.json);;All Files (*)'
-        )
+        # Use explicit dialog to avoid macOS selection bug
+        dlg = QFileDialog(self, 'Load Session')
+        dlg.setAcceptMode(QFileDialog.AcceptOpen)
+        dlg.setFileMode(QFileDialog.ExistingFile)
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        dlg.setNameFilters(['NucBox Session (*.nbs.json *.json)', 'JSON (*.json)', 'All Files (*)'])
+        if hasattr(self, '_last_session_dir'):
+            try:
+                dlg.setDirectory(self._last_session_dir)
+            except Exception:
+                pass
+        if not dlg.exec_():
+            return
+        files = dlg.selectedFiles()
+        if not files:
+            return
+        path = files[0]
+        try:
+            import os
+            self._last_session_dir = os.path.dirname(path)
+        except Exception:
+            pass
         if not path:
             return
         self._load_session_from_path(path)
 
     def _load_session_from_path(self, path: str):
         import json
+        import os
         try:
             with open(path, 'r') as f:
                 session = json.load(f)
@@ -483,6 +530,18 @@ class MainWindow(QMainWindow):
                             df = read_particles(data_path)
                         except Exception as e:
                             print('Failed to read data for layer', st.get('name'), e)
+                    # Try embedded data
+                    if df is None and st.get('embedded'):
+                        try:
+                            import base64, gzip
+                            from io import BytesIO
+                            payload = st['embedded']
+                            b = base64.b64decode(payload.get('data', ''))
+                            raw = gzip.decompress(b) if payload.get('encoding') == 'gzip+base64' else b
+                            import pandas as pd
+                            df = pd.read_csv(BytesIO(raw))
+                        except Exception as e:
+                            print('Failed to read embedded data for layer', st.get('name'), e)
                     if df is None and st.get('df_records'):
                         try:
                             import pandas as pd
