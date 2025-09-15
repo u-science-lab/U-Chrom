@@ -406,28 +406,27 @@ class MainWindow(QMainWindow):
         try:
             # Collect all canvases and their layers
             canvases_state = []
-            session_dir = os.path.dirname(path)
-            assets_dir = os.path.join(session_dir, os.path.splitext(os.path.basename(path))[0] + "_assets")
-            # Prepare assets directory lazily
-            created_assets = False
+            # Optional embedded data inside JSON
+            import gzip, base64
             for canvas in self.get_all_canvas():
                 try:
                     layers_state = []
                     for layer in getattr(canvas.control_panel, 'layers', []):
                         st = self._collect_layer_state(layer)
                         if st:
-                            # If original data file存在，复制到会话资产目录并保存相对路径，方便分享
+                            # If original data文件存在，内嵌到JSON（gzip+base64）
                             data_path = st.get('data_path')
                             if data_path and os.path.isfile(data_path):
                                 try:
-                                    if not created_assets:
-                                        os.makedirs(assets_dir, exist_ok=True)
-                                        created_assets = True
-                                    basename = os.path.basename(data_path)
-                                    asset_path = os.path.join(assets_dir, basename)
-                                    if not os.path.isfile(asset_path):
-                                        shutil.copy2(data_path, asset_path)
-                                    st['asset_rel_path'] = os.path.join(os.path.basename(assets_dir), basename)
+                                    with open(data_path, 'rb') as fbin:
+                                        raw = fbin.read()
+                                    comp = gzip.compress(raw)
+                                    b64 = base64.b64encode(comp).decode('ascii')
+                                    st['embedded'] = {
+                                        'filename': os.path.basename(data_path),
+                                        'encoding': 'gzip+base64',
+                                        'data': b64
+                                    }
                                 except Exception:
                                     pass
                             layers_state.append(st)
@@ -504,15 +503,18 @@ class MainWindow(QMainWindow):
                             df = read_particles(data_path)
                         except Exception as e:
                             print('Failed to read data for layer', st.get('name'), e)
-                    # Try session-bundled asset
-                    if df is None and st.get('asset_rel_path'):
+                    # Try embedded data
+                    if df is None and st.get('embedded'):
                         try:
-                            session_dir = os.path.dirname(path)
-                            asset_path = os.path.join(session_dir, st.get('asset_rel_path'))
-                            if os.path.isfile(asset_path):
-                                df = read_particles(asset_path)
+                            import base64, gzip
+                            from io import BytesIO
+                            payload = st['embedded']
+                            b = base64.b64decode(payload.get('data', ''))
+                            raw = gzip.decompress(b) if payload.get('encoding') == 'gzip+base64' else b
+                            import pandas as pd
+                            df = pd.read_csv(BytesIO(raw))
                         except Exception as e:
-                            print('Failed to read asset for layer', st.get('name'), e)
+                            print('Failed to read embedded data for layer', st.get('name'), e)
                     if df is None and st.get('df_records'):
                         try:
                             import pandas as pd
