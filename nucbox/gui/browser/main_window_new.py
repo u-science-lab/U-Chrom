@@ -390,13 +390,24 @@ class MainWindow(QMainWindow):
         import json
         import os
         import shutil
-        # Show both .nbs.json and .json in the first filter so generic json is visible by default
-        path, selected_filter = QFileDialog.getSaveFileName(
-            self,
-            'Save Session',
-            '',
-            'NucBox Session (*.nbs.json *.json);;JSON (*.json);;All Files (*)'
-        )
+        # Use explicit dialog to avoid macOS selection bug
+        dlg = QFileDialog(self, 'Save Session')
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setFileMode(QFileDialog.AnyFile)
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        dlg.setNameFilters(['NucBox Session (*.nbs.json *.json)', 'JSON (*.json)', 'All Files (*)'])
+        if hasattr(self, '_last_session_dir'):
+            dlg.setDirectory(self._last_session_dir)
+        if not dlg.exec_():
+            return
+        files = dlg.selectedFiles()
+        if not files:
+            return
+        path = files[0]
+        try:
+            self._last_session_dir = os.path.dirname(path)
+        except Exception:
+            pass
         if not path:
             return
         # If user didn't add an extension, default to .nbs.json; otherwise keep their extension
@@ -452,12 +463,28 @@ class MainWindow(QMainWindow):
     def load_session(self):
         from PyQt5.QtWidgets import QFileDialog
         import json
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            'Load Session',
-            '',
-            'NucBox Session (*.nbs.json *.json);;JSON (*.json);;All Files (*)'
-        )
+        # Use explicit dialog to avoid macOS selection bug
+        dlg = QFileDialog(self, 'Load Session')
+        dlg.setAcceptMode(QFileDialog.AcceptOpen)
+        dlg.setFileMode(QFileDialog.ExistingFile)
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        dlg.setNameFilters(['NucBox Session (*.nbs.json *.json)', 'JSON (*.json)', 'All Files (*)'])
+        if hasattr(self, '_last_session_dir'):
+            try:
+                dlg.setDirectory(self._last_session_dir)
+            except Exception:
+                pass
+        if not dlg.exec_():
+            return
+        files = dlg.selectedFiles()
+        if not files:
+            return
+        path = files[0]
+        try:
+            import os
+            self._last_session_dir = os.path.dirname(path)
+        except Exception:
+            pass
         if not path:
             return
         self._load_session_from_path(path)
