@@ -174,6 +174,16 @@ class CanvasControl(QWidget):
         list_item = self.layer_control.list.takeItem(idx)
         del list_item
         
+        # Remove chromosome labels that are tied to the current layer context
+        # Safer behavior: whenever a layer is deleted, remove existing chr labels
+        # and let subsequent current-layer selection重新决定是否重建
+        try:
+            if self.chr_label_layer is not None:
+                self.chr_label_layer.remove()
+                self.chr_label_layer = None
+        except Exception:
+            pass
+        
         # Force render to ensure deletion is visible
         if hasattr(self.canvas, 'backend') and hasattr(self.canvas.backend, 'render'):
             self.canvas.backend.render()
