@@ -18,6 +18,7 @@ class MenuBar(QMenuBar):
         self.action_remove_canvas = QAction("&Remove canvas", self)
         self.action_change_link_status = QAction("&Link canvases", self)
         self.action_show_axis = QAction("&Show axis", self)
+        self.action_show_mds = QAction("&Hi-C Structure Inference", self)
         self.action_show_about = QAction("&About", self)
 
         file_menu = QMenu("&File", self)
@@ -32,6 +33,11 @@ class MenuBar(QMenuBar):
         canvas_menu.addAction(self.action_change_link_status)
         canvas_menu.addAction(self.action_show_axis)
         self.addMenu(canvas_menu)
+        
+        tools_menu = QMenu("&Tools", self)
+        tools_menu.addAction(self.action_show_mds)
+        self.addMenu(tools_menu)
+        
         help_menu = QMenu("&Help", self)
         help_menu.addAction(self.action_show_about)
         self.addMenu(help_menu)

@@ -18,6 +18,7 @@ from nucbox.utils.io import read_particles
 from .canvas_new import Canvas  # Use new Canvas with backend support
 from .menubar import MenuBar
 from .config import get_backend, set_backend
+from .mds_panel import MDSPanel
 
 
 HERE = osp.dirname(osp.abspath(__file__))
@@ -43,6 +44,10 @@ class MainWindow(QMainWindow):
         self.splitter = QSplitter(Qt.Horizontal)
         self.control_stack = QStackedWidget()
 
+        # Add MDS panel to control stack
+        self.mds_panel = MDSPanel(self)
+        self.control_stack.addWidget(self.mds_panel)
+
         self.canvas_grid = []
         self.vsps = []
         self.canvas_grid_widget = QSplitter(Qt.Horizontal)
@@ -64,6 +69,7 @@ class MainWindow(QMainWindow):
         try:
             self.menubar.action_save_session.triggered.connect(self.save_session)
             self.menubar.action_load_session.triggered.connect(self.load_session)
+            self.menubar.action_show_mds.triggered.connect(self.show_mds_panel)
         except Exception:
             pass
 
@@ -488,6 +494,10 @@ class MainWindow(QMainWindow):
         if not path:
             return
         self._load_session_from_path(path)
+
+    def show_mds_panel(self):
+        """Show MDS panel for Hi-C structure inference."""
+        self.control_stack.setCurrentWidget(self.mds_panel)
 
     def _load_session_from_path(self, path: str):
         import json
