@@ -16,59 +16,117 @@ import numpy as np
 
 
 def optimize_mds_parameters(hic_df, resolution):
-    """Optimize MDS parameters based on data characteristics."""
+    """
+    Optimize MDS parameters based on data characteristics.
+    
+    Optimization Strategy:
+    1. Data Quality Assessment: Analyze contact density and distribution
+    2. Computational Complexity: Adjust parameters based on data size
+    3. Biological Relevance: Consider genomic scale and resolution
+    4. Algorithm Efficiency: Balance accuracy vs. computation time
+    """
     try:
         # Analyze data characteristics
         n_contacts = len(hic_df)
         n_positions = len(set(hic_df['chr1'].astype(str) + '_' + hic_df['pos1'].astype(str)) | 
                          set(hic_df['chr2'].astype(str) + '_' + hic_df['pos2'].astype(str)))
         
-        # Calculate data density
+        # Calculate data quality metrics
         density = n_contacts / n_positions if n_positions > 0 else 0
         
-        # Optimize parameters based on data size and density
+        # Calculate genomic span
+        all_positions = []
+        for _, row in hic_df.iterrows():
+            all_positions.extend([row['pos1'], row['pos2']])
+        genomic_span = max(all_positions) - min(all_positions) if all_positions else 0
+        
+        # Calculate contact distance distribution
+        distances = []
+        for _, row in hic_df.iterrows():
+            if row['chr1'] == row['chr2']:  # Intra-chromosomal contacts
+                dist = abs(row['pos2'] - row['pos1'])
+                distances.append(dist)
+        
+        avg_distance = np.mean(distances) if distances else 0
+        
+        # Optimize parameters based on comprehensive analysis
         optimized_params = {}
         
-        # Alpha parameter optimization (UI range: 1.0-10.0)
-        if density > 0.1:  # High density data
+        # Alpha parameter optimization (distance decay strength)
+        # Higher alpha for high-density data to prevent overfitting
+        if density > 0.15:  # Very high density
+            optimized_params['alpha'] = 9.0
+            optimized_params['alpha2'] = 4.5
+        elif density > 0.1:  # High density
             optimized_params['alpha'] = 8.0
             optimized_params['alpha2'] = 4.0
         elif density > 0.05:  # Medium density
             optimized_params['alpha'] = 6.0
             optimized_params['alpha2'] = 3.0
-        else:  # Low density data
+        elif density > 0.02:  # Low density
             optimized_params['alpha'] = 4.0
             optimized_params['alpha2'] = 2.0
+        else:  # Very low density
+            optimized_params['alpha'] = 2.0
+            optimized_params['alpha2'] = 1.0
             
-        # Weight parameter optimization (UI range: 0.0-1.0)
-        if n_contacts > 1000:
+        # Weight parameter optimization (information utilization)
+        # Higher weight for larger datasets with more reliable statistics
+        if n_contacts > 5000:  # Very large dataset
+            optimized_params['weight'] = 0.9
+        elif n_contacts > 1000:  # Large dataset
             optimized_params['weight'] = 0.8
-        elif n_contacts > 500:
+        elif n_contacts > 500:  # Medium dataset
             optimized_params['weight'] = 0.6
-        else:
+        elif n_contacts > 100:  # Small dataset
             optimized_params['weight'] = 0.4
+        else:  # Very small dataset
+            optimized_params['weight'] = 0.2
             
-        # Resolution ratio optimization (UI range: 2-50, integer)
-        if n_positions > 1000:
+        # Resolution ratio optimization (computational efficiency)
+        # Lower ratio for larger datasets to manage computational complexity
+        if n_positions > 5000:  # Very large genome
+            optimized_params['res_ratio'] = 3
+        elif n_positions > 2000:  # Large genome
             optimized_params['res_ratio'] = 5
-        elif n_positions > 500:
+        elif n_positions > 1000:  # Medium genome
             optimized_params['res_ratio'] = 10
-        else:
+        elif n_positions > 500:  # Small genome
+            optimized_params['res_ratio'] = 15
+        else:  # Very small genome
             optimized_params['res_ratio'] = 20
             
-        # Domain smoothing optimization (UI range: 0.01-1.0)
+        # Domain smoothing optimization (TAD detection sensitivity)
+        # Higher smoothing for high-density data to reduce noise
         if density > 0.1:
             optimized_params['domain_smoothing'] = 0.8
+        elif density > 0.05:
+            optimized_params['domain_smoothing'] = 0.6
         else:
-            optimized_params['domain_smoothing'] = 0.5
+            optimized_params['domain_smoothing'] = 0.4
             
-        # Min size fraction optimization
-        if n_positions > 2000:
+        # Min size fraction optimization (domain size threshold)
+        # Smaller fraction for larger genomes to detect smaller domains
+        if n_positions > 5000:  # Large genome
+            optimized_params['min_size_fraction'] = 0.005
+        elif n_positions > 2000:  # Medium-large genome
             optimized_params['min_size_fraction'] = 0.01
-        elif n_positions > 1000:
+        elif n_positions > 1000:  # Medium genome
             optimized_params['min_size_fraction'] = 0.02
-        else:
+        elif n_positions > 500:  # Small genome
             optimized_params['min_size_fraction'] = 0.05
+        else:  # Very small genome
+            optimized_params['min_size_fraction'] = 0.1
+            
+        # Add optimization metadata
+        optimized_params['_optimization_info'] = {
+            'n_contacts': n_contacts,
+            'n_positions': n_positions,
+            'density': density,
+            'genomic_span': genomic_span,
+            'avg_distance': avg_distance,
+            'optimization_strategy': 'data_characteristics_analysis'
+        }
             
         return optimized_params
         
@@ -80,7 +138,11 @@ def optimize_mds_parameters(hic_df, resolution):
             'weight': 0.6,
             'res_ratio': 10,
             'domain_smoothing': 0.5,
-            'min_size_fraction': 0.02
+            'min_size_fraction': 0.02,
+            '_optimization_info': {
+                'optimization_strategy': 'default_fallback',
+                'error': str(e)
+            }
         }
 
 
@@ -101,6 +163,9 @@ class MDSWorker(QThread):
     def run(self):
         try:
             import time
+            
+            # Start timing
+            start_time = time.time()
             
             # Check if thread should terminate
             if self.isInterruptionRequested():
@@ -134,12 +199,18 @@ class MDSWorker(QThread):
             if self.isInterruptionRequested():
                 return
                 
+            # Record MDS computation start time
+            mds_start_time = time.time()
+            
             particles_df, metadata = infer_3d_structure_minimds(
                 self.hic_df, 
                 self.resolution,
                 use_partitioned=self.use_partitioned,
                 **self.mds_params
             )
+            
+            # Record MDS computation end time
+            mds_end_time = time.time()
             
             # Check if thread should terminate before finishing
             if self.isInterruptionRequested():
@@ -151,6 +222,18 @@ class MDSWorker(QThread):
             # Check if thread should terminate before finishing
             if self.isInterruptionRequested():
                 return
+                
+            # Calculate timing information
+            total_time = time.time() - start_time
+            mds_time = mds_end_time - mds_start_time
+            
+            # Add timing information to metadata
+            metadata['computation_time'] = {
+                'total_time_seconds': round(total_time, 2),
+                'mds_algorithm_time_seconds': round(mds_time, 2),
+                'preprocessing_time_seconds': round(mds_start_time - start_time, 2),
+                'postprocessing_time_seconds': round(time.time() - mds_end_time, 2)
+            }
                 
             self.status.emit("MDS computation complete!")
             self.finished.emit(particles_df, metadata)
@@ -548,7 +631,16 @@ class MDSPanel(QWidget):
         else:
             results_text += f"Stress: {stress}\n"
         results_text += f"Iterations: {metadata.get('n_iter', 'N/A')}\n"
-        results_text += f"Resolution: {metadata.get('resolution', 'N/A'):,} bp"
+        results_text += f"Resolution: {metadata.get('resolution', 'N/A'):,} bp\n"
+        
+        # Add timing information
+        if 'computation_time' in metadata:
+            timing = metadata['computation_time']
+            results_text += f"\n⏱️ Computation Timing:\n"
+            results_text += f"Total Time: {timing.get('total_time_seconds', 'N/A')} seconds\n"
+            results_text += f"MDS Algorithm: {timing.get('mds_algorithm_time_seconds', 'N/A')} seconds\n"
+            results_text += f"Preprocessing: {timing.get('preprocessing_time_seconds', 'N/A')} seconds\n"
+            results_text += f"Postprocessing: {timing.get('postprocessing_time_seconds', 'N/A')} seconds"
         
         self.results_text.setText(results_text)
         
