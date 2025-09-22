@@ -325,7 +325,7 @@ class CanvasControl(QWidget):
         self._update_list_item_styles()
 
         # Update chromosome number labels overlay for the new layer
-        self._update_chr_numbers_for_current_layer()
+        self._update_chr_labels_for_current_layer()
         return layer
 
     def _show_rename_dialog(self, layer):
