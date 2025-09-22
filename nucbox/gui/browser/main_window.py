@@ -4,7 +4,6 @@ import os.path as osp
 
 from PyQt5 import QtGui
 import numpy as np
-from vispy.color import Color
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QFileDialog, QMainWindow, QSplitter, QStackedWidget)
@@ -140,11 +139,7 @@ class MainWindow(QMainWindow):
         if (len(self.canvas_grid) == 1) and (len(self.canvas_grid[0]) == 1):
             return
         for canvas in self.get_all_canvas():
-            if canvas is self.canvas:
-                c = Color("#888888")
-            else:
-                c = Color("#000000")
-            canvas.view.border_color = c
+            canvas.view.border_color = "#888888" if canvas is self.canvas else "#000000"
 
     def add_widgets(self):
         self.splitter.addWidget(self.control_stack)
