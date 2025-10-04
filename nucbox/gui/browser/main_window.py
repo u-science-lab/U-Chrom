@@ -1,6 +1,7 @@
 import random
 import itertools
 import os.path as osp
+import json
 
 from PyQt5 import QtGui
 import numpy as np
@@ -10,6 +11,7 @@ from PyQt5.QtWidgets import (QFileDialog, QMainWindow, QSplitter, QStackedWidget
 
 from nucbox.utils.io import read_particles
 from .canvas import Canvas
+from .session import save_session_to_path, load_session_from_path
 from .menubar import MenuBar
 
 
@@ -26,6 +28,8 @@ class MainWindow(QMainWindow):
         QMainWindow.__init__(self)
 
         self.chr_colormap = {}
+        # Keep references of spawned windows to avoid GC
+        self._child_windows = []
 
         self.resize(1100, 700)
         self.setWindowTitle('NucBrowser')
@@ -149,6 +153,8 @@ class MainWindow(QMainWindow):
 
     def _connect_events(self):
         self.menubar.action_open.triggered.connect(self.open_file_dialog)
+        self.menubar.action_save_session.triggered.connect(self.save_session_dialog)
+        self.menubar.action_load_session.triggered.connect(self.load_session_dialog)
         self.menubar.action_add_canvas_hor.triggered.connect(self.add_canvas_hor)
         self.menubar.action_add_canvas_ver.triggered.connect(self.add_canvas_ver)
         self.menubar.action_remove_canvas.triggered.connect(self.remove_canvas)
@@ -187,6 +193,32 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 print(str(e))
 
+    def save_session_dialog(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        path, _ = QFileDialog.getSaveFileName(self, "Save Session", "", "NucBrowser Session (*.json);;All Files (*)", options=options)
+        if path:
+            try:
+                base, ext = osp.splitext(path)
+                if ext.lower() != '.json':
+                    path = path + '.json'
+                save_session_to_path(self, path)
+            except Exception as e:
+                print(str(e))
+
+    def load_session_dialog(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        path, _ = QFileDialog.getOpenFileName(self, "Load Session", "", "NucBrowser Session (*.json);;All Files (*)", options=options)
+        if path:
+            try:
+                win = load_session_from_path(path, create_window=lambda: MainWindow())
+                if win is not None:
+                    self._child_windows.append(win)
+                    win.show()
+            except Exception as e:
+                print(str(e))
+
     def init_draw(self):
         for layer in self.canvas.control_panel.layers:
             layer.draw()
@@ -207,7 +239,21 @@ class MainWindow(QMainWindow):
                 name = osp.splitext(base)[0]
         except Exception:
             pass
-        self.canvas.control_panel.add_chromatin_layer(df, self.chr_colormap, name=name)
+        layer = self.canvas.control_panel.add_chromatin_layer(df, self.chr_colormap, name=name)
+        try:
+            if path is not None and hasattr(layer, 'cache_props'):
+                layer.cache_props['data_path'] = path
+        except Exception:
+            pass
+
+    def save_session(self, path: str):
+        # Kept for compatibility (delegate to module)
+        save_session_to_path(self, path)
+
+    def load_session_file(self, path: str):
+        # Kept for compatibility (delegate to module)
+        win = load_session_from_path(path, create_window=lambda: self)
+        return win
 
     def adjust_camera(self, factor=2.0):
         pos = self.canvas.info['df'][['x', 'y', 'z']].values
