@@ -1,6 +1,7 @@
 import random
 import itertools
 import os.path as osp
+import json
 
 from PyQt5 import QtGui
 import numpy as np
@@ -149,6 +150,8 @@ class MainWindow(QMainWindow):
 
     def _connect_events(self):
         self.menubar.action_open.triggered.connect(self.open_file_dialog)
+        self.menubar.action_save_session.triggered.connect(self.save_session_dialog)
+        self.menubar.action_load_session.triggered.connect(self.load_session_dialog)
         self.menubar.action_add_canvas_hor.triggered.connect(self.add_canvas_hor)
         self.menubar.action_add_canvas_ver.triggered.connect(self.add_canvas_ver)
         self.menubar.action_remove_canvas.triggered.connect(self.remove_canvas)
@@ -187,6 +190,29 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 print(str(e))
 
+    def save_session_dialog(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        path, _ = QFileDialog.getSaveFileName(self, "Save Session", "", "NucBrowser Session (*.json);;All Files (*)", options=options)
+        if path:
+            try:
+                self.save_session(path)
+            except Exception as e:
+                print(str(e))
+
+    def load_session_dialog(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        path, _ = QFileDialog.getOpenFileName(self, "Load Session", "", "NucBrowser Session (*.json);;All Files (*)", options=options)
+        if path:
+            try:
+                # Open session in a new window instead of current
+                win = MainWindow()
+                win.load_session_file(path)
+                win.show()
+            except Exception as e:
+                print(str(e))
+
     def init_draw(self):
         for layer in self.canvas.control_panel.layers:
             layer.draw()
@@ -207,7 +233,223 @@ class MainWindow(QMainWindow):
                 name = osp.splitext(base)[0]
         except Exception:
             pass
-        self.canvas.control_panel.add_chromatin_layer(df, self.chr_colormap, name=name)
+        layer = self.canvas.control_panel.add_chromatin_layer(df, self.chr_colormap, name=name)
+        try:
+            if path is not None and hasattr(layer, 'cache_props'):
+                layer.cache_props['data_path'] = path
+        except Exception:
+            pass
+
+    def save_session(self, path: str):
+        try:
+            def _records_from_df(df):
+                try:
+                    # Only keep common columns to keep size reasonable
+                    cols = [c for c in ['x', 'y', 'z', 'chrom', 'start', 'end'] if c in df.columns]
+                    if len(cols) == 0:
+                        return None
+                    return df[cols].to_dict('records')
+                except Exception:
+                    return None
+
+            canvases = []
+            for cv in self.get_all_canvas():
+                # Serialize layers
+                cv_layers = []
+                try:
+                    for layer in getattr(cv.control_panel, 'layers', []):
+                        try:
+                            entry = {
+                                'type': 'Chromatin',
+                                'name': getattr(layer, 'name', None),
+                                'locked': getattr(layer, 'locked', False),
+                            }
+                            cache = getattr(layer, 'cache_props', {}) if hasattr(layer, 'cache_props') else {}
+                            if isinstance(cache, dict):
+                                entry['style'] = cache.get('style')
+                                entry['width'] = cache.get('width')
+                                entry['opacity'] = cache.get('opacity')
+                                entry['color_mode'] = cache.get('color_mode')
+                                entry['single_color'] = cache.get('single_color')
+                                entry['chr_colormap'] = cache.get('chr_colormap', {})
+                                entry['data_path'] = cache.get('data_path')
+                                # Include a compact props copy for easy restore
+                                entry['props'] = {
+                                    k: v for k, v in cache.items() if k in ['style', 'width', 'opacity', 'color_mode', 'single_color']
+                                }
+                            # Embed data if available
+                            df = getattr(layer, 'df', None)
+                            if df is not None:
+                                records = _records_from_df(df)
+                                entry['df_records'] = records
+                            cv_layers.append(entry)
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+
+                # Camera approximation and axis visibility
+                try:
+                    dist = float(getattr(cv.view.camera, 'distance', 50.0))
+                except Exception:
+                    dist = 50.0
+                canvas_entry = {
+                    'layers': cv_layers,
+                    'camera': {
+                        # Approximate position with distance along Z
+                        'position': [0.0, 0.0, dist]
+                    },
+                    'axis_visible': bool(getattr(cv.axis, 'visible', False))
+                }
+                canvases.append(canvas_entry)
+
+            data = {
+                'version': 1,
+                'chr_colormap': self.chr_colormap,
+                'canvases': canvases
+            }
+
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(str(e))
+
+    def load_session_file(self, path: str):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            # Basic validation
+            if not isinstance(data, dict):
+                print("Invalid session format: root is not an object")
+                return
+            version = data.get("version")
+            try:
+                print(f"Loaded session: {version}")
+            except Exception:
+                pass
+
+            canvases = data.get("canvases", [])
+            if not isinstance(canvases, list):
+                print("Invalid session format: 'canvases' is not a list")
+                return
+
+            # Helper to coerce a DataFrame from records
+            def _df_from_records(records):
+                try:
+                    import pandas as pd
+                    if not isinstance(records, list):
+                        return None
+                    df = pd.DataFrame.from_records(records)
+                    # Ensure required columns exist
+                    for col in ["chrom", "x", "y", "z"]:
+                        if col not in df.columns:
+                            return None
+                    # Normalize types
+                    df["chrom"] = df["chrom"].astype(str)
+                    return df
+                except Exception:
+                    return None
+
+            # Iterate canvases as stored
+            for i, cv in enumerate(canvases):
+                if i > 0:
+                    # Create a new canvas to the right for each additional canvas
+                    self.add_canvas('h')
+                # Each canvas becomes current via add_canvas; apply per-canvas settings below
+                layers = []
+                try:
+                    layers = cv.get("layers", []) if isinstance(cv, dict) else []
+                except Exception:
+                    layers = []
+
+                # Restore layers
+                for layer_desc in layers:
+                    try:
+                        if not isinstance(layer_desc, dict):
+                            continue
+                        layer_type = layer_desc.get("type")
+                        if layer_type != "Chromatin":
+                            continue
+                        df = None
+                        data_path = layer_desc.get("data_path")
+                        if isinstance(data_path, str) and len(data_path) > 0:
+                            try:
+                                df = read_particles(data_path)
+                            except Exception as e:
+                                print(f"Failed to read data_path: {e}")
+                        if df is None:
+                            df_records = layer_desc.get("df_records")
+                            df = _df_from_records(df_records)
+                        if df is None:
+                            # Skip if no data available
+                            continue
+
+                        # Colormap: prefer layer-specific; fallback to global if present
+                        layer_colormap = layer_desc.get("chr_colormap")
+                        if not isinstance(layer_colormap, dict):
+                            layer_colormap = data.get("chr_colormap", {}) if isinstance(data.get("chr_colormap"), dict) else {}
+
+                        # Basic props
+                        width = layer_desc.get("width")
+                        style = layer_desc.get("style")
+                        name = layer_desc.get("name")
+                        if not isinstance(width, (int, float)):
+                            width = None
+                        if not isinstance(style, str):
+                            style = None
+
+                        # Add layer
+                        new_layer = self.canvas.control_panel.add_chromatin_layer(
+                            df, layer_colormap, parent=None, name=name, width=width, style=style
+                        )
+
+                        # Apply extended props if provided
+                        props = layer_desc.get("props") if isinstance(layer_desc.get("props"), dict) else {}
+                        color_mode = props.get("color_mode", layer_desc.get("color_mode"))
+                        single_color = props.get("single_color", layer_desc.get("single_color"))
+                        opacity = props.get("opacity", layer_desc.get("opacity"))
+
+                        try:
+                            if isinstance(color_mode, str):
+                                new_layer.cache_props["color_mode"] = color_mode
+                            if isinstance(single_color, str):
+                                new_layer.cache_props["single_color"] = single_color
+                            if isinstance(opacity, (int, float)):
+                                new_layer.cache_props["opacity"] = float(opacity)
+                            # Ensure current colormap persists
+                            new_layer.cache_props["chr_colormap"] = layer_colormap
+                            # Redraw to apply props
+                            new_layer.remove()
+                            new_layer.draw()
+                        except Exception as e:
+                            print(f"Failed to apply layer props: {e}")
+                    except Exception as e:
+                        print(f"Failed to restore a layer: {e}")
+
+                # Restore per-canvas axis visibility
+                try:
+                    axis_vis = cv.get("axis_visible") if isinstance(cv, dict) else None
+                    if isinstance(axis_vis, bool):
+                        self.canvas.axis.visible = axis_vis
+                except Exception:
+                    pass
+
+                # Restore camera (approximate distance from position if provided)
+                try:
+                    cam = cv.get("camera") if isinstance(cv, dict) else None
+                    if isinstance(cam, dict):
+                        pos = cam.get("position")
+                        if isinstance(pos, list) and len(pos) == 3:
+                            try:
+                                import math
+                                dist = math.sqrt(sum([float(pos[i])**2 for i in range(3)]))
+                                self.canvas.view.camera.distance = dist
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+        except Exception as e:
+            print(str(e))
 
     def adjust_camera(self, factor=2.0):
         pos = self.canvas.info['df'][['x', 'y', 'z']].values
