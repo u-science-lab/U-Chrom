@@ -159,6 +159,12 @@ class Canvas:
             "Maroon": "#800000", "Teal": "#008080", "Silver": "#C0C0C0", "Gold": "#FFD700"
         }
         self.layer_title.color = color_map.get(color_name, "#FFFFFF")
+
+    def set_layer_title_color_hex(self, hex_color: str):
+        """Set layer title color using hex color code."""
+        if self._layer_title_handle:
+            self.backend.update_text_overlay(self._layer_title_handle, color=hex_color)
+        self.layer_title.color = hex_color
     
     def set_layer_title_position(self, position: str):
         """Set layer title position."""
