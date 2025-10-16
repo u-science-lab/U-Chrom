@@ -411,7 +411,7 @@ class PyVistaBackend(RenderingBackend):
         if handle not in self.text_overlays:
             self.end_update()
             return
-            
+
         overlay = self.text_overlays[handle]
         widget = overlay['widget']
         
@@ -426,7 +426,7 @@ class PyVistaBackend(RenderingBackend):
         
         # Update style if needed
         if color is not None or font_size is not None:
-            current_color = color or '#FFFFFF'
+            current_color = color or widget.palette().color(QPalette.WindowText).name()
             # Only update font size if explicitly provided, otherwise preserve current size
             if font_size is not None:
                 current_size = font_size
