@@ -848,7 +848,7 @@ class ChromatinProps(LayerPropsPanel):
             return
         canvas = self.layers[0].canvas
         canvas.set_background_color(color_name)
-
+        canvas.update_layer_title()
 
     def _update_chromosome_list(self):
         # Update the chromosome dropdown list
