@@ -116,6 +116,10 @@ class Canvas:
             self.render()
     
     # ----- Title overlay -----
+    def update_layer_title(self, **kwargs):
+        if self._layer_title_handle:
+            self.backend.update_text_overlay(self._layer_title_handle, force_update=True, **kwargs)
+
     def set_layer_title(self, text: str):
         """Set layer title text."""
         if text is None:

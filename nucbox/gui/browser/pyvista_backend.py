@@ -56,7 +56,7 @@ class PyVistaBackend(RenderingBackend):
         self.overlay_label.setStyleSheet("""
             QLabel {
                 color: white;
-                background-color: transparent;
+                background-color: black;
                 font-weight: bold;
                 padding: 10px;
             }
@@ -381,10 +381,11 @@ class PyVistaBackend(RenderingBackend):
         """Add 2D text overlay."""
         # Use Qt label for overlay
         self.overlay_label.setText(text)
+        background_color = self.plotter.background_color.hex_rgb
         self.overlay_label.setStyleSheet(f"""
             QLabel {{
                 color: {color};
-                background-color: transparent;
+                background-color: {background_color};
                 font-size: {font_size}pt;
                 font-weight: bold;
                 padding: 10px;
@@ -405,7 +406,7 @@ class PyVistaBackend(RenderingBackend):
         return handle
     
     def update_text_overlay(self, handle: Any, text: str = None, position: str = None,
-                           color: str = None, font_size: int = None):
+                           color: str = None, font_size: int = None, force_update: bool = False):
         """Update text overlay properties."""
         self.begin_update()
         if handle not in self.text_overlays:
@@ -425,7 +426,7 @@ class PyVistaBackend(RenderingBackend):
             self._position_overlay(position)
         
         # Update style if needed
-        if color is not None or font_size is not None:
+        if color is not None or font_size is not None or force_update:
             current_color = color or widget.palette().color(QPalette.WindowText).name()
             # Only update font size if explicitly provided, otherwise preserve current size
             if font_size is not None:
@@ -436,18 +437,19 @@ class PyVistaBackend(RenderingBackend):
                 import re
                 size_match = re.search(r'font-size:\s*(\d+(?:\.\d+)?)pt', current_style)
                 current_size = float(size_match.group(1)) if size_match else 12
-            
+
+            background_color = self.plotter.background_color.hex_rgb
             widget.setStyleSheet(f"""
                 QLabel {{
                     color: {current_color};
-                    background-color: transparent;
+                    background-color: {background_color};
                     font-size: {current_size}pt;
                     font-weight: bold;
                     padding: 10px;
                 }}
             """)
             # Style change (e.g., font size) can alter size
-            widget.adjustSize()
+            #widget.adjustSize()
 
         # Reposition after any potential size change to keep margins correct
         self._position_overlay(overlay['position'])
