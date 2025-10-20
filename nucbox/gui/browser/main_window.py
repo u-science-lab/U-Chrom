@@ -7,7 +7,8 @@ from PyQt5 import QtGui
 import numpy as np
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QFileDialog, QMainWindow, QSplitter, QStackedWidget)
+from PyQt5.QtWidgets import (QFileDialog, QMainWindow, QSplitter, QStackedWidget,
+                             QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton)
 
 from nucbox.utils.io import read_particles
 from .canvas import Canvas
@@ -42,7 +43,17 @@ class MainWindow(QMainWindow):
         self.add_canvas('h')
 
         self.splitter.addWidget(self.canvas_grid_widget)
-        self.setCentralWidget(self.splitter)
+
+        # Create a container widget for central widget
+        self.central_container = QWidget()
+        self.central_layout = QVBoxLayout(self.central_container)
+        self.central_layout.setContentsMargins(0, 0, 0, 0)
+        self.central_layout.addWidget(self.splitter)
+
+        # Create navigation panel (will be overlaid on top)
+        self.navigation_panel = self._create_navigation_panel()
+
+        self.setCentralWidget(self.central_container)
         self.setWindowIcon(QtGui.QIcon(osp.join(HERE, '../nucbox.svg')))
         self.menubar = MenuBar(self)
         if not canvas_only:
@@ -51,6 +62,136 @@ class MainWindow(QMainWindow):
     @property
     def link_canvas(self):
         return self.menubar.link_canvas
+
+    def _create_navigation_panel(self):
+        """Create the initial navigation panel displayed at startup."""
+        panel = QWidget()
+        panel.setObjectName("NavigationPanel")
+
+        # Set a fixed width for the panel to ensure proper centering
+        panel.setFixedWidth(400)
+
+        # Main layout
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignCenter)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # Title
+        title = QLabel("NucBox")
+        title.setStyleSheet("font-size: 48px; font-weight: bold; color: #FFFFFF;")
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+
+        # Version
+        try:
+            from nucbox import __version__
+            version_text = f"version: {__version__}"
+        except:
+            version_text = "version: 0.1.1"
+
+        version = QLabel(version_text)
+        version.setStyleSheet("font-size: 18px; color: #888888;")
+        version.setAlignment(Qt.AlignCenter)
+        layout.addWidget(version)
+
+        # Add spacing before buttons
+        layout.addSpacing(20)
+
+        # Buttons container
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setAlignment(Qt.AlignCenter)
+        buttons_layout.setSpacing(15)
+
+        # Open structure button
+        btn_open = QPushButton("Open a structure")
+        btn_open.setFixedSize(165, 50)
+        btn_open.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: 2px solid #FFFFFF;
+                color: #FFFFFF;
+                font-size: 14px;
+                padding: 10px 20px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+            QPushButton:pressed {
+                background-color: rgba(255, 255, 255, 0.2);
+            }
+        """)
+        btn_open.clicked.connect(self.open_file_dialog)
+        buttons_layout.addWidget(btn_open)
+
+        # Load session button
+        btn_load = QPushButton("Load session")
+        btn_load.setFixedSize(165, 50)
+        btn_load.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: 2px solid #FFFFFF;
+                color: #FFFFFF;
+                font-size: 14px;
+                padding: 10px 20px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+            QPushButton:pressed {
+                background-color: rgba(255, 255, 255, 0.2);
+            }
+        """)
+        btn_load.clicked.connect(self.load_session_dialog)
+        buttons_layout.addWidget(btn_load)
+
+        layout.addLayout(buttons_layout)
+
+        panel.setLayout(layout)
+
+        # Position panel in the center of main window
+        panel.setParent(self.central_container)
+        panel.setAttribute(Qt.WA_StyledBackground, True)
+        # Initially hidden, will be shown in add_widgets
+        panel.hide()
+
+        return panel
+
+    def _center_navigation_panel(self):
+        """Center the navigation panel on the main window."""
+        if self.navigation_panel and self.central_container:
+            # Ensure the panel has been laid out and has a proper size
+            self.navigation_panel.adjustSize()
+
+            container_size = self.central_container.size()
+            panel_size = self.navigation_panel.size()
+
+            x = (container_size.width() - panel_size.width()) // 2
+            y = (container_size.height() - panel_size.height()) // 2
+
+            self.navigation_panel.move(max(0, x), max(0, y))
+            self.navigation_panel.raise_()  # Ensure panel is on top
+
+    def _show_navigation_panel(self):
+        """Show the navigation panel."""
+        if self.navigation_panel:
+            self.navigation_panel.show()
+            # Use a timer to ensure the layout is complete before centering
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(0, self._center_navigation_panel)
+
+    def _hide_navigation_panel(self):
+        """Hide the navigation panel."""
+        if self.navigation_panel:
+            self.navigation_panel.hide()
+
+    def resizeEvent(self, event):
+        """Handle window resize to keep navigation panel centered."""
+        super().resizeEvent(event)
+        if self.navigation_panel and self.navigation_panel.isVisible():
+            self._center_navigation_panel()
 
     def add_canvas(self, orientation='h'):
         canvas = Canvas()
@@ -145,6 +286,10 @@ class MainWindow(QMainWindow):
     def add_widgets(self):
         self.splitter.addWidget(self.control_stack)
         self.splitter.setSizes([850, 150])
+        # Hide the entire splitter (canvas + layers panel) initially until a structure is loaded
+        self.splitter.setVisible(False)
+        # Show the navigation panel initially
+        self._show_navigation_panel()
         self.setMenuBar(self.menubar)
         self._connect_events()
 
@@ -239,6 +384,10 @@ class MainWindow(QMainWindow):
                 layer.cache_props['data_path'] = path
         except Exception:
             pass
+        # Hide navigation panel and show the canvas and layers panel when a structure is loaded
+        self._hide_navigation_panel()
+        self.splitter.setVisible(True)
+        self.control_stack.setVisible(True)
 
     def save_session(self, path: str):
         try:
@@ -448,6 +597,19 @@ class MainWindow(QMainWindow):
                                 pass
                 except Exception:
                     pass
+
+            # Hide navigation panel and show the canvas and layers panel when a session is loaded (if any layers were loaded)
+            if len(canvases) > 0:
+                has_layers = False
+                for cv in canvases:
+                    layers = cv.get("layers", []) if isinstance(cv, dict) else []
+                    if len(layers) > 0:
+                        has_layers = True
+                        break
+                if has_layers:
+                    self._hide_navigation_panel()
+                    self.splitter.setVisible(True)
+                    self.control_stack.setVisible(True)
         except Exception as e:
             print(str(e))
 
