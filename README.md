@@ -33,9 +33,6 @@ Visualize the reconstructed genome:
 
 ```bash
 $ python -m nucbox.browser ./out1.csv
-
-# Use original VisPy renderer (if needed)
-$ NUCBROWSER_BACKEND=vispy python -m nucbox.browser ./out1.csv
 ```
 
 ### Rendering Features
@@ -49,5 +46,5 @@ $ NUCBROWSER_BACKEND=vispy python -m nucbox.browser ./out1.csv
 Convert the particles CSV file to PDB file(for visualization in PyMol or VMD):
 
 ```bash
-$ python -m nucbox.utils.io particles_to_pdb ./out1.csv ./out1.pdb --split-by-chrom=True
+$ python -m nucbox.io particles_to_pdb ./out1.csv ./out1.pdb --split-by-chrom=True
 ```

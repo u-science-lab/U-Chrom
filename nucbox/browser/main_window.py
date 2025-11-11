@@ -10,7 +10,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QFileDialog, QMainWindow, QSplitter, QStackedWidget,
                              QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton)
 
-from nucbox.utils.io import read_particles
+from nucbox.io import read_particles
 from .canvas import Canvas
 from .menubar import MenuBar
 
