@@ -32,10 +32,10 @@ $ python -m nucbox.simu.nucdyn --arch=cuda ./cell1.pairs.gz ./out1.csv --use-gri
 Visualize the reconstructed genome:
 
 ```bash
-$ python -m nucbox.gui.browser ./out1.csv
+$ python -m nucbox.browser ./out1.csv
 
 # Use original VisPy renderer (if needed)
-$ NUCBROWSER_BACKEND=vispy python -m nucbox.gui.browser ./out1.csv
+$ NUCBROWSER_BACKEND=vispy python -m nucbox.browser ./out1.csv
 ```
 
 ### Rendering Features

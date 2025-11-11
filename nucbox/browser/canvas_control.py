@@ -40,7 +40,7 @@ class LayerPanel(QWidget):
         try:
             import os, os.path as osp
             here = osp.dirname(osp.abspath(__file__))
-            return osp.join(here, '../icons', name)
+            return osp.join(here, 'icons', name)
         except Exception:
             return name
 
@@ -154,11 +154,11 @@ class CanvasControl(QWidget):
 
     def _icon_path(self, name: str) -> str:
         # Resolve icon path inside package resources
-        # Icons expected at nucbox/gui/icons/
+        # Icons expected at nucbox/browser/icons/
         try:
             import os, os.path as osp
             here = osp.dirname(osp.abspath(__file__))
-            return osp.join(here, '../icons', name)
+            return osp.join(here, 'icons', name)
         except Exception:
             return name
 

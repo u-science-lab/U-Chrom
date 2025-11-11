@@ -54,7 +54,7 @@ class MainWindow(QMainWindow):
         self.navigation_panel = self._create_navigation_panel()
 
         self.setCentralWidget(self.central_container)
-        self.setWindowIcon(QtGui.QIcon(osp.join(HERE, '../nucbox.svg')))
+        self.setWindowIcon(QtGui.QIcon(osp.join(HERE, 'nucbox.svg')))
         self.menubar = MenuBar(self)
         if not canvas_only:
             self.add_widgets()
