@@ -238,8 +238,8 @@ class PyVistaBackend(RenderingBackend):
             return None
         
         # Use Spline for smooth, continuous tube
-        # Determine number of interpolation points based on input size
-        n_points = min(points.shape[0] * 3, 1000)  # Interpolate for smoothness, cap for performance
+        # Higher interpolation = smoother curves at corners
+        n_points = min(points.shape[0] * 5, 2000)  # 5x interpolation for very smooth curves
         
         try:
             # Create a smooth spline through all points
