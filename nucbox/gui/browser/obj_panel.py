@@ -491,10 +491,10 @@ class ChromatinProps(LayerPropsPanel):
             self.width_control.setSingleStep(0.1)
             self.width_control.setValue(0.5)
         elif style == 'tube':
-            self.width_control.setMaximum(2.0)
+            self.width_control.setMaximum(5.0)
             self.width_control.setMinimum(0)
-            self.width_control.setSingleStep(0.05)
-            self.width_control.setValue(0.1)
+            self.width_control.setSingleStep(0.1)
+            self.width_control.setValue(0.5)
         
         # Single render at the end
         if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):

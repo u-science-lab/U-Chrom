@@ -236,25 +236,27 @@ class PyVistaBackend(RenderingBackend):
         """Add a tube to the scene."""
         if points.shape[0] < 2:
             return None
-            
-        # For better performance, use PolyLine directly without spline interpolation
-        # This creates a simpler tube that renders faster
-        polyline = pv.PolyData()
-        polyline.points = points
-        cells = np.full((points.shape[0] - 1, 3), 2, dtype=np.int_)
-        cells[:, 1] = np.arange(0, points.shape[0] - 1, dtype=np.int_)
-        cells[:, 2] = np.arange(1, points.shape[0], dtype=np.int_)
-        polyline.lines = cells
         
-        # Create tube with reduced complexity
-        tube = polyline.tube(radius=radius, n_sides=6)  # Reduced to 6 sides for performance
+        # Use Spline for smooth, continuous tube
+        # Determine number of interpolation points based on input size
+        n_points = min(points.shape[0] * 3, 1000)  # Interpolate for smoothness, cap for performance
         
-        # Optionally decimate for very complex meshes
         try:
-            if tube.n_cells > 2000:  # Only decimate if really needed
-                tube = tube.decimate(0.5)  # Simple 50% reduction
-        except:
-            pass  # Skip if decimate fails
+            # Create a smooth spline through all points
+            spline = pv.Spline(points, n_points=n_points)
+            # Create tube from the spline - this ensures continuity
+            tube = spline.tube(radius=radius, n_sides=12)
+        except Exception:
+            # Fallback to PolyLine if Spline fails
+            polyline = pv.PolyData()
+            polyline.points = points
+            n_pts = points.shape[0]
+            # Create a single continuous polyline
+            cells = np.zeros(n_pts + 1, dtype=np.int_)
+            cells[0] = n_pts
+            cells[1:] = np.arange(n_pts)
+            polyline.lines = cells
+            tube = polyline.tube(radius=radius, n_sides=12)
         
         # Handle color
         if isinstance(color, tuple) or isinstance(color, list):
@@ -270,9 +272,9 @@ class PyVistaBackend(RenderingBackend):
             tube,
             name=name,
             color=color_rgb,
-            smooth_shading=False,  # Disable for better performance
-            specular=0.1,          # Reduce specular for simpler shading
-            specular_power=10,     # Lower for faster rendering
+            smooth_shading=True,   # Enable for smoother tube appearance
+            specular=0.3,          # Moderate specular for nicer shading
+            specular_power=15,     # Balanced for good appearance
             interpolate_before_map=False,  # Disable interpolation
             lighting=True,
             render_points_as_spheres=False,
