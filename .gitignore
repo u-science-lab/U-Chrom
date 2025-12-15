@@ -9,3 +9,6 @@ imgui.ini
 *.csv
 *.egg-info
 *.json
+
+# Temporary files
+WALKTHROUGH_TEMP.md
