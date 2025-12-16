@@ -69,6 +69,8 @@ class PyVistaBackend(RenderingBackend):
         self.on_move_callback = None
         self.on_wheel_callback = None
         self.on_double_click_callback = None
+        self._last_click_time = 0
+        self._double_click_threshold = 0.3  # 300ms for double-click detection
         
         # Connect Qt events
         self._connect_events()
@@ -232,20 +234,35 @@ class PyVistaBackend(RenderingBackend):
         # Don't render immediately for better batch performance
         return handle
     
-    def add_tube(self, points: np.ndarray, color=None, radius: float = 0.5, opacity: float = 1.0) -> Any:
-        """Add a tube to the scene."""
+    def add_tube(self, points: np.ndarray, color=None, radius: float = 0.5, opacity: float = 1.0, sphere_fill: bool = False) -> Any:
+        """Add a tube to the scene.
+        
+        Args:
+            points: Array of 3D points defining the tube path
+            color: Color for the tube
+            radius: Tube radius
+            opacity: Tube transparency (0-1)
+            sphere_fill: If True, use high-quality mode with more interpolation
+        """
         if points.shape[0] < 2:
             return None
         
         # Use Spline for smooth, continuous tube
-        # Higher interpolation = smoother curves at corners
-        n_points = min(points.shape[0] * 5, 2000)  # 5x interpolation for very smooth curves
+        # Higher interpolation = smoother curves
+        if sphere_fill:
+            # High quality mode: much more interpolation points
+            n_points = min(points.shape[0] * 10, 5000)
+            n_sides = 20  # More sides for smoother surface
+        else:
+            # Standard mode: balanced performance
+            n_points = min(points.shape[0] * 3, 1500)
+            n_sides = 12
         
         try:
             # Create a smooth spline through all points
             spline = pv.Spline(points, n_points=n_points)
             # Create tube from the spline - this ensures continuity
-            tube = spline.tube(radius=radius, n_sides=12)
+            tube = spline.tube(radius=radius, n_sides=n_sides)
         except Exception:
             # Fallback to PolyLine if Spline fails
             polyline = pv.PolyData()
@@ -256,7 +273,7 @@ class PyVistaBackend(RenderingBackend):
             cells[0] = n_pts
             cells[1:] = np.arange(n_pts)
             polyline.lines = cells
-            tube = polyline.tube(radius=radius, n_sides=12)
+            tube = polyline.tube(radius=radius, n_sides=n_sides)
         
         # Handle color
         if isinstance(color, tuple) or isinstance(color, list):

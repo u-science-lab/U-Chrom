@@ -79,6 +79,13 @@ class ChromatinProps(LayerPropsPanel):
         self.opacity_control.setSingleStep(0.05)
         self.opacity_control.setValue(1.0)
         self.opacity_control.valueChanged.connect(self.on_opacity_changed)
+
+        # High quality mode checkbox (for tube mode)
+        self.sphere_fill_checkbox = QCheckBox("High Quality (slow)")
+        self.sphere_fill_checkbox.setChecked(False)
+        self.sphere_fill_checkbox.setToolTip("Use more interpolation points for smoother curves. Better quality but slower rendering.")
+        self.sphere_fill_checkbox.stateChanged.connect(self.on_sphere_fill_changed)
+        self.sphere_fill_checkbox.setVisible(False)  # Only visible in tube mode
  
         l_color_mode = QLabel("Color")
         # Mode: Rainbow or Custom HEX
@@ -204,17 +211,17 @@ class ChromatinProps(LayerPropsPanel):
         self.labels_group.setVisible(False)
 
 
-        # Add to model group layout
         model_layout.addWidget(l_style, 0, 0)
         model_layout.addWidget(self.model_style_select, 0, 1)
         model_layout.addWidget(l_width, 1, 0)
         model_layout.addWidget(self.width_control, 1, 1)
         model_layout.addWidget(l_opacity, 2, 0)
         model_layout.addWidget(self.opacity_control, 2, 1)
-        model_layout.addWidget(l_color_mode, 3, 0)
-        model_layout.addWidget(self.model_color_mode, 3, 1)
-        model_layout.addWidget(self.single_color_btn, 4, 0)
-        model_layout.addWidget(self.single_color_hex, 4, 1)
+        model_layout.addWidget(self.sphere_fill_checkbox, 3, 0, 1, 2)  # Span 2 columns
+        model_layout.addWidget(l_color_mode, 4, 0)
+        model_layout.addWidget(self.model_color_mode, 4, 1)
+        model_layout.addWidget(self.single_color_btn, 5, 0)
+        model_layout.addWidget(self.single_color_hex, 5, 1)
         self.model_group.setLayout(model_layout)
 
         # Layer Label Group
@@ -474,6 +481,9 @@ class ChromatinProps(LayerPropsPanel):
 
     def on_model_style_change(self):
         style = self.model_style_select.currentText()
+        # Show/hide sphere fill checkbox based on style
+        self.sphere_fill_checkbox.setVisible(style == 'tube')
+        
         # Update all layers
         for layer in self.layers:
             layer.remove()
@@ -497,6 +507,16 @@ class ChromatinProps(LayerPropsPanel):
             self.width_control.setValue(0.5)
         
         # Single render at the end
+        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
+            self.layers[0].canvas.backend.render()
+
+    def on_sphere_fill_changed(self):
+        """Handle sphere fill checkbox state change."""
+        sphere_fill = self.sphere_fill_checkbox.isChecked()
+        for layer in self.layers:
+            layer.cache_props['sphere_fill'] = sphere_fill
+            layer.remove()
+            layer.draw()
         if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
             self.layers[0].canvas.backend.render()
 

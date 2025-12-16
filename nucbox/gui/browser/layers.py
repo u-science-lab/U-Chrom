@@ -195,6 +195,7 @@ class ChromatinLayer(Layer):
                     self.vis_handles.append(handle)
                     self.vis_objs.append(self._create_vis_obj_wrapper(handle))
             elif style == 'tube':
+                sphere_fill = props.get('sphere_fill', False)
                 if isinstance(colors_rgba, np.ndarray) and colors_rgba.ndim == 2:
                     self._draw_gradient_tube(pos, colors_rgba, width/2, props)
                 else:
@@ -202,7 +203,8 @@ class ChromatinLayer(Layer):
                         pos,
                         color=colors_rgba,
                         radius=width/2,
-                        opacity=opacity
+                        opacity=opacity,
+                        sphere_fill=sphere_fill
                     )
                     if handle is not None:
                         self.vis_handles.append(handle)
@@ -222,6 +224,7 @@ class ChromatinLayer(Layer):
 
     def _draw_gradient_tube(self, pos, colors_rgba, radius, props):
         max_segments = int(props.get('tube_gradient_segments', 50))
+        sphere_fill = props.get('sphere_fill', False)
         total_points = pos.shape[0]
         if total_points <= max_segments * 2:
             step = max(2, total_points // max_segments)
@@ -234,7 +237,8 @@ class ChromatinLayer(Layer):
                         seg,
                         color=c,
                         radius=radius,
-                        opacity=float(props.get('opacity', 1.0))
+                        opacity=float(props.get('opacity', 1.0)),
+                        sphere_fill=sphere_fill
                     )
                     if handle is not None:
                         self.vis_handles.append(handle)
@@ -251,7 +255,8 @@ class ChromatinLayer(Layer):
                         seg,
                         color=c,
                         radius=radius,
-                        opacity=float(props.get('opacity', 1.0))
+                        opacity=float(props.get('opacity', 1.0)),
+                        sphere_fill=sphere_fill
                     )
                     if handle is not None:
                         self.vis_handles.append(handle)
