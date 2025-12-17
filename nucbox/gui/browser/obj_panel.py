@@ -79,6 +79,13 @@ class ChromatinProps(LayerPropsPanel):
         self.opacity_control.setSingleStep(0.05)
         self.opacity_control.setValue(1.0)
         self.opacity_control.valueChanged.connect(self.on_opacity_changed)
+
+        # High quality mode checkbox (for tube mode)
+        self.high_quality_checkbox = QCheckBox("High Quality (slow)")
+        self.high_quality_checkbox.setChecked(False)
+        self.high_quality_checkbox.setToolTip("Use more interpolation points for smoother curves. Better quality but slower rendering.")
+        self.high_quality_checkbox.stateChanged.connect(self.on_high_quality_changed)
+        self.high_quality_checkbox.setVisible(False)  # Only visible in tube mode
  
         l_color_mode = QLabel("Color")
         # Mode: Rainbow or Custom HEX
@@ -204,17 +211,17 @@ class ChromatinProps(LayerPropsPanel):
         self.labels_group.setVisible(False)
 
 
-        # Add to model group layout
         model_layout.addWidget(l_style, 0, 0)
         model_layout.addWidget(self.model_style_select, 0, 1)
         model_layout.addWidget(l_width, 1, 0)
         model_layout.addWidget(self.width_control, 1, 1)
         model_layout.addWidget(l_opacity, 2, 0)
         model_layout.addWidget(self.opacity_control, 2, 1)
-        model_layout.addWidget(l_color_mode, 3, 0)
-        model_layout.addWidget(self.model_color_mode, 3, 1)
-        model_layout.addWidget(self.single_color_btn, 4, 0)
-        model_layout.addWidget(self.single_color_hex, 4, 1)
+        model_layout.addWidget(self.high_quality_checkbox, 3, 0, 1, 2)  # Span 2 columns
+        model_layout.addWidget(l_color_mode, 4, 0)
+        model_layout.addWidget(self.model_color_mode, 4, 1)
+        model_layout.addWidget(self.single_color_btn, 5, 0)
+        model_layout.addWidget(self.single_color_hex, 5, 1)
         self.model_group.setLayout(model_layout)
 
         # Layer Label Group
@@ -474,6 +481,9 @@ class ChromatinProps(LayerPropsPanel):
 
     def on_model_style_change(self):
         style = self.model_style_select.currentText()
+        # Show/hide sphere fill checkbox based on style
+        self.high_quality_checkbox.setVisible(style == 'tube')
+        
         # Update all layers
         for layer in self.layers:
             layer.remove()
@@ -491,12 +501,22 @@ class ChromatinProps(LayerPropsPanel):
             self.width_control.setSingleStep(0.1)
             self.width_control.setValue(0.5)
         elif style == 'tube':
-            self.width_control.setMaximum(2.0)
+            self.width_control.setMaximum(5.0)
             self.width_control.setMinimum(0)
-            self.width_control.setSingleStep(0.05)
-            self.width_control.setValue(0.1)
+            self.width_control.setSingleStep(0.1)
+            self.width_control.setValue(0.5)
         
         # Single render at the end
+        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
+            self.layers[0].canvas.backend.render()
+
+    def on_high_quality_changed(self):
+        """Handle high quality checkbox state change."""
+        high_quality = self.high_quality_checkbox.isChecked()
+        for layer in self.layers:
+            layer.cache_props['high_quality'] = high_quality
+            layer.remove()
+            layer.draw()
         if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
             self.layers[0].canvas.backend.render()
 

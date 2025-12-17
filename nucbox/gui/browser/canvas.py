@@ -92,6 +92,9 @@ class Canvas:
         # Control panel
         self.control_panel = CanvasControl(self)
         
+        # Connect double-click to reset camera (uses Qt native event)
+        self.backend.on_double_click_callback = self._on_double_click
+        
         # Misc
         self.info = {}
         self.frozen = False
@@ -100,6 +103,10 @@ class Canvas:
         """Create native widget - compatibility method."""
         # Already created in parent __init__
         pass
+    
+    def _on_double_click(self):
+        """Reset camera to default position on double-click."""
+        self.backend.reset_camera()
     
     def freeze(self):
         """Freeze canvas updates - compatibility method."""

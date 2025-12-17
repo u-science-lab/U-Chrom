@@ -68,6 +68,7 @@ class PyVistaBackend(RenderingBackend):
         self.on_click_callback = None
         self.on_move_callback = None
         self.on_wheel_callback = None
+        self.on_double_click_callback = None
         
         # Connect Qt events
         self._connect_events()
@@ -231,29 +232,50 @@ class PyVistaBackend(RenderingBackend):
         # Don't render immediately for better batch performance
         return handle
     
-    def add_tube(self, points: np.ndarray, color=None, radius: float = 0.5, opacity: float = 1.0) -> Any:
-        """Add a tube to the scene."""
+    def add_tube(self, points: np.ndarray, color=None, radius: float = 0.5, opacity: float = 1.0, high_quality: bool = False) -> Any:
+        """Add a tube to the scene.
+        
+        Args:
+            points: Array of 3D points defining the tube path
+            color: Color for the tube
+            radius: Tube radius
+            opacity: Tube transparency (0-1)
+            high_quality: If True, use high-quality mode with more interpolation
+        """
         if points.shape[0] < 2:
             return None
-            
-        # For better performance, use PolyLine directly without spline interpolation
-        # This creates a simpler tube that renders faster
-        polyline = pv.PolyData()
-        polyline.points = points
-        cells = np.full((points.shape[0] - 1, 3), 2, dtype=np.int_)
-        cells[:, 1] = np.arange(0, points.shape[0] - 1, dtype=np.int_)
-        cells[:, 2] = np.arange(1, points.shape[0], dtype=np.int_)
-        polyline.lines = cells
         
-        # Create tube with reduced complexity
-        tube = polyline.tube(radius=radius, n_sides=6)  # Reduced to 6 sides for performance
+        # Use Spline for smooth, continuous tube
+        # Higher interpolation = smoother curves
+        if high_quality:
+            # High quality: 10x interpolation for very smooth curves at sharp bends
+            # Cap at 5000 to prevent excessive memory usage on very long chromatin paths
+            n_points = min(points.shape[0] * 10, 5000)
+            # 20 sides creates a nearly circular cross-section (18° per face)
+            n_sides = 20
+        else:
+            # Standard: 3x interpolation balances smoothness vs performance
+            # Cap at 1500 for reasonable rendering speed on typical datasets
+            n_points = min(points.shape[0] * 3, 1500)
+            # 12 sides is visually acceptable (30° per face) with good performance
+            n_sides = 12
         
-        # Optionally decimate for very complex meshes
         try:
-            if tube.n_cells > 2000:  # Only decimate if really needed
-                tube = tube.decimate(0.5)  # Simple 50% reduction
-        except:
-            pass  # Skip if decimate fails
+            # Create a smooth spline through all points
+            spline = pv.Spline(points, n_points=n_points)
+            # Create tube from the spline - this ensures continuity
+            tube = spline.tube(radius=radius, n_sides=n_sides)
+        except Exception:
+            # Fallback to PolyLine if Spline fails
+            polyline = pv.PolyData()
+            polyline.points = points
+            n_pts = points.shape[0]
+            # Create a single continuous polyline
+            cells = np.zeros(n_pts + 1, dtype=np.int_)
+            cells[0] = n_pts
+            cells[1:] = np.arange(n_pts)
+            polyline.lines = cells
+            tube = polyline.tube(radius=radius, n_sides=n_sides)
         
         # Handle color
         if isinstance(color, tuple) or isinstance(color, list):
@@ -269,9 +291,9 @@ class PyVistaBackend(RenderingBackend):
             tube,
             name=name,
             color=color_rgb,
-            smooth_shading=False,  # Disable for better performance
-            specular=0.1,          # Reduce specular for simpler shading
-            specular_power=10,     # Lower for faster rendering
+            smooth_shading=True,   # Enable for smoother tube appearance
+            specular=0.3,          # Moderate specular for nicer shading
+            specular_power=15,     # Balanced for good appearance
             interpolate_before_map=False,  # Disable interpolation
             lighting=True,
             render_points_as_spheres=False,
@@ -629,6 +651,22 @@ class PyVistaBackend(RenderingBackend):
         """Connect internal Qt events."""
         # Handle widget resize
         self.widget.resizeEvent = self._on_resize
+        
+        # Handle double-click using Qt native event
+        self._original_double_click = getattr(self.plotter, 'mouseDoubleClickEvent', None)
+        self.plotter.mouseDoubleClickEvent = self._on_double_click
+    
+    def _on_double_click(self, event):
+        """Handle double-click event."""
+        if self.on_double_click_callback:
+            self.on_double_click_callback()
+        # Still call original handler if exists
+        if self._original_double_click:
+            try:
+                self._original_double_click(event)
+            except Exception as e:
+                import logging
+                logging.warning(f"Error in original double-click handler: {e}")
     
     def _setup_interaction_callbacks(self):
         """Set up callbacks to optimize rendering during interaction."""
