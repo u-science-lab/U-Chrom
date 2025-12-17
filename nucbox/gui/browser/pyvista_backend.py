@@ -69,8 +69,6 @@ class PyVistaBackend(RenderingBackend):
         self.on_move_callback = None
         self.on_wheel_callback = None
         self.on_double_click_callback = None
-        self._last_click_time = 0
-        self._double_click_threshold = 0.3  # 300ms for double-click detection
         
         # Connect Qt events
         self._connect_events()
@@ -234,7 +232,7 @@ class PyVistaBackend(RenderingBackend):
         # Don't render immediately for better batch performance
         return handle
     
-    def add_tube(self, points: np.ndarray, color=None, radius: float = 0.5, opacity: float = 1.0, sphere_fill: bool = False) -> Any:
+    def add_tube(self, points: np.ndarray, color=None, radius: float = 0.5, opacity: float = 1.0, high_quality: bool = False) -> Any:
         """Add a tube to the scene.
         
         Args:
@@ -242,20 +240,24 @@ class PyVistaBackend(RenderingBackend):
             color: Color for the tube
             radius: Tube radius
             opacity: Tube transparency (0-1)
-            sphere_fill: If True, use high-quality mode with more interpolation
+            high_quality: If True, use high-quality mode with more interpolation
         """
         if points.shape[0] < 2:
             return None
         
         # Use Spline for smooth, continuous tube
         # Higher interpolation = smoother curves
-        if sphere_fill:
-            # High quality mode: much more interpolation points
+        if high_quality:
+            # High quality: 10x interpolation for very smooth curves at sharp bends
+            # Cap at 5000 to prevent excessive memory usage on very long chromatin paths
             n_points = min(points.shape[0] * 10, 5000)
-            n_sides = 20  # More sides for smoother surface
+            # 20 sides creates a nearly circular cross-section (18° per face)
+            n_sides = 20
         else:
-            # Standard mode: balanced performance
+            # Standard: 3x interpolation balances smoothness vs performance
+            # Cap at 1500 for reasonable rendering speed on typical datasets
             n_points = min(points.shape[0] * 3, 1500)
+            # 12 sides is visually acceptable (30° per face) with good performance
             n_sides = 12
         
         try:
@@ -639,23 +641,11 @@ class PyVistaBackend(RenderingBackend):
             self.plotter.track_click_position(callback=self._on_click_wrapper, side='left')
     
     def _on_click_wrapper(self, pos):
-        """Wrapper for click events with double-click detection."""
-        import time
-        current_time = time.time()
-        time_diff = current_time - self._last_click_time
-        
-        if time_diff < self._double_click_threshold:
-            # Double-click detected
-            if self.on_double_click_callback:
-                self.on_double_click_callback()
-            self._last_click_time = 0  # Reset to prevent triple-click
-        else:
-            # Single click
-            if self.on_click_callback:
-                # Create a mock event object similar to VisPy
-                event = type('Event', (), {'pos': pos})
-                self.on_click_callback(event)
-            self._last_click_time = current_time
+        """Wrapper for click events."""
+        if self.on_click_callback:
+            # Create a mock event object similar to VisPy
+            event = type('Event', (), {'pos': pos})
+            self.on_click_callback(event)
     
     def _connect_events(self):
         """Connect internal Qt events."""
@@ -674,8 +664,9 @@ class PyVistaBackend(RenderingBackend):
         if self._original_double_click:
             try:
                 self._original_double_click(event)
-            except Exception:
-                pass
+            except Exception as e:
+                import logging
+                logging.warning(f"Error in original double-click handler: {e}")
     
     def _setup_interaction_callbacks(self):
         """Set up callbacks to optimize rendering during interaction."""
