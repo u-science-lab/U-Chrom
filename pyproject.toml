@@ -2,10 +2,10 @@
 requires = ["setuptools", "wheel"]
 
 [project]
-name = "nucbox"
-version = "0.1.1"
+name = "u-chrom"
+version = "0.2.0"
 readme = "README.md"
-description = "Ultra fast chromosome 3D reconstraction."
+description = "Chromatin structure analysis toolkit."
 authors = [
     {name = "Weize Xu", email = "vet.xwz@gmail.com" },
 ]
@@ -27,5 +27,5 @@ dependencies = [
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["nucbox*"]
+include = ["uchrom*"]
 exclude = ["example-data*", "tests*"]
