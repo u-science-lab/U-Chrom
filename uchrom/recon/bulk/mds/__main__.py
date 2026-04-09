@@ -50,20 +50,34 @@ def main(input, output, resolution=100000, chrom=None,
          device='auto', alpha=4.0, alpha2=2.5, weight=0.05,
          n_iter=1000, lr=0.01, res_ratio=10,
          partitioned=False, tad_bed=None, n_workers=1,
-         verbose=False):
+         norm='KR', verbose=False,
+         inter=False, resolution_inter=1000000):
     """Reconstruct 3D chromatin structure from Hi-C data using MDS."""
     import torch
     from .torch_mds import run_mds, get_device
     from .partitioned import partitioned_mds
 
+    if inter:
+        from .inter import inter_mds
+        genome_df = inter_mds(
+            input, resolution_inter=resolution_inter,
+            resolution_intra=resolution, alpha=alpha,
+            weight=weight, n_iter=n_iter, device=device,
+            output_dir=output, verbose=True,
+        )
+        return
+
     print(f"Loading contacts from {input}...")
 
-    if input.endswith(('.mcool', '.cool')):
+    if input.endswith('.hic'):
+        from uchrom.io import load_hic
+        bins_df, contact_mat = load_hic(input, resolution, chrom, norm)
+    elif input.endswith(('.mcool', '.cool')):
         bins_df, contact_mat = load_contacts_from_mcool(
             input, resolution, chrom
         )
     else:
-        print("Error: Currently only .mcool/.cool files are supported")
+        print("Error: Supported formats: .hic, .mcool, .cool")
         return
 
     print(f"Contact matrix shape: {contact_mat.shape}")

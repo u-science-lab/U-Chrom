@@ -35,60 +35,63 @@ def contacts_to_matrix(bin1, bin2, counts, n, dtype=torch.float64):
     return mat
 
 
-def contact_to_distance(contact_mat, alpha=4.0, eps=1e-10):
-    """Convert contact frequencies to distances: d = c^(-1/alpha)."""
-    mat = torch.clamp(contact_mat, min=eps)
-    dist = torch.pow(mat, -1.0 / alpha)
+def contact_to_distance(contact_mat, alpha=4.0):
+    """Convert contact frequencies to distances: d = c^(-1/alpha).
+    Zero contacts are treated as missing data (distance = 0)."""
+    dist = torch.zeros_like(contact_mat)
+    nonzero = contact_mat > 0
+    dist[nonzero] = torch.pow(contact_mat[nonzero], -1.0 / alpha)
     dist.fill_diagonal_(0)
     return dist
 
 
-def fill_missing_distances_vectorized(dist_mat, contact_mat=None):
-    """Estimate missing distance values using genomic distance prior."""
+def fill_missing_distances(dist_mat, contact_mat=None):
+    """Fill zero (missing) distances using genomic distance prior.
+    After contact_to_distance, zeros represent missing data, not zero distance."""
     device = dist_mat.device
     dtype = dist_mat.dtype
     dist = dist_mat.clone()
     n = dist.shape[0]
 
-    finite_mask = torch.isfinite(dist)
-    if not finite_mask.any():
+    # identify missing entries: off-diagonal zeros
+    diag_mask = torch.eye(n, dtype=torch.bool, device=device)
+    missing = (dist == 0) & ~diag_mask
+
+    if not missing.any():
         return dist
 
-    max_valid = dist[finite_mask].max()
-    invalid_mask = ~finite_mask | (dist > max_valid * 10)
-
-    if not invalid_mask.any():
-        return dist
-
+    # compute average distance per genomic separation from observed entries
     idx = torch.arange(n, device=device, dtype=dtype)
     genomic_dist = torch.abs(idx.unsqueeze(0) - idx.unsqueeze(1))
 
-    valid_mask = ~invalid_mask & (genomic_dist > 0)
-    if valid_mask.any():
-        dist_per_unit = dist[valid_mask] / genomic_dist[valid_mask]
+    observed = (dist > 0) & ~diag_mask
+    if observed.any():
+        dist_per_unit = dist[observed] / genomic_dist[observed]
         avg_per_unit = dist_per_unit.mean()
     else:
-        avg_per_unit = max_valid / n
+        avg_per_unit = torch.tensor(1.0, device=device, dtype=dtype)
 
+    # fill missing with linear genomic distance estimate
     estimated = avg_per_unit * genomic_dist
-    dist = torch.where(invalid_mask, estimated, dist)
+    dist = torch.where(missing, estimated, dist)
     dist.fill_diagonal_(0)
 
     return dist
 
 
 def normalize_distances(dist_mat):
-    """Normalize distance matrix to have unit mean."""
-    n = dist_mat.shape[0]
-    mask = ~torch.eye(n, dtype=torch.bool, device=dist_mat.device)
-    mean_dist = dist_mat[mask].mean()
+    """Normalize distance matrix to have unit mean.
+    Includes zeros in mean calculation to match miniMDS behavior
+    (miniMDS divides by np.mean(distMat) which includes zeros)."""
+    mean_dist = dist_mat.mean()
     if mean_dist > 0:
         return dist_mat / mean_dist
     return dist_mat
 
 
-def apply_distance_decay_prior_vectorized(contact_mat, weight=0.05):
-    """Apply distance decay prior to smooth contact frequencies."""
+def apply_distance_decay_prior(contact_mat, weight=0.05):
+    """Apply distance decay prior to smooth contact frequencies.
+    Expected values computed from nonzero contacts only (matching miniMDS)."""
     device = contact_mat.device
     dtype = contact_mat.dtype
     n = contact_mat.shape[0]
@@ -104,20 +107,16 @@ def apply_distance_decay_prior_vectorized(contact_mat, weight=0.05):
     flat_dists = genomic_dist[triu_mask]
     flat_contacts = contact_mat[triu_mask]
 
-    expected_sum.scatter_add_(0, flat_dists, flat_contacts)
-    counts.scatter_add_(0, flat_dists, torch.ones_like(flat_contacts))
+    # only count nonzero contacts for expected value calculation
+    nonzero = flat_contacts > 0
+    flat_dists_nz = flat_dists[nonzero]
+    flat_contacts_nz = flat_contacts[nonzero]
+
+    expected_sum.scatter_add_(0, flat_dists_nz, flat_contacts_nz)
+    counts.scatter_add_(0, flat_dists_nz, torch.ones_like(flat_contacts_nz))
 
     expected = expected_sum / torch.clamp(counts, min=1)
     expected_mat = expected[genomic_dist]
 
     result = (1 - weight) * contact_mat + weight * expected_mat
     return result
-
-
-# aliases
-def fill_missing_distances(dist_mat, contact_mat=None):
-    return fill_missing_distances_vectorized(dist_mat, contact_mat)
-
-
-def apply_distance_decay_prior(contact_mat, weight=0.05):
-    return apply_distance_decay_prior_vectorized(contact_mat, weight)

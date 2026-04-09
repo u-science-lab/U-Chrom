@@ -10,6 +10,7 @@ from .core import (
 )
 from .torch_mds import torch_mds, compute_stress, run_mds
 from .partitioned import partitioned_mds
+from .inter import inter_mds
 from .transforms import (
     procrustes_alignment,
     apply_transform,
@@ -26,6 +27,7 @@ __all__ = [
     'compute_stress',
     'run_mds',
     'partitioned_mds',
+    'inter_mds',
     'procrustes_alignment',
     'apply_transform',
     'compute_radius_of_gyration',

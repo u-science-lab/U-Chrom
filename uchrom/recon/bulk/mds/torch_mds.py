@@ -24,12 +24,14 @@ def get_dtype(device):
 
 
 def compute_stress(coords, dist_mat, weights=None):
-    """Compute MDS stress: sum w_ij * (||x_i - x_j|| - d_ij)^2."""
+    """Compute MDS stress, skipping missing-data pairs (dist_mat == 0)."""
     pred_dist = torch.cdist(coords, coords)
     diff_sq = (pred_dist - dist_mat) ** 2
     if weights is not None:
         diff_sq = weights * diff_sq
-    stress = torch.triu(diff_sq, diagonal=1).sum()
+    # only sum over pairs with observed distances (nonzero upper triangle)
+    mask = torch.triu(dist_mat > 0, diagonal=1)
+    stress = (diff_sq * mask).sum()
     return stress
 
 
@@ -57,9 +59,84 @@ def cmds_init(dist_mat):
     return coords
 
 
+def smacof(dist_mat, device='auto', n_iter=1000, tol=1e-6,
+           init='cmds', verbose=False):
+    """Run SMACOF (Scaling by MAjorizing a Complicated Function) MDS.
+
+    Unlike the Adam-based approach, SMACOF uses a majorization algorithm
+    that does not require autograd, resulting in much lower per-iteration
+    overhead on CPU."""
+    dev = get_device(device)
+    dtype = get_dtype(dev)
+
+    if isinstance(dist_mat, np.ndarray):
+        dist_mat = torch.from_numpy(dist_mat)
+    dist_mat = dist_mat.to(dtype=dtype, device=dev)
+    n = dist_mat.shape[0]
+
+    # weight matrix: 1 for observed pairs, 0 for missing (precomputed)
+    diag_mask = torch.eye(n, dtype=torch.bool, device=dev)
+    W = ((dist_mat > 0) & ~diag_mask).to(dtype=dtype)
+
+    # V diagonal (row sums of W) — used as denominator in Guttman transform
+    V_diag = W.sum(dim=1)
+    V_diag = torch.clamp(V_diag, min=1.0)  # avoid division by zero
+
+    # initialize coordinates
+    if init == 'cmds':
+        coords = cmds_init(dist_mat)
+    else:
+        coords = torch.randn(n, 3, dtype=dtype, device=dev)
+
+    prev_stress = float('inf')
+    with torch.no_grad():
+        for i in range(n_iter):
+            # current pairwise distances
+            d_current = torch.cdist(coords, coords)
+
+            # compute stress (only on observed pairs, upper triangle)
+            diff_sq = (d_current - dist_mat) ** 2
+            mask_upper = torch.triu(W, diagonal=1)
+            stress = (diff_sq * mask_upper).sum().item()
+
+            if verbose and i % 100 == 0:
+                print(f"Iteration {i}: stress = {stress:.6f}")
+
+            # convergence check (relative)
+            if prev_stress != float('inf'):
+                rel_change = abs(prev_stress - stress) / max(prev_stress, 1e-12)
+                if rel_change < tol:
+                    if verbose:
+                        print(f"Converged at iteration {i}")
+                    break
+            prev_stress = stress
+
+            # Guttman transform: B matrix
+            # B[i,j] = -W[i,j] * d_target[i,j] / d_current[i,j]
+            safe_d = torch.clamp(d_current, min=1e-12)
+            B = -W * dist_mat / safe_d
+            B.fill_diagonal_(0)
+            B.diagonal().copy_(-B.sum(dim=1))
+
+            # update: coords = B @ coords / V_diag
+            coords = B @ coords / V_diag.unsqueeze(1)
+
+    coords = coords - coords.mean(dim=0, keepdim=True)
+    return coords.cpu().numpy()
+
+
 def torch_mds(dist_mat, device='auto', n_iter=1000, lr=0.01,
-              tol=1e-6, init='cmds', verbose=False):
-    """Run iterative MDS using Adam optimizer."""
+              tol=1e-6, init='cmds', verbose=False, method='smacof'):
+    """Run iterative MDS.
+
+    Args:
+        method: 'smacof' (default, fast) or 'adam' (gradient descent).
+    """
+    if method == 'smacof':
+        return smacof(dist_mat, device=device, n_iter=n_iter,
+                      tol=tol, init=init, verbose=verbose)
+
+    # Adam-based gradient descent (original implementation)
     dev = get_device(device)
     dtype = get_dtype(dev)
 
@@ -98,10 +175,11 @@ def torch_mds(dist_mat, device='auto', n_iter=1000, lr=0.01,
 
 
 def run_mds(contact_mat, alpha=4.0, device='auto', weight=0.05, **kwargs):
-    """Full MDS pipeline: contact matrix -> 3D coordinates."""
+    """Full MDS pipeline: contact matrix -> 3D coordinates.
+    Missing data (zero contacts) are skipped in stress computation,
+    matching the miniMDS approach."""
     from .core import (
         contact_to_distance,
-        fill_missing_distances,
         normalize_distances,
         apply_distance_decay_prior
     )
@@ -116,7 +194,7 @@ def run_mds(contact_mat, alpha=4.0, device='auto', weight=0.05, **kwargs):
         contact_mat = apply_distance_decay_prior(contact_mat, weight)
 
     dist_mat = contact_to_distance(contact_mat, alpha)
-    dist_mat = fill_missing_distances(dist_mat, contact_mat)
+    # do NOT fill missing distances — compute_stress skips zero pairs
     dist_mat = normalize_distances(dist_mat)
 
     coords = torch_mds(dist_mat, device=device, **kwargs)
