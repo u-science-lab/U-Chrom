@@ -1,5 +1,6 @@
 from ._io import (
-    read_pairs, load_cool, read_particles, read_3dg,
+    read_pairs, load_cool, load_hic, load_hic_inter, load_hic_genome,
+    read_particles, read_3dg,
     open_file, export_pdb_coords, particles_to_pdb,
 )
 from .particles import (

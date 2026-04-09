@@ -65,6 +65,288 @@ def load_cool(path, pos='mid'):
     return pixel_df
 
 
+def load_hic(path, resolution, chrom=None, norm='KR'):
+    """Load contact matrix from .hic file using hicstraw."""
+    try:
+        import hicstraw
+    except ImportError:
+        raise ImportError(
+            "hicstraw is required to read .hic files. "
+            "Install it with: pip install hic-straw"
+        )
+
+    hic = hicstraw.HiCFile(path)
+    chromosomes = hic.getChromosomes()
+    # build chrom name -> length lookup (skip 'All')
+    chrom_info = {c.name: c.length for c in chromosomes if c.name != 'All'}
+
+    if chrom is not None:
+        # strip 'chr' prefix if needed to match hic file convention
+        chrom_key = chrom
+        if chrom_key not in chrom_info:
+            chrom_key = chrom.replace('chr', '')
+        if chrom_key not in chrom_info:
+            raise ValueError(
+                f"Chromosome {chrom} not found. "
+                f"Available: {list(chrom_info.keys())}"
+            )
+
+        import numpy as np
+
+        chrom_len = chrom_info[chrom_key]
+        n_bins = (chrom_len + resolution - 1) // resolution
+
+        # use getRecords API (strawAsMatrix segfaults on large chromosomes)
+        mzd = hic.getMatrixZoomData(
+            chrom_key, chrom_key, 'observed', norm, 'BP', resolution
+        )
+        records = mzd.getRecords(0, chrom_len, 0, chrom_len)
+
+        matrix = np.zeros((n_bins, n_bins))
+        for rec in records:
+            i = rec.binX // resolution
+            j = rec.binY // resolution
+            if i < n_bins and j < n_bins:
+                val = rec.counts
+                if np.isfinite(val):
+                    matrix[i, j] = val
+                    matrix[j, i] = val
+
+        # build bins dataframe
+        starts = [i * resolution for i in range(n_bins)]
+        ends = [min((i + 1) * resolution, chrom_len) for i in range(n_bins)]
+        bins_df = pd.DataFrame({
+            'chrom': chrom,
+            'start': starts,
+            'end': ends,
+            'idx': range(n_bins),
+        })
+
+        return bins_df, matrix
+    else:
+        raise ValueError("Whole-genome mode not yet supported for .hic files. "
+                         "Please specify --chrom.")
+
+
+def load_hic_inter(path, resolution, chrom1, chrom2, norm='KR'):
+    """Load inter-chromosomal contact matrix from .hic file."""
+    try:
+        import hicstraw
+    except ImportError:
+        raise ImportError(
+            "hicstraw is required to read .hic files. "
+            "Install it with: pip install hic-straw"
+        )
+    import numpy as np
+
+    hic = hicstraw.HiCFile(path)
+    chromosomes = hic.getChromosomes()
+    chrom_info = {c.name: c.length for c in chromosomes if c.name != 'All'}
+
+    # resolve chrom names
+    def resolve(name):
+        if name in chrom_info:
+            return name
+        alt = name.replace('chr', '')
+        if alt in chrom_info:
+            return alt
+        raise ValueError(f"Chromosome {name} not found. Available: {list(chrom_info.keys())}")
+
+    key1, key2 = resolve(chrom1), resolve(chrom2)
+    len1, len2 = chrom_info[key1], chrom_info[key2]
+    n1 = (len1 + resolution - 1) // resolution
+    n2 = (len2 + resolution - 1) // resolution
+
+    mzd = hic.getMatrixZoomData(key1, key2, 'observed', norm, 'BP', resolution)
+    records = mzd.getRecords(0, len1, 0, len2)
+
+    matrix = np.zeros((n1, n2))
+    for rec in records:
+        i = rec.binX // resolution
+        j = rec.binY // resolution
+        if i < n1 and j < n2:
+            val = rec.counts
+            if np.isfinite(val):
+                matrix[i, j] = val
+
+    return matrix
+
+
+def load_hic_genome(path, resolution, chroms=None, norm='KR'):
+    """Load whole-genome contact matrix (intra + inter) from .hic or .mcool.
+
+    Returns:
+        bins_df: DataFrame with chrom, start, end, idx for all bins
+        matrix: N x N whole-genome contact matrix
+        offsets: dict mapping chrom name -> start index in the matrix
+        chrom_sizes: dict mapping chrom name -> number of bins
+    """
+    import numpy as np
+
+    if path.endswith(('.mcool', '.cool')):
+        return _load_genome_mcool(path, resolution, chroms)
+    elif path.endswith('.hic'):
+        return _load_genome_hic(path, resolution, chroms, norm)
+    else:
+        raise ValueError(f"Unsupported format: {path}. Use .hic, .mcool, or .cool")
+
+
+def _load_genome_mcool(path, resolution, chroms=None):
+    """Load whole-genome contact matrix from .mcool/.cool file."""
+    import numpy as np
+    from cooler import Cooler
+
+    if '::' in path:
+        clr = Cooler(path)
+    else:
+        clr = Cooler(f"{path}::resolutions/{resolution}")
+
+    if chroms is None:
+        skip = {'chrY', 'Y', 'chrMT', 'MT', 'chrM', 'M'}
+        chroms = [c for c in clr.chromnames if c not in skip]
+
+    # compute offsets and bins
+    offsets = {}
+    all_bins = []
+    total = 0
+    chrom_sizes = {}
+    for c in chroms:
+        chrom_bins = clr.bins().fetch(c)
+        n_bins = len(chrom_bins)
+        offsets[c] = total
+        chrom_sizes[c] = n_bins
+        for i in range(n_bins):
+            all_bins.append({
+                'chrom': c,
+                'start': int(chrom_bins['start'].iloc[i]),
+                'end': int(chrom_bins['end'].iloc[i]),
+                'idx': total + i,
+            })
+        total += n_bins
+
+    bins_df = pd.DataFrame(all_bins)
+    matrix = np.zeros((total, total))
+
+    # fill matrix block by block
+    for i, c1 in enumerate(chroms):
+        o1 = offsets[c1]
+        n1 = chrom_sizes[c1]
+
+        # intra-chromosomal
+        intra = clr.matrix(balance=True).fetch(c1)
+        intra = np.nan_to_num(intra, nan=0.0)
+        matrix[o1:o1+n1, o1:o1+n1] = intra
+
+        # inter-chromosomal
+        for j in range(i + 1, len(chroms)):
+            c2 = chroms[j]
+            o2 = offsets[c2]
+            n2 = chrom_sizes[c2]
+            try:
+                inter = clr.matrix(balance=True).fetch(c1, c2)
+                inter = np.nan_to_num(inter, nan=0.0)
+                matrix[o1:o1+n1, o2:o2+n2] = inter
+                matrix[o2:o2+n2, o1:o1+n1] = inter.T
+            except Exception:
+                pass
+
+    return bins_df, matrix, offsets, chrom_sizes
+
+
+def _load_genome_hic(path, resolution, chroms=None, norm='KR'):
+    """Load whole-genome contact matrix from .hic file."""
+    try:
+        import hicstraw
+    except ImportError:
+        raise ImportError("hicstraw is required. Install with: pip install hic-straw")
+    import numpy as np
+
+    hic = hicstraw.HiCFile(path)
+    chrom_info_raw = {c.name: c.length for c in hic.getChromosomes()
+                      if c.name != 'All'}
+
+    if chroms is None:
+        skip = {'Y', 'MT', 'M'}
+        chroms = [c for c in chrom_info_raw if c not in skip
+                  and c.replace('chr', '') not in skip]
+        chroms = sorted(chroms, key=lambda x: (
+            0 if x.replace('chr', '').isdigit() else 1,
+            int(x.replace('chr', '')) if x.replace('chr', '').isdigit() else ord(x.replace('chr', ''))
+        ))
+
+    # compute offsets and bins
+    offsets = {}
+    all_bins = []
+    total = 0
+    chrom_sizes = {}
+    for c in chroms:
+        key = c if c in chrom_info_raw else c.replace('chr', '')
+        clen = chrom_info_raw[key]
+        n_bins = (clen + resolution - 1) // resolution
+        offsets[c] = total
+        chrom_sizes[c] = n_bins
+        display_name = c if c.startswith('chr') else f'chr{c}'
+        for i in range(n_bins):
+            all_bins.append({
+                'chrom': display_name,
+                'start': i * resolution,
+                'end': min((i + 1) * resolution, clen),
+                'idx': total + i,
+            })
+        total += n_bins
+
+    bins_df = pd.DataFrame(all_bins)
+    matrix = np.zeros((total, total))
+
+    # resolve chrom keys
+    chrom_keys = {}
+    for c in chroms:
+        chrom_keys[c] = c if c in chrom_info_raw else c.replace('chr', '')
+
+    # fill matrix (reuse single HiCFile object)
+    for i, c1 in enumerate(chroms):
+        key1 = chrom_keys[c1]
+        n1 = chrom_sizes[c1]
+        o1 = offsets[c1]
+        len1 = chrom_info_raw[key1]
+
+        # intra-chromosomal (diagonal block)
+        mzd = hic.getMatrixZoomData(key1, key1, 'observed', norm, 'BP', resolution)
+        records = mzd.getRecords(0, len1, 0, len1)
+        for rec in records:
+            ri = rec.binX // resolution
+            rj = rec.binY // resolution
+            if ri < n1 and rj < n1:
+                val = rec.counts
+                if np.isfinite(val):
+                    matrix[o1+ri, o1+rj] = val
+                    matrix[o1+rj, o1+ri] = val
+
+        # inter-chromosomal (off-diagonal blocks)
+        for j in range(i + 1, len(chroms)):
+            c2 = chroms[j]
+            key2 = chrom_keys[c2]
+            n2 = chrom_sizes[c2]
+            o2 = offsets[c2]
+            len2 = chrom_info_raw[key2]
+            try:
+                mzd = hic.getMatrixZoomData(
+                    key1, key2, 'observed', norm, 'BP', resolution)
+                records = mzd.getRecords(0, len1, 0, len2)
+                for rec in records:
+                    ri = rec.binX // resolution
+                    rj = rec.binY // resolution
+                    if ri < n1 and rj < n2:
+                        val = rec.counts
+                        if np.isfinite(val):
+                            matrix[o1+ri, o2+rj] = val
+                            matrix[o2+rj, o1+ri] = val
+            except Exception:
+                pass  # some pairs may not have data
+
+    return bins_df, matrix, offsets, chrom_sizes
+
+
 def export_pdb_coords(file_path, particles, scale=1.0, extended=True):
     """
     Write chromosome particle coordinates as a PDB format file

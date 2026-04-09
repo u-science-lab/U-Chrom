@@ -176,7 +176,7 @@ class CanvasControl(QWidget):
         
         # Remove chromosome labels that are tied to the current layer context
         # Safer behavior: whenever a layer is deleted, remove existing chr labels
-        # and let subsequent current-layer selection重新决定是否重建
+        # and let subsequent current-layer selection decide whether to rebuild
         try:
             if self.chr_label_layer is not None:
                 self.chr_label_layer.remove()
