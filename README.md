@@ -1,6 +1,34 @@
 # U-Chrom
 
-Chromatin structure analysis toolkit.
+**U**niversal **Chrom**atin structure data analysis toolkit.
+
+U-Chrom provides a unified framework for chromatin 3D structure analysis. The core data structure is a **structure table** — genomic bins mapped to 3D coordinates (x, y, z). This table can be obtained from:
+
+- **Sequencing-based data** (Hi-C, Dip-C, etc.) via 3D reconstruction algorithms
+- **Imaging-based data** (DNA FISH, chromatin tracing, etc.) via image processing and chromatin tracing
+
+Based on this core data structure, U-Chrom supports a range of downstream analyses:
+
+- Reconstruct distance matrices from 3D coordinates
+- Identify chromatin structures (A/B compartments, TADs, loops)
+- Embed single-cell structures for population-level analysis
+- Compute geometric features
+- Interactive 3D visualization
+
+## Modules
+
+| Module | Description |
+|--------|-------------|
+| `uchrom.io` | Read/write standard formats (.pairs, .cool, .hic, .3dg, .csv, .pdb) |
+| `uchrom.recon.sc` | Single-cell 3D reconstruction (Nuc Dynamics, GEM) |
+| `uchrom.recon.bulk` | Bulk Hi-C 3D reconstruction (MDS/SMACOF) |
+| `uchrom.recon.fish` | Reconstruction combining sequencing and imaging data |
+| `uchrom.im` | Image processing for chromatin tracing data |
+| `uchrom.strc` | Structure identification (TAD, loop, compartment) |
+| `uchrom.fea` | Geometric feature computation |
+| `uchrom.emb` | Single-cell structure embedding |
+| `uchrom.pl` | Plotting utilities |
+| `uchrom.browser` | Interactive 3D structure browser |
 
 ## Install
 
@@ -23,25 +51,27 @@ $ pip install -e .
 
 ## Usage
 
-Reconstruct genome using Nuc Dynamics algorithm:
+### Single-cell 3D reconstruction
 
 ```bash
 $ python -m uchrom.recon.sc.nucdyn --arch=cuda ./cell1.pairs.gz ./out1.csv --use-grid=True --scale=0.01
 ```
 
-Visualize the reconstructed genome:
+### Bulk Hi-C 3D reconstruction
+
+```bash
+$ python -m uchrom.recon.bulk.mds ./data.mcool ./out.csv --resolution=100000 --chrom=chr1
+```
+
+### Visualize the reconstructed structure
 
 ```bash
 $ python -m uchrom.browser ./out1.csv
 ```
 
-### Rendering Features
-- **PyVista Backend** (default): Hardware-accelerated rendering with 5-6x performance improvement
-- **Rendering Modes**: Tube (3D), Line, Points
-
 ![demo](./demo1.png)
 
-Convert the particles CSV file to PDB file(for visualization in PyMol or VMD):
+### Convert to PDB format (for PyMol / VMD)
 
 ```bash
 $ python -m uchrom.io particles_to_pdb ./out1.csv ./out1.pdb --split-by-chrom=True
