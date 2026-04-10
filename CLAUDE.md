@@ -49,6 +49,56 @@ uchrom/
 └── op.py            Misc operations (mark empty particles)
 ```
 
+## ChromData — Core Data Container
+
+`ChromData` (`uchrom.core.ChromData`) is the central data structure, analogous to AnnData for scRNA-seq.
+
+### Hierarchy
+
+Cell → Trace → Spot/Bin
+
+### Attributes
+
+```
+ChromData
+├── coords      np.ndarray (n_spots, 3)     x, y, z coordinates
+├── spots       pd.DataFrame (n_spots)      chrom, start, end, trace_id, [cell_id]
+├── cells       pd.DataFrame (n_cells)      cell-level metadata (cell_type, position, ...)
+├── cellm       dict[str, ndarray]           per-cell multi-dim (embeddings, UMAP, ...)
+├── tracks      pd.DataFrame (n_spots)      epigenomic signals per bin (ATAC, ChIP, ...)
+├── traces      pd.DataFrame (n_traces)     trace-level metadata
+├── layers      dict[str, ndarray]           alternative coords, each (n_spots, 3)
+├── results     dict                         analysis outputs (tads, loops, compartments)
+└── uns         dict                         metadata (genome_assembly, xyz_unit, ...)
+```
+
+### Key Design Decisions
+
+- **No `spotp` (pairwise matrices)**: Distance/contact matrices are per-trace, not global. Use `cd.compute_distances(trace_id=X)` on demand instead of storing O(n²) matrices.
+- **Categorical dtypes**: `chrom`, `trace_id`, `cell_id` are auto-converted to `pd.Categorical` for ~10x memory savings on string columns.
+- **FOF-CT compatible**: `ChromData.from_fofct(path)` reads the 4DN FISH Omics Format core table. Column mapping: Spot_ID→spot_id, Trace_ID→trace_id, X/Y/Z→coords, Chrom→chrom, Chrom_Start/End→start/end.
+- **HDF5 persistence**: `.h5cd` format via `cd.write(path)` / `ChromData.read(path)`. DataFrames stored as per-column datasets, categorical as byte strings.
+- **Validation on construction**: Checks coords shape, spots required columns, tracks alignment, layers shape.
+- **Flat storage, hierarchical access**: All spots across all cells stored flat. Use `cd.get_cell(id)` / `cd.get_trace(id)` / `cd.get_chrom(name)` for subsetting, which returns a new ChromData.
+
+### spots Required Columns
+
+| Column | Type | Required | FOF-CT mapping |
+|--------|------|----------|----------------|
+| chrom | str (category) | yes | Chrom |
+| start | int | yes | Chrom_Start |
+| end | int | yes | Chrom_End |
+| trace_id | int/str (category) | yes | Trace_ID |
+| cell_id | int/str (category) | no | Cell_ID |
+
+### I/O Methods
+
+- `ChromData(coords, spots, ...)` — direct construction
+- `ChromData.from_dataframe(df)` — from reconstruction CSV (chrom, start, end, x, y, z); auto-assigns one trace per chromosome
+- `ChromData.from_fofct(path)` — from FOF-CT core table; parses `##` headers into `uns`
+- `cd.write('data.h5cd')` / `ChromData.read('data.h5cd')` — HDF5 roundtrip
+- `cd.to_dataframe()` — export as flat DataFrame
+
 ## Technical Notes
 
 - **GPU frameworks**: Taichi (sc reconstruction), PyTorch (bulk MDS). They coexist but don't interact.
