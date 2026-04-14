@@ -480,8 +480,14 @@ class PyVistaBackend(RenderingBackend):
     def _position_overlay(self, position: str):
         """Position the overlay label based on position string."""
         widget_size = self.widget.size()
+
+        # Constrain label width to viewport so it doesn't overflow in split view
+        max_width = max(widget_size.width() - 20, 40)
+        self.overlay_label.setMaximumWidth(max_width)
+        self.overlay_label.adjustSize()
+
         label_size = self.overlay_label.sizeHint()
-        
+
         x, y = 10, 10  # Default margins
         pos_lower = position.lower()
         
