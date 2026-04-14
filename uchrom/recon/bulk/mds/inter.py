@@ -72,19 +72,23 @@ def inter_mds(input_path, resolution_inter=1000000, resolution_intra=100000,
         print(f"\n[2/4] Global MDS (scaffold)...")
     t0 = time.time()
     genome_tensor = torch.from_numpy(genome_mat.astype(np.float64))
-    scaffold_coords = run_mds(
+    scaffold_coords, scaffold_mask = run_mds(
         genome_tensor, alpha=alpha, device=device,
         weight=weight, n_iter=n_iter, verbose=False,
     )
     if verbose:
         print(f"  Scaffold MDS: {time.time()-t0:.1f}s")
 
-    # extract per-chromosome scaffold coordinates
+    # extract per-chromosome scaffold coordinates (mapping through mask)
     scaffold_per_chrom = {}
+    scaffold_idx = 0
     for c in chrom_list:
         o = offsets[c]
         n = chrom_sizes[c]
-        scaffold_per_chrom[c] = scaffold_coords[o:o+n]
+        chrom_mask = scaffold_mask[o:o+n]
+        n_kept = chrom_mask.sum()
+        scaffold_per_chrom[c] = scaffold_coords[scaffold_idx:scaffold_idx+n_kept]
+        scaffold_idx += n_kept
 
     # ── Step 3: Per-chromosome high-resolution MDS ────────────────────
     if verbose:
@@ -107,10 +111,11 @@ def inter_mds(input_path, resolution_inter=1000000, resolution_intra=100000,
             continue
 
         contact_tensor = torch.from_numpy(contact_mat.astype(np.float64))
-        coords = run_mds(
+        coords, nonzero_mask = run_mds(
             contact_tensor, alpha=alpha, device=device,
             weight=weight, n_iter=n_iter, verbose=False,
         )
+        bins_df = bins_df[nonzero_mask].reset_index(drop=True)
         high_res_results[c] = {
             'coords': coords,
             'bins_df': bins_df,

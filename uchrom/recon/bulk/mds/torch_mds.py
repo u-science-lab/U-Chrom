@@ -176,8 +176,16 @@ def torch_mds(dist_mat, device='auto', n_iter=1000, lr=0.01,
 
 def run_mds(contact_mat, alpha=4.0, device='auto', weight=0.05, **kwargs):
     """Full MDS pipeline: contact matrix -> 3D coordinates.
-    Missing data (zero contacts) are skipped in stress computation,
-    matching the miniMDS approach."""
+
+    Zero-contact bins (rows/columns with no observed contacts) are removed
+    before MDS, matching miniMDS behavior. Returns coordinates only for
+    non-zero bins.
+
+    Returns:
+        coords: np.ndarray of shape (n_nonzero, 3)
+        nonzero_mask: np.ndarray boolean mask of shape (n_total,)
+            indicating which bins were kept
+    """
     from .core import (
         contact_to_distance,
         normalize_distances,
@@ -190,12 +198,23 @@ def run_mds(contact_mat, alpha=4.0, device='auto', weight=0.05, **kwargs):
 
     print(f"Processing on device: {dev} (dtype: {dtype})")
 
+    # Identify zero-contact bins BEFORE applying distance decay prior
+    row_sums = contact_mat.sum(dim=1)
+    nonzero_mask = (row_sums > 0).cpu().numpy()
+    n_total = len(nonzero_mask)
+    n_nonzero = nonzero_mask.sum()
+
+    if n_nonzero < n_total:
+        idx = torch.where(torch.from_numpy(nonzero_mask).to(dev))[0]
+        contact_mat = contact_mat[idx][:, idx]
+        print(f"  Removed {n_total - n_nonzero} zero-contact bins "
+              f"({n_nonzero}/{n_total} kept)")
+
     if weight > 0:
         contact_mat = apply_distance_decay_prior(contact_mat, weight)
 
     dist_mat = contact_to_distance(contact_mat, alpha)
-    # do NOT fill missing distances — compute_stress skips zero pairs
     dist_mat = normalize_distances(dist_mat)
 
     coords = torch_mds(dist_mat, device=device, **kwargs)
-    return coords
+    return coords, nonzero_mask

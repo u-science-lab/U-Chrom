@@ -107,7 +107,7 @@ def main(input, output, resolution=100000, chrom=None,
             n_workers=n_workers
         )
     else:
-        coords = run_mds(
+        coords, nonzero_mask = run_mds(
             contact_tensor,
             alpha=alpha,
             device=device,
@@ -116,6 +116,7 @@ def main(input, output, resolution=100000, chrom=None,
             lr=lr,
             verbose=verbose
         )
+        bins_df = bins_df[nonzero_mask].reset_index(drop=True)
 
     save_structure(coords, bins_df, output)
     print("Done!")
