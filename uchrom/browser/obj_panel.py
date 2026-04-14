@@ -457,39 +457,60 @@ class ChromatinProps(LayerPropsPanel):
             # re-render for transparency
             new_layer.parent.re_render(parent=True)
 
+    def _get_main_window(self):
+        """Get main window reference for link_canvas check."""
+        from PyQt5.QtWidgets import QApplication
+        for widget in QApplication.topLevelWidgets():
+            if hasattr(widget, 'link_canvas') and hasattr(widget, 'get_all_canvas'):
+                return widget
+        return None
+
+    def _get_linked_layers_and_canvases(self):
+        """Get all layers and canvases when linked, else current only."""
+        main = self._get_main_window()
+        if main and main.link_canvas:
+            layers = []
+            canvases = []
+            for canvas in main.get_all_canvas():
+                layers.extend(canvas.control_panel.layers)
+                canvases.append(canvas)
+            return layers, canvases
+        return self.layers, [self.layers[0].canvas] if self.layers else []
+
+    def _render_canvases(self, canvases):
+        """Render all given canvases."""
+        for canvas in canvases:
+            if hasattr(canvas.backend, 'render'):
+                canvas.backend.render()
+
     def on_width_changed(self):
         style = self.model_style_select.currentText()
         width = self.width_control.value()
-        for layer in self.layers:
+        layers, canvases = self._get_linked_layers_and_canvases()
+        for layer in layers:
             layer.cache_props['width'] = width
-            # Only redraw for non-line styles (tube, points need full redraw)
             if style != "line":
                 layer.remove()
                 layer.draw(width=width)
-        # Single render call at the end instead of multiple re_render calls
-        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
-            self.layers[0].canvas.backend.render()
+        self._render_canvases(canvases)
 
     def on_opacity_changed(self):
         val = self.opacity_control.value()
-        for layer in self.layers:
+        layers, canvases = self._get_linked_layers_and_canvases()
+        for layer in layers:
             layer.set_props('opacity', val)
             layer.cache_props['opacity'] = val
-        # Lightweight path: backend updates opacity directly; avoid redraw
-        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
-            self.layers[0].canvas.backend.render()
+        self._render_canvases(canvases)
 
     def on_model_style_change(self):
         style = self.model_style_select.currentText()
-        # Show/hide sphere fill checkbox based on style
         self.high_quality_checkbox.setVisible(style == 'tube')
-        
-        # Update all layers
-        for layer in self.layers:
+
+        layers, canvases = self._get_linked_layers_and_canvases()
+        for layer in layers:
             layer.remove()
             layer.draw(style=style)
-        
-        # Update width control settings based on style
+
         if style == 'line':
             self.width_control.setMaximum(20.0)
             self.width_control.setMinimum(1.0)
@@ -505,34 +526,32 @@ class ChromatinProps(LayerPropsPanel):
             self.width_control.setMinimum(0)
             self.width_control.setSingleStep(0.1)
             self.width_control.setValue(0.5)
-        
-        # Single render at the end
-        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
-            self.layers[0].canvas.backend.render()
+
+        self._render_canvases(canvases)
 
     def on_high_quality_changed(self):
         """Handle high quality checkbox state change."""
         high_quality = self.high_quality_checkbox.isChecked()
-        for layer in self.layers:
+        layers, canvases = self._get_linked_layers_and_canvases()
+        for layer in layers:
             layer.cache_props['high_quality'] = high_quality
             layer.remove()
             layer.draw()
-        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
-            self.layers[0].canvas.backend.render()
+        self._render_canvases(canvases)
 
     def on_model_color_mode_change(self):
         mode = self.model_color_mode.currentText()
         is_single = (mode == 'Custom')
-        # Toggle custom controls
         self.single_color_btn.setVisible(is_single)
         self.single_color_hex.setVisible(is_single)
-        for layer in self.layers:
+        layers, canvases = self._get_linked_layers_and_canvases()
+        for layer in layers:
             layer.cache_props['color_mode'] = 'single' if is_single else 'rainbow'
             if not is_single:
                 layer.remove()
                 layer.draw()
-        if not is_single and self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
-            self.layers[0].canvas.backend.render()
+        if not is_single:
+            self._render_canvases(canvases)
 
     def on_pick_single_color(self):
         current = QColor(self.single_color_hex.text() or "#FFFFFF")
@@ -553,16 +572,13 @@ class ChromatinProps(LayerPropsPanel):
             pass
 
     def _apply_single_color(self, hex_color: str):
-        for layer in self.layers:
+        layers, canvases = self._get_linked_layers_and_canvases()
+        for layer in layers:
             layer.cache_props['color_mode'] = 'single'
             layer.cache_props['single_color'] = hex_color
             layer.remove()
             layer.draw()
-        
-        # Single render at the end
-        if self.layers and hasattr(self.layers[0].canvas.backend, 'render'):
-            self.layers[0].canvas.backend.render()
-        # Update style availability after color mode change
+        self._render_canvases(canvases)
         self._update_style_availability()
     
 
@@ -794,41 +810,40 @@ class ChromatinProps(LayerPropsPanel):
 
     def on_label_font_changed(self):
         val = self.label_font_control.value()
-        # apply to current canvas only
         if len(self.layers) == 0:
             return
-        canvas = self.layers[0].canvas
-        canvas.set_layer_title_font_size(val)
+        _, canvases = self._get_linked_layers_and_canvases()
+        for canvas in canvases:
+            canvas.set_layer_title_font_size(val)
 
     def on_label_position_changed(self):
         position = self.label_position_control.currentText()
-        # apply to current canvas only
         if len(self.layers) == 0:
             return
-        canvas = self.layers[0].canvas
-        canvas.set_layer_title_position(position)
+        _, canvases = self._get_linked_layers_and_canvases()
+        for canvas in canvases:
+            canvas.set_layer_title_position(position)
 
     def on_label_color_changed(self):
         color_name = self.label_color_control.currentText()
         is_custom = (color_name == 'Custom')
-        
-        # Toggle custom controls visibility
+
         self.label_color_btn.setVisible(is_custom)
         self.label_color_hex.setVisible(is_custom)
-        
+
         if len(self.layers) == 0:
             return
-        
-        canvas = self.layers[0].canvas
+
+        _, canvases = self._get_linked_layers_and_canvases()
         if is_custom:
-            # Use hex color from input field
             hex_color = self.label_color_hex.text()
             from PyQt5.QtGui import QColor
             if hex_color and QColor(hex_color).isValid():
-                canvas.set_layer_title_color_hex(hex_color)
+                for canvas in canvases:
+                    canvas.set_layer_title_color_hex(hex_color)
         else:
-            # Use predefined color name
-            canvas.set_layer_title_color(color_name)
+            for canvas in canvases:
+                canvas.set_layer_title_color(color_name)
     
     def on_pick_label_color(self):
         """Open color picker for label color."""
@@ -858,17 +873,18 @@ class ChromatinProps(LayerPropsPanel):
         """Apply custom hex color to label."""
         if len(self.layers) == 0:
             return
-        canvas = self.layers[0].canvas
-        canvas.set_layer_title_color_hex(hex_color)
+        _, canvases = self._get_linked_layers_and_canvases()
+        for canvas in canvases:
+            canvas.set_layer_title_color_hex(hex_color)
 
     def on_bg_color_changed(self):
         color_name = self.bg_color_control.currentText()
-        # apply to current canvas only
         if len(self.layers) == 0:
             return
-        canvas = self.layers[0].canvas
-        canvas.set_background_color(color_name)
-        canvas.update_layer_title()
+        _, canvases = self._get_linked_layers_and_canvases()
+        for canvas in canvases:
+            canvas.set_background_color(color_name)
+            canvas.update_layer_title()
 
     def _update_chromosome_list(self):
         # Update the chromosome dropdown list
