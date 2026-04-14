@@ -75,9 +75,8 @@ class PyVistaBackend(RenderingBackend):
         
         # Track camera state for synchronization
         self._camera_state = None
-        
-        # Set up interaction callbacks for performance optimization
-        self._setup_interaction_callbacks()
+        self._syncing_camera = False
+        self.on_camera_changed_callback = None
         
         # Render batching / debouncing
         self._render_blocked = 0

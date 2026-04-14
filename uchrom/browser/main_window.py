@@ -196,10 +196,12 @@ class MainWindow(QMainWindow):
     def add_canvas(self, orientation='h'):
         canvas = Canvas()
         canvas.create_native()
+        canvas.main_window = self
         canvas.native.setParent(self)
         canvas.view.events.mouse_press.connect(self.on_click_canvas)
         canvas.view.events.mouse_move.connect(self.trigger_other_canvas_mouse_event)
         canvas.view.events.mouse_wheel.connect(self.trigger_other_canvas_mouse_event)
+        self._setup_camera_sync(canvas)
         self.canvas = canvas
         ix = self.current_ix
         if orientation == 'h':
@@ -245,6 +247,30 @@ class MainWindow(QMainWindow):
 
     def get_all_canvas(self):
         return itertools.chain.from_iterable(self.canvas_grid)
+
+    def _setup_camera_sync(self, canvas):
+        """Add VTK observer to sync camera across linked canvases."""
+        try:
+            iren = canvas.backend.plotter.iren.interactor
+            def on_interaction(*args):
+                if not self.link_canvas:
+                    return
+                if getattr(self, '_syncing_camera', False):
+                    return
+                self._syncing_camera = True
+                try:
+                    src_state = canvas.backend.get_camera_state()
+                    for other in self.get_all_canvas():
+                        if other is not canvas:
+                            other.backend.set_camera_state(src_state)
+                            other.backend.plotter.reset_camera_clipping_range()
+                            other.backend.render()
+                finally:
+                    self._syncing_camera = False
+            iren.AddObserver('InteractionEvent', on_interaction)
+            iren.AddObserver('EndInteractionEvent', on_interaction)
+        except Exception:
+            pass
 
     def trigger_other_canvas_mouse_event(self, event):
         if not self.link_canvas:
