@@ -1,6 +1,93 @@
-from .prep import z_project, z_project_dir
+from ._base import (
+    Image2D,
+    Image3D,
+    LocalRegistrationResult,
+    LocalRegistrationRoundResult,
+    LocalizationResult,
+    MaskResult,
+    MatrixResult,
+    ProjectionResult,
+    Registration2DResult,
+    Registration2DRoundResult,
+    RoundBundle,
+    TraceResult,
+)
+from .io import (
+    load_image,
+    load_rounds,
+    save_array,
+    save_image,
+    save_localizations,
+    save_project,
+    save_registration,
+    save_traces,
+)
+from .loc import localize, save_localizations as save_localization_result
+from .prep import save_projected_array, z_project, z_project_array, z_project_dir
+from .prep.project import project
+from .qc import plot_registration_qc_arrays, plot_registration_qc_png
+from .reg import (
+    register_2d,
+    register_2d_arrays,
+    register_global,
+    register_local,
+    save_local_registration_result,
+    save_registration_2d_result,
+)
+from .seg import save_mask_result, segment
+from .trace import (
+    build_matrix,
+    build_traces,
+    filter_localizations,
+    register_localizations,
+    save_matrix,
+    save_traces as save_trace_result,
+)
+from .workspace import ImWorkspace
 
 __all__ = [
+    "Image2D",
+    "Image3D",
+    "RoundBundle",
+    "ProjectionResult",
+    "Registration2DRoundResult",
+    "Registration2DResult",
+    "LocalRegistrationRoundResult",
+    "LocalRegistrationResult",
+    "MaskResult",
+    "LocalizationResult",
+    "TraceResult",
+    "MatrixResult",
+    "ImWorkspace",
+    "load_image",
+    "load_rounds",
+    "save_array",
+    "save_image",
+    "save_project",
+    "save_registration",
+    "save_localizations",
+    "save_traces",
+    "project",
+    "z_project_array",
+    "save_projected_array",
     "z_project",
     "z_project_dir",
+    "register_global",
+    "register_local",
+    "save_local_registration_result",
+    "register_2d_arrays",
+    "save_registration_2d_result",
+    "register_2d",
+    "segment",
+    "save_mask_result",
+    "localize",
+    "save_localization_result",
+    "filter_localizations",
+    "register_localizations",
+    "build_traces",
+    "build_matrix",
+    "save_trace_result",
+    "save_matrix",
+    "plot_registration_qc_arrays",
+    "plot_registration_qc_png",
 ]

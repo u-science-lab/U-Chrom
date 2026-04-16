@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from skimage import io
 
+from uchrom.im._base import ensure_2d_array, ensure_3d_array
+
 
 VALID_TIFF_SUFFIXES = (".tif", ".tiff")
 
@@ -19,18 +21,7 @@ def _read_stack(path):
         raise ValueError(f"Only .tif/.tiff files are supported, got: {path}")
 
     stack = io.imread(str(path)).squeeze()
-    return _validate_stack(stack, source=str(path))
-
-
-def _validate_stack(arr, source="input"):
-    arr = np.asarray(arr)
-    if arr.ndim != 3:
-        raise ValueError(
-            f"Expected a 3D stack with shape (z, y, x), got {arr.ndim}D from {source}."
-        )
-    if min(arr.shape) < 1:
-        raise ValueError(f"Invalid empty stack from {source}: shape={arr.shape}")
-    return arr
+    return ensure_3d_array(stack, source=str(path))
 
 
 def _normalize_z_range(nz, zmin=None, zmax=None):
@@ -59,7 +50,6 @@ def _project_stack(stack, method="mip"):
 
 
 def _as_float64(array_2d):
-    """Convert projected output to float64 to match pyHiM's .npy dtype."""
     return np.asarray(array_2d, dtype=np.float64)
 
 
@@ -109,11 +99,39 @@ def _save_preview_png(array_2d, preview_dir, stem):
     return str(png_path)
 
 
-def _load_and_project_stack(stack, method="mip", zmin=None, zmax=None):
-    stack = _validate_stack(stack)
+def _normalize_save_mode(save):
+    if save in (False, None, "none"):
+        return None
+    if save in (True, "selected", "all"):
+        return "all"
+    raise ValueError(f"Unsupported save mode: {save}")
+
+
+def z_project_array(stack, method="mip", zmin=None, zmax=None):
+    stack = ensure_3d_array(stack, source="input array")
     zmin, zmax = _normalize_z_range(stack.shape[0], zmin=zmin, zmax=zmax)
     projected = _project_stack(stack[zmin:zmax], method=method)
     return _as_float64(projected)
+
+
+def project(stack, method="mip", zmin=None, zmax=None):
+    """
+    Array-first z projection.
+
+    This is the recommended U-Chrom API. File-based helpers such as
+    `z_project` remain available for compatibility and explicit I/O.
+    """
+    return z_project_array(stack, method=method, zmin=zmin, zmax=zmax)
+
+
+def save_projected_array(array_2d, out_dir, out_name):
+    array_2d = _as_float64(ensure_2d_array(array_2d, source="projected array"))
+    stem = _resolve_output_stem(out_name, "projection_2d")
+    data_dir, preview_dir = _ensure_writable_dir(out_dir)
+    return {
+        "npy_path": _save_npy(array_2d, data_dir, stem),
+        "png_path": _save_preview_png(array_2d, preview_dir, stem),
+    }
 
 
 def z_project(
@@ -136,8 +154,9 @@ def z_project(
         Projection method. Supports "mip" and "sum".
     zmin, zmax : int | None
         Python-style z slicing range [zmin, zmax). If omitted, use the whole stack.
-    save : bool
-        If True, save both .npy and .png outputs.
+    save : bool | str
+        If truthy, save both .npy and .png outputs. Supported values are
+        False/None/"none" and True/"selected"/"all".
     out_dir : str | os.PathLike | None
         Output root directory. Results are saved into out_dir/data and out_dir/preview.
     out_name : str | None
@@ -148,6 +167,8 @@ def z_project(
     numpy.ndarray
         The 2D projected array.
     """
+    save_mode = _normalize_save_mode(save)
+
     if isinstance(src, (str, os.PathLike)):
         src_path = Path(src)
         stack = _read_stack(src_path)
@@ -157,17 +178,15 @@ def z_project(
         else:
             out_root = Path(out_dir)
     else:
-        stack = _validate_stack(src, source="input array")
+        stack = ensure_3d_array(src, source="input array")
         default_stem = "projection_2d"
         out_root = Path(out_dir) if out_dir is not None else (Path.cwd() / "project")
 
-    projected = _load_and_project_stack(stack, method=method, zmin=zmin, zmax=zmax)
+    projected = z_project_array(stack, method=method, zmin=zmin, zmax=zmax)
 
-    if save:
+    if save_mode is not None:
         stem = _resolve_output_stem(out_name, default_stem)
-        data_dir, preview_dir = _ensure_writable_dir(out_root)
-        _save_npy(projected, data_dir, stem)
-        _save_preview_png(projected, preview_dir, stem)
+        save_projected_array(projected, out_dir=out_root, out_name=stem)
 
     return projected
 
@@ -206,7 +225,6 @@ def z_project_dir(in_dir, method="mip", zmin=None, zmax=None, out_dir=None):
         raise FileNotFoundError(f"No .tif/.tiff files found in directory: {in_dir}")
 
     out_root = Path(out_dir) if out_dir is not None else _resolve_default_out_dir(in_dir)
-    data_dir, preview_dir = _ensure_writable_dir(out_root)
 
     records = []
     for path in tif_files:
@@ -217,14 +235,12 @@ def z_project_dir(in_dir, method="mip", zmin=None, zmax=None, out_dir=None):
             zmax=zmax,
             save=False,
         )
-        stem = f"{path.stem}_2d"
-        npy_path = _save_npy(projected, data_dir, stem)
-        png_path = _save_preview_png(projected, preview_dir, stem)
+        saved = save_projected_array(projected, out_dir=out_root, out_name=f"{path.stem}_2d")
         records.append(
             {
                 "input_path": str(path),
-                "npy_path": npy_path,
-                "png_path": png_path,
+                "npy_path": saved["npy_path"],
+                "png_path": saved["png_path"],
             }
         )
 
@@ -232,6 +248,9 @@ def z_project_dir(in_dir, method="mip", zmin=None, zmax=None, out_dir=None):
 
 
 __all__ = [
+    "project",
+    "z_project_array",
+    "save_projected_array",
     "z_project",
     "z_project_dir",
 ]
