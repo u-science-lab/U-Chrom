@@ -330,10 +330,11 @@ class MainWindow(QMainWindow):
         self.menubar.action_change_link_status.triggered.connect(self._on_link_toggled)
 
     def _on_link_toggled(self):
-        """Sync current canvas UI when link mode changes."""
-        layer = getattr(self.canvas.control_panel, 'current_layer', None)
-        if layer and hasattr(layer, 'control_panel') and hasattr(layer.control_panel, 'sync_ui_from_cache'):
-            layer.control_panel.sync_ui_from_cache()
+        """Sync all canvas UIs when link mode changes."""
+        for canvas in self.get_all_canvas():
+            layer = getattr(canvas.control_panel, 'current_layer', None)
+            if layer and hasattr(layer, 'control_panel') and hasattr(layer.control_panel, 'sync_ui_from_cache'):
+                layer.control_panel.sync_ui_from_cache()
 
     def _all_or_current(self, f):
         def wrap(*args, **kwargs):

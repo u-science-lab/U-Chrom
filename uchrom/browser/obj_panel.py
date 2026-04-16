@@ -496,6 +496,28 @@ class ChromatinProps(LayerPropsPanel):
         self.high_quality_checkbox.setChecked(props.get('high_quality', False))
         self.high_quality_checkbox.blockSignals(False)
 
+        # Sync layer label and background from canvas state
+        canvas = layer.canvas
+        self.label_font_control.blockSignals(True)
+        self.label_font_control.setValue(getattr(canvas.layer_title, 'font_size', 20.0))
+        self.label_font_control.blockSignals(False)
+
+        self.label_position_control.blockSignals(True)
+        pos = getattr(canvas, '_label_position', 'Top Left')
+        idx = self.label_position_control.findText(pos)
+        if idx >= 0:
+            self.label_position_control.setCurrentIndex(idx)
+        self.label_position_control.blockSignals(False)
+
+        bg_hex = getattr(canvas.view, 'bgcolor', '#000000')
+        bg_map = {'#000000': 'Black', '#FFFFFF': 'White', '#C0C0C0': 'Light Gray'}
+        bg_name = bg_map.get(bg_hex, 'Black')
+        self.bg_color_control.blockSignals(True)
+        idx = self.bg_color_control.findText(bg_name)
+        if idx >= 0:
+            self.bg_color_control.setCurrentIndex(idx)
+        self.bg_color_control.blockSignals(False)
+
     def _get_main_window(self):
         """Get main window reference for link_canvas check."""
         from PyQt5.QtWidgets import QApplication
@@ -586,11 +608,9 @@ class ChromatinProps(LayerPropsPanel):
         layers, canvases = self._get_linked_layers_and_canvases()
         for layer in layers:
             layer.cache_props['color_mode'] = 'single' if is_single else 'rainbow'
-            if not is_single:
-                layer.remove()
-                layer.draw()
-        if not is_single:
-            self._render_canvases(canvases)
+            layer.remove()
+            layer.draw()
+        self._render_canvases(canvases)
 
     def on_pick_single_color(self):
         current = QColor(self.single_color_hex.text() or "#FFFFFF")
@@ -920,7 +940,11 @@ class ChromatinProps(LayerPropsPanel):
         color_name = self.bg_color_control.currentText()
         if len(self.layers) == 0:
             return
-        _, canvases = self._get_linked_layers_and_canvases()
+        main = self._get_main_window()
+        if main and main.link_canvas:
+            canvases = list(main.get_all_canvas())
+        else:
+            canvases = [self.layers[0].canvas]
         for canvas in canvases:
             canvas.set_background_color(color_name)
             canvas.update_layer_title()
