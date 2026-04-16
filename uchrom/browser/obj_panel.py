@@ -457,6 +457,45 @@ class ChromatinProps(LayerPropsPanel):
             # re-render for transparency
             new_layer.parent.re_render(parent=True)
 
+    def sync_ui_from_cache(self):
+        """Update UI controls to reflect actual layer cache_props values."""
+        if not self.layers:
+            return
+        layer = self.layers[0]
+        props = layer.cache_props
+
+        self.model_style_select.blockSignals(True)
+        style = props.get('style', 'line')
+        idx = self.model_style_select.findText(style)
+        if idx >= 0:
+            self.model_style_select.setCurrentIndex(idx)
+        self.high_quality_checkbox.setVisible(style == 'tube')
+        self.model_style_select.blockSignals(False)
+
+        self.width_control.blockSignals(True)
+        self.width_control.setValue(props.get('width', 1.0))
+        self.width_control.blockSignals(False)
+
+        self.opacity_control.blockSignals(True)
+        self.opacity_control.setValue(props.get('opacity', 1.0))
+        self.opacity_control.blockSignals(False)
+
+        color_mode = props.get('color_mode', 'rainbow')
+        self.model_color_mode.blockSignals(True)
+        self.model_color_mode.setCurrentText('Custom' if color_mode == 'single' else 'Rainbow')
+        self.model_color_mode.blockSignals(False)
+        is_single = (color_mode == 'single')
+        self.single_color_btn.setVisible(is_single)
+        self.single_color_hex.setVisible(is_single)
+        if is_single:
+            hex_color = props.get('single_color', '#FFFFFF')
+            self.single_color_hex.setText(hex_color)
+            self.single_color_btn.setStyleSheet(f"background-color:{hex_color}")
+
+        self.high_quality_checkbox.blockSignals(True)
+        self.high_quality_checkbox.setChecked(props.get('high_quality', False))
+        self.high_quality_checkbox.blockSignals(False)
+
     def _get_main_window(self):
         """Get main window reference for link_canvas check."""
         from PyQt5.QtWidgets import QApplication

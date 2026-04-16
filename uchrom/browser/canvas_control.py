@@ -261,6 +261,9 @@ class CanvasControl(QWidget):
             control_panel = self.current_layer.control_panel
             self.set_props_panel(control_panel)
             self.layer_control.set_operations_panel(control_panel.operations_panel)
+            # Sync UI controls with actual rendering state
+            if hasattr(control_panel, 'sync_ui_from_cache'):
+                control_panel.sync_ui_from_cache()
             self.canvas.set_layer_title(str(self.current_layer))
             self._update_list_item_styles()
             # Update chromosome numbers for the newly selected layer
