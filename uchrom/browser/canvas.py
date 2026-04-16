@@ -43,6 +43,7 @@ class Canvas:
         self.view.bgcolor = "#000000"
         self.view.camera = self.camera
         self.view.scene = self
+        self.backend._canvas_ref = self
         self.view.events = type('ViewEvents', (), {
             'mouse_press': type('Event', (), {
                 'connect': lambda f: self.backend.connect_mouse_events(on_click=f),

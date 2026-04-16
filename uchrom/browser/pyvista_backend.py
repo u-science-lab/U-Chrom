@@ -637,29 +637,47 @@ class PyVistaBackend(RenderingBackend):
     
     def connect_mouse_events(self, on_click=None, on_move=None, on_wheel=None):
         """Connect mouse event handlers."""
-        self.on_click_callback = on_click
-        self.on_move_callback = on_move  
-        self.on_wheel_callback = on_wheel
-        
-        # PyVista has its own event system
         if on_click:
-            self.plotter.track_click_position(callback=self._on_click_wrapper, side='left')
+            self.on_click_callback = on_click
+        if on_move:
+            self.on_move_callback = on_move
+        if on_wheel:
+            self.on_wheel_callback = on_wheel
     
     def _on_click_wrapper(self, pos):
         """Wrapper for click events."""
         if self.on_click_callback:
-            # Create a mock event object similar to VisPy
-            event = type('Event', (), {'pos': pos})
+            canvas_ref = getattr(self, '_canvas_ref', None)
+            source = type('Source', (), {'canvas': canvas_ref})
+            event = type('Event', (), {'pos': pos, 'source': source})
             self.on_click_callback(event)
     
     def _connect_events(self):
         """Connect internal Qt events."""
         # Handle widget resize
         self.widget.resizeEvent = self._on_resize
-        
+
+        # Handle mouse press for canvas switching
+        self._original_mouse_press = getattr(self.plotter, 'mousePressEvent', None)
+        self.plotter.mousePressEvent = self._on_mouse_press
+
         # Handle double-click using Qt native event
         self._original_double_click = getattr(self.plotter, 'mouseDoubleClickEvent', None)
         self.plotter.mouseDoubleClickEvent = self._on_double_click
+
+    def _on_mouse_press(self, event):
+        """Handle mouse press for canvas switching."""
+        if self.on_click_callback:
+            canvas_ref = getattr(self, '_canvas_ref', None)
+            source = type('Source', (), {'canvas': canvas_ref})
+            mock_event = type('Event', (), {
+                'pos': (event.x(), event.y()),
+                'source': source,
+            })
+            self.on_click_callback(mock_event)
+        # Call original handler to preserve VTK interaction
+        if self._original_mouse_press:
+            self._original_mouse_press(event)
     
     def _on_double_click(self, event):
         """Handle double-click event."""
