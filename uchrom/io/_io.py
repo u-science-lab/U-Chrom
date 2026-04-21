@@ -25,9 +25,38 @@ def read_pairs(path):
 
 
 def read_particles(path):
+    """Read reconstruction output. Auto-detects format by extension.
+
+    - ``.h5cd``           → ChromData HDF5 (returned as flat DataFrame)
+    - ``.csv`` or other   → CSV
+    """
+    path_str = str(path)
+    if path_str.endswith(".h5cd"):
+        from uchrom.core import ChromData
+        cd = ChromData.read(path)
+        df = cd.to_dataframe()
+        df['chrom'] = df['chrom'].astype(str)
+        return df
     df = pd.read_csv(path, index_col=0, sep=",")
     df['chrom'] = df['chrom'].astype(str)
     return df
+
+
+def save_particles(df, path):
+    """Save reconstruction output. Default format is ``.h5cd`` (ChromData).
+
+    Format inferred from file extension:
+
+    - ``.csv``            → CSV via ``df.to_csv``
+    - ``.h5cd`` or other  → ChromData HDF5 (default)
+    """
+    path_str = str(path)
+    if path_str.endswith(".csv"):
+        df.to_csv(path)
+        return
+    from uchrom.core import ChromData
+    cd = ChromData.from_dataframe(df)
+    cd.write(path)
 
 
 def read_3dg(path):

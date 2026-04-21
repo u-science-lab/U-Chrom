@@ -34,7 +34,7 @@ def inter_mds(input_path, resolution_inter=1000000, resolution_intra=100000,
     Returns:
         genome_df: DataFrame with chrom, start, end, x, y, z for all bins
     """
-    from uchrom.io import load_hic, load_hic_genome
+    from uchrom.io import load_hic, load_hic_genome, save_particles
     from .__main__ import load_contacts_from_mcool
     from .torch_mds import run_mds, get_device
     from .transforms import (
@@ -180,13 +180,13 @@ def inter_mds(input_path, resolution_inter=1000000, resolution_intra=100000,
         all_dfs.append(df)
 
         if output_dir:
-            out_path = os.path.join(output_dir, f"{display_name}.csv")
-            df.to_csv(out_path, index=True)
+            out_path = os.path.join(output_dir, f"{display_name}.h5cd")
+            save_particles(df, out_path)
 
     genome_df = pd.concat(all_dfs, ignore_index=True)
 
     if output_dir:
-        genome_df.to_csv(os.path.join(output_dir, "genome.csv"), index=True)
+        save_particles(genome_df, os.path.join(output_dir, "genome.h5cd"))
 
     if verbose:
         print(f"\n  Total: {len(genome_df)} bins across "

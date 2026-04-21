@@ -7,7 +7,7 @@ import numpy as np
 
 
 from uchrom.recon._base import SimulationBase, Grid, deal_input
-from uchrom.io import remove_violated_contacts
+from uchrom.io import remove_violated_contacts, save_particles
 
 
 def get_restraints(particles, contacts, prams):
@@ -336,7 +336,7 @@ def main(in_file, out_file,
         if stage > 0:
             contacts = remove_violated_contacts(contacts, particles, prams['violated_threshold'])
         particles = run_once(particles, particle_size, contacts, prams, None)
-    particles.to_csv(out_file)
+    save_particles(particles, out_file)
 
 
 if __name__ == "__main__":
