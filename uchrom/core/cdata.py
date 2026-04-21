@@ -26,6 +26,15 @@ PathLike = Union[str, Path]
 _SPOTS_REQUIRED_COLUMNS = ("chrom", "start", "end", "trace_id")
 _CATEGORICAL_COLUMNS = ("chrom", "trace_id", "cell_id")
 
+# ``.h5cd`` on-disk format version. Semantics (MAJOR.MINOR):
+#   MAJOR bump  — breaking change: a reader for the old MAJOR cannot read the
+#                 new file without running a migration.
+#   MINOR bump  — additive/backwards-compatible change (e.g. a new optional
+#                 group or attribute).  Older readers should ignore unknown
+#                 fields and keep working.
+FORMAT_VERSION = "1.0"
+_SUPPORTED_MAJOR = 1
+
 
 class ChromData:
     """Chromatin Data container.
@@ -239,8 +248,15 @@ class ChromData:
         """Write to HDF5 (.h5cd) file."""
         import h5py
 
+        try:
+            from uchrom import __version__ as _uchrom_version
+        except Exception:
+            _uchrom_version = "unknown"
+
         path = Path(path)
         with h5py.File(path, "w") as f:
+            f.attrs["uchrom_format_version"] = FORMAT_VERSION
+            f.attrs["uchrom_version"] = _uchrom_version
             f.create_dataset("coords", data=self.coords)
             _write_dataframe(f, "spots", self.spots)
             _write_dataframe(f, "cells", self.cells)
@@ -253,32 +269,52 @@ class ChromData:
 
     @classmethod
     def read(cls, path: PathLike) -> "ChromData":
-        """Read from HDF5 (.h5cd) file."""
+        """Read from HDF5 (.h5cd) file.
+
+        Dispatches to a version-specific reader based on
+        ``f.attrs['uchrom_format_version']``.  Files written before
+        versioning was introduced are read with a warning using the v1.0
+        reader (the on-disk layout has been stable from the start).
+
+        Forward compatibility:
+
+        - Same MAJOR, higher MINOR  → read with a warning; unknown fields
+          are ignored silently by the lower-level helpers.
+        - Different MAJOR           → raise ``ValueError`` with guidance.
+        """
+        import warnings
         import h5py
 
         path = Path(path)
         with h5py.File(path, "r") as f:
-            coords = f["coords"][:]
-            spots = _read_dataframe(f, "spots")
-            cells = _read_dataframe(f, "cells")
-            tracks = _read_dataframe(f, "tracks")
-            traces = _read_dataframe(f, "traces")
-            layers = _read_dict_of_arrays(f, "layers")
-            cellm = _read_dict_of_arrays(f, "cellm")
-            results = _read_results(f, "results")
-            uns = _read_uns(f, "uns")
+            version_str = f.attrs.get("uchrom_format_version")
+            if version_str is None:
+                warnings.warn(
+                    f"{path}: missing uchrom_format_version attr; "
+                    f"assuming legacy 1.0 layout.",
+                    stacklevel=2,
+                )
+                version_str = "1.0"
+            elif isinstance(version_str, bytes):
+                version_str = version_str.decode("utf-8")
 
-        return cls(
-            coords,
-            spots,
-            cells=cells if len(cells) > 0 else None,
-            cellm=cellm or None,
-            tracks=tracks if len(tracks) > 0 else None,
-            traces=traces if len(traces) > 0 else None,
-            layers=layers or None,
-            results=results or None,
-            uns=uns or None,
-        )
+            major, minor = _parse_version(version_str)
+            if major != _SUPPORTED_MAJOR:
+                raise ValueError(
+                    f"{path}: format version {version_str} has incompatible "
+                    f"MAJOR with this uchrom (supports MAJOR={_SUPPORTED_MAJOR}). "
+                    f"Upgrade uchrom or convert the file."
+                )
+            cur_major, cur_minor = _parse_version(FORMAT_VERSION)
+            if minor > cur_minor:
+                warnings.warn(
+                    f"{path}: written with format version {version_str} "
+                    f"(reader supports up to {FORMAT_VERSION}). "
+                    f"Forward-compatible — unknown fields will be ignored.",
+                    stacklevel=2,
+                )
+
+            return _read_v1(cls, f)
 
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame, **kwargs) -> "ChromData":
@@ -469,6 +505,49 @@ def _pdist_matrix(coords: np.ndarray) -> np.ndarray:
     """Compute pairwise Euclidean distance matrix from (n, 3) coords."""
     diff = coords[:, None, :] - coords[None, :, :]
     return np.sqrt((diff ** 2).sum(axis=-1))
+
+
+def _parse_version(s: str):
+    """Parse 'MAJOR.MINOR' into a (major, minor) int tuple."""
+    parts = str(s).split(".")
+    try:
+        major = int(parts[0])
+        minor = int(parts[1]) if len(parts) > 1 else 0
+    except (ValueError, IndexError):
+        raise ValueError(f"invalid format version string: {s!r}")
+    return major, minor
+
+
+# ======================================================================
+# Version-specific readers
+# ======================================================================
+# Add new `_read_vN` functions as MAJOR bumps occur; dispatch from
+# ChromData.read().  Each reader is responsible for its on-disk layout
+# and may call a migration helper to produce the current in-memory form.
+
+def _read_v1(cls, f) -> "ChromData":
+    """Reader for .h5cd format MAJOR version 1."""
+    coords = f["coords"][:]
+    spots = _read_dataframe(f, "spots")
+    cells = _read_dataframe(f, "cells")
+    tracks = _read_dataframe(f, "tracks")
+    traces = _read_dataframe(f, "traces")
+    layers = _read_dict_of_arrays(f, "layers")
+    cellm = _read_dict_of_arrays(f, "cellm")
+    results = _read_results(f, "results")
+    uns = _read_uns(f, "uns")
+
+    return cls(
+        coords,
+        spots,
+        cells=cells if len(cells) > 0 else None,
+        cellm=cellm or None,
+        tracks=tracks if len(tracks) > 0 else None,
+        traces=traces if len(traces) > 0 else None,
+        layers=layers or None,
+        results=results or None,
+        uns=uns or None,
+    )
 
 
 # ======================================================================
