@@ -168,14 +168,43 @@ class ChromatinLayer(Layer):
         single_color = props.get('single_color', '#FFFFFF')
         opacity = float(props.get('opacity', 1.0))
         num_chrom = int(df['chrom'].nunique())
-        for chrom in df['chrom'].unique():
-            sdf = df[df['chrom'] == chrom]
+
+        # Group spots into polymers.  If ``trace_id`` is present (e.g. FOF-CT
+        # imaging data with many traces per chromosome), each trace is an
+        # independent polymer.  Otherwise fall back to one polymer per
+        # chromosome (reconstruction output convention).
+        if 'trace_id' in df.columns:
+            group_cols = ['chrom', 'trace_id']
+        else:
+            group_cols = ['chrom']
+        groups = df.groupby(group_cols, observed=True, sort=False)
+
+        # When color_mode == 'per_trace', each trace gets a distinct color
+        # from a cyclic palette, keyed by trace_id.
+        trace_color_cache = {}
+        if color_mode == 'per_trace' and 'trace_id' in df.columns:
+            palette = cm.get_cmap('tab20')
+            all_traces = list(df['trace_id'].unique())
+            for i, tid in enumerate(all_traces):
+                trace_color_cache[tid] = palette(i % 20)
+
+        for key, sdf in groups:
+            chrom = key[0] if isinstance(key, tuple) else key
+            trace_id = key[1] if isinstance(key, tuple) and len(key) > 1 else None
+            # Order spots along the genome so the polyline is drawn correctly
+            if 'start' in sdf.columns:
+                sdf = sdf.sort_values('start', kind='mergesort')
             if sdf.shape[0] <= 1:
                 continue
             pos = sdf[['x', 'y', 'z']].values
+            # Record how many handles already exist so we can tag the ones
+            # added for this trace with metadata after drawing.
+            _handle_offset = len(self.vis_handles)
             if color_mode == 'single':
                 color = single_color
                 colors_rgba = mpl_colors.to_rgba(color)
+            elif color_mode == 'per_trace' and trace_id in trace_color_cache:
+                colors_rgba = trace_color_cache[trace_id]
             else:
                 if num_chrom > 1:
                     color = chr_colormap.get(chrom, "#888888")
@@ -221,6 +250,20 @@ class ChromatinLayer(Layer):
                     self.vis_objs.append(self._create_vis_obj_wrapper(handle))
             if props.get('breaks', False):
                 self._handle_breaks(sdf, pos, colors_rgba, width, style)
+            # Tag newly-added handles with trace metadata for pick info.
+            try:
+                if hasattr(self.canvas.backend, 'set_object_metadata'):
+                    meta = {
+                        'trace_id': str(trace_id) if trace_id is not None else '-',
+                        'n_spots': int(sdf.shape[0]),
+                        'chrom': str(chrom),
+                    }
+                    if 'start' in sdf.columns and 'end' in sdf.columns:
+                        meta['region'] = f"{int(sdf['start'].min()):,}-{int(sdf['end'].max()):,}"
+                    for h in self.vis_handles[_handle_offset:]:
+                        self.canvas.backend.set_object_metadata(h, **meta)
+            except Exception:
+                pass
 
     def _draw_gradient_tube(self, pos, colors_rgba, radius, props):
         max_segments = int(props.get('tube_gradient_segments', 50))

@@ -42,20 +42,24 @@ def read_particles(path):
     return df
 
 
-def save_particles(df, path):
+def save_particles(df, path, cell_id=None):
     """Save reconstruction output. Default format is ``.h5cd`` (ChromData).
 
     Format inferred from file extension:
 
     - ``.csv``            → CSV via ``df.to_csv``
     - ``.h5cd`` or other  → ChromData HDF5 (default)
+
+    ``cell_id`` is only propagated into the ``.h5cd`` branch (CSV has no
+    dedicated cell column).  When writing ``.h5cd`` it is passed through
+    to :meth:`ChromData.from_dataframe`.
     """
     path_str = str(path)
     if path_str.endswith(".csv"):
         df.to_csv(path)
         return
     from uchrom.core import ChromData
-    cd = ChromData.from_dataframe(df)
+    cd = ChromData.from_dataframe(df, cell_id=cell_id)
     cd.write(path)
 
 

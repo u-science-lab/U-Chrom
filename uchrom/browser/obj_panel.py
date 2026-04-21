@@ -1,6 +1,6 @@
-from PyQt5.QtWidgets import (QComboBox, QDoubleSpinBox, QSpinBox, QWidget, QLabel, 
-                             QGridLayout, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLineEdit, QGroupBox, 
-                             QColorDialog, QMessageBox, QScrollArea, QSizePolicy)
+from PyQt5.QtWidgets import (QComboBox, QDoubleSpinBox, QSpinBox, QWidget, QLabel,
+                             QGridLayout, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLineEdit, QGroupBox,
+                             QColorDialog, QMessageBox, QScrollArea, QSizePolicy, QTabWidget)
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt
 from .range_list import RangeList
@@ -47,7 +47,22 @@ class ChromatinProps(LayerPropsPanel):
         self.subset_window.signal_ok.connect(self.on_take_subset)
 
         # Move entire Chromosome Management group to the Layers panel's right side
-        super().__init__(grid_table=[], operation_widgets=[self.chrom_group, self.region_group])
+        # Consolidate the three "management" groups into a QTabWidget so only
+        # one is shown at a time.  Tabs are added/removed based on the data
+        # in ``_update_style_availability``.  The QTabWidget's pane supplies
+        # the outer frame; the inner QGroupBoxes drop their own title (the
+        # tab label already names each section) but keep their default frame
+        # so the content visually matches the layer list.
+        self.ops_tabs = QTabWidget()
+        for g in (self.chrom_group, self.region_group, self.trace_group):
+            try:
+                g.setTitle("")
+            except Exception:
+                pass
+        self.ops_tabs.addTab(self.chrom_group, "Chromosome")
+        self.ops_tabs.addTab(self.region_group, "Region")
+        self.ops_tabs.addTab(self.trace_group, "Trace")
+        super().__init__(grid_table=[], operation_widgets=[self.ops_tabs])
         
         # Add grouped controls to layout after parent initialization
         self.add_grouped_layout()
@@ -90,7 +105,7 @@ class ChromatinProps(LayerPropsPanel):
         l_color_mode = QLabel("Color")
         # Mode: Rainbow or Custom HEX
         self.model_color_mode = QComboBox()
-        self.model_color_mode.addItems(["Rainbow", "Custom"])
+        self.model_color_mode.addItems(["Rainbow", "Custom", "Per Trace"])
         self.model_color_mode.setCurrentText("Rainbow")
         self.model_color_mode.currentIndexChanged.connect(self.on_model_color_mode_change)
         # Custom color controls
@@ -137,8 +152,6 @@ class ChromatinProps(LayerPropsPanel):
         chrom_layout.addWidget(self.create_subset_btn)
         
         self.chrom_group.setLayout(chrom_layout)
-        # Hidden by default; will be shown for multi-chromosome datasets
-        self.chrom_group.setVisible(False)
 
         # Region Management Group
         self.region_group = QGroupBox("Region Management")
@@ -180,7 +193,97 @@ class ChromatinProps(LayerPropsPanel):
         region_layout.addWidget(self.region_color_hex, 3, 2)
         region_layout.addWidget(self.region_subset_btn, 4, 0, 1, 3)
         self.region_group.setLayout(region_layout)
-        self.region_group.setVisible(True)
+
+        # Trace Management Group (visible only when a chromosome has multiple traces)
+        self.trace_group = QGroupBox("Trace Management")
+        trace_layout = QGridLayout()
+
+        l_trace_mode = QLabel("Mode:")
+        self.trace_mode_select = QComboBox()
+        self.trace_mode_select.addItems(["Single", "Range", "Multiple"])
+        self.trace_mode_select.setCurrentText("Single")
+        self.trace_mode_select.currentTextChanged.connect(self.on_trace_mode_changed)
+
+        self.trace_info_label = QLabel("")
+        self.trace_info_label.setStyleSheet("color: #888888; font-size: 11px;")
+
+        l_trace_id = QLabel("Trace ID:")
+        self.trace_id_input = QLineEdit()
+        self.trace_id_input.setPlaceholderText("1")
+        self.trace_id_input.setToolTip(
+            "Single: one trace_id (e.g. '1').  "
+            "Range: two IDs joined by '-' (e.g. '1-50').  "
+            "Multiple: comma-separated IDs (e.g. '1,5,20')."
+        )
+
+        l_trace_color = QLabel("Color:")
+        self.trace_color_btn = QPushButton()
+        self.trace_color_btn.setFixedSize(50, 20)
+        self.trace_color_btn.setStyleSheet("background-color:#FF6A00")
+        self.trace_color_btn.clicked.connect(self.on_pick_trace_color)
+        self.trace_color_hex = QLineEdit("#FF6A00")
+        self.trace_color_hex.textChanged.connect(self.on_trace_hex_changed)
+
+        self.trace_subset_btn = QPushButton("Create Trace Subset")
+        self.trace_subset_btn.clicked.connect(self.on_create_trace_subset)
+
+        trace_layout.addWidget(l_trace_mode, 0, 0)
+        trace_layout.addWidget(self.trace_mode_select, 0, 1, 1, 2)
+        trace_layout.addWidget(self.trace_info_label, 1, 0, 1, 3)
+        trace_layout.addWidget(l_trace_id, 2, 0)
+        trace_layout.addWidget(self.trace_id_input, 2, 1, 1, 2)
+        trace_layout.addWidget(l_trace_color, 3, 0)
+        trace_layout.addWidget(self.trace_color_btn, 3, 1)
+        trace_layout.addWidget(self.trace_color_hex, 3, 2)
+        trace_layout.addWidget(self.trace_subset_btn, 4, 0, 1, 3)
+        self.trace_group.setLayout(trace_layout)
+
+        # Trace Statistics group: population-level aggregate plots (E)
+        self.stats_group = QGroupBox("Trace Statistics")
+        stats_layout = QGridLayout()
+
+        self.stats_dist_btn = QPushButton("Distance Matrix")
+        self.stats_dist_btn.setToolTip("Population-median pairwise distance matrix")
+        self.stats_dist_btn.clicked.connect(self.on_show_distance_matrix)
+
+        self.stats_contact_btn = QPushButton("Contact Map")
+        self.stats_contact_btn.setToolTip("Contact frequency under a distance threshold")
+        self.stats_contact_btn.clicked.connect(self.on_show_contact_map)
+
+        self.stats_rg_btn = QPushButton("Rg Histogram")
+        self.stats_rg_btn.setToolTip("Distribution of per-trace radius of gyration")
+        self.stats_rg_btn.clicked.connect(self.on_show_rg_histogram)
+
+        self.stats_threshold = QDoubleSpinBox()
+        self.stats_threshold.setRange(0.0, 1e6)
+        self.stats_threshold.setDecimals(3)
+        self.stats_threshold.setSingleStep(10.0)
+        self.stats_threshold.setValue(200.0)
+        self.stats_threshold.setToolTip("Contact threshold (same units as coords)")
+
+        self.stats_split_spin = QSpinBox()
+        self.stats_split_spin.setRange(1, 64)
+        self.stats_split_spin.setValue(4)
+        self.stats_split_spin.setToolTip("Number of traces to show side by side")
+
+        self.stats_split_btn = QPushButton("Split by Trace")
+        self.stats_split_btn.setToolTip("Open N canvases each showing one trace")
+        self.stats_split_btn.clicked.connect(self.on_split_by_trace)
+
+        # Compact 3-column grid so the group doesn't dominate the panel
+        stats_layout.addWidget(self.stats_dist_btn,    0, 0, 1, 3)
+        stats_layout.addWidget(QLabel("Threshold:"),   1, 0)
+        stats_layout.addWidget(self.stats_threshold,   1, 1, 1, 2)
+        stats_layout.addWidget(self.stats_contact_btn, 2, 0, 1, 3)
+        stats_layout.addWidget(self.stats_rg_btn,      3, 0, 1, 3)
+        stats_layout.addWidget(QLabel("Split N:"),     4, 0)
+        stats_layout.addWidget(self.stats_split_spin,  4, 1)
+        stats_layout.addWidget(self.stats_split_btn,   4, 2)
+
+        self.stats_group.setLayout(stats_layout)
+        self.stats_group.setVisible(False)
+        # Keep references to open figure windows so they are not GC'd
+        self._figure_dialogs = []
 
         # Labels overlay color mode
         self.labels_group = QGroupBox("Chromosome Labels")
@@ -308,6 +411,7 @@ class ChromatinProps(LayerPropsPanel):
         
         # Add all group boxes to the container
         container_layout.addWidget(self.model_group)
+        container_layout.addWidget(self.stats_group)
         container_layout.addWidget(self.labels_group)
         container_layout.addWidget(self.label_group)
         container_layout.addWidget(self.canvas_group)
@@ -374,16 +478,13 @@ class ChromatinProps(LayerPropsPanel):
         # Update color controls and chromosome management based on chromosome count
         self.model_color_mode.blockSignals(True)
         if is_multi_chrom:
-            # Multi-chromosome: only rainbow mode; show both Chromosome and Region management on the right panel
+            # Multi-chromosome: only rainbow mode
             self.model_color_mode.setCurrentText("Rainbow")
             self.single_color_btn.setVisible(False)
             self.single_color_hex.setVisible(False)
-            self.chrom_group.setVisible(True)
-            self.region_group.setVisible(True)
             self._update_chromosome_list()
         else:
-            # Single chromosome: allow all color modes; hide Chromosome management, keep Region management visible
-            # Keep current mode; show custom controls only when Custom selected
+            # Single chromosome: allow all color modes
             if current_color not in ["Rainbow", "Rainbow (Multi-chromosome)"]:
                 self.model_color_mode.setCurrentText("Custom")
                 self.single_color_btn.setVisible(True)
@@ -392,21 +493,76 @@ class ChromatinProps(LayerPropsPanel):
                 self.model_color_mode.setCurrentText("Rainbow")
                 self.single_color_btn.setVisible(False)
                 self.single_color_hex.setVisible(False)
-            self.chrom_group.setVisible(False)
-            self.region_group.setVisible(True)
         self.model_color_mode.blockSignals(False)
-        
+
+        # Trace Management tab: show only when the data has more traces than
+        # chromosomes (i.e. multiple polymers per chromosome, typical of
+        # imaging data).
+        show_trace = False
+        try:
+            for layer in self.layers:
+                if not hasattr(layer, 'df'):
+                    continue
+                ldf = layer.df
+                if 'trace_id' not in ldf.columns:
+                    continue
+                n_tr = int(ldf['trace_id'].nunique())
+                n_ch = int(ldf['chrom'].nunique())
+                if n_tr > n_ch:
+                    show_trace = True
+                    self.trace_info_label.setText(
+                        f"{n_tr} traces across {n_ch} chromosome(s)"
+                    )
+                    break
+        except Exception:
+            pass
+
+        self._set_tab_visible(self.chrom_group, is_multi_chrom)
+        self._set_tab_visible(self.region_group, True)
+        self._set_tab_visible(self.trace_group, show_trace)
+        self.stats_group.setVisible(show_trace)
+        # Pick a sensible default tab
+        self._select_default_ops_tab()
+
         # Restore selection or fallback to line
         if current_style == 'tube' and disable_tube:
             current_style = 'line'
-        
+
         # Set the current style
         for i in range(self.model_style_select.count()):
             if self.model_style_select.itemText(i) == current_style:
                 self.model_style_select.setCurrentIndex(i)
                 break
-        
+
         self.model_style_select.blockSignals(False)
+
+    def _set_tab_visible(self, widget, visible: bool):
+        """Show/hide a tab in ``self.ops_tabs`` by its inner widget."""
+        idx = self.ops_tabs.indexOf(widget)
+        if idx < 0:
+            return
+        # Qt ≥ 5.15 exposes setTabVisible; older versions: no-op but tab stays
+        setter = getattr(self.ops_tabs, "setTabVisible", None)
+        if callable(setter):
+            setter(idx, visible)
+
+    def _select_default_ops_tab(self):
+        """Pick the first visible tab as the current one if needed."""
+        current = self.ops_tabs.currentIndex()
+        is_current_visible = True
+        try:
+            w = self.ops_tabs.widget(current)
+            if w is not None and not w.isVisible():
+                is_current_visible = False
+        except Exception:
+            pass
+        if is_current_visible:
+            return
+        for i in range(self.ops_tabs.count()):
+            w = self.ops_tabs.widget(i)
+            if w is not None and w.isVisible():
+                self.ops_tabs.setCurrentIndex(i)
+                return
 
     def connect_with(self, layer):
         super().connect_with(layer)
@@ -482,7 +638,12 @@ class ChromatinProps(LayerPropsPanel):
 
         color_mode = props.get('color_mode', 'rainbow')
         self.model_color_mode.blockSignals(True)
-        self.model_color_mode.setCurrentText('Custom' if color_mode == 'single' else 'Rainbow')
+        if color_mode == 'single':
+            self.model_color_mode.setCurrentText('Custom')
+        elif color_mode == 'per_trace':
+            self.model_color_mode.setCurrentText('Per Trace')
+        else:
+            self.model_color_mode.setCurrentText('Rainbow')
         self.model_color_mode.blockSignals(False)
         is_single = (color_mode == 'single')
         self.single_color_btn.setVisible(is_single)
@@ -605,9 +766,15 @@ class ChromatinProps(LayerPropsPanel):
         is_single = (mode == 'Custom')
         self.single_color_btn.setVisible(is_single)
         self.single_color_hex.setVisible(is_single)
+        if mode == 'Custom':
+            mode_key = 'single'
+        elif mode == 'Per Trace':
+            mode_key = 'per_trace'
+        else:
+            mode_key = 'rainbow'
         layers, canvases = self._get_linked_layers_and_canvases()
         for layer in layers:
-            layer.cache_props['color_mode'] = 'single' if is_single else 'rainbow'
+            layer.cache_props['color_mode'] = mode_key
             layer.remove()
             layer.draw()
         self._render_canvases(canvases)
@@ -866,6 +1033,248 @@ class ChromatinProps(LayerPropsPanel):
             pass
         if new_layer.parent:
             new_layer.parent.re_render(parent=True)
+
+    # ── Trace Management ────────────────────────────────────────────────────
+    def on_trace_mode_changed(self, mode: str):
+        placeholders = {
+            "Single":   "1",
+            "Range":    "1-50",
+            "Multiple": "1,5,20",
+        }
+        self.trace_id_input.setPlaceholderText(placeholders.get(mode, "1"))
+        self.trace_id_input.clear()
+
+    def on_pick_trace_color(self):
+        current = QColor(self.trace_color_hex.text() or "#FF6A00")
+        color = QColorDialog.getColor(current, self)
+        if color.isValid():
+            self.trace_color_hex.setText(color.name())
+            self.trace_color_btn.setStyleSheet(f"background-color:{color.name()}")
+
+    def on_trace_hex_changed(self):
+        text = self.trace_color_hex.text()
+        if text.startswith('#') and len(text) == 7 and QColor(text).isValid():
+            self.trace_color_btn.setStyleSheet(f"background-color:{text}")
+
+    def _parse_trace_selection(self, mode: str, text: str, available):
+        """Return list of trace_ids from user input, or (None, error_msg)."""
+        text = text.strip()
+        if not text:
+            return None, "Please enter a trace ID."
+        avail_set = set(map(str, available))
+        selected = []
+        try:
+            if mode == "Single":
+                selected = [text]
+            elif mode == "Range":
+                if '-' not in text:
+                    return None, "Range format: 'start-end' (e.g. '1-50')."
+                a, b = text.split('-', 1)
+                a, b = int(a.strip()), int(b.strip())
+                lo, hi = min(a, b), max(a, b)
+                # Only include IDs that actually exist in the data, preserving numeric order
+                numeric_avail = sorted(int(x) for x in available if str(x).lstrip('-').isdigit())
+                selected = [str(i) for i in numeric_avail if lo <= i <= hi]
+            elif mode == "Multiple":
+                selected = [t.strip() for t in text.split(',') if t.strip()]
+            else:
+                return None, f"Unknown mode: {mode}"
+        except ValueError:
+            return None, "Could not parse trace IDs. Check the format."
+        missing = [s for s in selected if s not in avail_set]
+        if missing:
+            return None, f"Trace IDs not found: {', '.join(missing[:5])}" + (" ..." if len(missing) > 5 else "")
+        return selected, None
+
+    def on_create_trace_subset(self):
+        if len(self.layers) == 0:
+            QMessageBox.warning(self, "Invalid state", "No layer available to subset.")
+            return
+        layer = self.layers[0].canvas.control_panel.current_layer or self.layers[0]
+        if not hasattr(layer, 'df') or 'trace_id' not in layer.df.columns:
+            QMessageBox.warning(self, "Invalid state", "Current layer has no trace_id column.")
+            return
+        df = layer.df
+        available = df['trace_id'].unique()
+
+        mode = self.trace_mode_select.currentText()
+        selected, err = self._parse_trace_selection(mode, self.trace_id_input.text(), available)
+        if err:
+            QMessageBox.warning(self, "Invalid trace selection", err)
+            return
+
+        # Compare as strings to sidestep categorical/int/str dtype differences
+        sub_df = df[df['trace_id'].astype(str).isin(selected)].copy()
+        if sub_df.shape[0] == 0:
+            QMessageBox.warning(self, "No data", "Selected traces produced an empty subset.")
+            return
+
+        if mode == "Single":
+            name = f"trace_{selected[0]}"
+        elif mode == "Range":
+            name = f"traces_{selected[0]}-{selected[-1]}"
+        else:
+            preview = ",".join(selected[:3])
+            if len(selected) > 3:
+                preview += ",..."
+            name = f"traces_{preview}"
+
+        trace_color = self.trace_color_hex.text() or "#FF6A00"
+        chr_colormap = dict(layer.cache_props.get('chr_colormap', {}))
+
+        new_layer = layer.canvas.control_panel.add_chromatin_layer(
+            sub_df, chr_colormap, parent=layer, name=name
+        )
+        try:
+            new_layer.cache_props['color_mode'] = 'single'
+            new_layer.cache_props['single_color'] = trace_color
+            new_layer.remove()
+            new_layer.draw()
+            if hasattr(new_layer, 'control_panel') and hasattr(new_layer.control_panel, '_set_model_color_ui_to_hex'):
+                new_layer.control_panel._set_model_color_ui_to_hex(trace_color)
+        except Exception:
+            pass
+        if new_layer.parent:
+            new_layer.parent.re_render(parent=True)
+
+    # ── Trace Statistics (E) ────────────────────────────────────────────────
+    def _current_layer_df(self):
+        """Return the DataFrame of the canvas's current layer, or None."""
+        if not self.layers:
+            return None, None
+        layer = self.layers[0].canvas.control_panel.current_layer or self.layers[0]
+        if not hasattr(layer, 'df'):
+            return None, None
+        return layer, layer.df
+
+    def _show_figure(self, fig, title: str):
+        """Display a matplotlib Figure inside a dockable Qt dialog."""
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout
+        from matplotlib.backends.backend_qt5agg import (
+            FigureCanvasQTAgg as _Canvas,
+            NavigationToolbar2QT as _Toolbar,
+        )
+        dlg = QDialog(self)
+        dlg.setWindowTitle(title)
+        dlg.resize(720, 620)
+        layout = QVBoxLayout(dlg)
+        canvas = _Canvas(fig)
+        toolbar = _Toolbar(canvas, dlg)
+        layout.addWidget(toolbar)
+        layout.addWidget(canvas)
+        dlg.show()
+        # Avoid GC
+        self._figure_dialogs.append(dlg)
+
+    def on_show_distance_matrix(self):
+        layer, df = self._current_layer_df()
+        if df is None:
+            QMessageBox.warning(self, "Invalid state", "No layer available.")
+            return
+        from uchrom.fea import mean_distance_matrix
+        from uchrom.pl import plot_distance_matrix
+        try:
+            chrom = df['chrom'].iloc[0] if df['chrom'].nunique() == 1 else None
+            dm, bin_ids, n = mean_distance_matrix(df, chrom=chrom)
+            unit = self._coord_unit(layer)
+            title = f"Median pairwise distance ({n} traces"
+            if chrom is not None:
+                title += f", {chrom}"
+            title += ")"
+            fig = plot_distance_matrix(dm, bin_ids=bin_ids, title=title)
+            if unit:
+                fig.axes[-1].set_ylabel(f"Distance ({unit})")
+            self._show_figure(fig, title)
+        except Exception as e:
+            QMessageBox.warning(self, "Compute failed", str(e))
+
+    def on_show_contact_map(self):
+        layer, df = self._current_layer_df()
+        if df is None:
+            QMessageBox.warning(self, "Invalid state", "No layer available.")
+            return
+        from uchrom.fea import contact_frequency
+        from uchrom.pl import plot_contact_map
+        try:
+            threshold = float(self.stats_threshold.value())
+            chrom = df['chrom'].iloc[0] if df['chrom'].nunique() == 1 else None
+            cm, bin_ids, n = contact_frequency(df, threshold=threshold, chrom=chrom)
+            unit = self._coord_unit(layer)
+            thr_str = f"{threshold:g} {unit}" if unit else f"{threshold:g}"
+            title = f"Contact freq (threshold={thr_str}, {n} traces)"
+            fig = plot_contact_map(cm, bin_ids=bin_ids, title=title)
+            self._show_figure(fig, title)
+        except Exception as e:
+            QMessageBox.warning(self, "Compute failed", str(e))
+
+    def on_show_rg_histogram(self):
+        layer, df = self._current_layer_df()
+        if df is None:
+            QMessageBox.warning(self, "Invalid state", "No layer available.")
+            return
+        from uchrom.fea import radius_of_gyration
+        from uchrom.pl import plot_rg_histogram
+        try:
+            chrom = df['chrom'].iloc[0] if df['chrom'].nunique() == 1 else None
+            rg = radius_of_gyration(df, chrom=chrom)
+            unit = self._coord_unit(layer)
+            title = f"Radius of gyration ({rg.size} traces)"
+            fig = plot_rg_histogram(rg, title=title)
+            if unit:
+                fig.axes[0].set_xlabel(f"Radius of gyration ({unit})")
+            self._show_figure(fig, title)
+        except Exception as e:
+            QMessageBox.warning(self, "Compute failed", str(e))
+
+    def _coord_unit(self, layer):
+        """Best-effort coordinate unit discovery (µm / nm) for axis labels."""
+        try:
+            uns = getattr(layer, 'uns', None) or {}
+            return uns.get('xyz_unit')
+        except Exception:
+            return None
+
+    # ── Small multiples (F) ─────────────────────────────────────────────────
+    def on_split_by_trace(self):
+        import math
+
+        layer, df = self._current_layer_df()
+        if df is None or 'trace_id' not in df.columns:
+            QMessageBox.warning(self, "Invalid state", "Current layer has no trace_id.")
+            return
+        n = int(self.stats_split_spin.value())
+        available = list(df['trace_id'].unique())
+        if n > len(available):
+            n = len(available)
+        selected = available[:n]
+        # Work through the owning canvas's main window
+        canvas = layer.canvas
+        main_window = getattr(canvas, 'main_window', None)
+        if main_window is None:
+            QMessageBox.warning(self, "Invalid state", "Cannot locate main window.")
+            return
+        chr_colormap = dict(layer.cache_props.get('chr_colormap', {}))
+
+        # Lay out as a ~square grid: ceil(sqrt(N)) columns, ceil(N/cols) rows.
+        cols = max(1, int(math.ceil(math.sqrt(n))))
+        rows = max(1, int(math.ceil(n / cols)))
+
+        for i, tid in enumerate(selected):
+            sub = df[df['trace_id'].astype(str) == str(tid)].copy()
+            row_idx = i % rows
+            # First canvas of each column: 'h' (new column).  Subsequent
+            # canvases in the column: 'v' (new row within the current column).
+            main_window.add_canvas('h' if row_idx == 0 else 'v')
+            cur_canvas = main_window.canvas
+            new_layer = cur_canvas.control_panel.add_chromatin_layer(
+                sub, chr_colormap, name=f"trace_{tid}"
+            )
+            try:
+                new_layer.cache_props['color_mode'] = 'rainbow'
+                new_layer.remove()
+                new_layer.draw()
+            except Exception:
+                pass
 
     def on_label_font_changed(self):
         val = self.label_font_control.value()

@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import (QListWidget, QWidget, QLabel, QHBoxLayout, QVBoxLayout, QStackedWidget, QListWidgetItem, QCheckBox, QPushButton, QLineEdit, QDialog, QToolButton)
+from PyQt5.QtWidgets import (QListWidget, QWidget, QLabel, QHBoxLayout, QVBoxLayout, QStackedWidget, QListWidgetItem, QCheckBox, QPushButton, QLineEdit, QDialog, QToolButton, QSplitter)
 from PyQt5.QtCore import Qt, QSize, QPoint
 from PyQt5.QtGui import QIcon
 
@@ -17,23 +17,26 @@ class LayerPanel(QWidget):
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list.setMinimumWidth(260)
 
-        title_layout = QVBoxLayout()
-        title_layout.addWidget(QLabel("<h2>Layers</h2>"))
+        # Left column: "Layers" heading + layer list
+        left_col = QVBoxLayout()
+        left_col.addWidget(QLabel("<h2>Layers</h2>"))
+        left_col.addWidget(self.list)
 
         self.operation_stack = QStackedWidget()
 
+        # Right column: operations — top-aligned, no heading above it, so
+        # the tab bar sits at the same y as the list's first item.
+        right_col = QVBoxLayout()
+        right_col.addWidget(self.operation_stack)
+
         hbox = QHBoxLayout()
-        hbox.addWidget(self.list)
-        hbox.addWidget(self.operation_stack)
+        hbox.addLayout(left_col)
+        hbox.addLayout(right_col)
         # Give the list more space than the right-side operations panel
         hbox.setStretch(0, 3)
         hbox.setStretch(1, 2)
 
-        vbox = QVBoxLayout()
-        vbox.addLayout(title_layout)
-        vbox.addLayout(hbox)
-
-        self.setLayout(vbox)
+        self.setLayout(hbox)
 
     def _icon_path(self, name: str) -> str:
         # Resolve icon path relative to this file
@@ -138,9 +141,20 @@ class CanvasControl(QWidget):
 
         self.layer_control = LayerPanel()
         self.props_stack = QStackedWidget()
+        # Use a QSplitter so the user can resize the Layers/Properties
+        # divide.  This avoids nested scroll areas when operation groups are
+        # plentiful (e.g. Region + Trace Management on imaging data).
+        self.vsplitter = QSplitter(Qt.Vertical)
+        self.vsplitter.setChildrenCollapsible(False)
+        self.vsplitter.addWidget(self.layer_control)
+        self.vsplitter.addWidget(self.props_stack)
+        # Initial size split; user can drag to adjust.
+        self.vsplitter.setStretchFactor(0, 1)
+        self.vsplitter.setStretchFactor(1, 2)
+        self.vsplitter.setSizes([280, 520])
         self.layout: QVBoxLayout = QVBoxLayout()
-        self.layout.addWidget(self.layer_control, 1)
-        self.layout.addWidget(self.props_stack, 2)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.addWidget(self.vsplitter)
         self.setLayout(self.layout)
 
         self.connect_events()
