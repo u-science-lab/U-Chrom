@@ -359,7 +359,7 @@ class MainWindow(QMainWindow):
     def open_file_dialog(self):
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
-        path, _ = QFileDialog.getOpenFileName(self, "Open", "", "All Files (*);;CSV Files(*.csv)", options=options)
+        path, _ = QFileDialog.getOpenFileName(self, "Open", "", "Structure Files (*.h5cd *.csv);;ChromData (*.h5cd);;CSV Files (*.csv);;All Files (*)", options=options)
         if path:
             try:
                 print(path)

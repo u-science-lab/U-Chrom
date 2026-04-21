@@ -33,7 +33,9 @@ def load_contacts_from_mcool(path, resolution, chrom=None):
 
 
 def save_structure(coords, bins_df, output_path):
-    """Save 3D structure to CSV."""
+    """Save 3D structure. Format auto-detected from extension (default .h5cd)."""
+    from uchrom.io import save_particles
+
     result = pd.DataFrame({
         'chrom': bins_df['chrom'].values,
         'start': bins_df['start'].values,
@@ -42,7 +44,7 @@ def save_structure(coords, bins_df, output_path):
         'y': coords[:, 1],
         'z': coords[:, 2],
     })
-    result.to_csv(output_path, index=True)
+    save_particles(result, output_path)
     print(f"Structure saved to {output_path}")
 
 

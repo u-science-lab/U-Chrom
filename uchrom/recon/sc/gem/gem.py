@@ -7,6 +7,7 @@ import pandas as pd
 import taichi as ti
 
 from uchrom.recon._base import SimulationBase, deal_input
+from uchrom.io import save_particles
 
 
 def get_backbones(particles):
@@ -219,7 +220,7 @@ def main(in_file, out_file, arch="gpu", **kwargs):
         simu.setup_schedule(prams['steps'], 0.0001, 0.01)
         simu.run()
         particles = simu.get_results()
-    particles.to_csv(out_file)
+    save_particles(particles, out_file)
 
 
 if __name__ == "__main__":
