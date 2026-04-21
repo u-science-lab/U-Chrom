@@ -78,6 +78,7 @@ ChromData
 - **Categorical dtypes**: `chrom`, `trace_id`, `cell_id` are auto-converted to `pd.Categorical` for ~10x memory savings on string columns.
 - **FOF-CT compatible**: `ChromData.from_fofct(path)` reads the 4DN FISH Omics Format core table. Column mapping: Spot_ID→spot_id, Trace_ID→trace_id, X/Y/Z→coords, Chrom→chrom, Chrom_Start/End→start/end.
 - **HDF5 persistence**: `.h5cd` format via `cd.write(path)` / `ChromData.read(path)`. DataFrames stored as per-column datasets, categorical as byte strings.
+- **Format versioning**: root HDF5 attrs `uchrom_format_version` (MAJOR.MINOR) and `uchrom_version`. Read-side dispatches to `_read_vN()`. Same MAJOR + higher MINOR warns but reads; different MAJOR raises. Missing attr → legacy 1.0 with warning. To bump format: update `FORMAT_VERSION` in `cdata.py`, add `_read_vN` function for the new MAJOR.
 - **Validation on construction**: Checks coords shape, spots required columns, tracks alignment, layers shape.
 - **Flat storage, hierarchical access**: All spots across all cells stored flat. Use `cd.get_cell(id)` / `cd.get_trace(id)` / `cd.get_chrom(name)` for subsetting, which returns a new ChromData.
 

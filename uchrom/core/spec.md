@@ -139,10 +139,30 @@ cd = ChromData.read('data.h5cd')   # Read from HDF5
 
 ## File Format (.h5cd)
 
-HDF5 layout:
+### Versioning
+
+The on-disk format is versioned via two root-group HDF5 attributes:
+
+| Attribute | Example | Description |
+|-----------|---------|-------------|
+| `uchrom_format_version` | `"1.0"` | `MAJOR.MINOR` version of the `.h5cd` format. MAJOR bumps are breaking; MINOR bumps are backwards-compatible (additive). |
+| `uchrom_version` | `"0.2.0"` | Version of the U-Chrom package that wrote the file. For provenance. |
+
+Read semantics (implemented in `ChromData.read`):
+
+- **Same MAJOR**: read successfully. Higher MINOR triggers a warning; unknown fields are ignored.
+- **Different MAJOR**: `ValueError` with guidance to upgrade or convert.
+- **Missing attribute** (pre-versioning files): warning, assumed to be the legacy 1.0 layout.
+
+New MAJOR versions should add a `_read_vN` function in `cdata.py` and may include a migration helper that converts old on-disk data to the current in-memory form.
+
+### HDF5 layout
 
 ```
 data.h5cd
+├── [attrs]
+│   ├── uchrom_format_version   "1.0"
+│   └── uchrom_version          "0.2.0"
 ├── coords              float64 (n_spots, 3)
 ├── spots/              group — one dataset per column
 │   ├── chrom           bytes
