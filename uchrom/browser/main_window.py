@@ -77,6 +77,21 @@ class MainWindow(QMainWindow):
         layout.setSpacing(15)
         layout.setContentsMargins(20, 20, 20, 20)
 
+        # Logo (uc.svg) centered above the title
+        try:
+            from PyQt5 import QtSvg
+            from PyQt5.QtCore import QSize
+            svg_path = osp.join(HERE, 'uc.svg')
+            if osp.exists(svg_path):
+                logo = QtSvg.QSvgWidget(svg_path)
+                logo.setFixedSize(QSize(96, 96))
+                logo_row = QHBoxLayout()
+                logo_row.setAlignment(Qt.AlignCenter)
+                logo_row.addWidget(logo)
+                layout.addLayout(logo_row)
+        except Exception:
+            pass
+
         # Title
         title = QLabel("U-Chrom")
         title.setStyleSheet("font-size: 48px; font-weight: bold; color: #FFFFFF;")
@@ -311,7 +326,10 @@ class MainWindow(QMainWindow):
 
     def add_widgets(self):
         self.splitter.addWidget(self.control_stack)
-        self.splitter.setSizes([850, 150])
+        self.splitter.setSizes([850, 420])
+        # Canvas area stretches with the window; the sidebar keeps its width.
+        self.splitter.setStretchFactor(0, 1)
+        self.splitter.setStretchFactor(1, 0)
         # Hide the entire splitter (canvas + layers panel) initially until a structure is loaded
         self.splitter.setVisible(False)
         # Show the navigation panel initially

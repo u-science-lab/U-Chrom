@@ -317,11 +317,21 @@ class ChromData:
             return _read_v1(cls, f)
 
     @classmethod
-    def from_dataframe(cls, df: pd.DataFrame, **kwargs) -> "ChromData":
+    def from_dataframe(cls, df: pd.DataFrame, *, cell_id=None, **kwargs) -> "ChromData":
         """Create from a reconstruction output DataFrame.
 
         Expects columns: chrom, start, end, x, y, z.
         Each chromosome becomes one trace.
+
+        Parameters
+        ----------
+        df : DataFrame with columns chrom, start, end, x, y, z.
+        cell_id : hashable, optional
+            If given, tag every spot with this cell identifier (e.g. derived
+            from the output filename for single-cell reconstruction).  The
+            DataFrame's own ``cell_id`` column, if any, takes precedence.
+        **kwargs
+            Forwarded to the :class:`ChromData` constructor.
         """
         required = {"chrom", "start", "end", "x", "y", "z"}
         missing = required - set(df.columns)
@@ -342,8 +352,13 @@ class ChromData:
             "trace_id": trace_ids,
         })
 
-        # Carry over extra columns (e.g. cell_id, contact_count)
-        skip = required | {"index"}
+        if "cell_id" in df.columns:
+            spots["cell_id"] = df["cell_id"].values
+        elif cell_id is not None:
+            spots["cell_id"] = cell_id
+
+        # Carry over extra columns (e.g. contact_count)
+        skip = required | {"index", "cell_id"}
         for col in df.columns:
             if col not in skip and col not in spots.columns:
                 spots[col] = df[col].values
@@ -365,14 +380,15 @@ class ChromData:
         path = Path(core_path)
         header_meta = {}
         data_lines = []
-        columns = None
+        columns = None  # from ``##columns=`` meta line if present
 
         with open(path, "r") as fh:
             for line in fh:
                 line = line.strip()
                 if not line:
                     continue
-                if line.startswith("##Columns="):
+                # ``##columns=(...)`` — case-insensitive; some files use lowercase.
+                if line.lower().startswith("##columns="):
                     cols_str = line.split("=", 1)[1].strip().strip("()")
                     columns = [c.strip() for c in cols_str.split(",")]
                 elif line.startswith("##"):
@@ -387,48 +403,83 @@ class ChromData:
         if not data_lines:
             raise ValueError(f"No data rows found in {path}")
 
+        # Some FOF-CT files repeat the column names as a CSV header row right
+        # before the data (in addition to the ``##columns=`` meta line).  If
+        # the first non-comment line has non-numeric values in positions where
+        # numbers are expected, treat it as a CSV header.
+        first_token = data_lines[0].split(",", 1)[0].strip()
+        has_csv_header = bool(first_token) and not (
+            first_token[0].isdigit() or first_token[0] in ("-", "+", ".")
+        )
+        if has_csv_header:
+            header_row = data_lines[0]
+            data_lines = data_lines[1:]
+            if columns is None:
+                columns = [c.strip() for c in header_row.split(",")]
+
+        if not data_lines:
+            raise ValueError(f"No data rows found in {path}")
+
         # Parse data
         from io import StringIO as _StringIO
         text = "\n".join(data_lines)
         df = pd.read_csv(_StringIO(text), header=None, skipinitialspace=True)
 
-        if columns is not None:
-            df.columns = columns[:len(df.columns)]
+        if columns is not None and len(columns) == len(df.columns):
+            df.columns = columns
+        elif columns is not None:
+            # Column count mismatch — trust the data and label the extras
+            df.columns = columns + [f"col_{i}" for i in range(len(columns), len(df.columns))]
         else:
-            # Fallback: assume standard column order
             default_cols = ["Spot_ID", "Trace_ID", "X", "Y", "Z",
                             "Chrom", "Chrom_Start", "Chrom_End"]
             df.columns = default_cols[:len(df.columns)]
 
-        # Map FOF-CT columns to ChromData
-        col_map = {
-            "X": "x", "Y": "y", "Z": "z",
-            "Chrom": "chrom", "Chrom_Start": "start", "Chrom_End": "end",
-            "Trace_ID": "trace_id", "Spot_ID": "spot_id",
-            "Cell_ID": "cell_id",
-            "Sub_Cell_ROI_ID": "sub_cell_roi_id",
-            "Extra_Cell_ROI_ID": "extra_cell_roi_id",
+        # Map FOF-CT columns to ChromData — case-insensitive.
+        canonical_map = {
+            "x": "x", "y": "y", "z": "z",
+            "chrom": "chrom",
+            "chrom_start": "start", "chromstart": "start",
+            "chrom_end": "end", "chromend": "end",
+            "trace_id": "trace_id", "traceid": "trace_id",
+            "spot_id": "spot_id", "spotid": "spot_id",
+            "cell_id": "cell_id", "cellid": "cell_id",
+            "sub_cell_roi_id": "sub_cell_roi_id",
+            "extra_cell_roi_id": "extra_cell_roi_id",
         }
-        df = df.rename(columns=col_map)
+        rename = {c: canonical_map[c.lower()] for c in df.columns if c.lower() in canonical_map}
+        df = df.rename(columns=rename)
+
+        missing = {"x", "y", "z"} - set(df.columns)
+        if missing:
+            raise ValueError(
+                f"FOF-CT core table missing coordinate columns {missing}. "
+                f"Parsed columns: {list(df.columns)}"
+            )
 
         coords = df[["x", "y", "z"]].values.astype(np.float64)
 
+        # Spot-level columns: the required set first, then any extras carried
+        # through verbatim (custom FOF-CT columns like ``Readout``).
         spot_cols = ["chrom", "start", "end", "trace_id"]
         for extra in ("spot_id", "cell_id", "sub_cell_roi_id", "extra_cell_roi_id"):
-            if extra in df.columns:
+            if extra in df.columns and extra not in spot_cols:
                 spot_cols.append(extra)
+        coord_cols = {"x", "y", "z"}
+        for col in df.columns:
+            if col not in spot_cols and col not in coord_cols:
+                spot_cols.append(col)
         spots = df[spot_cols].copy()
 
-        # Store FOF-CT header metadata
+        # Store FOF-CT header metadata (case-insensitive lookup for promotion).
         uns = kwargs.pop("uns", {})
         if header_meta:
             uns["fofct_header"] = header_meta
-        xyz_unit = header_meta.get("XYZ_Unit", None)
-        if xyz_unit:
-            uns["xyz_unit"] = xyz_unit
-        genome = header_meta.get("Genome_Assembly", None)
-        if genome:
-            uns["genome_assembly"] = genome
+        lower_meta = {k.lower(): v for k, v in header_meta.items()}
+        if "xyz_unit" in lower_meta:
+            uns["xyz_unit"] = lower_meta["xyz_unit"]
+        if "genome_assembly" in lower_meta:
+            uns["genome_assembly"] = lower_meta["genome_assembly"]
 
         return cls(coords, spots, uns=uns, **kwargs)
 

@@ -15,6 +15,11 @@ from matplotlib import colors as mpl_colors
 from .rendering_backend import RenderingBackend
 
 
+def _qpoint(x, y):
+    from PyQt5.QtCore import QPoint
+    return QPoint(int(x), int(y))
+
+
 class PyVistaBackend(RenderingBackend):
     """PyVista implementation of the rendering backend."""
     
@@ -47,10 +52,19 @@ class PyVistaBackend(RenderingBackend):
         # Store handles to objects
         self.objects = {}  # Maps our handle IDs to actor objects
         self.actor_names = {}  # Maps actor objects to their names in PyVista
+        self.actor_to_handle = {}  # Reverse lookup for VTK picking
+        self.handle_metadata = {}  # Per-handle metadata (trace_id, n_spots, ...)
         self.text_overlays = {}
         self.axes_actor = None
         self._handle_counter = 0
-        
+
+        # VTK picker used for identifying the clicked trace/actor
+        try:
+            import vtk as _vtk
+            self._actor_picker = _vtk.vtkPropPicker()
+        except Exception:
+            self._actor_picker = None
+
         # Text overlay widget (for 2D text)
         self.overlay_label = QLabel(self.widget)
         self.overlay_label.setStyleSheet("""
@@ -63,6 +77,22 @@ class PyVistaBackend(RenderingBackend):
         """)
         self.overlay_label.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.overlay_label.hide()
+
+        # Pick-info label (shows trace metadata when an actor is clicked)
+        self.pick_info_label = QLabel(self.widget)
+        self.pick_info_label.setStyleSheet("""
+            QLabel {
+                color: white;
+                background-color: rgba(20, 20, 20, 220);
+                padding: 6px 8px;
+                border: 1px solid #666;
+                border-radius: 3px;
+                font-family: monospace;
+                font-size: 11px;
+            }
+        """)
+        self.pick_info_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.pick_info_label.hide()
         
         # Mouse event callbacks
         self.on_click_callback = None
@@ -228,6 +258,7 @@ class PyVistaBackend(RenderingBackend):
         self._handle_counter += 1
         self.objects[handle] = actor
         self.actor_names[actor] = name
+        self.actor_to_handle[actor] = handle
         # Don't render immediately for better batch performance
         return handle
     
@@ -303,6 +334,7 @@ class PyVistaBackend(RenderingBackend):
         self._handle_counter += 1
         self.objects[handle] = actor
         self.actor_names[actor] = name
+        self.actor_to_handle[actor] = handle
         # Don't render immediately for better batch performance
         return handle
     
@@ -351,6 +383,7 @@ class PyVistaBackend(RenderingBackend):
         self._handle_counter += 1
         self.objects[handle] = actor
         self.actor_names[actor] = name
+        self.actor_to_handle[actor] = handle
         # Don't render immediately for better batch performance
         return handle
 
@@ -394,6 +427,7 @@ class PyVistaBackend(RenderingBackend):
         self._handle_counter += 1
         self.objects[handle] = actor
         self.actor_names[actor] = name
+        self.actor_to_handle[actor] = handle
         # Don't render immediately for better batch performance
         return handle
     
@@ -562,6 +596,9 @@ class PyVistaBackend(RenderingBackend):
             del self.objects[handle]
             if actor in self.actor_names:
                 del self.actor_names[actor]
+            if actor in self.actor_to_handle:
+                del self.actor_to_handle[actor]
+            self.handle_metadata.pop(handle, None)
             
             # Single render will be handled by end_update()
             
@@ -643,6 +680,65 @@ class PyVistaBackend(RenderingBackend):
             self.on_move_callback = on_move
         if on_wheel:
             self.on_wheel_callback = on_wheel
+
+    # ── Per-handle metadata & picking ───────────────────────────────────────
+    def set_object_metadata(self, handle, **meta):
+        """Attach arbitrary metadata to a handle (used by pick-info overlay)."""
+        if handle is None:
+            return
+        if handle in self.handle_metadata:
+            self.handle_metadata[handle].update(meta)
+        else:
+            self.handle_metadata[handle] = dict(meta)
+
+    def _pick_actor_metadata(self, qt_x: int, qt_y: int):
+        """Return the metadata dict of the actor under the given widget pixel."""
+        if self._actor_picker is None:
+            return None
+        try:
+            # Map Qt (top-down) widget coords to the plotter widget, then
+            # invert y for VTK (bottom-up).
+            plotter_widget = self.plotter
+            mapped = plotter_widget.mapFrom(self.widget, _qpoint(qt_x, qt_y))
+            px, py = mapped.x(), mapped.y()
+            h = plotter_widget.height()
+            vy = h - py
+            renderer = plotter_widget.renderer
+            self._actor_picker.Pick(px, vy, 0, renderer)
+            actor = self._actor_picker.GetActor()
+            if actor is None:
+                return None
+            handle = self.actor_to_handle.get(actor)
+            if handle is None:
+                return None
+            return self.handle_metadata.get(handle)
+        except Exception:
+            return None
+
+    def _update_pick_info(self, meta, qt_x: int, qt_y: int):
+        """Show/hide the pick-info overlay at the click position."""
+        if not meta:
+            self.pick_info_label.hide()
+            return
+        key_order = ("trace_id", "n_spots", "chrom", "region")
+        lines = []
+        for k in key_order:
+            if k in meta:
+                lines.append(f"{k}: {meta[k]}")
+        for k, v in meta.items():
+            if k in key_order:
+                continue
+            lines.append(f"{k}: {v}")
+        self.pick_info_label.setText("\n".join(lines))
+        self.pick_info_label.adjustSize()
+        lab = self.pick_info_label
+        max_x = max(10, self.widget.width() - lab.width() - 10)
+        max_y = max(10, self.widget.height() - lab.height() - 10)
+        x = min(max(10, qt_x + 12), max_x)
+        y = min(max(10, qt_y + 12), max_y)
+        lab.move(x, y)
+        lab.raise_()
+        lab.show()
     
     def _on_click_wrapper(self, pos):
         """Wrapper for click events."""
@@ -666,7 +762,7 @@ class PyVistaBackend(RenderingBackend):
         self.plotter.mouseDoubleClickEvent = self._on_double_click
 
     def _on_mouse_press(self, event):
-        """Handle mouse press for canvas switching."""
+        """Handle mouse press for canvas switching + trace picking."""
         if self.on_click_callback:
             canvas_ref = getattr(self, '_canvas_ref', None)
             source = type('Source', (), {'canvas': canvas_ref})
@@ -675,6 +771,14 @@ class PyVistaBackend(RenderingBackend):
                 'source': source,
             })
             self.on_click_callback(mock_event)
+        # Trace picking: left-click on an actor shows its metadata overlay.
+        try:
+            from PyQt5.QtCore import Qt as _Qt
+            if event.button() == _Qt.LeftButton:
+                meta = self._pick_actor_metadata(event.x(), event.y())
+                self._update_pick_info(meta, event.x(), event.y())
+        except Exception:
+            pass
         # Call original handler to preserve VTK interaction
         if self._original_mouse_press:
             self._original_mouse_press(event)

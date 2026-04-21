@@ -320,7 +320,9 @@ def run_once(particles, particle_size, contacts, prams, step_callback):
 
 def main(in_file, out_file,
          arch="gpu", device_memory_fraction=0.9,
+         cell_id=None,
          **kwargs):
+    import os
     prams = copy(default_params)
     prams.update(kwargs)
     print(in_file)
@@ -336,7 +338,9 @@ def main(in_file, out_file,
         if stage > 0:
             contacts = remove_violated_contacts(contacts, particles, prams['violated_threshold'])
         particles = run_once(particles, particle_size, contacts, prams, None)
-    save_particles(particles, out_file)
+    if cell_id is None:
+        cell_id = os.path.splitext(os.path.basename(str(out_file)))[0]
+    save_particles(particles, out_file, cell_id=cell_id)
 
 
 if __name__ == "__main__":

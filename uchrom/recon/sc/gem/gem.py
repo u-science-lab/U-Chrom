@@ -198,7 +198,8 @@ default_prams = {
 
 
 
-def main(in_file, out_file, arch="gpu", **kwargs):
+def main(in_file, out_file, arch="gpu", cell_id=None, **kwargs):
+    import os
     prams = copy(default_prams)
     prams.update(kwargs)
     print(in_file)
@@ -220,7 +221,9 @@ def main(in_file, out_file, arch="gpu", **kwargs):
         simu.setup_schedule(prams['steps'], 0.0001, 0.01)
         simu.run()
         particles = simu.get_results()
-    save_particles(particles, out_file)
+    if cell_id is None:
+        cell_id = os.path.splitext(os.path.basename(str(out_file)))[0]
+    save_particles(particles, out_file, cell_id=cell_id)
 
 
 if __name__ == "__main__":
