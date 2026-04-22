@@ -419,48 +419,74 @@ import pandas as pd
 from uchrom import ChromData
 from uchrom.strc.loop import call_loops_axiswise_f, LoopCallerParams"""),
 
-    md("## Load a chromatin-tracing dataset\n\nWe use the same synthetic FOF-CT file produced by tutorial 2; re-run that one first if this cell fails.  In practice you would download a real dataset such as Takei et al. 2021 (4DN accession `4DNFIHF3JCBY`)."),
+    md("## Load a chromatin-tracing dataset\n\nWe use the Takei et al. 2021 Nature mESC chromatin-tracing dataset (4DN accession `4DNFIHF3JCBY`).  The helper below auto-downloads it from the public 4DN S3 bucket into `example-data/` on the first run, and re-uses the local copy afterwards.  If the download can't reach the network, the notebook falls back to a small synthetic FOF-CT with hand-crafted TAD + loop structure so the notebook still runs."),
 
     code("""\
 from pathlib import Path
 import os
 
-# Preferred: use real chromatin-tracing data.  Takei et al. 2021 Nature
-# (4DN accession 4DNFIHF3JCBY) is the canonical ArcFISH benchmark set —
-# mm10 chromatin tracing at 25 kb resolution, 20 chromosomes,
-# ~400 traces/chrom.  Download instructions:
-#
-#   curl --user <4DN_key>:<4DN_secret> -O -L \\
-#       https://data.4dnucleome.org/files-processed/4DNFIHF3JCBY/@@download/4DNFIHF3JCBY.csv
-#
-# Save it anywhere on your system and set TAKEI_PATH below.  If the file
-# is not found, the tutorial falls back to a small synthetic FOF-CT with
-# hand-crafted TAD + loop structure so the notebook still runs.
+# Takei et al. 2021 Nature mESC chromatin tracing (mm10, 25 kb, 20 chroms,
+# ~400 traces/chrom).  Public 4DN S3 object — no auth required.
+TAKEI_URL = (
+    'https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/'
+    'wfoutput/e699334e-fb34-4a0e-8ef6-670b2099831a/4DNFIHF3JCBY.csv'
+)
+
+def _download_takei(dest: Path) -> bool:
+    '''Download Takei 2021 FOF-CT to *dest* if it doesn't already exist.
+    Returns True on success, False on any network error.'''
+    if dest.exists():
+        return True
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    print(f'[data] downloading Takei 2021 (~22 MB) → {dest}')
+    try:
+        import urllib.request
+        tmp = dest.with_suffix(dest.suffix + '.part')
+        urllib.request.urlretrieve(TAKEI_URL, tmp)
+        tmp.rename(dest)
+        return True
+    except Exception as exc:
+        print(f'[data] download failed ({exc}); falling back to synthetic')
+        return False
+
+def _repo_root() -> Path:
+    # nbconvert runs the notebook with cwd = tutorials/, so walk up to the
+    # repo root (contains pyproject.toml) before anchoring example-data.
+    for p in [Path.cwd(), *Path.cwd().parents]:
+        if (p / 'pyproject.toml').exists() or (p / 'example-data').exists():
+            return p
+    return Path.cwd()
 
 def find_fofct() -> str:
-    # 1) Try real Takei 2021 data in a few likely locations
+    root = _repo_root()
+    # 1) Fast path — any local copy already on disk
     candidates = [
+        root / 'example-data' / '4DNFIHF3JCBY.csv',
         Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
         Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.h5cd',
         Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
-        Path.cwd() / 'example-data' / '4DNFIHF3JCBY.csv',
     ]
     for c in candidates:
         if c.exists():
             print(f'[data] using real Takei 2021 FOF-CT: {c}')
             return str(c)
 
-    # 2) Fall back to an existing synthetic file if someone already made
-    #    one (avoid re-generating across cells)
+    # 2) Download to a stable repo-local location
+    dest = root / 'example-data' / '4DNFIHF3JCBY.csv'
+    if _download_takei(dest):
+        print(f'[data] using real Takei 2021 FOF-CT: {dest}')
+        return str(dest)
+
+    # 3) If a synthetic was already built (e.g. by an earlier run), reuse it
     for p in [Path.cwd(), *Path.cwd().parents]:
         cand = p / 'example-data' / 'fofct_core.csv'
         if cand.exists():
             print(f'[data] using synthetic FOF-CT: {cand}')
             return str(cand)
 
-    # 3) Last resort: synthesise a FOF-CT with built-in TAD + loop structure
-    print('[data] no real data found — generating synthetic FOF-CT')
-    os.makedirs('example-data', exist_ok=True)
+    # 4) Last resort: synthesise a FOF-CT with built-in TAD + loop structure
+    print('[data] generating synthetic FOF-CT (offline fallback)')
+    (root / 'example-data').mkdir(parents=True, exist_ok=True)
     import numpy as np
     rng = np.random.default_rng(0)
     header = '''##FOF-CT_Version=v1.0
@@ -512,7 +538,7 @@ def find_fofct() -> str:
                 rows.append((sid, f'{cell}_{trace}', x, y, z,
                              'chr17', s, s + 25_000, cell))
                 sid += 1
-    path = 'example-data/fofct_core.csv'
+    path = str(root / 'example-data' / 'fofct_core.csv')
     with open(path, 'w') as f:
         f.write(header)
         for r in rows:
@@ -672,24 +698,52 @@ from uchrom.strc.tad import call_tads_by_pval, TADCallerParams
 from uchrom.fea import mean_distance_matrix
 from uchrom.pl import plot_distance_matrix"""),
 
-    md("## Load the example FOF-CT\n\nUse the same synthetic file produced by tutorial 2 / 4; in practice you would point this at a real dataset such as Takei et al. 2021 (4DN `4DNFIHF3JCBY`)."),
+    md("## Load the example FOF-CT\n\nUses the Takei et al. 2021 Nature mESC chromatin-tracing dataset (4DN `4DNFIHF3JCBY`); auto-downloaded from the public 4DN S3 bucket on first run, cached under `example-data/`."),
 
     code("""\
 from pathlib import Path
 import os
 
-# Prefer real Takei 2021 data if downloaded; otherwise fall back to
-# the synthetic FOF-CT produced by tutorial 4.
-candidates = [
-    Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
-    Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.h5cd',
-    Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
-]
-for p in [Path.cwd(), *Path.cwd().parents]:
-    candidates.append(p / 'example-data' / 'fofct_core.csv')
-FOFCT = next((str(c) for c in candidates if c.exists()), None)
-if FOFCT is None:
-    raise FileNotFoundError('Run tutorial 4 first or download Takei 2021 (4DNFIHF3JCBY).')
+TAKEI_URL = (
+    'https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/'
+    'wfoutput/e699334e-fb34-4a0e-8ef6-670b2099831a/4DNFIHF3JCBY.csv'
+)
+
+def _repo_root() -> Path:
+    # Walk up until we find the repo marker (pyproject.toml); fall back to
+    # cwd if nothing matches.  Avoid matching on ``example-data/`` alone —
+    # prior notebook runs may have synthesised a ``tutorials/example-data/``.
+    for p in [Path.cwd(), *Path.cwd().parents]:
+        if (p / 'pyproject.toml').exists():
+            return p
+    return Path.cwd()
+
+def find_fofct() -> str:
+    root = _repo_root()
+    candidates = [
+        root / 'example-data' / '4DNFIHF3JCBY.csv',
+        Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
+        Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.h5cd',
+        Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
+    ]
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    # Fall back to an earlier synthetic build if present
+    cand = root / 'example-data' / 'fofct_core.csv'
+    if cand.exists():
+        return str(cand)
+    # Download
+    dest = root / 'example-data' / '4DNFIHF3JCBY.csv'
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    print(f'[data] downloading Takei 2021 (~22 MB) → {dest}')
+    import urllib.request
+    tmp = dest.with_suffix(dest.suffix + '.part')
+    urllib.request.urlretrieve(TAKEI_URL, tmp)
+    tmp.rename(dest)
+    return str(dest)
+
+FOFCT = find_fofct()
 print(FOFCT)
 cd = ChromData.read(FOFCT) if FOFCT.endswith(".h5cd") else ChromData.from_fofct(FOFCT)
 cd"""),
@@ -837,22 +891,50 @@ from uchrom.strc.comp import call_compartments_axes_pc, CompartmentCallerParams
 from uchrom.fea import mean_distance_matrix
 from uchrom.pl import plot_distance_matrix"""),
 
-    md("## Load example data"),
+    md("## Load example data\n\nUses the Takei et al. 2021 Nature mESC chromatin-tracing dataset (4DN `4DNFIHF3JCBY`); auto-downloaded from the public 4DN S3 bucket on first run, cached under `example-data/`."),
 
     code("""\
 from pathlib import Path
-# Prefer real Takei 2021 data if downloaded; otherwise fall back to
-# the synthetic FOF-CT produced by tutorial 4.
-candidates = [
-    Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
-    Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.h5cd',
-    Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
-]
-for p in [Path.cwd(), *Path.cwd().parents]:
-    candidates.append(p / 'example-data' / 'fofct_core.csv')
-FOFCT = next((str(c) for c in candidates if c.exists()), None)
-if FOFCT is None:
-    raise FileNotFoundError('Run tutorial 4 first or download Takei 2021 (4DNFIHF3JCBY).')
+
+TAKEI_URL = (
+    'https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/'
+    'wfoutput/e699334e-fb34-4a0e-8ef6-670b2099831a/4DNFIHF3JCBY.csv'
+)
+
+def _repo_root() -> Path:
+    # Walk up until we find the repo marker (pyproject.toml); fall back to
+    # cwd if nothing matches.  Avoid matching on ``example-data/`` alone —
+    # prior notebook runs may have synthesised a ``tutorials/example-data/``.
+    for p in [Path.cwd(), *Path.cwd().parents]:
+        if (p / 'pyproject.toml').exists():
+            return p
+    return Path.cwd()
+
+def find_fofct() -> str:
+    root = _repo_root()
+    candidates = [
+        root / 'example-data' / '4DNFIHF3JCBY.csv',
+        Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
+        Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.h5cd',
+        Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
+    ]
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    cand = root / 'example-data' / 'fofct_core.csv'
+    if cand.exists():
+        return str(cand)
+    dest = root / 'example-data' / '4DNFIHF3JCBY.csv'
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    print(f'[data] downloading Takei 2021 (~22 MB) → {dest}')
+    import urllib.request
+    tmp = dest.with_suffix(dest.suffix + '.part')
+    urllib.request.urlretrieve(TAKEI_URL, tmp)
+    tmp.rename(dest)
+    return str(dest)
+
+FOFCT = find_fofct()
+print(FOFCT)
 cd = ChromData.read(FOFCT) if FOFCT.endswith(".h5cd") else ChromData.from_fofct(FOFCT)
 cd"""),
 
