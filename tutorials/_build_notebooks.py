@@ -215,11 +215,11 @@ if not os.path.exists(FOFCT):
 '''
     rows = []
     sid = 1
-    for cell in range(5):
-        for trace in range(4):  # 4 traces per cell
-            base = rng.normal(size=3) * 0.1
-            for bin_i in range(8):  # 8 bins per trace
-                x, y, z = base + rng.normal(scale=0.05, size=3)
+    for cell in range(20):
+        for trace in range(2):          # 2 alleles per cell
+            walk = np.cumsum(rng.normal(scale=0.12, size=(12, 3)), axis=0)
+            for bin_i in range(12):      # 12 bins per trace
+                x, y, z = walk[bin_i]
                 start = 1_000_000 + bin_i * 10_000
                 rows.append((sid, f'{cell}_{trace}', x, y, z,
                              'chr17', start, start + 10_000, cell))
@@ -305,6 +305,23 @@ U-Chrom provides several 3D reconstruction algorithms:
 This notebook walks through a short single-cell reconstruction using Nuc
 Dynamics on the example data shipped with the repo."""),
 
+    md("## Locate the example data\n\nThe notebook looks for `example-data/cell1.pairs` in the repo; we walk up the directory tree to find the repo root so this runs from any cwd."),
+
+    code("""\
+from pathlib import Path
+
+def find_repo_root(start: Path = Path.cwd()) -> Path:
+    for p in [start, *start.parents]:
+        if (p / 'example-data' / 'cell1.pairs').exists():
+            return p
+    raise FileNotFoundError('Could not locate example-data/cell1.pairs')
+
+repo = find_repo_root()
+pairs = repo / 'example-data' / 'cell1.pairs'
+out_path = repo / 'tutorials' / '_out_tutorial3.h5cd'
+print('pairs:', pairs)
+print('out  :', out_path)"""),
+
     md("## Run Nuc Dynamics\n\nThe CLI is the simplest way; the main function is also importable."),
 
     code("""\
@@ -314,8 +331,8 @@ Dynamics on the example data shipped with the repo."""),
 
 from uchrom.recon.sc.nucdyn import main as nucdyn_main
 nucdyn_main(
-    'example-data/cell1.pairs',
-    'out.h5cd',
+    str(pairs),
+    str(out_path),
     arch='cpu',      # 'cuda' if you have an NVIDIA GPU
     dyns=30,         # fewer steps for the tutorial
     size_steps=[2, 0.4],  # only two resolution stages
@@ -325,7 +342,7 @@ nucdyn_main(
 
     code("""\
 from uchrom import ChromData
-cd = ChromData.read('out.h5cd')
+cd = ChromData.read(str(out_path))
 cd"""),
 
     code("""\
@@ -402,20 +419,82 @@ import pandas as pd
 from uchrom import ChromData
 from uchrom.strc.loop import call_loops_axiswise_f, LoopCallerParams"""),
 
-    md("## Load a chromatin-tracing dataset"),
+    md("## Load a chromatin-tracing dataset\n\nWe use the same synthetic FOF-CT file produced by tutorial 2; re-run that one first if this cell fails.  In practice you would download a real dataset such as Takei et al. 2021 (4DN accession `4DNFIHF3JCBY`)."),
 
     code("""\
-# Point this at a FOF-CT file you have locally.  A good choice is
-# Takei et al. 2021 (4DN accession 4DNFIHF3JCBY), which was used by
-# ArcFISH for benchmarking; it contains 19 autosomes + X at 25 kb bins,
-# roughly 400 traces per chromosome.
+from pathlib import Path
+import os
 
-FOFCT = 'example-data/fofct_core.csv'  # or your local path
+def find_fofct() -> str:
+    # Walk up to find a tutorials/ next to example-data/
+    here = Path.cwd()
+    for p in [here, *here.parents]:
+        cand = p / 'example-data' / 'fofct_core.csv'
+        if cand.exists():
+            return str(cand)
+    # Fallback: synthesise a FOF-CT file with built-in loop structure so
+    # the tutorial actually calls a loop.  Bin pair (5, 20) is drawn close
+    # together across traces; other pairs are random.
+    os.makedirs('example-data', exist_ok=True)
+    import numpy as np
+    rng = np.random.default_rng(0)
+    header = '''##FOF-CT_Version=v1.0
+##Table_Namespace=4dn_FOF-CT_core
+##Genome_Assembly=GRCh38
+##XYZ_Unit=micron
+#Lab_Name: Demo
+##Columns=(Spot_ID, Trace_ID, X, Y, Z, Chrom, Chrom_Start, Chrom_End, Cell_ID)
+'''
+    # Brownian-bridge polymer: bins 5 and 20 are always pinned close to
+    # each other (the "loop"); the intervening bins form a random bridge
+    # between the two anchors, and bins outside [5, 20] are independent
+    # random walks.  This produces a clean contact map with one bright
+    # spot at (5, 20) and a standard diagonal elsewhere.
+    def synth_trace(rng, n_bins=30, loop_a=5, loop_b=20, step=0.20, anchor_noise=0.03):
+        w = np.zeros((n_bins, 3))
+        # Pre-loop bins 0..loop_a: plain random walk
+        for i in range(1, loop_a + 1):
+            w[i] = w[i - 1] + rng.normal(scale=step, size=3)
+        # Loop anchor at bin b: near w[loop_a] with tiny noise
+        w[loop_b] = w[loop_a] + rng.normal(scale=anchor_noise, size=3)
+        # Interior bins loop_a+1 .. loop_b-1: Brownian bridge from w[loop_a] → w[loop_b]
+        n_int = loop_b - loop_a - 1
+        if n_int > 0:
+            raw = np.cumsum(rng.normal(scale=step, size=(n_int, 3)), axis=0)
+            # End-point drift to remove so we land at w[loop_b]
+            end_drift = raw[-1] - (w[loop_b] - w[loop_a])
+            for k, idx in enumerate(range(loop_a + 1, loop_b)):
+                t = (k + 1) / (n_int + 1)
+                w[idx] = w[loop_a] + raw[k] - t * end_drift
+        # Post-loop bins loop_b+1 .. n_bins-1: random walk from w[loop_b]
+        for i in range(loop_b + 1, n_bins):
+            w[i] = w[i - 1] + rng.normal(scale=step, size=3)
+        return w
 
+    rows = []
+    sid = 1
+    for cell in range(300):
+        for trace in range(2):
+            walk = synth_trace(rng)
+            for bin_i in range(30):
+                x, y, z = walk[bin_i]
+                s = 1_000_000 + bin_i * 25_000
+                rows.append((sid, f'{cell}_{trace}', x, y, z,
+                             'chr17', s, s + 25_000, cell))
+                sid += 1
+    path = 'example-data/fofct_core.csv'
+    with open(path, 'w') as f:
+        f.write(header)
+        for r in rows:
+            f.write(','.join(str(x) for x in r) + chr(10))
+    return path
+
+FOFCT = find_fofct()
+print('using', FOFCT)
 cd = ChromData.from_fofct(FOFCT)
 print(cd)
 print()
-print('chromosomes with trace counts:')
+print('traces per chrom:')
 print(
     cd.spots.groupby('chrom', observed=True)['trace_id']
       .nunique().sort_values(ascending=False).head(10)
@@ -439,6 +518,47 @@ loops = call_loops_axiswise_f(
     verbose=True,
 )
 loops"""),
+
+    md("## Visualising the result\n\nThe companion modules `uchrom.fea` and `uchrom.pl` compute and render the population-level aggregates that chromatin-tracing papers use to present loop calls."),
+
+    code("""\
+import matplotlib.pyplot as plt
+import numpy as np
+from uchrom.fea import mean_distance_matrix, contact_frequency, radius_of_gyration
+from uchrom.pl import plot_distance_matrix, plot_contact_map, plot_rg_histogram
+
+df = cd.get_chrom(chrom).to_dataframe()
+
+# Median pairwise distance matrix across all traces
+dmat, bin_ids, n = mean_distance_matrix(df, chrom=chrom)
+fig = plot_distance_matrix(dmat, title=f'Median 3D distance ({n} traces)')
+
+# Overlay called loop summits on the heatmap
+ax = fig.axes[0]
+for _, row in loops.iterrows():
+    i, j = int(row['summit_i']), int(row['summit_j'])
+    ax.plot(j, i, 'o', mfc='none', mec='white', mew=1.5, ms=14)
+    ax.plot(i, j, 'o', mfc='none', mec='white', mew=1.5, ms=14)
+ax.set_title(ax.get_title() + f' — {len(loops)} loop(s) overlaid')
+plt.show()"""),
+
+    code("""\
+# Population-level contact map at a user-chosen distance threshold
+threshold = float(np.nanmedian(dmat[dmat > 0]) * 0.5)  # loose rule of thumb
+cmat, bin_ids, n = contact_frequency(df, threshold=threshold, chrom=chrom)
+fig = plot_contact_map(cmat, title=f'Contact frequency (< {threshold:.2g}, {n} traces)')
+ax = fig.axes[0]
+for _, row in loops.iterrows():
+    i, j = int(row['summit_i']), int(row['summit_j'])
+    ax.plot(j, i, 'o', mfc='none', mec='cyan', mew=1.5, ms=14)
+    ax.plot(i, j, 'o', mfc='none', mec='cyan', mew=1.5, ms=14)
+plt.show()"""),
+
+    code("""\
+# Per-trace radius of gyration distribution
+rg = radius_of_gyration(df, chrom=chrom)
+fig = plot_rg_histogram(rg, title=f'Rg distribution ({len(rg)} traces)')
+plt.show()"""),
 
     md("## Tuning thresholds\n\nAll parameters live on `LoopCallerParams`:"),
 
@@ -469,9 +589,10 @@ loops_genome.sort_values('pval').head(10)"""),
     md("## Persist results into the ChromData\n\nThe single-chromosome call already wrote to `cd.results['loops']`.  The result round-trips through `.h5cd`."),
 
     code("""\
-cd.write('with_loops.h5cd')
+out = Path(FOFCT).parent / 'with_loops.h5cd'
+cd.write(str(out))
 
-cd_reloaded = ChromData.read('with_loops.h5cd')
+cd_reloaded = ChromData.read(str(out))
 print(cd_reloaded.results['loops'])"""),
 
     md("## CLI\n\nFor batch scripts:\n\n```bash\npython -m uchrom.strc.loop --input=data.h5cd --output=data_loops.h5cd \\\n    --chrom=chr17 --device=auto\n\n# BEDPE export instead\npython -m uchrom.strc.loop --input=data.h5cd --output=loops.bedpe \\\n    --chrom=chr17 --device=auto\n```"),

@@ -1,14 +1,167 @@
 """ChromData — core data container for U-Chrom.
 
-Analogous to AnnData for single-cell genomics, ChromData provides a
-structured container for chromatin 3D structure data.
+Purpose
+-------
+``ChromData`` is the project-wide interface for chromatin 3D structure
+data.  It unifies the two kinds of input U-Chrom consumes —
 
-Hierarchy: Cell → Trace → Spot/Bin
+    * **sequencing-based** (Hi-C, Dip-C) → produced by
+      :mod:`uchrom.recon` reconstruction
+    * **imaging-based** (ORCA, MERFISH, DNA seqFISH+) → produced by
+      :mod:`uchrom.im` + chromatin tracing
 
-Three core tables:
-    - Core table: 3D coordinates + genomic positions (FOF-CT compatible)
-    - Cell table: cell-level metadata and embeddings
-    - Chromatin table: epigenomic tracks per bin (ATAC, ChIP, etc.)
+— into a single flat "structure table" (*genomic bins → 3-D coordinates*)
+plus hierarchical metadata for cells, traces, and population-level
+aggregate results.  Every downstream analysis module (``uchrom.strc``,
+``uchrom.fea``, ``uchrom.emb``, ``uchrom.pl``, ``uchrom.browser``)
+consumes or produces ``ChromData`` — the format is the contract that
+decouples tools along the pipeline.
+
+Conceptually it is the chromatin-structure analogue of
+`AnnData <https://anndata.readthedocs.io/>`_ for scRNA-seq.  The main
+difference is an extra hierarchical axis: AnnData has
+``observations × variables``; ChromData has
+``Cell → Trace → Spot`` with coordinates in 3-D.
+
+Hierarchy
+---------
+Cell → Trace → Spot::
+
+    * Spot   — one genomic bin observed in one trace, with an (x, y, z).
+    * Trace  — an ordered polymer of spots along a chromatin fibre.  In
+               a diploid cell one chromosome contributes two traces
+               (maternal + paternal, when haplotype-resolved).
+    * Cell   — a physical cell that contains one or more traces.
+
+Attributes summary
+------------------
+
+    coords      (n_spots, 3) ndarray         x, y, z per spot
+    spots       DataFrame (n_spots, ≥4)      chrom, start, end, trace_id,
+                                              [cell_id, spot_id, ...]
+    cells       DataFrame (n_cells, ?)       cell_type, position, ...
+    cellm       dict[str, ndarray]            per-cell multi-dim
+                                              (embedding, UMAP, ...)
+    tracks      DataFrame (n_spots, n_track) epigenomic signals aligned
+                                              to spots (ATAC, ChIP, ...)
+    traces      DataFrame (n_traces, ?)      trace-level metadata
+    layers      dict[str, (n_spots, 3)]      alt. coordinate sets
+                                              (raw / corrected / aligned)
+    results     dict                          analysis outputs
+                                              (loops, tads, compartments)
+    uns         dict                          unstructured metadata
+                                              (genome_assembly, xyz_unit,
+                                              fofct_header, ...)
+
+See :attr:`_SPOTS_REQUIRED_COLUMNS` below for the contract on ``spots``.
+
+Spot required columns
+---------------------
+    chrom      str (stored as ``pd.Categorical``)
+    start      int, 0-based BED-style start
+    end        int, non-inclusive end
+    trace_id   int or str (stored as ``pd.Categorical``)
+
+Optional but conventional columns:
+
+    cell_id            int or str (categorical)
+    spot_id            int or str (globally unique; FOF-CT Spot_ID)
+    sub_cell_roi_id    see FOF-CT
+    extra_cell_roi_id  see FOF-CT
+
+Any extra column is preserved verbatim (e.g. ``Readout`` in Takei / Hu
+FOF-CT files).  String-heavy columns are auto-converted to
+``pd.Categorical`` in ``__init__`` for ~10× memory savings on large
+datasets.
+
+FOF-CT compatibility
+--------------------
+:meth:`ChromData.from_fofct` parses a `4DN FOF-CT core table
+<https://fish-omics-format.readthedocs.io/>`_:
+
+    FOF-CT field          →  ChromData location
+    ----------------------  ---------------------------------
+    Spot_ID                 spots['spot_id']
+    Trace_ID                spots['trace_id']
+    X, Y, Z                 coords[:, 0], coords[:, 1], coords[:, 2]
+    Chrom                   spots['chrom']
+    Chrom_Start             spots['start']
+    Chrom_End               spots['end']
+    Cell_ID                 spots['cell_id']
+    Sub_Cell_ROI_ID         spots['sub_cell_roi_id']
+    Extra_Cell_ROI_ID       spots['extra_cell_roi_id']
+
+Header fields (``##Genome_Assembly``, ``##XYZ_Unit``, ``#Lab_Name``,
+``#Software_*``, ...) are preserved verbatim in
+``uns['fofct_header']``; the two standard keys ``genome_assembly`` and
+``xyz_unit`` are also promoted to top-level ``uns`` entries.  The parser
+tolerates several real-world FOF-CT quirks (case-insensitive
+``##columns=``, header lines wrapped in double quotes with trailing
+commas, a CSV column header line after ``##columns=``, etc).
+
+On-disk format — ``.h5cd``
+--------------------------
+HDF5 with two root-group attributes:
+
+    uchrom_format_version    "MAJOR.MINOR" contract of the file layout
+    uchrom_version           uchrom package version that wrote the file
+
+Semantics:
+
+    * **Same MAJOR**  — readable.  Higher MINOR triggers a warning but
+      unknown fields are ignored (forward-compatible additive changes).
+    * **Different MAJOR** — :exc:`ValueError` on read, with guidance to
+      upgrade uchrom or convert the file.
+    * **Missing attribute** (pre-versioning files) — warn and assume
+      legacy 1.0 layout.
+
+Layout::
+
+    data.h5cd
+    ├── @uchrom_format_version  = "1.0"
+    ├── @uchrom_version         = "0.2.0"
+    ├── coords               (n_spots, 3) float64
+    ├── spots/               group — one dataset per DataFrame column
+    ├── cells/               group
+    ├── tracks/              group
+    ├── traces/              group
+    ├── cellm/               group of (n_cells, ...) ndarrays per key
+    ├── layers/              group of (n_spots, 3) ndarrays per key
+    ├── results/             group — DataFrames as sub-groups,
+    │                         arrays as datasets
+    └── uns/                 nested group — scalars as attrs,
+                              dicts as sub-groups
+
+New MAJOR versions should add a ``_read_vN`` function at the bottom of
+this module and extend the dispatch in :meth:`ChromData.read`.
+
+Design decisions (why this shape)
+---------------------------------
+* **Flat storage + hierarchical access.**  ``spots`` holds every
+  observation in one DataFrame; ``get_cell`` / ``get_trace`` /
+  ``get_chrom`` return new ``ChromData`` instances.  Mutation is
+  non-destructive.
+* **No global pairwise matrix.**  Pairwise distances / contacts are
+  biologically meaningful per-trace, not globally across cells, and
+  would be O(n²) to store.  Use
+  :meth:`ChromData.compute_distances` on demand.
+* **Three "core tables"** distinguishing *where the data comes from*
+  drives the module layout:
+
+      * ``core``  (coords + spots)   — *what* (3-D structure)
+      * ``cell`` (cells + cellm)     — *who* (cell identity / embedding)
+      * ``tracks``                   — *what else per bin*
+                                       (ATAC / ChIP signal)
+
+* **Categorical dtypes** on string columns save ~10× memory without
+  changing behaviour.
+* **Versioned on-disk format** lets future changes break cleanly —
+  downstream tools can refuse unknown MAJOR versions rather than
+  silently deserialise wrong data.
+
+See also :mod:`uchrom.core.spec` for a short human-oriented description
+of the format, and ``docs/source/guide/chromdata.md`` for tutorial-style
+material.
 """
 
 from __future__ import annotations
@@ -37,35 +190,88 @@ _SUPPORTED_MAJOR = 1
 
 
 class ChromData:
-    """Chromatin Data container.
+    """Chromatin Data — the core container for U-Chrom.
+
+    See the module docstring of :mod:`uchrom.core.cdata` for the full
+    purpose, hierarchy, FOF-CT mapping, and on-disk format contract.
+    Summary:
+
+    * The central abstraction is a "structure table" — genomic bins
+      mapped to 3D coordinates.  Each row of ``spots`` (with the
+      corresponding row of ``coords``) is one **Spot**.
+    * Spots are grouped hierarchically as **Cell → Trace → Spot**.  A
+      Trace is an ordered chromatin-fibre polymer; a Cell contains one
+      or more traces.
+    * All analysis in U-Chrom consumes or produces ``ChromData``.
+      Reconstruction modules (``uchrom.recon``) emit it, structure
+      callers (``uchrom.strc``) decorate ``cd.results[...]`` with TADs /
+      loops / compartments, and the browser / plotters render it.
 
     Parameters
     ----------
-    coords : np.ndarray, shape (n_spots, 3)
-        3D coordinates (x, y, z) for each spot/bin.
-    spots : pd.DataFrame, shape (n_spots,)
-        Spot-level metadata.  Required columns: chrom, start, end, trace_id.
-        Optional: cell_id, spot_id, etc.
-    cells : pd.DataFrame, optional
-        Cell-level metadata.  Index should be cell_id.
-    cellm : dict, optional
-        Per-cell multi-dimensional annotations.
-        e.g. ``{'embedding': array(n_cells, d)}``
-    tracks : pd.DataFrame, optional
-        Epigenomic signals per bin, row-aligned to *spots*.
-        e.g. columns: ATAC, H3K27ac, H3K27me3, …
-    traces : pd.DataFrame, optional
-        Trace-level metadata.  Index should be trace_id.
-    layers : dict, optional
-        Alternative coordinate representations, each ``(n_spots, 3)``.
+    coords : ndarray, shape (n_spots, 3)
+        3-D coordinates (x, y, z) per spot.
+    spots : DataFrame, shape (n_spots, ≥4)
+        Per-spot metadata.  **Required columns:**
+        ``chrom`` (str, will be categorified),
+        ``start`` (int, 0-based BED-style),
+        ``end`` (int, non-inclusive),
+        ``trace_id`` (int or str, will be categorified).
+        Optional: ``cell_id`` (int or str), ``spot_id``, FOF-CT
+        ``sub_cell_roi_id`` / ``extra_cell_roi_id``, and any
+        experiment-specific annotation column (carried through
+        verbatim).
+    cells : DataFrame, optional
+        Per-cell metadata indexed by cell_id.
+    cellm : dict[str, ndarray], optional
+        Per-cell multi-dimensional annotations (embeddings, UMAP, …).
+        Each array's first axis length = ``n_cells``.
+    tracks : DataFrame, optional
+        Epigenomic signals (ATAC, ChIP-seq, …) row-aligned to ``spots``.
+        Length must equal ``n_spots``.
+    traces : DataFrame, optional
+        Per-trace metadata indexed by trace_id.
+    layers : dict[str, ndarray], optional
+        Alternative coordinate sets, each with shape ``(n_spots, 3)`` —
+        e.g. raw / drift-corrected / aligned.
     results : dict, optional
-        Analysis results.
-        e.g. ``{'tads': DataFrame, 'loops': DataFrame, 'compartments': array}``
+        Analysis outputs.  Conventional keys:
+        ``'loops'`` → DataFrame (chrom1, start1, end1, …),
+        ``'tads'`` → DataFrame (chrom, start, end, …),
+        ``'compartments'`` → ndarray or DataFrame per bin.
     uns : dict, optional
-        Unstructured metadata.
-        e.g. ``{'genome_assembly': 'GRCh38', 'xyz_unit': 'micron'}``
+        Unstructured metadata preserved on disk.  Conventional keys:
+        ``'genome_assembly'``, ``'xyz_unit'``, ``'fofct_header'``.
     validate : bool
-        If True (default), validate data consistency on construction.
+        If True (default), validate internal consistency on
+        construction (coords shape, spots required columns, tracks /
+        layers alignment).
+
+    Attributes
+    ----------
+    n_spots, n_traces, n_cells, chroms : derived accessors
+
+    Key methods
+    -----------
+    from_dataframe, from_fofct, read, write, to_dataframe,
+    get_cell, get_trace, get_chrom, compute_distances
+
+    On-disk format — ``.h5cd``
+    --------------------------
+    Versioned HDF5.  See :mod:`uchrom.core.cdata` module docstring for
+    the full layout and the :meth:`read` / :meth:`write` round-trip
+    contract.
+
+    Notes
+    -----
+    * Subsetting (``cd[mask]``, ``get_chrom`` etc.) always returns a new
+      ``ChromData``; the source is not mutated.
+    * Global pairwise distance matrices are intentionally not stored —
+      they are biologically meaningful per-trace, not across cells, and
+      would be O(n²) memory.  Compute on demand via
+      :meth:`compute_distances(trace_id=...)`.
+    * String columns (``chrom``, ``trace_id``, ``cell_id``) are
+      auto-converted to ``pd.Categorical`` for ~10× memory savings.
     """
 
     def __init__(

@@ -291,13 +291,21 @@ def call_loops_axiswise_f(
     if cand_idx.size == 0:
         if verbose:
             print(f"[loop/{chrom}] no candidates in [{params.cut_lo}, {params.cut_up}]")
-        return _empty_result()
+        empty = _empty_result()
+        if store:
+            _store_result(cd, result_key, empty)
+        return empty
 
     # Step 4: per-axis F-test
     if verbose:
         print(f"[loop/{chrom}] {len(cand_idx)} candidates; running F-test...")
 
-    per_axis_p = np.full((3, len(cand_idx)), np.nan, dtype=np.float64)
+    # Work in log-p space to avoid floor-clipping ties at the minimum p.
+    # scipy's F.logcdf handles extreme F values without underflow, so a
+    # loop with F ≈ 1e-4 and a non-loop pair with F ≈ 0.2 stay
+    # distinguishable after ACAT combination, which matters for summit
+    # tie-breaking later.
+    per_axis_logp = np.full((3, len(cand_idx)), 0.0, dtype=np.float64)
     per_axis_F = np.full((3, len(cand_idx)), np.nan, dtype=np.float64)
     for k, (i, j) in enumerate(cand_idx):
         for ax in range(3):
@@ -312,14 +320,16 @@ def call_loops_axiswise_f(
             if not np.isfinite(denom) or denom <= 0 or bg_count <= 3:
                 continue
             F = vij / denom
-            # ArcFISH: df1 = count[i,j], df2 = total bg count
-            p = _f_dist.cdf(F, dfn=max(int(cij), 1), dfd=max(bg_count, 1))
+            logp = _f_dist.logcdf(F, dfn=max(int(cij), 1), dfd=max(bg_count, 1))
             per_axis_F[ax, k] = F
-            per_axis_p[ax, k] = p
+            per_axis_logp[ax, k] = logp
 
-    # Replace NaN / infs with 1 (conservative)
-    per_axis_p = np.where(np.isfinite(per_axis_p), per_axis_p, 1.0)
-    per_axis_p = np.clip(per_axis_p, 1e-300, 1 - 1e-15)
+    # Convert log-p back to p for ACAT (clip only here; ACAT needs raw p).
+    # A small floor (1e-300) still limits the dynamic range but that is
+    # enough precision for ACAT — the F-based ``score`` below breaks any
+    # remaining ties when picking the summit of a cluster.
+    per_axis_logp = np.where(np.isfinite(per_axis_logp), per_axis_logp, 0.0)
+    per_axis_p = np.clip(np.exp(per_axis_logp), 1e-300, 1 - 1e-15)
 
     # Step 4c: ACAT combine
     combined = cauchy_combination(per_axis_p.T, weights=w, axis=1)
@@ -334,17 +344,25 @@ def call_loops_axiswise_f(
     if not accept.any():
         if verbose:
             print(f"[loop/{chrom}] no candidates pass FDR < {params.fdr_cutoff}")
-        return _empty_result()
+        empty = _empty_result()
+        if store:
+            _store_result(cd, result_key, empty)
+        return empty
 
-    # Step 6: cluster accepted hits by 1D distance between midpoints
+    # Step 6: cluster accepted hits by 1D distance between midpoints.
+    # We order candidates inside a cluster by a full-precision log-p
+    # "score" (weighted sum of per-axis log-p) so that p-value ties at
+    # the numerical floor are broken by the actual F-statistic strength.
     hits_idx = cand_idx[accept]
     hit_pvals = pvals[accept]
+    w_arr = np.asarray(w).reshape(3, 1)
+    hit_score = (per_axis_logp * w_arr).sum(axis=0)[accept]   # smaller = better
     mids_i = np.array([(bin_ids[i][0] + bin_ids[i][1]) * 0.5 for i in hits_idx[:, 0]])
     mids_j = np.array([(bin_ids[j][0] + bin_ids[j][1]) * 0.5 for j in hits_idx[:, 1]])
     di = np.abs(mids_i[:, None] - mids_i[None, :])
     dj = np.abs(mids_j[:, None] - mids_j[None, :])
     d1d_hits = np.maximum(di, dj)
-    clusters, summits = _cluster_summits(accept, hit_pvals, d1d_hits, params.gap)
+    clusters, summits = _cluster_summits(accept, hit_score, d1d_hits, params.gap)
 
     # Step 7: pseudo-contact frequency filter
     # Build the (n_traces, n_bins, n_bins) 3D pdist matrix.  Uses the same
@@ -393,13 +411,18 @@ def call_loops_axiswise_f(
         df_out = _empty_result()
 
     if store:
-        results = getattr(cd, "results", None)
-        if results is None:
-            cd.results = {}
-            results = cd.results
-        results[result_key] = df_out
+        _store_result(cd, result_key, df_out)
 
     return df_out
+
+
+def _store_result(cd, key: str, df: pd.DataFrame):
+    """Assign ``df`` into ``cd.results[key]``, creating ``cd.results`` if needed."""
+    results = getattr(cd, "results", None)
+    if results is None:
+        cd.results = {}
+        results = cd.results
+    results[key] = df
 
 
 def _pseudo_contact_frequency(cd, chrom, bin_ids, device="auto"):
