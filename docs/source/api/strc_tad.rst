@@ -4,6 +4,16 @@ uchrom.strc.tad
 .. automodule:: uchrom.strc.tad
    :members:
 
+FISHnet (per-allele, graph-theory)
+----------------------------------
+
+.. autoclass:: uchrom.strc.tad.fishnet.FISHnetParams
+   :members:
+
+.. autofunction:: uchrom.strc.tad.fishnet.call_domains_fishnet
+
+.. autofunction:: uchrom.strc.tad.fishnet.call_domains_fishnet_trace
+
 F-test caller
 -------------
 
