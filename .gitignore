@@ -23,3 +23,6 @@ run_whole_genome.py
 # Large data files
 *.hic
 *.mcool
+# Docs build
+docs/build/
+.ipynb_checkpoints/

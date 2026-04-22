@@ -1,0 +1,90 @@
+# U-Chrom
+
+**U**niversal **Chrom**atin structure data analysis toolkit.
+
+U-Chrom provides a unified framework for 3D chromatin structure analysis.
+The core data structure is a **structure table** — genomic bins mapped to
+3D coordinates `(chrom, start, end, x, y, z)` — which can be obtained from
+either sequencing-based data (Hi-C, Dip-C) via 3D reconstruction, or
+imaging-based data (ORCA, MERFISH, DNA seqFISH+) via chromatin tracing.
+
+On top of this common interface, U-Chrom implements:
+
+- **Reconstruction** from sparse Hi-C contacts (Nuc Dynamics, GEM, MDS/SMACOF)
+- **Structure identification** — loops (ArcFISH-style per-axis F-test),
+  TADs (directionality index), compartments (placeholder)
+- **Geometric features** — distance matrices, contact frequency, radius
+  of gyration
+- **Interactive 3D browser** built on PyVista + PyQt5
+- **Population-level aggregation plots** (median distance matrix, contact
+  map, Rg histogram)
+
+## Quick start
+
+```bash
+pip install u-chrom
+```
+
+```python
+from uchrom import ChromData
+
+# Import FOF-CT imaging data
+cd = ChromData.from_fofct("example-data/core.csv")
+
+# ArcFISH-style loop calling (GPU-accelerated)
+from uchrom.strc.loop import call_loops_axiswise_f
+loops = call_loops_axiswise_f(cd, chrom="chr17", device="auto")
+
+# Persist
+cd.write("data.h5cd")
+```
+
+Launch the interactive 3D browser:
+
+```bash
+python -m uchrom.browser data.h5cd
+```
+
+```{toctree}
+:caption: Getting started
+:maxdepth: 1
+
+install
+concepts
+```
+
+```{toctree}
+:caption: Tutorials
+:maxdepth: 1
+
+tutorials/01_chromdata_basics
+tutorials/02_import_fofct
+tutorials/03_reconstruction
+tutorials/04_loop_calling
+```
+
+```{toctree}
+:caption: User guide
+:maxdepth: 2
+
+guide/chromdata
+guide/io
+guide/reconstruction
+guide/structure
+guide/browser
+```
+
+```{toctree}
+:caption: API reference
+:maxdepth: 1
+
+api/index
+```
+
+```{toctree}
+:caption: Project
+:maxdepth: 1
+
+changelog
+license
+```
