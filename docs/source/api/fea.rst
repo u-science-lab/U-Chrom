@@ -12,8 +12,8 @@ Distance-based aggregates
 .. automodule:: uchrom.fea.distance
    :members:
 
-ArcFISH-style preprocessing
----------------------------
+Axis-wise preprocessing
+-----------------------
 
 .. automodule:: uchrom.fea.arc
    :members: axis_variance_cube, filter_normalize, axis_weight

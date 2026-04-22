@@ -8,7 +8,7 @@
 | `uchrom.strc.tad` | available | Directionality index **and** ArcFISH-style F-test (hierarchical) |
 | `uchrom.strc.comp` | available | ArcFISH-style per-axis PC2 + KMeans |
 
-## Loop calling (ArcFISH-style)
+## Loop calling
 
 ```python
 from uchrom.strc.loop import call_loops_axiswise_f, LoopCallerParams
@@ -85,7 +85,7 @@ Output formats are inferred from the extension: `.bedpe` (BEDPE TSV),
 
 `uchrom.strc.tad` ships two methods:
 
-### 1. ArcFISH-style F-test (`call_tads_by_pval`)
+### 1. F-test caller (`call_tads_by_pval`)
 
 For each candidate boundary position the caller runs a per-axis F-test
 on the count-weighted intra-domain vs inter-domain variance inside a
