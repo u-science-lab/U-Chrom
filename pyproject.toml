@@ -24,6 +24,14 @@ dependencies = [
     "torch>=2.0",
 ]
 
+[project.optional-dependencies]
+docs = [
+    "sphinx>=7.0",
+    "furo>=2024.1",
+    "myst-nb>=1.0",
+    "sphinx-copybutton>=0.5",
+]
+
 [tool.setuptools]
 include-package-data = true
 

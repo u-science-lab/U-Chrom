@@ -1,0 +1,120 @@
+# Concepts
+
+## The structure table
+
+The central abstraction in U-Chrom is the **structure table**: a flat
+mapping from genomic bins to 3D coordinates.
+
+| chrom | start | end | x | y | z |
+|-------|-------|-----|---|---|---|
+| chr1 | 0 | 100_000 | 0.34 | 1.20 | -0.55 |
+| chr1 | 100_000 | 200_000 | 0.38 | 1.15 | -0.52 |
+| … | … | … | … | … | … |
+
+This is what **both** reconstruction output (Hi-C → 3D) **and** imaging
+output (chromatin tracing → 3D) produce.  Every analysis module in
+U-Chrom consumes this format.
+
+## Hierarchy: Cell → Trace → Spot
+
+A single row in the structure table is a **Spot** — one 3D observation
+of one genomic bin.  Spots are organised hierarchically:
+
+- **Spot** — one observation of one bin in one trace.
+- **Trace** — an ordered polymer of spots along a chromatin fibre.  One
+  allele's copy of the locus is one trace.  In chromatin tracing, a
+  diploid cell can give two traces per chromosome (maternal + paternal).
+- **Cell** — a physical cell containing one or more traces.
+
+For **reconstructed** data this hierarchy is thin: each chromosome is
+typically a single trace, and the whole output is one cell.
+
+For **imaging** data it matters: a single FOF-CT file may have hundreds
+of traces on the same chromosome, each coming from a different cell
+(and without explicit cell segmentation, individual traces do **not**
+necessarily belong to different cells — they just represent separate
+allele observations).
+
+## `ChromData` — the container
+
+[`uchrom.ChromData`](api/core) holds the structure table plus hierarchical
+metadata and analysis results:
+
+```
+ChromData
+├── coords      (n_spots, 3)             x, y, z coordinates
+├── spots       DataFrame (n_spots)      chrom, start, end, trace_id, [cell_id]
+├── cells       DataFrame (n_cells)      cell-level metadata
+├── cellm       dict[str, ndarray]        per-cell embeddings etc.
+├── tracks      DataFrame (n_spots)      per-bin epigenomic signals (ATAC, ChIP)
+├── traces      DataFrame (n_traces)     trace-level metadata
+├── layers      dict[str, (n_spots, 3)]  alternative coordinate sets
+├── results     dict                      analysis outputs (loops, tads, ...)
+└── uns         dict                      genome_assembly, xyz_unit, ...
+```
+
+Key design choices are documented in
+[User guide — ChromData](guide/chromdata).
+
+## Data flow
+
+```
+┌──────────────────────────────────┐
+│  Hi-C / Dip-C  (.pairs, .cool)   │
+└──────────────────────────────────┘
+                │
+                ▼ uchrom.recon.{sc,bulk}
+┌──────────────────────────────────┐
+│   3D coordinates (.h5cd)         │──┐
+└──────────────────────────────────┘  │
+                                      │
+┌──────────────────────────────────┐  │
+│  Imaging  (FOF-CT .csv)          │──┼──▶ ChromData
+└──────────────────────────────────┘  │
+                │                     │
+                ▼ uchrom.im (WIP)     │
+┌──────────────────────────────────┐  │
+│   3D coordinates (.h5cd)         │──┘
+└──────────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────┐
+│  Downstream analysis             │
+│  - uchrom.strc.loop              │
+│  - uchrom.strc.tad               │
+│  - uchrom.strc.comp  (WIP)       │
+│  - uchrom.fea                    │
+│  - uchrom.emb  (WIP)             │
+│  - uchrom.pl                     │
+│  - uchrom.browser                │
+└──────────────────────────────────┘
+```
+
+## On-disk format: `.h5cd`
+
+Serialisation is HDF5 with a small root-group schema:
+
+```
+data.h5cd (HDF5)
+├── @uchrom_format_version = "1.0"
+├── @uchrom_version        = "0.2.0"
+├── coords            (n_spots, 3) float64
+├── spots/            group of per-column datasets
+├── cells/            group
+├── tracks/           group
+├── traces/           group
+├── cellm/            group of per-key ndarrays
+├── layers/           group of (n_spots, 3) ndarrays
+├── results/          group (DataFrames as sub-groups, arrays as datasets)
+└── uns/              nested group (scalars as attrs, dicts as sub-groups)
+```
+
+Format version follows `MAJOR.MINOR`:
+
+- same MAJOR, higher MINOR → reader warns and proceeds (unknown fields
+  are ignored);
+- different MAJOR → reader raises, with a clear upgrade path;
+- missing attribute → reader warns and assumes legacy 1.0 layout.
+
+See [`uchrom/core/spec.md`](https://github.com/Nanguage/U-Chrom/blob/main/uchrom/core/spec.md)
+for the complete on-disk spec.
