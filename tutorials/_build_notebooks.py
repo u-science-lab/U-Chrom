@@ -617,6 +617,238 @@ write_nb(Path("tutorials") / "04_loop_calling.ipynb", nb4)
 
 
 # ============================================================
+# 5. TAD calling
+# ============================================================
+
+nb5 = [
+    md("""\
+# 5. TAD calling (ArcFISH-style)
+
+`uchrom.strc.tad.call_tads_by_pval` is a GPU-accelerated reimplementation
+of the ArcFISH TAD caller (Yu et al. 2025).  For each candidate boundary
+position it asks: is the variance *inside* the window smaller than the
+variance *across* the window?  A per-axis F-test answers this and ACAT
+combines the three axes into one p-value per bin.  Local minima in that
+p-value are scored as TAD boundaries; the hierarchical option emits
+nested TAD levels by repeatedly dropping the weakest boundary."""),
+
+    code("""\
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from uchrom import ChromData
+from uchrom.strc.tad import call_tads_by_pval, TADCallerParams
+from uchrom.fea import mean_distance_matrix
+from uchrom.pl import plot_distance_matrix"""),
+
+    md("## Load the example FOF-CT\n\nUse the same synthetic file produced by tutorial 2 / 4; in practice you would point this at a real dataset such as Takei et al. 2021 (4DN `4DNFIHF3JCBY`)."),
+
+    code("""\
+from pathlib import Path
+import os
+
+here = Path.cwd()
+candidates = [p / 'example-data' / 'fofct_core.csv' for p in [here, *here.parents]]
+FOFCT = next((str(p) for p in candidates if p.exists()), None)
+if FOFCT is None:
+    raise FileNotFoundError('Run tutorial 2 or 4 first to produce the example FOF-CT.')
+print(FOFCT)
+cd = ChromData.from_fofct(FOFCT)
+cd"""),
+
+    md("## Run the TAD caller"),
+
+    code("""\
+chrom = cd.spots['chrom'].astype(str).iloc[0]
+params = TADCallerParams(
+    window_bp=1e5,     # boundary window (bp)
+    fdr_cutoff=0.1,
+    hierarchical=True,
+    max_levels=3,
+)
+tads = call_tads_by_pval(cd, chrom=chrom, params=params, device='auto', verbose=True)
+print(f'{len(tads)} TAD entries across {tads[\"level\"].nunique()} levels')
+tads.head(15)"""),
+
+    md("## Overlay TAD boundaries on the median distance matrix\n\nA good TAD call should draw its boundaries at the corners of the \"blocks\" visible in the median pairwise distance heatmap."),
+
+    code("""\
+df = cd.get_chrom(chrom).to_dataframe()
+dmat, bin_ids, n_traces = mean_distance_matrix(df, chrom=chrom)
+B = len(bin_ids)
+mid_bp = np.array([(s + e) * 0.5 for (s, e) in bin_ids])
+
+fig = plot_distance_matrix(dmat, title=f'Median distance + TAD boundaries ({n_traces} traces)')
+ax = fig.axes[0]
+
+# Draw level-1 TAD boundaries as white lines
+top_level = tads[tads['level'] == tads['level'].min()]
+for _, row in top_level.iterrows():
+    # Find the bin index of each TAD end; draw a line there
+    for edge_bp in (row['start'], row['end']):
+        # Closest bin midpoint
+        k = int(np.argmin(np.abs(mid_bp - edge_bp)))
+        if 0 < k < B:
+            ax.axhline(k - 0.5, color='white', lw=1.2, alpha=0.8)
+            ax.axvline(k - 0.5, color='white', lw=1.2, alpha=0.8)
+plt.show()"""),
+
+    md("## Hierarchy\n\nWhen `hierarchical=True`, TADs are emitted at multiple levels of strictness.  Level 1 keeps only the most confident boundaries (coarse TADs); deeper levels include progressively weaker ones, producing nested structure."),
+
+    code("""\
+print('TADs per level:')
+print(tads.groupby('level').size())
+
+fig, axes = plt.subplots(1, min(3, tads['level'].max()), figsize=(12, 4), sharey=True)
+if not hasattr(axes, '__len__'):
+    axes = [axes]
+for i, lv in enumerate(sorted(tads['level'].unique())[:3]):
+    ax = axes[i]
+    sub = tads[tads['level'] == lv]
+    ax.set_title(f'level {lv} ({len(sub)} TADs)')
+    for _, r in sub.iterrows():
+        ax.axvspan(r['start'], r['end'], alpha=0.25, color='tab:blue',
+                   edgecolor='navy', linewidth=1)
+    ax.set_xlim(mid_bp.min(), mid_bp.max())
+    ax.set_xlabel('Genomic position (bp)')
+    ax.set_yticks([])
+plt.tight_layout()
+plt.show()"""),
+
+    md("""\
+## Notes
+
+- The variance-normalisation preprocessing is shared with
+  :func:`uchrom.strc.loop.call_loops_axiswise_f` — you only pay for it
+  once per chromosome if you cache.
+- For a "flat" TAD partition set ``hierarchical=False`` or just use
+  ``level == 1``.
+- This caller complements the classical directionality-index method
+  available in :func:`uchrom.strc.tad.get_domains`; they agree on
+  strong TADs and disagree on boundary-marginal ones."""),
+]
+
+write_nb(Path("tutorials") / "05_tad_calling.ipynb", nb5)
+
+
+# ============================================================
+# 6. A/B compartment
+# ============================================================
+
+nb6 = [
+    md("""\
+# 6. A/B compartment calling (ArcFISH-style)
+
+`uchrom.strc.comp.call_compartments_axes_pc` is a GPU-accelerated
+reimplementation of the ArcFISH `ABCaller.by_axes_pc`.  The idea:
+
+- Turn each axis' normalised variance matrix into a pseudo-contact
+  matrix ``K = exp(-var)``.
+- Take the **second-largest eigenvector** of each axis' ``K``.  The
+  first captures the overall distance-decay trend; the second captures
+  compartment-scale alternation.
+- Weight the three per-axis PC2's by the ArcFISH axis weights, stack
+  them as a 3-feature vector per bin, and run ``KMeans(n=2)``.
+- Assign A/B so that the cluster with smaller mean intra-distance is
+  the more compact one (A by convention)."""),
+
+    code("""\
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from uchrom import ChromData
+from uchrom.strc.comp import call_compartments_axes_pc, CompartmentCallerParams
+from uchrom.fea import mean_distance_matrix
+from uchrom.pl import plot_distance_matrix"""),
+
+    md("## Load example data"),
+
+    code("""\
+from pathlib import Path
+here = Path.cwd()
+candidates = [p / 'example-data' / 'fofct_core.csv' for p in [here, *here.parents]]
+FOFCT = next((str(p) for p in candidates if p.exists()), None)
+if FOFCT is None:
+    raise FileNotFoundError('Run tutorial 2 or 4 first to produce the example FOF-CT.')
+cd = ChromData.from_fofct(FOFCT)
+cd"""),
+
+    md("## Run the compartment caller"),
+
+    code("""\
+chrom = cd.spots['chrom'].astype(str).iloc[0]
+comps = call_compartments_axes_pc(
+    cd, chrom=chrom,
+    params=CompartmentCallerParams(min_bins=2),
+    device='auto', verbose=True,
+)
+print('compartment counts:')
+print(comps['compartment'].value_counts())
+comps.head(10)"""),
+
+    md("## Compartment track\n\nThe weighted PC2 track alternates along the chromosome; A / B labels come from KMeans."),
+
+    code("""\
+fig, (ax_track, ax_label) = plt.subplots(
+    2, 1, figsize=(10, 4), sharex=True,
+    gridspec_kw={'height_ratios': [3, 1]},
+)
+
+mid_bp = (comps['start'] + comps['end']) / 2
+ax_track.plot(mid_bp, comps['pc2'], 'k-', lw=1)
+ax_track.axhline(0, color='grey', lw=0.5)
+ax_track.set_ylabel('weighted PC2')
+ax_track.set_title(f'A/B compartments — {chrom} ({len(comps)} bins)')
+
+colors = {'A': 'tab:red', 'B': 'tab:blue'}
+for lab, sub in comps.groupby('compartment'):
+    for _, r in sub.iterrows():
+        ax_label.axvspan(r['start'], r['end'], color=colors[lab], alpha=0.7)
+ax_label.set_yticks([])
+ax_label.set_xlabel('Genomic position (bp)')
+ax_label.set_ylabel('A/B')
+plt.tight_layout()
+plt.show()"""),
+
+    md("## Compartments on the distance matrix\n\nVisualising per-bin A/B labels next to the population-mean distance matrix makes the compartment pattern clear: A-A and B-B pairs are usually closer than A-B pairs."),
+
+    code("""\
+df = cd.get_chrom(chrom).to_dataframe()
+dmat, bin_ids, _ = mean_distance_matrix(df, chrom=chrom)
+fig = plot_distance_matrix(dmat, title=f'Median distance with A/B track')
+
+ax = fig.axes[0]
+# Colour the diagonal edge by compartment label
+B = len(bin_ids)
+for i in range(B):
+    lab = comps.iloc[i]['compartment']
+    ax.plot(i, -2, 's', ms=8, color=colors[lab], clip_on=False)
+    ax.plot(-2, i, 's', ms=8, color=colors[lab], clip_on=False)
+ax.set_xlim(-3, B)
+ax.set_ylim(-3, B)
+plt.show()"""),
+
+    md("""\
+## Notes
+
+- The A/B assignment here is a convention (smaller mean intra-distance
+  → A).  With a gene-density annotation you would pick whichever
+  cluster has higher TSS density as A — this library does not ship
+  that integration.
+- ``n_clusters`` can be > 2 if you want to explore sub-compartment
+  structure (A1 / A2 / B1 / B2).  The naming in the output DataFrame
+  will no longer be ``{A, B}``.
+- Like the loop and TAD callers, this caller shares the
+  ``filter_normalize`` preprocessing step with the other ArcFISH-style
+  routines."""),
+]
+
+write_nb(Path("tutorials") / "06_compartment.ipynb", nb6)
+
+
+# ============================================================
 # README
 # ============================================================
 
@@ -634,6 +866,8 @@ work.
 | `02_import_fofct.ipynb` | Loading FOF-CT imaging data |
 | `03_reconstruction.ipynb` | 3D reconstruction from Hi-C |
 | `04_loop_calling.ipynb` | ArcFISH-style loop calling |
+| `05_tad_calling.ipynb` | ArcFISH-style TAD calling (hierarchical) |
+| `06_compartment.ipynb` | A/B compartment calling |
 
 The notebooks are regenerated by running
 `python tutorials/_build_notebooks.py` from the repo root, which keeps

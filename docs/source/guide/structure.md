@@ -5,8 +5,8 @@
 | Submodule | Status | Method |
 |-----------|--------|--------|
 | `uchrom.strc.loop` | available | ArcFISH-style axis-wise F-test |
-| `uchrom.strc.tad` | available | Directionality index; more to come |
-| `uchrom.strc.comp` | placeholder | A/B compartments (planned) |
+| `uchrom.strc.tad` | available | Directionality index **and** ArcFISH-style F-test (hierarchical) |
+| `uchrom.strc.comp` | available | ArcFISH-style per-axis PC2 + KMeans |
 
 ## Loop calling (ArcFISH-style)
 
@@ -83,17 +83,64 @@ Output formats are inferred from the extension: `.bedpe` (BEDPE TSV),
 
 ## TAD calling
 
-`uchrom.strc.tad` currently ships the directionality-index method; an
-ArcFISH-style F-test variant is planned for a follow-up release.
+`uchrom.strc.tad` ships two methods:
+
+### 1. ArcFISH-style F-test (`call_tads_by_pval`)
+
+For each candidate boundary position the caller runs a per-axis F-test
+on the count-weighted intra-domain vs inter-domain variance inside a
+window of size `window_bp`.  The three axes are combined with the
+standard ACAT Cauchy test, peaks are picked in `-log10 p`, BH-FDR
+adjusted, and (optionally) emitted as a hierarchy of nested TADs.
+
+```python
+from uchrom.strc.tad import call_tads_by_pval, TADCallerParams
+
+tads = call_tads_by_pval(
+    cd, chrom="chr1",
+    params=TADCallerParams(
+        window_bp=1e5, fdr_cutoff=0.1,
+        hierarchical=True, max_levels=3,
+    ),
+    device="auto",
+)
+# tads: DataFrame (chrom, start, end, level, score, pval, fdr)
+```
+
+### 2. Directionality index (`get_domains`)
+
+Classic Dixon-style caller on a contact matrix.
 
 ```python
 import torch
 from uchrom.strc.tad import get_domains
 
-# contact_mat: (n_bins, n_bins) torch tensor
 domains = get_domains(contact_mat, smoothing_param=0.1, min_size_frac=0.05)
 # → list of (start_idx, end_idx) in bin space
 ```
+
+## A/B compartment calling
+
+`uchrom.strc.comp.call_compartments_axes_pc` is an ArcFISH-style
+caller.  For each axis it builds a pseudo-contact matrix
+`K_c = exp(-norm_var_c)`, takes the second-largest eigenvector (PC2)
+which encodes the compartment-scale alternation, stacks the three
+weighted PC2's as features, and runs KMeans(2) to label bins A / B.
+
+```python
+from uchrom.strc.comp import call_compartments_axes_pc, CompartmentCallerParams
+
+comps = call_compartments_axes_pc(
+    cd, chrom="chr1",
+    params=CompartmentCallerParams(min_bins=2),
+    device="auto",
+)
+# comps: DataFrame (chrom, start, end, bin_index, cluster, compartment, pc2)
+```
+
+A/B labels default to the convention that the more compact (smaller
+mean intra-distance) cluster is A.  Override with the `a_cluster`
+parameter if you have gene-density ground truth.
 
 ## Where results live
 
