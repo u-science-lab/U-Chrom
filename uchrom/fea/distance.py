@@ -38,13 +38,19 @@ def _bin_coord_cube(df: pd.DataFrame, chrom=None):
     if df.empty:
         raise ValueError("No rows after filtering; cannot compute cube.")
 
+    # Coerce start/end to int so dict-key lookups don't fall over float.
+    df = df.assign(
+        start=df["start"].astype(np.int64),
+        end=df["end"].astype(np.int64),
+    )
+
     bins = (
         df[["start", "end"]]
         .drop_duplicates()
         .sort_values("start", kind="mergesort")
         .reset_index(drop=True)
     )
-    bin_ids = list(zip(bins["start"].tolist(), bins["end"].tolist()))
+    bin_ids = [(int(s), int(e)) for s, e in zip(bins["start"], bins["end"])]
     bin_to_idx = {k: i for i, k in enumerate(bin_ids)}
     n_bins = len(bin_ids)
 
@@ -53,9 +59,13 @@ def _bin_coord_cube(df: pd.DataFrame, chrom=None):
     n_traces = len(trace_ids)
 
     cube = np.full((n_traces, n_bins, 3), np.nan, dtype=np.float64)
-    # Vectorised assignment via numpy indexing
-    ti = df["trace_id"].map(tid_to_idx).to_numpy()
-    bi = pd.Series(list(zip(df["start"], df["end"]))).map(bin_to_idx).to_numpy()
+    ti = np.asarray(
+        [tid_to_idx[t] for t in df["trace_id"]], dtype=np.int64
+    )
+    bi = np.asarray(
+        [bin_to_idx[(int(s), int(e))] for s, e in zip(df["start"], df["end"])],
+        dtype=np.int64,
+    )
     cube[ti, bi, 0] = df["x"].to_numpy()
     cube[ti, bi, 1] = df["y"].to_numpy()
     cube[ti, bi, 2] = df["z"].to_numpy()

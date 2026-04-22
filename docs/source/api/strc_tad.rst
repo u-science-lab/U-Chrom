@@ -4,8 +4,8 @@ uchrom.strc.tad
 .. automodule:: uchrom.strc.tad
    :members:
 
-ArcFISH-style F-test caller
----------------------------
+F-test caller
+-------------
 
 .. autoclass:: uchrom.strc.tad.arc_pval.TADCallerParams
    :members:

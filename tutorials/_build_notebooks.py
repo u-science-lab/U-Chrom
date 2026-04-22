@@ -168,7 +168,7 @@ recon = pd.DataFrame({
 cd_recon = ChromData.from_dataframe(recon, cell_id='demo_cell')
 cd_recon"""),
 
-    md("## Where to go next\n\n- **Tutorial 2** — importing real FOF-CT imaging data and inspecting trace structure.\n- **Tutorial 3** — running 3D reconstruction from Hi-C `.pairs` files.\n- **Tutorial 4** — ArcFISH-style loop calling on FOF-CT data."),
+    md("## Where to go next\n\n- **Tutorial 2** — importing real FOF-CT imaging data and inspecting trace structure.\n- **Tutorial 3** — running 3D reconstruction from Hi-C `.pairs` files.\n- **Tutorial 4** — loop calling on FOF-CT data."),
 ]
 
 write_nb(Path("tutorials") / "01_chromdata_basics.ipynb", nb1)
@@ -234,7 +234,7 @@ FOFCT"""),
     md("## Load the file"),
 
     code("""\
-cd = ChromData.from_fofct(FOFCT)
+cd = ChromData.read(FOFCT) if FOFCT.endswith(".h5cd") else ChromData.from_fofct(FOFCT)
 cd"""),
 
     md("## Inspect metadata\n\nThe FOF-CT header fields go into `cd.uns` so you can always trace the origin of a dataset."),
@@ -381,12 +381,12 @@ write_nb(Path("tutorials") / "03_reconstruction.ipynb", nb3)
 
 
 # ============================================================
-# 4. ArcFISH-style loop calling
+# 4. Loop calling
 # ============================================================
 
 nb4 = [
     md("""\
-# 4. ArcFISH-style loop calling on tracing data
+# 4. Loop calling on tracing data
 
 `uchrom.strc.loop` provides a GPU-accelerated reimplementation of the
 axis-wise F-test loop caller from Yu et al. 2025 (*ArcFISH*, bioRxiv
@@ -425,16 +425,41 @@ from uchrom.strc.loop import call_loops_axiswise_f, LoopCallerParams"""),
 from pathlib import Path
 import os
 
+# Preferred: use real chromatin-tracing data.  Takei et al. 2021 Nature
+# (4DN accession 4DNFIHF3JCBY) is the canonical ArcFISH benchmark set —
+# mm10 chromatin tracing at 25 kb resolution, 20 chromosomes,
+# ~400 traces/chrom.  Download instructions:
+#
+#   curl --user <4DN_key>:<4DN_secret> -O -L \\
+#       https://data.4dnucleome.org/files-processed/4DNFIHF3JCBY/@@download/4DNFIHF3JCBY.csv
+#
+# Save it anywhere on your system and set TAKEI_PATH below.  If the file
+# is not found, the tutorial falls back to a small synthetic FOF-CT with
+# hand-crafted TAD + loop structure so the notebook still runs.
+
 def find_fofct() -> str:
-    # Walk up to find a tutorials/ next to example-data/
-    here = Path.cwd()
-    for p in [here, *here.parents]:
+    # 1) Try real Takei 2021 data in a few likely locations
+    candidates = [
+        Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
+        Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.h5cd',
+        Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
+        Path.cwd() / 'example-data' / '4DNFIHF3JCBY.csv',
+    ]
+    for c in candidates:
+        if c.exists():
+            print(f'[data] using real Takei 2021 FOF-CT: {c}')
+            return str(c)
+
+    # 2) Fall back to an existing synthetic file if someone already made
+    #    one (avoid re-generating across cells)
+    for p in [Path.cwd(), *Path.cwd().parents]:
         cand = p / 'example-data' / 'fofct_core.csv'
         if cand.exists():
+            print(f'[data] using synthetic FOF-CT: {cand}')
             return str(cand)
-    # Fallback: synthesise a FOF-CT file with built-in loop structure so
-    # the tutorial actually calls a loop.  Bin pair (5, 20) is drawn close
-    # together across traces; other pairs are random.
+
+    # 3) Last resort: synthesise a FOF-CT with built-in TAD + loop structure
+    print('[data] no real data found — generating synthetic FOF-CT')
     os.makedirs('example-data', exist_ok=True)
     import numpy as np
     rng = np.random.default_rng(0)
@@ -445,30 +470,35 @@ def find_fofct() -> str:
 #Lab_Name: Demo
 ##Columns=(Spot_ID, Trace_ID, X, Y, Z, Chrom, Chrom_Start, Chrom_End, Cell_ID)
 '''
-    # Brownian-bridge polymer: bins 5 and 20 are always pinned close to
-    # each other (the "loop"); the intervening bins form a random bridge
-    # between the two anchors, and bins outside [5, 20] are independent
-    # random walks.  This produces a clean contact map with one bright
-    # spot at (5, 20) and a standard diagonal elsewhere.
-    def synth_trace(rng, n_bins=30, loop_a=5, loop_b=20, step=0.20, anchor_noise=0.03):
+    # Tri-domain polymer with a nested loop:
+    #   - Bins  0..9  = TAD 1 (tight, small step size inside)
+    #   - Bins 10..19 = TAD 2 (tight) — separated from TAD 1 by a jump
+    #   - Bins 20..29 = TAD 3 (tight) — separated from TAD 2 by a jump
+    #   - Loop between bins 5 (in TAD 1) and 20 (first bin of TAD 3)
+    # Each TAD walks with small step; inter-TAD jumps are large.
+    def synth_trace(
+        rng,
+        tad_edges=(0, 10, 20, 30),
+        intra_step=0.08,
+        inter_jump=0.8,
+        loop_a=5,
+        loop_b=20,
+        anchor_noise=0.04,
+    ):
+        n_bins = tad_edges[-1]
         w = np.zeros((n_bins, 3))
-        # Pre-loop bins 0..loop_a: plain random walk
-        for i in range(1, loop_a + 1):
-            w[i] = w[i - 1] + rng.normal(scale=step, size=3)
-        # Loop anchor at bin b: near w[loop_a] with tiny noise
+        # Walk each TAD internally, plus a big jump between TADs
+        for t in range(len(tad_edges) - 1):
+            a, b = tad_edges[t], tad_edges[t + 1]
+            if t > 0:
+                w[a] = w[a - 1] + rng.normal(scale=inter_jump, size=3)
+            for i in range(a + 1, b):
+                w[i] = w[i - 1] + rng.normal(scale=intra_step, size=3)
+        # Loop closure: pin bin loop_b close to bin loop_a
         w[loop_b] = w[loop_a] + rng.normal(scale=anchor_noise, size=3)
-        # Interior bins loop_a+1 .. loop_b-1: Brownian bridge from w[loop_a] → w[loop_b]
-        n_int = loop_b - loop_a - 1
-        if n_int > 0:
-            raw = np.cumsum(rng.normal(scale=step, size=(n_int, 3)), axis=0)
-            # End-point drift to remove so we land at w[loop_b]
-            end_drift = raw[-1] - (w[loop_b] - w[loop_a])
-            for k, idx in enumerate(range(loop_a + 1, loop_b)):
-                t = (k + 1) / (n_int + 1)
-                w[idx] = w[loop_a] + raw[k] - t * end_drift
-        # Post-loop bins loop_b+1 .. n_bins-1: random walk from w[loop_b]
+        # Re-walk bins after loop_b so they stay continuous with the new anchor
         for i in range(loop_b + 1, n_bins):
-            w[i] = w[i - 1] + rng.normal(scale=step, size=3)
+            w[i] = w[i - 1] + rng.normal(scale=intra_step, size=3)
         return w
 
     rows = []
@@ -491,7 +521,7 @@ def find_fofct() -> str:
 
 FOFCT = find_fofct()
 print('using', FOFCT)
-cd = ChromData.from_fofct(FOFCT)
+cd = ChromData.read(FOFCT) if FOFCT.endswith(".h5cd") else ChromData.from_fofct(FOFCT)
 print(cd)
 print()
 print('traces per chrom:')
@@ -598,7 +628,7 @@ print(cd_reloaded.results['loops'])"""),
     md("## CLI\n\nFor batch scripts:\n\n```bash\npython -m uchrom.strc.loop --input=data.h5cd --output=data_loops.h5cd \\\n    --chrom=chr17 --device=auto\n\n# BEDPE export instead\npython -m uchrom.strc.loop --input=data.h5cd --output=loops.bedpe \\\n    --chrom=chr17 --device=auto\n```"),
 
     md("""\
-## Notes on the comparison with ArcFISH
+## Comparison notes
 
 This implementation is independent of the upstream ArcFISH
 (GPL-3.0) source; all algorithmic components — per-trace 4 σ filter,
@@ -622,7 +652,7 @@ write_nb(Path("tutorials") / "04_loop_calling.ipynb", nb4)
 
 nb5 = [
     md("""\
-# 5. TAD calling (ArcFISH-style)
+# 5. TAD calling
 
 `uchrom.strc.tad.call_tads_by_pval` is a GPU-accelerated reimplementation
 of the ArcFISH TAD caller (Yu et al. 2025).  For each candidate boundary
@@ -648,13 +678,20 @@ from uchrom.pl import plot_distance_matrix"""),
 from pathlib import Path
 import os
 
-here = Path.cwd()
-candidates = [p / 'example-data' / 'fofct_core.csv' for p in [here, *here.parents]]
-FOFCT = next((str(p) for p in candidates if p.exists()), None)
+# Prefer real Takei 2021 data if downloaded; otherwise fall back to
+# the synthetic FOF-CT produced by tutorial 4.
+candidates = [
+    Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
+    Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.h5cd',
+    Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
+]
+for p in [Path.cwd(), *Path.cwd().parents]:
+    candidates.append(p / 'example-data' / 'fofct_core.csv')
+FOFCT = next((str(c) for c in candidates if c.exists()), None)
 if FOFCT is None:
-    raise FileNotFoundError('Run tutorial 2 or 4 first to produce the example FOF-CT.')
+    raise FileNotFoundError('Run tutorial 4 first or download Takei 2021 (4DNFIHF3JCBY).')
 print(FOFCT)
-cd = ChromData.from_fofct(FOFCT)
+cd = ChromData.read(FOFCT) if FOFCT.endswith(".h5cd") else ChromData.from_fofct(FOFCT)
 cd"""),
 
     md("## Run the TAD caller"),
@@ -671,48 +708,85 @@ tads = call_tads_by_pval(cd, chrom=chrom, params=params, device='auto', verbose=
 print(f'{len(tads)} TAD entries across {tads[\"level\"].nunique()} levels')
 tads.head(15)"""),
 
-    md("## Overlay TAD boundaries on the median distance matrix\n\nA good TAD call should draw its boundaries at the corners of the \"blocks\" visible in the median pairwise distance heatmap."),
+    md("## Overlay TAD blocks on the median distance matrix\n\nA good TAD call should outline the **low-distance blocks** along the diagonal of the population-median pairwise distance matrix — the classic Hi-C TAD-view.  We draw each TAD as a rectangle along the diagonal."),
 
     code("""\
+from matplotlib.patches import Rectangle
+
 df = cd.get_chrom(chrom).to_dataframe()
 dmat, bin_ids, n_traces = mean_distance_matrix(df, chrom=chrom)
 B = len(bin_ids)
 mid_bp = np.array([(s + e) * 0.5 for (s, e) in bin_ids])
 
-fig = plot_distance_matrix(dmat, title=f'Median distance + TAD boundaries ({n_traces} traces)')
-ax = fig.axes[0]
+def bin_of(bp):
+    return int(np.argmin(np.abs(mid_bp - bp)))
 
-# Draw level-1 TAD boundaries as white lines
+def draw_tad_rects(ax, tad_df, **kw):
+    for _, r in tad_df.iterrows():
+        a = bin_of(r['start'])
+        b = bin_of(r['end']) - 1  # inclusive end bin
+        if b - a < 1:
+            continue
+        ax.add_patch(Rectangle(
+            (a - 0.5, a - 0.5), b - a + 1, b - a + 1,
+            fill=False, **kw,
+        ))
+
+# Top-level TADs only
 top_level = tads[tads['level'] == tads['level'].min()]
-for _, row in top_level.iterrows():
-    # Find the bin index of each TAD end; draw a line there
-    for edge_bp in (row['start'], row['end']):
-        # Closest bin midpoint
-        k = int(np.argmin(np.abs(mid_bp - edge_bp)))
-        if 0 < k < B:
-            ax.axhline(k - 0.5, color='white', lw=1.2, alpha=0.8)
-            ax.axvline(k - 0.5, color='white', lw=1.2, alpha=0.8)
+fig = plot_distance_matrix(dmat, title=f'Median distance, top-level TADs ({len(top_level)})')
+draw_tad_rects(fig.axes[0], top_level, edgecolor='white', linewidth=1.5)
 plt.show()"""),
 
-    md("## Hierarchy\n\nWhen `hierarchical=True`, TADs are emitted at multiple levels of strictness.  Level 1 keeps only the most confident boundaries (coarse TADs); deeper levels include progressively weaker ones, producing nested structure."),
+    md("## Hierarchy — nested TADs\n\nWith `hierarchical=True`, level 1 keeps only the strongest boundaries (coarse TADs); deeper levels add weaker ones.  Overlaying a different colour per level on the same heatmap makes the nesting obvious."),
 
     code("""\
-print('TADs per level:')
-print(tads.groupby('level').size())
+fig = plot_distance_matrix(dmat, title='Hierarchical TADs')
+ax = fig.axes[0]
+level_colors = {1: 'white', 2: 'cyan', 3: 'orange', 4: 'magenta'}
+for lv in sorted(tads['level'].unique()):
+    draw_tad_rects(
+        ax, tads[tads['level'] == lv],
+        edgecolor=level_colors.get(lv, 'yellow'),
+        linewidth=1.5 if lv == 1 else 1.0,
+        linestyle='-' if lv == 1 else '--',
+    )
+handles = [
+    plt.Line2D([0], [0], color=level_colors.get(lv, 'yellow'),
+               ls='-' if lv == 1 else '--',
+               label=f'level {lv} ({(tads[\"level\"]==lv).sum()} TADs)')
+    for lv in sorted(tads['level'].unique())
+]
+ax.legend(handles=handles, loc='upper right', fontsize=9, framealpha=0.6)
+plt.show()"""),
 
-fig, axes = plt.subplots(1, min(3, tads['level'].max()), figsize=(12, 4), sharey=True)
-if not hasattr(axes, '__len__'):
-    axes = [axes]
-for i, lv in enumerate(sorted(tads['level'].unique())[:3]):
-    ax = axes[i]
-    sub = tads[tads['level'] == lv]
-    ax.set_title(f'level {lv} ({len(sub)} TADs)')
-    for _, r in sub.iterrows():
-        ax.axvspan(r['start'], r['end'], alpha=0.25, color='tab:blue',
-                   edgecolor='navy', linewidth=1)
-    ax.set_xlim(mid_bp.min(), mid_bp.max())
-    ax.set_xlabel('Genomic position (bp)')
-    ax.set_yticks([])
+    md("## Boundary score track\n\nBehind the scenes each bin has a per-axis F-test p-value for the hypothesis *\"intra-window variance < inter-window variance\"*.  Plot the −log10 p along the chromosome to see where boundaries are most confident.  TAD corners should coincide with peaks."),
+
+    code("""\
+# Recompute the per-bin statistic directly so we can plot it.
+from uchrom.fea.arc import axis_variance_cube, filter_normalize, axis_weight
+from uchrom.strc.tad.arc_pval import _boundary_pvals
+
+cube = axis_variance_cube(cd, chrom=chrom, device='auto')
+cube = filter_normalize(cube)
+w = axis_weight(cd, chrom=chrom, device='auto')
+pvals_track, _ = _boundary_pvals(
+    cube['norm_var'], cube['count'],
+    np.array([(s+e)*0.5 for s,e in cube['bin_ids']]),
+    w, window_bp=1e5,
+)
+neg_log_p = -np.log10(np.clip(np.where(np.isfinite(pvals_track), pvals_track, 1.0), 1e-300, 1.0))
+
+fig, ax = plt.subplots(figsize=(9, 3))
+ax.plot(np.arange(len(neg_log_p)), neg_log_p, 'k-', lw=1)
+ax.set_xlabel('Bin index'); ax.set_ylabel('-log10 p (boundary)')
+ax.set_title('TAD-boundary signal along the chromosome')
+# Mark level-1 boundary bins
+for _, r in top_level.iterrows():
+    for bp in (r['start'], r['end']):
+        k = bin_of(bp)
+        if 0 < k < B:
+            ax.axvline(k, color='red', alpha=0.5, lw=1)
 plt.tight_layout()
 plt.show()"""),
 
@@ -738,7 +812,7 @@ write_nb(Path("tutorials") / "05_tad_calling.ipynb", nb5)
 
 nb6 = [
     md("""\
-# 6. A/B compartment calling (ArcFISH-style)
+# 6. A/B compartment calling
 
 `uchrom.strc.comp.call_compartments_axes_pc` is a GPU-accelerated
 reimplementation of the ArcFISH `ABCaller.by_axes_pc`.  The idea:
@@ -767,12 +841,19 @@ from uchrom.pl import plot_distance_matrix"""),
 
     code("""\
 from pathlib import Path
-here = Path.cwd()
-candidates = [p / 'example-data' / 'fofct_core.csv' for p in [here, *here.parents]]
-FOFCT = next((str(p) for p in candidates if p.exists()), None)
+# Prefer real Takei 2021 data if downloaded; otherwise fall back to
+# the synthetic FOF-CT produced by tutorial 4.
+candidates = [
+    Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
+    Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.h5cd',
+    Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
+]
+for p in [Path.cwd(), *Path.cwd().parents]:
+    candidates.append(p / 'example-data' / 'fofct_core.csv')
+FOFCT = next((str(c) for c in candidates if c.exists()), None)
 if FOFCT is None:
-    raise FileNotFoundError('Run tutorial 2 or 4 first to produce the example FOF-CT.')
-cd = ChromData.from_fofct(FOFCT)
+    raise FileNotFoundError('Run tutorial 4 first or download Takei 2021 (4DNFIHF3JCBY).')
+cd = ChromData.read(FOFCT) if FOFCT.endswith(".h5cd") else ChromData.from_fofct(FOFCT)
 cd"""),
 
     md("## Run the compartment caller"),
@@ -865,8 +946,8 @@ work.
 | `01_chromdata_basics.ipynb` | The `ChromData` container |
 | `02_import_fofct.ipynb` | Loading FOF-CT imaging data |
 | `03_reconstruction.ipynb` | 3D reconstruction from Hi-C |
-| `04_loop_calling.ipynb` | ArcFISH-style loop calling |
-| `05_tad_calling.ipynb` | ArcFISH-style TAD calling (hierarchical) |
+| `04_loop_calling.ipynb` | Loop calling (axis-wise F-test) |
+| `05_tad_calling.ipynb` | TAD calling (hierarchical F-test) |
 | `06_compartment.ipynb` | A/B compartment calling |
 
 The notebooks are regenerated by running

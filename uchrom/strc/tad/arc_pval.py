@@ -297,15 +297,26 @@ def call_tads_by_pval(
     fdr_full[peak_idx] = peak_fdr
 
     accepted_bins = list(peak_idx[accept])
-    # Sort boundaries by ascending FDR (stronger first); drop weakest at
-    # each hierarchy level to get nested TADs.
+    # Sort boundaries by descending strength: strongest first.
     sorted_by_strength = sorted(accepted_bins, key=lambda i: float(fdr_full[i]))
+    n_bdry = len(sorted_by_strength)
 
+    # Hierarchy convention: **level 1 = all boundaries** (finest TAD
+    # partition — the natural "full" result).  Each subsequent level
+    # drops the weakest remaining boundary, producing progressively
+    # coarser nested TADs.
     rows = []
-    levels = 1 if not params.hierarchical else min(params.max_levels, len(sorted_by_strength))
-    for level in range(1, levels + 1):
-        kept = sorted_by_strength[: max(1, len(sorted_by_strength) * level // levels)]
-        rows.extend(_emit_tads(kept, bin_ids, chrom, level, pvals, fdr_full))
+    if not params.hierarchical:
+        rows.extend(_emit_tads(sorted_by_strength, bin_ids, chrom, 1, pvals, fdr_full))
+    else:
+        levels = min(params.max_levels, max(1, n_bdry))
+        for level in range(1, levels + 1):
+            # level 1: keep all n boundaries
+            # level 2: drop the 1 weakest
+            # level k: drop (k-1) weakest
+            n_keep = max(1, n_bdry - (level - 1))
+            kept = sorted_by_strength[:n_keep]
+            rows.extend(_emit_tads(kept, bin_ids, chrom, level, pvals, fdr_full))
 
     df_out = pd.DataFrame(rows)
     if df_out.empty:
