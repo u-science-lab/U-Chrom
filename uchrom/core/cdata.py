@@ -384,21 +384,26 @@ class ChromData:
 
         with open(path, "r") as fh:
             for line in fh:
-                line = line.strip()
-                if not line:
+                raw = line.strip()
+                if not raw:
                     continue
-                # ``##columns=(...)`` — case-insensitive; some files use lowercase.
-                if line.lower().startswith("##columns="):
-                    cols_str = line.split("=", 1)[1].strip().strip("()")
+                # Some FOF-CT writers wrap the whole header line in quotes and
+                # pad with trailing commas so every line has the same column
+                # count.  Strip those so we can recognise ``#`` headers.
+                stripped = raw.rstrip(",").strip()
+                if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
+                    stripped = stripped[1:-1]
+                if stripped.lower().startswith("##columns="):
+                    cols_str = stripped.split("=", 1)[1].strip().strip("()")
                     columns = [c.strip() for c in cols_str.split(",")]
-                elif line.startswith("##"):
-                    key, _, val = line[2:].partition("=")
+                elif stripped.startswith("##"):
+                    key, _, val = stripped[2:].partition("=")
                     header_meta[key.strip()] = val.strip()
-                elif line.startswith("#"):
-                    key, _, val = line[1:].partition(":")
+                elif stripped.startswith("#"):
+                    key, _, val = stripped[1:].partition(":")
                     header_meta[key.strip()] = val.strip()
                 else:
-                    data_lines.append(line)
+                    data_lines.append(raw)
 
         if not data_lines:
             raise ValueError(f"No data rows found in {path}")
