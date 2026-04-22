@@ -10,6 +10,7 @@ io
 recon
 strc_loop
 strc_tad
+strc_comp
 fea
 pl
 utils
