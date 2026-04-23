@@ -1012,6 +1012,216 @@ write_nb(Path("tutorials") / "06_compartment.ipynb", nb6)
 
 
 # ============================================================
+# 7. FISHnet — per-allele domain calling
+# ============================================================
+
+nb7 = [
+    md("""\
+# 7. Single-cell domain calling with FISHnet
+
+:func:`uchrom.strc.tad.call_domains_fishnet` is a reimplementation of
+FISHnet (Patel et al. 2025, *Nature Methods* 22, 1255–1264,
+doi:10.1038/s41592-025-02688-1), a graph-theory method for detecting
+chromatin domains on **single alleles** rather than on a population
+average.
+
+Unlike the loop / TAD / compartment callers in tutorials 4–6 — which
+aggregate across traces to get one answer per chromosome — FISHnet runs
+on every trace independently, so each allele gets its own set of
+domain boundaries.  The population-level signal is recovered by
+summing single-allele domain masks (the "ensemble domain mask").
+
+Algorithm, per trace:
+
+1. **Threshold sweep** — binarise the pairwise distance matrix at a
+   grid of distance thresholds (``(i, j) → 1`` if ``dist[i, j] ≤ t``).
+2. **Smooth** — a ``(2*w)×(2*w)`` NaN-aware boxcar averages the binary
+   map, converting the graph into a weighted network.
+3. **Louvain modularity** — run Louvain community detection ``n_runs``
+   times per threshold; pick the consensus partition by maximal
+   adjusted-RAND similarity to the other runs.
+4. **Plateau detection** — find runs of ``plateau_size`` or more
+   consecutive thresholds that give the same number of communities;
+   each plateau contributes one partition to the final call.
+5. **Size exclusion + boundary merging** — drop tiny runs, collapse
+   boundaries within ``merge_tol`` bins."""),
+
+    code("""\
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from uchrom import ChromData
+from uchrom.strc.tad import call_domains_fishnet, FISHnetParams
+from uchrom.fea import mean_distance_matrix
+from uchrom.pl import plot_distance_matrix"""),
+
+    md("## Load the example FOF-CT\n\nUses the Takei et al. 2021 Nature mESC chromatin-tracing dataset (4DN `4DNFIHF3JCBY`); auto-downloaded from the public 4DN S3 bucket on first run, cached under `example-data/`."),
+
+    code("""\
+from pathlib import Path
+
+TAKEI_URL = (
+    'https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/'
+    'wfoutput/e699334e-fb34-4a0e-8ef6-670b2099831a/4DNFIHF3JCBY.csv'
+)
+
+def _repo_root() -> Path:
+    for p in [Path.cwd(), *Path.cwd().parents]:
+        if (p / 'pyproject.toml').exists():
+            return p
+    return Path.cwd()
+
+def find_fofct() -> str:
+    root = _repo_root()
+    candidates = [
+        root / 'example-data' / '4DNFIHF3JCBY.csv',
+        Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
+        Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
+    ]
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    dest = root / 'example-data' / '4DNFIHF3JCBY.csv'
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    print(f'[data] downloading Takei 2021 (~22 MB) → {dest}')
+    import urllib.request
+    tmp = dest.with_suffix(dest.suffix + '.part')
+    urllib.request.urlretrieve(TAKEI_URL, tmp)
+    tmp.rename(dest)
+    return str(dest)
+
+FOFCT = find_fofct()
+cd = ChromData.read(FOFCT) if FOFCT.endswith('.h5cd') else ChromData.from_fofct(FOFCT)
+cd"""),
+
+    md("## FISHnet on a single allele\n\nStart by looking at one trace.  The caller returns a dict with per-plateau domains, canonical boundary bin indices, and a (n_bins × n_bins) `domain_mask` counting how many plateaus grouped each bin pair together — a single-allele analogue of the ensemble domain mask."),
+
+    code("""\
+from uchrom.strc.tad.fishnet import call_domains_fishnet_trace
+from uchrom.fea.distance import _bin_coord_cube, _pairwise_distance_per_trace
+
+chrom = 'chr19'
+df = cd.get_chrom(chrom).to_dataframe()
+cube, bin_ids, trace_ids = _bin_coord_cube(df, chrom=chrom)
+dists = _pairwise_distance_per_trace(cube)   # (n_traces, n_bins, n_bins), in μm
+
+# Pick a high-coverage trace for the demo
+cov = np.mean(np.isfinite(cube[:, :, 0]), axis=1)
+ti = int(np.argmax(cov))
+trace_id = trace_ids[ti]
+print(f'demo trace: {trace_id}  coverage={cov[ti]:.0%}')
+
+params = FISHnetParams(
+    plateau_size=3,     # ≥3 adjacent thresholds → stable call
+    n_louvain_runs=10,
+    max_thresholds=30,  # 30 thresholds across the observed distance range
+    min_coverage=0.3,
+)
+res = call_domains_fishnet_trace(dists[ti], params=params)
+print(f'  {len(res[\"domains\"])} domains, {res[\"n_plateaus\"]} plateaus')
+print('  boundaries:', res['boundaries'])"""),
+
+    md("### Overlay single-allele domains on its distance matrix"),
+
+    code("""\
+from matplotlib.patches import Rectangle
+
+fig, ax = plt.subplots(figsize=(6, 5))
+im = ax.imshow(dists[ti], cmap='viridis_r', origin='lower')
+for a, b in res['domains']:
+    if b - a < 2:
+        continue
+    ax.add_patch(Rectangle((a - 0.5, a - 0.5), b - a, b - a,
+                           fill=False, edgecolor='white', lw=1.5))
+ax.set_title(f'{chrom} trace {trace_id} — FISHnet ({len(res[\"domains\"])} domains)')
+ax.set_xlabel('Bin'); ax.set_ylabel('Bin')
+plt.colorbar(im, ax=ax, label='distance (μm)')
+plt.tight_layout()
+plt.show()"""),
+
+    md("## FISHnet across many alleles → ensemble domain mask\n\nEach trace gets its own set of domain boundaries; summing the single-allele domain masks across many traces produces an **ensemble domain mask** — a (n_bins × n_bins) array where `mask[i, j]` counts the number of alleles in which bins `i` and `j` fall in the same domain.  This is FISHnet's population-level readout."),
+
+    code("""\
+fishnet_df = call_domains_fishnet(
+    cd, chrom=chrom, params=params, verbose=True,
+    max_traces=80,   # keep tutorial runtime reasonable
+)
+print(f'{len(fishnet_df)} domains across {fishnet_df[\"trace_id\"].nunique()} traces')
+print('  mean domains per trace:', fishnet_df.groupby('trace_id', observed=True).size().mean().round(2))
+fishnet_df.head()"""),
+
+    code("""\
+ens = cd.results['fishnet_ensemble']
+mask = ens['mask']
+print(f'ensemble domain mask: shape={mask.shape}, max={mask.max()}, n_traces={ens[\"n_traces\"]}')
+
+# Population-mean distance matrix for comparison
+dmat, _, n_traces_all = mean_distance_matrix(df, chrom=chrom)
+
+fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
+im0 = axes[0].imshow(dmat, cmap='viridis_r', origin='lower')
+axes[0].set_title(f'Median pairwise distance ({n_traces_all} traces)')
+plt.colorbar(im0, ax=axes[0], label='distance (μm)')
+
+im1 = axes[1].imshow(mask, cmap='magma', origin='lower')
+axes[1].set_title(f'FISHnet ensemble domain mask ({ens[\"n_traces\"]} traces)')
+plt.colorbar(im1, ax=axes[1], label='# alleles sharing a domain')
+for ax in axes:
+    ax.set_xlabel('Bin'); ax.set_ylabel('Bin')
+plt.tight_layout()
+plt.show()"""),
+
+    md("The ensemble mask's block-diagonal structure should track the population distance matrix's low-distance blocks — the two are different readouts of the same underlying chromatin folding."),
+
+    md("## Per-allele variability of domain counts\n\nA unique aspect of FISHnet is that it returns **one call per allele**, so we can look at cell-to-cell variability of the number of domains."),
+
+    code("""\
+counts_per_trace = (
+    fishnet_df.groupby('trace_id', observed=True).size()
+)
+fig, ax = plt.subplots(figsize=(6, 3.5))
+ax.hist(counts_per_trace, bins=np.arange(0, counts_per_trace.max() + 2) - 0.5,
+        color='tab:blue', edgecolor='black')
+ax.set_xlabel('Number of FISHnet domains per allele')
+ax.set_ylabel('# alleles')
+ax.set_title(f'{chrom} — single-allele domain count distribution')
+plt.tight_layout()
+plt.show()"""),
+
+    md("""\
+## Notes and when to use which caller
+
+- **FISHnet (this tutorial)** — per-allele domain calls; cell-to-cell
+  variability is explicit; ideal for questions like *"which alleles
+  share the same folding pattern?"*.
+- **F-test hierarchical TAD caller** (Tutorial 5) — population-level
+  boundaries with an FDR-controlled hierarchy; ideal for
+  *"where are the consensus domain boundaries in this cell type?"*.
+- **Directionality index** (:func:`uchrom.strc.tad.get_domains`) —
+  classical Dixon-style caller on a contact/frequency matrix.
+
+**Hyperparameters that matter:**
+
+| Parameter | Effect |
+|-----------|--------|
+| ``plateau_size`` | Higher = fewer but more robust calls |
+| ``window_size`` | Smoothing kernel — 2 is the paper default |
+| ``max_thresholds`` | Density of the threshold sweep — runtime scales linearly |
+| ``n_louvain_runs`` | Stability of consensus — 10–20 is enough for most data |
+| ``min_coverage`` | Skip traces with < N bins detected.  Lower for sparse data |
+| ``impute`` | Linear interpolate missing bins before thresholding |
+
+The upstream reference implementation (``github.com/RohanpatelUpenn/FISHnet``)
+uses a custom Louvain solver; this reimplementation delegates to
+:func:`networkx.algorithms.community.louvain_communities` so installation
+is simpler."""),
+]
+
+write_nb(Path("tutorials") / "07_fishnet_domains.ipynb", nb7)
+
+
+# ============================================================
 # README
 # ============================================================
 
@@ -1031,6 +1241,7 @@ work.
 | `04_loop_calling.ipynb` | Loop calling (axis-wise F-test) |
 | `05_tad_calling.ipynb` | TAD calling (hierarchical F-test) |
 | `06_compartment.ipynb` | A/B compartment calling |
+| `07_fishnet_domains.ipynb` | Per-allele domain calling (FISHnet) |
 
 The notebooks are regenerated by running
 `python tutorials/_build_notebooks.py` from the repo root, which keeps

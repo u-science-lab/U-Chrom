@@ -13,6 +13,11 @@ from .arc_pval import (
     call_tads_by_pval,
     TADCallerParams,
 )
+from .fishnet import (
+    call_domains_fishnet,
+    call_domains_fishnet_trace,
+    FISHnetParams,
+)
 
 __all__ = [
     "calc_directionality_index",
@@ -22,4 +27,7 @@ __all__ = [
     "substructures_from_tads",
     "call_tads_by_pval",
     "TADCallerParams",
+    "call_domains_fishnet",
+    "call_domains_fishnet_trace",
+    "FISHnetParams",
 ]

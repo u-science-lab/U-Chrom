@@ -5,7 +5,7 @@
 | Submodule | Status | Method |
 |-----------|--------|--------|
 | `uchrom.strc.loop` | available | ArcFISH-style axis-wise F-test |
-| `uchrom.strc.tad` | available | Directionality index **and** ArcFISH-style F-test (hierarchical) |
+| `uchrom.strc.tad` | available | Directionality index, ArcFISH-style F-test (hierarchical), FISHnet per-allele |
 | `uchrom.strc.comp` | available | ArcFISH-style per-axis PC2 + KMeans |
 
 ## Loop calling
@@ -107,7 +107,27 @@ tads = call_tads_by_pval(
 # tads: DataFrame (chrom, start, end, level, score, pval, fdr)
 ```
 
-### 2. Directionality index (`get_domains`)
+### 2. FISHnet per-allele caller (`call_domains_fishnet`)
+
+FISHnet (Patel et al. 2025, *Nature Methods*) runs a per-trace modularity
+optimisation on the pairwise distance matrix, so every allele gets its
+own set of domain boundaries.  Thresholds at which the community count
+is stable across ``plateau_size`` adjacent steps are grouped and
+consensed into final calls.  Population-level aggregation sums the
+per-allele domain masks into an "ensemble domain mask".
+
+```python
+from uchrom.strc.tad import call_domains_fishnet, FISHnetParams
+
+fishnet_df = call_domains_fishnet(
+    cd, chrom="chr19",
+    params=FISHnetParams(plateau_size=4, n_louvain_runs=20),
+    max_traces=200,
+)
+ens_mask = cd.results["fishnet_ensemble"]["mask"]
+```
+
+### 3. Directionality index (`get_domains`)
 
 Classic Dixon-style caller on a contact matrix.
 

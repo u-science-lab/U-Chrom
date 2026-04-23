@@ -63,6 +63,7 @@ tutorials/03_reconstruction
 tutorials/04_loop_calling
 tutorials/05_tad_calling
 tutorials/06_compartment
+tutorials/07_fishnet_domains
 ```
 
 ```{toctree}
