@@ -1818,6 +1818,99 @@ plot_structure_3d(
 )"""),
 
     md("""\
+## Hi-C contact map vs reconstructed distance matrix
+
+Sanity check: the reconstructed 3-D structure should reproduce the
+input Hi-C contact pattern — regions with high contact frequency
+should be close in 3D.  We compare side-by-side:
+
+1. **Input Hi-C contact map** ``log10(1 + f_ij)`` — raw balanced counts
+   from the Rao 2014 IMR90 ``.cool``.
+2. **Reconstructed pairwise distance matrix** — Euclidean distance
+   between every pair of reconstructed bins.
+
+If the reconstruction is self-consistent with the input, these should
+show the **inverse** pattern: bright diagonal bands and loops in the
+contact map correspond to dark (short-distance) blocks in the
+distance matrix.
+
+We also compute the Spearman correlation between
+``log10(1 + contact)`` and ``1 / distance`` over all off-diagonal
+pairs — the paper reports ~0.6–0.8 on chr21."""),
+
+    code("""\
+from uchrom.recon.fish._hic import load_contact_matrix
+from scipy.stats import spearmanr
+from scipy.spatial.distance import cdist
+
+hic_mat, hic_bin_df = load_contact_matrix(
+    str(hic_cool), chrom='chr21', resolution=None, normalize=True,
+)
+hic_mat = np.nan_to_num(hic_mat, nan=0.0)
+D_recon_full = cdist(cd.coords, cd.coords)
+n_bins = hic_mat.shape[0]
+
+# Observed / expected: divide each off-diagonal element by the mean at
+# its genomic separation.  Reveals structural features independent of
+# the distance-decay trend.
+def oe_normalize(mat):
+    n = mat.shape[0]
+    out = np.zeros_like(mat)
+    for k in range(1, n):
+        diag_vals = np.array([mat[i, i + k] for i in range(n - k)])
+        pos = diag_vals[diag_vals > 0]
+        if pos.size == 0: continue
+        mu = pos.mean()
+        for i in range(n - k):
+            out[i, i + k] = out[i + k, i] = (
+                mat[i, i + k] / mu if mat[i, i + k] > 0 else 0.0
+            )
+    return out
+
+hic_oe = oe_normalize(hic_mat)
+dist_oe = oe_normalize(D_recon_full)  # high distance / expected → far
+# For distance matrix, "observed/expected > 1" means farther than
+# expected; to make it analogous to contact-frequency we flip the sign.
+dist_inv_oe = np.where(dist_oe > 0, 1.0 / dist_oe, 0.0)
+
+fig, axes = plt.subplots(2, 2, figsize=(10, 9))
+
+im00 = axes[0, 0].imshow(np.log10(hic_mat + 1), cmap='Reds', origin='lower')
+axes[0, 0].set_title('Input Hi-C (log10 balanced)')
+plt.colorbar(im00, ax=axes[0, 0])
+
+im01 = axes[0, 1].imshow(D_recon_full, cmap='viridis_r', origin='lower',
+                          vmax=np.percentile(D_recon_full, 98))
+axes[0, 1].set_title('Reconstructed distance (recon units)')
+plt.colorbar(im01, ax=axes[0, 1])
+
+im10 = axes[1, 0].imshow(np.log10(hic_oe + 1e-2), cmap='RdBu_r', origin='lower',
+                          vmin=-1, vmax=1)
+axes[1, 0].set_title('Hi-C O/E (log10)')
+plt.colorbar(im10, ax=axes[1, 0])
+
+im11 = axes[1, 1].imshow(np.log10(dist_inv_oe + 1e-2), cmap='RdBu_r',
+                          origin='lower', vmin=-1, vmax=1)
+axes[1, 1].set_title('Reconstructed 1/(distance O/E) (log10)')
+plt.colorbar(im11, ax=axes[1, 1])
+
+for ax in axes.flat:
+    ax.set_xlabel('Bin'); ax.set_ylabel('Bin')
+plt.tight_layout()
+plt.show()
+
+# Correlations
+iu = np.triu_indices(n_bins, k=1)
+ok = (hic_mat[iu] > 0) & (D_recon_full[iu] > 0)
+rho_raw, _ = spearmanr(hic_mat[iu][ok], 1.0 / D_recon_full[iu][ok])
+ok_oe = (hic_oe[iu] > 0) & (dist_oe[iu] > 0)
+rho_oe, _ = spearmanr(hic_oe[iu][ok_oe], 1.0 / dist_oe[iu][ok_oe])
+print(f'Spearman(Hi-C raw contact,  1 / recon distance):       {rho_raw:.3f}')
+print(f'Spearman(Hi-C O/E,          1 / recon distance O/E):   {rho_oe:.3f}')
+print('  (raw captures mostly the distance-decay trend;')
+print('   O/E-corrected shows the structural agreement beyond it)')"""),
+
+    md("""\
 ## Scaling up to other chromosomes
 
 `IMR90_chr21_30kb.cool` only contains chr21.  For other chromosomes
