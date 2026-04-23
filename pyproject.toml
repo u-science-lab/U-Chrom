@@ -23,6 +23,7 @@ dependencies = [
     "matplotlib>=3.7.5",
     "torch>=2.0",
     "networkx>=3.0",
+    "scipy>=1.10",
 ]
 
 [project.optional-dependencies]

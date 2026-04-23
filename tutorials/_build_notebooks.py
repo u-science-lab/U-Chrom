@@ -59,12 +59,12 @@ def write_nb(path: Path, cells: list):
 
 
 # ============================================================
-# 1. ChromData basics
+# ChromData basics
 # ============================================================
 
 nb1 = [
     md("""\
-# 1. ChromData — the core data container
+# ChromData — the core data container
 
 `uchrom.ChromData` is the central data structure for U-Chrom, analogous to
 [AnnData](https://anndata.readthedocs.io/) for chromatin 3D structure data.
@@ -168,19 +168,19 @@ recon = pd.DataFrame({
 cd_recon = ChromData.from_dataframe(recon, cell_id='demo_cell')
 cd_recon"""),
 
-    md("## Where to go next\n\n- **Tutorial 2** — importing real FOF-CT imaging data and inspecting trace structure.\n- **Tutorial 3** — running 3D reconstruction from Hi-C `.pairs` files.\n- **Tutorial 4** — loop calling on FOF-CT data."),
+    md("## Where to go next\n\n- **Importing FOF-CT imaging data** and inspecting trace structure.\n- **3D reconstruction** from Hi-C `.pairs` files.\n- **Loop calling** on FOF-CT data."),
 ]
 
-write_nb(Path("tutorials") / "01_chromdata_basics.ipynb", nb1)
+write_nb(Path("tutorials") / "chromdata_basics.ipynb", nb1)
 
 
 # ============================================================
-# 2. FOF-CT imaging data
+# FOF-CT imaging data
 # ============================================================
 
 nb2 = [
     md("""\
-# 2. Importing FOF-CT imaging data
+# Importing FOF-CT imaging data
 
 The [4DN FISH Omics Format — Chromatin Tracing](https://fish-omics-format.readthedocs.io/)
 (FOF-CT) is the community standard for chromatin-tracing / multiplexed DNA
@@ -279,20 +279,20 @@ df.head()"""),
 ## Writing your own FOF-CT-compatible data
 
 If you produced tracing data with a tool that does not write FOF-CT, you
-can create a ChromData directly (see Tutorial 1) and write `.h5cd`.  The
+can create a ChromData directly (see the ChromData basics tutorial) and write `.h5cd`.  The
 on-disk format is versioned so downstream tools can safely consume it."""),
 ]
 
-write_nb(Path("tutorials") / "02_import_fofct.ipynb", nb2)
+write_nb(Path("tutorials") / "import_fofct.ipynb", nb2)
 
 
 # ============================================================
-# 3. 3D reconstruction from Hi-C
+# Reconstruction from Hi-C
 # ============================================================
 
 nb3 = [
     md("""\
-# 3. 3D reconstruction from Hi-C data
+# 3D reconstruction from Hi-C data
 
 U-Chrom provides several 3D reconstruction algorithms:
 
@@ -377,16 +377,16 @@ All three write the same `.h5cd` schema so downstream tools don't care
 which reconstructor was used."""),
 ]
 
-write_nb(Path("tutorials") / "03_reconstruction.ipynb", nb3)
+write_nb(Path("tutorials") / "reconstruction.ipynb", nb3)
 
 
 # ============================================================
-# 4. Loop calling
+# Loop calling
 # ============================================================
 
 nb4 = [
     md("""\
-# 4. Loop calling on tracing data
+# Loop calling on tracing data
 
 `uchrom.strc.loop` provides a GPU-accelerated reimplementation of the
 axis-wise F-test loop caller from Yu et al. 2025 (*ArcFISH*, bioRxiv
@@ -669,16 +669,16 @@ MPS forces float32; on CUDA with float64 you will see higher overlap
 with the upstream output."""),
 ]
 
-write_nb(Path("tutorials") / "04_loop_calling.ipynb", nb4)
+write_nb(Path("tutorials") / "loop_calling.ipynb", nb4)
 
 
 # ============================================================
-# 5. TAD calling
+# TAD calling
 # ============================================================
 
 nb5 = [
     md("""\
-# 5. TAD calling
+# TAD calling
 
 `uchrom.strc.tad.call_tads_by_pval` is a GPU-accelerated reimplementation
 of the ArcFISH TAD caller (Yu et al. 2025).  For each candidate boundary
@@ -857,16 +857,16 @@ plt.show()"""),
   strong TADs and disagree on boundary-marginal ones."""),
 ]
 
-write_nb(Path("tutorials") / "05_tad_calling.ipynb", nb5)
+write_nb(Path("tutorials") / "tad_calling.ipynb", nb5)
 
 
 # ============================================================
-# 6. A/B compartment
+# A/B compartment
 # ============================================================
 
 nb6 = [
     md("""\
-# 6. A/B compartment calling
+# A/B compartment calling
 
 `uchrom.strc.comp.call_compartments_axes_pc` is a GPU-accelerated
 reimplementation of the ArcFISH `ABCaller.by_axes_pc`.  The idea:
@@ -1008,16 +1008,16 @@ plt.show()"""),
   routines."""),
 ]
 
-write_nb(Path("tutorials") / "06_compartment.ipynb", nb6)
+write_nb(Path("tutorials") / "compartment.ipynb", nb6)
 
 
 # ============================================================
-# 7. FISHnet — per-allele domain calling
+# FISHnet — per-allele domain calling
 # ============================================================
 
 nb7 = [
     md("""\
-# 7. Single-cell domain calling with FISHnet
+# Single-cell domain calling with FISHnet
 
 :func:`uchrom.strc.tad.call_domains_fishnet` is a reimplementation of
 FISHnet (Patel et al. 2025, *Nature Methods* 22, 1255–1264,
@@ -1195,7 +1195,7 @@ plt.show()"""),
 - **FISHnet (this tutorial)** — per-allele domain calls; cell-to-cell
   variability is explicit; ideal for questions like *"which alleles
   share the same folding pattern?"*.
-- **F-test hierarchical TAD caller** (Tutorial 5) — population-level
+- **F-test hierarchical TAD caller** (tad_calling tutorial) — population-level
   boundaries with an FDR-controlled hierarchy; ideal for
   *"where are the consensus domain boundaries in this cell type?"*.
 - **Directionality index** (:func:`uchrom.strc.tad.get_domains`) —
@@ -1218,7 +1218,292 @@ uses a custom Louvain solver; this reimplementation delegates to
 is simpler."""),
 ]
 
-write_nb(Path("tutorials") / "07_fishnet_domains.ipynb", nb7)
+write_nb(Path("tutorials") / "fishnet_domains.ipynb", nb7)
+
+
+# ============================================================
+# Spot-to-fiber tracing (jie) on real seqFISH+ data
+# ============================================================
+
+nb8 = [
+    md("""\
+# Spot-to-fiber tracing with jie on seqFISH+ data
+
+:func:`uchrom.im.trace.align_spots` is an independent reimplementation
+of jie (Jia & Ren 2022, *Nature Biotechnology* 22,
+doi:10.1038/s41587-022-01568-9), a *spatial genome aligner* that
+resolves spot-to-fiber assignment in multiplexed DNA-FISH data.
+
+Where do the tutorials so far start?  The FOF-CT files we've been
+using (4DN `4DNFIHF3JCBY`) already carry a ``trace_id`` column — the
+fiber each spot belongs to has been assigned upstream.  But before
+that assignment, the raw seqFISH+ output looks like this:
+
+- Every cell has **multiple candidate spots per locus** (noise, sister
+  chromatids, copy-number variants → often 3–8 per 25-kb region).
+- No ground-truth link tells you which spot lies on which chromatin
+  fiber.
+
+jie decides:
+
+1. For each (cell, chromosome), build a DAG over candidate spots
+   ordered by genomic position.
+2. Score each candidate edge by the Gaussian-chain bond probability —
+   "how plausibly are these two spots linked by a ~L-bp piece of
+   chromatin?"
+3. Shortest path picks one spot per locus; iterate (masking used
+   spots) to extract all fibers → **ploidy emerges naturally**.
+4. Post-hoc sister-chromatid detection groups fibers whose
+   co-locus distances stay within a threshold."""),
+
+    code("""\
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from pathlib import Path
+
+from uchrom.im.trace import align_spots, SpotAlignerParams
+from uchrom import ChromData"""),
+
+    md("""\
+## Auto-download the Takei 2021 seqFISH+ spot-level data
+
+The raw detections used by Jia & Ren 2022 live in Takei et al. 2021's
+Zenodo deposit (doi:10.5281/zenodo.3735329, 144 MB zip — slower than
+the FOF-CT file used in previous tutorials, so cache aggressively).
+
+The archive contains eight CSVs; we use
+``DNAseqFISH+25kbloci-E14-replicate1.csv`` (~35 MB uncompressed) which
+has 46 mESC cells × 20 chromosomes × 60 loci at 25-kb resolution."""),
+
+    code("""\
+import zipfile
+import urllib.request
+
+DATA_URL = (
+    'https://zenodo.org/records/3735329/files/DNAseqFISH%2B.zip?download=1'
+)
+
+def _repo_root() -> Path:
+    for p in [Path.cwd(), *Path.cwd().parents]:
+        if (p / 'pyproject.toml').exists():
+            return p
+    return Path.cwd()
+
+def load_seqfish_spots(variant: str = '25kbloci-E14-replicate1') -> pd.DataFrame:
+    '''Download (once) and read one replicate from the Zenodo zip.'''
+    root = _repo_root()
+    zip_path = root / 'example-data' / 'DNAseqFISH+.zip'
+    if not zip_path.exists():
+        zip_path.parent.mkdir(parents=True, exist_ok=True)
+        print(f'[data] downloading seqFISH+ (~144 MB) → {zip_path}')
+        tmp = zip_path.with_suffix('.zip.part')
+        urllib.request.urlretrieve(DATA_URL, tmp)
+        tmp.rename(zip_path)
+    inner = f'DNAseqFISH+/DNAseqFISH+{variant}.csv'
+    with zipfile.ZipFile(zip_path) as zf:
+        with zf.open(inner) as f:
+            return pd.read_csv(f)
+
+raw = load_seqfish_spots()
+print('raw shape:', raw.shape)
+print('cells:', raw['cellID'].nunique(), ' chromIDs:', raw['chromID'].nunique())
+print('spots per (cell, chromID, region):',
+      raw.groupby(['cellID', 'chromID', 'regionID (hyb1-60)']).size().describe().round(1).to_dict())"""),
+
+    md("""\
+The key observation is in the spots-per-(cell, chromID, region) histogram:
+**the median is 6 candidate spots per locus** — raw seqFISH+ is very
+far from one-spot-per-locus, which is exactly the ambiguity jie is
+designed to resolve."""),
+
+    md("""\
+## Convert to the `align_spots` input contract
+
+``align_spots`` expects a long-format DataFrame with columns
+``cell_id, chrom, start, end, x, y, z`` (and optional
+``sigma_x/y/z, spot_id``).  We translate the seqFISH+ columns:
+
+- ``cellID`` → ``cell_id``
+- ``chromID`` → ``chrom`` (1..19 → ``chr1..chr19``, 20 → ``chrX``)
+- ``regionID (hyb1-60)`` → bin index along the chromosome, converted
+  to ``(start, end)`` at 25-kb resolution.
+- ``x, y`` are pixel indices — multiply by 103 nm/pixel.
+- ``z`` is pixel index — multiply by 250 nm/pixel.
+- We drop ``labelID == -1`` spots (the upstream pipeline's rejected
+  detections) and ignore other labelID values so jie works purely from
+  geometry.  The ``labelID`` column is kept separately as a
+  pre-assigned label we can compare against later."""),
+
+    code("""\
+XY_PIX_NM = 103.0
+Z_PIX_NM = 250.0
+BIN_SIZE_BP = 25_000
+
+def _chrom_name(cid: int) -> str:
+    return 'chrX' if cid == 20 else f'chr{cid}'
+
+raw_good = raw[raw['labelID'] >= 0].copy()
+spots_df = pd.DataFrame({
+    'spot_id':  np.arange(len(raw_good)),
+    'cell_id':  raw_good['cellID'].astype(str).values,
+    'chrom':    raw_good['chromID'].map(_chrom_name).values,
+    'start':    ((raw_good['regionID (hyb1-60)'] - 1) * BIN_SIZE_BP).astype(int).values,
+    'end':      (raw_good['regionID (hyb1-60)'] * BIN_SIZE_BP).astype(int).values,
+    'x':        (raw_good['x'] * XY_PIX_NM).values,
+    'y':        (raw_good['y'] * XY_PIX_NM).values,
+    'z':        (raw_good['z'] * Z_PIX_NM).values,
+    'labelID':  raw_good['labelID'].astype(int).values,  # upstream pre-assignment
+})
+print('converted shape:', spots_df.shape)
+print('cells:', spots_df['cell_id'].nunique(),
+      'chroms:', spots_df['chrom'].nunique())
+spots_df.head()"""),
+
+    md("""\
+## Run jie on one chromosome
+
+To keep the tutorial runtime small we trace chr19 only — ~60 loci ×
+~350 candidate spots per (cell, chrom), which is 46 Dijkstra runs
+total.  Real analyses would loop over all chromosomes (embarrassingly
+parallel)."""),
+
+    code("""\
+chr_to_use = 'chr19'
+sub = spots_df[spots_df['chrom'] == chr_to_use].copy()
+print(f'{len(sub)} spots on {chr_to_use} across {sub["cell_id"].nunique()} cells')
+
+# We pass τ explicitly (0.012 nm/bp is the canonical mESC value; the
+# automatic fit would be inflated by decoys in the raw data).  Tighter
+# min_spots_per_fiber + max_fibers + mean_edge_weight_cutoff together
+# reject spurious fibers built out of decoy spots.
+cd = align_spots(
+    sub.drop(columns=['labelID']),
+    params=SpotAlignerParams(
+        persistence_length_bp=150.0,
+        max_skip=3,
+        gap_penalty=3.0,
+        min_spots_per_fiber=30,          # ≥50% of 60 loci
+        max_fibers_per_chrom=4,
+        mean_edge_weight_cutoff=5.0,     # reject high-cost paths
+        detect_sisters=True,
+        sister_pair_radius_nm=400.0,
+        verbose=True,
+    ),
+    tau_by_chrom={chr_to_use: 0.012},
+)
+print('\\n', cd)"""),
+
+    md("## Ploidy distribution across cells"),
+
+    code("""\
+ploidy = cd.results['ploidy']
+print('ploidy table:')
+print(ploidy)
+print('\\nploidy distribution (n_sister_groups = distinct fibers):')
+print(ploidy['n_sister_groups'].value_counts().sort_index())
+
+fig, ax = plt.subplots(figsize=(6, 3.5))
+ax.hist(ploidy['n_sister_groups'], bins=np.arange(0, ploidy['n_sister_groups'].max() + 2) - 0.5,
+        color='tab:green', edgecolor='black')
+ax.set_xlabel('# distinct fibers (sister-merged) per cell')
+ax.set_ylabel('# cells')
+ax.set_title(f'{chr_to_use} — jie-called ploidy (mESC E14 replicate 1)')
+plt.tight_layout()
+plt.show()"""),
+
+    md("""\
+mESC cells are nominally diploid; a peak at 2 is the expected
+signature.  Deviations (triploid or more, or monoploid) reflect
+aneuploidy or reconstruction noise."""),
+
+    md("""\
+## Agreement with the upstream labelID
+
+The Takei 2021 dataset ships with a ``labelID`` column carrying an
+upstream pre-assignment (0..3 plus -1 for rejected).  We can compare:
+for each jie-called fiber, what fraction of its spots share the same
+``labelID``?  A high purity means jie recovers the same fibers as the
+upstream pipeline using only geometry + polymer physics."""),
+
+    code("""\
+# Join called trace_id back onto the original spots by spot_id
+called = cd.spots[['spot_id', 'cell_id', 'trace_id']].copy()
+called['trace_id'] = called['trace_id'].astype(int)
+joined = sub.merge(called, on=['spot_id', 'cell_id'], how='inner')
+
+purities = []
+for (cell, tid), g in joined.groupby(['cell_id', 'trace_id']):
+    top = g['labelID'].value_counts().iloc[0]
+    purities.append(top / len(g))
+
+fig, ax = plt.subplots(figsize=(6, 3.5))
+ax.hist(purities, bins=np.linspace(0, 1, 21), color='tab:orange', edgecolor='black')
+ax.set_xlabel('trace purity (top labelID / total)')
+ax.set_ylabel('# called fibers')
+ax.set_title(f'{chr_to_use} — agreement with upstream labelID (mean={np.mean(purities):.2f})')
+plt.tight_layout()
+plt.show()
+print(f'mean purity: {np.mean(purities):.3f}')
+print(f'median: {np.median(purities):.3f}; 25th percentile: {np.quantile(purities, 0.25):.3f}')"""),
+
+    md("""\
+## Feed jie output into FISHnet
+
+Because ``align_spots`` returns a ``ChromData``, every downstream tool
+in u-chrom works on the result unchanged.  We run FISHnet on the
+jie-assigned traces to confirm the 3-D structure is domain-structured
+and comparable with the FOF-CT-based analyses in tutorials 5 and 7."""),
+
+    code("""\
+from uchrom.strc.tad import call_domains_fishnet, FISHnetParams
+from uchrom.fea import mean_distance_matrix
+
+fishnet_df = call_domains_fishnet(
+    cd, chrom=chr_to_use,
+    params=FISHnetParams(
+        plateau_size=3, n_louvain_runs=10, max_thresholds=30,
+        min_coverage=0.3,
+    ),
+    verbose=True, max_traces=60,
+)
+print(f'{len(fishnet_df)} domains across {fishnet_df["trace_id"].nunique()} traces')"""),
+
+    code("""\
+ens = cd.results['fishnet_ensemble']
+dmat, _, _ = mean_distance_matrix(cd.get_chrom(chr_to_use).to_dataframe(), chrom=chr_to_use)
+
+fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
+im0 = axes[0].imshow(dmat, cmap='viridis_r', origin='lower')
+axes[0].set_title('Median distance after jie (FISH coords in nm, jie-assigned traces)')
+plt.colorbar(im0, ax=axes[0], label='distance (nm)')
+
+im1 = axes[1].imshow(ens['mask'], cmap='magma', origin='lower')
+axes[1].set_title(f'FISHnet ensemble mask ({ens["n_traces"]} traces)')
+plt.colorbar(im1, ax=axes[1], label='# alleles sharing a domain')
+for ax in axes: ax.set_xlabel('Bin'); ax.set_ylabel('Bin')
+plt.tight_layout()
+plt.show()"""),
+
+    md("""\
+## Notes
+
+- **Two parallel paths in ``uchrom``**: you can either start from an
+  already-traced FOF-CT file (other tutorials use 4DN
+  `4DNFIHF3JCBY`) **or** from raw detections + jie (this tutorial).
+  Both produce a `ChromData` with the same schema.
+- **jie is SV-blind** — inversions/translocations break the DAG
+  monotonicity assumption.  Flag or exclude known SV regions if
+  working with tumour / abnormal samples.
+- **Sister chromatid resolution is soft**: when sisters are very close
+  (< ~150 nm) the aligner tends to merge them into one fiber.  This
+  mirrors the upstream implementation's limits.
+- For the full ~920 (cell, chromosome) combinations in this dataset,
+  expect ~15 minutes on a single core.  Trivially parallelisable per
+  (cell, chromosome) using ``multiprocessing``."""),
+]
+
+write_nb(Path("tutorials") / "jie_aligner.ipynb", nb8)
 
 
 # ============================================================
@@ -1239,23 +1524,29 @@ Grouped by the U-Chrom module each tutorial targets:
 
 | Notebook | Topic |
 |----------|-------|
-| `01_chromdata_basics.ipynb` | The `ChromData` container |
-| `02_import_fofct.ipynb` | Loading FOF-CT imaging data |
+| `chromdata_basics.ipynb` | The `ChromData` container |
+| `import_fofct.ipynb` | Loading FOF-CT imaging data |
 
 ### Reconstruction (`uchrom.recon`)
 
 | Notebook | Topic |
 |----------|-------|
-| `03_reconstruction.ipynb` | 3D reconstruction from Hi-C |
+| `reconstruction.ipynb` | 3D reconstruction from Hi-C |
+
+### Imaging / tracing (`uchrom.im`)
+
+| Notebook | Topic |
+|----------|-------|
+| `jie_aligner.ipynb` | Spot-to-fiber tracing on raw seqFISH+ detections |
 
 ### Structure identification (`uchrom.strc`)
 
 | Notebook | Submodule | Topic |
 |----------|-----------|-------|
-| `04_loop_calling.ipynb` | `strc.loop` | Loop calling (axis-wise F-test) |
-| `05_tad_calling.ipynb` | `strc.tad` | TAD calling (hierarchical F-test) |
-| `07_fishnet_domains.ipynb` | `strc.tad` | Per-allele domain calling (FISHnet) |
-| `06_compartment.ipynb` | `strc.comp` | A/B compartment calling |
+| `loop_calling.ipynb` | `strc.loop` | Loop calling (axis-wise F-test) |
+| `tad_calling.ipynb` | `strc.tad` | TAD calling (hierarchical F-test) |
+| `fishnet_domains.ipynb` | `strc.tad` | Per-allele domain calling (FISHnet) |
+| `compartment.ipynb` | `strc.comp` | A/B compartment calling |
 
 The notebooks are regenerated by running
 `python tutorials/_build_notebooks.py` from the repo root, which keeps
