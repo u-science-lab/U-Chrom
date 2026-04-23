@@ -13,6 +13,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `cell2.pairs.gz`                      | 5.4 MB  | yes             | —             | (available for experimentation; bulkier variant of `cell1.pairs`)       |
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
+| `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial                                     |
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
 | `with_loops.h5cd`                     | 24 MB   | no              | generated     | output of `loop_calling.ipynb` (intermediate cache, safe to delete)     |
 | `fofct_core.csv`                      | ~6 MB   | no              | generated     | synthetic offline fallback for tutorials 4/5/6/7                        |
@@ -71,6 +72,28 @@ using.
 - **Used by** (all use the `find_fofct()` helper):
   `loop_calling.ipynb`, `tad_calling.ipynb`, `compartment.ipynb`,
   `fishnet_domains.ipynb`.
+
+### `IMR90_chr21-18-20Mb.csv` — Bintu 2018 IMR90 chr21:18.6–20.6 Mb chromatin tracing (2 MB)
+
+- **Format**: CSV with header line then columns
+  ``Chromosome index, Segment index, Z, X, Y``.  One row per detected
+  segment per imaged chromosome.  Coordinates in nanometres.  Segment
+  spacing is 30 kb.
+- **Content**: 1 278 imaged chromosomes × 66 segments in IMR90 cells,
+  covering chr21:18,627,714–20,577,518 (hg38).
+- **Source**: Bintu et al. 2018, *Science* 362, eaau1783, "Super-
+  resolution chromatin tracing reveals domains and cooperative
+  interactions in single cells".  The paper is a higher-resolution
+  follow-up to Wang et al. 2016 (*Science* 353:598) which Abbas et al.
+  2019 (GEM-FISH) originally used; Bintu 2018 data is directly
+  accessible from the authors' GitHub repository.
+- **Download URL**:
+  ``https://raw.githubusercontent.com/BogdanBintu/ChromatinImaging/master/Data/IMR90_chr21-18-20Mb.csv``
+- **Used by**: ``gem_fish_reconstruction.ipynb`` (part 2 — real FISH
+  data).  The tutorial synthesises a matching Hi-C from the FISH
+  population-mean so it runs offline; to reproduce the paper's exact
+  setup, substitute the Rao 2014 IMR90 ``.mcool`` from 4DN at 30 kb
+  resolution.
 
 ### `DNAseqFISH+.zip` — Takei 2021 raw seqFISH+ spots (144 MB)
 

@@ -42,6 +42,15 @@ DATASETS = {
         "size_mb": 144,
         "description": "Takei 2021 raw seqFISH+ spot detections",
     },
+    "bintu_imr90": {
+        "filename": "IMR90_chr21-18-20Mb.csv",
+        "url": (
+            "https://raw.githubusercontent.com/BogdanBintu/"
+            "ChromatinImaging/master/Data/IMR90_chr21-18-20Mb.csv"
+        ),
+        "size_mb": 2,
+        "description": "Bintu 2018 IMR90 chr21 chromatin tracing",
+    },
 }
 
 

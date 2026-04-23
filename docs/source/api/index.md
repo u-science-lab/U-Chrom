@@ -9,6 +9,7 @@ core
 io
 im
 recon
+recon_fish
 strc_loop
 strc_tad
 strc_comp
