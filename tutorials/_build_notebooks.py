@@ -1786,6 +1786,25 @@ plt.tight_layout()
 plt.show()"""),
 
     md("""\
+## 3-D rendering of the reconstructed chain
+
+:func:`uchrom.pl.plot_structure_3d` is a PyVista-based renderer
+(same stack the `uchrom.browser` uses, without the Qt window) that
+draws the reconstructed chain as a smooth tube coloured along the
+genomic direction."""),
+
+    code("""\
+from uchrom.pl import plot_structure_3d
+
+plot_structure_3d(
+    cd, chrom='chr21',
+    colour='bin', cmap='plasma',
+    tube_radius=0.08,
+    window_size=(900, 700),
+    notebook=True, jupyter_backend='static',
+)"""),
+
+    md("""\
 ## Scaling up to other chromosomes
 
 `IMR90_chr21_30kb.cool` only contains chr21.  For other chromosomes
