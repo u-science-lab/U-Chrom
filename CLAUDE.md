@@ -124,7 +124,17 @@ All datasets consumed by tutorials and benchmarks live in
 
 ## Technical Notes
 
-- **GPU frameworks**: Taichi (sc reconstruction), PyTorch (bulk MDS). They coexist but don't interact.
+- **GPU frameworks**: Taichi and PyTorch coexist but don't interact.
+  - **MD simulations / tight inner loops with many cheap iterations → Taichi**
+    (e.g. `recon.sc.nucdyn` — molecular-dynamics style integration over
+    millions of timesteps where per-iteration launch overhead matters).
+  - **Gradient-descent optimisation on a structured multi-term loss →
+    PyTorch** (e.g. `recon.bulk.mds`, `recon.fish.gem_fish` — hundreds to
+    thousands of iterations, each one doing dense matrix-level work; the
+    autodiff graph, standard optimisers (Adam / L-BFGS), and easy batch
+    dim for ensemble models outweigh Taichi's per-iter speed).
+  - Legacy: `recon.sc.gem` is Taichi-based.  If it ever needs ensembles
+    or more complex loss terms, consider migrating to PyTorch.
 - **Python package name**: `uchrom` (import name), `u-chrom` (pip name)
 - **`uchrom/io/` naming**: The internal file is `_io.py` to avoid shadowing Python's stdlib `io` module. Use `gzip.open(path, mode + "t")` instead of `io.TextIOWrapper`.
 - **CLI entry points**: All via `python -m` (e.g., `python -m uchrom.recon.sc.nucdyn`, `python -m uchrom.browser`)
