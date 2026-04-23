@@ -69,6 +69,13 @@ tutorials/03_reconstruction
 ```
 
 ```{toctree}
+:caption: Tutorials — Imaging & tracing (im)
+:maxdepth: 1
+
+tutorials/08_jie_aligner
+```
+
+```{toctree}
 :caption: Tutorials — Structure identification (strc)
 :maxdepth: 1
 
@@ -84,6 +91,7 @@ tutorials/06_compartment
 
 guide/chromdata
 guide/io
+guide/tracing
 guide/reconstruction
 guide/structure
 guide/browser

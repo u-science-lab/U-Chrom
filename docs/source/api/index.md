@@ -7,6 +7,7 @@ Public modules, generated from source docstrings.
 
 core
 io
+im
 recon
 strc_loop
 strc_tad

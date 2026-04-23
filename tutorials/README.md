@@ -20,6 +20,12 @@ Grouped by the U-Chrom module each tutorial targets:
 |----------|-------|
 | `03_reconstruction.ipynb` | 3D reconstruction from Hi-C |
 
+### Imaging / tracing (`uchrom.im`)
+
+| Notebook | Topic |
+|----------|-------|
+| `08_jie_aligner.ipynb` | Spot-to-fiber tracing on raw seqFISH+ detections |
+
 ### Structure identification (`uchrom.strc`)
 
 | Notebook | Submodule | Topic |
