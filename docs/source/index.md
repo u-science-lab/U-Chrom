@@ -51,6 +51,7 @@ python -m uchrom.browser data.h5cd
 
 install
 concepts
+example_data
 ```
 
 ```{toctree}
