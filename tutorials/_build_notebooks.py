@@ -1645,22 +1645,35 @@ corr_final = np.corrcoef(cdist(final, final)[np.triu_indices(N, 1)],
 print(f'Final chain distance correlation: {corr_final:.3f}')"""),
 
     code("""\
-# Visualise truth vs reconstruction
-fig = plt.figure(figsize=(11, 4.5))
-ax1 = fig.add_subplot(1, 2, 1, projection='3d')
-colors = plt.cm.viridis(np.linspace(0, 1, n_tads))
-for t, (s, e) in enumerate(tad_bins):
-    ax1.plot(*truth[s:e].T, '-', color=colors[t], lw=2, label=f'TAD {t+1}')
-ax1.set_title('Ground truth')
-ax1.legend(fontsize=8)
+# Visualise truth vs reconstruction using uchrom.pl.plot_structure_3d.
+# Use PyVista subplot so both tubes render side-by-side in one figure.
+import pyvista as pv
+from uchrom.pl import plot_structure_3d
 
-ax2 = fig.add_subplot(1, 2, 2, projection='3d')
-for t, (s, e) in enumerate(tad_bins):
-    ax2.plot(*final[s:e].T, '-', color=colors[t], lw=2)
-ax2.set_title(f'GEM-FISH reconstruction (chain corr = {corr_final:.2f})')
+# TAD-membership scalar so each TAD is coloured distinctly
+tad_scalar = np.concatenate([
+    np.full(e - s, t, dtype=np.float64) for t, (s, e) in enumerate(tad_bins)
+])
 
-plt.tight_layout()
-plt.show()"""),
+plotter = pv.Plotter(shape=(1, 2), notebook=True, window_size=(1100, 500))
+
+plotter.subplot(0, 0)
+plotter.add_text('Ground truth', font_size=10)
+plot_structure_3d(
+    truth, colour=tad_scalar, cmap='viridis',
+    plotter=plotter, show=False,
+)
+
+plotter.subplot(0, 1)
+plotter.add_text(
+    f'GEM-FISH reconstruction (chain corr = {corr_final:.2f})', font_size=10,
+)
+plot_structure_3d(
+    final, colour=tad_scalar, cmap='viridis',
+    plotter=plotter, show=False,
+)
+
+plotter.show(jupyter_backend='static')"""),
 
     code("""\
 # Distance-matrix comparison

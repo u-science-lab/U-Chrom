@@ -59,6 +59,31 @@ class AssemblyParams:
     ``2.0`` corresponds to roughly-tangent TAD packing; ``1.5`` gives
     slight overlap between neighbours; ``3.0`` gives visible spacing."""
 
+    iterative: bool = True
+    """If True, after the single-shot Kabsch rotation run the upstream
+    GEM-FISH iterative gradient descent (Abbas 2019 Eqn. 13): for each
+    adjacent-TAD pair, rotate TAD i+1 around its centre so the gap
+    between ``y_end[i]`` and ``y_start[i+1]`` converges toward
+    ``d_prior[i, i+1]``.  Repeats with reflection retry for TADs whose
+    boundary gap has > ``reflect_threshold`` relative error."""
+
+    inner_max_iter: int = 5000
+    """Max gradient-descent iterations per inner assembly pass."""
+
+    outer_max_iter: int = 5
+    """Max outer passes (each can reflect bad TADs and re-run inner)."""
+
+    alpha: float = 0.1
+    """Gradient-descent learning rate for the iterative assembly."""
+
+    reflect_threshold: float = 0.2
+    """TADs whose adjacent-boundary relative error exceeds this
+    threshold are reflected through their centre before the next outer
+    pass (matches the upstream reflection-retry strategy)."""
+
+    convergence_abs: float = 0.1
+    """Convergence: stop inner loop when ``Σ|d_prior - df| < convergence_abs``."""
+
 
 def _kabsch(
     P: np.ndarray, Q: np.ndarray, allow_reflection: bool = True,
@@ -189,7 +214,167 @@ def assemble(
         # Apply rotation around the TAD centre
         placed[i] = (curr - tad_centres[i]) @ R + tad_centres[i]
 
+    # Stage 3c: optional iterative gradient-descent + reflection retry.
+    if params.iterative and n_tads >= 2 and inter_tad_distances is not None:
+        placed = _iterative_rotate_assemble(
+            placed, tad_centres, inter_tad_distances,
+            params.inner_max_iter,
+            params.outer_max_iter,
+            params.alpha,
+            params.reflect_threshold,
+            params.convergence_abs,
+        )
+
     return np.vstack(placed)
+
+
+def _rotation_matrix(theta: float, axis: np.ndarray) -> np.ndarray:
+    """Rodrigues' rotation about unit vector ``axis`` by angle ``theta``."""
+    ax = axis / max(np.linalg.norm(axis), 1e-12)
+    c, s = np.cos(theta), np.sin(theta)
+    x, y, z = ax
+    C = 1.0 - c
+    return np.array([
+        [c + x * x * C,     x * y * C - z * s, x * z * C + y * s],
+        [y * x * C + z * s, c + y * y * C,     y * z * C - x * s],
+        [z * x * C - y * s, z * y * C + x * s, c + z * z * C],
+    ])
+
+
+def _rotate_around_centre(
+    segment: np.ndarray, centre: np.ndarray, R: np.ndarray,
+) -> np.ndarray:
+    return (segment - centre) @ R.T + centre
+
+
+def _iterative_rotate_assemble(
+    placed: list,
+    tad_centres: np.ndarray,
+    inter_tad_distances: np.ndarray,
+    inner_max_iter: int,
+    outer_max_iter: int,
+    alpha: float,
+    reflect_threshold: float,
+    convergence_abs: float,
+) -> list:
+    """Upstream GEM-FISH iterative assembly (Abbas 2019 Eqn. 13 + reflection).
+
+    For each adjacent TAD pair ``(i, i+1)``:
+
+    - Measure boundary distance ``df[i] = ||y_end[i] - y_start[i+1]||``
+    - Compute gradient ``der[i] = 2(df[i] − d_prior[i])/df[i] × (y_start[i+1] − y_end[i])``
+    - Move ``y_start[i+1]`` toward ``y_start[i+1] − alpha × der[i]``
+    - Rotate TAD ``i+1`` around its centre so its first-point lands at
+      the new target position.
+
+    Outer loop: any TAD whose boundary-gap relative error is above
+    ``reflect_threshold`` gets reflected (x,y mirror through its centre)
+    and the inner loop restarts.
+    """
+    n_tads = len(placed)
+    # d_prior for adjacent pairs only
+    d_prior = np.array([
+        float(inter_tad_distances[i, i + 1]) for i in range(n_tads - 1)
+    ])
+    # If any are 0 or non-finite, leave as no-op (matches upstream when
+    # both Hi-C and genomic fallback yield 0)
+    d_prior = np.where(np.isfinite(d_prior) & (d_prior > 0), d_prior, np.nan)
+
+    placed = [np.asarray(p, dtype=np.float64).copy() for p in placed]
+    lr = alpha
+
+    for outer in range(outer_max_iter):
+        # --- Inner gradient descent ---
+        prev_err_sum = float("inf")
+        stagnant = 0
+        for inner in range(inner_max_iter):
+            df = np.zeros(n_tads - 1)
+            der = np.zeros((n_tads - 1, 3))
+            ok_pairs = np.zeros(n_tads - 1, dtype=bool)
+            for i in range(n_tads - 1):
+                if placed[i].shape[0] < 1 or placed[i + 1].shape[0] < 1:
+                    continue
+                y_end = placed[i][-1]
+                y_start = placed[i + 1][0]
+                diff = y_start - y_end
+                d = np.linalg.norm(diff)
+                df[i] = d
+                if not np.isfinite(d_prior[i]) or d < 1e-9:
+                    continue
+                factor = 2.0 * (d - d_prior[i]) / d
+                der[i] = factor * diff
+                ok_pairs[i] = True
+
+            err = np.where(
+                np.isfinite(d_prior), np.abs(d_prior - df), 0.0,
+            )
+            err_sum = float(err.sum())
+            if err_sum < convergence_abs:
+                break
+            if abs(err_sum - prev_err_sum) < 0.01:
+                stagnant += 1
+            else:
+                stagnant = 0
+            if stagnant > 50:
+                break
+            prev_err_sum = err_sum
+
+            # Every 1000 iters, escalate learning rate (as upstream does)
+            if (inner + 1) % 1000 == 0:
+                lr = lr * 2.0
+
+            # Apply rotations
+            for i in range(n_tads - 1):
+                if not ok_pairs[i]:
+                    continue
+                y_start = placed[i + 1][0]
+                y_new = y_start - lr * der[i]
+                v1 = y_start - tad_centres[i + 1]
+                v2 = y_new - tad_centres[i + 1]
+                n1 = np.linalg.norm(v1)
+                n2 = np.linalg.norm(v2)
+                if n1 < 1e-9 or n2 < 1e-9:
+                    continue
+                cos_a = float(np.clip(
+                    np.dot(v1, v2) / (n1 * n2), -1.0, 1.0,
+                ))
+                angle = float(np.arccos(cos_a))
+                if angle < 1e-3:
+                    continue
+                axis = np.cross(v1, v2)
+                if np.linalg.norm(axis) < 1e-9:
+                    continue
+                R = _rotation_matrix(angle, axis)
+                placed[i + 1] = _rotate_around_centre(
+                    placed[i + 1], tad_centres[i + 1], R,
+                )
+
+        # --- Outer loop: reflection retry for high-error TADs ---
+        final_df = np.zeros(n_tads - 1)
+        for i in range(n_tads - 1):
+            final_df[i] = np.linalg.norm(
+                placed[i + 1][0] - placed[i][-1]
+            )
+        with np.errstate(divide="ignore", invalid="ignore"):
+            relative = np.where(
+                np.isfinite(d_prior) & (d_prior > 0),
+                np.abs(d_prior - final_df) / d_prior,
+                0.0,
+            )
+        reflected_any = False
+        for i in range(n_tads - 1):
+            if relative[i] > reflect_threshold:
+                # Reflect TAD i+1 through its centre in x and y
+                centre = tad_centres[i + 1]
+                reflected = placed[i + 1].copy()
+                reflected[:, 0] = 2 * centre[0] - reflected[:, 0]
+                reflected[:, 1] = 2 * centre[1] - reflected[:, 1]
+                placed[i + 1] = reflected
+                reflected_any = True
+        if not reflected_any:
+            break
+
+    return placed
 
 
 def gap_distance_from_contacts(

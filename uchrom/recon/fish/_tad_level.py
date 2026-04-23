@@ -55,11 +55,82 @@ class Stage1Params:
     optimiser: str = "adam"    # 'adam' | 'lbfgs'
     n_ensemble: int = 20
     init_scale: float = 3.0    # std of Gaussian initialisation
+    init_from_mds: bool = True
+    """If True, seed the Gaussian-chain optimisation with a classical
+    MDS embedding of the FISH distance matrix (filled in with Hi-C-
+    derived distances where FISH is absent).  Starting from an MDS
+    solution that already respects the pairwise-distance structure
+    gives the gradient descent a much better basin than N(0, σ²) —
+    crucial on chromosomes with partial FISH coverage where the
+    un-anchored centres otherwise drift into extended configurations.
+    Each ensemble replica gets a small random perturbation on top of
+    the MDS seed so the ensemble still has diversity."""
+
     device: str = "auto"       # 'auto' | 'cuda' | 'mps' | 'cpu'
     verbose: bool = False
 
 
 # ----------------------------------------------------------------------
+
+def _mds_seed(
+    fish_distances: np.ndarray,
+    contacts: np.ndarray,
+) -> np.ndarray:
+    """Classical-MDS 3-D embedding from a (mostly) pairwise distance matrix.
+
+    Missing FISH entries (NaN or ≤ 0) are filled in with the median of
+    available FISH distances for the same genomic separation, falling
+    back to a global median if no same-separation data is available.
+    The resulting dense distance matrix is centred via the double-
+    centring identity ``B = -0.5 J D² J``, eigendecomposed, and the
+    top-3 eigenvectors scaled by √eigenvalues give the 3-D coords.
+
+    When every FISH entry is missing or non-positive, returns a small
+    random point cloud so downstream code never sees NaNs.
+    """
+    D = np.asarray(fish_distances, dtype=np.float64).copy()
+    n = D.shape[0]
+    if n < 2:
+        return np.zeros((max(n, 1), 3), dtype=np.float64)
+
+    # Mark missing
+    missing = ~np.isfinite(D) | (D <= 0)
+    np.fill_diagonal(missing, False)
+
+    # Fill by same-|i-j| median
+    if missing.any():
+        for sep in range(1, n):
+            idx_i, idx_j = np.where(
+                (np.abs(np.arange(n)[:, None] - np.arange(n)[None, :]) == sep)
+            )
+            good = ~missing[idx_i, idx_j]
+            if good.any():
+                med = float(np.median(D[idx_i[good], idx_j[good]]))
+                fill = (
+                    (np.abs(np.arange(n)[:, None] - np.arange(n)[None, :]) == sep)
+                    & missing
+                )
+                D[fill] = med
+            else:
+                # Use global median as last-resort fill
+                global_med = float(np.median(D[~missing])) if (~missing).any() else 1.0
+                fill = (
+                    (np.abs(np.arange(n)[:, None] - np.arange(n)[None, :]) == sep)
+                    & missing
+                )
+                D[fill] = global_med
+
+    # Classical MDS: B = -0.5 J D² J, eigendecompose, top-3
+    D2 = D * D
+    J = np.eye(n) - np.ones((n, n)) / n
+    B = -0.5 * J @ D2 @ J
+    B = 0.5 * (B + B.T)  # numerical symmetry
+    w, v = np.linalg.eigh(B)
+    idx = np.argsort(w)[::-1][:3]
+    top_w = np.clip(w[idx], 0.0, None)
+    coords = v[:, idx] * np.sqrt(top_w)[None, :]
+    return coords.astype(np.float64)
+
 
 def _resolve_device(spec: str) -> Tuple[torch.device, torch.dtype]:
     """Return ``(device, dtype)`` — MPS is float32-only, others float64."""
@@ -128,6 +199,16 @@ def reconstruct_tad_level(
         elif init.dim() == 3:
             K = init.shape[0]
         coords = init.clone()
+    elif params.init_from_mds and fish_distances is not None:
+        mds_seed = _mds_seed(
+            np.asarray(fish_distances, dtype=np.float64),
+            np.asarray(contacts, dtype=np.float64),
+        )
+        torch.manual_seed(0)
+        seed = torch.as_tensor(mds_seed, dtype=dtype, device=device)
+        # Replicate across ensemble with small perturbation for diversity
+        coords = seed.unsqueeze(0).expand(K, -1, -1).clone()
+        coords = coords + 0.1 * torch.randn_like(coords)
     else:
         # MPS RNG doesn't support manual_seed on generators yet; seed torch global
         torch.manual_seed(0)
