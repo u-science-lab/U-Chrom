@@ -189,7 +189,7 @@ def plot_structure_3d(
     plotter: Any = None,
     notebook: Optional[bool] = None,
     jupyter_backend: str = "static",
-    bond_outlier_factor: Optional[float] = 10.0,
+    bond_outlier_factor: Optional[float] = None,
 ):
     """Render a ``ChromData`` (or ``(n_bins, 3)`` coords) as a 3-D tube.
 
@@ -236,13 +236,15 @@ def plot_structure_3d(
         renders an inline image (safest for nbconvert / CI), ``'trame'``
         gives an interactive widget.
     bond_outlier_factor : float, optional
-        If set (default 10.0), any consecutive-bin bond longer than
+        If set, any consecutive-bin bond longer than
         ``factor * median_bond`` is treated as a discontinuity and
         the chain is split at that point (rendered as two separate
-        tubes with a visible gap).  Without this, reconstructions with
-        scale-mismatched TAD boundaries produce misleadingly thin
-        "bridges" that look connected but aren't physically realistic.
-        Set to ``None`` to disable.
+        tubes with a visible gap).  Default ``None`` keeps the chain
+        continuous — use this when the algorithm produces a legitimate
+        chain that just happens to have a scale mismatch between
+        intra-TAD bonds and inter-TAD boundary bonds (the typical
+        two-stage reconstruction case).  Set to e.g. ``50`` to catch
+        only pathologically long "bridges".
 
     Returns
     -------
