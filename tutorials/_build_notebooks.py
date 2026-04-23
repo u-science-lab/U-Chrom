@@ -1731,11 +1731,12 @@ cd, intermediate = reconstruct_gem_fish(
     resolution=None,             # single-res .cool
     fish_cd=fish_cd,
     params=GEMFISHParams(
-        lambda_E_tad=0.05, lambda_F=0.5,
+        lambda_E_tad=0.5, lambda_F=0.5,
         lambda_E_intra=0.05, lambda_R=0.01,
         stage1_iter=500, stage1_ensemble=20,
         stage2_iter=300, stage2_ensemble=6,
         tad_di_window=50, tad_di_min_size_frac=0.01,
+        tad_max_size_frac=0.05,     # cap huge DI-called TADs (p-arm)
         device='auto', verbose=False,
     ),
     return_intermediate=True,
@@ -1799,8 +1800,7 @@ from uchrom.pl import plot_structure_3d
 plot_structure_3d(
     cd, chrom='chr21',
     colour='bin', cmap='plasma',
-    tube_radius=0.08,
-    window_size=(900, 700),
+    window_size=(1000, 800),
     notebook=True, jupyter_backend='static',
 )"""),
 

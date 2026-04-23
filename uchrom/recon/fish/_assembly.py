@@ -43,6 +43,22 @@ class AssemblyParams:
     computing the Kabsch alignment.  ``1`` uses just the first / last
     bin; ``3`` uses the first/last 3 bins (robust to noise)."""
 
+    match_scales: bool = True
+    """If True, uniformly rescale the Stage-1 TAD-centre layout so the
+    mean inter-TAD gap matches the intra-TAD Rg scale (roughly tangent
+    packing of TADs).  Without this, Stage 1 and Stage 2 end up on
+    incompatible scales: Stage-1 centres drift apart under minimal
+    polymer constraint while each Stage-2 intra-TAD cloud optimises
+    to unit bond length, giving tight blobs with huge bridges between
+    them.  The intra-TAD geometry (which Stage 2 optimised against
+    real Hi-C) is preserved; only the global layout is rescaled."""
+
+    centre_gap_factor: float = 2.0
+    """When ``match_scales=True``, the TAD centres are rescaled so
+    that ``mean_inter_TAD_gap = centre_gap_factor * mean_intra_TAD_Rg``.
+    ``2.0`` corresponds to roughly-tangent TAD packing; ``1.5`` gives
+    slight overlap between neighbours; ``3.0`` gives visible spacing."""
+
 
 def _kabsch(
     P: np.ndarray, Q: np.ndarray, allow_reflection: bool = True,
@@ -95,7 +111,36 @@ def assemble(
         "intra_tad_coords length must match tad_centres length"
     )
 
-    # Stage 3a: centre each intra-TAD cloud on its TAD centre
+    # Harmonise Stage-1 (TAD-centre) and Stage-2 (intra-TAD) scales.
+    # The intra-TAD geometry carries the information that Stage 2
+    # optimised against real Hi-C, so we leave the clouds intact and
+    # rescale the TAD-centre layout instead.  Target: mean inter-TAD
+    # gap ≈ ``centre_gap_factor * mean intra-TAD Rg`` (tangent-packed
+    # TAD spheres for factor=2).
+    if params.match_scales and n_tads >= 2:
+        intra_rgs = []
+        for clump in intra_tad_coords:
+            cl = np.asarray(clump)
+            if cl.shape[0] >= 2:
+                centroid = cl.mean(axis=0)
+                rg = float(np.sqrt(((cl - centroid) ** 2).sum(axis=1).mean()))
+                intra_rgs.append(rg)
+        if intra_rgs:
+            mean_rg = float(np.mean(intra_rgs))
+            gaps = np.linalg.norm(
+                tad_centres[1:] - tad_centres[:-1], axis=1,
+            )
+            mean_gap = float(np.mean(gaps))
+            if mean_gap > 1e-9:
+                target_gap = params.centre_gap_factor * mean_rg
+                tad_centres = tad_centres * (target_gap / mean_gap)
+                if inter_tad_distances is not None:
+                    inter_tad_distances = (
+                        inter_tad_distances * (target_gap / mean_gap)
+                    )
+
+    # Stage 3a: centre each intra-TAD cloud on its (optionally rescaled)
+    # TAD centre — the intra geometry is preserved.
     placed = []
     for i, clump in enumerate(intra_tad_coords):
         cl = np.asarray(clump, dtype=np.float64)

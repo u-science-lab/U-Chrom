@@ -65,6 +65,11 @@ class GEMFISHParams:
     tad_di_window: int = 50
     tad_di_smoothing: float = 0.1
     tad_di_min_size_frac: float = 0.05
+    tad_max_size_frac: float = 0.05
+    """Cap any called TAD at ``tad_max_size_frac * n_bins`` bins.
+    Oversized DI windows (often in heterochromatic regions like the
+    chr21 p-arm where DI signal is weak) are split into equal chunks.
+    Set to 1.0 to disable capping."""
 
     # Shared
     device: str = "auto"
@@ -100,7 +105,28 @@ def _auto_tads(
     out = [(int(s), int(e)) for s, e in windows]
     if out and out[-1][1] < contacts.shape[0]:
         out[-1] = (out[-1][0], int(contacts.shape[0]))
-    return out
+
+    # Split oversized TADs into equal chunks.  The Dixon DI caller
+    # happily lumps low-signal regions (centromeric / heterochromatic
+    # arms) into one huge TAD — those break the later assembly step
+    # because a 500-bin Gaussian-chain cloud has a Rg so large it
+    # can't sit adjacent to a 30-bin neighbour without a pathological
+    # boundary bond.
+    max_size = max(10, int(contacts.shape[0] * params.tad_max_size_frac))
+    capped = []
+    for s, e in out:
+        n = e - s
+        if n <= max_size:
+            capped.append((s, e))
+            continue
+        n_chunks = int(np.ceil(n / max_size))
+        chunk = int(np.ceil(n / n_chunks))
+        sub_s = s
+        while sub_s < e:
+            sub_e = min(sub_s + chunk, e)
+            capped.append((sub_s, sub_e))
+            sub_s = sub_e
+    return capped
 
 
 # ----------------------------------------------------------------------

@@ -189,6 +189,7 @@ def plot_structure_3d(
     plotter: Any = None,
     notebook: Optional[bool] = None,
     jupyter_backend: str = "static",
+    bond_outlier_factor: Optional[float] = 10.0,
 ):
     """Render a ``ChromData`` (or ``(n_bins, 3)`` coords) as a 3-D tube.
 
@@ -234,6 +235,14 @@ def plot_structure_3d(
         Passed to ``plotter.show(jupyter_backend=...)`` — ``'static'``
         renders an inline image (safest for nbconvert / CI), ``'trame'``
         gives an interactive widget.
+    bond_outlier_factor : float, optional
+        If set (default 10.0), any consecutive-bin bond longer than
+        ``factor * median_bond`` is treated as a discontinuity and
+        the chain is split at that point (rendered as two separate
+        tubes with a visible gap).  Without this, reconstructions with
+        scale-mismatched TAD boundaries produce misleadingly thin
+        "bridges" that look connected but aren't physically realistic.
+        Set to ``None`` to disable.
 
     Returns
     -------
@@ -254,6 +263,33 @@ def plot_structure_3d(
     )
     if not segments:
         raise ValueError("No coordinates to render — empty filter?")
+
+    # Split each contiguous segment further at pathologically long bonds
+    # so we don't draw fake bridges across algorithm-induced discontinuities.
+    if bond_outlier_factor is not None and bond_outlier_factor > 0:
+        all_bonds = []
+        for seg, _ in segments:
+            if seg.shape[0] >= 2:
+                all_bonds.extend(
+                    np.linalg.norm(seg[1:] - seg[:-1], axis=1).tolist()
+                )
+        if all_bonds:
+            thr = float(bond_outlier_factor * np.median(all_bonds))
+            refined = []
+            for seg, meta in segments:
+                if seg.shape[0] < 2:
+                    refined.append((seg, meta))
+                    continue
+                d = np.linalg.norm(seg[1:] - seg[:-1], axis=1)
+                cuts = np.where(d > thr)[0] + 1
+                if cuts.size == 0:
+                    refined.append((seg, meta))
+                else:
+                    pts = [0, *cuts.tolist(), seg.shape[0]]
+                    for a, b in zip(pts[:-1], pts[1:]):
+                        if b - a >= 2:
+                            refined.append((seg[a:b], meta))
+            segments = refined
 
     # Auto tube radius from global extent
     all_xyz = np.vstack([s for s, _ in segments])
