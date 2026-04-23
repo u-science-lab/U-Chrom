@@ -59,12 +59,12 @@ def write_nb(path: Path, cells: list):
 
 
 # ============================================================
-# 1. ChromData basics
+# ChromData basics
 # ============================================================
 
 nb1 = [
     md("""\
-# 1. ChromData — the core data container
+# ChromData — the core data container
 
 `uchrom.ChromData` is the central data structure for U-Chrom, analogous to
 [AnnData](https://anndata.readthedocs.io/) for chromatin 3D structure data.
@@ -168,19 +168,19 @@ recon = pd.DataFrame({
 cd_recon = ChromData.from_dataframe(recon, cell_id='demo_cell')
 cd_recon"""),
 
-    md("## Where to go next\n\n- **Tutorial 2** — importing real FOF-CT imaging data and inspecting trace structure.\n- **Tutorial 3** — running 3D reconstruction from Hi-C `.pairs` files.\n- **Tutorial 4** — loop calling on FOF-CT data."),
+    md("## Where to go next\n\n- **Importing FOF-CT imaging data** and inspecting trace structure.\n- **3D reconstruction** from Hi-C `.pairs` files.\n- **Loop calling** on FOF-CT data."),
 ]
 
-write_nb(Path("tutorials") / "01_chromdata_basics.ipynb", nb1)
+write_nb(Path("tutorials") / "chromdata_basics.ipynb", nb1)
 
 
 # ============================================================
-# 2. FOF-CT imaging data
+# FOF-CT imaging data
 # ============================================================
 
 nb2 = [
     md("""\
-# 2. Importing FOF-CT imaging data
+# Importing FOF-CT imaging data
 
 The [4DN FISH Omics Format — Chromatin Tracing](https://fish-omics-format.readthedocs.io/)
 (FOF-CT) is the community standard for chromatin-tracing / multiplexed DNA
@@ -279,20 +279,20 @@ df.head()"""),
 ## Writing your own FOF-CT-compatible data
 
 If you produced tracing data with a tool that does not write FOF-CT, you
-can create a ChromData directly (see Tutorial 1) and write `.h5cd`.  The
+can create a ChromData directly (see the ChromData basics tutorial) and write `.h5cd`.  The
 on-disk format is versioned so downstream tools can safely consume it."""),
 ]
 
-write_nb(Path("tutorials") / "02_import_fofct.ipynb", nb2)
+write_nb(Path("tutorials") / "import_fofct.ipynb", nb2)
 
 
 # ============================================================
-# 3. 3D reconstruction from Hi-C
+# Reconstruction from Hi-C
 # ============================================================
 
 nb3 = [
     md("""\
-# 3. 3D reconstruction from Hi-C data
+# 3D reconstruction from Hi-C data
 
 U-Chrom provides several 3D reconstruction algorithms:
 
@@ -377,16 +377,16 @@ All three write the same `.h5cd` schema so downstream tools don't care
 which reconstructor was used."""),
 ]
 
-write_nb(Path("tutorials") / "03_reconstruction.ipynb", nb3)
+write_nb(Path("tutorials") / "reconstruction.ipynb", nb3)
 
 
 # ============================================================
-# 4. Loop calling
+# Loop calling
 # ============================================================
 
 nb4 = [
     md("""\
-# 4. Loop calling on tracing data
+# Loop calling on tracing data
 
 `uchrom.strc.loop` provides a GPU-accelerated reimplementation of the
 axis-wise F-test loop caller from Yu et al. 2025 (*ArcFISH*, bioRxiv
@@ -669,16 +669,16 @@ MPS forces float32; on CUDA with float64 you will see higher overlap
 with the upstream output."""),
 ]
 
-write_nb(Path("tutorials") / "04_loop_calling.ipynb", nb4)
+write_nb(Path("tutorials") / "loop_calling.ipynb", nb4)
 
 
 # ============================================================
-# 5. TAD calling
+# TAD calling
 # ============================================================
 
 nb5 = [
     md("""\
-# 5. TAD calling
+# TAD calling
 
 `uchrom.strc.tad.call_tads_by_pval` is a GPU-accelerated reimplementation
 of the ArcFISH TAD caller (Yu et al. 2025).  For each candidate boundary
@@ -857,16 +857,16 @@ plt.show()"""),
   strong TADs and disagree on boundary-marginal ones."""),
 ]
 
-write_nb(Path("tutorials") / "05_tad_calling.ipynb", nb5)
+write_nb(Path("tutorials") / "tad_calling.ipynb", nb5)
 
 
 # ============================================================
-# 6. A/B compartment
+# A/B compartment
 # ============================================================
 
 nb6 = [
     md("""\
-# 6. A/B compartment calling
+# A/B compartment calling
 
 `uchrom.strc.comp.call_compartments_axes_pc` is a GPU-accelerated
 reimplementation of the ArcFISH `ABCaller.by_axes_pc`.  The idea:
@@ -1008,16 +1008,16 @@ plt.show()"""),
   routines."""),
 ]
 
-write_nb(Path("tutorials") / "06_compartment.ipynb", nb6)
+write_nb(Path("tutorials") / "compartment.ipynb", nb6)
 
 
 # ============================================================
-# 7. FISHnet — per-allele domain calling
+# FISHnet — per-allele domain calling
 # ============================================================
 
 nb7 = [
     md("""\
-# 7. Single-cell domain calling with FISHnet
+# Single-cell domain calling with FISHnet
 
 :func:`uchrom.strc.tad.call_domains_fishnet` is a reimplementation of
 FISHnet (Patel et al. 2025, *Nature Methods* 22, 1255–1264,
@@ -1195,7 +1195,7 @@ plt.show()"""),
 - **FISHnet (this tutorial)** — per-allele domain calls; cell-to-cell
   variability is explicit; ideal for questions like *"which alleles
   share the same folding pattern?"*.
-- **F-test hierarchical TAD caller** (Tutorial 5) — population-level
+- **F-test hierarchical TAD caller** (tad_calling tutorial) — population-level
   boundaries with an FDR-controlled hierarchy; ideal for
   *"where are the consensus domain boundaries in this cell type?"*.
 - **Directionality index** (:func:`uchrom.strc.tad.get_domains`) —
@@ -1218,16 +1218,16 @@ uses a custom Louvain solver; this reimplementation delegates to
 is simpler."""),
 ]
 
-write_nb(Path("tutorials") / "07_fishnet_domains.ipynb", nb7)
+write_nb(Path("tutorials") / "fishnet_domains.ipynb", nb7)
 
 
 # ============================================================
-# 8. Spot-to-fiber tracing (jie) on real seqFISH+ data
+# Spot-to-fiber tracing (jie) on real seqFISH+ data
 # ============================================================
 
 nb8 = [
     md("""\
-# 8. Spot-to-fiber tracing with jie on seqFISH+ data
+# Spot-to-fiber tracing with jie on seqFISH+ data
 
 :func:`uchrom.im.trace.align_spots` is an independent reimplementation
 of jie (Jia & Ren 2022, *Nature Biotechnology* 22,
@@ -1489,7 +1489,7 @@ plt.show()"""),
 ## Notes
 
 - **Two parallel paths in ``uchrom``**: you can either start from an
-  already-traced FOF-CT file (tutorials 2, 5, 6, 7 use 4DN
+  already-traced FOF-CT file (other tutorials use 4DN
   `4DNFIHF3JCBY`) **or** from raw detections + jie (this tutorial).
   Both produce a `ChromData` with the same schema.
 - **jie is SV-blind** — inversions/translocations break the DAG
@@ -1503,7 +1503,7 @@ plt.show()"""),
   (cell, chromosome) using ``multiprocessing``."""),
 ]
 
-write_nb(Path("tutorials") / "08_jie_aligner.ipynb", nb8)
+write_nb(Path("tutorials") / "jie_aligner.ipynb", nb8)
 
 
 # ============================================================
@@ -1524,29 +1524,29 @@ Grouped by the U-Chrom module each tutorial targets:
 
 | Notebook | Topic |
 |----------|-------|
-| `01_chromdata_basics.ipynb` | The `ChromData` container |
-| `02_import_fofct.ipynb` | Loading FOF-CT imaging data |
+| `chromdata_basics.ipynb` | The `ChromData` container |
+| `import_fofct.ipynb` | Loading FOF-CT imaging data |
 
 ### Reconstruction (`uchrom.recon`)
 
 | Notebook | Topic |
 |----------|-------|
-| `03_reconstruction.ipynb` | 3D reconstruction from Hi-C |
+| `reconstruction.ipynb` | 3D reconstruction from Hi-C |
 
 ### Imaging / tracing (`uchrom.im`)
 
 | Notebook | Topic |
 |----------|-------|
-| `08_jie_aligner.ipynb` | Spot-to-fiber tracing on raw seqFISH+ detections |
+| `jie_aligner.ipynb` | Spot-to-fiber tracing on raw seqFISH+ detections |
 
 ### Structure identification (`uchrom.strc`)
 
 | Notebook | Submodule | Topic |
 |----------|-----------|-------|
-| `04_loop_calling.ipynb` | `strc.loop` | Loop calling (axis-wise F-test) |
-| `05_tad_calling.ipynb` | `strc.tad` | TAD calling (hierarchical F-test) |
-| `07_fishnet_domains.ipynb` | `strc.tad` | Per-allele domain calling (FISHnet) |
-| `06_compartment.ipynb` | `strc.comp` | A/B compartment calling |
+| `loop_calling.ipynb` | `strc.loop` | Loop calling (axis-wise F-test) |
+| `tad_calling.ipynb` | `strc.tad` | TAD calling (hierarchical F-test) |
+| `fishnet_domains.ipynb` | `strc.tad` | Per-allele domain calling (FISHnet) |
+| `compartment.ipynb` | `strc.comp` | A/B compartment calling |
 
 The notebooks are regenerated by running
 `python tutorials/_build_notebooks.py` from the repo root, which keeps

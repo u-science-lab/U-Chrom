@@ -57,32 +57,32 @@ concepts
 :caption: Tutorials — Core & I/O
 :maxdepth: 1
 
-tutorials/01_chromdata_basics
-tutorials/02_import_fofct
+tutorials/chromdata_basics
+tutorials/import_fofct
 ```
 
 ```{toctree}
 :caption: Tutorials — Reconstruction (recon)
 :maxdepth: 1
 
-tutorials/03_reconstruction
+tutorials/reconstruction
 ```
 
 ```{toctree}
 :caption: Tutorials — Imaging & tracing (im)
 :maxdepth: 1
 
-tutorials/08_jie_aligner
+tutorials/jie_aligner
 ```
 
 ```{toctree}
 :caption: Tutorials — Structure identification (strc)
 :maxdepth: 1
 
-tutorials/04_loop_calling
-tutorials/05_tad_calling
-tutorials/07_fishnet_domains
-tutorials/06_compartment
+tutorials/loop_calling
+tutorials/tad_calling
+tutorials/fishnet_domains
+tutorials/compartment
 ```
 
 ```{toctree}
