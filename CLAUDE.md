@@ -100,6 +100,28 @@ ChromData
 - `cd.write('data.h5cd')` / `ChromData.read('data.h5cd')` — HDF5 roundtrip
 - `cd.to_dataframe()` — export as flat DataFrame
 
+## Example data
+
+All datasets consumed by tutorials and benchmarks live in
+`example-data/`.  Rules:
+
+- **Catalog is authoritative**: `example-data/README.md` lists every
+  dataset with size, source / citation, download URL, format, and
+  which tutorial consumes it.  A symlink surfaces the same catalog
+  in the Sphinx docs at `docs/source/example_data.md`.
+- **< 10 MB → check into the repo**.  Add a row to the "Small,
+  in-repo datasets" table of `example-data/README.md`.
+- **≥ 10 MB → document + auto-download**.  Add a row to "Large
+  datasets", an entry to `example-data/download_data.py`, and follow
+  the existing `find_*()` pattern inside the tutorial that needs it
+  (see e.g. `find_fofct()` in `tutorials/_build_notebooks.py`).  Add
+  the filename(s) to `.gitignore`.
+- **Whenever a tutorial or benchmark pulls in a new dataset, the
+  catalog must be updated in the same PR** — this is a hard rule.
+  Do not add silent downloads.
+- Tutorial-produced outputs (e.g. `with_loops.h5cd`, synthetic
+  `fofct_core.csv` fallbacks) are gitignored, not committed.
+
 ## Technical Notes
 
 - **GPU frameworks**: Taichi (sc reconstruction), PyTorch (bulk MDS). They coexist but don't interact.

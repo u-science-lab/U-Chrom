@@ -23,6 +23,12 @@ run_whole_genome.py
 # Large data files
 *.hic
 *.mcool
+*.h5cd
+example-data/4DNFIHF3JCBY.*
+example-data/DNAseqFISH+.zip
+example-data/DNAseqFISH+/
+example-data/fofct_core.csv
+example-data/with_loops.h5cd
 # Docs build
 docs/build/
 .ipynb_checkpoints/
