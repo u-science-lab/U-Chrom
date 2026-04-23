@@ -1679,214 +1679,140 @@ plt.tight_layout()
 plt.show()"""),
 
     md("""\
-## Part 2 — Real FISH (Bintu et al. 2018, IMR90 chr21:18.6-20.6 Mb)
+## Part 2 — Paper-faithful IMR90 chr21 reconstruction
 
-The FISH side of the paper's benchmark is
-`IMR90_chr21-18-20Mb.csv` from Bintu et al. 2018 (*Science* 362,
-eaau1783, a higher-resolution follow-up to Wang et al. 2016).  The
-file is ~2 MB with 1 278 imaged chromosomes × 66 segments per trace
-at 30-kb resolution in nanometres.
-
-We auto-download it and synthesise a matching Hi-C from the
-population-mean distances so the notebook can run offline.  For a
-paper-faithful analysis, replace the synthesised Hi-C with the Rao
-2014 IMR90 `.mcool` from 4DN — see the CLI section at the bottom."""),
+Load the real Bintu 2018 FISH data (auto-downloaded) and the real
+Rao 2014 IMR90 Hi-C (small 30-kb `.cool` shipped under `example-data/`,
+derived from 4DN accession [4DNFI4QQPDMR](https://data.4dnucleome.org/4DNFI4QQPDMR/)),
+then run the **one-shot** `reconstruct_gem_fish` entry point."""),
 
     code("""\
 from pathlib import Path
 import urllib.request
+from uchrom.io import read_bintu_tracing
 
 DATA_URL = (
     'https://raw.githubusercontent.com/BogdanBintu/ChromatinImaging/'
     'master/Data/IMR90_chr21-18-20Mb.csv'
 )
 
-def _repo_root() -> Path:
+def _repo_root():
     for p in [Path.cwd(), *Path.cwd().parents]:
         if (p / 'pyproject.toml').exists():
             return p
     return Path.cwd()
 
-def load_bintu_imr90() -> np.ndarray:
-    root = _repo_root()
-    dest = root / 'example-data' / 'IMR90_chr21-18-20Mb.csv'
-    if not dest.exists():
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        print(f'[data] downloading Bintu 2018 IMR90 FISH (~2 MB) → {dest}')
-        urllib.request.urlretrieve(DATA_URL, dest)
-    import pandas as pd
-    # Skip descriptive first line
-    df = pd.read_csv(dest, skiprows=1)
-    return df
+# Auto-download Bintu 2018 (~2 MB) if absent
+root = _repo_root()
+bintu_csv = root / 'example-data' / 'IMR90_chr21-18-20Mb.csv'
+if not bintu_csv.exists():
+    print(f'[data] downloading Bintu 2018 (~2 MB) → {bintu_csv}')
+    urllib.request.urlretrieve(DATA_URL, bintu_csv)
 
-df = load_bintu_imr90()
-print('Columns:', df.columns.tolist())
-print('shape:', df.shape)
-print('n chromosomes:', df['Chromosome index'].nunique())
-print('n segments:', df['Segment index'].nunique())
-df.head()"""),
-
-    code("""\
-# Build (n_traces, n_bins, 3) cube from the long-format CSV
-n_traces = int(df['Chromosome index'].max())
-n_bins = int(df['Segment index'].max())
-cube = np.full((n_traces, n_bins, 3), np.nan, dtype=np.float64)
-for _, row in df.iterrows():
-    ti = int(row['Chromosome index']) - 1
-    bi = int(row['Segment index']) - 1
-    cube[ti, bi] = [row['X'], row['Y'], row['Z']]
-
-# Population-mean pairwise distance matrix (median across traces for
-# robustness to dropout).
-diff = cube[:, :, None, :] - cube[:, None, :, :]
-D_per = np.sqrt((diff ** 2).sum(-1))
-F_real = np.nanmedian(D_per, axis=0)   # (n_bins, n_bins)
-print(f'cube: {cube.shape}, FISH median-dist shape: {F_real.shape}')
-print(f'mean inter-bin distance: {np.nanmean(F_real[np.triu_indices(n_bins, 1)]):.0f} nm')"""),
-
-    code("""\
-# Synthesise Hi-C from the FISH population-mean (stand-in for Rao 2014).
-# This is NOT the real Hi-C but it keeps the tutorial self-contained.
-# The substitution is clearly labelled in the output and notes below.
-contacts_real = 1.0 / (1.0 + F_real / 500.0)   # scale to micron-ish
-np.fill_diagonal(contacts_real, 0.0)
-contacts_real[~np.isfinite(contacts_real)] = 0.0
-
-# For the tutorial we run the 3 stages on a coarse TAD partition:
-# group the 66 segments into 6 TADs of 11 segments each.
-tad_bp = 11
-tad_bins_real = [(t * tad_bp, min((t + 1) * tad_bp, n_bins))
-                 for t in range(int(np.ceil(n_bins / tad_bp)))]
-print(f'TAD partition: {tad_bins_real}')"""),
-
-    code("""\
-# Aggregate inter-TAD contacts + build TAD-level FISH distances
-inter_contacts_real = np.zeros((len(tad_bins_real), len(tad_bins_real)))
-for i, (si, ei) in enumerate(tad_bins_real):
-    for j, (sj, ej) in enumerate(tad_bins_real):
-        inter_contacts_real[i, j] = contacts_real[si:ei, sj:ej].sum()
-
-# FISH TAD-centre distances
-tad_centres_bp = [(s + e) / 2 for (s, e) in tad_bins_real]
-F_tad = np.zeros((len(tad_bins_real), len(tad_bins_real)))
-for i, (si, ei) in enumerate(tad_bins_real):
-    for j, (sj, ej) in enumerate(tad_bins_real):
-        if i == j: continue
-        sub = F_real[si:ei, sj:ej]
-        F_tad[i, j] = np.nanmedian(sub) if np.isfinite(sub).any() else np.nan
-
-# Rg² per TAD from raw cube
-rg_targets_real = []
-for (si, ei) in tad_bins_real:
-    sub_cube = cube[:, si:ei, :]
-    rgs = []
-    for t in range(sub_cube.shape[0]):
-        cs = sub_cube[t][~np.isnan(sub_cube[t, :, 0])]
-        if cs.shape[0] < 3: continue
-        c = cs.mean(0)
-        rgs.append(((cs - c) ** 2).sum(1).mean())
-    rg_targets_real.append(float(np.median(rgs)) if rgs else None)
-print('per-TAD Rg² targets (nm²):', [f'{r:.0f}' if r else 'n/a' for r in rg_targets_real])"""),
-
-    code("""\
-# Run the pipeline.  Scale the FISH distances to the same "reduced
-# units" as Hi-C by normalising by the median inter-bin distance so
-# λ_E / λ_F defaults work sensibly.
-scale_nm = float(np.nanmedian(F_real[np.triu_indices(n_bins, 1)]))
-F_tad_norm = F_tad / scale_nm
-rg_targets_norm = [r / (scale_nm ** 2) if r is not None else None
-                    for r in rg_targets_real]
-
-tad_centres_r, s1_real = reconstruct_tad_level(
-    inter_contacts_real, F_tad_norm,
-    params=Stage1Params(lambda_E=0.05, lambda_F=0.5,
-                        n_iter=500, n_ensemble=20, device='cpu'),
+# Load into ChromData via the Bintu reader
+fish_cd = read_bintu_tracing(
+    str(bintu_csv), chrom='chr21',
+    start_bp=18_627_714,    # hg38, from the Bintu repo README
+    resolution_bp=30_000,
 )
-intra_real, s2_real = reconstruct_intra_tad(
-    contacts_real, tad_bins_real,
-    target_rg_sq_per_tad=rg_targets_norm,
-    params=Stage2Params(lambda_E=0.05, lambda_R=0.01,
-                        n_iter=300, n_ensemble=6, device='cpu'),
-)
+print(fish_cd)
+print(f'  n_traces: {fish_cd.traces.shape[0] if fish_cd.traces is not None else fish_cd.spots[\"trace_id\"].nunique()}')
 
-tad_mid_r = np.array([(s + e - 1) / 2 for (s, e) in tad_bins_real])
-genomic_r = np.abs(tad_mid_r[:, None] - tad_mid_r[None, :]).astype(np.float64)
-gap_r = contact_to_distance(inter_contacts_real, genomic_distances=genomic_r)
-final_real = assemble(tad_centres_r, intra_real, inter_tad_distances=gap_r)
-print('final chain shape:', final_real.shape)"""),
+# Hi-C .cool is shipped in the repo (0.3 MB, chr21 only, 30 kb)
+hic_cool = root / 'example-data' / 'IMR90_chr21_30kb.cool'
+print(f'Hi-C: {hic_cool} ({hic_cool.stat().st_size / 1e6:.2f} MB)')"""),
 
     code("""\
-# Compare reconstruction pairwise distances to the FISH population mean
-D_recon_real = cdist(final_real, final_real)
-iu_r = np.triu_indices(n_bins, 1)
-vals_fish = F_real[iu_r]
-vals_recon = D_recon_real[iu_r]
-finite = np.isfinite(vals_fish) & np.isfinite(vals_recon)
+from uchrom.recon.fish import reconstruct_gem_fish, GEMFISHParams
 
-# Scale recon back to nm
-scale_est = np.nanmean(vals_fish[finite]) / np.mean(vals_recon[finite])
-vals_recon_nm = vals_recon * scale_est
-corr_real = np.corrcoef(vals_fish[finite], vals_recon_nm[finite])[0, 1]
-print(f'IMR90 chr21:18-20Mb — reconstruction vs FISH pop-mean corr: {corr_real:.3f}')
+cd, intermediate = reconstruct_gem_fish(
+    hic_path=str(hic_cool),
+    chrom='chr21',
+    resolution=None,             # single-res .cool
+    fish_cd=fish_cd,
+    params=GEMFISHParams(
+        lambda_E_tad=0.05, lambda_F=0.5,
+        lambda_E_intra=0.05, lambda_R=0.01,
+        stage1_iter=500, stage1_ensemble=20,
+        stage2_iter=300, stage2_ensemble=6,
+        tad_di_window=50, tad_di_min_size_frac=0.01,
+        device='auto', verbose=False,
+    ),
+    return_intermediate=True,
+)
+print(f'Reconstructed: {cd}')
+print(f'  n_tads called: {cd.uns[\"gem_fish\"][\"n_tads\"]}')
+print(f'  final Stage-1 loss: {cd.uns[\"gem_fish\"][\"stage1_final_loss\"]:.2f}')"""),
 
+    code("""\
+# Evaluate: how well does the reconstruction match the FISH
+# population-mean pairwise-distance matrix?
+from uchrom.fea.distance import _bin_coord_cube, _pairwise_distance_per_trace
+
+df_fish = fish_cd.to_dataframe()
+cube, fish_bin_ids, _ = _bin_coord_cube(df_fish, chrom='chr21')
+D_fish = np.nanmedian(_pairwise_distance_per_trace(cube), axis=0)
+
+# Map each FISH bin to its corresponding Hi-C bin
+bin_starts = cd.spots['start'].to_numpy()
+fish_starts = np.array([s for s, _ in fish_bin_ids])
+idx = np.array([int(np.argmin(np.abs(bin_starts - fs))) for fs in fish_starts])
+D_recon = cdist(cd.coords[idx], cd.coords[idx])
+
+iu_r = np.triu_indices(D_fish.shape[0], 1)
+finite = np.isfinite(D_fish[iu_r]) & np.isfinite(D_recon[iu_r])
+corr_real = np.corrcoef(D_fish[iu_r][finite], D_recon[iu_r][finite])[0, 1]
+print(f'Reconstruction vs FISH pop-mean correlation: {corr_real:.3f}')
+print(f'  evaluated over {finite.sum()} bin pairs in the Bintu imaged region')"""),
+
+    code("""\
+# Visualise.  Scale the recon distance matrix back to nm via the mean
+# ratio with FISH so the two heat-maps are directly comparable.
+scale_est = np.nanmean(D_fish[iu_r][finite]) / np.mean(D_recon[iu_r][finite])
 fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
-im0 = axes[0].imshow(F_real, cmap='viridis_r', origin='lower')
+
+im0 = axes[0].imshow(D_fish, cmap='viridis_r', origin='lower')
 axes[0].set_title('FISH population median (nm)')
 plt.colorbar(im0, ax=axes[0])
 
-im1 = axes[1].imshow(D_recon_real * scale_est, cmap='viridis_r', origin='lower',
-                      vmax=np.nanpercentile(F_real, 98))
-axes[1].set_title(f'GEM-FISH reconstructed (corr={corr_real:.2f})')
+im1 = axes[1].imshow(D_recon * scale_est, cmap='viridis_r', origin='lower',
+                      vmax=np.nanpercentile(D_fish, 98))
+axes[1].set_title(f'GEM-FISH reconstruction (corr={corr_real:.2f})')
 plt.colorbar(im1, ax=axes[1])
-for ax in axes: ax.set_xlabel('Bin'); ax.set_ylabel('Bin')
+
+for ax in axes:
+    ax.set_xlabel('Bin'); ax.set_ylabel('Bin')
 plt.tight_layout()
 plt.show()"""),
 
     md("""\
-## Running on real Rao 2014 Hi-C (paper-faithful analysis)
+## Scaling up to other chromosomes
 
-Replace the synthesised Hi-C with the real IMR90 `.mcool` from 4DN:
+`IMR90_chr21_30kb.cool` only contains chr21.  For other chromosomes
+(or a different resolution) download the full Rao 2014 IMR90 `.mcool`
+from 4DN (~810 MB, public S3):
 
-```python
-from uchrom.recon.fish import reconstruct_gem_fish, GEMFISHParams
-from uchrom import ChromData
-
-# 1. Wrap the Bintu 2018 traces into a ChromData so _tad_fish_distances
-#    and _tad_rg_targets can aggregate them automatically.  Build a
-#    ``spots`` DataFrame with one row per (trace, segment), converting
-#    the segment index to genomic (start, end) at 30 kb resolution
-#    offset by chr21:18,627,714 (from the Bintu README).
-
-# 2. Call:
-cd = reconstruct_gem_fish(
-    hic_path='rao2014_IMR90.mcool',   # downloaded from 4DN
-    chrom='chr21',
-    resolution=30_000,
-    fish_cd=fish_cd,
-    params=GEMFISHParams(
-        lambda_E_tad=0.05, lambda_F=0.01,
-        lambda_E_intra=0.05, lambda_R=0.01,
-        stage1_iter=1000, stage2_iter=500,
-        device='auto',
-    ),
-)
-cd.write('imr90_chr21_gemfish.h5cd')
+```
+https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/
+1c856462-1e76-4850-bfa6-defcf1524d42/4DNFI4QQPDMR.mcool
 ```
 
-The `reconstruct_gem_fish` orchestrator runs TAD calling via the
-Dixon DI method on the Hi-C matrix (no need to pre-compute TAD
-boundaries), aggregates FISH constraints from the `ChromData`, and
-wraps the result into a `ChromData` at bin resolution."""),
+Then:
+
+```python
+cd = reconstruct_gem_fish(
+    hic_path='4DNFI4QQPDMR.mcool',
+    chrom='chr20',
+    resolution=30_000,         # required for .mcool
+    fish_cd=fish_cd,           # swap in FISH for that chromosome
+    params=GEMFISHParams(device='auto'),
+)
+cd.write('imr90_chr20_gemfish.h5cd')
+```"""),
 
     md("""\
 ## Notes and caveats
 
-- **Synthesised Hi-C** in part 2 is a stand-in.  Real Hi-C has
-  stochastic contact noise, resolution artefacts, and copy-number
-  variants that the synthesiser doesn't model.  Expect the
-  reconstruction-to-FISH correlation to be **lower** on real Hi-C
-  (Abbas et al. 2019 report ~0.8–0.9 on chr21 depending on
-  normalisation).
 - **λ weights** in the paper (λ_E = 5 × 10¹², λ_F = 1 × 10⁻⁸) are
   calibrated for raw Hi-C counts without row-normalisation.  The
   PyTorch ``C_1`` here row-normalises inside the loss, so the effective
@@ -1899,7 +1825,12 @@ wraps the result into a `ChromData` at bin resolution."""),
 - **Assembly** here uses a single-anchor Kabsch per TAD, which is
   a simplification of the paper's gradient-descent assembly.  Good
   enough for the tutorial; for production use you may want to augment
-  the initial rotation with a short local refinement step."""),
+  the initial rotation with a short local refinement step.
+- **FISH coverage**: the Bintu 2018 CSV only covers
+  chr21:18.6–20.6 Mb (65 bins out of the 1 557-bin chromosome).  The
+  FISH C_3 / C_4 terms influence only the TADs that fall inside that
+  region; the rest of the chromosome is shaped by Hi-C alone, which
+  is the expected behaviour when FISH coverage is partial."""),
 ]
 
 write_nb(Path("tutorials") / "gem_fish_reconstruction.ipynb", nb9)

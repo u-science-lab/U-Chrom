@@ -11,6 +11,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | ------------------------------------- | ------- | --------------- | ------------- | ----------------------------------------------------------------------- |
 | `cell1.pairs`                         | 4.7 MB  | yes             | —             | `reconstruction.ipynb`, root README CLI example                         |
 | `cell2.pairs.gz`                      | 5.4 MB  | yes             | —             | (available for experimentation; bulkier variant of `cell1.pairs`)       |
+| `IMR90_chr21_30kb.cool`               | 280 KB  | yes             | —             | `gem_fish_reconstruction` tutorial (Hi-C side)                          |
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
 | `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial                                     |
@@ -41,6 +42,43 @@ they're either generated or downloaded on demand.
 - **Source**: same Stevens 2017 dataset, a different cell.
 - **Used by**: not wired into any tutorial yet — kept for users who want
   to experiment with a larger, header-carrying pairs file.
+
+### `IMR90_chr21_30kb.cool` — Rao 2014 IMR90 chr21 at 30 kb (0.3 MB)
+
+- **Format**: single-resolution cooler.  1 557 bins × 30 kb covering
+  chr21 (hg38).
+- **Content**: IMR90 in situ Hi-C pair counts from Rao et al. 2014,
+  aggregated from the native 5 kb to 30 kb to match the Bintu 2018
+  chromatin-tracing resolution.
+- **Source**: 4DN accession [4DNFI4QQPDMR](https://data.4dnucleome.org/4DNFI4QQPDMR/)
+  (the full 810 MB IMR90 `.mcool`; we extract chr21 at 30 kb into this
+  small `.cool` for redistribution).
+- **How it was derived**:
+  ```python
+  from cooler import Cooler; import cooler, numpy as np, pandas as pd
+  c5 = Cooler('4DNFI4QQPDMR.mcool::/resolutions/5000')
+  m = c5.matrix(balance=False, as_pixels=False).fetch('chr21')
+  # aggregate 5 kb × 6 → 30 kb by summation
+  f = 6; n5 = m.shape[0]; n30 = (n5 + f - 1) // f
+  agg = np.zeros((n30, n30))
+  for i in range(n30):
+      for j in range(n30):
+          agg[i,j] = m[i*f:(i+1)*f, j*f:(j+1)*f].sum()
+  bins = pd.DataFrame({
+      'chrom': ['chr21']*n30,
+      'start': np.arange(n30)*30_000,
+      'end':   np.minimum((np.arange(n30)+1)*30_000, c5.chromsizes['chr21']),
+  })
+  iu = np.triu_indices(n30, k=0)
+  pixels = pd.DataFrame({'bin1_id': iu[0], 'bin2_id': iu[1],
+                          'count': agg[iu].astype(np.int64)})
+  pixels = pixels[pixels['count'] > 0]
+  cooler.create_cooler('IMR90_chr21_30kb.cool', bins, pixels, assembly='hg38')
+  # Balance with ICE so reconstruct_gem_fish can pull balanced counts:
+  # python -m cooler balance IMR90_chr21_30kb.cool
+  ```
+- **Used by**: `gem_fish_reconstruction.ipynb` — paired with the Bintu
+  2018 FISH CSV for the paper-faithful Part 2 run.
 
 ## Large datasets — auto-downloaded on first run
 

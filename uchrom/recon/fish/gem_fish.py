@@ -93,11 +93,13 @@ def _auto_tads(
         window=params.tad_di_window,
         device=params.device,
     )
-    # get_domains returns list of (start_idx, end_idx_inclusive)
-    # Convert to end-exclusive for downstream consistency
-    out = []
-    for s, e in windows:
-        out.append((int(s), int(e) + 1))
+    # get_domains returns end-exclusive (start_idx, end_idx) tuples that
+    # mostly tile the chromosome — the last window may stop a few bins
+    # short.  Extend it to cover the full matrix so downstream bin
+    # counts match.
+    out = [(int(s), int(e)) for s, e in windows]
+    if out and out[-1][1] < contacts.shape[0]:
+        out[-1] = (out[-1][0], int(contacts.shape[0]))
     return out
 
 
