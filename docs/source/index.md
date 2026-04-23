@@ -54,16 +54,28 @@ concepts
 ```
 
 ```{toctree}
-:caption: Tutorials
+:caption: Tutorials — Core & I/O
 :maxdepth: 1
 
 tutorials/01_chromdata_basics
 tutorials/02_import_fofct
+```
+
+```{toctree}
+:caption: Tutorials — Reconstruction (recon)
+:maxdepth: 1
+
 tutorials/03_reconstruction
+```
+
+```{toctree}
+:caption: Tutorials — Structure identification (strc)
+:maxdepth: 1
+
 tutorials/04_loop_calling
 tutorials/05_tad_calling
-tutorials/06_compartment
 tutorials/07_fishnet_domains
+tutorials/06_compartment
 ```
 
 ```{toctree}
