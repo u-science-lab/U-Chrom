@@ -19,6 +19,7 @@ Grouped by the U-Chrom module each tutorial targets:
 | Notebook | Topic |
 |----------|-------|
 | `reconstruction.ipynb` | 3D reconstruction from Hi-C |
+| `benchmark.ipynb` | Benchmarking MDS reconstruction (speed & quality) |
 
 ### Imaging / tracing (`uchrom.im`)
 

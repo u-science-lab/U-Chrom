@@ -16,6 +16,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
 | `with_loops.h5cd`                     | 24 MB   | no              | generated     | output of `loop_calling.ipynb` (intermediate cache, safe to delete)     |
 | `fofct_core.csv`                      | ~6 MB   | no              | generated     | synthetic offline fallback for tutorials 4/5/6/7                        |
+| `GSE63525_GM12878_insitu_primary+replicate_combined_30.hic` | ~40 GB | no | **manual** (too large) | `benchmark.ipynb` |
 
 `*.csv`, `*.h5cd`, and the DNAseqFISH+ zip/folder are ignored by git;
 they're either generated or downloaded on demand.
@@ -71,6 +72,26 @@ using.
 - **Used by** (all use the `find_fofct()` helper):
   `loop_calling.ipynb`, `tad_calling.ipynb`, `compartment.ipynb`,
   `fishnet_domains.ipynb`.
+
+### `GSE63525_GM12878_insitu_primary+replicate_combined_30.hic` — GM12878 in-situ combined Hi-C (~40 GB)
+
+- **Format**: Juicer `.hic` — a multi-resolution contact matrix file
+  (read with `hicstraw`).
+- **Content**: GM12878 lymphoblastoid cells, in-situ Hi-C, primary +
+  replicate merged and MAPQ ≥ 30 filtered.  Contains every standard
+  Juicer resolution from 1 kb to 2.5 Mb, all chromosomes.
+- **Source**: Rao et al. 2014, *Cell* 159:1665–1680, "A 3D map of the
+  human genome at kilobase resolution reveals principles of chromatin
+  looping".
+- **Download**: **not** auto-fetched (40 GB is too large to ship through
+  `download_data.py`).  Grab it manually from one of:
+  - [4DN DCIC — 4DNFI1UEG1HD](https://data.4dnucleome.org/files-processed/4DNFI1UEG1HD/)
+  - [GEO GSE63525](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE63525)
+    (look for `GSE63525_GM12878_insitu_primary+replicate_combined_30.hic`)
+- **Used by**: `benchmark.ipynb` (MDS reconstruction benchmark).  The
+  tutorial checks `example-data/` first and falls back to the
+  `UCHROM_GM12878_HIC` env var, so you can keep the file on an external
+  drive: `export UCHROM_GM12878_HIC=/path/to/…_combined_30.hic`.
 
 ### `DNAseqFISH+.zip` — Takei 2021 raw seqFISH+ spots (144 MB)
 
