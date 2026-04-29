@@ -23,9 +23,14 @@ from .io import (
     save_traces,
 )
 from .loc import localize, save_localizations as save_localization_result
-from .prep import save_projected_array, z_project, z_project_array, z_project_dir
-from .prep.project import project
-from .qc import plot_registration_qc_arrays, plot_registration_qc_png
+from .prep.project import (
+    project,
+    project_rounds,
+    save_projected_array,
+    z_project,
+    z_project_array,
+    z_project_dir,
+)
 from .reg import (
     register_2d,
     register_2d_arrays,
@@ -68,6 +73,7 @@ __all__ = [
     "save_localizations",
     "save_traces",
     "project",
+    "project_rounds",
     "z_project_array",
     "save_projected_array",
     "z_project",
@@ -88,6 +94,4 @@ __all__ = [
     "build_matrix",
     "save_trace_result",
     "save_matrix",
-    "plot_registration_qc_arrays",
-    "plot_registration_qc_png",
 ]

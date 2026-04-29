@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+import math
+import os
 import uuid
 import warnings
 from pathlib import Path
+import site
 
 import numpy as np
 import pandas as pd
@@ -54,13 +58,50 @@ def _repo_root():
     return Path(__file__).resolve().parents[2]
 
 
+def _existing_dirs(paths):
+    unique = []
+    seen = set()
+    for path in paths:
+        if path is None:
+            continue
+        resolved = Path(path)
+        key = str(resolved)
+        if key in seen or not resolved.exists() or not resolved.is_dir():
+            continue
+        seen.add(key)
+        unique.append(resolved)
+    return unique
+
+
+def _site_model_roots():
+    roots = []
+    try:
+        roots.extend(site.getsitepackages())
+    except AttributeError:
+        pass
+    try:
+        user_site = site.getusersitepackages()
+    except AttributeError:
+        user_site = None
+    if user_site:
+        roots.append(user_site)
+    return [Path(root) / "stardist_models" for root in roots]
+
+
 def _candidate_model_roots():
     repo_root = _repo_root()
-    return [
-        repo_root / "stardist_models",
-        repo_root.parent / "pyHiM_ref" / "src" / "stardist_models",
-        repo_root.parent.parent / "pyHiM_ref" / "src" / "stardist_models",
-    ]
+    env_root = os.environ.get("PYHIM_STARDIST_MODELS") or os.environ.get(
+        "UCHROM_PYHIM_STARDIST_MODELS"
+    )
+    return _existing_dirs(
+        [
+            Path(env_root) if env_root else None,
+            *_site_model_roots(),
+            repo_root / "stardist_models",
+            repo_root.parent / "pyHiM_ref" / "src" / "stardist_models",
+            repo_root.parent.parent / "pyHiM_ref" / "src" / "stardist_models",
+        ]
+    )
 
 
 def resolve_pyhim_model(model_kind, model_path=None, model_root=None, model_name=None):
@@ -104,6 +145,47 @@ def resolve_pyhim_model(model_kind, model_path=None, model_root=None, model_name
         f"Could not resolve pyHiM StarDist model '{model_name or default_name}'. "
         f"Searched roots: {searched}"
     )
+
+
+def _load_shift_mapping(source):
+    if source is None or hasattr(source, "rounds"):
+        return None
+    if isinstance(source, dict):
+        return source
+    if isinstance(source, (str, Path)):
+        path = Path(source)
+        if not path.exists() or path.suffix.lower() != ".json":
+            return None
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        if isinstance(payload, dict):
+            return payload
+    return None
+
+
+def _shift_from_mapping(mapping, round_name, roi=None):
+    if mapping is None or round_name is None:
+        return None
+
+    nested = mapping
+    if roi is not None:
+        roi_key = f"ROI:{roi}"
+        roi_payload = mapping.get(roi_key)
+        if isinstance(roi_payload, dict):
+            nested = roi_payload
+    elif len(mapping) == 1:
+        only_key = next(iter(mapping))
+        only_value = mapping[only_key]
+        if str(only_key).startswith("ROI:") and isinstance(only_value, dict):
+            nested = only_value
+
+    shift = nested.get(round_name)
+    if shift is None:
+        return None
+    shift = np.asarray(shift, dtype=np.float64).ravel()
+    if shift.size < 2:
+        return None
+    return np.array([shift[0], shift[1]], dtype=np.float64)
 
 
 def _require_stardist():
@@ -302,6 +384,10 @@ def segment_mask_2d_pyhim(
 ):
     image = ensure_2d_array(image, source="pyHiM 2D mask input")
     background_method = str(background_method).lower()
+    raw_labels = None
+    meta = {
+        "label_semantics": "filtered_instances_after_border_area_filter",
+    }
 
     if background_method in ("flat", "inhomogeneous"):
         sigma_clip = SigmaClip(sigma=background_sigma)
@@ -352,6 +438,7 @@ def segment_mask_2d_pyhim(
         model = StarDist2D(None, name=resolved_name, basedir=basedir)
         normalized = normalize(image, 1, 99.8, axis=(0, 1))
         labeled, _ = model.predict_instances(normalized)
+        raw_labels = np.asarray(labeled, dtype=np.int32)
         segmentation = SegmentationImage(labeled)
         segmentation.remove_border_labels(border_width=10)
         segmentation = _filter_label_areas_inplace(
@@ -360,6 +447,14 @@ def segment_mask_2d_pyhim(
             area_max=area_max,
         )
         labels = _segmentation_to_labels(segmentation)
+        meta.update(
+            {
+                "model_root": str(basedir),
+                "model_name": resolved_name,
+                "model_dir": str(Path(basedir) / resolved_name),
+                "raw_label_semantics": "stardist_instances_before_border_area_filter",
+            }
+        )
     else:
         raise ValueError(
             f"Unsupported pyHiM 2D mask background_method: {background_method}"
@@ -376,6 +471,8 @@ def segment_mask_2d_pyhim(
         labels=labels,
         properties=labels_to_properties(labels, image),
         method=f"pyhim_mask_2d:{background_method}",
+        meta=meta,
+        raw_labels=raw_labels,
     )
 
 
@@ -478,6 +575,7 @@ def segment_spots_3d_stardist(
         model_root=model_root,
         model_name=model_name,
     )
+    np.random.seed(6)
     model = StarDist3D(None, name=resolved_name, basedir=basedir)
     normalized = normalize(stack, 1, 99.8, axis=(0, 1, 2))
     if normalized.shape[1] < 1000:
@@ -489,8 +587,7 @@ def segment_spots_3d_stardist(
         labels, _ = model.predict_instances(normalized, n_tiles=(1, 8, 8))
         labels = resizer.after(labels, axes)
     mask = np.array(labels > 0, dtype=np.int32)
-    labeled_image = _deblend_3d_segmentation(mask)
-    return mask, np.asarray(labeled_image, dtype=np.int32)
+    return mask, np.asarray(labels, dtype=np.int32)
 
 
 def segment_mask_3d_pyhim(
@@ -529,6 +626,11 @@ def segment_mask_3d_pyhim(
         labels=np.asarray(labels, dtype=np.int32),
         properties=labels_to_properties(labels, stack),
         method="pyhim_mask_3d:stardist",
+        meta={
+            "model_root": str(basedir),
+            "model_name": resolved_name,
+            "model_dir": str(Path(basedir) / resolved_name),
+        },
     )
 
 
@@ -598,60 +700,96 @@ def tessellate_masks(labels):
 
 
 def get_spot_properties(segmented_image_3d, image_3d_aligned, threshold=10, brightest=1000):
-    properties = measure.regionprops(
-        np.asarray(segmented_image_3d, dtype=np.int32),
-        intensity_image=np.asarray(image_3d_aligned),
-    )
-    if len(properties) == 0:
+    labels = np.asarray(segmented_image_3d, dtype=np.int32)
+    image = np.asarray(image_3d_aligned, dtype=float)
+    if labels.shape != image.shape:
+        raise ValueError(
+            "segmented_image_3d and image_3d_aligned must have the same shape, "
+            f"got {labels.shape} and {image.shape}"
+        )
+
+    foreground = labels > 0
+    if not np.any(foreground):
         return [], [], [], [], [], [], [], [], []
 
-    try:
-        peak0 = [region.max_intensity for region in properties]
-    except AttributeError:
-        peak0 = [region.intensity_max for region in properties]
+    label_values = labels[foreground]
+    region_labels, inverse = np.unique(label_values, return_inverse=True)
+    n_regions = len(region_labels)
+    intensities = image[foreground]
+    area = np.bincount(inverse, minlength=n_regions).astype(float)
 
-    peak_list = sorted(peak0)
+    peak0 = np.full(n_regions, -np.inf, dtype=float)
+    np.maximum.at(peak0, inverse, intensities)
+
     if brightest in (None, "None"):
-        last_to_keep = len(peak_list)
+        selection = np.arange(n_regions)
     else:
-        last_to_keep = min(int(brightest), len(peak_list))
-    highest_peak_value = peak_list[-last_to_keep]
-    selection = list(np.nonzero(np.asarray(peak0) > highest_peak_value)[0])
+        last_to_keep = min(int(brightest), n_regions)
+        if last_to_keep <= 0:
+            return [], [], [], [], [], [], [], [], []
+        if last_to_keep >= n_regions:
+            selection = np.arange(n_regions)
+        else:
+            highest_peak_value = np.partition(peak0, -last_to_keep)[-last_to_keep]
+            selection = np.nonzero(peak0 > highest_peak_value)[0]
+            if selection.size == 0:
+                selection = np.argsort(peak0)[-last_to_keep:]
 
-    try:
-        peak = [properties[idx].max_intensity for idx in selection]
-        centroids = [properties[idx].weighted_centroid for idx in selection]
-        sharpness = [
-            float(properties[idx].filled_area / properties[idx].bbox_area)
-            for idx in selection
-        ]
-        roundness1 = [properties[idx].equivalent_diameter for idx in selection]
-    except AttributeError:
-        peak = [properties[idx].intensity_max for idx in selection]
-        centroids = [properties[idx].centroid_weighted for idx in selection]
-        sharpness = [
-            float(properties[idx].area_filled / properties[idx].area_bbox)
-            for idx in selection
-        ]
-        roundness1 = [properties[idx].equivalent_diameter_area for idx in selection]
+    z_coord, y_coord, x_coord = np.nonzero(foreground)
+    weighted_sum = np.bincount(inverse, weights=intensities, minlength=n_regions)
+    sum_z = np.bincount(inverse, weights=z_coord * intensities, minlength=n_regions)
+    sum_y = np.bincount(inverse, weights=y_coord * intensities, minlength=n_regions)
+    sum_x = np.bincount(inverse, weights=x_coord * intensities, minlength=n_regions)
+    geom_z = np.bincount(inverse, weights=z_coord, minlength=n_regions) / area
+    geom_y = np.bincount(inverse, weights=y_coord, minlength=n_regions) / area
+    geom_x = np.bincount(inverse, weights=x_coord, minlength=n_regions) / area
 
-    roundness2 = [properties[idx].extent for idx in selection]
-    npix = [int(properties[idx].area) for idx in selection]
+    centroid_z = np.divide(
+        sum_z,
+        weighted_sum,
+        out=geom_z.copy(),
+        where=weighted_sum != 0,
+    )
+    centroid_y = np.divide(
+        sum_y,
+        weighted_sum,
+        out=geom_y.copy(),
+        where=weighted_sum != 0,
+    )
+    centroid_x = np.divide(
+        sum_x,
+        weighted_sum,
+        out=geom_x.copy(),
+        where=weighted_sum != 0,
+    )
+
+    mins = np.full((3, n_regions), np.iinfo(np.int32).max, dtype=np.int64)
+    maxs = np.full((3, n_regions), -1, dtype=np.int64)
+    for axis, coord in enumerate((z_coord, y_coord, x_coord)):
+        np.minimum.at(mins[axis], inverse, coord)
+        np.maximum.at(maxs[axis], inverse, coord)
+    bbox_shape = maxs - mins + 1
+    bbox_area = np.prod(bbox_shape, axis=0).astype(float)
+    extent = np.divide(area, bbox_area, out=np.zeros_like(area), where=bbox_area != 0)
+    ndim = labels.ndim
+    equivalent_diameter = 2.0 * np.power(
+        area * math.gamma(ndim / 2.0 + 1.0) / (math.pi ** (ndim / 2.0)),
+        1.0 / ndim,
+    )
+
+    peak = peak0[selection].astype(float).tolist()
+    sharpness = extent[selection].astype(float).tolist()
+    roundness1 = equivalent_diameter[selection].astype(float).tolist()
+    roundness2 = extent[selection].astype(float).tolist()
+    npix = area[selection].astype(int).tolist()
     sky = [0.0 for _ in selection]
-
-    try:
-        peak = [properties[idx].max_intensity for idx in selection]
-        flux = [100.0 * properties[idx].max_intensity / float(threshold) for idx in selection]
-    except AttributeError:
-        peak = [properties[idx].intensity_max for idx in selection]
-        flux = [100.0 * properties[idx].intensity_max / float(threshold) for idx in selection]
+    flux = [100.0 * value / float(threshold) for value in peak]
 
     mag = [-2.5 * np.log10(value) for value in flux]
-    spots = np.zeros((len(centroids), 3), dtype=np.int64)
-    for idx, centroid in enumerate(centroids):
-        spots[idx, 0] = int(centroid[0])
-        spots[idx, 1] = int(centroid[1])
-        spots[idx, 2] = int(centroid[2])
+    spots = np.zeros((len(selection), 3), dtype=np.int64)
+    spots[:, 0] = centroid_z[selection].astype(np.int64)
+    spots[:, 1] = centroid_y[selection].astype(np.int64)
+    spots[:, 2] = centroid_x[selection].astype(np.int64)
 
     return spots, sharpness, roundness1, roundness2, npix, sky, peak, flux, mag
 
@@ -709,7 +847,11 @@ def fit_subpixel_spots(
     return np.asarray(spots_subpixel, dtype=float)
 
 
-def global_shift_for_round(global_registration, round_name):
+def global_shift_for_round(global_registration, round_name, roi=None):
+    mapping = _load_shift_mapping(global_registration)
+    shift = _shift_from_mapping(mapping, round_name, roi=roi)
+    if shift is not None:
+        return shift
     if global_registration is None:
         return np.array([0.0, 0.0], dtype=np.float64)
     rounds = getattr(global_registration, "rounds", {})
@@ -753,6 +895,7 @@ def build_pyhim_3d_localization_rows(
     **kwargs,
 ):
     stack = ensure_3d_array(stack, source=f"{round_name} barcode stack")
+    stack = reinterpolate_z(stack, z_binning=z_binning)
     backend = str(backend).lower()
     z_offset = 0
     if reduce_planes:

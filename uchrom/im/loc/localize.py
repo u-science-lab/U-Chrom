@@ -6,7 +6,7 @@ import pandas as pd
 from astropy.table import Table
 from skimage import measure, morphology
 
-from uchrom.im._base import LocalizationResult, MaskResult
+from uchrom.im._base import Image2D, Image3D, LocalizationResult, MaskResult
 from uchrom.im._pyhim import (
     PYHIM_LOCALIZATION_COLUMNS,
     build_pyhim_3d_localization_rows,
@@ -54,6 +54,30 @@ def _mask_label_at(mask, centroid):
 def _spot_id(round_name, idx, centroid):
     key = f"{round_name}:{idx}:{','.join(f'{float(v):.3f}' for v in centroid)}"
     return str(uuid5(NAMESPACE_DNS, key))
+
+
+def _image_payload(image_or_stack, default_round_name=None):
+    if isinstance(image_or_stack, (Image2D, Image3D)):
+        meta = dict(image_or_stack.meta)
+        round_name = meta.get("round", default_round_name)
+        return np.asarray(image_or_stack.data), meta, round_name, image_or_stack.name
+    return np.asarray(image_or_stack), {}, default_round_name, None
+
+
+def _set_result_meta(result, meta):
+    current = getattr(result, "meta", None)
+    if current is None:
+        current = {}
+        result.meta = current
+    current.update(meta)
+    return result
+
+
+def _global_shift_for_round_compat(global_registration, round_name, roi=None):
+    try:
+        return global_shift_for_round(global_registration, round_name, roi=roi)
+    except TypeError:
+        return global_shift_for_round(global_registration, round_name)
 
 
 def _spot_rows_for_stack(
@@ -142,9 +166,21 @@ def _pyhim_rows_for_stack(
     area_max = kwargs.pop("area_max", npix_max)
     backend = kwargs.pop("backend", "stardist")
     assign_mask_labels = bool(kwargs.pop("assign_mask_labels", False))
+    coordinate_frame = kwargs.pop("coordinate_frame", "raw")
+    apply_global_registration = kwargs.pop("apply_global_registration", None)
     shift_yx = kwargs.pop("shift_yx", None)
     if shift_yx is None:
-        shift_yx = global_shift_for_round(global_registration, round_name)
+        if coordinate_frame == "global_registered":
+            shift_yx = None
+        else:
+            if apply_global_registration is None:
+                apply_global_registration = global_registration is not None
+            if apply_global_registration:
+                shift_yx = _global_shift_for_round_compat(
+                    global_registration,
+                    round_name,
+                    roi=roi,
+                )
     rows = build_pyhim_3d_localization_rows(
         stack,
         round_name=round_name,
@@ -163,6 +199,23 @@ def _pyhim_rows_for_stack(
                 (row["zcentroid"], row["ycentroid"], row["xcentroid"]),
             )
     return rows
+
+
+def _pyhim_output_frame(
+    coordinate_frame,
+    global_registration=None,
+    shift_yx=None,
+    apply_global_registration=None,
+):
+    if coordinate_frame == "global_registered":
+        return "global_registered"
+    if shift_yx is not None:
+        return "global_registered"
+    if apply_global_registration is False:
+        return coordinate_frame
+    if global_registration is not None:
+        return "global_registered"
+    return coordinate_frame
 
 
 def localize(
@@ -191,12 +244,30 @@ def localize(
         raise ValueError(f"Unsupported localization method: {method}")
 
     rows = []
+    coordinate_frame = kwargs.pop("coordinate_frame", "raw")
+    output_frames = []
+    round_name_kw = kwargs.pop("round_name", None)
     if isinstance(image_or_stack, dict):
         for round_name, stack in image_or_stack.items():
+            stack_data, stack_meta, inferred_round, _ = _image_payload(
+                stack,
+                default_round_name=round_name,
+            )
+            round_name = inferred_round or round_name
+            role = stack_meta.get("role")
+            stack_coordinate_frame = stack_meta.get("coordinate_frame", coordinate_frame)
             if method == "pyhim_3d":
+                output_frames.append(
+                    _pyhim_output_frame(
+                        stack_coordinate_frame,
+                        global_registration=global_registration,
+                        shift_yx=kwargs.get("shift_yx"),
+                        apply_global_registration=kwargs.get("apply_global_registration"),
+                    )
+                )
                 rows.extend(
                     _pyhim_rows_for_stack(
-                        stack,
+                        stack_data,
                         round_name=round_name,
                         roi=roi,
                         masks=masks,
@@ -205,13 +276,16 @@ def localize(
                         threshold_over_std=threshold_over_std,
                         npix_min=npix_min,
                         npix_max=npix_max,
+                        coordinate_frame=stack_coordinate_frame,
+                        role=role,
                         **kwargs,
                     )
                 )
             else:
+                output_frames.append(stack_coordinate_frame)
                 rows.extend(
                     _spot_rows_for_stack(
-                        stack,
+                        stack_data,
                         round_name=round_name,
                         roi=roi,
                         mask=masks,
@@ -222,11 +296,25 @@ def localize(
                     )
                 )
     else:
-        round_name = kwargs.get("round_name", "image")
+        stack_data, stack_meta, inferred_round, source_name = _image_payload(
+            image_or_stack,
+            default_round_name=round_name_kw or "image",
+        )
+        round_name = inferred_round or round_name_kw or "image"
+        role = stack_meta.get("role")
+        coordinate_frame = stack_meta.get("coordinate_frame", coordinate_frame)
         if method == "pyhim_3d":
+            output_frames.append(
+                _pyhim_output_frame(
+                    coordinate_frame,
+                    global_registration=global_registration,
+                    shift_yx=kwargs.get("shift_yx"),
+                    apply_global_registration=kwargs.get("apply_global_registration"),
+                )
+            )
             rows.extend(
                 _pyhim_rows_for_stack(
-                    image_or_stack,
+                    stack_data,
                     round_name=round_name,
                     roi=roi,
                     masks=masks,
@@ -235,13 +323,16 @@ def localize(
                     threshold_over_std=threshold_over_std,
                     npix_min=npix_min,
                     npix_max=npix_max,
+                    coordinate_frame=coordinate_frame,
+                    role=role,
                     **kwargs,
                 )
             )
         else:
+            output_frames.append(coordinate_frame)
             rows.extend(
                 _spot_rows_for_stack(
-                    image_or_stack,
+                    stack_data,
                     round_name=round_name,
                     roi=roi,
                     mask=masks,
@@ -277,7 +368,14 @@ def localize(
         ]
     )
     table = pd.DataFrame(rows, columns=columns)
-    return LocalizationResult(table=table, method=method)
+    result_frame = output_frames[0] if output_frames else coordinate_frame
+    if output_frames and any(frame != result_frame for frame in output_frames):
+        result_frame = "mixed"
+    result_meta = {
+        "coordinate_frame": result_frame,
+    }
+    result = LocalizationResult(table=table, method=method)
+    return _set_result_meta(result, result_meta)
 
 
 def save_localizations(result, out_dir, name="localizations_3D_barcode"):

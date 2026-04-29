@@ -1,13 +1,11 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from uchrom.im._base import Image2D, Image3D
 from uchrom.im.io import load_rounds
 from uchrom.im.loc import save_localizations
-from uchrom.im.prep.project import project as project_image
-from uchrom.im.prep.project import save_projected_array
-from uchrom.im.reg import register_global as register_global_rounds
-from uchrom.im.reg import register_local as register_local_rounds
+from uchrom.im.prep.project import project_rounds, save_projected_array
+from uchrom.im.reg import register_global as _register_global
+from uchrom.im.reg import register_local as _register_local
 from uchrom.im.reg import save_local_registration_result
 from uchrom.im.reg import save_registration_2d_result
 from uchrom.im.seg import save_mask_result
@@ -22,6 +20,7 @@ class ImWorkspace:
     local_registration: object = None
     masks: dict = field(default_factory=dict)
     localizations: object = None
+    decoded: object = None
     traces: object = None
     matrices: object = None
     meta: dict = field(default_factory=dict)
@@ -31,63 +30,40 @@ class ImWorkspace:
         return cls(raw_rounds=load_rounds(manifest), meta={} if meta is None else dict(meta))
 
     def project(self, methods=None, z_ranges=None):
-        methods = {} if methods is None else methods
-        z_ranges = {} if z_ranges is None else z_ranges
-        projected = {}
-
-        for round_name, round_spec in self.raw_rounds.items():
-            round_methods = methods.get(round_name, {})
-            round_z_ranges = z_ranges.get(round_name, {})
-
-            fiducial = round_spec["fiducial"]
-            fid_method = round_methods.get("fiducial", "mip")
-            fid_zmin, fid_zmax = round_z_ranges.get("fiducial", (None, None))
-            projected_images = {}
-
-            for image_name, image in round_spec.get("images", {}).items():
-                image_method = round_methods.get(image_name, "mip")
-                image_zmin, image_zmax = round_z_ranges.get(image_name, (None, None))
-                projected_images[image_name] = Image2D(
-                    project_image(image.data, method=image_method, zmin=image_zmin, zmax=image_zmax),
-                    name=f"{image.name}_2d",
-                    path=None,
-                    meta=dict(image.meta),
-                )
-
-            projected[round_name] = {
-                "fiducial": Image2D(
-                    project_image(fiducial.data, method=fid_method, zmin=fid_zmin, zmax=fid_zmax),
-                    name=f"{fiducial.name}_2d",
-                    path=None,
-                    meta=dict(fiducial.meta),
-                ),
-                "images": projected_images,
-                "meta": dict(round_spec.get("meta", {})),
-            }
-
-        self.projections = projected
-        return projected
+        """Project all raw rounds and store the result in ``self.projections``."""
+        self.projections = project_rounds(self.raw_rounds, methods=methods, z_ranges=z_ranges)
+        return self.projections
 
     def register_global(self, reference, **kwargs):
-        if not self.projections:
-            raise ValueError("No projections found. Run workspace.project(...) first.")
-        self.global_registration = register_global_rounds(
-            self.projections,
-            reference=reference,
-            **kwargs,
+        """Run global 2D registration on projections and store the result."""
+        self.global_registration = _register_global(
+            self.projections, reference=reference, **kwargs,
         )
         return self.global_registration
 
-    def register_local(self, reference=None, **kwargs):
-        if not self.raw_rounds:
-            raise ValueError("No raw rounds found.")
-        self.local_registration = register_local_rounds(
-            self.raw_rounds,
-            global_registration=self.global_registration,
-            reference=reference,
-            **kwargs,
+    def register_local(self, **kwargs):
+        """Run local 3D registration on raw rounds and store the result."""
+        if "global_registration" not in kwargs:
+            kwargs["global_registration"] = self.global_registration
+        self.local_registration = _register_local(
+            self.raw_rounds, **kwargs,
         )
         return self.local_registration
+
+    def summary(self):
+        return {
+            "meta": dict(self.meta),
+            "n_rounds": len(self.raw_rounds),
+            "rounds": list(self.raw_rounds),
+            "n_projected_rounds": len(self.projections),
+            "masks": sorted(self.masks),
+            "has_global_registration": self.global_registration is not None,
+            "has_local_registration": self.local_registration is not None,
+            "has_localizations": self.localizations is not None,
+            "has_decoded": self.decoded is not None,
+            "has_traces": self.traces is not None,
+            "has_matrices": self.matrices is not None,
+        }
 
     def save(self, step, out_dir, mode="selected"):
         if mode in (False, None, "none"):
@@ -98,7 +74,7 @@ class ImWorkspace:
 
         if step == "project":
             if not self.projections:
-                raise ValueError("No projections found. Run workspace.project(...) first.")
+                raise ValueError("No projections found. Assign workspace.projections before saving.")
             records = []
             for round_name, round_spec in self.projections.items():
                 fiducial = round_spec["fiducial"]

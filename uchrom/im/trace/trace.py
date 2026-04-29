@@ -1,12 +1,17 @@
 from pathlib import Path
+import uuid
+import warnings
 from uuid import NAMESPACE_DNS, uuid5
 
 import numpy as np
 import pandas as pd
 from astropy.table import Table
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
+from sklearn.metrics import pairwise_distances
+from skimage.measure import label as relabel_connected
+from skimage.segmentation import expand_labels
 
-from uchrom.im._base import LocalizationResult, MatrixResult, TraceResult
+from uchrom.im._base import LocalizationResult, MaskResult, MatrixResult, TraceResult
 
 
 def _as_dataframe(localizations):
@@ -19,37 +24,13 @@ def _as_dataframe(localizations):
     raise ValueError("Expected a pandas DataFrame or U-Chrom localization/trace result.")
 
 
-def _trace_id(group_key, cluster_id):
-    return str(uuid5(NAMESPACE_DNS, f"trace:{group_key}:{cluster_id}"))
-
-
-def filter_localizations(localizations, flux_min_3D=None, flux_max_3D=None, **kwargs):
-    table = _as_dataframe(localizations)
-    if flux_min_3D is not None and "flux" in table:
-        table = table[table["flux"] >= float(flux_min_3D)]
-    if flux_max_3D is not None and "flux" in table:
-        table = table[table["flux"] <= float(flux_max_3D)]
-    return table.reset_index(drop=True)
-
-
-def _global_shift_for_row(global_registration, round_name):
-    if global_registration is None or round_name not in global_registration.rounds:
-        return np.array([0.0, 0.0, 0.0], dtype=np.float64)
-    shift_yx = np.asarray(global_registration.rounds[round_name].shift, dtype=np.float64)
-    return np.array([0.0, shift_yx[0], shift_yx[1]], dtype=np.float64)
-
-
-def _round_name_for_row(row):
-    round_name = row.get("round", None)
-    if round_name is not None and not (isinstance(round_name, float) and np.isnan(round_name)):
-        return str(round_name)
-    barcode = row.get("Barcode #", -1)
-    if pd.isna(barcode):
-        return ""
-    try:
-        return f"RT{int(barcode)}"
-    except (TypeError, ValueError):
-        return ""
+def _set_result_meta(result, meta):
+    current = getattr(result, "meta", None)
+    if current is None:
+        current = {}
+        result.meta = current
+    current.update(meta)
+    return result
 
 
 def _normalize_tolerance_drift(tolerance_drift):
@@ -64,10 +45,17 @@ def _normalize_tolerance_drift(tolerance_drift):
     return values
 
 
-def _local_shift_for_round(local_registration, round_name):
-    if local_registration is None or round_name not in local_registration.rounds:
-        return None
-    return np.asarray(local_registration.rounds[round_name].shift_zyx, dtype=np.float64)
+def _round_name_for_row(row):
+    round_name = row.get("round", None)
+    if round_name is not None and not (isinstance(round_name, float) and np.isnan(round_name)):
+        return str(round_name)
+    barcode = row.get("Barcode #", -1)
+    if pd.isna(barcode):
+        return ""
+    try:
+        return f"RT{int(barcode)}"
+    except (TypeError, ValueError):
+        return ""
 
 
 def _local_alignment_table(local_registration):
@@ -142,14 +130,31 @@ def _passes_tolerance(shift_zyx, tolerance_drift):
     return bool(np.all(np.abs(shift_zyx) < tolerance_drift))
 
 
+def filter_localizations(localizations, flux_min_3D=None, flux_max_3D=None, **kwargs):
+    table = _as_dataframe(localizations)
+    if flux_min_3D is not None and "flux" in table:
+        table = table[table["flux"] >= float(flux_min_3D)]
+    if flux_max_3D is not None and "flux" in table:
+        table = table[table["flux"] <= float(flux_max_3D)]
+    return table.reset_index(drop=True)
+
+
 def register_localizations(
     localizations,
     global_registration=None,
     local_registration=None,
     tolerance_drift=(3, 1, 1),
     remove_uncorrected_localizations=True,
+    apply_global_registration=False,
     **kwargs,
 ):
+    """
+    Apply pyHiM-style local block corrections to globally registered spot coordinates.
+
+    Global registration is assumed to have been applied upstream during 3D localization.
+    The optional `apply_global_registration=True` fallback is kept only for explicit
+    compatibility calls.
+    """
     table = _as_dataframe(localizations)
     if table.empty:
         return table
@@ -164,6 +169,7 @@ def register_localizations(
 
     for idx, row in corrected.iterrows():
         round_name = _round_name_for_row(row)
+
         if local_registration is not None and round_name == getattr(local_registration, "reference", None):
             shift_zyx = np.array([0.0, 0.0, 0.0], dtype=np.float64)
         elif local_lookup:
@@ -172,97 +178,179 @@ def register_localizations(
                 if remove_uncorrected_localizations:
                     rows_to_remove.append(idx)
                 continue
-        else:
-            local_shift = _local_shift_for_round(local_registration, round_name)
-            shift_zyx = (
-                local_shift
-                if local_shift is not None
-                else _global_shift_for_row(global_registration, round_name)
+        elif (
+            local_registration is not None
+            and round_name in getattr(local_registration, "rounds", {})
+            and round_name != getattr(local_registration, "reference", None)
+        ):
+            shift_zyx = np.asarray(
+                local_registration.rounds[round_name].shift_zyx,
+                dtype=np.float64,
             )
+        elif apply_global_registration and global_registration is not None:
+            shift_yx = np.asarray(
+                global_registration.rounds[round_name].shift,
+                dtype=np.float64,
+            )
+            shift_zyx = np.array([0.0, shift_yx[0], shift_yx[1]], dtype=np.float64)
+        else:
+            shift_zyx = np.array([0.0, 0.0, 0.0], dtype=np.float64)
+
         corrected.at[idx, "zcentroid"] = float(row["zcentroid"] + shift_zyx[0])
         corrected.at[idx, "ycentroid"] = float(row["ycentroid"] + shift_zyx[1])
         corrected.at[idx, "xcentroid"] = float(row["xcentroid"] + shift_zyx[2])
+
     if rows_to_remove:
         corrected = corrected.drop(index=rows_to_remove)
     return corrected.reset_index(drop=True)
 
 
-def _cluster_points(points, threshold):
-    if len(points) == 0:
-        return np.array([], dtype=int)
-    if len(points) == 1 or threshold is None or threshold <= 0:
-        return np.arange(len(points), dtype=int)
-    tree = cKDTree(points)
-    pairs = tree.query_pairs(float(threshold))
-    parent = np.arange(len(points))
-
-    def find(i):
-        while parent[i] != i:
-            parent[i] = parent[parent[i]]
-            i = parent[i]
-        return i
-
-    def union(i, j):
-        ri, rj = find(i), find(j)
-        if ri != rj:
-            parent[rj] = ri
-
-    for i, j in pairs:
-        union(i, j)
-    roots = [find(i) for i in range(len(points))]
-    remap = {root: idx for idx, root in enumerate(sorted(set(roots)))}
-    return np.array([remap[root] for root in roots], dtype=int)
+def _mask_labels(masks, mask_expansion=0):
+    if masks is None:
+        return None
+    labels = masks.labels if isinstance(masks, MaskResult) else np.asarray(masks)
+    labels = np.asarray(labels, dtype=np.int32)
+    if mask_expansion and int(mask_expansion) > 0:
+        labels = expand_labels(labels, distance=int(mask_expansion))
+        labels = relabel_connected(labels > 0, connectivity=1).astype(np.int32)
+    return labels
 
 
-def build_traces(
-    localizations,
-    masks=None,
-    method="KDtree",
-    distance_threshold_um=1.0,
-    pixel_size_xy=1.0,
-    pixel_size_z=1.0,
-    roi=None,
-    **kwargs,
-):
-    table = _as_dataframe(localizations)
-    if table.empty:
-        return TraceResult(table=table, method=method)
+def _mask_id_from_labels(labels, row, z_offset=0):
+    if labels is None:
+        return 0
 
+    x_corrected = float(row["ycentroid"])
+    y_corrected = float(row["xcentroid"])
+    z_corrected = float(row["zcentroid"]) if "zcentroid" in row else 0.0
+
+    x_int = np.nan if np.isnan(x_corrected) else int(x_corrected)
+    y_int = np.nan if np.isnan(y_corrected) else int(y_corrected)
+    z_int = np.nan if np.isnan(z_corrected) else int(z_corrected) + int(z_offset)
+
+    if np.isnan(x_int) or np.isnan(y_int) or np.isnan(z_int):
+        return 0
+
+    if labels.ndim == 2:
+        if 0 < x_int < labels.shape[0] and 0 < y_int < labels.shape[1]:
+            return int(labels[x_int, y_int])
+        return 0
+
+    if (
+        0 < z_int < labels.shape[0]
+        and 0 < x_int < labels.shape[1]
+        and 0 < y_int < labels.shape[2]
+    ):
+        return int(labels[z_int, x_int, y_int])
+    return 0
+
+
+def _assign_masks_pyhim(table, masks, mask_expansion=0, z_offset=0):
+    labels = _mask_labels(masks, mask_expansion=mask_expansion)
+    if labels is None:
+        return table
+
+    assigned = table.copy()
+    cell_ids = []
+    for _, row in assigned.iterrows():
+        cell_ids.append(_mask_id_from_labels(labels, row, z_offset=z_offset))
+    assigned["CellID #"] = np.asarray(cell_ids, dtype=np.int32)
+    assigned["Mask_id"] = assigned["CellID #"]
+    return assigned
+
+
+def _group_localizations_by_coordinate_pyhim(table, distance_threshold_um, pixel_size_xy, pixel_size_z):
+    grouped = table.copy()
+    grouped["CellID #"] = 0
+
+    for roi_value, roi_group in grouped.groupby("ROI #", sort=False):
+        idx = list(roi_group.index)
+        if not idx:
+            continue
+
+        coordinates = np.column_stack(
+            [
+                pixel_size_xy * roi_group["xcentroid"].to_numpy(dtype=float),
+                pixel_size_xy * roi_group["ycentroid"].to_numpy(dtype=float),
+                pixel_size_z * roi_group["zcentroid"].to_numpy(dtype=float),
+            ]
+        )
+
+        tree = KDTree(coordinates)
+        points = [
+            tree.query_ball_point(element, float(distance_threshold_um), p=2.0)
+            for element in coordinates
+        ]
+        group_list = [list(group) for group in {tuple(group) for group in points}]
+
+        for trace_id, trace in enumerate(group_list):
+            for local_index in trace:
+                grouped.at[idx[local_index], "CellID #"] = int(trace_id)
+
+    grouped["Mask_id"] = grouped["CellID #"]
+    return grouped
+
+
+def _spot_uid(row, fallback_idx):
+    if "Buid" in row and pd.notna(row["Buid"]):
+        return str(row["Buid"])
+    return str(uuid5(NAMESPACE_DNS, f"spot:{fallback_idx}"))
+
+
+def _trace_table_from_groups(table, pixel_size_xy, pixel_size_z):
     traces = table.copy()
     traces["x"] = traces["xcentroid"].astype(float) * float(pixel_size_xy)
     traces["y"] = traces["ycentroid"].astype(float) * float(pixel_size_xy)
     traces["z"] = traces["zcentroid"].astype(float) * float(pixel_size_z)
-    if "Spot_ID" not in traces:
-        traces["Spot_ID"] = [
-            str(uuid5(NAMESPACE_DNS, f"spot:{idx}:{row.Buid}"))
-            if "Buid" in traces
-            else str(uuid5(NAMESPACE_DNS, f"spot:{idx}"))
-            for idx, row in traces.iterrows()
-        ]
+
     if "ROI #" not in traces:
-        traces["ROI #"] = -1 if roi is None else int(roi)
+        traces["ROI #"] = 0
     if "Mask_id" not in traces:
         traces["Mask_id"] = traces.get("CellID #", 0)
 
-    trace_ids = pd.Series(index=traces.index, dtype=object)
-    group_column = "Mask_id" if "Mask_id" in traces else "CellID #"
-    for group_key, group in traces.groupby(group_column, sort=False):
-        points = group[["x", "y", "z"]].to_numpy(dtype=float)
-        clusters = _cluster_points(points, distance_threshold_um)
-        for row_idx, cluster_id in zip(group.index, clusters):
-            trace_ids.at[row_idx] = _trace_id(group_key, int(cluster_id))
-    traces["Trace_ID"] = trace_ids
+    output_rows = []
+    grouped = traces.groupby("CellID #", sort=False)
+    for group_key, group in grouped:
+        # pyHiM's builds_sc_distance_table keeps only CellID > 1.
+        if int(group_key) <= 1:
+            continue
 
-    for column, default in (
-        ("Chrom", "xxxxx"),
-        ("Chrom_Start", 0),
-        ("Chrom_End", 999999999),
-        ("label", "xxxxxxxxxxxxxxxxxxxx"),
-    ):
-        if column not in traces:
-            traces[column] = default
+        trace_id = str(uuid.uuid4())
+        for fallback_idx, (_, row) in enumerate(group.iterrows()):
+            output_rows.append(
+                {
+                    "Spot_ID": _spot_uid(row, fallback_idx),
+                    "Trace_ID": trace_id,
+                    "x": float(row["x"]),
+                    "y": float(row["y"]),
+                    "z": float(row["z"]),
+                    "Chrom": "xxxxx",
+                    "Chrom_Start": 0,
+                    "Chrom_End": 999999999,
+                    "ROI #": int(row["ROI #"]),
+                    "Mask_id": int(row.get("Mask_id", row.get("CellID #", 0))),
+                    "Barcode #": int(row["Barcode #"]),
+                    "label": "x" * 20,
+                    **{
+                        key: row[key]
+                        for key in traces.columns
+                        if key not in {
+                            "x",
+                            "y",
+                            "z",
+                            "Trace_ID",
+                            "Spot_ID",
+                            "Chrom",
+                            "Chrom_Start",
+                            "Chrom_End",
+                            "Mask_id",
+                            "label",
+                        }
+                    },
+                }
+            )
 
-    ordered = [
+    columns = [
         "Spot_ID",
         "Trace_ID",
         "x",
@@ -276,50 +364,162 @@ def build_traces(
         "Barcode #",
         "label",
     ]
-    remaining = [column for column in traces.columns if column not in ordered]
-    return TraceResult(table=traces[ordered + remaining], method=method)
+    trace_table = pd.DataFrame(output_rows)
+    if trace_table.empty:
+        return trace_table.reindex(columns=columns)
+    remaining = [column for column in trace_table.columns if column not in columns]
+    return trace_table[columns + remaining]
 
 
-def build_matrix(traces, pixel_size_xy=1.0, pixel_size_z=1.0, **kwargs):
-    table = _as_dataframe(traces)
-    if table.empty or "Barcode #" not in table:
-        return MatrixResult(
-            {
-                "PWDscMatrix": np.empty((0, 0), dtype=np.float64),
-                "Nmatrix": np.empty((0, 0), dtype=np.float64),
-                "uniqueBarcodes": np.empty((0,), dtype=np.int32),
-            }
+def build_traces(
+    localizations,
+    masks=None,
+    method="KDtree",
+    distance_threshold_um=1.0,
+    pixel_size_xy=1.0,
+    pixel_size_z=1.0,
+    roi=None,
+    mask_expansion=0,
+    z_offset=0,
+    **kwargs,
+):
+    """
+    Build pyHiM-style trace tables from registered localization coordinates.
+
+    Supported methods:
+    - `KDtree`: spatial grouping with pyHiM's KDTree query_ball_point workflow
+    - `masking`: assign spots to masks and build one trace per mask
+    """
+    table = _as_dataframe(localizations)
+    if table.empty:
+        return TraceResult(table=table, method=method)
+
+    traces = table.copy()
+    if "ROI #" not in traces:
+        traces["ROI #"] = -1 if roi is None else int(roi)
+
+    method_normalized = str(method).lower()
+    if method_normalized in {"masking", "mask", "masking_expanded"}:
+        traces = _assign_masks_pyhim(
+            traces,
+            masks=masks,
+            mask_expansion=mask_expansion,
+            z_offset=z_offset,
         )
+    elif method_normalized in {"kdtree", "kdtree_clustering", "clustering"}:
+        traces = _group_localizations_by_coordinate_pyhim(
+            traces,
+            distance_threshold_um=distance_threshold_um,
+            pixel_size_xy=float(pixel_size_xy),
+            pixel_size_z=float(pixel_size_z),
+        )
+    else:
+        raise ValueError(f"Unsupported trace-building method: {method}")
 
-    barcodes = np.array(sorted(table["Barcode #"].dropna().astype(int).unique()))
-    index = {barcode: idx for idx, barcode in enumerate(barcodes)}
-    n = len(barcodes)
-    distances = [[[] for _ in range(n)] for _ in range(n)]
+    trace_table = _trace_table_from_groups(
+        traces,
+        pixel_size_xy=float(pixel_size_xy),
+        pixel_size_z=float(pixel_size_z),
+    )
+    result = TraceResult(
+        table=trace_table.reset_index(drop=True),
+        method=method,
+    )
+    return _set_result_meta(
+        result,
+        {
+            "distance_threshold_um": float(distance_threshold_um),
+            "mask_expansion": int(mask_expansion),
+        },
+    )
 
-    for _, group in table.groupby("Trace_ID", sort=False):
-        by_barcode = group.groupby("Barcode #", sort=False).first()
-        for b1, row1 in by_barcode.iterrows():
-            for b2, row2 in by_barcode.iterrows():
-                i, j = index[int(b1)], index[int(b2)]
-                p1 = np.array([row1["x"], row1["y"], row1["z"]], dtype=float)
-                p2 = np.array([row2["x"], row2["y"], row2["z"]], dtype=float)
-                distances[i][j].append(float(np.linalg.norm(p1 - p2)))
 
-    pwd = np.full((n, n), np.nan, dtype=np.float64)
-    nmatrix = np.zeros((n, n), dtype=np.float64)
-    for i in range(n):
-        for j in range(n):
-            values = distances[i][j]
-            nmatrix[i, j] = len(values)
-            if values:
-                pwd[i, j] = float(np.nanmedian(values))
-
+def _empty_matrix_result():
+    empty_2d = np.empty((0, 0), dtype=np.float64)
+    empty_3d = np.empty((0, 0, 0), dtype=np.float64)
+    empty_1d = np.empty((0,), dtype=np.int32)
     return MatrixResult(
         {
-            "PWDscMatrix": pwd,
-            "Nmatrix": nmatrix,
-            "uniqueBarcodes": barcodes,
+            "PWDscMatrix": empty_3d,
+            "PWDmedianMatrix": empty_2d,
+            "Nmatrix": empty_2d,
+            "uniqueBarcodes": empty_1d,
         }
+    )
+
+
+def build_matrix(
+    traces,
+    pixel_size_xy=1.0,
+    pixel_size_z=1.0,
+    mode="min",
+    distance_threshold=np.inf,
+    **kwargs,
+):
+    table = _as_dataframe(traces)
+    if table.empty or "Barcode #" not in table or "Trace_ID" not in table:
+        return _empty_matrix_result()
+
+    barcodes = np.array(sorted(table["Barcode #"].dropna().astype(int).unique()))
+    n_barcodes = len(barcodes)
+    n_traces = int(table["Trace_ID"].nunique())
+    if n_barcodes == 0 or n_traces == 0:
+        return _empty_matrix_result()
+
+    barcode_index = {barcode: idx for idx, barcode in enumerate(barcodes)}
+    sc_matrix = np.full((n_barcodes, n_barcodes, n_traces), np.nan, dtype=np.float64)
+
+    for trace_idx, (_, group) in enumerate(table.groupby("Trace_ID", sort=False)):
+        barcodes_in_trace = group["Barcode #"].to_numpy(dtype=int)
+        xyz = group[["x", "y", "z"]].to_numpy(dtype=float)
+        pwd_matrix = pairwise_distances(xyz)
+
+        for i, barcode_1 in enumerate(barcodes_in_trace):
+            index_1 = barcode_index[int(barcode_1)]
+            for j, barcode_2 in enumerate(barcodes_in_trace):
+                if barcode_1 == barcode_2:
+                    continue
+                new_distance = float(pwd_matrix[i, j])
+                if new_distance >= float(distance_threshold):
+                    continue
+                index_2 = barcode_index[int(barcode_2)]
+
+                current = sc_matrix[index_1, index_2, trace_idx]
+                if mode == "last" or np.isnan(current):
+                    sc_matrix[index_1, index_2, trace_idx] = new_distance
+                elif mode == "mean":
+                    sc_matrix[index_1, index_2, trace_idx] = float(
+                        np.nanmean([current, new_distance])
+                    )
+                elif mode == "min":
+                    sc_matrix[index_1, index_2, trace_idx] = float(
+                        np.nanmin([current, new_distance])
+                    )
+                else:
+                    raise ValueError(f"Unsupported matrix mode: {mode}")
+
+    n_matrix = np.sum(~np.isnan(sc_matrix), axis=2).astype(np.float64)
+    if sc_matrix.size:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            pwd_median = np.nanmedian(sc_matrix, axis=2)
+    else:
+        pwd_median = np.empty((0, 0))
+
+    result = MatrixResult(
+        {
+            "PWDscMatrix": sc_matrix,
+            "PWDmedianMatrix": np.asarray(pwd_median, dtype=np.float64),
+            "Nmatrix": n_matrix,
+            "uniqueBarcodes": barcodes.astype(np.int32),
+        }
+    )
+    return _set_result_meta(
+        result,
+        {
+            "mode": str(mode),
+            "distance_threshold": float(distance_threshold),
+        },
     )
 
 
@@ -329,7 +529,7 @@ def save_traces(result, out_dir, name="Trace_3D_barcode_KDtree"):
     data_dir.mkdir(parents=True, exist_ok=True)
     path = data_dir / f"{name}.ecsv"
     table = result.table if isinstance(result, TraceResult) else result
-    Table.from_pandas(table).write(path, format="ascii.ecsv", overwrite=True)
+    Table.from_pandas(pd.DataFrame(table)).write(path, format="ascii.ecsv", overwrite=True)
     if isinstance(result, TraceResult):
         result.saved_path = str(path)
         return result
@@ -343,8 +543,12 @@ def save_matrix(result, out_dir, prefix="Trace_3D_barcode_KDtree"):
     matrices = result.matrices if isinstance(result, MatrixResult) else result
     saved = {}
     for name, array in matrices.items():
-        path = data_dir / f"{prefix}_{name}.npy"
-        np.save(path, array)
+        if name == "uniqueBarcodes":
+            path = data_dir / f"{prefix}_{name}.ecsv"
+            np.savetxt(path, np.asarray(array, dtype=np.int32), delimiter=" ", fmt="%d")
+        else:
+            path = data_dir / f"{prefix}_{name}.npy"
+            np.save(path, np.asarray(array))
         saved[name] = str(path)
     if isinstance(result, MatrixResult):
         result.saved_paths = saved

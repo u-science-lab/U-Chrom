@@ -79,7 +79,9 @@ def _preprocess_3d_image(stack, lower_threshold, higher_threshold):
         lower_threshold=lower_threshold,
         higher_threshold=higher_threshold,
     )
-    return np.asarray(image, dtype=np.float32)
+    # pyHiM keeps double precision through block3D registration; downcasting here
+    # perturbs subpixel phase-correlation results for some blocks.
+    return np.asarray(image, dtype=np.float64)
 
 
 def _global_xy_shift(global_registration, round_name):
@@ -126,7 +128,7 @@ def _block_images(reference, moving, block_size_xy):
 
 def _estimate_block_shift_matrices(reference, moving, block_size_xy, upsample_factor):
     block_ref, block_target = _block_images(reference, moving, block_size_xy)
-    shift_matrices = [np.zeros(block_ref.shape[:2], dtype=np.float32) for _ in range(3)]
+    shift_matrices = [np.zeros(block_ref.shape[:2], dtype=np.float64) for _ in range(3)]
     rows = []
     for block_i in range(block_ref.shape[0]):
         for block_j in range(block_ref.shape[1]):
@@ -151,7 +153,7 @@ def _estimate_block_shift_matrices(reference, moving, block_size_xy, upsample_fa
 
 
 def _quality_matrix_for_axis(block_ref, block_target, shift_matrices, axis):
-    quality = np.zeros(block_ref.shape[:2], dtype=np.float32)
+    quality = np.zeros(block_ref.shape[:2], dtype=np.float64)
     for block_i in range(block_ref.shape[0]):
         for block_j in range(block_ref.shape[1]):
             shift_zyx = np.array([matrix[block_i, block_j] for matrix in shift_matrices])

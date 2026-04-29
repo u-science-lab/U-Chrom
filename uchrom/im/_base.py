@@ -164,6 +164,8 @@ class MaskResult:
     method: str = "threshold"
     source_name: Optional[str] = None
     saved_path: Optional[str] = None
+    meta: Dict[str, Any] = field(default_factory=dict)
+    raw_labels: Optional[np.ndarray] = None
 
 
 @dataclass
@@ -171,6 +173,7 @@ class LocalizationResult:
     table: Any
     method: str = "pyhim_3d"
     saved_path: Optional[str] = None
+    meta: Dict[str, Any] = field(default_factory=dict)
 
     def __getitem__(self, key):
         return self.table.__getitem__(key)
@@ -191,6 +194,7 @@ class TraceResult:
     table: Any
     method: str = "KDtree"
     saved_path: Optional[str] = None
+    meta: Dict[str, Any] = field(default_factory=dict)
 
     def __getitem__(self, key):
         return self.table.__getitem__(key)
@@ -210,6 +214,7 @@ class TraceResult:
 class MatrixResult:
     matrices: Dict[str, np.ndarray]
     saved_paths: Dict[str, str] = field(default_factory=dict)
+    meta: Dict[str, Any] = field(default_factory=dict)
 
     def keys(self):
         return self.matrices.keys()

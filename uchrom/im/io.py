@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 from skimage import io as skio
 
-from uchrom.im._base import Image2D, Image3D
+from uchrom.im._base import Image3D
 
 
 VALID_IMAGE_SUFFIXES = (".tif", ".tiff", ".npy")
@@ -24,23 +24,48 @@ def load_image(path, squeeze=True):
     return np.asarray(image)
 
 
+def _image_path_and_meta(spec, round_name, default_role, round_meta):
+    if isinstance(spec, dict):
+        path = spec["path"]
+        image_meta = {key: value for key, value in spec.items() if key != "path"}
+    else:
+        path = spec
+        image_meta = {}
+
+    merged_meta = dict(round_meta)
+    merged_meta.update(image_meta)
+    merged_meta.setdefault("round", round_name)
+    merged_meta.setdefault("role", default_role)
+    return Path(path), merged_meta
+
+
 def load_rounds(manifest, as_images=True):
     rounds = {}
     for round_name, round_spec in manifest.items():
-        fiducial_spec = round_spec["fiducial"]
-        fiducial_path = Path(fiducial_spec["path"] if isinstance(fiducial_spec, dict) else fiducial_spec)
+        round_meta = dict(round_spec.get("meta", {}))
+        fiducial_path, fiducial_meta = _image_path_and_meta(
+            round_spec["fiducial"],
+            round_name=round_name,
+            default_role="fiducial",
+            round_meta=round_meta,
+        )
         fiducial_data = load_image(fiducial_path)
 
         images = {}
         for image_name, image_spec in round_spec.get("images", {}).items():
-            image_path = Path(image_spec["path"] if isinstance(image_spec, dict) else image_spec)
+            image_path, image_meta = _image_path_and_meta(
+                image_spec,
+                round_name=round_name,
+                default_role=image_name,
+                round_meta=round_meta,
+            )
             image_data = load_image(image_path)
             if as_images:
                 images[image_name] = Image3D(
                     image_data,
                     name=image_path.stem,
                     path=str(image_path),
-                    meta=dict(round_spec.get("meta", {})),
+                    meta=image_meta,
                 )
             else:
                 images[image_name] = image_data
@@ -51,16 +76,16 @@ def load_rounds(manifest, as_images=True):
                     fiducial_data,
                     name=fiducial_path.stem,
                     path=str(fiducial_path),
-                    meta=dict(round_spec.get("meta", {})),
+                    meta=fiducial_meta,
                 ),
                 "images": images,
-                "meta": dict(round_spec.get("meta", {})),
+                "meta": round_meta,
             }
         else:
             rounds[round_name] = {
                 "fiducial": fiducial_data,
                 "images": images,
-                "meta": dict(round_spec.get("meta", {})),
+                "meta": round_meta,
             }
 
     return rounds

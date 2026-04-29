@@ -8,6 +8,18 @@ from scipy.optimize import linear_sum_assignment
 from skimage import color, exposure
 
 
+def _as_array(obj):
+    if isinstance(obj, np.ndarray):
+        return obj
+    labels = getattr(obj, "labels", None)
+    if labels is not None:
+        return np.asarray(labels)
+    data = getattr(obj, "data", None)
+    if data is not None and not isinstance(obj, (pd.DataFrame, pd.Series)):
+        return np.asarray(data)
+    return np.asarray(obj)
+
+
 def first_existing(*paths):
     for path in paths:
         path = Path(path)
@@ -28,8 +40,8 @@ def read_ecsv(path):
 
 
 def finite_array_metrics(reference, candidate):
-    reference = np.asarray(reference)
-    candidate = np.asarray(candidate)
+    reference = _as_array(reference)
+    candidate = _as_array(candidate)
     metrics = {
         "shape_reference": reference.shape,
         "shape_candidate": candidate.shape,
@@ -71,7 +83,7 @@ def finite_array_metrics(reference, candidate):
 
 
 def display_plane(array, z=None, projection="max"):
-    array = np.asarray(array)
+    array = _as_array(array)
     if array.ndim == 2:
         return array
     if array.ndim != 3:
@@ -84,10 +96,12 @@ def display_plane(array, z=None, projection="max"):
 
 
 def show_array_comparison(reference, candidate, title="", z=None, projection="max", cmap="gray"):
-    if np.asarray(reference).shape != np.asarray(candidate).shape:
+    ref_array = _as_array(reference)
+    cand_array = _as_array(candidate)
+    if ref_array.shape != cand_array.shape:
         print(
             "Cannot plot difference for shape mismatch: "
-            f"{np.asarray(reference).shape} vs {np.asarray(candidate).shape}"
+            f"{ref_array.shape} vs {cand_array.shape}"
         )
         return None
     ref = display_plane(reference, z=z, projection=projection)
@@ -126,7 +140,7 @@ def show_array_comparison(reference, candidate, title="", z=None, projection="ma
 
 
 def mask_summary(name, mask):
-    mask = np.asarray(mask)
+    mask = _as_array(mask)
     labels = np.unique(mask)
     labels_fg = labels[labels != 0]
     return {
@@ -143,8 +157,8 @@ def mask_summary(name, mask):
 
 
 def foreground_scores(reference_mask, candidate_mask):
-    reference_mask = np.asarray(reference_mask)
-    candidate_mask = np.asarray(candidate_mask)
+    reference_mask = _as_array(reference_mask)
+    candidate_mask = _as_array(candidate_mask)
     if reference_mask.shape != candidate_mask.shape:
         return {
             "shape_match": False,
@@ -169,8 +183,8 @@ def foreground_scores(reference_mask, candidate_mask):
 
 
 def label_iou_matches(reference_mask, candidate_mask):
-    reference_mask = np.asarray(reference_mask, dtype=np.int64)
-    candidate_mask = np.asarray(candidate_mask, dtype=np.int64)
+    reference_mask = np.asarray(_as_array(reference_mask), dtype=np.int64)
+    candidate_mask = np.asarray(_as_array(candidate_mask), dtype=np.int64)
     if reference_mask.shape != candidate_mask.shape:
         raise ValueError(
             f"shape mismatch: pyHiM {reference_mask.shape}, U-Chrom {candidate_mask.shape}"
@@ -225,17 +239,22 @@ def label_iou_matches(reference_mask, candidate_mask):
 
 
 def show_mask_overlay(reference_image, pyhim_mask, uchrom_mask, title="", z=None):
-    if np.asarray(pyhim_mask).shape != np.asarray(uchrom_mask).shape:
+    pyhim_mask_array = _as_array(pyhim_mask)
+    uchrom_mask_array = _as_array(uchrom_mask)
+    if pyhim_mask_array.shape != uchrom_mask_array.shape:
         print(
             "Cannot overlay masks with shape mismatch: "
-            f"{np.asarray(pyhim_mask).shape} vs {np.asarray(uchrom_mask).shape}"
+            f"{pyhim_mask_array.shape} vs {uchrom_mask_array.shape}"
         )
         return None
-    base = display_plane(reference_image, z=z).astype(float)
-    lo, hi = np.nanpercentile(base, [1, 99]) if np.isfinite(base).any() else (0, 1)
-    base = np.clip((base - lo) / (hi - lo + 1e-12), 0, 1)
-    py = display_plane(pyhim_mask > 0, z=z).astype(bool)
-    uc = display_plane(uchrom_mask > 0, z=z).astype(bool)
+    py = display_plane(pyhim_mask_array > 0, z=z).astype(bool)
+    uc = display_plane(uchrom_mask_array > 0, z=z).astype(bool)
+    if reference_image is None:
+        base = np.zeros(py.shape, dtype=float)
+    else:
+        base = display_plane(reference_image, z=z).astype(float)
+        lo, hi = np.nanpercentile(base, [1, 99]) if np.isfinite(base).any() else (0, 1)
+        base = np.clip((base - lo) / (hi - lo + 1e-12), 0, 1)
     rgb = np.dstack([base, base, base])
     rgb[py & ~uc] = [1, 0, 0]
     rgb[uc & ~py] = [0, 1, 0]
@@ -248,7 +267,7 @@ def show_mask_overlay(reference_image, pyhim_mask, uchrom_mask, title="", z=None
 
 
 def _display_ready_image(image):
-    image = np.asarray(image, dtype=float)
+    image = np.asarray(_as_array(image), dtype=float)
     finite = image[np.isfinite(image)]
     if finite.size == 0:
         return np.zeros_like(image, dtype=float)
@@ -262,8 +281,9 @@ def show_mask_segmentation_qc(raw_image, labels, title="", crop=None):
     """
     pyHiM-style mask QC: mean raw projection next to max-projected labels.
     """
-    raw = np.asarray(raw_image)
-    label_array = np.asarray(labels)
+    raw = _as_array(raw_image)
+    label_array = _as_array(labels)
+    n_labels = int(np.max(label_array)) if np.size(label_array) else 0
     raw_projection = np.mean(raw, axis=0) if raw.ndim == 3 else raw
     label_projection = np.max(label_array, axis=0) if label_array.ndim == 3 else label_array
     raw_projection = _display_ready_image(raw_projection)
@@ -285,7 +305,10 @@ def show_mask_segmentation_qc(raw_image, labels, title="", crop=None):
     for axis in axes:
         axis.set_xticks([])
         axis.set_yticks([])
-    fig.suptitle(title)
+    if title:
+        fig.suptitle(f"{title} (n_labels={n_labels})")
+    else:
+        fig.suptitle(f"Mask segmentation QC (n_labels={n_labels})")
     fig.tight_layout()
     return fig
 
@@ -422,6 +445,153 @@ def plot_localization_xy(pyhim_locs, uchrom_locs, barcode=None, title=""):
     return fig
 
 
+def _round_barcode_image(raw_rounds, round_name):
+    round_data = raw_rounds[round_name]
+    if "images" in round_data and "barcode" in round_data["images"]:
+        return round_data["images"]["barcode"]
+    if "barcode" in round_data:
+        return round_data["barcode"]
+    raise KeyError(f"Missing barcode image for round {round_name!r}")
+
+
+def _localize_3d_display_stack(
+    image,
+    global_registration=None,
+    round_name=None,
+    roi=None,
+    z_binning=None,
+):
+    from uchrom.im._pyhim import apply_xy_shift_3d, global_shift_for_round, reinterpolate_z
+
+    stack = reinterpolate_z(_as_array(image), z_binning=z_binning)
+    shift_yx = global_shift_for_round(global_registration, round_name, roi=roi)
+    return apply_xy_shift_3d(stack, shift_yx), shift_yx
+
+
+def _localization_label_overlay(base, table, spot_radius=3):
+    base = _display_ready_image(base)
+    labels = np.zeros(base.shape, dtype=np.int32)
+    if table is not None and not table.empty:
+        yy = pd.to_numeric(table["ycentroid"], errors="coerce").to_numpy()
+        xx = pd.to_numeric(table["xcentroid"], errors="coerce").to_numpy()
+        next_label = 1
+        for y, x in zip(yy, xx):
+            if not np.isfinite(y) or not np.isfinite(x):
+                continue
+            yc = int(round(y))
+            xc = int(round(x))
+            y0 = max(0, yc - int(spot_radius))
+            y1 = min(labels.shape[0], yc + int(spot_radius) + 1)
+            x0 = max(0, xc - int(spot_radius))
+            x1 = min(labels.shape[1], xc + int(spot_radius) + 1)
+            labels[y0:y1, x0:x1] = next_label
+            next_label += 1
+    return color.label2rgb(labels, image=base, bg_label=0, alpha=0.75), labels
+
+
+def show_3d_call_alignment_qc(
+    raw_rounds,
+    uchrom_localizations,
+    pyhim_localizations=None,
+    global_registration=None,
+    roi=None,
+    rounds=("RT26", "RT27"),
+    projection="max",
+    z_binning=None,
+    match_distance_px=2.0,
+    spot_radius=3,
+    title="",
+):
+    """
+    Show U-Chrom 3D call inputs/label projections and pyHiM-vs-U-Chrom XY overlays.
+    """
+    uc = normalize_localization_table(uchrom_localizations)
+    py = (
+        normalize_localization_table(pyhim_localizations)
+        if pyhim_localizations is not None
+        else None
+    )
+
+    fig, axes = plt.subplots(3, 2, figsize=(14, 18), constrained_layout=True)
+    for col, round_name in enumerate(rounds):
+        barcode = _barcode_from_round_name(round_name)
+        image = _round_barcode_image(raw_rounds, round_name)
+        display_stack, shift_yx = _localize_3d_display_stack(
+            image,
+            global_registration=global_registration,
+            round_name=round_name,
+            roi=roi,
+            z_binning=z_binning,
+        )
+        projection_image = display_plane(display_stack, projection=projection)
+        uc_round = _filter_localizations_for_display(uc, barcode=barcode, roi=roi)
+        overlay, label_image = _localization_label_overlay(
+            projection_image,
+            uc_round,
+            spot_radius=spot_radius,
+        )
+
+        axes[col, 0].imshow(_display_ready_image(projection_image), cmap="gray", origin="lower")
+        axes[col, 0].set_title(
+            f"{round_name} localize_3d input MIP | shift={np.round(shift_yx, 2).tolist()}"
+        )
+        axes[col, 1].imshow(overlay, origin="lower")
+        axes[col, 1].set_title(
+            f"U-Chrom {round_name} 3D call labels | n={int(label_image.max())}"
+        )
+        axes[col, 0].set_xticks([])
+        axes[col, 0].set_yticks([])
+        axes[col, 1].set_xticks([])
+        axes[col, 1].set_yticks([])
+
+        ax = axes[2, col]
+        py_round = (
+            _filter_localizations_for_display(py, barcode=barcode, roi=roi)
+            if py is not None
+            else None
+        )
+        if py_round is not None and not py_round.empty:
+            ax.scatter(
+                py_round["xcentroid"],
+                py_round["ycentroid"],
+                s=18,
+                facecolors="none",
+                edgecolors="tab:red",
+                label="pyHiM",
+            )
+        if not uc_round.empty:
+            ax.scatter(
+                uc_round["xcentroid"],
+                uc_round["ycentroid"],
+                s=12,
+                alpha=0.65,
+                color="tab:green",
+                label="U-Chrom",
+            )
+        if py_round is not None:
+            _, summary = match_localizations_by_position(
+                py_round,
+                uc_round,
+                max_distance_px=match_distance_px,
+            )
+            subtitle = (
+                f"matched={summary['matched']} | "
+                f"median={summary['median_distance_px']:.2f}px"
+            )
+        else:
+            subtitle = "pyHiM table missing"
+        ax.set_title(f"XY coordinate overlay for {round_name}\n{subtitle}")
+        ax.set_aspect("equal")
+        ax.invert_yaxis()
+        ax.set_xlabel("xcentroid [px]")
+        ax.set_ylabel("ycentroid [px]")
+        ax.legend(loc="best")
+
+    if title:
+        fig.suptitle(title)
+    return fig, axes
+
+
 def show_barcode_localization_qc(
     image,
     localizations,
@@ -481,6 +651,307 @@ def show_barcode_localization_qc(
     return fig
 
 
+def _barcode_from_round_name(round_name):
+    digits = "".join(ch for ch in str(round_name) if ch.isdigit())
+    return int(digits) if digits else None
+
+
+def _resolve_global_shift_yx(global_registration=None, round_name=None, roi=None, shift_yx=None):
+    if shift_yx is not None:
+        shift = np.asarray(shift_yx, dtype=float).ravel()
+        if shift.size < 2:
+            raise ValueError(f"shift_yx must contain 2 values, got: {shift_yx}")
+        return np.array([shift[0], shift[1]], dtype=float)
+    if global_registration is None:
+        raise ValueError("shift_yx or global_registration is required.")
+    from uchrom.im._pyhim import global_shift_for_round
+
+    return global_shift_for_round(global_registration, round_name, roi=roi)
+
+
+def _apply_xy_shift_for_display(image, shift_yx):
+    image = np.asarray(_as_array(image))
+    shift_yx = np.asarray(shift_yx, dtype=float).ravel()
+    if image.ndim == 2:
+        return shift_image(image, [float(shift_yx[0]), float(shift_yx[1])])
+    if image.ndim == 3:
+        return shift_image(image, [0.0, float(shift_yx[0]), float(shift_yx[1])])
+    raise ValueError(f"Expected 2D or 3D image, got {image.shape}")
+
+
+def _filter_localizations_for_display(table, barcode=None, roi=None, crop=None):
+    table = normalize_localization_table(table)
+    if barcode is not None and "Barcode #" in table:
+        table = table[table["Barcode #"] == barcode]
+    if roi is not None and "ROI #" in table:
+        try:
+            roi_value = int(str(roi))
+        except ValueError:
+            roi_value = roi
+        table = table[table["ROI #"] == roi_value]
+    if crop is not None:
+        y0, y1, x0, x1 = crop
+        table = table[
+            (table["ycentroid"] >= y0)
+            & (table["ycentroid"] < y1)
+            & (table["xcentroid"] >= x0)
+            & (table["xcentroid"] < x1)
+        ]
+    return table
+
+
+def _scatter_localizations_for_display(
+    axis,
+    table,
+    x_offset=0,
+    y_offset=0,
+    spot_size=18,
+    edgecolor="yellow",
+    label=None,
+    alpha=0.9,
+):
+    if table is None or table.empty:
+        return
+    axis.scatter(
+        table["xcentroid"] - x_offset,
+        table["ycentroid"] - y_offset,
+        s=spot_size,
+        facecolors="none",
+        edgecolors=edgecolor,
+        linewidths=1.0,
+        alpha=alpha,
+        label=label,
+    )
+
+
+def _display_match_classes(uchrom_table, pyhim_table, max_distance_px=2.0):
+    uchrom = pd.DataFrame(uchrom_table).copy().reset_index(drop=True)
+    pyhim = pd.DataFrame(pyhim_table).copy().reset_index(drop=True)
+    matched = pd.DataFrame(columns=["xcentroid", "ycentroid", "distance_px"])
+    if uchrom.empty or pyhim.empty:
+        return uchrom, pyhim, matched
+
+    dimensions = ["xcentroid", "ycentroid"]
+    if "zcentroid" in uchrom.columns and "zcentroid" in pyhim.columns:
+        dimensions = ["zcentroid", "xcentroid", "ycentroid"]
+    if any(column not in uchrom.columns or column not in pyhim.columns for column in dimensions):
+        return uchrom, pyhim, matched
+
+    uchrom_coords = uchrom[dimensions].to_numpy(dtype=float)
+    pyhim_coords = pyhim[dimensions].to_numpy(dtype=float)
+    uchrom_finite = np.isfinite(uchrom_coords).all(axis=1)
+    pyhim_finite = np.isfinite(pyhim_coords).all(axis=1)
+    if not uchrom_finite.any() or not pyhim_finite.any():
+        return uchrom, pyhim, matched
+
+    uchrom_valid = uchrom.loc[uchrom_finite].reset_index().rename(
+        columns={"index": "uchrom_index"}
+    )
+    pyhim_valid = pyhim.loc[pyhim_finite].reset_index().rename(
+        columns={"index": "pyhim_index"}
+    )
+    delta = (
+        uchrom_valid[dimensions].to_numpy(dtype=float)[:, None, :]
+        - pyhim_valid[dimensions].to_numpy(dtype=float)[None, :, :]
+    )
+    distances = np.sqrt(np.sum(delta**2, axis=2))
+    uchrom_match_rows, pyhim_match_rows = linear_sum_assignment(distances)
+    threshold = np.inf if max_distance_px is None else float(max_distance_px)
+
+    matched_rows = []
+    matched_uchrom_indices = set()
+    matched_pyhim_indices = set()
+    for uchrom_row, pyhim_row in zip(uchrom_match_rows, pyhim_match_rows):
+        distance = distances[uchrom_row, pyhim_row]
+        if distance > threshold:
+            continue
+        uchrom_index = int(uchrom_valid.iloc[uchrom_row]["uchrom_index"])
+        pyhim_index = int(pyhim_valid.iloc[pyhim_row]["pyhim_index"])
+        matched_uchrom_indices.add(uchrom_index)
+        matched_pyhim_indices.add(pyhim_index)
+        matched_rows.append(
+            {
+                "xcentroid": float(
+                    np.mean(
+                        [
+                            uchrom.loc[uchrom_index, "xcentroid"],
+                            pyhim.loc[pyhim_index, "xcentroid"],
+                        ]
+                    )
+                ),
+                "ycentroid": float(
+                    np.mean(
+                        [
+                            uchrom.loc[uchrom_index, "ycentroid"],
+                            pyhim.loc[pyhim_index, "ycentroid"],
+                        ]
+                    )
+                ),
+                "distance_px": float(distance),
+            }
+        )
+
+    uchrom_only = uchrom.drop(index=list(matched_uchrom_indices), errors="ignore")
+    pyhim_only = pyhim.drop(index=list(matched_pyhim_indices), errors="ignore")
+    matched = pd.DataFrame(
+        matched_rows,
+        columns=["xcentroid", "ycentroid", "distance_px"],
+    )
+    return uchrom_only, pyhim_only, matched
+
+
+def show_barcode_xy_shift_and_call_qc(
+    barcode_image,
+    localizations,
+    global_registration=None,
+    round_name="RT27",
+    roi=None,
+    shift_yx=None,
+    barcode=None,
+    pyhim_localizations=None,
+    title="",
+    projection="sum",
+    crop=None,
+    spot_size=18,
+    match_distance_px=2.0,
+):
+    """
+    Show raw vs global-XY-corrected barcode input and barcode calls.
+    """
+    if barcode is None:
+        barcode = _barcode_from_round_name(round_name)
+    shift = _resolve_global_shift_yx(
+        global_registration=global_registration,
+        round_name=round_name,
+        roi=roi,
+        shift_yx=shift_yx,
+    )
+    corrected = _apply_xy_shift_for_display(barcode_image, shift)
+    raw_projection = _display_ready_image(display_plane(barcode_image, projection=projection))
+    corrected_projection = _display_ready_image(
+        display_plane(corrected, projection=projection)
+    )
+    table = _filter_localizations_for_display(
+        localizations,
+        barcode=barcode,
+        roi=roi,
+        crop=crop,
+    )
+    pyhim_table = None
+    if pyhim_localizations is not None:
+        pyhim_table = _filter_localizations_for_display(
+            pyhim_localizations,
+            barcode=barcode,
+            roi=roi,
+            crop=crop,
+        )
+
+    y_offset = 0
+    x_offset = 0
+    if crop is not None:
+        y0, _, x0, _ = crop
+        y_offset = y0
+        x_offset = x0
+        raw_projection = _crop_abs(raw_projection, crop)
+        corrected_projection = _crop_abs(corrected_projection, crop)
+
+    shift_text = np.round(np.asarray(shift, dtype=float), 2).tolist()
+    fig, axes = plt.subplots(3, 2, figsize=(12, 14), constrained_layout=True)
+    axes[0, 0].imshow(corrected_projection, cmap="gray", origin="lower")
+    axes[0, 0].set_title(f"{round_name} barcode XY-corrected shift_yx={shift_text}")
+    axes[0, 1].imshow(raw_projection, cmap="gray", origin="lower")
+    axes[0, 1].set_title(f"{round_name} barcode raw")
+    axes[1, 0].imshow(corrected_projection, cmap="gray", origin="lower")
+    axes[1, 0].set_title(f"{round_name} barcode XY-corrected")
+    axes[1, 1].imshow(corrected_projection, cmap="gray", origin="lower")
+    axes[1, 1].set_title(f"U-Chrom {round_name} calls")
+    axes[2, 0].imshow(corrected_projection, cmap="gray", origin="lower")
+    axes[2, 0].set_title(f"pyHiM {round_name} calls")
+    match_text = "all" if match_distance_px is None else f"{match_distance_px:g}px"
+    axes[2, 1].imshow(corrected_projection, cmap="gray", origin="lower")
+    axes[2, 1].set_title(
+        f"U-Chrom vs pyHiM {round_name} calls (match <= {match_text})"
+    )
+
+    _scatter_localizations_for_display(
+        axes[1, 1],
+        table,
+        x_offset=x_offset,
+        y_offset=y_offset,
+        spot_size=spot_size,
+        edgecolor="yellow",
+    )
+    if pyhim_table is None:
+        axes[2, 0].text(
+            0.5,
+            0.5,
+            "pyHiM localizations not provided",
+            transform=axes[2, 0].transAxes,
+            ha="center",
+            va="center",
+            color="white",
+        )
+        axes[2, 1].text(
+            0.5,
+            0.5,
+            "pyHiM localizations not provided",
+            transform=axes[2, 1].transAxes,
+            ha="center",
+            va="center",
+            color="white",
+        )
+    else:
+        uchrom_only, pyhim_only, matched = _display_match_classes(
+            table,
+            pyhim_table,
+            max_distance_px=match_distance_px,
+        )
+        _scatter_localizations_for_display(
+            axes[2, 0],
+            pyhim_table,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            spot_size=spot_size,
+            edgecolor="tab:red",
+        )
+        _scatter_localizations_for_display(
+            axes[2, 1],
+            pyhim_only,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            spot_size=spot_size,
+            edgecolor="tab:red",
+            label=f"pyHiM only ({len(pyhim_only)})",
+        )
+        _scatter_localizations_for_display(
+            axes[2, 1],
+            uchrom_only,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            spot_size=spot_size,
+            edgecolor="lime",
+            label=f"U-Chrom only ({len(uchrom_only)})",
+        )
+        _scatter_localizations_for_display(
+            axes[2, 1],
+            matched,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            spot_size=spot_size * 1.4,
+            edgecolor="yellow",
+            label=f"matched ({len(matched)})",
+        )
+        if not pyhim_table.empty or not table.empty or not matched.empty:
+            axes[2, 1].legend(loc="upper right", fontsize="small")
+
+    for axis in axes.ravel():
+        axis.set_xticks([])
+        axis.set_yticks([])
+    if title:
+        fig.suptitle(title)
+    return fig, axes
+
+
 def show_localization_match_diagnostics(matches, title=""):
     matches = pd.DataFrame(matches)
     if matches.empty:
@@ -512,9 +983,16 @@ def trace_summary(table, source):
     return row
 
 
+def _matrix_for_comparison(matrix):
+    matrix = _as_array(matrix)
+    if matrix.ndim == 3:
+        return np.nanmedian(matrix, axis=2)
+    return matrix
+
+
 def matrix_metrics(reference_matrix, candidate_matrix):
-    reference_matrix = np.asarray(reference_matrix)
-    candidate_matrix = np.asarray(candidate_matrix)
+    reference_matrix = _matrix_for_comparison(reference_matrix)
+    candidate_matrix = _matrix_for_comparison(candidate_matrix)
     metrics = finite_array_metrics(reference_matrix, candidate_matrix)
     if reference_matrix.shape == candidate_matrix.shape:
         finite = np.isfinite(reference_matrix) & np.isfinite(candidate_matrix)
@@ -523,6 +1001,8 @@ def matrix_metrics(reference_matrix, candidate_matrix):
 
 
 def show_matrix_comparison(reference_matrix, candidate_matrix, title=""):
+    reference_matrix = _matrix_for_comparison(reference_matrix)
+    candidate_matrix = _matrix_for_comparison(candidate_matrix)
     if np.asarray(reference_matrix).shape != np.asarray(candidate_matrix).shape:
         print(
             "Cannot plot matrix comparison for shape mismatch: "
@@ -661,7 +1141,7 @@ def show_registration_qc_comparison(
 def _contrast_adjust_projection(image):
     from uchrom.im.reg.register_2d import _image_adjust
 
-    image = exposure.rescale_intensity(np.asarray(image), out_range=(0, 1))
+    image = exposure.rescale_intensity(np.asarray(_as_array(image)), out_range=(0, 1))
     image, _, _, _, _ = _image_adjust(
         image,
         lower_threshold=0.5,

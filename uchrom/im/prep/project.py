@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from skimage import io
 
-from uchrom.im._base import ensure_2d_array, ensure_3d_array
+from uchrom.im._base import Image2D, Image3D, ensure_2d_array, ensure_3d_array
 
 
 VALID_TIFF_SUFFIXES = (".tif", ".tiff")
@@ -122,6 +122,60 @@ def project(stack, method="mip", zmin=None, zmax=None):
     `z_project` remain available for compatibility and explicit I/O.
     """
     return z_project_array(stack, method=method, zmin=zmin, zmax=zmax)
+
+
+def _image3d_payload(image, default_name, default_meta):
+    if isinstance(image, Image3D):
+        return image.data, image.name or default_name, dict(image.meta)
+    return ensure_3d_array(image, source=default_name), default_name, dict(default_meta)
+
+
+def project_rounds(rounds, methods=None, z_ranges=None):
+    methods = {} if methods is None else methods
+    z_ranges = {} if z_ranges is None else z_ranges
+    projected = {}
+
+    for round_name, round_spec in rounds.items():
+        round_meta = dict(round_spec.get("meta", {}))
+        round_methods = methods.get(round_name, {})
+        round_z_ranges = z_ranges.get(round_name, {})
+
+        fiducial_data, fiducial_name, fiducial_meta = _image3d_payload(
+            round_spec["fiducial"],
+            default_name=f"{round_name}_fiducial",
+            default_meta={**round_meta, "round": round_name, "role": "fiducial"},
+        )
+        fid_method = round_methods.get("fiducial", "mip")
+        fid_zmin, fid_zmax = round_z_ranges.get("fiducial", (None, None))
+        projected_images = {}
+
+        for image_name, image in round_spec.get("images", {}).items():
+            image_data, image_label, image_meta = _image3d_payload(
+                image,
+                default_name=f"{round_name}_{image_name}",
+                default_meta={**round_meta, "round": round_name, "role": image_name},
+            )
+            image_method = round_methods.get(image_name, "mip")
+            image_zmin, image_zmax = round_z_ranges.get(image_name, (None, None))
+            projected_images[image_name] = Image2D(
+                project(image_data, method=image_method, zmin=image_zmin, zmax=image_zmax),
+                name=f"{image_label}_2d",
+                path=None,
+                meta=image_meta,
+            )
+
+        projected[round_name] = {
+            "fiducial": Image2D(
+                project(fiducial_data, method=fid_method, zmin=fid_zmin, zmax=fid_zmax),
+                name=f"{fiducial_name}_2d",
+                path=None,
+                meta=fiducial_meta,
+            ),
+            "images": projected_images,
+            "meta": round_meta,
+        }
+
+    return projected
 
 
 def save_projected_array(array_2d, out_dir, out_name):
@@ -249,6 +303,7 @@ def z_project_dir(in_dir, method="mip", zmin=None, zmax=None, out_dir=None):
 
 __all__ = [
     "project",
+    "project_rounds",
     "z_project_array",
     "save_projected_array",
     "z_project",
