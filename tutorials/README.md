@@ -20,6 +20,7 @@ Grouped by the U-Chrom module each tutorial targets:
 |----------|-------|
 | `reconstruction.ipynb` | 3D reconstruction from Hi-C |
 | `gem_fish_reconstruction.ipynb` | Joint Hi-C + FISH reconstruction (GEM-FISH) |
+| `benchmark.ipynb` | Benchmarking MDS reconstruction (speed & quality) |
 
 ### Imaging / tracing (`uchrom.im`)
 
