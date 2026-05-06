@@ -67,6 +67,7 @@ tutorials/import_fofct
 :maxdepth: 1
 
 tutorials/reconstruction
+tutorials/gem_fish_reconstruction
 ```
 
 ```{toctree}

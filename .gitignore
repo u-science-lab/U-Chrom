@@ -29,6 +29,7 @@ example-data/DNAseqFISH+.zip
 example-data/DNAseqFISH+/
 example-data/fofct_core.csv
 example-data/with_loops.h5cd
+example-data/IMR90_chr21-18-20Mb.csv
 # Docs build
 docs/build/
 .ipynb_checkpoints/

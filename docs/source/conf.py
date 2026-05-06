@@ -75,8 +75,11 @@ intersphinx_mapping = {
     "anndata": ("https://anndata.readthedocs.io/en/stable", None),
 }
 
-# Render notebooks as-is (no execution — outputs are empty by design)
-nb_execution_mode = "off"
+# Execute notebooks during the Sphinx build and cache results so
+# re-builds are fast.  The cache lives in docs/source/.jupyter_cache/.
+nb_execution_mode = "cache"
+nb_execution_timeout = 600
+nb_execution_raise_on_error = True
 
 # ---------------------------------------------------------------------
 # HTML output

@@ -2,6 +2,7 @@ from ._io import (
     read_pairs, load_cool, load_hic, load_hic_inter, load_hic_genome,
     read_particles, save_particles, read_3dg,
     open_file, export_pdb_coords, particles_to_pdb,
+    read_bintu_tracing,
 )
 from .particles import (
     create_particles_from_pairs, create_contacts_from_pairs,

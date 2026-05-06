@@ -100,6 +100,39 @@ ChromData
 - `cd.write('data.h5cd')` / `ChromData.read('data.h5cd')` — HDF5 roundtrip
 - `cd.to_dataframe()` — export as flat DataFrame
 
+## Validation discipline — always run on real data
+
+When porting or implementing an algorithm (new method, new module,
+re-implementation of a paper):
+
+- **Synthetic tests validate correctness; real data validates the
+  port**.  Both are required.  A PR that only runs on synthetic
+  data is not done.
+- **If a paper names benchmark datasets, get those exact datasets**.
+  Reproducing the paper's setup is the bar — not "something similar".
+- **If real data isn't trivially downloadable, solve that, don't
+  sidestep it**.  Options in order of preference:
+  1. Direct public URL (Zenodo / 4DN open S3 / GitHub raw).
+  2. Authenticated portal with a documented procedure.
+  3. Pre-trim / extract a small slice on disk once, host it somewhere
+     stable, document the recipe.
+  4. **Only if all else fails**, use synthetic as a *supplement* to
+     real data — never as a replacement.  Clearly label what was and
+     wasn't validated.
+- **Never fabricate inputs to make a pipeline runnable** (e.g.
+  synthesising Hi-C from FISH to "demo" GEM-FISH).  If a tutorial
+  can't run on real data end-to-end within reasonable time/size,
+  the tutorial is wrong — fix the data pipeline or narrow the scope,
+  don't swap in a fake.
+- **Do not pass off "it compiled / the tests passed" as validation**
+  for a reconstruction / alignment / calling algorithm.  Always
+  report the real-data metric (distance-matrix correlation,
+  trace purity, ploidy recall, etc.) in the commit message / PR
+  body.  If the number is disappointing, say so.
+- The example-data catalog rule above is the mechanism — every
+  dataset used for validation MUST be documented in
+  `example-data/README.md` in the same PR.
+
 ## Example data
 
 All datasets consumed by tutorials and benchmarks live in
@@ -124,7 +157,17 @@ All datasets consumed by tutorials and benchmarks live in
 
 ## Technical Notes
 
-- **GPU frameworks**: Taichi (sc reconstruction), PyTorch (bulk MDS). They coexist but don't interact.
+- **GPU frameworks**: Taichi and PyTorch coexist but don't interact.
+  - **MD simulations / tight inner loops with many cheap iterations → Taichi**
+    (e.g. `recon.sc.nucdyn` — molecular-dynamics style integration over
+    millions of timesteps where per-iteration launch overhead matters).
+  - **Gradient-descent optimisation on a structured multi-term loss →
+    PyTorch** (e.g. `recon.bulk.mds`, `recon.fish.gem_fish` — hundreds to
+    thousands of iterations, each one doing dense matrix-level work; the
+    autodiff graph, standard optimisers (Adam / L-BFGS), and easy batch
+    dim for ensemble models outweigh Taichi's per-iter speed).
+  - Legacy: `recon.sc.gem` is Taichi-based.  If it ever needs ensembles
+    or more complex loss terms, consider migrating to PyTorch.
 - **Python package name**: `uchrom` (import name), `u-chrom` (pip name)
 - **`uchrom/io/` naming**: The internal file is `_io.py` to avoid shadowing Python's stdlib `io` module. Use `gzip.open(path, mode + "t")` instead of `io.TextIOWrapper`.
 - **CLI entry points**: All via `python -m` (e.g., `python -m uchrom.recon.sc.nucdyn`, `python -m uchrom.browser`)

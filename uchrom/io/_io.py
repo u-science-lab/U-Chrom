@@ -504,6 +504,75 @@ def export_pdb_coords(file_path, particles, scale=1.0, extended=True):
     file_obj.close()
 
 
+def read_bintu_tracing(
+    path,
+    chrom: str,
+    start_bp: int,
+    resolution_bp: int = 30_000,
+    skip_header_line: bool = True,
+    cell_id_per_trace: bool = True,
+):
+    """Read a Bintu 2018-style chromatin-tracing CSV into a ChromData.
+
+    Bintu et al. 2018 (*Science* 362, eaau1783) distribute their FISH
+    imaging as simple CSVs with columns
+    ``Chromosome index, Segment index, Z, X, Y`` (coordinates in nm).
+    Each ``Chromosome index`` is one imaged chromatin fiber in one cell
+    (they do not distinguish multiple alleles per cell), and segments
+    are numbered 1..N along the genomic region.
+
+    Parameters
+    ----------
+    path : str
+        Path to the CSV (e.g. ``IMR90_chr21-18-20Mb.csv``).
+    chrom : str
+        Chromosome name for the output (e.g. ``'chr21'``).
+    start_bp : int
+        Genomic start of segment 1 (from the dataset's README — for
+        ``IMR90_chr21-18-20Mb`` this is ``18_627_714`` in hg38).
+    resolution_bp : int
+        Genomic size of each segment (30 kb in Bintu 2018).
+    skip_header_line : bool
+        If True, skip the first descriptive line before the CSV header.
+    cell_id_per_trace : bool
+        If True, assign each trace to its own ``cell_id`` (one trace
+        per cell — matches how Bintu 2018 published the data).
+
+    Returns
+    -------
+    ChromData
+    """
+    import pandas as pd
+    import numpy as np
+    from uchrom.core import ChromData
+
+    raw = pd.read_csv(path, skiprows=1 if skip_header_line else 0)
+    raw = raw.dropna(subset=['X', 'Y', 'Z'])
+    raw = raw.rename(columns={
+        'Chromosome index': 'trace_id',
+        'Segment index': 'segment',
+        'X': 'x', 'Y': 'y', 'Z': 'z',
+    })
+    raw['trace_id'] = raw['trace_id'].astype(int)
+    raw['segment'] = raw['segment'].astype(int)
+    raw['chrom'] = chrom
+    raw['start'] = (raw['segment'] - 1) * resolution_bp + start_bp
+    raw['end'] = raw['start'] + resolution_bp
+    if cell_id_per_trace:
+        raw['cell_id'] = raw['trace_id'].astype(str)
+
+    coords = raw[['x', 'y', 'z']].to_numpy(dtype=np.float64)
+    spots_cols = ['chrom', 'start', 'end', 'trace_id']
+    if 'cell_id' in raw.columns:
+        spots_cols.append('cell_id')
+    spots = raw[spots_cols].reset_index(drop=True)
+    return ChromData(
+        coords=coords, spots=spots,
+        uns={'xyz_unit': 'nm', 'genome_assembly': 'hg38',
+             'source': 'Bintu 2018 (Science 362, eaau1783)'},
+    )
+
+
 def particles_to_pdb(path_particles, path_pdb, split_by_chrom=False):
     df = read_particles(path_particles)
     if not split_by_chrom:

@@ -11,8 +11,10 @@ auto-downloaded by the tutorials on first run into this directory.
 | ------------------------------------- | ------- | --------------- | ------------- | ----------------------------------------------------------------------- |
 | `cell1.pairs`                         | 4.7 MB  | yes             | —             | `reconstruction.ipynb`, root README CLI example                         |
 | `cell2.pairs.gz`                      | 5.4 MB  | yes             | —             | (available for experimentation; bulkier variant of `cell1.pairs`)       |
+| `IMR90_chr21_30kb.cool`               | 280 KB  | yes             | —             | `gem_fish_reconstruction` tutorial (Hi-C side)                          |
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
+| `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial                                     |
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
 | `with_loops.h5cd`                     | 24 MB   | no              | generated     | output of `loop_calling.ipynb` (intermediate cache, safe to delete)     |
 | `fofct_core.csv`                      | ~6 MB   | no              | generated     | synthetic offline fallback for tutorials 4/5/6/7                        |
@@ -41,6 +43,43 @@ they're either generated or downloaded on demand.
 - **Source**: same Stevens 2017 dataset, a different cell.
 - **Used by**: not wired into any tutorial yet — kept for users who want
   to experiment with a larger, header-carrying pairs file.
+
+### `IMR90_chr21_30kb.cool` — Rao 2014 IMR90 chr21 at 30 kb (0.3 MB)
+
+- **Format**: single-resolution cooler.  1 557 bins × 30 kb covering
+  chr21 (hg38).
+- **Content**: IMR90 in situ Hi-C pair counts from Rao et al. 2014,
+  aggregated from the native 5 kb to 30 kb to match the Bintu 2018
+  chromatin-tracing resolution.
+- **Source**: 4DN accession [4DNFI4QQPDMR](https://data.4dnucleome.org/4DNFI4QQPDMR/)
+  (the full 810 MB IMR90 `.mcool`; we extract chr21 at 30 kb into this
+  small `.cool` for redistribution).
+- **How it was derived**:
+  ```python
+  from cooler import Cooler; import cooler, numpy as np, pandas as pd
+  c5 = Cooler('4DNFI4QQPDMR.mcool::/resolutions/5000')
+  m = c5.matrix(balance=False, as_pixels=False).fetch('chr21')
+  # aggregate 5 kb × 6 → 30 kb by summation
+  f = 6; n5 = m.shape[0]; n30 = (n5 + f - 1) // f
+  agg = np.zeros((n30, n30))
+  for i in range(n30):
+      for j in range(n30):
+          agg[i,j] = m[i*f:(i+1)*f, j*f:(j+1)*f].sum()
+  bins = pd.DataFrame({
+      'chrom': ['chr21']*n30,
+      'start': np.arange(n30)*30_000,
+      'end':   np.minimum((np.arange(n30)+1)*30_000, c5.chromsizes['chr21']),
+  })
+  iu = np.triu_indices(n30, k=0)
+  pixels = pd.DataFrame({'bin1_id': iu[0], 'bin2_id': iu[1],
+                          'count': agg[iu].astype(np.int64)})
+  pixels = pixels[pixels['count'] > 0]
+  cooler.create_cooler('IMR90_chr21_30kb.cool', bins, pixels, assembly='hg38')
+  # Balance with ICE so reconstruct_gem_fish can pull balanced counts:
+  # python -m cooler balance IMR90_chr21_30kb.cool
+  ```
+- **Used by**: `gem_fish_reconstruction.ipynb` — paired with the Bintu
+  2018 FISH CSV for the paper-faithful Part 2 run.
 
 ## Large datasets — auto-downloaded on first run
 
@@ -72,6 +111,28 @@ using.
 - **Used by** (all use the `find_fofct()` helper):
   `loop_calling.ipynb`, `tad_calling.ipynb`, `compartment.ipynb`,
   `fishnet_domains.ipynb`.
+
+### `IMR90_chr21-18-20Mb.csv` — Bintu 2018 IMR90 chr21:18.6–20.6 Mb chromatin tracing (2 MB)
+
+- **Format**: CSV with header line then columns
+  ``Chromosome index, Segment index, Z, X, Y``.  One row per detected
+  segment per imaged chromosome.  Coordinates in nanometres.  Segment
+  spacing is 30 kb.
+- **Content**: 1 278 imaged chromosomes × 66 segments in IMR90 cells,
+  covering chr21:18,627,714–20,577,518 (hg38).
+- **Source**: Bintu et al. 2018, *Science* 362, eaau1783, "Super-
+  resolution chromatin tracing reveals domains and cooperative
+  interactions in single cells".  The paper is a higher-resolution
+  follow-up to Wang et al. 2016 (*Science* 353:598) which Abbas et al.
+  2019 (GEM-FISH) originally used; Bintu 2018 data is directly
+  accessible from the authors' GitHub repository.
+- **Download URL**:
+  ``https://raw.githubusercontent.com/BogdanBintu/ChromatinImaging/master/Data/IMR90_chr21-18-20Mb.csv``
+- **Used by**: ``gem_fish_reconstruction.ipynb`` (part 2 — real FISH
+  data).  The tutorial synthesises a matching Hi-C from the FISH
+  population-mean so it runs offline; to reproduce the paper's exact
+  setup, substitute the Rao 2014 IMR90 ``.mcool`` from 4DN at 30 kb
+  resolution.
 
 ### `GSE63525_GM12878_insitu_primary+replicate_combined_30.hic` — GM12878 in-situ combined Hi-C (~40 GB)
 
