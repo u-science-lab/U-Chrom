@@ -556,14 +556,10 @@ print(
       .nunique().sort_values(ascending=False).head(10)
 )"""),
 
-    md("## Call loops on a single chromosome\n\nDefault parameters match ArcFISH (`fdr_cutoff=0.1`, `pval_cutoff=1e-5`, `gap=50 kb`, `inner_cut=25 kb`, `outer_cut=50 kb`)."),
+    md("## Call loops on a single chromosome\n\nWe pick chr2, which has a well-characterised loop in this dataset.  Default parameters match ArcFISH (`fdr_cutoff=0.1`, `pval_cutoff=1e-5`, `gap=50 kb`, `inner_cut=25 kb`, `outer_cut=50 kb`)."),
 
     code("""\
-# Pick a chromosome with enough traces
-chrom = (
-    cd.spots.groupby('chrom', observed=True)['trace_id']
-      .nunique().idxmax()
-)
+chrom = 'chr2'
 print('calling loops on', chrom)
 
 loops = call_loops_axiswise_f(
@@ -616,17 +612,19 @@ rg = radius_of_gyration(df, chrom=chrom)
 fig = plot_rg_histogram(rg, title=f'Rg distribution ({len(rg)} traces)')
 plt.show()"""),
 
-    md("## Tuning thresholds\n\nAll parameters live on `LoopCallerParams`:"),
+    md("## Tuning thresholds\n\nAll parameters live on `LoopCallerParams`.  Relaxing thresholds recovers weaker candidates; tightening removes marginal ones:"),
 
     code("""\
-params = LoopCallerParams(
-    fdr_cutoff=0.05,    # stricter FDR
-    pval_cutoff=1e-6,   # stricter p-value
-    gap=25_000,         # tighter cluster gap
-    k_sigma=3.0,        # aggressive outlier filter
+params_relaxed = LoopCallerParams(
+    fdr_cutoff=0.2,      # more permissive FDR
+    pval_cutoff=1e-3,    # more permissive raw p-value
 )
-loops_strict = call_loops_axiswise_f(cd, chrom=chrom, params=params, device='auto', store=False)
-print(f'default: {len(loops)} loops  |  strict: {len(loops_strict)} loops')"""),
+loops_relaxed = call_loops_axiswise_f(cd, chrom=chrom, params=params_relaxed,
+                                      device='auto', store=False)
+print(f'default: {len(loops)} loops  |  relaxed: {len(loops_relaxed)} loops')
+if len(loops_relaxed) > len(loops):
+    print('\\nExtra candidates at relaxed thresholds:')
+    print(loops_relaxed[~loops_relaxed['summit_i'].isin(loops['summit_i'])])"""),
 
     md("## Whole-genome loop calling\n\nLoop over chromosomes and concatenate.  Each call is independent so trivial to parallelise if needed."),
 
@@ -642,9 +640,10 @@ loops_genome = pd.concat(all_loops, ignore_index=True)
 print(f'Total called loops genome-wide: {len(loops_genome)}')
 loops_genome.sort_values('pval').head(10)"""),
 
-    md("## Persist results into the ChromData\n\nThe single-chromosome call already wrote to `cd.results['loops']`.  The result round-trips through `.h5cd`."),
+    md("## Persist results into the ChromData\n\nStore the genome-wide loop calls in `cd.results['loops']` and round-trip through `.h5cd`."),
 
     code("""\
+cd.results['loops'] = loops_genome
 out = Path(FOFCT).parent / 'with_loops.h5cd'
 cd.write(str(out))
 
