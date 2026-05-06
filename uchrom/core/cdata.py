@@ -447,6 +447,136 @@ class ChromData:
         return _pdist_matrix(self.coords)
 
     # ------------------------------------------------------------------
+    # AnnData integration
+    # ------------------------------------------------------------------
+
+    def link_anndata(
+        self,
+        adata,
+        *,
+        cell_id_col: Optional[str] = None,
+        copy_obs: bool = True,
+        copy_obsm: bool = True,
+    ) -> int:
+        """Import cell-level metadata from an AnnData into this ChromData.
+
+        Matches cells by ``cell_id``: each unique value in
+        ``spots['cell_id']`` is looked up in ``adata.obs`` (by index, or
+        by the column *cell_id_col* if given).  Matched cells get their
+        ``adata.obs`` columns copied into ``self.cells`` and their
+        ``adata.obsm`` arrays copied into ``self.cellm``.
+
+        Parameters
+        ----------
+        adata : anndata.AnnData
+            The single-cell dataset to link (e.g. scRNA-seq).
+        cell_id_col : str, optional
+            Column in ``adata.obs`` that holds cell identifiers matching
+            ``spots['cell_id']``.  If ``None``, ``adata.obs.index`` is
+            used as the key.
+        copy_obs : bool
+            If True (default), copy ``adata.obs`` columns into
+            ``self.cells``.
+        copy_obsm : bool
+            If True (default), copy ``adata.obsm`` arrays into
+            ``self.cellm``.
+
+        Returns
+        -------
+        int
+            Number of cells matched.
+
+        Raises
+        ------
+        KeyError
+            If ``spots`` has no ``cell_id`` column.
+        """
+        if "cell_id" not in self.spots.columns:
+            raise KeyError(
+                "spots has no 'cell_id' column — cannot match cells. "
+                "Add cell_id to spots before calling link_anndata()."
+            )
+
+        cd_cell_ids = self.spots["cell_id"].unique()
+
+        if cell_id_col is not None:
+            adata_ids = adata.obs[cell_id_col].values
+            adata_index = pd.Index(adata_ids)
+        else:
+            adata_index = adata.obs.index
+
+        # Cast both sides to string for robust matching
+        cd_set = set(str(c) for c in cd_cell_ids)
+        adata_str = pd.Index([str(x) for x in adata_index])
+
+        matched = sorted(cd_set & set(adata_str))
+        if not matched:
+            import warnings
+            warnings.warn(
+                "No cell_id overlap between ChromData and AnnData. "
+                "Check that cell_id values match.",
+                stacklevel=2,
+            )
+            return 0
+
+        adata_mask = adata_str.isin(matched)
+        adata_matched = adata[adata_mask]
+
+        # Build a cells DataFrame keyed by the matched IDs
+        if copy_obs:
+            obs = adata_matched.obs.copy()
+            if cell_id_col is not None:
+                obs = obs.set_index(cell_id_col, drop=False)
+            obs.index = [str(x) for x in obs.index]
+            obs.index.name = "cell_id"
+            self.cells = obs
+
+        if copy_obsm:
+            # Map adata row indices to our cells order
+            order = [list(adata_str[adata_mask]).index(c) for c in matched]
+            for key in adata_matched.obsm:
+                arr = np.asarray(adata_matched.obsm[key])
+                self.cellm[key] = arr[order] if order != list(range(len(order))) else arr.copy()
+
+        return len(matched)
+
+    def to_anndata(self):
+        """Export cell-level data as an AnnData object.
+
+        Creates an AnnData where each observation is a cell,
+        ``obs`` = ``self.cells``, ``obsm`` = ``self.cellm``.
+        The ``X`` matrix is left empty (zeros) since ChromData
+        has no cell × gene expression matrix.
+
+        Returns
+        -------
+        anndata.AnnData
+
+        Raises
+        ------
+        ImportError
+            If anndata is not installed.
+        """
+        import anndata as ad
+
+        n = len(self.cells) if len(self.cells) > 0 else self.n_cells
+        if n == 0:
+            raise ValueError(
+                "No cell-level data to export. "
+                "Use link_anndata() first or populate cd.cells."
+            )
+
+        obs = self.cells.copy()
+        obsm = {k: v.copy() for k, v in self.cellm.items()}
+
+        adata = ad.AnnData(
+            X=np.zeros((len(obs), 0)),
+            obs=obs,
+            obsm=obsm,
+        )
+        return adata
+
+    # ------------------------------------------------------------------
     # I/O
     # ------------------------------------------------------------------
 
