@@ -12,6 +12,8 @@ auto-downloaded by the tutorials on first run into this directory.
 | `cell1.pairs`                         | 4.7 MB  | yes             | —             | `reconstruction.ipynb`, root README CLI example                         |
 | `cell2.pairs.gz`                      | 5.4 MB  | yes             | —             | (available for experimentation; bulkier variant of `cell1.pairs`)       |
 | `IMR90_chr21_30kb.cool`               | 280 KB  | yes             | —             | `gem_fish_reconstruction` tutorial (Hi-C side)                          |
+| `takei2025_cerebellum_fixture/`       | ~750 KB | yes             | —             | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture)    |
+| Takei 2025 full Zenodo dump           | ~8 GB   | no              | **manual**    | `seqfish_multiomics_cerebellum` tutorial (real-data run)                |
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
 | `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial                                     |
@@ -43,6 +45,56 @@ they're either generated or downloaded on demand.
 - **Source**: same Stevens 2017 dataset, a different cell.
 - **Used by**: not wired into any tutorial yet — kept for users who want
   to experiment with a larger, header-carrying pairs file.
+
+### `takei2025_cerebellum_fixture/` — Takei 2025 cerebellum DNA seqFISH+ slice (~750 KB)
+
+- **Format**: three CSVs that together exercise the
+  `read_seqfish_multiomics` loader end-to-end —
+  - `dna_spots.csv` — 1 070 rows from `cerebellum_rep1_pos0.csv`
+    (rep 1, FOV 0, 6 cells, chr19 only), all 76 source columns preserved
+    verbatim (59 z-scores + 3 DBSCAN allele variants + μm coordinates +
+    `dot_int / n_rad_score / n_per_dist(um)`).
+  - `locus_annotation.csv` — the 838 chr19 rows from
+    `LC1-100k-09022022-mm10-25kb-meta.csv` trimmed to
+    `name/chrom/start/end`.
+  - `clustering.csv` — the 6 matching rows from
+    `100k-002-001-cerebellum_mRNA_cluster_nuc_vol_filtered.csv`.
+  - `derive_fixture.py` — the slicing script for reproducibility.  Not
+    executed in CI.
+  - `verify.py` — five-layer correctness check (HDF5 layout +
+    `ChromData` consistency + value-level row reconciliation against
+    the source CSVs + semantic checks + `.h5cd` round-trip).  Run
+    `python example-data/takei2025_cerebellum_fixture/verify.py` to
+    re-validate; pass `--skip-value-recon` plus `--spot-glob/--locus/
+    --clustering` paths to validate the full Zenodo data instead.
+- **Cell-type coverage**: the 6 cells span leiden clusters
+  {0, 2, 3, 4, 6, 7} → cell types Granule, Bergmann, *Other*, MLI1,
+  Purkinje, MLI2+PLI (one cell per type).
+- **Source**: Takei et al. 2025, *Nature* "Spatial multi-omics reveals
+  cell-type-specific nuclear compartments"
+  (doi:10.1038/s41586-025-08838-x).  Raw data: Zenodo record
+  [7693825](https://zenodo.org/records/7693825).  Locus annotation +
+  clustering CSVs: CaiGroup/dna-seqfish-plus-multi-omics GitHub repo.
+- **Used by**: `seqfish_multiomics_cerebellum.ipynb` (loader walk-through
+  + `.h5cd` round-trip).
+- **Real-data run**: the full distribution (rep 1 + rep 2 tarballs,
+  ~8 GB compressed; tens of GB uncompressed; tens of millions of spots)
+  is *not* auto-fetched.  Manual download:
+  ```bash
+  wget https://zenodo.org/records/7693825/files/cerebellum_rep1.tar.gz
+  wget https://zenodo.org/records/7693825/files/cerebellum_rep2.tar.gz
+  git clone https://github.com/CaiGroup/dna-seqfish-plus-multi-omics.git
+  ```
+  Then point the loader at the extracted CSV(s):
+  ```python
+  cd = ChromData.from_seqfish_multiomics(
+      spot_glob='cerebellum_rep*/cerebellum_rep*_pos*.csv',
+      locus_annotation='dna-seqfish-plus-multi-omics/data/annotation/'
+                       'LC1-100k-09022022-mm10-25kb-meta.csv',
+      cell_clustering='dna-seqfish-plus-multi-omics/data/cerebellum/'
+                      'clustering/100k-002-001-cerebellum_mRNA_cluster_nuc_vol_filtered.csv',
+  )
+  ```
 
 ### `IMR90_chr21_30kb.cool` — Rao 2014 IMR90 chr21 at 30 kb (0.3 MB)
 
