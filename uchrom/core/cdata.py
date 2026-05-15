@@ -185,7 +185,12 @@ _CATEGORICAL_COLUMNS = ("chrom", "trace_id", "cell_id")
 #   MINOR bump  — additive/backwards-compatible change (e.g. a new optional
 #                 group or attribute).  Older readers should ignore unknown
 #                 fields and keep working.
-FORMAT_VERSION = "1.0"
+#
+# 1.1: per-DataFrame ``_index`` dataset + ``_index_name`` attr.  Files with
+#      a non-trivial DataFrame index (e.g. ``cells`` keyed by ``cell_id``)
+#      previously lost that index on round-trip; 1.1 preserves it.  1.0
+#      readers ignore the extra dataset and recover the old behaviour.
+FORMAT_VERSION = "1.1"
 _SUPPORTED_MAJOR = 1
 
 
@@ -694,6 +699,16 @@ class ChromData:
 
         return cls(coords, spots, uns=uns, **kwargs)
 
+    @classmethod
+    def from_seqfish_multiomics(cls, spot_glob, **kwargs) -> "ChromData":
+        """Load Takei 2025 DNA seqFISH+ cerebellum data.
+
+        Thin shim around :func:`uchrom.io.seqfish_multiomics.read_seqfish_multiomics`.
+        See that function for the full parameter list.
+        """
+        from uchrom.io.seqfish_multiomics import read_seqfish_multiomics
+        return read_seqfish_multiomics(spot_glob, **kwargs)
+
     def to_dataframe(self) -> pd.DataFrame:
         """Export as a flat DataFrame with coords + spots columns."""
         df = self.spots.copy()
@@ -817,7 +832,13 @@ def _read_v1(cls, f) -> "ChromData":
 # ======================================================================
 
 def _write_dataframe(f, name: str, df: Optional[pd.DataFrame]):
-    """Write a DataFrame to an HDF5 group, one dataset per column."""
+    """Write a DataFrame to an HDF5 group, one dataset per column.
+
+    Format 1.1: when the index is not a trivial ``RangeIndex`` or has a
+    name, it is written to a reserved ``_index`` dataset with the name
+    stored in ``_index_name``.  Old (1.0) readers ignore both and
+    reconstruct a default RangeIndex — the historical behaviour.
+    """
     if df is None or len(df) == 0:
         f.create_group(name)
         return
@@ -838,6 +859,23 @@ def _write_dataframe(f, name: str, df: Optional[pd.DataFrame]):
         else:
             grp.create_dataset(col, data=data)
 
+    # Preserve a non-trivial index — see format 1.1 note above.
+    idx = df.index
+    is_trivial_range = (
+        isinstance(idx, pd.RangeIndex)
+        and idx.start == 0
+        and idx.step == 1
+        and idx.name is None
+    )
+    if not is_trivial_range:
+        idx_vals = idx.to_numpy()
+        if idx_vals.dtype == object or idx_vals.dtype.kind in ("U", "S"):
+            data = np.array([str(x) for x in idx_vals]).astype("S")
+        else:
+            data = idx_vals
+        grp.create_dataset("_index", data=data)
+        grp.attrs["_index_name"] = idx.name if idx.name is not None else ""
+
 
 def _read_dataframe(f, name: str) -> pd.DataFrame:
     """Read a DataFrame from an HDF5 group."""
@@ -857,7 +895,18 @@ def _read_dataframe(f, name: str) -> pd.DataFrame:
         data[col] = arr
     if not data:
         return pd.DataFrame()
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    # Format 1.1: restore the index if it was persisted.
+    if "_index" in grp:
+        idx_arr = grp["_index"][:]
+        if idx_arr.dtype.kind == "S":
+            idx_arr = np.array([x.decode("utf-8") for x in idx_arr])
+        name_attr = grp.attrs.get("_index_name", "")
+        if isinstance(name_attr, bytes):
+            name_attr = name_attr.decode("utf-8")
+        idx_name = name_attr or None
+        df.index = pd.Index(idx_arr, name=idx_name)
+    return df
 
 
 def _write_dict_of_arrays(f, name: str, d: dict):

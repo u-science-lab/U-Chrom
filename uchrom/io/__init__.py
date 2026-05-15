@@ -4,6 +4,7 @@ from ._io import (
     open_file, export_pdb_coords, particles_to_pdb,
     read_bintu_tracing,
 )
+from .seqfish_multiomics import read_seqfish_multiomics
 from .particles import (
     create_particles_from_pairs, create_contacts_from_pairs,
     create_particles_from_cool, create_contacts_from_cool,
