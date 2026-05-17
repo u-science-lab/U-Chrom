@@ -63,6 +63,98 @@ Artifact types:
 - "data": Structured analysis results (JSON)
   emit_artifact("data", {"type": "compartment_diff", "regions": [...], "stats": {...}})
 
+## Publication-ready figure generation
+When the user asks to generate a figure for publication (e.g., "适合 Nature 投稿", "for Cell journal"):
+```python
+from uchrom.pl import create_figure, PanelSpec
+
+# Infer parameters from user request:
+# - "Nature" → style="nature", dpi=300
+# - "Cell" → style="cell", dpi=300
+# - "Science" → style="science", dpi=300
+# - "single column" → column_mode="single"
+# - "double column" → column_mode="double"
+
+panels = [
+    PanelSpec(
+        type="structure_3d",  # or "contact_map", "track"
+        data={"projection": "xy"},
+        label="A",
+        title="3D Structure",
+        colormap="RdBu_r",
+    ),
+    PanelSpec(
+        type="contact_map",
+        data={"matrix": None},  # auto-compute
+        label="B",
+        title="Contact Map",
+    ),
+]
+
+fig = create_figure(
+    chromdata=cd,
+    layout="1x2",  # or "2x1", "3x1", etc.
+    panels=panels,
+    style="nature",  # inferred from user request
+    dpi=300,
+)
+
+# Export and send to frontend
+import tempfile
+pdf_path = tempfile.mktemp(suffix=".pdf")
+fig.save(pdf_path)
+preview_base64 = fig.to_base64(dpi=150)
+
+emit_artifact("figure", {
+    "path": pdf_path,
+    "preview": preview_base64,
+    "format": "pdf",
+    "params": fig.metadata
+})
+emit_artifact("text_block", {"content": f"Generated figure with {len(panels)} panels"})
+```
+
+Example — user: "生成 Figure 2: 三个细胞的 A/B compartment 对比，适合 Nature 投稿"
+```python
+from uchrom.pl import create_figure, PanelSpec
+
+cells = ["cell_001", "cell_002", "cell_003"]
+panels = []
+
+for i, cell_id in enumerate(cells):
+    cd_cell = cd.get_cell(cell_id)
+    # Assume compartment data exists in cd_cell
+    panels.append(PanelSpec(
+        type="track",
+        data={"track_type": "signal", "positions": [], "values": []},  # placeholder
+        label=chr(65 + i),  # A, B, C
+        title=f"Cell {cell_id}",
+    ))
+
+fig = create_figure(
+    chromdata=cd,
+    layout="3x1",
+    panels=panels,
+    style="nature",
+    dpi=300,
+)
+
+import tempfile
+pdf_path = tempfile.mktemp(suffix=".pdf")
+fig.save(pdf_path)
+preview_base64 = fig.to_base64(dpi=150)
+
+emit_artifact("figure", {
+    "path": pdf_path,
+    "preview": preview_base64,
+    "format": "pdf",
+    "params": fig.metadata
+})
+```
+
+- "data": Structured analysis results (JSON)
+  emit_artifact("data", {"type": "compartment_diff", "regions": [...], "stats": {...}})
+
 Example — highlight significant regions:
 ```python
 result = uchrom.strc.comp.detect_compartments(cd, chrom="chr15")

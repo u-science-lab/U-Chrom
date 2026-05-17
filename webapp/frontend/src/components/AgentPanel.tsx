@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { ws } from '../ws'
 import { useAppStore, PanelType } from '../store'
+import FigurePreview from './FigurePreview'
 
-interface Message { role: 'user' | 'agent'; text: string; isError?: boolean }
+interface Message {
+  role: 'user' | 'agent'
+  text: string
+  isError?: boolean
+  figure?: { preview: string; path: string; format: string; params?: any }
+}
 
 export default function AgentPanel() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -75,9 +81,15 @@ export default function AgentPanel() {
         }])
       } else if (artifact_type === 'figure') {
         // Handle figure export
-        console.log('Figure artifact:', payload)
         setMessages(prev => [...prev, {
-          role: 'agent', text: `Generated figure: ${payload?.path ?? 'figure.pdf'}`
+          role: 'agent',
+          text: `Generated figure: ${payload?.path?.split('/').pop() ?? 'figure.pdf'}`,
+          figure: {
+            preview: payload?.preview ?? '',
+            path: payload?.path ?? '',
+            format: payload?.format ?? 'pdf',
+            params: payload?.params,
+          }
         }])
       } else if (artifact_type === 'data') {
         // Handle structured data
@@ -139,13 +151,22 @@ export default function AgentPanel() {
                     color: '#cdd6f4', fontSize: 13, fontWeight: 600 }}>Agent</div>
       <div style={{ flex: 1, overflowY: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {messages.map((m, i) => (
-          <div key={i} style={{
-            alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-            background: m.role === 'user' ? '#45475a' : m.isError ? '#3d1a1a' : '#313244',
-            color: m.isError ? '#f38ba8' : '#cdd6f4',
-            borderRadius: 8, padding: '6px 10px',
-            maxWidth: '90%', fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          }}>{m.text}</div>
+          <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '90%' }}>
+            <div style={{
+              background: m.role === 'user' ? '#45475a' : m.isError ? '#3d1a1a' : '#313244',
+              color: m.isError ? '#f38ba8' : '#cdd6f4',
+              borderRadius: 8, padding: '6px 10px',
+              fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            }}>{m.text}</div>
+            {m.figure && (
+              <FigurePreview
+                preview={m.figure.preview}
+                path={m.figure.path}
+                format={m.figure.format}
+                params={m.figure.params}
+              />
+            )}
+          </div>
         ))}
         <div ref={bottomRef} />
       </div>

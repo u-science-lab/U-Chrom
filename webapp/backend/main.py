@@ -59,3 +59,23 @@ async def upload_file(file: UploadFile = File(...)):
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
     return {"path": dest}
+
+
+@app.get("/api/download")
+async def download_file(path: str):
+    """Download generated figure files."""
+    from fastapi.responses import FileResponse
+
+    # Security: only allow downloading from temp directory
+    if not path.startswith("/tmp/") and not path.startswith(tempfile.gettempdir()):
+        return {"error": "Invalid path"}
+
+    if not os.path.exists(path):
+        return {"error": "File not found"}
+
+    filename = os.path.basename(path)
+    return FileResponse(
+        path,
+        media_type="application/pdf" if path.endswith(".pdf") else "application/octet-stream",
+        filename=filename
+    )
