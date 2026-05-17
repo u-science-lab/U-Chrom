@@ -41,13 +41,14 @@ export default function ContactMap() {
       new URL('../workers/contactMap.worker.ts', import.meta.url),
       { type: 'module' }
     )
-    workerRef.current.onmessage = (e: MessageEvent<{ imageData: ImageData; maxAbs: number }>) => {
-      const { imageData, maxAbs } = e.data
+    workerRef.current.onmessage = (e: MessageEvent<{ pixels: ArrayBuffer; n: number; maxAbs: number }>) => {
+      const { pixels, n, maxAbs } = e.data
       maxAbsRef.current = maxAbs
       const canvas = canvasRef.current
       if (!canvas) return
-      canvas.width = imageData.width
-      canvas.height = imageData.height
+      canvas.width = n
+      canvas.height = n
+      const imageData = new ImageData(new Uint8ClampedArray(pixels), n, n)
       canvas.getContext('2d')!.putImageData(imageData, 0, 0)
     }
     return () => { workerRef.current?.terminate() }

@@ -22,16 +22,15 @@ self.onmessage = (e: MessageEvent<{ matrix: Float32Array; n: number; colormap: '
     if (a > maxAbs) maxAbs = a
   }
 
-  const imageData = new ImageData(n, n)
-  const buf = imageData.data
+  const pixels = new Uint8ClampedArray(n * n * 4)
   for (let i = 0; i < n * n; i++) {
     const t = maxAbs === 0 ? 0.5 : (matrix[i] / maxAbs) * 0.5 + 0.5
     const [r, g, b] = rdbu(t)
-    buf[i * 4] = r
-    buf[i * 4 + 1] = g
-    buf[i * 4 + 2] = b
-    buf[i * 4 + 3] = 255
+    pixels[i * 4] = r
+    pixels[i * 4 + 1] = g
+    pixels[i * 4 + 2] = b
+    pixels[i * 4 + 3] = 255
   }
 
-  postMessage({ imageData, maxAbs }, { transfer: [imageData.data.buffer] })
+  postMessage({ pixels: pixels.buffer, n, maxAbs }, { transfer: [pixels.buffer] })
 }
