@@ -23,6 +23,17 @@ def _cd_or_404():
     return current_session.chromdata
 
 
+def _coerce_cell_id(cd, cell_id: str):
+    """Try str first, then int, to match categorical cell_id dtype."""
+    sub = cd.get_cell(cell_id)
+    if len(sub.spots) == 0:
+        try:
+            sub = cd.get_cell(int(cell_id))
+        except (ValueError, TypeError):
+            pass
+    return sub
+
+
 def _float32_response(arr: np.ndarray) -> Response:
     data = arr.astype(np.float32, copy=False).tobytes()
     return Response(content=data, media_type="application/octet-stream",
@@ -39,7 +50,7 @@ def get_coords_batch(ids: str):
     id_list = [i.strip() for i in ids.split(",") if i.strip()]
     rows = []
     for idx, cell_id in enumerate(id_list):
-        cell = cd.get_cell(cell_id)
+        cell = _coerce_cell_id(cd, cell_id)
         n = cell.coords.shape[0]
         col = np.full((n, 1), idx, dtype=np.float32)
         rows.append(np.hstack([col, cell.coords.astype(np.float32)]))
@@ -55,7 +66,7 @@ def get_coords_batch(ids: str):
 @data_router.get("/api/coords/{cell_id}")
 def get_coords(cell_id: str):
     cd = _cd_or_404()
-    cell = cd.get_cell(cell_id)
+    cell = _coerce_cell_id(cd, cell_id)
     return _float32_response(cell.coords)  # (n_bins, 3)
 
 

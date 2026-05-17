@@ -1,13 +1,15 @@
-import uuid
+import uuid, shutil, tempfile, os
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
 from pydantic import BaseModel
 from typing import Any
 from .session import Session
 from .ws_handler import handle_message
 from .data_api import data_router
 import webapp.backend.data_api as _data_api
+
+UPLOAD_DIR = tempfile.mkdtemp(prefix="uchrom_uploads_")
 
 
 @asynccontextmanager
@@ -48,3 +50,12 @@ class ExportRequest(BaseModel):
 @app.post("/api/export")
 async def export_figure(req: ExportRequest):
     return {"url": "/exports/figure.svg"}
+
+
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    ext = os.path.splitext(file.filename or "")[1] or ".h5cd"
+    dest = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}{ext}")
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return {"path": dest}

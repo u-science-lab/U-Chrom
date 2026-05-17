@@ -16,3 +16,4 @@ class Session:
     viewport: Viewport = field(default_factory=Viewport)
     cell_selection: list = field(default_factory=list)
     pending_artifacts: list[dict] = field(default_factory=list)
+    conversation_history: list[dict] = field(default_factory=list)

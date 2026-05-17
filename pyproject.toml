@@ -44,5 +44,5 @@ webapp = [
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["uchrom*"]
+include = ["uchrom*", "webapp*"]
 exclude = ["example-data*", "tests*"]

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import DeckGL from '@deck.gl/react'
 import { ScatterplotLayer } from '@deck.gl/layers'
 import { OrthographicView } from '@deck.gl/core'
@@ -16,13 +16,19 @@ const PALETTE: [number, number, number][] = [
 
 function colorFor(cellType: string | undefined, typeIndex: Map<string, number>): [number, number, number] {
   if (!cellType) return [108, 112, 134]
-  const i = typeIndex.get(cellType) ?? 0
-  return PALETTE[i % PALETTE.length]
+  return PALETTE[(typeIndex.get(cellType) ?? 0) % PALETTE.length]
 }
 
 export default function CellEmbedding() {
   const [data, setData] = useState<UmapData>({ points: [], cell_types: [] })
+  const [viewState, setViewState] = useState({ target: [0, 0, 0] as [number,number,number], zoom: 1 })
   const { cellSelection, setCellSelection } = useAppStore()
+  const deckRef = useRef<any>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Lasso state
+  const [lasso, setLasso] = useState<{x:number,y:number,w:number,h:number}|null>(null)
+  const dragStart = useRef<{x:number,y:number}|null>(null)
 
   useEffect(() => {
     fetch('/api/umap').then(r => r.json()).then(setData).catch(() => {})
@@ -42,31 +48,78 @@ export default function CellEmbedding() {
     getRadius: 4,
     radiusUnits: 'pixels',
     pickable: true,
-    onClick: ({ object }) => object && setCellSelection({ mode: 'manual', ids: [object.cell_id], label: object.cell_id }),
+    onClick: ({ object }) => {
+      if (object) setCellSelection({ mode: 'manual', ids: [object.cell_id], label: object.cell_id })
+    },
     updateTriggers: { getFillColor: [cellSelection] },
   })
 
+  function onMouseDown(e: React.MouseEvent) {
+    if (e.button !== 0) return
+    const rect = containerRef.current!.getBoundingClientRect()
+    dragStart.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    setLasso(null)
+  }
+
+  function onMouseMove(e: React.MouseEvent) {
+    if (!dragStart.current) return
+    const rect = containerRef.current!.getBoundingClientRect()
+    const cx = e.clientX - rect.left
+    const cy = e.clientY - rect.top
+    const x = Math.min(dragStart.current.x, cx)
+    const y = Math.min(dragStart.current.y, cy)
+    const w = Math.abs(cx - dragStart.current.x)
+    const h = Math.abs(cy - dragStart.current.y)
+    if (w > 4 || h > 4) setLasso({ x, y, w, h })
+  }
+
+  function onMouseUp(e: React.MouseEvent) {
+    if (!dragStart.current || !lasso || !deckRef.current) {
+      dragStart.current = null; setLasso(null); return
+    }
+    // Pick all objects in the lasso rect
+    const picked = deckRef.current.pickObjects({
+      x: lasso.x, y: lasso.y, width: lasso.w, height: lasso.h, layerIds: ['umap']
+    })
+    const ids = picked.map((p: any) => p.object?.cell_id).filter(Boolean)
+    if (ids.length > 0) {
+      setCellSelection({ mode: 'manual', ids, label: `${ids.length} cells selected` })
+    }
+    dragStart.current = null; setLasso(null)
+  }
+
   return (
     <PanelContainer title="Cell Embedding">
-      <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100%',
+                                       cursor: 'crosshair' }}
+        onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp}>
         <DeckGL
+          ref={deckRef}
           views={new OrthographicView({ id: 'ortho' })}
           layers={[layer]}
-          initialViewState={{ target: [0, 0, 0], zoom: 1 }}
-          controller={true}
+          viewState={viewState}
+          onViewStateChange={({ viewState: vs }: any) => setViewState(vs)}
+          controller={!dragStart.current}
           style={{ position: 'absolute', inset: '0' }}
         />
+        {lasso && (
+          <svg style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+                        width: '100%', height: '100%' }}>
+            <rect x={lasso.x} y={lasso.y} width={lasso.w} height={lasso.h}
+              fill="rgba(137,180,250,0.15)" stroke="#89b4fa" strokeWidth={1} strokeDasharray="4 2" />
+          </svg>
+        )}
         {data.cell_types.length > 0 && (
-          <div style={{
-            position: 'absolute', bottom: 8, left: 8, background: 'rgba(24,24,37,0.85)',
-            padding: '6px 8px', borderRadius: 4, fontSize: 11, color: '#cdd6f4',
-            display: 'flex', flexDirection: 'column', gap: 3, pointerEvents: 'none',
-          }}>
+          <div style={{ position: 'absolute', bottom: 8, left: 8,
+                        background: 'rgba(24,24,37,0.85)', padding: '6px 8px',
+                        borderRadius: 4, fontSize: 11, color: '#cdd6f4',
+                        display: 'flex', flexDirection: 'column', gap: 3, pointerEvents: 'none' }}>
             {data.cell_types.map((t, i) => {
               const [r, g, b] = PALETTE[i % PALETTE.length]
               return (
                 <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: 2, background: `rgb(${r},${g},${b})`, flexShrink: 0 }} />
+                  <div style={{ width: 10, height: 10, borderRadius: 2,
+                                background: `rgb(${r},${g},${b})`, flexShrink: 0 }} />
                   <span>{t}</span>
                 </div>
               )
