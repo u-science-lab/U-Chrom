@@ -1,11 +1,9 @@
-import PanelContainer from './PanelContainer'
+import CellEmbedding from './CellEmbedding'
 
 export default function MainCanvas() {
   return (
-    <div style={{ flex: 1 }}>
-      <PanelContainer title="Main Canvas">
-        <div style={{ padding: 8, color: '#6c7086', fontSize: 12 }}>MainCanvas placeholder</div>
-      </PanelContainer>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <CellEmbedding />
     </div>
   )
 }
