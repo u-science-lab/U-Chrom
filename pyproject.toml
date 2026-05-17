@@ -33,6 +33,12 @@ docs = [
     "myst-nb>=1.0",
     "sphinx-copybutton>=0.5",
 ]
+webapp = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "websockets>=12.0",
+    "python-multipart>=0.0.9",
+]
 
 [tool.setuptools]
 include-package-data = true
