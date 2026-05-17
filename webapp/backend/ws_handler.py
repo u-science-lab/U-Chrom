@@ -28,6 +28,12 @@ When the user asks to view a genomic region or navigate:
 When the user asks to select cells by type:
   <action type="select_cells">{"mode":"cell_type","ids":[],"label":"Purkinje"}</action>
 
+When the user asks to highlight specific genomic regions:
+  <action type="highlight_region">{"chrom":"chr15","start":30000000,"end":35000000,"color":"#ff6b6b","label":"TAD boundary"}</action>
+
+When the user asks to change the colormap:
+  <action type="set_colormap">{"scheme":"viridis","property":"compartment"}</action>
+
 ## Analysis via Python code
 When the user asks to run analysis (TAD calling, compartments, embeddings, etc.),
 output a Python code block. The code runs in the backend with these variables available:
@@ -36,18 +42,35 @@ output a Python code block. The code runs in the backend with these variables av
   - `np`, `pd`: numpy, pandas
   - `emit_artifact(type, payload)`: send results to the frontend
 
-Example — add a track plot panel with analysis results:
-```python
-result = uchrom.strc.tad.call(cd, chrom="chr15")
-emit_artifact("add_panel", {"type": "track_plot", "label": "TADs chr15",
-    "data": result.to_dict() if hasattr(result, 'to_dict') else str(result)})
-```
+Artifact types:
+- "text_block": Display text message
+  emit_artifact("text_block", {"content": "Analysis complete", "format": "info|error|success"})
 
-Example — show a summary:
+- "add_panel": Add a new visualization panel
+  emit_artifact("add_panel", {"type": "track_plot", "label": "TADs chr15", "data": {...}})
+
+- "highlight_region": Highlight genomic regions in 3D view
+  emit_artifact("highlight_region", {"regions": [
+    {"chrom": "chr15", "start": 30000000, "end": 35000000, "color": "#ff6b6b", "label": "Region 1"}
+  ]})
+
+- "set_colormap": Change 3D structure coloring
+  emit_artifact("set_colormap", {"scheme": "viridis", "property": "compartment", "range": [0, 1]})
+
+- "figure": Export publication-ready figure
+  emit_artifact("figure", {"path": "figure.pdf", "preview": "base64...", "format": "pdf"})
+
+- "data": Structured analysis results (JSON)
+  emit_artifact("data", {"type": "compartment_diff", "regions": [...], "stats": {...}})
+
+Example — highlight significant regions:
 ```python
-n_cells = len(cd.cells)
-chroms = list(cd.spots['chrom'].unique())
-emit_artifact("text_block", {"content": f"{n_cells} cells, {len(chroms)} chromosomes"})
+result = uchrom.strc.comp.detect_compartments(cd, chrom="chr15")
+significant = result[result['score'] > 0.8]
+regions = [{"chrom": r.chrom, "start": r.start, "end": r.end, "color": "#ff6b6b"}
+           for _, r in significant.iterrows()]
+emit_artifact("highlight_region", {"regions": regions})
+emit_artifact("text_block", {"content": f"Found {len(regions)} significant compartments"})
 ```
 
 Rules:
@@ -195,6 +218,10 @@ async def _run_agent(ws: WebSocket, session: Session, text: str, session_id: str
         elif atype == "select_cells":
             session.cell_selection = payload.get("ids", [])
             await ws.send_json({"type": "agent_cell_selection", "payload": payload})
+        elif atype == "highlight_region":
+            await ws.send_json({"type": "agent_highlight_region", "payload": payload})
+        elif atype == "set_colormap":
+            await ws.send_json({"type": "agent_set_colormap", "payload": payload})
 
     # Execute Python code blocks in subprocess worker
     code_blocks = _extract_code_blocks(full_text)
@@ -226,6 +253,78 @@ async def _run_agent(ws: WebSocket, session: Session, text: str, session_id: str
     if full_response:
         session.conversation_history.append({"role": "user", "content": text})
         session.conversation_history.append({"role": "assistant", "content": full_text})
+
+
+async def _run_agent_multimodal(ws: WebSocket, session: Session, image_base64: str, prompt: str, session_id: str, executor=None):
+    """Run agent with multimodal input (image + text)."""
+    import os
+
+    # Build context
+    ctx = ""
+    if session.chromdata is not None:
+        cd = session.chromdata
+        n_cells = len(cd.cells) if cd.cells is not None else 0
+        chroms = list(cd.spots["chrom"].unique()) if cd.spots is not None else []
+        ctx = (f"\n\nLoaded data: {n_cells} cells, chroms: {[str(c) for c in chroms[:8]]}"
+               f"{'...' if len(chroms) > 8 else ''}")
+        if session.viewport.chrom:
+            ctx += f", current viewport: {session.viewport.chrom}:{session.viewport.start}-{session.viewport.end}"
+
+    # Call Claude API with vision
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": image_base64,
+                        },
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt + ctx,
+                    },
+                ],
+            }
+        ]
+
+        # Stream response
+        full_response = []
+        with client.messages.stream(
+            model="claude-opus-4",
+            max_tokens=2048,
+            messages=messages,
+        ) as stream:
+            for text in stream.text_stream:
+                full_response.append(text)
+                await ws.send_json({
+                    "type": "agent_token",
+                    "payload": {"session_id": session_id, "token": text}
+                })
+
+        await ws.send_json({
+            "type": "agent_token",
+            "payload": {"session_id": session_id, "token": "", "done": True}
+        })
+
+        # Store in history
+        full_text = "".join(full_response)
+        if full_text:
+            session.conversation_history.append({"role": "user", "content": f"[Image] {prompt}"})
+            session.conversation_history.append({"role": "assistant", "content": full_text})
+
+    except Exception as e:
+        await ws.send_json({
+            "type": "agent_token",
+            "payload": {"session_id": session_id, "token": f"\n\nError: {e}", "done": True}
+        })
 
 
 async def handle_message(ws: WebSocket, session: Session, msg: dict, executor) -> None:
@@ -273,6 +372,22 @@ async def handle_message(ws: WebSocket, session: Session, msg: dict, executor) -
                 except Exception:
                     pass
         asyncio.create_task(_safe_run())
+
+    elif t == "multimodal_query":
+        session_id = p.get("session_id", session.session_id)
+        image_base64 = p.get("image", "")
+        prompt = p.get("prompt", "Analyze this image.")
+        async def _safe_run_multimodal():
+            try:
+                await _run_agent_multimodal(ws, session, image_base64, prompt, session_id, executor)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                try:
+                    await ws.send_json({"type": "error", "payload": {"message": str(e)}})
+                except Exception:
+                    pass
+        asyncio.create_task(_safe_run_multimodal())
 
     elif t == "artifact_action":
         await ws.send_json({"type": "not_implemented"})

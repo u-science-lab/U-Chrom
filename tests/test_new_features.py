@@ -258,3 +258,125 @@ def test_camera_state_in_session():
     s = json.loads(json.dumps(session))
     assert s["cameraState"]["position"] == [0, 0, 5]
     assert s["linkedCameras"] is True
+
+
+# ── new artifact types and action tags ────────────────────────────────────────
+
+def test_parse_action_highlight_region():
+    """Test parsing highlight_region action tag."""
+    from webapp.backend.ws_handler import _parse_actions
+    text = '<action type="highlight_region">{"chrom":"chr15","start":30000000,"end":35000000,"color":"#ff6b6b"}</action>'
+    actions = _parse_actions(text)
+    assert len(actions) == 1
+    assert actions[0]["action_type"] == "highlight_region"
+    assert actions[0]["payload"]["chrom"] == "chr15"
+    assert actions[0]["payload"]["start"] == 30000000
+    assert actions[0]["payload"]["end"] == 35000000
+    assert actions[0]["payload"]["color"] == "#ff6b6b"
+
+
+def test_parse_action_set_colormap():
+    """Test parsing set_colormap action tag."""
+    from webapp.backend.ws_handler import _parse_actions
+    text = '<action type="set_colormap">{"scheme":"viridis","property":"compartment"}</action>'
+    actions = _parse_actions(text)
+    assert len(actions) == 1
+    assert actions[0]["action_type"] == "set_colormap"
+    assert actions[0]["payload"]["scheme"] == "viridis"
+    assert actions[0]["payload"]["property"] == "compartment"
+
+
+def test_emit_artifact_highlight_region():
+    """Test emit_artifact with highlight_region type."""
+    from webapp.backend.ws_handler import _run_code_in_worker
+    code = '''
+regions = [
+    {"chrom": "chr1", "start": 1000000, "end": 2000000, "color": "#ff6b6b", "label": "Region 1"},
+    {"chrom": "chr2", "start": 3000000, "end": 4000000, "color": "#51cf66", "label": "Region 2"}
+]
+emit_artifact("highlight_region", {"regions": regions})
+'''
+    artifacts = _run_code_in_worker(code, None)
+    assert len(artifacts) == 1
+    assert artifacts[0]["artifact_type"] == "highlight_region"
+    assert len(artifacts[0]["payload"]["regions"]) == 2
+    assert artifacts[0]["payload"]["regions"][0]["chrom"] == "chr1"
+    assert artifacts[0]["payload"]["regions"][1]["color"] == "#51cf66"
+
+
+def test_emit_artifact_set_colormap():
+    """Test emit_artifact with set_colormap type."""
+    from webapp.backend.ws_handler import _run_code_in_worker
+    code = '''
+emit_artifact("set_colormap", {"scheme": "plasma", "property": "expression", "range": [0, 10]})
+'''
+    artifacts = _run_code_in_worker(code, None)
+    assert len(artifacts) == 1
+    assert artifacts[0]["artifact_type"] == "set_colormap"
+    assert artifacts[0]["payload"]["scheme"] == "plasma"
+    assert artifacts[0]["payload"]["property"] == "expression"
+    assert artifacts[0]["payload"]["range"] == [0, 10]
+
+
+def test_emit_artifact_data():
+    """Test emit_artifact with structured data type."""
+    from webapp.backend.ws_handler import _run_code_in_worker
+    code = '''
+result = {
+    "type": "compartment_analysis",
+    "regions": [{"chrom": "chr1", "start": 0, "end": 1000000, "score": 0.85}],
+    "stats": {"mean": 0.75, "std": 0.12}
+}
+emit_artifact("data", result)
+'''
+    artifacts = _run_code_in_worker(code, None)
+    assert len(artifacts) == 1
+    assert artifacts[0]["artifact_type"] == "data"
+    assert artifacts[0]["payload"]["type"] == "compartment_analysis"
+    assert len(artifacts[0]["payload"]["regions"]) == 1
+    assert artifacts[0]["payload"]["stats"]["mean"] == 0.75
+
+
+def test_emit_artifact_figure():
+    """Test emit_artifact with figure type."""
+    from webapp.backend.ws_handler import _run_code_in_worker
+    code = '''
+emit_artifact("figure", {"path": "figure2.pdf", "preview": "base64data...", "format": "pdf"})
+'''
+    artifacts = _run_code_in_worker(code, None)
+    assert len(artifacts) == 1
+    assert artifacts[0]["artifact_type"] == "figure"
+    assert artifacts[0]["payload"]["path"] == "figure2.pdf"
+    assert artifacts[0]["payload"]["format"] == "pdf"
+
+
+# ── multimodal input (canvas screenshot) ──────────────────────────────────────
+
+def test_multimodal_query_message_format():
+    """Test multimodal_query message structure."""
+    msg = {
+        "type": "multimodal_query",
+        "payload": {
+            "session_id": "main",
+            "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+            "prompt": "Analyze this 3D structure"
+        }
+    }
+    assert msg["type"] == "multimodal_query"
+    assert "image" in msg["payload"]
+    assert "prompt" in msg["payload"]
+    assert len(msg["payload"]["image"]) > 0
+
+
+def test_canvas_capture_base64():
+    """Test that canvas.toDataURL produces valid base64."""
+    # Simulate canvas.toDataURL output
+    data_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    base64_data = data_url.split(',')[1]
+    assert len(base64_data) > 0
+    # Verify it's valid base64
+    import base64
+    decoded = base64.b64decode(base64_data)
+    assert len(decoded) > 0
+
+
