@@ -354,16 +354,24 @@ def create_figure(
         ax = fig.add_subplot(gs[i])
         axes.append(ax)
 
-        # 渲染面板（暂时只是占位）
+        # 渲染面板
         if panel_spec.title:
             ax.set_title(panel_spec.title, fontsize=style_obj.font_size_title)
 
-        # 简单示例：显示面板类型
-        ax.text(0.5, 0.5, f"Panel {i+1}\nType: {panel_spec.type}",
-                ha='center', va='center', transform=ax.transAxes,
-                fontsize=style_obj.font_size_label)
-        ax.set_xticks([])
-        ax.set_yticks([])
+        # 根据面板类型渲染
+        if panel_spec.type == "structure_3d":
+            _render_structure_3d_panel(ax, chromdata, panel_spec, style_obj)
+        elif panel_spec.type == "contact_map":
+            _render_contact_map_panel(ax, chromdata, panel_spec, style_obj)
+        elif panel_spec.type == "track":
+            _render_track_panel(ax, chromdata, panel_spec, style_obj)
+        else:
+            # 未实现的类型：显示占位符
+            ax.text(0.5, 0.5, f"Panel {i+1}\nType: {panel_spec.type}",
+                    ha='center', va='center', transform=ax.transAxes,
+                    fontsize=style_obj.font_size_label)
+            ax.set_xticks([])
+            ax.set_yticks([])
 
     # 添加面板标签
     panel_labels = [p.label for p in panels if p.label]
@@ -384,3 +392,112 @@ def create_figure(
     }
 
     return Figure(fig, metadata)
+
+
+def _render_structure_3d_panel(ax, chromdata, panel_spec: PanelSpec, style: JournalStyle):
+    """渲染 3D 结构面板（投影到 2D）"""
+    coords = chromdata.coords
+
+    # 投影到 2D
+    projection = panel_spec.data.get("projection", "xy")
+    if projection == "xy":
+        x, y = coords[:, 0], coords[:, 1]
+    elif projection == "xz":
+        x, y = coords[:, 0], coords[:, 2]
+    elif projection == "yz":
+        x, y = coords[:, 1], coords[:, 2]
+    else:
+        x, y = coords[:, 0], coords[:, 1]
+
+    # 着色方案
+    colormap = panel_spec.colormap or style.colormap_sequential
+    colors = panel_spec.data.get("colors", None)
+
+    # 绘制
+    if colors is not None:
+        scatter = ax.scatter(x, y, c=colors, cmap=colormap, s=style.marker_size, alpha=0.8)
+        cbar = ax.figure.colorbar(scatter, ax=ax, fraction=0.046, pad=0.04)
+        cbar.ax.tick_params(labelsize=style.font_size_tick)
+    else:
+        ax.plot(x, y, linewidth=style.line_width, color='black', alpha=0.7)
+        ax.scatter(x, y, s=style.marker_size, color='black', alpha=0.5)
+
+    # 样式
+    ax.set_aspect('equal')
+    ax.set_xlabel(f"{projection[0].upper()} (nm)", fontsize=style.font_size_label)
+    ax.set_ylabel(f"{projection[1].upper()} (nm)", fontsize=style.font_size_label)
+    ax.tick_params(labelsize=style.font_size_tick)
+
+    if not style.show_grid:
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+
+def _render_contact_map_panel(ax, chromdata, panel_spec: PanelSpec, style: JournalStyle):
+    """渲染接触图面板"""
+    matrix = panel_spec.data.get("matrix")
+    if matrix is None:
+        # 从 chromdata 计算距离矩阵（简化版）
+        coords = chromdata.coords
+        from scipy.spatial.distance import pdist, squareform
+        distances = squareform(pdist(coords))
+        # 转换为接触频率（距离越近，接触频率越高）
+        matrix = 1.0 / (1.0 + distances)
+
+    # 绘制热图
+    colormap = panel_spec.colormap or style.colormap_sequential
+    im = ax.imshow(
+        matrix,
+        cmap=colormap,
+        aspect='equal',
+        origin='lower',
+        interpolation='nearest'
+    )
+
+    # 添加 colorbar
+    cbar = ax.figure.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cbar.ax.tick_params(labelsize=style.font_size_tick)
+    cbar.set_label("Contact frequency", fontsize=style.font_size_label)
+
+    # 坐标轴
+    ax.set_xlabel("Genomic position", fontsize=style.font_size_label)
+    ax.set_ylabel("Genomic position", fontsize=style.font_size_label)
+    ax.tick_params(labelsize=style.font_size_tick)
+
+
+def _render_track_panel(ax, chromdata, panel_spec: PanelSpec, style: JournalStyle):
+    """渲染基因组 track 面板"""
+    track_type = panel_spec.data.get("track_type", "signal")
+
+    if track_type == "signal":
+        # 信号轨道（连续值）
+        positions = panel_spec.data.get("positions", [])
+        values = panel_spec.data.get("values", [])
+        if len(positions) > 0 and len(values) > 0:
+            ax.fill_between(positions, values, alpha=0.5, color=style.colormap_qualitative[0])
+            ax.plot(positions, values, linewidth=style.line_width, color=style.colormap_qualitative[0])
+
+    elif track_type == "regions":
+        # 区域轨道（TAD, compartment）
+        regions = panel_spec.data.get("regions", [])
+        for i, region in enumerate(regions):
+            if len(region) >= 2:
+                start, end = region[0], region[1]
+                label = region[2] if len(region) > 2 else f"Region {i+1}"
+                color = style.colormap_qualitative[i % len(style.colormap_qualitative)]
+                ax.axvspan(start, end, alpha=0.3, color=color, label=label)
+
+        if len(regions) > 0:
+            ax.legend(fontsize=style.font_size_legend, loc='upper right')
+
+    # 坐标轴
+    ax.set_xlabel("Genomic position (bp)", fontsize=style.font_size_label)
+    ylabel = panel_spec.data.get("ylabel", "Signal")
+    ax.set_ylabel(ylabel, fontsize=style.font_size_label)
+    ax.tick_params(labelsize=style.font_size_tick)
+
+    # Scale bar
+    if panel_spec.show_scale:
+        chrom_length = panel_spec.data.get("chrom_length", 1_000_000)
+        _add_scale_bar(ax, chrom_length // 10, style)
+

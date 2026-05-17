@@ -21,6 +21,24 @@ def _load_chromdata(path: str, fmt: str):
 _SYSTEM_PROMPT = """\
 You are an assistant for U-Chrom, a chromatin 3D structure analysis tool.
 
+## Multi-step analysis mode
+For complex queries, break down the task into multiple steps and execute them sequentially.
+Use the <step> tag to mark each step:
+
+<step id="1" description="Load data">
+```python
+# Step 1 code
+```
+</step>
+
+<step id="2" description="Analyze compartments">
+```python
+# Step 2 code
+```
+</step>
+
+After each step completes, the user will see the progress and intermediate results.
+
 ## Navigation actions
 When the user asks to view a genomic region or navigate:
   <action type="set_viewport">{"chrom":"chr15","start":30000000,"end":60000000}</action>
@@ -190,6 +208,26 @@ def _extract_code_blocks(text: str) -> list[str]:
     return re.findall(r'```python\n(.*?)```', text, re.DOTALL)
 
 
+def _extract_steps(text: str) -> list[dict]:
+    """Extract <step> tags with code blocks from Claude's response."""
+    import re
+    steps = []
+    for m in re.finditer(r'<step id="([^"]+)" description="([^"]+)">(.*?)</step>', text, re.DOTALL):
+        step_id = m.group(1)
+        description = m.group(2)
+        content = m.group(3)
+        # Extract code from content
+        code_blocks = re.findall(r'```python\n(.*?)```', content, re.DOTALL)
+        if code_blocks:
+            steps.append({
+                "id": step_id,
+                "description": description,
+                "code": code_blocks[0]
+            })
+    return steps
+
+
+
 def _run_code_in_worker(code: str, chromdata_path: str | None) -> list[dict]:
     """Execute code in isolated process. Returns list of emit_artifact calls."""
     import sys, io, numpy as np, pandas as pd
@@ -316,9 +354,10 @@ async def _run_agent(ws: WebSocket, session: Session, text: str, session_id: str
             await ws.send_json({"type": "agent_set_colormap", "payload": payload})
 
     # Execute Python code blocks in subprocess worker
-    code_blocks = _extract_code_blocks(full_text)
-    if code_blocks and executor is not None:
-        # Save chromdata to temp file for worker process (avoids pickling ChromData)
+    # First check for multi-step execution
+    steps = _extract_steps(full_text)
+    if steps and executor is not None:
+        # Multi-step execution
         chromdata_path = None
         if session.chromdata is not None:
             import tempfile
@@ -328,17 +367,70 @@ async def _run_agent(ws: WebSocket, session: Session, text: str, session_id: str
             chromdata_path = tmp.name
 
         loop = asyncio.get_running_loop()
-        for code in code_blocks:
+        for step in steps:
+            # Send step start notification
+            await ws.send_json({
+                "type": "agent_step_start",
+                "payload": {
+                    "step_id": step["id"],
+                    "description": step["description"]
+                }
+            })
+
             try:
                 artifacts = await loop.run_in_executor(
-                    executor, _run_code_in_worker, code, chromdata_path
+                    executor, _run_code_in_worker, step["code"], chromdata_path
                 )
                 for art in artifacts:
                     await ws.send_json({"type": "agent_artifact", "payload": art})
+
+                # Send step complete notification
+                await ws.send_json({
+                    "type": "agent_step_complete",
+                    "payload": {
+                        "step_id": step["id"],
+                        "status": "success"
+                    }
+                })
             except Exception as e:
-                await ws.send_json({"type": "agent_artifact", "payload": {
-                    "artifact_type": "text_block",
-                    "payload": {"content": f"Execution error: {e}", "format": "error"}
+                await ws.send_json({
+                    "type": "agent_step_complete",
+                    "payload": {
+                        "step_id": step["id"],
+                        "status": "error",
+                        "error": str(e)
+                    }
+                })
+                break  # Stop on error
+
+        if chromdata_path:
+            os.unlink(chromdata_path)
+
+    elif executor is not None:
+        # Single-step execution (original behavior)
+        code_blocks = _extract_code_blocks(full_text)
+        if code_blocks:
+            # Save chromdata to temp file for worker process
+            chromdata_path = None
+            if session.chromdata is not None:
+                import tempfile
+                tmp = tempfile.NamedTemporaryFile(suffix=".h5cd", delete=False)
+                tmp.close()
+                session.chromdata.write(tmp.name)
+                chromdata_path = tmp.name
+
+            loop = asyncio.get_running_loop()
+            for code in code_blocks:
+                try:
+                    artifacts = await loop.run_in_executor(
+                        executor, _run_code_in_worker, code, chromdata_path
+                    )
+                    for art in artifacts:
+                        await ws.send_json({"type": "agent_artifact", "payload": art})
+                except Exception as e:
+                    await ws.send_json({"type": "agent_artifact", "payload": {
+                        "artifact_type": "text_block",
+                        "payload": {"content": f"Execution error: {e}", "format": "error"}
                 }})
 
     # Store turn in session history for next call

@@ -8,6 +8,14 @@ interface Message {
   text: string
   isError?: boolean
   figure?: { preview: string; path: string; format: string; params?: any }
+  steps?: Step[]
+}
+
+interface Step {
+  id: string
+  description: string
+  status: 'pending' | 'running' | 'success' | 'error'
+  error?: string
 }
 
 export default function AgentPanel() {
@@ -99,7 +107,42 @@ export default function AgentPanel() {
         }])
       }
     })
-    return () => { offToken(); offVp(); offCells(); offHighlight(); offColormap(); offArt() }
+    const offStepStart = ws.onMessage('agent_step_start', (p: any) => {
+      setMessages(prev => {
+        const last = prev[prev.length - 1]
+        if (last && last.role === 'agent' && last.steps) {
+          const newSteps = [...last.steps, {
+            id: p.step_id,
+            description: p.description,
+            status: 'running' as const
+          }]
+          return [...prev.slice(0, -1), { ...last, steps: newSteps }]
+        } else {
+          return [...prev, {
+            role: 'agent',
+            text: 'Executing multi-step analysis...',
+            steps: [{
+              id: p.step_id,
+              description: p.description,
+              status: 'running' as const
+            }]
+          }]
+        }
+      })
+    })
+    const offStepComplete = ws.onMessage('agent_step_complete', (p: any) => {
+      setMessages(prev => {
+        const last = prev[prev.length - 1]
+        if (last && last.role === 'agent' && last.steps) {
+          const newSteps = last.steps.map(s =>
+            s.id === p.step_id ? { ...s, status: p.status, error: p.error } : s
+          )
+          return [...prev.slice(0, -1), { ...last, steps: newSteps }]
+        }
+        return prev
+      })
+    })
+    return () => { offToken(); offVp(); offCells(); offHighlight(); offColormap(); offArt(); offStepStart(); offStepComplete() }
   }, [setViewport, setCellSelection, addPanel, setHighlightRegions, setColormapConfig])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
@@ -165,6 +208,38 @@ export default function AgentPanel() {
                 format={m.figure.format}
                 params={m.figure.params}
               />
+            )}
+            {m.steps && m.steps.length > 0 && (
+              <div style={{
+                marginTop: 6,
+                background: '#1e1e2e',
+                borderRadius: 6,
+                padding: 8,
+                border: '1px solid #313244'
+              }}>
+                {m.steps.map((step, idx) => (
+                  <div key={step.id} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '4px 0',
+                    borderBottom: idx < m.steps!.length - 1 ? '1px solid #313244' : 'none'
+                  }}>
+                    <div style={{ fontSize: 14 }}>
+                      {step.status === 'running' && '🔄'}
+                      {step.status === 'success' && '✅'}
+                      {step.status === 'error' && '❌'}
+                      {step.status === 'pending' && '⏳'}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 11, color: '#cdd6f4' }}>{step.description}</div>
+                      {step.error && (
+                        <div style={{ fontSize: 10, color: '#f38ba8', marginTop: 2 }}>{step.error}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         ))}

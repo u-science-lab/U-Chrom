@@ -28,11 +28,13 @@ export default function StructureViewer({ onExport }: Props) {
   const raycasterRef = useRef(new THREE.Raycaster())
   const mouseRef = useRef(new THREE.Vector2())
   const suppressCameraSync = useRef(false)
+  const lodEnabledRef = useRef(true)  // LOD optimization toggle
 
   const [renderMode, setRenderMode] = useState<RenderMode>('points')
   const [tooltip, setTooltip] = useState<{ x: number; y: number; info: SpotInfo } | null>(null)
+  const [lodEnabled, setLodEnabled] = useState(true)
 
-  const { cellSelection, cameraState, linkedCameras, setCameraState } = useAppStore()
+  const { cellSelection, cameraState, linkedCameras, setCameraState, highlightRegions, colormapConfig } = useAppStore()
 
   // Initialize Three.js
   useEffect(() => {
@@ -149,9 +151,16 @@ export default function StructureViewer({ onExport }: Props) {
       }
 
       if (renderMode === 'points') {
-        const geo = new THREE.SphereGeometry(0.05, 8, 8)
+        // Use LOD for better performance
+        const useLOD = lodEnabled && count > 1000
+        const sphereDetail = useLOD ? 4 : 8  // Lower detail for large datasets
+        const geo = new THREE.SphereGeometry(0.05, sphereDetail, sphereDetail)
         const mat = new THREE.MeshBasicMaterial()
         const mesh = new THREE.InstancedMesh(geo, mat, count)
+
+        // Enable frustum culling
+        mesh.frustumCulled = true
+
         const dummy = new THREE.Object3D()
         const spotInfos: SpotInfo[] = []
         let idx = 0
@@ -207,7 +216,59 @@ export default function StructureViewer({ onExport }: Props) {
       }
     }
     load().catch(() => {})
-  }, [cellSelection, renderMode])
+  }, [cellSelection, renderMode, lodEnabled])
+
+  // Sync lodEnabledRef
+  useEffect(() => {
+    lodEnabledRef.current = lodEnabled
+  }, [lodEnabled])
+
+  // Render highlight regions
+  useEffect(() => {
+    if (!highlightRegions || highlightRegions.length === 0) return
+    const scene = sceneRef.current
+    if (!scene) return
+
+    // Remove old highlights
+    const oldHighlights = objectsRef.current.filter(obj => (obj as any).isHighlight)
+    oldHighlights.forEach(obj => {
+      scene.remove(obj)
+      if ((obj as any).geometry) (obj as any).geometry.dispose()
+      if ((obj as any).material) (obj as any).material.dispose()
+    })
+    objectsRef.current = objectsRef.current.filter(obj => !(obj as any).isHighlight)
+
+    // Add new highlights
+    for (const region of highlightRegions) {
+      // Create a bounding box for the region
+      const color = new THREE.Color(region.color || '#ff6b6b')
+      const boxGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5)
+      const boxMat = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.3,
+        wireframe: true
+      })
+      const box = new THREE.Mesh(boxGeo, boxMat)
+      box.position.set(0, 0, 0) // TODO: map genomic coords to 3D position
+      ;(box as any).isHighlight = true
+      scene.add(box)
+      objectsRef.current.push(box)
+
+      // Add label if provided
+      if (region.label) {
+        // TODO: Add text sprite for label
+      }
+    }
+  }, [highlightRegions])
+
+  // Apply colormap
+  useEffect(() => {
+    if (!colormapConfig || !colormapConfig.scheme) return
+    // TODO: Re-color points based on colormapConfig.property and colormapConfig.scheme
+    // For now, just log the config
+    console.log('Colormap config:', colormapConfig)
+  }, [colormapConfig])
 
   // Raycaster: hover/click on points mode
   function onMouseMove(e: React.MouseEvent) {
@@ -266,6 +327,14 @@ export default function StructureViewer({ onExport }: Props) {
                      border: '1px solid #313244', fontSize: 10, padding: '2px 6px',
                      borderRadius: 3, cursor: 'pointer' }}>
             🔗
+          </button>
+          <button onClick={() => setLodEnabled(!lodEnabled)}
+            title="Toggle LOD optimization"
+            style={{ background: lodEnabled ? '#a6e3a1' : 'rgba(24,24,37,0.85)',
+                     color: lodEnabled ? '#1e1e2e' : '#cdd6f4',
+                     border: '1px solid #313244', fontSize: 10, padding: '2px 6px',
+                     borderRadius: 3, cursor: 'pointer' }}>
+            ⚡
           </button>
           <button onClick={handleExport}
             style={{ background: 'rgba(24,24,37,0.85)', border: '1px solid #313244',
