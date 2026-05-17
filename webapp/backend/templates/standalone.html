@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>U-Chrom Session Export</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1e1e2e;
+            color: #cdd6f4;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header {
+            background: #313244;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .header h1 { font-size: 24px; margin-bottom: 10px; }
+        .header .meta { font-size: 14px; color: #a6adc8; }
+        .section {
+            background: #313244;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .section h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #45475a;
+            padding-bottom: 10px;
+        }
+        .viewport { display: flex; gap: 20px; flex-wrap: wrap; }
+        .viewport-item { flex: 1; min-width: 200px; }
+        .viewport-item label { display: block; font-size: 12px; color: #a6adc8; margin-bottom: 5px; }
+        .viewport-item .value { font-size: 16px; font-weight: 500; }
+        .conversation { max-height: 400px; overflow-y: auto; }
+        .message {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+        }
+        .message.user { background: #45475a; text-align: right; }
+        .message.agent { background: #1e1e2e; }
+        .message .role { font-size: 11px; color: #a6adc8; margin-bottom: 5px; }
+        .message .text { font-size: 13px; white-space: pre-wrap; }
+        .analysis-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
+        .result-card {
+            background: #1e1e2e;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #45475a;
+        }
+        .result-card h3 { font-size: 14px; margin-bottom: 10px; color: #89b4fa; }
+        .result-card .count { font-size: 24px; font-weight: bold; }
+        .annotations { list-style: none; }
+        .annotations li {
+            padding: 10px;
+            background: #1e1e2e;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border-left: 3px solid #89b4fa;
+        }
+        .annotations li .label { font-weight: 500; margin-bottom: 5px; }
+        .annotations li .details { font-size: 12px; color: #a6adc8; }
+        canvas { max-width: 100%; border-radius: 6px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>U-Chrom Session Export</h1>
+            <div class="meta">
+                <span>Session ID: <strong>{{SESSION_ID}}</strong></span> |
+                <span>Exported: <strong>{{TIMESTAMP}}</strong></span>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Viewport</h2>
+            <div class="viewport">
+                <div class="viewport-item">
+                    <label>Chromosome</label>
+                    <div class="value">{{VIEWPORT_CHROM}}</div>
+                </div>
+                <div class="viewport-item">
+                    <label>Start</label>
+                    <div class="value">{{VIEWPORT_START}}</div>
+                </div>
+                <div class="viewport-item">
+                    <label>End</label>
+                    <div class="value">{{VIEWPORT_END}}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Conversation History</h2>
+            <div class="conversation" id="conversation"></div>
+        </div>
+
+        <div class="section">
+            <h2>Analysis Results</h2>
+            <div class="analysis-results" id="analysis-results"></div>
+        </div>
+
+        <div class="section">
+            <h2>Annotations</h2>
+            <ul class="annotations" id="annotations"></ul>
+        </div>
+
+        <div class="section">
+            <h2>3D Structure Visualization</h2>
+            <canvas id="canvas" width="800" height="600"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Embedded session data
+        const sessionData = {{SESSION_DATA}};
+
+        // Render conversation
+        const conversationEl = document.getElementById('conversation');
+        sessionData.conversation_history.forEach(msg => {
+            const div = document.createElement('div');
+            div.className = `message ${msg.role}`;
+            div.innerHTML = `
+                <div class="role">${msg.role.toUpperCase()}</div>
+                <div class="text">${msg.content}</div>
+            `;
+            conversationEl.appendChild(div);
+        });
+
+        // Render analysis results
+        const resultsEl = document.getElementById('analysis-results');
+        Object.entries(sessionData.analysis_results).forEach(([key, value]) => {
+            const card = document.createElement('div');
+            card.className = 'result-card';
+            const count = Array.isArray(value) ? value.length : Object.keys(value).length;
+            card.innerHTML = `
+                <h3>${key.toUpperCase()}</h3>
+                <div class="count">${count}</div>
+                <div style="font-size: 12px; color: #a6adc8; margin-top: 5px;">items</div>
+            `;
+            resultsEl.appendChild(card);
+        });
+
+        // Render annotations
+        const annotationsEl = document.getElementById('annotations');
+        sessionData.annotations.forEach(ann => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <div class="label">${ann.label || 'Annotation'}</div>
+                <div class="details">${ann.type} | ${JSON.stringify(ann.region || {})}</div>
+            `;
+            annotationsEl.appendChild(li);
+        });
+
+        // Render 3D structure (simplified)
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#1e1e2e';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#cdd6f4';
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('3D visualization requires WebGL', canvas.width / 2, canvas.height / 2);
+        ctx.fillText('(not available in static export)', canvas.width / 2, canvas.height / 2 + 25);
+    </script>
+</body>
+</html>

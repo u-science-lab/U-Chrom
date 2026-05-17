@@ -79,3 +79,140 @@ async def download_file(path: str):
         media_type="application/pdf" if path.endswith(".pdf") else "application/octet-stream",
         filename=filename
     )
+
+
+@app.post("/api/session/save")
+async def save_session(session_id: str):
+    """Save current session to .uchromfig file."""
+    session = sessions.get(session_id)
+    if not session:
+        return {"error": "Session not found"}
+
+    # Generate filename
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(suffix=".uchromfig", delete=False, mode='w')
+    tmp.close()
+
+    # Save session
+    session.save(tmp.name)
+
+    return {
+        "path": tmp.name,
+        "filename": f"session_{session_id[:8]}.uchromfig"
+    }
+
+
+@app.post("/api/session/load")
+async def load_session(file: UploadFile = File(...)):
+    """Load session from .uchromfig file."""
+    import tempfile
+    from .session import Session
+
+    # Save uploaded file
+    tmp = tempfile.NamedTemporaryFile(suffix=".uchromfig", delete=False)
+    shutil.copyfileobj(file.file, tmp)
+    tmp.close()
+
+    # Load session
+    session_id = str(uuid.uuid4())
+    session = Session.load(tmp.name, session_id)
+    sessions[session_id] = session
+
+    # Clean up
+    os.unlink(tmp.name)
+
+    return {
+        "session_id": session_id,
+        "state": session.to_dict()
+    }
+
+
+@app.post("/api/session/export_html")
+async def export_html(session_id: str):
+    """Export session as standalone HTML file."""
+    session = sessions.get(session_id)
+    if not session:
+        return {"error": "Session not found"}
+
+    # Load template
+    template_path = os.path.join(os.path.dirname(__file__), "templates", "standalone.html")
+    with open(template_path, 'r') as f:
+        template = f.read()
+
+    # Prepare data
+    session_dict = session.to_dict()
+    viewport = session_dict.get("viewport", {})
+
+    # Replace placeholders
+    html = template.replace("{{SESSION_ID}}", session_id[:8])
+    html = html.replace("{{TIMESTAMP}}", session_dict.get("timestamp", ""))
+    html = html.replace("{{VIEWPORT_CHROM}}", viewport.get("chrom") or "N/A")
+    html = html.replace("{{VIEWPORT_START}}", str(viewport.get("start") or "N/A"))
+    html = html.replace("{{VIEWPORT_END}}", str(viewport.get("end") or "N/A"))
+    html = html.replace("{{SESSION_DATA}}", json.dumps(session_dict))
+
+    # Save to temp file
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode='w')
+    tmp.write(html)
+    tmp.close()
+
+    return {
+        "path": tmp.name,
+        "filename": f"uchrom_session_{session_id[:8]}.html"
+    }
+
+
+@app.get("/api/plugins")
+async def list_plugins():
+    """List all registered plugins."""
+    from uchrom.plugins import list_plugins
+    return {"plugins": list_plugins()}
+
+
+@app.post("/api/plugins/load")
+async def load_plugin_file(file: UploadFile = File(...)):
+    """Load a plugin from uploaded .py file."""
+    from uchrom.plugins import load_plugin
+    import tempfile
+
+    # Save uploaded file
+    tmp = tempfile.NamedTemporaryFile(suffix=".py", delete=False)
+    shutil.copyfileobj(file.file, tmp)
+    tmp.close()
+
+    try:
+        plugin = load_plugin(tmp.name)
+        return {
+            "success": True,
+            "plugin": {
+                "name": plugin.name,
+                "version": plugin.version,
+                "description": plugin.description
+            }
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        os.unlink(tmp.name)
+
+
+@app.post("/api/plugins/run")
+async def run_plugin_analysis(plugin_name: str, session_id: str):
+    """Run a plugin's analyze method on current session data."""
+    from uchrom.plugins import run_plugin
+
+    session = sessions.get(session_id)
+    if not session:
+        return {"error": "Session not found"}
+
+    if session.chromdata is None:
+        return {"error": "No data loaded"}
+
+    try:
+        result = run_plugin(plugin_name, session.chromdata)
+        # Store result in session
+        session.analysis_results[plugin_name] = result
+        return {"success": True, "result": result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
