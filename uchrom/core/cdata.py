@@ -700,6 +700,125 @@ class ChromData:
         return cls(coords, spots, uns=uns, **kwargs)
 
     @classmethod
+    def from_pyhim_trace(
+        cls,
+        ecsv_path: PathLike,
+        barcode_dict: dict | pd.DataFrame | None = None,
+        **kwargs,
+    ) -> "ChromData":
+        """Read a PyHiM chromatin-trace ECSV table into a ChromData.
+
+        PyHiM (Devos et al. 2024) emits one ECSV file per trace-building
+        run.  Schema (from ``chromatin_trace_table.py`` upstream):
+
+            Spot_ID, Trace_ID, x, y, z, Chrom, Chrom_Start, Chrom_End,
+            ROI #, Mask_id, Barcode #, label
+
+        ``meta['comments']`` carries ``xyz_unit=...`` and
+        ``genome_assembly=...``.
+
+        Parameters
+        ----------
+        ecsv_path : path
+            Path to the ECSV file written by PyHiM.
+        barcode_dict : dict[int, (chrom, start, end)] or DataFrame, optional
+            Required when ``Chrom``/``Chrom_Start``/``Chrom_End`` are empty
+            in the ECSV (PyHiM does not always populate them).  As a
+            DataFrame, expects columns ``barcode, chrom, start, end``.
+            If ``Chrom`` is populated, ``barcode_dict`` is ignored.
+        **kwargs
+            Additional keyword arguments passed to the ChromData
+            constructor (``cells``, ``tracks``, ``uns``, ...).
+
+        Notes
+        -----
+        - ``Mask_id`` becomes ``cell_id`` (PyHiM convention).
+        - ECSV header comments are captured in
+          ``cd.uns['pyhim']['ecsv_comments']`` and any
+          ``xyz_unit`` / ``genome_assembly`` entries are also promoted
+          to ``cd.uns`` directly (matching :meth:`from_fofct`).
+        """
+        try:
+            from astropy.table import Table
+        except ImportError as e:
+            raise ImportError(
+                "astropy is required to read PyHiM ECSV trace tables. "
+                "Install with `pip install u-chrom[im]` or `pip install astropy`."
+            ) from e
+
+        path = Path(ecsv_path)
+        table = Table.read(path, format="ascii.ecsv")
+        df = table.to_pandas()
+
+        # Astropy can decode byte-string columns as bytes — decode to str.
+        for col in df.columns:
+            if df[col].dtype == object and df[col].apply(
+                lambda v: isinstance(v, bytes)
+            ).any():
+                df[col] = df[col].apply(
+                    lambda v: v.decode() if isinstance(v, bytes) else v
+                )
+
+        missing_coord = {"x", "y", "z"} - set(df.columns)
+        if missing_coord:
+            raise ValueError(
+                f"PyHiM ECSV missing coordinate columns {missing_coord}. "
+                f"Got: {list(df.columns)}"
+            )
+
+        # Decide whether Chrom is filled.  PyHiM writes empty strings (which
+        # astropy round-trips as NaN) when the barcode→genome mapping wasn't
+        # supplied at trace-building time.
+        chrom_filled = (
+            "Chrom" in df.columns
+            and df["Chrom"].notna().any()
+            and df["Chrom"].astype(str).str.strip().ne("").any()
+        )
+
+        if not chrom_filled:
+            if barcode_dict is None:
+                raise ValueError(
+                    "PyHiM ECSV has no Chrom/Chrom_Start/Chrom_End data; "
+                    "pass `barcode_dict={barcode: (chrom, start, end)}` "
+                    "or a DataFrame[barcode, chrom, start, end]."
+                )
+            df = _apply_pyhim_barcode_dict(df, barcode_dict)
+
+        # Canonical column names for ChromData.
+        rename = {
+            "Chrom": "chrom",
+            "Chrom_Start": "start",
+            "Chrom_End": "end",
+            "Trace_ID": "trace_id",
+            "Spot_ID": "spot_id",
+            "Mask_id": "cell_id",
+            "ROI #": "roi_id",
+            "Barcode #": "barcode",
+        }
+        df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
+
+        coords = df[["x", "y", "z"]].values.astype(np.float64)
+
+        spot_cols = ["chrom", "start", "end", "trace_id"]
+        for extra in ("spot_id", "cell_id", "roi_id", "barcode", "label"):
+            if extra in df.columns:
+                spot_cols.append(extra)
+        spots = df[spot_cols].copy()
+
+        # Capture ECSV meta into uns.
+        uns = kwargs.pop("uns", None) or {}
+        ecsv_comments = list(table.meta.get("comments") or [])
+        uns.setdefault("pyhim", {})["ecsv_comments"] = ecsv_comments
+        for c in ecsv_comments:
+            if "=" in c:
+                k, _, v = c.partition("=")
+                k = k.strip(); v = v.strip()
+                if k in ("xyz_unit", "genome_assembly"):
+                    uns.setdefault(k, v)
+
+        return cls(coords, spots, uns=uns, **kwargs)
+
+    @classmethod
     def from_seqfish_multiomics(cls, spot_glob, **kwargs) -> "ChromData":
         """Load Takei 2025 DNA seqFISH+ cerebellum data.
 
@@ -782,6 +901,50 @@ def _pdist_matrix(coords: np.ndarray) -> np.ndarray:
     """Compute pairwise Euclidean distance matrix from (n, 3) coords."""
     diff = coords[:, None, :] - coords[None, :, :]
     return np.sqrt((diff ** 2).sum(axis=-1))
+
+
+def _apply_pyhim_barcode_dict(
+    df: pd.DataFrame,
+    barcode_dict,
+) -> pd.DataFrame:
+    """Fill Chrom / Chrom_Start / Chrom_End from a Barcode # → (chrom, start, end) map.
+
+    Accepts a Python ``dict`` keyed by integer barcode, or a DataFrame
+    with columns ``barcode, chrom, start, end``.  Unmapped barcodes
+    raise ``KeyError`` listing the offenders.
+    """
+    if isinstance(barcode_dict, pd.DataFrame):
+        bdf = barcode_dict
+        required = {"barcode", "chrom", "start", "end"}
+        missing_cols = required - set(bdf.columns)
+        if missing_cols:
+            raise ValueError(
+                f"barcode_dict DataFrame missing columns: {sorted(missing_cols)}"
+            )
+        mapping = {
+            int(row.barcode): (str(row.chrom), int(row.start), int(row.end))
+            for row in bdf.itertuples(index=False)
+        }
+    else:
+        mapping = {int(k): tuple(v) for k, v in dict(barcode_dict).items()}
+
+    if "Barcode #" not in df.columns:
+        raise ValueError(
+            "PyHiM ECSV has no 'Barcode #' column — cannot apply barcode_dict."
+        )
+
+    barcodes = df["Barcode #"].astype(int)
+    unknown = sorted(set(barcodes) - set(mapping))
+    if unknown:
+        raise KeyError(
+            f"barcode_dict missing entries for barcodes: {unknown}"
+        )
+
+    df = df.copy()
+    df["Chrom"] = barcodes.map(lambda b: mapping[b][0])
+    df["Chrom_Start"] = barcodes.map(lambda b: mapping[b][1]).astype("int64")
+    df["Chrom_End"] = barcodes.map(lambda b: mapping[b][2]).astype("int64")
+    return df
 
 
 def _parse_version(s: str):
