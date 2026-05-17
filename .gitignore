@@ -33,3 +33,7 @@ example-data/IMR90_chr21-18-20Mb.csv
 # Docs build
 docs/build/
 .ipynb_checkpoints/
+
+# Frontend
+webapp/frontend/node_modules/
+webapp/frontend/dist/
