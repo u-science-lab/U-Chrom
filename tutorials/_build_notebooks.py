@@ -54,7 +54,7 @@ def write_nb(path: Path, cells: list):
         "nbformat_minor": 5,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(nb, indent=1) + "\n")
+    path.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + "\n")
     print(f"wrote {path}")
 
 
@@ -284,6 +284,187 @@ on-disk format is versioned so downstream tools can safely consume it."""),
 ]
 
 write_nb(Path("tutorials") / "import_fofct.ipynb", nb2)
+
+
+# ============================================================
+# PyHiM ECSV imaging data
+# ============================================================
+
+nb_pyhim = [
+    md("""\
+# Importing PyHiM chromatin trace tables
+
+[PyHiM](https://github.com/pyHi-M/pyHiM) (Devos et al. 2024, *Genome
+Biology*) is a Python toolkit for multiplexed DNA-FISH image analysis.
+It outputs chromatin trace tables as **Astropy ECSV** files with columns:
+
+    Spot_ID, Trace_ID, x, y, z, Chrom, Chrom_Start, Chrom_End,
+    ROI #, Mask_id, Barcode #, label
+
+U-Chrom's `ChromData.from_pyhim_trace()` reads these ECSV files directly
+into the standard ChromData container, so you can use the browser,
+structure callers, and embedding tools on PyHiM outputs without manual
+conversion.
+
+This notebook demonstrates the reader on **Bintu et al. 2018** IMR90
+chr21 chromatin tracing data (1,277 traces × 66 loci, 30 kb spacing),
+converted to PyHiM ECSV format."""),
+
+    md("""\
+## 1. Locate the demo ECSV
+
+We use a PyHiM-format ECSV derived from Bintu et al. 2018 (*Science*
+362:eaau1783) — IMR90 cells, chr21:18.6–20.6 Mb, 66 segments × 30 kb.
+The conversion script is in `example-data/bintu_to_pyhim_ecsv.py`."""),
+
+    code("""\
+from pathlib import Path
+import numpy as np
+import pandas as pd
+from uchrom import ChromData
+
+def _repo_root():
+    for p in [Path.cwd(), *Path.cwd().parents]:
+        if (p / "pyproject.toml").exists():
+            return p
+    return Path.cwd()
+
+root = _repo_root()
+ecsv_path = root / "example-data" / "IMR90_chr21_pyhim.ecsv"
+
+if not ecsv_path.exists():
+    # Generate it from the Bintu CSV
+    import subprocess
+    script = root / "example-data" / "bintu_to_pyhim_ecsv.py"
+    subprocess.run(["python", str(script)], check=True)
+
+print(f"ECSV: {ecsv_path}")
+print(f"Size: {ecsv_path.stat().st_size / 1e6:.1f} MB")"""),
+
+    md("""\
+## 2. Read the ECSV into ChromData
+
+`ChromData.from_pyhim_trace()` parses the ECSV and maps PyHiM columns
+to ChromData's schema:
+
+- `x, y, z` → `cd.coords`
+- `Chrom, Chrom_Start, Chrom_End, Trace_ID` → `cd.spots`
+- `Mask_id` → `cell_id` (PyHiM convention: each trace = one "cell")
+- ECSV `meta['comments']` → `cd.uns['xyz_unit']`, `cd.uns['genome_assembly']`"""),
+
+    code("""\
+cd = ChromData.from_pyhim_trace(ecsv_path)
+cd"""),
+
+    code("""\
+print(f"Traces: {cd.spots['trace_id'].nunique()}")
+print(f"Spots per trace: {len(cd.spots) // cd.spots['trace_id'].nunique()}")
+print(f"Genomic region: {cd.spots['chrom'].iloc[0]}:{cd.spots['start'].min():,}–{cd.spots['end'].max():,}")
+print(f"xyz_unit: {cd.uns.get('xyz_unit')}")
+print(f"genome_assembly: {cd.uns.get('genome_assembly')}")"""),
+
+    md("""\
+## 3. Inspect a single trace
+
+Each trace is a chromatin fiber — 66 consecutive loci on chr21."""),
+
+    code("""\
+trace0 = cd.get_trace("1")  # first trace
+print(f"Trace '1': {len(trace0.spots)} spots")
+print(trace0.spots[["chrom", "start", "end"]].head(10))"""),
+
+    md("""\
+## 4. Compute radius of gyration (Rg)
+
+Rg measures the spatial compactness of each trace."""),
+
+    code("""\
+def compute_rg(coords):
+    centroid = coords.mean(axis=0)
+    return np.sqrt(((coords - centroid) ** 2).sum(axis=1).mean())
+
+rg_per_trace = []
+for tid in cd.spots["trace_id"].unique():
+    tr = cd.get_trace(tid)
+    rg_per_trace.append(compute_rg(tr.coords))
+
+rg_per_trace = np.array(rg_per_trace)
+print(f"Rg (microns): mean={rg_per_trace.mean():.2f}, std={rg_per_trace.std():.2f}")
+print(f"              min={rg_per_trace.min():.2f}, max={rg_per_trace.max():.2f}")"""),
+
+    md("""\
+## 5. Visualize Rg distribution"""),
+
+    code("""\
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(6, 4))
+ax.hist(rg_per_trace, bins=40, edgecolor="black", alpha=0.7)
+ax.set_xlabel("Radius of gyration (μm)")
+ax.set_ylabel("Number of traces")
+ax.set_title(f"Bintu 2018 IMR90 chr21 (n={len(rg_per_trace)} traces)")
+plt.tight_layout()"""),
+
+    md("""\
+## 6. Plot a few example traces in 3D"""),
+
+    code("""\
+from mpl_toolkits.mplot3d import Axes3D
+
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection="3d")
+
+# Plot first 5 traces
+for i, tid in enumerate(list(cd.spots["trace_id"].unique())[:5]):
+    tr = cd.get_trace(tid)
+    ax.plot(tr.coords[:, 0], tr.coords[:, 1], tr.coords[:, 2],
+            marker="o", markersize=3, alpha=0.7, label=f"Trace {tid}")
+
+ax.set_xlabel("x (μm)")
+ax.set_ylabel("y (μm)")
+ax.set_zlabel("z (μm)")
+ax.set_title("5 example chromatin traces")
+ax.legend()
+plt.tight_layout()"""),
+
+    md("""\
+## 7. Compute pairwise distance matrix for one trace
+
+The distance matrix shows spatial proximity between loci."""),
+
+    code("""\
+trace0 = cd.get_trace("1")
+dist_mat = trace0.compute_distances()
+
+fig, ax = plt.subplots(figsize=(6, 5))
+im = ax.imshow(dist_mat, cmap="viridis", origin="lower")
+ax.set_xlabel("Locus index")
+ax.set_ylabel("Locus index")
+ax.set_title("Pairwise distance matrix (trace '1')")
+plt.colorbar(im, ax=ax, label="Distance (μm)")
+plt.tight_layout()"""),
+
+    md("""\
+## Next steps
+
+- **Save as `.h5cd`**: `cd.write("imr90_chr21.h5cd")` for fast reload
+- **3D browser**: `python -m uchrom.browser imr90_chr21.h5cd` (interactive PyVista viewer)
+- **Structure calling**: TAD/loop/compartment callers work on imaging data too
+- **Embedding**: If you have multiple cells, run FastHigashi on the population
+
+For PyHiM outputs with **empty Chrom columns**, pass a `barcode_dict`:
+
+```python
+cd = ChromData.from_pyhim_trace(
+    "Trace_3D.ecsv",
+    barcode_dict={1: ("chr1", 10_000_000, 10_050_000), ...}
+)
+```
+
+See `ChromData.from_pyhim_trace` docstring for details."""),
+]
+
+write_nb(Path("tutorials") / "import_pyhim_ecsv.ipynb", nb_pyhim)
 
 
 # ============================================================
@@ -2363,6 +2544,361 @@ write_nb(Path("tutorials") / "gem_fish_reconstruction.ipynb", nb9)
 
 
 # ============================================================
+# Higashi embedding (FastHigashi cell embedding)
+# ============================================================
+
+nb_higashi = [
+    md("""\
+# FastHigashi cell embedding
+
+U-Chrom wraps **FastHigashi** (Zhang et al. 2022, *Cell Systems*) so
+that single-cell Hi-C data can be embedded into a per-cell low-rank
+representation that's stored inside `ChromData` (`cd.cellm['higashi']`)
+alongside everything else.
+
+This notebook walks the full pipeline:
+
+1. Convert per-cell sci-Hi-C contact matrices into Higashi v2 input
+   format (`filelist.txt`, `label_info.pickle`, `config.JSON`,
+   `chromsizes.tsv`) using `uchrom.io.write_higashi_inputs` / helpers.
+2. Run FastHigashi end-to-end via `uchrom.emb.higashi.run` — the
+   wrapper applies an Apple-Silicon `pin_memory` shim so it works on
+   CPU-only Macs.
+3. Score the resulting embedding against the known cell-type labels
+   using ARI / NMI.
+
+**Dataset**: Kim et al. 2020 sci-Hi-C (Noble lab), H1Esc + HFF mix at
+500 kb on hg19 — 1 931 cells with ground-truth labels.  See
+`example-data/README.md` for source.
+
+**Performance** on a Mac mini M2 (16 GB, CPU only):
+
+| n cells | rank | wall (s) | ARI  |
+|---------|------|----------|------|
+| 40      | 16   | 8        | 0.07 |
+| 150     | 64   | 52       | 0.42 |
+| 300     | 64   | 136      | 0.55 |
+
+ARI grows with cell count — Tucker decomposition needs population
+diversity to separate cell types.  This notebook defaults to 150 cells
+(~1 min on a Mac mini)."""),
+
+    md("""\
+## 0. Install FastHigashi
+
+FastHigashi is an **optional** dependency — `pip install -e .[emb]` (or
+`pip install fast-higashi` from a checkout of the upstream repo) before
+running this notebook.  The wrapper imports `fasthigashi` lazily and
+raises a clear `ImportError` pointing at the right extra if it's
+missing."""),
+
+    code("""\
+# Sanity check the dep is available; the import is otherwise lazy.
+import importlib.util
+if importlib.util.find_spec("fasthigashi") is None:
+    raise RuntimeError(
+        "Install FastHigashi first: `pip install -e .[emb]` "
+        "(or `pip install fast-higashi`)."
+    )"""),
+
+    md("""\
+## 1. Locate the demo data
+
+We use **Kim et al. 2020 sci-Hi-C** (H1Esc + HFF mix, 500 kb, hg19), as
+hosted by the Noble lab at
+`noble.gs.washington.edu/proj/schic-topic-model`.  The helper below
+auto-downloads the tarball (~128 MB) and labels file (~92 KB) into
+`example-data/` on first run.
+
+**Format note**: each cell's `.matrix` file is a sparse triplet
+`bin1<TAB>bin2<TAB>count<TAB>weight<TAB>chrom1<TAB>chrom2`, where
+`bin1`/`bin2` are **global** bin indices across the whole genome.  We
+discover each chrom's offset by scanning the data, then convert to
+Higashi v2's `(chrom1, pos1, chrom2, pos2, count)` rows."""),
+
+    code("""\
+import tarfile, urllib.request
+from pathlib import Path
+import numpy as np
+import pandas as pd
+
+RESOLUTION = 500_000
+KIM2020_BASE = (
+    "https://noble.gs.washington.edu/proj/schic-topic-model/data/"
+)
+HG19_CHROMSIZES_500K = {
+    "chr1":  249250621, "chr2":  243199373, "chr3":  198022430, "chr4":  191154276,
+    "chr5":  180915260, "chr6":  171115067, "chr7":  159138663, "chr8":  146364022,
+    "chr9":  141213431, "chr10": 135534747, "chr11": 135006516, "chr12": 133851895,
+    "chr13": 115169878, "chr14": 107349540, "chr15": 102531392, "chr16":  90354753,
+    "chr17":  81195210, "chr18":  78077248, "chr19":  59128983, "chr20":  63025520,
+    "chr21":  48129895, "chr22":  51304566, "chrX":  155270560,
+}
+
+def _repo_root() -> Path:
+    for p in [Path.cwd(), *Path.cwd().parents]:
+        if (p / "pyproject.toml").exists():
+            return p
+    return Path.cwd()
+
+def find_kim2020():
+    root = _repo_root()
+    data = root / "example-data"
+    data.mkdir(parents=True, exist_ok=True)
+    tar_path = data / "H1Esc-HFF.R1.tar.gz"
+    matrices_dir = data / "H1Esc-HFF.R1"
+    labels_path = data / "H1Esc-HFF.R1.labeled"
+
+    if not labels_path.exists():
+        url = KIM2020_BASE + "matrix_labels/H1Esc-HFF.R1.labeled"
+        print(f"[data] fetching cell-type labels → {labels_path}")
+        urllib.request.urlretrieve(url, labels_path)
+
+    if not matrices_dir.exists():
+        if not tar_path.exists():
+            url = KIM2020_BASE + "matrix_files/H1Esc-HFF.R1.tar.gz"
+            print(f"[data] fetching sci-Hi-C tarball (~128 MB) → {tar_path}")
+            urllib.request.urlretrieve(url, tar_path)
+        print(f"[data] extracting {tar_path.name} → {matrices_dir}")
+        with tarfile.open(tar_path, "r:gz") as tf:
+            tf.extractall(data)
+    return matrices_dir, labels_path
+
+matrices_dir, labels_path = find_kim2020()
+print(f"matrices: {matrices_dir}  ({sum(1 for _ in matrices_dir.glob('*.matrix'))} cells)")"""),
+
+    md("""\
+## 2. Pick a balanced subset
+
+Take 75 H1Esc + 75 HFF cells.  Larger subsets give better ARI but cost
+more wall-clock time — see the table at the top of the notebook."""),
+
+    code("""\
+N_PER_TYPE = 75   # 150 cells total — ~1 min on Mac mini CPU
+
+label_df = pd.read_csv(
+    labels_path, sep="\\t", header=None, names=["matrix", "cell_type"]
+)
+h1 = label_df[label_df.cell_type == "H1Esc"].head(N_PER_TYPE)
+hff = label_df[label_df.cell_type == "HFF"].head(N_PER_TYPE)
+sub = pd.concat([h1, hff]).reset_index(drop=True)
+sub["cell_name"] = sub["matrix"].str.replace(".matrix", "", regex=False)
+print(f"subset: {len(sub)} cells")
+sub["cell_type"].value_counts()"""),
+
+    md("""\
+## 3. Discover bin offsets, convert to Higashi v2
+
+The matrix files use **global bin indices**, but Higashi v2 wants
+`(chrom, pos)` per contact.  We compute each chrom's offset by taking
+the minimum global bin observed for that chrom across a sample of
+cells, then translate to local genomic coordinates."""),
+
+    code("""\
+def discover_bin_offsets(matrices_dir, sample=200):
+    files = sorted(matrices_dir.glob("*.matrix"))[:sample]
+    per_chrom_min = {}
+    for f in files:
+        df = pd.read_csv(
+            f, sep="\\t", header=None,
+            names=["bin1", "bin2", "count", "weight", "chrom1", "chrom2"],
+        )
+        for col_bin, col_chrom in [("bin1", "chrom1"), ("bin2", "chrom2")]:
+            for chrom, mn in df.groupby(col_chrom)[col_bin].min().items():
+                if chrom not in per_chrom_min or mn < per_chrom_min[chrom]:
+                    per_chrom_min[chrom] = int(mn)
+    return per_chrom_min
+
+def matrix_to_higashi(matrix_path, bin_offsets):
+    df = pd.read_csv(
+        matrix_path, sep="\\t", header=None,
+        names=["bin1", "bin2", "count", "weight", "chrom1_full", "chrom2_full"],
+    )
+    df["chrom1"] = df["chrom1_full"].str.replace("human_", "", regex=False)
+    df["chrom2"] = df["chrom2_full"].str.replace("human_", "", regex=False)
+    df["pos1"] = (df["bin1"] - df["chrom1_full"].map(bin_offsets)) * RESOLUTION
+    df["pos2"] = (df["bin2"] - df["chrom2_full"].map(bin_offsets)) * RESOLUTION
+    out = df[["chrom1", "pos1", "chrom2", "pos2", "count"]].dropna()
+    out = out[(out["pos1"] >= 0) & (out["pos2"] >= 0)]
+    return out.astype({"pos1": int, "pos2": int, "count": int})
+
+bin_offsets = discover_bin_offsets(matrices_dir)
+print("first 5 chrom offsets:", sorted(bin_offsets.items(), key=lambda x: x[1])[:5])"""),
+
+    md("""\
+## 4. Materialise the Higashi v2 input directory
+
+`uchrom.io.contacts` exposes three helpers used here:
+
+- `write_label_info(cells_df, path)` — dump per-cell metadata as
+  `dict[col] -> ndarray` to a pickle.
+- `make_higashi_config(...)` — produce the `config.JSON` dict with all
+  fields FastHigashi expects (resolution, chrom_list, header_included,
+  contact_header, resolution_fh, …).
+- `_materialise_chromsizes(...)` — write `chromsizes.tsv` from a
+  `{chrom: size}` dict (FastHigashi needs `genome_reference_path`).
+
+`write_higashi_inputs` orchestrates these for the common `.pairs/.cool`
+case.  Here we open the sparse `.matrix` files directly, so we call the
+helpers ourselves."""),
+
+    code("""\
+import json
+import tempfile
+from uchrom.io.contacts import (
+    write_label_info, make_higashi_config, _materialise_chromsizes,
+)
+
+td = Path(tempfile.mkdtemp(prefix="higashi_tut_"))
+higashi_dir = td / "higashi"
+data_dir = higashi_dir / "data"
+data_dir.mkdir(parents=True)
+
+chrom_list = list(HG19_CHROMSIZES_500K.keys())
+filelist_lines = []
+for _, row in sub.iterrows():
+    df = matrix_to_higashi(matrices_dir / row.matrix, bin_offsets)
+    df = df[df["chrom1"].isin(chrom_list) & df["chrom2"].isin(chrom_list)]
+    out = data_dir / f"{row.cell_name}.txt"
+    df.to_csv(out, sep="\\t", index=False, header=False)
+    filelist_lines.append(str(out.resolve()))
+
+(higashi_dir / "filelist.txt").write_text("\\n".join(filelist_lines) + "\\n")
+write_label_info(sub[["cell_name", "cell_type"]],
+                 higashi_dir / "label_info.pickle")
+chromsizes_path = _materialise_chromsizes(HG19_CHROMSIZES_500K, higashi_dir)
+cfg = make_higashi_config(
+    data_dir=str(higashi_dir),
+    genome_reference="hg19",
+    resolution=RESOLUTION,
+    chrom_list=chrom_list,
+    overrides={"genome_reference_path": str(chromsizes_path)},
+)
+(higashi_dir / "config.JSON").write_text(json.dumps(cfg, indent=2))
+print("Higashi input directory:", higashi_dir)
+print("files:", sorted(p.name for p in higashi_dir.iterdir()))"""),
+
+    md("""\
+## 5. Build a stub ChromData
+
+The embedding goes into `cd.cellm['higashi']`, so we need a
+`ChromData` with a `cells` frame whose `cell_name` matches the names
+in `label_info.pickle`.  Spots/coords here are placeholders — in a real
+analysis you'd already have a populated `ChromData` from
+reconstruction or tracing."""),
+
+    code("""\
+from uchrom.core import ChromData
+
+cd = ChromData(
+    coords=np.zeros((len(sub), 3)),
+    spots=pd.DataFrame({
+        "chrom": ["chr1"] * len(sub),
+        "start": np.arange(len(sub)) * RESOLUTION,
+        "end":   np.arange(len(sub)) * RESOLUTION + RESOLUTION,
+        "trace_id": [f"t{i}" for i in range(len(sub))],
+        "cell_id": list(sub.cell_name),
+    }),
+    cells=sub[["cell_name", "cell_type"]].reset_index(drop=True),
+)
+cd"""),
+
+    md("""\
+## 6. Run FastHigashi
+
+`uchrom.emb.higashi.run` drives the four-stage FastHigashi pipeline
+(`fast_process_data → prep_dataset → run_model → fetch_cell_embedding`)
+and writes the L2-normalised cell embedding into
+`cd.cellm['higashi']`, aligned to `cd.cells` row order.  Provenance
+(rank, config path, output dir) is recorded in `cd.uns['higashi']`.
+
+The `wrapper_kwargs` enable the recommended preprocessing for noisy
+scHi-C: graph convolution, random-walk-with-restart, and column
+normalization."""),
+
+    code("""\
+import time
+from uchrom.emb.higashi import run as higashi_run
+
+RANK = 64
+t0 = time.time()
+cd = higashi_run(
+    cd,
+    contacts_dir=higashi_dir,
+    rank=RANK,
+    cache_dir=td / "cache",
+    result_dir=td / "result",
+    wrapper_kwargs={"do_conv": True, "do_rwr": True, "do_col": True},
+)
+print(f"wall clock: {time.time()-t0:.1f}s")
+print(f"embedding shape: {cd.cellm['higashi'].shape}")
+print(f"provenance: {dict(cd.uns['higashi'])}")"""),
+
+    md("""\
+## 7. Score the embedding against ground truth
+
+Cluster the embedding with k-means (k = 2 = number of known cell
+types) and compare to the labels using:
+
+- **ARI** (Adjusted Rand Index): random = 0, perfect = 1.
+- **NMI** (Normalised Mutual Information): random ≈ 0, perfect = 1.
+
+For 150 cells at rank 64 with conv+rwr+col preprocessing we expect
+ARI ≈ 0.4.  Bumping to 300 cells gets ARI ≈ 0.55.  GPU + full PFC
+dataset in the original paper reaches ARI > 0.7."""),
+
+    code("""\
+from sklearn.cluster import KMeans
+from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
+
+emb = cd.cellm["higashi"]
+true_labels = pd.Categorical(cd.cells["cell_type"]).codes
+pred = KMeans(n_clusters=2, n_init=10, random_state=0).fit_predict(emb)
+ari = adjusted_rand_score(true_labels, pred)
+nmi = normalized_mutual_info_score(true_labels, pred)
+print(f"ARI = {ari:.3f}  (random ≈ 0, perfect = 1)")
+print(f"NMI = {nmi:.3f}")"""),
+
+    md("""\
+## 8. Visualise with UMAP
+
+A quick 2-D UMAP of the embedding shows whether H1Esc and HFF separate
+visually.  (UMAP is optional — `pip install umap-learn`.)"""),
+
+    code("""\
+try:
+    from umap import UMAP
+    import matplotlib.pyplot as plt
+    coords = UMAP(n_components=2, n_neighbors=15, random_state=0).fit_transform(emb)
+    fig, ax = plt.subplots(figsize=(6, 5))
+    for ct, color in [("H1Esc", "tab:red"), ("HFF", "tab:blue")]:
+        mask = cd.cells["cell_type"].values == ct
+        ax.scatter(coords[mask, 0], coords[mask, 1], s=14, alpha=0.7,
+                   label=ct, color=color)
+    ax.set_xlabel("UMAP 1"); ax.set_ylabel("UMAP 2")
+    ax.set_title(f"FastHigashi cell embedding (ARI={ari:.2f})")
+    ax.legend()
+    plt.tight_layout()
+except ImportError:
+    print("install umap-learn for the UMAP plot: pip install umap-learn")"""),
+
+    md("""\
+## Next steps
+
+- **Use the embedding** for cell-type / trajectory analysis — store it
+  in `cd.cellm[...]` and persist with `cd.write('with_higashi.h5cd')`.
+- **Imputed contact maps** are written under
+  `cd.uns['higashi']['result_dir']` — not loaded into `ChromData` (per
+  the "no `spotp`" design — O(n²) per cell is prohibitive).
+- **Larger / more cell types**: rerun with `N_PER_TYPE=150` (300 cells,
+  ~2 min on Mac mini, ARI ≈ 0.55) or move to a GPU box for the full
+  1 931-cell dataset."""),
+]
+
+write_nb(Path("tutorials") / "higashi_embedding.ipynb", nb_higashi)
+
+
+# ============================================================
 # README
 # ============================================================
 
@@ -2382,6 +2918,7 @@ Grouped by the U-Chrom module each tutorial targets:
 |----------|-------|
 | `chromdata_basics.ipynb` | The `ChromData` container |
 | `import_fofct.ipynb` | Loading FOF-CT imaging data |
+| `import_pyhim_ecsv.ipynb` | Loading PyHiM chromatin trace tables |
 
 ### Reconstruction (`uchrom.recon`)
 
@@ -2405,6 +2942,12 @@ Grouped by the U-Chrom module each tutorial targets:
 | `tad_calling.ipynb` | `strc.tad` | TAD calling (hierarchical F-test) |
 | `fishnet_domains.ipynb` | `strc.tad` | Per-allele domain calling (FISHnet) |
 | `compartment.ipynb` | `strc.comp` | A/B compartment calling |
+
+### Embedding (`uchrom.emb`)
+
+| Notebook | Topic |
+|----------|-------|
+| `higashi_embedding.ipynb` | FastHigashi cell embedding + ARI / NMI vs known cell types (Kim 2020 sci-Hi-C) |
 
 The notebooks are regenerated by running
 `python tutorials/_build_notebooks.py` from the repo root, which keeps

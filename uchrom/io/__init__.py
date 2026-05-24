@@ -12,3 +12,9 @@ from .particles import (
     filter_outliers, random_pos,
 )
 from .genome import GenomeRange
+from .contacts import (
+    pairs_df_to_higashi,
+    make_higashi_config,
+    write_label_info,
+    write_higashi_inputs,
+)

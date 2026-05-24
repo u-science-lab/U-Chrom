@@ -33,6 +33,24 @@ docs = [
     "myst-nb>=1.0",
     "sphinx-copybutton>=0.5",
 ]
+# FastHigashi for uchrom.emb.higashi.
+# The legacy `higashi` package hard-pins scipy==1.7.3 / pandas==1.3.4 and is
+# painful to install via pip; prefer `emb` (FastHigashi) and install the full
+# Higashi from the ruochiz conda channel when its co-assay features are needed.
+emb = [
+    "fasthigashi",
+]
+emb-full = [
+    "u-chrom[emb]",
+    "higashi",
+]
+# Image-side integrations (PyHiM ECSV reader and friends).
+# astropy alone is enough for from_pyhim_trace().  The full PyHiM CLI
+# is a much heavier dep (TensorFlow + StarDist) — install separately
+# in its own environment when you need the imaging pipeline itself.
+im = [
+    "astropy>=5.0",
+]
 
 [tool.setuptools]
 include-package-data = true
