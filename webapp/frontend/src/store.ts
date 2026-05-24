@@ -17,6 +17,7 @@ interface AppStore {
   linkedCameras: boolean
   highlightRegions: HighlightRegion[]
   colormapConfig: ColormapConfig
+  dataVersion: number
   setViewport: (v: GenomicViewport) => void
   setCellSelection: (s: CellSelection) => void
   addPanel: (type: PanelType) => void
@@ -25,6 +26,7 @@ interface AppStore {
   setLinkedCameras: (v: boolean) => void
   setHighlightRegions: (regions: HighlightRegion[]) => void
   setColormapConfig: (config: ColormapConfig) => void
+  bumpDataVersion: () => void
 }
 
 let _nextId = 1
@@ -37,6 +39,7 @@ export const useAppStore = create<AppStore>((set) => ({
   linkedCameras: false,
   highlightRegions: [],
   colormapConfig: { scheme: 'viridis' },
+  dataVersion: 0,
   setViewport: (v) => set({ viewport: v }),
   setCellSelection: (s) => set({ cellSelection: s }),
   addPanel: (type) => set(s => ({
@@ -47,6 +50,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setLinkedCameras: (v) => set({ linkedCameras: v }),
   setHighlightRegions: (regions) => set({ highlightRegions: regions }),
   setColormapConfig: (config) => set({ colormapConfig: config }),
+  bumpDataVersion: () => set(s => ({ dataVersion: s.dataVersion + 1 })),
 }))
 
 const PANEL_LABELS: Record<PanelType, string> = {

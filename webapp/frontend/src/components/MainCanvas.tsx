@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from 'react-resizable-panels'
 import { useAppStore, PanelType, PanelDef } from '../store'
 import CellEmbedding from './CellEmbedding'
@@ -57,17 +58,17 @@ export default function MainCanvas() {
     <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
       <PanelGroup orientation="horizontal" style={{ flex: 1 }}>
         {panels.map((p: PanelDef, i: number) => (
-          <>
+          <Fragment key={p.id}>
             {i > 0 && (
-              <PanelResizeHandle key={`h${p.id}`}
+              <PanelResizeHandle
                 style={{ width: 4, background: '#313244', cursor: 'col-resize' }} />
             )}
-            <Panel key={p.id} minSize={15}>
+            <Panel minSize={15}>
               <PanelContainer title={p.label} onClose={() => removePanel(p.id)}>
                 <PanelContent type={p.type} />
               </PanelContainer>
             </Panel>
-          </>
+          </Fragment>
         ))}
       </PanelGroup>
       <AddPanelMenu />

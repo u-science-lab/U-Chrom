@@ -23,6 +23,7 @@ export default function CellEmbedding() {
   const [data, setData] = useState<UmapData>({ points: [], cell_types: [] })
   const [viewState, setViewState] = useState({ target: [0, 0, 0] as [number,number,number], zoom: 1 })
   const { cellSelection, setCellSelection } = useAppStore()
+  const dataVersion = useAppStore(s => s.dataVersion)
   const deckRef = useRef<any>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -31,8 +32,11 @@ export default function CellEmbedding() {
   const dragStart = useRef<{x:number,y:number}|null>(null)
 
   useEffect(() => {
-    fetch('/api/umap').then(r => r.json()).then(setData).catch(() => {})
-  }, [])
+    fetch('/api/umap')
+      .then(r => r.json())
+      .then(d => { if (d?.points) setData(d) })
+      .catch(() => {})
+  }, [dataVersion])
 
   const typeIndex = new Map(data.cell_types.map((t, i) => [t, i]))
 

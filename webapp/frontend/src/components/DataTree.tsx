@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ws } from '../ws'
+import { useAppStore } from '../store'
 
 interface DataInfo {
   cell_count: number
@@ -13,12 +14,14 @@ export default function DataTree() {
   const [data, setData] = useState<DataInfo | null>(null)
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const bumpDataVersion = useAppStore(s => s.bumpDataVersion)
 
   useEffect(() => {
     const off = ws.onMessage('data_loaded', (p: any) => {
       setData(p)
       setLoading(false)
       setError('')
+      bumpDataVersion()
     })
     return () => { off() }
   }, [])
