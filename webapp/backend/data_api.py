@@ -189,3 +189,36 @@ def get_track(name: str, chrom: Optional[str] = None,
                            for i in range(resolution)], dtype=np.float32)
 
     return _float32_response(values)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/browse?path=/some/dir  — filesystem browser
+# ---------------------------------------------------------------------------
+
+import os as _os
+
+@data_router.get("/api/browse")
+def browse_directory(path: str = ""):
+    """List directories and supported data files at the given path."""
+    resolved = _os.path.abspath(path) if path else _os.path.expanduser("~")
+    if not _os.path.isdir(resolved):
+        raise HTTPException(status_code=400, detail={"error": "Not a directory"})
+
+    try:
+        names = sorted(_os.listdir(resolved))
+    except PermissionError:
+        raise HTTPException(status_code=403, detail={"error": "Permission denied"})
+
+    entries = []
+    for name in names:
+        if name.startswith("."):
+            continue
+        full = _os.path.join(resolved, name)
+        if _os.path.isdir(full):
+            entries.append({"name": name, "type": "dir", "path": full})
+        elif name.endswith((".h5cd", ".csv")):
+            size = _os.path.getsize(full)
+            entries.append({"name": name, "type": "file", "path": full, "size": size})
+
+    parent = _os.path.dirname(resolved) if resolved != "/" else None
+    return {"path": resolved, "parent": parent, "entries": entries}
