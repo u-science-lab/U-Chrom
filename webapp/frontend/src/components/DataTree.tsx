@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ws } from '../ws'
 import { useAppStore } from '../store'
+import FileBrowser from './FileBrowser'
 
 interface DataInfo {
   cell_count: number
@@ -13,6 +14,7 @@ export default function DataTree() {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<DataInfo | null>(null)
   const [error, setError] = useState('')
+  const [showBrowser, setShowBrowser] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const bumpDataVersion = useAppStore(s => s.bumpDataVersion)
 
@@ -70,17 +72,22 @@ export default function DataTree() {
   }
 
   return (
-    <div style={s.root}>
+    <>
+      <div style={s.root}>
       <div style={s.header}>Data</div>
       <div style={s.body}>
         {!data ? (
           <>
-            <div style={{ color: '#6c7086', fontSize: 11, marginBottom: 6 }}>Server path:</div>
+            <button style={s.btn} disabled={loading} onClick={() => setShowBrowser(true)}>
+              Browse…
+            </button>
+            <div style={{ textAlign: 'center', color: '#6c7086', fontSize: 11, margin: '6px 0' }}>or enter path</div>
             <input style={s.input} value={path} onChange={e => setPath(e.target.value)}
               placeholder="/path/to/data.h5cd"
               onKeyDown={e => e.key === 'Enter' && path && load(path)} />
-            <button style={s.btn} disabled={loading || !path} onClick={() => load(path)}>
-              {loading ? 'Loading…' : 'Load'}
+            <button style={{ ...s.btn, background: '#313244', color: '#cdd6f4' }}
+              disabled={loading || !path} onClick={() => load(path)}>
+              {loading ? 'Loading…' : 'Load path'}
             </button>
             <div style={{ textAlign: 'center', color: '#6c7086', fontSize: 11, margin: '6px 0' }}>or</div>
             <button style={{ ...s.btn, background: '#313244', color: '#cdd6f4' }}
@@ -112,6 +119,13 @@ export default function DataTree() {
           </>
         )}
       </div>
-    </div>
+      </div>
+      {showBrowser && (
+        <FileBrowser
+          onSelect={p => { setShowBrowser(false); load(p) }}
+          onClose={() => setShowBrowser(false)}
+        />
+      )}
+    </>
   )
 }
