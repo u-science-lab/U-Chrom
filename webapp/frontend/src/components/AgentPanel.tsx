@@ -43,6 +43,43 @@ export default function AgentPanel() {
       }
       if (p.done) setStreaming(false)
     })
+    // AG-UI: TEXT_MESSAGE_START — create a new agent message slot
+    const offTmStart = ws.onMessage('TEXT_MESSAGE_START', (_p: any) => {
+      setMessages(prev => [...prev, { role: 'agent', text: '' }])
+      setStreaming(true)
+    })
+
+    // AG-UI: TEXT_MESSAGE_CONTENT — append delta to the open message
+    const offTmContent = ws.onMessage('TEXT_MESSAGE_CONTENT', (p: any) => {
+      setMessages(prev => {
+        const last = prev[prev.length - 1]
+        if (last?.role === 'agent' && !last.isError) {
+          return [...prev.slice(0, -1), { ...last, text: last.text + p.delta }]
+        }
+        return [...prev, { role: 'agent', text: p.delta }]
+      })
+    })
+
+    // AG-UI: TEXT_MESSAGE_END — streaming complete
+    const offTmEnd = ws.onMessage('TEXT_MESSAGE_END', () => { setStreaming(false) })
+
+    // AG-UI: TOOL_CALL_START — show a "calling tool…" indicator
+    const offTcStart = ws.onMessage('TOOL_CALL_START', (p: any) => {
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        text: `Calling: ${p.tool_call_name}…`,
+      }])
+    })
+
+    // AG-UI: TOOL_CALL_END — no-op (legacy compat events update the store)
+    const offTcEnd = ws.onMessage('TOOL_CALL_END', () => {})
+
+    // AG-UI: RUN_ERROR
+    const offRunError = ws.onMessage('RUN_ERROR', (p: any) => {
+      setStreaming(false)
+      setMessages(prev => [...prev, { role: 'agent', text: `Error: ${p.message}`, isError: true }])
+    })
+
     const offVp = ws.onMessage('agent_viewport_update', (p: any) => {
       setViewport({ chrom: p.chrom, start: p.start, end: p.end })
     })
@@ -142,7 +179,7 @@ export default function AgentPanel() {
         return prev
       })
     })
-    return () => { offToken(); offVp(); offCells(); offHighlight(); offColormap(); offArt(); offStepStart(); offStepComplete() }
+    return () => { offToken(); offTmStart(); offTmContent(); offTmEnd(); offTcStart(); offTcEnd(); offRunError(); offVp(); offCells(); offHighlight(); offColormap(); offArt(); offStepStart(); offStepComplete() }
   }, [setViewport, setCellSelection, addPanel, setHighlightRegions, setColormapConfig])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
