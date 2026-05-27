@@ -1,0 +1,209 @@
+"""HiGlass-compatible tileset API for U-Chrom contact map tiles.
+
+Endpoints (HiGlass spec):
+  GET /api/tileset_info?d=<uid>          → JSON with dataset metadata
+  GET /api/tiles?d=<uid>.<z>.<x>.<y>    → JSON with dense tile data
+
+UID format: "contact-{chrom}" e.g. "contact-chr1"
+
+Tile format (matrix datatype):
+  256×256 Float32 dense array, gzipped, base64-encoded.
+  At zoom level z, the full chromatin range is divided into 2^z tiles per axis.
+  Resolution: bin_size * factor, where factor = 2^(max_z - z).
+"""
+
+from __future__ import annotations
+
+import base64
+import gzip
+import math
+from typing import Dict, Any
+
+import numpy as np
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
+
+import webapp.backend.data_api as data_api
+
+tileset_router = APIRouter()
+
+BINS_PER_DIM = 256
+
+# In-memory cache: uid → full NxN distance matrix (averaged across cells)
+_matrix_cache: Dict[str, np.ndarray] = {}
+# Tile cache: "uid.z.x.y" → encoded tile bytes
+_tile_cache: Dict[str, str] = {}
+
+
+def clear_cache() -> None:
+    """Clear all caches (used in tests)."""
+    _matrix_cache.clear()
+    _tile_cache.clear()
+
+
+def _get_session():
+    s = data_api.current_session
+    if s is None or s.chromdata is None:
+        raise HTTPException(status_code=404, detail={"error": "No data loaded"})
+    return s
+
+
+def _parse_uid(uid: str):
+    """Parse 'contact-{chrom}' → chrom string."""
+    if not uid.startswith("contact-"):
+        raise HTTPException(status_code=400, detail={"error": f"Unknown tileset uid: {uid}"})
+    return uid[len("contact-"):]
+
+
+def _build_matrix(chrom: str) -> np.ndarray:
+    """Build averaged distance matrix for chrom across all cells/traces."""
+    if chrom in _matrix_cache:
+        return _matrix_cache[chrom]
+
+    s = _get_session()
+    cd = s.chromdata
+    spots = cd.spots
+    chrom_spots = spots[spots["chrom"] == chrom]
+    if chrom_spots.empty:
+        raise HTTPException(status_code=404, detail={"error": f"No bins for {chrom}"})
+
+    # Find all traces for this chrom
+    trace_ids = chrom_spots["trace_id"].unique()
+    n_bins = chrom_spots.groupby("trace_id").size().max()
+
+    accum = np.zeros((n_bins, n_bins), dtype=np.float64)
+    counts = np.zeros((n_bins, n_bins), dtype=np.int32)
+
+    for tid in trace_ids:
+        mask = (spots["trace_id"] == tid) & (spots["chrom"] == chrom)
+        idx = np.where(mask)[0]
+        if len(idx) < 2:
+            continue
+        coords = cd.coords[idx]  # shape (k, 3)
+        k = len(coords)
+        # Pairwise Euclidean distances
+        diff = coords[:, None, :] - coords[None, :, :]  # (k, k, 3)
+        dmat = np.sqrt((diff ** 2).sum(axis=-1))  # (k, k)
+        accum[:k, :k] += dmat
+        counts[:k, :k] += 1
+
+    with np.errstate(invalid="ignore"):
+        matrix = np.where(counts > 0, accum / counts, 0.0).astype(np.float32)
+
+    _matrix_cache[chrom] = matrix
+    return matrix
+
+
+def _chrom_size(chrom: str) -> int:
+    """Return max genomic end position for chrom."""
+    s = _get_session()
+    cd = s.chromdata
+    spots = cd.spots
+    chrom_spots = spots[spots["chrom"] == chrom]
+    if chrom_spots.empty:
+        return 1000000
+    return int(chrom_spots["end"].max())
+
+
+def _max_zoom(chrom_size: int) -> int:
+    """Compute max zoom level so that at zoom 0 the whole chrom fits in one tile."""
+    bins_total = chrom_size  # treat 1bp = 1 unit
+    max_zoom = max(0, math.ceil(math.log2(bins_total / BINS_PER_DIM)))
+    return int(max_zoom)
+
+
+def _encode_tile(matrix: np.ndarray, z: int, x: int, y: int, max_z: int) -> str:
+    """Extract a 256×256 tile from the full matrix and return base64-gzipped float32."""
+    n = matrix.shape[0]
+    factor = 2 ** (max_z - z)  # bins per output pixel at this zoom level
+
+    # Map matrix bins → tile coordinates
+    # Each output pixel covers `factor` matrix bins
+    # Tile x covers columns [x*256..(x+1)*256) in the 256*2^z grid
+    start_x = x * BINS_PER_DIM
+    start_y = y * BINS_PER_DIM
+
+    out = np.zeros((BINS_PER_DIM, BINS_PER_DIM), dtype=np.float32)
+
+    for ty in range(BINS_PER_DIM):
+        gy = start_y + ty  # grid y index
+        row_lo = gy * factor
+        row_hi = min(row_lo + factor, n)
+        if row_lo >= n:
+            break
+        for tx in range(BINS_PER_DIM):
+            gx = start_x + tx
+            col_lo = gx * factor
+            col_hi = min(col_lo + factor, n)
+            if col_lo >= n:
+                break
+            block = matrix[row_lo:row_hi, col_lo:col_hi]
+            if block.size > 0:
+                out[ty, tx] = float(block.mean())
+
+    raw = out.flatten().tobytes()  # little-endian float32
+    compressed = gzip.compress(raw)
+    return base64.b64encode(compressed).decode("ascii")
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@tileset_router.get("/api/tileset_info")
+def tileset_info(d: str):
+    """Return HiGlass tileset metadata for one or more datasets (comma-separated d)."""
+    uids = [u.strip() for u in d.split(",") if u.strip()]
+    result: Dict[str, Any] = {}
+    for uid in uids:
+        chrom = _parse_uid(uid)
+        size = _chrom_size(chrom)
+        max_z = _max_zoom(size)
+        max_width = BINS_PER_DIM * (2 ** max_z)
+        result[uid] = {
+            "name": uid,
+            "datatype": "matrix",
+            "bins_per_dimension": BINS_PER_DIM,
+            "max_zoom": max_z,
+            "max_width": max_width,
+            "min_pos": [0, 0],
+            "max_pos": [max_width, max_width],
+            "chromsizes": [[chrom, size]],
+        }
+    return JSONResponse(result)
+
+
+@tileset_router.get("/api/tiles")
+def tiles(d: str):
+    """Return one or more tiles.
+
+    d format: uid.z.x.y  (multiple d= params not used by TestClient, so we
+    accept comma-separated in a single d= for simplicity, though HiGlass
+    normally repeats the param).
+    """
+    tile_ids = [t.strip() for t in d.split(",") if t.strip()]
+    result: Dict[str, Any] = {}
+    for tile_id in tile_ids:
+        parts = tile_id.rsplit(".", 3)
+        if len(parts) != 4:
+            raise HTTPException(status_code=400, detail={"error": f"Bad tile id: {tile_id}"})
+        uid, z_s, x_s, y_s = parts
+        z, x, y = int(z_s), int(x_s), int(y_s)
+
+        cache_key = tile_id
+        if cache_key in _tile_cache:
+            dense = _tile_cache[cache_key]
+        else:
+            chrom = _parse_uid(uid)
+            matrix = _build_matrix(chrom)
+            size = _chrom_size(chrom)
+            max_z = _max_zoom(size)
+            dense = _encode_tile(matrix, z, x, y, max_z)
+            _tile_cache[cache_key] = dense
+
+        result[tile_id] = {
+            "dense": dense,
+            "min_value": 0.0,
+            "max_value": 1.0,
+        }
+    return JSONResponse(result)
