@@ -34,7 +34,10 @@ export default function StructureViewer({ onExport }: Props) {
   const [tooltip, setTooltip] = useState<{ x: number; y: number; info: SpotInfo } | null>(null)
   const [lodEnabled, setLodEnabled] = useState(true)
 
-  const { cellSelection, cameraState, linkedCameras, setCameraState, highlightRegions, colormapConfig } = useAppStore()
+  const instancedMeshRef = useRef<THREE.InstancedMesh | null>(null)
+  const spotMapRef2 = useRef<{chrom: string; start: number; end: number}[]>([])  // bin info per instance
+
+  const { cellSelection, cameraState, linkedCameras, setCameraState, highlightRegions, colormapConfig, viewport } = useAppStore()
 
   // Initialize Three.js
   useEffect(() => {
@@ -181,6 +184,7 @@ export default function StructureViewer({ onExport }: Props) {
         scene.add(mesh)
         objectsRef.current.push(mesh)
         spotMapRef.current = spotInfos
+        instancedMeshRef.current = mesh
 
       } else if (renderMode === 'lines') {
         for (const [cellIdx, {pts}] of cellPoints) {
@@ -269,6 +273,87 @@ export default function StructureViewer({ onExport }: Props) {
     // For now, just log the config
     console.log('Colormap config:', colormapConfig)
   }, [colormapConfig])
+
+  // Viewport bin highlighting: color bins inside viewport range
+  useEffect(() => {
+    const mesh = instancedMeshRef.current
+    if (!mesh) return
+
+    const color = new THREE.Color()
+    const HIGHLIGHT = new THREE.Color(1.0, 0.42, 0.42)   // #ff6b6b
+    const DEFAULT  = new THREE.Color(0.4, 0.7,  1.0)     // base blue
+
+    // No viewport chrom → reset all to default
+    if (!viewport || !viewport.chrom) {
+      for (let i = 0; i < mesh.count; i++) {
+        mesh.setColorAt(i, DEFAULT)
+      }
+      mesh.instanceColor!.needsUpdate = true
+      return
+    }
+
+    // Need bin metadata; if not loaded yet, fetch it
+    async function applyHighlight() {
+      const spotInfos = spotMapRef.current
+      if (spotInfos.length === 0 || !mesh) return
+
+      // Determine first cell id to fetch bins
+      let cellId: string | null = null
+      if (cellSelection.mode === 'all') {
+        try {
+          const r = await fetch('/api/umap')
+          if (r.ok) {
+            const body = await r.json()
+            const pts = body.points as {cell_id: string}[]
+            if (pts.length > 0) cellId = pts[0].cell_id
+          }
+        } catch { /* ignore */ }
+      } else if (cellSelection.ids.length > 0) {
+        cellId = cellSelection.ids[0]
+      }
+      if (!cellId) return
+
+      let bins: {chrom: string; start: number; end: number; idx: number}[] = []
+      // Use cached bins if available, otherwise fetch
+      if (spotMapRef2.current.length > 0) {
+        bins = spotMapRef2.current.map((b, i) => ({ ...b, idx: i }))
+      } else {
+        try {
+          const r = await fetch(`/api/bins/${cellId}`)
+          if (!r.ok) return
+          const body = await r.json()
+          bins = body.bins
+          spotMapRef2.current = bins.map((b: {chrom: string; start: number; end: number}) => ({
+            chrom: b.chrom, start: b.start, end: b.end
+          }))
+        } catch { return }
+      }
+
+      const { chrom, start, end } = viewport!
+      // bins are indexed by instance order — use spotInfos order as fallback
+      // The bins endpoint returns bins for a single cell ordered by chrom/start.
+      // We match by position in spotInfos (same order as instancedMesh was built for first cell).
+      for (let i = 0; i < mesh!.count; i++) {
+        const bin = bins[i]
+        if (bin && bin.chrom === chrom && bin.start >= start && bin.end <= end) {
+          mesh!.setColorAt(i, HIGHLIGHT)
+        } else {
+          // Restore palette color based on cell index in spotInfos
+          const si = spotInfos[i]
+          if (si) {
+            // find cellIdx from ids
+            // DEFAULT fallback
+            mesh!.setColorAt(i, DEFAULT)
+          } else {
+            mesh!.setColorAt(i, DEFAULT)
+          }
+        }
+      }
+      mesh!.instanceColor!.needsUpdate = true
+    }
+
+    applyHighlight().catch(() => {})
+  }, [viewport, cellSelection])
 
   // Raycaster: hover/click on points mode
   function onMouseMove(e: React.MouseEvent) {

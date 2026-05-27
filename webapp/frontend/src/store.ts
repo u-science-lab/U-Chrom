@@ -6,7 +6,7 @@ export interface CameraState { position: [number,number,number]; target: [number
 export interface HighlightRegion { chrom: string; start: number; end: number; color?: string; label?: string }
 export interface ColormapConfig { scheme: string; property?: string; range?: [number, number] }
 
-export type PanelType = 'umap' | 'structure3d' | 'contact_map' | 'track_plot'
+export type PanelType = 'umap' | 'structure3d' | 'contact_map' | 'track_plot' | 'igv_browser'
 export interface PanelDef { id: string; type: PanelType; label: string }
 
 interface AppStore {
@@ -58,4 +58,5 @@ const PANEL_LABELS: Record<PanelType, string> = {
   structure3d: '3D Structure',
   contact_map: 'Contact Map',
   track_plot: 'Track Plot',
+  igv_browser: 'IGV Browser',
 }
