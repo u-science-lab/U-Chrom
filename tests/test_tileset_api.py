@@ -71,8 +71,8 @@ def test_tile_encoding_returns_valid_float32():
     assert len(arr) == 256 * 256
 
 
-def test_tileset_info_multi_uid():
-    """tileset_info handles comma-separated uid list."""
+def test_tileset_info_returns_correct_structure():
+    """tileset_info returns correct structure for a single UID."""
     r = client.get("/api/tileset_info?d=contact-chr1")
     assert r.status_code == 200
     body = r.json()

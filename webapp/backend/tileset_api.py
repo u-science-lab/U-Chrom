@@ -112,35 +112,39 @@ def _max_zoom(chrom_size: int) -> int:
     return int(max_zoom)
 
 
+def _build_tile_array(matrix: np.ndarray, zoom: int, tx: int, ty: int,
+                      max_zoom: int) -> np.ndarray:
+    """Build a 256×256 float32 tile via vectorized downsampling."""
+    n = matrix.shape[0]
+    factor = max(1, math.ceil(n / (BINS_PER_DIM * (2 ** zoom))))
+    # Pad matrix to multiple of (BINS_PER_DIM * factor)
+    target = BINS_PER_DIM * factor
+    pad = (target - n % target) % target
+    if pad > 0:
+        mat = np.pad(matrix, ((0, pad), (0, pad)), constant_values=np.nan)
+    else:
+        mat = matrix
+    # Slice the tile region
+    row_start = ty * BINS_PER_DIM * factor
+    col_start = tx * BINS_PER_DIM * factor
+    row_end = row_start + BINS_PER_DIM * factor
+    col_end = col_start + BINS_PER_DIM * factor
+    chunk = mat[row_start:row_end, col_start:col_end]
+    # Pad chunk if smaller than expected (out-of-range tile)
+    if chunk.shape[0] < BINS_PER_DIM * factor or chunk.shape[1] < BINS_PER_DIM * factor:
+        chunk = np.pad(chunk,
+                       ((0, BINS_PER_DIM * factor - chunk.shape[0]),
+                        (0, BINS_PER_DIM * factor - chunk.shape[1])),
+                       constant_values=np.nan)
+    # Vectorized downsample: reshape → mean over factor blocks
+    reshaped = chunk.reshape(BINS_PER_DIM, factor, BINS_PER_DIM, factor)
+    out = np.nanmean(reshaped, axis=(1, 3)).astype(np.float32)
+    return out
+
+
 def _encode_tile(matrix: np.ndarray, z: int, x: int, y: int, max_z: int) -> str:
     """Extract a 256×256 tile from the full matrix and return base64-gzipped float32."""
-    n = matrix.shape[0]
-    factor = 2 ** (max_z - z)  # bins per output pixel at this zoom level
-
-    # Map matrix bins → tile coordinates
-    # Each output pixel covers `factor` matrix bins
-    # Tile x covers columns [x*256..(x+1)*256) in the 256*2^z grid
-    start_x = x * BINS_PER_DIM
-    start_y = y * BINS_PER_DIM
-
-    out = np.zeros((BINS_PER_DIM, BINS_PER_DIM), dtype=np.float32)
-
-    for ty in range(BINS_PER_DIM):
-        gy = start_y + ty  # grid y index
-        row_lo = gy * factor
-        row_hi = min(row_lo + factor, n)
-        if row_lo >= n:
-            break
-        for tx in range(BINS_PER_DIM):
-            gx = start_x + tx
-            col_lo = gx * factor
-            col_hi = min(col_lo + factor, n)
-            if col_lo >= n:
-                break
-            block = matrix[row_lo:row_hi, col_lo:col_hi]
-            if block.size > 0:
-                out[ty, tx] = float(block.mean())
-
+    out = _build_tile_array(matrix, z, x, y, max_z)
     raw = out.flatten().tobytes()  # little-endian float32
     compressed = gzip.compress(raw)
     return base64.b64encode(compressed).decode("ascii")
@@ -192,18 +196,22 @@ def tiles(d: str):
 
         cache_key = tile_id
         if cache_key in _tile_cache:
-            dense = _tile_cache[cache_key]
+            dense, actual_max = _tile_cache[cache_key]
         else:
             chrom = _parse_uid(uid)
             matrix = _build_matrix(chrom)
             size = _chrom_size(chrom)
             max_z = _max_zoom(size)
-            dense = _encode_tile(matrix, z, x, y, max_z)
-            _tile_cache[cache_key] = dense
+            arr = _build_tile_array(matrix, z, x, y, max_z)
+            actual_max = float(np.nanmax(arr)) if not np.all(np.isnan(arr)) else 1.0
+            raw = arr.flatten().tobytes()
+            compressed = gzip.compress(raw)
+            dense = base64.b64encode(compressed).decode("ascii")
+            _tile_cache[cache_key] = (dense, actual_max)
 
         result[tile_id] = {
             "dense": dense,
             "min_value": 0.0,
-            "max_value": 1.0,
+            "max_value": actual_max,
         }
     return JSONResponse(result)

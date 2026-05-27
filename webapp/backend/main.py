@@ -7,6 +7,7 @@ from typing import Any
 from .session import Session
 from .ws_handler import handle_message
 from .data_api import data_router
+from .tileset_api import tileset_router
 import webapp.backend.data_api as _data_api
 
 UPLOAD_DIR = tempfile.mkdtemp(prefix="uchrom_uploads_")
