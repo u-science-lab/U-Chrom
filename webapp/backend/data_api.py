@@ -192,6 +192,27 @@ def get_track(name: str, chrom: Optional[str] = None,
 
 
 # ---------------------------------------------------------------------------
+# GET /api/bins/{cell_id}  — genomic bin list for a cell
+# ---------------------------------------------------------------------------
+
+@data_router.get("/api/bins/{cell_id}")
+def get_bins(cell_id: str):
+    cd = _cd_or_404()
+    cell = _coerce_cell_id(cd, cell_id)
+    if len(cell.spots) == 0:
+        raise HTTPException(status_code=404, detail={"error": f"Cell '{cell_id}' not found"})
+    bins = cell.spots[["chrom", "start", "end"]].copy()
+    # Convert categorical columns to plain strings for JSON serialisation
+    for col in ("chrom",):
+        if hasattr(bins[col], "cat"):
+            bins[col] = bins[col].astype(str)
+    return JSONResponse(
+        {"bins": bins.to_dict(orient="records")},
+        headers={"Cache-Control": _CACHE},
+    )
+
+
+# ---------------------------------------------------------------------------
 # GET /api/browse?path=/some/dir  — filesystem browser
 # ---------------------------------------------------------------------------
 
