@@ -46,6 +46,13 @@ async def ws_main(ws: WebSocket):
             _data_api.current_session = None
 
 
+CANVAS_SIZES = {
+    "nature-single": (336, 280),
+    "nature-double": (692, 460),
+    "science-double": (658, 440),
+}
+
+
 class ExportRequest(BaseModel):
     figure_state: Any
     format: str
@@ -53,7 +60,39 @@ class ExportRequest(BaseModel):
 
 @app.post("/api/export")
 async def export_figure(req: ExportRequest):
-    return {"url": "/exports/figure.svg"}
+    state = req.figure_state or {}
+    panels = state.get("panels", [])
+    style = state.get("style", {})
+    preset = style.get("sizePreset", "nature-double")
+    font_size = style.get("fontSize", 7)
+    w, h = CANVAS_SIZES.get(preset, (692, 460))
+
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">',
+        f'  <rect width="{w}" height="{h}" fill="white"/>',
+    ]
+    for p in panels:
+        px, py, pw, ph = p.get("x", 0), p.get("y", 0), p.get("w", 100), p.get("h", 80)
+        label = str(p.get("label", ""))
+        # Escape XML special chars
+        label = label.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        lines.append(
+            f'  <rect x="{px}" y="{py}" width="{pw}" height="{ph}" '
+            f'fill="none" stroke="#89b4fa" stroke-width="1"/>'
+        )
+        lines.append(
+            f'  <text x="{px + 4}" y="{py + font_size + 2}" '
+            f'font-family="Arial,sans-serif" font-size="{font_size}" fill="#1e1e2e">{label}</text>'
+        )
+    lines.append("</svg>")
+    svg_content = "\n".join(lines)
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".svg", delete=False, mode="w", encoding="utf-8")
+    tmp.write(svg_content)
+    tmp.close()
+
+    return {"url": f"/api/download?path={tmp.name}"}
 
 
 @app.post("/api/upload")
@@ -78,11 +117,13 @@ async def download_file(path: str):
         return {"error": "File not found"}
 
     filename = os.path.basename(path)
-    return FileResponse(
-        path,
-        media_type="application/pdf" if path.endswith(".pdf") else "application/octet-stream",
-        filename=filename
-    )
+    if path.endswith(".pdf"):
+        media_type = "application/pdf"
+    elif path.endswith(".svg"):
+        media_type = "image/svg+xml"
+    else:
+        media_type = "application/octet-stream"
+    return FileResponse(path, media_type=media_type, filename=filename)
 
 
 @app.post("/api/session/save")
