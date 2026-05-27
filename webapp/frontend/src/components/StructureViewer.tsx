@@ -187,15 +187,30 @@ export default function StructureViewer({ onExport }: Props) {
         instancedMeshRef.current = mesh
 
       } else if (renderMode === 'lines') {
+        // Merge all cells into one draw call using LineSegments with per-vertex colors.
+        // LineSegments requires pairs of vertices (start, end per segment).
+        // Convert each cell's continuous polyline into segment pairs.
+        const allPositions: number[] = []
+        const allColors: number[] = []
         for (const [cellIdx, {pts}] of cellPoints) {
-          const positions = new Float32Array(pts)
+          const [rv, gv, bv] = PALETTE[cellIdx % PALETTE.length]
+          const r = rv / 255, g = gv / 255, b = bv / 255
+          // pts is flat [x0,y0,z0, x1,y1,z1, ...] for one cell's polyline
+          for (let j = 0; j + 5 < pts.length; j += 3) {
+            // segment: pt[j] → pt[j+3]
+            allPositions.push(pts[j], pts[j+1], pts[j+2])
+            allPositions.push(pts[j+3], pts[j+4], pts[j+5])
+            allColors.push(r, g, b, r, g, b)
+          }
+        }
+        if (allPositions.length > 0) {
           const geo = new THREE.BufferGeometry()
-          geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-          const [rv, g, b] = PALETTE[cellIdx % PALETTE.length]
-          const mat = new THREE.LineBasicMaterial({ color: new THREE.Color(rv/255, g/255, b/255), linewidth: 2 })
-          const line = new THREE.Line(geo, mat)
-          scene.add(line)
-          objectsRef.current.push(line)
+          geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(allPositions), 3))
+          geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(allColors), 3))
+          const mat = new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 1 })
+          const lines = new THREE.LineSegments(geo, mat)
+          scene.add(lines)
+          objectsRef.current.push(lines)
         }
 
       } else { // tubes
