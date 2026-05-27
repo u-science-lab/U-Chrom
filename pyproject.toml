@@ -38,6 +38,7 @@ webapp = [
     "uvicorn[standard]>=0.29",
     "websockets>=12.0",
     "python-multipart>=0.0.9",
+    "anthropic>=0.25",
 ]
 
 [tool.setuptools]
