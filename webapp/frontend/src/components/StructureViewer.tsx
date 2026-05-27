@@ -214,19 +214,37 @@ export default function StructureViewer({ onExport }: Props) {
         }
 
       } else { // tubes
+        // Merge all cell tube geometries into one draw call.
+        const { mergeGeometries } = await import('three/examples/jsm/utils/BufferGeometryUtils.js')
+        const geos: THREE.BufferGeometry[] = []
         for (const [cellIdx, {pts}] of cellPoints) {
           if (pts.length < 6) continue
-          const points3d = []
-          for (let j = 0; j < pts.length; j += 3) points3d.push(new THREE.Vector3(pts[j], pts[j+1], pts[j+2]))
+          const points3d: THREE.Vector3[] = []
+          for (let j = 0; j + 2 < pts.length; j += 3)
+            points3d.push(new THREE.Vector3(pts[j], pts[j+1], pts[j+2]))
           const curve = new THREE.CatmullRomCurve3(points3d)
-          const geo = new THREE.TubeGeometry(curve, Math.min(points3d.length * 3, 300), 0.03, 6, false)
-          const [rv, g, b] = PALETTE[cellIdx % PALETTE.length]
-          const mat = new THREE.MeshPhongMaterial({ color: new THREE.Color(rv/255, g/255, b/255) })
-          const tube = new THREE.Mesh(geo, mat)
-          scene.add(tube)
-          objectsRef.current.push(tube)
+          const segments = Math.min(points3d.length * 3, 300)
+          const geo = new THREE.TubeGeometry(curve, segments, 0.03, 6, false)
+          // Assign per-vertex color for this cell
+          const [rv, gv, bv] = PALETTE[cellIdx % PALETTE.length]
+          const r = rv / 255, g = gv / 255, b = bv / 255
+          const count = geo.attributes.position.count
+          const colors = new Float32Array(count * 3)
+          for (let i = 0; i < count; i++) { colors[i*3] = r; colors[i*3+1] = g; colors[i*3+2] = b }
+          geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+          geos.push(geo)
         }
-        // Add ambient light for tubes
+        if (geos.length > 0) {
+          const merged = mergeGeometries(geos, false)
+          geos.forEach(g => g.dispose())
+          if (merged) {
+            const mat = new THREE.MeshPhongMaterial({ vertexColors: true })
+            const mesh = new THREE.Mesh(merged, mat)
+            scene.add(mesh)
+            objectsRef.current.push(mesh)
+          }
+        }
+        // Lights (still needed for MeshPhong)
         const light = new THREE.AmbientLight(0xffffff, 0.8)
         const dlight = new THREE.DirectionalLight(0xffffff, 0.5)
         dlight.position.set(5, 5, 5)
