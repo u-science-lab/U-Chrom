@@ -1,8 +1,10 @@
 import asyncio
 import json
 import os
+import anthropic
 from fastapi import WebSocket
 from .session import Session, Viewport
+from .agui_events import AGUI, TOOLS, send_agui
 
 
 def _load_chromdata(path: str, fmt: str):
@@ -258,6 +260,188 @@ def _run_code_in_worker(code: str, chromdata_path: str | None) -> list[dict]:
         artifacts.append({"artifact_type": "text_block",
                           "payload": {"content": f"Code error: {e}", "format": "error"}})
     return artifacts
+
+
+async def _execute_tool(
+    ws: WebSocket,
+    session: Session,
+    session_id: str,
+    tool_name: str,
+    tool_call_id: str,
+    args: dict,
+    executor,
+) -> None:
+    """Apply a completed tool call: update session state and emit legacy compat events."""
+    if tool_name == "set_viewport":
+        session.viewport = Viewport(
+            chrom=args.get("chrom"),
+            start=args.get("start"),
+            end=args.get("end"),
+        )
+        await ws.send_json({"type": "agent_viewport_update", "payload": args})
+    elif tool_name == "select_cells":
+        session.cell_selection = args.get("ids", [])
+        await ws.send_json({"type": "agent_cell_selection", "payload": args})
+    elif tool_name == "highlight_region":
+        await ws.send_json({"type": "agent_highlight_region", "payload": args})
+    elif tool_name == "set_colormap":
+        await ws.send_json({"type": "agent_set_colormap", "payload": args})
+    elif tool_name == "run_python":
+        code = args.get("code", "")
+        if code and executor is not None:
+            chromdata_path = None
+            if session.chromdata is not None:
+                import tempfile
+                tmp = tempfile.NamedTemporaryFile(suffix=".h5cd", delete=False)
+                tmp.close()
+                session.chromdata.write(tmp.name)
+                chromdata_path = tmp.name
+            loop = asyncio.get_running_loop()
+            try:
+                artifacts = await loop.run_in_executor(
+                    executor, _run_code_in_worker, code, chromdata_path
+                )
+                for art in artifacts:
+                    await ws.send_json({"type": "agent_artifact", "payload": art})
+            except Exception as e:
+                await ws.send_json({"type": "agent_artifact", "payload": {
+                    "artifact_type": "text_block",
+                    "payload": {"content": f"Execution error: {e}", "format": "error"},
+                }})
+            finally:
+                if chromdata_path:
+                    os.unlink(chromdata_path)
+
+
+async def _run_agent_agui(
+    ws: WebSocket,
+    session: Session,
+    text: str,
+    session_id: str,
+    executor=None,
+) -> None:
+    """Run agent using Anthropic SDK tool calls, emitting AG-UI events."""
+    ctx = ""
+    if session.chromdata is not None:
+        cd = session.chromdata
+        n_cells = len(cd.cells) if cd.cells is not None else 0
+        chroms = list(cd.spots["chrom"].unique()) if cd.spots is not None else []
+        ctx = (
+            f"\n\nLoaded data: {n_cells} cells, "
+            f"chroms: {[str(c) for c in chroms[:8]]}"
+            f"{'...' if len(chroms) > 8 else ''}"
+        )
+        if session.viewport.chrom:
+            ctx += (
+                f", current viewport: {session.viewport.chrom}:"
+                f"{session.viewport.start}-{session.viewport.end}"
+            )
+
+    messages = []
+    for turn in session.conversation_history:
+        messages.append({"role": turn["role"], "content": turn["content"]})
+    messages.append({"role": "user", "content": text + ctx})
+
+    run_id = session_id
+    await send_agui(ws, AGUI.RUN_STARTED, {"run_id": run_id})
+
+    try:
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+
+        full_text_parts: list[str] = []
+        tool_blocks: dict[int, dict] = {}
+        msg_id = f"msg_{run_id}"
+        text_started = False
+
+        with client.messages.stream(
+            model="claude-opus-4",
+            max_tokens=4096,
+            system=_SYSTEM_PROMPT,
+            tools=TOOLS,
+            messages=messages,
+        ) as stream:
+            for event in stream:
+                etype = event.type
+
+                if etype == "content_block_start":
+                    block = event.content_block
+                    if block.type == "text":
+                        if not text_started:
+                            await send_agui(ws, AGUI.TEXT_MESSAGE_START,
+                                            {"message_id": msg_id, "role": "assistant"})
+                            text_started = True
+                    elif block.type == "tool_use":
+                        tool_blocks[event.index] = {
+                            "id": block.id,
+                            "name": block.name,
+                            "partial_json": "",
+                        }
+                        await send_agui(ws, AGUI.TOOL_CALL_START, {
+                            "tool_call_id": block.id,
+                            "tool_call_name": block.name,
+                            "parent_message_id": msg_id,
+                        })
+
+                elif etype == "content_block_delta":
+                    delta = event.delta
+                    if delta.type == "text_delta":
+                        token = delta.text
+                        if token:
+                            full_text_parts.append(token)
+                            await send_agui(ws, AGUI.TEXT_MESSAGE_CONTENT, {
+                                "message_id": msg_id,
+                                "delta": token,
+                            })
+                            # Legacy compat
+                            await ws.send_json({
+                                "type": "agent_token",
+                                "payload": {"session_id": session_id, "token": token},
+                            })
+                    elif delta.type == "input_json_delta":
+                        idx = event.index
+                        if idx in tool_blocks:
+                            chunk = delta.partial_json
+                            tool_blocks[idx]["partial_json"] += chunk
+                            await send_agui(ws, AGUI.TOOL_CALL_ARGS, {
+                                "tool_call_id": tool_blocks[idx]["id"],
+                                "delta": chunk,
+                            })
+
+                elif etype == "content_block_stop":
+                    idx = event.index
+                    if idx in tool_blocks:
+                        tb = tool_blocks[idx]
+                        try:
+                            args = json.loads(tb["partial_json"]) if tb["partial_json"] else {}
+                        except json.JSONDecodeError:
+                            args = {}
+                        await send_agui(ws, AGUI.TOOL_CALL_END, {
+                            "tool_call_id": tb["id"],
+                            "tool_call_name": tb["name"],
+                        })
+                        await _execute_tool(ws, session, session_id, tb["name"], tb["id"], args, executor)
+
+                elif etype == "message_delta":
+                    if text_started:
+                        await send_agui(ws, AGUI.TEXT_MESSAGE_END, {"message_id": msg_id})
+                        await ws.send_json({
+                            "type": "agent_token",
+                            "payload": {"session_id": session_id, "token": "", "done": True},
+                        })
+
+        await send_agui(ws, AGUI.RUN_FINISHED, {"run_id": run_id})
+
+        full_text = "".join(full_text_parts)
+        if full_text or tool_blocks:
+            session.conversation_history.append({"role": "user", "content": text})
+            if full_text:
+                session.conversation_history.append({"role": "assistant", "content": full_text})
+
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        await send_agui(ws, AGUI.RUN_ERROR, {"run_id": run_id, "message": str(exc)})
+        await ws.send_json({"type": "error", "payload": {"message": str(exc)}})
 
 
 async def _run_agent(ws: WebSocket, session: Session, text: str, session_id: str, executor=None):
@@ -547,7 +731,7 @@ async def handle_message(ws: WebSocket, session: Session, msg: dict, executor) -
         text = p.get("text", "")
         async def _safe_run():
             try:
-                await _run_agent(ws, session, text, session_id, executor)
+                await _run_agent_agui(ws, session, text, session_id, executor)
             except Exception as e:
                 import traceback
                 traceback.print_exc()
