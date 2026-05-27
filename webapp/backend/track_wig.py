@@ -72,8 +72,8 @@ def get_track_wig(
         first = group.iloc[0]
         bin_size = int(first["end"] - first["start"])
         lines.append(f"variableStep chrom={chrom_name} span={bin_size}")
-        for _, row in group.iterrows():
-            wig_pos = int(row["start"]) + 1  # WIG is 1-based
-            lines.append(f"{wig_pos} {row['_value']}")
+        for row in group.rename(columns={"_value": "value"}).itertuples(index=False):
+            wig_pos = int(row.start) + 1  # WIG is 1-based
+            lines.append(f"{wig_pos} {row.value:.6g}")
 
     return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain")
