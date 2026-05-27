@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import DataTree from './components/DataTree'
 import MainCanvas from './components/MainCanvas'
 import AgentPanel from './components/AgentPanel'
