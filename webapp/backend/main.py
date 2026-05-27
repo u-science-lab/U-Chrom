@@ -24,7 +24,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="U-Chrom WebApp", lifespan=lifespan)
 app.state.executor = ProcessPoolExecutor()  # fallback for TestClient (no lifespan)
 app.include_router(data_router)
-from .tileset_api import tileset_router
 app.include_router(tileset_router)
 app.include_router(track_wig_router)
 sessions: dict[str, Session] = {}

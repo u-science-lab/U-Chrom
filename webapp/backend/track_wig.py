@@ -17,6 +17,7 @@ One track per chromosome section. Values are the per-bin mean across all cells.
 
 from typing import Optional
 
+import pandas as pd
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
 
@@ -42,7 +43,6 @@ def get_track_wig(
         raise HTTPException(status_code=404, detail={"error": f"Track '{name}' not found"})
 
     # Build a combined DataFrame of spots + track value
-    import pandas as pd
     df = cd.spots[["chrom", "start", "end"]].copy()
     df["_value"] = cd.tracks[name].values
 
@@ -50,20 +50,20 @@ def get_track_wig(
     if chrom is not None:
         df = df[df["chrom"] == chrom]
 
-    # Filter by genomic range
+    # Filter by genomic range (overlap semantics: bin overlaps [start, end))
     if start is not None:
-        df = df[df["start"] >= start]
+        df = df[df["end"] > start]
     if end is not None:
-        df = df[df["end"] <= end]
+        df = df[df["start"] < end]
 
     if df.empty:
-        return PlainTextResponse("", media_type="text/plain")
+        return PlainTextResponse(f"track type=wiggle_0 name={name}\n", media_type="text/plain")
 
     # Group by (chrom, start, end) and compute mean across all cells/traces
     grouped = df.groupby(["chrom", "start", "end"], observed=True)["_value"].mean().reset_index()
     grouped = grouped.sort_values(["chrom", "start"])
 
-    lines = []
+    lines = [f"track type=wiggle_0 name={name}"]
     for chrom_name, group in grouped.groupby("chrom", observed=True, sort=True):
         group = group.sort_values("start")
         if group.empty:
