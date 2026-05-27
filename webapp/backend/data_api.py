@@ -243,3 +243,51 @@ def browse_directory(path: str = ""):
 
     parent = _os.path.dirname(resolved) if resolved != "/" else None
     return {"path": resolved, "parent": parent, "entries": entries}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/export_script  — generate standalone Python analysis script
+# ---------------------------------------------------------------------------
+
+@data_router.get("/api/export_script")
+def export_script():
+    """Return a standalone Python script that reproduces the current session."""
+    from fastapi.responses import PlainTextResponse
+    cd = _cd_or_404()
+    source_path = getattr(cd, "_source_path", None) or "path/to/data.h5cd"
+
+    lines = [
+        "#!/usr/bin/env python3",
+        '"""Auto-generated U-Chrom analysis script."""',
+        "import numpy as np",
+        "import pandas as pd",
+        "import uchrom",
+        "from uchrom.core.cdata import ChromData",
+        "",
+        "# Load data",
+        f'cd = ChromData.read("{source_path}")',
+        "",
+        "# Session info",
+    ]
+
+    if cd.cells is not None:
+        n_cells = len(cd.cells)
+        lines.append(f"# {n_cells} cells loaded")
+
+    if cd.spots is not None:
+        chroms = sorted(cd.spots["chrom"].astype(str).unique().tolist())
+        lines.append(f"# Chromosomes: {chroms}")
+
+    lines += [
+        "",
+        "# Example: get a specific cell",
+        "# cell = cd.get_cell('c1')",
+        "",
+        "# Example: compute distance matrix for a trace",
+        "# dist = cd.compute_distances(trace_id=0)",
+        "",
+        "print(f'Loaded {len(cd.cells) if cd.cells is not None else 0} cells')",
+    ]
+
+    script = "\n".join(lines) + "\n"
+    return PlainTextResponse(script, media_type="text/plain")
