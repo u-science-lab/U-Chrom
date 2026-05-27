@@ -5,18 +5,20 @@ import CellEmbedding from './CellEmbedding'
 import StructureViewer from './StructureViewer'
 import ContactMap from './ContactMap'
 import TrackPlot from './TrackPlot'
+import IGVPanel from './IGVPanel'
 import PanelContainer from './PanelContainer'
 
-const PANEL_TYPES: PanelType[] = ['umap', 'structure3d', 'contact_map', 'track_plot']
+const PANEL_TYPES: PanelType[] = ['umap', 'structure3d', 'contact_map', 'track_plot', 'igv_browser']
 const PANEL_LABELS: Record<PanelType, string> = {
   umap: 'Cell Embedding', structure3d: '3D Structure',
-  contact_map: 'Contact Map', track_plot: 'Track Plot',
+  contact_map: 'Contact Map', track_plot: 'Track Plot', igv_browser: 'IGV Browser',
 }
 
 function PanelContent({ type }: { type: PanelType }) {
   if (type === 'umap') return <CellEmbedding />
   if (type === 'structure3d') return <StructureViewer />
   if (type === 'contact_map') return <ContactMap />
+  if (type === 'igv_browser') return <IGVPanel />
   return <TrackPlot />
 }
 
