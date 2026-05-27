@@ -37,7 +37,7 @@ export default function StructureViewer({ onExport }: Props) {
   const instancedMeshRef = useRef<THREE.InstancedMesh | null>(null)
   const spotMapRef2 = useRef<{chrom: string; start: number; end: number}[]>([])  // bin info per instance
 
-  const { cellSelection, cameraState, linkedCameras, setCameraState, highlightRegions, colormapConfig, viewport } = useAppStore()
+  const { cellSelection, cameraState, linkedCameras, setCameraState, highlightRegions, colormapConfig, viewport, setViewport } = useAppStore()
 
   // Initialize Three.js
   useEffect(() => {
@@ -376,6 +376,33 @@ export default function StructureViewer({ onExport }: Props) {
     }
   }
 
+  function onClick(e: React.MouseEvent) {
+    if (renderMode !== 'points') return
+    const container = containerRef.current
+    const mesh = objectsRef.current[0] as THREE.InstancedMesh
+    if (!container || !mesh || !cameraRef.current) return
+    const rect = container.getBoundingClientRect()
+    mouseRef.current.set(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1
+    )
+    raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current)
+    const hits = raycasterRef.current.intersectObject(mesh)
+    if (hits.length > 0 && hits[0].instanceId !== undefined) {
+      const info = spotMapRef.current[hits[0].instanceId]
+      if (!info) return
+      const bin = spotMapRef2.current[info.spotIdx]
+      if (!bin) return
+      const binSize = bin.end - bin.start
+      const window = binSize * 5
+      setViewport({
+        chrom: bin.chrom,
+        start: Math.max(0, bin.start - window),
+        end: bin.end + window,
+      })
+    }
+  }
+
   const handleExport = useCallback(() => {
     const renderer = rendererRef.current
     if (!renderer) return
@@ -393,7 +420,7 @@ export default function StructureViewer({ onExport }: Props) {
     <PanelContainer title="3D Structure">
       <div style={{ position: 'relative', width: '100%', height: '100%' }}>
         <div ref={containerRef} style={{ width: '100%', height: '100%' }}
-          onMouseMove={onMouseMove} onMouseLeave={() => setTooltip(null)} />
+          onMouseMove={onMouseMove} onMouseLeave={() => setTooltip(null)} onClick={onClick} />
 
         {/* Controls bar */}
         <div style={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 4 }}>
