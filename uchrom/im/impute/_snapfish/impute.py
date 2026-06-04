@@ -269,6 +269,9 @@ def boxcox_by1d(by1d_arr):
     Returns:
         np.ndarray, np.ndarray: transformed data, transformed parameters.
     """
+    # Make a copy to avoid read-only issues
+    by1d_arr = by1d_arr.copy()
+
     y = by1d_arr[~np.isnan(by1d_arr)]
     lmbda = round(stats.boxcox_normmax(y, method="mle"), 4)
     y_trf = stats.boxcox(y, lmbda=lmbda)
