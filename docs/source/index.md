@@ -60,6 +60,7 @@ example_data
 
 tutorials/chromdata_basics
 tutorials/import_fofct
+tutorials/import_pyhim_ecsv
 ```
 
 ```{toctree}
@@ -85,6 +86,13 @@ tutorials/loop_calling
 tutorials/tad_calling
 tutorials/fishnet_domains
 tutorials/compartment
+```
+
+```{toctree}
+:caption: Tutorials — Embedding (emb)
+:maxdepth: 1
+
+tutorials/higashi_embedding
 ```
 
 ```{toctree}
