@@ -61,6 +61,7 @@ example_data
 tutorials/chromdata_basics
 tutorials/import_fofct
 tutorials/import_pyhim_ecsv
+tutorials/takei2025_walkthrough
 ```
 
 ```{toctree}

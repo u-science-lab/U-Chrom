@@ -291,6 +291,7 @@ class ChromData:
         layers: Optional[Dict[str, np.ndarray]] = None,
         results: Optional[dict] = None,
         uns: Optional[dict] = None,
+        linked_adata=None,
         validate: bool = True,
     ):
         self.coords = np.asarray(coords, dtype=np.float64)
@@ -302,6 +303,7 @@ class ChromData:
         self.layers = layers if layers is not None else {}
         self.results = results if results is not None else {}
         self.uns = uns if uns is not None else {}
+        self._linked_adata = linked_adata
 
         # Convert string-heavy columns to categorical for memory efficiency
         self._categorify()
@@ -333,6 +335,32 @@ class ChromData:
                     if hasattr(self.spots["chrom"], "cat")
                     else self.spots["chrom"].unique())
 
+    @property
+    def linked_adata(self):
+        """Linked AnnData object, loaded lazily from ``uns`` metadata if possible."""
+        if self._linked_adata is None:
+            path = self.uns.get("linked_anndata", {}).get("path")
+            if path:
+                path = Path(path)
+                if path.exists():
+                    import anndata as ad
+                    self._linked_adata = ad.read_h5ad(path)
+        return self._linked_adata
+
+    @linked_adata.setter
+    def linked_adata(self, value) -> None:
+        self._linked_adata = value
+
+    def load_linked_anndata(self, path: Optional[PathLike] = None):
+        """Load, cache, and return the linked AnnData object."""
+        if path is None:
+            path = self.uns.get("linked_anndata", {}).get("path")
+        if path is None:
+            raise ValueError("No linked AnnData path is recorded in cd.uns['linked_anndata'].")
+        import anndata as ad
+        self._linked_adata = ad.read_h5ad(path)
+        return self._linked_adata
+
     # ------------------------------------------------------------------
     # Validation
     # ------------------------------------------------------------------
@@ -353,6 +381,15 @@ class ChromData:
             raise ValueError(
                 f"tracks rows ({len(self.tracks)}) != n_spots ({self.n_spots})"
             )
+        cell_axis_len = len(self.cells) if len(self.cells) > 0 else self.n_cells
+        for key, arr in self.cellm.items():
+            arr = np.asarray(arr)
+            if arr.ndim == 0:
+                raise ValueError(f"cellm['{key}'] must have at least one dimension")
+            if cell_axis_len > 0 and arr.shape[0] != cell_axis_len:
+                raise ValueError(
+                    f"cellm['{key}'] rows ({arr.shape[0]}) != n_cells ({cell_axis_len})"
+                )
         for key, arr in self.layers.items():
             if arr.shape != self.coords.shape:
                 raise ValueError(
@@ -393,6 +430,7 @@ class ChromData:
             layers=new_layers,
             results=self.results,
             uns=self.uns,
+            linked_adata=None,
             validate=False,
         )
 
@@ -407,13 +445,43 @@ class ChromData:
             return self.cells, self.cellm
         if "cell_id" not in spots.columns:
             return self.cells, self.cellm
-        keep = spots["cell_id"].unique()
-        mask = self.cells.index.isin(keep)
+        keep = {str(x) for x in spots["cell_id"].unique()}
+        axis_ids = self._cells_axis_ids()
+        if axis_ids is None:
+            return self.cells, self.cellm
+        mask = axis_ids.isin(keep)
         new_cells = self.cells[mask]
         new_cellm = {}
         for k, v in self.cellm.items():
             new_cellm[k] = v[mask.values] if hasattr(mask, "values") else v[mask]
         return new_cells, new_cellm
+
+    def _spot_cell_ids(self) -> pd.Index:
+        if "cell_id" not in self.spots.columns:
+            return pd.Index([], name="cell_id")
+        return pd.Index([str(x) for x in self.spots["cell_id"].unique()], name="cell_id")
+
+    def _cells_axis_ids(self) -> Optional[pd.Index]:
+        """Return the cell ids that define rows of cells/cellm, if known."""
+        if len(self.cells) == 0:
+            return None
+
+        spot_ids = set(self._spot_cell_ids())
+        candidates = []
+        if not isinstance(self.cells.index, pd.RangeIndex) or self.cells.index.name is not None:
+            candidates.append(self.cells.index)
+        for col in ("cell_id", "cell_name"):
+            if col in self.cells.columns:
+                candidates.append(self.cells[col])
+
+        for values in candidates:
+            ids = pd.Index([str(x) for x in values], name="cell_id")
+            if not spot_ids or spot_ids.intersection(set(ids)):
+                return ids
+
+        if len(self.cells) == len(self._spot_cell_ids()):
+            return self._spot_cell_ids()
+        return pd.Index([str(x) for x in self.cells.index], name="cell_id")
 
     def get_cell(self, cell_id) -> "ChromData":
         if "cell_id" not in self.spots.columns:
@@ -468,8 +536,15 @@ class ChromData:
         Matches cells by ``cell_id``: each unique value in
         ``spots['cell_id']`` is looked up in ``adata.obs`` (by index, or
         by the column *cell_id_col* if given).  Matched cells get their
-        ``adata.obs`` columns copied into ``self.cells`` and their
+        ``adata.obs`` columns merged into ``self.cells`` and their
         ``adata.obsm`` arrays copied into ``self.cellm``.
+
+        If ``self.cells`` already exists, its row order is preserved and
+        AnnData rows are aligned onto that cell axis.  This is important
+        for multi-omics loaders such as Takei 2025, where chromatin
+        tracing coordinates live in ``coords/spots``, RNA/IF signals live
+        in spot-level ``tracks``, and mRNA clustering/UMAP already live
+        in ``cells`` / ``cellm``.
 
         Parameters
         ----------
@@ -502,19 +577,34 @@ class ChromData:
                 "Add cell_id to spots before calling link_anndata()."
             )
 
-        cd_cell_ids = self.spots["cell_id"].unique()
+        cd_cell_ids = self._spot_cell_ids()
 
         if cell_id_col is not None:
-            adata_ids = adata.obs[cell_id_col].values
-            adata_index = pd.Index(adata_ids)
+            if cell_id_col not in adata.obs.columns:
+                raise KeyError(f"adata.obs has no column '{cell_id_col}'")
+            adata_index = pd.Index(adata.obs[cell_id_col].values)
         else:
             adata_index = adata.obs.index
 
-        # Cast both sides to string for robust matching
-        cd_set = set(str(c) for c in cd_cell_ids)
+        # Cast both sides to string for robust matching.
+        cd_set = set(cd_cell_ids)
         adata_str = pd.Index([str(x) for x in adata_index])
+        if adata_str.has_duplicates:
+            dupes = adata_str[adata_str.duplicated()].unique().tolist()
+            raise ValueError(
+                "AnnData cell identifiers are not unique; duplicate ids: "
+                f"{dupes[:5]}"
+            )
 
-        matched = sorted(cd_set & set(adata_str))
+        matched_set = cd_set & set(adata_str)
+        if len(self.cells) > 0:
+            existing_axis = self._cells_axis_ids()
+            if existing_axis is not None:
+                matched = [c for c in existing_axis if c in matched_set]
+            else:
+                matched = [c for c in cd_cell_ids if c in matched_set]
+        else:
+            matched = [c for c in cd_cell_ids if c in matched_set]
         if not matched:
             import warnings
             warnings.warn(
@@ -524,34 +614,59 @@ class ChromData:
             )
             return 0
 
-        adata_mask = adata_str.isin(matched)
-        adata_matched = adata[adata_mask]
+        adata_pos = {cell_id: i for i, cell_id in enumerate(adata_str)}
+        order = [adata_pos[cell_id] for cell_id in matched]
 
-        # Build a cells DataFrame keyed by the matched IDs
+        # Build / update the cell table keyed by the matched ids.
+        new_index = pd.Index(matched, name="cell_id")
+        if len(self.cells) > 0:
+            old_axis = self._cells_axis_ids()
+            if old_axis is None:
+                cells = pd.DataFrame(index=new_index)
+            else:
+                cells = self.cells.copy()
+                cells.index = old_axis
+                cells = cells.loc[new_index].copy()
+                cells.index.name = "cell_id"
+        else:
+            cells = pd.DataFrame(index=new_index)
+
+        old_cellm = self.cellm
+        if len(self.cells) > 0 and old_cellm:
+            old_axis = self._cells_axis_ids()
+            if old_axis is not None:
+                old_pos = {cell_id: i for i, cell_id in enumerate(old_axis)}
+                keep = [old_pos[cell_id] for cell_id in matched]
+                old_cellm = {k: np.asarray(v)[keep].copy() for k, v in old_cellm.items()}
+
         if copy_obs:
-            obs = adata_matched.obs.copy()
-            if cell_id_col is not None:
-                obs = obs.set_index(cell_id_col, drop=False)
-            obs.index = [str(x) for x in obs.index]
-            obs.index.name = "cell_id"
-            self.cells = obs
+            obs = adata.obs.iloc[order].copy()
+            obs.index = new_index
+            for col in obs.columns:
+                cells[col] = obs[col].values
+        self.cells = cells
 
+        self.cellm = old_cellm
         if copy_obsm:
-            # Map adata row indices to our cells order
-            order = [list(adata_str[adata_mask]).index(c) for c in matched]
-            for key in adata_matched.obsm:
-                arr = np.asarray(adata_matched.obsm[key])
-                self.cellm[key] = arr[order] if order != list(range(len(order))) else arr.copy()
+            for key in adata.obsm:
+                arr = np.asarray(adata.obsm[key])
+                if arr.shape[0] != adata.n_obs:
+                    raise ValueError(
+                        f"adata.obsm['{key}'] rows ({arr.shape[0]}) != adata.n_obs ({adata.n_obs})"
+                    )
+                self.cellm[key] = arr[order].copy()
 
         return len(matched)
 
     def to_anndata(self):
         """Export cell-level data as an AnnData object.
 
-        Creates an AnnData where each observation is a cell,
-        ``obs`` = ``self.cells``, ``obsm`` = ``self.cellm``.
-        The ``X`` matrix is left empty (zeros) since ChromData
-        has no cell × gene expression matrix.
+        Creates an AnnData where each observation is a cell, ``obs`` is
+        ``self.cells``, and ``obsm`` is ``self.cellm``.  The ``X`` matrix
+        is left empty (zeros) because ChromData has no cell-by-feature
+        expression matrix.  Spot-level RNA-FISH / IF / epigenomic
+        signals, such as Takei 2025 tracks, remain in ``self.tracks`` and
+        are not flattened into AnnData.X.
 
         Returns
         -------
@@ -564,15 +679,28 @@ class ChromData:
         """
         import anndata as ad
 
-        n = len(self.cells) if len(self.cells) > 0 else self.n_cells
-        if n == 0:
+        if len(self.cells) > 0:
+            obs = self.cells.copy()
+            axis_ids = self._cells_axis_ids()
+            if axis_ids is not None:
+                obs.index = axis_ids
+                obs.index.name = "cell_id"
+        elif self.n_cells > 0:
+            obs = pd.DataFrame(index=self._spot_cell_ids())
+        else:
             raise ValueError(
                 "No cell-level data to export. "
                 "Use link_anndata() first or populate cd.cells."
             )
 
-        obs = self.cells.copy()
-        obsm = {k: v.copy() for k, v in self.cellm.items()}
+        obsm = {}
+        for key, value in self.cellm.items():
+            arr = np.asarray(value)
+            if arr.shape[0] != len(obs):
+                raise ValueError(
+                    f"cellm['{key}'] rows ({arr.shape[0]}) != exported cells ({len(obs)})"
+                )
+            obsm[key] = arr.copy()
 
         adata = ad.AnnData(
             X=np.zeros((len(obs), 0)),
@@ -958,6 +1086,31 @@ class ChromData:
         from uchrom.io.seqfish_multiomics import read_seqfish_multiomics
         return read_seqfish_multiomics(spot_glob, **kwargs)
 
+    @classmethod
+    def from_seqfish_multiomics_linked(cls, spot_glob, **kwargs):
+        """Load linked Takei 2025 DNA tracing + RNA AnnData artifacts.
+
+        Thin shim around
+        :func:`uchrom.io.seqfish_multiomics.load_seqfish_multiomics_linked`.
+        Returns a ``ChromData`` with RNA expression available at
+        ``cd.linked_adata`` and can write paired ``.h5cd`` / ``.h5ad``
+        files.
+        """
+        from uchrom.io.seqfish_multiomics import load_seqfish_multiomics_linked
+        return load_seqfish_multiomics_linked(spot_glob, **kwargs)
+
+    @classmethod
+    def from_takei2025_cerebellum(cls, **kwargs):
+        """Load linked Takei 2025 cerebellum data.
+
+        Thin shim around
+        :func:`uchrom.io.seqfish_multiomics.load_takei2025_cerebellum`.
+        Returns a ``ChromData`` with RNA expression available at
+        ``cd.linked_adata``.
+        """
+        from uchrom.io.seqfish_multiomics import load_takei2025_cerebellum
+        return load_takei2025_cerebellum(**kwargs)
+
     def to_dataframe(self) -> pd.DataFrame:
         """Export as a flat DataFrame with coords + spots columns."""
         df = self.spots.copy()
@@ -984,6 +1137,7 @@ class ChromData:
             layers={k: v.copy() for k, v in self.layers.items()} or None,
             results=deepcopy(self.results) or None,
             uns=deepcopy(self.uns) or None,
+            linked_adata=self._linked_adata.copy() if self._linked_adata is not None else None,
             validate=False,
         )
 
@@ -1016,6 +1170,10 @@ class ChromData:
             parts.append(f"  results: {list(self.results.keys())}")
         if self.uns:
             parts.append(f"  uns:     {list(self.uns.keys())}")
+        if self._linked_adata is not None:
+            parts.append(f"  linked_adata: {self._linked_adata.shape}")
+        elif self.uns.get("linked_anndata", {}).get("path"):
+            parts.append("  linked_adata: lazy")
 
         return "\n".join(parts)
 

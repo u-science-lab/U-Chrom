@@ -14,6 +14,7 @@ See https://github.com/ma-compbio/Higashi/wiki/Input-Files for the full spec.
 """
 from __future__ import annotations
 
+import gzip
 import json
 import pickle
 from pathlib import Path
@@ -21,8 +22,6 @@ from typing import Any, Mapping
 
 import numpy as np
 import pandas as pd
-
-from ._io import read_pairs
 
 
 def pairs_df_to_higashi(
@@ -169,7 +168,7 @@ def write_higashi_inputs(
     filelist_lines: list[str] = []
     for name in label_names:
         src = Path(pairs_files[name])
-        pairs = read_pairs(str(src))
+        pairs = _read_pairs_file(src)
         higashi = pairs_df_to_higashi(pairs, resolution=resolution)
         out_path = data_dir / f"{name}.txt"
         # FastHigashi reads with header=None when config[header_included]=False,
@@ -197,6 +196,18 @@ def write_higashi_inputs(
     (out_dir / "config.JSON").write_text(json.dumps(cfg, indent=2))
 
     return out_dir
+
+
+def _read_pairs_file(path: str | Path) -> pd.DataFrame:
+    """Read the minimal .pairs columns needed for Higashi conversion."""
+    path = Path(path)
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "rt") as f:
+        df = pd.read_csv(f, sep="\t", header=None, comment="#")
+    columns = ["read", "chr1", "pos1", "chr2", "pos2", "strand1", "strand2"]
+    df = df.iloc[:, :len(columns)]
+    df.columns = columns[:len(df.columns)]
+    return df
 
 
 def _materialise_chromsizes(

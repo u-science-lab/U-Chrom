@@ -33,7 +33,13 @@ from __future__ import annotations
 
 import gc
 import glob as _glob
+import re
+import shutil
+import tarfile
+import urllib.request
 import warnings
+import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
@@ -42,6 +48,23 @@ import pandas as pd
 
 
 PathLike = Union[str, Path]
+
+
+ZENODO_RECORD = "7693825"
+ZENODO_BASE_URL = f"https://zenodo.org/api/records/{ZENODO_RECORD}/files"
+TRANSCRIPTOMIC_ZIP_NAME = "transcriptomic-data.zip"
+TRANSCRIPTOMIC_ZIP_URL = f"{ZENODO_BASE_URL}/{TRANSCRIPTOMIC_ZIP_NAME}/content"
+GITHUB_MEDIA_BASE_URL = (
+    "https://media.githubusercontent.com/media/"
+    "CaiGroup/dna-seqfish-plus-multi-omics/main"
+)
+CEREBELLUM_LOCUS_25KB_PATH = (
+    "data/annotation/LC1-100k-09022022-mm10-25kb-meta.csv"
+)
+CEREBELLUM_CLUSTERING_PATH = (
+    "data/cerebellum/clustering/"
+    "100k-002-001-cerebellum_mRNA_cluster_nuc_vol_filtered.csv"
+)
 
 
 DEFAULT_CEREBELLUM_LEIDEN_MAP: Dict[int, str] = {
@@ -228,9 +251,460 @@ def read_seqfish_multiomics(
     )
 
 
+def read_seqfish_transcriptome(
+    transcriptomic_data: PathLike | Iterable[PathLike] | None = None,
+    *,
+    dataset: str = "cerebellum",
+    assay: str = "mrna",
+    replicate: Optional[int] = None,
+    observed_cell_ids: Optional[Iterable[str]] = None,
+    download: bool = False,
+    data_dir: PathLike = "example-data",
+    chunksize: int = 500_000,
+):
+    """Read Takei 2025 RNA seqFISH spot CSVs into a cell × gene AnnData.
+
+    The Zenodo transcriptomic archive stores super-resolved RNA spots,
+    not a precomputed expression matrix.  This function aggregates those
+    spots into a sparse count matrix with cell ids matching
+    :func:`read_seqfish_multiomics`: ``rep_fov_cellID``.
+    """
+    try:
+        import anndata as ad
+        from scipy import sparse
+    except ImportError as e:
+        raise ImportError(
+            "anndata and scipy are required to build the Takei 2025 h5ad. "
+            "Install with `pip install anndata scipy`."
+        ) from e
+
+    sources = _resolve_transcriptome_sources(
+        transcriptomic_data,
+        dataset=dataset,
+        assay=assay,
+        replicate=replicate,
+        download=download,
+        data_dir=data_dir,
+    )
+    if not sources:
+        raise ValueError(
+            f"No transcriptomic CSVs found for dataset={dataset!r}, "
+            f"assay={assay!r}, replicate={replicate!r}."
+        )
+
+    observed_order = None
+    observed = None
+    if observed_cell_ids is not None:
+        observed_order = [str(x) for x in observed_cell_ids]
+        observed = set(observed_order)
+
+    counts: Optional[pd.Series] = None
+    intensity: Optional[pd.Series] = None
+    source_names: List[str] = []
+    for source in sources:
+        source_names.append(source.name)
+        source_rep = _infer_replicate(source.name, default=replicate)
+        for chunk in _iter_csv_chunks(source, chunksize=chunksize):
+            expr = _normalise_transcriptome_chunk(chunk, replicate=source_rep)
+            if observed is not None:
+                expr = expr[expr["cell_id"].isin(observed)]
+            if expr.empty:
+                continue
+            grp = expr.groupby(["cell_id", "geneID"], sort=False).size()
+            counts = grp if counts is None else counts.add(grp, fill_value=0)
+            if "intensity" in expr.columns:
+                inten_grp = expr.groupby(["cell_id", "geneID"], sort=False)["intensity"].sum()
+                intensity = inten_grp if intensity is None else intensity.add(inten_grp, fill_value=0)
+
+    if counts is None or counts.empty:
+        raise ValueError("No RNA spots remained after filtering; cannot build AnnData.")
+
+    counts = counts.astype(np.int64)
+    idx = counts.index
+    if observed_order is None:
+        cell_ids = list(pd.Index(idx.get_level_values("cell_id")).unique())
+    else:
+        cell_ids = observed_order
+    genes = list(pd.Index(idx.get_level_values("geneID")).unique())
+
+    cell_pos = {c: i for i, c in enumerate(cell_ids)}
+    gene_pos = {g: i for i, g in enumerate(genes)}
+    rows = np.array([cell_pos[c] for c in idx.get_level_values("cell_id")], dtype=np.int64)
+    cols = np.array([gene_pos[g] for g in idx.get_level_values("geneID")], dtype=np.int64)
+    x = sparse.csr_matrix(
+        (counts.to_numpy(dtype=np.float64), (rows, cols)),
+        shape=(len(cell_ids), len(genes)),
+    )
+
+    obs = pd.DataFrame(index=pd.Index(cell_ids, name="cell_id"))
+    obs["n_transcripts"] = np.asarray(x.sum(axis=1)).ravel().astype(np.int64)
+    obs["n_genes_by_counts"] = np.asarray((x > 0).sum(axis=1)).ravel().astype(np.int64)
+    var = pd.DataFrame(index=pd.Index(genes, name="geneID"))
+    var["n_cells_by_counts"] = np.asarray((x > 0).sum(axis=0)).ravel().astype(np.int64)
+
+    adata = ad.AnnData(X=x, obs=obs, var=var)
+    if intensity is not None and not intensity.empty:
+        intensity = intensity.reindex(idx).fillna(0.0)
+        adata.layers["intensity_sum"] = sparse.csr_matrix(
+            (intensity.to_numpy(dtype=np.float64), (rows, cols)),
+            shape=x.shape,
+        )
+    adata.uns["takei2025_transcriptome"] = {
+        "dataset": dataset,
+        "assay": assay,
+        "replicate": replicate,
+        "source_files": source_names,
+        "zenodo_record": ZENODO_RECORD,
+    }
+    return adata
+
+
+def load_seqfish_multiomics_linked(
+    spot_glob: Union[str, Iterable[PathLike]],
+    *,
+    locus_annotation: PathLike,
+    cell_clustering: Optional[PathLike] = None,
+    transcriptomic_data: PathLike | Iterable[PathLike] | None = None,
+    transcriptome_dataset: str = "cerebellum",
+    transcriptome_assay: str = "mrna",
+    transcriptome_replicate: Optional[int] = None,
+    transcriptome_chunksize: int = 500_000,
+    download_transcriptome: bool = False,
+    data_dir: PathLike = "example-data",
+    h5cd_path: Optional[PathLike] = None,
+    h5ad_path: Optional[PathLike] = None,
+    **kwargs,
+):
+    """Build linked Takei 2025 ChromData and AnnData artifacts.
+
+    Returns a ``ChromData`` that stores chromatin tracing geometry and
+    spot-level tracks.  The aggregated RNA expression matrix is attached
+    as ``cd.linked_adata``.  Both objects are ordered on the same cell
+    ids, and the ChromData receives ``adata.obs``/``adata.obsm`` via
+    :meth:`ChromData.link_anndata`.
+    """
+    cd = read_seqfish_multiomics(
+        spot_glob,
+        locus_annotation=locus_annotation,
+        cell_clustering=cell_clustering,
+        **kwargs,
+    )
+    observed_ids = [str(x) for x in cd.spots["cell_id"].unique()]
+    adata = read_seqfish_transcriptome(
+        transcriptomic_data,
+        dataset=transcriptome_dataset,
+        assay=transcriptome_assay,
+        replicate=transcriptome_replicate,
+        observed_cell_ids=observed_ids,
+        download=download_transcriptome,
+        data_dir=data_dir,
+        chunksize=transcriptome_chunksize,
+    )
+    matched = cd.link_anndata(adata)
+    if matched == 0:
+        raise ValueError("RNA AnnData had no cell_id overlap with ChromData.")
+    adata = _align_anndata_to_chromdata(adata, cd)
+    cd.linked_adata = adata
+
+    cd.uns["linked_anndata"] = {
+        "n_obs": int(adata.n_obs),
+        "n_vars": int(adata.n_vars),
+        "cell_id_axis": "obs_names",
+    }
+    if h5ad_path is not None:
+        h5ad_path = Path(h5ad_path)
+        h5ad_path.parent.mkdir(parents=True, exist_ok=True)
+        adata.write_h5ad(h5ad_path)
+        cd.uns["linked_anndata"]["path"] = str(h5ad_path)
+    if h5cd_path is not None:
+        h5cd_path = Path(h5cd_path)
+        h5cd_path.parent.mkdir(parents=True, exist_ok=True)
+        cd.write(h5cd_path)
+    return cd
+
+
+def load_takei2025_cerebellum(
+    *,
+    replicate: int = 1,
+    data_dir: PathLike = "example-data/takei2025_cerebellum",
+    download: bool = True,
+    rebuild: bool = False,
+    transcriptome_chunksize: int = 500_000,
+    **kwargs,
+):
+    """Load linked Takei 2025 cerebellum ``ChromData`` + AnnData.
+
+    This convenience loader returns a ``ChromData``.  The aggregated RNA
+    expression matrix is available as ``cd.linked_adata``.  If paired
+    ``.h5cd`` / ``.h5ad`` artifacts already exist under ``data_dir``,
+    they are reused.  Otherwise, when ``download=True``, the required
+    DNA seqFISH+ archive and transcriptome zip are downloaded from
+    Zenodo record 7693825, annotation/clustering tables are downloaded
+    from the CaiGroup GitHub repository, and linked artifacts are built.
+
+    Parameters
+    ----------
+    replicate
+        Cerebellum replicate to load.  Currently ``1`` or ``2``.
+    data_dir
+        Cache/build directory for downloaded raw files and linked
+        artifacts.
+    download
+        If False, missing raw/build artifacts raise ``FileNotFoundError``.
+    rebuild
+        If True, rebuild the paired artifacts even when ``.h5cd`` exists.
+    transcriptome_chunksize
+        Chunk size used while aggregating RNA spot CSVs into AnnData.
+    **kwargs
+        Forwarded to :func:`load_seqfish_multiomics_linked`.
+    """
+    if replicate not in (1, 2):
+        raise ValueError("replicate must be 1 or 2 for the cerebellum dataset")
+
+    from uchrom.core import ChromData
+
+    data_dir = Path(data_dir)
+    h5cd_path = data_dir / f"takei2025_cerebellum_rep{replicate}.h5cd"
+    h5ad_path = data_dir / f"takei2025_cerebellum_rep{replicate}.h5ad"
+    if h5cd_path.exists() and not rebuild:
+        cd = ChromData.read(h5cd_path)
+        if h5ad_path.exists():
+            cd.uns.setdefault("linked_anndata", {})["path"] = str(h5ad_path)
+        return cd
+
+    if not download:
+        raise FileNotFoundError(
+            f"{h5cd_path} does not exist. Pass download=True to build it."
+        )
+
+    archive_name = f"cerebellum_rep{replicate}.tar.gz"
+    archive = _download_file(
+        f"{ZENODO_BASE_URL}/{archive_name}/content",
+        data_dir / "downloads" / archive_name,
+    )
+    extract_dir = data_dir / f"cerebellum_rep{replicate}"
+    _extract_tar_once(archive, extract_dir)
+
+    locus = _download_file(
+        f"{GITHUB_MEDIA_BASE_URL}/{CEREBELLUM_LOCUS_25KB_PATH}",
+        data_dir / "annotation" / Path(CEREBELLUM_LOCUS_25KB_PATH).name,
+    )
+    clustering = _download_file(
+        f"{GITHUB_MEDIA_BASE_URL}/{CEREBELLUM_CLUSTERING_PATH}",
+        data_dir / "clustering" / Path(CEREBELLUM_CLUSTERING_PATH).name,
+    )
+    transcriptome_zip = _download_file(
+        TRANSCRIPTOMIC_ZIP_URL,
+        data_dir / "downloads" / TRANSCRIPTOMIC_ZIP_NAME,
+    )
+
+    return load_seqfish_multiomics_linked(
+        str(extract_dir / "**" / f"cerebellum_rep{replicate}*.csv"),
+        locus_annotation=locus,
+        cell_clustering=clustering,
+        transcriptomic_data=transcriptome_zip,
+        transcriptome_replicate=replicate,
+        transcriptome_chunksize=transcriptome_chunksize,
+        h5cd_path=h5cd_path,
+        h5ad_path=h5ad_path,
+        **kwargs,
+    )
+
+
 # ----------------------------------------------------------------------
 # Internal helpers
 # ----------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _TranscriptomeSource:
+    name: str
+    path: Path
+    member: Optional[str] = None
+
+
+def _download_file(url: str, dest: Path) -> Path:
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists() and dest.stat().st_size > 0:
+        return dest
+
+    tmp = dest.with_suffix(dest.suffix + ".tmp")
+    with urllib.request.urlopen(url) as r, open(tmp, "wb") as fh:
+        shutil.copyfileobj(r, fh)
+    tmp.replace(dest)
+    return dest
+
+
+def _extract_tar_once(archive: Path, dest: Path) -> Path:
+    dest = Path(dest)
+    if dest.exists() and any(dest.iterdir()):
+        return dest
+    dest.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(archive, "r:gz") as tf:
+        tf.extractall(dest)
+    return dest
+
+
+def _resolve_transcriptome_sources(
+    transcriptomic_data: PathLike | Iterable[PathLike] | None,
+    *,
+    dataset: str,
+    assay: str,
+    replicate: Optional[int],
+    download: bool,
+    data_dir: PathLike,
+) -> List[_TranscriptomeSource]:
+    if transcriptomic_data is None:
+        if not download:
+            raise ValueError(
+                "transcriptomic_data is required unless download=True."
+            )
+        transcriptomic_data = _download_transcriptomic_zip(data_dir)
+
+    paths = _resolve_transcriptome_paths(transcriptomic_data)
+    sources: List[_TranscriptomeSource] = []
+    for path in paths:
+        if path.is_dir():
+            for csv_path in sorted(path.rglob("*.csv")):
+                name = str(csv_path.relative_to(path))
+                if _transcriptome_file_matches(name, dataset, assay, replicate):
+                    sources.append(_TranscriptomeSource(name=name, path=csv_path))
+        elif path.suffix.lower() == ".zip":
+            with zipfile.ZipFile(path) as zf:
+                for member in sorted(zf.namelist()):
+                    if member.endswith("/") or not member.lower().endswith(".csv"):
+                        continue
+                    if _transcriptome_file_matches(member, dataset, assay, replicate):
+                        sources.append(_TranscriptomeSource(name=member, path=path, member=member))
+        else:
+            name = path.name
+            if _transcriptome_file_matches(name, dataset, assay, replicate):
+                sources.append(_TranscriptomeSource(name=name, path=path))
+    return sources
+
+
+def _resolve_transcriptome_paths(
+    transcriptomic_data: PathLike | Iterable[PathLike],
+) -> List[Path]:
+    if isinstance(transcriptomic_data, (str, Path)):
+        s = str(transcriptomic_data)
+        matches = sorted(_glob.glob(s))
+        if matches:
+            return [Path(m) for m in matches]
+        return [Path(s)]
+    return [Path(p) for p in transcriptomic_data]
+
+
+def _download_transcriptomic_zip(data_dir: PathLike) -> Path:
+    data_dir = Path(data_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    out = data_dir / TRANSCRIPTOMIC_ZIP_NAME
+    if out.exists() and out.stat().st_size > 0:
+        return out
+    tmp = out.with_suffix(out.suffix + ".tmp")
+    with urllib.request.urlopen(TRANSCRIPTOMIC_ZIP_URL) as r, open(tmp, "wb") as fh:
+        shutil.copyfileobj(r, fh)
+    tmp.replace(out)
+    return out
+
+
+def _transcriptome_file_matches(
+    name: str,
+    dataset: str,
+    assay: str,
+    replicate: Optional[int],
+) -> bool:
+    lower = name.lower()
+    dataset_key = dataset.lower()
+    if dataset_key in {"cerebellum", "cb"}:
+        if "cerebellum" not in lower:
+            return False
+    elif dataset_key == "e14":
+        if "e14" not in lower:
+            return False
+    elif dataset_key == "nmumg":
+        if "nmumg" not in lower:
+            return False
+    else:
+        raise ValueError("dataset must be one of 'cerebellum', 'E14', or 'NMuMG'")
+
+    if replicate is not None and f"replicate{int(replicate)}" not in lower:
+        return False
+
+    assay_key = assay.lower().replace("-", "_")
+    if assay_key == "all":
+        return "seqfish" in lower
+    if assay_key == "intron":
+        return "intron" in lower
+    if assay_key in {"mrna", "m_rna"}:
+        return "mrna" in lower
+    if assay_key in {"mrna_barcoded", "barcoded"}:
+        return "mrna" in lower and "non-barcoded" not in lower
+    if assay_key in {"mrna_non_barcoded", "non_barcoded"}:
+        return "mrna" in lower and "non-barcoded" in lower
+    raise ValueError(
+        "assay must be one of 'mrna', 'mrna_barcoded', "
+        "'mrna_non_barcoded', 'intron', or 'all'"
+    )
+
+
+def _infer_replicate(name: str, default: Optional[int] = None) -> int:
+    match = re.search(r"replicate[_-]?(\d+)", name, flags=re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    match = re.search(r"(?:^|[_/-])rep[_-]?(\d+)", name, flags=re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    if default is not None:
+        return int(default)
+    return 1
+
+
+def _iter_csv_chunks(source: _TranscriptomeSource, *, chunksize: int):
+    if source.member is None:
+        yield from pd.read_csv(source.path, chunksize=chunksize, low_memory=False)
+        return
+    with zipfile.ZipFile(source.path) as zf:
+        with zf.open(source.member) as fh:
+            yield from pd.read_csv(fh, chunksize=chunksize, low_memory=False)
+
+
+def _normalise_transcriptome_chunk(df: pd.DataFrame, *, replicate: int) -> pd.DataFrame:
+    missing = {"fov", "cellID", "geneID"} - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"transcriptomic CSV missing required columns: {sorted(missing)}"
+        )
+    out = df[["fov", "cellID", "geneID"]].copy()
+    if "rep" in df.columns:
+        rep = df["rep"].astype(int).astype(str)
+    else:
+        rep = pd.Series(str(int(replicate)), index=df.index)
+    out["cell_id"] = (
+        rep.astype(str) + "_"
+        + df["fov"].astype(int).astype(str) + "_"
+        + df["cellID"].astype(int).astype(str)
+    )
+    out["geneID"] = out["geneID"].astype(str)
+    out = out[out["geneID"].notna() & out["geneID"].ne("")]
+    if "intensity" in df.columns:
+        out["intensity"] = pd.to_numeric(df["intensity"], errors="coerce").fillna(0.0)
+    return out[["cell_id", "geneID"] + (["intensity"] if "intensity" in out.columns else [])]
+
+
+def _align_anndata_to_chromdata(adata, cd):
+    cell_ids = [str(x) for x in cd.cells.index]
+    have = [str(x) for x in adata.obs_names]
+    pos = {cell_id: i for i, cell_id in enumerate(have)}
+    missing = [cell_id for cell_id in cell_ids if cell_id not in pos]
+    if missing:
+        raise ValueError(f"Linked AnnData missing ChromData cell ids: {missing[:5]}")
+    out = adata[[pos[cell_id] for cell_id in cell_ids]].copy()
+    out.obs = cd.cells.copy()
+    out.obs.index = pd.Index(cell_ids, name="cell_id")
+    out.uns.setdefault("uchrom_link", {})["cell_id_axis"] = "obs_names"
+    return out
 
 
 def _resolve_spot_paths(spot_glob: Union[str, Iterable[PathLike]]) -> List[Path]:
