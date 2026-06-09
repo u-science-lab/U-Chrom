@@ -10,7 +10,7 @@ from .data_api import data_router
 from .tileset_api import tileset_router
 from .track_wig import track_wig_router
 from .strc_api import strc_router
-from .figure_render import figure_render_router
+from .figure_render import figure_render_router, build_svg, CANVAS_SIZES as _CANVAS_SIZES
 import webapp.backend.data_api as _data_api
 
 UPLOAD_DIR = tempfile.mkdtemp(prefix="uchrom_uploads_")
@@ -64,39 +64,16 @@ class ExportRequest(BaseModel):
 
 @app.post("/api/export")
 async def export_figure(req: ExportRequest):
+    from fastapi.responses import Response
     state = req.figure_state or {}
     panels = state.get("panels", [])
     style = state.get("style", {})
-    preset = style.get("sizePreset", "nature-double")
-    font_size = style.get("fontSize", 7)
-    w, h = CANVAS_SIZES.get(preset, (692, 460))
-
-    lines = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">',
-        f'  <rect width="{w}" height="{h}" fill="white"/>',
-    ]
-    for p in panels:
-        px, py, pw, ph = p.get("x", 0), p.get("y", 0), p.get("w", 100), p.get("h", 80)
-        label = str(p.get("label", ""))
-        # Escape XML special chars
-        label = label.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        lines.append(
-            f'  <rect x="{px}" y="{py}" width="{pw}" height="{ph}" '
-            f'fill="none" stroke="#89b4fa" stroke-width="1"/>'
-        )
-        lines.append(
-            f'  <text x="{px + 4}" y="{py + font_size + 2}" '
-            f'font-family="Arial,sans-serif" font-size="{font_size}" fill="#1e1e2e">{label}</text>'
-        )
-    lines.append("</svg>")
-    svg_content = "\n".join(lines)
-
-    tmp = tempfile.NamedTemporaryFile(suffix=".svg", delete=False, mode="w", encoding="utf-8")
-    tmp.write(svg_content)
-    tmp.close()
-
-    return {"url": f"/api/download?path={tmp.name}"}
+    svg_content = build_svg(panels, style)
+    return Response(
+        content=svg_content,
+        media_type="image/svg+xml",
+        headers={"Content-Disposition": "attachment; filename=figure.svg"},
+    )
 
 
 @app.post("/api/upload")
