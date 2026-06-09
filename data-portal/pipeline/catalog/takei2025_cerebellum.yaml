@@ -1,0 +1,40 @@
+# Takei 2025 cerebellum DNA seqFISH+ — full dataset.
+#
+# TEMPLATE / PENDING ZENODO HOSTING.
+# Before running `ingest` on this entry, you must:
+#   1. Upload the full ChromData .h5cd to Zenodo (or 4DN / stable S3).
+#   2. Replace `source_h5cd` below with the local path you ingest from
+#      (the pipeline reads the file once at ingest time; it is NOT served
+#       at runtime — see design spec §3, backend never touches .h5cd).
+#   3. Fill in `doi`, the `files[].url` (the public Zenodo download URL),
+#      and `size_mb`.
+#   4. Add a row to example-data/README.md per the example-data catalog rule.
+id: takei2025_cerebellum
+title: "Mouse cerebellum DNA seqFISH+ (Takei et al. 2025)"
+description: >-
+  Genome-scale single-cell chromatin tracing of the adult mouse cerebellum by
+  DNA seqFISH+, jointly resolving 3D genome organization, RNA, and protein in
+  intact tissue. Distributed as analysis-ready ChromData (.h5cd).
+organism: "Mus musculus"
+assembly: "mm10"
+technology: "DNA seqFISH+"
+
+# TODO: fill once deposited on Zenodo.
+doi: ""
+citation: "Takei et al. Integrated spatial genomics of the mouse cerebellum. Nature (2025)."
+
+# TODO: point at the local .h5cd you ingest from (downloaded from Zenodo).
+source_h5cd: "../../../example-data/takei2025_cerebellum.h5cd"
+
+# Walkthrough notebook rendered to static HTML for the Notebook tab.
+notebook: "../../../tutorials/takei2025_walkthrough.ipynb"
+
+# Public download links shown in the Download tab. Hosted externally (Zenodo).
+files:
+  - label: "Full dataset (.h5cd)"
+    url: "https://zenodo.org/records/PLACEHOLDER/files/takei2025_cerebellum.h5cd"
+    size_mb: 0  # TODO: real size after upload
+    format: h5cd
+
+# Optional deep-link into the U-Chrom Analyzer (webapp). Leave null for v0.
+analyzer_url: null
