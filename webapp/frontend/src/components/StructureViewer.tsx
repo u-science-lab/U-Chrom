@@ -33,6 +33,10 @@ export default function StructureViewer({ onExport }: Props) {
   const [renderMode, setRenderMode] = useState<RenderMode>('points')
   const [tooltip, setTooltip] = useState<{ x: number; y: number; info: SpotInfo } | null>(null)
   const [lodEnabled, setLodEnabled] = useState(true)
+  const [colorMode, setColorMode] = useState<'viewport' | 'compartment'>('viewport')
+  const [compartmentData, setCompartmentData] = useState<
+    Map<string, Array<{start: number, end: number, compartment: 'A' | 'B'}>>
+  >(new Map())
 
   const instancedMeshRef = useRef<THREE.InstancedMesh | null>(null)
   const spotMapRef2 = useRef<{chrom: string; start: number; end: number}[]>([])  // bin info per instance
@@ -307,17 +311,47 @@ export default function StructureViewer({ onExport }: Props) {
     console.log('Colormap config:', colormapConfig)
   }, [colormapConfig])
 
+  // Fetch compartment data when colorMode switches to compartment
+  useEffect(() => {
+    if (colorMode === 'compartment' && viewport?.chrom) {
+      if (compartmentData.has(viewport.chrom)) return
+      fetch(`/api/compartments/${viewport.chrom}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.compartments) {
+            setCompartmentData(prev => new Map(prev).set(viewport.chrom!, data.compartments))
+          }
+        })
+        .catch(() => {})
+    }
+  }, [colorMode, viewport?.chrom])
+
+  // Helper: get bin color based on colorMode
+  function getBinColor(bin: {chrom: string; start: number; end: number} | undefined): THREE.Color {
+    if (colorMode === 'compartment' && bin) {
+      const comps = compartmentData.get(bin.chrom) ?? []
+      const match = comps.find(c => c.start <= bin.start && c.end >= bin.end)
+      if (match?.compartment === 'A') return new THREE.Color(0.9, 0.2, 0.2)
+      if (match?.compartment === 'B') return new THREE.Color(0.2, 0.4, 0.9)
+      return new THREE.Color(0.5, 0.5, 0.5)
+    }
+    // viewport mode
+    if (bin && viewport?.chrom && bin.chrom === viewport.chrom &&
+        bin.end > viewport.start && bin.start < viewport.end) {
+      return new THREE.Color(1.0, 0.42, 0.42)
+    }
+    return new THREE.Color(0.4, 0.7, 1.0)
+  }
+
   // Viewport bin highlighting: color bins inside viewport range
   useEffect(() => {
     const mesh = instancedMeshRef.current
     if (!mesh) return
 
-    const color = new THREE.Color()
-    const HIGHLIGHT = new THREE.Color(1.0, 0.42, 0.42)   // #ff6b6b
     const DEFAULT  = new THREE.Color(0.4, 0.7,  1.0)     // base blue
 
-    // No viewport chrom → reset all to default
-    if (!viewport || !viewport.chrom) {
+    // No viewport chrom and viewport mode → reset all to default
+    if (colorMode === 'viewport' && (!viewport || !viewport.chrom)) {
       for (let i = 0; i < mesh.count; i++) {
         mesh.setColorAt(i, DEFAULT)
       }
@@ -362,31 +396,15 @@ export default function StructureViewer({ onExport }: Props) {
         } catch { return }
       }
 
-      const { chrom, start, end } = viewport!
-      // bins are indexed by instance order — use spotInfos order as fallback
-      // The bins endpoint returns bins for a single cell ordered by chrom/start.
-      // We match by position in spotInfos (same order as instancedMesh was built for first cell).
       for (let i = 0; i < mesh!.count; i++) {
         const bin = bins[i]
-        if (bin && bin.chrom === chrom && bin.start >= start && bin.end <= end) {
-          mesh!.setColorAt(i, HIGHLIGHT)
-        } else {
-          // Restore palette color based on cell index in spotInfos
-          const si = spotInfos[i]
-          if (si) {
-            // find cellIdx from ids
-            // DEFAULT fallback
-            mesh!.setColorAt(i, DEFAULT)
-          } else {
-            mesh!.setColorAt(i, DEFAULT)
-          }
-        }
+        mesh!.setColorAt(i, getBinColor(bin))
       }
       mesh!.instanceColor!.needsUpdate = true
     }
 
     applyHighlight().catch(() => {})
-  }, [viewport, cellSelection])
+  }, [viewport, cellSelection, colorMode, compartmentData])
 
   // Raycaster: hover/click on points mode
   function onMouseMove(e: React.MouseEvent) {
@@ -480,6 +498,17 @@ export default function StructureViewer({ onExport }: Props) {
                      border: '1px solid #313244', fontSize: 10, padding: '2px 6px',
                      borderRadius: 3, cursor: 'pointer' }}>
             ⚡
+          </button>
+          <button
+            onClick={() => setColorMode(m => m === 'viewport' ? 'compartment' : 'viewport')}
+            style={{
+              background: colorMode === 'compartment' ? '#a6e3a1' : 'rgba(24,24,37,0.85)',
+              color: colorMode === 'compartment' ? '#1e1e2e' : '#cdd6f4',
+              border: '1px solid #313244', fontSize: 10, padding: '2px 6px',
+              borderRadius: 3, cursor: 'pointer',
+            }}
+            title="Toggle A/B compartment coloring">
+            {colorMode === 'compartment' ? 'A/B' : 'viewport'}
           </button>
           <button onClick={handleExport}
             style={{ background: 'rgba(24,24,37,0.85)', border: '1px solid #313244',
