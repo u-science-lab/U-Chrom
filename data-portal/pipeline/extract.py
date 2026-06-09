@@ -17,8 +17,15 @@ def extract_stats(cd: Any) -> dict:
     cell_types: dict[str, int] = {}
     cells = cd.cells
     if cells is not None and "cell_type" in getattr(cells, "columns", []):
-        counts = cells["cell_type"].value_counts()
-        cell_types = {str(k): int(v) for k, v in counts.items()}
+        counts = cells["cell_type"].value_counts(dropna=False)
+        cell_types = {}
+        for k, v in counts.items():
+            # NaN is the only value not equal to itself; retain it as an
+            # explicit "unassigned" bucket so the distribution sums to the
+            # number of cells (the real Takei dataset has untyped cells).
+            key = "unassigned" if (k is None or (isinstance(k, float) and k != k)) else str(k)
+            # merge in case a real "unassigned" label coexists with NaN
+            cell_types[key] = cell_types.get(key, 0) + int(v)
 
     # Genome coverage: list of chromosomes joined, or "genome-wide" if many.
     chroms = list(cd.chroms)

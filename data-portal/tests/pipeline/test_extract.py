@@ -28,3 +28,27 @@ def test_extract_minimal(minimal_h5cd):
     # missing uns -> safe defaults (not crash)
     assert stats["assembly"] in ("", None) or isinstance(stats["assembly"], str)
     assert stats["xyz_unit"] in ("", None) or isinstance(stats["xyz_unit"], str)
+
+
+def test_extract_cell_types_counts_nan_as_unassigned():
+    import pandas as pd
+    import numpy as np
+
+    class _Stub:
+        # mimic the ChromData attributes extract_stats reads
+        tracks = None
+        uns = {}
+        chroms = ["chr1"]
+        n_cells = 4
+        n_traces = 4
+        n_spots = 4
+        cells = pd.DataFrame({"cell_type": ["A", "A", np.nan, "B"]})
+
+    from pipeline.extract import extract_stats
+    stats = extract_stats(_Stub())
+    # NaN must be retained as an explicit bucket, not dropped
+    assert stats["cell_types"].get("unassigned") == 1
+    assert stats["cell_types"].get("A") == 2
+    assert stats["cell_types"].get("B") == 1
+    # distribution sums to the number of typed cells
+    assert sum(stats["cell_types"].values()) == 4
