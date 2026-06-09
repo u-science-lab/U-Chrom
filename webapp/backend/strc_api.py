@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 import webapp.backend.data_api as data_api
+from uchrom.core import ChromData
 from uchrom.strc.tad import call_tads_by_pval, TADCallerParams
 from uchrom.strc.loop import call_loops_axiswise_f, LoopCallerParams
 from uchrom.strc.comp import call_compartments_axes_pc, CompartmentCallerParams
@@ -33,25 +34,48 @@ def _cd_or_404():
     return data_api.current_session.chromdata
 
 
+def _filter_by_cell_type(cd: ChromData, cell_type: Optional[str]) -> ChromData:
+    """Filter ChromData to cells matching the given cell_type.
+
+    If cell_type is None or cd.cells is empty / lacks a cell_type column,
+    returns cd unchanged.
+    """
+    if cell_type is None:
+        return cd
+    if cd.cells is None or cd.cells.empty or "cell_type" not in cd.cells.columns:
+        return cd
+
+    matched = cd.cells[cd.cells["cell_type"].astype(str) == cell_type]
+    if matched.empty:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": f"No cells with cell_type '{cell_type}'"},
+        )
+
+    valid_cell_ids = set(matched.index.tolist())
+    if "cell_id" not in cd.spots.columns:
+        return cd
+
+    mask = cd.spots["cell_id"].astype(str).isin({str(c) for c in valid_cell_ids})
+    if mask.sum() == 0:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": f"No spots for cell_type '{cell_type}'"},
+        )
+
+    filtered_spots = cd.spots[mask].copy()
+    filtered_coords = cd.coords[mask.values]
+    return ChromData(coords=filtered_coords, spots=filtered_spots)
+
+
 def _df_to_records(df: pd.DataFrame) -> list:
     """Convert DataFrame to JSON-serializable list of dicts."""
-    records = []
-    for _, row in df.iterrows():
-        rec = {}
-        for col in df.columns:
-            v = row[col]
-            if isinstance(v, (np.integer,)):
-                v = int(v)
-            elif isinstance(v, (np.floating, float)):
-                try:
-                    v = float(v) if np.isfinite(float(v)) else None
-                except (TypeError, ValueError):
-                    v = None
-            elif not isinstance(v, (str, bool, type(None))):
-                v = str(v)
-            rec[col] = v
-        records.append(rec)
-    return records
+    records = df.copy()
+    for col in records.select_dtypes(include=[np.integer]).columns:
+        records[col] = records[col].astype(int)
+    for col in records.select_dtypes(include=[np.floating, float]).columns:
+        records[col] = records[col].apply(lambda v: float(v) if np.isfinite(v) else None)
+    return records.to_dict(orient="records")
 
 
 # ---------------------------------------------------------------------------
@@ -62,22 +86,22 @@ def _df_to_records(df: pd.DataFrame) -> list:
 def get_tads(chrom: str, cell_type: Optional[str] = None):
     """Return TAD domains for the given chromosome."""
     cd = _cd_or_404()
+    cd = _filter_by_cell_type(cd, cell_type)
 
-    # Filter to chrom
-    chrom_mask = cd.spots["chrom"].astype(str) == chrom
-    if chrom_mask.sum() == 0:
+    # Use get_chrom for correct index alignment
+    try:
+        chrom_cd = cd.get_chrom(chrom)
+    except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail={"error": f"Chromosome {chrom} not found"})
 
-    chrom_spots = cd.spots[chrom_mask]
-    chrom_coords = cd.coords[chrom_mask.values]
+    if chrom_cd.coords.shape[0] == 0:
+        raise HTTPException(status_code=404, detail={"error": f"Chromosome {chrom} not found"})
 
-    from uchrom.core import ChromData
-    chrom_cd = ChromData(
-        coords=chrom_coords,
-        spots=chrom_spots.copy(),
-    )
+    try:
+        tads = call_tads_by_pval(chrom_cd, TADCallerParams())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": "TAD calling failed", "detail": str(e)})
 
-    tads = call_tads_by_pval(chrom_cd, TADCallerParams())
     if tads is None or len(tads) == 0:
         return JSONResponse({"tads": []}, headers={"Cache-Control": _CACHE})
 
@@ -96,21 +120,21 @@ def get_tads(chrom: str, cell_type: Optional[str] = None):
 def get_loops(chrom: str, cell_type: Optional[str] = None):
     """Return loop anchors for the given chromosome."""
     cd = _cd_or_404()
+    cd = _filter_by_cell_type(cd, cell_type)
 
-    chrom_mask = cd.spots["chrom"].astype(str) == chrom
-    if chrom_mask.sum() == 0:
+    try:
+        chrom_cd = cd.get_chrom(chrom)
+    except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail={"error": f"Chromosome {chrom} not found"})
 
-    chrom_spots = cd.spots[chrom_mask]
-    chrom_coords = cd.coords[chrom_mask.values]
+    if chrom_cd.coords.shape[0] == 0:
+        raise HTTPException(status_code=404, detail={"error": f"Chromosome {chrom} not found"})
 
-    from uchrom.core import ChromData
-    chrom_cd = ChromData(
-        coords=chrom_coords,
-        spots=chrom_spots.copy(),
-    )
+    try:
+        loops = call_loops_axiswise_f(chrom_cd, LoopCallerParams())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": "Loop calling failed", "detail": str(e)})
 
-    loops = call_loops_axiswise_f(chrom_cd, LoopCallerParams())
     if loops is None or len(loops) == 0:
         return JSONResponse({"loops": []}, headers={"Cache-Control": _CACHE})
 
@@ -125,21 +149,21 @@ def get_loops(chrom: str, cell_type: Optional[str] = None):
 def get_compartments(chrom: str, cell_type: Optional[str] = None):
     """Return A/B compartment assignments for the given chromosome."""
     cd = _cd_or_404()
+    cd = _filter_by_cell_type(cd, cell_type)
 
-    chrom_mask = cd.spots["chrom"].astype(str) == chrom
-    if chrom_mask.sum() == 0:
+    try:
+        chrom_cd = cd.get_chrom(chrom)
+    except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail={"error": f"Chromosome {chrom} not found"})
 
-    chrom_spots = cd.spots[chrom_mask]
-    chrom_coords = cd.coords[chrom_mask.values]
+    if chrom_cd.coords.shape[0] == 0:
+        raise HTTPException(status_code=404, detail={"error": f"Chromosome {chrom} not found"})
 
-    from uchrom.core import ChromData
-    chrom_cd = ChromData(
-        coords=chrom_coords,
-        spots=chrom_spots.copy(),
-    )
+    try:
+        comp = call_compartments_axes_pc(chrom_cd, CompartmentCallerParams())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": "Compartment calling failed", "detail": str(e)})
 
-    comp = call_compartments_axes_pc(chrom_cd, CompartmentCallerParams())
     if comp is None or len(comp) == 0:
         return JSONResponse({"compartments": []}, headers={"Cache-Control": _CACHE})
 
