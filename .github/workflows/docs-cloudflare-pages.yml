@@ -1,0 +1,92 @@
+name: Docs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/docs-cloudflare-pages.yml"
+      - "docs/**"
+      - "tutorials/**"
+      - "uchrom/**"
+      - "pyproject.toml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/docs-cloudflare-pages.yml"
+      - "docs/**"
+      - "tutorials/**"
+      - "uchrom/**"
+      - "pyproject.toml"
+  workflow_dispatch:
+
+env:
+  CLOUDFLARE_PROJECT_NAME: u-chrom-docs
+
+permissions:
+  contents: read
+
+jobs:
+  build-docs:
+    name: Build and publish docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            docs/requirements.txt
+            pyproject.toml
+
+      - name: Install docs dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r docs/requirements.txt
+
+      - name: Build Sphinx HTML
+        run: |
+          sphinx-build -b html -D nb_execution_mode=off docs/source docs/build/html
+
+      - name: Verify exported auto-discovery notebooks are present
+        run: |
+          test -f docs/build/html/_auto_discovery_notebooks/purkinje-specific-h3k27ac-decompaction-along-tra-8f00bdb00f.html
+          python - <<'PY'
+          from pathlib import Path
+          count = len(list(Path("docs/build/html/_auto_discovery_notebooks").glob("*.html")))
+          if count < 20:
+              raise SystemExit(f"expected at least 20 auto-discovery notebook exports, found {count}")
+          print(f"auto-discovery notebook exports: {count}")
+          PY
+
+      - name: Upload built docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: u-chrom-docs-html
+          path: docs/build/html
+          if-no-files-found: error
+
+      - name: Set up Node.js
+        if: github.event_name != 'pull_request'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Deploy to Cloudflare Pages
+        if: github.event_name != 'pull_request'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          NPM_CONFIG_IGNORE_SCRIPTS: "true"
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npx --yes wrangler@4.99.0 pages deploy docs/build/html \
+            --project-name "$CLOUDFLARE_PROJECT_NAME" \
+            --branch "${GITHUB_REF_NAME:-main}"

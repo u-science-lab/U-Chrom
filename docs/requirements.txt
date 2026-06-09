@@ -4,3 +4,4 @@ myst-nb>=1.0
 sphinx-copybutton>=0.5
 numpy>=1.26,<2.0
 pandas>=2.0
+h5py>=3.10

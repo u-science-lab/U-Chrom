@@ -56,6 +56,29 @@ autodoc_mock_imports = [
     "hicstraw",
     "qdarkgraystyle",
     "scooby",
+    "matplotlib",
+    "matplotlib.cm",
+    "matplotlib.colors",
+    "matplotlib.pyplot",
+    "scipy",
+    "scipy.interpolate",
+    "scipy.optimize",
+    "scipy.signal",
+    "scipy.sparse",
+    "scipy.sparse.csgraph",
+    "scipy.spatial",
+    "scipy.spatial.distance",
+    "scipy.stats",
+    "sklearn",
+    "sklearn.cluster",
+    "sklearn.metrics",
+    "sklearn.metrics.pairwise",
+    "sklearn.neighbors",
+    "networkx",
+    "networkx.algorithms",
+    "networkx.algorithms.community",
+    "astropy",
+    "astropy.table",
 ]
 
 napoleon_numpy_docstring = True
@@ -89,6 +112,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**/.ipynb_checkpoints"]
 
 html_theme = "furo"
 html_static_path = ["_static"]
+html_extra_path = ["_extra"]
 html_title = f"{project} {version}"
 html_theme_options = {
     "sidebar_hide_name": False,

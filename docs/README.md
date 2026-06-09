@@ -19,11 +19,26 @@ cd docs
 make livehtml
 ```
 
-## Read the Docs
+## Cloudflare Pages CI
 
-The site is built automatically from `.readthedocs.yaml` at the repo
-root.  The configuration installs `.[docs]` plus `docs/requirements.txt`
-and runs Sphinx over `docs/source/`.
+`.github/workflows/docs-cloudflare-pages.yml` builds the Sphinx site on
+pull requests to `main`, and builds plus deploys on pushes to `main` or
+manual `workflow_dispatch` runs.
+
+The workflow publishes `docs/build/html` to the Cloudflare Pages project
+`u-chrom-docs`.  Configure these GitHub repository secrets before using
+the deploy job:
+
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`
+
+Use a scoped Cloudflare API token that can edit/deploy the `u-chrom-docs`
+Pages project.
+
+The auto-discovery tutorial links to exported exploration notebooks.  CI
+does not regenerate those agent outputs; the published snapshot lives in
+`docs/source/_extra/_auto_discovery_notebooks/` and is copied to
+`docs/build/html/_auto_discovery_notebooks/` by `html_extra_path`.
 
 ## Layout
 
@@ -31,7 +46,7 @@ and runs Sphinx over `docs/source/`.
 docs/
 ├── Makefile
 ├── README.md
-├── requirements.txt      # Sphinx-only deps (RTD installs these)
+├── requirements.txt      # Sphinx-only deps installed by CI
 └── source/
     ├── conf.py           # Sphinx config
     ├── index.md          # landing page
@@ -41,6 +56,7 @@ docs/
     ├── license.md
     ├── _static/
     │   └── logo.svg      # symlinked from uchrom/browser/uc.svg
+    ├── _extra/           # static publish-only files copied to HTML root
     ├── api/              # .rst files, one per top-level module
     ├── guide/            # long-form user guide chapters
     └── tutorials/        # symlinks to ../../../tutorials/*.ipynb
@@ -48,4 +64,4 @@ docs/
 
 The tutorial notebooks live under the repo's top-level `tutorials/`
 directory; `docs/source/tutorials/` holds symlinks so Sphinx picks them
-up via `nbsphinx` without duplicating sources.
+up via `myst-nb` without duplicating sources.
