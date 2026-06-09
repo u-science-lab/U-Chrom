@@ -92,10 +92,10 @@ def get_notebook(dataset_id: str):
         raise HTTPException(status_code=404, detail="not found")
     with _Session() as s:
         r = s.get(Dataset, dataset_id)
-        if r is None or not r.notebook_html_path:
+        if r is None or r.status != "published" or not r.notebook_html_path:
             raise HTTPException(status_code=404, detail="notebook unavailable")
         nb_dir = (_data_root() / "notebooks").resolve()
         target = (_data_root() / r.notebook_html_path).resolve()
-        if not str(target).startswith(str(nb_dir)) or not target.exists():
+        if not target.is_relative_to(nb_dir) or not target.exists():
             raise HTTPException(status_code=404, detail="notebook unavailable")
         return FileResponse(str(target), media_type="text/html")

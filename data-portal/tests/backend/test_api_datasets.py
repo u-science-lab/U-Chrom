@@ -57,3 +57,27 @@ def test_health(client):
     r = client.get("/api/health")
     assert r.status_code == 200
     assert r.json()["n_datasets"] == 1
+
+
+def test_notebook_unpublished_404(tmp_path, monkeypatch):
+    db = str(tmp_path / "p2.db")
+    monkeypatch.setenv("PORTAL_DB_PATH", db)
+    from backend.db import make_engine, make_session, Base
+    from backend.models import Dataset
+    engine = make_engine(db)
+    Base.metadata.create_all(engine)
+    Session = make_session(engine)
+    nb_dir = tmp_path / "notebooks"
+    nb_dir.mkdir(parents=True, exist_ok=True)
+    (nb_dir / "draftds.html").write_text("<html>x</html>")
+    with Session() as s:
+        s.add(Dataset(id="draftds", title="Draft", status="draft",
+                       notebook_html_path="notebooks/draftds.html"))
+        s.commit()
+    import importlib
+    import backend.api.datasets, backend.main
+    importlib.reload(backend.api.datasets)
+    importlib.reload(backend.main)
+    from fastapi.testclient import TestClient
+    client = TestClient(backend.main.app)
+    assert client.get("/api/datasets/draftds/notebook").status_code == 404
