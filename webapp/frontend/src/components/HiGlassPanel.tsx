@@ -10,6 +10,43 @@ interface HiGlassPanelProps {
   onViewportChange?: (viewportInfo: { chromName: string; startBin: number; endBin: number }) => void;
 }
 
+function TADOverlay({ tads, viewport, panelWidth }: {
+  tads: Array<{chrom: string, start: number, end: number}>,
+  viewport: {chrom: string, start: number, end: number},
+  panelWidth: number,
+}) {
+  if (!viewport.chrom || !tads.length) return null;
+
+  const range = viewport.end - viewport.start;
+  if (range <= 0) return null;
+
+  const boundaries = tads
+    .filter(t => t.chrom === viewport.chrom)
+    .flatMap(t => [t.start, t.end])
+    .filter((pos, i, arr) => arr.indexOf(pos) === i)  // dedupe
+    .filter(pos => pos >= viewport.start && pos <= viewport.end);
+
+  return (
+    <svg
+      style={{
+        position: 'absolute', top: 0, left: 0,
+        width: '100%', height: '100%',
+        pointerEvents: 'none', zIndex: 10,
+      }}
+    >
+      {boundaries.map(pos => {
+        const x = ((pos - viewport.start) / range) * panelWidth;
+        return (
+          <line key={pos}
+            x1={x} y1={0} x2={x} y2="100%"
+            stroke="#f38ba8" strokeWidth={1.5} strokeDasharray="4 2" opacity={0.8}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
 const HiGlassPanel: React.FC<HiGlassPanelProps> = ({
   width = 800,
   height = 400,
@@ -24,6 +61,7 @@ const HiGlassPanel: React.FC<HiGlassPanelProps> = ({
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tilesetInfo, setTilesetInfo] = useState<any>(null);
+  const [tadData, setTadData] = useState<Array<{chrom: string, start: number, end: number, level: number}>>([]);
 
   // Fetch tileset info from backend
   useEffect(() => {
@@ -40,6 +78,17 @@ const HiGlassPanel: React.FC<HiGlassPanelProps> = ({
     };
     fetchTilesetInfo();
   }, []);
+
+  // Fetch TAD data when chromosome changes
+  useEffect(() => {
+    if (!chromName) return;
+    fetch(`/api/tads/${chromName}?level=0`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.tads) setTadData(data.tads);
+      })
+      .catch(() => {});
+  }, [chromName]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -199,6 +248,12 @@ const HiGlassPanel: React.FC<HiGlassPanelProps> = ({
     );
   }
 
+  const viewport = {
+    chrom: chromName,
+    start: (startBin ?? 0) * resolution,
+    end: (endBin ?? 40000) * resolution,
+  };
+
   return (
     <div style={{ position: 'relative', width, height }}>
       {!isLoaded && (
@@ -218,14 +273,21 @@ const HiGlassPanel: React.FC<HiGlassPanelProps> = ({
           Loading HiGlass...
         </div>
       )}
-      <div
-        ref={containerRef}
-        style={{
-          width: '100%',
-          height: '100%',
-          background: '#1a1a2e',
-        }}
-      />
+      <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+        <div
+          ref={containerRef}
+          style={{
+            width: '100%',
+            height: '100%',
+            background: '#1a1a2e',
+          }}
+        />
+        <TADOverlay
+          tads={tadData}
+          viewport={viewport}
+          panelWidth={containerRef.current?.clientWidth ?? width}
+        />
+      </div>
     </div>
   );
 };
