@@ -4,6 +4,10 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { useAppStore, CameraState } from '../store'
 import PanelContainer from './PanelContainer'
 
+const COLOR_A = new THREE.Color(0.9, 0.2, 0.2)
+const COLOR_B = new THREE.Color(0.2, 0.4, 0.9)
+const COLOR_GREY = new THREE.Color(0.5, 0.5, 0.5)
+
 const PALETTE: [number, number, number][] = [
   [137, 180, 250], [166, 227, 161], [243, 139, 168], [250, 179, 135],
   [203, 166, 247], [148, 226, 213], [249, 226, 175], [180, 190, 254],
@@ -39,7 +43,8 @@ export default function StructureViewer({ onExport }: Props) {
   >(new Map())
 
   const instancedMeshRef = useRef<THREE.InstancedMesh | null>(null)
-  const spotMapRef2 = useRef<{chrom: string; start: number; end: number}[]>([])  // bin info per instance
+  const spotMapRef2 = useRef<{chrom: string; start: number; end: number}[]>([])
+  const fetchedChroms = useRef<Set<string>>(new Set())  // bin info per instance
 
   const { cellSelection, cameraState, linkedCameras, setCameraState, highlightRegions, colormapConfig, viewport, setViewport } = useAppStore()
 
@@ -117,6 +122,7 @@ export default function StructureViewer({ onExport }: Props) {
     }
     objectsRef.current = []
     spotMapRef.current = []
+    spotMapRef2.current = []
   }
 
   // Fetch and render
@@ -314,13 +320,13 @@ export default function StructureViewer({ onExport }: Props) {
   // Fetch compartment data when colorMode switches to compartment
   useEffect(() => {
     if (colorMode === 'compartment' && viewport?.chrom) {
-      if (compartmentData.has(viewport.chrom)) return
+      if (fetchedChroms.current.has(viewport.chrom)) return
+      fetchedChroms.current.add(viewport.chrom)
       fetch(`/api/compartments/${viewport.chrom}`)
         .then(r => r.ok ? r.json() : null)
         .then(data => {
-          if (data?.compartments) {
+          if (data?.compartments)
             setCompartmentData(prev => new Map(prev).set(viewport.chrom!, data.compartments))
-          }
         })
         .catch(() => {})
     }
