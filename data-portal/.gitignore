@@ -1,0 +1,7 @@
+data/portal.db
+data/notebooks/
+data/thumbnails/
+frontend/node_modules/
+frontend/.next/
+__pycache__/
+*.pyc
