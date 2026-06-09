@@ -291,3 +291,30 @@ catalog/*.yaml + .h5cd
 - 用户系统、数据集提交、QC 审核队列 → 生态阶段
 - Python SDK 实现 → v1（v0 仅在 UI 展示目标 API 形态）
 - 下载量统计、全文搜索 → 按需
+
+## 十三、v0 已实现状态 + v1 跟进项
+
+**v0 已完成（2026-06-10）**：12 任务 TDD 实现，26 测试通过，已在真实 .h5cd
+（mesc_sox2_test）端到端验证（ingest → REST → SSR）。提交范围
+`bc35948..HEAD`。
+
+**v1 跟进项**（最终代码评审记录，按优先级）：
+
+1. **（已在 v0 修复）NaN cell_type 归入 "unassigned" 桶** —— 原 `value_counts()`
+   丢弃 NaN，导致真实 Takei 数据细胞类型分布不等于 n_cells。已用
+   `dropna=False` + 显式 unassigned 桶修复。
+2. **缩略图**：`thumbnail_url` 当前指向尚不存在的 `/thumbnail` 端点（因
+   `thumbnail_path` 从不写入而处于惰性状态）。v1 实现该端点 + notebook 代表图
+   提取，或在此前移除 `thumbnail_url`/`thumbnail_path`/`resolution` 三个未用字段。
+3. **筛选/搜索 UI**：后端 `/api/datasets?organism=&technology=&q=` 与
+   `/api/facets` 已完整支持，但前端列表页尚无筛选控件（`getFacets` 已导出未用）。
+   v1 接上 UI 即可，无需后端改动。
+4. **data_root 单一来源**：ingest 的 `--data-dir` 与 API 读路径需保持一致；
+   生产默认值一致，但应统一来源或在文档中固化约束。
+5. **notebook iframe `sandbox` 属性** + `<html lang>` 与中文 UI 对齐（防御纵深 +
+   i18n 一致性）。
+6. **`/api/health` 计数**：当前计入 draft，与其他端点的 published 过滤不一致
+   （仅探活用途，影响轻微）。
+7. **真实 Takei 数据集上线**：当 full .h5cd 托管到 Zenodo 后，新增其 catalog
+   YAML 并 ingest，按项目纪律在 PR 报告真实数据指标（细胞数/marker 数/分布）。
+   这是 portal 配合论文发表的关键一步。
