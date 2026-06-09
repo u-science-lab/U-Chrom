@@ -33,28 +33,33 @@ export default function FigureComposer({ onClose }: { onClose: () => void }) {
   }
 
   async function exportSvg() {
-    // Build panels with image captures
-    const panelsWithImages = await Promise.all(
-      panels.map(async p => {
-        // Simple capture placeholder - real screenshot would need html2canvas
-        return { ...p, image: undefined }
-      })
-    )
+    try {
+      // Build panels with image captures
+      const panelsWithImages = await Promise.all(
+        panels.map(async p => {
+          // Simple capture placeholder - real screenshot would need html2canvas
+          return { ...p, image: undefined }
+        })
+      )
 
-    const r = await fetch('/api/figure_render', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        panels: panelsWithImages,
-        style: { ...style, sizePreset: preset }
-      }),
-    })
-    const { url } = await r.json()
-    if (url) {
+      const r = await fetch('/api/figure_render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          panels: panelsWithImages,
+          style: { ...style, sizePreset: preset }
+        }),
+      })
+      if (!r.ok) throw new Error(`Server error ${r.status}`)
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = 'figure.svg'
       a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      alert(`Export failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 

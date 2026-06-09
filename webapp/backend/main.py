@@ -1,4 +1,4 @@
-import uuid, shutil, tempfile, os
+import uuid, shutil, tempfile, os, pathlib
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
@@ -113,12 +113,14 @@ async def download_file(path: str):
     """Download generated figure files."""
     from fastapi.responses import FileResponse
 
-    # Security: only allow downloading from temp directory
-    if not path.startswith("/tmp/") and not path.startswith(tempfile.gettempdir()):
-        return {"error": "Invalid path"}
-
-    if not os.path.exists(path):
-        return {"error": "File not found"}
+    # Security: only allow downloading from temp directory (path traversal fix)
+    from fastapi import HTTPException
+    real = pathlib.Path(path).resolve()
+    allowed = pathlib.Path(tempfile.gettempdir()).resolve()
+    if not str(real).startswith(str(allowed) + os.sep) and str(real) != str(allowed):
+        raise HTTPException(status_code=403, detail={"error": "Invalid path"})
+    if not real.exists():
+        raise HTTPException(status_code=404, detail={"error": "File not found"})
 
     filename = os.path.basename(path)
     if path.endswith(".pdf"):

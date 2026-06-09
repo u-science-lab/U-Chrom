@@ -5,12 +5,12 @@ Body: {
   "panels": [{"id": "...", "label": "...", "x": 0, "y": 0, "w": 300, "h": 200, "image": "data:image/png;base64,..."}],
   "style": {"sizePreset": "nature-double", "fontSize": 7},
 }
-Returns: {"svg": "<svg>...</svg>", "url": "/api/download?path=..."}
+Returns: SVG file (image/svg+xml)
 """
-import tempfile
 from typing import Any, List, Optional
 
 from fastapi import APIRouter
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 figure_render_router = APIRouter()
@@ -37,11 +37,12 @@ class FigureRenderRequest(BaseModel):
     style: Any = None
 
 
-@figure_render_router.post("/api/figure_render")
-async def render_figure(req: FigureRenderRequest):
-    style = req.style or {}
-    preset = style.get("sizePreset", "nature-double") if isinstance(style, dict) else "nature-double"
-    font_size = style.get("fontSize", 7) if isinstance(style, dict) else 7
+def build_svg(panels, style) -> str:
+    """Build SVG content from panels and style. Shared by figure_render and export endpoints."""
+    if not isinstance(style, dict):
+        style = {}
+    preset = style.get("sizePreset", "nature-double")
+    font_size = style.get("fontSize", 7)
     w, h = CANVAS_SIZES.get(preset, (692, 460))
 
     lines = [
@@ -51,15 +52,24 @@ async def render_figure(req: FigureRenderRequest):
         f'  <rect width="{w}" height="{h}" fill="white"/>',
     ]
 
-    for p in req.panels:
-        px, py, pw, ph = p.x, p.y, p.w, p.h
-        label = p.label.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    for p in panels:
+        # Support both dict (from export) and object (from figure_render)
+        if isinstance(p, dict):
+            px, py, pw, ph = p.get("x", 0), p.get("y", 0), p.get("w", 100), p.get("h", 80)
+            label = str(p.get("label", ""))
+            image = p.get("image")
+        else:
+            px, py, pw, ph = p.x, p.y, p.w, p.h
+            label = p.label
+            image = p.image
+
+        label = label.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
         # Embed screenshot if provided
-        if p.image and p.image.startswith("data:image/"):
+        if image and image.startswith("data:image/"):
             lines.append(
                 f'  <image x="{px}" y="{py}" width="{pw}" height="{ph}"'
-                f' xlink:href="{p.image}" preserveAspectRatio="xMidYMid meet"/>'
+                f' xlink:href="{image}" preserveAspectRatio="xMidYMid meet"/>'
             )
 
         # Border
@@ -74,10 +84,15 @@ async def render_figure(req: FigureRenderRequest):
         )
 
     lines.append("</svg>")
-    svg_content = "\n".join(lines)
+    return "\n".join(lines)
 
-    tmp = tempfile.NamedTemporaryFile(suffix=".svg", delete=False, mode="w", encoding="utf-8")
-    tmp.write(svg_content)
-    tmp.close()
 
-    return {"svg": svg_content, "url": f"/api/download?path={tmp.name}"}
+@figure_render_router.post("/api/figure_render")
+async def render_figure(req: FigureRenderRequest):
+    style = req.style or {}
+    svg_content = build_svg(req.panels, style)
+    return Response(
+        content=svg_content,
+        media_type="image/svg+xml",
+        headers={"Content-Disposition": "attachment; filename=figure.svg"},
+    )
