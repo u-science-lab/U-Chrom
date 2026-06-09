@@ -1,0 +1,16 @@
+id: mesc_sox2_test
+title: "mESC Sox2 locus DNA FISH (test fixture)"
+description: "A 5-cell test slice of mouse ESC Sox2-locus chromatin tracing, used to exercise the portal pipeline end-to-end."
+organism: "Mus musculus"
+assembly: "mm10"
+technology: "DNA FISH"
+doi: ""
+citation: "U-Chrom example data"
+source_h5cd: "../../../example-data/mESC_Sox2_5cells_wnan.h5cd"
+notebook: "../../../tutorials/takei2025_walkthrough.ipynb"
+files:
+  - label: "5-cell slice (.h5cd)"
+    url: "https://example.org/placeholder/mESC_Sox2_5cells_wnan.h5cd"
+    size_mb: 1
+    format: h5cd
+analyzer_url: null
