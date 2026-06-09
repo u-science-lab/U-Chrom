@@ -76,6 +76,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Also ask Pantheon observe_images to QA generated schematics.",
     )
 
+    graph_p = sub.add_parser(
+        "graph",
+        help="Build graph artifacts from an existing auto-discovery run",
+    )
+    graph_p.add_argument("run_dir")
+    graph_p.add_argument(
+        "--output-dir",
+        default=None,
+        help="Directory that will receive graph/idea_graph.json and graph/graph_summary.md. Defaults to run_dir.",
+    )
+
     args = parser.parse_args(argv)
     if args.cmd == "run":
         result = run_auto_discovery(DiscoveryRunConfig(
@@ -119,6 +130,13 @@ def main(argv: list[str] | None = None) -> int:
             visual_qa=args.visual_qa,
         ))
         print(json.dumps([asdict(record) for record in records], indent=2))
+        return 0
+    if args.cmd == "graph":
+        from .graph import build_idea_graph_from_run, write_idea_graph_artifacts
+
+        graph = build_idea_graph_from_run(args.run_dir)
+        paths = write_idea_graph_artifacts(graph, args.output_dir or args.run_dir)
+        print(json.dumps({"summary": graph.summary(), **paths}, indent=2))
         return 0
     return 1
 

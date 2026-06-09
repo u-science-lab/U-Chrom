@@ -59,6 +59,8 @@ class DiscoveryRunResult:
     results_path: str
     notebooks: list[str] = field(default_factory=list)
     agent_records_path: str | None = None
+    graph_path: str | None = None
+    graph_summary_path: str | None = None
 
 
 def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> DiscoveryRunResult:
@@ -224,10 +226,46 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
     _write_jsonl(agent_records_path, agent_records)
     _write_report(report_path, config, schema, ideas, reviews, results)
 
+    from .graph import build_idea_graph_from_run, write_idea_graph_artifacts
+
+    graph = build_idea_graph_from_run(output_dir)
+    graph_artifacts = write_idea_graph_artifacts(graph, output_dir)
+
     verified = [
         r for r in results
         if (r.get("verification") or {}).get("status") == "pass"
     ]
+    if config.store_schema:
+        graph_summary = graph.summary()
+        cdata.uns["auto_discovery_graph"] = {
+            "schema_hash": schema.get("schema_hash"),
+            "latest_graph_path": graph_artifacts["graph_json"],
+            "graph_summary_path": graph_artifacts["graph_summary"],
+            "n_ideas": len(ideas),
+            "n_accepted": len(accepted),
+            "n_executed": len(results) if config.execute else 0,
+            "n_verified": len(verified),
+            "coverage_summary": graph_summary.get("coverage", {}),
+            "hypothesis_status": graph_summary.get("hypothesis_status", {}),
+        }
+        runs = cdata.uns.get("auto_discovery_runs")
+        if not isinstance(runs, list):
+            runs = []
+        runs.append({
+            "output_dir": str(output_dir),
+            "schema_hash": schema.get("schema_hash"),
+            "ideas_path": str(ideas_path),
+            "reviews_path": str(reviews_path),
+            "results_path": str(results_path),
+            "report_path": str(report_path),
+            "graph_path": graph_artifacts["graph_json"],
+            "n_generated": len(ideas),
+            "n_accepted": len(accepted),
+            "n_executed": len(results) if config.execute else 0,
+            "n_verified": len(verified),
+        })
+        cdata.uns["auto_discovery_runs"] = runs
+        cdata.write(h5cd_path)
     return DiscoveryRunResult(
         output_dir=str(output_dir),
         n_generated=len(ideas),
@@ -240,6 +278,8 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
         results_path=str(results_path),
         notebooks=notebooks,
         agent_records_path=str(agent_records_path),
+        graph_path=graph_artifacts["graph_json"],
+        graph_summary_path=graph_artifacts["graph_summary"],
     )
 
 

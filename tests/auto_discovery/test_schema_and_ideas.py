@@ -79,6 +79,53 @@ def test_discovery_schema_includes_linked_anndata():
     assert "linked_adata" in cdata.describe_for_agent()
 
 
+def test_discovery_schema_includes_references_and_user_annotations(tmp_path):
+    from uchrom import ChromData
+
+    cdata = _make_cd()
+    ref = cdata.add_reference(
+        role="primary_dataset_paper",
+        title="Takei 2025 cerebellum multi-omics",
+        doi="10.0000/example",
+        url="https://example.org/takei",
+        year=2025,
+        notes="Primary paper associated with this linked dataset.",
+    )
+    ann = cdata.add_user_annotation(
+        scope="analysis_constraint",
+        target="linked_adata",
+        text="RNA and chromatin tracing are linked at cell_id level; do not assume RNA spot geometry.",
+        tags=["constraint", "multiomics_alignment"],
+    )
+
+    assert ref["reference_id"].startswith("ref_")
+    assert ann["annotation_id"].startswith("ann_")
+
+    schema = cdata.build_discovery_schema(store=True)
+    context = cdata.describe_for_agent(max_items=10)
+
+    assert schema["summary"]["n_references"] == 1
+    assert schema["summary"]["n_user_annotations"] == 1
+    assert schema["references"][0]["role"] == "primary_dataset_paper"
+    assert schema["references"][0]["doi"] == "10.0000/example"
+    assert schema["user_annotations"][0]["scope"] == "analysis_constraint"
+    assert schema["knowledge_seed_context"]["reference_roles"]["primary_dataset_paper"] == 1
+    assert schema["knowledge_seed_context"]["annotation_scopes"]["analysis_constraint"] == 1
+    assert "dataset_references:" in context
+    assert "user_annotations:" in context
+    assert "Takei 2025 cerebellum multi-omics" in context
+    assert "RNA and chromatin tracing are linked" in context
+
+    path = tmp_path / "schema_context.h5cd"
+    cdata.write(path)
+    out = ChromData.read(path)
+
+    assert out.dataset_references[0]["reference_id"] == ref["reference_id"]
+    assert out.user_annotations[0]["annotation_id"] == ann["annotation_id"]
+    assert out.discovery_schema["references"][0]["doi"] == "10.0000/example"
+    assert out.validate_discovery_schema() == []
+
+
 def test_review_idea_against_schema_accepts_and_rejects_fields():
     from uchrom.auto_discovery import DiscoveryIdea, review_idea_against_schema
 
@@ -398,6 +445,7 @@ def test_structured_conclusion_replaces_vague_final_interpretation(tmp_path):
 
 
 def test_run_auto_discovery_executes_notebook_pipeline(monkeypatch, tmp_path):
+    from uchrom import ChromData
     from uchrom.auto_discovery import DiscoveryRunConfig, run_auto_discovery
 
     cdata = _make_cd()
@@ -465,7 +513,78 @@ print(json.dumps(analysis_summary, indent=2))
     assert (tmp_path / "run" / "reviews.jsonl").exists()
     assert (tmp_path / "run" / "results.jsonl").exists()
     assert (tmp_path / "run" / "report.md").exists()
+    assert result.graph_path is not None
+    assert result.graph_summary_path is not None
+    assert Path(result.graph_path).exists()
+    assert Path(result.graph_summary_path).exists()
     assert len(list((tmp_path / "run" / "notebooks").glob("*.ipynb"))) == 2
+    out = ChromData.read(h5cd_path)
+    assert out.uns["auto_discovery_graph"]["latest_graph_path"] == result.graph_path
+    assert out.uns["auto_discovery_runs"][-1]["graph_path"] == result.graph_path
+
+
+def test_build_idea_graph_from_run_artifacts(tmp_path):
+    from uchrom.auto_discovery import (
+        build_idea_graph_from_run,
+        idea_signature,
+        load_idea_graph,
+        write_idea_graph_artifacts,
+    )
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    idea = _make_idea()
+    idea.expected_direction = "Positive interaction: higher marker should increase the statistic."
+    idea.metadata["source_claim_ids"] = ["claim_pcp2_marker"]
+    idea.metadata["parent_idea_ids"] = ["parent_idea"]
+
+    def write_jsonl(path, rows):
+        with path.open("w") as fh:
+            for row in rows:
+                fh.write(json.dumps(row) + "\n")
+
+    write_jsonl(run_dir / "ideas.jsonl", [idea.to_dict()])
+    write_jsonl(run_dir / "reviews.jsonl", [{
+        "idea_id": idea.idea_id,
+        "accepted": True,
+        "errors": [],
+        "warnings": [],
+        "missing_fields": [],
+    }])
+    write_jsonl(run_dir / "results.jsonl", [{
+        "idea_id": idea.idea_id,
+        "notebook": str(run_dir / "notebooks" / f"{idea.idea_id}.ipynb"),
+        "execution_ok": True,
+        "elapsed_sec": 1.2,
+        "errors": [],
+        "verification": {
+            "status": "pass",
+            "p_value": 0.01,
+            "effect_size": 0.25,
+            "observed_statistic": 0.25,
+            "parameter_value": 0.25,
+            "test_method": "unit-test permutation",
+            "result_path": str(run_dir / f"{idea.idea_id}_result.csv"),
+        },
+    }])
+
+    signature = idea_signature(idea)
+    graph = build_idea_graph_from_run(run_dir)
+    artifacts = write_idea_graph_artifacts(graph, run_dir)
+    loaded = load_idea_graph(artifacts["graph_json"])
+    summary = loaded.summary()
+    edge_relations = {edge["relation"] for edge in loaded.edges}
+
+    assert signature["markers"] == ["H3K27me3"]
+    assert signature["parameter_family"] == "spatial_distance"
+    assert f"idea:{idea.idea_id}" in loaded.nodes
+    assert f"evidence:{idea.idea_id}" in loaded.nodes
+    assert loaded.nodes[f"evidence:{idea.idea_id}"]["hypothesis_status"] == "Supported"
+    assert "supports" in edge_relations
+    assert "motivated_by" in edge_relations
+    assert "derived_from" in edge_relations
+    assert summary["coverage"]["markers"]["H3K27me3"] == 1
+    assert Path(artifacts["graph_summary"]).exists()
 
 
 def test_auto_discovery_defaults_to_pantheon_backend(tmp_path):

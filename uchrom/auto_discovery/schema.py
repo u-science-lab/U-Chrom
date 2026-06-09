@@ -61,6 +61,8 @@ def build_discovery_schema(
 
     tracks = _columns(cdata.tracks)
     genes = linked.get("var_names", {"n": 0, "values": [], "truncated": False, "sha1": ""})
+    references = _metadata_records(cdata.uns.get("dataset_references"))
+    user_annotations = _metadata_records(cdata.uns.get("user_annotations"))
     schema = {
         "schema_version": DISCOVERY_SCHEMA_VERSION,
         "schema_type": "uchrom_multiomics_auto_discovery",
@@ -71,12 +73,17 @@ def build_discovery_schema(
             "genome_assembly": _json_scalar(cdata.uns.get("genome_assembly")),
             "xyz_unit": _json_scalar(cdata.uns.get("xyz_unit")),
         },
+        "references": references,
+        "user_annotations": user_annotations,
+        "knowledge_seed_context": _knowledge_seed_context(references, user_annotations),
         "summary": {
             "n_spots": int(cdata.n_spots),
             "n_traces": int(cdata.n_traces),
             "n_cells": int(cdata.n_cells),
             "n_chroms": len(chroms),
             "n_tracks": len(tracks),
+            "n_references": len(references),
+            "n_user_annotations": len(user_annotations),
         },
         "axes": {
             "spot": "Rows of coords/spots/tracks; one observed genomic bin in one trace.",
@@ -200,6 +207,10 @@ def validate_discovery_schema(schema: Mapping[str, Any], cdata=None) -> list[str
             issues.append(f"missing top-level key: {key}")
     if schema.get("schema_type") != "uchrom_multiomics_auto_discovery":
         issues.append("schema_type is not uchrom_multiomics_auto_discovery")
+    if "references" in schema and not isinstance(schema["references"], list):
+        issues.append("references must be a list")
+    if "user_annotations" in schema and not isinstance(schema["user_annotations"], list):
+        issues.append("user_annotations must be a list")
     if cdata is not None and "summary" in schema:
         summary = schema["summary"]
         expected = {
@@ -250,6 +261,21 @@ def schema_to_agent_context(schema: Mapping[str, Any], *, max_items: int = 40) -
         lines.append(f"genes: {_format_catalog(catalogs.get('genes', {}), max_items)}")
     else:
         lines.append("linked_adata: missing")
+
+    references = list(schema.get("references", []) or [])
+    annotations = list(schema.get("user_annotations", []) or [])
+    if references:
+        lines.extend(["", "dataset_references:"])
+        for ref in references[:max_items]:
+            lines.append(f"- {_format_reference(ref)}")
+        if len(references) > max_items:
+            lines.append(f"- ... {len(references) - max_items} more")
+    if annotations:
+        lines.extend(["", "user_annotations:"])
+        for ann in annotations[:max_items]:
+            lines.append(f"- {_format_annotation(ann)}")
+        if len(annotations) > max_items:
+            lines.append(f"- ... {len(annotations) - max_items} more")
 
     missing = schema.get("known_missing", [])
     if missing:
@@ -313,6 +339,106 @@ def _linked_anndata_field(cdata, *, include_linked_adata: bool, max_catalog_item
         "var_names": _catalog(_as_str_list(adata.var_names), max_catalog_items),
     })
     return out
+
+
+def _metadata_records(raw: Any) -> list[dict[str, Any]]:
+    if raw is None:
+        return []
+    if isinstance(raw, Mapping):
+        raw = [raw]
+    if not isinstance(raw, (list, tuple)):
+        return []
+    records = []
+    for item in raw:
+        if not isinstance(item, Mapping):
+            continue
+        records.append(_json_roundtrip(dict(item)))
+    return records
+
+
+def _knowledge_seed_context(
+    references: list[Mapping[str, Any]],
+    annotations: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    roles: dict[str, int] = {}
+    annotation_scopes: dict[str, int] = {}
+    citation_seeds = []
+    annotation_seeds = []
+    for ref in references:
+        role = str(ref.get("role") or "unspecified")
+        roles[role] = roles.get(role, 0) + 1
+        seed = {
+            "reference_id": ref.get("reference_id"),
+            "role": ref.get("role"),
+            "title": ref.get("title"),
+            "doi": ref.get("doi"),
+            "pmid": ref.get("pmid"),
+            "url": ref.get("url"),
+        }
+        citation_seeds.append({k: v for k, v in seed.items() if v not in (None, "")})
+    for ann in annotations:
+        scope = str(ann.get("scope") or "unspecified")
+        annotation_scopes[scope] = annotation_scopes.get(scope, 0) + 1
+        seed = {
+            "annotation_id": ann.get("annotation_id"),
+            "scope": ann.get("scope"),
+            "target": ann.get("target"),
+            "text": ann.get("text"),
+            "tags": ann.get("tags", []),
+            "confidence": ann.get("confidence"),
+        }
+        annotation_seeds.append({k: v for k, v in seed.items() if v not in (None, "")})
+    return {
+        "n_references": len(references),
+        "reference_roles": roles,
+        "n_user_annotations": len(annotations),
+        "annotation_scopes": annotation_scopes,
+        "citation_seeds": citation_seeds,
+        "annotation_seeds": annotation_seeds,
+    }
+
+
+def _format_reference(ref: Mapping[str, Any]) -> str:
+    label = ref.get("reference_id") or ref.get("title") or ref.get("doi") or ref.get("url") or "reference"
+    bits = [str(label)]
+    if ref.get("title") and ref.get("title") != label:
+        bits.append(f"title={ref.get('title')}")
+    if ref.get("role"):
+        bits.append(f"role={ref.get('role')}")
+    if ref.get("year"):
+        bits.append(f"year={ref.get('year')}")
+    if ref.get("doi"):
+        bits.append(f"doi={ref.get('doi')}")
+    if ref.get("pmid"):
+        bits.append(f"pmid={ref.get('pmid')}")
+    if ref.get("url") and not ref.get("doi"):
+        bits.append(f"url={ref.get('url')}")
+    if ref.get("notes"):
+        bits.append(f"notes={_truncate(str(ref.get('notes')), 160)}")
+    return "; ".join(bits)
+
+
+def _format_annotation(annotation: Mapping[str, Any]) -> str:
+    label = annotation.get("annotation_id") or annotation.get("scope") or "annotation"
+    bits = [str(label)]
+    if annotation.get("scope"):
+        bits.append(f"scope={annotation.get('scope')}")
+    if annotation.get("target"):
+        bits.append(f"target={annotation.get('target')}")
+    if annotation.get("tags"):
+        bits.append("tags=" + ",".join(map(str, annotation.get("tags", []))))
+    if annotation.get("confidence"):
+        bits.append(f"confidence={annotation.get('confidence')}")
+    if annotation.get("text"):
+        bits.append(f"text={_truncate(str(annotation.get('text')), 220)}")
+    return "; ".join(bits)
+
+
+def _truncate(text: str, max_chars: int) -> str:
+    text = " ".join(text.split())
+    if len(text) <= max_chars:
+        return text
+    return text[: max(0, max_chars - 4)].rstrip() + " ..."
 
 
 def _cell_type_counts(cdata) -> dict[str, int]:

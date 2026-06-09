@@ -31,6 +31,13 @@ Notebooks
    :members:
    :undoc-members:
 
+Idea graph
+----------
+
+.. automodule:: uchrom.auto_discovery.graph
+   :members:
+   :undoc-members:
+
 Runner
 ------
 

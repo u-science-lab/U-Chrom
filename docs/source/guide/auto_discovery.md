@@ -10,6 +10,18 @@ agents can reason from the same object that downstream analyses load.
 from uchrom import ChromData
 
 cdata = ChromData.read("takei2025_cerebellum_rep1.h5cd")
+cdata.add_reference(
+    role="primary_dataset_paper",
+    title="Primary paper or dataset manuscript",
+    doi="10.xxxx/example",
+    url="https://example.org/paper",
+)
+cdata.add_user_annotation(
+    scope="analysis_constraint",
+    target="linked_adata",
+    text="RNA and chromatin tracing are linked at cell_id level; do not assume RNA spot geometry.",
+    tags=["constraint", "multiomics_alignment"],
+)
 schema = cdata.build_discovery_schema(store=True)
 print(cdata.describe_for_agent())
 cdata.write("takei2025_cerebellum_rep1.h5cd")
@@ -20,8 +32,14 @@ The schema records:
 - axes: spot, trace, cell, marker, gene
 - modalities: chromatin tracing, IF tracks, cell metadata, linked RNA
 - field catalogs: `spots`, `tracks`, `cells`, `cellm`, `linked_adata`
+- dataset references from `cdata.uns["dataset_references"]`
+- user annotations from `cdata.uns["user_annotations"]`
+- a compact `knowledge_seed_context` for browser/idea agents
 - known missing data, such as raw RNA spot geometry or scRNA reference
 - recommended verification checks for generated parameters
+
+References and annotations are treated as priors and constraints for
+discovery agents. They do not replace notebook-based validation.
 
 ## Runner
 
@@ -76,7 +94,21 @@ Each run writes:
 - `results.jsonl`
 - `agent_records.jsonl`
 - `report.md`
+- `graph/idea_graph.json`
+- `graph/graph_summary.md`
 - one notebook per accepted idea under `notebooks/`
+
+When `--store-schema` is used, the runner also stores a lightweight graph
+pointer and run summary in `cdata.uns["auto_discovery_graph"]` and
+`cdata.uns["auto_discovery_runs"]`. Full notebooks and graph artifacts stay
+in the run directory.
+
+Existing runs can be converted into graph artifacts without re-running the
+agents:
+
+```bash
+python -m uchrom.auto_discovery graph runs/pantheon
+```
 
 ## Verified Notebook Exports
 

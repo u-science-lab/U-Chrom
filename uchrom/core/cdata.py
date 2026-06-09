@@ -166,9 +166,11 @@ material.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from copy import deepcopy
 from pathlib import Path
-from typing import Union, Optional, Dict, List
+from typing import Any, Union, Optional, Dict, List, Mapping
 
 import numpy as np
 import pandas as pd
@@ -178,6 +180,7 @@ PathLike = Union[str, Path]
 
 _SPOTS_REQUIRED_COLUMNS = ("chrom", "start", "end", "trace_id")
 _CATEGORICAL_COLUMNS = ("chrom", "trace_id", "cell_id")
+_UNS_JSON_PREFIX = "__uchrom_json__:"
 
 # ``.h5cd`` on-disk format version. Semantics (MAJOR.MINOR):
 #   MAJOR bump  — breaking change: a reader for the old MAJOR cannot read the
@@ -247,6 +250,9 @@ class ChromData:
     uns : dict, optional
         Unstructured metadata preserved on disk.  Conventional keys:
         ``'genome_assembly'``, ``'xyz_unit'``, ``'fofct_header'``.
+        Auto-discovery context may use ``'dataset_references'`` for source
+        papers/repositories and ``'user_annotations'`` for user-provided
+        priors, constraints, or hypothesis seeds.
     validate : bool
         If True (default), validate internal consistency on
         construction (coords shape, spots required columns, tracks /
@@ -360,6 +366,115 @@ class ChromData:
         import anndata as ad
         self._linked_adata = ad.read_h5ad(path)
         return self._linked_adata
+
+    @property
+    def dataset_references(self) -> List[dict]:
+        """Dataset-level source references used as auto-discovery priors.
+
+        References are stored in ``uns['dataset_references']`` and round-trip
+        with ``.h5cd`` files.  They are intended for primary dataset papers,
+        data repositories, supplementary tables, method papers, and related
+        biological priors.
+        """
+        return self._metadata_records("dataset_references")
+
+    @property
+    def user_annotations(self) -> List[dict]:
+        """User-provided discovery context and analysis constraints.
+
+        Annotations are stored in ``uns['user_annotations']`` and are treated
+        as user-supplied priors or constraints by discovery agents, not as
+        validated data evidence.
+        """
+        return self._metadata_records("user_annotations")
+
+    def add_reference(
+        self,
+        *,
+        reference_id: Optional[str] = None,
+        role: str = "user_supplied_reference",
+        title: Optional[str] = None,
+        doi: Optional[str] = None,
+        pmid: Optional[str] = None,
+        url: Optional[str] = None,
+        year: Optional[int] = None,
+        notes: Optional[str] = None,
+        **extra: Any,
+    ) -> dict:
+        """Add a source reference to ``uns['dataset_references']``.
+
+        Parameters are intentionally metadata-oriented rather than tied to one
+        publication database.  ``role`` should describe how the reference
+        relates to the dataset, for example ``'primary_dataset_paper'``,
+        ``'data_repository'``, ``'supplementary_table'``, or
+        ``'related_biology_prior'``.
+        """
+        record = {
+            "reference_id": reference_id,
+            "role": role,
+            "title": title,
+            "doi": doi,
+            "pmid": pmid,
+            "url": str(url) if url is not None else None,
+            "year": int(year) if year is not None else None,
+            "notes": notes,
+            **extra,
+        }
+        record = _clean_metadata_record(record)
+        if "reference_id" not in record:
+            record["reference_id"] = _stable_metadata_id("ref", record)
+        self.dataset_references.append(record)
+        return record
+
+    def add_user_annotation(
+        self,
+        *,
+        annotation_id: Optional[str] = None,
+        scope: str,
+        text: str,
+        target: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        confidence: str = "user_asserted",
+        **extra: Any,
+    ) -> dict:
+        """Add a user annotation to ``uns['user_annotations']``.
+
+        Use annotations for cell-type notes, marker priors, analysis
+        constraints, hypothesis seeds, negative constraints, field semantics,
+        or quality warnings.  They are surfaced in the discovery schema and
+        agent context but still require notebook validation before becoming
+        evidence.
+        """
+        record = {
+            "annotation_id": annotation_id,
+            "scope": scope,
+            "target": target,
+            "text": text,
+            "tags": tags or [],
+            "confidence": confidence,
+            **extra,
+        }
+        record = _clean_metadata_record(record)
+        if "annotation_id" not in record:
+            record["annotation_id"] = _stable_metadata_id("ann", record)
+        self.user_annotations.append(record)
+        return record
+
+    def _metadata_records(self, key: str) -> List[dict]:
+        raw = self.uns.get(key)
+        if raw is None:
+            self.uns[key] = []
+            return self.uns[key]
+        if isinstance(raw, Mapping):
+            records = [_clean_metadata_record(dict(raw))]
+        elif isinstance(raw, list):
+            records = [_clean_metadata_record(item) for item in raw]
+        elif isinstance(raw, tuple):
+            records = [_clean_metadata_record(item) for item in raw]
+        else:
+            raise TypeError(f"uns['{key}'] must be a list of records, got {type(raw).__name__}")
+        self.uns[key] = records
+        return records
 
     @property
     def discovery_schema(self) -> dict:
@@ -1259,6 +1374,43 @@ class ChromData:
 # Utilities
 # ======================================================================
 
+def _clean_metadata_record(record: Any) -> dict:
+    """Return a JSON-friendly metadata record with empty values removed."""
+    if not isinstance(record, Mapping):
+        raise TypeError(f"metadata record must be a mapping, got {type(record).__name__}")
+    out = {}
+    for key, value in record.items():
+        if value is None or value == "":
+            continue
+        out[str(key)] = _metadata_jsonable(value)
+    return out
+
+
+def _metadata_jsonable(value: Any) -> Any:
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    if isinstance(value, Mapping):
+        return {
+            str(k): _metadata_jsonable(v)
+            for k, v in value.items()
+            if v is not None and v != ""
+        }
+    if isinstance(value, (list, tuple, set)):
+        return [_metadata_jsonable(v) for v in value]
+    if isinstance(value, (pd.Index, pd.Series)):
+        return [_metadata_jsonable(v) for v in value.tolist()]
+    return value
+
+
+def _stable_metadata_id(prefix: str, record: Mapping[str, Any]) -> str:
+    payload = json.dumps(record, sort_keys=True, separators=(",", ":"), default=str)
+    return f"{prefix}_{hashlib.sha1(payload.encode('utf-8')).hexdigest()[:10]}"
+
+
 def _pdist_matrix(coords: np.ndarray) -> np.ndarray:
     """Compute pairwise Euclidean distance matrix from (n, 3) coords."""
     diff = coords[:, None, :] - coords[None, :, :]
@@ -1488,7 +1640,12 @@ def _write_uns(f, name: str, uns: dict):
             try:
                 grp.create_dataset(key, data=np.array(val))
             except (TypeError, ValueError):
-                grp.attrs[key] = str(val)
+                grp.attrs[key] = _UNS_JSON_PREFIX + json.dumps(
+                    _metadata_jsonable(val),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    default=str,
+                )
         else:
             grp.attrs[key] = str(val)
 
@@ -1498,7 +1655,7 @@ def _read_uns(f, name: str) -> dict:
     if name not in f:
         return {}
     grp = f[name]
-    result = dict(grp.attrs)
+    result = {key: _read_uns_attr(value) for key, value in grp.attrs.items()}
     for key in grp:
         item = grp[key]
         if isinstance(item, type(grp)):
@@ -1506,3 +1663,11 @@ def _read_uns(f, name: str) -> dict:
         else:
             result[key] = item[:]
     return result
+
+
+def _read_uns_attr(value: Any) -> Any:
+    if isinstance(value, bytes):
+        value = value.decode("utf-8")
+    if isinstance(value, str) and value.startswith(_UNS_JSON_PREFIX):
+        return json.loads(value[len(_UNS_JSON_PREFIX):])
+    return value
