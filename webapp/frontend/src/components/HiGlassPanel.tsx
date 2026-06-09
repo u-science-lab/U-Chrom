@@ -20,11 +20,11 @@ function TADOverlay({ tads, viewport, panelWidth }: {
   const range = viewport.end - viewport.start;
   if (range <= 0) return null;
 
-  const boundaries = tads
-    .filter(t => t.chrom === viewport.chrom)
-    .flatMap(t => [t.start, t.end])
-    .filter((pos, i, arr) => arr.indexOf(pos) === i)  // dedupe
-    .filter(pos => pos >= viewport.start && pos <= viewport.end);
+  const uniqueBoundaries = Array.from(new Set(  // O(n) dedupe
+    tads
+      .filter(t => t.chrom === viewport.chrom)
+      .flatMap(t => [t.start, t.end])
+  )).filter(pos => pos >= viewport.start && pos <= viewport.end);
 
   return (
     <svg
@@ -34,11 +34,11 @@ function TADOverlay({ tads, viewport, panelWidth }: {
         pointerEvents: 'none', zIndex: 10,
       }}
     >
-      {boundaries.map(pos => {
+      {uniqueBoundaries.map(pos => {
         const x = ((pos - viewport.start) / range) * panelWidth;
         return (
           <line key={pos}
-            x1={x} y1={0} x2={x} y2="100%"
+            x1={x} y1={0} x2={x} y2={10000}
             stroke="#f38ba8" strokeWidth={1.5} strokeDasharray="4 2" opacity={0.8}
           />
         );
@@ -58,26 +58,15 @@ const HiGlassPanel: React.FC<HiGlassPanelProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const hgRef = useRef<any>(null);
+  const chromNameRef = useRef(chromName);
+  const resolutionRef = useRef(resolution);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tilesetInfo, setTilesetInfo] = useState<any>(null);
   const [tadData, setTadData] = useState<Array<{chrom: string, start: number, end: number, level: number}>>([]);
 
-  // Fetch tileset info from backend
-  useEffect(() => {
-    const fetchTilesetInfo = async () => {
-      try {
-        const response = await fetch('/api/higlass/tileset_info/?d=uchrom-contact');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        setTilesetInfo(data);
-      } catch (err) {
-        console.warn('HiGlass tileset info fetch failed:', err);
-        // Not fatal - HiGlass can still load without pre-fetched info
-      }
-    };
-    fetchTilesetInfo();
-  }, []);
+  // Keep refs up to date for use in stale closures
+  useEffect(() => { chromNameRef.current = chromName; }, [chromName]);
+  useEffect(() => { resolutionRef.current = resolution; }, [resolution]);
 
   // Fetch TAD data when chromosome changes
   useEffect(() => {
@@ -181,9 +170,9 @@ const HiGlassPanel: React.FC<HiGlassPanelProps> = ({
             const { xDomain } = event;
             if (xDomain && onViewportChange) {
               onViewportChange({
-                chromName,
-                startBin: Math.floor(xDomain[0] / resolution),
-                endBin: Math.ceil(xDomain[1] / resolution),
+                chromName: chromNameRef.current,
+                startBin: Math.floor(xDomain[0] / resolutionRef.current),
+                endBin: Math.ceil(xDomain[1] / resolutionRef.current),
               });
             }
           });
