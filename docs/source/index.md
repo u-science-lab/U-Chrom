@@ -62,6 +62,7 @@ tutorials/chromdata_basics
 tutorials/import_fofct
 tutorials/import_pyhim_ecsv
 tutorials/takei2025_walkthrough
+tutorials/takei2025_auto_discovery
 ```
 
 ```{toctree}
@@ -105,6 +106,7 @@ guide/io
 guide/tracing
 guide/reconstruction
 guide/structure
+guide/auto_discovery
 guide/browser
 ```
 

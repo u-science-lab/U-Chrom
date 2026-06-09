@@ -2,6 +2,7 @@ tmp/
 *.pyc
 __pycache__/
 imgui.ini
+.DS_Store
 
 .vscode/
 
@@ -24,6 +25,9 @@ run_whole_genome.py
 *.hic
 *.mcool
 *.h5cd
+*.h5ad
+*.tar.gz
+example-data/**/*.zip
 example-data/4DNFIHF3JCBY.*
 example-data/DNAseqFISH+.zip
 example-data/DNAseqFISH+/
@@ -36,6 +40,8 @@ example-data/H1Esc-HFF.R1.labeled
 example-data/H1Esc-HFF.R1/
 # venv + smoke test work
 .venv/
+.venv-pantheon/
+.pantheon/
 # Docs build
 docs/build/
 .ipynb_checkpoints/

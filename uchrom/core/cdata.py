@@ -361,6 +361,80 @@ class ChromData:
         self._linked_adata = ad.read_h5ad(path)
         return self._linked_adata
 
+    @property
+    def discovery_schema(self) -> dict:
+        """Agent-readable auto-discovery schema for this ``ChromData``.
+
+        If a schema is stored in ``uns['auto_discovery_schema']`` it is
+        parsed and returned.  Otherwise a fresh in-memory schema is built
+        without mutating ``uns``.
+        """
+        from uchrom.auto_discovery.schema import (
+            DISCOVERY_SCHEMA_KEY,
+            build_discovery_schema,
+            unpack_schema,
+        )
+
+        raw = self.uns.get(DISCOVERY_SCHEMA_KEY)
+        if raw is not None:
+            return unpack_schema(raw)
+        return build_discovery_schema(self)
+
+    @property
+    def auto_discovery_schema(self) -> dict:
+        """Alias for :attr:`discovery_schema`."""
+        return self.discovery_schema
+
+    def build_discovery_schema(self, *, store: bool = True, **kwargs) -> dict:
+        """Build the auto-discovery schema, optionally storing it in ``uns``.
+
+        The stored representation is an HDF5-friendly JSON payload under
+        ``uns['auto_discovery_schema']``, so it round-trips with ``.h5cd``.
+        """
+        from uchrom.auto_discovery.schema import (
+            DISCOVERY_SCHEMA_KEY,
+            build_discovery_schema,
+            pack_schema,
+        )
+
+        schema = build_discovery_schema(self, **kwargs)
+        if store:
+            self.uns[DISCOVERY_SCHEMA_KEY] = pack_schema(schema)
+        return schema
+
+    def update_discovery_schema(self, schema: Optional[dict] = None, **kwargs) -> dict:
+        """Store a supplied or newly built auto-discovery schema in ``uns``."""
+        from uchrom.auto_discovery.schema import DISCOVERY_SCHEMA_KEY, pack_schema
+
+        if schema is None:
+            return self.build_discovery_schema(store=True, **kwargs)
+        self.uns[DISCOVERY_SCHEMA_KEY] = pack_schema(schema)
+        return schema
+
+    def validate_discovery_schema(
+        self,
+        schema: Optional[dict] = None,
+        *,
+        raise_on_error: bool = False,
+    ) -> List[str]:
+        """Validate a discovery schema against this ``ChromData``.
+
+        Returns a list of issues.  If ``raise_on_error=True``, raises
+        ``ValueError`` when any issue is found.
+        """
+        from uchrom.auto_discovery.schema import validate_discovery_schema
+
+        issues = validate_discovery_schema(schema or self.discovery_schema, cdata=self)
+        if issues and raise_on_error:
+            raise ValueError("; ".join(issues))
+        return issues
+
+    def describe_for_agent(self, *, max_items: int = 40) -> str:
+        """Return a compact prompt-ready description of available data."""
+        from uchrom.auto_discovery.schema import schema_to_agent_context
+
+        return schema_to_agent_context(self.discovery_schema, max_items=max_items)
+
     # ------------------------------------------------------------------
     # Validation
     # ------------------------------------------------------------------

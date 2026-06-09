@@ -6,6 +6,7 @@ Public modules, generated from source docstrings.
 :maxdepth: 1
 
 core
+auto_discovery
 io
 im
 recon

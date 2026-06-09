@@ -4,6 +4,7 @@ uchrom.core
 .. automodule:: uchrom.core
    :members:
    :undoc-members:
+   :exclude-members: ChromData
 
 ChromData
 ---------
