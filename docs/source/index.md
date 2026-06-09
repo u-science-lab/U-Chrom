@@ -107,6 +107,7 @@ guide/tracing
 guide/reconstruction
 guide/structure
 guide/auto_discovery
+guide/iterative_auto_discovery
 guide/browser
 ```
 
