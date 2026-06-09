@@ -10,6 +10,7 @@ from .data_api import data_router
 from .tileset_api import tileset_router
 from .track_wig import track_wig_router
 from .strc_api import strc_router
+from .figure_render import figure_render_router
 import webapp.backend.data_api as _data_api
 
 UPLOAD_DIR = tempfile.mkdtemp(prefix="uchrom_uploads_")
@@ -28,6 +29,7 @@ app.include_router(data_router)
 app.include_router(tileset_router)
 app.include_router(track_wig_router)
 app.include_router(strc_router)
+app.include_router(figure_render_router)
 sessions: dict[str, Session] = {}
 
 

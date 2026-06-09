@@ -33,13 +33,29 @@ export default function FigureComposer({ onClose }: { onClose: () => void }) {
   }
 
   async function exportSvg() {
-    const r = await fetch('/api/export', {
+    // Build panels with image captures
+    const panelsWithImages = await Promise.all(
+      panels.map(async p => {
+        // Simple capture placeholder - real screenshot would need html2canvas
+        return { ...p, image: undefined }
+      })
+    )
+
+    const r = await fetch('/api/figure_render', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ figure_state: { panels, style }, format: 'svg' }),
+      body: JSON.stringify({
+        panels: panelsWithImages,
+        style: { ...style, sizePreset: preset }
+      }),
     })
     const { url } = await r.json()
-    if (url) { const a = document.createElement('a'); a.href = url; a.download = 'figure.svg'; a.click() }
+    if (url) {
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'figure.svg'
+      a.click()
+    }
   }
 
   function saveFig() {
