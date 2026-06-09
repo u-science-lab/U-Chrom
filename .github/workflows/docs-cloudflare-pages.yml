@@ -23,6 +23,7 @@ on:
 
 env:
   CLOUDFLARE_PROJECT_NAME: u-chrom-docs
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 permissions:
   contents: read
