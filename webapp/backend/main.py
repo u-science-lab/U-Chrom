@@ -9,6 +9,7 @@ from .ws_handler import handle_message
 from .data_api import data_router
 from .tileset_api import tileset_router
 from .track_wig import track_wig_router
+from .strc_api import strc_router
 import webapp.backend.data_api as _data_api
 
 UPLOAD_DIR = tempfile.mkdtemp(prefix="uchrom_uploads_")
@@ -26,6 +27,7 @@ app.state.executor = ProcessPoolExecutor()  # fallback for TestClient (no lifesp
 app.include_router(data_router)
 app.include_router(tileset_router)
 app.include_router(track_wig_router)
+app.include_router(strc_router)
 sessions: dict[str, Session] = {}
 
 
