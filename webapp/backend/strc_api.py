@@ -19,9 +19,6 @@ from fastapi.responses import JSONResponse
 
 import webapp.backend.data_api as data_api
 from uchrom.core import ChromData
-from uchrom.strc.tad import call_tads_by_pval, TADCallerParams
-from uchrom.strc.loop import call_loops_axiswise_f, LoopCallerParams
-from uchrom.strc.comp import call_compartments_axes_pc, CompartmentCallerParams
 
 strc_router = APIRouter()
 
@@ -98,7 +95,10 @@ def get_tads(chrom: str, cell_type: Optional[str] = None):
         raise HTTPException(status_code=404, detail={"error": f"Chromosome {chrom} not found"})
 
     try:
+        from uchrom.strc.tad import call_tads_by_pval, TADCallerParams
         tads = call_tads_by_pval(chrom_cd, TADCallerParams())
+    except ImportError:
+        raise HTTPException(status_code=503, detail={"error": "TAD module unavailable (missing torch?)"})
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error": "TAD calling failed", "detail": str(e)})
 
@@ -131,7 +131,10 @@ def get_loops(chrom: str, cell_type: Optional[str] = None):
         raise HTTPException(status_code=404, detail={"error": f"Chromosome {chrom} not found"})
 
     try:
+        from uchrom.strc.loop import call_loops_axiswise_f, LoopCallerParams
         loops = call_loops_axiswise_f(chrom_cd, LoopCallerParams())
+    except ImportError:
+        raise HTTPException(status_code=503, detail={"error": "Loop module unavailable (missing torch?)"})
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error": "Loop calling failed", "detail": str(e)})
 
@@ -160,7 +163,10 @@ def get_compartments(chrom: str, cell_type: Optional[str] = None):
         raise HTTPException(status_code=404, detail={"error": f"Chromosome {chrom} not found"})
 
     try:
+        from uchrom.strc.comp import call_compartments_axes_pc, CompartmentCallerParams
         comp = call_compartments_axes_pc(chrom_cd, CompartmentCallerParams())
+    except ImportError:
+        raise HTTPException(status_code=503, detail={"error": "Compartment module unavailable (missing torch?)"})
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error": "Compartment calling failed", "detail": str(e)})
 

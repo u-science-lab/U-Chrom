@@ -20,30 +20,33 @@ FIGURE_STATE = {
 }
 
 
-def test_export_returns_url():
+def test_export_returns_svg():
     r = client.post("/api/export", json={"figure_state": FIGURE_STATE, "format": "svg"})
     assert r.status_code == 200
-    body = r.json()
-    assert "url" in body
-    assert body["url"].endswith(".svg")
-
-
-def test_export_svg_is_downloadable():
-    r = client.post("/api/export", json={"figure_state": FIGURE_STATE, "format": "svg"})
-    url = r.json()["url"]
-    # Download the generated file
-    dl = client.get(url)
-    assert dl.status_code == 200
-    content = dl.text
+    assert r.headers["content-type"].startswith("image/svg+xml")
+    content = r.text
     assert content.startswith("<?xml") or content.startswith("<svg")
+
+
+def test_export_svg_contains_panels():
+    r = client.post("/api/export", json={"figure_state": FIGURE_STATE, "format": "svg"})
+    assert r.status_code == 200
+    content = r.text
     assert "3D Structure" in content
     assert "Contact Map" in content
 
 
 def test_export_svg_has_correct_dimensions():
     r = client.post("/api/export", json={"figure_state": FIGURE_STATE, "format": "svg"})
-    url = r.json()["url"]
-    svg = client.get(url).text
+    assert r.status_code == 200
+    svg = r.text
     # nature-double is 692x460
     assert "692" in svg
     assert "460" in svg
+
+
+def test_export_svg_disposition_header():
+    r = client.post("/api/export", json={"figure_state": FIGURE_STATE, "format": "svg"})
+    assert r.status_code == 200
+    cd = r.headers.get("content-disposition", "")
+    assert "figure.svg" in cd

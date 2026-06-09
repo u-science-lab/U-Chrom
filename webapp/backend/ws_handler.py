@@ -354,7 +354,7 @@ async def _run_agent_agui(
         text_started = False
 
         with client.messages.stream(
-            model="claude-opus-4",
+            model="claude-sonnet-4-6",
             max_tokens=4096,
             system=_SYSTEM_PROMPT,
             tools=TOOLS,
@@ -666,7 +666,7 @@ async def _run_agent_multimodal(ws: WebSocket, session: Session, image_base64: s
         # Stream response
         full_response = []
         with client.messages.stream(
-            model="claude-opus-4",
+            model="claude-sonnet-4-6",
             max_tokens=2048,
             messages=messages,
         ) as stream:

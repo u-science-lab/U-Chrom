@@ -28,7 +28,10 @@ def _make_mock_cd():
     cd.cellm = {}
     cd.results = {}
     cd.uns = {}
-    cd.get_cell.return_value = cd
+    # get_chrom returns a mock with non-empty coords
+    chrom_cd = MagicMock()
+    chrom_cd.coords = np.random.randn(n, 3).astype(np.float32)
+    cd.get_chrom.return_value = chrom_cd
     return cd
 
 
@@ -52,10 +55,13 @@ def test_tads_returns_list():
         "score": [5.0, 3.0],
         "pval": [1e-5, 1e-3],
         "fdr": [0.05, 0.09],
-        "boundary_bin_l": [0, 10],
-        "boundary_bin_r": [9, 19],
     })
-    with patch("webapp.backend.strc_api.call_tads_by_pval", return_value=fake_tads):
+
+    mock_tad_module = MagicMock()
+    mock_tad_module.call_tads_by_pval.return_value = fake_tads
+    mock_tad_module.TADCallerParams = MagicMock
+
+    with patch.dict("sys.modules", {"uchrom.strc.tad": mock_tad_module}):
         resp = client.get("/api/tads/chr1")
 
     assert resp.status_code == 200
@@ -85,7 +91,12 @@ def test_loops_returns_list():
         "pval": [1e-6],
         "fdr": [0.01],
     })
-    with patch("webapp.backend.strc_api.call_loops_axiswise_f", return_value=fake_loops):
+
+    mock_loop_module = MagicMock()
+    mock_loop_module.call_loops_axiswise_f.return_value = fake_loops
+    mock_loop_module.LoopCallerParams = MagicMock
+
+    with patch.dict("sys.modules", {"uchrom.strc.loop": mock_loop_module}):
         resp = client.get("/api/loops/chr1")
 
     assert resp.status_code == 200
@@ -108,10 +119,13 @@ def test_compartments_returns_list():
         "end": [500_000, 1_000_000],
         "compartment": ["A", "B"],
         "pc2": [0.5, -0.3],
-        "cluster": [0, 1],
-        "bin_index": [0, 5],
     })
-    with patch("webapp.backend.strc_api.call_compartments_axes_pc", return_value=fake_comp):
+
+    mock_comp_module = MagicMock()
+    mock_comp_module.call_compartments_axes_pc.return_value = fake_comp
+    mock_comp_module.CompartmentCallerParams = MagicMock
+
+    with patch.dict("sys.modules", {"uchrom.strc.comp": mock_comp_module}):
         resp = client.get("/api/compartments/chr1")
 
     assert resp.status_code == 200
