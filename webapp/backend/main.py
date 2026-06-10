@@ -30,6 +30,11 @@ app.include_router(tileset_router)
 app.include_router(track_wig_router)
 app.include_router(strc_router)
 app.include_router(figure_render_router)
+
+# HiGlass requests /api/v1/tileset_info and /api/v1/tiles — alias our endpoints
+from .tileset_api import tileset_info, tiles as tiles_endpoint
+app.add_api_route("/api/v1/tileset_info", tileset_info, methods=["GET"])
+app.add_api_route("/api/v1/tiles/", tiles_endpoint, methods=["GET"])
 sessions: dict[str, Session] = {}
 
 
@@ -46,8 +51,8 @@ async def ws_main(ws: WebSocket):
             await handle_message(ws, session, msg, app.state.executor)
     except WebSocketDisconnect:
         sessions.pop(session_id, None)
-        if _data_api.current_session is session:
-            _data_api.current_session = None
+        # Don't clear current_session on disconnect — REST APIs (tileset, data)
+        # need to keep serving the last loaded data after the WS closes.
 
 
 CANVAS_SIZES = {

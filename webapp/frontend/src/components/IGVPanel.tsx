@@ -20,16 +20,24 @@ const IGVPanel: React.FC = () => {
 
     const initIGV = async () => {
       try {
+        // Build track list: only add tracks that are available on the backend
+        const availableTracks: object[] = []
+        try {
+          const res = await fetch('/api/tracks')
+          if (res.ok) {
+            const names: string[] = await res.json()
+            for (const name of names) {
+              availableTracks.push({ type: 'wig', name, url: `/api/track_wig/${name}` })
+            }
+          }
+        } catch (_) {
+          // No tracks available — that's fine, IGV still shows the reference
+        }
+
         const config = {
           genome: 'hg19',
           locus: 'chr21',
-          tracks: [
-            {
-              type: 'wig',
-              name: 'ATAC',
-              url: '/api/track_wig/atac',
-            },
-          ],
+          tracks: availableTracks,
         }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

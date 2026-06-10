@@ -26,6 +26,17 @@ import webapp.backend.data_api as data_api
 track_wig_router = APIRouter()
 
 
+@track_wig_router.get("/api/tracks")
+def list_tracks() -> list:
+    """Return list of available track names from cd.tracks columns."""
+    if data_api.current_session is None or data_api.current_session.chromdata is None:
+        return []
+    cd = data_api.current_session.chromdata
+    if cd.tracks is None:
+        return []
+    return list(cd.tracks.columns)
+
+
 @track_wig_router.get("/api/track_wig/{name}")
 def get_track_wig(
     name: str,

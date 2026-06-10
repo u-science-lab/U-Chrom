@@ -62,6 +62,7 @@ const HiGlassPanel: React.FC<HiGlassPanelProps> = ({
   const resolutionRef = useRef(resolution);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [noData, setNoData] = useState(false);
   const [tadData, setTadData] = useState<Array<{chrom: string, start: number, end: number, level: number}>>([]);
 
   // Keep refs up to date for use in stale closures
@@ -86,6 +87,13 @@ const HiGlassPanel: React.FC<HiGlassPanelProps> = ({
 
     const initHiGlass = async () => {
       try {
+        // Check if data is loaded before trying to init HiGlass
+        const infoRes = await fetch(`/api/tileset_info?d=contact-${chromName}`)
+        if (!infoRes.ok) {
+          if (mounted) setNoData(true)
+          return
+        }
+
         // Dynamic import to avoid SSR issues
         const hglib = await import('higlass');
 
@@ -121,8 +129,8 @@ const HiGlassPanel: React.FC<HiGlassPanelProps> = ({
                   {
                     uid: 'heatmap-track',
                     type: 'heatmap',
-                    server: '/api/higlass',
-                    tilesetUid: 'uchrom-contact',
+                    server: window.location.origin,
+                    tilesetUid: `contact-${chromName}`,
                     height: height - 60,
                     options: {
                       colorRange: [
@@ -210,6 +218,21 @@ const HiGlassPanel: React.FC<HiGlassPanelProps> = ({
       console.warn('HiGlass zoom failed:', e);
     }
   }, [startBin, endBin, resolution, isLoaded]);
+
+  if (noData) {
+    return (
+      <div style={{
+        width, height,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#1a1a2e', color: '#888',
+        border: '1px solid #333', borderRadius: 4,
+        flexDirection: 'column', gap: 8,
+      }}>
+        <div style={{ fontSize: 14 }}>No contact data loaded</div>
+        <div style={{ fontSize: 12, opacity: 0.6 }}>Load a Hi-C / ChromData file to view the contact matrix</div>
+      </div>
+    );
+  }
 
   if (error) {
     return (
