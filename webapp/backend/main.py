@@ -47,22 +47,60 @@ app.add_api_route("/api/v1/tiles", tiles_endpoint, methods=["GET"])
 app.add_api_route("/api/v1/tiles/", tiles_endpoint, methods=["GET"])
 sessions: dict[str, Session] = {}
 
+# How long a disconnected session is retained so a reconnect can resume its
+# conversation history + view state. After this, a reaper-free lazy sweep drops it.
+SESSION_GRACE_SECONDS = 30 * 60
+
+
+def _sweep_detached(now: float) -> None:
+    """Drop sessions detached longer than the grace window (lazy, on connect)."""
+    stale = [
+        sid for sid, s in sessions.items()
+        if s.detached_at is not None and (now - s.detached_at) > SESSION_GRACE_SECONDS
+    ]
+    for sid in stale:
+        sessions.pop(sid, None)
+
 
 @app.websocket("/ws/main")
 async def ws_main(ws: WebSocket):
+    import time as _t
     await ws.accept()
-    session_id = str(uuid.uuid4())
-    session = Session(session_id=session_id)
-    sessions[session_id] = session
-    _data_api.current_session = session
+    _sweep_detached(_t.time())
+
+    # The client generates and stores its own session id (localStorage) and
+    # always reconnects with ?session_id=. A known id resumes the session
+    # (conversation history + view state); an unknown/absent id starts fresh.
+    requested_id = ws.query_params.get("session_id")
+    if requested_id and requested_id in sessions:
+        session = sessions[requested_id]
+        session.detached_at = None  # re-attached
+        session_id = requested_id
+        if session.chromdata is not None:
+            _data_api.current_session = session
+    else:
+        session_id = requested_id or str(uuid.uuid4())
+        session = Session(session_id=session_id)
+        sessions[session_id] = session
+        _data_api.current_session = session
+
     try:
         while True:
             msg = await ws.receive_json()
             await handle_message(ws, session, msg, app.state.executor)
     except WebSocketDisconnect:
-        sessions.pop(session_id, None)
-        # Don't clear current_session on disconnect — REST APIs (tileset, data)
-        # need to keep serving the last loaded data after the WS closes.
+        # Retain sessions that hold resumable state so a reconnect can pick them
+        # up; drop empty ones immediately so short-lived connections don't leak.
+        # REST APIs keep serving the last loaded data after the WS closes.
+        has_state = (
+            session.chromdata is not None
+            or session.conversation_history
+            or session.views
+        )
+        if has_state:
+            session.detached_at = _t.time()
+        else:
+            sessions.pop(session_id, None)
 
 
 CANVAS_SIZES = {

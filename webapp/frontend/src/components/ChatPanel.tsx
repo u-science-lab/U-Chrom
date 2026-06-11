@@ -1,110 +1,53 @@
-import { useState, useEffect, useRef } from 'react'
-import { useAppStore, type GoslingArtifact } from '../store'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { ws } from '../ws'
+import { ARTIFACT_HANDLERS } from '../artifactHandlers'
+import { useAppStore } from '../store'
 
 export default function ChatPanel() {
   const [messages, setMessages] = useState<Array<{ id: string; role: 'user' | 'assistant'; content: string }>>([])
   const [input, setInput] = useState('')
   const [wsConnected, setWsConnected] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const { addGoslingArtifact, applyGoslingPatch, setActiveGoslingSpec } = useAppStore()
+
+  const pushAssistant = useCallback((content: string) => {
+    setMessages(prev => [...prev, {
+      id: `${Date.now()}-${Math.random()}`,
+      role: 'assistant',
+      content,
+    }])
+  }, [])
 
   useEffect(() => {
     const offStatus = ws.onStatus(setWsConnected)
 
     const offText = ws.onMessage('agent_message', (msg) => {
-      setMessages(prev => [...prev, {
-        id: `${Date.now()}-${Math.random()}`,
-        role: 'assistant',
-        content: (msg.text as string) || (msg.content as string) || '',
-      }])
+      pushAssistant((msg.text as string) || (msg.content as string) || '')
     })
 
     const offArtifact = ws.onMessage('agent_artifact', (msg) => {
-      if (msg.artifact_type === 'gosling_spec' && msg.spec) {
-        const artifact: GoslingArtifact = {
-          id: (msg.artifact_id as string) || `viz_${Date.now()}`,
-          title: (msg.title as string) || 'Genomic Visualization',
-          spec: msg.spec as object,
-          createdAt: Date.now(),
-          active: false,
-        }
-        addGoslingArtifact(artifact)
-        setActiveGoslingSpec(artifact.spec, artifact.id)
-        setMessages(prev => [...prev, {
-          id: `${Date.now()}-${Math.random()}`,
-          role: 'assistant',
-          content: `[Visualization: ${artifact.title}]`,
-        }])
-      } else if (msg.artifact_type === 'gosling_patch' && msg.target_id && msg.patch) {
-        applyGoslingPatch(msg.target_id as string, msg.patch as { op: string; path: string; value: unknown })
-      } else if (msg.artifact_type === 'select_cells') {
-        // Agent-driven cell selection → cross-panel highlight
-        const ids = (msg.cell_ids as string[]) || []
-        useAppStore.getState().highlightCells(ids)
-        useAppStore.getState().setActiveTab('embedding')
-        setMessages(prev => [...prev, {
-          id: `${Date.now()}-${Math.random()}`,
-          role: 'assistant',
-          content: `[Selected ${ids.length} cell(s)]`,
-        }])
-      } else if (msg.artifact_type === 'color_embedding') {
-        useAppStore.getState().setActiveTab('embedding')
-        setMessages(prev => [...prev, {
-          id: `${Date.now()}-${Math.random()}`,
-          role: 'assistant',
-          content: `[Colored embedding by ${msg.color_by as string}]`,
-        }])
-      } else if (msg.artifact_type === 'show_structure') {
-        const cellId = msg.cell_id as string
-        if (cellId) useAppStore.getState().highlightCells([cellId])
-        useAppStore.getState().setActiveTab('structure3d')
-        setMessages(prev => [...prev, {
-          id: `${Date.now()}-${Math.random()}`,
-          role: 'assistant',
-          content: `[Showing 3D structure for ${cellId}]`,
-        }])
-      } else if (msg.artifact_type === 'color_structure') {
-        useAppStore.getState().setActiveTab('structure3d')
-        setMessages(prev => [...prev, {
-          id: `${Date.now()}-${Math.random()}`,
-          role: 'assistant',
-          content: `[Colored 3D structure by ${msg.color_by as string}]`,
-        }])
-      } else if (msg.artifact_type === 'export_view') {
-        const fmt = (msg.format as 'png' | 'pdf') || 'png'
-        useAppStore.getState().requestExport(fmt)
-        setMessages(prev => [...prev, {
-          id: `${Date.now()}-${Math.random()}`,
-          role: 'assistant',
-          content: `[Exporting current view as ${fmt.toUpperCase()}]`,
-        }])
-      } else if (msg.artifact_type === 'analysis_result') {
-        // Bump dataVersion so panels re-fetch derived data (TAD/loop/compartment)
-        useAppStore.getState().bumpDataVersion()
-        const at = msg.analysis_type as string
-        const chrom = msg.chrom as string
-        setMessages(prev => [...prev, {
-          id: `${Date.now()}-${Math.random()}`,
-          role: 'assistant',
-          content: `[${at} analysis complete on ${chrom}]`,
-        }])
+      const handler = ARTIFACT_HANDLERS[msg.artifact_type as string]
+      if (handler) {
+        handler(msg, { pushAssistant })
       }
     })
 
     // Plain text artifacts (e.g. "Data loaded", analysis results)
     const offTextArtifact = ws.onMessage('artifact', (msg) => {
       if (msg.artifact_type === 'text' && msg.content) {
-        setMessages(prev => [...prev, {
-          id: `${Date.now()}-${Math.random()}`,
-          role: 'assistant',
-          content: msg.content as string,
-        }])
+        pushAssistant(msg.content as string)
       }
     })
 
-    return () => { offStatus(); offText(); offArtifact(); offTextArtifact() }
-  }, [addGoslingArtifact, applyGoslingPatch, setActiveGoslingSpec])
+    // Backend view-state snapshot (after a resumed reconnect) — rebuild views.
+    const offSnapshot = ws.onMessage('view.snapshot', (msg) => {
+      const views = msg.views as Array<{
+        view_id: string; view_type: string; state: Record<string, unknown>; title?: string
+      }> | undefined
+      if (views && views.length) useAppStore.getState().hydrateViews(views)
+    })
+
+    return () => { offStatus(); offText(); offArtifact(); offTextArtifact(); offSnapshot() }
+  }, [pushAssistant])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })

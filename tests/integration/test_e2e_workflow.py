@@ -82,9 +82,11 @@ async def test_full_workflow_load_data_to_notebook():
                           if isinstance(c, dict) and c.get("artifact_type") == "notebook_cell"]
     assert len(notebook_artifacts) >= 1, "notebook_cell artifact not sent"
 
-    # Verify artifact contains code and output
+    # Verify artifact contains code and output. notebook_cell now travels on
+    # the agent_artifact channel (so the frontend ARTIFACT_HANDLERS picks it up,
+    # like every other agent-driven UI effect) — not the legacy "artifact" type.
     artifact = notebook_artifacts[0]
-    assert artifact["type"] == "artifact"
+    assert artifact["type"] == "agent_artifact"
     assert artifact["artifact_type"] == "notebook_cell"
     assert artifact["content"]["code"] == "print(42)"
     assert artifact["content"]["output"] == "Result: 42"

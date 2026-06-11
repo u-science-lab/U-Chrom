@@ -450,3 +450,43 @@ COMPONENT_TREE_SCHEMA = {
 
 - **pantheon LiveView**:后端持权威 state,agent/UI 都是客户端;"不透明 state + 可加载模块"+ 统一 deep-merge patch + Future 式 action 回环 + diagnostics/截图自检。其 same-origin iframe 姿态**不可照抄**。
 - **A2UI 业界**:收敛到"声明式白名单 catalog"与"sandboxed iframe"两极,回避主 realm eval;hybrid 两层(声明式 90% + iframe 逃生舱 10%)是 norm。我们的 `ARTIFACT_HANDLERS` + Gosling 已在正确的安全极上。
+
+---
+
+## 9. 实现进度(2026-06-11 已落地)
+
+本节记录方案中**已实现并验证**的部分(分支 `feat/phase0-viewer-integration`)。
+
+### P0 缺陷修复 ✅
+- **notebook_cell 前端静默丢弃**:后端改走 `agent_artifact` 通道,前端 `ARTIFACT_HANDLERS` 加 `notebook_cell` handler(写入 `store.notebookCells` + 切到 Notebook tab)。
+- **patch_gosling 先发后校验**:改为先校验 `target_id`/`patch.path`,非法直接返回 error,不再向前端发出无效 artifact。
+
+### 阶段1:后端 view-state 权威 + 重连恢复 ✅
+- `session.py` 新增 `ViewSession`(view_id/view_type/state/revision)+ `_deep_merge` + `Session.views` 注册表 + `get_or_create_view`。
+- `render_gosling` 写入 ViewSession(`replace`),`patch_gosling` 通过 `_apply_json_patch_to_view` 同步后端权威 spec 并 bump revision。
+- **重连恢复**:客户端自持 `session_id`(localStorage),总是带 `?session_id=` 连接;后端已知 id 则复用 session(恢复 history + chromdata + views),空 session 断开即清理、有状态 session 进入 30min grace window(惰性 sweep,无泄漏)。
+- 协议:`view.request_snapshot` → `view.snapshot`(全量 view 重建);前端 `store.hydrateViews` 接住,重建 gosling artifacts + component tree。
+
+### 阶段2-A:状态回环 ✅(设计文档列为最高优先级缺口)
+- `ws_handler` 新增 `ui_event` 入站分支:把用户交互(brush/click/select)记到 `ViewSession.state.last_interaction`,并 resolve 阻塞中的 Future。
+- 新增 `wait_for_interaction` + `_pending_interactions` futures map(仿 pantheon `live_view_call`)。
+- 新增 agent 工具 **`get_view_state`**(读后端权威 view 状态)与 **`query_user_interaction`**(wait=false 读最近一次 / wait=true 阻塞等下一次,带超时)。
+- 前端 `GoslingRenderer` 在用户手动 pan/zoom 时发 `ui_event{brush_selection}`。**agent 从"只写 UI"变成能看见用户操作。**
+
+### 阶段2-B:Tier2 可组合组件树 ✅
+- 新增 agent 工具 **`render_component`**:声明式节点树 over 白名单组件(Panel/Row/Column/Text/Table/Button/Slider/Select/GoslingView/EmbeddingView/StructureView)。
+- 后端 `_validate_component_tree` 双重校验(未知组件名 reject + 节点数上限 200),前端 `ComponentRenderer.tsx` 递归渲染 + `COMPONENT_REGISTRY` 白名单,未知组件渲染可见错误而非任何代码;props 仅 literal | `{$dataPath}`,无表达式求值。
+- TabContainer 在有组件树时显示 "Custom" tab。
+
+### Tier3 sandboxed iframe ⏸️ 未实现
+按方案定位为"最后手段",默认关闭。Tier1/2 已覆盖绝大多数需求,暂不引入 iframe 攻击面。待出现 catalog 真表达不了的需求时再按 §4.2.2 落地。
+
+### 验证
+- 后端:**282 passed**(新增 8 个 view-state/回环/组件树单测;`test_every_tool_has_an_executor` 锁定 13 工具一致)。
+- 前端:`tsc --noEmit` 干净,`npm run build` 成功(消除了 dynamic/static import 警告)。
+- 回归:WS 重连改动一度引入 17 个回归(协议首帧 + cleanup 不变量),已通过"客户端自持 session_id + 空 session 即清理"重新设计修正;测试中编码旧契约的断言(notebook_cell 旧的 `type:"artifact"`、2-arg `run_agent_loop` fake)已更新为新契约。
+
+### 已知遗留(非本次范围)
+- **流式**(§4 阶段债):loop 仍用阻塞 `messages.create`;模型硬编码 `claude-sonnet-4-6`(未抽 config)。
+- **`agui_events.py`**:仍是未接线死代码(含第二份不一致 TOOLS),建议后续删除或明确标注为 AG-UI 迁移预留。
+- **前端自检回灌**(diagnostics + 截图):未实现,留待引入 vision 自检时。

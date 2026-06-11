@@ -1,24 +1,47 @@
 type Handler = (msg: Record<string, unknown>) => void
 
+const SESSION_KEY = 'uchrom_session_id'
+
+function makeSessionId(): string {
+  try {
+    if (crypto?.randomUUID) return crypto.randomUUID()
+  } catch { /* fall through */ }
+  return `s_${Date.now()}_${Math.random().toString(36).slice(2)}`
+}
+
 class WSClient {
   private socket: WebSocket | null = null
   private handlers = new Map<string, Set<Handler>>()
   private statusHandlers = new Set<(connected: boolean) => void>()
   private delay = 1000
   private readonly maxDelay = 30000
-  private readonly url: string
+  private readonly baseUrl: string
+  private sessionId: string
 
   constructor() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    this.url = `${protocol}//${window.location.host}/ws/main`
+    this.baseUrl = `${protocol}//${window.location.host}/ws/main`
+    // The client owns its session id: generate once, persist, and always
+    // reconnect with it so the backend resumes our conversation + view state.
+    let sid: string | null = null
+    try { sid = localStorage.getItem(SESSION_KEY) } catch { /* ignore */ }
+    if (!sid) {
+      sid = makeSessionId()
+      try { localStorage.setItem(SESSION_KEY, sid) } catch { /* ignore */ }
+    }
+    this.sessionId = sid
     this.connect()
   }
 
   private connect() {
-    this.socket = new WebSocket(this.url)
+    const url = `${this.baseUrl}?session_id=${encodeURIComponent(this.sessionId)}`
+    this.socket = new WebSocket(url)
     this.socket.onopen = () => {
       this.delay = 1000
       this.statusHandlers.forEach((h) => h(true))
+      // Ask the backend for any view state under this session id. Returns an
+      // empty snapshot for a fresh session, or the views to rebuild on resume.
+      this.send('view.request_snapshot', {})
     }
     this.socket.onmessage = (e) => {
       try {

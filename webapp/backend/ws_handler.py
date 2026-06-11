@@ -1,6 +1,8 @@
 from fastapi import WebSocket
+import asyncio
 import json
 import os
+import time
 import anthropic
 import logging
 
@@ -10,6 +12,43 @@ logger = logging.getLogger(__name__)
 
 # Anthropic async client
 client = anthropic.AsyncAnthropic()
+
+
+def _now() -> float:
+    return time.time()
+
+
+# Pending user-interaction waiters, keyed by (id(session), view_id). A blocking
+# query_user_interaction tool registers an asyncio.Future here; the ui_event
+# handler resolves it when the user next interacts with that view.
+_pending_interactions: dict[tuple, asyncio.Future] = {}
+
+
+def _interaction_key(session, view_id) -> tuple:
+    return (id(session), view_id)
+
+
+def _resolve_interaction(session, view_id, event: dict) -> None:
+    """Resolve a future waiting on the next interaction for this view."""
+    for key in (_interaction_key(session, view_id), _interaction_key(session, None)):
+        fut = _pending_interactions.get(key)
+        if fut is not None and not fut.done():
+            fut.set_result(event)
+            _pending_interactions.pop(key, None)
+
+
+async def wait_for_interaction(session, view_id, timeout: float) -> dict | None:
+    """Block until the next ui_event for ``view_id`` (or any view if None)."""
+    loop = asyncio.get_event_loop()
+    fut: asyncio.Future = loop.create_future()
+    key = _interaction_key(session, view_id)
+    _pending_interactions[key] = fut
+    try:
+        return await asyncio.wait_for(fut, timeout=timeout)
+    except asyncio.TimeoutError:
+        return None
+    finally:
+        _pending_interactions.pop(key, None)
 
 
 async def handle_message(ws, session, msg: dict, executor):
@@ -34,7 +73,7 @@ async def handle_message(ws, session, msg: dict, executor):
         session.conversation_history.append({"role": "user", "content": user_text})
 
         # Call agent loop with full history
-        await run_agent_loop(ws, session.conversation_history)
+        await run_agent_loop(ws, session.conversation_history, session)
     elif msg_type == "load_data":
         path = payload.get("path")
         if not path:
@@ -105,6 +144,32 @@ async def handle_message(ws, session, msg: dict, executor):
             session.viewport = payload
     elif msg_type == "select_cells":
         session.cell_selection = payload.get("cell_ids", [])
+    elif msg_type == "view.request_snapshot":
+        # Client (re)connected or detected a revision gap — send full view state.
+        view_id = payload.get("view_id")
+        views = session.views
+        if view_id:
+            v = views.get(view_id)
+            snapshot = [v.to_dict()] if v is not None else []
+        else:
+            snapshot = [v.to_dict() for v in views.values()]
+        await ws.send_json({"type": "view.snapshot", "views": snapshot})
+    elif msg_type == "ui_event":
+        # A user interaction on a rendered view (brush, click, selection).
+        # Record it on the backend-authoritative view state so the agent can
+        # see what the user did (get_view_state / query_user_interaction), and
+        # wake any tool currently blocked waiting for the next interaction.
+        view_id = payload.get("source_view_id") or payload.get("view_id")
+        event = {
+            "event_name": payload.get("event_name"),
+            "payload": payload.get("payload"),
+            "timestamp": _now(),
+        }
+        if view_id and view_id in session.views:
+            session.views[view_id].state["last_interaction"] = event
+            session.views[view_id].last_updated = _now()
+        # Resolve a pending query_user_interaction future, if any.
+        _resolve_interaction(session, view_id, event)
     else:
         await ws.send_json({"type": "error", "message": f"Unknown message type: {msg_type}"})
 
@@ -112,8 +177,18 @@ async def handle_message(ws, session, msg: dict, executor):
 MAX_TOOL_ITERATIONS = 10  # prevent infinite loops
 
 
-async def run_agent_loop(websocket: WebSocket, conversation_history: list):
-    """Run the Claude agent loop, handling tool calls."""
+async def run_agent_loop(websocket: WebSocket, conversation_history: list, session=None):
+    """Run the Claude agent loop, dispatching tool calls via TOOL_EXECUTORS.
+
+    The loop itself is tool-agnostic: each tool's side effect + tool_result
+    content lives in webapp.backend.tool_executors. To add a tool, register an
+    executor there — no change here.
+
+    ``session`` (optional) is surfaced to executors via ``tool_input["_session"]``
+    so view-aware tools can read/write the backend-authoritative view state.
+    """
+    from .tool_executors import TOOL_EXECUTORS
+
     iterations = 0
     while True:
         iterations += 1
@@ -134,12 +209,10 @@ async def run_agent_loop(websocket: WebSocket, conversation_history: list):
         print(f"Claude response stop_reason: {response.stop_reason}")
 
         # Process response content
-        assistant_content = []
         text_parts = []
         tool_uses = []
 
         for block in response.content:
-            assistant_content.append(block)
             if block.type == "text":
                 text_parts.append(block.text)
             elif block.type == "tool_use":
@@ -165,319 +238,37 @@ async def run_agent_loop(websocket: WebSocket, conversation_history: list):
 
             for tool_use in tool_uses:
                 print(f"Tool call: {tool_use.name}, input: {tool_use.input}")
-
-                if tool_use.name == "render_gosling":
-                    spec = tool_use.input.get("spec", {})
-                    title = tool_use.input.get("title", "Genomic Visualization")
-
-                    # Send spec to frontend for rendering (ag-ui format)
-                    await websocket.send_json({
-                        "type": "agent_artifact",
-                        "artifact_type": "gosling_spec",
-                        "artifact_id": tool_use.id,
-                        "title": title,
-                        "spec": spec
-                    })
-
+                executor = TOOL_EXECUTORS.get(tool_use.name)
+                if executor is None:
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": tool_use.id,
-                        "content": json.dumps({
-                            "success": True,
-                            "message": f"Gosling spec rendered successfully. Title: {title}",
-                            "spec_tracks": len(spec.get("tracks", []))
-                        })
+                        "content": json.dumps({"error": f"Unknown tool: {tool_use.name}"}),
                     })
-                elif tool_use.name == "patch_gosling":
-                    target_id = tool_use.input.get("target_id", "")
-                    patch = tool_use.input.get("patch", {})
+                    continue
 
-                    # Forward the JSON-Patch op to the frontend, which applies it
-                    # to the active spec (store.applyGoslingPatch).
-                    await websocket.send_json({
-                        "type": "agent_artifact",
-                        "artifact_type": "gosling_patch",
-                        "target_id": target_id,
-                        "patch": patch,
-                    })
+                # Surface the tool_use id to executors that need it (render_gosling
+                # uses it as the artifact_id so patch_gosling can target the spec).
+                # Also surface the session so view-aware tools can read/write the
+                # backend-authoritative view state.
+                tool_input = dict(tool_use.input)
+                tool_input["_tool_use_id"] = tool_use.id
+                tool_input["_session"] = session
+                try:
+                    content = await executor(websocket, tool_input)
+                except Exception as e:  # defensive: an executor bug must not kill the loop
+                    logger.exception("tool executor %s failed", tool_use.name)
+                    content = json.dumps({"success": False, "error": f"{tool_use.name} failed: {e}"})
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tool_use.id,
+                    "content": content,
+                })
 
-                    if not target_id or not patch.get("path"):
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": tool_use.id,
-                            "content": json.dumps({
-                                "success": False,
-                                "error": "patch_gosling requires 'target_id' and a 'patch' with a 'path'.",
-                            }),
-                        })
-                    else:
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": tool_use.id,
-                            "content": json.dumps({
-                                "success": True,
-                                "message": f"Applied {patch.get('op', 'replace')} to {patch.get('path')} on spec {target_id}.",
-                            }),
-                        })
-                elif tool_use.name == "add_notebook_cell":
-                    code = tool_use.input.get("code", "")
-
-                    try:
-                        # Execute code
-                        from .notebook_api import execute_code
-                        result = execute_code(code)
-                    except Exception as e:
-                        # Handle execution failures
-                        result = {
-                            "status": "error",
-                            "output": "",
-                            "error": f"Execution failed: {str(e)}"
-                        }
-
-                    # Send to frontend
-                    await websocket.send_json({
-                        "type": "artifact",
-                        "artifact_type": "notebook_cell",
-                        "content": {
-                            "code": code,
-                            "output": result.get("output", ""),
-                            "error": result.get("error"),
-                            "status": result.get("status", "ok")
-                        }
-                    })
-
-                    # Build tool result with truncated output/error
-                    output_preview = result.get("output", "")[:100]
-                    error_preview = result.get("error", "")[:100] if result.get("error") else None
-
-                    if error_preview:
-                        tool_result_content = f"Cell added with error. Error: {error_preview}"
-                    else:
-                        tool_result_content = f"Cell added. Output: {output_preview}"
-
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": tool_result_content
-                    })
-                # Security note: Executes Claude-generated code in Jupyter kernel.
-                # Suitable for trusted LLM agents in local/research environments.
-                # Production deployments should add sandboxing (containers, pyodide, etc.)
-                elif tool_use.name == "run_analysis":
-                    analysis_type = tool_use.input.get("type", "")
-                    region = tool_use.input.get("region", "") or ""
-                    # region may be 'chr21' or 'chr21:1-48000000'; take the chrom
-                    chrom = region.split(":")[0].strip() if region else ""
-
-                    try:
-                        from .strc_api import run_registered_analysis
-                        handle = run_registered_analysis(analysis_type, chrom)
-
-                        # Notify frontend so the relevant panel can refresh
-                        await websocket.send_json({
-                            "type": "agent_artifact",
-                            "artifact_type": "analysis_result",
-                            "analysis_type": analysis_type,
-                            "chrom": chrom,
-                            "result": {handle["type"] + "s": handle["records"]},
-                        })
-
-                        # Hand the agent everything it needs to render the result
-                        # with render_gosling (data URL + field names + mark).
-                        result_payload = {
-                            "success": True,
-                            "type": handle["type"],
-                            "chrom": handle["chrom"],
-                            "record_count": handle["record_count"],
-                            "data_url": handle["data_url"],
-                            "chromosome_field": handle["chromosome_field"],
-                            "genomic_fields": handle["genomic_fields"],
-                            "suggested_mark": handle["suggested_mark"],
-                            "next_step": (
-                                "To visualize, call render_gosling with a track whose "
-                                "data = {\"type\":\"json\",\"url\":data_url,"
-                                "\"chromosomeField\":chromosome_field,"
-                                "\"genomicFields\":genomic_fields} and mark = suggested_mark."
-                            ),
-                        }
-                        # Link marks (loops): a loop connects two anchors. Anchor 1
-                        # (start1/end1) drives x/xe; anchor 2 (start2/end2) drives
-                        # x1/x1e. NOTE: the loop caller is cis-only — chrom2 always
-                        # equals chrom1 (== the queried chrom), so a single
-                        # chromosomeField suffices today. chromosome_field_x1 is
-                        # surfaced for a future trans-loop caller (chrom1 != chrom2).
-                        if "chromosome_field_x1" in handle:
-                            result_payload["chromosome_field_x1"] = handle["chromosome_field_x1"]
-                            result_payload["next_step"] = (
-                                "To visualize loops, call render_gosling with a link-mark "
-                                "track: data = {\"type\":\"json\",\"url\":data_url,"
-                                "\"chromosomeField\":chromosome_field,"
-                                "\"genomicFields\":genomic_fields}, mark = \"link\", and map "
-                                "anchor 1 to x={field:\"start1\"}, xe={field:\"end1\"} and "
-                                "anchor 2 to x1={field:\"start2\"}, x1e={field:\"end2\"}. "
-                                "Loops are CIS-ONLY (chrom2 == chrom1); do not attempt "
-                                "trans-chromosome links — the caller does not emit them."
-                            )
-                        tool_result = {
-                            "type": "tool_result",
-                            "tool_use_id": tool_use.id,
-                            "content": json.dumps(result_payload),
-                        }
-                    except Exception as e:
-                        tool_result = {
-                            "type": "tool_result",
-                            "tool_use_id": tool_use.id,
-                            "content": f"Analysis failed: {str(e)}"
-                        }
-
-                    tool_results.append(tool_result)
-                elif tool_use.name == "write_analysis_function":
-                    name = (tool_use.input.get("name") or "").strip()
-                    code = tool_use.input.get("code", "")
-                    meta = {}
-                    if tool_use.input.get("chromosome_field"):
-                        meta["chromosome_field"] = tool_use.input["chromosome_field"]
-                    if tool_use.input.get("genomic_fields"):
-                        meta["genomic_fields"] = tuple(tool_use.input["genomic_fields"])
-                    if tool_use.input.get("suggested_mark"):
-                        meta["suggested_mark"] = tool_use.input["suggested_mark"]
-                    if name:
-                        meta["result_key"] = name
-
-                    try:
-                        from .dynamic_api import register_analysis
-                        from .dynamic_analysis import AnalysisValidationError
-                        try:
-                            handle = register_analysis(name, code, **meta)
-                        except AnalysisValidationError as ve:
-                            tool_results.append({
-                                "type": "tool_result",
-                                "tool_use_id": tool_use.id,
-                                "content": json.dumps({
-                                    "success": False,
-                                    "error": f"Rejected by sandbox: {ve}",
-                                    "hint": (
-                                        "Remove imports/IO/dunder access; define "
-                                        "analyze(cd, chrom, **params) returning a DataFrame."
-                                    ),
-                                }),
-                            })
-                        else:
-                            await websocket.send_json({
-                                "type": "agent_artifact",
-                                "artifact_type": "custom_analysis_deployed",
-                                "analysis_id": name,
-                                "data_url": handle["data_url"],
-                            })
-                            tool_results.append({
-                                "type": "tool_result",
-                                "tool_use_id": tool_use.id,
-                                "content": json.dumps({
-                                    "success": True,
-                                    "analysis_id": name,
-                                    "data_url": handle["data_url"],
-                                    "chromosome_field": handle["chromosome_field"],
-                                    "genomic_fields": handle["genomic_fields"],
-                                    "suggested_mark": handle["suggested_mark"],
-                                    "next_step": (
-                                        "Endpoint deployed. Replace {chrom} in data_url "
-                                        "with the real chromosome, then call render_gosling "
-                                        "with data={\"type\":\"json\",\"url\":<data_url>,"
-                                        "\"chromosomeField\":chromosome_field,"
-                                        "\"genomicFields\":genomic_fields} and "
-                                        "mark=suggested_mark."
-                                    ),
-                                }),
-                            })
-                    except Exception as e:
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": tool_use.id,
-                            "content": f"Deploy failed: {str(e)}",
-                        })
-                elif tool_use.name == "select_cells":
-                    cell_ids = tool_use.input.get("cell_ids", []) or []
-                    criteria = tool_use.input.get("criteria", "")
-                    await websocket.send_json({
-                        "type": "agent_artifact",
-                        "artifact_type": "select_cells",
-                        "cell_ids": cell_ids,
-                        "criteria": criteria,
-                    })
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": f"Selected {len(cell_ids)} cell(s)."
-                                   + (f" Criteria: {criteria}" if criteria else ""),
-                    })
-                elif tool_use.name == "color_embedding":
-                    color_by = tool_use.input.get("color_by", "")
-                    await websocket.send_json({
-                        "type": "agent_artifact",
-                        "artifact_type": "color_embedding",
-                        "color_by": color_by,
-                    })
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": f"Embedding colored by '{color_by}'.",
-                    })
-                elif tool_use.name == "show_structure":
-                    cell_id = tool_use.input.get("cell_id", "")
-                    chrom = tool_use.input.get("chrom", "")
-                    await websocket.send_json({
-                        "type": "agent_artifact",
-                        "artifact_type": "show_structure",
-                        "cell_id": cell_id,
-                        "chrom": chrom,
-                    })
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": f"Showing 3D structure for cell '{cell_id}'"
-                                   + (f", {chrom}" if chrom else "") + ".",
-                    })
-                elif tool_use.name == "color_structure":
-                    color_by = tool_use.input.get("color_by", "")
-                    await websocket.send_json({
-                        "type": "agent_artifact",
-                        "artifact_type": "color_structure",
-                        "color_by": color_by,
-                    })
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": f"3D structure colored by '{color_by}'.",
-                    })
-                elif tool_use.name == "export_view":
-                    fmt = (tool_use.input.get("format") or "png").lower()
-                    if fmt not in ("png", "pdf"):
-                        fmt = "png"
-                    await websocket.send_json({
-                        "type": "agent_artifact",
-                        "artifact_type": "export_view",
-                        "format": fmt,
-                    })
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": f"Triggered export of the current view as {fmt.upper()}. "
-                                   "The download will start in the user's browser.",
-                    })
-                else:
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": json.dumps({"error": f"Unknown tool: {tool_use.name}"})
-                    })
-
-            # Add tool results to history and continue loop
-            conversation_history.append({
-                "role": "user",
-                "content": tool_results
-            })
-            # Continue the loop for Claude to process tool results
+            # Add tool results to history and continue the loop.
+            conversation_history.append({"role": "user", "content": tool_results})
             continue
 
         # If stop_reason is "end_turn" or no more tool calls, we're done
         break
+

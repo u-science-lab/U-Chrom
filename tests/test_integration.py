@@ -230,7 +230,7 @@ class TestFullMessageCycle:
 
         # handle_message appends the user turn before calling run_agent_loop;
         # the agent loop appends the assistant turn. Simulate the latter.
-        async def fake_agent(ws, history):
+        async def fake_agent(ws, history, session=None):
             history.append({"role": "assistant", "content": "ok"})
 
         for i in range(3):
@@ -286,7 +286,7 @@ class TestErrorHandlingAcrossBoundaries:
         """If run_agent_loop raises, subsequent messages still work."""
         session = make_session("recovery-test")
 
-        async def exploding_agent(ws, history):
+        async def exploding_agent(ws, history, session=None):
             raise ValueError("LLM unavailable")
 
         ws1 = MagicMock(); ws1.send_json = AsyncMock()
@@ -432,7 +432,7 @@ class TestConcurrentSessions:
 
         # run_agent_loop receives the history list; the user turn is already
         # appended by handle_message before the call.
-        async def recorder(ws, history):
+        async def recorder(ws, history, session=None):
             pass
 
         ws1 = MagicMock(); ws1.send_json = AsyncMock()
@@ -465,7 +465,7 @@ class TestConcurrentSessions:
             session = make_session(sid)
             seen = []
 
-            async def fake_agent(ws, history):
+            async def fake_agent(ws, history, session=None):
                 seen.append(history[-1]["content"])
 
             async def driver():

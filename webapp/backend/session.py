@@ -1,7 +1,60 @@
 from dataclasses import dataclass, field
 from typing import Optional, Any
 import json
+import time
 from datetime import datetime
+
+
+def _deep_merge(base: dict, patch: dict) -> dict:
+    """Recursively merge ``patch`` into ``base`` in place and return it.
+
+    Mirrors the frontend ``deepMerge`` so an update means the same thing on
+    both ends. Dict values merge key-by-key; everything else (lists, scalars)
+    replaces wholesale.
+    """
+    for k, v in patch.items():
+        if isinstance(v, dict) and isinstance(base.get(k), dict):
+            _deep_merge(base[k], v)
+        else:
+            base[k] = v
+    return base
+
+
+@dataclass
+class ViewSession:
+    """Backend-authoritative state for one agent-driven view.
+
+    The agent mutates ``state`` (render_gosling creates it, patch_gosling
+    deep-merges into it); the user's interactions are reported back and also
+    land here (see ws_handler ``ui_event``). ``revision`` increments on every
+    mutation so the frontend can detect a gap and request a fresh snapshot.
+    """
+    view_id: str
+    view_type: str  # "gosling" | "component" | "embedding" | "structure" | ...
+    state: dict = field(default_factory=dict)
+    revision: int = 0
+    title: str = ""
+    created_at: float = field(default_factory=time.time)
+    last_updated: float = field(default_factory=time.time)
+
+    def replace(self, state: dict) -> None:
+        self.state = state
+        self.revision += 1
+        self.last_updated = time.time()
+
+    def merge(self, patch: dict) -> None:
+        _deep_merge(self.state, patch)
+        self.revision += 1
+        self.last_updated = time.time()
+
+    def to_dict(self) -> dict:
+        return {
+            "view_id": self.view_id,
+            "view_type": self.view_type,
+            "state": self.state,
+            "revision": self.revision,
+            "title": self.title,
+        }
 
 
 @dataclass
@@ -50,6 +103,23 @@ class Session:
     highlight_regions: list[dict] = field(default_factory=list)  # Highlighted regions
     colormap_config: Optional[dict] = None  # Colormap configuration
     panels: list[dict] = field(default_factory=list)  # Panel configurations
+
+    # Backend-authoritative view state (agent-driven UI). Keyed by view_id.
+    # Not serialized to .uchromfig (live UI state, rebuilt per connection),
+    # but survives WS reconnects because the Session outlives the socket.
+    views: dict[str, "ViewSession"] = field(default_factory=dict)
+    # When the WS disconnects we mark the time instead of dropping the session,
+    # so a reconnect within the grace window restores history + views.
+    detached_at: Optional[float] = None
+
+    def get_or_create_view(
+        self, view_id: str, view_type: str, title: str = ""
+    ) -> "ViewSession":
+        v = self.views.get(view_id)
+        if v is None:
+            v = ViewSession(view_id=view_id, view_type=view_type, title=title)
+            self.views[view_id] = v
+        return v
 
     def to_dict(self) -> dict:
         """Serialize session to dictionary for .uchromfig format."""

@@ -3,7 +3,7 @@ import { ws } from './ws'
 
 export interface GenomicViewport { chrom: string; start: number; end: number }
 export interface CellSelection { mode: 'cell_type' | 'manual' | 'all'; ids: string[]; label: string }
-export type TabType = 'genomic' | 'embedding' | 'structure3d' | 'notebook'
+export type TabType = 'genomic' | 'embedding' | 'structure3d' | 'notebook' | 'custom'
 
 export interface GoslingArtifact {
   id: string
@@ -58,6 +58,12 @@ interface AppStore {
   setActiveGoslingSpec: (spec: object | undefined, id: string | undefined) => void
   addGoslingArtifact: (artifact: GoslingArtifact) => void
   applyGoslingPatch: (targetId: string, patch: { op: string; path: string; value: unknown }) => void
+  // Rebuild gosling views from a backend snapshot (after WS reconnect).
+  hydrateViews: (views: Array<{ view_id: string; view_type: string; state: Record<string, unknown>; title?: string }>) => void
+
+  // Tier-2 generative UI: an agent-composed component tree (whitelisted nodes).
+  activeComponentTree: { id: string; title: string; tree: unknown } | null
+  setComponentTree: (id: string, title: string, tree: unknown) => void
 
   // Export signal: bumped (with a format) to ask the active Gosling view to export.
   // GoslingRenderer subscribes; consumers compare `id` to detect a fresh request.
@@ -115,6 +121,36 @@ export const useAppStore = create<AppStore>((set, get) => ({
   addGoslingArtifact: (artifact) => set(s => ({
     goslingArtifacts: [...s.goslingArtifacts, artifact]
   })),
+  hydrateViews: (views) => {
+    const gosling = views.filter(v => v.view_type === 'gosling' && v.state?.spec)
+    if (gosling.length > 0) {
+      const artifacts: GoslingArtifact[] = gosling.map(v => ({
+        id: v.view_id,
+        title: (v.title as string) || (v.state.title as string) || 'Genomic Visualization',
+        spec: v.state.spec as object,
+        createdAt: Date.now(),
+        active: false,
+      }))
+      const last = artifacts[artifacts.length - 1]
+      set({
+        goslingArtifacts: artifacts,
+        activeGoslingSpec: last.spec,
+        activeGoslingSpecId: last.id,
+      })
+    }
+    // Rebuild the most recent component tree, if any.
+    const components = views.filter(v => v.view_type === 'component' && v.state?.tree)
+    if (components.length > 0) {
+      const v = components[components.length - 1]
+      set({
+        activeComponentTree: {
+          id: v.view_id,
+          title: (v.title as string) || (v.state.title as string) || 'Custom View',
+          tree: v.state.tree,
+        },
+      })
+    }
+  },
   applyGoslingPatch: (targetId, patch) => {
     // Apply JSON patch to the active spec if it matches targetId
     const { activeGoslingSpec, activeGoslingSpecId } = get()
@@ -140,6 +176,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
   requestExport: (format) => set(s => ({
     exportRequest: { id: (s.exportRequest?.id ?? 0) + 1, format },
   })),
+
+  // Tier-2 component tree
+  activeComponentTree: null,
+  setComponentTree: (id, title, tree) => set({ activeComponentTree: { id, title, tree } }),
 
   // Notebook
   notebookCells: [

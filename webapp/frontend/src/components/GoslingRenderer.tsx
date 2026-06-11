@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react'
 import { GoslingComponent } from 'gosling.js'
 import { useAppStore } from '../store'
+import { ws } from '../ws'
 
 interface GoslingRendererProps {
   spec: object
@@ -44,6 +45,20 @@ export default function GoslingRenderer({ spec }: GoslingRendererProps) {
               start: range[0].position,
               end: range[1].position,
             }, true) // notify agent of user's manual pan/zoom
+            // Report the interaction to the backend view state so the agent
+            // can SEE the region the user navigated to (state round-trip).
+            const viewId = useAppStore.getState().activeGoslingSpecId
+            if (viewId) {
+              ws.send('ui_event', {
+                source_view_id: viewId,
+                event_name: 'brush_selection',
+                payload: {
+                  chrom: range[0].chromosome,
+                  start: range[0].position,
+                  end: range[1].position,
+                },
+              })
+            }
           }
         })
       } catch {

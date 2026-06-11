@@ -272,6 +272,80 @@ render_gosling with a json track whose url points at data_url (replace the
             },
         },
     },
+    {
+        "name": "get_view_state",
+        "description": """Read the backend-authoritative state of a rendered view.
+
+Use this to see the CURRENT state of a visualization — including any change the
+USER made (e.g. brushed a region, clicked a feature). The state includes a
+'last_interaction' field if the user has interacted since the view was created.
+
+Pass the view_id returned by render_gosling. Omit view_id to list all views.""",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "view_id": {"type": "string", "description": "view id from render_gosling; omit for all"},
+            },
+        },
+    },
+    {
+        "name": "query_user_interaction",
+        "description": """Get the user's interaction with a view (brush/click/selection).
+
+Two modes:
+  - wait=false (default): return the LAST interaction immediately, or null if none.
+  - wait=true: BLOCK until the user next interacts (up to timeout_seconds), then
+    return it. Use this to ask the user to pick a region/feature and act on it.
+
+Returns {event_name, payload, timestamp} where payload depends on the event:
+  brush_selection → {chrom, start, end};  region_click → {chrom, position};
+  cell_selection → {cell_ids: [...]}.
+
+This is how you SEE what the user does in the UI — closing the agent↔user loop.""",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "view_id": {"type": "string", "description": "view id to watch; omit for any view"},
+                "wait": {"type": "boolean", "description": "block for the next interaction (default false)"},
+                "timeout_seconds": {"type": "number", "description": "max wait when wait=true (default 30)"},
+            },
+        },
+    },
+    {
+        "name": "render_component",
+        "description": """Compose a CUSTOM layout from whitelisted U-Chrom UI components.
+
+Use this when a single chart isn't enough and you need a bespoke arrangement —
+e.g. two views side-by-side for comparison, a panel with a parameter control, or
+a titled section with text + a table. You are building your OWN UI by composing
+trusted building blocks (you are NOT writing code or HTML).
+
+The 'tree' is a node: {component, props?, children?}. Allowed components:
+  Layout:   Panel, Row, Column
+  Display:  Text, Table
+  Controls: Button, Slider, Select
+  Views:    GoslingView (props.view_id → an existing render_gosling view),
+            EmbeddingView, StructureView
+
+props are LITERAL values only, or a data reference {"$dataPath": "..."}; no
+expressions/code. Unknown component names are rejected. Example:
+  {"component":"Row","children":[
+     {"component":"Panel","props":{"title":"Embedding"},
+      "children":[{"component":"EmbeddingView"}]},
+     {"component":"Panel","props":{"title":"Structure"},
+      "children":[{"component":"StructureView"}]}]}""",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "tree": {
+                    "type": "object",
+                    "description": "root node: {component, props?, children?}",
+                },
+            },
+            "required": ["tree"],
+        },
+    },
 ]
 
 SYSTEM_PROMPT = """You are a genomics visualization assistant for U-Chrom, a chromatin 3D structure analysis workbench, with expertise in Gosling.js.
@@ -284,6 +358,8 @@ You drive a multi-tab UI directly through tools:
 - run_analysis → TAD/loop/compartment, results feed back into visualizations
 - write_analysis_function → author+deploy a CUSTOM sandboxed analysis as a live endpoint, then render its output
 - export_view → download the current Gosling view as PNG/PDF
+- get_view_state / query_user_interaction → SEE the current view state and what the user did (brush/click/select)
+- render_component → compose a CUSTOM layout from whitelisted UI blocks (Panel/Row/Column/Text/Table/Button/Slider/Select/GoslingView/EmbeddingView/StructureView) when one chart isn't enough
 
 Gosling concepts:
 - Tracks have 'data' (source), 'mark' (bar/line/point/rect/area/text/link/triangle), and encodings (x, y, color, size).
