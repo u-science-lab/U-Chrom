@@ -11,6 +11,7 @@ from .tileset_api import tileset_router
 from .track_wig import track_wig_router
 from .strc_api import strc_router
 from .figure_render import figure_render_router, build_svg, CANVAS_SIZES as _CANVAS_SIZES
+from .notebook_api import start_kernel, execute_code
 import webapp.backend.data_api as _data_api
 
 UPLOAD_DIR = tempfile.mkdtemp(prefix="uchrom_uploads_")
@@ -260,3 +261,17 @@ async def run_plugin_analysis(plugin_name: str, session_id: str):
         return {"success": True, "result": result}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+@app.post("/api/execute_code")
+async def execute_code_endpoint(request: dict):
+    """Execute Python code in the Jupyter kernel."""
+    code = request.get("code", "")
+    if not code:
+        return {"error": "No code provided"}
+
+    try:
+        result = execute_code(code)
+        return result
+    except RuntimeError as e:
+        return {"error": str(e), "status": "error"}

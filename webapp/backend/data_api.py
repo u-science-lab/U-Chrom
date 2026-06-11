@@ -41,8 +41,25 @@ def _float32_response(arr: np.ndarray) -> Response:
 
 
 # ---------------------------------------------------------------------------
-# GET /api/coords/batch?ids=1,2,3  — must be registered before /{cell_id}
+# POST /api/coords/batch — accepts JSON body {cell_ids: [...]}
+# GET  /api/coords/batch?ids=1,2,3 — legacy query string (URL length limit)
 # ---------------------------------------------------------------------------
+
+@data_router.post("/api/coords/batch")
+async def post_coords_batch(request: Request):
+    cd = _cd_or_404()
+    body = await request.json()
+    id_list = body.get("cell_ids", [])
+    rows = []
+    for idx, cell_id in enumerate(id_list):
+        cell = _coerce_cell_id(cd, str(cell_id))
+        n = cell.coords.shape[0]
+        col = np.full((n, 1), idx, dtype=np.float32)
+        rows.append(np.hstack([col, cell.coords.astype(np.float32)]))
+    if not rows:
+        return _float32_response(np.empty((0, 4), dtype=np.float32))
+    return _float32_response(np.vstack(rows))  # (n_cells * n_bins, 4)
+
 
 @data_router.get("/api/coords/batch")
 def get_coords_batch(ids: str):

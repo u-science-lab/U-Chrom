@@ -74,6 +74,38 @@ def test_tads_returns_list():
     assert "level" in data["tads"][0]
 
 
+def test_tads_format_gosling_returns_bare_array():
+    """?format=gosling must return a bare JSON array (Gosling json loader
+    requirement), not the {tads:[...]} wrapper."""
+    cd = _make_mock_cd()
+    mock_session = MagicMock()
+    mock_session.chromdata = cd
+    data_api.current_session = mock_session
+
+    fake_tads = pd.DataFrame({
+        "chrom": ["chr1", "chr1"],
+        "start": [0, 1_000_000],
+        "end": [1_000_000, 2_000_000],
+        "level": [0, 0],
+        "score": [5.0, 3.0],
+        "pval": [1e-5, 1e-3],
+        "fdr": [0.05, 0.09],
+    })
+
+    mock_tad_module = MagicMock()
+    mock_tad_module.call_tads_by_pval.return_value = fake_tads
+    mock_tad_module.TADCallerParams = MagicMock
+
+    with patch.dict("sys.modules", {"uchrom.strc.tad": mock_tad_module}):
+        resp = client.get("/api/tads/chr1?format=gosling")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 2
+    assert data[0]["chrom"] == "chr1"
+
+
 def test_loops_returns_list():
     cd = _make_mock_cd()
     mock_session = MagicMock()

@@ -17,10 +17,11 @@ from __future__ import annotations
 import base64
 import gzip
 import math
+import warnings
 from typing import Dict, Any
 
 import numpy as np
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 import webapp.backend.data_api as data_api
@@ -53,6 +54,22 @@ def _parse_uid(uid: str):
     if not uid.startswith("contact-"):
         raise HTTPException(status_code=400, detail={"error": f"Unknown tileset uid: {uid}"})
     return uid[len("contact-"):]
+
+
+def _flatten_ids(d):
+    """Normalize the ``d`` query param into a flat list of ids.
+
+    HiGlass batches requests using *repeated* params (``?d=a&d=b``), which
+    FastAPI delivers as a list.  Older callers / our tests pass a single
+    comma-separated string (``?d=a,b``).  Accept both transparently.
+    """
+    if d is None:
+        return []
+    items = d if isinstance(d, list) else [d]
+    out = []
+    for item in items:
+        out.extend(part.strip() for part in item.split(",") if part.strip())
+    return out
 
 
 def _build_matrix(chrom: str) -> np.ndarray:
@@ -136,9 +153,14 @@ def _build_tile_array(matrix: np.ndarray, zoom: int, tx: int, ty: int,
                        ((0, BINS_PER_DIM * factor - chunk.shape[0]),
                         (0, BINS_PER_DIM * factor - chunk.shape[1])),
                        constant_values=np.nan)
-    # Vectorized downsample: reshape → mean over factor blocks
+    # Vectorized downsample: reshape → mean over factor blocks.
+    # All-NaN blocks (padding past the chrom edge) collapse to NaN — that's
+    # the intended "no data" sentinel HiGlass renders transparent, so silence
+    # the resulting "Mean of empty slice" warning.
     reshaped = chunk.reshape(BINS_PER_DIM, factor, BINS_PER_DIM, factor)
-    out = np.nanmean(reshaped, axis=(1, 3)).astype(np.float32)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        out = np.nanmean(reshaped, axis=(1, 3)).astype(np.float32)
     return out
 
 
@@ -155,9 +177,12 @@ def _encode_tile(matrix: np.ndarray, z: int, x: int, y: int, max_z: int) -> str:
 # ---------------------------------------------------------------------------
 
 @tileset_router.get("/api/tileset_info")
-def tileset_info(d: str):
-    """Return HiGlass tileset metadata for one or more datasets (comma-separated d)."""
-    uids = [u.strip() for u in d.split(",") if u.strip()]
+def tileset_info(d: list[str] | None = Query(default=None)):
+    """Return HiGlass tileset metadata for one or more datasets.
+
+    Accepts repeated (``?d=a&d=b``) or comma-separated (``?d=a,b``) ids.
+    """
+    uids = _flatten_ids(d)
     result: Dict[str, Any] = {}
     for uid in uids:
         chrom = _parse_uid(uid)
@@ -178,14 +203,13 @@ def tileset_info(d: str):
 
 
 @tileset_router.get("/api/tiles")
-def tiles(d: str):
+def tiles(d: list[str] | None = Query(default=None)):
     """Return one or more tiles.
 
-    d format: uid.z.x.y  (multiple d= params not used by TestClient, so we
-    accept comma-separated in a single d= for simplicity, though HiGlass
-    normally repeats the param).
+    Each id has the form ``uid.z.x.y``.  Accepts repeated (``?d=a&d=b``) or
+    comma-separated (``?d=a,b``) ids — HiGlass uses the repeated form.
     """
-    tile_ids = [t.strip() for t in d.split(",") if t.strip()]
+    tile_ids = _flatten_ids(d)
     result: Dict[str, Any] = {}
     for tile_id in tile_ids:
         parts = tile_id.rsplit(".", 3)

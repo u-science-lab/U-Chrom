@@ -1,768 +1,392 @@
-import asyncio
+from fastapi import WebSocket
 import json
 import os
 import anthropic
-from fastapi import WebSocket
-from .session import Session, Viewport
-from .agui_events import AGUI, TOOLS, send_agui
+import logging
+
+from .agent_tools import TOOLS, SYSTEM_PROMPT
+
+logger = logging.getLogger(__name__)
+
+# Anthropic async client
+client = anthropic.AsyncAnthropic()
 
 
-def _load_chromdata(path: str, fmt: str):
-    from uchrom.core import ChromData
-    from uchrom.io.seqfish_multiomics import read_seqfish_multiomics
-    if fmt == "h5cd":
-        return ChromData.read(path)
-    elif fmt == "fofct":
-        return ChromData.from_fofct(path)
-    elif fmt == "seqfish_multiomics":
-        return read_seqfish_multiomics(path)
-    else:
-        return ChromData.read(path)
+async def handle_message(ws, session, msg: dict, executor):
+    """Central message dispatcher for /ws/main.
 
+    Args:
+        ws: WebSocket connection
+        session: Session object (from session.py)
+        msg: Incoming message dict with 'type' field
+        executor: ThreadPoolExecutor for blocking operations
+    """
+    msg_type = msg.get("type")
+    payload = msg.get("payload", {})
 
-_SYSTEM_PROMPT = """\
-You are an assistant for U-Chrom, a chromatin 3D structure analysis tool.
+    if msg_type == "user_message":
+        user_text = payload.get("text", "")
+        if not user_text:
+            await ws.send_json({"type": "error", "message": "user_message requires 'text' field"})
+            return
 
-## Multi-step analysis mode
-For complex queries, break down the task into multiple steps and execute them sequentially.
-Use the <step> tag to mark each step:
+        # Append to session's conversation history for multi-turn dialog
+        session.conversation_history.append({"role": "user", "content": user_text})
 
-<step id="1" description="Load data">
-```python
-# Step 1 code
-```
-</step>
+        # Call agent loop with full history
+        await run_agent_loop(ws, session.conversation_history)
+    elif msg_type == "load_data":
+        path = payload.get("path")
+        if not path:
+            await ws.send_json({"type": "error", "message": "load_data requires 'path' field"})
+            return
 
-<step id="2" description="Analyze compartments">
-```python
-# Step 2 code
-```
-</step>
+        # Validate file exists
+        abs_path = os.path.abspath(path)
+        if not os.path.exists(abs_path):
+            await ws.send_json({"type": "error", "message": f"File not found: {path}"})
+            return
 
-After each step completes, the user will see the progress and intermediate results.
+        # Optional: validate .h5cd extension
+        if not abs_path.endswith('.h5cd'):
+            await ws.send_json({"type": "error", "message": "File must be .h5cd format"})
+            return
 
-## Navigation actions
-When the user asks to view a genomic region or navigate:
-  <action type="set_viewport">{"chrom":"chr15","start":30000000,"end":60000000}</action>
-
-When the user asks to select cells by type:
-  <action type="select_cells">{"mode":"cell_type","ids":[],"label":"Purkinje"}</action>
-
-When the user asks to highlight specific genomic regions:
-  <action type="highlight_region">{"chrom":"chr15","start":30000000,"end":35000000,"color":"#ff6b6b","label":"TAD boundary"}</action>
-
-When the user asks to change the colormap:
-  <action type="set_colormap">{"scheme":"viridis","property":"compartment"}</action>
-
-## Analysis via Python code
-When the user asks to run analysis (TAD calling, compartments, embeddings, etc.),
-output a Python code block. The code runs in the backend with these variables available:
-  - `cd`: the loaded ChromData object (uchrom.core.ChromData)
-  - `uchrom`: the uchrom package
-  - `np`, `pd`: numpy, pandas
-  - `emit_artifact(type, payload)`: send results to the frontend
-
-Artifact types:
-- "text_block": Display text message
-  emit_artifact("text_block", {"content": "Analysis complete", "format": "info|error|success"})
-
-- "add_panel": Add a new visualization panel
-  emit_artifact("add_panel", {"type": "track_plot", "label": "TADs chr15", "data": {...}})
-
-- "highlight_region": Highlight genomic regions in 3D view
-  emit_artifact("highlight_region", {"regions": [
-    {"chrom": "chr15", "start": 30000000, "end": 35000000, "color": "#ff6b6b", "label": "Region 1"}
-  ]})
-
-- "set_colormap": Change 3D structure coloring
-  emit_artifact("set_colormap", {"scheme": "viridis", "property": "compartment", "range": [0, 1]})
-
-- "figure": Export publication-ready figure
-  emit_artifact("figure", {"path": "figure.pdf", "preview": "base64...", "format": "pdf"})
-
-- "data": Structured analysis results (JSON)
-  emit_artifact("data", {"type": "compartment_diff", "regions": [...], "stats": {...}})
-
-## Publication-ready figure generation
-When the user asks to generate a figure for publication (e.g., "适合 Nature 投稿", "for Cell journal"):
-```python
-from uchrom.pl import create_figure, PanelSpec
-
-# Infer parameters from user request:
-# - "Nature" → style="nature", dpi=300
-# - "Cell" → style="cell", dpi=300
-# - "Science" → style="science", dpi=300
-# - "single column" → column_mode="single"
-# - "double column" → column_mode="double"
-
-panels = [
-    PanelSpec(
-        type="structure_3d",  # or "contact_map", "track"
-        data={"projection": "xy"},
-        label="A",
-        title="3D Structure",
-        colormap="RdBu_r",
-    ),
-    PanelSpec(
-        type="contact_map",
-        data={"matrix": None},  # auto-compute
-        label="B",
-        title="Contact Map",
-    ),
-]
-
-fig = create_figure(
-    chromdata=cd,
-    layout="1x2",  # or "2x1", "3x1", etc.
-    panels=panels,
-    style="nature",  # inferred from user request
-    dpi=300,
-)
-
-# Export and send to frontend
-import tempfile
-pdf_path = tempfile.mktemp(suffix=".pdf")
-fig.save(pdf_path)
-preview_base64 = fig.to_base64(dpi=150)
-
-emit_artifact("figure", {
-    "path": pdf_path,
-    "preview": preview_base64,
-    "format": "pdf",
-    "params": fig.metadata
-})
-emit_artifact("text_block", {"content": f"Generated figure with {len(panels)} panels"})
-```
-
-Example — user: "生成 Figure 2: 三个细胞的 A/B compartment 对比，适合 Nature 投稿"
-```python
-from uchrom.pl import create_figure, PanelSpec
-
-cells = ["cell_001", "cell_002", "cell_003"]
-panels = []
-
-for i, cell_id in enumerate(cells):
-    cd_cell = cd.get_cell(cell_id)
-    # Assume compartment data exists in cd_cell
-    panels.append(PanelSpec(
-        type="track",
-        data={"track_type": "signal", "positions": [], "values": []},  # placeholder
-        label=chr(65 + i),  # A, B, C
-        title=f"Cell {cell_id}",
-    ))
-
-fig = create_figure(
-    chromdata=cd,
-    layout="3x1",
-    panels=panels,
-    style="nature",
-    dpi=300,
-)
-
-import tempfile
-pdf_path = tempfile.mktemp(suffix=".pdf")
-fig.save(pdf_path)
-preview_base64 = fig.to_base64(dpi=150)
-
-emit_artifact("figure", {
-    "path": pdf_path,
-    "preview": preview_base64,
-    "format": "pdf",
-    "params": fig.metadata
-})
-```
-
-- "data": Structured analysis results (JSON)
-  emit_artifact("data", {"type": "compartment_diff", "regions": [...], "stats": {...}})
-
-Example — highlight significant regions:
-```python
-result = uchrom.strc.comp.detect_compartments(cd, chrom="chr15")
-significant = result[result['score'] > 0.8]
-regions = [{"chrom": r.chrom, "start": r.start, "end": r.end, "color": "#ff6b6b"}
-           for _, r in significant.iterrows()]
-emit_artifact("highlight_region", {"regions": regions})
-emit_artifact("text_block", {"content": f"Found {len(regions)} significant compartments"})
-```
-
-Rules:
-- Use action tags for navigation/selection, Python code for analysis.
-- chrom values: chr1..chr19, chrX. start/end are integers (base pairs).
-- Keep code minimal — only what's needed to answer the question.
-"""
-
-
-def _parse_actions(text: str) -> list[dict]:
-    """Extract <action type="...">JSON</action> tags from Claude's response."""
-    import re
-    actions = []
-    for m in re.finditer(r'<action type="([^"]+)">([^<]+)</action>', text):
+        # Actually read the ChromData into the session so the REST APIs
+        # (/api/umap, /api/coords/batch, /api/tileset_info, ...) can serve it.
         try:
-            actions.append({"action_type": m.group(1), "payload": json.loads(m.group(2))})
-        except json.JSONDecodeError:
-            pass
-    return actions
-
-
-def _extract_code_blocks(text: str) -> list[str]:
-    """Extract ```python ... ``` blocks from Claude's response."""
-    import re
-    return re.findall(r'```python\n(.*?)```', text, re.DOTALL)
-
-
-def _extract_steps(text: str) -> list[dict]:
-    """Extract <step> tags with code blocks from Claude's response."""
-    import re
-    steps = []
-    for m in re.finditer(r'<step id="([^"]+)" description="([^"]+)">(.*?)</step>', text, re.DOTALL):
-        step_id = m.group(1)
-        description = m.group(2)
-        content = m.group(3)
-        # Extract code from content
-        code_blocks = re.findall(r'```python\n(.*?)```', content, re.DOTALL)
-        if code_blocks:
-            steps.append({
-                "id": step_id,
-                "description": description,
-                "code": code_blocks[0]
-            })
-    return steps
-
-
-
-def _run_code_in_worker(code: str, chromdata_path: str | None) -> list[dict]:
-    """Execute code in isolated process. Returns list of emit_artifact calls."""
-    import sys, io, numpy as np, pandas as pd
-    artifacts = []
-
-    def emit_artifact(type_: str, payload: dict):
-        artifacts.append({"artifact_type": type_, "payload": payload})
-
-    sandbox = {
-        "emit_artifact": emit_artifact,
-        "np": np, "pd": pd,
-        "__builtins__": __builtins__,  # full builtins — local deploy, no hostile users
-    }
-
-    # Load uchrom and chromdata
-    try:
-        import uchrom
-        sandbox["uchrom"] = uchrom
-        if chromdata_path:
             from uchrom.core import ChromData
-            sandbox["cd"] = ChromData.read(chromdata_path)
-    except Exception:
-        pass
+            cd = ChromData.read(abs_path)
+        except Exception as e:
+            await ws.send_json({"type": "error", "message": f"Failed to read {os.path.basename(abs_path)}: {e}"})
+            return
 
-    try:
-        exec(code, sandbox)  # noqa: S102
-    except Exception as e:
-        artifacts.append({"artifact_type": "text_block",
-                          "payload": {"content": f"Code error: {e}", "format": "error"}})
-    return artifacts
+        session.h5cd_path = abs_path
+        session.chromdata = cd
+        # data_api serves from its module-level current_session; point it here.
+        import webapp.backend.data_api as _data_api
+        _data_api.current_session = session
+        # tileset cache is keyed per-chrom on the previous dataset — clear it.
+        try:
+            from .tileset_api import clear_cache
+            clear_cache()
+        except Exception:
+            pass
 
+        # Start Jupyter kernel for analysis (idempotent)
+        from .notebook_api import start_kernel
+        start_kernel()  # Safe to call multiple times
 
-async def _execute_tool(
-    ws: WebSocket,
-    session: Session,
-    session_id: str,
-    tool_name: str,
-    tool_call_id: str,
-    args: dict,
-    executor,
-) -> None:
-    """Apply a completed tool call: update session state and emit legacy compat events."""
-    if tool_name == "set_viewport":
-        session.viewport = Viewport(
-            chrom=args.get("chrom"),
-            start=args.get("start"),
-            end=args.get("end"),
-        )
-        await ws.send_json({"type": "agent_viewport_update", "payload": args})
-    elif tool_name == "select_cells":
-        session.cell_selection = args.get("ids", [])
-        await ws.send_json({"type": "agent_cell_selection", "payload": args})
-    elif tool_name == "highlight_region":
-        await ws.send_json({"type": "agent_highlight_region", "payload": args})
-    elif tool_name == "set_colormap":
-        await ws.send_json({"type": "agent_set_colormap", "payload": args})
-    elif tool_name == "run_python":
-        code = args.get("code", "")
-        if code and executor is not None:
-            chromdata_path = None
-            if session.chromdata is not None:
-                import tempfile
-                tmp = tempfile.NamedTemporaryFile(suffix=".h5cd", delete=False)
-                tmp.close()
-                session.chromdata.write(tmp.name)
-                chromdata_path = tmp.name
-            loop = asyncio.get_running_loop()
-            try:
-                artifacts = await loop.run_in_executor(
-                    executor, _run_code_in_worker, code, chromdata_path
-                )
-                for art in artifacts:
-                    await ws.send_json({"type": "agent_artifact", "payload": art})
-            except Exception as e:
-                await ws.send_json({"type": "agent_artifact", "payload": {
-                    "artifact_type": "text_block",
-                    "payload": {"content": f"Execution error: {e}", "format": "error"},
-                }})
-            finally:
-                if chromdata_path:
-                    os.unlink(chromdata_path)
+        n_cells = cd.cells.shape[0] if getattr(cd, "cells", None) is not None else 0
+        n_spots = cd.coords.shape[0] if getattr(cd, "coords", None) is not None else 0
+        await ws.send_json({
+            "type": "data_loaded",
+            "path": abs_path,
+            "n_cells": int(n_cells),
+            "n_spots": int(n_spots),
+        })
+
+        # Send initial confirmation message
+        await ws.send_json({
+            "type": "artifact",
+            "artifact_type": "text",
+            "content": f"Data loaded: {os.path.basename(abs_path)} — {n_cells} cells, {n_spots} spots.\n\nYou can now ask questions or request visualizations.",
+            "title": "Ready"
+        })
+    elif msg_type == "update_viewport":
+        session.viewport = payload
+    elif msg_type == "select_cells":
+        session.cell_selection = payload.get("cell_ids", [])
+    else:
+        await ws.send_json({"type": "error", "message": f"Unknown message type: {msg_type}"})
 
 
-async def _run_agent_agui(
-    ws: WebSocket,
-    session: Session,
-    text: str,
-    session_id: str,
-    executor=None,
-) -> None:
-    """Run agent using Anthropic SDK tool calls, emitting AG-UI events."""
-    ctx = ""
-    if session.chromdata is not None:
-        cd = session.chromdata
-        n_cells = len(cd.cells) if cd.cells is not None else 0
-        chroms = list(cd.spots["chrom"].unique()) if cd.spots is not None else []
-        ctx = (
-            f"\n\nLoaded data: {n_cells} cells, "
-            f"chroms: {[str(c) for c in chroms[:8]]}"
-            f"{'...' if len(chroms) > 8 else ''}"
-        )
-        if session.viewport.chrom:
-            ctx += (
-                f", current viewport: {session.viewport.chrom}:"
-                f"{session.viewport.start}-{session.viewport.end}"
-            )
+MAX_TOOL_ITERATIONS = 10  # prevent infinite loops
 
-    messages = []
-    for turn in session.conversation_history:
-        messages.append({"role": turn["role"], "content": turn["content"]})
-    messages.append({"role": "user", "content": text + ctx})
 
-    run_id = session_id
-    await send_agui(ws, AGUI.RUN_STARTED, {"run_id": run_id})
-
-    try:
-        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-
-        full_text_parts: list[str] = []
-        tool_blocks: dict[int, dict] = {}
-        msg_id = f"msg_{run_id}"
-        text_started = False
-
-        with client.messages.stream(
+async def run_agent_loop(websocket: WebSocket, conversation_history: list):
+    """Run the Claude agent loop, handling tool calls."""
+    iterations = 0
+    while True:
+        iterations += 1
+        if iterations > MAX_TOOL_ITERATIONS:
+            await websocket.send_json({
+                "type": "agent_message",
+                "text": f"(Stopped after {MAX_TOOL_ITERATIONS} tool iterations to avoid a loop.)",
+            })
+            break
+        response = await client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=4096,
-            system=_SYSTEM_PROMPT,
+            system=SYSTEM_PROMPT,
             tools=TOOLS,
-            messages=messages,
-        ) as stream:
-            for event in stream:
-                etype = event.type
+            messages=conversation_history
+        )
 
-                if etype == "content_block_start":
-                    block = event.content_block
-                    if block.type == "text":
-                        if not text_started:
-                            await send_agui(ws, AGUI.TEXT_MESSAGE_START,
-                                            {"message_id": msg_id, "role": "assistant"})
-                            text_started = True
-                    elif block.type == "tool_use":
-                        tool_blocks[event.index] = {
-                            "id": block.id,
-                            "name": block.name,
-                            "partial_json": "",
-                        }
-                        await send_agui(ws, AGUI.TOOL_CALL_START, {
-                            "tool_call_id": block.id,
-                            "tool_call_name": block.name,
-                            "parent_message_id": msg_id,
-                        })
+        print(f"Claude response stop_reason: {response.stop_reason}")
 
-                elif etype == "content_block_delta":
-                    delta = event.delta
-                    if delta.type == "text_delta":
-                        token = delta.text
-                        if token:
-                            full_text_parts.append(token)
-                            await send_agui(ws, AGUI.TEXT_MESSAGE_CONTENT, {
-                                "message_id": msg_id,
-                                "delta": token,
-                            })
-                            # Legacy compat
-                            await ws.send_json({
-                                "type": "agent_token",
-                                "payload": {"session_id": session_id, "token": token},
-                            })
-                    elif delta.type == "input_json_delta":
-                        idx = event.index
-                        if idx in tool_blocks:
-                            chunk = delta.partial_json
-                            tool_blocks[idx]["partial_json"] += chunk
-                            await send_agui(ws, AGUI.TOOL_CALL_ARGS, {
-                                "tool_call_id": tool_blocks[idx]["id"],
-                                "delta": chunk,
-                            })
+        # Process response content
+        assistant_content = []
+        text_parts = []
+        tool_uses = []
 
-                elif etype == "content_block_stop":
-                    idx = event.index
-                    if idx in tool_blocks:
-                        tb = tool_blocks[idx]
-                        try:
-                            args = json.loads(tb["partial_json"]) if tb["partial_json"] else {}
-                        except json.JSONDecodeError:
-                            args = {}
-                        await send_agui(ws, AGUI.TOOL_CALL_END, {
-                            "tool_call_id": tb["id"],
-                            "tool_call_name": tb["name"],
-                        })
-                        await _execute_tool(ws, session, session_id, tb["name"], tb["id"], args, executor)
+        for block in response.content:
+            assistant_content.append(block)
+            if block.type == "text":
+                text_parts.append(block.text)
+            elif block.type == "tool_use":
+                tool_uses.append(block)
 
-                elif etype == "message_delta":
-                    if text_started:
-                        await send_agui(ws, AGUI.TEXT_MESSAGE_END, {"message_id": msg_id})
-                        await ws.send_json({
-                            "type": "agent_token",
-                            "payload": {"session_id": session_id, "token": "", "done": True},
-                        })
+        # Add assistant message to history
+        conversation_history.append({
+            "role": "assistant",
+            "content": response.content
+        })
 
-        await send_agui(ws, AGUI.RUN_FINISHED, {"run_id": run_id})
+        # Send text response to client
+        if text_parts:
+            combined_text = "\n".join(text_parts)
+            await websocket.send_json({
+                "type": "agent_message",
+                "text": combined_text
+            })
 
-        full_text = "".join(full_text_parts)
-        if full_text or tool_blocks:
-            session.conversation_history.append({"role": "user", "content": text})
-            if full_text:
-                session.conversation_history.append({"role": "assistant", "content": full_text})
+        # Handle tool calls
+        if response.stop_reason == "tool_use" and tool_uses:
+            tool_results = []
 
-    except Exception as exc:
-        import traceback
-        traceback.print_exc()
-        await send_agui(ws, AGUI.RUN_ERROR, {"run_id": run_id, "message": str(exc)})
-        await ws.send_json({"type": "error", "payload": {"message": str(exc)}})
+            for tool_use in tool_uses:
+                print(f"Tool call: {tool_use.name}, input: {tool_use.input}")
 
+                if tool_use.name == "render_gosling":
+                    spec = tool_use.input.get("spec", {})
+                    title = tool_use.input.get("title", "Genomic Visualization")
 
-async def _run_agent(ws: WebSocket, session: Session, text: str, session_id: str, executor=None):
-    """Spawn claude CLI, pass prompt via stdin, stream partial tokens via stream_event."""
-    ctx = ""
-    if session.chromdata is not None:
-        cd = session.chromdata
-        n_cells = len(cd.cells) if cd.cells is not None else 0
-        chroms = list(cd.spots["chrom"].unique()) if cd.spots is not None else []
-        ctx = (f"\n\nLoaded data: {n_cells} cells, chroms: {[str(c) for c in chroms[:8]]}"
-               f"{'...' if len(chroms) > 8 else ''}")
-        if session.viewport.chrom:
-            ctx += f", current viewport: {session.viewport.chrom}:{session.viewport.start}-{session.viewport.end}"
-
-    history = ""
-    for turn in session.conversation_history:
-        history += f"\n{turn['role'].upper()}: {turn['content']}"
-
-    prompt = (_SYSTEM_PROMPT + "\n\n" + history + f"\nUSER: {text}" + ctx).lstrip()
-
-    proc = await asyncio.create_subprocess_exec(
-        "claude", "-p",
-        "--output-format", "stream-json",
-        "--include-partial-messages",
-        "--bare",
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
-        cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-    )
-    # Pass prompt via stdin — avoids argv length limits
-    proc.stdin.write(prompt.encode())
-    proc.stdin.close()
-
-    full_response = []
-    async for line in proc.stdout:
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-
-        etype = event.get("type")
-
-        # Partial streaming: content_block_delta → text_delta
-        if etype == "stream_event":
-            inner = event.get("event", {})
-            if inner.get("type") == "content_block_delta":
-                delta = inner.get("delta", {})
-                if delta.get("type") == "text_delta":
-                    token = delta.get("text", "")
-                    if token:
-                        full_response.append(token)
-                        await ws.send_json({
-                            "type": "agent_token",
-                            "payload": {"session_id": session_id, "token": token}
-                        })
-
-        # Fallback: complete assistant message (when --include-partial-messages unsupported)
-        elif etype == "assistant" and not full_response:
-            for block in event.get("message", {}).get("content", []):
-                if block.get("type") == "text" and block.get("text"):
-                    full_response.append(block["text"])
-                    await ws.send_json({
-                        "type": "agent_token",
-                        "payload": {"session_id": session_id, "token": block["text"]}
+                    # Send spec to frontend for rendering (ag-ui format)
+                    await websocket.send_json({
+                        "type": "agent_artifact",
+                        "artifact_type": "gosling_spec",
+                        "artifact_id": tool_use.id,
+                        "title": title,
+                        "spec": spec
                     })
 
-        elif etype == "result":
-            await ws.send_json({
-                "type": "agent_token",
-                "payload": {"session_id": session_id, "token": "", "done": True}
-            })
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": json.dumps({
+                            "success": True,
+                            "message": f"Gosling spec rendered successfully. Title: {title}",
+                            "spec_tracks": len(spec.get("tracks", []))
+                        })
+                    })
+                elif tool_use.name == "patch_gosling":
+                    target_id = tool_use.input.get("target_id", "")
+                    patch = tool_use.input.get("patch", {})
 
-    await proc.wait()
+                    # Forward the JSON-Patch op to the frontend, which applies it
+                    # to the active spec (store.applyGoslingPatch).
+                    await websocket.send_json({
+                        "type": "agent_artifact",
+                        "artifact_type": "gosling_patch",
+                        "target_id": target_id,
+                        "patch": patch,
+                    })
 
-    # Parse actions from full response and push to frontend
-    full_text = "".join(full_response)
-    for action in _parse_actions(full_text):
-        atype = action["action_type"]
-        payload = action["payload"]
-        if atype == "set_viewport":
-            session.viewport = Viewport(
-                chrom=payload.get("chrom"),
-                start=payload.get("start"),
-                end=payload.get("end"),
-            )
-            await ws.send_json({"type": "agent_viewport_update", "payload": payload})
-        elif atype == "select_cells":
-            session.cell_selection = payload.get("ids", [])
-            await ws.send_json({"type": "agent_cell_selection", "payload": payload})
-        elif atype == "highlight_region":
-            await ws.send_json({"type": "agent_highlight_region", "payload": payload})
-        elif atype == "set_colormap":
-            await ws.send_json({"type": "agent_set_colormap", "payload": payload})
+                    if not target_id or not patch.get("path"):
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": json.dumps({
+                                "success": False,
+                                "error": "patch_gosling requires 'target_id' and a 'patch' with a 'path'.",
+                            }),
+                        })
+                    else:
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": json.dumps({
+                                "success": True,
+                                "message": f"Applied {patch.get('op', 'replace')} to {patch.get('path')} on spec {target_id}.",
+                            }),
+                        })
+                elif tool_use.name == "add_notebook_cell":
+                    code = tool_use.input.get("code", "")
 
-    # Execute Python code blocks in subprocess worker
-    # First check for multi-step execution
-    steps = _extract_steps(full_text)
-    if steps and executor is not None:
-        # Multi-step execution
-        chromdata_path = None
-        if session.chromdata is not None:
-            import tempfile
-            tmp = tempfile.NamedTemporaryFile(suffix=".h5cd", delete=False)
-            tmp.close()
-            session.chromdata.write(tmp.name)
-            chromdata_path = tmp.name
+                    try:
+                        # Execute code
+                        from .notebook_api import execute_code
+                        result = execute_code(code)
+                    except Exception as e:
+                        # Handle execution failures
+                        result = {
+                            "status": "error",
+                            "output": "",
+                            "error": f"Execution failed: {str(e)}"
+                        }
 
-        loop = asyncio.get_running_loop()
-        for step in steps:
-            # Send step start notification
-            await ws.send_json({
-                "type": "agent_step_start",
-                "payload": {
-                    "step_id": step["id"],
-                    "description": step["description"]
-                }
-            })
+                    # Send to frontend
+                    await websocket.send_json({
+                        "type": "artifact",
+                        "artifact_type": "notebook_cell",
+                        "content": {
+                            "code": code,
+                            "output": result.get("output", ""),
+                            "error": result.get("error"),
+                            "status": result.get("status", "ok")
+                        }
+                    })
 
-            try:
-                artifacts = await loop.run_in_executor(
-                    executor, _run_code_in_worker, step["code"], chromdata_path
-                )
-                for art in artifacts:
-                    await ws.send_json({"type": "agent_artifact", "payload": art})
+                    # Build tool result with truncated output/error
+                    output_preview = result.get("output", "")[:100]
+                    error_preview = result.get("error", "")[:100] if result.get("error") else None
 
-                # Send step complete notification
-                await ws.send_json({
-                    "type": "agent_step_complete",
-                    "payload": {
-                        "step_id": step["id"],
-                        "status": "success"
-                    }
-                })
-            except Exception as e:
-                await ws.send_json({
-                    "type": "agent_step_complete",
-                    "payload": {
-                        "step_id": step["id"],
-                        "status": "error",
-                        "error": str(e)
-                    }
-                })
-                break  # Stop on error
+                    if error_preview:
+                        tool_result_content = f"Cell added with error. Error: {error_preview}"
+                    else:
+                        tool_result_content = f"Cell added. Output: {output_preview}"
 
-        if chromdata_path:
-            os.unlink(chromdata_path)
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": tool_result_content
+                    })
+                # Security note: Executes Claude-generated code in Jupyter kernel.
+                # Suitable for trusted LLM agents in local/research environments.
+                # Production deployments should add sandboxing (containers, pyodide, etc.)
+                elif tool_use.name == "run_analysis":
+                    analysis_type = tool_use.input.get("type", "")
+                    region = tool_use.input.get("region", "") or ""
+                    # region may be 'chr21' or 'chr21:1-48000000'; take the chrom
+                    chrom = region.split(":")[0].strip() if region else ""
 
-    elif executor is not None:
-        # Single-step execution (original behavior)
-        code_blocks = _extract_code_blocks(full_text)
-        if code_blocks:
-            # Save chromdata to temp file for worker process
-            chromdata_path = None
-            if session.chromdata is not None:
-                import tempfile
-                tmp = tempfile.NamedTemporaryFile(suffix=".h5cd", delete=False)
-                tmp.close()
-                session.chromdata.write(tmp.name)
-                chromdata_path = tmp.name
+                    try:
+                        from .strc_api import run_registered_analysis
+                        handle = run_registered_analysis(analysis_type, chrom)
 
-            loop = asyncio.get_running_loop()
-            for code in code_blocks:
-                try:
-                    artifacts = await loop.run_in_executor(
-                        executor, _run_code_in_worker, code, chromdata_path
-                    )
-                    for art in artifacts:
-                        await ws.send_json({"type": "agent_artifact", "payload": art})
-                except Exception as e:
-                    await ws.send_json({"type": "agent_artifact", "payload": {
-                        "artifact_type": "text_block",
-                        "payload": {"content": f"Execution error: {e}", "format": "error"}
-                }})
+                        # Notify frontend so the relevant panel can refresh
+                        await websocket.send_json({
+                            "type": "agent_artifact",
+                            "artifact_type": "analysis_result",
+                            "analysis_type": analysis_type,
+                            "chrom": chrom,
+                            "result": {handle["type"] + "s": handle["records"]},
+                        })
 
-    # Store turn in session history for next call
-    if full_response:
-        session.conversation_history.append({"role": "user", "content": text})
-        session.conversation_history.append({"role": "assistant", "content": full_text})
+                        # Hand the agent everything it needs to render the result
+                        # with render_gosling (data URL + field names + mark).
+                        tool_result = {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": json.dumps({
+                                "success": True,
+                                "type": handle["type"],
+                                "chrom": handle["chrom"],
+                                "record_count": handle["record_count"],
+                                "data_url": handle["data_url"],
+                                "chromosome_field": handle["chromosome_field"],
+                                "genomic_fields": handle["genomic_fields"],
+                                "suggested_mark": handle["suggested_mark"],
+                                "next_step": (
+                                    "To visualize, call render_gosling with a track whose "
+                                    "data = {\"type\":\"json\",\"url\":data_url,"
+                                    "\"chromosomeField\":chromosome_field,"
+                                    "\"genomicFields\":genomic_fields} and mark = suggested_mark."
+                                ),
+                            }),
+                        }
+                    except Exception as e:
+                        tool_result = {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": f"Analysis failed: {str(e)}"
+                        }
 
+                    tool_results.append(tool_result)
+                elif tool_use.name == "select_cells":
+                    cell_ids = tool_use.input.get("cell_ids", []) or []
+                    criteria = tool_use.input.get("criteria", "")
+                    await websocket.send_json({
+                        "type": "agent_artifact",
+                        "artifact_type": "select_cells",
+                        "cell_ids": cell_ids,
+                        "criteria": criteria,
+                    })
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": f"Selected {len(cell_ids)} cell(s)."
+                                   + (f" Criteria: {criteria}" if criteria else ""),
+                    })
+                elif tool_use.name == "color_embedding":
+                    color_by = tool_use.input.get("color_by", "")
+                    await websocket.send_json({
+                        "type": "agent_artifact",
+                        "artifact_type": "color_embedding",
+                        "color_by": color_by,
+                    })
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": f"Embedding colored by '{color_by}'.",
+                    })
+                elif tool_use.name == "show_structure":
+                    cell_id = tool_use.input.get("cell_id", "")
+                    chrom = tool_use.input.get("chrom", "")
+                    await websocket.send_json({
+                        "type": "agent_artifact",
+                        "artifact_type": "show_structure",
+                        "cell_id": cell_id,
+                        "chrom": chrom,
+                    })
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": f"Showing 3D structure for cell '{cell_id}'"
+                                   + (f", {chrom}" if chrom else "") + ".",
+                    })
+                elif tool_use.name == "color_structure":
+                    color_by = tool_use.input.get("color_by", "")
+                    await websocket.send_json({
+                        "type": "agent_artifact",
+                        "artifact_type": "color_structure",
+                        "color_by": color_by,
+                    })
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": f"3D structure colored by '{color_by}'.",
+                    })
+                elif tool_use.name == "export_view":
+                    fmt = (tool_use.input.get("format") or "png").lower()
+                    if fmt not in ("png", "pdf"):
+                        fmt = "png"
+                    await websocket.send_json({
+                        "type": "agent_artifact",
+                        "artifact_type": "export_view",
+                        "format": fmt,
+                    })
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": f"Triggered export of the current view as {fmt.upper()}. "
+                                   "The download will start in the user's browser.",
+                    })
+                else:
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": json.dumps({"error": f"Unknown tool: {tool_use.name}"})
+                    })
 
-async def _run_agent_multimodal(ws: WebSocket, session: Session, image_base64: str, prompt: str, session_id: str, executor=None):
-    """Run agent with multimodal input (image + text)."""
-    import os
-
-    # Build context
-    ctx = ""
-    if session.chromdata is not None:
-        cd = session.chromdata
-        n_cells = len(cd.cells) if cd.cells is not None else 0
-        chroms = list(cd.spots["chrom"].unique()) if cd.spots is not None else []
-        ctx = (f"\n\nLoaded data: {n_cells} cells, chroms: {[str(c) for c in chroms[:8]]}"
-               f"{'...' if len(chroms) > 8 else ''}")
-        if session.viewport.chrom:
-            ctx += f", current viewport: {session.viewport.chrom}:{session.viewport.start}-{session.viewport.end}"
-
-    # Call Claude API with vision
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-
-        messages = [
-            {
+            # Add tool results to history and continue loop
+            conversation_history.append({
                 "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/png",
-                            "data": image_base64,
-                        },
-                    },
-                    {
-                        "type": "text",
-                        "text": prompt + ctx,
-                    },
-                ],
-            }
-        ]
+                "content": tool_results
+            })
+            # Continue the loop for Claude to process tool results
+            continue
 
-        # Stream response
-        full_response = []
-        with client.messages.stream(
-            model="claude-sonnet-4-6",
-            max_tokens=2048,
-            messages=messages,
-        ) as stream:
-            for text in stream.text_stream:
-                full_response.append(text)
-                await ws.send_json({
-                    "type": "agent_token",
-                    "payload": {"session_id": session_id, "token": text}
-                })
-
-        await ws.send_json({
-            "type": "agent_token",
-            "payload": {"session_id": session_id, "token": "", "done": True}
-        })
-
-        # Store in history
-        full_text = "".join(full_response)
-        if full_text:
-            session.conversation_history.append({"role": "user", "content": f"[Image] {prompt}"})
-            session.conversation_history.append({"role": "assistant", "content": full_text})
-
-    except Exception as e:
-        await ws.send_json({
-            "type": "agent_token",
-            "payload": {"session_id": session_id, "token": f"\n\nError: {e}", "done": True}
-        })
-
-
-async def handle_message(ws: WebSocket, session: Session, msg: dict, executor) -> None:
-    t = msg.get("type")
-    p = msg.get("payload", {})
-
-    if t == "load_data":
-        path = p.get("path", "")
-        fmt = p.get("format", "h5cd")
-        loop = asyncio.get_running_loop()
-        try:
-            session.chromdata = await loop.run_in_executor(executor, _load_chromdata, path, fmt)
-            cd = session.chromdata
-            n_cells = len(cd.cells) if cd.cells is not None else 0
-            chroms = list(cd.spots["chrom"].unique()) if cd.spots is not None else []
-            await ws.send_json({"type": "data_loaded", "payload": {
-                "cell_count": n_cells,
-                "chroms": [str(c) for c in chroms],
-                "umap_url": "/api/umap" if "umap" in (cd.cellm or {}) else None,
-            }})
-        except Exception as e:
-            await ws.send_json({"type": "error", "payload": {"message": str(e)}})
-
-    elif t == "update_viewport":
-        session.viewport = Viewport(**{k: p[k] for k in ("chrom", "start", "end") if k in p})
-
-    elif t == "select_cells":
-        session.cell_selection = p.get("ids", [])
-
-    elif t == "run_analysis":
-        # TODO: dispatch to ProcessPoolExecutor
-        await ws.send_json({"type": "analysis_progress", "payload": {"job_id": None, "progress": 0, "status": "queued"}})
-
-    elif t == "agent_message":
-        session_id = p.get("session_id", session.session_id)
-        text = p.get("text", "")
-        async def _safe_run():
-            try:
-                await _run_agent_agui(ws, session, text, session_id, executor)
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                try:
-                    await ws.send_json({"type": "error", "payload": {"message": str(e)}})
-                except Exception:
-                    pass
-        asyncio.create_task(_safe_run())
-
-    elif t == "multimodal_query":
-        session_id = p.get("session_id", session.session_id)
-        image_base64 = p.get("image", "")
-        prompt = p.get("prompt", "Analyze this image.")
-        async def _safe_run_multimodal():
-            try:
-                await _run_agent_multimodal(ws, session, image_base64, prompt, session_id, executor)
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                try:
-                    await ws.send_json({"type": "error", "payload": {"message": str(e)}})
-                except Exception:
-                    pass
-        asyncio.create_task(_safe_run_multimodal())
-
-    elif t == "artifact_action":
-        await ws.send_json({"type": "not_implemented"})
-
-    elif t == "export_figure":
-        # TODO: render and serve
-        await ws.send_json({"type": "export_ready", "payload": {"url": None, "format": p.get("format")}})
-
-    else:
-        await ws.send_json({"type": "error", "payload": {"message": f"unknown type: {t}"}})
+        # If stop_reason is "end_turn" or no more tool calls, we're done
+        break

@@ -10,6 +10,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import json
 from typing import Optional
 
 import numpy as np
@@ -75,12 +76,23 @@ def _df_to_records(df: pd.DataFrame) -> list:
     return records.to_dict(orient="records")
 
 
+def _respond(key: str, records: list, fmt: Optional[str]):
+    """Shape the response by `format`.
+
+    - default / 'wrapped': {<key>: [...]}  (back-compat with existing tests/UI)
+    - 'gosling':           [...]           (bare array — Gosling json loader wants this)
+    """
+    if fmt == "gosling":
+        return JSONResponse(records, headers={"Cache-Control": _CACHE})
+    return JSONResponse({key: records}, headers={"Cache-Control": _CACHE})
+
+
 # ---------------------------------------------------------------------------
 # GET /api/tads/{chrom}
 # ---------------------------------------------------------------------------
 
 @strc_router.get("/api/tads/{chrom}")
-def get_tads(chrom: str, cell_type: Optional[str] = None):
+def get_tads(chrom: str, cell_type: Optional[str] = None, format: Optional[str] = None):
     """Return TAD domains for the given chromosome."""
     cd = _cd_or_404()
     cd = _filter_by_cell_type(cd, cell_type)
@@ -103,13 +115,13 @@ def get_tads(chrom: str, cell_type: Optional[str] = None):
         raise HTTPException(status_code=500, detail={"error": "TAD calling failed", "detail": str(e)})
 
     if tads is None or len(tads) == 0:
-        return JSONResponse({"tads": []}, headers={"Cache-Control": _CACHE})
+        return _respond("tads", [], format)
 
     # Filter to requested chrom only
     if "chrom" in tads.columns:
         tads = tads[tads["chrom"].astype(str) == chrom]
 
-    return JSONResponse({"tads": _df_to_records(tads)}, headers={"Cache-Control": _CACHE})
+    return _respond("tads", _df_to_records(tads), format)
 
 
 # ---------------------------------------------------------------------------
@@ -117,7 +129,7 @@ def get_tads(chrom: str, cell_type: Optional[str] = None):
 # ---------------------------------------------------------------------------
 
 @strc_router.get("/api/loops/{chrom}")
-def get_loops(chrom: str, cell_type: Optional[str] = None):
+def get_loops(chrom: str, cell_type: Optional[str] = None, format: Optional[str] = None):
     """Return loop anchors for the given chromosome."""
     cd = _cd_or_404()
     cd = _filter_by_cell_type(cd, cell_type)
@@ -139,9 +151,9 @@ def get_loops(chrom: str, cell_type: Optional[str] = None):
         raise HTTPException(status_code=500, detail={"error": "Loop calling failed", "detail": str(e)})
 
     if loops is None or len(loops) == 0:
-        return JSONResponse({"loops": []}, headers={"Cache-Control": _CACHE})
+        return _respond("loops", [], format)
 
-    return JSONResponse({"loops": _df_to_records(loops)}, headers={"Cache-Control": _CACHE})
+    return _respond("loops", _df_to_records(loops), format)
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +161,7 @@ def get_loops(chrom: str, cell_type: Optional[str] = None):
 # ---------------------------------------------------------------------------
 
 @strc_router.get("/api/compartments/{chrom}")
-def get_compartments(chrom: str, cell_type: Optional[str] = None):
+def get_compartments(chrom: str, cell_type: Optional[str] = None, format: Optional[str] = None):
     """Return A/B compartment assignments for the given chromosome."""
     cd = _cd_or_404()
     cd = _filter_by_cell_type(cd, cell_type)
@@ -171,9 +183,117 @@ def get_compartments(chrom: str, cell_type: Optional[str] = None):
         raise HTTPException(status_code=500, detail={"error": "Compartment calling failed", "detail": str(e)})
 
     if comp is None or len(comp) == 0:
-        return JSONResponse({"compartments": []}, headers={"Cache-Control": _CACHE})
+        return _respond("compartments", [], format)
 
     if "chrom" in comp.columns:
         comp = comp[comp["chrom"].astype(str) == chrom]
 
-    return JSONResponse({"compartments": _df_to_records(comp)}, headers={"Cache-Control": _CACHE})
+    return _respond("compartments", _df_to_records(comp), format)
+
+
+# ---------------------------------------------------------------------------
+# Analysis registry
+# ---------------------------------------------------------------------------
+# Single source of truth mapping an analysis name to its getter + the metadata
+# an agent needs to render the result with render_gosling. To add a new
+# structural analysis (e.g. insulation, stripes): implement the caller in
+# uchrom.strc, add a get_* endpoint above, and add ONE row here — the
+# run_analysis tool loop and the analysis→render handoff pick it up for free.
+#
+# Fields:
+#   getter_name:       name of the endpoint function in this module, resolved at
+#                      call time (so it stays patchable in tests / hot-reload).
+#   result_key:        key under which records live in the default (wrapped) response
+#   chromosome_field:  the chrom column name in the records (for Gosling chromosomeField)
+#   genomic_fields:    position columns (for Gosling genomicFields)
+#   suggested_mark:    a sensible default Gosling mark for this result type
+
+ANALYSIS_REGISTRY = {
+    "tad": {
+        "getter_name": "get_tads",
+        "endpoint": "/api/tads",
+        "result_key": "tads",
+        "chromosome_field": "chrom",
+        "genomic_fields": ["start", "end"],
+        "suggested_mark": "rule",
+    },
+    "loop": {
+        "getter_name": "get_loops",
+        "endpoint": "/api/loops",
+        "result_key": "loops",
+        "chromosome_field": "chrom1",
+        "genomic_fields": ["start1", "end1", "start2", "end2"],
+        "suggested_mark": "link",
+    },
+    "compartment": {
+        "getter_name": "get_compartments",
+        "endpoint": "/api/compartments",
+        "result_key": "compartments",
+        "chromosome_field": "chrom",
+        "genomic_fields": ["start", "end"],
+        "suggested_mark": "bar",
+    },
+}
+
+
+def _records_from_response(resp, result_key: str) -> list:
+    """Extract the record list from a getter return value.
+
+    Tolerates both a FastAPI JSONResponse (real call) and a plain dict
+    (e.g. a mocked getter in tests)."""
+    if isinstance(resp, dict):
+        payload = resp
+    else:
+        body = getattr(resp, "body", None)
+        payload = json.loads(body) if body is not None else {}
+    if isinstance(payload, dict):
+        return payload.get(result_key, [])
+    if isinstance(payload, list):
+        return payload
+    return []
+
+
+def run_registered_analysis(analysis_type: str, chrom: str) -> dict:
+    """Run a registered analysis and return both records and a render handle.
+
+    Returns:
+        {
+          "type": analysis_type,
+          "chrom": chrom,
+          "record_count": int,
+          "records": [...],                # the raw records (wrapped-format list)
+          "data_url": "/api/<x>/<chrom>?format=gosling",
+          "chromosome_field": str,
+          "genomic_fields": [str, ...],
+          "suggested_mark": str,
+        }
+
+    Raises:
+        ValueError: unknown analysis_type or missing chrom.
+        HTTPException: propagated from the underlying getter (404/500/503).
+    """
+    if not chrom:
+        raise ValueError("run_analysis requires a 'region' (e.g. 'chr21')")
+    spec = ANALYSIS_REGISTRY.get(analysis_type)
+    if spec is None:
+        raise ValueError(
+            f"Unknown analysis type: {analysis_type}. "
+            f"Available: {', '.join(ANALYSIS_REGISTRY)}"
+        )
+
+    # Resolve the getter by name at call time so tests can patch the module
+    # attribute (patch('webapp.backend.strc_api.get_tads')).
+    getter = globals()[spec["getter_name"]]
+    resp = getter(chrom)
+    records = _records_from_response(resp, spec["result_key"])
+
+    return {
+        "type": analysis_type,
+        "chrom": chrom,
+        "record_count": len(records),
+        "records": records,
+        "data_url": f"{spec['endpoint']}/{chrom}?format=gosling",
+        "chromosome_field": spec["chromosome_field"],
+        "genomic_fields": spec["genomic_fields"],
+        "suggested_mark": spec["suggested_mark"],
+    }

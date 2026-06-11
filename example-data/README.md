@@ -18,8 +18,12 @@ auto-downloaded by the tutorials on first run into this directory.
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
 | `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial                                     |
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
+| `H1Esc-HFF.R1.tar.gz`                 | 128 MB  | no              | UW Noble lab  | `higashi_embedding` tutorial (sci-Hi-C H1Esc+HFF mix)                   |
+| `H1Esc-HFF.R1.labeled`                | 92 KB   | no              | UW Noble lab  | `higashi_embedding` tutorial (cell-type labels)                         |
 | `with_loops.h5cd`                     | 24 MB   | no              | generated     | output of `loop_calling.ipynb` (intermediate cache, safe to delete)     |
 | `fofct_core.csv`                      | ~6 MB   | no              | generated     | synthetic offline fallback for tutorials 4/5/6/7                        |
+| `synthetic_chr1_tiny.h5cd`            | 21 KB   | no              | generated     | E2E test fixture (100 random spots on chr1, 1 cell; auto-created by `test_e2e_quick_synthetic.py`) |
+| `takei2025_cerebellum_rep1.h5cd`      | 5.9 GB  | no              | **manual**    | Processed Takei 2025 data for webapp E2E validation (full-scale performance testing) |
 | `GSE63525_GM12878_insitu_primary+replicate_combined_30.hic` | ~40 GB | no | **manual** (too large) | `benchmark.ipynb` |
 
 `*.csv`, `*.h5cd`, and the DNAseqFISH+ zip/folder are ignored by git;
@@ -145,6 +149,33 @@ The tutorials locate these files via a `find_*()` helper that:
 Every tutorial's first data-loading cell prints the location it ends up
 using.
 
+### `IMR90_chr21_pyhim.ecsv` — Bintu 2018 IMR90 chr21 in PyHiM ECSV format (5.7 MB)
+
+- **Format**: [PyHiM](https://github.com/pyHi-M/pyHiM) chromatin trace
+  table (Astropy ECSV).  Columns: `Spot_ID, Trace_ID, x, y, z, Chrom,
+  Chrom_Start, Chrom_End, ROI #, Mask_id, Barcode #, label`.
+  `meta['comments']` carries `xyz_unit=micron`, `genome_assembly=hg38`.
+- **Content**: hg38 chr21:18.6–20.6 Mb, 1,277 traces × 66 loci × 30 kb
+  spacing.  IMR90 fibroblasts.
+- **Source**: Bintu et al. 2018, *Science* 362:eaau1783, "Super-resolution
+  chromatin tracing reveals domains and cooperative interactions in single
+  cells".  Original CSV at
+  [mendeley.com/datasets/3jkp7zhwbr/1](https://data.mendeley.com/datasets/3jkp7zhwbr/1).
+- **How it was derived**: The original Bintu CSV has columns
+  `Chromosome index, Segment index, Z, X, Y` (nm).  The conversion
+  script `bintu_to_pyhim_ecsv.py` maps these to PyHiM schema:
+  - `Chromosome index` → `Trace_ID` (1..1277)
+  - `Segment index` → `Barcode #` (1..66)
+  - `X, Y, Z` (nm) → `x, y, z` (microns)
+  - `Chrom = chr21`, `Chrom_Start/End` derived from segment index × 30 kb
+  - `Mask_id = Chromosome index` (each trace = one "cell")
+  - `ROI # = 0`, `label = "None"`
+- **Used by**: `import_pyhim_ecsv.ipynb` — demonstrates
+  `ChromData.from_pyhim_trace()` on real chromatin tracing data.
+- **Generated on demand**: If missing, the tutorial runs
+  `bintu_to_pyhim_ecsv.py` to convert `IMR90_chr21-18-20Mb.csv` (which
+  is auto-downloaded if needed).
+
 ### `4DNFIHF3JCBY.csv` — Takei 2021 mESC FOF-CT chromatin tracing (22 MB)
 
 - **Format**: [4DN FISH Omics Format — Chromatin Tracing](https://fish-omics-format.readthedocs.io/)
@@ -228,6 +259,36 @@ using.
   tutorial opens the CSV directly from the zip without extracting.
 - **Coordinate conventions** (applied by the tutorial):
   `x, y` in pixels × 103 nm/pixel; `z` in pixels × 250 nm/pixel.
+
+### `H1Esc-HFF.R1.tar.gz` + `H1Esc-HFF.R1.labeled` — Kim 2020 sci-Hi-C (128 MB + 92 KB)
+
+- **Format**: tarball of per-cell `.matrix` files; each is a sparse
+  triplet `bin1<TAB>bin2<TAB>count<TAB>weight<TAB>chrom1<TAB>chrom2`,
+  with `bin1`/`bin2` as **global bin indices** across the whole hg19
+  genome at 500 kb (offsets are not encoded — derive them by min-bin
+  per chrom across the cells, or compute from canonical hg19
+  chromsizes).  Chromosome strings are prefixed `human_` (e.g.
+  `human_chr14`).  The companion `*.labeled` is a 2-column TSV
+  `matrix_filename<TAB>cell_type` with values in `{H1Esc, HFF}`.
+- **Content**: 1 931 cells (750 H1Esc + 1 181 HFF), pooled from a
+  combinatorial-indexing sci-Hi-C library at 500 kb.  Used as a
+  benchmark in Kim et al.'s topic-model paper.
+- **Source**: Kim et al. 2020, *Nature Communications* 11:6386, "Capturing cell
+  type-specific chromatin compartment patterns by applying topic
+  modeling to single-cell Hi-C data" — accompanying website at
+  [noble.gs.washington.edu/proj/schic-topic-model](https://noble.gs.washington.edu/proj/schic-topic-model/).
+- **Download URLs**:
+  ```
+  https://noble.gs.washington.edu/proj/schic-topic-model/data/matrix_files/H1Esc-HFF.R1.tar.gz
+  https://noble.gs.washington.edu/proj/schic-topic-model/data/matrix_labels/H1Esc-HFF.R1.labeled
+  ```
+- **Used by**: `higashi_embedding.ipynb` (FastHigashi cell embedding +
+  ARI vs ground-truth labels).  The tutorial picks a balanced subset
+  (e.g. 150 H1Esc + 150 HFF), converts each `.matrix` to Higashi v2
+  contact-pair format, runs FastHigashi at rank 64 with
+  ``do_conv/do_rwr/do_col=True``, and reports ARI / NMI between the
+  k-means clustering of `cd.cellm['higashi']` and the cell-type labels.
+  Reproduces ARI ≈ 0.55 on a Mac mini M2 in ~2 min on CPU at 300 cells.
 
 ## Generated outputs
 
