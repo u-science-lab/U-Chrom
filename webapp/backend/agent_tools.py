@@ -215,6 +215,50 @@ to draw the computed result. This is the standard analysis→render handoff.""",
         },
     },
     {
+        "name": "write_analysis_function",
+        "description": """Author and deploy a CUSTOM Python analysis as a live API endpoint.
+
+Use this when no built-in analysis (run_analysis: tad/loop/compartment) fits —
+e.g. custom insulation score, radius-of-gyration profile, or a bespoke caller.
+
+YOUR CODE MUST define exactly this top-level function:
+    def analyze(cd, chrom, **params):
+        # cd: ChromData already subset to `chrom`
+        # available: cd.coords (N,3 ndarray), cd.spots (DataFrame),
+        #            cd.compute_distances(trace_id=...)
+        # pre-bound: np, pd  (NO import statements allowed)
+        # MUST return a pandas DataFrame containing chromosome_field and
+        # genomic_fields columns.
+        ...
+        return pd.DataFrame({"chrom": [...], "start": [...], "end": [...]})
+
+FORBIDDEN: import, open, eval/exec/compile, file/network/os access, lambda,
+async, global/nonlocal, with, and ANY dunder attribute access (e.g. __class__).
+Treat cd as read-only. Keep it O(n) over <100K spots; 10s execution timeout.
+
+After success, returns the SAME render handle as run_analysis (analysis_id /
+data_url / chromosome_field / genomic_fields / suggested_mark). Then call
+render_gosling with a json track whose url points at data_url (replace the
+{chrom} placeholder with the real chromosome).""",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "short id (a-z0-9_)"},
+                "code": {"type": "string", "description": "Python defining analyze(cd, chrom, **params)"},
+                "chromosome_field": {"type": "string", "description": "chrom column name (default 'chrom')"},
+                "genomic_fields": {
+                    "type": "array", "items": {"type": "string"},
+                    "description": "position columns, e.g. ['start','end']",
+                },
+                "suggested_mark": {
+                    "type": "string",
+                    "description": "Gosling mark: rule/bar/link/point/line",
+                },
+            },
+            "required": ["name", "code"],
+        },
+    },
+    {
         "name": "export_view",
         "description": "Export the current Genomic (Gosling) visualization as an image file the user can download. Use when the user asks to save, download, or export the current view/figure.",
         "input_schema": {
@@ -238,6 +282,7 @@ You drive a multi-tab UI directly through tools:
 - show_structure / color_structure → 3D Structure tab
 - add_notebook_cell → Notebook tab (Python)
 - run_analysis → TAD/loop/compartment, results feed back into visualizations
+- write_analysis_function → author+deploy a CUSTOM sandboxed analysis as a live endpoint, then render its output
 - export_view → download the current Gosling view as PNG/PDF
 
 Gosling concepts:
@@ -246,4 +291,10 @@ Gosling concepts:
 - Hi-C contact matrix: data {"type":"matrix","url":"/api/v1/tileset_info/?d=contact-<chrom>"}, mark "bar", with x/xe/ys/ye genomic fields and color quantitative.
 - Always set 'assembly' (hg19/hg38/mm10), 'width', 'height'.
 
-Be helpful, explain what you're creating, and generate accurate specs. To tweak an existing spec, prefer patch_gosling over recreating."""
+Be helpful, explain what you're creating, and generate accurate specs. To tweak an existing spec, prefer patch_gosling over recreating.
+
+When a user asks for an analysis that tad/loop/compartment don't cover, prefer
+write_analysis_function over add_notebook_cell: it deploys a reusable endpoint
+you can immediately visualize. Define analyze(cd, chrom, **params) returning a
+DataFrame; you cannot import modules (np/pd are pre-bound) or touch the
+filesystem/network. Keep it O(n) over <100K spots."""

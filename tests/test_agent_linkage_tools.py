@@ -223,3 +223,97 @@ def test_unknown_tool_returns_error_result():
     sent = _run("nonexistent_tool", {})
     # No artifact emitted for unknown tool, but the loop completed.
     assert _artifacts(sent, "nonexistent_tool") == []
+
+
+_GOOD_ANALYSIS = (
+    "def analyze(cd, chrom, **params):\n"
+    "    n = cd.coords.shape[0]\n"
+    "    starts = cd.spots['start'].to_numpy()\n"
+    "    return pd.DataFrame({'chrom': [chrom]*n, 'start': starts, 'end': starts+1})\n"
+)
+
+
+def _tool_results_from_history(history):
+    import json
+    return [
+        json.loads(block["content"]) if _is_json(block["content"]) else block["content"]
+        for msg in history
+        if msg["role"] == "user" and isinstance(msg["content"], list)
+        for block in msg["content"]
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+    ]
+
+
+def _is_json(s):
+    import json
+    try:
+        json.loads(s)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def _run_capture_history(tool_name, tool_input):
+    """Drive run_agent_loop once and return (sent_messages, history)."""
+    from webapp.backend import ws_handler
+    import webapp.backend.dynamic_api as dynamic_api
+
+    dynamic_api.clear_registry()
+    history = [{"role": "user", "content": "hi"}]
+    responses = iter([
+        _response([_tool_block("t1", tool_name, tool_input)], "tool_use"),
+        _response([_text_block("done")], "end_turn"),
+    ])
+    ws = AsyncMock()
+    sent = []
+
+    async def _capture(obj):
+        sent.append(obj)
+    ws.send_json = _capture
+
+    with patch.object(ws_handler, "client") as _client:
+        _client.messages.create = AsyncMock(side_effect=lambda **k: next(responses))
+        asyncio.run(ws_handler.run_agent_loop(ws, history))
+    return sent, history
+
+
+def test_write_analysis_deploys_and_returns_handle():
+    sent, history = _run_capture_history("write_analysis_function", {
+        "name": "myrg",
+        "code": _GOOD_ANALYSIS,
+        "chromosome_field": "chrom",
+        "genomic_fields": ["start", "end"],
+        "suggested_mark": "line",
+    })
+
+    arts = _artifacts(sent, "custom_analysis_deployed")
+    assert len(arts) == 1
+    assert arts[0]["analysis_id"] == "myrg"
+    assert arts[0]["data_url"] == "/api/custom/myrg/{chrom}?format=gosling"
+
+    results = _tool_results_from_history(history)
+    assert len(results) == 1
+    payload = results[0]
+    assert payload["success"] is True
+    assert payload["data_url"] == "/api/custom/myrg/{chrom}?format=gosling"
+    assert payload["chromosome_field"] == "chrom"
+    assert payload["genomic_fields"] == ["start", "end"]
+    assert payload["suggested_mark"] == "line"
+    assert "render_gosling" in payload["next_step"]
+
+
+def test_write_analysis_rejects_malicious():
+    sent, history = _run_capture_history("write_analysis_function", {
+        "name": "evil",
+        "code": "import os\ndef analyze(cd, chrom, **p):\n    return os.listdir('/')\n",
+    })
+
+    # No deploy artifact for rejected code.
+    assert _artifacts(sent, "custom_analysis_deployed") == []
+
+    results = _tool_results_from_history(history)
+    assert len(results) == 1
+    payload = results[0]
+    assert payload["success"] is False
+    assert "Rejected by sandbox" in payload["error"]
+    assert "hint" in payload
