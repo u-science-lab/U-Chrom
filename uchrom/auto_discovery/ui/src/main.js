@@ -5,12 +5,14 @@ import {
   BookOpen,
   CircleDot,
   Crosshair,
+  ExternalLink,
   GitBranch,
   Maximize2,
   Minimize2,
   Notebook,
   Search,
   Waypoints,
+  X,
   ZoomIn,
   ZoomOut
 } from "@lucide/vue";
@@ -45,7 +47,9 @@ const colors = {
   Run: "#6b7280"
 };
 
-const statusOrder = ["Supported", "Borderline", "Contradicted", "Not supported", "Untested"];
+const scientificStatusOrder = ["Supported", "Borderline", "Contradicted", "Not supported", "Inconclusive"];
+const auditStatusOrder = ["Pending", "Failed", "Rejected"];
+const statusOrder = [...scientificStatusOrder, ...auditStatusOrder];
 const NODE_WIDTH = 232;
 const NODE_HEIGHT = 94;
 const NODE_GAP = 270;
@@ -60,7 +64,7 @@ const MAX_ZOOM = 1.85;
 const MINIMAP_WIDTH = 220;
 const MINIMAP_HEIGHT = 136;
 
-const outcomeRelations = new Set(["supports", "borderline_supports", "contradicts", "not_supports"]);
+const outcomeRelations = new Set(["supports", "borderline_supports", "contradicts", "not_supports", "inconclusive_for"]);
 
 function label(n) {
   if (!n) return "";
@@ -114,7 +118,15 @@ function evidenceForIdea(id) {
 }
 
 function statusForIdea(id) {
-  return evidenceForIdea(id)?.hypothesis_status || "Untested";
+  const ev = evidenceForIdea(id);
+  if (ev?.hypothesis_status) return ev.hypothesis_status;
+  const idea = byId.get(id);
+  if (idea?.hypothesis_status) return idea.hypothesis_status;
+  const state = String(idea?.execution_state || "").toLowerCase();
+  if (idea?.review_accepted === false || state.includes("rejected")) return "Rejected";
+  if (state.includes("failed")) return "Failed";
+  if (state.includes("pending") || state.includes("not executed")) return "Pending";
+  return "Pending";
 }
 
 function notebookForIdea(id) {
@@ -127,6 +139,44 @@ function notebookHref(path) {
   if (!notebookBaseUrl) return path;
   const name = String(path).split("/").pop().replace(/\.ipynb$/, ".html");
   return `${notebookBaseUrl}/${name}`;
+}
+
+const graphicAbstractCache = new Map();
+
+function notebookGraphicAbstractHref(href) {
+  return href ? `${href}#Graphical-abstract` : "";
+}
+
+function extractGraphicAbstract(html, href) {
+  if (!html) return null;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const headings = [...doc.querySelectorAll("h1,h2,h3,h4")];
+  const heading = doc.getElementById("Graphical-abstract")
+    || headings.find((h) => h.textContent?.trim().toLowerCase() === "graphical abstract");
+  let img = null;
+  if (heading) {
+    let cursor = heading.nextElementSibling;
+    while (cursor && !/^H[1-4]$/.test(cursor.tagName)) {
+      img = cursor.matches?.("img") ? cursor : cursor.querySelector?.("img");
+      if (img) break;
+      cursor = cursor.nextElementSibling;
+    }
+  }
+  img ||= doc.querySelector('img[alt*="Scientific schematic"], img[alt*="Graphical abstract"], img[src^="data:image"]');
+  const src = img?.getAttribute("src");
+  if (!src) return null;
+  let resolvedSrc = src;
+  if (!src.startsWith("data:") && !/^https?:\/\//.test(src)) {
+    try {
+      resolvedSrc = new URL(src, href || window.location.href).toString();
+    } catch {
+      resolvedSrc = src;
+    }
+  }
+  return {
+    src: resolvedSrc,
+    alt: img.getAttribute("alt") || "Graphical abstract"
+  };
 }
 
 function runIdeaIds(runId) {
@@ -179,8 +229,24 @@ function frontierLabel(idea) {
 }
 
 function contextUnavailable(idea) {
-  const text = String(idea.iterative_context_status || idea.metadata?.iterative_context_status || "").toLowerCase();
-  return text.includes("not found") || text.includes("unavailable");
+  const direction = frontierForIdea(idea);
+  const text = direction ? [
+    direction.frontier_id,
+    direction.frontier_type,
+    direction.label,
+    direction.title
+  ].filter(Boolean).join(" ").toLowerCase() : [
+    idea.iterative_context_status,
+    idea.metadata?.iterative_context_status,
+    idea.frontier_id,
+    idea.metadata?.frontier_id
+  ].filter(Boolean).join(" ").toLowerCase();
+  return text.includes("context_unavailable")
+    || text.includes("context unavailable")
+    || text.includes("provided_paths_not_found")
+    || text.includes("provided paths not found")
+    || text.includes("not found")
+    || text.includes("unavailable");
 }
 
 function parentIdeaIds(idea) {
@@ -235,6 +301,10 @@ function claimIdeaIds(claimId) {
     .filter((e) => e.source === claimId && String(e.relation || "").startsWith("literature_"))
     .map((e) => e.target)
     .filter((id) => byId.get(id)?.kind === "Idea"))];
+}
+
+function visibleClaimIdeaIds(claimId, visibleIdeaIds) {
+  return claimIdeaIds(claimId).filter((id) => visibleIdeaIds.has(id));
 }
 
 function slugForId(value) {
@@ -429,8 +499,11 @@ function statusClass(status) {
   const s = String(status || "").toLowerCase();
   if (s === "supported") return "supported";
   if (s === "borderline") return "borderline";
+  if (s === "inconclusive") return "inconclusive";
   if (s === "contradicted" || s === "not supported") return "contradicted";
-  return "untested";
+  if (s === "failed") return "failed";
+  if (s === "rejected") return "rejected";
+  return "pending";
 }
 
 function evidenceSummary(ev) {
@@ -509,10 +582,21 @@ function buildDiscoveryModel(visibleIdeaIds, query) {
 
   const claimNodes = nodes
     .filter((n) => n.kind === "LiteratureClaim")
-    .filter((claim) => searchable(claim).includes(query) || claimRootIdeasByClaim.has(claim.id))
+    .filter((claim) => (
+      !query
+      || searchable(claim).includes(query)
+      || visibleClaimIdeaIds(claim.id, visibleIdeaIds).length
+      || claimRootIdeasByClaim.has(claim.id)
+    ))
     .sort((a, b) => label(a).localeCompare(label(b)));
   const claimBranches = claimNodes.map((claim) => {
-    const related = [...(claimRootIdeasByClaim.get(claim.id) || [])]
+    const relatedIds = new Set([
+      ...(claimRootIdeasByClaim.get(claim.id) || []).map((idea) => idea.id),
+      ...visibleClaimIdeaIds(claim.id, visibleIdeaIds),
+    ]);
+    const related = [...relatedIds]
+      .map((id) => byId.get(id))
+      .filter(Boolean)
       .sort((a, b) => label(a).localeCompare(label(b)));
     return {
       node: claim,
@@ -522,16 +606,13 @@ function buildDiscoveryModel(visibleIdeaIds, query) {
     };
   });
 
-  const directionBranches = groupedDirectionBranches(directionIdeas, followUpsByParent);
-  const gapBranches = gapIdeas.length ? [{
-    node: makeVirtualNode("virtual:handoff-gap", "HandoffGap", {
-      title: "Context unavailable",
-      summary: "Second-round ideas without usable parent_idea_ids or prior-graph context."
-    }),
-    caption: "gap",
-    meta: `${gapIdeas.length} idea${gapIdeas.length === 1 ? "" : "s"}`,
-    children: gapIdeas.map((idea) => ideaBranch(idea, followUpsByParent))
-  }] : [];
+  const directionBranches = mergeUniqueBranches([
+    ...groupedDirectionBranches(directionIdeas, followUpsByParent),
+    ...visibleDirectionBranches(visibleIdeaIds, followUpsByParent, false),
+  ]);
+  const gapBranches = gapIdeas
+    .sort((a, b) => label(a).localeCompare(label(b)))
+    .map((idea) => ideaBranch(idea, followUpsByParent));
 
   return {
     root: {
@@ -571,12 +652,12 @@ function buildSummaryDiscoveryModel(visibleIdeaIds, query) {
 
   const claimBranches = nodes
     .filter((n) => n.kind === "LiteratureClaim")
-    .filter((claim) => searchable(claim).includes(query) || claimIdeaIds(claim.id).some((id) => visibleIdeaIds.has(id)))
+    .filter((claim) => !query || searchable(claim).includes(query) || visibleClaimIdeaIds(claim.id, visibleIdeaIds).length)
     .sort((a, b) => label(a).localeCompare(label(b)))
     .map((claim) => ({
       node: claim,
       caption: "claim",
-      meta: `${claimIdeaIds(claim.id).filter((id) => visibleIdeaIds.has(id)).length} linked ideas`,
+      meta: `${visibleClaimIdeaIds(claim.id, visibleIdeaIds).length} linked ideas`,
       children: []
     }));
 
@@ -585,16 +666,13 @@ function buildSummaryDiscoveryModel(visibleIdeaIds, query) {
     .sort((a, b) => statusOrder.indexOf(statusForIdea(a.id)) - statusOrder.indexOf(statusForIdea(b.id)) || label(a).localeCompare(label(b)))
     .map((idea) => summaryIdeaBranch(idea, followUpsByParent));
 
-  const directionBranches = groupedSummaryDirectionBranches(directionIdeas, followUpsByParent);
-  const gapBranches = gapIdeas.length ? [{
-    node: makeVirtualNode("virtual:handoff-gap", "HandoffGap", {
-      title: "Unlinked Round 2 ideas",
-      summary: "Second-round ideas without usable parent_idea_ids or prior-graph context."
-    }),
-    caption: "unlinked",
-    meta: `${gapIdeas.length} idea${gapIdeas.length === 1 ? "" : "s"}`,
-    children: gapIdeas.map((idea) => summaryIdeaBranch(idea, followUpsByParent))
-  }] : [];
+  const directionBranches = mergeUniqueBranches([
+    ...groupedSummaryDirectionBranches(directionIdeas, followUpsByParent),
+    ...visibleDirectionBranches(visibleIdeaIds, followUpsByParent, true),
+  ]);
+  const gapBranches = gapIdeas
+    .sort((a, b) => label(a).localeCompare(label(b)))
+    .map((idea) => summaryIdeaBranch(idea, followUpsByParent));
 
   return {
     root: {
@@ -668,17 +746,52 @@ function summaryDirectionBranch(direction, ideas, followUpsByParent, seen) {
 
 function groupedSummaryDirectionBranches(ideas, followUpsByParent) {
   const groups = new Map();
+  const direct = [];
   for (const idea of ideas) {
-    const direction = frontierForIdea(idea) || makeVirtualNode(`virtual:direction:${slugForId(frontierLabel(idea) || "graph-level-direction")}`, "Frontier", {
-      title: frontierLabel(idea) || "Graph-level follow-up direction",
-      frontier_type: "graph_level_direction"
-    });
+    const direction = frontierForIdea(idea);
+    if (!direction) {
+      direct.push(idea);
+      continue;
+    }
+    if (!groups.has(direction.id)) groups.set(direction.id, { direction, ideas: [] });
+    groups.get(direction.id).ideas.push(idea);
+  }
+  const directionBranches = [...groups.values()]
+    .sort((a, b) => label(a.direction).localeCompare(label(b.direction)))
+    .map((group) => summaryDirectionBranch(group.direction, group.ideas, followUpsByParent, new Set()));
+  const directBranches = direct
+    .sort((a, b) => label(a).localeCompare(label(b)))
+    .map((idea) => summaryIdeaBranch(idea, followUpsByParent, new Set()));
+  return [...directionBranches, ...directBranches];
+}
+
+function visibleDirectionBranches(visibleIdeaIds, followUpsByParent, summary = false) {
+  const groups = new Map();
+  for (const edge of edges) {
+    if (edge.relation !== "frontier_proposed" || !visibleIdeaIds.has(edge.target)) continue;
+    const direction = byId.get(edge.source);
+    const idea = byId.get(edge.target);
+    if (!direction || direction.kind !== "Frontier" || !idea || contextUnavailable(idea)) continue;
     if (!groups.has(direction.id)) groups.set(direction.id, { direction, ideas: [] });
     groups.get(direction.id).ideas.push(idea);
   }
   return [...groups.values()]
     .sort((a, b) => label(a.direction).localeCompare(label(b.direction)))
-    .map((group) => summaryDirectionBranch(group.direction, group.ideas, followUpsByParent, new Set()));
+    .map((group) => summary
+      ? summaryDirectionBranch(group.direction, group.ideas, followUpsByParent, new Set())
+      : directionBranch(group.direction, group.ideas, followUpsByParent, new Set()));
+}
+
+function mergeUniqueBranches(branches) {
+  const seen = new Set();
+  const out = [];
+  for (const branch of branches) {
+    const id = branch?.node?.id;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(branch);
+  }
+  return out;
 }
 
 function ideaBranch(idea, followUpsByParent, seen = new Set()) {
@@ -743,17 +856,23 @@ function directionBranch(direction, ideas, followUpsByParent, seen) {
 
 function groupedDirectionBranches(ideas, followUpsByParent) {
   const groups = new Map();
+  const direct = [];
   for (const idea of ideas) {
-    const direction = frontierForIdea(idea) || makeVirtualNode(`virtual:direction:${slugForId(frontierLabel(idea) || "graph-level-direction")}`, "Frontier", {
-      title: frontierLabel(idea) || "Graph-level follow-up direction",
-      frontier_type: "graph_level_direction"
-    });
+    const direction = frontierForIdea(idea);
+    if (!direction) {
+      direct.push(idea);
+      continue;
+    }
     if (!groups.has(direction.id)) groups.set(direction.id, { direction, ideas: [] });
     groups.get(direction.id).ideas.push(idea);
   }
-  return [...groups.values()]
+  const directionBranches = [...groups.values()]
     .sort((a, b) => label(a.direction).localeCompare(label(b.direction)))
     .map((group) => directionBranch(group.direction, group.ideas, followUpsByParent, new Set()));
+  const directBranches = direct
+    .sort((a, b) => label(a).localeCompare(label(b)))
+    .map((idea) => ideaBranch(idea, followUpsByParent, new Set()));
+  return [...directionBranches, ...directBranches];
 }
 
 function groupEntry(id, title, caption, meta, children, summary = "") {
@@ -1356,6 +1475,32 @@ function svgLines(text, maxChars = 23, maxLines = 2) {
   return clipped.length ? clipped : [""];
 }
 
+function compactSvgLines(text, maxChars = 14, maxLines = 2) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = "";
+  const clipWord = (word) => word.length > maxChars ? `${word.slice(0, Math.max(2, maxChars - 3))}...` : word;
+  for (const rawWord of words) {
+    const word = clipWord(rawWord);
+    const next = line ? `${line} ${word}` : word;
+    if (next.length > maxChars && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+    if (lines.length >= maxLines) break;
+  }
+  if (line && lines.length < maxLines) lines.push(line);
+  if (!lines.length) lines.push("");
+  const hasRemaining = words.join(" ").length > lines.join(" ").length;
+  if (hasRemaining && lines.length) {
+    const last = lines.length - 1;
+    lines[last] = `${lines[last].slice(0, Math.max(2, maxChars - 3))}...`;
+  }
+  return lines;
+}
+
 function nodeWidth(item) {
   if (item.node.kind === "CData") return 244;
   if (item.node.kind === "Group") return 220;
@@ -1377,6 +1522,7 @@ function nodeColor(node) {
     const status = String(node.hypothesis_status || "").toLowerCase();
     if (status === "supported") return "#2a9d55";
     if (status === "borderline") return "#c8841b";
+    if (status === "inconclusive") return "#8b95a3";
     if (status === "contradicted" || status === "not supported") return "#d64545";
     return "#8b95a3";
   }
@@ -1413,11 +1559,11 @@ function nodeBadge(item) {
     return { text: status, status };
   }
   if (node.kind === "EvidenceResult" || node.kind === "Conclusion") {
-    const status = node.hypothesis_status || "Untested";
+    const status = node.hypothesis_status || "Pending";
     return { text: status, status };
   }
-  if (node.kind === "Frontier") return { text: "Direction", status: "Untested" };
-  if (node.kind === "LiteratureClaim") return { text: "Claim", status: "Untested" };
+  if (node.kind === "Frontier") return { text: "Direction", status: "Pending" };
+  if (node.kind === "LiteratureClaim") return { text: "Claim", status: "Pending" };
   return null;
 }
 
@@ -1512,6 +1658,17 @@ function globalTitleLines(item) {
   return svgLines(nodeTitleText(item), maxChars, item.node.kind === "CData" ? 1 : 2);
 }
 
+function globalShortLabelLines(item) {
+  const maxChars = item.node.kind === "CData"
+    ? 18
+    : item.node.kind === "EvidenceResult" || item.node.kind === "Conclusion"
+      ? 12
+      : item.node.kind === "LiteratureClaim" || item.node.kind === "Frontier"
+        ? 13
+        : 15;
+  return compactSvgLines(nodeTitleText(item), maxChars, item.node.kind === "CData" ? 1 : 2);
+}
+
 function globalMetaText(item) {
   const node = item.node;
   if (node.kind === "Idea") return statusForIdea(node.id);
@@ -1533,12 +1690,14 @@ const App = {
     BookOpen,
     CircleDot,
     Crosshair,
+    ExternalLink,
     GitBranch,
     Maximize2,
     Minimize2,
     Notebook,
     Search,
     Waypoints,
+    X,
     ZoomIn,
     ZoomOut
   },
@@ -1552,32 +1711,40 @@ const App = {
             <h1>{{ title }}</h1>
           </div>
         </div>
-        <div class="top-summary">
-          <span><b>{{ stats.ideas }}</b> ideas</span>
-          <span><b>{{ stats.evidence }}</b> evidence</span>
-          <span><b>{{ shownCount }}</b> shown</span>
-        </div>
-        <div class="top-actions">
-          <button title="Top-down layout" aria-label="Top-down layout" :class="{active: layoutDirection === 'vertical'}" @click="setLayoutDirection('vertical')"><ArrowDown :size="16" /><span>Top-down</span></button>
-          <button title="Left-right layout" aria-label="Left-right layout" :class="{active: layoutDirection === 'horizontal'}" @click="setLayoutDirection('horizontal')"><ArrowRight :size="16" /><span>Left-right</span></button>
-          <button title="Round lanes layout" aria-label="Round lanes layout" :class="{active: layoutDirection === 'round'}" @click="setLayoutDirection('round')"><GitBranch :size="16" /><span>Round lanes</span></button>
-          <button title="Global view" aria-label="Global view" :class="{active: globalView}" @click="showGlobalView"><Waypoints :size="16" /><span>Global</span></button>
-          <button title="Fit full overview" aria-label="Fit full overview" @click="fitOverview"><Crosshair :size="16" /><span>Overview</span></button>
-          <button :title="focusMode ? 'Show panels' : 'Focus graph'" :aria-label="focusMode ? 'Show panels' : 'Focus graph'" :class="{active: focusMode}" @click="toggleFocusMode">
-            <component :is="focusMode ? Minimize2 : Maximize2" :size="16" />
-            <span>{{ focusMode ? 'Panels' : 'Focus' }}</span>
+        <div class="top-panel-actions">
+          <button title="Toggle explore panel" aria-label="Toggle explore panel" :class="{active: sidebarOpen}" @click="sidebarOpen = !sidebarOpen">
+            <Search :size="16" />
+            <span>Explore</span>
           </button>
         </div>
       </header>
 
-      <div class="workspace" :class="{'focus-mode': focusMode}">
-        <aside class="sidebar">
+      <div
+        class="workspace"
+        :class="{'focus-mode': focusMode, 'sidebar-open': sidebarOpen && !focusMode, 'inspector-open': inspectorOpen && !focusMode}"
+        :style="workspaceStyle"
+      >
+        <button v-if="!sidebarOpen && !focusMode" class="edge-panel-toggle" title="Open explore panel" aria-label="Open explore panel" @click="sidebarOpen = true">
+          <Search :size="17" />
+        </button>
+
+        <aside v-if="sidebarOpen && !focusMode" class="sidebar">
           <div class="side-head">
             <div>
               <div class="eyebrow compact">Explore</div>
               <strong>Ideas and evidence</strong>
             </div>
+            <button class="panel-close" title="Hide explore panel" aria-label="Hide explore panel" @click="sidebarOpen = false">x</button>
           </div>
+
+          <section class="overview-card">
+            <div class="overview">
+              <div class="metric"><b>{{ stats.ideas }}</b><span>ideas</span></div>
+              <div class="metric"><b>{{ stats.evidence }}</b><span>evidence</span></div>
+              <div class="metric"><b>{{ shownCount }}</b><span>shown</span></div>
+              <div class="metric"><b>{{ stats.claims }}</b><span>claims</span></div>
+            </div>
+          </section>
 
           <section class="search-card">
             <label class="search-box">
@@ -1602,6 +1769,13 @@ const App = {
             <div v-if="!visibleIdeas.length" class="empty">No matching ideas.</div>
           </section>
         </aside>
+        <div
+          v-if="sidebarOpen && !focusMode"
+          class="panel-resizer sidebar-resizer"
+          role="separator"
+          aria-label="Resize explore panel"
+          @pointerdown="startPanelResize('sidebar', $event)"
+        ></div>
 
         <main class="graph-card">
           <div class="graph-toolbar">
@@ -1611,11 +1785,6 @@ const App = {
                 <span>Idea lineage graph</span>
               </div>
               <div class="toolbar-subtitle">{{ graphSubtitle }}</div>
-            </div>
-            <div class="legend-pills">
-              <span><i class="legend-dot blue"></i>selected</span>
-              <span><i class="legend-dot green"></i>supported</span>
-              <span><i class="legend-dot red"></i>not supported</span>
             </div>
           </div>
           <div class="lineage-path">
@@ -1631,21 +1800,18 @@ const App = {
               <span v-if="i < selectedPathNodes.length - 1" class="path-arrow">→</span>
             </template>
           </div>
-          <div class="evidence-strip">
-            <button
-              v-for="item in evidenceStatusItems"
-              :key="item.status"
-              class="evidence-segment"
-              :class="[statusClass(item.status), {active: statusFilter === item.status}]"
-              @click="statusFilter = statusFilter === item.status ? 'All' : item.status"
-            >
-              <span>{{ item.status }}</span>
-              <b>{{ item.count }}</b>
-              <i :style="{width: item.percent + '%'}"></i>
-            </button>
-          </div>
           <div ref="plotRef" class="plot" :class="['layout-' + layoutDirection, {'overview-zoom': overviewZoom, 'global-context': globalView}]">
-            <div class="canvas-tools">
+            <div class="canvas-tools layout-tools">
+              <button title="Top-down layout" aria-label="Top-down layout" :class="{active: layoutDirection === 'vertical'}" @click="setLayoutDirection('vertical')"><ArrowDown :size="15" /></button>
+              <button title="Left-right layout" aria-label="Left-right layout" :class="{active: layoutDirection === 'horizontal'}" @click="setLayoutDirection('horizontal')"><ArrowRight :size="15" /></button>
+              <button title="Round lanes layout" aria-label="Round lanes layout" :class="{active: layoutDirection === 'round'}" @click="setLayoutDirection('round')"><GitBranch :size="15" /></button>
+              <button title="Global view" aria-label="Global view" :class="{active: globalView}" @click="showGlobalView"><Waypoints :size="15" /></button>
+              <button title="Fit full overview" aria-label="Fit full overview" @click="fitOverview"><Crosshair :size="15" /></button>
+              <button :title="focusMode ? 'Show panels' : 'Focus graph'" :aria-label="focusMode ? 'Show panels' : 'Focus graph'" :class="{active: focusMode}" @click="toggleFocusMode">
+                <component :is="focusMode ? Minimize2 : Maximize2" :size="15" />
+              </button>
+            </div>
+            <div class="canvas-tools zoom-tools">
               <button title="Zoom out" @click="zoomOut"><ZoomOut :size="15" /></button>
               <span>{{ zoomPercent }}%</span>
               <button title="Zoom in" @click="zoomIn"><ZoomIn :size="15" /></button>
@@ -1669,7 +1835,7 @@ const App = {
                   v-for="item in tree.nodes"
                   :key="'mini-' + item.uid"
                   class="minimap-node"
-                  :class="{active: activeIds.has(item.node.id), selected: isSelectedItem(item)}"
+                  :class="{active: activeUids.has(item.uid), selected: isSelectedItem(item)}"
                   :cx="minimapX(item.x)"
                   :cy="minimapY(item.y)"
                   :r="isSelectedItem(item) ? 4 : 2.6"
@@ -1684,35 +1850,6 @@ const App = {
                   rx="4"
                 />
               </svg>
-            </div>
-            <div class="selection-dock">
-              <div class="selection-head">
-                <div>
-                  <div class="selection-kicker">{{ displayKind(selectedNode) }}</div>
-                  <div class="selection-title">{{ truncate(label(selectedNode), 86) }}</div>
-                </div>
-                <span v-if="selectedStatus" class="status-pill" :class="statusClass(selectedStatus)">{{ selectedStatus }}</span>
-              </div>
-              <div v-if="selectedSummary" class="selection-summary">{{ truncate(selectedSummary, 180) }}</div>
-              <div v-if="selectedOutcome" class="selection-outcome" :class="statusClass(selectedOutcome.hypothesis_status)">
-                <div class="outcome-top">
-                  <span class="outcome-dot"></span>
-                  <strong>Notebook verdict: {{ selectedOutcome.hypothesis_status || 'Evidence' }}</strong>
-                  <span v-if="selectedOutcome.direction_status">{{ selectedOutcome.direction_status }}</span>
-                </div>
-                <div class="outcome-metrics">
-                  <span v-if="selectedOutcome.p_value !== undefined && selectedOutcome.p_value !== null">p {{ formatNumber(selectedOutcome.p_value) }}</span>
-                  <span v-if="selectedOutcome.effect_size !== undefined && selectedOutcome.effect_size !== null">effect {{ formatNumber(selectedOutcome.effect_size) }}</span>
-                  <span v-if="selectedOutcome.test_method">{{ truncate(selectedOutcome.test_method, 46) }}</span>
-                </div>
-              </div>
-              <div class="selection-actions">
-                <button v-if="selectedEvidenceId && selectedEvidenceId !== selectedId" @click="selectNode(selectedEvidenceId)">View evidence</button>
-                <button v-if="selectedIdeaId && selectedIdeaId !== selectedId" @click="selectNode(selectedIdeaId)">View idea</button>
-                <a v-if="selectedNotebookHref" :href="selectedNotebookHref" target="_blank" rel="noreferrer"><Notebook :size="13" />Notebook</a>
-                <button v-if="spotlightActive && hiddenBySpotlight" @click="showContext">Show context</button>
-                <span>{{ shownCount }} shown</span>
-              </div>
             </div>
             <svg
               class="graph-svg"
@@ -1797,6 +1934,18 @@ const App = {
                     <circle class="global-node-hit" :r="globalNodeRadius(item) * globalDotScale + 14" />
                     <circle class="global-node-halo" :r="globalNodeRadius(item) * globalDotScale + 7" />
                     <circle class="global-node-dot" :r="globalNodeRadius(item) * globalDotScale" />
+                    <text
+                      class="global-node-name"
+                      text-anchor="middle"
+                      :y="globalNodeRadius(item) * globalDotScale + 16"
+                    >
+                      <tspan
+                        v-for="(line, i) in globalShortLabelLines(item)"
+                        :key="'global-short-label-' + item.uid + '-' + i"
+                        x="0"
+                        :dy="i === 0 ? 0 : 9.5"
+                      >{{ line }}</tspan>
+                    </text>
                   </g>
                   <template v-else>
                     <rect class="node-shadow" :x="-nodeWidth(item) / 2" :y="-nodeHeight(item) / 2" :width="nodeWidth(item)" :height="nodeHeight(item)" rx="8" />
@@ -1891,23 +2040,101 @@ const App = {
           </div>
         </main>
 
-        <aside class="inspector">
-          <div v-if="selectedNode" class="detail">
+        <aside v-if="inspectorOpen && !focusMode" class="inspector" :class="{'preview-mode': selectedNotebookPreviewOpen && selectedNotebookHref}">
+          <section v-if="selectedNotebookPreviewOpen && selectedNotebookHref" class="inspector-preview">
+            <div class="inspector-preview-toolbar">
+              <div>
+                <div class="eyebrow">Notebook preview</div>
+                <h2>{{ truncate(label(selectedNode), 56) }}</h2>
+              </div>
+              <div class="inspector-preview-actions">
+                <a
+                  class="preview-icon-button"
+                  :href="selectedPreviewHref"
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Open preview in a new tab"
+                  aria-label="Open preview in a new tab"
+                >
+                  <ExternalLink :size="16" />
+                </a>
+                <button
+                  class="preview-icon-button"
+                  type="button"
+                  title="Back to details"
+                  aria-label="Back to details"
+                  @click="selectedNotebookPreviewOpen = false"
+                >
+                  <X :size="16" />
+                </button>
+              </div>
+            </div>
+            <iframe :src="selectedPreviewHref" title="Notebook preview" loading="lazy" @load="prepareNotebookPreviewFrame"></iframe>
+          </section>
+
+          <div v-else-if="selectedNode" class="detail">
             <div class="detail-head">
               <div>
                 <div class="eyebrow">{{ displayKind(selectedNode) }}</div>
                 <h2>{{ label(selectedNode) }}</h2>
               </div>
-              <span v-if="selectedStatus" class="status-pill large" :class="statusClass(selectedStatus)">{{ selectedStatus }}</span>
+              <div class="detail-head-actions">
+                <span v-if="selectedStatus" class="status-pill large" :class="statusClass(selectedStatus)">{{ selectedStatus }}</span>
+                <button class="panel-close" title="Hide inspector" aria-label="Hide inspector" @click="inspectorOpen = false">x</button>
+              </div>
             </div>
             <div class="badge-row">
-              <a v-if="selectedNotebookHref" class="primary-link" :href="selectedNotebookHref" target="_blank" rel="noreferrer">
+              <button
+                v-if="selectedNotebookHref"
+                class="soft-chip notebook-chip"
+                type="button"
+                :class="{active: selectedNotebookPreviewOpen}"
+                title="Preview notebook in the inspector"
+                aria-label="Preview notebook in the inspector"
+                @click="selectedNotebookPreviewOpen = true"
+              >
                 <Notebook :size="15" />
                 Notebook
+              </button>
+              <a
+                v-if="selectedNotebookHref"
+                class="icon-link"
+                :href="selectedNotebookHref"
+                target="_blank"
+                rel="noreferrer"
+                title="Open notebook in a new tab"
+                aria-label="Open notebook in a new tab"
+              >
+                <ExternalLink :size="15" />
               </a>
               <span class="soft-chip"><BookOpen :size="14" /> {{ selectedPathNodes.length }} levels</span>
             </div>
             <p v-if="selectedSummary">{{ selectedSummary }}</p>
+
+            <section
+              v-if="selectedGraphicAbstract.state === 'loaded'"
+              class="graphic-abstract-card"
+              :class="{active: graphicAbstractDialogOpen}"
+            >
+              <div class="graphic-abstract-head">
+                <span>Graphical abstract</span>
+                <button
+                  type="button"
+                  title="Preview notebook in the inspector"
+                  aria-label="Preview notebook in the inspector"
+                  @click="selectedNotebookPreviewOpen = true"
+                >preview</button>
+              </div>
+              <button
+                class="graphic-abstract-image-button"
+                type="button"
+                title="Expand graphical abstract"
+                aria-label="Expand graphical abstract"
+                @click="graphicAbstractDialogOpen = true"
+              >
+                <img :src="selectedGraphicAbstract.src" :alt="selectedGraphicAbstract.alt" loading="lazy" />
+              </button>
+            </section>
 
             <div v-if="selectedOutcome" class="inspector-outcome-card" :class="statusClass(selectedOutcome.hypothesis_status)">
               <div class="key">Notebook verdict</div>
@@ -1953,6 +2180,73 @@ const App = {
           </div>
           <div v-else class="empty">No node selected.</div>
         </aside>
+        <div
+          v-if="inspectorOpen && !focusMode"
+          class="panel-resizer inspector-resizer"
+          role="separator"
+          aria-label="Resize inspector panel"
+          @pointerdown="startPanelResize('inspector', $event)"
+        ></div>
+      </div>
+
+      <div
+        v-if="graphicAbstractDialogOpen && selectedGraphicAbstract.state === 'loaded'"
+        class="graphic-abstract-dialog-backdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Graphical abstract preview"
+        @click.self="graphicAbstractDialogOpen = false"
+      >
+        <div class="graphic-abstract-dialog">
+          <div class="graphic-abstract-dialog-head">
+            <div>
+              <div class="eyebrow">Graphical abstract</div>
+              <h2>{{ truncate(label(selectedNode), 74) }}</h2>
+            </div>
+            <button
+              class="preview-icon-button"
+              type="button"
+              title="Close graphical abstract"
+              aria-label="Close graphical abstract"
+              @click="graphicAbstractDialogOpen = false"
+            >
+              <X :size="16" />
+            </button>
+          </div>
+          <div class="graphic-abstract-dialog-body">
+            <img :src="selectedGraphicAbstract.src" :alt="selectedGraphicAbstract.alt" />
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="notebookPreviewImage.open"
+        class="graphic-abstract-dialog-backdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Notebook image preview"
+        @click.self="closeNotebookPreviewImage"
+      >
+        <div class="graphic-abstract-dialog">
+          <div class="graphic-abstract-dialog-head">
+            <div>
+              <div class="eyebrow">Notebook image</div>
+              <h2>{{ truncate(notebookPreviewImage.alt || label(selectedNode), 74) }}</h2>
+            </div>
+            <button
+              class="preview-icon-button"
+              type="button"
+              title="Close notebook image"
+              aria-label="Close notebook image"
+              @click="closeNotebookPreviewImage"
+            >
+              <X :size="16" />
+            </button>
+          </div>
+          <div class="graphic-abstract-dialog-body">
+            <img :src="notebookPreviewImage.src" :alt="notebookPreviewImage.alt || 'Notebook image'" />
+          </div>
+        </div>
       </div>
     </div>
   `,
@@ -1967,12 +2261,20 @@ const App = {
     const compactLabels = ref(false);
     const spotlightMode = ref(false);
     const globalView = ref(true);
-    const layoutDirection = ref("vertical");
+    const layoutDirection = ref("round");
     const focusMode = ref(false);
+    const sidebarOpen = ref(false);
+    const inspectorOpen = ref(false);
+    const selectedNotebookPreviewOpen = ref(false);
+    const graphicAbstractDialogOpen = ref(false);
+    const notebookPreviewImage = ref({ open: false, src: "", alt: "" });
+    const sidebarWidth = ref(278);
+    const inspectorWidth = ref(360);
     const plotRef = ref(null);
     const plotSize = ref({ width: 1200, height: 720 });
     const view = ref({ x: 0, y: 0, k: 0.92 });
     const dragging = ref(null);
+    const panelResize = ref(null);
     const expandedIds = ref(new Set([cdataNode.id]));
     const viewportPinned = ref(false);
     const statusFilters = ["All", ...statusOrder];
@@ -1984,10 +2286,15 @@ const App = {
       directions: nodes.filter((n) => n.kind === "Frontier").length,
       claims: nodes.filter((n) => n.kind === "LiteratureClaim").length
     }));
+    const workspaceStyle = computed(() => ({
+      "--sidebar-width": `${sidebarWidth.value}px`,
+      "--inspector-width": `${inspectorWidth.value}px`
+    }));
     const statusCounts = computed(() => {
-      const counts = { All: nodes.filter((n) => n.kind === "Idea").length };
+      const allIdeas = nodes.filter((n) => n.kind === "Idea");
+      const counts = { All: allIdeas.filter((idea) => statusForIdea(idea.id) !== "Rejected").length };
       for (const status of statusOrder) counts[status] = 0;
-      for (const idea of nodes.filter((n) => n.kind === "Idea")) {
+      for (const idea of allIdeas) {
         counts[statusForIdea(idea.id)] = (counts[statusForIdea(idea.id)] || 0) + 1;
       }
       return counts;
@@ -2007,7 +2314,10 @@ const App = {
       const q = query.value.trim().toLowerCase();
       return new Set(nodes
         .filter((n) => n.kind === "Idea")
-        .filter((idea) => statusFilter.value === "All" || statusForIdea(idea.id) === statusFilter.value)
+        .filter((idea) => {
+          const status = statusForIdea(idea.id);
+          return statusFilter.value === "All" ? status !== "Rejected" : status === statusFilter.value;
+        })
         .filter((idea) => {
           if (!q) return true;
           const ev = evidenceForIdea(idea.id);
@@ -2033,12 +2343,19 @@ const App = {
     });
     const selectedEdgeKeys = computed(() => {
       const keys = new Set();
-      const path = selectedUidExists.value ? visualPathIdsForUid(selectedUid.value) : selectedPathList.value;
+      const path = selectedUidExists.value
+        ? visualPathUidsForUid(selectedUid.value)
+        : visualPathUidsForNodePath(selectedPathList.value);
       for (let i = 1; i < path.length; i += 1) keys.add(`${path[i - 1]}->${path[i]}`);
       const n = byId.get(selectedId.value);
       if (n?.kind === "Idea") {
-        const outcome = evidenceForIdea(n.id);
-        if (outcome) keys.add(`${n.id}->${outcome.id}`);
+        const selectedItem = selectedUidExists.value
+          ? tree.value.nodes.find((item) => item.uid === selectedUid.value)
+          : tree.value.byNodeId.get(n.id);
+        const outcomeItem = (selectedItem?.children || []).find((child) => (
+          child.node.kind === "EvidenceResult" || child.node.kind === "Conclusion"
+        ));
+        if (selectedItem && outcomeItem) keys.add(`${selectedItem.uid}->${outcomeItem.uid}`);
       }
       return keys;
     });
@@ -2090,7 +2407,7 @@ const App = {
       return [...byDepth.entries()]
         .sort(([a], [b]) => a - b)
         .map(([depth, items]) => {
-          const active = items.some((item) => activeIds.value.has(item.node.id));
+          const active = items.some((item) => activeUids.value.has(item.uid));
           if (layoutDirection.value === "horizontal") {
             return {
               depth,
@@ -2183,17 +2500,63 @@ const App = {
       if (selectedOutcome.value?.id) return notebookHref(notebookForEvidence(selectedOutcome.value.id)?.path || "");
       return "";
     });
-    const activeIds = computed(() => {
-      const selectedActivePath = selectedUidExists.value ? visualPathIdsForUid(selectedUid.value) : selectedPathList.value;
-      const ids = new Set([...selectedActivePath, ...hoveredPathIds.value, selectedId.value]);
-      if (hoveredId.value) ids.add(hoveredId.value);
-      for (const id of [selectedId.value, hoveredId.value].filter(Boolean)) {
-        for (const edge of neighborEdges(id)) {
-          ids.add(edge.source);
-          ids.add(edge.target);
-        }
+    const selectedGraphicAbstract = ref({ state: "idle", src: "", alt: "", href: "" });
+    const selectedPreviewHref = computed(() => selectedNotebookHref.value ? notebookGraphicAbstractHref(selectedNotebookHref.value) : "");
+    watch(selectedNotebookHref, () => {
+      selectedNotebookPreviewOpen.value = false;
+      graphicAbstractDialogOpen.value = false;
+      closeNotebookPreviewImage();
+    });
+    let graphicAbstractRequestId = 0;
+    watch(selectedNotebookHref, async (href) => {
+      const requestId = ++graphicAbstractRequestId;
+      if (!href) {
+        selectedGraphicAbstract.value = { state: "idle", src: "", alt: "", href: "" };
+        return;
       }
+      if (graphicAbstractCache.has(href)) {
+        selectedGraphicAbstract.value = graphicAbstractCache.get(href);
+        return;
+      }
+      selectedGraphicAbstract.value = { state: "loading", src: "", alt: "", href: notebookGraphicAbstractHref(href) };
+      try {
+        const response = await fetch(href, { cache: "force-cache" });
+        if (!response.ok) throw new Error(`Notebook preview fetch failed: ${response.status}`);
+        const html = await response.text();
+        const abstract = extractGraphicAbstract(html, href);
+        const next = abstract
+          ? { state: "loaded", href: notebookGraphicAbstractHref(href), ...abstract }
+          : { state: "missing", src: "", alt: "", href: notebookGraphicAbstractHref(href) };
+        graphicAbstractCache.set(href, next);
+        if (requestId === graphicAbstractRequestId) selectedGraphicAbstract.value = next;
+      } catch {
+        const next = { state: "error", src: "", alt: "", href: notebookGraphicAbstractHref(href) };
+        graphicAbstractCache.set(href, next);
+        if (requestId === graphicAbstractRequestId) selectedGraphicAbstract.value = next;
+      }
+    }, { immediate: true });
+    const activeIds = computed(() => {
+      const ids = new Set([...selectedPathList.value, ...hoveredPathIds.value, selectedId.value]);
+      if (hoveredId.value) ids.add(hoveredId.value);
       return ids;
+    });
+    const activeUids = computed(() => {
+      const selectedPath = selectedUidExists.value
+        ? visualPathUidsForUid(selectedUid.value)
+        : visualPathUidsForNodePath(selectedPathList.value);
+      const hoveredPath = hoveredUidExists.value
+        ? visualPathUidsForUid(hoveredUid.value)
+        : visualPathUidsForNodePath(hoveredId.value ? (findEntryPath(model.value.root, hoveredId.value) || []) : []);
+      const uids = new Set([...selectedPath, ...hoveredPath]);
+      const selectedItem = selectedUidExists.value
+        ? tree.value.nodes.find((item) => item.uid === selectedUid.value)
+        : tree.value.byNodeId.get(selectedId.value);
+      const hoveredItem = hoveredUidExists.value
+        ? tree.value.nodes.find((item) => item.uid === hoveredUid.value)
+        : tree.value.byNodeId.get(hoveredId.value);
+      if (selectedItem) uids.add(selectedItem.uid);
+      if (hoveredItem) uids.add(hoveredItem.uid);
+      return uids;
     });
     const focusActive = computed(() => !globalView.value && (Boolean(hoveredId.value) || selectedId.value !== cdataNode.id));
 
@@ -2202,12 +2565,34 @@ const App = {
     }
 
     function visualPathIdsForUid(uid) {
+      return visualPathItemsForUid(uid).map((item) => item.node.id);
+    }
+
+    function visualPathUidsForUid(uid) {
+      return visualPathItemsForUid(uid).map((item) => item.uid);
+    }
+
+    function visualPathUidsForNodePath(pathIds) {
+      const uids = [];
+      let parentUid = "";
+      for (const id of pathIds || []) {
+        const item = tree.value.nodes.find((candidate) => (
+          candidate.node.id === id && (!parentUid || candidate.parent?.uid === parentUid)
+        )) || tree.value.nodes.find((candidate) => candidate.node.id === id);
+        if (!item) continue;
+        uids.push(item.uid);
+        parentUid = item.uid;
+      }
+      return uids;
+    }
+
+    function visualPathItemsForUid(uid) {
       const item = tree.value.nodes.find((candidate) => candidate.uid === uid);
       if (!item) return [];
       const path = [];
       let cursor = item;
       while (cursor) {
-        path.unshift(cursor.node.id);
+        path.unshift(cursor);
         cursor = cursor.parent;
       }
       return path;
@@ -2237,6 +2622,7 @@ const App = {
       const shouldPreserveViewport = globalView.value && viewportPinned.value;
       selectedId.value = id;
       selectedUid.value = uid || visualUidForNode(id);
+      inspectorOpen.value = true;
       if (!globalView.value) {
         const path = findEntryPath(model.value.root, id);
         if (path) {
@@ -2268,6 +2654,7 @@ const App = {
       expandedIds.value = next;
       selectedId.value = id;
       selectedUid.value = visualUidForNode(id);
+      inspectorOpen.value = true;
     }
 
     function hoverNode(id, uid = "") {
@@ -2349,13 +2736,13 @@ const App = {
         `status-${statusClass(nodeBadge(item)?.status || item.node.hypothesis_status || "")}`,
         isSelectedItem(item) ? "selected" : "",
         isHoveredItem(item) ? "hovered" : "",
-        activeIds.value.has(item.node.id) ? "active" : "",
-        focusActive.value && !activeIds.value.has(item.node.id) ? "dimmed" : ""
+        activeUids.value.has(item.uid) ? "active" : "",
+        focusActive.value && !activeUids.value.has(item.uid) ? "dimmed" : ""
       ].filter(Boolean).join(" ");
     }
 
     function edgeClass(link) {
-      const active = activeIds.value.has(link.source.node.id) && activeIds.value.has(link.target.node.id);
+      const active = activeUids.value.has(link.source.uid) && activeUids.value.has(link.target.uid);
       const lineage = selectedEdgeKeys.value.has(edgeKey(link));
       const dimmed = focusActive.value && !active;
       return ["tree-edge", link.role, lineage ? "lineage-edge" : "", active ? "active" : "", dimmed ? "dimmed" : ""].filter(Boolean).join(" ");
@@ -2363,7 +2750,7 @@ const App = {
 
     function edgeMarker(link) {
       if (globalView.value || safeView.value.k < 0.62) return null;
-      const active = activeIds.value.has(link.source.node.id) && activeIds.value.has(link.target.node.id);
+      const active = activeUids.value.has(link.source.uid) && activeUids.value.has(link.target.uid);
       if (active || selectedEdgeKeys.value.has(edgeKey(link))) return "url(#edge-arrow-active)";
       if (link.role === "direction" || link.role === "run-direction") return "url(#edge-arrow-direction)";
       return null;
@@ -2371,11 +2758,11 @@ const App = {
 
     function edgeLabelVisible(link) {
       if (globalView.value) return false;
-      return selectedEdgeKeys.value.has(edgeKey(link)) || (focusActive.value && activeIds.value.has(link.source.node.id) && activeIds.value.has(link.target.node.id));
+      return selectedEdgeKeys.value.has(edgeKey(link)) || (focusActive.value && activeUids.value.has(link.source.uid) && activeUids.value.has(link.target.uid));
     }
 
     function edgeKey(link) {
-      return `${link.source.node.id}->${link.target.node.id}`;
+      return `${link.source.uid}->${link.target.uid}`;
     }
 
     function edgePath(link) {
@@ -2678,6 +3065,83 @@ const App = {
       dragging.value = null;
     }
 
+    function startPanelResize(panel, event) {
+      if (!event) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const startX = finiteNumber(event.clientX, 0);
+      const startSidebar = sidebarWidth.value;
+      const startInspector = inspectorWidth.value;
+      const minSidebar = 220;
+      const maxSidebar = 430;
+      const minInspector = 300;
+      const maxInspector = 620;
+      const move = (moveEvent) => {
+        const delta = finiteNumber(moveEvent.clientX, startX) - startX;
+        if (panel === "sidebar") {
+          sidebarWidth.value = clamp(startSidebar + delta, minSidebar, maxSidebar);
+        } else {
+          inspectorWidth.value = clamp(startInspector - delta, minInspector, maxInspector);
+        }
+        nextTick(measurePlot);
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        document.body.classList.remove("is-resizing-panel");
+        panelResize.value = null;
+        nextTick(() => {
+          measurePlot();
+          if (globalView.value && !viewportPinned.value) fitTree();
+        });
+      };
+      panelResize.value = { panel, move, up };
+      document.body.classList.add("is-resizing-panel");
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    }
+
+    function openNotebookPreviewImage(src, alt = "") {
+      if (!src) return;
+      notebookPreviewImage.value = { open: true, src, alt };
+    }
+
+    function closeNotebookPreviewImage() {
+      notebookPreviewImage.value = { open: false, src: "", alt: "" };
+    }
+
+    function prepareNotebookPreviewFrame(event) {
+      const frame = event?.target;
+      const doc = frame?.contentDocument;
+      if (!doc) return;
+      let frameHref = window.location.href;
+      try {
+        frameHref = frame.contentWindow?.location?.href
+          || new URL(frame.getAttribute("src") || selectedPreviewHref.value || "", window.location.href).toString();
+      } catch {
+        frameHref = window.location.href;
+      }
+      for (const img of doc.querySelectorAll("img")) {
+        if (!img.getAttribute("src")) continue;
+        img.style.cursor = "zoom-in";
+        img.title = img.title || "Click to enlarge";
+        img.addEventListener("click", (clickEvent) => {
+          clickEvent.preventDefault();
+          clickEvent.stopPropagation();
+          const rawSrc = img.getAttribute("src") || "";
+          let src = rawSrc;
+          if (!rawSrc.startsWith("data:") && !/^https?:\/\//.test(rawSrc)) {
+            try {
+              src = new URL(rawSrc, frameHref).toString();
+            } catch {
+              src = rawSrc;
+            }
+          }
+          openNotebookPreviewImage(src, img.getAttribute("alt") || "");
+        });
+      }
+    }
+
     function measurePlot() {
       const rect = plotRef.value?.getBoundingClientRect();
       if (!rect) return false;
@@ -2709,6 +3173,11 @@ const App = {
 
     onBeforeUnmount(() => {
       resizeObserver?.disconnect();
+      if (panelResize.value) {
+        window.removeEventListener("pointermove", panelResize.value.move);
+        window.removeEventListener("pointerup", panelResize.value.up);
+        document.body.classList.remove("is-resizing-panel");
+      }
     });
 
     watch([query, statusFilter, spotlightMode, globalView], () => {
@@ -2731,6 +3200,12 @@ const App = {
       globalView,
       layoutDirection,
       focusMode,
+      sidebarOpen,
+      inspectorOpen,
+      selectedNotebookPreviewOpen,
+      graphicAbstractDialogOpen,
+      notebookPreviewImage,
+      workspaceStyle,
       isHorizontal,
       overviewZoom,
       zoomPercent,
@@ -2751,6 +3226,7 @@ const App = {
       laneGuides,
       minimap,
       activeIds,
+      activeUids,
       selectedPathNodes,
       viewportTransform,
       selectedNode,
@@ -2763,6 +3239,8 @@ const App = {
       technicalRowsForSelected,
       selectedQuickFacts,
       selectedNotebookHref,
+      selectedPreviewHref,
+      selectedGraphicAbstract,
       label,
       truncate,
       formatNumber,
@@ -2786,6 +3264,7 @@ const App = {
       globalNodeRadius,
       globalLabelWidth,
       globalTitleLines,
+      globalShortLabelLines,
       globalMetaText,
       nodeClass,
       edgeClass,
@@ -2821,6 +3300,10 @@ const App = {
       startPan,
       onPointerMove,
       endPan
+      ,
+      startPanelResize,
+      prepareNotebookPreviewFrame,
+      closeNotebookPreviewImage
     };
   }
 };
