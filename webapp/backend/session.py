@@ -10,6 +10,27 @@ class Viewport:
     start: Optional[int] = None
     end: Optional[int] = None
 
+    # Support both attribute access (vp.chrom) and dict-style access
+    # (vp["chrom"]) so callers and tests written against either form work.
+    def __getitem__(self, key):
+        try:
+            return getattr(self, key)
+        except AttributeError as e:
+            raise KeyError(key) from e
+
+    def get(self, key, default=None):
+        return getattr(self, key, default)
+
+    def __eq__(self, other):
+        if isinstance(other, Viewport):
+            return (self.chrom, self.start, self.end) == (other.chrom, other.start, other.end)
+        if isinstance(other, dict):
+            return {"chrom": self.chrom, "start": self.start, "end": self.end} == other
+        return NotImplemented
+
+    def __hash__(self):
+        return hash((self.chrom, self.start, self.end))
+
 
 @dataclass
 class Session:
