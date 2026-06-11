@@ -487,6 +487,6 @@ COMPONENT_TREE_SCHEMA = {
 - 回归:WS 重连改动一度引入 17 个回归(协议首帧 + cleanup 不变量),已通过"客户端自持 session_id + 空 session 即清理"重新设计修正;测试中编码旧契约的断言(notebook_cell 旧的 `type:"artifact"`、2-arg `run_agent_loop` fake)已更新为新契约。
 
 ### 已知遗留(非本次范围)
-- **流式**(§4 阶段债):loop 仍用阻塞 `messages.create`;模型硬编码 `claude-sonnet-4-6`(未抽 config)。
-- **`agui_events.py`**:仍是未接线死代码(含第二份不一致 TOOLS),建议后续删除或明确标注为 AG-UI 迁移预留。
+- **~~流式~~**(§4 阶段债):~~loop 仍用阻塞 `messages.create`;模型硬编码 `claude-sonnet-4-6`(未抽 config)~~ **已修复**(2026-06-11):改用 `messages.stream` 实时流式 + `agent_message_delta`;模型抽取为 `DEFAULT_MODEL` 常量,可通过 `UCHROM_MODEL` 环境变量或 `model` 参数覆盖。
+- **~~`agui_events.py`~~**:~~仍是未接线死代码(含第二份不一致 TOOLS),建议后续删除或明确标注为 AG-UI 迁移预留。~~ **已删除**(2026-06-11):连同 `test_agent_pipeline.py` 一起移除;`test_integration.py` 中的 AG-UI 协议测试类删除,`test_ws_backend.py` 中的 agui 单测移除。
 - **前端自检回灌**(diagnostics + 截图):未实现,留待引入 vision 自检时。

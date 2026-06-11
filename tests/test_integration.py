@@ -635,71 +635,10 @@ class TestStatePersistenceAcrossInteractions:
 
 
 # ===========================================================================
-# 6. AG-UI event protocol integration
+# 6. HTTP API integration with session state
 # ===========================================================================
 
-class TestAGUIProtocolIntegration:
-    def test_run_started_and_finished_events_emitted(self):
-        """send_agui emits RUN_STARTED / RUN_FINISHED frames with the right type."""
-        from webapp.backend.agui_events import AGUI, send_agui
-
-        ws = MagicMock(); ws.send_json = AsyncMock()
-
-        async def driver():
-            await send_agui(ws, AGUI.RUN_STARTED, {"run_id": "r1"})
-            await send_agui(ws, AGUI.RUN_FINISHED, {"run_id": "r1"})
-
-        asyncio.run(driver())
-        types = sent_types(ws)
-        assert AGUI.RUN_STARTED in types
-        assert AGUI.RUN_FINISHED in types
-
-    def test_text_message_events_carry_content(self):
-        """TEXT_MESSAGE_CONTENT frames carry the token text in their payload."""
-        from webapp.backend.agui_events import AGUI, send_agui
-
-        ws = MagicMock(); ws.send_json = AsyncMock()
-
-        async def driver():
-            await send_agui(ws, AGUI.TEXT_MESSAGE_START, {"message_id": "m1"})
-            for token in ["Hello", " world", "!"]:
-                await send_agui(ws, AGUI.TEXT_MESSAGE_CONTENT,
-                                {"message_id": "m1", "delta": token})
-            await send_agui(ws, AGUI.TEXT_MESSAGE_END, {"message_id": "m1"})
-
-        asyncio.run(driver())
-        payloads = sent_payloads(ws)
-        content_events = [
-            p for p in payloads if p.get("type") == AGUI.TEXT_MESSAGE_CONTENT
-        ]
-        assert len(content_events) == 3
-        deltas = [e["payload"]["delta"] for e in content_events]
-        assert "".join(deltas) == "Hello world!"
-
-    def test_tool_call_events_emitted_for_code_execution(self):
-        """TOOL_CALL_START / END frames are emitted around a tool call."""
-        from webapp.backend.agui_events import AGUI, send_agui
-
-        ws = MagicMock(); ws.send_json = AsyncMock()
-
-        async def driver():
-            await send_agui(ws, AGUI.TOOL_CALL_START,
-                            {"tool_call_id": "tc1", "tool_name": "python"})
-            await send_agui(ws, AGUI.TOOL_CALL_ARGS,
-                            {"tool_call_id": "tc1", "delta": '{"code": "1+1"}'})
-            await send_agui(ws, AGUI.TOOL_CALL_END, {"tool_call_id": "tc1"})
-
-        asyncio.run(driver())
-        types = sent_types(ws)
-        assert AGUI.TOOL_CALL_START in types
-        assert AGUI.TOOL_CALL_END in types
-
-
-# ===========================================================================
-# 7. HTTP API integration with session state
-# ===========================================================================
-
-class TestHTTPAPIIntegration:
+class TestHTTPAndDataAPIIntegration:
     def setup_method(self):
         """Ensure clean session state before each test."""
         import webapp.backend.data_api as _da

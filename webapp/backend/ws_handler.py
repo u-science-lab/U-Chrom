@@ -175,19 +175,26 @@ async def handle_message(ws, session, msg: dict, executor):
 
 
 MAX_TOOL_ITERATIONS = 10  # prevent infinite loops
+DEFAULT_MODEL = "claude-opus-4-8"  # can be overridden via config or env
 
 
-async def run_agent_loop(websocket: WebSocket, conversation_history: list, session=None):
-    """Run the Claude agent loop, dispatching tool calls via TOOL_EXECUTORS.
+async def run_agent_loop(websocket: WebSocket, conversation_history: list, session=None, model: str = None):
+    """Run the Claude agent loop with streaming, dispatching tool calls via TOOL_EXECUTORS.
 
     The loop itself is tool-agnostic: each tool's side effect + tool_result
     content lives in webapp.backend.tool_executors. To add a tool, register an
     executor there — no change here.
 
-    ``session`` (optional) is surfaced to executors via ``tool_input["_session"]``
-    so view-aware tools can read/write the backend-authoritative view state.
+    Args:
+        websocket: WebSocket connection for sending responses
+        conversation_history: Full conversation history (user + assistant turns)
+        session: Optional Session object for view-state authority
+        model: Model name override (defaults to DEFAULT_MODEL or UCHROM_MODEL env)
     """
     from .tool_executors import TOOL_EXECUTORS
+
+    if model is None:
+        model = os.getenv("UCHROM_MODEL", DEFAULT_MODEL)
 
     iterations = 0
     while True:
@@ -198,25 +205,28 @@ async def run_agent_loop(websocket: WebSocket, conversation_history: list, sessi
                 "text": f"(Stopped after {MAX_TOOL_ITERATIONS} tool iterations to avoid a loop.)",
             })
             break
-        response = await client.messages.create(
-            model="claude-sonnet-4-6",
+
+        # Stream the response for real-time text delivery
+        async with client.messages.stream(
+            model=model,
             max_tokens=4096,
             system=SYSTEM_PROMPT,
             tools=TOOLS,
             messages=conversation_history
-        )
+        ) as stream:
+            # Stream text deltas to client in real-time
+            async for event in stream:
+                if event.type == "content_block_delta":
+                    if event.delta.type == "text_delta":
+                        await websocket.send_json({
+                            "type": "agent_message_delta",
+                            "text": event.delta.text
+                        })
+
+            # Get the final message
+            response = await stream.get_final_message()
 
         print(f"Claude response stop_reason: {response.stop_reason}")
-
-        # Process response content
-        text_parts = []
-        tool_uses = []
-
-        for block in response.content:
-            if block.type == "text":
-                text_parts.append(block.text)
-            elif block.type == "tool_use":
-                tool_uses.append(block)
 
         # Add assistant message to history
         conversation_history.append({
@@ -224,13 +234,8 @@ async def run_agent_loop(websocket: WebSocket, conversation_history: list, sessi
             "content": response.content
         })
 
-        # Send text response to client
-        if text_parts:
-            combined_text = "\n".join(text_parts)
-            await websocket.send_json({
-                "type": "agent_message",
-                "text": combined_text
-            })
+        # Extract tool uses from response
+        tool_uses = [block for block in response.content if block.type == "tool_use"]
 
         # Handle tool calls
         if response.stop_reason == "tool_use" and tool_uses:
