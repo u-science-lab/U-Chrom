@@ -72,9 +72,26 @@ Notebook agents are instructed to produce a quantitative matplotlib figure
 for each verified idea. The scaffold and lightweight runner executor force
 matplotlib to the non-interactive `Agg` backend so batch/doc runs do not open
 local GUI windows. For large batches, keep graphical abstract generation
-decoupled from notebook verification; generated schematics should be added as
-a separate low-concurrency post-processing pass so image-generation latency
-cannot block statistical exploration.
+decoupled from notebook verification. Generated schematics should be added as
+a separate post-processing pass so image-generation latency cannot block
+statistical exploration. Use retries plus strict coverage checking before
+publishing exported notebooks:
+
+```bash
+python -m uchrom.auto_discovery schematics runs/pantheon \
+  --model openai \
+  --concurrency 3 \
+  --retries 2 \
+  --strict
+```
+
+The command writes `pantheon/schematic_images/schematics.jsonl` and
+`pantheon/schematic_images/schematic_coverage.json`. In strict mode, the
+command fails if any target notebook still lacks the `schematic_image` cell,
+so missing graphical abstracts cannot silently enter the docs snapshot.
+`--visual-qa` is available for runtimes that provide a Pantheon sub-agent
+callback context; the default CLI path keeps QA separate from the coverage
+gate.
 
 For direct backend debugging, the lower-level OpenAI path remains available:
 
@@ -114,7 +131,7 @@ python -m uchrom.auto_discovery graph runs/pantheon
 
 The Takei 2025 tutorial build includes standalone HTML exports from a completed 20-idea Pantheon notebook-agent batch. The batch generated 20 ideas, accepted 20 after h5cd schema review, executed 20 notebooks, and U-Chrom re-executed/verified all 20 with explicit hypothesis tests and saved statistical figures.
 
-The exported notebooks intentionally separate quantitative verification from optional schematic generation. Main exploration notebooks include statistical matplotlib figures; generated graphical abstracts should be added by a separate low-concurrency post-processing pass when needed.
+The exported notebooks intentionally separate quantitative verification from schematic generation. Main exploration notebooks include statistical matplotlib figures; generated graphical abstracts are added by a separate post-processing pass with strict coverage checking before the docs snapshot is published.
 
 - <a href="../_auto_discovery_notebooks/purkinje-specific-h3k27ac-decompaction-along-tra-8f00bdb00f.html">Purkinje-specific H3K27ac decompaction along traced chromosomes</a>: one-sided label permutation test on trace/chromosome deltas, 500 permutations..., p = 1.
 - <a href="../_auto_discovery_notebooks/bergmann-specific-laminb1-peripheral-anchoring-s-509bbf93ca.html">Bergmann-specific LaminB1 peripheral anchoring signature</a>: one-sided exact cell-label permutation test, p = 0.9881.

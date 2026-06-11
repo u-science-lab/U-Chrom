@@ -55,6 +55,9 @@ im = [
 [tool.setuptools]
 include-package-data = true
 
+[tool.setuptools.package-data]
+"uchrom.auto_discovery" = ["ui/dist/*"]
+
 [tool.setuptools.packages.find]
 include = ["uchrom*"]
 exclude = ["example-data*", "tests*"]

@@ -57,6 +57,7 @@ class PantheonSchematicRecord:
     image_path: str | None
     status: str
     model: str | None = None
+    attempt: int = 1
     visual_qa: Any = None
     error: str | None = None
 
@@ -69,6 +70,8 @@ async def generate_pantheon_ideas(
     model: str | None = None,
     timeout: int = 420,
     idea_agent_count: int = 3,
+    prior_graph_path: str | Path | None = None,
+    frontier_context_path: str | Path | None = None,
 ) -> tuple[list[DiscoveryIdea], list[PantheonAgentRecord]]:
     """Generate ideas by running multiple Pantheon idea agents in parallel.
 
@@ -93,6 +96,12 @@ async def generate_pantheon_ideas(
             ideas_per_agent=ideas_per_agent,
             model=model,
             timeout=timeout,
+            prior_graph_path=Path(prior_graph_path) if prior_graph_path is not None else None,
+            frontier_context_path=(
+                Path(frontier_context_path)
+                if frontier_context_path is not None
+                else None
+            ),
         ))
 
     records = list(await asyncio.gather(*tasks))
@@ -181,6 +190,8 @@ async def generate_pantheon_schematic_images_for_run(
     verified_only: bool = True,
     force: bool = False,
     visual_qa: bool = False,
+    retries: int = 2,
+    strict: bool = False,
 ) -> list[PantheonSchematicRecord]:
     """Generate and insert graphical abstracts for a completed discovery run.
 
@@ -208,30 +219,16 @@ async def generate_pantheon_schematic_images_for_run(
             "source": "completed U-Chrom auto-discovery run",
         }, indent=2))
 
-    ideas = {
-        row["idea_id"]: DiscoveryIdea.from_dict(row)
-        for row in _read_jsonl(run_dir / "ideas.jsonl")
-        if isinstance(row, Mapping) and row.get("idea_id")
-    }
-    rows = [
-        row for row in _read_jsonl(run_dir / "results.jsonl")
-        if isinstance(row, Mapping) and row.get("idea_id") in ideas
-    ]
-    if verified_only:
-        rows = [
-            row for row in rows
-            if ((row.get("verification") or {}).get("status") == "pass")
-        ]
+    ideas = _ideas_by_id_for_run(run_dir)
+    rows = _schematic_target_rows(run_dir, verified_only=verified_only, ideas=ideas)
     if max_images is not None:
         rows = rows[:max(0, int(max_images))]
 
     sem = asyncio.Semaphore(max(1, int(concurrency)))
 
-    async def _one(row: Mapping[str, Any]) -> PantheonSchematicRecord:
+    async def _one(row: Mapping[str, Any], *, attempt: int) -> PantheonSchematicRecord:
         idea = ideas[str(row["idea_id"])]
-        notebook_path = Path(str(row.get("notebook") or ""))
-        if not notebook_path.is_absolute():
-            notebook_path = Path.cwd() / notebook_path
+        notebook_path = _notebook_path_for_result(row, run_dir)
         prompt_path = workdir / f"{idea.idea_id}_prompt.md"
         prompt = _posthoc_schematic_prompt(
             idea=idea,
@@ -247,6 +244,7 @@ async def generate_pantheon_schematic_images_for_run(
                 image_path=None,
                 status="already_present",
                 model=model,
+                attempt=attempt,
             )
         async with sem:
             try:
@@ -273,6 +271,7 @@ async def generate_pantheon_schematic_images_for_run(
                         image_path=None,
                         status="fail",
                         model=model,
+                        attempt=attempt,
                         error=json.dumps(response, default=str)[:1000],
                     )
                 qa_result = None
@@ -299,6 +298,7 @@ async def generate_pantheon_schematic_images_for_run(
                     image_path=str(image_path),
                     status=status,
                     model=model,
+                    attempt=attempt,
                     visual_qa=qa_result,
                 )
             except BaseException as exc:
@@ -309,12 +309,123 @@ async def generate_pantheon_schematic_images_for_run(
                     image_path=None,
                     status="fail",
                     model=model,
+                    attempt=attempt,
                     error=f"{type(exc).__name__}: {exc}",
                 )
 
-    records = list(await asyncio.gather(*[_one(row) for row in rows]))
+    records: list[PantheonSchematicRecord] = []
+    max_attempts = max(1, int(retries) + 1)
+    for attempt in range(1, max_attempts + 1):
+        pending = [
+            row for row in rows
+            if (
+                (force and attempt == 1)
+                or not _notebook_has_cell(
+                    _notebook_path_for_result(row, run_dir),
+                    "schematic_image",
+                )
+            )
+        ]
+        if not pending:
+            break
+        records.extend(await asyncio.gather(*[
+            _one(row, attempt=attempt) for row in pending
+        ]))
+        force = False
+
+    coverage = schematic_coverage_for_run(
+        run_dir,
+        verified_only=verified_only,
+        max_images=max_images,
+    )
     _write_jsonl(workdir / "schematics.jsonl", [asdict(record) for record in records])
+    (workdir / "schematic_coverage.json").write_text(
+        json.dumps(coverage, indent=2, default=str) + "\n"
+    )
+    if strict and coverage["n_missing"] > 0:
+        missing = ", ".join(Path(p).name for p in coverage["missing_notebooks"][:8])
+        extra = "" if coverage["n_missing"] <= 8 else f", ... +{coverage['n_missing'] - 8} more"
+        raise RuntimeError(
+            "Graphical abstract generation incomplete: "
+            f"{coverage['n_present']}/{coverage['n_targets']} notebooks contain "
+            f"`schematic_image`; missing {coverage['n_missing']}: {missing}{extra}"
+        )
     return records
+
+
+def schematic_coverage_for_run(
+    run_dir: str | Path,
+    *,
+    verified_only: bool = True,
+    max_images: int | None = None,
+) -> dict[str, Any]:
+    """Return graphical-abstract coverage for a completed discovery run."""
+    run_dir = Path(run_dir)
+    ideas = _ideas_by_id_for_run(run_dir)
+    rows = _schematic_target_rows(run_dir, verified_only=verified_only, ideas=ideas)
+    if max_images is not None:
+        rows = rows[:max(0, int(max_images))]
+    present: list[str] = []
+    missing: list[str] = []
+    for row in rows:
+        notebook_path = _notebook_path_for_result(row, run_dir)
+        if _notebook_has_cell(notebook_path, "schematic_image"):
+            present.append(str(notebook_path))
+        else:
+            missing.append(str(notebook_path))
+    n_targets = len(rows)
+    return {
+        "run_dir": str(run_dir),
+        "verified_only": verified_only,
+        "n_targets": n_targets,
+        "n_present": len(present),
+        "n_missing": len(missing),
+        "coverage": (len(present) / n_targets) if n_targets else 1.0,
+        "present_notebooks": present,
+        "missing_notebooks": missing,
+    }
+
+
+def _ideas_by_id_for_run(run_dir: Path) -> dict[str, DiscoveryIdea]:
+    return {
+        row["idea_id"]: DiscoveryIdea.from_dict(row)
+        for row in _read_jsonl(run_dir / "ideas.jsonl")
+        if isinstance(row, Mapping) and row.get("idea_id")
+    }
+
+
+def _schematic_target_rows(
+    run_dir: Path,
+    *,
+    verified_only: bool,
+    ideas: Mapping[str, DiscoveryIdea],
+) -> list[dict[str, Any]]:
+    rows = [
+        row for row in _read_jsonl(run_dir / "results.jsonl")
+        if isinstance(row, Mapping) and row.get("idea_id") in ideas
+    ]
+    if verified_only:
+        rows = [
+            row for row in rows
+            if ((row.get("verification") or {}).get("status") == "pass")
+        ]
+    return rows
+
+
+def _notebook_path_for_result(row: Mapping[str, Any], run_dir: Path) -> Path:
+    idea_id = str(row.get("idea_id") or "")
+    raw = str(row.get("notebook") or "")
+    candidates: list[Path] = []
+    if raw:
+        raw_path = Path(raw)
+        candidates.append(raw_path if raw_path.is_absolute() else Path.cwd() / raw_path)
+        candidates.append(raw_path if raw_path.is_absolute() else run_dir / raw_path)
+    if idea_id:
+        candidates.append(run_dir / "notebooks" / f"{idea_id}.ipynb")
+    for path in candidates:
+        if path.exists():
+            return path
+    return candidates[0] if candidates else run_dir / "notebooks" / f"{idea_id}.ipynb"
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -482,6 +593,8 @@ async def _run_one_idea_agent(
     ideas_per_agent: int,
     model: str | None,
     timeout: int,
+    prior_graph_path: Path | None = None,
+    frontier_context_path: Path | None = None,
 ) -> PantheonAgentRecord:
     agent_name = f"uchrom_idea_agent_{idx + 1}"
     prompt = _idea_prompt(
@@ -489,6 +602,8 @@ async def _run_one_idea_agent(
         ideas_per_agent=ideas_per_agent,
         schema_path=workdir / "schema.json",
         context_path=workdir / "schema_context.md",
+        prior_graph_path=prior_graph_path,
+        frontier_context_path=frontier_context_path,
     )
     prompt_path = workdir / f"{agent_name}_prompt.md"
     prompt_path.write_text(prompt)
@@ -663,17 +778,34 @@ def _idea_prompt(
     ideas_per_agent: int,
     schema_path: Path,
     context_path: Path,
+    prior_graph_path: Path | None = None,
+    frontier_context_path: Path | None = None,
 ) -> str:
+    iterative_inputs = []
+    if prior_graph_path is not None:
+        iterative_inputs.append(f"- prior idea graph JSON: {prior_graph_path}")
+    if frontier_context_path is not None:
+        iterative_inputs.append(f"- graph-derived frontier markdown: {frontier_context_path}")
+    iterative_block = ""
+    if iterative_inputs:
+        iterative_block = "\nIterative discovery context:\n" + "\n".join(iterative_inputs) + "\n"
     return f"""
 Read these files with your file tool before answering:
 - schema JSON: {schema_path}
 - schema context: {context_path}
+{iterative_block}
 
 Generate up to {ideas_per_agent} diverse, computable U-Chrom discovery ideas.
 Your focus direction is: {direction}
 
 Rules:
 - Use only modalities, fields, cell types, tracks, and genes present in schema.
+- If iterative context files are provided, use them to avoid near-duplicate
+  ideas and to build on supported, contradicted, under-tested, or literature-
+  motivated graph frontiers.
+- For child ideas derived from a prior result, include
+  metadata.parent_idea_ids with the parent idea id and mention the frontier in
+  idea_markdown.
 - Each idea must define exactly one measurable parameter.
 - Include idea_markdown as 3-6 short Markdown paragraphs or bullets. It should
   explain the hypothesis, data used, analysis sketch, expected result, and
@@ -699,7 +831,8 @@ Return JSON only:
       "required_fields": ["coords", "spots.cell_id"],
       "validation_checks": ["required_fields_exist", "finite_numeric_output", "statistical_hypothesis_test"],
       "expected_direction": "...",
-      "complexity": 4
+      "complexity": 4,
+      "metadata": {{"parent_idea_ids": [], "frontier_id": "..."}}
     }}
   ]
 }}

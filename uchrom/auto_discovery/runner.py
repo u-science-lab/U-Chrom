@@ -42,6 +42,8 @@ class DiscoveryRunConfig:
     stop_on_error: bool = False
     store_schema: bool = False
     dataset_name: str | None = None
+    prior_graph_path: str | Path | None = None
+    frontier_context_path: str | Path | None = None
 
 
 @dataclass
@@ -61,6 +63,9 @@ class DiscoveryRunResult:
     agent_records_path: str | None = None
     graph_path: str | None = None
     graph_summary_path: str | None = None
+    graph_html_path: str | None = None
+    frontiers_path: str | None = None
+    frontier_summary_path: str | None = None
 
 
 def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> DiscoveryRunResult:
@@ -98,6 +103,8 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
             model=config.model,
             timeout=config.llm_timeout,
             idea_agent_count=config.idea_agent_count,
+            prior_graph_path=config.prior_graph_path,
+            frontier_context_path=config.frontier_context_path,
         ))
         agent_records.extend(_agent_record_rows(records))
     elif config.idea_source == "openai":
@@ -226,10 +233,19 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
     _write_jsonl(agent_records_path, agent_records)
     _write_report(report_path, config, schema, ideas, reviews, results)
 
+    from .frontier import plan_discovery_frontiers, write_frontier_artifacts
     from .graph import build_idea_graph_from_run, write_idea_graph_artifacts
+    from .visualization import write_idea_graph_html
 
     graph = build_idea_graph_from_run(output_dir)
     graph_artifacts = write_idea_graph_artifacts(graph, output_dir)
+    graph_html_path = write_idea_graph_html(
+        graph,
+        output_dir / "graph" / "idea_graph.html",
+        notebook_base_url="../../_auto_discovery_notebooks",
+    )
+    frontiers = plan_discovery_frontiers(graph, schema)
+    frontier_artifacts = write_frontier_artifacts(frontiers, output_dir)
 
     verified = [
         r for r in results
@@ -241,6 +257,10 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
             "schema_hash": schema.get("schema_hash"),
             "latest_graph_path": graph_artifacts["graph_json"],
             "graph_summary_path": graph_artifacts["graph_summary"],
+            "graph_html_path": str(graph_html_path),
+            "frontiers_path": frontier_artifacts["frontiers_json"],
+            "frontier_summary_path": frontier_artifacts["frontiers_markdown"],
+            "n_frontiers": len(frontiers),
             "n_ideas": len(ideas),
             "n_accepted": len(accepted),
             "n_executed": len(results) if config.execute else 0,
@@ -259,6 +279,10 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
             "results_path": str(results_path),
             "report_path": str(report_path),
             "graph_path": graph_artifacts["graph_json"],
+            "graph_summary_path": graph_artifacts["graph_summary"],
+            "graph_html_path": str(graph_html_path),
+            "frontiers_path": frontier_artifacts["frontiers_json"],
+            "frontier_summary_path": frontier_artifacts["frontiers_markdown"],
             "n_generated": len(ideas),
             "n_accepted": len(accepted),
             "n_executed": len(results) if config.execute else 0,
@@ -280,6 +304,9 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
         agent_records_path=str(agent_records_path),
         graph_path=graph_artifacts["graph_json"],
         graph_summary_path=graph_artifacts["graph_summary"],
+        graph_html_path=str(graph_html_path),
+        frontiers_path=frontier_artifacts["frontiers_json"],
+        frontier_summary_path=frontier_artifacts["frontiers_markdown"],
     )
 
 

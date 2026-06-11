@@ -326,6 +326,61 @@ def test_insert_schematic_image_cell_embeds_local_image(tmp_path):
     assert "Statistical figure" in "".join(stat_cells[0]["source"])
 
 
+def test_schematic_coverage_reports_missing_verified_notebooks(tmp_path):
+    from uchrom.auto_discovery import create_exploration_notebook, schematic_coverage_for_run
+    from uchrom.auto_discovery.pantheon import _insert_schematic_image_from_agent_content
+
+    run_dir = tmp_path / "run"
+    notebooks_dir = run_dir / "notebooks"
+    notebooks_dir.mkdir(parents=True)
+    image = tmp_path / "schematic.png"
+    image.write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+        b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02"
+        b"\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDAT"
+        b"\x08\xd7c\xf8\xff\xff?\x00\x05\xfe\x02\xfeA"
+        b"\xe2'\xb5\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+
+    idea_with_image = _make_idea(title="Granule H3K27me3 compaction")
+    idea_missing = _make_idea(title="Bergmann H3K27me3 compaction", cell_type="Bergmann")
+    notebook_with_image = create_exploration_notebook(
+        idea_with_image,
+        notebooks_dir / f"{idea_with_image.idea_id}.ipynb",
+    )
+    notebook_missing = create_exploration_notebook(
+        idea_missing,
+        notebooks_dir / f"{idea_missing.idea_id}.ipynb",
+    )
+    _insert_schematic_image_from_agent_content(
+        {"schematic_image_path": str(image)},
+        notebook_with_image,
+        run_dir,
+    )
+
+    (run_dir / "ideas.jsonl").write_text(
+        "\n".join(json.dumps(idea.to_dict()) for idea in [idea_with_image, idea_missing]) + "\n"
+    )
+    (run_dir / "results.jsonl").write_text(
+        "\n".join(json.dumps({
+            "idea_id": idea.idea_id,
+            "notebook": str(path),
+            "verification": {"status": "pass"},
+        }) for idea, path in [
+            (idea_with_image, notebook_with_image),
+            (idea_missing, notebook_missing),
+        ]) + "\n"
+    )
+
+    coverage = schematic_coverage_for_run(run_dir)
+
+    assert coverage["n_targets"] == 2
+    assert coverage["n_present"] == 1
+    assert coverage["n_missing"] == 1
+    assert coverage["coverage"] == 0.5
+    assert coverage["missing_notebooks"] == [str(notebook_missing)]
+
+
 def test_lightweight_executor_supports_notebook_display(tmp_path):
     from uchrom.auto_discovery.notebooks import execute_notebook_python
 
@@ -515,8 +570,10 @@ print(json.dumps(analysis_summary, indent=2))
     assert (tmp_path / "run" / "report.md").exists()
     assert result.graph_path is not None
     assert result.graph_summary_path is not None
+    assert result.graph_html_path is not None
     assert Path(result.graph_path).exists()
     assert Path(result.graph_summary_path).exists()
+    assert Path(result.graph_html_path).exists()
     assert len(list((tmp_path / "run" / "notebooks").glob("*.ipynb"))) == 2
     out = ChromData.read(h5cd_path)
     assert out.uns["auto_discovery_graph"]["latest_graph_path"] == result.graph_path
@@ -534,11 +591,13 @@ def test_build_idea_graph_from_run_artifacts(tmp_path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     idea = _make_idea()
+    idea.metadata["frontier_id"] = "coverage_gap-test"
     idea.expected_direction = "Positive interaction: higher marker should increase the statistic."
     idea.metadata["source_claim_ids"] = ["claim_pcp2_marker"]
     idea.metadata["parent_idea_ids"] = ["parent_idea"]
 
     def write_jsonl(path, rows):
+        path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w") as fh:
             for row in rows:
                 fh.write(json.dumps(row) + "\n")
@@ -585,6 +644,188 @@ def test_build_idea_graph_from_run_artifacts(tmp_path):
     assert "derived_from" in edge_relations
     assert summary["coverage"]["markers"]["H3K27me3"] == 1
     assert Path(artifacts["graph_summary"]).exists()
+
+
+def test_plan_discovery_frontiers_from_idea_graph(tmp_path):
+    from uchrom.auto_discovery import (
+        build_idea_graph_from_run,
+        frontiers_to_agent_context,
+        plan_discovery_frontiers,
+        write_frontier_artifacts,
+    )
+
+    cdata = _make_cd()
+    schema = cdata.build_discovery_schema(store=False)
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    idea = _make_idea()
+    idea.expected_direction = "Positive interaction: higher marker should increase the statistic."
+
+    def write_jsonl(path, rows):
+        with path.open("w") as fh:
+            for row in rows:
+                fh.write(json.dumps(row) + "\n")
+
+    write_jsonl(run_dir / "ideas.jsonl", [idea.to_dict()])
+    write_jsonl(run_dir / "reviews.jsonl", [{
+        "idea_id": idea.idea_id,
+        "accepted": True,
+        "errors": [],
+        "warnings": [],
+        "missing_fields": [],
+    }])
+    write_jsonl(run_dir / "results.jsonl", [{
+        "idea_id": idea.idea_id,
+        "notebook": str(run_dir / "notebooks" / f"{idea.idea_id}.ipynb"),
+        "execution_ok": True,
+        "elapsed_sec": 1.2,
+        "errors": [],
+        "verification": {
+            "status": "pass",
+            "p_value": 0.01,
+            "effect_size": 0.25,
+            "test_method": "unit-test permutation",
+        },
+    }])
+
+    graph = build_idea_graph_from_run(run_dir)
+    frontiers = plan_discovery_frontiers(graph, schema, max_frontiers=4)
+    artifacts = write_frontier_artifacts(frontiers, run_dir)
+    context = frontiers_to_agent_context(frontiers)
+
+    assert frontiers
+    assert frontiers[0].frontier_id
+    assert any(f.frontier_type == "evidence_extension" for f in frontiers)
+    assert any(f.frontier_type == "coverage_gap" for f in frontiers)
+    assert idea.idea_id in context
+    assert "Graph-derived discovery frontiers" in context
+    assert Path(artifacts["frontiers_json"]).exists()
+    assert Path(artifacts["frontiers_markdown"]).exists()
+
+
+def test_literature_claims_and_graph_html_viewer(tmp_path):
+    from uchrom.auto_discovery import (
+        build_idea_graph_from_run,
+        ingest_literature_claims,
+        load_idea_graph,
+        write_idea_graph_artifacts,
+        write_idea_graph_html,
+    )
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    idea = _make_idea()
+    idea.metadata["frontier_id"] = "coverage_gap-test"
+    idea.metadata["frontier_type"] = "coverage_gap"
+
+    def write_jsonl(path, rows):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as fh:
+            for row in rows:
+                fh.write(json.dumps(row) + "\n")
+
+    write_jsonl(run_dir / "ideas.jsonl", [idea.to_dict()])
+    write_jsonl(run_dir / "reviews.jsonl", [{
+        "idea_id": idea.idea_id,
+        "accepted": True,
+        "errors": [],
+        "warnings": [],
+        "missing_fields": [],
+    }])
+    write_jsonl(run_dir / "results.jsonl", [{
+        "idea_id": idea.idea_id,
+        "notebook": str(run_dir / "notebooks" / f"{idea.idea_id}.ipynb"),
+        "execution_ok": True,
+        "elapsed_sec": 1.2,
+        "errors": [],
+        "verification": {
+            "status": "pass",
+            "p_value": 0.01,
+            "effect_size": 0.25,
+            "test_method": "unit-test permutation",
+        },
+    }])
+    claims_path = run_dir / "browser" / "claims.jsonl"
+    write_jsonl(claims_path, [{
+        "claim_id": "claim_hp1alpha_heterochromatin",
+        "claim": "HP1alpha marks heterochromatin domains relevant to chromatin compaction.",
+        "source_title": "Browser agent source",
+        "url": "https://example.org/paper",
+        "genes": [],
+        "markers": ["HP1alpha"],
+        "cell_types": ["Granule"],
+        "supports_idea_ids": [idea.idea_id],
+        "extraction_method": "browser_agent",
+    }])
+
+    graph = build_idea_graph_from_run(run_dir)
+    assert graph.nodes["literature_claim:claim_hp1alpha_heterochromatin"]["kind"] == "LiteratureClaim"
+    assert graph.nodes["frontier:coverage_gap-test"]["kind"] == "Frontier"
+    assert any(edge["relation"] == "frontier_proposed" for edge in graph.edges)
+    assert any(edge["relation"] == "literature_supports" for edge in graph.edges)
+
+    extra_claims = tmp_path / "extra_claims.jsonl"
+    write_jsonl(extra_claims, [{
+        "claim": "Pcp2 is a Purkinje marker.",
+        "genes": ["Pcp2"],
+        "cell_types": ["Purkinje"],
+        "related_idea_ids": [idea.idea_id],
+    }])
+    assert ingest_literature_claims(graph, extra_claims) == 1
+
+    artifacts = write_idea_graph_artifacts(graph, run_dir)
+    html_path = write_idea_graph_html(
+        load_idea_graph(artifacts["graph_json"]),
+        run_dir / "graph" / "idea_graph.html",
+        notebook_base_url="_auto_discovery_notebooks",
+    )
+    html = html_path.read_text()
+
+    assert "U-Chrom Idea Graph" in html
+    assert "Tree view" not in html
+    assert "Discovery tree" not in html
+    assert "cdata" in html
+    assert "uchrom-idea-graph-app" in html
+    assert "Visible ideas" in html
+    assert "Global" in html
+    assert "Overview" in html
+    assert "Focus" in html
+    assert "Follow-up direction" in html
+    assert "Idea lineage graph" in html
+    assert "legend-pills" in html
+    assert "Lineage" in html
+    assert "canvas-tools" in html
+    assert "node-card-bg" in html
+    assert "global-node-visual" in html
+    assert "global-node-label" in html
+    assert "globalLabelScale" in html
+    assert "conclusion" in html
+    assert "viewport-layer" in html
+    assert "lineage-path" in html
+    assert "evidence-strip" in html
+    assert "evidence-segment" in html
+    assert "selection-dock" in html
+    assert "minimap" in html
+    assert "node-badge" in html
+    assert "node-badge-text" in html
+    assert "dimmed" in html
+    assert "lane-guides" in html
+    assert "lane-band" in html
+    assert "Notebook evidence" in html
+    assert "edge-label" in html
+    assert "edge-label-bg" in html
+    assert "edgeLabelVisible" in html
+    assert "Focus graph" in html
+    assert "focus-mode" in html
+    assert "toggleFocusMode" in html
+    assert "node-port" in html
+    assert "lineage-edge" in html
+    assert "Technical details" in html
+    assert "Notebook" in html
+    assert "primary-link" in html
+    assert "_auto_discovery_notebooks" in html
+    assert "LiteratureClaim" in html
+    assert "claim_hp1alpha_heterochromatin" in html
 
 
 def test_auto_discovery_defaults_to_pantheon_backend(tmp_path):

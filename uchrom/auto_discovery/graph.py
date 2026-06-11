@@ -104,7 +104,12 @@ class IdeaGraph:
         return path
 
 
-def build_idea_graph_from_run(run_dir: str | Path, *, graph_id: str | None = None) -> IdeaGraph:
+def build_idea_graph_from_run(
+    run_dir: str | Path,
+    *,
+    graph_id: str | None = None,
+    claims_paths: list[str | Path] | None = None,
+) -> IdeaGraph:
     """Build an :class:`IdeaGraph` from a completed auto-discovery run.
 
     The function reads ``ideas.jsonl``, ``reviews.jsonl``, and
@@ -131,6 +136,7 @@ def build_idea_graph_from_run(run_dir: str | Path, *, graph_id: str | None = Non
         for row in _read_jsonl_if_exists(run_dir / "results.jsonl")
         if isinstance(row, Mapping) and row.get("idea_id")
     }
+    frontiers = _read_frontiers_if_exists(run_dir / "frontiers" / "next_frontiers.json")
 
     for idea_id, idea in ideas.items():
         idea_node = _idea_node_id(idea_id)
@@ -144,9 +150,13 @@ def build_idea_graph_from_run(run_dir: str | Path, *, graph_id: str | None = Non
             computable_parameter=idea.computable_parameter,
             expected_direction=idea.expected_direction,
             complexity=idea.complexity,
+            metadata=dict(idea.metadata or {}),
+            frontier_id=idea.metadata.get("frontier_id"),
+            iterative_context_status=idea.metadata.get("iterative_context_status"),
             signature=signature,
         )
         graph.add_edge(run_node, "generated", idea_node)
+        _add_idea_frontier(graph, idea_node, idea.metadata, frontiers.get(str(idea.metadata.get("frontier_id"))))
         _add_idea_facets(graph, idea_node, signature)
 
         review = reviews.get(idea_id)
@@ -168,7 +178,108 @@ def build_idea_graph_from_run(run_dir: str | Path, *, graph_id: str | None = Non
         if result is not None:
             _add_result_nodes(graph, run_node, idea, result)
 
+    for claims_path in _default_claims_paths(run_dir, claims_paths):
+        ingest_literature_claims(graph, claims_path)
+
+    _add_run_frontiers(graph, run_node, frontiers)
+
     return graph
+
+
+def build_idea_graph_from_runs(
+    run_dirs: list[str | Path],
+    *,
+    graph_id: str = "iterative_idea_graph",
+    claims_paths: list[str | Path] | None = None,
+) -> IdeaGraph:
+    """Build one graph by merging several auto-discovery runs."""
+    graph = IdeaGraph(graph_id=graph_id)
+    for run_dir in run_dirs:
+        partial = build_idea_graph_from_run(run_dir, graph_id=f"run:{Path(run_dir).name}")
+        _merge_graph(graph, partial)
+    for claims_path in claims_paths or []:
+        ingest_literature_claims(graph, claims_path)
+    return graph
+
+
+def ingest_literature_claims(
+    graph: IdeaGraph,
+    claims_path: str | Path,
+) -> int:
+    """Ingest browser-agent literature claims into an :class:`IdeaGraph`.
+
+    ``claims_path`` is a JSONL file.  Rows may contain ``claim_id``, ``claim``,
+    ``source_title``, ``url``, ``doi``, ``pmid``, ``genes``, ``cell_types``,
+    ``markers``, ``modalities``, ``supports_idea_ids``,
+    ``contradicts_idea_ids``, and ``related_idea_ids``.  Extra keys are kept on
+    the claim node for auditability.
+    """
+    path = Path(claims_path)
+    if not path.exists():
+        return 0
+    n = 0
+    for row in _read_jsonl_if_exists(path):
+        if not isinstance(row, Mapping):
+            continue
+        claim_id = str(row.get("claim_id") or _stable_claim_id(row))
+        claim_node = f"literature_claim:{_slug(claim_id)}"
+        reference_id = str(
+            row.get("reference_id")
+            or row.get("doi")
+            or row.get("pmid")
+            or row.get("url")
+            or f"reference_for_{claim_id}"
+        )
+        reference_node = f"reference:{_slug(reference_id)}"
+        graph.add_node(
+            reference_node,
+            "Reference",
+            reference_id=reference_id,
+            title=row.get("source_title") or row.get("title"),
+            url=row.get("url"),
+            doi=row.get("doi"),
+            pmid=row.get("pmid"),
+            year=row.get("year"),
+        )
+        graph.add_node(
+            claim_node,
+            "LiteratureClaim",
+            claim_id=claim_id,
+            claim=row.get("claim") or row.get("text") or row.get("summary"),
+            summary=row.get("summary"),
+            confidence=row.get("confidence"),
+            extraction_method=row.get("extraction_method"),
+            source_title=row.get("source_title") or row.get("title"),
+            url=row.get("url"),
+            doi=row.get("doi"),
+            pmid=row.get("pmid"),
+            raw=row,
+        )
+        graph.add_edge(claim_node, "sourced_from", reference_node)
+        for gene in _as_str_list(row.get("genes")):
+            node = f"gene:{_slug(gene)}"
+            graph.add_node(node, "Gene", label=gene)
+            graph.add_edge(claim_node, "mentions_gene", node)
+        for cell_type in _as_str_list(row.get("cell_types")):
+            node = f"cell_type:{_slug(cell_type)}"
+            graph.add_node(node, "CellType", label=cell_type)
+            graph.add_edge(claim_node, "mentions_cell_type", node)
+        for marker in _as_str_list(row.get("markers")):
+            node = f"marker:{_slug(marker)}"
+            graph.add_node(node, "IFMarker", label=marker)
+            graph.add_edge(claim_node, "mentions_marker", node)
+        for modality in _as_str_list(row.get("modalities")):
+            node = f"modality:{_slug(modality)}"
+            graph.add_node(node, "Modality", label=modality)
+            graph.add_edge(claim_node, "mentions_modality", node)
+        for idea_id in _as_str_list(row.get("supports_idea_ids")):
+            graph.add_edge(claim_node, "literature_supports", _idea_node_id(idea_id))
+        for idea_id in _as_str_list(row.get("contradicts_idea_ids")):
+            graph.add_edge(claim_node, "literature_contradicts", _idea_node_id(idea_id))
+        for idea_id in _as_str_list(row.get("related_idea_ids")):
+            graph.add_edge(claim_node, "literature_related_to", _idea_node_id(idea_id))
+        n += 1
+    return n
 
 
 def write_idea_graph_artifacts(
@@ -309,6 +420,75 @@ def _add_idea_facets(graph: IdeaGraph, idea_node: str, signature: Mapping[str, A
         graph.add_edge(idea_node, "motivated_by", claim_node)
 
 
+def _add_idea_frontier(
+    graph: IdeaGraph,
+    idea_node: str,
+    metadata: Mapping[str, Any],
+    frontier: Mapping[str, Any] | None = None,
+) -> None:
+    frontier_id = metadata.get("frontier_id") if isinstance(metadata, Mapping) else None
+    if not frontier_id:
+        return
+    frontier_id = str(frontier_id)
+    frontier_node = _add_frontier_node(
+        graph,
+        frontier_id,
+        frontier=frontier,
+        iterative_context_status=metadata.get("iterative_context_status"),
+    )
+    graph.add_edge(frontier_node, "frontier_proposed", idea_node)
+
+
+def _add_run_frontiers(
+    graph: IdeaGraph,
+    run_node: str,
+    frontiers: Mapping[str, Mapping[str, Any]],
+) -> None:
+    for frontier_id, frontier in frontiers.items():
+        frontier_node = _add_frontier_node(graph, frontier_id, frontier=frontier)
+        graph.add_edge(run_node, "planned_direction", frontier_node)
+        for parent_idea_id in _as_str_list(frontier.get("parent_idea_ids")):
+            parent_node = _idea_node_id(parent_idea_id)
+            graph.add_edge(frontier_node, "direction_based_on", parent_node)
+            evidence_node = f"evidence:{parent_idea_id}"
+            if evidence_node in graph.nodes:
+                graph.add_edge(frontier_node, "direction_based_on_evidence", evidence_node)
+
+
+def _add_frontier_node(
+    graph: IdeaGraph,
+    frontier_id: str,
+    *,
+    frontier: Mapping[str, Any] | None = None,
+    iterative_context_status: Any = None,
+) -> str:
+    frontier = dict(frontier or {})
+    frontier_id = str(frontier.get("frontier_id") or frontier_id)
+    frontier_type = str(
+        frontier.get("frontier_type")
+        or (frontier_id.rsplit("-", 1)[0] if "-" in frontier_id else frontier_id)
+    )
+    frontier_node = f"frontier:{_slug(frontier_id)}"
+    graph.add_node(
+        frontier_node,
+        "Frontier",
+        frontier_id=frontier_id,
+        frontier_type=frontier_type,
+        label=frontier.get("label") or frontier_type.replace("_", " "),
+        title=frontier.get("title"),
+        prompt=frontier.get("prompt"),
+        rationale=frontier.get("rationale"),
+        priority=frontier.get("priority"),
+        target_facets=frontier.get("target_facets"),
+        parent_idea_ids=frontier.get("parent_idea_ids"),
+        evidence_basis=frontier.get("evidence_basis"),
+        novelty_notes=frontier.get("novelty_notes"),
+        constraints=frontier.get("constraints"),
+        iterative_context_status=iterative_context_status or frontier.get("iterative_context_status"),
+    )
+    return frontier_node
+
+
 def _add_result_nodes(
     graph: IdeaGraph,
     run_node: str,
@@ -376,6 +556,59 @@ def _read_jsonl_if_exists(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _read_frontiers_if_exists(path: Path) -> dict[str, dict[str, Any]]:
+    if not path.exists():
+        return {}
+    try:
+        rows = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(rows, list):
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if isinstance(row, Mapping) and row.get("frontier_id"):
+            out[str(row["frontier_id"])] = dict(row)
+    return out
+
+
+def _default_claims_paths(
+    run_dir: Path,
+    claims_paths: list[str | Path] | None,
+) -> list[Path]:
+    paths = [Path(p) for p in claims_paths or []]
+    for rel in (
+        "browser/claims.jsonl",
+        "literature/claims.jsonl",
+        "claims.jsonl",
+    ):
+        path = run_dir / rel
+        if path.exists():
+            paths.append(path)
+    seen = set()
+    unique = []
+    for path in paths:
+        key = str(path)
+        if key not in seen:
+            unique.append(path)
+            seen.add(key)
+    return unique
+
+
+def _merge_graph(target: IdeaGraph, source: IdeaGraph) -> None:
+    for node in source.nodes.values():
+        attrs = dict(node)
+        node_id = str(attrs.pop("id"))
+        kind = str(attrs.pop("kind", "Node"))
+        target.add_node(node_id, kind, **attrs)
+    for edge in source.edges:
+        attrs = dict(edge)
+        source_id = str(attrs.pop("source"))
+        relation = str(attrs.pop("relation"))
+        target_id = str(attrs.pop("target"))
+        target.add_edge(source_id, relation, target_id, **attrs)
+
+
 def _node_label_counts(nodes: Any, kind: str) -> dict[str, int]:
     counts = Counter(
         str(node.get("label", node.get("id")))
@@ -393,6 +626,29 @@ def _slug(value: Any) -> str:
     text = str(value).strip().lower()
     slug = re.sub(r"[^a-z0-9_.+-]+", "-", text).strip("-")
     return slug or "unknown"
+
+
+def _stable_claim_id(row: Mapping[str, Any]) -> str:
+    text = str(row.get("claim") or row.get("summary") or row.get("text") or "claim")
+    slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:48] or "claim"
+    payload = json.dumps(row, sort_keys=True, default=str)
+    import hashlib
+
+    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:10]
+    return f"{slug}-{digest}"
+
+
+def _as_str_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, Mapping):
+        return [str(k) for k, v in value.items() if v]
+    try:
+        return [str(item) for item in value if str(item)]
+    except TypeError:
+        return [str(value)]
 
 
 def _jsonable(value: Any) -> Any:

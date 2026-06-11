@@ -1,0 +1,16 @@
+{
+  "name": "@uchrom/idea-graph-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.17.0",
+    "vue": "^3.5.16"
+  },
+  "devDependencies": {
+    "vite": "^6.3.5"
+  }
+}

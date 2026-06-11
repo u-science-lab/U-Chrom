@@ -30,9 +30,71 @@ references tell what is known
 annotations tell what the user cares about
 graph tells what has already been tried
 evidence tells what held up
-frontiers tell what to ask next
+follow-up directions tell what to ask next
 notebooks verify each claim
 ```
+
+## Current Implementation
+
+The first implementation pass now covers the local graph/follow-up-direction loop:
+
+- `uchrom.auto_discovery.graph.IdeaGraph` builds a discovery graph from
+  `ideas.jsonl`, `reviews.jsonl`, and `results.jsonl`.
+- `uchrom.auto_discovery.frontier.plan_discovery_frontiers` reads that graph
+  plus the h5cd-backed schema and produces diverse next-iteration follow-up
+  directions. The module name keeps the original internal term, but the UI
+  presents these as directions rather than scientific results.
+- `run_auto_discovery` writes `graph/idea_graph.json`,
+  `graph/graph_summary.md`, `graph/idea_graph.html`,
+  `frontiers/next_frontiers.json`, and `frontiers/next_frontiers.md` after
+  each run.
+- `uchrom.auto_discovery.iterative.run_iterative_auto_discovery` can run
+  multiple graph-guided iterations. Iteration 2 and later receive the prior
+  idea graph and follow-up-direction Markdown as explicit Pantheon idea-agent
+  context.
+- `uchrom.auto_discovery.graph.ingest_literature_claims` ingests browser-agent
+  `claims.jsonl` artifacts into the graph as `LiteratureClaim` and
+  `Reference` nodes.
+- `uchrom.auto_discovery.visualization.write_idea_graph_html` writes a static
+  interactive graph viewer for ideas, evidence, notebooks, references, and
+  literature claims.
+- The CLI can regenerate these artifacts from an existing run:
+
+```bash
+python -m uchrom.auto_discovery frontiers RUN_DIR DATA.h5cd
+python -m uchrom.auto_discovery view RUN_DIR/graph/idea_graph.json graph.html
+python -m uchrom.auto_discovery claims RUN_DIR/graph/idea_graph.json RUN_DIR/browser/claims.jsonl
+python -m uchrom.auto_discovery iterate DATA.h5cd ITERATIVE_OUT \
+  --iterations 3 \
+  --ideas-per-iteration 20
+```
+
+When graphical abstracts are requested in iterative mode, U-Chrom now keeps
+image generation post-hoc. Each iteration first completes notebook-agent
+exploration and runner verification, then calls the Pantheon file-tool
+schematic pass for the verified notebooks. Use strict mode when producing a
+docs snapshot:
+
+```bash
+python -m uchrom.auto_discovery iterate DATA.h5cd ITERATIVE_OUT \
+  --iterations 3 \
+  --ideas-per-iteration 20 \
+  --generate-schematic-image \
+  --schematic-image-model openai \
+  --schematic-retries 2 \
+  --strict-schematics
+```
+
+This writes a per-run `schematic_coverage.json` and fails the iteration if
+any verified notebook is still missing its `schematic_image` cell after
+retries. `--schematic-visual-qa` is intentionally opt-in because direct CLI
+use of the Pantheon file tool may not provide a sub-agent callback context
+for `observe_images`.
+
+See the real-data tutorial
+{doc}`../tutorials/takei2025_iterative_auto_discovery` for a Takei
+cerebellum example built from a completed 20-idea Pantheon notebook-agent
+batch.
 
 ## High-level Architecture
 
@@ -60,7 +122,7 @@ Runner
   -> deterministic re-execution and evidence classification
 
 IdeaGraph
-  -> shared memory, provenance, coverage, and next frontiers
+  -> shared memory, provenance, coverage, and next follow-up directions
 ```
 
 This keeps responsibilities clear:
@@ -172,7 +234,7 @@ Gene
 IFMarker
 Modality
 ParameterFamily
-Frontier
+Follow-upDirection
 Idea
 NotebookRun
 EvidenceResult
@@ -225,7 +287,7 @@ input:
   schema references
   user annotations
   graph gaps
-  frontier query plan
+  follow-up direction query plan
 
 output:
   papers.jsonl
@@ -291,8 +353,8 @@ the graph before planning the next step.
 ```text
 1. Sync graph from cdata and discovery schema.
 2. Optionally refresh external knowledge with browser agents.
-3. Plan dynamic frontiers from graph state.
-4. Dispatch idea agents over selected frontiers.
+3. Plan dynamic follow-up directions from graph state.
+4. Dispatch idea agents over selected directions.
 5. Run schema review and graph novelty review.
 6. Select a diverse idea portfolio.
 7. Dispatch notebook agents over selected ideas.
@@ -311,8 +373,8 @@ while budget.remaining():
         claims = browser_pool.run(graph.knowledge_queries())
         graph.ingest_literature_claims(claims)
 
-    frontiers = planner.plan_frontiers(graph)
-    candidates = idea_pool.run(frontiers)
+    directions = planner.plan_frontiers(graph)
+    candidates = idea_pool.run(directions)
 
     reviewed = [
         review_idea_against_schema(idea, schema)
@@ -328,13 +390,13 @@ while budget.remaining():
     cdata.uns["auto_discovery_graph"] = graph.lightweight_summary()
 ```
 
-## Dynamic Frontiers
+## Dynamic Follow-up Directions
 
 The current framework uses fixed idea direction buckets. This is useful for a
 first pass, but it is too rigid for iterative discovery. The next design
-should replace static buckets with graph-derived frontier cards.
+should replace static buckets with graph-derived follow-up direction cards.
 
-Frontier examples:
+Follow-up direction examples:
 
 ```text
 Follow up a supported rDNA inter-chromosomal hub result.
@@ -345,7 +407,7 @@ Add negative controls for active chromatin assortativity.
 Generate literature-guided Pcp2/Purkinje spatial coupling ideas.
 ```
 
-Example frontier:
+Example follow-up direction:
 
 ```json
 {
@@ -363,7 +425,7 @@ Example frontier:
 }
 ```
 
-Frontiers can be generated from:
+Follow-up directions can be generated from:
 
 - supported findings that need replication, refinement, or controls
 - contradicted findings that need alternative definitions or confounder tests
@@ -588,15 +650,15 @@ Deliverables:
 - coverage gain scores
 - portfolio selector
 
-### Phase 4: Dynamic frontier planner
+### Phase 4: Dynamic follow-up direction planner
 
-Replace fixed direction buckets with graph-derived frontiers.
+Replace fixed direction buckets with graph-derived follow-up directions.
 
 Deliverables:
 
 - `plan_discovery_frontiers(schema, graph, ...)`
-- frontier JSON schema
-- Pantheon idea-agent prompts that consume frontiers
+- follow-up direction JSON schema
+- Pantheon idea-agent prompts that consume follow-up directions
 - CLI flags for iterative mode and history runs
 
 ### Phase 5: External knowledge layer

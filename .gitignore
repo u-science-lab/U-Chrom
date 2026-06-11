@@ -10,6 +10,10 @@ imgui.ini
 *.csv
 *.egg-info
 *.json
+!uchrom/auto_discovery/ui/package.json
+!uchrom/auto_discovery/ui/package-lock.json
+node_modules/
+uchrom/auto_discovery/ui/node_modules/
 
 # Temporary files
 WALKTHROUGH_TEMP.md

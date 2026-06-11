@@ -63,6 +63,7 @@ tutorials/import_fofct
 tutorials/import_pyhim_ecsv
 tutorials/takei2025_walkthrough
 tutorials/takei2025_auto_discovery
+tutorials/takei2025_iterative_auto_discovery
 ```
 
 ```{toctree}
