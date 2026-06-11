@@ -304,6 +304,70 @@ async def run_agent_loop(websocket: WebSocket, conversation_history: list):
                         }
 
                     tool_results.append(tool_result)
+                elif tool_use.name == "write_analysis_function":
+                    name = (tool_use.input.get("name") or "").strip()
+                    code = tool_use.input.get("code", "")
+                    meta = {}
+                    if tool_use.input.get("chromosome_field"):
+                        meta["chromosome_field"] = tool_use.input["chromosome_field"]
+                    if tool_use.input.get("genomic_fields"):
+                        meta["genomic_fields"] = tuple(tool_use.input["genomic_fields"])
+                    if tool_use.input.get("suggested_mark"):
+                        meta["suggested_mark"] = tool_use.input["suggested_mark"]
+                    if name:
+                        meta["result_key"] = name
+
+                    try:
+                        from .dynamic_api import register_analysis
+                        from .dynamic_analysis import AnalysisValidationError
+                        try:
+                            handle = register_analysis(name, code, **meta)
+                        except AnalysisValidationError as ve:
+                            tool_results.append({
+                                "type": "tool_result",
+                                "tool_use_id": tool_use.id,
+                                "content": json.dumps({
+                                    "success": False,
+                                    "error": f"Rejected by sandbox: {ve}",
+                                    "hint": (
+                                        "Remove imports/IO/dunder access; define "
+                                        "analyze(cd, chrom, **params) returning a DataFrame."
+                                    ),
+                                }),
+                            })
+                        else:
+                            await websocket.send_json({
+                                "type": "agent_artifact",
+                                "artifact_type": "custom_analysis_deployed",
+                                "analysis_id": name,
+                                "data_url": handle["data_url"],
+                            })
+                            tool_results.append({
+                                "type": "tool_result",
+                                "tool_use_id": tool_use.id,
+                                "content": json.dumps({
+                                    "success": True,
+                                    "analysis_id": name,
+                                    "data_url": handle["data_url"],
+                                    "chromosome_field": handle["chromosome_field"],
+                                    "genomic_fields": handle["genomic_fields"],
+                                    "suggested_mark": handle["suggested_mark"],
+                                    "next_step": (
+                                        "Endpoint deployed. Replace {chrom} in data_url "
+                                        "with the real chromosome, then call render_gosling "
+                                        "with data={\"type\":\"json\",\"url\":<data_url>,"
+                                        "\"chromosomeField\":chromosome_field,"
+                                        "\"genomicFields\":genomic_fields} and "
+                                        "mark=suggested_mark."
+                                    ),
+                                }),
+                            })
+                    except Exception as e:
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": f"Deploy failed: {str(e)}",
+                        })
                 elif tool_use.name == "select_cells":
                     cell_ids = tool_use.input.get("cell_ids", []) or []
                     criteria = tool_use.input.get("criteria", "")
