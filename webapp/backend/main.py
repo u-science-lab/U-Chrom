@@ -32,9 +32,16 @@ app.include_router(track_wig_router)
 app.include_router(strc_router)
 app.include_router(figure_render_router)
 
-# HiGlass requests /api/v1/tileset_info and /api/v1/tiles — alias our endpoints
+# HiGlass requests /api/v1/tileset_info and /api/v1/tiles — alias our endpoints.
+# HiGlass/Gosling's matrix datafetcher requests the *trailing-slash* forms
+# (`/tileset_info/?d=...`, `/tiles/?d=...`).  FastAPI would 307-redirect a
+# missing-slash route to the canonical one, but the HiGlass tile-fetcher does
+# not follow redirects — so register both slash and no-slash variants
+# explicitly to return 200 directly for whichever form the client uses.
 from .tileset_api import tileset_info, tiles as tiles_endpoint
 app.add_api_route("/api/v1/tileset_info", tileset_info, methods=["GET"])
+app.add_api_route("/api/v1/tileset_info/", tileset_info, methods=["GET"])
+app.add_api_route("/api/v1/tiles", tiles_endpoint, methods=["GET"])
 app.add_api_route("/api/v1/tiles/", tiles_endpoint, methods=["GET"])
 sessions: dict[str, Session] = {}
 

@@ -1,6 +1,12 @@
 /**
  * Default Gosling spec for local contact map (chr21).
- * Uses our HiGlass-compatible tileset API at /api/tileset_info.
+ * Uses our HiGlass-compatible tileset API at /api/v1 (server prefix).
+ *
+ * NOTE: HiGlass/Gosling's matrix datafetcher builds tile requests from
+ * `server` + `tilesetUid` as `${server}/tileset_info/?d=<uid>` and
+ * `${server}/tiles/?d=<uid>.z.x.y` (with trailing slashes). The vite dev proxy
+ * only forwards `/api/*`, and the backend serves these under `/api/v1`, so
+ * `server` MUST include the `/api/v1` prefix.
  */
 
 export const LOCAL_CONTACT_MAP_SPEC = {
@@ -17,8 +23,8 @@ export const LOCAL_CONTACT_MAP_SPEC = {
           title: 'Contact Map (chr21)',
           data: {
             type: 'matrix',
-            url: `${window.location.origin}/api/tileset_info?d=contact-chr21`,
-            server: window.location.origin,
+            url: `${window.location.origin}/api/v1/tileset_info?d=contact-chr21`,
+            server: `${window.location.origin}/api/v1`,
             tilesetUid: 'contact-chr21',
           },
           mark: 'rect',

@@ -79,3 +79,48 @@ def test_wig_range_filtered():
     # bins outside range should not appear
     assert "1001 " not in text
     assert "5001 " not in text
+
+
+# ---------------------------------------------------------------------------
+# CSV endpoint (E1): Gosling's data.type:'csv' loader needs real CSV, not WIG.
+# ---------------------------------------------------------------------------
+
+def test_csv_returns_csv_header():
+    r = client.get("/api/track_csv/atac?chrom=chr1")
+    assert r.status_code == 200
+    assert "text/csv" in r.headers["content-type"]
+    lines = r.text.strip().split("\n")
+    assert lines[0] == "chrom,start,end,value"
+
+
+def test_csv_returns_data_rows():
+    r = client.get("/api/track_csv/atac?chrom=chr1")
+    assert r.status_code == 200
+    lines = r.text.strip().split("\n")
+    # header + one row per unique (chrom,start,end) bin (n_bins=10)
+    assert len(lines) == 11
+    # Each data row: chrom,start,end,value
+    first = lines[1].split(",")
+    assert len(first) == 4
+    assert first[0] == "chr1"
+    int(first[1]); int(first[2]); float(first[3])  # parseable
+
+
+def test_csv_range_filtered():
+    r = client.get("/api/track_csv/atac?chrom=chr1&start=2000&end=5000")
+    assert r.status_code == 200
+    lines = r.text.strip().split("\n")
+    starts = [row.split(",")[1] for row in lines[1:]]
+    # overlap semantics: end>2000 AND start<5000 → starts 2000,3000,4000
+    assert starts == ["2000", "3000", "4000"]
+
+
+def test_csv_unknown_track_returns_404():
+    r = client.get("/api/track_csv/nonexistent?chrom=chr1")
+    assert r.status_code == 404
+
+
+def test_csv_no_session_returns_404():
+    data_api.current_session = None
+    r = client.get("/api/track_csv/atac?chrom=chr1")
+    assert r.status_code == 404

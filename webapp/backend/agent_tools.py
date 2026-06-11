@@ -90,7 +90,7 @@ GOSLING SCHEMA REFERENCE:
 
    Signal track (ChIP-seq, ATAC-seq):
    {
-     "data": {"type":"csv","url":"/api/track_wig/H3K27ac","chromosomeField":"chrom","genomicFields":["start","end"]},
+     "data": {"type":"csv","url":"/api/track_csv/H3K27ac","chromosomeField":"chrom","genomicFields":["start","end"]},
      "mark": "bar",
      "x": {"field":"start","type":"genomic"},
      "xe": {"field":"end","type":"genomic"},
@@ -242,7 +242,7 @@ You drive a multi-tab UI directly through tools:
 
 Gosling concepts:
 - Tracks have 'data' (source), 'mark' (bar/line/point/rect/area/text/link/triangle), and encodings (x, y, color, size).
-- Signal tracks: {"type":"csv","url":"/api/track_wig/<name>","chromosomeField":"chrom","genomicFields":["start","end"]}, mark "bar"/"line".
+- Signal tracks: {"type":"csv","url":"/api/track_csv/<name>","chromosomeField":"chrom","genomicFields":["start","end"]}, mark "bar"/"line".
 - Hi-C contact matrix: data {"type":"matrix","url":"/api/v1/tileset_info/?d=contact-<chrom>"}, mark "bar", with x/xe/ys/ye genomic fields and color quantitative.
 - Always set 'assembly' (hg19/hg38/mm10), 'width', 'height'.
 

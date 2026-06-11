@@ -165,3 +165,68 @@ def test_compartments_returns_list():
     assert "compartments" in data
     assert len(data["compartments"]) == 2
     assert data["compartments"][0]["compartment"] == "A"
+
+
+# ---------------------------------------------------------------------------
+# E3: loop link-mark x1-channel field mapping
+# ---------------------------------------------------------------------------
+
+def test_loop_registry_declares_x1_chromosome_field():
+    """Loop registry maps the second anchor's chrom to the x1 channel."""
+    from webapp.backend.strc_api import ANALYSIS_REGISTRY
+    loop = ANALYSIS_REGISTRY["loop"]
+    assert loop["chromosome_field"] == "chrom1"
+    assert loop["chromosome_field_x1"] == "chrom2"
+    # genomic_fields cover both anchors (x/xe + x1/x1e)
+    assert loop["genomic_fields"] == ["start1", "end1", "start2", "end2"]
+    assert loop["suggested_mark"] == "link"
+
+
+def test_run_registered_analysis_loop_surfaces_x1_field():
+    """run_registered_analysis surfaces chromosome_field_x1 for loops only."""
+    from webapp.backend import strc_api
+
+    cd = _make_mock_cd()
+    mock_session = MagicMock()
+    mock_session.chromdata = cd
+    data_api.current_session = mock_session
+
+    fake_loops = pd.DataFrame({
+        "chrom1": ["chr1"], "start1": [100_000], "end1": [200_000],
+        "chrom2": ["chr1"], "start2": [500_000], "end2": [600_000],
+        "score": [8.0], "pval": [1e-6], "fdr": [0.01],
+    })
+    mock_loop_module = MagicMock()
+    mock_loop_module.call_loops_axiswise_f.return_value = fake_loops
+    mock_loop_module.LoopCallerParams = MagicMock
+
+    with patch.dict("sys.modules", {"uchrom.strc.loop": mock_loop_module}):
+        handle = strc_api.run_registered_analysis("loop", "chr1")
+
+    assert handle["chromosome_field"] == "chrom1"
+    assert handle["chromosome_field_x1"] == "chrom2"
+    assert handle["suggested_mark"] == "link"
+    # cis-only caller: chrom2 == chrom1 in every record
+    assert all(r["chrom2"] == r["chrom1"] for r in handle["records"])
+
+
+def test_run_registered_analysis_tad_has_no_x1_field():
+    """Non-link analyses (TAD) do not surface chromosome_field_x1."""
+    from webapp.backend import strc_api
+
+    cd = _make_mock_cd()
+    mock_session = MagicMock()
+    mock_session.chromdata = cd
+    data_api.current_session = mock_session
+
+    fake_tads = pd.DataFrame({
+        "chrom": ["chr1"], "start": [0], "end": [500_000],
+    })
+    mock_tad_module = MagicMock()
+    mock_tad_module.call_tads_by_pval.return_value = fake_tads
+    mock_tad_module.TADCallerParams = MagicMock
+
+    with patch.dict("sys.modules", {"uchrom.strc.tad": mock_tad_module}):
+        handle = strc_api.run_registered_analysis("tad", "chr1")
+
+    assert "chromosome_field_x1" not in handle

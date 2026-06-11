@@ -207,6 +207,14 @@ def get_compartments(chrom: str, cell_type: Optional[str] = None, format: Option
 #   chromosome_field:  the chrom column name in the records (for Gosling chromosomeField)
 #   genomic_fields:    position columns (for Gosling genomicFields)
 #   suggested_mark:    a sensible default Gosling mark for this result type
+#   chromosome_field_x1 (optional): for link marks, the chrom column of the
+#                      second anchor (the x1/x1e channel). The loop caller
+#                      (uchrom.strc.loop.axiswise_f) is CIS-ONLY: it always sets
+#                      chrom2 == chrom1 == the queried chromosome, so chrom2 here
+#                      equals chromosome_field in practice. It is surfaced
+#                      explicitly so a future trans-loop caller (chrom1 != chrom2)
+#                      maps the x1 anchor to chrom2 correctly without changing the
+#                      contract. Do NOT fabricate trans loops — see note below.
 
 ANALYSIS_REGISTRY = {
     "tad": {
@@ -221,7 +229,9 @@ ANALYSIS_REGISTRY = {
         "getter_name": "get_loops",
         "endpoint": "/api/loops",
         "result_key": "loops",
+        # Anchor 1 → x/xe channel; anchor 2 → x1/x1e channel of the link mark.
         "chromosome_field": "chrom1",
+        "chromosome_field_x1": "chrom2",
         "genomic_fields": ["start1", "end1", "start2", "end2"],
         "suggested_mark": "link",
     },
@@ -287,7 +297,7 @@ def run_registered_analysis(analysis_type: str, chrom: str) -> dict:
     resp = getter(chrom)
     records = _records_from_response(resp, spec["result_key"])
 
-    return {
+    handle = {
         "type": analysis_type,
         "chrom": chrom,
         "record_count": len(records),
@@ -297,3 +307,8 @@ def run_registered_analysis(analysis_type: str, chrom: str) -> dict:
         "genomic_fields": spec["genomic_fields"],
         "suggested_mark": spec["suggested_mark"],
     }
+    # Link marks (loops) need a second-anchor chromosome field for the x1
+    # channel. Only present for analyses that declare it.
+    if "chromosome_field_x1" in spec:
+        handle["chromosome_field_x1"] = spec["chromosome_field_x1"]
+    return handle

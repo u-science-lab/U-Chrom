@@ -276,25 +276,44 @@ async def run_agent_loop(websocket: WebSocket, conversation_history: list):
 
                         # Hand the agent everything it needs to render the result
                         # with render_gosling (data URL + field names + mark).
+                        result_payload = {
+                            "success": True,
+                            "type": handle["type"],
+                            "chrom": handle["chrom"],
+                            "record_count": handle["record_count"],
+                            "data_url": handle["data_url"],
+                            "chromosome_field": handle["chromosome_field"],
+                            "genomic_fields": handle["genomic_fields"],
+                            "suggested_mark": handle["suggested_mark"],
+                            "next_step": (
+                                "To visualize, call render_gosling with a track whose "
+                                "data = {\"type\":\"json\",\"url\":data_url,"
+                                "\"chromosomeField\":chromosome_field,"
+                                "\"genomicFields\":genomic_fields} and mark = suggested_mark."
+                            ),
+                        }
+                        # Link marks (loops): a loop connects two anchors. Anchor 1
+                        # (start1/end1) drives x/xe; anchor 2 (start2/end2) drives
+                        # x1/x1e. NOTE: the loop caller is cis-only — chrom2 always
+                        # equals chrom1 (== the queried chrom), so a single
+                        # chromosomeField suffices today. chromosome_field_x1 is
+                        # surfaced for a future trans-loop caller (chrom1 != chrom2).
+                        if "chromosome_field_x1" in handle:
+                            result_payload["chromosome_field_x1"] = handle["chromosome_field_x1"]
+                            result_payload["next_step"] = (
+                                "To visualize loops, call render_gosling with a link-mark "
+                                "track: data = {\"type\":\"json\",\"url\":data_url,"
+                                "\"chromosomeField\":chromosome_field,"
+                                "\"genomicFields\":genomic_fields}, mark = \"link\", and map "
+                                "anchor 1 to x={field:\"start1\"}, xe={field:\"end1\"} and "
+                                "anchor 2 to x1={field:\"start2\"}, x1e={field:\"end2\"}. "
+                                "Loops are CIS-ONLY (chrom2 == chrom1); do not attempt "
+                                "trans-chromosome links — the caller does not emit them."
+                            )
                         tool_result = {
                             "type": "tool_result",
                             "tool_use_id": tool_use.id,
-                            "content": json.dumps({
-                                "success": True,
-                                "type": handle["type"],
-                                "chrom": handle["chrom"],
-                                "record_count": handle["record_count"],
-                                "data_url": handle["data_url"],
-                                "chromosome_field": handle["chromosome_field"],
-                                "genomic_fields": handle["genomic_fields"],
-                                "suggested_mark": handle["suggested_mark"],
-                                "next_step": (
-                                    "To visualize, call render_gosling with a track whose "
-                                    "data = {\"type\":\"json\",\"url\":data_url,"
-                                    "\"chromosomeField\":chromosome_field,"
-                                    "\"genomicFields\":genomic_fields} and mark = suggested_mark."
-                                ),
-                            }),
+                            "content": json.dumps(result_payload),
                         }
                     except Exception as e:
                         tool_result = {
