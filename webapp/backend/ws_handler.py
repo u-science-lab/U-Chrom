@@ -94,7 +94,15 @@ async def handle_message(ws, session, msg: dict, executor):
             "title": "Ready"
         })
     elif msg_type == "update_viewport":
-        session.viewport = payload
+        from .session import Viewport
+        if isinstance(payload, dict):
+            session.viewport = Viewport(
+                chrom=payload.get("chrom"),
+                start=payload.get("start"),
+                end=payload.get("end"),
+            )
+        else:
+            session.viewport = payload
     elif msg_type == "select_cells":
         session.cell_selection = payload.get("cell_ids", [])
     else:

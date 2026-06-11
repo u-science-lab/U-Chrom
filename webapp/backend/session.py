@@ -67,17 +67,22 @@ class Session:
         # Load h5cd_path
         session.h5cd_path = data.get("h5cd_path")
 
-        # Load viewport - handle both dict and Viewport object
-        if "viewport" in data:
+        # Load viewport — always reconstruct a Viewport object so callers can
+        # use attribute access (session.viewport.chrom). Accept dict or object.
+        if "viewport" in data and data["viewport"] is not None:
             vp = data["viewport"]
             if isinstance(vp, dict):
-                session.viewport = vp
+                session.viewport = Viewport(
+                    chrom=vp.get("chrom"),
+                    start=vp.get("start"),
+                    end=vp.get("end"),
+                )
             else:
-                session.viewport = {
-                    "chrom": vp.get("chrom") if hasattr(vp, "get") else getattr(vp, "chrom", None),
-                    "start": vp.get("start") if hasattr(vp, "get") else getattr(vp, "start", None),
-                    "end": vp.get("end") if hasattr(vp, "get") else getattr(vp, "end", None),
-                }
+                session.viewport = Viewport(
+                    chrom=getattr(vp, "chrom", None),
+                    start=getattr(vp, "start", None),
+                    end=getattr(vp, "end", None),
+                )
 
         # Load other state
         session.cell_selection = data.get("cell_selection", [])
