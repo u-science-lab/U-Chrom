@@ -196,65 +196,14 @@ def test_figure_params_roundtrip():
         os.unlink(params_path)
 
 
-def test_emit_artifact_figure_integration():
-    """Test emit_artifact with figure type in worker."""
-    from webapp.backend.ws_handler import _run_code_in_worker
-    import tempfile
-    import numpy as np
-    import pandas as pd
-    from uchrom.core import ChromData
-
-    # Create test ChromData file
-    coords = np.random.rand(50, 3)
-    spots = pd.DataFrame({
-        "chrom": ["chr1"] * 50,
-        "start": list(range(0, 50000, 1000)),
-        "end": list(range(1000, 51000, 1000)),
-        "trace_id": [0] * 50,
-    })
-    cd = ChromData(coords=coords, spots=spots)
-
-    with tempfile.NamedTemporaryFile(suffix='.h5cd', delete=False) as f:
-        cd_path = f.name
-    cd.write(cd_path)
-
-    code = '''
-from uchrom.pl import create_figure, PanelSpec
-import tempfile
-
-panels = [PanelSpec(type="structure_3d", data={}, label="A")]
-fig = create_figure(
-    chromdata=cd,
-    layout="1x1",
-    panels=panels,
-    style="nature",
-)
-
-pdf_path = tempfile.mktemp(suffix=".pdf")
-fig.save(pdf_path)
-preview_base64 = fig.to_base64(dpi=150)
-
-emit_artifact("figure", {
-    "path": pdf_path,
-    "preview": preview_base64,
-    "format": "pdf",
-    "params": fig.metadata
-})
-'''
-
-    try:
-        artifacts = _run_code_in_worker(code, cd_path)
-
-        # Should have one figure artifact
-        assert len(artifacts) == 1
-        assert artifacts[0]["artifact_type"] == "figure"
-        assert "preview" in artifacts[0]["payload"]
-        assert "path" in artifacts[0]["payload"]
-        assert "format" in artifacts[0]["payload"]
-        assert artifacts[0]["payload"]["format"] == "pdf"
-    finally:
-        import os
-        os.unlink(cd_path)
+# NOTE: test_emit_artifact_figure_integration was removed. It exercised the
+# legacy `_run_code_in_worker` + `emit_artifact` worker-execution path, which
+# was removed during the Phase 0 refactor (code execution now goes through the
+# Jupyter kernel in notebook_api.execute_code). The figure-generation logic it
+# wrapped — create_figure / fig.save / fig.to_base64 / fig.metadata — is
+# already covered directly by test_figure_generation_basic,
+# test_figure_export_formats, test_figure_base64_conversion, and
+# test_figure_params_roundtrip above.
 
 
 def test_journal_style_inference():

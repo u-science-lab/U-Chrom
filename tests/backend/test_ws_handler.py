@@ -25,14 +25,19 @@ async def test_handle_message_load_data():
     msg = {"type": "load_data", "payload": {"path": "/path/to/data.h5cd"}}
     executor = MagicMock()
 
+    # load_data reads the file via ChromData.read; mock it so a fake path loads.
+    fake_cd = MagicMock()
+    fake_cd.cells.shape = (2, 1)
+    fake_cd.coords.shape = (50, 3)
     with patch('os.path.exists', return_value=True), \
-         patch('os.path.abspath', return_value="/absolute/path/to/data.h5cd"):
+         patch('os.path.abspath', return_value="/absolute/path/to/data.h5cd"), \
+         patch('uchrom.core.ChromData.read', return_value=fake_cd), \
+         patch('webapp.backend.notebook_api.start_kernel', lambda: None):
         await handle_message(ws, session, msg, executor)
 
     assert session.h5cd_path == "/absolute/path/to/data.h5cd"
-    # Now sends 2 messages: data_loaded + default viz
+    # Sends 2 messages: data_loaded + confirmation text artifact
     assert ws.send_json.call_count == 2
-    # First call should be data_loaded
     first_call = ws.send_json.call_args_list[0][0][0]
     assert first_call["type"] == "data_loaded"
     assert first_call["path"] == "/absolute/path/to/data.h5cd"
@@ -148,6 +153,7 @@ async def test_handle_message_user_message_multi_turn():
 async def test_run_agent_loop_uses_agent_tools():
     """run_agent_loop should use TOOLS from agent_tools."""
     from webapp.backend.ws_handler import run_agent_loop
+    from webapp.backend.agent_tools import TOOLS
 
     ws = AsyncMock()
     conversation_history = [{"role": "user", "content": "test"}]
@@ -156,14 +162,15 @@ async def test_run_agent_loop_uses_agent_tools():
         mock_response = MagicMock()
         mock_response.stop_reason = "end_turn"
         mock_response.content = [MagicMock(type="text", text="response")]
-        mock_client.messages.create.return_value = mock_response
+        # client is AsyncAnthropic — messages.create is awaited.
+        mock_client.messages.create = AsyncMock(return_value=mock_response)
 
         await run_agent_loop(ws, conversation_history)
 
         # Verify TOOLS was passed to API call
         call_kwargs = mock_client.messages.create.call_args[1]
         assert "tools" in call_kwargs
-        assert len(call_kwargs["tools"]) == 8  # All 8 tools from agent_tools
+        assert len(call_kwargs["tools"]) == len(TOOLS)  # all defined tools
 
 
 @pytest.mark.asyncio
@@ -174,9 +181,13 @@ async def test_load_data_sends_initial_viz():
     msg = {"type": "load_data", "payload": {"path": "/path/to/data.h5cd"}}
     executor = MagicMock()
 
-    # Mock file existence
+    fake_cd = MagicMock()
+    fake_cd.cells.shape = (2, 1)
+    fake_cd.coords.shape = (50, 3)
     with patch('os.path.exists', return_value=True), \
-         patch('os.path.abspath', return_value="/path/to/data.h5cd"):
+         patch('os.path.abspath', return_value="/path/to/data.h5cd"), \
+         patch('uchrom.core.ChromData.read', return_value=fake_cd), \
+         patch('webapp.backend.notebook_api.start_kernel', lambda: None):
         await handle_message(ws, session, msg, executor)
 
     assert ws.send_json.call_count == 2  # data_loaded + text artifact
@@ -188,7 +199,7 @@ async def test_load_data_sends_initial_viz():
     # Second: text artifact with confirmation
     assert calls[1]["type"] == "artifact"
     assert calls[1]["artifact_type"] == "text"
-    assert "Data loaded successfully" in calls[1]["content"]
+    assert "Data loaded" in calls[1]["content"]
 
 
 @pytest.mark.asyncio
@@ -217,16 +228,16 @@ async def test_run_agent_loop_add_notebook_cell():
         mock_response_2.stop_reason = "end_turn"
         mock_response_2.content = [MagicMock(type="text", text="Done")]
 
-        mock_client.messages.create.side_effect = [mock_response_1, mock_response_2]
+        mock_client.messages.create = AsyncMock(side_effect=[mock_response_1, mock_response_2])
 
         # Mock execute_code
         with patch('webapp.backend.notebook_api.execute_code', return_value={"status": "ok", "output": "2", "error": None}):
             await run_agent_loop(ws, conversation_history)
 
-        # Verify notebook_cell artifact sent
-        calls = [call[0][0] for call in ws.send_text.call_args_list]
-        parsed_calls = [json.loads(c) for c in calls]
-        notebook_cells = [c for c in parsed_calls if c.get("artifact_type") == "notebook_cell"]
+        # Verify notebook_cell artifact sent (current impl uses send_json with dicts)
+        calls = [call[0][0] for call in ws.send_json.call_args_list]
+        notebook_cells = [c for c in calls
+                          if isinstance(c, dict) and c.get("artifact_type") == "notebook_cell"]
 
         assert len(notebook_cells) == 1
         assert notebook_cells[0]["content"]["code"] == "1+1"
@@ -237,22 +248,23 @@ async def test_run_agent_loop_add_notebook_cell():
 
 @pytest.mark.asyncio
 async def test_run_agent_loop_run_analysis():
-    """run_agent_loop should handle run_analysis tool."""
+    """run_agent_loop should handle run_analysis tool (registry-based)."""
     from webapp.backend.ws_handler import run_agent_loop
 
     ws = AsyncMock()
     conversation_history = [{"role": "user", "content": "Analyze data"}]
 
-    # Mock anthropic response with run_analysis tool use
     with patch('webapp.backend.ws_handler.client') as mock_client:
-        # First response: tool_use
+        # First response: tool_use for run_analysis. Current contract: the tool
+        # takes {type, region} and dispatches to run_registered_analysis — it
+        # does NOT execute arbitrary code.
         mock_response_1 = MagicMock()
         mock_response_1.stop_reason = "tool_use"
         tool_block = MagicMock()
         tool_block.type = "tool_use"
         tool_block.name = "run_analysis"
         tool_block.id = "tool_456"
-        tool_block.input = {"code": "import numpy as np\nprint(np.mean([1,2,3]))"}
+        tool_block.input = {"type": "tad", "region": "chr21"}
         mock_response_1.content = [tool_block]
 
         # Second response: end_turn (after tool result)
@@ -260,14 +272,22 @@ async def test_run_agent_loop_run_analysis():
         mock_response_2.stop_reason = "end_turn"
         mock_response_2.content = [MagicMock(type="text", text="Analysis done")]
 
-        mock_client.messages.create.side_effect = [mock_response_1, mock_response_2]
+        mock_client.messages.create = AsyncMock(side_effect=[mock_response_1, mock_response_2])
 
-        # Mock execute_code
-        with patch('webapp.backend.notebook_api.execute_code', return_value={"status": "ok", "output": "2.0"}):
+        fake_handle = {
+            "type": "tad", "chrom": "chr21", "record_count": 3,
+            "records": [{"chrom": "chr21", "start": 0, "end": 1000}],
+            "data_url": "/api/tads/chr21?format=gosling",
+            "chromosome_field": "chrom", "genomic_fields": ["start", "end"],
+            "suggested_mark": "rule",
+        }
+        with patch('webapp.backend.strc_api.run_registered_analysis', return_value=fake_handle):
             await run_agent_loop(ws, conversation_history)
 
-        # Verify text artifact sent
+        # Verify an analysis_result artifact was emitted for the frontend.
         calls = [call[0][0] for call in ws.send_json.call_args_list]
-        text_artifacts = [c for c in calls if c.get("artifact_type") == "text"]
-        assert len(text_artifacts) >= 1
-        assert "Analysis complete" in text_artifacts[0]["content"]
+        analysis_artifacts = [c for c in calls
+                              if isinstance(c, dict) and c.get("artifact_type") == "analysis_result"]
+        assert len(analysis_artifacts) >= 1
+        assert analysis_artifacts[0]["analysis_type"] == "tad"
+        assert analysis_artifacts[0]["chrom"] == "chr21"

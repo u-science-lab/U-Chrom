@@ -20,12 +20,16 @@ async def test_full_workflow_load_data_to_notebook():
     executor = MagicMock()
 
     # Step 1: Load data
-    with patch('webapp.backend.notebook_api.start_kernel') as mock_start_kernel:
-        with patch('os.path.exists', return_value=True):
-            await handle_message(ws, session, {
-                "type": "load_data",
-                "payload": {"path": "/fake/data.h5cd"}
-            }, executor)
+    fake_cd = MagicMock()
+    fake_cd.cells.shape = (2, 1)
+    fake_cd.coords.shape = (50, 3)
+    with patch('webapp.backend.notebook_api.start_kernel') as mock_start_kernel, \
+         patch('os.path.exists', return_value=True), \
+         patch('uchrom.core.ChromData.read', return_value=fake_cd):
+        await handle_message(ws, session, {
+            "type": "load_data",
+            "payload": {"path": "/fake/data.h5cd"}
+        }, executor)
 
     # Verify kernel was started
     mock_start_kernel.assert_called_once()
@@ -34,8 +38,8 @@ async def test_full_workflow_load_data_to_notebook():
     calls = [call[0][0] for call in ws.send_json.call_args_list]
     assert any('data_loaded' in json.dumps(call) for call in calls), "data_loaded message not sent"
 
-    # Verify initial artifact sent
-    assert any('artifact' in json.dumps(call) and 'Data loaded successfully' in json.dumps(call)
+    # Verify initial artifact sent (current text is "Data loaded: ...")
+    assert any('artifact' in json.dumps(call) and 'Data loaded' in json.dumps(call)
                for call in calls), "Initial artifact not sent"
 
     # Step 2: Agent adds notebook cell
@@ -64,7 +68,7 @@ async def test_full_workflow_load_data_to_notebook():
             mock_response_2.stop_reason = "end_turn"
             mock_response_2.content = [MagicMock(type="text", text="Done")]
 
-            mock_client.messages.create.side_effect = [mock_response, mock_response_2]
+            mock_client.messages.create = AsyncMock(side_effect=[mock_response, mock_response_2])
 
             conversation_history = [{"role": "user", "content": "Calculate 42"}]
             await run_agent_loop(ws, conversation_history)
@@ -72,13 +76,14 @@ async def test_full_workflow_load_data_to_notebook():
     # Verify execute_code was called
     mock_execute.assert_called_once_with("print(42)")
 
-    # Verify notebook_cell artifact sent
-    calls = [call[0][0] for call in ws.send_text.call_args_list]
-    notebook_artifacts = [call for call in calls if 'notebook_cell' in call]
+    # Verify notebook_cell artifact sent (current impl: send_json with dicts)
+    calls = [call[0][0] for call in ws.send_json.call_args_list]
+    notebook_artifacts = [c for c in calls
+                          if isinstance(c, dict) and c.get("artifact_type") == "notebook_cell"]
     assert len(notebook_artifacts) >= 1, "notebook_cell artifact not sent"
 
     # Verify artifact contains code and output
-    artifact = json.loads(notebook_artifacts[0])
+    artifact = notebook_artifacts[0]
     assert artifact["type"] == "artifact"
     assert artifact["artifact_type"] == "notebook_cell"
     assert artifact["content"]["code"] == "print(42)"
@@ -88,7 +93,7 @@ async def test_full_workflow_load_data_to_notebook():
 
 @pytest.mark.asyncio
 async def test_agent_run_analysis_workflow():
-    """Test agent using run_analysis tool for complex analysis."""
+    """Test agent using run_analysis tool (registry-based structure analysis)."""
 
     ws = AsyncMock()
 
@@ -96,12 +101,12 @@ async def test_agent_run_analysis_workflow():
         mock_response = MagicMock()
         mock_response.stop_reason = "tool_use"
 
-        # Create mock tool use block
+        # Current run_analysis contract: {type, region} → run_registered_analysis.
         mock_tool_use = MagicMock()
         mock_tool_use.type = "tool_use"
         mock_tool_use.name = "run_analysis"
         mock_tool_use.id = "t2"
-        mock_tool_use.input = {"code": "import numpy as np\nprint(np.mean([1,2,3]))"}
+        mock_tool_use.input = {"type": "compartment", "region": "chr21"}
 
         mock_response.content = [mock_tool_use]
 
@@ -110,29 +115,30 @@ async def test_agent_run_analysis_workflow():
         mock_response_2.stop_reason = "end_turn"
         mock_response_2.content = [MagicMock(type="text", text="Analysis complete")]
 
-        mock_client.messages.create.side_effect = [mock_response, mock_response_2]
+        mock_client.messages.create = AsyncMock(side_effect=[mock_response, mock_response_2])
 
-        with patch('webapp.backend.notebook_api.execute_code', return_value={
-            "status": "ok",
-            "output": "2.0"
-        }) as mock_execute:
+        fake_handle = {
+            "type": "compartment", "chrom": "chr21", "record_count": 2,
+            "records": [{"chrom": "chr21", "start": 0, "end": 1000, "value": 0.5}],
+            "data_url": "/api/compartments/chr21?format=gosling",
+            "chromosome_field": "chrom", "genomic_fields": ["start", "end"],
+            "suggested_mark": "bar",
+        }
+        with patch('webapp.backend.strc_api.run_registered_analysis',
+                   return_value=fake_handle) as mock_run:
             conversation_history = [{"role": "user", "content": "Analyze"}]
             await run_agent_loop(ws, conversation_history)
 
-    # Verify execute_code was called
-    mock_execute.assert_called_once()
+    # Verify the registry analysis was invoked
+    mock_run.assert_called_once()
 
-    # Verify text artifact sent
+    # Verify analysis_result artifact emitted for the frontend
     calls = [call[0][0] for call in ws.send_json.call_args_list]
-    text_artifacts = [call for call in calls if 'Analysis complete' in json.dumps(call)]
-    assert len(text_artifacts) >= 1, "Analysis result artifact not sent"
-
-    # Verify artifact format
-    artifact = text_artifacts[0]
-    assert artifact["type"] == "artifact"
-    assert artifact["artifact_type"] == "text"
-    assert "Analysis complete" in artifact["content"]
-    assert "2.0" in artifact["content"]
+    analysis_artifacts = [c for c in calls
+                          if isinstance(c, dict) and c.get("artifact_type") == "analysis_result"]
+    assert len(analysis_artifacts) >= 1, "analysis_result artifact not sent"
+    assert analysis_artifacts[0]["analysis_type"] == "compartment"
+    assert analysis_artifacts[0]["chrom"] == "chr21"
 
 
 @pytest.mark.asyncio
@@ -159,7 +165,7 @@ async def test_agent_error_handling():
         mock_response_2.stop_reason = "end_turn"
         mock_response_2.content = [MagicMock(type="text", text="Error handled")]
 
-        mock_client.messages.create.side_effect = [mock_response, mock_response_2]
+        mock_client.messages.create = AsyncMock(side_effect=[mock_response, mock_response_2])
 
         with patch('webapp.backend.notebook_api.execute_code', return_value={
             "status": "error",
@@ -169,12 +175,13 @@ async def test_agent_error_handling():
             conversation_history = [{"role": "user", "content": "Test error"}]
             await run_agent_loop(ws, conversation_history)
 
-    # Verify artifact contains error
-    calls = [call[0][0] for call in ws.send_text.call_args_list]
-    notebook_artifacts = [call for call in calls if 'notebook_cell' in call]
+    # Verify artifact contains error (current impl: send_json with dicts)
+    calls = [call[0][0] for call in ws.send_json.call_args_list]
+    notebook_artifacts = [c for c in calls
+                          if isinstance(c, dict) and c.get("artifact_type") == "notebook_cell"]
     assert len(notebook_artifacts) >= 1
 
-    artifact = json.loads(notebook_artifacts[0])
+    artifact = notebook_artifacts[0]
     assert artifact["content"]["status"] == "error"
     assert artifact["content"]["error"] == "ValueError: test error"
 
@@ -186,13 +193,14 @@ async def test_multiple_tool_calls_in_sequence():
     ws = AsyncMock()
 
     with patch('webapp.backend.ws_handler.client') as mock_client:
-        # First response: two tool uses
+        # First response: two tool uses (both code-executing notebook cells, since
+        # run_analysis is now registry-based and does not execute arbitrary code).
         mock_response_1 = MagicMock()
         mock_response_1.stop_reason = "tool_use"
 
         mock_tool_use_1 = MagicMock()
         mock_tool_use_1.type = "tool_use"
-        mock_tool_use_1.name = "run_analysis"
+        mock_tool_use_1.name = "add_notebook_cell"
         mock_tool_use_1.id = "t1"
         mock_tool_use_1.input = {"code": "x = 1"}
 
@@ -209,7 +217,7 @@ async def test_multiple_tool_calls_in_sequence():
         mock_response_2.stop_reason = "end_turn"
         mock_response_2.content = [MagicMock(type="text", text="Both executed")]
 
-        mock_client.messages.create.side_effect = [mock_response_1, mock_response_2]
+        mock_client.messages.create = AsyncMock(side_effect=[mock_response_1, mock_response_2])
 
         with patch('webapp.backend.notebook_api.execute_code', return_value={
             "status": "ok",
@@ -221,13 +229,8 @@ async def test_multiple_tool_calls_in_sequence():
     # Verify both executions happened
     assert mock_execute.call_count == 2
 
-    # Verify both artifacts sent
-    calls = [call[0][0] for call in ws.send_text.call_args_list] + \
-            [call[0][0] for call in ws.send_json.call_args_list]
-
-    # Should have run_analysis artifact (text) and add_notebook_cell artifact
-    text_artifacts = [c for c in calls if isinstance(c, dict) and c.get("artifact_type") == "text"]
-    notebook_artifacts = [c for c in calls if isinstance(c, str) and "notebook_cell" in c]
-
-    assert len(text_artifacts) >= 1, "run_analysis artifact not sent"
-    assert len(notebook_artifacts) >= 1, "add_notebook_cell artifact not sent"
+    # Verify both notebook_cell artifacts sent (current impl: send_json with dicts)
+    calls = [call[0][0] for call in ws.send_json.call_args_list]
+    notebook_artifacts = [c for c in calls
+                          if isinstance(c, dict) and c.get("artifact_type") == "notebook_cell"]
+    assert len(notebook_artifacts) == 2, "expected two notebook_cell artifacts"

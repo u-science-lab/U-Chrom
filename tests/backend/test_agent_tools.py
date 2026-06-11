@@ -3,14 +3,16 @@ from webapp.backend.agent_tools import TOOLS, SYSTEM_PROMPT
 
 
 def test_all_tools_defined():
-    """All 8 planned tools should be defined."""
+    """All planned tools should be defined (plus later additions)."""
     names = {t["name"] for t in TOOLS}
     expected = {
         "render_gosling", "patch_gosling", "color_embedding",
         "select_cells", "show_structure", "color_structure",
         "add_notebook_cell", "run_analysis",
     }
-    assert expected == names
+    # The 8 planned tools must all exist; newer tools (export_view,
+    # write_analysis_function, ...) may extend the set.
+    assert expected <= names, f"missing planned tools: {expected - names}"
 
 
 def test_each_tool_has_schema():
