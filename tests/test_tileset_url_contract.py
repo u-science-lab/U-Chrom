@@ -92,7 +92,8 @@ def test_tiles_trailing_slash_no_redirect():
     body = r.json()
     assert tile_id in body
     dense = body[tile_id]["dense"]
-    raw = gzip.decompress(base64.b64decode(dense))
+    raw = base64.b64decode(dense)  # raw float32, NOT gzipped (Gosling decodes directly)
+    assert len(raw) % 4 == 0
     arr = np.frombuffer(raw, dtype=np.float32)
     assert len(arr) == 256 * 256
     # Real distance data: at least some finite, non-zero values.

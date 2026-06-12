@@ -165,11 +165,16 @@ def _build_tile_array(matrix: np.ndarray, zoom: int, tx: int, ty: int,
 
 
 def _encode_tile(matrix: np.ndarray, z: int, x: int, y: int, max_z: int) -> str:
-    """Extract a 256×256 tile from the full matrix and return base64-gzipped float32."""
+    """Extract a 256×256 tile and return base64-encoded raw little-endian float32.
+
+    NOT gzipped: Gosling's tile decoder reads the ``dense`` field as
+    ``new Float32Array(base64ToArrayBuffer(dense))`` with no decompression
+    step, so a gzipped payload makes its byte length not a multiple of 4
+    ("byte length of Float32Array should be a multiple of 4").
+    """
     out = _build_tile_array(matrix, z, x, y, max_z)
     raw = out.flatten().tobytes()  # little-endian float32
-    compressed = gzip.compress(raw)
-    return base64.b64encode(compressed).decode("ascii")
+    return base64.b64encode(raw).decode("ascii")
 
 
 # ---------------------------------------------------------------------------
@@ -229,8 +234,8 @@ def tiles(d: list[str] | None = Query(default=None)):
             arr = _build_tile_array(matrix, z, x, y, max_z)
             actual_max = float(np.nanmax(arr)) if not np.all(np.isnan(arr)) else 1.0
             raw = arr.flatten().tobytes()
-            compressed = gzip.compress(raw)
-            dense = base64.b64encode(compressed).decode("ascii")
+            # NOT gzipped — Gosling reads dense as raw float32 (see _encode_tile).
+            dense = base64.b64encode(raw).decode("ascii")
             _tile_cache[cache_key] = (dense, actual_max)
 
         result[tile_id] = {

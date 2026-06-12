@@ -7,7 +7,16 @@
  * `${server}/tiles/?d=<uid>.z.x.y` (with trailing slashes). The vite dev proxy
  * only forwards `/api/*`, and the backend serves these under `/api/v1`, so
  * `server` MUST include the `/api/v1` prefix.
+ *
+ * OVERLAY STRUCTURE (Gosling 1.x): a track that sets `alignment: 'overlay'`
+ * MUST carry a nested `tracks: [...]` array of the layers to overlay. Setting
+ * `alignment: 'overlay'` on a leaf track WITHOUT a nested `tracks` array makes
+ * the compiler do `[...track.tracks]` on `undefined` → "track.tracks is not
+ * iterable". So the heatmap + TAD boundaries are wrapped in ONE overlay track,
+ * and the cytoband axis is a separate stacked track.
  */
+
+const ORIGIN = typeof window !== 'undefined' ? window.location.origin : ''
 
 export const LOCAL_CONTACT_MAP_SPEC = {
   assembly: [['chr21', 46709983]], // chr21 length for hg38
@@ -19,83 +28,82 @@ export const LOCAL_CONTACT_MAP_SPEC = {
       xDomain: { chromosome: 'chr21', interval: [0, 46709983] },
       tracks: [
         {
-          id: 'contact-heatmap',
+          // Overlay parent: heatmap + TAD boundary rules share one canvas.
+          alignment: 'overlay',
           title: 'Contact Map (chr21)',
-          data: {
-            type: 'matrix',
-            url: `${window.location.origin}/api/v1/tileset_info?d=contact-chr21`,
-            server: `${window.location.origin}/api/v1`,
-            tilesetUid: 'contact-chr21',
-          },
-          mark: 'rect',
-          x: { field: 'start', type: 'genomic', axis: 'top' },
-          xe: { field: 'end', type: 'genomic' },
-          color: {
-            field: 'value',
-            type: 'quantitative',
-            range: 'warm',
-            legend: true,
-          },
           width: 800,
           height: 400,
-        },
-        {
-          // TAD boundaries overlaid on the heatmap
-          id: 'tad-boundaries',
-          alignment: 'overlay',
-          title: 'TAD Boundaries',
-          data: {
-            type: 'json',
-            url: `${window.location.origin}/api/tads/chr21?format=gosling`,
-            genomicFields: [
-              { index: 'start', name: 'start' },
-              { index: 'end', name: 'end' },
-            ],
-            chromosomeField: 'chrom',
-          },
-          dataTransform: [
-            // Create boundary positions (start and end of each TAD)
-            { type: 'filter', field: 'start', oneOf: ['!', null] },
+          tracks: [
+            {
+              // Layer 1: contact matrix heatmap.
+              // Gosling 1.0.7 MatrixData schema accepts ONLY `url` (no `server`
+              // / `tilesetUid`). The compiler derives server+tilesetUid by
+              // splitting the url on the literal "tileset_info/?d=" (note the
+              // trailing slash), so the url MUST contain that exact substring.
+              // A matrix is a 2D track: it needs all four positional channels
+              // (x/xe/y/ye) with the tile fields xs/xe/ys/ye, and mark 'bar'.
+              id: 'contact-heatmap',
+              data: {
+                type: 'matrix',
+                url: `${ORIGIN}/api/v1/tileset_info/?d=contact-chr21`,
+              },
+              mark: 'bar',
+              x: { field: 'xs', type: 'genomic', axis: 'top' },
+              xe: { field: 'xe', type: 'genomic' },
+              y: { field: 'ys', type: 'genomic', axis: 'left' },
+              ye: { field: 'ye', type: 'genomic' },
+              color: {
+                field: 'value',
+                type: 'quantitative',
+                range: 'warm',
+                legend: true,
+              },
+            },
+            {
+              // Layer 2: TAD start boundaries (vertical rules).
+              // Gosling's json loader only accepts inline `values`; remote data
+              // MUST use `type: 'csv'` (which supports `url`). Backend serves
+              // text/csv at format=csv with a header row even when empty.
+              id: 'tad-boundaries',
+              data: {
+                type: 'csv',
+                url: `${ORIGIN}/api/tads/chr21?format=csv`,
+                chromosomeField: 'chrom',
+                genomicFields: ['start', 'end'],
+              },
+              mark: 'rule',
+              x: { field: 'start', type: 'genomic' },
+              strokeWidth: { value: 2 },
+              stroke: { value: '#ff1493' },
+              opacity: { value: 0.7 },
+            },
+            {
+              // Layer 3: TAD end boundaries (vertical rules)
+              id: 'tad-boundaries-end',
+              data: {
+                type: 'csv',
+                url: `${ORIGIN}/api/tads/chr21?format=csv`,
+                chromosomeField: 'chrom',
+                genomicFields: ['start', 'end'],
+              },
+              mark: 'rule',
+              x: { field: 'end', type: 'genomic' },
+              strokeWidth: { value: 2 },
+              stroke: { value: '#ff1493' },
+              opacity: { value: 0.7 },
+            },
           ],
-          mark: 'rule',
-          x: { field: 'start', type: 'genomic' },
-          strokeWidth: { value: 2 },
-          stroke: { value: '#ff1493' },
-          opacity: { value: 0.7 },
-          style: { linePattern: { type: 'triangleRight', size: 5 } },
-          width: 800,
-          height: 400,
         },
         {
-          // Right boundaries (end positions)
-          id: 'tad-boundaries-end',
-          alignment: 'overlay',
-          data: {
-            type: 'json',
-            url: `${window.location.origin}/api/tads/chr21?format=gosling`,
-            genomicFields: [
-              { index: 'end', name: 'end' },
-            ],
-            chromosomeField: 'chrom',
-          },
-          mark: 'rule',
-          x: { field: 'end', type: 'genomic' },
-          strokeWidth: { value: 2 },
-          stroke: { value: '#ff1493' },
-          opacity: { value: 0.7 },
-          width: 800,
-          height: 400,
-        },
-        {
-          // Axis track below the heatmap
+          // Separate stacked track: cytogenetic band axis below the heatmap.
+          // Gosling 1.0.7 CsvData has no `quantitativeFields` (that's JSON-only);
+          // the csv loader infers field types, so it is omitted here.
           id: 'axis',
-          alignment: 'overlay',
           data: {
             type: 'csv',
             url: 'https://raw.githubusercontent.com/sehilyi/gemini-datasets/master/data/cytogenetic_band.csv',
             chromosomeField: 'Chr.',
             genomicFields: ['ISCN_start', 'ISCN_stop', 'Basepair_start', 'Basepair_stop'],
-            quantitativeFields: ['Band', 'Density'],
           },
           mark: 'rect',
           dataTransform: [{ type: 'filter', field: 'Chr.', oneOf: ['chr21'] }],

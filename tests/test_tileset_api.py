@@ -59,14 +59,20 @@ def test_tileset_info_returns_chrom_dataset():
 
 
 def test_tile_encoding_returns_valid_float32():
-    """Tile endpoint returns base64-gzipped float32 array of correct length."""
+    """Tile endpoint returns base64 raw (un-gzipped) float32 array.
+
+    Gosling's tile decoder reads `dense` as new Float32Array(base64ToArrayBuffer(dense))
+    with no decompression, so the payload must be raw little-endian float32 — and its
+    decoded byte length must be a multiple of 4 (256*256*4 = 262144).
+    """
     r = client.get("/api/tiles?d=contact-chr1.0.0.0")
     assert r.status_code == 200
     body = r.json()
     assert "contact-chr1.0.0.0" in body
     tile = body["contact-chr1.0.0.0"]
     assert "dense" in tile
-    raw = gzip.decompress(base64.b64decode(tile["dense"]))
+    raw = base64.b64decode(tile["dense"])
+    assert len(raw) % 4 == 0
     arr = np.frombuffer(raw, dtype=np.float32)
     assert len(arr) == 256 * 256
 

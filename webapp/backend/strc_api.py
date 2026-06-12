@@ -10,13 +10,14 @@ Endpoints:
 """
 from __future__ import annotations
 
+import io
 import json
 from typing import Optional
 
 import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 import webapp.backend.data_api as data_api
 from uchrom.core import ChromData
@@ -76,12 +77,33 @@ def _df_to_records(df: pd.DataFrame) -> list:
     return records.to_dict(orient="records")
 
 
+# Column headers per result type, so a `csv` response with zero rows still
+# emits a valid header line (Gosling's csv loader parses the header to learn
+# field names; an empty body or a JSON error body would break it).
+_CSV_COLUMNS = {
+    "tads": ["chrom", "start", "end"],
+    "loops": ["chrom", "start1", "end1", "start2", "end2"],
+    "compartments": ["chrom", "start", "end", "compartment"],
+}
+
+
 def _respond(key: str, records: list, fmt: Optional[str]):
     """Shape the response by `format`.
 
     - default / 'wrapped': {<key>: [...]}  (back-compat with existing tests/UI)
     - 'gosling':           [...]           (bare array — Gosling json loader wants this)
+    - 'csv':               text/csv        (Gosling's csv loader needs a remote URL;
+                                             json loader only accepts inline `values`)
     """
+    if fmt == "csv":
+        if records:
+            df = pd.DataFrame(records)
+        else:
+            df = pd.DataFrame(columns=_CSV_COLUMNS.get(key, []))
+        buf = io.StringIO()
+        df.to_csv(buf, index=False)
+        return PlainTextResponse(buf.getvalue(), media_type="text/csv",
+                                 headers={"Cache-Control": _CACHE})
     if fmt == "gosling":
         return JSONResponse(records, headers={"Cache-Control": _CACHE})
     return JSONResponse({key: records}, headers={"Cache-Control": _CACHE})
@@ -108,9 +130,9 @@ def get_tads(chrom: str, cell_type: Optional[str] = None, format: Optional[str] 
 
     try:
         from uchrom.strc.tad import call_tads_by_pval, TADCallerParams
-        tads = call_tads_by_pval(chrom_cd, TADCallerParams())
-    except ImportError:
-        raise HTTPException(status_code=503, detail={"error": "TAD module unavailable (missing torch?)"})
+        tads = call_tads_by_pval(chrom_cd, chrom, TADCallerParams())
+    except ImportError as e:
+        raise HTTPException(status_code=503, detail={"error": "TAD module unavailable", "detail": str(e)})
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error": "TAD calling failed", "detail": str(e)})
 
@@ -144,9 +166,9 @@ def get_loops(chrom: str, cell_type: Optional[str] = None, format: Optional[str]
 
     try:
         from uchrom.strc.loop import call_loops_axiswise_f, LoopCallerParams
-        loops = call_loops_axiswise_f(chrom_cd, LoopCallerParams())
-    except ImportError:
-        raise HTTPException(status_code=503, detail={"error": "Loop module unavailable (missing torch?)"})
+        loops = call_loops_axiswise_f(chrom_cd, chrom, LoopCallerParams())
+    except ImportError as e:
+        raise HTTPException(status_code=503, detail={"error": "Loop module unavailable", "detail": str(e)})
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error": "Loop calling failed", "detail": str(e)})
 
@@ -176,9 +198,9 @@ def get_compartments(chrom: str, cell_type: Optional[str] = None, format: Option
 
     try:
         from uchrom.strc.comp import call_compartments_axes_pc, CompartmentCallerParams
-        comp = call_compartments_axes_pc(chrom_cd, CompartmentCallerParams())
-    except ImportError:
-        raise HTTPException(status_code=503, detail={"error": "Compartment module unavailable (missing torch?)"})
+        comp = call_compartments_axes_pc(chrom_cd, chrom, CompartmentCallerParams())
+    except ImportError as e:
+        raise HTTPException(status_code=503, detail={"error": "Compartment module unavailable", "detail": str(e)})
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error": "Compartment calling failed", "detail": str(e)})
 

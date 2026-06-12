@@ -43,9 +43,17 @@ export default function GenomicPanel() {
   const setActiveGoslingSpec = useAppStore(s => s.setActiveGoslingSpec)
   const viewport = useAppStore(s => s.viewport)
   const requestExport = useAppStore(s => s.requestExport)
+  const dataVersion = useAppStore(s => s.dataVersion)
 
-  // Priority: agent-generated spec > local contact map (default)
-  const specToRender = activeSpec ?? LOCAL_CONTACT_MAP_SPEC
+  // The local contact map pulls from the backend tileset/strc endpoints, which
+  // 404 until a ChromData file is loaded. Only mount it once data exists —
+  // otherwise Gosling fires requests against an empty session and its CSV
+  // fetcher crashes on the undefined response
+  // (`Cannot read properties of undefined (reading 'filter')`).
+  const hasData = dataVersion > 0
+
+  // Priority: agent-generated spec > local contact map (only once data loaded).
+  const specToRender = activeSpec ?? (hasData ? LOCAL_CONTACT_MAP_SPEC : null)
 
   const isLocalDefault = !activeSpec
 
@@ -114,13 +122,23 @@ export default function GenomicPanel() {
 
       {/* Main Gosling renderer */}
       <div className="flex-1 overflow-auto">
-        <Suspense fallback={
-          <div className="h-full flex items-center justify-center text-gray-400 text-sm">
-            Loading Gosling...
+        {specToRender ? (
+          <Suspense fallback={
+            <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+              Loading Gosling...
+            </div>
+          }>
+            <GoslingRenderer spec={specToRender} />
+          </Suspense>
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center text-center px-6 text-gray-400">
+            <div className="text-sm font-medium text-gray-500 mb-1">No data loaded</div>
+            <div className="text-xs max-w-xs">
+              Open a ChromData file (top-right) to view the contact map, or pick
+              "Remote Demo" to preview a sample track.
+            </div>
           </div>
-        }>
-          <GoslingRenderer spec={specToRender} />
-        </Suspense>
+        )}
       </div>
     </div>
   )
