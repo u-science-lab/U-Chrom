@@ -1,0 +1,597 @@
+{
+  "version": "1.0.0",
+  "description": "Machine-readable catalog of U-Chrom webapp genomic data API endpoints for agent discovery",
+  "base_url": "/api",
+  "endpoints": [
+    {
+      "id": "tileset_info",
+      "name": "HiGlass Tileset Info",
+      "path": "/api/tileset_info",
+      "method": "GET",
+      "description": "HiGlass-compatible tileset metadata for contact map tiles. Returns dataset metadata including zoom levels, dimensions, and chromosome sizes.",
+      "parameters": {
+        "d": {
+          "type": "string or array",
+          "required": true,
+          "description": "Tileset UID(s). Format: 'contact-{chrom}' (e.g., 'contact-chr21'). Accepts repeated params (?d=a&d=b) or comma-separated (?d=a,b).",
+          "example": "contact-chr21"
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "description": "Map from tileset UID to metadata object",
+        "properties": {
+          "{uid}": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Tileset UID"
+              },
+              "datatype": {
+                "type": "string",
+                "description": "Always 'matrix' for contact maps"
+              },
+              "bins_per_dimension": {
+                "type": "integer",
+                "description": "Tile dimension (always 256)"
+              },
+              "max_zoom": {
+                "type": "integer",
+                "description": "Maximum zoom level"
+              },
+              "max_width": {
+                "type": "integer",
+                "description": "Full matrix width at max zoom"
+              },
+              "min_pos": {
+                "type": "array",
+                "items": "integer",
+                "description": "Minimum position [x, y]"
+              },
+              "max_pos": {
+                "type": "array",
+                "items": "integer",
+                "description": "Maximum position [x, y]"
+              },
+              "chromsizes": {
+                "type": "array",
+                "description": "Array of [chrom_name, size] tuples"
+              }
+            }
+          }
+        }
+      },
+      "gosling_track_example": {
+        "description": "Contact map heatmap visualization",
+        "track": {
+          "id": "contact-heatmap",
+          "title": "Contact Map",
+          "data": {
+            "type": "matrix",
+            "url": "${window.location.origin}/api/tileset_info?d=contact-chr21",
+            "server": "${window.location.origin}",
+            "tilesetUid": "contact-chr21"
+          },
+          "mark": "rect",
+          "x": {
+            "field": "start",
+            "type": "genomic",
+            "axis": "top"
+          },
+          "xe": {
+            "field": "end",
+            "type": "genomic"
+          },
+          "color": {
+            "field": "value",
+            "type": "quantitative",
+            "range": "warm",
+            "legend": true
+          },
+          "width": 800,
+          "height": 400
+        }
+      }
+    },
+    {
+      "id": "tiles",
+      "name": "HiGlass Tiles",
+      "path": "/api/tiles",
+      "method": "GET",
+      "description": "Returns contact map tiles as base64-gzipped float32 arrays (256x256). Companion endpoint to /api/tileset_info.",
+      "parameters": {
+        "d": {
+          "type": "string or array",
+          "required": true,
+          "description": "Tile ID(s). Format: '{uid}.{z}.{x}.{y}' (e.g., 'contact-chr21.0.0.0'). Accepts repeated or comma-separated IDs.",
+          "example": "contact-chr21.0.0.0"
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "description": "Map from tile ID to tile data",
+        "properties": {
+          "{tile_id}": {
+            "type": "object",
+            "properties": {
+              "dense": {
+                "type": "string",
+                "description": "Base64-encoded gzipped float32 array (256x256 flattened)"
+              },
+              "min_value": {
+                "type": "number",
+                "description": "Minimum value in tile (typically 0.0)"
+              },
+              "max_value": {
+                "type": "number",
+                "description": "Maximum value in tile"
+              }
+            }
+          }
+        }
+      },
+      "notes": "This endpoint is automatically used by Gosling when rendering 'matrix' type tracks. No direct Gosling configuration needed."
+    },
+    {
+      "id": "tads",
+      "name": "TAD Boundaries",
+      "path": "/api/tads/{chrom}",
+      "method": "GET",
+      "description": "Returns Topologically Associating Domain (TAD) boundaries for a chromosome. Computed on-demand using uchrom.strc.tad.call_tads_by_pval with ArcFISH-style variance F-test. Results cached for 5 minutes.",
+      "parameters": {
+        "chrom": {
+          "type": "string",
+          "required": true,
+          "location": "path",
+          "description": "Chromosome name (e.g., 'chr21', 'chr1')",
+          "example": "chr21"
+        },
+        "cell_type": {
+          "type": "string",
+          "required": false,
+          "location": "query",
+          "description": "Filter to specific cell type. If omitted, uses all cells.",
+          "example": "neuron"
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "tads": {
+            "type": "array",
+            "description": "Array of TAD domain records",
+            "items": {
+              "type": "object",
+              "properties": {
+                "chrom": {
+                  "type": "string",
+                  "description": "Chromosome name"
+                },
+                "start": {
+                  "type": "integer",
+                  "description": "Domain start position (bp)"
+                },
+                "end": {
+                  "type": "integer",
+                  "description": "Domain end position (bp)"
+                },
+                "level": {
+                  "type": "integer",
+                  "description": "Hierarchy level (0=top level, higher=nested)"
+                },
+                "score": {
+                  "type": "number",
+                  "description": "Statistical score (-log10 p-value)"
+                },
+                "pval": {
+                  "type": "number",
+                  "description": "Raw p-value from F-test"
+                },
+                "fdr": {
+                  "type": "number",
+                  "description": "FDR-adjusted q-value (BH correction)"
+                }
+              }
+            }
+          }
+        }
+      },
+      "gosling_track_example": {
+        "description": "TAD boundaries as vertical rules overlaid on contact map",
+        "track": {
+          "id": "tad-boundaries",
+          "alignment": "overlay",
+          "title": "TAD Boundaries",
+          "data": {
+            "type": "json",
+            "url": "${window.location.origin}/api/tads/chr21",
+            "genomicFields": [
+              {
+                "index": "start",
+                "name": "start"
+              },
+              {
+                "index": "end",
+                "name": "end"
+              }
+            ],
+            "chromosomeField": "chrom"
+          },
+          "dataTransform": [
+            {
+              "type": "filter",
+              "field": "start",
+              "oneOf": [
+                "!",
+                null
+              ]
+            }
+          ],
+          "mark": "rule",
+          "x": {
+            "field": "start",
+            "type": "genomic"
+          },
+          "strokeWidth": {
+            "value": 2
+          },
+          "stroke": {
+            "value": "#ff1493"
+          },
+          "opacity": {
+            "value": 0.7
+          },
+          "width": 800,
+          "height": 400
+        },
+        "notes": "For end boundaries, create a second track with x: {field: 'end', type: 'genomic'}."
+      }
+    },
+    {
+      "id": "loops",
+      "name": "Chromatin Loops",
+      "path": "/api/loops/{chrom}",
+      "method": "GET",
+      "description": "Returns chromatin loop anchors for a chromosome. Computed on-demand using uchrom.strc.loop.call_loops_axiswise_f with ArcFISH-style axis-wise F-test. Results cached for 5 minutes.",
+      "parameters": {
+        "chrom": {
+          "type": "string",
+          "required": true,
+          "location": "path",
+          "description": "Chromosome name (e.g., 'chr21', 'chr1')",
+          "example": "chr21"
+        },
+        "cell_type": {
+          "type": "string",
+          "required": false,
+          "location": "query",
+          "description": "Filter to specific cell type. If omitted, uses all cells.",
+          "example": "neuron"
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "loops": {
+            "type": "array",
+            "description": "Array of loop anchor pair records",
+            "items": {
+              "type": "object",
+              "properties": {
+                "chrom1": {
+                  "type": "string",
+                  "description": "First anchor chromosome"
+                },
+                "start1": {
+                  "type": "integer",
+                  "description": "First anchor start position (bp)"
+                },
+                "end1": {
+                  "type": "integer",
+                  "description": "First anchor end position (bp)"
+                },
+                "chrom2": {
+                  "type": "string",
+                  "description": "Second anchor chromosome"
+                },
+                "start2": {
+                  "type": "integer",
+                  "description": "Second anchor start position (bp)"
+                },
+                "end2": {
+                  "type": "integer",
+                  "description": "Second anchor end position (bp)"
+                },
+                "score": {
+                  "type": "number",
+                  "description": "Statistical score (-log10 p-value)"
+                },
+                "pval": {
+                  "type": "number",
+                  "description": "Raw p-value from ACAT combined F-test"
+                },
+                "fdr": {
+                  "type": "number",
+                  "description": "FDR-adjusted q-value (BH correction)"
+                },
+                "cluster_size": {
+                  "type": "integer",
+                  "description": "Number of candidate pairs in this loop's cluster"
+                },
+                "summit_i": {
+                  "type": "integer",
+                  "description": "First anchor bin index (internal)"
+                },
+                "summit_j": {
+                  "type": "integer",
+                  "description": "Second anchor bin index (internal)"
+                }
+              }
+            }
+          }
+        }
+      },
+      "gosling_track_example": {
+        "description": "Loop arcs rendered as curves between anchor pairs",
+        "track": {
+          "id": "chromatin-loops",
+          "title": "Chromatin Loops",
+          "data": {
+            "type": "json",
+            "url": "${window.location.origin}/api/loops/chr21",
+            "genomicFields": [
+              {
+                "index": "start1",
+                "name": "start1"
+              },
+              {
+                "index": "end1",
+                "name": "end1"
+              },
+              {
+                "index": "start2",
+                "name": "start2"
+              },
+              {
+                "index": "end2",
+                "name": "end2"
+              }
+            ],
+            "chromosomeField": "chrom1"
+          },
+          "mark": "withinLink",
+          "x": {
+            "field": "start1",
+            "type": "genomic",
+            "axis": "top"
+          },
+          "xe": {
+            "field": "end1",
+            "type": "genomic"
+          },
+          "x1": {
+            "field": "start2",
+            "type": "genomic"
+          },
+          "x1e": {
+            "field": "end2",
+            "type": "genomic"
+          },
+          "stroke": {
+            "value": "#0080ff"
+          },
+          "strokeWidth": {
+            "field": "score",
+            "type": "quantitative",
+            "range": [
+              1,
+              4
+            ]
+          },
+          "opacity": {
+            "value": 0.6
+          },
+          "width": 800,
+          "height": 200
+        },
+        "notes": "Use 'withinLink' mark for arcs. Adjust strokeWidth mapping to emphasize high-confidence loops."
+      }
+    },
+    {
+      "id": "compartments",
+      "name": "A/B Compartments",
+      "path": "/api/compartments/{chrom}",
+      "method": "GET",
+      "description": "Returns A/B compartment assignments for a chromosome. Computed on-demand using uchrom.strc.comp.call_compartments_axes_pc with per-axis PC2 clustering. Results cached for 5 minutes.",
+      "parameters": {
+        "chrom": {
+          "type": "string",
+          "required": true,
+          "location": "path",
+          "description": "Chromosome name (e.g., 'chr21', 'chr1')",
+          "example": "chr21"
+        },
+        "cell_type": {
+          "type": "string",
+          "required": false,
+          "location": "query",
+          "description": "Filter to specific cell type. If omitted, uses all cells.",
+          "example": "neuron"
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "compartments": {
+            "type": "array",
+            "description": "Array of compartment bin records",
+            "items": {
+              "type": "object",
+              "properties": {
+                "chrom": {
+                  "type": "string",
+                  "description": "Chromosome name"
+                },
+                "start": {
+                  "type": "integer",
+                  "description": "Bin start position (bp)"
+                },
+                "end": {
+                  "type": "integer",
+                  "description": "Bin end position (bp)"
+                },
+                "bin_index": {
+                  "type": "integer",
+                  "description": "Bin index along chromosome"
+                },
+                "cluster": {
+                  "type": "integer",
+                  "description": "Cluster ID (0 or 1)"
+                },
+                "compartment": {
+                  "type": "string",
+                  "description": "Compartment label: 'A' (active/open) or 'B' (inactive/closed)"
+                },
+                "pc2": {
+                  "type": "number",
+                  "description": "Weighted PC2 score (composite signal across axes)"
+                }
+              }
+            }
+          }
+        }
+      },
+      "gosling_track_example": {
+        "description": "Compartment track showing A/B regions with color encoding",
+        "track": {
+          "id": "ab-compartments",
+          "title": "A/B Compartments",
+          "data": {
+            "type": "json",
+            "url": "${window.location.origin}/api/compartments/chr21",
+            "genomicFields": [
+              {
+                "index": "start",
+                "name": "start"
+              },
+              {
+                "index": "end",
+                "name": "end"
+              }
+            ],
+            "chromosomeField": "chrom"
+          },
+          "mark": "rect",
+          "x": {
+            "field": "start",
+            "type": "genomic",
+            "axis": "top"
+          },
+          "xe": {
+            "field": "end",
+            "type": "genomic"
+          },
+          "color": {
+            "field": "compartment",
+            "type": "nominal",
+            "domain": [
+              "A",
+              "B"
+            ],
+            "range": [
+              "#e74c3c",
+              "#3498db"
+            ],
+            "legend": true
+          },
+          "width": 800,
+          "height": 60
+        },
+        "alternative_track": {
+          "description": "Line plot of PC2 signal",
+          "track": {
+            "id": "compartment-signal",
+            "title": "Compartment Signal (PC2)",
+            "data": {
+              "type": "json",
+              "url": "${window.location.origin}/api/compartments/chr21",
+              "genomicFields": [
+                {
+                  "index": "start",
+                  "name": "start"
+                },
+                {
+                  "index": "end",
+                  "name": "end"
+                }
+              ],
+              "chromosomeField": "chrom"
+            },
+            "mark": "line",
+            "x": {
+              "field": "start",
+              "type": "genomic",
+              "axis": "top"
+            },
+            "y": {
+              "field": "pc2",
+              "type": "quantitative",
+              "axis": "right"
+            },
+            "stroke": {
+              "value": "#2c3e50"
+            },
+            "strokeWidth": {
+              "value": 1.5
+            },
+            "width": 800,
+            "height": 100
+          }
+        }
+      }
+    }
+  ],
+  "error_responses": {
+    "404": {
+      "description": "No data loaded or chromosome not found",
+      "example": {
+        "error": "No data loaded"
+      }
+    },
+    "400": {
+      "description": "Invalid parameters (bad UID format, malformed tile ID)",
+      "example": {
+        "error": "Unknown tileset uid: invalid-format"
+      }
+    },
+    "503": {
+      "description": "Required module unavailable (missing PyTorch dependency)",
+      "example": {
+        "error": "TAD module unavailable (missing torch?)"
+      }
+    },
+    "500": {
+      "description": "Analysis failed (computation error)",
+      "example": {
+        "error": "TAD calling failed",
+        "detail": "error details"
+      }
+    }
+  },
+  "usage_notes": {
+    "caching": "All structure endpoints (TADs, loops, compartments) cache results for 5 minutes. Contact map tiles are cached in-memory for the session.",
+    "computation": "Structure endpoints run on-demand. First request may take several seconds. Subsequent requests within cache window return immediately.",
+    "cell_filtering": "If cell_type parameter is provided but no cells match, returns 404. If ChromData has no cell metadata, cell_type is ignored.",
+    "coordinate_system": "All genomic positions are 0-based, half-open intervals [start, end) following BED convention.",
+    "chromosome_format": "Use standard chromosome names (chr1, chr21, etc.). Must match ChromData.spots['chrom'] values."
+  },
+  "agent_guidelines": {
+    "discovery": "Parse this catalog to understand available endpoints and their schemas. Do not hallucinate fields not listed here.",
+    "spec_generation": "Use the gosling_track_example templates as starting points. Modify track properties (width, height, colors) as needed, but preserve the data structure.",
+    "error_handling": "Check error_responses section for expected failure modes. Handle 404 gracefully (dataset not loaded) and 503 (missing dependencies).",
+    "multi_track_specs": "Combine multiple tracks in a single Gosling spec by placing them in the same view. Use 'alignment: overlay' to stack tracks on the same axis.",
+    "dynamic_urls": "Use ${window.location.origin} prefix for API URLs in generated specs to ensure correct routing in both dev and production.",
+    "validation": "Before generating a spec, verify the requested chromosome exists in the loaded dataset. Prefer chr21 as the default for demos."
+  }
+}

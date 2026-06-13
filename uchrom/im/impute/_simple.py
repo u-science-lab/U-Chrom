@@ -9,112 +9,98 @@ import numpy as np
 from scipy.interpolate import interp1d
 
 
-def impute_linear(cd, extrapolate=True):
+def impute_linear(cd, extrapolate=True, ann=None):
     """
     Impute missing coordinates using linear interpolation.
+
+    The input is first densified onto the per-chrom locus panel, so loci that
+    are missing as *absent rows* (not just NaN rows) are also imputed.
 
     Parameters
     ----------
     cd : ChromData
-        Input ChromData with missing coordinates (NaN values).
+        Input ChromData with missing coordinates (NaN values and/or absent rows).
     extrapolate : bool, default True
         Whether to extrapolate values outside the range of known coordinates.
+    ann : pd.DataFrame, optional
+        Authoritative locus panel (columns chrom|region, start, end). When given,
+        loci absent from every haploid are still restored.
 
     Returns
     -------
     ChromData
-        ChromData with linearly interpolated coordinates.
+        ChromData on the dense grid with linearly interpolated coordinates.
 
     Examples
     --------
     >>> cd_imputed = impute_linear(cd)
     """
-    return _impute_interpolation(cd, kind='linear', extrapolate=extrapolate)
+    return _impute_interpolation(cd, kind='linear', extrapolate=extrapolate, ann=ann)
 
 
-def impute_cubic(cd, extrapolate=True):
+def impute_cubic(cd, extrapolate=True, ann=None):
     """
     Impute missing coordinates using cubic spline interpolation.
+
+    The input is first densified onto the per-chrom locus panel, so loci that
+    are missing as *absent rows* (not just NaN rows) are also imputed.
 
     Parameters
     ----------
     cd : ChromData
-        Input ChromData with missing coordinates (NaN values).
+        Input ChromData with missing coordinates (NaN values and/or absent rows).
     extrapolate : bool, default True
         Whether to extrapolate values outside the range of known coordinates.
+    ann : pd.DataFrame, optional
+        Authoritative locus panel (columns chrom|region, start, end).
 
     Returns
     -------
     ChromData
-        ChromData with cubic-spline interpolated coordinates.
+        ChromData on the dense grid with cubic-spline interpolated coordinates.
 
     Examples
     --------
     >>> cd_imputed = impute_cubic(cd)
     """
-    return _impute_interpolation(cd, kind='cubic', extrapolate=extrapolate)
+    return _impute_interpolation(cd, kind='cubic', extrapolate=extrapolate, ann=ann)
 
 
-def _impute_interpolation(cd, kind, extrapolate):
+def _impute_interpolation(cd, kind, extrapolate, ann=None):
     """
     Internal function for scipy-based interpolation.
 
-    Interpolates along the genomic coordinate (start position) for each
-    trace independently.
+    Densifies onto the per-chrom locus panel, then interpolates along the
+    genomic coordinate (start position) for each haploid independently.
     """
-    from uchrom.core import ChromData
+    from ._grid import build_dense_grid, grid_to_chromdata
 
-    coords_imputed = cd.coords.copy()
-    spots = cd.spots.copy()
+    grid, _panel, has_cell = build_dense_grid(cd, ann=ann)
+    # np.array (not asarray) guarantees a writable copy; h5cd-backed coords
+    # can be read-only views.
+    coords_imputed = np.array(grid[['x', 'y', 'z']].to_numpy(dtype=float))
+    fill_value = 'extrapolate' if extrapolate else np.nan
 
-    # Group by trace_id (and cell_id if present)
-    if 'cell_id' in spots.columns:
-        group_cols = ['cell_id', 'trace_id', 'chrom']
-    else:
-        group_cols = ['trace_id', 'chrom']
-
-    for group_keys, group_df in spots.groupby(group_cols, sort=False):
-        indices = group_df.index.values
-
-        # Get genomic positions and coordinates
-        positions = group_df['start'].values
+    # grid is sorted by (region, haploid, pos); interpolate per haploid.
+    for _hap, group_df in grid.groupby('haploid', sort=False):
+        indices = group_df.index.to_numpy()
+        positions = group_df['start'].to_numpy()
         group_coords = coords_imputed[indices]
 
-        # Find non-NaN entries
         mask = ~np.isnan(group_coords[:, 0])
-
         if mask.sum() < 2:
-            # Need at least 2 points for interpolation
+            # Not enough anchors to interpolate; leave as NaN.
             continue
 
-        # Interpolate each dimension
-        fill_value = 'extrapolate' if extrapolate else np.nan
+        for dim in range(3):
+            f = interp1d(
+                positions[mask],
+                group_coords[mask, dim],
+                kind=kind,
+                fill_value=fill_value,
+                bounds_error=False,
+            )
+            coords_imputed[indices, dim] = f(positions)
 
-        try:
-            for dim in range(3):
-                f = interp1d(
-                    positions[mask],
-                    group_coords[mask, dim],
-                    kind=kind,
-                    fill_value=fill_value,
-                    bounds_error=False
-                )
-                coords_imputed[indices, dim] = f(positions)
-        except ValueError:
-            # Interpolation failed (e.g., all NaN), skip this group
-            continue
-
-    # Create new ChromData with imputed coordinates
-    result = ChromData(
-        coords=coords_imputed,
-        spots=cd.spots,
-        cells=cd.cells if hasattr(cd, 'cells') else None,
-        traces=cd.traces if hasattr(cd, 'traces') else None,
-        tracks=cd.tracks if hasattr(cd, 'tracks') else None,
-        layers=cd.layers if hasattr(cd, 'layers') else None,
-        cellm=cd.cellm if hasattr(cd, 'cellm') else None,
-        results=cd.results if hasattr(cd, 'results') else None,
-        uns=cd.uns if hasattr(cd, 'uns') else None,
-    )
-
-    return result
+    grid[['x', 'y', 'z']] = coords_imputed
+    return grid_to_chromdata(grid, has_cell, cd)

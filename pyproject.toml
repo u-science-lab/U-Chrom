@@ -51,6 +51,11 @@ emb-full = [
 im = [
     "astropy>=5.0",
 ]
+# SnapFISH-IMPUTE coordinate imputation (uchrom.im.impute method='snapfish').
+# scipy and scikit-learn are already core deps; scikit-image is the only extra.
+snapfish = [
+    "scikit-image>=0.20",
+]
 
 [tool.setuptools]
 include-package-data = true
