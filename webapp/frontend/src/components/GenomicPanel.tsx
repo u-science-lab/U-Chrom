@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { useAppStore } from '../store'
 import { LOCAL_CONTACT_MAP_SPEC } from '../specs/localContactMapSpec'
+import { ErrorBoundary } from './ErrorBoundary'
 
 const GoslingRenderer = lazy(() => import('./GoslingRenderer'))
 
@@ -123,13 +124,31 @@ export default function GenomicPanel() {
       {/* Main Gosling renderer */}
       <div className="flex-1 overflow-auto">
         {specToRender ? (
-          <Suspense fallback={
-            <div className="h-full flex items-center justify-center text-gray-400 text-sm">
-              Loading Gosling...
-            </div>
-          }>
-            <GoslingRenderer spec={specToRender} />
-          </Suspense>
+          // Wrap in an ErrorBoundary so an invalid/unrenderable Gosling spec
+          // degrades to an inline message instead of crashing the whole app
+          // (design spec §6). React error boundaries catch render/lifecycle
+          // throws — keying on the spec resets the boundary when the agent
+          // sends a new (valid) spec, so the panel can recover.
+          <ErrorBoundary
+            key={activeSpecId ?? 'local-contact-map'}
+            fallback={
+              <div className="h-full flex flex-col items-center justify-center p-6 text-center text-gray-500">
+                <div className="text-sm font-medium mb-1">This view could not be rendered</div>
+                <div className="text-xs max-w-xs">
+                  The Gosling spec is invalid or unsupported. Try a different
+                  view, or ask the agent to regenerate it.
+                </div>
+              </div>
+            }
+          >
+            <Suspense fallback={
+              <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                Loading Gosling...
+              </div>
+            }>
+              <GoslingRenderer spec={specToRender} />
+            </Suspense>
+          </ErrorBoundary>
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-center px-6 text-gray-400">
             <div className="text-sm font-medium text-gray-500 mb-1">No data loaded</div>

@@ -4,6 +4,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from webapp.backend.ws_handler import handle_message
 from webapp.backend.session import Session
 
+from tests._agent_loop_harness import (
+    text_block,
+    turn,
+    single_tool_then_done,
+    drive_loop,
+    artifacts,
+)
+
 
 @pytest.mark.asyncio
 async def test_handle_message_exists():
@@ -151,26 +159,19 @@ async def test_handle_message_user_message_multi_turn():
 
 @pytest.mark.asyncio
 async def test_run_agent_loop_uses_agent_tools():
-    """run_agent_loop should use TOOLS from agent_tools."""
-    from webapp.backend.ws_handler import run_agent_loop
+    """run_agent_loop should forward all TOOLS to the streaming API call."""
     from webapp.backend.agent_tools import TOOLS
 
-    ws = AsyncMock()
-    conversation_history = [{"role": "user", "content": "test"}]
+    _sent, _history, fake = await drive_loop(
+        [turn([text_block("response")], "end_turn")],
+        history=[{"role": "user", "content": "test"}],
+    )
 
-    with patch('webapp.backend.ws_handler.client') as mock_client:
-        mock_response = MagicMock()
-        mock_response.stop_reason = "end_turn"
-        mock_response.content = [MagicMock(type="text", text="response")]
-        # client is AsyncAnthropic — messages.create is awaited.
-        mock_client.messages.create = AsyncMock(return_value=mock_response)
-
-        await run_agent_loop(ws, conversation_history)
-
-        # Verify TOOLS was passed to API call
-        call_kwargs = mock_client.messages.create.call_args[1]
-        assert "tools" in call_kwargs
-        assert len(call_kwargs["tools"]) == len(TOOLS)  # all defined tools
+    # The real loop passes tools= to client.messages.stream(...); the harness
+    # records the kwargs of the last stream() call.
+    assert fake.messages.last_kwargs is not None
+    assert "tools" in fake.messages.last_kwargs
+    assert len(fake.messages.last_kwargs["tools"]) == len(TOOLS)
 
 
 @pytest.mark.asyncio
@@ -205,89 +206,38 @@ async def test_load_data_sends_initial_viz():
 @pytest.mark.asyncio
 async def test_run_agent_loop_add_notebook_cell():
     """run_agent_loop should handle add_notebook_cell tool."""
-    from webapp.backend.ws_handler import run_agent_loop
-    import json
+    with patch('webapp.backend.notebook_api.execute_code',
+               return_value={"status": "ok", "output": "2", "error": None}):
+        sent, _history, _ = await drive_loop(
+            single_tool_then_done("add_notebook_cell", {"code": "1+1"}),
+            history=[{"role": "user", "content": "Run 1+1"}],
+        )
 
-    ws = AsyncMock()
-    conversation_history = [{"role": "user", "content": "Run 1+1"}]
-
-    # Mock anthropic response with add_notebook_cell tool use
-    with patch('webapp.backend.ws_handler.client') as mock_client:
-        # First response: tool_use
-        mock_response_1 = MagicMock()
-        mock_response_1.stop_reason = "tool_use"
-        tool_block = MagicMock()
-        tool_block.type = "tool_use"
-        tool_block.name = "add_notebook_cell"
-        tool_block.id = "tool_123"
-        tool_block.input = {"code": "1+1"}
-        mock_response_1.content = [tool_block]
-
-        # Second response: end_turn (after tool result)
-        mock_response_2 = MagicMock()
-        mock_response_2.stop_reason = "end_turn"
-        mock_response_2.content = [MagicMock(type="text", text="Done")]
-
-        mock_client.messages.create = AsyncMock(side_effect=[mock_response_1, mock_response_2])
-
-        # Mock execute_code
-        with patch('webapp.backend.notebook_api.execute_code', return_value={"status": "ok", "output": "2", "error": None}):
-            await run_agent_loop(ws, conversation_history)
-
-        # Verify notebook_cell artifact sent (current impl uses send_json with dicts)
-        calls = [call[0][0] for call in ws.send_json.call_args_list]
-        notebook_cells = [c for c in calls
-                          if isinstance(c, dict) and c.get("artifact_type") == "notebook_cell"]
-
-        assert len(notebook_cells) == 1
-        assert notebook_cells[0]["content"]["code"] == "1+1"
-        assert notebook_cells[0]["content"]["output"] == "2"
-        assert notebook_cells[0]["content"]["status"] == "ok"
-        assert notebook_cells[0]["content"]["error"] is None
+    notebook_cells = artifacts(sent, "notebook_cell")
+    assert len(notebook_cells) == 1
+    assert notebook_cells[0]["content"]["code"] == "1+1"
+    assert notebook_cells[0]["content"]["output"] == "2"
+    assert notebook_cells[0]["content"]["status"] == "ok"
+    assert notebook_cells[0]["content"]["error"] is None
 
 
 @pytest.mark.asyncio
 async def test_run_agent_loop_run_analysis():
     """run_agent_loop should handle run_analysis tool (registry-based)."""
-    from webapp.backend.ws_handler import run_agent_loop
+    fake_handle = {
+        "type": "tad", "chrom": "chr21", "record_count": 3,
+        "records": [{"chrom": "chr21", "start": 0, "end": 1000}],
+        "data_url": "/api/tads/chr21?format=gosling",
+        "chromosome_field": "chrom", "genomic_fields": ["start", "end"],
+        "suggested_mark": "rule",
+    }
+    with patch('webapp.backend.strc_api.run_registered_analysis', return_value=fake_handle):
+        sent, _history, _ = await drive_loop(
+            single_tool_then_done("run_analysis", {"type": "tad", "region": "chr21"}),
+            history=[{"role": "user", "content": "Analyze data"}],
+        )
 
-    ws = AsyncMock()
-    conversation_history = [{"role": "user", "content": "Analyze data"}]
-
-    with patch('webapp.backend.ws_handler.client') as mock_client:
-        # First response: tool_use for run_analysis. Current contract: the tool
-        # takes {type, region} and dispatches to run_registered_analysis — it
-        # does NOT execute arbitrary code.
-        mock_response_1 = MagicMock()
-        mock_response_1.stop_reason = "tool_use"
-        tool_block = MagicMock()
-        tool_block.type = "tool_use"
-        tool_block.name = "run_analysis"
-        tool_block.id = "tool_456"
-        tool_block.input = {"type": "tad", "region": "chr21"}
-        mock_response_1.content = [tool_block]
-
-        # Second response: end_turn (after tool result)
-        mock_response_2 = MagicMock()
-        mock_response_2.stop_reason = "end_turn"
-        mock_response_2.content = [MagicMock(type="text", text="Analysis done")]
-
-        mock_client.messages.create = AsyncMock(side_effect=[mock_response_1, mock_response_2])
-
-        fake_handle = {
-            "type": "tad", "chrom": "chr21", "record_count": 3,
-            "records": [{"chrom": "chr21", "start": 0, "end": 1000}],
-            "data_url": "/api/tads/chr21?format=gosling",
-            "chromosome_field": "chrom", "genomic_fields": ["start", "end"],
-            "suggested_mark": "rule",
-        }
-        with patch('webapp.backend.strc_api.run_registered_analysis', return_value=fake_handle):
-            await run_agent_loop(ws, conversation_history)
-
-        # Verify an analysis_result artifact was emitted for the frontend.
-        calls = [call[0][0] for call in ws.send_json.call_args_list]
-        analysis_artifacts = [c for c in calls
-                              if isinstance(c, dict) and c.get("artifact_type") == "analysis_result"]
-        assert len(analysis_artifacts) >= 1
-        assert analysis_artifacts[0]["analysis_type"] == "tad"
-        assert analysis_artifacts[0]["chrom"] == "chr21"
+    analysis_artifacts = artifacts(sent, "analysis_result")
+    assert len(analysis_artifacts) >= 1
+    assert analysis_artifacts[0]["analysis_type"] == "tad"
+    assert analysis_artifacts[0]["chrom"] == "chr21"
