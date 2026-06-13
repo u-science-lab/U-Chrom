@@ -49,3 +49,5 @@ example-data/H1Esc-HFF.R1/
 # Docs build
 docs/build/
 .ipynb_checkpoints/
+# Stray nested worktree paths must never be committed
+.claude/worktrees/
