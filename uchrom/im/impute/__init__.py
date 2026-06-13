@@ -7,6 +7,35 @@ including linear interpolation and the SnapFISH-IMPUTE algorithm.
 
 from ._simple import impute_linear, impute_cubic
 
+# Map import name -> pip package name for SnapFISH-IMPUTE's extra dependencies.
+_SNAPFISH_DEPS = {
+    "scipy": "scipy",
+    "sklearn": "scikit-learn",
+    "skimage": "scikit-image",
+}
+
+
+def _missing_snapfish_deps(_import=None):
+    """Return the pip names of SnapFISH dependencies that fail to import.
+
+    Parameters
+    ----------
+    _import : callable, optional
+        Import function (defaults to importlib.import_module); injectable for
+        testing. Should raise ImportError when the module is unavailable.
+    """
+    import importlib
+
+    do_import = _import if _import is not None else importlib.import_module
+    missing = []
+    for mod, pip_name in _SNAPFISH_DEPS.items():
+        try:
+            do_import(mod)
+        except ImportError:
+            missing.append(pip_name)
+    return missing
+
+
 # Try to import SnapFISH core functions
 try:
     from ._snapfish_core import impute_snapfish
@@ -18,6 +47,7 @@ __all__ = [
     'impute_coordinates',
     'impute_linear',
     'impute_cubic',
+    '_missing_snapfish_deps',
 ]
 
 if SNAPFISH_AVAILABLE:
@@ -75,10 +105,13 @@ def impute_coordinates(cd, method='linear', **kwargs):
         return impute_cubic(cd, **kwargs)
     elif method == 'snapfish':
         if not SNAPFISH_AVAILABLE:
+            missing = _missing_snapfish_deps()
+            pkgs = " ".join(missing) if missing else "scipy scikit-learn scikit-image"
             raise ImportError(
-                "SnapFISH-IMPUTE requires additional dependencies.\n"
-                "Install with: pip install scipy scikit-learn scikit-image\n\n"
-                "For small datasets (<1000 cells), you can use method='linear' or 'cubic'"
+                "SnapFISH-IMPUTE is unavailable because these packages are "
+                f"missing: {', '.join(missing) if missing else 'unknown'}.\n"
+                f"Install with: pip install {pkgs}\n\n"
+                "For small datasets, you can use method='linear' or 'cubic'"
             )
         return impute_snapfish(cd, **kwargs)
     else:
