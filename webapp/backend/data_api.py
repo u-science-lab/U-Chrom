@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
@@ -85,6 +86,85 @@ def get_coords(cell_id: str):
     cd = _cd_or_404()
     cell = _coerce_cell_id(cd, cell_id)
     return _float32_response(cell.coords)  # (n_bins, 3)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/cells — lightweight cell list, independent of UMAP
+# ---------------------------------------------------------------------------
+
+@data_router.get("/api/cells")
+def get_cells():
+    """Return the dataset's cell list, independent of any UMAP embedding.
+
+    Source priority:
+      1. ``cd.cells`` (DataFrame; cell ids from index or a ``cell_id`` column),
+         carrying optional per-cell metadata such as ``cell_type``.
+      2. Fallback: unique ``cell_id`` values from ``cd.spots`` when ``cd.cells``
+         is empty or unavailable.
+    """
+    cd = _cd_or_404()
+
+    cells = []
+    cell_types: list[str] = []
+
+    cells_df = cd.cells
+    if cells_df is not None and len(cells_df) > 0:
+        df = cells_df.reset_index()
+        if "cell_id" not in df.columns:
+            df["cell_id"] = df.index
+        has_type = "cell_type" in df.columns
+        for i in range(len(df)):
+            entry = {"cell_id": str(df.loc[i, "cell_id"])}
+            if has_type:
+                entry["cell_type"] = str(df.loc[i, "cell_type"])
+            cells.append(entry)
+        if has_type:
+            cell_types = sorted(df["cell_type"].dropna().astype(str).unique().tolist())
+    elif cd.spots is not None and "cell_id" in cd.spots.columns:
+        # Fallback: derive cell list from spots, preserving first-seen order.
+        seen = pd.unique(cd.spots["cell_id"].astype(str))
+        cells = [{"cell_id": str(cid)} for cid in seen]
+
+    return JSONResponse({"cells": cells, "cell_types": cell_types},
+                        headers={"Cache-Control": _CACHE})
+
+
+# ---------------------------------------------------------------------------
+# GET /api/dataset_info — dataset-level metadata for default-spec construction
+# ---------------------------------------------------------------------------
+
+@data_router.get("/api/dataset_info")
+def get_dataset_info():
+    """Return dataset-level metadata used to build default visualizations.
+
+    The genomic panel uses this to construct its default contact-map spec
+    against the actually-loaded chromosomes/assembly instead of a hardcoded
+    chr21/hg38.
+
+    Fields:
+      - ``chroms``: unique chrom values from ``cd.spots["chrom"]``, in
+        first-seen order.
+      - ``genome_assembly``: ``cd.uns["genome_assembly"]`` if present, else null.
+      - ``n_cells`` / ``n_spots``: simple size counts.
+    """
+    cd = _cd_or_404()
+
+    chroms: list[str] = []
+    if cd.spots is not None and "chrom" in cd.spots.columns:
+        chroms = [str(c) for c in pd.unique(cd.spots["chrom"].astype(str))]
+
+    assembly = cd.uns.get("genome_assembly") if cd.uns is not None else None
+    if assembly is not None:
+        assembly = str(assembly)
+
+    n_cells = int(len(cd.cells)) if cd.cells is not None else 0
+    n_spots = int(len(cd.spots)) if cd.spots is not None else 0
+
+    return JSONResponse(
+        {"chroms": chroms, "genome_assembly": assembly,
+         "n_cells": n_cells, "n_spots": n_spots},
+        headers={"Cache-Control": _CACHE},
+    )
 
 
 # ---------------------------------------------------------------------------

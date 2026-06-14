@@ -7,6 +7,7 @@ interface NotebookCellContent {
   output?: string
   error?: string
   status: string
+  images?: string[]
 }
 
 function CellView({ cell }: { cell: NotebookCell }) {
@@ -22,7 +23,16 @@ function CellView({ cell }: { cell: NotebookCell }) {
         body: JSON.stringify({ code }),
       })
       const data = await res.json()
-      updateCellOutput(cell.id, data.outputs || [{ type: 'text', content: JSON.stringify(data) }])
+      const outputs: NotebookCell['outputs'] = []
+      if (data.error) {
+        outputs.push({ type: 'error', content: String(data.error) })
+      } else if (data.output) {
+        outputs.push({ type: 'text', content: String(data.output) })
+      }
+      for (const img of (data.images as string[] | undefined) || []) {
+        outputs.push({ type: 'image', content: img })
+      }
+      updateCellOutput(cell.id, outputs)
     } catch (err) {
       updateCellOutput(cell.id, [{ type: 'error', content: String(err) }])
     }
@@ -75,13 +85,19 @@ export default function NotebookPanel() {
     const offArtifact = ws.onMessage('artifact', (msg) => {
       if (msg.artifact_type !== 'notebook_cell' || !msg.content) return
       const content = msg.content as NotebookCellContent
+      const outputs: NotebookCell['outputs'] = []
+      if (content.error) {
+        outputs.push({ type: 'error', content: content.error })
+      } else if (content.output) {
+        outputs.push({ type: 'text', content: content.output })
+      }
+      for (const img of content.images || []) {
+        outputs.push({ type: 'image', content: img })
+      }
       useAppStore.getState().addNotebookCell({
         id: `cell_${Date.now()}`,
         code: content.code || '',
-        outputs: [
-          content.output ? { type: 'text' as const, content: content.output } : null,
-          content.error ? { type: 'error' as const, content: content.error } : null,
-        ].filter(Boolean) as NotebookCell['outputs'],
+        outputs,
         running: content.status === 'running',
       })
     })

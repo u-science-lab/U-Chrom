@@ -3,16 +3,26 @@ from webapp.backend.agent_tools import TOOLS, SYSTEM_PROMPT
 
 
 def test_all_tools_defined():
-    """All planned tools should be defined (plus later additions)."""
+    """All currently-exposed tools should be defined (plus later additions)."""
     names = {t["name"] for t in TOOLS}
     expected = {
-        "render_gosling", "patch_gosling", "color_embedding",
-        "select_cells", "show_structure", "color_structure",
+        "render_gosling", "patch_gosling",
+        "select_cells",
         "add_notebook_cell", "run_analysis",
     }
-    # The 8 planned tools must all exist; newer tools (export_view,
+    # The exposed tools must all exist; newer tools (export_view,
     # write_analysis_function, ...) may extend the set.
     assert expected <= names, f"missing planned tools: {expected - names}"
+
+
+def test_linkage_tools_present():
+    """color_embedding / show_structure / color_structure are wired up (第二波)
+    and must be exposed in TOOLS so the agent can drive the Embedding / 3D
+    panels. Their executors are registered in tool_executors.py and produce
+    real visual effects (recolor / filter), not placeholder tab-switches."""
+    names = {t["name"] for t in TOOLS}
+    expected = {"color_embedding", "show_structure", "color_structure"}
+    assert expected <= names, f"missing linkage tools: {expected - names}"
 
 
 def test_each_tool_has_schema():

@@ -9,12 +9,35 @@ the tests link-level rather than poking individual executors.
 """
 import json
 
+import pytest
+
 from tests._agent_loop_harness import (
     single_tool_then_done,
     run_loop,
     artifacts,
     tool_results,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_global_session():
+    """Drive these link-level tests with NO data loaded.
+
+    The linkage executors (show_structure / color_structure / color_embedding)
+    validate their args against the live ChromData when one is present, falling
+    back to ``data_api.current_session``. Other test modules can leave that
+    global set, which would make these id/field-arbitrary tests fail. Clear it
+    so the executors skip validation and emit the artifact unconditionally (the
+    validation paths are covered directly in tests/backend/test_tool_executors).
+    """
+    import webapp.backend.data_api as data_api
+    saved = data_api.current_session
+    data_api.current_session = None
+    try:
+        yield
+    finally:
+        data_api.current_session = saved
+
 
 
 def _run(tool_name, tool_input):
@@ -68,6 +91,8 @@ def test_export_view_defaults_to_png():
 
 
 def test_patch_gosling_forwards_patch():
+    # Input accepts a single {op,path,value} (normalized to an op array) — the
+    # emitted artifact carries the standard RFC 6902 `ops` array.
     sent = _run("patch_gosling", {
         "target_id": "viz_1",
         "patch": {"op": "replace", "path": "/views/0/tracks/0/mark", "value": "bar"},
@@ -75,8 +100,8 @@ def test_patch_gosling_forwards_patch():
     arts = artifacts(sent, "gosling_patch")
     assert len(arts) == 1
     assert arts[0]["target_id"] == "viz_1"
-    assert arts[0]["patch"]["path"] == "/views/0/tracks/0/mark"
-    assert arts[0]["patch"]["value"] == "bar"
+    assert arts[0]["ops"][0]["path"] == "/views/0/tracks/0/mark"
+    assert arts[0]["ops"][0]["value"] == "bar"
 
 
 def test_patch_gosling_missing_fields_reports_error():

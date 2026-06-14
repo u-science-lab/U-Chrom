@@ -1,8 +1,8 @@
 """Agent tool definitions and system prompt for the A2UI loop.
 
 render_gosling / patch_gosling are fully implemented in ws_handler.
-The other 6 tools are defined here (schema + artifact protocol) but their
-executors are placeholders in P2 — filled in P3 (notebook) and P4 (rest).
+The other tools are defined here (schema + artifact protocol) with executors
+in tool_executors.py.
 """
 
 TOOLS = [
@@ -119,20 +119,36 @@ DO NOT HALLUCINATE:
     },
     {
         "name": "patch_gosling",
-        "description": "Apply an incremental JSON-Patch-style change to the currently active Gosling spec (e.g. change a mark, color, or domain). Use when the user wants to tweak an existing visualization rather than recreate it.",
+        "description": "Apply an incremental RFC 6902 JSON-Patch to the currently active Gosling spec (e.g. change a mark, color, or domain). Use when the user wants to tweak an existing visualization rather than recreate it. 'patch' may be a single op object {op,path,value} OR an array of such ops (applied in order). Paths are rooted at the spec, e.g. '/tracks/0/mark'.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "target_id": {"type": "string", "description": "artifact_id of the spec to patch"},
                 "patch": {
-                    "type": "object",
-                    "description": "JSON Patch op: {op:'replace'|'add'|'remove', path:'/tracks/0/mark', value:<any>}",
-                    "properties": {
-                        "op": {"type": "string"},
-                        "path": {"type": "string"},
-                        "value": {},
-                    },
-                    "required": ["op", "path"],
+                    "description": "A single JSON-Patch op {op:'replace'|'add'|'remove', path:'/tracks/0/mark', value:<any>}, OR an array of such ops applied in order.",
+                    "oneOf": [
+                        {
+                            "type": "object",
+                            "properties": {
+                                "op": {"type": "string"},
+                                "path": {"type": "string"},
+                                "value": {},
+                            },
+                            "required": ["op", "path"],
+                        },
+                        {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "op": {"type": "string"},
+                                    "path": {"type": "string"},
+                                    "value": {},
+                                },
+                                "required": ["op", "path"],
+                            },
+                        },
+                    ],
                 },
             },
             "required": ["target_id", "patch"],
@@ -140,11 +156,98 @@ DO NOT HALLUCINATE:
     },
     {
         "name": "color_embedding",
-        "description": "Color the UMAP embedding by a marker or cell metadata column. Renders in the Embedding tab.",
+        "description": """Recolor the Embedding (UMAP) scatter in the Embedding tab by a per-cell field.
+
+Use after an embedding exists (compute_embedding) to color cells by a cell-level
+attribute. `color_by` must be a column of the dataset's cell table — typically
+'cell_type', or the cell id itself. Categorical fields get a distinct color per
+category (shown in the legend); the points recolor live. If the field doesn't
+exist you get an error listing the valid fields.""",
         "input_schema": {
             "type": "object",
-            "properties": {"color_by": {"type": "string", "description": "marker name or cell_type"}},
+            "properties": {
+                "color_by": {
+                    "type": "string",
+                    "description": "cell-table column to color by, e.g. 'cell_type'",
+                },
+            },
             "required": ["color_by"],
+        },
+    },
+    {
+        "name": "show_structure",
+        "description": """Show a single cell's 3D chromatin structure in the 3D Structure tab.
+
+Filters the 3D view to just `cell_id` (instead of overlaying every cell), and
+optionally to a single `chrom`. Use when the user wants to inspect one cell's
+folding. Validates that the cell (and chrom, if given) exists and errors
+otherwise. Switches to the Structure tab.""",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cell_id": {"type": "string", "description": "the cell to display"},
+                "chrom": {
+                    "type": "string",
+                    "description": "optional: restrict to one chromosome, e.g. 'chr1'",
+                },
+            },
+            "required": ["cell_id"],
+        },
+    },
+    {
+        "name": "color_structure",
+        "description": """Recolor the 3D Structure traces by a field in the 3D Structure tab.
+
+`color_by` is a column of the spot table. Always available: 'chrom' (color by
+chromosome) and 'trace_id'. compartment/TAD/marker coloring only works once a
+matching analysis (run_analysis) has added that column to the data — otherwise
+you get an error listing the available fields. Switches to the Structure tab.""",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "color_by": {
+                    "type": "string",
+                    "description": "spot-table column to color by, e.g. 'chrom'",
+                },
+            },
+            "required": ["color_by"],
+        },
+    },
+    {
+        "name": "compute_embedding",
+        "description": """Compute a cell-level 2D UMAP embedding and populate the Embedding tab.
+
+Use this when the user wants to see the Embedding/UMAP view but no embedding
+exists yet (the tab is empty, or /api/umap was 404). It computes a feature
+vector per cell, runs UMAP to 2D, and writes the result to the dataset so the
+Embedding tab can render it.
+
+FEATURE METHODS:
+  - 'auto' (default): try the distance method, fall back to geometric if bins
+    don't align across cells.
+  - 'distance': per-cell pairwise-distance matrix (upper triangle) on a
+    reference chromosome's common bins. Best when all cells share the same
+    genomic binning (e.g. reconstructed Hi-C / dense tracing). Needs >= 3
+    common bins across cells.
+  - 'geometric': order/length-invariant geometric scalars (radius of gyration,
+    per-axis std, pairwise-distance mean/std/max). Robust for sparse FISH where
+    cells don't share bins.
+
+Needs at least 2 cells. After it succeeds, the Embedding tab refreshes
+automatically — you do NOT need to call select_cells to show it.""",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "chrom": {
+                    "type": "string",
+                    "description": "Reference chromosome for the distance method (e.g. 'chr1'). Defaults to the first chromosome in the dataset.",
+                },
+                "method": {
+                    "type": "string",
+                    "enum": ["auto", "distance", "geometric"],
+                    "description": "Feature method (default 'auto').",
+                },
+            },
         },
     },
     {
@@ -156,27 +259,6 @@ DO NOT HALLUCINATE:
                 "cell_ids": {"type": "array", "items": {"type": "string"}},
                 "criteria": {"type": "string", "description": "optional natural-language criteria"},
             },
-        },
-    },
-    {
-        "name": "show_structure",
-        "description": "Display the 3D structure of a given cell/chromosome in the 3D Structure tab.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "cell_id": {"type": "string"},
-                "chrom": {"type": "string"},
-            },
-            "required": ["cell_id"],
-        },
-    },
-    {
-        "name": "color_structure",
-        "description": "Color the 3D structure by marker, compartment, or TAD.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"color_by": {"type": "string"}},
-            "required": ["color_by"],
         },
     },
     {
@@ -290,22 +372,31 @@ Pass the view_id returned by render_gosling. Omit view_id to list all views.""",
     },
     {
         "name": "query_user_interaction",
-        "description": """Get the user's interaction with a view (brush/click/selection).
+        "description": """Get the user's interaction with a view (brush/click/selection/3D pick).
 
 Two modes:
   - wait=false (default): return the LAST interaction immediately, or null if none.
   - wait=true: BLOCK until the user next interacts (up to timeout_seconds), then
-    return it. Use this to ask the user to pick a region/feature and act on it.
+    return it. Use this to ASK the user to pick a region/feature/spot and act on
+    what they choose. While blocked, the UI shows the user that you're waiting.
 
 Returns {event_name, payload, timestamp} where payload depends on the event:
-  brush_selection → {chrom, start, end};  region_click → {chrom, position};
-  cell_selection → {cell_ids: [...]}.
+  brush_selection → {chrom, start, end};   region_click → {chrom, position};
+  cell_selection  → {cell_ids: [...]};
+  pick_spot       → {cell_id, chrom, start, end, spot_index} — the user clicked
+                    a bin/spot in the 3D Structure tab. Use this to "analyze the
+                    region/bin the user just picked": take payload.chrom +
+                    start/end and feed them into run_analysis / render_gosling /
+                    write_analysis_function, or payload.cell_id into show_structure.
 
-This is how you SEE what the user does in the UI — closing the agent↔user loop.""",
+Typical 3D-pick flow: show_structure(cell) → tell the user "click a spot in the
+3D view" → query_user_interaction(wait=true) → read pick_spot payload → analyze
+that bin. This is how you SEE what the user does in the UI — closing the
+agent↔user loop.""",
         "input_schema": {
             "type": "object",
             "properties": {
-                "view_id": {"type": "string", "description": "view id to watch; omit for any view"},
+                "view_id": {"type": "string", "description": "view id to watch; omit for any view (brush, click, 3D pick)"},
                 "wait": {"type": "boolean", "description": "block for the next interaction (default false)"},
                 "timeout_seconds": {"type": "number", "description": "max wait when wait=true (default 30)"},
             },
@@ -346,20 +437,59 @@ expressions/code. Unknown component names are rejected. Example:
             "required": ["tree"],
         },
     },
+    {
+        "name": "capture_view_snapshot",
+        "description": """Capture a PNG snapshot of a rendered view and SEE it yourself.
+
+Use this to VISUALLY verify your own output: after you render a visualization
+(render_gosling / show_structure / color_structure / compute_embedding), call
+this to get the actual rendered pixels back as an image. You are vision-capable,
+so the snapshot is returned to you AS AN IMAGE — inspect it, and if it doesn't
+match what you intended (wrong colors, empty plot, wrong region, clipped 3D
+structure), FIX it (patch_gosling / re-render / recolor) and capture again.
+
+view_id selects which tab to capture:
+  - 'genomic'      → the Gosling genomic visualization (Genomic tab)
+  - 'structure3d'  → the 3D chromatin structure (3D Structure tab)
+  - 'embedding'    → the UMAP scatter (Embedding tab)
+
+The capture switches to that tab, forces a render, and reads the canvas. It can
+take a few seconds. If the view isn't rendered/visible or capture fails, you get
+a text error instead of an image — render the view first, then capture.""",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "view_id": {
+                    "type": "string",
+                    "enum": ["genomic", "structure3d", "embedding"],
+                    "description": "which view/tab to snapshot",
+                },
+                "timeout_seconds": {
+                    "type": "number",
+                    "description": "max wait for the capture (default 30)",
+                },
+            },
+            "required": ["view_id"],
+        },
+    },
 ]
 
 SYSTEM_PROMPT = """You are a genomics visualization assistant for U-Chrom, a chromatin 3D structure analysis workbench, with expertise in Gosling.js.
 
 You drive a multi-tab UI directly through tools:
 - render_gosling / patch_gosling → Genomic tab (Gosling specs)
-- color_embedding / select_cells → Embedding tab (UMAP)
-- show_structure / color_structure → 3D Structure tab
+- compute_embedding → compute a cell-level UMAP and populate the Embedding tab (use when the Embedding view is empty / no UMAP exists yet)
+- color_embedding → recolor the Embedding (UMAP) scatter by a cell-table field (e.g. 'cell_type')
+- select_cells → Embedding tab (UMAP)
+- show_structure → show ONE cell's 3D structure in the 3D Structure tab (optionally one chrom)
+- color_structure → recolor the 3D Structure traces by a spot-table field ('chrom'/'trace_id'; compartment/TAD need run_analysis first)
 - add_notebook_cell → Notebook tab (Python)
 - run_analysis → TAD/loop/compartment, results feed back into visualizations
 - write_analysis_function → author+deploy a CUSTOM sandboxed analysis as a live endpoint, then render its output
 - export_view → download the current Gosling view as PNG/PDF
-- get_view_state / query_user_interaction → SEE the current view state and what the user did (brush/click/select)
+- get_view_state / query_user_interaction → SEE the current view state and what the user did (brush/click/select), and BLOCK to wait for the user's next interaction (query_user_interaction with wait=true). You can wait for a 3D spot pick (pick_spot → {cell_id, chrom, start, end, spot_index}) and then analyze the exact bin/region the user clicked — e.g. show_structure(cell), ask the user to click a spot, query_user_interaction(wait=true), then run_analysis/render_gosling on payload.chrom:start-end.
 - render_component → compose a CUSTOM layout from whitelisted UI blocks (Panel/Row/Column/Text/Table/Button/Slider/Select/GoslingView/EmbeddingView/StructureView) when one chart isn't enough
+- capture_view_snapshot → SEE a rendered view as an image. After you draw something (genomic / 3D structure / embedding), capture it and visually check it rendered as intended; if it's wrong (empty, wrong colors/region, clipped), fix it and capture again. This closes the see→correct loop — don't assume a render succeeded, verify it.
 
 Gosling concepts:
 - Tracks have 'data' (source), 'mark' (bar/line/point/rect/area/text/link/triangle), and encodings (x, y, color, size).

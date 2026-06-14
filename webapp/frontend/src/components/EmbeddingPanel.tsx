@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import DeckGL from '@deck.gl/react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import DeckGL, { type DeckGLRef } from '@deck.gl/react'
 import { ScatterplotLayer } from '@deck.gl/layers'
 import { OrthographicView } from '@deck.gl/core'
 import { useAppStore } from '../store'
+import { registerCapturer } from '../snapshot'
 
 // Module-level view instance — created once, not on every render
 const ORTHO_VIEW = new OrthographicView({ id: 'ortho', flipY: false })
@@ -36,6 +37,13 @@ interface EmbeddingData {
   cell_types: string[]
 }
 
+// Per-cell metadata row from /api/cells: always cell_id, plus any string fields
+// (cell_type, etc.). Used to color by an arbitrary field, not just cell_type.
+interface CellEntry {
+  cell_id: string
+  [field: string]: string
+}
+
 function computeInitialViewState(points: EmbeddingPoint[]): ViewState {
   if (points.length === 0) {
     return { target: [0, 0, 0], zoom: 1 }
@@ -60,19 +68,38 @@ export default function EmbeddingPanel() {
   const cellSelection = useAppStore(s => s.cellSelection)
   const highlightedCells = useAppStore(s => s.highlightedCells)
   const highlightCells = useAppStore(s => s.highlightCells)
+  const embeddingColorBy = useAppStore(s => s.embeddingColorBy)
 
   const [data, setData] = useState<EmbeddingData | null>(null)
+  const [cellMeta, setCellMeta] = useState<Record<string, CellEntry>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [viewState, setViewState] = useState<ViewState>({ target: [0, 0, 0], zoom: 1 })
+  const deckRef = useRef<DeckGLRef>(null)
 
   const fetchEmbedding = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/umap')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const json: EmbeddingData = await res.json()
+      // Fetch UMAP coords and per-cell metadata together. /api/umap carries
+      // cell_type; /api/cells carries the full cell table so we can color by
+      // any field the agent picks via color_embedding.
+      const [umapRes, cellsRes] = await Promise.all([
+        fetch('/api/umap'),
+        fetch('/api/cells').catch(() => null),
+      ])
+      if (!umapRes.ok) throw new Error(`HTTP ${umapRes.status}`)
+      const json: EmbeddingData = await umapRes.json()
+
+      const meta: Record<string, CellEntry> = {}
+      if (cellsRes && cellsRes.ok) {
+        const cj = await cellsRes.json()
+        for (const c of (cj.cells || []) as CellEntry[]) {
+          meta[String(c.cell_id)] = c
+        }
+      }
+      setCellMeta(meta)
+
       if (!json.points || json.points.length === 0) {
         setData(null)
       } else {
@@ -91,16 +118,54 @@ export default function EmbeddingPanel() {
     fetchEmbedding()
   }, [dataVersion, fetchEmbedding])
 
+  // Register the snapshot capturer for capture_view_snapshot ('embedding').
+  // deck.gl 9.x keeps preserveDrawingBuffers=true by default, so the WebGL
+  // canvas is readable after a redraw. Force a redraw, then toDataURL it.
+  useEffect(() => {
+    return registerCapturer('embedding', async () => {
+      const deck = deckRef.current?.deck
+      const canvas = deck?.getCanvas?.()
+      if (!canvas) throw new Error('embedding canvas not ready')
+      try {
+        deck?.redraw?.('snapshot')
+      } catch {
+        // best-effort: a redraw failure shouldn't block reading the buffer
+      }
+      await new Promise<void>(res => requestAnimationFrame(() => res()))
+      return canvas.toDataURL('image/png')
+    })
+  }, [])
+
   // Derive from data with fallbacks so all hooks run unconditionally
-  const cell_types = data?.cell_types ?? []
   const points = data?.points ?? []
 
-  // Build color lookup by cell_type
+  // Which field colors the scatter. Default to 'cell_type'; color_embedding can
+  // switch it to any cell-table field. Resolve each point's category value from
+  // the /api/cells metadata, falling back to the point's own cell_type.
+  const colorField = embeddingColorBy ?? 'cell_type'
+  const valueFor = useCallback((p: EmbeddingPoint): string => {
+    if (colorField === 'cell_id') return p.cell_id
+    const m = cellMeta[p.cell_id]
+    const v = m ? m[colorField] : undefined
+    if (v != null) return String(v)
+    // Fall back to the umap-provided cell_type when metadata lacks the field.
+    if (colorField === 'cell_type') return p.cell_type ?? 'unknown'
+    return 'unknown'
+  }, [colorField, cellMeta])
+
+  // Categories present for the active field, in stable sorted order.
+  const categories = useMemo(() => {
+    const set = new Set<string>()
+    for (const p of points) set.add(valueFor(p))
+    return Array.from(set).sort()
+  }, [points, valueFor])
+
+  // Build color lookup by category value of the active field.
   const colorMap = useMemo(() => {
     const map: Record<string, [number, number, number]> = {}
-    cell_types.forEach((ct, i) => { map[ct] = PALETTE[i % PALETTE.length] })
+    categories.forEach((c, i) => { map[c] = PALETTE[i % PALETTE.length] })
     return map
-  }, [cell_types])
+  }, [categories])
 
   const selectedIds = useMemo(() => new Set(cellSelection.ids), [cellSelection.ids])
   const hasSelection = cellSelection.mode !== 'all' && selectedIds.size > 0
@@ -134,8 +199,8 @@ export default function EmbeddingPanel() {
         return [255, 255, 0, 200] as [number, number, number, number]
       }
 
-      // Otherwise use base color with selection logic
-      const base = colorMap[d.cell_type] ?? PALETTE[0]
+      // Otherwise use base color (by the active color field) with selection logic
+      const base = colorMap[valueFor(d)] ?? PALETTE[0]
       if (hasSelection) {
         const alpha = selectedIds.has(d.cell_id) ? 255 : 40
         return [...base, alpha] as [number, number, number, number]
@@ -155,10 +220,10 @@ export default function EmbeddingPanel() {
     pickable: true,
     onClick: handleClick,
     updateTriggers: {
-      getFillColor: [hasSelection, selectedIds, highlightedSet, hasHighlights],
+      getFillColor: [hasSelection, selectedIds, highlightedSet, hasHighlights, colorMap, valueFor],
       getRadius: [highlightedSet],
     },
-  }), [points, colorMap, hasSelection, selectedIds, highlightedSet, hasHighlights, handleClick])
+  }), [points, colorMap, valueFor, hasSelection, selectedIds, highlightedSet, hasHighlights, handleClick])
 
   // Early returns after all hooks
   if (loading) {
@@ -172,9 +237,13 @@ export default function EmbeddingPanel() {
   if (error || !data) {
     return (
       <div className="h-full flex items-center justify-center bg-white">
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-2 max-w-xs px-4">
           <div className="text-3xl">📊</div>
           <div className="text-sm font-medium text-gray-600">No embedding data available</div>
+          <div className="text-xs text-gray-400">
+            Ask the agent to compute one, e.g. “compute the UMAP embedding”
+            (it runs <span className="font-mono">compute_embedding</span>).
+          </div>
           {error && <div className="text-xs text-red-400">{error}</div>}
         </div>
       </div>
@@ -186,6 +255,7 @@ export default function EmbeddingPanel() {
       {/* Canvas area */}
       <div className="flex-1 relative min-h-0">
         <DeckGL
+          ref={deckRef}
           views={ORTHO_VIEW}
           viewState={viewState}
           onViewStateChange={({ viewState: vs }) => setViewState(vs as ViewState)}
@@ -197,15 +267,16 @@ export default function EmbeddingPanel() {
 
       {/* Legend */}
       <div className="flex-shrink-0 border-t border-gray-100 px-3 py-2 flex flex-wrap gap-x-4 gap-y-1">
-        {cell_types.map((ct, i) => {
+        <span className="text-xs text-gray-400 mr-1">color: {colorField}</span>
+        {categories.map((cat, i) => {
           const [r, g, b] = PALETTE[i % PALETTE.length]
           return (
-            <div key={ct} className="flex items-center gap-1.5">
+            <div key={cat} className="flex items-center gap-1.5">
               <span
                 className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
                 style={{ backgroundColor: `rgb(${r},${g},${b})` }}
               />
-              <span className="text-xs text-gray-600">{ct}</span>
+              <span className="text-xs text-gray-600">{cat}</span>
             </div>
           )
         })}

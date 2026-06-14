@@ -15,13 +15,20 @@ from webapp.backend.tool_executors import TOOL_EXECUTORS
 
 
 def test_every_tool_has_an_executor():
-    """Every schema in TOOLS must have a registered executor (and vice versa)."""
+    """TOOLS and TOOL_EXECUTORS must be in 1:1 correspondence.
+
+    color_embedding / show_structure / color_structure are now wired up (第二波)
+    and exposed in TOOLS, so the registry is symmetric again: every schema has
+    an executor and every executor has a schema.
+    """
     tool_names = {t["name"] for t in TOOLS}
-    assert tool_names == set(TOOL_EXECUTORS), (
-        f"schema/executor mismatch: "
-        f"schema-only={tool_names - set(TOOL_EXECUTORS)}, "
-        f"executor-only={set(TOOL_EXECUTORS) - tool_names}"
-    )
+    executor_names = set(TOOL_EXECUTORS)
+
+    schema_only = tool_names - executor_names
+    assert not schema_only, f"schema without executor: {schema_only}"
+
+    executor_only = executor_names - tool_names
+    assert not executor_only, f"executor without schema: {executor_only}"
 
 
 @pytest.mark.asyncio
@@ -143,6 +150,128 @@ async def test_simple_forwarders(name, inp, art_type):
     art = ws.send_json.call_args[0][0]
     assert art["artifact_type"] == art_type
     assert isinstance(content, str) and content
+
+
+# ---------------------------------------------------------------------------
+# Linkage tools (第二波): real artifacts + validation against live ChromData
+# ---------------------------------------------------------------------------
+
+class _FakeCell:
+    def __init__(self, spots):
+        self.spots = spots
+
+
+class _FakeCD:
+    """Minimal ChromData stand-in for executor validation tests."""
+    def __init__(self, cells=None, spots=None, cell_map=None):
+        self.cells = cells
+        self.spots = spots
+        self._cell_map = cell_map or {}
+
+    def get_cell(self, cid):
+        return self._cell_map.get(str(cid), _FakeCell(_EmptySpots()))
+
+
+class _EmptySpots:
+    def __len__(self):
+        return 0
+
+
+def _session_with(cd):
+    from types import SimpleNamespace
+    return SimpleNamespace(chromdata=cd)
+
+
+@pytest.mark.asyncio
+async def test_color_embedding_emits_color_by():
+    ws = AsyncMock()
+    content = await TOOL_EXECUTORS["color_embedding"](ws, {"color_by": "cell_type"})
+    art = ws.send_json.call_args[0][0]
+    assert art["artifact_type"] == "color_embedding"
+    assert art["color_by"] == "cell_type"
+    assert json.loads(content)["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_color_embedding_rejects_unknown_field():
+    import pandas as pd
+    cells = pd.DataFrame({"cell_type": ["typeA", "typeB"]},
+                         index=pd.Index(["c0", "c1"], name="cell_id"))
+    ws = AsyncMock()
+    content = await TOOL_EXECUTORS["color_embedding"](
+        ws, {"color_by": "nope", "_session": _session_with(_FakeCD(cells=cells))}
+    )
+    payload = json.loads(content)
+    assert payload["success"] is False
+    assert "not a cell field" in payload["error"]
+    ws.send_json.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_color_embedding_requires_color_by():
+    ws = AsyncMock()
+    content = await TOOL_EXECUTORS["color_embedding"](ws, {"color_by": ""})
+    assert json.loads(content)["success"] is False
+    ws.send_json.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_show_structure_emits_cell_id():
+    ws = AsyncMock()
+    content = await TOOL_EXECUTORS["show_structure"](ws, {"cell_id": "c1", "chrom": "chr1"})
+    art = ws.send_json.call_args[0][0]
+    assert art["artifact_type"] == "show_structure"
+    assert art["cell_id"] == "c1"
+    assert art["chrom"] == "chr1"
+    assert json.loads(content)["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_show_structure_requires_cell_id():
+    ws = AsyncMock()
+    content = await TOOL_EXECUTORS["show_structure"](ws, {"cell_id": ""})
+    assert json.loads(content)["success"] is False
+    ws.send_json.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_show_structure_rejects_missing_cell():
+    import pandas as pd
+    cd = _FakeCD(cell_map={})  # get_cell returns empty spots → cell not found
+    cd.spots = pd.DataFrame({"chrom": ["chr1"]})
+    ws = AsyncMock()
+    content = await TOOL_EXECUTORS["show_structure"](
+        ws, {"cell_id": "ghost", "_session": _session_with(cd)}
+    )
+    payload = json.loads(content)
+    assert payload["success"] is False
+    assert "no cell" in payload["error"]
+    ws.send_json.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_color_structure_emits_color_by():
+    ws = AsyncMock()
+    content = await TOOL_EXECUTORS["color_structure"](ws, {"color_by": "chrom"})
+    art = ws.send_json.call_args[0][0]
+    assert art["artifact_type"] == "color_structure"
+    assert art["color_by"] == "chrom"
+    assert json.loads(content)["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_color_structure_rejects_unknown_field():
+    import pandas as pd
+    spots = pd.DataFrame({"chrom": ["chr1"], "start": [0], "end": [1],
+                          "trace_id": ["t0"], "cell_id": ["c0"]})
+    ws = AsyncMock()
+    content = await TOOL_EXECUTORS["color_structure"](
+        ws, {"color_by": "compartment", "_session": _session_with(_FakeCD(spots=spots))}
+    )
+    payload = json.loads(content)
+    assert payload["success"] is False
+    assert "not a spot field" in payload["error"]
+    ws.send_json.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

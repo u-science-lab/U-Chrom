@@ -14,7 +14,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `IMR90_chr21_30kb.cool`               | 280 KB  | yes             | —             | `gem_fish_reconstruction` tutorial (Hi-C side)                          |
 | `takei2025_cerebellum_fixture/`       | ~750 KB | yes             | —             | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture)    |
 | Takei 2025 full Zenodo dump           | ~8 GB   | no              | **manual**    | `seqfish_multiomics_cerebellum` tutorial (real-data run)                |
-| `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials |
+| `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials; webapp real-data validation (FOF-CT load, ~317k spots / 20 chroms / 8285 traces) |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
 | `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial                                     |
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
@@ -23,6 +23,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `with_loops.h5cd`                     | 24 MB   | no              | generated     | output of `loop_calling.ipynb` (intermediate cache, safe to delete)     |
 | `fofct_core.csv`                      | ~6 MB   | no              | generated     | synthetic offline fallback for tutorials 4/5/6/7                        |
 | `synthetic_chr1_tiny.h5cd`            | 21 KB   | no              | generated     | E2E test fixture (100 random spots on chr1, 1 cell; auto-created by `test_e2e_quick_synthetic.py`) |
+| `rich_multicell.h5cd`                 | 41 KB   | no              | generated     | webapp test fixture (8 cells / 2 cell types / 2 chroms / 16 traces, mm10; auto-created by `tests/conftest.py` via `make_rich_multicell.py`) — exercises per-cell UMAP, cell-coloured 3D, `/api/cells`, `/api/dataset_info` |
 | `takei2025_cerebellum_rep1.h5cd`      | 5.9 GB  | no              | **manual**    | Processed Takei 2025 data for webapp E2E validation (full-scale performance testing) |
 | `GSE63525_GM12878_insitu_primary+replicate_combined_30.hic` | ~40 GB | no | **manual** (too large) | `benchmark.ipynb` |
 

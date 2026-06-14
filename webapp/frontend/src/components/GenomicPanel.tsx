@@ -1,7 +1,14 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useAppStore } from '../store'
-import { LOCAL_CONTACT_MAP_SPEC } from '../specs/localContactMapSpec'
+import { makeDefaultContactSpec } from '../specs/localContactMapSpec'
 import { ErrorBoundary } from './ErrorBoundary'
+
+interface DatasetInfo {
+  chroms: string[]
+  genome_assembly: string | null
+  n_cells: number
+  n_spots: number
+}
 
 const GoslingRenderer = lazy(() => import('./GoslingRenderer'))
 
@@ -46,6 +53,12 @@ export default function GenomicPanel() {
   const requestExport = useAppStore(s => s.requestExport)
   const dataVersion = useAppStore(s => s.dataVersion)
 
+  // Default contact-map spec, built from the actually-loaded dataset's first
+  // chromosome + assembly (via /api/dataset_info) instead of a hardcoded
+  // chr21/hg38. Rebuilt whenever new data loads (dataVersion bumps).
+  const [defaultSpec, setDefaultSpec] = useState<object | null>(null)
+  const [defaultSpecId, setDefaultSpecId] = useState<string>('local-contact-map')
+
   // The local contact map pulls from the backend tileset/strc endpoints, which
   // 404 until a ChromData file is loaded. Only mount it once data exists —
   // otherwise Gosling fires requests against an empty session and its CSV
@@ -53,8 +66,37 @@ export default function GenomicPanel() {
   // (`Cannot read properties of undefined (reading 'filter')`).
   const hasData = dataVersion > 0
 
+  useEffect(() => {
+    if (!hasData) {
+      setDefaultSpec(null)
+      return
+    }
+    let cancelled = false
+    fetch('/api/dataset_info')
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.json() as Promise<DatasetInfo>
+      })
+      .then(info => {
+        if (cancelled) return
+        const chrom = info.chroms?.[0]
+        if (!chrom) {
+          setDefaultSpec(null)
+          return
+        }
+        setDefaultSpec(makeDefaultContactSpec(chrom, info.genome_assembly))
+        // Key the spec by chrom so the ErrorBoundary/renderer reset when the
+        // loaded dataset changes to a different chromosome.
+        setDefaultSpecId(`local-contact-map-${chrom}`)
+      })
+      .catch(() => {
+        if (!cancelled) setDefaultSpec(null)
+      })
+    return () => { cancelled = true }
+  }, [hasData, dataVersion])
+
   // Priority: agent-generated spec > local contact map (only once data loaded).
-  const specToRender = activeSpec ?? (hasData ? LOCAL_CONTACT_MAP_SPEC : null)
+  const specToRender = activeSpec ?? defaultSpec
 
   const isLocalDefault = !activeSpec
 
@@ -130,7 +172,8 @@ export default function GenomicPanel() {
           // throws — keying on the spec resets the boundary when the agent
           // sends a new (valid) spec, so the panel can recover.
           <ErrorBoundary
-            key={activeSpecId ?? 'local-contact-map'}
+            key={activeSpecId ?? defaultSpecId}
+            viewId={activeSpecId ?? undefined}
             fallback={
               <div className="h-full flex flex-col items-center justify-center p-6 text-center text-gray-500">
                 <div className="text-sm font-medium mb-1">This view could not be rendered</div>

@@ -1,8 +1,12 @@
 import { Component, ErrorInfo, ReactNode } from 'react'
+import { reportViewDiagnostic } from '../diagnostics'
 
 interface Props {
   children: ReactNode
   fallback?: ReactNode
+  // When set, a caught render error is fed back to the backend as a
+  // `view.diagnostic` for this view so the agent can SEE it (get_view_state).
+  viewId?: string
 }
 
 interface State {
@@ -22,6 +26,16 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught:', error, errorInfo)
+    // Feed the failure back to the agent if this boundary guards a named view.
+    if (this.props.viewId) {
+      reportViewDiagnostic({
+        view_id: this.props.viewId,
+        level: 'error',
+        source: 'react-error-boundary',
+        message: error.message || String(error),
+        detail: errorInfo?.componentStack ?? undefined,
+      })
+    }
   }
 
   render() {

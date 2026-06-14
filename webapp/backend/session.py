@@ -5,6 +5,11 @@ import time
 from datetime import datetime
 
 
+# Cap on per-view render diagnostics (FIFO). Keeps a misbehaving render that
+# throws on every frame from growing the session unbounded.
+MAX_VIEW_DIAGNOSTICS = 20
+
+
 def _deep_merge(base: dict, patch: dict) -> dict:
     """Recursively merge ``patch`` into ``base`` in place and return it.
 
@@ -36,6 +41,11 @@ class ViewSession:
     title: str = ""
     created_at: float = field(default_factory=time.time)
     last_updated: float = field(default_factory=time.time)
+    # Rendering diagnostics fed back from the frontend (React error-boundary
+    # catches, Gosling spec failures). Capped FIFO so a render that keeps
+    # throwing can't grow this unbounded; get_view_state surfaces it so the
+    # agent can SEE that its output "画崩了" and self-correct.
+    diagnostics: list = field(default_factory=list)
 
     def replace(self, state: dict) -> None:
         self.state = state
@@ -47,6 +57,13 @@ class ViewSession:
         self.revision += 1
         self.last_updated = time.time()
 
+    def add_diagnostic(self, diag: dict, cap: int = MAX_VIEW_DIAGNOSTICS) -> None:
+        """Append a render diagnostic, keeping only the most recent ``cap``."""
+        self.diagnostics.append(diag)
+        if len(self.diagnostics) > cap:
+            self.diagnostics = self.diagnostics[-cap:]
+        self.last_updated = time.time()
+
     def to_dict(self) -> dict:
         return {
             "view_id": self.view_id,
@@ -54,6 +71,7 @@ class ViewSession:
             "state": self.state,
             "revision": self.revision,
             "title": self.title,
+            "diagnostics": self.diagnostics,
         }
 
 

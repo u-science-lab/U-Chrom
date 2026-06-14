@@ -1,5 +1,7 @@
 """Tests for the ChromData HTTP data API endpoints."""
 import struct
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -8,6 +10,8 @@ from fastapi.testclient import TestClient
 from uchrom.core.cdata import ChromData
 from webapp.backend.main import app
 import webapp.backend.data_api as data_api
+
+EXAMPLE_DATA = Path(__file__).resolve().parents[1] / "example-data"
 
 
 def _make_cd():
@@ -112,6 +116,131 @@ def test_umap_no_umap():
     data_api.current_session = s
     r = client.get("/api/umap")
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# /api/cells — cell list independent of UMAP
+# ---------------------------------------------------------------------------
+
+def _set_session(cd):
+    from webapp.backend.session import Session
+    s = Session(session_id="cells-test")
+    s.chromdata = cd
+    data_api.current_session = s
+
+
+def test_cells_no_session():
+    data_api.current_session = None
+    r = client.get("/api/cells")
+    assert r.status_code == 404
+
+
+def test_cells_from_cells_df():
+    # Synthetic cd has cells c1, c2 with cell_type metadata
+    r = client.get("/api/cells")
+    assert r.status_code == 200
+    body = r.json()
+    assert "cells" in body
+    ids = [c["cell_id"] for c in body["cells"]]
+    assert ids == ["c1", "c2"]
+    assert all("cell_type" in c for c in body["cells"])
+    assert body["cell_types"] == ["A", "B"]
+
+
+def test_cells_independent_of_umap():
+    # Same dataset minus UMAP: /api/cells must still list cells, /api/umap 404s.
+    cd = _make_cd()
+    cd.cellm.pop("umap")
+    _set_session(cd)
+    r = client.get("/api/cells")
+    assert r.status_code == 200
+    ids = [c["cell_id"] for c in r.json()["cells"]]
+    assert ids == ["c1", "c2"]
+    # Proof of decoupling: UMAP is gone but cells still resolve.
+    assert client.get("/api/umap").status_code == 404
+
+
+def test_cells_fallback_to_spots():
+    # cd.cells empty → derive cell list from spots.cell_id
+    cd = _make_cd()
+    cd.cells = pd.DataFrame()
+    _set_session(cd)
+    r = client.get("/api/cells")
+    assert r.status_code == 200
+    ids = [c["cell_id"] for c in r.json()["cells"]]
+    assert ids == ["c1", "c2"]
+
+
+@pytest.mark.skipif(
+    not (EXAMPLE_DATA / "rich_multicell.h5cd").exists(),
+    reason="rich_multicell.h5cd example data not present",
+)
+def test_cells_real_rich_multicell():
+    """Real-data validation: 8 cells, no UMAP — exactly the decoupling case."""
+    cd = ChromData.read(str(EXAMPLE_DATA / "rich_multicell.h5cd"))
+    assert "umap" not in cd.cellm  # precondition: this dataset has no UMAP
+    _set_session(cd)
+
+    r = client.get("/api/cells")
+    assert r.status_code == 200
+    ids = [c["cell_id"] for c in r.json()["cells"]]
+    assert ids == [f"c{i}" for i in range(8)]
+
+    # /api/umap stays 404 for this dataset, proving /api/cells is independent.
+    assert client.get("/api/umap").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# /api/dataset_info — dataset-level metadata for default-spec construction
+# ---------------------------------------------------------------------------
+
+def test_dataset_info_no_session():
+    data_api.current_session = None
+    r = client.get("/api/dataset_info")
+    assert r.status_code == 404
+
+
+def test_dataset_info_synthetic():
+    # Synthetic cd: 1 chrom (chr1), no assembly in uns, 2 cells, 6 spots.
+    r = client.get("/api/dataset_info")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["chroms"] == ["chr1"]
+    assert body["genome_assembly"] is None
+    assert body["n_cells"] == 2
+    assert body["n_spots"] == 6
+
+
+@pytest.mark.skipif(
+    not (EXAMPLE_DATA / "rich_multicell.h5cd").exists(),
+    reason="rich_multicell.h5cd example data not present",
+)
+def test_dataset_info_real_rich_multicell():
+    """Real-data: chr1+chr2, assembly mm10."""
+    cd = ChromData.read(str(EXAMPLE_DATA / "rich_multicell.h5cd"))
+    _set_session(cd)
+    r = client.get("/api/dataset_info")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["chroms"] == ["chr1", "chr2"]
+    assert body["genome_assembly"] == "mm10"
+    assert body["n_cells"] == 8
+    assert body["n_spots"] > 0
+
+
+@pytest.mark.skipif(
+    not (EXAMPLE_DATA / "synthetic_chr1_tiny.h5cd").exists(),
+    reason="synthetic_chr1_tiny.h5cd example data not present",
+)
+def test_dataset_info_real_chr1_tiny():
+    """Real-data: chr1 only, no assembly → genome_assembly null."""
+    cd = ChromData.read(str(EXAMPLE_DATA / "synthetic_chr1_tiny.h5cd"))
+    _set_session(cd)
+    r = client.get("/api/dataset_info")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["chroms"] == ["chr1"]
+    assert body["genome_assembly"] is None
 
 
 # ---------------------------------------------------------------------------

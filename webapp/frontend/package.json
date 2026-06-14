@@ -14,6 +14,7 @@
     "@deck.gl/react": "^9.0.0",
     "@types/three": "^0.163.0",
     "deck.gl": "^9.0.0",
+    "fast-json-patch": "^3.1.1",
     "gosling.js": "1.0.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

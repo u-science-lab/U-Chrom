@@ -55,13 +55,16 @@ def single_tool_then_done(name, inp, tool_id="t1", final_text="done"):
 class _FakeStream:
     """Mimics anthropic's MessageStreamManager for a single turn.
 
-    ``async with`` yields self; ``async for`` walks the text deltas (if any);
-    ``get_final_message`` returns the turn's final response object.
+    ``async with`` yields self; ``async for`` walks the streaming lifecycle
+    (message_start → content_block_start/delta/stop → message_stop), mirroring
+    the real Anthropic event sequence so the loop's lifecycle forwarding is
+    exercised; ``get_final_message`` returns the turn's final response object.
     """
 
-    def __init__(self, response, deltas):
+    def __init__(self, response, deltas, message_id="msg_fake"):
         self._response = response
         self._deltas = deltas
+        self._message_id = message_id
 
     async def __aenter__(self):
         return self
@@ -70,11 +73,25 @@ class _FakeStream:
         return False
 
     async def __aiter__(self):
+        yield SimpleNamespace(
+            type="message_start",
+            message=SimpleNamespace(id=self._message_id),
+        )
+        # Emit the text deltas as a single content block at index 0, bracketed
+        # by content_block_start / content_block_stop.
+        yield SimpleNamespace(
+            type="content_block_start",
+            index=0,
+            content_block=SimpleNamespace(type="text"),
+        )
         for d in self._deltas:
             yield SimpleNamespace(
                 type="content_block_delta",
+                index=0,
                 delta=SimpleNamespace(type="text_delta", text=d),
             )
+        yield SimpleNamespace(type="content_block_stop", index=0)
+        yield SimpleNamespace(type="message_stop")
 
     async def get_final_message(self):
         return self._response
@@ -97,7 +114,7 @@ class FakeMessages:
         self.last_kwargs = kwargs
         i = self._i
         self._i += 1
-        return _FakeStream(self._turns[i], self._deltas[i])
+        return _FakeStream(self._turns[i], self._deltas[i], message_id=f"msg_fake_{i}")
 
 
 class FakeClient:
