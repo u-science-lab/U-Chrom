@@ -62,6 +62,7 @@ def test_discovery_schema_roundtrips_inside_h5cd(tmp_path):
 
 def test_discovery_schema_includes_linked_anndata():
     ad = pytest.importorskip("anndata")
+    from uchrom.auto_discovery import DiscoveryIdea, review_idea_against_schema
 
     cdata = _make_cd()
     adata = ad.AnnData(
@@ -77,6 +78,28 @@ def test_discovery_schema_includes_linked_anndata():
     assert schema["linked_adata"]["shape"] == [2, 2]
     assert schema["catalogs"]["genes"]["values"] == ["Aldoc", "Pcp2"]
     assert "linked_adata" in cdata.describe_for_agent()
+
+    idea = DiscoveryIdea(
+        idea_title="Pcp2 expression linked chromatin phenotype",
+        biological_hypothesis="Pcp2 expression should align with a linked chromatin phenotype.",
+        computable_parameter="Association between linked Pcp2 expression and H3K27me3 signal.",
+        analysis_plan="Align cells by linked_adata.obs_names and compare expression to chromatin tracks.",
+        modalities=["rna_expression", "chromatin_tracing", "if_tracks", "cell_metadata"],
+        cell_types=["Bergmann", "Granule"],
+        required_fields=[
+            "linked_adata.X",
+            "linked_adata.var.Pcp2",
+            "linked_adata.obs_names",
+            "cells.cell_type",
+            "tracks.H3K27me3",
+        ],
+        validation_checks=["required_fields_exist", "cell_id_alignment", "statistical_hypothesis_test"],
+    )
+
+    review = review_idea_against_schema(idea, schema)
+
+    assert review.accepted
+    assert "linked_adata.obs_names" not in review.missing_fields
 
 
 def test_discovery_schema_includes_references_and_user_annotations(tmp_path):
@@ -124,6 +147,60 @@ def test_discovery_schema_includes_references_and_user_annotations(tmp_path):
     assert out.user_annotations[0]["annotation_id"] == ann["annotation_id"]
     assert out.discovery_schema["references"][0]["doi"] == "10.0000/example"
     assert out.validate_discovery_schema() == []
+
+
+def test_refresh_literature_claims_for_iteration_uses_cached_and_schema_knowledge(tmp_path):
+    from uchrom.auto_discovery import (
+        build_idea_graph_from_run,
+        refresh_literature_claims_for_iteration,
+    )
+
+    cdata = _make_cd()
+    ref = cdata.add_reference(
+        role="primary_dataset_paper",
+        title="Takei 2025 cerebellum multi-omics",
+        doi="10.0000/example",
+        year=2025,
+        notes="Primary dataset paper links chromatin tracing with IF markers.",
+    )
+    ann = cdata.add_user_annotation(
+        scope="analysis_constraint",
+        target="linked_adata",
+        text="Treat RNA and chromatin tracing as cell-level matched modalities.",
+    )
+    schema = cdata.build_discovery_schema(store=False)
+    seed_claims = tmp_path / "seed_claims.jsonl"
+    seed_claims.write_text(
+        json.dumps({
+            "claim_text": "Pcp2 is a Purkinje marker in cerebellum.",
+            "source": {
+                "reference_id": "seed_ref",
+                "title": "Seed source",
+                "url": "https://example.org/seed",
+            },
+            "entities": {
+                "genes": ["Pcp2"],
+                "cell_types": ["Purkinje"],
+                "modalities": ["rna_expression"],
+            },
+        }) + "\n"
+    )
+
+    run_dir = tmp_path / "run"
+    result = refresh_literature_claims_for_iteration(
+        run_dir=run_dir,
+        schema=schema,
+        seed_claim_paths=[seed_claims],
+    )
+    graph = build_idea_graph_from_run(run_dir)
+
+    assert result.n_claims == 3
+    assert Path(result.claims_path).exists()
+    assert Path(result.retrieval_log_path).exists()
+    assert ref["reference_id"] in Path(result.claims_path).read_text()
+    assert ann["annotation_id"] in Path(result.claims_path).read_text()
+    assert graph.summary()["node_kinds"]["LiteratureClaim"] == 3
+    assert any(edge["relation"] == "mentions_gene" for edge in graph.edges)
 
 
 def test_review_idea_against_schema_accepts_and_rejects_fields():
@@ -591,7 +668,7 @@ def test_build_idea_graph_from_run_artifacts(tmp_path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     idea = _make_idea()
-    idea.metadata["frontier_id"] = "coverage_gap-test"
+    idea.metadata["direction_id"] = "coverage_gap-test"
     idea.expected_direction = "Positive interaction: higher marker should increase the statistic."
     idea.metadata["source_claim_ids"] = ["claim_pcp2_marker"]
     idea.metadata["parent_idea_ids"] = ["parent_idea"]
@@ -642,16 +719,49 @@ def test_build_idea_graph_from_run_artifacts(tmp_path):
     assert "supports" in edge_relations
     assert "motivated_by" in edge_relations
     assert "derived_from" in edge_relations
+    assert "direction_proposed" in edge_relations
     assert summary["coverage"]["markers"]["H3K27me3"] == 1
     assert Path(artifacts["graph_summary"]).exists()
 
 
-def test_plan_discovery_frontiers_from_idea_graph(tmp_path):
+def test_build_idea_graph_marks_schema_rejected_ideas(tmp_path):
+    from uchrom.auto_discovery import build_idea_graph_from_run
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    idea = _make_idea()
+
+    def write_jsonl(path, rows):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as fh:
+            for row in rows:
+                fh.write(json.dumps(row) + "\n")
+
+    write_jsonl(run_dir / "ideas.jsonl", [idea.to_dict()])
+    write_jsonl(run_dir / "reviews.jsonl", [{
+        "idea_id": idea.idea_id,
+        "accepted": False,
+        "errors": ["required field does not exist: linked_adata.obs_names"],
+        "warnings": [],
+        "missing_fields": ["linked_adata.obs_names"],
+    }])
+
+    graph = build_idea_graph_from_run(run_dir)
+    idea_node = graph.nodes[f"idea:{idea.idea_id}"]
+
+    assert idea_node["review_status"] == "Rejected"
+    assert idea_node["review_accepted"] is False
+    assert idea_node["execution_state"] == "Rejected by schema"
+    assert idea_node["hypothesis_status"] == "Rejected"
+    assert f"evidence:{idea.idea_id}" not in graph.nodes
+
+
+def test_plan_discovery_directions_from_idea_graph(tmp_path):
     from uchrom.auto_discovery import (
         build_idea_graph_from_run,
-        frontiers_to_agent_context,
-        plan_discovery_frontiers,
-        write_frontier_artifacts,
+        directions_to_agent_context,
+        plan_discovery_directions,
+        write_direction_artifacts,
     )
 
     cdata = _make_cd()
@@ -689,18 +799,24 @@ def test_plan_discovery_frontiers_from_idea_graph(tmp_path):
     }])
 
     graph = build_idea_graph_from_run(run_dir)
-    frontiers = plan_discovery_frontiers(graph, schema, max_frontiers=4)
-    artifacts = write_frontier_artifacts(frontiers, run_dir)
-    context = frontiers_to_agent_context(frontiers)
+    directions = plan_discovery_directions(graph, schema, max_directions=6)
+    artifacts = write_direction_artifacts(directions, run_dir)
+    context = directions_to_agent_context(directions)
+    direction_types = {d.direction_type for d in directions}
 
-    assert frontiers
-    assert frontiers[0].frontier_id
-    assert any(f.frontier_type == "evidence_extension" for f in frontiers)
-    assert any(f.frontier_type == "coverage_gap" for f in frontiers)
+    assert directions
+    assert directions[0].direction_id
+    assert "evidence_extension" in direction_types
+    assert "cell_spatial_context" in direction_types
+    assert "global_structure" in direction_types
+    assert "coverage_gap" in direction_types
+    spatial_direction = next(d for d in directions if d.direction_type == "cell_spatial_context")
+    assert "cellm.umap" in spatial_direction.target_facets["cell_spatial_fields"]
+    assert "pan-cell" in context
     assert idea.idea_id in context
-    assert "Graph-derived discovery frontiers" in context
-    assert Path(artifacts["frontiers_json"]).exists()
-    assert Path(artifacts["frontiers_markdown"]).exists()
+    assert "Graph-derived discovery directions" in context
+    assert Path(artifacts["directions_json"]).exists()
+    assert Path(artifacts["directions_markdown"]).exists()
 
 
 def test_literature_claims_and_graph_html_viewer(tmp_path):
@@ -715,8 +831,8 @@ def test_literature_claims_and_graph_html_viewer(tmp_path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     idea = _make_idea()
-    idea.metadata["frontier_id"] = "coverage_gap-test"
-    idea.metadata["frontier_type"] = "coverage_gap"
+    idea.metadata["direction_id"] = "coverage_gap-test"
+    idea.metadata["direction_type"] = "coverage_gap"
 
     def write_jsonl(path, rows):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -760,15 +876,15 @@ def test_literature_claims_and_graph_html_viewer(tmp_path):
 
     graph = build_idea_graph_from_run(run_dir)
     assert graph.nodes["literature_claim:claim_hp1alpha_heterochromatin"]["kind"] == "LiteratureClaim"
-    assert graph.nodes["frontier:coverage_gap-test"]["kind"] == "Frontier"
-    assert any(edge["relation"] == "frontier_proposed" for edge in graph.edges)
+    assert graph.nodes["direction:coverage_gap-test"]["kind"] == "Direction"
+    assert any(edge["relation"] == "direction_proposed" for edge in graph.edges)
     assert any(edge["relation"] == "literature_supports" for edge in graph.edges)
 
     extra_claims = tmp_path / "extra_claims.jsonl"
     write_jsonl(extra_claims, [{
-        "claim": "Pcp2 is a Purkinje marker.",
-        "genes": ["Pcp2"],
-        "cell_types": ["Purkinje"],
+        "claim_text": "Pcp2 is a Purkinje marker.",
+        "source": {"reference_id": "ref_pcp2", "title": "Pcp2 source"},
+        "entities": {"genes": ["Pcp2"], "cell_types": ["Purkinje"]},
         "related_idea_ids": [idea.idea_id],
     }])
     assert ingest_literature_claims(graph, extra_claims) == 1
@@ -791,9 +907,8 @@ def test_literature_claims_and_graph_html_viewer(tmp_path):
     assert "Overview" in html
     assert "Focus" in html
     assert "Follow-up direction" in html
-    assert "Idea lineage graph" in html
+    assert "Idea graph" in html
     assert "legend-pills" in html
-    assert "Lineage" in html
     assert "canvas-tools" in html
     assert "node-card-bg" in html
     assert "global-node-visual" in html
@@ -815,9 +930,6 @@ def test_literature_claims_and_graph_html_viewer(tmp_path):
     assert "edge-label" in html
     assert "edge-label-bg" in html
     assert "edgeLabelVisible" in html
-    assert "Focus graph" in html
-    assert "focus-mode" in html
-    assert "toggleFocusMode" in html
     assert "node-port" in html
     assert "lineage-edge" in html
     assert "Technical details" in html
@@ -841,6 +953,65 @@ def test_auto_discovery_defaults_to_pantheon_backend(tmp_path):
     assert config.schematic_image_model is None
     assert config.max_complexity == 5
     assert config.llm_timeout == 420
+
+
+def test_iterative_auto_discovery_defaults_to_inline_schematics(monkeypatch, tmp_path):
+    from uchrom.auto_discovery import IterativeDiscoveryConfig
+    from uchrom.auto_discovery.runner import DiscoveryRunResult
+    import uchrom.auto_discovery.iterative as iterative
+
+    captured = {}
+
+    def fake_run_auto_discovery(config):
+        captured["generate_schematic_image"] = config.generate_schematic_image
+        captured["schematic_image_model"] = config.schematic_image_model
+        captured["schematic_image_model_args"] = config.schematic_image_model_args
+        return DiscoveryRunResult(
+            output_dir=str(config.output_dir),
+            n_generated=1,
+            n_accepted=1,
+            n_executed=1,
+            n_verified=1,
+            report_path="report.md",
+            ideas_path="ideas.jsonl",
+            reviews_path="reviews.jsonl",
+            results_path="results.jsonl",
+        )
+
+    monkeypatch.setattr(iterative, "run_auto_discovery", fake_run_auto_discovery)
+    monkeypatch.setattr(iterative, "build_idea_graph_from_runs", lambda *_, **__: object())
+    monkeypatch.setattr(
+        iterative,
+        "write_idea_graph_artifacts",
+        lambda *_: {"graph_json": "graph.json", "graph_summary": "graph.md"},
+    )
+    monkeypatch.setattr(iterative, "_schema_for_h5cd", lambda *_, **__: {})
+    monkeypatch.setattr(iterative, "plan_discovery_directions", lambda *_, **__: [])
+    monkeypatch.setattr(
+        iterative,
+        "write_direction_artifacts",
+        lambda *_: {
+            "directions_json": "directions.json",
+            "directions_markdown": "directions.md",
+        },
+    )
+    monkeypatch.setattr(iterative, "write_idea_graph_html", lambda *_, **__: tmp_path / "graph.html")
+
+    config = IterativeDiscoveryConfig(
+        h5cd_path=tmp_path / "data.h5cd",
+        output_dir=tmp_path / "iterative",
+        iterations=1,
+        schematic_image_model="openai",
+        schematic_image_model_args={"size": "1536x1024"},
+    )
+    iterative.run_iterative_auto_discovery(config)
+
+    assert config.generate_schematic_image is True
+    assert captured == {
+        "generate_schematic_image": True,
+        "schematic_image_model": "openai",
+        "schematic_image_model_args": {"size": "1536x1024"},
+    }
 
 
 def test_openai_backend_defaults_to_current_reasoning_model(monkeypatch, tmp_path):

@@ -71,6 +71,7 @@ async def generate_pantheon_ideas(
     timeout: int = 420,
     idea_agent_count: int = 3,
     prior_graph_path: str | Path | None = None,
+    direction_context_path: str | Path | None = None,
     frontier_context_path: str | Path | None = None,
 ) -> tuple[list[DiscoveryIdea], list[PantheonAgentRecord]]:
     """Generate ideas by running multiple Pantheon idea agents in parallel.
@@ -97,9 +98,9 @@ async def generate_pantheon_ideas(
             model=model,
             timeout=timeout,
             prior_graph_path=Path(prior_graph_path) if prior_graph_path is not None else None,
-            frontier_context_path=(
-                Path(frontier_context_path)
-                if frontier_context_path is not None
+            direction_context_path=(
+                Path(direction_context_path or frontier_context_path)
+                if (direction_context_path or frontier_context_path) is not None
                 else None
             ),
         ))
@@ -594,7 +595,7 @@ async def _run_one_idea_agent(
     model: str | None,
     timeout: int,
     prior_graph_path: Path | None = None,
-    frontier_context_path: Path | None = None,
+    direction_context_path: Path | None = None,
 ) -> PantheonAgentRecord:
     agent_name = f"uchrom_idea_agent_{idx + 1}"
     prompt = _idea_prompt(
@@ -603,15 +604,22 @@ async def _run_one_idea_agent(
         schema_path=workdir / "schema.json",
         context_path=workdir / "schema_context.md",
         prior_graph_path=prior_graph_path,
-        frontier_context_path=frontier_context_path,
+        direction_context_path=direction_context_path,
     )
     prompt_path = workdir / f"{agent_name}_prompt.md"
     prompt_path.write_text(prompt)
+    file_tool_root = _shared_file_tool_root([
+        workdir,
+        workdir / "schema.json",
+        workdir / "schema_context.md",
+        prior_graph_path,
+        direction_context_path,
+    ])
     agent = await _create_agent_with_tools(
         name=agent_name,
         role="idea",
         instructions=_idea_agent_instructions(direction),
-        workdir=workdir,
+        workdir=file_tool_root,
         toolsets=("file",),
         model=model,
         timeout=timeout,
@@ -772,6 +780,23 @@ def _notebook_agent_instructions() -> str:
     )
 
 
+def _prompt_path(path: Path) -> str:
+    return str(Path(path).expanduser().resolve())
+
+
+def _shared_file_tool_root(paths: Sequence[Path | None]) -> Path:
+    """Return a file-tool root that can see every prompt-referenced file."""
+    dirs: list[Path] = []
+    for raw in paths:
+        if raw is None:
+            continue
+        path = Path(raw).expanduser().resolve()
+        dirs.append(path if path.is_dir() else path.parent)
+    if not dirs:
+        return Path.cwd()
+    return Path(os.path.commonpath([str(path) for path in dirs]))
+
+
 def _idea_prompt(
     *,
     direction: str,
@@ -779,20 +804,24 @@ def _idea_prompt(
     schema_path: Path,
     context_path: Path,
     prior_graph_path: Path | None = None,
-    frontier_context_path: Path | None = None,
+    direction_context_path: Path | None = None,
 ) -> str:
+    schema_path = Path(schema_path).expanduser().resolve()
+    context_path = Path(context_path).expanduser().resolve()
+    prior_graph_path = Path(prior_graph_path).expanduser().resolve() if prior_graph_path is not None else None
+    direction_context_path = Path(direction_context_path).expanduser().resolve() if direction_context_path is not None else None
     iterative_inputs = []
     if prior_graph_path is not None:
-        iterative_inputs.append(f"- prior idea graph JSON: {prior_graph_path}")
-    if frontier_context_path is not None:
-        iterative_inputs.append(f"- graph-derived frontier markdown: {frontier_context_path}")
+        iterative_inputs.append(f"- prior idea graph JSON: {_prompt_path(prior_graph_path)}")
+    if direction_context_path is not None:
+        iterative_inputs.append(f"- graph-derived direction markdown: {_prompt_path(direction_context_path)}")
     iterative_block = ""
     if iterative_inputs:
         iterative_block = "\nIterative discovery context:\n" + "\n".join(iterative_inputs) + "\n"
     return f"""
 Read these files with your file tool before answering:
-- schema JSON: {schema_path}
-- schema context: {context_path}
+- schema JSON: {_prompt_path(schema_path)}
+- schema context: {_prompt_path(context_path)}
 {iterative_block}
 
 Generate up to {ideas_per_agent} diverse, computable U-Chrom discovery ideas.
@@ -802,9 +831,9 @@ Rules:
 - Use only modalities, fields, cell types, tracks, and genes present in schema.
 - If iterative context files are provided, use them to avoid near-duplicate
   ideas and to build on supported, contradicted, under-tested, or literature-
-  motivated graph frontiers.
+  motivated graph directions.
 - For child ideas derived from a prior result, include
-  metadata.parent_idea_ids with the parent idea id and mention the frontier in
+  metadata.parent_idea_ids with the parent idea id and mention the direction in
   idea_markdown.
 - Each idea must define exactly one measurable parameter.
 - Include idea_markdown as 3-6 short Markdown paragraphs or bullets. It should
@@ -832,7 +861,7 @@ Return JSON only:
       "validation_checks": ["required_fields_exist", "finite_numeric_output", "statistical_hypothesis_test"],
       "expected_direction": "...",
       "complexity": 4,
-      "metadata": {{"parent_idea_ids": [], "frontier_id": "..."}}
+      "metadata": {{"parent_idea_ids": [], "direction_id": "..."}}
     }}
   ]
 }}

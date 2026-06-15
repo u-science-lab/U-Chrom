@@ -26,6 +26,8 @@ class DiscoveryRunConfig:
     h5cd_path: str | Path
     output_dir: str | Path
     max_ideas: int = 12
+    accepted_idea_target: int | None = None
+    max_generation_attempts: int = 3
     ideas_path: str | Path | None = None
     max_complexity: int = 5
     idea_source: str = "pantheon"
@@ -43,7 +45,9 @@ class DiscoveryRunConfig:
     store_schema: bool = False
     dataset_name: str | None = None
     prior_graph_path: str | Path | None = None
+    direction_context_path: str | Path | None = None
     frontier_context_path: str | Path | None = None
+    claims_paths: list[str | Path] = field(default_factory=list)
 
 
 @dataclass
@@ -64,8 +68,18 @@ class DiscoveryRunResult:
     graph_path: str | None = None
     graph_summary_path: str | None = None
     graph_html_path: str | None = None
-    frontiers_path: str | None = None
-    frontier_summary_path: str | None = None
+    directions_path: str | None = None
+    direction_summary_path: str | None = None
+
+    @property
+    def frontiers_path(self) -> str | None:
+        """Legacy alias for ``directions_path``."""
+        return self.directions_path
+
+    @property
+    def frontier_summary_path(self) -> str | None:
+        """Legacy alias for ``direction_summary_path``."""
+        return self.direction_summary_path
 
 
 def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> DiscoveryRunResult:
@@ -96,17 +110,44 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
     elif config.idea_source == "pantheon":
         from .pantheon import generate_pantheon_ideas
 
-        ideas, records = _run_async(generate_pantheon_ideas(
-            schema,
-            output_dir=output_dir,
-            max_ideas=config.max_ideas,
-            model=config.model,
-            timeout=config.llm_timeout,
-            idea_agent_count=config.idea_agent_count,
-            prior_graph_path=config.prior_graph_path,
-            frontier_context_path=config.frontier_context_path,
-        ))
-        agent_records.extend(_agent_record_rows(records))
+        ideas = []
+        seen_idea_ids: set[str] = set()
+        accepted_target = int(config.accepted_idea_target or 0)
+        max_attempts = max(1, int(config.max_generation_attempts))
+        for attempt in range(max_attempts):
+            accepted_preview = [
+                idea for idea in ideas
+                if review_idea_against_schema(
+                    idea, schema, max_complexity=config.max_complexity
+                ).accepted
+            ]
+            if accepted_target and len(accepted_preview) >= accepted_target:
+                break
+            if not accepted_target and ideas:
+                break
+            remaining = max(1, accepted_target - len(accepted_preview)) if accepted_target else config.max_ideas
+            batch_size = max(config.idea_agent_count, config.max_ideas if attempt == 0 else remaining * 2)
+            generated, records = _run_async(generate_pantheon_ideas(
+                schema,
+                output_dir=output_dir,
+                max_ideas=batch_size,
+                model=config.model,
+                timeout=config.llm_timeout,
+                idea_agent_count=config.idea_agent_count,
+                prior_graph_path=config.prior_graph_path,
+                direction_context_path=(
+                    config.direction_context_path or config.frontier_context_path
+                ),
+            ))
+            agent_records.extend(_agent_record_rows(records))
+            before = len(ideas)
+            for idea in generated:
+                if idea.idea_id in seen_idea_ids:
+                    continue
+                seen_idea_ids.add(idea.idea_id)
+                ideas.append(idea)
+            if len(ideas) == before:
+                break
     elif config.idea_source == "openai":
         from .llm import generate_openai_ideas
 
@@ -128,10 +169,11 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
     results = []
     notebooks = []
     accepted: list[DiscoveryIdea] = []
+    accepted_target = int(config.accepted_idea_target or 0)
     for idea in ideas:
         review = review_idea_against_schema(idea, schema, max_complexity=config.max_complexity)
         reviews.append({"idea_id": idea.idea_id, **review.to_dict()})
-        if review.accepted:
+        if review.accepted and (not accepted_target or len(accepted) < accepted_target):
             accepted.append(idea)
 
     # Persist generation/review outputs before notebook agents run. Long
@@ -233,19 +275,19 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
     _write_jsonl(agent_records_path, agent_records)
     _write_report(report_path, config, schema, ideas, reviews, results)
 
-    from .frontier import plan_discovery_frontiers, write_frontier_artifacts
+    from .direction import plan_discovery_directions, write_direction_artifacts
     from .graph import build_idea_graph_from_run, write_idea_graph_artifacts
     from .visualization import write_idea_graph_html
 
-    graph = build_idea_graph_from_run(output_dir)
+    graph = build_idea_graph_from_run(output_dir, claims_paths=config.claims_paths)
     graph_artifacts = write_idea_graph_artifacts(graph, output_dir)
     graph_html_path = write_idea_graph_html(
         graph,
         output_dir / "graph" / "idea_graph.html",
         notebook_base_url="../../_auto_discovery_notebooks",
     )
-    frontiers = plan_discovery_frontiers(graph, schema)
-    frontier_artifacts = write_frontier_artifacts(frontiers, output_dir)
+    directions = plan_discovery_directions(graph, schema)
+    direction_artifacts = write_direction_artifacts(directions, output_dir)
 
     verified = [
         r for r in results
@@ -258,9 +300,9 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
             "latest_graph_path": graph_artifacts["graph_json"],
             "graph_summary_path": graph_artifacts["graph_summary"],
             "graph_html_path": str(graph_html_path),
-            "frontiers_path": frontier_artifacts["frontiers_json"],
-            "frontier_summary_path": frontier_artifacts["frontiers_markdown"],
-            "n_frontiers": len(frontiers),
+            "directions_path": direction_artifacts["directions_json"],
+            "direction_summary_path": direction_artifacts["directions_markdown"],
+            "n_directions": len(directions),
             "n_ideas": len(ideas),
             "n_accepted": len(accepted),
             "n_executed": len(results) if config.execute else 0,
@@ -281,8 +323,8 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
             "graph_path": graph_artifacts["graph_json"],
             "graph_summary_path": graph_artifacts["graph_summary"],
             "graph_html_path": str(graph_html_path),
-            "frontiers_path": frontier_artifacts["frontiers_json"],
-            "frontier_summary_path": frontier_artifacts["frontiers_markdown"],
+            "directions_path": direction_artifacts["directions_json"],
+            "direction_summary_path": direction_artifacts["directions_markdown"],
             "n_generated": len(ideas),
             "n_accepted": len(accepted),
             "n_executed": len(results) if config.execute else 0,
@@ -305,8 +347,8 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
         graph_path=graph_artifacts["graph_json"],
         graph_summary_path=graph_artifacts["graph_summary"],
         graph_html_path=str(graph_html_path),
-        frontiers_path=frontier_artifacts["frontiers_json"],
-        frontier_summary_path=frontier_artifacts["frontiers_markdown"],
+        directions_path=direction_artifacts["directions_json"],
+        direction_summary_path=direction_artifacts["directions_markdown"],
     )
 
 

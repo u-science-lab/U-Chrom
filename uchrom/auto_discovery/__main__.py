@@ -53,6 +53,12 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument("--dataset-name", default=None)
     run_p.add_argument("--store-schema", action="store_true")
     run_p.add_argument("--no-execute", action="store_true")
+    run_p.add_argument(
+        "--claim-path",
+        action="append",
+        default=[],
+        help="Existing literature/browser claims JSONL to ingest into the run graph.",
+    )
 
     schem_p = sub.add_parser(
         "schematics",
@@ -97,15 +103,22 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Directory that will receive graph/idea_graph.json and graph/graph_summary.md. Defaults to run_dir.",
     )
-    frontier_p = sub.add_parser(
-        "frontiers",
-        help="Plan next-iteration discovery frontiers from a run graph and h5cd schema",
+    direction_p = sub.add_parser(
+        "directions",
+        aliases=["frontiers"],
+        help="Plan next-iteration discovery directions from a run graph and h5cd schema",
     )
-    frontier_p.add_argument("run_dir")
-    frontier_p.add_argument("h5cd_path")
-    frontier_p.add_argument("--output-dir", default=None)
-    frontier_p.add_argument("--max-frontiers", type=int, default=8)
-    frontier_p.add_argument("--dataset-name", default=None)
+    direction_p.add_argument("run_dir")
+    direction_p.add_argument("h5cd_path")
+    direction_p.add_argument("--output-dir", default=None)
+    direction_p.add_argument(
+        "--max-directions",
+        "--max-frontiers",
+        dest="max_directions",
+        type=int,
+        default=8,
+    )
+    direction_p.add_argument("--dataset-name", default=None)
 
     view_p = sub.add_parser(
         "view",
@@ -134,6 +147,7 @@ def main(argv: list[str] | None = None) -> int:
     iter_p.add_argument("output_dir")
     iter_p.add_argument("--iterations", type=int, default=2)
     iter_p.add_argument("--ideas-per-iteration", type=int, default=20)
+    iter_p.add_argument("--max-generation-attempts", type=int, default=3)
     iter_p.add_argument("--seed-run-dir", action="append", default=[])
     iter_p.add_argument("--max-complexity", type=int, default=5)
     iter_p.add_argument("--idea-source", choices=["pantheon", "openai"], default="pantheon")
@@ -147,23 +161,41 @@ def main(argv: list[str] | None = None) -> int:
     iter_p.add_argument("--llm-timeout", type=int, default=900)
     iter_p.add_argument("--idea-agent-count", type=int, default=4)
     iter_p.add_argument("--notebook-agent-concurrency", type=int, default=4)
-    iter_p.add_argument("--generate-schematic-image", action="store_true")
+    iter_p.add_argument(
+        "--generate-schematic-image",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Ask the Pantheon notebook agent to generate a graphical abstract "
+            "during each iterative notebook run. Enabled by default; use "
+            "--no-generate-schematic-image for a faster evidence-only run."
+        ),
+    )
     iter_p.add_argument("--schematic-image-model", default=None)
     iter_p.add_argument(
         "--schematic-image-model-args",
         default=None,
         help="JSON object with provider image args, e.g. '{\"size\":\"1536x1024\"}'.",
     )
-    iter_p.add_argument("--schematic-retries", type=int, default=2)
-    iter_p.add_argument(
-        "--schematic-visual-qa",
-        action="store_true",
-        help="Also ask Pantheon observe_images to QA generated schematics.",
-    )
-    iter_p.add_argument("--strict-schematics", action="store_true")
     iter_p.add_argument("--dataset-name", default=None)
     iter_p.add_argument("--store-schema", action="store_true")
     iter_p.add_argument("--no-execute", action="store_true")
+    iter_p.add_argument(
+        "--knowledge-mode",
+        choices=["off", "knowledge_guided", "browser_refresh"],
+        default="knowledge_guided",
+        help=(
+            "External-knowledge behavior for iterative runs. "
+            "knowledge_guided is enabled by default and uses cached claims, "
+            "h5cd references, and user annotations."
+        ),
+    )
+    iter_p.add_argument(
+        "--claim-path",
+        action="append",
+        default=[],
+        help="Existing literature/browser claims JSONL to seed every iteration.",
+    )
 
     args = parser.parse_args(argv)
     if args.cmd == "run":
@@ -190,6 +222,7 @@ def main(argv: list[str] | None = None) -> int:
             execute=not args.no_execute,
             store_schema=args.store_schema,
             dataset_name=args.dataset_name,
+            claims_paths=args.claim_path,
         ))
         print(json.dumps(result.__dict__, indent=2))
         return 0
@@ -218,30 +251,30 @@ def main(argv: list[str] | None = None) -> int:
         paths = write_idea_graph_artifacts(graph, args.output_dir or args.run_dir)
         print(json.dumps({"summary": graph.summary(), **paths}, indent=2))
         return 0
-    if args.cmd == "frontiers":
+    if args.cmd in {"frontiers", "directions"}:
         from uchrom import ChromData
 
-        from .frontier import plan_discovery_frontiers, write_frontier_artifacts
+        from .direction import plan_discovery_directions, write_direction_artifacts
         from .graph import build_idea_graph_from_run, write_idea_graph_artifacts
 
         cdata = ChromData.read(args.h5cd_path)
         schema = cdata.build_discovery_schema(store=False, dataset_name=args.dataset_name)
         graph = build_idea_graph_from_run(args.run_dir)
         graph_paths = write_idea_graph_artifacts(graph, args.output_dir or args.run_dir)
-        frontiers = plan_discovery_frontiers(
+        directions = plan_discovery_directions(
             graph,
             schema,
-            max_frontiers=args.max_frontiers,
+            max_directions=args.max_directions,
         )
-        frontier_paths = write_frontier_artifacts(
-            frontiers,
+        direction_paths = write_direction_artifacts(
+            directions,
             args.output_dir or args.run_dir,
         )
         print(json.dumps({
-            "n_frontiers": len(frontiers),
-            "frontier_ids": [f.frontier_id for f in frontiers],
+            "n_directions": len(directions),
+            "direction_ids": [d.direction_id for d in directions],
             **graph_paths,
-            **frontier_paths,
+            **direction_paths,
         }, indent=2))
         return 0
     if args.cmd == "view":
@@ -281,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
             output_dir=args.output_dir,
             iterations=args.iterations,
             ideas_per_iteration=args.ideas_per_iteration,
+            max_generation_attempts=args.max_generation_attempts,
             seed_run_dirs=args.seed_run_dir,
             max_complexity=args.max_complexity,
             idea_source=args.idea_source,
@@ -297,12 +331,11 @@ def main(argv: list[str] | None = None) -> int:
                 if args.schematic_image_model_args
                 else None
             ),
-            schematic_retries=args.schematic_retries,
-            schematic_visual_qa=args.schematic_visual_qa,
-            strict_schematics=args.strict_schematics,
             execute=not args.no_execute,
             store_schema=args.store_schema,
             dataset_name=args.dataset_name,
+            knowledge_mode=args.knowledge_mode,
+            claims_paths=args.claim_path,
         ))
         print(json.dumps(result.to_dict(), indent=2))
         return 0

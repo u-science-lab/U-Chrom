@@ -40,13 +40,12 @@ The first implementation pass now covers the local graph/follow-up-direction loo
 
 - `uchrom.auto_discovery.graph.IdeaGraph` builds a discovery graph from
   `ideas.jsonl`, `reviews.jsonl`, and `results.jsonl`.
-- `uchrom.auto_discovery.frontier.plan_discovery_frontiers` reads that graph
+- `uchrom.auto_discovery.direction.plan_discovery_directions` reads that graph
   plus the h5cd-backed schema and produces diverse next-iteration follow-up
-  directions. The module name keeps the original internal term, but the UI
-  presents these as directions rather than scientific results.
+  directions.
 - `run_auto_discovery` writes `graph/idea_graph.json`,
   `graph/graph_summary.md`, `graph/idea_graph.html`,
-  `frontiers/next_frontiers.json`, and `frontiers/next_frontiers.md` after
+  `directions/next_directions.json`, and `directions/next_directions.md` after
   each run.
 - `uchrom.auto_discovery.iterative.run_iterative_auto_discovery` can run
   multiple graph-guided iterations. Iteration 2 and later receive the prior
@@ -61,7 +60,7 @@ The first implementation pass now covers the local graph/follow-up-direction loo
 - The CLI can regenerate these artifacts from an existing run:
 
 ```bash
-python -m uchrom.auto_discovery frontiers RUN_DIR DATA.h5cd
+python -m uchrom.auto_discovery directions RUN_DIR DATA.h5cd
 python -m uchrom.auto_discovery view RUN_DIR/graph/idea_graph.json graph.html
 python -m uchrom.auto_discovery claims RUN_DIR/graph/idea_graph.json RUN_DIR/browser/claims.jsonl
 python -m uchrom.auto_discovery iterate DATA.h5cd ITERATIVE_OUT \
@@ -69,27 +68,23 @@ python -m uchrom.auto_discovery iterate DATA.h5cd ITERATIVE_OUT \
   --ideas-per-iteration 20
 ```
 
-When graphical abstracts are requested in iterative mode, U-Chrom now keeps
-image generation post-hoc. Each iteration first completes notebook-agent
-exploration and runner verification, then calls the Pantheon file-tool
-schematic pass for the verified notebooks. Use strict mode when producing a
-docs snapshot:
+Iterative mode asks the Pantheon notebook agent to generate a graphical
+abstract during each notebook run by default. The image is requested after the
+notebook's statistical analysis and verification inside the same agent task,
+so the schematic reflects the actual evidence result rather than a later
+separate pass. Use `--no-generate-schematic-image` for a faster evidence-only
+run:
 
 ```bash
 python -m uchrom.auto_discovery iterate DATA.h5cd ITERATIVE_OUT \
   --iterations 3 \
   --ideas-per-iteration 20 \
-  --generate-schematic-image \
-  --schematic-image-model openai \
-  --schematic-retries 2 \
-  --strict-schematics
+  --schematic-image-model openai
 ```
 
-This writes a per-run `schematic_coverage.json` and fails the iteration if
-any verified notebook is still missing its `schematic_image` cell after
-retries. `--schematic-visual-qa` is intentionally opt-in because direct CLI
-use of the Pantheon file tool may not provide a sub-agent callback context
-for `observe_images`.
+The generated notebook agent prompt includes a `file_manager.observe_images`
+QA step for the schematic and embeds the accepted image as a
+`schematic_image` notebook cell.
 
 See the real-data tutorial
 {doc}`../tutorials/takei2025_iterative_auto_discovery` for a Takei
@@ -373,7 +368,7 @@ while budget.remaining():
         claims = browser_pool.run(graph.knowledge_queries())
         graph.ingest_literature_claims(claims)
 
-    directions = planner.plan_frontiers(graph)
+    directions = planner.plan_directions(graph)
     candidates = idea_pool.run(directions)
 
     reviewed = [
@@ -411,7 +406,7 @@ Example follow-up direction:
 
 ```json
 {
-  "frontier_id": "contradicted_h3k27ac_radial_followup",
+  "direction_id": "contradicted_h3k27ac_radial_followup",
   "goal": "Explain why H3K27ac radial enrichment was contradicted.",
   "strategy": "alternative_definition",
   "preferred_facets": {
@@ -583,7 +578,7 @@ runs/iterative_001/
     sources.bib
     retrieval_log.jsonl
     browser_records.jsonl
-  frontiers.jsonl
+  directions.jsonl
   ideas.jsonl
   reviews.jsonl
   graph_reviews.jsonl
@@ -656,7 +651,7 @@ Replace fixed direction buckets with graph-derived follow-up directions.
 
 Deliverables:
 
-- `plan_discovery_frontiers(schema, graph, ...)`
+- `plan_discovery_directions(schema, graph, ...)`
 - follow-up direction JSON schema
 - Pantheon idea-agent prompts that consume follow-up directions
 - CLI flags for iterative mode and history runs

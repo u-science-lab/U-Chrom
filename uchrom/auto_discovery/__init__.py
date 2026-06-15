@@ -1,6 +1,11 @@
 """Multi-omics auto-discovery helpers for ChromData."""
 
 from .ideas import DiscoveryIdea, IdeaReview, review_idea_against_schema
+from .claims import (
+    CLAIM_KNOWLEDGE_MODES,
+    ClaimRefreshResult,
+    refresh_literature_claims_for_iteration,
+)
 from .iterative import (
     IterativeDiscoveryConfig,
     IterativeDiscoveryResult,
@@ -10,6 +15,12 @@ from .evidence import (
     EvidenceConclusion,
     classify_hypothesis_evidence,
     structured_conclusion_markdown,
+)
+from .direction import (
+    DiscoveryDirection,
+    directions_to_agent_context,
+    plan_discovery_directions,
+    write_direction_artifacts,
 )
 from .frontier import (
     DiscoveryFrontier,
@@ -53,6 +64,9 @@ from .visualization import write_idea_graph_html
 
 __all__ = [
     "DISCOVERY_SCHEMA_KEY",
+    "CLAIM_KNOWLEDGE_MODES",
+    "ClaimRefreshResult",
+    "DiscoveryDirection",
     "DiscoveryFrontier",
     "DiscoveryIdea",
     "EvidenceConclusion",
@@ -67,6 +81,7 @@ __all__ = [
     "build_idea_graph_from_runs",
     "classify_hypothesis_evidence",
     "create_exploration_notebook",
+    "directions_to_agent_context",
     "execute_notebook_python",
     "frontiers_to_agent_context",
     "generate_openai_analysis_code",
@@ -79,8 +94,10 @@ __all__ = [
     "infer_parameter_family",
     "load_idea_graph",
     "pack_schema",
+    "plan_discovery_directions",
     "plan_discovery_frontiers",
     "review_idea_against_schema",
+    "refresh_literature_claims_for_iteration",
     "run_auto_discovery",
     "run_iterative_auto_discovery",
     "run_pantheon_notebook_agents",
@@ -90,6 +107,7 @@ __all__ = [
     "unpack_schema",
     "upsert_structured_conclusion",
     "validate_discovery_schema",
+    "write_direction_artifacts",
     "write_frontier_artifacts",
     "write_idea_graph_html",
     "write_idea_graph_artifacts",

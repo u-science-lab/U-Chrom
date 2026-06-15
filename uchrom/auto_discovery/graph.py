@@ -136,11 +136,16 @@ def build_idea_graph_from_run(
         for row in _read_jsonl_if_exists(run_dir / "results.jsonl")
         if isinstance(row, Mapping) and row.get("idea_id")
     }
-    frontiers = _read_frontiers_if_exists(run_dir / "frontiers" / "next_frontiers.json")
+    directions = _read_directions_if_exists(run_dir)
 
     for idea_id, idea in ideas.items():
         idea_node = _idea_node_id(idea_id)
         signature = idea_signature(idea)
+        review = reviews.get(idea_id)
+        result = results.get(idea_id)
+        review_accepted = bool(review.get("accepted")) if review is not None else None
+        execution_state = _idea_execution_state(review, result)
+        direction_id = idea.metadata.get("direction_id") or idea.metadata.get("frontier_id")
         graph.add_node(
             idea_node,
             "Idea",
@@ -150,16 +155,19 @@ def build_idea_graph_from_run(
             computable_parameter=idea.computable_parameter,
             expected_direction=idea.expected_direction,
             complexity=idea.complexity,
-            metadata=dict(idea.metadata or {}),
-            frontier_id=idea.metadata.get("frontier_id"),
+            metadata=_direction_metadata(idea.metadata),
+            direction_id=direction_id,
             iterative_context_status=idea.metadata.get("iterative_context_status"),
             signature=signature,
+            review_status=_idea_review_status(review),
+            review_accepted=review_accepted,
+            execution_state=execution_state,
+            hypothesis_status=_idea_graph_status(review, result),
         )
         graph.add_edge(run_node, "generated", idea_node)
-        _add_idea_frontier(graph, idea_node, idea.metadata, frontiers.get(str(idea.metadata.get("frontier_id"))))
+        _add_idea_direction(graph, idea_node, idea.metadata, directions.get(str(direction_id)))
         _add_idea_facets(graph, idea_node, signature)
 
-        review = reviews.get(idea_id)
         if review is not None:
             review_node = f"review:{idea_id}"
             graph.add_node(
@@ -174,14 +182,13 @@ def build_idea_graph_from_run(
             graph.add_edge(idea_node, "reviewed_by", review_node)
             graph.add_edge(run_node, "has_review", review_node)
 
-        result = results.get(idea_id)
         if result is not None:
             _add_result_nodes(graph, run_node, idea, result)
 
     for claims_path in _default_claims_paths(run_dir, claims_paths):
         ingest_literature_claims(graph, claims_path)
 
-    _add_run_frontiers(graph, run_node, frontiers)
+    _add_run_directions(graph, run_node, directions)
 
     return graph
 
@@ -208,9 +215,10 @@ def ingest_literature_claims(
 ) -> int:
     """Ingest browser-agent literature claims into an :class:`IdeaGraph`.
 
-    ``claims_path`` is a JSONL file.  Rows may contain ``claim_id``, ``claim``,
-    ``source_title``, ``url``, ``doi``, ``pmid``, ``genes``, ``cell_types``,
-    ``markers``, ``modalities``, ``supports_idea_ids``,
+    ``claims_path`` is a JSONL file.  Rows may contain ``claim_id``, ``claim``
+    or ``claim_text``, ``source``/``source_title``, ``url``, ``doi``, ``pmid``,
+    ``entities``/``genes``, ``cell_types``, ``markers``, ``modalities``,
+    ``supports_idea_ids``,
     ``contradicts_idea_ids``, and ``related_idea_ids``.  Extra keys are kept on
     the claim node for auditability.
     """
@@ -221,13 +229,25 @@ def ingest_literature_claims(
     for row in _read_jsonl_if_exists(path):
         if not isinstance(row, Mapping):
             continue
+        source = row.get("source") if isinstance(row.get("source"), Mapping) else {}
+        entities = row.get("entities") if isinstance(row.get("entities"), Mapping) else {}
+        claim_text = (
+            row.get("claim")
+            or row.get("claim_text")
+            or row.get("text")
+            or row.get("summary")
+        )
         claim_id = str(row.get("claim_id") or _stable_claim_id(row))
         claim_node = f"literature_claim:{_slug(claim_id)}"
         reference_id = str(
             row.get("reference_id")
+            or source.get("reference_id")
             or row.get("doi")
+            or source.get("doi")
             or row.get("pmid")
+            or source.get("pmid")
             or row.get("url")
+            or source.get("url")
             or f"reference_for_{claim_id}"
         )
         reference_node = f"reference:{_slug(reference_id)}"
@@ -235,40 +255,40 @@ def ingest_literature_claims(
             reference_node,
             "Reference",
             reference_id=reference_id,
-            title=row.get("source_title") or row.get("title"),
-            url=row.get("url"),
-            doi=row.get("doi"),
-            pmid=row.get("pmid"),
-            year=row.get("year"),
+            title=row.get("source_title") or row.get("title") or source.get("title"),
+            url=row.get("url") or source.get("url"),
+            doi=row.get("doi") or source.get("doi"),
+            pmid=row.get("pmid") or source.get("pmid"),
+            year=row.get("year") or source.get("year"),
         )
         graph.add_node(
             claim_node,
             "LiteratureClaim",
             claim_id=claim_id,
-            claim=row.get("claim") or row.get("text") or row.get("summary"),
+            claim=claim_text,
             summary=row.get("summary"),
             confidence=row.get("confidence"),
             extraction_method=row.get("extraction_method"),
-            source_title=row.get("source_title") or row.get("title"),
-            url=row.get("url"),
-            doi=row.get("doi"),
-            pmid=row.get("pmid"),
+            source_title=row.get("source_title") or row.get("title") or source.get("title"),
+            url=row.get("url") or source.get("url"),
+            doi=row.get("doi") or source.get("doi"),
+            pmid=row.get("pmid") or source.get("pmid"),
             raw=row,
         )
         graph.add_edge(claim_node, "sourced_from", reference_node)
-        for gene in _as_str_list(row.get("genes")):
+        for gene in _as_str_list(row.get("genes") or entities.get("genes")):
             node = f"gene:{_slug(gene)}"
             graph.add_node(node, "Gene", label=gene)
             graph.add_edge(claim_node, "mentions_gene", node)
-        for cell_type in _as_str_list(row.get("cell_types")):
+        for cell_type in _as_str_list(row.get("cell_types") or entities.get("cell_types")):
             node = f"cell_type:{_slug(cell_type)}"
             graph.add_node(node, "CellType", label=cell_type)
             graph.add_edge(claim_node, "mentions_cell_type", node)
-        for marker in _as_str_list(row.get("markers")):
+        for marker in _as_str_list(row.get("markers") or entities.get("markers")):
             node = f"marker:{_slug(marker)}"
             graph.add_node(node, "IFMarker", label=marker)
             graph.add_edge(claim_node, "mentions_marker", node)
-        for modality in _as_str_list(row.get("modalities")):
+        for modality in _as_str_list(row.get("modalities") or entities.get("modalities")):
             node = f"modality:{_slug(modality)}"
             graph.add_node(node, "Modality", label=modality)
             graph.add_edge(claim_node, "mentions_modality", node)
@@ -420,73 +440,89 @@ def _add_idea_facets(graph: IdeaGraph, idea_node: str, signature: Mapping[str, A
         graph.add_edge(idea_node, "motivated_by", claim_node)
 
 
-def _add_idea_frontier(
+def _add_idea_direction(
     graph: IdeaGraph,
     idea_node: str,
     metadata: Mapping[str, Any],
-    frontier: Mapping[str, Any] | None = None,
+    direction: Mapping[str, Any] | None = None,
 ) -> None:
-    frontier_id = metadata.get("frontier_id") if isinstance(metadata, Mapping) else None
-    if not frontier_id:
+    direction_id = (
+        metadata.get("direction_id") or metadata.get("frontier_id")
+        if isinstance(metadata, Mapping)
+        else None
+    )
+    if not direction_id:
         return
-    frontier_id = str(frontier_id)
-    frontier_node = _add_frontier_node(
+    direction_id = str(direction_id)
+    direction_node = _add_direction_node(
         graph,
-        frontier_id,
-        frontier=frontier,
+        direction_id,
+        direction=direction,
         iterative_context_status=metadata.get("iterative_context_status"),
     )
-    graph.add_edge(frontier_node, "frontier_proposed", idea_node)
+    graph.add_edge(direction_node, "direction_proposed", idea_node)
 
 
-def _add_run_frontiers(
+def _direction_metadata(metadata: Mapping[str, Any] | None) -> dict[str, Any]:
+    out = dict(metadata or {})
+    if out.get("frontier_id") and not out.get("direction_id"):
+        out["direction_id"] = out["frontier_id"]
+    if out.get("frontier_type") and not out.get("direction_type"):
+        out["direction_type"] = out["frontier_type"]
+    out.pop("frontier_id", None)
+    out.pop("frontier_type", None)
+    return out
+
+
+def _add_run_directions(
     graph: IdeaGraph,
     run_node: str,
-    frontiers: Mapping[str, Mapping[str, Any]],
+    directions: Mapping[str, Mapping[str, Any]],
 ) -> None:
-    for frontier_id, frontier in frontiers.items():
-        frontier_node = _add_frontier_node(graph, frontier_id, frontier=frontier)
-        graph.add_edge(run_node, "planned_direction", frontier_node)
-        for parent_idea_id in _as_str_list(frontier.get("parent_idea_ids")):
+    for direction_id, direction in directions.items():
+        direction_node = _add_direction_node(graph, direction_id, direction=direction)
+        graph.add_edge(run_node, "planned_direction", direction_node)
+        for parent_idea_id in _as_str_list(direction.get("parent_idea_ids")):
             parent_node = _idea_node_id(parent_idea_id)
-            graph.add_edge(frontier_node, "direction_based_on", parent_node)
+            graph.add_edge(direction_node, "direction_based_on", parent_node)
             evidence_node = f"evidence:{parent_idea_id}"
             if evidence_node in graph.nodes:
-                graph.add_edge(frontier_node, "direction_based_on_evidence", evidence_node)
+                graph.add_edge(direction_node, "direction_based_on_evidence", evidence_node)
 
 
-def _add_frontier_node(
+def _add_direction_node(
     graph: IdeaGraph,
-    frontier_id: str,
+    direction_id: str,
     *,
-    frontier: Mapping[str, Any] | None = None,
+    direction: Mapping[str, Any] | None = None,
     iterative_context_status: Any = None,
 ) -> str:
-    frontier = dict(frontier or {})
-    frontier_id = str(frontier.get("frontier_id") or frontier_id)
-    frontier_type = str(
-        frontier.get("frontier_type")
-        or (frontier_id.rsplit("-", 1)[0] if "-" in frontier_id else frontier_id)
+    direction = dict(direction or {})
+    direction_id = str(direction.get("direction_id") or direction.get("frontier_id") or direction_id)
+    direction_type = str(
+        direction.get("direction_type")
+        or direction.get("frontier_type")
+        or (direction_id.rsplit("-", 1)[0] if "-" in direction_id else direction_id)
     )
-    frontier_node = f"frontier:{_slug(frontier_id)}"
+    direction_node = f"direction:{_slug(direction_id)}"
     graph.add_node(
-        frontier_node,
-        "Frontier",
-        frontier_id=frontier_id,
-        frontier_type=frontier_type,
-        label=frontier.get("label") or frontier_type.replace("_", " "),
-        title=frontier.get("title"),
-        prompt=frontier.get("prompt"),
-        rationale=frontier.get("rationale"),
-        priority=frontier.get("priority"),
-        target_facets=frontier.get("target_facets"),
-        parent_idea_ids=frontier.get("parent_idea_ids"),
-        evidence_basis=frontier.get("evidence_basis"),
-        novelty_notes=frontier.get("novelty_notes"),
-        constraints=frontier.get("constraints"),
-        iterative_context_status=iterative_context_status or frontier.get("iterative_context_status"),
+        direction_node,
+        "Direction",
+        direction_id=direction_id,
+        direction_type=direction_type,
+        label=direction.get("label") or direction_type.replace("_", " "),
+        title=direction.get("title"),
+        prompt=direction.get("prompt"),
+        rationale=direction.get("rationale"),
+        priority=direction.get("priority"),
+        target_facets=direction.get("target_facets"),
+        parent_idea_ids=direction.get("parent_idea_ids"),
+        evidence_basis=direction.get("evidence_basis"),
+        novelty_notes=direction.get("novelty_notes"),
+        constraints=direction.get("constraints"),
+        iterative_context_status=iterative_context_status or direction.get("iterative_context_status"),
     )
-    return frontier_node
+    return direction_node
 
 
 def _add_result_nodes(
@@ -544,6 +580,43 @@ def _evidence_relation(status: str) -> str:
     return "not_supports"
 
 
+def _idea_review_status(review: Mapping[str, Any] | None) -> str:
+    if review is None:
+        return "Not reviewed"
+    return "Accepted" if bool(review.get("accepted")) else "Rejected"
+
+
+def _idea_execution_state(
+    review: Mapping[str, Any] | None,
+    result: Mapping[str, Any] | None,
+) -> str:
+    if review is not None and not bool(review.get("accepted")):
+        return "Rejected by schema"
+    if result is None:
+        return "Pending execution" if review is None or bool(review.get("accepted")) else "Rejected by schema"
+    if result.get("execution_ok") is True:
+        verification = result.get("verification") or {}
+        if verification.get("status") == "pass":
+            return "Verified"
+        return "Verification failed"
+    if result.get("execution_ok") is False:
+        return "Execution failed"
+    return "Not executed"
+
+
+def _idea_graph_status(
+    review: Mapping[str, Any] | None,
+    result: Mapping[str, Any] | None,
+) -> str:
+    if review is not None and not bool(review.get("accepted")):
+        return "Rejected"
+    if result is None:
+        return "Pending"
+    if result.get("execution_ok") is False:
+        return "Failed"
+    return ""
+
+
 def _read_jsonl_if_exists(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -556,7 +629,10 @@ def _read_jsonl_if_exists(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _read_frontiers_if_exists(path: Path) -> dict[str, dict[str, Any]]:
+def _read_directions_if_exists(run_dir: Path) -> dict[str, dict[str, Any]]:
+    path = run_dir / "directions" / "next_directions.json"
+    if not path.exists():
+        path = run_dir / "frontiers" / "next_frontiers.json"
     if not path.exists():
         return {}
     try:
@@ -567,8 +643,10 @@ def _read_frontiers_if_exists(path: Path) -> dict[str, dict[str, Any]]:
         return {}
     out: dict[str, dict[str, Any]] = {}
     for row in rows:
-        if isinstance(row, Mapping) and row.get("frontier_id"):
-            out[str(row["frontier_id"])] = dict(row)
+        if isinstance(row, Mapping):
+            direction_id = row.get("direction_id") or row.get("frontier_id")
+            if direction_id:
+                out[str(direction_id)] = dict(row)
     return out
 
 
@@ -629,7 +707,13 @@ def _slug(value: Any) -> str:
 
 
 def _stable_claim_id(row: Mapping[str, Any]) -> str:
-    text = str(row.get("claim") or row.get("summary") or row.get("text") or "claim")
+    text = str(
+        row.get("claim")
+        or row.get("claim_text")
+        or row.get("summary")
+        or row.get("text")
+        or "claim"
+    )
     slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:48] or "claim"
     payload = json.dumps(row, sort_keys=True, default=str)
     import hashlib
@@ -652,12 +736,23 @@ def _as_str_list(value: Any) -> list[str]:
 
 
 def _jsonable(value: Any) -> Any:
+    if isinstance(value, str):
+        return _normalize_direction_terms(value)
+    if isinstance(value, Mapping):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_jsonable(v) for v in value]
     try:
         json.dumps(value)
         return value
     except TypeError:
-        if isinstance(value, Mapping):
-            return {str(k): _jsonable(v) for k, v in value.items()}
-        if isinstance(value, (list, tuple, set)):
-            return [_jsonable(v) for v in value]
-        return str(value)
+        return _normalize_direction_terms(str(value))
+
+
+def _normalize_direction_terms(value: str) -> str:
+    return (
+        value.replace("Frontiers", "Directions")
+        .replace("frontiers", "directions")
+        .replace("Frontier", "Direction")
+        .replace("frontier", "direction")
+    )

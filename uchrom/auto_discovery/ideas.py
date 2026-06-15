@@ -148,7 +148,7 @@ def _field_exists(field_name: str, schema: Mapping[str, Any]) -> bool:
         linked = schema.get("linked_adata", {})
         if not linked.get("present"):
             return False
-        if suffix in {"X", "obs", "var"}:
+        if suffix in {"X", "obs", "var", "obs_names", "var_names"}:
             return True
         if suffix.startswith("obs."):
             return suffix[4:] in linked.get("obs_columns", [])

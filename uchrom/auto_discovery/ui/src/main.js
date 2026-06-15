@@ -1,16 +1,14 @@
 import { createApp, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
-  ArrowDown,
-  ArrowRight,
   BookOpen,
   CircleDot,
   Crosshair,
   ExternalLink,
   GitBranch,
-  Maximize2,
-  Minimize2,
+  Moon,
   Notebook,
   Search,
+  Sun,
   Waypoints,
   X,
   ZoomIn,
@@ -30,8 +28,8 @@ const cdataNode = {
   n_edges: rawGraph.summary?.n_edges ?? rawGraph.edges.length
 };
 
-const nodes = [cdataNode, ...rawGraph.nodes.map((d) => ({ ...d }))];
-const edges = rawGraph.edges.map((d) => ({ ...d }));
+const nodes = [cdataNode, ...rawGraph.nodes];
+const edges = rawGraph.edges;
 const byId = new Map(nodes.map((n) => [n.id, n]));
 
 const colors = {
@@ -40,7 +38,7 @@ const colors = {
   Idea: "#4c78a8",
   EvidenceResult: "#45a36b",
   LiteratureClaim: "#f28e2b",
-  Frontier: "#f1ce63",
+  Direction: "#f1ce63",
   HandoffGap: "#8b95a3",
   Conclusion: "#8b95a3",
   NotebookRun: "#9c755f",
@@ -50,6 +48,22 @@ const colors = {
 const scientificStatusOrder = ["Supported", "Borderline", "Contradicted", "Not supported", "Inconclusive"];
 const auditStatusOrder = ["Pending", "Failed", "Rejected"];
 const statusOrder = [...scientificStatusOrder, ...auditStatusOrder];
+const notebookVisualSpecs = {
+  graphic: {
+    title: "Graphical abstract",
+    fragment: "Graphical-abstract",
+    headingText: "graphical abstract",
+    altMatches: ["scientific schematic", "graphical abstract"],
+    fallbackAlt: "Graphical abstract"
+  },
+  statistical: {
+    title: "Statistical figure",
+    fragment: "Statistical-figure",
+    headingText: "statistical figure",
+    altMatches: ["statistical figure", "statistical analysis"],
+    fallbackAlt: "Statistical figure"
+  }
+};
 const NODE_WIDTH = 232;
 const NODE_HEIGHT = 94;
 const NODE_GAP = 270;
@@ -57,14 +71,37 @@ const LEVEL_GAP = 154;
 const HORIZONTAL_NODE_GAP = 94;
 const HORIZONTAL_LEVEL_GAP = 300;
 const ROUND_NODE_GAP = 132;
-const ROUND_LANE_GAP = 112;
+const ROUND_LANE_GAP = 190;
+const ROUND_ROOT_LANE_GAP = 170;
 const GRAPH_PADDING = 112;
 const MIN_ZOOM = 0.08;
 const MAX_ZOOM = 1.85;
 const MINIMAP_WIDTH = 220;
 const MINIMAP_HEIGHT = 136;
+const THEME_STORAGE_KEY = "uchrom-idea-graph-theme";
 
 const outcomeRelations = new Set(["supports", "borderline_supports", "contradicts", "not_supports", "inconclusive_for"]);
+
+function initialThemeMode() {
+  try {
+    const stored = window.localStorage?.getItem(THEME_STORAGE_KEY);
+    if (stored === "dark" || stored === "light") return stored;
+  } catch {
+    // Ignore storage failures and keep the graph in its original light mode.
+  }
+  return "light";
+}
+
+function applyThemeMode(mode) {
+  const next = mode === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = next;
+  document.documentElement.style.colorScheme = next;
+  try {
+    window.localStorage?.setItem(THEME_STORAGE_KEY, next);
+  } catch {
+    // Theme state is still applied even when storage is unavailable.
+  }
+}
 
 function label(n) {
   if (!n) return "";
@@ -74,7 +111,7 @@ function label(n) {
 function displayKind(n) {
   if (!n) return "Node";
   if (n.kind === "Group") return "Group";
-  if (n.kind === "Frontier") return "Follow-up direction";
+  if (n.kind === "Direction") return "Follow-up direction";
   if (n.kind === "EvidenceResult") return "Evidence";
   if (n.kind === "HandoffGap") return "Handoff gap";
   return n.kind || "Node";
@@ -94,7 +131,7 @@ function formatNumber(x) {
 
 function relationLabel(relation) {
   const labels = {
-    frontier_proposed: "proposed idea",
+    direction_proposed: "proposed idea",
     planned_direction: "planned direction",
     direction_based_on: "based on idea",
     direction_based_on_evidence: "based on evidence",
@@ -143,39 +180,57 @@ function notebookHref(path) {
 
 const graphicAbstractCache = new Map();
 
-function notebookGraphicAbstractHref(href) {
-  return href ? `${href}#Graphical-abstract` : "";
+function notebookVisualSpec(kind) {
+  return notebookVisualSpecs[kind] || notebookVisualSpecs.graphic;
 }
 
-function extractGraphicAbstract(html, href) {
+function notebookVisualHref(href, kind) {
+  if (!href) return "";
+  return `${href}#${notebookVisualSpec(kind).fragment}`;
+}
+
+function headingTextMatches(heading, spec) {
+  const text = (heading.textContent || "").replace(/¶/g, "").trim().toLowerCase();
+  return text === spec.headingText;
+}
+
+function imageFromSection(heading) {
+  let cursor = heading?.nextElementSibling;
+  while (cursor && !/^H[1-4]$/.test(cursor.tagName)) {
+    const img = cursor.matches?.("img") ? cursor : cursor.querySelector?.("img");
+    if (img) return img;
+    cursor = cursor.nextElementSibling;
+  }
+  return null;
+}
+
+function resolveNotebookImageSrc(src, href) {
+  if (!src) return "";
+  if (src.startsWith("data:") || /^https?:\/\//.test(src)) return src;
+  try {
+    return new URL(src, href || window.location.href).toString();
+  } catch {
+    return src;
+  }
+}
+
+function extractNotebookVisual(html, href, kind = "graphic") {
   if (!html) return null;
+  const spec = notebookVisualSpec(kind);
   const doc = new DOMParser().parseFromString(html, "text/html");
   const headings = [...doc.querySelectorAll("h1,h2,h3,h4")];
-  const heading = doc.getElementById("Graphical-abstract")
-    || headings.find((h) => h.textContent?.trim().toLowerCase() === "graphical abstract");
-  let img = null;
-  if (heading) {
-    let cursor = heading.nextElementSibling;
-    while (cursor && !/^H[1-4]$/.test(cursor.tagName)) {
-      img = cursor.matches?.("img") ? cursor : cursor.querySelector?.("img");
-      if (img) break;
-      cursor = cursor.nextElementSibling;
-    }
-  }
-  img ||= doc.querySelector('img[alt*="Scientific schematic"], img[alt*="Graphical abstract"], img[src^="data:image"]');
+  const heading = doc.getElementById(spec.fragment)
+    || headings.find((h) => headingTextMatches(h, spec));
+  let img = imageFromSection(heading);
+  img ||= [...doc.querySelectorAll("img")].find((candidate) => {
+    const alt = candidate.getAttribute("alt")?.toLowerCase() || "";
+    return spec.altMatches.some((match) => alt.includes(match));
+  });
   const src = img?.getAttribute("src");
   if (!src) return null;
-  let resolvedSrc = src;
-  if (!src.startsWith("data:") && !/^https?:\/\//.test(src)) {
-    try {
-      resolvedSrc = new URL(src, href || window.location.href).toString();
-    } catch {
-      resolvedSrc = src;
-    }
-  }
   return {
-    src: resolvedSrc,
-    alt: img.getAttribute("alt") || "Graphical abstract"
+    src: resolveNotebookImageSrc(src, href),
+    alt: img.getAttribute("alt") || spec.fallbackAlt
   };
 }
 
@@ -199,6 +254,19 @@ function runOrder(run) {
   return 1;
 }
 
+function claimSearchRound(claim) {
+  const raw = claim?.raw || {};
+  const text = [
+    raw.search_iteration,
+    claim?.search_iteration,
+    raw.claim_id,
+    claim?.claim_id,
+    claim?.id,
+  ].filter(Boolean).join(" ");
+  const match = text.match(/iteration_(\d+)/);
+  return match ? Number(match[1]) + 1 : null;
+}
+
 function runDisplayLabel(run) {
   const path = String(run?.path || run?.id || "");
   const name = path.split("/").filter(Boolean).pop() || run?.id || "";
@@ -213,33 +281,33 @@ function runForIdea(ideaId) {
   return edge ? byId.get(edge.source) : null;
 }
 
-function frontierForIdea(idea) {
-  const edge = edges.find((e) => e.relation === "frontier_proposed" && e.target === idea.id);
+function directionForIdea(idea) {
+  const edge = edges.find((e) => e.relation === "direction_proposed" && e.target === idea.id);
   return edge ? byId.get(edge.source) : null;
 }
 
-function frontierLabel(idea) {
-  const frontier = frontierForIdea(idea);
-  if (frontier?.title) return frontier.title;
-  const id = frontier?.frontier_id || idea.frontier_id || idea.metadata?.frontier_id || "";
+function directionLabel(idea) {
+  const direction = directionForIdea(idea);
+  if (direction?.title) return direction.title;
+  const id = direction?.direction_id || idea.direction_id || idea.metadata?.direction_id || "";
   const parts = String(id).split("-");
-  const type = frontier?.frontier_type || (parts.length > 1 ? parts.slice(0, -1).join("-") : String(id));
+  const type = direction?.direction_type || (parts.length > 1 ? parts.slice(0, -1).join("-") : String(id));
   if (!id && !type) return "";
   return String(type || id).replaceAll("_", " ");
 }
 
 function contextUnavailable(idea) {
-  const direction = frontierForIdea(idea);
+  const direction = directionForIdea(idea);
   const text = direction ? [
-    direction.frontier_id,
-    direction.frontier_type,
+    direction.direction_id,
+    direction.direction_type,
     direction.label,
     direction.title
   ].filter(Boolean).join(" ").toLowerCase() : [
     idea.iterative_context_status,
     idea.metadata?.iterative_context_status,
-    idea.frontier_id,
-    idea.metadata?.frontier_id
+    idea.direction_id,
+    idea.metadata?.direction_id
   ].filter(Boolean).join(" ").toLowerCase();
   return text.includes("context_unavailable")
     || text.includes("context unavailable")
@@ -256,7 +324,7 @@ function parentIdeaIds(idea) {
   ];
   const ids = raw.map((id) => String(id).startsWith("idea:") ? String(id) : `idea:${id}`);
   for (const edge of edges.filter((e) => e.source === idea.id && e.relation === "derived_from")) ids.push(edge.target);
-  const direction = frontierForIdea(idea);
+  const direction = directionForIdea(idea);
   if (direction) {
     for (const parent of direction.parent_idea_ids || []) {
       ids.push(String(parent).startsWith("idea:") ? String(parent) : `idea:${parent}`);
@@ -312,7 +380,7 @@ function slugForId(value) {
 }
 
 function directionTypeLabel(direction) {
-  const raw = String(direction?.frontier_type || direction?.label || "follow_up_direction");
+  const raw = String(direction?.direction_type || direction?.label || "follow_up_direction");
   const known = {
     evidence_extension: "Evidence extension",
     negative_result_refinement: "Negative-result refinement",
@@ -406,12 +474,12 @@ function detailRows(n) {
   const keys = [
     "rationale", "prompt", "biological_hypothesis", "computable_parameter", "expected_direction",
     "hypothesis_status", "direction_status", "p_value", "effect_size", "test_method",
-    "frontier_id", "frontier_type", "priority", "target_facets", "parent_idea_ids",
+    "direction_id", "direction_type", "priority", "target_facets", "parent_idea_ids",
     "evidence_basis", "novelty_notes", "constraints", "iterative_context_status",
     "source_title", "url", "doi", "pmid", "path"
   ];
   const rows = [];
-  if (n.kind === "Frontier") rows.push(["Round1 Link", directionRound1Summary(n)]);
+  if (n.kind === "Direction") rows.push(["Round1 Link", directionRound1Summary(n)]);
   for (const key of keys) {
     const v = n[key];
     if (v === undefined || v === null || v === "") continue;
@@ -424,8 +492,8 @@ function detailRows(n) {
 
 function detailKeyLabel(key) {
   const labels = {
-    frontier_id: "Direction ID",
-    frontier_type: "Direction Type",
+    direction_id: "Direction ID",
+    direction_type: "Direction Type",
     parent_idea_ids: "Parent Idea IDs",
     evidence_basis: "Evidence Basis",
     target_facets: "Target Facets",
@@ -439,7 +507,7 @@ function valueLines(value) {
   if (Array.isArray(value)) {
     return value.map((item) => {
       if (item && typeof item === "object") {
-        const title = item.title || item.idea_id || item.claim_id || item.frontier_id || "item";
+        const title = item.title || item.idea_id || item.claim_id || item.direction_id || "item";
         const bits = [];
         if (item.hypothesis_status) bits.push(item.hypothesis_status);
         if (item.p_value !== undefined && item.p_value !== null) bits.push(`p=${formatNumber(item.p_value)}`);
@@ -475,7 +543,7 @@ function quickFacts(node, outcome) {
     add("Status", node.hypothesis_status);
     add("Direction", node.direction_status);
     add("Test", node.test_method);
-  } else if (node.kind === "Frontier") {
+  } else if (node.kind === "Direction") {
     add("Type", directionTypeLabel(node));
     add("Priority", node.priority !== undefined && node.priority !== null ? formatNumber(node.priority) : "");
     add("Parents", directionParentIdeaIds(node).length ? `${directionParentIdeaIds(node).length} prior signal(s)` : "");
@@ -500,7 +568,8 @@ function statusClass(status) {
   if (s === "supported") return "supported";
   if (s === "borderline") return "borderline";
   if (s === "inconclusive") return "inconclusive";
-  if (s === "contradicted" || s === "not supported") return "contradicted";
+  if (s === "contradicted") return "contradicted";
+  if (s === "not supported") return "not-supported";
   if (s === "failed") return "failed";
   if (s === "rejected") return "rejected";
   return "pending";
@@ -533,7 +602,7 @@ function makeVirtualNode(id, kind, fields = {}) {
 function addFollowUp(map, parentId, idea) {
   if (!map.has(parentId)) map.set(parentId, { direct: [], directions: new Map() });
   const bucket = map.get(parentId);
-  const direction = frontierForIdea(idea);
+  const direction = directionForIdea(idea);
   if (direction) {
     if (!bucket.directions.has(direction.id)) bucket.directions.set(direction.id, { direction, ideas: [] });
     bucket.directions.get(direction.id).ideas.push(idea);
@@ -748,7 +817,7 @@ function groupedSummaryDirectionBranches(ideas, followUpsByParent) {
   const groups = new Map();
   const direct = [];
   for (const idea of ideas) {
-    const direction = frontierForIdea(idea);
+    const direction = directionForIdea(idea);
     if (!direction) {
       direct.push(idea);
       continue;
@@ -768,10 +837,10 @@ function groupedSummaryDirectionBranches(ideas, followUpsByParent) {
 function visibleDirectionBranches(visibleIdeaIds, followUpsByParent, summary = false) {
   const groups = new Map();
   for (const edge of edges) {
-    if (edge.relation !== "frontier_proposed" || !visibleIdeaIds.has(edge.target)) continue;
+    if (edge.relation !== "direction_proposed" || !visibleIdeaIds.has(edge.target)) continue;
     const direction = byId.get(edge.source);
     const idea = byId.get(edge.target);
-    if (!direction || direction.kind !== "Frontier" || !idea || contextUnavailable(idea)) continue;
+    if (!direction || direction.kind !== "Direction" || !idea || contextUnavailable(idea)) continue;
     if (!groups.has(direction.id)) groups.set(direction.id, { direction, ideas: [] });
     groups.get(direction.id).ideas.push(idea);
   }
@@ -813,7 +882,7 @@ function ideaBranch(idea, followUpsByParent, seen = new Set()) {
   return {
     node: idea,
     caption: `Round ${run ? runOrder(run) : 1} idea`,
-    meta: [statusForIdea(idea.id), idea.signature?.parameter_family || "", frontierLabel(idea)].filter(Boolean).join(" | "),
+    meta: [statusForIdea(idea.id), idea.signature?.parameter_family || "", directionLabel(idea)].filter(Boolean).join(" | "),
     children: [conclusionBranch(idea, followUpsByParent.get(idea.id), followUpsByParent, nextSeen)]
   };
 }
@@ -858,7 +927,7 @@ function groupedDirectionBranches(ideas, followUpsByParent) {
   const groups = new Map();
   const direct = [];
   for (const idea of ideas) {
-    const direction = frontierForIdea(idea);
+    const direction = directionForIdea(idea);
     if (!direction) {
       direct.push(idea);
       continue;
@@ -1084,13 +1153,15 @@ function layoutRoundLanes(rootEntry) {
     if (item.node.kind === "EvidenceResult" || item.node.kind === "Conclusion") {
       return ideaRound(evidenceIdea(item));
     }
-    if (item.node.kind === "Frontier" || item.node.kind === "HandoffGap") {
+    if (item.node.kind === "Direction" || item.node.kind === "HandoffGap") {
       const childRounds = childIdeas(item).map(ideaRound);
       if (childRounds.length) return Math.min(...childRounds);
       const parent = parentIdea(item);
       return parent ? ideaRound(parent) + 1 : 2;
     }
     if (item.node.kind === "LiteratureClaim") {
+      const searchRound = claimSearchRound(item.node);
+      if (searchRound) return searchRound;
       const childRounds = childIdeas(item).map(ideaRound);
       return childRounds.length ? Math.min(...childRounds) : 1;
     }
@@ -1102,7 +1173,7 @@ function layoutRoundLanes(rootEntry) {
     const round = Math.max(1, itemRound(item));
     const base = (round - 1) * 3;
     if (item.node.kind === "LiteratureClaim") return base + 1;
-    if (item.node.kind === "Frontier" || item.node.kind === "HandoffGap") return base + 1;
+    if (item.node.kind === "Direction" || item.node.kind === "HandoffGap") return base + 1;
     if (item.node.kind === "Idea") return base + 2;
     if (item.node.kind === "EvidenceResult" || item.node.kind === "Conclusion") return base + 3;
     if (item.node.kind === "Group") return Math.max(1, item.depth);
@@ -1114,7 +1185,7 @@ function layoutRoundLanes(rootEntry) {
     if (item.node.kind === "EvidenceResult" || item.node.kind === "Conclusion") {
       return ideaIndex(evidenceIdea(item));
     }
-    if (item.node.kind === "LiteratureClaim" || item.node.kind === "Frontier" || item.node.kind === "HandoffGap") {
+    if (item.node.kind === "LiteratureClaim" || item.node.kind === "Direction" || item.node.kind === "HandoffGap") {
       const kids = childIdeas(item);
       if (kids.length) return mean(kids.map(ideaIndex), 0);
       const parent = parentIdea(item);
@@ -1135,6 +1206,19 @@ function layoutRoundLanes(rootEntry) {
     byLane.get(item.depth).push(item);
   }
 
+  const laneYByDepth = new Map();
+  const sortedDepths = [...byLane.keys()].sort((a, b) => a - b);
+  let nextLaneY = GRAPH_PADDING;
+  for (const [index, depth] of sortedDepths.entries()) {
+    if (index === 0) {
+      laneYByDepth.set(depth, GRAPH_PADDING);
+      nextLaneY = GRAPH_PADDING + ROUND_ROOT_LANE_GAP;
+    } else {
+      laneYByDepth.set(depth, nextLaneY);
+      nextLaneY += ROUND_LANE_GAP;
+    }
+  }
+
   let maxX = GRAPH_PADDING;
   for (const laneItems of byLane.values()) {
     laneItems.sort((a, b) => a._roundOrder - b._roundOrder || label(a.node).localeCompare(label(b.node)));
@@ -1142,15 +1226,15 @@ function layoutRoundLanes(rootEntry) {
     for (const item of laneItems) {
       const idealX = GRAPH_PADDING + item._roundOrder * ROUND_NODE_GAP;
       item.x = Math.max(idealX, previousX + ROUND_NODE_GAP * 0.56);
-      item.y = GRAPH_PADDING + item.depth * ROUND_LANE_GAP;
+      item.y = laneYByDepth.get(item.depth) ?? GRAPH_PADDING;
       previousX = item.x;
       maxX = Math.max(maxX, item.x + nodeWidth(item) / 2);
     }
   }
 
-  const maxStage = Math.max(...items.map((item) => item.depth), 0);
+  const maxY = Math.max(...items.map((item) => item.y), GRAPH_PADDING);
   const width = Math.max(1100, maxX + GRAPH_PADDING);
-  const height = Math.max(720, GRAPH_PADDING * 2 + maxStage * ROUND_LANE_GAP);
+  const height = Math.max(720, maxY + GRAPH_PADDING);
   root.x = width / 2;
   root.y = GRAPH_PADDING;
 
@@ -1276,7 +1360,7 @@ function layoutClassicTree(rootEntry, direction = "vertical") {
     if (!kids.length) return 1;
     const childWeight = kids.reduce((sum, child) => sum + entryWeight(child), 0);
     if (entry.node.kind === "CData") return Math.max(1, childWeight);
-    if (entry.node.kind === "LiteratureClaim" || entry.node.kind === "Frontier" || entry.node.kind === "HandoffGap") {
+    if (entry.node.kind === "LiteratureClaim" || entry.node.kind === "Direction" || entry.node.kind === "HandoffGap") {
       return Math.max(1.1, childWeight * 0.92);
     }
     return Math.max(1, childWeight);
@@ -1363,9 +1447,9 @@ function layoutClassicTree(rootEntry, direction = "vertical") {
 function edgeRole(parent, child) {
   const pk = parent.node?.kind;
   const ck = child.node?.kind;
-  if ((pk === "EvidenceResult" || pk === "Conclusion") && ck === "Frontier") return "direction";
-  if (pk === "Frontier" && ck === "Idea") return "direction";
-  if (pk === "CData" && ck === "Frontier") return "run-direction";
+  if ((pk === "EvidenceResult" || pk === "Conclusion") && ck === "Direction") return "direction";
+  if (pk === "Direction" && ck === "Idea") return "direction";
+  if (pk === "CData" && ck === "Direction") return "run-direction";
   return "";
 }
 
@@ -1375,19 +1459,19 @@ function edgeLabel(link) {
   if (pk === "CData" && ck === "Group") return "organize";
   if (pk === "CData" && ck === "Idea") return "hypothesis";
   if (pk === "CData" && ck === "LiteratureClaim") return "claim";
-  if (pk === "CData" && ck === "Frontier") return "run direction";
+  if (pk === "CData" && ck === "Direction") return "run direction";
   if (pk === "CData" && ck === "HandoffGap") return "handoff";
   if (pk === "Group" && ck === "Group") return "group";
   if (pk === "Group" && ck === "HandoffGap") return "handoff";
   if (pk === "Group" && ck === "LiteratureClaim") return "claim";
-  if (pk === "Group" && ck === "Frontier") return "direction";
+  if (pk === "Group" && ck === "Direction") return "direction";
   if (pk === "Group" && ck === "Idea") return "idea";
   if (pk === "HandoffGap" && ck === "Idea") return "idea";
   if (pk === "LiteratureClaim" && ck === "Idea") return "motivates";
   if (pk === "Idea" && (ck === "EvidenceResult" || ck === "Conclusion")) return "tested";
-  if ((pk === "EvidenceResult" || pk === "Conclusion") && ck === "Frontier") return "follow-up";
+  if ((pk === "EvidenceResult" || pk === "Conclusion") && ck === "Direction") return "follow-up";
   if ((pk === "EvidenceResult" || pk === "Conclusion") && ck === "Idea") return "next idea";
-  if (pk === "Frontier" && ck === "Idea") return "generates";
+  if (pk === "Direction" && ck === "Idea") return "generates";
   return link.role || "links";
 }
 
@@ -1415,12 +1499,12 @@ function laneLabel(depth, items) {
   const hasIdea = kinds.has("Idea");
   const hasEvidence = kinds.has("EvidenceResult") || kinds.has("Conclusion");
   const hasClaim = kinds.has("LiteratureClaim");
-  const hasDirection = kinds.has("Frontier");
+  const hasDirection = kinds.has("Direction");
   if (kinds.has("CData")) return "Dataset";
   if (depth > 0) {
     const round = Math.floor((depth - 1) / 3) + 1;
     const phase = ((depth - 1) % 3) + 1;
-    if (phase === 1 && hasClaim && hasDirection) return `Round ${round} context`;
+    if (phase === 1 && hasClaim && hasDirection) return `Round ${round} literature + directions`;
     if (phase === 1 && hasClaim) return `Round ${round} claims`;
     if (phase === 1 && hasDirection) return `Round ${round} directions`;
     if (phase === 2 && hasIdea) return `Round ${round} hypotheses`;
@@ -1447,7 +1531,7 @@ function laneMeta(items) {
   const ideas = items.filter((item) => item.node.kind === "Idea").length;
   const evidence = items.filter((item) => item.node.kind === "EvidenceResult" || item.node.kind === "Conclusion").length;
   const claims = items.filter((item) => item.node.kind === "LiteratureClaim").length;
-  const directions = items.filter((item) => item.node.kind === "Frontier").length;
+  const directions = items.filter((item) => item.node.kind === "Direction").length;
   const bits = [];
   if (ideas) bits.push(`${ideas} idea${ideas === 1 ? "" : "s"}`);
   if (evidence) bits.push(`${evidence} evidence`);
@@ -1505,7 +1589,7 @@ function nodeWidth(item) {
   if (item.node.kind === "CData") return 244;
   if (item.node.kind === "Group") return 220;
   if (item.node.kind === "LiteratureClaim") return 224;
-  if (item.node.kind === "Frontier") return 224;
+  if (item.node.kind === "Direction") return 224;
   if (item.node.kind === "EvidenceResult" || item.node.kind === "Conclusion") return 194;
   return NODE_WIDTH;
 }
@@ -1523,7 +1607,8 @@ function nodeColor(node) {
     if (status === "supported") return "#2a9d55";
     if (status === "borderline") return "#c8841b";
     if (status === "inconclusive") return "#8b95a3";
-    if (status === "contradicted" || status === "not supported") return "#d64545";
+    if (status === "contradicted") return "#8b5cf6";
+    if (status === "not supported") return "#d64545";
     return "#8b95a3";
   }
   return colors[node.kind] || "#8b95a3";
@@ -1547,7 +1632,7 @@ function nodeMetaLabel(item) {
     return pieces.join(" | ");
   }
   if (node.kind === "EvidenceResult" || node.kind === "Conclusion") return evidenceSummary(node);
-  if (node.kind === "Frontier") return directionMeta(node);
+  if (node.kind === "Direction") return directionMeta(node);
   return item.entry.meta || displayKind(node);
 }
 
@@ -1562,7 +1647,7 @@ function nodeBadge(item) {
     const status = node.hypothesis_status || "Pending";
     return { text: status, status };
   }
-  if (node.kind === "Frontier") return { text: "Direction", status: "Pending" };
+  if (node.kind === "Direction") return { text: "Direction", status: "Pending" };
   if (node.kind === "LiteratureClaim") return { text: "Claim", status: "Pending" };
   return null;
 }
@@ -1613,7 +1698,7 @@ function nodeTokens(item) {
     if (node.p_value !== undefined && node.p_value !== null) tokens.push(`p ${formatNumber(node.p_value)}`);
     if (node.effect_size !== undefined && node.effect_size !== null) tokens.push(`effect ${formatNumber(node.effect_size)}`);
     if (node.test_method) tokens.push(truncate(node.test_method, 28));
-  } else if (node.kind === "Frontier") {
+  } else if (node.kind === "Direction") {
     tokens.push(directionTypeLabel(node));
     if (node.priority !== undefined && node.priority !== null) tokens.push(`priority ${formatNumber(node.priority)}`);
     const parentCount = directionParentIdeaIds(node).length;
@@ -1642,7 +1727,7 @@ function nodeCardClasses(item) {
 function globalNodeRadius(item) {
   if (item.node.kind === "CData") return 8;
   if (item.node.kind === "LiteratureClaim") return 5.5;
-  if (item.node.kind === "Frontier") return 5.5;
+  if (item.node.kind === "Direction") return 5.5;
   if (item.node.kind === "EvidenceResult" || item.node.kind === "Conclusion") return 4.7;
   return 5.5;
 }
@@ -1663,7 +1748,7 @@ function globalShortLabelLines(item) {
     ? 18
     : item.node.kind === "EvidenceResult" || item.node.kind === "Conclusion"
       ? 12
-      : item.node.kind === "LiteratureClaim" || item.node.kind === "Frontier"
+      : item.node.kind === "LiteratureClaim" || item.node.kind === "Direction"
         ? 13
         : 15;
   return compactSvgLines(nodeTitleText(item), maxChars, item.node.kind === "CData" ? 1 : 2);
@@ -1677,7 +1762,7 @@ function globalMetaText(item) {
     if (node.p_value !== undefined && node.p_value !== null) bits.push(`p ${formatNumber(node.p_value)}`);
     return bits.join(" | ");
   }
-  if (node.kind === "Frontier") return directionTypeLabel(node);
+  if (node.kind === "Direction") return directionTypeLabel(node);
   if (node.kind === "LiteratureClaim") return "literature claim";
   if (node.kind === "CData") return `${rawGraph.summary?.n_nodes ?? rawGraph.nodes.length} nodes | ${rawGraph.summary?.n_edges ?? rawGraph.edges.length} edges`;
   return displayKind(node);
@@ -1685,17 +1770,15 @@ function globalMetaText(item) {
 
 const App = {
   components: {
-    ArrowDown,
-    ArrowRight,
     BookOpen,
     CircleDot,
     Crosshair,
     ExternalLink,
     GitBranch,
-    Maximize2,
-    Minimize2,
+    Moon,
     Notebook,
     Search,
+    Sun,
     Waypoints,
     X,
     ZoomIn,
@@ -1712,6 +1795,16 @@ const App = {
           </div>
         </div>
         <div class="top-panel-actions">
+          <button
+            class="theme-toggle"
+            :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+            :aria-label="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+            :aria-pressed="darkMode ? 'true' : 'false'"
+            @click="toggleTheme"
+          >
+            <Sun v-if="darkMode" :size="16" />
+            <Moon v-else :size="16" />
+          </button>
           <button title="Toggle explore panel" aria-label="Toggle explore panel" :class="{active: sidebarOpen}" @click="sidebarOpen = !sidebarOpen">
             <Search :size="16" />
             <span>Explore</span>
@@ -1782,40 +1875,20 @@ const App = {
             <div>
               <div class="graph-title-row">
                 <GitBranch :size="17" />
-                <span>Idea lineage graph</span>
+                <span>Idea graph</span>
               </div>
               <div class="toolbar-subtitle">{{ graphSubtitle }}</div>
             </div>
           </div>
-          <div class="lineage-path">
-            <span class="path-label">Lineage</span>
-            <template v-for="(node, i) in selectedPathNodes" :key="node.id">
-              <button
-                class="path-chip"
-                :class="{active: node.id === selectedId}"
-                @click="selectNode(node.id)"
-              >
-                {{ truncate(label(node), node.kind === 'CData' ? 28 : 34) }}
-              </button>
-              <span v-if="i < selectedPathNodes.length - 1" class="path-arrow">→</span>
-            </template>
-          </div>
           <div ref="plotRef" class="plot" :class="['layout-' + layoutDirection, {'overview-zoom': overviewZoom, 'global-context': globalView}]">
             <div class="canvas-tools layout-tools">
-              <button title="Top-down layout" aria-label="Top-down layout" :class="{active: layoutDirection === 'vertical'}" @click="setLayoutDirection('vertical')"><ArrowDown :size="15" /></button>
-              <button title="Left-right layout" aria-label="Left-right layout" :class="{active: layoutDirection === 'horizontal'}" @click="setLayoutDirection('horizontal')"><ArrowRight :size="15" /></button>
-              <button title="Round lanes layout" aria-label="Round lanes layout" :class="{active: layoutDirection === 'round'}" @click="setLayoutDirection('round')"><GitBranch :size="15" /></button>
-              <button title="Global view" aria-label="Global view" :class="{active: globalView}" @click="showGlobalView"><Waypoints :size="15" /></button>
-              <button title="Fit full overview" aria-label="Fit full overview" @click="fitOverview"><Crosshair :size="15" /></button>
-              <button :title="focusMode ? 'Show panels' : 'Focus graph'" :aria-label="focusMode ? 'Show panels' : 'Focus graph'" :class="{active: focusMode}" @click="toggleFocusMode">
-                <component :is="focusMode ? Minimize2 : Maximize2" :size="15" />
-              </button>
+              <button title="Fit full overview" data-tooltip="Fit overview" aria-label="Fit full overview" @click="fitOverview"><Crosshair :size="15" /></button>
             </div>
             <div class="canvas-tools zoom-tools">
-              <button title="Zoom out" @click="zoomOut"><ZoomOut :size="15" /></button>
+              <button title="Zoom out" data-tooltip="Zoom out" aria-label="Zoom out" @click="zoomOut"><ZoomOut :size="15" /></button>
               <span>{{ zoomPercent }}%</span>
-              <button title="Zoom in" @click="zoomIn"><ZoomIn :size="15" /></button>
-              <button title="Focus selected node" @click="focusSelected"><CircleDot :size="15" /></button>
+              <button title="Zoom in" data-tooltip="Zoom in" aria-label="Zoom in" @click="zoomIn"><ZoomIn :size="15" /></button>
+              <button title="Focus selected node" data-tooltip="Focus selected node" aria-label="Focus selected node" @click="focusSelected"><CircleDot :size="15" /></button>
             </div>
             <div class="minimap">
               <div class="minimap-title">Overview</div>
@@ -2117,19 +2190,19 @@ const App = {
               :class="{active: graphicAbstractDialogOpen}"
             >
               <div class="graphic-abstract-head">
-                <span>Graphical abstract</span>
+                <span>{{ selectedNotebookVisualTitle }}</span>
                 <button
                   type="button"
-                  title="Preview notebook in the inspector"
-                  aria-label="Preview notebook in the inspector"
+                  :title="'Preview notebook at ' + selectedNotebookVisualTitle"
+                  :aria-label="'Preview notebook at ' + selectedNotebookVisualTitle"
                   @click="selectedNotebookPreviewOpen = true"
                 >preview</button>
               </div>
               <button
                 class="graphic-abstract-image-button"
                 type="button"
-                title="Expand graphical abstract"
-                aria-label="Expand graphical abstract"
+                :title="'Expand ' + selectedNotebookVisualTitle"
+                :aria-label="'Expand ' + selectedNotebookVisualTitle"
                 @click="graphicAbstractDialogOpen = true"
               >
                 <img :src="selectedGraphicAbstract.src" :alt="selectedGraphicAbstract.alt" loading="lazy" />
@@ -2194,20 +2267,20 @@ const App = {
         class="graphic-abstract-dialog-backdrop"
         role="dialog"
         aria-modal="true"
-        aria-label="Graphical abstract preview"
+        :aria-label="selectedNotebookVisualTitle + ' preview'"
         @click.self="graphicAbstractDialogOpen = false"
       >
         <div class="graphic-abstract-dialog">
           <div class="graphic-abstract-dialog-head">
             <div>
-              <div class="eyebrow">Graphical abstract</div>
+              <div class="eyebrow">{{ selectedNotebookVisualTitle }}</div>
               <h2>{{ truncate(label(selectedNode), 74) }}</h2>
             </div>
             <button
               class="preview-icon-button"
               type="button"
-              title="Close graphical abstract"
-              aria-label="Close graphical abstract"
+              :title="'Close ' + selectedNotebookVisualTitle"
+              :aria-label="'Close ' + selectedNotebookVisualTitle"
               @click="graphicAbstractDialogOpen = false"
             >
               <X :size="16" />
@@ -2252,6 +2325,8 @@ const App = {
   `,
   setup() {
     const title = document.title || "U-Chrom Idea Graph";
+    const themeMode = ref(initialThemeMode());
+    const darkMode = computed(() => themeMode.value === "dark");
     const query = ref("");
     const statusFilter = ref("All");
     const selectedId = ref(cdataNode.id);
@@ -2283,7 +2358,7 @@ const App = {
     const stats = computed(() => ({
       ideas: nodes.filter((n) => n.kind === "Idea").length,
       evidence: nodes.filter((n) => n.kind === "EvidenceResult").length,
-      directions: nodes.filter((n) => n.kind === "Frontier").length,
+      directions: nodes.filter((n) => n.kind === "Direction").length,
       claims: nodes.filter((n) => n.kind === "LiteratureClaim").length
     }));
     const workspaceStyle = computed(() => ({
@@ -2322,7 +2397,7 @@ const App = {
           if (!q) return true;
           const ev = evidenceForIdea(idea.id);
           const nb = notebookForIdea(idea.id);
-          const direction = frontierForIdea(idea);
+          const direction = directionForIdea(idea);
           const claims = sourceClaimIds(idea).map((id) => byId.get(id)).filter(Boolean);
           return [idea, ev, nb, direction, ...claims].filter(Boolean).some((n) => searchable(n).includes(q));
         })
@@ -2386,7 +2461,7 @@ const App = {
           ? "round-lane"
           : "top-down";
       return globalView.value
-        ? `${shownCount.value} expanded lineage nodes in a ${directionLabel} graph; hover any dot to preview details`
+        ? `${shownCount.value} expanded nodes in a ${directionLabel} graph; hover any dot to preview details`
         : `${tree.value.nodes.length} visible nodes, all loaded in a stable ${directionLabel} graph`;
     });
     const isHorizontal = computed(() => layoutDirection.value === "horizontal");
@@ -2500,38 +2575,45 @@ const App = {
       if (selectedOutcome.value?.id) return notebookHref(notebookForEvidence(selectedOutcome.value.id)?.path || "");
       return "";
     });
+    const selectedNotebookVisualKind = computed(() => {
+      const kind = selectedNode.value?.kind;
+      return kind === "EvidenceResult" || kind === "Conclusion" ? "statistical" : "graphic";
+    });
+    const selectedNotebookVisualTitle = computed(() => notebookVisualSpec(selectedNotebookVisualKind.value).title);
     const selectedGraphicAbstract = ref({ state: "idle", src: "", alt: "", href: "" });
-    const selectedPreviewHref = computed(() => selectedNotebookHref.value ? notebookGraphicAbstractHref(selectedNotebookHref.value) : "");
-    watch(selectedNotebookHref, () => {
+    const selectedPreviewHref = computed(() => notebookVisualHref(selectedNotebookHref.value, selectedNotebookVisualKind.value));
+    watch([selectedNotebookHref, selectedNotebookVisualKind], () => {
       selectedNotebookPreviewOpen.value = false;
       graphicAbstractDialogOpen.value = false;
       closeNotebookPreviewImage();
     });
     let graphicAbstractRequestId = 0;
-    watch(selectedNotebookHref, async (href) => {
+    watch([selectedNotebookHref, selectedNotebookVisualKind], async ([href, visualKind]) => {
       const requestId = ++graphicAbstractRequestId;
       if (!href) {
         selectedGraphicAbstract.value = { state: "idle", src: "", alt: "", href: "" };
         return;
       }
-      if (graphicAbstractCache.has(href)) {
-        selectedGraphicAbstract.value = graphicAbstractCache.get(href);
+      const cacheKey = `${visualKind}:${href}`;
+      const visualHref = notebookVisualHref(href, visualKind);
+      if (graphicAbstractCache.has(cacheKey)) {
+        selectedGraphicAbstract.value = graphicAbstractCache.get(cacheKey);
         return;
       }
-      selectedGraphicAbstract.value = { state: "loading", src: "", alt: "", href: notebookGraphicAbstractHref(href) };
+      selectedGraphicAbstract.value = { state: "loading", src: "", alt: "", href: visualHref };
       try {
-        const response = await fetch(href, { cache: "force-cache" });
+        const response = await fetch(href, { cache: "no-store" });
         if (!response.ok) throw new Error(`Notebook preview fetch failed: ${response.status}`);
         const html = await response.text();
-        const abstract = extractGraphicAbstract(html, href);
+        const abstract = extractNotebookVisual(html, href, visualKind);
         const next = abstract
-          ? { state: "loaded", href: notebookGraphicAbstractHref(href), ...abstract }
-          : { state: "missing", src: "", alt: "", href: notebookGraphicAbstractHref(href) };
-        graphicAbstractCache.set(href, next);
+          ? { state: "loaded", href: visualHref, ...abstract }
+          : { state: "missing", src: "", alt: "", href: visualHref };
+        graphicAbstractCache.set(cacheKey, next);
         if (requestId === graphicAbstractRequestId) selectedGraphicAbstract.value = next;
       } catch {
-        const next = { state: "error", src: "", alt: "", href: notebookGraphicAbstractHref(href) };
-        graphicAbstractCache.set(href, next);
+        const next = { state: "error", src: "", alt: "", href: visualHref };
+        graphicAbstractCache.set(cacheKey, next);
         if (requestId === graphicAbstractRequestId) selectedGraphicAbstract.value = next;
       }
     }, { immediate: true });
@@ -2682,6 +2764,10 @@ const App = {
       });
     }
 
+    function toggleTheme() {
+      themeMode.value = darkMode.value ? "light" : "dark";
+    }
+
     function toggleSpotlight() {
       spotlightMode.value = !spotlightMode.value;
       if (spotlightMode.value) globalView.value = false;
@@ -2700,13 +2786,6 @@ const App = {
       nextTick(fitTree);
     }
 
-    function setLayoutDirection(direction) {
-      if (!["vertical", "horizontal", "round"].includes(direction) || layoutDirection.value === direction) return;
-      layoutDirection.value = direction;
-      viewportPinned.value = false;
-      nextTick(fitTree);
-    }
-
     function statusCount(status) {
       return statusCounts.value[status] || 0;
     }
@@ -2716,7 +2795,7 @@ const App = {
       const parts = [];
       if (idea.signature?.parameter_family) parts.push(idea.signature.parameter_family);
       if (ev?.p_value !== undefined && ev?.p_value !== null) parts.push(`p=${formatNumber(ev.p_value)}`);
-      if (frontierLabel(idea)) parts.push(truncate(frontierLabel(idea), 34));
+      if (directionLabel(idea)) parts.push(truncate(directionLabel(idea), 34));
       const run = runForIdea(idea.id);
       if (run) parts.push(runOrder(run) > 1 ? `Round ${runOrder(run)}` : "Round 1");
       return parts.filter(Boolean).join(" | ");
@@ -3185,9 +3264,12 @@ const App = {
         fitTree();
       });
     });
+    watch(themeMode, applyThemeMode, { immediate: true });
 
     return {
       title,
+      darkMode,
+      toggleTheme,
       summary,
       query,
       statusFilter,
@@ -3240,6 +3322,7 @@ const App = {
       selectedQuickFacts,
       selectedNotebookHref,
       selectedPreviewHref,
+      selectedNotebookVisualTitle,
       selectedGraphicAbstract,
       label,
       truncate,
@@ -3286,7 +3369,6 @@ const App = {
       toggleSpotlight,
       showContext,
       showGlobalView,
-      setLayoutDirection,
       hoverNode,
       clearHover,
       collapseAll,
