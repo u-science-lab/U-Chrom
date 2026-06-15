@@ -60,6 +60,49 @@ def test_discovery_schema_roundtrips_inside_h5cd(tmp_path):
     assert "H3K27me3" in out.describe_for_agent(max_items=10)
 
 
+def test_discovery_schema_exposes_enriched_feature_groups():
+    cdata = _make_cd()
+    cdata.tracks["seq.gc_fraction"] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+    cdata.tracks["gtf.nearest_tss_distance"] = [0, 10, 20, 30, 40, 50]
+    cdata.tracks["strc.distance_to_tad_boundary"] = [5, 4, 3, 2, 1, 0]
+    cdata.results["bin_features"] = pd.DataFrame({
+        "chrom": ["chr1", "chr1"],
+        "start": [0, 25_000],
+        "end": [25_000, 50_000],
+        "gc_fraction": [0.42, 0.51],
+        "nearest_tss_distance": [0, 10_000],
+    })
+    cdata.results["tads"] = pd.DataFrame({
+        "chrom": ["chr1"],
+        "start": [0],
+        "end": [50_000],
+        "score": [3.2],
+    })
+    cdata.uns["feature_registry"] = [
+        {"feature_group": "sequence", "features": ["seq.gc_fraction"]},
+        {"feature_group": "annotation", "features": ["gtf.nearest_tss_distance"]},
+    ]
+
+    schema = cdata.build_discovery_schema(store=True)
+    context = cdata.describe_for_agent(max_items=10)
+
+    assert schema["modalities"]["sequence_features"]["present"]
+    assert schema["modalities"]["genome_annotations"]["present"]
+    assert schema["modalities"]["structure_annotations"]["present"]
+    assert schema["summary"]["n_feature_registry_entries"] == 2
+    assert schema["catalogs"]["track_groups"]["seq"]["values"] == ["seq.gc_fraction"]
+    assert "bin_features" in schema["fields"]["results"]["tables"]
+    assert schema["fields"]["results"]["tables"]["tads"]["columns"] == [
+        "chrom",
+        "start",
+        "end",
+        "score",
+    ]
+    assert "track_groups:" in context
+    assert "result_tables:" in context
+    assert "feature_registry:" in context
+
+
 def test_discovery_schema_includes_linked_anndata():
     ad = pytest.importorskip("anndata")
     from uchrom.auto_discovery import DiscoveryIdea, review_idea_against_schema

@@ -60,9 +60,23 @@ def build_discovery_schema(
     )
 
     tracks = _columns(cdata.tracks)
+    track_groups = _track_groups(tracks)
+    result_tables = _result_tables(cdata.results)
+    feature_registry = _metadata_records(cdata.uns.get("feature_registry"))
     genes = linked.get("var_names", {"n": 0, "values": [], "truncated": False, "sha1": ""})
     references = _metadata_records(cdata.uns.get("dataset_references"))
     user_annotations = _metadata_records(cdata.uns.get("user_annotations"))
+    fields["results"]["tables"] = result_tables
+    sequence_present = _has_feature_group(feature_registry, "sequence") or "seq" in track_groups
+    annotation_present = (
+        _has_feature_group(feature_registry, "annotation")
+        or "gtf" in track_groups
+        or "gene_annotations" in result_tables
+    )
+    structure_present = (
+        "strc" in track_groups
+        or any(_result_family(key) in {"tads", "loops", "compartments"} for key in result_tables)
+    )
     schema = {
         "schema_version": DISCOVERY_SCHEMA_VERSION,
         "schema_type": "uchrom_multiomics_auto_discovery",
@@ -82,6 +96,8 @@ def build_discovery_schema(
             "n_cells": int(cdata.n_cells),
             "n_chroms": len(chroms),
             "n_tracks": len(tracks),
+            "n_track_groups": len(track_groups),
+            "n_feature_registry_entries": len(feature_registry),
             "n_references": len(references),
             "n_user_annotations": len(user_annotations),
         },
@@ -130,12 +146,45 @@ def build_discovery_schema(
                     "chromatin_expression_association",
                 ],
             },
+            "sequence_features": {
+                "present": bool(sequence_present),
+                "fields": ["tracks", "results.bin_features", "uns.feature_registry"],
+                "operations": [
+                    "sequence_track_stratified_distance",
+                    "gc_content_association",
+                    "g4_density_association",
+                    "sequence_feature_correlation",
+                ],
+            },
+            "genome_annotations": {
+                "present": bool(annotation_present),
+                "fields": ["tracks", "results.bin_features", "results.gene_annotations", "uns.feature_registry"],
+                "operations": [
+                    "annotation_overlap_enrichment",
+                    "nearest_tss_distance_association",
+                    "gene_body_or_promoter_stratification",
+                ],
+            },
+            "structure_annotations": {
+                "present": bool(structure_present),
+                "fields": ["results.tads", "results.loops", "results.compartments", "tracks"],
+                "operations": [
+                    "tad_boundary_distance",
+                    "loop_anchor_proximity",
+                    "compartment_stratified_radial_position",
+                ],
+            },
         },
         "fields": fields,
+        "feature_registry": feature_registry,
         "linked_adata": linked,
         "catalogs": {
             "chroms": _catalog(chroms, max_catalog_items),
             "tracks": _catalog(tracks, max_catalog_items),
+            "track_groups": {
+                name: _catalog(values, max_catalog_items)
+                for name, values in sorted(track_groups.items())
+            },
             "cell_types": {
                 "n": len(cell_type_counts),
                 "counts": cell_type_counts,
@@ -256,6 +305,27 @@ def schema_to_agent_context(schema: Mapping[str, Any], *, max_items: int = 40) -
         f"cell_types: {_format_cell_types(catalogs.get('cell_types', {}), max_items)}",
         f"tracks: {_format_catalog(catalogs.get('tracks', {}), max_items)}",
     ])
+    track_groups = catalogs.get("track_groups", {})
+    if track_groups:
+        group_bits = []
+        for name, info in sorted(track_groups.items()):
+            group_bits.append(f"{name}={info.get('n', 0)}")
+        lines.append(f"track_groups: {', '.join(group_bits)}")
+    result_tables = schema.get("fields", {}).get("results", {}).get("tables", {})
+    if result_tables:
+        table_bits = []
+        for name, info in sorted(result_tables.items()):
+            cols = info.get("columns", [])
+            table_bits.append(f"{name}({len(cols)} cols)")
+        lines.append(f"result_tables: {', '.join(table_bits[:max_items])}")
+    registry = schema.get("feature_registry", [])
+    if registry:
+        groups = sorted({
+            str(item.get("feature_group"))
+            for item in registry
+            if item.get("feature_group")
+        })
+        lines.append(f"feature_registry: {len(registry)} entries; groups={', '.join(groups)}")
     if linked.get("present"):
         lines.append(f"linked_adata: shape={linked.get('shape')}, X={linked.get('x_type')}")
         lines.append(f"genes: {_format_catalog(catalogs.get('genes', {}), max_items)}")
@@ -310,6 +380,21 @@ def _array_mapping_field(mapping: Mapping[str, Any], *, axis: str) -> dict[str, 
         "shapes": {str(k): _shape(v) for k, v in mapping.items()},
         "dtypes": {str(k): str(getattr(v, "dtype", "")) for k, v in mapping.items()},
     }
+
+
+def _result_tables(results: Mapping[str, Any]) -> dict[str, Any]:
+    tables: dict[str, Any] = {}
+    for key, value in results.items():
+        if isinstance(value, pd.DataFrame):
+            tables[str(key)] = _dataframe_field(value, axis="result_row")
+        elif isinstance(value, np.ndarray):
+            tables[str(key)] = {
+                "present": True,
+                "axis": "result_array",
+                "shape": _shape(value),
+                "dtype": str(value.dtype),
+            }
+    return tables
 
 
 def _linked_anndata_field(cdata, *, include_linked_adata: bool, max_catalog_items: int) -> dict[str, Any]:
@@ -469,6 +554,26 @@ def _catalog(values: list[str], max_items: int) -> dict[str, Any]:
         "truncated": len(values) > max_items,
         "sha1": _hash_names(values),
     }
+
+
+def _track_groups(columns: list[str]) -> dict[str, list[str]]:
+    groups: dict[str, list[str]] = {}
+    for col in columns:
+        name = str(col)
+        if "." in name:
+            group, _ = name.split(".", 1)
+        else:
+            group = "marker"
+        groups.setdefault(group, []).append(name)
+    return groups
+
+
+def _has_feature_group(records: list[dict[str, Any]], name: str) -> bool:
+    return any(str(record.get("feature_group")) == name for record in records)
+
+
+def _result_family(key: str) -> str:
+    return str(key).split(":", 1)[0]
 
 
 def _format_catalog(catalog: Mapping[str, Any], max_items: int) -> str:

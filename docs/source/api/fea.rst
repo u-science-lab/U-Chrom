@@ -17,3 +17,27 @@ Axis-wise preprocessing
 
 .. automodule:: uchrom.fea.arc
    :members: axis_variance_cube, filter_normalize, axis_weight
+
+Interval projection
+-------------------
+
+.. automodule:: uchrom.fea.project
+   :members:
+
+Sequence features
+-----------------
+
+.. automodule:: uchrom.fea.sequence
+   :members:
+
+Annotation features
+-------------------
+
+.. automodule:: uchrom.fea.annotation
+   :members:
+
+Feature registry
+----------------
+
+.. automodule:: uchrom.fea.registry
+   :members:
