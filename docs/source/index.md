@@ -109,6 +109,7 @@ guide/reconstruction
 guide/structure
 guide/auto_discovery
 guide/iterative_auto_discovery
+guide/data_enrichment_for_discovery
 guide/browser
 ```
 
