@@ -18,7 +18,7 @@ import pandas as pd
 DISCOVERY_SCHEMA_KEY = "auto_discovery_schema"
 DISCOVERY_SCHEMA_VERSION = "0.1"
 DISCOVERY_SCHEMA_FORMAT = "uchrom.auto_discovery.schema+json"
-ENRICHED_TRACK_PREFIXES = frozenset({"seq", "gtf", "strc"})
+ENRICHED_TRACK_PREFIXES = frozenset({"seq", "gtf", "strc", "peak"})
 
 
 def build_discovery_schema(
@@ -75,8 +75,15 @@ def build_discovery_schema(
         or "gene_annotations" in result_tables
     )
     structure_present = (
-        "strc" in track_groups
+        _has_feature_group(feature_registry, "structure")
+        or _has_feature_group(feature_registry, "structural")
+        or "strc" in track_groups
         or any(_result_family(key) in {"tads", "loops", "compartments"} for key in result_tables)
+    )
+    peaks_present = (
+        _has_feature_group(feature_registry, "peaks")
+        or "peak" in track_groups
+        or any(_result_family(key) == "peaks" for key in result_tables)
     )
     schema = {
         "schema_version": DISCOVERY_SCHEMA_VERSION,
@@ -173,6 +180,15 @@ def build_discovery_schema(
                     "tad_boundary_distance",
                     "loop_anchor_proximity",
                     "compartment_stratified_radial_position",
+                ],
+            },
+            "peak_features": {
+                "present": bool(peaks_present),
+                "fields": ["tracks", "results.bin_features", "results.peaks:*", "uns.feature_registry"],
+                "operations": [
+                    "peak_overlap_enrichment",
+                    "peak_distance_association",
+                    "peak_stratified_distance",
                 ],
             },
         },

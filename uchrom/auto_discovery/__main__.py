@@ -60,6 +60,58 @@ def main(argv: list[str] | None = None) -> int:
         help="Existing literature/browser claims JSONL to ingest into the run graph.",
     )
 
+    enrich_p = sub.add_parser(
+        "enrich",
+        help="Add reusable sequence, annotation, structure, and peak features to an h5cd file",
+    )
+    enrich_p.add_argument("h5cd_path")
+    enrich_p.add_argument("output_h5cd_path")
+    enrich_p.add_argument("--fasta", default=None, help="FASTA path for sequence-derived features.")
+    enrich_p.add_argument(
+        "--sequence-feature",
+        action="append",
+        default=None,
+        help="Sequence feature to compute. Repeatable; defaults to all built-in sequence features.",
+    )
+    enrich_p.add_argument("--gtf", default=None, help="GTF/GFF path for genome annotation features.")
+    enrich_p.add_argument(
+        "--annotation-feature",
+        action="append",
+        default=None,
+        help="Annotation feature to compute. Repeatable; defaults to all built-in annotation features.",
+    )
+    enrich_p.add_argument("--promoter-upstream", type=int, default=-2000)
+    enrich_p.add_argument("--promoter-downstream", type=int, default=500)
+    enrich_p.add_argument(
+        "--structure",
+        action="append",
+        choices=["tads", "loops", "compartments"],
+        default=[],
+        help="Run an existing structural caller and project its features. Repeatable.",
+    )
+    enrich_p.add_argument(
+        "--project-existing-structure",
+        action="store_true",
+        help="Project existing results['tads'/'loops'/'compartments'] without running callers.",
+    )
+    enrich_p.add_argument("--chrom", action="append", default=None, help="Chromosome for structural callers.")
+    enrich_p.add_argument("--device", default="auto", help="Device for structural callers.")
+    enrich_p.add_argument(
+        "--peak-track",
+        action="append",
+        default=[],
+        help="Track column to aggregate and call peaks from. Repeatable.",
+    )
+    enrich_p.add_argument("--peak-agg", default="mean", choices=["mean", "median", "max", "min", "sum"])
+    enrich_p.add_argument("--peak-threshold", type=float, default=None)
+    enrich_p.add_argument("--peak-quantile", type=float, default=0.95)
+    enrich_p.add_argument("--peak-min-width-bins", type=int, default=1)
+    enrich_p.add_argument("--peak-max-gap-bins", type=int, default=0)
+    enrich_p.add_argument("--store-schema", action="store_true")
+    enrich_p.add_argument("--overwrite", action="store_true")
+    enrich_p.add_argument("--no-project", action="store_true")
+    enrich_p.add_argument("--verbose", action="store_true")
+
     schem_p = sub.add_parser(
         "schematics",
         help="Generate and insert graphical abstracts for a completed run",
@@ -225,6 +277,80 @@ def main(argv: list[str] | None = None) -> int:
             claims_paths=args.claim_path,
         ))
         print(json.dumps(result.__dict__, indent=2))
+        return 0
+    if args.cmd == "enrich":
+        from pathlib import Path
+
+        from uchrom import ChromData
+        from uchrom.fea import add_annotation_features, add_sequence_features, call_peaks_from_track
+        from uchrom.strc import add_structural_features, call_structures_multi
+
+        cdata = ChromData.read(args.h5cd_path)
+        project = not args.no_project
+        summary = {
+            "input_h5cd_path": str(args.h5cd_path),
+            "output_h5cd_path": str(args.output_h5cd_path),
+            "sequence_features": [],
+            "annotation_features": [],
+            "structures": [],
+            "peak_tracks": {},
+            "schema_stored": False,
+        }
+        if args.fasta:
+            table = add_sequence_features(
+                cdata,
+                args.fasta,
+                features=args.sequence_feature,
+                project=project,
+                overwrite=args.overwrite,
+            )
+            summary["sequence_features"] = [c for c in table.columns if c not in {"chrom", "start", "end"}]
+        if args.gtf:
+            table = add_annotation_features(
+                cdata,
+                args.gtf,
+                features=args.annotation_feature,
+                promoter_window=(args.promoter_upstream, args.promoter_downstream),
+                project=project,
+                overwrite=args.overwrite,
+            )
+            summary["annotation_features"] = [c for c in table.columns if c not in {"chrom", "start", "end"}]
+        if args.structure:
+            called = call_structures_multi(
+                cdata,
+                structures=args.structure,
+                chroms=args.chrom,
+                device=args.device,
+                store=True,
+                verbose=args.verbose,
+            )
+            table = add_structural_features(cdata, project=project, overwrite=args.overwrite)
+            summary["structures"] = sorted(called.keys())
+            summary["structural_features"] = [c for c in table.columns if c not in {"chrom", "start", "end"}]
+        elif args.project_existing_structure:
+            table = add_structural_features(cdata, project=project, overwrite=args.overwrite)
+            summary["structures"] = ["existing"]
+            summary["structural_features"] = [c for c in table.columns if c not in {"chrom", "start", "end"}]
+        for track in args.peak_track:
+            peaks = call_peaks_from_track(
+                cdata,
+                track,
+                agg=args.peak_agg,
+                threshold=args.peak_threshold,
+                quantile=args.peak_quantile,
+                min_width_bins=args.peak_min_width_bins,
+                max_gap_bins=args.peak_max_gap_bins,
+                project=project,
+                overwrite=args.overwrite,
+            )
+            summary["peak_tracks"][track] = int(len(peaks))
+        if args.store_schema:
+            cdata.build_discovery_schema(store=True)
+            summary["schema_stored"] = True
+        out_path = Path(args.output_h5cd_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        cdata.write(out_path)
+        print(json.dumps(summary, indent=2))
         return 0
     if args.cmd == "schematics":
         from .pantheon import generate_pantheon_schematic_images_for_run

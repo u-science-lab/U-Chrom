@@ -14,6 +14,7 @@ recon_fish
 strc_loop
 strc_tad
 strc_comp
+strc_enrichment
 fea
 pl
 utils

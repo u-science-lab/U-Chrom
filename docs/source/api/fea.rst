@@ -36,6 +36,12 @@ Annotation features
 .. automodule:: uchrom.fea.annotation
    :members:
 
+Peak features
+-------------
+
+.. automodule:: uchrom.fea.peaks
+   :members:
+
 Feature registry
 ----------------
 

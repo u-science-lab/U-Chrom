@@ -65,6 +65,7 @@ def test_discovery_schema_exposes_enriched_feature_groups():
     cdata.tracks["seq.gc_fraction"] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
     cdata.tracks["gtf.nearest_tss_distance"] = [0, 10, 20, 30, 40, 50]
     cdata.tracks["strc.distance_to_tad_boundary"] = [5, 4, 3, 2, 1, 0]
+    cdata.tracks["peak.h3k27me3_overlap"] = [0, 1, 0, 1, 0, 1]
     cdata.tracks["H2A.X"] = [1, 1, 0, 0, 1, 0]
     cdata.results["bin_features"] = pd.DataFrame({
         "chrom": ["chr1", "chr1"],
@@ -82,6 +83,7 @@ def test_discovery_schema_exposes_enriched_feature_groups():
     cdata.uns["feature_registry"] = [
         {"feature_group": "sequence", "features": ["seq.gc_fraction"]},
         {"feature_group": "annotation", "features": ["gtf.nearest_tss_distance"]},
+        {"feature_group": "peaks", "features": ["peak.h3k27me3_overlap"]},
     ]
 
     schema = cdata.build_discovery_schema(store=True)
@@ -90,8 +92,10 @@ def test_discovery_schema_exposes_enriched_feature_groups():
     assert schema["modalities"]["sequence_features"]["present"]
     assert schema["modalities"]["genome_annotations"]["present"]
     assert schema["modalities"]["structure_annotations"]["present"]
-    assert schema["summary"]["n_feature_registry_entries"] == 2
+    assert schema["modalities"]["peak_features"]["present"]
+    assert schema["summary"]["n_feature_registry_entries"] == 3
     assert schema["catalogs"]["track_groups"]["seq"]["values"] == ["seq.gc_fraction"]
+    assert schema["catalogs"]["track_groups"]["peak"]["values"] == ["peak.h3k27me3_overlap"]
     assert "H2A" not in schema["catalogs"]["track_groups"]
     assert "H2A.X" in schema["catalogs"]["track_groups"]["marker"]["values"]
     assert "seq.gc_fraction" not in schema["catalogs"]["track_groups"]["marker"]["values"]

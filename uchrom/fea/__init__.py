@@ -13,6 +13,13 @@ from .annotation import (
     compute_annotation_features,
     read_gtf,
 )
+from .peaks import (
+    add_peak_features,
+    aggregate_track_by_interval,
+    call_peaks_from_signal,
+    call_peaks_from_track,
+    compute_peak_features,
+)
 from .project import (
     project_interval_features_to_spots,
     unique_spot_intervals,
@@ -33,6 +40,11 @@ __all__ = [
     "add_annotation_features",
     "compute_annotation_features",
     "read_gtf",
+    "add_peak_features",
+    "aggregate_track_by_interval",
+    "call_peaks_from_signal",
+    "call_peaks_from_track",
+    "compute_peak_features",
     "project_interval_features_to_spots",
     "unique_spot_intervals",
     "append_feature_registry_entry",
