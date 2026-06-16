@@ -12,6 +12,7 @@ Grouped by the U-Chrom module each tutorial targets:
 | Notebook | Topic |
 |----------|-------|
 | `chromdata_basics.ipynb` | The `ChromData` container |
+| `schicar_linked_multiomics_framework.ipynb` | Recommended scHiCAR layout with linked MuData and scool |
 | `import_fofct.ipynb` | Loading FOF-CT imaging data |
 | `import_pyhim_ecsv.ipynb` | Loading PyHiM chromatin trace tables |
 | `import_pyhim_ecsv.ipynb` | Loading PyHiM chromatin trace tables |
