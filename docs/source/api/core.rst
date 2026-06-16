@@ -13,3 +13,11 @@ ChromData
    :members:
    :undoc-members:
    :show-inheritance:
+
+UChromProject
+-------------
+
+.. autoclass:: uchrom.core.UChromProject
+   :members:
+   :undoc-members:
+   :show-inheritance:

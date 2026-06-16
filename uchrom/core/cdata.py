@@ -367,6 +367,169 @@ class ChromData:
         self._linked_adata = ad.read_h5ad(path)
         return self._linked_adata
 
+    def link_mudata(
+        self,
+        path: PathLike,
+        *,
+        key: str = "default",
+        modalities: Optional[List[str]] = None,
+        cell_axis: Optional[str] = None,
+        spatial_source: Optional[str] = None,
+        not_measured_spatial: Optional[bool] = None,
+        **metadata: Any,
+    ) -> dict:
+        """Record a linked MuData file in ``uns['linked_mudata']``.
+
+        The MuData object is kept external.  ``ChromData`` stores only
+        lightweight provenance so multi-modal cell matrices are not forced
+        into ``coords`` / ``spots``.
+        """
+        record = {
+            "path": str(path),
+            "format": "h5mu",
+            "modalities": list(modalities) if modalities is not None else [],
+            "cell_axis": cell_axis,
+            "spatial_source": spatial_source,
+            "not_measured_spatial": not_measured_spatial,
+            **metadata,
+        }
+        record = _clean_metadata_record(record)
+        _set_linked_record(self.uns, "linked_mudata", key, record)
+        return record
+
+    def load_linked_mudata(self, *, key: str = "default"):
+        """Load a linked MuData file by key.
+
+        ``mudata`` is an optional dependency.  A clear ImportError is raised
+        when it is unavailable.
+        """
+        record = _linked_record(self.uns.get("linked_mudata"), key)
+        path = record.get("path")
+        if not path:
+            raise ValueError(f"No linked MuData path is recorded for key {key!r}.")
+        try:
+            import mudata as md
+        except ImportError as exc:  # pragma: no cover - depends on optional env
+            raise ImportError(
+                "mudata is required to load linked MuData files. "
+                "Install it with `pip install mudata` or use an environment "
+                "that provides mudata."
+            ) from exc
+        return md.read_h5mu(path)
+
+    def link_scool(
+        self,
+        path: PathLike,
+        *,
+        key: str = "default",
+        cell_name: Optional[str] = None,
+        barcode_source: Optional[str] = None,
+        genome_assembly: Optional[str] = None,
+        bin_size: Optional[int] = None,
+        coordinate_status: str = "contacts, not xyz coordinates",
+        **metadata: Any,
+    ) -> dict:
+        """Record a linked scool contact store in ``uns['linked_scool']``."""
+        record = {
+            "path": str(path),
+            "format": "scool",
+            "cell_name": cell_name,
+            "barcode_source": barcode_source,
+            "genome_assembly": genome_assembly,
+            "bin_size": int(bin_size) if bin_size is not None else None,
+            "coordinate_status": coordinate_status,
+            **metadata,
+        }
+        record = _clean_metadata_record(record)
+        _set_linked_record(self.uns, "linked_scool", key, record)
+        return record
+
+    def load_linked_scool(self, *, key: str = "default", cell: Optional[str] = None):
+        """Load metadata or one cell cooler from a linked scool file.
+
+        If ``cell`` is ``None``, returns a summary dict with available scool
+        cells.  If ``cell`` is supplied, returns ``cooler.Cooler`` for that
+        cell group.
+        """
+        record = _linked_record(self.uns.get("linked_scool"), key)
+        path = record.get("path")
+        if not path:
+            raise ValueError(f"No linked scool path is recorded for key {key!r}.")
+        try:
+            import cooler
+        except ImportError as exc:  # pragma: no cover - cooler is a core dep now
+            raise ImportError("cooler is required to load linked scool files.") from exc
+
+        if cell is None:
+            cells = cooler.fileops.list_scool_cells(path)
+            return {"path": str(path), "cells": cells, "record": record}
+
+        cell_uri = str(cell)
+        if not cell_uri.startswith("/cells/"):
+            cell_uri = f"/cells/{cell_uri}"
+        return cooler.Cooler(f"{path}::{cell_uri}")
+
+    def coord_status(self) -> dict:
+        """Return a compact status summary for ``coords``."""
+        total = int(self.coords.size)
+        finite = int(np.isfinite(self.coords).sum())
+        nan = int(np.isnan(self.coords).sum())
+        if total == 0:
+            status = "empty"
+        elif finite == total:
+            status = "complete"
+        elif nan == total:
+            status = "unavailable_all_nan"
+        else:
+            status = "partially_missing"
+        return {"status": status, "total_values": total, "finite_values": finite, "nan_values": nan}
+
+    def describe_links(self) -> dict:
+        """Summarize linked external modality records."""
+        return {
+            "coord_status": self.coord_status(),
+            "linked_anndata": dict(self.uns.get("linked_anndata", {}) or {}),
+            "linked_mudata": _linked_records(self.uns.get("linked_mudata")),
+            "linked_scool": _linked_records(self.uns.get("linked_scool")),
+        }
+
+    def validate_links(self, *, check_files: bool = True) -> List[str]:
+        """Return issues found in linked external modality metadata."""
+        issues: List[str] = []
+        coord = self.coord_status()
+        declared = self.uns.get("coordinate_status") or self.uns.get("coords_status")
+        if coord["status"] == "unavailable_all_nan" and not declared:
+            issues.append(
+                "coords are all NaN but uns['coordinate_status'] or uns['coords_status'] is not set"
+            )
+
+        for family, expected_format in (("linked_mudata", "h5mu"), ("linked_scool", "scool")):
+            records = _linked_records(self.uns.get(family))
+            for key, record in records.items():
+                path = record.get("path")
+                if not path:
+                    issues.append(f"{family}.{key} missing path")
+                    continue
+                if check_files and not Path(path).exists():
+                    issues.append(f"{family}.{key} path does not exist: {path}")
+                fmt = record.get("format")
+                if fmt and str(fmt) != expected_format:
+                    issues.append(f"{family}.{key} format={fmt!r} != {expected_format!r}")
+
+        for key, record in _linked_records(self.uns.get("linked_scool")).items():
+            if record.get("coordinate_status") in {None, ""}:
+                issues.append(f"linked_scool.{key} missing coordinate_status")
+            if check_files and record.get("path") and Path(record["path"]).exists():
+                try:
+                    import cooler
+
+                    if not cooler.fileops.is_scool_file(record["path"]):
+                        issues.append(f"linked_scool.{key} is not a valid scool file")
+                except ImportError:
+                    issues.append("cooler is not installed; linked_scool validity could not be checked")
+
+        return issues
+
     @property
     def dataset_references(self) -> List[dict]:
         """Dataset-level source references used as auto-discovery priors.
@@ -1671,3 +1834,36 @@ def _read_uns_attr(value: Any) -> Any:
     if isinstance(value, str) and value.startswith(_UNS_JSON_PREFIX):
         return json.loads(value[len(_UNS_JSON_PREFIX):])
     return value
+
+
+def _linked_records(raw: Any) -> dict[str, dict]:
+    """Normalize linked modality metadata to ``key -> record``."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        return {"default": {"value": raw}}
+    raw_dict = dict(raw)
+    if "path" in raw_dict:
+        return {"default": _clean_metadata_record(raw_dict)}
+    records = {}
+    for key, value in raw_dict.items():
+        if isinstance(value, Mapping):
+            records[str(key)] = _clean_metadata_record(dict(value))
+        else:
+            records[str(key)] = {"value": value}
+    return records
+
+
+def _linked_record(raw: Any, key: str) -> dict:
+    records = _linked_records(raw)
+    if key in records:
+        return records[key]
+    if key == "default" and len(records) == 1:
+        return next(iter(records.values()))
+    raise KeyError(f"No linked modality record for key {key!r}")
+
+
+def _set_linked_record(uns: dict, family: str, key: str, record: dict) -> None:
+    records = _linked_records(uns.get(family))
+    records[str(key)] = record
+    uns[family] = records

@@ -56,6 +56,9 @@ im = [
 snapfish = [
     "scikit-image>=0.20",
 ]
+multiome = [
+    "mudata>=0.2.0",
+]
 
 [tool.setuptools]
 include-package-data = true
