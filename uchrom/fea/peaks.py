@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Sequence
 
 import numpy as np
@@ -144,12 +145,12 @@ def call_macs_peaks_from_signal(
     negative: str = "clip",
     name: str = "peak",
 ) -> pd.DataFrame:
-    """Call peaks with a MACS-style dynamic Poisson model.
+    """Call peaks with U-Chrom's legacy dynamic Poisson approximation.
 
-    This adapts the core MACS idea to U-Chrom's binned signal tracks: observed
-    binned signal is tested against a dynamic local lambda using Poisson tail
-    probabilities, p-values are Benjamini-Hochberg adjusted, and significant
-    adjacent bins are merged into peak intervals.
+    Observed binned signal is tested against a dynamic local lambda using
+    Poisson tail probabilities, p-values are Benjamini-Hochberg adjusted, and
+    significant adjacent bins are merged into peak intervals. Use
+    ``call_macs_bdgpeaks_from_signal`` for the MACS3 ``bdgpeakcall`` port.
     """
     if pvalue is not None and qvalue is not None:
         if float(qvalue) == 0.05:
@@ -236,6 +237,156 @@ def call_macs_peaks_from_signal(
     out = out[out["n_bins"].astype(int) >= int(min_width_bins)].reset_index(drop=True)
     out["peak_id"] = [f"{name}_{i + 1}" for i in range(len(out))]
     return out.loc[:, _peak_columns()]
+
+
+def read_bedgraph(path: str | Path, *, signal_col: str = "score") -> pd.DataFrame:
+    """Read a MACS-compatible bedGraph score track into an interval table."""
+    rows: list[dict[str, object]] = []
+    with Path(path).open() as handle:
+        for line in handle:
+            line = line.strip()
+            if not line or line.startswith(("#", "track", "browse")):
+                continue
+            fields = line.split()
+            if len(fields) < 4:
+                raise ValueError(f"bedGraph line must have at least 4 columns: {line!r}")
+            rows.append({
+                "chrom": fields[0],
+                "start": int(fields[1]),
+                "end": int(fields[2]),
+                signal_col: float(fields[3]),
+            })
+    return pd.DataFrame(rows, columns=["chrom", "start", "end", signal_col])
+
+
+def call_macs_bdgpeaks_from_signal(
+    signal_table: pd.DataFrame,
+    *,
+    signal_col: str = "score",
+    cutoff: float = 5.0,
+    min_length: int = 200,
+    max_gap: int = 30,
+    name: str = "MACS",
+    name_prefix: str | None = None,
+) -> pd.DataFrame:
+    """Call peaks using a Python port of MACS3 ``bdgpeakcall``.
+
+    This mirrors MACS3's ``bedGraphTrackI.call_peaks`` behavior for score
+    tracks: regions with values at or above ``cutoff`` are merged when the
+    intervening gap is at most ``max_gap`` bases, peaks shorter than
+    ``min_length`` bases are discarded, and the summit follows MACS3's
+    tie-breaking rule. The port follows MACS3's BSD-licensed ``bdgpeakcall``
+    and narrowPeak semantics without vendoring the MACS3 package at runtime.
+    """
+    if signal_col not in signal_table.columns:
+        raise ValueError(f"signal table missing signal column: {signal_col}")
+    if min_length < 1:
+        raise ValueError("min_length must be >= 1")
+    if max_gap < 0:
+        raise ValueError("max_gap must be >= 0")
+
+    table = _normalise_intervals(signal_table)
+    table[signal_col] = pd.to_numeric(signal_table[signal_col], errors="coerce").to_numpy()
+    segments = _macs_bdg_segments(table, signal_col=signal_col, baseline_value=0.0)
+
+    rows: list[dict[str, object]] = []
+    for chrom in sorted(segments):
+        _append_macs_bdgpeak_rows(
+            rows,
+            chrom=chrom,
+            segments=segments[chrom],
+            cutoff=float(cutoff),
+            min_length=int(min_length),
+            max_gap=int(max_gap),
+            signal_col=signal_col,
+            name=name,
+            name_prefix=name_prefix,
+        )
+
+    out = pd.DataFrame(rows, columns=_peak_columns())
+    if out.empty:
+        return out
+    out["peak_id"] = [f"{name}_{i + 1}" for i in range(len(out))]
+    return out.loc[:, _peak_columns()]
+
+
+def call_macs_bdgpeaks_from_bedgraph(
+    path: str | Path,
+    *,
+    signal_col: str = "score",
+    cutoff: float = 5.0,
+    min_length: int = 200,
+    max_gap: int = 30,
+    name: str = "MACS",
+    name_prefix: str | None = None,
+) -> pd.DataFrame:
+    """Read a bedGraph file and call MACS3 ``bdgpeakcall``-compatible peaks."""
+    return call_macs_bdgpeaks_from_signal(
+        read_bedgraph(path, signal_col=signal_col),
+        signal_col=signal_col,
+        cutoff=cutoff,
+        min_length=min_length,
+        max_gap=max_gap,
+        name=name,
+        name_prefix=name_prefix,
+    )
+
+
+def macs_bdgpeaks_to_narrowpeak(
+    peaks: pd.DataFrame,
+    *,
+    name: str = "MACS",
+    name_prefix: str | None = None,
+    trackline: bool = False,
+    score_column: str = "score",
+) -> str:
+    """Render MACS ``bdgpeakcall``-compatible peaks as narrowPeak text."""
+    if name_prefix is None:
+        name_prefix = f"{name}_narrowPeak"
+    try:
+        peak_prefix = name_prefix % name
+    except Exception:
+        peak_prefix = name_prefix
+
+    lines: list[str] = []
+    if trackline:
+        lines.append(f'track type=narrowPeak name="{name}" description="{name}" nextItemButton=on')
+    if peaks is None or peaks.empty:
+        return "\n".join(lines) + ("\n" if lines else "")
+
+    table = _normalise_peaks(peaks).copy()
+    for column in [score_column, "fold_enrichment", "summit_pvalue", "summit_qvalue", "summit"]:
+        if column in peaks.columns:
+            table[column] = pd.to_numeric(peaks[column], errors="coerce").to_numpy()
+    table["peak_order"] = np.arange(len(table))
+
+    n_peak = 0
+    for chrom in sorted(table["chrom"].unique()):
+        sub = table[table["chrom"] == chrom].sort_values(["start", "end", "peak_order"])
+        for _, peak in sub.iterrows():
+            n_peak += 1
+            summit = int(peak["summit"]) if np.isfinite(float(peak.get("summit", np.nan))) else -1
+            summit_offset = -1 if summit == -1 else summit - int(peak["start"])
+            score = int(10 * float(peak.get(score_column, 0.0)))
+            fc = float(peak.get("fold_enrichment", 0.0))
+            pscore = float(peak.get("summit_pvalue", 0.0))
+            qscore = float(peak.get("summit_qvalue", 0.0))
+            lines.append(
+                "%s\t%d\t%d\t%s%d\t%d\t.\t%.6g\t%.6g\t%.6g\t%d"
+                % (
+                    chrom,
+                    int(peak["start"]),
+                    int(peak["end"]),
+                    peak_prefix,
+                    n_peak,
+                    score,
+                    fc,
+                    pscore,
+                    qscore,
+                    summit_offset,
+                )
+            )
+    return "\n".join(lines) + "\n"
 
 
 def compute_peak_features(
@@ -342,6 +493,9 @@ def call_peaks_from_track(
     agg: str = "mean",
     threshold: float | None = None,
     quantile: float = 0.95,
+    cutoff: float | None = None,
+    min_length: int = 200,
+    max_gap: int = 30,
     qvalue: float | None = 0.05,
     pvalue: float | None = None,
     genome_size: int | float | None = None,
@@ -370,8 +524,15 @@ def call_peaks_from_track(
     method = str(method).lower()
     if method == "auto":
         method = "threshold" if threshold is not None else "macs"
-    if method not in {"threshold", "macs", "macs_style"}:
-        raise ValueError("method must be one of: auto, threshold, macs")
+    method_aliases = {
+        "macs": "macs_bdgpeakcall",
+        "bdgpeakcall": "macs_bdgpeakcall",
+        "macs3_bdgpeakcall": "macs_bdgpeakcall",
+        "macs_style": "macs_poisson",
+    }
+    method = method_aliases.get(method, method)
+    if method not in {"threshold", "macs_bdgpeakcall", "macs_poisson"}:
+        raise ValueError("method must be one of: auto, threshold, macs, macs_bdgpeakcall, macs_poisson")
 
     if method == "threshold":
         signal = aggregate_track_by_interval(cdata, track, agg=agg)
@@ -381,6 +542,18 @@ def call_peaks_from_track(
             quantile=quantile,
             min_width_bins=min_width_bins,
             max_gap_bins=max_gap_bins,
+            name=feature_name,
+        )
+    elif method == "macs_bdgpeakcall":
+        if control_track is not None:
+            raise ValueError("control_track is only supported by method='macs_poisson'")
+        signal = aggregate_track_by_interval(cdata, track, agg=agg, signal_col=track)
+        peaks = call_macs_bdgpeaks_from_signal(
+            signal,
+            signal_col=track,
+            cutoff=5.0 if cutoff is None else cutoff,
+            min_length=min_length,
+            max_gap=max_gap,
             name=feature_name,
         )
     else:
@@ -436,10 +609,13 @@ def call_peaks_from_track(
         "control_track": control_track,
         "coordinate_convention": "0-based half-open",
         "parameters": {
-            "method": "macs_style" if method in {"macs", "macs_style"} else "threshold",
+            "method": method,
             "aggregation": agg,
             "threshold": threshold,
             "quantile": quantile,
+            "cutoff": cutoff,
+            "min_length": min_length,
+            "max_gap": max_gap,
             "qvalue": qvalue,
             "pvalue": pvalue,
             "genome_size": genome_size,
@@ -458,6 +634,157 @@ def call_peaks_from_track(
         "created_by": "uchrom.fea.peaks",
     })
     return peaks
+
+
+def _macs_bdg_segments(
+    table: pd.DataFrame,
+    *,
+    signal_col: str,
+    baseline_value: float,
+) -> dict[str, list[tuple[int, int, float]]]:
+    """Build MACS3-style bedGraph transition segments from sorted intervals."""
+    segments: dict[str, list[tuple[int, int, float]]] = {}
+    for _, row in table.sort_values(["chrom", "start", "end"]).iterrows():
+        chrom = str(row["chrom"])
+        start = int(row["start"])
+        end = int(row["end"])
+        value = float(row[signal_col])
+        if end <= 0:
+            continue
+        if start < 0:
+            start = 0
+        chrom_segments = segments.setdefault(chrom, [])
+        if not chrom_segments:
+            if start:
+                chrom_segments.append((0, start, float(baseline_value)))
+            chrom_segments.append((start, end, value))
+            continue
+        previous_start, previous_end, previous_value = chrom_segments[-1]
+        if previous_value == value:
+            chrom_segments[-1] = (previous_start, end, value)
+        else:
+            chrom_segments.append((previous_end, end, value))
+    return segments
+
+
+def _append_macs_bdgpeak_rows(
+    rows: list[dict[str, object]],
+    *,
+    chrom: str,
+    segments: list[tuple[int, int, float]],
+    cutoff: float,
+    min_length: int,
+    max_gap: int,
+    signal_col: str,
+    name: str,
+    name_prefix: str | None,
+) -> None:
+    peak_content: list[tuple[int, int, float]] | None = None
+    x = 0
+    for segment in segments:
+        x += 1
+        if segment[2] >= cutoff:
+            peak_content = [segment]
+            break
+
+    if peak_content is None:
+        return
+
+    for segment in segments[x:]:
+        start, _end, value = segment
+        if value < cutoff:
+            continue
+        if start - peak_content[-1][1] <= max_gap:
+            peak_content.append(segment)
+        else:
+            _append_one_macs_bdgpeak(
+                rows,
+                peak_content,
+                chrom=chrom,
+                cutoff=cutoff,
+                min_length=min_length,
+                max_gap=max_gap,
+                signal_col=signal_col,
+                name=name,
+                name_prefix=name_prefix,
+            )
+            peak_content = [segment]
+
+    _append_one_macs_bdgpeak(
+        rows,
+        peak_content,
+        chrom=chrom,
+        cutoff=cutoff,
+        min_length=min_length,
+        max_gap=max_gap,
+        signal_col=signal_col,
+        name=name,
+        name_prefix=name_prefix,
+    )
+
+
+def _append_one_macs_bdgpeak(
+    rows: list[dict[str, object]],
+    peak_content: list[tuple[int, int, float]],
+    *,
+    chrom: str,
+    cutoff: float,
+    min_length: int,
+    max_gap: int,
+    signal_col: str,
+    name: str,
+    name_prefix: str | None,
+) -> None:
+    peak_start = int(peak_content[0][0])
+    peak_end = int(peak_content[-1][1])
+    peak_length = peak_end - peak_start
+    if peak_length < min_length:
+        return
+
+    tsummit: list[int] = []
+    summit_value = 0.0
+    for start, end, value in peak_content:
+        if (not summit_value) or summit_value < value:
+            tsummit = [int((end + start) / 2)]
+            summit_value = float(value)
+        elif summit_value == value:
+            tsummit.append(int((end + start) / 2))
+    summit = tsummit[int((len(tsummit) + 1) / 2) - 1]
+    widths = np.array([end - start for start, end, _value in peak_content], dtype=float)
+    values = np.array([value for _start, _end, value in peak_content], dtype=float)
+    mean_signal = float(np.average(values, weights=widths)) if widths.sum() else float(np.nanmean(values))
+    peak_prefix = f"{name}_narrowPeak" if name_prefix is None else name_prefix
+    rows.append({
+        "peak_id": f"{name}_{len(rows) + 1}",
+        "chrom": str(chrom),
+        "start": peak_start,
+        "end": peak_end,
+        "n_bins": int(len(peak_content)),
+        "score": float(summit_value),
+        "max_signal": float(np.nanmax(values)),
+        "mean_signal": mean_signal,
+        "threshold": float(cutoff),
+        "signal_col": str(signal_col),
+        "method": "macs_bdgpeakcall",
+        "pvalue": np.nan,
+        "qvalue": np.nan,
+        "fold_enrichment": 0.0,
+        "lambda": np.nan,
+        "pileup": 0.0,
+        "summit": int(summit),
+        "summit_signal": float(summit_value),
+        "summit_pvalue": 0.0,
+        "summit_qvalue": 0.0,
+        "pvalue_cutoff": np.nan,
+        "qvalue_cutoff": np.nan,
+        "control_col": "",
+        "control_scale": np.nan,
+        "min_length": int(min_length),
+        "max_gap": int(max_gap),
+        "summit_offset": int(summit - peak_start),
+        "narrowpeak_score": int(10 * float(summit_value)),
+        "macs_name_prefix": peak_prefix,
+    })
 
 
 def _append_peak_row(
@@ -584,7 +911,7 @@ def _append_one_macs_peak(
         "mean_signal": float(np.nanmean(observed)),
         "threshold": np.nan,
         "signal_col": str(signal_col),
-        "method": "macs_style",
+        "method": "macs_poisson",
         "pvalue": min_p,
         "qvalue": min_q,
         "fold_enrichment": float(np.nanmax(fold)),
@@ -703,7 +1030,7 @@ def _scaled_counts(values: np.ndarray, scale: float, negative: str) -> np.ndarra
         raise ValueError("negative must be one of: clip, raise, shift")
     out = np.asarray(values, dtype=float) * float(scale)
     if negative == "raise" and np.nanmin(out) < 0:
-        raise ValueError("MACS-style peak calling requires non-negative signal")
+        raise ValueError("macs_poisson peak calling requires non-negative signal")
     if negative == "clip":
         out = np.where(np.isfinite(out), np.maximum(out, 0.0), np.nan)
     elif negative == "shift":
@@ -805,6 +1132,11 @@ def _peak_columns() -> list[str]:
         "qvalue_cutoff",
         "control_col",
         "control_scale",
+        "min_length",
+        "max_gap",
+        "summit_offset",
+        "narrowpeak_score",
+        "macs_name_prefix",
     ]
 
 
@@ -813,8 +1145,12 @@ __all__ = [
     "add_peak_features",
     "aggregate_track_by_interval",
     "aggregate_tracks_by_interval",
+    "call_macs_bdgpeaks_from_bedgraph",
+    "call_macs_bdgpeaks_from_signal",
     "call_macs_peaks_from_signal",
     "call_peaks_from_signal",
     "call_peaks_from_track",
     "compute_peak_features",
+    "macs_bdgpeaks_to_narrowpeak",
+    "read_bedgraph",
 ]

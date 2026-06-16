@@ -33,8 +33,8 @@ generation. Examples include:
   N fraction, and G-quadruplex motif density
 - genome annotation tracks from GTF or BED, such as gene body overlap, exon
   overlap, promoter overlap, nearest TSS distance, and gene biotype overlap
-- peak tracks from existing signal tracks, such as MACS-style high-confidence
-  H3K27ac or RNAPIISer2-P domains, optionally using a matched control track
+- peak tracks from existing score tracks, such as MACS3 `bdgpeakcall`-compatible
+  H3K27ac or RNAPIISer2-P domains
 - projected interval-level features that make notebook analysis simple, such
   as distance to the nearest TAD boundary or loop anchor membership
 
@@ -234,18 +234,20 @@ peaks = call_peaks_from_track(
     cdata,
     "H3K27ac",
     method="macs",
-    qvalue=0.05,
-    small_local_window_bins=10,
-    large_local_window_bins=100,
+    cutoff=5.0,
+    min_length=200,
+    max_gap=30,
 )
 ```
 
-The MACS-style caller adapts MACS' dynamic Poisson background idea to binned
-U-Chrom tracks. It aggregates repeated spot rows to genomic bins, estimates a
-global and local lambda, computes Poisson tail p-values, applies
-Benjamini-Hochberg q-values, and merges adjacent significant bins. For legacy
-or exploratory use, `method="threshold"` keeps the simpler quantile/threshold
-caller.
+`method="macs"` is a MACS3 `bdgpeakcall`-compatible port for single score
+tracks. It aggregates repeated spot rows to genomic bins, applies MACS'
+bedGraph cutoff/min-length/max-gap scan, uses the same summit tie-breaking rule,
+and can be rendered in MACS-compatible narrowPeak format. This is intended for
+tracks that already encode a score where larger means more peak-like. For
+legacy exploratory use, `method="macs_poisson"` keeps U-Chrom's older binned
+dynamic-Poisson approximation, and `method="threshold"` keeps the simpler
+quantile/threshold caller.
 
 Auto-discovery convenience:
 

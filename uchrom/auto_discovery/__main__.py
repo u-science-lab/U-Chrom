@@ -106,12 +106,19 @@ def main(argv: list[str] | None = None) -> int:
         "--peak-control-track",
         action="append",
         default=[],
-        help="Optional control/background track for MACS-style peak calling. Repeatable.",
+        help="Optional control/background track for method='macs_poisson'. Repeatable.",
     )
-    enrich_p.add_argument("--peak-method", default="auto", choices=["auto", "macs", "threshold"])
+    enrich_p.add_argument(
+        "--peak-method",
+        default="auto",
+        choices=["auto", "macs", "macs_bdgpeakcall", "bdgpeakcall", "macs_poisson", "threshold"],
+    )
     enrich_p.add_argument("--peak-agg", default="mean", choices=["mean", "median", "max", "min", "sum"])
     enrich_p.add_argument("--peak-threshold", type=float, default=None)
     enrich_p.add_argument("--peak-quantile", type=float, default=0.95)
+    enrich_p.add_argument("--peak-cutoff", type=float, default=None, help="MACS bdgpeakcall score cutoff; defaults to 5.0.")
+    enrich_p.add_argument("--peak-min-length", type=int, default=200, help="MACS bdgpeakcall minimum peak length in bases.")
+    enrich_p.add_argument("--peak-max-gap", type=int, default=30, help="MACS bdgpeakcall maximum merge gap in bases.")
     enrich_p.add_argument("--peak-qvalue", type=float, default=0.05)
     enrich_p.add_argument("--peak-pvalue", type=float, default=None)
     enrich_p.add_argument("--peak-genome-size", type=float, default=None)
@@ -365,6 +372,9 @@ def main(argv: list[str] | None = None) -> int:
                 agg=args.peak_agg,
                 threshold=args.peak_threshold,
                 quantile=args.peak_quantile,
+                cutoff=args.peak_cutoff,
+                min_length=args.peak_min_length,
+                max_gap=args.peak_max_gap,
                 qvalue=(None if args.peak_pvalue is not None else args.peak_qvalue),
                 pvalue=args.peak_pvalue,
                 genome_size=args.peak_genome_size,
@@ -382,10 +392,12 @@ def main(argv: list[str] | None = None) -> int:
             )
             method = "threshold" if args.peak_method == "auto" and args.peak_threshold is not None else args.peak_method
             if method == "auto":
-                method = "macs"
+                method = "macs_bdgpeakcall"
+            elif method in {"macs", "bdgpeakcall"}:
+                method = "macs_bdgpeakcall"
             summary["peak_tracks"][track] = {
                 "n_peaks": int(len(peaks)),
-                "method": "macs_style" if method == "macs" else method,
+                "method": method,
                 "control_track": control_track,
             }
         if args.store_schema:
