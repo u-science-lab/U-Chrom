@@ -44,6 +44,7 @@ class DiscoveryRunConfig:
     stop_on_error: bool = False
     store_schema: bool = False
     dataset_name: str | None = None
+    enrichment: dict[str, Any] | None = None
     prior_graph_path: str | Path | None = None
     direction_context_path: str | Path | None = None
     frontier_context_path: str | Path | None = None
@@ -70,6 +71,8 @@ class DiscoveryRunResult:
     graph_html_path: str | None = None
     directions_path: str | None = None
     direction_summary_path: str | None = None
+    enriched_h5cd_path: str | None = None
+    enrichment_summary_path: str | None = None
 
     @property
     def frontiers_path(self) -> str | None:
@@ -89,15 +92,36 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
 
     from uchrom import ChromData
 
-    h5cd_path = Path(config.h5cd_path)
+    input_h5cd_path = Path(config.h5cd_path)
+    h5cd_path = input_h5cd_path
     output_dir = Path(config.output_dir)
     notebooks_dir = output_dir / "notebooks"
     output_dir.mkdir(parents=True, exist_ok=True)
     notebooks_dir.mkdir(parents=True, exist_ok=True)
 
-    cdata = ChromData.read(h5cd_path)
+    cdata = ChromData.read(input_h5cd_path)
+    enrichment_summary: dict[str, Any] = {"enabled": False}
+    enrichment_summary_path: Path | None = None
+    enriched_h5cd_path: Path | None = None
+    if config.enrichment is not None:
+        from .enrichment import DiscoveryEnrichmentConfig, enrich_for_discovery
+
+        enrichment_config = (
+            config.enrichment
+            if isinstance(config.enrichment, DiscoveryEnrichmentConfig)
+            else DiscoveryEnrichmentConfig(**dict(config.enrichment))
+        )
+        enrichment_summary = enrich_for_discovery(cdata, enrichment_config)
+        if enrichment_summary.get("enabled"):
+            enriched_h5cd_path = output_dir / "enriched.h5cd"
+            h5cd_path = enriched_h5cd_path
+            enrichment_summary["enriched_h5cd_path"] = str(enriched_h5cd_path)
+            enrichment_summary_path = output_dir / "enrichment_summary.json"
+            enrichment_summary_path.write_text(
+                json.dumps(enrichment_summary, indent=2, default=_json_default) + "\n"
+            )
     schema = cdata.build_discovery_schema(store=config.store_schema, dataset_name=config.dataset_name)
-    if config.store_schema:
+    if config.store_schema or enriched_h5cd_path is not None:
         cdata.write(h5cd_path)
 
     agent_records_path = output_dir / "agent_records.jsonl"
@@ -331,7 +355,9 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
             "n_verified": len(verified),
         })
         cdata.uns["auto_discovery_runs"] = runs
-        cdata.write(h5cd_path)
+        cdata.write(input_h5cd_path)
+        if enriched_h5cd_path is not None:
+            cdata.write(enriched_h5cd_path)
     return DiscoveryRunResult(
         output_dir=str(output_dir),
         n_generated=len(ideas),
@@ -349,6 +375,8 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
         graph_html_path=str(graph_html_path),
         directions_path=direction_artifacts["directions_json"],
         direction_summary_path=direction_artifacts["directions_markdown"],
+        enriched_h5cd_path=str(enriched_h5cd_path) if enriched_h5cd_path is not None else None,
+        enrichment_summary_path=str(enrichment_summary_path) if enrichment_summary_path is not None else None,
     )
 
 

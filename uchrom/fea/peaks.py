@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from .project import INTERVAL_COLUMNS, project_interval_features_to_spots, unique_spot_intervals
-from .registry import append_feature_registry_entry
+from .registry import append_feature_registry_entry, table_provenance
 
 
 PEAK_FEATURE_COLUMNS = ("overlap", "count", "distance")
@@ -479,6 +479,7 @@ def add_peak_features(
             "projected_to_tracks": bool(project),
             "track_prefix": prefix,
         },
+        "outputs": table_provenance(table, value_columns=value_columns),
         "created_by": "uchrom.fea.peaks",
     })
     return table
@@ -630,6 +631,10 @@ def call_peaks_from_track(
             "negative": negative,
             "projected_to_tracks": bool(project),
             "track_prefix": prefix,
+        },
+        "outputs": {
+            "peaks": table_provenance(peaks, value_columns=[c for c in ("score", "summit_signal", "qvalue") if c in peaks]),
+            "features": table_provenance(table, value_columns=value_columns),
         },
         "created_by": "uchrom.fea.peaks",
     })

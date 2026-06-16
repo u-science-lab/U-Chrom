@@ -42,6 +42,7 @@ class IterativeDiscoveryConfig:
     execute: bool = True
     store_schema: bool = False
     dataset_name: str | None = None
+    enrichment: dict[str, Any] | None = None
     knowledge_mode: str = "knowledge_guided"
     claims_paths: list[str | Path] = field(default_factory=list)
 
@@ -106,7 +107,11 @@ def run_iterative_auto_discovery(
     prior_direction_path: Path | None = None
     for idx in range(1, int(config.iterations) + 1):
         run_dir = output_dir / f"iteration_{idx:02d}"
-        schema = _schema_for_h5cd(config.h5cd_path, dataset_name=config.dataset_name)
+        schema = _schema_for_h5cd(
+            config.h5cd_path,
+            dataset_name=config.dataset_name,
+            enrichment=config.enrichment,
+        )
         claims_paths = _active_claims_paths(output_dir, config)
         if run_dirs or claims_paths or _schema_has_knowledge_seeds(schema):
             prior_dir = output_dir / f"iteration_{idx:02d}_prior"
@@ -141,6 +146,7 @@ def run_iterative_auto_discovery(
             execute=config.execute,
             store_schema=config.store_schema,
             dataset_name=config.dataset_name,
+            enrichment=config.enrichment,
             prior_graph_path=prior_graph_path,
             direction_context_path=prior_direction_path,
             claims_paths=claims_paths,
@@ -170,7 +176,11 @@ def run_iterative_auto_discovery(
         claims_paths=claims_paths,
     )
     final_graph_paths = write_idea_graph_artifacts(final_graph, output_dir)
-    final_schema = _schema_for_h5cd(config.h5cd_path, dataset_name=config.dataset_name)
+    final_schema = _schema_for_h5cd(
+        config.h5cd_path,
+        dataset_name=config.dataset_name,
+        enrichment=config.enrichment,
+    )
     final_directions = plan_discovery_directions(final_graph, final_schema, max_directions=12)
     final_direction_paths = write_direction_artifacts(final_directions, output_dir)
     html_path = write_idea_graph_html(
@@ -196,10 +206,19 @@ def run_iterative_auto_discovery(
     return result
 
 
-def _schema_for_h5cd(path: str | Path, *, dataset_name: str | None) -> dict[str, Any]:
+def _schema_for_h5cd(
+    path: str | Path,
+    *,
+    dataset_name: str | None,
+    enrichment: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     from uchrom import ChromData
 
     cdata = ChromData.read(path)
+    if enrichment is not None:
+        from .enrichment import DiscoveryEnrichmentConfig, enrich_for_discovery
+
+        enrich_for_discovery(cdata, DiscoveryEnrichmentConfig(**dict(enrichment)))
     return cdata.build_discovery_schema(store=False, dataset_name=dataset_name)
 
 

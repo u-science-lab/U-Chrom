@@ -64,6 +64,7 @@ def build_discovery_schema(
     track_groups = _track_groups(tracks)
     result_tables = _result_tables(cdata.results)
     feature_registry = _metadata_records(cdata.uns.get("feature_registry"))
+    feature_summary = _feature_summary(feature_registry, track_groups, result_tables)
     genes = linked.get("var_names", {"n": 0, "values": [], "truncated": False, "sha1": ""})
     references = _metadata_records(cdata.uns.get("dataset_references"))
     user_annotations = _metadata_records(cdata.uns.get("user_annotations"))
@@ -106,6 +107,7 @@ def build_discovery_schema(
             "n_tracks": len(tracks),
             "n_track_groups": len(track_groups),
             "n_feature_registry_entries": len(feature_registry),
+            "n_enriched_feature_tracks": int(sum(info.get("n_tracks", 0) for info in feature_summary.values())),
             "n_references": len(references),
             "n_user_annotations": len(user_annotations),
         },
@@ -194,6 +196,7 @@ def build_discovery_schema(
         },
         "fields": fields,
         "feature_registry": feature_registry,
+        "feature_summary": feature_summary,
         "linked_adata": linked,
         "catalogs": {
             "chroms": _catalog(chroms, max_catalog_items),
@@ -343,6 +346,17 @@ def schema_to_agent_context(schema: Mapping[str, Any], *, max_items: int = 40) -
             if item.get("feature_group")
         })
         lines.append(f"feature_registry: {len(registry)} entries; groups={', '.join(groups)}")
+    feature_summary = schema.get("feature_summary", {})
+    if feature_summary:
+        lines.extend(["", "enriched_features:"])
+        for name, info in sorted(feature_summary.items()):
+            tracks = _format_catalog({"n": info.get("n_tracks", 0), "values": info.get("tracks", [])}, max_items)
+            features = _format_catalog({"n": info.get("n_features", 0), "values": info.get("features", [])}, max_items)
+            sources = ", ".join(map(str, info.get("source_paths", [])[:3])) or "none"
+            lines.append(
+                f"- {name}: tracks={tracks}; features={features}; "
+                f"results={', '.join(map(str, info.get('result_keys', []))) or 'none'}; sources={sources}"
+            )
     if linked.get("present"):
         lines.append(f"linked_adata: shape={linked.get('shape')}, X={linked.get('x_type')}")
         lines.append(f"genes: {_format_catalog(catalogs.get('genes', {}), max_items)}")
@@ -498,6 +512,77 @@ def _knowledge_seed_context(
         "citation_seeds": citation_seeds,
         "annotation_seeds": annotation_seeds,
     }
+
+
+def _feature_summary(
+    feature_registry: list[dict[str, Any]],
+    track_groups: Mapping[str, list[str]],
+    result_tables: Mapping[str, Any],
+) -> dict[str, Any]:
+    mapping = {
+        "sequence": ("seq", {"sequence"}),
+        "annotation": ("gtf", {"annotation"}),
+        "structure": ("strc", {"structure", "structural"}),
+        "peaks": ("peak", {"peaks"}),
+    }
+    summary: dict[str, Any] = {}
+    for name, (prefix, registry_names) in mapping.items():
+        records = [
+            record for record in feature_registry
+            if str(record.get("feature_group")) in registry_names
+        ]
+        tracks = sorted(set(map(str, track_groups.get(prefix, []))))
+        features = sorted(set(
+            str(feature)
+            for record in records
+            for feature in (record.get("features") or [])
+            if feature not in (None, "")
+        ) | set(tracks))
+        result_keys = sorted(set(
+            str(record.get("result_key"))
+            for record in records
+            if record.get("result_key")
+        ))
+        source_results = sorted(set(
+            str(source)
+            for record in records
+            for source in (record.get("source_results") or [])
+            if source not in (None, "")
+        ))
+        source_paths = sorted(set(
+            str(record.get("source_path"))
+            for record in records
+            if record.get("source_path")
+        ))
+        source_hashes = sorted(set(
+            str(record.get("source_sha256"))
+            for record in records
+            if record.get("source_sha256")
+        ))
+        created_by = sorted(set(
+            str(record.get("created_by"))
+            for record in records
+            if record.get("created_by")
+        ))
+        present = bool(records or tracks or result_keys or source_results)
+        if not present and name == "structure":
+            present = any(_result_family(key) in {"tads", "loops", "compartments"} for key in result_tables)
+        if not present and name == "peaks":
+            present = any(_result_family(key) == "peaks" for key in result_tables)
+        summary[name] = {
+            "present": bool(present),
+            "n_registry_entries": len(records),
+            "n_tracks": len(tracks),
+            "tracks": tracks,
+            "n_features": len(features),
+            "features": features,
+            "result_keys": result_keys,
+            "source_results": source_results,
+            "source_paths": source_paths,
+            "source_sha256": source_hashes,
+            "created_by": created_by,
+        }
+    return summary
 
 
 def _format_reference(ref: Mapping[str, Any]) -> str:

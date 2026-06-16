@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import gzip
-import hashlib
 import re
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -12,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from .project import INTERVAL_COLUMNS, project_interval_features_to_spots, unique_spot_intervals
-from .registry import append_feature_registry_entry
+from .registry import append_feature_registry_entry, table_provenance
 
 
 DEFAULT_SEQUENCE_FEATURES = (
@@ -148,13 +147,13 @@ def add_sequence_features(
             "projected_to_tracks": bool(project),
             "track_prefix": prefix,
         },
+        "outputs": table_provenance(table, value_columns=requested),
         "created_by": "uchrom.fea.sequence",
+        "hash_source": bool(hash_source),
     }
     genome = cdata.uns.get("genome_assembly")
     if genome is not None:
         entry["genome_assembly"] = str(genome)
-    if hash_source:
-        entry["source_sha256"] = _file_sha256(fasta)
     append_feature_registry_entry(cdata, entry)
     return table
 
@@ -289,17 +288,6 @@ def _prefixed_name(name: str, prefix: str | None) -> str:
     if name.startswith(prefix + "."):
         return name
     return f"{prefix}.{name}"
-
-
-def _file_sha256(path: str | Path, *, block_size: int = 1024 * 1024) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        while True:
-            block = handle.read(block_size)
-            if not block:
-                break
-            digest.update(block)
-    return digest.hexdigest()
 
 
 __all__ = [

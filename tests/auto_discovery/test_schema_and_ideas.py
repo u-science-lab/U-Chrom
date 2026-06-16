@@ -94,6 +94,10 @@ def test_discovery_schema_exposes_enriched_feature_groups():
     assert schema["modalities"]["structure_annotations"]["present"]
     assert schema["modalities"]["peak_features"]["present"]
     assert schema["summary"]["n_feature_registry_entries"] == 3
+    assert schema["summary"]["n_enriched_feature_tracks"] == 4
+    assert schema["feature_summary"]["sequence"]["tracks"] == ["seq.gc_fraction"]
+    assert schema["feature_summary"]["annotation"]["features"] == ["gtf.nearest_tss_distance"]
+    assert schema["feature_summary"]["peaks"]["n_tracks"] == 1
     assert schema["catalogs"]["track_groups"]["seq"]["values"] == ["seq.gc_fraction"]
     assert schema["catalogs"]["track_groups"]["peak"]["values"] == ["peak.h3k27me3_overlap"]
     assert "H2A" not in schema["catalogs"]["track_groups"]
@@ -109,6 +113,7 @@ def test_discovery_schema_exposes_enriched_feature_groups():
     assert "track_groups:" in context
     assert "result_tables:" in context
     assert "feature_registry:" in context
+    assert "enriched_features:" in context
 
 
 def test_discovery_schema_includes_linked_anndata():
@@ -706,6 +711,53 @@ print(json.dumps(analysis_summary, indent=2))
     out = ChromData.read(h5cd_path)
     assert out.uns["auto_discovery_graph"]["latest_graph_path"] == result.graph_path
     assert out.uns["auto_discovery_runs"][-1]["graph_path"] == result.graph_path
+
+
+def test_run_auto_discovery_enriches_before_schema_and_notebooks(tmp_path):
+    from uchrom import ChromData
+    from uchrom.auto_discovery import DiscoveryRunConfig, run_auto_discovery
+
+    cdata = _make_cd()
+    h5cd_path = tmp_path / "data.h5cd"
+    cdata.write(h5cd_path)
+    fasta = tmp_path / "toy.fa"
+    fasta.write_text(
+        ">chr1\n" + "GCGCGCGCATATATATNNNN" * 4000 + "\n"
+        ">chr2\n" + "ATATATATGCGCGCGCNNNN" * 4000 + "\n"
+    )
+    gtf = tmp_path / "toy.gtf"
+    gtf.write_text(
+        "chr1\tunit\tgene\t1\t1000\t.\t+\t.\tgene_id \"g1\"; gene_name \"Gene1\"; gene_biotype \"protein_coding\";\n"
+        "chr1\tunit\texon\t1\t500\t.\t+\t.\tgene_id \"g1\"; gene_name \"Gene1\";\n"
+        "chr2\tunit\tgene\t25001\t26000\t.\t-\t.\tgene_id \"g2\"; gene_name \"Gene2\"; gene_biotype \"protein_coding\";\n"
+    )
+    ideas_path = tmp_path / "ideas.jsonl"
+    ideas_path.write_text("")
+
+    result = run_auto_discovery(DiscoveryRunConfig(
+        h5cd_path=h5cd_path,
+        output_dir=tmp_path / "run",
+        ideas_path=ideas_path,
+        execute=False,
+        store_schema=True,
+        enrichment={
+            "fasta": str(fasta),
+            "sequence_features": ["gc_fraction", "n_fraction"],
+            "gtf": str(gtf),
+            "annotation_features": ["gene_body_overlap_bp", "nearest_tss_distance"],
+        },
+    ))
+
+    assert result.enriched_h5cd_path is not None
+    assert result.enrichment_summary_path is not None
+    enriched = ChromData.read(result.enriched_h5cd_path)
+    assert "seq.gc_fraction" in enriched.tracks
+    assert "gtf.nearest_tss_distance" in enriched.tracks
+    assert enriched.discovery_schema["feature_summary"]["sequence"]["source_paths"] == [str(fasta)]
+    assert enriched.discovery_schema["feature_summary"]["annotation"]["source_paths"] == [str(gtf)]
+    registry = enriched.uns["feature_registry"]
+    assert all("outputs" in entry for entry in registry)
+    assert all("source_sha256" in entry for entry in registry if entry.get("source_path"))
 
 
 def test_build_idea_graph_from_run_artifacts(tmp_path):

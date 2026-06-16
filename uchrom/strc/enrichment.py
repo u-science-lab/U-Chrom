@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from uchrom.fea.project import INTERVAL_COLUMNS, project_interval_features_to_spots, unique_spot_intervals
-from uchrom.fea.registry import append_feature_registry_entry
+from uchrom.fea.registry import append_feature_registry_entry, table_provenance
 
 
 STRUCTURAL_FEATURE_COLUMNS = (
@@ -241,6 +241,7 @@ def add_structural_features(
             "projected_to_tracks": bool(project),
             "track_prefix": prefix,
         },
+        "outputs": table_provenance(table, value_columns=value_columns),
         "created_by": "uchrom.strc.enrichment",
     })
     return table

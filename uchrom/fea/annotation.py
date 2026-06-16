@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from .project import INTERVAL_COLUMNS, project_interval_features_to_spots, unique_spot_intervals
-from .registry import append_feature_registry_entry
+from .registry import append_feature_registry_entry, table_provenance
 
 
 DEFAULT_ANNOTATION_FEATURES = (
@@ -128,6 +128,7 @@ def add_annotation_features(
     store: bool = True,
     overwrite: bool = False,
     promoter_window: tuple[int, int] = (-2000, 500),
+    hash_source: bool = False,
 ) -> pd.DataFrame:
     """Compute annotation features for a ``ChromData`` object."""
     requested = _validate_features(features)
@@ -170,7 +171,9 @@ def add_annotation_features(
             "projected_to_tracks": bool(project),
             "track_prefix": prefix,
         },
+        "outputs": table_provenance(table, value_columns=requested),
         "created_by": "uchrom.fea.annotation",
+        "hash_source": bool(hash_source),
     }
     genome = cdata.uns.get("genome_assembly")
     if genome is not None:

@@ -22,6 +22,7 @@ from .direction import (
     plan_discovery_directions,
     write_direction_artifacts,
 )
+from .enrichment import DiscoveryEnrichmentConfig, enrich_for_discovery
 from .frontier import (
     DiscoveryFrontier,
     frontiers_to_agent_context,
@@ -67,6 +68,7 @@ __all__ = [
     "CLAIM_KNOWLEDGE_MODES",
     "ClaimRefreshResult",
     "DiscoveryDirection",
+    "DiscoveryEnrichmentConfig",
     "DiscoveryFrontier",
     "DiscoveryIdea",
     "EvidenceConclusion",
@@ -82,6 +84,7 @@ __all__ = [
     "classify_hypothesis_evidence",
     "create_exploration_notebook",
     "directions_to_agent_context",
+    "enrich_for_discovery",
     "execute_notebook_python",
     "frontiers_to_agent_context",
     "generate_openai_analysis_code",

@@ -168,6 +168,10 @@ The registry should also record projection behavior, such as whether the
 track was computed directly on `spots` intervals or copied from a canonical
 bin table.
 
+The registry entries now include creation time, U-Chrom version, feature count,
+output row/non-null summaries, and source SHA-256 digests when the enrichment
+stage receives local FASTA/GTF paths.
+
 ## Proposed APIs
 
 The public APIs should be useful even when no auto-discovery run happens.
@@ -252,15 +256,15 @@ quantile/threshold caller.
 Auto-discovery convenience:
 
 ```python
-from uchrom.auto_discovery.enrichment import enrich_for_discovery
+from uchrom.auto_discovery.enrichment import DiscoveryEnrichmentConfig, enrich_for_discovery
 
-cdata = enrich_for_discovery(
+summary = enrich_for_discovery(
     cdata,
-    fasta="genome.fa",
-    gtf="genes.gtf",
-    sequence=True,
-    annotation=True,
-    structure=True,
+    DiscoveryEnrichmentConfig(
+        fasta="genome.fa",
+        gtf="genes.gtf",
+        peak_tracks=["H3K27ac"],
+    ),
 )
 cdata.build_discovery_schema(store=True)
 ```
@@ -268,6 +272,21 @@ cdata.build_discovery_schema(store=True)
 The convenience layer should not implement the computations itself. It should
 coordinate existing U-Chrom functions, update provenance metadata, and rebuild
 the discovery schema.
+
+The runner uses the same layer as a default pre-discovery stage. For example:
+
+```bash
+python -m uchrom.auto_discovery run data.h5cd runs/example \
+  --fasta genome.fa \
+  --gtf genes.gtf \
+  --peak-track H3K27ac \
+  --store-schema
+```
+
+When enrichment is enabled, the run writes `enriched.h5cd` in the run
+directory and uses it for schema generation and notebooks. With
+`--store-schema`, the enriched features, schema, and graph metadata are also
+written back to the input `.h5cd`.
 
 ## Discovery Schema Extensions
 
@@ -307,6 +326,12 @@ schema["modalities"]["structure_annotations"] = {
     ],
 }
 ```
+
+The implemented schema also includes `feature_summary`, which groups enriched
+tracks by `sequence`, `annotation`, `structure`, and `peaks`, listing feature
+names, projected tracks, source paths, source hashes when available, and result
+keys. `schema_to_agent_context()` renders this as an `enriched_features`
+section for idea-generation agents.
 
 The schema should also include:
 

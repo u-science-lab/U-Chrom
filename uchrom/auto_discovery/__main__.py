@@ -10,6 +10,97 @@ from dataclasses import asdict
 from .runner import DiscoveryRunConfig, run_auto_discovery
 
 
+def _add_run_enrichment_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--fasta", default=None, help="FASTA path for default pre-discovery sequence enrichment.")
+    parser.add_argument("--sequence-feature", action="append", default=None)
+    parser.add_argument("--gtf", default=None, help="GTF/GFF path for default pre-discovery annotation enrichment.")
+    parser.add_argument("--annotation-feature", action="append", default=None)
+    parser.add_argument("--promoter-upstream", type=int, default=-2000)
+    parser.add_argument("--promoter-downstream", type=int, default=500)
+    parser.add_argument("--structure", action="append", choices=["tads", "loops", "compartments"], default=[])
+    parser.add_argument("--project-existing-structure", action="store_true")
+    parser.add_argument("--chrom", action="append", default=None)
+    parser.add_argument("--device", default="auto")
+    parser.add_argument("--peak-track", action="append", default=[])
+    parser.add_argument("--peak-control-track", action="append", default=[])
+    parser.add_argument(
+        "--peak-method",
+        default="auto",
+        choices=["auto", "macs", "macs_bdgpeakcall", "bdgpeakcall", "macs_poisson", "threshold"],
+    )
+    parser.add_argument("--peak-agg", default="mean", choices=["mean", "median", "max", "min", "sum"])
+    parser.add_argument("--peak-threshold", type=float, default=None)
+    parser.add_argument("--peak-quantile", type=float, default=0.95)
+    parser.add_argument("--peak-cutoff", type=float, default=None)
+    parser.add_argument("--peak-min-length", type=int, default=200)
+    parser.add_argument("--peak-max-gap", type=int, default=30)
+    parser.add_argument("--peak-qvalue", type=float, default=0.05)
+    parser.add_argument("--peak-pvalue", type=float, default=None)
+    parser.add_argument("--peak-genome-size", type=float, default=None)
+    parser.add_argument("--peak-small-local-window-bins", type=int, default=10)
+    parser.add_argument("--peak-large-local-window-bins", type=int, default=100)
+    parser.add_argument("--peak-fragment-size-bins", type=int, default=1)
+    parser.add_argument("--peak-min-width-bins", type=int, default=1)
+    parser.add_argument("--peak-max-gap-bins", type=int, default=0)
+    parser.add_argument("--peak-signal-scale", type=float, default=1.0)
+    parser.add_argument("--peak-control-scale", type=float, default=None)
+    parser.add_argument("--peak-negative", default="clip", choices=["clip", "raise", "shift"])
+    parser.add_argument("--peak-nolambda", action="store_true")
+    parser.add_argument("--overwrite-enrichment", action="store_true")
+    parser.add_argument("--no-enrich-project", action="store_true")
+
+
+def _enrichment_from_args(args) -> dict | None:
+    enabled = bool(
+        getattr(args, "fasta", None)
+        or getattr(args, "gtf", None)
+        or getattr(args, "structure", None)
+        or getattr(args, "project_existing_structure", False)
+        or getattr(args, "peak_track", None)
+    )
+    if not enabled:
+        return None
+    return {
+        "fasta": getattr(args, "fasta", None),
+        "sequence_features": getattr(args, "sequence_feature", None),
+        "gtf": getattr(args, "gtf", None),
+        "annotation_features": getattr(args, "annotation_feature", None),
+        "promoter_window": (
+            int(getattr(args, "promoter_upstream", -2000)),
+            int(getattr(args, "promoter_downstream", 500)),
+        ),
+        "structures": list(getattr(args, "structure", []) or []),
+        "project_existing_structure": bool(getattr(args, "project_existing_structure", False)),
+        "chroms": getattr(args, "chrom", None),
+        "device": getattr(args, "device", "auto"),
+        "peak_tracks": list(getattr(args, "peak_track", []) or []),
+        "peak_control_tracks": list(getattr(args, "peak_control_track", []) or []),
+        "peak_method": getattr(args, "peak_method", "auto"),
+        "peak_agg": getattr(args, "peak_agg", "mean"),
+        "peak_threshold": getattr(args, "peak_threshold", None),
+        "peak_quantile": getattr(args, "peak_quantile", 0.95),
+        "peak_cutoff": getattr(args, "peak_cutoff", None),
+        "peak_min_length": getattr(args, "peak_min_length", 200),
+        "peak_max_gap": getattr(args, "peak_max_gap", 30),
+        "peak_qvalue": getattr(args, "peak_qvalue", 0.05),
+        "peak_pvalue": getattr(args, "peak_pvalue", None),
+        "peak_genome_size": getattr(args, "peak_genome_size", None),
+        "peak_small_local_window_bins": getattr(args, "peak_small_local_window_bins", 10),
+        "peak_large_local_window_bins": getattr(args, "peak_large_local_window_bins", 100),
+        "peak_fragment_size_bins": getattr(args, "peak_fragment_size_bins", 1),
+        "peak_min_width_bins": getattr(args, "peak_min_width_bins", 1),
+        "peak_max_gap_bins": getattr(args, "peak_max_gap_bins", 0),
+        "peak_signal_scale": getattr(args, "peak_signal_scale", 1.0),
+        "peak_control_scale": getattr(args, "peak_control_scale", None),
+        "peak_negative": getattr(args, "peak_negative", "clip"),
+        "peak_nolambda": bool(getattr(args, "peak_nolambda", False)),
+        "project": not bool(getattr(args, "no_enrich_project", False)),
+        "overwrite": bool(getattr(args, "overwrite_enrichment", False) or getattr(args, "overwrite", False)),
+        "hash_sources": True,
+        "verbose": bool(getattr(args, "verbose", False)),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m uchrom.auto_discovery")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -59,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="Existing literature/browser claims JSONL to ingest into the run graph.",
     )
+    _add_run_enrichment_args(run_p)
 
     enrich_p = sub.add_parser(
         "enrich",
@@ -272,6 +364,7 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="Existing literature/browser claims JSONL to seed every iteration.",
     )
+    _add_run_enrichment_args(iter_p)
 
     args = parser.parse_args(argv)
     if args.cmd == "run":
@@ -298,111 +391,30 @@ def main(argv: list[str] | None = None) -> int:
             execute=not args.no_execute,
             store_schema=args.store_schema,
             dataset_name=args.dataset_name,
+            enrichment=_enrichment_from_args(args),
             claims_paths=args.claim_path,
         ))
         print(json.dumps(result.__dict__, indent=2))
         return 0
     if args.cmd == "enrich":
-        from pathlib import Path
-
         from uchrom import ChromData
-        from uchrom.fea import add_annotation_features, add_sequence_features, call_peaks_from_track
-        from uchrom.strc import add_structural_features, call_structures_multi
+        from .enrichment import DiscoveryEnrichmentConfig, enrich_for_discovery
 
         cdata = ChromData.read(args.h5cd_path)
-        project = not args.no_project
-        summary = {
+        enrichment_args = _enrichment_from_args(args) or {}
+        enrichment_args["project"] = not args.no_project
+        enrichment_args["overwrite"] = bool(args.overwrite)
+        summary = enrich_for_discovery(cdata, DiscoveryEnrichmentConfig(**enrichment_args))
+        summary.update({
             "input_h5cd_path": str(args.h5cd_path),
             "output_h5cd_path": str(args.output_h5cd_path),
-            "sequence_features": [],
-            "annotation_features": [],
-            "structures": [],
-            "peak_tracks": {},
             "schema_stored": False,
-        }
-        if args.fasta:
-            table = add_sequence_features(
-                cdata,
-                args.fasta,
-                features=args.sequence_feature,
-                project=project,
-                overwrite=args.overwrite,
-            )
-            summary["sequence_features"] = [c for c in table.columns if c not in {"chrom", "start", "end"}]
-        if args.gtf:
-            table = add_annotation_features(
-                cdata,
-                args.gtf,
-                features=args.annotation_feature,
-                promoter_window=(args.promoter_upstream, args.promoter_downstream),
-                project=project,
-                overwrite=args.overwrite,
-            )
-            summary["annotation_features"] = [c for c in table.columns if c not in {"chrom", "start", "end"}]
-        if args.structure:
-            called = call_structures_multi(
-                cdata,
-                structures=args.structure,
-                chroms=args.chrom,
-                device=args.device,
-                store=True,
-                verbose=args.verbose,
-            )
-            table = add_structural_features(cdata, project=project, overwrite=args.overwrite)
-            summary["structures"] = sorted(called.keys())
-            summary["structural_features"] = [c for c in table.columns if c not in {"chrom", "start", "end"}]
-        elif args.project_existing_structure:
-            table = add_structural_features(cdata, project=project, overwrite=args.overwrite)
-            summary["structures"] = ["existing"]
-            summary["structural_features"] = [c for c in table.columns if c not in {"chrom", "start", "end"}]
-        controls = list(args.peak_control_track or [])
-        if len(controls) > 1 and len(controls) != len(args.peak_track):
-            raise ValueError("--peak-control-track must be provided once or once per --peak-track")
-        for i, track in enumerate(args.peak_track):
-            control_track = None
-            if len(controls) == 1:
-                control_track = controls[0]
-            elif len(controls) == len(args.peak_track):
-                control_track = controls[i]
-            peaks = call_peaks_from_track(
-                cdata,
-                track,
-                method=args.peak_method,
-                control_track=control_track,
-                agg=args.peak_agg,
-                threshold=args.peak_threshold,
-                quantile=args.peak_quantile,
-                cutoff=args.peak_cutoff,
-                min_length=args.peak_min_length,
-                max_gap=args.peak_max_gap,
-                qvalue=(None if args.peak_pvalue is not None else args.peak_qvalue),
-                pvalue=args.peak_pvalue,
-                genome_size=args.peak_genome_size,
-                small_local_window_bins=args.peak_small_local_window_bins,
-                large_local_window_bins=args.peak_large_local_window_bins,
-                fragment_size_bins=args.peak_fragment_size_bins,
-                nolambda=args.peak_nolambda,
-                min_width_bins=args.peak_min_width_bins,
-                max_gap_bins=args.peak_max_gap_bins,
-                signal_scale=args.peak_signal_scale,
-                control_scale=args.peak_control_scale,
-                negative=args.peak_negative,
-                project=project,
-                overwrite=args.overwrite,
-            )
-            method = "threshold" if args.peak_method == "auto" and args.peak_threshold is not None else args.peak_method
-            if method == "auto":
-                method = "macs_bdgpeakcall"
-            elif method in {"macs", "bdgpeakcall"}:
-                method = "macs_bdgpeakcall"
-            summary["peak_tracks"][track] = {
-                "n_peaks": int(len(peaks)),
-                "method": method,
-                "control_track": control_track,
-            }
+        })
         if args.store_schema:
             cdata.build_discovery_schema(store=True)
             summary["schema_stored"] = True
+        from pathlib import Path
+
         out_path = Path(args.output_h5cd_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         cdata.write(out_path)
@@ -516,6 +528,7 @@ def main(argv: list[str] | None = None) -> int:
             execute=not args.no_execute,
             store_schema=args.store_schema,
             dataset_name=args.dataset_name,
+            enrichment=_enrichment_from_args(args),
             knowledge_mode=args.knowledge_mode,
             claims_paths=args.claim_path,
         ))
