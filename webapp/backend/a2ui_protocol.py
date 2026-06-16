@@ -38,9 +38,9 @@ def parse_client_hello(msg: dict[str, Any]) -> dict[str, Any] | None:
         return None
     payload = msg.get("payload")
     if isinstance(payload, dict):
-      source = payload
+        source = payload
     else:
-      source = msg
+        source = msg
     requested = source.get("capabilities", [])
     if not isinstance(requested, list):
         requested = []
