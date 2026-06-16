@@ -18,6 +18,7 @@ import pandas as pd
 DISCOVERY_SCHEMA_KEY = "auto_discovery_schema"
 DISCOVERY_SCHEMA_VERSION = "0.1"
 DISCOVERY_SCHEMA_FORMAT = "uchrom.auto_discovery.schema+json"
+ENRICHED_TRACK_PREFIXES = frozenset({"seq", "gtf", "strc"})
 
 
 def build_discovery_schema(
@@ -562,6 +563,8 @@ def _track_groups(columns: list[str]) -> dict[str, list[str]]:
         name = str(col)
         if "." in name:
             group, _ = name.split(".", 1)
+            if group not in ENRICHED_TRACK_PREFIXES:
+                group = "marker"
         else:
             group = "marker"
         groups.setdefault(group, []).append(name)

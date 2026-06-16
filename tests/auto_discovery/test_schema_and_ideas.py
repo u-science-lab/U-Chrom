@@ -65,6 +65,7 @@ def test_discovery_schema_exposes_enriched_feature_groups():
     cdata.tracks["seq.gc_fraction"] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
     cdata.tracks["gtf.nearest_tss_distance"] = [0, 10, 20, 30, 40, 50]
     cdata.tracks["strc.distance_to_tad_boundary"] = [5, 4, 3, 2, 1, 0]
+    cdata.tracks["H2A.X"] = [1, 1, 0, 0, 1, 0]
     cdata.results["bin_features"] = pd.DataFrame({
         "chrom": ["chr1", "chr1"],
         "start": [0, 25_000],
@@ -91,6 +92,9 @@ def test_discovery_schema_exposes_enriched_feature_groups():
     assert schema["modalities"]["structure_annotations"]["present"]
     assert schema["summary"]["n_feature_registry_entries"] == 2
     assert schema["catalogs"]["track_groups"]["seq"]["values"] == ["seq.gc_fraction"]
+    assert "H2A" not in schema["catalogs"]["track_groups"]
+    assert "H2A.X" in schema["catalogs"]["track_groups"]["marker"]["values"]
+    assert "seq.gc_fraction" not in schema["catalogs"]["track_groups"]["marker"]["values"]
     assert "bin_features" in schema["fields"]["results"]["tables"]
     assert schema["fields"]["results"]["tables"]["tads"]["columns"] == [
         "chrom",
