@@ -16,6 +16,8 @@ from .annotation import (
 from .peaks import (
     add_peak_features,
     aggregate_track_by_interval,
+    aggregate_tracks_by_interval,
+    call_macs_peaks_from_signal,
     call_peaks_from_signal,
     call_peaks_from_track,
     compute_peak_features,
@@ -42,6 +44,8 @@ __all__ = [
     "read_gtf",
     "add_peak_features",
     "aggregate_track_by_interval",
+    "aggregate_tracks_by_interval",
+    "call_macs_peaks_from_signal",
     "call_peaks_from_signal",
     "call_peaks_from_track",
     "compute_peak_features",

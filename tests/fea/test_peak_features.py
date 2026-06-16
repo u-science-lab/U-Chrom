@@ -26,6 +26,7 @@ def test_call_peaks_from_track_projects_peak_features():
     peaks = call_peaks_from_track(
         cdata,
         "signal.track",
+        method="threshold",
         threshold=9.0,
     )
 
@@ -40,6 +41,76 @@ def test_call_peaks_from_track_projects_peak_features():
     assert list(cdata.tracks["peak.signal_track_overlap"]) == [0.0, 0.0, 0.0, 1.0, 1.0, 0.0]
     assert list(cdata.tracks["peak.distance_to_signal_track"]) == [10.0, 10.0, 0.0, 0.0, 0.0, 0.0]
     assert cdata.uns["feature_registry"][0]["feature_group"] == "peaks"
+
+
+def test_macs_style_peak_calling_reports_significance():
+    from uchrom.fea.peaks import call_macs_peaks_from_signal
+
+    signal = pd.DataFrame({
+        "chrom": ["chr1"] * 12,
+        "start": [i * 10 for i in range(12)],
+        "end": [(i + 1) * 10 for i in range(12)],
+        "signal": [1, 1, 1, 1, 1, 30, 32, 1, 1, 1, 1, 1],
+    })
+
+    peaks = call_macs_peaks_from_signal(
+        signal,
+        qvalue=0.05,
+        small_local_window_bins=3,
+        large_local_window_bins=9,
+        name="macs",
+    )
+
+    assert len(peaks) == 1
+    assert peaks.loc[0, "method"] == "macs_style"
+    assert peaks.loc[0, "start"] == 50
+    assert peaks.loc[0, "end"] == 70
+    assert peaks.loc[0, "qvalue"] <= 0.05
+    assert peaks.loc[0, "pvalue"] <= peaks.loc[0, "qvalue"]
+    assert peaks.loc[0, "fold_enrichment"] > 1.0
+    assert peaks.loc[0, "summit"] in {55, 65}
+
+
+def test_macs_style_control_track_suppresses_matching_background():
+    from uchrom.fea.peaks import call_macs_peaks_from_signal
+
+    signal = pd.DataFrame({
+        "chrom": ["chr1"] * 12,
+        "start": [i * 10 for i in range(12)],
+        "end": [(i + 1) * 10 for i in range(12)],
+        "signal": [1, 1, 1, 1, 1, 30, 32, 1, 1, 1, 1, 1],
+        "control": [1, 1, 1, 1, 1, 30, 32, 1, 1, 1, 1, 1],
+    })
+
+    peaks = call_macs_peaks_from_signal(
+        signal,
+        signal_col="signal",
+        control_col="control",
+        qvalue=0.05,
+        small_local_window_bins=3,
+        large_local_window_bins=9,
+    )
+
+    assert peaks.empty
+
+
+def test_call_peaks_from_track_defaults_to_macs_style():
+    from uchrom.fea.peaks import call_peaks_from_track
+
+    cdata = _make_cd()
+
+    peaks = call_peaks_from_track(
+        cdata,
+        "signal.track",
+        qvalue=0.2,
+        small_local_window_bins=3,
+        large_local_window_bins=5,
+    )
+
+    assert len(peaks) == 1
+    assert peaks.loc[0, "method"] == "macs_style"
+    assert "qvalue" in cdata.results["peaks:signal_track"]
+    assert cdata.uns["feature_registry"][0]["parameters"]["method"] == "macs_style"
 
 
 def test_compute_peak_features_handles_no_peaks():

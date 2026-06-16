@@ -102,11 +102,28 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="Track column to aggregate and call peaks from. Repeatable.",
     )
+    enrich_p.add_argument(
+        "--peak-control-track",
+        action="append",
+        default=[],
+        help="Optional control/background track for MACS-style peak calling. Repeatable.",
+    )
+    enrich_p.add_argument("--peak-method", default="auto", choices=["auto", "macs", "threshold"])
     enrich_p.add_argument("--peak-agg", default="mean", choices=["mean", "median", "max", "min", "sum"])
     enrich_p.add_argument("--peak-threshold", type=float, default=None)
     enrich_p.add_argument("--peak-quantile", type=float, default=0.95)
+    enrich_p.add_argument("--peak-qvalue", type=float, default=0.05)
+    enrich_p.add_argument("--peak-pvalue", type=float, default=None)
+    enrich_p.add_argument("--peak-genome-size", type=float, default=None)
+    enrich_p.add_argument("--peak-small-local-window-bins", type=int, default=10)
+    enrich_p.add_argument("--peak-large-local-window-bins", type=int, default=100)
+    enrich_p.add_argument("--peak-fragment-size-bins", type=int, default=1)
     enrich_p.add_argument("--peak-min-width-bins", type=int, default=1)
     enrich_p.add_argument("--peak-max-gap-bins", type=int, default=0)
+    enrich_p.add_argument("--peak-signal-scale", type=float, default=1.0)
+    enrich_p.add_argument("--peak-control-scale", type=float, default=None)
+    enrich_p.add_argument("--peak-negative", default="clip", choices=["clip", "raise", "shift"])
+    enrich_p.add_argument("--peak-nolambda", action="store_true")
     enrich_p.add_argument("--store-schema", action="store_true")
     enrich_p.add_argument("--overwrite", action="store_true")
     enrich_p.add_argument("--no-project", action="store_true")
@@ -331,19 +348,46 @@ def main(argv: list[str] | None = None) -> int:
             table = add_structural_features(cdata, project=project, overwrite=args.overwrite)
             summary["structures"] = ["existing"]
             summary["structural_features"] = [c for c in table.columns if c not in {"chrom", "start", "end"}]
-        for track in args.peak_track:
+        controls = list(args.peak_control_track or [])
+        if len(controls) > 1 and len(controls) != len(args.peak_track):
+            raise ValueError("--peak-control-track must be provided once or once per --peak-track")
+        for i, track in enumerate(args.peak_track):
+            control_track = None
+            if len(controls) == 1:
+                control_track = controls[0]
+            elif len(controls) == len(args.peak_track):
+                control_track = controls[i]
             peaks = call_peaks_from_track(
                 cdata,
                 track,
+                method=args.peak_method,
+                control_track=control_track,
                 agg=args.peak_agg,
                 threshold=args.peak_threshold,
                 quantile=args.peak_quantile,
+                qvalue=(None if args.peak_pvalue is not None else args.peak_qvalue),
+                pvalue=args.peak_pvalue,
+                genome_size=args.peak_genome_size,
+                small_local_window_bins=args.peak_small_local_window_bins,
+                large_local_window_bins=args.peak_large_local_window_bins,
+                fragment_size_bins=args.peak_fragment_size_bins,
+                nolambda=args.peak_nolambda,
                 min_width_bins=args.peak_min_width_bins,
                 max_gap_bins=args.peak_max_gap_bins,
+                signal_scale=args.peak_signal_scale,
+                control_scale=args.peak_control_scale,
+                negative=args.peak_negative,
                 project=project,
                 overwrite=args.overwrite,
             )
-            summary["peak_tracks"][track] = int(len(peaks))
+            method = "threshold" if args.peak_method == "auto" and args.peak_threshold is not None else args.peak_method
+            if method == "auto":
+                method = "macs"
+            summary["peak_tracks"][track] = {
+                "n_peaks": int(len(peaks)),
+                "method": "macs_style" if method == "macs" else method,
+                "control_track": control_track,
+            }
         if args.store_schema:
             cdata.build_discovery_schema(store=True)
             summary["schema_stored"] = True

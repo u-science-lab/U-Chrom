@@ -33,6 +33,8 @@ generation. Examples include:
   N fraction, and G-quadruplex motif density
 - genome annotation tracks from GTF or BED, such as gene body overlap, exon
   overlap, promoter overlap, nearest TSS distance, and gene biotype overlap
+- peak tracks from existing signal tracks, such as MACS-style high-confidence
+  H3K27ac or RNAPIISer2-P domains, optionally using a matched control track
 - projected interval-level features that make notebook analysis simple, such
   as distance to the nearest TAD boundary or loop anchor membership
 
@@ -133,10 +135,13 @@ strc.compartment_pc2
 strc.compartment_label
 strc.distance_to_tad_boundary
 strc.loop_anchor_overlap
+peak.h3k27ac_overlap
+peak.distance_to_h3k27ac
 ```
 
 Namespacing tracks by source, such as `seq.*`, `gtf.*`, and `strc.*`, keeps
-generated fields distinct from experimental IF marker tracks.
+generated fields distinct from experimental IF marker tracks. Peak-derived
+features use the `peak.*` namespace.
 
 ### Provenance metadata
 
@@ -219,6 +224,28 @@ for chrom in cdata.chroms:
 
 A later wrapper can merge per-chromosome tables into standard keys such as
 `cd.results["tads"]`, but the lower-level callers should remain reusable.
+
+Peak callers:
+
+```python
+from uchrom.fea.peaks import call_peaks_from_track
+
+peaks = call_peaks_from_track(
+    cdata,
+    "H3K27ac",
+    method="macs",
+    qvalue=0.05,
+    small_local_window_bins=10,
+    large_local_window_bins=100,
+)
+```
+
+The MACS-style caller adapts MACS' dynamic Poisson background idea to binned
+U-Chrom tracks. It aggregates repeated spot rows to genomic bins, estimates a
+global and local lambda, computes Poisson tail p-values, applies
+Benjamini-Hochberg q-values, and merges adjacent significant bins. For legacy
+or exploratory use, `method="threshold"` keeps the simpler quantile/threshold
+caller.
 
 Auto-discovery convenience:
 
