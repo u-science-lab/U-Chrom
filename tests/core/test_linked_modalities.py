@@ -37,6 +37,11 @@ def test_linked_mudata_and_scool_metadata_roundtrip(tmp_path):
         cell_axis="RNAbarcode",
         spatial_source="Tangram-inferred MERFISH coordinate",
         not_measured_spatial=True,
+        mapping_matrix={
+            "modality": "tangram_mapping",
+            "shape": "merfish_cells x schicar_cells",
+            "semantics": "projection weights from scHiCAR cells to MERFISH cells",
+        },
     )
     cd.link_scool(
         scool,
@@ -54,6 +59,7 @@ def test_linked_mudata_and_scool_metadata_roundtrip(tmp_path):
     links = out.describe_links()
     assert links["linked_mudata"]["schicar"]["path"] == str(h5mu)
     assert links["linked_mudata"]["schicar"]["not_measured_spatial"] is True
+    assert links["linked_mudata"]["schicar"]["mapping_matrix"]["modality"] == "tangram_mapping"
     assert links["linked_scool"]["contacts"]["bin_size"] == 1_000_000
     assert links["linked_scool"]["contacts"]["coordinate_status"] == "contacts, not xyz coordinates"
 

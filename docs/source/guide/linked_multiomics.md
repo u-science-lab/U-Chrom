@@ -12,7 +12,7 @@ UChromProject
 ├── ChromData (.h5cd)       measured or reconstructed 3D structure
 ├── MuData (.h5mu)          multi-modal single-cell matrices
 ├── scool (.scool)          raw single-cell Hi-C contact matrices
-└── provenance / links      cell mappings and coordinate semantics
+└── provenance / links      mapping matrices and coordinate semantics
 ```
 
 ## Link MuData
@@ -28,12 +28,41 @@ cd.link_mudata(
     cell_axis="RNAbarcode",
     spatial_source="Tangram-inferred MERFISH coordinate",
     not_measured_spatial=True,
+    mapping_matrix={
+        "modality": "tangram_mapping",
+        "shape": "merfish_cells x schicar_cells",
+        "semantics": "projection weights from scHiCAR cells to MERFISH cells",
+    },
 )
 cd.write("data.linked.h5cd")
 ```
 
 The MuData file remains external.  U-Chrom records only link metadata under
 `cd.uns["linked_mudata"]`.
+
+## Store the Mapping Matrix
+
+The Tangram mapping matrix is the core evidence for projecting scHiCAR data
+into MERFISH space.  Store it in MuData, not only in notes or plots.
+
+Recommended layout:
+
+```text
+mdata["schicar_rna"]              scHiCAR cells x genes
+mdata["schicar_hic_features"]     scHiCAR cells x Hi-C-derived features
+mdata["merfish"]                  MERFISH cells x genes or cell metadata
+mdata["tangram_mapping"].X        MERFISH cells x scHiCAR cells
+mdata.uns["tangram_mapping"]      method, source files, normalization, axis names
+```
+
+With the orientation above, MERFISH-space projection is:
+
+```python
+merfish_feature = mdata["tangram_mapping"].X @ schicar_feature
+```
+
+If your Tangram output uses the opposite orientation, record that explicitly
+in `mdata.uns["tangram_mapping"]` and transpose before projection.
 
 ## Link scool
 
@@ -51,6 +80,13 @@ cd.link_scool(
 Raw scHi-C / scHiCAR contacts are contact matrices, not `x/y/z` coordinates.
 Only measured or reconstructed coordinates should be stored in
 `ChromData.coords`.
+
+When `spots` rows are synthetic `cell x genome_bin` feature rows rather than
+optical FISH spots, mark this explicitly:
+
+```python
+cd.uns["spot_semantics"] = "cell_by_genomic_bin_feature_rows"
+```
 
 ## Store Cell-Level Spatial Coordinates
 
