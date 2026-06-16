@@ -44,6 +44,12 @@ class UChromProject:
         self.links = self.chromdata.describe_links()
         return record
 
+    def set_cell_spatial_coordinates(self, xy, *, key: str = "default", **metadata: Any) -> dict:
+        self._require_chromdata()
+        record = self.chromdata.set_cell_spatial_coordinates(xy, key=key, **metadata)
+        self.links = self.chromdata.describe_links()
+        return record
+
     def load_mudata(self, *, key: str = "default"):
         self._require_chromdata()
         return self.chromdata.load_linked_mudata(key=key)

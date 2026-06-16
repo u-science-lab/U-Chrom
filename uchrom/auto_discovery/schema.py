@@ -61,6 +61,7 @@ def build_discovery_schema(
     )
     linked_mudata = _linked_modality_records(cdata.uns.get("linked_mudata"))
     linked_scool = _linked_modality_records(cdata.uns.get("linked_scool"))
+    cell_spatial = _linked_modality_records(cdata.uns.get("cell_spatial"))
 
     tracks = _columns(cdata.tracks)
     track_groups = _track_groups(tracks)
@@ -148,6 +149,15 @@ def build_discovery_schema(
                 "fields": ["cells", "cellm"],
                 "operations": ["cell_type_stratification", "embedding_visualization"],
             },
+            "cell_spatial_coordinates": {
+                "present": bool(cell_spatial.get("present")),
+                "fields": ["cells", "uns.cell_spatial"],
+                "operations": [
+                    "cell_spatial_visualization",
+                    "spatial_neighborhood_lookup",
+                    "inferred_coordinate_quality_check",
+                ],
+            },
             "rna_expression": {
                 "present": bool(linked.get("present")),
                 "fields": ["linked_adata"],
@@ -222,6 +232,7 @@ def build_discovery_schema(
         "linked_adata": linked,
         "linked_mudata": linked_mudata,
         "linked_scool": linked_scool,
+        "cell_spatial": cell_spatial,
         "catalogs": {
             "chroms": _catalog(chroms, max_catalog_items),
             "tracks": _catalog(tracks, max_catalog_items),
@@ -331,6 +342,7 @@ def schema_to_agent_context(schema: Mapping[str, Any], *, max_items: int = 40) -
     linked = schema.get("linked_adata", {})
     linked_mudata = schema.get("linked_mudata", {})
     linked_scool = schema.get("linked_scool", {})
+    cell_spatial = schema.get("cell_spatial", {})
     lines = [
         "# ChromData discovery schema",
         "",
@@ -402,6 +414,10 @@ def schema_to_agent_context(schema: Mapping[str, Any], *, max_items: int = 40) -
         lines.append(f"linked_scool: records={', '.join(sorted(linked_scool.get('records', {})))}")
     else:
         lines.append("linked_scool: missing")
+    if cell_spatial.get("present"):
+        lines.append(f"cell_spatial: records={', '.join(sorted(cell_spatial.get('records', {})))}")
+    else:
+        lines.append("cell_spatial: missing")
 
     references = list(schema.get("references", []) or [])
     annotations = list(schema.get("user_annotations", []) or [])

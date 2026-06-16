@@ -469,6 +469,70 @@ class ChromData:
             cell_uri = f"/cells/{cell_uri}"
         return cooler.Cooler(f"{path}::{cell_uri}")
 
+    def set_cell_spatial_coordinates(
+        self,
+        xy: np.ndarray,
+        *,
+        key: str = "default",
+        cell_ids: Optional[List[str]] = None,
+        x_col: Optional[str] = None,
+        y_col: Optional[str] = None,
+        source: Optional[str] = None,
+        method: Optional[str] = None,
+        coordinate_system: Optional[str] = None,
+        inferred: bool = True,
+        **metadata: Any,
+    ) -> dict:
+        """Store cell-level 2D spatial coordinates in ``cells``.
+
+        These coordinates describe cells, not chromatin spots.  They are
+        therefore stored in ``cells`` with provenance in
+        ``uns['cell_spatial']`` rather than in ``coords``.
+        """
+        arr = np.asarray(xy, dtype=np.float64)
+        if arr.ndim != 2 or arr.shape[1] != 2:
+            raise ValueError("xy must have shape (n_cells, 2).")
+
+        if cell_ids is not None:
+            axis_ids = self._cells_axis_ids()
+            ids = pd.Index([str(x) for x in cell_ids], name="cell_id")
+            if len(ids) != arr.shape[0]:
+                raise ValueError("cell_ids length must match xy rows.")
+            if len(self.cells) == 0:
+                self.cells = pd.DataFrame(index=ids)
+            else:
+                current = pd.Index(axis_ids.astype(str) if axis_ids is not None else self.cells.index.astype(str))
+                positions = current.get_indexer(ids)
+                if np.any(positions < 0):
+                    missing = ids[positions < 0]
+                    raise ValueError(f"cell_ids are not present in cells: {list(missing[:5])}")
+                aligned = np.full((len(self.cells), 2), np.nan, dtype=np.float64)
+                aligned[positions] = arr
+                arr = aligned
+        elif len(self.cells) == 0:
+            raise ValueError("cell_ids are required when cells is empty.")
+        elif len(self.cells) != arr.shape[0]:
+            raise ValueError("xy rows must match cells rows when cell_ids is not provided.")
+
+        prefix = "" if key == "default" else f"{key}_"
+        x_name = x_col or f"{prefix}spatial_x"
+        y_name = y_col or f"{prefix}spatial_y"
+        self.cells[x_name] = arr[:, 0]
+        self.cells[y_name] = arr[:, 1]
+
+        record = {
+            "x_col": x_name,
+            "y_col": y_name,
+            "source": source,
+            "method": method,
+            "coordinate_system": coordinate_system,
+            "inferred": bool(inferred),
+            **metadata,
+        }
+        record = _clean_metadata_record(record)
+        _set_linked_record(self.uns, "cell_spatial", key, record)
+        return record
+
     def coord_status(self) -> dict:
         """Return a compact status summary for ``coords``."""
         total = int(self.coords.size)
@@ -491,6 +555,7 @@ class ChromData:
             "linked_anndata": dict(self.uns.get("linked_anndata", {}) or {}),
             "linked_mudata": _linked_records(self.uns.get("linked_mudata")),
             "linked_scool": _linked_records(self.uns.get("linked_scool")),
+            "cell_spatial": _linked_records(self.uns.get("cell_spatial")),
         }
 
     def validate_links(self, *, check_files: bool = True) -> List[str]:

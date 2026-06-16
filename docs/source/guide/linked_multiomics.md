@@ -52,6 +52,29 @@ Raw scHi-C / scHiCAR contacts are contact matrices, not `x/y/z` coordinates.
 Only measured or reconstructed coordinates should be stored in
 `ChromData.coords`.
 
+## Store Cell-Level Spatial Coordinates
+
+Tangram maps cells to tissue-space positions.  Those positions describe
+cells, not genomic bins, so store them in `cells` and record provenance under
+`uns["cell_spatial"]`.
+
+```python
+cd.set_cell_spatial_coordinates(
+    xy,  # shape: n_cells x 2
+    key="tangram_merfish",
+    cell_ids=schicar_cell_ids,
+    source="MERFISH centroid",
+    method="Tangram map_cells_to_space",
+    coordinate_system="micron",
+    inferred=True,
+)
+```
+
+Use this only when `cd.cells` is on the same cell axis as `cell_ids`.  If
+`cd.cells` contains MERFISH cells but `xy` contains scHiCAR cells, keep the
+scHiCAR coordinates in the linked MuData/AnnData object instead and record
+that link from `ChromData`.
+
 ## Validate Links
 
 ```python
