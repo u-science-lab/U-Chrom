@@ -27,10 +27,8 @@ strc_router = APIRouter()
 _CACHE = "max-age=300"  # 5 min cache — computation is expensive
 
 
-def _cd_or_404():
-    if data_api.current_session is None or data_api.current_session.chromdata is None:
-        raise HTTPException(status_code=404, detail={"error": "No data loaded"})
-    return data_api.current_session.chromdata
+def _cd_or_404(session_id: Optional[str] = None):
+    return data_api.cd_or_404(session_id)
 
 
 def _filter_by_cell_type(cd: ChromData, cell_type: Optional[str]) -> ChromData:
@@ -114,9 +112,10 @@ def _respond(key: str, records: list, fmt: Optional[str]):
 # ---------------------------------------------------------------------------
 
 @strc_router.get("/api/tads/{chrom}")
-def get_tads(chrom: str, cell_type: Optional[str] = None, format: Optional[str] = None):
+def get_tads(chrom: str, cell_type: Optional[str] = None, format: Optional[str] = None,
+             session_id: Optional[str] = None):
     """Return TAD domains for the given chromosome."""
-    cd = _cd_or_404()
+    cd = _cd_or_404(session_id)
     cd = _filter_by_cell_type(cd, cell_type)
 
     # Use get_chrom for correct index alignment
@@ -151,9 +150,10 @@ def get_tads(chrom: str, cell_type: Optional[str] = None, format: Optional[str] 
 # ---------------------------------------------------------------------------
 
 @strc_router.get("/api/loops/{chrom}")
-def get_loops(chrom: str, cell_type: Optional[str] = None, format: Optional[str] = None):
+def get_loops(chrom: str, cell_type: Optional[str] = None, format: Optional[str] = None,
+              session_id: Optional[str] = None):
     """Return loop anchors for the given chromosome."""
-    cd = _cd_or_404()
+    cd = _cd_or_404(session_id)
     cd = _filter_by_cell_type(cd, cell_type)
 
     try:
@@ -183,9 +183,10 @@ def get_loops(chrom: str, cell_type: Optional[str] = None, format: Optional[str]
 # ---------------------------------------------------------------------------
 
 @strc_router.get("/api/compartments/{chrom}")
-def get_compartments(chrom: str, cell_type: Optional[str] = None, format: Optional[str] = None):
+def get_compartments(chrom: str, cell_type: Optional[str] = None, format: Optional[str] = None,
+                     session_id: Optional[str] = None):
     """Return A/B compartment assignments for the given chromosome."""
-    cd = _cd_or_404()
+    cd = _cd_or_404(session_id)
     cd = _filter_by_cell_type(cd, cell_type)
 
     try:

@@ -4,6 +4,7 @@ import { ScatterplotLayer } from '@deck.gl/layers'
 import { OrthographicView } from '@deck.gl/core'
 import { useAppStore } from '../store'
 import { registerCapturer } from '../snapshot'
+import { sessionApiUrl } from '../ws'
 
 // Module-level view instance — created once, not on every render
 const ORTHO_VIEW = new OrthographicView({ id: 'ortho', flipY: false })
@@ -85,8 +86,8 @@ export default function EmbeddingPanel() {
       // cell_type; /api/cells carries the full cell table so we can color by
       // any field the agent picks via color_embedding.
       const [umapRes, cellsRes] = await Promise.all([
-        fetch('/api/umap'),
-        fetch('/api/cells').catch(() => null),
+        fetch(sessionApiUrl('/api/umap')),
+        fetch(sessionApiUrl('/api/cells')).catch(() => null),
       ])
       if (!umapRes.ok) throw new Error(`HTTP ${umapRes.status}`)
       const json: EmbeddingData = await umapRes.json()

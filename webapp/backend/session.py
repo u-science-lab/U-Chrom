@@ -112,11 +112,16 @@ class Session:
 
     # Legacy attributes for backward compatibility
     session_id: Optional[str] = None
+    conversation_id: Optional[str] = None
+    conversation_store: Any = None
+    ui_messages: list[dict] = field(default_factory=list)
+    current_assistant_message_id: Optional[str] = None
     chromdata: Any = None  # uchrom.core.ChromData, loaded later
     pending_artifacts: list[dict] = field(default_factory=list)
 
     # Extended state for persistence
     analysis_results: dict = field(default_factory=dict)  # TADs, compartments, loops
+    analysis_annotations: dict = field(default_factory=dict)  # Analysis records projected onto genomic bins
     annotations: list[dict] = field(default_factory=list)  # Custom annotations
     highlight_regions: list[dict] = field(default_factory=list)  # Highlighted regions
     colormap_config: Optional[dict] = None  # Colormap configuration
@@ -138,6 +143,26 @@ class Session:
             v = ViewSession(view_id=view_id, view_type=view_type, title=title)
             self.views[view_id] = v
         return v
+
+    def view_snapshot(self) -> list[dict]:
+        return [v.to_dict() for v in self.views.values()]
+
+    def load_view_snapshot(self, views: list[dict]) -> None:
+        self.views = {}
+        for raw in views or []:
+            view_id = raw.get("view_id")
+            view_type = raw.get("view_type")
+            if not view_id or not view_type:
+                continue
+            view = ViewSession(
+                view_id=view_id,
+                view_type=view_type,
+                title=raw.get("title", ""),
+            )
+            view.state = raw.get("state", {}) or {}
+            view.revision = int(raw.get("revision", 0) or 0)
+            view.diagnostics = raw.get("diagnostics", []) or []
+            self.views[view_id] = view
 
     def to_dict(self) -> dict:
         """Serialize session to dictionary for .uchromfig format."""

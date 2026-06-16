@@ -2,25 +2,22 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { ws } from '../ws'
 import { ARTIFACT_HANDLERS } from '../artifactHandlers'
 import { useAppStore } from '../store'
+import {
+  buildChatMessagesFromSnapshot,
+  type ChatMessage,
+  type ConversationMessage,
+  type ConversationSummary,
+} from '../conversationHistory'
 
 // A chat entry is either a text bubble (user / assistant) or a tool-call
 // indicator that moves through three states: loading → ok / error (mirrors the
 // Vercel AI SDK tool-part lifecycle input-available → output-available/-error).
-type ChatMessage =
-  | { id: string; role: 'user' | 'assistant'; content: string }
-  | {
-      id: string
-      role: 'tool'
-      toolUseId: string
-      toolName: string
-      status: 'loading' | 'ok' | 'error'
-      summary?: string
-    }
-
 export default function ChatPanel() {
   const [messages, setMessages] = useState<Array<ChatMessage>>([])
   const [input, setInput] = useState('')
   const [wsConnected, setWsConnected] = useState(false)
+  const [conversations, setConversations] = useState<ConversationSummary[]>([])
+  const [activeConversationId, setActiveConversationId] = useState<string>('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Per-streaming-message scratch: message_id -> { index -> accumulated text }.
@@ -49,6 +46,31 @@ export default function ChatPanel() {
 
   useEffect(() => {
     const offStatus = ws.onStatus(setWsConnected)
+
+    const offConversationSnapshot = ws.onMessage('conversation.snapshot', (msg) => {
+      const conversation = msg.conversation as { id?: string } | undefined
+      const id = conversation?.id || ''
+      setActiveConversationId(id)
+      try {
+        if (id) localStorage.setItem('uchrom_conversation_id', id)
+      } catch { /* ignore */ }
+      setConversations((msg.conversations as ConversationSummary[] | undefined) || [])
+      setMessages(buildChatMessagesFromSnapshot(
+        (msg.messages as ConversationMessage[] | undefined) || [],
+      ))
+      const views = msg.views as Array<{
+        view_id: string; view_type: string; state: Record<string, unknown>; title?: string
+      }> | undefined
+      useAppStore.getState().hydrateViews(views || [])
+    })
+
+    const offConversationList = ws.onMessage('conversation.list', (msg) => {
+      setConversations((msg.conversations as ConversationSummary[] | undefined) || [])
+    })
+
+    const offConversationUpdated = ws.onMessage('conversation.updated', (msg) => {
+      setConversations((msg.conversations as ConversationSummary[] | undefined) || [])
+    })
 
     // Streaming lifecycle: message_start creates an empty assistant bubble keyed
     // by message_id; agent_message_delta appends text in-place at its index;
@@ -176,7 +198,8 @@ export default function ChatPanel() {
     })
 
     return () => {
-      offStatus(); offStart(); offDelta(); offStop()
+      offStatus(); offConversationSnapshot(); offConversationList(); offConversationUpdated()
+      offStart(); offDelta(); offStop()
       offText(); offArtifact(); offTextArtifact(); offSnapshot()
       offAwait(); offAwaitDone(); offToolStart(); offToolResult()
     }
@@ -193,11 +216,49 @@ export default function ChatPanel() {
     setInput('')
   }
 
+  const handleLoadConversation = (id: string) => {
+    if (!id || id === activeConversationId || !ws.connected) return
+    ws.send('conversation.load', { conversation_id: id })
+  }
+
+  const handleNewConversation = () => {
+    if (!ws.connected) return
+    setMessages([])
+    ws.send('conversation.new', {})
+  }
+
   return (
     <div className="h-full flex flex-col bg-bg-primary">
       <div className="px-4 py-2 border-b border-border-primary bg-bg-secondary flex items-center gap-2">
         <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-accent-green' : 'bg-gray-300'}`} />
         <span className="text-xs text-text-secondary">{wsConnected ? 'Connected' : 'Disconnected'}</span>
+        <div className="ml-auto flex items-center gap-2 min-w-0">
+          <select
+            value={activeConversationId}
+            onChange={(e) => handleLoadConversation(e.target.value)}
+            disabled={!wsConnected}
+            className="max-w-[180px] px-2 py-1 text-xs border border-border-primary rounded bg-bg-primary text-text-primary disabled:opacity-50"
+            title="Conversation history"
+          >
+            {activeConversationId && !conversations.some(c => c.id === activeConversationId) && (
+              <option value={activeConversationId}>Current</option>
+            )}
+            {conversations.length === 0 && <option value="">No history</option>}
+            {conversations.map(conversation => (
+              <option key={conversation.id} value={conversation.id}>
+                {conversation.title || conversation.data_name || 'Conversation'}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={handleNewConversation}
+            disabled={!wsConnected}
+            className="px-2 py-1 text-xs border border-border-primary rounded text-text-secondary hover:text-text-primary disabled:opacity-50"
+            title="New conversation"
+          >
+            New
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">

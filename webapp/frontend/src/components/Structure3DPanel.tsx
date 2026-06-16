@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { useAppStore } from '../store'
-import { ws } from '../ws'
+import { sessionApiUrl, ws } from '../ws'
 import { registerCapturer } from '../snapshot'
 
 const PALETTE = [
@@ -23,6 +23,7 @@ interface BinInfo {
   start: number | null
   end: number | null
   spot_index: number   // index of this point within the cell's spot order
+  annotations?: Record<string, unknown>
 }
 interface Segment {
   seg_id: string      // unique: `${cell_id}:${chrom}`
@@ -38,6 +39,12 @@ interface Structure3DData {
 
 function hexStr(c: number): string {
   return '#' + c.toString(16).padStart(6, '0')
+}
+
+function annotationKey(seg: Segment, field: string): string | null {
+  const bin = seg.bins.find(b => b.annotations?.[field] != null)
+  const value = bin?.annotations?.[field]
+  return value == null ? null : String(value)
 }
 
 export default function Structure3DPanel() {
@@ -74,7 +81,7 @@ export default function Structure3DPanel() {
 
     const run = async () => {
       try {
-        const cellsRes = await fetch('/api/cells')
+        const cellsRes = await fetch(sessionApiUrl('/api/cells'))
         if (!cellsRes.ok) throw new Error(`Cells fetch failed: HTTP ${cellsRes.status}`)
         const cellsData = await cellsRes.json()
         const cellIds: string[] = (cellsData.cells || []).map((c: { cell_id: string }) => c.cell_id)
@@ -84,7 +91,7 @@ export default function Structure3DPanel() {
         }
 
         // Coords for all cells: float32 rows [cell_index, x, y, z].
-        const coordsRes = await fetch('/api/coords/batch', {
+        const coordsRes = await fetch(sessionApiUrl('/api/coords/batch'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ cell_ids: cellIds }),
@@ -103,7 +110,7 @@ export default function Structure3DPanel() {
         // Bins (chrom per spot) for each cell, index-aligned with its coords.
         const binsLists = await Promise.all(
           cellIds.map(cid =>
-            fetch(`/api/bins/${encodeURIComponent(cid)}`)
+            fetch(sessionApiUrl(`/api/bins/${encodeURIComponent(cid)}?annotations=true`))
               .then(r => (r.ok ? r.json() : null))
               .catch(() => null),
           ),
@@ -113,7 +120,12 @@ export default function Structure3DPanel() {
         cellIds.forEach((cid, ci) => {
           const pts = coordsByCell.get(ci) || []
           if (pts.length === 0) return
-          const bins = (binsLists[ci]?.bins as Array<{ chrom: string; start?: number; end?: number }> | undefined) || null
+          const bins = (binsLists[ci]?.bins as Array<{
+            chrom: string
+            start?: number
+            end?: number
+            annotations?: Record<string, unknown>
+          }> | undefined) || null
 
           if (bins && bins.length === pts.length) {
             // Group consecutive points by chrom into per-chrom polylines,
@@ -129,6 +141,7 @@ export default function Structure3DPanel() {
                 start: bins[k]?.start ?? null,
                 end: bins[k]?.end ?? null,
                 spot_index: k,
+                annotations: bins[k]?.annotations,
               })
             }
             byChrom.forEach((cpts, ch) => {
@@ -235,6 +248,7 @@ export default function Structure3DPanel() {
     // chromosome; anything else (default / 'trace_id' / 'cell_id') colors per
     // cell so each cell stays visually distinct.
     const byChrom = structureColorBy === 'chrom'
+    const byAnnotation = Boolean(structureColorBy && !['chrom', 'cell_id', 'trace_id'].includes(structureColorBy))
     const chromColor = new Map<string, number>()
     Array.from(new Set(data.segments.map(s => s.chrom))).sort().forEach((ch, i) => {
       chromColor.set(ch, PALETTE[i % PALETTE.length])
@@ -243,8 +257,23 @@ export default function Structure3DPanel() {
     Array.from(new Set(data.segments.map(s => s.cell_id))).forEach((cid, i) => {
       cellColor.set(cid, PALETTE[i % PALETTE.length])
     })
-    const baseColorFor = (s: Segment): number =>
-      byChrom ? (chromColor.get(s.chrom) ?? PALETTE[0]) : (cellColor.get(s.cell_id) ?? PALETTE[0])
+    const annotationColor = new Map<string, number>()
+    if (byAnnotation && structureColorBy) {
+      Array.from(new Set(
+        data.segments
+          .map(s => annotationKey(s, structureColorBy))
+          .filter((v): v is string => Boolean(v)),
+      )).sort().forEach((value, i) => annotationColor.set(value, PALETTE[i % PALETTE.length]))
+    }
+    const baseColorFor = (s: Segment): number => {
+      if (byChrom) return chromColor.get(s.chrom) ?? PALETTE[0]
+      if (byAnnotation && structureColorBy) {
+        const value = annotationKey(s, structureColorBy)
+        if (value) return annotationColor.get(value) ?? PALETTE[0]
+        return 0x9ca3af
+      }
+      return cellColor.get(s.cell_id) ?? PALETTE[0]
+    }
 
     const allPoints: THREE.Vector3[] = []
     lineMapRef.current = new Map()

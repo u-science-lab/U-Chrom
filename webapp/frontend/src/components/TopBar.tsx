@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '../store'
-import { ws } from '../ws'
+import { sessionApiUrl, ws } from '../ws'
 
 // One entry returned by GET /api/browse.
 interface BrowseEntry {
@@ -66,7 +66,7 @@ export default function TopBar() {
     setBrowseLoading(true)
     setBrowseError(null)
     try {
-      const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`)
+      const res = await fetch(sessionApiUrl(`/api/browse?path=${encodeURIComponent(path)}`))
       if (!res.ok) {
         const body = await res.json().catch(() => null)
         throw new Error(body?.detail?.error || `Browse failed (${res.status})`)
@@ -114,7 +114,6 @@ export default function TopBar() {
     <div className="h-[60px] flex items-center justify-between px-6 border-b border-border-primary bg-bg-primary">
       <div className="flex items-center gap-3">
         <div className="text-2xl font-bold text-accent-blue">U-Chrom</div>
-        <div className="text-sm text-text-secondary">Data Portal</div>
       </div>
 
       <div className="flex items-center gap-4">

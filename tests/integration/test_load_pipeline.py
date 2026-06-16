@@ -33,16 +33,25 @@ def test_umap_404_before_load(client):
     assert client.get("/api/umap").status_code == 404
 
 
+def _receive_until(wsc, msg_type: str):
+    for _ in range(5):
+        msg = wsc.receive_json()
+        if msg.get("type") == msg_type:
+            return msg
+    raise AssertionError(f"Did not receive {msg_type}")
+
+
 def test_ws_load_data_populates_session(client):
     """WS load_data reads ChromData and sets data_api.current_session."""
     with client.websocket_connect("/ws/main") as wsc:
+        assert wsc.receive_json()["type"] == "a2ui.protocol"
         wsc.send_json({"type": "load_data", "payload": {"path": H5CD}})
-        loaded = wsc.receive_json()
+        loaded = _receive_until(wsc, "data_loaded")
         assert loaded["type"] == "data_loaded"
         assert loaded["n_cells"] == 20
         assert loaded["n_spots"] == 1000
         # Followed by a human-readable text artifact
-        artifact = wsc.receive_json()
+        artifact = _receive_until(wsc, "artifact")
         assert artifact["type"] == "artifact"
         assert artifact["artifact_type"] == "text"
 
@@ -53,9 +62,10 @@ def test_ws_load_data_populates_session(client):
 def test_rest_apis_serve_after_load(client):
     """After load_data, the REST endpoints the frontend calls return data."""
     with client.websocket_connect("/ws/main") as wsc:
+        assert wsc.receive_json()["type"] == "a2ui.protocol"
         wsc.send_json({"type": "load_data", "payload": {"path": H5CD}})
-        wsc.receive_json()  # data_loaded
-        wsc.receive_json()  # text artifact
+        _receive_until(wsc, "data_loaded")
+        _receive_until(wsc, "artifact")
 
     # UMAP
     r = client.get("/api/umap")
@@ -77,6 +87,7 @@ def test_rest_apis_serve_after_load(client):
 def test_load_data_missing_file_errors(client):
     """A non-existent path yields an error message, not a crash."""
     with client.websocket_connect("/ws/main") as wsc:
+        assert wsc.receive_json()["type"] == "a2ui.protocol"
         wsc.send_json({"type": "load_data", "payload": {"path": "/nope/missing.h5cd"}})
         msg = wsc.receive_json()
         assert msg["type"] == "error"

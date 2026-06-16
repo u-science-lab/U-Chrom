@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Awaitable, Callable
 
 from .url_safety import is_safe_url, sanitize_artifact_urls
@@ -97,6 +98,41 @@ def _apply_json_patch_to_view(view, ops: list[dict]) -> str | None:
 # Gosling rendering
 # ---------------------------------------------------------------------------
 
+def _normalize_gosling_spec(spec):
+    """Normalize agent specs to this app's Gosling 1.0.7 contracts.
+
+    Claude can produce plausible-but-old matrix tracks (``rect`` with
+    start1/end1/start2/end2) while our HiGlass-compatible matrix tiles emit
+    xs/xe/ys/ye and Gosling 1.0.7 expects mark ``bar``. Also, ``alignment:
+    overlay`` is valid only on a wrapper that owns a nested ``tracks`` array; on
+    a leaf track it trips the compiler. Keep the cleanup narrow and structural.
+    """
+    if not isinstance(spec, dict):
+        return spec
+
+    def _walk(node):
+        if isinstance(node, list):
+            return [_walk(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+
+        out = {key: _walk(value) for key, value in node.items()}
+        if out.get("alignment") == "overlay" and "tracks" not in out:
+            out.pop("alignment", None)
+
+        data = out.get("data")
+        if isinstance(data, dict) and data.get("type") == "matrix":
+            out["mark"] = "bar"
+            out["x"] = {**out.get("x", {}), "field": "xs", "type": "genomic"}
+            out["xe"] = {**out.get("xe", {}), "field": "xe", "type": "genomic"}
+            out["y"] = {**out.get("y", {}), "field": "ys", "type": "genomic"}
+            out["ye"] = {**out.get("ye", {}), "field": "ye", "type": "genomic"}
+
+        return out
+
+    return _walk(spec)
+
+
 @register("render_gosling")
 async def _render_gosling(ws, ti: dict) -> str:
     spec = ti.get("spec", {})
@@ -106,6 +142,7 @@ async def _render_gosling(ws, ti: dict) -> str:
     # reaches the frontend or the backend-authoritative snapshot. Relative API
     # paths pass; pseudo-protocols and private/loopback hosts are dropped.
     spec, rejected_urls = sanitize_artifact_urls(spec)
+    spec = _normalize_gosling_spec(spec)
     if rejected_urls:
         logger.warning(
             "render_gosling: rejected %d unsafe URL(s) in spec %s: %s",
@@ -289,13 +326,30 @@ async def _run_analysis(ws, ti: dict) -> str:
     except Exception as e:
         return f"Analysis failed: {e}"
 
-    await ws.send_json({
+    session = ti.get("_session")
+    if session is not None:
+        session.analysis_results[f"{analysis_type}:{chrom}"] = handle
+        session.analysis_annotations[f"{analysis_type}:{chrom}"] = {
+            "analysis_type": handle["type"],
+            "chrom": chrom,
+            "records": handle["records"],
+        }
+
+    artifact = {
         "type": "agent_artifact",
         "artifact_type": "analysis_result",
         "analysis_type": analysis_type,
         "chrom": chrom,
         "result": {handle["type"] + "s": handle["records"]},
-    })
+        "record_count": handle["record_count"],
+        "data_url": handle["data_url"],
+        "chromosome_field": handle["chromosome_field"],
+        "genomic_fields": handle["genomic_fields"],
+        "suggested_mark": handle["suggested_mark"],
+    }
+    if "chromosome_field_x1" in handle:
+        artifact["chromosome_field_x1"] = handle["chromosome_field_x1"]
+    await ws.send_json(artifact)
 
     payload = {
         "success": True,
@@ -819,6 +873,7 @@ ALLOWED_COMPONENTS = frozenset({
     "GoslingView", "EmbeddingView", "StructureView",
 })
 MAX_COMPONENT_NODES = 200
+ACTION_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,79}$")
 
 
 def _validate_component_tree(node, counter: list) -> str | None:
@@ -828,6 +883,16 @@ def _validate_component_tree(node, counter: list) -> str | None:
     name = node.get("component")
     if name not in ALLOWED_COMPONENTS:
         return f"unknown component '{name}'; allowed: {sorted(ALLOWED_COMPONENTS)}"
+    props = node.get("props", {})
+    if props is not None and not isinstance(props, dict):
+        return f"'props' of {name} must be an object"
+    action_id = (props or {}).get("action_id") if isinstance(props, dict) else None
+    if action_id is not None:
+        if not isinstance(action_id, str) or not ACTION_ID_RE.match(action_id):
+            return (
+                "invalid action_id; use 1-80 characters matching "
+                "[A-Za-z][A-Za-z0-9_.:-]*"
+            )
     counter[0] += 1
     if counter[0] > MAX_COMPONENT_NODES:
         return f"component tree too large (> {MAX_COMPONENT_NODES} nodes)"

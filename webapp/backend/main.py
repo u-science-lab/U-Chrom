@@ -6,6 +6,8 @@ from pydantic import BaseModel
 from typing import Any
 from .session import Session
 from .ws_handler import handle_message
+from .a2ui_protocol import build_protocol_handshake
+from .conversation_store import ConversationStore
 from .data_api import data_router
 from .tileset_api import tileset_router
 from .track_wig import track_wig_router
@@ -46,6 +48,7 @@ app.add_api_route("/api/v1/tileset_info/", tileset_info, methods=["GET"])
 app.add_api_route("/api/v1/tiles", tiles_endpoint, methods=["GET"])
 app.add_api_route("/api/v1/tiles/", tiles_endpoint, methods=["GET"])
 sessions: dict[str, Session] = {}
+conversation_store = ConversationStore()
 
 # How long a disconnected session is retained so a reconnect can resume its
 # conversation history + view state. After this, a reaper-free lazy sweep drops it.
@@ -71,18 +74,30 @@ async def ws_main(ws: WebSocket):
     # The client generates and stores its own session id (localStorage) and
     # always reconnects with ?session_id=. A known id resumes the session
     # (conversation history + view state); an unknown/absent id starts fresh.
-    requested_id = ws.query_params.get("session_id")
+    requested_id = ws.query_params.get("conversation_id") or ws.query_params.get("session_id")
     if requested_id and requested_id in sessions:
         session = sessions[requested_id]
         session.detached_at = None  # re-attached
         session_id = requested_id
+        session.conversation_store = conversation_store
         if session.chromdata is not None:
             _data_api.current_session = session
     else:
         session_id = requested_id or str(uuid.uuid4())
-        session = Session(session_id=session_id)
+        session = Session(session_id=session_id, conversation_id=session_id)
+        session.conversation_store = conversation_store
+        snapshot = conversation_store.get_snapshot(session_id)
+        if snapshot is not None:
+            session.h5cd_path = snapshot["conversation"].get("data_path")
+            session.ui_messages = snapshot.get("messages", [])
+            session.conversation_history = conversation_store.load_model_history(session_id)
+            session.load_view_snapshot(snapshot.get("views", []))
+        else:
+            conversation_store.ensure_conversation(session_id)
         sessions[session_id] = session
         _data_api.current_session = session
+
+    await ws.send_json(build_protocol_handshake(session_id))
 
     try:
         while True:
@@ -101,6 +116,20 @@ async def ws_main(ws: WebSocket):
             session.detached_at = _t.time()
         else:
             sessions.pop(session_id, None)
+
+
+@app.get("/api/conversations")
+async def list_conversations():
+    return {"conversations": conversation_store.list_conversations()}
+
+
+@app.get("/api/conversations/{conversation_id}")
+async def get_conversation(conversation_id: str):
+    snapshot = conversation_store.get_snapshot(conversation_id)
+    if snapshot is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return snapshot
 
 
 CANVAS_SIZES = {

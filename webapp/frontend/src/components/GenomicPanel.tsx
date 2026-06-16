@@ -1,6 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { useAppStore } from '../store'
 import { makeDefaultContactSpec } from '../specs/localContactMapSpec'
+import { DEMO_OPTIONS, UCHROM_DEMO_DATA_PATH, type DemoOptionId } from '../specs/demoData'
+import { OFFICIAL_DEMO_SPEC } from '../specs/remoteDemoSpec'
+import { sessionApiUrl, ws } from '../ws'
 import { ErrorBoundary } from './ErrorBoundary'
 
 interface DatasetInfo {
@@ -12,38 +15,6 @@ interface DatasetInfo {
 
 const GoslingRenderer = lazy(() => import('./GoslingRenderer'))
 
-// Remote demo spec (CpG Islands) for comparison/testing
-export const REMOTE_DEMO_SPEC = {
-  assembly: 'hg19',
-  layout: 'linear',
-  arrangement: 'vertical',
-  views: [
-    {
-      xDomain: { chromosome: 'chr1', interval: [1, 3000000] },
-      tracks: [
-        {
-          id: 'demo-track',
-          title: 'CpG Islands (Remote Demo)',
-          data: {
-            url: 'https://server.gosling-lang.org/api/v1/tileset_info/?d=gene-annotation',
-            type: 'beddb',
-            genomicFields: [{ index: 1, name: 'start' }, { index: 2, name: 'end' }],
-            valueFields: [{ index: 5, name: 'strand', type: 'nominal' }],
-            exonIntervalFields: [{ index: 12, name: 'start' }, { index: 13, name: 'end' }],
-          },
-          mark: 'triangleRight',
-          x: { field: 'start', type: 'genomic', axis: 'top' },
-          xe: { field: 'end', type: 'genomic' },
-          size: { value: 10 },
-          color: { value: '#3b82f6' },
-          width: 800,
-          height: 60,
-        }
-      ]
-    }
-  ]
-}
-
 export default function GenomicPanel() {
   const activeSpec = useAppStore(s => s.activeGoslingSpec)
   const activeSpecId = useAppStore(s => s.activeGoslingSpecId)
@@ -52,6 +23,7 @@ export default function GenomicPanel() {
   const viewport = useAppStore(s => s.viewport)
   const requestExport = useAppStore(s => s.requestExport)
   const dataVersion = useAppStore(s => s.dataVersion)
+  const [demoError, setDemoError] = useState<string | null>(null)
 
   // Default contact-map spec, built from the actually-loaded dataset's first
   // chromosome + assembly (via /api/dataset_info) instead of a hardcoded
@@ -72,7 +44,7 @@ export default function GenomicPanel() {
       return
     }
     let cancelled = false
-    fetch('/api/dataset_info')
+    fetch(sessionApiUrl('/api/dataset_info'))
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         return res.json() as Promise<DatasetInfo>
@@ -100,6 +72,20 @@ export default function GenomicPanel() {
 
   const isLocalDefault = !activeSpec
 
+  const runDemo = (id: DemoOptionId) => {
+    setDemoError(null)
+    if (id === 'official-demo') {
+      setActiveGoslingSpec(OFFICIAL_DEMO_SPEC, 'official-demo')
+      return
+    }
+    if (!ws.connected) {
+      setDemoError('Not connected to backend')
+      return
+    }
+    setActiveGoslingSpec(undefined, undefined)
+    ws.send('load_data', { path: UCHROM_DEMO_DATA_PATH })
+  }
+
   return (
     <div className="h-full flex flex-col bg-white overflow-hidden">
       {/* Control bar - manual view selection */}
@@ -115,16 +101,29 @@ export default function GenomicPanel() {
         >
           Local Contact Map
         </button>
-        <button
-          onClick={() => setActiveGoslingSpec(REMOTE_DEMO_SPEC, 'remote-demo')}
-          className={`px-2 py-1 rounded transition-colors ${
-            activeSpecId === 'remote-demo'
-              ? 'bg-blue-500 text-white'
-              : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-400'
+        <label className="sr-only" htmlFor="demo-menu">Demo</label>
+        <select
+          id="demo-menu"
+          value=""
+          onChange={e => {
+            const value = e.target.value as DemoOptionId | ''
+            if (value) runDemo(value)
+          }}
+          className={`px-2 py-1 rounded border text-xs transition-colors bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 ${
+            activeSpecId === 'official-demo'
+              ? 'border-blue-500 text-blue-700'
+              : 'border-gray-200 text-gray-600 hover:border-blue-400'
           }`}
+          title="Load a demo dataset or official Gosling demo"
         >
-          Remote Demo
-        </button>
+          <option value="">Demo</option>
+          {DEMO_OPTIONS.map(option => (
+            <option key={option.id} value={option.id}>{option.label}</option>
+          ))}
+        </select>
+        {demoError && (
+          <span className="text-red-500" role="status">{demoError}</span>
+        )}
 
         {/* Viewport display */}
         {viewport && (
@@ -196,8 +195,8 @@ export default function GenomicPanel() {
           <div className="h-full flex flex-col items-center justify-center text-center px-6 text-gray-400">
             <div className="text-sm font-medium text-gray-500 mb-1">No data loaded</div>
             <div className="text-xs max-w-xs">
-              Open a ChromData file (top-right) to view the contact map, or pick
-              "Remote Demo" to preview a sample track.
+              Open a ChromData file (top-right) to view the contact map, or use
+              the Demo menu to load U-Chrom data or the official Gosling demo.
             </div>
           </div>
         )}

@@ -21,6 +21,22 @@ export interface NotebookCell {
   running: boolean
 }
 
+export interface ProtocolState {
+  protocol_version: string
+  capabilities: string[]
+  tools: string[]
+}
+
+export interface AnalysisResultMetadata {
+  analysis_type: string
+  chrom: string
+  data_url?: string
+  record_count?: number
+  chromosome_field?: string
+  genomic_fields?: string[]
+  suggested_mark?: string
+}
+
 interface AppStore {
   // Viewport
   viewport: GenomicViewport
@@ -37,6 +53,12 @@ interface AppStore {
   // Data version (bumped when new data loaded)
   dataVersion: number
   bumpDataVersion: () => void
+
+  // Protocol and analysis metadata
+  protocol: ProtocolState | null
+  setProtocol: (protocol: ProtocolState | null) => void
+  analysisResults: Record<string, AnalysisResultMetadata>
+  setAnalysisResult: (key: string, result: AnalysisResultMetadata) => void
 
   // Linked view state
   highlightedCells: string[]
@@ -131,6 +153,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
   dataVersion: 0,
   bumpDataVersion: () => set(s => ({ dataVersion: s.dataVersion + 1 })),
 
+  protocol: null,
+  setProtocol: (protocol) => set({ protocol }),
+  analysisResults: {},
+  setAnalysisResult: (key, result) => set(s => ({
+    analysisResults: { ...s.analysisResults, [key]: result },
+  })),
+
   // Linked view state
   highlightedCells: [],
   selectedRegion: null,
@@ -165,6 +194,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
     goslingArtifacts: [...s.goslingArtifacts, artifact]
   })),
   hydrateViews: (views) => {
+    if (views.length === 0) {
+      set({
+        activeGoslingSpec: null,
+        activeGoslingSpecId: null,
+        goslingArtifacts: [],
+        activeComponentTree: null,
+        viewRevisions: {},
+      })
+      return
+    }
     // Adopt the backend revision for every view so subsequent base_revision
     // checks line up after a reconnect / snapshot re-pull.
     const revisions: Record<string, number> = { ...get().viewRevisions }

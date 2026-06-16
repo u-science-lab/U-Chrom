@@ -13,15 +13,12 @@
  * only forwards `/api/*`, and the backend serves these under `/api/v1`, so
  * `server` MUST include the `/api/v1` prefix.
  *
- * OVERLAY STRUCTURE (Gosling 1.x): a track that sets `alignment: 'overlay'`
- * MUST carry a nested `tracks: [...]` array of the layers to overlay. Setting
- * `alignment: 'overlay'` on a leaf track WITHOUT a nested `tracks` array makes
- * the compiler do `[...track.tracks]` on `undefined` → "track.tracks is not
- * iterable". So the heatmap + TAD boundaries are wrapped in ONE overlay track,
- * and the cytoband axis is a separate stacked track.
+ * Keep the default view as a plain matrix track. Gosling 1.0.7's overlay
+ * compiler is brittle when mixed tileset and CSV tracks are superposed, and can
+ * pass an overlay shell with no data.url into its HiGlass tileset parser.
  */
 
-const ORIGIN = typeof window !== 'undefined' ? window.location.origin : ''
+const ORIGIN = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
 
 /**
  * Build a default contact-map spec for a given chromosome.
@@ -44,73 +41,32 @@ export function makeDefaultContactSpec(chrom: string, assembly?: string | null) 
         xDomain: { chromosome: chrom },
         tracks: [
           {
-            // Overlay parent: heatmap + TAD boundary rules share one canvas.
-            alignment: 'overlay',
+            // Contact matrix heatmap.
+            // Gosling 1.0.7 MatrixData schema accepts ONLY `url` (no
+            // `server` / `tilesetUid`). The compiler derives server+tilesetUid
+            // by splitting the url on the literal "tileset_info/?d=" (note the
+            // trailing slash), so the url MUST contain that exact substring. A
+            // matrix is a 2D track: it needs all four positional channels
+            // (x/xe/y/ye) with the tile fields xs/xe/ys/ye, and mark 'bar'.
+            id: 'contact-heatmap',
             title: `Contact Map (${chrom})`,
+            data: {
+              type: 'matrix',
+              url: `${ORIGIN}/api/v1/tileset_info/?d=contact-${chrom}`,
+            },
+            mark: 'bar',
+            x: { field: 'xs', type: 'genomic', axis: 'top' },
+            xe: { field: 'xe', type: 'genomic' },
+            y: { field: 'ys', type: 'genomic', axis: 'left' },
+            ye: { field: 'ye', type: 'genomic' },
+            color: {
+              field: 'value',
+              type: 'quantitative',
+              range: 'warm',
+              legend: true,
+            },
             width: 800,
             height: 400,
-            tracks: [
-              {
-                // Layer 1: contact matrix heatmap.
-                // Gosling 1.0.7 MatrixData schema accepts ONLY `url` (no
-                // `server` / `tilesetUid`). The compiler derives
-                // server+tilesetUid by splitting the url on the literal
-                // "tileset_info/?d=" (note the trailing slash), so the url MUST
-                // contain that exact substring. A matrix is a 2D track: it needs
-                // all four positional channels (x/xe/y/ye) with the tile fields
-                // xs/xe/ys/ye, and mark 'bar'.
-                id: 'contact-heatmap',
-                data: {
-                  type: 'matrix',
-                  url: `${ORIGIN}/api/v1/tileset_info/?d=contact-${chrom}`,
-                },
-                mark: 'bar',
-                x: { field: 'xs', type: 'genomic', axis: 'top' },
-                xe: { field: 'xe', type: 'genomic' },
-                y: { field: 'ys', type: 'genomic', axis: 'left' },
-                ye: { field: 'ye', type: 'genomic' },
-                color: {
-                  field: 'value',
-                  type: 'quantitative',
-                  range: 'warm',
-                  legend: true,
-                },
-              },
-              {
-                // Layer 2: TAD start boundaries (vertical rules).
-                // Gosling's json loader only accepts inline `values`; remote
-                // data MUST use `type: 'csv'` (which supports `url`). Backend
-                // serves text/csv at format=csv with a header row even when
-                // empty.
-                id: 'tad-boundaries',
-                data: {
-                  type: 'csv',
-                  url: `${ORIGIN}/api/tads/${chrom}?format=csv`,
-                  chromosomeField: 'chrom',
-                  genomicFields: ['start', 'end'],
-                },
-                mark: 'rule',
-                x: { field: 'start', type: 'genomic' },
-                strokeWidth: { value: 2 },
-                stroke: { value: '#ff1493' },
-                opacity: { value: 0.7 },
-              },
-              {
-                // Layer 3: TAD end boundaries (vertical rules)
-                id: 'tad-boundaries-end',
-                data: {
-                  type: 'csv',
-                  url: `${ORIGIN}/api/tads/${chrom}?format=csv`,
-                  chromosomeField: 'chrom',
-                  genomicFields: ['start', 'end'],
-                },
-                mark: 'rule',
-                x: { field: 'end', type: 'genomic' },
-                strokeWidth: { value: 2 },
-                stroke: { value: '#ff1493' },
-                opacity: { value: 0.7 },
-              },
-            ],
           },
           {
             // Separate stacked track: cytogenetic band axis below the heatmap.

@@ -77,6 +77,45 @@ maps, and camera positions.  **File → Load Session** restores them.
 Imaging data paths are re-resolved if still valid; if not, the embedded
 records are used.
 
+## AI web workbench
+
+The `webapp/` worktree contains a browser-based AI workbench in addition to
+the PyVista desktop browser.  It uses a FastAPI backend, a single `/ws/main`
+control channel, and REST endpoints for data-heavy reads such as coordinates,
+tiles, tracks, UMAP points, structural calls, and custom analyses.
+
+On WebSocket connect the server emits an `a2ui.protocol` frame with
+`protocol_version: "0.2"`, the active `session_id`, supported capabilities,
+and the backend tool list.  Current capabilities include JSON Patch state
+deltas, view snapshots, interaction waits, snapshot capture, whitelisted
+component trees, component actions, analysis projection, and session-scoped
+REST.  The frontend replies with `protocol.hello` and appends `session_id` to
+REST calls via `sessionApiUrl()`, while the backend keeps the legacy global
+session fallback for older clients.
+
+Agent-driven UI remains declarative.  The agent can render or patch Gosling
+specs, request user interaction futures, capture genomic/embedding/3D
+snapshots, run built-in TAD/loop/compartment analysis, deploy sandboxed Python
+analysis endpoints, and compose whitelisted Tier-2 components.  It cannot ship
+browser-executable JavaScript; `ComponentRenderer` only renders approved
+components and emits structured `component_action` UI events from controls.
+
+Structural analyses now link back into the 3D view.  `run_analysis` returns
+Gosling-ready render metadata (`data_url`, genomic fields, record count, and
+suggested mark), stores the records in the active session, and `/api/bins/{cell}`
+can include projected annotations with `annotations=true`.  Compartment/TAD
+intervals project onto overlapping bins, loop records project anchor counts,
+and the 3D panel can color by projected annotation fields.
+
+Compared with Pantheon LiveView, U-Chrom intentionally stays narrower:
+Pantheon is a general live UI platform with NATS-backed remote streams,
+viewer plugins, and optional agent-provided JavaScript modules.  U-Chrom is a
+domain workbench for `ChromData`: FastAPI + WebSocket control, REST data
+surfaces, backend-authoritative view state, Gosling/Three.js panels, and
+declarative component trees.  It borrows the useful ideas of state snapshots,
+actions, futures, and screenshots without importing NATS or arbitrary frontend
+module execution.
+
 ## Known issues
 
 - Some macOS builds of PyVista/VTK show spurious `IMKCFRunLoopWakeUp`

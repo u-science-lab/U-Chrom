@@ -15,6 +15,7 @@ WALKTHROUGH_TEMP.md
 
 # Benchmark and test scripts
 benchmark_output/
+logs/
 benchmark_mds.py
 compare_mds.py
 compare_tgev_all_chroms.py

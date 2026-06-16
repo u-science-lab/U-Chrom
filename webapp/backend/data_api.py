@@ -24,6 +24,93 @@ def _cd_or_404():
     return current_session.chromdata
 
 
+def resolve_session(session_id: Optional[str] = None) -> Optional[Session]:
+    """Resolve explicit session scope, falling back to the legacy global."""
+    if session_id:
+        try:
+            from .main import sessions
+            session = sessions.get(session_id)
+        except Exception:
+            session = None
+        if session is not None:
+            return session
+    return current_session
+
+
+def session_or_404(session_id: Optional[str] = None) -> Session:
+    session = resolve_session(session_id)
+    if session is None or session.chromdata is None:
+        raise HTTPException(status_code=404, detail={"error": "No data loaded"})
+    return session
+
+
+def cd_or_404(session_id: Optional[str] = None):
+    return session_or_404(session_id).chromdata
+
+
+def _ranges_overlap(a_start, a_end, b_start, b_end) -> bool:
+    try:
+        return int(a_start) < int(b_end) and int(b_start) < int(a_end)
+    except (TypeError, ValueError):
+        return False
+
+
+def _annotation_value_fields(record: dict, analysis_type: str) -> dict:
+    skip = {"chrom", "chrom1", "chrom2", "start", "end", "start1", "end1", "start2", "end2"}
+    out = {}
+    for key, value in record.items():
+        if key in skip:
+            continue
+        out[key] = value
+        if key == "score":
+            out[f"{analysis_type}_score"] = value
+    return out
+
+
+def _project_interval_annotations(bin_row: dict, analysis_type: str, records: list[dict]) -> dict:
+    projected = {}
+    chrom = str(bin_row.get("chrom", ""))
+    start = bin_row.get("start")
+    end = bin_row.get("end")
+    for idx, record in enumerate(records):
+        if str(record.get("chrom", record.get("chrom1", ""))) != chrom:
+            continue
+        if not _ranges_overlap(start, end, record.get("start"), record.get("end")):
+            continue
+        if analysis_type == "tad":
+            projected["tad"] = True
+            projected["tad_index"] = idx
+        projected.update(_annotation_value_fields(record, analysis_type))
+    return projected
+
+
+def _project_loop_annotations(bin_row: dict, records: list[dict]) -> dict:
+    chrom = str(bin_row.get("chrom", ""))
+    start = bin_row.get("start")
+    end = bin_row.get("end")
+    count = 0
+    for record in records:
+        chrom1 = str(record.get("chrom", record.get("chrom1", "")))
+        chrom2 = str(record.get("chrom2", chrom1))
+        anchor1 = chrom1 == chrom and _ranges_overlap(start, end, record.get("start1"), record.get("end1"))
+        anchor2 = chrom2 == chrom and _ranges_overlap(start, end, record.get("start2"), record.get("end2"))
+        if anchor1 or anchor2:
+            count += 1
+    return {"loop_anchor_count": count} if count else {}
+
+
+def _project_analysis_annotations(bin_row: dict, annotations: dict) -> dict:
+    projected = {}
+    for key, entry in (annotations or {}).items():
+        analysis_type = str(entry.get("analysis_type") or key.split(":", 1)[0])
+        records = entry.get("records") or []
+        if analysis_type == "loop":
+            projected.update(_project_loop_annotations(bin_row, records))
+        else:
+            projected.update(_project_interval_annotations(bin_row, analysis_type, records))
+    return projected
+
+
 def _coerce_cell_id(cd, cell_id: str):
     """Try str first, then int, to match categorical cell_id dtype."""
     sub = cd.get_cell(cell_id)
@@ -48,8 +135,8 @@ def _float32_response(arr: np.ndarray) -> Response:
 
 @data_router.post("/api/coords/batch")
 async def post_coords_batch(request: Request):
-    cd = _cd_or_404()
     body = await request.json()
+    cd = cd_or_404(body.get("session_id") or request.query_params.get("session_id"))
     id_list = body.get("cell_ids", [])
     rows = []
     for idx, cell_id in enumerate(id_list):
@@ -63,8 +150,8 @@ async def post_coords_batch(request: Request):
 
 
 @data_router.get("/api/coords/batch")
-def get_coords_batch(ids: str):
-    cd = _cd_or_404()
+def get_coords_batch(ids: str, session_id: Optional[str] = None):
+    cd = cd_or_404(session_id)
     id_list = [i.strip() for i in ids.split(",") if i.strip()]
     rows = []
     for idx, cell_id in enumerate(id_list):
@@ -82,8 +169,8 @@ def get_coords_batch(ids: str):
 # ---------------------------------------------------------------------------
 
 @data_router.get("/api/coords/{cell_id}")
-def get_coords(cell_id: str):
-    cd = _cd_or_404()
+def get_coords(cell_id: str, session_id: Optional[str] = None):
+    cd = cd_or_404(session_id)
     cell = _coerce_cell_id(cd, cell_id)
     return _float32_response(cell.coords)  # (n_bins, 3)
 
@@ -93,7 +180,7 @@ def get_coords(cell_id: str):
 # ---------------------------------------------------------------------------
 
 @data_router.get("/api/cells")
-def get_cells():
+def get_cells(session_id: Optional[str] = None):
     """Return the dataset's cell list, independent of any UMAP embedding.
 
     Source priority:
@@ -102,7 +189,7 @@ def get_cells():
       2. Fallback: unique ``cell_id`` values from ``cd.spots`` when ``cd.cells``
          is empty or unavailable.
     """
-    cd = _cd_or_404()
+    cd = cd_or_404(session_id)
 
     cells = []
     cell_types: list[str] = []
@@ -134,7 +221,7 @@ def get_cells():
 # ---------------------------------------------------------------------------
 
 @data_router.get("/api/dataset_info")
-def get_dataset_info():
+def get_dataset_info(session_id: Optional[str] = None):
     """Return dataset-level metadata used to build default visualizations.
 
     The genomic panel uses this to construct its default contact-map spec
@@ -147,7 +234,7 @@ def get_dataset_info():
       - ``genome_assembly``: ``cd.uns["genome_assembly"]`` if present, else null.
       - ``n_cells`` / ``n_spots``: simple size counts.
     """
-    cd = _cd_or_404()
+    cd = cd_or_404(session_id)
 
     chroms: list[str] = []
     if cd.spots is not None and "chrom" in cd.spots.columns:
@@ -172,8 +259,8 @@ def get_dataset_info():
 # ---------------------------------------------------------------------------
 
 @data_router.get("/api/umap")
-def get_umap():
-    cd = _cd_or_404()
+def get_umap(session_id: Optional[str] = None):
+    cd = cd_or_404(session_id)
     umap = cd.cellm.get("umap")
     if umap is None:
         raise HTTPException(status_code=404, detail={"error": "No UMAP computed"})
@@ -244,8 +331,9 @@ def _compute_contact_matrix(cd, chrom: str, start: Optional[int],
 @data_router.get("/api/contact/{chrom}")
 async def get_contact(chrom: str,
                       start: Optional[int] = None, end: Optional[int] = None,
-                      cell_type: Optional[str] = None):
-    cd = _cd_or_404()
+                      cell_type: Optional[str] = None,
+                      session_id: Optional[str] = None):
+    cd = cd_or_404(session_id)
     loop = asyncio.get_running_loop()
     with ThreadPoolExecutor(max_workers=1) as executor:
         try:
@@ -264,8 +352,9 @@ async def get_contact(chrom: str,
 @data_router.get("/api/track/{name}")
 def get_track(name: str, chrom: Optional[str] = None,
               start: Optional[int] = None, end: Optional[int] = None,
-              resolution: int = 1000):
-    cd = _cd_or_404()
+              resolution: int = 1000,
+              session_id: Optional[str] = None):
+    cd = cd_or_404(session_id)
     if cd.tracks is None or name not in cd.tracks.columns:
         raise HTTPException(status_code=404, detail={"error": f"Track '{name}' not found"})
 
@@ -293,8 +382,9 @@ def get_track(name: str, chrom: Optional[str] = None,
 # ---------------------------------------------------------------------------
 
 @data_router.get("/api/bins/{cell_id}")
-def get_bins(cell_id: str):
-    cd = _cd_or_404()
+def get_bins(cell_id: str, session_id: Optional[str] = None, annotations: bool = False):
+    session = session_or_404(session_id)
+    cd = session.chromdata
     cell = _coerce_cell_id(cd, cell_id)
     if len(cell.spots) == 0:
         raise HTTPException(status_code=404, detail={"error": f"Cell '{cell_id}' not found"})
@@ -303,10 +393,14 @@ def get_bins(cell_id: str):
     for col in ("chrom",):
         if hasattr(bins[col], "cat"):
             bins[col] = bins[col].astype(str)
-    return JSONResponse(
-        {"bins": bins.to_dict(orient="records")},
-        headers={"Cache-Control": _CACHE},
-    )
+    records = bins.to_dict(orient="records")
+    if annotations:
+        session_annotations = getattr(session, "analysis_annotations", {}) or {}
+        for row in records:
+            projected = _project_analysis_annotations(row, session_annotations)
+            if projected:
+                row["annotations"] = projected
+    return JSONResponse({"bins": records}, headers={"Cache-Control": _CACHE})
 
 
 # ---------------------------------------------------------------------------
@@ -347,10 +441,10 @@ def browse_directory(path: str = ""):
 # ---------------------------------------------------------------------------
 
 @data_router.get("/api/export_script")
-def export_script():
+def export_script(session_id: Optional[str] = None):
     """Return a standalone Python script that reproduces the current session."""
     from fastapi.responses import PlainTextResponse
-    cd = _cd_or_404()
+    cd = cd_or_404(session_id)
     source_path = getattr(cd, "_source_path", None) or "path/to/data.h5cd"
 
     lines = [

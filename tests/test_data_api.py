@@ -211,6 +211,92 @@ def test_dataset_info_synthetic():
     assert body["n_spots"] == 6
 
 
+def test_dataset_info_prefers_explicit_session_id_over_global_fallback():
+    from webapp.backend.main import sessions
+    from webapp.backend.session import Session
+
+    global_cd = _make_cd()
+    global_cd.uns["genome_assembly"] = "global"
+    explicit_cd = _make_cd()
+    explicit_cd.spots["chrom"] = ["chr2"] * len(explicit_cd.spots)
+    explicit_cd.uns["genome_assembly"] = "explicit"
+
+    global_session = Session(session_id="global-session")
+    global_session.chromdata = global_cd
+    explicit_session = Session(session_id="explicit-session")
+    explicit_session.chromdata = explicit_cd
+
+    data_api.current_session = global_session
+    sessions["explicit-session"] = explicit_session
+    try:
+        r = client.get("/api/dataset_info?session_id=explicit-session")
+    finally:
+        sessions.pop("explicit-session", None)
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["chroms"] == ["chr2"]
+    assert body["genome_assembly"] == "explicit"
+
+
+def test_bins_can_include_session_analysis_annotations():
+    session = data_api.current_session
+    session.analysis_annotations = {
+        "compartment:chr1": {
+            "analysis_type": "compartment",
+            "chrom": "chr1",
+            "records": [
+                {"chrom": "chr1", "start": 0, "end": 150, "compartment": "A", "score": 0.9},
+                {"chrom": "chr1", "start": 150, "end": 300, "compartment": "B", "score": -0.4},
+            ],
+        }
+    }
+
+    default_body = client.get("/api/bins/c1").json()
+    assert "annotations" not in default_body["bins"][0]
+
+    r = client.get("/api/bins/c1?annotations=true")
+    assert r.status_code == 200
+    bins = r.json()["bins"]
+    assert bins[0]["annotations"]["compartment"] == "A"
+    assert bins[0]["annotations"]["compartment_score"] == 0.9
+    assert bins[1]["annotations"]["compartment"] == "B"
+    assert bins[2]["annotations"]["compartment"] == "B"
+
+
+def test_bins_project_tad_membership_and_loop_anchor_counts():
+    session = data_api.current_session
+    session.analysis_annotations = {
+        "tad:chr1": {
+            "analysis_type": "tad",
+            "chrom": "chr1",
+            "records": [{"chrom": "chr1", "start": 0, "end": 150}],
+        },
+        "loop:chr1": {
+            "analysis_type": "loop",
+            "chrom": "chr1",
+            "records": [{
+                "chrom": "chr1",
+                "chrom2": "chr1",
+                "start1": 0,
+                "end1": 100,
+                "start2": 200,
+                "end2": 300,
+            }],
+        },
+    }
+
+    r = client.get("/api/bins/c1?annotations=true")
+    assert r.status_code == 200
+    bins = r.json()["bins"]
+    assert bins[0]["annotations"]["tad"] is True
+    assert bins[0]["annotations"]["tad_index"] == 0
+    assert bins[0]["annotations"]["loop_anchor_count"] == 1
+    assert bins[1]["annotations"]["tad"] is True
+    assert "tad" not in bins[2]["annotations"]
+    assert bins[2]["annotations"]["loop_anchor_count"] == 1
+
+
 @pytest.mark.skipif(
     not (EXAMPLE_DATA / "rich_multicell.h5cd").exists(),
     reason="rich_multicell.h5cd example data not present",

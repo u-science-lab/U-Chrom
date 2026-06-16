@@ -118,8 +118,18 @@ export const ARTIFACT_HANDLERS: Record<string, ArtifactHandler> = {
   analysis_result: (msg, ctx) => {
     // Bump dataVersion so panels re-fetch derived data (TAD/loop/compartment).
     useAppStore.getState().bumpDataVersion()
-    const at = msg.analysis_type as string
+    const analysisType = msg.analysis_type as string
     const chrom = msg.chrom as string
+    useAppStore.getState().setAnalysisResult(`${analysisType}:${chrom}`, {
+      analysis_type: analysisType,
+      chrom,
+      data_url: msg.data_url as string | undefined,
+      record_count: msg.record_count as number | undefined,
+      chromosome_field: msg.chromosome_field as string | undefined,
+      genomic_fields: msg.genomic_fields as string[] | undefined,
+      suggested_mark: msg.suggested_mark as string | undefined,
+    })
+    const at = msg.analysis_type as string
     ctx.pushAssistant(`[${at} analysis complete on ${chrom}]`)
   },
 

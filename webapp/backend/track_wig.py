@@ -27,11 +27,12 @@ track_wig_router = APIRouter()
 
 
 @track_wig_router.get("/api/tracks")
-def list_tracks() -> list:
+def list_tracks(session_id: Optional[str] = None) -> list:
     """Return list of available track names from cd.tracks columns."""
-    if data_api.current_session is None or data_api.current_session.chromdata is None:
+    session = data_api.resolve_session(session_id)
+    if session is None or session.chromdata is None:
         return []
-    cd = data_api.current_session.chromdata
+    cd = session.chromdata
     if cd.tracks is None:
         return []
     return list(cd.tracks.columns)
@@ -43,12 +44,10 @@ def get_track_wig(
     chrom: Optional[str] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
+    session_id: Optional[str] = None,
 ) -> PlainTextResponse:
     """Return variableStep WIG text for the named track column."""
-    if data_api.current_session is None or data_api.current_session.chromdata is None:
-        raise HTTPException(status_code=404, detail={"error": "No data loaded"})
-
-    cd = data_api.current_session.chromdata
+    cd = data_api.cd_or_404(session_id)
 
     if cd.tracks is None or name not in cd.tracks.columns:
         raise HTTPException(status_code=404, detail={"error": f"Track '{name}' not found"})
@@ -96,6 +95,7 @@ def get_track_csv(
     chrom: Optional[str] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
+    session_id: Optional[str] = None,
 ) -> PlainTextResponse:
     """Return Gosling-compatible CSV for the named track column.
 
@@ -112,10 +112,7 @@ def get_track_csv(
     ``{"type":"csv","url":"/api/track_csv/<name>","chromosomeField":"chrom",
     "genomicFields":["start","end"]}`` and ``y:{"field":"value",...}``.
     """
-    if data_api.current_session is None or data_api.current_session.chromdata is None:
-        raise HTTPException(status_code=404, detail={"error": "No data loaded"})
-
-    cd = data_api.current_session.chromdata
+    cd = data_api.cd_or_404(session_id)
 
     if cd.tracks is None or name not in cd.tracks.columns:
         raise HTTPException(status_code=404, detail={"error": f"Track '{name}' not found"})

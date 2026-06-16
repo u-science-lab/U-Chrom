@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import TwoColumnLayout from './components/TwoColumnLayout'
 import TopBar from './components/TopBar'
-import GenomicNavBar from './components/GenomicNavBar'
 import { installSnapshotOrchestrator } from './snapshot'
 
 export default function App() {
@@ -15,7 +14,6 @@ export default function App() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <TwoColumnLayout />
       </div>
-      <GenomicNavBar />
     </div>
   )
 }

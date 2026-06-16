@@ -8,6 +8,10 @@ import anthropic
 import logging
 
 from .agent_tools import TOOLS, SYSTEM_PROMPT
+from .a2ui_protocol import parse_client_hello
+from .conversation_log import append_conversation_event
+from .conversation_store import ConversationStore
+from .session import ViewSession
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +21,159 @@ client = anthropic.AsyncAnthropic()
 
 def _now() -> float:
     return time.time()
+
+
+def _log_event(session, event: str, payload):
+    """Best-effort conversation trace hook."""
+    append_conversation_event(session, event, payload)
+
+
+def _conversation_store(session) -> ConversationStore:
+    store = getattr(session, "conversation_store", None)
+    if store is None:
+        store = ConversationStore()
+        session.conversation_store = store
+    return store
+
+
+def _conversation_id(session) -> str:
+    cid = getattr(session, "conversation_id", None) or getattr(session, "session_id", None)
+    if not cid:
+        cid = str(uuid.uuid4())
+    session.conversation_id = cid
+    session.session_id = cid
+    return cid
+
+
+def _text_from_content_blocks(content) -> str:
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return str(content or "")
+    parts: list[str] = []
+    for block in content:
+        if isinstance(block, dict):
+            if block.get("type") == "text":
+                parts.append(str(block.get("text", "")))
+        else:
+            if getattr(block, "type", None) == "text":
+                parts.append(str(getattr(block, "text", "")))
+    return "".join(parts)
+
+
+def _serialize_model_history(history: list) -> list[dict]:
+    serialized: list[dict] = []
+    for item in history or []:
+        role = item.get("role") if isinstance(item, dict) else getattr(item, "role", None)
+        content = item.get("content") if isinstance(item, dict) else getattr(item, "content", None)
+        serialized.append({"role": role, "content": _json_safe(content)})
+    return serialized
+
+
+def _json_safe(value):
+    try:
+        json.dumps(value)
+        return value
+    except TypeError:
+        pass
+    if hasattr(value, "model_dump"):
+        try:
+            return _json_safe(value.model_dump())
+        except Exception:
+            pass
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if hasattr(value, "__dict__"):
+        return _json_safe({
+            k: v for k, v in vars(value).items() if not k.startswith("_")
+        })
+    return str(value)
+
+
+def _apply_conversation_snapshot(session, snapshot: dict) -> None:
+    conversation = snapshot["conversation"]
+    session.conversation_id = conversation["id"]
+    session.session_id = conversation["id"]
+    session.h5cd_path = conversation.get("data_path")
+    session.ui_messages = snapshot.get("messages", [])
+    session.conversation_history = _conversation_store(session).load_model_history(
+        conversation["id"]
+    )
+    session.load_view_snapshot(snapshot.get("views", []))
+
+
+def _snapshot_payload(session, conversation_id: str | None = None) -> dict | None:
+    store = _conversation_store(session)
+    cid = conversation_id or _conversation_id(session)
+    snapshot = store.get_snapshot(cid)
+    if snapshot is None:
+        store.ensure_conversation(cid, data_path=getattr(session, "h5cd_path", None))
+        snapshot = store.get_snapshot(cid)
+    if snapshot is None:
+        return None
+    if cid == getattr(session, "conversation_id", None):
+        session.ui_messages = snapshot.get("messages", [])
+    return {
+        "type": "conversation.snapshot",
+        **snapshot,
+        "conversations": store.list_conversations(),
+    }
+
+
+async def _send_conversation_snapshot(ws, session, conversation_id: str | None = None) -> None:
+    payload = _snapshot_payload(session, conversation_id)
+    if payload is None:
+        await ws.send_json({"type": "error", "message": "Conversation not found"})
+        return
+    await ws.send_json(payload)
+
+
+async def _send_conversation_list(ws, session) -> None:
+    await ws.send_json({
+        "type": "conversation.list",
+        "conversations": _conversation_store(session).list_conversations(),
+    })
+
+
+def _persist_current_views(session) -> None:
+    cid = getattr(session, "conversation_id", None)
+    if not cid:
+        return
+    _conversation_store(session).save_view_snapshot(cid, session.view_snapshot())
+
+
+def _append_ui_message(session, role: str, content: str, *, message_id: str | None = None) -> dict:
+    cid = _conversation_id(session)
+    store = _conversation_store(session)
+    existing = store.get_snapshot(cid)
+    title = None
+    if role == "user" and content and (
+        existing is None
+        or not existing.get("messages")
+        or existing.get("conversation", {}).get("title") == "New conversation"
+    ):
+        title = content[:60]
+    store.ensure_conversation(cid, title=title, data_path=getattr(session, "h5cd_path", None))
+    msg = store.append_message(cid, role, content, message_id=message_id)
+    session.ui_messages.append(msg)
+    return msg
+
+
+def persist_text_artifact(session, content: str) -> dict | None:
+    """Persist a backend-sent text artifact as a user-visible assistant row."""
+    if session is None or not content:
+        return None
+    return _append_ui_message(session, "assistant", content)
+
+
+async def _send_conversation_updated(ws, session) -> None:
+    await ws.send_json({
+        "type": "conversation.updated",
+        "conversation_id": _conversation_id(session),
+        "conversations": _conversation_store(session).list_conversations(),
+    })
 
 
 def _looks_like_fofct(path: str) -> bool:
@@ -229,28 +386,85 @@ async def handle_message(ws, session, msg: dict, executor):
     """
     msg_type = msg.get("type")
     payload = msg.get("payload", {})
+    _log_event(session, "client_message", {"type": msg_type, "payload": payload})
 
-    if msg_type == "user_message":
+    if msg_type == "conversation.request_snapshot":
+        await _send_conversation_snapshot(ws, session)
+        return
+    elif msg_type == "protocol.hello":
+        hello = parse_client_hello(msg)
+        if hello is None:
+            await ws.send_json({"type": "error", "message": "protocol.hello requires capabilities"})
+            return
+        await ws.send_json({
+            "type": "protocol.ready",
+            "protocol_version": hello["protocol_version"],
+            "version": hello["version"],
+            "session_id": _conversation_id(session),
+            "capabilities": hello["capabilities"],
+        })
+        return
+    elif msg_type == "conversation.list":
+        await _send_conversation_list(ws, session)
+        return
+    elif msg_type == "conversation.load":
+        requested = payload.get("conversation_id")
+        if not requested:
+            await ws.send_json({"type": "error", "message": "conversation.load requires conversation_id"})
+            return
+        snapshot = _conversation_store(session).get_snapshot(requested)
+        if snapshot is None:
+            await ws.send_json({"type": "error", "message": f"Conversation not found: {requested}"})
+            return
+        _apply_conversation_snapshot(session, snapshot)
+        await _send_conversation_snapshot(ws, session, requested)
+        return
+    elif msg_type == "conversation.new":
+        cid = str(uuid.uuid4())
+        _conversation_store(session).create_conversation(conversation_id=cid)
+        session.session_id = cid
+        session.conversation_id = cid
+        session.conversation_history = []
+        session.ui_messages = []
+        session.current_assistant_message_id = None
+        session.views = {}
+        session.h5cd_path = None
+        await _send_conversation_snapshot(ws, session, cid)
+        return
+    elif msg_type == "user_message":
         user_text = payload.get("text", "")
         if not user_text:
-            await ws.send_json({"type": "error", "message": "user_message requires 'text' field"})
+            error = {"type": "error", "message": "user_message requires 'text' field"}
+            _log_event(session, "error", {"where": "handle_message", "message": error["message"]})
+            await ws.send_json(error)
             return
 
         # Append to session's conversation history for multi-turn dialog
         session.conversation_history.append({"role": "user", "content": user_text})
+        _append_ui_message(session, "user", user_text)
+        _conversation_store(session).save_model_history(
+            _conversation_id(session),
+            _serialize_model_history(session.conversation_history),
+        )
+        _log_event(session, "user_message", {"text": user_text})
+        await _send_conversation_updated(ws, session)
 
         # Call agent loop with full history
         await run_agent_loop(ws, session.conversation_history, session)
     elif msg_type == "load_data":
         path = payload.get("path")
         if not path:
-            await ws.send_json({"type": "error", "message": "load_data requires 'path' field"})
+            error = {"type": "error", "message": "load_data requires 'path' field"}
+            _log_event(session, "error", {"where": "load_data", "message": error["message"]})
+            await ws.send_json(error)
             return
 
         # Validate file exists
         abs_path = os.path.abspath(path)
         if not os.path.exists(abs_path):
-            await ws.send_json({"type": "error", "message": f"File not found: {path}"})
+            error = {"type": "error", "message": f"File not found: {path}"}
+            _log_event(session, "error", {"where": "load_data", "message": error["message"], "path": path})
+            await ws.send_json(error)
             return
 
         # Accept the formats the file browser / open dialog advertise:
@@ -259,10 +473,12 @@ async def handle_message(ws, session, msg: dict, executor):
         # rest up front with a clear message.
         lower = abs_path.lower()
         if not (lower.endswith(".h5cd") or lower.endswith(".csv") or lower.endswith(".fofct")):
-            await ws.send_json({
+            error = {
                 "type": "error",
                 "message": "File must be .h5cd, .csv, or FOF-CT (.fofct) format",
-            })
+            }
+            _log_event(session, "error", {"where": "load_data", "message": error["message"], "path": abs_path})
+            await ws.send_json(error)
             return
 
         # Dispatch by extension / content: .h5cd → ChromData.read; structure
@@ -270,11 +486,16 @@ async def handle_message(ws, session, msg: dict, executor):
         try:
             cd = _load_chromdata(abs_path)
         except Exception as e:
-            await ws.send_json({"type": "error", "message": f"Failed to read {os.path.basename(abs_path)}: {e}"})
+            error = {"type": "error", "message": f"Failed to read {os.path.basename(abs_path)}: {e}"}
+            _log_event(session, "error", {"where": "load_data", "message": error["message"], "path": abs_path})
+            await ws.send_json(error)
             return
 
         session.h5cd_path = abs_path
         session.chromdata = cd
+        if getattr(session, "conversation_id", None):
+            _conversation_store(session).update_conversation(session.conversation_id, data_path=abs_path)
+            await _send_conversation_updated(ws, session)
         # data_api serves from its module-level current_session; point it here.
         import webapp.backend.data_api as _data_api
         _data_api.current_session = session
@@ -315,12 +536,25 @@ async def handle_message(ws, session, msg: dict, executor):
             "n_cells": int(n_cells),
             "n_spots": int(n_spots),
         })
+        _log_event(session, "agent_artifact", {
+            "artifact_type": "data_loaded",
+            "path": abs_path,
+            "n_cells": int(n_cells),
+            "n_spots": int(n_spots),
+        })
 
         # Send initial confirmation message
+        ready_text = (
+            f"Data loaded: {os.path.basename(abs_path)} — {n_cells} cells, {n_spots} spots."
+            "\n\nYou can now ask questions or request visualizations."
+        )
+        persist_text_artifact(session, ready_text)
+        if getattr(session, "conversation_id", None):
+            await _send_conversation_updated(ws, session)
         await ws.send_json({
             "type": "artifact",
             "artifact_type": "text",
-            "content": f"Data loaded: {os.path.basename(abs_path)} — {n_cells} cells, {n_spots} spots.\n\nYou can now ask questions or request visualizations.",
+            "content": ready_text,
             "title": "Ready"
         })
     elif msg_type == "update_viewport":
@@ -344,6 +578,8 @@ async def handle_message(ws, session, msg: dict, executor):
             snapshot = [v.to_dict()] if v is not None else []
         else:
             snapshot = [v.to_dict() for v in views.values()]
+        if not view_id:
+            _persist_current_views(session)
         await ws.send_json({"type": "view.snapshot", "views": snapshot})
     elif msg_type == "snapshot_result":
         # The frontend captured (or failed to capture) a view image in response
@@ -399,7 +635,9 @@ async def handle_message(ws, session, msg: dict, executor):
         # Resolve a pending query_user_interaction waiter, if any.
         _resolve_interaction(session, view_id, event, interaction_id)
     else:
-        await ws.send_json({"type": "error", "message": f"Unknown message type: {msg_type}"})
+        error = {"type": "error", "message": f"Unknown message type: {msg_type}"}
+        _log_event(session, "error", {"where": "handle_message", "message": error["message"]})
+        await ws.send_json(error)
 
 
 MAX_TOOL_ITERATIONS = 10  # prevent infinite loops
@@ -489,6 +727,13 @@ async def run_agent_loop(websocket: WebSocket, conversation_history: list, sessi
         # message_id, with per-block text appended at a stable index — instead of
         # spawning a fresh bubble per delta. Mirrors the Anthropic / Vercel AI SDK
         # streaming protocols.
+        _log_event(session, "agent_request", {
+            "model": model,
+            "message_count": len(conversation_history),
+            "tool_count": len(TOOLS),
+            "last_message": conversation_history[-1] if conversation_history else None,
+            "iteration": iterations,
+        })
         async with client.messages.stream(
             model=model,
             max_tokens=4096,
@@ -569,6 +814,26 @@ async def run_agent_loop(websocket: WebSocket, conversation_history: list, sessi
             "role": "assistant",
             "content": response.content
         })
+        assistant_text = _text_from_content_blocks(response.content)
+        if session is not None:
+            assistant_ui = _append_ui_message(
+                session,
+                "assistant",
+                assistant_text,
+                message_id=message_id,
+            )
+            session.current_assistant_message_id = assistant_ui["id"]
+            _conversation_store(session).save_model_history(
+                _conversation_id(session),
+                _serialize_model_history(conversation_history),
+            )
+            await _send_conversation_updated(websocket, session)
+        _log_event(session, "assistant_message", {
+            "stop_reason": response.stop_reason,
+            "content": response.content,
+            "message_id": message_id,
+            "iteration": iterations,
+        })
 
         # Extract tool uses from response
         tool_uses = [block for block in response.content if block.type == "tool_use"]
@@ -579,6 +844,26 @@ async def run_agent_loop(websocket: WebSocket, conversation_history: list, sessi
 
             for tool_use in tool_uses:
                 print(f"Tool call: {tool_use.name}, input: {tool_use.input}")
+                _log_event(session, "tool_call_start", {
+                    "tool_use_id": tool_use.id,
+                    "tool_name": tool_use.name,
+                    "message_id": message_id,
+                    "input": tool_use.input,
+                    "iteration": iterations,
+                })
+                if session is not None and getattr(session, "current_assistant_message_id", None):
+                    _conversation_store(session).append_event(
+                        _conversation_id(session),
+                        session.current_assistant_message_id,
+                        "tool_call_start",
+                        {
+                            "tool_use_id": tool_use.id,
+                            "tool_name": tool_use.name,
+                            "message_id": message_id,
+                            "input": _json_safe(tool_use.input),
+                            "iteration": iterations,
+                        },
+                    )
                 # Announce the call before running it so the frontend can show a
                 # "calling {tool_name}…" loading indicator keyed by tool_use_id
                 # (Vercel AI SDK input-available state).
@@ -590,6 +875,12 @@ async def run_agent_loop(websocket: WebSocket, conversation_history: list, sessi
                 })
                 executor = TOOL_EXECUTORS.get(tool_use.name)
                 if executor is None:
+                    _log_event(session, "error", {
+                        "where": "tool_call",
+                        "tool_use_id": tool_use.id,
+                        "tool_name": tool_use.name,
+                        "message": f"Unknown tool: {tool_use.name}",
+                    })
                     await websocket.send_json({
                         "type": "tool_call_result",
                         "tool_use_id": tool_use.id,
@@ -597,6 +888,18 @@ async def run_agent_loop(websocket: WebSocket, conversation_history: list, sessi
                         "status": "error",
                         "summary": f"Unknown tool: {tool_use.name}",
                     })
+                    if session is not None and getattr(session, "current_assistant_message_id", None):
+                        _conversation_store(session).append_event(
+                            _conversation_id(session),
+                            session.current_assistant_message_id,
+                            "tool_call_result",
+                            {
+                                "tool_use_id": tool_use.id,
+                                "tool_name": tool_use.name,
+                                "status": "error",
+                                "summary": f"Unknown tool: {tool_use.name}",
+                            },
+                        )
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": tool_use.id,
@@ -618,9 +921,37 @@ async def run_agent_loop(websocket: WebSocket, conversation_history: list, sessi
                     logger.exception("tool executor %s failed", tool_use.name)
                     content = json.dumps({"success": False, "error": f"{tool_use.name} failed: {e}"})
                     executor_failed = True
+                    _log_event(session, "error", {
+                        "where": "tool_executor",
+                        "tool_use_id": tool_use.id,
+                        "tool_name": tool_use.name,
+                        "message": str(e),
+                    })
                 # Classify the outcome and tell the frontend to finalize the
                 # indicator as ✓ done or ✗ error (output-available / output-error).
                 status, summary = _tool_status_and_summary(content, executor_failed)
+                _log_event(session, "tool_call_result", {
+                    "tool_use_id": tool_use.id,
+                    "tool_name": tool_use.name,
+                    "status": status,
+                    "summary": summary,
+                    "content": content,
+                    "iteration": iterations,
+                })
+                if session is not None and getattr(session, "current_assistant_message_id", None):
+                    _conversation_store(session).append_event(
+                        _conversation_id(session),
+                        session.current_assistant_message_id,
+                        "tool_call_result",
+                        {
+                            "tool_use_id": tool_use.id,
+                            "tool_name": tool_use.name,
+                            "status": status,
+                            "summary": summary,
+                            "iteration": iterations,
+                        },
+                    )
+                    _persist_current_views(session)
                 await websocket.send_json({
                     "type": "tool_call_result",
                     "tool_use_id": tool_use.id,
@@ -647,8 +978,12 @@ async def run_agent_loop(websocket: WebSocket, conversation_history: list, sessi
 
             # Add tool results to history and continue the loop.
             conversation_history.append({"role": "user", "content": tool_results})
+            if session is not None:
+                _conversation_store(session).save_model_history(
+                    _conversation_id(session),
+                    _serialize_model_history(conversation_history),
+                )
             continue
 
         # If stop_reason is "end_turn" or no more tool calls, we're done
         break
-

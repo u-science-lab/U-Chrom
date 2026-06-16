@@ -11,7 +11,8 @@
  * Rules mirror the backend:
  *   - relative references (no scheme, not protocol-relative) → allowed
  *   - http(s) to a public host → allowed
- *   - http(s) to localhost / loopback / private / link-local → blocked
+ *   - http(s) to the current page origin → allowed
+ *   - http(s) to other localhost / loopback / private / link-local → blocked
  *   - protocol-relative `//host` → blocked
  *   - any non-http(s) scheme → blocked
  */
@@ -72,6 +73,12 @@ export function isSafeUrl(url: unknown): boolean {
   try {
     const parsed = new URL(cleaned)
     if (!parsed.hostname) return false
+    if (
+      typeof window !== 'undefined'
+      && parsed.origin === window.location.origin
+    ) {
+      return true
+    }
     return !isBlockedHost(parsed.hostname)
   } catch {
     return false

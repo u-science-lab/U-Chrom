@@ -14,6 +14,10 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+# Unit tests should not leave debug JSONL traces in the repository by default.
+# Conversation logger tests opt back in explicitly.
+os.environ.setdefault("UCHROM_CONVERSATION_LOG", "0")
+
 
 def _ensure_rich_multicell_fixture():
     """Auto-create the gitignored ``rich_multicell.h5cd`` fixture if missing.

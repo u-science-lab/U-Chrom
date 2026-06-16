@@ -42,8 +42,8 @@ def clear_cache() -> None:
     _tile_cache.clear()
 
 
-def _get_session():
-    s = data_api.current_session
+def _get_session(session_id: str | None = None):
+    s = data_api.resolve_session(session_id)
     if s is None or s.chromdata is None:
         raise HTTPException(status_code=404, detail={"error": "No data loaded"})
     return s
@@ -72,12 +72,13 @@ def _flatten_ids(d):
     return out
 
 
-def _build_matrix(chrom: str) -> np.ndarray:
+def _build_matrix(chrom: str, session_id: str | None = None) -> np.ndarray:
     """Build averaged distance matrix for chrom across all cells/traces."""
-    if chrom in _matrix_cache:
-        return _matrix_cache[chrom]
+    cache_key = f"{session_id or '__global__'}:{chrom}"
+    if cache_key in _matrix_cache:
+        return _matrix_cache[cache_key]
 
-    s = _get_session()
+    s = _get_session(session_id)
     cd = s.chromdata
     spots = cd.spots
     chrom_spots = spots[spots["chrom"] == chrom]
@@ -107,13 +108,13 @@ def _build_matrix(chrom: str) -> np.ndarray:
     with np.errstate(invalid="ignore"):
         matrix = np.where(counts > 0, accum / counts, 0.0).astype(np.float32)
 
-    _matrix_cache[chrom] = matrix
+    _matrix_cache[cache_key] = matrix
     return matrix
 
 
-def _chrom_size(chrom: str) -> int:
+def _chrom_size(chrom: str, session_id: str | None = None) -> int:
     """Return max genomic end position for chrom."""
-    s = _get_session()
+    s = _get_session(session_id)
     cd = s.chromdata
     spots = cd.spots
     chrom_spots = spots[spots["chrom"] == chrom]
@@ -182,7 +183,7 @@ def _encode_tile(matrix: np.ndarray, z: int, x: int, y: int, max_z: int) -> str:
 # ---------------------------------------------------------------------------
 
 @tileset_router.get("/api/tileset_info")
-def tileset_info(d: list[str] | None = Query(default=None)):
+def tileset_info(d: list[str] | None = Query(default=None), session_id: str | None = None):
     """Return HiGlass tileset metadata for one or more datasets.
 
     Accepts repeated (``?d=a&d=b``) or comma-separated (``?d=a,b``) ids.
@@ -191,7 +192,7 @@ def tileset_info(d: list[str] | None = Query(default=None)):
     result: Dict[str, Any] = {}
     for uid in uids:
         chrom = _parse_uid(uid)
-        size = _chrom_size(chrom)
+        size = _chrom_size(chrom, session_id)
         max_z = _max_zoom(size)
         max_width = BINS_PER_DIM * (2 ** max_z)
         result[uid] = {
@@ -208,7 +209,7 @@ def tileset_info(d: list[str] | None = Query(default=None)):
 
 
 @tileset_router.get("/api/tiles")
-def tiles(d: list[str] | None = Query(default=None)):
+def tiles(d: list[str] | None = Query(default=None), session_id: str | None = None):
     """Return one or more tiles.
 
     Each id has the form ``uid.z.x.y``.  Accepts repeated (``?d=a&d=b``) or
@@ -223,13 +224,13 @@ def tiles(d: list[str] | None = Query(default=None)):
         uid, z_s, x_s, y_s = parts
         z, x, y = int(z_s), int(x_s), int(y_s)
 
-        cache_key = tile_id
+        cache_key = f"{session_id or '__global__'}:{tile_id}"
         if cache_key in _tile_cache:
             dense, actual_max = _tile_cache[cache_key]
         else:
             chrom = _parse_uid(uid)
-            matrix = _build_matrix(chrom)
-            size = _chrom_size(chrom)
+            matrix = _build_matrix(chrom, session_id)
+            size = _chrom_size(chrom, session_id)
             max_z = _max_zoom(size)
             arr = _build_tile_array(matrix, z, x, y, max_z)
             actual_max = float(np.nanmax(arr)) if not np.all(np.isnan(arr)) else 1.0

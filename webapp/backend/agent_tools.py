@@ -50,11 +50,11 @@ GOSLING SCHEMA REFERENCE:
    Contact map heatmap:
    {
      "data": {"type":"matrix","url":"/api/v1/tileset_info/?d=contact-chr1"},
-     "mark": "rect",
-     "x": {"field":"start1","type":"genomic"},
-     "xe": {"field":"end1","type":"genomic"},
-     "y": {"field":"start2","type":"genomic"},
-     "ye": {"field":"end2","type":"genomic"},
+     "mark": "bar",
+     "x": {"field":"xs","type":"genomic"},
+     "xe": {"field":"xe","type":"genomic"},
+     "y": {"field":"ys","type":"genomic"},
+     "ye": {"field":"ye","type":"genomic"},
      "color": {"field":"value","type":"quantitative"}
    }
 
@@ -494,7 +494,8 @@ You drive a multi-tab UI directly through tools:
 Gosling concepts:
 - Tracks have 'data' (source), 'mark' (bar/line/point/rect/area/text/link/triangle), and encodings (x, y, color, size).
 - Signal tracks: {"type":"csv","url":"/api/track_csv/<name>","chromosomeField":"chrom","genomicFields":["start","end"]}, mark "bar"/"line".
-- Hi-C contact matrix: data {"type":"matrix","url":"/api/v1/tileset_info/?d=contact-<chrom>"}, mark "bar", with x/xe/ys/ye genomic fields and color quantitative.
+- Hi-C contact matrix: data {"type":"matrix","url":"/api/v1/tileset_info/?d=contact-<chrom>"}, mark "bar", with x="xs", xe="xe", y="ys", ye="ye" genomic fields and color quantitative.
+- Use alignment="overlay" only on a wrapper object that has a nested tracks array; never put alignment="overlay" on a leaf track.
 - Always set 'assembly' (hg19/hg38/mm10), 'width', 'height'.
 
 Be helpful, explain what you're creating, and generate accurate specs. To tweak an existing spec, prefer patch_gosling over recreating.

@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react'
 import { useAppStore } from '../store'
+import { ws } from '../ws'
 import EmbeddingPanel from './EmbeddingPanel'
 import Structure3DPanel from './Structure3DPanel'
 
@@ -45,6 +46,28 @@ function resolveProps(props?: Record<string, unknown>): Record<string, unknown> 
 
 type LeafProps = { props: Record<string, unknown>; children: ReactNode }
 
+function controlLabel(props: Record<string, unknown>, fallback: string): string {
+  return String(props.aria_label ?? props['aria-label'] ?? props.label ?? fallback)
+}
+
+function emitComponentAction(
+  component: 'Button' | 'Slider' | 'Select',
+  props: Record<string, unknown>,
+  value?: unknown,
+) {
+  const actionId = props.action_id
+  if (typeof actionId !== 'string' || !actionId) return
+  ws.send('ui_event', {
+    source_view_id: 'custom',
+    event_name: 'component_action',
+    payload: {
+      action_id: actionId,
+      component,
+      value,
+    },
+  })
+}
+
 const COMPONENT_REGISTRY: Record<string, (p: LeafProps) => ReactNode> = {
   Panel: ({ props, children }) => (
     <div className="border border-border-primary rounded-lg overflow-hidden flex flex-col min-h-0">
@@ -78,7 +101,12 @@ const COMPONENT_REGISTRY: Record<string, (p: LeafProps) => ReactNode> = {
     )
   },
   Button: ({ props }) => (
-    <button className="px-3 py-1.5 bg-accent-blue text-white text-sm rounded hover:bg-blue-600">
+    <button
+      className="px-3 py-1.5 bg-accent-blue text-white text-sm rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+      aria-label={controlLabel(props, 'Button')}
+      disabled={Boolean(props.disabled)}
+      onClick={() => emitComponentAction('Button', props, true)}
+    >
       {String(props.label ?? 'Button')}
     </button>
   ),
@@ -90,14 +118,22 @@ const COMPONENT_REGISTRY: Record<string, (p: LeafProps) => ReactNode> = {
         min={Number(props.min ?? 0)}
         max={Number(props.max ?? 100)}
         defaultValue={Number(props.value ?? 50)}
-        readOnly
+        aria-label={controlLabel(props, 'Slider')}
+        disabled={Boolean(props.disabled)}
+        onChange={(e) => emitComponentAction('Slider', props, Number(e.currentTarget.value))}
       />
     </label>
   ),
   Select: ({ props }) => {
     const options = Array.isArray(props.options) ? (props.options as string[]) : []
     return (
-      <select className="text-sm border border-border-primary rounded px-2 py-1" defaultValue={String(props.value ?? '')}>
+      <select
+        className="text-sm border border-border-primary rounded px-2 py-1 disabled:opacity-50"
+        defaultValue={String(props.value ?? '')}
+        aria-label={controlLabel(props, 'Select')}
+        disabled={Boolean(props.disabled)}
+        onChange={(e) => emitComponentAction('Select', props, e.currentTarget.value)}
+      >
         {options.map((o, i) => <option key={i} value={o}>{o}</option>)}
       </select>
     )

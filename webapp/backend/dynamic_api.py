@@ -71,7 +71,7 @@ def clear_registry() -> None:
 # ---------------------------------------------------------------------------
 
 @dynamic_router.get("/api/custom")
-def list_custom():
+def list_custom(session_id: Optional[str] = None):
     return {
         "analyses": [
             render_handle(c) for c in _REGISTRY.values()
@@ -84,7 +84,8 @@ def list_custom():
 # ---------------------------------------------------------------------------
 
 @dynamic_router.get("/api/custom/{analysis_id}/{chrom}")
-def run_custom(analysis_id: str, chrom: str, format: Optional[str] = None):
+def run_custom(analysis_id: str, chrom: str, format: Optional[str] = None,
+               session_id: Optional[str] = None):
     """Look up a registered analysis, run it on `chrom`, return Gosling-ready records."""
     compiled = _REGISTRY.get(analysis_id)
     if compiled is None:
@@ -93,7 +94,7 @@ def run_custom(analysis_id: str, chrom: str, format: Optional[str] = None):
             detail={"error": f"No analysis '{analysis_id}' registered"},
         )
 
-    cd = _cd_or_404()
+    cd = data_api.cd_or_404(session_id)
 
     try:
         sub = cd.get_chrom(chrom)
