@@ -40,7 +40,6 @@ from .graph import (
     load_idea_graph,
     write_idea_graph_artifacts,
 )
-from .llm import generate_openai_analysis_code, generate_openai_ideas
 from .notebooks import (
     create_exploration_notebook,
     execute_notebook_python,
@@ -51,6 +50,16 @@ from .pantheon import (
     generate_pantheon_ideas,
     run_pantheon_notebook_agents,
     schematic_coverage_for_run,
+)
+from .backends import (
+    AnalysisCodeResult,
+    BackendAgentRecord,
+    BackendCapabilities,
+    BackendDetection,
+    get_backend,
+    list_backends,
+    register_backend,
+    unregister_backend,
 )
 from .runner import DiscoveryRunConfig, DiscoveryRunResult, run_auto_discovery
 from .schema import (
@@ -78,6 +87,10 @@ __all__ = [
     "DiscoveryRunConfig",
     "DiscoveryRunResult",
     "IdeaReview",
+    "AnalysisCodeResult",
+    "BackendAgentRecord",
+    "BackendCapabilities",
+    "BackendDetection",
     "build_discovery_schema",
     "build_idea_graph_from_run",
     "build_idea_graph_from_runs",
@@ -87,20 +100,21 @@ __all__ = [
     "enrich_for_discovery",
     "execute_notebook_python",
     "frontiers_to_agent_context",
-    "generate_openai_analysis_code",
-    "generate_openai_ideas",
     "generate_pantheon_ideas",
+    "get_backend",
     "graph_summary_markdown",
     "idea_signature",
     "ingest_literature_claims",
     "idea_to_markdown",
     "infer_parameter_family",
+    "list_backends",
     "load_idea_graph",
     "pack_schema",
     "plan_discovery_directions",
     "plan_discovery_frontiers",
     "review_idea_against_schema",
     "refresh_literature_claims_for_iteration",
+    "register_backend",
     "run_auto_discovery",
     "run_iterative_auto_discovery",
     "run_pantheon_notebook_agents",
@@ -114,4 +128,5 @@ __all__ = [
     "write_frontier_artifacts",
     "write_idea_graph_html",
     "write_idea_graph_artifacts",
+    "unregister_backend",
 ]

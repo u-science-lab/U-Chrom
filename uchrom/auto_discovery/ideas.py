@@ -45,6 +45,14 @@ class DiscoveryIdea:
             data.pop("idea_id", None)
         return data
 
+    def __getitem__(self, key: str) -> Any:
+        """Allow read-only dict-style access in generated notebook cells."""
+        return self.to_dict()[key]
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Return an idea field by name, matching ``dict.get`` semantics."""
+        return self.to_dict().get(key, default)
+
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DiscoveryIdea":
         return cls(**dict(data))

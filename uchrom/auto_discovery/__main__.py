@@ -7,6 +7,7 @@ import asyncio
 import json
 from dataclasses import asdict
 
+from .backends import list_backends
 from .runner import DiscoveryRunConfig, run_auto_discovery
 
 
@@ -104,6 +105,7 @@ def _enrichment_from_args(args) -> dict | None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m uchrom.auto_discovery")
     sub = parser.add_subparsers(dest="cmd", required=True)
+    backend_choices = list_backends()
 
     run_p = sub.add_parser("run", help="Run schema -> idea -> notebook -> verification")
     run_p.add_argument("h5cd_path")
@@ -115,8 +117,8 @@ def main(argv: list[str] | None = None) -> int:
         help="Reuse a JSONL file of DiscoveryIdea objects instead of generating new ideas.",
     )
     run_p.add_argument("--max-complexity", type=int, default=5)
-    run_p.add_argument("--idea-source", choices=["pantheon", "openai"], default="pantheon")
-    run_p.add_argument("--code-source", choices=["pantheon", "openai"], default="pantheon")
+    run_p.add_argument("--idea-source", choices=backend_choices, default="pantheon")
+    run_p.add_argument("--code-source", choices=backend_choices, default="pantheon")
     run_p.add_argument("--model", default=None)
     run_p.add_argument(
         "--reasoning-effort",
@@ -318,8 +320,8 @@ def main(argv: list[str] | None = None) -> int:
     iter_p.add_argument("--max-generation-attempts", type=int, default=3)
     iter_p.add_argument("--seed-run-dir", action="append", default=[])
     iter_p.add_argument("--max-complexity", type=int, default=5)
-    iter_p.add_argument("--idea-source", choices=["pantheon", "openai"], default="pantheon")
-    iter_p.add_argument("--code-source", choices=["pantheon", "openai"], default="pantheon")
+    iter_p.add_argument("--idea-source", choices=backend_choices, default="pantheon")
+    iter_p.add_argument("--code-source", choices=backend_choices, default="pantheon")
     iter_p.add_argument("--model", default=None)
     iter_p.add_argument(
         "--reasoning-effort",

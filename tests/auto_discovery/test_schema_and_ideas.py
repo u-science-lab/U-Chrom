@@ -674,24 +674,63 @@ analysis_summary = {
 print(json.dumps(analysis_summary, indent=2))
 """
 
-    monkeypatch.setattr(
-        "uchrom.auto_discovery.llm.generate_openai_ideas",
-        lambda schema, **kwargs: [idea, idea2],
-    )
-    monkeypatch.setattr(
-        "uchrom.auto_discovery.llm.generate_openai_analysis_code",
-        lambda idea, schema, **kwargs: analysis_code,
+    from uchrom.auto_discovery.backends import (
+        AnalysisCodeResult,
+        BackendAgentRecord,
+        BackendCapabilities,
+        register_backend,
+        unregister_backend,
     )
 
-    result = run_auto_discovery(DiscoveryRunConfig(
-        h5cd_path=h5cd_path,
-        output_dir=tmp_path / "run",
-        max_ideas=2,
-        idea_source="openai",
-        code_source="openai",
-        execute=True,
-        store_schema=True,
-    ))
+    class FakeBackend:
+        backend_id = "fake"
+        display_name = "Fake backend"
+
+        def capabilities(self):
+            return BackendCapabilities(
+                structured_output=True,
+                file_workspace=True,
+                prompt_via_stdin=False,
+                streaming=False,
+            )
+
+        def generate_ideas(self, schema, **kwargs):
+            return [idea, idea2], [
+                BackendAgentRecord(
+                    agent_name="fake_idea_agent",
+                    role="idea",
+                    prompt_path="",
+                    content={"status": "ok"},
+                )
+            ]
+
+        def generate_analysis_code(self, idea, schema, **kwargs):
+            return AnalysisCodeResult(
+                analysis_code=analysis_code,
+                agent_records=[
+                    BackendAgentRecord(
+                        agent_name=f"fake_analysis_agent_{idea.idea_id}",
+                        role="analysis",
+                        prompt_path="",
+                        content={"status": "ok"},
+                    )
+                ],
+            )
+
+    register_backend(FakeBackend())
+
+    try:
+        result = run_auto_discovery(DiscoveryRunConfig(
+            h5cd_path=h5cd_path,
+            output_dir=tmp_path / "run",
+            max_ideas=2,
+            idea_source="fake",
+            code_source="fake",
+            execute=True,
+            store_schema=True,
+        ))
+    finally:
+        unregister_backend("fake")
 
     assert result.n_generated == 2
     assert result.n_accepted == 2
@@ -1058,6 +1097,16 @@ def test_auto_discovery_defaults_to_pantheon_backend(tmp_path):
     assert config.llm_timeout == 420
 
 
+def test_auto_discovery_registers_cli_backends():
+    from uchrom.auto_discovery.backends import get_backend, list_backends
+
+    assert {"pantheon", "claude", "codex"}.issubset(set(list_backends()))
+    assert get_backend("claude").capabilities().prompt_via_stdin is True
+    assert get_backend("claude").capabilities().structured_output is True
+    assert get_backend("codex").capabilities().prompt_via_stdin is True
+    assert get_backend("codex").capabilities().file_workspace is True
+
+
 def test_iterative_auto_discovery_defaults_to_inline_schematics(monkeypatch, tmp_path):
     from uchrom.auto_discovery import IterativeDiscoveryConfig
     from uchrom.auto_discovery.runner import DiscoveryRunResult
@@ -1117,53 +1166,208 @@ def test_iterative_auto_discovery_defaults_to_inline_schematics(monkeypatch, tmp
     }
 
 
-def test_openai_backend_defaults_to_current_reasoning_model(monkeypatch, tmp_path):
-    from uchrom.auto_discovery import DiscoveryIdea
-    from uchrom.auto_discovery.llm import DEFAULT_OPENAI_MODEL, generate_openai_analysis_code
+def test_backend_json_parser_accepts_marked_structured_output():
+    from uchrom.auto_discovery.backends import extract_structured_json
 
-    cdata = _make_cd()
-    schema = cdata.build_discovery_schema(store=False)
-    idea = DiscoveryIdea.from_dict({
-        "idea_title": "Granule H3K27me3 compaction",
-        "biological_hypothesis": "H3K27me3-high bins are compacted in Granule cells.",
-        "computable_parameter": "Median high-marker pairwise distance.",
-        "analysis_plan": "Subset Granule cells and compare distances by marker rank.",
-        "modalities": ["chromatin_tracing", "if_tracks", "cell_metadata"],
-        "cell_types": ["Granule"],
-        "required_fields": ["coords", "spots.cell_id", "tracks.H3K27me3", "cells.cell_type"],
-        "validation_checks": ["required_fields_exist", "cell_id_alignment"],
-        "expected_direction": "H3K27me3-high bins have lower distances.",
-        "complexity": 3,
-    })
-    captured = {}
-
-    class FakeResponse:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_):
-            return False
-
-        def read(self):
-            return json.dumps({"output_text": json.dumps({"analysis_code": "result_table = None"})}).encode()
-
-    def fake_urlopen(req, timeout):
-        captured["payload"] = json.loads(req.data.decode("utf-8"))
-        captured["timeout"] = timeout
-        return FakeResponse()
-
-    monkeypatch.delenv("OPENAI_MODEL", raising=False)
-    monkeypatch.delenv("OPENAI_REASONING_EFFORT", raising=False)
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
-
-    generate_openai_analysis_code(
-        idea,
-        schema,
-        api_key="test-key",
-        env_path=tmp_path / "missing.env",
-        timeout=17,
+    parsed = extract_structured_json(
+        'noise\nBEGIN_UCHROM_JSON\n{"analysis_code": "result_table = None"}\nEND_UCHROM_JSON\n'
     )
 
-    assert captured["payload"]["model"] == DEFAULT_OPENAI_MODEL
-    assert captured["payload"]["reasoning"] == {"effort": "medium"}
-    assert captured["timeout"] == 17
+    assert parsed == {"analysis_code": "result_table = None"}
+
+
+def test_runner_verification_marks_non_numeric_parameter_value_failed(tmp_path):
+    from uchrom.auto_discovery import create_exploration_notebook
+    from uchrom.auto_discovery.notebooks import execute_notebook_python
+    from uchrom.auto_discovery.runner import _verification_code_for_idea
+
+    cdata = _make_cd()
+    h5cd_path = tmp_path / "data.h5cd"
+    cdata.write(h5cd_path)
+    idea = _make_idea()
+    analysis_code = """
+from pathlib import Path
+import pandas as pd
+
+result_path = RUN_OUTPUT_DIR / f"{IDEA.idea_id}_result.csv"
+result_table = pd.DataFrame([{
+    "value": 1.0,
+    "p_value": 1.0,
+    "test_method": "unit-test fallback",
+}])
+result_table.to_csv(result_path, index=False)
+analysis_summary = {
+    "n_selected_cells": 1,
+    "n_rows": 1,
+    "parameter_value": "not numeric",
+    "observed_statistic": 1.0,
+    "effect_size": 0.0,
+    "p_value": 1.0,
+    "test_method": "unit-test fallback",
+    "null_hypothesis": "No difference.",
+    "alternative_hypothesis": "A difference exists.",
+    "hypothesis_test_status": "pass_with_fallback",
+    "result_path": str(result_path),
+    "notes": [],
+}
+"""
+    notebook = create_exploration_notebook(
+        idea,
+        tmp_path / "idea.ipynb",
+        h5cd_path=h5cd_path,
+        run_output_dir=tmp_path,
+        analysis_code=analysis_code,
+        verification_code=_verification_code_for_idea(idea, tmp_path),
+    )
+
+    result = execute_notebook_python(notebook)
+
+    assert result["ok"]
+    assert result["verification"]["status"] == "fail"
+    assert result["verification"]["checks"]["finite_numeric_output"] == "fail"
+
+
+def test_notebook_scaffold_allows_dict_style_idea_access(tmp_path):
+    from uchrom.auto_discovery import create_exploration_notebook
+    from uchrom.auto_discovery.notebooks import execute_notebook_python
+
+    cdata = _make_cd()
+    h5cd_path = tmp_path / "data.h5cd"
+    cdata.write(h5cd_path)
+    idea = _make_idea()
+    analysis_code = """
+import pandas as pd
+
+result_path = RUN_OUTPUT_DIR / f"{IDEA['idea_id']}_result.csv"
+result_table = pd.DataFrame([{"value": 1.0}])
+result_table.to_csv(result_path, index=False)
+analysis_summary = {"result_path": str(result_path)}
+verification = {"status": "pass", "idea_id": IDEA["idea_id"], "title": IDEA.get("idea_title")}
+"""
+    notebook = create_exploration_notebook(
+        idea,
+        tmp_path / "idea.ipynb",
+        h5cd_path=h5cd_path,
+        run_output_dir=tmp_path,
+        analysis_code=analysis_code,
+        verification_code="verification = verification\n",
+    )
+
+    result = execute_notebook_python(notebook)
+
+    assert result["ok"]
+    assert result["verification"]["idea_id"] == idea.idea_id
+    assert result["verification"]["title"] == idea.idea_title
+
+
+def test_analysis_prompt_requires_numeric_scalar_outputs(tmp_path):
+    from uchrom.auto_discovery.backends import _analysis_prompt
+
+    prompt = _analysis_prompt(
+        idea_path=tmp_path / "idea.json",
+        schema_path=tmp_path / "schema.json",
+        context_path=tmp_path / "schema_context.md",
+        h5cd_path=tmp_path / "data.h5cd",
+        output_dir=tmp_path,
+    )
+
+    assert "parameter_value must be a finite numeric scalar" in prompt
+    assert "pd.qcut" in prompt
+    assert "pd.Series" in prompt
+    assert "IDEA is a DiscoveryIdea object" in prompt
+    assert "IDEA.idea_id" in prompt
+
+
+def test_claude_backend_extracts_native_structured_output():
+    from uchrom.auto_discovery.backends import ClaudeBackend
+
+    stdout = json.dumps([
+        {
+            "type": "result",
+            "result": "summary text",
+            "structured_output": {"ideas": []},
+        }
+    ])
+
+    assert json.loads(ClaudeBackend()._extract_final_text(stdout)) == {"ideas": []}
+
+
+def test_codex_backend_command_uses_output_schema(tmp_path):
+    from uchrom.auto_discovery.backends import CodexBackend
+
+    schema_path = tmp_path / "schema.json"
+    config = tmp_path / "config.toml"
+    config.write_text(
+        "\n".join([
+            'model_provider = "custom"',
+            'model = "gpt-5.5"',
+            "",
+            "[model_providers.custom]",
+            'name = "custom"',
+            'wire_api = "responses"',
+            'base_url = "http://127.0.0.1:15721/v1"',
+            'experimental_bearer_token = "secret-token"',
+        ])
+        + "\n"
+    )
+    cmd = CodexBackend()._command(
+        workdir=tmp_path,
+        model=None,
+        reasoning_effort=None,
+        output_schema_path=schema_path,
+        codex_config_path=config,
+    )
+
+    assert "--output-schema" in cmd
+    assert cmd[cmd.index("--output-schema") + 1] == str(schema_path)
+    assert "--ignore-user-config" in cmd
+    assert "--ignore-rules" in cmd
+    assert "--ephemeral" in cmd
+    assert "web_search=\"disabled\"" in cmd
+    assert 'model_provider="custom"' in cmd
+    assert 'model="gpt-5.5"' in cmd
+    assert 'model_providers.custom.experimental_bearer_token="secret-token"' in cmd
+
+
+def test_codex_backend_uses_minimal_temporary_codex_home(monkeypatch, tmp_path):
+    from uchrom.auto_discovery.backends import CodexBackend
+
+    source_home = tmp_path / "source_codex"
+    source_home.mkdir()
+    (source_home / "config.toml").write_text(
+        "\n".join([
+            'model_provider = "custom"',
+            'model = "gpt-5.5"',
+            'model_reasoning_effort = "xhigh"',
+            'preferred_auth_method = "apikey"',
+            "",
+            "[model_providers.custom]",
+            'name = "custom"',
+            'wire_api = "responses"',
+            'base_url = "http://127.0.0.1:15721/v1"',
+            'experimental_bearer_token = "secret-token"',
+            "",
+            "[mcp_servers.github]",
+            'url = "https://api.githubcopilot.com/mcp/"',
+            "",
+            "[features]",
+            "rmcp_client = true",
+        ])
+        + "\n"
+    )
+    (source_home / "auth.json").write_text('{"token": "secret"}\n')
+    monkeypatch.setenv("CODEX_HOME", str(source_home))
+
+    with CodexBackend()._run_environment(tmp_path) as env:
+        codex_home = Path(env["CODEX_HOME"])
+        config_text = (codex_home / "config.toml").read_text()
+        assert codex_home != source_home
+        assert 'model_provider = "custom"' in config_text
+        assert "[model_providers.custom]" in config_text
+        assert 'experimental_bearer_token = "secret-token"' in config_text
+        assert "model_reasoning_effort" not in config_text
+        assert "mcp_servers" not in config_text
+        assert "rmcp_client" not in config_text
+        assert (codex_home / "auth.json").exists()
+
+    assert not codex_home.exists()

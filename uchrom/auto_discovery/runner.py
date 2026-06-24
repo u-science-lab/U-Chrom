@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable
 
+from .backends import AnalysisCodeResult, get_backend
 from .ideas import DiscoveryIdea, review_idea_against_schema
 from .notebooks import (
     create_exploration_notebook,
@@ -131,9 +132,8 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
             DiscoveryIdea.from_dict(row)
             for row in _read_jsonl(Path(config.ideas_path))
         ][:config.max_ideas]
-    elif config.idea_source == "pantheon":
-        from .pantheon import generate_pantheon_ideas
-
+    else:
+        idea_backend = get_backend(config.idea_source)
         ideas = []
         seen_idea_ids: set[str] = set()
         accepted_target = int(config.accepted_idea_target or 0)
@@ -151,18 +151,19 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
                 break
             remaining = max(1, accepted_target - len(accepted_preview)) if accepted_target else config.max_ideas
             batch_size = max(config.idea_agent_count, config.max_ideas if attempt == 0 else remaining * 2)
-            generated, records = _run_async(generate_pantheon_ideas(
+            generated, records = idea_backend.generate_ideas(
                 schema,
                 output_dir=output_dir,
                 max_ideas=batch_size,
                 model=config.model,
+                reasoning_effort=config.reasoning_effort,
                 timeout=config.llm_timeout,
                 idea_agent_count=config.idea_agent_count,
                 prior_graph_path=config.prior_graph_path,
                 direction_context_path=(
                     config.direction_context_path or config.frontier_context_path
                 ),
-            ))
+            )
             agent_records.extend(_agent_record_rows(records))
             before = len(ideas)
             for idea in generated:
@@ -172,18 +173,6 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
                 ideas.append(idea)
             if len(ideas) == before:
                 break
-    elif config.idea_source == "openai":
-        from .llm import generate_openai_ideas
-
-        ideas = generate_openai_ideas(
-            schema,
-            max_ideas=config.max_ideas,
-            model=config.model,
-            reasoning_effort=config.reasoning_effort,
-            timeout=config.llm_timeout,
-        )
-    else:
-        raise ValueError("idea_source must be 'pantheon' or 'openai'")
     ideas_path = output_dir / "ideas.jsonl"
     reviews_path = output_dir / "reviews.jsonl"
     results_path = output_dir / "results.jsonl"
@@ -206,6 +195,7 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
     _write_jsonl(ideas_path, [idea.to_dict() for idea in ideas])
     _write_jsonl(reviews_path, reviews)
 
+    code_backend = get_backend(config.code_source)
     if config.code_source == "pantheon":
         for idea in accepted:
             notebook_path = notebooks_dir / f"{idea.idea_id}.ipynb"
@@ -237,28 +227,27 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
                 schematic_image_model_args=config.schematic_image_model_args,
             ))
             agent_records.extend(_agent_record_rows(records))
-    elif config.code_source != "openai":
-        raise ValueError("code_source must be 'pantheon' or 'openai'")
 
     for idea in accepted:
         notebook_path = notebooks_dir / f"{idea.idea_id}.ipynb"
-        if config.code_source == "openai":
-            from .llm import generate_openai_analysis_code
-
-            analysis_code = generate_openai_analysis_code(
+        if config.code_source != "pantheon":
+            analysis = code_backend.generate_analysis_code(
                 idea,
                 schema,
+                output_dir=output_dir,
+                h5cd_path=h5cd_path,
                 model=config.model,
                 reasoning_effort=config.reasoning_effort,
                 timeout=config.llm_timeout,
             )
+            agent_records.extend(_agent_record_rows(analysis.agent_records))
             verification_code = _verification_code_for_idea(idea, output_dir)
             create_exploration_notebook(
                 idea,
                 notebook_path,
                 h5cd_path=h5cd_path,
                 run_output_dir=output_dir,
-                analysis_code=analysis_code,
+                analysis_code=_analysis_code_with_backend_notes(analysis),
                 verification_code=verification_code,
             )
             notebooks.append(str(notebook_path))
@@ -451,6 +440,25 @@ def _pantheon_analysis_placeholder() -> str:
         "raise RuntimeError('PantheonOS notebook agent did not replace the exploration placeholder')\n"
     )
 
+
+def _analysis_code_with_backend_notes(result: AnalysisCodeResult) -> str:
+    """Append backend notes as inert metadata inside the executable cell."""
+    metadata = {
+        "warnings": result.warnings,
+        "notes": result.notes,
+        "artifact_manifest": result.artifact_manifest,
+    }
+    if not any(metadata.values()):
+        return result.analysis_code
+    return (
+        result.analysis_code.rstrip()
+        + "\n\n"
+        + "__uchrom_backend_metadata__ = "
+        + repr(metadata)
+        + "\n"
+    )
+
+
 def _verification_code_for_idea(idea: DiscoveryIdea, output_dir: Path) -> str:
     return """
 checks = {check: 'not_run' for check in IDEA.validation_checks}
@@ -498,7 +506,11 @@ if _check_keys('minimum_spot_or_trace_count'):
     _set_check('minimum_spot_or_trace_count', 'pass' if n_rows >= 1 else 'fail')
 if _check_keys('finite_numeric_output'):
     value = analysis_summary.get('parameter_value')
-    _set_check('finite_numeric_output', 'pass' if value is not None and np.isfinite(value) else 'fail')
+    try:
+        value_float = float(value)
+    except Exception:
+        value_float = np.nan
+    _set_check('finite_numeric_output', 'pass' if np.isfinite(value_float) else 'fail')
 if _check_keys('statistical_hypothesis_test'):
     p_value = analysis_summary.get('p_value')
     test_method = analysis_summary.get('test_method')

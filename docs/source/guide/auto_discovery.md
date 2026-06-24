@@ -93,16 +93,20 @@ so missing graphical abstracts cannot silently enter the docs snapshot.
 callback context; the default CLI path keeps QA separate from the coverage
 gate.
 
-For direct backend debugging, the lower-level OpenAI path remains available:
+For direct backend debugging, the runner can use any registered structured
+backend. Claude and Codex CLI backends return structured idea/code payloads;
+the U-Chrom runner still writes, executes, and verifies the final notebooks:
 
 ```bash
-python -m uchrom.auto_discovery run data.h5cd runs/openai \
-  --idea-source openai \
-  --code-source openai \
-  --model gpt-5.5 \
-  --reasoning-effort medium \
+python -m uchrom.auto_discovery run data.h5cd runs/claude \
+  --idea-source claude \
+  --code-source claude \
+  --reasoning-effort low \
   --max-ideas 4
 ```
+
+Use `--idea-source codex --code-source codex` to exercise the Codex CLI
+backend with the same runner-owned notebook lifecycle.
 
 Each run writes:
 
