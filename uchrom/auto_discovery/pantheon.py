@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .ideas import DiscoveryIdea
+from .llm import build_required_fields_prompt_block
 from .schema import schema_to_agent_context
 
 
@@ -601,6 +602,7 @@ async def _run_one_idea_agent(
     prompt = _idea_prompt(
         direction=direction,
         ideas_per_agent=ideas_per_agent,
+        schema=schema,
         schema_path=workdir / "schema.json",
         context_path=workdir / "schema_context.md",
         prior_graph_path=prior_graph_path,
@@ -801,6 +803,7 @@ def _idea_prompt(
     *,
     direction: str,
     ideas_per_agent: int,
+    schema: Mapping[str, Any],
     schema_path: Path,
     context_path: Path,
     prior_graph_path: Path | None = None,
@@ -818,6 +821,7 @@ def _idea_prompt(
     iterative_block = ""
     if iterative_inputs:
         iterative_block = "\nIterative discovery context:\n" + "\n".join(iterative_inputs) + "\n"
+    required_fields_block = build_required_fields_prompt_block(schema)
     return f"""
 Read these files with your file tool before answering:
 - schema JSON: {_prompt_path(schema_path)}
@@ -845,6 +849,8 @@ Rules:
   output, a statistical hypothesis test with p-value, runtime,
   deterministic rerun, and a negative/permutation control when possible.
 - Complexity must be 1-5.
+
+{required_fields_block}
 
 Return JSON only:
 {{

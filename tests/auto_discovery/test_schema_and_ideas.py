@@ -1260,10 +1260,42 @@ verification = {"status": "pass", "idea_id": IDEA["idea_id"], "title": IDEA.get(
     assert result["verification"]["title"] == idea.idea_title
 
 
-def test_analysis_prompt_requires_numeric_scalar_outputs(tmp_path):
-    from uchrom.auto_discovery.backends import _analysis_prompt
+def test_llm_idea_prompt_preserves_legacy_schema_field_constraints():
+    from uchrom.auto_discovery.llm import allowed_required_fields, build_idea_prompt
 
-    prompt = _analysis_prompt(
+    schema = _make_cd().build_discovery_schema(store=False)
+    schema["known_missing"] = ["tracks.MissingTrack"]
+    schema["linked_adata"] = {
+        "present": True,
+        "obs_columns": ["cell_type"],
+        "layers": ["counts"],
+    }
+    schema.setdefault("catalogs", {})["genes"] = {"values": ["Pcp2"]}
+
+    fields = allowed_required_fields(schema, max_items=80)
+    prompt = build_idea_prompt(
+        schema,
+        max_ideas=3,
+        prior_graph_path=None,
+        direction_context_path=None,
+    )
+
+    assert "coords" in fields
+    assert "tracks.H3K27me3" in fields
+    assert "linked_adata.X" in fields
+    assert "linked_adata.var.Pcp2" in fields
+    assert "Allowed required_fields" in prompt
+    assert "Known missing data that must not be used" in prompt
+    assert "tracks.MissingTrack" in prompt
+    assert "gene_expression_lookup" in prompt
+    assert "linked_adata.X" in prompt
+    assert "linked_adata.var.<gene>" in prompt
+
+
+def test_analysis_prompt_requires_numeric_scalar_outputs(tmp_path):
+    from uchrom.auto_discovery.llm import build_analysis_prompt
+
+    prompt = build_analysis_prompt(
         idea_path=tmp_path / "idea.json",
         schema_path=tmp_path / "schema.json",
         context_path=tmp_path / "schema_context.md",
@@ -1276,6 +1308,10 @@ def test_analysis_prompt_requires_numeric_scalar_outputs(tmp_path):
     assert "pd.Series" in prompt
     assert "IDEA is a DiscoveryIdea object" in prompt
     assert "IDEA.idea_id" in prompt
+    assert "ChromData access rules" in prompt
+    assert "Do not index ChromData with string field paths" in prompt
+    assert "aggregate tracks per cell_id first" in prompt
+    assert "AnnData access is allowed" in prompt
 
 
 def test_claude_backend_extracts_native_structured_output():

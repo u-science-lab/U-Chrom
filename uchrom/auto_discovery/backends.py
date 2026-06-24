@@ -21,11 +21,14 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping, Protocol, Sequence
 
 from .ideas import DiscoveryIdea
-from .schema import schema_to_agent_context
-
-
-STRUCTURED_JSON_BEGIN = "BEGIN_UCHROM_JSON"
-STRUCTURED_JSON_END = "END_UCHROM_JSON"
+from .llm import (
+    STRUCTURED_JSON_BEGIN,
+    STRUCTURED_JSON_END,
+    analysis_output_schema,
+    build_analysis_prompt,
+    build_idea_prompt,
+    idea_output_schema,
+)
 
 
 @dataclass(frozen=True)
@@ -299,10 +302,9 @@ class CLIBackend:
             prior_graph_path=prior_graph_path,
             direction_context_path=direction_context_path,
         )
-        prompt = _idea_prompt(
+        prompt = build_idea_prompt(
+            schema,
             max_ideas=max_ideas,
-            schema_path=context["schema_path"],
-            context_path=context["context_path"],
             prior_graph_path=prior_graph_path,
             direction_context_path=direction_context_path,
         )
@@ -336,7 +338,7 @@ class CLIBackend:
         context = _write_backend_context(schema, workdir)
         idea_path = workdir / "idea.json"
         idea_path.write_text(json.dumps(idea.to_dict(), indent=2, default=str) + "\n")
-        prompt = _analysis_prompt(
+        prompt = build_analysis_prompt(
             idea_path=idea_path,
             schema_path=context["schema_path"],
             context_path=context["context_path"],
@@ -585,65 +587,9 @@ class CodexBackend(CLIBackend):
 
 def _output_schema_for_role(role: str) -> dict[str, Any]:
     if role == "idea":
-        return {
-            "type": "object",
-            "properties": {
-                "ideas": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "idea_title": {"type": "string"},
-                            "biological_hypothesis": {"type": "string"},
-                            "computable_parameter": {"type": "string"},
-                            "analysis_plan": {"type": "string"},
-                            "modalities": {"type": "array", "items": {"type": "string"}},
-                            "idea_markdown": {"type": "string"},
-                            "cell_types": {"type": "array", "items": {"type": "string"}},
-                            "required_fields": {"type": "array", "items": {"type": "string"}},
-                            "validation_checks": {"type": "array", "items": {"type": "string"}},
-                            "expected_direction": {"type": "string"},
-                            "complexity": {"type": "integer", "minimum": 1, "maximum": 5},
-                            "metadata": {"type": "object", "additionalProperties": True},
-                        },
-                        "required": [
-                            "idea_title",
-                            "biological_hypothesis",
-                            "computable_parameter",
-                            "analysis_plan",
-                            "modalities",
-                            "cell_types",
-                            "required_fields",
-                            "validation_checks",
-                            "expected_direction",
-                            "complexity",
-                        ],
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            "required": ["ideas"],
-            "additionalProperties": False,
-        }
+        return idea_output_schema()
     if role == "analysis":
-        return {
-            "type": "object",
-            "properties": {
-                "analysis_code": {"type": "string"},
-                "extra_cells": {
-                    "type": "array",
-                    "items": {"type": "object", "additionalProperties": True},
-                },
-                "artifact_manifest": {
-                    "type": "array",
-                    "items": {"type": "object", "additionalProperties": True},
-                },
-                "warnings": {"type": "array", "items": {"type": "string"}},
-                "notes": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["analysis_code", "extra_cells", "artifact_manifest", "warnings", "notes"],
-            "additionalProperties": False,
-        }
+        return analysis_output_schema()
     raise ValueError(f"unknown backend role {role!r}")
 
 
@@ -766,116 +712,6 @@ def _write_backend_context(
     }
     (workdir / "context_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return {"schema_path": schema_path, "context_path": context_path}
-
-
-def _idea_prompt(
-    *,
-    max_ideas: int,
-    schema_path: Path,
-    context_path: Path,
-    prior_graph_path: str | Path | None,
-    direction_context_path: str | Path | None,
-) -> str:
-    extra = []
-    if prior_graph_path is not None:
-        extra.append(f"- Prior graph JSON: {prior_graph_path}")
-    if direction_context_path is not None:
-        extra.append(f"- Direction context markdown: {direction_context_path}")
-    extra_text = "\n".join(extra) if extra else "- No prior graph or direction context."
-    return f"""
-You are generating U-Chrom auto-discovery ideas. Return only structured JSON
-between {STRUCTURED_JSON_BEGIN} and {STRUCTURED_JSON_END}. Do not write files.
-
-Files:
-- Schema JSON: {schema_path}
-- Schema context: {context_path}
-{extra_text}
-
-Rules:
-- Generate at most {max_ideas} diverse, computable ideas.
-- Use only fields present in the schema.
-- Each idea must be compatible with DiscoveryIdea.from_dict.
-- Required fields must be exact schema field paths.
-- Include statistical_hypothesis_test in validation_checks unless impossible.
-
-Return this shape exactly:
-{{
-  "ideas": [
-    {{
-      "idea_title": "...",
-      "biological_hypothesis": "...",
-      "computable_parameter": "...",
-      "analysis_plan": "...",
-      "modalities": ["chromatin_tracing"],
-      "cell_types": ["..."],
-      "required_fields": ["coords"],
-      "validation_checks": ["required_fields_exist", "statistical_hypothesis_test"],
-      "expected_direction": "...",
-      "complexity": 3
-    }}
-  ]
-}}
-""".strip()
-
-
-def _analysis_prompt(
-    *,
-    idea_path: Path,
-    schema_path: Path,
-    context_path: Path,
-    h5cd_path: Path,
-    output_dir: Path,
-) -> str:
-    return f"""
-You are writing one executable Python notebook analysis cell for U-Chrom
-auto-discovery. Read these files:
-- Idea JSON: {idea_path}
-- Schema JSON: {schema_path}
-- Schema context: {context_path}
-
-The final notebook is owned by the U-Chrom runner. Do not edit files or
-notebooks. Return the structured JSON in your final message only.
-
-Execution environment:
-- H5CD_PATH will be {h5cd_path}
-- RUN_OUTPUT_DIR will be {output_dir}
-- Variables already defined by the notebook: cdata, adata, IDEA, schema, review,
-  RUN_OUTPUT_DIR, np, pd, plt, ChromData.
-- IDEA is a DiscoveryIdea object. Prefer attribute access such as IDEA.idea_id
-  and IDEA.idea_title over dict-style access.
-
-Return only structured JSON between {STRUCTURED_JSON_BEGIN} and
-{STRUCTURED_JSON_END} with this shape:
-{{
-  "analysis_code": "Python code string",
-  "extra_cells": [],
-  "artifact_manifest": [],
-  "warnings": [],
-  "notes": []
-}}
-
-analysis_code requirements:
-- Define result_table as a pandas DataFrame.
-- Define analysis_summary as a JSON-serializable dict.
-- Write result_table to RUN_OUTPUT_DIR / f"{{IDEA.idea_id}}_result.csv".
-- result_table must include `p_value` and `test_method` columns on every row.
-- Include result_path, parameter_value, observed_statistic, effect_size, p_value,
-  test_method, null_hypothesis, alternative_hypothesis, hypothesis_test_status,
-  n_selected_cells, and n_rows in analysis_summary.
-- parameter_value must be a finite numeric scalar that directly summarizes the
-  computable parameter, not the parameter name or any other string.
-- observed_statistic, effect_size, and p_value must also be finite numeric
-  scalars; convert numpy scalar types with float(...) or int(...).
-- Perform an explicit statistical hypothesis test or bounded permutation /
-  randomization test. Do not set hypothesis_test_status to `insufficient_data`
-  when a finite fallback statistic can be computed; use `pass_with_fallback`,
-  set p_value to 1.0, and add a note instead.
-- If using pd.qcut or pd.cut and you need `.cat`, wrap the input in
-  pd.Series(...) first; qcut/cut on numpy arrays returns a Categorical without
-  the Series `.cat` accessor.
-- Keep runtime small and deterministic.
-- Do not modify package source files or notebooks.
-""".strip()
 
 
 def _coerce_record(record: Any) -> BackendAgentRecord:

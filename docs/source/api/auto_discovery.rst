@@ -17,6 +17,13 @@ Ideas
    :members:
    :undoc-members:
 
+Prompt contracts
+----------------
+
+.. automodule:: uchrom.auto_discovery.llm
+   :members:
+   :undoc-members:
+
 Backend adapters
 ----------------
 

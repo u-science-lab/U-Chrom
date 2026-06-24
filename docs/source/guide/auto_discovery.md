@@ -97,6 +97,10 @@ For direct backend debugging, the runner can use any registered structured
 backend. Claude and Codex CLI backends return structured idea/code payloads;
 the U-Chrom runner still writes, executes, and verifies the final notebooks:
 
+The shared prompt contracts live in `uchrom.auto_discovery.llm`; backend
+adapters call those prompt builders but do not own provider-specific prompt
+rules or the notebook lifecycle.
+
 ```bash
 python -m uchrom.auto_discovery run data.h5cd runs/claude \
   --idea-source claude \

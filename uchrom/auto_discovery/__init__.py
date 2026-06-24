@@ -61,6 +61,14 @@ from .backends import (
     register_backend,
     unregister_backend,
 )
+from .llm import (
+    allowed_required_fields,
+    analysis_output_schema,
+    build_analysis_prompt,
+    build_idea_prompt,
+    build_required_fields_prompt_block,
+    idea_output_schema,
+)
 from .runner import DiscoveryRunConfig, DiscoveryRunResult, run_auto_discovery
 from .schema import (
     DISCOVERY_SCHEMA_KEY,
@@ -91,9 +99,14 @@ __all__ = [
     "BackendAgentRecord",
     "BackendCapabilities",
     "BackendDetection",
+    "allowed_required_fields",
+    "analysis_output_schema",
+    "build_analysis_prompt",
     "build_discovery_schema",
+    "build_idea_prompt",
     "build_idea_graph_from_run",
     "build_idea_graph_from_runs",
+    "build_required_fields_prompt_block",
     "classify_hypothesis_evidence",
     "create_exploration_notebook",
     "directions_to_agent_context",
@@ -104,6 +117,7 @@ __all__ = [
     "get_backend",
     "graph_summary_markdown",
     "idea_signature",
+    "idea_output_schema",
     "ingest_literature_claims",
     "idea_to_markdown",
     "infer_parameter_family",
