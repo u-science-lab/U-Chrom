@@ -8,6 +8,7 @@ Python objects that the runner can audit, write, execute, and verify.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -29,6 +30,23 @@ from .llm import (
     build_idea_prompt,
     idea_output_schema,
 )
+from .schema import schema_to_agent_context
+
+
+class BackendError(RuntimeError):
+    """A classified backend failure.
+
+    ``category`` is one of ``backend_unavailable`` (missing/exited binary or an
+    auth failure that a retry will not fix), ``failed`` (ran but exited
+    non-zero for another reason), ``bad_output`` (ran but produced output that
+    could not be parsed), or ``timeout``.  ``retryable`` tells the run loop
+    whether a transient retry is worthwhile.
+    """
+
+    def __init__(self, message: str, *, category: str, retryable: bool) -> None:
+        super().__init__(message)
+        self.category = category
+        self.retryable = retryable
 
 
 @dataclass(frozen=True)
@@ -41,6 +59,13 @@ class BackendCapabilities:
     streaming: bool
     native_skill_loading: bool = False
     resume: bool = False
+    # When True the backend owns the notebook lifecycle end to end (it edits
+    # the notebook itself via an agentic loop); the runner must not generate
+    # an analysis cell for it.  When False the backend only returns an
+    # ``analysis_code`` string and the runner owns the notebook.  The runner
+    # dispatches on this capability instead of branching on backend id, so a
+    # new notebook-owning backend works without touching the runner.
+    owns_notebook_lifecycle: bool = False
 
 
 @dataclass(frozen=True)
@@ -53,6 +78,10 @@ class BackendDetection:
     available: bool = False
     auth_state: str = "unknown"
     error: str | None = None
+    # CLI feature flags discovered by probing ``--help`` (flag substring ->
+    # present?).  Empty when the help text could not be read; ``build_command``
+    # treats "unknown" as "assume present" to preserve legacy behavior.
+    cli_flags: Mapping[str, bool] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -204,6 +233,7 @@ class PantheonBackend:
             streaming=True,
             native_skill_loading=False,
             resume=False,
+            owns_notebook_lifecycle=True,
         )
 
     def generate_ideas(self, schema: Mapping[str, Any], **kwargs: Any) -> tuple[list[DiscoveryIdea], list[BackendAgentRecord]]:
@@ -226,15 +256,184 @@ class PantheonBackend:
         raise NotImplementedError("Pantheon analysis is notebook-agent based and is handled by runner.")
 
 
-class CLIBackend:
-    """Base adapter for stdin-driven coding-agent CLIs."""
+def _flag_present(cli_flags: Mapping[str, bool] | None, key: str) -> bool:
+    """Return whether a probed CLI flag is available.
 
-    backend_id = ""
-    display_name = ""
-    executable = ""
+    ``cli_flags`` maps a capability key to whether the corresponding flag was
+    found in the CLI ``--help`` output.  An unknown key (help not probed, or
+    probe failed) is treated as present so behavior matches the pre-probe
+    default and a probe failure never silently strips a required flag.
+    """
+    if cli_flags is None:
+        return True
+    return cli_flags.get(key, True)
+
+
+def _build_claude_command(
+    *,
+    workdir: Path,
+    model: str | None,
+    reasoning_effort: str | None,
+    output_schema_path: Path,
+    codex_config_path: Path | None = None,
+    cli_flags: Mapping[str, bool] | None = None,
+) -> list[str]:
+    cmd = [
+        "claude",
+        "--bare",
+        "-p",
+        "--output-format",
+        "json",
+        "--input-format",
+        "text",
+    ]
+    if _flag_present(cli_flags, "json_schema"):
+        cmd.extend(["--json-schema", output_schema_path.read_text()])
+    cmd.extend(["--permission-mode", "default"])
+    cmd.extend(["--disallowedTools", "Write,Edit,Bash,NotebookEdit,NotebookRead"])
+    if model:
+        cmd.extend(["--model", model])
+    if reasoning_effort and _flag_present(cli_flags, "effort"):
+        cmd.extend(["--effort", _claude_effort(reasoning_effort)])
+    return cmd
+
+
+def _build_codex_command(
+    *,
+    workdir: Path,
+    model: str | None,
+    reasoning_effort: str | None,
+    output_schema_path: Path,
+    codex_config_path: Path | None = None,
+    cli_flags: Mapping[str, bool] | None = None,
+) -> list[str]:
+    cmd = ["codex", "exec", "--json"]
+    if _flag_present(cli_flags, "ignore_user_config"):
+        cmd.append("--ignore-user-config")
+    if _flag_present(cli_flags, "ignore_rules"):
+        cmd.append("--ignore-rules")
+    if _flag_present(cli_flags, "ephemeral"):
+        cmd.append("--ephemeral")
+    cmd.extend([
+        "--skip-git-repo-check",
+        "--output-schema",
+        str(output_schema_path),
+        "--sandbox",
+        "workspace-write",
+        "-C",
+        str(workdir),
+        "-c",
+        "sandbox_workspace_write.network_access=true",
+        "-c",
+        'web_search="disabled"',
+    ])
+    if codex_config_path is not None:
+        cmd.extend(_codex_config_args(codex_config_path))
+    if model:
+        cmd.extend(["--model", model])
+    if reasoning_effort:
+        cmd.extend(["-c", f"model_reasoning_effort={json.dumps(reasoning_effort)}"])
+    cmd.append("-")
+    return cmd
+
+
+def _parse_claude_stream(stdout: str) -> str:
+    last_result = ""
+    chunks: list[str] = []
+    for event in _iter_json_events(stdout):
+        structured_output = _structured_output_from_event(event)
+        if structured_output is not None:
+            return json.dumps(structured_output)
+        if event.get("type") == "result" and event.get("result"):
+            last_result = str(event["result"])
+        if event.get("type") == "assistant":
+            for content in event.get("message", {}).get("content", []) or []:
+                if isinstance(content, Mapping) and content.get("type") == "text":
+                    chunks.append(str(content.get("text", "")))
+    return last_result or "".join(chunks) or stdout
+
+
+def _parse_codex_events(stdout: str) -> str:
+    last_message = ""
+    chunks: list[str] = []
+    for event in _iter_json_events(stdout):
+        msg = event.get("msg") if isinstance(event.get("msg"), Mapping) else event
+        if not isinstance(msg, Mapping):
+            continue
+        message = msg.get("message")
+        if isinstance(message, str):
+            chunks.append(message)
+            last_message = message
+        item = msg.get("item")
+        if isinstance(item, Mapping):
+            text = item.get("text") or item.get("content")
+            if isinstance(text, str):
+                chunks.append(text)
+                last_message = text
+    return last_message or "\n".join(chunks) or stdout
+
+
+_STREAM_PARSERS: dict[str, Any] = {
+    "claude-stream-json": _parse_claude_stream,
+    "codex-json-event": _parse_codex_events,
+}
+
+
+@contextmanager
+def _default_run_environment(workdir: Path) -> Iterator[dict[str, str]]:
+    yield dict(os.environ)
+
+
+@contextmanager
+def _codex_run_environment(workdir: Path) -> Iterator[dict[str, str]]:
+    with tempfile.TemporaryDirectory(prefix="uchrom-codex-home-", dir=workdir) as codex_home:
+        codex_home_path = Path(codex_home)
+        _write_minimal_codex_config(codex_home_path)
+        env = dict(os.environ)
+        env["CODEX_HOME"] = str(codex_home_path)
+        env["UCHROM_CODEX_CONFIG_PATH"] = str(codex_home_path / "config.toml")
+        yield env
+
+
+@dataclass(frozen=True)
+class CLISpec:
+    """Data describing one stdin-driven coding-agent CLI backend.
+
+    Per-CLI differences are expressed as data here rather than as subclass
+    overrides, mirroring open-design's data-driven adapter model: the generic
+    ``CLIBackend`` consumes a spec and the core never branches on backend id.
+    """
+
+    backend_id: str
+    display_name: str
+    executable: str
+    build_command: Any  # callable(**kwargs) -> list[str]
+    stream_format: str
+    run_environment: Any = _default_run_environment  # callable(Path) -> ctx mgr
+    fallback_bins: tuple[str, ...] = ()
+    # capability key -> ``--help`` substring whose presence enables the flag.
+    capability_probe: Mapping[str, str] = field(default_factory=dict)
+
+
+class CLIBackend:
+    """Generic adapter for stdin-driven coding-agent CLIs, driven by a spec."""
+
+    def __init__(self, spec: CLISpec) -> None:
+        self.spec = spec
+        self.backend_id = spec.backend_id
+        self.display_name = spec.display_name
+        self.executable = spec.executable
+
+    def _resolve_executable(self) -> str | None:
+        for candidate in (self.executable, *self.spec.fallback_bins):
+            path = shutil.which(candidate)
+            if path:
+                return path
+        return None
 
     def detect(self) -> BackendDetection:
-        path = shutil.which(self.executable)
+        path = self._resolve_executable()
+
         if not path:
             return BackendDetection(
                 backend_id=self.backend_id,
@@ -269,7 +468,36 @@ class CLIBackend:
             version=version,
             available=True,
             auth_state="unknown",
+            cli_flags=self._probe_cli_flags(path),
         )
+
+    def _probe_cli_flags(self, path: str) -> dict[str, bool]:
+        """Probe ``--help`` and report which capability flags are supported.
+
+        Returns an empty dict when ``capability_probe`` is empty or the help
+        text cannot be read, so ``build_command`` falls back to assuming every
+        flag is present (legacy behavior).
+        """
+        if not self.spec.capability_probe:
+            return {}
+        try:
+            completed = subprocess.run(
+                [path, "--help"],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=5,
+                check=False,
+            )
+        except Exception:
+            return {}
+        help_text = (completed.stdout or "") + (completed.stderr or "")
+        if not help_text.strip():
+            return {}
+        return {
+            key: substring in help_text
+            for key, substring in self.spec.capability_probe.items()
+        }
 
     def capabilities(self) -> BackendCapabilities:
         return BackendCapabilities(
@@ -296,31 +524,54 @@ class CLIBackend:
     ) -> tuple[list[DiscoveryIdea], list[BackendAgentRecord]]:
         workdir = Path(output_dir) / self.backend_id / "idea_agents"
         workdir.mkdir(parents=True, exist_ok=True)
-        context = _write_backend_context(
+        _write_backend_context(
             schema,
             workdir,
             prior_graph_path=prior_graph_path,
             direction_context_path=direction_context_path,
         )
+        # Fan out across ``idea_agent_count`` independent agents and dedup by
+        # idea_id, matching the Pantheon backend.  Previously the CLI backends
+        # accepted ``idea_agent_count`` but ran a single agent, so the same
+        # config value silently meant different things per backend.
+        agent_count = max(1, int(idea_agent_count))
+        ideas_per_agent = max(1, math.ceil(max_ideas / agent_count))
         prompt = build_idea_prompt(
             schema,
-            max_ideas=max_ideas,
+            max_ideas=ideas_per_agent,
             prior_graph_path=prior_graph_path,
             direction_context_path=direction_context_path,
         )
-        record = self._run_structured(
-            role="idea",
-            prompt=prompt,
-            workdir=workdir,
-            model=model,
-            reasoning_effort=reasoning_effort,
-            timeout=timeout,
-        )
-        payload = extract_structured_json(str(record.content.get("output", "")))
-        raw_ideas = payload.get("ideas", [])
-        if not isinstance(raw_ideas, list):
-            raise ValueError(f"{self.backend_id} idea output must contain an ideas list")
-        return [DiscoveryIdea.from_dict(item) for item in raw_ideas[:max_ideas]], [record]
+        cli_flags = self._detect_cli_flags()
+        ideas: list[DiscoveryIdea] = []
+        records: list[BackendAgentRecord] = []
+        seen: set[str] = set()
+        for idx in range(agent_count):
+            agent_workdir = workdir if agent_count == 1 else workdir / f"agent_{idx}"
+            agent_workdir.mkdir(parents=True, exist_ok=True)
+            record = self._run_structured(
+                role="idea",
+                prompt=prompt,
+                workdir=agent_workdir,
+                model=model,
+                reasoning_effort=reasoning_effort,
+                timeout=timeout,
+                cli_flags=cli_flags,
+            )
+            records.append(record)
+            payload = extract_structured_json(str(record.content.get("output", "")))
+            raw_ideas = payload.get("ideas", [])
+            if not isinstance(raw_ideas, list):
+                raise ValueError(f"{self.backend_id} idea output must contain an ideas list")
+            for item in raw_ideas:
+                idea = DiscoveryIdea.from_dict(item)
+                if idea.idea_id in seen:
+                    continue
+                seen.add(idea.idea_id)
+                ideas.append(idea)
+                if len(ideas) >= max_ideas:
+                    return ideas, records
+        return ideas, records
 
     def generate_analysis_code(
         self,
@@ -352,6 +603,7 @@ class CLIBackend:
             model=model,
             reasoning_effort=reasoning_effort,
             timeout=timeout,
+            cli_flags=self._detect_cli_flags(),
         )
         payload = extract_structured_json(str(record.content.get("output", "")))
         code = payload.get("analysis_code")
@@ -375,11 +627,53 @@ class CLIBackend:
         model: str | None,
         reasoning_effort: str | None,
         timeout: int,
+        cli_flags: Mapping[str, bool] | None = None,
+        max_attempts: int = 2,
     ) -> BackendAgentRecord:
+        """Run one structured backend invocation, retrying transient failures.
+
+        Failures are classified so callers and audit logs can tell apart a
+        missing/exited binary, a run that produced unparseable output, and a
+        timeout.  Transient failures (timeout, non-zero exit that is not an
+        auth error) are retried once; auth and bad-output failures are not.
+        """
+        last_exc: BackendError | None = None
+        for attempt in range(1, max(1, int(max_attempts)) + 1):
+            try:
+                return self._run_structured_once(
+                    role=role,
+                    prompt=prompt,
+                    workdir=workdir,
+                    model=model,
+                    reasoning_effort=reasoning_effort,
+                    timeout=timeout,
+                    cli_flags=cli_flags,
+                    attempt=attempt,
+                )
+            except BackendError as exc:
+                last_exc = exc
+                if not exc.retryable or attempt >= max(1, int(max_attempts)):
+                    raise
+        assert last_exc is not None  # loop always sets it before raising
+        raise last_exc
+
+    def _run_structured_once(
+        self,
+        *,
+        role: str,
+        prompt: str,
+        workdir: Path,
+        model: str | None,
+        reasoning_effort: str | None,
+        timeout: int,
+        cli_flags: Mapping[str, bool] | None,
+        attempt: int,
+    ) -> BackendAgentRecord:
+        suffix = "" if attempt == 1 else f"_attempt{attempt}"
         prompt_path = workdir / f"{role}_prompt.md"
         output_schema_path = workdir / f"{role}_schema.json"
-        stdout_path = workdir / f"{role}_stdout.jsonl"
-        stderr_path = workdir / f"{role}_stderr.log"
+        stdout_path = workdir / f"{role}{suffix}_stdout.jsonl"
+        stderr_path = workdir / f"{role}{suffix}_stderr.log"
         prompt_path.write_text(prompt)
         output_schema_path.write_text(json.dumps(_output_schema_for_role(role), indent=2) + "\n")
         started = time.time()
@@ -393,6 +687,7 @@ class CLIBackend:
                         reasoning_effort=reasoning_effort,
                         output_schema_path=output_schema_path,
                         codex_config_path=Path(codex_config_path) if codex_config_path else None,
+                        cli_flags=cli_flags,
                     ),
                     input=prompt,
                     text=True,
@@ -421,6 +716,7 @@ class CLIBackend:
             "status": "completed" if returncode == 0 else "failed",
             "returncode": returncode,
             "elapsed_sec": round(elapsed, 3),
+            "attempt": attempt,
             "output_schema_path": str(output_schema_path),
             "stdout_path": str(stdout_path),
             "stderr_path": str(stderr_path),
@@ -430,8 +726,19 @@ class CLIBackend:
             content["structured_output_path"] = str(structured_output_path)
         if returncode != 0:
             tail = stderr[-4000:] or stdout[-4000:]
-            status = "timed out" if returncode == -1 else f"failed with exit {returncode}"
-            raise RuntimeError(f"{self.backend_id} {role} backend {status}: {tail}")
+            if returncode == -1:
+                raise BackendError(
+                    f"{self.backend_id} {role} backend timed out: {tail}",
+                    category="timeout",
+                    retryable=True,
+                )
+            auth = _looks_like_auth_failure(stderr or stdout)
+            raise BackendError(
+                f"{self.backend_id} {role} backend "
+                f"{'failed (auth)' if auth else f'failed with exit {returncode}'}: {tail}",
+                category="backend_unavailable" if auth else "failed",
+                retryable=not auth,
+            )
         return BackendAgentRecord(
             agent_name=f"{self.backend_id}_{role}_agent",
             role=role,
@@ -439,6 +746,14 @@ class CLIBackend:
             content=content,
         )
 
+    def _detect_cli_flags(self) -> Mapping[str, bool]:
+        if not self.spec.capability_probe:
+            return {}
+        path = self._resolve_executable()
+        if not path:
+            return {}
+        return self._probe_cli_flags(path)
+
     def _command(
         self,
         *,
@@ -447,142 +762,65 @@ class CLIBackend:
         reasoning_effort: str | None,
         output_schema_path: Path,
         codex_config_path: Path | None = None,
+        cli_flags: Mapping[str, bool] | None = None,
     ) -> list[str]:
-        raise NotImplementedError
+        return self.spec.build_command(
+            workdir=workdir,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            output_schema_path=output_schema_path,
+            codex_config_path=codex_config_path,
+            cli_flags=cli_flags,
+        )
 
     def _extract_final_text(self, stdout: str) -> str:
-        return stdout
+        parser = _STREAM_PARSERS.get(self.spec.stream_format)
+        if parser is None:
+            return stdout
+        return parser(stdout)
 
     @contextmanager
     def _run_environment(self, workdir: Path) -> Iterator[dict[str, str]]:
-        yield dict(os.environ)
+        with self.spec.run_environment(workdir) as env:
+            yield env
+
+
+CLAUDE_SPEC = CLISpec(
+    backend_id="claude",
+    display_name="Claude Code",
+    executable="claude",
+    build_command=_build_claude_command,
+    stream_format="claude-stream-json",
+    capability_probe={"json_schema": "--json-schema", "effort": "--effort"},
+)
+
+CODEX_SPEC = CLISpec(
+    backend_id="codex",
+    display_name="Codex",
+    executable="codex",
+    build_command=_build_codex_command,
+    stream_format="codex-json-event",
+    run_environment=_codex_run_environment,
+    capability_probe={
+        "ignore_user_config": "--ignore-user-config",
+        "ignore_rules": "--ignore-rules",
+        "ephemeral": "--ephemeral",
+    },
+)
 
 
 class ClaudeBackend(CLIBackend):
-    """Claude Code CLI adapter."""
+    """Claude Code CLI adapter (thin spec-backed wrapper)."""
 
-    backend_id = "claude"
-    display_name = "Claude Code"
-    executable = "claude"
-
-    def _command(
-        self,
-        *,
-        workdir: Path,
-        model: str | None,
-        reasoning_effort: str | None,
-        output_schema_path: Path,
-        codex_config_path: Path | None = None,
-    ) -> list[str]:
-        cmd = [
-            self.executable,
-            "--bare",
-            "-p",
-            "--output-format",
-            "json",
-            "--input-format",
-            "text",
-            "--json-schema",
-            output_schema_path.read_text(),
-            "--permission-mode",
-            "default",
-            "--disallowedTools",
-            "Write,Edit,Bash,NotebookEdit,NotebookRead",
-        ]
-        if model:
-            cmd.extend(["--model", model])
-        if reasoning_effort:
-            cmd.extend(["--effort", _claude_effort(reasoning_effort)])
-        return cmd
-
-    def _extract_final_text(self, stdout: str) -> str:
-        last_result = ""
-        chunks: list[str] = []
-        for event in _iter_json_events(stdout):
-            structured_output = _structured_output_from_event(event)
-            if structured_output is not None:
-                return json.dumps(structured_output)
-            if event.get("type") == "result" and event.get("result"):
-                last_result = str(event["result"])
-            if event.get("type") == "assistant":
-                for content in event.get("message", {}).get("content", []) or []:
-                    if isinstance(content, Mapping) and content.get("type") == "text":
-                        chunks.append(str(content.get("text", "")))
-        return last_result or "".join(chunks) or stdout
+    def __init__(self) -> None:
+        super().__init__(CLAUDE_SPEC)
 
 
 class CodexBackend(CLIBackend):
-    """Codex CLI adapter."""
+    """Codex CLI adapter (thin spec-backed wrapper)."""
 
-    backend_id = "codex"
-    display_name = "Codex"
-    executable = "codex"
-
-    def _command(
-        self,
-        *,
-        workdir: Path,
-        model: str | None,
-        reasoning_effort: str | None,
-        output_schema_path: Path,
-        codex_config_path: Path | None = None,
-    ) -> list[str]:
-        cmd = [
-            self.executable,
-            "exec",
-            "--json",
-            "--ignore-user-config",
-            "--ignore-rules",
-            "--ephemeral",
-            "--skip-git-repo-check",
-            "--output-schema",
-            str(output_schema_path),
-            "--sandbox",
-            "workspace-write",
-            "-C",
-            str(workdir),
-            "-c",
-            "sandbox_workspace_write.network_access=true",
-            "-c",
-            'web_search="disabled"',
-        ]
-        if codex_config_path is not None:
-            cmd.extend(_codex_config_args(codex_config_path))
-        if model:
-            cmd.extend(["--model", model])
-        if reasoning_effort:
-            cmd.extend(["-c", f"model_reasoning_effort={json.dumps(reasoning_effort)}"])
-        cmd.append("-")
-        return cmd
-
-    @contextmanager
-    def _run_environment(self, workdir: Path) -> Iterator[dict[str, str]]:
-        with tempfile.TemporaryDirectory(prefix="uchrom-codex-home-", dir=workdir) as codex_home:
-            codex_home_path = Path(codex_home)
-            _write_minimal_codex_config(codex_home_path)
-            env = dict(os.environ)
-            env["CODEX_HOME"] = str(codex_home_path)
-            env["UCHROM_CODEX_CONFIG_PATH"] = str(codex_home_path / "config.toml")
-            yield env
-
-    def _extract_final_text(self, stdout: str) -> str:
-        last_message = ""
-        chunks: list[str] = []
-        for event in _iter_json_events(stdout):
-            msg = event.get("msg") if isinstance(event.get("msg"), Mapping) else event
-            if not isinstance(msg, Mapping):
-                continue
-            message = msg.get("message")
-            if isinstance(message, str):
-                chunks.append(message)
-                last_message = message
-            item = msg.get("item")
-            if isinstance(item, Mapping):
-                text = item.get("text") or item.get("content")
-                if isinstance(text, str):
-                    chunks.append(text)
-                    last_message = text
-        return last_message or "\n".join(chunks) or stdout
+    def __init__(self) -> None:
+        super().__init__(CODEX_SPEC)
 
 
 def _output_schema_for_role(role: str) -> dict[str, Any]:
@@ -733,6 +971,32 @@ def _list_of_strings(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value]
+
+
+_AUTH_FAILURE_MARKERS = (
+    "not logged in",
+    "please log in",
+    "please login",
+    "run `claude login`",
+    "run `codex login`",
+    "authentication required",
+    "unauthorized",
+    "invalid api key",
+    "missing api key",
+    "no api key",
+    "credentials",
+)
+
+
+def _looks_like_auth_failure(text: str) -> bool:
+    """Heuristically detect an auth failure from CLI stderr/stdout.
+
+    Auth failures will not be fixed by retrying, so they are reported as
+    ``backend_unavailable`` and not retried.  Kept deliberately conservative:
+    a bare HTTP status is too noisy, so only explicit auth phrasing counts.
+    """
+    lowered = text.lower()
+    return any(marker in lowered for marker in _AUTH_FAILURE_MARKERS)
 
 
 def _decode_timeout_stream(value: str | bytes | None) -> str:

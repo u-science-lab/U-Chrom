@@ -91,6 +91,15 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
     if not isinstance(config, DiscoveryRunConfig):
         config = DiscoveryRunConfig(**dict(config))
 
+    # Preflight: fail fast with a friendly message if a selected backend's CLI
+    # is missing or unauthenticated, instead of surfacing a raw subprocess
+    # error partway through a long run.  Reading from a pre-generated ideas
+    # file skips the idea backend.
+    needed = {config.code_source}
+    if config.ideas_path is None:
+        needed.add(config.idea_source)
+    _preflight_backends(needed)
+
     from uchrom import ChromData
 
     input_h5cd_path = Path(config.h5cd_path)
@@ -196,7 +205,8 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
     _write_jsonl(reviews_path, reviews)
 
     code_backend = get_backend(config.code_source)
-    if config.code_source == "pantheon":
+    code_owns_notebook = code_backend.capabilities().owns_notebook_lifecycle
+    if code_owns_notebook:
         for idea in accepted:
             notebook_path = notebooks_dir / f"{idea.idea_id}.ipynb"
             verification_code = _verification_code_for_idea(idea, output_dir)
@@ -230,7 +240,7 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
 
     for idea in accepted:
         notebook_path = notebooks_dir / f"{idea.idea_id}.ipynb"
-        if config.code_source != "pantheon":
+        if not code_owns_notebook:
             analysis = code_backend.generate_analysis_code(
                 idea,
                 schema,
@@ -367,6 +377,30 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
         enriched_h5cd_path=str(enriched_h5cd_path) if enriched_h5cd_path is not None else None,
         enrichment_summary_path=str(enrichment_summary_path) if enrichment_summary_path is not None else None,
     )
+
+
+def _preflight_backends(backend_ids: set[str]) -> None:
+    """Detect each selected backend and raise a friendly error if unavailable.
+
+    Pantheon-style backends report ``available`` from an import check; CLI
+    backends report it from PATH lookup.  A backend that cannot even be
+    detected is a hard stop before any work happens.
+    """
+    for backend_id in sorted(backend_ids):
+        backend = get_backend(backend_id)
+        detect = getattr(backend, "detect", None)
+        if not callable(detect):
+            # A backend that does not implement detection (e.g. an in-process
+            # test double) is assumed available; preflight only guards CLIs.
+            continue
+        detection = detect()
+        if not detection.available:
+            hint = detection.error or "not available"
+            raise RuntimeError(
+                f"auto-discovery backend {backend_id!r} is unavailable: {hint}. "
+                f"Install or authenticate it, or choose another backend via "
+                f"idea_source / code_source."
+            )
 
 
 def _run_async(coro: Awaitable[Any]) -> Any:

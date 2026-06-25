@@ -1407,3 +1407,166 @@ def test_codex_backend_uses_minimal_temporary_codex_home(monkeypatch, tmp_path):
         assert (codex_home / "auth.json").exists()
 
     assert not codex_home.exists()
+
+
+def test_pantheon_backend_owns_notebook_lifecycle():
+    from uchrom.auto_discovery.backends import get_backend
+
+    assert get_backend("pantheon").capabilities().owns_notebook_lifecycle is True
+    assert get_backend("claude").capabilities().owns_notebook_lifecycle is False
+    assert get_backend("codex").capabilities().owns_notebook_lifecycle is False
+
+
+def test_cli_backend_build_command_gates_flags_on_probe():
+    from uchrom.auto_discovery.backends import _build_codex_command
+    from pathlib import Path
+
+    # Probe says --ephemeral is absent on this CLI version; it must be dropped.
+    cmd = _build_codex_command(
+        workdir=Path("/tmp/work"),
+        model=None,
+        reasoning_effort=None,
+        output_schema_path=Path("/tmp/schema.json"),
+        cli_flags={"ephemeral": False, "ignore_rules": True, "ignore_user_config": True},
+    )
+    assert "--ephemeral" not in cmd
+    assert "--ignore-rules" in cmd
+    # Unknown flags (cli_flags is None) default to present, preserving behavior.
+    legacy = _build_codex_command(
+        workdir=Path("/tmp/work"),
+        model=None,
+        reasoning_effort=None,
+        output_schema_path=Path("/tmp/schema.json"),
+        cli_flags=None,
+    )
+    assert "--ephemeral" in legacy
+
+
+def test_cli_backend_fans_out_idea_agents(monkeypatch, tmp_path):
+    from uchrom.auto_discovery import backends as backends_mod
+    from uchrom.auto_discovery.backends import ClaudeBackend, BackendAgentRecord
+
+    calls = {"n": 0}
+
+    def fake_run_structured(self, *, role, prompt, workdir, model, reasoning_effort, timeout, cli_flags=None):
+        calls["n"] += 1
+        # Each agent returns one unique idea keyed by its call index.
+        idea = {
+            "idea_title": f"Idea {calls['n']}",
+            "biological_hypothesis": "h",
+            "computable_parameter": "p",
+            "analysis_plan": "a",
+            "modalities": ["chromatin_tracing"],
+            "cell_types": ["Granule"],
+            "required_fields": ["coords"],
+            "validation_checks": ["required_fields_exist"],
+            "expected_direction": "up",
+            "complexity": 2,
+        }
+        payload = "BEGIN_UCHROM_JSON\n" + json.dumps({"ideas": [idea]}) + "\nEND_UCHROM_JSON"
+        return BackendAgentRecord(
+            agent_name="claude_idea_agent",
+            role=role,
+            prompt_path=str(workdir / "p.md"),
+            content={"output": payload},
+        )
+
+    monkeypatch.setattr(ClaudeBackend, "_run_structured", fake_run_structured)
+    monkeypatch.setattr(ClaudeBackend, "_detect_cli_flags", lambda self: {})
+
+    ideas, records = ClaudeBackend().generate_ideas(
+        {"fields": {}},
+        output_dir=tmp_path,
+        max_ideas=5,
+        idea_agent_count=3,
+    )
+    assert calls["n"] == 3
+    assert len(records) == 3
+    assert len(ideas) == 3
+
+
+def test_run_auto_discovery_preflights_unavailable_backend(tmp_path):
+    from uchrom import ChromData
+    from uchrom.auto_discovery import DiscoveryRunConfig, run_auto_discovery
+    from uchrom.auto_discovery.backends import (
+        BackendCapabilities,
+        BackendDetection,
+        register_backend,
+        unregister_backend,
+    )
+
+    cdata = _make_cd()
+    h5cd_path = tmp_path / "data.h5cd"
+    cdata.write(h5cd_path)
+
+    class MissingBackend:
+        backend_id = "missing-cli"
+        display_name = "Missing CLI"
+
+        def detect(self):
+            return BackendDetection(
+                backend_id=self.backend_id,
+                executable_path=None,
+                available=False,
+                auth_state="missing",
+                error="'missing-cli' was not found on PATH",
+            )
+
+        def capabilities(self):
+            return BackendCapabilities(
+                structured_output=True, file_workspace=True,
+                prompt_via_stdin=True, streaming=False,
+            )
+
+    register_backend(MissingBackend())
+    try:
+        with pytest.raises(RuntimeError, match="unavailable"):
+            run_auto_discovery(DiscoveryRunConfig(
+                h5cd_path=h5cd_path,
+                output_dir=tmp_path / "run",
+                idea_source="missing-cli",
+                code_source="missing-cli",
+            ))
+    finally:
+        unregister_backend("missing-cli")
+
+
+def test_run_structured_retries_transient_then_classifies(monkeypatch, tmp_path):
+    from uchrom.auto_discovery.backends import ClaudeBackend, BackendError, BackendAgentRecord
+
+    attempts = {"n": 0}
+
+    def flaky_once(self, *, role, prompt, workdir, model, reasoning_effort, timeout, cli_flags, attempt):
+        attempts["n"] += 1
+        if attempt == 1:
+            raise BackendError("boom", category="timeout", retryable=True)
+        return BackendAgentRecord(
+            agent_name="claude_idea_agent", role=role, prompt_path="", content={"output": "{}"}
+        )
+
+    monkeypatch.setattr(ClaudeBackend, "_run_structured_once", flaky_once)
+    rec = ClaudeBackend()._run_structured(
+        role="idea", prompt="p", workdir=tmp_path,
+        model=None, reasoning_effort=None, timeout=1,
+    )
+    assert attempts["n"] == 2
+    assert rec.agent_name == "claude_idea_agent"
+
+
+def test_run_structured_does_not_retry_auth_failure(monkeypatch, tmp_path):
+    from uchrom.auto_discovery.backends import ClaudeBackend, BackendError
+
+    attempts = {"n": 0}
+
+    def auth_fail(self, *, role, prompt, workdir, model, reasoning_effort, timeout, cli_flags, attempt):
+        attempts["n"] += 1
+        raise BackendError("not logged in", category="backend_unavailable", retryable=False)
+
+    monkeypatch.setattr(ClaudeBackend, "_run_structured_once", auth_fail)
+    with pytest.raises(BackendError) as excinfo:
+        ClaudeBackend()._run_structured(
+            role="idea", prompt="p", workdir=tmp_path,
+            model=None, reasoning_effort=None, timeout=1,
+        )
+    assert attempts["n"] == 1
+    assert excinfo.value.category == "backend_unavailable"
