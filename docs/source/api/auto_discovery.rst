@@ -17,10 +17,17 @@ Ideas
    :members:
    :undoc-members:
 
-LLM idea generation
--------------------
+Prompt contracts
+----------------
 
 .. automodule:: uchrom.auto_discovery.llm
+   :members:
+   :undoc-members:
+
+Backend adapters
+----------------
+
+.. automodule:: uchrom.auto_discovery.backends
    :members:
    :undoc-members:
 

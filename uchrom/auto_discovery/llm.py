@@ -1,255 +1,20 @@
-"""Optional LLM-backed idea generation."""
+"""Provider-agnostic prompt builders for U-Chrom auto-discovery."""
 
 from __future__ import annotations
 
 import json
-import os
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any, Mapping
 
-from .ideas import DiscoveryIdea
 from .schema import schema_to_agent_context
 
 
-OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-DEFAULT_OPENAI_MODEL = "gpt-5.5"
-DEFAULT_OPENAI_REASONING_EFFORT = "medium"
-OPENAI_IDEA_MAX_OUTPUT_TOKENS = 8000
-OPENAI_CODE_MAX_OUTPUT_TOKENS = 12000
+STRUCTURED_JSON_BEGIN = "BEGIN_UCHROM_JSON"
+STRUCTURED_JSON_END = "END_UCHROM_JSON"
 
 
-def generate_openai_ideas(
-    schema: Mapping[str, Any],
-    *,
-    max_ideas: int = 8,
-    model: str | None = None,
-    reasoning_effort: str | None = None,
-    api_key: str | None = None,
-    env_path: str | Path = "~/.env",
-    timeout: int = 120,
-) -> list[DiscoveryIdea]:
-    """Generate structured ideas with the OpenAI Responses API.
-
-    This function intentionally avoids a hard dependency on the OpenAI
-    Python SDK so the package remains lightweight.  It uses the API key
-    from ``api_key``, ``OPENAI_API_KEY``, or ``~/.env``.
-    """
-    env = _read_env(env_path)
-    api_key = api_key or os.environ.get("OPENAI_API_KEY") or env.get("OPENAI_API_KEY")
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY was not found in the environment or ~/.env")
-    model = _resolve_model(model, env)
-    reasoning_effort = _resolve_reasoning_effort(reasoning_effort, env)
-    allowed_fields = _allowed_required_fields(schema, max_items=80)
-    missing = schema.get("known_missing", [])
-
-    prompt = (
-        "Generate diverse, computable multi-omics discovery ideas for this U-Chrom "
-        "ChromData dataset. Use only modalities and fields listed in the schema. "
-        "Each idea must be a single measurable parameter and must include concrete "
-        "required_fields and validation_checks. Vary cell types and modality "
-        "combinations across ideas.\n\n"
-        "Important required_fields rules:\n"
-        "- required_fields must be exact field paths from the allowed list below.\n"
-        "- Do not put operation names such as gene_expression_lookup in required_fields.\n"
-        "- Do not use known_missing entries as required_fields.\n"
-        "- For RNA expression, include linked_adata.X and linked_adata.var.<gene>.\n\n"
-        f"Allowed required_fields:\n{json.dumps(allowed_fields, indent=2)}\n\n"
-        f"Known missing data that must not be used:\n{json.dumps(missing, indent=2)}\n\n"
-        f"{schema_to_agent_context(schema, max_items=60)}"
-    )
-    payload = {
-        "model": model,
-        "max_output_tokens": OPENAI_IDEA_MAX_OUTPUT_TOKENS,
-        "input": [
-            {
-                "role": "system",
-                "content": (
-                    "You are an autonomous scientific idea generator for chromatin "
-                    "tracing and multi-omics data. Return only schema-valid JSON."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ],
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": "uchrom_discovery_ideas",
-                "strict": True,
-                "schema": _ideas_json_schema(max_ideas=max_ideas),
-            }
-        },
-    }
-    _add_reasoning(payload, model=model, reasoning_effort=reasoning_effort)
-    req = urllib.request.Request(
-        OPENAI_RESPONSES_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"OpenAI request failed with HTTP {exc.code}: {body}") from exc
-    text = _extract_response_text(data)
-    parsed = json.loads(text)
-    return [DiscoveryIdea.from_dict(item) for item in parsed.get("ideas", [])[:max_ideas]]
-
-
-def generate_openai_analysis_code(
-    idea: DiscoveryIdea,
-    schema: Mapping[str, Any],
-    *,
-    model: str | None = None,
-    reasoning_effort: str | None = None,
-    api_key: str | None = None,
-    env_path: str | Path = "~/.env",
-    timeout: int = 180,
-) -> str:
-    """Generate free-form notebook analysis code for one idea."""
-    env = _read_env(env_path)
-    api_key = api_key or os.environ.get("OPENAI_API_KEY") or env.get("OPENAI_API_KEY")
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY was not found in the environment or ~/.env")
-    model = _resolve_model(model, env)
-    reasoning_effort = _resolve_reasoning_effort(reasoning_effort, env)
-    prompt = (
-        "Write one executable Python notebook cell for this U-Chrom discovery idea. "
-        "The cell will run after variables cdata, adata, IDEA, schema, review, and "
-        "RUN_OUTPUT_DIR are already defined. You may write arbitrary Python using "
-        "numpy, pandas, scipy if installed, matplotlib, and U-Chrom APIs. Do not "
-        "modify package source files. Keep runtime small by using aggregation or "
-        "subsampling when needed. The cell must define result_table as a pandas "
-        "DataFrame and analysis_summary as a JSON-serializable dict. It must write "
-        "result_table to RUN_OUTPUT_DIR / f'{IDEA.idea_id}_result.csv' and include "
-        "result_path and parameter_value in analysis_summary. It must perform an "
-        "explicit statistical hypothesis test, not only descriptive aggregation: "
-        "define null_hypothesis, alternative_hypothesis, test_method, "
-        "observed_statistic, effect_size, p_value, and hypothesis_test_status in "
-        "analysis_summary, and include p_value/test_method columns in result_table. "
-        "Use a bounded permutation/randomization test or a suitable nonparametric "
-        "test when possible. Return only Python code.\n\n"
-        "ChromData access rules:\n"
-        "- Do not index ChromData with string field paths like cdata['tracks.H3K27me3'].\n"
-        "- Use cdata.spots, cdata.tracks, cdata.cells, cdata.cellm, cdata.coords directly.\n"
-        "- To select spots by cell type, get cell IDs from cdata.cells and mask cdata.spots['cell_id'].\n"
-        "- To combine spot-level tracks with RNA expression, aggregate tracks per cell_id first, then align to adata.obs_names.\n"
-        "- AnnData access is allowed as adata[:, gene].X; convert sparse matrices with toarray().\n"
-        "- Verification requires a finite numeric parameter_value. If the requested statistic is undefined because the selected sample is too small or an input is constant, compute a finite descriptive fallback effect size and record the fallback in analysis_summary['notes'].\n\n"
-        f"IDEA JSON:\n{json.dumps(idea.to_dict(), indent=2)}\n\n"
-        f"Schema summary:\n{schema_to_agent_context(schema, max_items=60)}"
-    )
-    payload = {
-        "model": model,
-        "max_output_tokens": OPENAI_CODE_MAX_OUTPUT_TOKENS,
-        "input": [
-            {
-                "role": "system",
-                "content": (
-                    "You are a careful Python data scientist writing executable "
-                    "notebook code for chromatin tracing multi-omics analysis."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ],
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": "uchrom_analysis_code",
-                "strict": True,
-                "schema": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "required": ["analysis_code"],
-                    "properties": {"analysis_code": {"type": "string"}},
-                },
-            }
-        },
-    }
-    _add_reasoning(payload, model=model, reasoning_effort=reasoning_effort)
-    req = urllib.request.Request(
-        OPENAI_RESPONSES_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"OpenAI request failed with HTTP {exc.code}: {body}") from exc
-    parsed = json.loads(_extract_response_text(data))
-    return str(parsed["analysis_code"])
-
-
-def _resolve_model(model: str | None, env: Mapping[str, str]) -> str:
-    return model or os.environ.get("OPENAI_MODEL") or env.get("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
-
-
-def _resolve_reasoning_effort(reasoning_effort: str | None, env: Mapping[str, str]) -> str:
-    return (
-        reasoning_effort
-        or os.environ.get("OPENAI_REASONING_EFFORT")
-        or env.get("OPENAI_REASONING_EFFORT")
-        or DEFAULT_OPENAI_REASONING_EFFORT
-    )
-
-
-def _add_reasoning(payload: dict[str, Any], *, model: str, reasoning_effort: str) -> None:
-    if _supports_reasoning(model):
-        payload["reasoning"] = {"effort": reasoning_effort}
-
-
-def _supports_reasoning(model: str) -> bool:
-    return model.startswith(("gpt-5", "o"))
-
-
-def _read_env(path: str | Path) -> dict[str, str]:
-    path = Path(path).expanduser()
-    if not path.exists():
-        return {}
-    values: dict[str, str] = {}
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        value = value.strip().strip('"').strip("'")
-        values[key.strip()] = value
-    return values
-
-
-def _extract_response_text(data: Mapping[str, Any]) -> str:
-    if data.get("output_text"):
-        return str(data["output_text"])
-    chunks: list[str] = []
-    for item in data.get("output", []) or []:
-        for content in item.get("content", []) or []:
-            if "text" in content:
-                chunks.append(str(content["text"]))
-    if chunks:
-        return "".join(chunks)
-    output_types = [str(item.get("type", "")) for item in data.get("output", []) or []]
-    details = {
-        "status": data.get("status"),
-        "incomplete_details": data.get("incomplete_details"),
-        "output_types": output_types,
-    }
-    raise RuntimeError(f"OpenAI response did not contain output text: {json.dumps(details)}")
-
-
-def _allowed_required_fields(schema: Mapping[str, Any], *, max_items: int) -> list[str]:
+def allowed_required_fields(schema: Mapping[str, Any], *, max_items: int) -> list[str]:
+    """Return schema field paths that agents may use in ``required_fields``."""
     fields = ["coords"]
     for table in ("spots", "tracks", "cells", "traces"):
         for column in (schema.get("fields", {}).get(table, {}) or {}).get("columns", []):
@@ -269,60 +34,221 @@ def _allowed_required_fields(schema: Mapping[str, Any], *, max_items: int) -> li
     return fields[:max_items]
 
 
-def _ideas_json_schema(*, max_ideas: int) -> dict[str, Any]:
-    idea = {
-        "type": "object",
-        "additionalProperties": False,
-        "required": [
-            "idea_title",
-            "biological_hypothesis",
-            "computable_parameter",
-            "analysis_plan",
-            "modalities",
-            "cell_types",
-            "required_fields",
-            "validation_checks",
-            "expected_direction",
-            "complexity",
-        ],
-        "properties": {
-            "idea_title": {"type": "string"},
-            "biological_hypothesis": {"type": "string"},
-            "computable_parameter": {"type": "string"},
-            "analysis_plan": {"type": "string"},
-            "modalities": {
-                "type": "array",
-                "items": {"type": "string"},
-                "minItems": 1,
+def build_required_fields_prompt_block(schema: Mapping[str, Any], *, max_items: int = 80) -> str:
+    """Build the legacy required-field guardrails shared by all idea backends."""
+    allowed_fields = allowed_required_fields(schema, max_items=max_items)
+    missing = schema.get("known_missing", [])
+    return (
+        "Important required_fields rules:\n"
+        "- required_fields must be exact field paths from the allowed list below.\n"
+        "- Do not put operation names such as gene_expression_lookup in required_fields.\n"
+        "- Do not use known_missing entries as required_fields.\n"
+        "- For RNA expression, include linked_adata.X and linked_adata.var.<gene>.\n\n"
+        f"Allowed required_fields:\n{json.dumps(allowed_fields, indent=2)}\n\n"
+        f"Known missing data that must not be used:\n{json.dumps(missing, indent=2)}"
+    )
+
+
+def build_idea_prompt(
+    schema: Mapping[str, Any],
+    *,
+    max_ideas: int,
+    prior_graph_path: str | Path | None = None,
+    direction_context_path: str | Path | None = None,
+) -> str:
+    """Build the structured idea-generation prompt used by CLI backends."""
+    extra = []
+    if prior_graph_path is not None:
+        extra.append(f"- Prior graph JSON: {prior_graph_path}")
+    if direction_context_path is not None:
+        extra.append(f"- Direction context markdown: {direction_context_path}")
+    extra_text = "\n".join(extra) if extra else "- No prior graph or direction context."
+    required_fields_block = build_required_fields_prompt_block(schema)
+    return f"""
+You are an autonomous scientific idea generator for chromatin tracing and
+multi-omics data. Generate diverse, computable U-Chrom discovery ideas for this
+ChromData dataset. Return only structured JSON between {STRUCTURED_JSON_BEGIN}
+and {STRUCTURED_JSON_END}. Do not write files.
+
+Files:
+- Schema JSON and compact schema context are available in the backend workdir.
+{extra_text}
+
+{required_fields_block}
+
+Rules:
+- Generate at most {max_ideas} diverse, computable ideas.
+- Use only modalities, fields, cell types, tracks, and genes present in schema.
+- Each idea must define exactly one measurable parameter.
+- Each idea must be compatible with DiscoveryIdea.from_dict.
+- Vary cell types and modality combinations across ideas.
+- Include statistical_hypothesis_test in validation_checks unless impossible.
+- Include idea_markdown when useful to explain rationale, data used, analysis
+  sketch, expected result, and validation checks in human-readable prose.
+- Complexity must be 1-5.
+
+Schema summary:
+{schema_to_agent_context(schema, max_items=60)}
+
+Return this shape exactly:
+{{
+  "ideas": [
+    {{
+      "idea_title": "...",
+      "idea_markdown": "### Rationale\\n...",
+      "biological_hypothesis": "...",
+      "computable_parameter": "...",
+      "analysis_plan": "...",
+      "modalities": ["chromatin_tracing"],
+      "cell_types": ["..."],
+      "required_fields": ["coords"],
+      "validation_checks": ["required_fields_exist", "finite_numeric_output", "statistical_hypothesis_test"],
+      "expected_direction": "...",
+      "complexity": 3,
+      "metadata": {{}}
+    }}
+  ]
+}}
+""".strip()
+
+
+def build_analysis_prompt(
+    *,
+    idea_path: Path,
+    schema_path: Path,
+    context_path: Path,
+    h5cd_path: Path,
+    output_dir: Path,
+) -> str:
+    """Build the structured analysis-code prompt used by CLI backends."""
+    return f"""
+You are a careful Python data scientist writing one executable Python notebook
+analysis cell for chromatin tracing multi-omics analysis. Read these files:
+- Idea JSON: {idea_path}
+- Schema JSON: {schema_path}
+- Schema context: {context_path}
+
+The final notebook is owned by the U-Chrom runner. Do not edit files or
+notebooks. Return the structured JSON in your final message only.
+
+Execution environment:
+- H5CD_PATH will be {h5cd_path}
+- RUN_OUTPUT_DIR will be {output_dir}
+- Variables already defined by the notebook: cdata, adata, IDEA, schema, review,
+  RUN_OUTPUT_DIR, np, pd, plt, ChromData.
+- IDEA is a DiscoveryIdea object. Prefer attribute access such as IDEA.idea_id
+  and IDEA.idea_title over dict-style access.
+
+Return only structured JSON between {STRUCTURED_JSON_BEGIN} and
+{STRUCTURED_JSON_END} with this shape:
+{{
+  "analysis_code": "Python code string",
+  "extra_cells": [],
+  "artifact_manifest": [],
+  "warnings": [],
+  "notes": []
+}}
+
+analysis_code requirements:
+- Define result_table as a pandas DataFrame.
+- Define analysis_summary as a JSON-serializable dict.
+- Write result_table to RUN_OUTPUT_DIR / f"{{IDEA.idea_id}}_result.csv".
+- result_table must include `p_value` and `test_method` columns on every row.
+- Include result_path, parameter_value, observed_statistic, effect_size, p_value,
+  test_method, null_hypothesis, alternative_hypothesis, hypothesis_test_status,
+  n_selected_cells, and n_rows in analysis_summary.
+- parameter_value must be a finite numeric scalar that directly summarizes the
+  computable parameter, not the parameter name or any other string.
+- observed_statistic, effect_size, and p_value must also be finite numeric
+  scalars; convert numpy scalar types with float(...) or int(...).
+- Perform an explicit statistical hypothesis test or bounded permutation /
+  randomization test. Do not set hypothesis_test_status to `insufficient_data`
+  when a finite fallback statistic can be computed; use `pass_with_fallback`,
+  set p_value to 1.0, and add a note instead.
+- Use a bounded permutation/randomization test or a suitable nonparametric test
+  when possible. Keep runtime small by using aggregation or subsampling.
+- If using pd.qcut or pd.cut and you need `.cat`, wrap the input in
+  pd.Series(...) first; qcut/cut on numpy arrays returns a Categorical without
+  the Series `.cat` accessor.
+- Do not modify package source files or notebooks.
+
+ChromData access rules:
+- Do not index ChromData with string field paths like cdata['tracks.H3K27me3'].
+- Use cdata.spots, cdata.tracks, cdata.cells, cdata.cellm, cdata.coords directly.
+- To select spots by cell type, get cell IDs from cdata.cells and mask
+  cdata.spots['cell_id'].
+- To combine spot-level tracks with RNA expression, aggregate tracks per cell_id first, then align to adata.obs_names.
+- AnnData access is allowed as adata[:, gene].X; convert sparse matrices with
+  toarray().
+- Verification requires a finite numeric parameter_value. If the requested
+  statistic is undefined because the selected sample is too small or an input is
+  constant, compute a finite descriptive fallback effect size and record the
+  fallback in analysis_summary['notes'].
+""".strip()
+
+
+def idea_output_schema(*, max_ideas: int | None = None) -> dict[str, Any]:
+    """Return the structured-output schema for idea-generation backends."""
+    ideas_schema: dict[str, Any] = {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "idea_title": {"type": "string"},
+                "biological_hypothesis": {"type": "string"},
+                "computable_parameter": {"type": "string"},
+                "analysis_plan": {"type": "string"},
+                "modalities": {"type": "array", "items": {"type": "string"}},
+                "idea_markdown": {"type": "string"},
+                "cell_types": {"type": "array", "items": {"type": "string"}},
+                "required_fields": {"type": "array", "items": {"type": "string"}},
+                "validation_checks": {"type": "array", "items": {"type": "string"}},
+                "expected_direction": {"type": "string"},
+                "complexity": {"type": "integer", "minimum": 1, "maximum": 5},
+                "metadata": {"type": "object", "additionalProperties": True},
             },
-            "cell_types": {
-                "type": "array",
-                "items": {"type": "string"},
-            },
-            "required_fields": {
-                "type": "array",
-                "items": {"type": "string"},
-                "minItems": 1,
-            },
-            "validation_checks": {
-                "type": "array",
-                "items": {"type": "string"},
-                "minItems": 1,
-            },
-            "expected_direction": {"type": "string"},
-            "complexity": {"type": "integer", "minimum": 1, "maximum": 5},
+            "required": [
+                "idea_title",
+                "biological_hypothesis",
+                "computable_parameter",
+                "analysis_plan",
+                "modalities",
+                "cell_types",
+                "required_fields",
+                "validation_checks",
+                "expected_direction",
+                "complexity",
+            ],
+            "additionalProperties": False,
         },
     }
+    if max_ideas is not None:
+        ideas_schema["maxItems"] = max_ideas
     return {
         "type": "object",
-        "additionalProperties": False,
+        "properties": {"ideas": ideas_schema},
         "required": ["ideas"],
+        "additionalProperties": False,
+    }
+
+
+def analysis_output_schema() -> dict[str, Any]:
+    """Return the structured-output schema for analysis-code backends."""
+    return {
+        "type": "object",
         "properties": {
-            "ideas": {
+            "analysis_code": {"type": "string"},
+            "extra_cells": {
                 "type": "array",
-                "items": idea,
-                "minItems": 1,
-                "maxItems": max_ideas,
-            }
+                "items": {"type": "object", "additionalProperties": True},
+            },
+            "artifact_manifest": {
+                "type": "array",
+                "items": {"type": "object", "additionalProperties": True},
+            },
+            "warnings": {"type": "array", "items": {"type": "string"}},
+            "notes": {"type": "array", "items": {"type": "string"}},
         },
+        "required": ["analysis_code", "extra_cells", "artifact_manifest", "warnings", "notes"],
+        "additionalProperties": False,
     }
