@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Awaitable
 
 from .backends import AnalysisCodeResult, get_backend
+from .diversity import select_diverse_ideas
 from .ideas import DiscoveryIdea, review_idea_against_schema
 from .notebooks import (
     create_exploration_notebook,
@@ -37,6 +38,8 @@ class DiscoveryRunConfig:
     reasoning_effort: str | None = None
     llm_timeout: int = 420
     idea_agent_count: int = 3
+    diversity_policy: str = "balanced"
+    idea_candidate_multiplier: int = 4
     notebook_agent_concurrency: int = 3
     generate_schematic_image: bool = False
     schematic_image_model: str | None = None
@@ -74,6 +77,7 @@ class DiscoveryRunResult:
     direction_summary_path: str | None = None
     enriched_h5cd_path: str | None = None
     enrichment_summary_path: str | None = None
+    diversity_report_path: str | None = None
 
     @property
     def frontiers_path(self) -> str | None:
@@ -136,16 +140,17 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
 
     agent_records_path = output_dir / "agent_records.jsonl"
     agent_records: list[dict[str, Any]] = []
+    final_idea_target = _final_idea_target(config)
+    candidate_idea_target = _candidate_idea_target(config)
     if config.ideas_path is not None:
         ideas = [
             DiscoveryIdea.from_dict(row)
             for row in _read_jsonl(Path(config.ideas_path))
-        ][:config.max_ideas]
+        ][:candidate_idea_target]
     else:
         idea_backend = get_backend(config.idea_source)
         ideas = []
         seen_idea_ids: set[str] = set()
-        accepted_target = int(config.accepted_idea_target or 0)
         max_attempts = max(1, int(config.max_generation_attempts))
         for attempt in range(max_attempts):
             accepted_preview = [
@@ -154,12 +159,13 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
                     idea, schema, max_complexity=config.max_complexity
                 ).accepted
             ]
-            if accepted_target and len(accepted_preview) >= accepted_target:
+            if len(accepted_preview) >= candidate_idea_target:
                 break
-            if not accepted_target and ideas:
-                break
-            remaining = max(1, accepted_target - len(accepted_preview)) if accepted_target else config.max_ideas
-            batch_size = max(config.idea_agent_count, config.max_ideas if attempt == 0 else remaining * 2)
+            remaining = max(1, candidate_idea_target - len(accepted_preview))
+            batch_size = max(
+                config.idea_agent_count,
+                candidate_idea_target if attempt == 0 else remaining * 2,
+            )
             generated, records = idea_backend.generate_ideas(
                 schema,
                 output_dir=output_dir,
@@ -186,17 +192,28 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
     reviews_path = output_dir / "reviews.jsonl"
     results_path = output_dir / "results.jsonl"
     report_path = output_dir / "report.md"
+    diversity_report_path = output_dir / "idea_diversity_report.json"
 
     reviews = []
     results = []
     notebooks = []
-    accepted: list[DiscoveryIdea] = []
-    accepted_target = int(config.accepted_idea_target or 0)
     for idea in ideas:
         review = review_idea_against_schema(idea, schema, max_complexity=config.max_complexity)
         reviews.append({"idea_id": idea.idea_id, **review.to_dict()})
-        if review.accepted and (not accepted_target or len(accepted) < accepted_target):
-            accepted.append(idea)
+
+    diversity_selection = select_diverse_ideas(
+        ideas,
+        reviews,
+        target=final_idea_target,
+        policy=config.diversity_policy,
+    )
+    accepted: list[DiscoveryIdea] = diversity_selection.ideas
+    selected_ids = set(diversity_selection.selected_idea_ids)
+    for row in reviews:
+        row["selected"] = row.get("idea_id") in selected_ids
+    diversity_report_path.write_text(
+        json.dumps(diversity_selection.to_dict(), indent=2, default=_json_default) + "\n"
+    )
 
     # Persist generation/review outputs before notebook agents run. Long
     # notebook batches may hit transient provider errors, and these files make
@@ -295,6 +312,7 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
     _write_jsonl(ideas_path, [idea.to_dict() for idea in ideas])
     _write_jsonl(reviews_path, reviews)
     _write_jsonl(results_path, results)
+    _ensure_schematic_images_for_run(config, output_dir, agent_records)
     _write_jsonl(agent_records_path, agent_records)
     _write_report(report_path, config, schema, ideas, reviews, results)
 
@@ -302,7 +320,11 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
     from .graph import build_idea_graph_from_run, write_idea_graph_artifacts
     from .visualization import write_idea_graph_html
 
-    graph = build_idea_graph_from_run(output_dir, claims_paths=config.claims_paths)
+    graph = build_idea_graph_from_run(
+        output_dir,
+        claims_paths=config.claims_paths,
+        selected_only=True,
+    )
     graph_artifacts = write_idea_graph_artifacts(graph, output_dir)
     graph_html_path = write_idea_graph_html(
         graph,
@@ -330,6 +352,9 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
             "n_accepted": len(accepted),
             "n_executed": len(results) if config.execute else 0,
             "n_verified": len(verified),
+            "diversity_policy": config.diversity_policy,
+            "idea_candidate_multiplier": int(config.idea_candidate_multiplier),
+            "idea_diversity_report_path": str(diversity_report_path),
             "coverage_summary": graph_summary.get("coverage", {}),
             "hypothesis_status": graph_summary.get("hypothesis_status", {}),
         }
@@ -352,6 +377,9 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
             "n_accepted": len(accepted),
             "n_executed": len(results) if config.execute else 0,
             "n_verified": len(verified),
+            "diversity_policy": config.diversity_policy,
+            "idea_candidate_multiplier": int(config.idea_candidate_multiplier),
+            "idea_diversity_report_path": str(diversity_report_path),
         })
         cdata.uns["auto_discovery_runs"] = runs
         cdata.write(input_h5cd_path)
@@ -376,6 +404,7 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
         direction_summary_path=direction_artifacts["directions_markdown"],
         enriched_h5cd_path=str(enriched_h5cd_path) if enriched_h5cd_path is not None else None,
         enrichment_summary_path=str(enrichment_summary_path) if enrichment_summary_path is not None else None,
+        diversity_report_path=str(diversity_report_path),
     )
 
 
@@ -401,6 +430,68 @@ def _preflight_backends(backend_ids: set[str]) -> None:
                 f"Install or authenticate it, or choose another backend via "
                 f"idea_source / code_source."
             )
+
+
+def _final_idea_target(config: DiscoveryRunConfig) -> int:
+    return max(0, int(config.accepted_idea_target or config.max_ideas))
+
+
+def _candidate_idea_target(config: DiscoveryRunConfig) -> int:
+    final_target = _final_idea_target(config)
+    if config.diversity_policy == "off":
+        return max(0, int(config.max_ideas))
+    multiplier = max(1, int(config.idea_candidate_multiplier))
+    return max(int(config.max_ideas), final_target * multiplier)
+
+
+def _ensure_schematic_images_for_run(
+    config: DiscoveryRunConfig,
+    output_dir: Path,
+    agent_records: list[dict[str, Any]],
+) -> None:
+    """Generate missing graphical abstracts inside the same discovery run."""
+    if (
+        not config.generate_schematic_image
+        or config.code_source != "pantheon"
+        or not config.execute
+    ):
+        return
+    try:
+        from .pantheon import generate_pantheon_schematic_images_for_run
+
+        records = _run_async(generate_pantheon_schematic_images_for_run(
+            output_dir,
+            model=config.schematic_image_model,
+            model_args=config.schematic_image_model_args,
+            timeout=config.llm_timeout,
+            concurrency=max(1, min(2, int(config.notebook_agent_concurrency))),
+            verified_only=False,
+            force=False,
+            visual_qa=False,
+            retries=2,
+            strict=False,
+        ))
+        agent_records.append({
+            "agent_name": "pantheon_schematic_images",
+            "role": "schematic_images",
+            "content": {
+                "status": "completed",
+                "n_records": len(records),
+                "records_path": str(output_dir / "pantheon" / "schematic_images" / "schematics.jsonl"),
+                "coverage_path": str(output_dir / "pantheon" / "schematic_images" / "schematic_coverage.json"),
+            },
+        })
+    except BaseException as exc:
+        agent_records.append({
+            "agent_name": "pantheon_schematic_images",
+            "role": "schematic_images",
+            "content": {
+                "status": "failed",
+                "error": f"{type(exc).__name__}: {exc}",
+            },
+        })
+        if config.stop_on_error:
+            raise
 
 
 def _run_async(coro: Awaitable[Any]) -> Any:
@@ -719,7 +810,9 @@ def _write_report(
         f"h5cd: `{config.h5cd_path}`",
         f"schema_hash: `{schema.get('schema_hash')}`",
         f"generated ideas: {len(ideas)}",
-        f"accepted ideas: {sum(1 for r in reviews if r.get('accepted'))}",
+        f"schema-accepted candidates: {sum(1 for r in reviews if r.get('accepted'))}",
+        f"selected ideas: {sum(1 for r in reviews if r.get('selected'))}",
+        f"diversity policy: `{config.diversity_policy}`",
         f"executed notebooks: {len(results) if config.execute else 0}",
         f"verified ideas: {len(verified)}",
         "",

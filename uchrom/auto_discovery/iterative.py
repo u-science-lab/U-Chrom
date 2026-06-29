@@ -35,6 +35,8 @@ class IterativeDiscoveryConfig:
     reasoning_effort: str | None = None
     llm_timeout: int = 900
     idea_agent_count: int = 4
+    diversity_policy: str = "balanced"
+    idea_candidate_multiplier: int = 4
     notebook_agent_concurrency: int = 4
     generate_schematic_image: bool = True
     schematic_image_model: str | None = None
@@ -119,6 +121,7 @@ def run_iterative_auto_discovery(
                 run_dirs,
                 graph_id=f"prior_to_iteration_{idx:02d}",
                 claims_paths=claims_paths,
+                selected_only=True,
             )
             graph_paths = write_idea_graph_artifacts(graph, prior_dir)
             directions = plan_discovery_directions(graph, schema, max_directions=8)
@@ -139,6 +142,8 @@ def run_iterative_auto_discovery(
             reasoning_effort=config.reasoning_effort,
             llm_timeout=config.llm_timeout,
             idea_agent_count=config.idea_agent_count,
+            diversity_policy=config.diversity_policy,
+            idea_candidate_multiplier=config.idea_candidate_multiplier,
             notebook_agent_concurrency=config.notebook_agent_concurrency,
             generate_schematic_image=config.generate_schematic_image,
             schematic_image_model=config.schematic_image_model,
@@ -174,6 +179,7 @@ def run_iterative_auto_discovery(
         run_dirs,
         graph_id=f"iterative:{output_dir.name}",
         claims_paths=claims_paths,
+        selected_only=True,
     )
     final_graph_paths = write_idea_graph_artifacts(final_graph, output_dir)
     final_schema = _schema_for_h5cd(

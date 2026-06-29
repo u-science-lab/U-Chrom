@@ -833,6 +833,14 @@ Your focus direction is: {direction}
 
 Rules:
 - Use only modalities, fields, cell types, tracks, and genes present in schema.
+- If schema context lists enriched_features, treat those sequence, annotation,
+  structure, and peak features as first-class hypothesis variables. Let the
+  schema and biological plausibility guide which enriched features to use; do
+  not force a fixed template.
+- Across your candidate ideas, avoid saturating on only gene-expression or
+  peak-overlap hypotheses. Include non-gene/non-peak chromatin geometry,
+  cell-spatial, sequence, structure, or annotation hypotheses when the schema
+  makes them biologically plausible.
 - If iterative context files are provided, use them to avoid near-duplicate
   ideas and to build on supported, contradicted, under-tested, or literature-
   motivated graph directions.
@@ -844,7 +852,9 @@ Rules:
   explain the hypothesis, data used, analysis sketch, expected result, and
   validation checks in human-readable prose.
 - required_fields must be exact paths such as coords, spots.cell_id,
-  tracks.H3K27ac, linked_adata.X, linked_adata.var.Pcp2.
+  tracks.H3K27ac, tracks.seq.gc_fraction, results.bin_features.gc_fraction,
+  results.peaks:signal.score, uns.feature_registry, linked_adata.X, or
+  linked_adata.var.Pcp2.
 - Include validation checks for required fields, cell counts, finite numeric
   output, a statistical hypothesis test with p-value, runtime,
   deterministic rerun, and a negative/permutation control when possible.
@@ -932,6 +942,9 @@ Task:
 6. Add and execute at least one separate data-inspection code cell before the
    main exploration_code cell. Use it to preview selected columns, counts,
    finite-value coverage, or alignment assumptions. Keep this cell lightweight.
+   If the idea uses enriched features, inspect the relevant cdata.tracks
+   columns, cdata.results tables, or cdata.uns["feature_registry"] entries
+   before the main test.
 7. You may insert additional Markdown/code cells before or after the main
    analysis with notebook_edit(action="add_cell", execute=true for code cells).
 8. The executed main exploration must define:
@@ -1001,7 +1014,13 @@ Task:
    statistical plotting, no expensive pairwise all-vs-all loops over more than
    5,000 rows, and no unbounded permutation test.
    If the idea asks for a complex control, record a concise note instead.
-19. Do not invent unavailable fields; use the schema.
+19. Do not invent unavailable fields; use the schema. Projected enrichment
+    features live in cdata.tracks, often with prefixes such as seq., gtf.,
+    strc., or peak. Interval/result tables live in cdata.results; a required
+    field like results.peaks:signal.score means use
+    cdata.results["peaks:signal"]["score"]. Provenance lives in
+    cdata.uns.get("feature_registry", []). Do not recompute FASTA/GTF/peak or
+    structure features when precomputed tracks/results are already present.
 20. Stop only after the notebook file contains your Markdown notes, at least two
     executed exploration code cells (inspection + main analysis),
     result_table/analysis_summary output with p-value/effect size,

@@ -152,6 +152,10 @@ def _field_exists(field_name: str, schema: Mapping[str, Any]) -> bool:
         return suffix in (fields.get(prefix, {}) or {}).get("columns", [])
     if prefix in {"cellm", "layers"}:
         return suffix in (fields.get(prefix, {}) or {}).get("keys", [])
+    if prefix == "results":
+        return _result_field_exists(suffix, schema)
+    if prefix == "uns":
+        return suffix in (fields.get("uns", {}) or {}).get("keys", [])
     if prefix == "linked_adata":
         linked = schema.get("linked_adata", {})
         if not linked.get("present"):
@@ -166,4 +170,20 @@ def _field_exists(field_name: str, schema: Mapping[str, Any]) -> bool:
             return gene in gene_catalog.get("values", [])
         if suffix.startswith("layers."):
             return suffix[7:] in linked.get("layers", [])
+    return False
+
+
+def _result_field_exists(suffix: str, schema: Mapping[str, Any]) -> bool:
+    tables = (schema.get("fields", {}).get("results", {}) or {}).get("tables", {}) or {}
+    if suffix in tables:
+        return True
+    if suffix.endswith("*"):
+        prefix = suffix[:-1]
+        return any(str(key).startswith(prefix) for key in tables)
+    for table_key, table_info in sorted(tables.items(), key=lambda item: len(str(item[0])), reverse=True):
+        table_key = str(table_key)
+        if not suffix.startswith(table_key + "."):
+            continue
+        column = suffix[len(table_key) + 1:]
+        return column in (table_info or {}).get("columns", [])
     return False

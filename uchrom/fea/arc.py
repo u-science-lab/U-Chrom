@@ -33,6 +33,7 @@ input size is ``O(n_bins²)`` (typically ≤ 10 k).
 
 from __future__ import annotations
 
+import warnings
 from typing import Optional
 
 import numpy as np
@@ -40,6 +41,14 @@ import pandas as pd
 
 from uchrom.utils import get_device, lowess_log_log
 from uchrom.utils.stats import default_float_dtype
+
+
+def _optional_torch():
+    try:
+        import torch
+    except ImportError:
+        return None
+    return torch
 
 
 # ----------------------------------------------------------------------
@@ -105,9 +114,12 @@ def _pairwise_diff_tensor(cd, chrom: str, device: str = "auto"):
     trace is missing a bin.  Kept on ``device``; caller is responsible for
     moving to CPU if needed.
     """
-    import torch
-
     cube, bin_ids, trace_ids = _coord_cube_for_chrom(cd, chrom)
+    torch = _optional_torch()
+    if torch is None:
+        diff = cube[:, :, None, :] - cube[:, None, :, :]
+        return diff.transpose(3, 0, 1, 2).astype(np.float64), bin_ids, trace_ids
+
     dev = get_device(device)
     dtype = default_float_dtype(dev)
 
@@ -129,9 +141,28 @@ def axis_variance_cube(
     :func:`filter_normalize` — the full ``(3, T, B, B)`` pairwise diff
     tensor on the GPU device under key ``"diff"``.
     """
-    import torch
-
     diff, bin_ids, trace_ids = _pairwise_diff_tensor(cd, chrom, device)
+    torch = _optional_torch()
+    if torch is None or isinstance(diff, np.ndarray):
+        valid = ~np.isnan(diff)
+        count = valid.sum(axis=1).astype(np.int64)
+        safe_count = np.maximum(count, 1).astype(np.float64)
+        safe = np.where(valid, diff, 0.0)
+        mean = safe.sum(axis=1) / safe_count
+        dev_sq = np.where(valid, (diff - mean[:, None, :, :]) ** 2, 0.0)
+        var = dev_sq.sum(axis=1) / safe_count
+        var[count == 0] = np.nan
+        mean[count == 0] = np.nan
+        return {
+            "var": var.astype(np.float64),
+            "count": count,
+            "mean": mean.astype(np.float64),
+            "diff": diff,
+            "bin_ids": bin_ids,
+            "n_traces": len(trace_ids),
+            "chrom": chrom,
+        }
+
     valid = ~torch.isnan(diff)
     count = valid.sum(dim=1).to(torch.int64)            # (3, B, B)
 
@@ -195,9 +226,15 @@ def filter_normalize(
     ``norm_var``, ``expected``, ``raw_var``, ``genomic_distance``.  The
     original 4D tensor under ``"diff"`` is consumed (may be modified).
     """
-    import torch
+    diff = cube["diff"]          # (3, T, B, B) on device or numpy fallback
+    if isinstance(diff, np.ndarray):
+        return _filter_normalize_numpy(cube, k_sigma=k_sigma, frac=frac)
 
-    diff: "torch.Tensor" = cube["diff"]          # (3, T, B, B) on device
+    torch = _optional_torch()
+    if torch is None:
+        return _filter_normalize_numpy(cube, k_sigma=k_sigma, frac=frac)
+
+    diff: "torch.Tensor" = diff
     n_axes, T, B, _ = diff.shape
     bin_ids = cube["bin_ids"]
     d1d = _genomic_distance_matrix(bin_ids)      # (B, B) numpy
@@ -284,13 +321,103 @@ def filter_normalize(
     return out
 
 
+def _filter_normalize_numpy(cube: dict, k_sigma: float, frac: float) -> dict:
+    diff = np.asarray(cube["diff"], dtype=np.float64).copy()
+    n_axes, _T, B, _ = diff.shape
+    bin_ids = cube["bin_ids"]
+    d1d = _genomic_distance_matrix(bin_ids)
+    iu = np.triu_indices(B, k=1)
+    d_flat = d1d[iu]
+
+    with np.errstate(all="ignore"):
+        dev = diff - _nanmedian_np(diff, axis=1, keepdims=True)
+        raw_var = _nanmedian_np(dev ** 2, axis=1)
+    raw_var = np.where(raw_var < 1e-30, np.nan, raw_var)
+
+    strata_std = np.full_like(raw_var, np.nan)
+    for a in range(n_axes):
+        v_flat = raw_var[a][iu]
+        fit = lowess_log_log(d_flat, v_flat, frac=frac)
+        std_flat = np.sqrt(np.clip(fit, 1e-30, None))
+        axm = np.full((B, B), np.nan)
+        axm[iu] = std_flat
+        axm.T[iu] = std_flat
+        strata_std[a] = axm
+
+    with np.errstate(all="ignore"):
+        abs_dev = np.abs(diff - _nanmedian_np(diff, axis=1, keepdims=True))
+    outlier = abs_dev > (k_sigma * strata_std)[:, None, :, :]
+    diff = np.where(outlier, np.nan, diff)
+
+    valid = ~np.isnan(diff)
+    count = valid.sum(axis=1).astype(np.int64)
+    safe_count = np.maximum(count, 1).astype(np.float64)
+    safe = np.where(valid, diff, 0.0)
+    mean = safe.sum(axis=1) / safe_count
+    dev_sq = np.where(valid, (diff - mean[:, None, :, :]) ** 2, 0.0)
+    filtered_var = dev_sq.sum(axis=1) / safe_count
+    filtered_var[count == 0] = np.nan
+
+    expected, norm_var = _expected_and_normalized_variance(
+        filtered_var,
+        d_flat=d_flat,
+        iu=iu,
+        frac=frac,
+    )
+    out = dict(cube)
+    out["var"] = filtered_var.astype(np.float64)
+    out["count"] = count
+    out["raw_var"] = raw_var.astype(np.float64)
+    out["expected"] = expected
+    out["norm_var"] = norm_var
+    out["genomic_distance"] = d1d
+    out.pop("diff", None)
+    return out
+
+
+def _nanmedian_np(values: np.ndarray, *, axis: int, keepdims: bool = False) -> np.ndarray:
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="All-NaN slice encountered", category=RuntimeWarning)
+        return np.nanmedian(values, axis=axis, keepdims=keepdims)
+
+
+def _expected_and_normalized_variance(
+    fvar_np: np.ndarray,
+    *,
+    d_flat: np.ndarray,
+    iu: tuple[np.ndarray, np.ndarray],
+    frac: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    n_axes, B, _ = fvar_np.shape
+    expected = np.full_like(fvar_np, np.nan)
+    norm_var = np.full_like(fvar_np, np.nan)
+    for a in range(n_axes):
+        v_flat = fvar_np[a][iu]
+        v_flat_ok = np.where(v_flat > 1e-30, v_flat, np.nan)
+        fit = lowess_log_log(d_flat, v_flat_ok, frac=frac)
+        exp_axis = np.full((B, B), np.nan)
+        exp_axis[iu] = fit
+        exp_axis.T[iu] = fit
+        expected[a] = exp_axis
+        with np.errstate(invalid="ignore", divide="ignore"):
+            norm_axis = np.where(exp_axis > 0, fvar_np[a] / exp_axis, np.nan)
+        norm_var[a] = norm_axis
+        np.fill_diagonal(norm_var[a], 0.0)
+    return expected, norm_var
+
+
 def _nanmedian_along_dim(t, dim: int, keepdim: bool = False):
     """NaN-aware median along a single dim for a torch tensor.
 
     Uses ``torch.nanmedian`` (available) but falls back to numpy if on
     MPS where nanmedian kernels are spotty.
     """
-    import torch
+    if isinstance(t, np.ndarray):
+        return np.nanmedian(t, axis=dim, keepdims=keepdim)
+
+    torch = _optional_torch()
+    if torch is None:
+        return np.nanmedian(np.asarray(t), axis=dim, keepdims=keepdim)
 
     try:
         return torch.nanmedian(t, dim=dim, keepdim=keepdim).values
@@ -316,8 +443,6 @@ def axis_weight(
     The inverse of that median is the axis weight, normalised to sum 1.
     Consistent with ArcFISH's ``axis_weight`` routine.
     """
-    import torch
-
     df = cd.spots.copy()
     df["x"] = cd.coords[:, 0]
     df["y"] = cd.coords[:, 1]
@@ -346,6 +471,18 @@ def axis_weight(
             w_c = axis_weight(cd, chrom=str(c), device=device)
             weights_accum.append(w_c)
         return np.mean(np.stack(weights_accum, axis=0), axis=0)
+
+    torch = _optional_torch()
+    if torch is None:
+        valid = ~np.isnan(cube)
+        count = np.maximum(valid.sum(axis=1, keepdims=True), 1).astype(np.float64)
+        safe = np.where(valid, cube, 0.0)
+        mean = safe.sum(axis=1, keepdims=True) / count
+        centred = np.where(valid, cube - mean, 0.0)
+        trace_var = (centred ** 2).sum(axis=1) / count.squeeze(1)
+        per_axis_median = np.nanmedian(trace_var, axis=0)
+        w = 1.0 / np.clip(per_axis_median, 1e-30, None)
+        return (w / w.sum()).astype(np.float64)
 
     dev = get_device(device)
     dtype = default_float_dtype(dev)

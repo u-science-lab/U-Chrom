@@ -22,6 +22,11 @@ from .direction import (
     plan_discovery_directions,
     write_direction_artifacts,
 )
+from .diversity import (
+    IdeaDiversitySelection,
+    idea_diversity_signature,
+    select_diverse_ideas,
+)
 from .enrichment import DiscoveryEnrichmentConfig, enrich_for_discovery
 from .frontier import (
     DiscoveryFrontier,
@@ -90,6 +95,7 @@ __all__ = [
     "DiscoveryEnrichmentConfig",
     "DiscoveryFrontier",
     "DiscoveryIdea",
+    "IdeaDiversitySelection",
     "EvidenceConclusion",
     "IdeaGraph",
     "IterativeDiscoveryConfig",
@@ -123,6 +129,7 @@ __all__ = [
     "idea_signature",
     "idea_output_schema",
     "ingest_literature_claims",
+    "idea_diversity_signature",
     "idea_to_markdown",
     "infer_parameter_family",
     "list_backends",
@@ -137,6 +144,7 @@ __all__ = [
     "run_iterative_auto_discovery",
     "run_pantheon_notebook_agents",
     "schematic_coverage_for_run",
+    "select_diverse_ideas",
     "schema_to_agent_context",
     "structured_conclusion_markdown",
     "unpack_schema",

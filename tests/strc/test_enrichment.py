@@ -103,3 +103,40 @@ def test_add_structural_features_projects_empty_result_tables():
     assert list(table["loop_anchor_overlap"]) == [0.0, 0.0, 0.0, 0.0]
     assert "strc.loop_anchor_overlap" in cdata.tracks
     assert cdata.uns["feature_registry"][0]["source_results"] == ["loops"]
+
+
+def test_arc_feature_preprocessing_has_numpy_fallback(monkeypatch):
+    import warnings
+
+    from uchrom import ChromData
+    import uchrom.fea.arc as arc
+
+    spots = pd.DataFrame({
+        "chrom": ["chr1"] * 8,
+        "start": [0, 10, 20, 30] * 2,
+        "end": [10, 20, 30, 40] * 2,
+        "trace_id": ["t1"] * 4 + ["t2"] * 4,
+    })
+    coords = np.array([
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.2],
+        [2.0, 0.1, 0.3],
+        [3.0, 0.2, 0.5],
+        [0.2, 0.1, 0.0],
+        [1.1, 0.2, 0.4],
+        [2.2, 0.2, 0.5],
+        [3.2, 0.4, 0.7],
+    ])
+    cdata = ChromData(coords, spots)
+    monkeypatch.setattr(arc, "_optional_torch", lambda: None)
+
+    cube = arc.axis_variance_cube(cdata, chrom="chr1")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="invalid value encountered in divide", category=RuntimeWarning)
+        normalized = arc.filter_normalize(cube, frac=0.8)
+    weights = arc.axis_weight(cdata, chrom="chr1")
+
+    assert isinstance(cube["diff"], np.ndarray)
+    assert normalized["norm_var"].shape == (3, 4, 4)
+    assert np.isfinite(normalized["count"]).all()
+    assert np.isclose(weights.sum(), 1.0)

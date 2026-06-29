@@ -51,6 +51,29 @@ def _add_run_enrichment_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-enrich-project", action="store_true")
 
 
+def _add_diversity_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--diversity-policy",
+        choices=["off", "balanced"],
+        default="balanced",
+        help=(
+            "How to select generated idea candidates before notebook execution. "
+            "balanced over-generates candidates and avoids letting one feature "
+            "family dominate a round."
+        ),
+    )
+    parser.add_argument(
+        "--idea-candidate-multiplier",
+        type=int,
+        default=4,
+        help=(
+            "Candidate-pool multiplier for balanced diversity selection. "
+            "For example, 4 with --max-ideas 10 asks the idea agents for up to "
+            "40 candidates, then executes 10 selected ideas."
+        ),
+    )
+
+
 def _enrichment_from_args(args) -> dict | None:
     enabled = bool(
         getattr(args, "fasta", None)
@@ -152,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="Existing literature/browser claims JSONL to ingest into the run graph.",
     )
+    _add_diversity_args(run_p)
     _add_run_enrichment_args(run_p)
 
     enrich_p = sub.add_parser(
@@ -273,6 +297,11 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Directory that will receive graph/idea_graph.json and graph/graph_summary.md. Defaults to run_dir.",
     )
+    graph_p.add_argument(
+        "--selected-only",
+        action="store_true",
+        help="If a diversity report exists, include only ideas selected for execution.",
+    )
     direction_p = sub.add_parser(
         "directions",
         aliases=["frontiers"],
@@ -281,6 +310,11 @@ def main(argv: list[str] | None = None) -> int:
     direction_p.add_argument("run_dir")
     direction_p.add_argument("h5cd_path")
     direction_p.add_argument("--output-dir", default=None)
+    direction_p.add_argument(
+        "--selected-only",
+        action="store_true",
+        help="If a diversity report exists, plan from only the selected/executed discovery route.",
+    )
     direction_p.add_argument(
         "--max-directions",
         "--max-frontiers",
@@ -366,6 +400,7 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="Existing literature/browser claims JSONL to seed every iteration.",
     )
+    _add_diversity_args(iter_p)
     _add_run_enrichment_args(iter_p)
 
     args = parser.parse_args(argv)
@@ -382,6 +417,8 @@ def main(argv: list[str] | None = None) -> int:
             reasoning_effort=args.reasoning_effort,
             llm_timeout=args.llm_timeout,
             idea_agent_count=args.idea_agent_count,
+            diversity_policy=args.diversity_policy,
+            idea_candidate_multiplier=args.idea_candidate_multiplier,
             notebook_agent_concurrency=args.notebook_agent_concurrency,
             generate_schematic_image=args.generate_schematic_image,
             schematic_image_model=args.schematic_image_model,
@@ -443,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "graph":
         from .graph import build_idea_graph_from_run, write_idea_graph_artifacts
 
-        graph = build_idea_graph_from_run(args.run_dir)
+        graph = build_idea_graph_from_run(args.run_dir, selected_only=args.selected_only)
         paths = write_idea_graph_artifacts(graph, args.output_dir or args.run_dir)
         print(json.dumps({"summary": graph.summary(), **paths}, indent=2))
         return 0
@@ -455,7 +492,7 @@ def main(argv: list[str] | None = None) -> int:
 
         cdata = ChromData.read(args.h5cd_path)
         schema = cdata.build_discovery_schema(store=False, dataset_name=args.dataset_name)
-        graph = build_idea_graph_from_run(args.run_dir)
+        graph = build_idea_graph_from_run(args.run_dir, selected_only=args.selected_only)
         graph_paths = write_idea_graph_artifacts(graph, args.output_dir or args.run_dir)
         directions = plan_discovery_directions(
             graph,
@@ -519,6 +556,8 @@ def main(argv: list[str] | None = None) -> int:
             reasoning_effort=args.reasoning_effort,
             llm_timeout=args.llm_timeout,
             idea_agent_count=args.idea_agent_count,
+            diversity_policy=args.diversity_policy,
+            idea_candidate_multiplier=args.idea_candidate_multiplier,
             notebook_agent_concurrency=args.notebook_agent_concurrency,
             generate_schematic_image=args.generate_schematic_image,
             schematic_image_model=args.schematic_image_model,

@@ -15,23 +15,97 @@ STRUCTURED_JSON_END = "END_UCHROM_JSON"
 
 def allowed_required_fields(schema: Mapping[str, Any], *, max_items: int) -> list[str]:
     """Return schema field paths that agents may use in ``required_fields``."""
-    fields = ["coords"]
+    fields: list[str] = []
+
+    def add(field: str) -> None:
+        if field not in fields:
+            fields.append(field)
+
+    add("coords")
     for table in ("spots", "tracks", "cells", "traces"):
         for column in (schema.get("fields", {}).get(table, {}) or {}).get("columns", []):
-            fields.append(f"{table}.{column}")
+            add(f"{table}.{column}")
+    # Enriched (sequence / annotation / structure / peak) features are projected
+    # into tracks and interval result tables; surface them so agents treat them
+    # as first-class hypothesis variables.
+    for track in _enriched_track_names(schema):
+        add(f"tracks.{track}")
+    result_tables = ((schema.get("fields", {}).get("results", {}) or {}).get("tables", {}) or {})
+    for table_key in sorted(result_tables):
+        add(f"results.{table_key}")
+    per_result_table_limit = max(8, max_items // max(1, len(result_tables) * 2))
+    for table_key, table_info in sorted(result_tables.items()):
+        for column in _priority_result_columns(
+            str(table_key),
+            (table_info or {}).get("columns", []),
+        )[:per_result_table_limit]:
+            add(f"results.{table_key}.{column}")
     for mapping in ("cellm", "layers"):
         for key in (schema.get("fields", {}).get(mapping, {}) or {}).get("keys", []):
-            fields.append(f"{mapping}.{key}")
+            add(f"{mapping}.{key}")
+    for key in (schema.get("fields", {}).get("uns", {}) or {}).get("keys", []):
+        if key == "feature_registry":
+            add("uns.feature_registry")
     linked = schema.get("linked_adata", {}) or {}
     if linked.get("present"):
-        fields.append("linked_adata.X")
+        add("linked_adata.X")
         for col in linked.get("obs_columns", [])[:max_items]:
-            fields.append(f"linked_adata.obs.{col}")
+            add(f"linked_adata.obs.{col}")
         for gene in (schema.get("catalogs", {}).get("genes", {}) or {}).get("values", [])[:max_items]:
-            fields.append(f"linked_adata.var.{gene}")
+            add(f"linked_adata.var.{gene}")
         for layer in linked.get("layers", [])[:max_items]:
-            fields.append(f"linked_adata.layers.{layer}")
+            add(f"linked_adata.layers.{layer}")
     return fields[:max_items]
+
+
+def _enriched_track_names(schema: Mapping[str, Any]) -> list[str]:
+    """Track names contributed by the pre-discovery enrichment stage."""
+    names: list[str] = []
+    for info in (schema.get("feature_summary", {}) or {}).values():
+        for track in info.get("tracks", []) or []:
+            if track not in names:
+                names.append(str(track))
+    return names
+
+
+def _priority_result_columns(table_key: str, columns: list[str]) -> list[str]:
+    """Order result-table columns so the most hypothesis-relevant come first."""
+    preferred_tokens = (
+        "gc",
+        "cpg",
+        "g4",
+        "n_fraction",
+        "tad",
+        "loop",
+        "compartment",
+        "pc2",
+        "label",
+        "promoter",
+        "tss",
+        "gene",
+        "exon",
+        "peak",
+        "overlap",
+        "distance",
+        "count",
+        "score",
+        "pval",
+        "fdr",
+    )
+    table_key = table_key.lower()
+
+    def rank(column: str) -> tuple[int, int, str]:
+        name = str(column).lower()
+        if name in {"chrom", "start", "end"}:
+            return (3, 0, name)
+        if table_key in {"tads", "loops", "compartments"}:
+            return (0, 0, name)
+        for token_index, token in enumerate(preferred_tokens):
+            if token in name:
+                return (1, token_index, name)
+        return (2, 0, name)
+
+    return sorted(map(str, columns), key=rank)
 
 
 def build_required_fields_prompt_block(schema: Mapping[str, Any], *, max_items: int = 80) -> str:
@@ -44,6 +118,17 @@ def build_required_fields_prompt_block(schema: Mapping[str, Any], *, max_items: 
         "- Do not put operation names such as gene_expression_lookup in required_fields.\n"
         "- Do not use known_missing entries as required_fields.\n"
         "- For RNA expression, include linked_adata.X and linked_adata.var.<gene>.\n\n"
+        "Enriched feature rules:\n"
+        "- If the schema lists enriched_features, treat sequence, annotation, "
+        "structure, and peak features as first-class hypothesis variables.\n"
+        "- Let the biology and schema decide which enriched features to use; "
+        "do not follow a fixed template.\n"
+        "- Across the candidate pool, avoid saturating on gene expression or "
+        "peak-overlap ideas; include non-gene/non-peak chromatin geometry, "
+        "cell-spatial, sequence, structure, or annotation ideas when the schema "
+        "makes them biologically plausible.\n"
+        "- Use tracks.<feature_track> for projected bin/spot features and "
+        "results.<table> or results.<table>.<column> for interval result tables.\n\n"
         f"Allowed required_fields:\n{json.dumps(allowed_fields, indent=2)}\n\n"
         f"Known missing data that must not be used:\n{json.dumps(missing, indent=2)}"
     )
@@ -175,6 +260,12 @@ analysis_code requirements:
 ChromData access rules:
 - Do not index ChromData with string field paths like cdata['tracks.H3K27me3'].
 - Use cdata.spots, cdata.tracks, cdata.cells, cdata.cellm, cdata.coords directly.
+- Projected enrichment features live in cdata.tracks, often with prefixes such as
+  seq., gtf., strc., or peak.; use cdata.tracks['seq.gc_fraction'] rather than
+  recomputing the source file.
+- Interval/result tables live in cdata.results; a required field like
+  results.peaks:signal.score means use cdata.results['peaks:signal']['score'].
+- Provenance for enriched features lives in cdata.uns.get('feature_registry', []).
 - To select spots by cell type, get cell IDs from cdata.cells and mask
   cdata.spots['cell_id'].
 - To combine spot-level tracks with RNA expression, aggregate tracks per cell_id first, then align to adata.obs_names.

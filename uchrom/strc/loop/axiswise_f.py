@@ -435,12 +435,17 @@ def _pseudo_contact_frequency(cd, chrom, bin_ids, device="auto"):
     traces where the (i, j) 3D distance is below that cutoff,
     conditional on both endpoints being observed.
     """
-    import torch
-
     diff, _, _ = _pairwise_diff_tensor(cd, chrom, device)
     # (3, T, B, B) → (T, B, B) 3D pdist
-    pdist = torch.sqrt((diff ** 2).sum(dim=0))
-    pdist_np = pdist.detach().cpu().numpy().astype(np.float64)
+    if isinstance(diff, np.ndarray):
+        pdist_np = np.sqrt(np.nansum(diff ** 2, axis=0)).astype(np.float64)
+        valid_axis = ~np.isnan(diff)
+        pdist_np[~valid_axis.all(axis=0)] = np.nan
+    else:
+        import torch
+
+        pdist = torch.sqrt((diff ** 2).sum(dim=0))
+        pdist_np = pdist.detach().cpu().numpy().astype(np.float64)
 
     B = len(bin_ids)
     if pdist_np.shape[1] != B:

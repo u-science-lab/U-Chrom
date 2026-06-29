@@ -109,32 +109,57 @@ def build_idea_graph_from_run(
     *,
     graph_id: str | None = None,
     claims_paths: list[str | Path] | None = None,
+    selected_only: bool = False,
 ) -> IdeaGraph:
     """Build an :class:`IdeaGraph` from a completed auto-discovery run.
 
     The function reads ``ideas.jsonl``, ``reviews.jsonl``, and
     ``results.jsonl`` when present.  Missing files are tolerated so interrupted
     runs can still produce partial graph snapshots.
+
+    When ``selected_only`` is true and an ``idea_diversity_report.json`` exists,
+    the graph is limited to the ideas chosen by the diversity selector.  This
+    keeps exported iterative graphs focused on the executed discovery route
+    while preserving all generated candidates in the raw run artifacts.
     """
     run_dir = Path(run_dir)
     graph = IdeaGraph(graph_id=graph_id or f"run:{run_dir.name}")
     run_node = f"run:{run_dir.name}"
-    graph.add_node(run_node, "Run", path=str(run_dir))
+    selected_idea_ids = _read_selected_idea_ids_if_exists(run_dir) if selected_only else None
+    graph.add_node(
+        run_node,
+        "Run",
+        path=str(run_dir),
+        selected_only=selected_only,
+        selected_idea_count=len(selected_idea_ids) if selected_idea_ids is not None else None,
+    )
 
     ideas = {
         str(row.get("idea_id")): DiscoveryIdea.from_dict(row)
         for row in _read_jsonl_if_exists(run_dir / "ideas.jsonl")
-        if isinstance(row, Mapping) and row.get("idea_id")
+        if (
+            isinstance(row, Mapping)
+            and row.get("idea_id")
+            and _selected_filter_allows(row.get("idea_id"), selected_idea_ids)
+        )
     }
     reviews = {
         str(row.get("idea_id")): row
         for row in _read_jsonl_if_exists(run_dir / "reviews.jsonl")
-        if isinstance(row, Mapping) and row.get("idea_id")
+        if (
+            isinstance(row, Mapping)
+            and row.get("idea_id")
+            and _selected_filter_allows(row.get("idea_id"), selected_idea_ids)
+        )
     }
     results = {
         str(row.get("idea_id")): row
         for row in _read_jsonl_if_exists(run_dir / "results.jsonl")
-        if isinstance(row, Mapping) and row.get("idea_id")
+        if (
+            isinstance(row, Mapping)
+            and row.get("idea_id")
+            and _selected_filter_allows(row.get("idea_id"), selected_idea_ids)
+        )
     }
     directions = _read_directions_if_exists(run_dir)
 
@@ -198,11 +223,16 @@ def build_idea_graph_from_runs(
     *,
     graph_id: str = "iterative_idea_graph",
     claims_paths: list[str | Path] | None = None,
+    selected_only: bool = False,
 ) -> IdeaGraph:
     """Build one graph by merging several auto-discovery runs."""
     graph = IdeaGraph(graph_id=graph_id)
     for run_dir in run_dirs:
-        partial = build_idea_graph_from_run(run_dir, graph_id=f"run:{Path(run_dir).name}")
+        partial = build_idea_graph_from_run(
+            run_dir,
+            graph_id=f"run:{Path(run_dir).name}",
+            selected_only=selected_only,
+        )
         _merge_graph(graph, partial)
     for claims_path in claims_paths or []:
         ingest_literature_claims(graph, claims_path)
@@ -648,6 +678,35 @@ def _read_directions_if_exists(run_dir: Path) -> dict[str, dict[str, Any]]:
             if direction_id:
                 out[str(direction_id)] = dict(row)
     return out
+
+
+def _read_selected_idea_ids_if_exists(run_dir: Path) -> set[str] | None:
+    path = run_dir / "idea_diversity_report.json"
+    if not path.exists():
+        return None
+    try:
+        report = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(report, Mapping):
+        return None
+    idea_ids = report.get("selected_idea_ids")
+    if idea_ids is None and isinstance(report.get("selected_ideas"), list):
+        idea_ids = [
+            row.get("idea_id")
+            for row in report["selected_ideas"]
+            if isinstance(row, Mapping) and row.get("idea_id")
+        ]
+    if not isinstance(idea_ids, list):
+        return None
+    return {str(idea_id) for idea_id in idea_ids if str(idea_id)}
+
+
+def _selected_filter_allows(
+    idea_id: Any,
+    selected_idea_ids: set[str] | None,
+) -> bool:
+    return selected_idea_ids is None or str(idea_id) in selected_idea_ids
 
 
 def _default_claims_paths(

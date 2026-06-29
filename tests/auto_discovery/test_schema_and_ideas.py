@@ -261,8 +261,34 @@ def test_refresh_literature_claims_for_iteration_uses_cached_and_schema_knowledg
 
 def test_review_idea_against_schema_accepts_and_rejects_fields():
     from uchrom.auto_discovery import DiscoveryIdea, review_idea_against_schema
+    from uchrom.auto_discovery.llm import allowed_required_fields
 
     cdata = _make_cd()
+    cdata.tracks["seq.gc_fraction"] = np.linspace(0.2, 0.7, len(cdata.tracks))
+    cdata.results["bin_features"] = pd.DataFrame({
+        "chrom": ["chr1", "chr1"],
+        "start": [0, 25_000],
+        "end": [25_000, 50_000],
+        "gc_fraction": [0.42, 0.51],
+    })
+    cdata.results["peaks:signal"] = pd.DataFrame({
+        "chrom": ["chr1"],
+        "start": [0],
+        "end": [25_000],
+        "score": [8.0],
+    })
+    cdata.uns["feature_registry"] = [
+        {
+            "feature_group": "sequence",
+            "features": ["seq.gc_fraction"],
+            "result_key": "bin_features",
+        },
+        {
+            "feature_group": "peaks",
+            "features": ["peak.signal_overlap"],
+            "source_results": ["peaks:signal"],
+        },
+    ]
     schema = cdata.build_discovery_schema(store=False)
     idea = DiscoveryIdea(
         idea_title="Granule H3K27me3 compaction",
@@ -280,12 +306,30 @@ def test_review_idea_against_schema_accepts_and_rejects_fields():
     assert review.accepted
     assert review.errors == []
 
+    enriched_idea = idea.to_dict()
+    enriched_idea["required_fields"] = [
+        "tracks.seq.gc_fraction",
+        "results.bin_features",
+        "results.bin_features.gc_fraction",
+        "results.peaks:signal.score",
+        "results.peaks:*",
+        "uns.feature_registry",
+    ]
+    review = review_idea_against_schema(enriched_idea, schema)
+
+    assert review.accepted
+    allowed = allowed_required_fields(schema, max_items=80)
+    assert "tracks.seq.gc_fraction" in allowed
+    assert "results.bin_features.gc_fraction" in allowed
+    assert "results.peaks:signal.score" in allowed
+    assert "uns.feature_registry" in allowed
+
     bad = idea.to_dict()
-    bad["required_fields"] = ["tracks.DOES_NOT_EXIST"]
+    bad["required_fields"] = ["tracks.DOES_NOT_EXIST", "results.bin_features.missing"]
     review = review_idea_against_schema(bad, schema)
 
     assert not review.accepted
-    assert review.missing_fields == ["tracks.DOES_NOT_EXIST"]
+    assert review.missing_fields == ["tracks.DOES_NOT_EXIST", "results.bin_features.missing"]
 
 
 def _make_idea(*, title: str = "Granule H3K27me3 compaction", cell_type: str = "Granule"):
@@ -310,6 +354,85 @@ def _make_idea(*, title: str = "Granule H3K27me3 compaction", cell_type: str = "
             "deterministic_rerun",
         ],
     )
+
+
+def test_diversity_selector_balances_feature_families():
+    from uchrom.auto_discovery import DiscoveryIdea, select_diverse_ideas
+
+    def make(title, fields, modalities):
+        return DiscoveryIdea(
+            idea_title=title,
+            biological_hypothesis=f"{title} is testable in the dataset.",
+            computable_parameter=f"Effect size for {title}.",
+            analysis_plan=f"Compute one parameter for {title} with a permutation test.",
+            modalities=["chromatin_tracing", *modalities],
+            cell_types=["Granule"],
+            required_fields=["coords", "spots.cell_id", *fields],
+            validation_checks=["required_fields_exist", "statistical_hypothesis_test"],
+        )
+
+    ideas = [
+        make("Aldoc expression predicts H3K27ac peaks", ["linked_adata.X", "linked_adata.var.Aldoc", "tracks.peak.h3k27ac_overlap"], ["rna_expression", "peak_features"]),
+        make("Pcp2 expression predicts H3K9me3 peaks", ["linked_adata.X", "linked_adata.var.Pcp2", "tracks.peak.h3k9me3_overlap"], ["rna_expression", "peak_features"]),
+        make("Calb1 expression predicts RNAPII peaks", ["linked_adata.X", "linked_adata.var.Calb1", "tracks.peak.rnapol2_overlap"], ["rna_expression", "peak_features"]),
+        make("Foxj1 expression predicts promoter peaks", ["linked_adata.X", "linked_adata.var.Foxj1", "tracks.peak.promoter_overlap"], ["rna_expression", "peak_features"]),
+        make("GC content tracks radial positioning", ["tracks.seq.gc_fraction"], ["sequence_features"]),
+        make("TAD boundary distance tracks lamina proximity", ["tracks.strc.distance_to_tad_boundary"], ["structure_annotations"]),
+        make("Cell centroid context changes radial distances", ["cells.x_centroid"], ["cell_metadata"]),
+    ]
+
+    selection = select_diverse_ideas(ideas, target=4, policy="balanced")
+    selected_families = {
+        family
+        for record in selection.candidates
+        if record["selected"]
+        for family in record["families"]
+    }
+
+    assert len(selection.ideas) == 4
+    assert "sequence_features" in selected_families
+    assert "structure_annotations" in selected_families
+    assert "cell_spatial_context" in selected_families
+    assert selection.family_counts["gene_expression"] < 4
+
+
+def test_diversity_signature_detects_biological_angle_families():
+    from uchrom.auto_discovery import DiscoveryIdea, idea_diversity_signature
+
+    idea = DiscoveryIdea(
+        idea_title="Literature-guided radial compaction and chromosome territory scale",
+        biological_hypothesis=(
+            "A prior claim suggests promoter bins near the lamina have local "
+            "compaction and altered inter-chromosomal territory assortativity."
+        ),
+        computable_parameter="Genome-wide radial positioning and local pairwise distance effect.",
+        analysis_plan=(
+            "Compare bin-level promoter/TSS neighborhoods across nuclear volume "
+            "and cell-state metadata, then test inter-chromosomal hub proximity."
+        ),
+        modalities=["chromatin_tracing", "cell_metadata", "genome_annotations"],
+        cell_types=["Granule"],
+        required_fields=[
+            "coords",
+            "spots.trace_id",
+            "cells.nuc_volume_um3",
+            "cells.n_transcripts",
+            "tracks.gtf.promoter_overlap_bp",
+            "tracks.strc.distance_to_tad_boundary",
+        ],
+        validation_checks=["required_fields_exist", "statistical_hypothesis_test"],
+        metadata={"source_claim_ids": ["claim_lamina_promoter"], "feature_families": ["radial"]},
+    )
+
+    families = set(idea_diversity_signature(idea)["families"])
+
+    assert "radial_positioning" in families
+    assert "local_compaction" in families
+    assert "inter_chromosomal_organization" in families
+    assert "cell_state_metadata" in families
+    assert "genomic_scale" in families
+    assert "regulatory_context" in families
+    assert "literature_prior" in families
 
 
 def test_notebook_scaffold(tmp_path):
@@ -512,6 +635,52 @@ def test_schematic_coverage_reports_missing_verified_notebooks(tmp_path):
     assert coverage["n_missing"] == 1
     assert coverage["coverage"] == 0.5
     assert coverage["missing_notebooks"] == [str(notebook_missing)]
+
+
+def test_runner_inline_schematic_fallback_targets_all_results(monkeypatch, tmp_path):
+    import uchrom.auto_discovery.pantheon as pantheon
+    from uchrom.auto_discovery.runner import (
+        DiscoveryRunConfig,
+        _ensure_schematic_images_for_run,
+    )
+
+    captured = {}
+
+    async def fake_generate(run_dir, **kwargs):
+        captured["run_dir"] = run_dir
+        captured.update(kwargs)
+        return [object(), object()]
+
+    monkeypatch.setattr(pantheon, "generate_pantheon_schematic_images_for_run", fake_generate)
+    records = []
+    config = DiscoveryRunConfig(
+        h5cd_path=tmp_path / "data.h5cd",
+        output_dir=tmp_path / "run",
+        generate_schematic_image=True,
+        schematic_image_model="openai",
+        schematic_image_model_args={"size": "1536x1024"},
+        notebook_agent_concurrency=4,
+        execute=True,
+    )
+
+    _ensure_schematic_images_for_run(config, tmp_path / "run", records)
+
+    assert captured["run_dir"] == tmp_path / "run"
+    assert captured["model"] == "openai"
+    assert captured["model_args"] == {"size": "1536x1024"}
+    assert captured["verified_only"] is False
+    assert captured["concurrency"] == 2
+    assert captured["strict"] is False
+    assert records == [{
+        "agent_name": "pantheon_schematic_images",
+        "role": "schematic_images",
+        "content": {
+            "status": "completed",
+            "n_records": 2,
+            "records_path": str(tmp_path / "run" / "pantheon" / "schematic_images" / "schematics.jsonl"),
+            "coverage_path": str(tmp_path / "run" / "pantheon" / "schematic_images" / "schematic_coverage.json"),
+        },
+    }]
 
 
 def test_lightweight_executor_supports_notebook_display(tmp_path):
@@ -740,6 +909,16 @@ print(json.dumps(analysis_summary, indent=2))
     assert (tmp_path / "run" / "reviews.jsonl").exists()
     assert (tmp_path / "run" / "results.jsonl").exists()
     assert (tmp_path / "run" / "report.md").exists()
+    assert result.diversity_report_path is not None
+    diversity = json.loads(Path(result.diversity_report_path).read_text())
+    assert diversity["policy"] == "balanced"
+    assert diversity["selected_idea_ids"] == [idea.idea_id, idea2.idea_id]
+    reviews = [
+        json.loads(line)
+        for line in (tmp_path / "run" / "reviews.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert all(row["selected"] for row in reviews)
     assert result.graph_path is not None
     assert result.graph_summary_path is not None
     assert result.graph_html_path is not None
@@ -896,6 +1075,55 @@ def test_build_idea_graph_marks_schema_rejected_ideas(tmp_path):
     assert idea_node["execution_state"] == "Rejected by schema"
     assert idea_node["hypothesis_status"] == "Rejected"
     assert f"evidence:{idea.idea_id}" not in graph.nodes
+
+
+def test_build_idea_graph_can_filter_to_diversity_selected_ideas(tmp_path):
+    from uchrom.auto_discovery import build_idea_graph_from_run
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    selected = _make_idea(title="Selected route idea", cell_type="Granule")
+    candidate = _make_idea(title="Unselected candidate idea", cell_type="Bergmann")
+
+    def write_jsonl(path, rows):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as fh:
+            for row in rows:
+                fh.write(json.dumps(row) + "\n")
+
+    write_jsonl(run_dir / "ideas.jsonl", [selected.to_dict(), candidate.to_dict()])
+    write_jsonl(run_dir / "reviews.jsonl", [
+        {"idea_id": selected.idea_id, "accepted": True},
+        {"idea_id": candidate.idea_id, "accepted": True},
+    ])
+    write_jsonl(run_dir / "results.jsonl", [
+        {
+            "idea_id": selected.idea_id,
+            "notebook": str(run_dir / "notebooks" / f"{selected.idea_id}.ipynb"),
+            "execution_ok": True,
+            "verification": {"status": "pass", "p_value": 0.01, "effect_size": 0.2},
+        },
+        {
+            "idea_id": candidate.idea_id,
+            "notebook": str(run_dir / "notebooks" / f"{candidate.idea_id}.ipynb"),
+            "execution_ok": True,
+            "verification": {"status": "pass", "p_value": 0.02, "effect_size": 0.1},
+        },
+    ])
+    (run_dir / "idea_diversity_report.json").write_text(json.dumps({
+        "selected_idea_ids": [selected.idea_id],
+    }))
+
+    full_graph = build_idea_graph_from_run(run_dir)
+    selected_graph = build_idea_graph_from_run(run_dir, selected_only=True)
+
+    assert f"idea:{selected.idea_id}" in full_graph.nodes
+    assert f"idea:{candidate.idea_id}" in full_graph.nodes
+    assert f"idea:{selected.idea_id}" in selected_graph.nodes
+    assert f"evidence:{selected.idea_id}" in selected_graph.nodes
+    assert f"idea:{candidate.idea_id}" not in selected_graph.nodes
+    assert f"evidence:{candidate.idea_id}" not in selected_graph.nodes
+    assert selected_graph.nodes[f"run:{run_dir.name}"]["selected_idea_count"] == 1
 
 
 def test_plan_discovery_directions_from_idea_graph(tmp_path):
@@ -1090,6 +1318,8 @@ def test_auto_discovery_defaults_to_pantheon_backend(tmp_path):
     assert config.idea_source == "pantheon"
     assert config.code_source == "pantheon"
     assert config.idea_agent_count == 3
+    assert config.diversity_policy == "balanced"
+    assert config.idea_candidate_multiplier == 4
     assert config.notebook_agent_concurrency == 3
     assert config.generate_schematic_image is False
     assert config.schematic_image_model is None
@@ -1118,6 +1348,8 @@ def test_iterative_auto_discovery_defaults_to_inline_schematics(monkeypatch, tmp
         captured["generate_schematic_image"] = config.generate_schematic_image
         captured["schematic_image_model"] = config.schematic_image_model
         captured["schematic_image_model_args"] = config.schematic_image_model_args
+        captured["diversity_policy"] = config.diversity_policy
+        captured["idea_candidate_multiplier"] = config.idea_candidate_multiplier
         return DiscoveryRunResult(
             output_dir=str(config.output_dir),
             n_generated=1,
@@ -1163,6 +1395,8 @@ def test_iterative_auto_discovery_defaults_to_inline_schematics(monkeypatch, tmp
         "generate_schematic_image": True,
         "schematic_image_model": "openai",
         "schematic_image_model_args": {"size": "1536x1024"},
+        "diversity_policy": "balanced",
+        "idea_candidate_multiplier": 4,
     }
 
 
