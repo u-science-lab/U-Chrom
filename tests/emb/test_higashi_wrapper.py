@@ -235,6 +235,8 @@ def test_run_raises_import_error_when_fasthigashi_missing(tmp_path):
     contacts_dir = tmp_path / "higashi_in"
     contacts_dir.mkdir()
     (contacts_dir / "config.JSON").write_text("{}")
+    from uchrom.io.contacts import write_label_info
+    write_label_info(cd.cells, contacts_dir / "label_info.pickle")
 
     # if fasthigashi happens to be importable we skip — we only care
     # about the guard firing when it's absent

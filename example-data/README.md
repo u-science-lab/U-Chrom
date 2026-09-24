@@ -23,6 +23,10 @@ auto-downloaded by the tutorials on first run into this directory.
 | `with_loops.h5cd`                     | 24 MB   | no              | generated     | output of `loop_calling.ipynb` (intermediate cache, safe to delete)     |
 | `fofct_core.csv`                      | ~6 MB   | no              | generated     | synthetic offline fallback for tutorials 4/5/6/7                        |
 | `GSE63525_GM12878_insitu_primary+replicate_combined_30.hic` | ~40 GB | no | **manual** (too large) | `benchmark.ipynb` |
+| `schicar_mop/raw/GSE305439/` RNA + metadata | 61 MB | no | GEO GSE305439 | scHiCAR tutorials (upstream input) |
+| `schicar_mop/raw/GSE305439/` pairs + ATAC | ~2.8 GB | no | GEO GSE305439 (opt-in) | scHiCAR tutorials (upstream input) |
+| `schicar_mop/raw/merfish_mop/` | 332 MB | no | Brain Image Library g.21 | `schicar_to_merfish_mapping.ipynb` (upstream input) |
+| `schicar_mop/data/…`, `schicar_mop/organized_u_chrom_framework/…` | — | no | **derived — recipe pending** | scHiCAR tutorials (see below) |
 
 `*.csv`, `*.h5cd`, and the DNAseqFISH+ zip/folder are ignored by git;
 they're either generated or downloaded on demand.
@@ -287,6 +291,65 @@ using.
   ``do_conv/do_rwr/do_col=True``, and reports ARI / NMI between the
   k-means clustering of `cd.cellm['higashi']` and the cell-type labels.
   Reproduces ARI ≈ 0.55 on a Mac mini M2 in ~2 min on CPU at 300 cells.
+
+### scHiCAR mouse brain + MERFISH MOp (`schicar_mop/`)
+
+Used by `schicar_to_merfish_mapping.ipynb`,
+`schicar_merfish_uchrom_framework_walkthrough.ipynb` and (paths only,
+no data needed) `schicar_linked_multiomics_framework.ipynb`.  The
+notebooks read `$UCHROM_SCHICAR_ROOT`, defaulting to
+`example-data/schicar_mop/`.
+
+**Upstream sources (public, auto-downloadable):**
+
+- **scHiCAR** — Wei X, Xu Y, Yang D, … Diao Y. "Trimodal single-cell
+  profiling of transcriptome, epigenome and 3D genome in complex tissues
+  with scHiCAR." *Nature Biotechnology* (2026),
+  doi:[10.1038/s41587-026-03013-7](https://doi.org/10.1038/s41587-026-03013-7).
+  GEO [GSE305439](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE305439)
+  (`mouse_brain_scHiCAR_1`, mouse frontal cortex; SubSeries of GSE305889,
+  BioProject PRJNA1305748).  Files under
+  `https://ftp.ncbi.nlm.nih.gov/geo/series/GSE305nnn/GSE305439/suppl/`:
+
+  | File | Size | Content |
+  |------|------|---------|
+  | `GSE305439_RNA.matrix.mtx.gz` / `.barcodes.tsv.gz` / `.features.tsv.gz` | 61 MB | RNA counts (10x-style MTX) |
+  | `GSE305439_mouse_brain_scHiCAR_1_RNA_metadata.txt.gz` | 152 KB | 5 313 cells: `RNAbarcode, nCount_RNA, nFeature_RNA, celltype, UMAP1, UMAP2, DNAbarcode` |
+  | `GSE305439_DNA.dedup.pairs.gz` | 1.47 GB | deduplicated contact pairs (keyed by DNA barcode) |
+  | `GSE305439_DNA.ATAC.tsv.gz` | 1.35 GB | ATAC fragments (keyed by DNA barcode) |
+
+  `python example-data/download_data.py --schicar_rna` fetches the RNA
+  side; `--schicar_dna` (opt-in, ~2.8 GB) the pairs + ATAC.  The larger
+  sibling subseries (e.g. GSE267126) are multi-TB and are not used.
+
+- **MERFISH MOp atlas** — Zhang M, Eichhorn SW, Zingg B, … Zhuang X.
+  "Spatially resolved cell atlas of the mouse primary motor cortex by
+  MERFISH." *Nature* 598:137–143 (2021),
+  doi:[10.1038/s41586-021-03705-x](https://doi.org/10.1038/s41586-021-03705-x).
+  Brain Image Library, doi:[10.35077/g.21](https://doi.org/10.35077/g.21);
+  processed files under
+  `https://download.brainimagelibrary.org/cf/1c/cf1c1a431ef8d021/processed_data/`:
+  `counts.h5ad` (305 MB, all 12 experiments, volume-normalised cell ×
+  258 genes) and `cell_labels.csv` (27 MB, `sample_id, slice_id,
+  class_label, subclass, label`).  The tutorials use experiment
+  `mouse2_sample1`.  Fetch with `--merfish_mop`.
+
+**Derived inputs — recipe pending.**  The notebooks do not read the raw
+files directly; they read intermediates that were produced outside this
+repository and whose build scripts are not yet checked in:
+
+| Derived file (relative to `$UCHROM_SCHICAR_ROOT`) | Derived from |
+|---|---|
+| `data/schicar/schicar_rna_mop.h5ad` | GSE305439 RNA + metadata (MOp-matched cells) |
+| `data/schicar/hic_features.csv` | GSE305439 pairs → per-cell contact summary features |
+| `data/schicar/atac_features.npz` | GSE305439 ATAC → per-cell 1 Mb bins |
+| `data/schicar/paper_loops_5kb.csv`, `paper_loop_density_5kb.npz` | scHiCAR paper 5 kb loop calls |
+| `data/merfish_mop/merfish_mouse2sample1.h5ad` | BIL `counts.h5ad` + `cell_labels.csv`, `mouse2_sample1` |
+| `organized_u_chrom_framework/GSE305439_scHiCAR1_MOp_MERFISH_linked_framework.{h5cd,h5mu}` + `_summary.json`, 1 Mb `.scool` | all of the above + Tangram mapping |
+
+Until the build scripts land (tracked as an open item; see the
+tutorials' first cell), these two notebooks are **not reproducible from
+public data alone** and are shipped with their recorded outputs.
 
 ## Generated outputs
 

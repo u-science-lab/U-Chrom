@@ -1,5 +1,18 @@
 # Multi-omics Auto-discovery
 
+```{note}
+Auto-discovery ships as the separate **`uchrom-discovery`** package
+(`discovery/` in this repository) so the core `u-chrom` toolkit does not
+depend on LLM backends.  Install it next to `u-chrom`:
+
+    pip install -e .            # u-chrom
+    pip install -e discovery/   # uchrom-discovery  (import uchrom_discovery)
+
+The old `uchrom.auto_discovery` import path and the
+`ChromData.build_discovery_schema` / `describe_for_agent` methods still work
+for one release but emit `DeprecationWarning`.
+```
+
 U-Chrom can expose an agent-readable schema directly from a `.h5cd` file.
 The schema is stored in `cdata.uns["auto_discovery_schema"]`, so discovery
 agents can reason from the same object that downstream analyses load.
@@ -8,6 +21,7 @@ agents can reason from the same object that downstream analyses load.
 
 ```python
 from uchrom import ChromData
+from uchrom_discovery import build_discovery_schema, describe_for_agent
 
 cdata = ChromData.read("takei2025_cerebellum_rep1.h5cd")
 cdata.add_reference(
@@ -22,8 +36,8 @@ cdata.add_user_annotation(
     text="RNA and chromatin tracing are linked at cell_id level; do not assume RNA spot geometry.",
     tags=["constraint", "multiomics_alignment"],
 )
-schema = cdata.build_discovery_schema(store=True)
-print(cdata.describe_for_agent())
+schema = build_discovery_schema(cdata, store=True)
+print(describe_for_agent(cdata))
 cdata.write("takei2025_cerebellum_rep1.h5cd")
 ```
 
@@ -53,7 +67,7 @@ h5cd schema -> idea generation -> schema review -> notebook creation
 Run the default PantheonOS-agent backend:
 
 ```bash
-MPLBACKEND=Agg python -m uchrom.auto_discovery run data.h5cd runs/pantheon \
+MPLBACKEND=Agg python -m uchrom_discovery run data.h5cd runs/pantheon \
   --model openai/gpt-5.5 \
   --idea-agent-count 3 \
   --notebook-agent-concurrency 3 \
@@ -78,7 +92,7 @@ statistical exploration. Use retries plus strict coverage checking before
 publishing exported notebooks:
 
 ```bash
-python -m uchrom.auto_discovery schematics runs/pantheon \
+python -m uchrom_discovery schematics runs/pantheon \
   --model openai \
   --concurrency 3 \
   --retries 2 \
@@ -97,12 +111,12 @@ For direct backend debugging, the runner can use any registered structured
 backend. Claude and Codex CLI backends return structured idea/code payloads;
 the U-Chrom runner still writes, executes, and verifies the final notebooks:
 
-The shared prompt contracts live in `uchrom.auto_discovery.llm`; backend
+The shared prompt contracts live in `uchrom_discovery.llm`; backend
 adapters call those prompt builders but do not own provider-specific prompt
 rules or the notebook lifecycle.
 
 ```bash
-python -m uchrom.auto_discovery run data.h5cd runs/claude \
+python -m uchrom_discovery run data.h5cd runs/claude \
   --idea-source claude \
   --code-source claude \
   --reasoning-effort low \
@@ -132,7 +146,7 @@ Existing runs can be converted into graph artifacts without re-running the
 agents:
 
 ```bash
-python -m uchrom.auto_discovery graph runs/pantheon
+python -m uchrom_discovery graph runs/pantheon
 ```
 
 ## Verified Notebook Exports
@@ -183,7 +197,7 @@ Successful notebook code can later be promoted into stable modules such as
 
 ## PantheonOS
 
-`uchrom.auto_discovery.pantheon` implements the default agent orchestration
+`uchrom_discovery.pantheon` implements the default agent orchestration
 used by `run_auto_discovery`. PantheonOS is kept as an optional runtime
 dependency of U-Chrom itself, but the Pantheon backend requires
 `pantheon-agents` to be installed in the environment that runs the agents.

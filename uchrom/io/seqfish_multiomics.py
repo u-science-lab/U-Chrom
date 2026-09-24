@@ -419,7 +419,6 @@ def load_seqfish_multiomics_linked(
     if h5cd_path is not None:
         h5cd_path = Path(h5cd_path)
         h5cd_path.parent.mkdir(parents=True, exist_ok=True)
-        cd.build_discovery_schema(store=True)
         cd.write(h5cd_path)
     return cd
 

@@ -16,15 +16,21 @@ pip install -e .
 
 ## Optional dependencies
 
-The browser module (`uchrom.browser`) and bulk MDS reconstruction pull in
-heavier dependencies that you only need for certain workflows:
+Some workflows need heavier dependencies that are published as extras:
+
+| Extra | Installs | Needed for |
+|-------|----------|------------|
+| `browser` | PyVista, pyvistaqt, VTK, PyQt5, qdarkgraystyle | `python -m uchrom.browser` |
+| `hic` | hic-straw | reading `.hic` files |
+| `anndata` | anndata | `ChromData.link_anndata` / `to_anndata`, seqFISH RNA |
+| `multiome` | mudata | `ChromData.load_linked_mudata` |
+| `im` | astropy | `ChromData.from_pyhim_trace` |
+| `snapfish` | scikit-image | SnapFISH-IMPUTE (`uchrom.im.impute`) |
+| `emb` / `emb-full` | FastHigashi / Higashi | `uchrom.emb.higashi` |
 
 ```bash
-# Browser — PyVista + PyQt5
-pip install "pyvista>=0.43,<0.45" "pyvistaqt>=0.11,<0.12" PyQt5 qdarkgraystyle
-
-# Bulk MDS reconstruction — PyTorch
-pip install "torch>=2.0"
+pip install "u-chrom[browser]"
+pip install "u-chrom[browser,hic,anndata]"   # several at once
 ```
 
 ## GPU acceleration

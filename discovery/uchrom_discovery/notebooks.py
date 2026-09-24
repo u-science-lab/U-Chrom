@@ -55,18 +55,23 @@ def create_exploration_notebook(
             "matplotlib.use('Agg', force=True)\n"
             "import matplotlib.pyplot as plt\n"
             "from uchrom import ChromData\n"
-            "from uchrom.auto_discovery import DiscoveryIdea, review_idea_against_schema\n\n"
+            "from uchrom_discovery import (\n"
+            "    DiscoveryIdea,\n"
+            "    describe_for_agent,\n"
+            "    get_discovery_schema,\n"
+            "    review_idea_against_schema,\n"
+            ")\n\n"
             f"IDEA = DiscoveryIdea.from_dict({idea.to_dict()!r})\n"
             f"H5CD_PATH = {h5cd_repr}\n"
             f"RUN_OUTPUT_DIR = {run_output_repr}\n"
             "RUN_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)\n"
             "cdata = ChromData.read(H5CD_PATH) if H5CD_PATH else None\n"
-            "schema = cdata.discovery_schema if cdata is not None else None\n"
+            "schema = get_discovery_schema(cdata) if cdata is not None else None\n"
             "adata = cdata.linked_adata if cdata is not None else None\n"
             "print(IDEA.idea_id)\n"
             "if cdata is not None:\n"
             "    print(cdata)\n"
-            "    print(cdata.describe_for_agent(max_items=20))\n",
+            "    print(describe_for_agent(cdata, max_items=20))\n",
             cell_id="setup",
         ),
         _markdown_cell("## Required data checks", cell_id="required_data_checks"),

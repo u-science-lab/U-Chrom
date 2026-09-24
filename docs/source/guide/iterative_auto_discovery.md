@@ -38,32 +38,32 @@ notebooks verify each claim
 
 The first implementation pass now covers the local graph/follow-up-direction loop:
 
-- `uchrom.auto_discovery.graph.IdeaGraph` builds a discovery graph from
+- `uchrom_discovery.graph.IdeaGraph` builds a discovery graph from
   `ideas.jsonl`, `reviews.jsonl`, and `results.jsonl`.
-- `uchrom.auto_discovery.direction.plan_discovery_directions` reads that graph
+- `uchrom_discovery.direction.plan_discovery_directions` reads that graph
   plus the h5cd-backed schema and produces diverse next-iteration follow-up
   directions.
 - `run_auto_discovery` writes `graph/idea_graph.json`,
   `graph/graph_summary.md`, `graph/idea_graph.html`,
   `directions/next_directions.json`, and `directions/next_directions.md` after
   each run.
-- `uchrom.auto_discovery.iterative.run_iterative_auto_discovery` can run
+- `uchrom_discovery.iterative.run_iterative_auto_discovery` can run
   multiple graph-guided iterations. Iteration 2 and later receive the prior
   idea graph and follow-up-direction Markdown as explicit Pantheon idea-agent
   context.
-- `uchrom.auto_discovery.graph.ingest_literature_claims` ingests browser-agent
+- `uchrom_discovery.graph.ingest_literature_claims` ingests browser-agent
   `claims.jsonl` artifacts into the graph as `LiteratureClaim` and
   `Reference` nodes.
-- `uchrom.auto_discovery.visualization.write_idea_graph_html` writes a static
+- `uchrom_discovery.visualization.write_idea_graph_html` writes a static
   interactive graph viewer for ideas, evidence, notebooks, references, and
   literature claims.
 - The CLI can regenerate these artifacts from an existing run:
 
 ```bash
-python -m uchrom.auto_discovery directions RUN_DIR DATA.h5cd
-python -m uchrom.auto_discovery view RUN_DIR/graph/idea_graph.json graph.html
-python -m uchrom.auto_discovery claims RUN_DIR/graph/idea_graph.json RUN_DIR/browser/claims.jsonl
-python -m uchrom.auto_discovery iterate DATA.h5cd ITERATIVE_OUT \
+python -m uchrom_discovery directions RUN_DIR DATA.h5cd
+python -m uchrom_discovery view RUN_DIR/graph/idea_graph.json graph.html
+python -m uchrom_discovery claims RUN_DIR/graph/idea_graph.json RUN_DIR/browser/claims.jsonl
+python -m uchrom_discovery iterate DATA.h5cd ITERATIVE_OUT \
   --iterations 3 \
   --ideas-per-iteration 20
 ```
@@ -76,7 +76,7 @@ separate pass. Use `--no-generate-schematic-image` for a faster evidence-only
 run:
 
 ```bash
-python -m uchrom.auto_discovery iterate DATA.h5cd ITERATIVE_OUT \
+python -m uchrom_discovery iterate DATA.h5cd ITERATIVE_OUT \
   --iterations 3 \
   --ideas-per-iteration 20 \
   --schematic-image-model openai
@@ -627,7 +627,7 @@ Build a graph from existing run artifacts.
 
 Deliverables:
 
-- `uchrom.auto_discovery.graph`
+- `uchrom_discovery.graph`
 - graph import from `ideas.jsonl`, `reviews.jsonl`, `results.jsonl`
 - evidence nodes from `classify_hypothesis_evidence`
 - graph export as JSON and GraphML

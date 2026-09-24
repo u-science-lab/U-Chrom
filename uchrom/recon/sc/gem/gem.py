@@ -154,7 +154,7 @@ class Simulation(SimulationBase):
             self.E_bend[None] = 0.0
             self.E_exclude[None] = 0.0
             self.E_contact[None] = 0.0
-            with ti.Tape(loss=self.E):
+            with ti.ad.Tape(loss=self.E):
                 compute_E_strach(self.E_strach, self.E, self.pos, self.backbones, self.bond_factor/2)
                 compute_E_bend(self.E_bend, self.E, self.pos, self.backbones, self.angle_factor/2)
                 compute_E_exclude(self.E_exclude, self.E, self.pos, exclude_factor)

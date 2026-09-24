@@ -1,7 +1,7 @@
 """Projection helpers for genomic interval features.
 
 The functions in this module are deliberately independent of
-``uchrom.auto_discovery``.  They provide a small shared layer for mapping
+``uchrom_discovery``.  They provide a small shared layer for mapping
 canonical interval-level feature tables onto the spot axis of a
 ``ChromData`` object.
 """

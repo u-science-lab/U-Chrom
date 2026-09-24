@@ -130,7 +130,7 @@ def _resolve_color(
     coloured along its length.
     """
     import matplotlib.colors as mpl_colors
-    import matplotlib.cm as mpl_cm
+    from matplotlib import colormaps as mpl_colormaps
 
     N = segment_coords.shape[0]
     palette = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00",
@@ -140,7 +140,7 @@ def _resolve_color(
         m = mode.lower()
         if m == "bin":
             t = np.linspace(0, 1, N) if N > 0 else np.empty(0)
-            cm = mpl_cm.get_cmap(cmap)
+            cm = mpl_colormaps.get_cmap(cmap)
             return cm(t)[:, :3], True, "bin"
         if m == "chrom":
             chrom = segment_meta.get("chrom", "chr?")
@@ -162,7 +162,7 @@ def _resolve_color(
         norm = (seg_vals - np.nanmin(mode)) / (
             max(np.nanmax(mode) - np.nanmin(mode), 1e-12)
         )
-        cm = mpl_cm.get_cmap(cmap)
+        cm = mpl_colormaps.get_cmap(cmap)
         return cm(norm)[:, :3], True, "scalar"
 
     # (r, g, b) tuple

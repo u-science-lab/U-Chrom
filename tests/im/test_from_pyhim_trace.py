@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytest.importorskip("astropy", reason="from_pyhim_trace needs the [im] extra")
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 

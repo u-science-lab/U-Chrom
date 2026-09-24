@@ -18,6 +18,7 @@ from .notebooks import (
     execute_notebook_python,
     upsert_structured_conclusion,
 )
+from .schema import build_discovery_schema
 
 
 @dataclass
@@ -130,7 +131,7 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
             enrichment_summary_path.write_text(
                 json.dumps(enrichment_summary, indent=2, default=_json_default) + "\n"
             )
-    schema = cdata.build_discovery_schema(store=config.store_schema, dataset_name=config.dataset_name)
+    schema = build_discovery_schema(cdata, store=config.store_schema, dataset_name=config.dataset_name)
     if config.store_schema or enriched_h5cd_path is not None:
         cdata.write(h5cd_path)
 

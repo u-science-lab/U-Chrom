@@ -28,26 +28,47 @@ From the structure table, downstream modules perform:
 
 ```
 uchrom/
-├── io/              Data I/O (.pairs, .cool, .hic, .3dg, .csv, .pdb)
+├── core/            ChromData container (cdata.py) + format spec (spec.md)
+├── io/              Data I/O (.pairs, .cool, .hic, .3dg, .csv, .pdb, seqFISH multi-omics)
 ├── recon/           3D reconstruction
 │   ├── _base.py     Shared simulation base (Taichi)
 │   ├── sc/          Single-cell reconstruction
 │   │   ├── nucdyn/  Nuc Dynamics (molecular dynamics, Taichi GPU)
 │   │   └── gem/     GEM (energy minimization, Taichi autodiff)
 │   ├── bulk/        Bulk reconstruction
-│   │   └── mds/     MDS/SMACOF (PyTorch GPU)
-│   └── fish/        Sequencing + imaging combined (placeholder)
-├── im/              Image processing (placeholder)
+│   │   └── mds/     MDS/SMACOF (PyTorch GPU; partitioned + inter-chrom)
+│   └── fish/        GEM-FISH: Hi-C + FISH combined (PyTorch; TAD-level + intra-TAD)
+├── im/              Imaging-side processing
+│   ├── trace/       Chromatin tracing / spot-to-trace alignment (Jie aligner)
+│   └── impute/      FISH coordinate imputation (linear, grid, SnapFISH-IMPUTE)
 ├── strc/            Structure identification
-│   ├── tad/         TAD detection (directionality index)
-│   ├── loop/        Loop detection (placeholder)
-│   └── comp/        Compartment detection (placeholder)
-├── fea/             Geometric features (placeholder)
-├── emb/             Structure embedding (placeholder)
-├── pl/              Plotting (placeholder)
+│   ├── tad/         TAD detection (directionality index, ArcFISH arc p-value, FISHnet)
+│   ├── loop/        Loop detection (axis-wise F-test)
+│   ├── comp/        Compartment detection (axes PC)
+│   └── enrichment.py  Run structure callers and project results onto spots
+├── fea/             Per-bin features (distance, arc, sequence, GTF annotation,
+│                    MACS-style peaks, structure projection) + feature registry
+├── emb/             Single-cell embedding (Higashi / FastHigashi wrapper)
+├── pl/              Plotting (3D structure, trace statistics)
+├── utils/           Shared statistics helpers (LOWESS, etc.)
 ├── browser/         Interactive 3D browser (PyVista + PyQt5)
 └── op.py            Misc operations (mark empty particles)
+
+discovery/           Separate package `uchrom-discovery` (import uchrom_discovery):
+                     LLM-driven multi-omics auto-discovery — h5cd schema → ideas →
+                     notebooks → verification → evidence; iterative idea graph,
+                     pre-discovery enrichment, Pantheon / Claude / Codex CLI
+                     backends, graph UI.  Own pyproject and tests/.
 ```
+
+- **Dependency direction is one-way**: `uchrom_discovery` may import the
+  public `uchrom` API; `uchrom` must never import `uchrom_discovery`
+  (except the deprecated `uchrom.auto_discovery` shim and the deprecated
+  `ChromData.*discovery*` delegators, both slated for removal).  Reusable
+  feature computation belongs in `uchrom.fea` / `uchrom.strc`, not in
+  discovery.
+- Run the two test suites separately (both have a `tests` package):
+  `pytest tests` from the root, `cd discovery && pytest tests`.
 
 ## ChromData — Core Data Container
 
@@ -76,6 +97,7 @@ ChromData
 
 - **No `spotp` (pairwise matrices)**: Distance/contact matrices are per-trace, not global. Use `cd.compute_distances(trace_id=X)` on demand instead of storing O(n²) matrices.
 - **Categorical dtypes**: `chrom`, `trace_id`, `cell_id` are auto-converted to `pd.Categorical` for ~10x memory savings on string columns.
+- **Linked modalities stay external**: scHi-C contacts (`.scool`) and multi-modal matrices (`.h5mu`) are referenced, not copied — `cd.link_scool()` / `cd.link_mudata()` record paths + cell mapping in `uns`, `cd.validate_links()` checks them, `cd.set_cell_spatial_coordinates()` stores cell-level (possibly inferred) positions in `cells`.  Never put contacts or inferred positions into `coords`.
 - **FOF-CT compatible**: `ChromData.from_fofct(path)` reads the 4DN FISH Omics Format core table. Column mapping: Spot_ID→spot_id, Trace_ID→trace_id, X/Y/Z→coords, Chrom→chrom, Chrom_Start/End→start/end.
 - **HDF5 persistence**: `.h5cd` format via `cd.write(path)` / `ChromData.read(path)`. DataFrames stored as per-column datasets, categorical as byte strings.
 - **Format versioning**: root HDF5 attrs `uchrom_format_version` (MAJOR.MINOR) and `uchrom_version`. Read-side dispatches to `_read_vN()`. Same MAJOR + higher MINOR warns but reads; different MAJOR raises. Missing attr → legacy 1.0 with warning. To bump format: update `FORMAT_VERSION` in `cdata.py`, add `_read_vN` function for the new MAJOR.

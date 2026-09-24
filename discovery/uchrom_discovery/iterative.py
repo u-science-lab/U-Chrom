@@ -15,6 +15,7 @@ from .claims import (
 from .direction import plan_discovery_directions, write_direction_artifacts
 from .graph import build_idea_graph_from_runs, write_idea_graph_artifacts
 from .runner import DiscoveryRunConfig, DiscoveryRunResult, run_auto_discovery
+from .schema import build_discovery_schema
 from .visualization import write_idea_graph_html
 
 
@@ -219,7 +220,7 @@ def _schema_for_h5cd(
         from .enrichment import DiscoveryEnrichmentConfig, enrich_for_discovery
 
         enrich_for_discovery(cdata, DiscoveryEnrichmentConfig(**dict(enrichment)))
-    return cdata.build_discovery_schema(store=False, dataset_name=dataset_name)
+    return build_discovery_schema(cdata, store=False, dataset_name=dataset_name)
 
 
 def _claims_paths_for_output(

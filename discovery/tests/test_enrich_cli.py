@@ -1,10 +1,12 @@
 import numpy as np
 import pandas as pd
 
+from uchrom_discovery.schema import get_discovery_schema
+
 
 def test_enrich_cli_adds_reusable_feature_layers(tmp_path):
     from uchrom import ChromData
-    from uchrom.auto_discovery.__main__ import main
+    from uchrom_discovery.__main__ import main
 
     cdata = ChromData(
         np.zeros((4, 3), dtype=float),
@@ -57,7 +59,7 @@ def test_enrich_cli_adds_reusable_feature_layers(tmp_path):
     assert "strc.distance_to_tad_boundary" in out.tracks
     assert "peak.signal_overlap" in out.tracks
     assert "peaks:signal" in out.results
-    schema = out.discovery_schema
+    schema = get_discovery_schema(out)
     assert schema["modalities"]["sequence_features"]["present"]
     assert schema["modalities"]["genome_annotations"]["present"]
     assert schema["modalities"]["structure_annotations"]["present"]
