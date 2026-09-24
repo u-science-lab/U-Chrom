@@ -33,6 +33,11 @@ browser = [
     "PyQt5>=5.15.2",
     "qdarkgraystyle>=1.0.2",
 ]
+# Web browser (python -m uchrom.browser --web); no Qt needed.
+web = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
 # Reading .hic files (uchrom.io load_hic / benchmark tutorial).
 hic = [
     "hic-straw",
@@ -77,6 +82,9 @@ snapfish = [
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.setuptools.package-data]
+"uchrom.browser.web" = ["static/*", "static/**/*", "API.md"]
 
 [tool.setuptools.packages.find]
 include = ["uchrom*"]

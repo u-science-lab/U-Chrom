@@ -1,0 +1,340 @@
+/* Dark theme modelled on the desktop browser's qdarkgraystyle. */
+:root {
+  --bg: #2b2d31;
+  --bg-panel: #31343a;
+  --bg-input: #25272b;
+  --bg-hover: #3b3f46;
+  --bg-active: #45628a;
+  --viewport-bg: #1b1d21;
+  --border: #45484f;
+  --text: #d8dadf;
+  --text-muted: #8f949c;
+  --accent: #5c9ded;
+  --warn: #e6b450;
+  --error: #f07178;
+  --radius: 4px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 var(--font);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 3px 8px;
+}
+button {
+  cursor: pointer;
+  background: var(--bg-hover);
+}
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button.active {
+  background: var(--bg-active);
+  border-color: var(--accent);
+}
+input:focus,
+select:focus {
+  outline: 1px solid var(--accent);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+.brand {
+  font-weight: 600;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+.brand span {
+  color: var(--accent);
+}
+.open-form {
+  display: flex;
+  gap: 6px;
+}
+.open-form input {
+  width: 360px;
+}
+.summary {
+  margin-left: auto;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.left {
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  background: var(--bg-panel);
+}
+.panel {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.panel h2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 6px;
+}
+.muted {
+  color: var(--text-muted);
+}
+.small {
+  font-size: 12px;
+}
+.error {
+  color: var(--error);
+  font-size: 12px;
+}
+.warn {
+  color: var(--warn);
+  font-size: 12px;
+}
+
+.layer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.layer-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.layer-list li:hover {
+  background: var(--bg-hover);
+}
+.layer-list li.selected {
+  background: var(--bg-active);
+}
+.layer-list .name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.layer-list .rename {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 4px;
+}
+.layer-list .eye,
+.layer-list .del {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  color: var(--text-muted);
+}
+.layer-list .eye.on {
+  color: var(--accent);
+}
+.layer-list .del:hover {
+  color: var(--error);
+}
+.layer-state {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabs,
+.seg {
+  display: flex;
+  gap: 4px;
+  margin: 6px 0;
+}
+.tabs button,
+.seg button {
+  flex: 1;
+  padding: 2px 4px;
+}
+.op {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.trace-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+}
+.trace-list li {
+  padding: 2px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trace-list li:hover {
+  background: var(--bg-hover);
+}
+.trace-list .idx {
+  display: inline-block;
+  min-width: 2.5em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.viewport {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  background: var(--viewport-bg);
+  overflow: hidden;
+}
+.viewport canvas {
+  display: block;
+}
+.viewport-tools {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+.pick-label {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  background: rgba(20, 22, 26, 0.92);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  font-size: 12px;
+  max-width: 320px;
+}
+.pick-title {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.props {
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-left: 1px solid var(--border);
+  border-bottom: none;
+  background: var(--bg-panel);
+  overflow-y: auto;
+}
+.props label {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+}
+.props label.check {
+  justify-content: flex-start;
+  gap: 6px;
+  color: var(--text);
+}
+.props .val {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.prop-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.props input[type='range'] {
+  padding: 0;
+  width: 100%;
+}
+.props input[type='color'] {
+  width: 100%;
+  height: 26px;
+  padding: 1px;
+}
+.row {
+  display: flex;
+  gap: 6px;
+}
+.row input {
+  flex: 1;
+  min-width: 0;
+}
+.stats {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 12px 0 0;
+  font-size: 12px;
+}
+.stats dt {
+  color: var(--text-muted);
+}
+.stats dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.statusbar {
+  display: flex;
+  gap: 16px;
+  padding: 3px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.statusbar .error {
+  cursor: pointer;
+}

@@ -12,6 +12,9 @@ imgui.ini
 *.json
 !discovery/uchrom_discovery/ui/package.json
 !discovery/uchrom_discovery/ui/package-lock.json
+!uchrom/browser/web/frontend/package.json
+!uchrom/browser/web/frontend/package-lock.json
+!uchrom/browser/web/frontend/tsconfig.json
 node_modules/
 discovery/uchrom_discovery/ui/node_modules/
 

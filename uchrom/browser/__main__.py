@@ -1,12 +1,24 @@
 import fire
-from PyQt5.QtCore import QTimer
-
-from uchrom.io import read_particles
-from .utils import get_qapp
-from .main_window import MainWindow
 
 
-def read_and_show(*paths, style='qdarkgraystyle'):
+def read_and_show(*paths, style='qdarkgraystyle', web=False, host='127.0.0.1',
+                  port=8765, open_browser=True):
+    """Open structure files in the browser.
+
+    Desktop (PyVista + Qt) by default; ``--web`` serves the web browser on
+    ``host:port`` instead (``--noopen_browser`` to skip opening a tab).
+    """
+    if web:
+        from .web import serve
+        serve(paths, host=host, port=port, open_browser=open_browser)
+        return
+
+    from PyQt5.QtCore import QTimer
+
+    from uchrom.io import read_particles
+    from .utils import get_qapp
+    from .main_window import MainWindow
+
     qapp = get_qapp(style=style)
 
     win = MainWindow()

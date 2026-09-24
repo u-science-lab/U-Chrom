@@ -51,7 +51,9 @@ uchrom/
 ├── emb/             Single-cell embedding (Higashi / FastHigashi wrapper)
 ├── pl/              Plotting (3D structure, trace statistics)
 ├── utils/           Shared statistics helpers (LOWESS, etc.)
-├── browser/         Interactive 3D browser (PyVista + PyQt5)
+├── browser/         Interactive 3D browser: desktop (PyVista + PyQt5) and
+│   └── web/         web (FastAPI server + React/Three.js SPA in frontend/,
+│                    built into static/ and committed; API in API.md)
 └── op.py            Misc operations (mark empty particles)
 
 discovery/           Separate package `uchrom-discovery` (import uchrom_discovery):
@@ -194,3 +196,4 @@ All datasets consumed by tutorials and benchmarks live in
 - **`uchrom/io/` naming**: The internal file is `_io.py` to avoid shadowing Python's stdlib `io` module. Use `gzip.open(path, mode + "t")` instead of `io.TextIOWrapper`.
 - **CLI entry points**: All via `python -m` (e.g., `python -m uchrom.recon.sc.nucdyn`, `python -m uchrom.browser`)
 - **Browser backend**: PyVista only (VisPy backend was removed)
+- **Web browser**: `python -m uchrom.browser --web`.  `uchrom/browser/__init__.py` imports Qt lazily so the web path works without PyQt5.  Frontend changes need `npm run build` in `uchrom/browser/web/frontend` and the rebuilt `static/` committed.  Keep `API.md` in sync with `server.py` / `data.py`.

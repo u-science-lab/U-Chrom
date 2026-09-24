@@ -1,0 +1,58 @@
+import { describe, expect, it } from 'vitest'
+import { decodeGeometry } from './api'
+import { TAB20, chromColor, hexToRgb, rainbow, vertexColors } from './colors'
+import { encodeGeometry, sampleHeader } from './testing'
+
+const rgbOf = (arr: Float32Array, i: number) => Array.from(arr.slice(3 * i, 3 * i + 3))
+const close = (a: number[], b: number[]) => a.forEach((v, k) => expect(v).toBeCloseTo(b[k], 5))
+
+describe('colour helpers', () => {
+  it('parses hex colours', () => {
+    expect(hexToRgb('#ff0000')).toEqual([1, 0, 0])
+    expect(hexToRgb('0f0')).toEqual([0, 1, 0])
+    expect(() => hexToRgb('#zzz')).toThrow()
+  })
+  it('gives stable, distinct chromosome colours', () => {
+    expect(chromColor('chr1')).toBe(chromColor('chr1'))
+    const names = Array.from({ length: 22 }, (_, i) => `chr${i + 1}`).concat(['chrX', 'chrY'])
+    expect(new Set(names.map(chromColor)).size).toBe(names.length)
+  })
+  it('rainbow runs violet/blue → red and clamps', () => {
+    expect(rainbow(1)).toEqual(rainbow(2))
+    const [r1, , b1] = rainbow(1)
+    const [r0, , b0] = rainbow(0)
+    expect(r1).toBeGreaterThan(b1)
+    expect(b0).toBeGreaterThan(r0)
+  })
+})
+
+describe('vertexColors', () => {
+  const pos = new Array(15).fill(0)
+  const geom = () => decodeGeometry(encodeGeometry(sampleHeader(), pos, [0, 100, 200, 100, 200], [0, 3, 5]))
+
+  it('custom paints everything one colour', () => {
+    const c = vertexColors(geom(), 'custom', '#0000ff')
+    for (let i = 0; i < 5; i++) expect(rgbOf(c, i)).toEqual([0, 0, 1])
+  })
+  it('per-trace uses tab20 by first appearance', () => {
+    const c = vertexColors(geom(), 'trace', '#fff')
+    close(rgbOf(c, 0), hexToRgb(TAB20[0]))
+    close(rgbOf(c, 3), hexToRgb(TAB20[1]))
+  })
+  it('single-chrom rainbow follows genomic position on the dataset-wide extent', () => {
+    const c = vertexColors(geom(), 'rainbow', '#fff')
+    close(rgbOf(c, 0), rainbow(0))
+    close(rgbOf(c, 2), rainbow(200 / 400))
+    // same bin in another trace → same colour
+    close(rgbOf(c, 1), rgbOf(c, 3))
+  })
+  it('multi-chrom rainbow colours by chromosome', () => {
+    const h = sampleHeader()
+    h.segments[1] = { ...h.segments[1], chrom: 'chr2' }
+    h.chrom_extent.chr2 = [0, 400]
+    const g = decodeGeometry(encodeGeometry(h, pos, [0, 100, 200, 100, 200], [0, 3, 5]))
+    const c = vertexColors(g, 'rainbow', '#fff')
+    close(rgbOf(c, 0), hexToRgb(chromColor('chr1')))
+    close(rgbOf(c, 4), hexToRgb(chromColor('chr2')))
+  })
+})

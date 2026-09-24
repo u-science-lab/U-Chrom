@@ -9,6 +9,25 @@ python -m uchrom.browser out.csv        # legacy CSV
 python -m uchrom.browser                 # no args — shows welcome page
 ```
 
+## Web version
+
+The same browser also runs in a web page — no Qt required:
+
+```bash
+pip install "u-chrom[web]"
+python -m uchrom.browser --web out.h5cd            # opens http://127.0.0.1:8765/
+python -m uchrom.browser --web a.h5cd b.csv --port=9000 --noopen_browser
+```
+
+A local FastAPI server loads the files and streams coordinates to a
+Three.js viewer in binary, one layer at a time, so only what is on screen
+is transferred.  More files can be opened from the page (paths on the
+machine running the server).  The first release covers layers,
+chromosome / region / trace subsets, line / tube / points rendering,
+colour modes and click-to-inspect; trace statistics, multi-canvas and
+sessions are desktop-only for now.  The HTTP API is documented in
+`uchrom/browser/web/API.md`.
+
 ## Main areas
 
 | Area | Purpose |
