@@ -100,6 +100,9 @@ def _build_discovery_schema(
         include_linked_adata=include_linked_adata,
         max_catalog_items=max_catalog_items,
     )
+    linked_mudata = _linked_modality_records(cdata.uns.get("linked_mudata"))
+    linked_scool = _linked_modality_records(cdata.uns.get("linked_scool"))
+    cell_spatial = _linked_modality_records(cdata.uns.get("cell_spatial"))
 
     tracks = _columns(cdata.tracks)
     track_groups = _track_groups(tracks)
@@ -187,6 +190,15 @@ def _build_discovery_schema(
                 "fields": ["cells", "cellm"],
                 "operations": ["cell_type_stratification", "embedding_visualization"],
             },
+            "cell_spatial_coordinates": {
+                "present": bool(cell_spatial.get("present")),
+                "fields": ["cells", "uns.cell_spatial"],
+                "operations": [
+                    "cell_spatial_visualization",
+                    "spatial_neighborhood_lookup",
+                    "inferred_coordinate_quality_check",
+                ],
+            },
             "rna_expression": {
                 "present": bool(linked.get("present")),
                 "fields": ["linked_adata"],
@@ -195,6 +207,26 @@ def _build_discovery_schema(
                     "expression_stratification",
                     "gene_marker_correlation",
                     "chromatin_expression_association",
+                ],
+            },
+            "mudata_multiomics": {
+                "present": bool(linked_mudata.get("present")),
+                "fields": ["linked_mudata"],
+                "operations": [
+                    "multi_modal_cell_metadata_lookup",
+                    "modality_embedding_visualization",
+                    "cross_modality_association",
+                    "spatial_inference_lookup",
+                ],
+            },
+            "single_cell_hic_contacts": {
+                "present": bool(linked_scool.get("present")),
+                "fields": ["linked_scool"],
+                "operations": [
+                    "per_cell_contact_matrix_lookup",
+                    "contact_derived_feature_association",
+                    "scool_cell_subset",
+                    "contact_map_visualization",
                 ],
             },
             "sequence_features": {
@@ -239,6 +271,9 @@ def _build_discovery_schema(
         "feature_registry": feature_registry,
         "feature_summary": feature_summary,
         "linked_adata": linked,
+        "linked_mudata": linked_mudata,
+        "linked_scool": linked_scool,
+        "cell_spatial": cell_spatial,
         "catalogs": {
             "chroms": _catalog(chroms, max_catalog_items),
             "tracks": _catalog(tracks, max_catalog_items),
@@ -255,10 +290,16 @@ def _build_discovery_schema(
         },
         "constraints": {
             "cell_axis_alignment": (
-                "cells.index, cellm arrays, and linked_adata.obs_names should share "
-                "the same cell_id order when linked_adata is present."
+                "cells.index, cellm arrays, linked_adata.obs_names, linked_mudata "
+                "cell axes, and linked_scool cell names must be explicitly mapped "
+                "when more than one cell identifier system is present."
             ),
             "spot_axis_alignment": "coords, spots, and tracks are row-aligned on the spot axis.",
+            "coordinate_semantics": (
+                "Raw scool contacts are not xyz coordinates. Tangram or other "
+                "mapped spatial coordinates should be marked as inferred unless "
+                "directly measured."
+            ),
             "free_code_policy": (
                 "Discovery code agents may write new Python code, but exploratory "
                 "runs should be recorded in notebooks with data checks and verification."
@@ -361,6 +402,9 @@ def schema_to_agent_context(schema: Mapping[str, Any], *, max_items: int = 40) -
     summary = schema.get("summary", {})
     catalogs = schema.get("catalogs", {})
     linked = schema.get("linked_adata", {})
+    linked_mudata = schema.get("linked_mudata", {})
+    linked_scool = schema.get("linked_scool", {})
+    cell_spatial = schema.get("cell_spatial", {})
     lines = [
         "# ChromData discovery schema",
         "",
@@ -424,6 +468,18 @@ def schema_to_agent_context(schema: Mapping[str, Any], *, max_items: int = 40) -
         lines.append(f"genes: {_format_catalog(catalogs.get('genes', {}), max_items)}")
     else:
         lines.append("linked_adata: missing")
+    if linked_mudata.get("present"):
+        lines.append(f"linked_mudata: records={', '.join(sorted(linked_mudata.get('records', {})))}")
+    else:
+        lines.append("linked_mudata: missing")
+    if linked_scool.get("present"):
+        lines.append(f"linked_scool: records={', '.join(sorted(linked_scool.get('records', {})))}")
+    else:
+        lines.append("linked_scool: missing")
+    if cell_spatial.get("present"):
+        lines.append(f"cell_spatial: records={', '.join(sorted(cell_spatial.get('records', {})))}")
+    else:
+        lines.append("cell_spatial: missing")
 
     references = list(schema.get("references", []) or [])
     annotations = list(schema.get("user_annotations", []) or [])
@@ -517,6 +573,31 @@ def _linked_anndata_field(cdata, *, include_linked_adata: bool, max_catalog_item
         "var_names": _catalog(_as_str_list(adata.var_names), max_catalog_items),
     })
     return out
+
+
+def _linked_modality_records(raw: Any) -> dict[str, Any]:
+    records = _normalize_link_records(raw)
+    return {
+        "present": bool(records),
+        "records": records,
+    }
+
+
+def _normalize_link_records(raw: Any) -> dict[str, Any]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        return {"default": {"value": _json_scalar(raw)}}
+    raw_dict = dict(raw)
+    if "path" in raw_dict:
+        return {"default": _json_roundtrip(raw_dict)}
+    records = {}
+    for key, value in raw_dict.items():
+        if isinstance(value, Mapping):
+            records[str(key)] = _json_roundtrip(value)
+        else:
+            records[str(key)] = {"value": _json_scalar(value)}
+    return records
 
 
 def _metadata_records(raw: Any) -> list[dict[str, Any]]:

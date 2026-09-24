@@ -95,9 +95,10 @@ The unmerged branch `origin/codex/linked-mudata-scool-framework`
 - `validate_links()` checks paths, formats and declared coordinate status;
 - `UChromProject` wraps a `ChromData` plus its links.
 
-**Recommendation:** rebase that branch onto `main` and merge it first,
-as-is, as format 1.3 (purely additive `uns` keys; 1.2 is already taken by
-the typed-`results` fix).  2.0 then promotes the
+**Status:** that branch is now merged (`link_mudata`, `link_scool`,
+`set_cell_spatial_coordinates`, `coord_status`, `validate_links`,
+`UChromProject`).  It only adds `uns` keys, so it needs no format bump
+and ships inside format 1.2.  2.0 then promotes the
 `uns["linked_*"]` records to a first-class, typed `cd.contacts` attribute
 rather than re-inventing it.  `UChromProject` becomes unnecessary once
 `ChromData` owns the links; keep it as a thin alias for one release.
@@ -194,7 +195,7 @@ directory, so a project folder can be moved as a unit.
 
 ### Migration / compat
 
-- 1.3 files with `uns["linked_scool"]` / `uns["linked_mudata"]` are
+- 1.x files with `uns["linked_scool"]` / `uns["linked_mudata"]` are
   upgraded on read into `cd.contacts` / `cd.links["mudata"]`.
 - `link_scool` / `link_mudata` / `load_linked_scool` stay as deprecated
   wrappers over `cd.contacts` for one minor release.
@@ -673,8 +674,8 @@ cool, H1Esc-HFF sci-Hi-C).
 | # | PR | Format | Depends on |
 |---|----|--------|-----------|
 | 0 | Fix `results` silent-drop on write (raise on unsupported types + round-trip tests) | 1.2 | — (**done**) |
-| 1 | Rebase + merge `codex/linked-mudata-scool-framework` (`link_scool`, `link_mudata`, `coord_status`, `validate_links`) | 1.3 | — |
-| 2 | Calling convention + `ResultsStore` / `ResultRecord` + `key_added`; convert `strc.*` callers, merge per-chrom outputs; `uc.tl` / `uc.pp` aliases | 1.4 (results gain attrs) | 0 |
+| 1 | Merge `codex/linked-mudata-scool-framework` (`link_scool`, `link_mudata`, `coord_status`, `validate_links`) | 1.2 (uns only) | — (**done**) |
+| 2 | Calling convention + `ResultsStore` / `ResultRecord` + `key_added`; convert `strc.*` callers, merge per-chrom outputs; `uc.tl` / `uc.pp` aliases | 1.3 (results gain attrs) | 0 |
 | 3 | `bins` axis, `bin_id`, bin-level `tracks` vs `spot_tracks`, `intervals`, `fea.project` → bins; 1.x upgrade path | **2.0** | 2 |
 | 4 | `cd.contacts` (`ContactRef`, cool/mcool/scool/hic backends), optional coords + `coord_status`; `ChromData.from_contacts`; Higashi tutorial without zeros | 2.0 | 1, 3 |
 | 5 | Recon library entry points returning `ChromData` (nucdyn, gem, mds); CLIs become wrappers | 2.0 | 4 |

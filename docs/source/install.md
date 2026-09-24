@@ -23,6 +23,7 @@ Some workflows need heavier dependencies that are published as extras:
 | `browser` | PyVista, pyvistaqt, VTK, PyQt5, qdarkgraystyle | `python -m uchrom.browser` |
 | `hic` | hic-straw | reading `.hic` files |
 | `anndata` | anndata | `ChromData.link_anndata` / `to_anndata`, seqFISH RNA |
+| `multiome` | mudata | `ChromData.load_linked_mudata` |
 | `im` | astropy | `ChromData.from_pyhim_trace` |
 | `snapfish` | scikit-image | SnapFISH-IMPUTE (`uchrom.im.impute`) |
 | `emb` / `emb-full` | FastHigashi / Higashi | `uchrom.emb.higashi` |
