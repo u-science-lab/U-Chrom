@@ -55,6 +55,38 @@ export const DEFAULT_VIEW: DatasetView = {
 /** Key of a cached cell-field vector. */
 export const fieldKey = (datasetId: string, field: string) => `${datasetId}\u0000${field}`
 
+/** Where the embedding view lives: floating over the 3-D view, a tab, or a split pane. */
+export type EmbeddingLayout = 'float' | 'tab' | 'split'
+
+export interface UiPrefs {
+  embeddingLayout: EmbeddingLayout
+  /** active tab in 'tab' layout */
+  activeTab: '3d' | 'embedding'
+  /** width fraction of the 3-D pane in 'split' layout */
+  splitFrac: number
+}
+
+const UI_KEY = 'uchrom.browser.ui'
+const DEFAULT_UI: UiPrefs = { embeddingLayout: 'float', activeTab: '3d', splitFrac: 0.6 }
+
+/** Layout prefs survive reloads (per viewer; storage may be unavailable). */
+function loadUi(): UiPrefs {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(UI_KEY) : null
+    return raw ? { ...DEFAULT_UI, ...JSON.parse(raw) } : DEFAULT_UI
+  } catch {
+    return DEFAULT_UI
+  }
+}
+
+function saveUi(ui: UiPrefs) {
+  try {
+    localStorage.setItem(UI_KEY, JSON.stringify(ui))
+  } catch {
+    /* private mode / blocked storage: prefs just don't persist */
+  }
+}
+
 export interface AppState {
   datasets: DatasetSummary[]
   activeDatasetId: string | null
@@ -92,6 +124,8 @@ export interface AppState {
   setStatus(msg: string | null): void
   setError(msg: string | null): void
   resetView(): void
+  ui: UiPrefs
+  setUi(patch: Partial<UiPrefs>): void
   setCells(datasetId: string, cells: CellInfo[]): void
   focusCell(cellId: string | null): void
   stepCell(delta: number): void
@@ -286,6 +320,13 @@ export const useStore = create<AppState>((set, get) => {
   },
   setError(error) {
     set({ error })
+  },
+  ui: loadUi(),
+  setUi(patch) {
+    const ui = { ...get().ui, ...patch }
+    if (patch.splitFrac !== undefined) ui.splitFrac = Math.min(0.85, Math.max(0.15, patch.splitFrac))
+    set({ ui })
+    saveUi(ui)
   },
   resetView() {
     set({ resetViewToken: get().resetViewToken + 1 })

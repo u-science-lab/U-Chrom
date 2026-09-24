@@ -42,9 +42,12 @@ Navigating imaging data with many cells:
 Multi-omics data (e.g. `ChromData.from_fofct(core, cell_table=…,
 rna_table=…)`, see the ChromData guide):
 
-- **Colour · all cells → Field** colours every cell by a numeric
-  `cd.cells` column — RNA counts (`rna.Nanog`, …), nuclear area, … — with
-  a viridis colour bar (capped at the 99th percentile; grey = missing).
+- **Colour · all cells → Gene / Property** colours every cell by a
+  numeric `cd.cells` column — **Gene** for RNA counts (`rna.Nanog`, …),
+  **Property** for morphology (nuclear area, centroid, …), and one button
+  per any other column prefix (e.g. `if.*` → *IF*).  Pick the column in the
+  search box (type to filter).  Colours use viridis with a colour bar
+  (capped at the 99th percentile; grey = missing).
   The cell list then shows each cell's value and can sort by it.
 - A focused cell shows a **Cell** panel: morphology and its RNA counts as
   bars; click a gene to colour all cells by it.
@@ -56,7 +59,9 @@ rna_table=…)`, see the ChromData guide):
   embeddings (e.g. `rna_umap`, `rna_tsne`, `rna_pca` from
   `uchrom.emb.embed_cells`; any two PCs for PCA).  Dots use the same
   colouring as the 3-D overview, the focused cell is ringed, and clicking
-  a dot focuses that cell in 3-D.
+  a dot focuses that cell in 3-D.  The header switches the layout — **Float** (window over the 3-D view),
+  **Tab** (full-size tab next to *3D*) or **Split** (side by side, drag the
+  divider); the choice is remembered in the browser.
 - **Max bond** (Style) breaks polylines between consecutive spots farther
   apart than a threshold — by default 10× the median spacing.  Imaging
   traces contain duplicated loci and, in Takei 2021, per-chromosome

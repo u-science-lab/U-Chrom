@@ -714,3 +714,118 @@ button.link {
   border: 1px solid var(--accent);
   border-radius: var(--radius);
 }
+
+/* ---- searchable field picker ---------------------------------------- */
+.field-picker {
+  position: relative;
+}
+.field-picker input {
+  width: 100%;
+}
+.field-options {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin: 2px 0 0;
+  padding: 2px 0;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+.field-options li {
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.field-options li:hover,
+.field-options li.selected {
+  background: var(--bg-active);
+}
+
+/* ---- workspace: 3-D view + embedding (float / tab / split) ------------ */
+.workspace {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 6px 0;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+.ws-tabs button {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  padding: 3px 14px;
+}
+.ws-row {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.ws-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.ws-main > .viewport {
+  flex: 1;
+}
+.ws-side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  background: var(--viewport-bg);
+}
+.ws-main.hidden,
+.ws-side.hidden {
+  display: none;
+}
+.mode-split .ws-side {
+  border-left: 1px solid var(--border);
+}
+.ws-splitter {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background: var(--border);
+}
+.ws-splitter:hover {
+  background: var(--accent);
+}
+body.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+.embedding-panel.docked {
+  position: relative;
+  inset: auto;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.layout-switch {
+  display: flex;
+  gap: 2px;
+}
+.layout-switch button {
+  padding: 1px 6px;
+  font-size: 11px;
+}
+/* colour choices can be 6+ buttons (Cell / Property / Gene / …): wrap */
+.props .seg {
+  flex-wrap: wrap;
+}
+.props .seg button {
+  flex: 1 0 auto;
+}

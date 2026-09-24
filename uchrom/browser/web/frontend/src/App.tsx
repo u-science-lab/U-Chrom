@@ -6,7 +6,7 @@ import { OperationsPanel } from './components/OperationsPanel'
 import { PropertiesPanel } from './components/PropertiesPanel'
 import { StatusBar } from './components/StatusBar'
 import { TopBar } from './components/TopBar'
-import { Viewport } from './components/Viewport'
+import { Workspace } from './components/Workspace'
 import { useStore } from './store'
 import { useCellLoader } from './useCellLoader'
 import { useGeometryLoader } from './useGeometryLoader'
@@ -33,7 +33,7 @@ export function App() {
           <LayerPanel />
           <OperationsPanel />
         </div>
-        <Viewport />
+        <Workspace />
         <PropertiesPanel />
       </div>
       <StatusBar />

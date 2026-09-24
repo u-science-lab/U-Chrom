@@ -4,6 +4,7 @@ import { autoTubeRadius } from '../render/segments'
 import { activeView, useStore } from '../store'
 import { CellInfoPanel } from './CellInfoPanel'
 import { colourableFields } from './format'
+import { FieldPicker, groupTitle } from './FieldPicker'
 import { ChromLegend } from './ChromLegend'
 import { PointsPanel } from './PointsPanel'
 import type { ColorMode, RenderMode } from '../types'
@@ -38,18 +39,20 @@ export function PropertiesPanel() {
   // currently on screen.
   const overview = hasCells && view.focusCell === null
   const colorMode: ColorMode = overview ? view.overviewColor : st.colorMode
-  const setColor = (m: ColorMode) => {
-    if (!overview) return upd({ colorMode: m })
-    // 'Field' needs a field: default to the first one
-    if (m === 'field' && !view.cellField && cellFields.length) return setCellField(cellFields[0].name)
-    setOverviewColor(m)
-  }
+  const setColor = (m: ColorMode) => (overview ? setOverviewColor(m) : upd({ colorMode: m }))
+  // Cell fields are offered per group: "Gene" (rna.*), "Property" (area,
+  // centroid, …) and any other prefix by name — one button each.
   const groups = new Map<string, typeof cellFields>()
   for (const f of cellFields) groups.set(f.group, [...(groups.get(f.group) ?? []), f])
-  const groupLabel = (g: string) => (g === 'cell' ? 'Cell' : g === 'rna' ? 'RNA' : g)
+  const activeGroup = colorMode === 'field' ? cellFields.find((f) => f.name === view.cellField)?.group : undefined
+  const pickGroup = (g: string) => {
+    const fs = groups.get(g) ?? []
+    if (!fs.length) return
+    // keep the current field if it is in this group, else the first one
+    setCellField(fs.some((f) => f.name === view.cellField) ? view.cellField! : fs[0].name)
+  }
   const colorChoices: [ColorMode, string][] = [
     ...(overview ? ([['cell', 'Cell']] as [ColorMode, string][]) : []),
-    ...(overview && cellFields.length ? ([['field', 'Field']] as [ColorMode, string][]) : []),
     ['rainbow', overview ? 'Chrom' : 'Rainbow'],
     ['trace', 'Trace'],
     ['custom', 'Custom'],
@@ -79,25 +82,32 @@ export function PropertiesPanel() {
 
       <label>{overview ? 'Colour · all cells' : view.focusCell ? `Colour · cell ${view.focusCell}` : 'Colour'}</label>
       <div className="seg">
-        {colorChoices.map(([m, label]) => (
+        {colorChoices.slice(0, overview ? 1 : 0).map(([m, label]) => (
+          <button key={m} className={colorMode === m ? 'active' : ''} onClick={() => setColor(m)}>
+            {label}
+          </button>
+        ))}
+        {overview &&
+          [...groups.keys()].map((g) => (
+            <button key={g} className={activeGroup === g ? 'active' : ''} onClick={() => pickGroup(g)} title={`Colour cells by a ${groupTitle(g).toLowerCase()}`}>
+              {groupTitle(g)}
+            </button>
+          ))}
+        {colorChoices.slice(overview ? 1 : 0).map(([m, label]) => (
           <button key={m} className={colorMode === m ? 'active' : ''} onClick={() => setColor(m)}>
             {label}
           </button>
         ))}
       </div>
       {colorMode === 'custom' && <input type="color" value={st.color} onChange={(e) => upd({ color: e.target.value })} />}
-      {overview && colorMode === 'field' && (
-        <select value={view.cellField ?? ''} onChange={(e) => setCellField(e.target.value)}>
-          {[...groups].map(([g, fs]) => (
-            <optgroup key={g} label={groupLabel(g)}>
-              {fs.map((f) => (
-                <option key={f.name} value={f.name}>
-                  {f.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+      {overview && activeGroup && (
+        <FieldPicker
+          key={activeGroup}
+          fields={groups.get(activeGroup) ?? []}
+          value={view.cellField}
+          placeholder={`search ${groupTitle(activeGroup).toLowerCase()}…`}
+          onPick={setCellField}
+        />
       )}
 
       <label>

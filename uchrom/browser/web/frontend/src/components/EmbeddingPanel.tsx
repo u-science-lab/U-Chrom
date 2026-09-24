@@ -19,10 +19,15 @@ function defaultKey(list: EmbeddingInfo[]): string | null {
 }
 
 /**
- * Docked 2-D scatter of a cell embedding (UMAP / t-SNE / PCA), coloured like
- * the 3-D overview.  Click a dot to focus that cell in 3-D.
+ * 2-D scatter of a cell embedding (UMAP / t-SNE / PCA), coloured like the
+ * 3-D overview.  Click a dot to focus that cell in 3-D.
+ *
+ * `docked=false`: a floating, resizable window over the 3-D view.
+ * `docked=true`: fills its container (tab or split pane).
  */
-export function EmbeddingPanel() {
+export function EmbeddingPanel({ docked = false }: { docked?: boolean }) {
+  const ui = useStore((s) => s.ui)
+  const setUi = useStore((s) => s.setUi)
   const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
   const view = useStore(activeView)
   const setEmbedding = useStore((s) => s.setEmbedding)
@@ -37,7 +42,19 @@ export function EmbeddingPanel() {
 
   const [emb, setEmb] = useState<Embedding | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [size, setSize] = useState({ w: 340, h: 340 })
+  const [floatSize, setFloatSize] = useState({ w: 340, h: 340 })
+  const [boxSize, setBoxSize] = useState({ w: 340, h: 340 })
+  const boxRef = useRef<HTMLDivElement>(null)
+  // docked: follow the container
+  useEffect(() => {
+    if (!docked || !boxRef.current) return
+    const el = boxRef.current
+    const ro = new ResizeObserver(() => setBoxSize({ w: el.clientWidth, h: el.clientHeight }))
+    ro.observe(el)
+    setBoxSize({ w: el.clientWidth, h: el.clientHeight })
+    return () => ro.disconnect()
+  }, [docked])
+  const size = docked ? boxSize : floatSize
   const [collapsed, setCollapsed] = useState(false)
   const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -88,7 +105,9 @@ export function EmbeddingPanel() {
     g.setTransform(dpr, 0, 0, dpr, 0, 0)
     g.clearRect(0, 0, size.w, plotH)
     const n = emb.cell_ids.length
-    const r = n > 3000 ? 1.6 : n > 800 ? 2.4 : 3.4
+    // dots grow a little with the panel (full-size tab / split pane)
+    const grow = Math.min(2, Math.max(1, Math.min(size.w, plotH) / 340))
+    const r = (n > 3000 ? 1.6 : n > 800 ? 2.4 : 3.4) * grow
     const focus = view.focusCell
     for (let i = 0; i < n; i++) {
       const x = px[2 * i]
@@ -125,6 +144,7 @@ export function EmbeddingPanel() {
   }, [px, colors, emb, size.w, plotH, view.focusCell, hover])
 
   if (!list.length || !view.embeddingOpen) return null
+  if (!docked && ui.embeddingLayout !== 'float') return null
 
   const onMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!px) return
@@ -140,9 +160,9 @@ export function EmbeddingPanel() {
   // resize from the top-left corner (the panel is anchored bottom-right)
   const onResizeStart = (e: React.PointerEvent) => {
     e.preventDefault()
-    const start = { x: e.clientX, y: e.clientY, ...size }
+    const start = { x: e.clientX, y: e.clientY, ...floatSize }
     const move = (ev: PointerEvent) =>
-      setSize({ w: Math.max(MIN_SIZE, start.w - (ev.clientX - start.x)), h: Math.max(MIN_SIZE, start.h - (ev.clientY - start.y)) })
+      setFloatSize({ w: Math.max(MIN_SIZE, start.w - (ev.clientX - start.x)), h: Math.max(MIN_SIZE, start.h - (ev.clientY - start.y)) })
     const up = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
@@ -158,8 +178,8 @@ export function EmbeddingPanel() {
   const dimLabel = (i: number) => (info?.method === 'pca' ? `PC${i + 1}` : `${info?.method.toUpperCase() ?? 'D'}${i + 1}`)
 
   return (
-    <div className="embedding-panel" style={{ width: size.w }}>
-      {!collapsed && <div className="embedding-resize" onPointerDown={onResizeStart} title="Drag to resize" />}
+    <div ref={boxRef} className={docked ? 'embedding-panel docked' : 'embedding-panel'} style={docked ? undefined : { width: size.w }}>
+      {!docked && !collapsed && <div className="embedding-resize" onPointerDown={onResizeStart} title="Drag to resize" />}
       <div className="embedding-head">
         <select value={key ?? ''} onChange={(e) => setEmbedding({ embeddingKey: e.target.value, embeddingDims: [0, 1] })}>
           {list.map((e) => (
@@ -191,14 +211,34 @@ export function EmbeddingPanel() {
           </>
         )}
         <span className="spacer" />
-        <button onClick={() => setCollapsed(!collapsed)} title={collapsed ? 'Expand' : 'Collapse'}>
-          {collapsed ? '▴' : '▾'}
-        </button>
+        <div className="layout-switch" role="group" aria-label="Layout">
+          {(
+            [
+              ['float', 'Float', 'Floating window over the 3-D view'],
+              ['tab', 'Tab', 'Full-size tab next to the 3-D view'],
+              ['split', 'Split', 'Side by side with the 3-D view'],
+            ] as const
+          ).map(([m, label, title]) => (
+            <button
+              key={m}
+              className={ui.embeddingLayout === m ? 'active' : ''}
+              title={title}
+              onClick={() => setUi(m === 'tab' ? { embeddingLayout: m, activeTab: 'embedding' } : { embeddingLayout: m })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {!docked && (
+          <button onClick={() => setCollapsed(!collapsed)} title={collapsed ? 'Expand' : 'Collapse'}>
+            {collapsed ? '▴' : '▾'}
+          </button>
+        )}
         <button onClick={() => setEmbedding({ embeddingOpen: false })} title="Close">
           ×
         </button>
       </div>
-      {!collapsed && (
+      {(docked || !collapsed) && (
         <div className="embedding-body" style={{ height: size.h - 30 }}>
           {error && <div className="error">{error}</div>}
           <canvas
