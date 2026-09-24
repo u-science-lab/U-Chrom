@@ -46,6 +46,7 @@ savings on large datasets.
 | `tracks` | `(n_spots, n_tracks)` | epigenomic signals aligned to spots |
 | `traces` | `(n_traces, ?)` | per-trace metadata |
 | `layers` | dict | alternative coordinate sets |
+| `points` | dict of DataFrames | non-genomic 3-D points in the same frame (nascent RNA spots, IF puncta): `x, y, z`, `cell_id`, `gene`, … |
 | `results` | dict | analysis outputs (loops, TADs, …) |
 | `uns` | dict | unstructured metadata |
 
@@ -64,8 +65,8 @@ cd[cd.spots["chrom"] == "chr1"]  # boolean mask
 cd[:100]                       # first 100 spots
 ```
 
-All children (coords, spots, tracks, layers, cellm) are filtered
-consistently; traces and cells that become empty are dropped.
+All children (coords, spots, tracks, layers, cellm, and `points` via
+their `cell_id`) are filtered consistently; traces and cells that become empty are dropped.
 
 ## On-demand distance matrix
 
@@ -81,13 +82,33 @@ D = cd.compute_distances(trace_id=0)  # (n_spots_in_trace, n_spots_in_trace)
 | Input | Method |
 |-------|--------|
 | Reconstruction CSV (chrom, start, end, x, y, z) | `ChromData.from_dataframe` |
-| 4DN FOF-CT core table | `ChromData.from_fofct` |
+| 4DN FOF-CT core table (+ cell / RNA tables) | `ChromData.from_fofct` |
 | `.h5cd` (HDF5) | `ChromData.read` |
 
 ```python
 cd.write("data.h5cd")
 cd2 = ChromData.read("data.h5cd")
 ```
+
+### Multi-omics FOF-CT: cell table and RNA spots
+
+4DN FOF-CT data sets can ship companion tables next to the core DNA
+table.  Pass them to `from_fofct` to keep everything in one `.h5cd`:
+
+```python
+cd = ChromData.from_fofct(
+    "4DNFIHF3JCBY.csv",                 # DNA spots / traces (core)
+    cell_table="4DNFIFINA2U9.csv",      # per-cell: area, centroid, RNA counts
+    rna_table="4DNFIJ52NVDV.csv",       # nascent RNA spots
+)
+cd.cells[["nucleus_area_um2", "rna.Nanog"]]   # genes are prefixed "rna."
+cd.points["rna"].head()                        # x, y, z, gene, cell_id, …
+cd.get_cell("0_2").points["rna"]               # RNA spots of one cell
+cd.write("takei2021_multiomics.h5cd")          # format 1.3
+```
+
+The web browser (`python -m uchrom.browser --web`) can colour cells by any
+of these cell fields and draw the RNA spots with the chromatin traces.
 
 The `.h5cd` format has a version stamp and gracefully handles legacy
 files.  See [Concepts — On-disk format](../concepts.md) for details.

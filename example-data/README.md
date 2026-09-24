@@ -12,6 +12,8 @@ auto-downloaded by the tutorials on first run into this directory.
 | `cell1.pairs`                         | 4.7 MB  | yes             | —             | `reconstruction.ipynb`, root README CLI example                         |
 | `cell2.pairs.gz`                      | 5.4 MB  | yes             | —             | (available for experimentation; bulkier variant of `cell1.pairs`)       |
 | `IMR90_chr21_30kb.cool`               | 280 KB  | yes             | —             | `gem_fish_reconstruction` tutorial (Hi-C side)                          |
+| `4DNFIFINA2U9.csv`                    | 58 KB   | yes             | —             | Takei 2021 cell table (RNA counts, nuclear area) for `from_fofct(cell_table=…)`, web browser |
+| `4DNFIJ52NVDV.csv`                    | 219 KB  | yes             | —             | Takei 2021 nascent RNA spots for `from_fofct(rna_table=…)`, web browser |
 | `takei2025_cerebellum_fixture/`       | ~750 KB | yes             | —             | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture)    |
 | Takei 2025 full Zenodo dump           | ~8 GB   | no              | **manual**    | `seqfish_multiomics_cerebellum` tutorial (real-data run)                |
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials |
@@ -101,6 +103,35 @@ they're either generated or downloaded on demand.
                       'clustering/100k-002-001-cerebellum_mRNA_cluster_nuc_vol_filtered.csv',
   )
   ```
+
+### `4DNFIFINA2U9.csv` + `4DNFIJ52NVDV.csv` — Takei 2021 FOF-CT companion tables (58 KB + 219 KB)
+
+- **Format**: 4DN FOF-CT v0.1 CSV (`##`-headers; both files label their
+  namespace `4dn_FOF-CT_quality` although they are the *cell* and *RNA*
+  tables).
+  - `4DNFIFINA2U9.csv` — *cell data*, 201 rows:
+    `Cell_ID, Extra_Cell_ROI_ID, keep1, cent_ROI_x, cent_ROI_y, area(um2),
+    area_cyto(um2)` + RNA copy numbers of 45 genes (Eef2 … Zfp352).
+  - `4DNFIJ52NVDV.csv` — *nascent RNA spots*, 3,335 rows:
+    `Spot_ID, X, Y, Z (µm), RNA_name, Gene_ID, Cell_ID, Extra_Cell_ROI_ID,
+    Peak_Intensity`; 23 genes.
+- **Pairs with** the core table `4DNFIHF3JCBY.csv` (same 201 `Cell_ID`s,
+  same micron frame): 4DN experiment `4DNEXM45AILX`, experiment set
+  [`4DNESL2AY9CM`](https://data.4dnucleome.org/experiment-set-replicates/4DNESL2AY9CM/).
+- **Source**: Takei et al. 2021, *Nature* 590:344–350, "Integrated spatial
+  genomics reveals global architecture of single nuclei".  Downloaded from
+  the 4DN open-data bucket:
+  ```
+  https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/c5bafa92-d08b-4e20-84de-6e75103c016d/4DNFIFINA2U9.csv
+  https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/4b66ffc5-50e0-4832-99c2-0020c934ff24/4DNFIJ52NVDV.csv
+  ```
+  SHA-256 `ebeca858…9941` / `70171dfd…bd2`.
+- **Used by**: `ChromData.from_fofct(core, cell_table=…, rna_table=…)` →
+  `cd.cells` (`rna.<gene>` columns, `nucleus_area_um2`, …) and
+  `cd.points['rna']`; `tests/core/test_fofct_companions.py`; the web
+  browser (colour cells by a gene, show RNA spots).
+- The same set also has sequential IF (17 chromatin marks) described in the
+  paper; it is not among the 4DN FOF-CT files.
 
 ### `IMR90_chr21_30kb.cool` — Rao 2014 IMR90 chr21 at 30 kb (0.3 MB)
 
