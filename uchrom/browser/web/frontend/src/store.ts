@@ -28,6 +28,12 @@ export interface DatasetView {
   hiddenLabels: Record<string, string[]>
   /** point sprite size in px */
   pointSize: number
+  /** cut bonds longer than this ('auto' = 10 × median bond, null = never) */
+  maxBond: 'auto' | number | null
+  /** 2-D embedding panel */
+  embeddingOpen: boolean
+  embeddingKey: string | null
+  embeddingDims: [number, number]
 }
 
 export const DEFAULT_VIEW: DatasetView = {
@@ -40,6 +46,10 @@ export const DEFAULT_VIEW: DatasetView = {
   hiddenPointSets: [],
   hiddenLabels: {},
   pointSize: 7,
+  maxBond: 'auto',
+  embeddingOpen: false,
+  embeddingKey: null,
+  embeddingDims: [0, 1],
 }
 
 /** Key of a cached cell-field vector. */
@@ -98,6 +108,8 @@ export interface AppState {
   toggleLabel(set: string, label: string): void
   setHiddenLabels(set: string, labels: string[]): void
   setPointSize(px: number): void
+  setMaxBond(v: 'auto' | number | null): void
+  setEmbedding(patch: Partial<Pick<DatasetView, 'embeddingOpen' | 'embeddingKey' | 'embeddingDims'>>): void
 }
 
 /** Values of the active overview field, if loaded. */
@@ -341,6 +353,12 @@ export const useStore = create<AppState>((set, get) => {
   },
   setPointSize(pointSize) {
     patchView({ pointSize })
+  },
+  setMaxBond(maxBond) {
+    patchView({ maxBond })
+  },
+  setEmbedding(patch) {
+    patchView(patch)
   },
   }
 })

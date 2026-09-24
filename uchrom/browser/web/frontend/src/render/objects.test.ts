@@ -22,3 +22,30 @@ describe('picking thin lines', () => {
     expect(pointIndexOfHit(built.pick, hits[0])).toBe(3)
   })
 })
+
+describe('singleton spots in line mode', () => {
+  it('are drawn as a Points child and picked back to their point', () => {
+    // t1 = points 0..2, t2 = a single point 3, t3 = points 4..5
+    const header = {
+      ...sampleHeader(),
+      total_points: 6,
+      segments: [
+        { trace_id: 't1', chrom: 'chr1', cell_id: null, n_points: 3, start: 0, end: 300 },
+        { trace_id: 't2', chrom: 'chr1', cell_id: null, n_points: 1, start: 0, end: 100 },
+        { trace_id: 't3', chrom: 'chr1', cell_id: null, n_points: 2, start: 0, end: 200 },
+      ],
+    }
+    const g = decodeGeometry(encodeGeometry(header, [0, 0, 0, 1, 0, 0, 2, 0, 0, 50, 0, 0, 80, 0, 0, 81, 0, 0], [0, 100, 200, 0, 0, 100], [0, 3, 4, 6]))
+    const built = buildLayerObject(g, { ...DEFAULT_STYLE, mode: 'line', lineWidth: 1 })
+    const child = built.object.children[0] as THREE.Points
+    expect(child.isPoints).toBe(true)
+    expect(Array.from(child.userData.singletons as Uint32Array)).toEqual([3])
+    const ray = new THREE.Raycaster(new THREE.Vector3(50, 0, 5), new THREE.Vector3(0, 0, -1))
+    ray.params.Points = { threshold: 0.1 }
+    ray.params.Line = { threshold: 0.1 }
+    const hits = ray.intersectObject(built.object, true)
+    expect(hits.length).toBe(1)
+    expect(pointIndexOfHit(built.pick, hits[0])).toBe(3)
+    built.dispose()
+  })
+})

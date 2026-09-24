@@ -22,6 +22,26 @@ export interface DatasetSummary {
   cell_fields?: CellField[]
   /** non-genomic 3D point sets (cd.points), e.g. nascent RNA spots */
   point_sets?: PointSetInfo[]
+  /** cell embeddings (cd.cellm arrays with ≥2 columns) */
+  embeddings?: EmbeddingInfo[]
+}
+
+export interface EmbeddingInfo {
+  key: string
+  method: string
+  source: string
+  label: string
+  n_dims: number
+}
+
+/** Two components of an embedding (API: GET embedding/{key}?dims=a,b). */
+export interface Embedding {
+  key: string
+  label: string
+  cell_ids: string[]
+  x: (number | null)[]
+  y: (number | null)[]
+  axis_labels: [string, string]
 }
 
 export interface CellField {

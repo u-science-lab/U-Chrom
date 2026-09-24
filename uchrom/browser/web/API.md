@@ -48,6 +48,10 @@ Multi-omics fields (empty lists when the dataset has none):
     {"name": "rna.Nanog", "group": "rna", "label": "Nanog",
      "min": 0, "max": 52, "n_valid": 201}
   ],
+  "embeddings": [
+    {"key": "rna_umap", "method": "umap", "source": "rna", "label": "RNA UMAP",
+     "n_dims": 2}
+  ],
   "point_sets": [
     {"name": "rna", "n_points": 3334, "label_field": "gene",
      "labels": [{"value": "Auts2", "count": 157}],
@@ -56,6 +60,8 @@ Multi-omics fields (empty lists when the dataset has none):
 }
 ```
 
+`embeddings` are the 2-D-or-more arrays in `cd.cellm` (rows aligned to
+`cd.cells`); metadata from `uns["embeddings"][key]` when present.
 `cell_fields` are the numeric columns of `cd.cells`; `group` is the prefix
 before the first `.` (`rna.Nanog` → `rna`) or `cell`, and `label` the rest.
 `point_sets` describe `cd.points` (non-genomic 3D points in the same frame
@@ -125,6 +131,18 @@ All `cd.cells` columns of one cell (numbers stay numbers, NaN → `null`):
 ```
 
 `404` unknown cell.
+
+### `GET /api/datasets/{id}/embedding/{key}?dims=0,1`
+
+Two components of a cell embedding for a 2-D scatter view:
+
+```json
+{"key": "rna_umap", "label": "RNA UMAP", "cell_ids": ["0_1", "0_2"],
+ "x": [1.2, -0.4], "y": [3.3, 0.8], "axis_labels": ["UMAP1", "UMAP2"]}
+```
+
+`dims` defaults to `0,1` (e.g. `2,3` for PC3/PC4).  Non-finite values →
+`null`.  `404` unknown key, `422` bad dims.
 
 ## Point sets
 

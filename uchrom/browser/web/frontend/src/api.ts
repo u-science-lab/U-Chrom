@@ -1,4 +1,4 @@
-import type { CellDetails, CellPage, CellValues, DatasetSummary, PointSet, PointSetPayload, Geometry, GeometryHeader, LayerFilter, TracePage } from './types'
+import type { CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, TracePage } from './types'
 
 async function request(url: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(url, init)
@@ -56,6 +56,11 @@ export async function fetchCellValues(id: string, field: string): Promise<CellVa
 export async function fetchCellInfo(id: string, cellId: string): Promise<CellDetails> {
   const q = new URLSearchParams({ cell_id: cellId })
   return (await request(`api/datasets/${encodeURIComponent(id)}/cell_info?${q}`)).json()
+}
+
+export async function fetchEmbedding(id: string, key: string, dims: [number, number]): Promise<Embedding> {
+  const q = new URLSearchParams({ dims: `${dims[0]},${dims[1]}` })
+  return (await request(`api/datasets/${encodeURIComponent(id)}/embedding/${encodeURIComponent(key)}?${q}`)).json()
 }
 
 export async function fetchPointSet(id: string, name: string): Promise<PointSet> {

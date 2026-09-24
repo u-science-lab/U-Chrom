@@ -177,3 +177,25 @@ def test_cell_fields_and_points_endpoints(tmp_path):
     assert one == {"n": 1, "positions": [0.3, 0.0, 1.0], "cell_ids": ["c2"], "labels": ["Nanog"],
                    "values": {"peak_intensity": [None]}}
     assert c.post("/api/datasets/d1/points/nope").status_code == 404
+
+
+def test_embedding_endpoint(tmp_path):
+    spots = pd.DataFrame({"chrom": ["chr1"] * 2, "start": [0, 10], "end": [10, 20],
+                          "trace_id": ["a", "b"], "cell_id": ["c1", "c2"]})
+    cells = pd.DataFrame({"rna.A": [1, 2]}, index=pd.Index(["c1", "c2"], name="cell_id"))
+    cellm = {"rna_pca": np.array([[0.5, 1.5, 2.5], [-1.0, np.nan, 0.0]]),
+             "rna_umap": np.array([[1.0, 2.0], [3.0, 4.0]]), "scalar": np.array([1.0, 2.0])}
+    uns = {"embeddings": {"rna_pca": {"method": "pca", "source": "rna", "label": "RNA PCA", "axis_prefix": "PC"}}}
+    path = tmp_path / "emb.h5cd"
+    ChromData(np.zeros((2, 3)), spots, cells=cells, cellm=cellm, uns=uns).write(path)
+    store = DatasetStore()
+    store.load(path)
+    c = TestClient(create_app(store))
+    embs = c.get("/api/datasets").json()[0]["embeddings"]
+    assert embs == [{"key": "rna_pca", "method": "pca", "source": "rna", "label": "RNA PCA", "n_dims": 3},
+                    {"key": "rna_umap", "method": None, "source": None, "label": "rna_umap", "n_dims": 2}]
+    e = c.get("/api/datasets/d1/embedding/rna_pca", params={"dims": "1,2"}).json()
+    assert e == {"key": "rna_pca", "label": "RNA PCA", "cell_ids": ["c1", "c2"],
+                 "x": [1.5, None], "y": [2.5, 0.0], "axis_labels": ["PC2", "PC3"]}
+    assert c.get("/api/datasets/d1/embedding/rna_pca", params={"dims": "0,3"}).status_code == 422
+    assert c.get("/api/datasets/d1/embedding/scalar").status_code == 404

@@ -1,4 +1,5 @@
 import { describeFilter } from '../filters'
+import { AUTO_BOND_FACTOR, splitForView } from '../render/bonds'
 import { autoTubeRadius } from '../render/segments'
 import { activeView, useStore } from '../store'
 import { CellInfoPanel } from './CellInfoPanel'
@@ -11,6 +12,8 @@ export function PropertiesPanel() {
   const layer = useStore((s) => s.layers.find((l) => l.id === s.selectedLayerId))
   const setStyle = useStore((s) => s.setStyle)
   const view = useStore(activeView)
+  const setMaxBond = useStore((s) => s.setMaxBond)
+  const unit = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId)?.xyz_unit ?? '')
   const setOverviewColor = useStore((s) => s.setOverviewColor)
   const hasCells = useStore((s) => ((s.activeDatasetId && s.cells[s.activeDatasetId]) || []).length > 1)
   const allFields = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId)?.cell_fields)
@@ -142,6 +145,15 @@ export function PropertiesPanel() {
         </>
       )}
 
+      {layer.geometry && st.mode !== 'points' && (
+        <MaxBond
+          setting={view.maxBond}
+          split={splitForView(layer.geometry, view.maxBond)}
+          unit={unit}
+          onChange={setMaxBond}
+        />
+      )}
+
       {header && (
         <dl className="stats">
           <dt>{view.focusCell ? `cell ${view.focusCell}` : 'shown'} points</dt>
@@ -162,5 +174,45 @@ export function PropertiesPanel() {
       )}
       {layer.error && <div className="error">{layer.error}</div>}
     </aside>
+  )
+}
+
+/** "Max bond": cut polylines where consecutive spots are far apart. */
+function MaxBond({
+  setting,
+  split,
+  unit,
+  onChange,
+}: {
+  setting: 'auto' | number | null
+  split: { threshold: number | null; broken: number }
+  unit: string
+  onChange: (v: 'auto' | number | null) => void
+}) {
+  const shown =
+    setting === null ? 'off' : `${setting === 'auto' ? `auto (${AUTO_BOND_FACTOR}× median) ` : ''}${split.threshold?.toPrecision(3) ?? '—'} ${unit}`
+  return (
+    <>
+      <label title="Consecutive spots farther apart than this are not connected (unassigned spots, duplicated loci)">
+        Max bond <span className="val">{shown}</span>
+      </label>
+      <div className="row">
+        <input
+          type="number"
+          step="any"
+          min={0}
+          placeholder={setting === null ? 'off' : 'auto'}
+          value={typeof setting === 'number' ? setting : ''}
+          onChange={(e) => onChange(e.target.value === '' ? 'auto' : Math.max(0, +e.target.value))}
+        />
+        <button onClick={() => onChange('auto')} disabled={setting === 'auto'}>
+          auto
+        </button>
+        <button onClick={() => onChange(null)} disabled={setting === null}>
+          off
+        </button>
+      </div>
+      {setting !== null && <div className="muted small">{split.broken.toLocaleString('en-US')} long bonds cut</div>}
+    </>
   )
 }

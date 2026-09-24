@@ -100,6 +100,19 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
         except KeyError:
             raise HTTPException(404, f"unknown cell: {cell_id}") from None
 
+    @app.get("/api/datasets/{dataset_id}/embedding/{key}")
+    def embedding(dataset_id: str, key: str, dims: str = "0,1") -> Dict[str, Any]:
+        ds = _dataset(dataset_id)
+        try:
+            parsed = [int(d) for d in dims.split(",")]
+            if len(parsed) != 2:
+                raise ValueError("dims needs two comma-separated indices")
+            return ds.embedding(key, parsed)
+        except KeyError:
+            raise HTTPException(404, f"unknown embedding: {key}") from None
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+
     @app.post("/api/datasets/{dataset_id}/points/{name}")
     def points(dataset_id: str, name: str, req: Optional[PointsRequest] = None) -> Dict[str, Any]:
         req = req or PointsRequest()

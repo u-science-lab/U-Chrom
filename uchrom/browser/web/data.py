@@ -143,6 +143,7 @@ class Dataset:
             "trace_mode": bool(self.cd.n_traces > len(chroms)),
             "chroms": chroms,
             "cell_fields": self.cell_fields(),
+            "embeddings": self.embeddings(),
             "point_sets": self.point_sets(),
         }
 
@@ -260,6 +261,36 @@ class Dataset:
             else:
                 fields[str(col)] = str(val)
         return {"cell_id": str(cell_id), "fields": fields}
+
+    def embeddings(self) -> List[Dict[str, Any]]:
+        """cellm arrays usable as ≥2-D cell embeddings (rows = cd.cells)."""
+        n = len(self._cells_table())
+        meta = self.cd.uns.get("embeddings") if isinstance(self.cd.uns, dict) else None
+        meta = meta if isinstance(meta, dict) else {}
+        out = []
+        for key, arr in self.cd.cellm.items():
+            if np.ndim(arr) != 2 or np.shape(arr)[1] < 2 or not n or np.shape(arr)[0] != n:
+                continue
+            m = meta.get(key) if isinstance(meta.get(key), dict) else {}
+            out.append({"key": str(key), "method": m.get("method"), "source": m.get("source"),
+                        "label": str(m.get("label") or key), "n_dims": int(np.shape(arr)[1])})
+        return out
+
+    def embedding(self, key: str, dims=(0, 1)) -> Dict[str, Any]:
+        info = next((e for e in self.embeddings() if e["key"] == key), None)
+        if info is None:
+            raise KeyError(key)
+        a, b = (int(d) for d in dims)
+        if not (0 <= a < info["n_dims"] and 0 <= b < info["n_dims"]):
+            raise ValueError(f"dims must be in [0, {info['n_dims']})")
+        arr = np.asarray(self.cd.cellm[key], dtype=np.float64)
+        meta = (self.cd.uns.get("embeddings") or {}).get(key) or {}
+        prefix = str(meta.get("axis_prefix") or info["label"].split()[-1])
+        fin = lambda v: [None if not np.isfinite(x) else float(x) for x in v]  # noqa: E731
+        return {"key": key, "label": info["label"],
+                "cell_ids": [str(c) for c in self._cells_table().index],
+                "x": fin(arr[:, a]), "y": fin(arr[:, b]),
+                "axis_labels": [f"{prefix}{a + 1}", f"{prefix}{b + 1}"]}
 
     def point_sets(self) -> List[Dict[str, Any]]:
         if "point_sets" not in self._cache:

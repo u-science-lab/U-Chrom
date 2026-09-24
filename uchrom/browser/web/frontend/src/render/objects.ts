@@ -70,7 +70,53 @@ function buildPoints(geom: Geometry, colors: Float32Array, style: LayerStyle, wa
   }
 }
 
+/**
+ * Lines cannot show a one-spot segment (e.g. an unassigned spot, or a spot
+ * isolated by bond breaking), so line layers get a small Points child for
+ * them.  `userData.singletons[i]` is the layer point index of marker i.
+ */
+function singletonMarkers(geom: Geometry, colors: Float32Array, opacity: number): THREE.Points | null {
+  const { offsets, positions } = geom
+  const idx: number[] = []
+  for (let s = 0; s + 1 < offsets.length; s++) if (offsets[s + 1] - offsets[s] === 1) idx.push(offsets[s])
+  if (!idx.length) return null
+  const pos = new Float32Array(3 * idx.length)
+  const col = new Float32Array(3 * idx.length)
+  idx.forEach((pi, k) => {
+    pos.set(positions.subarray(3 * pi, 3 * pi + 3), 3 * k)
+    col.set(colors.subarray(3 * pi, 3 * pi + 3), 3 * k)
+  })
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3))
+  g.computeBoundingSphere()
+  const mat = new THREE.PointsMaterial({ size: 4, sizeAttenuation: false, vertexColors: true })
+  applyOpacity(mat, opacity)
+  const pts = new THREE.Points(g, mat)
+  pts.userData.singletons = Uint32Array.from(idx)
+  return pts
+}
+
+function withSingletons(built: BuiltLayer, geom: Geometry, colors: Float32Array, opacity: number): BuiltLayer {
+  const pts = singletonMarkers(geom, colors, opacity)
+  if (!pts) return built
+  built.object.add(pts)
+  const dispose = built.dispose
+  return {
+    ...built,
+    dispose: () => {
+      dispose()
+      pts.geometry.dispose()
+      ;(pts.material as THREE.Material).dispose()
+    },
+  }
+}
+
 function buildLines(geom: Geometry, colors: Float32Array, style: LayerStyle, warning: string | null): BuiltLayer {
+  return withSingletons(buildLinesOnly(geom, colors, style, warning), geom, colors, style.opacity)
+}
+
+function buildLinesOnly(geom: Geometry, colors: Float32Array, style: LayerStyle, warning: string | null): BuiltLayer {
   const index = buildLineIndex(geom.offsets)
   if (style.lineWidth <= 1) {
     // One draw call; WebGL line width is always 1px.
@@ -197,6 +243,8 @@ function buildTubes(geom: Geometry, colors: Float32Array, style: LayerStyle, war
 
 /** Point index for a raycast hit on a built layer, or -1. */
 export function pointIndexOfHit(pick: PickMap, hit: THREE.Intersection): number {
+  const single = hit.object.userData.singletons as Uint32Array | undefined
+  if (single) return hit.index === undefined || hit.index === null ? -1 : single[hit.index]
   if (pick.kind === 'vertex') return hit.index ?? -1
   if (pick.kind === 'indexed') {
     const i = hit.index

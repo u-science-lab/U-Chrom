@@ -176,6 +176,27 @@ export interface ColorOptions {
   fieldRange?: [number, number]
 }
 
+/** Neutral dot colour for modes that are not about cells (chrom, trace, …). */
+export const NEUTRAL_RGB: RGB = [0.72, 0.74, 0.78]
+
+/**
+ * Colour of one whole cell under the overview colouring — the same colour
+ * its chromatin gets in the 3-D view ('cell' / 'field'); other modes have
+ * no per-cell colour and give NEUTRAL_RGB ('custom' uses the custom colour).
+ */
+export function cellRgb(cellId: string, mode: ColorMode, custom: string, opts: ColorOptions = {}): RGB {
+  if (mode === 'cell') {
+    const i = opts.cellIndex?.get(cellId)
+    return i === undefined ? [0.6, 0.6, 0.6] : cellColor(i)
+  }
+  if (mode === 'field') {
+    const vals = opts.cellValues ?? new Map<string, number | null>()
+    return fieldColor(vals.get(cellId), opts.fieldRange ?? fieldRange(vals.values()))
+  }
+  if (mode === 'custom') return hexToRgb(custom)
+  return NEUTRAL_RGB
+}
+
 export function vertexColors(geom: Geometry, mode: ColorMode, custom: string, opts: ColorOptions = {}): Float32Array {
   const chromColors = opts.chromColors ?? false
   const { header, starts, offsets } = geom

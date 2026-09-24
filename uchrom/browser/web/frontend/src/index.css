@@ -644,3 +644,73 @@ button.link {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- embedding panel ----------------------------------------------- */
+.viewport-tools {
+  display: flex;
+  gap: 6px;
+}
+.viewport-tools button.active {
+  background: var(--bg-active);
+}
+.embedding-panel {
+  position: absolute;
+  z-index: 3;
+  right: 8px;
+  bottom: 8px;
+  background: rgba(24, 26, 30, 0.94);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+}
+.embedding-resize {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  border-left: 2px solid var(--text-muted);
+  border-top: 2px solid var(--text-muted);
+  border-radius: 2px 0 0 0;
+}
+.embedding-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.embedding-head select {
+  max-width: 150px;
+}
+.embedding-head select.dim {
+  width: 62px;
+}
+.embedding-head .spacer {
+  flex: 1;
+}
+.embedding-head button {
+  padding: 0 6px;
+}
+.embedding-body {
+  position: relative;
+}
+.embedding-body canvas {
+  display: block;
+}
+.embedding-axes {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 8px;
+}
+.embedding-tip {
+  position: absolute;
+  pointer-events: none;
+  padding: 2px 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  background: rgba(20, 22, 26, 0.94);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+}

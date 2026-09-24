@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { buildLayerObject, pointIndexOfHit, type BuiltLayer } from '../render/objects'
+import { splitForView } from '../render/bonds'
 import { displayParts, subsetGeometry } from '../render/partition'
 import { buildPointMarkers, splitPoints, type BuiltPoints } from '../render/points'
 import { bboxDiagonal, findSegment } from '../render/segments'
@@ -10,6 +11,7 @@ import { activeFieldValues, activeView, useStore } from '../store'
 import { fieldRange } from '../colors'
 import { isPointPick, type ColorMode, type Geometry, type LayerStyle, type PointSet, type SegmentInfo } from '../types'
 import { ColorBar } from './ColorBar'
+import { EmbeddingPanel } from './EmbeddingPanel'
 import { FocusBar } from './FocusBar'
 import { PickLabel } from './PickLabel'
 
@@ -23,7 +25,7 @@ interface Part {
 
 interface Entry {
   /** inputs the parts were built from; rebuilt when any changes */
-  key: { geometry: Geometry; style: LayerStyle; focus: string | null; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: Map<string, number | null> | null }
+  key: { geometry: Geometry; style: LayerStyle; focus: string | null; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: Map<string, number | null> | null; maxBond: 'auto' | number | null }
   parts: Part[]
 }
 
@@ -122,6 +124,7 @@ export function Viewport() {
   const resetViewToken = useStore((s) => s.resetViewToken)
   const flyToken = useStore((s) => s.flyToken)
   const cells = useStore((s) => s.cells)
+  const hasEmbeddings = useStore((s) => (s.datasets.find((d) => d.id === s.activeDatasetId)?.embeddings?.length ?? 0) > 0)
   const fieldValues = useStore(activeFieldValues)
   const pointSets = useStore((s) => (s.activeDatasetId ? s.pointSets[s.activeDatasetId] : undefined))
   const setPick = useStore((s) => s.setPick)
@@ -301,6 +304,7 @@ export function Viewport() {
         overview: view.overviewColor,
         nCells: cellList.length,
         values: view.overviewColor === 'field' ? fieldValues : null,
+        maxBond: view.maxBond,
       }
       const prev = t.entries.get(l.id)
       if (
@@ -312,13 +316,16 @@ export function Viewport() {
         prev.key.ctx === key.ctx &&
         prev.key.overview === key.overview &&
         prev.key.nCells === key.nCells &&
-        prev.key.values === key.values
+        prev.key.values === key.values &&
+        prev.key.maxBond === key.maxBond
       ) {
         for (const p of prev.parts) if (p.built.warning) warnings.push(`${l.name}: ${p.built.warning}`)
         continue
       }
       if (prev) drop(l.id, prev)
-      const { main, context } = displayParts(l.geometry!, hidden, view.focusCell)
+      // cut over-long bonds (unassigned spots, duplicate loci) before drawing
+      const base = splitForView(l.geometry!, view.maxBond).geometry
+      const { main, context } = displayParts(base, hidden, view.focusCell)
       // colour by chromosome whenever the layer itself has several, so hiding
       // chromosomes never switches the colour scheme away from the legend
       const colorOpts = {
@@ -455,10 +462,20 @@ export function Viewport() {
       <PickLabel />
       <div className="hover-tip" ref={tipRef} />
       <div className="viewport-tools">
+        {hasEmbeddings && (
+          <button
+            className={view.embeddingOpen ? 'active' : ''}
+            onClick={() => useStore.getState().setEmbedding({ embeddingOpen: !view.embeddingOpen })}
+            title="Show a 2-D embedding of the cells (UMAP / t-SNE / PCA)"
+          >
+            Embedding
+          </button>
+        )}
         <button onClick={() => useStore.getState().resetView()} title="Fit everything drawn">
           Reset view
         </button>
       </div>
+      <EmbeddingPanel />
     </div>
   )
 }
@@ -501,8 +518,10 @@ function hitAt(t: Three, clientX: number, clientY: number): Hit | null {
   ray.setFromCamera(ndc, t.camera)
   let best: Hit | null = null
   let bestScore = Infinity
-  for (const h of ray.intersectObjects(t.group.children, false)) {
-    const ud = h.object.userData as { kind?: string; layerId?: string; set?: string; role: Role }
+  // recursive: line layers carry a Points child for one-spot segments
+  for (const h of ray.intersectObjects(t.group.children, true)) {
+    const owner = h.object.userData.singletons && h.object.parent ? h.object.parent : h.object
+    const ud = owner.userData as { kind?: string; layerId?: string; set?: string; role: Role }
     const off = (h as { distanceToRay?: number }).distanceToRay ?? ray.ray.distanceToPoint(h.point)
     let score = off / Math.max(h.distance, 1e-9) + (ud.role === 'context' ? 1 : 0)
     let hit: Hit | null = null
@@ -629,7 +648,7 @@ function hoverAt(t: Three, e: PointerEvent, tip: HTMLDivElement) {
   // anything of another cell: outline that cell and say a click focuses it
   const layerGeom = store.layers.find((l) => l.datasetId === store.activeDatasetId && l.visible && l.geometry)?.geometry
   const traceGeom = hit.kind === 'trace' ? store.layers.find((l) => l.id === hit.layerId)?.geometry : layerGeom
-  if (traceGeom) setHoverCell(t, cell!, traceGeom, new Set(view.hiddenChroms))
+  if (traceGeom) setHoverCell(t, cell!, splitForView(traceGeom, view.maxBond).geometry, new Set(view.hiddenChroms))
   const box = traceGeom ? cellBoxes(traceGeom).get(cell!) : undefined
   if (box) {
     t.hoverBox.box.copy(box)
