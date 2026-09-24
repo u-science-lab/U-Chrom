@@ -30,6 +30,7 @@ export function findSegment(offsets: Uint32Array, pointIndex: number): number {
 }
 
 export function bboxDiagonal(bbox: GeometryHeader['bbox']): number {
+  if (!bbox) return 0 // empty selection (e.g. data without 3-D spots)
   const d = [0, 1, 2].map((i) => bbox.max[i] - bbox.min[i])
   return Math.hypot(d[0], d[1], d[2])
 }

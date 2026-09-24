@@ -100,6 +100,52 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
         except KeyError:
             raise HTTPException(404, f"unknown cell: {cell_id}") from None
 
+    def _call(fn, *args, **kwargs):
+        """Map data-layer errors to HTTP: unknown key → 404, bad input → 422."""
+        try:
+            return fn(*args, **kwargs)
+        except KeyError as exc:
+            raise HTTPException(404, f"not found: {exc.args[0] if exc.args else exc}") from None
+        except LookupError as exc:  # e.g. empty selection, per-cell map without a cell
+            raise HTTPException(422, str(exc)) from None
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+
+    def _names(names: str) -> List[str]:
+        return [n for n in (x.strip() for x in names.split(",")) if n]
+
+    @app.get("/api/datasets/{dataset_id}/tracks")
+    def tracks(dataset_id: str, names: str, chrom: str, start: Optional[int] = None,
+               end: Optional[int] = None, cell_id: Optional[str] = None, agg: str = "mean") -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).tracks, _names(names), chrom, start, end, cell_id, agg)
+
+    @app.get("/api/datasets/{dataset_id}/intervals/{key}")
+    def intervals(dataset_id: str, key: str, chrom: str, start: Optional[int] = None,
+                  end: Optional[int] = None) -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).intervals, key, chrom, start, end)
+
+    @app.get("/api/datasets/{dataset_id}/contacts/{key}")
+    def contacts(dataset_id: str, key: str, chrom: str, start: Optional[int] = None,
+                 end: Optional[int] = None, resolution: Optional[int] = None,
+                 balance: bool = False, cell: Optional[str] = None) -> Response:
+        buf = _call(_dataset(dataset_id).contacts, key, chrom, start, end, resolution, balance, cell)
+        return Response(buf, media_type="application/octet-stream")
+
+    @app.get("/api/datasets/{dataset_id}/distance")
+    def distance(dataset_id: str, chrom: str, start: Optional[int] = None, end: Optional[int] = None,
+                 cell_id: Optional[str] = None, trace_id: Optional[str] = None,
+                 stat: str = "median", threshold: Optional[float] = None) -> Response:
+        buf = _call(_dataset(dataset_id).distance, chrom, start, end, cell_id, trace_id, stat, threshold)
+        return Response(buf, media_type="application/octet-stream")
+
+    @app.get("/api/datasets/{dataset_id}/stats/rg")
+    def stats_rg(dataset_id: str, chrom: Optional[str] = None, cell_id: Optional[str] = None) -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).stats_rg, chrom, cell_id)
+
+    @app.get("/api/datasets/{dataset_id}/stats/scaling")
+    def stats_scaling(dataset_id: str, chrom: Optional[str] = None, cell_id: Optional[str] = None) -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).stats_scaling, chrom, cell_id)
+
     @app.get("/api/datasets/{dataset_id}/embedding/{key}")
     def embedding(dataset_id: str, key: str, dims: str = "0,1") -> Dict[str, Any]:
         ds = _dataset(dataset_id)

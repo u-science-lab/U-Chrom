@@ -6,6 +6,8 @@ import {
   LAYOUTS,
   moveSplitter,
   normalizeSizes,
+  PANE_LABEL,
+  PANE_TYPES,
   removePane,
   retypePane,
   setLayout,
@@ -16,9 +18,22 @@ import {
 import { ColorBar } from './ColorBar'
 import { EmbeddingControls, EmbeddingView } from './EmbeddingView'
 import { FocusBar } from './FocusBar'
+import { LocusBar } from './LocusBar'
+import { MatrixControls, MatrixView } from './MatrixView'
+import { StatsControls, StatsView } from './StatsView'
+import { TracksControls, TracksView } from './TracksView'
 import { Viewport } from './Viewport'
 
-const TYPE_LABEL: Record<PaneType, string> = { '3d': '3D', embedding: 'Embedding' }
+const TYPE_LABEL = PANE_LABEL
+const MENU_LABEL: Record<PaneType, string> = {
+  '3d': '3D view',
+  embedding: 'Embedding view',
+  tracks: 'Genome tracks',
+  matrix: 'Matrix (Hi-C / distance)',
+  stats: 'Statistics',
+}
+/** Views that follow the shared genomic locus. */
+const GENOME_PANES = new Set<PaneType>(['tracks', 'matrix', 'stats'])
 const LAYOUT_LABEL: Record<WsLayout, [string, string]> = {
   tabs: ['Tabs', 'One view at a time, switch with tabs'],
   columns: ['Columns', 'Views side by side'],
@@ -39,15 +54,18 @@ export function Workspace() {
   const setWorkspace = useStore((s) => s.setWorkspace)
   const ensureDefault = useStore((s) => s.ensureDefaultWorkspace)
   const datasetId = useStore((s) => s.activeDatasetId)
-  const hasEmbeddings = useStore((s) => (s.datasets.find((d) => d.id === s.activeDatasetId)?.embeddings?.length ?? 0) > 0)
+  const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
+  const hasEmbeddings = (ds?.embeddings?.length ?? 0) > 0
+  const hasCoords = !!ds && ds.has_coords !== false && ds.n_spots > 0
+  const hasTracks = (ds?.tracks?.length ?? 0) > 0
   const [resetKeys, setResetKeys] = useState<Record<string, number>>({})
   const [menu, setMenu] = useState(false)
   const panesRef = useRef<HTMLDivElement>(null)
 
   // Until the user arranges views, the default follows the data.
   useEffect(() => {
-    if (datasetId) ensureDefault(hasEmbeddings)
-  }, [datasetId, hasEmbeddings, ensureDefault])
+    if (datasetId) ensureDefault({ hasEmbeddings, hasCoords, hasTracks })
+  }, [datasetId, hasEmbeddings, hasCoords, hasTracks, ensureDefault])
 
   // Keyboard shortcuts once for the whole workspace (not per 3-D pane).
   useEffect(() => {
@@ -99,6 +117,7 @@ export function Workspace() {
       <div className="ws-bar">
         <FocusBar />
         <ColorBar inline />
+        {ws.panes.some((p) => GENOME_PANES.has(p.type)) && <LocusBar />}
         <span className="spacer" />
         <div className="ws-add">
           <button onClick={() => setMenu(!menu)} title="Add a view">
@@ -106,8 +125,11 @@ export function Workspace() {
           </button>
           {menu && (
             <ul className="ws-menu" onMouseLeave={() => setMenu(false)}>
-              <li onClick={() => add('3d')}>3D view</li>
-              <li onClick={() => add('embedding')}>Embedding view</li>
+              {PANE_TYPES.map((t) => (
+                <li key={t} onClick={() => add(t)}>
+                  {MENU_LABEL[t]}
+                </li>
+              ))}
             </ul>
           )}
         </div>
@@ -180,8 +202,11 @@ function PaneBox({
     <section className={`pane${active ? ' active' : ''}${hidden ? ' hidden' : ''}`} style={style} onPointerDownCapture={activate}>
       <header className="pane-head">
         <select value={pane.type} onChange={(e) => setWorkspace((w) => retypePane(w, pane.id, e.target.value as PaneType))} title="View type">
-          <option value="3d">3D</option>
-          <option value="embedding">Embedding</option>
+          {PANE_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {TYPE_LABEL[t]}
+            </option>
+          ))}
         </select>
         {pane.type === '3d' && (
           <button onClick={onReset} title="Fit everything drawn in this view">
@@ -189,6 +214,9 @@ function PaneBox({
           </button>
         )}
         {pane.type === 'embedding' && <EmbeddingControls pane={pane} />}
+        {pane.type === 'tracks' && <TracksControls pane={pane} />}
+        {pane.type === 'matrix' && <MatrixControls pane={pane} />}
+        {pane.type === 'stats' && <StatsControls pane={pane} />}
         <span className="spacer" />
         <button
           onClick={() => setWorkspace((w) => ({ ...w, maximized: w.maximized === pane.id ? null : pane.id, activePane: pane.id }))}
@@ -201,7 +229,11 @@ function PaneBox({
         </button>
       </header>
       <div className="pane-body">
-        {pane.type === '3d' ? <Viewport paneId={pane.id} resetKey={resetKey} /> : <EmbeddingView pane={pane} />}
+        {pane.type === '3d' && <Viewport paneId={pane.id} resetKey={resetKey} />}
+        {pane.type === 'embedding' && <EmbeddingView pane={pane} />}
+        {pane.type === 'tracks' && <TracksView pane={pane} />}
+        {pane.type === 'matrix' && <MatrixView pane={pane} />}
+        {pane.type === 'stats' && <StatsView pane={pane} />}
       </div>
     </section>
   )

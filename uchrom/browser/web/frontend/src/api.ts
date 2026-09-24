@@ -1,4 +1,5 @@
-import type { CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, TracePage } from './types'
+import { decodeMatrix, type MatrixData } from './matrix'
+import type { IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, TracePage } from './types'
 
 async function request(url: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(url, init)
@@ -125,4 +126,63 @@ export function decodeGeometry(buf: ArrayBuffer): Geometry {
   off += 4 * n
   const offsets = new Uint32Array(buf, off, s + 1)
   return { header, positions, starts, offsets }
+}
+
+// ---- genome-coordinate views (API.md "Genome-coordinate views") ----------
+
+const ds = (id: string) => `api/datasets/${encodeURIComponent(id)}`
+
+/** Build a query string, dropping null / undefined / '' values. */
+function query(params: Record<string, string | number | boolean | null | undefined>): string {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) if (v !== null && v !== undefined && v !== '') q.set(k, String(v))
+  const s = q.toString()
+  return s ? `?${s}` : ''
+}
+
+export interface RegionQuery {
+  chrom: string
+  start?: number
+  end?: number
+}
+
+export async function fetchTracks(
+  id: string,
+  names: string[],
+  r: RegionQuery,
+  opts: { cellId?: string | null; agg?: string } = {},
+): Promise<TrackData> {
+  const q = query({ names: names.join(','), chrom: r.chrom, start: r.start, end: r.end, cell_id: opts.cellId, agg: opts.agg })
+  return (await request(`${ds(id)}/tracks${q}`)).json()
+}
+
+export async function fetchIntervals(id: string, key: string, r: RegionQuery): Promise<IntervalTable> {
+  return (await request(`${ds(id)}/intervals/${encodeURIComponent(key)}${query({ chrom: r.chrom, start: r.start, end: r.end })}`)).json()
+}
+
+export async function fetchContacts(
+  id: string,
+  key: string,
+  r: RegionQuery,
+  opts: { resolution?: number | null; balance?: boolean; cell?: string | null } = {},
+): Promise<MatrixData> {
+  const q = query({ chrom: r.chrom, start: r.start, end: r.end, resolution: opts.resolution, balance: opts.balance ? 'true' : 'false', cell: opts.cell })
+  return decodeMatrix(await (await request(`${ds(id)}/contacts/${encodeURIComponent(key)}${q}`)).arrayBuffer())
+}
+
+export async function fetchDistance(
+  id: string,
+  r: RegionQuery,
+  opts: { cellId?: string | null; traceId?: string | null; stat?: string; threshold?: number | null } = {},
+): Promise<MatrixData> {
+  const q = query({ chrom: r.chrom, start: r.start, end: r.end, cell_id: opts.cellId, trace_id: opts.traceId, stat: opts.stat, threshold: opts.threshold })
+  return decodeMatrix(await (await request(`${ds(id)}/distance${q}`)).arrayBuffer())
+}
+
+export async function fetchRg(id: string, opts: { chrom?: string | null; cellId?: string | null } = {}): Promise<RgStats> {
+  return (await request(`${ds(id)}/stats/rg${query({ chrom: opts.chrom, cell_id: opts.cellId })}`)).json()
+}
+
+export async function fetchScaling(id: string, opts: { chrom?: string | null; cellId?: string | null } = {}): Promise<ScalingStats> {
+  return (await request(`${ds(id)}/stats/scaling${query({ chrom: opts.chrom, cell_id: opts.cellId })}`)).json()
 }

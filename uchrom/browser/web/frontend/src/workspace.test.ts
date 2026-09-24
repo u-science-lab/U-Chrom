@@ -24,7 +24,7 @@ describe('default workspace', () => {
     expect(ws.layout).toBe('columns')
     expect(ws.panes.map((p) => p.type)).toEqual(['3d', 'embedding'])
     expect(ws.sizes).toEqual([0.6, 0.4])
-    expect(defaultWorkspace(false).panes.map((p) => p.type)).toEqual(['3d'])
+    expect(defaultWorkspace(false).panes.map((p) => p.type)).toEqual(['3d', 'matrix']) // coords, no embeddings → 3D | distance matrix
   })
   it('prefers UMAP > t-SNE > PCA', () => {
     const e = (key: string, method: string) => ({ key, method, source: 'rna', label: key, n_dims: 2 })

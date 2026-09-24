@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { labelColorMap } from '../colors'
+import { labelColorMap, srgbToLinear } from '../colors'
 import type { PointSet } from '../types'
 
 export interface PointSplit {
@@ -74,7 +74,7 @@ export function buildPointMarkers(ps: PointSet, indices: Uint32Array, sizePx: nu
   })
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3))
+  g.setAttribute('color', new THREE.BufferAttribute(srgbToLinear(col), 3))
   g.computeBoundingSphere()
   const mat = new THREE.PointsMaterial({
     size: sizePx,

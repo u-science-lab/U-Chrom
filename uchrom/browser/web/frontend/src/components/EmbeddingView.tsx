@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchEmbedding } from '../api'
-import { cellRgb, fieldRange, rgbCss } from '../colors'
+import { cellRgb, rgbCss } from '../colors'
+import { useFieldColors } from '../useFieldColors'
 import { fitPlot, nearestPoint, project } from '../render/embedding'
-import { activeFieldValues, activeView, useStore } from '../store'
+import { activeView, useStore } from '../store'
 import type { Embedding, EmbeddingInfo } from '../types'
 import { defaultEmbeddingKey, updatePane, type Pane } from '../workspace'
-import { fmtNum } from './format'
+import { fmtValue } from './format'
 
 const PAD = 14
 
@@ -68,7 +69,8 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
   const view = useStore(activeView)
   const focusCell = useStore((s) => s.focusCell)
   const cells = useStore((s) => (s.activeDatasetId ? s.cells[s.activeDatasetId] : undefined))
-  const fieldValues = useStore(activeFieldValues)
+  const fieldColors = useFieldColors()
+  const fieldValues = fieldColors.cellValues
   const custom = useStore((s) => s.layers.find((l) => l.datasetId === s.activeDatasetId && l.parentId === null)?.style.color ?? '#ffffff')
   const list = ds?.embeddings ?? []
   const { key, dims } = resolveEmbedding(list, pane)
@@ -116,11 +118,10 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
     const cellIndex = new Map((cells ?? []).map((c, i) => [c.cell_id, i]))
     const opts = {
       cellIndex,
-      cellValues: fieldValues ?? undefined,
-      fieldRange: fieldValues ? fieldRange(fieldValues.values()) : undefined,
+      ...fieldColors,
     }
     return emb.cell_ids.map((id) => rgbCss(cellRgb(id, view.overviewColor, custom, opts)))
-  }, [emb, cells, fieldValues, view.overviewColor, custom])
+  }, [emb, cells, fieldColors, view.overviewColor, custom])
 
   // draw
   useEffect(() => {
@@ -211,7 +212,7 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
       {hover && hoverId && (
         <div className="embedding-tip" style={{ left: hover.x + 12, top: hover.y + 12 }}>
           cell {hoverId}
-          {hoverVal !== undefined && ` · ${hoverVal === null ? '—' : fmtNum(hoverVal)}`}
+          {hoverVal !== undefined && ` · ${fmtValue(hoverVal)}`}
         </div>
       )}
     </div>

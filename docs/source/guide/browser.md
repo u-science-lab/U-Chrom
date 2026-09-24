@@ -77,6 +77,36 @@ rna_table=…)`, see the ChromData guide):
   Tubes (radius 0.35× the median spot spacing) appear once a cell is
   focused.
 
+### Genome-coordinate views
+
+Besides *3D* and *Embedding*, panes can show views along the genome.  They
+share a **locus** (chromosome + range) set in the workspace bar — type
+`chr7:20M-40M`, zoom with ± or *full*, or drag / zoom inside a view:
+
+- **Tracks** — a genome-browser view of `cd.tracks` (e.g. the 59 per-spot
+  IF channels of Takei 2025: H3K27ac, H3K4me3, H3K9me3, LaminB1, …)
+  aggregated per bin (mean / median / max) over all cells or the focused
+  cell, plus interval rows for `cd.results` tables (TADs, loops, peaks).
+- **Matrix** — a contact map from a linked `.cool` / `.mcool` / `.scool`
+  (`cd.link_cool`, `cd.link_scool`; per-cell maps follow the focused cell)
+  or the **3-D distance** matrix computed from `coords` (one trace, the
+  focused cell, or the population median / mean / contact frequency).
+  Large regions are pooled to ≤ 1,000 bins; drag a square to zoom.
+- **Stats** — radius of gyration per trace, distance vs genomic
+  distance (population with IQR band, focused cell on top), a histogram
+  of a cell field, or a scatter of two cell fields (click to focus).
+
+Cells can be coloured by numeric fields (genes, morphology) or by
+categorical ones such as `cell_type`, with a legend.
+
+### What each kind of data looks like
+
+| Data | Example | Opens as |
+|------|---------|----------|
+| Imaging traces, many cells | Takei 2021 / 2025 (`example-data/takei2025_fov0/`) | 3D \| Embedding or 3D \| Tracks |
+| One simulated / reconstructed cell | `example-data/sim_cell1/` (NucDynamics + its contacts) | 3D \| Matrix — contacts next to 3-D distances |
+| Single-cell multi-omics without 3-D | scHiCAR (`example-data/schicar_mop/`) | Matrix \| Embedding; the 3D pane says there are no coordinates |
+
 Trace statistics, multi-canvas and sessions are desktop-only for now.
 
 ## Main areas

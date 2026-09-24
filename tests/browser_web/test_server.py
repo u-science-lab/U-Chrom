@@ -163,7 +163,7 @@ def test_cell_fields_and_points_endpoints(tmp_path):
                                 "value_fields": ["peak_intensity"]}]
 
     v = c.get("/api/datasets/d1/cell_values", params={"field": "nucleus_area_um2"}).json()
-    assert v == {"field": "nucleus_area_um2", "cell_ids": ["c1", "c2"], "values": [150.5, None]}
+    assert v == {"field": "nucleus_area_um2", "kind": "numeric", "cell_ids": ["c1", "c2"], "values": [150.5, None]}
     assert c.get("/api/datasets/d1/cell_values", params={"field": "label"}).status_code == 404
 
     info = c.get("/api/datasets/d1/cell_info", params={"cell_id": "c2"}).json()
@@ -199,3 +199,24 @@ def test_embedding_endpoint(tmp_path):
                  "x": [1.5, None], "y": [2.5, 0.0], "axis_labels": ["PC2", "PC3"]}
     assert c.get("/api/datasets/d1/embedding/rna_pca", params={"dims": "0,3"}).status_code == 422
     assert c.get("/api/datasets/d1/embedding/scalar").status_code == 404
+
+
+def test_categorical_cell_fields(tmp_path):
+    n = 6
+    ids = [f"c{i}" for i in range(n)]
+    spots = pd.DataFrame({"chrom": "chr1", "start": 0, "end": 1, "trace_id": ids, "cell_id": ids})
+    cells = pd.DataFrame({"cell_type": ["L5IT", "Astro", "L5IT", "Astro", "L23IT", "L5IT"],
+                          "barcode": [f"b{i}" for i in range(n)]}, index=pd.Index(ids, name="cell_id"))
+    path = tmp_path / "cat.h5cd"
+    ChromData(np.zeros((n, 3)), spots, cells=cells).write(path)
+    store = DatasetStore()
+    store.load(path)
+    c = TestClient(create_app(store))
+    fields = c.get("/api/datasets").json()[0]["cell_fields"]
+    assert [f["name"] for f in fields] == ["cell_type"]  # the per-cell barcode is not offered
+    assert fields[0]["kind"] == "category"
+    # natural order: numbers inside names compare numerically (L5IT < L23IT)
+    assert fields[0]["categories"] == [{"value": "Astro", "count": 2}, {"value": "L5IT", "count": 3},
+                                       {"value": "L23IT", "count": 1}]
+    v = c.get("/api/datasets/d1/cell_values", params={"field": "cell_type"}).json()
+    assert v["kind"] == "category" and v["values"][:2] == ["L5IT", "Astro"]

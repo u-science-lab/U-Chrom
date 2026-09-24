@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { fetchCellValues, fetchPointSet } from './api'
-import { activeView, fieldKey, useStore } from './store'
+import { activeView, defaultCategoryField, fieldKey, useStore } from './store'
+import type { CellValue } from './types'
 
 const requested = new Set<string>()
 
@@ -27,21 +28,25 @@ export function useOmicsLoader() {
     }
   }, [datasets])
 
+  // the overview field, plus the dataset's cell type (the cell list shows it)
+  const typeField = useStore((s) => defaultCategoryField(s.datasets.find((d) => d.id === s.activeDatasetId))?.name ?? null)
   useEffect(() => {
-    const field = view.cellField
-    if (!activeId || !field) return
-    const key = fieldKey(activeId, field)
-    if (requested.has(key) || useStore.getState().cellValues[key]) return
-    requested.add(key)
-    fetchCellValues(activeId, field)
-      .then((r) => {
-        const m = new Map<string, number | null>()
-        r.cell_ids.forEach((c, i) => m.set(String(c), r.values[i]))
-        useStore.getState().setCellValues(activeId, field, m)
-      })
-      .catch((e: Error) => {
-        requested.delete(key)
-        useStore.getState().setError(`Cannot load ${field}: ${e.message}`)
-      })
-  }, [activeId, view.cellField])
+    if (!activeId) return
+    for (const field of new Set([view.cellField, typeField])) {
+      if (!field) continue
+      const key = fieldKey(activeId, field)
+      if (requested.has(key) || useStore.getState().cellValues[key]) continue
+      requested.add(key)
+      fetchCellValues(activeId, field)
+        .then((r) => {
+          const m = new Map<string, CellValue>()
+          r.cell_ids.forEach((c, i) => m.set(String(c), r.values[i]))
+          useStore.getState().setCellValues(activeId, field, m)
+        })
+        .catch((e: Error) => {
+          requested.delete(key)
+          useStore.getState().setError(`Cannot load ${field}: ${e.message}`)
+        })
+    }
+  }, [activeId, view.cellField, typeField])
 }

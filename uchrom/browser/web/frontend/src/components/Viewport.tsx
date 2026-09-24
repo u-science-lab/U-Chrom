@@ -7,8 +7,8 @@ import { displayParts, subsetGeometry } from '../render/partition'
 import { buildPointMarkers, splitPoints, type BuiltPoints } from '../render/points'
 import { bboxDiagonal, findSegment } from '../render/segments'
 import { DEFAULT_STYLE } from '../layers'
-import { activeFieldValues, activeView, useStore } from '../store'
-import { fieldRange } from '../colors'
+import { activeView, useStore } from '../store'
+import { useFieldColors, type FieldColors } from '../useFieldColors'
 import { isPointPick, type ColorMode, type Geometry, type LayerStyle, type PointSet, type SegmentInfo } from '../types'
 import { PickLabel } from './PickLabel'
 
@@ -22,7 +22,7 @@ interface Part {
 
 interface Entry {
   /** inputs the parts were built from; rebuilt when any changes */
-  key: { geometry: Geometry; style: LayerStyle; focus: string | null; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: Map<string, number | null> | null; maxBond: 'auto' | number | null }
+  key: { geometry: Geometry; style: LayerStyle; focus: string | null; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null }
   parts: Part[]
 }
 
@@ -54,9 +54,10 @@ function unionBox(geoms: (Geometry | null)[]): THREE.Box3 | null {
   const box = new THREE.Box3()
   let any = false
   for (const g of geoms) {
-    if (!g || g.header.n_points === 0) continue
-    box.expandByPoint(new THREE.Vector3(...g.header.bbox.min))
-    box.expandByPoint(new THREE.Vector3(...g.header.bbox.max))
+    const bb = g?.header.bbox
+    if (!g || g.header.n_points === 0 || !bb) continue
+    box.expandByPoint(new THREE.Vector3(...bb.min))
+    box.expandByPoint(new THREE.Vector3(...bb.max))
     any = true
   }
   return any ? box : null
@@ -128,10 +129,14 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
   const resetViewToken = useStore((s) => s.resetViewToken)
   const flyToken = useStore((s) => s.flyToken)
   const cells = useStore((s) => s.cells)
-  const fieldValues = useStore(activeFieldValues)
+  const fieldColors = useFieldColors()
   const pointSets = useStore((s) => (s.activeDatasetId ? s.pointSets[s.activeDatasetId] : undefined))
   const setPick = useStore((s) => s.setPick)
   const setStatus = useStore((s) => s.setStatus)
+  const noCoords = useStore((s) => {
+    const d = s.datasets.find((x) => x.id === s.activeDatasetId)
+    return !!d && (d.has_coords === false || d.n_spots === 0)
+  })
 
   // One-time renderer / scene setup.
   useEffect(() => {
@@ -289,7 +294,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
         ctx: view.contextOpacity,
         overview: view.overviewColor,
         nCells: cellList.length,
-        values: view.overviewColor === 'field' ? fieldValues : null,
+        values: view.overviewColor === 'field' ? fieldColors : null,
         maxBond: view.maxBond,
       }
       const prev = t.entries.get(l.id)
@@ -317,8 +322,9 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
       const colorOpts = {
         chromColors: new Set(l.geometry!.header.segments.map((s) => s.chrom)).size > 1,
         cellIndex,
-        cellValues: key.values ?? undefined,
-        fieldRange: key.values ? fieldRange(key.values.values()) : undefined,
+        cellValues: key.values?.cellValues,
+        fieldRange: key.values?.fieldRange,
+        categories: key.values?.categories,
       }
       // Multi-cell data: the overview (and the faint context around a
       // focused cell) uses the overview colouring — per cell by default.
@@ -350,7 +356,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
     }
     const pick = useStore.getState().pick
     if (pick && !isPointPick(pick) && !keep.has(pick.layerId)) setPick(null)
-  }, [layers, activeDatasetId, view, cells, fieldValues, setPick, setStatus])
+  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus])
 
   // Point sets (e.g. RNA spots): focused cell's points full, others faint.
   useEffect(() => {
@@ -443,6 +449,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
 
   return (
     <div className="viewport" ref={hostRef}>
+      {noCoords && <div className="muted pane-empty">No 3-D coordinates in this dataset — use Matrix / Tracks / Embedding views</div>}
       <PickLabel paneId={paneId} />
       <div className="hover-tip" ref={tipRef} />
     </div>

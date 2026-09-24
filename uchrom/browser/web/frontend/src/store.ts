@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { DEFAULT_STYLE, removeCascade, uniqueName } from './layers'
 import { isPointPick } from './types'
-import { defaultWorkspace, parseWorkspace, type WorkspaceState } from './workspace'
-import type { CellInfo, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo, PointSet } from './types'
+import type { Locus } from './genome'
+import { defaultWorkspace, paneSignature, parseWorkspace, type DataKind, type WorkspaceState } from './workspace'
+import type { CellField, CellInfo, CellValue, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo, PointSet } from './types'
 
 let nextId = 1
 const newId = () => `L${nextId++}`
@@ -19,8 +20,10 @@ export interface DatasetView {
   contextOpacity: number
   /** colouring of the all-cells overview (and the faint context); a focused cell uses the layer style */
   overviewColor: ColorMode
-  /** numeric cell field used when overviewColor is 'field' */
+  /** cell field (numeric or categorical) used when overviewColor is 'field' */
   cellField: string | null
+  /** categories of a categorical cellField switched off in the legend */
+  hiddenCategories: string[]
   /** cell list order: natural id order or by the field value (descending) */
   cellSort: 'id' | 'value'
   /** point sets switched off */
@@ -31,6 +34,8 @@ export interface DatasetView {
   pointSize: number
   /** cut bonds longer than this ('auto' = 10 × median bond, null = never) */
   maxBond: 'auto' | number | null
+  /** genomic window shared by the tracks / matrix / stats panes (null → default) */
+  locus: Locus | null
 }
 
 export const DEFAULT_VIEW: DatasetView = {
@@ -39,11 +44,33 @@ export const DEFAULT_VIEW: DatasetView = {
   contextOpacity: 0.15,
   overviewColor: 'cell',
   cellField: null,
+  hiddenCategories: [],
   cellSort: 'id',
   hiddenPointSets: [],
   hiddenLabels: {},
   pointSize: 7,
   maxBond: 'auto',
+  locus: null,
+}
+
+/** Whether a dataset has 3-D coordinates to draw (scHi-C without a model has none). */
+export function hasCoords(ds: Pick<DatasetSummary, 'has_coords' | 'n_spots'> | undefined): boolean {
+  return !!ds && ds.has_coords !== false && ds.n_spots > 0
+}
+
+/**
+ * The categorical field a dataset is best summarised by: `cell_type`, else
+ * the first category field whose name mentions a type or cluster.
+ */
+export function defaultCategoryField(ds: Pick<DatasetSummary, 'cell_fields'> | undefined): CellField | null {
+  const cats = (ds?.cell_fields ?? []).filter((f) => f.kind === 'category')
+  return cats.find((f) => f.name === 'cell_type') ?? cats.find((f) => /type|cluster/i.test(f.name)) ?? null
+}
+
+/** Initial view of a dataset: coloured by its cell type when it has one. */
+export function initialView(ds: DatasetSummary): DatasetView {
+  const f = defaultCategoryField(ds)
+  return f ? { ...DEFAULT_VIEW, overviewColor: 'field', cellField: f.name } : DEFAULT_VIEW
 }
 
 /** Key of a cached cell-field vector. */
@@ -86,7 +113,7 @@ export interface AppState {
   /** cell table per dataset, natural order (empty when no cell_id) */
   cells: Record<string, CellInfo[]>
   /** cached cell-field values: fieldKey(ds, field) → cell_id → value */
-  cellValues: Record<string, Map<string, number | null>>
+  cellValues: Record<string, Map<string, CellValue>>
   /** loaded point sets per dataset */
   pointSets: Record<string, Record<string, PointSet>>
 
@@ -113,7 +140,7 @@ export interface AppState {
    *  the default follows the data (with / without embeddings) */
   workspaceTouched: boolean
   /** apply the data-dependent default unless the user has a layout */
-  ensureDefaultWorkspace(hasEmbeddings: boolean): void
+  ensureDefaultWorkspace(kind: boolean | DataKind): void
   /** replace the workspace (used by the pane actions); persists it */
   setWorkspace(update: (ws: WorkspaceState) => WorkspaceState): void
   setCells(datasetId: string, cells: CellInfo[]): void
@@ -126,17 +153,20 @@ export interface AppState {
   /** colour the overview by `field` (switches overviewColor to 'field') */
   setCellField(field: string | null): void
   setCellSort(sort: 'id' | 'value'): void
-  setCellValues(datasetId: string, field: string, values: Map<string, number | null>): void
+  setCellValues(datasetId: string, field: string, values: Map<string, CellValue>): void
+  toggleCategory(value: string): void
+  setHiddenCategories(values: string[]): void
   setPointSet(datasetId: string, set: PointSet): void
   togglePointSet(name: string): void
   toggleLabel(set: string, label: string): void
   setHiddenLabels(set: string, labels: string[]): void
   setPointSize(px: number): void
   setMaxBond(v: 'auto' | number | null): void
+  setLocus(locus: Locus): void
 }
 
 /** Values of the active overview field, if loaded. */
-export function activeFieldValues(s: Pick<AppState, 'views' | 'activeDatasetId' | 'cellValues'>): Map<string, number | null> | null {
+export function activeFieldValues(s: Pick<AppState, 'views' | 'activeDatasetId' | 'cellValues'>): Map<string, CellValue> | null {
   const v = activeView(s)
   if (!s.activeDatasetId || !v.cellField) return null
   return s.cellValues[fieldKey(s.activeDatasetId, v.cellField)] ?? null
@@ -147,13 +177,18 @@ export function activeFieldValues(s: Pick<AppState, 'views' | 'activeDatasetId' 
  * (descending, missing last) when colouring by a field and sorting by value.
  * The cell list and ←/→ stepping both follow this order.
  */
-export function orderedCells(s: Pick<AppState, 'views' | 'activeDatasetId' | 'cellValues' | 'cells'>): CellInfo[] {
+export function orderedCells(s: Pick<AppState, 'views' | 'activeDatasetId' | 'cellValues' | 'cells'> & { datasets?: DatasetSummary[] }): CellInfo[] {
   const list = (s.activeDatasetId && s.cells[s.activeDatasetId]) || []
   const v = activeView(s)
   const vals = activeFieldValues(s)
   if (v.overviewColor !== 'field' || v.cellSort !== 'value' || !vals) return list
+  // categories: legend order (first category on top); numbers: descending
+  const order = (s.datasets?.find((d) => d.id === s.activeDatasetId)?.cell_fields?.find((f) => f.name === v.cellField)?.categories ?? []).map((c) => c.value)
+  const rank = new Map(order.map((c, i) => [c, -i]))
+  for (const x of vals.values()) if (typeof x === 'string' && !rank.has(x)) rank.set(x, -rank.size)
   const key = (c: CellInfo) => {
     const x = vals.get(c.cell_id)
+    if (typeof x === 'string') return rank.get(x) ?? -Infinity
     return typeof x === 'number' && Number.isFinite(x) ? x : -Infinity
   }
   return list.map((c, i) => ({ c, i })).sort((a, b) => key(b.c) - key(a.c) || a.i - b.i).map((x) => x.c)
@@ -207,6 +242,7 @@ export const useStore = create<AppState>((set, get) => {
       ? s.datasets.map((d) => (d.id === ds.id ? ds : d))
       : [...s.datasets, ds]
     set({ datasets, activeDatasetId: ds.id })
+    if (!get().views[ds.id]) set({ views: { ...get().views, [ds.id]: initialView(ds) } })
     if (!get().layers.some((l) => l.datasetId === ds.id && l.parentId === null)) {
       // Imaging data: tubes for the focused cell; the crowded overview falls
       // back to lines automatically.
@@ -314,11 +350,11 @@ export const useStore = create<AppState>((set, get) => {
   },
   workspace: savedWorkspace ?? defaultWorkspace(false),
   workspaceTouched: savedWorkspace !== null,
-  ensureDefaultWorkspace(hasEmbeddings) {
+  ensureDefaultWorkspace(kind) {
     const s = get()
     if (s.workspaceTouched) return
-    const ws = defaultWorkspace(hasEmbeddings)
-    if (ws.panes.length !== s.workspace.panes.length) set({ workspace: ws })
+    const ws = defaultWorkspace(kind)
+    if (paneSignature(ws) !== paneSignature(s.workspace)) set({ workspace: ws })
   },
   setWorkspace(update) {
     const workspace = update(get().workspace)
@@ -361,7 +397,18 @@ export const useStore = create<AppState>((set, get) => {
     patchView({ overviewColor })
   },
   setCellField(cellField) {
-    patchView(cellField ? { cellField, overviewColor: 'field' } : { cellField: null })
+    const v = activeView(get())
+    const hiddenCategories = cellField === v.cellField ? v.hiddenCategories : []
+    patchView(cellField ? { cellField, overviewColor: 'field', hiddenCategories } : { cellField: null, hiddenCategories })
+  },
+  toggleCategory(value) {
+    const hidden = new Set(activeView(get()).hiddenCategories)
+    if (hidden.has(value)) hidden.delete(value)
+    else hidden.add(value)
+    patchView({ hiddenCategories: [...hidden] })
+  },
+  setHiddenCategories(values) {
+    patchView({ hiddenCategories: [...values] })
   },
   setCellSort(cellSort) {
     patchView({ cellSort })
@@ -395,6 +442,11 @@ export const useStore = create<AppState>((set, get) => {
   },
   setMaxBond(maxBond) {
     patchView({ maxBond })
+  },
+  setLocus(locus) {
+    const cur = activeView(get()).locus
+    if (cur && cur.chrom === locus.chrom && cur.start === locus.start && cur.end === locus.end) return
+    patchView({ locus })
   },
   }
 })

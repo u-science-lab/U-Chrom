@@ -1,4 +1,4 @@
-import type { ColorMode, Geometry } from './types'
+import type { CellField, CellValue, ColorMode, Geometry } from './types'
 
 export type RGB = [number, number, number]
 
@@ -82,7 +82,7 @@ export const MISSING_RGB: RGB = [0.45, 0.45, 0.45]
  * Colour range for a numeric field: [min, 99th percentile] of the finite
  * values, so a few outliers don't wash the map out.  Degenerate → [v, v+1].
  */
-export function fieldRange(values: Iterable<number | null | undefined>): [number, number] {
+export function fieldRange(values: Iterable<CellValue | undefined>): [number, number] {
   const v: number[] = []
   for (const x of values) if (typeof x === 'number' && Number.isFinite(x)) v.push(x)
   if (!v.length) return [0, 1]
@@ -93,9 +93,42 @@ export function fieldRange(values: Iterable<number | null | undefined>): [number
 }
 
 /** viridis over `range`, grey for missing values. */
-export function fieldColor(value: number | null | undefined, range: [number, number]): RGB {
+export function fieldColor(value: CellValue | undefined, range: [number, number]): RGB {
   if (typeof value !== 'number' || !Number.isFinite(value)) return MISSING_RGB
   return viridis((value - range[0]) / (range[1] - range[0]))
+}
+
+/** Colour of a hidden category (legend toggled off): darker than missing. */
+export const HIDDEN_RGB: RGB = [0.24, 0.24, 0.26]
+
+/** Colour of the i-th category of a field (legend order); past 24, a hashed colour. */
+export function categoryColor(index: number, value: string): RGB {
+  return index < 24 ? categoricalColor(index) : labelColor(value)
+}
+
+/**
+ * Category → legend index for a categorical cell field (−1 = hidden by the
+ * legend).  Values the field's list doesn't know are appended in order of
+ * appearance so they still get a colour.
+ */
+export function categoryIndex(field: CellField, hidden: readonly string[] = [], values?: Iterable<CellValue | undefined>): Map<string, number> {
+  const off = new Set(hidden)
+  const order = (field.categories ?? []).map((c) => c.value)
+  if (values) {
+    const known = new Set(order)
+    for (const v of values) if (typeof v === 'string' && !known.has(v)) (known.add(v), order.push(v))
+  }
+  return new Map(order.map((v, i) => [v, off.has(v) ? -1 : i]))
+}
+
+/** Colour of one cell value: categorical when `categories` is given, else viridis. */
+export function cellValueColor(value: CellValue | undefined, opts: Pick<ColorOptions, 'categories' | 'fieldRange' | 'cellValues'>): RGB {
+  if (opts.categories) {
+    if (value === null || value === undefined) return MISSING_RGB
+    const i = opts.categories.get(String(value))
+    return i === undefined ? MISSING_RGB : i < 0 ? HIDDEN_RGB : categoryColor(i, String(value))
+  }
+  return fieldColor(value, opts.fieldRange ?? fieldRange(opts.cellValues?.values() ?? []))
 }
 
 /** Stable colour per categorical label (e.g. gene): hashed golden-angle hue. */
@@ -130,6 +163,19 @@ export function labelColor(label: string): RGB {
   }
   const hue = (((h >>> 0) % 997) * 0.618033988749895) % 1
   return hsv(hue, 0.7, 1)
+}
+
+/**
+ * sRGB → linear, in place.  three.js treats vertex colours as linear and
+ * encodes the output as sRGB, so palette colours must be linearised first
+ * or the 3-D view comes out washed out next to the (CSS) legends.
+ */
+export function srgbToLinear(rgb: Float32Array): Float32Array {
+  for (let i = 0; i < rgb.length; i++) {
+    const c = rgb[i]
+    rgb[i] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+  }
+  return rgb
 }
 
 export const rgbCss = (c: RGB) => `rgb(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)})`
@@ -172,8 +218,10 @@ export interface ColorOptions {
   /** stable index per cell id for 'cell' mode (e.g. the dataset's cell list) */
   cellIndex?: ReadonlyMap<string, number>
   /** per-cell values + colour range for 'field' mode */
-  cellValues?: ReadonlyMap<string, number | null>
+  cellValues?: ReadonlyMap<string, CellValue>
   fieldRange?: [number, number]
+  /** categorical field: category → legend index (−1 hidden); see categoryIndex */
+  categories?: ReadonlyMap<string, number>
 }
 
 /** Neutral dot colour for modes that are not about cells (chrom, trace, …). */
@@ -189,10 +237,7 @@ export function cellRgb(cellId: string, mode: ColorMode, custom: string, opts: C
     const i = opts.cellIndex?.get(cellId)
     return i === undefined ? [0.6, 0.6, 0.6] : cellColor(i)
   }
-  if (mode === 'field') {
-    const vals = opts.cellValues ?? new Map<string, number | null>()
-    return fieldColor(vals.get(cellId), opts.fieldRange ?? fieldRange(vals.values()))
-  }
+  if (mode === 'field') return cellValueColor(opts.cellValues?.get(cellId), opts)
   if (mode === 'custom') return hexToRgb(custom)
   return NEUTRAL_RGB
 }
@@ -214,10 +259,14 @@ export function vertexColors(geom: Geometry, mode: ColorMode, custom: string, op
     return out
   }
   if (mode === 'field') {
-    const vals = opts.cellValues ?? new Map<string, number | null>()
-    const range = opts.fieldRange ?? fieldRange(vals.values())
+    const vals = opts.cellValues ?? new Map<string, CellValue>()
+    const o = { ...opts, fieldRange: opts.fieldRange ?? fieldRange(vals.values()) }
+    const memo = new Map<string, RGB>()
     header.segments.forEach((seg, s) => {
-      fill(offsets[s], offsets[s + 1], seg.cell_id === null ? MISSING_RGB : fieldColor(vals.get(seg.cell_id), range))
+      if (seg.cell_id === null) return fill(offsets[s], offsets[s + 1], MISSING_RGB)
+      let c = memo.get(seg.cell_id)
+      if (!c) memo.set(seg.cell_id, (c = cellValueColor(vals.get(seg.cell_id), o)))
+      fill(offsets[s], offsets[s + 1], c)
     })
     return out
   }

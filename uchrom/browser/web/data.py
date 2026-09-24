@@ -142,6 +142,10 @@ class Dataset:
             "xyz_unit": None if unit is None else str(unit),
             "trace_mode": bool(self.cd.n_traces > len(chroms)),
             "chroms": chroms,
+            "has_coords": bool(self.cd.n_spots > 0),
+            "tracks": self.track_names(),
+            "contact_maps": self.contact_maps(),
+            "intervals": self.interval_tables(),
             "cell_fields": self.cell_fields(),
             "embeddings": self.embeddings(),
             "point_sets": self.point_sets(),
@@ -183,8 +187,13 @@ class Dataset:
         """Cell table in natural id order (empty when there is no cell_id)."""
         if "cells" not in self._cache:
             a = self._arrays()
-            if a["cell"] is None:
-                self._cache["cells"] = []
+            if a["cell"] is None or len(a["cell"]) == 0:
+                # no 3-D spots (e.g. scHi-C / RNA only): list cd.cells
+                table = self._cells_table()
+                self._cache["cells"] = [
+                    {"cell_id": str(c), "n_spots": 0, "n_traces": 0, "n_chroms": 0}
+                    for c in sorted(table.index, key=natural_key)
+                ]
             else:
                 df = pd.DataFrame({"cell_id": a["cell"], "trace": a["trace"],
                                    "chrom": a["chrom"], "start": a["start"]})
@@ -219,12 +228,26 @@ class Dataset:
         return self._cache["cells_table"]
 
     def cell_fields(self) -> List[Dict[str, Any]]:
-        """Numeric ``cd.cells`` columns, for colouring cells."""
+        """``cd.cells`` columns for colouring cells: numeric ones (with range)
+        and low-cardinality categorical ones such as ``cell_type``."""
         if "cell_fields" not in self._cache:
             table = self._cells_table()
             out = []
             for col in table.columns:
-                if not pd.api.types.is_numeric_dtype(table[col]) or pd.api.types.is_bool_dtype(table[col]):
+                series = table[col]
+                if not pd.api.types.is_numeric_dtype(series) or pd.api.types.is_bool_dtype(series):
+                    values = series.dropna().astype(str)
+                    counts = values.value_counts()
+                    # ids / barcodes are unique per cell: not a useful colouring
+                    if len(counts) < 2 or len(counts) > 60 or len(counts) > 0.5 * max(len(values), 1):
+                        continue
+                    group, _, label = str(col).partition(".")
+                    if not label:
+                        group, label = "cell", str(col)
+                    out.append({"name": str(col), "group": group, "label": label, "kind": "category",
+                                "categories": [{"value": str(k), "count": int(v)}
+                                               for k, v in sorted(counts.items(), key=lambda kv: natural_key(kv[0]))],
+                                "n_valid": int(len(values))})
                     continue
                 vals = table[col].to_numpy(dtype=np.float64)
                 valid = vals[np.isfinite(vals)]
@@ -233,7 +256,7 @@ class Dataset:
                 group, _, label = str(col).partition(".")
                 if not label:
                     group, label = "cell", str(col)
-                out.append({"name": str(col), "group": group, "label": label,
+                out.append({"name": str(col), "group": group, "label": label, "kind": "numeric",
                             "min": float(valid.min()), "max": float(valid.max()),
                             "n_valid": int(len(valid))})
             self._cache["cell_fields"] = out
@@ -241,10 +264,14 @@ class Dataset:
 
     def cell_values(self, field: str) -> Dict[str, Any]:
         table = self._cells_table()
-        if field not in {f["name"] for f in self.cell_fields()}:
+        info = next((f for f in self.cell_fields() if f["name"] == field), None)
+        if info is None:
             raise KeyError(field)
+        if info["kind"] == "category":
+            return {"field": field, "kind": "category", "cell_ids": [str(c) for c in table.index],
+                    "values": [None if pd.isna(v) else str(v) for v in table[field]]}
         vals = table[field].to_numpy(dtype=np.float64)
-        return {"field": field, "cell_ids": [str(c) for c in table.index],
+        return {"field": field, "kind": "numeric", "cell_ids": [str(c) for c in table.index],
                 "values": [None if not np.isfinite(v) else _num(v) for v in vals]}
 
     def cell_info(self, cell_id: str) -> Dict[str, Any]:
@@ -336,6 +363,327 @@ class Dataset:
                 "cell_ids": cells, "labels": lab, "values": values}
 
     # ------------------------------------------------------------------
+    # Genome-coordinate views: tracks, intervals, contacts, distances, stats
+    # ------------------------------------------------------------------
+
+    def resolve(self, path: str) -> Path:
+        """Linked file path; relative paths are relative to the .h5cd."""
+        p = Path(path).expanduser()
+        if not p.is_absolute() and self.path:
+            p = Path(self.path).parent / p
+        return p
+
+    def track_names(self) -> List[Dict[str, Any]]:
+        tracks = self.cd.tracks
+        if tracks is None or len(tracks) == 0:
+            return []
+        return [{"name": str(c)} for c in tracks.columns
+                if pd.api.types.is_numeric_dtype(tracks[c])]
+
+    def _select(self, chrom: str, start=None, end=None, cell_id=None, trace_id=None) -> np.ndarray:
+        a = self._arrays()
+        mask = a["chrom"] == str(chrom)
+        if start is not None:
+            mask &= a["end"] > int(start)
+        if end is not None:
+            mask &= a["start"] < int(end)
+        if cell_id is not None and a["cell"] is not None:
+            mask &= a["cell"] == str(cell_id)
+        if trace_id is not None:
+            mask &= a["trace"] == str(trace_id)
+        return np.flatnonzero(mask)
+
+    def tracks(self, names: List[str], chrom: str, start=None, end=None,
+               cell_id=None, agg: str = "mean") -> Dict[str, Any]:
+        known = {t["name"] for t in self.track_names()}
+        unknown = [n for n in names if n not in known]
+        if unknown:
+            raise KeyError(unknown[0])
+        if agg not in ("mean", "median", "max"):
+            raise ValueError("agg must be mean, median or max")
+        a = self._arrays()
+        idx = self._select(chrom, start, end, cell_id)
+        df = pd.DataFrame({"start": a["start"][idx], "end": a["end"][idx]})
+        for n in names:
+            df[n] = self.cd.tracks[n].to_numpy(dtype=np.float64)[idx]
+        g = df.groupby("start", sort=True)
+        out = g[names].agg(agg) if names else pd.DataFrame(index=g.size().index)
+        return {
+            "chrom": str(chrom),
+            "bin_starts": [int(v) for v in out.index],
+            "bin_ends": [int(v) for v in g["end"].max().to_numpy()],
+            "n_spots": [int(v) for v in g.size().to_numpy()],
+            "values": {n: [None if not np.isfinite(v) else float(v) for v in out[n].to_numpy()]
+                       for n in names},
+        }
+
+    def interval_tables(self) -> List[Dict[str, Any]]:
+        out = []
+        for key, val in self.cd.results.items():
+            if isinstance(val, pd.DataFrame) and {"chrom", "start", "end"} <= set(val.columns):
+                out.append({"key": str(key), "n": int(len(val))})
+        return out
+
+    def intervals(self, key: str, chrom: str, start=None, end=None) -> Dict[str, Any]:
+        df = self.cd.results.get(key)
+        if not isinstance(df, pd.DataFrame) or not {"chrom", "start", "end"} <= set(df.columns):
+            raise KeyError(key)
+        m = df["chrom"].astype(str) == str(chrom)
+        if start is not None:
+            m &= df["end"] > int(start)
+        if end is not None:
+            m &= df["start"] < int(end)
+        sel = df[m]
+
+        def cell(v):
+            if isinstance(v, (float, np.floating)) and not np.isfinite(v):
+                return None
+            if isinstance(v, (int, float, np.integer, np.floating)):
+                return _num(v)
+            return str(v)
+
+        return {"columns": [str(c) for c in sel.columns],
+                "rows": [[cell(v) for v in row] for row in sel.itertuples(index=False)]}
+
+    # -- contact maps ----------------------------------------------------
+
+    def _link_records(self, family: str) -> Dict[str, dict]:
+        raw = self.cd.uns.get(family) if isinstance(self.cd.uns, dict) else None
+        if not isinstance(raw, dict):
+            return {}
+        if "path" in raw:
+            return {"default": raw}
+        return {str(k): v for k, v in raw.items() if isinstance(v, dict) and v.get("path")}
+
+    def contact_maps(self) -> List[Dict[str, Any]]:
+        if "contact_maps" not in self._cache:
+            out = []
+            for family in ("linked_cool", "linked_scool"):
+                for key, rec in self._link_records(family).items():
+                    path = self.resolve(str(rec["path"]))
+                    if not path.is_file():
+                        continue
+                    try:
+                        out.append(self._describe_contacts(key, rec, path, family))
+                    except Exception as exc:  # unreadable file: skip, but say why
+                        out.append({"key": key, "kind": "error", "label": str(rec.get("label") or key),
+                                    "error": f"{type(exc).__name__}: {exc}", "resolutions": [],
+                                    "chroms": [], "per_cell": False, "n_cells": 0})
+            self._cache["contact_maps"] = out
+        return self._cache["contact_maps"]
+
+    def _describe_contacts(self, key: str, rec: dict, path: Path, family: str) -> Dict[str, Any]:
+        import cooler
+
+        uris = cooler.fileops.list_coolers(str(path))
+        kind = "scool" if family == "linked_scool" else ("mcool" if any("/resolutions/" in u for u in uris) else "cool")
+        cells = []
+        if kind == "scool":
+            cells = cooler.fileops.list_scool_cells(str(path))
+            self._cache[("scool_cells", str(path))] = set(cells)  # listing is slow
+            first = f"{path}::{cells[0]}" if cells else str(path)
+            resolutions = [int(cooler.Cooler(first).binsize or 0)]
+        elif kind == "mcool":
+            resolutions = sorted(int(u.rsplit("/", 1)[-1]) for u in uris if "/resolutions/" in u)
+            first = f"{path}::/resolutions/{resolutions[0]}"
+        else:
+            first = str(path)
+            resolutions = [int(cooler.Cooler(first).binsize or 0)]
+        clr = cooler.Cooler(first)
+        chroms = [{"name": str(c), "length": int(n)} for c, n in clr.chromsizes.items()]
+        return {"key": key, "kind": kind, "label": str(rec.get("label") or key),
+                "resolutions": resolutions, "chroms": chroms,
+                "per_cell": kind == "scool", "n_cells": len(cells),
+                "balanced": "weight" in clr.bins().columns}
+
+    def contacts(self, key: str, chrom: str, start=None, end=None, resolution=None,
+                 balance: bool = False, cell: Optional[str] = None) -> bytes:
+        import cooler
+
+        info = next((m for m in self.contact_maps() if m["key"] == key and m["kind"] != "error"), None)
+        if info is None:
+            raise KeyError(key)
+        family = "linked_scool" if info["kind"] == "scool" else "linked_cool"
+        path = self.resolve(str(self._link_records(family)[key]["path"]))
+        length = next((c["length"] for c in info["chroms"] if c["name"] == chrom), None)
+        if length is None:
+            raise ValueError(f"unknown chromosome {chrom!r} in contact map {key!r}")
+        lo = max(0, int(start or 0))
+        hi = min(length, int(end or length))
+        if hi <= lo:
+            raise ValueError("empty region")
+        if info["kind"] == "mcool":
+            res = int(resolution) if resolution else next(
+                (r for r in info["resolutions"] if (hi - lo) / r <= MAX_MATRIX_BINS), info["resolutions"][-1])
+            if res not in info["resolutions"]:
+                raise ValueError(f"resolution must be one of {info['resolutions']}")
+            uri = f"{path}::/resolutions/{res}"
+        elif info["kind"] == "scool":
+            if cell is None:
+                raise LookupError("per-cell contact map: pass cell=<cell id>")
+            cells = self._cache.get(("scool_cells", str(path)))
+            if cells is None:
+                cells = self._cache[("scool_cells", str(path))] = set(cooler.fileops.list_scool_cells(str(path)))
+            name = f"/cells/{cell}"
+            if name not in cells:
+                raise KeyError(f"cell {cell!r} not in {key!r}")
+            uri = f"{path}::{name}"
+        else:
+            uri = str(path)
+        clr = cooler.Cooler(uri)
+        balanced = bool(balance) and "weight" in clr.bins().columns
+        region = (chrom, lo, hi)
+        mat = clr.matrix(balance=balanced, sparse=False).fetch(region).astype(np.float32)
+        bins = clr.bins().fetch(region)
+        starts, ends = bins["start"].to_numpy(np.int64), bins["end"].to_numpy(np.int64)
+        mat, starts, ends, note = _pool_square(mat, starts, ends, np.nansum)
+        header = {"chrom": chrom, "start": lo, "end": hi, "resolution": int(clr.binsize or 0),
+                  "value": "balanced" if balanced else "count", "unit": None,
+                  "cell": cell, "note": note}
+        return encode_matrix(mat, starts, ends, header)
+
+    # -- distances --------------------------------------------------------
+
+    def _trace_bin_positions(self, idx: np.ndarray):
+        """(traces, bins, P[T, N, 3]) — per-trace coordinates on the union of
+        bins of ``idx`` (duplicate spots in a bin are averaged; missing = NaN)."""
+        a = self._arrays()
+        coords = self.cd.coords[idx]
+        ok = np.isfinite(coords).all(axis=1)
+        idx, coords = idx[ok], coords[ok]
+        starts = a["start"][idx]
+        bins, bin_pos = np.unique(starts, return_inverse=True)
+        ends = pd.Series(a["end"][idx]).groupby(bin_pos).max().reindex(range(len(bins))).to_numpy()
+        traces, tr_pos = np.unique(a["trace"][idx], return_inverse=True)
+        T, N = len(traces), len(bins)
+        acc = np.zeros((T, N, 3))
+        cnt = np.zeros((T, N))
+        np.add.at(acc, (tr_pos, bin_pos), coords)
+        np.add.at(cnt, (tr_pos, bin_pos), 1)
+        with np.errstate(invalid="ignore"):
+            P = acc / cnt[..., None]
+        P[cnt == 0] = np.nan
+        return traces, bins, ends, P
+
+    def distance(self, chrom: str, start=None, end=None, cell_id=None, trace_id=None,
+                 stat: str = "median", threshold: Optional[float] = None) -> bytes:
+        if stat not in ("median", "mean", "contact"):
+            raise ValueError("stat must be median, mean or contact")
+        idx = self._select(chrom, start, end, cell_id, trace_id)
+        if len(idx) == 0:
+            raise LookupError("no spots with coordinates in this selection")
+        traces, bins, ends, P = self._trace_bin_positions(idx)
+        notes = []
+        # coarsen bins so the matrix fits (average positions per block)
+        k = int(np.ceil(len(bins) / MAX_MATRIX_BINS))
+        if k > 1:
+            nb = int(np.ceil(len(bins) / k))
+            with np.errstate(invalid="ignore"), warnings_ignored():
+                P = np.stack([np.nanmean(P[:, i * k:(i + 1) * k], axis=1) for i in range(nb)], axis=1)
+            ends = np.array([ends[min(len(ends), (i + 1) * k) - 1] for i in range(nb)])
+            bins = bins[::k]
+            notes.append(f"{k} bins pooled per cell")
+        T, N = P.shape[:2]
+        budget = 60_000_000  # floats in the (T, N, N) stack
+        if T * N * N > budget:
+            keep = max(1, budget // (N * N))
+            sel = np.random.default_rng(0).choice(T, keep, replace=False)
+            P = P[np.sort(sel)]
+            notes.append(f"statistic over {keep} of {T} traces (random subset)")
+        D = np.linalg.norm(P[:, :, None, :] - P[:, None, :, :], axis=-1)  # (T, N, N)
+        with warnings_ignored():
+            if stat == "contact":
+                thr = float(threshold) if threshold is not None else 0.5 * float(np.nanmedian(D))
+                valid = np.isfinite(D)
+                mat = np.where(valid.sum(0) > 0, (np.where(valid, D, np.inf) < thr).sum(0) / np.maximum(valid.sum(0), 1), np.nan)
+                value = "contact_frequency"
+                notes.append(f"threshold {thr:.3g}")
+            else:
+                mat = np.nanmedian(D, axis=0) if stat == "median" else np.nanmean(D, axis=0)
+                value = "distance"
+        unit = self.cd.uns.get("xyz_unit") if isinstance(self.cd.uns, dict) else None
+        header = {"chrom": chrom, "start": int(bins[0]), "end": int(ends[-1]),
+                  "resolution": int(np.median(np.diff(bins))) if len(bins) > 1 else 0,
+                  "value": value, "stat": stat, "unit": None if unit is None else str(unit),
+                  "n_traces": int(len(traces)), "trace_id": trace_id, "cell_id": cell_id,
+                  "note": "; ".join(notes) or None}
+        return encode_matrix(mat.astype(np.float32), bins, ends, header)
+
+    # -- statistics -------------------------------------------------------
+
+    def stats_rg(self, chrom=None, cell_id=None) -> Dict[str, Any]:
+        a = self._arrays()
+        mask = np.isfinite(self.cd.coords).all(axis=1)
+        if chrom:
+            mask &= a["chrom"] == str(chrom)
+        if cell_id is not None and a["cell"] is not None:
+            mask &= a["cell"] == str(cell_id)
+        idx = np.flatnonzero(mask)
+        df = pd.DataFrame(self.cd.coords[idx], columns=["x", "y", "z"])
+        df["trace"] = a["trace"][idx]
+        g = df.groupby("trace", sort=False)
+        cen = g[["x", "y", "z"]].transform("mean")
+        df["d2"] = ((df[["x", "y", "z"]] - cen) ** 2).sum(axis=1)
+        rg = np.sqrt(df.groupby("trace", sort=False)["d2"].mean())
+        first = pd.Series(idx).groupby(df["trace"].to_numpy(), sort=False).first().reindex(rg.index)
+        unit = self.cd.uns.get("xyz_unit") if isinstance(self.cd.uns, dict) else None
+        return {"trace_ids": [str(t) for t in rg.index],
+                "cell_ids": [None if a["cell"] is None else str(a["cell"][i]) for i in first.to_numpy()],
+                "chroms": [str(a["chrom"][i]) for i in first.to_numpy()],
+                "rg": [float(v) for v in rg.to_numpy()],
+                "n_spots": [int(v) for v in g.size().reindex(rg.index).to_numpy()],
+                "unit": None if unit is None else str(unit)}
+
+    def stats_scaling(self, chrom=None, cell_id=None, n_bins: int = 24) -> Dict[str, Any]:
+        a = self._arrays()
+        mask = np.isfinite(self.cd.coords).all(axis=1)
+        if chrom:
+            mask &= a["chrom"] == str(chrom)
+        if cell_id is not None and a["cell"] is not None:
+            mask &= a["cell"] == str(cell_id)
+        idx = np.flatnonzero(mask)
+        order = np.lexsort((a["start"][idx], a["trace_code"][idx]))
+        idx = idx[order]
+        codes = a["trace_code"][idx]
+        cut = np.flatnonzero(np.r_[True, codes[1:] != codes[:-1], True])
+        groups = [idx[cut[i]:cut[i + 1]] for i in range(len(cut) - 1)]
+        rng = np.random.default_rng(0)
+        total = sum(len(g) * (len(g) - 1) // 2 for g in groups)
+        if total > 30_000_000:  # sample traces to bound memory
+            frac = 30_000_000 / total
+            groups = [g for g in groups if rng.random() < frac]
+        seps, dists = [], []
+        for g in groups:
+            if len(g) < 2:
+                continue
+            i, j = np.triu_indices(len(g), k=1)
+            mid = (a["start"][g] + a["end"][g]) / 2
+            seps.append(np.abs(mid[j] - mid[i]))
+            dists.append(np.linalg.norm(self.cd.coords[g][j] - self.cd.coords[g][i], axis=1))
+        unit = self.cd.uns.get("xyz_unit") if isinstance(self.cd.uns, dict) else None
+        if not seps:
+            return {"sep_bp": [], "median": [], "q25": [], "q75": [], "n_pairs": [],
+                    "unit": None if unit is None else str(unit)}
+        sep, dist = np.concatenate(seps), np.concatenate(dists)
+        pos = sep > 0
+        sep, dist = sep[pos], dist[pos]
+        edges = np.geomspace(sep.min(), sep.max() * 1.0001, n_bins + 1)
+        which = np.digitize(sep, edges) - 1
+        out = {"sep_bp": [], "median": [], "q25": [], "q75": [], "n_pairs": []}
+        for b in range(n_bins):
+            d = dist[which == b]
+            if len(d) == 0:
+                continue
+            q = np.percentile(d, [25, 50, 75])
+            out["sep_bp"].append(float(np.sqrt(edges[b] * edges[b + 1])))
+            out["q25"].append(float(q[0]))
+            out["median"].append(float(q[1]))
+            out["q75"].append(float(q[2]))
+            out["n_pairs"].append(int(len(d)))
+        out["unit"] = None if unit is None else str(unit)
+        return out
+
+    # ------------------------------------------------------------------
     # Geometry
     # ------------------------------------------------------------------
 
@@ -362,6 +710,57 @@ class Dataset:
 
     def geometry(self, flt: GeometryFilter) -> bytes:
         return encode_geometry(self, self.select(flt), flt.max_points)
+
+
+MAX_MATRIX_BINS = 1000
+
+
+class warnings_ignored:
+    """Silence numpy's all-NaN slice / empty-mean warnings in a block."""
+
+    def __enter__(self):
+        import warnings
+
+        self._ctx = warnings.catch_warnings()
+        self._ctx.__enter__()
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        return self
+
+    def __exit__(self, *exc):
+        return self._ctx.__exit__(*exc)
+
+
+def _pool_square(mat: np.ndarray, starts: np.ndarray, ends: np.ndarray, reduce):
+    """Pool a square matrix by k×k blocks so it has at most MAX_MATRIX_BINS bins."""
+    n = mat.shape[0]
+    k = int(np.ceil(n / MAX_MATRIX_BINS))
+    if k <= 1:
+        return mat, starts, ends, None
+    m = int(np.ceil(n / k))
+    pad = m * k - n
+    padded = np.pad(mat, ((0, pad), (0, pad)), constant_values=np.nan)
+    with warnings_ignored():
+        pooled = reduce(padded.reshape(m, k, m, k), axis=(1, 3)).astype(np.float32)
+    new_ends = np.array([ends[min(n, (i + 1) * k) - 1] for i in range(m)])
+    return pooled, starts[::k], new_ends, f"{k}x{k} bins pooled"
+
+
+def encode_matrix(mat: np.ndarray, starts, ends, header: Dict[str, Any]) -> bytes:
+    """Binary matrix payload (API.md): uint32 H | JSON header | float32 rows."""
+    mat = np.asarray(mat, dtype="<f4")
+    head = {**header, "n_rows": int(mat.shape[0]), "n_cols": int(mat.shape[1]),
+            "bin_starts": [int(v) for v in starts], "bin_ends": [int(v) for v in ends]}
+    raw = json.dumps(head, separators=(",", ":")).encode("utf-8")
+    raw += b" " * (-len(raw) % 4)
+    return struct.pack("<I", len(raw)) + raw + mat.tobytes()
+
+
+def decode_matrix(buf: bytes) -> Dict[str, Any]:
+    (h,) = struct.unpack_from("<I", buf, 0)
+    header = json.loads(buf[4: 4 + h].decode("utf-8"))
+    mat = np.frombuffer(buf, dtype="<f4", count=header["n_rows"] * header["n_cols"],
+                        offset=4 + h).reshape(header["n_rows"], header["n_cols"])
+    return {"header": header, "matrix": mat}
 
 
 def _num(v) -> Any:

@@ -24,6 +24,66 @@ export interface DatasetSummary {
   point_sets?: PointSetInfo[]
   /** cell embeddings (cd.cellm arrays with ≥2 columns) */
   embeddings?: EmbeddingInfo[]
+  /** false → no 3-D spots (e.g. single-cell Hi-C / RNA only) */
+  has_coords?: boolean
+  /** numeric per-spot tracks (cd.tracks), e.g. IF / ChIP marks */
+  tracks?: TrackInfo[]
+  /** linked contact maps (cool / mcool / scool) */
+  contact_maps?: ContactMapInfo[]
+  /** interval tables in cd.results (TADs, loops, peaks) */
+  intervals?: IntervalInfo[]
+}
+
+export interface TrackInfo {
+  name: string
+}
+
+export interface ContactMapInfo {
+  key: string
+  kind: 'cool' | 'mcool' | 'scool' | string
+  label: string
+  resolutions: number[]
+  chroms: { name: string; length: number }[]
+  per_cell: boolean
+  n_cells: number
+}
+
+export interface IntervalInfo {
+  key: string
+  n: number
+}
+
+/** GET tracks: per-genomic-bin aggregates of spot tracks. */
+export interface TrackData {
+  chrom: string
+  bin_starts: number[]
+  bin_ends: number[]
+  n_spots: number[]
+  values: Record<string, (number | null)[]>
+}
+
+/** GET intervals/{key}. */
+export interface IntervalTable {
+  columns: string[]
+  rows: (string | number | null)[][]
+}
+
+export interface RgStats {
+  trace_ids: string[]
+  cell_ids: (string | null)[]
+  chroms: string[]
+  rg: (number | null)[]
+  n_spots: number[]
+  unit: string | null
+}
+
+export interface ScalingStats {
+  sep_bp: number[]
+  median: (number | null)[]
+  q25: (number | null)[]
+  q75: (number | null)[]
+  n_pairs: number[]
+  unit: string | null
 }
 
 export interface EmbeddingInfo {
@@ -49,10 +109,17 @@ export interface CellField {
   /** prefix before the first '.' ('rna.Nanog' → 'rna'), else 'cell' */
   group: string
   label: string
+  /** 'category': string column with a few values (e.g. cell_type); absent → numeric */
+  kind?: 'numeric' | 'category'
   min: number | null
   max: number | null
   n_valid: number
+  /** category fields: values in natural order with their cell counts */
+  categories?: { value: string; count: number }[]
 }
+
+/** One cell's value of a cell field (numbers, category strings, or missing). */
+export type CellValue = number | string | null
 
 export interface PointSetInfo {
   name: string
@@ -64,8 +131,9 @@ export interface PointSetInfo {
 
 export interface CellValues {
   field: string
+  kind?: 'numeric' | 'category'
   cell_ids: string[]
-  values: (number | null)[]
+  values: CellValue[]
 }
 
 export interface CellDetails {
@@ -147,7 +215,8 @@ export interface GeometryHeader {
   total_points: number
   truncated: boolean
   segments: SegmentInfo[]
-  bbox: { min: [number, number, number]; max: [number, number, number] }
+  /** null when the selection has no points (API.md) */
+  bbox: { min: [number, number, number]; max: [number, number, number] } | null
   chrom_extent: Record<string, [number, number]>
 }
 

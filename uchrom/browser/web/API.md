@@ -62,7 +62,10 @@ Multi-omics fields (empty lists when the dataset has none):
 
 `embeddings` are the 2-D-or-more arrays in `cd.cellm` (rows aligned to
 `cd.cells`); metadata from `uns["embeddings"][key]` when present.
-`cell_fields` are the numeric columns of `cd.cells`; `group` is the prefix
+`cell_fields` are the columns of `cd.cells` usable for colouring:
+`kind: "numeric"` (with `min`/`max`) or `kind: "category"` — string
+columns with 2–60 values that are not per-cell ids (e.g. `cell_type`), with
+`categories: [{"value", "count"}]` in natural order; `group` is the prefix
 before the first `.` (`rna.Nanog` → `rna`) or `cell`, and `label` the rest.
 `point_sets` describe `cd.points` (non-genomic 3D points in the same frame
 as `coords`, e.g. nascent RNA spots); `labels` are sorted by count.
@@ -117,10 +120,11 @@ when the dataset has no `cell_id` column.
 One numeric cell field for every cell (for colouring the overview):
 
 ```json
-{"field": "rna.Nanog", "cell_ids": ["0_1", "0_2"], "values": [0, 13]}
+{"field": "rna.Nanog", "kind": "numeric", "cell_ids": ["0_1", "0_2"], "values": [0, 13]}
 ```
 
-Missing values are `null`.  `404` unknown field.
+Categorical fields return strings (`"kind": "category"`).  Missing values
+are `null`.  `404` unknown field.
 
 ### `GET /api/datasets/{id}/cell_info?cell_id=0_2`
 
@@ -221,3 +225,92 @@ dataset (not just the selection), so the frontend can colour a sub-region on
 the same rainbow scale as its parent.
 
 Errors: `404` unknown dataset, `422` invalid filter.
+
+## Genome-coordinate views (tracks, contact and distance matrices, stats)
+
+These views are **peers** of the 3-D view and also work for datasets without
+3-D coordinates (e.g. single-cell Hi-C / RNA: `n_spots == 0`).  All share a
+*locus* `chrom, start, end` chosen in the client.
+
+The dataset summary gains:
+
+```json
+{
+  "has_coords": true,                    // false → no 3-D spots (hide/grey 3-D views)
+  "tracks": [{"name": "H3K27ac"}],       // numeric cd.tracks columns (per spot)
+  "contact_maps": [
+    {"key": "bulk", "kind": "cool",      // cool | mcool | scool
+     "label": "IMR90 Hi-C", "resolutions": [30000],
+     "chroms": [{"name": "chr21", "length": 46709983}],
+     "per_cell": false, "n_cells": 0}
+  ],
+  "intervals": [{"key": "tads", "n": 120}]   // cd.results DataFrames with chrom/start/end
+}
+```
+
+`contact_maps` come from `uns["linked_cool"]` (`ChromData.link_cool`) and
+`uns["linked_scool"]` (`ChromData.link_scool`); files must exist on the
+server.
+
+### Binary matrix payload
+
+`/contacts/…` and `/distance` return `application/octet-stream`, little-endian:
+`uint32 H` | `H` bytes JSON header (space-padded to a multiple of 4) |
+`float32[n_rows × n_cols]` row-major (`NaN` = missing).  Header:
+
+```json
+{"chrom": "chr21", "start": 18000000, "end": 21000000,
+ "n_rows": 100, "n_cols": 100, "bin_starts": [...], "bin_ends": [...],
+ "resolution": 30000, "value": "count|balanced|distance|contact_frequency",
+ "unit": "um", "n_traces": 42, "note": "…"}
+```
+
+Matrices are capped at 1,000 × 1,000 bins: larger requests are sum-pooled
+(contacts) / median-pooled (distances) and the header says so in `note`.
+
+### `GET /api/datasets/{id}/tracks?names=H3K27ac,H3K9me3&chrom=chr7&start=&end=&cell_id=&agg=mean`
+
+Per-genomic-bin aggregate of spot tracks over the selection (all cells, or
+one `cell_id`), for a genome-browser track view:
+
+```json
+{"chrom": "chr7", "bin_starts": [...], "bin_ends": [...],
+ "n_spots": [12, 9, …],
+ "values": {"H3K27ac": [0.3, -0.1, …], "H3K9me3": […]}}
+```
+
+`agg`: `mean` (default) | `median` | `max`.  Empty bins are omitted.
+
+### `GET /api/datasets/{id}/intervals/{key}?chrom=chr7&start=&end=`
+
+Rows of an interval table (TADs, loops, peaks):
+`{"columns": [...], "rows": [[…], …]}` with `chrom, start, end` (and for
+loops `chrom2, start2, end2`) plus any score columns.
+
+### `GET /api/datasets/{id}/contacts/{key}?chrom=chr21&start=&end=&resolution=&balance=false&cell=`
+
+Contact matrix from a linked cool / mcool / scool.  `resolution` picks an
+mcool level (default: the finest that fits 1,000 bins); `cell` selects a
+cell of an scool (defaults to none → `400`).  Binary payload above.
+
+### `GET /api/datasets/{id}/distance?chrom=&start=&end=&cell_id=&trace_id=&stat=median&threshold=`
+
+Pairwise 3-D distances between genomic bins from `coords`:
+
+- `trace_id` → that trace's matrix;
+- `cell_id` (no trace) → per-bin-pair median over that cell's traces;
+- neither → population statistic over all traces on `chrom`.
+
+`stat`: `median` (default) | `mean` | `contact` (fraction of traces with
+distance < `threshold`, default 0.5 × dataset unit… or `threshold`).
+Binary payload above (`value`: `distance` or `contact_frequency`).
+
+### `GET /api/datasets/{id}/stats/rg?chrom=&cell_id=`
+
+Radius of gyration per trace: `{"trace_ids": [...], "cell_ids": [...],
+"chroms": [...], "rg": [...], "n_spots": [...], "unit": "um"}`.
+
+### `GET /api/datasets/{id}/stats/scaling?chrom=&cell_id=`
+
+Distance vs genomic separation (log-spaced separation bins):
+`{"sep_bp": [...], "median": [...], "q25": [...], "q75": [...], "n_pairs": [...], "unit": "um"}`.

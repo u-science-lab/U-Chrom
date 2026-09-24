@@ -5,16 +5,47 @@
 
 import type { EmbeddingInfo } from './types'
 
-export type PaneType = '3d' | 'embedding'
+export type PaneType = '3d' | 'embedding' | 'tracks' | 'matrix' | 'stats'
 export type WsLayout = 'tabs' | 'columns' | 'rows' | 'grid'
+export type StatsKind = 'rg' | 'scaling' | 'hist' | 'scatter'
+export type TrackAgg = 'mean' | 'median' | 'max'
+export type DistanceStat = 'median' | 'mean' | 'contact'
 
-export interface Pane {
+/** Per-pane settings of the genome-coordinate views (all optional). */
+export interface PaneOptions {
+  /** tracks: selected track names (null → a default set) */
+  tracks?: string[] | null
+  agg?: TrackAgg
+  /** tracks / matrix(distance): restrict to the focused cell when one is focused */
+  followFocus?: boolean
+  /** matrix: a contact-map key, or 'distance' (null → first contact map, else distance) */
+  source?: string | null
+  balance?: boolean
+  resolution?: number | null
+  stat?: DistanceStat
+  threshold?: number | null
+  /** stats */
+  statsKind?: StatsKind
+  fieldX?: string | null
+  fieldY?: string | null
+  /** stats rg / scaling: all chromosomes or only the locus chromosome */
+  chromScope?: 'all' | 'locus'
+}
+
+export interface Pane extends PaneOptions {
   id: string
   type: PaneType
   /** embedding panes: cellm key (null → default UMAP > t-SNE > PCA) */
   embeddingKey: string | null
   /** embedding panes: the two components shown */
   dims: [number, number]
+}
+
+/** What a dataset offers — decides the default views. */
+export interface DataKind {
+  hasEmbeddings: boolean
+  hasCoords: boolean
+  hasTracks: boolean
 }
 
 export interface WorkspaceState {
@@ -28,17 +59,37 @@ export interface WorkspaceState {
 }
 
 export const LAYOUTS: WsLayout[] = ['tabs', 'columns', 'rows', 'grid']
-export const PANE_TYPES: PaneType[] = ['3d', 'embedding']
+export const PANE_TYPES: PaneType[] = ['3d', 'embedding', 'tracks', 'matrix', 'stats']
+export const PANE_LABEL: Record<PaneType, string> = { '3d': '3D', embedding: 'Embedding', tracks: 'Tracks', matrix: 'Matrix', stats: 'Stats' }
 export const MIN_FRAC = 0.1
 
 const pane = (id: string, type: PaneType): Pane => ({ id, type, embeddingKey: null, dims: [0, 1] })
 
-/** Default: 3D | Embedding columns when the data has embeddings, else 3D alone. */
-export function defaultWorkspace(hasEmbeddings: boolean): WorkspaceState {
-  return hasEmbeddings
-    ? { layout: 'columns', panes: [pane('P1', '3d'), pane('P2', 'embedding')], activePane: 'P1', sizes: [0.6, 0.4], maximized: null }
-    : { layout: 'columns', panes: [pane('P1', '3d')], activePane: 'P1', sizes: [1], maximized: null }
+/**
+ * Default views follow the data:
+ * - 3-D coords + embeddings → 3D | Embedding
+ * - 3-D coords, no embeddings → 3D | Tracks (if tracks) else 3D | Matrix (distances)
+ * - no 3-D coords → Matrix | Embedding (or Matrix alone)
+ * A bare boolean means "has embeddings" with 3-D coords (older callers).
+ */
+export function defaultWorkspace(kind: boolean | DataKind): WorkspaceState {
+  const k: DataKind = typeof kind === 'boolean' ? { hasEmbeddings: kind, hasCoords: true, hasTracks: false } : kind
+  const two = (a: PaneType, b: PaneType, sizes: [number, number]): WorkspaceState => ({
+    layout: 'columns',
+    panes: [pane('P1', a), pane('P2', b)],
+    activePane: 'P1',
+    sizes,
+    maximized: null,
+  })
+  if (!k.hasCoords) {
+    return k.hasEmbeddings ? two('matrix', 'embedding', [0.55, 0.45]) : { layout: 'columns', panes: [pane('P1', 'matrix')], activePane: 'P1', sizes: [1], maximized: null }
+  }
+  if (k.hasEmbeddings) return two('3d', 'embedding', [0.6, 0.4])
+  return k.hasTracks ? two('3d', 'tracks', [0.55, 0.45]) : two('3d', 'matrix', [0.55, 0.45])
 }
+
+/** Pane types of a workspace, in order — to compare layouts. */
+export const paneSignature = (ws: WorkspaceState) => ws.panes.map((p) => p.type).join(',')
 
 /** Preferred default embedding: UMAP, then t-SNE, then PCA, then the first one. */
 export function defaultEmbeddingKey(list: EmbeddingInfo[]): string | null {
@@ -119,6 +170,24 @@ export function moveSplitter(ws: WorkspaceState, index: number, frac: number): W
   return { ...ws, sizes: s }
 }
 
+/** Keep only well-formed pane options from a persisted pane. */
+function parseOptions(p: Partial<Pane>): PaneOptions {
+  const o: PaneOptions = {}
+  if (Array.isArray(p.tracks) && p.tracks.every((t) => typeof t === 'string')) o.tracks = p.tracks
+  if (p.agg === 'mean' || p.agg === 'median' || p.agg === 'max') o.agg = p.agg
+  if (typeof p.followFocus === 'boolean') o.followFocus = p.followFocus
+  if (typeof p.source === 'string') o.source = p.source
+  if (typeof p.balance === 'boolean') o.balance = p.balance
+  if (typeof p.resolution === 'number' && p.resolution > 0) o.resolution = p.resolution
+  if (p.stat === 'median' || p.stat === 'mean' || p.stat === 'contact') o.stat = p.stat
+  if (typeof p.threshold === 'number' && p.threshold > 0) o.threshold = p.threshold
+  if (p.statsKind === 'rg' || p.statsKind === 'scaling' || p.statsKind === 'hist' || p.statsKind === 'scatter') o.statsKind = p.statsKind
+  if (typeof p.fieldX === 'string') o.fieldX = p.fieldX
+  if (typeof p.fieldY === 'string') o.fieldY = p.fieldY
+  if (p.chromScope === 'all' || p.chromScope === 'locus') o.chromScope = p.chromScope
+  return o
+}
+
 /** Parse a persisted workspace; anything malformed → null (caller uses a default). */
 export function parseWorkspace(raw: unknown): WorkspaceState | null {
   if (!raw || typeof raw !== 'object') return null
@@ -129,7 +198,7 @@ export function parseWorkspace(raw: unknown): WorkspaceState | null {
     if (!p || typeof p.id !== 'string' || !PANE_TYPES.includes(p.type)) return null
     const dims: [number, number] =
       Array.isArray(p.dims) && p.dims.length === 2 && p.dims.every((d) => Number.isInteger(d) && d >= 0) ? [p.dims[0], p.dims[1]] : [0, 1]
-    panes.push({ id: p.id, type: p.type, embeddingKey: typeof p.embeddingKey === 'string' ? p.embeddingKey : null, dims })
+    panes.push({ ...parseOptions(p), id: p.id, type: p.type, embeddingKey: typeof p.embeddingKey === 'string' ? p.embeddingKey : null, dims })
   }
   if (new Set(panes.map((p) => p.id)).size !== panes.length) return null
   const activePane = panes.some((p) => p.id === w.activePane) ? (w.activePane as string) : panes[0].id

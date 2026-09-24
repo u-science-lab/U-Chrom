@@ -350,16 +350,37 @@ select:focus {
   min-height: 120px;
   max-height: 46vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-input);
 }
 .cell-list li {
+  /* fixed row height: the list is virtualised (ROW_H in CellPanel.tsx) */
+  height: 22px;
+  box-sizing: border-box;
   padding: 3px 6px;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.cell-list li.spacer {
+  padding: 0;
+  cursor: default;
+  pointer-events: none;
+}
+.cell-list .cell-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.cell-list .cell-tag {
+  margin-left: auto;
+  padding-left: 6px;
+  flex: none;
+  font-size: 11px;
 }
 .cell-list li:hover {
   background: var(--bg-hover);
@@ -537,8 +558,22 @@ details.subset > summary h2 {
 }
 .cell-value {
   margin-left: auto;
+  flex: none;
   font-variant-numeric: tabular-nums;
   color: var(--accent);
+}
+.cell-value.cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+  font-size: 11px;
+}
+.cell-tag + .cell-value {
+  margin-left: 6px;
+}
+.swatch.round {
+  border-radius: 50%;
 }
 
 /* ---- focused cell details ------------------------------------------ */
@@ -721,6 +756,9 @@ button.link {
 }
 .ws-bar {
   display: flex;
+  flex-wrap: wrap;
+  row-gap: 3px;
+  min-width: 0;
   align-items: center;
   gap: 8px;
   min-height: 34px;
@@ -840,6 +878,7 @@ button.link {
 }
 .pane-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   padding: 2px 4px;
@@ -893,4 +932,159 @@ body.resizing-rows {
   border-left: 2px solid var(--accent);
   border-radius: var(--radius);
   line-height: 1.35;
+}
+
+/* ---- genome-coordinate panes: tracks / matrix / stats ----------------- */
+.genome-view {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--viewport-bg);
+}
+.genome-view canvas {
+  display: block;
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+.genome-view .pane-empty,
+.viewport > .pane-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  z-index: 1;
+  pointer-events: none;
+}
+.pane-error {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  z-index: 2;
+  max-width: 80%;
+}
+.pane-loading {
+  position: absolute;
+  right: 8px;
+  top: 4px;
+  z-index: 2;
+}
+.pane-badge {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  z-index: 2;
+  padding: 1px 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--accent);
+  background: rgba(20, 22, 26, 0.85);
+}
+.matrix-note {
+  position: absolute;
+  z-index: 2;
+  right: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.locus-bar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.locus-bar input {
+  width: 190px;
+  font-variant-numeric: tabular-nums;
+}
+.locus-bar input.bad {
+  border-color: var(--error);
+}
+.locus-bar button {
+  padding: 1px 7px;
+}
+.pane-head input.num {
+  width: 72px;
+}
+.pane-menu {
+  position: relative;
+}
+.pane-popup {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  width: 220px;
+  margin-top: 2px;
+  padding: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.pane-popup input {
+  width: 100%;
+  margin-bottom: 4px;
+}
+.pane-popup ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.pane-popup li {
+  padding: 2px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pane-popup li:hover {
+  background: var(--bg-hover);
+}
+.pane-popup li.on {
+  color: var(--accent);
+}
+.pane-popup .tick {
+  display: inline-block;
+  width: 1.2em;
+}
+.cell-value .swatch {
+  width: 8px;
+  height: 8px;
+  flex: none;
+}
+
+/* ---- categorical cell-field legend --------------------------------- */
+.legend-list.categories {
+  grid-template-columns: 1fr;
+}
+.legend-list.categories .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.legend-list li.missing .swatch {
+  background: rgb(115, 115, 115);
+}
+.colorbar.inline.cats {
+  gap: 3px;
+  flex-wrap: wrap;
+  max-width: 420px;
+}
+.colorbar.inline.cats .cat-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  cursor: pointer;
+  flex: none;
+}
+.colorbar.inline.cats .cat-dot.off {
+  background: transparent !important;
+  outline: 1px solid var(--text-muted);
 }

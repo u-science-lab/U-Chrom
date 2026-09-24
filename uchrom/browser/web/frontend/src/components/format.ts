@@ -8,7 +8,13 @@ export function fmtNum(v: number | null | undefined): string {
   return (+v.toPrecision(3)).toString()
 }
 
-import type { CellField } from '../types'
+import type { CellField, CellValue } from '../types'
+
+/** A cell-field value for display: category strings as-is, numbers compact. */
+export function fmtValue(v: CellValue | undefined): string {
+  if (typeof v === 'string') return v
+  return fmtNum(v)
+}
 
 /**
  * Cell fields worth colouring by: drop id-like columns (`*_id`) and put 0/1
