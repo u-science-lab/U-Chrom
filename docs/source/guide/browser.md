@@ -107,6 +107,51 @@ the cell list, ↗ *New view* in the focus bar, or from the label shown when
 clicking a trace — e.g. to compare two cells side by side while the
 overview stays.
 
+### Cell groups
+
+Views can aggregate over a **group** of cells, not only over all cells or
+one cell.  A group is either a category of a cell field (every
+`cell_type`, cluster, … — one automatic group per value) or a cell list you
+select yourself:
+
+- **Groups** (left sidebar, shared by every view) lists the automatic
+  groups, collapsed by field, and your saved groups.  Click a group to
+  **focus** it — like focusing a cell.  Its cells are drawn in full in the
+  3-D views and highlighted in the embeddings and the cell list, and the
+  others fade.  Every view that follows the focus then aggregates over the
+  group.  *All cells* / `Esc` releases it, and ↗ opens a new view scoped to
+  it.
+- **Lasso**: in an Embedding view, shift-drag (or turn on the ◌ lasso
+  tool) around cells.  The selection is focused at once.  **Save as
+  group** (in the view or the Groups panel) keeps it under a name, and you
+  can rename (✎) or delete (×) it later.  Saved groups are remembered per
+  dataset in the browser.
+- **Scope of a view** (inspector, top): *follow focus*, 📌 one cell, or a
+  group.  A group-scoped view shows its group whatever is focused, which
+  makes side-by-side comparisons possible:
+  - *3D*: the group's cells in full, the others faint;
+  - *Genome* / *Matrix*: tracks and the 3-D distance matrix aggregated
+    over the group's traces; a per-cell contact map (`.scool`) becomes the
+    group's **pseudo-bulk** (the sum of its cells' maps);
+  - *Stats*: Rg and distance-vs-separation over the group.
+- **Per-row groups** (Genome inspector): each track, distance or per-cell
+  matrix row can have a group of its own.  Stack e.g. *Bergmann* above
+  *Granule* on one axis.
+- **Compare groups** (Stats inspector): overlay several groups on the Rg
+  histogram (as fractions of traces) or on the scaling curve, each in its
+  colour.
+
+On Takei 2025 cerebellum FOV 0, for example, the median trace Rg follows
+nuclear size: Granule 1.16 µm (22 cells) < Bergmann 1.47 µm (8) < Purkinje
+1.86 µm (3).  On scHiCAR MOp the pseudo-bulk of a subclass is identical
+to that subclass's own `.cool` (coarsened to the same 1 Mb bins).
+
+### Saving a view as an image
+
+The camera button in every pane header saves that pane's content as a PNG.
+The file is `uchrom_<dataset>_<view>_<scope or locus>_<time>.png`, and the
+header and hover tips are left out.
+
 ### Genome-coordinate views
 
 Besides *3D* and *Embedding*, panes can show views along the genome.  They

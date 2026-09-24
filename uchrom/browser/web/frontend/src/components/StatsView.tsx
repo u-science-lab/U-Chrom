@@ -5,11 +5,13 @@ import { useFieldColors } from '../useFieldColors'
 import { fmtBp } from '../filters'
 import { logTicks, niceTicks } from '../genome'
 import { nearestPoint } from '../render/embedding'
+import { scopeLabel, type GroupInfo } from '../groups'
 import { activeView, fieldKey, useStore } from '../store'
 import { extent, fmtAxis, histogram, linear, logScale } from '../stats'
 import type { CellField, CellValue, RgStats, ScalingStats } from '../types'
 import { useLocus } from '../useLocus'
-import { paneCell, updatePane, type Pane, type StatsKind } from '../workspace'
+import { useGroupChoices, useGroupInfos, usePaneScope } from '../useGroups'
+import { updatePane, type Pane, type StatsKind } from '../workspace'
 import { CHART, drawAxes, rgb, type Box } from './chart'
 import { colourableFields, fieldLabel } from './format'
 import { prepareCanvas, useSize } from './useSize'
@@ -91,7 +93,44 @@ export function StatsControls({ pane }: { pane: Pane }) {
           <FieldSelect fields={fields} value={fy} onChange={(v) => upd({ fieldY: v })} title="y field" />
         </>
       )}
+      {(kind === 'rg' || kind === 'scaling') && <CompareGroups pane={pane} />}
     </>
+  )
+}
+
+/** Inspector checklist: groups overlaid on the Rg / scaling chart, each in its colour. */
+function CompareGroups({ pane }: { pane: Pane }) {
+  const setWorkspace = useStore((s) => s.setWorkspace)
+  const choices = useGroupChoices()
+  const refs = [...choices.fields.flatMap((f) => f.refs), ...choices.saved]
+  const infos = useGroupInfos(refs)
+  const on = new Set(pane.compareGroups ?? [])
+  if (!refs.length) return null
+  const toggle = (r: string) =>
+    setWorkspace((w) => updatePane(w, pane.id, { compareGroups: on.has(r) ? [...on].filter((x) => x !== r) : [...on, r] }))
+  return (
+    <div className="compare-groups">
+      <div className="muted small">
+        compare groups
+        {on.size > 0 && (
+          <button className="link" onClick={() => setWorkspace((w) => updatePane(w, pane.id, { compareGroups: [] }))}>
+            none
+          </button>
+        )}
+      </div>
+      <ul className="legend-list">
+        {refs.map((r, i) => {
+          const info = infos[i]
+          return (
+            <li key={r} className={on.has(r) ? '' : 'off'} onClick={() => toggle(r)} title={on.has(r) ? 'Remove from the chart' : 'Overlay on the chart'}>
+              <span className="swatch round" style={{ background: info?.color ?? '#888' }} />
+              <span>{info?.name ?? r}</span>
+              <span className="muted small">{info?.cells ? info.cells.length : ''}</span>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }
 
@@ -118,7 +157,13 @@ function useFieldValues(datasetId: string | undefined, field: string | null): Ma
  */
 export function StatsView({ pane }: { pane: Pane }) {
   const { ds, kind, fx, fy } = useStatsSetup(pane)
-  const focus = useStore((s) => paneCell(pane, activeView(s).focusCell))
+  const scope = usePaneScope(pane)
+  const focus = scope.kind === 'cell' ? scope.cell : null
+  const baseGroup = scope.kind === 'group' ? scope.group : null
+  const compare = useMemo(() => (pane.compareGroups ?? []).filter((g) => g !== baseGroup), [pane.compareGroups, baseGroup])
+  const infos = useGroupInfos([baseGroup, ...compare])
+  const baseInfo = infos[0]
+  const compareInfos = useMemo(() => infos.slice(1), [infos])
   const focusCell = useStore((s) => s.focusCell)
   const view = useStore(activeView)
   const cells = useStore((s) => (s.activeDatasetId ? s.cells[s.activeDatasetId] : undefined))
@@ -131,6 +176,9 @@ export function StatsView({ pane }: { pane: Pane }) {
   const chrom = (pane.chromScope ?? 'all') === 'locus' ? (locus?.chrom ?? null) : null
   const [rg, setRg] = useState<RgStats | null>(null)
   const [scaling, setScaling] = useState<{ pop: ScalingStats; cell: ScalingStats | null } | null>(null)
+  // overlaid groups: ref → stats of the current kind
+  const [groupRg, setGroupRg] = useState<Record<string, RgStats>>({})
+  const [groupScaling, setGroupScaling] = useState<Record<string, ScalingStats>>({})
   const [error, setError] = useState<string | null>(null)
   const [hover, setHover] = useState<{ x: number; y: number; text: string } | null>(null)
   const xs = useFieldValues(ds?.id, kind === 'hist' || kind === 'scatter' ? fx : null)
@@ -140,19 +188,41 @@ export function StatsView({ pane }: { pane: Pane }) {
     if (!ds || (kind !== 'rg' && kind !== 'scaling')) return
     let live = true
     setError(null)
+    // the base is the pane's group when it has one, else every cell
     if (kind === 'rg') {
-      fetchRg(ds.id, { chrom })
+      fetchRg(ds.id, { chrom, group: baseGroup })
         .then((r) => live && setRg(r))
         .catch((e: Error) => live && setError(e.message))
     } else {
-      Promise.all([fetchScaling(ds.id, { chrom }), focus ? fetchScaling(ds.id, { chrom, cellId: focus }).catch(() => null) : Promise.resolve(null)])
+      Promise.all([fetchScaling(ds.id, { chrom, group: baseGroup }), focus ? fetchScaling(ds.id, { chrom, cellId: focus }).catch(() => null) : Promise.resolve(null)])
         .then(([pop, cell]) => live && setScaling({ pop, cell }))
         .catch((e: Error) => live && setError(e.message))
     }
     return () => {
       live = false
     }
-  }, [ds?.id, kind, chrom, kind === 'scaling' ? focus : null]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ds?.id, kind, chrom, baseGroup, kind === 'scaling' ? focus : null]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const compareKey = compare.join('\u0001')
+  useEffect(() => {
+    if (!ds || (kind !== 'rg' && kind !== 'scaling')) return
+    let live = true
+    setGroupRg({})
+    setGroupScaling({})
+    for (const g of compare) {
+      if (kind === 'rg')
+        fetchRg(ds.id, { chrom, group: g })
+          .then((r) => live && setGroupRg((m) => ({ ...m, [g]: r })))
+          .catch((e: Error) => live && setError(e.message))
+      else
+        fetchScaling(ds.id, { chrom, group: g })
+          .then((r) => live && setGroupScaling((m) => ({ ...m, [g]: r })))
+          .catch((e: Error) => live && setError(e.message))
+    }
+    return () => {
+      live = false
+    }
+  }, [ds?.id, kind, chrom, compareKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // scatter geometry for hit-testing
   const scatter = useMemo(() => {
@@ -188,16 +258,68 @@ export function StatsView({ pane }: { pane: Pane }) {
     if (!g) return
     const unit = ds.xyz_unit ?? ''
     if (kind === 'rg' && rg) {
-      const hist = histogram(rg.rg, 40)
-      const top = Math.max(1, ...hist.counts)
+      const overlays = compare
+        .map((g, i) => ({ info: compareInfos[i], data: groupRg[g] }))
+        .filter((o): o is { info: GroupInfo | null; data: RgStats } => !!o.data)
+      const baseLabel = baseGroup ? scopeLabel({ kind: 'group', group: baseGroup }, baseInfo) : 'all cells'
+      const allVals = [...rg.rg, ...overlays.flatMap((o) => o.data.rg)]
+      const lo = Math.min(...allVals.filter((v): v is number => typeof v === 'number'))
+      const hi = Math.max(...allVals.filter((v): v is number => typeof v === 'number'))
+      const range: [number, number] | undefined = Number.isFinite(lo) && Number.isFinite(hi) && hi > lo ? [lo, hi] : undefined
+      const hist = histogram(rg.rg, 40, range)
+      // with groups overlaid, every histogram is a fraction of its traces so sizes compare
+      const frac = overlays.length > 0
+      const norm = (h: { counts: number[] }) => {
+        const total = h.counts.reduce((a, b) => a + b, 0) || 1
+        return frac ? h.counts.map((c) => c / total) : h.counts
+      }
+      const baseCounts = norm(hist)
+      const overlayHists = overlays.map((o) => ({ ...o, counts: norm(histogram(o.data.rg, 40, range ?? [hist.edges[0], hist.edges[hist.edges.length - 1]])) }))
+      const top = Math.max(frac ? 1e-9 : 1, ...baseCounts, ...overlayHists.flatMap((o) => o.counts))
       const sx = linear(hist.edges[0], hist.edges[hist.edges.length - 1], plot.x, plot.x + plot.w)
       const sy = linear(0, top, plot.y + plot.h, plot.y)
-      g.fillStyle = 'rgba(92,157,237,0.75)'
-      hist.counts.forEach((c, i) => {
+      g.fillStyle = baseGroup && baseInfo ? baseInfo.color : 'rgba(92,157,237,0.75)'
+      g.globalAlpha = frac ? 0.35 : baseGroup ? 0.8 : 1
+      baseCounts.forEach((c, i) => {
         const x0 = sx(hist.edges[i])
         g.fillRect(x0 + 0.5, sy(c), Math.max(1, sx(hist.edges[i + 1]) - x0 - 1), plot.y + plot.h - sy(c))
       })
-      drawAxes(g, plot, { ticks: niceTicks(hist.edges[0], hist.edges[hist.edges.length - 1]), pos: sx, fmt: fmtAxis, label: `radius of gyration${unit ? ` (${unit})` : ''}` }, { ticks: niceTicks(0, top, 4), pos: sy, fmt: fmtAxis, label: 'traces' })
+      g.globalAlpha = 1
+      for (const o of overlayHists) {
+        g.strokeStyle = o.info?.color ?? '#ffffff'
+        g.lineWidth = 2
+        g.beginPath()
+        o.counts.forEach((c, i) => {
+          const x0 = sx(hist.edges[i])
+          const x1 = sx(hist.edges[i + 1])
+          if (i === 0) g.moveTo(x0, sy(0))
+          g.lineTo(x0, sy(c))
+          g.lineTo(x1, sy(c))
+          if (i === o.counts.length - 1) g.lineTo(x1, sy(0))
+        })
+        g.stroke()
+      }
+      drawAxes(
+        g,
+        plot,
+        { ticks: niceTicks(hist.edges[0], hist.edges[hist.edges.length - 1]), pos: sx, fmt: fmtAxis, label: `radius of gyration${unit ? ` (${unit})` : ''}` },
+        { ticks: niceTicks(0, top, 4), pos: sy, fmt: fmtAxis, label: frac ? 'fraction of traces' : 'traces' },
+      )
+      // legend: base + each group with n cells / traces and its median
+      const med = (v: (number | null)[]) => {
+        const x = v.filter((y): y is number => typeof y === 'number').sort((a, b) => a - b)
+        return x.length ? x[Math.floor((x.length - 1) / 2)] : NaN
+      }
+      g.font = CHART.font
+      g.textAlign = 'right'
+      const legend = [
+        { color: baseGroup && baseInfo ? baseInfo.color : CHART.accent, text: `${baseLabel}: median ${fmtAxis(med(rg.rg))} · ${rg.rg.length} traces${rg.n_cells ? ` / ${rg.n_cells} cells` : ''}` },
+        ...overlays.map((o) => ({ color: o.info?.color ?? '#fff', text: `${o.info?.name ?? o.data.group}: median ${fmtAxis(med(o.data.rg))} · ${o.data.rg.length} traces${o.data.n_cells ? ` / ${o.data.n_cells} cells` : ''}` })),
+      ]
+      legend.forEach((l, i) => {
+        g.fillStyle = l.color
+        g.fillText(l.text, plot.x + plot.w, plot.y + 10 + 14 * i)
+      })
       if (focus) {
         g.strokeStyle = '#ffffff'
         g.lineWidth = 2
@@ -211,12 +333,13 @@ export function StatsView({ pane }: { pane: Pane }) {
           g.stroke()
         })
         g.fillStyle = CHART.text
-        g.font = CHART.font
-        g.textAlign = 'right'
-        g.fillText(`white: traces of cell ${focus}`, plot.x + plot.w, plot.y + 10)
+        g.fillText(`white: traces of cell ${focus}`, plot.x + plot.w, plot.y + 10 + 14 * legend.length)
       }
     } else if (kind === 'scaling' && scaling) {
-      const all = [scaling.pop, ...(scaling.cell ? [scaling.cell] : [])]
+      const overlays = compare
+        .map((gr, i) => ({ info: compareInfos[i], data: groupScaling[gr] }))
+        .filter((o): o is { info: GroupInfo | null; data: ScalingStats } => !!o.data && o.data.sep_bp.length > 0)
+      const all = [scaling.pop, ...(scaling.cell ? [scaling.cell] : []), ...overlays.map((o) => o.data)]
       const sepAll = all.flatMap((s) => s.sep_bp).filter((v) => v > 0)
       const yAll = all.flatMap((s) => [...s.q25, ...s.q75, ...s.median]).filter((v): v is number => typeof v === 'number' && v > 0)
       if (!sepAll.length || !yAll.length) return
@@ -224,10 +347,10 @@ export function StatsView({ pane }: { pane: Pane }) {
       const [y0, y1] = [Math.min(...yAll), Math.max(...yAll)]
       const sx = logScale(sx0, sx1 > sx0 ? sx1 : sx0 * 10, plot.x, plot.x + plot.w)
       const sy = logScale(y0, y1 > y0 ? y1 : y0 * 10, plot.y + plot.h, plot.y)
-      const line = (s: ScalingStats, color: string, band: boolean) => {
+      const line = (s: ScalingStats, color: string, band: boolean, bandColor = 'rgba(92,157,237,0.18)') => {
         const pts = s.sep_bp.map((x, i) => ({ x, m: s.median[i], a: s.q25[i], b: s.q75[i] })).filter((p) => p.x > 0 && typeof p.m === 'number' && p.m > 0)
         if (band) {
-          g.fillStyle = 'rgba(92,157,237,0.18)'
+          g.fillStyle = bandColor
           g.beginPath()
           pts.forEach((p, k) => (k ? g.lineTo(sx(p.x), sy(p.b ?? p.m!)) : g.moveTo(sx(p.x), sy(p.b ?? p.m!))))
           ;[...pts].reverse().forEach((p) => g.lineTo(sx(p.x), sy(p.a && p.a > 0 ? p.a : p.m!)))
@@ -240,7 +363,9 @@ export function StatsView({ pane }: { pane: Pane }) {
         pts.forEach((p, k) => (k ? g.lineTo(sx(p.x), sy(p.m!)) : g.moveTo(sx(p.x), sy(p.m!))))
         g.stroke()
       }
-      line(scaling.pop, CHART.accent, true)
+      const baseColor = baseGroup && baseInfo ? baseInfo.color : CHART.accent
+      line(scaling.pop, baseColor, true, baseGroup && baseInfo ? baseInfo.color.replace('rgb(', 'rgba(').replace(')', ', 0.18)') : undefined)
+      for (const o of overlays) line(o.data, o.info?.color ?? '#ffffff', false)
       if (scaling.cell) line(scaling.cell, '#ffffff', false)
       const yt = logTicks(y0, y1)
       drawAxes(
@@ -251,12 +376,15 @@ export function StatsView({ pane }: { pane: Pane }) {
       )
       g.font = CHART.font
       g.textAlign = 'left'
-      g.fillStyle = CHART.accent
-      g.fillText('population (median, IQR band)', plot.x + 8, plot.y + 10)
-      if (scaling.cell) {
-        g.fillStyle = '#ffffff'
-        g.fillText(`cell ${focus}`, plot.x + 8, plot.y + 24)
-      }
+      const legend = [
+        { color: baseColor, text: `${baseGroup ? scopeLabel({ kind: 'group', group: baseGroup }, baseInfo) : 'population'} (median, IQR band)` },
+        ...overlays.map((o) => ({ color: o.info?.color ?? '#fff', text: `${o.info?.name ?? o.data.group}${o.data.n_cells ? ` (${o.data.n_cells} cells)` : ''}` })),
+        ...(scaling.cell ? [{ color: '#ffffff', text: `cell ${focus}` }] : []),
+      ]
+      legend.forEach((l, i) => {
+        g.fillStyle = l.color
+        g.fillText(l.text, plot.x + 8, plot.y + 10 + 14 * i)
+      })
     } else if (kind === 'hist' && xs && fx) {
       const hist = histogram(xs.values(), 40)
       const top = Math.max(1, ...hist.counts)
@@ -311,7 +439,7 @@ export function StatsView({ pane }: { pane: Pane }) {
         { ticks: niceTicks(scatterPx.y0, scatterPx.y1, 4), pos: scatterPx.sy, fmt: fmtAxis, label: fieldLabel(fy) },
       )
     }
-  }, [kind, rg, scaling, xs, fx, fy, scatter, scatterPx, size.w, size.h, focus, cells, fieldColors, view.overviewColor, custom, ds]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [kind, rg, scaling, xs, fx, fy, scatter, scatterPx, size.w, size.h, focus, cells, fieldColors, view.overviewColor, custom, ds, groupRg, groupScaling, baseInfo, compareInfos]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const hit = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!scatter || !scatterPx) return -1
@@ -337,7 +465,9 @@ export function StatsView({ pane }: { pane: Pane }) {
       {message && <div className="muted pane-empty">{message}</div>}
       {error && <div className="error pane-error">{error}</div>}
       <canvas ref={canvasRef} onMouseMove={onMove} onMouseLeave={() => setHover(null)} onClick={onClick} style={{ cursor: hover ? 'pointer' : 'default' }} />
-      {chrom && (kind === 'rg' || kind === 'scaling') && <div className="pane-badge small">{chrom}</div>}
+      {(kind === 'rg' || kind === 'scaling') && (chrom || baseGroup) && (
+        <div className="pane-badge small">{[chrom, baseGroup ? scopeLabel(scope, baseInfo) : null].filter(Boolean).join(' · ')}</div>
+      )}
       {hover && (
         <div className="embedding-tip" style={{ left: Math.min(hover.x + 12, size.w - 200), top: hover.y + 12 }}>
           {hover.text}

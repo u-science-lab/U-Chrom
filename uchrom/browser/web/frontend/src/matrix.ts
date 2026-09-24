@@ -17,6 +17,10 @@ export interface MatrixHeader {
   value: 'count' | 'balanced' | 'distance' | 'contact_frequency' | string
   unit?: string | null
   n_traces?: number | null
+  /** group-scoped matrices: the group, its cells used, contacts summed (pseudo-bulk) */
+  group?: string | null
+  n_cells?: number | null
+  n_contacts?: number | null
   note?: string | null
 }
 

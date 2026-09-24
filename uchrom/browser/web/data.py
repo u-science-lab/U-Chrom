@@ -8,6 +8,7 @@ wire format.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import struct
@@ -77,6 +78,7 @@ class Dataset:
     path: Optional[str]
     cd: ChromData
     _cache: Dict[str, Any] = field(default_factory=dict, repr=False)
+    _groups: Dict[str, Dict[str, Any]] = field(default_factory=dict, repr=False)
 
     # ------------------------------------------------------------------
     # Cached per-spot arrays
@@ -289,6 +291,81 @@ class Dataset:
                 fields[str(col)] = str(val)
         return {"cell_id": str(cell_id), "fields": fields}
 
+    # ------------------------------------------------------------------
+    # Cell groups: a category of a cell field, or a registered cell list
+    # ------------------------------------------------------------------
+
+    def known_cells(self) -> set:
+        """Cell ids of this dataset (the cells table and the spots)."""
+        if "known_cells" not in self._cache:
+            a = self._arrays()
+            known = set(self._cells_table().index)
+            if a["cell"] is not None:
+                known.update(pd.unique(a["cell"]))
+            self._cache["known_cells"] = known
+        return self._cache["known_cells"]
+
+    def register_group(self, cells: Sequence[str], name: Optional[str] = None) -> Dict[str, Any]:
+        """Register a cell list (e.g. a lasso selection) under a stable id.
+
+        The id hashes the sorted known cells, so registering the same cells
+        again (another tab, a reload) gives the same id.  Unknown ids are
+        dropped; none known → LookupError.
+        """
+        wanted = {str(c) for c in cells}
+        kept = sorted(wanted & self.known_cells(), key=natural_key)
+        if not kept:
+            raise LookupError("none of these cells are in the dataset")
+        gid = "g" + hashlib.sha1("\n".join(kept).encode("utf-8")).hexdigest()[:12]
+        rec = self._groups.setdefault(gid, {"id": gid, "cells": kept})
+        if name:
+            rec["name"] = str(name)
+        return {"id": gid, "name": rec.get("name"), "n_cells": len(kept),
+                "n_unknown": len(wanted) - len(kept)}
+
+    def groups(self) -> List[Dict[str, Any]]:
+        return [{"id": g["id"], "name": g.get("name"), "n_cells": len(g["cells"])}
+                for g in self._groups.values()]
+
+    def group_cells(self, group: str) -> List[str]:
+        """Cells of a group reference: ``field:<column>=<value>`` or a registered id.
+
+        Unknown field / id → KeyError; a group with no cells → LookupError.
+        """
+        group = str(group)
+        if group.startswith("field:"):
+            field, sep, value = group[len("field:"):].partition("=")
+            table = self._cells_table()
+            if not sep or field not in table.columns:
+                raise KeyError(f"group {group!r}: no cell field {field!r}")
+            col = table[field]
+            cells = [str(c) for c, v in zip(table.index, col) if not pd.isna(v) and str(v) == value]
+            if not cells:
+                raise LookupError(f"group {group!r} has no cells")
+            return cells
+        rec = self._groups.get(group)
+        if rec is None:
+            raise KeyError(f"unknown group {group!r} (register it with POST groups)")
+        return rec["cells"]
+
+    def group_info(self, group: str) -> Dict[str, Any]:
+        cells = self.group_cells(group)
+        name = self._groups[group].get("name") if group in self._groups else group.partition("=")[2]
+        return {"group": group, "name": name, "n_cells": len(cells), "cells": cells}
+
+    def _group_spot_mask(self, group: str) -> np.ndarray:
+        """Spots of the group's cells (cached; a few groups at a time)."""
+        cache = self._cache.setdefault("group_masks", {})
+        if group not in cache:
+            a = self._arrays()
+            cells = self.group_cells(group)
+            mask = (np.zeros(len(a["chrom"]), dtype=bool) if a["cell"] is None
+                    else np.isin(a["cell"], np.array(cells, dtype=object).astype(str)))
+            if len(cache) >= 16:
+                cache.pop(next(iter(cache)))
+            cache[group] = mask
+        return cache[group]
+
     def embeddings(self) -> List[Dict[str, Any]]:
         """cellm arrays usable as ≥2-D cell embeddings (rows = cd.cells)."""
         n = len(self._cells_table())
@@ -380,8 +457,10 @@ class Dataset:
         return [{"name": str(c)} for c in tracks.columns
                 if pd.api.types.is_numeric_dtype(tracks[c])]
 
-    def _select(self, chrom: str, start=None, end=None, cell_id=None, trace_id=None) -> np.ndarray:
+    def _select(self, chrom: str, start=None, end=None, cell_id=None, trace_id=None,
+                group=None) -> np.ndarray:
         a = self._arrays()
+        _one_scope(cell_id, group)
         mask = a["chrom"] == str(chrom)
         if start is not None:
             mask &= a["end"] > int(start)
@@ -391,10 +470,12 @@ class Dataset:
             mask &= a["cell"] == str(cell_id)
         if trace_id is not None:
             mask &= a["trace"] == str(trace_id)
+        if group is not None:
+            mask &= self._group_spot_mask(group)
         return np.flatnonzero(mask)
 
     def tracks(self, names: List[str], chrom: str, start=None, end=None,
-               cell_id=None, agg: str = "mean") -> Dict[str, Any]:
+               cell_id=None, agg: str = "mean", group=None) -> Dict[str, Any]:
         known = {t["name"] for t in self.track_names()}
         unknown = [n for n in names if n not in known]
         if unknown:
@@ -402,7 +483,7 @@ class Dataset:
         if agg not in ("mean", "median", "max"):
             raise ValueError("agg must be mean, median or max")
         a = self._arrays()
-        idx = self._select(chrom, start, end, cell_id)
+        idx = self._select(chrom, start, end, cell_id, group=group)
         df = pd.DataFrame({"start": a["start"][idx], "end": a["end"][idx]})
         for n in names:
             df[n] = self.cd.tracks[n].to_numpy(dtype=np.float64)[idx]
@@ -410,6 +491,7 @@ class Dataset:
         out = g[names].agg(agg) if names else pd.DataFrame(index=g.size().index)
         return {
             "chrom": str(chrom),
+            "group": group,
             "bin_starts": [int(v) for v in out.index],
             "bin_ends": [int(v) for v in g["end"].max().to_numpy()],
             "n_spots": [int(v) for v in g.size().to_numpy()],
@@ -497,8 +579,10 @@ class Dataset:
                 "balanced": "weight" in clr.bins().columns}
 
     def contacts(self, key: str, chrom: str, start=None, end=None, resolution=None,
-                 balance: bool = False, cell: Optional[str] = None) -> bytes:
+                 balance: bool = False, cell: Optional[str] = None, group: Optional[str] = None) -> bytes:
         import cooler
+
+        _one_scope(cell, group)
 
         info = next((m for m in self.contact_maps() if m["key"] == key and m["kind"] != "error"), None)
         if info is None:
@@ -512,6 +596,10 @@ class Dataset:
         hi = min(length, int(end or length))
         if hi <= lo:
             raise ValueError("empty region")
+        if group is not None:
+            if info["kind"] != "scool":
+                raise ValueError(f"contact map {key!r} is not per-cell: a group needs a per-cell (.scool) map")
+            return self._pseudobulk(key, path, group, chrom, lo, hi)
         if info["kind"] == "mcool":
             res = int(resolution) if resolution else next(
                 (r for r in info["resolutions"] if (hi - lo) / r <= MAX_MATRIX_BINS), info["resolutions"][-1])
@@ -520,12 +608,9 @@ class Dataset:
             uri = f"{path}::/resolutions/{res}"
         elif info["kind"] == "scool":
             if cell is None:
-                raise LookupError("per-cell contact map: pass cell=<cell id>")
-            cells = self._cache.get(("scool_cells", str(path)))
-            if cells is None:
-                cells = self._cache[("scool_cells", str(path))] = set(cooler.fileops.list_scool_cells(str(path)))
+                raise LookupError("per-cell contact map: pass cell=<cell id> or group=<group>")
             name = f"/cells/{cell}"
-            if name not in cells:
+            if name not in self._scool_cells(path):
                 raise KeyError(f"cell {cell!r} not in {key!r}")
             uri = f"{path}::{name}"
         else:
@@ -539,8 +624,74 @@ class Dataset:
         mat, starts, ends, note = _pool_square(mat, starts, ends, np.nansum)
         header = {"chrom": chrom, "start": lo, "end": hi, "resolution": int(clr.binsize or 0),
                   "value": "balanced" if balanced else "count", "unit": None,
-                  "cell": cell, "note": note}
+                  "cell": cell, "group": None, "note": note}
         return encode_matrix(mat, starts, ends, header)
+
+    def _scool_cells(self, path: Path) -> set:
+        """``/cells/<name>`` URIs of a .scool (listing is slow: cached)."""
+        import cooler
+
+        cells = self._cache.get(("scool_cells", str(path)))
+        if cells is None:
+            cells = self._cache[("scool_cells", str(path))] = set(cooler.fileops.list_scool_cells(str(path)))
+        return cells
+
+    def _pseudobulk(self, key: str, path: Path, group: str, chrom: str, lo: int, hi: int) -> bytes:
+        """Sum of a group's per-cell maps over a region (raw counts).
+
+        Reads the pixels of each cell straight from HDF5 (bin1 index slice
+        per cell), which is ~100× faster than a Cooler per cell; at most
+        PSEUDOBULK_MAX_CELLS cells (a random subset beyond that, noted), and
+        the last PSEUDOBULK_CACHE results are kept.
+        """
+        import cooler
+        import h5py
+
+        cache = self._cache.setdefault("pseudobulk", {})
+        ck = (key, group, chrom, lo, hi)
+        if ck in cache:
+            cache[ck] = cache.pop(ck)  # LRU: most recent last
+            return cache[ck]
+        available = self._scool_cells(path)
+        names = [c for c in self.group_cells(group) if f"/cells/{c}" in available]
+        if not names:
+            raise LookupError(f"no cell of group {group!r} has a map in {key!r}")
+        notes = []
+        if len(names) > PSEUDOBULK_MAX_CELLS:
+            rng = np.random.default_rng(0)
+            names = sorted(rng.choice(names, PSEUDOBULK_MAX_CELLS, replace=False).tolist(), key=natural_key)
+            notes.append(f"sum over {PSEUDOBULK_MAX_CELLS} random cells of the group")
+        first = cooler.Cooler(f"{path}::/cells/{names[0]}")
+        b0, b1 = first.extent((chrom, lo, hi))
+        bins = first.bins()[b0:b1]
+        starts, ends = bins["start"].to_numpy(np.int64), bins["end"].to_numpy(np.int64)
+        n = b1 - b0
+        acc = np.zeros(n * n, dtype=np.float64)
+        with h5py.File(path, "r") as f:
+            for c in names:
+                g = f["cells"][c]
+                off = g["indexes/bin1_offset"][b0: b1 + 1]
+                s0, s1 = int(off[0]), int(off[-1])
+                if s1 <= s0:
+                    continue
+                i = g["pixels/bin1_id"][s0:s1] - b0
+                j = g["pixels/bin2_id"][s0:s1] - b0
+                ok = j < n
+                acc += np.bincount(i[ok] * n + j[ok], weights=g["pixels/count"][s0:s1][ok], minlength=n * n)
+        up = acc.reshape(n, n)
+        mat = (up + up.T - np.diag(np.diag(up))).astype(np.float32)  # cool stores the upper triangle
+        total = float(np.triu(up).sum())
+        mat, starts, ends, note = _pool_square(mat, starts, ends, np.nansum)
+        if note:
+            notes.append(note)
+        header = {"chrom": chrom, "start": lo, "end": hi, "resolution": int(first.binsize or 0),
+                  "value": "count", "unit": None, "cell": None, "group": group,
+                  "n_cells": len(names), "n_contacts": total, "note": "; ".join(notes) or None}
+        buf = encode_matrix(mat, starts, ends, header)
+        cache[ck] = buf
+        while len(cache) > PSEUDOBULK_CACHE:
+            cache.pop(next(iter(cache)))
+        return buf
 
     # -- distances --------------------------------------------------------
 
@@ -566,10 +717,10 @@ class Dataset:
         return traces, bins, ends, P
 
     def distance(self, chrom: str, start=None, end=None, cell_id=None, trace_id=None,
-                 stat: str = "median", threshold: Optional[float] = None) -> bytes:
+                 stat: str = "median", threshold: Optional[float] = None, group=None) -> bytes:
         if stat not in ("median", "mean", "contact"):
             raise ValueError("stat must be median, mean or contact")
-        idx = self._select(chrom, start, end, cell_id, trace_id)
+        idx = self._select(chrom, start, end, cell_id, trace_id, group=group)
         if len(idx) == 0:
             raise LookupError("no spots with coordinates in this selection")
         traces, bins, ends, P = self._trace_bin_positions(idx)
@@ -606,19 +757,31 @@ class Dataset:
                   "resolution": int(np.median(np.diff(bins))) if len(bins) > 1 else 0,
                   "value": value, "stat": stat, "unit": None if unit is None else str(unit),
                   "n_traces": int(len(traces)), "trace_id": trace_id, "cell_id": cell_id,
+                  "group": group, "n_cells": self._n_cells_of(idx),
                   "note": "; ".join(notes) or None}
         return encode_matrix(mat.astype(np.float32), bins, ends, header)
 
     # -- statistics -------------------------------------------------------
 
-    def stats_rg(self, chrom=None, cell_id=None) -> Dict[str, Any]:
+    def _stats_spots(self, chrom=None, cell_id=None, group=None) -> np.ndarray:
         a = self._arrays()
+        _one_scope(cell_id, group)
         mask = np.isfinite(self.cd.coords).all(axis=1)
         if chrom:
             mask &= a["chrom"] == str(chrom)
         if cell_id is not None and a["cell"] is not None:
             mask &= a["cell"] == str(cell_id)
-        idx = np.flatnonzero(mask)
+        if group is not None:
+            mask &= self._group_spot_mask(group)
+        return np.flatnonzero(mask)
+
+    def _n_cells_of(self, idx: np.ndarray) -> Optional[int]:
+        a = self._arrays()
+        return None if a["cell"] is None else int(len(pd.unique(a["cell"][idx])))
+
+    def stats_rg(self, chrom=None, cell_id=None, group=None) -> Dict[str, Any]:
+        a = self._arrays()
+        idx = self._stats_spots(chrom, cell_id, group)
         df = pd.DataFrame(self.cd.coords[idx], columns=["x", "y", "z"])
         df["trace"] = a["trace"][idx]
         g = df.groupby("trace", sort=False)
@@ -632,16 +795,13 @@ class Dataset:
                 "chroms": [str(a["chrom"][i]) for i in first.to_numpy()],
                 "rg": [float(v) for v in rg.to_numpy()],
                 "n_spots": [int(v) for v in g.size().reindex(rg.index).to_numpy()],
+                "group": group, "n_cells": self._n_cells_of(idx),
                 "unit": None if unit is None else str(unit)}
 
-    def stats_scaling(self, chrom=None, cell_id=None, n_bins: int = 24) -> Dict[str, Any]:
+    def stats_scaling(self, chrom=None, cell_id=None, n_bins: int = 24, group=None) -> Dict[str, Any]:
         a = self._arrays()
-        mask = np.isfinite(self.cd.coords).all(axis=1)
-        if chrom:
-            mask &= a["chrom"] == str(chrom)
-        if cell_id is not None and a["cell"] is not None:
-            mask &= a["cell"] == str(cell_id)
-        idx = np.flatnonzero(mask)
+        idx = self._stats_spots(chrom, cell_id, group)
+        n_cells = self._n_cells_of(idx)
         order = np.lexsort((a["start"][idx], a["trace_code"][idx]))
         idx = idx[order]
         codes = a["trace_code"][idx]
@@ -663,7 +823,7 @@ class Dataset:
         unit = self.cd.uns.get("xyz_unit") if isinstance(self.cd.uns, dict) else None
         if not seps:
             return {"sep_bp": [], "median": [], "q25": [], "q75": [], "n_pairs": [],
-                    "unit": None if unit is None else str(unit)}
+                    "group": group, "n_cells": n_cells, "unit": None if unit is None else str(unit)}
         sep, dist = np.concatenate(seps), np.concatenate(dists)
         pos = sep > 0
         sep, dist = sep[pos], dist[pos]
@@ -681,6 +841,7 @@ class Dataset:
             out["q75"].append(float(q[2]))
             out["n_pairs"].append(int(len(d)))
         out["unit"] = None if unit is None else str(unit)
+        out["group"], out["n_cells"] = group, n_cells
         return out
 
     # ------------------------------------------------------------------
@@ -713,6 +874,15 @@ class Dataset:
 
 
 MAX_MATRIX_BINS = 1000
+#: pseudo-bulk of a group over a per-cell (.scool) map: cells summed at most
+PSEUDOBULK_MAX_CELLS = 20_000
+#: pseudo-bulk matrices kept per dataset (LRU)
+PSEUDOBULK_CACHE = 16
+
+
+def _one_scope(cell_id, group) -> None:
+    if cell_id is not None and group is not None:
+        raise ValueError("pass either cell_id or group, not both")
 
 
 class warnings_ignored:

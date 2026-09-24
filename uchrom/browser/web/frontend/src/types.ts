@@ -56,6 +56,7 @@ export interface IntervalInfo {
 /** GET tracks: per-genomic-bin aggregates of spot tracks. */
 export interface TrackData {
   chrom: string
+  group?: string | null
   bin_starts: number[]
   bin_ends: number[]
   n_spots: number[]
@@ -75,6 +76,8 @@ export interface RgStats {
   rg: (number | null)[]
   n_spots: number[]
   unit: string | null
+  group?: string | null
+  n_cells?: number | null
 }
 
 export interface ScalingStats {
@@ -84,6 +87,8 @@ export interface ScalingStats {
   q75: (number | null)[]
   n_pairs: number[]
   unit: string | null
+  group?: string | null
+  n_cells?: number | null
 }
 
 export interface EmbeddingInfo {

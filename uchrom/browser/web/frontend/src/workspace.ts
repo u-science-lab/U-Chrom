@@ -34,6 +34,8 @@ export interface PaneOptions {
   fieldY?: string | null
   /** stats rg / scaling: all chromosomes or only the locus chromosome */
   chromScope?: 'all' | 'locus'
+  /** stats rg / scaling: groups overlaid in their colours (group refs) */
+  compareGroups?: string[]
 }
 
 export interface Pane extends PaneOptions {
@@ -41,6 +43,8 @@ export interface Pane extends PaneOptions {
   type: PaneType
   /** cell this view is pinned to; null / absent = follow the global focus */
   cell?: string | null
+  /** group this view aggregates over (a group ref, see groups.ts); wins over `cell` */
+  group?: string | null
   /** embedding panes: cellm key (null → default UMAP > t-SNE > PCA) */
   embeddingKey: string | null
   /** embedding panes: the two components shown */
@@ -153,9 +157,42 @@ export function addPinnedPane(ws: WorkspaceState, type: PaneType, cell: string):
   return split && next.panes.length > MAX_SPLIT_PANES ? { ...next, layout: 'grid' } : next
 }
 
-/** Pin a pane to a cell, or unpin it (null = follow the global focus). */
+/** Pin a pane to a cell, or unpin it (null = follow the global focus); clears a group scope. */
 export function pinPane(ws: WorkspaceState, id: string, cell: string | null): WorkspaceState {
-  return updatePane(ws, id, { cell })
+  return updatePane(ws, id, { cell, group: null })
+}
+
+/** Scope a pane to a group (null = follow the global focus); clears a pinned cell. */
+export function setPaneGroup(ws: WorkspaceState, id: string, group: string | null): WorkspaceState {
+  return updatePane(ws, id, { group, cell: null })
+}
+
+/** Open a new view of `type` scoped to a group. */
+export function addGroupPane(ws: WorkspaceState, type: PaneType, group: string): WorkspaceState {
+  const next = addPane(ws, type, { group })
+  const split = next.layout === 'columns' || next.layout === 'rows'
+  return split && next.panes.length > MAX_SPLIT_PANES ? { ...next, layout: 'grid' } : next
+}
+
+/**
+ * Forget a deleted group everywhere: pane scopes, stats overlays and genome
+ * row scopes (same object when nothing refers to it).
+ */
+export function dropGroupScope(ws: WorkspaceState, group: string): WorkspaceState {
+  let changed = false
+  const panes = ws.panes.map((p) => {
+    let q = p
+    if (q.group === group) q = { ...q, group: null }
+    if (q.compareGroups?.includes(group)) q = { ...q, compareGroups: q.compareGroups.filter((g) => g !== group) }
+    if (q.genomeRows && Object.values(q.genomeRows).some((rows) => rows.some((r) => r.group === group))) {
+      const byDs: Record<string, GenomeRow[]> = {}
+      for (const [k, rows] of Object.entries(q.genomeRows)) byDs[k] = rows.map((r) => (r.group === group ? { ...r, group: null } : r))
+      q = { ...q, genomeRows: byDs }
+    }
+    if (q !== p) changed = true
+    return q
+  })
+  return changed ? { ...ws, panes } : ws
 }
 
 /** The cell a pane shows: its pinned cell, else the global focus. */
@@ -174,6 +211,23 @@ export function activePaneOf(ws: WorkspaceState): Pane | undefined {
  */
 export function show3dPanels(ws: WorkspaceState): boolean {
   return activePaneOf(ws)?.type === '3d'
+}
+
+/**
+ * Drop pane-level group scopes (the pane's group, Stats overlays) that the
+ * active dataset cannot resolve, e.g. a lasso group of another dataset
+ * after switching; genome rows are kept per dataset and left alone.
+ * Same object when nothing changes.
+ */
+export function dropUnknownGroups(ws: WorkspaceState, known: (ref: string) => boolean): WorkspaceState {
+  const bad = (p: Pane) => (p.group && !known(p.group)) || (p.compareGroups ?? []).some((g) => !known(g))
+  if (!ws.panes.some(bad)) return ws
+  return {
+    ...ws,
+    panes: ws.panes.map((p) =>
+      bad(p) ? { ...p, group: p.group && !known(p.group) ? null : p.group, compareGroups: (p.compareGroups ?? []).filter(known) } : p,
+    ),
+  }
 }
 
 /** Unpin panes whose cell is not among `known` (e.g. after switching dataset); same object when nothing changes. */
@@ -220,9 +274,11 @@ export function moveSplitter(ws: WorkspaceState, index: number, frac: number): W
 }
 
 /** Keep only well-formed pane options from a persisted pane. */
-function parseOptions(p: Partial<Pane>): PaneOptions & { cell?: string | null } {
-  const o: PaneOptions & { cell?: string | null } = {}
+function parseOptions(p: Partial<Pane>): PaneOptions & { cell?: string | null; group?: string | null } {
+  const o: PaneOptions & { cell?: string | null; group?: string | null } = {}
   if (typeof p.cell === 'string' && p.cell) o.cell = p.cell
+  if (typeof p.group === 'string' && p.group) o.group = p.group
+  if (Array.isArray(p.compareGroups) && p.compareGroups.every((g) => typeof g === 'string')) o.compareGroups = [...p.compareGroups]
   if (p.genomeRows && typeof p.genomeRows === 'object' && !Array.isArray(p.genomeRows)) {
     const byDs: Record<string, GenomeRow[]> = {}
     for (const [k, v] of Object.entries(p.genomeRows)) {

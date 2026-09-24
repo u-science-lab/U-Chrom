@@ -3,13 +3,15 @@ import * as THREE from 'three'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { buildLayerObject, pointIndexOfHit, type BuiltLayer } from '../render/objects'
 import { splitForView } from '../render/bonds'
-import { displayParts, subsetGeometry } from '../render/partition'
+import { displayParts, subsetGeometry, type FocusSet } from '../render/partition'
 import { buildPointMarkers, splitPoints, type BuiltPoints } from '../render/points'
 import { bboxDiagonal, findSegment } from '../render/segments'
 import { DEFAULT_STYLE } from '../layers'
 import { activeView, useStore } from '../store'
 import { useFieldColors, type FieldColors } from '../useFieldColors'
+import { usePaneScope, useScopeCells } from '../useGroups'
 import { isPointPick, type ColorMode, type Geometry, type LayerStyle, type PointSet, type SegmentInfo } from '../types'
+import { registerRenderHook } from '../capture'
 import { PickLabel } from './PickLabel'
 
 type Role = 'main' | 'context'
@@ -22,7 +24,7 @@ interface Part {
 
 interface Entry {
   /** inputs the parts were built from; rebuilt when any changes */
-  key: { geometry: Geometry; style: LayerStyle; focus: string | null; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null }
+  key: { geometry: Geometry; style: LayerStyle; focus: FocusSet; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null }
   parts: Part[]
 }
 
@@ -122,9 +124,10 @@ function drawnGeometries(t: Three): Geometry[] {
  * 3-D view of the active dataset — one instance per workspace pane.  Several
  * 3-D panes share the store (layers, focus, colours) but each has its own
  * renderer and camera.  `resetKey` refits this pane only.  `pinned`: draw
- * only that cell (no context), ignoring the global focus.
+ * only that cell (no context), ignoring the global focus.  `group`: draw
+ * that group's cells in full and the others as faint context.
  */
-export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null }: { paneId?: string; resetKey?: number; pinned?: string | null }) {
+export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null, group = null }: { paneId?: string; resetKey?: number; pinned?: string | null; group?: string | null }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const paneRef = useRef(paneId)
   paneRef.current = paneId
@@ -141,11 +144,15 @@ export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null }: { paneI
   const pointSets = useStore((s) => (s.activeDatasetId ? s.pointSets[s.activeDatasetId] : undefined))
   const setPick = useStore((s) => s.setPick)
   const setStatus = useStore((s) => s.setStatus)
-  // the cell drawn in full here: the pinned one, else the global focus
-  const focus = pinned ?? view.focusCell
-  const ctxOpacity = pinned ? 0 : view.contextOpacity
-  const focusRef = useRef(focus)
-  focusRef.current = focus
+  // drawn in full here: the pane's group, its pinned cell, else the global
+  // focus (a cell or a group)
+  const scope = usePaneScope({ group, cell: pinned })
+  const scopeCells = useScopeCells(scope)
+  const focus: FocusSet = scope.kind === 'all' ? null : scope.kind === 'cell' ? scope.cell : scopeCells
+  const ctxOpacity = pinned && !group ? 0 : view.contextOpacity
+  // clicking a trace of another cell focuses it; within a single focused cell it picks
+  const focusRef = useRef<string | null>(null)
+  focusRef.current = scope.kind === 'cell' ? scope.cell : null
   const noCoords = useStore((s) => {
     const d = s.datasets.find((x) => x.id === s.activeDatasetId)
     return !!d && (d.has_coords === false || d.n_spots === 0)
@@ -260,7 +267,14 @@ export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null }: { paneI
     renderer.domElement.addEventListener('pointermove', onMove)
     renderer.domElement.addEventListener('pointerleave', hideHover)
 
+    // "Save image": draw the current view now (the loop may be paused)
+    registerRenderHook(paneRef.current, () => {
+      controls.update()
+      renderer.render(scene, camera)
+    })
+
     return () => {
+      registerRenderHook(paneRef.current, null)
       cancelAnimationFrame(raf)
       ro.disconnect()
       renderer.domElement.removeEventListener('pointerdown', onDown)
@@ -277,10 +291,10 @@ export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null }: { paneI
     }
   }, [])
 
-  // A new pin → fit the camera to that cell once it is drawn.
+  // A new pin / group → fit the camera to it once it is drawn.
   useEffect(() => {
     fittedRef.current = false
-  }, [pinned])
+  }, [pinned, group])
 
   // Sync scene objects with layers + view state (only the active dataset).
   useEffect(() => {
@@ -347,11 +361,17 @@ export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null }: { paneI
       // Multi-cell data: the overview (and the faint context around a
       // focused cell) uses the overview colouring — per cell by default.
       const overviewStyle: LayerStyle = cellIndex.size > 1 ? { ...l.style, colorMode: view.overviewColor } : l.style
-      const mainStyle = focus === null ? overviewStyle : l.style
+      // one cell: the layer style (tubes); a group reads like a small overview
+      const mainStyle = typeof focus === 'string' ? l.style : overviewStyle
       const parts: Part[] = []
       if (main) parts.push({ role: 'main', geometry: main, built: buildLayerObject(main, mainStyle, colorOpts) })
       if (context && ctxOpacity > 0) {
-        const ctxStyle: LayerStyle = { ...overviewStyle, mode: 'line', lineWidth: 1, opacity: ctxOpacity }
+        // around a group, members share colours with the rest: grey context keeps them apart
+        // (thousands of overlapping faint lines saturate otherwise)
+        const groupCtx = focus !== null && typeof focus !== 'string'
+        const ctxStyle: LayerStyle = groupCtx
+          ? { ...overviewStyle, mode: 'line', lineWidth: 1, opacity: ctxOpacity, colorMode: 'custom', color: '#6b7078' }
+          : { ...overviewStyle, mode: 'line', lineWidth: 1, opacity: ctxOpacity }
         parts.push({ role: 'context', geometry: context, built: buildLayerObject(context, ctxStyle, colorOpts) })
       }
       for (const p of parts) {
@@ -366,7 +386,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null }: { paneI
     setStatus(warnings.length ? warnings.join(' · ') : null)
 
     if (!fittedRef.current) {
-      const box = unionBox(pinned ? mainGeometries(t) : drawnGeometries(t))
+      const box = unionBox(pinned || group ? mainGeometries(t) : drawnGeometries(t))
       if (box) {
         jumpTo(t, box)
         fittedRef.current = true
@@ -374,7 +394,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null }: { paneI
     }
     const pick = useStore.getState().pick
     if (pick && !isPointPick(pick) && !keep.has(pick.layerId)) setPick(null)
-  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, pinned])
+  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, pinned, group])
 
   // Point sets (e.g. RNA spots): focused cell's points full, others faint.
   useEffect(() => {
@@ -393,7 +413,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null }: { paneI
     for (const ps of Object.values(sets)) {
       if (hiddenSets.has(ps.name)) continue
       const hiddenLabels = view.hiddenLabels[ps.name] ?? []
-      const key = [focus, ctxOpacity, view.pointSize, [...hiddenLabels].sort().join('\u0000')].join('|')
+      const key = [typeof focus === 'string' || focus === null ? focus : `set:${[...focus].join(',')}`, ctxOpacity, view.pointSize, [...hiddenLabels].sort().join('\u0000')].join('|')
       const prev = t.points.get(ps.name)
       if (prev && prev.set === ps && prev.key === key) continue
       if (prev)
@@ -404,7 +424,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null }: { paneI
       const split = splitPoints(ps, new Set(hiddenLabels), focus)
       const parts: { role: Role; built: BuiltPoints }[] = []
       // all-cells overview: half-size markers so the chromatin stays visible
-      const overview = focus === null
+      const overview = typeof focus !== 'string'
       if (split.main.length)
         parts.push({
           role: 'main',
@@ -432,15 +452,17 @@ export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null }: { paneI
     }
   }, [resetViewToken, activeDatasetId, resetKey])
 
-  // Global focus changes don't move a pinned view.
-  const pinnedRef = useRef(pinned)
-  pinnedRef.current = pinned
+  // Global focus changes don't move a pinned / group-scoped view.
+  const pinnedRef = useRef(pinned || group)
+  pinnedRef.current = pinned || group
+  const hasFocusRef = useRef(false)
+  hasFocusRef.current = focus !== null
 
   // Focus change → fly to the focused cell (or back to everything).
   useEffect(() => {
     const t = threeRef.current
     if (!t || flyToken === 0 || pinnedRef.current) return
-    const box = unionBox(view.focusCell ? mainGeometries(t) : drawnGeometries(t))
+    const box = unionBox(hasFocusRef.current ? mainGeometries(t) : drawnGeometries(t))
     if (box) flyTo(t, box)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flyToken])

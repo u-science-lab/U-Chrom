@@ -33,6 +33,9 @@ export interface GenomeRow {
   track?: string | null
   /** intervals: results key */
   key?: string | null
+  /** matrix / track: a group to aggregate over instead of the pane's scope
+   *  (stack e.g. Bergmann above Granule); absent / null = the pane's scope */
+  group?: string | null
 }
 
 export const ROW_HEIGHT: Record<GenomeRowKind, number> = { matrix: 200, track: 44, intervals: 22 }
@@ -96,7 +99,7 @@ export function resizeRow(rows: GenomeRow[], id: string, height: number): Genome
 }
 
 /** Settings of a row edited in the inspector. */
-export type RowSetting = 'source' | 'resolution' | 'balance' | 'stat' | 'threshold' | 'followFocus' | 'maxDist' | 'flip' | 'track' | 'key' | 'height'
+export type RowSetting = 'source' | 'resolution' | 'balance' | 'stat' | 'threshold' | 'followFocus' | 'maxDist' | 'flip' | 'track' | 'key' | 'height' | 'group'
 
 /**
  * Row patch for one edited setting (text inputs arrive as strings, check
@@ -116,6 +119,8 @@ export function rowPatch(setting: RowSetting, value: string | boolean): Partial<
     case 'track':
     case 'key':
       return text ? { [setting]: text } : null
+    case 'group':
+      return { group: text || null } // empty = the pane's scope
     case 'stat':
       return text === 'median' || text === 'mean' || text === 'contact' ? { stat: text } : null
     case 'resolution':
@@ -194,6 +199,7 @@ export function parseRows(raw: unknown): GenomeRow[] | null {
     if (typeof x.flip === 'boolean') row.flip = x.flip
     if (typeof x.track === 'string') row.track = x.track
     if (typeof x.key === 'string') row.key = x.key
+    if (typeof x.group === 'string' && x.group) row.group = x.group
     out.push(row)
   }
   return new Set(out.map((r) => r.id)).size === out.length ? out : null

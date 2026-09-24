@@ -132,6 +132,63 @@ export function decodeGeometry(buf: ArrayBuffer): Geometry {
 
 const ds = (id: string) => `api/datasets/${encodeURIComponent(id)}`
 
+// ---- cell groups (API.md "Cell groups") ----------------------------------
+
+export interface GroupRegistration {
+  id: string
+  name: string | null
+  n_cells: number
+  n_unknown: number
+}
+
+export async function registerGroup(id: string, cells: string[], name?: string | null): Promise<GroupRegistration> {
+  const res = await request(`${ds(id)}/groups`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cells, name: name ?? null }),
+  })
+  return res.json()
+}
+
+export async function fetchGroupCells(id: string, group: string): Promise<{ group: string; name: string | null; n_cells: number; cells: string[] }> {
+  return (await request(`${ds(id)}/group_cells${query({ group })}`)).json()
+}
+
+/**
+ * Registered-group lookup for requests: a saved / selected group lives in
+ * the browser; the server learns it on first use (after a restart too).
+ * Set by the store: (dataset id, ref) → the group's cells, or null.
+ */
+let groupCellsOf: (datasetId: string, ref: string) => string[] | null = () => null
+export function setGroupResolver(f: typeof groupCellsOf) {
+  groupCellsOf = f
+}
+const registered = new Map<string, Promise<string>>()
+
+/**
+ * The group parameter to send: field groups as they are; other refs are
+ * registered once per (dataset, ref) — the server answers with the id to use.
+ */
+export async function groupParam(datasetId: string, ref: string | null | undefined): Promise<string | null> {
+  if (!ref) return null
+  if (ref.startsWith('field:')) return ref
+  const key = `${datasetId}\u0000${ref}`
+  let p = registered.get(key)
+  if (!p) {
+    const cells = groupCellsOf(datasetId, ref)
+    if (!cells) return ref // unknown here: let the server say 404
+    p = registerGroup(datasetId, cells).then((r) => r.id)
+    p.catch(() => registered.delete(key))
+    registered.set(key, p)
+  }
+  return p
+}
+
+/** Forget registrations (tests; a dataset re-opened under the same id). */
+export function resetGroupRegistrations() {
+  registered.clear()
+}
+
 /** Build a query string, dropping null / undefined / '' values. */
 function query(params: Record<string, string | number | boolean | null | undefined>): string {
   const q = new URLSearchParams()
@@ -150,9 +207,10 @@ export async function fetchTracks(
   id: string,
   names: string[],
   r: RegionQuery,
-  opts: { cellId?: string | null; agg?: string } = {},
+  opts: { cellId?: string | null; agg?: string; group?: string | null } = {},
 ): Promise<TrackData> {
-  const q = query({ names: names.join(','), chrom: r.chrom, start: r.start, end: r.end, cell_id: opts.cellId, agg: opts.agg })
+  const group = await groupParam(id, opts.group)
+  const q = query({ names: names.join(','), chrom: r.chrom, start: r.start, end: r.end, cell_id: opts.cellId, agg: opts.agg, group })
   return (await request(`${ds(id)}/tracks${q}`)).json()
 }
 
@@ -164,25 +222,29 @@ export async function fetchContacts(
   id: string,
   key: string,
   r: RegionQuery,
-  opts: { resolution?: number | null; balance?: boolean; cell?: string | null } = {},
+  opts: { resolution?: number | null; balance?: boolean; cell?: string | null; group?: string | null } = {},
 ): Promise<MatrixData> {
-  const q = query({ chrom: r.chrom, start: r.start, end: r.end, resolution: opts.resolution, balance: opts.balance ? 'true' : 'false', cell: opts.cell })
+  const group = await groupParam(id, opts.group)
+  const q = query({ chrom: r.chrom, start: r.start, end: r.end, resolution: opts.resolution, balance: opts.balance ? 'true' : 'false', cell: opts.cell, group })
   return decodeMatrix(await (await request(`${ds(id)}/contacts/${encodeURIComponent(key)}${q}`)).arrayBuffer())
 }
 
 export async function fetchDistance(
   id: string,
   r: RegionQuery,
-  opts: { cellId?: string | null; traceId?: string | null; stat?: string; threshold?: number | null } = {},
+  opts: { cellId?: string | null; traceId?: string | null; stat?: string; threshold?: number | null; group?: string | null } = {},
 ): Promise<MatrixData> {
-  const q = query({ chrom: r.chrom, start: r.start, end: r.end, cell_id: opts.cellId, trace_id: opts.traceId, stat: opts.stat, threshold: opts.threshold })
+  const group = await groupParam(id, opts.group)
+  const q = query({ chrom: r.chrom, start: r.start, end: r.end, cell_id: opts.cellId, trace_id: opts.traceId, stat: opts.stat, threshold: opts.threshold, group })
   return decodeMatrix(await (await request(`${ds(id)}/distance${q}`)).arrayBuffer())
 }
 
-export async function fetchRg(id: string, opts: { chrom?: string | null; cellId?: string | null } = {}): Promise<RgStats> {
-  return (await request(`${ds(id)}/stats/rg${query({ chrom: opts.chrom, cell_id: opts.cellId })}`)).json()
+export async function fetchRg(id: string, opts: { chrom?: string | null; cellId?: string | null; group?: string | null } = {}): Promise<RgStats> {
+  const group = await groupParam(id, opts.group)
+  return (await request(`${ds(id)}/stats/rg${query({ chrom: opts.chrom, cell_id: opts.cellId, group })}`)).json()
 }
 
-export async function fetchScaling(id: string, opts: { chrom?: string | null; cellId?: string | null } = {}): Promise<ScalingStats> {
-  return (await request(`${ds(id)}/stats/scaling${query({ chrom: opts.chrom, cell_id: opts.cellId })}`)).json()
+export async function fetchScaling(id: string, opts: { chrom?: string | null; cellId?: string | null; group?: string | null } = {}): Promise<ScalingStats> {
+  const group = await groupParam(id, opts.group)
+  return (await request(`${ds(id)}/stats/scaling${query({ chrom: opts.chrom, cell_id: opts.cellId, group })}`)).json()
 }

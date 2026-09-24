@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { cellValueColor, rgbCss } from '../colors'
 import { activeView, defaultCategoryField, fieldKey, orderedCells, useStore } from '../store'
 import { useFieldColors } from '../useFieldColors'
+import { useGroupInfo } from '../useGroups'
 import { fieldLabel, fmtValue } from './format'
 import { useSize } from './useSize'
 
@@ -39,6 +40,9 @@ export function CellPanel() {
   const [scrollTop, setScrollTop] = useState(0)
   const byField = view.overviewColor === 'field' && !!view.cellField
   const values = colors.cellValues
+  // members of the focused group get a coloured edge
+  const group = useGroupInfo(view.focusGroup)
+  const members = useMemo(() => (group?.cells ? new Set(group.cells) : null), [group])
 
   // Without 3-D coordinates "n traces" is always 0: show the cell's type instead.
   const hasCoords = ds?.has_coords !== false && (ds?.n_spots ?? 0) > 0
@@ -116,7 +120,8 @@ export function CellPanel() {
           return (
             <li
               key={c.cell_id}
-              className={c.cell_id === view.focusCell ? 'selected' : ''}
+              className={`${c.cell_id === view.focusCell ? 'selected' : ''}${members?.has(c.cell_id) ? ' in-group' : ''}`}
+              style={members?.has(c.cell_id) ? { boxShadow: `inset 3px 0 0 ${group!.color}` } : undefined}
               onClick={() => focus(c.cell_id)}
               title={`${c.cell_id}${hasCoords ? ` · ${c.n_spots.toLocaleString('en-US')} spots` : ''}${typeof t === 'string' ? ` · ${t}` : ''}${byField && v !== undefined ? ` · ${fieldLabel(view.cellField!)}: ${fmtValue(v)}` : ''}`}
             >

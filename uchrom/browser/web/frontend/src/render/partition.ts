@@ -63,18 +63,29 @@ export interface DisplayParts {
   context: Geometry | null
 }
 
+/** The cells drawn in full: one focused cell, a group of cells, or everything (null). */
+export type FocusSet = string | ReadonlySet<string> | null
+
+/** Membership test of a focus (null = no focus: everything is main). */
+export function inFocus(focus: FocusSet, cell: string | null): boolean {
+  if (focus === null) return true
+  if (cell === null) return false
+  return typeof focus === 'string' ? cell === focus : focus.has(cell)
+}
+
 /**
  * Split a layer's geometry for display: drop hidden chromosomes, and when a
- * cell is focused put it in `main` and every other cell in `context`.
+ * cell (or a group of cells) is in focus put it in `main` and every other
+ * cell in `context`.
  */
-export function displayParts(geom: Geometry, hiddenChroms: ReadonlySet<string>, focusCell: string | null): DisplayParts {
+export function displayParts(geom: Geometry, hiddenChroms: ReadonlySet<string>, focus: FocusSet): DisplayParts {
   const shown = (s: SegmentInfo) => !hiddenChroms.has(s.chrom)
-  if (focusCell === null) {
+  if (focus === null) {
     const main = subsetGeometry(geom, shown)
     return { main: main.header.n_points ? main : null, context: null }
   }
-  const main = subsetGeometry(geom, (s) => shown(s) && s.cell_id === focusCell)
-  const context = subsetGeometry(geom, (s) => shown(s) && s.cell_id !== focusCell)
+  const main = subsetGeometry(geom, (s) => shown(s) && inFocus(focus, s.cell_id))
+  const context = subsetGeometry(geom, (s) => shown(s) && !inFocus(focus, s.cell_id))
   return {
     main: main.header.n_points ? main : null,
     context: context.header.n_points ? context : null,

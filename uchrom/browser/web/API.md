@@ -268,10 +268,11 @@ server.
 Matrices are capped at 1,000 × 1,000 bins: larger requests are sum-pooled
 (contacts) / median-pooled (distances) and the header says so in `note`.
 
-### `GET /api/datasets/{id}/tracks?names=H3K27ac,H3K9me3&chrom=chr7&start=&end=&cell_id=&agg=mean`
+### `GET /api/datasets/{id}/tracks?names=H3K27ac,H3K9me3&chrom=chr7&start=&end=&cell_id=&agg=mean&group=`
 
-Per-genomic-bin aggregate of spot tracks over the selection (all cells, or
-one `cell_id`), for a genome-browser track view:
+Per-genomic-bin aggregate of spot tracks over the selection (all cells,
+one `cell_id`, or a `group` — see *Cell groups*), for a genome-browser
+track view:
 
 ```json
 {"chrom": "chr7", "bin_starts": [...], "bin_ends": [...],
@@ -287,30 +288,74 @@ Rows of an interval table (TADs, loops, peaks):
 `{"columns": [...], "rows": [[…], …]}` with `chrom, start, end` (and for
 loops `chrom2, start2, end2`) plus any score columns.
 
-### `GET /api/datasets/{id}/contacts/{key}?chrom=chr21&start=&end=&resolution=&balance=false&cell=`
+### `GET /api/datasets/{id}/contacts/{key}?chrom=chr21&start=&end=&resolution=&balance=false&cell=&group=`
 
 Contact matrix from a linked cool / mcool / scool.  `resolution` picks an
 mcool level (default: the finest that fits 1,000 bins); `cell` selects a
-cell of an scool (defaults to none → `400`).  Binary payload above.
+cell of an scool (neither `cell` nor `group` → `422`).  Binary payload above.
 
-### `GET /api/datasets/{id}/distance?chrom=&start=&end=&cell_id=&trace_id=&stat=median&threshold=`
+`group` (scool only) → **pseudo-bulk**: the sum of the raw counts of the
+group's cells that have a map (read straight from the HDF5 pixels, so a few
+hundred cells take ~0.2 s; at most 20,000 cells, a random subset beyond
+that is noted).  Header adds `"group"`, `"n_cells"` (maps summed) and
+`"n_contacts"` (upper-triangle total in the region); `value` is `count`
+(no balancing).  The last 16 results are cached.  `group` on a cool /
+mcool (not per-cell) → `422`; `cell` and `group` together → `422`.
+
+### `GET /api/datasets/{id}/distance?chrom=&start=&end=&cell_id=&trace_id=&stat=median&threshold=&group=`
 
 Pairwise 3-D distances between genomic bins from `coords`:
 
 - `trace_id` → that trace's matrix;
 - `cell_id` (no trace) → per-bin-pair median over that cell's traces;
-- neither → population statistic over all traces on `chrom`.
+- `group` → statistic over the traces of the group's cells;
+- none → population statistic over all traces on `chrom`.
+
+The header adds `"group"` and `"n_cells"` (cells contributing traces).
 
 `stat`: `median` (default) | `mean` | `contact` (fraction of traces with
 distance < `threshold`, default 0.5 × dataset unit… or `threshold`).
 Binary payload above (`value`: `distance` or `contact_frequency`).
 
-### `GET /api/datasets/{id}/stats/rg?chrom=&cell_id=`
+### `GET /api/datasets/{id}/stats/rg?chrom=&cell_id=&group=`
 
 Radius of gyration per trace: `{"trace_ids": [...], "cell_ids": [...],
-"chroms": [...], "rg": [...], "n_spots": [...], "unit": "um"}`.
+"chroms": [...], "rg": [...], "n_spots": [...], "unit": "um",
+"group": null, "n_cells": 47}`.
 
-### `GET /api/datasets/{id}/stats/scaling?chrom=&cell_id=`
+### `GET /api/datasets/{id}/stats/scaling?chrom=&cell_id=&group=`
 
 Distance vs genomic separation (log-spaced separation bins):
-`{"sep_bp": [...], "median": [...], "q25": [...], "q75": [...], "n_pairs": [...], "unit": "um"}`.
+`{"sep_bp": [...], "median": [...], "q25": [...], "q75": [...], "n_pairs": [...],
+"unit": "um", "group": null, "n_cells": 47}`.
+
+## Cell groups
+
+Views can aggregate over a **group** of cells instead of all cells or one
+cell.  Every endpoint above that takes `cell_id` / `cell` also takes
+`group=<ref>` (exclusive with the cell; both → `422`).  A reference is
+
+- `field:<column>=<value>` — every cell whose `cd.cells[column]` equals
+  `value` (e.g. `field:cell_type=Bergmann`; URL-encode it, values may
+  contain `+`), usable without registering; or
+- a registered id `g<12 hex>` — an explicit cell list (a lasso selection).
+
+An unknown field or id → `404`; a group with no cells → `422`.
+
+### `POST /api/datasets/{id}/groups`
+
+Body `{"cells": ["1_0_25", "1_0_34"], "name": "lasso 1"}` →
+`{"id": "g3f1c…", "name": "lasso 1", "n_cells": 2, "n_unknown": 0}`.
+The id is a hash of the sorted known cells, so registering the same cells
+again (another tab, after a server restart) returns the same id; unknown
+cell ids are dropped (`n_unknown`); none known → `422`.  Groups live in the
+server's memory: clients keep their own list and re-register on use.
+
+### `GET /api/datasets/{id}/groups`
+
+Registered groups: `[{"id": "g3f1c…", "name": "lasso 1", "n_cells": 2}]`.
+
+### `GET /api/datasets/{id}/group_cells?group=<ref>`
+
+`{"group": "<ref>", "name": "Bergmann", "n_cells": 8, "cells": [...]}`
+(natural cell order for registered groups, `cd.cells` order for fields).

@@ -30,6 +30,11 @@ class PointsRequest(BaseModel):
     labels: Optional[List[str]] = None
 
 
+class GroupRequest(BaseModel):
+    cells: List[str]
+    name: Optional[str] = None
+
+
 class GeometryRequest(BaseModel):
     chroms: Optional[List[str]] = None
     region: Optional[Region] = None
@@ -114,10 +119,23 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
     def _names(names: str) -> List[str]:
         return [n for n in (x.strip() for x in names.split(",")) if n]
 
+    @app.post("/api/datasets/{dataset_id}/groups")
+    def register_group(dataset_id: str, req: GroupRequest) -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).register_group, req.cells, req.name)
+
+    @app.get("/api/datasets/{dataset_id}/groups")
+    def list_groups(dataset_id: str) -> List[Dict[str, Any]]:
+        return _dataset(dataset_id).groups()
+
+    @app.get("/api/datasets/{dataset_id}/group_cells")
+    def group_cells(dataset_id: str, group: str) -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).group_info, group)
+
     @app.get("/api/datasets/{dataset_id}/tracks")
     def tracks(dataset_id: str, names: str, chrom: str, start: Optional[int] = None,
-               end: Optional[int] = None, cell_id: Optional[str] = None, agg: str = "mean") -> Dict[str, Any]:
-        return _call(_dataset(dataset_id).tracks, _names(names), chrom, start, end, cell_id, agg)
+               end: Optional[int] = None, cell_id: Optional[str] = None, agg: str = "mean",
+               group: Optional[str] = None) -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).tracks, _names(names), chrom, start, end, cell_id, agg, group)
 
     @app.get("/api/datasets/{dataset_id}/intervals/{key}")
     def intervals(dataset_id: str, key: str, chrom: str, start: Optional[int] = None,
@@ -127,24 +145,26 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
     @app.get("/api/datasets/{dataset_id}/contacts/{key}")
     def contacts(dataset_id: str, key: str, chrom: str, start: Optional[int] = None,
                  end: Optional[int] = None, resolution: Optional[int] = None,
-                 balance: bool = False, cell: Optional[str] = None) -> Response:
-        buf = _call(_dataset(dataset_id).contacts, key, chrom, start, end, resolution, balance, cell)
+                 balance: bool = False, cell: Optional[str] = None, group: Optional[str] = None) -> Response:
+        buf = _call(_dataset(dataset_id).contacts, key, chrom, start, end, resolution, balance, cell, group)
         return Response(buf, media_type="application/octet-stream")
 
     @app.get("/api/datasets/{dataset_id}/distance")
     def distance(dataset_id: str, chrom: str, start: Optional[int] = None, end: Optional[int] = None,
                  cell_id: Optional[str] = None, trace_id: Optional[str] = None,
-                 stat: str = "median", threshold: Optional[float] = None) -> Response:
-        buf = _call(_dataset(dataset_id).distance, chrom, start, end, cell_id, trace_id, stat, threshold)
+                 stat: str = "median", threshold: Optional[float] = None, group: Optional[str] = None) -> Response:
+        buf = _call(_dataset(dataset_id).distance, chrom, start, end, cell_id, trace_id, stat, threshold, group)
         return Response(buf, media_type="application/octet-stream")
 
     @app.get("/api/datasets/{dataset_id}/stats/rg")
-    def stats_rg(dataset_id: str, chrom: Optional[str] = None, cell_id: Optional[str] = None) -> Dict[str, Any]:
-        return _call(_dataset(dataset_id).stats_rg, chrom, cell_id)
+    def stats_rg(dataset_id: str, chrom: Optional[str] = None, cell_id: Optional[str] = None,
+                 group: Optional[str] = None) -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).stats_rg, chrom, cell_id, group)
 
     @app.get("/api/datasets/{dataset_id}/stats/scaling")
-    def stats_scaling(dataset_id: str, chrom: Optional[str] = None, cell_id: Optional[str] = None) -> Dict[str, Any]:
-        return _call(_dataset(dataset_id).stats_scaling, chrom, cell_id)
+    def stats_scaling(dataset_id: str, chrom: Optional[str] = None, cell_id: Optional[str] = None,
+                      group: Optional[str] = None) -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).stats_scaling, chrom, cell_id, group=group)
 
     @app.get("/api/datasets/{dataset_id}/embedding/{key}")
     def embedding(dataset_id: str, key: str, dims: str = "0,1") -> Dict[str, Any]:

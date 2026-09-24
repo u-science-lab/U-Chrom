@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { labelColorMap, srgbToLinear } from '../colors'
 import type { PointSet } from '../types'
+import { inFocus, type FocusSet } from './partition'
 
 export interface PointSplit {
   /** indices drawn at full opacity (focused cell, or everything in the overview) */
@@ -14,14 +15,14 @@ export interface PointSplit {
  * non-finite position are dropped; with a focused cell its points are
  * `main` and every other point is `context`.
  */
-export function splitPoints(ps: PointSet, hiddenLabels: ReadonlySet<string>, focusCell: string | null): PointSplit {
+export function splitPoints(ps: PointSet, hiddenLabels: ReadonlySet<string>, focusCell: FocusSet): PointSplit {
   const main: number[] = []
   const context: number[] = []
   const p = ps.positions
   for (let i = 0; i < ps.n; i++) {
     if (hiddenLabels.has(ps.labels[i])) continue
     if (!Number.isFinite(p[3 * i]) || !Number.isFinite(p[3 * i + 1]) || !Number.isFinite(p[3 * i + 2])) continue
-    if (focusCell === null || ps.cellIds[i] === focusCell) main.push(i)
+    if (inFocus(focusCell, ps.cellIds[i])) main.push(i)
     else context.push(i)
   }
   return { main: Uint32Array.from(main), context: Uint32Array.from(context) }

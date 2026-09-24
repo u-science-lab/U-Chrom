@@ -1,8 +1,10 @@
 import { create } from 'zustand'
+import { setGroupResolver } from './api'
+import { groupColor, nextGroupName, parseSavedGroups, removeGroup, renameGroup, upsertGroup, type GroupRef, type SavedGroup, type Selection } from './groups'
 import { DEFAULT_STYLE, removeCascade, uniqueName } from './layers'
 import { isPointPick } from './types'
 import type { Locus } from './genome'
-import { addPinnedPane, defaultWorkspace, paneSignature, parseWorkspace, type DataKind, type WorkspaceState } from './workspace'
+import { addPinnedPane, defaultWorkspace, dropGroupScope, paneSignature, parseWorkspace, type DataKind, type WorkspaceState } from './workspace'
 import type { CellField, CellInfo, CellValue, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo, PointSet } from './types'
 
 let nextId = 1
@@ -15,6 +17,11 @@ const newId = () => `L${nextId++}`
 export interface DatasetView {
   /** cell drawn in full; others become faint context.  null = all cells */
   focusCell: string | null
+  /** group in focus instead of one cell (its cells drawn in full, views
+   *  following the focus aggregate over it); exclusive with focusCell */
+  focusGroup: GroupRef | null
+  /** current lasso selection (registered, not saved as a named group yet) */
+  selection: Selection | null
   hiddenChroms: string[]
   /** opacity of the non-focused cells (0 hides them) */
   contextOpacity: number
@@ -40,6 +47,8 @@ export interface DatasetView {
 
 export const DEFAULT_VIEW: DatasetView = {
   focusCell: null,
+  focusGroup: null,
+  selection: null,
   hiddenChroms: [],
   contextOpacity: 0.15,
   overviewColor: 'cell',
@@ -77,6 +86,25 @@ export function initialView(ds: DatasetSummary): DatasetView {
 export const fieldKey = (datasetId: string, field: string) => `${datasetId}\u0000${field}`
 
 const WS_KEY = 'uchrom.browser.workspace'
+const GROUPS_KEY = 'uchrom.browser.groups'
+
+/** Saved cell groups per dataset name (per viewer; storage may be unavailable). */
+export function loadSavedGroups(): Record<string, SavedGroup[]> {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(GROUPS_KEY) : null
+    return raw ? parseSavedGroups(JSON.parse(raw)) : {}
+  } catch {
+    return {}
+  }
+}
+
+function persistGroups(groups: Record<string, SavedGroup[]>) {
+  try {
+    localStorage.setItem(GROUPS_KEY, JSON.stringify(groups))
+  } catch {
+    /* private mode / blocked storage: groups last for this session only */
+  }
+}
 
 /** Saved workspace (per viewer; storage may be unavailable or hold junk). */
 export function loadWorkspace(): WorkspaceState | null {
@@ -165,7 +193,24 @@ export interface AppState {
   setPointSize(px: number): void
   setMaxBond(v: 'auto' | number | null): void
   setLocus(locus: Locus): void
+  /** named cell groups per dataset name (persisted in the browser) */
+  savedGroups: Record<string, SavedGroup[]>
+  /** focus a group (null = none); clears the focused cell */
+  focusGroup(ref: GroupRef | null): void
+  /** set the lasso selection and focus it (null clears it) */
+  setSelection(sel: Selection | null): void
+  /** save the current selection as a named group (keeps its id) */
+  saveSelection(name?: string): void
+  renameSavedGroup(id: string, name: string): void
+  deleteSavedGroup(id: string): void
 }
+
+/** Saved groups of the active dataset. */
+export function activeSavedGroups(s: Pick<AppState, 'savedGroups' | 'datasets' | 'activeDatasetId'>): SavedGroup[] {
+  const name = s.datasets.find((d) => d.id === s.activeDatasetId)?.name
+  return (name && s.savedGroups[name]) || NO_GROUPS
+}
+const NO_GROUPS: SavedGroup[] = []
 
 /** Values of the active overview field, if loaded. */
 export function activeFieldValues(s: Pick<AppState, 'views' | 'activeDatasetId' | 'cellValues'>): Map<string, CellValue> | null {
@@ -205,6 +250,7 @@ const patchLayer = (layers: Layer[], id: string, patch: Partial<Layer>) =>
   layers.map((l) => (l.id === id ? { ...l, ...patch } : l))
 
 const savedWorkspace = loadWorkspace()
+const savedGroups = loadSavedGroups()
 
 export const useStore = create<AppState>((set, get) => {
   const patchView = (patch: Partial<DatasetView>, extra: Partial<AppState> = {}) => {
@@ -376,8 +422,60 @@ export const useStore = create<AppState>((set, get) => {
   },
   focusCell(cellId) {
     const s = get()
-    if (activeView(s).focusCell === cellId) return
-    patchView({ focusCell: cellId }, { pick: null, flyToken: s.flyToken + 1 })
+    const v = activeView(s)
+    if (v.focusCell === cellId && (cellId !== null || v.focusGroup === null)) return
+    // one focus at a time: a cell, or a group ("All cells" clears both)
+    patchView({ focusCell: cellId, focusGroup: null }, { pick: null, flyToken: s.flyToken + 1 })
+  },
+  savedGroups,
+  focusGroup(ref) {
+    const s = get()
+    const v = activeView(s)
+    if (v.focusGroup === ref && v.focusCell === null) return
+    patchView({ focusGroup: ref, focusCell: null }, { pick: null, flyToken: s.flyToken + 1 })
+  },
+  setSelection(sel) {
+    const s = get()
+    const v = activeView(s)
+    const focusGroup = sel ? sel.id : v.focusGroup === v.selection?.id ? null : v.focusGroup
+    patchView({ selection: sel, focusGroup, focusCell: sel ? null : v.focusCell }, { pick: null, flyToken: s.flyToken + 1 })
+  },
+  saveSelection(name) {
+    const s = get()
+    const v = activeView(s)
+    const ds = s.datasets.find((d) => d.id === s.activeDatasetId)
+    if (!ds || !v.selection) return
+    const list = s.savedGroups[ds.name] ?? []
+    const existing = list.find((g) => g.id === v.selection!.id)
+    const g: SavedGroup = {
+      id: v.selection.id,
+      name: name?.trim() || existing?.name || nextGroupName(list),
+      color: existing?.color ?? groupColor(list.length),
+      cells: v.selection.cells,
+    }
+    const savedGroups = { ...s.savedGroups, [ds.name]: upsertGroup(list, g) }
+    set({ savedGroups })
+    persistGroups(savedGroups)
+    patchView({ selection: null, focusGroup: g.id, focusCell: null })
+  },
+  renameSavedGroup(id, name) {
+    const s = get()
+    const ds = s.datasets.find((d) => d.id === s.activeDatasetId)
+    if (!ds) return
+    const savedGroups = { ...s.savedGroups, [ds.name]: renameGroup(s.savedGroups[ds.name] ?? [], id, name) }
+    set({ savedGroups })
+    persistGroups(savedGroups)
+  },
+  deleteSavedGroup(id) {
+    const s = get()
+    const ds = s.datasets.find((d) => d.id === s.activeDatasetId)
+    if (!ds) return
+    const savedGroups = { ...s.savedGroups, [ds.name]: removeGroup(s.savedGroups[ds.name] ?? [], id) }
+    set({ savedGroups })
+    persistGroups(savedGroups)
+    if (activeView(s).focusGroup === id) patchView({ focusGroup: null })
+    // panes / rows scoped to it fall back to their other scope
+    get().setWorkspace((w) => dropGroupScope(w, id))
   },
   stepCell(delta) {
     const s = get()
@@ -455,4 +553,14 @@ export const useStore = create<AppState>((set, get) => {
     patchView({ locus })
   },
   }
+})
+
+/** Cells of a registered group (saved or the current selection) for api.groupParam. */
+setGroupResolver((datasetId, ref) => {
+  const s = useStore.getState()
+  const ds = s.datasets.find((d) => d.id === datasetId)
+  const saved = ds ? (s.savedGroups[ds.name] ?? []).find((g) => g.id === ref) : undefined
+  if (saved) return saved.cells
+  const sel = s.views[datasetId]?.selection
+  return sel && sel.id === ref ? sel.cells : null
 })

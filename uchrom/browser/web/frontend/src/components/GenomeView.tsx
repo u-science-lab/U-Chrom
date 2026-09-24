@@ -19,13 +19,15 @@ import {
   type GenomeRowKind,
   type TriangleGeom,
 } from '../genomeRows'
+import { ALL, rowScope, scopeKey, scopeLabel, scopeParams, type GroupInfo, type Scope } from '../groups'
 import { matrixColor, matrixPixels, matrixRange, scaleFor, type MatrixData } from '../matrix'
-import { activeView, hasCoords, useStore } from '../store'
+import { hasCoords, useStore } from '../store'
 import { fmtAxis, trackRange } from '../stats'
 import { binIndexAt } from '../tracks'
 import type { DatasetSummary, IntervalTable, TrackData } from '../types'
 import { useLocus } from '../useLocus'
-import { paneCell, updatePane, type DistanceStat, type Pane, type TrackAgg } from '../workspace'
+import { useGroupChoices, useGroupInfos, usePaneScope } from '../useGroups'
+import { updatePane, type DistanceStat, type Pane, type TrackAgg } from '../workspace'
 import { CHART, drawColorRamp, rgb } from './chart'
 import { prepareCanvas, useSize } from './useSize'
 
@@ -130,8 +132,13 @@ function rowLabel(r: GenomeRow, ds: DatasetSummary): string {
  */
 export function GenomeInspector({ pane }: { pane: Pane }) {
   const { ds, rows, setRows, resetRows, customised } = useGenomeRows(pane)
-  const focus = useStore((s) => paneCell(pane, activeView(s).focusCell))
+  const scope = usePaneScope(pane)
+  const focus = scope.kind === 'cell' ? scope.cell : null
   const setWorkspace = useStore((s) => s.setWorkspace)
+  const choices = useGroupChoices()
+  const groupRefs = [...choices.fields.flatMap((f) => f.refs), ...choices.saved]
+  const infos = useGroupInfos([...groupRefs, ...rows.map((r) => r.group ?? null)])
+  const byRef = new Map(infos.filter((i): i is GroupInfo => !!i).map((i) => [i.ref, i]))
   if (!ds) return null
   const can: Record<GenomeRowKind, boolean> = {
     matrix: (ds.contact_maps?.length ?? 0) > 0 || hasCoords(ds),
@@ -188,7 +195,7 @@ export function GenomeInspector({ pane }: { pane: Pane }) {
                 ×
               </button>
             </div>
-            <RowSettings row={r} ds={ds} set={set(r.id)} />
+            <RowSettings row={r} ds={ds} set={set(r.id)} groups={groupRefs} byRef={byRef} />
           </li>
         ))}
       </ol>
@@ -197,10 +204,42 @@ export function GenomeInspector({ pane }: { pane: Pane }) {
   )
 }
 
+/** Whether a row can aggregate over a group: tracks, the 3-D distance and per-cell contact maps. */
+export function rowTakesGroup(row: GenomeRow, ds: DatasetSummary): boolean {
+  if (row.kind === 'track') return true
+  if (row.kind !== 'matrix') return false
+  if (row.source === 'distance') return hasCoords(ds)
+  return !!(ds.contact_maps ?? []).find((m) => m.key === row.source)?.per_cell
+}
+
 /** Settings of one row (by kind). */
-function RowSettings({ row, ds, set }: { row: GenomeRow; ds: DatasetSummary; set(setting: RowSetting, value: string | boolean): void }) {
+function RowSettings({
+  row,
+  ds,
+  set,
+  groups,
+  byRef,
+}: {
+  row: GenomeRow
+  ds: DatasetSummary
+  set(setting: RowSetting, value: string | boolean): void
+  groups: string[]
+  byRef: Map<string, GroupInfo>
+}) {
   return (
     <div className="row-card-body">
+      {rowTakesGroup(row, ds) && groups.length > 0 && (
+        <select value={row.group ?? ''} onChange={(e) => set('group', e.target.value)} title="Cells this row aggregates over: the view's scope, or a group of its own">
+          <option value="">cells: the view’s scope</option>
+          {groups.map((g) => (
+            <option key={g} value={g}>
+              group: {byRef.get(g)?.name ?? g}
+              {byRef.get(g)?.cells ? ` (${byRef.get(g)!.cells!.length})` : ''}
+            </option>
+          ))}
+          {row.group && !groups.includes(row.group) && <option value={row.group}>group: {row.group} (missing)</option>}
+        </select>
+      )}
       {row.kind === 'matrix' && <MatrixTools row={row} ds={ds} set={set} />}
       {row.kind === 'track' && (
         <select value={row.track ?? ''} onChange={(e) => set('track', e.target.value)} title="Track">
@@ -256,8 +295,10 @@ type Describe = (x: number, y: number) => string | null
  */
 export function GenomeView({ pane }: { pane: Pane }) {
   const { ds, rows, setRows } = useGenomeRows(pane)
-  // the pane's pinned cell, else the global focus
-  const focus = useStore((s) => paneCell(pane, activeView(s).focusCell))
+  // the pane's group, pinned cell, else the global focus (cell or group)
+  const scope = usePaneScope(pane)
+  const infos = useGroupInfos([scope.kind === 'group' ? scope.group : null, ...rows.map((r) => r.group ?? null)])
+  const byRef = useMemo(() => new Map(infos.filter((i): i is GroupInfo => !!i).map((i) => [i.ref, i])), [infos])
   const { locus, ext, setLocus } = useLocus()
   const boxRef = useRef<HTMLDivElement>(null)
   const rowsRef = useRef<HTMLDivElement>(null)
@@ -270,28 +311,43 @@ export function GenomeView({ pane }: { pane: Pane }) {
     else describers.current.delete(id)
   }, [])
 
-  // tracks: one request for every track row
+  // tracks: one request per scope (rows may have their own group)
   const names = useMemo(() => new Set((ds?.tracks ?? []).map((t) => t.name)), [ds])
-  const trackNames = [...new Set(rows.filter((r) => r.kind === 'track' && r.track && names.has(r.track)).map((r) => r.track!))]
-  const trackKey = trackNames.join(',')
   const agg = pane.agg ?? 'mean'
-  const trackCell = (pane.followFocus ?? true) ? focus : null
-  const [tracks, setTracks] = useState<TrackData | null>(null)
+  // "cell only" off: a focused / pinned cell does not restrict the tracks (groups still do)
+  const trackPaneScope: Scope = scope.kind === 'cell' && !(pane.followFocus ?? true) ? ALL : scope
+  const trackReqs = useMemo(() => {
+    const m = new Map<string, { scope: Scope; names: string[] }>()
+    for (const r of rows) {
+      if (r.kind !== 'track' || !r.track || !names.has(r.track)) continue
+      const sc = rowScope(r, trackPaneScope)
+      const k = scopeKey(sc)
+      const e = m.get(k) ?? { scope: sc, names: [] }
+      if (!e.names.includes(r.track)) e.names.push(r.track)
+      m.set(k, e)
+    }
+    return m
+  }, [rows, names, trackPaneScope])
+  const trackSig = [...trackReqs].map(([k, e]) => `${k}=${e.names.join(',')}`).join('|')
+  const [tracks, setTracks] = useState<Record<string, TrackData>>({})
   const [trackError, setTrackError] = useState<string | null>(null)
   useEffect(() => {
-    if (!ds || !locus || !trackNames.length) return
+    if (!ds || !locus || !trackReqs.size) return
     let live = true
     const t = setTimeout(() => {
-      fetchTracks(ds.id, trackNames, locus, { cellId: trackCell, agg })
-        .then((d) => live && (setTracks(d), setTrackError(null)))
-        .catch((e: Error) => live && setTrackError(e.message))
+      for (const [k, e] of trackReqs) {
+        const p = scopeParams(e.scope)
+        fetchTracks(ds.id, e.names, locus, { cellId: p.cellId, group: p.group, agg })
+          .then((d) => live && (setTracks((m) => ({ ...m, [k]: d })), setTrackError(null)))
+          .catch((err: Error) => live && setTrackError(err.message))
+      }
     }, 180)
     return () => {
       live = false
       clearTimeout(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ds?.id, trackKey, locus?.chrom, locus?.start, locus?.end, trackCell, agg])
+  }, [ds?.id, trackSig, locus?.chrom, locus?.start, locus?.end, agg])
 
   // interval tables shown as rows (their boundaries also guide the matrix rows)
   const ivKeys = [...new Set(rows.filter((r) => r.kind === 'intervals' && r.key).map((r) => r.key!))]
@@ -402,8 +458,20 @@ export function GenomeView({ pane }: { pane: Pane }) {
           W > 0 &&
           rows.map((r, i) => (
             <RowFrame key={r.id} row={r} height={heights[i]} setRows={setRows}>
-              {r.kind === 'matrix' && <MatrixRow row={r} height={heights[i]} ds={ds} width={W} locus={locus} focus={focus} guides={guides} register={register} />}
-              {r.kind === 'track' && <TrackRow row={r} height={heights[i]} width={W} locus={locus} data={tracks} register={register} />}
+              {r.kind === 'matrix' && (
+                <MatrixRow row={r} height={heights[i]} ds={ds} width={W} locus={locus} scope={rowScope(r, scope)} group={byRef.get((r.group || (scope.kind === 'group' ? scope.group : '')) ?? '') ?? null} guides={guides} register={register} />
+              )}
+              {r.kind === 'track' && (
+                <TrackRow
+                  row={r}
+                  height={heights[i]}
+                  width={W}
+                  locus={locus}
+                  data={tracks[scopeKey(rowScope(r, trackPaneScope))] ?? null}
+                  label={r.group ? (byRef.get(r.group) ?? null) : null}
+                  register={register}
+                />
+              )}
               {r.kind === 'intervals' && (
                 <IntervalRow row={r} height={heights[i]} width={W} locus={locus} table={r.key ? intervals[r.key] : undefined} register={register} />
               )}
@@ -416,7 +484,9 @@ export function GenomeView({ pane }: { pane: Pane }) {
           {hover.text}
         </div>
       )}
-      {trackCell && rows.some((r) => r.kind === 'track') && <div className="pane-badge small">tracks: cell {trackCell}</div>}
+      {trackPaneScope.kind !== 'all' && rows.some((r) => r.kind === 'track' && !r.group) && (
+        <div className="pane-badge small">tracks: {scopeLabel(trackPaneScope, trackPaneScope.kind === 'group' ? byRef.get(trackPaneScope.group) : null)}</div>
+      )}
     </div>
   )
 }
@@ -517,7 +587,7 @@ function MatrixTools({ row, ds, set }: { row: GenomeRow; ds: DatasetSummary; set
           <input type="checkbox" checked={row.balance ?? false} onChange={(e) => set('balance', e.target.checked)} /> balanced
         </label>
       )}
-      {map?.per_cell && <div className="muted small">one map per cell: follows the focused / pinned cell</div>}
+      {map?.per_cell && <div className="muted small">one map per cell: the focused / pinned cell, or a group’s pseudo-bulk (sum of its cells)</div>}
       {row.source === 'distance' && (
         <>
           <select value={row.stat ?? 'median'} onChange={(e) => set('stat', e.target.value)} title="Statistic over traces">
@@ -575,7 +645,8 @@ function MatrixRow({
   ds,
   width,
   locus,
-  focus,
+  scope,
+  group,
   guides,
   register,
 }: {
@@ -584,7 +655,10 @@ function MatrixRow({
   ds: DatasetSummary
   width: number
   locus: Locus
-  focus: string | null
+  /** cells this row aggregates over (its own group, else the pane's scope) */
+  scope: Scope
+  /** the group in scope, resolved (name / colour) */
+  group: GroupInfo | null
   guides: number[]
   register(id: string, f: Describe | null): void
 }) {
@@ -593,8 +667,11 @@ function MatrixRow({
   const isDist = row.source === 'distance'
   const valid = isDist ? hasCoords(ds) : !!map
   const needsCell = !!map?.per_cell
-  const cell = needsCell ? focus : isDist && (row.followFocus ?? true) ? focus : null
-  const waiting = needsCell && !focus
+  const takesScope = needsCell || isDist
+  // a group always applies; a focused / pinned cell only with "cell only" (distance) or per-cell maps
+  const cell = takesScope && scope.kind === 'cell' && (needsCell || (row.followFocus ?? true)) ? scope.cell : null
+  const groupRef = takesScope && scope.kind === 'group' ? scope.group : null
+  const waiting = needsCell && !cell && !groupRef
   const stat = row.stat ?? 'median'
   const [mat, setMat] = useState<MatrixData | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -606,12 +683,12 @@ function MatrixRow({
       setError(null)
       return
     }
-    const key = [ds.id, row.source, locus.chrom, locus.start, locus.end, row.resolution ?? '', row.balance ? 1 : 0, cell ?? '', stat, row.threshold ?? ''].join('|')
+    const key = [ds.id, row.source, locus.chrom, locus.start, locus.end, row.resolution ?? '', row.balance ? 1 : 0, cell ?? '', groupRef ?? '', stat, row.threshold ?? ''].join('|')
     let live = true
     const load = () =>
       isDist
-        ? fetchDistance(ds.id, locus, { cellId: cell, stat, threshold: row.threshold ?? null })
-        : fetchContacts(ds.id, row.source!, locus, { resolution: row.resolution ?? null, balance: row.balance ?? false, cell })
+        ? fetchDistance(ds.id, locus, { cellId: cell, group: groupRef, stat, threshold: row.threshold ?? null })
+        : fetchContacts(ds.id, row.source!, locus, { resolution: row.resolution ?? null, balance: row.balance ?? false, cell, group: groupRef })
     // cached → at once; else debounced (pan / zoom move the locus continuously)
     const t = setTimeout(
       () => {
@@ -628,7 +705,7 @@ function MatrixRow({
       clearTimeout(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ds.id, row.source, locus.chrom, locus.start, locus.end, row.resolution, row.balance, cell, stat, row.threshold, valid, waiting])
+  }, [ds.id, row.source, locus.chrom, locus.start, locus.end, row.resolution, row.balance, cell, groupRef, stat, row.threshold, valid, waiting])
 
   // a stale matrix of another chromosome must not be drawn on this axis
   const shown = mat && mat.header.chrom === locus.chrom && !waiting && valid ? mat : null
@@ -638,7 +715,13 @@ function MatrixRow({
   const k = depthScale(row.maxDist, (locus.end - locus.start) / width, height)
   const geom: TriangleGeom = { start: locus.start, bpPerPx: (locus.end - locus.start) / width, height, k, flip: !!row.flip, maxDist: row.maxDist ?? null }
   const title = isDist ? `3-D distance · ${STAT_LABEL[stat]}` : map ? map.label || map.key : `unknown source “${row.source}”`
-  const note = [cell ? `cell ${cell}` : null, shown?.header.resolution ? `${fmtBp(shown.header.resolution)} bins` : null, shown?.header.n_traces ? `${shown.header.n_traces} traces` : null]
+  const cellsNote = shown?.header.n_cells ? `${shown.header.n_cells} cells` : null
+  const note = [
+    cell ? `cell ${cell}` : groupRef ? `${group?.name ?? groupRef}${cellsNote ? ` · ${cellsNote}` : ''}` : null,
+    shown?.header.resolution ? `${fmtBp(shown.header.resolution)} bins` : null,
+    shown?.header.n_traces ? `${shown.header.n_traces} traces` : null,
+    needsCell && groupRef && shown?.header.n_contacts ? `${fmtAxis(shown.header.n_contacts)} contacts (pseudo-bulk)` : null,
+  ]
     .filter(Boolean)
     .join(' · ')
 
@@ -676,8 +759,16 @@ function MatrixRow({
     g.fillStyle = CHART.text
     g.fillText(title, 6, top)
     if (note) {
+      let x = 6
+      if (groupRef && group) {
+        g.fillStyle = group.color
+        g.beginPath()
+        g.arc(x + 4, top + 20, 4, 0, 2 * Math.PI)
+        g.fill()
+        x += 12
+      }
       g.fillStyle = CHART.muted
-      g.fillText(note, 6, top + 14)
+      g.fillText(note, x, top + 14)
     }
     if (shown && height >= 70) {
       const lo = scale === 'contacts' ? '0' : fmtAxis(range[0])
@@ -692,7 +783,7 @@ function MatrixRow({
     const msg = !valid
       ? title
       : waiting
-        ? `“${map?.label || map?.key}” holds one map per cell — select a cell (cell list, embedding or ←/→)`
+        ? `“${map?.label || map?.key}” holds one map per cell — select a cell or a group (left), or give this row a group`
         : error
     if (msg) {
       g.fillStyle = error ? '#e07a7a' : CHART.muted
@@ -707,7 +798,7 @@ function MatrixRow({
       g.fillText('loading…', width / 2, height / 2)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown, colors, width, height, locus, k, row.flip, row.maxDist, guides, title, note, error, waiting, valid, loading])
+  }, [shown, colors, width, height, locus, k, row.flip, row.maxDist, guides, title, note, error, waiting, valid, loading, group, groupRef])
 
   useRegister(register, row.id, (x, y) => {
     if (!shown) return null
@@ -734,6 +825,7 @@ function TrackRow({
   width,
   locus,
   data,
+  label,
   register,
 }: {
   row: GenomeRow
@@ -741,6 +833,8 @@ function TrackRow({
   width: number
   locus: Locus
   data: TrackData | null
+  /** the row's own group (null: the pane's scope, shown by the pane badge) */
+  label: GroupInfo | null
   register(id: string, f: Describe | null): void
 }) {
   const { ref, style } = useRowCanvas(width, height)
@@ -785,7 +879,16 @@ function TrackRow({
     g.textAlign = 'left'
     g.textBaseline = 'top'
     g.fillText(name || '(no track)', 6, 2)
-  }, [vals, data, width, height, locus, name]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (label) {
+      const x = 6 + g.measureText(name || '(no track)').width + 10
+      g.fillStyle = label.color
+      g.beginPath()
+      g.arc(x + 4, 8, 4, 0, 2 * Math.PI)
+      g.fill()
+      g.fillStyle = CHART.muted
+      g.fillText(`${label.name}${label.cells ? ` (${label.cells.length})` : ''}`, x + 12, 2)
+    }
+  }, [vals, data, width, height, locus, name, label]) // eslint-disable-line react-hooks/exhaustive-deps
   useRegister(register, row.id, (x) => {
     if (!vals || !data) return null
     const bp = locus.start + (x / width) * (locus.end - locus.start)

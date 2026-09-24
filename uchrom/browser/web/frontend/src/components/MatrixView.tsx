@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchContacts, fetchDistance } from '../api'
 import { fmtBp } from '../filters'
 import { matrixColor, matrixPixels, matrixRange, scaleFor, type MatrixData } from '../matrix'
-import { activeView, useStore } from '../store'
+import { scopeLabel } from '../groups'
+import { useStore } from '../store'
+import { useGroupInfo, usePaneScope } from '../useGroups'
 import { fmtAxis } from '../stats'
 import type { ContactMapInfo } from '../types'
 import { useLocus } from '../useLocus'
-import { paneCell, updatePane, type DistanceStat, type Pane } from '../workspace'
+import { updatePane, type DistanceStat, type Pane } from '../workspace'
 import { CHART, drawColorRamp, rgb } from './chart'
 import { prepareCanvas, useSize } from './useSize'
 
@@ -73,7 +75,7 @@ export function MatrixControls({ pane }: { pane: Pane }) {
               title={`Distance threshold (${ds?.xyz_unit ?? 'dataset unit'}); empty = server default`}
             />
           )}
-          <label className="check small" title="Only the focused cell's traces">
+          <label className="check small" title="Only the focused / pinned cell's traces (a group in scope always applies)">
             <input type="checkbox" checked={pane.followFocus ?? true} onChange={(e) => upd({ followFocus: e.target.checked })} /> focused cell
           </label>
         </>
@@ -88,7 +90,8 @@ export function MatrixControls({ pane }: { pane: Pane }) {
  */
 export function MatrixView({ pane }: { pane: Pane }) {
   const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
-  const focus = useStore((s) => paneCell(pane, activeView(s).focusCell))
+  const scope = usePaneScope(pane)
+  const groupInfo = useGroupInfo(scope.kind === 'group' ? scope.group : null)
   const { locus, setLocus } = useLocus()
   const boxRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -104,8 +107,11 @@ export function MatrixView({ pane }: { pane: Pane }) {
   const [drag, setDrag] = useState<{ i0: number; i1: number } | null>(null)
 
   const needsCell = !!map?.per_cell
-  const cell = needsCell ? focus : source === 'distance' && (pane.followFocus ?? true) ? focus : null
-  const waitingForCell = needsCell && !focus
+  const takesScope = needsCell || source === 'distance'
+  const cell = takesScope && scope.kind === 'cell' && (needsCell || (pane.followFocus ?? true)) ? scope.cell : null
+  // per-cell map + group → pseudo-bulk; distance + group → statistic over the group's traces
+  const group = takesScope && scope.kind === 'group' ? scope.group : null
+  const waitingForCell = needsCell && !cell && !group
 
   useEffect(() => {
     if (!ds || !locus || !source || waitingForCell) return
@@ -114,8 +120,8 @@ export function MatrixView({ pane }: { pane: Pane }) {
       setLoading(true)
       const req =
         source === 'distance'
-          ? fetchDistance(ds.id, locus, { cellId: cell, stat: pane.stat ?? 'median', threshold: pane.threshold ?? null })
-          : fetchContacts(ds.id, source, locus, { resolution: pane.resolution ?? null, balance: pane.balance ?? false, cell })
+          ? fetchDistance(ds.id, locus, { cellId: cell, group, stat: pane.stat ?? 'median', threshold: pane.threshold ?? null })
+          : fetchContacts(ds.id, source, locus, { resolution: pane.resolution ?? null, balance: pane.balance ?? false, cell, group })
       req
         .then((m) => live && (setMat(m), setError(null)))
         .catch((e: Error) => live && (setError(e.message), setMat(null)))
@@ -126,7 +132,7 @@ export function MatrixView({ pane }: { pane: Pane }) {
       clearTimeout(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ds?.id, source, locus?.chrom, locus?.start, locus?.end, cell, pane.stat, pane.threshold, pane.resolution, pane.balance, waitingForCell])
+  }, [ds?.id, source, locus?.chrom, locus?.start, locus?.end, cell, group, pane.stat, pane.threshold, pane.resolution, pane.balance, waitingForCell])
 
   const scale = mat ? scaleFor(mat.header.value) : 'contacts'
   const range = useMemo<[number, number]>(() => (mat ? matrixRange(mat.data, scale) : [0, 1]), [mat, scale])
@@ -239,8 +245,14 @@ export function MatrixView({ pane }: { pane: Pane }) {
   let message: string | null = null
   if (!source) message = 'No contact maps and no 3-D coordinates — nothing to show as a matrix.'
   else if (!locus) message = 'No chromosomes to show.'
-  else if (waitingForCell) message = `“${map?.label || map?.key}” holds one contact map per cell — select a cell (cell list, embedding or ←/→).`
-  const note = [mat?.header.note, mat?.header.n_traces ? `${mat.header.n_traces} traces` : null, mat?.header.resolution ? `${fmtBp(mat.header.resolution)} bins` : null]
+  else if (waitingForCell) message = `“${map?.label || map?.key}” holds one contact map per cell — select a cell or a group (left), or scope this view to a group (inspector).`
+  const note = [
+    mat?.header.note,
+    mat?.header.n_cells && group ? `${mat.header.n_cells} cells` : null,
+    mat?.header.n_contacts ? `${fmtAxis(mat.header.n_contacts)} contacts (pseudo-bulk)` : null,
+    mat?.header.n_traces ? `${mat.header.n_traces} traces` : null,
+    mat?.header.resolution ? `${fmtBp(mat.header.resolution)} bins` : null,
+  ]
     .filter(Boolean)
     .join(' · ')
   return (
@@ -250,6 +262,12 @@ export function MatrixView({ pane }: { pane: Pane }) {
       <canvas ref={canvasRef} onPointerDown={onPointerDown} onMouseMove={onMove} onMouseLeave={() => setHover(null)} style={{ cursor: 'crosshair' }} />
       {loading && <div className="pane-loading muted small">loading…</div>}
       {cell && <div className="pane-badge small">cell {cell}</div>}
+      {group && (
+        <div className="pane-badge small">
+          <span className="swatch round" style={{ display: 'inline-block', width: 8, height: 8, marginRight: 4, background: groupInfo?.color ?? '#888' }} />
+          {scopeLabel(scope, groupInfo)}
+        </div>
+      )}
       {note && !message && (
         <div className="matrix-note muted small" style={{ left: M.left, top: M.top + side + 58 }}>
           {note}

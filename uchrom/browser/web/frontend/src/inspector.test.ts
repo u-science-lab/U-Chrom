@@ -32,14 +32,14 @@ describe('left side bar', () => {
     let ws: WorkspaceState = defaultWorkspace({ hasCoords: true, hasEmbeddings: true, hasTracks: false })
     for (const t of PANE_TYPES) ws = addPane(ws, t)
     const lefts = ws.panes.map((p) => sidebarSections({ ...ws, activePane: p.id }, imaging).left)
-    for (const l of lefts) expect(l).toEqual(['cells', 'cellInfo', 'colour'])
+    for (const l of lefts) expect(l).toEqual(['cells', 'groups', 'cellInfo', 'colour'])
     // …while the right one follows the active pane
     const rights = new Set(ws.panes.map((p) => sidebarSections({ ...ws, activePane: p.id }, imaging).right.join(',')))
     expect(rights.size).toBe(PANE_TYPES.length)
   })
   it('shows the cell list and the colouring only for multi-cell data', () => {
     expect(leftSections(sim)).toEqual(['cellInfo'])
-    expect(leftSections(scHiC)).toEqual(['cells', 'cellInfo', 'colour'])
+    expect(leftSections(scHiC)).toEqual(['cells', 'groups', 'cellInfo', 'colour'])
     expect(leftSections(null)).toEqual([])
   })
 })

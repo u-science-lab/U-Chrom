@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { useStore } from '../store'
+import { parseFieldRef } from '../groups'
+import { activeSavedGroups, useStore } from '../store'
 import {
   addPane,
+  dropUnknownGroups,
   dropUnknownPins,
   handleWorkspaceKey,
   LAYOUTS,
@@ -22,6 +24,8 @@ import { GenomeView } from './GenomeView'
 import { LocusBar } from './LocusBar'
 import { MatrixView } from './MatrixView'
 import { cellTitle, useCellTypes } from './PaneCell'
+import { useGroupInfo } from '../useGroups'
+import { savePanePng } from '../capture'
 import { StatsView } from './StatsView'
 import { Viewport } from './Viewport'
 
@@ -75,6 +79,19 @@ export function Workspace() {
     if (!cellList) return
     setWorkspace((w) => dropUnknownPins(w, new Set(cellList.map((c) => c.cell_id))))
   }, [cellList, setWorkspace])
+
+  // Group scopes the active dataset doesn't know (another dataset's lasso group) are dropped.
+  const fields = ds?.cell_fields
+  const savedIds = useStore((s) => activeSavedGroups(s))
+  useEffect(() => {
+    if (!ds) return
+    const saved = new Set(savedIds.map((g) => g.id))
+    const known = (ref: string) => {
+      const f = parseFieldRef(ref)
+      return f ? !!fields?.some((x) => x.name === f.field) : saved.has(ref)
+    }
+    setWorkspace((w) => dropUnknownGroups(w, known))
+  }, [ds, fields, savedIds, setWorkspace])
 
   // Keyboard shortcuts once for the whole workspace (not per 3-D pane).
   useEffect(() => {
@@ -207,9 +224,19 @@ function PaneBox({
   const setWorkspace = useStore((s) => s.setWorkspace)
   const activate = () => setWorkspace((w) => (w.activePane === pane.id ? w : { ...w, activePane: pane.id }))
   const types = useCellTypes()
+  const groupInfo = useGroupInfo(pane.group)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const [saving, setSaving] = useState(false)
+  const saveImage = () => {
+    if (!bodyRef.current || saving) return
+    setSaving(true)
+    savePanePng(bodyRef.current, pane)
+      .catch((e: Error) => useStore.getState().setError(`Cannot save the image: ${e.message}`))
+      .finally(() => setSaving(false))
+  }
   return (
     <section
-      className={`pane${active ? ' active' : ''}${hidden ? ' hidden' : ''}${pane.cell ? ' pinned' : ''}`}
+      className={`pane${active ? ' active' : ''}${hidden ? ' hidden' : ''}${pane.cell || pane.group ? ' pinned' : ''}`}
       style={style}
       onPointerDownCapture={activate}
       onFocusCapture={activate}
@@ -222,12 +249,25 @@ function PaneBox({
             </option>
           ))}
         </select>
-        {pane.cell && (
+        {pane.cell && !pane.group && (
           <button className="pin-badge" onClick={() => activate()} title="Pinned to this cell — change or unpin it in the inspector (right)">
             📌 {cellTitle(pane.cell, types)}
           </button>
         )}
+        {pane.group && (
+          <button className="pin-badge group" onClick={() => activate()} title="This view aggregates over a group of cells — change it in the inspector (right)">
+            <span className="swatch round" style={{ background: groupInfo?.color ?? '#888' }} />
+            {groupInfo?.name ?? pane.group}
+            {groupInfo?.cells && <span className="muted"> · {groupInfo.cells.length}</span>}
+          </button>
+        )}
         <span className="spacer" />
+        <button className="pane-shot" onClick={saveImage} disabled={saving} title="Save image (PNG)" aria-label="Save image (PNG)">
+          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden>
+            <path d="M2 5h2.6l1.2-1.8h4.4L11.4 5H14v8H2z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+            <circle cx="8" cy="9" r="2.3" fill="none" stroke="currentColor" strokeWidth="1.3" />
+          </svg>
+        </button>
         {pane.type === '3d' && (
           <button onClick={onReset} title="Reset view: fit everything drawn in this view">
             ⟲
@@ -243,8 +283,8 @@ function PaneBox({
           ×
         </button>
       </header>
-      <div className="pane-body">
-        {pane.type === '3d' && <Viewport paneId={pane.id} resetKey={resetKey} pinned={pane.cell ?? null} />}
+      <div className="pane-body" ref={bodyRef} data-pane={pane.id}>
+        {pane.type === '3d' && <Viewport paneId={pane.id} resetKey={resetKey} pinned={pane.cell ?? null} group={pane.group ?? null} />}
         {pane.type === 'embedding' && <EmbeddingView pane={pane} />}
         {pane.type === 'genome' && <GenomeView pane={pane} />}
         {pane.type === 'matrix' && <MatrixView pane={pane} />}

@@ -1384,3 +1384,169 @@ body.resizing-rows {
 .pane-head {
   flex-wrap: nowrap;
 }
+
+/* ---- cell groups (left side bar) ------------------------------------ */
+.panel.groups h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.panel.groups h2 .link {
+  margin-left: auto;
+}
+.group-list,
+.group-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.group-list {
+  max-height: 30vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  margin-bottom: 4px;
+}
+.group-field-head {
+  padding: 3px 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+.group-field-head.static {
+  cursor: default;
+}
+.group-field-head .caret {
+  display: inline-block;
+  width: 1em;
+}
+.group-field ul li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 2px 18px;
+  height: 22px;
+  box-sizing: border-box;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.group-field ul li:hover {
+  background: var(--bg-hover);
+}
+.group-field ul li.selected {
+  background: var(--bg-active);
+}
+.group-field ul li .swatch {
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+.group-field ul li .group-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.group-field ul li > .muted {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.group-field .cell-open {
+  display: none;
+  flex: none;
+  padding: 0 5px;
+  height: 16px;
+  line-height: 14px;
+  font-size: 11px;
+}
+.group-field li:hover .cell-open {
+  display: inline-block;
+}
+.group-field li.editing input {
+  width: 100%;
+}
+.group-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  margin-bottom: 6px;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
+}
+.group-selection > div {
+  flex: 1 0 100%;
+}
+.group-selection input {
+  flex: 1 1 60px;
+  min-width: 0;
+}
+.pane-popup li.head {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: default;
+}
+.pane-popup li .swatch,
+.pane-cell > button .swatch,
+.pin-badge .swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 4px;
+  vertical-align: baseline;
+}
+.pane-head .pane-shot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---- embedding lasso ------------------------------------------------ */
+.embedding-view .emb-lasso-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+.emb-tools {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: flex;
+  gap: 4px;
+  z-index: 2;
+}
+.emb-tools button.active {
+  background: var(--bg-active);
+  border-color: var(--accent);
+}
+.emb-selection {
+  position: absolute;
+  left: 50%;
+  bottom: 30px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  white-space: nowrap;
+  z-index: 2;
+}
+.emb-selection input {
+  width: 110px;
+}
+.compare-groups .link {
+  margin-left: 6px;
+}
+.compare-groups .legend-list {
+  margin-top: 2px;
+}

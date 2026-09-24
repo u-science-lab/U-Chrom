@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { listDatasets } from './api'
 import { CellInfoPanel } from './components/CellInfoPanel'
 import { CellPanel } from './components/CellPanel'
+import { GroupPanel } from './components/GroupPanel'
 import { Inspector, useDatasetFacts } from './components/Inspector'
 import { OverviewColour } from './components/PropertiesPanel'
 import { StatusBar } from './components/StatusBar'
@@ -44,6 +45,7 @@ function LeftSidebar() {
   return (
     <div className="left">
       {sections.has('cells') && <CellPanel />}
+      {sections.has('groups') && <GroupPanel />}
       {sections.has('cellInfo') && (
         <div className="panel left-info">
           <CellInfoPanel />

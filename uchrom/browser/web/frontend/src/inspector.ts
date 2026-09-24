@@ -14,7 +14,7 @@ export interface DatasetFacts {
   nPointSets: number
 }
 
-export type LeftSection = 'cells' | 'cellInfo' | 'colour'
+export type LeftSection = 'cells' | 'groups' | 'cellInfo' | 'colour'
 export type InspectorSection =
   | 'pin'
   | 'layers'
@@ -32,7 +32,8 @@ export type InspectorSection =
 export function leftSections(ds: DatasetFacts | null): LeftSection[] {
   if (!ds) return []
   const many = ds.nCells > 1
-  return [...(many ? (['cells'] as LeftSection[]) : []), 'cellInfo', ...(many ? (['colour'] as LeftSection[]) : [])]
+  // groups (cell types, lasso selections) only make sense with several cells
+  return many ? ['cells', 'groups', 'cellInfo', 'colour'] : ['cellInfo']
 }
 
 /** Inspector sections of one pane, by its type; irrelevant ones left out. */
