@@ -123,3 +123,18 @@ def test_cli_serves_over_http(tmp_path):
     finally:
         proc.terminate()
         proc.wait(timeout=10)
+
+
+def test_cells_endpoint_and_cell_filter(tmp_path):
+    spots = pd.DataFrame({"chrom": ["chr1"] * 4, "start": [0, 10, 0, 10], "end": [10, 20, 10, 20],
+                          "trace_id": ["a", "a", "b", "b"], "cell_id": ["c10", "c10", "c2", "c2"]})
+    path = tmp_path / "cells.h5cd"
+    ChromData(np.arange(12, dtype=float).reshape(4, 3), spots).write(path)
+    store = DatasetStore()
+    store.load(path)
+    c = TestClient(create_app(store))
+    cells = c.get("/api/datasets/d1/cells").json()
+    assert [x["cell_id"] for x in cells["cells"]] == ["c2", "c10"]
+    g = decode_geometry(c.post("/api/datasets/d1/geometry", json={"cell_ids": ["c10"]}).content)
+    assert [s["trace_id"] for s in g["header"]["segments"]] == ["a"]
+    assert c.get("/api/datasets/zz/cells").status_code == 404

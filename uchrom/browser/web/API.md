@@ -67,6 +67,22 @@ chromosome then trace id.
 
 `trace_id` / `cell_id` are always strings; `cell_id` may be `null`.
 
+## Cells
+
+### `GET /api/datasets/{id}/cells?offset=0&limit=500`
+
+Cell table in natural id order (`cell_2` before `cell_10`); `total` is 0
+when the dataset has no `cell_id` column.
+
+```json
+{
+  "total": 201,
+  "cells": [
+    {"cell_id": "0_1", "n_spots": 1548, "n_traces": 41, "n_chroms": 20}
+  ]
+}
+```
+
 ## Geometry (binary)
 
 ### `POST /api/datasets/{id}/geometry`
@@ -78,6 +94,7 @@ Body — a **layer filter**; all fields optional and combined with AND:
   "chroms": ["chr1", "chr2"],
   "region": {"chrom": "chr1", "start": 10000000, "end": 20000000},
   "trace_ids": ["t1", "t2"],
+  "cell_ids": ["c1"],
   "max_points": 2000000
 }
 ```

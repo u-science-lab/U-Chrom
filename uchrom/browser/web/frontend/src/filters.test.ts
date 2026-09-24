@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chromsOf, composeFilter, describeFilter, fmtBp, parseGenomicNumber, parseRange, parseRegion, parseTraceSelection } from './filters'
+import { chromsOf, composeFilter, describeFilter, fmtBp, parseGenomicNumber, parseIdSelection, parseRange, parseRegion, parseTraceSelection } from './filters'
 
 const chr1 = { name: 'chr1', start: 3_000_000, end: 195_000_000, n_spots: 10, n_traces: 1 }
 const chr2 = { name: 'chr2', start: 0, end: 180_000_000, n_spots: 10, n_traces: 1 }
@@ -93,5 +93,20 @@ describe('fmtBp', () => {
     expect(fmtBp(135_875_000)).toBe('135.875M')
     expect(fmtBp(25_000)).toBe('25k')
     expect(fmtBp(1_234_567)).toBe('1,234,567')
+  })
+})
+
+describe('cell subsets', () => {
+  it('compose and describe cell filters', () => {
+    expect(composeFilter({ chroms: ['chr1'] }, { cell_ids: ['c1'] })).toEqual({ chroms: ['chr1'], cell_ids: ['c1'] })
+    expect(composeFilter({ cell_ids: ['c1', 'c2'] }, { cell_ids: ['c2', 'c3'] })).toEqual({ cell_ids: ['c2'] })
+    expect(composeFilter({ cell_ids: ['c1'] }, { cell_ids: ['c3'] })).toBeNull()
+    expect(describeFilter({ cell_ids: ['0_10'] })).toBe('cell 0_10')
+    expect(describeFilter({ cell_ids: ['a', 'b', 'c', 'd'] })).toBe('4 cells')
+  })
+  it('parses cell selections with cell-specific errors', () => {
+    const ids = ['0_1', '0_2', '0_10']
+    expect(parseIdSelection('2-3', ids, 'cell')).toEqual(['0_2', '0_10'])
+    expect(() => parseIdSelection('x', ids, 'cell')).toThrow('unknown cell "x"')
   })
 })

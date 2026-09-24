@@ -29,6 +29,7 @@ class GeometryRequest(BaseModel):
     chroms: Optional[List[str]] = None
     region: Optional[Region] = None
     trace_ids: Optional[List[str]] = None
+    cell_ids: Optional[List[str]] = None
     max_points: int = DEFAULT_MAX_POINTS
 
 
@@ -75,6 +76,11 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
                     limit: int = Query(500, ge=1, le=100_000)) -> Dict[str, Any]:
         return _dataset(dataset_id).traces(chrom=chrom, offset=offset, limit=limit)
 
+    @app.get("/api/datasets/{dataset_id}/cells")
+    def list_cells(dataset_id: str, offset: int = Query(0, ge=0),
+                   limit: int = Query(500, ge=1, le=100_000)) -> Dict[str, Any]:
+        return _dataset(dataset_id).cells(offset=offset, limit=limit)
+
     @app.post("/api/datasets/{dataset_id}/geometry")
     def geometry(dataset_id: str, req: GeometryRequest) -> Response:
         ds = _dataset(dataset_id)
@@ -83,6 +89,7 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
                 chroms=req.chroms,
                 region=None if req.region is None else req.region.model_dump(),
                 trace_ids=req.trace_ids,
+                cell_ids=req.cell_ids,
                 max_points=req.max_points,
             )
         except ValueError as exc:

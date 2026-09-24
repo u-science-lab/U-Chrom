@@ -29,6 +29,18 @@ export interface TraceInfo {
   end: number
 }
 
+export interface CellInfo {
+  cell_id: string
+  n_spots: number
+  n_traces: number
+  n_chroms: number
+}
+
+export interface CellPage {
+  total: number
+  cells: CellInfo[]
+}
+
 export interface TracePage {
   total: number
   traces: TraceInfo[]
@@ -45,6 +57,7 @@ export interface LayerFilter {
   chroms?: string[]
   region?: Region
   trace_ids?: string[]
+  cell_ids?: string[]
 }
 
 export interface SegmentInfo {

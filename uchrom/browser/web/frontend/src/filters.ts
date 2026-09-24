@@ -35,6 +35,11 @@ export function parseRegion(chrom: ChromInfo, text: string): Region {
  * over range syntax, so numeric trace ids like "3" or "1-2" still work.
  */
 export function parseTraceSelection(text: string, orderedIds: string[]): string[] {
+  return parseIdSelection(text, orderedIds, 'trace')
+}
+
+/** Same syntax as {@link parseTraceSelection} for any id list (cells, …). */
+export function parseIdSelection(text: string, orderedIds: string[], what: string): string[] {
   const known = new Set(orderedIds)
   const out: string[] = []
   const seen = new Set<string>()
@@ -45,7 +50,7 @@ export function parseTraceSelection(text: string, orderedIds: string[]): string[
     }
   }
   const tokens = text.split(',').map((t) => t.trim()).filter(Boolean)
-  if (tokens.length === 0) throw new Error('empty trace selection')
+  if (tokens.length === 0) throw new Error(`empty ${what} selection`)
   for (const tok of tokens) {
     if (known.has(tok)) {
       push(tok)
@@ -61,7 +66,7 @@ export function parseTraceSelection(text: string, orderedIds: string[]): string[
       for (let i = a; i <= b; i++) push(orderedIds[i - 1])
       continue
     }
-    throw new Error(`unknown trace "${tok}"`)
+    throw new Error(`unknown ${what} "${tok}"`)
   }
   return out
 }
@@ -105,6 +110,11 @@ export function composeFilter(parent: LayerFilter, child: LayerFilter): LayerFil
     if (traces.length === 0) return null
     out.trace_ids = traces
   }
+  const cells = intersect(parent.cell_ids, child.cell_ids)
+  if (cells) {
+    if (cells.length === 0) return null
+    out.cell_ids = cells
+  }
   return out
 }
 
@@ -128,6 +138,10 @@ export function fmtBp(bp: number): string {
 /** Short human label for a subset created from `child`. */
 export function describeFilter(child: LayerFilter): string {
   if (child.region) return `${child.region.chrom}:${fmtBp(child.region.start)}-${fmtBp(child.region.end)}`
+  if (child.cell_ids) {
+    const ids = child.cell_ids
+    return ids.length <= 3 ? `cell ${ids.join(', ')}` : `${ids.length} cells`
+  }
   if (child.trace_ids) {
     const ids = child.trace_ids
     return ids.length <= 3 ? `trace ${ids.join(', ')}` : `${ids.length} traces`

@@ -35,6 +35,12 @@ def natural_chrom_key(name: str):
     return (2, 0, str(name))
 
 
+def natural_key(text: str):
+    """Sort "cell_2" before "cell_10" (digit runs compare numerically)."""
+    return [(0, int(t), "") if t.isdigit() else (1, 0, t)
+            for t in re.split(r"(\d+)", str(text)) if t]
+
+
 def load_chromdata(path: Path) -> ChromData:
     """Load a ``.h5cd`` or a reconstruction CSV (chrom, start, end, x, y, z)."""
     if path.suffix == ".h5cd":
@@ -50,6 +56,7 @@ class GeometryFilter:
     chroms: Optional[List[str]] = None
     region: Optional[Dict[str, Any]] = None  # {"chrom", "start", "end"}
     trace_ids: Optional[List[str]] = None
+    cell_ids: Optional[List[str]] = None
     max_points: int = DEFAULT_MAX_POINTS
 
     def __post_init__(self):
@@ -169,6 +176,27 @@ class Dataset:
         ]
         return {"total": int(len(t)), "traces": rows}
 
+    def cells(self, offset: int = 0, limit: int = 500) -> Dict[str, Any]:
+        """Cell table in natural id order (empty when there is no cell_id)."""
+        if "cells" not in self._cache:
+            a = self._arrays()
+            if a["cell"] is None:
+                self._cache["cells"] = []
+            else:
+                df = pd.DataFrame({"cell_id": a["cell"], "trace": a["trace"],
+                                   "chrom": a["chrom"], "start": a["start"]})
+                g = df.groupby("cell_id", sort=False).agg(
+                    n_spots=("start", "size"), n_traces=("trace", "nunique"),
+                    n_chroms=("chrom", "nunique"))
+                self._cache["cells"] = [
+                    {"cell_id": str(c), "n_spots": int(g.at[c, "n_spots"]),
+                     "n_traces": int(g.at[c, "n_traces"]),
+                     "n_chroms": int(g.at[c, "n_chroms"])}
+                    for c in sorted(g.index, key=natural_key)
+                ]
+        rows = self._cache["cells"]
+        return {"total": len(rows), "cells": rows[offset: offset + limit]}
+
     # ------------------------------------------------------------------
     # Geometry
     # ------------------------------------------------------------------
@@ -185,6 +213,11 @@ class Dataset:
             mask &= (a["end"] > int(r["start"])) & (a["start"] < int(r["end"]))
         if flt.trace_ids is not None:
             mask &= np.isin(a["trace"], [str(t) for t in flt.trace_ids])
+        if flt.cell_ids is not None:
+            if a["cell"] is None:
+                mask[:] = False
+            else:
+                mask &= np.isin(a["cell"], [str(c) for c in flt.cell_ids])
         idx = np.nonzero(mask)[0]
         order = np.lexsort((a["start"][idx], a["trace_code"][idx], a["chrom_rank"][idx]))
         return idx[order]

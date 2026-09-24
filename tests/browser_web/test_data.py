@@ -149,3 +149,25 @@ def test_real_fish_data_with_missing_spots():
         np.testing.assert_allclose(g["positions"][lo:hi], expected, rtol=1e-6)
     # positions match the float32 cast of the source coordinates
     assert g["positions"].dtype == np.float32
+
+
+def test_cells_table_and_filter():
+    _, ds = _toy()
+    c = ds.cells()
+    assert c["total"] == 3
+    assert [r["cell_id"] for r in c["cells"]] == ["cell_t_a", "cell_t_b", "cell_t_c"]
+    assert c["cells"][0] == {"cell_id": "cell_t_a", "n_spots": 5, "n_traces": 1, "n_chroms": 1}
+    h = decode_geometry(ds.geometry(GeometryFilter(cell_ids=["cell_t_b"])))["header"]
+    assert [(s["trace_id"], s["cell_id"]) for s in h["segments"]] == [("t_b", "cell_t_b")]
+
+
+def test_cells_natural_order_and_missing_column():
+    from uchrom.browser.web.data import natural_key
+    assert sorted(["c10", "c2", "c1", "b"], key=natural_key) == ["b", "c1", "c2", "c10"]
+    store = DatasetStore()
+    spots = pd.DataFrame({"chrom": ["chr1"] * 2, "start": [0, 10], "end": [10, 20],
+                          "trace_id": ["t"] * 2})
+    ds = store.add(ChromData(np.zeros((2, 3)), spots), name="nocell")
+    assert ds.cells() == {"total": 0, "cells": []}
+    h = decode_geometry(ds.geometry(GeometryFilter(cell_ids=["x"])))["header"]
+    assert h["n_points"] == 0

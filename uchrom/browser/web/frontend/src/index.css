@@ -256,6 +256,11 @@ select:focus {
   font-size: 12px;
   max-width: 320px;
 }
+.pick-action {
+  pointer-events: auto;
+  margin-top: 6px;
+  width: 100%;
+}
 .pick-title {
   font-weight: 600;
   color: var(--accent);

@@ -1,4 +1,4 @@
-import type { DatasetSummary, Geometry, GeometryHeader, LayerFilter, TracePage } from './types'
+import type { CellPage, DatasetSummary, Geometry, GeometryHeader, LayerFilter, TracePage } from './types'
 
 async function request(url: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(url, init)
@@ -41,6 +41,11 @@ export async function listTraces(
   q.set('offset', String(opts.offset ?? 0))
   q.set('limit', String(opts.limit ?? 500))
   return (await request(`api/datasets/${encodeURIComponent(id)}/traces?${q}`)).json()
+}
+
+export async function listCells(id: string, opts: { offset?: number; limit?: number } = {}): Promise<CellPage> {
+  const q = new URLSearchParams({ offset: String(opts.offset ?? 0), limit: String(opts.limit ?? 500) })
+  return (await request(`api/datasets/${encodeURIComponent(id)}/cells?${q}`)).json()
 }
 
 export async function fetchGeometry(
