@@ -3,9 +3,11 @@
  * as tabs, columns, rows or a grid.  Pure functions — the store wraps them.
  */
 
+import { parseRows, type GenomeRow } from './genomeRows'
 import type { EmbeddingInfo } from './types'
 
-export type PaneType = '3d' | 'embedding' | 'tracks' | 'matrix' | 'stats'
+/** 'genome': combined tracks + matrix triangles on one axis (was 'tracks'). */
+export type PaneType = '3d' | 'embedding' | 'genome' | 'matrix' | 'stats'
 export type WsLayout = 'tabs' | 'columns' | 'rows' | 'grid'
 export type StatsKind = 'rg' | 'scaling' | 'hist' | 'scatter'
 export type TrackAgg = 'mean' | 'median' | 'max'
@@ -13,7 +15,9 @@ export type DistanceStat = 'median' | 'mean' | 'contact'
 
 /** Per-pane settings of the genome-coordinate views (all optional). */
 export interface PaneOptions {
-  /** tracks: selected track names (null → a default set) */
+  /** genome: rows of the combined view per dataset name (absent → defaults for that dataset) */
+  genomeRows?: Record<string, GenomeRow[]>
+  /** genome: preferred track names for the default rows (from old Tracks panes) */
   tracks?: string[] | null
   agg?: TrackAgg
   /** tracks / matrix(distance): restrict to the focused cell when one is focused */
@@ -46,6 +50,7 @@ export interface DataKind {
   hasEmbeddings: boolean
   hasCoords: boolean
   hasTracks: boolean
+  hasContactMaps?: boolean
 }
 
 export interface WorkspaceState {
@@ -59,8 +64,8 @@ export interface WorkspaceState {
 }
 
 export const LAYOUTS: WsLayout[] = ['tabs', 'columns', 'rows', 'grid']
-export const PANE_TYPES: PaneType[] = ['3d', 'embedding', 'tracks', 'matrix', 'stats']
-export const PANE_LABEL: Record<PaneType, string> = { '3d': '3D', embedding: 'Embedding', tracks: 'Tracks', matrix: 'Matrix', stats: 'Stats' }
+export const PANE_TYPES: PaneType[] = ['3d', 'embedding', 'genome', 'matrix', 'stats']
+export const PANE_LABEL: Record<PaneType, string> = { '3d': '3D', embedding: 'Embedding', genome: 'Genome', matrix: 'Matrix', stats: 'Stats' }
 export const MIN_FRAC = 0.1
 
 const pane = (id: string, type: PaneType): Pane => ({ id, type, embeddingKey: null, dims: [0, 1] })
@@ -68,7 +73,7 @@ const pane = (id: string, type: PaneType): Pane => ({ id, type, embeddingKey: nu
 /**
  * Default views follow the data:
  * - 3-D coords + embeddings → 3D | Embedding
- * - 3-D coords, no embeddings → 3D | Tracks (if tracks) else 3D | Matrix (distances)
+ * - 3-D coords, no embeddings → 3D | Genome (tracks / contact maps) else 3D | Matrix (distances)
  * - no 3-D coords → Matrix | Embedding (or Matrix alone)
  * A bare boolean means "has embeddings" with 3-D coords (older callers).
  */
@@ -85,7 +90,7 @@ export function defaultWorkspace(kind: boolean | DataKind): WorkspaceState {
     return k.hasEmbeddings ? two('matrix', 'embedding', [0.55, 0.45]) : { layout: 'columns', panes: [pane('P1', 'matrix')], activePane: 'P1', sizes: [1], maximized: null }
   }
   if (k.hasEmbeddings) return two('3d', 'embedding', [0.6, 0.4])
-  return k.hasTracks ? two('3d', 'tracks', [0.55, 0.45]) : two('3d', 'matrix', [0.55, 0.45])
+  return k.hasTracks || k.hasContactMaps ? two('3d', 'genome', [0.5, 0.5]) : two('3d', 'matrix', [0.55, 0.45])
 }
 
 /** Pane types of a workspace, in order — to compare layouts. */
@@ -173,6 +178,14 @@ export function moveSplitter(ws: WorkspaceState, index: number, frac: number): W
 /** Keep only well-formed pane options from a persisted pane. */
 function parseOptions(p: Partial<Pane>): PaneOptions {
   const o: PaneOptions = {}
+  if (p.genomeRows && typeof p.genomeRows === 'object' && !Array.isArray(p.genomeRows)) {
+    const byDs: Record<string, GenomeRow[]> = {}
+    for (const [k, v] of Object.entries(p.genomeRows)) {
+      const rows = parseRows(v)
+      if (rows) byDs[k] = rows
+    }
+    if (Object.keys(byDs).length) o.genomeRows = byDs
+  }
   if (Array.isArray(p.tracks) && p.tracks.every((t) => typeof t === 'string')) o.tracks = p.tracks
   if (p.agg === 'mean' || p.agg === 'median' || p.agg === 'max') o.agg = p.agg
   if (typeof p.followFocus === 'boolean') o.followFocus = p.followFocus
@@ -194,7 +207,9 @@ export function parseWorkspace(raw: unknown): WorkspaceState | null {
   const w = raw as Partial<WorkspaceState>
   if (!LAYOUTS.includes(w.layout as WsLayout) || !Array.isArray(w.panes) || !w.panes.length) return null
   const panes: Pane[] = []
-  for (const p of w.panes) {
+  for (const raw of w.panes) {
+    // saved before the combined view: a 'tracks' pane opens as a genome pane
+    const p = raw && (raw.type as string) === 'tracks' ? { ...raw, type: 'genome' as PaneType } : raw
     if (!p || typeof p.id !== 'string' || !PANE_TYPES.includes(p.type)) return null
     const dims: [number, number] =
       Array.isArray(p.dims) && p.dims.length === 2 && p.dims.every((d) => Number.isInteger(d) && d >= 0) ? [p.dims[0], p.dims[1]] : [0, 1]

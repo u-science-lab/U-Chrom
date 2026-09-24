@@ -18,22 +18,22 @@ import {
 import { ColorBar } from './ColorBar'
 import { EmbeddingControls, EmbeddingView } from './EmbeddingView'
 import { FocusBar } from './FocusBar'
+import { GenomeControls, GenomeView } from './GenomeView'
 import { LocusBar } from './LocusBar'
 import { MatrixControls, MatrixView } from './MatrixView'
 import { StatsControls, StatsView } from './StatsView'
-import { TracksControls, TracksView } from './TracksView'
 import { Viewport } from './Viewport'
 
 const TYPE_LABEL = PANE_LABEL
 const MENU_LABEL: Record<PaneType, string> = {
   '3d': '3D view',
   embedding: 'Embedding view',
-  tracks: 'Genome tracks',
+  genome: 'Genome (Hi-C / distance / tracks)',
   matrix: 'Matrix (Hi-C / distance)',
   stats: 'Statistics',
 }
 /** Views that follow the shared genomic locus. */
-const GENOME_PANES = new Set<PaneType>(['tracks', 'matrix', 'stats'])
+const GENOME_PANES = new Set<PaneType>(['genome', 'matrix', 'stats'])
 const LAYOUT_LABEL: Record<WsLayout, [string, string]> = {
   tabs: ['Tabs', 'One view at a time, switch with tabs'],
   columns: ['Columns', 'Views side by side'],
@@ -58,14 +58,15 @@ export function Workspace() {
   const hasEmbeddings = (ds?.embeddings?.length ?? 0) > 0
   const hasCoords = !!ds && ds.has_coords !== false && ds.n_spots > 0
   const hasTracks = (ds?.tracks?.length ?? 0) > 0
+  const hasContactMaps = (ds?.contact_maps?.length ?? 0) > 0
   const [resetKeys, setResetKeys] = useState<Record<string, number>>({})
   const [menu, setMenu] = useState(false)
   const panesRef = useRef<HTMLDivElement>(null)
 
   // Until the user arranges views, the default follows the data.
   useEffect(() => {
-    if (datasetId) ensureDefault({ hasEmbeddings, hasCoords, hasTracks })
-  }, [datasetId, hasEmbeddings, hasCoords, hasTracks, ensureDefault])
+    if (datasetId) ensureDefault({ hasEmbeddings, hasCoords, hasTracks, hasContactMaps })
+  }, [datasetId, hasEmbeddings, hasCoords, hasTracks, hasContactMaps, ensureDefault])
 
   // Keyboard shortcuts once for the whole workspace (not per 3-D pane).
   useEffect(() => {
@@ -214,7 +215,7 @@ function PaneBox({
           </button>
         )}
         {pane.type === 'embedding' && <EmbeddingControls pane={pane} />}
-        {pane.type === 'tracks' && <TracksControls pane={pane} />}
+        {pane.type === 'genome' && <GenomeControls pane={pane} />}
         {pane.type === 'matrix' && <MatrixControls pane={pane} />}
         {pane.type === 'stats' && <StatsControls pane={pane} />}
         <span className="spacer" />
@@ -231,7 +232,7 @@ function PaneBox({
       <div className="pane-body">
         {pane.type === '3d' && <Viewport paneId={pane.id} resetKey={resetKey} />}
         {pane.type === 'embedding' && <EmbeddingView pane={pane} />}
-        {pane.type === 'tracks' && <TracksView pane={pane} />}
+        {pane.type === 'genome' && <GenomeView pane={pane} />}
         {pane.type === 'matrix' && <MatrixView pane={pane} />}
         {pane.type === 'stats' && <StatsView pane={pane} />}
       </div>

@@ -1,0 +1,251 @@
+/**
+ * Combined genome view (HiGlass / Juicebox style): a stack of rows sharing
+ * one horizontal genomic axis.  Pure helpers — row list reducers, defaults
+ * per dataset and the rotated-triangle (45°) matrix geometry.
+ */
+
+import { binAt } from './matrix'
+import { defaultTrackSelection } from './tracks'
+import type { DatasetSummary } from './types'
+import type { DistanceStat } from './workspace'
+
+export type GenomeRowKind = 'matrix' | 'track' | 'intervals'
+
+export interface GenomeRow {
+  id: string
+  kind: GenomeRowKind
+  /** row height in CSS px (null → default: matrix rows share the free height) */
+  height?: number | null
+  /** matrix: contact-map key or 'distance' */
+  source?: string | null
+  resolution?: number | null
+  balance?: boolean
+  stat?: DistanceStat
+  threshold?: number | null
+  /** matrix (distance): only the focused cell's traces */
+  followFocus?: boolean
+  /** matrix: deepest genomic separation shown across the row height (null → 45°, clipped by the height) */
+  maxDist?: number | null
+  /** matrix: diagonal at the top of the row (triangle pointing down) */
+  flip?: boolean
+  /** track: track name */
+  track?: string | null
+  /** intervals: results key */
+  key?: string | null
+}
+
+export const ROW_HEIGHT: Record<GenomeRowKind, number> = { matrix: 200, track: 44, intervals: 22 }
+export const MIN_ROW_H = 16
+export const MAX_ROW_H = 900
+
+/** Smallest automatic height of a matrix row. */
+export const MIN_AUTO_MATRIX_H = 120
+
+/**
+ * Row heights for a pane `avail` px tall: explicit heights as set, tracks /
+ * intervals their default, and matrix rows without a height share what is
+ * left (at least MIN_AUTO_MATRIX_H each — the stack scrolls beyond that —
+ * and at most the height of the full triangle of a `width`-px axis).
+ */
+export function resolveHeights(rows: GenomeRow[], avail: number, width = Infinity): number[] {
+  const fixed = rows.map((r) => r.height ?? (r.kind === 'matrix' ? null : ROW_HEIGHT[r.kind]))
+  const nAuto = fixed.filter((h) => h === null).length
+  // 1 px row separators
+  const free = avail - rows.length - fixed.reduce<number>((a, h) => a + (h ?? 0), 0)
+  // never taller than the whole 45° triangle (width / 2)
+  const auto = nAuto ? Math.max(MIN_AUTO_MATRIX_H, Math.min(Math.ceil(width / 2), Math.floor(free / nAuto))) : 0
+  return fixed.map((h) => h ?? auto)
+}
+
+function nextRowId(rows: GenomeRow[]): string {
+  const used = new Set(rows.map((r) => r.id))
+  let i = rows.length + 1
+  while (used.has(`r${i}`)) i++
+  return `r${i}`
+}
+
+/** Append a row (a fresh id is assigned). */
+export function addRow(rows: GenomeRow[], row: Omit<GenomeRow, 'id'>): GenomeRow[] {
+  return [...rows, { ...row, id: nextRowId(rows) }]
+}
+
+export function removeRow(rows: GenomeRow[], id: string): GenomeRow[] {
+  return rows.filter((r) => r.id !== id)
+}
+
+/** Move a row up (delta < 0) or down; clamped to the ends. */
+export function moveRow(rows: GenomeRow[], id: string, delta: number): GenomeRow[] {
+  const i = rows.findIndex((r) => r.id === id)
+  if (i < 0) return rows
+  const j = Math.max(0, Math.min(rows.length - 1, i + delta))
+  if (i === j) return rows
+  const out = [...rows]
+  const [r] = out.splice(i, 1)
+  out.splice(j, 0, r)
+  return out
+}
+
+export function updateRow(rows: GenomeRow[], id: string, patch: Partial<Omit<GenomeRow, 'id'>>): GenomeRow[] {
+  return rows.map((r) => (r.id === id ? { ...r, ...patch } : r))
+}
+
+/** Set a row's height, clamped to [MIN_ROW_H, MAX_ROW_H]. */
+export function resizeRow(rows: GenomeRow[], id: string, height: number): GenomeRow[] {
+  return updateRow(rows, id, { height: Math.round(Math.max(MIN_ROW_H, Math.min(MAX_ROW_H, height))) })
+}
+
+type DsLike = Pick<DatasetSummary, 'has_coords' | 'n_spots' | 'contact_maps' | 'tracks' | 'intervals'>
+
+/**
+ * Default rows for a dataset: the first bulk contact map, the first per-cell
+ * map (follows the focused cell), the 3-D distance triangle when there are
+ * coordinates, then interval tables and up to six marks as tracks
+ * (`tracks`: an earlier track selection, e.g. from an old Tracks pane).
+ */
+export function defaultRows(ds: DsLike | undefined, tracks?: string[] | null): GenomeRow[] {
+  if (!ds) return []
+  let rows: GenomeRow[] = []
+  const maps = ds.contact_maps ?? []
+  const bulk = maps.find((m) => !m.per_cell)
+  const perCell = maps.find((m) => m.per_cell)
+  if (bulk) rows = addRow(rows, { kind: 'matrix', source: bulk.key })
+  if (perCell) rows = addRow(rows, { kind: 'matrix', source: perCell.key })
+  if (ds.has_coords !== false && ds.n_spots > 0) rows = addRow(rows, { kind: 'matrix', source: 'distance' })
+  for (const iv of ds.intervals ?? []) rows = addRow(rows, { kind: 'intervals', key: iv.key })
+  const names = (ds.tracks ?? []).map((t) => t.name)
+  const have = new Set(names)
+  const picked = (tracks ?? []).filter((t) => have.has(t))
+  for (const t of picked.length ? picked : defaultTrackSelection(names)) rows = addRow(rows, { kind: 'track', track: t })
+  return rows
+}
+
+/** Keep only well-formed rows of a persisted pane (null when absent / malformed). */
+export function parseRows(raw: unknown): GenomeRow[] | null {
+  if (!Array.isArray(raw)) return null
+  const out: GenomeRow[] = []
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') return null
+    const x = r as Partial<GenomeRow>
+    if (typeof x.id !== 'string' || !(x.kind === 'matrix' || x.kind === 'track' || x.kind === 'intervals')) return null
+    const row: GenomeRow = { id: x.id, kind: x.kind }
+    if (typeof x.height === 'number' && x.height >= MIN_ROW_H && x.height <= MAX_ROW_H) row.height = x.height
+    if (typeof x.source === 'string') row.source = x.source
+    if (typeof x.resolution === 'number' && x.resolution > 0) row.resolution = x.resolution
+    if (typeof x.balance === 'boolean') row.balance = x.balance
+    if (x.stat === 'median' || x.stat === 'mean' || x.stat === 'contact') row.stat = x.stat
+    if (typeof x.threshold === 'number' && x.threshold > 0) row.threshold = x.threshold
+    if (typeof x.followFocus === 'boolean') row.followFocus = x.followFocus
+    if (typeof x.maxDist === 'number' && x.maxDist > 0) row.maxDist = x.maxDist
+    if (typeof x.flip === 'boolean') row.flip = x.flip
+    if (typeof x.track === 'string') row.track = x.track
+    if (typeof x.key === 'string') row.key = x.key
+    out.push(row)
+  }
+  return new Set(out.map((r) => r.id)).size === out.length ? out : null
+}
+
+// ---- rotated-triangle geometry --------------------------------------------
+
+/**
+ * A matrix row: the upper triangle of a symmetric matrix rotated 45° so the
+ * diagonal lies on the shared genomic axis.  A point at screen x (genomic
+ * midpoint) and depth t below/above the diagonal shows the contact between
+ * the loci x − t·k and x + t·k (k = axis px per depth px; 1 = true 45°).
+ */
+export interface TriangleGeom {
+  /** genomic position of screen x = 0 */
+  start: number
+  /** bp per screen px along the axis */
+  bpPerPx: number
+  /** row height in the same px */
+  height: number
+  /** axis px per depth px */
+  k: number
+  /** diagonal at the top (true) or at the bottom (false) of the row */
+  flip: boolean
+  /** deepest separation drawn (bp), or null */
+  maxDist: number | null
+}
+
+/**
+ * Axis px per depth px so that `maxDist` spans the row height; null keeps
+ * the true 45° aspect (k = 1).
+ */
+export function depthScale(maxDist: number | null | undefined, bpPerPx: number, height: number): number {
+  if (!maxDist || !(bpPerPx > 0) || !(height > 0)) return 1
+  return maxDist / bpPerPx / 2 / height
+}
+
+/**
+ * Genomic positions [a, b] (a ≤ b) shown at row point (x, y) — the two loci
+ * whose contact is drawn there — or null outside the triangle (outside the
+ * row, or deeper than maxDist).
+ */
+export function trianglePos(x: number, y: number, g: TriangleGeom): [number, number] | null {
+  if (y < 0 || y > g.height) return null
+  const t = g.flip ? y : g.height - y
+  const half = t * g.k
+  const a = g.start + (x - half) * g.bpPerPx
+  const b = g.start + (x + half) * g.bpPerPx
+  if (g.maxDist !== null && b - a > g.maxDist * (1 + 1e-9)) return null
+  return [a, b]
+}
+
+/** Bin pair (i ≤ j) of a matrix at row point (x, y), or null outside the triangle / the matrix. */
+export function triangleBins(x: number, y: number, g: TriangleGeom, starts: readonly number[], ends: readonly number[]): [number, number] | null {
+  const p = trianglePos(x, y, g)
+  if (!p) return null
+  const i = binAt(starts, ends, p[0])
+  const j = binAt(starts, ends, p[1])
+  return i < 0 || j < 0 ? null : [i, j]
+}
+
+/** Sub-pixel steps of the bin lookup table (positions are resolved to 1/LUT_SUB px). */
+const LUT_SUB = 4
+
+/**
+ * RGBA pixels (width × height) of the rotated triangle: for every pixel
+ * (centre) the inverse mapping gives the two loci, a lookup table the bins,
+ * and `colors` (RGBA per matrix cell, n × n) the colour.  Pixels outside
+ * the triangle or the matrix stay transparent.
+ */
+export function rasterTriangle(
+  width: number,
+  height: number,
+  g: TriangleGeom,
+  starts: readonly number[],
+  ends: readonly number[],
+  colors: Uint8ClampedArray,
+): Uint8ClampedArray {
+  const n = starts.length
+  const out = new Uint8ClampedArray(4 * width * height)
+  // bin at every 1/LUT_SUB px along the axis (positions outside the locus: −1)
+  const lut = new Int32Array(width * LUT_SUB + 1)
+  for (let q = 0; q < lut.length; q++) lut[q] = binAt(starts, ends, g.start + ((q + 0.5) / LUT_SUB) * g.bpPerPx)
+  for (let py = 0; py < height; py++) {
+    const yc = py + 0.5
+    const t = g.flip ? yc : height - yc
+    const half = t * g.k
+    if (g.maxDist !== null && 2 * half * g.bpPerPx > g.maxDist * (1 + 1e-9)) continue
+    const row = 4 * width * py
+    // columns whose two loci both fall inside [0, width)
+    const x0 = Math.max(0, Math.ceil(half - 0.5))
+    const x1 = Math.min(width, Math.floor(width - half - 0.5) + 1)
+    for (let px = x0; px < x1; px++) {
+      const xc = px + 0.5
+      const qa = Math.floor((xc - half) * LUT_SUB)
+      const qb = Math.floor((xc + half) * LUT_SUB)
+      if (qa < 0 || qb >= lut.length) continue
+      const i = lut[qa]
+      const j = lut[qb]
+      if (i < 0 || j < 0) continue
+      const src = 4 * (i * n + j)
+      const dst = row + 4 * px
+      out[dst] = colors[src]
+      out[dst + 1] = colors[src + 1]
+      out[dst + 2] = colors[src + 2]
+      out[dst + 3] = 255
+    }
+  }
+  return out
+}

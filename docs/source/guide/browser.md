@@ -83,11 +83,19 @@ Besides *3D* and *Embedding*, panes can show views along the genome.  They
 share a **locus** (chromosome + range) set in the workspace bar — type
 `chr7:20M-40M`, zoom with ± or *full*, or drag / zoom inside a view:
 
-- **Tracks** — a genome-browser view of `cd.tracks` (e.g. the 59 per-spot
-  IF channels of Takei 2025: H3K27ac, H3K4me3, H3K9me3, LaminB1, …)
-  aggregated per bin (mean / median / max) over all cells or the focused
-  cell, plus interval rows for `cd.results` tables (TADs, loops, peaks).
-- **Matrix** — a contact map from a linked `.cool` / `.mcool` / `.scool`
+- **Genome** — a HiGlass-style stack of rows on one genomic axis (drag
+  to pan, wheel to zoom, crosshair across rows):
+  - *matrix rows*: a contact map or the 3-D distance matrix drawn as the
+    upper triangle rotated 45° (adjustable height / max distance, flip);
+    stack several to compare, e.g. two cell types' pseudo-bulk Hi-C, or a
+    cell's contacts above its 3-D distances;
+  - *track rows*: `cd.tracks` (e.g. Takei 2025's 59 per-spot IF channels:
+    H3K27ac, H3K4me3, H3K9me3, LaminB1, …) aggregated per bin over all
+    cells or the focused cell;
+  - *interval rows*: `cd.results` tables (TADs as boxes, loops as arcs),
+    with their boundaries echoed as guides across the matrix rows.
+  Add / remove / reorder rows from the pane header; rows are remembered.
+- **Matrix** — the full square version: a contact map from a linked `.cool` / `.mcool` / `.scool`
   (`cd.link_cool`, `cd.link_scool`; per-cell maps follow the focused cell)
   or the **3-D distance** matrix computed from `coords` (one trace, the
   focused cell, or the population median / mean / contact frequency).

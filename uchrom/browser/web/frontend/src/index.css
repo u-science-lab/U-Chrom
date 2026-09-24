@@ -1088,3 +1088,107 @@ body.resizing-rows {
   background: transparent !important;
   outline: 1px solid var(--text-muted);
 }
+
+/* ---- combined genome view (rows on one genomic axis) ---------------- */
+.genome-view.gv {
+  display: flex;
+  flex-direction: column;
+  cursor: grab;
+  user-select: none;
+}
+.genome-view.gv canvas {
+  position: static;
+}
+.gv-axis {
+  flex: none;
+}
+.gv-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+.gv-row {
+  position: relative;
+  flex: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.gv-row.track {
+  border-bottom-color: rgba(255, 255, 255, 0.03);
+}
+.gv-tools {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  z-index: 3;
+  display: none;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: calc(100% - 8px);
+  padding: 2px 4px;
+  background: rgba(20, 22, 26, 0.9);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: default;
+}
+.gv-row:hover .gv-tools {
+  display: flex;
+}
+.gv-tools select,
+.gv-tools button,
+.gv-tools input {
+  font-size: 11px;
+  padding: 0 4px;
+  height: 20px;
+}
+.gv-tools input.num {
+  width: 64px;
+}
+.gv-tools select {
+  max-width: 150px;
+}
+.gv-tools button.active {
+  background: var(--bg-active);
+}
+.gv-row.track .gv-tools,
+.gv-row.intervals .gv-tools {
+  top: 0;
+}
+.gv-resize {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 6px;
+  z-index: 2;
+  cursor: row-resize;
+}
+.gv-resize:hover {
+  background: rgba(92, 157, 237, 0.35);
+}
+.gv-cross {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+  z-index: 2;
+}
+.gv-row-loading {
+  position: absolute;
+  left: 6px;
+  bottom: 4px;
+  z-index: 2;
+  pointer-events: none;
+}
+.pane-popup li.disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+.gv .embedding-tip {
+  z-index: 5;
+}

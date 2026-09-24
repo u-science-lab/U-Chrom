@@ -48,7 +48,7 @@ describe('default views per kind of data', () => {
   const sig = (k: Parameters<typeof defaultWorkspace>[0]) => paneSignature(defaultWorkspace(k))
   it('follows coords / embeddings / tracks', () => {
     expect(sig({ hasCoords: true, hasEmbeddings: true, hasTracks: true })).toBe('3d,embedding')
-    expect(sig({ hasCoords: true, hasEmbeddings: false, hasTracks: true })).toBe('3d,tracks')
+    expect(sig({ hasCoords: true, hasEmbeddings: false, hasTracks: true })).toBe('3d,genome')
     expect(sig({ hasCoords: true, hasEmbeddings: false, hasTracks: false })).toBe('3d,matrix')
     expect(sig({ hasCoords: false, hasEmbeddings: true, hasTracks: false })).toBe('matrix,embedding')
     expect(sig({ hasCoords: false, hasEmbeddings: false, hasTracks: false })).toBe('matrix')
