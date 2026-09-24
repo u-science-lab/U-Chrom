@@ -3,10 +3,13 @@ import * as THREE from 'three'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { buildLayerObject, pointIndexOfHit, type BuiltLayer } from '../render/objects'
 import { displayParts, subsetGeometry } from '../render/partition'
+import { buildPointMarkers, splitPoints, type BuiltPoints } from '../render/points'
 import { bboxDiagonal, findSegment } from '../render/segments'
 import { DEFAULT_STYLE } from '../layers'
-import { activeView, useStore } from '../store'
-import type { ColorMode, Geometry, LayerStyle, SegmentInfo } from '../types'
+import { activeFieldValues, activeView, useStore } from '../store'
+import { fieldRange } from '../colors'
+import { isPointPick, type ColorMode, type Geometry, type LayerStyle, type PointSet, type SegmentInfo } from '../types'
+import { ColorBar } from './ColorBar'
 import { FocusBar } from './FocusBar'
 import { PickLabel } from './PickLabel'
 
@@ -20,7 +23,7 @@ interface Part {
 
 interface Entry {
   /** inputs the parts were built from; rebuilt when any changes */
-  key: { geometry: Geometry; style: LayerStyle; focus: string | null; hidden: string; ctx: number; overview: ColorMode; nCells: number }
+  key: { geometry: Geometry; style: LayerStyle; focus: string | null; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: Map<string, number | null> | null }
   parts: Part[]
 }
 
@@ -41,6 +44,8 @@ interface Three {
   hoverBox: THREE.Box3Helper
   /** white overlay of the hovered cell's traces (drawn on top) */
   hover: { cell: string; geometry: Geometry; built: BuiltLayer } | null
+  /** point-set markers: one main and one faint (context) object per set */
+  points: Map<string, { set: PointSet; key: string; parts: { role: Role; built: BuiltPoints }[] }>
   fly: Fly | null
 }
 
@@ -117,6 +122,8 @@ export function Viewport() {
   const resetViewToken = useStore((s) => s.resetViewToken)
   const flyToken = useStore((s) => s.flyToken)
   const cells = useStore((s) => s.cells)
+  const fieldValues = useStore(activeFieldValues)
+  const pointSets = useStore((s) => (s.activeDatasetId ? s.pointSets[s.activeDatasetId] : undefined))
   const setPick = useStore((s) => s.setPick)
   const setStatus = useStore((s) => s.setStatus)
 
@@ -156,7 +163,7 @@ export function Viewport() {
     controls.panSpeed = 0.8
     controls.staticMoving = true
 
-    const t: Three = { renderer, scene, camera, controls, group, entries: new Map(), highlight, hoverBox, hover: null, fly: null }
+    const t: Three = { renderer, scene, camera, controls, group, entries: new Map(), highlight, hoverBox, hover: null, points: new Map(), fly: null }
     threeRef.current = t
 
     const resize = () => {
@@ -255,6 +262,7 @@ export function Viewport() {
       cancelAnimationFrame(hoverRaf)
       window.removeEventListener('keydown', onKey)
       for (const e of t.entries.values()) for (const p of e.parts) p.built.dispose()
+      for (const e of t.points.values()) for (const p of e.parts) p.built.dispose()
       controls.dispose()
       renderer.dispose()
       host.removeChild(renderer.domElement)
@@ -292,6 +300,7 @@ export function Viewport() {
         ctx: view.contextOpacity,
         overview: view.overviewColor,
         nCells: cellList.length,
+        values: view.overviewColor === 'field' ? fieldValues : null,
       }
       const prev = t.entries.get(l.id)
       if (
@@ -302,7 +311,8 @@ export function Viewport() {
         prev.key.hidden === key.hidden &&
         prev.key.ctx === key.ctx &&
         prev.key.overview === key.overview &&
-        prev.key.nCells === key.nCells
+        prev.key.nCells === key.nCells &&
+        prev.key.values === key.values
       ) {
         for (const p of prev.parts) if (p.built.warning) warnings.push(`${l.name}: ${p.built.warning}`)
         continue
@@ -311,7 +321,12 @@ export function Viewport() {
       const { main, context } = displayParts(l.geometry!, hidden, view.focusCell)
       // colour by chromosome whenever the layer itself has several, so hiding
       // chromosomes never switches the colour scheme away from the legend
-      const colorOpts = { chromColors: new Set(l.geometry!.header.segments.map((s) => s.chrom)).size > 1, cellIndex }
+      const colorOpts = {
+        chromColors: new Set(l.geometry!.header.segments.map((s) => s.chrom)).size > 1,
+        cellIndex,
+        cellValues: key.values ?? undefined,
+        fieldRange: key.values ? fieldRange(key.values.values()) : undefined,
+      }
       // Multi-cell data: the overview (and the faint context around a
       // focused cell) uses the overview colouring — per cell by default.
       const overviewStyle: LayerStyle = cellIndex.size > 1 ? { ...l.style, colorMode: view.overviewColor } : l.style
@@ -341,8 +356,52 @@ export function Viewport() {
       }
     }
     const pick = useStore.getState().pick
-    if (pick && !keep.has(pick.layerId)) setPick(null)
-  }, [layers, activeDatasetId, view, cells, setPick, setStatus])
+    if (pick && !isPointPick(pick) && !keep.has(pick.layerId)) setPick(null)
+  }, [layers, activeDatasetId, view, cells, fieldValues, setPick, setStatus])
+
+  // Point sets (e.g. RNA spots): focused cell's points full, others faint.
+  useEffect(() => {
+    const t = threeRef.current
+    if (!t) return
+    const sets = pointSets ?? {}
+    const hiddenSets = new Set(view.hiddenPointSets)
+    for (const [name, e] of t.points) {
+      if (sets[name] && !hiddenSets.has(name)) continue
+      for (const p of e.parts) {
+        t.group.remove(p.built.object)
+        p.built.dispose()
+      }
+      t.points.delete(name)
+    }
+    for (const ps of Object.values(sets)) {
+      if (hiddenSets.has(ps.name)) continue
+      const hiddenLabels = view.hiddenLabels[ps.name] ?? []
+      const key = [view.focusCell, view.contextOpacity, view.pointSize, [...hiddenLabels].sort().join('\u0000')].join('|')
+      const prev = t.points.get(ps.name)
+      if (prev && prev.set === ps && prev.key === key) continue
+      if (prev)
+        for (const p of prev.parts) {
+          t.group.remove(p.built.object)
+          p.built.dispose()
+        }
+      const split = splitPoints(ps, new Set(hiddenLabels), view.focusCell)
+      const parts: { role: Role; built: BuiltPoints }[] = []
+      // all-cells overview: half-size markers so the chromatin stays visible
+      const overview = view.focusCell === null
+      if (split.main.length)
+        parts.push({
+          role: 'main',
+          built: buildPointMarkers(ps, split.main, overview ? Math.max(2, view.pointSize * 0.5) : view.pointSize, overview ? 0.85 : 1),
+        })
+      if (split.context.length && view.contextOpacity > 0)
+        parts.push({ role: 'context', built: buildPointMarkers(ps, split.context, Math.max(2, view.pointSize * 0.6), view.contextOpacity) })
+      for (const p of parts) {
+        p.built.object.userData = { kind: 'points', set: ps.name, role: p.role }
+        t.group.add(p.built.object)
+      }
+      t.points.set(ps.name, { set: ps, key, parts })
+    }
+  }, [pointSets, view])
 
   // Explicit reset / dataset switch → refit on everything drawn.
   useEffect(() => {
@@ -374,6 +433,12 @@ export function Viewport() {
     if (!t) return
     t.highlight.visible = false
     if (!pick) return
+    if (isPointPick(pick)) {
+      t.highlight.position.set(...pick.position)
+      t.highlight.scale.setScalar(Math.max(t.camera.position.distanceTo(t.controls.target) * 0.01, 1e-6))
+      t.highlight.visible = true
+      return
+    }
     const main = t.entries.get(pick.layerId)?.parts.find((p) => p.role === 'main')
     if (!main) return
     const p = main.geometry.positions
@@ -386,6 +451,7 @@ export function Viewport() {
   return (
     <div className="viewport" ref={hostRef}>
       <FocusBar />
+      <ColorBar />
       <PickLabel />
       <div className="hover-tip" ref={tipRef} />
       <div className="viewport-tools">
@@ -397,19 +463,32 @@ export function Viewport() {
   )
 }
 
-interface Hit {
+interface TraceHit {
+  kind: 'trace'
   layerId: string
   role: Role
   part: Part
   pointIndex: number
   segment: SegmentInfo
+  cell: string | null
 }
 
+interface PointHit {
+  kind: 'point'
+  set: PointSet
+  role: Role
+  index: number
+  cell: string | null
+}
+
+type Hit = TraceHit | PointHit
+
 /**
- * The trace under the cursor: among raycast hits within a few pixels, the
- * one closest to the cursor *on screen* (distance to the ray / depth) — not
- * the one closest to the camera, which in a crowded field is often a
- * neighbouring cell.  The focused cell wins over its faint context.
+ * What is under the cursor: among raycast hits within a few pixels — traces
+ * and point markers alike — the one closest to the cursor *on screen*
+ * (distance to the ray / depth), not the one closest to the camera, which in
+ * a crowded field is often a neighbouring cell.  The focused cell wins over
+ * its faint context, and a point marker over a trace at the same spot.
  */
 function hitAt(t: Three, clientX: number, clientY: number): Hit | null {
   const rect = t.renderer.domElement.getBoundingClientRect()
@@ -423,18 +502,30 @@ function hitAt(t: Three, clientX: number, clientY: number): Hit | null {
   let best: Hit | null = null
   let bestScore = Infinity
   for (const h of ray.intersectObjects(t.group.children, false)) {
-    const { layerId, role } = h.object.userData as { layerId: string; role: Role }
-    const part = t.entries.get(layerId)?.parts.find((p) => p.role === role)
-    if (!part) continue
-    const pi = pointIndexOfHit(part.built.pick, h)
-    if (pi < 0) continue
-    const s = findSegment(part.geometry.offsets, pi)
-    if (s < 0) continue
+    const ud = h.object.userData as { kind?: string; layerId?: string; set?: string; role: Role }
     const off = (h as { distanceToRay?: number }).distanceToRay ?? ray.ray.distanceToPoint(h.point)
-    const score = off / Math.max(h.distance, 1e-9) + (role === 'context' ? 1 : 0)
+    let score = off / Math.max(h.distance, 1e-9) + (ud.role === 'context' ? 1 : 0)
+    let hit: Hit | null = null
+    if (ud.kind === 'points') {
+      const e = t.points.get(ud.set!)
+      const part = e?.parts.find((p) => p.role === ud.role)
+      if (!e || !part || h.index === undefined || h.index === null) continue
+      const index = part.built.indices[h.index]
+      hit = { kind: 'point', set: e.set, role: ud.role, index, cell: e.set.cellIds[index] }
+      score -= 1e-4 // markers sit on the chromatin: prefer them on ties
+    } else {
+      const part = t.entries.get(ud.layerId!)?.parts.find((p) => p.role === ud.role)
+      if (!part) continue
+      const pi = pointIndexOfHit(part.built.pick, h)
+      if (pi < 0) continue
+      const si = findSegment(part.geometry.offsets, pi)
+      if (si < 0) continue
+      const segment = part.geometry.header.segments[si]
+      hit = { kind: 'trace', layerId: ud.layerId!, role: ud.role, part, pointIndex: pi, segment, cell: segment.cell_id }
+    }
     if (score < bestScore) {
       bestScore = score
-      best = { layerId, role, part, pointIndex: pi, segment: part.geometry.header.segments[s] }
+      best = hit
     }
   }
   return best
@@ -444,9 +535,9 @@ const hasManyCells = (store: ReturnType<typeof useStore.getState>) =>
   ((store.activeDatasetId && store.cells[store.activeDatasetId]) || []).length > 1
 
 /**
- * Click behaviour: a trace of another cell (context, or the overview of a
- * multi-cell dataset) focuses that cell; a trace of the focused cell — or of
- * data without cells — shows its details.
+ * Click behaviour: anything belonging to another cell (context, or the
+ * overview of a multi-cell dataset) focuses that cell; a trace or point of
+ * the focused cell — or of data without cells — shows its details.
  */
 function pickAt(t: Three, e: PointerEvent) {
   const store = useStore.getState()
@@ -456,18 +547,36 @@ function pickAt(t: Three, e: PointerEvent) {
     store.setPick(null)
     return
   }
-  const cell = hit.segment.cell_id
-  if (hasManyCells(store) && cell !== null && cell !== view.focusCell) {
-    store.focusCell(cell)
+  if (hasManyCells(store) && hit.cell !== null && hit.cell !== view.focusCell) {
+    store.focusCell(hit.cell)
     return
   }
   const rect = t.renderer.domElement.getBoundingClientRect()
+  const screen = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+  if (hit.kind === 'point') {
+    const ps = hit.set
+    const values: Record<string, number | null> = {}
+    for (const [k, arr] of Object.entries(ps.values)) values[k] = arr[hit.index] ?? null
+    const p = ps.positions
+    store.setPick({
+      kind: 'point',
+      set: ps.name,
+      index: hit.index,
+      label: ps.labels[hit.index],
+      cellId: hit.cell,
+      position: [p[3 * hit.index], p[3 * hit.index + 1], p[3 * hit.index + 2]],
+      values,
+      screen,
+    })
+    return
+  }
   store.setPick({
+    kind: 'trace',
     layerId: hit.layerId,
     pointIndex: hit.pointIndex,
     segment: hit.segment,
     binStart: hit.part.geometry.starts[hit.pointIndex],
-    screen: { x: e.clientX - rect.left, y: e.clientY - rect.top },
+    screen,
   })
 }
 
@@ -495,28 +604,39 @@ function cellBoxes(g: Geometry): Map<string, THREE.Box3> {
 function hoverAt(t: Three, e: PointerEvent, tip: HTMLDivElement) {
   const store = useStore.getState()
   const view = activeView(store)
-  const hit = hasManyCells(store) ? hitAt(t, e.clientX, e.clientY) : null
-  const cell = hit?.segment.cell_id ?? null
-  if (!hit || cell === null || cell === view.focusCell) {
+  const hit = hitAt(t, e.clientX, e.clientY)
+  const rect = t.renderer.domElement.getBoundingClientRect()
+  const showTip = (text: string) => {
+    tip.textContent = text
+    tip.style.left = `${e.clientX - rect.left + 14}px`
+    tip.style.top = `${e.clientY - rect.top + 14}px`
+    tip.style.display = 'block'
+  }
+  const clear = () => {
     setHoverCell(t, null)
     t.hoverBox.visible = false
     tip.style.display = 'none'
     t.renderer.domElement.style.cursor = ''
+  }
+  const cell = hit?.cell ?? null
+  const otherCell = hasManyCells(store) && cell !== null && cell !== view.focusCell
+  const pointText = hit?.kind === 'point' ? `${hit.set.labels[hit.index]}${cell !== null ? ` · cell ${cell}` : ''}` : null
+  if (!hit || !otherCell) {
+    clear()
+    if (pointText) showTip(pointText) // a marker of the focused cell (or cell-less data)
     return
   }
-  const layerGeom = store.layers.find((l) => l.id === hit.layerId)?.geometry
-  if (layerGeom) setHoverCell(t, cell, layerGeom, new Set(view.hiddenChroms))
-  const box = layerGeom ? cellBoxes(layerGeom).get(cell) : undefined
+  // anything of another cell: outline that cell and say a click focuses it
+  const layerGeom = store.layers.find((l) => l.datasetId === store.activeDatasetId && l.visible && l.geometry)?.geometry
+  const traceGeom = hit.kind === 'trace' ? store.layers.find((l) => l.id === hit.layerId)?.geometry : layerGeom
+  if (traceGeom) setHoverCell(t, cell!, traceGeom, new Set(view.hiddenChroms))
+  const box = traceGeom ? cellBoxes(traceGeom).get(cell!) : undefined
   if (box) {
     t.hoverBox.box.copy(box)
     t.hoverBox.visible = true
   }
   const info = (store.activeDatasetId ? store.cells[store.activeDatasetId] : undefined)?.find((c) => c.cell_id === cell)
-  const rect = t.renderer.domElement.getBoundingClientRect()
-  tip.textContent = `cell ${cell}${info ? ` · ${info.n_traces} traces` : ''} — click to focus`
-  tip.style.left = `${e.clientX - rect.left + 14}px`
-  tip.style.top = `${e.clientY - rect.top + 14}px`
-  tip.style.display = 'block'
+  showTip(`${pointText ? `${pointText} — ` : `cell ${cell}${info ? ` · ${info.n_traces} traces` : ''} — `}click to focus`)
   t.renderer.domElement.style.cursor = 'pointer'
 }
 

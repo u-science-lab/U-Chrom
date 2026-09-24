@@ -39,6 +39,20 @@ Navigating imaging data with many cells:
 - **Subset layer** (collapsed, bottom left) still creates region / trace
   layers when you want to compare or keep a selection.
 
+Multi-omics data (e.g. `ChromData.from_fofct(core, cell_table=…,
+rna_table=…)`, see the ChromData guide):
+
+- **Colour · all cells → Field** colours every cell by a numeric
+  `cd.cells` column — RNA counts (`rna.Nanog`, …), nuclear area, … — with
+  a viridis colour bar (capped at the 99th percentile; grey = missing).
+  The cell list then shows each cell's value and can sort by it.
+- A focused cell shows a **Cell** panel: morphology and its RNA counts as
+  bars; click a gene to colour all cells by it.
+- **Points** draws `cd.points` sets (nascent RNA spots) as markers
+  coloured by gene, with a legend to show / hide genes (double-click to
+  show one) and a marker-size slider.  Other cells' points follow the
+  *others* opacity; clicking a point shows its gene, cell and intensity.
+
 Trace statistics, multi-canvas and sessions are desktop-only for now.
 
 ## Main areas

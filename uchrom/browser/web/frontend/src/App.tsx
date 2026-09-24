@@ -10,12 +10,14 @@ import { Viewport } from './components/Viewport'
 import { useStore } from './store'
 import { useCellLoader } from './useCellLoader'
 import { useGeometryLoader } from './useGeometryLoader'
+import { useOmicsLoader } from './useOmicsLoader'
 
 export function App() {
   const setDatasets = useStore((s) => s.setDatasets)
   const setError = useStore((s) => s.setError)
   useGeometryLoader()
   useCellLoader()
+  useOmicsLoader()
   useEffect(() => {
     listDatasets()
       .then(setDatasets)

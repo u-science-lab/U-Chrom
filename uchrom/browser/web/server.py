@@ -25,6 +25,11 @@ class Region(BaseModel):
     end: int
 
 
+class PointsRequest(BaseModel):
+    cell_ids: Optional[List[str]] = None
+    labels: Optional[List[str]] = None
+
+
 class GeometryRequest(BaseModel):
     chroms: Optional[List[str]] = None
     region: Optional[Region] = None
@@ -80,6 +85,28 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
     def list_cells(dataset_id: str, offset: int = Query(0, ge=0),
                    limit: int = Query(500, ge=1, le=100_000)) -> Dict[str, Any]:
         return _dataset(dataset_id).cells(offset=offset, limit=limit)
+
+    @app.get("/api/datasets/{dataset_id}/cell_values")
+    def cell_values(dataset_id: str, field: str) -> Dict[str, Any]:
+        try:
+            return _dataset(dataset_id).cell_values(field)
+        except KeyError:
+            raise HTTPException(404, f"unknown cell field: {field}") from None
+
+    @app.get("/api/datasets/{dataset_id}/cell_info")
+    def cell_info(dataset_id: str, cell_id: str) -> Dict[str, Any]:
+        try:
+            return _dataset(dataset_id).cell_info(cell_id)
+        except KeyError:
+            raise HTTPException(404, f"unknown cell: {cell_id}") from None
+
+    @app.post("/api/datasets/{dataset_id}/points/{name}")
+    def points(dataset_id: str, name: str, req: Optional[PointsRequest] = None) -> Dict[str, Any]:
+        req = req or PointsRequest()
+        try:
+            return _dataset(dataset_id).points(name, cell_ids=req.cell_ids, labels=req.labels)
+        except KeyError:
+            raise HTTPException(404, f"unknown point set: {name}") from None
 
     @app.post("/api/datasets/{dataset_id}/geometry")
     def geometry(dataset_id: str, req: GeometryRequest) -> Response:

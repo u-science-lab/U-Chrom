@@ -484,3 +484,163 @@ details.subset > summary h2 {
   border: 1px solid var(--accent);
   border-radius: var(--radius);
 }
+
+/* ---- cell field colour bar ----------------------------------------- */
+.colorbar {
+  position: absolute;
+  z-index: 2;
+  left: 10px;
+  bottom: 10px;
+  width: 200px;
+  padding: 6px 8px;
+  background: rgba(20, 22, 26, 0.88);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+.colorbar-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.colorbar-ramp {
+  height: 10px;
+  border-radius: 2px;
+}
+.colorbar-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- cell list values / sorting ------------------------------------ */
+.panel.cells h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cell-sort {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+}
+.cell-sort button {
+  padding: 0 5px;
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cell-sort button.active {
+  background: var(--bg-active);
+}
+.cell-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.cell-value {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+/* ---- focused cell details ------------------------------------------ */
+.cell-info {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.cell-info .stats {
+  margin: 4px 0 8px;
+}
+.stats .kv {
+  display: contents;
+}
+.bars {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+}
+.bars li {
+  display: grid;
+  grid-template-columns: 64px 1fr 40px;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 2px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.bars li:hover {
+  background: var(--bg-hover);
+}
+.bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bar-track {
+  height: 8px;
+  background: var(--bg-input);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.bar-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+button.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/* ---- point sets ---------------------------------------------------- */
+.points-panel {
+  margin-bottom: 10px;
+}
+.points-panel h2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.points-panel h2 .check {
+  margin: 0;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  color: var(--text);
+}
+.legend-list.labels {
+  max-height: 220px;
+  overflow-y: auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.legend-list.labels li {
+  min-width: 0;
+}
+.legend-list.labels .name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.legend-list .swatch.round {
+  border-radius: 50%;
+}
+.legend-list .count {
+  margin-left: auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}

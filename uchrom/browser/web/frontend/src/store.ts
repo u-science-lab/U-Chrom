@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { DEFAULT_STYLE, removeCascade, uniqueName } from './layers'
-import type { CellInfo, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo } from './types'
+import { isPointPick } from './types'
+import type { CellInfo, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo, PointSet } from './types'
 
 let nextId = 1
 const newId = () => `L${nextId++}`
@@ -17,9 +18,32 @@ export interface DatasetView {
   contextOpacity: number
   /** colouring of the all-cells overview (and the faint context); a focused cell uses the layer style */
   overviewColor: ColorMode
+  /** numeric cell field used when overviewColor is 'field' */
+  cellField: string | null
+  /** cell list order: natural id order or by the field value (descending) */
+  cellSort: 'id' | 'value'
+  /** point sets switched off */
+  hiddenPointSets: string[]
+  /** hidden labels per point set (e.g. genes) */
+  hiddenLabels: Record<string, string[]>
+  /** point sprite size in px */
+  pointSize: number
 }
 
-export const DEFAULT_VIEW: DatasetView = { focusCell: null, hiddenChroms: [], contextOpacity: 0.15, overviewColor: 'cell' }
+export const DEFAULT_VIEW: DatasetView = {
+  focusCell: null,
+  hiddenChroms: [],
+  contextOpacity: 0.15,
+  overviewColor: 'cell',
+  cellField: null,
+  cellSort: 'id',
+  hiddenPointSets: [],
+  hiddenLabels: {},
+  pointSize: 7,
+}
+
+/** Key of a cached cell-field vector. */
+export const fieldKey = (datasetId: string, field: string) => `${datasetId}\u0000${field}`
 
 export interface AppState {
   datasets: DatasetSummary[]
@@ -36,6 +60,10 @@ export interface AppState {
   views: Record<string, DatasetView>
   /** cell table per dataset, natural order (empty when no cell_id) */
   cells: Record<string, CellInfo[]>
+  /** cached cell-field values: fieldKey(ds, field) → cell_id → value */
+  cellValues: Record<string, Map<string, number | null>>
+  /** loaded point sets per dataset */
+  pointSets: Record<string, Record<string, PointSet>>
 
   setDatasets(ds: DatasetSummary[]): void
   addDataset(ds: DatasetSummary): void
@@ -61,6 +89,39 @@ export interface AppState {
   setHiddenChroms(chroms: string[]): void
   setContextOpacity(opacity: number): void
   setOverviewColor(mode: ColorMode): void
+  /** colour the overview by `field` (switches overviewColor to 'field') */
+  setCellField(field: string | null): void
+  setCellSort(sort: 'id' | 'value'): void
+  setCellValues(datasetId: string, field: string, values: Map<string, number | null>): void
+  setPointSet(datasetId: string, set: PointSet): void
+  togglePointSet(name: string): void
+  toggleLabel(set: string, label: string): void
+  setHiddenLabels(set: string, labels: string[]): void
+  setPointSize(px: number): void
+}
+
+/** Values of the active overview field, if loaded. */
+export function activeFieldValues(s: Pick<AppState, 'views' | 'activeDatasetId' | 'cellValues'>): Map<string, number | null> | null {
+  const v = activeView(s)
+  if (!s.activeDatasetId || !v.cellField) return null
+  return s.cellValues[fieldKey(s.activeDatasetId, v.cellField)] ?? null
+}
+
+/**
+ * Cells in display order: natural id order, or by the overview field value
+ * (descending, missing last) when colouring by a field and sorting by value.
+ * The cell list and ←/→ stepping both follow this order.
+ */
+export function orderedCells(s: Pick<AppState, 'views' | 'activeDatasetId' | 'cellValues' | 'cells'>): CellInfo[] {
+  const list = (s.activeDatasetId && s.cells[s.activeDatasetId]) || []
+  const v = activeView(s)
+  const vals = activeFieldValues(s)
+  if (v.overviewColor !== 'field' || v.cellSort !== 'value' || !vals) return list
+  const key = (c: CellInfo) => {
+    const x = vals.get(c.cell_id)
+    return typeof x === 'number' && Number.isFinite(x) ? x : -Infinity
+  }
+  return list.map((c, i) => ({ c, i })).sort((a, b) => key(b.c) - key(a.c) || a.i - b.i).map((x) => x.c)
 }
 
 /** View state of the active dataset (defaults when none recorded). */
@@ -90,6 +151,8 @@ export const useStore = create<AppState>((set, get) => {
   flyToken: 0,
   views: {},
   cells: {},
+  cellValues: {},
+  pointSets: {},
 
   setDatasets(ds) {
     // Create a root layer for every dataset that doesn't have one yet.
@@ -161,7 +224,7 @@ export const useStore = create<AppState>((set, get) => {
     set({
       layers,
       selectedLayerId: layers.some((l) => l.id === s.selectedLayerId) ? s.selectedLayerId : null,
-      pick: s.pick && layers.some((l) => l.id === s.pick!.layerId) ? s.pick : null,
+      pick: s.pick && (isPointPick(s.pick) || layers.some((l) => l.id === (s.pick as { layerId: string }).layerId)) ? s.pick : null,
     })
   },
 
@@ -225,7 +288,7 @@ export const useStore = create<AppState>((set, get) => {
   },
   stepCell(delta) {
     const s = get()
-    const list = (s.activeDatasetId && s.cells[s.activeDatasetId]) || []
+    const list = orderedCells(s)
     if (!list.length) return
     const cur = list.findIndex((c) => c.cell_id === activeView(s).focusCell)
     const next = cur < 0 ? (delta > 0 ? 0 : list.length - 1) : (cur + delta + list.length) % list.length
@@ -245,6 +308,39 @@ export const useStore = create<AppState>((set, get) => {
   },
   setOverviewColor(overviewColor) {
     patchView({ overviewColor })
+  },
+  setCellField(cellField) {
+    patchView(cellField ? { cellField, overviewColor: 'field' } : { cellField: null })
+  },
+  setCellSort(cellSort) {
+    patchView({ cellSort })
+  },
+  setCellValues(datasetId, field, values) {
+    set({ cellValues: { ...get().cellValues, [fieldKey(datasetId, field)]: values } })
+  },
+  setPointSet(datasetId, ps) {
+    const all = get().pointSets
+    set({ pointSets: { ...all, [datasetId]: { ...(all[datasetId] ?? {}), [ps.name]: ps } } })
+  },
+  togglePointSet(name) {
+    const hidden = new Set(activeView(get()).hiddenPointSets)
+    if (hidden.has(name)) hidden.delete(name)
+    else hidden.add(name)
+    patchView({ hiddenPointSets: [...hidden] })
+  },
+  toggleLabel(setName, label) {
+    const v = activeView(get())
+    const hidden = new Set(v.hiddenLabels[setName] ?? [])
+    if (hidden.has(label)) hidden.delete(label)
+    else hidden.add(label)
+    patchView({ hiddenLabels: { ...v.hiddenLabels, [setName]: [...hidden] } })
+  },
+  setHiddenLabels(setName, labels) {
+    const v = activeView(get())
+    patchView({ hiddenLabels: { ...v.hiddenLabels, [setName]: [...labels] } })
+  },
+  setPointSize(pointSize) {
+    patchView({ pointSize })
   },
   }
 })

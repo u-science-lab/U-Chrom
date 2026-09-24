@@ -1,4 +1,4 @@
-import type { CellPage, DatasetSummary, Geometry, GeometryHeader, LayerFilter, TracePage } from './types'
+import type { CellDetails, CellPage, CellValues, DatasetSummary, PointSet, PointSetPayload, Geometry, GeometryHeader, LayerFilter, TracePage } from './types'
 
 async function request(url: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(url, init)
@@ -46,6 +46,40 @@ export async function listTraces(
 export async function listCells(id: string, opts: { offset?: number; limit?: number } = {}): Promise<CellPage> {
   const q = new URLSearchParams({ offset: String(opts.offset ?? 0), limit: String(opts.limit ?? 500) })
   return (await request(`api/datasets/${encodeURIComponent(id)}/cells?${q}`)).json()
+}
+
+export async function fetchCellValues(id: string, field: string): Promise<CellValues> {
+  const q = new URLSearchParams({ field })
+  return (await request(`api/datasets/${encodeURIComponent(id)}/cell_values?${q}`)).json()
+}
+
+export async function fetchCellInfo(id: string, cellId: string): Promise<CellDetails> {
+  const q = new URLSearchParams({ cell_id: cellId })
+  return (await request(`api/datasets/${encodeURIComponent(id)}/cell_info?${q}`)).json()
+}
+
+export async function fetchPointSet(id: string, name: string): Promise<PointSet> {
+  const res = await request(`api/datasets/${encodeURIComponent(id)}/points/${encodeURIComponent(name)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  return decodePointSet(name, await res.json())
+}
+
+/** JSON point payload → typed arrays; null positions become NaN (never drawn). */
+export function decodePointSet(name: string, p: PointSetPayload): PointSet {
+  if (p.positions.length !== 3 * p.n || p.cell_ids.length !== p.n || p.labels.length !== p.n) {
+    throw new Error(`point set ${name}: inconsistent lengths`)
+  }
+  return {
+    name,
+    n: p.n,
+    positions: Float32Array.from(p.positions, (v) => (v === null ? NaN : v)),
+    cellIds: p.cell_ids.map((c) => (c === null ? null : String(c))),
+    labels: p.labels.map((l) => (l === null ? '' : String(l))),
+    values: p.values ?? {},
+  }
 }
 
 export async function fetchGeometry(

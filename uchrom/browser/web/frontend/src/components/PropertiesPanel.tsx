@@ -1,7 +1,10 @@
 import { describeFilter } from '../filters'
 import { autoTubeRadius } from '../render/segments'
 import { activeView, useStore } from '../store'
+import { CellInfoPanel } from './CellInfoPanel'
+import { colourableFields } from './format'
 import { ChromLegend } from './ChromLegend'
+import { PointsPanel } from './PointsPanel'
 import type { ColorMode, RenderMode } from '../types'
 
 export function PropertiesPanel() {
@@ -10,10 +13,15 @@ export function PropertiesPanel() {
   const view = useStore(activeView)
   const setOverviewColor = useStore((s) => s.setOverviewColor)
   const hasCells = useStore((s) => ((s.activeDatasetId && s.cells[s.activeDatasetId]) || []).length > 1)
+  const allFields = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId)?.cell_fields)
+  const cellFields = colourableFields(allFields ?? [])
+  const setCellField = useStore((s) => s.setCellField)
   if (!layer) {
     return (
       <aside className="props panel">
+        <CellInfoPanel />
         <ChromLegend />
+        <PointsPanel />
         <h2>Properties</h2>
         <p className="muted">Select a layer.</p>
       </aside>
@@ -27,9 +35,18 @@ export function PropertiesPanel() {
   // currently on screen.
   const overview = hasCells && view.focusCell === null
   const colorMode: ColorMode = overview ? view.overviewColor : st.colorMode
-  const setColor = (m: ColorMode) => (overview ? setOverviewColor(m) : upd({ colorMode: m }))
+  const setColor = (m: ColorMode) => {
+    if (!overview) return upd({ colorMode: m })
+    // 'Field' needs a field: default to the first one
+    if (m === 'field' && !view.cellField && cellFields.length) return setCellField(cellFields[0].name)
+    setOverviewColor(m)
+  }
+  const groups = new Map<string, typeof cellFields>()
+  for (const f of cellFields) groups.set(f.group, [...(groups.get(f.group) ?? []), f])
+  const groupLabel = (g: string) => (g === 'cell' ? 'Cell' : g === 'rna' ? 'RNA' : g)
   const colorChoices: [ColorMode, string][] = [
     ...(overview ? ([['cell', 'Cell']] as [ColorMode, string][]) : []),
+    ...(overview && cellFields.length ? ([['field', 'Field']] as [ColorMode, string][]) : []),
     ['rainbow', overview ? 'Chrom' : 'Rainbow'],
     ['trace', 'Trace'],
     ['custom', 'Custom'],
@@ -41,7 +58,9 @@ export function PropertiesPanel() {
 
   return (
     <aside className="props panel">
+      <CellInfoPanel />
       <ChromLegend />
+      <PointsPanel />
       <h2>Style</h2>
       <div className="prop-title">{layer.name}</div>
       <div className="muted small">filter: {describeFilter(layer.filter)}</div>
@@ -64,6 +83,19 @@ export function PropertiesPanel() {
         ))}
       </div>
       {colorMode === 'custom' && <input type="color" value={st.color} onChange={(e) => upd({ color: e.target.value })} />}
+      {overview && colorMode === 'field' && (
+        <select value={view.cellField ?? ''} onChange={(e) => setCellField(e.target.value)}>
+          {[...groups].map(([g, fs]) => (
+            <optgroup key={g} label={groupLabel(g)}>
+              {fs.map((f) => (
+                <option key={f.name} value={f.name}>
+                  {f.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      )}
 
       <label>
         Opacity <span className="val">{st.opacity.toFixed(2)}</span>

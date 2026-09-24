@@ -38,6 +38,29 @@ List loaded datasets.
 
 `chroms` is ordered naturally (`chr1, chr2, …, chr10, …, chrX, chrY, chrM`).
 
+Multi-omics fields (empty lists when the dataset has none):
+
+```json
+{
+  "cell_fields": [
+    {"name": "nucleus_area_um2", "group": "cell", "label": "nucleus_area_um2",
+     "min": 81.2, "max": 402.7, "n_valid": 201},
+    {"name": "rna.Nanog", "group": "rna", "label": "Nanog",
+     "min": 0, "max": 52, "n_valid": 201}
+  ],
+  "point_sets": [
+    {"name": "rna", "n_points": 3334, "label_field": "gene",
+     "labels": [{"value": "Auts2", "count": 157}],
+     "value_fields": ["peak_intensity"]}
+  ]
+}
+```
+
+`cell_fields` are the numeric columns of `cd.cells`; `group` is the prefix
+before the first `.` (`rna.Nanog` → `rna`) or `cell`, and `label` the rest.
+`point_sets` describe `cd.points` (non-genomic 3D points in the same frame
+as `coords`, e.g. nascent RNA spots); `labels` are sorted by count.
+
 ### `POST /api/datasets`
 
 Body `{"path": "/abs/path/data.h5cd"}` (`.h5cd` or reconstruction `.csv`).
@@ -82,6 +105,45 @@ when the dataset has no `cell_id` column.
   ]
 }
 ```
+
+### `GET /api/datasets/{id}/cell_values?field=rna.Nanog`
+
+One numeric cell field for every cell (for colouring the overview):
+
+```json
+{"field": "rna.Nanog", "cell_ids": ["0_1", "0_2"], "values": [0, 13]}
+```
+
+Missing values are `null`.  `404` unknown field.
+
+### `GET /api/datasets/{id}/cell_info?cell_id=0_2`
+
+All `cd.cells` columns of one cell (numbers stay numbers, NaN → `null`):
+
+```json
+{"cell_id": "0_2", "fields": {"nucleus_area_um2": 158.7, "rna.Zfp42": 95}}
+```
+
+`404` unknown cell.
+
+## Point sets
+
+### `POST /api/datasets/{id}/points/{name}`
+
+Body (optional filters, AND-ed): `{"cell_ids": ["0_2"], "labels": ["Nanog"]}`.
+Small point sets, so the response is JSON:
+
+```json
+{
+  "n": 2,
+  "positions": [x0, y0, z0, x1, y1, z1],
+  "cell_ids": ["0_2", "0_2"],
+  "labels": ["Nanog", "Sox2"],
+  "values": {"peak_intensity": [1234, 980]}
+}
+```
+
+`cell_ids` entries may be `null`; NaN values → `null`.  `404` unknown set.
 
 ## Geometry (binary)
 

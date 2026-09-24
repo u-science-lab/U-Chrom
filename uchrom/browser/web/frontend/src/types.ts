@@ -18,6 +18,58 @@ export interface DatasetSummary {
   xyz_unit: string | null
   trace_mode: boolean
   chroms: ChromInfo[]
+  /** numeric columns of cd.cells (absent from older servers) */
+  cell_fields?: CellField[]
+  /** non-genomic 3D point sets (cd.points), e.g. nascent RNA spots */
+  point_sets?: PointSetInfo[]
+}
+
+export interface CellField {
+  name: string
+  /** prefix before the first '.' ('rna.Nanog' → 'rna'), else 'cell' */
+  group: string
+  label: string
+  min: number | null
+  max: number | null
+  n_valid: number
+}
+
+export interface PointSetInfo {
+  name: string
+  n_points: number
+  label_field: string | null
+  labels: { value: string; count: number }[]
+  value_fields: string[]
+}
+
+export interface CellValues {
+  field: string
+  cell_ids: string[]
+  values: (number | null)[]
+}
+
+export interface CellDetails {
+  cell_id: string
+  fields: Record<string, number | string | null>
+}
+
+/** POST /points/{name} response (JSON). */
+export interface PointSetPayload {
+  n: number
+  positions: number[]
+  cell_ids: (string | null)[]
+  labels: (string | null)[]
+  values: Record<string, (number | null)[]>
+}
+
+/** Decoded point set held by the client. */
+export interface PointSet {
+  name: string
+  n: number
+  positions: Float32Array
+  cellIds: (string | null)[]
+  labels: string[]
+  values: Record<string, (number | null)[]>
 }
 
 export interface TraceInfo {
@@ -90,7 +142,7 @@ export interface Geometry {
 }
 
 export type RenderMode = 'line' | 'tube' | 'points'
-export type ColorMode = 'rainbow' | 'custom' | 'trace' | 'cell'
+export type ColorMode = 'rainbow' | 'custom' | 'trace' | 'cell' | 'field'
 
 export interface LayerStyle {
   mode: RenderMode
@@ -118,10 +170,29 @@ export interface Layer {
   error: string | null
 }
 
-export interface PickInfo {
+/** A clicked chromatin spot. */
+export interface TracePick {
+  kind?: 'trace'
   layerId: string
   pointIndex: number
   segment: SegmentInfo
   binStart: number
   screen: { x: number; y: number }
 }
+
+/** A clicked point of a point set (e.g. an RNA spot). */
+export interface PointPick {
+  kind: 'point'
+  set: string
+  index: number
+  label: string
+  cellId: string | null
+  position: [number, number, number]
+  values: Record<string, number | null>
+  screen: { x: number; y: number }
+}
+
+export type PickInfo = TracePick | PointPick
+
+export const isPointPick = (p: PickInfo | null | undefined): p is PointPick => !!p && p.kind === 'point'
+

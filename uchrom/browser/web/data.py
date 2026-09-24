@@ -142,6 +142,8 @@ class Dataset:
             "xyz_unit": None if unit is None else str(unit),
             "trace_mode": bool(self.cd.n_traces > len(chroms)),
             "chroms": chroms,
+            "cell_fields": self.cell_fields(),
+            "point_sets": self.point_sets(),
         }
 
     def traces(self, chrom: Optional[str] = None, offset: int = 0,
@@ -198,6 +200,111 @@ class Dataset:
         return {"total": len(rows), "cells": rows[offset: offset + limit]}
 
     # ------------------------------------------------------------------
+    # Multi-omics: cell fields and point sets
+    # ------------------------------------------------------------------
+
+    def _cells_table(self) -> pd.DataFrame:
+        """``cd.cells`` indexed by string cell_id (empty if unavailable)."""
+        if "cells_table" not in self._cache:
+            cells = self.cd.cells
+            if len(cells) == 0:
+                table = pd.DataFrame()
+            else:
+                if "cell_id" in cells.columns:
+                    cells = cells.set_index("cell_id")
+                table = cells.copy()
+                table.index = table.index.astype(str)
+            self._cache["cells_table"] = table
+        return self._cache["cells_table"]
+
+    def cell_fields(self) -> List[Dict[str, Any]]:
+        """Numeric ``cd.cells`` columns, for colouring cells."""
+        if "cell_fields" not in self._cache:
+            table = self._cells_table()
+            out = []
+            for col in table.columns:
+                if not pd.api.types.is_numeric_dtype(table[col]) or pd.api.types.is_bool_dtype(table[col]):
+                    continue
+                vals = table[col].to_numpy(dtype=np.float64)
+                valid = vals[np.isfinite(vals)]
+                if not len(valid):
+                    continue
+                group, _, label = str(col).partition(".")
+                if not label:
+                    group, label = "cell", str(col)
+                out.append({"name": str(col), "group": group, "label": label,
+                            "min": float(valid.min()), "max": float(valid.max()),
+                            "n_valid": int(len(valid))})
+            self._cache["cell_fields"] = out
+        return self._cache["cell_fields"]
+
+    def cell_values(self, field: str) -> Dict[str, Any]:
+        table = self._cells_table()
+        if field not in {f["name"] for f in self.cell_fields()}:
+            raise KeyError(field)
+        vals = table[field].to_numpy(dtype=np.float64)
+        return {"field": field, "cell_ids": [str(c) for c in table.index],
+                "values": [None if not np.isfinite(v) else _num(v) for v in vals]}
+
+    def cell_info(self, cell_id: str) -> Dict[str, Any]:
+        table = self._cells_table()
+        if str(cell_id) not in table.index:
+            raise KeyError(cell_id)
+        row = table.loc[str(cell_id)]
+        fields = {}
+        for col, val in row.items():
+            if isinstance(val, (float, np.floating)) and not np.isfinite(val):
+                fields[str(col)] = None
+            elif isinstance(val, (int, float, np.integer, np.floating)):
+                fields[str(col)] = _num(val)
+            else:
+                fields[str(col)] = str(val)
+        return {"cell_id": str(cell_id), "fields": fields}
+
+    def point_sets(self) -> List[Dict[str, Any]]:
+        if "point_sets" not in self._cache:
+            out = []
+            for name, df in self.cd.points.items():
+                label_field = next((c for c in ("gene", "label", "name") if c in df.columns), None)
+                labels = []
+                if label_field is not None:
+                    counts = df[label_field].astype(str).value_counts()
+                    labels = [{"value": str(k), "count": int(v)} for k, v in counts.items()]
+                skip = {"x", "y", "z", "cell_id", "spot_id", label_field}
+                value_fields = [str(c) for c in df.columns
+                                if c not in skip and pd.api.types.is_numeric_dtype(df[c])
+                                and not str(c).endswith("_id")]
+                out.append({"name": str(name), "n_points": int(len(df)),
+                            "label_field": label_field, "labels": labels,
+                            "value_fields": value_fields})
+            self._cache["point_sets"] = out
+        return self._cache["point_sets"]
+
+    def points(self, name: str, cell_ids: Optional[List[str]] = None,
+               labels: Optional[List[str]] = None) -> Dict[str, Any]:
+        if name not in self.cd.points:
+            raise KeyError(name)
+        info = next(p for p in self.point_sets() if p["name"] == name)
+        df = self.cd.points[name]
+        mask = np.ones(len(df), dtype=bool)
+        if cell_ids is not None and "cell_id" in df.columns:
+            mask &= df["cell_id"].astype(str).isin([str(c) for c in cell_ids]).to_numpy()
+        if labels is not None and info["label_field"] is not None:
+            mask &= df[info["label_field"]].astype(str).isin([str(v) for v in labels]).to_numpy()
+        sel = df[mask]
+        pos = sel[["x", "y", "z"]].to_numpy(dtype=np.float64)
+        cells = (sel["cell_id"].astype(str).tolist() if "cell_id" in sel.columns
+                 else [None] * len(sel))
+        lab = (sel[info["label_field"]].astype(str).tolist() if info["label_field"] is not None
+               else [None] * len(sel))
+        values = {f: [None if not np.isfinite(v) else _num(v)
+                      for v in sel[f].to_numpy(dtype=np.float64)]
+                  for f in info["value_fields"]}
+        return {"n": int(len(sel)),
+                "positions": [None if not np.isfinite(v) else float(v) for v in pos.ravel()],
+                "cell_ids": cells, "labels": lab, "values": values}
+
+    # ------------------------------------------------------------------
     # Geometry
     # ------------------------------------------------------------------
 
@@ -224,6 +331,12 @@ class Dataset:
 
     def geometry(self, flt: GeometryFilter) -> bytes:
         return encode_geometry(self, self.select(flt), flt.max_points)
+
+
+def _num(v) -> Any:
+    """JSON-friendly number: ints stay ints."""
+    f = float(v)
+    return int(f) if f.is_integer() and abs(f) < 2**53 else f
 
 
 def _segment_bounds(dataset: Dataset, idx: np.ndarray):

@@ -138,3 +138,42 @@ def test_cells_endpoint_and_cell_filter(tmp_path):
     g = decode_geometry(c.post("/api/datasets/d1/geometry", json={"cell_ids": ["c10"]}).content)
     assert [s["trace_id"] for s in g["header"]["segments"]] == ["a"]
     assert c.get("/api/datasets/zz/cells").status_code == 404
+
+
+def test_cell_fields_and_points_endpoints(tmp_path):
+    spots = pd.DataFrame({"chrom": ["chr1"] * 4, "start": [0, 10, 0, 10], "end": [10, 20, 10, 20],
+                          "trace_id": ["a", "a", "b", "b"], "cell_id": ["c1", "c1", "c2", "c2"]})
+    cells = pd.DataFrame({"nucleus_area_um2": [150.5, np.nan], "rna.Nanog": [3, 12], "label": ["x", "y"]},
+                         index=pd.Index(["c1", "c2"], name="cell_id"))
+    rna = pd.DataFrame({"x": [0.1, 0.2, 0.3], "y": [0.0, 0.0, 0.0], "z": [1.0, 1.0, 1.0],
+                        "gene": ["Nanog", "Sox2", "Nanog"], "cell_id": ["c1", "c2", "c2"],
+                        "spot_id": [1, 2, 3], "peak_intensity": [100, 200, np.nan]})
+    path = tmp_path / "multi.h5cd"
+    ChromData(np.arange(12, dtype=float).reshape(4, 3), spots, cells=cells, points={"rna": rna}).write(path)
+    store = DatasetStore()
+    store.load(path)
+    c = TestClient(create_app(store))
+
+    s = c.get("/api/datasets").json()[0]
+    assert [(f["name"], f["group"], f["label"]) for f in s["cell_fields"]] == [
+        ("nucleus_area_um2", "cell", "nucleus_area_um2"), ("rna.Nanog", "rna", "Nanog")]
+    assert s["cell_fields"][0]["n_valid"] == 1
+    assert s["point_sets"] == [{"name": "rna", "n_points": 3, "label_field": "gene",
+                                "labels": [{"value": "Nanog", "count": 2}, {"value": "Sox2", "count": 1}],
+                                "value_fields": ["peak_intensity"]}]
+
+    v = c.get("/api/datasets/d1/cell_values", params={"field": "nucleus_area_um2"}).json()
+    assert v == {"field": "nucleus_area_um2", "cell_ids": ["c1", "c2"], "values": [150.5, None]}
+    assert c.get("/api/datasets/d1/cell_values", params={"field": "label"}).status_code == 404
+
+    info = c.get("/api/datasets/d1/cell_info", params={"cell_id": "c2"}).json()
+    assert info == {"cell_id": "c2", "fields": {"nucleus_area_um2": None, "rna.Nanog": 12, "label": "y"}}
+    assert c.get("/api/datasets/d1/cell_info", params={"cell_id": "zz"}).status_code == 404
+
+    allp = c.post("/api/datasets/d1/points/rna").json()
+    assert allp["n"] == 3 and allp["labels"] == ["Nanog", "Sox2", "Nanog"]
+    assert allp["values"] == {"peak_intensity": [100, 200, None]}
+    one = c.post("/api/datasets/d1/points/rna", json={"cell_ids": ["c2"], "labels": ["Nanog"]}).json()
+    assert one == {"n": 1, "positions": [0.3, 0.0, 1.0], "cell_ids": ["c2"], "labels": ["Nanog"],
+                   "values": {"peak_intensity": [None]}}
+    assert c.post("/api/datasets/d1/points/nope").status_code == 404
