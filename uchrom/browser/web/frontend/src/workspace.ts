@@ -3,7 +3,8 @@
  * as tabs, columns, rows or a grid.  Pure functions — the store wraps them.
  */
 
-import { parseRows, type GenomeRow } from './genomeRows'
+import { migrateRows, parseRows, type GenomeRow } from './genomeRows'
+import { FOCUS, parseScopeSpec, type ScopeSpec } from './groups'
 import type { EmbeddingInfo } from './types'
 
 /** 'genome': combined tracks + matrix triangles on one axis (was 'tracks'). */
@@ -19,9 +20,8 @@ export interface PaneOptions {
   genomeRows?: Record<string, GenomeRow[]>
   /** genome: preferred track names for the default rows (from old Tracks panes) */
   tracks?: string[] | null
+  /** default aggregate of track rows that have none of their own (older layouts) */
   agg?: TrackAgg
-  /** tracks / matrix(distance): restrict to the focused cell when one is focused */
-  followFocus?: boolean
   /** matrix: a contact-map key, or 'distance' (null → first contact map, else distance) */
   source?: string | null
   balance?: boolean
@@ -41,10 +41,8 @@ export interface PaneOptions {
 export interface Pane extends PaneOptions {
   id: string
   type: PaneType
-  /** cell this view is pinned to; null / absent = follow the global focus */
-  cell?: string | null
-  /** group this view aggregates over (a group ref, see groups.ts); wins over `cell` */
-  group?: string | null
+  /** which cells the view shows (absent = follow the focus); see groups.ts ScopeSpec */
+  scope?: ScopeSpec
   /** embedding panes: cellm key (null → default UMAP > t-SNE > PCA) */
   embeddingKey: string | null
   /** embedding panes: the two components shown */
@@ -152,52 +150,55 @@ export const MAX_SPLIT_PANES = 3
  * into a grid beyond MAX_SPLIT_PANES panes so views stay usable.
  */
 export function addPinnedPane(ws: WorkspaceState, type: PaneType, cell: string): WorkspaceState {
-  const next = addPane(ws, type, { cell })
-  const split = next.layout === 'columns' || next.layout === 'rows'
-  return split && next.panes.length > MAX_SPLIT_PANES ? { ...next, layout: 'grid' } : next
+  return addScopedPane(ws, type, { kind: 'cell', cell })
 }
 
-/** Pin a pane to a cell, or unpin it (null = follow the global focus); clears a group scope. */
-export function pinPane(ws: WorkspaceState, id: string, cell: string | null): WorkspaceState {
-  return updatePane(ws, id, { cell, group: null })
-}
-
-/** Scope a pane to a group (null = follow the global focus); clears a pinned cell. */
-export function setPaneGroup(ws: WorkspaceState, id: string, group: string | null): WorkspaceState {
-  return updatePane(ws, id, { group, cell: null })
-}
-
-/** Open a new view of `type` scoped to a group. */
+/** Open a new view of `type` showing a group. */
 export function addGroupPane(ws: WorkspaceState, type: PaneType, group: string): WorkspaceState {
-  const next = addPane(ws, type, { group })
+  return addScopedPane(ws, type, { kind: 'group', group })
+}
+
+function addScopedPane(ws: WorkspaceState, type: PaneType, scope: ScopeSpec): WorkspaceState {
+  const next = addPane(ws, type, { scope })
   const split = next.layout === 'columns' || next.layout === 'rows'
   return split && next.panes.length > MAX_SPLIT_PANES ? { ...next, layout: 'grid' } : next
 }
+
+/** Set a pane's cells setting. */
+export function setPaneScope(ws: WorkspaceState, id: string, scope: ScopeSpec): WorkspaceState {
+  return updatePane(ws, id, { scope })
+}
+
+/** A pane's cells setting (absent = follow the focus). */
+export const paneSpec = (pane: Pick<Pane, 'scope'> | undefined): ScopeSpec => pane?.scope ?? FOCUS
+
+/** The cell a pane is pinned to, if any. */
+export const pinnedCell = (pane: Pick<Pane, 'scope'> | undefined): string | null => (pane?.scope?.kind === 'cell' ? pane.scope.cell : null)
+
+/** The group a pane is fixed to, if any. */
+export const pinnedGroup = (pane: Pick<Pane, 'scope'> | undefined): string | null => (pane?.scope?.kind === 'group' ? pane.scope.group : null)
 
 /**
- * Forget a deleted group everywhere: pane scopes, stats overlays and genome
- * row scopes (same object when nothing refers to it).
+ * Forget a deleted group everywhere: pane settings (→ follow focus), stats
+ * overlays and genome row settings (→ same as view).  Same object when
+ * nothing refers to it.
  */
 export function dropGroupScope(ws: WorkspaceState, group: string): WorkspaceState {
   let changed = false
+  const isIt = (s: { kind: string; group?: string } | undefined) => s?.kind === 'group' && s.group === group
   const panes = ws.panes.map((p) => {
     let q = p
-    if (q.group === group) q = { ...q, group: null }
+    if (isIt(q.scope)) q = { ...q, scope: FOCUS }
     if (q.compareGroups?.includes(group)) q = { ...q, compareGroups: q.compareGroups.filter((g) => g !== group) }
-    if (q.genomeRows && Object.values(q.genomeRows).some((rows) => rows.some((r) => r.group === group))) {
+    if (q.genomeRows && Object.values(q.genomeRows).some((rows) => rows.some((r) => isIt(r.scope)))) {
       const byDs: Record<string, GenomeRow[]> = {}
-      for (const [k, rows] of Object.entries(q.genomeRows)) byDs[k] = rows.map((r) => (r.group === group ? { ...r, group: null } : r))
+      for (const [k, rows] of Object.entries(q.genomeRows)) byDs[k] = rows.map((r) => (isIt(r.scope) ? { ...r, scope: { kind: 'view' as const } } : r))
       q = { ...q, genomeRows: byDs }
     }
     if (q !== p) changed = true
     return q
   })
   return changed ? { ...ws, panes } : ws
-}
-
-/** The cell a pane shows: its pinned cell, else the global focus. */
-export function paneCell(pane: Pick<Pane, 'cell'> | undefined, focus: string | null): string | null {
-  return pane?.cell ?? focus
 }
 
 /** The active pane (falls back to the first). */
@@ -220,20 +221,22 @@ export function show3dPanels(ws: WorkspaceState): boolean {
  * Same object when nothing changes.
  */
 export function dropUnknownGroups(ws: WorkspaceState, known: (ref: string) => boolean): WorkspaceState {
-  const bad = (p: Pane) => (p.group && !known(p.group)) || (p.compareGroups ?? []).some((g) => !known(g))
+  const g = pinnedGroup
+  const bad = (p: Pane) => (g(p) !== null && !known(g(p)!)) || (p.compareGroups ?? []).some((x) => !known(x))
   if (!ws.panes.some(bad)) return ws
   return {
     ...ws,
     panes: ws.panes.map((p) =>
-      bad(p) ? { ...p, group: p.group && !known(p.group) ? null : p.group, compareGroups: (p.compareGroups ?? []).filter(known) } : p,
+      bad(p) ? { ...p, scope: g(p) !== null && !known(g(p)!) ? FOCUS : p.scope, compareGroups: (p.compareGroups ?? []).filter(known) } : p,
     ),
   }
 }
 
 /** Unpin panes whose cell is not among `known` (e.g. after switching dataset); same object when nothing changes. */
 export function dropUnknownPins(ws: WorkspaceState, known: ReadonlySet<string>): WorkspaceState {
-  if (!ws.panes.some((p) => p.cell && !known.has(p.cell))) return ws
-  return { ...ws, panes: ws.panes.map((p) => (p.cell && !known.has(p.cell) ? { ...p, cell: null } : p)) }
+  const bad = (p: Pane) => pinnedCell(p) !== null && !known.has(pinnedCell(p)!)
+  if (!ws.panes.some(bad)) return ws
+  return { ...ws, panes: ws.panes.map((p) => (bad(p) ? { ...p, scope: FOCUS } : p)) }
 }
 
 export function removePane(ws: WorkspaceState, id: string): WorkspaceState {
@@ -273,23 +276,46 @@ export function moveSplitter(ws: WorkspaceState, index: number, frac: number): W
   return { ...ws, sizes: s }
 }
 
-/** Keep only well-formed pane options from a persisted pane. */
-function parseOptions(p: Partial<Pane>): PaneOptions & { cell?: string | null; group?: string | null } {
-  const o: PaneOptions & { cell?: string | null; group?: string | null } = {}
-  if (typeof p.cell === 'string' && p.cell) o.cell = p.cell
-  if (typeof p.group === 'string' && p.group) o.group = p.group
+/** Pane fields of layouts saved before the explicit cells setting. */
+interface LegacyPane {
+  cell?: unknown
+  group?: unknown
+  followFocus?: unknown
+}
+
+/**
+ * A pane's cells setting from a persisted pane.  Older layouts had a pinned
+ * `cell`, a `group`, and a "focused cell only" flag (`followFocus`):
+ * group → that group; matrix with the flag off → all cells; cell → that
+ * cell; otherwise follow the focus.
+ */
+export function migratePaneScope(p: Partial<Pane> & LegacyPane): ScopeSpec {
+  const spec = parseScopeSpec(p.scope)
+  if (spec && spec.kind !== 'view') return spec
+  if (typeof p.group === 'string' && p.group) return { kind: 'group', group: p.group }
+  if (p.type === 'matrix' && p.followFocus === false) return { kind: 'all' }
+  if (typeof p.cell === 'string' && p.cell) return { kind: 'cell', cell: p.cell }
+  return FOCUS
+}
+
+/** Keep only well-formed pane options from a persisted pane (migrating old settings). */
+function parseOptions(p: Partial<Pane> & LegacyPane): PaneOptions & { scope?: ScopeSpec } {
+  const o: PaneOptions & { scope?: ScopeSpec } = {}
+  const scope = migratePaneScope(p)
+  if (scope.kind !== 'focus') o.scope = scope
   if (Array.isArray(p.compareGroups) && p.compareGroups.every((g) => typeof g === 'string')) o.compareGroups = [...p.compareGroups]
+  const agg = p.agg === 'mean' || p.agg === 'median' || p.agg === 'max' ? p.agg : undefined
+  if (agg) o.agg = agg // default of track rows without their own (e.g. default rows)
   if (p.genomeRows && typeof p.genomeRows === 'object' && !Array.isArray(p.genomeRows)) {
     const byDs: Record<string, GenomeRow[]> = {}
     for (const [k, v] of Object.entries(p.genomeRows)) {
       const rows = parseRows(v)
-      if (rows) byDs[k] = rows
+      // the old pane-level "cell only" box and track aggregate move onto the rows
+      if (rows) byDs[k] = migrateRows(rows, v, { tracksCellOnly: typeof p.followFocus === 'boolean' ? p.followFocus : undefined, agg })
     }
     if (Object.keys(byDs).length) o.genomeRows = byDs
   }
   if (Array.isArray(p.tracks) && p.tracks.every((t) => typeof t === 'string')) o.tracks = p.tracks
-  if (p.agg === 'mean' || p.agg === 'median' || p.agg === 'max') o.agg = p.agg
-  if (typeof p.followFocus === 'boolean') o.followFocus = p.followFocus
   if (typeof p.source === 'string') o.source = p.source
   if (typeof p.balance === 'boolean') o.balance = p.balance
   if (typeof p.resolution === 'number' && p.resolution > 0) o.resolution = p.resolution

@@ -7,8 +7,9 @@ import { GenomeInspector } from './GenomeView'
 import { LayerPanel } from './LayerPanel'
 import { MatrixControls } from './MatrixView'
 import { OperationsPanel } from './OperationsPanel'
-import { PaneCellControl } from './PaneCell'
 import { PointsPanel } from './PointsPanel'
+import { ScopePicker } from './ScopePicker'
+import { setPaneScope } from '../workspace'
 import { StyleSection } from './PropertiesPanel'
 import { StatsControls } from './StatsView'
 
@@ -43,7 +44,12 @@ export function Inspector() {
       </div>
       {sections.has('pin') && (
         <div className="insp-pin">
-          <PaneCellControl pane={pane} />
+          <span className="insp-label">cells</span>
+          <ScopePicker
+            value={pane.scope}
+            onChange={(s) => s.kind !== 'view' && setWorkspace((w) => setPaneScope(w, pane.id, s))}
+            title="Which cells this view shows (genome rows can override it)"
+          />
         </div>
       )}
       {sections.has('noCoords') && <p className="muted small">This dataset has no 3-D coordinates — use a Genome, Matrix or Embedding view.</p>}

@@ -7,7 +7,7 @@ import { useGroupInfo, usePaneScope, useScopeCells } from '../useGroups'
 import { fitPlot, nearestPoint, project } from '../render/embedding'
 import { activeView, useStore } from '../store'
 import type { Embedding, EmbeddingInfo } from '../types'
-import { defaultEmbeddingKey, updatePane, type Pane } from '../workspace'
+import { defaultEmbeddingKey, pinnedCell, updatePane, type Pane } from '../workspace'
 import { fmtValue } from './format'
 
 const PAD = 14
@@ -195,14 +195,15 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
       }
     }
     // this pane's pinned cell: accent ring + label, in addition to the focus
-    const pi = pane.cell ? emb.cell_ids.indexOf(pane.cell) : -1
+    const pin = pinnedCell(pane)
+    const pi = pin ? emb.cell_ids.indexOf(pin) : -1
     if (pi >= 0) {
       ring(pi, r * 2 + 5, '#5c9ded', 2.5)
       g.fillStyle = '#5c9ded'
       g.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
       g.textAlign = 'left'
       g.textBaseline = 'middle'
-      if (!Number.isNaN(px[2 * pi])) g.fillText(`📌 ${pane.cell}`, px[2 * pi] + r * 2 + 9, px[2 * pi + 1])
+      if (!Number.isNaN(px[2 * pi])) g.fillText(`📌 ${pin}`, px[2 * pi] + r * 2 + 9, px[2 * pi + 1])
     }
     if (hover) ring(hover.i, r + 4, 'rgba(255,255,255,0.8)', 1.5)
     if (groupSet && groupInfo) {
@@ -213,7 +214,7 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
       g.textBaseline = 'top'
       g.fillText(`${groupInfo.name} · ${groupSet.size} cells`, size.w - 8, 8)
     }
-  }, [px, colors, emb, size.w, plotH, view.focusCell, hover, pane.cell, groupSet, groupInfo])
+  }, [px, colors, emb, size.w, plotH, view.focusCell, hover, pane.scope, groupSet, groupInfo])
 
   // ---- lasso ----------------------------------------------------------------
   const drawLasso = () => {

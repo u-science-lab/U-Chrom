@@ -148,24 +148,55 @@ export type Scope = { kind: 'all' } | { kind: 'cell'; cell: string } | { kind: '
 export const ALL: Scope = { kind: 'all' }
 
 /**
- * Scope of a pane: its own group, else its pinned cell, else the global
- * focus (a focused cell, else a focused group), else all cells.
+ * The persisted "cells" setting of a view or a genome row — one explicit
+ * choice, resolved against the global focus when drawing:
+ * - all: every cell, whatever is focused / selected;
+ * - focus: the focused cell, else the focused group / lasso selection, else all;
+ * - cell / group: fixed;
+ * - view (genome rows only): the same as the view's setting.
  */
-export function paneScope(
-  pane: { group?: string | null; cell?: string | null } | undefined,
-  focus: { focusCell: string | null; focusGroup?: string | null },
-): Scope {
-  if (pane?.group) return { kind: 'group', group: pane.group }
-  if (pane?.cell) return { kind: 'cell', cell: pane.cell }
+export type ScopeSpec = { kind: 'all' } | { kind: 'focus' } | { kind: 'cell'; cell: string } | { kind: 'group'; group: GroupRef }
+export type RowScopeSpec = ScopeSpec | { kind: 'view' }
+
+export const FOCUS: ScopeSpec = { kind: 'focus' }
+export const SAME_AS_VIEW: RowScopeSpec = { kind: 'view' }
+
+export interface FocusState {
+  focusCell: string | null
+  focusGroup?: string | null
+}
+
+/** What a setting shows right now. */
+export function resolveScope(spec: ScopeSpec | undefined | null, focus: FocusState): Scope {
+  const s = spec ?? FOCUS
+  if (s.kind === 'all') return ALL
+  if (s.kind === 'cell') return { kind: 'cell', cell: s.cell }
+  if (s.kind === 'group') return { kind: 'group', group: s.group }
   if (focus.focusCell) return { kind: 'cell', cell: focus.focusCell }
   if (focus.focusGroup) return { kind: 'group', group: focus.focusGroup }
   return ALL
 }
 
-/** Scope of a genome row: its own group overrides the pane's scope. */
-export function rowScope(row: { group?: string | null }, pane: Scope): Scope {
-  return row.group ? { kind: 'group', group: row.group } : pane
+/** A row's setting: "same as view" (the default) takes the view's resolved scope. */
+export function resolveRowScope(spec: RowScopeSpec | undefined | null, view: Scope, focus: FocusState): Scope {
+  return !spec || spec.kind === 'view' ? view : resolveScope(spec, focus)
 }
+
+/** Keep a well-formed persisted setting (null when absent / malformed). */
+export function parseScopeSpec(raw: unknown, allowView = false): RowScopeSpec | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  if (r.kind === 'all' || r.kind === 'focus') return { kind: r.kind }
+  if (r.kind === 'view') return allowView ? { kind: 'view' } : null
+  if (r.kind === 'cell' && typeof r.cell === 'string' && r.cell) return { kind: 'cell', cell: r.cell }
+  if (r.kind === 'group' && typeof r.group === 'string' && r.group) return { kind: 'group', group: r.group }
+  return null
+}
+
+export const sameSpec = (a: RowScopeSpec | undefined | null, b: RowScopeSpec | undefined | null) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+
+/** Whether a resolved scope covers more than one cell (then an aggregate statistic applies). */
+export const isMultiCell = (s: Scope) => s.kind !== 'cell'
 
 /** Query parameters of a scope (API: cell_id / cell and group are exclusive). */
 export function scopeParams(s: Scope): { cellId: string | null; group: string | null } {
@@ -216,10 +247,36 @@ export function describeGroup(
   return null
 }
 
-/** Short label of a scope: "all cells", "cell 1_0_34", "Bergmann (8 cells)". */
-export function scopeLabel(s: Scope, info?: GroupInfo | null): string {
-  if (s.kind === 'all') return 'all cells'
+/** Short label of a scope: "All cells (47)", "cell 1_0_34", "Bergmann (8 cells)". */
+export function scopeLabel(s: Scope, info?: GroupInfo | null, nAll?: number): string {
+  if (s.kind === 'all') return nAll ? `All cells (${nAll})` : 'All cells'
   if (s.kind === 'cell') return `cell ${s.cell}`
   const n = info?.cells?.length
   return `${info?.name ?? s.group}${n !== undefined ? ` (${n} cells)` : ''}`
+}
+
+/** On-canvas form: "All cells · 47", "cell 1_0_34", "selection · 10 cells". */
+export function scopeText(s: Scope, info?: GroupInfo | null, nAll?: number): string {
+  if (s.kind === 'all') return nAll ? `All cells · ${nAll}` : 'All cells'
+  if (s.kind === 'cell') return `cell ${s.cell}`
+  const n = info?.cells?.length
+  return `${info?.name ?? s.group}${n !== undefined ? ` · ${n} cells` : ''}`
+}
+
+/** Reserved group reference of every cell (per-cell maps: the all-cell pseudo-bulk). */
+export const ALL_CELLS_REF = 'all'
+
+/** Label of a setting with what it resolves to: "Follow focus → selection (10 cells)". */
+export function specLabel(spec: RowScopeSpec | undefined | null, resolved: Scope, info?: GroupInfo | null, nAll?: number, cellTypes?: ReadonlyMap<string, unknown>): string {
+  const s = spec ?? FOCUS
+  const now = scopeLabel(resolved, info, nAll)
+  const typed = (cell: string) => {
+    const t = cellTypes?.get(cell)
+    return typeof t === 'string' ? ` · ${t}` : ''
+  }
+  if (s.kind === 'view') return `Same as view → ${resolved.kind === 'cell' ? now + typed(resolved.cell) : now}`
+  if (s.kind === 'focus') return `Follow focus → ${resolved.kind === 'cell' ? now + typed(resolved.cell) : now}`
+  if (s.kind === 'all') return now
+  if (s.kind === 'cell') return `📌 ${now}${typed(s.cell)}`
+  return `Group: ${now}`
 }

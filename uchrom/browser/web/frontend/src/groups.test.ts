@@ -1,19 +1,20 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { captureFilename, safePart, timestamp } from './capture'
-import { applyRowSetting, parseRows, type GenomeRow } from './genomeRows'
+import { applyRowSetting, migrateRows, parseRows, setRowScope, type GenomeRow } from './genomeRows'
 import {
   describeGroup,
   fieldGroupCells,
   fieldGroupRef,
   lassoSelect,
   nextGroupName,
-  paneScope,
+  resolveRowScope,
+  resolveScope,
+  specLabel,
   parseFieldRef,
   parseSavedGroups,
   pointInPolygon,
   removeGroup,
   renameGroup,
-  rowScope,
   scopeKey,
   scopeLabel,
   scopeParams,
@@ -28,7 +29,7 @@ import { decodeGeometry } from './api'
 import { activeSavedGroups, activeView, useStore } from './store'
 import { encodeGeometry, sampleHeader } from './testing'
 import type { CellField, DatasetSummary, PointSet } from './types'
-import { defaultWorkspace, dropGroupScope, dropUnknownGroups, parseWorkspace, pinPane, setPaneGroup, updatePane } from './workspace'
+import { defaultWorkspace, dropGroupScope, dropUnknownGroups, migratePaneScope, parseWorkspace, pinnedCell, pinnedGroup, setPaneScope, updatePane } from './workspace'
 
 const square: Pt[] = [
   [0, 0],
@@ -140,68 +141,139 @@ describe('saved-group reducers', () => {
   })
 })
 
-describe('scopes', () => {
-  it('pane group > pinned cell > focused cell > focused group > all', () => {
-    const none = { focusCell: null, focusGroup: null }
-    expect(paneScope({}, none)).toEqual({ kind: 'all' })
-    expect(paneScope({}, { focusCell: null, focusGroup: 'g1' })).toEqual({ kind: 'group', group: 'g1' })
-    expect(paneScope({}, { focusCell: 'c1', focusGroup: 'g1' })).toEqual({ kind: 'cell', cell: 'c1' })
-    expect(paneScope({ cell: 'c2' }, { focusCell: 'c1', focusGroup: null })).toEqual({ kind: 'cell', cell: 'c2' })
-    expect(paneScope({ cell: 'c2', group: 'g3' }, { focusCell: 'c1', focusGroup: 'g1' })).toEqual({ kind: 'group', group: 'g3' })
+describe('scopes: one explicit cells setting', () => {
+  const none = { focusCell: null, focusGroup: null }
+  const lasso = { focusCell: null, focusGroup: 'gsel' }
+  const cell = { focusCell: 'c1', focusGroup: null }
+  it('All cells never changes with focus, selection or lasso', () => {
+    for (const f of [none, lasso, cell]) expect(resolveScope({ kind: 'all' }, f)).toEqual({ kind: 'all' })
   })
-  it('a row group overrides the pane scope; params and keys', () => {
-    const pane = { kind: 'cell', cell: 'c1' } as const
-    expect(rowScope({}, pane)).toBe(pane)
-    expect(rowScope({ group: 'g' }, pane)).toEqual({ kind: 'group', group: 'g' })
-    expect(scopeParams(pane)).toEqual({ cellId: 'c1', group: null })
+  it('Follow focus: the focused cell, else the focused group / selection, else all', () => {
+    expect(resolveScope({ kind: 'focus' }, none)).toEqual({ kind: 'all' })
+    expect(resolveScope({ kind: 'focus' }, lasso)).toEqual({ kind: 'group', group: 'gsel' })
+    expect(resolveScope({ kind: 'focus' }, cell)).toEqual({ kind: 'cell', cell: 'c1' })
+    expect(resolveScope(undefined, lasso)).toEqual({ kind: 'group', group: 'gsel' }) // absent = follow focus
+  })
+  it('Cell / Group are fixed', () => {
+    expect(resolveScope({ kind: 'cell', cell: 'c9' }, lasso)).toEqual({ kind: 'cell', cell: 'c9' })
+    expect(resolveScope({ kind: 'group', group: 'field:t=A' }, cell)).toEqual({ kind: 'group', group: 'field:t=A' })
+  })
+  it('rows: same as view (default) takes the view; anything else is its own', () => {
+    const view = resolveScope({ kind: 'focus' }, lasso)
+    expect(resolveRowScope(undefined, view, lasso)).toBe(view)
+    expect(resolveRowScope({ kind: 'view' }, view, lasso)).toBe(view)
+    // the reported bug: an "all cells" row must stay all after a lasso
+    expect(resolveRowScope({ kind: 'all' }, view, lasso)).toEqual({ kind: 'all' })
+    expect(resolveRowScope({ kind: 'focus' }, { kind: 'all' }, lasso)).toEqual({ kind: 'group', group: 'gsel' })
+  })
+  it('labels say what a setting resolves to', () => {
+    const sel = { ref: 'gsel', name: 'selection', color: '#fff', cells: Array(10).fill('x'), kind: 'selection' as const }
+    expect(specLabel({ kind: 'focus' }, { kind: 'group', group: 'gsel' }, sel, 47)).toBe('Follow focus → selection (10 cells)')
+    expect(specLabel({ kind: 'view' }, { kind: 'all' }, null, 47)).toBe('Same as view → All cells (47)')
+    expect(specLabel({ kind: 'all' }, { kind: 'all' }, null, 47)).toBe('All cells (47)')
+    expect(specLabel({ kind: 'cell', cell: 'c1' }, { kind: 'cell', cell: 'c1' }, null, 47, new Map([['c1', 'Bergmann']]))).toBe('📌 cell c1 · Bergmann')
+    expect(scopeLabel({ kind: 'group', group: 'g' }, { ref: 'g', name: 'Bergmann', color: '#fff', cells: ['a', 'b'], kind: 'field' })).toBe('Bergmann (2 cells)')
+  })
+  it('query params and keys', () => {
+    const c = { kind: 'cell', cell: 'c1' } as const
+    expect(scopeParams(c)).toEqual({ cellId: 'c1', group: null })
     expect(scopeParams({ kind: 'group', group: 'g' })).toEqual({ cellId: null, group: 'g' })
     expect(scopeParams({ kind: 'all' })).toEqual({ cellId: null, group: null })
-    expect(new Set([scopeKey(pane), scopeKey({ kind: 'group', group: 'c1' }), scopeKey({ kind: 'all' })]).size).toBe(3)
-    expect(scopeLabel({ kind: 'group', group: 'g' }, { ref: 'g', name: 'Bergmann', color: '#fff', cells: ['a', 'b'], kind: 'field' })).toBe('Bergmann (2 cells)')
+    expect(new Set([scopeKey(c), scopeKey({ kind: 'group', group: 'c1' }), scopeKey({ kind: 'all' })]).size).toBe(3)
   })
 })
 
-describe('workspace: group scopes', () => {
-  it('pinning a cell clears a group and vice versa', () => {
-    let ws = defaultWorkspace(true)
-    ws = setPaneGroup(ws, 'P1', 'field:cell_type=A')
-    expect(ws.panes[0]).toMatchObject({ group: 'field:cell_type=A', cell: null })
-    ws = pinPane(ws, 'P1', 'c1')
-    expect(ws.panes[0]).toMatchObject({ group: null, cell: 'c1' })
+describe('migration of stored layouts', () => {
+  it('pane: group → group; cell → cell; matrix with "focused cell" off → all; else follow focus', () => {
+    expect(migratePaneScope({ id: 'a', type: '3d', group: 'g1', cell: 'c1' } as never)).toEqual({ kind: 'group', group: 'g1' })
+    expect(migratePaneScope({ id: 'a', type: '3d', cell: 'c1' } as never)).toEqual({ kind: 'cell', cell: 'c1' })
+    expect(migratePaneScope({ id: 'a', type: 'matrix', followFocus: false } as never)).toEqual({ kind: 'all' })
+    expect(migratePaneScope({ id: 'a', type: 'matrix', followFocus: true } as never)).toEqual({ kind: 'focus' })
+    expect(migratePaneScope({ id: 'a', type: 'genome' } as never)).toEqual({ kind: 'focus' })
+    expect(migratePaneScope({ id: 'a', type: 'genome', scope: { kind: 'all' } } as never)).toEqual({ kind: 'all' })
   })
-  it('a deleted group is dropped from panes, overlays and rows', () => {
+  it('rows: cell only off → All cells, on → Same as view, a group → that group; aggregate moves onto tracks', () => {
+    const raw = [
+      { id: 'r1', kind: 'matrix', source: 'distance', followFocus: false },
+      { id: 'r2', kind: 'matrix', source: 'distance', followFocus: true },
+      { id: 'r3', kind: 'track', track: 'H3K27ac' },
+      { id: 'r4', kind: 'track', track: 'H3K27ac', group: 'field:t=A' },
+      { id: 'r5', kind: 'intervals', key: 'tads' },
+    ]
+    const off = migrateRows(parseRows(raw)!, raw, { tracksCellOnly: false, agg: 'max' })
+    expect(off.map((r) => r.scope ?? null)).toEqual([{ kind: 'all' }, null, { kind: 'all' }, { kind: 'group', group: 'field:t=A' }, null])
+    expect(off[2].agg).toBe('max')
+    const on = migrateRows(parseRows(raw)!, raw, { tracksCellOnly: true })
+    expect(on[2].scope).toBeUndefined() // same as view
+  })
+  it('a whole saved workspace migrates through parseWorkspace', () => {
+    const old = {
+      layout: 'columns',
+      panes: [
+        { id: 'P1', type: '3d', cell: 'c7', embeddingKey: null, dims: [0, 1] },
+        {
+          id: 'P2',
+          type: 'genome',
+          followFocus: false,
+          agg: 'median',
+          genomeRows: { takei: [{ id: 'r1', kind: 'matrix', source: 'distance', followFocus: false }, { id: 'r2', kind: 'track', track: 'H3K27ac' }] },
+          embeddingKey: null,
+          dims: [0, 1],
+        },
+      ],
+      activePane: 'P1',
+      sizes: [0.5, 0.5],
+      maximized: null,
+    }
+    const ws = parseWorkspace(old)!
+    expect(pinnedCell(ws.panes[0])).toBe('c7')
+    expect(ws.panes[1].scope).toBeUndefined() // follow focus
+    expect(ws.panes[1].genomeRows!.takei.map((r) => r.scope)).toEqual([{ kind: 'all' }, { kind: 'all' }])
+    expect(ws.panes[1].genomeRows!.takei[1].agg).toBe('median')
+    expect('followFocus' in ws.panes[1]).toBe(false)
+    // and round-trips unchanged
+    expect(parseWorkspace(JSON.parse(JSON.stringify(ws)))).toEqual(ws)
+  })
+})
+
+describe('workspace: cells settings', () => {
+  it('a pane holds one setting', () => {
+    let ws = defaultWorkspace(true)
+    ws = setPaneScope(ws, 'P1', { kind: 'group', group: 'field:cell_type=A' })
+    expect(pinnedGroup(ws.panes[0])).toBe('field:cell_type=A')
+    ws = setPaneScope(ws, 'P1', { kind: 'cell', cell: 'c1' })
+    expect([pinnedGroup(ws.panes[0]), pinnedCell(ws.panes[0])]).toEqual([null, 'c1'])
+  })
+  it('a deleted group is dropped from panes (→ follow focus), overlays and rows (→ same as view)', () => {
     let ws = defaultWorkspace(true)
     const rows: GenomeRow[] = [
-      { id: 'r1', kind: 'track', track: 'H3K27ac', group: 'g1' },
-      { id: 'r2', kind: 'track', track: 'H3K27ac', group: 'g2' },
+      { id: 'r1', kind: 'track', track: 'H3K27ac', scope: { kind: 'group', group: 'g1' } },
+      { id: 'r2', kind: 'track', track: 'H3K27ac', scope: { kind: 'group', group: 'g2' } },
     ]
-    ws = updatePane(ws, 'P1', { group: 'g1', compareGroups: ['g1', 'g2'], genomeRows: { ds: rows } })
+    ws = updatePane(ws, 'P1', { scope: { kind: 'group', group: 'g1' }, compareGroups: ['g1', 'g2'], genomeRows: { ds: rows } })
     const out = dropGroupScope(ws, 'g1')
-    expect(out.panes[0].group).toBeNull()
+    expect(out.panes[0].scope).toEqual({ kind: 'focus' })
     expect(out.panes[0].compareGroups).toEqual(['g2'])
-    expect(out.panes[0].genomeRows!.ds.map((r) => r.group)).toEqual([null, 'g2'])
-    expect(dropGroupScope(out, 'g1')).toBe(out) // nothing left: same object
+    expect(out.panes[0].genomeRows!.ds.map((r) => r.scope)).toEqual([{ kind: 'view' }, { kind: 'group', group: 'g2' }])
+    expect(dropGroupScope(out, 'g1')).toBe(out)
   })
   it("another dataset's groups are dropped from panes, not from its rows", () => {
-    const rows: GenomeRow[] = [{ id: 'r1', kind: 'track', group: 'gOther' }]
-    const ws = updatePane(defaultWorkspace(true), 'P1', { group: 'gOther', compareGroups: ['field:t=A', 'gOther'], genomeRows: { other: rows } })
+    const rows: GenomeRow[] = [{ id: 'r1', kind: 'track', scope: { kind: 'group', group: 'gOther' } }]
+    const ws = updatePane(defaultWorkspace(true), 'P1', { scope: { kind: 'group', group: 'gOther' }, compareGroups: ['field:t=A', 'gOther'], genomeRows: { other: rows } })
     const known = (r: string) => r.startsWith('field:')
     const out = dropUnknownGroups(ws, known)
-    expect(out.panes[0]).toMatchObject({ group: null, compareGroups: ['field:t=A'] })
-    expect(out.panes[0].genomeRows!.other[0].group).toBe('gOther')
+    expect(out.panes[0]).toMatchObject({ scope: { kind: 'focus' }, compareGroups: ['field:t=A'] })
+    expect(out.panes[0].genomeRows!.other[0].scope).toEqual({ kind: 'group', group: 'gOther' })
     expect(dropUnknownGroups(out, known)).toBe(out)
   })
-  it('persisted group scopes survive parsing', () => {
-    const ws = updatePane(defaultWorkspace(true), 'P2', { group: 'field:t=A', compareGroups: ['g1'], genomeRows: { ds: [{ id: 'r1', kind: 'track', group: 'g1' }] } })
-    const back = parseWorkspace(JSON.parse(JSON.stringify(ws)))!
-    expect(back.panes[1]).toMatchObject({ group: 'field:t=A', compareGroups: ['g1'] })
-    expect(back.panes[1].genomeRows!.ds[0].group).toBe('g1')
-    expect(parseRows([{ id: 'r', kind: 'track', group: 5 }])![0].group).toBeUndefined()
-  })
-  it('row group setting: a ref, or empty for the pane scope', () => {
+  it('row settings: scope ("view" stored as absent) and aggregate', () => {
     const rows: GenomeRow[] = [{ id: 'r1', kind: 'track' }]
-    expect(applyRowSetting(rows, 'r1', 'group', 'field:t=A')[0].group).toBe('field:t=A')
-    expect(applyRowSetting(rows, 'r1', 'group', '')[0].group).toBeNull()
+    const all = setRowScope(rows, 'r1', { kind: 'all' })
+    expect(all[0].scope).toEqual({ kind: 'all' })
+    expect('scope' in setRowScope(all, 'r1', { kind: 'view' })[0]).toBe(false)
+    expect(applyRowSetting(rows, 'r1', 'agg', 'median')[0].agg).toBe('median')
+    expect(applyRowSetting(rows, 'r1', 'agg', 'mode')).toBe(rows)
+    expect(parseRows([{ id: 'r', kind: 'track', scope: { kind: 'group', group: 5 } }])![0].scope).toBeUndefined()
   })
 })
 

@@ -343,7 +343,9 @@ cell.  Every endpoint above that takes `cell_id` / `cell` also takes
 - `field:<column>=<value>` — every cell whose `cd.cells[column]` equals
   `value` (e.g. `field:cell_type=Bergmann`; URL-encode it, values may
   contain `+`), usable without registering; or
-- a registered id `g<12 hex>` — an explicit cell list (a lasso selection).
+- a registered id `g<12 hex>` — an explicit cell list (a lasso selection);
+- `all` — every cell of the dataset (reserved; on a per-cell `.scool` map it
+  gives the all-cell pseudo-bulk — the client's "All cells" setting).
 
 An unknown field or id → `404`; a group with no cells → `422`.
 

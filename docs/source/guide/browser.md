@@ -97,15 +97,37 @@ Pane headers stay one line: view type, 📌 badge, maximise / close
 (3-D views also have ⟲ reset camera).  The focus bar and locus navigator
 above the panes are shared, like the left sidebar.
 
-### Pinned cells
+### Which cells a view shows
 
-Any pane can **follow the focused cell** (default) or be **pinned** to one
-cell (*follow focus ▾* at the top of the inspector).  A pinned 3-D view draws only that cell with its
-own camera; pinned Genome / Matrix / Stats views use that cell's traces or
-per-cell contacts.  Open a cell in a new pinned view with ↗ on its row in
-the cell list, ↗ *New view* in the focus bar, or from the label shown when
-clicking a trace — e.g. to compare two cells side by side while the
-overview stays.
+Every view has **one** *cells* setting at the top of the inspector.  Each
+Genome row that depends on cells (tracks, the 3-D distance, per-cell
+contact maps) has its own, next to the row's other settings.  The
+setting always says what it shows *right now*, e.g. *Follow focus →
+selection (10 cells)*, and every row's label on the canvas repeats it
+(*All cells · 47*, *selection · 10 cells*, *cell 1_0_34*).
+
+| Setting | Shows | Changes with focus / lasso? |
+|---|---|---|
+| **All cells** | every cell of the dataset | never |
+| **Follow focus** (default for views) | the focused cell, else the focused group or lasso selection, else all cells | yes |
+| **Cell…** | one cell (📌; a 3-D view draws only it) | no |
+| **Group…** | a cell type, a saved group, or the current lasso selection | no |
+| **Same as view** (default for rows) | whatever the view's setting shows | like the view |
+
+When a lasso selection is picked as a group, it can be saved under a name
+or **frozen** as an unnamed group, so that a new lasso doesn't change it.
+When the cells are more than one, an **aggregate** control appears:
+mean / median / max of the spots per bin for tracks, and median / mean
+distance over the traces for the 3-D distance.  A per-cell contact map
+over several cells is their pseudo-bulk (the sum of their maps).  Bulk
+contact maps always hold all cells in the file.
+
+Open a cell in a new view pinned to it with ↗ on its row in the cell list,
+↗ *New view* in the focus bar, or the label shown when clicking a trace —
+e.g. to compare two cells side by side while the overview stays.  Layouts
+saved before this setting are migrated: a pinned cell or a group stays;
+"focused cell only" unticked becomes *All cells*; ticked becomes *Same as
+view*.
 
 ### Cell groups
 
@@ -126,17 +148,17 @@ select yourself:
   group** (in the view or the Groups panel) keeps it under a name, and you
   can rename (✎) or delete (×) it later.  Saved groups are remembered per
   dataset in the browser.
-- **Scope of a view** (inspector, top): *follow focus*, 📌 one cell, or a
-  group.  A group-scoped view shows its group whatever is focused, which
-  makes side-by-side comparisons possible:
+- **A view on a group** (*cells → Group…*, see above) shows its group
+  whatever is focused, which makes side-by-side comparisons possible:
   - *3D*: the group's cells in full, the others faint;
   - *Genome* / *Matrix*: tracks and the 3-D distance matrix aggregated
     over the group's traces; a per-cell contact map (`.scool`) becomes the
     group's **pseudo-bulk** (the sum of its cells' maps);
   - *Stats*: Rg and distance-vs-separation over the group.
-- **Per-row groups** (Genome inspector): each track, distance or per-cell
-  matrix row can have a group of its own.  Stack e.g. *Bergmann* above
-  *Granule* on one axis.
+- **Per-row cells** (Genome inspector): each track, distance or per-cell
+  matrix row can have its own setting.  Stack e.g. *Bergmann* above
+  *Granule* on one axis, or keep an *All cells* row above a *Follow
+  focus* row to see a selection against the whole population.
 - **Compare groups** (Stats inspector): overlay several groups on the Rg
   histogram (as fractions of traces) or on the scaling curve, each in its
   colour.
@@ -166,14 +188,15 @@ share a **locus** (chromosome + range) set in the workspace bar — type
     cell's contacts above its 3-D distances;
   - *track rows*: `cd.tracks` (e.g. Takei 2025's 59 per-spot IF channels:
     H3K27ac, H3K4me3, H3K9me3, LaminB1, …) aggregated per bin over all
-    cells or the focused cell;
+    cells, one cell or a group (the row's *cells* setting);
   - *interval rows*: `cd.results` tables (TADs as boxes, loops as arcs),
     with their boundaries echoed as guides across the matrix rows.
   Add / remove / reorder rows in the inspector (right); rows are remembered.
 - **Matrix** — the full square version: a contact map from a linked `.cool` / `.mcool` / `.scool`
-  (`cd.link_cool`, `cd.link_scool`; per-cell maps follow the focused cell)
+  (`cd.link_cool`, `cd.link_scool`; a per-cell map shows the view's cells —
+  one cell's map, or the sum over a group / all cells)
   or the **3-D distance** matrix computed from `coords` (one trace, the
-  focused cell, or the population median / mean / contact frequency).
+  cells in scope: median / mean distance or contact frequency).
   Large regions are pooled to ≤ 1,000 bins; drag a square to zoom.
 - **Stats** — radius of gyration per trace, distance vs genomic
   distance (population with IQR band, focused cell on top), a histogram

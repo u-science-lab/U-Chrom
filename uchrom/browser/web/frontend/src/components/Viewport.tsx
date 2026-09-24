@@ -10,6 +10,7 @@ import { DEFAULT_STYLE } from '../layers'
 import { activeView, useStore } from '../store'
 import { useFieldColors, type FieldColors } from '../useFieldColors'
 import { usePaneScope, useScopeCells } from '../useGroups'
+import type { ScopeSpec } from '../groups'
 import { isPointPick, type ColorMode, type Geometry, type LayerStyle, type PointSet, type SegmentInfo } from '../types'
 import { registerRenderHook } from '../capture'
 import { PickLabel } from './PickLabel'
@@ -124,10 +125,11 @@ function drawnGeometries(t: Three): Geometry[] {
  * 3-D view of the active dataset — one instance per workspace pane.  Several
  * 3-D panes share the store (layers, focus, colours) but each has its own
  * renderer and camera.  `resetKey` refits this pane only.  `pinned`: draw
- * only that cell (no context), ignoring the global focus.  `group`: draw
- * that group's cells in full and the others as faint context.
+ * only that cell (no context), ignoring the global focus.  `scope`: the
+ * pane's cells setting — all cells in full, one pinned cell alone, a group
+ * in full with the others as grey context, or follow the focus (default).
  */
-export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null, group = null }: { paneId?: string; resetKey?: number; pinned?: string | null; group?: string | null }) {
+export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?: string; resetKey?: number; scope?: ScopeSpec }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const paneRef = useRef(paneId)
   paneRef.current = paneId
@@ -146,10 +148,13 @@ export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null, group = n
   const setStatus = useStore((s) => s.setStatus)
   // drawn in full here: the pane's group, its pinned cell, else the global
   // focus (a cell or a group)
-  const scope = usePaneScope({ group, cell: pinned })
+  const scope = usePaneScope({ scope: spec })
+  const pinned = spec?.kind === 'cell' ? spec.cell : null
+  // fixed settings (all / cell / group) don't follow focus changes
+  const fixed = spec && spec.kind !== 'focus' ? JSON.stringify(spec) : null
   const scopeCells = useScopeCells(scope)
   const focus: FocusSet = scope.kind === 'all' ? null : scope.kind === 'cell' ? scope.cell : scopeCells
-  const ctxOpacity = pinned && !group ? 0 : view.contextOpacity
+  const ctxOpacity = pinned ? 0 : view.contextOpacity
   // clicking a trace of another cell focuses it; within a single focused cell it picks
   const focusRef = useRef<string | null>(null)
   focusRef.current = scope.kind === 'cell' ? scope.cell : null
@@ -294,7 +299,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null, group = n
   // A new pin / group → fit the camera to it once it is drawn.
   useEffect(() => {
     fittedRef.current = false
-  }, [pinned, group])
+  }, [fixed])
 
   // Sync scene objects with layers + view state (only the active dataset).
   useEffect(() => {
@@ -386,7 +391,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null, group = n
     setStatus(warnings.length ? warnings.join(' · ') : null)
 
     if (!fittedRef.current) {
-      const box = unionBox(pinned || group ? mainGeometries(t) : drawnGeometries(t))
+      const box = unionBox(fixed && focus !== null ? mainGeometries(t) : drawnGeometries(t))
       if (box) {
         jumpTo(t, box)
         fittedRef.current = true
@@ -394,7 +399,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null, group = n
     }
     const pick = useStore.getState().pick
     if (pick && !isPointPick(pick) && !keep.has(pick.layerId)) setPick(null)
-  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, pinned, group])
+  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed])
 
   // Point sets (e.g. RNA spots): focused cell's points full, others faint.
   useEffect(() => {
@@ -453,8 +458,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null, group = n
   }, [resetViewToken, activeDatasetId, resetKey])
 
   // Global focus changes don't move a pinned / group-scoped view.
-  const pinnedRef = useRef(pinned || group)
-  pinnedRef.current = pinned || group
+  const pinnedRef = useRef(fixed)
+  pinnedRef.current = fixed
   const hasFocusRef = useRef(false)
   hasFocusRef.current = focus !== null
 

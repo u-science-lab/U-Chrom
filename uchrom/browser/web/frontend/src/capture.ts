@@ -9,7 +9,7 @@
 
 import { fmtBp } from './filters'
 import { datasetChroms } from './genome'
-import { describeGroup, paneScope, type Scope } from './groups'
+import { describeGroup, resolveScope, type Scope } from './groups'
 import { activeSavedGroups, activeView, fieldKey, useStore } from './store'
 import { resolveLocus } from './useLocus'
 import { PANE_LABEL, type Pane } from './workspace'
@@ -76,7 +76,7 @@ export function paneFilename(pane: Pane, date = new Date()): string {
   return captureFilename({
     dataset: ds?.name ?? 'data',
     type: pane.type,
-    scope: scopeName(paneScope(pane, v)),
+    scope: scopeName(resolveScope(pane.scope, v)),
     locus: genomic ? resolveLocus(v.locus, datasetChroms(ds)) : null,
     date,
   })

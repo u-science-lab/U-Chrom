@@ -1550,3 +1550,60 @@ body.resizing-rows {
 .compare-groups .legend-list {
   margin-top: 2px;
 }
+
+/* ---- the one "cells" setting (ScopePicker) --------------------------- */
+.inspector .insp-pin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.inspector .insp-pin .pane-cell {
+  flex: 1;
+  min-width: 0;
+}
+.insp-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.scope-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.scope-line .scope-picker {
+  flex: 1;
+  min-width: 0;
+}
+.scope-picker > button {
+  width: 100%;
+  max-width: 100%;
+  text-align: left;
+}
+.scope-picker .pane-popup {
+  width: 280px;
+  right: 0;
+  left: auto;
+}
+.scope-picker .pane-popup li.naming {
+  display: flex;
+  gap: 4px;
+  cursor: default;
+}
+.scope-picker .pane-popup li.naming input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.emb-selection {
+  max-width: calc(100% - 12px);
+  flex-wrap: wrap;
+  white-space: normal;
+  justify-content: center;
+}
+.emb-selection input {
+  flex: 1 1 70px;
+  min-width: 0;
+}

@@ -2,13 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchContacts, fetchDistance } from '../api'
 import { fmtBp } from '../filters'
 import { matrixColor, matrixPixels, matrixRange, scaleFor, type MatrixData } from '../matrix'
-import { scopeLabel } from '../groups'
+import { ALL_CELLS_REF, isMultiCell, scopeText } from '../groups'
+import { DistanceValueControls } from './AggregateControls'
+import { useNCells } from './ScopePicker'
 import { useStore } from '../store'
 import { useGroupInfo, usePaneScope } from '../useGroups'
 import { fmtAxis } from '../stats'
 import type { ContactMapInfo } from '../types'
 import { useLocus } from '../useLocus'
-import { updatePane, type DistanceStat, type Pane } from '../workspace'
+import { updatePane, type Pane } from '../workspace'
 import { CHART, drawColorRamp, rgb } from './chart'
 import { prepareCanvas, useSize } from './useSize'
 
@@ -30,6 +32,7 @@ export function MatrixControls({ pane }: { pane: Pane }) {
   const source = resolveSource(pane, maps, hasCoords)
   const map = maps.find((m) => m.key === source)
   const upd = (p: Partial<Pane>) => setWorkspace((w) => updatePane(w, pane.id, p))
+  const scope = usePaneScope(pane)
   if (!source) return null
   return (
     <>
@@ -57,13 +60,11 @@ export function MatrixControls({ pane }: { pane: Pane }) {
         </label>
       )}
       {source === 'distance' && (
-        <>
-          <select value={pane.stat ?? 'median'} onChange={(e) => upd({ stat: e.target.value as DistanceStat })} title="Statistic over traces">
-            <option value="median">median distance</option>
-            <option value="mean">mean distance</option>
-            <option value="contact">contact frequency</option>
-          </select>
-          {(pane.stat ?? 'median') === 'contact' && (
+        <DistanceValueControls
+          stat={pane.stat ?? 'median'}
+          multi={isMultiCell(scope)}
+          onStat={(stat) => upd({ stat })}
+          threshold={
             <input
               className="num"
               type="number"
@@ -74,11 +75,8 @@ export function MatrixControls({ pane }: { pane: Pane }) {
               onChange={(e) => upd({ threshold: e.target.value === '' ? null : Math.max(0, +e.target.value) })}
               title={`Distance threshold (${ds?.xyz_unit ?? 'dataset unit'}); empty = server default`}
             />
-          )}
-          <label className="check small" title="Only the focused / pinned cell's traces (a group in scope always applies)">
-            <input type="checkbox" checked={pane.followFocus ?? true} onChange={(e) => upd({ followFocus: e.target.checked })} /> focused cell
-          </label>
-        </>
+          }
+        />
       )}
     </>
   )
@@ -108,10 +106,11 @@ export function MatrixView({ pane }: { pane: Pane }) {
 
   const needsCell = !!map?.per_cell
   const takesScope = needsCell || source === 'distance'
-  const cell = takesScope && scope.kind === 'cell' && (needsCell || (pane.followFocus ?? true)) ? scope.cell : null
-  // per-cell map + group → pseudo-bulk; distance + group → statistic over the group's traces
-  const group = takesScope && scope.kind === 'group' ? scope.group : null
-  const waitingForCell = needsCell && !cell && !group
+  const nAll = useNCells()
+  const cell = takesScope && scope.kind === 'cell' ? scope.cell : null
+  // per-cell map + group / all cells → pseudo-bulk; distance + group → statistic over its traces
+  const group = takesScope && scope.kind === 'group' ? scope.group : needsCell && scope.kind === 'all' ? ALL_CELLS_REF : null
+  const waitingForCell = false
 
   useEffect(() => {
     if (!ds || !locus || !source || waitingForCell) return
@@ -248,7 +247,7 @@ export function MatrixView({ pane }: { pane: Pane }) {
   else if (waitingForCell) message = `“${map?.label || map?.key}” holds one contact map per cell — select a cell or a group (left), or scope this view to a group (inspector).`
   const note = [
     mat?.header.note,
-    mat?.header.n_cells && group ? `${mat.header.n_cells} cells` : null,
+    mat?.header.n_cells && group ? `${mat.header.n_cells} cells used` : null,
     mat?.header.n_contacts ? `${fmtAxis(mat.header.n_contacts)} contacts (pseudo-bulk)` : null,
     mat?.header.n_traces ? `${mat.header.n_traces} traces` : null,
     mat?.header.resolution ? `${fmtBp(mat.header.resolution)} bins` : null,
@@ -261,12 +260,13 @@ export function MatrixView({ pane }: { pane: Pane }) {
       {error && !message && <div className="error pane-error">{error}</div>}
       <canvas ref={canvasRef} onPointerDown={onPointerDown} onMouseMove={onMove} onMouseLeave={() => setHover(null)} style={{ cursor: 'crosshair' }} />
       {loading && <div className="pane-loading muted small">loading…</div>}
-      {cell && <div className="pane-badge small">cell {cell}</div>}
-      {group && (
+      {takesScope ? (
         <div className="pane-badge small">
-          <span className="swatch round" style={{ display: 'inline-block', width: 8, height: 8, marginRight: 4, background: groupInfo?.color ?? '#888' }} />
-          {scopeLabel(scope, groupInfo)}
+          {scope.kind === 'group' && <span className="swatch round" style={{ display: 'inline-block', width: 8, height: 8, marginRight: 4, background: groupInfo?.color ?? '#888' }} />}
+          {scopeText(scope, groupInfo, nAll)}
         </div>
+      ) : (
+        map && <div className="pane-badge small">bulk map (all cells in the file)</div>
       )}
       {note && !message && (
         <div className="matrix-note muted small" style={{ left: M.left, top: M.top + side + 58 }}>

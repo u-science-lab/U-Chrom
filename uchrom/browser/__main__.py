@@ -8,6 +8,9 @@ def read_and_show(*paths, style='qdarkgraystyle', web=False, host='127.0.0.1',
     Desktop (PyVista + Qt) by default; ``--web`` serves the web browser on
     ``host:port`` instead (``--noopen_browser`` to skip opening a tab).
     """
+    # fire reads `--web out.h5cd` as web='out.h5cd': that value is a path too
+    if isinstance(web, str) and web.lower() not in ('true', 'false', '1', '0', 'yes', 'no'):
+        paths, web = (web, *paths), True
     if web:
         from .web import serve
         serve(paths, host=host, port=port, open_browser=open_browser)

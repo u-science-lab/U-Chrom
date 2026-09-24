@@ -5,6 +5,8 @@ import {
   addPane,
   dropUnknownGroups,
   dropUnknownPins,
+  pinnedCell,
+  pinnedGroup,
   handleWorkspaceKey,
   LAYOUTS,
   moveSplitter,
@@ -224,7 +226,8 @@ function PaneBox({
   const setWorkspace = useStore((s) => s.setWorkspace)
   const activate = () => setWorkspace((w) => (w.activePane === pane.id ? w : { ...w, activePane: pane.id }))
   const types = useCellTypes()
-  const groupInfo = useGroupInfo(pane.group)
+  const groupInfo = useGroupInfo(pinnedGroup(pane))
+  const cellPin = pinnedCell(pane)
   const bodyRef = useRef<HTMLDivElement>(null)
   const [saving, setSaving] = useState(false)
   const saveImage = () => {
@@ -236,7 +239,7 @@ function PaneBox({
   }
   return (
     <section
-      className={`pane${active ? ' active' : ''}${hidden ? ' hidden' : ''}${pane.cell || pane.group ? ' pinned' : ''}`}
+      className={`pane${active ? ' active' : ''}${hidden ? ' hidden' : ''}${pane.scope && pane.scope.kind !== 'focus' ? ' pinned' : ''}`}
       style={style}
       onPointerDownCapture={activate}
       onFocusCapture={activate}
@@ -249,15 +252,20 @@ function PaneBox({
             </option>
           ))}
         </select>
-        {pane.cell && !pane.group && (
-          <button className="pin-badge" onClick={() => activate()} title="Pinned to this cell — change or unpin it in the inspector (right)">
-            📌 {cellTitle(pane.cell, types)}
+        {cellPin && (
+          <button className="pin-badge" onClick={() => activate()} title="Pinned to this cell — change it in the inspector (right, “cells”)">
+            📌 {cellTitle(cellPin, types)}
           </button>
         )}
-        {pane.group && (
+        {pane.scope?.kind === 'all' && (
+          <button className="pin-badge" onClick={() => activate()} title="Always all cells — change it in the inspector (right, “cells”)">
+            All cells
+          </button>
+        )}
+        {pane.scope?.kind === 'group' && (
           <button className="pin-badge group" onClick={() => activate()} title="This view aggregates over a group of cells — change it in the inspector (right)">
             <span className="swatch round" style={{ background: groupInfo?.color ?? '#888' }} />
-            {groupInfo?.name ?? pane.group}
+            {groupInfo?.name ?? pane.scope.group}
             {groupInfo?.cells && <span className="muted"> · {groupInfo.cells.length}</span>}
           </button>
         )}
@@ -284,7 +292,7 @@ function PaneBox({
         </button>
       </header>
       <div className="pane-body" ref={bodyRef} data-pane={pane.id}>
-        {pane.type === '3d' && <Viewport paneId={pane.id} resetKey={resetKey} pinned={pane.cell ?? null} group={pane.group ?? null} />}
+        {pane.type === '3d' && <Viewport paneId={pane.id} resetKey={resetKey} scope={pane.scope} />}
         {pane.type === 'embedding' && <EmbeddingView pane={pane} />}
         {pane.type === 'genome' && <GenomeView pane={pane} />}
         {pane.type === 'matrix' && <MatrixView pane={pane} />}

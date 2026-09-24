@@ -6,26 +6,27 @@ import {
   defaultWorkspace,
   dropUnknownPins,
   MAX_SPLIT_PANES,
-  paneCell,
   parseWorkspace,
-  pinPane,
+  pinnedCell,
   setLayout,
+  setPaneScope,
   show3dPanels,
   type WorkspaceState,
 } from './workspace'
 
+const pinPane = (ws: WorkspaceState, id: string, cell: string | null) => setPaneScope(ws, id, cell ? { kind: 'cell', cell } : { kind: 'focus' })
 const base = (): WorkspaceState => defaultWorkspace({ hasCoords: true, hasEmbeddings: true, hasTracks: false }) // 3D | Embedding
 
 describe('pinning panes to cells', () => {
   it('pins and unpins a pane', () => {
     const ws = pinPane(base(), 'P2', 'c7')
-    expect(ws.panes[1].cell).toBe('c7')
-    expect(ws.panes[0].cell).toBeUndefined()
-    expect(pinPane(ws, 'P2', null).panes[1].cell).toBeNull()
+    expect(pinnedCell(ws.panes[1])).toBe('c7')
+    expect(ws.panes[0].scope).toBeUndefined()
+    expect(pinnedCell(pinPane(ws, 'P2', null).panes[1])).toBeNull()
   })
   it('opens a cell in a new pinned pane and makes it active', () => {
     const ws = addPinnedPane(base(), '3d', 'c7')
-    expect(ws.panes.map((p) => [p.type, p.cell ?? null])).toEqual([
+    expect(ws.panes.map((p) => [p.type, pinnedCell(p)])).toEqual([
       ['3d', null],
       ['embedding', null],
       ['3d', 'c7'],
@@ -40,12 +41,6 @@ describe('pinning panes to cells', () => {
     expect(ws.layout).toBe('grid')
     const tabs = addPinnedPane(addPinnedPane(setLayout(base(), 'tabs'), '3d', 'a'), '3d', 'b')
     expect(tabs.layout).toBe('tabs')
-  })
-  it('resolves the cell a pane shows: its pin, else the focus', () => {
-    expect(paneCell({ cell: 'c7' }, 'c1')).toBe('c7')
-    expect(paneCell({ cell: null }, 'c1')).toBe('c1')
-    expect(paneCell({}, null)).toBeNull()
-    expect(paneCell(undefined, 'c1')).toBe('c1')
   })
 })
 
@@ -68,14 +63,14 @@ describe('persisted pins', () => {
   it('round-trips the pinned cell and drops malformed values', () => {
     const ws = pinPane(base(), 'P1', 'c7')
     const back = parseWorkspace(JSON.parse(JSON.stringify(ws)))!
-    expect(back.panes[0].cell).toBe('c7')
-    const bad = parseWorkspace({ layout: 'columns', panes: [{ id: 'a', type: '3d', cell: 5 }, { id: 'b', type: '3d', cell: '' }] })!
-    expect(bad.panes.map((p) => p.cell)).toEqual([undefined, undefined])
+    expect(pinnedCell(back.panes[0])).toBe('c7')
+    const bad = parseWorkspace({ layout: 'columns', panes: [{ id: 'a', type: '3d', cell: 5 }, { id: 'b', type: '3d', scope: { kind: 'cell', cell: '' } }] })!
+    expect(bad.panes.map((p) => p.scope)).toEqual([undefined, undefined])
   })
   it('unpins cells the active dataset does not have', () => {
     const ws = pinPane(pinPane(addPinnedPane(base(), '3d', 'gone'), 'P1', 'c1'), 'P2', null)
     const out = dropUnknownPins(ws, new Set(['c1', 'c2']))
-    expect(out.panes.map((p) => p.cell ?? null)).toEqual(['c1', null, null])
+    expect(out.panes.map((p) => pinnedCell(p))).toEqual(['c1', null, null])
     // nothing to drop → same object (no needless save / re-render)
     expect(dropUnknownPins(out, new Set(['c1']))).toBe(out)
   })

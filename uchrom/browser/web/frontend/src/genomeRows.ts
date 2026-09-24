@@ -8,7 +8,8 @@ import { parseGenomicNumber } from './filters'
 import { binAt } from './matrix'
 import { defaultTrackSelection } from './tracks'
 import type { DatasetSummary } from './types'
-import type { DistanceStat } from './workspace'
+import { parseScopeSpec, type RowScopeSpec } from './groups'
+import type { DistanceStat, TrackAgg } from './workspace'
 
 export type GenomeRowKind = 'matrix' | 'track' | 'intervals'
 
@@ -23,8 +24,6 @@ export interface GenomeRow {
   balance?: boolean
   stat?: DistanceStat
   threshold?: number | null
-  /** matrix (distance): only the focused cell's traces */
-  followFocus?: boolean
   /** matrix: deepest genomic separation shown across the row height (null → 45°, clipped by the height) */
   maxDist?: number | null
   /** matrix: diagonal at the top of the row (triangle pointing down) */
@@ -33,9 +32,11 @@ export interface GenomeRow {
   track?: string | null
   /** intervals: results key */
   key?: string | null
-  /** matrix / track: a group to aggregate over instead of the pane's scope
-   *  (stack e.g. Bergmann above Granule); absent / null = the pane's scope */
-  group?: string | null
+  /** track / distance / per-cell matrix: which cells (absent = same as the view);
+   *  stack e.g. Bergmann above Granule */
+  scope?: RowScopeSpec
+  /** track: aggregate of the spots in a bin over several cells (default mean) */
+  agg?: TrackAgg
 }
 
 export const ROW_HEIGHT: Record<GenomeRowKind, number> = { matrix: 200, track: 44, intervals: 22 }
@@ -99,7 +100,7 @@ export function resizeRow(rows: GenomeRow[], id: string, height: number): Genome
 }
 
 /** Settings of a row edited in the inspector. */
-export type RowSetting = 'source' | 'resolution' | 'balance' | 'stat' | 'threshold' | 'followFocus' | 'maxDist' | 'flip' | 'track' | 'key' | 'height' | 'group'
+export type RowSetting = 'source' | 'resolution' | 'balance' | 'stat' | 'threshold' | 'maxDist' | 'flip' | 'track' | 'key' | 'height' | 'agg'
 
 /**
  * Row patch for one edited setting (text inputs arrive as strings, check
@@ -109,7 +110,7 @@ export type RowSetting = 'source' | 'resolution' | 'balance' | 'stat' | 'thresho
  */
 export function rowPatch(setting: RowSetting, value: string | boolean): Partial<Omit<GenomeRow, 'id'>> | null {
   if (typeof value === 'boolean') {
-    return setting === 'balance' || setting === 'followFocus' || setting === 'flip' ? { [setting]: value } : null
+    return setting === 'balance' || setting === 'flip' ? { [setting]: value } : null
   }
   const text = value.trim()
   const num = (x: number) => (Number.isFinite(x) && x > 0 ? x : NaN)
@@ -119,8 +120,8 @@ export function rowPatch(setting: RowSetting, value: string | boolean): Partial<
     case 'track':
     case 'key':
       return text ? { [setting]: text } : null
-    case 'group':
-      return { group: text || null } // empty = the pane's scope
+    case 'agg':
+      return text === 'mean' || text === 'median' || text === 'max' ? { agg: text } : null
     case 'stat':
       return text === 'median' || text === 'mean' || text === 'contact' ? { stat: text } : null
     case 'resolution':
@@ -194,15 +195,47 @@ export function parseRows(raw: unknown): GenomeRow[] | null {
     if (typeof x.balance === 'boolean') row.balance = x.balance
     if (x.stat === 'median' || x.stat === 'mean' || x.stat === 'contact') row.stat = x.stat
     if (typeof x.threshold === 'number' && x.threshold > 0) row.threshold = x.threshold
-    if (typeof x.followFocus === 'boolean') row.followFocus = x.followFocus
     if (typeof x.maxDist === 'number' && x.maxDist > 0) row.maxDist = x.maxDist
     if (typeof x.flip === 'boolean') row.flip = x.flip
     if (typeof x.track === 'string') row.track = x.track
     if (typeof x.key === 'string') row.key = x.key
-    if (typeof x.group === 'string' && x.group) row.group = x.group
+    const scope = parseScopeSpec(x.scope, true)
+    if (scope && scope.kind !== 'view') row.scope = scope
+    if (x.agg === 'mean' || x.agg === 'median' || x.agg === 'max') row.agg = x.agg
     out.push(row)
   }
   return new Set(out.map((r) => r.id)).size === out.length ? out : null
+}
+
+/**
+ * Rows saved before the explicit cells setting: a row `group` → that
+ * group; a distance row with "focused / pinned cell only" off → all cells;
+ * track rows follow the pane's old "cell only" box (off → all cells) and
+ * take its aggregate.  `raw` is the persisted list `rows` was parsed from.
+ */
+export function migrateRows(rows: GenomeRow[], raw: unknown, legacy: { tracksCellOnly?: boolean; agg?: TrackAgg } = {}): GenomeRow[] {
+  const old = Array.isArray(raw) ? (raw as Record<string, unknown>[]) : []
+  return rows.map((r, i) => {
+    const o = old[i] ?? {}
+    if (r.scope || 'scope' in o) return r.kind === 'track' && !r.agg && legacy.agg ? { ...r, agg: legacy.agg } : r
+    let scope: RowScopeSpec | undefined
+    if (typeof o.group === 'string' && o.group) scope = { kind: 'group', group: o.group }
+    else if (r.kind === 'matrix' && r.source === 'distance' && o.followFocus === false) scope = { kind: 'all' }
+    else if (r.kind === 'track' && legacy.tracksCellOnly === false) scope = { kind: 'all' }
+    const out: GenomeRow = { ...r }
+    if (scope) out.scope = scope
+    if (r.kind === 'track' && !r.agg && legacy.agg) out.agg = legacy.agg
+    return out
+  })
+}
+
+/** Set a row's cells setting ("view" = same as the view: stored as absent). */
+export function setRowScope(rows: GenomeRow[], id: string, scope: RowScopeSpec): GenomeRow[] {
+  return rows.map((r) => {
+    if (r.id !== id) return r
+    const { scope: _old, ...rest } = r // eslint-disable-line @typescript-eslint/no-unused-vars
+    return scope.kind === 'view' ? rest : { ...rest, scope }
+  })
 }
 
 // ---- rotated-triangle geometry --------------------------------------------

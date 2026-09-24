@@ -23,6 +23,8 @@ import pandas as pd
 from uchrom.core import ChromData
 
 DEFAULT_MAX_POINTS = 5_000_000
+#: reserved group reference: every cell (e.g. the all-cell pseudo-bulk of a per-cell map)
+ALL_CELLS = "all"
 
 
 def natural_chrom_key(name: str):
@@ -328,11 +330,16 @@ class Dataset:
                 for g in self._groups.values()]
 
     def group_cells(self, group: str) -> List[str]:
-        """Cells of a group reference: ``field:<column>=<value>`` or a registered id.
+        """Cells of a group reference: ``all``, ``field:<column>=<value>`` or a registered id.
 
         Unknown field / id → KeyError; a group with no cells → LookupError.
         """
         group = str(group)
+        if group == ALL_CELLS:
+            cells = sorted(self.known_cells(), key=natural_key)
+            if not cells:
+                raise LookupError("this dataset has no cell ids")
+            return cells
         if group.startswith("field:"):
             field, sep, value = group[len("field:"):].partition("=")
             table = self._cells_table()
@@ -350,7 +357,8 @@ class Dataset:
 
     def group_info(self, group: str) -> Dict[str, Any]:
         cells = self.group_cells(group)
-        name = self._groups[group].get("name") if group in self._groups else group.partition("=")[2]
+        name = (self._groups[group].get("name") if group in self._groups
+                else "all cells" if group == ALL_CELLS else group.partition("=")[2])
         return {"group": group, "name": name, "n_cells": len(cells), "cells": cells}
 
     def _group_spot_mask(self, group: str) -> np.ndarray:

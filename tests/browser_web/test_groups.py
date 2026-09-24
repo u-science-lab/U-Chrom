@@ -33,6 +33,8 @@ def _three_cells():
 def test_field_group_cells_and_errors():
     ds = _three_cells()
     assert ds.group_cells("field:cell_type=A") == ["c1", "c2"]
+    assert ds.group_cells("all") == ["c1", "c2", "c3"]
+    assert ds.group_info("all")["name"] == "all cells"
     info = ds.group_info("field:cell_type=B")
     assert info == {"group": "field:cell_type=B", "name": "B", "n_cells": 1, "cells": ["c3"]}
     with pytest.raises(KeyError):
@@ -102,6 +104,9 @@ def test_scool_pseudobulk(tmp_path):
     assert part["header"]["bin_starts"] == [100, 200] and np.all(part["matrix"] == 5)
     gid = ds.register_group(["c1", "c3"])["id"]
     assert np.all(decode_matrix(ds.contacts("cells", "chr1", group=gid))["matrix"] == 6)
+    # reserved "all": every cell's map
+    everyone = decode_matrix(ds.contacts("cells", "chr1", group="all"))
+    assert np.all(everyone["matrix"] == 8) and everyone["header"]["n_cells"] == 3
     # cached: the same bytes come back
     assert ds.contacts("cells", "chr1", group=gid) is ds.contacts("cells", "chr1", group=gid)
     with pytest.raises(ValueError):
