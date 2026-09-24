@@ -1,6 +1,6 @@
 import { describeFilter } from '../filters'
 import { AUTO_BOND_FACTOR, splitForView } from '../render/bonds'
-import { autoTubeRadius } from '../render/segments'
+import { autoTubeRadius, tubeAllowed } from '../render/segments'
 import { activeView, useStore } from '../store'
 import { CellInfoPanel } from './CellInfoPanel'
 import { colourableFields } from './format'
@@ -61,6 +61,12 @@ export function PropertiesPanel() {
   const hidden = new Set(view.hiddenChroms)
   const drawn = header?.segments.filter((s) => !hidden.has(s.chrom) && (view.focusCell === null || s.cell_id === view.focusCell))
   const autoR = layer.geometry ? autoTubeRadius(layer.geometry) : null
+  // tube mode silently falls back to lines for big selections — say so here
+  const drawnPoints = drawn ? drawn.reduce((a, s) => a + s.n_points, 0) : 0
+  const tubeFallback =
+    st.mode === 'tube' && header && drawn && !tubeAllowed({ ...header, n_segments: drawn.length, n_points: drawnPoints, segments: drawn }, st.highQuality)
+      ? drawn.length
+      : 0
 
   return (
     <aside className="props panel">
@@ -79,6 +85,20 @@ export function PropertiesPanel() {
           </button>
         ))}
       </div>
+      {tubeFallback && (
+        <div className="note small">
+          {hasCells && view.focusCell === null ? (
+            <>
+              All cells are drawn as <b>lines</b>: at this zoom a tube is thinner than a pixel, and {tubeFallback.toLocaleString('en-US')} traces exceed
+              the tube budget. Select a cell to see tubes.
+            </>
+          ) : (
+            <>
+              Drawn as <b>lines</b>: {tubeFallback.toLocaleString('en-US')} traces exceed the tube budget. Create a subset or select a cell to see tubes.
+            </>
+          )}
+        </div>
+      )}
 
       <label>{overview ? 'Colour · all cells' : view.focusCell ? `Colour · cell ${view.focusCell}` : 'Colour'}</label>
       <div className="seg">

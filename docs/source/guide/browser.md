@@ -55,18 +55,27 @@ rna_table=…)`, see the ChromData guide):
   coloured by gene, with a legend to show / hide genes (double-click to
   show one) and a marker-size slider.  Other cells' points follow the
   *others* opacity; clicking a point shows its gene, cell and intensity.
-- **Embedding** (viewport toolbar) opens a 2-D view of `cd.cellm`
-  embeddings (e.g. `rna_umap`, `rna_tsne`, `rna_pca` from
-  `uchrom.emb.embed_cells`; any two PCs for PCA).  Dots use the same
-  colouring as the 3-D overview, the focused cell is ringed, and clicking
-  a dot focuses that cell in 3-D.  The header switches the layout — **Float** (window over the 3-D view),
-  **Tab** (full-size tab next to *3D*) or **Split** (side by side, drag the
-  divider); the choice is remembered in the browser.
+- **Views are equal panes.**  The centre area is a workspace of views —
+  *3D* and *Embedding* (2-D view of `cd.cellm` embeddings such as
+  `rna_umap`, `rna_tsne`, `rna_pca` from `uchrom.emb.embed_cells`; any two
+  PCs for PCA).  Each pane's header picks its view type and holds its own
+  controls; **+ View** adds panes (e.g. two 3-D cameras, or UMAP next to
+  PCA) and the workspace bar switches the layout: **Tabs**, **Columns**,
+  **Rows** or **Grid** (drag the dividers; the arrangement is remembered
+  in the browser).  Datasets with embeddings open as 3D | Embedding.
+  Selection is shared: clicking a dot or a nucleus focuses that cell in
+  every pane, and the focus bar (◀ cell ▶, *others* opacity) and colour
+  scale live in the workspace bar, not in any one view.
 - **Max bond** (Style) breaks polylines between consecutive spots farther
   apart than a threshold — by default 10× the median spacing.  Imaging
   traces contain duplicated loci and, in Takei 2021, per-chromosome
   "unassigned" traces (`…_-1`); without the cut these are drawn as long
   lines across the nucleus.  Isolated spots are still drawn.
+- **Tubes vs lines.**  In the all-cells view a tube (≈0.1 µm across) is
+  thinner than a pixel and thousands of traces exceed the tube budget, so
+  the overview is always drawn with lines — the Style panel says so.
+  Tubes (radius 0.35× the median spot spacing) appear once a cell is
+  focused.
 
 Trace statistics, multi-canvas and sessions are desktop-only for now.
 

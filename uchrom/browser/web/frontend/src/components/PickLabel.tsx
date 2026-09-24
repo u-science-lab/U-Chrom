@@ -3,10 +3,11 @@ import { useStore } from '../store'
 import { isPointPick } from '../types'
 import { fmtNum } from './format'
 
-export function PickLabel() {
+/** Details of the clicked trace / point, shown in the pane where it was clicked. */
+export function PickLabel({ paneId }: { paneId?: string }) {
   const pick = useStore((s) => s.pick)
   const layer = useStore((s) => s.layers.find((l) => !isPointPick(s.pick) && l.id === s.pick?.layerId))
-  if (!pick) return null
+  if (!pick || (paneId && pick.paneId && pick.paneId !== paneId)) return null
   if (isPointPick(pick)) {
     return (
       <div className="pick-label" style={{ left: pick.screen.x + 14, top: pick.screen.y + 14 }}>

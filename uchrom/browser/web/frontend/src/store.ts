@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { DEFAULT_STYLE, removeCascade, uniqueName } from './layers'
 import { isPointPick } from './types'
+import { defaultWorkspace, parseWorkspace, type WorkspaceState } from './workspace'
 import type { CellInfo, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo, PointSet } from './types'
 
 let nextId = 1
@@ -30,10 +31,6 @@ export interface DatasetView {
   pointSize: number
   /** cut bonds longer than this ('auto' = 10 × median bond, null = never) */
   maxBond: 'auto' | number | null
-  /** 2-D embedding panel */
-  embeddingOpen: boolean
-  embeddingKey: string | null
-  embeddingDims: [number, number]
 }
 
 export const DEFAULT_VIEW: DatasetView = {
@@ -47,43 +44,29 @@ export const DEFAULT_VIEW: DatasetView = {
   hiddenLabels: {},
   pointSize: 7,
   maxBond: 'auto',
-  embeddingOpen: false,
-  embeddingKey: null,
-  embeddingDims: [0, 1],
 }
 
 /** Key of a cached cell-field vector. */
 export const fieldKey = (datasetId: string, field: string) => `${datasetId}\u0000${field}`
 
-/** Where the embedding view lives: floating over the 3-D view, a tab, or a split pane. */
-export type EmbeddingLayout = 'float' | 'tab' | 'split'
+const WS_KEY = 'uchrom.browser.workspace'
 
-export interface UiPrefs {
-  embeddingLayout: EmbeddingLayout
-  /** active tab in 'tab' layout */
-  activeTab: '3d' | 'embedding'
-  /** width fraction of the 3-D pane in 'split' layout */
-  splitFrac: number
-}
-
-const UI_KEY = 'uchrom.browser.ui'
-const DEFAULT_UI: UiPrefs = { embeddingLayout: 'float', activeTab: '3d', splitFrac: 0.6 }
-
-/** Layout prefs survive reloads (per viewer; storage may be unavailable). */
-function loadUi(): UiPrefs {
+/** Saved workspace (per viewer; storage may be unavailable or hold junk). */
+export function loadWorkspace(): WorkspaceState | null {
   try {
-    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(UI_KEY) : null
-    return raw ? { ...DEFAULT_UI, ...JSON.parse(raw) } : DEFAULT_UI
+    localStorage.removeItem('uchrom.browser.ui') // pre-workspace float/tab/split prefs
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(WS_KEY) : null
+    return raw ? parseWorkspace(JSON.parse(raw)) : null
   } catch {
-    return DEFAULT_UI
+    return null
   }
 }
 
-function saveUi(ui: UiPrefs) {
+function saveWorkspace(ws: WorkspaceState) {
   try {
-    localStorage.setItem(UI_KEY, JSON.stringify(ui))
+    localStorage.setItem(WS_KEY, JSON.stringify(ws))
   } catch {
-    /* private mode / blocked storage: prefs just don't persist */
+    /* private mode / blocked storage: layout just doesn't persist */
   }
 }
 
@@ -124,8 +107,15 @@ export interface AppState {
   setStatus(msg: string | null): void
   setError(msg: string | null): void
   resetView(): void
-  ui: UiPrefs
-  setUi(patch: Partial<UiPrefs>): void
+  /** views laid out as equal panes */
+  workspace: WorkspaceState
+  /** false until the user changes the layout (or one was saved): until then
+   *  the default follows the data (with / without embeddings) */
+  workspaceTouched: boolean
+  /** apply the data-dependent default unless the user has a layout */
+  ensureDefaultWorkspace(hasEmbeddings: boolean): void
+  /** replace the workspace (used by the pane actions); persists it */
+  setWorkspace(update: (ws: WorkspaceState) => WorkspaceState): void
   setCells(datasetId: string, cells: CellInfo[]): void
   focusCell(cellId: string | null): void
   stepCell(delta: number): void
@@ -143,7 +133,6 @@ export interface AppState {
   setHiddenLabels(set: string, labels: string[]): void
   setPointSize(px: number): void
   setMaxBond(v: 'auto' | number | null): void
-  setEmbedding(patch: Partial<Pick<DatasetView, 'embeddingOpen' | 'embeddingKey' | 'embeddingDims'>>): void
 }
 
 /** Values of the active overview field, if loaded. */
@@ -177,6 +166,8 @@ export function activeView(s: Pick<AppState, 'views' | 'activeDatasetId'>): Data
 
 const patchLayer = (layers: Layer[], id: string, patch: Partial<Layer>) =>
   layers.map((l) => (l.id === id ? { ...l, ...patch } : l))
+
+const savedWorkspace = loadWorkspace()
 
 export const useStore = create<AppState>((set, get) => {
   const patchView = (patch: Partial<DatasetView>, extra: Partial<AppState> = {}) => {
@@ -321,12 +312,19 @@ export const useStore = create<AppState>((set, get) => {
   setError(error) {
     set({ error })
   },
-  ui: loadUi(),
-  setUi(patch) {
-    const ui = { ...get().ui, ...patch }
-    if (patch.splitFrac !== undefined) ui.splitFrac = Math.min(0.85, Math.max(0.15, patch.splitFrac))
-    set({ ui })
-    saveUi(ui)
+  workspace: savedWorkspace ?? defaultWorkspace(false),
+  workspaceTouched: savedWorkspace !== null,
+  ensureDefaultWorkspace(hasEmbeddings) {
+    const s = get()
+    if (s.workspaceTouched) return
+    const ws = defaultWorkspace(hasEmbeddings)
+    if (ws.panes.length !== s.workspace.panes.length) set({ workspace: ws })
+  },
+  setWorkspace(update) {
+    const workspace = update(get().workspace)
+    if (workspace === get().workspace) return
+    set({ workspace, workspaceTouched: true })
+    saveWorkspace(workspace)
   },
   resetView() {
     set({ resetViewToken: get().resetViewToken + 1 })
@@ -397,9 +395,6 @@ export const useStore = create<AppState>((set, get) => {
   },
   setMaxBond(maxBond) {
     patchView({ maxBond })
-  },
-  setEmbedding(patch) {
-    patchView(patch)
   },
   }
 })

@@ -193,6 +193,8 @@ export interface Layer {
 /** A clicked chromatin spot. */
 export interface TracePick {
   kind?: 'trace'
+  /** workspace pane where the pick happened (label + highlight only there) */
+  paneId?: string
   layerId: string
   pointIndex: number
   segment: SegmentInfo
@@ -203,6 +205,7 @@ export interface TracePick {
 /** A clicked point of a point set (e.g. an RNA spot). */
 export interface PointPick {
   kind: 'point'
+  paneId?: string
   set: string
   index: number
   label: string

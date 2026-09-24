@@ -29,11 +29,11 @@ describe('findSegment', () => {
 
 describe('tube sizing', () => {
   const h = { ...sampleHeader(), n_points: 5, n_segments: 2 }
-  it('auto radius is a quarter of the median bond length', () => {
-    // bonds of length 1, 2, 4 → median 2 → radius 0.5, independent of bbox size
+  it('auto radius is 0.35 × the median bond length', () => {
+    // bonds of length 1, 2, 4 → median 2 → radius 0.7, independent of bbox size
     const positions = Float32Array.from([0, 0, 0, 1, 0, 0, 3, 0, 0, 100, 0, 0, 100, 4, 0])
     const offsets = Uint32Array.from([0, 3, 5])
-    expect(autoTubeRadius({ positions, offsets, header: h })).toBeCloseTo(0.5)
+    expect(autoTubeRadius({ positions, offsets, header: h })).toBeCloseTo(0.7)
   })
   it('falls back to 0.3% of the bbox diagonal without bonds', () => {
     expect(bboxDiagonal(h.bbox)).toBeCloseTo(5)

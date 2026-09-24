@@ -43,7 +43,7 @@ export function buildLayerObject(geom: Geometry, style: LayerStyle, opts: ColorO
   let warning: string | null = null
   if (mode === 'tube' && !tubeAllowed(geom.header, style.highQuality)) {
     mode = 'line'
-    warning = `${geom.header.n_segments.toLocaleString('en-US')} traces are too many for tubes — drawing lines (select a cell to see tubes)`
+    warning = `${geom.header.n_segments.toLocaleString('en-US')} polyline segments exceed the tube budget — drawing lines (select a cell to see tubes)`
   }
   if (mode === 'points') return buildPoints(geom, colors, style, warning)
   if (mode === 'tube') return buildTubes(geom, colors, style, warning)

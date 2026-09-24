@@ -10,9 +10,6 @@ import { DEFAULT_STYLE } from '../layers'
 import { activeFieldValues, activeView, useStore } from '../store'
 import { fieldRange } from '../colors'
 import { isPointPick, type ColorMode, type Geometry, type LayerStyle, type PointSet, type SegmentInfo } from '../types'
-import { ColorBar } from './ColorBar'
-import { EmbeddingPanel } from './EmbeddingPanel'
-import { FocusBar } from './FocusBar'
 import { PickLabel } from './PickLabel'
 
 type Role = 'main' | 'context'
@@ -113,8 +110,15 @@ function drawnGeometries(t: Three): Geometry[] {
   return out
 }
 
-export function Viewport() {
+/**
+ * 3-D view of the active dataset — one instance per workspace pane.  Several
+ * 3-D panes share the store (layers, focus, colours) but each has its own
+ * renderer and camera.  `resetKey` refits this pane only.
+ */
+export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; resetKey?: number }) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const paneRef = useRef(paneId)
+  paneRef.current = paneId
   const tipRef = useRef<HTMLDivElement>(null)
   const threeRef = useRef<Three | null>(null)
   const fittedRef = useRef(false)
@@ -124,7 +128,6 @@ export function Viewport() {
   const resetViewToken = useStore((s) => s.resetViewToken)
   const flyToken = useStore((s) => s.flyToken)
   const cells = useStore((s) => s.cells)
-  const hasEmbeddings = useStore((s) => (s.datasets.find((d) => d.id === s.activeDatasetId)?.embeddings?.length ?? 0) > 0)
   const fieldValues = useStore(activeFieldValues)
   const pointSets = useStore((s) => (s.activeDatasetId ? s.pointSets[s.activeDatasetId] : undefined))
   const setPick = useStore((s) => s.setPick)
@@ -212,7 +215,7 @@ export function Viewport() {
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y)
       down = null
       if (moved > 5) return
-      pickAt(t, e)
+      pickAt(t, e, paneRef.current)
       hideHover()
     }
     // Hover: at most one raycast per frame, none while dragging.
@@ -234,26 +237,10 @@ export function Viewport() {
           if (hoverEvt) hoverAt(t, hoverEvt, tip)
         })
     }
-    const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement | null)?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-      const st = useStore.getState()
-      if (e.key === 'Escape') {
-        if (st.pick) st.setPick(null)
-        else st.focusCell(null)
-      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-        st.stepCell(1)
-        e.preventDefault()
-      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-        st.stepCell(-1)
-        e.preventDefault()
-      }
-    }
     renderer.domElement.addEventListener('pointerdown', onDown)
     renderer.domElement.addEventListener('pointerup', onUp)
     renderer.domElement.addEventListener('pointermove', onMove)
     renderer.domElement.addEventListener('pointerleave', hideHover)
-    window.addEventListener('keydown', onKey)
 
     return () => {
       cancelAnimationFrame(raf)
@@ -263,7 +250,6 @@ export function Viewport() {
       renderer.domElement.removeEventListener('pointermove', onMove)
       renderer.domElement.removeEventListener('pointerleave', hideHover)
       cancelAnimationFrame(hoverRaf)
-      window.removeEventListener('keydown', onKey)
       for (const e of t.entries.values()) for (const p of e.parts) p.built.dispose()
       for (const e of t.points.values()) for (const p of e.parts) p.built.dispose()
       controls.dispose()
@@ -420,7 +406,7 @@ export function Viewport() {
       jumpTo(t, box)
       fittedRef.current = true
     }
-  }, [resetViewToken, activeDatasetId])
+  }, [resetViewToken, activeDatasetId, resetKey])
 
   // Focus change → fly to the focused cell (or back to everything).
   useEffect(() => {
@@ -439,7 +425,7 @@ export function Viewport() {
     const t = threeRef.current
     if (!t) return
     t.highlight.visible = false
-    if (!pick) return
+    if (!pick || (pick.paneId && pick.paneId !== paneId)) return
     if (isPointPick(pick)) {
       t.highlight.position.set(...pick.position)
       t.highlight.scale.setScalar(Math.max(t.camera.position.distanceTo(t.controls.target) * 0.01, 1e-6))
@@ -453,29 +439,12 @@ export function Viewport() {
     t.highlight.position.set(p[3 * i], p[3 * i + 1], p[3 * i + 2])
     t.highlight.scale.setScalar(Math.max(bboxDiagonal(main.geometry.header.bbox) * 0.006, 1e-6))
     t.highlight.visible = true
-  }, [pick])
+  }, [pick, paneId])
 
   return (
     <div className="viewport" ref={hostRef}>
-      <FocusBar />
-      <ColorBar />
-      <PickLabel />
+      <PickLabel paneId={paneId} />
       <div className="hover-tip" ref={tipRef} />
-      <div className="viewport-tools">
-        {hasEmbeddings && (
-          <button
-            className={view.embeddingOpen ? 'active' : ''}
-            onClick={() => useStore.getState().setEmbedding({ embeddingOpen: !view.embeddingOpen })}
-            title="Show a 2-D embedding of the cells (UMAP / t-SNE / PCA)"
-          >
-            Embedding
-          </button>
-        )}
-        <button onClick={() => useStore.getState().resetView()} title="Fit everything drawn">
-          Reset view
-        </button>
-      </div>
-      <EmbeddingPanel />
     </div>
   )
 }
@@ -558,7 +527,7 @@ const hasManyCells = (store: ReturnType<typeof useStore.getState>) =>
  * overview of a multi-cell dataset) focuses that cell; a trace or point of
  * the focused cell — or of data without cells — shows its details.
  */
-function pickAt(t: Three, e: PointerEvent) {
+function pickAt(t: Three, e: PointerEvent, paneId: string) {
   const store = useStore.getState()
   const view = activeView(store)
   const hit = hitAt(t, e.clientX, e.clientY)
@@ -586,6 +555,7 @@ function pickAt(t: Three, e: PointerEvent) {
       position: [p[3 * hit.index], p[3 * hit.index + 1], p[3 * hit.index + 2]],
       values,
       screen,
+      paneId,
     })
     return
   }
@@ -596,6 +566,7 @@ function pickAt(t: Three, e: PointerEvent) {
     segment: hit.segment,
     binStart: hit.part.geometry.starts[hit.pointIndex],
     screen,
+    paneId,
   })
 }
 

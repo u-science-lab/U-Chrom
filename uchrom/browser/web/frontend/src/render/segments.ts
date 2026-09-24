@@ -35,7 +35,7 @@ export function bboxDiagonal(bbox: GeometryHeader['bbox']): number {
 }
 
 /**
- * Default tube radius: a quarter of the median distance between consecutive
+ * Default tube radius: 0.35 × the median distance between consecutive
  * spots, so tubes look the same whether one trace or a whole field of view
  * (hundreds of µm across) is loaded.  Falls back to 0.3% of the bbox
  * diagonal when there are no bonds (only single-spot segments).
@@ -52,7 +52,7 @@ export function autoTubeRadius(geom: Pick<Geometry, 'positions' | 'offsets' | 'h
     }
   }
   const positive = bonds.filter((d) => d > 0).sort((x, y) => x - y)
-  if (positive.length) return positive[Math.floor(positive.length / 2)] * 0.25
+  if (positive.length) return positive[Math.floor(positive.length / 2)] * 0.35
   return Math.max(bboxDiagonal(geom.header.bbox) * 0.003, 1e-6)
 }
 
