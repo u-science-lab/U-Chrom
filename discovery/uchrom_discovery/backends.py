@@ -15,11 +15,15 @@ import shutil
 import subprocess
 import tempfile
 import time
-import tomllib
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Protocol, Sequence
+
+try:
+    import tomllib
+except ImportError:  # Python < 3.11
+    import tomli as tomllib
 
 from .ideas import DiscoveryIdea
 from .llm import (

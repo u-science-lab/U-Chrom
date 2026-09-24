@@ -127,8 +127,10 @@ Layout::
     ├── traces/              group
     ├── cellm/               group of (n_cells, ...) ndarrays per key
     ├── layers/              group of (n_spots, 3) ndarrays per key
-    ├── results/             group — DataFrames as sub-groups,
-    │                         arrays as datasets
+    ├── results/             group — typed entries (``_type`` attr):
+    │                         DataFrame / Series / nested dict as
+    │                         sub-groups, ndarrays as datasets,
+    │                         scalars & lists as JSON string datasets
     └── uns/                 nested group — scalars as attrs,
                               dicts as sub-groups
 
@@ -181,6 +183,7 @@ PathLike = Union[str, Path]
 _SPOTS_REQUIRED_COLUMNS = ("chrom", "start", "end", "trace_id")
 _CATEGORICAL_COLUMNS = ("chrom", "trace_id", "cell_id")
 _UNS_JSON_PREFIX = "__uchrom_json__:"
+_SERIES_COLUMN = "_value"
 
 # ``.h5cd`` on-disk format version. Semantics (MAJOR.MINOR):
 #   MAJOR bump  — breaking change: a reader for the old MAJOR cannot read the
@@ -193,7 +196,11 @@ _UNS_JSON_PREFIX = "__uchrom_json__:"
 #      a non-trivial DataFrame index (e.g. ``cells`` keyed by ``cell_id``)
 #      previously lost that index on round-trip; 1.1 preserves it.  1.0
 #      readers ignore the extra dataset and recover the old behaviour.
-FORMAT_VERSION = "1.1"
+# 1.2: typed ``results`` entries (``_type`` attr: dataframe / series / dict /
+#      json).  Nested dicts, Series, scalars and lists now round-trip; before
+#      1.2 anything other than a DataFrame or ndarray was silently dropped on
+#      write.  1.1 readers still see DataFrames and arrays unchanged.
+FORMAT_VERSION = "1.2"
 _SUPPORTED_MAJOR = 1
 
 
@@ -476,55 +483,31 @@ class ChromData:
         self.uns[key] = records
         return records
 
+    # ------------------------------------------------------------------
+    # Deprecated auto-discovery hooks — moved to ``uchrom_discovery``
+    # ------------------------------------------------------------------
+
     @property
     def discovery_schema(self) -> dict:
-        """Agent-readable auto-discovery schema for this ``ChromData``.
-
-        If a schema is stored in ``uns['auto_discovery_schema']`` it is
-        parsed and returned.  Otherwise a fresh in-memory schema is built
-        without mutating ``uns``.
-        """
-        from uchrom.auto_discovery.schema import (
-            DISCOVERY_SCHEMA_KEY,
-            build_discovery_schema,
-            unpack_schema,
-        )
-
-        raw = self.uns.get(DISCOVERY_SCHEMA_KEY)
-        if raw is not None:
-            return unpack_schema(raw)
-        return build_discovery_schema(self)
+        """Deprecated: use ``uchrom_discovery.get_discovery_schema(cd)``."""
+        return _discovery("get_discovery_schema", "discovery_schema")(self)
 
     @property
     def auto_discovery_schema(self) -> dict:
-        """Alias for :attr:`discovery_schema`."""
-        return self.discovery_schema
+        """Deprecated: use ``uchrom_discovery.get_discovery_schema(cd)``."""
+        return _discovery("get_discovery_schema", "auto_discovery_schema")(self)
 
     def build_discovery_schema(self, *, store: bool = True, **kwargs) -> dict:
-        """Build the auto-discovery schema, optionally storing it in ``uns``.
-
-        The stored representation is an HDF5-friendly JSON payload under
-        ``uns['auto_discovery_schema']``, so it round-trips with ``.h5cd``.
-        """
-        from uchrom.auto_discovery.schema import (
-            DISCOVERY_SCHEMA_KEY,
-            build_discovery_schema,
-            pack_schema,
+        """Deprecated: use ``uchrom_discovery.build_discovery_schema(cd, ...)``."""
+        return _discovery("build_discovery_schema", "build_discovery_schema")(
+            self, store=store, **kwargs
         )
 
-        schema = build_discovery_schema(self, **kwargs)
-        if store:
-            self.uns[DISCOVERY_SCHEMA_KEY] = pack_schema(schema)
-        return schema
-
     def update_discovery_schema(self, schema: Optional[dict] = None, **kwargs) -> dict:
-        """Store a supplied or newly built auto-discovery schema in ``uns``."""
-        from uchrom.auto_discovery.schema import DISCOVERY_SCHEMA_KEY, pack_schema
-
-        if schema is None:
-            return self.build_discovery_schema(store=True, **kwargs)
-        self.uns[DISCOVERY_SCHEMA_KEY] = pack_schema(schema)
-        return schema
+        """Deprecated: use ``uchrom_discovery.store_discovery_schema(cd, ...)``."""
+        return _discovery("store_discovery_schema", "update_discovery_schema")(
+            self, schema, **kwargs
+        )
 
     def validate_discovery_schema(
         self,
@@ -532,23 +515,16 @@ class ChromData:
         *,
         raise_on_error: bool = False,
     ) -> List[str]:
-        """Validate a discovery schema against this ``ChromData``.
-
-        Returns a list of issues.  If ``raise_on_error=True``, raises
-        ``ValueError`` when any issue is found.
-        """
-        from uchrom.auto_discovery.schema import validate_discovery_schema
-
-        issues = validate_discovery_schema(schema or self.discovery_schema, cdata=self)
-        if issues and raise_on_error:
-            raise ValueError("; ".join(issues))
-        return issues
+        """Deprecated: use ``uchrom_discovery.validate_discovery_schema(...)``."""
+        return _discovery("validate_discovery_schema", "validate_discovery_schema")(
+            schema, self, raise_on_error=raise_on_error
+        )
 
     def describe_for_agent(self, *, max_items: int = 40) -> str:
-        """Return a compact prompt-ready description of available data."""
-        from uchrom.auto_discovery.schema import schema_to_agent_context
-
-        return schema_to_agent_context(self.discovery_schema, max_items=max_items)
+        """Deprecated: use ``uchrom_discovery.describe_for_agent(cd)``."""
+        return _discovery("describe_for_agent", "describe_for_agent")(
+            self, max_items=max_items
+        )
 
     # ------------------------------------------------------------------
     # Validation
@@ -1374,6 +1350,26 @@ class ChromData:
 # Utilities
 # ======================================================================
 
+def _discovery(func_name: str, method_name: str):
+    """Resolve a ``uchrom_discovery`` function for a deprecated ChromData hook."""
+    import warnings
+
+    warnings.warn(
+        f"ChromData.{method_name} is deprecated; use "
+        f"uchrom_discovery.{func_name}(cd, ...) instead.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    try:
+        import uchrom_discovery
+    except ImportError as exc:
+        raise ImportError(
+            f"ChromData.{method_name} needs the separate 'uchrom-discovery' "
+            f"package (`pip install -e discovery/` from the U-Chrom repository)."
+        ) from exc
+    return getattr(uchrom_discovery, func_name)
+
+
 def _clean_metadata_record(record: Any) -> dict:
     """Return a JSON-friendly metadata record with empty values removed."""
     if not isinstance(record, Mapping):
@@ -1601,29 +1597,112 @@ def _read_dict_of_arrays(f, name: str) -> dict:
     return {key: grp[key][:] for key in grp}
 
 
-def _write_results(f, name: str, results: dict):
-    """Write results dict (DataFrames and arrays) to HDF5."""
+def _write_results(f, name: str, results: dict, _path: str = "results"):
+    """Write a results dict to HDF5, recursing into nested dicts.
+
+    Format 1.2: every entry carries a ``_type`` attr so the reader can
+    restore it faithfully —
+
+    * ``dataframe`` — sub-group, one dataset per column (1.0 layout)
+    * ``series``    — as ``dataframe`` with a single column
+    * ``dict``      — sub-group, written recursively
+    * ``json``      — scalar string dataset holding a JSON document
+                      (str / int / float / bool / None / list / tuple)
+    * plain dataset (no ``_type``) — ndarray
+
+    Values that fit none of these raise ``TypeError`` instead of being
+    silently dropped (the pre-1.2 behaviour).
+    """
     grp = f.create_group(name)
+    grp.attrs["_type"] = "dict"
     for key, val in results.items():
+        key = str(key)
+        where = f"{_path}[{key!r}]"
+        if "/" in key or key in (".", ""):
+            raise ValueError(f"{where}: result keys must be non-empty and contain no '/'.")
         if isinstance(val, pd.DataFrame):
             _write_dataframe(grp, key, val)
+            grp[key].attrs["_type"] = "dataframe"
+        elif isinstance(val, pd.Series):
+            _write_dataframe(grp, key, val.to_frame(name=_SERIES_COLUMN))
+            grp[key].attrs["_type"] = "series"
+            if val.name is not None:
+                grp[key].attrs["_series_name"] = str(val.name)
+        elif isinstance(val, Mapping):
+            _write_results(grp, key, val, _path=where)
         elif isinstance(val, np.ndarray):
+            if val.dtype == object:
+                raise TypeError(
+                    f"{where}: object-dtype arrays cannot be stored in .h5cd; "
+                    f"convert to a numeric/string dtype or a list first."
+                )
             grp.create_dataset(key, data=val)
+        else:
+            if isinstance(val, np.generic):
+                val = val.item()
+            try:
+                doc = json.dumps(_results_jsonable(val), allow_nan=True)
+            except TypeError as exc:
+                raise TypeError(
+                    f"{where}: cannot serialise value of type "
+                    f"{type(val).__name__} to .h5cd results. Supported: "
+                    f"DataFrame, Series, ndarray, dict, and JSON-compatible "
+                    f"scalars / lists."
+                ) from exc
+            ds = grp.create_dataset(key, data=doc)
+            ds.attrs["_type"] = "json"
+            if isinstance(val, tuple):
+                ds.attrs["_pytype"] = "tuple"
+
+
+def _results_jsonable(value: Any) -> Any:
+    """Normalise numpy scalars / nested containers for ``json.dumps``."""
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, (list, tuple)):
+        return [_results_jsonable(v) for v in value]
+    if isinstance(value, Mapping):
+        return {str(k): _results_jsonable(v) for k, v in value.items()}
+    return value
 
 
 def _read_results(f, name: str) -> dict:
-    """Read results dict from HDF5."""
+    """Read a results dict from HDF5 (inverse of :func:`_write_results`).
+
+    Pre-1.2 files have no ``_type`` attrs: groups are DataFrames and
+    datasets are arrays, which is exactly the fallback below.
+    """
     if name not in f:
         return {}
     grp = f[name]
     results = {}
     for key in grp:
         item = grp[key]
-        if isinstance(item, type(grp)):  # is a group → DataFrame
-            results[key] = _read_dataframe(grp, key)
+        kind = _attr_str(item.attrs.get("_type"))
+        if isinstance(item, type(grp)):
+            if kind == "dict":
+                results[key] = _read_results(grp, key)
+            elif kind == "series":
+                series = _read_dataframe(grp, key)[_SERIES_COLUMN]
+                series.name = _attr_str(item.attrs.get("_series_name"))
+                results[key] = series
+            else:  # "dataframe" or legacy (untyped) group
+                results[key] = _read_dataframe(grp, key)
+        elif kind == "json":
+            raw = item[()]
+            value = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+            if _attr_str(item.attrs.get("_pytype")) == "tuple":
+                value = tuple(value)
+            results[key] = value
         else:
             results[key] = item[:]
     return results
+
+
+def _attr_str(value: Any) -> Optional[str]:
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return value
 
 
 def _write_uns(f, name: str, uns: dict):

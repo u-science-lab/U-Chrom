@@ -5,6 +5,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from uchrom_discovery.schema import (
+    build_discovery_schema,
+    describe_for_agent,
+    get_discovery_schema,
+    validate_discovery_schema,
+)
+
 
 def _make_cd():
     from uchrom import ChromData
@@ -38,26 +45,26 @@ def _make_cd():
 
 def test_discovery_schema_roundtrips_inside_h5cd(tmp_path):
     from uchrom import ChromData
-    from uchrom.auto_discovery.schema import DISCOVERY_SCHEMA_KEY
+    from uchrom_discovery.schema import DISCOVERY_SCHEMA_KEY
 
     cdata = _make_cd()
-    schema = cdata.build_discovery_schema(store=True)
+    schema = build_discovery_schema(cdata, store=True)
 
     assert DISCOVERY_SCHEMA_KEY in cdata.uns
     assert schema["modalities"]["chromatin_tracing"]["present"]
     assert schema["modalities"]["if_tracks"]["present"]
     assert schema["catalogs"]["tracks"]["values"] == ["H3K27me3", "LaminB1"]
     assert "statistical_hypothesis_test" in schema["recommended_verification"]
-    assert cdata.validate_discovery_schema() == []
+    assert validate_discovery_schema(cdata=cdata) == []
 
     path = tmp_path / "schema.h5cd"
     cdata.write(path)
     out = ChromData.read(path)
 
     assert DISCOVERY_SCHEMA_KEY in out.uns
-    assert out.discovery_schema["schema_hash"] == schema["schema_hash"]
-    assert out.discovery_schema["catalogs"]["cell_types"]["counts"]["Granule"] == 1
-    assert "H3K27me3" in out.describe_for_agent(max_items=10)
+    assert get_discovery_schema(out)["schema_hash"] == schema["schema_hash"]
+    assert get_discovery_schema(out)["catalogs"]["cell_types"]["counts"]["Granule"] == 1
+    assert "H3K27me3" in describe_for_agent(out, max_items=10)
 
 
 def test_discovery_schema_exposes_enriched_feature_groups():
@@ -86,8 +93,8 @@ def test_discovery_schema_exposes_enriched_feature_groups():
         {"feature_group": "peaks", "features": ["peak.h3k27me3_overlap"]},
     ]
 
-    schema = cdata.build_discovery_schema(store=True)
-    context = cdata.describe_for_agent(max_items=10)
+    schema = build_discovery_schema(cdata, store=True)
+    context = describe_for_agent(cdata, max_items=10)
 
     assert schema["modalities"]["sequence_features"]["present"]
     assert schema["modalities"]["genome_annotations"]["present"]
@@ -118,7 +125,7 @@ def test_discovery_schema_exposes_enriched_feature_groups():
 
 def test_discovery_schema_includes_linked_anndata():
     ad = pytest.importorskip("anndata")
-    from uchrom.auto_discovery import DiscoveryIdea, review_idea_against_schema
+    from uchrom_discovery import DiscoveryIdea, review_idea_against_schema
 
     cdata = _make_cd()
     adata = ad.AnnData(
@@ -128,12 +135,12 @@ def test_discovery_schema_includes_linked_anndata():
     )
     cdata.linked_adata = adata
 
-    schema = cdata.build_discovery_schema(store=True)
+    schema = build_discovery_schema(cdata, store=True)
 
     assert schema["modalities"]["rna_expression"]["present"]
     assert schema["linked_adata"]["shape"] == [2, 2]
     assert schema["catalogs"]["genes"]["values"] == ["Aldoc", "Pcp2"]
-    assert "linked_adata" in cdata.describe_for_agent()
+    assert "linked_adata" in describe_for_agent(cdata)
 
     idea = DiscoveryIdea(
         idea_title="Pcp2 expression linked chromatin phenotype",
@@ -180,8 +187,8 @@ def test_discovery_schema_includes_references_and_user_annotations(tmp_path):
     assert ref["reference_id"].startswith("ref_")
     assert ann["annotation_id"].startswith("ann_")
 
-    schema = cdata.build_discovery_schema(store=True)
-    context = cdata.describe_for_agent(max_items=10)
+    schema = build_discovery_schema(cdata, store=True)
+    context = describe_for_agent(cdata, max_items=10)
 
     assert schema["summary"]["n_references"] == 1
     assert schema["summary"]["n_user_annotations"] == 1
@@ -201,12 +208,12 @@ def test_discovery_schema_includes_references_and_user_annotations(tmp_path):
 
     assert out.dataset_references[0]["reference_id"] == ref["reference_id"]
     assert out.user_annotations[0]["annotation_id"] == ann["annotation_id"]
-    assert out.discovery_schema["references"][0]["doi"] == "10.0000/example"
-    assert out.validate_discovery_schema() == []
+    assert get_discovery_schema(out)["references"][0]["doi"] == "10.0000/example"
+    assert validate_discovery_schema(cdata=out) == []
 
 
 def test_refresh_literature_claims_for_iteration_uses_cached_and_schema_knowledge(tmp_path):
-    from uchrom.auto_discovery import (
+    from uchrom_discovery import (
         build_idea_graph_from_run,
         refresh_literature_claims_for_iteration,
     )
@@ -224,7 +231,7 @@ def test_refresh_literature_claims_for_iteration_uses_cached_and_schema_knowledg
         target="linked_adata",
         text="Treat RNA and chromatin tracing as cell-level matched modalities.",
     )
-    schema = cdata.build_discovery_schema(store=False)
+    schema = build_discovery_schema(cdata, store=False)
     seed_claims = tmp_path / "seed_claims.jsonl"
     seed_claims.write_text(
         json.dumps({
@@ -260,10 +267,10 @@ def test_refresh_literature_claims_for_iteration_uses_cached_and_schema_knowledg
 
 
 def test_review_idea_against_schema_accepts_and_rejects_fields():
-    from uchrom.auto_discovery import DiscoveryIdea, review_idea_against_schema
+    from uchrom_discovery import DiscoveryIdea, review_idea_against_schema
 
     cdata = _make_cd()
-    schema = cdata.build_discovery_schema(store=False)
+    schema = build_discovery_schema(cdata, store=False)
     idea = DiscoveryIdea(
         idea_title="Granule H3K27me3 compaction",
         biological_hypothesis="H3K27me3-high bins are compacted in Granule cells.",
@@ -289,7 +296,7 @@ def test_review_idea_against_schema_accepts_and_rejects_fields():
 
 
 def _make_idea(*, title: str = "Granule H3K27me3 compaction", cell_type: str = "Granule"):
-    from uchrom.auto_discovery import DiscoveryIdea
+    from uchrom_discovery import DiscoveryIdea
 
     return DiscoveryIdea(
         idea_title=title,
@@ -313,7 +320,7 @@ def _make_idea(*, title: str = "Granule H3K27me3 compaction", cell_type: str = "
 
 
 def test_notebook_scaffold(tmp_path):
-    from uchrom.auto_discovery import create_exploration_notebook
+    from uchrom_discovery import create_exploration_notebook
 
     idea = _make_idea()
     idea.idea_markdown = (
@@ -341,10 +348,10 @@ def test_notebook_scaffold(tmp_path):
 
 
 def test_pantheon_notebook_prompt_requires_live_notebook_editing(tmp_path):
-    from uchrom.auto_discovery.pantheon import _notebook_prompt
+    from uchrom_discovery.pantheon import _notebook_prompt
 
     cdata = _make_cd()
-    schema = cdata.build_discovery_schema(store=False)
+    schema = build_discovery_schema(cdata, store=False)
     idea = _make_idea()
 
     prompt = _notebook_prompt(
@@ -403,7 +410,7 @@ def test_pantheon_notebook_prompt_requires_live_notebook_editing(tmp_path):
 
 
 def test_runner_verification_requires_hypothesis_test():
-    from uchrom.auto_discovery.runner import _verification_code_for_idea
+    from uchrom_discovery.runner import _verification_code_for_idea
 
     code = _verification_code_for_idea(_make_idea(), output_dir=Path("/tmp"))
 
@@ -418,8 +425,8 @@ def test_runner_verification_requires_hypothesis_test():
 
 
 def test_insert_schematic_image_cell_embeds_local_image(tmp_path):
-    from uchrom.auto_discovery import create_exploration_notebook
-    from uchrom.auto_discovery.pantheon import (
+    from uchrom_discovery import create_exploration_notebook
+    from uchrom_discovery.pantheon import (
         _insert_schematic_image_from_agent_content,
         _insert_statistical_figure_from_agent_content,
     )
@@ -460,8 +467,8 @@ def test_insert_schematic_image_cell_embeds_local_image(tmp_path):
 
 
 def test_schematic_coverage_reports_missing_verified_notebooks(tmp_path):
-    from uchrom.auto_discovery import create_exploration_notebook, schematic_coverage_for_run
-    from uchrom.auto_discovery.pantheon import _insert_schematic_image_from_agent_content
+    from uchrom_discovery import create_exploration_notebook, schematic_coverage_for_run
+    from uchrom_discovery.pantheon import _insert_schematic_image_from_agent_content
 
     run_dir = tmp_path / "run"
     notebooks_dir = run_dir / "notebooks"
@@ -515,7 +522,7 @@ def test_schematic_coverage_reports_missing_verified_notebooks(tmp_path):
 
 
 def test_lightweight_executor_supports_notebook_display(tmp_path):
-    from uchrom.auto_discovery.notebooks import execute_notebook_python
+    from uchrom_discovery.notebooks import execute_notebook_python
 
     notebook = tmp_path / "display.ipynb"
     notebook.write_text(json.dumps({
@@ -543,7 +550,7 @@ def test_lightweight_executor_supports_notebook_display(tmp_path):
 
 def test_lightweight_executor_uses_noninteractive_matplotlib_backend(tmp_path):
     pytest.importorskip("matplotlib")
-    from uchrom.auto_discovery.notebooks import execute_notebook_python
+    from uchrom_discovery.notebooks import execute_notebook_python
 
     notebook = tmp_path / "figure.ipynb"
     notebook.write_text(json.dumps({
@@ -576,7 +583,7 @@ def test_lightweight_executor_uses_noninteractive_matplotlib_backend(tmp_path):
 
 
 def test_evidence_classification_separates_verified_from_supported():
-    from uchrom.auto_discovery.evidence import classify_hypothesis_evidence
+    from uchrom_discovery.evidence import classify_hypothesis_evidence
 
     idea = _make_idea()
     idea.expected_direction = "Positive interaction: higher marker should increase the statistic."
@@ -594,8 +601,8 @@ def test_evidence_classification_separates_verified_from_supported():
 
 
 def test_structured_conclusion_replaces_vague_final_interpretation(tmp_path):
-    from uchrom.auto_discovery import create_exploration_notebook
-    from uchrom.auto_discovery.notebooks import upsert_structured_conclusion
+    from uchrom_discovery import create_exploration_notebook
+    from uchrom_discovery.notebooks import upsert_structured_conclusion
 
     idea = _make_idea()
     idea.expected_direction = "Positive interaction: higher marker should increase the statistic."
@@ -634,7 +641,7 @@ def test_structured_conclusion_replaces_vague_final_interpretation(tmp_path):
 
 def test_run_auto_discovery_executes_notebook_pipeline(monkeypatch, tmp_path):
     from uchrom import ChromData
-    from uchrom.auto_discovery import DiscoveryRunConfig, run_auto_discovery
+    from uchrom_discovery import DiscoveryRunConfig, run_auto_discovery
 
     cdata = _make_cd()
     h5cd_path = tmp_path / "data.h5cd"
@@ -674,7 +681,7 @@ analysis_summary = {
 print(json.dumps(analysis_summary, indent=2))
 """
 
-    from uchrom.auto_discovery.backends import (
+    from uchrom_discovery.backends import (
         AnalysisCodeResult,
         BackendAgentRecord,
         BackendCapabilities,
@@ -754,7 +761,7 @@ print(json.dumps(analysis_summary, indent=2))
 
 def test_run_auto_discovery_enriches_before_schema_and_notebooks(tmp_path):
     from uchrom import ChromData
-    from uchrom.auto_discovery import DiscoveryRunConfig, run_auto_discovery
+    from uchrom_discovery import DiscoveryRunConfig, run_auto_discovery
 
     cdata = _make_cd()
     h5cd_path = tmp_path / "data.h5cd"
@@ -792,15 +799,15 @@ def test_run_auto_discovery_enriches_before_schema_and_notebooks(tmp_path):
     enriched = ChromData.read(result.enriched_h5cd_path)
     assert "seq.gc_fraction" in enriched.tracks
     assert "gtf.nearest_tss_distance" in enriched.tracks
-    assert enriched.discovery_schema["feature_summary"]["sequence"]["source_paths"] == [str(fasta)]
-    assert enriched.discovery_schema["feature_summary"]["annotation"]["source_paths"] == [str(gtf)]
+    assert get_discovery_schema(enriched)["feature_summary"]["sequence"]["source_paths"] == [str(fasta)]
+    assert get_discovery_schema(enriched)["feature_summary"]["annotation"]["source_paths"] == [str(gtf)]
     registry = enriched.uns["feature_registry"]
     assert all("outputs" in entry for entry in registry)
     assert all("source_sha256" in entry for entry in registry if entry.get("source_path"))
 
 
 def test_build_idea_graph_from_run_artifacts(tmp_path):
-    from uchrom.auto_discovery import (
+    from uchrom_discovery import (
         build_idea_graph_from_run,
         idea_signature,
         load_idea_graph,
@@ -867,7 +874,7 @@ def test_build_idea_graph_from_run_artifacts(tmp_path):
 
 
 def test_build_idea_graph_marks_schema_rejected_ideas(tmp_path):
-    from uchrom.auto_discovery import build_idea_graph_from_run
+    from uchrom_discovery import build_idea_graph_from_run
 
     run_dir = tmp_path / "run"
     run_dir.mkdir()
@@ -899,7 +906,7 @@ def test_build_idea_graph_marks_schema_rejected_ideas(tmp_path):
 
 
 def test_plan_discovery_directions_from_idea_graph(tmp_path):
-    from uchrom.auto_discovery import (
+    from uchrom_discovery import (
         build_idea_graph_from_run,
         directions_to_agent_context,
         plan_discovery_directions,
@@ -907,7 +914,7 @@ def test_plan_discovery_directions_from_idea_graph(tmp_path):
     )
 
     cdata = _make_cd()
-    schema = cdata.build_discovery_schema(store=False)
+    schema = build_discovery_schema(cdata, store=False)
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     idea = _make_idea()
@@ -962,7 +969,7 @@ def test_plan_discovery_directions_from_idea_graph(tmp_path):
 
 
 def test_literature_claims_and_graph_html_viewer(tmp_path):
-    from uchrom.auto_discovery import (
+    from uchrom_discovery import (
         build_idea_graph_from_run,
         ingest_literature_claims,
         load_idea_graph,
@@ -1083,7 +1090,7 @@ def test_literature_claims_and_graph_html_viewer(tmp_path):
 
 
 def test_auto_discovery_defaults_to_pantheon_backend(tmp_path):
-    from uchrom.auto_discovery import DiscoveryRunConfig
+    from uchrom_discovery import DiscoveryRunConfig
 
     config = DiscoveryRunConfig(h5cd_path=tmp_path / "data.h5cd", output_dir=tmp_path / "run")
 
@@ -1098,7 +1105,7 @@ def test_auto_discovery_defaults_to_pantheon_backend(tmp_path):
 
 
 def test_auto_discovery_registers_cli_backends():
-    from uchrom.auto_discovery.backends import get_backend, list_backends
+    from uchrom_discovery.backends import get_backend, list_backends
 
     assert {"pantheon", "claude", "codex"}.issubset(set(list_backends()))
     assert get_backend("claude").capabilities().prompt_via_stdin is True
@@ -1108,9 +1115,9 @@ def test_auto_discovery_registers_cli_backends():
 
 
 def test_iterative_auto_discovery_defaults_to_inline_schematics(monkeypatch, tmp_path):
-    from uchrom.auto_discovery import IterativeDiscoveryConfig
-    from uchrom.auto_discovery.runner import DiscoveryRunResult
-    import uchrom.auto_discovery.iterative as iterative
+    from uchrom_discovery import IterativeDiscoveryConfig
+    from uchrom_discovery.runner import DiscoveryRunResult
+    import uchrom_discovery.iterative as iterative
 
     captured = {}
 
@@ -1167,7 +1174,7 @@ def test_iterative_auto_discovery_defaults_to_inline_schematics(monkeypatch, tmp
 
 
 def test_backend_json_parser_accepts_marked_structured_output():
-    from uchrom.auto_discovery.backends import extract_structured_json
+    from uchrom_discovery.backends import extract_structured_json
 
     parsed = extract_structured_json(
         'noise\nBEGIN_UCHROM_JSON\n{"analysis_code": "result_table = None"}\nEND_UCHROM_JSON\n'
@@ -1177,9 +1184,9 @@ def test_backend_json_parser_accepts_marked_structured_output():
 
 
 def test_runner_verification_marks_non_numeric_parameter_value_failed(tmp_path):
-    from uchrom.auto_discovery import create_exploration_notebook
-    from uchrom.auto_discovery.notebooks import execute_notebook_python
-    from uchrom.auto_discovery.runner import _verification_code_for_idea
+    from uchrom_discovery import create_exploration_notebook
+    from uchrom_discovery.notebooks import execute_notebook_python
+    from uchrom_discovery.runner import _verification_code_for_idea
 
     cdata = _make_cd()
     h5cd_path = tmp_path / "data.h5cd"
@@ -1228,8 +1235,8 @@ analysis_summary = {
 
 
 def test_notebook_scaffold_allows_dict_style_idea_access(tmp_path):
-    from uchrom.auto_discovery import create_exploration_notebook
-    from uchrom.auto_discovery.notebooks import execute_notebook_python
+    from uchrom_discovery import create_exploration_notebook
+    from uchrom_discovery.notebooks import execute_notebook_python
 
     cdata = _make_cd()
     h5cd_path = tmp_path / "data.h5cd"
@@ -1261,9 +1268,9 @@ verification = {"status": "pass", "idea_id": IDEA["idea_id"], "title": IDEA.get(
 
 
 def test_llm_idea_prompt_preserves_legacy_schema_field_constraints():
-    from uchrom.auto_discovery.llm import allowed_required_fields, build_idea_prompt
+    from uchrom_discovery.llm import allowed_required_fields, build_idea_prompt
 
-    schema = _make_cd().build_discovery_schema(store=False)
+    schema = build_discovery_schema(_make_cd(), store=False)
     schema["known_missing"] = ["tracks.MissingTrack"]
     schema["linked_adata"] = {
         "present": True,
@@ -1293,7 +1300,7 @@ def test_llm_idea_prompt_preserves_legacy_schema_field_constraints():
 
 
 def test_analysis_prompt_requires_numeric_scalar_outputs(tmp_path):
-    from uchrom.auto_discovery.llm import build_analysis_prompt
+    from uchrom_discovery.llm import build_analysis_prompt
 
     prompt = build_analysis_prompt(
         idea_path=tmp_path / "idea.json",
@@ -1315,7 +1322,7 @@ def test_analysis_prompt_requires_numeric_scalar_outputs(tmp_path):
 
 
 def test_claude_backend_extracts_native_structured_output():
-    from uchrom.auto_discovery.backends import ClaudeBackend
+    from uchrom_discovery.backends import ClaudeBackend
 
     stdout = json.dumps([
         {
@@ -1329,7 +1336,7 @@ def test_claude_backend_extracts_native_structured_output():
 
 
 def test_codex_backend_command_uses_output_schema(tmp_path):
-    from uchrom.auto_discovery.backends import CodexBackend
+    from uchrom_discovery.backends import CodexBackend
 
     schema_path = tmp_path / "schema.json"
     config = tmp_path / "config.toml"
@@ -1366,7 +1373,7 @@ def test_codex_backend_command_uses_output_schema(tmp_path):
 
 
 def test_codex_backend_uses_minimal_temporary_codex_home(monkeypatch, tmp_path):
-    from uchrom.auto_discovery.backends import CodexBackend
+    from uchrom_discovery.backends import CodexBackend
 
     source_home = tmp_path / "source_codex"
     source_home.mkdir()
@@ -1410,7 +1417,7 @@ def test_codex_backend_uses_minimal_temporary_codex_home(monkeypatch, tmp_path):
 
 
 def test_pantheon_backend_owns_notebook_lifecycle():
-    from uchrom.auto_discovery.backends import get_backend
+    from uchrom_discovery.backends import get_backend
 
     assert get_backend("pantheon").capabilities().owns_notebook_lifecycle is True
     assert get_backend("claude").capabilities().owns_notebook_lifecycle is False
@@ -1418,7 +1425,7 @@ def test_pantheon_backend_owns_notebook_lifecycle():
 
 
 def test_cli_backend_build_command_gates_flags_on_probe():
-    from uchrom.auto_discovery.backends import _build_codex_command
+    from uchrom_discovery.backends import _build_codex_command
     from pathlib import Path
 
     # Probe says --ephemeral is absent on this CLI version; it must be dropped.
@@ -1443,8 +1450,8 @@ def test_cli_backend_build_command_gates_flags_on_probe():
 
 
 def test_cli_backend_fans_out_idea_agents(monkeypatch, tmp_path):
-    from uchrom.auto_discovery import backends as backends_mod
-    from uchrom.auto_discovery.backends import ClaudeBackend, BackendAgentRecord
+    from uchrom_discovery import backends as backends_mod
+    from uchrom_discovery.backends import ClaudeBackend, BackendAgentRecord
 
     calls = {"n": 0}
 
@@ -1487,8 +1494,8 @@ def test_cli_backend_fans_out_idea_agents(monkeypatch, tmp_path):
 
 def test_run_auto_discovery_preflights_unavailable_backend(tmp_path):
     from uchrom import ChromData
-    from uchrom.auto_discovery import DiscoveryRunConfig, run_auto_discovery
-    from uchrom.auto_discovery.backends import (
+    from uchrom_discovery import DiscoveryRunConfig, run_auto_discovery
+    from uchrom_discovery.backends import (
         BackendCapabilities,
         BackendDetection,
         register_backend,
@@ -1532,7 +1539,7 @@ def test_run_auto_discovery_preflights_unavailable_backend(tmp_path):
 
 
 def test_run_structured_retries_transient_then_classifies(monkeypatch, tmp_path):
-    from uchrom.auto_discovery.backends import ClaudeBackend, BackendError, BackendAgentRecord
+    from uchrom_discovery.backends import ClaudeBackend, BackendError, BackendAgentRecord
 
     attempts = {"n": 0}
 
@@ -1554,7 +1561,7 @@ def test_run_structured_retries_transient_then_classifies(monkeypatch, tmp_path)
 
 
 def test_run_structured_does_not_retry_auth_failure(monkeypatch, tmp_path):
-    from uchrom.auto_discovery.backends import ClaudeBackend, BackendError
+    from uchrom_discovery.backends import ClaudeBackend, BackendError
 
     attempts = {"n": 0}
 

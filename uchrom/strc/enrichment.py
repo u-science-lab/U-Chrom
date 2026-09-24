@@ -2,7 +2,7 @@
 
 This module wraps existing structure callers and projects their interval
 outputs back onto the spot axis.  It is deliberately independent of
-``uchrom.auto_discovery`` so browser, plotting, notebooks, and discovery can
+``uchrom_discovery`` so browser, plotting, notebooks, and discovery can
 share the same structural feature layer.
 """
 

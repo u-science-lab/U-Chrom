@@ -17,22 +17,63 @@ import pandas as pd
 
 DISCOVERY_SCHEMA_KEY = "auto_discovery_schema"
 DISCOVERY_SCHEMA_VERSION = "0.1"
-DISCOVERY_SCHEMA_FORMAT = "uchrom.auto_discovery.schema+json"
+DISCOVERY_SCHEMA_FORMAT = "uchrom_discovery.schema+json"
 ENRICHED_TRACK_PREFIXES = frozenset({"seq", "gtf", "strc", "peak"})
 
 
 def build_discovery_schema(
     cdata,
     *,
+    store: bool = False,
     dataset_name: str | None = None,
     include_linked_adata: bool = True,
     max_catalog_items: int = 500,
 ) -> dict[str, Any]:
     """Build an agent-readable schema from a ``ChromData`` object.
 
-    The returned dict is JSON-serializable and can be persisted via
-    :func:`pack_schema` under ``cd.uns['auto_discovery_schema']``.
+    The returned dict is JSON-serializable.  With ``store=True`` it is also
+    packed (:func:`pack_schema`) into ``cd.uns['auto_discovery_schema']`` so
+    it round-trips with ``.h5cd``.
     """
+    schema = _build_discovery_schema(
+        cdata,
+        dataset_name=dataset_name,
+        include_linked_adata=include_linked_adata,
+        max_catalog_items=max_catalog_items,
+    )
+    if store:
+        cdata.uns[DISCOVERY_SCHEMA_KEY] = pack_schema(schema)
+    return schema
+
+
+def get_discovery_schema(cdata) -> dict[str, Any]:
+    """Return the schema stored in ``cd.uns``, or build one without storing."""
+    raw = cdata.uns.get(DISCOVERY_SCHEMA_KEY)
+    if raw is not None:
+        return unpack_schema(raw)
+    return build_discovery_schema(cdata)
+
+
+def store_discovery_schema(cdata, schema: Mapping[str, Any] | None = None, **kwargs) -> dict[str, Any]:
+    """Store a supplied (or newly built) schema in ``cd.uns``."""
+    if schema is None:
+        return build_discovery_schema(cdata, store=True, **kwargs)
+    cdata.uns[DISCOVERY_SCHEMA_KEY] = pack_schema(schema)
+    return dict(schema)
+
+
+def describe_for_agent(cdata, *, max_items: int = 40) -> str:
+    """Compact, prompt-ready description of the data available in ``cdata``."""
+    return schema_to_agent_context(get_discovery_schema(cdata), max_items=max_items)
+
+
+def _build_discovery_schema(
+    cdata,
+    *,
+    dataset_name: str | None,
+    include_linked_adata: bool,
+    max_catalog_items: int,
+) -> dict[str, Any]:
     fields = {
         "coords": {
             "axis": "spot",
@@ -268,8 +309,29 @@ def unpack_schema(raw: Any) -> dict[str, Any]:
     return _json_roundtrip(raw)
 
 
-def validate_discovery_schema(schema: Mapping[str, Any], cdata=None) -> list[str]:
-    """Return validation issues for a discovery schema."""
+def validate_discovery_schema(
+    schema: Mapping[str, Any] | None = None,
+    cdata=None,
+    *,
+    raise_on_error: bool = False,
+) -> list[str]:
+    """Return validation issues for a discovery schema.
+
+    With ``schema=None`` the schema of ``cdata`` is validated
+    (:func:`get_discovery_schema`).  ``raise_on_error=True`` raises
+    ``ValueError`` when any issue is found.
+    """
+    if schema is None:
+        if cdata is None:
+            raise ValueError("validate_discovery_schema needs a schema or a cdata")
+        schema = get_discovery_schema(cdata)
+    issues = _validate_discovery_schema(schema, cdata)
+    if issues and raise_on_error:
+        raise ValueError("; ".join(issues))
+    return issues
+
+
+def _validate_discovery_schema(schema: Mapping[str, Any], cdata=None) -> list[str]:
     issues: list[str] = []
     for key in ("schema_version", "schema_type", "summary", "modalities", "fields", "catalogs"):
         if key not in schema:

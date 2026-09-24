@@ -2,7 +2,7 @@
 
 This page records the proposed design for enriching `ChromData` before
 auto-discovery. The goal is to give discovery agents more biological context
-without turning `uchrom.auto_discovery` into a general genomics toolbox.
+without turning `uchrom_discovery` into a general genomics toolbox.
 
 The guiding principle is:
 
@@ -60,7 +60,7 @@ The repo already has the main storage and structural-analysis foundations:
   them under `cd.results["loops"]`.
 - `uchrom.strc.comp.call_compartments_axes_pc` calls A/B compartments and can
   store them under `cd.results["compartments"]`.
-- `uchrom.auto_discovery.schema.build_discovery_schema` already records track
+- `uchrom_discovery.schema.build_discovery_schema` already records track
   columns and result keys, but it should be extended to describe enriched
   feature groups more explicitly.
 
@@ -85,11 +85,11 @@ uchrom.strc
 uchrom.core
   ChromData storage conventions and provenance metadata
 
-uchrom.auto_discovery
+uchrom_discovery
   orchestration glue, schema exposure, and agent-facing summaries
 ```
 
-`uchrom.auto_discovery` may provide a convenience command such as
+`uchrom_discovery` may provide a convenience command such as
 `enrich` or an option on the runner, but that command should delegate to
 `uchrom.fea`, `uchrom.strc`, and `uchrom.io`.
 
@@ -256,7 +256,8 @@ quantile/threshold caller.
 Auto-discovery convenience:
 
 ```python
-from uchrom.auto_discovery.enrichment import DiscoveryEnrichmentConfig, enrich_for_discovery
+from uchrom_discovery import build_discovery_schema
+from uchrom_discovery.enrichment import DiscoveryEnrichmentConfig, enrich_for_discovery
 
 summary = enrich_for_discovery(
     cdata,
@@ -266,7 +267,7 @@ summary = enrich_for_discovery(
         peak_tracks=["H3K27ac"],
     ),
 )
-cdata.build_discovery_schema(store=True)
+build_discovery_schema(cdata, store=True)
 ```
 
 The convenience layer should not implement the computations itself. It should
@@ -276,7 +277,7 @@ the discovery schema.
 The runner uses the same layer as a default pre-discovery stage. For example:
 
 ```bash
-python -m uchrom.auto_discovery run data.h5cd runs/example \
+python -m uchrom_discovery run data.h5cd runs/example \
   --fasta genome.fa \
   --gtf genes.gtf \
   --peak-track H3K27ac \
@@ -364,7 +365,7 @@ thin composition layer.
 Example:
 
 ```bash
-python -m uchrom.auto_discovery enrich data.h5cd enriched.h5cd \
+python -m uchrom_discovery enrich data.h5cd enriched.h5cd \
   --fasta genome.fa \
   --gtf genes.gtf \
   --sequence gc,cpg,n,g4 \
@@ -376,7 +377,7 @@ python -m uchrom.auto_discovery enrich data.h5cd enriched.h5cd \
 Then:
 
 ```bash
-python -m uchrom.auto_discovery iterate enriched.h5cd runs/enriched_iterative \
+python -m uchrom_discovery iterate enriched.h5cd runs/enriched_iterative \
   --iterations 2 \
   --ideas-per-iteration 10
 ```
@@ -415,7 +416,7 @@ python -m uchrom.auto_discovery iterate enriched.h5cd runs/enriched_iterative \
 ## Non-goals
 
 - Do not put general FASTA, GTF, BED, TAD, loop, or compartment algorithms
-  inside `uchrom.auto_discovery`.
+  inside `uchrom_discovery`.
 - Do not store large notebooks, browser logs, or generated graph artifacts
   directly in `ChromData`.
 - Do not duplicate every interval-level value into `tracks` by default when a

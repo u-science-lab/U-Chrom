@@ -11,6 +11,7 @@ from datetime import datetime
 # ---------------------------------------------------------------------
 # Allow ``import uchrom`` when running Sphinx locally without a pip install.
 sys.path.insert(0, os.path.abspath("../.."))
+sys.path.insert(0, os.path.abspath("../../discovery"))  # uchrom_discovery
 
 import uchrom  # noqa: E402
 

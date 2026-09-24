@@ -30,15 +30,20 @@ Based on this core data structure, U-Chrom supports a range of downstream analys
 | `uchrom.pl` | Plotting utilities |
 | `uchrom.browser` | Interactive 3D structure browser |
 
+LLM-driven multi-omics auto-discovery lives in the separate
+[`uchrom-discovery`](discovery/README.md) package (`pip install -e discovery/`).
+
 ## Install
 
 ```bash
 $ pip install u-chrom
 ```
 
-For enhanced rendering performance (recommended):
+Optional extras:
 ```bash
-$ pip install pyvista==0.43.0 pyvistaqt==0.11.0
+$ pip install "u-chrom[browser]"   # interactive 3D browser (PyVista + PyQt5)
+$ pip install "u-chrom[hic]"       # read .hic files
+$ pip install "u-chrom[anndata]"   # link ChromData with AnnData
 ```
 
 Install from source:

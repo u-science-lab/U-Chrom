@@ -1,47 +1,49 @@
-uchrom.auto_discovery
-=====================
+uchrom_discovery
+================
 
-.. automodule:: uchrom.auto_discovery
+Separate package (``pip install -e discovery/``); formerly ``uchrom.auto_discovery``.
+
+.. automodule:: uchrom_discovery
 
 Schema
 ------
 
-.. automodule:: uchrom.auto_discovery.schema
+.. automodule:: uchrom_discovery.schema
    :members:
    :undoc-members:
 
 Ideas
 -----
 
-.. automodule:: uchrom.auto_discovery.ideas
+.. automodule:: uchrom_discovery.ideas
    :members:
    :undoc-members:
 
 Prompt contracts
 ----------------
 
-.. automodule:: uchrom.auto_discovery.llm
+.. automodule:: uchrom_discovery.llm
    :members:
    :undoc-members:
 
 Backend adapters
 ----------------
 
-.. automodule:: uchrom.auto_discovery.backends
+.. automodule:: uchrom_discovery.backends
    :members:
    :undoc-members:
 
 Notebooks
 ---------
 
-.. automodule:: uchrom.auto_discovery.notebooks
+.. automodule:: uchrom_discovery.notebooks
    :members:
    :undoc-members:
 
 Idea graph
 ----------
 
-.. automodule:: uchrom.auto_discovery.graph
+.. automodule:: uchrom_discovery.graph
    :members:
    :undoc-members:
 
@@ -52,34 +54,34 @@ The module name keeps the original internal term ``frontier`` for API
 compatibility, while the graph viewer presents these records as follow-up
 directions.
 
-.. automodule:: uchrom.auto_discovery.frontier
+.. automodule:: uchrom_discovery.frontier
    :members:
    :undoc-members:
 
 Iterative orchestration
 -----------------------
 
-.. automodule:: uchrom.auto_discovery.iterative
+.. automodule:: uchrom_discovery.iterative
    :members:
    :undoc-members:
 
 Graph visualization
 -------------------
 
-.. automodule:: uchrom.auto_discovery.visualization
+.. automodule:: uchrom_discovery.visualization
    :members:
    :undoc-members:
 
 Runner
 ------
 
-.. automodule:: uchrom.auto_discovery.runner
+.. automodule:: uchrom_discovery.runner
    :members:
    :undoc-members:
 
 PantheonOS backend
 ------------------
 
-.. automodule:: uchrom.auto_discovery.pantheon
+.. automodule:: uchrom_discovery.pantheon
    :members:
    :undoc-members:

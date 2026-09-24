@@ -28,26 +28,47 @@ From the structure table, downstream modules perform:
 
 ```
 uchrom/
-├── io/              Data I/O (.pairs, .cool, .hic, .3dg, .csv, .pdb)
+├── core/            ChromData container (cdata.py) + format spec (spec.md)
+├── io/              Data I/O (.pairs, .cool, .hic, .3dg, .csv, .pdb, seqFISH multi-omics)
 ├── recon/           3D reconstruction
 │   ├── _base.py     Shared simulation base (Taichi)
 │   ├── sc/          Single-cell reconstruction
 │   │   ├── nucdyn/  Nuc Dynamics (molecular dynamics, Taichi GPU)
 │   │   └── gem/     GEM (energy minimization, Taichi autodiff)
 │   ├── bulk/        Bulk reconstruction
-│   │   └── mds/     MDS/SMACOF (PyTorch GPU)
-│   └── fish/        Sequencing + imaging combined (placeholder)
-├── im/              Image processing (placeholder)
+│   │   └── mds/     MDS/SMACOF (PyTorch GPU; partitioned + inter-chrom)
+│   └── fish/        GEM-FISH: Hi-C + FISH combined (PyTorch; TAD-level + intra-TAD)
+├── im/              Imaging-side processing
+│   ├── trace/       Chromatin tracing / spot-to-trace alignment (Jie aligner)
+│   └── impute/      FISH coordinate imputation (linear, grid, SnapFISH-IMPUTE)
 ├── strc/            Structure identification
-│   ├── tad/         TAD detection (directionality index)
-│   ├── loop/        Loop detection (placeholder)
-│   └── comp/        Compartment detection (placeholder)
-├── fea/             Geometric features (placeholder)
-├── emb/             Structure embedding (placeholder)
-├── pl/              Plotting (placeholder)
+│   ├── tad/         TAD detection (directionality index, ArcFISH arc p-value, FISHnet)
+│   ├── loop/        Loop detection (axis-wise F-test)
+│   ├── comp/        Compartment detection (axes PC)
+│   └── enrichment.py  Run structure callers and project results onto spots
+├── fea/             Per-bin features (distance, arc, sequence, GTF annotation,
+│                    MACS-style peaks, structure projection) + feature registry
+├── emb/             Single-cell embedding (Higashi / FastHigashi wrapper)
+├── pl/              Plotting (3D structure, trace statistics)
+├── utils/           Shared statistics helpers (LOWESS, etc.)
 ├── browser/         Interactive 3D browser (PyVista + PyQt5)
 └── op.py            Misc operations (mark empty particles)
+
+discovery/           Separate package `uchrom-discovery` (import uchrom_discovery):
+                     LLM-driven multi-omics auto-discovery — h5cd schema → ideas →
+                     notebooks → verification → evidence; iterative idea graph,
+                     pre-discovery enrichment, Pantheon / Claude / Codex CLI
+                     backends, graph UI.  Own pyproject and tests/.
 ```
+
+- **Dependency direction is one-way**: `uchrom_discovery` may import the
+  public `uchrom` API; `uchrom` must never import `uchrom_discovery`
+  (except the deprecated `uchrom.auto_discovery` shim and the deprecated
+  `ChromData.*discovery*` delegators, both slated for removal).  Reusable
+  feature computation belongs in `uchrom.fea` / `uchrom.strc`, not in
+  discovery.
+- Run the two test suites separately (both have a `tests` package):
+  `pytest tests` from the root, `cd discovery && pytest tests`.
 
 ## ChromData — Core Data Container
 
