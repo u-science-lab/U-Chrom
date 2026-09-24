@@ -472,3 +472,15 @@ details.subset[open] > summary h2::before {
 details.subset > summary h2 {
   display: inline;
 }
+.hover-tip {
+  display: none;
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  padding: 3px 7px;
+  font-size: 12px;
+  white-space: nowrap;
+  background: rgba(20, 22, 26, 0.92);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+}

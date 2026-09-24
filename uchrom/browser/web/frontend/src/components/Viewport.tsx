@@ -2,10 +2,11 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { buildLayerObject, pointIndexOfHit, type BuiltLayer } from '../render/objects'
-import { displayParts } from '../render/partition'
+import { displayParts, subsetGeometry } from '../render/partition'
 import { bboxDiagonal, findSegment } from '../render/segments'
+import { DEFAULT_STYLE } from '../layers'
 import { activeView, useStore } from '../store'
-import type { ColorMode, Geometry, LayerStyle } from '../types'
+import type { ColorMode, Geometry, LayerStyle, SegmentInfo } from '../types'
 import { FocusBar } from './FocusBar'
 import { PickLabel } from './PickLabel'
 
@@ -37,6 +38,9 @@ interface Three {
   group: THREE.Group
   entries: Map<string, Entry>
   highlight: THREE.Mesh
+  hoverBox: THREE.Box3Helper
+  /** white overlay of the hovered cell's traces (drawn on top) */
+  hover: { cell: string; geometry: Geometry; built: BuiltLayer } | null
   fly: Fly | null
 }
 
@@ -104,6 +108,7 @@ function drawnGeometries(t: Three): Geometry[] {
 
 export function Viewport() {
   const hostRef = useRef<HTMLDivElement>(null)
+  const tipRef = useRef<HTMLDivElement>(null)
   const threeRef = useRef<Three | null>(null)
   const fittedRef = useRef(false)
   const layers = useStore((s) => s.layers)
@@ -141,13 +146,17 @@ export function Viewport() {
     highlight.renderOrder = 999
     scene.add(highlight)
 
+    const hoverBox = new THREE.Box3Helper(new THREE.Box3(), new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#5c9ded'))
+    hoverBox.visible = false
+    scene.add(hoverBox)
+
     const controls = new TrackballControls(camera, renderer.domElement)
     controls.rotateSpeed = 3
     controls.zoomSpeed = 3 // ~7.5% per wheel notch
     controls.panSpeed = 0.8
     controls.staticMoving = true
 
-    const t: Three = { renderer, scene, camera, controls, group, entries: new Map(), highlight, fly: null }
+    const t: Three = { renderer, scene, camera, controls, group, entries: new Map(), highlight, hoverBox, hover: null, fly: null }
     threeRef.current = t
 
     const resize = () => {
@@ -194,6 +203,26 @@ export function Viewport() {
       down = null
       if (moved > 5) return
       pickAt(t, e)
+      hideHover()
+    }
+    // Hover: at most one raycast per frame, none while dragging.
+    const tip = tipRef.current!
+    let hoverEvt: PointerEvent | null = null
+    let hoverRaf = 0
+    const hideHover = () => {
+      setHoverCell(t, null)
+      hoverBox.visible = false
+      tip.style.display = 'none'
+      renderer.domElement.style.cursor = ''
+    }
+    const onMove = (e: PointerEvent) => {
+      if (e.buttons) return hideHover()
+      hoverEvt = e
+      if (!hoverRaf)
+        hoverRaf = requestAnimationFrame(() => {
+          hoverRaf = 0
+          if (hoverEvt) hoverAt(t, hoverEvt, tip)
+        })
     }
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName
@@ -212,6 +241,8 @@ export function Viewport() {
     }
     renderer.domElement.addEventListener('pointerdown', onDown)
     renderer.domElement.addEventListener('pointerup', onUp)
+    renderer.domElement.addEventListener('pointermove', onMove)
+    renderer.domElement.addEventListener('pointerleave', hideHover)
     window.addEventListener('keydown', onKey)
 
     return () => {
@@ -219,6 +250,9 @@ export function Viewport() {
       ro.disconnect()
       renderer.domElement.removeEventListener('pointerdown', onDown)
       renderer.domElement.removeEventListener('pointerup', onUp)
+      renderer.domElement.removeEventListener('pointermove', onMove)
+      renderer.domElement.removeEventListener('pointerleave', hideHover)
+      cancelAnimationFrame(hoverRaf)
       window.removeEventListener('keydown', onKey)
       for (const e of t.entries.values()) for (const p of e.parts) p.built.dispose()
       controls.dispose()
@@ -353,6 +387,7 @@ export function Viewport() {
     <div className="viewport" ref={hostRef}>
       <FocusBar />
       <PickLabel />
+      <div className="hover-tip" ref={tipRef} />
       <div className="viewport-tools">
         <button onClick={() => useStore.getState().resetView()} title="Fit everything drawn">
           Reset view
@@ -362,47 +397,148 @@ export function Viewport() {
   )
 }
 
+interface Hit {
+  layerId: string
+  role: Role
+  part: Part
+  pointIndex: number
+  segment: SegmentInfo
+}
+
 /**
- * Click behaviour: a trace of another cell (context, or the overview of a
- * multi-cell dataset) focuses that cell; a trace of the focused cell — or of
- * data without cells — shows its details.
+ * The trace under the cursor: among raycast hits within a few pixels, the
+ * one closest to the cursor *on screen* (distance to the ray / depth) — not
+ * the one closest to the camera, which in a crowded field is often a
+ * neighbouring cell.  The focused cell wins over its faint context.
  */
-function pickAt(t: Three, e: PointerEvent) {
+function hitAt(t: Three, clientX: number, clientY: number): Hit | null {
   const rect = t.renderer.domElement.getBoundingClientRect()
-  const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1)
+  const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1)
   const ray = new THREE.Raycaster()
   // a fraction of the camera distance ≈ a few pixels on screen, at any unit
   const threshold = t.camera.position.distanceTo(t.controls.target) * 0.006
   ray.params.Line = { threshold }
   ray.params.Points = { threshold }
   ray.setFromCamera(ndc, t.camera)
-  const hits = ray.intersectObjects(t.group.children, false)
-  const store = useStore.getState()
-  const view = activeView(store)
-  const hasCells = ((store.activeDatasetId && store.cells[store.activeDatasetId]) || []).length > 1
-  // Prefer the focused cell when both it and its context are under the cursor.
-  hits.sort((a, b) => Number(a.object.userData.role === 'context') - Number(b.object.userData.role === 'context') || a.distance - b.distance)
-  for (const hit of hits) {
-    const { layerId, role } = hit.object.userData as { layerId: string; role: Role }
+  let best: Hit | null = null
+  let bestScore = Infinity
+  for (const h of ray.intersectObjects(t.group.children, false)) {
+    const { layerId, role } = h.object.userData as { layerId: string; role: Role }
     const part = t.entries.get(layerId)?.parts.find((p) => p.role === role)
     if (!part) continue
-    const pi = pointIndexOfHit(part.built.pick, hit)
+    const pi = pointIndexOfHit(part.built.pick, h)
     if (pi < 0) continue
     const s = findSegment(part.geometry.offsets, pi)
     if (s < 0) continue
-    const segment = part.geometry.header.segments[s]
-    if (hasCells && segment.cell_id !== null && segment.cell_id !== view.focusCell) {
-      store.focusCell(segment.cell_id)
-      return
+    const off = (h as { distanceToRay?: number }).distanceToRay ?? ray.ray.distanceToPoint(h.point)
+    const score = off / Math.max(h.distance, 1e-9) + (role === 'context' ? 1 : 0)
+    if (score < bestScore) {
+      bestScore = score
+      best = { layerId, role, part, pointIndex: pi, segment: part.geometry.header.segments[s] }
     }
-    store.setPick({
-      layerId,
-      pointIndex: pi,
-      segment,
-      binStart: part.geometry.starts[pi],
-      screen: { x: e.clientX - rect.left, y: e.clientY - rect.top },
-    })
+  }
+  return best
+}
+
+const hasManyCells = (store: ReturnType<typeof useStore.getState>) =>
+  ((store.activeDatasetId && store.cells[store.activeDatasetId]) || []).length > 1
+
+/**
+ * Click behaviour: a trace of another cell (context, or the overview of a
+ * multi-cell dataset) focuses that cell; a trace of the focused cell — or of
+ * data without cells — shows its details.
+ */
+function pickAt(t: Three, e: PointerEvent) {
+  const store = useStore.getState()
+  const view = activeView(store)
+  const hit = hitAt(t, e.clientX, e.clientY)
+  if (!hit) {
+    store.setPick(null)
     return
   }
-  store.setPick(null)
+  const cell = hit.segment.cell_id
+  if (hasManyCells(store) && cell !== null && cell !== view.focusCell) {
+    store.focusCell(cell)
+    return
+  }
+  const rect = t.renderer.domElement.getBoundingClientRect()
+  store.setPick({
+    layerId: hit.layerId,
+    pointIndex: hit.pointIndex,
+    segment: hit.segment,
+    binStart: hit.part.geometry.starts[hit.pointIndex],
+    screen: { x: e.clientX - rect.left, y: e.clientY - rect.top },
+  })
+}
+
+/** Per-cell bounding boxes of a geometry (cached; geometries are immutable). */
+const cellBoxCache = new WeakMap<Geometry, Map<string, THREE.Box3>>()
+function cellBoxes(g: Geometry): Map<string, THREE.Box3> {
+  let boxes = cellBoxCache.get(g)
+  if (boxes) return boxes
+  boxes = new Map()
+  const v = new THREE.Vector3()
+  g.header.segments.forEach((seg, s) => {
+    if (seg.cell_id === null) return
+    let b = boxes!.get(seg.cell_id)
+    if (!b) boxes!.set(seg.cell_id, (b = new THREE.Box3()))
+    for (let i = g.offsets[s]; i < g.offsets[s + 1]; i++) b.expandByPoint(v.fromArray(g.positions, 3 * i))
+  })
+  cellBoxCache.set(g, boxes)
+  return boxes
+}
+
+/**
+ * Hover feedback for multi-cell data: outline the cell under the cursor and
+ * say what a click will do.  Updates the DOM directly (no React renders).
+ */
+function hoverAt(t: Three, e: PointerEvent, tip: HTMLDivElement) {
+  const store = useStore.getState()
+  const view = activeView(store)
+  const hit = hasManyCells(store) ? hitAt(t, e.clientX, e.clientY) : null
+  const cell = hit?.segment.cell_id ?? null
+  if (!hit || cell === null || cell === view.focusCell) {
+    setHoverCell(t, null)
+    t.hoverBox.visible = false
+    tip.style.display = 'none'
+    t.renderer.domElement.style.cursor = ''
+    return
+  }
+  const layerGeom = store.layers.find((l) => l.id === hit.layerId)?.geometry
+  if (layerGeom) setHoverCell(t, cell, layerGeom, new Set(view.hiddenChroms))
+  const box = layerGeom ? cellBoxes(layerGeom).get(cell) : undefined
+  if (box) {
+    t.hoverBox.box.copy(box)
+    t.hoverBox.visible = true
+  }
+  const info = (store.activeDatasetId ? store.cells[store.activeDatasetId] : undefined)?.find((c) => c.cell_id === cell)
+  const rect = t.renderer.domElement.getBoundingClientRect()
+  tip.textContent = `cell ${cell}${info ? ` · ${info.n_traces} traces` : ''} — click to focus`
+  tip.style.left = `${e.clientX - rect.left + 14}px`
+  tip.style.top = `${e.clientY - rect.top + 14}px`
+  tip.style.display = 'block'
+  t.renderer.domElement.style.cursor = 'pointer'
+}
+
+/** Swap the hover overlay to `cell` (built once per hovered cell). */
+function setHoverCell(t: Three, cell: string | null, layerGeom?: Geometry, hidden?: ReadonlySet<string>) {
+  if (t.hover && t.hover.cell === cell && t.hover.geometry === layerGeom) return
+  if (t.hover) {
+    t.scene.remove(t.hover.built.object)
+    t.hover.built.dispose()
+    t.hover = null
+  }
+  if (cell === null || !layerGeom) return
+  const g = subsetGeometry(layerGeom, (s) => s.cell_id === cell && !hidden?.has(s.chrom))
+  if (!g.header.n_points) return
+  const built = buildLayerObject(g, { ...DEFAULT_STYLE, mode: 'line', colorMode: 'custom', color: '#ffffff', lineWidth: 2.5, opacity: 1 })
+  const el = t.renderer.domElement
+  built.setResolution(el.clientWidth, el.clientHeight)
+  built.object.renderOrder = 998
+  built.object.traverse((o) => {
+    const m = (o as THREE.Mesh).material as THREE.Material | undefined
+    if (m) m.depthTest = false
+  })
+  t.scene.add(built.object)
+  t.hover = { cell, geometry: layerGeom, built }
 }

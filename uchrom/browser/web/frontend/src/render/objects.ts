@@ -9,12 +9,15 @@ import { autoTubeRadius, buildLineIndex, tubeAllowed } from './segments'
 
 /**
  * How to map a raycast hit back to a point index of the layer geometry.
- * - 'vertex': hit.index is the point index (Points, LineSegments)
+ * - 'vertex': hit.index is the point index (Points)
+ * - 'indexed': hit.index is a position in the index buffer of an indexed
+ *   LineSegments (three.js reports that, not the vertex); `index[i]` is the point
  * - 'pair': hit.faceIndex is a line-pair index into `pairIndex`
  * - 'tube': hit.face.a is a mesh vertex; `pointOfVertex` maps it to a point
  */
 export type PickMap =
   | { kind: 'vertex' }
+  | { kind: 'indexed'; index: Uint32Array }
   | { kind: 'pair'; pairIndex: Uint32Array }
   | { kind: 'tube'; pointOfVertex: Uint32Array }
 
@@ -80,7 +83,7 @@ function buildLines(geom: Geometry, colors: Float32Array, style: LayerStyle, war
     applyOpacity(mat, style.opacity)
     return {
       object: new THREE.LineSegments(g, mat),
-      pick: { kind: 'vertex' },
+      pick: { kind: 'indexed', index },
       warning,
       dispose: () => {
         g.dispose()
@@ -195,6 +198,10 @@ function buildTubes(geom: Geometry, colors: Float32Array, style: LayerStyle, war
 /** Point index for a raycast hit on a built layer, or -1. */
 export function pointIndexOfHit(pick: PickMap, hit: THREE.Intersection): number {
   if (pick.kind === 'vertex') return hit.index ?? -1
+  if (pick.kind === 'indexed') {
+    const i = hit.index
+    return i === undefined || i === null ? -1 : pick.index[i]
+  }
   if (pick.kind === 'pair') {
     const f = hit.faceIndex
     return f === undefined || f === null ? -1 : pick.pairIndex[2 * f]
