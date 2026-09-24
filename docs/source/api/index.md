@@ -16,6 +16,7 @@ strc_tad
 strc_comp
 strc_enrichment
 fea
+emb
 pl
 utils
 browser

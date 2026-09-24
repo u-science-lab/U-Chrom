@@ -46,6 +46,10 @@ hic = [
 anndata = [
     "anndata>=0.9",
 ]
+# UMAP cell embeddings (uchrom.emb.embed_cells); PCA / t-SNE need only scikit-learn.
+umap = [
+    "umap-learn>=0.5",
+]
 # Linked MuData files (ChromData.link_mudata / load_linked_mudata).
 multiome = [
     "mudata>=0.2.0",

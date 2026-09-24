@@ -107,8 +107,27 @@ cd.get_cell("0_2").points["rna"]               # RNA spots of one cell
 cd.write("takei2021_multiomics.h5cd")          # format 1.3
 ```
 
+Cell embeddings from the RNA counts (stored in `cd.cellm`, parameters in
+`cd.uns["embeddings"]`):
+
+```python
+from uchrom.emb import embed_cells
+
+embed_cells(cd)          # rna_pca (10 PCs), rna_tsne, rna_umap (needs umap-learn)
+cd.cellm["rna_umap"]     # (n_cells, 2), rows follow cd.cells
+```
+
+Counts are `log1p`-transformed and z-scored per gene.  Library-size
+normalisation is **off** by default (`library_size=True` to enable): in
+small targeted panels one housekeeping gene can dominate the total (Eef2
+is ~16 % of all counts in Takei 2021), and dividing by it makes PC1 "Eef2
+vs everything else".  Without it, PC1 on Takei 2021 is overall expression
+level and PC2 separates naive (Nanog, Esrrb, Tfcp2l1, Tbx3) from primed /
+formative (Otx2, Lin28a/b, Dnmt3a) pluripotency markers.
+
 The web browser (`python -m uchrom.browser --web`) can colour cells by any
-of these cell fields and draw the RNA spots with the chromatin traces.
+of these cell fields, draw the RNA spots with the chromatin traces, and
+show the embeddings as a 2-D view linked to the 3-D one.
 
 The `.h5cd` format has a version stamp and gracefully handles legacy
 files.  See [Concepts — On-disk format](../concepts.md) for details.
