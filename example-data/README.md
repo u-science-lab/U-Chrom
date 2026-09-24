@@ -14,7 +14,10 @@ auto-downloaded by the tutorials on first run into this directory.
 | `IMR90_chr21_30kb.cool`               | 280 KB  | yes             | —             | `gem_fish_reconstruction` tutorial (Hi-C side)                          |
 | `4DNFIFINA2U9.csv`                    | 58 KB   | yes             | —             | Takei 2021 cell table (RNA counts, nuclear area) for `from_fofct(cell_table=…)`, web browser |
 | `4DNFIJ52NVDV.csv`                    | 219 KB  | yes             | —             | Takei 2021 nascent RNA spots for `from_fofct(rna_table=…)`, web browser |
-| `takei2025_cerebellum_fixture/`       | ~750 KB | yes             | —             | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture)    |
+| `takei2025_cerebellum_fixture/`       | ~750 KB | **missing** — listed but never committed (see its section) | — | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture) |
+| `sim_cell1/` (h5cd + mcool)           | 2.3 MB  | yes             | —             | web browser: single-cell 3-D structure + its own contacts (`build_sim_cell1.py`) |
+| `takei2025_fov0/takei2025_fov0.h5cd`  | 220 MB  | no              | Zenodo 7693825 (streamed) | web browser: 59 IF tracks per spot, 47 cells (`build_takei2025_fov0.py`) |
+| `schicar_mop/*.h5cd, *.mcool, *.cool, *.scool` | ~420 MB | no  | built from GEO GSE305439 | web browser: scHiCAR without 3-D (`build_schicar_mop.py`) |
 | Takei 2025 full Zenodo dump           | ~8 GB   | no              | **manual**    | `seqfish_multiomics_cerebellum` tutorial (real-data run)                |
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
@@ -55,6 +58,11 @@ they're either generated or downloaded on demand.
   to experiment with a larger, header-carrying pairs file.
 
 ### `takei2025_cerebellum_fixture/` — Takei 2025 cerebellum DNA seqFISH+ slice (~750 KB)
+
+> **Not in the repository.**  This entry predates the checks: the folder
+> (and its `derive_fixture.py` / `verify.py`) was never committed.  For a
+> real Takei 2025 subset use `takei2025_fov0/` below; the description is
+> kept for whoever restores the fixture.
 
 - **Format**: three CSVs that together exercise the
   `read_seqfish_multiomics` loader end-to-end —
@@ -381,6 +389,53 @@ repository and whose build scripts are not yet checked in:
 Until the build scripts land (tracked as an open item; see the
 tutorials' first cell), these two notebooks are **not reproducible from
 public data alone** and are shipped with their recorded outputs.
+
+### `sim_cell1/` — NucDynamics single-cell structure + its contacts (2.3 MB, in repo)
+
+- **Content**: `sim_cell1.h5cd` — NucDynamics (`uchrom.recon.sc.nucdyn`,
+  CPU) on `cell1.pairs` (Stevens et al. 2017, mESC G1, mm10): 20
+  chromosomes, 25,654 particles at ~100 kb, one trace per chromosome,
+  coordinates in model units; `cell1_contacts.mcool` — the same cell's
+  105,700 contacts at 100 kb / 200 kb / 500 kb / 1 Mb, linked with
+  `cd.link_cool("cell1_contacts.mcool")` (path relative to the h5cd).
+- **Rebuild**: `python example-data/build_sim_cell1.py [--arch cpu]`.
+- **Check**: bins in contact in the input are ~2× closer in the model
+  (median 3D distance of contacted / non-contacted 1 Mb pairs = 0.44–0.59
+  on chr1, 2, 5, 11, 19) — `tests/browser_web/test_genome_views.py`.
+- **Used by**: web browser (3D + contact + distance matrices).
+
+### `takei2025_fov0/` — Takei 2025 cerebellum, rep 1 FOV 0, first 47 cells (220 MB, built)
+
+- **Content**: DNA seqFISH+ traces (383,674 spots, 1,500 traces, 47
+  cells: Granule, Bergmann, Purkinje, MLI1, MLI2+PLI, Other) with **59
+  per-spot immunofluorescence / RNA-FISH channels as `tracks`** (H3K27ac,
+  H3K4me3, H3K27me3, H3K9me3, LaminB1, …), cell types and the published
+  UMAP (`cellm['umap']`).
+- **Source**: Takei et al. 2025, *Nature* (doi:10.1038/s41586-025-08838-x);
+  Zenodo [7693825](https://zenodo.org/records/7693825)
+  `cerebellum_rep1.tar.gz` (2.8 GB) — only the start of the first FOV is
+  read (streamed); locus map and clustering from
+  CaiGroup/dna-seqfish-plus-multi-omics.
+- **Build**: `python example-data/build_takei2025_fov0.py [--rows 400000]`
+  (~1 min, downloads ~0.1–0.3 GB of the tarball, drops the last possibly
+  truncated cell).
+- **Used by**: web browser (genome track view, distance matrices, stats).
+
+### `schicar_mop/` — scHiCAR mouse brain, no 3-D coordinates (built from GEO)
+
+- **Content** (built by `python example-data/build_schicar_mop.py` from
+  the GSE305439 files above):
+  - `schicar_mop.h5cd` (21 MB) — `ChromData` **without spots**: 5,313
+    cells (RNA barcode ids, 22 cell types, QC), 500 highly variable genes
+    as `rna.<gene>` (log-normalised dispersion, genes in ≥1 % cells),
+    `cellm`: `paper_umap` (from the GEO metadata) and `rna_pca / rna_tsne
+    / rna_umap` (`uchrom.emb.embed_cells`, library-size normalised);
+  - `contacts_all.mcool` (42 MB) — all 120,280,303 contacts, 250 kb … 2 Mb;
+  - `contacts_<celltype>.cool` — 22 pseudo-bulk maps at 500 kb;
+  - `contacts_cells_1Mb.scool` (257 MB) — one map per cell (all 5,313).
+  Links are stored relative to the h5cd.
+- **Used by**: web browser (matrix, embedding and field views for data
+  without 3-D).
 
 ## Generated outputs
 
