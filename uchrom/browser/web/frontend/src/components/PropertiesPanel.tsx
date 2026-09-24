@@ -1,14 +1,17 @@
 import { describeFilter } from '../filters'
 import { autoTubeRadius } from '../render/segments'
-import { useStore } from '../store'
+import { activeView, useStore } from '../store'
+import { ChromLegend } from './ChromLegend'
 import type { ColorMode, RenderMode } from '../types'
 
 export function PropertiesPanel() {
   const layer = useStore((s) => s.layers.find((l) => l.id === s.selectedLayerId))
   const setStyle = useStore((s) => s.setStyle)
+  const view = useStore(activeView)
   if (!layer) {
     return (
       <aside className="props panel">
+        <ChromLegend />
         <h2>Properties</h2>
         <p className="muted">Select a layer.</p>
       </aside>
@@ -17,15 +20,19 @@ export function PropertiesPanel() {
   const st = layer.style
   const upd = (p: Partial<typeof st>) => setStyle(layer.id, p)
   const header = layer.geometry?.header
+  // what is actually drawn in full (focused cell, visible chromosomes)
+  const hidden = new Set(view.hiddenChroms)
+  const drawn = header?.segments.filter((s) => !hidden.has(s.chrom) && (view.focusCell === null || s.cell_id === view.focusCell))
   const autoR = layer.geometry ? autoTubeRadius(layer.geometry) : null
 
   return (
     <aside className="props panel">
-      <h2>Properties</h2>
+      <ChromLegend />
+      <h2>Style</h2>
       <div className="prop-title">{layer.name}</div>
       <div className="muted small">filter: {describeFilter(layer.filter)}</div>
 
-      <label>Style</label>
+      <label>Render as</label>
       <div className="seg">
         {(['line', 'tube', 'points'] as RenderMode[]).map((m) => (
           <button key={m} className={st.mode === m ? 'active' : ''} onClick={() => upd({ mode: m })}>
@@ -95,12 +102,14 @@ export function PropertiesPanel() {
 
       {header && (
         <dl className="stats">
-          <dt>points</dt>
-          <dd>{header.n_points.toLocaleString('en-US')}</dd>
-          <dt>segments</dt>
-          <dd>{header.n_segments.toLocaleString('en-US')}</dd>
+          <dt>{view.focusCell ? `cell ${view.focusCell}` : 'shown'} points</dt>
+          <dd>{drawn!.reduce((a, s) => a + s.n_points, 0).toLocaleString('en-US')}</dd>
+          <dt>traces</dt>
+          <dd>{new Set(drawn!.map((s) => s.trace_id)).size.toLocaleString('en-US')}</dd>
           <dt>chroms</dt>
-          <dd>{new Set(header.segments.map((s) => s.chrom)).size}</dd>
+          <dd>{new Set(drawn!.map((s) => s.chrom)).size}</dd>
+          <dt className="muted">layer points</dt>
+          <dd className="muted">{header.n_points.toLocaleString('en-US')}</dd>
         </dl>
       )}
       {header?.truncated && (

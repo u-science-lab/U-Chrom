@@ -256,11 +256,6 @@ select:focus {
   font-size: 12px;
   max-width: 320px;
 }
-.pick-action {
-  pointer-events: auto;
-  margin-top: 6px;
-  width: 100%;
-}
 .pick-title {
   font-weight: 600;
   color: var(--accent);
@@ -342,4 +337,138 @@ select:focus {
 }
 .statusbar .error {
   cursor: pointer;
+}
+
+/* ---- cell navigator ------------------------------------------------ */
+.panel.cells {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.cell-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: 46vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+}
+.cell-list li {
+  padding: 3px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cell-list li:hover {
+  background: var(--bg-hover);
+}
+.cell-list li.selected {
+  background: var(--bg-active);
+}
+.cell-list .idx {
+  display: inline-block;
+  min-width: 2.8em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- focus bar over the viewport ----------------------------------- */
+.focus-bar {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(20, 22, 26, 0.88);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+.focus-title b {
+  color: var(--accent);
+}
+.focus-ctx {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.focus-ctx input {
+  width: 90px;
+}
+
+/* ---- chromosome legend --------------------------------------------- */
+.legend h2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.legend-actions button {
+  margin-left: 4px;
+  padding: 0 6px;
+  font-size: 11px;
+  text-transform: none;
+}
+.legend-list {
+  list-style: none;
+  margin: 4px 0 10px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px 8px;
+}
+.legend-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 4px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  user-select: none;
+}
+.legend-list li:hover {
+  background: var(--bg-hover);
+}
+.legend-list li.off {
+  color: var(--text-muted);
+}
+.legend-list .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+.legend-list li.off .swatch {
+  background: transparent !important;
+  outline: 1px solid var(--text-muted);
+}
+
+/* ---- collapsible subset panel -------------------------------------- */
+details.subset > summary {
+  cursor: pointer;
+  list-style: none;
+}
+details.subset > summary::-webkit-details-marker {
+  display: none;
+}
+details.subset > summary h2::before {
+  content: '▸ ';
+}
+details.subset[open] > summary h2::before {
+  content: '▾ ';
+}
+details.subset > summary h2 {
+  display: inline;
 }

@@ -56,3 +56,21 @@ describe('vertexColors', () => {
     close(rgbOf(c, 4), hexToRgb(chromColor('chr2')))
   })
 })
+
+describe('chromColors override', () => {
+  it('keeps per-chromosome colours for a single visible chromosome', () => {
+    const g = decodeGeometry(
+      encodeGeometry(
+        { ...sampleHeader(), segments: [{ trace_id: 't1', chrom: 'chr2', cell_id: null, n_points: 2, start: 0, end: 200 }] },
+        [0, 0, 0, 1, 0, 0],
+        [0, 100],
+        [0, 2],
+      ),
+    )
+    const gradient = vertexColors(g, 'rainbow', '#ffffff')
+    expect(Array.from(gradient.slice(0, 3))).not.toEqual(Array.from(gradient.slice(3, 6)))
+    const fixed = vertexColors(g, 'rainbow', '#ffffff', true)
+    expect(Array.from(fixed.slice(0, 3))).toEqual(hexToRgb(chromColor('chr2')).map((x) => Math.fround(x)))
+    expect(Array.from(fixed.slice(3, 6))).toEqual(Array.from(fixed.slice(0, 3)))
+  })
+})

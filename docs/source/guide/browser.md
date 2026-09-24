@@ -22,11 +22,24 @@ python -m uchrom.browser --web a.h5cd b.csv --port=9000 --noopen_browser
 A local FastAPI server loads the files and streams coordinates to a
 Three.js viewer in binary, one layer at a time, so only what is on screen
 is transferred.  More files can be opened from the page (paths on the
-machine running the server).  The first release covers layers,
-chromosome / region / trace subsets, line / tube / points rendering,
-colour modes and click-to-inspect; trace statistics, multi-canvas and
-sessions are desktop-only for now.  The HTTP API is documented in
+machine running the server).  The HTTP API is documented in
 `uchrom/browser/web/API.md`.
+
+Navigating imaging data with many cells:
+
+- **Cells** (left) lists every cell.  Click one — or click a nucleus in
+  the view — to focus it: the camera flies there, the cell is drawn in
+  full (tubes by default) and the other cells fade into context.  `←` /
+  `→` step through cells, `Esc` returns to all cells, and the *others*
+  slider in the focus bar sets how faint the context is.
+- **Chromosomes** (right) is a legend and a visibility filter: click to
+  show / hide, double-click to show only one.  Colours match the
+  rainbow mode.
+- Clicking a trace of the focused cell shows its trace, cell and bin.
+- **Subset layer** (collapsed, bottom left) still creates region / trace
+  layers when you want to compare or keep a selection.
+
+Trace statistics, multi-canvas and sessions are desktop-only for now.
 
 ## Main areas
 

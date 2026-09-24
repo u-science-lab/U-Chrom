@@ -2,15 +2,31 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { buildLayerObject, pointIndexOfHit, type BuiltLayer } from '../render/objects'
+import { displayParts } from '../render/partition'
 import { bboxDiagonal, findSegment } from '../render/segments'
-import { useStore } from '../store'
-import type { Geometry, Layer, LayerStyle } from '../types'
+import { activeView, useStore } from '../store'
+import type { Geometry, LayerStyle } from '../types'
+import { FocusBar } from './FocusBar'
 import { PickLabel } from './PickLabel'
 
-interface Entry {
+type Role = 'main' | 'context'
+
+interface Part {
+  role: Role
   built: BuiltLayer
   geometry: Geometry
-  style: LayerStyle
+}
+
+interface Entry {
+  /** inputs the parts were built from; rebuilt when any changes */
+  key: { geometry: Geometry; style: LayerStyle; focus: string | null; hidden: string; ctx: number }
+  parts: Part[]
+}
+
+interface Fly {
+  from: { pos: THREE.Vector3; target: THREE.Vector3 }
+  to: { pos: THREE.Vector3; target: THREE.Vector3 }
+  t0: number
 }
 
 interface Three {
@@ -21,33 +37,69 @@ interface Three {
   group: THREE.Group
   entries: Map<string, Entry>
   highlight: THREE.Mesh
+  fly: Fly | null
 }
 
-/** Union bbox of all visible layers with geometry. */
-function sceneBox(layers: Layer[]): THREE.Box3 | null {
+const FLY_MS = 450
+
+function unionBox(geoms: (Geometry | null)[]): THREE.Box3 | null {
   const box = new THREE.Box3()
   let any = false
-  for (const l of layers) {
-    if (!l.visible || !l.geometry || l.geometry.header.n_points === 0) continue
-    const b = l.geometry.header.bbox
-    box.expandByPoint(new THREE.Vector3(...b.min))
-    box.expandByPoint(new THREE.Vector3(...b.max))
+  for (const g of geoms) {
+    if (!g || g.header.n_points === 0) continue
+    box.expandByPoint(new THREE.Vector3(...g.header.bbox.min))
+    box.expandByPoint(new THREE.Vector3(...g.header.bbox.max))
     any = true
   }
   return any ? box : null
 }
 
-function fitCamera(t: Three, box: THREE.Box3) {
+/** Camera pose that frames `box`, keeping the current viewing direction. */
+function framing(t: Three, box: THREE.Box3) {
   const center = box.getCenter(new THREE.Vector3())
   const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1e-6)
-  const dist = radius / Math.sin(THREE.MathUtils.degToRad(t.camera.fov / 2))
+  const dist = (radius / Math.sin(THREE.MathUtils.degToRad(t.camera.fov / 2))) * 1.1
+  const dir = t.camera.position.clone().sub(t.controls.target)
+  if (dir.lengthSq() < 1e-12) dir.set(0, 0, 1)
+  dir.normalize()
+  return { target: center, pos: center.clone().add(dir.multiplyScalar(dist)), dist }
+}
+
+function setClip(t: Three, dist: number) {
   t.camera.near = Math.max(dist / 1000, 1e-6)
   t.camera.far = dist * 100
-  t.camera.position.copy(center).add(new THREE.Vector3(0, 0, dist * 1.1))
-  t.camera.up.set(0, 1, 0)
   t.camera.updateProjectionMatrix()
-  t.controls.target.copy(center)
+}
+
+function jumpTo(t: Three, box: THREE.Box3) {
+  const f = framing(t, box)
+  t.fly = null
+  setClip(t, f.dist)
+  t.camera.position.copy(f.pos)
+  t.controls.target.copy(f.target)
   t.controls.update()
+}
+
+function flyTo(t: Three, box: THREE.Box3) {
+  const f = framing(t, box)
+  // far plane must cover the start and the end of the flight
+  t.camera.far = Math.max(t.camera.far, f.dist * 100)
+  t.camera.near = Math.min(t.camera.near, Math.max(f.dist / 1000, 1e-6))
+  t.camera.updateProjectionMatrix()
+  t.fly = {
+    from: { pos: t.camera.position.clone(), target: t.controls.target.clone() },
+    to: { pos: f.pos, target: f.target },
+    t0: performance.now(),
+  }
+}
+
+const hiddenKey = (h: string[]) => [...h].sort().join('\u0000')
+
+/** Geometry parts currently drawn for the active dataset. */
+function drawnGeometries(t: Three): Geometry[] {
+  const out: Geometry[] = []
+  for (const e of t.entries.values()) for (const p of e.parts) out.push(p.geometry)
+  return out
 }
 
 export function Viewport() {
@@ -56,7 +108,9 @@ export function Viewport() {
   const fittedRef = useRef(false)
   const layers = useStore((s) => s.layers)
   const activeDatasetId = useStore((s) => s.activeDatasetId)
+  const view = useStore(activeView)
   const resetViewToken = useStore((s) => s.resetViewToken)
+  const flyToken = useStore((s) => s.flyToken)
   const setPick = useStore((s) => s.setPick)
   const setStatus = useStore((s) => s.setStatus)
 
@@ -92,7 +146,7 @@ export function Viewport() {
     controls.panSpeed = 0.8
     controls.staticMoving = true
 
-    const t: Three = { renderer, scene, camera, controls, group, entries: new Map(), highlight }
+    const t: Three = { renderer, scene, camera, controls, group, entries: new Map(), highlight, fly: null }
     threeRef.current = t
 
     const resize = () => {
@@ -103,7 +157,7 @@ export function Viewport() {
       camera.aspect = w / h
       camera.updateProjectionMatrix()
       controls.handleResize()
-      for (const e of t.entries.values()) e.built.setResolution(w, h)
+      for (const e of t.entries.values()) for (const p of e.parts) p.built.setResolution(w, h)
     }
     const ro = new ResizeObserver(resize)
     ro.observe(host)
@@ -111,27 +165,48 @@ export function Viewport() {
 
     let raf = 0
     const loop = () => {
+      if (t.fly) {
+        const u = Math.min(1, (performance.now() - t.fly.t0) / FLY_MS)
+        const e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2 // easeInOutCubic
+        camera.position.lerpVectors(t.fly.from.pos, t.fly.to.pos, e)
+        controls.target.lerpVectors(t.fly.from.target, t.fly.to.target, e)
+        if (u >= 1) {
+          setClip(t, t.fly.to.pos.distanceTo(t.fly.to.target))
+          t.fly = null
+        }
+      }
       controls.update()
       renderer.render(scene, camera)
       raf = requestAnimationFrame(loop)
     }
     loop()
 
-    // Click (not drag) → pick.
+    // Click (not drag) → pick / focus.
     let down: { x: number; y: number } | null = null
     const onDown = (e: PointerEvent) => {
       down = { x: e.clientX, y: e.clientY }
+      t.fly = null // user takes over the camera
     }
     const onUp = (e: PointerEvent) => {
       if (!down || e.button !== 0) return
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y)
       down = null
-      if (moved > 4) return
+      if (moved > 5) return
       pickAt(t, e)
     }
     const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      const st = useStore.getState()
       if (e.key === 'Escape') {
-        useStore.getState().setPick(null)
+        if (st.pick) st.setPick(null)
+        else st.focusCell(null)
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        st.stepCell(1)
+        e.preventDefault()
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        st.stepCell(-1)
+        e.preventDefault()
       }
     }
     renderer.domElement.addEventListener('pointerdown', onDown)
@@ -144,7 +219,7 @@ export function Viewport() {
       renderer.domElement.removeEventListener('pointerdown', onDown)
       renderer.domElement.removeEventListener('pointerup', onUp)
       window.removeEventListener('keydown', onKey)
-      for (const e of t.entries.values()) e.built.dispose()
+      for (const e of t.entries.values()) for (const p of e.parts) p.built.dispose()
       controls.dispose()
       renderer.dispose()
       host.removeChild(renderer.domElement)
@@ -152,83 +227,123 @@ export function Viewport() {
     }
   }, [])
 
-  // Sync scene objects with layers (only the active dataset is shown).
+  // Sync scene objects with layers + view state (only the active dataset).
   useEffect(() => {
     const t = threeRef.current
     if (!t) return
     const shown = layers.filter((l) => l.datasetId === activeDatasetId && l.visible && l.geometry)
     const keep = new Set(shown.map((l) => l.id))
-    for (const [id, e] of t.entries) {
-      if (!keep.has(id)) {
-        t.group.remove(e.built.object)
-        e.built.dispose()
-        t.entries.delete(id)
+    const drop = (id: string, e: Entry) => {
+      for (const p of e.parts) {
+        t.group.remove(p.built.object)
+        p.built.dispose()
       }
+      t.entries.delete(id)
     }
+    for (const [id, e] of t.entries) if (!keep.has(id)) drop(id, e)
+
+    const hidden = new Set(view.hiddenChroms)
     const warnings: string[] = []
+    const w = t.renderer.domElement.clientWidth
+    const h = t.renderer.domElement.clientHeight
     for (const l of shown) {
+      const key = {
+        geometry: l.geometry!,
+        style: l.style,
+        focus: view.focusCell,
+        hidden: hiddenKey(view.hiddenChroms),
+        ctx: view.contextOpacity,
+      }
       const prev = t.entries.get(l.id)
-      if (prev && prev.geometry === l.geometry && prev.style === l.style) {
-        if (prev.built.warning) warnings.push(`${l.name}: ${prev.built.warning}`)
+      if (
+        prev &&
+        prev.key.geometry === key.geometry &&
+        prev.key.style === key.style &&
+        prev.key.focus === key.focus &&
+        prev.key.hidden === key.hidden &&
+        prev.key.ctx === key.ctx
+      ) {
+        for (const p of prev.parts) if (p.built.warning) warnings.push(`${l.name}: ${p.built.warning}`)
         continue
       }
-      if (prev) {
-        t.group.remove(prev.built.object)
-        prev.built.dispose()
+      if (prev) drop(l.id, prev)
+      const { main, context } = displayParts(l.geometry!, hidden, view.focusCell)
+      // colour by chromosome whenever the layer itself has several, so hiding
+      // chromosomes never switches the colour scheme away from the legend
+      const chromColors = new Set(l.geometry!.header.segments.map((s) => s.chrom)).size > 1
+      const parts: Part[] = []
+      if (main) parts.push({ role: 'main', geometry: main, built: buildLayerObject(main, l.style, { chromColors }) })
+      if (context && view.contextOpacity > 0) {
+        const ctxStyle: LayerStyle = { ...l.style, mode: 'line', lineWidth: 1, opacity: view.contextOpacity }
+        parts.push({ role: 'context', geometry: context, built: buildLayerObject(context, ctxStyle, { chromColors }) })
       }
-      const built = buildLayerObject(l.geometry!, l.style)
-      built.object.userData.layerId = l.id
-      built.setResolution(t.renderer.domElement.clientWidth, t.renderer.domElement.clientHeight)
-      t.group.add(built.object)
-      t.entries.set(l.id, { built, geometry: l.geometry!, style: l.style })
-      if (built.warning) warnings.push(`${l.name}: ${built.warning}`)
+      for (const p of parts) {
+        p.built.object.userData = { layerId: l.id, role: p.role }
+        p.built.setResolution(w, h)
+        if (p.role === 'context') p.built.object.renderOrder = -1
+        t.group.add(p.built.object)
+        if (p.role === 'main' && p.built.warning) warnings.push(`${l.name}: ${p.built.warning}`)
+      }
+      t.entries.set(l.id, { key, parts })
     }
     setStatus(warnings.length ? warnings.join(' · ') : null)
 
-    const box = sceneBox(shown)
-    if (box && !fittedRef.current) {
-      fitCamera(t, box)
-      fittedRef.current = true
+    if (!fittedRef.current) {
+      const box = unionBox(drawnGeometries(t))
+      if (box) {
+        jumpTo(t, box)
+        fittedRef.current = true
+      }
     }
     const pick = useStore.getState().pick
     if (pick && !keep.has(pick.layerId)) setPick(null)
-  }, [layers, activeDatasetId, setPick, setStatus])
+  }, [layers, activeDatasetId, view, setPick, setStatus])
 
-  // Explicit reset / dataset switch → refit.
+  // Explicit reset / dataset switch → refit on everything drawn.
   useEffect(() => {
     fittedRef.current = false
     const t = threeRef.current
     if (!t) return
-    const box = sceneBox(useStore.getState().layers.filter((l) => l.datasetId === activeDatasetId))
+    const box = unionBox(drawnGeometries(t))
     if (box) {
-      fitCamera(t, box)
+      jumpTo(t, box)
       fittedRef.current = true
     }
   }, [resetViewToken, activeDatasetId])
+
+  // Focus change → fly to the focused cell (or back to everything).
+  useEffect(() => {
+    const t = threeRef.current
+    if (!t || flyToken === 0) return
+    const mains: Geometry[] = []
+    for (const e of t.entries.values()) for (const p of e.parts) if (p.role === 'main') mains.push(p.geometry)
+    const box = unionBox(view.focusCell ? mains : drawnGeometries(t))
+    if (box) flyTo(t, box)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flyToken])
 
   // Highlight the picked spot.
   const pick = useStore((s) => s.pick)
   useEffect(() => {
     const t = threeRef.current
     if (!t) return
-    if (!pick) {
-      t.highlight.visible = false
-      return
-    }
-    const entry = t.entries.get(pick.layerId)
-    if (!entry) return
-    const p = entry.geometry.positions
+    t.highlight.visible = false
+    if (!pick) return
+    const main = t.entries.get(pick.layerId)?.parts.find((p) => p.role === 'main')
+    if (!main) return
+    const p = main.geometry.positions
     const i = pick.pointIndex
     t.highlight.position.set(p[3 * i], p[3 * i + 1], p[3 * i + 2])
-    t.highlight.scale.setScalar(Math.max(bboxDiagonal(entry.geometry.header.bbox) * 0.006, 1e-6))
+    t.highlight.scale.setScalar(Math.max(bboxDiagonal(main.geometry.header.bbox) * 0.006, 1e-6))
     t.highlight.visible = true
   }, [pick])
 
   return (
     <div className="viewport" ref={hostRef}>
+      <FocusBar />
       <PickLabel />
       <div className="viewport-tools">
-        <button onClick={() => useStore.getState().resetView()} title="Fit all visible layers">
+        <button onClick={() => useStore.getState().resetView()} title="Fit everything drawn">
           Reset view
         </button>
       </div>
@@ -236,31 +351,44 @@ export function Viewport() {
   )
 }
 
+/**
+ * Click behaviour: a trace of another cell (context, or the overview of a
+ * multi-cell dataset) focuses that cell; a trace of the focused cell — or of
+ * data without cells — shows its details.
+ */
 function pickAt(t: Three, e: PointerEvent) {
   const rect = t.renderer.domElement.getBoundingClientRect()
   const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1)
   const ray = new THREE.Raycaster()
-  // Thresholds scale with the view so picking works at any unit
-  // (a fraction of the camera distance ≈ a few pixels on screen).
+  // a fraction of the camera distance ≈ a few pixels on screen, at any unit
   const threshold = t.camera.position.distanceTo(t.controls.target) * 0.006
   ray.params.Line = { threshold }
   ray.params.Points = { threshold }
   ray.setFromCamera(ndc, t.camera)
   const hits = ray.intersectObjects(t.group.children, false)
   const store = useStore.getState()
+  const view = activeView(store)
+  const hasCells = ((store.activeDatasetId && store.cells[store.activeDatasetId]) || []).length > 1
+  // Prefer the focused cell when both it and its context are under the cursor.
+  hits.sort((a, b) => Number(a.object.userData.role === 'context') - Number(b.object.userData.role === 'context') || a.distance - b.distance)
   for (const hit of hits) {
-    const layerId = hit.object.userData.layerId as string
-    const entry = t.entries.get(layerId)
-    if (!entry) continue
-    const pi = pointIndexOfHit(entry.built.pick, hit)
+    const { layerId, role } = hit.object.userData as { layerId: string; role: Role }
+    const part = t.entries.get(layerId)?.parts.find((p) => p.role === role)
+    if (!part) continue
+    const pi = pointIndexOfHit(part.built.pick, hit)
     if (pi < 0) continue
-    const s = findSegment(entry.geometry.offsets, pi)
+    const s = findSegment(part.geometry.offsets, pi)
     if (s < 0) continue
+    const segment = part.geometry.header.segments[s]
+    if (hasCells && segment.cell_id !== null && segment.cell_id !== view.focusCell) {
+      store.focusCell(segment.cell_id)
+      return
+    }
     store.setPick({
       layerId,
       pointIndex: pi,
-      segment: entry.geometry.header.segments[s],
-      binStart: entry.geometry.starts[pi],
+      segment,
+      binStart: part.geometry.starts[pi],
       screen: { x: e.clientX - rect.left, y: e.clientY - rect.top },
     })
     return

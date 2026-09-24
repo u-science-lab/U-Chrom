@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { listCells, listTraces } from '../api'
-import { chromsOf, composeFilter, describeFilter, fmtBp, parseIdSelection, parseRegion, parseTraceSelection } from '../filters'
+import { listTraces } from '../api'
+import { chromsOf, composeFilter, describeFilter, fmtBp, parseRegion, parseTraceSelection } from '../filters'
 import { useStore } from '../store'
-import type { CellInfo, DatasetSummary, Layer, LayerFilter, LayerStyle, TraceInfo } from '../types'
+import type { DatasetSummary, Layer, LayerFilter, LayerStyle, TraceInfo } from '../types'
 
-type Tab = 'cell' | 'chrom' | 'region' | 'trace'
+type Tab = 'region' | 'trace'
 
-const TAB_LABEL: Record<Tab, string> = { cell: 'Cell', chrom: 'Chromosome', region: 'Region', trace: 'Trace' }
+const TAB_LABEL: Record<Tab, string> = { region: 'Region', trace: 'Trace' }
 
 export function OperationsPanel() {
   const datasets = useStore((s) => s.datasets)
@@ -20,12 +20,7 @@ export function OperationsPanel() {
 
   const tabs = useMemo(() => {
     if (!ds || !parent) return [] as Tab[]
-    const t: Tab[] = []
-    // Imaging data with many cells: looking at one nucleus at a time is the
-    // main way to see anything, so Cell comes first.
-    if (ds.n_cells > 1 && !(parent.filter.cell_ids?.length === 1)) t.push('cell')
-    if (chromsOf(parent.filter, ds.chroms).length > 1) t.push('chrom')
-    t.push('region')
+    const t: Tab[] = ['region']
     if (ds.trace_mode) t.push('trace')
     return t
   }, [ds, parent])
@@ -34,10 +29,12 @@ export function OperationsPanel() {
 
   if (!ds || !parent) return null
   return (
-    <section className="panel">
-      <h2>Operations</h2>
+    <details className="panel subset">
+      <summary>
+        <h2>Subset layer</h2>
+      </summary>
       <div className="muted small">
-        subset of <b>{parent.name}</b>
+        new layer from <b>{parent.name}</b> — for comparing or exporting a region / set of traces
       </div>
       <div className="tabs">
         {tabs.map((t) => (
@@ -46,11 +43,9 @@ export function OperationsPanel() {
           </button>
         ))}
       </div>
-      {current === 'cell' && <CellTab ds={ds} parent={parent} />}
-      {current === 'chrom' && <ChromTab ds={ds} parent={parent} />}
       {current === 'region' && <RegionTab ds={ds} parent={parent} />}
       {current === 'trace' && <TraceTab ds={ds} parent={parent} />}
-    </section>
+    </details>
   )
 }
 
@@ -69,26 +64,6 @@ function useCreateSubset(ds: DatasetSummary, parent: Layer) {
   return { create, error, setError }
 }
 
-function ChromTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
-  const chroms = chromsOf(parent.filter, ds.chroms)
-  const [picked, setPicked] = useState<string[]>([])
-  const { create, error } = useCreateSubset(ds, parent)
-  return (
-    <div className="op">
-      <select multiple size={Math.min(8, chroms.length)} value={picked} onChange={(e) => setPicked(Array.from(e.target.selectedOptions, (o) => o.value))}>
-        {chroms.map((c) => (
-          <option key={c.name} value={c.name}>
-            {c.name} ({c.n_spots.toLocaleString('en-US')})
-          </option>
-        ))}
-      </select>
-      <button disabled={!picked.length} onClick={() => create({ chroms: picked })}>
-        Create subset
-      </button>
-      {error && <div className="error">{error}</div>}
-    </div>
-  )
-}
 
 function RegionTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
   const chroms = chromsOf(parent.filter, ds.chroms)
@@ -207,76 +182,3 @@ function TraceTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
   )
 }
 
-function CellTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
-  const [cells, setCells] = useState<CellInfo[]>([])
-  const [total, setTotal] = useState(0)
-  const [text, setText] = useState('')
-  const [loading, setLoading] = useState(false)
-  const { create, error, setError } = useCreateSubset(ds, parent)
-
-  const load = async (offset: number) => {
-    setLoading(true)
-    try {
-      const page = await listCells(ds.id, { offset, limit: PAGE })
-      setTotal(page.total)
-      setCells((prev) => (offset === 0 ? page.cells : [...prev, ...page.cells]))
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
-    }
-  }
-  useEffect(() => {
-    setCells([])
-    void load(0)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ds.id])
-
-  const visible = parent.filter.cell_ids ? cells.filter((c) => parent.filter.cell_ids!.includes(c.cell_id)) : cells
-  const ids = visible.map((c) => c.cell_id)
-  const submit = (raw = text) => {
-    try {
-      const sel = parseIdSelection(raw, ids, 'cell')
-      // a single nucleus is small enough to draw as tubes
-      create({ cell_ids: sel }, sel.length === 1 ? `cell ${sel[0]}` : `${raw.trim()} (${sel.length} cells)`, { mode: 'tube' })
-    } catch (e) {
-      setError((e as Error).message)
-    }
-  }
-  return (
-    <form
-      className="op"
-      onSubmit={(e) => {
-        e.preventDefault()
-        submit()
-      }}
-    >
-      <ul className="trace-list">
-        {visible.map((c, i) => (
-          <li
-            key={c.cell_id}
-            onClick={() => setText(c.cell_id)}
-            onDoubleClick={() => submit(c.cell_id)}
-            title="double-click to open this cell"
-          >
-            <span className="idx">{i + 1}</span> {c.cell_id}
-            <span className="muted">
-              {' '}
-              {c.n_traces} traces · {c.n_chroms} chroms · {c.n_spots.toLocaleString('en-US')} spots
-            </span>
-          </li>
-        ))}
-      </ul>
-      {cells.length < total && (
-        <button type="button" disabled={loading} onClick={() => void load(cells.length)}>
-          {loading ? 'Loading…' : `Load more (${cells.length}/${total})`}
-        </button>
-      )}
-      <input placeholder='cell id, "1-10", or "c1, c7"' value={text} onChange={(e) => setText(e.target.value)} />
-      <button type="submit" disabled={!text.trim()}>
-        Create subset
-      </button>
-      {error && <div className="error">{error}</div>}
-    </form>
-  )
-}

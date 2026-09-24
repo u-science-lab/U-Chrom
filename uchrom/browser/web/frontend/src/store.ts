@@ -1,9 +1,23 @@
 import { create } from 'zustand'
 import { DEFAULT_STYLE, removeCascade, uniqueName } from './layers'
-import type { DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo } from './types'
+import type { CellInfo, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo } from './types'
 
 let nextId = 1
 const newId = () => `L${nextId++}`
+
+/**
+ * Per-dataset display state.  These are *view* settings, not layers: they
+ * change what is drawn and where the camera looks, never the data layers.
+ */
+export interface DatasetView {
+  /** cell drawn in full; others become faint context.  null = all cells */
+  focusCell: string | null
+  hiddenChroms: string[]
+  /** opacity of the non-focused cells (0 hides them) */
+  contextOpacity: number
+}
+
+export const DEFAULT_VIEW: DatasetView = { focusCell: null, hiddenChroms: [], contextOpacity: 0.15 }
 
 export interface AppState {
   datasets: DatasetSummary[]
@@ -15,6 +29,11 @@ export interface AppState {
   error: string | null
   /** bumped to ask the viewport to refit the camera */
   resetViewToken: number
+  /** bumped to ask the viewport to fly to the current focus */
+  flyToken: number
+  views: Record<string, DatasetView>
+  /** cell table per dataset, natural order (empty when no cell_id) */
+  cells: Record<string, CellInfo[]>
 
   setDatasets(ds: DatasetSummary[]): void
   addDataset(ds: DatasetSummary): void
@@ -33,12 +52,30 @@ export interface AppState {
   setStatus(msg: string | null): void
   setError(msg: string | null): void
   resetView(): void
+  setCells(datasetId: string, cells: CellInfo[]): void
+  focusCell(cellId: string | null): void
+  stepCell(delta: number): void
+  toggleChrom(chrom: string): void
+  setHiddenChroms(chroms: string[]): void
+  setContextOpacity(opacity: number): void
+}
+
+/** View state of the active dataset (defaults when none recorded). */
+export function activeView(s: Pick<AppState, 'views' | 'activeDatasetId'>): DatasetView {
+  return (s.activeDatasetId && s.views[s.activeDatasetId]) || DEFAULT_VIEW
 }
 
 const patchLayer = (layers: Layer[], id: string, patch: Partial<Layer>) =>
   layers.map((l) => (l.id === id ? { ...l, ...patch } : l))
 
-export const useStore = create<AppState>((set, get) => ({
+export const useStore = create<AppState>((set, get) => {
+  const patchView = (patch: Partial<DatasetView>, extra: Partial<AppState> = {}) => {
+    const s = get()
+    const id = s.activeDatasetId
+    if (!id) return
+    set({ views: { ...s.views, [id]: { ...activeView(s), ...patch } }, ...extra })
+  }
+  return {
   datasets: [],
   activeDatasetId: null,
   layers: [],
@@ -47,6 +84,9 @@ export const useStore = create<AppState>((set, get) => ({
   status: null,
   error: null,
   resetViewToken: 0,
+  flyToken: 0,
+  views: {},
+  cells: {},
 
   setDatasets(ds) {
     // Create a root layer for every dataset that doesn't have one yet.
@@ -65,7 +105,10 @@ export const useStore = create<AppState>((set, get) => ({
       : [...s.datasets, ds]
     set({ datasets, activeDatasetId: ds.id })
     if (!get().layers.some((l) => l.datasetId === ds.id && l.parentId === null)) {
-      const id = get().addLayer({ datasetId: ds.id, parentId: null, name: ds.name, filter: {} })
+      // Imaging data: tubes for the focused cell; the crowded overview falls
+      // back to lines automatically.
+      const style: Partial<LayerStyle> = ds.trace_mode ? { mode: 'tube' } : {}
+      const id = get().addLayer({ datasetId: ds.id, parentId: null, name: ds.name, filter: {}, style })
       set({ selectedLayerId: id, resetViewToken: get().resetViewToken + 1 })
     }
   },
@@ -169,4 +212,33 @@ export const useStore = create<AppState>((set, get) => ({
   resetView() {
     set({ resetViewToken: get().resetViewToken + 1 })
   },
-}))
+  setCells(datasetId, cells) {
+    set({ cells: { ...get().cells, [datasetId]: cells } })
+  },
+  focusCell(cellId) {
+    const s = get()
+    if (activeView(s).focusCell === cellId) return
+    patchView({ focusCell: cellId }, { pick: null, flyToken: s.flyToken + 1 })
+  },
+  stepCell(delta) {
+    const s = get()
+    const list = (s.activeDatasetId && s.cells[s.activeDatasetId]) || []
+    if (!list.length) return
+    const cur = list.findIndex((c) => c.cell_id === activeView(s).focusCell)
+    const next = cur < 0 ? (delta > 0 ? 0 : list.length - 1) : (cur + delta + list.length) % list.length
+    get().focusCell(list[next].cell_id)
+  },
+  toggleChrom(chrom) {
+    const hidden = new Set(activeView(get()).hiddenChroms)
+    if (hidden.has(chrom)) hidden.delete(chrom)
+    else hidden.add(chrom)
+    patchView({ hiddenChroms: [...hidden] })
+  },
+  setHiddenChroms(chroms) {
+    patchView({ hiddenChroms: [...chroms] })
+  },
+  setContextOpacity(contextOpacity) {
+    patchView({ contextOpacity })
+  },
+  }
+})

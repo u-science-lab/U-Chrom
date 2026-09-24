@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { listDatasets } from './api'
+import { CellPanel } from './components/CellPanel'
 import { LayerPanel } from './components/LayerPanel'
 import { OperationsPanel } from './components/OperationsPanel'
 import { PropertiesPanel } from './components/PropertiesPanel'
@@ -7,12 +8,14 @@ import { StatusBar } from './components/StatusBar'
 import { TopBar } from './components/TopBar'
 import { Viewport } from './components/Viewport'
 import { useStore } from './store'
+import { useCellLoader } from './useCellLoader'
 import { useGeometryLoader } from './useGeometryLoader'
 
 export function App() {
   const setDatasets = useStore((s) => s.setDatasets)
   const setError = useStore((s) => s.setError)
   useGeometryLoader()
+  useCellLoader()
   useEffect(() => {
     listDatasets()
       .then(setDatasets)
@@ -24,6 +27,7 @@ export function App() {
       <TopBar />
       <div className="main">
         <div className="left">
+          <CellPanel />
           <LayerPanel />
           <OperationsPanel />
         </div>

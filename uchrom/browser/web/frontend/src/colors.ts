@@ -70,13 +70,13 @@ export function rainbow(t: number): RGB {
 /**
  * Per-vertex RGB colours (length 3·N) for a geometry.
  *
- * - rainbow: several chromosomes → one colour per chromosome; a single
+ * - rainbow: several chromosomes (or `chromColors`) → one colour per chromosome; a single
  *   chromosome → hue along genomic position, scaled by the dataset-wide
  *   `chrom_extent` so a sub-region keeps its parent's colours.
  * - trace: tab20 by order of first appearance of each trace_id.
  * - custom: one colour.
  */
-export function vertexColors(geom: Geometry, mode: ColorMode, custom: string): Float32Array {
+export function vertexColors(geom: Geometry, mode: ColorMode, custom: string, chromColors = false): Float32Array {
   const { header, starts, offsets } = geom
   const n = header.n_points
   const out = new Float32Array(3 * n)
@@ -100,7 +100,9 @@ export function vertexColors(geom: Geometry, mode: ColorMode, custom: string): F
     return out
   }
   const chroms = new Set(header.segments.map((s) => s.chrom))
-  if (chroms.size > 1) {
+  // `chromColors`: the layer spans several chromosomes even if the display
+  // filter left one, so keep the legend's per-chromosome colours.
+  if (chroms.size > 1 || chromColors) {
     header.segments.forEach((seg, s) => fill(offsets[s], offsets[s + 1], hexToRgb(chromColor(seg.chrom))))
     return out
   }

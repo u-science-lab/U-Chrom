@@ -34,13 +34,13 @@ function applyOpacity(mat: THREE.Material, opacity: number) {
   mat.depthWrite = opacity >= 1
 }
 
-export function buildLayerObject(geom: Geometry, style: LayerStyle): BuiltLayer {
-  const colors = vertexColors(geom, style.colorMode, style.color)
+export function buildLayerObject(geom: Geometry, style: LayerStyle, opts: { chromColors?: boolean } = {}): BuiltLayer {
+  const colors = vertexColors(geom, style.colorMode, style.color, opts.chromColors)
   let mode = style.mode
   let warning: string | null = null
   if (mode === 'tube' && !tubeAllowed(geom.header, style.highQuality)) {
     mode = 'line'
-    warning = `Too large for tubes (${geom.header.n_segments} segments, ${geom.header.n_points} points) — drawing lines`
+    warning = `${geom.header.n_segments.toLocaleString('en-US')} traces are too many for tubes — drawing lines (select a cell to see tubes)`
   }
   if (mode === 'points') return buildPoints(geom, colors, style, warning)
   if (mode === 'tube') return buildTubes(geom, colors, style, warning)

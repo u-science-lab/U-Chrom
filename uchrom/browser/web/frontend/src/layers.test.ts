@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { descendantIds, removeCascade, treeOrder, uniqueName } from './layers'
-import { useStore } from './store'
+import { activeView, useStore } from './store'
 import { decodeGeometry } from './api'
 import { encodeGeometry, sampleHeader } from './testing'
 import type { DatasetSummary, Layer } from './types'
@@ -53,7 +53,7 @@ const ds: DatasetSummary = {
 
 describe('store', () => {
   beforeEach(() => {
-    useStore.setState({ datasets: [], layers: [], activeDatasetId: null, selectedLayerId: null, pick: null })
+    useStore.setState({ datasets: [], layers: [], activeDatasetId: null, selectedLayerId: null, pick: null, views: {}, cells: {} })
   })
 
   it('creates one root layer per dataset', () => {
@@ -125,5 +125,36 @@ describe('store', () => {
     expect(s.datasets.map((d) => d.id)).toEqual(['d1'])
     expect(s.layers.every((l) => l.datasetId === 'd1')).toBe(true)
     expect(s.activeDatasetId).toBe('d1')
+  })
+
+  it('focuses and steps through cells without creating layers', () => {
+    const st = useStore.getState()
+    st.addDataset(ds)
+    st.setCells('d1', ['c1', 'c2', 'c10'].map((cell_id) => ({ cell_id, n_spots: 1, n_traces: 1, n_chroms: 1 })))
+    const nLayers = useStore.getState().layers.length
+    const fly0 = useStore.getState().flyToken
+    st.stepCell(1)
+    expect(activeView(useStore.getState()).focusCell).toBe('c1')
+    st.stepCell(-1) // wraps
+    expect(activeView(useStore.getState()).focusCell).toBe('c10')
+    st.focusCell('c2')
+    st.focusCell('c2') // no-op: no extra camera flight
+    expect(useStore.getState().flyToken).toBe(fly0 + 3)
+    st.focusCell(null)
+    expect(activeView(useStore.getState()).focusCell).toBeNull()
+    expect(useStore.getState().layers.length).toBe(nLayers)
+  })
+
+  it('keeps chromosome visibility per dataset', () => {
+    const st = useStore.getState()
+    st.addDataset(ds)
+    st.toggleChrom('chr1')
+    st.toggleChrom('chr2')
+    st.toggleChrom('chr1')
+    expect(activeView(useStore.getState()).hiddenChroms).toEqual(['chr2'])
+    st.addDataset({ ...ds, id: 'd2', name: 'other' }) // becomes active
+    expect(activeView(useStore.getState()).hiddenChroms).toEqual([])
+    st.setActiveDataset('d1')
+    expect(activeView(useStore.getState()).hiddenChroms).toEqual(['chr2'])
   })
 })
