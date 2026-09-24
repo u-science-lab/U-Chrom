@@ -31,6 +31,9 @@ describe('default workspace', () => {
     expect(defaultEmbeddingKey([e('a', 'pca'), e('b', 'tsne'), e('c', 'umap')])).toBe('c')
     expect(defaultEmbeddingKey([e('a', 'pca'), e('b', 'tsne')])).toBe('b')
     expect(defaultEmbeddingKey([])).toBeNull()
+    const m = (key: string, modality: string) => ({ ...e(key, 'umap'), modality })
+    expect(defaultEmbeddingKey([m('atac_umap', 'ATAC'), m('paper_umap', 'Published'), m('rna_umap', 'RNA')])).toBe('rna_umap')
+    expect(defaultEmbeddingKey([m('atac_umap', 'ATAC'), m('umap', 'Published')])).toBe('umap')
   })
 })
 
@@ -128,5 +131,32 @@ describe('colour groups', () => {
     expect(groupTitle('rna')).toBe('Gene')
     expect(groupTitle('cell')).toBe('Property')
     expect(groupTitle('if')).toBe('IF')
+    expect(groupTitle('atac')).toBe('ATAC')
+    expect(groupTitle('hic')).toBe('Hi-C')
+  })
+})
+
+describe('embedding picker', () => {
+  it('groups embeddings by modality as "<modality> · <method>"', async () => {
+    const { groupEmbeddings } = await import('./components/EmbeddingView')
+    const e = (key: string, method: string | null, modality?: string, label = key) => ({ key, method: method as string, source: '', modality, label, n_dims: 2 })
+    const groups = groupEmbeddings([
+      e('paper_umap', 'umap', 'Published', 'Paper UMAP (RNA)'),
+      e('rna_pca', 'pca', 'RNA'),
+      e('rna_umap', 'umap', 'RNA'),
+      e('atac_lsi', 'lsi', 'ATAC'),
+      e('atac_umap', 'umap', 'ATAC'),
+      e('hic_umap', 'umap', 'Hi-C'),
+      e('if_umap', 'umap', 'Histone/IF'),
+      e('mystery', null, undefined, 'mystery'),
+    ])
+    expect(groups.map((g) => g.modality)).toEqual(['RNA', 'Histone/IF', 'ATAC', 'Hi-C', 'Published', 'Other'])
+    expect(groups[0].items.map((i) => i.text)).toEqual(['RNA · UMAP', 'RNA · PCA'])
+    expect(groups[2].items.map((i) => i.text)).toEqual(['ATAC · UMAP', 'ATAC · LSI'])
+    expect(groups[4].items[0].text).toBe('Published · UMAP')
+    expect(groups[5].items[0].text).toBe('Other · mystery')
+    // two published UMAPs: fall back to their labels
+    const two = groupEmbeddings([e('a', 'umap', 'Published', 'Paper A'), e('b', 'umap', 'Published', 'Paper B')])
+    expect(two[0].items.map((i) => i.text)).toEqual(['Published · Paper A', 'Published · Paper B'])
   })
 })

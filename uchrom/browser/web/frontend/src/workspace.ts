@@ -103,10 +103,13 @@ export function defaultWorkspace(kind: boolean | DataKind): WorkspaceState {
 /** Pane types of a workspace, in order — to compare layouts. */
 export const paneSignature = (ws: WorkspaceState) => ws.panes.map((p) => p.type).join(',')
 
-/** Preferred default embedding: UMAP, then t-SNE, then PCA, then the first one. */
+/** Preferred default embedding: UMAP, then t-SNE, then PCA, then the first
+ *  one — within a method RNA first, then published, then other modalities. */
 export function defaultEmbeddingKey(list: EmbeddingInfo[]): string | null {
+  const pref = ['RNA', 'Published']
+  const rank = (e: EmbeddingInfo) => (pref.includes(e.modality ?? '') ? pref.indexOf(e.modality!) : pref.length)
   for (const m of ['umap', 'tsne', 'pca']) {
-    const e = list.find((x) => x.method === m)
+    const e = list.filter((x) => x.method === m).sort((a, b) => rank(a) - rank(b))[0]
     if (e) return e.key
   }
   return list[0]?.key ?? null

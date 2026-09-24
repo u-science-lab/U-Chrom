@@ -21,6 +21,36 @@ export function resolveEmbedding(list: EmbeddingInfo[], pane: Pane): { key: stri
   return { key, info, dims }
 }
 
+const MODALITY_ORDER = ['RNA', 'Histone/IF', 'ATAC', 'Hi-C', 'Published']
+const METHOD_ORDER = ['umap', 'tsne', 'pca', 'lsi']
+const METHOD_NAME: Record<string, string> = { umap: 'UMAP', tsne: 't-SNE', pca: 'PCA', lsi: 'LSI' }
+
+/**
+ * Picker entries grouped by modality ("RNA", "Histone/IF", "ATAC", "Hi-C",
+ * "Published", then any other), each labelled "<modality> · <method>" —
+ * or with the stored label when that is ambiguous / the method unknown.
+ */
+export function groupEmbeddings(list: EmbeddingInfo[]): { modality: string; items: { info: EmbeddingInfo; text: string }[] }[] {
+  const mod = (e: EmbeddingInfo) => e.modality || 'Other'
+  const base = (e: EmbeddingInfo) => (e.method && METHOD_NAME[e.method] ? `${mod(e)} · ${METHOD_NAME[e.method]}` : null)
+  const count = new Map<string, number>()
+  for (const e of list) {
+    const b = base(e)
+    if (b) count.set(b, (count.get(b) ?? 0) + 1)
+  }
+  const groups = new Map<string, { info: EmbeddingInfo; text: string }[]>()
+  for (const e of list) {
+    const b = base(e)
+    const text = b && count.get(b) === 1 ? b : `${mod(e)} · ${e.label}`
+    groups.set(mod(e), [...(groups.get(mod(e)) ?? []), { info: e, text }])
+  }
+  const rank = (m: string) => (MODALITY_ORDER.includes(m) ? MODALITY_ORDER.indexOf(m) : MODALITY_ORDER.length)
+  const mrank = (e: EmbeddingInfo) => (e.method && METHOD_ORDER.includes(e.method) ? METHOD_ORDER.indexOf(e.method) : METHOD_ORDER.length)
+  return [...groups.entries()]
+    .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+    .map(([modality, items]) => ({ modality, items: [...items].sort((a, b) => mrank(a.info) - mrank(b.info)) }))
+}
+
 /** Pane-header controls of an embedding pane: which embedding and which two components. */
 export function EmbeddingControls({ pane }: { pane: Pane }) {
   const list = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId)?.embeddings) ?? []
@@ -32,11 +62,20 @@ export function EmbeddingControls({ pane }: { pane: Pane }) {
   return (
     <>
       <select value={key ?? ''} onChange={(e) => setWorkspace((ws) => updatePane(ws, pane.id, { embeddingKey: e.target.value, dims: [0, 1] }))}>
-        {list.map((e) => (
-          <option key={e.key} value={e.key}>
-            {e.label}
-          </option>
-        ))}
+        {groupEmbeddings(list).map((g, _, all) => {
+          const opts = g.items.map(({ info: e, text }) => (
+            <option key={e.key} value={e.key} title={`${e.label} (${e.key})`}>
+              {text}
+            </option>
+          ))
+          return all.length > 1 ? (
+            <optgroup key={g.modality} label={g.modality}>
+              {opts}
+            </optgroup>
+          ) : (
+            opts
+          )
+        })}
       </select>
       {info &&
         info.n_dims > 2 &&

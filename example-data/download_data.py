@@ -10,7 +10,8 @@ Usage::
     python example-data/download_data.py           # fetch all default datasets
     python example-data/download_data.py --takei   # just Takei 2021 FOF-CT
     python example-data/download_data.py --seqfish # just seqFISH+ zip
-    python example-data/download_data.py --schicar_dna  # opt-in, ~2.8 GB
+    python example-data/download_data.py --schicar_dna  # opt-in, ~1.5 GB pairs
+    python example-data/download_data.py --schicar_atac # opt-in, ~1.4 GB ATAC + mm10 GTF
 
 Datasets marked ``"default": False`` are large and only fetched when
 requested explicitly.  Multi-file datasets list ``files`` as
@@ -78,11 +79,23 @@ DATASETS = {
     "schicar_dna": {
         "files": [
             (f"schicar_mop/raw/GSE305439/{name}", f"{_GSE305439}/{name}")
-            for name in ("GSE305439_DNA.dedup.pairs.gz", "GSE305439_DNA.ATAC.tsv.gz")
+            for name in ("GSE305439_DNA.dedup.pairs.gz",)
         ],
-        "size_mb": 2800,
+        "size_mb": 1470,
         "default": False,
-        "description": "scHiCAR mouse brain contact pairs + ATAC fragments (GSE305439)",
+        "description": "scHiCAR mouse brain contact pairs (GSE305439)",
+    },
+    # ATAC fragments + UCSC mm10 refGene (gene windows for ATAC gene activity)
+    "schicar_atac": {
+        "files": [
+            ("schicar_mop/raw/GSE305439/GSE305439_DNA.ATAC.tsv.gz",
+             f"{_GSE305439}/GSE305439_DNA.ATAC.tsv.gz"),
+            ("schicar_mop/raw/mm10.refGene.gtf.gz",
+             "https://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/genes/mm10.refGene.gtf.gz"),
+        ],
+        "size_mb": 1366,
+        "default": False,
+        "description": "scHiCAR mouse brain ATAC fragments (GSE305439) + UCSC mm10 refGene GTF",
     },
     # BICCN MERFISH mouse MOp atlas (Zhang et al. 2021, Nature), BIL doi:10.35077/g.21.
     "merfish_mop": {

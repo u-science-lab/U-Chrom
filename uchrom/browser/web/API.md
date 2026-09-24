@@ -54,8 +54,10 @@ Multi-omics fields (empty lists when the dataset has none):
      "min": 0, "max": 52, "n_valid": 201}
   ],
   "embeddings": [
-    {"key": "rna_umap", "method": "umap", "source": "rna", "label": "RNA UMAP",
-     "n_dims": 2}
+    {"key": "rna_umap", "method": "umap", "source": "rna", "modality": "RNA",
+     "label": "RNA UMAP", "n_dims": 2},
+    {"key": "atac_lsi", "method": "lsi", "source": "atac", "modality": "ATAC",
+     "label": "ATAC LSI", "n_dims": 29}
   ],
   "point_sets": [
     {"name": "rna", "n_points": 3334, "label_field": "gene",
@@ -66,7 +68,13 @@ Multi-omics fields (empty lists when the dataset has none):
 ```
 
 `embeddings` are the 2-D-or-more arrays in `cd.cellm` (rows aligned to
-`cd.cells`); metadata from `uns["embeddings"][key]` when present.
+`cd.cells`); metadata from `uns["embeddings"][key]` when present
+(`uchrom.emb.embed_cells` writes it).  `method` is `pca`, `lsi`, `tsne`,
+`umap` (or `null`), taken from the metadata or else from the key suffix
+(`atac_umap` → `umap`).  `modality` is the display group the Embedding
+view uses: the recorded `modality`, else from `source` / the key prefix
+(`rna` → `RNA`, `if` → `Histone/IF`, `atac` → `ATAC`, `hic` → `Hi-C`),
+`Published` for `paper_*` keys or a `…metadata` source, else `Other`.
 `cell_fields` are the columns of `cd.cells` usable for colouring:
 `kind: "numeric"` (with `min`/`max`) or `kind: "category"` — string
 columns with 2–60 values that are not per-cell ids (e.g. `cell_type`), with

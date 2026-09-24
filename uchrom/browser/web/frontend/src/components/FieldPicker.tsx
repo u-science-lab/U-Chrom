@@ -6,6 +6,8 @@ import { fieldLabel } from './format'
 export function groupTitle(group: string): string {
   if (group === 'rna') return 'Gene'
   if (group === 'cell') return 'Property'
+  if (group === 'atac') return 'ATAC' // gene activity (atac.<gene>)
+  if (group === 'hic') return 'Hi-C'
   return group.length <= 3 ? group.toUpperCase() : group[0].toUpperCase() + group.slice(1)
 }
 

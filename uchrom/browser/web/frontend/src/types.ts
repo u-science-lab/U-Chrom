@@ -95,6 +95,8 @@ export interface EmbeddingInfo {
   key: string
   method: string
   source: string
+  /** display group: "RNA", "Histone/IF", "ATAC", "Hi-C", "Published", "Other" */
+  modality?: string
   label: string
   n_dims: number
 }
