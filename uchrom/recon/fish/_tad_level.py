@@ -94,8 +94,12 @@ def _mds_seed(
         return np.zeros((max(n, 1), 3), dtype=np.float64)
 
     # Mark missing
+    np.fill_diagonal(D, 0.0)
     missing = ~np.isfinite(D) | (D <= 0)
     np.fill_diagonal(missing, False)
+    if (missing | np.eye(n, dtype=bool)).all():
+        rng = np.random.default_rng(0)
+        return rng.normal(scale=0.1, size=(n, 3))
 
     # Fill by same-|i-j| median
     if missing.any():
