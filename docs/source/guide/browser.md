@@ -45,7 +45,8 @@ rna_table=…)`, see the ChromData guide):
 - **Colour · all cells → Gene / Property** colours every cell by a
   numeric `cd.cells` column — **Gene** for RNA counts (`rna.Nanog`, …),
   **Property** for morphology (nuclear area, centroid, …), and one button
-  per any other column prefix (e.g. `if.*` → *IF*).  Pick the column in the
+  per any other column prefix (`if.*` → *IF* for per-cell immunofluorescence /
+  histone means, `atac.*` → *ATAC* for gene activity).  Pick the column in the
   search box (type to filter).  Colours use viridis with a colour bar
   (capped at the 99th percentile; grey = missing).
   The cell list then shows each cell's value and can sort by it.
@@ -58,7 +59,10 @@ rna_table=…)`, see the ChromData guide):
 - **Views are equal panes.**  The centre area is a workspace of views —
   *3D* and *Embedding* (2-D view of `cd.cellm` embeddings such as
   `rna_umap`, `rna_tsne`, `rna_pca` from `uchrom.emb.embed_cells`; any two
-  PCs for PCA).  Each pane's header picks its view type; its settings are in the
+  PCs for PCA / LSI).  The Embedding picker groups them by modality —
+  *RNA · UMAP*, *Histone/IF · UMAP*, *ATAC · UMAP* / *ATAC · LSI*,
+  *Hi-C · UMAP*, *Published · UMAP* — from `uns["embeddings"][key]["modality"]`
+  (or the key prefix).  Each pane's header picks its view type; its settings are in the
   inspector (right); **+ View** adds panes (e.g. two 3-D cameras, or UMAP next to
   PCA) and the workspace bar switches the layout: **Tabs**, **Columns**,
   **Rows** or **Grid** (drag the dividers; the arrangement is remembered

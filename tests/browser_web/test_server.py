@@ -198,13 +198,48 @@ def test_embedding_endpoint(tmp_path):
     store.load(path)
     c = TestClient(create_app(store))
     embs = c.get("/api/datasets").json()[0]["embeddings"]
-    assert embs == [{"key": "rna_pca", "method": "pca", "source": "rna", "label": "RNA PCA", "n_dims": 3},
-                    {"key": "rna_umap", "method": None, "source": None, "label": "rna_umap", "n_dims": 2}]
+    # method / modality fall back to the key when uns has no metadata
+    assert embs == [{"key": "rna_pca", "method": "pca", "source": "rna", "modality": "RNA",
+                     "label": "RNA PCA", "n_dims": 3},
+                    {"key": "rna_umap", "method": "umap", "source": None, "modality": "RNA",
+                     "label": "rna_umap", "n_dims": 2}]
     e = c.get("/api/datasets/d1/embedding/rna_pca", params={"dims": "1,2"}).json()
     assert e == {"key": "rna_pca", "label": "RNA PCA", "cell_ids": ["c1", "c2"],
                  "x": [1.5, None], "y": [2.5, 0.0], "axis_labels": ["PC2", "PC3"]}
     assert c.get("/api/datasets/d1/embedding/rna_pca", params={"dims": "0,3"}).status_code == 422
     assert c.get("/api/datasets/d1/embedding/scalar").status_code == 404
+
+
+def test_embedding_modalities(tmp_path):
+    """Embeddings from embed_cells (RNA, IF, ATAC) carry modality + method;
+    unknown keys fall back to 'Published' / 'Other'."""
+    from uchrom.emb import embed_cells
+
+    rng = np.random.default_rng(0)
+    n = 12
+    ids = [f"c{i}" for i in range(n)]
+    spots = pd.DataFrame({"chrom": "chr1", "start": 0, "end": 1, "trace_id": ids, "cell_id": ids})
+    cells = pd.DataFrame(rng.poisson(5, size=(n, 4)), columns=[f"rna.g{j}" for j in range(4)],
+                         index=pd.Index(ids, name="cell_id"))
+    for j in range(3):
+        cells[f"if.m{j}"] = rng.normal(size=n)
+    cd = ChromData(np.zeros((n, 3)), spots, cells=cells,
+                   cellm={"paper_umap": rng.normal(size=(n, 2)), "umap": rng.normal(size=(n, 2))})
+    embed_cells(cd, source="rna", methods=("pca",))
+    embed_cells(cd, source="if", methods=("pca",))
+    embed_cells(cd, source="atac", matrix=rng.poisson(1, size=(n, 40)), methods=("pca",), drop_depth_r=None)
+    path = tmp_path / "mod.h5cd"
+    cd.write(path)
+    store = DatasetStore()
+    store.load(path)
+    c = TestClient(create_app(store))
+    embs = {e["key"]: e for e in c.get("/api/datasets").json()[0]["embeddings"]}
+    assert {k: (e["modality"], e["method"]) for k, e in embs.items()} == {
+        "paper_umap": ("Published", "umap"), "umap": ("Other", "umap"),
+        "rna_pca": ("RNA", "pca"), "if_pca": ("Histone/IF", "pca"), "atac_lsi": ("ATAC", "lsi")}
+    assert embs["atac_lsi"]["label"] == "ATAC LSI"
+    e = c.get("/api/datasets/d1/embedding/atac_lsi").json()
+    assert e["axis_labels"] == ["LSI1", "LSI2"]
 
 
 def test_categorical_cell_fields(tmp_path):

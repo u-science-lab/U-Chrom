@@ -44,6 +44,33 @@ def natural_key(text: str):
             for t in re.split(r"(\d+)", str(text)) if t]
 
 
+_EMB_METHODS = ("umap", "tsne", "pca", "lsi")
+
+
+def _method_from_key(key: str) -> Optional[str]:
+    """'atac_umap' → 'umap' (for cellm arrays without uns['embeddings'] metadata)."""
+    low = key.lower()
+    return next((m for m in _EMB_METHODS if low == m or low.endswith("_" + m)), None)
+
+
+def _modality(key: str, meta: Dict[str, Any]) -> str:
+    """Display modality of an embedding ("RNA", "Histone/IF", "ATAC", "Hi-C",
+    "Published", …): the recorded one, else from its source / key prefix."""
+    if meta.get("modality"):
+        return str(meta["modality"])
+    from uchrom.emb.cells import MODALITY_LABELS
+
+    source = str(meta.get("source") or "")
+    if source in MODALITY_LABELS:
+        return MODALITY_LABELS[source]
+    prefix = key.split("_", 1)[0].lower() if "_" in key else ""
+    if prefix in MODALITY_LABELS:
+        return MODALITY_LABELS[prefix]
+    if prefix in ("paper", "published") or "metadata" in source.lower():
+        return "Published"
+    return "Other"
+
+
 def load_chromdata(path: Path) -> ChromData:
     """Load a ``.h5cd`` or a reconstruction CSV (chrom, start, end, x, y, z)."""
     if path.suffix == ".h5cd":
@@ -384,7 +411,9 @@ class Dataset:
             if np.ndim(arr) != 2 or np.shape(arr)[1] < 2 or not n or np.shape(arr)[0] != n:
                 continue
             m = meta.get(key) if isinstance(meta.get(key), dict) else {}
-            out.append({"key": str(key), "method": m.get("method"), "source": m.get("source"),
+            method = m.get("method") or _method_from_key(str(key))
+            out.append({"key": str(key), "method": method, "source": m.get("source"),
+                        "modality": _modality(str(key), m),
                         "label": str(m.get("label") or key), "n_dims": int(np.shape(arr)[1])})
         return out
 
