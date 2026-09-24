@@ -2,6 +2,8 @@
 
 import numpy as np
 import pandas as pd
+from pathlib import Path
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -32,7 +34,11 @@ def client(tmp_path):
 
 def test_health_and_list(client):
     c, path = client
-    assert c.get("/api/health").json()["status"] == "ok"
+    health = c.get("/api/health").json()
+    assert health["status"] == "ok"
+    # the committed bundle, so the page can tell a server older than itself
+    html = (Path(__file__).resolve().parents[2] / "uchrom/browser/web/static/index.html").read_text()
+    assert health["bundle"] and f"assets/{health['bundle']}" in html
     ds = c.get("/api/datasets").json()
     assert len(ds) == 1 and ds[0]["id"] == "d1" and ds[0]["path"] == str(path.resolve())
     assert [x["name"] for x in ds[0]["chroms"]] == ["chr1", "chr2"]

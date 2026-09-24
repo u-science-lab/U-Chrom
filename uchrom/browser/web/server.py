@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -13,6 +14,19 @@ from pydantic import BaseModel
 from .data import DEFAULT_MAX_POINTS, DatasetStore, GeometryFilter
 
 STATIC_DIR = Path(__file__).with_name("static")
+
+
+def _bundle_id() -> Optional[str]:
+    """Name of the JS bundle the page loads (changes on every frontend build).
+
+    Read once at start-up: a page that reports a different bundle was built
+    after this server started, i.e. the server runs stale backend code.
+    """
+    try:
+        m = re.search(r"assets/(index-[^\"']+\.js)", (STATIC_DIR / "index.html").read_text())
+    except OSError:
+        return None
+    return m.group(1) if m else None
 
 
 class LoadRequest(BaseModel):
@@ -49,6 +63,7 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
     app = FastAPI(title="U-Chrom browser", docs_url="/api/docs",
                   openapi_url="/api/openapi.json")
     app.state.store = store
+    bundle = _bundle_id()
 
     def _dataset(dataset_id: str):
         try:
@@ -59,7 +74,7 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
     @app.get("/api/health")
     def health() -> Dict[str, Any]:
         from uchrom import __version__
-        return {"status": "ok", "version": __version__}
+        return {"status": "ok", "version": __version__, "bundle": bundle}
 
     @app.get("/api/datasets")
     def list_datasets() -> List[Dict[str, Any]]:

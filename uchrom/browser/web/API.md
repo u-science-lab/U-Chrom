@@ -11,7 +11,12 @@ paths are local filesystem paths on the machine running the server.
 
 ### `GET /api/health`
 
-`{"status": "ok", "version": "<uchrom version>"}`
+`{"status": "ok", "version": "<uchrom version>", "bundle": "index-<hash>.js" | null}`
+
+`bundle` is the frontend build the server saw in `static/` when it started.
+The page compares it with its own script and warns when they differ: the
+page was rebuilt after the server started, so the server may lack routes
+the page uses — restart the server.
 
 ### `GET /api/datasets`
 

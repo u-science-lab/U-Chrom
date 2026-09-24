@@ -16,6 +16,10 @@ async function request(url: string, init?: RequestInit): Promise<Response> {
   return res
 }
 
+export async function fetchHealth(): Promise<{ status: string; version: string; bundle?: string | null }> {
+  return (await request('api/health')).json()
+}
+
 export async function listDatasets(): Promise<DatasetSummary[]> {
   return (await request('api/datasets')).json()
 }

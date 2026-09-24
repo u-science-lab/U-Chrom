@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { listDatasets } from './api'
+import { fetchHealth, listDatasets } from './api'
 import { CellInfoPanel } from './components/CellInfoPanel'
 import { CellPanel } from './components/CellPanel'
 import { GroupPanel } from './components/GroupPanel'
@@ -9,6 +9,7 @@ import { StatusBar } from './components/StatusBar'
 import { TopBar } from './components/TopBar'
 import { Workspace } from './components/Workspace'
 import { leftSections } from './inspector'
+import { STALE_SERVER_MESSAGE, isStaleServer, pageBundle } from './serverBundle'
 import { useStore } from './store'
 import { useCellLoader } from './useCellLoader'
 import { useGeometryLoader } from './useGeometryLoader'
@@ -24,6 +25,12 @@ export function App() {
     listDatasets()
       .then(setDatasets)
       .catch((e: Error) => setError(`Cannot reach the U-Chrom server: ${e.message}`))
+    fetchHealth()
+      .then((h) => {
+        // a server older than the page lacks its newer routes (405 / 404 on use)
+        if (isStaleServer(pageBundle(), h.bundle ?? null)) setError(STALE_SERVER_MESSAGE)
+      })
+      .catch(() => {})
   }, [setDatasets, setError])
 
   return (
