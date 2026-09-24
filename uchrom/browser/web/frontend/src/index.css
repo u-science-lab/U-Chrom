@@ -1192,3 +1192,76 @@ body.resizing-rows {
 .gv .embedding-tip {
   z-index: 5;
 }
+
+/* ---- 3-D-only side sections (shown while a 3-D pane is active) ------ */
+.panel-3d {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: panel-in 0.18s ease-out;
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.panel-hint {
+  margin: 10px 0 0;
+}
+.overview-colour {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.pane.active > .pane-head {
+  background: rgba(92, 157, 237, 0.1);
+}
+
+/* ---- cells pinned into their own views ------------------------------- */
+.pick-open {
+  pointer-events: auto;
+  margin-top: 5px;
+  font-size: 11px;
+  padding: 1px 6px;
+}
+.cell-list .cell-open {
+  display: none;
+  flex: none;
+  margin-left: 4px;
+  padding: 0 5px;
+  height: 16px;
+  line-height: 14px;
+  font-size: 11px;
+}
+.cell-list li:hover .cell-open {
+  display: inline-block;
+}
+.cell-list li:hover .cell-tag,
+.cell-list li:hover .cell-value {
+  margin-left: 4px;
+}
+.cell-list .cell-open {
+  order: 10;
+}
+.pane-cell > button {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pane-cell > button.pinned {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.pane-cell .pane-popup {
+  width: 260px;
+}
+.pane.pinned > .pane-head {
+  box-shadow: inset 0 -2px 0 rgba(92, 157, 237, 0.55);
+}

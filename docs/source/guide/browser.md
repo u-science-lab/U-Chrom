@@ -77,6 +77,21 @@ rna_table=…)`, see the ChromData guide):
   Tubes (radius 0.35× the median spot spacing) appear once a cell is
   focused.
 
+### Active view, pinned cells
+
+The side panels follow the **active pane** (click a pane; it gets an accent
+border): layers, subsets, chromosome legend, RNA points and the 3-D style
+controls appear only while a 3-D view is active, while the cell list,
+cell info and *Colour · all cells* are always there.
+
+Any pane can **follow the focused cell** (default) or be **pinned** to one
+cell (📌 in its header).  A pinned 3-D view draws only that cell with its
+own camera; pinned Genome / Matrix / Stats views use that cell's traces or
+per-cell contacts.  Open a cell in a new pinned view with ↗ on its row in
+the cell list, ↗ *New view* in the focus bar, or from the label shown when
+clicking a trace — e.g. to compare two cells side by side while the
+overview stays.
+
 ### Genome-coordinate views
 
 Besides *3D* and *Embedding*, panes can show views along the genome.  They

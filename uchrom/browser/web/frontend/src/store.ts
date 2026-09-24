@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { DEFAULT_STYLE, removeCascade, uniqueName } from './layers'
 import { isPointPick } from './types'
 import type { Locus } from './genome'
-import { defaultWorkspace, paneSignature, parseWorkspace, type DataKind, type WorkspaceState } from './workspace'
+import { addPinnedPane, defaultWorkspace, paneSignature, parseWorkspace, type DataKind, type WorkspaceState } from './workspace'
 import type { CellField, CellInfo, CellValue, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo, PointSet } from './types'
 
 let nextId = 1
@@ -143,6 +143,8 @@ export interface AppState {
   ensureDefaultWorkspace(kind: boolean | DataKind): void
   /** replace the workspace (used by the pane actions); persists it */
   setWorkspace(update: (ws: WorkspaceState) => WorkspaceState): void
+  /** open `cell` in a new view pinned to it (3-D, or Genome without coordinates) */
+  openCellView(cell: string): void
   setCells(datasetId: string, cells: CellInfo[]): void
   focusCell(cellId: string | null): void
   stepCell(delta: number): void
@@ -361,6 +363,10 @@ export const useStore = create<AppState>((set, get) => {
     if (workspace === get().workspace) return
     set({ workspace, workspaceTouched: true })
     saveWorkspace(workspace)
+  },
+  openCellView(cell) {
+    const ds = get().datasets.find((d) => d.id === get().activeDatasetId)
+    get().setWorkspace((ws) => addPinnedPane(ws, hasCoords(ds) ? '3d' : 'genome', cell))
   },
   resetView() {
     set({ resetViewToken: get().resetViewToken + 1 })

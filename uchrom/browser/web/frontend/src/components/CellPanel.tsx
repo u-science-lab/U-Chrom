@@ -31,6 +31,7 @@ export function CellPanel() {
   )
   const focus = useStore((s) => s.focusCell)
   const setSort = useStore((s) => s.setCellSort)
+  const openCellView = useStore((s) => s.openCellView)
   const colors = useFieldColors()
   const [query, setQuery] = useState('')
   const listRef = useRef<HTMLUListElement>(null)
@@ -121,6 +122,16 @@ export function CellPanel() {
             >
               <span className="idx">{c.index}</span>
               <span className="cell-id">{c.cell_id}</span>
+              <button
+                className="cell-open"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openCellView(c.cell_id)
+                }}
+                title="Open this cell in a new view"
+              >
+                ↗
+              </button>
               {hasCoords && <span className="muted"> {c.n_traces} traces</span>}
               {typeof t === 'string' && <span className="muted cell-tag">{t}</span>}
               {byField &&

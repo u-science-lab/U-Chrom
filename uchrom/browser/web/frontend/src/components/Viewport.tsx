@@ -104,6 +104,13 @@ function flyTo(t: Three, box: THREE.Box3) {
 
 const hiddenKey = (h: string[]) => [...h].sort().join('\u0000')
 
+/** Geometry of the fully drawn (focused / pinned) parts. */
+function mainGeometries(t: Three): Geometry[] {
+  const out: Geometry[] = []
+  for (const e of t.entries.values()) for (const p of e.parts) if (p.role === 'main') out.push(p.geometry)
+  return out
+}
+
 /** Geometry parts currently drawn for the active dataset. */
 function drawnGeometries(t: Three): Geometry[] {
   const out: Geometry[] = []
@@ -114,9 +121,10 @@ function drawnGeometries(t: Three): Geometry[] {
 /**
  * 3-D view of the active dataset — one instance per workspace pane.  Several
  * 3-D panes share the store (layers, focus, colours) but each has its own
- * renderer and camera.  `resetKey` refits this pane only.
+ * renderer and camera.  `resetKey` refits this pane only.  `pinned`: draw
+ * only that cell (no context), ignoring the global focus.
  */
-export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; resetKey?: number }) {
+export function Viewport({ paneId = 'P1', resetKey = 0, pinned = null }: { paneId?: string; resetKey?: number; pinned?: string | null }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const paneRef = useRef(paneId)
   paneRef.current = paneId
@@ -133,6 +141,11 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
   const pointSets = useStore((s) => (s.activeDatasetId ? s.pointSets[s.activeDatasetId] : undefined))
   const setPick = useStore((s) => s.setPick)
   const setStatus = useStore((s) => s.setStatus)
+  // the cell drawn in full here: the pinned one, else the global focus
+  const focus = pinned ?? view.focusCell
+  const ctxOpacity = pinned ? 0 : view.contextOpacity
+  const focusRef = useRef(focus)
+  focusRef.current = focus
   const noCoords = useStore((s) => {
     const d = s.datasets.find((x) => x.id === s.activeDatasetId)
     return !!d && (d.has_coords === false || d.n_spots === 0)
@@ -220,7 +233,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y)
       down = null
       if (moved > 5) return
-      pickAt(t, e, paneRef.current)
+      pickAt(t, e, paneRef.current, focusRef.current)
       hideHover()
     }
     // Hover: at most one raycast per frame, none while dragging.
@@ -239,7 +252,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
       if (!hoverRaf)
         hoverRaf = requestAnimationFrame(() => {
           hoverRaf = 0
-          if (hoverEvt) hoverAt(t, hoverEvt, tip)
+          if (hoverEvt) hoverAt(t, hoverEvt, tip, focusRef.current)
         })
     }
     renderer.domElement.addEventListener('pointerdown', onDown)
@@ -263,6 +276,11 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
       threeRef.current = null
     }
   }, [])
+
+  // A new pin → fit the camera to that cell once it is drawn.
+  useEffect(() => {
+    fittedRef.current = false
+  }, [pinned])
 
   // Sync scene objects with layers + view state (only the active dataset).
   useEffect(() => {
@@ -289,9 +307,9 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
       const key = {
         geometry: l.geometry!,
         style: l.style,
-        focus: view.focusCell,
+        focus,
         hidden: hiddenKey(view.hiddenChroms),
-        ctx: view.contextOpacity,
+        ctx: ctxOpacity,
         overview: view.overviewColor,
         nCells: cellList.length,
         values: view.overviewColor === 'field' ? fieldColors : null,
@@ -316,7 +334,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
       if (prev) drop(l.id, prev)
       // cut over-long bonds (unassigned spots, duplicate loci) before drawing
       const base = splitForView(l.geometry!, view.maxBond).geometry
-      const { main, context } = displayParts(base, hidden, view.focusCell)
+      const { main, context } = displayParts(base, hidden, focus)
       // colour by chromosome whenever the layer itself has several, so hiding
       // chromosomes never switches the colour scheme away from the legend
       const colorOpts = {
@@ -329,11 +347,11 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
       // Multi-cell data: the overview (and the faint context around a
       // focused cell) uses the overview colouring — per cell by default.
       const overviewStyle: LayerStyle = cellIndex.size > 1 ? { ...l.style, colorMode: view.overviewColor } : l.style
-      const mainStyle = view.focusCell === null ? overviewStyle : l.style
+      const mainStyle = focus === null ? overviewStyle : l.style
       const parts: Part[] = []
       if (main) parts.push({ role: 'main', geometry: main, built: buildLayerObject(main, mainStyle, colorOpts) })
-      if (context && view.contextOpacity > 0) {
-        const ctxStyle: LayerStyle = { ...overviewStyle, mode: 'line', lineWidth: 1, opacity: view.contextOpacity }
+      if (context && ctxOpacity > 0) {
+        const ctxStyle: LayerStyle = { ...overviewStyle, mode: 'line', lineWidth: 1, opacity: ctxOpacity }
         parts.push({ role: 'context', geometry: context, built: buildLayerObject(context, ctxStyle, colorOpts) })
       }
       for (const p of parts) {
@@ -348,7 +366,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
     setStatus(warnings.length ? warnings.join(' · ') : null)
 
     if (!fittedRef.current) {
-      const box = unionBox(drawnGeometries(t))
+      const box = unionBox(pinned ? mainGeometries(t) : drawnGeometries(t))
       if (box) {
         jumpTo(t, box)
         fittedRef.current = true
@@ -356,7 +374,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
     }
     const pick = useStore.getState().pick
     if (pick && !isPointPick(pick) && !keep.has(pick.layerId)) setPick(null)
-  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus])
+  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, pinned])
 
   // Point sets (e.g. RNA spots): focused cell's points full, others faint.
   useEffect(() => {
@@ -375,7 +393,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
     for (const ps of Object.values(sets)) {
       if (hiddenSets.has(ps.name)) continue
       const hiddenLabels = view.hiddenLabels[ps.name] ?? []
-      const key = [view.focusCell, view.contextOpacity, view.pointSize, [...hiddenLabels].sort().join('\u0000')].join('|')
+      const key = [focus, ctxOpacity, view.pointSize, [...hiddenLabels].sort().join('\u0000')].join('|')
       const prev = t.points.get(ps.name)
       if (prev && prev.set === ps && prev.key === key) continue
       if (prev)
@@ -383,24 +401,24 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
           t.group.remove(p.built.object)
           p.built.dispose()
         }
-      const split = splitPoints(ps, new Set(hiddenLabels), view.focusCell)
+      const split = splitPoints(ps, new Set(hiddenLabels), focus)
       const parts: { role: Role; built: BuiltPoints }[] = []
       // all-cells overview: half-size markers so the chromatin stays visible
-      const overview = view.focusCell === null
+      const overview = focus === null
       if (split.main.length)
         parts.push({
           role: 'main',
           built: buildPointMarkers(ps, split.main, overview ? Math.max(2, view.pointSize * 0.5) : view.pointSize, overview ? 0.85 : 1),
         })
-      if (split.context.length && view.contextOpacity > 0)
-        parts.push({ role: 'context', built: buildPointMarkers(ps, split.context, Math.max(2, view.pointSize * 0.6), view.contextOpacity) })
+      if (split.context.length && ctxOpacity > 0)
+        parts.push({ role: 'context', built: buildPointMarkers(ps, split.context, Math.max(2, view.pointSize * 0.6), ctxOpacity) })
       for (const p of parts) {
         p.built.object.userData = { kind: 'points', set: ps.name, role: p.role }
         t.group.add(p.built.object)
       }
       t.points.set(ps.name, { set: ps, key, parts })
     }
-  }, [pointSets, view])
+  }, [pointSets, view, focus, ctxOpacity])
 
   // Explicit reset / dataset switch → refit on everything drawn.
   useEffect(() => {
@@ -414,13 +432,15 @@ export function Viewport({ paneId = 'P1', resetKey = 0 }: { paneId?: string; res
     }
   }, [resetViewToken, activeDatasetId, resetKey])
 
+  // Global focus changes don't move a pinned view.
+  const pinnedRef = useRef(pinned)
+  pinnedRef.current = pinned
+
   // Focus change → fly to the focused cell (or back to everything).
   useEffect(() => {
     const t = threeRef.current
-    if (!t || flyToken === 0) return
-    const mains: Geometry[] = []
-    for (const e of t.entries.values()) for (const p of e.parts) if (p.role === 'main') mains.push(p.geometry)
-    const box = unionBox(view.focusCell ? mains : drawnGeometries(t))
+    if (!t || flyToken === 0 || pinnedRef.current) return
+    const box = unionBox(view.focusCell ? mainGeometries(t) : drawnGeometries(t))
     if (box) flyTo(t, box)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flyToken])
@@ -534,15 +554,14 @@ const hasManyCells = (store: ReturnType<typeof useStore.getState>) =>
  * overview of a multi-cell dataset) focuses that cell; a trace or point of
  * the focused cell — or of data without cells — shows its details.
  */
-function pickAt(t: Three, e: PointerEvent, paneId: string) {
+function pickAt(t: Three, e: PointerEvent, paneId: string, focus: string | null) {
   const store = useStore.getState()
-  const view = activeView(store)
   const hit = hitAt(t, e.clientX, e.clientY)
   if (!hit) {
     store.setPick(null)
     return
   }
-  if (hasManyCells(store) && hit.cell !== null && hit.cell !== view.focusCell) {
+  if (hasManyCells(store) && hit.cell !== null && hit.cell !== focus) {
     store.focusCell(hit.cell)
     return
   }
@@ -598,7 +617,7 @@ function cellBoxes(g: Geometry): Map<string, THREE.Box3> {
  * Hover feedback for multi-cell data: outline the cell under the cursor and
  * say what a click will do.  Updates the DOM directly (no React renders).
  */
-function hoverAt(t: Three, e: PointerEvent, tip: HTMLDivElement) {
+function hoverAt(t: Three, e: PointerEvent, tip: HTMLDivElement, focus: string | null) {
   const store = useStore.getState()
   const view = activeView(store)
   const hit = hitAt(t, e.clientX, e.clientY)
@@ -616,7 +635,7 @@ function hoverAt(t: Three, e: PointerEvent, tip: HTMLDivElement) {
     t.renderer.domElement.style.cursor = ''
   }
   const cell = hit?.cell ?? null
-  const otherCell = hasManyCells(store) && cell !== null && cell !== view.focusCell
+  const otherCell = hasManyCells(store) && cell !== null && cell !== focus
   const pointText = hit?.kind === 'point' ? `${hit.set.labels[hit.index]}${cell !== null ? ` · cell ${cell}` : ''}` : null
   if (!hit || !otherCell) {
     clear()

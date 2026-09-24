@@ -6,7 +6,7 @@ import { activeView, useStore } from '../store'
 import { fmtAxis } from '../stats'
 import type { ContactMapInfo } from '../types'
 import { useLocus } from '../useLocus'
-import { updatePane, type DistanceStat, type Pane } from '../workspace'
+import { paneCell, updatePane, type DistanceStat, type Pane } from '../workspace'
 import { CHART, drawColorRamp, rgb } from './chart'
 import { prepareCanvas, useSize } from './useSize'
 
@@ -88,7 +88,7 @@ export function MatrixControls({ pane }: { pane: Pane }) {
  */
 export function MatrixView({ pane }: { pane: Pane }) {
   const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
-  const focus = useStore((s) => activeView(s).focusCell)
+  const focus = useStore((s) => paneCell(pane, activeView(s).focusCell))
   const { locus, setLocus } = useLocus()
   const boxRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)

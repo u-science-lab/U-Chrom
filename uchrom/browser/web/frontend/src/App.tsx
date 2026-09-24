@@ -8,6 +8,7 @@ import { StatusBar } from './components/StatusBar'
 import { TopBar } from './components/TopBar'
 import { Workspace } from './components/Workspace'
 import { hasCoords, useStore } from './store'
+import { show3dPanels } from './workspace'
 import { useCellLoader } from './useCellLoader'
 import { useGeometryLoader } from './useGeometryLoader'
 import { useOmicsLoader } from './useOmicsLoader'
@@ -17,6 +18,8 @@ export function App() {
   const setError = useStore((s) => s.setError)
   // layers / subsets are 3-D geometry: nothing to show without coordinates
   const coords = useStore((s) => hasCoords(s.datasets.find((d) => d.id === s.activeDatasetId)) || !s.activeDatasetId)
+  // …and only while a 3-D view is the active pane
+  const threeD = useStore((s) => show3dPanels(s.workspace))
   useGeometryLoader()
   useCellLoader()
   useOmicsLoader()
@@ -32,8 +35,12 @@ export function App() {
       <div className="main">
         <div className="left">
           <CellPanel />
-          {coords && <LayerPanel />}
-          {coords && <OperationsPanel />}
+          {coords && threeD && (
+            <div className="panel-3d">
+              <LayerPanel />
+              <OperationsPanel />
+            </div>
+          )}
         </div>
         <Workspace />
         <PropertiesPanel />

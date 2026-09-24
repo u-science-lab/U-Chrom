@@ -9,7 +9,7 @@ import { activeView, fieldKey, useStore } from '../store'
 import { extent, fmtAxis, histogram, linear, logScale } from '../stats'
 import type { CellField, CellValue, RgStats, ScalingStats } from '../types'
 import { useLocus } from '../useLocus'
-import { updatePane, type Pane, type StatsKind } from '../workspace'
+import { paneCell, updatePane, type Pane, type StatsKind } from '../workspace'
 import { CHART, drawAxes, rgb, type Box } from './chart'
 import { colourableFields, fieldLabel } from './format'
 import { prepareCanvas, useSize } from './useSize'
@@ -118,7 +118,7 @@ function useFieldValues(datasetId: string | undefined, field: string | null): Ma
  */
 export function StatsView({ pane }: { pane: Pane }) {
   const { ds, kind, fx, fy } = useStatsSetup(pane)
-  const focus = useStore((s) => activeView(s).focusCell)
+  const focus = useStore((s) => paneCell(pane, activeView(s).focusCell))
   const focusCell = useStore((s) => s.focusCell)
   const view = useStore(activeView)
   const cells = useStore((s) => (s.activeDatasetId ? s.cells[s.activeDatasetId] : undefined))

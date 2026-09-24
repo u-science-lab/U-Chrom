@@ -23,7 +23,7 @@ import { fmtAxis, trackRange } from '../stats'
 import { binIndexAt } from '../tracks'
 import type { DatasetSummary, IntervalTable, TrackData } from '../types'
 import { useLocus } from '../useLocus'
-import { updatePane, type DistanceStat, type Pane, type TrackAgg } from '../workspace'
+import { paneCell, updatePane, type DistanceStat, type Pane, type TrackAgg } from '../workspace'
 import { CHART, drawColorRamp, rgb } from './chart'
 import { prepareCanvas, useSize } from './useSize'
 
@@ -177,7 +177,8 @@ type Describe = (x: number, y: number) => string | null
  */
 export function GenomeView({ pane }: { pane: Pane }) {
   const { ds, rows, setRows } = useGenomeRows(pane)
-  const focus = useStore((s) => activeView(s).focusCell)
+  // the pane's pinned cell, else the global focus
+  const focus = useStore((s) => paneCell(pane, activeView(s).focusCell))
   const { locus, ext, setLocus } = useLocus()
   const boxRef = useRef<HTMLDivElement>(null)
   const rowsRef = useRef<HTMLDivElement>(null)

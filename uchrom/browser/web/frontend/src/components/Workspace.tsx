@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import {
   addPane,
+  dropUnknownPins,
   handleWorkspaceKey,
   LAYOUTS,
   moveSplitter,
@@ -21,6 +22,7 @@ import { FocusBar } from './FocusBar'
 import { GenomeControls, GenomeView } from './GenomeView'
 import { LocusBar } from './LocusBar'
 import { MatrixControls, MatrixView } from './MatrixView'
+import { PaneCellControl } from './PaneCell'
 import { StatsControls, StatsView } from './StatsView'
 import { Viewport } from './Viewport'
 
@@ -67,6 +69,13 @@ export function Workspace() {
   useEffect(() => {
     if (datasetId) ensureDefault({ hasEmbeddings, hasCoords, hasTracks, hasContactMaps })
   }, [datasetId, hasEmbeddings, hasCoords, hasTracks, hasContactMaps, ensureDefault])
+
+  // Pins to cells the active dataset doesn't have (e.g. after switching) are dropped.
+  const cellList = useStore((s) => (s.activeDatasetId ? s.cells[s.activeDatasetId] : undefined))
+  useEffect(() => {
+    if (!cellList) return
+    setWorkspace((w) => dropUnknownPins(w, new Set(cellList.map((c) => c.cell_id))))
+  }, [cellList, setWorkspace])
 
   // Keyboard shortcuts once for the whole workspace (not per 3-D pane).
   useEffect(() => {
@@ -200,7 +209,12 @@ function PaneBox({
   const setWorkspace = useStore((s) => s.setWorkspace)
   const activate = () => setWorkspace((w) => (w.activePane === pane.id ? w : { ...w, activePane: pane.id }))
   return (
-    <section className={`pane${active ? ' active' : ''}${hidden ? ' hidden' : ''}`} style={style} onPointerDownCapture={activate}>
+    <section
+      className={`pane${active ? ' active' : ''}${hidden ? ' hidden' : ''}${pane.cell ? ' pinned' : ''}`}
+      style={style}
+      onPointerDownCapture={activate}
+      onFocusCapture={activate}
+    >
       <header className="pane-head">
         <select value={pane.type} onChange={(e) => setWorkspace((w) => retypePane(w, pane.id, e.target.value as PaneType))} title="View type">
           {PANE_TYPES.map((t) => (
@@ -209,6 +223,7 @@ function PaneBox({
             </option>
           ))}
         </select>
+        <PaneCellControl pane={pane} />
         {pane.type === '3d' && (
           <button onClick={onReset} title="Fit everything drawn in this view">
             Reset view
@@ -230,7 +245,7 @@ function PaneBox({
         </button>
       </header>
       <div className="pane-body">
-        {pane.type === '3d' && <Viewport paneId={pane.id} resetKey={resetKey} />}
+        {pane.type === '3d' && <Viewport paneId={pane.id} resetKey={resetKey} pinned={pane.cell ?? null} />}
         {pane.type === 'embedding' && <EmbeddingView pane={pane} />}
         {pane.type === 'genome' && <GenomeView pane={pane} />}
         {pane.type === 'matrix' && <MatrixView pane={pane} />}

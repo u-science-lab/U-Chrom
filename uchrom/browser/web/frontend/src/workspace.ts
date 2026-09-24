@@ -39,6 +39,8 @@ export interface PaneOptions {
 export interface Pane extends PaneOptions {
   id: string
   type: PaneType
+  /** cell this view is pinned to; null / absent = follow the global focus */
+  cell?: string | null
   /** embedding panes: cellm key (null → default UMAP > t-SNE > PCA) */
   embeddingKey: string | null
   /** embedding panes: the two components shown */
@@ -130,12 +132,54 @@ function nextId(ws: WorkspaceState): string {
   return `P${i}`
 }
 
-export function addPane(ws: WorkspaceState, type: PaneType): WorkspaceState {
+export function addPane(ws: WorkspaceState, type: PaneType, opts: Partial<Omit<Pane, 'id' | 'type'>> = {}): WorkspaceState {
   const id = nextId(ws)
   const n = ws.panes.length + 1
   // the new pane gets an equal share; the others shrink proportionally
   const sizes = normalizeSizes([...ws.sizes.map((x) => x * (1 - 1 / n)), 1 / n], n)
-  return { ...ws, panes: [...ws.panes, pane(id, type)], sizes, activePane: id, maximized: null }
+  return { ...ws, panes: [...ws.panes, { ...pane(id, type), ...opts }], sizes, activePane: id, maximized: null }
+}
+
+/** Panes side by side (or stacked) before the layout switches to a grid. */
+export const MAX_SPLIT_PANES = 3
+
+/**
+ * Open `cell` in a new view of `type` pinned to it.  Columns / rows turn
+ * into a grid beyond MAX_SPLIT_PANES panes so views stay usable.
+ */
+export function addPinnedPane(ws: WorkspaceState, type: PaneType, cell: string): WorkspaceState {
+  const next = addPane(ws, type, { cell })
+  const split = next.layout === 'columns' || next.layout === 'rows'
+  return split && next.panes.length > MAX_SPLIT_PANES ? { ...next, layout: 'grid' } : next
+}
+
+/** Pin a pane to a cell, or unpin it (null = follow the global focus). */
+export function pinPane(ws: WorkspaceState, id: string, cell: string | null): WorkspaceState {
+  return updatePane(ws, id, { cell })
+}
+
+/** The cell a pane shows: its pinned cell, else the global focus. */
+export function paneCell(pane: Pick<Pane, 'cell'> | undefined, focus: string | null): string | null {
+  return pane?.cell ?? focus
+}
+
+/** The active pane (falls back to the first). */
+export function activePaneOf(ws: WorkspaceState): Pane | undefined {
+  return ws.panes.find((p) => p.id === ws.activePane) ?? ws.panes[0]
+}
+
+/**
+ * Whether the 3-D-only side panels (layers, subsets, 3-D style, chromosome
+ * legend, point sets) apply: only while a 3-D pane is the active one.
+ */
+export function show3dPanels(ws: WorkspaceState): boolean {
+  return activePaneOf(ws)?.type === '3d'
+}
+
+/** Unpin panes whose cell is not among `known` (e.g. after switching dataset); same object when nothing changes. */
+export function dropUnknownPins(ws: WorkspaceState, known: ReadonlySet<string>): WorkspaceState {
+  if (!ws.panes.some((p) => p.cell && !known.has(p.cell))) return ws
+  return { ...ws, panes: ws.panes.map((p) => (p.cell && !known.has(p.cell) ? { ...p, cell: null } : p)) }
 }
 
 export function removePane(ws: WorkspaceState, id: string): WorkspaceState {
@@ -176,8 +220,9 @@ export function moveSplitter(ws: WorkspaceState, index: number, frac: number): W
 }
 
 /** Keep only well-formed pane options from a persisted pane. */
-function parseOptions(p: Partial<Pane>): PaneOptions {
-  const o: PaneOptions = {}
+function parseOptions(p: Partial<Pane>): PaneOptions & { cell?: string | null } {
+  const o: PaneOptions & { cell?: string | null } = {}
+  if (typeof p.cell === 'string' && p.cell) o.cell = p.cell
   if (p.genomeRows && typeof p.genomeRows === 'object' && !Array.isArray(p.genomeRows)) {
     const byDs: Record<string, GenomeRow[]> = {}
     for (const [k, v] of Object.entries(p.genomeRows)) {

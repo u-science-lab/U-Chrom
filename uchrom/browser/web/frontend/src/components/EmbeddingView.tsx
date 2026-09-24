@@ -170,8 +170,18 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
         ring(fi, r * 2 + 2, '#ffffff', 2)
       }
     }
+    // this pane's pinned cell: accent ring + label, in addition to the focus
+    const pi = pane.cell ? emb.cell_ids.indexOf(pane.cell) : -1
+    if (pi >= 0) {
+      ring(pi, r * 2 + 5, '#5c9ded', 2.5)
+      g.fillStyle = '#5c9ded'
+      g.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      g.textAlign = 'left'
+      g.textBaseline = 'middle'
+      if (!Number.isNaN(px[2 * pi])) g.fillText(`📌 ${pane.cell}`, px[2 * pi] + r * 2 + 9, px[2 * pi + 1])
+    }
     if (hover) ring(hover.i, r + 4, 'rgba(255,255,255,0.8)', 1.5)
-  }, [px, colors, emb, size.w, plotH, view.focusCell, hover])
+  }, [px, colors, emb, size.w, plotH, view.focusCell, hover, pane.cell])
 
   const onMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!px) return
