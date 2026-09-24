@@ -759,9 +759,14 @@ print(json.dumps(analysis_summary, indent=2))
     assert out.uns["auto_discovery_runs"][-1]["graph_path"] == result.graph_path
 
 
-def test_run_auto_discovery_enriches_before_schema_and_notebooks(tmp_path):
+def test_run_auto_discovery_enriches_before_schema_and_notebooks(monkeypatch, tmp_path):
     from uchrom import ChromData
     from uchrom_discovery import DiscoveryRunConfig, run_auto_discovery
+    import uchrom_discovery.runner as runner
+
+    # No ideas are generated or executed here, so the default (pantheon)
+    # backend is never called; skip its availability preflight.
+    monkeypatch.setattr(runner, "_preflight_backends", lambda backend_ids: None)
 
     cdata = _make_cd()
     h5cd_path = tmp_path / "data.h5cd"
