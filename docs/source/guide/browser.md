@@ -111,8 +111,8 @@ categorical ones such as `cell_type`, with a legend.
 
 | Data | Example | Opens as |
 |------|---------|----------|
-| Imaging traces, many cells | Takei 2021 / 2025 (`example-data/takei2025_fov0/`) | 3D \| Embedding or 3D \| Tracks |
-| One simulated / reconstructed cell | `example-data/sim_cell1/` (NucDynamics + its contacts) | 3D \| Matrix — contacts next to 3-D distances |
+| Imaging traces, many cells | Takei 2021 / 2025 (`example-data/takei2025_fov0/`) | 3D \| Embedding or 3D \| Genome |
+| One simulated / reconstructed cell | `example-data/sim_cell1/` (NucDynamics + its contacts) | 3D \| Genome — its contacts above its 3-D distances |
 | Single-cell multi-omics without 3-D | scHiCAR (`example-data/schicar_mop/`) | Matrix \| Embedding; the 3D pane says there are no coordinates |
 
 Trace statistics, multi-canvas and sessions are desktop-only for now.
