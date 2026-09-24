@@ -351,7 +351,9 @@ class ChromData:
 
     @property
     def n_cells(self) -> int:
-        if "cell_id" in self.spots.columns:
+        # Cells known from spots; fall back to the cells table for data
+        # without 3-D spots (e.g. single-cell Hi-C / RNA only).
+        if "cell_id" in self.spots.columns and len(self.spots) > 0:
             return self.spots["cell_id"].nunique()
         return len(self.cells) if len(self.cells) > 0 else 0
 
@@ -435,7 +437,7 @@ class ChromData:
                 "Install it with `pip install mudata` or use an environment "
                 "that provides mudata."
             ) from exc
-        return md.read_h5mu(path)
+        return md.read_h5mu(self.resolve_link_path(path))
 
     def link_scool(
         self,
@@ -464,6 +466,40 @@ class ChromData:
         _set_linked_record(self.uns, "linked_scool", key, record)
         return record
 
+    def resolve_link_path(self, path: PathLike) -> Path:
+        """Linked-file path; relative paths resolve against the directory of
+        the ``.h5cd`` this object was read from (else the working directory),
+        so a dataset folder can be moved or shipped as a whole."""
+        p = Path(path).expanduser()
+        src = getattr(self, "_source_path", None)
+        if not p.is_absolute() and src is not None:
+            p = Path(src).parent / p
+        return p
+
+    def link_cool(
+        self,
+        path: PathLike,
+        *,
+        key: str = "default",
+        label: Optional[str] = None,
+        genome_assembly: Optional[str] = None,
+        **metadata: Any,
+    ) -> dict:
+        """Record a linked bulk / pseudo-bulk ``.cool`` or ``.mcool`` in
+        ``uns['linked_cool']`` (the counterpart of :meth:`link_scool` for
+        one matrix per file).  The file stays external."""
+        path = Path(path)
+        record = {
+            "path": str(path),
+            "format": "mcool" if path.suffix == ".mcool" else "cool",
+            "label": label or path.stem,
+            "genome_assembly": genome_assembly or self.uns.get("genome_assembly"),
+            **metadata,
+        }
+        record = _clean_metadata_record(record)
+        _set_linked_record(self.uns, "linked_cool", key, record)
+        return record
+
     def load_linked_scool(self, *, key: str = "default", cell: Optional[str] = None):
         """Load metadata or one cell cooler from a linked scool file.
 
@@ -481,13 +517,14 @@ class ChromData:
             raise ImportError("cooler is required to load linked scool files.") from exc
 
         if cell is None:
+            path = str(self.resolve_link_path(path))
             cells = cooler.fileops.list_scool_cells(path)
             return {"path": str(path), "cells": cells, "record": record}
 
         cell_uri = str(cell)
         if not cell_uri.startswith("/cells/"):
             cell_uri = f"/cells/{cell_uri}"
-        return cooler.Cooler(f"{path}::{cell_uri}")
+        return cooler.Cooler(f"{self.resolve_link_path(path)}::{cell_uri}")
 
     def set_cell_spatial_coordinates(
         self,
@@ -575,6 +612,7 @@ class ChromData:
             "linked_anndata": dict(self.uns.get("linked_anndata", {}) or {}),
             "linked_mudata": _linked_records(self.uns.get("linked_mudata")),
             "linked_scool": _linked_records(self.uns.get("linked_scool")),
+            "linked_cool": _linked_records(self.uns.get("linked_cool")),
             "cell_spatial": _linked_records(self.uns.get("cell_spatial")),
         }
 
@@ -588,27 +626,28 @@ class ChromData:
                 "coords are all NaN but uns['coordinate_status'] or uns['coords_status'] is not set"
             )
 
-        for family, expected_format in (("linked_mudata", "h5mu"), ("linked_scool", "scool")):
+        for family, expected_format in (("linked_mudata", "h5mu"), ("linked_scool", "scool"),
+                                        ("linked_cool", "cool|mcool")):
             records = _linked_records(self.uns.get(family))
             for key, record in records.items():
                 path = record.get("path")
                 if not path:
                     issues.append(f"{family}.{key} missing path")
                     continue
-                if check_files and not Path(path).exists():
+                if check_files and not self.resolve_link_path(path).exists():
                     issues.append(f"{family}.{key} path does not exist: {path}")
                 fmt = record.get("format")
-                if fmt and str(fmt) != expected_format:
+                if fmt and str(fmt) not in expected_format.split("|"):
                     issues.append(f"{family}.{key} format={fmt!r} != {expected_format!r}")
 
         for key, record in _linked_records(self.uns.get("linked_scool")).items():
             if record.get("coordinate_status") in {None, ""}:
                 issues.append(f"linked_scool.{key} missing coordinate_status")
-            if check_files and record.get("path") and Path(record["path"]).exists():
+            if check_files and record.get("path") and self.resolve_link_path(record["path"]).exists():
                 try:
                     import cooler
 
-                    if not cooler.fileops.is_scool_file(record["path"]):
+                    if not cooler.fileops.is_scool_file(str(self.resolve_link_path(record["path"]))):
                         issues.append(f"linked_scool.{key} is not a valid scool file")
                 except ImportError:
                     issues.append("cooler is not installed; linked_scool validity could not be checked")
@@ -1216,7 +1255,9 @@ class ChromData:
                     stacklevel=2,
                 )
 
-            return _read_v1(cls, f)
+            cd = _read_v1(cls, f)
+        cd._source_path = path
+        return cd
 
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame, *, cell_id=None, **kwargs) -> "ChromData":
@@ -1924,11 +1965,17 @@ def _write_dataframe(f, name: str, df: Optional[pd.DataFrame]):
     stored in ``_index_name``.  Old (1.0) readers ignore both and
     reconstruct a default RangeIndex — the historical behaviour.
     """
-    if df is None or len(df) == 0:
+    if df is None or (len(df) == 0 and len(df.columns) == 0):
         f.create_group(name)
         return
     grp = f.create_group(name)
     grp.attrs["_n_rows"] = len(df)
+    if len(df) == 0:
+        # keep the schema of empty tables (e.g. spots of data without 3-D
+        # coordinates) so required columns survive a round trip
+        grp.attrs["_columns"] = [str(c) for c in df.columns]
+        grp.attrs["_empty"] = True
+        return
     grp.attrs["_columns"] = list(df.columns)
     for col in df.columns:
         series = df[col]
@@ -1970,6 +2017,8 @@ def _read_dataframe(f, name: str) -> pd.DataFrame:
     if "_columns" not in grp.attrs:
         return pd.DataFrame()
     columns = list(grp.attrs["_columns"])
+    if grp.attrs.get("_empty", False):
+        return pd.DataFrame({c: pd.Series(dtype=object) for c in columns})
     data = {}
     for col in columns:
         if col not in grp:
