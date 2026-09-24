@@ -5,7 +5,7 @@ This file provides the concrete (non-abstract) layers used by the UI.
 
 import numpy as np
 from PyQt5.QtWidgets import QWidget
-from matplotlib import cm
+from matplotlib import colormaps
 from matplotlib import colors as mpl_colors
 
 
@@ -183,7 +183,7 @@ class ChromatinLayer(Layer):
         # from a cyclic palette, keyed by trace_id.
         trace_color_cache = {}
         if color_mode == 'per_trace' and 'trace_id' in df.columns:
-            palette = cm.get_cmap('tab20')
+            palette = colormaps.get_cmap('tab20')
             all_traces = list(df['trace_id'].unique())
             for i, tid in enumerate(all_traces):
                 trace_color_cache[tid] = palette(i % 20)
@@ -211,7 +211,7 @@ class ChromatinLayer(Layer):
                     colors_rgba = mpl_colors.to_rgba(color)
                 else:
                     t = np.linspace(0.0, 1.0, pos.shape[0])
-                    cmap = cm.get_cmap('rainbow')
+                    cmap = colormaps.get_cmap('rainbow')
                     colors_rgba = cmap(t)
             if style == 'points':
                 handle = self.canvas.backend.add_points(
