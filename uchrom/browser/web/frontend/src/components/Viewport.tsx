@@ -5,7 +5,7 @@ import { buildLayerObject, pointIndexOfHit, type BuiltLayer } from '../render/ob
 import { displayParts } from '../render/partition'
 import { bboxDiagonal, findSegment } from '../render/segments'
 import { activeView, useStore } from '../store'
-import type { Geometry, LayerStyle } from '../types'
+import type { ColorMode, Geometry, LayerStyle } from '../types'
 import { FocusBar } from './FocusBar'
 import { PickLabel } from './PickLabel'
 
@@ -19,7 +19,7 @@ interface Part {
 
 interface Entry {
   /** inputs the parts were built from; rebuilt when any changes */
-  key: { geometry: Geometry; style: LayerStyle; focus: string | null; hidden: string; ctx: number }
+  key: { geometry: Geometry; style: LayerStyle; focus: string | null; hidden: string; ctx: number; overview: ColorMode; nCells: number }
   parts: Part[]
 }
 
@@ -111,6 +111,7 @@ export function Viewport() {
   const view = useStore(activeView)
   const resetViewToken = useStore((s) => s.resetViewToken)
   const flyToken = useStore((s) => s.flyToken)
+  const cells = useStore((s) => s.cells)
   const setPick = useStore((s) => s.setPick)
   const setStatus = useStore((s) => s.setStatus)
 
@@ -243,6 +244,8 @@ export function Viewport() {
     for (const [id, e] of t.entries) if (!keep.has(id)) drop(id, e)
 
     const hidden = new Set(view.hiddenChroms)
+    const cellList = (activeDatasetId && cells[activeDatasetId]) || []
+    const cellIndex = new Map(cellList.map((c, i) => [c.cell_id, i]))
     const warnings: string[] = []
     const w = t.renderer.domElement.clientWidth
     const h = t.renderer.domElement.clientHeight
@@ -253,6 +256,8 @@ export function Viewport() {
         focus: view.focusCell,
         hidden: hiddenKey(view.hiddenChroms),
         ctx: view.contextOpacity,
+        overview: view.overviewColor,
+        nCells: cellList.length,
       }
       const prev = t.entries.get(l.id)
       if (
@@ -261,7 +266,9 @@ export function Viewport() {
         prev.key.style === key.style &&
         prev.key.focus === key.focus &&
         prev.key.hidden === key.hidden &&
-        prev.key.ctx === key.ctx
+        prev.key.ctx === key.ctx &&
+        prev.key.overview === key.overview &&
+        prev.key.nCells === key.nCells
       ) {
         for (const p of prev.parts) if (p.built.warning) warnings.push(`${l.name}: ${p.built.warning}`)
         continue
@@ -270,12 +277,16 @@ export function Viewport() {
       const { main, context } = displayParts(l.geometry!, hidden, view.focusCell)
       // colour by chromosome whenever the layer itself has several, so hiding
       // chromosomes never switches the colour scheme away from the legend
-      const chromColors = new Set(l.geometry!.header.segments.map((s) => s.chrom)).size > 1
+      const colorOpts = { chromColors: new Set(l.geometry!.header.segments.map((s) => s.chrom)).size > 1, cellIndex }
+      // Multi-cell data: the overview (and the faint context around a
+      // focused cell) uses the overview colouring — per cell by default.
+      const overviewStyle: LayerStyle = cellIndex.size > 1 ? { ...l.style, colorMode: view.overviewColor } : l.style
+      const mainStyle = view.focusCell === null ? overviewStyle : l.style
       const parts: Part[] = []
-      if (main) parts.push({ role: 'main', geometry: main, built: buildLayerObject(main, l.style, { chromColors }) })
+      if (main) parts.push({ role: 'main', geometry: main, built: buildLayerObject(main, mainStyle, colorOpts) })
       if (context && view.contextOpacity > 0) {
-        const ctxStyle: LayerStyle = { ...l.style, mode: 'line', lineWidth: 1, opacity: view.contextOpacity }
-        parts.push({ role: 'context', geometry: context, built: buildLayerObject(context, ctxStyle, { chromColors }) })
+        const ctxStyle: LayerStyle = { ...overviewStyle, mode: 'line', lineWidth: 1, opacity: view.contextOpacity }
+        parts.push({ role: 'context', geometry: context, built: buildLayerObject(context, ctxStyle, colorOpts) })
       }
       for (const p of parts) {
         p.built.object.userData = { layerId: l.id, role: p.role }
@@ -297,7 +308,7 @@ export function Viewport() {
     }
     const pick = useStore.getState().pick
     if (pick && !keep.has(pick.layerId)) setPick(null)
-  }, [layers, activeDatasetId, view, setPick, setStatus])
+  }, [layers, activeDatasetId, view, cells, setPick, setStatus])
 
   // Explicit reset / dataset switch → refit on everything drawn.
   useEffect(() => {

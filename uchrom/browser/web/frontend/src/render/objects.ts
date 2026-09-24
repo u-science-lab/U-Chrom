@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js'
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js'
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
-import { vertexColors } from '../colors'
+import { vertexColors, type ColorOptions } from '../colors'
 import type { Geometry, LayerStyle } from '../types'
 import { autoTubeRadius, buildLineIndex, tubeAllowed } from './segments'
 
@@ -34,8 +34,8 @@ function applyOpacity(mat: THREE.Material, opacity: number) {
   mat.depthWrite = opacity >= 1
 }
 
-export function buildLayerObject(geom: Geometry, style: LayerStyle, opts: { chromColors?: boolean } = {}): BuiltLayer {
-  const colors = vertexColors(geom, style.colorMode, style.color, opts.chromColors)
+export function buildLayerObject(geom: Geometry, style: LayerStyle, opts: ColorOptions = {}): BuiltLayer {
+  const colors = vertexColors(geom, style.colorMode, style.color, opts)
   let mode = style.mode
   let warning: string | null = null
   if (mode === 'tube' && !tubeAllowed(geom.header, style.highQuality)) {

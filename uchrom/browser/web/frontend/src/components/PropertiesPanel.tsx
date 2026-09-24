@@ -8,6 +8,8 @@ export function PropertiesPanel() {
   const layer = useStore((s) => s.layers.find((l) => l.id === s.selectedLayerId))
   const setStyle = useStore((s) => s.setStyle)
   const view = useStore(activeView)
+  const setOverviewColor = useStore((s) => s.setOverviewColor)
+  const hasCells = useStore((s) => ((s.activeDatasetId && s.cells[s.activeDatasetId]) || []).length > 1)
   if (!layer) {
     return (
       <aside className="props panel">
@@ -20,6 +22,18 @@ export function PropertiesPanel() {
   const st = layer.style
   const upd = (p: Partial<typeof st>) => setStyle(layer.id, p)
   const header = layer.geometry?.header
+  // Multi-cell data has two colourings: the all-cells overview (per cell by
+  // default) and the focused cell (layer style).  The buttons edit the one
+  // currently on screen.
+  const overview = hasCells && view.focusCell === null
+  const colorMode: ColorMode = overview ? view.overviewColor : st.colorMode
+  const setColor = (m: ColorMode) => (overview ? setOverviewColor(m) : upd({ colorMode: m }))
+  const colorChoices: [ColorMode, string][] = [
+    ...(overview ? ([['cell', 'Cell']] as [ColorMode, string][]) : []),
+    ['rainbow', overview ? 'Chrom' : 'Rainbow'],
+    ['trace', 'Trace'],
+    ['custom', 'Custom'],
+  ]
   // what is actually drawn in full (focused cell, visible chromosomes)
   const hidden = new Set(view.hiddenChroms)
   const drawn = header?.segments.filter((s) => !hidden.has(s.chrom) && (view.focusCell === null || s.cell_id === view.focusCell))
@@ -41,19 +55,15 @@ export function PropertiesPanel() {
         ))}
       </div>
 
-      <label>Colour</label>
+      <label>{overview ? 'Colour · all cells' : view.focusCell ? `Colour · cell ${view.focusCell}` : 'Colour'}</label>
       <div className="seg">
-        {([
-          ['rainbow', 'Rainbow'],
-          ['custom', 'Custom'],
-          ['trace', 'Per trace'],
-        ] as [ColorMode, string][]).map(([m, label]) => (
-          <button key={m} className={st.colorMode === m ? 'active' : ''} onClick={() => upd({ colorMode: m })}>
+        {colorChoices.map(([m, label]) => (
+          <button key={m} className={colorMode === m ? 'active' : ''} onClick={() => setColor(m)}>
             {label}
           </button>
         ))}
       </div>
-      {st.colorMode === 'custom' && <input type="color" value={st.color} onChange={(e) => upd({ color: e.target.value })} />}
+      {colorMode === 'custom' && <input type="color" value={st.color} onChange={(e) => upd({ color: e.target.value })} />}
 
       <label>
         Opacity <span className="val">{st.opacity.toFixed(2)}</span>

@@ -44,6 +44,15 @@ export function chromColor(name: string): string {
   return CHROM_PALETTE[chromRank(name) % CHROM_PALETTE.length]
 }
 
+/**
+ * Colour of the i-th cell: hues spaced by the golden angle, so cells with
+ * neighbouring indices always differ clearly even with hundreds of cells.
+ */
+export function cellColor(index: number): RGB {
+  const h = (index * 0.618033988749895) % 1
+  return hsv(h, 0.8, 1)
+}
+
 /** HSV → RGB, all in [0, 1]. */
 function hsv(h: number, s: number, v: number): RGB {
   const i = Math.floor(h * 6)
@@ -76,7 +85,15 @@ export function rainbow(t: number): RGB {
  * - trace: tab20 by order of first appearance of each trace_id.
  * - custom: one colour.
  */
-export function vertexColors(geom: Geometry, mode: ColorMode, custom: string, chromColors = false): Float32Array {
+export interface ColorOptions {
+  /** colour by chromosome even if only one is present (see rainbow) */
+  chromColors?: boolean
+  /** stable index per cell id for 'cell' mode (e.g. the dataset's cell list) */
+  cellIndex?: ReadonlyMap<string, number>
+}
+
+export function vertexColors(geom: Geometry, mode: ColorMode, custom: string, opts: ColorOptions = {}): Float32Array {
+  const chromColors = opts.chromColors ?? false
   const { header, starts, offsets } = geom
   const n = header.n_points
   const out = new Float32Array(3 * n)
@@ -89,6 +106,16 @@ export function vertexColors(geom: Geometry, mode: ColorMode, custom: string, ch
   }
   if (mode === 'custom') {
     fill(0, n, hexToRgb(custom))
+    return out
+  }
+  if (mode === 'cell') {
+    const order = new Map<string, number>(opts.cellIndex ?? [])
+    const grey: RGB = [0.6, 0.6, 0.6]
+    header.segments.forEach((seg, s) => {
+      if (seg.cell_id === null) return fill(offsets[s], offsets[s + 1], grey)
+      if (!order.has(seg.cell_id)) order.set(seg.cell_id, order.size)
+      fill(offsets[s], offsets[s + 1], cellColor(order.get(seg.cell_id)!))
+    })
     return out
   }
   if (mode === 'trace') {

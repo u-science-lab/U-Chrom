@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { decodeGeometry } from './api'
-import { TAB20, chromColor, hexToRgb, rainbow, vertexColors } from './colors'
+import { TAB20, cellColor, chromColor, hexToRgb, rainbow, vertexColors } from './colors'
 import { encodeGeometry, sampleHeader } from './testing'
 
 const rgbOf = (arr: Float32Array, i: number) => Array.from(arr.slice(3 * i, 3 * i + 3))
@@ -69,8 +69,35 @@ describe('chromColors override', () => {
     )
     const gradient = vertexColors(g, 'rainbow', '#ffffff')
     expect(Array.from(gradient.slice(0, 3))).not.toEqual(Array.from(gradient.slice(3, 6)))
-    const fixed = vertexColors(g, 'rainbow', '#ffffff', true)
+    const fixed = vertexColors(g, 'rainbow', '#ffffff', { chromColors: true })
     expect(Array.from(fixed.slice(0, 3))).toEqual(hexToRgb(chromColor('chr2')).map((x) => Math.fround(x)))
     expect(Array.from(fixed.slice(3, 6))).toEqual(Array.from(fixed.slice(0, 3)))
+  })
+})
+
+describe('per-cell colours', () => {
+  const seg = (trace_id: string, cell_id: string | null) => ({ trace_id, chrom: 'chr1', cell_id, n_points: 1, start: 0, end: 100 })
+  const g = () =>
+    decodeGeometry(
+      encodeGeometry(
+        { ...sampleHeader(), segments: [seg('a', 'c2'), seg('b', 'c1'), seg('c', 'c2'), seg('d', null)] },
+        [0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0],
+        [0, 0, 0, 0],
+        [0, 1, 2, 3, 4],
+      ),
+    )
+  it('gives each cell one colour, using the dataset cell order when provided', () => {
+    const c = vertexColors(g(), 'cell', '#fff', { cellIndex: new Map([['c1', 0], ['c2', 1]]) })
+    const f = (rgb: number[]) => rgb.map((x) => Math.fround(x))
+    expect(rgbOf(c, 1)).toEqual(f(cellColor(0)))
+    expect(rgbOf(c, 0)).toEqual(f(cellColor(1)))
+    expect(rgbOf(c, 2)).toEqual(rgbOf(c, 0)) // same cell, same colour
+    expect(rgbOf(c, 3)).toEqual(f([0.6, 0.6, 0.6])) // no cell → grey
+  })
+  it('neighbouring cell indices get clearly different hues', () => {
+    for (let i = 0; i < 200; i++) {
+      const [a, b] = [cellColor(i), cellColor(i + 1)]
+      expect(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])).toBeGreaterThan(0.25)
+    }
   })
 })

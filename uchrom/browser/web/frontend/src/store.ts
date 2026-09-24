@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { DEFAULT_STYLE, removeCascade, uniqueName } from './layers'
-import type { CellInfo, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo } from './types'
+import type { CellInfo, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo } from './types'
 
 let nextId = 1
 const newId = () => `L${nextId++}`
@@ -15,9 +15,11 @@ export interface DatasetView {
   hiddenChroms: string[]
   /** opacity of the non-focused cells (0 hides them) */
   contextOpacity: number
+  /** colouring of the all-cells overview (and the faint context); a focused cell uses the layer style */
+  overviewColor: ColorMode
 }
 
-export const DEFAULT_VIEW: DatasetView = { focusCell: null, hiddenChroms: [], contextOpacity: 0.15 }
+export const DEFAULT_VIEW: DatasetView = { focusCell: null, hiddenChroms: [], contextOpacity: 0.15, overviewColor: 'cell' }
 
 export interface AppState {
   datasets: DatasetSummary[]
@@ -58,6 +60,7 @@ export interface AppState {
   toggleChrom(chrom: string): void
   setHiddenChroms(chroms: string[]): void
   setContextOpacity(opacity: number): void
+  setOverviewColor(mode: ColorMode): void
 }
 
 /** View state of the active dataset (defaults when none recorded). */
@@ -239,6 +242,9 @@ export const useStore = create<AppState>((set, get) => {
   },
   setContextOpacity(contextOpacity) {
     patchView({ contextOpacity })
+  },
+  setOverviewColor(overviewColor) {
+    patchView({ overviewColor })
   },
   }
 })

@@ -90,7 +90,7 @@ export interface Geometry {
 }
 
 export type RenderMode = 'line' | 'tube' | 'points'
-export type ColorMode = 'rainbow' | 'custom' | 'trace'
+export type ColorMode = 'rainbow' | 'custom' | 'trace' | 'cell'
 
 export interface LayerStyle {
   mode: RenderMode
