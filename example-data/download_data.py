@@ -7,9 +7,14 @@ ready before running nbconvert.
 
 Usage::
 
-    python example-data/download_data.py           # fetch everything
+    python example-data/download_data.py           # fetch all default datasets
     python example-data/download_data.py --takei   # just Takei 2021 FOF-CT
     python example-data/download_data.py --seqfish # just seqFISH+ zip
+    python example-data/download_data.py --schicar_dna  # opt-in, ~2.8 GB
+
+Datasets marked ``"default": False`` are large and only fetched when
+requested explicitly.  Multi-file datasets list ``files`` as
+``(relative path, url)`` pairs.
 """
 
 from __future__ import annotations
@@ -21,6 +26,11 @@ from pathlib import Path
 
 
 HERE = Path(__file__).resolve().parent
+
+_GSE305439 = "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE305nnn/GSE305439/suppl"
+_BIL_MERFISH_MOP = (
+    "https://download.brainimagelibrary.org/cf/1c/cf1c1a431ef8d021/processed_data"
+)
 
 DATASETS = {
     "takei": {
@@ -50,6 +60,38 @@ DATASETS = {
         ),
         "size_mb": 2,
         "description": "Bintu 2018 IMR90 chr21 chromatin tracing",
+    },
+    # scHiCAR mouse brain (Wei et al. 2026, Nat Biotechnol), GEO GSE305439.
+    "schicar_rna": {
+        "files": [
+            (f"schicar_mop/raw/GSE305439/{name}", f"{_GSE305439}/{name}")
+            for name in (
+                "GSE305439_RNA.matrix.mtx.gz",
+                "GSE305439_RNA.barcodes.tsv.gz",
+                "GSE305439_RNA.features.tsv.gz",
+                "GSE305439_mouse_brain_scHiCAR_1_RNA_metadata.txt.gz",
+            )
+        ],
+        "size_mb": 61,
+        "description": "scHiCAR mouse brain RNA matrix + cell metadata (GSE305439)",
+    },
+    "schicar_dna": {
+        "files": [
+            (f"schicar_mop/raw/GSE305439/{name}", f"{_GSE305439}/{name}")
+            for name in ("GSE305439_DNA.dedup.pairs.gz", "GSE305439_DNA.ATAC.tsv.gz")
+        ],
+        "size_mb": 2800,
+        "default": False,
+        "description": "scHiCAR mouse brain contact pairs + ATAC fragments (GSE305439)",
+    },
+    # BICCN MERFISH mouse MOp atlas (Zhang et al. 2021, Nature), BIL doi:10.35077/g.21.
+    "merfish_mop": {
+        "files": [
+            (f"schicar_mop/raw/merfish_mop/{name}", f"{_BIL_MERFISH_MOP}/{name}")
+            for name in ("counts.h5ad", "cell_labels.csv")
+        ],
+        "size_mb": 332,
+        "description": "MERFISH mouse MOp cell x gene counts + cell labels (BIL g.21)",
     },
 }
 
@@ -81,12 +123,13 @@ def main() -> None:
     args = ap.parse_args()
     selected = [k for k in DATASETS if getattr(args, k)]
     if not selected:
-        selected = list(DATASETS)
+        selected = [k for k, info in DATASETS.items() if info.get("default", True)]
 
     for key in selected:
         info = DATASETS[key]
-        _download(info["url"], HERE / info["filename"],
-                  info["description"], info["size_mb"])
+        files = info.get("files") or [(info["filename"], info["url"])]
+        for rel, url in files:
+            _download(url, HERE / rel, info["description"], info["size_mb"])
 
     print(f"\nAll requested datasets staged under: {HERE}")
 

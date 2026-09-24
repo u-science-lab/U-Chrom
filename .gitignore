@@ -38,6 +38,7 @@ example-data/DNAseqFISH+/
 example-data/fofct_core.csv
 example-data/with_loops.h5cd
 example-data/IMR90_chr21-18-20Mb.csv
+example-data/schicar_mop/
 example-data/IMR90_chr21_pyhim.ecsv
 example-data/H1Esc-HFF.R1.tar.gz
 example-data/H1Esc-HFF.R1.labeled
