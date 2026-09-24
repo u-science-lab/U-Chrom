@@ -3,6 +3,7 @@ import { fetchEmbedding, registerGroup } from '../api'
 import { cellRgb, rgbCss } from '../colors'
 import { lassoSelect, simplifyPath, type Pt } from '../groups'
 import { useFieldColors } from '../useFieldColors'
+import { useTheme } from '../useTheme'
 import { useGroupInfo, usePaneScope, useScopeCells } from '../useGroups'
 import { fitPlot, nearestPoint, project } from '../render/embedding'
 import { activeView, useStore } from '../store'
@@ -73,6 +74,7 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
   const focusCell = useStore((s) => s.focusCell)
   const cells = useStore((s) => (s.activeDatasetId ? s.cells[s.activeDatasetId] : undefined))
   const fieldColors = useFieldColors()
+  const pal = useTheme()
   const fieldValues = fieldColors.cellValues
   const custom = useStore((s) => s.layers.find((l) => l.datasetId === s.activeDatasetId && l.parentId === null)?.style.color ?? '#ffffff')
   const list = ds?.embeddings ?? []
@@ -172,6 +174,12 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
       g.beginPath()
       g.arc(x, y, member ? r * 1.15 : r, 0, 2 * Math.PI)
       g.fill()
+      // light themes: a thin outline keeps pale colours / viridis yellow visible on white
+      if (pal.dotRing !== 'transparent') {
+        g.strokeStyle = pal.dotRing
+        g.lineWidth = 0.6
+        g.stroke()
+      }
     }
     g.globalAlpha = 1
     const ring = (i: number, rad: number, color: string, width: number) => {
@@ -191,21 +199,21 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
         g.beginPath()
         g.arc(px[2 * fi], px[2 * fi + 1], r * 2, 0, 2 * Math.PI)
         g.fill()
-        ring(fi, r * 2 + 2, '#ffffff', 2)
+        ring(fi, r * 2 + 2, pal.strong, 2)
       }
     }
     // this pane's pinned cell: accent ring + label, in addition to the focus
     const pin = pinnedCell(pane)
     const pi = pin ? emb.cell_ids.indexOf(pin) : -1
     if (pi >= 0) {
-      ring(pi, r * 2 + 5, '#5c9ded', 2.5)
-      g.fillStyle = '#5c9ded'
+      ring(pi, r * 2 + 5, pal.accent, 2.5)
+      g.fillStyle = pal.accent
       g.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
       g.textAlign = 'left'
       g.textBaseline = 'middle'
       if (!Number.isNaN(px[2 * pi])) g.fillText(`📌 ${pin}`, px[2 * pi] + r * 2 + 9, px[2 * pi + 1])
     }
-    if (hover) ring(hover.i, r + 4, 'rgba(255,255,255,0.8)', 1.5)
+    if (hover) ring(hover.i, r + 4, pal.strong, 1.5)
     if (groupSet && groupInfo) {
       g.globalAlpha = 1
       g.fillStyle = groupInfo.color
@@ -214,7 +222,7 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
       g.textBaseline = 'top'
       g.fillText(`${groupInfo.name} · ${groupSet.size} cells`, size.w - 8, 8)
     }
-  }, [px, colors, emb, size.w, plotH, view.focusCell, hover, pane.scope, groupSet, groupInfo])
+  }, [px, colors, emb, size.w, plotH, view.focusCell, hover, pane.scope, groupSet, groupInfo, pal])
 
   // ---- lasso ----------------------------------------------------------------
   const drawLasso = () => {
@@ -231,8 +239,8 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
     g.clearRect(0, 0, size.w, plotH)
     const p = path.current
     if (!p || p.length < 2) return
-    g.strokeStyle = '#ffffff'
-    g.fillStyle = 'rgba(255,255,255,0.08)'
+    g.strokeStyle = pal.strong
+    g.fillStyle = pal.lassoFill
     g.lineWidth = 1.5
     g.setLineDash([5, 4])
     g.beginPath()
@@ -344,8 +352,9 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
               saveSelection(selName)
               setSelName('')
             }}
+            title="Save as group"
           >
-            Save as group
+            Save
           </button>
           <button onClick={() => setSelection(null)} title="Discard the selection">
             ×

@@ -7,6 +7,7 @@
  */
 
 import { categoricalColor, categoryColor, rgbCss } from './colors'
+import { palette } from './theme'
 import type { CellField, CellValue } from './types'
 
 export type GroupRef = string
@@ -243,7 +244,7 @@ export function describeGroup(
   }
   const g = ctx.saved.find((x) => x.id === ref)
   if (g) return { ref, name: g.name, color: g.color, cells: g.cells, kind: 'saved' }
-  if (ctx.selection?.id === ref) return { ref, name: 'selection', color: '#ffffff', cells: ctx.selection.cells, kind: 'selection' }
+  if (ctx.selection?.id === ref) return { ref, name: 'selection', color: palette().strong, cells: ctx.selection.cells, kind: 'selection' }
   return null
 }
 

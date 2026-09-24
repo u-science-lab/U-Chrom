@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchContacts, fetchDistance } from '../api'
 import { fmtBp } from '../filters'
-import { matrixColor, matrixPixels, matrixRange, scaleFor, type MatrixData } from '../matrix'
+import type { MatrixData } from '../matrix'
+import { ColorScaleControls, useMatrixScale } from './ColorScaleControls'
 import { ALL_CELLS_REF, isMultiCell, scopeText } from '../groups'
 import { DistanceValueControls } from './AggregateControls'
 import { useNCells } from './ScopePicker'
@@ -10,8 +11,10 @@ import { useGroupInfo, usePaneScope } from '../useGroups'
 import { fmtAxis } from '../stats'
 import type { ContactMapInfo } from '../types'
 import { useLocus } from '../useLocus'
+import { useTheme } from '../useTheme'
+import { palette } from '../theme'
 import { updatePane, type Pane } from '../workspace'
-import { CHART, drawColorRamp, rgb } from './chart'
+import { CHART, drawColorRamp } from './chart'
 import { prepareCanvas, useSize } from './useSize'
 
 const M = { left: 64, top: 10, right: 12, bottom: 76 }
@@ -33,6 +36,7 @@ export function MatrixControls({ pane }: { pane: Pane }) {
   const map = maps.find((m) => m.key === source)
   const upd = (p: Partial<Pane>) => setWorkspace((w) => updatePane(w, pane.id, p))
   const scope = usePaneScope(pane)
+  const auto = useStore((s) => s.matrixAuto[pane.id])
   if (!source) return null
   return (
     <>
@@ -78,6 +82,12 @@ export function MatrixControls({ pane }: { pane: Pane }) {
           }
         />
       )}
+      <ColorScaleControls
+        kind={source === 'distance' ? ((pane.stat ?? 'median') === 'contact' ? 'frequency' : 'distance') : 'contacts'}
+        value={pane.color}
+        onChange={(color) => upd({ color })}
+        auto={auto}
+      />
     </>
   )
 }
@@ -90,6 +100,7 @@ export function MatrixView({ pane }: { pane: Pane }) {
   const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
   const scope = usePaneScope(pane)
   const groupInfo = useGroupInfo(scope.kind === 'group' ? scope.group : null)
+  const pal = useTheme()
   const { locus, setLocus } = useLocus()
   const boxRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -133,17 +144,17 @@ export function MatrixView({ pane }: { pane: Pane }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ds?.id, source, locus?.chrom, locus?.start, locus?.end, cell, group, pane.stat, pane.threshold, pane.resolution, pane.balance, waitingForCell])
 
-  const scale = mat ? scaleFor(mat.header.value) : 'contacts'
-  const range = useMemo<[number, number]>(() => (mat ? matrixRange(mat.data, scale) : [0, 1]), [mat, scale])
+  const cscale = useMatrixScale(mat, pane.color, pane.id)
+  const scale = cscale.kind ?? 'contacts'
   // one pixel per bin, scaled up with nearest-neighbour sampling
   const bitmap = useMemo(() => {
-    if (!mat || !mat.header.n_rows || !mat.header.n_cols) return null
+    if (!mat || !cscale.pixels || !mat.header.n_rows || !mat.header.n_cols) return null
     const c = document.createElement('canvas')
     c.width = mat.header.n_cols
     c.height = mat.header.n_rows
-    c.getContext('2d')!.putImageData(new ImageData(matrixPixels(mat, scale, range) as unknown as Uint8ClampedArray<ArrayBuffer>, c.width, c.height), 0, 0)
+    c.getContext('2d')!.putImageData(new ImageData(cscale.pixels as unknown as Uint8ClampedArray<ArrayBuffer>, c.width, c.height), 0, 0)
     return c
-  }, [mat, scale, range])
+  }, [mat, cscale.pixels])
 
   const side = Math.max(0, Math.min(size.w - M.left - M.right, size.h - M.top - M.bottom))
   const n = mat?.header.n_cols ?? 0
@@ -179,22 +190,14 @@ export function MatrixView({ pane }: { pane: Pane }) {
     if (drag) {
       const a = Math.min(drag.i0, drag.i1)
       const b = Math.max(drag.i0, drag.i1) + 1
-      g.strokeStyle = '#ffffff'
+      g.strokeStyle = palette().strong
       g.setLineDash([4, 3])
       g.strokeRect(M.left + (a / n) * side, M.top + (a / n) * side, ((b - a) / n) * side, ((b - a) / n) * side)
       g.setLineDash([])
     }
     // colour bar
-    const unit = h.unit ? ` (${h.unit})` : ''
-    const title = scale === 'contacts' ? `${h.value === 'balanced' ? 'balanced' : 'contacts'} (log)` : scale === 'distance' ? `distance${unit}` : 'contact frequency'
-    const lo = scale === 'contacts' ? '0' : fmtAxis(range[0])
-    const hi = scale === 'contacts' ? `≥${fmtAxis(Math.expm1(range[1]))}` : fmtAxis(range[1])
-    const color = (t: number) => {
-      const v = scale === 'contacts' ? Math.expm1(t * range[1]) : range[0] + t * (range[1] - range[0])
-      return rgb(matrixColor(v, scale, range))
-    }
-    drawColorRamp(g, { x: M.left, y: M.top + side + 34, w: Math.min(180, side), h: 8 }, color, lo, hi, title)
-  }, [mat, bitmap, side, size.w, size.h, drag, range, scale, n])
+    drawColorRamp(g, { x: M.left, y: M.top + side + 34, w: Math.min(180, side), h: 8 }, (t) => cscale.ramp(t), cscale.lo, cscale.hi, cscale.title)
+  }, [mat, bitmap, side, size.w, size.h, drag, cscale.lo, cscale.hi, cscale.title, cscale.cs, n, pal])
 
   const binOf = (e: React.MouseEvent | PointerEvent, rect: DOMRect): [number, number] => {
     const x = (e.clientX - rect.left - M.left) / side

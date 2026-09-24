@@ -22,6 +22,7 @@ export function useGroupInfos(refs: readonly (GroupRef | null | undefined)[]): (
   const saved = useStore(activeSavedGroups)
   const selection = useStore((s) => activeView(s).selection)
   const cellValues = useStore((s) => s.cellValues)
+  const pal = useStore((s) => s.palette) // the selection's colour follows the theme
   const key = refs.join('\u0001')
   useEffect(() => {
     if (!dsId) return
@@ -37,7 +38,7 @@ export function useGroupInfos(refs: readonly (GroupRef | null | undefined)[]): (
         r && dsId ? describeGroup(r, { fields, saved, selection, values: (f) => cellValues[fieldKey(dsId, f)] }) : null,
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [key, dsId, fields, saved, selection, cellValues],
+    [key, dsId, fields, saved, selection, cellValues, pal],
   )
 }
 

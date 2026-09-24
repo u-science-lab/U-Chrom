@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { parseFieldRef } from '../groups'
 import { activeSavedGroups, useStore } from '../store'
 import {
@@ -25,6 +25,7 @@ import { FocusBar } from './FocusBar'
 import { GenomeView } from './GenomeView'
 import { LocusBar } from './LocusBar'
 import { MatrixView } from './MatrixView'
+import { Popover } from './Popover'
 import { cellTitle, useCellTypes } from './PaneCell'
 import { useGroupInfo } from '../useGroups'
 import { savePanePng } from '../capture'
@@ -68,6 +69,8 @@ export function Workspace() {
   const hasContactMaps = (ds?.contact_maps?.length ?? 0) > 0
   const [resetKeys, setResetKeys] = useState<Record<string, number>>({})
   const [menu, setMenu] = useState(false)
+  const addRef = useRef<HTMLButtonElement>(null)
+  const closeMenu = useCallback(() => setMenu(false), [])
   const panesRef = useRef<HTMLDivElement>(null)
 
   // Until the user arranges views, the default follows the data.
@@ -147,18 +150,18 @@ export function Workspace() {
         {ws.panes.some((p) => GENOME_PANES.has(p.type)) && <LocusBar />}
         <span className="spacer" />
         <div className="ws-add">
-          <button onClick={() => setMenu(!menu)} title="Add a view">
+          <button ref={addRef} onClick={() => setMenu(!menu)} title="Add a view">
             + View
           </button>
-          {menu && (
-            <ul className="ws-menu" onMouseLeave={() => setMenu(false)}>
+          <Popover anchor={addRef} open={menu} onClose={closeMenu} className="menu-popup">
+            <ul className="ws-menu">
               {PANE_TYPES.map((t) => (
                 <li key={t} onClick={() => add(t)}>
                   {MENU_LABEL[t]}
                 </li>
               ))}
             </ul>
-          )}
+          </Popover>
         </div>
         <div className="seg ws-layouts" role="group" aria-label="Layout">
           {LAYOUTS.map((l) => (

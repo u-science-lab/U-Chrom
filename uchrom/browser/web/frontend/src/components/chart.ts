@@ -1,11 +1,24 @@
 /** Minimal canvas chart primitives shared by the stats / tracks / matrix panes. */
 
+import { palette } from '../theme'
+
+/** Chart colours of the current theme (read at draw time; see theme.ts). */
 export const CHART = {
-  axis: 'rgba(216,218,223,0.55)',
-  grid: 'rgba(216,218,223,0.08)',
-  text: '#b9bdc4',
-  muted: '#8f949c',
-  accent: '#5c9ded',
+  get axis() {
+    return palette().axis
+  },
+  get grid() {
+    return palette().grid
+  },
+  get text() {
+    return palette().text
+  },
+  get muted() {
+    return palette().muted
+  },
+  get accent() {
+    return palette().accent
+  },
   font: '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
 }
 

@@ -5,6 +5,7 @@ import { niceTicks, panLocus, zoomLocus, type Locus } from '../genome'
 import {
   addRow,
   applyRowSetting,
+  setRowColor,
   setRowScope,
   defaultRows,
   depthScale,
@@ -21,25 +22,24 @@ import {
   type TriangleGeom,
 } from '../genomeRows'
 import { ALL_CELLS_REF, isMultiCell, resolveRowScope, scopeKey, scopeParams, scopeText, type GroupInfo, type Scope } from '../groups'
-import { matrixColor, matrixPixels, matrixRange, scaleFor, type MatrixData } from '../matrix'
+import type { MatrixData } from '../matrix'
+import { ColorScaleControls, useMatrixScale } from './ColorScaleControls'
+import type { ColorScaleSetting, MatrixKind } from '../colormaps'
 import { hasCoords, useStore } from '../store'
 import { fmtAxis, trackRange } from '../stats'
 import { binIndexAt } from '../tracks'
 import type { DatasetSummary, IntervalTable, TrackData } from '../types'
 import type { RowScopeSpec } from '../groups'
 import { useLocus } from '../useLocus'
+import { useTheme } from '../useTheme'
 import { useFocusState, useGroupInfos, usePaneScope, useRowScope } from '../useGroups'
 import { DistanceValueControls, TrackAggregateControl } from './AggregateControls'
 import { ScopePicker, useNCells } from './ScopePicker'
 import { updatePane, type DistanceStat, type Pane, type TrackAgg } from '../workspace'
-import { CHART, drawColorRamp, rgb } from './chart'
+import { CHART, drawColorRamp } from './chart'
 import { prepareCanvas, useSize } from './useSize'
 
 const AXIS_H = 26
-const POS = '#e8784f'
-const NEG = '#4f8fe8'
-const PLAIN = '#6aa4ef'
-const GUIDE = 'rgba(255,255,255,0.16)'
 const STAT_LABEL: Record<DistanceStat, string> = { median: 'median distance', mean: 'mean distance', contact: 'contact frequency' }
 
 // ---- matrix cache: (source, locus, params) → decoded matrix -------------------
@@ -181,13 +181,28 @@ export function GenomeInspector({ pane }: { pane: Pane }) {
                 ×
               </button>
             </div>
-            <RowSettings row={r} ds={ds} set={set(r.id)} view={scope} defaultAgg={pane.agg ?? 'mean'} setScope={(sc) => setRows((x) => setRowScope(x, r.id, sc))} />
+            <RowSettings
+              row={r}
+              ds={ds}
+              set={set(r.id)}
+              view={scope}
+              defaultAgg={pane.agg ?? 'mean'}
+              setScope={(sc) => setRows((x) => setRowScope(x, r.id, sc))}
+              setColor={(c) => setRows((x) => setRowColor(x, r.id, c))}
+              autoKey={`${pane.id}:${r.id}`}
+            />
           </li>
         ))}
       </ol>
       <div className="muted small">Drag a row’s bottom edge in the view to resize it; wheel zooms, drag pans.</div>
     </section>
   )
+}
+
+/** What a matrix row holds (decides its default colour scale). */
+export function rowMatrixKind(row: GenomeRow): MatrixKind {
+  if (row.source !== 'distance') return 'contacts'
+  return row.stat === 'contact' ? 'frequency' : 'distance'
 }
 
 /** Whether a row has a cells setting: tracks, the 3-D distance and per-cell contact maps (not bulk maps / intervals). */
@@ -206,6 +221,8 @@ function RowSettings({
   view,
   defaultAgg,
   setScope,
+  setColor,
+  autoKey,
 }: {
   row: GenomeRow
   ds: DatasetSummary
@@ -214,13 +231,18 @@ function RowSettings({
   view: Scope
   defaultAgg: TrackAgg
   setScope(s: RowScopeSpec): void
+  setColor(c: ColorScaleSetting | undefined): void
+  /** key of this row's automatic colour range (published by the view) */
+  autoKey: string
 }) {
+  const auto = useStore((s) => s.matrixAuto[autoKey])
   const scope = useRowScope(row.scope, view)
   const multi = isMultiCell(scope)
   const perCellMap = row.kind === 'matrix' && row.source !== 'distance' && !!(ds.contact_maps ?? []).find((m) => m.key === row.source)?.per_cell
   return (
     <div className="row-card-body">
       {row.kind === 'matrix' && <MatrixTools row={row} ds={ds} set={set} multi={multi} />}
+      {row.kind === 'matrix' && <ColorScaleControls kind={rowMatrixKind(row)} value={row.color} onChange={setColor} auto={auto} />}
       {row.kind === 'track' && (
         <select value={row.track ?? ''} onChange={(e) => set('track', e.target.value)} title="Track">
           {(ds.tracks ?? []).map((t) => (
@@ -452,6 +474,7 @@ export function GenomeView({ pane }: { pane: Pane }) {
             <RowFrame key={r.id} row={r} height={heights[i]} setRows={setRows}>
               {r.kind === 'matrix' && (
                 <MatrixRow
+                  paneId={pane.id}
                   row={r}
                   height={heights[i]}
                   ds={ds}
@@ -495,6 +518,7 @@ export function GenomeView({ pane }: { pane: Pane }) {
 /** Genomic ruler along the top of the pane. */
 function AxisRuler({ width, locus }: { width: number; locus: Locus }) {
   const ref = useRef<HTMLCanvasElement>(null)
+  const pal = useTheme()
   useEffect(() => {
     const cv = ref.current
     if (!cv) return
@@ -521,7 +545,7 @@ function AxisRuler({ width, locus }: { width: number; locus: Locus }) {
     g.moveTo(0, AXIS_H - 0.5)
     g.lineTo(width, AXIS_H - 0.5)
     g.stroke()
-  }, [width, locus])
+  }, [width, locus, pal])
   return <canvas ref={ref} className="gv-axis" style={{ width, height: AXIS_H }} />
 }
 
@@ -645,7 +669,9 @@ function MatrixRow({
   nAll,
   guides,
   register,
+  paneId,
 }: {
+  paneId: string
   row: GenomeRow
   height: number
   ds: DatasetSummary
@@ -661,6 +687,7 @@ function MatrixRow({
   register(id: string, f: Describe | null): void
 }) {
   const { ref, style } = useRowCanvas(width, height)
+  const pal = useTheme()
   const map = (ds.contact_maps ?? []).find((m) => m.key === row.source)
   const isDist = row.source === 'distance'
   const valid = isDist ? hasCoords(ds) : !!map
@@ -707,9 +734,8 @@ function MatrixRow({
 
   // a stale matrix of another chromosome must not be drawn on this axis
   const shown = mat && mat.header.chrom === locus.chrom && !waiting && valid ? mat : null
-  const scale = shown ? scaleFor(shown.header.value) : 'contacts'
-  const range = useMemo<[number, number]>(() => (shown ? matrixRange(shown.data, scale) : [0, 1]), [shown, scale])
-  const colors = useMemo(() => (shown ? matrixPixels(shown, scale, range) : null), [shown, scale, range])
+  const cscale = useMatrixScale(shown, row.color, `${paneId}:${row.id}`)
+  const colors = cscale.pixels
   const k = depthScale(row.maxDist, (locus.end - locus.start) / width, height)
   const geom: TriangleGeom = { start: locus.start, bpPerPx: (locus.end - locus.start) / width, height, k, flip: !!row.flip, maxDist: row.maxDist ?? null }
   const title = isDist ? `3-D distance · ${STAT_LABEL[stat]}` : map ? map.label || map.key : `unknown source “${row.source}”`
@@ -740,7 +766,7 @@ function MatrixRow({
     }
     // interval boundaries as faint guides
     if (guides.length) {
-      g.strokeStyle = GUIDE
+      g.strokeStyle = pal.guide
       g.lineWidth = 1
       g.setLineDash([3, 3])
       for (const bp of guides) {
@@ -771,14 +797,27 @@ function MatrixRow({
       g.fillStyle = CHART.muted
       g.fillText(note, x, top + 14)
     }
+    if (shown && colors && pal.matrixFrame !== 'transparent') {
+      // light themes: the white end of e.g. "fall" needs an edge — outline the
+      // triangle's two sides (depth t sits t·k px in from each end; clipped by the row)
+      const t = Math.min(height, width / 2 / (geom.k || 1))
+      const x = t * (geom.k || 1)
+      const y0 = row.flip ? 0.5 : height - 0.5
+      const y1 = row.flip ? t : height - t
+      g.strokeStyle = pal.matrixFrame
+      g.lineWidth = 1
+      g.beginPath()
+      g.moveTo(0, y0)
+      g.lineTo(x, y1)
+      g.moveTo(width - x, y1)
+      g.lineTo(width, y0)
+      g.stroke()
+    }
     if (shown && height >= 70) {
-      const lo = scale === 'contacts' ? '0' : fmtAxis(range[0])
-      const hi = scale === 'contacts' ? `≥${fmtAxis(Math.expm1(range[1]))}` : fmtAxis(range[1])
-      const color = (t: number) => rgb(matrixColor(scale === 'contacts' ? Math.expm1(t * range[1]) : range[0] + t * (range[1] - range[0]), scale, range))
       const rw = 70
       g.save()
       g.textAlign = 'right'
-      drawColorRamp(g, { x: width - rw - 8, y: row.flip ? height - 22 : 8, w: rw, h: 6 }, color, lo, hi)
+      drawColorRamp(g, { x: width - rw - 8, y: row.flip ? height - 22 : 8, w: rw, h: 6 }, (t) => cscale.ramp(t), cscale.lo, cscale.hi)
       g.restore()
     }
     const msg = !valid
@@ -787,7 +826,7 @@ function MatrixRow({
         ? `“${map?.label || map?.key}” holds one map per cell — select a cell or a group (left), or give this row a group`
         : error
     if (msg) {
-      g.fillStyle = error ? '#e07a7a' : CHART.muted
+      g.fillStyle = error ? pal.error : CHART.muted
       g.textAlign = 'center'
       g.textBaseline = 'middle'
       g.fillText(msg, width / 2, height / 2)
@@ -799,7 +838,7 @@ function MatrixRow({
       g.fillText('loading…', width / 2, height / 2)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown, colors, width, height, locus, k, row.flip, row.maxDist, guides, title, note, error, waiting, valid, loading, group, groupRef])
+  }, [shown, colors, width, height, locus, k, row.flip, row.maxDist, guides, title, note, error, waiting, valid, loading, group, groupRef, pal, cscale.lo, cscale.hi, cscale.cs])
 
   useRegister(register, row.id, (x, y) => {
     if (!shown) return null
@@ -808,7 +847,7 @@ function MatrixRow({
     if (!b) return null
     const [i, j] = b
     const v = shown.data[i * h.n_cols + j]
-    const unit = scale === 'distance' && h.unit ? ` ${h.unit}` : ''
+    const unit = cscale.kind === 'distance' && h.unit ? ` ${h.unit}` : ''
     return `${title} · bins ${i}, ${j} · ${h.chrom}:${fmtBp(h.bin_starts[i])} × ${fmtBp(h.bin_starts[j])} · ${Number.isFinite(v) ? fmtAxis(v) : '—'}${unit}`
   })
   return (
@@ -842,6 +881,7 @@ function TrackRow({
   register(id: string, f: Describe | null): void
 }) {
   const { ref, style } = useRowCanvas(width, height)
+  const pal = useTheme()
   const name = row.track ?? ''
   const vals = data?.chrom === locus.chrom ? data.values[name] : undefined
   useEffect(() => {
@@ -850,7 +890,7 @@ function TrackRow({
     const g = prepareCanvas(cv, width, height)
     if (!g) return
     const X = (bp: number) => ((bp - locus.start) / (locus.end - locus.start)) * width
-    g.fillStyle = 'rgba(255,255,255,0.03)'
+    g.fillStyle = pal.rowBg
     g.fillRect(0, 0, width, height - 1)
     g.font = CHART.font
     if (vals && data) {
@@ -864,11 +904,11 @@ function TrackRow({
         const x0 = X(data.bin_starts[i])
         const w = Math.max(1, X(data.bin_ends[i]) - x0)
         const y = Y(v)
-        g.fillStyle = diverging ? (v >= 0 ? POS : NEG) : PLAIN
+        g.fillStyle = diverging ? (v >= 0 ? pal.trackPos : pal.trackNeg) : pal.trackPlain
         g.fillRect(x0, Math.min(y, zero), w, Math.max(1, Math.abs(zero - y)))
       }
       if (diverging) {
-        g.strokeStyle = 'rgba(255,255,255,0.18)'
+        g.strokeStyle = pal.zero
         g.beginPath()
         g.moveTo(0, Math.round(zero) + 0.5)
         g.lineTo(width, Math.round(zero) + 0.5)
@@ -893,7 +933,7 @@ function TrackRow({
     }
     g.fillStyle = CHART.muted
     g.fillText(label, x, 2)
-  }, [vals, data, width, height, locus, name, label, color]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vals, data, width, height, locus, name, label, color, pal]) // eslint-disable-line react-hooks/exhaustive-deps
   useRegister(register, row.id, (x) => {
     if (!vals || !data) return null
     const bp = locus.start + (x / width) * (locus.end - locus.start)
@@ -922,6 +962,7 @@ function IntervalRow({
   register(id: string, f: Describe | null): void
 }) {
   const { ref, style } = useRowCanvas(width, height)
+  const pal = useTheme()
   const items = useMemo(() => {
     if (!table) return []
     const c = (n: string) => table.columns.indexOf(n)
@@ -945,7 +986,7 @@ function IntervalRow({
       if (it.s2 !== null && it.e2 !== null) {
         const a = X((it.s + it.e) / 2)
         const b = X((it.s2 + it.e2) / 2)
-        g.strokeStyle = '#d08bf0'
+        g.strokeStyle = pal.loop
         g.beginPath()
         g.moveTo(a, height - 2)
         g.quadraticCurveTo((a + b) / 2, -height * 0.6, b, height - 2)
@@ -953,8 +994,8 @@ function IntervalRow({
       } else {
         const x0 = X(it.s)
         const w = Math.max(1, X(it.e) - x0)
-        g.fillStyle = 'rgba(92,157,237,0.35)'
-        g.strokeStyle = 'rgba(92,157,237,0.9)'
+        g.fillStyle = pal.intervalFill
+        g.strokeStyle = pal.intervalStroke
         g.fillRect(x0, 3, w, height - 6)
         g.strokeRect(x0 + 0.5, 3.5, w - 1, height - 7)
       }
@@ -964,7 +1005,7 @@ function IntervalRow({
     g.textAlign = 'left'
     g.textBaseline = 'top'
     g.fillText(row.key ?? '', 6, Math.max(0, height / 2 - 7))
-  }, [items, width, height, locus, row.key]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [items, width, height, locus, row.key, pal]) // eslint-disable-line react-hooks/exhaustive-deps
   useRegister(register, row.id, (x) => {
     const bp = locus.start + (x / width) * (locus.end - locus.start)
     const hit = items.find((it) => it.s2 === null && bp >= it.s && bp < it.e)

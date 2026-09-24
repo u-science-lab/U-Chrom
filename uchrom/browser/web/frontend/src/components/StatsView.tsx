@@ -10,6 +10,7 @@ import { activeView, fieldKey, useStore } from '../store'
 import { extent, fmtAxis, histogram, linear, logScale } from '../stats'
 import type { CellField, CellValue, RgStats, ScalingStats } from '../types'
 import { useLocus } from '../useLocus'
+import { useTheme } from '../useTheme'
 import { useGroupChoices, useGroupInfos, usePaneScope } from '../useGroups'
 import { updatePane, type Pane, type StatsKind } from '../workspace'
 import { CHART, drawAxes, rgb, type Box } from './chart'
@@ -168,6 +169,7 @@ export function StatsView({ pane }: { pane: Pane }) {
   const view = useStore(activeView)
   const cells = useStore((s) => (s.activeDatasetId ? s.cells[s.activeDatasetId] : undefined))
   const fieldColors = useFieldColors()
+  const pal = useTheme()
   const custom = useStore((s) => s.layers.find((l) => l.datasetId === s.activeDatasetId && l.parentId === null)?.style.color ?? '#ffffff')
   const { locus } = useLocus()
   const boxRef = useRef<HTMLDivElement>(null)
@@ -278,7 +280,7 @@ export function StatsView({ pane }: { pane: Pane }) {
       const top = Math.max(frac ? 1e-9 : 1, ...baseCounts, ...overlayHists.flatMap((o) => o.counts))
       const sx = linear(hist.edges[0], hist.edges[hist.edges.length - 1], plot.x, plot.x + plot.w)
       const sy = linear(0, top, plot.y + plot.h, plot.y)
-      g.fillStyle = baseGroup && baseInfo ? baseInfo.color : 'rgba(92,157,237,0.75)'
+      g.fillStyle = baseGroup && baseInfo ? baseInfo.color : pal.bar
       g.globalAlpha = frac ? 0.35 : baseGroup ? 0.8 : 1
       baseCounts.forEach((c, i) => {
         const x0 = sx(hist.edges[i])
@@ -286,7 +288,7 @@ export function StatsView({ pane }: { pane: Pane }) {
       })
       g.globalAlpha = 1
       for (const o of overlayHists) {
-        g.strokeStyle = o.info?.color ?? '#ffffff'
+        g.strokeStyle = o.info?.color ?? pal.strong
         g.lineWidth = 2
         g.beginPath()
         o.counts.forEach((c, i) => {
@@ -314,14 +316,14 @@ export function StatsView({ pane }: { pane: Pane }) {
       g.textAlign = 'right'
       const legend = [
         { color: baseGroup && baseInfo ? baseInfo.color : CHART.accent, text: `${baseLabel}: median ${fmtAxis(med(rg.rg))} · ${rg.rg.length} traces${rg.n_cells ? ` / ${rg.n_cells} cells` : ''}` },
-        ...overlays.map((o) => ({ color: o.info?.color ?? '#fff', text: `${o.info?.name ?? o.data.group}: median ${fmtAxis(med(o.data.rg))} · ${o.data.rg.length} traces${o.data.n_cells ? ` / ${o.data.n_cells} cells` : ''}` })),
+        ...overlays.map((o) => ({ color: o.info?.color ?? pal.strong, text: `${o.info?.name ?? o.data.group}: median ${fmtAxis(med(o.data.rg))} · ${o.data.rg.length} traces${o.data.n_cells ? ` / ${o.data.n_cells} cells` : ''}` })),
       ]
       legend.forEach((l, i) => {
         g.fillStyle = l.color
         g.fillText(l.text, plot.x + plot.w, plot.y + 10 + 14 * i)
       })
       if (focus) {
-        g.strokeStyle = '#ffffff'
+        g.strokeStyle = pal.strong
         g.lineWidth = 2
         rg.cell_ids.forEach((c, i) => {
           const v = rg.rg[i]
@@ -333,7 +335,7 @@ export function StatsView({ pane }: { pane: Pane }) {
           g.stroke()
         })
         g.fillStyle = CHART.text
-        g.fillText(`white: traces of cell ${focus}`, plot.x + plot.w, plot.y + 10 + 14 * legend.length)
+        g.fillText(`${pal.name === 'dark' ? 'white' : 'dark'} lines: traces of cell ${focus}`, plot.x + plot.w, plot.y + 10 + 14 * legend.length)
       }
     } else if (kind === 'scaling' && scaling) {
       const overlays = compare
@@ -347,7 +349,7 @@ export function StatsView({ pane }: { pane: Pane }) {
       const [y0, y1] = [Math.min(...yAll), Math.max(...yAll)]
       const sx = logScale(sx0, sx1 > sx0 ? sx1 : sx0 * 10, plot.x, plot.x + plot.w)
       const sy = logScale(y0, y1 > y0 ? y1 : y0 * 10, plot.y + plot.h, plot.y)
-      const line = (s: ScalingStats, color: string, band: boolean, bandColor = 'rgba(92,157,237,0.18)') => {
+      const line = (s: ScalingStats, color: string, band: boolean, bandColor = pal.band) => {
         const pts = s.sep_bp.map((x, i) => ({ x, m: s.median[i], a: s.q25[i], b: s.q75[i] })).filter((p) => p.x > 0 && typeof p.m === 'number' && p.m > 0)
         if (band) {
           g.fillStyle = bandColor
@@ -365,8 +367,8 @@ export function StatsView({ pane }: { pane: Pane }) {
       }
       const baseColor = baseGroup && baseInfo ? baseInfo.color : CHART.accent
       line(scaling.pop, baseColor, true, baseGroup && baseInfo ? baseInfo.color.replace('rgb(', 'rgba(').replace(')', ', 0.18)') : undefined)
-      for (const o of overlays) line(o.data, o.info?.color ?? '#ffffff', false)
-      if (scaling.cell) line(scaling.cell, '#ffffff', false)
+      for (const o of overlays) line(o.data, o.info?.color ?? pal.strong, false)
+      if (scaling.cell) line(scaling.cell, pal.strong, false)
       const yt = logTicks(y0, y1)
       drawAxes(
         g,
@@ -378,8 +380,8 @@ export function StatsView({ pane }: { pane: Pane }) {
       g.textAlign = 'left'
       const legend = [
         { color: baseColor, text: `${baseGroup ? scopeLabel({ kind: 'group', group: baseGroup }, baseInfo) : 'population'} (median, IQR band)` },
-        ...overlays.map((o) => ({ color: o.info?.color ?? '#fff', text: `${o.info?.name ?? o.data.group}${o.data.n_cells ? ` (${o.data.n_cells} cells)` : ''}` })),
-        ...(scaling.cell ? [{ color: '#ffffff', text: `cell ${focus}` }] : []),
+        ...overlays.map((o) => ({ color: o.info?.color ?? pal.strong, text: `${o.info?.name ?? o.data.group}${o.data.n_cells ? ` (${o.data.n_cells} cells)` : ''}` })),
+        ...(scaling.cell ? [{ color: pal.strong, text: `cell ${focus}` }] : []),
       ]
       legend.forEach((l, i) => {
         g.fillStyle = l.color
@@ -390,7 +392,7 @@ export function StatsView({ pane }: { pane: Pane }) {
       const top = Math.max(1, ...hist.counts)
       const sx = linear(hist.edges[0], hist.edges[hist.edges.length - 1], plot.x, plot.x + plot.w)
       const sy = linear(0, top, plot.y + plot.h, plot.y)
-      g.fillStyle = 'rgba(92,157,237,0.75)'
+      g.fillStyle = pal.bar
       hist.counts.forEach((c, i) => {
         const x0 = sx(hist.edges[i])
         g.fillRect(x0 + 0.5, sy(c), Math.max(1, sx(hist.edges[i + 1]) - x0 - 1), plot.y + plot.h - sy(c))
@@ -398,7 +400,7 @@ export function StatsView({ pane }: { pane: Pane }) {
       drawAxes(g, plot, { ticks: niceTicks(hist.edges[0], hist.edges[hist.edges.length - 1]), pos: sx, fmt: fmtAxis, label: fieldLabel(fx) }, { ticks: niceTicks(0, top, 4), pos: sy, fmt: fmtAxis, label: 'cells' })
       const fv = focus ? xs.get(focus) : undefined
       if (typeof fv === 'number') {
-        g.strokeStyle = '#ffffff'
+        g.strokeStyle = pal.strong
         g.lineWidth = 2
         g.beginPath()
         g.moveTo(sx(fv), plot.y)
@@ -422,11 +424,16 @@ export function StatsView({ pane }: { pane: Pane }) {
         g.beginPath()
         g.arc(x, scatterPx.px[2 * i + 1], r, 0, 2 * Math.PI)
         g.fill()
+        if (pal.dotRing !== 'transparent') {
+          g.strokeStyle = pal.dotRing
+          g.lineWidth = 0.6
+          g.stroke()
+        }
       }
       g.globalAlpha = 1
       const fi = focus ? scatter.ids.indexOf(focus) : -1
       if (fi >= 0 && !Number.isNaN(scatterPx.px[2 * fi])) {
-        g.strokeStyle = '#ffffff'
+        g.strokeStyle = pal.strong
         g.lineWidth = 2
         g.beginPath()
         g.arc(scatterPx.px[2 * fi], scatterPx.px[2 * fi + 1], r * 2 + 2, 0, 2 * Math.PI)
@@ -439,7 +446,7 @@ export function StatsView({ pane }: { pane: Pane }) {
         { ticks: niceTicks(scatterPx.y0, scatterPx.y1, 4), pos: scatterPx.sy, fmt: fmtAxis, label: fieldLabel(fy) },
       )
     }
-  }, [kind, rg, scaling, xs, fx, fy, scatter, scatterPx, size.w, size.h, focus, cells, fieldColors, view.overviewColor, custom, ds, groupRg, groupScaling, baseInfo, compareInfos]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [kind, rg, scaling, xs, fx, fy, scatter, scatterPx, size.w, size.h, focus, cells, fieldColors, view.overviewColor, custom, ds, groupRg, groupScaling, baseInfo, compareInfos, pal]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const hit = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!scatter || !scatterPx) return -1

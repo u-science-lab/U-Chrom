@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { setGroupResolver } from './api'
 import { groupColor, nextGroupName, parseSavedGroups, removeGroup, renameGroup, upsertGroup, type GroupRef, type SavedGroup, type Selection } from './groups'
 import { DEFAULT_STYLE, removeCascade, uniqueName } from './layers'
+import { applyTheme, loadThemeChoice, resolveTheme, saveThemeChoice, systemPrefersDark, type Palette, type ThemeChoice } from './theme'
 import { isPointPick } from './types'
 import type { Locus } from './genome'
 import { addPinnedPane, defaultWorkspace, dropGroupScope, paneSignature, parseWorkspace, type DataKind, type WorkspaceState } from './workspace'
@@ -203,6 +204,15 @@ export interface AppState {
   saveSelection(name?: string): void
   renameSavedGroup(id: string, name: string): void
   deleteSavedGroup(id: string): void
+  /** interface theme: the choice (persisted) and the applied palette */
+  themeChoice: ThemeChoice
+  palette: Palette
+  setThemeChoice(choice: ThemeChoice): void
+  /** re-apply the theme (the system preference changed) */
+  refreshTheme(): void
+  /** automatic colour range of each drawn matrix (key: pane id or pane:row) — inspector placeholders */
+  matrixAuto: Record<string, [number, number]>
+  setMatrixAuto(key: string, range: [number, number]): void
 }
 
 /** Saved groups of the active dataset. */
@@ -251,6 +261,8 @@ const patchLayer = (layers: Layer[], id: string, patch: Partial<Layer>) =>
 
 const savedWorkspace = loadWorkspace()
 const savedGroups = loadSavedGroups()
+const savedTheme = loadThemeChoice()
+const initialPalette = applyTheme(resolveTheme(savedTheme, systemPrefersDark()))
 
 export const useStore = create<AppState>((set, get) => {
   const patchView = (patch: Partial<DatasetView>, extra: Partial<AppState> = {}) => {
@@ -428,6 +440,21 @@ export const useStore = create<AppState>((set, get) => {
     patchView({ focusCell: cellId, focusGroup: null }, { pick: null, flyToken: s.flyToken + 1 })
   },
   savedGroups,
+  themeChoice: savedTheme,
+  palette: initialPalette,
+  setThemeChoice(choice) {
+    saveThemeChoice(choice)
+    set({ themeChoice: choice, palette: applyTheme(resolveTheme(choice, systemPrefersDark())) })
+  },
+  matrixAuto: {},
+  setMatrixAuto(key, range) {
+    const cur = get().matrixAuto[key]
+    if (cur && cur[0] === range[0] && cur[1] === range[1]) return
+    set({ matrixAuto: { ...get().matrixAuto, [key]: range } })
+  },
+  refreshTheme() {
+    set({ palette: applyTheme(resolveTheme(get().themeChoice, systemPrefersDark())) })
+  },
   focusGroup(ref) {
     const s = get()
     const v = activeView(s)

@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { closeDataset, openDataset } from '../api'
 import { useStore } from '../store'
+import { THEME_CHOICES } from '../theme'
+import { Popover } from './Popover'
 
 export function TopBar() {
   const datasets = useStore((s) => s.datasets)
@@ -89,6 +91,43 @@ export function TopBar() {
           {active.xyz_unit ? ` · ${active.xyz_unit}` : ''}
         </div>
       )}
+      <ThemeMenu />
     </header>
+  )
+}
+
+/** ◐ menu (right of the top bar): System / Dark / Light / Paper, remembered in the browser. */
+function ThemeMenu() {
+  const choice = useStore((s) => s.themeChoice)
+  const name = useStore((s) => s.palette.name)
+  const setChoice = useStore((s) => s.setThemeChoice)
+  const [open, setOpen] = useState(false)
+  const btn = useRef<HTMLButtonElement>(null)
+  const closeMenu = useCallback(() => setOpen(false), [])
+  return (
+    <div className="theme-menu">
+      <button ref={btn} onClick={() => setOpen(!open)} title={`Theme: ${THEME_CHOICES.find((c) => c.value === choice)?.label}${choice === 'system' ? ` (${name})` : ''}`} aria-label="Theme">
+        ◐
+      </button>
+      <Popover anchor={btn} open={open} onClose={closeMenu} className="menu-popup">
+        <ul>
+          {THEME_CHOICES.map((c) => (
+            <li
+              key={c.value}
+              className={c.value === choice ? 'on' : ''}
+              title={c.hint}
+              onClick={() => {
+                setChoice(c.value)
+                setOpen(false)
+              }}
+            >
+              <span className="tick">{c.value === choice ? '✓' : ''}</span>
+              {c.label}
+              {c.value === 'system' && <span className="muted"> ({name === 'dark' ? 'dark' : 'light'} now)</span>}
+            </li>
+          ))}
+        </ul>
+      </Popover>
+    </div>
   )
 }

@@ -11,6 +11,7 @@ import { fmtBp } from './filters'
 import { datasetChroms } from './genome'
 import { describeGroup, resolveScope, type Scope } from './groups'
 import { activeSavedGroups, activeView, fieldKey, useStore } from './store'
+import { palette } from './theme'
 import { resolveLocus } from './useLocus'
 import { PANE_LABEL, type Pane } from './workspace'
 
@@ -88,7 +89,7 @@ function backgroundOf(el: HTMLElement | null): string {
     const bg = getComputedStyle(e).backgroundColor
     if (bg && bg !== 'transparent' && !/rgba\(.*,\s*0\)$/.test(bg)) return bg
   }
-  return '#1b1d21'
+  return palette().viewportBg
 }
 
 const SKIP = '.embedding-tip, .gv-cross, .gv-row-loading, .gv-resize, [data-capture="skip"], button, input, select, textarea, label'

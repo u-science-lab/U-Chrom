@@ -13,6 +13,8 @@ import { usePaneScope, useScopeCells } from '../useGroups'
 import type { ScopeSpec } from '../groups'
 import { isPointPick, type ColorMode, type Geometry, type LayerStyle, type PointSet, type SegmentInfo } from '../types'
 import { registerRenderHook } from '../capture'
+import { palette } from '../theme'
+import { useTheme } from '../useTheme'
 import { PickLabel } from './PickLabel'
 
 type Role = 'main' | 'context'
@@ -25,7 +27,7 @@ interface Part {
 
 interface Entry {
   /** inputs the parts were built from; rebuilt when any changes */
-  key: { geometry: Geometry; style: LayerStyle; focus: FocusSet; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null }
+  key: { geometry: Geometry; style: LayerStyle; focus: FocusSet; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null; theme: string }
   parts: Part[]
 }
 
@@ -143,6 +145,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
   const flyToken = useStore((s) => s.flyToken)
   const cells = useStore((s) => s.cells)
   const fieldColors = useFieldColors()
+  const pal = useTheme()
   const pointSets = useStore((s) => (s.activeDatasetId ? s.pointSets[s.activeDatasetId] : undefined))
   const setPick = useStore((s) => s.setPick)
   const setStatus = useStore((s) => s.setStatus)
@@ -168,7 +171,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     const host = hostRef.current!
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
     renderer.setPixelRatio(window.devicePixelRatio)
-    renderer.setClearColor(new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--viewport-bg').trim() || '#1b1d21'))
+    renderer.setClearColor(new THREE.Color(palette().viewportBg))
     host.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
@@ -183,13 +186,13 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     scene.add(group)
     const highlight = new THREE.Mesh(
       new THREE.SphereGeometry(1, 16, 12),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthTest: false }),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(palette().strong), transparent: true, opacity: 0.85, depthTest: false }),
     )
     highlight.visible = false
     highlight.renderOrder = 999
     scene.add(highlight)
 
-    const hoverBox = new THREE.Box3Helper(new THREE.Box3(), new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#5c9ded'))
+    const hoverBox = new THREE.Box3Helper(new THREE.Box3(), new THREE.Color(palette().accent))
     hoverBox.visible = false
     scene.add(hoverBox)
 
@@ -296,6 +299,15 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     }
   }, [])
 
+  // Theme switch: background, highlight and hover-box colours (lines re-colour via the sync below).
+  useEffect(() => {
+    const t = threeRef.current
+    if (!t) return
+    t.renderer.setClearColor(new THREE.Color(pal.viewportBg))
+    ;(t.highlight.material as THREE.MeshBasicMaterial).color.set(pal.strong)
+    ;(t.hoverBox.material as THREE.LineBasicMaterial).color.set(pal.accent)
+  }, [pal])
+
   // A new pin / group → fit the camera to it once it is drawn.
   useEffect(() => {
     fittedRef.current = false
@@ -333,6 +345,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         nCells: cellList.length,
         values: view.overviewColor === 'field' ? fieldColors : null,
         maxBond: view.maxBond,
+        theme: pal.name,
       }
       const prev = t.entries.get(l.id)
       if (
@@ -345,7 +358,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         prev.key.overview === key.overview &&
         prev.key.nCells === key.nCells &&
         prev.key.values === key.values &&
-        prev.key.maxBond === key.maxBond
+        prev.key.maxBond === key.maxBond &&
+        prev.key.theme === key.theme
       ) {
         for (const p of prev.parts) if (p.built.warning) warnings.push(`${l.name}: ${p.built.warning}`)
         continue
@@ -375,7 +389,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         // (thousands of overlapping faint lines saturate otherwise)
         const groupCtx = focus !== null && typeof focus !== 'string'
         const ctxStyle: LayerStyle = groupCtx
-          ? { ...overviewStyle, mode: 'line', lineWidth: 1, opacity: ctxOpacity, colorMode: 'custom', color: '#6b7078' }
+          ? { ...overviewStyle, mode: 'line', lineWidth: 1, opacity: ctxOpacity, colorMode: 'custom', color: pal.context }
           : { ...overviewStyle, mode: 'line', lineWidth: 1, opacity: ctxOpacity }
         parts.push({ role: 'context', geometry: context, built: buildLayerObject(context, ctxStyle, colorOpts) })
       }
@@ -399,7 +413,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     }
     const pick = useStore.getState().pick
     if (pick && !isPointPick(pick) && !keep.has(pick.layerId)) setPick(null)
-  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed])
+  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed, pal])
 
   // Point sets (e.g. RNA spots): focused cell's points full, others faint.
   useEffect(() => {
@@ -694,7 +708,7 @@ function setHoverCell(t: Three, cell: string | null, layerGeom?: Geometry, hidde
   if (cell === null || !layerGeom) return
   const g = subsetGeometry(layerGeom, (s) => s.cell_id === cell && !hidden?.has(s.chrom))
   if (!g.header.n_points) return
-  const built = buildLayerObject(g, { ...DEFAULT_STYLE, mode: 'line', colorMode: 'custom', color: '#ffffff', lineWidth: 2.5, opacity: 1 })
+  const built = buildLayerObject(g, { ...DEFAULT_STYLE, mode: 'line', colorMode: 'custom', color: palette().strong, lineWidth: 2.5, opacity: 1 })
   const el = t.renderer.domElement
   built.setResolution(el.clientWidth, el.clientHeight)
   built.object.renderOrder = 998

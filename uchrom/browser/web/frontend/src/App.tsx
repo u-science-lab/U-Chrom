@@ -21,6 +21,7 @@ export function App() {
   useGeometryLoader()
   useCellLoader()
   useOmicsLoader()
+  useSystemTheme()
   useEffect(() => {
     listDatasets()
       .then(setDatasets)
@@ -65,4 +66,16 @@ function LeftSidebar() {
       )}
     </div>
   )
+}
+
+/** Follow the system light / dark preference while the choice is "System". */
+function useSystemTheme() {
+  const choice = useStore((s) => s.themeChoice)
+  const refresh = useStore((s) => s.refreshTheme)
+  useEffect(() => {
+    if (choice !== 'system' || typeof matchMedia === 'undefined') return
+    const mq = matchMedia('(prefers-color-scheme: light)')
+    mq.addEventListener('change', refresh)
+    return () => mq.removeEventListener('change', refresh)
+  }, [choice, refresh])
 }

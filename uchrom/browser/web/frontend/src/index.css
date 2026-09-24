@@ -1,5 +1,6 @@
-/* Dark theme modelled on the desktop browser's qdarkgraystyle. */
-:root {
+/* Themes: dark (qdarkgraystyle-like), light, paper; chosen via [data-theme] on <html> (theme.ts). */
+:root,
+:root[data-theme='dark'] {
   --bg: #2b2d31;
   --bg-panel: #31343a;
   --bg-input: #25272b;
@@ -12,9 +13,111 @@
   --accent: #5c9ded;
   --warn: #e6b450;
   --error: #f07178;
+  --overlay-bg: rgba(20, 22, 26, 0.9);
+  --shadow: rgba(0, 0, 0, 0.4);
+  --accent-soft: rgba(92, 157, 237, 0.12);
+  --accent-mid: rgba(92, 157, 237, 0.35);
+  --accent-line: rgba(92, 157, 237, 0.55);
+  --row-sep: rgba(255, 255, 255, 0.07);
+  --row-sep-faint: rgba(255, 255, 255, 0.03);
+  --handle: rgba(255, 255, 255, 0.35);
+  --faint-bg: rgba(255, 255, 255, 0.02);
+  --missing: rgb(115, 115, 115);
+  --swatch-ring: transparent;
+  --kind-matrix: #e8784f;
+  --kind-track: #6aa4ef;
+  --kind-intervals: #d08bf0;
+  /* canvas / WebGL drawing (read by theme.ts) */
+  --c-axis: rgba(216, 218, 223, 0.55);
+  --c-grid: rgba(216, 218, 223, 0.08);
+  --c-text: #b9bdc4;
+  --c-muted: #8f949c;
+  --c-strong: #ffffff;
+  --c-context: #6b7078;
+  --c-guide: rgba(255, 255, 255, 0.16);
+  --c-row-bg: rgba(255, 255, 255, 0.03);
+  --c-zero: rgba(255, 255, 255, 0.18);
+  --c-band: rgba(92, 157, 237, 0.18);
+  --c-bar: rgba(92, 157, 237, 0.75);
+  --c-lasso-fill: rgba(255, 255, 255, 0.08);
+  --c-dot-ring: transparent;
+  --c-interval-fill: rgba(92, 157, 237, 0.35);
+  --c-interval-stroke: rgba(92, 157, 237, 0.9);
+  --c-loop: #d08bf0;
+  --c-track-pos: #e8784f;
+  --c-track-neg: #4f8fe8;
+  --c-track-plain: #6aa4ef;
+  --c-error: #e07a7a;
+  --c-missing: #616166;
+  --c-matrix-frame: transparent;
   --radius: 4px;
+  /* above panes, overlays and side bars */
+  --z-popover: 1000;
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   color-scheme: dark;
+}
+
+/* Light: grey panels, light viewport */
+:root[data-theme='light'],
+:root[data-theme='paper'] {
+  --bg: #eceef1;
+  --bg-panel: #f6f7f9;
+  --bg-input: #ffffff;
+  --bg-hover: #e1e5eb;
+  --bg-active: #c9dcf5;
+  --viewport-bg: #f4f5f7;
+  --border: #c9ced6;
+  --text: #1f2328;
+  --text-muted: #5f6670;
+  --accent: #2f6fc9;
+  --warn: #9a6a00;
+  --error: #c62f3a;
+  --overlay-bg: rgba(255, 255, 255, 0.94);
+  --shadow: rgba(0, 0, 0, 0.18);
+  --accent-soft: rgba(47, 111, 201, 0.1);
+  --accent-mid: rgba(47, 111, 201, 0.3);
+  --accent-line: rgba(47, 111, 201, 0.6);
+  --row-sep: rgba(0, 0, 0, 0.08);
+  --row-sep-faint: rgba(0, 0, 0, 0.04);
+  --handle: rgba(0, 0, 0, 0.3);
+  --faint-bg: rgba(0, 0, 0, 0.02);
+  --missing: rgb(150, 150, 150);
+  --swatch-ring: rgba(0, 0, 0, 0.35);
+  --kind-matrix: #d0592b;
+  --kind-track: #2f6fc9;
+  --kind-intervals: #9b4fc4;
+  --c-axis: rgba(31, 35, 40, 0.55);
+  --c-grid: rgba(31, 35, 40, 0.08);
+  --c-text: #30353c;
+  --c-muted: #5f6670;
+  --c-strong: #111418;
+  --c-context: #c4c8cf;
+  --c-guide: rgba(0, 0, 0, 0.18);
+  --c-row-bg: rgba(0, 0, 0, 0.025);
+  --c-zero: rgba(0, 0, 0, 0.25);
+  --c-band: rgba(47, 111, 201, 0.16);
+  --c-bar: rgba(47, 111, 201, 0.7);
+  --c-lasso-fill: rgba(0, 0, 0, 0.06);
+  --c-dot-ring: rgba(0, 0, 0, 0.35);
+  --c-interval-fill: rgba(47, 111, 201, 0.25);
+  --c-interval-stroke: rgba(47, 111, 201, 0.9);
+  --c-loop: #9b4fc4;
+  --c-track-pos: #d0592b;
+  --c-track-neg: #2f6fc9;
+  --c-track-plain: #3f7fd6;
+  --c-error: #c62f3a;
+  --c-missing: #b9bdc4;
+  /* the white end of 'fall' needs an edge on white */
+  --c-matrix-frame: rgba(0, 0, 0, 0.28);
+  color-scheme: light;
+}
+
+/* Paper: light, with pure white views for figures */
+:root[data-theme='paper'] {
+  --bg: #f3f4f6;
+  --bg-panel: #ffffff;
+  --viewport-bg: #ffffff;
+  --c-row-bg: transparent;
 }
 
 * {
@@ -244,7 +347,7 @@ select:focus {
   position: absolute;
   z-index: 2;
   pointer-events: none;
-  background: rgba(20, 22, 26, 0.92);
+  background: var(--overlay-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 6px 8px;
@@ -406,7 +509,7 @@ select:focus {
   align-items: center;
   gap: 8px;
   padding: 4px 8px;
-  background: rgba(20, 22, 26, 0.88);
+  background: var(--overlay-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   white-space: nowrap;
@@ -496,7 +599,7 @@ details.subset > summary h2 {
   padding: 3px 7px;
   font-size: 12px;
   white-space: nowrap;
-  background: rgba(20, 22, 26, 0.92);
+  background: var(--overlay-bg);
   border: 1px solid var(--accent);
   border-radius: var(--radius);
 }
@@ -509,7 +612,7 @@ details.subset > summary h2 {
   bottom: 10px;
   width: 200px;
   padding: 6px 8px;
-  background: rgba(20, 22, 26, 0.88);
+  background: var(--overlay-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   font-size: 12px;
@@ -701,7 +804,7 @@ button.link {
   padding: 2px 6px;
   font-size: 12px;
   white-space: nowrap;
-  background: rgba(20, 22, 26, 0.94);
+  background: var(--overlay-bg);
   border: 1px solid var(--accent);
   border-radius: var(--radius);
 }
@@ -727,7 +830,7 @@ button.link {
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 18px var(--shadow);
 }
 .field-options li {
   padding: 2px 8px;
@@ -822,7 +925,7 @@ button.link {
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 18px var(--shadow);
 }
 .ws-menu li {
   padding: 4px 12px;
@@ -928,7 +1031,7 @@ body.resizing-rows {
   margin: 4px 0 2px;
   padding: 5px 7px;
   color: var(--text);
-  background: rgba(92, 157, 237, 0.12);
+  background: var(--accent-soft);
   border-left: 2px solid var(--accent);
   border-radius: var(--radius);
   line-height: 1.35;
@@ -983,7 +1086,7 @@ body.resizing-rows {
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   color: var(--accent);
-  background: rgba(20, 22, 26, 0.85);
+  background: var(--overlay-bg);
 }
 .matrix-note {
   position: absolute;
@@ -1025,7 +1128,7 @@ body.resizing-rows {
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 6px 18px var(--shadow);
 }
 .pane-popup input {
   width: 100%;
@@ -1070,7 +1173,7 @@ body.resizing-rows {
   min-width: 0;
 }
 .legend-list li.missing .swatch {
-  background: rgb(115, 115, 115);
+  background: var(--missing);
 }
 .colorbar.inline.cats {
   gap: 3px;
@@ -1112,10 +1215,10 @@ body.resizing-rows {
 .gv-row {
   position: relative;
   flex: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid var(--row-sep);
 }
 .gv-row.track {
-  border-bottom-color: rgba(255, 255, 255, 0.03);
+  border-bottom-color: var(--row-sep-faint);
 }
 .gv-resize {
   position: absolute;
@@ -1127,14 +1230,14 @@ body.resizing-rows {
   cursor: row-resize;
 }
 .gv-resize:hover {
-  background: rgba(92, 157, 237, 0.35);
+  background: var(--accent-mid);
 }
 .gv-cross {
   position: absolute;
   top: 0;
   bottom: 0;
   width: 1px;
-  background: rgba(255, 255, 255, 0.35);
+  background: var(--handle);
   pointer-events: none;
   z-index: 2;
 }
@@ -1180,7 +1283,7 @@ body.resizing-rows {
   margin-bottom: 6px;
 }
 .pane.active > .pane-head {
-  background: rgba(92, 157, 237, 0.1);
+  background: var(--accent-soft);
 }
 
 /* ---- cells pinned into their own views ------------------------------- */
@@ -1223,7 +1326,7 @@ body.resizing-rows {
   width: 260px;
 }
 .pane.pinned > .pane-head {
-  box-shadow: inset 0 -2px 0 rgba(92, 157, 237, 0.55);
+  box-shadow: inset 0 -2px 0 var(--accent-line);
 }
 
 /* ---- side bars: left = shared, right = inspector of the active pane -- */
@@ -1319,16 +1422,16 @@ body.resizing-rows {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 4px 6px 6px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--faint-bg);
 }
 .row-card.matrix {
-  border-left: 3px solid #e8784f;
+  border-left: 3px solid var(--kind-matrix);
 }
 .row-card.track {
-  border-left: 3px solid #6aa4ef;
+  border-left: 3px solid var(--kind-track);
 }
 .row-card.intervals {
-  border-left: 3px solid #d08bf0;
+  border-left: 3px solid var(--kind-intervals);
 }
 .row-card-head {
   display: flex;
@@ -1582,28 +1685,113 @@ body.resizing-rows {
   max-width: 100%;
   text-align: left;
 }
-.scope-picker .pane-popup {
-  width: 280px;
-  right: 0;
-  left: auto;
+.popover.scope-popup {
+  width: 290px;
 }
-.scope-picker .pane-popup li.naming {
+.scope-popup li.naming {
   display: flex;
   gap: 4px;
   cursor: default;
 }
-.scope-picker .pane-popup li.naming input {
+.scope-popup li.naming input {
   flex: 1;
   min-width: 0;
   margin: 0;
 }
+/* narrow panes: the bar spans the pane and wraps (count on one line, name + Save on the next) */
 .emb-selection {
-  max-width: calc(100% - 12px);
+  left: 6px;
+  right: 6px;
+  transform: none;
+  max-width: none;
   flex-wrap: wrap;
   white-space: normal;
   justify-content: center;
 }
+.emb-selection > span {
+  flex: 0 0 auto;
+}
 .emb-selection input {
-  flex: 1 1 70px;
-  min-width: 0;
+  flex: 1 1 80px;
+  min-width: 60px;
+  width: auto;
+}
+
+/* swatches keep an outline on light backgrounds (pale categories, viridis yellow) */
+.swatch {
+  box-shadow: 0 0 0 1px var(--swatch-ring);
+}
+
+/* ---- theme menu (top bar) ------------------------------------------- */
+.theme-menu {
+  position: relative;
+  margin-left: auto;
+}
+.summary + .theme-menu {
+  margin-left: 8px;
+}
+.theme-menu > button {
+  padding: 2px 8px;
+}
+.popover.menu-popup ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  min-width: 190px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 18px var(--shadow);
+}
+.menu-popup li {
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.menu-popup li:hover {
+  background: var(--bg-hover);
+}
+.menu-popup li.on {
+  color: var(--accent);
+}
+.menu-popup li .tick {
+  display: inline-block;
+  width: 1.2em;
+}
+
+/* ---- floating popovers (Popover.tsx: portal on <body>, position: fixed) - */
+.popover {
+  position: fixed;
+  z-index: var(--z-popover);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.popover.pane-popup {
+  margin: 0;
+}
+.popover.menu-popup {
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+.popover .ws-menu {
+  position: static;
+  margin: 0;
+}
+
+/* ---- matrix colour scale (ColorScaleControls) ------------------------ */
+.colorscale {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+}
+.cmap-preview {
+  height: 8px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--border);
+}
+.colorscale .range-input {
+  width: 70px;
 }

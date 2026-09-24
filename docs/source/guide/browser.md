@@ -168,6 +168,32 @@ nuclear size: Granule 1.16 µm (22 cells) < Bergmann 1.47 µm (8) < Purkinje
 1.86 µm (3).  On scHiCAR MOp the pseudo-bulk of a subclass is identical
 to that subclass's own `.cool` (coarsened to the same 1 Mb bins).
 
+### Themes
+
+The ◐ menu at the right of the top bar switches the interface theme:
+**System** (default; follows the OS light / dark setting), **Dark**,
+**Light**, or **Paper** (light, with white views — for figures).  The
+choice is remembered in the browser.  Canvases and the 3-D view follow the
+theme: text, axes, grid, context cells, missing values and the PNG
+background all switch.  Data colormaps (viridis, rainbow, the category
+palettes) don't change; on light themes, dots and swatches get a thin
+outline so pale colours stay visible.
+
+### Matrix colour scales
+
+Every matrix — each Genome matrix row, and the Matrix view — has its own
+colour scale in the inspector:
+
+- **Colormap**: fall (HiGlass; the default for contact maps), viridis
+  (the default for distances), magma, inferno, Reds, YlOrRd, greys, or
+  RdBu_r (diverging, for signed data).
+- **Reverse**: distances are reversed by default, so near is bright.
+- **Scale**: log (the default for contacts) or linear.
+- **Range**: empty means automatic (99th-percentile clip, shown as the
+  placeholder), or enter a min / max.
+
+The colour bar on the canvas, and the PNG export, follow these settings.
+
 ### Saving a view as an image
 
 The camera button in every pane header saves that pane's content as a PNG.

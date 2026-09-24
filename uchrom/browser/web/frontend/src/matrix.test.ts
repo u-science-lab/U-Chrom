@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { binAt, decodeMatrix, fall, matrixColor, matrixPixels, matrixRange, quantile, scaleFor } from './matrix'
+import { autoRange, defaultColorScale, effectiveRange, scaleColor } from './colormaps'
+import { binAt, decodeMatrix, matrixPixels, quantile, scaleFor } from './matrix'
 
 function encode(header: object, data: number[]): ArrayBuffer {
   let json = new TextEncoder().encode(JSON.stringify(header))
@@ -40,25 +41,25 @@ describe('colour scales', () => {
     expect(scaleFor('distance')).toBe('distance')
     expect(scaleFor('contact_frequency')).toBe('frequency')
   })
-  it('contacts use a log range from the 99th percentile; zeros stay white', () => {
+  it('contacts: fall on a log scale up to the 99th percentile; zeros stay white', () => {
     const data = Float32Array.from([0, 0, 1, 9, 99, NaN])
-    const [lo, hi] = matrixRange(data, 'contacts')
-    expect(lo).toBe(0)
-    expect(hi).toBeCloseTo(Math.log1p(99))
-    expect(matrixColor(0, 'contacts', [lo, hi])).toEqual([1, 1, 1])
-    expect(matrixColor(99, 'contacts', [lo, hi])).toEqual(fall(1))
-    expect(matrixColor(NaN, 'contacts', [lo, hi])).toEqual([0.38, 0.38, 0.4])
+    const cs = defaultColorScale('contacts')
+    const range = effectiveRange(autoRange(data, 'contacts'), cs)
+    expect(range).toEqual([0, 99])
+    expect(scaleColor(0, cs, range, [0.5, 0.5, 0.5])).toEqual([1, 1, 1])
+    expect(scaleColor(99, cs, range, [0.5, 0.5, 0.5])).toEqual([0, 0, 0]) // fall ends in black
+    expect(scaleColor(NaN, cs, range, [0.1, 0.2, 0.3])).toEqual([0.1, 0.2, 0.3]) // missing = theme colour
   })
-  it('distances are reversed: near = bright', () => {
-    const near = matrixColor(0.1, 'distance', [0.1, 2])
-    const far = matrixColor(2, 'distance', [0.1, 2])
+  it('distances are reversed by default: near = bright', () => {
+    const cs = defaultColorScale('distance')
     const lum = (c: number[]) => 0.3 * c[0] + 0.6 * c[1] + 0.1 * c[2]
-    expect(lum(near)).toBeGreaterThan(lum(far))
-    expect(matrixRange(Float32Array.from([1, 1, 1]), 'distance')).toEqual([1, 2]) // degenerate
+    expect(lum(scaleColor(0.1, cs, [0.1, 2], [0, 0, 0]))).toBeGreaterThan(lum(scaleColor(2, cs, [0.1, 2], [0, 0, 0])))
+    expect(autoRange(Float32Array.from([1, 1, 1]), 'distance')).toEqual([1, 2]) // degenerate
   })
   it('makes one RGBA pixel per bin', () => {
     const m = decodeMatrix(encode(H, [0, 1, 2, 3, 4, 5]))
-    const px = matrixPixels(m, 'contacts', matrixRange(m.data, 'contacts'))
+    const cs = defaultColorScale('contacts')
+    const px = matrixPixels(m, cs, effectiveRange(autoRange(m.data, 'contacts'), cs), [0.5, 0.5, 0.5])
     expect(px.length).toBe(4 * 6)
     expect(Array.from(px.slice(0, 4))).toEqual([255, 255, 255, 255])
   })

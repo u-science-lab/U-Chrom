@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { nextGroupName, resolveRowScope, sameSpec, specLabel, type GroupInfo, type RowScopeSpec, type Scope } from '../groups'
 import { activeSavedGroups, activeView, useStore } from '../store'
 import { useFocusState, useGroupChoices, useGroupInfos } from '../useGroups'
 import { useCellTypes } from './PaneCell'
+import { Popover } from './Popover'
 
 const MAX_SHOWN = 80
 
@@ -48,6 +49,7 @@ export function ScopePicker({
   const infos = useGroupInfos([...groupRefs, resolved.kind === 'group' ? resolved.group : null, selection?.id ?? null])
   const byRef = useMemo(() => new Map(infos.filter((i): i is GroupInfo => !!i).map((i) => [i.ref, i])), [infos])
   const [open, setOpen] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
   const [q, setQ] = useState('')
   const [naming, setNaming] = useState<string | null>(null)
   const t = q.trim().toLowerCase()
@@ -65,11 +67,11 @@ export function ScopePicker({
   const info = resolved.kind === 'group' ? byRef.get(resolved.group) : null
   const label = specLabel(spec, resolved, info, nAll, types)
 
-  const close = () => {
+  const close = useCallback(() => {
     setOpen(false)
     setQ('')
     setNaming(null)
-  }
+  }, [])
   const pick = (s: RowScopeSpec) => {
     onChange(s)
     close()
@@ -91,12 +93,12 @@ export function ScopePicker({
   const swatch = (i: GroupInfo | null | undefined) => <span className="swatch round" style={{ background: i?.color ?? '#888' }} />
   return (
     <div className="pane-menu pane-cell scope-picker">
-      <button className={spec.kind === 'focus' || spec.kind === 'view' ? '' : 'pinned'} onClick={() => setOpen(!open)} title={title}>
+      <button ref={btnRef} className={spec.kind === 'focus' || spec.kind === 'view' ? '' : 'pinned'} onClick={() => setOpen(!open)} title={title}>
         {resolved.kind === 'group' && swatch(info)}
         {label} ▾
       </button>
       {open && (
-        <div className="pane-popup" onMouseLeave={close}>
+        <Popover anchor={btnRef} open={open} onClose={close} className="pane-popup scope-popup">
           <input autoFocus placeholder="search a cell or a group…" value={q} onChange={(e) => setQ(e.target.value)} />
           <ul>
             {allowView && option({ kind: 'view' }, <>Same as view <span className="muted">→ {specLabel({ kind: 'all' }, view!, view!.kind === 'group' ? byRef.get(view!.group) : null, nAll)}</span></>, "Use the view's cells setting (top of the inspector)")}
@@ -153,7 +155,7 @@ export function ScopePicker({
             ))}
             {cellMatches.length >= MAX_SHOWN && <li className="muted disabled">… type to narrow down</li>}
           </ul>
-        </div>
+        </Popover>
       )}
     </div>
   )

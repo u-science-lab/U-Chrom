@@ -8,6 +8,7 @@ import { parseGenomicNumber } from './filters'
 import { binAt } from './matrix'
 import { defaultTrackSelection } from './tracks'
 import type { DatasetSummary } from './types'
+import { parseColorScale, type ColorScaleSetting } from './colormaps'
 import { parseScopeSpec, type RowScopeSpec } from './groups'
 import type { DistanceStat, TrackAgg } from './workspace'
 
@@ -37,6 +38,8 @@ export interface GenomeRow {
   scope?: RowScopeSpec
   /** track: aggregate of the spots in a bin over several cells (default mean) */
   agg?: TrackAgg
+  /** matrix: colour scale changes from the defaults of its kind (absent = defaults) */
+  color?: ColorScaleSetting
 }
 
 export const ROW_HEIGHT: Record<GenomeRowKind, number> = { matrix: 200, track: 44, intervals: 22 }
@@ -202,6 +205,8 @@ export function parseRows(raw: unknown): GenomeRow[] | null {
     const scope = parseScopeSpec(x.scope, true)
     if (scope && scope.kind !== 'view') row.scope = scope
     if (x.agg === 'mean' || x.agg === 'median' || x.agg === 'max') row.agg = x.agg
+    const color = parseColorScale(x.color)
+    if (color) row.color = color
     out.push(row)
   }
   return new Set(out.map((r) => r.id)).size === out.length ? out : null
@@ -226,6 +231,15 @@ export function migrateRows(rows: GenomeRow[], raw: unknown, legacy: { tracksCel
     if (scope) out.scope = scope
     if (r.kind === 'track' && !r.agg && legacy.agg) out.agg = legacy.agg
     return out
+  })
+}
+
+/** Change a row's colour scale: `patch` fields with null / undefined go back to the default (auto for min / max). */
+export function setRowColor(rows: GenomeRow[], id: string, color: ColorScaleSetting | undefined): GenomeRow[] {
+  return rows.map((r) => {
+    if (r.id !== id) return r
+    const { color: _old, ...rest } = r // eslint-disable-line @typescript-eslint/no-unused-vars
+    return color && Object.keys(color).length ? { ...rest, color } : rest
   })
 }
 

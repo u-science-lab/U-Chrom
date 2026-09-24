@@ -4,6 +4,7 @@
  */
 
 import { migrateRows, parseRows, type GenomeRow } from './genomeRows'
+import { parseColorScale, type ColorScaleSetting } from './colormaps'
 import { FOCUS, parseScopeSpec, type ScopeSpec } from './groups'
 import type { EmbeddingInfo } from './types'
 
@@ -36,6 +37,8 @@ export interface PaneOptions {
   chromScope?: 'all' | 'locus'
   /** stats rg / scaling: groups overlaid in their colours (group refs) */
   compareGroups?: string[]
+  /** matrix: colour scale changes from the defaults (absent = defaults) */
+  color?: ColorScaleSetting
 }
 
 export interface Pane extends PaneOptions {
@@ -325,6 +328,8 @@ function parseOptions(p: Partial<Pane> & LegacyPane): PaneOptions & { scope?: Sc
   if (typeof p.fieldX === 'string') o.fieldX = p.fieldX
   if (typeof p.fieldY === 'string') o.fieldY = p.fieldY
   if (p.chromScope === 'all' || p.chromScope === 'locus') o.chromScope = p.chromScope
+  const color = parseColorScale(p.color)
+  if (color) o.color = color
   return o
 }
 

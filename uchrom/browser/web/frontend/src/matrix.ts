@@ -3,7 +3,8 @@
  * scales for contact / distance matrices.  Pure — no DOM.
  */
 
-import { viridis, type RGB } from './colors'
+import type { RGB } from './colors'
+import { scaleColor, type ColorScale, type MatrixKind } from './colormaps'
 
 export interface MatrixHeader {
   chrom: string
@@ -43,8 +44,8 @@ export function decodeMatrix(buf: ArrayBuffer): MatrixData {
   return { header, data: new Float32Array(buf, 4 + h, n) }
 }
 
-/** Kind of colour scale a matrix needs. */
-export type MatrixScale = 'contacts' | 'distance' | 'frequency'
+/** Kind of values a matrix holds (decides the default colour scale). */
+export type MatrixScale = MatrixKind
 
 export function scaleFor(value: string): MatrixScale {
   if (value === 'distance') return 'distance'
@@ -64,62 +65,12 @@ export function quantile(values: ArrayLike<number>, q: number, transform?: (v: n
   return v[Math.min(v.length - 1, Math.max(0, Math.round(q * (v.length - 1))))]
 }
 
-/**
- * Colour range of a matrix.  Contacts: [0, p99 of log1p(count)] (log
- * scale, zeros stay white).  Distances: [p1, p99].  Frequencies: [0, max].
- */
-export function matrixRange(data: ArrayLike<number>, scale: MatrixScale): [number, number] {
-  if (scale === 'contacts') {
-    const hi = quantile(data, 0.99, (v) => (v > 0 ? Math.log1p(v) : NaN))
-    return [0, Number.isFinite(hi) && hi > 0 ? hi : 1]
-  }
-  if (scale === 'frequency') {
-    const hi = quantile(data, 1)
-    return [0, Number.isFinite(hi) && hi > 0 ? hi : 1]
-  }
-  const lo = quantile(data, 0.01)
-  const hi = quantile(data, 0.99)
-  if (!Number.isFinite(lo)) return [0, 1]
-  return hi > lo ? [lo, hi] : [lo, lo + 1]
-}
-
-/** "fall"-like ramp for contacts: white → yellow → orange → red → dark red. */
-const FALL: RGB[] = [
-  [1, 1, 1],
-  [1, 0.96, 0.62],
-  [1, 0.72, 0.3],
-  [0.94, 0.33, 0.13],
-  [0.7, 0.05, 0.08],
-  [0.3, 0, 0.03],
-]
-
-export function fall(t: number): RGB {
-  const c = Math.min(1, Math.max(0, Number.isFinite(t) ? t : 0)) * (FALL.length - 1)
-  const i = Math.min(FALL.length - 2, Math.floor(c))
-  const f = c - i
-  const a = FALL[i]
-  const b = FALL[i + 1]
-  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]
-}
-
-export const MATRIX_MISSING: RGB = [0.38, 0.38, 0.4]
-
-/** Colour of one matrix value under `scale` / `range` (NaN → grey). */
-export function matrixColor(v: number, scale: MatrixScale, range: [number, number]): RGB {
-  if (!Number.isFinite(v)) return MATRIX_MISSING
-  const [lo, hi] = range
-  if (scale === 'contacts') return fall((v > 0 ? Math.log1p(v) : 0) / (hi || 1))
-  const t = (v - lo) / (hi - lo || 1)
-  // distances: near = bright (reversed viridis); frequencies: high = bright
-  return scale === 'distance' ? viridis(1 - t) : viridis(t)
-}
-
-/** RGBA pixels (n_cols × n_rows, one pixel per bin) for an ImageData. */
-export function matrixPixels(m: MatrixData, scale: MatrixScale, range: [number, number]): Uint8ClampedArray {
+/** RGBA pixels (n_cols × n_rows, one pixel per bin) under a colour scale; missing values get `missing`. */
+export function matrixPixels(m: MatrixData, s: ColorScale, range: [number, number], missing: RGB): Uint8ClampedArray {
   const { n_rows, n_cols } = m.header
   const px = new Uint8ClampedArray(4 * n_rows * n_cols)
   for (let i = 0; i < n_rows * n_cols; i++) {
-    const c = matrixColor(m.data[i], scale, range)
+    const c = scaleColor(m.data[i], s, range, missing)
     px[4 * i] = c[0] * 255
     px[4 * i + 1] = c[1] * 255
     px[4 * i + 2] = c[2] * 255
