@@ -32,11 +32,11 @@ Navigating imaging data with many cells:
   full (tubes by default) and the other cells fade into context.  `←` /
   `→` step through cells, `Esc` returns to all cells, and the *others*
   slider in the focus bar sets how faint the context is.
-- **Chromosomes** (right) is a legend and a visibility filter: click to
+- **Chromosomes** (3-D inspector, right) is a legend and a visibility filter: click to
   show / hide, double-click to show only one.  Colours match the
   rainbow mode.
 - Clicking a trace of the focused cell shows its trace, cell and bin.
-- **Subset layer** (collapsed, bottom left) still creates region / trace
+- **Subset layer** (collapsed, 3-D inspector) still creates region / trace
   layers when you want to compare or keep a selection.
 
 Multi-omics data (e.g. `ChromData.from_fofct(core, cell_table=…,
@@ -58,14 +58,14 @@ rna_table=…)`, see the ChromData guide):
 - **Views are equal panes.**  The centre area is a workspace of views —
   *3D* and *Embedding* (2-D view of `cd.cellm` embeddings such as
   `rna_umap`, `rna_tsne`, `rna_pca` from `uchrom.emb.embed_cells`; any two
-  PCs for PCA).  Each pane's header picks its view type and holds its own
-  controls; **+ View** adds panes (e.g. two 3-D cameras, or UMAP next to
+  PCs for PCA).  Each pane's header picks its view type; its settings are in the
+  inspector (right); **+ View** adds panes (e.g. two 3-D cameras, or UMAP next to
   PCA) and the workspace bar switches the layout: **Tabs**, **Columns**,
   **Rows** or **Grid** (drag the dividers; the arrangement is remembered
   in the browser).  Datasets with embeddings open as 3D | Embedding.
   Selection is shared: clicking a dot or a nucleus focuses that cell in
   every pane, and the focus bar (◀ cell ▶, *others* opacity) and colour
-  scale live in the workspace bar, not in any one view.
+  scale are shared (focus bar, left sidebar), not in any one view.
 - **Max bond** (Style) breaks polylines between consecutive spots farther
   apart than a threshold — by default 10× the median spacing.  Imaging
   traces contain duplicated loci and, in Takei 2021, per-chromosome
@@ -77,15 +77,30 @@ rna_table=…)`, see the ChromData guide):
   Tubes (radius 0.35× the median spot spacing) appear once a cell is
   focused.
 
-### Active view, pinned cells
+### Left sidebar vs right sidebar (inspector)
 
-The side panels follow the **active pane** (click a pane; it gets an accent
-border): layers, subsets, chromosome legend, RNA points and the 3-D style
-controls appear only while a 3-D view is active, while the cell list,
-cell info and *Colour · all cells* are always there.
+The two sidebars have fixed roles:
+
+- **Left = shared by every open view** — the cell list (search, ↗),
+  the focused cell's info (or the dataset summary) and *Colour · all
+  cells* with its legend / colour bar.  Changing anything here affects
+  all panes, in every layout (tabs, columns, rows, grid).
+- **Right = inspector of the active pane** — click a pane to make it
+  active (accent border); the inspector is titled after it
+  (e.g. *Genome · pane 3*) and holds only that pane's settings:
+  - *3D*: layers, subset layer, render style, chromosome legend, points;
+  - *Genome*: one card per row (tracks, matrices, intervals) with all
+    its settings;
+  - *Matrix*, *Embedding*, *Stats*: their own controls.
+
+Pane headers stay one line: view type, 📌 badge, maximise / close
+(3-D views also have ⟲ reset camera).  The focus bar and locus navigator
+above the panes are shared, like the left sidebar.
+
+### Pinned cells
 
 Any pane can **follow the focused cell** (default) or be **pinned** to one
-cell (📌 in its header).  A pinned 3-D view draws only that cell with its
+cell (*follow focus ▾* at the top of the inspector).  A pinned 3-D view draws only that cell with its
 own camera; pinned Genome / Matrix / Stats views use that cell's traces or
 per-cell contacts.  Open a cell in a new pinned view with ↗ on its row in
 the cell list, ↗ *New view* in the focus bar, or from the label shown when
@@ -109,7 +124,7 @@ share a **locus** (chromosome + range) set in the workspace bar — type
     cells or the focused cell;
   - *interval rows*: `cd.results` tables (TADs as boxes, loops as arcs),
     with their boundaries echoed as guides across the matrix rows.
-  Add / remove / reorder rows from the pane header; rows are remembered.
+  Add / remove / reorder rows in the inspector (right); rows are remembered.
 - **Matrix** — the full square version: a contact map from a linked `.cool` / `.mcool` / `.scool`
   (`cd.link_cool`, `cd.link_scool`; per-cell maps follow the focused cell)
   or the **3-D distance** matrix computed from `coords` (one trace, the

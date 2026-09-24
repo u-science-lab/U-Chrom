@@ -3,7 +3,7 @@ import { activeFieldValues, activeView, useStore } from '../store'
 import { useCategoryRows } from './CategoryLegend'
 import { fieldLabel, fmtNum } from './format'
 
-/** Colour scale while the overview is coloured by a cell field (`inline`: compact, for the workspace bar). */
+/** Colour scale while the overview is coloured by a numeric cell field (`inline`: compact one-line variant). */
 export function ColorBar({ inline = false }: { inline?: boolean }) {
   const view = useStore(activeView)
   const values = useStore(activeFieldValues)
@@ -11,6 +11,8 @@ export function ColorBar({ inline = false }: { inline?: boolean }) {
   const toggle = useStore((s) => s.toggleCategory)
   if (view.overviewColor !== 'field' || !view.cellField) return null
   if (cats) {
+    // side bar: the category legend (with counts and toggles) says it all
+    if (!inline) return null
     // categorical: one dot per category (full legend with counts in the side panel)
     return (
       <div className={`colorbar${inline ? ' inline' : ''} cats`} title="Legend with cell counts in the side panel">
@@ -40,7 +42,7 @@ export function ColorBar({ inline = false }: { inline?: boolean }) {
     )
   }
   return (
-    <div className="colorbar">
+    <div className="colorbar side">
       <div className="colorbar-title">{fieldLabel(view.cellField)}</div>
       <div className="colorbar-ramp" style={{ background: `linear-gradient(to right, ${stops})` }} />
       <div className="colorbar-ticks">

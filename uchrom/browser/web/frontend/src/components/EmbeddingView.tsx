@@ -91,7 +91,10 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
-    if (!ds || !key) return
+    if (!ds || !key) {
+      setEmb(null) // another dataset without embeddings: no stale dots
+      return
+    }
     let live = true
     setError(null)
     fetchEmbedding(ds.id, key, dims)

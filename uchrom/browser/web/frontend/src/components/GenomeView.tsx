@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchContacts, fetchDistance, fetchIntervals, fetchTracks } from '../api'
-import { fmtBp, parseGenomicNumber } from '../filters'
+import { fmtBp } from '../filters'
 import { niceTicks, panLocus, zoomLocus, type Locus } from '../genome'
 import {
   addRow,
+  applyRowSetting,
   defaultRows,
   depthScale,
   moveRow,
@@ -11,9 +12,10 @@ import {
   removeRow,
   resizeRow,
   resolveHeights,
+  ROW_HEIGHT,
   triangleBins,
-  updateRow,
   type GenomeRow,
+  type RowSetting,
   type GenomeRowKind,
   type TriangleGeom,
 } from '../genomeRows'
@@ -63,7 +65,7 @@ function cachedMatrix(key: string, load: () => Promise<MatrixData>): Promise<Mat
 
 // ---- rows of the pane (per dataset, defaults until edited) ------------------
 
-function useGenomeRows(pane: Pane) {
+export function useGenomeRows(pane: Pane) {
   const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
   const setWorkspace = useStore((s) => s.setWorkspace)
   const saved = ds ? pane.genomeRows?.[ds.name] : undefined
@@ -110,61 +112,138 @@ function newRow(kind: GenomeRowKind, rows: GenomeRow[], ds: DatasetSummary): Omi
   return { kind, key: keys.find((k) => !used.has(k)) ?? keys[0] ?? null }
 }
 
-/** Pane-header controls: add rows, track aggregation, reset. */
-export function GenomeControls({ pane }: { pane: Pane }) {
+const KIND_LABEL: Record<GenomeRowKind, string> = { matrix: 'Matrix', track: 'Track', intervals: 'Intervals' }
+
+/** Short name of a row for the inspector list. */
+function rowLabel(r: GenomeRow, ds: DatasetSummary): string {
+  if (r.kind === 'matrix') {
+    if (r.source === 'distance') return `3-D distance · ${r.stat ?? 'median'}`
+    const m = (ds.contact_maps ?? []).find((x) => x.key === r.source)
+    return m ? m.label || m.key : (r.source ?? '—')
+  }
+  return (r.kind === 'track' ? r.track : r.key) ?? '—'
+}
+
+/**
+ * Inspector of a genome pane: its rows (add / remove / reorder) with every
+ * row's settings, plus the track aggregation shared by all track rows.
+ */
+export function GenomeInspector({ pane }: { pane: Pane }) {
   const { ds, rows, setRows, resetRows, customised } = useGenomeRows(pane)
-  const focus = useStore((s) => activeView(s).focusCell)
+  const focus = useStore((s) => paneCell(pane, activeView(s).focusCell))
   const setWorkspace = useStore((s) => s.setWorkspace)
-  const [menu, setMenu] = useState(false)
   if (!ds) return null
   const can: Record<GenomeRowKind, boolean> = {
     matrix: (ds.contact_maps?.length ?? 0) > 0 || hasCoords(ds),
     track: (ds.tracks?.length ?? 0) > 0,
     intervals: (ds.intervals?.length ?? 0) > 0,
   }
-  const add = (kind: GenomeRowKind) => {
-    if (!can[kind]) return
-    setRows((r) => addRow(r, newRow(kind, r, ds)))
-    setMenu(false)
-  }
-  const label: Record<GenomeRowKind, string> = { matrix: 'Matrix triangle (Hi-C / 3-D distance)', track: 'Track', intervals: 'Intervals (TADs, loops…)' }
+  const set = (id: string) => (setting: RowSetting, value: string | boolean) => setRows((r) => applyRowSetting(r, id, setting, value))
   return (
-    <>
-      <div className="pane-menu">
-        <button onClick={() => setMenu(!menu)} title="Add a row">
-          + Row ▾
-        </button>
-        {menu && (
-          <div className="pane-popup" onMouseLeave={() => setMenu(false)}>
-            <ul>
-              {(['matrix', 'track', 'intervals'] as GenomeRowKind[]).map((k) => (
-                <li key={k} className={can[k] ? '' : 'disabled'} onClick={() => add(k)} title={can[k] ? '' : 'Not available in this dataset'}>
-                  {label[k]}
-                </li>
-              ))}
-            </ul>
-          </div>
+    <section className="insp-genome">
+      <h2>
+        Rows <span className="muted">{rows.length}</span>
+        {customised && (
+          <button className="link" onClick={resetRows} title="Back to the default rows for this dataset">
+            reset
+          </button>
         )}
+      </h2>
+      <div className="seg insp-add">
+        {(['matrix', 'track', 'intervals'] as GenomeRowKind[]).map((k) => (
+          <button key={k} disabled={!can[k]} onClick={() => setRows((r) => addRow(r, newRow(k, r, ds)))} title={can[k] ? `Add a ${KIND_LABEL[k].toLowerCase()} row` : 'Not available in this dataset'}>
+            + {KIND_LABEL[k]}
+          </button>
+        ))}
       </div>
       {rows.some((r) => r.kind === 'track') && (
-        <>
+        <div className="insp-line">
+          <span className="muted small">tracks</span>
           <select value={pane.agg ?? 'mean'} onChange={(e) => setWorkspace((w) => updatePane(w, pane.id, { agg: e.target.value as TrackAgg }))} title="Aggregate spots in each bin">
             <option value="mean">mean</option>
             <option value="median">median</option>
             <option value="max">max</option>
           </select>
           <label className="check small" title={focus ? `Tracks: only spots of cell ${focus}` : 'Tracks: select a cell to restrict them to it'}>
-            <input type="checkbox" checked={pane.followFocus ?? true} onChange={(e) => setWorkspace((w) => updatePane(w, pane.id, { followFocus: e.target.checked }))} />{' '}
-            focused cell
+            <input type="checkbox" checked={pane.followFocus ?? true} onChange={(e) => setWorkspace((w) => updatePane(w, pane.id, { followFocus: e.target.checked }))} /> cell only
           </label>
-        </>
+        </div>
       )}
-      {customised && (
-        <button onClick={resetRows} title="Back to the default rows for this dataset">
-          Reset rows
-        </button>
+      {!rows.length && <p className="muted small">No rows — add one above.</p>}
+      <ol className="row-list">
+        {rows.map((r, i) => (
+          <li key={r.id} className={`row-card ${r.kind}`}>
+            <div className="row-card-head">
+              <span className="row-kind">{KIND_LABEL[r.kind]}</span>
+              <span className="row-name" title={rowLabel(r, ds)}>
+                {rowLabel(r, ds)}
+              </span>
+              <button onClick={() => setRows((x) => moveRow(x, r.id, -1))} disabled={i === 0} title="Move up">
+                ↑
+              </button>
+              <button onClick={() => setRows((x) => moveRow(x, r.id, 1))} disabled={i === rows.length - 1} title="Move down">
+                ↓
+              </button>
+              <button onClick={() => setRows((x) => removeRow(x, r.id))} title="Remove this row">
+                ×
+              </button>
+            </div>
+            <RowSettings row={r} ds={ds} set={set(r.id)} />
+          </li>
+        ))}
+      </ol>
+      <div className="muted small">Drag a row’s bottom edge in the view to resize it; wheel zooms, drag pans.</div>
+    </section>
+  )
+}
+
+/** Settings of one row (by kind). */
+function RowSettings({ row, ds, set }: { row: GenomeRow; ds: DatasetSummary; set(setting: RowSetting, value: string | boolean): void }) {
+  return (
+    <div className="row-card-body">
+      {row.kind === 'matrix' && <MatrixTools row={row} ds={ds} set={set} />}
+      {row.kind === 'track' && (
+        <select value={row.track ?? ''} onChange={(e) => set('track', e.target.value)} title="Track">
+          {(ds.tracks ?? []).map((t) => (
+            <option key={t.name} value={t.name}>
+              {t.name}
+            </option>
+          ))}
+        </select>
       )}
-    </>
+      {row.kind === 'intervals' && (
+        <select value={row.key ?? ''} onChange={(e) => set('key', e.target.value)} title="Interval table">
+          {(ds.intervals ?? []).map((t) => (
+            <option key={t.key} value={t.key}>
+              {t.key}
+            </option>
+          ))}
+        </select>
+      )}
+      <TextSetting label="height" value={row.height ? String(row.height) : ''} placeholder={row.kind === 'matrix' ? 'auto' : String(ROW_HEIGHT[row.kind])} onCommit={(v) => set('height', v)} title="Row height in px (empty = default)" />
+    </div>
+  )
+}
+
+/** Text input committed on blur / Enter (reverts when the value is refused). */
+function TextSetting({ label, value, placeholder, title, onCommit }: { label: string; value: string; placeholder: string; title: string; onCommit(v: string): void }) {
+  const [text, setText] = useState(value)
+  useEffect(() => setText(value), [value])
+  return (
+    <label className="insp-text small" title={title}>
+      {label}
+      <input
+        className="num"
+        value={text}
+        placeholder={placeholder}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
+          onCommit(text)
+          setText(value)
+        }}
+        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+      />
+    </label>
   )
 }
 
@@ -322,7 +401,7 @@ export function GenomeView({ pane }: { pane: Pane }) {
           locus &&
           W > 0 &&
           rows.map((r, i) => (
-            <RowFrame key={r.id} row={r} height={heights[i]} ds={ds} first={i === 0} last={i === rows.length - 1} setRows={setRows}>
+            <RowFrame key={r.id} row={r} height={heights[i]} setRows={setRows}>
               {r.kind === 'matrix' && <MatrixRow row={r} height={heights[i]} ds={ds} width={W} locus={locus} focus={focus} guides={guides} register={register} />}
               {r.kind === 'track' && <TrackRow row={r} height={heights[i]} width={W} locus={locus} data={tracks} register={register} />}
               {r.kind === 'intervals' && (
@@ -375,25 +454,18 @@ function AxisRuler({ width, locus }: { width: number; locus: Locus }) {
   return <canvas ref={ref} className="gv-axis" style={{ width, height: AXIS_H }} />
 }
 
-/** Row chrome: tools on hover (config, ↑ ↓ ×) and a bottom edge to drag the height. */
+/** Row chrome: a bottom edge to drag the height (settings live in the inspector). */
 function RowFrame({
   row,
   height,
-  ds,
-  first,
-  last,
   setRows,
   children,
 }: {
   row: GenomeRow
   height: number
-  ds: DatasetSummary
-  first: boolean
-  last: boolean
   setRows(f: (rows: GenomeRow[]) => GenomeRow[]): void
   children: React.ReactNode
 }) {
-  const upd = (p: Partial<GenomeRow>) => setRows((r) => updateRow(r, row.id, p))
   const onResize = (e: React.PointerEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -412,58 +484,17 @@ function RowFrame({
   return (
     <div className={`gv-row ${row.kind}`} data-row={row.id} style={{ height }}>
       {children}
-      <div className="gv-tools" onPointerDown={(e) => e.stopPropagation()}>
-        {row.kind === 'matrix' && <MatrixTools row={row} ds={ds} upd={upd} />}
-        {row.kind === 'track' && (
-          <select value={row.track ?? ''} onChange={(e) => upd({ track: e.target.value })} title="Track">
-            {(ds.tracks ?? []).map((t) => (
-              <option key={t.name} value={t.name}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        )}
-        {row.kind === 'intervals' && (
-          <select value={row.key ?? ''} onChange={(e) => upd({ key: e.target.value })} title="Interval table">
-            {(ds.intervals ?? []).map((t) => (
-              <option key={t.key} value={t.key}>
-                {t.key}
-              </option>
-            ))}
-          </select>
-        )}
-        <button onClick={() => setRows((r) => moveRow(r, row.id, -1))} disabled={first} title="Move up">
-          ↑
-        </button>
-        <button onClick={() => setRows((r) => moveRow(r, row.id, 1))} disabled={last} title="Move down">
-          ↓
-        </button>
-        <button onClick={() => setRows((r) => removeRow(r, row.id))} title="Remove this row">
-          ×
-        </button>
-      </div>
       <div className="gv-resize" onPointerDown={onResize} title="Drag to change the row height" />
     </div>
   )
 }
 
-function MatrixTools({ row, ds, upd }: { row: GenomeRow; ds: DatasetSummary; upd(p: Partial<GenomeRow>): void }) {
+function MatrixTools({ row, ds, set }: { row: GenomeRow; ds: DatasetSummary; set(setting: RowSetting, value: string | boolean): void }) {
   const maps = ds.contact_maps ?? []
   const map = maps.find((m) => m.key === row.source)
-  const [depth, setDepth] = useState(row.maxDist ? fmtBp(row.maxDist) : '')
-  useEffect(() => setDepth(row.maxDist ? fmtBp(row.maxDist) : ''), [row.maxDist])
-  const commitDepth = () => {
-    if (!depth.trim()) return upd({ maxDist: null })
-    try {
-      const v = parseGenomicNumber(depth)
-      upd({ maxDist: v > 0 ? v : null })
-    } catch {
-      setDepth(row.maxDist ? fmtBp(row.maxDist) : '')
-    }
-  }
   return (
     <>
-      <select value={row.source ?? ''} onChange={(e) => upd({ source: e.target.value, resolution: null })} title="Matrix source">
+      <select value={row.source ?? ''} onChange={(e) => set('source', e.target.value)} title="Matrix source">
         {maps.map((m) => (
           <option key={m.key} value={m.key}>
             {m.label || m.key} ({m.kind})
@@ -472,8 +503,8 @@ function MatrixTools({ row, ds, upd }: { row: GenomeRow; ds: DatasetSummary; upd
         {hasCoords(ds) && <option value="distance">3-D distance</option>}
       </select>
       {map && map.resolutions.length > 1 && (
-        <select value={row.resolution ?? ''} onChange={(e) => upd({ resolution: e.target.value ? +e.target.value : null })} title="Resolution">
-          <option value="">auto</option>
+        <select value={row.resolution ?? ''} onChange={(e) => set('resolution', e.target.value)} title="Resolution">
+          <option value="">auto resolution</option>
           {map.resolutions.map((r) => (
             <option key={r} value={r}>
               {fmtBp(r)}
@@ -483,33 +514,41 @@ function MatrixTools({ row, ds, upd }: { row: GenomeRow; ds: DatasetSummary; upd
       )}
       {map && (
         <label className="check small" title="ICE-balanced values (if the cooler has weights)">
-          <input type="checkbox" checked={row.balance ?? false} onChange={(e) => upd({ balance: e.target.checked })} /> balanced
+          <input type="checkbox" checked={row.balance ?? false} onChange={(e) => set('balance', e.target.checked)} /> balanced
         </label>
       )}
+      {map?.per_cell && <div className="muted small">one map per cell: follows the focused / pinned cell</div>}
       {row.source === 'distance' && (
         <>
-          <select value={row.stat ?? 'median'} onChange={(e) => upd({ stat: e.target.value as DistanceStat })} title="Statistic over traces">
-            <option value="median">median</option>
-            <option value="mean">mean</option>
-            <option value="contact">contact freq.</option>
+          <select value={row.stat ?? 'median'} onChange={(e) => set('stat', e.target.value)} title="Statistic over traces">
+            <option value="median">median distance</option>
+            <option value="mean">mean distance</option>
+            <option value="contact">contact frequency</option>
           </select>
-          <label className="check small" title="Only the focused cell's traces">
-            <input type="checkbox" checked={row.followFocus ?? true} onChange={(e) => upd({ followFocus: e.target.checked })} /> focused cell
+          {row.stat === 'contact' && (
+            <TextSetting
+              label="threshold"
+              value={row.threshold ? String(row.threshold) : ''}
+              placeholder="default"
+              title={`Contact distance threshold (${ds.xyz_unit ?? 'dataset unit'}); empty = server default`}
+              onCommit={(v) => set('threshold', v)}
+            />
+          )}
+          <label className="check small" title="Only the focused / pinned cell's traces">
+            <input type="checkbox" checked={row.followFocus ?? true} onChange={(e) => set('followFocus', e.target.checked)} /> focused / pinned cell only
           </label>
         </>
       )}
-      <input
-        className="num"
-        value={depth}
-        placeholder="max dist"
+      <TextSetting
+        label="max dist"
+        value={row.maxDist ? fmtBp(row.maxDist) : ''}
+        placeholder="45°"
         title="Deepest genomic separation shown over the row height (e.g. 5M); empty = true 45°"
-        onChange={(e) => setDepth(e.target.value)}
-        onBlur={commitDepth}
-        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        onCommit={(v) => set('maxDist', v)}
       />
-      <button className={row.flip ? 'active' : ''} onClick={() => upd({ flip: !row.flip })} title="Flip: diagonal at the top / bottom of the row">
-        ⇅
-      </button>
+      <label className="check small" title="Diagonal at the top of the row (triangle pointing down)">
+        <input type="checkbox" checked={!!row.flip} onChange={(e) => set('flip', e.target.checked)} /> flip
+      </label>
     </>
   )
 }

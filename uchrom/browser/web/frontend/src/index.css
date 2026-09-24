@@ -1117,46 +1117,6 @@ body.resizing-rows {
 .gv-row.track {
   border-bottom-color: rgba(255, 255, 255, 0.03);
 }
-.gv-tools {
-  position: absolute;
-  top: 2px;
-  right: 4px;
-  z-index: 3;
-  display: none;
-  align-items: center;
-  gap: 3px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  max-width: calc(100% - 8px);
-  padding: 2px 4px;
-  background: rgba(20, 22, 26, 0.9);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  cursor: default;
-}
-.gv-row:hover .gv-tools {
-  display: flex;
-}
-.gv-tools select,
-.gv-tools button,
-.gv-tools input {
-  font-size: 11px;
-  padding: 0 4px;
-  height: 20px;
-}
-.gv-tools input.num {
-  width: 64px;
-}
-.gv-tools select {
-  max-width: 150px;
-}
-.gv-tools button.active {
-  background: var(--bg-active);
-}
-.gv-row.track .gv-tools,
-.gv-row.intervals .gv-tools {
-  top: 0;
-}
 .gv-resize {
   position: absolute;
   left: 0;
@@ -1264,4 +1224,163 @@ body.resizing-rows {
 }
 .pane.pinned > .pane-head {
   box-shadow: inset 0 -2px 0 rgba(92, 157, 237, 0.55);
+}
+
+/* ---- side bars: left = shared, right = inspector of the active pane -- */
+.colorbar.side {
+  position: static;
+  width: auto;
+  margin: 4px 0 2px;
+  padding: 0;
+  background: none;
+  border: none;
+}
+
+.left > *,
+.left > .panel.cells {
+  flex: none;
+}
+.left .seg {
+  flex-wrap: wrap;
+}
+.left .seg button {
+  flex: 1 0 auto;
+}
+.left .cell-info h2 {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  color: var(--text);
+}
+.left-colour .overview-colour {
+  margin-top: 4px;
+}
+.inspector .insp-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  color: var(--accent);
+}
+.inspector .insp-pin {
+  margin-bottom: 6px;
+}
+.inspector .insp-pin .pane-cell > button {
+  max-width: 100%;
+  width: 100%;
+  text-align: left;
+}
+.inspector .panel {
+  padding-left: 0;
+  padding-right: 0;
+}
+.insp-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.insp-controls select,
+.insp-controls input.num {
+  width: 100%;
+}
+.insp-controls .pane-menu > button {
+  width: 100%;
+  text-align: left;
+}
+.insp-genome h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.insp-genome h2 .link {
+  margin-left: auto;
+}
+.insp-add {
+  margin: 4px 0 6px;
+}
+.insp-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.row-list {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.row-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 6px 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.row-card.matrix {
+  border-left: 3px solid #e8784f;
+}
+.row-card.track {
+  border-left: 3px solid #6aa4ef;
+}
+.row-card.intervals {
+  border-left: 3px solid #d08bf0;
+}
+.row-card-head {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.row-card-head .row-kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.row-card-head .row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.row-card-head button {
+  padding: 0 5px;
+  font-size: 11px;
+  height: 18px;
+}
+.row-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+.row-card-body select {
+  width: 100%;
+}
+.props .insp-text {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0;
+}
+.insp-text input.num {
+  width: 90px;
+}
+.pane-head .pin-badge {
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.pane-head {
+  flex-wrap: nowrap;
 }

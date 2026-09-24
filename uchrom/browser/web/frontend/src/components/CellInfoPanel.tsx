@@ -20,10 +20,33 @@ export function splitCellFields(fields: CellDetails['fields']) {
   return { attrs, rna }
 }
 
+/** No focused cell: one line about the dataset instead. */
+function DatasetSummaryLine() {
+  const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
+  if (!ds) return null
+  const coords = ds.has_coords !== false && ds.n_spots > 0
+  const parts = [
+    ds.n_cells > 1 ? `${ds.n_cells.toLocaleString('en-US')} cells` : null,
+    coords ? `${ds.n_traces.toLocaleString('en-US')} traces` : null,
+    coords ? `${ds.n_spots.toLocaleString('en-US')} spots` : null,
+    ds.chroms.length ? `${ds.chroms.length} chroms` : null,
+    ds.contact_maps?.length ? `${ds.contact_maps.length} contact maps` : null,
+    coords && ds.xyz_unit ? ds.xyz_unit : null,
+  ].filter(Boolean)
+  return (
+    <section className="cell-info">
+      <h2>{ds.name}</h2>
+      <div className="muted small">{parts.join(' · ')}</div>
+      {ds.n_cells > 1 && <div className="muted small">No cell focused — pick one in the list or any view.</div>}
+    </section>
+  )
+}
+
 /** Details of the focused cell: attributes and its RNA counts. */
 export function CellInfoPanel() {
   const dsId = useStore((s) => s.activeDatasetId)
-  const hasFields = useStore((s) => !!s.datasets.find((d) => d.id === s.activeDatasetId)?.cell_fields?.length)
+  const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
+  const hasFields = !!ds?.cell_fields?.length
   const view = useStore(activeView)
   const setCellField = useStore((s) => s.setCellField)
   const [info, setInfo] = useState<CellDetails | null>(null)
@@ -50,7 +73,8 @@ export function CellInfoPanel() {
     }
   }, [dsId, cell, hasFields])
 
-  if (!cell || !hasFields) return null
+  if (!cell) return <DatasetSummaryLine />
+  if (!hasFields) return null
   const { attrs, rna } = info ? splitCellFields(info.fields) : { attrs: [], rna: [] }
   const shown = showAll ? rna : rna.slice(0, TOP)
   const max = rna.length ? Math.max(1e-9, rna[0].value) : 1

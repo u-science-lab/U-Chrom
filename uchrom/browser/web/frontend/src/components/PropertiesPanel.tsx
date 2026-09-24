@@ -2,56 +2,17 @@ import { describeFilter } from '../filters'
 import { AUTO_BOND_FACTOR, splitForView } from '../render/bonds'
 import { autoTubeRadius, tubeAllowed } from '../render/segments'
 import { activeView, hasCoords, useStore } from '../store'
-import { show3dPanels } from '../workspace'
 import { CategoryLegend } from './CategoryLegend'
-import { CellInfoPanel } from './CellInfoPanel'
+import { ColorBar } from './ColorBar'
 import { colourableFields, fieldLabel } from './format'
 import { FieldPicker, groupTitle } from './FieldPicker'
-import { ChromLegend } from './ChromLegend'
-import { PointsPanel } from './PointsPanel'
 import type { ColorMode, Layer, RenderMode } from '../types'
 
 /** Button group of the categorical cell fields (cell type, cluster, …). */
 const CATEGORY_GROUP = '\u0000category'
 
-/**
- * Right-hand panel.  Always: cell details, the category legend and the
- * all-cells colouring (shared by every view).  Only while a 3-D pane is
- * the active view: chromosome legend, point sets and the 3-D style.
- */
-export function PropertiesPanel() {
-  const layer = useStore((s) => s.layers.find((l) => l.id === s.selectedLayerId))
-  const hasCells = useStore((s) => ((s.activeDatasetId && s.cells[s.activeDatasetId]) || []).length > 1)
-  const coords = useStore((s) => hasCoords(s.datasets.find((d) => d.id === s.activeDatasetId)))
-  const threeD = useStore((s) => show3dPanels(s.workspace)) && coords
-  return (
-    <aside className="props panel">
-      <CellInfoPanel />
-      <CategoryLegend />
-      {hasCells && <OverviewColour />}
-      {threeD && (
-        <div className="panel-3d">
-          <ChromLegend />
-          <PointsPanel />
-          {layer ? (
-            <StyleSection layer={layer} hasCells={hasCells} />
-          ) : (
-            <>
-              <h2>Style</h2>
-              <p className="muted">Select a layer.</p>
-            </>
-          )}
-        </div>
-      )}
-      {!threeD && coords && (
-        <p className="muted small panel-hint">3-D style, chromosomes and layers appear while a 3-D view is active.</p>
-      )}
-    </aside>
-  )
-}
-
 /** "Colour · all cells": the overview colouring shared by 3-D, embedding, scatter and cell list. */
-function OverviewColour() {
+export function OverviewColour() {
   const view = useStore(activeView)
   const setOverviewColor = useStore((s) => s.setOverviewColor)
   const allFields = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId)?.cell_fields)
@@ -123,12 +84,14 @@ function OverviewColour() {
           onPick={setCellField}
         />
       )}
+      <ColorBar />
+      <CategoryLegend />
     </section>
   )
 }
 
 /** 3-D style of the selected layer (the focused cell's colouring on multi-cell data). */
-function StyleSection({ layer, hasCells }: { layer: Layer; hasCells: boolean }) {
+export function StyleSection({ layer, hasCells }: { layer: Layer; hasCells: boolean }) {
   const setStyle = useStore((s) => s.setStyle)
   const view = useStore(activeView)
   const setMaxBond = useStore((s) => s.setMaxBond)

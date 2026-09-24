@@ -4,6 +4,7 @@
  * per dataset and the rotated-triangle (45°) matrix geometry.
  */
 
+import { parseGenomicNumber } from './filters'
 import { binAt } from './matrix'
 import { defaultTrackSelection } from './tracks'
 import type { DatasetSummary } from './types'
@@ -92,6 +93,60 @@ export function updateRow(rows: GenomeRow[], id: string, patch: Partial<Omit<Gen
 /** Set a row's height, clamped to [MIN_ROW_H, MAX_ROW_H]. */
 export function resizeRow(rows: GenomeRow[], id: string, height: number): GenomeRow[] {
   return updateRow(rows, id, { height: Math.round(Math.max(MIN_ROW_H, Math.min(MAX_ROW_H, height))) })
+}
+
+/** Settings of a row edited in the inspector. */
+export type RowSetting = 'source' | 'resolution' | 'balance' | 'stat' | 'threshold' | 'followFocus' | 'maxDist' | 'flip' | 'track' | 'key' | 'height'
+
+/**
+ * Row patch for one edited setting (text inputs arrive as strings, check
+ * boxes as booleans); null when the input is not valid for that setting.
+ * Empty text clears optional numbers (auto height, 45° depth, default
+ * threshold / resolution).
+ */
+export function rowPatch(setting: RowSetting, value: string | boolean): Partial<Omit<GenomeRow, 'id'>> | null {
+  if (typeof value === 'boolean') {
+    return setting === 'balance' || setting === 'followFocus' || setting === 'flip' ? { [setting]: value } : null
+  }
+  const text = value.trim()
+  const num = (x: number) => (Number.isFinite(x) && x > 0 ? x : NaN)
+  switch (setting) {
+    case 'source':
+      return text ? { source: text, resolution: null } : null // another map: its own resolutions
+    case 'track':
+    case 'key':
+      return text ? { [setting]: text } : null
+    case 'stat':
+      return text === 'median' || text === 'mean' || text === 'contact' ? { stat: text } : null
+    case 'resolution':
+    case 'threshold': {
+      if (!text) return { [setting]: null }
+      const v = num(Number(text))
+      return Number.isNaN(v) ? null : { [setting]: v }
+    }
+    case 'height': {
+      if (!text) return { height: null }
+      const v = num(Number(text))
+      return Number.isNaN(v) ? null : { height: Math.round(Math.max(MIN_ROW_H, Math.min(MAX_ROW_H, v))) }
+    }
+    case 'maxDist': {
+      if (!text) return { maxDist: null }
+      try {
+        const v = parseGenomicNumber(text)
+        return v > 0 ? { maxDist: v } : null
+      } catch {
+        return null
+      }
+    }
+    default:
+      return null
+  }
+}
+
+/** Apply one inspector edit to a row (unchanged rows when the input is invalid). */
+export function applyRowSetting(rows: GenomeRow[], id: string, setting: RowSetting, value: string | boolean): GenomeRow[] {
+  const patch = rowPatch(setting, value)
+  return patch ? updateRow(rows, id, patch) : rows
 }
 
 type DsLike = Pick<DatasetSummary, 'has_coords' | 'n_spots' | 'contact_maps' | 'tracks' | 'intervals'>

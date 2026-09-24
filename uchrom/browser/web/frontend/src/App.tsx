@@ -1,14 +1,14 @@
 import { useEffect } from 'react'
 import { listDatasets } from './api'
+import { CellInfoPanel } from './components/CellInfoPanel'
 import { CellPanel } from './components/CellPanel'
-import { LayerPanel } from './components/LayerPanel'
-import { OperationsPanel } from './components/OperationsPanel'
-import { PropertiesPanel } from './components/PropertiesPanel'
+import { Inspector, useDatasetFacts } from './components/Inspector'
+import { OverviewColour } from './components/PropertiesPanel'
 import { StatusBar } from './components/StatusBar'
 import { TopBar } from './components/TopBar'
 import { Workspace } from './components/Workspace'
-import { hasCoords, useStore } from './store'
-import { show3dPanels } from './workspace'
+import { leftSections } from './inspector'
+import { useStore } from './store'
 import { useCellLoader } from './useCellLoader'
 import { useGeometryLoader } from './useGeometryLoader'
 import { useOmicsLoader } from './useOmicsLoader'
@@ -16,10 +16,6 @@ import { useOmicsLoader } from './useOmicsLoader'
 export function App() {
   const setDatasets = useStore((s) => s.setDatasets)
   const setError = useStore((s) => s.setError)
-  // layers / subsets are 3-D geometry: nothing to show without coordinates
-  const coords = useStore((s) => hasCoords(s.datasets.find((d) => d.id === s.activeDatasetId)) || !s.activeDatasetId)
-  // …and only while a 3-D view is the active pane
-  const threeD = useStore((s) => show3dPanels(s.workspace))
   useGeometryLoader()
   useCellLoader()
   useOmicsLoader()
@@ -33,19 +29,31 @@ export function App() {
     <div className="app">
       <TopBar />
       <div className="main">
-        <div className="left">
-          <CellPanel />
-          {coords && threeD && (
-            <div className="panel-3d">
-              <LayerPanel />
-              <OperationsPanel />
-            </div>
-          )}
-        </div>
+        <LeftSidebar />
         <Workspace />
-        <PropertiesPanel />
+        <Inspector />
       </div>
       <StatusBar />
+    </div>
+  )
+}
+
+/** Left side bar: shared by every open view (never depends on the active pane). */
+function LeftSidebar() {
+  const sections = new Set(leftSections(useDatasetFacts()))
+  return (
+    <div className="left">
+      {sections.has('cells') && <CellPanel />}
+      {sections.has('cellInfo') && (
+        <div className="panel left-info">
+          <CellInfoPanel />
+        </div>
+      )}
+      {sections.has('colour') && (
+        <div className="panel left-colour">
+          <OverviewColour />
+        </div>
+      )}
     </div>
   )
 }

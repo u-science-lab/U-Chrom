@@ -16,14 +16,13 @@ import {
   type PaneType,
   type WsLayout,
 } from '../workspace'
-import { ColorBar } from './ColorBar'
-import { EmbeddingControls, EmbeddingView } from './EmbeddingView'
+import { EmbeddingView } from './EmbeddingView'
 import { FocusBar } from './FocusBar'
-import { GenomeControls, GenomeView } from './GenomeView'
+import { GenomeView } from './GenomeView'
 import { LocusBar } from './LocusBar'
-import { MatrixControls, MatrixView } from './MatrixView'
-import { PaneCellControl } from './PaneCell'
-import { StatsControls, StatsView } from './StatsView'
+import { MatrixView } from './MatrixView'
+import { cellTitle, useCellTypes } from './PaneCell'
+import { StatsView } from './StatsView'
 import { Viewport } from './Viewport'
 
 const TYPE_LABEL = PANE_LABEL
@@ -126,7 +125,6 @@ export function Workspace() {
     <div className="workspace">
       <div className="ws-bar">
         <FocusBar />
-        <ColorBar inline />
         {ws.panes.some((p) => GENOME_PANES.has(p.type)) && <LocusBar />}
         <span className="spacer" />
         <div className="ws-add">
@@ -208,6 +206,7 @@ function PaneBox({
 }) {
   const setWorkspace = useStore((s) => s.setWorkspace)
   const activate = () => setWorkspace((w) => (w.activePane === pane.id ? w : { ...w, activePane: pane.id }))
+  const types = useCellTypes()
   return (
     <section
       className={`pane${active ? ' active' : ''}${hidden ? ' hidden' : ''}${pane.cell ? ' pinned' : ''}`}
@@ -223,17 +222,17 @@ function PaneBox({
             </option>
           ))}
         </select>
-        <PaneCellControl pane={pane} />
-        {pane.type === '3d' && (
-          <button onClick={onReset} title="Fit everything drawn in this view">
-            Reset view
+        {pane.cell && (
+          <button className="pin-badge" onClick={() => activate()} title="Pinned to this cell — change or unpin it in the inspector (right)">
+            📌 {cellTitle(pane.cell, types)}
           </button>
         )}
-        {pane.type === 'embedding' && <EmbeddingControls pane={pane} />}
-        {pane.type === 'genome' && <GenomeControls pane={pane} />}
-        {pane.type === 'matrix' && <MatrixControls pane={pane} />}
-        {pane.type === 'stats' && <StatsControls pane={pane} />}
         <span className="spacer" />
+        {pane.type === '3d' && (
+          <button onClick={onReset} title="Reset view: fit everything drawn in this view">
+            ⟲
+          </button>
+        )}
         <button
           onClick={() => setWorkspace((w) => ({ ...w, maximized: w.maximized === pane.id ? null : pane.id, activePane: pane.id }))}
           title={maximized ? 'Restore layout' : 'Maximise this view'}
