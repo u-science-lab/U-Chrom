@@ -122,3 +122,15 @@ def test_cell_spatial_coordinates_align_by_cell_id_and_roundtrip(tmp_path):
     assert out.cells.loc["cell_b", "tangram_merfish_spatial_x"] == 20.0
     assert out.describe_links()["cell_spatial"]["tangram_merfish"]["inferred"] is True
 
+
+
+def test_link_cool_records_and_validates(tmp_path):
+    cool = tmp_path / "bulk.mcool"
+    cool.write_bytes(b"")
+    cd = _make_cd()
+    rec = cd.link_cool(cool, key="bulk", label="Bulk Hi-C")
+    assert rec["format"] == "mcool" and rec["label"] == "Bulk Hi-C"
+    assert cd.describe_links()["linked_cool"]["bulk"]["path"] == str(cool)
+    assert cd.validate_links(check_files=True) == []
+    cd.uns["linked_cool"]["bulk"]["format"] = "hic"
+    assert any("format='hic'" in i for i in cd.validate_links(check_files=False))

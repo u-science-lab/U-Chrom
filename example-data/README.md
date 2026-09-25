@@ -12,7 +12,12 @@ auto-downloaded by the tutorials on first run into this directory.
 | `cell1.pairs`                         | 4.7 MB  | yes             | —             | `reconstruction.ipynb`, root README CLI example                         |
 | `cell2.pairs.gz`                      | 5.4 MB  | yes             | —             | (available for experimentation; bulkier variant of `cell1.pairs`)       |
 | `IMR90_chr21_30kb.cool`               | 280 KB  | yes             | —             | `gem_fish_reconstruction` tutorial (Hi-C side)                          |
-| `takei2025_cerebellum_fixture/`       | ~750 KB | yes             | —             | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture)    |
+| `4DNFIFINA2U9.csv`                    | 58 KB   | yes             | —             | Takei 2021 cell table (RNA counts, nuclear area) for `from_fofct(cell_table=…)`, web browser |
+| `4DNFIJ52NVDV.csv`                    | 219 KB  | yes             | —             | Takei 2021 nascent RNA spots for `from_fofct(rna_table=…)`, web browser |
+| `takei2025_cerebellum_fixture/`       | ~750 KB | **missing** — listed but never committed (see its section) | — | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture) |
+| `sim_cell1/` (h5cd + mcool)           | 2.3 MB  | yes             | —             | web browser: single-cell 3-D structure + its own contacts (`build_sim_cell1.py`) |
+| `takei2025_fov0/takei2025_fov0.h5cd`  | 220 MB  | no              | Zenodo 7693825 (streamed) | web browser: 59 IF tracks per spot, 47 cells, IF embedding (`build_takei2025_fov0.py`); `benchmarks/omics_embeddings.py` |
+| `schicar_mop/*.h5cd, *.mcool, *.cool, *.scool` | ~440 MB | no  | built from GEO GSE305439 | web browser: scHiCAR without 3-D, RNA / ATAC / Hi-C embeddings (`build_schicar_mop.py`); `benchmarks/omics_embeddings.py` |
 | Takei 2025 full Zenodo dump           | ~8 GB   | no              | **manual**    | `seqfish_multiomics_cerebellum` tutorial (real-data run)                |
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
@@ -24,7 +29,8 @@ auto-downloaded by the tutorials on first run into this directory.
 | `fofct_core.csv`                      | ~6 MB   | no              | generated     | synthetic offline fallback for tutorials 4/5/6/7                        |
 | `GSE63525_GM12878_insitu_primary+replicate_combined_30.hic` | ~40 GB | no | **manual** (too large) | `benchmark.ipynb` |
 | `schicar_mop/raw/GSE305439/` RNA + metadata | 61 MB | no | GEO GSE305439 | scHiCAR tutorials (upstream input) |
-| `schicar_mop/raw/GSE305439/` pairs + ATAC | ~2.8 GB | no | GEO GSE305439 (opt-in) | scHiCAR tutorials (upstream input) |
+| `schicar_mop/raw/GSE305439/` pairs | 1.47 GB | no | GEO GSE305439 (opt-in, `--schicar_dna`) | `build_schicar_mop.py` contact maps, scHiCAR tutorials |
+| `schicar_mop/raw/GSE305439/` ATAC fragments + `schicar_mop/raw/mm10.refGene.gtf.gz` | 1.35 GB + 13 MB | no | GEO GSE305439 + UCSC (opt-in, `--schicar_atac`) | `build_schicar_mop.py` ATAC embedding + gene activity |
 | `schicar_mop/raw/merfish_mop/` | 332 MB | no | Brain Image Library g.21 | `schicar_to_merfish_mapping.ipynb` (upstream input) |
 | `schicar_mop/data/…`, `schicar_mop/organized_u_chrom_framework/…` | — | no | **derived — recipe pending** | scHiCAR tutorials (see below) |
 
@@ -53,6 +59,11 @@ they're either generated or downloaded on demand.
   to experiment with a larger, header-carrying pairs file.
 
 ### `takei2025_cerebellum_fixture/` — Takei 2025 cerebellum DNA seqFISH+ slice (~750 KB)
+
+> **Not in the repository.**  This entry predates the checks: the folder
+> (and its `derive_fixture.py` / `verify.py`) was never committed.  For a
+> real Takei 2025 subset use `takei2025_fov0/` below; the description is
+> kept for whoever restores the fixture.
 
 - **Format**: three CSVs that together exercise the
   `read_seqfish_multiomics` loader end-to-end —
@@ -101,6 +112,35 @@ they're either generated or downloaded on demand.
                       'clustering/100k-002-001-cerebellum_mRNA_cluster_nuc_vol_filtered.csv',
   )
   ```
+
+### `4DNFIFINA2U9.csv` + `4DNFIJ52NVDV.csv` — Takei 2021 FOF-CT companion tables (58 KB + 219 KB)
+
+- **Format**: 4DN FOF-CT v0.1 CSV (`##`-headers; both files label their
+  namespace `4dn_FOF-CT_quality` although they are the *cell* and *RNA*
+  tables).
+  - `4DNFIFINA2U9.csv` — *cell data*, 201 rows:
+    `Cell_ID, Extra_Cell_ROI_ID, keep1, cent_ROI_x, cent_ROI_y, area(um2),
+    area_cyto(um2)` + RNA copy numbers of 45 genes (Eef2 … Zfp352).
+  - `4DNFIJ52NVDV.csv` — *nascent RNA spots*, 3,335 rows:
+    `Spot_ID, X, Y, Z (µm), RNA_name, Gene_ID, Cell_ID, Extra_Cell_ROI_ID,
+    Peak_Intensity`; 23 genes.
+- **Pairs with** the core table `4DNFIHF3JCBY.csv` (same 201 `Cell_ID`s,
+  same micron frame): 4DN experiment `4DNEXM45AILX`, experiment set
+  [`4DNESL2AY9CM`](https://data.4dnucleome.org/experiment-set-replicates/4DNESL2AY9CM/).
+- **Source**: Takei et al. 2021, *Nature* 590:344–350, "Integrated spatial
+  genomics reveals global architecture of single nuclei".  Downloaded from
+  the 4DN open-data bucket:
+  ```
+  https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/c5bafa92-d08b-4e20-84de-6e75103c016d/4DNFIFINA2U9.csv
+  https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/4b66ffc5-50e0-4832-99c2-0020c934ff24/4DNFIJ52NVDV.csv
+  ```
+  SHA-256 `ebeca858…9941` / `70171dfd…bd2`.
+- **Used by**: `ChromData.from_fofct(core, cell_table=…, rna_table=…)` →
+  `cd.cells` (`rna.<gene>` columns, `nucleus_area_um2`, …) and
+  `cd.points['rna']`; `tests/core/test_fofct_companions.py`; the web
+  browser (colour cells by a gene, show RNA spots).
+- The same set also has sequential IF (17 chromatin marks) described in the
+  paper; it is not among the 4DN FOF-CT files.
 
 ### `IMR90_chr21_30kb.cool` — Rao 2014 IMR90 chr21 at 30 kb (0.3 MB)
 
@@ -316,10 +356,18 @@ notebooks read `$UCHROM_SCHICAR_ROOT`, defaulting to
   | `GSE305439_RNA.matrix.mtx.gz` / `.barcodes.tsv.gz` / `.features.tsv.gz` | 61 MB | RNA counts (10x-style MTX) |
   | `GSE305439_mouse_brain_scHiCAR_1_RNA_metadata.txt.gz` | 152 KB | 5 313 cells: `RNAbarcode, nCount_RNA, nFeature_RNA, celltype, UMAP1, UMAP2, DNAbarcode` |
   | `GSE305439_DNA.dedup.pairs.gz` | 1.47 GB | deduplicated contact pairs (keyed by DNA barcode) |
-  | `GSE305439_DNA.ATAC.tsv.gz` | 1.35 GB | ATAC fragments (keyed by DNA barcode) |
+  | `GSE305439_DNA.ATAC.tsv.gz` | 1.35 GB | ATAC fragments `chrom, start, end, DNA barcode, 2-nt tag, strand` (175,496,023 fragments, all from the 5,313 metadata cells) |
 
   `python example-data/download_data.py --schicar_rna` fetches the RNA
-  side; `--schicar_dna` (opt-in, ~2.8 GB) the pairs + ATAC.  The larger
+  side; `--schicar_dna` (opt-in, 1.47 GB) the pairs; `--schicar_atac`
+  (opt-in, 1.36 GB) the ATAC fragments plus the gene annotation below.
+
+- **UCSC mm10 refGene** (NCBI RefSeq genes on mm10, UCSC Genome Browser;
+  Navarro Gonzalez et al. 2021, *Nucleic Acids Res* 49:D1046) —
+  `https://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/genes/mm10.refGene.gtf.gz`
+  (13 MB, GTF) → `schicar_mop/raw/mm10.refGene.gtf.gz`; gene body + 2 kb
+  upstream windows for ATAC gene activity in `build_schicar_mop.py`.
+  Fetched by `--schicar_atac`.  The larger
   sibling subseries (e.g. GSE267126) are multi-TB and are not used.
 
 - **MERFISH MOp atlas** — Zhang M, Eichhorn SW, Zingg B, … Zhuang X.
@@ -350,6 +398,65 @@ repository and whose build scripts are not yet checked in:
 Until the build scripts land (tracked as an open item; see the
 tutorials' first cell), these two notebooks are **not reproducible from
 public data alone** and are shipped with their recorded outputs.
+
+### `sim_cell1/` — NucDynamics single-cell structure + its contacts (2.3 MB, in repo)
+
+- **Content**: `sim_cell1.h5cd` — NucDynamics (`uchrom.recon.sc.nucdyn`,
+  CPU) on `cell1.pairs` (Stevens et al. 2017, mESC G1, mm10): 20
+  chromosomes, 25,654 particles at ~100 kb, one trace per chromosome,
+  coordinates in model units; `cell1_contacts.mcool` — the same cell's
+  105,700 contacts at 100 kb / 200 kb / 500 kb / 1 Mb, linked with
+  `cd.link_cool("cell1_contacts.mcool")` (path relative to the h5cd).
+- **Rebuild**: `python example-data/build_sim_cell1.py [--arch cpu]`.
+- **Check**: bins in contact in the input are ~2× closer in the model
+  (median 3D distance of contacted / non-contacted 1 Mb pairs = 0.44–0.59
+  on chr1, 2, 5, 11, 19) — `tests/browser_web/test_genome_views.py`.
+- **Used by**: web browser (3D + contact + distance matrices).
+
+### `takei2025_fov0/` — Takei 2025 cerebellum, rep 1 FOV 0, first 47 cells (220 MB, built)
+
+- **Content**: DNA seqFISH+ traces (383,674 spots, 1,500 traces, 47
+  cells: Granule, Bergmann, Purkinje, MLI1, MLI2+PLI, Other) with **59
+  per-spot immunofluorescence / RNA-FISH channels as `tracks`** (H3K27ac,
+  H3K4me3, H3K27me3, H3K9me3, LaminB1, …), cell types and the published
+  UMAP (`cellm['umap']`); per-cell means of the 48 IF channels as
+  `cells['if.<mark>']` and a histone / IF embedding `if_pca / _tsne /
+  _umap` from the within-cell mark–mark correlations
+  (`build_takei2025_fov0.py`, `--update` redoes only that step).
+- **Source**: Takei et al. 2025, *Nature* (doi:10.1038/s41586-025-08838-x);
+  Zenodo [7693825](https://zenodo.org/records/7693825)
+  `cerebellum_rep1.tar.gz` (2.8 GB) — only the start of the first FOV is
+  read (streamed); locus map and clustering from
+  CaiGroup/dna-seqfish-plus-multi-omics.
+- **Build**: `python example-data/build_takei2025_fov0.py [--rows 400000]`
+  (~1 min, downloads ~0.1–0.3 GB of the tarball, drops the last possibly
+  truncated cell).
+- **Used by**: web browser (genome track view, distance matrices, stats).
+
+### `schicar_mop/` — scHiCAR mouse brain, no 3-D coordinates (built from GEO)
+
+- **Content** (built by `python example-data/build_schicar_mop.py` from
+  the GSE305439 files above):
+  - `schicar_mop.h5cd` (44 MB) — `ChromData` **without spots**: 5,313
+    cells (RNA barcode ids, 22 cell types, QC), 500 highly variable genes
+    as `rna.<gene>` (log-normalised dispersion, genes in ≥1 % cells),
+    ATAC gene activity of 484 of them as `atac.<gene>` (fragment midpoints
+    in gene body + 2 kb upstream, UCSC mm10 refGene), `n_fragments_atac`,
+    `n_contacts_hic`; `cellm`: `paper_umap` (from the GEO metadata),
+    `rna_pca / _tsne / _umap` (library-size normalised, 30 PCs),
+    `atac_lsi / _tsne / _umap` (100 kb bins, TF-IDF + LSI, LSI 1 dropped:
+    r = 0.97 with log depth) and `hic_pca / _tsne / _umap` (scHiCluster on
+    the 1 Mb scool) — all from `uchrom.emb.embed_cells`.  The ATAC here is
+    weakly peaked (TSS enrichment ≈ 2.9 on the first 5 M fragments), so
+    100 kb bins beat 5–50 kb ones for cell-type structure (kNN-10 purity
+    0.33 vs 0.19–0.30); `python benchmarks/omics_embeddings.py` gives the
+    per-modality numbers.  `--update` redoes only the ATAC / Hi-C step;
+  - `contacts_all.mcool` (42 MB) — all 120,280,303 contacts, 250 kb … 2 Mb;
+  - `contacts_<celltype>.cool` — 22 pseudo-bulk maps at 500 kb;
+  - `contacts_cells_1Mb.scool` (257 MB) — one map per cell (all 5,313).
+  Links are stored relative to the h5cd.
+- **Used by**: web browser (matrix, embedding and field views for data
+  without 3-D).
 
 ## Generated outputs
 

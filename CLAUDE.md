@@ -51,7 +51,9 @@ uchrom/
 ├── emb/             Single-cell embedding (Higashi / FastHigashi wrapper)
 ├── pl/              Plotting (3D structure, trace statistics)
 ├── utils/           Shared statistics helpers (LOWESS, etc.)
-├── browser/         Interactive 3D browser (PyVista + PyQt5)
+├── browser/         Interactive 3D browser: desktop (PyVista + PyQt5) and
+│   └── web/         web (FastAPI server + React/Three.js SPA in frontend/,
+│                    built into static/ and committed; API in API.md)
 └── op.py            Misc operations (mark empty particles)
 
 discovery/           Separate package `uchrom-discovery` (import uchrom_discovery):
@@ -89,6 +91,7 @@ ChromData
 ├── tracks      pd.DataFrame (n_spots)      epigenomic signals per bin (ATAC, ChIP, ...)
 ├── traces      pd.DataFrame (n_traces)     trace-level metadata
 ├── layers      dict[str, ndarray]           alternative coords, each (n_spots, 3)
+├── points      dict[str, DataFrame]         non-genomic 3-D points (RNA spots, IF puncta) in the coords frame
 ├── results     dict                         analysis outputs (tads, loops, compartments)
 └── uns         dict                         metadata (genome_assembly, xyz_unit, ...)
 ```
@@ -118,7 +121,7 @@ ChromData
 
 - `ChromData(coords, spots, ...)` — direct construction
 - `ChromData.from_dataframe(df)` — from reconstruction CSV (chrom, start, end, x, y, z); auto-assigns one trace per chromosome
-- `ChromData.from_fofct(path)` — from FOF-CT core table; parses `##` headers into `uns`
+- `ChromData.from_fofct(path, cell_table=None, rna_table=None)` — from FOF-CT core table; parses `##` headers into `uns`; companion cell table → `cells` (gene counts as `rna.<gene>`), RNA spot table → `points['rna']`
 - `cd.write('data.h5cd')` / `ChromData.read('data.h5cd')` — HDF5 roundtrip
 - `cd.to_dataframe()` — export as flat DataFrame
 
@@ -194,3 +197,4 @@ All datasets consumed by tutorials and benchmarks live in
 - **`uchrom/io/` naming**: The internal file is `_io.py` to avoid shadowing Python's stdlib `io` module. Use `gzip.open(path, mode + "t")` instead of `io.TextIOWrapper`.
 - **CLI entry points**: All via `python -m` (e.g., `python -m uchrom.recon.sc.nucdyn`, `python -m uchrom.browser`)
 - **Browser backend**: PyVista only (VisPy backend was removed)
+- **Web browser**: `python -m uchrom.browser --web`.  `uchrom/browser/__init__.py` imports Qt lazily so the web path works without PyQt5.  Frontend changes need `npm run build` in `uchrom/browser/web/frontend` and the rebuilt `static/` committed.  Keep `API.md` in sync with `server.py` / `data.py`.

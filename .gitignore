@@ -12,6 +12,12 @@ imgui.ini
 *.json
 !discovery/uchrom_discovery/ui/package.json
 !discovery/uchrom_discovery/ui/package-lock.json
+!uchrom/browser/web/frontend/package.json
+!example-data/4DNFIFINA2U9.csv
+example-data/takei2025_fov0/
+!example-data/4DNFIJ52NVDV.csv
+!uchrom/browser/web/frontend/package-lock.json
+!uchrom/browser/web/frontend/tsconfig.json
 node_modules/
 discovery/uchrom_discovery/ui/node_modules/
 
@@ -52,3 +58,7 @@ docs/build/
 .ipynb_checkpoints/
 # Stray nested worktree paths must never be committed
 .claude/worktrees/
+
+# small in-repo example (must come after the *.h5cd / *.mcool rules)
+!example-data/sim_cell1/*.h5cd
+!example-data/sim_cell1/*.mcool

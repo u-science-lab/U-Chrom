@@ -65,6 +65,7 @@ Each column is a named track, e.g. `ATAC`, `H3K27ac`, `H3K27me3`. Data sourced f
 |-----------|------|-------------|
 | `traces` | DataFrame (n_traces) | Trace-level metadata. Index = trace_id. |
 | `layers` | dict[str, ndarray] | Alternative coordinate representations, each (n_spots, 3). e.g. `layers['raw']` for uncorrected coordinates. |
+| `points` | dict[str, DataFrame] | Non-genomic 3-D points in the `coords` frame (columns `x, y, z` + e.g. `cell_id`, `gene`): nascent RNA spots, IF puncta. Subsetting keeps the points of retained cells. Format ≥ 1.3. |
 | `results` | dict | Analysis results. Values may be DataFrames, Series, ndarrays, nested dicts of these, or JSON-compatible scalars / lists. Anything else raises `TypeError` on `write()`. |
 | `uns` | dict | Unstructured metadata (genome assembly, coordinate unit, etc.). |
 
@@ -175,6 +176,7 @@ data.h5cd
 ├── tracks/             group — one dataset per column
 ├── traces/             group — one dataset per column
 ├── layers/             group — one float64 (n_spots, 3) per key
+├── points/             optional group of DataFrames (format ≥ 1.3)
 ├── results/            group — typed entries (`_type` attr): DataFrame / Series / dict as sub-groups, arrays as datasets, scalars & lists as JSON (format ≥ 1.2)
 └── uns/                group — scalars as attrs, arrays as datasets, dicts as sub-groups
 ```

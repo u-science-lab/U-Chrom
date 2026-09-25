@@ -106,6 +106,11 @@ _EXTRA_TRACK_COLUMNS: Tuple[str, ...] = (
 # Source-to-internal column rename for names HDF5 cannot store directly.
 _SLASH_RENAME: Dict[str, str] = {"KAT3B/p300": "KAT3B_p300"}
 
+#: the 48 immunofluorescence (antibody) channels among the z-score tracks,
+#: as ``tracks`` column names (CPSF6 … SOX2); the rest are DNA-FISH repeat
+#: probes (rDNA … MinSat) and RNA-FISH probes (… _RNA)
+IF_COLUMNS: Tuple[str, ...] = tuple(_SLASH_RENAME.get(c, c) for c in Z_SCORE_COLUMNS[:48])
+
 
 _ALLELE_COLUMNS = ("dbscan_allele", "dbscan_ldp_allele", "dbscan_ldp_nbr_allele")
 _COORD_COLUMNS = ("x_um", "y_um", "z_um")

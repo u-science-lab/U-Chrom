@@ -21,9 +21,11 @@ Some workflows need heavier dependencies that are published as extras:
 | Extra | Installs | Needed for |
 |-------|----------|------------|
 | `browser` | PyVista, pyvistaqt, VTK, PyQt5, qdarkgraystyle | `python -m uchrom.browser` |
+| `web` | FastAPI, uvicorn | `python -m uchrom.browser --web` (browser in a web page) |
 | `hic` | hic-straw | reading `.hic` files |
 | `anndata` | anndata | `ChromData.link_anndata` / `to_anndata`, seqFISH RNA |
 | `multiome` | mudata | `ChromData.load_linked_mudata` |
+| `umap` | umap-learn | UMAP in `uchrom.emb.embed_cells` (PCA / t-SNE need only scikit-learn) |
 | `im` | astropy | `ChromData.from_pyhim_trace` |
 | `snapfish` | scikit-image | SnapFISH-IMPUTE (`uchrom.im.impute`) |
 | `emb` / `emb-full` | FastHigashi / Higashi | `uchrom.emb.higashi` |

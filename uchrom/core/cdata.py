@@ -46,6 +46,7 @@ Attributes summary
                                               to spots (ATAC, ChIP, ...)
     traces      DataFrame (n_traces, ?)      trace-level metadata
     layers      dict[str, (n_spots, 3)]      alt. coordinate sets
+    points      dict[str, DataFrame]         non-genomic 3-D points (RNA spots, …)
                                               (raw / corrected / aligned)
     results     dict                          analysis outputs
                                               (loops, tads, compartments)
@@ -127,6 +128,8 @@ Layout::
     ├── traces/              group
     ├── cellm/               group of (n_cells, ...) ndarrays per key
     ├── layers/              group of (n_spots, 3) ndarrays per key
+    ├── points/              optional group of DataFrames (non-genomic
+    │                         3-D points: x, y, z, cell_id, …)
     ├── results/             group — typed entries (``_type`` attr):
     │                         DataFrame / Series / nested dict as
     │                         sub-groups, ndarrays as datasets,
@@ -200,7 +203,10 @@ _SERIES_COLUMN = "_value"
 #      json).  Nested dicts, Series, scalars and lists now round-trip; before
 #      1.2 anything other than a DataFrame or ndarray was silently dropped on
 #      write.  1.1 readers still see DataFrames and arrays unchanged.
-FORMAT_VERSION = "1.2"
+# 1.3: optional ``points/`` group — named DataFrames of non-genomic 3-D
+#      points (x, y, z + columns such as cell_id, gene) in the coords frame,
+#      e.g. nascent RNA spots.  Older readers ignore the group.
+FORMAT_VERSION = "1.3"
 _SUPPORTED_MAJOR = 1
 
 
@@ -249,6 +255,11 @@ class ChromData:
     layers : dict[str, ndarray], optional
         Alternative coordinate sets, each with shape ``(n_spots, 3)`` —
         e.g. raw / drift-corrected / aligned.
+    points : dict[str, DataFrame], optional
+        Named sets of non-genomic 3-D points in the same frame as
+        ``coords`` — e.g. nascent RNA spots or IF puncta.  Each DataFrame
+        needs ``x, y, z``; ``cell_id`` (if present) links points to cells
+        and is used when subsetting.
     results : dict, optional
         Analysis outputs.  Conventional keys:
         ``'loops'`` → DataFrame (chrom1, start1, end1, …),
@@ -304,6 +315,7 @@ class ChromData:
         layers: Optional[Dict[str, np.ndarray]] = None,
         results: Optional[dict] = None,
         uns: Optional[dict] = None,
+        points: Optional[Dict[str, pd.DataFrame]] = None,
         linked_adata=None,
         validate: bool = True,
     ):
@@ -316,6 +328,7 @@ class ChromData:
         self.layers = layers if layers is not None else {}
         self.results = results if results is not None else {}
         self.uns = uns if uns is not None else {}
+        self.points = {k: v.reset_index(drop=True) for k, v in (points or {}).items()}
         self._linked_adata = linked_adata
 
         # Convert string-heavy columns to categorical for memory efficiency
@@ -338,7 +351,9 @@ class ChromData:
 
     @property
     def n_cells(self) -> int:
-        if "cell_id" in self.spots.columns:
+        # Cells known from spots; fall back to the cells table for data
+        # without 3-D spots (e.g. single-cell Hi-C / RNA only).
+        if "cell_id" in self.spots.columns and len(self.spots) > 0:
             return self.spots["cell_id"].nunique()
         return len(self.cells) if len(self.cells) > 0 else 0
 
@@ -422,7 +437,7 @@ class ChromData:
                 "Install it with `pip install mudata` or use an environment "
                 "that provides mudata."
             ) from exc
-        return md.read_h5mu(path)
+        return md.read_h5mu(self.resolve_link_path(path))
 
     def link_scool(
         self,
@@ -451,6 +466,40 @@ class ChromData:
         _set_linked_record(self.uns, "linked_scool", key, record)
         return record
 
+    def resolve_link_path(self, path: PathLike) -> Path:
+        """Linked-file path; relative paths resolve against the directory of
+        the ``.h5cd`` this object was read from (else the working directory),
+        so a dataset folder can be moved or shipped as a whole."""
+        p = Path(path).expanduser()
+        src = getattr(self, "_source_path", None)
+        if not p.is_absolute() and src is not None:
+            p = Path(src).parent / p
+        return p
+
+    def link_cool(
+        self,
+        path: PathLike,
+        *,
+        key: str = "default",
+        label: Optional[str] = None,
+        genome_assembly: Optional[str] = None,
+        **metadata: Any,
+    ) -> dict:
+        """Record a linked bulk / pseudo-bulk ``.cool`` or ``.mcool`` in
+        ``uns['linked_cool']`` (the counterpart of :meth:`link_scool` for
+        one matrix per file).  The file stays external."""
+        path = Path(path)
+        record = {
+            "path": str(path),
+            "format": "mcool" if path.suffix == ".mcool" else "cool",
+            "label": label or path.stem,
+            "genome_assembly": genome_assembly or self.uns.get("genome_assembly"),
+            **metadata,
+        }
+        record = _clean_metadata_record(record)
+        _set_linked_record(self.uns, "linked_cool", key, record)
+        return record
+
     def load_linked_scool(self, *, key: str = "default", cell: Optional[str] = None):
         """Load metadata or one cell cooler from a linked scool file.
 
@@ -468,13 +517,14 @@ class ChromData:
             raise ImportError("cooler is required to load linked scool files.") from exc
 
         if cell is None:
+            path = str(self.resolve_link_path(path))
             cells = cooler.fileops.list_scool_cells(path)
             return {"path": str(path), "cells": cells, "record": record}
 
         cell_uri = str(cell)
         if not cell_uri.startswith("/cells/"):
             cell_uri = f"/cells/{cell_uri}"
-        return cooler.Cooler(f"{path}::{cell_uri}")
+        return cooler.Cooler(f"{self.resolve_link_path(path)}::{cell_uri}")
 
     def set_cell_spatial_coordinates(
         self,
@@ -562,6 +612,7 @@ class ChromData:
             "linked_anndata": dict(self.uns.get("linked_anndata", {}) or {}),
             "linked_mudata": _linked_records(self.uns.get("linked_mudata")),
             "linked_scool": _linked_records(self.uns.get("linked_scool")),
+            "linked_cool": _linked_records(self.uns.get("linked_cool")),
             "cell_spatial": _linked_records(self.uns.get("cell_spatial")),
         }
 
@@ -575,27 +626,28 @@ class ChromData:
                 "coords are all NaN but uns['coordinate_status'] or uns['coords_status'] is not set"
             )
 
-        for family, expected_format in (("linked_mudata", "h5mu"), ("linked_scool", "scool")):
+        for family, expected_format in (("linked_mudata", "h5mu"), ("linked_scool", "scool"),
+                                        ("linked_cool", "cool|mcool")):
             records = _linked_records(self.uns.get(family))
             for key, record in records.items():
                 path = record.get("path")
                 if not path:
                     issues.append(f"{family}.{key} missing path")
                     continue
-                if check_files and not Path(path).exists():
+                if check_files and not self.resolve_link_path(path).exists():
                     issues.append(f"{family}.{key} path does not exist: {path}")
                 fmt = record.get("format")
-                if fmt and str(fmt) != expected_format:
+                if fmt and str(fmt) not in expected_format.split("|"):
                     issues.append(f"{family}.{key} format={fmt!r} != {expected_format!r}")
 
         for key, record in _linked_records(self.uns.get("linked_scool")).items():
             if record.get("coordinate_status") in {None, ""}:
                 issues.append(f"linked_scool.{key} missing coordinate_status")
-            if check_files and record.get("path") and Path(record["path"]).exists():
+            if check_files and record.get("path") and self.resolve_link_path(record["path"]).exists():
                 try:
                     import cooler
 
-                    if not cooler.fileops.is_scool_file(record["path"]):
+                    if not cooler.fileops.is_scool_file(str(self.resolve_link_path(record["path"]))):
                         issues.append(f"linked_scool.{key} is not a valid scool file")
                 except ImportError:
                     issues.append("cooler is not installed; linked_scool validity could not be checked")
@@ -788,6 +840,12 @@ class ChromData:
                 raise ValueError(
                     f"layers['{key}'] shape {arr.shape} != coords shape {self.coords.shape}"
                 )
+        for key, df in self.points.items():
+            if not isinstance(df, pd.DataFrame):
+                raise TypeError(f"points['{key}'] must be a DataFrame")
+            missing = [c for c in ("x", "y", "z") if c not in df.columns]
+            if missing:
+                raise ValueError(f"points['{key}'] missing coordinate columns {missing}")
 
     def _categorify(self):
         for col in _CATEGORICAL_COLUMNS:
@@ -812,6 +870,7 @@ class ChromData:
         # Filter traces/cells to those still referenced
         new_traces = self._filter_traces(new_spots)
         new_cells, new_cellm = self._filter_cells(new_spots)
+        new_points = self._filter_points(new_spots)
 
         return ChromData(
             new_coords,
@@ -823,9 +882,23 @@ class ChromData:
             layers=new_layers,
             results=self.results,
             uns=self.uns,
+            points=new_points,
             linked_adata=None,
             validate=False,
         )
+
+    def _filter_points(self, spots: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+        """Keep points of the cells that still have spots (sets without a
+        ``cell_id`` column, or data without cells, are kept whole)."""
+        if not self.points or "cell_id" not in spots.columns:
+            return dict(self.points)
+        keep = {str(x) for x in spots["cell_id"].unique()}
+        out = {}
+        for key, df in self.points.items():
+            if "cell_id" in df.columns:
+                df = df[df["cell_id"].astype(str).isin(keep)].reset_index(drop=True)
+            out[key] = df
+        return out
 
     def _filter_traces(self, spots: pd.DataFrame) -> pd.DataFrame:
         if len(self.traces) == 0:
@@ -1128,6 +1201,12 @@ class ChromData:
             _write_dict_of_arrays(f, "cellm", self.cellm)
             _write_results(f, "results", self.results)
             _write_uns(f, "uns", self.uns)
+            if self.points:
+                grp = f.create_group("points")
+                for key, df in self.points.items():
+                    if "/" in key or not key:
+                        raise ValueError(f"points key must be non-empty without '/': {key!r}")
+                    _write_dataframe(grp, key, df)
 
     @classmethod
     def read(cls, path: PathLike) -> "ChromData":
@@ -1176,7 +1255,9 @@ class ChromData:
                     stacklevel=2,
                 )
 
-            return _read_v1(cls, f)
+            cd = _read_v1(cls, f)
+        cd._source_path = path
+        return cd
 
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame, *, cell_id=None, **kwargs) -> "ChromData":
@@ -1228,79 +1309,47 @@ class ChromData:
         return cls(coords, spots, **kwargs)
 
     @classmethod
-    def from_fofct(cls, core_path: PathLike, **kwargs) -> "ChromData":
-        """Read from FOF-CT core table file.
+    def from_fofct(
+        cls,
+        core_path: PathLike,
+        *,
+        cell_table: Optional[PathLike] = None,
+        rna_table: Optional[PathLike] = None,
+        cell_value_prefix: Optional[str] = "rna.",
+        **kwargs,
+    ) -> "ChromData":
+        """Read a FOF-CT core table, optionally with its companion tables.
 
         Parameters
         ----------
         core_path : path
             Path to the FOF-CT core table (CSV/TSV/TXT).
+        cell_table : path, optional
+            FOF-CT *cell data* table (``4dn_FOF-CT_cell``).  Loaded into
+            :attr:`cells` indexed by ``cell_id``: ``cent_ROI_x/y`` become
+            ``centroid_x/y``, ``area(um2)`` / ``area_cyto(um2)`` become
+            ``nucleus_area_um2`` / ``cytoplasm_area_um2``, and every other
+            numeric column (per-cell RNA copy numbers in 4DN tables) is
+            prefixed with ``cell_value_prefix`` (``Nanog`` → ``rna.Nanog``).
+        rna_table : path, optional
+            FOF-CT *RNA spot* table (``4dn_FOF-CT_rna``).  Loaded into
+            ``points['rna']`` with columns ``x, y, z, gene, gene_id,
+            cell_id, spot_id, …`` in the same frame as ``coords``.
+        cell_value_prefix : str or None
+            Prefix for unrecognised numeric cell-table columns; ``None``
+            keeps their names.
         **kwargs
             Additional keyword arguments passed to ChromData constructor
             (e.g. cells, tracks, uns).
         """
         path = Path(core_path)
-        header_meta = {}
-        data_lines = []
-        columns = None  # from ``##columns=`` meta line if present
-
-        with open(path, "r") as fh:
-            for line in fh:
-                raw = line.strip()
-                if not raw:
-                    continue
-                # Some FOF-CT writers wrap the whole header line in quotes and
-                # pad with trailing commas so every line has the same column
-                # count.  Strip those so we can recognise ``#`` headers.
-                stripped = raw.rstrip(",").strip()
-                if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
-                    stripped = stripped[1:-1]
-                if stripped.lower().startswith("##columns="):
-                    cols_str = stripped.split("=", 1)[1].strip().strip("()")
-                    columns = [c.strip() for c in cols_str.split(",")]
-                elif stripped.startswith("##"):
-                    key, _, val = stripped[2:].partition("=")
-                    header_meta[key.strip()] = val.strip()
-                elif stripped.startswith("#"):
-                    key, _, val = stripped[1:].partition(":")
-                    header_meta[key.strip()] = val.strip()
-                else:
-                    data_lines.append(raw)
-
-        if not data_lines:
-            raise ValueError(f"No data rows found in {path}")
-
-        # Some FOF-CT files repeat the column names as a CSV header row right
-        # before the data (in addition to the ``##columns=`` meta line).  If
-        # the first non-comment line has non-numeric values in positions where
-        # numbers are expected, treat it as a CSV header.
-        first_token = data_lines[0].split(",", 1)[0].strip()
-        has_csv_header = bool(first_token) and not (
-            first_token[0].isdigit() or first_token[0] in ("-", "+", ".")
-        )
-        if has_csv_header:
-            header_row = data_lines[0]
-            data_lines = data_lines[1:]
-            if columns is None:
-                columns = [c.strip() for c in header_row.split(",")]
-
-        if not data_lines:
-            raise ValueError(f"No data rows found in {path}")
-
-        # Parse data
-        from io import StringIO as _StringIO
-        text = "\n".join(data_lines)
-        df = pd.read_csv(_StringIO(text), header=None, skipinitialspace=True)
-
-        if columns is not None and len(columns) == len(df.columns):
-            df.columns = columns
-        elif columns is not None:
-            # Column count mismatch — trust the data and label the extras
-            df.columns = columns + [f"col_{i}" for i in range(len(columns), len(df.columns))]
-        else:
+        df, header_meta = _read_fofct_table(path)
+        if not any(str(c).lower() == "x" for c in df.columns):
+            # no column names in the file: assume the core-table order
             default_cols = ["Spot_ID", "Trace_ID", "X", "Y", "Z",
                             "Chrom", "Chrom_Start", "Chrom_End"]
-            df.columns = default_cols[:len(df.columns)]
+            n = len(df.columns)
+            df.columns = default_cols[:n] + [f"col_{i}" for i in range(len(default_cols), n)]
 
         # Map FOF-CT columns to ChromData — case-insensitive.
         canonical_map = {
@@ -1314,7 +1363,7 @@ class ChromData:
             "sub_cell_roi_id": "sub_cell_roi_id",
             "extra_cell_roi_id": "extra_cell_roi_id",
         }
-        rename = {c: canonical_map[c.lower()] for c in df.columns if c.lower() in canonical_map}
+        rename = {c: canonical_map[str(c).lower()] for c in df.columns if str(c).lower() in canonical_map}
         df = df.rename(columns=rename)
 
         missing = {"x", "y", "z"} - set(df.columns)
@@ -1347,6 +1396,23 @@ class ChromData:
             uns["xyz_unit"] = lower_meta["xyz_unit"]
         if "genome_assembly" in lower_meta:
             uns["genome_assembly"] = lower_meta["genome_assembly"]
+
+        companions = {}
+        if cell_table is not None:
+            cells, meta = _fofct_cell_table(Path(cell_table), cell_value_prefix)
+            if kwargs.get("cells") is not None:
+                raise ValueError("pass either cells= or cell_table=, not both")
+            kwargs["cells"] = cells
+            companions["cells"] = meta
+        if rna_table is not None:
+            rna, meta = _fofct_rna_table(Path(rna_table))
+            points = dict(kwargs.pop("points", None) or {})
+            points["rna"] = rna
+            kwargs["points"] = points
+            companions["rna"] = meta
+        if companions:
+            uns["fofct_companions"] = companions
+            _warn_unmatched_cells(spots, companions, kwargs)
 
         return cls(coords, spots, uns=uns, **kwargs)
 
@@ -1530,6 +1596,7 @@ class ChromData:
             layers={k: v.copy() for k, v in self.layers.items()} or None,
             results=deepcopy(self.results) or None,
             uns=deepcopy(self.uns) or None,
+            points={k: v.copy() for k, v in self.points.items()} or None,
             linked_adata=self._linked_adata.copy() if self._linked_adata is not None else None,
             validate=False,
         )
@@ -1559,6 +1626,9 @@ class ChromData:
             parts.append(f"  traces:  {list(self.traces.columns)} ({len(self.traces)} traces)")
         if self.layers:
             parts.append(f"  layers:  {list(self.layers.keys())}")
+        if self.points:
+            sizes = {k: len(v) for k, v in self.points.items()}
+            parts.append(f"  points:  {sizes}")
         if self.results:
             parts.append(f"  results: {list(self.results.keys())}")
         if self.uns:
@@ -1703,6 +1773,159 @@ def _parse_version(s: str):
 # ChromData.read().  Each reader is responsible for its on-disk layout
 # and may call a migration helper to produce the current in-memory form.
 
+def _read_fofct_table(path: Path):
+    """Parse a FOF-CT table: ``##key=value`` / ``#key: value`` headers,
+    a ``##columns=(...)`` line and CSV data.  Returns ``(df, header_meta)``
+    with the file's own column names (unknown → ``col_i``)."""
+    header_meta = {}
+    data_lines = []
+    columns = None  # from ``##columns=`` meta line if present
+
+    with open(path, "r") as fh:
+        for line in fh:
+            raw = line.strip()
+            if not raw:
+                continue
+            # Some FOF-CT writers wrap the whole header line in quotes and
+            # pad with trailing commas so every line has the same column
+            # count.  Strip those so we can recognise ``#`` headers.
+            stripped = raw.rstrip(",").strip()
+            if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
+                stripped = stripped[1:-1]
+            if stripped.lower().startswith("##columns="):
+                cols_str = stripped.split("=", 1)[1].strip().strip("()")
+                columns = [c.strip() for c in cols_str.split(",")]
+            elif stripped.startswith("##"):
+                key, _, val = stripped[2:].partition("=")
+                header_meta[key.strip()] = val.strip()
+            elif stripped.startswith("#"):
+                key, _, val = stripped[1:].partition(":")
+                header_meta[key.strip()] = val.strip()
+            else:
+                data_lines.append(raw)
+
+    if not data_lines:
+        raise ValueError(f"No data rows found in {path}")
+
+    # Some FOF-CT files repeat the column names as a CSV header row right
+    # before the data (in addition to the ``##columns=`` meta line).  If
+    # the first non-comment line starts with a non-numeric token, treat it
+    # as a CSV header.
+    first_token = data_lines[0].split(",", 1)[0].strip().strip('"')
+    has_csv_header = bool(first_token) and not (
+        first_token[0].isdigit() or first_token[0] in ("-", "+", ".")
+    )
+    if has_csv_header and columns is not None and first_token not in columns:
+        has_csv_header = False  # e.g. cell tables whose first column is an id like "0_1"
+    if has_csv_header:
+        header_row = data_lines[0]
+        data_lines = data_lines[1:]
+        if columns is None:
+            columns = [c.strip() for c in header_row.split(",")]
+
+    if not data_lines:
+        raise ValueError(f"No data rows found in {path}")
+
+    from io import StringIO as _StringIO
+    df = pd.read_csv(_StringIO("\n".join(data_lines)), header=None, skipinitialspace=True)
+    if columns is not None and len(columns) == len(df.columns):
+        df.columns = columns
+    elif columns is not None:
+        # Column count mismatch — trust the data and label the extras
+        df.columns = (columns + [f"col_{i}" for i in range(len(columns), len(df.columns))])[: len(df.columns)]
+    return df, header_meta
+
+
+# FOF-CT cell-table columns with a fixed meaning → ChromData.cells names.
+_FOFCT_CELL_COLUMNS = {
+    "cell_id": "cell_id",
+    "extra_cell_roi_id": "extra_cell_roi_id",
+    "cent_roi_x": "centroid_x",
+    "cent_roi_y": "centroid_y",
+    "cent_roi_z": "centroid_z",
+    "area(um2)": "nucleus_area_um2",
+    "area_cyto(um2)": "cytoplasm_area_um2",
+    "keep1": "keep1",
+}
+
+
+def _fofct_cell_table(path: Path, value_prefix: Optional[str]):
+    """FOF-CT cell data table → (cells DataFrame indexed by cell_id, meta)."""
+    df, meta = _read_fofct_table(path)
+    rename = {}
+    for col in df.columns:
+        key = str(col).strip().lower()
+        if key in _FOFCT_CELL_COLUMNS:
+            rename[col] = _FOFCT_CELL_COLUMNS[key]
+        elif value_prefix and pd.api.types.is_numeric_dtype(df[col]):
+            rename[col] = f"{value_prefix}{str(col).strip()}"
+    df = df.rename(columns=rename)
+    if "cell_id" not in df.columns:
+        raise ValueError(f"{path}: cell table has no Cell_ID column; columns: {list(df.columns)}")
+    df["cell_id"] = df["cell_id"].astype(str)
+    if df["cell_id"].duplicated().any():
+        raise ValueError(f"{path}: duplicate Cell_ID values in cell table")
+    cells = df.set_index("cell_id")
+    return cells, {"source": path.name, "header": meta, "n": int(len(cells))}
+
+
+# FOF-CT RNA-spot columns → ChromData.points['rna'] names.
+_FOFCT_RNA_COLUMNS = {
+    "spot_id": "spot_id",
+    "x": "x", "y": "y", "z": "z",
+    "rna_name": "gene",
+    "gene_id": "gene_id",
+    "cell_id": "cell_id",
+    "extra_cell_roi_id": "extra_cell_roi_id",
+    "peak_intensity": "peak_intensity",
+}
+
+
+def _fofct_rna_table(path: Path):
+    """FOF-CT RNA spot table → (points DataFrame, meta)."""
+    df, meta = _read_fofct_table(path)
+    df = df.rename(columns={c: _FOFCT_RNA_COLUMNS.get(str(c).strip().lower(), str(c).strip().lower())
+                            for c in df.columns})
+    missing = {"x", "y", "z"} - set(df.columns)
+    if missing:
+        raise ValueError(f"{path}: RNA table missing coordinate columns {missing}")
+    if "gene_id" in df.columns:  # 4DN writes lists like "NM_001363480,"
+        df["gene_id"] = df["gene_id"].astype(str).str.strip().str.rstrip(",")
+    for col in ("cell_id", "gene"):
+        if col in df.columns:
+            df[col] = df[col].astype(str)
+    front = [c for c in ("x", "y", "z", "gene", "gene_id", "cell_id", "spot_id") if c in df.columns]
+    df = df[front + [c for c in df.columns if c not in front]]
+    return df, {"source": path.name, "header": meta, "n": int(len(df))}
+
+
+def _warn_unmatched_cells(spots: pd.DataFrame, companions: dict, kwargs: dict) -> None:
+    """Warn when companion tables mention cells the core table lacks (or vice versa)."""
+    import warnings
+
+    if "cell_id" not in spots.columns:
+        return
+    core = {str(x) for x in spots["cell_id"].unique()}
+    cells = kwargs.get("cells")
+    if "cells" in companions and cells is not None:
+        extra = set(cells.index.astype(str)) - core
+        missing = core - set(cells.index.astype(str))
+        if extra or missing:
+            warnings.warn(
+                f"FOF-CT cell table: {len(extra)} cells not in the core table, "
+                f"{len(missing)} core cells without a cell-table row",
+                stacklevel=3,
+            )
+    rna = (kwargs.get("points") or {}).get("rna")
+    if rna is not None and "cell_id" in rna.columns:
+        orphan = set(rna["cell_id"]) - core
+        if orphan:
+            warnings.warn(
+                f"FOF-CT RNA table: spots in {len(orphan)} cells not in the core table",
+                stacklevel=3,
+            )
+
+
 def _read_v1(cls, f) -> "ChromData":
     """Reader for .h5cd format MAJOR version 1."""
     coords = f["coords"][:]
@@ -1714,6 +1937,7 @@ def _read_v1(cls, f) -> "ChromData":
     cellm = _read_dict_of_arrays(f, "cellm")
     results = _read_results(f, "results")
     uns = _read_uns(f, "uns")
+    points = {k: _read_dataframe(f["points"], k) for k in f["points"]} if "points" in f else {}
 
     return cls(
         coords,
@@ -1725,6 +1949,7 @@ def _read_v1(cls, f) -> "ChromData":
         layers=layers or None,
         results=results or None,
         uns=uns or None,
+        points=points or None,
     )
 
 
@@ -1740,11 +1965,17 @@ def _write_dataframe(f, name: str, df: Optional[pd.DataFrame]):
     stored in ``_index_name``.  Old (1.0) readers ignore both and
     reconstruct a default RangeIndex — the historical behaviour.
     """
-    if df is None or len(df) == 0:
+    if df is None or (len(df) == 0 and len(df.columns) == 0):
         f.create_group(name)
         return
     grp = f.create_group(name)
     grp.attrs["_n_rows"] = len(df)
+    if len(df) == 0:
+        # keep the schema of empty tables (e.g. spots of data without 3-D
+        # coordinates) so required columns survive a round trip
+        grp.attrs["_columns"] = [str(c) for c in df.columns]
+        grp.attrs["_empty"] = True
+        return
     grp.attrs["_columns"] = list(df.columns)
     for col in df.columns:
         series = df[col]
@@ -1786,6 +2017,8 @@ def _read_dataframe(f, name: str) -> pd.DataFrame:
     if "_columns" not in grp.attrs:
         return pd.DataFrame()
     columns = list(grp.attrs["_columns"])
+    if grp.attrs.get("_empty", False):
+        return pd.DataFrame({c: pd.Series(dtype=object) for c in columns})
     data = {}
     for col in columns:
         if col not in grp:

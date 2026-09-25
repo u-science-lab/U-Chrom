@@ -33,6 +33,11 @@ browser = [
     "PyQt5>=5.15.2",
     "qdarkgraystyle>=1.0.2",
 ]
+# Web browser (python -m uchrom.browser --web); no Qt needed.
+web = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
 # Reading .hic files (uchrom.io load_hic / benchmark tutorial).
 hic = [
     "hic-straw",
@@ -40,6 +45,10 @@ hic = [
 # Linking ChromData with AnnData (link_anndata / to_anndata, seqFISH RNA).
 anndata = [
     "anndata>=0.9",
+]
+# UMAP cell embeddings (uchrom.emb.embed_cells); PCA / t-SNE need only scikit-learn.
+umap = [
+    "umap-learn>=0.5",
 ]
 # Linked MuData files (ChromData.link_mudata / load_linked_mudata).
 multiome = [
@@ -77,6 +86,9 @@ snapfish = [
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.setuptools.package-data]
+"uchrom.browser.web" = ["static/*", "static/**/*", "API.md"]
 
 [tool.setuptools.packages.find]
 include = ["uchrom*"]
