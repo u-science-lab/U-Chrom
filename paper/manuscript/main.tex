@@ -1,0 +1,76 @@
+% U-Chrom manuscript — journal-neutral draft.
+% Build: latexmk -xelatex main.tex   (or: make)
+\documentclass[11pt]{article}
+
+\usepackage{fontspec}
+\setmainfont{texgyretermes}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]  % Times-like body
+\setsansfont{texgyreheros}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]  % Helvetica/Arial-like
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{setspace}
+\usepackage[running]{lineno}
+\usepackage{graphicx}
+\usepackage{authblk}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[labelfont=bf,labelsep=space,font=small]{caption}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+
+\graphicspath{{figures/}}
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\pkg}[1]{\texttt{#1}}
+
+\title{U-Chrom: a unified framework for sequencing- and imaging-based 3-D genome data}
+\author[1]{Author One}
+\author[1]{Author Two}
+\affil[1]{\todo{affiliation}}
+\date{}
+
+\begin{document}
+\maketitle
+\doublespacing
+\linenumbers
+
+\begin{abstract}
+\noindent\todo{Abstract (background, results, conclusions; $\leq$ 350 words).}
+\end{abstract}
+
+\noindent\textbf{Keywords:} 3-D genome, chromatin tracing, Hi-C, single-cell multi-omics, data model, software
+
+\section*{Background}
+\todo{Motivation: each assay captures one facet of 3-D genome organisation (Fig.~\ref{fig:overview}a); no shared data model links them.}
+
+\section*{Results}
+
+\subsection*{A shared index for sequencing- and imaging-based 3-D genome data}
+\todo{ChromData design (Fig.~\ref{fig:overview}b): modality layers, genomic bins, observation levels, bridges.}
+
+\begin{figure}[p]
+  \centering
+  \includegraphics[width=\textwidth]{fig1.pdf}
+  \caption[U-Chrom overview]{\input{captions/fig1}\unskip}
+  \label{fig:overview}
+\end{figure}
+
+\subsection*{An open ecosystem}
+\todo{Formats, methods and interfaces (Fig.~\ref{fig:overview}c).}
+
+\section*{Discussion}
+\todo{}
+
+\section*{Conclusions}
+\todo{}
+
+\section*{Methods}
+\subsection*{Data}
+\todo{Takei et al.\ 2025 cerebellum DNA seqFISH+; scHiCAR mouse MOp (GSE305439); see \texttt{example-data/README.md}.}
+
+\subsection*{Software availability}
+\todo{Repository URL, licence, version, documentation.}
+
+\section*{Declarations}
+\todo{Ethics, consent, data availability, competing interests, funding, authors' contributions, acknowledgements.}
+
+\bibliographystyle{unsrtnat}
+\bibliography{refs}
+
+\end{document}
