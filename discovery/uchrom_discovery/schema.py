@@ -6,6 +6,8 @@ it round-trips through ``.h5cd`` without requiring a new HDF5 layout.
 
 from __future__ import annotations
 
+import re
+
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -820,7 +822,8 @@ def _has_feature_group(records: list[dict[str, Any]], name: str) -> bool:
 
 
 def _result_family(key: str) -> str:
-    return str(key).split(":", 1)[0]
+    """``"tads:chr1"`` / ``"tads.arcfish"`` / ``"tads"`` → ``"tads"``."""
+    return re.split(r"[:.]", str(key), maxsplit=1)[0]
 
 
 def _format_catalog(catalog: Mapping[str, Any], max_items: int) -> str:

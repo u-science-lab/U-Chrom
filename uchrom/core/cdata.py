@@ -48,7 +48,7 @@ Attributes summary
     layers      dict[str, (n_spots, 3)]      alt. coordinate sets
     points      dict[str, DataFrame]         non-genomic 3-D points (RNA spots, …)
                                               (raw / corrected / aligned)
-    results     dict                          analysis outputs
+    results     ResultsStore                  analysis outputs + provenance
                                               (loops, tads, compartments)
     uns         dict                          unstructured metadata
                                               (genome_assembly, xyz_unit,
@@ -133,7 +133,9 @@ Layout::
     ├── results/             group — typed entries (``_type`` attr):
     │                         DataFrame / Series / nested dict as
     │                         sub-groups, ndarrays as datasets,
-    │                         scalars & lists as JSON string datasets
+    │                         scalars & lists as JSON string datasets;
+    │                         provenance attrs (``_kind``, ``_function``,
+    │                         ``_params``, …) on each entry (1.4)
     └── uns/                 nested group — scalars as attrs,
                               dicts as sub-groups
 
@@ -180,6 +182,8 @@ from typing import Any, Union, Optional, Dict, List, Mapping
 import numpy as np
 import pandas as pd
 
+from .results import ResultRecord, ResultsStore, jsonable as _results_jsonable, validate_value
+
 
 PathLike = Union[str, Path]
 
@@ -206,7 +210,13 @@ _SERIES_COLUMN = "_value"
 # 1.3: optional ``points/`` group — named DataFrames of non-genomic 3-D
 #      points (x, y, z + columns such as cell_id, gene) in the coords frame,
 #      e.g. nascent RNA spots.  Older readers ignore the group.
-FORMAT_VERSION = "1.3"
+# 1.4: ``results`` entries carry provenance (``cd.results`` is a
+#      :class:`~uchrom.core.results.ResultsStore`).  Each top-level item of
+#      ``results/`` gains attrs ``_kind``, ``_function``, ``_params`` (JSON),
+#      ``_inputs`` (JSON), ``_uchrom_version`` and ``_created_utc``.  The
+#      value itself is stored in place exactly as in 1.2/1.3, so older
+#      readers still read the value and ignore the extra attrs.
+FORMAT_VERSION = "1.4"
 _SUPPORTED_MAJOR = 1
 
 
@@ -260,11 +270,12 @@ class ChromData:
         ``coords`` — e.g. nascent RNA spots or IF puncta.  Each DataFrame
         needs ``x, y, z``; ``cell_id`` (if present) links points to cells
         and is used when subsetting.
-    results : dict, optional
-        Analysis outputs.  Conventional keys:
-        ``'loops'`` → DataFrame (chrom1, start1, end1, …),
-        ``'tads'`` → DataFrame (chrom, start, end, …),
-        ``'compartments'`` → ndarray or DataFrame per bin.
+    results : dict or ResultsStore, optional
+        Analysis outputs, stored as a :class:`~uchrom.core.results.ResultsStore`
+        (``cd.results[key]`` returns the value, ``cd.results.record(key)``
+        the value plus provenance).  Keys follow ``"<what>.<method>"``:
+        ``'tads.arcfish'``, ``'loops.axiswise_f'``,
+        ``'compartments.axes_pc'``, ….
     uns : dict, optional
         Unstructured metadata preserved on disk.  Conventional keys:
         ``'genome_assembly'``, ``'xyz_unit'``, ``'fofct_header'``.
@@ -340,6 +351,20 @@ class ChromData:
     # ------------------------------------------------------------------
     # Properties
     # ------------------------------------------------------------------
+
+    @property
+    def results(self) -> ResultsStore:
+        """Analysis outputs — a :class:`~uchrom.core.results.ResultsStore`.
+
+        Behaves like a ``dict`` of values; assigning a plain ``dict``
+        converts it.  Values that cannot be written to ``.h5cd`` raise
+        ``TypeError`` on assignment.
+        """
+        return self._results
+
+    @results.setter
+    def results(self, value) -> None:
+        self._results = ResultsStore.coerce(value)
 
     @property
     def n_spots(self) -> int:
@@ -1935,7 +1960,7 @@ def _read_v1(cls, f) -> "ChromData":
     traces = _read_dataframe(f, "traces")
     layers = _read_dict_of_arrays(f, "layers")
     cellm = _read_dict_of_arrays(f, "cellm")
-    results = _read_results(f, "results")
+    results = _read_results_store(f, "results")
     uns = _read_uns(f, "uns")
     points = {k: _read_dataframe(f["points"], k) for k in f["points"]} if "points" in f else {}
 
@@ -1947,7 +1972,7 @@ def _read_v1(cls, f) -> "ChromData":
         tracks=tracks if len(tracks) > 0 else None,
         traces=traces if len(traces) > 0 else None,
         layers=layers or None,
-        results=results or None,
+        results=results,
         uns=uns or None,
         points=points or None,
     )
@@ -1975,6 +2000,9 @@ def _write_dataframe(f, name: str, df: Optional[pd.DataFrame]):
         # coordinates) so required columns survive a round trip
         grp.attrs["_columns"] = [str(c) for c in df.columns]
         grp.attrs["_empty"] = True
+        # dtypes of the empty columns (additive, format 1.4) so that an
+        # empty result table keeps its schema on a round trip
+        grp.attrs["_dtypes"] = [_empty_dtype_str(df[c].dtype) for c in df.columns]
         return
     grp.attrs["_columns"] = list(df.columns)
     for col in df.columns:
@@ -2009,6 +2037,17 @@ def _write_dataframe(f, name: str, df: Optional[pd.DataFrame]):
         grp.attrs["_index_name"] = idx.name if idx.name is not None else ""
 
 
+def _empty_dtype_str(dtype) -> str:
+    """dtype name for an empty column; anything exotic → ``object``."""
+    if hasattr(dtype, "categories"):
+        return "object"
+    try:
+        np.dtype(dtype)
+    except TypeError:
+        return "object"
+    return str(dtype)
+
+
 def _read_dataframe(f, name: str) -> pd.DataFrame:
     """Read a DataFrame from an HDF5 group."""
     if name not in f:
@@ -2018,7 +2057,10 @@ def _read_dataframe(f, name: str) -> pd.DataFrame:
         return pd.DataFrame()
     columns = list(grp.attrs["_columns"])
     if grp.attrs.get("_empty", False):
-        return pd.DataFrame({c: pd.Series(dtype=object) for c in columns})
+        dtypes = [_attr_str(d) for d in grp.attrs.get("_dtypes", [])]
+        if len(dtypes) != len(columns):
+            dtypes = ["object"] * len(columns)
+        return pd.DataFrame({c: pd.Series(dtype=d) for c, d in zip(columns, dtypes)})
     data = {}
     for col in columns:
         if col not in grp:
@@ -2058,11 +2100,35 @@ def _read_dict_of_arrays(f, name: str) -> dict:
     return {key: grp[key][:] for key in grp}
 
 
-def _write_results(f, name: str, results: dict, _path: str = "results"):
-    """Write a results dict to HDF5, recursing into nested dicts.
+def _write_results(f, name: str, results, _path: str = "results"):
+    """Write ``cd.results`` (a ResultsStore or plain dict) to HDF5.
 
-    Format 1.2: every entry carries a ``_type`` attr so the reader can
-    restore it faithfully —
+    Values are written by :func:`_write_result_value` (format 1.2 typed
+    layout).  Format 1.4: when ``results`` is a :class:`ResultsStore`, the
+    provenance of each top-level record is added as attrs on the value's
+    group / dataset (``_kind``, ``_function``, ``_params``, ``_inputs``,
+    ``_uchrom_version``, ``_created_utc``).
+    """
+    grp = f.create_group(name)
+    grp.attrs["_type"] = "dict"
+    records = results.records() if isinstance(results, ResultsStore) else None
+    for key, val in results.items():
+        key = str(key)
+        where = f"{_path}[{key!r}]"
+        _write_result_value(grp, key, val, where)
+        if records is not None:
+            rec = records[key]
+            attrs = grp[key].attrs
+            attrs["_kind"] = rec.kind
+            attrs["_function"] = rec.function or ""
+            attrs["_params"] = json.dumps(rec.params, allow_nan=True, sort_keys=True)
+            attrs["_inputs"] = json.dumps(rec.inputs, allow_nan=True, sort_keys=True)
+            attrs["_uchrom_version"] = rec.uchrom_version or ""
+            attrs["_created_utc"] = rec.created_utc or ""
+
+
+def _write_result_value(grp, key: str, val: Any, where: str) -> None:
+    """Write one results value (format 1.2 typed layout).
 
     * ``dataframe`` — sub-group, one dataset per column (1.0 layout)
     * ``series``    — as ``dataframe`` with a single column
@@ -2074,61 +2140,79 @@ def _write_results(f, name: str, results: dict, _path: str = "results"):
     Values that fit none of these raise ``TypeError`` instead of being
     silently dropped (the pre-1.2 behaviour).
     """
-    grp = f.create_group(name)
-    grp.attrs["_type"] = "dict"
-    for key, val in results.items():
-        key = str(key)
-        where = f"{_path}[{key!r}]"
-        if "/" in key or key in (".", ""):
-            raise ValueError(f"{where}: result keys must be non-empty and contain no '/'.")
-        if isinstance(val, pd.DataFrame):
-            _write_dataframe(grp, key, val)
-            grp[key].attrs["_type"] = "dataframe"
-        elif isinstance(val, pd.Series):
-            _write_dataframe(grp, key, val.to_frame(name=_SERIES_COLUMN))
-            grp[key].attrs["_type"] = "series"
-            if val.name is not None:
-                grp[key].attrs["_series_name"] = str(val.name)
-        elif isinstance(val, Mapping):
-            _write_results(grp, key, val, _path=where)
-        elif isinstance(val, np.ndarray):
-            if val.dtype == object:
-                raise TypeError(
-                    f"{where}: object-dtype arrays cannot be stored in .h5cd; "
-                    f"convert to a numeric/string dtype or a list first."
-                )
-            grp.create_dataset(key, data=val)
-        else:
-            if isinstance(val, np.generic):
-                val = val.item()
-            try:
-                doc = json.dumps(_results_jsonable(val), allow_nan=True)
-            except TypeError as exc:
-                raise TypeError(
-                    f"{where}: cannot serialise value of type "
-                    f"{type(val).__name__} to .h5cd results. Supported: "
-                    f"DataFrame, Series, ndarray, dict, and JSON-compatible "
-                    f"scalars / lists."
-                ) from exc
-            ds = grp.create_dataset(key, data=doc)
-            ds.attrs["_type"] = "json"
-            if isinstance(val, tuple):
-                ds.attrs["_pytype"] = "tuple"
+    if "/" in key or key in (".", ""):
+        raise ValueError(f"{where}: result keys must be non-empty and contain no '/'.")
+    if isinstance(val, pd.DataFrame):
+        _write_dataframe(grp, key, val)
+        grp[key].attrs["_type"] = "dataframe"
+    elif isinstance(val, pd.Series):
+        _write_dataframe(grp, key, val.to_frame(name=_SERIES_COLUMN))
+        grp[key].attrs["_type"] = "series"
+        if val.name is not None:
+            grp[key].attrs["_series_name"] = str(val.name)
+    elif isinstance(val, Mapping):
+        sub = grp.create_group(key)
+        sub.attrs["_type"] = "dict"
+        for k, v in val.items():
+            k = str(k)
+            _write_result_value(sub, k, v, f"{where}[{k!r}]")
+    elif isinstance(val, np.ndarray):
+        if val.dtype == object:
+            raise TypeError(
+                f"{where}: object-dtype arrays cannot be stored in .h5cd; "
+                f"convert to a numeric/string dtype or a list first."
+            )
+        grp.create_dataset(key, data=val)
+    else:
+        if isinstance(val, np.generic):
+            val = val.item()
+        try:
+            doc = json.dumps(_results_jsonable(val), allow_nan=True)
+        except TypeError as exc:
+            raise TypeError(
+                f"{where}: cannot serialise value of type "
+                f"{type(val).__name__} to .h5cd results. Supported: "
+                f"DataFrame, Series, ndarray, dict, and JSON-compatible "
+                f"scalars / lists."
+            ) from exc
+        ds = grp.create_dataset(key, data=doc)
+        ds.attrs["_type"] = "json"
+        if isinstance(val, tuple):
+            ds.attrs["_pytype"] = "tuple"
 
 
-def _results_jsonable(value: Any) -> Any:
-    """Normalise numpy scalars / nested containers for ``json.dumps``."""
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, (list, tuple)):
-        return [_results_jsonable(v) for v in value]
-    if isinstance(value, Mapping):
-        return {str(k): _results_jsonable(v) for k, v in value.items()}
-    return value
+def _read_results_store(f, name: str) -> ResultsStore:
+    """Read ``results/`` into a :class:`ResultsStore`.
+
+    Items with format-1.4 provenance attrs become full records; older
+    items (no ``_kind``) become records with an inferred kind and no
+    provenance.
+    """
+    store = ResultsStore()
+    if name not in f:
+        return store
+    values = _read_results(f, name)
+    grp = f[name]
+    for key, value in values.items():
+        attrs = grp[key].attrs
+        kind = _attr_str(attrs.get("_kind"))
+        if not kind:
+            store[key] = value
+            continue
+        store[key] = ResultRecord(
+            kind=kind,
+            value=value,
+            params=json.loads(_attr_str(attrs.get("_params")) or "{}"),
+            function=_attr_str(attrs.get("_function")) or None,
+            uchrom_version=_attr_str(attrs.get("_uchrom_version")) or "unknown",
+            inputs=json.loads(_attr_str(attrs.get("_inputs")) or "{}"),
+            created_utc=_attr_str(attrs.get("_created_utc")) or "",
+        )
+    return store
 
 
 def _read_results(f, name: str) -> dict:
-    """Read a results dict from HDF5 (inverse of :func:`_write_results`).
+    """Read a results dict of plain values (inverse of :func:`_write_results`).
 
     Pre-1.2 files have no ``_type`` attrs: groups are DataFrames and
     datasets are arrays, which is exactly the fallback below.

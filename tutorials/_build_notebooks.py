@@ -1149,7 +1149,7 @@ loops = call_loops_axiswise_f(
     cd,
     chrom=chrom,
     device='auto',   # CUDA > MPS > CPU
-    store=True,      # also write to cd.results['loops']
+    key_added='loops',   # store under cd.results['loops'] (default key: 'loops.axiswise_f')
     verbose=True,
 )
 loops"""),
@@ -1203,7 +1203,7 @@ params_relaxed = LoopCallerParams(
     pval_cutoff=1e-3,    # more permissive raw p-value
 )
 loops_relaxed = call_loops_axiswise_f(cd, chrom=chrom, params=params_relaxed,
-                                      device='auto', store=False)
+                                      device='auto', key_added=None)
 print(f'default: {len(loops)} loops  |  relaxed: {len(loops_relaxed)} loops')
 if len(loops_relaxed) > len(loops):
     print('\\nExtra candidates at relaxed thresholds:')
@@ -1215,7 +1215,7 @@ if len(loops_relaxed) > len(loops):
 all_loops = []
 for chrom in cd.chroms:
     ls = call_loops_axiswise_f(cd, chrom=chrom, device='auto',
-                               store=False, verbose=False)
+                               key_added=None, verbose=False)
     ls['chrom'] = chrom
     all_loops.append(ls)
 
@@ -1734,7 +1734,7 @@ print('  mean domains per trace:', fishnet_df.groupby('trace_id', observed=True)
 fishnet_df.head()"""),
 
     code("""\
-ens = cd.results['fishnet_ensemble']
+ens = cd.results['tads.fishnet.ensemble'][chrom]   # one entry per chromosome
 mask = ens['mask']
 print(f'ensemble domain mask: shape={mask.shape}, max={mask.max()}, n_traces={ens[\"n_traces\"]}')
 
@@ -2052,7 +2052,7 @@ fishnet_df = call_domains_fishnet(
 print(f'{len(fishnet_df)} domains across {fishnet_df["trace_id"].nunique()} traces')"""),
 
     code("""\
-ens = cd.results['fishnet_ensemble']
+ens = cd.results['tads.fishnet.ensemble'][chr_to_use]
 dmat, _, _ = mean_distance_matrix(cd.get_chrom(chr_to_use).to_dataframe(), chrom=chr_to_use)
 
 fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))

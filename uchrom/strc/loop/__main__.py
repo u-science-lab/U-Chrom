@@ -26,6 +26,7 @@ def main(
     frac: float = 0.1,
     verbose: bool = True,
     format: str = "h5cd",
+    key_added: str = "loops.axiswise_f",
 ):
     """Call loops on a single chromosome with the ArcFISH-style axis F-test.
 
@@ -36,7 +37,8 @@ def main(
         - ``.bedpe`` → write BEDPE TSV (six columns + score)
         - ``.csv`` → full CSV with all columns
         - ``.h5cd`` (default) → update the input ChromData with
-          ``results['loops']`` and write back.
+          ``results[key_added]`` (default ``'loops.axiswise_f'``) and
+          write it to ``output``.
     chrom : chromosome to process (required).
     device : ``'auto' | 'cpu' | 'cuda' | 'mps'``
     """
@@ -54,7 +56,7 @@ def main(
     )
     loops = call_loops_axiswise_f(
         cd, chrom=chrom, params=params, device=device,
-        store=True, verbose=verbose,
+        key_added=key_added, verbose=verbose,
     )
 
     out = str(output)

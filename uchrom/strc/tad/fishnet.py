@@ -41,6 +41,16 @@ from typing import List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from uchrom.core.convention import (
+    UNSET,
+    merge_tables,
+    parse_legacy_call,
+    resolve_chroms,
+    select_spots,
+    selection_inputs,
+    store_and_return,
+)
+
 
 @dataclass
 class FISHnetParams:
@@ -449,36 +459,104 @@ def call_domains_fishnet_trace(
 
 def call_domains_fishnet(
     cd,
-    chrom: str,
+    *args,
+    chrom=None,
+    trace_ids=None,
+    cells=None,
     params: Optional[FISHnetParams] = None,
-    store: bool = True,
-    result_key: str = "fishnet_domains",
-    ensemble_key: str = "fishnet_ensemble",
+    key_added: Optional[str] = UNSET,
+    ensemble_key: Optional[str] = UNSET,
+    copy: bool = False,
     verbose: bool = False,
     max_traces: Optional[int] = None,
-) -> pd.DataFrame:
-    """Run FISHnet on every trace of ``chrom`` in ``cd``.
+    store=UNSET,
+    result_key=UNSET,
+):
+    """Run FISHnet on every trace of the selected chromosome(s).
 
     Parameters
     ----------
     cd : ChromData
-    chrom : str
+    chrom : str, sequence of str, or None
+        ``None`` (default) runs every chromosome and merges the tables.
+    trace_ids, cells : sequence, optional
+        Restrict to these traces / cells.
     params : FISHnetParams, optional
-    store : bool
-        If True, write results to ``cd.results[result_key]`` and the
-        ensemble domain mask to ``cd.results[ensemble_key]``.
+    key_added : str or None
+        ``cd.results`` key of the per-trace domain table (default
+        ``"tads.fishnet"``); ``None`` does not store.
+    ensemble_key : str, optional
+        ``cd.results`` key of the ensemble domain mask (default
+        ``f"{key_added}.ensemble"``).  Stored as a mapping
+        ``{chrom: {"mask": (n_bins, n_bins) int64, "bin_ids": (n_bins, 2)
+        int64 [start, end], "n_traces": int}}``.
+    copy : bool
+        ``True`` → return a new ChromData holding the results.
     max_traces : int, optional
-        Hard cap on the number of traces processed (useful for quick
-        previews — FISHnet is O(n_bins² · n_thresholds) per trace).
+        Cap on the number of traces processed **per chromosome** (useful
+        for previews — FISHnet is O(n_bins² · n_thresholds) per trace).
 
     Returns
     -------
-    DataFrame with one row per (trace, domain):
-        ``chrom, trace_id, domain_idx, start, end, start_bin, end_bin``.
-    """
-    from uchrom.fea.distance import _bin_coord_cube, _pairwise_distance_per_trace
+    DataFrame (``copy=False``) or ChromData (``copy=True``)
+        One row per (trace, domain): ``chrom, trace_id, domain_idx, start,
+        end, start_bin, end_bin``.
 
+    Notes
+    -----
+    Deprecated 1.x forms (positional ``chrom``, ``store=``,
+    ``result_key=``) still work with a ``DeprecationWarning``; they keep
+    the 1.x keys ``"fishnet_domains"`` / ``"fishnet_ensemble"`` and the
+    1.x single-chromosome ensemble layout ``{"chrom", "mask", "bin_ids",
+    "n_traces"}``.
+    """
+    chrom, key_added, legacy = parse_legacy_call(
+        "call_domains_fishnet", args, chrom=chrom, key_added=key_added,
+        store=store, result_key=result_key, default_key="tads.fishnet",
+        legacy_key="fishnet_domains", copy=copy,
+    )
+    if ensemble_key is UNSET:
+        if key_added is None:
+            ensemble_key = None
+        elif legacy:
+            ensemble_key = "fishnet_ensemble"
+        else:
+            ensemble_key = f"{key_added}.ensemble"
     params = params or FISHnetParams()
+    work = select_spots(cd, trace_ids=trace_ids, cells=cells)
+    chroms = resolve_chroms(work, chrom)
+
+    frames, ensembles = [], {}
+    for c in chroms:
+        table, ens = _call_domains_fishnet_chrom(work, c, params, verbose, max_traces)
+        frames.append(table)
+        ensembles[c] = ens
+    table = merge_tables(frames, _empty_fishnet())
+
+    extra = []
+    if ensemble_key is not None:
+        if legacy and len(chroms) == 1:
+            ens = ensembles[chroms[0]]
+            ensemble = {"chrom": chroms[0], "mask": ens["mask"],
+                        "bin_ids": [tuple(b) for b in ens["bin_ids"].tolist()],
+                        "n_traces": ens["n_traces"]}
+        else:
+            ensemble = ensembles
+        extra.append((ensemble_key, ensemble, "mapping"))
+    inputs = selection_inputs(work, chroms, trace_ids, cells)
+    if max_traces is not None:
+        inputs["max_traces"] = int(max_traces)
+    return store_and_return(
+        cd, table, key_added=key_added, copy=copy, kind="intervals",
+        function="uchrom.strc.tad.call_domains_fishnet", params=params,
+        inputs=inputs, extra=extra,
+    )
+
+
+def _call_domains_fishnet_chrom(cd, chrom: str, params: FISHnetParams,
+                                verbose: bool, max_traces: Optional[int]):
+    """Per-chromosome kernel: ``(domain table, ensemble dict)``."""
+    from uchrom.fea.distance import _bin_coord_cube, _pairwise_distance_per_trace
 
     df = cd.to_dataframe()
     cube, bin_ids, trace_ids = _bin_coord_cube(df, chrom=chrom)
@@ -519,25 +597,24 @@ def call_domains_fishnet(
         if verbose and (ti + 1) % 25 == 0:
             print(f"[fishnet/{chrom}] {ti + 1}/{n_traces} traces")
 
-    out = pd.DataFrame(rows, columns=[
-        "chrom", "trace_id", "domain_idx", "start", "end",
-        "start_bin", "end_bin",
-    ])
+    out = pd.DataFrame(rows, columns=list(_FISHNET_COLUMNS))
     if verbose:
         print(f"[fishnet/{chrom}] called domains in "
               f"{n_traces - skipped}/{n_traces} traces; "
               f"{len(out)} domains total")
-    if store:
-        if getattr(cd, "results", None) is None:
-            cd.results = {}
-        cd.results[result_key] = out
-        cd.results[ensemble_key] = {
-            "chrom": chrom,
-            "mask": ensemble_mask,
-            "bin_ids": bin_ids,
-            "n_traces": n_traces,
-        }
-    return out
+    ensemble = {
+        "mask": ensemble_mask,
+        "bin_ids": np.asarray(bin_ids, dtype=np.int64).reshape(-1, 2),
+        "n_traces": int(n_traces),
+    }
+    return out, ensemble
+
+
+_FISHNET_COLUMNS = ("chrom", "trace_id", "domain_idx", "start", "end", "start_bin", "end_bin")
+
+
+def _empty_fishnet() -> pd.DataFrame:
+    return pd.DataFrame(columns=list(_FISHNET_COLUMNS))
 
 
 __all__ = [

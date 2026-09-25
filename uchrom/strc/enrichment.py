@@ -8,6 +8,7 @@ share the same structural feature layer.
 
 from __future__ import annotations
 
+import warnings
 from typing import Sequence
 
 import numpy as np
@@ -28,6 +29,35 @@ STRUCTURAL_FEATURE_COLUMNS = (
 )
 
 
+# Default result keys: the 2.0 ``"<what>.<method>"`` key first, then the
+# 1.x key, so ``add_structural_features`` finds results written either way.
+STRUCTURE_RESULT_KEYS = {
+    "tads": ("tads.arcfish", "tads"),
+    "loops": ("loops.axiswise_f", "loops"),
+    "compartments": ("compartments.axes_pc", "compartments"),
+}
+
+
+def _warn_multi(name: str, replacement: str) -> None:
+    warnings.warn(
+        f"uchrom.strc.{name} is deprecated; call {replacement}(cd, chrom=None) "
+        f"instead (chrom=None runs every chromosome and merges the tables).",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
+
+def _run_multi(caller, cdata, chroms, params, device, result_key, store, verbose):
+    return caller(
+        cdata,
+        chrom=None if chroms is None else [str(c) for c in chroms],
+        params=params,
+        device=device,
+        key_added=result_key if store else None,
+        verbose=verbose,
+    )
+
+
 def call_tads_multi(
     cdata,
     *,
@@ -38,25 +68,11 @@ def call_tads_multi(
     store: bool = True,
     verbose: bool = False,
 ) -> pd.DataFrame:
-    """Call TADs on multiple chromosomes and optionally store one merged table."""
+    """Deprecated: use ``call_tads_by_pval(cd, chrom=None)``."""
     from uchrom.strc.tad import call_tads_by_pval
 
-    rows = []
-    for chrom in _chroms(cdata, chroms):
-        df = call_tads_by_pval(
-            cdata,
-            chrom=chrom,
-            params=params,
-            device=device,
-            store=False,
-            verbose=verbose,
-        )
-        if not df.empty:
-            rows.append(df)
-    out = _concat_or_empty(rows, _empty_tads())
-    if store:
-        cdata.results[result_key] = out
-    return out
+    _warn_multi("call_tads_multi", "uchrom.strc.tad.call_tads_by_pval")
+    return _run_multi(call_tads_by_pval, cdata, chroms, params, device, result_key, store, verbose)
 
 
 def call_loops_multi(
@@ -69,25 +85,11 @@ def call_loops_multi(
     store: bool = True,
     verbose: bool = False,
 ) -> pd.DataFrame:
-    """Call loops on multiple chromosomes and optionally store one merged table."""
+    """Deprecated: use ``call_loops_axiswise_f(cd, chrom=None)``."""
     from uchrom.strc.loop import call_loops_axiswise_f
 
-    rows = []
-    for chrom in _chroms(cdata, chroms):
-        df = call_loops_axiswise_f(
-            cdata,
-            chrom=chrom,
-            params=params,
-            device=device,
-            store=False,
-            verbose=verbose,
-        )
-        if not df.empty:
-            rows.append(df)
-    out = _concat_or_empty(rows, _empty_loops())
-    if store:
-        cdata.results[result_key] = out
-    return out
+    _warn_multi("call_loops_multi", "uchrom.strc.loop.call_loops_axiswise_f")
+    return _run_multi(call_loops_axiswise_f, cdata, chroms, params, device, result_key, store, verbose)
 
 
 def call_compartments_multi(
@@ -100,25 +102,11 @@ def call_compartments_multi(
     store: bool = True,
     verbose: bool = False,
 ) -> pd.DataFrame:
-    """Call compartments on multiple chromosomes and store one merged table."""
+    """Deprecated: use ``call_compartments_axes_pc(cd, chrom=None)``."""
     from uchrom.strc.comp import call_compartments_axes_pc
 
-    rows = []
-    for chrom in _chroms(cdata, chroms):
-        df = call_compartments_axes_pc(
-            cdata,
-            chrom=chrom,
-            params=params,
-            device=device,
-            store=False,
-            verbose=verbose,
-        )
-        if not df.empty:
-            rows.append(df)
-    out = _concat_or_empty(rows, _empty_compartments())
-    if store:
-        cdata.results[result_key] = out
-    return out
+    _warn_multi("call_compartments_multi", "uchrom.strc.comp.call_compartments_axes_pc")
+    return _run_multi(call_compartments_axes_pc, cdata, chroms, params, device, result_key, store, verbose)
 
 
 def call_structures_multi(
@@ -130,24 +118,28 @@ def call_structures_multi(
     store: bool = True,
     verbose: bool = False,
 ) -> dict[str, pd.DataFrame]:
-    """Run selected structural callers on multiple chromosomes."""
+    """Deprecated: call each structure caller with ``chrom=None``.
+
+    Stores under the 1.x keys ``"tads"`` / ``"loops"`` / ``"compartments"``.
+    """
+    from uchrom.strc.comp import call_compartments_axes_pc
+    from uchrom.strc.loop import call_loops_axiswise_f
+    from uchrom.strc.tad import call_tads_by_pval
+
+    _warn_multi("call_structures_multi", "each structure caller")
     selected = {str(name) for name in structures}
     unknown = selected - {"tads", "loops", "compartments"}
     if unknown:
         raise ValueError(f"unknown structural callers: {sorted(unknown)}")
+    callers = {
+        "tads": call_tads_by_pval,
+        "loops": call_loops_axiswise_f,
+        "compartments": call_compartments_axes_pc,
+    }
     out: dict[str, pd.DataFrame] = {}
-    if "tads" in selected:
-        out["tads"] = call_tads_multi(cdata, chroms=chroms, device=device, store=store, verbose=verbose)
-    if "loops" in selected:
-        out["loops"] = call_loops_multi(cdata, chroms=chroms, device=device, store=store, verbose=verbose)
-    if "compartments" in selected:
-        out["compartments"] = call_compartments_multi(
-            cdata,
-            chroms=chroms,
-            device=device,
-            store=store,
-            verbose=verbose,
-        )
+    for name in ("tads", "loops", "compartments"):
+        if name in selected:
+            out[name] = _run_multi(callers[name], cdata, chroms, None, device, name, store, verbose)
     return out
 
 
@@ -183,19 +175,24 @@ def add_structural_features(
     tads: pd.DataFrame | None = None,
     loops: pd.DataFrame | None = None,
     compartments: pd.DataFrame | None = None,
-    tads_key: str = "tads",
-    loops_key: str = "loops",
-    compartments_key: str = "compartments",
+    tads_key: str | None = None,
+    loops_key: str | None = None,
+    compartments_key: str | None = None,
     prefix: str = "strc",
     result_key: str = "bin_features",
     project: bool = True,
     store: bool = True,
     overwrite: bool = False,
 ) -> pd.DataFrame:
-    """Project TAD/loop/compartment outputs into ``cdata.tracks``."""
-    tads = _result_or_arg(cdata, tads, tads_key)
-    loops = _result_or_arg(cdata, loops, loops_key)
-    compartments = _result_or_arg(cdata, compartments, compartments_key)
+    """Project TAD/loop/compartment outputs into ``cdata.tracks``.
+
+    ``*_key=None`` looks the result up under the 2.0 key first
+    (``"tads.arcfish"``, ``"loops.axiswise_f"``,
+    ``"compartments.axes_pc"``), then under the 1.x key (``"tads"``, …).
+    """
+    tads, tads_key = _result_or_arg(cdata, tads, tads_key, "tads")
+    loops, loops_key = _result_or_arg(cdata, loops, loops_key, "loops")
+    compartments, compartments_key = _result_or_arg(cdata, compartments, compartments_key, "compartments")
     if tads is None and loops is None and compartments is None:
         raise ValueError("no structural result tables were provided or found in cdata.results")
 
@@ -367,23 +364,16 @@ def _merge_feature_table(existing, table: pd.DataFrame, *, value_columns: Sequen
     return out.merge(table[list(INTERVAL_COLUMNS) + list(value_columns)], on=list(INTERVAL_COLUMNS), how="outer")
 
 
-def _result_or_arg(cdata, value, key: str):
+def _result_or_arg(cdata, value, key: str | None, family: str):
+    """``(table, key)`` — the explicit table, else the first result found."""
+    candidates = STRUCTURE_RESULT_KEYS[family] if key is None else (key,)
     if value is not None:
-        return value
-    if key not in cdata.results:
-        return None
-    found = cdata.results.get(key)
-    return found if isinstance(found, pd.DataFrame) else None
-
-
-def _chroms(cdata, chroms: Sequence[str] | None) -> list[str]:
-    return [str(c) for c in (chroms if chroms is not None else cdata.chroms)]
-
-
-def _concat_or_empty(frames: list[pd.DataFrame], empty: pd.DataFrame) -> pd.DataFrame:
-    if not frames:
-        return empty
-    return pd.concat(frames, ignore_index=True)
+        return value, candidates[0]
+    for cand in candidates:
+        found = cdata.results.get(cand)
+        if isinstance(found, pd.DataFrame):
+            return found, cand
+    return None, candidates[0]
 
 
 def _midpoints(frame: pd.DataFrame) -> np.ndarray:
@@ -396,23 +386,9 @@ def _prefixed_name(name: str, prefix: str | None) -> str:
     return f"{str(prefix).rstrip('.')}.{name}"
 
 
-def _empty_tads() -> pd.DataFrame:
-    return pd.DataFrame(columns=["chrom", "start", "end", "level", "score", "pval", "fdr"])
-
-
-def _empty_loops() -> pd.DataFrame:
-    return pd.DataFrame(columns=[
-        "chrom1", "start1", "end1", "chrom2", "start2", "end2",
-        "score", "pval", "fdr", "cluster_size", "contact_freq", "summit_i", "summit_j",
-    ])
-
-
-def _empty_compartments() -> pd.DataFrame:
-    return pd.DataFrame(columns=["chrom", "start", "end", "bin_index", "cluster", "compartment", "pc2"])
-
-
 __all__ = [
     "STRUCTURAL_FEATURE_COLUMNS",
+    "STRUCTURE_RESULT_KEYS",
     "add_structural_features",
     "call_compartments_multi",
     "call_loops_multi",

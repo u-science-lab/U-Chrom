@@ -322,6 +322,23 @@ back to the result record that produced it (section 3).
 
 ## 3. Unified analysis API
 
+**Status:** implemented for the `strc` callers (roadmap step 2, format
+1.4).  `uchrom.core.results` holds `ResultsStore` / `ResultRecord`,
+`uchrom.core.convention` the shared helpers, `uchrom.tl` / `uchrom.pp`
+the aliases.  Differences from the text below, as built:
+
+- On disk the value stays where 1.2/1.3 put it (`results/<key>`) and the
+  provenance is added as attrs on it (`_kind`, `_function`, `_params`,
+  `_inputs`, `_uchrom_version`, `_created_utc`) instead of moving the
+  value under `results/<key>/value`, so 1.x readers still read results.
+- `call_tads_di(cd, *, contacts=...)` resolves `contacts` through
+  `cd.uns["linked_cool"]` (or a path) until `cd.contacts` exists (step 4).
+- The FISHnet ensemble is stored at `f"{key_added}.ensemble"` as
+  `{chrom: {"mask", "bin_ids", "n_traces"}}`.
+- Existing `*Params` dataclasses are not made frozen (that would break
+  callers that mutate them); the new `DICallerParams` is frozen.
+- `fea.*`, `im.*`, `recon.*`, `emb.*` and `pl.*` are not converted yet.
+
 ### Namespace
 
 **Recommendation:** keep the existing domain modules (`recon`, `im`,
@@ -675,7 +692,7 @@ cool, H1Esc-HFF sci-Hi-C).
 |---|----|--------|-----------|
 | 0 | Fix `results` silent-drop on write (raise on unsupported types + round-trip tests) | 1.2 | — (**done**) |
 | 1 | Merge `codex/linked-mudata-scool-framework` (`link_scool`, `link_mudata`, `coord_status`, `validate_links`) | 1.2 (uns only) | — (**done**) |
-| 2 | Calling convention + `ResultsStore` / `ResultRecord` + `key_added`; convert `strc.*` callers, merge per-chrom outputs; `uc.tl` / `uc.pp` aliases | 1.3 (results gain attrs) | 0 |
+| 2 | Calling convention + `ResultsStore` / `ResultRecord` + `key_added`; convert `strc.*` callers, merge per-chrom outputs; `uc.tl` / `uc.pp` aliases | 1.4 (results gain attrs; 1.3 went to `points/`) | 0 (**done**) |
 | 3 | `bins` axis, `bin_id`, bin-level `tracks` vs `spot_tracks`, `intervals`, `fea.project` → bins; 1.x upgrade path | **2.0** | 2 |
 | 4 | `cd.contacts` (`ContactRef`, cool/mcool/scool/hic backends), optional coords + `coord_status`; `ChromData.from_contacts`; Higashi tutorial without zeros | 2.0 | 1, 3 |
 | 5 | Recon library entry points returning `ChromData` (nucdyn, gem, mds); CLIs become wrappers | 2.0 | 4 |

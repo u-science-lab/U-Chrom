@@ -4,7 +4,7 @@ uchrom.core
 .. automodule:: uchrom.core
    :members:
    :undoc-members:
-   :exclude-members: ChromData
+   :exclude-members: ChromData, ResultRecord, ResultsStore
 
 ChromData
 ---------
@@ -21,3 +21,15 @@ UChromProject
    :members:
    :undoc-members:
    :show-inheritance:
+
+Results store
+-------------
+
+.. automodule:: uchrom.core.results
+   :members: ResultRecord, ResultsStore
+
+Calling convention helpers
+--------------------------
+
+.. automodule:: uchrom.core.convention
+   :members:

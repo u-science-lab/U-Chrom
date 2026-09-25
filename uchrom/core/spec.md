@@ -66,16 +66,24 @@ Each column is a named track, e.g. `ATAC`, `H3K27ac`, `H3K27me3`. Data sourced f
 | `traces` | DataFrame (n_traces) | Trace-level metadata. Index = trace_id. |
 | `layers` | dict[str, ndarray] | Alternative coordinate representations, each (n_spots, 3). e.g. `layers['raw']` for uncorrected coordinates. |
 | `points` | dict[str, DataFrame] | Non-genomic 3-D points in the `coords` frame (columns `x, y, z` + e.g. `cell_id`, `gene`): nascent RNA spots, IF puncta. Subsetting keeps the points of retained cells. Format ≥ 1.3. |
-| `results` | dict | Analysis results. Values may be DataFrames, Series, ndarrays, nested dicts of these, or JSON-compatible scalars / lists. Anything else raises `TypeError` on `write()`. |
+| `results` | `ResultsStore` | Analysis results with provenance. Dict-like: `cd.results[key]` is the value, `cd.results.record(key)` a `ResultRecord` (`kind, value, params, function, uchrom_version, inputs, created_utc`). Values may be DataFrames, Series, ndarrays, nested dicts of these, or JSON-compatible scalars / lists; anything else raises `TypeError` on assignment. |
 | `uns` | dict | Unstructured metadata (genome assembly, coordinate unit, etc.). |
 
 ### Results Convention
 
-| Key | Type | Description |
+Keys are `"<what>.<method>"`; the structure callers merge all
+chromosomes into one table per key.
+
+| Key | kind | Description |
 |-----|------|-------------|
-| `'tads'` | DataFrame | Columns: chrom, start, end. |
-| `'loops'` | DataFrame | Columns: chrom1, start1, end1, chrom2, start2, end2, score. |
-| `'compartments'` | ndarray (n_spots,) | Per-bin A/B label or PC1 value. |
+| `'tads.arcfish'` | intervals | chrom, start, end, level, score, pval, fdr |
+| `'tads.fishnet'` (+ `'.ensemble'` mapping) | intervals | chrom, trace_id, domain_idx, start, end, start_bin, end_bin |
+| `'tads.di'` | intervals | chrom, start, end, start_bin, end_bin |
+| `'loops.axiswise_f'` | intervals | chrom1, start1, end1, chrom2, start2, end2, score, pval, fdr, … |
+| `'compartments.axes_pc'` | table | one row per bin: chrom, start, end, bin_index, cluster, compartment, pc2 |
+
+1.x keys (`'tads'`, `'loops'`, `'compartments'`) are still produced by
+the deprecated call forms and still read by `add_structural_features`.
 
 ## API
 
@@ -177,7 +185,7 @@ data.h5cd
 ├── traces/             group — one dataset per column
 ├── layers/             group — one float64 (n_spots, 3) per key
 ├── points/             optional group of DataFrames (format ≥ 1.3)
-├── results/            group — typed entries (`_type` attr): DataFrame / Series / dict as sub-groups, arrays as datasets, scalars & lists as JSON (format ≥ 1.2)
+├── results/            group — typed entries (`_type` attr): DataFrame / Series / dict as sub-groups, arrays as datasets, scalars & lists as JSON (format ≥ 1.2); each top-level entry carries provenance attrs `_kind, _function, _params, _inputs, _uchrom_version, _created_utc` (format ≥ 1.4)
 └── uns/                group — scalars as attrs, arrays as datasets, dicts as sub-groups
 ```
 
