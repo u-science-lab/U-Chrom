@@ -18,7 +18,9 @@ auto-downloaded by the tutorials on first run into this directory.
 | `sim_cell1/` (h5cd + mcool)           | 2.3 MB  | yes             | —             | web browser: single-cell 3-D structure + its own contacts (`build_sim_cell1.py`) |
 | `takei2025_fov0/takei2025_fov0.h5cd`  | 220 MB  | no              | Zenodo 7693825 (streamed) | web browser: 59 IF tracks per spot, 47 cells, IF embedding (`build_takei2025_fov0.py`); `benchmarks/omics_embeddings.py` |
 | `schicar_mop/*.h5cd, *.mcool, *.cool, *.scool` | ~440 MB | no  | built from GEO GSE305439 | web browser: scHiCAR without 3-D, RNA / ATAC / Hi-C embeddings (`build_schicar_mop.py`); `benchmarks/omics_embeddings.py` |
-| Takei 2025 full Zenodo dump           | ~8 GB   | no              | **manual**    | `seqfish_multiomics_cerebellum` tutorial (real-data run)                |
+| `takei2025_cerebellum/` (tarball + per-FOV and combined `.h5cd`) | 2.85 GB download; 7.9 GB raw CSV; 6.3 GB combined h5cd | no | Zenodo 7693825 (opt-in, `--takei2025_cerebellum`) | `benchmarks/fig2/` (b, c, allele QC) via `build_takei2025_cerebellum.py` |
+| `liu2025_mop/4DNFID46OABK.csv` + `4DNFICX8IVEK.csv` | 1.68 GB + 17 MB | no | 4DN public S3 (opt-in, `--liu2025_mop`) | largest wild-type 4DN FOF-CT; `build_liu2025_mop.py` (Fig. 2 dataset scale) |
+| Takei 2025 other Zenodo archives (cerebellum rep 2, E14, NMuMG) | 5.3–11 GB each | no | **manual** | `seqfish_multiomics_cerebellum` tutorial (real-data run) |
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
 | `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial                                     |
@@ -457,6 +459,72 @@ public data alone** and are shipped with their recorded outputs.
   Links are stored relative to the h5cd.
 - **Used by**: web browser (matrix, embedding and field views for data
   without 3-D).
+
+### `takei2025_cerebellum/` — Takei 2025 cerebellum, replicate 1, all FOVs (Fig. 2 benchmarks)
+
+- **Source**: Takei et al. 2025, *Nature* (doi:10.1038/s41586-025-08838-x);
+  Zenodo [7693825](https://zenodo.org/records/7693825) (CC-BY-4.0),
+  `cerebellum_rep1.tar.gz` (2,846,258,062 B, md5 `758ebb15…4d84471d62b4`,
+  checked by `download_data.py`).  Locus map and clustering from
+  CaiGroup/dna-seqfish-plus-multi-omics (same URLs as `build_takei2025_fov0.py`).
+  The record's other files: `cerebellum_rep2.tar.gz` (5.28 GB),
+  `E14_rep1/2.tar.gz` (11.1 / 11.3 GB), `NMuMG.tar.gz` (4.16 GB),
+  `transcriptomic-data.zip` (0.46 GB), a mean-IF CSV and `readme.txt`;
+  rep 2 exists but is not used here.
+- **Fetch / build**:
+  ```bash
+  python example-data/download_data.py --takei2025_cerebellum
+  python example-data/build_takei2025_cerebellum.py      # ~3 min on an M5 Pro
+  ```
+  The tarball holds **3 FOVs** (`cerebellum_rep1_pos{0,1,2}.csv`, 2.23 /
+  2.77 / 2.87 GB; plus macOS `._*` entries, skipped).  Each FOV is loaded in
+  its own subprocess with `read_seqfish_multiomics` (default
+  `dbscan_ldp_nbr_allele` traces, DBSCAN noise dropped, 62 spot tracks) →
+  `fov/takei2025_cerebellum_rep1_pos<N>.h5cd`, then concatenated into
+  `takei2025_cerebellum_rep1.h5cd`; stats in `build_summary.json`.
+
+  | | spots | traces | cells | h5cd | loader peak RSS |
+  |---|---|---|---|---|---|
+  | FOV 0 | 3,108,941 | 16,609 | 545 | 1.79 GB | 10.6 GB |
+  | FOV 1 | 3,821,962 | 20,997 | 592 | 2.19 GB | 12.2 GB |
+  | FOV 2 | 3,981,735 | 21,506 | 662 | 2.29 GB | 13.1 GB |
+  | **combined** | **10,912,638** | **59,112** | **1,799** | **6.29 GB** | 13.2 GB (concat) |
+
+  The raw CSVs stay in `raw/` (7.9 GB; `benchmarks/fig2/allele_qc.py` reads
+  their three allele columns); `--drop-raw` deletes them.
+- **Caveat — allele calls**: the default `dbscan_ldp_nbr_allele` traces
+  often merge both homologs / add off-trace spots; see
+  `benchmarks/fig2/allele_qc.py` and `paper/fig2/results/allele_qc.json`.
+- **Used by**: `benchmarks/fig2/b_storage.py`, `c_access.py`, `allele_qc.py`.
+
+### `liu2025_mop/` — Liu et al. 2025 mouse MOp DNA-MERFISH, 4DN FOF-CT (1.7 GB)
+
+- **Source**: Liu S, Wang CY, Zheng P, … Zhuang X. "Cell type-specific 3D-genome
+  organization and transcription regulation in the brain." *Sci Adv* (2025),
+  PMID 40009678.  4DN experiment set
+  [4DNESMTNNB3N](https://data.4dnucleome.org/experiment-set-replicates/4DNESMTNNB3N/)
+  (DNA-MERFISH of 2,000 loci + RNA-MERFISH of 240 genes, mouse primary motor
+  cortex, wild type), experiment 4DNEXBUVZYLI.
+  - core table [4DNFID46OABK](https://data.4dnucleome.org/4DNFID46OABK/)
+    (1,684,734,602 B, md5 `e2234c8d…75a4abb`):
+    `https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/7c153998-3e92-4dbe-8e35-7a09570e6ed3/4DNFID46OABK.csv`
+  - cell table [4DNFICX8IVEK](https://data.4dnucleome.org/4DNFICX8IVEK/)
+    (16,564,294 B, md5 `f66afc5a…e5e5`):
+    `https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/ad72715d-57cc-4d68-8ddb-536b94ed9bb0/4DNFICX8IVEK.csv`
+- **How it was chosen**: a portal search for released files of type
+  `FOF-CT - DNA-spot/trace core` (321 files, all open on the public S3 bucket)
+  sorted by size.  The top 10 (1.27–2.14 GB) are all Zhuang-lab mouse MOp / visual-cortex tables; the
+  larger ones are *Mecp2* KO samples, so we took the **largest wild-type core
+  table**.  It is 77× the Takei 2021 table (`4DNFIHF3JCBY`, 22 MB).  Next
+  largest from other studies: Su et al. 2020 IMR90 DNA-MERFISH
+  (`4DNFIGJT3AN3` 572 MB, `4DNFIZ4TAGXZ` 248 MB).
+- **Content** (`python example-data/build_liu2025_mop.py` →
+  `liu2025_mop.h5cd` 1.57 GB + `build_summary.json`): **9,582,069 spots,
+  188,891 traces, 11,045 cells**, 20 chromosomes, median 50 spots per trace,
+  µm, GRCm38.  The cell table has 14,733 rows (3,695 cells without traces;
+  7 traced cells without a row), with 240 RNA counts and cell-type labels.
+  `from_fofct` reads the 1.68 GB core table in 14 s at 11.6 GB peak RSS.
+- **Used by**: `build_liu2025_mop.py` (dataset-scale entry for Fig. 2).
 
 ## Generated outputs
 
