@@ -1,0 +1,1300 @@
+{
+ "panel": "b",
+ "machine": {
+  "os": "macOS 26.4.1 (25.4.0)",
+  "platform": "macOS-26.4.1-arm64-arm-64bit",
+  "python": "3.11.15",
+  "machine": "arm64",
+  "cpu": "Apple M5 Pro",
+  "n_cpu": 18,
+  "ram_gb": 64.0,
+  "disk": "File System Personality=APFS; Protocol=Apple Fabric; Solid State=Yes",
+  "work_dir_free_gb": 687.5,
+  "versions": {
+   "numpy": "2.4.3",
+   "pandas": "2.3.3",
+   "h5py": "3.16.0",
+   "pyarrow": "23.0.1",
+   "anndata": "0.12.11",
+   "cooler": "0.10.4",
+   "psutil": "7.2.2",
+   "scipy": "1.17.1",
+   "uchrom_h5cd_format": "1.3",
+   "uchrom_git": "06cdd1b"
+  }
+ },
+ "schema": "full",
+ "dataset": {
+  "name": "Takei 2025 cerebellum rep 1, all FOVs (Zenodo 7693825)",
+  "n_spots": 10912638,
+  "n_cells": 1799,
+  "n_traces": 59112,
+  "n_tracks": 62,
+  "subsetting": "whole cells in a fixed random order (seed 0); above the real size, real cells copied under new cell/trace ids (flag 'replicated')"
+ },
+ "protocol": {
+  "repeats": 3,
+  "stat": "median with min/max over repeats",
+  "fresh_process_per_trial": true,
+  "page_cache": "warm (not flushed; read follows write)",
+  "peak_rss": "getrusage ru_maxrss of the read process (absolute; baseline = RSS after imports)",
+  "read_target": {
+   "FOF-CT / CSV": "ChromData (ChromData.from_fofct)",
+   "Parquet": "pandas DataFrame",
+   "AnnData (spots as obs)": "AnnData (read_h5ad, in memory)",
+   "h5cd": "ChromData (ChromData.read)"
+  },
+  "compression": {
+   "FOF-CT / CSV": "none",
+   "Parquet": "snappy (pyarrow default)",
+   "AnnData (spots as obs)": "none (write_h5ad default)",
+   "h5cd 1.x": "none (cd.write)"
+  }
+ },
+ "series": {
+  "FOF-CT / CSV": {
+   "points": [
+    {
+     "n_target": 10000,
+     "n_spots": 11449,
+     "n_cells": 2,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 7.631539344787598,
+      "min": 7.631539344787598,
+      "max": 7.631539344787598,
+      "n": 3
+     },
+     "write_s": {
+      "median": 0.23264133295742795,
+      "min": 0.2319802079582587,
+      "max": 0.23304883402306587,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.06088737497339025,
+      "min": 0.05770766601199284,
+      "max": 0.06454591703368351,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 305.90625,
+      "min": 303.953125,
+      "max": 310.8125,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 201.75,
+      "min": 199.859375,
+      "max": 202.828125,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 132.09375,
+      "min": 130.4375,
+      "max": 136.8125,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 0.23304883402306587,
+       "bytes": 8002249,
+       "write_peak_rss_mb": 130.4375,
+       "label": "FOF-CT / CSV",
+       "read_s": 0.06088737497339025,
+       "read_peak_rss_mb": 305.90625,
+       "baseline_rss_mb": 199.859375,
+       "n_rows": 11449
+      },
+      {
+       "write_s": 0.2319802079582587,
+       "bytes": 8002249,
+       "write_peak_rss_mb": 132.09375,
+       "label": "FOF-CT / CSV",
+       "read_s": 0.06454591703368351,
+       "read_peak_rss_mb": 303.953125,
+       "baseline_rss_mb": 202.828125,
+       "n_rows": 11449
+      },
+      {
+       "write_s": 0.23264133295742795,
+       "bytes": 8002249,
+       "write_peak_rss_mb": 136.8125,
+       "label": "FOF-CT / CSV",
+       "read_s": 0.05770766601199284,
+       "read_peak_rss_mb": 310.8125,
+       "baseline_rss_mb": 201.75,
+       "n_rows": 11449
+      }
+     ]
+    },
+    {
+     "n_target": 100000,
+     "n_spots": 101463,
+     "n_cells": 19,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 67.68516445159912,
+      "min": 67.68516445159912,
+      "max": 67.68516445159912,
+      "n": 3
+     },
+     "write_s": {
+      "median": 1.9972076250123791,
+      "min": 1.9846418329980224,
+      "max": 2.0279797919793054,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.48203533299965784,
+      "min": 0.45002516702516004,
+      "max": 0.5126337080146186,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 854.5625,
+      "min": 851.5625,
+      "max": 864.328125,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 201.921875,
+      "min": 200.734375,
+      "max": 201.984375,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 271.75,
+      "min": 255.125,
+      "max": 277.3125,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 1.9846418329980224,
+       "bytes": 70973039,
+       "write_peak_rss_mb": 271.75,
+       "label": "FOF-CT / CSV",
+       "read_s": 0.45002516702516004,
+       "read_peak_rss_mb": 854.5625,
+       "baseline_rss_mb": 200.734375,
+       "n_rows": 101463
+      },
+      {
+       "write_s": 2.0279797919793054,
+       "bytes": 70973039,
+       "write_peak_rss_mb": 277.3125,
+       "label": "FOF-CT / CSV",
+       "read_s": 0.5126337080146186,
+       "read_peak_rss_mb": 864.328125,
+       "baseline_rss_mb": 201.921875,
+       "n_rows": 101463
+      },
+      {
+       "write_s": 1.9972076250123791,
+       "bytes": 70973039,
+       "write_peak_rss_mb": 255.125,
+       "label": "FOF-CT / CSV",
+       "read_s": 0.48203533299965784,
+       "read_peak_rss_mb": 851.5625,
+       "baseline_rss_mb": 201.984375,
+       "n_rows": 101463
+      }
+     ]
+    },
+    {
+     "n_target": 1000000,
+     "n_spots": 1008086,
+     "n_cells": 166,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 672.400860786438,
+      "min": 672.400860786438,
+      "max": 672.400860786438,
+      "n": 3
+     },
+     "write_s": {
+      "median": 19.956240875006188,
+      "min": 19.731956959003583,
+      "max": 20.768054832995404,
+      "n": 3
+     },
+     "read_s": {
+      "median": 4.840015665977262,
+      "min": 4.7662745409761555,
+      "max": 4.898711875022855,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 6415.265625,
+      "min": 6406.796875,
+      "max": 6419.625,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 200.96875,
+      "min": 200.921875,
+      "max": 201.359375,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 1768.3125,
+      "min": 1768.1875,
+      "max": 1780.40625,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 20.768054832995404,
+       "bytes": 705063405,
+       "write_peak_rss_mb": 1768.1875,
+       "label": "FOF-CT / CSV",
+       "read_s": 4.7662745409761555,
+       "read_peak_rss_mb": 6419.625,
+       "baseline_rss_mb": 201.359375,
+       "n_rows": 1008086
+      },
+      {
+       "write_s": 19.956240875006188,
+       "bytes": 705063405,
+       "write_peak_rss_mb": 1768.3125,
+       "label": "FOF-CT / CSV",
+       "read_s": 4.840015665977262,
+       "read_peak_rss_mb": 6415.265625,
+       "baseline_rss_mb": 200.921875,
+       "n_rows": 1008086
+      },
+      {
+       "write_s": 19.731956959003583,
+       "bytes": 705063405,
+       "write_peak_rss_mb": 1780.40625,
+       "label": "FOF-CT / CSV",
+       "read_s": 4.898711875022855,
+       "read_peak_rss_mb": 6406.796875,
+       "baseline_rss_mb": 200.96875,
+       "n_rows": 1008086
+      }
+     ]
+    },
+    {
+     "n_target": 10000000,
+     "n_spots": 10005527,
+     "n_cells": 1656,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 6679.471641540527,
+      "min": 6679.471641540527,
+      "max": 6679.471641540527,
+      "n": 3
+     },
+     "write_s": {
+      "median": 201.37538516701898,
+      "min": 195.3515472910367,
+      "max": 203.82359916699352,
+      "n": 3
+     },
+     "read_s": {
+      "median": 68.83570245804731,
+      "min": 65.85933424998075,
+      "max": 69.45077295799274,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 29305.28125,
+      "min": 29106.390625,
+      "max": 29355.609375,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 201.1875,
+      "min": 200.328125,
+      "max": 201.703125,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 14612.890625,
+      "min": 14599.609375,
+      "max": 14616.28125,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 203.82359916699352,
+       "bytes": 7003933656,
+       "write_peak_rss_mb": 14599.609375,
+       "label": "FOF-CT / CSV",
+       "read_s": 69.45077295799274,
+       "read_peak_rss_mb": 29106.390625,
+       "baseline_rss_mb": 200.328125,
+       "n_rows": 10005527
+      },
+      {
+       "write_s": 195.3515472910367,
+       "bytes": 7003933656,
+       "write_peak_rss_mb": 14612.890625,
+       "label": "FOF-CT / CSV",
+       "read_s": 65.85933424998075,
+       "read_peak_rss_mb": 29355.609375,
+       "baseline_rss_mb": 201.1875,
+       "n_rows": 10005527
+      },
+      {
+       "write_s": 201.37538516701898,
+       "bytes": 7003933656,
+       "write_peak_rss_mb": 14616.28125,
+       "label": "FOF-CT / CSV",
+       "read_s": 68.83570245804731,
+       "read_peak_rss_mb": 29305.28125,
+       "baseline_rss_mb": 201.703125,
+       "n_rows": 10005527
+      }
+     ]
+    }
+   ],
+   "infeasible": [
+    {
+     "n_target": 100000000,
+     "est_in_memory_mb": 54016,
+     "reason": "~53 GB in memory for the table alone (x4 for the CSV reader) exceeds 60% of 64.0 GB RAM"
+    }
+   ]
+  },
+  "Parquet": {
+   "points": [
+    {
+     "n_target": 10000,
+     "n_spots": 11449,
+     "n_cells": 2,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 2.839191436767578,
+      "min": 2.839191436767578,
+      "max": 2.839191436767578,
+      "n": 3
+     },
+     "write_s": {
+      "median": 0.04150283295894042,
+      "min": 0.03797104203840718,
+      "max": 0.043067958031315356,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.05970829201396555,
+      "min": 0.05404324998380616,
+      "max": 0.06554308399790898,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 253.328125,
+      "min": 253.0625,
+      "max": 255.125,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 201.375,
+      "min": 201.0625,
+      "max": 202.0625,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 142.03125,
+      "min": 141.28125,
+      "max": 142.8125,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 0.043067958031315356,
+       "bytes": 2977108,
+       "write_peak_rss_mb": 142.8125,
+       "label": "Parquet",
+       "read_s": 0.06554308399790898,
+       "read_peak_rss_mb": 255.125,
+       "baseline_rss_mb": 201.375,
+       "n_rows": 11449
+      },
+      {
+       "write_s": 0.04150283295894042,
+       "bytes": 2977108,
+       "write_peak_rss_mb": 142.03125,
+       "label": "Parquet",
+       "read_s": 0.05970829201396555,
+       "read_peak_rss_mb": 253.328125,
+       "baseline_rss_mb": 202.0625,
+       "n_rows": 11449
+      },
+      {
+       "write_s": 0.03797104203840718,
+       "bytes": 2977108,
+       "write_peak_rss_mb": 141.28125,
+       "label": "Parquet",
+       "read_s": 0.05404324998380616,
+       "read_peak_rss_mb": 253.0625,
+       "baseline_rss_mb": 201.0625,
+       "n_rows": 11449
+      }
+     ]
+    },
+    {
+     "n_target": 100000,
+     "n_spots": 101463,
+     "n_cells": 19,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 22.616697311401367,
+      "min": 22.616697311401367,
+      "max": 22.616697311401367,
+      "n": 3
+     },
+     "write_s": {
+      "median": 0.16845966601977125,
+      "min": 0.1678499580011703,
+      "max": 0.18087941699195653,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.06488075002562255,
+      "min": 0.06398733297828585,
+      "max": 0.06796212500194088,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 391.21875,
+      "min": 389.171875,
+      "max": 391.609375,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 201.484375,
+      "min": 201.046875,
+      "max": 202.21875,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 302.03125,
+      "min": 301.921875,
+      "max": 308.4375,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 0.16845966601977125,
+       "bytes": 23715326,
+       "write_peak_rss_mb": 301.921875,
+       "label": "Parquet",
+       "read_s": 0.06488075002562255,
+       "read_peak_rss_mb": 391.21875,
+       "baseline_rss_mb": 202.21875,
+       "n_rows": 101463
+      },
+      {
+       "write_s": 0.1678499580011703,
+       "bytes": 23715326,
+       "write_peak_rss_mb": 302.03125,
+       "label": "Parquet",
+       "read_s": 0.06398733297828585,
+       "read_peak_rss_mb": 391.609375,
+       "baseline_rss_mb": 201.046875,
+       "n_rows": 101463
+      },
+      {
+       "write_s": 0.18087941699195653,
+       "bytes": 23715326,
+       "write_peak_rss_mb": 308.4375,
+       "label": "Parquet",
+       "read_s": 0.06796212500194088,
+       "read_peak_rss_mb": 389.171875,
+       "baseline_rss_mb": 201.484375,
+       "n_rows": 101463
+      }
+     ]
+    },
+    {
+     "n_target": 1000000,
+     "n_spots": 1008086,
+     "n_cells": 166,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 212.4638261795044,
+      "min": 212.4638261795044,
+      "max": 212.4638261795044,
+      "n": 3
+     },
+     "write_s": {
+      "median": 1.1956110420287587,
+      "min": 1.1865353750181384,
+      "max": 1.2125121249700896,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.13947154197376221,
+      "min": 0.13837887498084456,
+      "max": 0.15013658301904798,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 1636.03125,
+      "min": 1632.875,
+      "max": 1642.84375,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 201.125,
+      "min": 200.828125,
+      "max": 201.15625,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 1929.25,
+      "min": 1905.296875,
+      "max": 1933.078125,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 1.2125121249700896,
+       "bytes": 222784469,
+       "write_peak_rss_mb": 1933.078125,
+       "label": "Parquet",
+       "read_s": 0.15013658301904798,
+       "read_peak_rss_mb": 1642.84375,
+       "baseline_rss_mb": 201.125,
+       "n_rows": 1008086
+      },
+      {
+       "write_s": 1.1865353750181384,
+       "bytes": 222784469,
+       "write_peak_rss_mb": 1905.296875,
+       "label": "Parquet",
+       "read_s": 0.13947154197376221,
+       "read_peak_rss_mb": 1636.03125,
+       "baseline_rss_mb": 200.828125,
+       "n_rows": 1008086
+      },
+      {
+       "write_s": 1.1956110420287587,
+       "bytes": 222784469,
+       "write_peak_rss_mb": 1929.25,
+       "label": "Parquet",
+       "read_s": 0.13837887498084456,
+       "read_peak_rss_mb": 1632.875,
+       "baseline_rss_mb": 201.15625,
+       "n_rows": 1008086
+      }
+     ]
+    },
+    {
+     "n_target": 10000000,
+     "n_spots": 10005527,
+     "n_cells": 1656,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 2114.7752046585083,
+      "min": 2114.7752046585083,
+      "max": 2114.7752046585083,
+      "n": 3
+     },
+     "write_s": {
+      "median": 11.509918666968588,
+      "min": 11.237076499965042,
+      "max": 11.736113291000947,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.7259614579961635,
+      "min": 0.6924399999552406,
+      "max": 0.7856684579746798,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 13084.71875,
+      "min": 13081.671875,
+      "max": 13129.765625,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 201.921875,
+      "min": 201.46875,
+      "max": 201.9375,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 16990.65625,
+      "min": 16990.609375,
+      "max": 16990.71875,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 11.237076499965042,
+       "bytes": 2217502525,
+       "write_peak_rss_mb": 16990.65625,
+       "label": "Parquet",
+       "read_s": 0.6924399999552406,
+       "read_peak_rss_mb": 13081.671875,
+       "baseline_rss_mb": 201.921875,
+       "n_rows": 10005527
+      },
+      {
+       "write_s": 11.509918666968588,
+       "bytes": 2217502525,
+       "write_peak_rss_mb": 16990.609375,
+       "label": "Parquet",
+       "read_s": 0.7259614579961635,
+       "read_peak_rss_mb": 13084.71875,
+       "baseline_rss_mb": 201.9375,
+       "n_rows": 10005527
+      },
+      {
+       "write_s": 11.736113291000947,
+       "bytes": 2217502525,
+       "write_peak_rss_mb": 16990.71875,
+       "label": "Parquet",
+       "read_s": 0.7856684579746798,
+       "read_peak_rss_mb": 13129.765625,
+       "baseline_rss_mb": 201.46875,
+       "n_rows": 10005527
+      }
+     ]
+    }
+   ],
+   "infeasible": [
+    {
+     "n_target": 100000000,
+     "est_in_memory_mb": 54016,
+     "reason": "~53 GB in memory for the table alone (x4 for the CSV reader) exceeds 60% of 64.0 GB RAM"
+    }
+   ]
+  },
+  "AnnData (spots as obs)": {
+   "points": [
+    {
+     "n_target": 10000,
+     "n_spots": 11449,
+     "n_cells": 2,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 9.720948219299316,
+      "min": 9.720948219299316,
+      "max": 9.720948219299316,
+      "n": 3
+     },
+     "write_s": {
+      "median": 0.699581082968507,
+      "min": 0.6851288750185631,
+      "max": 0.7150657919701189,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.026211207965388894,
+      "min": 0.026009791006799787,
+      "max": 0.02787574997637421,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 246.609375,
+      "min": 246.296875,
+      "max": 247.609375,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 201.53125,
+      "min": 201.34375,
+      "max": 201.609375,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 241.59375,
+      "min": 238.546875,
+      "max": 244.9375,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 0.6851288750185631,
+       "bytes": 10193153,
+       "write_peak_rss_mb": 241.59375,
+       "label": "AnnData (spots as obs)",
+       "read_s": 0.026009791006799787,
+       "read_peak_rss_mb": 246.296875,
+       "baseline_rss_mb": 201.34375,
+       "n_rows": 11449
+      },
+      {
+       "write_s": 0.699581082968507,
+       "bytes": 10193153,
+       "write_peak_rss_mb": 244.9375,
+       "label": "AnnData (spots as obs)",
+       "read_s": 0.02787574997637421,
+       "read_peak_rss_mb": 247.609375,
+       "baseline_rss_mb": 201.609375,
+       "n_rows": 11449
+      },
+      {
+       "write_s": 0.7150657919701189,
+       "bytes": 10193153,
+       "write_peak_rss_mb": 238.546875,
+       "label": "AnnData (spots as obs)",
+       "read_s": 0.026211207965388894,
+       "read_peak_rss_mb": 246.609375,
+       "baseline_rss_mb": 201.53125,
+       "n_rows": 11449
+      }
+     ]
+    },
+    {
+     "n_target": 100000,
+     "n_spots": 101463,
+     "n_cells": 19,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 62.36085224151611,
+      "min": 62.36085224151611,
+      "max": 62.36085224151611,
+      "n": 3
+     },
+     "write_s": {
+      "median": 0.8510414159973152,
+      "min": 0.8327667920384556,
+      "max": 0.8608590409858152,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.06619791698176414,
+      "min": 0.0637168749817647,
+      "max": 0.06712858297396451,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 446.5,
+      "min": 440.875,
+      "max": 448.765625,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 201.703125,
+      "min": 201.46875,
+      "max": 201.8125,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 415.96875,
+      "min": 409.59375,
+      "max": 417.8125,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 0.8608590409858152,
+       "bytes": 65390093,
+       "write_peak_rss_mb": 415.96875,
+       "label": "AnnData (spots as obs)",
+       "read_s": 0.06712858297396451,
+       "read_peak_rss_mb": 446.5,
+       "baseline_rss_mb": 201.8125,
+       "n_rows": 101463
+      },
+      {
+       "write_s": 0.8327667920384556,
+       "bytes": 65390093,
+       "write_peak_rss_mb": 409.59375,
+       "label": "AnnData (spots as obs)",
+       "read_s": 0.0637168749817647,
+       "read_peak_rss_mb": 440.875,
+       "baseline_rss_mb": 201.46875,
+       "n_rows": 101463
+      },
+      {
+       "write_s": 0.8510414159973152,
+       "bytes": 65390093,
+       "write_peak_rss_mb": 417.8125,
+       "label": "AnnData (spots as obs)",
+       "read_s": 0.06619791698176414,
+       "read_peak_rss_mb": 448.765625,
+       "baseline_rss_mb": 201.703125,
+       "n_rows": 101463
+      }
+     ]
+    },
+    {
+     "n_target": 1000000,
+     "n_spots": 1008086,
+     "n_cells": 166,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 571.6678714752197,
+      "min": 571.6678714752197,
+      "max": 571.6678714752197,
+      "n": 3
+     },
+     "write_s": {
+      "median": 1.4174422079813667,
+      "min": 1.3930184170021676,
+      "max": 1.5148685419699177,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.4199243339826353,
+      "min": 0.4186948749702424,
+      "max": 0.4266478330246173,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 2369.90625,
+      "min": 2368.4375,
+      "max": 2379.53125,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 202.0625,
+      "min": 201.15625,
+      "max": 202.09375,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 2013.234375,
+      "min": 2003.15625,
+      "max": 2037.1875,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 1.3930184170021676,
+       "bytes": 599437210,
+       "write_peak_rss_mb": 2013.234375,
+       "label": "AnnData (spots as obs)",
+       "read_s": 0.4186948749702424,
+       "read_peak_rss_mb": 2369.90625,
+       "baseline_rss_mb": 202.0625,
+       "n_rows": 1008086
+      },
+      {
+       "write_s": 1.4174422079813667,
+       "bytes": 599437210,
+       "write_peak_rss_mb": 2037.1875,
+       "label": "AnnData (spots as obs)",
+       "read_s": 0.4199243339826353,
+       "read_peak_rss_mb": 2379.53125,
+       "baseline_rss_mb": 201.15625,
+       "n_rows": 1008086
+      },
+      {
+       "write_s": 1.5148685419699177,
+       "bytes": 599437210,
+       "write_peak_rss_mb": 2003.15625,
+       "label": "AnnData (spots as obs)",
+       "read_s": 0.4266478330246173,
+       "read_peak_rss_mb": 2368.4375,
+       "baseline_rss_mb": 202.09375,
+       "n_rows": 1008086
+      }
+     ]
+    },
+    {
+     "n_target": 10000000,
+     "n_spots": 10005527,
+     "n_cells": 1656,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 5608.568448066711,
+      "min": 5608.568448066711,
+      "max": 5608.568448066711,
+      "n": 3
+     },
+     "write_s": {
+      "median": 8.969956209009979,
+      "min": 8.788682500016876,
+      "max": 8.995285457989667,
+      "n": 3
+     },
+     "read_s": {
+      "median": 5.384921499993652,
+      "min": 5.259285875014029,
+      "max": 5.517808834032621,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 20315.390625,
+      "min": 20314.078125,
+      "max": 20320.09375,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 200.84375,
+      "min": 199.890625,
+      "max": 200.890625,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 16254.921875,
+      "min": 16250.546875,
+      "max": 16256.0,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 8.969956209009979,
+       "bytes": 5881010269,
+       "write_peak_rss_mb": 16256.0,
+       "label": "AnnData (spots as obs)",
+       "read_s": 5.384921499993652,
+       "read_peak_rss_mb": 20315.390625,
+       "baseline_rss_mb": 200.890625,
+       "n_rows": 10005527
+      },
+      {
+       "write_s": 8.788682500016876,
+       "bytes": 5881010269,
+       "write_peak_rss_mb": 16250.546875,
+       "label": "AnnData (spots as obs)",
+       "read_s": 5.517808834032621,
+       "read_peak_rss_mb": 20320.09375,
+       "baseline_rss_mb": 199.890625,
+       "n_rows": 10005527
+      },
+      {
+       "write_s": 8.995285457989667,
+       "bytes": 5881010269,
+       "write_peak_rss_mb": 16254.921875,
+       "label": "AnnData (spots as obs)",
+       "read_s": 5.259285875014029,
+       "read_peak_rss_mb": 20314.078125,
+       "baseline_rss_mb": 200.84375,
+       "n_rows": 10005527
+      }
+     ]
+    }
+   ],
+   "infeasible": [
+    {
+     "n_target": 100000000,
+     "est_in_memory_mb": 54016,
+     "reason": "~53 GB in memory for the table alone (x4 for the CSV reader) exceeds 60% of 64.0 GB RAM"
+    }
+   ]
+  },
+  "h5cd 1.x": {
+   "points": [
+    {
+     "n_target": 10000,
+     "n_spots": 11449,
+     "n_cells": 2,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 6.314367294311523,
+      "min": 6.314367294311523,
+      "max": 6.314367294311523,
+      "n": 3
+     },
+     "write_s": {
+      "median": 0.07624812499852851,
+      "min": 0.07496695802547038,
+      "max": 0.08227266604080796,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.013571583025623113,
+      "min": 0.01332533301319927,
+      "max": 0.013838959042914212,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 229.296875,
+      "min": 228.546875,
+      "max": 230.125,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 201.3125,
+      "min": 201.015625,
+      "max": 201.71875,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 128.9375,
+      "min": 128.65625,
+      "max": 129.140625,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 0.08227266604080796,
+       "bytes": 6621094,
+       "write_peak_rss_mb": 128.65625,
+       "label": "h5cd 1.x",
+       "read_s": 0.01332533301319927,
+       "read_peak_rss_mb": 228.546875,
+       "baseline_rss_mb": 201.015625,
+       "n_rows": 11449
+      },
+      {
+       "write_s": 0.07624812499852851,
+       "bytes": 6621094,
+       "write_peak_rss_mb": 129.140625,
+       "label": "h5cd 1.x",
+       "read_s": 0.013571583025623113,
+       "read_peak_rss_mb": 230.125,
+       "baseline_rss_mb": 201.3125,
+       "n_rows": 11449
+      },
+      {
+       "write_s": 0.07496695802547038,
+       "bytes": 6621094,
+       "write_peak_rss_mb": 128.9375,
+       "label": "h5cd 1.x",
+       "read_s": 0.013838959042914212,
+       "read_peak_rss_mb": 229.296875,
+       "baseline_rss_mb": 201.71875,
+       "n_rows": 11449
+      }
+     ]
+    },
+    {
+     "n_target": 100000,
+     "n_spots": 101463,
+     "n_cells": 19,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 55.7976016998291,
+      "min": 55.7976016998291,
+      "max": 55.7976016998291,
+      "n": 3
+     },
+     "write_s": {
+      "median": 0.11205695802345872,
+      "min": 0.10636408301070333,
+      "max": 0.1217278330004774,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.08277979196282104,
+      "min": 0.08186112501425669,
+      "max": 0.08493100001942366,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 455.296875,
+      "min": 450.0,
+      "max": 460.703125,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 202.1875,
+      "min": 200.578125,
+      "max": 202.46875,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 217.4375,
+      "min": 217.15625,
+      "max": 217.890625,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 0.1217278330004774,
+       "bytes": 58508026,
+       "write_peak_rss_mb": 217.890625,
+       "label": "h5cd 1.x",
+       "read_s": 0.08186112501425669,
+       "read_peak_rss_mb": 450.0,
+       "baseline_rss_mb": 202.1875,
+       "n_rows": 101463
+      },
+      {
+       "write_s": 0.10636408301070333,
+       "bytes": 58508026,
+       "write_peak_rss_mb": 217.4375,
+       "label": "h5cd 1.x",
+       "read_s": 0.08277979196282104,
+       "read_peak_rss_mb": 460.703125,
+       "baseline_rss_mb": 200.578125,
+       "n_rows": 101463
+      },
+      {
+       "write_s": 0.11205695802345872,
+       "bytes": 58508026,
+       "write_peak_rss_mb": 217.15625,
+       "label": "h5cd 1.x",
+       "read_s": 0.08493100001942366,
+       "read_peak_rss_mb": 455.296875,
+       "baseline_rss_mb": 202.46875,
+       "n_rows": 101463
+      }
+     ]
+    },
+    {
+     "n_target": 1000000,
+     "n_spots": 1008086,
+     "n_cells": 166,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 553.9919128417969,
+      "min": 553.9919128417969,
+      "max": 553.9919128417969,
+      "n": 3
+     },
+     "write_s": {
+      "median": 0.44007737503852695,
+      "min": 0.4229037080076523,
+      "max": 0.4449416670249775,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.7447402919642627,
+      "min": 0.7378885830403306,
+      "max": 0.7473411249811761,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 2640.90625,
+      "min": 2634.375,
+      "max": 2678.5625,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 201.21875,
+      "min": 200.109375,
+      "max": 202.125,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 1126.609375,
+      "min": 1118.078125,
+      "max": 1138.40625,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 0.44007737503852695,
+       "bytes": 580902624,
+       "write_peak_rss_mb": 1118.078125,
+       "label": "h5cd 1.x",
+       "read_s": 0.7378885830403306,
+       "read_peak_rss_mb": 2640.90625,
+       "baseline_rss_mb": 200.109375,
+       "n_rows": 1008086
+      },
+      {
+       "write_s": 0.4229037080076523,
+       "bytes": 580902624,
+       "write_peak_rss_mb": 1126.609375,
+       "label": "h5cd 1.x",
+       "read_s": 0.7473411249811761,
+       "read_peak_rss_mb": 2634.375,
+       "baseline_rss_mb": 202.125,
+       "n_rows": 1008086
+      },
+      {
+       "write_s": 0.4449416670249775,
+       "bytes": 580902624,
+       "write_peak_rss_mb": 1138.40625,
+       "label": "h5cd 1.x",
+       "read_s": 0.7447402919642627,
+       "read_peak_rss_mb": 2678.5625,
+       "baseline_rss_mb": 201.21875,
+       "n_rows": 1008086
+      }
+     ]
+    },
+    {
+     "n_target": 10000000,
+     "n_spots": 10005527,
+     "n_cells": 1656,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 5498.09091091156,
+      "min": 5498.09091091156,
+      "max": 5498.09091091156,
+      "n": 3
+     },
+     "write_s": {
+      "median": 3.476530541025568,
+      "min": 3.439434166997671,
+      "max": 3.5466429159860127,
+      "n": 3
+     },
+     "read_s": {
+      "median": 7.168309541011695,
+      "min": 7.1266370409866795,
+      "max": 7.271171208994929,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 23498.890625,
+      "min": 23495.25,
+      "max": 23503.671875,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 200.625,
+      "min": 200.296875,
+      "max": 200.703125,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 8594.046875,
+      "min": 8593.90625,
+      "max": 8595.21875,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 3.5466429159860127,
+       "bytes": 5765166175,
+       "write_peak_rss_mb": 8594.046875,
+       "label": "h5cd 1.x",
+       "read_s": 7.1266370409866795,
+       "read_peak_rss_mb": 23498.890625,
+       "baseline_rss_mb": 200.296875,
+       "n_rows": 10005527
+      },
+      {
+       "write_s": 3.476530541025568,
+       "bytes": 5765166175,
+       "write_peak_rss_mb": 8595.21875,
+       "label": "h5cd 1.x",
+       "read_s": 7.168309541011695,
+       "read_peak_rss_mb": 23503.671875,
+       "baseline_rss_mb": 200.703125,
+       "n_rows": 10005527
+      },
+      {
+       "write_s": 3.439434166997671,
+       "bytes": 5765166175,
+       "write_peak_rss_mb": 8593.90625,
+       "label": "h5cd 1.x",
+       "read_s": 7.271171208994929,
+       "read_peak_rss_mb": 23495.25,
+       "baseline_rss_mb": 200.625,
+       "n_rows": 10005527
+      }
+     ]
+    }
+   ],
+   "infeasible": [
+    {
+     "n_target": 100000000,
+     "est_in_memory_mb": 54016,
+     "reason": "~53 GB in memory for the table alone (x4 for the CSV reader) exceeds 60% of 64.0 GB RAM"
+    }
+   ]
+  }
+ }
+}

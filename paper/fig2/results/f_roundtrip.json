@@ -1,0 +1,193 @@
+{
+ "panel": "f",
+ "machine": {
+  "os": "macOS 26.4.1 (25.4.0)",
+  "platform": "macOS-26.4.1-arm64-arm-64bit",
+  "python": "3.11.15",
+  "machine": "arm64",
+  "cpu": "Apple M5 Pro",
+  "n_cpu": 18,
+  "ram_gb": 64.0,
+  "disk": "File System Personality=APFS; Protocol=Apple Fabric; Solid State=Yes",
+  "work_dir_free_gb": 696.6,
+  "versions": {
+   "numpy": "2.4.3",
+   "pandas": "2.3.3",
+   "h5py": "3.16.0",
+   "pyarrow": "23.0.1",
+   "anndata": "0.12.11",
+   "cooler": "0.10.4",
+   "psutil": "7.2.2",
+   "scipy": "1.17.1",
+   "uchrom_h5cd_format": "1.3",
+   "uchrom_git": "06cdd1b"
+  }
+ },
+ "cols": [
+  "coords",
+  "cell \u203a trace",
+  "tracks",
+  "cell table",
+  "contacts"
+ ],
+ "rows": [
+  "h5cd 1.x",
+  "FOF-CT",
+  "AnnData",
+  ".cool / .scool",
+  "PDB",
+  ".3dg"
+ ],
+ "cells": {
+  "h5cd 1.x": {
+   "coords": {
+    "status": "preserved",
+    "note": "max |\u0394| = 0"
+   },
+   "cell \u203a trace": {
+    "status": "preserved",
+    "note": "trace_id equal: True; cell_id equal: True"
+   },
+   "tracks": {
+    "status": "preserved",
+    "note": "62/62 columns equal (exact)"
+   },
+   "cell table": {
+    "status": "preserved",
+    "note": "56/56 columns equal (exact); cellm equal: True"
+   },
+   "contacts": {
+    "status": "preserved",
+    "note": "link records (uns['linked_cool'/'linked_scool']) round-trip; see the .cool/.scool row"
+   }
+  },
+  "FOF-CT": {
+   "coords": {
+    "status": "preserved",
+    "note": "max |\u0394| = 0 (floats written with full repr)"
+   },
+   "cell \u203a trace": {
+    "status": "preserved",
+    "note": "trace_id equal: True; cell_id equal: True; trace-level table (traces) not carried: FOF-CT core has no trace table",
+    "traces_table_lost": true
+   },
+   "tracks": {
+    "status": "partial",
+    "note": "61/62 track columns back, values: 61/61 columns equal (exact); read back as extra *spot* columns (FOF-CT has no spot-vs-track distinction; back.tracks is None); missing ['n_per_dist(um)'] \u2014 reader bug: from_fofct strips '()' from the whole ##columns list, so a last name ending in ')' comes back as ['spot_id', 'n_per_dist(um']",
+    "missing_columns": [
+     "n_per_dist(um)"
+    ]
+   },
+   "cell table": {
+    "status": "partial",
+    "note": "cells: 56/56 columns equal (max rel. error 1e-13); cellm (if_pca, if_tsne, if_umap, umap) has no FOF-CT table \u2192 dropped"
+   },
+   "contacts": {
+    "status": "na",
+    "note": "FOF-CT core/cell tables carry no contact maps"
+   }
+  },
+  "AnnData": {
+   "coords": {
+    "status": "na",
+    "note": "to_anndata exports the cell axis (obs = cells, obsm = cellm); spot coordinates stay in the h5cd by design"
+   },
+   "cell \u203a trace": {
+    "status": "partial",
+    "note": "cell ids preserved: True; the trace level has no place in a cells-as-obs AnnData",
+    "cell_ids_equal": true
+   },
+   "tracks": {
+    "status": "na",
+    "note": "spot-level tracks are not flattened into AnnData by design (to_anndata docstring)"
+   },
+   "cell table": {
+    "status": "preserved",
+    "note": "load_linked_anndata obs: 56/56 columns equal (exact), obsm equal: True; link_anndata (47 cells matched) cells: 56/56 columns equal (exact), cellm equal: True"
+   },
+   "contacts": {
+    "status": "na",
+    "note": "AnnData carries no contact maps (link them as .cool/.scool)"
+   }
+  },
+  ".cool / .scool": {
+   "coords": {
+    "status": "na",
+    "note": ".cool/.scool hold contacts, not coordinates"
+   },
+   "tracks": {
+    "status": "na",
+    "note": "no spot tracks in a contact map"
+   },
+   "cell table": {
+    "status": "na",
+    "note": "an .scool stores per-cell maps, not a cell table"
+   },
+   "contacts": {
+    "status": "preserved",
+    "note": "linked, not copied \u2014 sim_cell1 .mcool (4 resolutions) pixels identical after h5cd round trip: True; scHiCAR .scool: 5313/5313 h5cd cells have a map; pixels of 25 random cells identical via load_linked_scool: True"
+   },
+   "cell \u203a trace": {
+    "status": "partial",
+    "note": "cell \u2194 per-cell map: 5313/5313 cells matched by id; no trace level in a contact map"
+   }
+  },
+  "PDB": {
+   "coords": {
+    "status": "partial",
+    "note": "max |\u0394| = 0.0005 (PDB %8.3f: 3 decimals; values must stay within \u00b19999.999 \u2014 max |coord| here 15.5)",
+    "tol": 0.0005
+   },
+   "cell \u203a trace": {
+    "status": "partial",
+    "note": "chromosome \u2192 chain; bin start in the extended column preserved: True; one MODEL, so trace / cell ids are lost"
+   },
+   "tracks": {
+    "status": "na",
+    "note": "exporter writes occupancy/B-factor as 0.0; no per-bin values"
+   },
+   "cell table": {
+    "status": "na",
+    "note": "PDB has no cell table"
+   },
+   "contacts": {
+    "status": "na",
+    "note": "PDB has no contacts"
+   }
+  },
+  ".3dg": {
+   "coords": {
+    "status": "partial",
+    "note": "import only: .3dg \u2192 read_3dg \u2192 from_dataframe max |\u0394| = 1.78e-15; uchrom has no .3dg writer, so h5cd \u2192 .3dg is not possible"
+   },
+   "cell \u203a trace": {
+    "status": "partial",
+    "note": "import only: one trace per chromosome; haplotype / cell ids absent in .3dg"
+   },
+   "tracks": {
+    "status": "na",
+    "note": ".3dg has no per-bin values"
+   },
+   "cell table": {
+    "status": "na",
+    "note": ".3dg has no cell table"
+   },
+   "contacts": {
+    "status": "na",
+    "note": ".3dg has no contacts"
+   }
+  }
+ },
+ "status_values": {
+  "preserved": 1.0,
+  "partial": 0.5,
+  "lost": 0.0,
+  "na": 0.0,
+  "untested": null
+ },
+ "datasets": {
+  "h5cd / FOF-CT / AnnData": "Takei 2025 FOV0 (takei2025_fov0.h5cd)",
+  "PDB / .3dg / .cool": "sim_cell1 (NucDynamics on Stevens 2017 cell 1, in repo)",
+  ".scool": "scHiCAR MOp (schicar_mop.h5cd + contacts_cells_1Mb.scool)"
+ }
+}
