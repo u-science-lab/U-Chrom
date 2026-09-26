@@ -3,7 +3,8 @@
 This page records the proposed next data model for `ChromData`: the next
 MAJOR bump of the on-disk format (1.x → 2.0) and of the package (0.3.0).
 It is a design document: nothing here is implemented yet unless stated
-otherwise.
+otherwise.  Sections 2 and 3 are implemented; section 4 is implemented on
+a Zarr + Parquet container (`.chromdata.zarr`) instead of HDF5.
 
 The goal is to make `ChromData` the *single* container for chromatin
 tracing, bulk / single-cell Hi-C, and other per-locus omics — while keeping
@@ -502,6 +503,24 @@ cover each kind.  (The current silent-drop bug is the motivating case.)
 
 ## 4. OOM-friendly storage
 
+**Status:** implemented on a **Zarr + Parquet container**,
+`<name>.chromdata.zarr` (roadmap steps 6 and 8, format 2.0 — see
+*Format 2.0 container: `.chromdata.zarr`* below).  The HDF5 plan in the
+rest of this section was the starting point; the Figure 2 benchmarks (#64)
+showed HDF5 to be the bottleneck (1e7 real spots: h5cd 1.x 5.50 GB, 7.2 s
+full read, 23.5 GB peak RSS, against Parquet 2.11 GB, 0.73 s, 13.1 GB), so
+the container changed.  As built:
+
+- sorted spots, the `index/` offsets, backed mode (`read(path,
+  backed=True)`, `get_*`, `iter_traces` / `iter_cells`, `to_memory()`),
+  float32 coords (opt-in) and compression are done;
+- the data model (section 2) is unchanged, and the HDF5 `.h5cd` 2.0 of
+  #65 stays readable (writing it warns);
+- not done: the streaming writer / streaming imports and the streaming
+  population callers (step 7), `backed="r+"`, the memory-budget knobs,
+  `binsets/`.  Backed `spots` is a light proxy (`BackedFrame`), not a
+  `DataFrame` subclass.
+
 ### Goals
 
 - Open a 1e8-spot file in constant memory; read only the traces / cells /
@@ -529,6 +548,9 @@ In-memory objects build the same index lazily (`np.searchsorted` on the
 sorted codes) so subsetting also stops doing full-table boolean scans.
 
 ### Backed mode
+
+*As built:* `ChromData.read("big.chromdata.zarr", backed=True)` (read-only;
+`"r+"` is not implemented).  The plan was:
 
 ```python
 cd = ChromData.read("big.h5cd", backed="r")     # or "r+"
@@ -622,13 +644,138 @@ dictionary accumulated across chunks.
 | append columns without rewrite | ✅ | ✅ |
 | ecosystem alignment | AnnData `.h5ad`, cooler | AnnData zarr, SpatialData |
 
-**Recommendation:** stay on HDF5 for 2.0 — it keeps one file per dataset,
-reuses the 1.x reader / writer helpers and matches `cooler`.  Keep all
-array I/O behind a small `_Store` interface (`create_dataset`, `read_slice`,
-`attrs`) so a zarr backend (`.zarrcd`) can be added later for cloud /
-parallel-write use cases without touching `ChromData`.
+The first recommendation here was to stay on HDF5 for 2.0.  The Figure 2
+benchmarks (#64) changed that: on real data the per-spot tables dominate,
+and a columnar table format (Parquet) beat both HDF5 layouts on size, read
+time and peak memory.  **Decision (format 2.0 as shipped): a Zarr
+container with the large tables stored as Parquet** — the SpatialData
+approach.  `.cdz` (the same tree zipped, uncompressed) restores the
+single-file property.
 
-### Format 2.0 HDF5 layout
+### Format 2.0 container: `.chromdata.zarr`
+
+```text
+x.chromdata.zarr/
+├── zarr.json                  root group; attrs: uchrom_format_version "2.0",
+│                              uchrom_version, uchrom = {format, format_version,
+│                              spot_order "cell,trace,bin", n_spots, n_bins,
+│                              n_traces, n_cells, n_row_groups, has_source_row, …}
+├── tables/                    zarr group; attrs["tables"] = table metadata
+│   ├── spots.parquet          sorted by (cell, trace, bin): bin_id int32,
+│   │                          trace_id / cell_id int16/32 codes, x, y, z,
+│   │                          extra spot columns (coord_status, spot_id, …);
+│   │                          row groups of ~65,536 rows ending on cell
+│   │                          boundaries; statistics on
+│   ├── spot_tracks.parquet    row-aligned with spots (same row groups)
+│   ├── layers/<key>.parquet   row-aligned x, y, z
+│   ├── categories/<table>.<col>.parquet   values of the coded columns
+│   ├── bins.parquet           chrom (dictionary), start, end, [name, …]
+│   ├── bin_tracks.parquet  traces.parquet  cells.parquet
+│   ├── intervals/<key>.parquet            (+ kind, source_result in attrs)
+│   └── points/<key>.parquet
+├── index/                     zarr arrays: trace_offsets, trace_codes,
+│                              trace_cells, chrom_trace, cell_offsets,
+│                              cell_codes, row_groups, [source_row]
+├── cellm/<key>, binm/<key>    zarr arrays (zstd)
+├── results/<key>              zarr group / array; attrs = provenance + _type;
+│                              tables as <key>/table.parquet
+├── uns/                       attrs (JSON) + arrays for numeric arrays > 64 values
+├── contacts/                  attrs: linked .cool / .scool records
+└── links/                     attrs: linked .h5ad / .h5mu records
+```
+
+The authoritative layout is `uchrom/core/spec.md`; the code is
+`uchrom/core/zarrcd.py` (container, writer, readers) and
+`uchrom/core/backed.py` (`BackedChromData`).
+
+**Decisions**
+
+1. **Parquet for rows, Zarr for arrays, JSON attrs for metadata.**  Every
+   table (spots, tracks, cells, traces, bins, intervals, points, result
+   tables) is Parquet, zstd level 3.  `cellm`, `binm`, `index/` and result
+   arrays are Zarr v3 arrays (zstd).  Provenance, `uns`, table metadata and
+   linked-file records are attributes.  Parquet gives column pruning,
+   row-group reads, per-column encodings and statistics, and every
+   dataframe tool (DuckDB, Polars, Arrow) reads the files directly.
+2. **Zarr v3 (zarr-python ≥ 3).**  That needs Python ≥ 3.11, so the
+   package now requires 3.11 (CI tests 3.11 and 3.12).  Zarr format 2 via
+   zarr-python 2.18 would have kept 3.10, at the cost of an older on-disk
+   spec and two code paths.
+3. **Coordinates live in `spots.parquet` as `x, y, z`**, not a separate
+   array: one row-group read serves a cell's spots and coordinates, and the
+   spots file on its own is the "structure table" of the project vision
+   (minus the loci, which are `bins[bin_id]`).  `layers` are separate
+   Parquet files with the same row groups.
+4. **Categorical spot-aligned columns are integer codes** (int16 / int32)
+   with the categories in `tables/categories/`, not Parquet dictionary
+   columns.  Parquet dictionaries are per row group: a 60,000-category
+   `trace_id` would either be repeated in every group or come back with
+   per-group dictionaries that must be unified (and re-sorted into the
+   original category order) on every read.  Codes decode with no string
+   work and keep the category order exactly.  Small tables (bins, cells,
+   traces, results) keep pandas categoricals as Parquet dictionaries.
+5. **Spots are stored sorted by (cell code, trace code, bin_id)**, a
+   stable sort.  Row groups end on cell boundaries (on (cell, trace) run
+   boundaries when there is no `cell_id`), so `get_cell` reads one group,
+   `get_trace` one group, and a chromosome is the union of its (cell,
+   trace) runs.  The permutation is kept in `index/source_row`
+   (`read(path, original_order=True)` restores the written order); an
+   already sorted object is written unchanged, without `source_row`.  **Row
+   order therefore changes on a round trip**: tests compare after sorting
+   by a stable key, or read with `original_order=True`.
+6. **The index is per (cell, trace) run**, not per trace id: a trace id
+   shared by several cells (one trace per chromosome per cell, as
+   `from_dataframe` assigns) has one run per cell.  `chrom_trace` is `-1`
+   for a run spanning several chromosomes; `get_chrom` then filters those
+   rows.  `iter_traces(batch)` counts runs.
+7. **Backed mode reads row groups, not pages.**  pyarrow reads whole row
+   groups; `SpotRows` keeps the two most recent decoded groups per file
+   (sequential `iter_*` decodes each group once) and copies small
+   selections out of a group so it can be freed.  Parquet files are read
+   with plain file reads, not memory maps (mapped pages would count as
+   resident memory).  65,536 rows per group was chosen on the 10.9 M-spot
+   Takei data: 262,144 rows gave a 2 % smaller file and the same full-read
+   time but doubled `get_cell` latency (8 → 19 ms).
+8. **zstd level 3, float64 coordinates by default.**  On Takei FOV 0's 62
+   float spot tracks, zstd-3 is 63 MB vs 69 MB (zstd-1), 92 MB (snappy)
+   and 182 MB (none); decoding is ~25 % slower than snappy.
+   Byte-stream-split made these tracks 2.5× larger (many repeated
+   values), so it is off.  `coord_dtype="float32"` is opt-in: it saves
+   38 % on the Liu 2025 MOp store (coords dominate), 4 % on the Takei
+   cerebellum store (62 tracks dominate), and changes the values.
+9. **Writes are atomic**: the store is built in a temporary sibling
+   directory and renamed into place.  Writing over an existing store is
+   allowed; writing over any other directory is refused; writing a backed
+   object onto its own source is refused.
+10. **`.cdz`** is the finished tree zipped with `ZIP_STORED`, `zarr.json`
+    first.  Zarr reads it through `zarr.storage.ZipStore`; each Parquet
+    member is read in place through a byte-range view of the archive (no
+    fsspec needed).
+11. **Linked files** (`uns["linked_cool" / "linked_scool"]` →
+    `contacts/`, `uns["linked_anndata" / "linked_mudata"]` → `links/`)
+    keep their records verbatim; absolute paths next to the store also
+    get a relative copy, used on read when the absolute path no longer
+    exists (a moved project folder).  In memory they stay in `uns`.
+12. **Portable names**: keys that are not portable file / node names, or
+    that clash case-insensitively (macOS), are stored as `_<i>`; the attrs
+    map them back.  `uns` values keep their Python types (tuples, numpy
+    arrays, NaN) through a small JSON tagging scheme.
+13. **Dispatch by path**: `*.zarr` → zarr, `*.cdz` → zip, `*.h5cd` →
+    HDF5; other existing paths are sniffed.  `write()` to `.h5cd` (and to
+    unknown suffixes, as before) still writes HDF5 2.0 in this release,
+    with a `DeprecationWarning`.  `python -m uchrom.io.upgrade old.h5cd`
+    converts to `old.chromdata.zarr`.
+14. **The web browser opens stores backed.**  Summaries, trace and cell
+    lists come from `index/` plus the `bin_id` column; geometry requests
+    that name cells, traces or chromosomes read only those rows and reuse
+    the in-memory encoder, so responses are identical.  Other views load
+    the per-spot columns they need on first use.
+
+### Format 2.0 HDF5 layout (the first plan)
+
+As built by #65 (without `index/`, sorted spots, `contacts/`, `links/`),
+this is the deprecated `.h5cd` container; the plan was:
+
 
 ```text
 data.h5cd
@@ -661,7 +808,12 @@ data.h5cd
 
 ### Read dispatch
 
-Consistent with the existing `FORMAT_VERSION` mechanism in `cdata.py`:
+*As built:* `ChromData.read(path, backed=False, original_order=False)`
+dispatches on the path first (`uchrom.core.zarrcd.container_kind`):
+`.chromdata.zarr` / `.cdz` → `BackedChromData`, loaded with `to_memory()`
+unless `backed=True`, after the same MAJOR / MINOR check
+(`_check_zarr_version`); `.h5cd` → the HDF5 readers below, and
+`backed=True` raises with the `upgrade` command.  The plan was:
 
 ```python
 FORMAT_VERSION = "2.0"
@@ -721,9 +873,9 @@ cool, H1Esc-HFF sci-Hi-C).
 | 3 | `bins` axis, `bin_id`, bin-level `tracks` vs `spot_tracks`, `intervals`, `fea.project` → bins; 1.x upgrade path | **2.0** | 2 (**done**) |
 | 4 | `cd.contacts` (`ContactRef`, cool/mcool/scool/hic backends), optional coords + `coord_status`; `ChromData.from_contacts`; Higashi tutorial without zeros | 2.0 | 1, 3 |
 | 5 | Recon library entry points returning `ChromData` (nucdyn, gem, mds); CLIs become wrappers | 2.0 | 4 |
-| 6 | Sorted spots + `index/*`, backed mode, `iter_traces` / `iter_cells`, float32 coords, compression | 2.1 | 3 |
+| 6 | Sorted spots + `index/*`, backed mode, `iter_traces` / `iter_cells`, float32 coords, compression | 2.0 (`.chromdata.zarr`) | 3 (**done**, with 8) |
 | 7 | Streaming writer + streaming `from_fofct` / `from_seqfish_multiomics`; streaming population callers; memory budget | 2.1 | 6 |
-| 8 | Optional zarr `_Store` backend | 2.2 | 6 |
+| 8 | ~~Optional zarr `_Store` backend~~ → zarr + Parquet **is** the 2.0 container; `.h5cd` writing deprecated | 2.0 | 6 (**done**) |
 
 Steps 3 and 4 are the breaking ones and should ship together as
 `u-chrom 0.3.0` with `upgrade_h5cd` and a migration note in the
