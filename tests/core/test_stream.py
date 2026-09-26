@@ -58,7 +58,8 @@ def _assert_same_store(a_path, b_path):
                 "n_row_groups", "n_partitions", "has_source_row", "has_cell_id"):
         assert ma[key] == mb[key], key
     ta, tb = ra["tables"].attrs["tables"], rb["tables"].attrs["tables"]
-    assert ta["partitions"] == tb["partitions"]
+    for key in ("partitions", "coords", "primary"):
+        assert ta.get(key) == tb.get(key), key
     for key in ("spots", "spot_tracks"):
         if key in ta:
             assert {k: v for k, v in ta[key].items() if k != "spot_view_order"} == \

@@ -82,7 +82,7 @@ PathLike = Union[str, Path]
 ZARR_SUFFIX = ".chromdata.zarr"
 ZIP_SUFFIX = ".cdz"
 CONTAINER = "chromdata.zarr"
-ZARR_FORMAT_VERSION = "2.1"
+ZARR_FORMAT_VERSION = "2.2"
 #: MINOR versions of the container this reader understands (2.0: one file per
 #: spot-aligned table, sorted by cell › trace › bin; 2.1: partitioned by
 #: chromosome; 2.2: coordinates + keys partitioned by chromosome, everything
@@ -95,7 +95,11 @@ DEFAULT_ROW_GROUP_ROWS = 65_536
 #: the same for the chromosome-partitioned tables (format 2.1 spot tables,
 #: the format 2.2 coordinate table)
 DEFAULT_COORDS_ROW_GROUP_ROWS = 16_384
-DEFAULT_PROJECTION_ROW_GROUP_ROWS = DEFAULT_COORDS_ROW_GROUP_ROWS   # PR #70 name
+#: format 2.2 defaults: lossless decimal float encoding (``True`` / ``False``
+#: / tables, see :func:`_float_encoding_tables`) and Parquet dictionary pages
+#: for the float columns of the primary tables
+DEFAULT_FLOAT_ENCODING = False
+DEFAULT_FLOAT_DICTIONARY = True
 #: decoded row groups kept by backed readers (LRU, bytes)
 DEFAULT_CACHE_BYTES = 256 << 20
 #: zstd level for Parquet and Zarr
@@ -692,9 +696,9 @@ class SpotPartitionWriter:
 def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float64",
                row_group_rows: Optional[int] = None,
                compression_level: int = DEFAULT_ZSTD_LEVEL,
-               keep_source_order: bool = True, float_encoding=True,
+               keep_source_order: bool = True, float_encoding=DEFAULT_FLOAT_ENCODING,
                coords_row_group_rows: int = DEFAULT_COORDS_ROW_GROUP_ROWS,
-               normalize_spot_columns: bool = True, float_dictionary: bool = False,
+               normalize_spot_columns: bool = True, float_dictionary: bool = DEFAULT_FLOAT_DICTIONARY,
                compression="zstd", _layout: str = ZARR_FORMAT_VERSION) -> None:
     """Write ``cd`` as a ``.chromdata.zarr`` directory, or a ``.cdz`` zip
     when ``path`` ends with ``.cdz``.  See :meth:`ChromData.write`.
@@ -795,9 +799,10 @@ def _coord_arrays(coords, coord_dtype) -> List[Tuple[str, Any]]:
 
 
 def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level: int,
-                keep_source_order: bool, layout: str = ZARR_FORMAT_VERSION, float_encoding=True,
+                keep_source_order: bool, layout: str = ZARR_FORMAT_VERSION,
+                float_encoding=DEFAULT_FLOAT_ENCODING,
                 coords_row_group_rows: int = DEFAULT_COORDS_ROW_GROUP_ROWS, normalize: bool = True,
-                codec="zstd", float_dictionary: bool = False) -> None:
+                codec="zstd", float_dictionary: bool = DEFAULT_FLOAT_DICTIONARY) -> None:
     import pyarrow as pa
 
     zarr = _zarr()
@@ -1087,10 +1092,11 @@ def derive_spot_columns(spots: pd.DataFrame, columns: Sequence[str],
     return out
 
 
-def _write_derived(derived: Mapping[str, Dict[str, Any]], spots: pd.DataFrame, tpath: Path,
-                   spot_meta: Dict[str, Any], cat_dir: Path, level: int) -> Dict[str, Any]:
+def _write_derived(derived: Mapping[str, Dict[str, Any]], categories: Mapping[str, Tuple[Any, bool]],
+                   tpath: Path, spot_meta: Dict[str, Any], cat_dir: Path, level: int) -> Dict[str, Any]:
     """``tables/derived/<key>.parquet`` (one row per key code) of the derived
-    spot columns; returns their metadata."""
+    spot columns (``categories``: ``(categories, ordered)`` of the
+    categorical ones); returns their metadata."""
     import pyarrow as pa
     import pyarrow.parquet as pq
 
@@ -1104,10 +1110,9 @@ def _write_derived(derived: Mapping[str, Dict[str, Any]], spots: pd.DataFrame, t
     for key, recs in by_key.items():
         data = {}
         for col, rec in recs.items():
-            s = spots[col]
             if rec["kind"] == "category":
-                data[col] = pd.Categorical.from_codes(rec["values"], categories=s.cat.categories,
-                                                      ordered=bool(s.cat.ordered))
+                cats, ordered = categories[col]
+                data[col] = pd.Categorical.from_codes(rec["values"], categories=cats, ordered=bool(ordered))
             else:
                 data[col] = pd.Series(rec["values"], dtype=object if rec["kind"] == "object" else rec["values"].dtype)
         frame = pd.DataFrame(data)
@@ -1203,7 +1208,9 @@ def _write_tree_v22(cd, root, root_path: Path, *, coord_dtype, row_group_rows: i
     columns: Dict[str, List[Tuple[str, Any]]] = {}
     if primary_cols:
         columns["spots"] = _spot_frame_columns(spots[primary_cols], "spots", spot_meta, cat_dir, level)
-    dmeta = _write_derived(derived, spots, tpath, spot_meta, cat_dir, level)
+    dmeta = _write_derived(derived, {c: (spots[c].cat.categories, bool(spots[c].cat.ordered))
+                                     for c, r in derived.items() if r["kind"] == "category"},
+                           tpath, spot_meta, cat_dir, level)
     del spots, derived
     st = cd.spot_tracks
     if len(st.columns):
@@ -1302,7 +1309,9 @@ def _write_tree_v22(cd, root, root_path: Path, *, coord_dtype, row_group_rows: i
         "partitions": [{"chrom": p["chrom"], "code": p["code"], "dir": p["dir"], "n_rows": int(p["n_rows"]),
                         "files": dict(p["files"])} for p in cw.partitions]}
     files = {name: primary.rel_path(name, None) for name in names}
-    tables_meta["primary"] = {"row_group_rows": int(row_group_rows), "files": files}
+    tables_meta["primary"] = {"row_group_rows": int(row_group_rows), "files": files,
+                              "float_dictionary": bool(float_dictionary), "compression": primary.codec}
+    tables_meta["coords"]["compression"] = cw.codec
     if primary_cols:
         tables_meta["spots"]["file"] = files["spots"]
     if "spot_tracks" in tables_meta:

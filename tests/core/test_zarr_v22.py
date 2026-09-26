@@ -41,7 +41,7 @@ def _decimal_cd(n_cells=6, seed=0):
     s["fov"] = s["cell_id"].cat.codes.to_numpy().astype(np.int64) * 7 + 3   # a function of the cell
     s["allele"] = pd.Categorical(np.where(s["trace_id"].cat.codes.to_numpy() % 2, "a1", "a2"))  # of the trace
     s["order"] = (bid * 0.5).astype(np.float64)                        # float, of the bin
-    cd.spots = s
+    cd.spots = s[[c for c in s.columns if c != "bin_id"] + ["bin_id"]]
     return cd
 
 
@@ -76,7 +76,7 @@ def store(request, tmp_path):
 def test_layout_and_encoding(tmp_path):
     cd = _decimal_cd()
     path = tmp_path / "x.chromdata.zarr"
-    write_zarr(cd, path, row_group_rows=40, coords_row_group_rows=10, _layout="2.2")
+    write_zarr(cd, path, row_group_rows=40, coords_row_group_rows=10, _layout="2.2", float_encoding=True)
     meta = json.loads((path / "zarr.json").read_text())["attributes"]["uchrom"]
     assert meta["format_version"] == "2.2" and meta["layout"] == "primary+coords"
     assert meta["spot_order"] == "cell,trace,chrom,bin" and meta["coords_order"] == "chrom,cell,trace,bin"
@@ -179,6 +179,9 @@ def test_backed_matches_in_memory(store):
     pd.testing.assert_frame_equal(bk.spots.to_pandas(), mem.spots)
     pd.testing.assert_frame_equal(bk.spots.iloc[[4, 2]], mem.spots.iloc[[4, 2]].reset_index(drop=True))
     pd.testing.assert_series_equal(bk.spots["name"], mem.spots["name"])
+    pd.testing.assert_series_equal(bk.spots["bin_id"], mem.spots["bin_id"])          # key-only fast path
+    pd.testing.assert_frame_equal(bk.spots.iloc[3:30][["bin_id", "chrom", "end"]],
+                                  mem.spots.iloc[3:30][["bin_id", "chrom", "end"]].reset_index(drop=True))
     assert bk.spots.dtypes.to_dict() == mem.spots.dtypes.to_dict()
 
 
@@ -275,3 +278,49 @@ def test_bins_column_is_reused(tmp_path):
     back = ChromData.read(path, original_order=True)
     pd.testing.assert_frame_equal(back.spots, cd.spots)
     pd.testing.assert_frame_equal(back.bins, cd.bins)
+
+
+@pytest.mark.parametrize("n_chunks,budget", [(1, "1GB"), (5, "1KB"), (13, "20KB")])
+@pytest.mark.parametrize("opts", [dict(float_encoding=True, float_dictionary=False),
+                                  dict(float_encoding=False, float_dictionary=True)])
+def test_streaming_writer_equals_in_memory_writer(tmp_path, n_chunks, budget, opts):
+    """The streaming writer makes the store the in-memory writer makes."""
+    import zarr
+
+    from tests.core.test_stream import _stream
+
+    cd = _decimal_cd(n_cells=6)
+    write_zarr(cd, tmp_path / "mem.chromdata.zarr", row_group_rows=20, coords_row_group_rows=8, _layout="2.2",
+               **opts)
+    _stream(cd, tmp_path / "st.chromdata.zarr", n_chunks=n_chunks, budget=budget, row_group_rows=20,
+            coords_row_group_rows=8, layout="2.2", **opts)
+    a, b = ChromData.read(tmp_path / "mem.chromdata.zarr"), ChromData.read(tmp_path / "st.chromdata.zarr")
+    _same(a, b)
+    _assert_same_small(a, b)
+    ra = zarr.open_group(str(tmp_path / "mem.chromdata.zarr"), mode="r")
+    rb = zarr.open_group(str(tmp_path / "st.chromdata.zarr"), mode="r")
+    for grp in ("index", "index/coords"):
+        for name in ra[grp].array_keys():
+            np.testing.assert_array_equal(ra[f"{grp}/{name}"][:], rb[f"{grp}/{name}"][:], err_msg=f"{grp}/{name}")
+    ta, tb = ra["tables"].attrs["tables"], rb["tables"].attrs["tables"]
+    for key in ("coords", "primary", "spots", "layer_encoding"):
+        assert ta[key] == tb[key], key
+    assert {k: v for k, v in ta["spot_tracks"].items() if k != "spot_view_order"} == \
+        {k: v for k, v in tb["spot_tracks"].items() if k != "spot_view_order"}
+    ref = ChromData.read(tmp_path / "st.chromdata.zarr", original_order=True)
+    pd.testing.assert_frame_equal(ref.spots, cd.spots)
+    np.testing.assert_array_equal(_bits(ref.coords), _bits(cd.coords))
+
+
+def test_sorted_rewrite_and_default_layout(tmp_path):
+    """2.2 is the default; rewriting a store read in stored order keeps the
+    order and stores no permutation."""
+    cd = _decimal_cd()
+    cd.write(tmp_path / "a.chromdata.zarr")
+    back = ChromData.read(tmp_path / "a.chromdata.zarr")
+    meta = json.loads((tmp_path / "a.chromdata.zarr" / "zarr.json").read_text())["attributes"]["uchrom"]
+    assert meta["format_version"] == "2.2" and meta["has_source_row"]
+    back.write(tmp_path / "b.chromdata.zarr")
+    meta2 = json.loads((tmp_path / "b.chromdata.zarr" / "zarr.json").read_text())["attributes"]["uchrom"]
+    assert not meta2["has_source_row"]
+    _same(back, ChromData.read(tmp_path / "b.chromdata.zarr"))

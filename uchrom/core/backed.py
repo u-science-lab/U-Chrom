@@ -352,6 +352,24 @@ class _SpotsFrame22(BackedFrame):
 
     def _range_frame(self, start: int, stop: int, cols: Optional[Sequence[str]] = None) -> pd.DataFrame:
         cols = list(cols) if cols is not None else self._columns
+        o = self._owner
+        if all(c == BIN_ID or c in LOCI for c in cols):
+            # bin_id (and the loci): the coordinate table's key column only
+            n = o.n_spots
+            stop = max(start, stop)
+            if start == 0 and stop == n:
+                bid = o._full_coords(with_bins=True, with_xyz=False)[1]
+            else:
+                cs, ce = o._p2c(np.array([start]), np.array([stop]))
+                bid = _read_ordered(o._crows, "coords", cs, ce, [BIN_ID]).column(BIN_ID).to_numpy()
+            bid = np.asarray(bid, dtype=np.int64)
+            df = pd.DataFrame({BIN_ID: bid})
+            if any(c in LOCI for c in cols):
+                loci = loci_of(o._bins, bid)
+                for c in LOCI:
+                    if c in cols:
+                        df[c] = loci[c]
+            return df[cols]
         sub = self._owner._build22(prim=[(int(start), int(max(start, stop)))], subset=False,
                                    columns=[c for c in cols if c not in LOCI], tracks=False)
         return sub.spots[cols]
@@ -686,18 +704,18 @@ class BackedChromData(ChromData):
             return np.repeat(shift[k0:k1], lens) + np.arange(a, b, dtype=np.int64)
         return rows
 
-    def _full_coords(self, with_bins: bool = False):
-        """All coordinates (and ``bin_id``) in primary order: the coordinate
-        partitions are read as they are stored (contiguous columns), then
-        gathered into primary order block by block in threads (random reads,
-        sequential writes: much faster than scattering into the strided
-        ``(n, 3)`` array)."""
+    def _full_coords(self, with_bins: bool = False, with_xyz: bool = True):
+        """All coordinates (and / or ``bin_id``) in primary order: the
+        coordinate partitions are read as they are stored (contiguous
+        columns), then gathered into primary order block by block in threads
+        (random reads, sequential writes: much faster than scattering into
+        the strided ``(n, 3)`` array)."""
         n = self.n_spots
-        coords = np.empty((n, 3), dtype=np.float64)
+        coords = np.empty((n, 3) if with_xyz else (0, 3), dtype=np.float64)
         bid = np.empty(n, dtype=np.int64) if with_bins else None
         if not n:
             return (coords, bid) if with_bins else coords
-        cols = ([BIN_ID] if with_bins else []) + list(_XYZ)
+        cols = ([BIN_ID] if with_bins else []) + (list(_XYZ) if with_xyz else [])
         src = {c: np.empty(n, dtype=np.int64 if c == BIN_ID else np.float64) for c in cols}
         self._crows.read_all("coords", cols, dest=src)
         poff = self._poff
@@ -710,7 +728,7 @@ class BackedChromData(ChromData):
             k1 = int(np.searchsorted(poff, b, side="left"))
             lens = np.minimum(poff[k0 + 1:k1 + 1], b) - np.maximum(poff[k0:k1], a)
             idx = np.repeat(start[k0:k1], lens) + np.arange(a, b, dtype=np.int64)
-            for j, c in enumerate(_XYZ):
+            for j, c in enumerate(_XYZ if with_xyz else ()):
                 coords[a:b, j] = src[c][idx]
             if with_bins:
                 bid[a:b] = src[BIN_ID][idx]

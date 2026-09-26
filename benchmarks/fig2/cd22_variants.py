@@ -175,6 +175,9 @@ VARIANTS = {
     "D_lz4": {"label": "D, primary lz4 (coords zstd)", "ext": ".chromdata.zarr",
               "write": _zarr_writer(**_V22, float_encoding=False, compression={"primary": "lz4", "coords": "zstd"}),
               "read": _zarr_read, "store": True},
+    "zarr22": {"label": "chromdata.zarr 2.2 (the default: coordinates once, derived spot columns, "
+                        "float dictionary pages)", "ext": ".chromdata.zarr",
+               "write": _zarr_writer(_layout="2.2"), "read": _zarr_read, "store": True},
     "DF": {"label": "2.2: coords once + derived columns + float dictionary pages (primary)",
            "ext": ".chromdata.zarr",
            "write": _zarr_writer(**_V22, float_encoding=False, float_dictionary=True),
