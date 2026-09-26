@@ -29,6 +29,7 @@ List loaded datasets.
     "name": "cell1",
     "path": "/abs/path/cell1.h5cd",
     "n_spots": 105700,
+    "n_bins": 2600,                 // cd.bins (ChromData format 2.0 locus axis)
     "n_traces": 20,
     "n_cells": 1,
     "xyz_unit": "um",              // from uns, may be null
@@ -250,14 +251,17 @@ The dataset summary gains:
 ```json
 {
   "has_coords": true,                    // false → no 3-D spots (hide/grey 3-D views)
-  "tracks": [{"name": "H3K27ac"}],       // numeric cd.tracks columns (per spot)
+  "tracks": [{"name": "ATAC", "level": "bin"},     // numeric cd.bin_tracks columns (per locus)
+             {"name": "H3K27ac", "level": "spot"}], // numeric cd.spot_tracks columns (per spot)
   "contact_maps": [
     {"key": "bulk", "kind": "cool",      // cool | mcool | scool
      "label": "IMR90 Hi-C", "resolutions": [30000],
      "chroms": [{"name": "chr21", "length": 46709983}],
      "per_cell": false, "n_cells": 0}
   ],
-  "intervals": [{"key": "tads", "n": 120}]   // cd.results DataFrames with chrom/start/end
+  "intervals": [{"key": "tads.arcfish", "n": 120, "kind": "domain"}]
+      // cd.intervals tables (kind: domain | segment | peak) first, then other
+      // cd.results DataFrames with chrom/start/end (kind: null)
 }
 ```
 
@@ -283,9 +287,10 @@ Matrices are capped at 1,000 × 1,000 bins: larger requests are sum-pooled
 
 ### `GET /api/datasets/{id}/tracks?names=H3K27ac,H3K9me3&chrom=chr7&start=&end=&cell_id=&agg=mean&group=`
 
-Per-genomic-bin aggregate of spot tracks over the selection (all cells,
-one `cell_id`, or a `group` — see *Cell groups*), for a genome-browser
-track view:
+Per-genomic-bin aggregate of tracks over the spots of the selection (all
+cells, one `cell_id`, or a `group` — see *Cell groups*), for a
+genome-browser track view.  Bin-level tracks are broadcast to their spots
+first, so `n_spots` and empty-bin omission behave the same for both levels:
 
 ```json
 {"chrom": "chr7", "bin_starts": [...], "bin_ends": [...],
@@ -297,7 +302,8 @@ track view:
 
 ### `GET /api/datasets/{id}/intervals/{key}?chrom=chr7&start=&end=`
 
-Rows of an interval table (TADs, loops, peaks):
+Rows of an interval table (TADs, loops, peaks; `cd.intervals[key]`, else
+`cd.results[key]`):
 `{"columns": [...], "rows": [[…], …]}` with `chrom, start, end` (and for
 loops `chrom2, start2, end2`) plus any score columns.
 

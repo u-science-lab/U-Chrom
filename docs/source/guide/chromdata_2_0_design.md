@@ -217,6 +217,26 @@ directory, so a project folder can be moved as a unit.
 
 ## 2. `bins` — a locus axis separate from `spots`
 
+**Status:** implemented (roadmap step 3, format 2.0): `uchrom.core.bins`,
+`uchrom.core.intervals`, `uchrom.io.upgrade_h5cd`.  Differences from the
+text below, as built:
+
+- The bin-level table is `cd.bin_tracks` during 2.x, because `cd.tracks`
+  stays the deprecated spot-aligned shim for the whole series; on disk
+  `tracks/` is bin-level as specified.  The shim warns on every access
+  (it cannot know the caller's "spot-length expectations") and
+  `cd.tracks[col] = values` writes through.
+- `spots["chrom"/"start"/"end"]` are derived from `bins` but kept as
+  materialised columns in memory (not stored on disk), with no
+  per-access warning.  A lazy accessor needs a DataFrame proxy, which
+  arrives with backed mode (step 6).  `write()` checks that they agree
+  with `bins[bin_id]`; `cd.rebuild_bins()` re-derives bins after edits.
+- Bins derived from spots are ordered by chromosome (category order),
+  start, end — not first occurrence — so `bin_id` follows genome order.
+- `binsets` / `rebin` are not implemented yet.
+- Categorical columns are stored as `{codes, categories}`; spots are not
+  sorted and `index/` is not written (step 6, `@spot_order = "unsorted"`).
+
 ### Motivation
 
 AnnData's obs/var split is what makes per-gene annotations (var) and
@@ -693,7 +713,7 @@ cool, H1Esc-HFF sci-Hi-C).
 | 0 | Fix `results` silent-drop on write (raise on unsupported types + round-trip tests) | 1.2 | — (**done**) |
 | 1 | Merge `codex/linked-mudata-scool-framework` (`link_scool`, `link_mudata`, `coord_status`, `validate_links`) | 1.2 (uns only) | — (**done**) |
 | 2 | Calling convention + `ResultsStore` / `ResultRecord` + `key_added`; convert `strc.*` callers, merge per-chrom outputs; `uc.tl` / `uc.pp` aliases | 1.4 (results gain attrs; 1.3 went to `points/`) | 0 (**done**) |
-| 3 | `bins` axis, `bin_id`, bin-level `tracks` vs `spot_tracks`, `intervals`, `fea.project` → bins; 1.x upgrade path | **2.0** | 2 |
+| 3 | `bins` axis, `bin_id`, bin-level `tracks` vs `spot_tracks`, `intervals`, `fea.project` → bins; 1.x upgrade path | **2.0** | 2 (**done**) |
 | 4 | `cd.contacts` (`ContactRef`, cool/mcool/scool/hic backends), optional coords + `coord_status`; `ChromData.from_contacts`; Higashi tutorial without zeros | 2.0 | 1, 3 |
 | 5 | Recon library entry points returning `ChromData` (nucdyn, gem, mds); CLIs become wrappers | 2.0 | 4 |
 | 6 | Sorted spots + `index/*`, backed mode, `iter_traces` / `iter_cells`, float32 coords, compression | 2.1 | 3 |

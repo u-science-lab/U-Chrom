@@ -1,9 +1,11 @@
 """Projection helpers for genomic interval features.
 
 The functions in this module are deliberately independent of
-``uchrom_discovery``.  They provide a small shared layer for mapping
-canonical interval-level feature tables onto the spot axis of a
-``ChromData`` object.
+``uchrom_discovery``.  They map canonical interval-level feature tables
+(one row per ``chrom, start, end``) onto the **bin axis** of a
+``ChromData`` (``cd.bins`` → ``cd.bin_tracks``), once per locus rather
+than once per spot.  The spot-axis projection of format 1.x is kept as a
+deprecated helper.
 """
 
 from __future__ import annotations
@@ -18,14 +20,99 @@ INTERVAL_COLUMNS = ("chrom", "start", "end")
 
 
 def unique_spot_intervals(cdata_or_spots) -> pd.DataFrame:
-    """Return unique ``chrom/start/end`` intervals from a spot table.
+    """Return the unique ``chrom/start/end`` intervals of the data.
 
-    The first occurrence order is preserved.  ``cdata_or_spots`` may be a
-    ``ChromData``-like object with a ``spots`` attribute or a DataFrame.
+    For a ``ChromData`` these are its ``bins`` (in ``bin_id`` order).  For a
+    spot DataFrame the first-occurrence order is preserved.
     """
+    bins = getattr(cdata_or_spots, "bins", None)
+    if isinstance(bins, pd.DataFrame):
+        return _normalise_interval_frame(bins, columns=INTERVAL_COLUMNS).reset_index(drop=True)
     spots = _spots_dataframe(cdata_or_spots)
     intervals = _normalise_interval_frame(spots, columns=INTERVAL_COLUMNS)
     return intervals.drop_duplicates(list(INTERVAL_COLUMNS), keep="first").reset_index(drop=True)
+
+
+def project_interval_features_to_bins(
+    cdata_or_bins,
+    features: pd.DataFrame,
+    *,
+    prefix: str | None = None,
+    value_columns: Sequence[str] | None = None,
+    into: pd.DataFrame | None = None,
+    overwrite: bool = False,
+) -> pd.DataFrame:
+    """Project interval-level features onto the bin axis.
+
+    Parameters
+    ----------
+    cdata_or_bins
+        A ``ChromData`` (its ``bins`` are used) or a bin table with
+        ``chrom, start, end``.
+    features
+        DataFrame with one row per interval (matched to bins by exact
+        ``chrom, start, end``) and feature columns.
+    prefix
+        Optional namespace prefix, e.g. ``"seq"`` → ``seq.gc_fraction``.
+    value_columns
+        Feature columns to project (default: all non-interval columns).
+    into
+        Existing bin-aligned table to extend (usually ``cd.bin_tracks``).
+    overwrite
+        If False, raise when a projected column already exists in ``into``.
+
+    Returns
+    -------
+    DataFrame
+        ``n_bins`` rows indexed by ``bin_id``: the ``into`` columns plus
+        the projected ones (NaN for bins without a feature row).
+    """
+    bins = getattr(cdata_or_bins, "bins", cdata_or_bins)
+    if not isinstance(bins, pd.DataFrame):
+        raise TypeError("expected a ChromData-like object or a bins DataFrame")
+    table, value_columns = _feature_table(features, value_columns)
+    keys = _normalise_interval_frame(bins, columns=INTERVAL_COLUMNS).reset_index(drop=True)
+    projected = keys.merge(table, on=list(INTERVAL_COLUMNS), how="left", sort=False)
+
+    n = len(bins)
+    if into is None or len(into.columns) == 0:
+        out = pd.DataFrame(index=pd.RangeIndex(n, name="bin_id"))
+    else:
+        if len(into) != n:
+            raise ValueError(f"into rows ({len(into)}) != n_bins ({n})")
+        out = into.copy()
+        out.index = pd.RangeIndex(n, name="bin_id")
+    for col in value_columns:
+        out_col = _prefixed_name(col, prefix)
+        if out_col in out.columns and not overwrite:
+            raise ValueError(f"projected column already exists: {out_col}")
+        out[out_col] = projected[col].to_numpy()
+    return out
+
+
+def _feature_table(features, value_columns):
+    if features is None:
+        raise ValueError("features must be a DataFrame")
+    if not isinstance(features, pd.DataFrame):
+        raise TypeError("features must be a pandas DataFrame")
+    feature_keys = _normalise_interval_frame(features, columns=INTERVAL_COLUMNS)
+    if value_columns is None:
+        value_columns = [c for c in features.columns if c not in INTERVAL_COLUMNS]
+    value_columns = list(value_columns)
+    if not value_columns:
+        raise ValueError("no feature columns to project")
+    missing_values = [c for c in value_columns if c not in features.columns]
+    if missing_values:
+        raise ValueError(f"features missing value columns: {missing_values}")
+    duplicated = feature_keys.duplicated(list(INTERVAL_COLUMNS), keep=False)
+    if duplicated.any():
+        dup = feature_keys.loc[duplicated, list(INTERVAL_COLUMNS)].head(3).to_dict("records")
+        raise ValueError(f"features contain duplicate intervals: {dup}")
+    table = pd.concat(
+        [feature_keys.reset_index(drop=True), features[value_columns].reset_index(drop=True)],
+        axis=1,
+    )
+    return table, value_columns
 
 
 def project_interval_features_to_spots(
@@ -62,7 +149,19 @@ def project_interval_features_to_spots(
     DataFrame
         A spot-aligned DataFrame containing the existing ``into`` columns plus
         projected feature columns.
+
+    .. deprecated:: format 2.0
+        Per-locus features belong on the bin axis: use
+        :func:`project_interval_features_to_bins` (``cd.bin_tracks``).
     """
+    import warnings
+
+    warnings.warn(
+        "project_interval_features_to_spots is deprecated; use "
+        "project_interval_features_to_bins (writes cd.bin_tracks).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     spots = _spots_dataframe(cdata_or_spots)
     if features is None:
         raise ValueError("features must be a DataFrame")
@@ -107,6 +206,8 @@ def project_interval_features_to_spots(
 def _spots_dataframe(cdata_or_spots) -> pd.DataFrame:
     if isinstance(cdata_or_spots, pd.DataFrame):
         return cdata_or_spots
+    if hasattr(cdata_or_spots, "spots_with_loci"):
+        return cdata_or_spots.spots_with_loci()
     spots = getattr(cdata_or_spots, "spots", None)
     if isinstance(spots, pd.DataFrame):
         return spots
@@ -153,6 +254,7 @@ def _prefixed_name(name: str, prefix: str | None) -> str:
 
 __all__ = [
     "INTERVAL_COLUMNS",
+    "project_interval_features_to_bins",
     "project_interval_features_to_spots",
     "unique_spot_intervals",
 ]

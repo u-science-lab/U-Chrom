@@ -180,7 +180,7 @@ def call_tads_di(
         "chrom": list(chroms),
     }
     return store_and_return(
-        cd, table, key_added=key_added, copy=copy, kind="intervals",
+        cd, table, key_added=key_added, copy=copy, kind="intervals", interval_kind="domain",
         function="uchrom.strc.tad.call_tads_di", params=params, inputs=inputs,
     )
 

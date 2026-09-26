@@ -176,13 +176,15 @@ def test_old_reader_sees_values_unchanged(tmp_path):
 
 def test_pre_provenance_file_reads_as_records_without_provenance(tmp_path):
     """A 1.3 file (no ``_kind`` attrs) reads into a store with inferred kinds."""
+    from tests._v1 import write_v1
+
     path = tmp_path / "v13.h5cd"
     cd = _cd()
     cd.results.set("tads", pd.DataFrame({"start": [0]}), function="f")
     cd.results.set("pc1", np.ones(4), function="f")
-    cd.write(path)
+    write_v1(path, cd.coords, cd.to_dataframe().drop(columns=["x", "y", "z"]),
+             results=cd.results, version="1.3")
     with h5py.File(path, "r+") as f:
-        f.attrs["uchrom_format_version"] = "1.3"
         for key in ("tads", "pc1"):
             for attr in ("_kind", "_function", "_params", "_inputs",
                          "_uchrom_version", "_created_utc"):

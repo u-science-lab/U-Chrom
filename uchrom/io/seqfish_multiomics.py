@@ -248,12 +248,33 @@ def read_seqfish_multiomics(
     return ChromData(
         coords=coords,
         spots=spots,
+        bins=_panel_bins(locus_df, spots),
         cells=cells_kept,
         cellm=cellm if cellm else None,
-        tracks=tracks,
+        spot_tracks=tracks,          # per-spot z-scores (not per-locus)
         traces=traces,
         uns=uns,
     )
+
+
+def _panel_bins(locus_df: pd.DataFrame, spots: pd.DataFrame) -> Optional[pd.DataFrame]:
+    """The probe panel as ``bins`` (one row per annotated locus, with its
+    ``name``), restricted to the chromosomes that have spots.  ``None`` —
+    bins then come from the spot loci — if the panel has duplicate loci or
+    misses a spot locus (e.g. a spot whose source chrom disagrees)."""
+    from uchrom.core.bins import map_loci_to_bins, normalise_bins
+
+    chroms = set(spots["chrom"].astype(str))
+    panel = locus_df[locus_df["chrom"].astype(str).isin(chroms)]
+    panel = panel.sort_values(["chrom", "start", "end"], kind="mergesort")
+    panel = panel[["chrom", "start", "end", "name"]].reset_index(drop=True)
+    try:
+        bins = normalise_bins(panel)
+    except (ValueError, TypeError):
+        return None
+    if (map_loci_to_bins(spots, bins) < 0).any():
+        return None
+    return bins
 
 
 def read_seqfish_transcriptome(

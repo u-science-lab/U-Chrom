@@ -20,21 +20,30 @@ Cell
 
 ## Attributes
 
+### Locus axis (format 2.0)
+
+| Attribute | Type | Shape | Description |
+|-----------|------|-------|-------------|
+| `bins` | DataFrame | (n_bins, ≥3) | Index `bin_id` (0..n_bins-1). Columns `chrom` (categorical), `start`, `end` (int64), optional `resolution`, `name`, … One row per locus, shared by all cells. |
+| `bin_tracks` | DataFrame | (n_bins, ?) | Per-locus signals (bulk ATAC / ChIP, GC, annotation features, compartment score). |
+| `binm` | dict[str, ndarray] | (n_bins, …) | Per-locus multi-dimensional arrays. |
+| `intervals` | dict[str, IntervalTable] | — | Typed interval tables: `domain` (chrom, start, end), `pair` (chrom1…end2), `peak`, `segment` (+ label). `attrs`: `kind`, `source_result`. |
+
 ### Core Table (FOF-CT compatible)
 
 | Attribute | Type | Shape | Description |
 |-----------|------|-------|-------------|
 | `coords` | ndarray | (n_spots, 3) | 3D coordinates. Column order: x, y, z. |
-| `spots` | DataFrame | (n_spots, ≥4) | Spot metadata. See columns below. |
+| `spots` | DataFrame | (n_spots, ≥2) | Spot metadata. See columns below. |
+| `spot_tracks` | DataFrame | (n_spots, ?) | Per-spot signals (IF intensity, seqFISH z-scores). |
 
 **`spots` columns:**
 
 | Column | Type | Required | Description |
 |--------|------|----------|-------------|
-| `chrom` | str (categorical) | yes | Chromosome name (e.g. `chr1`). |
-| `start` | int | yes | Start position on chromosome (0-based). |
-| `end` | int | yes | End position (non-inclusive). |
+| `bin_id` | int | yes | Row of `bins` this spot observes (derived from chrom/start/end when not given). |
 | `trace_id` | int or str (categorical) | yes | Which Trace this Spot belongs to. |
+| `chrom` / `start` / `end` | derived | — | Filled from `bins[bin_id]` (0-based, end-exclusive); not stored on disk. `cd.spots_with_loci()` is the stable accessor. |
 | `cell_id` | int or str (categorical) | no | Which Cell this Spot belongs to. |
 | `spot_id` | int or str | no | Globally unique Spot identifier. |
 
@@ -51,13 +60,11 @@ Cell
 - `cellm['embedding']` — shape (n_cells, 128), single-cell structure embeddings.
 - `cellm['umap']` — shape (n_cells, 2), UMAP coordinates.
 
-### Chromatin Table (epigenomic tracks)
+### Tracks
 
-| Attribute | Type | Shape | Description |
-|-----------|------|-------|-------------|
-| `tracks` | DataFrame | (n_spots, n_tracks) | Epigenomic signal per bin, row-aligned to `spots`. |
-
-Each column is a named track, e.g. `ATAC`, `H3K27ac`, `H3K27me3`. Data sourced from bed/bedgraph files, mapped to bins via genomic coordinates.
+`bin_tracks` (per locus) and `spot_tracks` (per spot) replace the 1.x
+spot-aligned `tracks`.  During 2.x, `cd.tracks` is a deprecated
+spot-aligned view of both (`cd.tracks_spot_view()` without the warning).
 
 ### Additional Storage
 
@@ -165,29 +172,36 @@ Read semantics (implemented in `ChromData.read`):
 
 New MAJOR versions should add a `_read_vN` function in `cdata.py` and may include a migration helper that converts old on-disk data to the current in-memory form.
 
-### HDF5 layout
+### HDF5 layout (format 2.0)
 
 ```
 data.h5cd
 ├── [attrs]
-│   ├── uchrom_format_version   "1.0"
-│   └── uchrom_version          "0.2.0"
+│   ├── uchrom_format_version   "2.0"
+│   ├── uchrom_version          "0.2.0"
+│   └── spot_order              "unsorted"
+├── bins/               chrom {codes, categories}, start int64, end int64, …
 ├── coords              float64 (n_spots, 3)
-├── spots/              group — one dataset per column
-│   ├── chrom           bytes
-│   ├── start           int64
-│   ├── end             int64
-│   ├── trace_id        bytes or int64
-│   └── cell_id         bytes or int64 (optional)
-├── cells/              group — one dataset per column
-├── cellm/              group — one dataset per key
-├── tracks/             group — one dataset per column
-├── traces/             group — one dataset per column
-├── layers/             group — one float64 (n_spots, 3) per key
-├── points/             optional group of DataFrames (format ≥ 1.3)
-├── results/            group — typed entries (`_type` attr): DataFrame / Series / dict as sub-groups, arrays as datasets, scalars & lists as JSON (format ≥ 1.2); each top-level entry carries provenance attrs `_kind, _function, _params, _inputs, _uchrom_version, _created_utc` (format ≥ 1.4)
-└── uns/                group — scalars as attrs, arrays as datasets, dicts as sub-groups
+├── spots/              bin_id int32, trace_id / cell_id {codes, categories}, extra columns
+│                        (@_column_order keeps the in-memory column order)
+├── tracks/             bin-level tracks, n_bins rows
+├── spot_tracks/        spot-level tracks, n_spots rows
+├── binm/               one (n_bins, …) dataset per key
+├── intervals/<key>/    DataFrame group, @_kind, @_source_result
+├── cells/, traces/     DataFrame groups
+├── cellm/, layers/     one dataset per key
+├── points/             optional group of DataFrames
+├── results/            typed entries + provenance attrs; an interval result holds
+│                        @_value_ref = "intervals/<key>" instead of a copy
+└── uns/                scalars as attrs, arrays as datasets, dicts as sub-groups
 ```
+
+Categorical columns are stored as `{codes, categories}` groups.  1.x
+files (spots with `chrom/start/end`, spot-aligned `tracks/`) are read by
+`_read_v1` and upgraded in memory; `uchrom.io.upgrade_h5cd(src, dst)` /
+`python -m uchrom.io.upgrade` rewrites them.  Not in 2.0 yet: sorted
+spots + `index/` offsets and backed mode (2.1), `contacts/` / `links/`
+(linked files stay in `uns["linked_*"]`), `binsets/`.
 
 ## FOF-CT Compatibility
 

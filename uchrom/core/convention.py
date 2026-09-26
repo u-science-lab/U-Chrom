@@ -166,17 +166,47 @@ def store_and_return(
     params: Any,
     inputs: Mapping[str, Any],
     extra: Sequence[Tuple[str, Any, str]] = (),
+    interval_kind: Optional[str] = None,
+    intervals: Sequence[Tuple[str, pd.DataFrame, str]] = (),
+    bin_tracks: Optional[Mapping[str, pd.DataFrame]] = None,
 ):
     """Store ``table`` (and ``extra`` ``(key, value, kind)`` records) with
-    provenance, then return per the convention."""
+    provenance, then return per the convention.
+
+    ``kind="intervals"`` tables are also exposed as ``cd.intervals[key_added]``
+    (the same object, typed ``interval_kind``).  ``intervals`` adds more
+    ``(key, table, interval_kind)`` interval tables (e.g. compartment
+    segments) and ``bin_tracks`` maps a track name to a frame with
+    ``chrom, start, end, value`` that is written to ``cd.bin_tracks``.
+    """
     target = cd.copy() if copy else cd
     if key_added is not None:
+        if kind == "intervals" and hasattr(target, "intervals"):
+            table = target.intervals.add(key_added, table, kind=interval_kind,
+                                         source_result=key_added)
         target.results.set(key_added, table, kind=kind, function=function,
                            params=params, inputs=inputs)
         for key, value, extra_kind in extra:
             target.results.set(key, value, kind=extra_kind, function=function,
                                params=params, inputs=inputs)
+        for key, value, ikind in intervals:
+            target.intervals.add(key, value, kind=ikind, source_result=key_added)
+        for name, frame in (bin_tracks or {}).items():
+            _set_bin_track(target, name, frame)
     return target if copy else table
+
+
+def _set_bin_track(cd, name: str, frame: pd.DataFrame) -> None:
+    """Write ``frame["value"]`` onto ``cd.bin_tracks[name]`` by exact locus."""
+    from uchrom.core.bins import map_loci_to_bins
+
+    ids = map_loci_to_bins(frame, cd.bins)
+    values = np.full(cd.n_bins, np.nan)
+    ok = ids >= 0
+    values[ids[ok]] = frame["value"].to_numpy(dtype=float)[ok]
+    bt = cd.bin_tracks.copy()
+    bt[name] = values
+    cd.bin_tracks = bt
 
 
 __all__ = [

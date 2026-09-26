@@ -59,7 +59,7 @@ def test_chrom_none_merges_per_chrom_outputs(name, two_chrom_data):
     merged = fn(cd, **kw)
     per = [fn(cd, chrom=c, key_added=None, **kw) for c in ("chr1", "chr2")]
     expected = pd.concat([p for p in per if not p.empty], ignore_index=True)
-    pd.testing.assert_frame_equal(merged.reset_index(drop=True), expected)
+    pd.testing.assert_frame_equal(merged.reset_index(drop=True), expected, check_frame_type=False)
     chrom_col = "chrom1" if name == "loops" else "chrom"
     if len(merged):
         assert set(merged[chrom_col]) <= {"chr1", "chr2"}
@@ -112,7 +112,7 @@ def test_legacy_forms_warn_and_keep_old_keys(name, two_chrom_data):
         legacy = fn(cd, "chr1", **kw)
     assert old_key in cd.results and new_key not in cd.results
     new = fn(cd, chrom="chr1", **kw)
-    pd.testing.assert_frame_equal(legacy, new)
+    pd.testing.assert_frame_equal(legacy, new, check_frame_type=False)
 
     cd2 = two_chrom_data[name].copy()
     with pytest.warns(DeprecationWarning, match="store="):
@@ -151,6 +151,7 @@ def test_results_round_trip_after_calling(tmp_path, two_chrom_data):
     pd.testing.assert_frame_equal(
         back["tads.fishnet"].astype({"trace_id": str}),
         cd.results["tads.fishnet"].astype({"trace_id": str}),
+        check_frame_type=False,
     )
     for c in ("chr1", "chr2"):
         for k in ("mask", "bin_ids"):
@@ -168,7 +169,7 @@ def test_multi_wrappers_are_deprecated_but_equivalent(two_chrom_data):
         old = call_tads_multi(cd, params=p, device="cpu")
     assert "tads" in cd.results
     new = call_tads_by_pval(cd, params=p, device="cpu")
-    pd.testing.assert_frame_equal(old, new)
+    pd.testing.assert_frame_equal(old, new, check_frame_type=False)
 
 
 def test_structural_features_find_new_keys(two_chrom_data):

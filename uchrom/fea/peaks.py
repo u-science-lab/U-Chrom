@@ -9,7 +9,7 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 
-from .project import INTERVAL_COLUMNS, project_interval_features_to_spots, unique_spot_intervals
+from .project import INTERVAL_COLUMNS, project_interval_features_to_bins, unique_spot_intervals
 from .registry import append_feature_registry_entry, table_provenance
 
 
@@ -29,17 +29,33 @@ def aggregate_track_by_interval(
     callers should operate on the genomic bin signal rather than individual
     spot rows, so this helper collapses duplicate intervals first.
     """
-    if track not in cdata.tracks.columns:
+    if track not in _track_columns(cdata):
         raise ValueError(f"track not found: {track}")
     if agg not in {"mean", "median", "max", "min", "sum"}:
         raise ValueError("agg must be one of: mean, median, max, min, sum")
 
     frame = cdata.spots.loc[:, list(INTERVAL_COLUMNS)].copy()
-    frame["_signal"] = pd.to_numeric(cdata.tracks[track], errors="coerce").to_numpy()
+    frame["_signal"] = pd.to_numeric(_spot_values(cdata, track), errors="coerce").to_numpy()
     grouped = frame.groupby(list(INTERVAL_COLUMNS), sort=False, observed=True)["_signal"]
     signal = getattr(grouped, agg)().rename(signal_col)
     counts = grouped.count().rename("n_spots")
     return pd.concat([signal, counts], axis=1).reset_index()
+
+
+def _track_columns(cdata) -> set:
+    """Names of all tracks (bin- and spot-level; 1.x-style objects too)."""
+    if hasattr(cdata, "track_names"):
+        names = cdata.track_names()
+        return set(names["bin"]) | set(names["spot"])
+    tracks = getattr(cdata, "tracks", None)
+    return set(tracks.columns) if tracks is not None else set()
+
+
+def _spot_values(cdata, track: str) -> pd.Series:
+    """Spot-aligned values of one track (bin-level tracks are broadcast)."""
+    if hasattr(cdata, "tracks_spot_view"):
+        return cdata.tracks_spot_view([track])[track]
+    return cdata.tracks[track]
 
 
 def aggregate_tracks_by_interval(
@@ -50,7 +66,7 @@ def aggregate_tracks_by_interval(
 ) -> pd.DataFrame:
     """Aggregate multiple spot-aligned tracks to unique genomic intervals."""
     tracks = list(tracks)
-    missing = [track for track in tracks if track not in cdata.tracks.columns]
+    missing = [track for track in tracks if track not in _track_columns(cdata)]
     if missing:
         raise ValueError(f"track(s) not found: {missing}")
     if agg not in {"mean", "median", "max", "min", "sum"}:
@@ -58,7 +74,7 @@ def aggregate_tracks_by_interval(
 
     frame = cdata.spots.loc[:, list(INTERVAL_COLUMNS)].copy()
     for track in tracks:
-        frame[track] = pd.to_numeric(cdata.tracks[track], errors="coerce").to_numpy()
+        frame[track] = pd.to_numeric(_spot_values(cdata, track), errors="coerce").to_numpy()
     grouped = frame.groupby(list(INTERVAL_COLUMNS), sort=False, observed=True)
     out = grouped[tracks].agg(agg).reset_index()
     out["n_spots"] = grouped.size().to_numpy()
@@ -460,12 +476,12 @@ def add_peak_features(
         )
     projected = [_prefixed_name(col, prefix) for col in value_columns]
     if project:
-        cdata.tracks = project_interval_features_to_spots(
+        cdata.bin_tracks = project_interval_features_to_bins(
             cdata,
             table,
             prefix=prefix,
             value_columns=value_columns,
-            into=cdata.tracks,
+            into=cdata.bin_tracks,
             overwrite=overwrite,
         )
     append_feature_registry_entry(cdata, {
@@ -517,7 +533,7 @@ def call_peaks_from_track(
     store: bool = True,
     overwrite: bool = False,
 ) -> pd.DataFrame:
-    """Aggregate a track, call peaks, and project peak features to spots."""
+    """Aggregate a track, call peaks, and project peak features to bins."""
     safe_track = _safe_name(track)
     feature_name = _safe_name(feature_name or safe_track)
     peaks_key = peaks_key or f"peaks:{safe_track}"
@@ -593,12 +609,12 @@ def call_peaks_from_track(
         )
     projected = [_prefixed_name(col, prefix) for col in value_columns]
     if project:
-        cdata.tracks = project_interval_features_to_spots(
+        cdata.bin_tracks = project_interval_features_to_bins(
             cdata,
             table,
             prefix=prefix,
             value_columns=value_columns,
-            into=cdata.tracks,
+            into=cdata.bin_tracks,
             overwrite=overwrite,
         )
     append_feature_registry_entry(cdata, {

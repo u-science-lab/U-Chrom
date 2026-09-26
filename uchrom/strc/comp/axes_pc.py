@@ -163,11 +163,43 @@ def call_compartments_axes_pc(
     chroms = resolve_chroms(work, chrom)
     frames = [_call_compartments_chrom(work, c, params, device, verbose) for c in chroms]
     table = merge_tables(frames, _empty_compartments())
+    track = table[["chrom", "start", "end"]].assign(value=table["pc2"].to_numpy(dtype=float))
     return store_and_return(
         cd, table, key_added=key_added, copy=copy, kind="table",
         function="uchrom.strc.comp.call_compartments_axes_pc", params=params,
         inputs=selection_inputs(work, chroms, trace_ids, cells),
+        intervals=[(key_added, compartment_segments(table), "segment")] if key_added else (),
+        bin_tracks={f"{key_added}.pc2": track} if key_added else None,
     )
+
+
+def compartment_segments(table: pd.DataFrame) -> pd.DataFrame:
+    """Per-bin compartment calls → runs of equal label per chromosome.
+
+    Columns ``chrom, start, end, label, n_bins, pc2`` (mean ``pc2`` of the
+    run's bins).  Stored as the ``segment`` interval table
+    ``cd.intervals[key_added]``.
+    """
+    rows = []
+    for chrom, sub in table.groupby("chrom", sort=False, observed=True):
+        sub = sub.sort_values("start", kind="mergesort")
+        lab = sub["compartment"].astype(str).to_numpy()
+        run = np.concatenate([[0], np.cumsum(lab[1:] != lab[:-1])])
+        for _, g in sub.groupby(run, sort=True):
+            rows.append({
+                "chrom": str(chrom),
+                "start": int(g["start"].iloc[0]),
+                "end": int(g["end"].iloc[-1]),
+                "label": str(g["compartment"].iloc[0]),
+                "n_bins": int(len(g)),
+                "pc2": float(g["pc2"].mean()),
+            })
+    cols = ["chrom", "start", "end", "label", "n_bins", "pc2"]
+    if not rows:
+        return pd.DataFrame({"chrom": pd.Series(dtype=str), "start": pd.Series(dtype="int64"),
+                             "end": pd.Series(dtype="int64"), "label": pd.Series(dtype=str),
+                             "n_bins": pd.Series(dtype="int64"), "pc2": pd.Series(dtype=float)})
+    return pd.DataFrame(rows, columns=cols)
 
 
 def _call_compartments_chrom(cd, chrom: str, params: CompartmentCallerParams,
@@ -261,5 +293,6 @@ def _empty_compartments() -> pd.DataFrame:
 
 __all__ = [
     "call_compartments_axes_pc",
+    "compartment_segments",
     "CompartmentCallerParams",
 ]

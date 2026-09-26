@@ -547,7 +547,7 @@ def call_domains_fishnet(
     if max_traces is not None:
         inputs["max_traces"] = int(max_traces)
     return store_and_return(
-        cd, table, key_added=key_added, copy=copy, kind="intervals",
+        cd, table, key_added=key_added, copy=copy, kind="intervals", interval_kind="domain",
         function="uchrom.strc.tad.call_domains_fishnet", params=params,
         inputs=inputs, extra=extra,
     )

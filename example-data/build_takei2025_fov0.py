@@ -76,7 +76,7 @@ def add_if_embedding(cd) -> None:
     from uchrom.emb import aggregate_tracks, embed_cells
     from uchrom.io.seqfish_multiomics import IF_COLUMNS
 
-    marks = [c for c in IF_COLUMNS if c in cd.tracks.columns]
+    marks = [c for c in IF_COLUMNS if c in cd.spot_tracks.columns]
     aggregate_tracks(cd, marks, prefix="if", stat="mean")
     corr = aggregate_tracks(cd, marks, prefix="if", stat="corr", write=False)
     embed_cells(cd, source="if", matrix=corr.to_numpy(), normalization="zscore",

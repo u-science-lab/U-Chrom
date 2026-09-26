@@ -15,6 +15,18 @@
   Positional `chrom`, `store=`, `result_key=` and
   `strc.call_*_multi` are deprecated (they warn and keep the 1.x keys).
 - `uchrom.tl` / `uchrom.pp` alias namespaces.
+- **`.h5cd` format 2.0 — the `bins` locus axis** (breaking on disk; 1.x
+  files still read).  `cd.bins` (index `bin_id`), required
+  `spots.bin_id` (derived from `chrom/start/end` by every constructor and
+  loader), bin-level `cd.bin_tracks` vs per-spot `cd.spot_tracks`,
+  `cd.binm`, typed `cd.intervals` (`domain | pair | peak | segment`, with
+  `to_bins`).  Structure callers also fill `cd.intervals`; compartments add
+  segments and a per-bin `pc2` track.  `fea` / `strc` feature writers
+  project onto bins (`fea.project_interval_features_to_bins`; the spot
+  version is deprecated).  `cd.tracks` is a deprecated spot-aligned view.
+  `uchrom.io.upgrade_h5cd` and `python -m uchrom.io.upgrade` rewrite 1.x
+  files; the web browser lists bin- and spot-level tracks and typed
+  intervals.
 
 ## 0.2.0 — 2026-04
 

@@ -2,7 +2,15 @@
 
 `uchrom.ChromData` is the central container.  It is conceptually similar
 to [AnnData](https://anndata.readthedocs.io/) but organises the data
-around the chromatin-tracing hierarchy *Cell → Trace → Spot*.
+around the chromatin-tracing hierarchy *Cell → Trace → Spot*, plus a
+locus axis, `bins`, shared by all cells (format 2.0).
+
+```text
+spots   tell what was observed      (one row per observation)
+bins    tell where on the genome    (one row per locus, shared by all cells)
+cells   tell who                    (one row per cell)
+results tell what was derived       (typed, with provenance)
+```
 
 ## Construction
 
@@ -21,16 +29,41 @@ spots = pd.DataFrame({
 cd = ChromData(coords, spots, uns={"genome_assembly": "GRCh38"})
 ```
 
-### Required spot columns
+The constructor derives the locus axis from the spot loci:
+
+```python
+cd.bins          # index = bin_id: chrom (category), start, end
+cd.spots         # chrom, start, end, trace_id, bin_id
+cd.n_bins        # 2
+```
+
+### Spot columns
 
 | Column | Type | Required | FOF-CT field |
 |--------|------|----------|--------------|
-| `chrom` | str (category) | yes | `Chrom` |
-| `start` | int | yes | `Chrom_Start` |
-| `end` | int | yes | `Chrom_End` |
+| `bin_id` | int → `bins.index` | yes (derived from `chrom/start/end` if absent) | — |
 | `trace_id` | int/str (category) | yes | `Trace_ID` |
+| `chrom` / `start` / `end` | derived from `bins` | give them instead of `bin_id` | `Chrom` / `Chrom_Start` / `Chrom_End` |
 | `cell_id` | int/str (category) | no | `Cell_ID` |
 | `spot_id` | int/str | no | `Spot_ID` |
+
+`spots["chrom" / "start" / "end"]` are *derived* columns: they are
+filled from `bins[spots.bin_id]`, kept in memory for convenience and not
+stored on disk.  `cd.spots_with_loci()` is the stable way to get them;
+`cd.to_dataframe()` includes them (and leaves `bin_id` out unless
+`include_bin_id=True`).  If you edit spot loci in place, call
+`cd.rebuild_bins()`; `write()` refuses spots whose loci disagree with
+`bins`.
+
+To use an explicit bin table (a probe panel with names, or a regular
+grid that includes unobserved loci), pass `bins=` together with either
+`bin_id` or loci in `spots`:
+
+```python
+bins = pd.DataFrame({"chrom": ["chr1"] * 3, "start": [0, 100_000, 200_000],
+                     "end": [100_000, 200_000, 300_000], "name": ["p1", "p2", "p3"]})
+cd = ChromData(coords, spots, bins=bins)       # spots loci are looked up in bins
+```
 
 String columns are auto-converted to `pd.Categorical` for ~10× memory
 savings on large datasets.
@@ -39,18 +72,77 @@ savings on large datasets.
 
 | Attribute | Shape | Purpose |
 |-----------|-------|---------|
+| `bins` | `(n_bins, ≥3)` | locus axis: `chrom, start, end` (+ `name`, `resolution`, …), index `bin_id` |
+| `bin_tracks` | `(n_bins, ?)` | per-locus signals: bulk ATAC / ChIP, GC, annotation features, compartment score |
+| `binm` | dict | per-locus multi-dim arrays, first axis `n_bins` |
+| `intervals` | dict of `IntervalTable` | typed TADs / loops / peaks / segments (see [Intervals](#intervals)) |
 | `coords` | `(n_spots, 3)` | x, y, z for each spot |
-| `spots` | `(n_spots, ≥4)` | per-spot metadata |
+| `spots` | `(n_spots, ≥2)` | per-spot metadata (`bin_id`, `trace_id`, …) |
+| `spot_tracks` | `(n_spots, ?)` | per-spot signals: IF intensity, seqFISH z-scores |
+| `tracks` | `(n_spots, ?)` | **deprecated** spot-aligned view of `bin_tracks` + `spot_tracks` |
 | `cells` | `(n_cells, ?)` | per-cell metadata |
 | `cellm` | dict | multi-dim cell annotations (embeddings, UMAP) |
-| `tracks` | `(n_spots, n_tracks)` | epigenomic signals aligned to spots |
 | `traces` | `(n_traces, ?)` | per-trace metadata |
 | `layers` | dict | alternative coordinate sets |
 | `points` | dict of DataFrames | non-genomic 3-D points in the same frame (nascent RNA spots, IF puncta): `x, y, z`, `cell_id`, `gene`, … |
 | `results` | `ResultsStore` | analysis outputs with provenance (loops, TADs, …) — see [Results](#results) |
 | `uns` | dict | unstructured metadata |
 
-Properties: `cd.n_spots`, `cd.n_traces`, `cd.n_cells`, `cd.chroms`.
+Properties: `cd.n_spots`, `cd.n_bins`, `cd.n_traces`, `cd.n_cells`, `cd.chroms`.
+
+## Tracks: per locus vs per spot
+
+| data | lives in | aligned to |
+|------|----------|-----------|
+| bulk ATAC / ChIP / GC / annotation features | `cd.bin_tracks` | bins |
+| per-spot IF intensity, seqFISH z-scores | `cd.spot_tracks` | spots |
+| per-bin embeddings / loadings | `cd.binm[key]` | bins (first axis) |
+| TADs, loops, peaks, compartment segments | `cd.intervals[key]` | typed interval tables |
+| per-bin compartment score | `cd.bin_tracks["compartments.axes_pc.pc2"]` | bins |
+
+```python
+cd.bin_tracks["ATAC"] = atac_per_bin            # n_bins values
+cd.spot_tracks = if_table                       # n_spots rows
+cd.tracks_spot_view()                           # every track aligned to spots
+cd.tracks_spot_view(["ATAC"])                   # (bin tracks broadcast via bin_id)
+cd.track_names()                                # {"bin": [...], "spot": [...]}
+```
+
+`fea.add_sequence_features / add_annotation_features / add_peak_features`
+and `strc.add_structural_features` write `cd.bin_tracks` (once per locus,
+not once per spot); `fea.project_interval_features_to_bins` is the
+underlying projection.
+
+`cd.tracks` keeps working during the 2.x series as a spot-aligned view
+with a `DeprecationWarning`.  `cd.tracks["x"] = values` writes through
+(to `spot_tracks`, or `bin_tracks` for an existing bin track that stays
+constant within every bin); assigning a whole spot-aligned table splits
+it: columns constant within every bin become bin tracks, the rest spot
+tracks.  (In 3.0 `cd.tracks` becomes the bin-level table.)
+
+## Intervals
+
+`cd.intervals` holds typed, validated interval tables (`IntervalTable`,
+a DataFrame with `attrs["kind"]` and `attrs["source_result"]`):
+
+| kind | required columns | examples |
+|------|------------------|----------|
+| `domain` | `chrom, start, end` | TADs, FISHnet domains |
+| `pair` | `chrom1, start1, end1, chrom2, start2, end2` | loops |
+| `peak` | `chrom, start, end` (+ `summit`, …) | MACS peaks |
+| `segment` | `chrom, start, end, label` | A/B compartment runs |
+
+```python
+cd.intervals["tads.arcfish"]                          # set by call_tads_by_pval
+cd.intervals["tads.arcfish"].to_bins(cd.bins)         # best-overlap row per bin (-1 = none)
+cd.intervals["tads.arcfish"].to_bins(cd.bins, how="bool")
+cd.intervals["compartments.axes_pc"].to_bins(cd.bins, column="label")
+cd.intervals.add("peaks", peaks_df, kind="peak")
+```
+
+The structure callers store interval outputs in `cd.results` **and**
+`cd.intervals` (the same object); on disk the result references
+`intervals/<key>` instead of storing the table twice.
 
 ## Subsetting
 
@@ -132,9 +224,39 @@ D = cd.compute_distances(trace_id=0)  # (n_spots_in_trace, n_spots_in_trace)
 | `.h5cd` (HDF5) | `ChromData.read` |
 
 ```python
-cd.write("data.h5cd")
-cd2 = ChromData.read("data.h5cd")
+cd.write("data.h5cd")                  # format 2.0
+cd2 = ChromData.read("data.h5cd")      # 2.0, or 1.x upgraded in memory
 ```
+
+### Migrating 1.x files (format 2.0)
+
+`ChromData.read` reads 1.x files transparently: `bins` become the unique
+spot loci, and the spot-aligned 1.x `tracks` table is split into
+`bin_tracks` (columns constant within every bin) and `spot_tracks` (the
+rest).  To rewrite files once:
+
+```python
+from uchrom.io import upgrade_h5cd
+upgrade_h5cd("old.h5cd", "new.h5cd")   # the source is never modified
+```
+
+```bash
+python -m uchrom.io.upgrade old.h5cd new.h5cd
+python -m uchrom.io.upgrade data/*.h5cd --out-dir upgraded/
+```
+
+Code changes, if any:
+
+- `cd.tracks[...]` → `cd.bin_tracks[...]` (per locus) or
+  `cd.spot_tracks[...]` (per spot); `cd.tracks_spot_view()` gives the
+  old spot-aligned table.
+- `ChromData(..., tracks=spot_aligned)` → `spot_tracks=` (per spot) or a
+  bins-aligned `tracks=`.
+- `fea.project_interval_features_to_spots` →
+  `project_interval_features_to_bins`.
+- Reading spot loci keeps working; `cd.spots_with_loci()` is the stable
+  form.
+- 1.x readers cannot read 2.0 files.
 
 ### Multi-omics FOF-CT: cell table and RNA spots
 
@@ -150,7 +272,7 @@ cd = ChromData.from_fofct(
 cd.cells[["nucleus_area_um2", "rna.Nanog"]]   # genes are prefixed "rna."
 cd.points["rna"].head()                        # x, y, z, gene, cell_id, …
 cd.get_cell("0_2").points["rna"]               # RNA spots of one cell
-cd.write("takei2021_multiomics.h5cd")          # format 1.3
+cd.write("takei2021_multiomics.h5cd")          # format 2.0
 ```
 
 Cell embeddings from the RNA counts (stored in `cd.cellm`, parameters in
@@ -188,7 +310,7 @@ a normalisation suited to the data (`normalization="auto"` picks it from
 Each entry also records `modality` ("RNA", "Histone/IF", "ATAC", "Hi-C"),
 which the web browser uses to group the Embedding picker.
 
-Imaging data carry per-spot signals in `cd.tracks`.
+Imaging data carry per-spot signals in `cd.spot_tracks`.
 `aggregate_tracks` turns them into per-cell features:
 
 ```python

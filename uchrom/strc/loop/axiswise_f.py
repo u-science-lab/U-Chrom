@@ -288,7 +288,7 @@ def call_loops_axiswise_f(
     frames = [_call_loops_chrom(work, c, params, device, verbose) for c in chroms]
     table = merge_tables(frames, _empty_result())
     return store_and_return(
-        cd, table, key_added=key_added, copy=copy, kind="intervals",
+        cd, table, key_added=key_added, copy=copy, kind="intervals", interval_kind="pair",
         function="uchrom.strc.loop.call_loops_axiswise_f", params=params,
         inputs=selection_inputs(work, chroms, trace_ids, cells),
     )

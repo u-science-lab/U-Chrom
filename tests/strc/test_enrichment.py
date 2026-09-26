@@ -80,10 +80,11 @@ def test_add_structural_features_updates_tracks_results_and_registry():
 
     table = add_structural_features(cdata)
 
-    assert "strc.distance_to_tad_boundary" in cdata.tracks
-    assert "strc.loop_anchor_overlap" in cdata.tracks
+    assert "strc.distance_to_tad_boundary" in cdata.tracks_spot_view()
+    assert "strc.loop_anchor_overlap" in cdata.tracks_spot_view()
     assert "bin_features" in cdata.results
-    assert cdata.tracks.loc[1, "strc.loop_anchor_overlap"] == 1.0
+    assert cdata.tracks_spot_view().loc[1, "strc.loop_anchor_overlap"] == 1.0
+    assert "strc.loop_anchor_overlap" in cdata.bin_tracks.columns
     assert cdata.uns["feature_registry"][0]["feature_group"] == "structure"
     assert cdata.uns["feature_registry"][0]["source_results"] == ["tads", "loops"]
     assert "distance_to_tad_boundary" in table
@@ -101,5 +102,5 @@ def test_add_structural_features_projects_empty_result_tables():
 
     assert "loop_anchor_overlap" in table
     assert list(table["loop_anchor_overlap"]) == [0.0, 0.0, 0.0, 0.0]
-    assert "strc.loop_anchor_overlap" in cdata.tracks
+    assert "strc.loop_anchor_overlap" in cdata.tracks_spot_view()
     assert cdata.uns["feature_registry"][0]["source_results"] == ["loops"]

@@ -22,15 +22,18 @@ def _two_cell_dataset():
     tracks = pd.DataFrame({"H3K27ac": [1.0, 2.0, 3.0, 3.0, 4.0, 5.0], "label": list("abcdef")})
     tads = pd.DataFrame({"chrom": ["chr1", "chr1", "chr2"], "start": [0, 150, 0],
                          "end": [150, 300, 10], "score": [0.5, np.nan, 1.0]})
-    cd = ChromData(coords, spots, tracks=tracks, results={"tads": tads}, uns={"xyz_unit": "um"})
+    cd = ChromData(coords, spots, spot_tracks=tracks, results={"tads": tads}, uns={"xyz_unit": "um"})
+    cd.bin_tracks = pd.DataFrame({"ATAC": [0.5, 1.5, 2.5]})   # one value per locus
     return DatasetStore().add(cd, name="two")
 
 
 def test_summary_lists_genome_views():
     s = _two_cell_dataset().summary()
     assert s["has_coords"] is True
-    assert s["tracks"] == [{"name": "H3K27ac"}]  # non-numeric columns are not tracks
-    assert s["intervals"] == [{"key": "tads", "n": 3}]
+    assert s["n_bins"] == 3
+    # non-numeric columns are not tracks
+    assert s["tracks"] == [{"name": "ATAC", "level": "bin"}, {"name": "H3K27ac", "level": "spot"}]
+    assert s["intervals"] == [{"key": "tads", "n": 3, "kind": None}]
     assert s["contact_maps"] == []
 
 
@@ -44,6 +47,20 @@ def test_tracks_aggregate_per_bin_and_by_cell():
     assert ds.tracks(["H3K27ac"], "chr1", agg="max")["values"]["H3K27ac"] == [3.0, 4.0, 5.0]
     with pytest.raises(KeyError):
         ds.tracks(["nope"], "chr1")
+
+
+def test_bin_level_track_is_broadcast_to_spots():
+    ds = _two_cell_dataset()
+    t = ds.tracks(["ATAC", "H3K27ac"], "chr1", cell_id="c1")
+    assert t["values"]["ATAC"] == [0.5, 1.5, 2.5] and t["n_spots"] == [1, 1, 1]
+
+
+def test_typed_intervals_are_listed_first():
+    ds = _two_cell_dataset()
+    ds.cd.intervals["tads.x"] = pd.DataFrame({"chrom": ["chr1"], "start": [0], "end": [300]})
+    s = ds.summary()
+    assert s["intervals"][0] == {"key": "tads.x", "n": 1, "kind": "domain"}
+    assert ds.intervals("tads.x", "chr1")["rows"] == [["chr1", 0, 300]]
 
 
 def test_intervals_filter_by_locus():

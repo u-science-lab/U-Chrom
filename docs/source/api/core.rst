@@ -4,7 +4,7 @@ uchrom.core
 .. automodule:: uchrom.core
    :members:
    :undoc-members:
-   :exclude-members: ChromData, ResultRecord, ResultsStore
+   :exclude-members: ChromData, ResultRecord, ResultsStore, IntervalTable, IntervalStore
 
 ChromData
 ---------
@@ -33,3 +33,15 @@ Calling convention helpers
 
 .. automodule:: uchrom.core.convention
    :members:
+
+Locus axis (bins)
+-----------------
+
+.. automodule:: uchrom.core.bins
+   :members:
+
+Interval tables
+---------------
+
+.. automodule:: uchrom.core.intervals
+   :members: IntervalTable, IntervalStore, INTERVAL_KINDS
