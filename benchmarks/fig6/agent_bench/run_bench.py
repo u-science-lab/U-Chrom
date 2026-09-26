@@ -18,6 +18,10 @@ clean `git archive` of a fixed commit, so `uchrom.__file__` is in site-packages.
     uv pip freeze --python .venv/bin/python | grep -v '^-e ' > $B/requirements.txt
     uv venv --python .venv/bin/python $B/venv && uv pip install --python $B/venv/bin/python -r $B/requirements.txt $B/dist/*.whl
 
+The agent runs under `sandbox-exec` with reads and writes denied below the U-Chrom checkouts (the parent of this
+repo plus every `--deny` path) and below ~/.claude/projects/*U-Chrom* (Claude Code memories of those projects):
+in main2, a `find /` located another checkout and read its build scripts.
+
 Each run's meta.json records `repo_refs` (tool calls naming this repo or the data root — should be 0) and
 `pkg_source_refs` (tool calls reading the installed uchrom source, which a real user could also do).
 """
@@ -87,6 +91,17 @@ def audit(lines: list[str], data_root: Path) -> dict:
     return {"repo_refs": repo, "pkg_source_refs": pkg}
 
 
+def sandbox_profile(deny: list[Path]) -> str:
+    """macOS sandbox-exec profile: allow everything except reading/writing the given trees and U-Chrom memories."""
+    paths = "\n".join(f'  (subpath "{d}")' for d in deny)
+    return f"""(version 1)
+(allow default)
+(deny file-read* file-write*
+{paths}
+  (regex #"^{Path.home()}/\\.claude/projects/[^/]*U-Chrom"))
+"""
+
+
 def workdir(condition: str, agent: str = "claude") -> Path:
     # neutral name: the agent should not learn it is in a benchmark, or which condition
     w = Path(tempfile.mkdtemp(prefix="analysis_"))
@@ -107,7 +122,7 @@ def workdir(condition: str, agent: str = "claude") -> Path:
 
 
 def run_one(q: dict, condition: str, rep: int, data_root: Path, out: Path, model: str | None, timeout: int,
-            agent: str = "claude", venv: Path | None = None):
+            agent: str = "claude", venv: Path | None = None, deny: list[Path] | None = None):
     d = out / f"{q['id']}__{condition}__r{rep}"
     if (d / "meta.json").exists():
         return json.loads((d / "meta.json").read_text())
@@ -133,6 +148,10 @@ def run_one(q: dict, condition: str, rep: int, data_root: Path, out: Path, model
     # A Bash call past Claude Code's 120 s default is moved to the background, and under `claude -p` the agent
     # then ends its turn without the result (TAD calls in B7/B8/C3).  Let such calls run in the foreground.
     env["BASH_DEFAULT_TIMEOUT_MS"] = env["BASH_MAX_TIMEOUT_MS"] = "600000"
+    if deny:
+        prof = w / ".." / f"{w.name}.sb"             # outside the workdir, so the agent never sees it
+        prof.write_text(sandbox_profile(deny))
+        cmd = ["sandbox-exec", "-f", str(prof), *cmd]
     t0 = time.time()
     try:
         p = subprocess.run(cmd, cwd=w, env=env, capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL)
@@ -162,9 +181,12 @@ def run_one(q: dict, condition: str, rep: int, data_root: Path, out: Path, model
             "returncode": rc, "elapsed_s": time.time() - t0,
             "cost_usd": final.get("total_cost_usd"), "num_turns": final.get("num_turns"),
             "model": init.get("model"), "skills_used": skills_used, "workdir": str(w), "venv": str(venv),
-            "claude_code_version": init.get("claude_code_version"), **audit(lines, data_root)}
+            "claude_code_version": init.get("claude_code_version"),
+            "sandbox_deny": [str(x) for x in deny or []], **audit(lines, data_root)}
     (d / "meta.json").write_text(json.dumps(meta, indent=1))
     shutil.rmtree(w, ignore_errors=True)
+    if deny:
+        prof.unlink(missing_ok=True)
     print(f"{q['id']:4s} {condition:6s} r{rep}  {meta['elapsed_s']:5.0f} s  ${meta['cost_usd'] or 0:.2f}  "
           f"turns {meta['num_turns']}  skills {skills_used}  repo_refs {meta['repo_refs']}", flush=True)
     return meta
@@ -181,6 +203,10 @@ def main():
     ap.add_argument("--agent", default="claude", choices=["claude", "codex"])
     ap.add_argument("--timeout", type=int, default=900)
     ap.add_argument("--run", default=time.strftime("run_%Y%m%d_%H%M"))
+    ap.add_argument("--deny", type=Path, action="append", default=[],
+                    help="extra U-Chrom checkout to hide from the agent (repeatable); the parent of this repo is "
+                         "always hidden")
+    ap.add_argument("--no-sandbox", action="store_true")
     ap.add_argument("--venv", type=Path, default=None,
                     help="isolated venv (default ~/.cache/uchrom-bench/<HEAD short sha>/venv; see module docstring)")
     a = ap.parse_args()
@@ -191,6 +217,10 @@ def main():
     if not (a.venv / "bin/python").exists():
         raise SystemExit(f"no benchmark venv at {a.venv}; build it as described in the module docstring")
     a.venv = a.venv.resolve()
+    deny = [] if a.no_sandbox else sorted({REPO.parent.resolve(), *(d.resolve() for d in a.deny)})
+    for d in deny:
+        if a.venv.is_relative_to(d):   # data are cloned before the sandbox starts, so --data-root may be inside
+            raise SystemExit(f"venv {a.venv} is inside a hidden tree {d}")
     qs = yaml.safe_load((HERE / "questions.yaml").read_text())["questions"]
     ids = set(filter(None, a.ids.split(",")))
     qs = [q for q in qs if not ids or q["id"] in ids]
@@ -201,7 +231,7 @@ def main():
         out.mkdir(parents=True, exist_ok=True)
         tasks += [(q, c, r, out, m) for r in range(a.reps) for q in qs for c in a.conditions.split(",")]
     with ThreadPoolExecutor(a.jobs) as ex:
-        list(ex.map(lambda t: run_one(t[0], t[1], t[2], a.data_root, t[3], t[4], a.timeout, a.agent, a.venv), tasks))
+        list(ex.map(lambda t: run_one(t[0], t[1], t[2], a.data_root, t[3], t[4], a.timeout, a.agent, a.venv, deny), tasks))
     print("->", HERE / "runs" / a.run)
 
 
