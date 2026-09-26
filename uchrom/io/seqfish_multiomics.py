@@ -136,6 +136,8 @@ def read_seqfish_multiomics(
     leiden_to_cell_type: Optional[Dict[int, str]] = None,
     allele_col: str = "dbscan_ldp_nbr_allele",
     keep_unclustered: bool = False,
+    out: Optional[PathLike] = None,
+    memory_budget=None,
 ) -> "ChromData":
     """Load Takei 2025 DNA seqFISH+ cerebellum data into a ChromData.
 
@@ -185,6 +187,17 @@ def read_seqfish_multiomics(
         (default) these are dropped before constructing the
         ``ChromData``.  Set ``True`` to keep them as their own
         ``allele=-1`` traces (useful for QC).
+    out
+        **Streaming import**: write the result to this ``.chromdata.zarr``
+        store, one CSV (FOV) at a time, with
+        :class:`~uchrom.core.stream.ChromDataWriter`, and return it opened
+        backed.  Peak memory is one FOV's parse (the raw CSV frame) — not
+        the sum of the FOVs — plus the writer's merge pieces (bounded by
+        ``memory_budget``).  The store equals
+        ``read_seqfish_multiomics(...).write(out)``.
+    memory_budget
+        Working-memory budget of the streaming writer (default
+        :data:`uchrom.settings.memory_budget`).
 
     Returns
     -------
@@ -221,6 +234,11 @@ def read_seqfish_multiomics(
     paths = _resolve_spot_paths(spot_glob)
     if not paths:
         raise ValueError(f"spot_glob matched no files: {spot_glob!r}")
+
+    if out is not None:
+        return _read_seqfish_streaming(
+            paths, locus_df, out=Path(out), cell_clustering=cell_clustering, leiden_map=leiden_map,
+            allele_col=allele_col, keep_unclustered=keep_unclustered, memory_budget=memory_budget)
 
     # Stream per-CSV: process and immediately filter each file so the
     # heavy raw frames (~12 GB / FOV) do not all live in memory at once.
@@ -270,6 +288,39 @@ def read_seqfish_multiomics(
         traces=traces,
         uns=uns,
     )
+
+
+def _read_seqfish_streaming(paths, locus_df, *, out: Path, cell_clustering, leiden_map,
+                            allele_col, keep_unclustered, memory_budget):
+    """:func:`read_seqfish_multiomics` with ``out=``: FOV by FOV into a
+    :class:`~uchrom.core.stream.ChromDataWriter`."""
+    from uchrom.core import ChromData
+    from uchrom.core.stream import ChromDataWriter
+
+    w = ChromDataWriter(out, memory_budget=memory_budget)
+    try:
+        traces_chunks: List[pd.DataFrame] = []
+        for p in paths:
+            if not p.exists():
+                raise FileNotFoundError(p)
+            chunk = _process_one_csv(p, locus_df, allele_col=allele_col,
+                                     keep_unclustered=keep_unclustered)
+            w.append(coords=chunk["coords"], spots=chunk["spots"], spot_tracks=chunk["tracks"])
+            traces_chunks.append(chunk["traces"])
+            del chunk
+            gc.collect()
+        traces = pd.concat(traces_chunks) if len(traces_chunks) > 1 else traces_chunks[0]
+        # the loci / cell ids seen stand in for the spots (same result)
+        loci = w.loci()
+        cells_kept, cellm = _build_cells_and_umap(
+            cell_clustering, leiden_map, pd.DataFrame({"cell_id": w.unique("cell_id")}))
+        w.finish(bins=_panel_bins(locus_df, loci), cells=cells_kept, cellm=cellm or None,
+                 traces=traces, uns=_build_uns(leiden_map, allele_col, keep_unclustered))
+    except BaseException:
+        if not w._closed:
+            w.abort()
+        raise
+    return ChromData.read(out, backed=True)
 
 
 def _panel_bins(locus_df: pd.DataFrame, spots: pd.DataFrame) -> Optional[pd.DataFrame]:

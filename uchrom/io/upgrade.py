@@ -113,7 +113,7 @@ def upgrade_h5cd(src: PathLike, dst: Optional[PathLike] = None, *, overwrite: bo
     names = cd.track_names()
     return {
         "src": str(src), "dst": str(dst),
-        "from_version": before, "to_version": FORMAT_VERSION,
+        "from_version": before, "to_version": file_format_version(dst),
         "from_container": src_kind, "to_container": kind,
         "n_spots": int(cd.n_spots), "n_bins": int(cd.n_bins),
         "bin_tracks": names["bin"], "spot_tracks": names["spot"],

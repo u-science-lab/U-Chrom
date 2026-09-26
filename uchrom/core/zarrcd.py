@@ -1,26 +1,30 @@
-"""The ``.chromdata.zarr`` container (format 2.0): Zarr + Parquet.
+"""The ``.chromdata.zarr`` container (format 2.1): Zarr + Parquet.
 
 A ChromData store is a Zarr v3 group whose large tables are Parquet files
 (the SpatialData approach): Parquet for anything with rows (spots, tracks,
 cells, traces, bins, intervals, points, result tables), Zarr for
 n-dimensional arrays (``cellm``, ``binm``, the ``index/`` offsets, result
 arrays) and JSON attributes for metadata (format version, ``uns``,
-provenance, linked files).  Layout::
+provenance, linked files).  Layout (2.1)::
 
     x.chromdata.zarr/
     ├── zarr.json                 root group; attrs["uchrom"] = format metadata
     ├── tables/                   zarr group (attrs: table metadata)
-    │   ├── spots.parquet         sorted by (cell, trace, bin); bin_id, trace_id,
-    │   │                         cell_id (integer codes), x, y, z, extra columns
-    │   ├── spot_tracks.parquet   row-aligned with spots.parquet
-    │   ├── layers/<key>.parquet  row-aligned x, y, z
+    │   ├── spots/chrom=<name>/part-0.parquet
+    │   │                         one partition per chromosome, sorted by
+    │   │                         (cell, trace, bin); bin_id, trace_id, cell_id
+    │   │                         (integer codes), x, y, z, extra columns
+    │   ├── spot_tracks/chrom=<name>/part-0.parquet   row-aligned with spots
+    │   ├── layers/<key>/chrom=<name>/part-0.parquet  row-aligned x, y, z
     │   ├── categories/<table>.<column>.parquet   values of the coded columns
     │   ├── bins.parquet  bin_tracks.parquet  traces.parquet  cells.parquet
     │   ├── intervals/<key>.parquet
     │   └── points/<key>.parquet
     ├── index/                    zarr arrays: trace_offsets, trace_codes,
     │                             trace_cells, chrom_trace, cell_offsets,
-    │                             cell_codes, row_groups, [source_row]
+    │                             cell_codes, cell_partition, row_groups,
+    │                             partition_offsets, partition_groups,
+    │                             partition_chrom, [source_row]
     ├── cellm/<key>  binm/<key>   zarr arrays (zstd)
     ├── results/<key>             zarr groups / arrays; attrs = provenance;
     │                             tables as <key>/table.parquet
@@ -28,9 +32,22 @@ provenance, linked files).  Layout::
     ├── contacts/                 attrs: linked .cool / .scool records
     └── links/                    attrs: linked .h5ad / .h5mu records
 
+The spot-aligned tables are **partitioned by chromosome** (hive-style
+``chrom=<name>`` directories; a trace observes one chromosome, so a
+partition never splits a single-chromosome trace).  Rows are numbered
+globally in partition order (chromosome category order), and within a
+partition sorted by (cell, trace, bin): the stored order is
+chrom › cell › trace › bin.  ``index/`` offsets use the global row
+numbers; ``cell_offsets`` has one entry per (chromosome, cell) run, so a
+cell is one slice per chromosome it has.  ``get_chrom`` reads one
+partition, ``get_trace`` one slice of one partition.
+
+Format 2.0 stores (one ``tables/spots.parquet`` etc., sorted by
+(cell, trace, bin)) stay readable: they are read as a single partition.
+
 ``<name>.cdz`` is the same tree in one uncompressed (``ZIP_STORED``) zip
-archive, so every member can be read in place (Parquet through a memory
-map, Zarr through :class:`zarr.storage.ZipStore`).
+archive, so every member can be read in place (Parquet through a byte
+range of the archive, Zarr through :class:`zarr.storage.ZipStore`).
 
 The full specification is in ``uchrom/core/spec.md``; the design
 rationale in ``docs/source/guide/chromdata_2_0_design.md`` (section 4).
@@ -65,11 +82,16 @@ PathLike = Union[str, Path]
 ZARR_SUFFIX = ".chromdata.zarr"
 ZIP_SUFFIX = ".cdz"
 CONTAINER = "chromdata.zarr"
-ZARR_FORMAT_VERSION = "2.0"
+ZARR_FORMAT_VERSION = "2.1"
+#: MINOR versions of the container this reader understands (2.0: one file per
+#: spot-aligned table, sorted by cell › trace › bin; 2.1: partitioned by chromosome)
+ZARR_LAYOUTS = {"2.0": "flat", "2.1": "partitioned"}
 
 #: target rows per Parquet row group of the spot-aligned tables (row groups
-#: end on cell boundaries, so a group holds whole cells)
-DEFAULT_ROW_GROUP_ROWS = 65_536
+#: end on cell boundaries within a chromosome partition)
+DEFAULT_ROW_GROUP_ROWS = 16_384
+#: decoded row groups kept by backed readers (LRU, bytes)
+DEFAULT_CACHE_BYTES = 256 << 20
 #: zstd level for Parquet and Zarr
 DEFAULT_ZSTD_LEVEL = 3
 
@@ -253,32 +275,43 @@ def _spot_keys(cd) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     return cell, trace, bin_id
 
 
-def sort_order(cell: np.ndarray, trace: np.ndarray, bin_id: np.ndarray) -> Optional[np.ndarray]:
-    """Stable permutation sorting spots by (cell, trace, bin), or ``None``
-    when they already are sorted."""
+def sort_order(cell: np.ndarray, trace: np.ndarray, bin_id: np.ndarray,
+               chrom: Optional[np.ndarray] = None) -> Optional[np.ndarray]:
+    """Stable permutation sorting spots by ([chrom,] cell, trace, bin), or
+    ``None`` when they already are sorted.  ``chrom`` (the chromosome code
+    of every spot) is the format 2.1 partition key; without it the order is
+    the 2.0 one."""
     n = len(bin_id)
     if n == 0:
         return None
     nc = int(cell.max()) + 2
     nt = int(trace.max()) + 2
     nb = int(bin_id.max()) + 1
-    if nc * nt * nb < 2 ** 62:
+    nch = int(chrom.max()) + 2 if chrom is not None else 1
+    if nch * nc * nt * nb < 2 ** 62:
         key = ((cell + 1) * nt + (trace + 1)) * nb + bin_id
+        if chrom is not None:
+            key = key + (chrom + 1) * (nc * nt * nb)
         if np.all(key[1:] >= key[:-1]):
             return None
         return np.argsort(key, kind="stable")
-    order = np.lexsort((bin_id, trace, cell))
+    keys = (bin_id, trace, cell) if chrom is None else (bin_id, trace, cell, chrom)
+    order = np.lexsort(keys)
     if np.array_equal(order, np.arange(n)):
         return None
     return order
 
 
-def _segments(cell: np.ndarray, trace: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """Offsets of the (cell, trace) runs and of the cell runs of sorted spots."""
+def _segments(cell: np.ndarray, trace: np.ndarray,
+              chrom: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray]:
+    """Offsets of the ([chrom,] cell, trace) runs and of the ([chrom,] cell)
+    runs of sorted spots."""
     n = len(trace)
     if n == 0:
         return np.zeros(1, dtype=np.int64), np.zeros(1, dtype=np.int64)
     new_cell = np.r_[True, cell[1:] != cell[:-1]]
+    if chrom is not None:
+        new_cell |= np.r_[True, chrom[1:] != chrom[:-1]]
     new_seg = new_cell | np.r_[True, trace[1:] != trace[:-1]]
     seg = np.r_[np.flatnonzero(new_seg), n].astype(np.int64)
     cel = np.r_[np.flatnonzero(new_cell), n].astype(np.int64)
@@ -377,12 +410,173 @@ def _spot_frame_columns(df: pd.DataFrame, table: str, cat_meta: dict, cat_dir: P
     return cols
 
 
+def partition_dirs(names: Sequence[Optional[str]]) -> List[str]:
+    """``chrom=<name>`` directory of every partition (portable names; others,
+    and case-insensitive clashes, become ``chrom=_<i>``)."""
+    safe = _safe_names([str(n) for n in names])
+    return [f"chrom={safe[str(n)]}" for n in names]
+
+
+class SpotPartitionWriter:
+    """Writes the spot-aligned tables of a format 2.1 store, one chromosome
+    partition at a time, and builds ``index/`` as it goes.
+
+    Rows are handed over already sorted by (cell, trace, bin) within the
+    partition, in any number of :meth:`add` calls.  Row groups end on unit
+    boundaries (cell runs; (cell, trace) runs without ``cell_id``): a group is
+    cut at the first unit boundary where it holds at least ``row_group_rows``
+    rows — the same groups however the rows are split into calls, so the
+    in-memory writer and the streaming writer produce identical files.
+    """
+
+    def __init__(self, tpath: Path, tables: Sequence[str], *, level: int, row_group_rows: int,
+                 has_cells: bool, layer_names: Mapping[str, str]):
+        self.tpath = Path(tpath)
+        self.tables = list(tables)
+        self.level = int(level)
+        self.target = max(1, int(row_group_rows))
+        self.has_cells = bool(has_cells)
+        self.layer_names = dict(layer_names)
+        self.partitions: List[Dict[str, Any]] = []
+        self.n = 0
+        self.rg = [0]
+        self.part_offsets = [0]
+        self.part_groups = [0]
+        self.part_chrom: List[int] = []
+        self._seg: List[np.ndarray] = []
+        self._seg_trace: List[np.ndarray] = []
+        self._seg_cell: List[np.ndarray] = []
+        self._seg_chrom: List[np.ndarray] = []
+        self._cel: List[np.ndarray] = []
+        self._cel_code: List[np.ndarray] = []
+        self._cel_part: List[np.ndarray] = []
+        self._cur: Optional[Dict[str, Any]] = None
+
+    def rel_path(self, name: str, pdir: str) -> str:
+        if name in _SPOT_TABLES:
+            return f"{name}/{pdir}/part-0.parquet"
+        key = name.split("/", 1)[1]
+        return f"layers/{self.layer_names[key]}/{pdir}/part-0.parquet"
+
+    def begin(self, chrom_code: int, chrom_name: Optional[str], pdir: str) -> None:
+        if self._cur is not None:
+            raise RuntimeError("previous partition not ended")
+        files = {name: self.rel_path(name, pdir) for name in self.tables}
+        self._cur = {"chrom": chrom_name, "code": int(chrom_code), "dir": pdir, "n_rows": 0,
+                     "files": files}
+        self._writers = {name: _SpotTableWriter(self.tpath / rel, self.level) for name, rel in files.items()}
+        self._pending: Dict[str, List[Any]] = {name: [] for name in self.tables}
+        self._pend_n = 0
+        self._pend_bounds: List[int] = []
+        self._last: Optional[Tuple[int, int]] = None
+
+    def write_empty(self, tables: Mapping[str, Any]) -> None:
+        """Create the files of the current partition with the schema of
+        ``tables`` and no rows (a store without spots)."""
+        for name in self.tables:
+            self._writers[name].write(tables[name].slice(0, 0))
+
+    def add(self, tables: Mapping[str, Any], cell: np.ndarray, trace: np.ndarray) -> None:
+        """Append sorted rows: ``tables[name]`` (Arrow tables of equal length)
+        with the cell / trace codes of the rows (cell = -1 without cell_id)."""
+        cur = self._cur
+        m = len(trace)
+        if m == 0:
+            return
+        cell = np.asarray(cell, dtype=np.int64)
+        trace = np.asarray(trace, dtype=np.int64)
+        new_cell = np.empty(m, dtype=bool)
+        new_seg = np.empty(m, dtype=bool)
+        if self._last is None:
+            new_cell[0] = new_seg[0] = True
+        else:
+            new_cell[0] = cell[0] != self._last[0]
+            new_seg[0] = new_cell[0] or trace[0] != self._last[1]
+        new_cell[1:] = cell[1:] != cell[:-1]
+        new_seg[1:] = new_cell[1:] | (trace[1:] != trace[:-1])
+        s = np.flatnonzero(new_seg)
+        self._seg.append(self.n + s)
+        self._seg_trace.append(trace[s])
+        self._seg_cell.append(cell[s])
+        self._seg_chrom.append(np.full(len(s), cur["code"], dtype=np.int64))
+        c = np.flatnonzero(new_cell)
+        self._cel.append(self.n + c)
+        self._cel_code.append(cell[c])
+        self._cel_part.append(np.full(len(c), len(self.partitions), dtype=np.int64))
+        unit = new_cell if self.has_cells else new_seg
+        self._pend_bounds.extend((self._pend_n + np.flatnonzero(unit)).tolist())
+        for name in self.tables:
+            t = tables[name]
+            if t.num_rows != m:
+                raise ValueError(f"{name}: {t.num_rows} rows, expected {m}")
+            self._pending[name].append(t)
+        self._pend_n += m
+        self.n += m
+        cur["n_rows"] += m
+        self._last = (int(cell[-1]), int(trace[-1]))
+        self._cut(final=False)
+
+    def _cut(self, final: bool) -> None:
+        import pyarrow as pa
+
+        while self._pend_n:
+            cut = next((b for b in self._pend_bounds if b >= self.target), None)
+            if cut is None:
+                if not final:
+                    return
+                cut = self._pend_n
+            for name in self.tables:
+                parts = self._pending[name]
+                t = parts[0] if len(parts) == 1 else pa.concat_tables(parts)
+                self._writers[name].write(t.slice(0, cut))
+                self._pending[name] = [t.slice(cut)] if cut < t.num_rows else []
+            self._pend_bounds = [b - cut for b in self._pend_bounds if b > cut]
+            self._pend_n -= cut
+            self.rg.append(self.rg[-1] + cut)
+
+    def end(self) -> Dict[str, Any]:
+        self._cut(final=True)
+        for w in self._writers.values():
+            w.close()
+        cur = self._cur
+        self._cur = None
+        self.partitions.append(cur)
+        self.part_offsets.append(self.n)
+        self.part_groups.append(len(self.rg) - 1)
+        self.part_chrom.append(cur["code"])
+        return cur
+
+    def index(self) -> Dict[str, np.ndarray]:
+        def cat(parts, dtype):
+            return np.concatenate(parts).astype(dtype) if parts else np.zeros(0, dtype=dtype)
+
+        return {
+            "trace_offsets": np.r_[cat(self._seg, np.int64), self.n].astype(np.int64),
+            "trace_codes": cat(self._seg_trace, np.int32),
+            "trace_cells": cat(self._seg_cell, np.int32),
+            "chrom_trace": cat(self._seg_chrom, np.int32),
+            "cell_offsets": (np.r_[cat(self._cel, np.int64), self.n].astype(np.int64)
+                             if self.has_cells else np.zeros(1, dtype=np.int64)),
+            "cell_codes": cat(self._cel_code, np.int32) if self.has_cells else np.zeros(0, dtype=np.int32),
+            "cell_partition": cat(self._cel_part, np.int32) if self.has_cells else np.zeros(0, dtype=np.int32),
+            "row_groups": np.asarray(self.rg, dtype=np.int64),
+            "partition_offsets": np.asarray(self.part_offsets, dtype=np.int64),
+            "partition_groups": np.asarray(self.part_groups, dtype=np.int64),
+            "partition_chrom": np.asarray(self.part_chrom, dtype=np.int32),
+        }
+
+
 def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float64",
                row_group_rows: int = DEFAULT_ROW_GROUP_ROWS,
                compression_level: int = DEFAULT_ZSTD_LEVEL,
-               keep_source_order: bool = True) -> None:
+               keep_source_order: bool = True, _layout: str = "2.1") -> None:
     """Write ``cd`` as a ``.chromdata.zarr`` directory, or a ``.cdz`` zip
-    when ``path`` ends with ``.cdz``.  See :meth:`ChromData.write`."""
+    when ``path`` ends with ``.cdz``.  See :meth:`ChromData.write`.
+
+    ``_layout="2.0"`` writes the previous, unpartitioned layout (format 2.0;
+    kept for compatibility tests)."""
+    if _layout not in ZARR_LAYOUTS:
+        raise ValueError(f"unknown layout {_layout!r}")
     path = Path(path)
     kind = "cdz" if path.name.lower().endswith(ZIP_SUFFIX) else "zarr"
     src = getattr(cd, "_backing_path", None)
@@ -398,7 +592,8 @@ def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float
     try:
         if kind == "zarr":
             _write_tree(cd, tmp, coord_dtype=coord_dtype, row_group_rows=row_group_rows,
-                        level=compression_level, keep_source_order=keep_source_order)
+                        level=compression_level, keep_source_order=keep_source_order,
+                        layout=_layout)
             if path.exists():
                 old = parent / f".{path.name}.{uuid.uuid4().hex}.old"
                 os.replace(path, old)
@@ -409,7 +604,8 @@ def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float
         else:
             tree = tmp / "tree"
             _write_tree(cd, tree, coord_dtype=coord_dtype, row_group_rows=row_group_rows,
-                        level=compression_level, keep_source_order=keep_source_order)
+                        level=compression_level, keep_source_order=keep_source_order,
+                        layout=_layout)
             zpath = tmp / "store.cdz"
             _zip_tree(tree, zpath)
             os.replace(zpath, path)
@@ -444,39 +640,128 @@ def _zip_tree(tree: Path, zpath: Path) -> None:
             zf.write(f, f.relative_to(tree).as_posix())
 
 
+def _uchrom_version() -> str:
+    try:
+        from uchrom import __version__ as v
+    except Exception:  # pragma: no cover
+        v = "unknown"
+    return str(v)
+
+
+def _zarr_array(group, name, data, comp) -> None:
+    data = np.ascontiguousarray(data)
+    chunks = ((max(1, min(data.shape[0], 1 << 20)),) + tuple(max(1, s) for s in data.shape[1:])
+              if data.ndim else "auto")
+    group.create_array(name, data=data, chunks=chunks, compressors=comp)
+
+
+def _coord_arrays(coords, coord_dtype) -> List[Tuple[str, Any]]:
+    import pyarrow as pa
+
+    coords = np.asarray(coords)
+    return [(c, pa.array(np.ascontiguousarray(coords[:, j]).astype(coord_dtype, copy=False)))
+            for j, c in enumerate(_COORD_COLUMNS)]
+
+
 def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level: int,
-                keep_source_order: bool) -> None:
+                keep_source_order: bool, layout: str = "2.1") -> None:
     import pyarrow as pa
 
     zarr = _zarr()
-    try:
-        from uchrom import __version__ as uchrom_version
-    except Exception:  # pragma: no cover
-        uchrom_version = "unknown"
-
     cd._check_bin_ids()
     coord_dtype = np.dtype(coord_dtype)
     if coord_dtype not in (np.dtype("float32"), np.dtype("float64")):
         raise ValueError("coord_dtype must be float32 or float64")
     comp = _compressor(level)
     root = zarr.open_group(str(root_path), mode="w", zarr_format=3)
-    tables = root.create_group("tables")
     tpath = root_path / "tables"
     tables_meta: Dict[str, Any] = {}
 
-    # -- spot order + index ---------------------------------------------
+    # -- spot order ---------------------------------------------------------
     n = int(cd.n_spots)
     cell, trace, bin_id = _spot_keys(cd)
-    order = sort_order(cell, trace, bin_id)
-    if order is not None:
-        cell, trace, bin_id = cell[order], trace[order], bin_id[order]
-    seg, cel = _segments(cell, trace)
-    has_cells = "cell_id" in cd.spots.columns
-    rg = _row_groups(cel if has_cells else seg, n, max(1, int(row_group_rows)))
-
     chrom_codes = np.asarray(cd.bins["chrom"].cat.codes, dtype=np.int64)
+    spot_chrom = chrom_codes[bin_id] if n else np.zeros(0, dtype=np.int64)
+    has_cells = "cell_id" in cd.spots.columns
+    order = sort_order(cell, trace, bin_id, chrom=None if layout == "2.0" else spot_chrom)
+    if order is not None:
+        cell, trace, bin_id, spot_chrom = cell[order], trace[order], bin_id[order], spot_chrom[order]
+
+    # -- spot-aligned columns (Arrow, in the object's row order) -------------
+    spots = cd.spots.drop(columns=[c for c in LOCI if c in cd.spots.columns])
+    spots[BIN_ID] = spots[BIN_ID].to_numpy().astype(np.int32 if cd.n_bins < 2 ** 31 else np.int64)
+    cat_dir = tpath / "categories"
+    spot_meta: Dict[str, Any] = {}
+    columns: Dict[str, List[Tuple[str, Any]]] = {
+        "spots": _spot_frame_columns(spots, "spots", spot_meta, cat_dir, level)
+        + _coord_arrays(cd.coords, coord_dtype)}
+    del spots
+    tables_meta["spots"] = {"n_rows": n, "categorical": spot_meta,
+                            "coords": list(_COORD_COLUMNS), "coord_dtype": coord_dtype.name,
+                            "column_order": [str(c) for c in cd.spots.columns]}
+    st = cd.spot_tracks
+    if len(st.columns):
+        st_meta: Dict[str, Any] = {}
+        columns["spot_tracks"] = _spot_frame_columns(st, "spot_tracks", st_meta, cat_dir, level)
+        tables_meta["spot_tracks"] = {"n_rows": n, "categorical": st_meta,
+                                      "spot_view_order": cd._spot_view_order}
+    layer_names = _safe_names(list(cd.layers))
+    for key, a in cd.layers.items():
+        columns[f"layers/{key}"] = _coord_arrays(a, coord_dtype)
+
+    if layout == "2.0":
+        index, extra = _write_spots_flat(columns, tpath, tables_meta, layer_names, n=n, cell=cell,
+                                         trace=trace, spot_chrom=spot_chrom, order=order,
+                                         has_cells=has_cells, row_group_rows=row_group_rows,
+                                         level=level)
+    else:
+        index, extra = _write_spots_partitioned(
+            columns, tpath, tables_meta, layer_names, cell=cell, trace=trace,
+            spot_chrom=spot_chrom, order=order, has_cells=has_cells,
+            chrom_names=[str(c) for c in cd.bins["chrom"].cat.categories],
+            row_group_rows=row_group_rows, level=level)
+    del columns
+    ig = root.create_group("index")
+    for name, data in index.items():
+        _zarr_array(ig, name, data, comp)
+    if order is not None and keep_source_order:
+        _zarr_array(ig, "source_row", order.astype(np.int64), comp)
+
+    _write_small_parts(root, root_path, tables_meta, level=level, bins=cd.bins,
+                       bin_tracks=cd.bin_tracks, cells=cd.cells, traces=cd.traces,
+                       intervals=cd.intervals, points=cd.points, cellm=cd.cellm, binm=cd.binm,
+                       results=cd.results, uns=cd.uns)
+    seg_trace = index["trace_codes"]
+    meta = {
+        "n_spots": n,
+        "n_bins": int(cd.n_bins),
+        "n_traces": int(len(np.unique(seg_trace))) if n else 0,
+        "n_cells": int(len(np.unique(index["cell_codes"]))) if has_cells else 0,
+        "n_row_groups": int(len(index["row_groups"]) - 1),
+        "has_source_row": bool(order is not None and keep_source_order),
+        "has_cell_id": bool(has_cells),
+        **extra,
+    }
+    _write_root_meta(root, meta, layout=layout)
+
+
+def _write_root_meta(root, meta: Dict[str, Any], *, layout: str = "2.1") -> None:
+    version = layout
+    full = {"format": CONTAINER, "format_version": version, "uchrom_version": _uchrom_version(),
+            "spot_order": "chrom,cell,trace,bin" if layout != "2.0" else "cell,trace,bin",
+            "layout": ZARR_LAYOUTS[layout], **meta}
+    root.attrs.update({"uchrom": full, "uchrom_format_version": version,
+                       "uchrom_version": full["uchrom_version"]})
+
+
+def _write_spots_flat(columns, tpath: Path, tables_meta, layer_names, *, n, cell, trace, spot_chrom,
+                      order, has_cells, row_group_rows, level):
+    """The format 2.0 layout: one file per spot-aligned table."""
+    import pyarrow as pa
+
+    seg, cel = _segments(cell, trace)
+    rg = _row_groups(cel if has_cells else seg, n, max(1, int(row_group_rows)))
     if n:
-        spot_chrom = chrom_codes[bin_id]
         starts = seg[:-1]
         seg_chrom = spot_chrom[starts].astype(np.int32)
         cmin = np.minimum.reduceat(spot_chrom, starts)
@@ -487,63 +772,21 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
         cell_codes = cell[cel[:-1]].astype(np.int32)
     else:
         seg_chrom = seg_trace = seg_cell = cell_codes = np.zeros(0, dtype=np.int32)
-
-    index = root.create_group("index")
-
-    def arr(group, name, data):
-        data = np.ascontiguousarray(data)
-        chunks = ((max(1, min(data.shape[0], 1 << 20)),) + tuple(max(1, s) for s in data.shape[1:])
-                  if data.ndim else "auto")
-        group.create_array(name, data=data, chunks=chunks, compressors=comp)
-
-    arr(index, "trace_offsets", seg)
-    arr(index, "trace_codes", seg_trace)
-    arr(index, "trace_cells", seg_cell)
-    arr(index, "chrom_trace", seg_chrom)
-    arr(index, "cell_offsets", cel if has_cells else np.zeros(1, dtype=np.int64))
-    arr(index, "cell_codes", cell_codes if has_cells else np.zeros(0, dtype=np.int32))
-    arr(index, "row_groups", rg)
-    if order is not None and keep_source_order:
-        arr(index, "source_row", order.astype(np.int64))
-
-    # -- spot-aligned tables ---------------------------------------------
-    spots = cd.spots.drop(columns=[c for c in LOCI if c in cd.spots.columns])
-    spots[BIN_ID] = spots[BIN_ID].to_numpy().astype(np.int32 if cd.n_bins < 2 ** 31 else np.int64)
-    cat_dir = tpath / "categories"
-    spot_meta: Dict[str, Any] = {}
-    spot_cols = _spot_frame_columns(spots, "spots", spot_meta, cat_dir, level)
-    coords = np.asarray(cd.coords)
-    for j, c in enumerate(_COORD_COLUMNS):
-        spot_cols.append((c, pa.array(np.ascontiguousarray(coords[:, j]).astype(coord_dtype, copy=False))))
-    tables_meta["spots"] = {"file": "spots.parquet", "n_rows": n, "categorical": spot_meta,
-                            "coords": list(_COORD_COLUMNS), "coord_dtype": coord_dtype.name,
-                            "column_order": [str(c) for c in cd.spots.columns]}
-
-    targets = [("spots", tpath / "spots.parquet", spot_cols)]
-    st = cd.spot_tracks
-    if len(st.columns):
-        st_meta: Dict[str, Any] = {}
-        targets.append(("spot_tracks", tpath / "spot_tracks.parquet",
-                        _spot_frame_columns(st, "spot_tracks", st_meta, cat_dir, level)))
-        tables_meta["spot_tracks"] = {"file": "spot_tracks.parquet", "n_rows": n,
-                                      "categorical": st_meta,
-                                      "spot_view_order": cd._spot_view_order}
-    layer_names = _safe_names(list(cd.layers))
-    layer_meta = {}
-    for key, a in cd.layers.items():
-        a = np.asarray(a)
-        cols = [(c, pa.array(np.ascontiguousarray(a[:, j]).astype(coord_dtype, copy=False)))
-                for j, c in enumerate(_COORD_COLUMNS)]
-        fname = f"layers/{layer_names[key]}.parquet"
-        targets.append((f"layers/{key}", tpath / fname, cols))
-        layer_meta[str(key)] = fname
-    tables_meta["layers"] = layer_meta
-
+    tables_meta["spots"]["file"] = "spots.parquet"
+    if "spot_tracks" in tables_meta:
+        tables_meta["spot_tracks"]["file"] = "spot_tracks.parquet"
+    tables_meta["layers"] = {}
     idx_arrow = pa.array(order) if order is not None else None
-    for _name, fpath, cols in targets:
+    for name, cols in columns.items():
+        if name.startswith("layers/"):
+            key = name.split("/", 1)[1]
+            fname = f"layers/{layer_names[key]}.parquet"
+            tables_meta["layers"][key] = fname
+        else:
+            fname = f"{name}.parquet"
         names = [c for c, _ in cols]
         arrays = [a for _, a in cols]
-        w = _SpotTableWriter(fpath, level)
+        w = _SpotTableWriter(tpath / fname, level)
         if n == 0:
             w.write(pa.Table.from_arrays([a.slice(0, 0) for a in arrays], names=names))
         for g in range(len(rg) - 1):
@@ -551,32 +794,96 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
             if idx_arrow is None:
                 part = [a.slice(a0, a1 - a0) for a in arrays]
             else:
-                take = idx_arrow.slice(a0, a1 - a0)
-                part = [a.take(take) for a in arrays]
+                part = [a.take(idx_arrow.slice(a0, a1 - a0)) for a in arrays]
             w.write(pa.Table.from_arrays(part, names=names))
         w.close()
+    index = {"trace_offsets": seg, "trace_codes": seg_trace, "trace_cells": seg_cell,
+             "chrom_trace": seg_chrom,
+             "cell_offsets": cel if has_cells else np.zeros(1, dtype=np.int64),
+             "cell_codes": cell_codes if has_cells else np.zeros(0, dtype=np.int32),
+             "row_groups": rg}
+    return index, {}
 
-    # -- small tables ------------------------------------------------------
-    _write_frame(cd.bins.reset_index(drop=True), tpath / "bins.parquet", level)
-    tables_meta["bins"] = {"file": "bins.parquet", "n_rows": int(cd.n_bins)}
-    if len(cd.bin_tracks.columns):
-        _write_frame(cd.bin_tracks.reset_index(drop=True), tpath / "bin_tracks.parquet", level)
-        tables_meta["bin_tracks"] = {"file": "bin_tracks.parquet", "n_rows": int(cd.n_bins)}
-    for key in ("cells", "traces"):
-        df = getattr(cd, key)
+
+#: rows handed to the partition writer at a time by the in-memory writer
+_WRITE_SLICE_ROWS = 1 << 20
+
+
+def _write_spots_partitioned(columns, tpath: Path, tables_meta, layer_names, *, cell, trace,
+                             spot_chrom, order, has_cells, chrom_names, row_group_rows, level):
+    """The format 2.1 layout: one partition (directory) per chromosome."""
+    import pyarrow as pa
+
+    n = len(trace)
+    names = list(columns)
+    w = SpotPartitionWriter(tpath, names, level=level, row_group_rows=row_group_rows,
+                            has_cells=has_cells, layer_names=layer_names)
+    tables = {name: pa.Table.from_arrays([a for _, a in cols], names=[c for c, _ in cols])
+              for name, cols in columns.items()}
+    if n == 0:
+        w.begin(-1, None, "empty")
+        w.write_empty(tables)
+        w.end()
+    else:
+        bounds = np.r_[0, np.flatnonzero(spot_chrom[1:] != spot_chrom[:-1]) + 1, n]
+        codes = [int(spot_chrom[a]) for a in bounds[:-1]]
+        dirs = partition_dirs([chrom_names[c] for c in codes])
+        idx_arrow = pa.array(order) if order is not None else None
+        for p, code in enumerate(codes):
+            a, b = int(bounds[p]), int(bounds[p + 1])
+            w.begin(code, chrom_names[code], dirs[p])
+            for s0 in range(a, b, _WRITE_SLICE_ROWS):
+                s1 = min(b, s0 + _WRITE_SLICE_ROWS)
+                if idx_arrow is None:
+                    part = {name: t.slice(s0, s1 - s0) for name, t in tables.items()}
+                else:
+                    take = idx_arrow.slice(s0, s1 - s0)
+                    part = {name: t.take(take) for name, t in tables.items()}
+                w.add(part, cell[s0:s1], trace[s0:s1])
+                del part
+            w.end()
+    _partition_meta(tables_meta, w, layer_names)
+    return w.index(), {"n_partitions": len(w.partitions)}
+
+
+def _partition_meta(tables_meta: Dict[str, Any], w: "SpotPartitionWriter", layer_names) -> None:
+    """Table metadata of a partitioned store (per-partition files)."""
+    tables_meta["spots"]["layout"] = "partitioned"
+    tables_meta["partitions"] = [
+        {"chrom": p["chrom"], "code": p["code"], "dir": p["dir"], "n_rows": int(p["n_rows"]),
+         "files": dict(p["files"])} for p in w.partitions]
+    tables_meta["layers"] = {key: f"layers/{layer_names[key]}"
+                             for key in (n.split("/", 1)[1] for n in w.tables if n.startswith("layers/"))}
+
+
+def _write_small_parts(root, root_path: Path, tables_meta: Dict[str, Any], *, level: int, bins,
+                       bin_tracks, cells, traces, intervals, points, cellm, binm, results,
+                       uns) -> None:
+    """Everything but the spot-aligned tables and ``index/``: bins, bin
+    tracks, cells, traces, intervals, points, cellm / binm, results, uns and
+    the linked-file records."""
+    comp = _compressor(level)
+    tpath = root_path / "tables"
+    tables = root.create_group("tables")
+    _write_frame(bins.reset_index(drop=True), tpath / "bins.parquet", level)
+    tables_meta["bins"] = {"file": "bins.parquet", "n_rows": int(len(bins))}
+    if len(bin_tracks.columns):
+        _write_frame(bin_tracks.reset_index(drop=True), tpath / "bin_tracks.parquet", level)
+        tables_meta["bin_tracks"] = {"file": "bin_tracks.parquet", "n_rows": int(len(bins))}
+    for key, df in (("cells", cells), ("traces", traces)):
         if len(df.columns) or len(df):
             _write_frame(df, tpath / f"{key}.parquet", level)
             tables_meta[key] = {"file": f"{key}.parquet", "n_rows": int(len(df))}
-    iv_names = _safe_names(list(cd.intervals))
+    iv_names = _safe_names(list(intervals))
     iv_meta = {}
-    for key, table in cd.intervals.items():
+    for key, table in intervals.items():
         fname = f"intervals/{iv_names[key]}.parquet"
         _write_frame(pd.DataFrame(table), tpath / fname, level)
         iv_meta[str(key)] = {"file": fname, "kind": table.kind, "source_result": table.source_result}
     tables_meta["intervals"] = iv_meta
-    pt_names = _safe_names(list(cd.points))
+    pt_names = _safe_names(list(points))
     pt_meta = {}
-    for key, df in cd.points.items():
+    for key, df in points.items():
         if "/" in key or not key:
             raise ValueError(f"points key must be non-empty without '/': {key!r}")
         fname = f"points/{pt_names[key]}.parquet"
@@ -585,8 +892,7 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
     tables_meta["points"] = pt_meta
     tables.attrs.update({"tables": tables_meta})
 
-    # -- arrays ------------------------------------------------------------
-    for gname, d in (("cellm", cd.cellm), ("binm", cd.binm)):
+    for gname, d in (("cellm", cellm), ("binm", binm)):
         g = root.create_group(gname)
         names = _safe_names(list(d))
         for key, a in d.items():
@@ -595,37 +901,20 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
                 raise TypeError(f"{gname}[{key!r}]: object-dtype arrays cannot be stored")
             if a.dtype.kind in "US":
                 raise TypeError(f"{gname}[{key!r}]: string arrays cannot be stored in {gname}")
-            arr(g, names[key], a)
+            _zarr_array(g, names[key], a, comp)
         g.attrs.update({"keys": names})
 
-    # -- results, uns, links -------------------------------------------------
-    _write_results(root.create_group("results"), root_path / "results", cd.results,
-                   cd.intervals, level)
-    uns = dict(cd.uns)
+    _write_results(root.create_group("results"), root_path / "results", results, intervals, level)
+    uns_d = dict(uns)
     link_records: Dict[str, Dict[str, Any]] = {"contacts": {}, "links": {}}
     for fam, grp in _LINK_FAMILIES.items():
-        if fam in uns:
-            link_records[grp][fam] = uns.pop(fam)
-    _write_uns(root.create_group("uns"), uns, level, order=[str(k) for k in cd.uns])
+        if fam in uns_d:
+            link_records[grp][fam] = uns_d.pop(fam)
+    _write_uns(root.create_group("uns"), uns_d, level, order=[str(k) for k in uns])
     for grp, recs in link_records.items():
         root.create_group(grp).attrs.update(
             {"records": _to_json_value(recs), "relpaths": _link_relpaths(recs, root_path)})
 
-    meta = {
-        "format": CONTAINER,
-        "format_version": ZARR_FORMAT_VERSION,
-        "uchrom_version": str(uchrom_version),
-        "spot_order": "cell,trace,bin",
-        "n_spots": n,
-        "n_bins": int(cd.n_bins),
-        "n_traces": int(len(np.unique(seg_trace))) if n else 0,
-        "n_cells": int(len(cell_codes)) if has_cells else 0,
-        "n_row_groups": int(len(rg) - 1),
-        "has_source_row": bool(order is not None and keep_source_order),
-        "has_cell_id": bool(has_cells),
-    }
-    root.attrs.update({"uchrom": meta, "uchrom_format_version": ZARR_FORMAT_VERSION,
-                       "uchrom_version": str(uchrom_version)})
 
 
 def _link_relpaths(records: Dict[str, Any], root_path: Path) -> Dict[str, Any]:
@@ -929,6 +1218,17 @@ def read_small_parts(c: Container) -> Dict[str, Any]:
     for name in ("trace_offsets", "trace_codes", "trace_cells", "chrom_trace", "cell_offsets",
                  "cell_codes", "row_groups"):
         index[name] = c.array(f"index/{name}")
+    partitioned = tmeta.get("spots", {}).get("layout") == "partitioned"
+    if partitioned:
+        for name in ("cell_partition", "partition_offsets", "partition_groups", "partition_chrom"):
+            index[name] = c.array(f"index/{name}")
+    else:  # format 2.0: the whole table is one partition (any chromosome)
+        n_rows = int(tmeta.get("spots", {}).get("n_rows", c.meta.get("n_spots", 0)))
+        index["cell_partition"] = np.zeros(len(index["cell_codes"]), dtype=np.int32)
+        index["partition_offsets"] = np.array([0, n_rows], dtype=np.int64)
+        index["partition_groups"] = np.array([0, len(index["row_groups"]) - 1], dtype=np.int64)
+        index["partition_chrom"] = np.array([-1], dtype=np.int32)
+    parts["partitioned"] = partitioned
     parts["index"] = index
     parts["spot_meta"] = tmeta.get("spots", {})
     parts["categories"] = {
@@ -1027,66 +1327,282 @@ def _read_uns(c: Container, rel: str, group=None) -> dict:
 # Spot rows (shared by the in-memory reader and backed mode)
 # ======================================================================
 
+#: reads of at least this many rows from several pieces are combined into
+#: single-chunk columns (so the pandas conversion is zero-copy)
+_COMBINE_MIN_ROWS = 1 << 18
+
+
+_IO_POOL = None
+
+
+def _io_pool():
+    """Shared thread pool for reading row groups of several partitions."""
+    global _IO_POOL
+    if _IO_POOL is None:
+        from concurrent.futures import ThreadPoolExecutor
+        _IO_POOL = ThreadPoolExecutor(max_workers=min(16, (os.cpu_count() or 4)),
+                                      thread_name_prefix="uchrom-io")
+    return _IO_POOL
+
+
+class _ColumnFill:
+    """One output column of known length filled piece by piece.
+
+    Integer / float columns go into one buffer allocated from Arrow's pool
+    up front (float nulls become NaN, as pandas would make them); other
+    types — and an integer column that turns out to hold nulls — keep their
+    chunks and are combined at the end."""
+
+    def __init__(self, typ, n: int):
+        import pyarrow as pa
+        import pyarrow.types as pat
+
+        self.typ = typ
+        self.n = int(n)
+        self.pos = 0
+        self.chunks: Optional[List[Any]] = None
+        self.is_float = pat.is_floating(typ)
+        if pat.is_integer(typ) or self.is_float:
+            self.dt = np.dtype(typ.to_pandas_dtype())
+            self.buf = pa.allocate_buffer(max(1, self.n * self.dt.itemsize))
+            self.arr = np.frombuffer(self.buf, dtype=self.dt, count=self.n)
+        else:
+            self.buf = None
+            self.chunks = []
+
+    def add(self, column) -> None:
+        import pyarrow as pa
+
+        for piece in column.chunks:
+            m = len(piece)
+            if self.chunks is None and piece.null_count and not self.is_float:
+                # integers with nulls: keep Arrow semantics (chunks)
+                self.chunks = [pa.array(self.arr[:self.pos], type=self.typ)] if self.pos else []
+                self.buf = self.arr = None
+            if self.chunks is not None:
+                self.chunks.append(piece)
+            elif m:
+                self.arr[self.pos:self.pos + m] = piece.to_numpy(zero_copy_only=False)
+            self.pos += m
+
+    def finish(self):
+        import pyarrow as pa
+
+        if self.chunks is not None:
+            return pa.chunked_array(self.chunks, type=self.typ).combine_chunks()
+        return pa.Array.from_buffers(self.typ, self.n, [None, self.buf])
+
+
+def combine_tables(tables: Sequence[Any], threads: int = 8):
+    """Concatenate Arrow tables of one schema into a table whose columns are
+    **single chunks** (``pyarrow.concat_tables`` keeps one chunk per input).
+
+    ``Table.to_pandas`` is zero-copy only for single-chunk numeric columns;
+    with several chunks it copies every column, doubling peak memory on a
+    full read.  Numeric null-free columns are copied into one preallocated
+    buffer per column (several columns at a time, in threads); the inputs
+    release each column as soon as it is copied, so the peak stays at about
+    the table plus a few columns.  A list argument is emptied (the
+    inputs are consumed).
+    """
+    import pyarrow as pa
+    import pyarrow.types as pat
+    from concurrent.futures import ThreadPoolExecutor
+
+    src = tables
+    tables = [t for t in src if t is not None]
+    if isinstance(src, list):
+        src.clear()        # the caller's list must not keep the inputs alive
+    if not tables:
+        raise ValueError("no tables")
+    if len(tables) == 1:
+        return tables[0]
+    names = tables[0].column_names
+    schema = tables[0].schema
+    n = sum(t.num_rows for t in tables)
+    out: List[Any] = [None] * len(names)
+
+    def one(i, chunks):
+        typ = schema.field(i).type
+        fixed = (pat.is_integer(typ) or pat.is_floating(typ)) and not any(c.null_count for c in chunks)
+        if fixed:
+            # allocate from Arrow's pool: it reuses the memory the inputs
+            # release (a numpy allocation would add to it)
+            dt = np.dtype(typ.to_pandas_dtype())
+            buf = pa.allocate_buffer(max(1, n * dt.itemsize))
+            arr = np.frombuffer(buf, dtype=dt, count=n)
+            pos = 0
+            for c in chunks:
+                for piece in c.chunks:
+                    m = len(piece)
+                    if m:
+                        arr[pos:pos + m] = piece.to_numpy(zero_copy_only=False)
+                    pos += m
+            return pa.Array.from_buffers(typ, n, [None, buf])
+        return pa.chunked_array([p for c in chunks for p in c.chunks], type=typ).combine_chunks()
+
+    step = max(1, int(threads))
+    with ThreadPoolExecutor(max_workers=step) as ex:
+        for g0 in range(0, len(names), step):
+            ids = list(range(g0, min(len(names), g0 + step)))
+            jobs = [ex.submit(one, i, [t.column(k) for t in tables])
+                    for k, i in enumerate(ids)]
+            for i, job in zip(ids, jobs):
+                out[i] = job.result()
+            # release the copied columns of the inputs
+            tables = [t.drop_columns(list(t.column_names[:len(ids)])) for t in tables]
+    return pa.Table.from_arrays(out, schema=schema)
+
+
 class SpotRows:
     """Row access to the spot-aligned Parquet tables of a store.
 
-    Every spot-aligned file has the same row groups (``index/row_groups``),
-    so a row range maps onto the same groups in each.  The most recently
-    decoded row groups are cached per file (sequential iteration decodes
-    every group once).
+    Rows are numbered globally: partition after partition (format 2.1: one
+    per chromosome; format 2.0: a single one).  Every spot-aligned table has
+    the same row groups (``index/row_groups``, global offsets;
+    ``index/partition_groups`` gives each partition's first group), so a
+    row range maps onto the same groups in each table.
+
+    Row groups a request covers completely are read in one call and not
+    cached (``get_chrom`` reads a whole partition); partially covered ones go
+    through a small LRU cache of decoded groups bounded in bytes
+    (``cache_bytes``), from which small selections are copied so a group can
+    be freed.
     """
 
-    def __init__(self, c: Container, parts: Dict[str, Any], cache_groups: int = 2):
+    def __init__(self, c: Container, parts: Dict[str, Any], cache_bytes: int = DEFAULT_CACHE_BYTES):
+        from collections import OrderedDict
+
         self.c = c
         tmeta = parts["tables_meta"]
+        idx = parts["index"]
         self.n = int(tmeta.get("spots", {}).get("n_rows", c.meta.get("n_spots", 0)))
-        self.rg = np.asarray(parts["index"]["row_groups"], dtype=np.int64)
+        self.rg = np.asarray(idx["row_groups"], dtype=np.int64)
+        self.part_offsets = np.asarray(idx["partition_offsets"], dtype=np.int64)
+        self.part_groups = np.asarray(idx["partition_groups"], dtype=np.int64)
+        self.part_chrom = np.asarray(idx["partition_chrom"], dtype=np.int64)
+        self.partitioned = bool(parts.get("partitioned"))
         self.cats = parts["categories"]
         self.spot_meta = tmeta.get("spots", {})
-        self.files: Dict[str, str] = {"spots": "tables/spots.parquet"}
-        if "spot_tracks" in tmeta:
-            self.files["spot_tracks"] = "tables/spot_tracks.parquet"
-        for key, f in tmeta.get("layers", {}).items():
-            self.files[f"layers/{key}"] = f"tables/{f}"
-        self._pf: Dict[str, Any] = {}
-        self._cache: Dict[Tuple[str, int, Tuple[str, ...]], Any] = {}
-        self._cache_n = cache_groups
+        if self.partitioned:
+            self.part_files = [{name: f"tables/{rel}" for name, rel in p["files"].items()}
+                               for p in tmeta["partitions"]]
+        else:
+            files = {"spots": "tables/spots.parquet"}
+            if "spot_tracks" in tmeta:
+                files["spot_tracks"] = "tables/spot_tracks.parquet"
+            for key, f in tmeta.get("layers", {}).items():
+                files[f"layers/{key}"] = f"tables/{f}"
+            self.part_files = [files]
+        #: table names ("spots", "spot_tracks", "layers/<key>") → True
+        self.files: Dict[str, bool] = {name: True for name in self.part_files[0]}
+        n_groups = len(self.rg) - 1
+        self.group_part = np.repeat(np.arange(len(self.part_files), dtype=np.int64),
+                                    np.diff(self.part_groups)) if n_groups else np.zeros(0, np.int64)
+        self._pf: Dict[Tuple[str, int], Any] = {}
+        self._flocks: Dict[Tuple[str, int], Any] = {}
+        self._cache: "OrderedDict[Tuple[str, int, Tuple[str, ...]], Any]" = OrderedDict()
+        self._cache_used = 0
+        self.cache_bytes = int(cache_bytes)
         # one reader at a time: ParquetFile objects and the cache are shared
         # (the web server calls in from a thread pool)
         self._lock = threading.RLock()
         self.coord_dtype = np.dtype(self.spot_meta.get("coord_dtype", "float64"))
 
-    def pf(self, name: str):
+    @property
+    def n_partitions(self) -> int:
+        return len(self.part_files)
+
+    def pf(self, name: str, part: int = 0):
         with self._lock:
-            if name not in self._pf:
-                self._pf[name] = self.c.parquet(self.files[name])
-            return self._pf[name]
+            key = (name, int(part))
+            if key not in self._pf:
+                self._pf[key] = self.c.parquet(self.part_files[int(part)][name])
+            return self._pf[key]
 
     def columns(self, name: str) -> List[str]:
         return list(self.pf(name).schema_arrow.names)
 
+    def empty(self, name: str, columns: Optional[Sequence[str]] = None):
+        t = self.pf(name).schema_arrow.empty_table()
+        return t.select(list(columns)) if columns is not None else t
+
+    def partition_range(self, part: int) -> Tuple[int, int]:
+        return int(self.part_offsets[part]), int(self.part_offsets[part + 1])
+
     # -- raw Arrow access --------------------------------------------------
 
     def read_all(self, name: str, columns: Optional[Sequence[str]] = None):
+        """The whole table (all partitions), with single-chunk columns.
+
+        Partitions are decoded one at a time and copied into preallocated
+        buffers, so the peak is the table plus one partition (see
+        :class:`_ColumnFill`), and ``to_pandas`` is zero-copy."""
+        import pyarrow as pa
+
+        cols = list(columns) if columns is not None else None
         with self._lock:
-            return self.pf(name).read(columns=list(columns) if columns is not None else None,
-                                      use_threads=True)
+            if self.n_partitions == 1:
+                return self.pf(name, 0).read(columns=cols, use_threads=True)
+            fills = None
+            schema = None
+            for p in range(self.n_partitions):
+                t = self.pf(name, p).read(columns=cols, use_threads=True)
+                if fills is None:
+                    schema = t.schema
+                    fills = [_ColumnFill(f.type, self.n) for f in schema]
+                for i, f in enumerate(fills):
+                    f.add(t.column(i))
+                del t
+            return pa.Table.from_arrays([f.finish() for f in fills], schema=schema)
+
+    def _local(self, g: int) -> Tuple[int, int]:
+        p = int(self.group_part[g])
+        return p, g - int(self.part_groups[p])
+
+    def _file_lock(self, name: str, part: int):
+        with self._lock:
+            key = (name, int(part))
+            lk = self._flocks.get(key)
+            if lk is None:
+                lk = self._flocks[key] = threading.Lock()
+            return lk
 
     def _group(self, name: str, g: int, columns: Tuple[str, ...]):
         key = (name, g, columns)
         with self._lock:
             t = self._cache.get(key)
-            if t is None:
-                t = self.pf(name).read_row_group(g, columns=list(columns), use_threads=True)
-                if len(self._cache) >= self._cache_n * max(1, len(self.files)):
-                    self._cache.pop(next(iter(self._cache)))
+            if t is not None:
+                self._cache.move_to_end(key)
+                return t
+        p, lg = self._local(g)
+        pf = self.pf(name, p)
+        with self._file_lock(name, p):
+            t = pf.read_row_group(lg, columns=list(columns), use_threads=True)
+        size = int(t.nbytes)
+        with self._lock:
+            if size <= self.cache_bytes and key not in self._cache:
+                while self._cache and self._cache_used + size > self.cache_bytes:
+                    _, old = self._cache.popitem(last=False)
+                    self._cache_used -= int(old.nbytes)
                 self._cache[key] = t
-            return t
+                self._cache_used += size
+        return t
+
+    def clear_cache(self) -> None:
+        with self._lock:
+            self._cache.clear()
+            self._cache_used = 0
 
     def read_ranges(self, name: str, ranges: Sequence[Tuple[int, int]],
                     columns: Optional[Sequence[str]] = None):
         """Rows of the given ``[start, stop)`` ranges (ascending, disjoint)
-        of one file, as one Arrow table."""
+        of one table, as one Arrow table.
+
+        Consecutive row groups a range covers completely are read in one
+        call (not cached); partially covered groups go through the cache.
+        Different partitions are read in parallel threads (a cell touches
+        one row group per chromosome)."""
         import pyarrow as pa
 
         cols = tuple(columns) if columns is not None else tuple(self.columns(name))
@@ -1100,31 +1616,71 @@ class SpotRows:
             for g in range(g0, g1):
                 lo, hi = max(a, int(self.rg[g])), min(b, int(self.rg[g + 1]))
                 per_group.setdefault(g, []).append((lo - int(self.rg[g]), hi - int(self.rg[g])))
-        pieces = []
+        # plan: ("run", [g, ...]) of consecutive full groups of one partition,
+        # or ("part", g, local ranges); tasks keep the output order
+        tasks: List[Tuple] = []
         for g in sorted(per_group):
-            t = self._group(name, g, cols)
             local = per_group[g]
+            size = int(self.rg[g + 1] - self.rg[g])
             kept = sum(hi - lo for lo, hi in local)
-            if len(local) == 1 and kept == t.num_rows:
-                pieces.append(t)
-            elif len(local) == 1 and kept * 2 >= t.num_rows:
-                pieces.append(t.slice(local[0][0], kept))
+            if kept == size:
+                last = tasks[-1] if tasks else None
+                if (last is not None and last[0] == "run" and g == last[1][-1] + 1
+                        and self.group_part[g] == self.group_part[last[1][-1]]):
+                    last[1].append(g)
+                else:
+                    tasks.append(("run", [g]))
             else:
-                # copy small selections, so the decoded group can be freed
-                idx = np.concatenate([np.arange(lo, hi) for lo, hi in local])
-                pieces.append(t.take(pa.array(idx)))
+                tasks.append(("part", g, local))
+
+        def do(task):
+            if task[0] == "run":
+                gs = task[1]
+                p, lg0 = self._local(gs[0])
+                pf = self.pf(name, p)
+                with self._file_lock(name, p):
+                    return pf.read_row_groups(list(range(lg0, lg0 + len(gs))), columns=list(cols),
+                                              use_threads=True)
+            _, g, local = task
+            t = self._group(name, g, cols)
+            kept = sum(hi - lo for lo, hi in local)
+            if len(local) == 1 and kept * 2 >= t.num_rows:
+                return t.slice(local[0][0], kept)
+            # copy small selections, so the decoded group can be freed
+            idx = np.concatenate([np.arange(lo, hi) for lo, hi in local])
+            return t.take(pa.array(idx))
+
+        def part_of(task):
+            return int(self.group_part[task[1][0] if task[0] == "run" else task[1]])
+
+        by_part: Dict[int, List[int]] = {}
+        for i, task in enumerate(tasks):
+            by_part.setdefault(part_of(task), []).append(i)
+        pieces: List[Any] = [None] * len(tasks)
+        if len(by_part) > 1:
+            def work(ids):
+                for i in ids:
+                    pieces[i] = do(tasks[i])
+            list(_io_pool().map(work, by_part.values()))
+        else:
+            for i, task in enumerate(tasks):
+                pieces[i] = do(task)
         if not pieces:
-            return self.pf(name).schema_arrow.empty_table().select(list(cols))
+            return self.empty(name, cols)
+        if len(pieces) == 1:
+            return pieces[0]
+        if sum(p.num_rows for p in pieces) >= _COMBINE_MIN_ROWS:
+            return combine_tables(pieces)
         return pa.concat_tables(pieces)
 
     def take(self, name: str, rows: np.ndarray, columns: Optional[Sequence[str]] = None):
-        """Arbitrary rows (any order) of one file."""
+        """Arbitrary rows (any order) of one table."""
         import pyarrow as pa
 
         rows = np.asarray(rows, dtype=np.int64)
         cols = tuple(columns) if columns is not None else tuple(self.columns(name))
         if len(rows) == 0:
-            return self.pf(name).schema_arrow.empty_table().select(list(cols))
+            return self.empty(name, cols)
         order = np.argsort(rows, kind="stable")
         srt = rows[order]
         g = np.searchsorted(self.rg, srt, side="right") - 1
@@ -1138,7 +1694,6 @@ class SpotRows:
         return t.take(pa.array(inv))
 
     # -- conversion --------------------------------------------------------
-
     def to_frame(self, name: str, table) -> pd.DataFrame:
         """Arrow table of a spot-aligned file → DataFrame (codes → categoricals)."""
         cats = self.cats.get(name, {})
@@ -1182,7 +1737,7 @@ except TypeError:  # pragma: no cover - pandas < 2.1
 
 
 __all__ = [
-    "CONTAINER", "Container", "DEFAULT_ROW_GROUP_ROWS", "DEFAULT_ZSTD_LEVEL", "SpotRows",
-    "ZARR_FORMAT_VERSION", "ZARR_SUFFIX", "ZIP_SUFFIX", "container_kind", "read_small_parts",
-    "sort_order", "write_zarr",
+    "CONTAINER", "Container", "DEFAULT_CACHE_BYTES", "DEFAULT_ROW_GROUP_ROWS", "DEFAULT_ZSTD_LEVEL",
+    "SpotPartitionWriter", "SpotRows", "ZARR_FORMAT_VERSION", "ZARR_LAYOUTS", "ZARR_SUFFIX",
+    "ZIP_SUFFIX", "container_kind", "partition_dirs", "read_small_parts", "sort_order", "write_zarr",
 ]

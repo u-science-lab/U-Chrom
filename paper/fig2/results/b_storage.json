@@ -9,7 +9,7 @@
   "n_cpu": 18,
   "ram_gb": 64.0,
   "disk": "File System Personality=APFS; Protocol=Apple Fabric; Solid State=Yes",
-  "work_dir_free_gb": 642.2,
+  "work_dir_free_gb": 563.5,
   "versions": {
    "numpy": "2.4.3",
    "pandas": "2.3.3",
@@ -21,7 +21,8 @@
    "psutil": "7.2.2",
    "scipy": "1.17.1",
    "uchrom_h5cd_format": "2.0",
-   "uchrom_git": "af2ed58"
+   "uchrom_zarr_format": "2.1",
+   "uchrom_git": "1df6e89"
   }
  },
  "schema": "full",
@@ -44,7 +45,8 @@
    "Parquet": "pandas DataFrame",
    "AnnData (spots as obs)": "AnnData (read_h5ad, in memory)",
    "h5cd": "ChromData (ChromData.read)",
-   "chromdata.zarr 2.0": "ChromData (ChromData.read, in memory)"
+   "chromdata.zarr 2.0": "ChromData (ChromData.read, in memory)",
+   "chromdata.zarr 2.1": "ChromData (ChromData.read, in memory)"
   },
   "compression": {
    "FOF-CT / CSV": "none",
@@ -52,8 +54,10 @@
    "AnnData (spots as obs)": "none (write_h5ad default)",
    "h5cd 1.x": "none (cd.write)",
    "h5cd 2.0": "gzip-4 on integer / string data, floats uncompressed (cd.write default)",
-   "chromdata.zarr 2.0": "Parquet zstd-3 + Zarr zstd-3; spots sorted by (cell, trace, bin), 65,536-row row groups on cell boundaries (cd.write default)"
-  }
+   "chromdata.zarr 2.0": "Parquet zstd-3 + Zarr zstd-3; spots sorted by (cell, trace, bin), 65,536-row row groups on cell boundaries (cd.write default)",
+   "chromdata.zarr 2.1": "Parquet zstd-3 + Zarr zstd-3; spot tables partitioned by chromosome (tables/spots/chrom=<name>/), sorted by (cell, trace, bin) within a partition, 16,384-row row groups on cell boundaries (cd.write default)"
+  },
+  "fofct_writer": "uchrom.io.write_fofct (official writer, PR #67)"
  },
  "series": {
   "FOF-CT / CSV": {
@@ -71,64 +75,64 @@
       "n": 3
      },
      "write_s": {
-      "median": 0.23264133295742795,
-      "min": 0.2319802079582587,
-      "max": 0.23304883402306587,
+      "median": 0.45067795895738527,
+      "min": 0.4301180000184104,
+      "max": 0.4675830839551054,
       "n": 3
      },
      "read_s": {
-      "median": 0.06088737497339025,
-      "min": 0.05770766601199284,
-      "max": 0.06454591703368351,
+      "median": 0.10409233398968354,
+      "min": 0.10389337496599182,
+      "max": 0.10750266700051725,
       "n": 3
      },
      "read_peak_rss_mb": {
-      "median": 305.90625,
-      "min": 303.953125,
-      "max": 310.8125,
+      "median": 309.015625,
+      "min": 300.984375,
+      "max": 314.09375,
       "n": 3
      },
      "read_baseline_rss_mb": {
-      "median": 201.75,
-      "min": 199.859375,
-      "max": 202.828125,
+      "median": 204.625,
+      "min": 204.1875,
+      "max": 205.609375,
       "n": 3
      },
      "write_peak_rss_mb": {
-      "median": 132.09375,
-      "min": 130.4375,
-      "max": 136.8125,
+      "median": 170.171875,
+      "min": 169.875,
+      "max": 171.046875,
       "n": 3
      },
      "trials": [
       {
-       "write_s": 0.23304883402306587,
+       "write_s": 0.4675830839551054,
        "bytes": 8002249,
-       "write_peak_rss_mb": 130.4375,
+       "write_peak_rss_mb": 171.046875,
        "label": "FOF-CT / CSV",
-       "read_s": 0.06088737497339025,
-       "read_peak_rss_mb": 305.90625,
-       "baseline_rss_mb": 199.859375,
+       "read_s": 0.10750266700051725,
+       "read_peak_rss_mb": 300.984375,
+       "baseline_rss_mb": 204.1875,
        "n_rows": 11449
       },
       {
-       "write_s": 0.2319802079582587,
+       "write_s": 0.4301180000184104,
        "bytes": 8002249,
-       "write_peak_rss_mb": 132.09375,
+       "write_peak_rss_mb": 170.171875,
        "label": "FOF-CT / CSV",
-       "read_s": 0.06454591703368351,
-       "read_peak_rss_mb": 303.953125,
-       "baseline_rss_mb": 202.828125,
+       "read_s": 0.10409233398968354,
+       "read_peak_rss_mb": 309.015625,
+       "baseline_rss_mb": 205.609375,
        "n_rows": 11449
       },
       {
-       "write_s": 0.23264133295742795,
+       "write_s": 0.45067795895738527,
        "bytes": 8002249,
-       "write_peak_rss_mb": 136.8125,
+       "write_peak_rss_mb": 169.875,
        "label": "FOF-CT / CSV",
-       "read_s": 0.05770766601199284,
-       "read_peak_rss_mb": 310.8125,
-       "baseline_rss_mb": 201.75,
+       "read_s": 0.10389337496599182,
+       "read_peak_rss_mb": 314.09375,
+       "baseline_rss_mb": 204.625,
        "n_rows": 11449
       }
      ]
@@ -146,64 +150,64 @@
       "n": 3
      },
      "write_s": {
-      "median": 1.9972076250123791,
-      "min": 1.9846418329980224,
-      "max": 2.0279797919793054,
+      "median": 2.137381792010274,
+      "min": 2.121957666997332,
+      "max": 2.1583801669767126,
       "n": 3
      },
      "read_s": {
-      "median": 0.48203533299965784,
-      "min": 0.45002516702516004,
-      "max": 0.5126337080146186,
+      "median": 0.8607866669772193,
+      "min": 0.8498380829696544,
+      "max": 0.8634522909997031,
       "n": 3
      },
      "read_peak_rss_mb": {
-      "median": 854.5625,
-      "min": 851.5625,
-      "max": 864.328125,
+      "median": 865.46875,
+      "min": 864.84375,
+      "max": 882.40625,
       "n": 3
      },
      "read_baseline_rss_mb": {
-      "median": 201.921875,
-      "min": 200.734375,
-      "max": 201.984375,
+      "median": 203.78125,
+      "min": 203.75,
+      "max": 204.046875,
       "n": 3
      },
      "write_peak_rss_mb": {
-      "median": 271.75,
-      "min": 255.125,
-      "max": 277.3125,
+      "median": 438.15625,
+      "min": 436.390625,
+      "max": 440.828125,
       "n": 3
      },
      "trials": [
       {
-       "write_s": 1.9846418329980224,
+       "write_s": 2.121957666997332,
        "bytes": 70973039,
-       "write_peak_rss_mb": 271.75,
+       "write_peak_rss_mb": 440.828125,
        "label": "FOF-CT / CSV",
-       "read_s": 0.45002516702516004,
-       "read_peak_rss_mb": 854.5625,
-       "baseline_rss_mb": 200.734375,
+       "read_s": 0.8498380829696544,
+       "read_peak_rss_mb": 882.40625,
+       "baseline_rss_mb": 203.78125,
        "n_rows": 101463
       },
       {
-       "write_s": 2.0279797919793054,
+       "write_s": 2.1583801669767126,
        "bytes": 70973039,
-       "write_peak_rss_mb": 277.3125,
+       "write_peak_rss_mb": 436.390625,
        "label": "FOF-CT / CSV",
-       "read_s": 0.5126337080146186,
-       "read_peak_rss_mb": 864.328125,
-       "baseline_rss_mb": 201.921875,
+       "read_s": 0.8634522909997031,
+       "read_peak_rss_mb": 864.84375,
+       "baseline_rss_mb": 204.046875,
        "n_rows": 101463
       },
       {
-       "write_s": 1.9972076250123791,
+       "write_s": 2.137381792010274,
        "bytes": 70973039,
-       "write_peak_rss_mb": 255.125,
+       "write_peak_rss_mb": 438.15625,
        "label": "FOF-CT / CSV",
-       "read_s": 0.48203533299965784,
-       "read_peak_rss_mb": 851.5625,
-       "baseline_rss_mb": 201.984375,
+       "read_s": 0.8607866669772193,
+       "read_peak_rss_mb": 865.46875,
+       "baseline_rss_mb": 203.75,
        "n_rows": 101463
       }
      ]
@@ -221,64 +225,64 @@
       "n": 3
      },
      "write_s": {
-      "median": 19.956240875006188,
-      "min": 19.731956959003583,
-      "max": 20.768054832995404,
+      "median": 19.67480895796325,
+      "min": 19.139154667034745,
+      "max": 19.803243833011948,
       "n": 3
      },
      "read_s": {
-      "median": 4.840015665977262,
-      "min": 4.7662745409761555,
-      "max": 4.898711875022855,
+      "median": 8.591938333003782,
+      "min": 8.509520624997094,
+      "max": 8.70317445899127,
       "n": 3
      },
      "read_peak_rss_mb": {
-      "median": 6415.265625,
-      "min": 6406.796875,
-      "max": 6419.625,
+      "median": 6392.390625,
+      "min": 6384.171875,
+      "max": 6411.234375,
       "n": 3
      },
      "read_baseline_rss_mb": {
-      "median": 200.96875,
-      "min": 200.921875,
-      "max": 201.359375,
+      "median": 204.921875,
+      "min": 204.46875,
+      "max": 205.0,
       "n": 3
      },
      "write_peak_rss_mb": {
-      "median": 1768.3125,
-      "min": 1768.1875,
-      "max": 1780.40625,
+      "median": 2998.796875,
+      "min": 2994.34375,
+      "max": 3005.3125,
       "n": 3
      },
      "trials": [
       {
-       "write_s": 20.768054832995404,
+       "write_s": 19.67480895796325,
        "bytes": 705063405,
-       "write_peak_rss_mb": 1768.1875,
+       "write_peak_rss_mb": 3005.3125,
        "label": "FOF-CT / CSV",
-       "read_s": 4.7662745409761555,
-       "read_peak_rss_mb": 6419.625,
-       "baseline_rss_mb": 201.359375,
+       "read_s": 8.70317445899127,
+       "read_peak_rss_mb": 6411.234375,
+       "baseline_rss_mb": 204.46875,
        "n_rows": 1008086
       },
       {
-       "write_s": 19.956240875006188,
+       "write_s": 19.139154667034745,
        "bytes": 705063405,
-       "write_peak_rss_mb": 1768.3125,
+       "write_peak_rss_mb": 2994.34375,
        "label": "FOF-CT / CSV",
-       "read_s": 4.840015665977262,
-       "read_peak_rss_mb": 6415.265625,
-       "baseline_rss_mb": 200.921875,
+       "read_s": 8.509520624997094,
+       "read_peak_rss_mb": 6392.390625,
+       "baseline_rss_mb": 204.921875,
        "n_rows": 1008086
       },
       {
-       "write_s": 19.731956959003583,
+       "write_s": 19.803243833011948,
        "bytes": 705063405,
-       "write_peak_rss_mb": 1780.40625,
+       "write_peak_rss_mb": 2998.796875,
        "label": "FOF-CT / CSV",
-       "read_s": 4.898711875022855,
-       "read_peak_rss_mb": 6406.796875,
-       "baseline_rss_mb": 200.96875,
+       "read_s": 8.591938333003782,
+       "read_peak_rss_mb": 6384.171875,
+       "baseline_rss_mb": 205.0,
        "n_rows": 1008086
       }
      ]
@@ -296,64 +300,64 @@
       "n": 3
      },
      "write_s": {
-      "median": 201.37538516701898,
-      "min": 195.3515472910367,
-      "max": 203.82359916699352,
+      "median": 188.30578404205153,
+      "min": 188.11534141597804,
+      "max": 195.45615549996728,
       "n": 3
      },
      "read_s": {
-      "median": 68.83570245804731,
-      "min": 65.85933424998075,
-      "max": 69.45077295799274,
+      "median": 99.1566852920223,
+      "min": 98.18831308401423,
+      "max": 107.97016641596565,
       "n": 3
      },
      "read_peak_rss_mb": {
-      "median": 29305.28125,
-      "min": 29106.390625,
-      "max": 29355.609375,
+      "median": 37740.5,
+      "min": 37033.5,
+      "max": 40013.0,
       "n": 3
      },
      "read_baseline_rss_mb": {
-      "median": 201.1875,
-      "min": 200.328125,
-      "max": 201.703125,
+      "median": 205.140625,
+      "min": 203.9375,
+      "max": 205.265625,
       "n": 3
      },
      "write_peak_rss_mb": {
-      "median": 14612.890625,
-      "min": 14599.609375,
-      "max": 14616.28125,
+      "median": 21954.734375,
+      "min": 21952.90625,
+      "max": 21960.109375,
       "n": 3
      },
      "trials": [
       {
-       "write_s": 203.82359916699352,
+       "write_s": 195.45615549996728,
        "bytes": 7003933656,
-       "write_peak_rss_mb": 14599.609375,
+       "write_peak_rss_mb": 21952.90625,
        "label": "FOF-CT / CSV",
-       "read_s": 69.45077295799274,
-       "read_peak_rss_mb": 29106.390625,
-       "baseline_rss_mb": 200.328125,
+       "read_s": 107.97016641596565,
+       "read_peak_rss_mb": 37740.5,
+       "baseline_rss_mb": 205.265625,
        "n_rows": 10005527
       },
       {
-       "write_s": 195.3515472910367,
+       "write_s": 188.11534141597804,
        "bytes": 7003933656,
-       "write_peak_rss_mb": 14612.890625,
+       "write_peak_rss_mb": 21960.109375,
        "label": "FOF-CT / CSV",
-       "read_s": 65.85933424998075,
-       "read_peak_rss_mb": 29355.609375,
-       "baseline_rss_mb": 201.1875,
+       "read_s": 99.1566852920223,
+       "read_peak_rss_mb": 37033.5,
+       "baseline_rss_mb": 203.9375,
        "n_rows": 10005527
       },
       {
-       "write_s": 201.37538516701898,
+       "write_s": 188.30578404205153,
        "bytes": 7003933656,
-       "write_peak_rss_mb": 14616.28125,
+       "write_peak_rss_mb": 21954.734375,
        "label": "FOF-CT / CSV",
-       "read_s": 68.83570245804731,
-       "read_peak_rss_mb": 29305.28125,
-       "baseline_rss_mb": 201.703125,
+       "read_s": 98.18831308401423,
+       "read_peak_rss_mb": 40013.0,
+       "baseline_rss_mb": 205.140625,
        "n_rows": 10005527
       }
      ]
@@ -365,7 +369,9 @@
      "est_in_memory_mb": 54016,
      "reason": "~53 GB in memory for the table alone (x4 for the CSV reader) exceeds 60% of 64.0 GB RAM"
     }
-   ]
+   ],
+   "repeats": 3,
+   "writer": "uchrom.io.write_fofct"
   },
   "Parquet": {
    "points": [
@@ -2232,6 +2238,319 @@
      "reason": "~53 GB in memory for the table alone (x4 for the CSV reader) exceeds 60% of 64.0 GB RAM"
     }
    ]
+  },
+  "chromdata.zarr 2.1": {
+   "points": [
+    {
+     "n_target": 10000,
+     "n_spots": 11449,
+     "n_cells": 2,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 4.649432182312012,
+      "min": 4.649432182312012,
+      "max": 4.649432182312012,
+      "n": 3
+     },
+     "write_s": {
+      "median": 0.37003624998033047,
+      "min": 0.36310495901852846,
+      "max": 0.3770600419957191,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.05240641598356888,
+      "min": 0.051595124998129904,
+      "max": 0.05265666695777327,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 246.875,
+      "min": 245.984375,
+      "max": 247.546875,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 204.171875,
+      "min": 203.890625,
+      "max": 204.359375,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 172.53125,
+      "min": 172.28125,
+      "max": 172.5625,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 0.37003624998033047,
+       "bytes": 4875283,
+       "write_peak_rss_mb": 172.53125,
+       "label": "chromdata.zarr 2.1",
+       "read_s": 0.051595124998129904,
+       "read_peak_rss_mb": 245.984375,
+       "baseline_rss_mb": 203.890625,
+       "n_rows": 11449
+      },
+      {
+       "write_s": 0.36310495901852846,
+       "bytes": 4875283,
+       "write_peak_rss_mb": 172.28125,
+       "label": "chromdata.zarr 2.1",
+       "read_s": 0.05265666695777327,
+       "read_peak_rss_mb": 247.546875,
+       "baseline_rss_mb": 204.359375,
+       "n_rows": 11449
+      },
+      {
+       "write_s": 0.3770600419957191,
+       "bytes": 4875283,
+       "write_peak_rss_mb": 172.5625,
+       "label": "chromdata.zarr 2.1",
+       "read_s": 0.05240641598356888,
+       "read_peak_rss_mb": 246.875,
+       "baseline_rss_mb": 204.171875,
+       "n_rows": 11449
+      }
+     ]
+    },
+    {
+     "n_target": 100000,
+     "n_spots": 101463,
+     "n_cells": 19,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 31.875654220581055,
+      "min": 31.875654220581055,
+      "max": 31.875654220581055,
+      "n": 3
+     },
+     "write_s": {
+      "median": 0.5302257920266129,
+      "min": 0.5268441659864038,
+      "max": 0.5353968749986961,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.06623054202646017,
+      "min": 0.06610379199264571,
+      "max": 0.0713400419917889,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 333.71875,
+      "min": 331.390625,
+      "max": 335.296875,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 203.9375,
+      "min": 203.859375,
+      "max": 205.203125,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 395.859375,
+      "min": 387.453125,
+      "max": 399.921875,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 0.5353968749986961,
+       "bytes": 33424046,
+       "write_peak_rss_mb": 387.453125,
+       "label": "chromdata.zarr 2.1",
+       "read_s": 0.0713400419917889,
+       "read_peak_rss_mb": 335.296875,
+       "baseline_rss_mb": 203.9375,
+       "n_rows": 101463
+      },
+      {
+       "write_s": 0.5268441659864038,
+       "bytes": 33424046,
+       "write_peak_rss_mb": 399.921875,
+       "label": "chromdata.zarr 2.1",
+       "read_s": 0.06610379199264571,
+       "read_peak_rss_mb": 333.71875,
+       "baseline_rss_mb": 205.203125,
+       "n_rows": 101463
+      },
+      {
+       "write_s": 0.5302257920266129,
+       "bytes": 33424046,
+       "write_peak_rss_mb": 395.859375,
+       "label": "chromdata.zarr 2.1",
+       "read_s": 0.06623054202646017,
+       "read_peak_rss_mb": 331.390625,
+       "baseline_rss_mb": 203.859375,
+       "n_rows": 101463
+      }
+     ]
+    },
+    {
+     "n_target": 1000000,
+     "n_spots": 1008086,
+     "n_cells": 166,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 264.25840759277344,
+      "min": 264.25840759277344,
+      "max": 264.25840759277344,
+      "n": 3
+     },
+     "write_s": {
+      "median": 2.475511791999452,
+      "min": 2.457414541975595,
+      "max": 2.478395999991335,
+      "n": 3
+     },
+     "read_s": {
+      "median": 0.1678095829556696,
+      "min": 0.1668434999883175,
+      "max": 0.16982379194814712,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 998.65625,
+      "min": 988.515625,
+      "max": 1021.625,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 203.8125,
+      "min": 203.6875,
+      "max": 204.71875,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 2651.4375,
+      "min": 2650.453125,
+      "max": 2652.171875,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 2.475511791999452,
+       "bytes": 277095024,
+       "write_peak_rss_mb": 2651.4375,
+       "label": "chromdata.zarr 2.1",
+       "read_s": 0.16982379194814712,
+       "read_peak_rss_mb": 998.65625,
+       "baseline_rss_mb": 203.8125,
+       "n_rows": 1008086
+      },
+      {
+       "write_s": 2.478395999991335,
+       "bytes": 277095024,
+       "write_peak_rss_mb": 2650.453125,
+       "label": "chromdata.zarr 2.1",
+       "read_s": 0.1668434999883175,
+       "read_peak_rss_mb": 1021.625,
+       "baseline_rss_mb": 204.71875,
+       "n_rows": 1008086
+      },
+      {
+       "write_s": 2.457414541975595,
+       "bytes": 277095024,
+       "write_peak_rss_mb": 2652.171875,
+       "label": "chromdata.zarr 2.1",
+       "read_s": 0.1678095829556696,
+       "read_peak_rss_mb": 988.515625,
+       "baseline_rss_mb": 203.6875,
+       "n_rows": 1008086
+      }
+     ]
+    },
+    {
+     "n_target": 10000000,
+     "n_spots": 10005527,
+     "n_cells": 1656,
+     "replicated": false,
+     "n_copies": 1,
+     "size_mb": {
+      "median": 2575.301465988159,
+      "min": 2575.301465988159,
+      "max": 2575.301465988159,
+      "n": 3
+     },
+     "write_s": {
+      "median": 22.067169459012803,
+      "min": 21.994330540997908,
+      "max": 22.68936004198622,
+      "n": 3
+     },
+     "read_s": {
+      "median": 1.1081227920367382,
+      "min": 1.0927726249792613,
+      "max": 1.1813846669974737,
+      "n": 3
+     },
+     "read_peak_rss_mb": {
+      "median": 6806.578125,
+      "min": 6781.609375,
+      "max": 6810.0625,
+      "n": 3
+     },
+     "read_baseline_rss_mb": {
+      "median": 204.4375,
+      "min": 203.875,
+      "max": 204.921875,
+      "n": 3
+     },
+     "write_peak_rss_mb": {
+      "median": 21957.703125,
+      "min": 21955.6875,
+      "max": 21959.8125,
+      "n": 3
+     },
+     "trials": [
+      {
+       "write_s": 22.68936004198622,
+       "bytes": 2700399310,
+       "write_peak_rss_mb": 21955.6875,
+       "label": "chromdata.zarr 2.1",
+       "read_s": 1.1813846669974737,
+       "read_peak_rss_mb": 6781.609375,
+       "baseline_rss_mb": 203.875,
+       "n_rows": 10005527
+      },
+      {
+       "write_s": 21.994330540997908,
+       "bytes": 2700399310,
+       "write_peak_rss_mb": 21959.8125,
+       "label": "chromdata.zarr 2.1",
+       "read_s": 1.1081227920367382,
+       "read_peak_rss_mb": 6810.0625,
+       "baseline_rss_mb": 204.4375,
+       "n_rows": 10005527
+      },
+      {
+       "write_s": 22.067169459012803,
+       "bytes": 2700399310,
+       "write_peak_rss_mb": 21957.703125,
+       "label": "chromdata.zarr 2.1",
+       "read_s": 1.0927726249792613,
+       "read_peak_rss_mb": 6806.578125,
+       "baseline_rss_mb": 204.921875,
+       "n_rows": 10005527
+      }
+     ]
+    }
+   ],
+   "infeasible": [
+    {
+     "n_target": 100000000,
+     "est_in_memory_mb": 54016,
+     "reason": "~53 GB in memory for the table alone (x4 for the CSV reader) exceeds 60% of 64.0 GB RAM"
+    }
+   ],
+   "repeats": 3,
+   "container_version": "2.1"
   }
  }
 }

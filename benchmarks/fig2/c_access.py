@@ -83,19 +83,33 @@ class H5cd2Memory(H5cd1xMemory):
         C.FORMATS["h5cd2"].write(cd, path)
 
 
-class ZarrMemory(H5cd1xMemory):
-    label = "chromdata.zarr 2.0 (in memory, scan)"
-    ext = ".chromdata.zarr"
+def _zarr_version() -> str:
+    try:
+        from uchrom.core.zarrcd import ZARR_FORMAT_VERSION
+    except ImportError:  # pragma: no cover - older checkout
+        return "2.0"
+    return ZARR_FORMAT_VERSION
 
-    @staticmethod
-    def write(cd, path):
-        cd.write(path)
+
+class ZarrMemory(H5cd1xMemory):
+    label = f"chromdata.zarr {_zarr_version()} (in memory, scan)"
+    ext = ".chromdata.zarr"
+    row_group_rows = None
+
+    @classmethod
+    def write(cls, cd, path):
+        cd.write(path, **({"row_group_rows": cls.row_group_rows} if cls.row_group_rows else {}))
 
 
 class ZarrBacked(ZarrMemory):
-    """Backed store: open reads the small tables + index; get_* reads row ranges."""
+    """Backed store: open reads the small tables + index; get_* reads row ranges.
 
-    label = "chromdata.zarr 2.0 (backed, from disk)"
+    Also timed with ``columns="coords"`` (coordinates + key columns only; the
+    62 Takei spot tracks are not read): levels ``trace_coords`` /
+    ``cell_coords`` / ``chrom_coords``."""
+
+    label = f"chromdata.zarr {_zarr_version()} (backed, from disk)"
+    coords_levels = True
 
     def open(self, path):
         from uchrom import ChromData
@@ -105,6 +119,13 @@ class ZarrBacked(ZarrMemory):
         cd = self.cd
         return {"trace": list(cd._categories("trace_id")), "cell": list(cd._categories("cell_id")),
                 "chrom": list(cd.bins["chrom"].cat.categories)}
+
+    def get(self, level, key):
+        if level.endswith("_coords"):
+            fn = {"trace": self.cd.get_trace, "cell": self.cd.get_cell,
+                  "chrom": self.cd.get_chrom}[level.split("_")[0]]
+            return fn(key, columns="coords")
+        return super().get(level, key)
 
 
 class ParquetMemory:
@@ -176,12 +197,16 @@ def child(backend_key, path, n_queries):
     ids = be.ids()
     rng = np.random.default_rng(0)
     out = {"open_s": open_s, "rss_after_open_mb": rss_open, "baseline_rss_mb": base}
-    for level in ("trace", "cell", "chrom"):
+    levels = ["trace", "cell", "chrom"]
+    if getattr(be, "coords_levels", False):
+        levels += ["trace_coords", "cell_coords", "chrom_coords"]
+    for level in levels:
         if level == "chrom":
             out["rss_after_trace_cell_mb"] = C.current_rss_mb()
             out["peak_rss_trace_cell_mb"] = C.peak_rss_mb()
-        pool = ids[level]
-        picks = rng.choice(len(pool), int(n_queries), replace=len(pool) < int(n_queries) or level == "chrom")
+        pool = ids[level.split("_")[0]]
+        picks = rng.choice(len(pool), int(n_queries),
+                           replace=len(pool) < int(n_queries) or level.startswith("chrom"))
         be.get(level, pool[picks[0]])  # warm-up (first-call imports / caches), not timed
         times, sizes = [], []
         for i in picks:
@@ -195,6 +220,27 @@ def child(backend_key, path, n_queries):
     C.emit(out)
 
 
+def _pool_repeats(runs):
+    """Several fresh-process runs of one (backend, size) → one record: query
+    times pooled over the runs (median / IQR), open time and memory as the
+    median of the runs; the per-run summaries are kept under ``repeats``."""
+    import statistics
+
+    out = dict(runs[0])
+    for key in ("open_s", "rss_after_open_mb", "baseline_rss_mb", "rss_after_trace_cell_mb",
+                "peak_rss_trace_cell_mb", "peak_rss_mb"):
+        vals = [r[key] for r in runs if r.get(key) is not None]
+        if vals:
+            out[key] = statistics.median(vals)
+    for level in [k for k, v in runs[0].items() if isinstance(v, dict) and "times_s" in v]:
+        times = [t for r in runs for t in r[level]["times_s"]]
+        out[level] = {**runs[0][level], "latency_s": C.iqr(times), "times_s": times}
+    out["repeats"] = [{"open_s": r["open_s"], **{lv: r[lv]["latency_s"]["median"] for lv in r
+                                                 if isinstance(r[lv], dict) and "latency_s" in r[lv]}}
+                      for r in runs]
+    return out
+
+
 def child_write(backend_key, stage, out):
     cd = C.load_stage(Path(stage))
     BACKENDS[backend_key].write(cd, out)
@@ -205,6 +251,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sizes", default="1e4,1e5,1e6,1e7")
     ap.add_argument("--queries", type=int, default=20)
+    ap.add_argument("--repeats", type=int, default=3,
+                    help="fresh processes per (backend, size); query times are pooled")
     ap.add_argument("--backends", default="h5cd-1x-memory")
     ap.add_argument("--prebuilt", action="append", default=[], metavar="N=PATH",
                     help="zarr backends: use this store for size N instead of staging + writing "
@@ -236,13 +284,15 @@ def main():
             else:
                 stage = C.stage_subset(n)
                 info = C.stage_info(stage)
-                tag = ("h5cd2" if key == "h5cd-2-memory" else "zarr" if key.startswith("zarr")
+                tag = ("h5cd2" if key == "h5cd-2-memory"
+                       else f"zarr{_zarr_version().replace('.', '')}" if key.startswith("zarr")
                        else key.split("-")[0] if key in ("parquet-memory", "anndata-memory")
                        else f"v{FORMAT_VERSION}")
                 h5 = work / f"n{n}_{tag}{be.ext}"
                 if not h5.exists():
                     C.run_child(SCRIPT, ["--child", "write", key, str(stage), str(h5)])
-            r = C.run_child(SCRIPT, ["--child", key, str(h5), str(args.queries)])
+            r = _pool_repeats([C.run_child(SCRIPT, ["--child", key, str(h5), str(args.queries)])
+                               for _ in range(args.repeats)])
             points.append({"n_target": n, "n_spots": info["n_spots"], "n_cells": info["n_cells"],
                            "replicated": info["replicated"], "file_mb": C.size_bytes(h5) / 2**20,
                            **({"prebuilt": info["prebuilt"], "replicated_from": info["replicated_from"]}
@@ -250,7 +300,8 @@ def main():
             print(f"{be.label:28s} n={info['n_spots']:>11,}  open {r['open_s']:7.2f} s  "
                   + "  ".join(f"{lv} {r[lv]['latency_s']['median'] * 1e3:8.2f} ms" for lv in ("trace", "cell", "chrom")),
                   flush=True)
-        series[be.label] = {"backend": key, "format_version": FORMAT_VERSION, "points": points,
+        series[be.label] = {"backend": key, "points": points, "repeats": args.repeats,
+                            "format_version": _zarr_version() if key.startswith("zarr") else FORMAT_VERSION,
                             "page_cache": "warm (fresh process; OS cache not flushed)"}
         C.write_json("c_access", {"panel": "c", "machine": C.machine_info(), "queries_per_level": args.queries,
                                   "dataset": "Takei 2025 cerebellum rep 1 whole-cell subsets (see b_storage.json)",

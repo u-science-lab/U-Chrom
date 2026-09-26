@@ -504,7 +504,7 @@ cover each kind.  (The current silent-drop bug is the motivating case.)
 ## 4. OOM-friendly storage
 
 **Status:** implemented on a **Zarr + Parquet container**,
-`<name>.chromdata.zarr` (roadmap steps 6 and 8, format 2.0 — see
+`<name>.chromdata.zarr` (roadmap steps 6, 7 and 8; format 2.1 since step 7 — see
 *Format 2.0 container: `.chromdata.zarr`* below).  The HDF5 plan in the
 rest of this section was the starting point; the Figure 2 benchmarks (#64)
 showed HDF5 to be the bottleneck (1e7 real spots: h5cd 1.x 5.50 GB, 7.2 s
@@ -516,10 +516,13 @@ the container changed.  As built:
   float32 coords (opt-in) and compression are done;
 - the data model (section 2) is unchanged, and the HDF5 `.h5cd` 2.0 of
   #65 stays readable (writing it warns);
-- not done: the streaming writer / streaming imports and the streaming
-  population callers (step 7), `backed="r+"`, the memory-budget knobs,
-  `binsets/`.  Backed `spots` is a light proxy (`BackedFrame`), not a
-  `DataFrame` subclass.
+- step 7 is done (format 2.1): spot tables partitioned by chromosome,
+  `columns=` / `tracks=` selection, the streaming writer and imports, the
+  streaming population callers and the memory budget — see *Format 2.1*
+  and *Streaming (roadmap step 7, as built)* below;
+- not done: `backed="r+"`, `binsets/`, streaming compartments / FISHnet.
+  Backed `spots` is a light proxy (`BackedFrame`), not a `DataFrame`
+  subclass.
 
 ### Goals
 
@@ -735,7 +738,7 @@ The authoritative layout is `uchrom/core/spec.md`; the code is
    with plain file reads, not memory maps (mapped pages would count as
    resident memory).  65,536 rows per group was chosen on the 10.9 M-spot
    Takei data: 262,144 rows gave a 2 % smaller file and the same full-read
-   time but doubled `get_cell` latency (8 → 19 ms).
+   time but doubled `get_cell` latency (8 → 19 ms).  Format 2.1 uses 16,384 rows (see *Format 2.1*).
 8. **zstd level 3, float64 coordinates by default.**  On Takei FOV 0's 62
    float spot tracks, zstd-3 is 63 MB vs 69 MB (zstd-1), 92 MB (snappy)
    and 182 MB (none); decoding is ~25 % slower than snappy.
@@ -795,6 +798,160 @@ reads are ~20 % slower than a flat Parquet file: two zstd files instead of
 one snappy file, and building a `ChromData` (loci from `bins`,
 categoricals) instead of returning a flat DataFrame — but at half the peak
 memory.  Full numbers: PR #66 and `paper/fig2/results/`.
+
+### Format 2.1: chromosome partitions
+
+**Why.**  In 2.0, `get_chrom` was a scan: spots sorted cell › trace › bin
+put every chromosome in every row group.  Profile of a backed `get_chrom`
+on the Takei 2025 cerebellum subsets (fresh process, warm cache, chr1 /
+chr7 / chr12 / chr19):
+
+| n_spots | row groups read | spots: I/O + decode | spot_tracks (62 cols): I/O + decode | Arrow → pandas | ChromData assembly | total |
+|---|---|---|---|---|---|---|
+| 1e7 | 144 / 144 | 0.01–0.02 + 0.16–0.18 s (232 MB) | 0.07–0.13 + 0.36–0.41 s (1.64 GB) | 0.02–0.09 s | ~0.01 s | 0.72–0.84 s |
+| 1e8 | 1439 / 1439 | 0.11–0.21 + 1.7–1.8 s (2.3 GB) | 1.0–1.3 + 8.3–9.8 s (16.5 GB) | 1.8–4.6 s | ~0.1 s | 8.8–13.2 s |
+
+Decoding the whole `spot_tracks` file dominates (~70 %), then the whole
+spots file (~25 %); the pandas conversion and the object assembly are
+small.  Two fixes: read one chromosome's row groups only, and do not read
+the tracks when only coordinates are needed.
+
+**Layout.**  The spot-aligned tables are partitioned by chromosome, hive
+style — `tables/spots/chrom=<name>/part-0.parquet`, the same for
+`spot_tracks` and `layers/<key>` — in chromosome category order, sorted
+(cell, trace, bin) inside a partition (stored order chrom › cell › trace ›
+bin).  Rows are numbered globally, partition after partition; `index/`
+keeps its 2.0 arrays with global offsets (`cell_offsets` now has one entry
+per (chromosome, cell) run) plus `partition_offsets`, `partition_groups`,
+`partition_chrom` and `cell_partition`.  `get_trace` reads one slice of
+one partition, `get_chrom` one partition, `get_cell` one slice per
+chromosome (partitions read in parallel threads).  A trace over several
+chromosomes is split into one run per partition.  Full reads decode
+partition by partition into preallocated single-chunk columns, so the
+pandas conversion stays zero-copy and the peak is the table plus one
+partition (a plain `concat_tables` doubled the peak: 5.9 → 10.8 GB).
+
+**Column selection.**  `get_*`, `iter_*`, `to_memory`, `read(...)` take
+`columns=` / `tracks=`; `columns="coords"` reads `x, y, z` and the key
+columns only.  The web browser's geometry reads use it.
+
+**Row-group size** (`benchmarks/fig2/rowgroup_sweep.py`, Takei 1e7, 3
+fresh processes, query times pooled over 20 random ids × 3):
+
+| rows / group | store | full read | get_trace | get_cell | get_chrom | get_cell, coords | get_chrom, coords |
+|---|---|---|---|---|---|---|---|
+| 8,192 | 2.96 GB | 1.26 s | 5.2 ms | 22.5 ms | 42.4 ms | 4.7 ms | 13.5 ms |
+| **16,384 (default)** | **2.58 GB** | **1.17 s** | **5.3 ms** | **24.5 ms** | **41.0 ms** | **4.6 ms** | **13.4 ms** |
+| 32,768 | 2.67 GB | 1.14 s | 6.1 ms | 29.9 ms | 39.4 ms | 4.6 ms | 13.3 ms |
+| 65,536 | 2.57 GB | 1.15 s | 7.6 ms | 47.7 ms | 39.6 ms | 4.4 ms | 13.3 ms |
+
+A cell has spots on every chromosome, so `get_cell` decodes one group per
+chromosome and table; halving the group halves that work until per-call
+overheads dominate.  16,384 rows keeps the file within 0.2 % of the
+smallest and the full read within 3 %, and makes `get_cell` 2× faster than
+65,536; 8,192 buys 2 ms for a 15 % larger file.
+
+**Before / after** (panel b / c harness, 3 fresh processes; 1e8 = rep 1
+replicated):
+
+| | 2.0 | 2.1 |
+|---|---|---|
+| backed `get_chrom`, 1e7 / 1e8 | 0.77 s / 8.9 s | 0.040 s / 0.49 s |
+| … with `columns="coords"`, 1e7 / 1e8 | — | 0.013 s / 0.14 s |
+| backed `get_cell`, 1e7 / 1e8 | 7.9 ms / 22 ms | 23 ms / 42 ms (`coords`: 4.4 / 22 ms) |
+| backed `get_trace`, 1e7 / 1e8 | 7.1 ms / 16 ms | 5.3 ms / 20 ms |
+| full read, 1e7 | 0.98 s, 6.1 GB peak | 1.11 s, 6.8 GB peak |
+| store, Takei 1e7 subset (62 tracks) | 1.90 GB | 2.58 GB (+36 %) |
+| store, Takei rep 1 (10.9 M spots) | 2.17 GB | 2.94 GB (+35 %) |
+| store, Liu 2025 MOp (no tracks) | 294 MB | 285 MB (−3 %) |
+| backed memory after trace + cell queries, 1e7 / 1e8 | 0.35 / 0.57 GB | 0.82 / 1.30 GB |
+
+**Regressions, stated plainly.**  `get_cell` is ~3× slower at 1e7 and ~2×
+at 1e8 on data with many per-spot tracks (one row group per chromosome
+instead of one; with `columns="coords"` it is faster than before); the
+backed process holds more (the 256 MB row-group cache fills with
+per-chromosome groups); tiny stores carry per-partition overhead (1e4
+spots: 2.6 → 4.6 MB); full reads are 13 % slower; and the Takei store is
+35 % larger.  The size (`benchmarks/fig2/spot_tracks_encoding.py` →
+`results/spot_tracks_encoding.json`, Takei rep 1's 62 tracks, 10.9 M
+rows): with identical Parquet options the same `spot_tracks` take 1.82 GB
+in the 2.0 order and 2.56 GB in the 2.1 order — the per-spot z-scores
+repeat within a cell *across* chromosomes (neighbouring voxels), which the
+cell-contiguous 2.0 order put in the same zstd pages.  No encoding
+recovers it: 65k / 262k-row groups 2.57 / 2.53 GB; zstd-9 / -15 2.44 /
+2.41 GB at 5× / 11× the write time; dictionary encoding of the floats
+3.42 GB; `BYTE_STREAM_SPLIT` 4.63 GB (the repeated values compress worse
+once their bytes are split).  Defaults unchanged (zstd-3, 16k rows); the
+cost is inherent to partitioning by chromosome, and is the price of the
+16–22× faster `get_chrom`.
+
+**Compatibility.**  `ZARR_FORMAT_VERSION = "2.1"`; readers dispatch on
+`tables.attrs["tables"]["spots"]["layout"]` — a 2.0 store is read as one
+unpartitioned partition, in memory and backed.  A 2.0 reader cannot read a
+2.1 store (it finds no `tables/spots.parquet`): a MINOR bump that is not
+additive for old readers, accepted because the container is new and
+`python -m uchrom.io.upgrade old.chromdata.zarr new.chromdata.zarr`
+rewrites stores.  The zarr container version is now separate from the
+`.h5cd` `FORMAT_VERSION` (2.0).
+
+### Streaming (roadmap step 7, as built)
+
+- **Memory budget**: `uchrom.settings.memory_budget` (bytes or `"8GB"`;
+  default half of the available RAM); `iter_*(batch="auto")` sizes batches
+  from it.  macOS / glibc keep freed pages resident, so the band loops call
+  `uchrom.utils.memory.release_memory()`.
+- **Writer**: `ChromData.writer(path)` →
+  `uchrom.core.stream.ChromDataWriter`.  `append` spills each chunk, split
+  by chromosome and sorted by the range key (cell id, or trace id), to a
+  Parquet run; loci get provisional ids; trace / cell ids are collected.
+  `finish` fixes the bins (given, or `bins_from_loci` of the loci seen),
+  the categories (sorted, as `astype("category")`), and writes each
+  partition in pieces of whole cells (one slice per run, budget-sized),
+  sorted by (cell, trace, bin, input row), through the same
+  `SpotPartitionWriter` as the in-memory writer — rows, order, `index/`,
+  row groups and `source_row` are identical.  Column types are unified
+  over chunks (int → float when a later chunk has NaN).  (This answers the
+  open question on external sorting: in-house.)
+- **Imports**: `ChromData.from_fofct(path, out=..., chunksize="auto")`
+  (header scanned, then `pd.read_csv(chunksize=)`), and
+  `read_seqfish_multiomics(glob, out=...)` (one FOV at a time; bins and
+  cells from the loci / cell ids seen); both return the store backed.
+- **Population statistics**: `uchrom.fea.distance_map(cd, chrom,
+  "median" | "mean")` — exact.  The mean accumulates per-pair sums in trace
+  order (`np.add.at`, the additions the dense `np.nanmean` makes, same
+  order: bitwise equal).  An exact median needs all values of a pair, so
+  the pair observations are gathered one *row band* of the matrix at a
+  time (rows `i` whose pairs `(i, j > i)` fit the budget, 80 bytes each)
+  and reduced with a grouped median — one pass over the chromosome's
+  traces per band; memory is the band plus the `n_bins²` output,
+  independent of the number of traces.  No approximation.  The ArcFISH
+  loop F-test and TAD caller stream the same way
+  (`uchrom.fea.arc_stream.axis_cube_streaming`, `streaming=True`, default
+  on backed data): exact lower medians (`torch.nanmedian` semantics),
+  identical outlier masks, filtered variances equal to the torch path up to
+  summation order (≤ 1e-9 relative in tests), same calls.
+  `call_compartments_axes_pc` and `fishnet` are not streamed yet.
+- **Real data** (`benchmarks/cd21_streaming_validation.py`,
+  `benchmarks/fig2/d_streaming.py`; M5 Pro, 64 GB):
+  - Liu 2025 MOp FOF-CT (1.68 GB, 9.58 M spots): in-memory `from_fofct` +
+    write 12.6 GB peak / 20 s; `from_fofct(out=, memory_budget="4GB")`
+    1.3 GB / 20 s; the two stores are value-identical (stored and original
+    order, `index/` identical).
+  - Takei 2025 rep 1, 3 FOV CSVs (7.9 GB, 10.9 M spots):
+    `read_seqfish_multiomics` in memory + write 28.1 GB / 142 s; with
+    `out=` 15.0 GB / 165 s (the peak is one FOV's CSV parse); identical.
+  - Median and mean distance maps, streaming vs in memory, bitwise
+    identical: Takei chr19 / chr11 / chr1 (chr1: 7,656 bins, 200 M pair
+    observations, 60 bands at a 1 GB budget, 14 s) and all 20 Liu
+    chromosomes (also identical to the dense `mean_distance_matrix`).
+  - Panel d (chr11 median map): streaming peaks at 1.6 GB (1e7 spots,
+    54 k traces, 4 bands) and 2.3 GB (1e8, 540 k traces, 551 M pair
+    observations, 31 bands) under a 2 GB budget; "load all" takes 9.7 GB
+    at 1e7 and does not fit at 1e8.  Identical at every size.
+  - ArcFISH on Takei 2021 mESC (FOF-CT, 20 chromosomes): loops 5 = 5,
+    same calls, p-values identical; TADs 223 = 223, same calls, max
+    relative p-value difference 4e-12.  Streaming is slower on this small
+    dataset (12 vs 7 s; 8 vs 3 s).
 
 ### Format 2.0 HDF5 layout (the first plan)
 
@@ -899,7 +1056,7 @@ cool, H1Esc-HFF sci-Hi-C).
 | 4 | `cd.contacts` (`ContactRef`, cool/mcool/scool/hic backends), optional coords + `coord_status`; `ChromData.from_contacts`; Higashi tutorial without zeros | 2.0 | 1, 3 |
 | 5 | Recon library entry points returning `ChromData` (nucdyn, gem, mds); CLIs become wrappers | 2.0 | 4 |
 | 6 | Sorted spots + `index/*`, backed mode, `iter_traces` / `iter_cells`, float32 coords, compression | 2.0 (`.chromdata.zarr`) | 3 (**done**, with 8) |
-| 7 | Streaming writer + streaming `from_fofct` / `from_seqfish_multiomics`; streaming population callers; memory budget | 2.1 | 6 |
+| 7 | Streaming writer + streaming `from_fofct` / `from_seqfish_multiomics`; streaming population callers; memory budget; spot tables partitioned by chromosome, `columns=` | 2.1 | 6 (**done**) |
 | 8 | ~~Optional zarr `_Store` backend~~ → zarr + Parquet **is** the 2.0 container; `.h5cd` writing deprecated | 2.0 | 6 (**done**) |
 
 Steps 3 and 4 are the breaking ones and should ship together as

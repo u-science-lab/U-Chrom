@@ -1,4 +1,6 @@
 from .distance import (
+    DistanceMap,
+    distance_map,
     mean_distance_matrix,
     contact_frequency,
     radius_of_gyration,
@@ -38,6 +40,8 @@ from .sequence import (
 )
 
 __all__ = [
+    "DistanceMap",
+    "distance_map",
     "mean_distance_matrix",
     "contact_frequency",
     "radius_of_gyration",

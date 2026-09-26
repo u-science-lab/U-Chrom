@@ -28,6 +28,14 @@ The builder
 4. writes ``build_summary.json``: per-FOV and combined n_spots / n_traces /
    n_cells, file sizes, wall time and peak RSS.
 
+``--stream`` builds the combined store in one pass instead:
+``read_seqfish_multiomics(raw/*.csv, out=...)`` reads the FOVs one at a
+time into the streaming writer (peak memory: one FOV's parse plus the
+writer's merge pieces, bounded by ``--memory-budget``).  The result is the
+loader's own output for all FOVs (the probe-panel bins, with names), which
+differs from the per-FOV concatenation (bins re-derived from the loci) —
+written to ``takei2025_cerebellum_rep1.stream.chromdata.zarr``.
+
 Usage::
 
     python example-data/build_takei2025_cerebellum.py [--data-dir DIR] [--fovs 0,1] [--no-combined]
@@ -193,9 +201,26 @@ def main() -> None:
     ap.add_argument("--force", action="store_true", help="rebuild FOV files that already exist")
     ap.add_argument("--format", default="zarr", choices=sorted(SUFFIX),
                     help="output container (default zarr: .chromdata.zarr)")
+    ap.add_argument("--stream", action="store_true",
+                    help="one streaming pass over the FOV CSVs (read_seqfish_multiomics(out=...))")
+    ap.add_argument("--memory-budget", default=None, help="streaming writer budget, e.g. 8GB")
     ap.add_argument("--one", nargs=2, metavar=("CSV", "OUT"), help=argparse.SUPPRESS)
     args = ap.parse_args()
     data_dir = (args.data_dir or default_data_dir()).resolve()
+
+    if args.stream:
+        from uchrom.io.seqfish_multiomics import read_seqfish_multiomics
+
+        csvs = extract(data_dir, None if args.fovs is None else {int(x) for x in args.fovs.split(",")})
+        out = data_dir / f"{PREFIX}.stream.chromdata.zarr"
+        t0 = time.perf_counter()
+        cd = read_seqfish_multiomics([str(c) for c in csvs], locus_annotation=data_dir / LOCI,
+                                     cell_clustering=data_dir / CLUSTERS, out=out,
+                                     memory_budget=args.memory_budget)
+        print(cd)
+        print(f"{out} ({size_bytes(out) / 1e9:.2f} GB), {time.perf_counter() - t0:.0f} s, "
+              f"peak RSS {peak_rss_mb() / 1024:.1f} GB")
+        return
 
     if args.one:  # child mode
         print("__RESULT__" + json.dumps(build_one(Path(args.one[0]), Path(args.one[1]), data_dir)), flush=True)

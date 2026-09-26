@@ -11,8 +11,12 @@ format-version comparison (supplementary `figS_formats.pdf`).
 |---|---|---|---|
 | `b_storage.py` | b | Takei 2025 cerebellum rep 1, all FOVs (whole-cell subsets) | file size, write time, full-read time, peak RSS vs n_spots for FOF-CT/CSV, Parquet, AnnData (spots as obs), h5cd N.x |
 | `c_access.py` | c | same subsets | `get_trace` / `get_cell` / `get_chrom` latency (median, IQR of 20 random ids) and open / load time vs n_spots; backed chromdata.zarr vs the in-memory baseline (Parquet / AnnData: load the flat table, subset with a pandas boolean mask) |
-| — | d | — | **not possible yet**: out-of-core analysis needs streaming (`iter_traces`, backed mode, roadmap steps 6–7).  Panel d stays mock. |
-| `e_contacts.py` | e | scHiCAR MOp `.h5cd` + 1 Mb `.scool` | on-disk size linked vs copied; web-browser pseudo-bulk time vs cells aggregated (first query vs cached) |
+| `d_streaming.py` | d | same subsets + the 1e8 replicated store | exact median distance map of one chromosome (`uchrom.fea.distance_map`): peak RSS and time, "load all" (`ChromData.read` + in-memory) vs streaming (`backed=True`, `iter_traces` under a 2 GB budget); bitwise identity of the two results + a scatter |
+| `e_contacts_query.py` | e + supplement | scHiCAR MOp `.h5cd` + 1 Mb `.scool` + published `contacts_<type>.cool` | group pseudo-bulk through the index (`Dataset.contacts(group=)` → `_pseudobulk`) vs the published per-type maps for all 22 cell types and all chromosomes (max \|Δ\|); an Oligo thumbnail; link vs copy import time and sizes (→ `make_figS_contacts.py`) |
+| `e_contacts.py` | e (right) | scHiCAR MOp `.h5cd` + 1 Mb `.scool` | web-browser pseudo-bulk time vs cells aggregated (first query vs cached); first on-disk size comparison (HDF5) |
+| `rowgroup_sweep.py` | format 2.1 | Takei 1e7 subset | row-group size (8k / 16k / 32k / 65k): size, full read, get_cell / get_trace / get_chrom (± `columns="coords"`) |
+| `spot_tracks_encoding.py` | format 2.1 | Takei 1e7 subset | why 2.1 is larger on Takei: size per table, 2.0 vs 2.1 row order, Parquet options (row groups, zstd level, dictionary, byte_stream_split) |
+| `replicate_store.py` | c, d | Takei 2.1 store | the 1e8-spot store (whole copies with renamed cells / traces, streamed per partition) |
 | `f_roundtrip.py` | f | Takei 2025 FOV0, sim_cell1, scHiCAR | field-by-field round trips (`.chromdata.zarr`, FOF-CT via `uchrom.io.write_fofct`, AnnData, .cool/.scool, PDB, .3dg) → preserved / partial / lost / NA matrix |
 | `allele_qc.py` | supplement | Takei 2025 raw spot CSVs | diagnostic of the published homolog calls (loci per trace, duplicate loci, genomic–spatial Spearman) |
 
@@ -85,6 +89,31 @@ python benchmarks/fig2/c_access.py --sizes 1e4,1e5,1e6,1e7,1e8 --backends zarr-b
   and FOF-CT; panel c draws backed chromdata.zarr (solid) against the
   Parquet / AnnData baseline as one "load + get_trace" line each.  The h5cd
   1.x / 2.0 / float32 series are in `make_figS_formats.py`.
+
+## Format 2.1 series (this PR: chromosome partitions, streaming)
+
+```bash
+python -m uchrom.io.upgrade takei2025_cerebellum_rep1.chromdata.zarr takei2025_cerebellum_rep1.v21.chromdata.zarr
+python benchmarks/fig2/replicate_store.py takei2025_cerebellum_rep1.v21.chromdata.zarr takei_1e8.v21.chromdata.zarr --n 1e8
+python benchmarks/fig2/rowgroup_sweep.py --n 1e7 --rows 8192,16384,32768,65536 --repeats 3
+python benchmarks/fig2/c_access.py --sizes 1e4,1e5,1e6,1e7,1e8 --backends zarr-backed --repeats 3 \
+    --prebuilt 1e8=takei_1e8.v21.chromdata.zarr
+python benchmarks/fig2/b_storage.py --sizes 1e4,1e5,1e6,1e7,1e8 --formats zarr,fofct --repeats 3
+python benchmarks/fig2/d_streaming.py --sizes 1e4,1e5,1e6,1e7 --prebuilt 1e8=takei_1e8.v21.chromdata.zarr --repeats 3
+python benchmarks/fig2/e_contacts_query.py --repeats 3
+python benchmarks/fig2/spot_tracks_encoding.py OLD_2_0.chromdata.zarr NEW_2_1.chromdata.zarr
+python benchmarks/cd21_streaming_validation.py --data example-data --work /tmp/cd21   # conversion, streaming imports, identity
+```
+
+* Series are labelled with the container version ("chromdata.zarr 2.1");
+  the 2.0 series stay in the JSONs for before / after (panel c draws the
+  2.0 `get_chrom` as a thin grey line).  `c_access.py` now runs each size
+  in `--repeats` fresh processes (query times pooled) and also times
+  `get_*(..., columns="coords")`.
+* Panel b's FOF-CT series is re-measured with the official
+  `uchrom.io.write_fofct` (recorded as `writer` in `b_storage.json`).
+* `replicate_store.py` needs a 2.1 source (it copies each partition's row
+  groups).
 
 ## Adding h5cd 2.x
 

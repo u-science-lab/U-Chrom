@@ -97,6 +97,15 @@ def parse_legacy_call(
 def resolve_chroms(cd, chrom: Optional[Any]) -> List[str]:
     """``chrom=None`` → chromosomes that actually have spots, in category
     order; a string → ``[chrom]``; a sequence → ``list(chrom)``."""
+    if chrom is None and getattr(cd, "backed", False):
+        # from index/ (no per-spot read): partitions / runs carry the chromosome
+        idx = cd._index
+        names = [str(c) for c in cd.bins["chrom"].cat.categories]
+        codes = np.asarray(idx["partition_chrom"] if getattr(cd, "partitioned", False)
+                           else idx["chrom_trace"])
+        if (codes >= 0).all():
+            present = set(int(c) for c in np.unique(codes))
+            return [n for i, n in enumerate(names) if i in present]
     if chrom is None:
         col = cd.spots["chrom"]
         present = set(map(str, pd.unique(col.astype(str))))

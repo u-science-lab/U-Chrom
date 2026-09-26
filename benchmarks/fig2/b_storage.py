@@ -2,8 +2,9 @@
 
 Formats (``_common.FORMATS``):
 
-* **FOF-CT / CSV** — ``_common.write_fofct`` (uchrom has no FOF-CT writer yet)
-  and ``ChromData.from_fofct`` (the repo's reader);
+* **FOF-CT / CSV** — the official ``uchrom.io.write_fofct`` (``cd.to_fofct``)
+  and ``ChromData.from_fofct`` (the first series used the minimal
+  ``_common.write_fofct``; the JSON records the writer);
 * **Parquet** — the flat spot table (spots + x/y/z + tracks), pyarrow, default
   snappy compression; read back with ``pd.read_parquet``;
 * **AnnData (spots as obs)** — spot columns + tracks in ``obs``, coords in
@@ -143,7 +144,9 @@ def main():
                 "write_peak_rss_mb": C.summarize([t["write_peak_rss_mb"] for t in trials]),
                 "trials": trials,
             })
-        series[fmt.label] = {"points": points, "infeasible": infeasible}
+        series[fmt.label] = {"points": points, "infeasible": infeasible, "repeats": args.repeats,
+                             **({"writer": fmt.writer} if getattr(fmt, "writer", None) else {}),
+                             **({"container_version": C._zarr_version()} if key.startswith("zarr") else {})}
         C.write_json("b_storage", {"panel": "b", "machine": machine, "schema": args.schema,
                                    "dataset": _dataset_note(), "protocol": _protocol(args),
                                    "series": series}, merge_key="series")
@@ -168,14 +171,20 @@ def _protocol(args):
             "read_target": {"FOF-CT / CSV": "ChromData (ChromData.from_fofct)", "Parquet": "pandas DataFrame",
                             "AnnData (spots as obs)": "AnnData (read_h5ad, in memory)",
                             "h5cd": "ChromData (ChromData.read)",
-                            "chromdata.zarr 2.0": "ChromData (ChromData.read, in memory)"},
+                            "chromdata.zarr 2.0": "ChromData (ChromData.read, in memory)",
+                            "chromdata.zarr 2.1": "ChromData (ChromData.read, in memory)"},
             "compression": {"FOF-CT / CSV": "none", "Parquet": "snappy (pyarrow default)",
                             "AnnData (spots as obs)": "none (write_h5ad default)",
                             "h5cd 1.x": "none (cd.write)",
                             "h5cd 2.0": "gzip-4 on integer / string data, floats uncompressed (cd.write default)",
                             "chromdata.zarr 2.0": "Parquet zstd-3 + Zarr zstd-3; spots sorted by (cell, trace, "
                                                   "bin), 65,536-row row groups on cell boundaries "
-                                                  "(cd.write default)"}}
+                                                  "(cd.write default)",
+                            "chromdata.zarr 2.1": "Parquet zstd-3 + Zarr zstd-3; spot tables partitioned by "
+                                                  "chromosome (tables/spots/chrom=<name>/), sorted by (cell, "
+                                                  "trace, bin) within a partition, 16,384-row row groups on "
+                                                  "cell boundaries (cd.write default)"},
+            "fofct_writer": "uchrom.io.write_fofct (official writer, PR #67)"}
 
 
 if __name__ == "__main__":

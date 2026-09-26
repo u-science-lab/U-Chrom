@@ -238,6 +238,9 @@ def call_tads_by_pval(
     key_added: Optional[str] = UNSET,
     copy: bool = False,
     verbose: bool = False,
+    streaming: Optional[bool] = None,
+    batch="auto",
+    memory_budget=None,
     store=UNSET,
     result_key=UNSET,
 ):
@@ -259,6 +262,16 @@ def call_tads_by_pval(
     copy : bool
         ``True`` → return a new ChromData with the result; ``cd`` is not
         modified.
+    streaming : bool, optional
+        Compute the axis-variance cube by streaming over the traces
+        (:func:`uchrom.fea.arc_stream.axis_cube_streaming`: exact medians per
+        row band, memory ``O(n_bins²)`` instead of
+        ``O(n_traces × n_bins²)``).  Default: ``True`` for a backed
+        ``ChromData``.  Results equal the in-memory path up to
+        floating-point rounding of the variance sums.
+    batch, memory_budget
+        Traces per batch (``"auto"``) and working-memory budget of the
+        streaming path (default :data:`uchrom.settings.memory_budget`).
 
     Returns
     -------
@@ -282,7 +295,9 @@ def call_tads_by_pval(
     params = params or TADCallerParams()
     work = select_spots(cd, trace_ids=trace_ids, cells=cells)
     chroms = resolve_chroms(work, chrom)
-    frames = [_call_tads_by_pval_chrom(work, c, params, device, verbose) for c in chroms]
+    streaming = bool(getattr(work, "backed", False)) if streaming is None else bool(streaming)
+    frames = [_call_tads_by_pval_chrom(work, c, params, device, verbose, streaming=streaming,
+                                       batch=batch, memory_budget=memory_budget) for c in chroms]
     table = merge_tables(frames, _empty_tads())
     return store_and_return(
         cd, table, key_added=key_added, copy=copy, kind="intervals", interval_kind="domain",
@@ -292,16 +307,25 @@ def call_tads_by_pval(
 
 
 def _call_tads_by_pval_chrom(cd, chrom: str, params: TADCallerParams,
-                             device: str, verbose: bool) -> pd.DataFrame:
+                             device: str, verbose: bool, *, streaming: bool = False,
+                             batch="auto", memory_budget=None) -> pd.DataFrame:
     """Per-chromosome kernel of :func:`call_tads_by_pval` (no storing)."""
     from scipy.signal import find_peaks
 
     if verbose:
-        print(f"[tad/{chrom}] variance cube...")
-    cube = axis_variance_cube(cd, chrom=chrom, device=device)
-    if verbose:
-        print(f"[tad/{chrom}] filter + normalise...")
-    cube = filter_normalize(cube, k_sigma=params.k_sigma, frac=params.frac)
+        print(f"[tad/{chrom}] variance cube{' (streaming)' if streaming else ''}...")
+    if streaming:
+        from uchrom.fea.arc_stream import axis_cube_streaming
+
+        cube = axis_cube_streaming(cd, chrom, k_sigma=params.k_sigma, frac=params.frac,
+                                   streaming=True, batch=batch, memory_budget=memory_budget)
+        w = cube["axis_weight"]
+    else:
+        cube = axis_variance_cube(cd, chrom=chrom, device=device)
+        if verbose:
+            print(f"[tad/{chrom}] filter + normalise...")
+        cube = filter_normalize(cube, k_sigma=params.k_sigma, frac=params.frac)
+        w = axis_weight(cd, chrom=chrom, device=device)
 
     norm_var = cube["norm_var"]
     count = cube["count"]
@@ -309,9 +333,8 @@ def _call_tads_by_pval_chrom(cd, chrom: str, params: TADCallerParams,
     B = len(bin_ids)
     midpoints = np.array([(s + e) * 0.5 for (s, e) in bin_ids])
 
-    w = axis_weight(cd, chrom=chrom, device=device)
     if verbose:
-        print(f"[tad/{chrom}] axis weights: {w.round(3)}")
+        print(f"[tad/{chrom}] axis weights: {np.round(w, 3)}")
 
     pvals, per_axis_logp = _boundary_pvals(
         norm_var, count, midpoints, w, params.window_bp

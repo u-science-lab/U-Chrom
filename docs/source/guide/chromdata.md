@@ -3,7 +3,7 @@
 `uchrom.ChromData` is the central container.  It is conceptually similar
 to [AnnData](https://anndata.readthedocs.io/) but organises the data
 around the chromatin-tracing hierarchy *Cell → Trace → Spot*, plus a
-locus axis, `bins`, shared by all cells (format 2.0).
+locus axis, `bins`, shared by all cells (format 2.0; the `.chromdata.zarr` container is at 2.1).
 
 ```text
 spots   tell what was observed      (one row per observation)
@@ -224,7 +224,7 @@ D = cd.compute_distances(trace_id=0)  # (n_spots_in_trace, n_spots_in_trace)
 | `.chromdata.zarr` / `.cdz` / `.h5cd` | `ChromData.read` |
 
 ```python
-cd.write("data.chromdata.zarr")        # format 2.0: Zarr + Parquet (a directory)
+cd.write("data.chromdata.zarr")        # format 2.1: Zarr + Parquet (a directory)
 cd.write("data.cdz")                   # the same store as one zip file
 cd2 = ChromData.read("data.chromdata.zarr")
 cd3 = ChromData.read("old.h5cd")       # HDF5 2.0, or 1.x upgraded in memory
@@ -233,39 +233,91 @@ cd3 = ChromData.read("old.h5cd")       # HDF5 2.0, or 1.x upgraded in memory
 ### Storage: `.chromdata.zarr`
 
 A `.chromdata.zarr` store is a Zarr v3 directory whose tables are Parquet
-files (zstd): `tables/spots.parquet` (`bin_id`, `trace_id`, `cell_id`,
-`x, y, z`, extra columns), `spot_tracks.parquet`, `layers/`, `bins`,
-`bin_tracks`, `cells`, `traces`, `intervals/`, `points/`; `cellm`,
-`binm`, result arrays and the `index/` offsets are Zarr arrays;
-`results` provenance, `uns` and linked-file records are JSON attributes.
-The full layout is in `uchrom/core/spec.md`.
+files (zstd).  The spot-aligned tables are **partitioned by chromosome**:
+`tables/spots/chrom=<name>/part-0.parquet` (`bin_id`, `trace_id`,
+`cell_id`, `x, y, z`, extra columns), `tables/spot_tracks/chrom=<name>/`,
+`tables/layers/<key>/chrom=<name>/`; the small tables (`bins`,
+`bin_tracks`, `cells`, `traces`, `intervals/`, `points/`) are single
+Parquet files; `cellm`, `binm`, result arrays and the `index/` offsets are
+Zarr arrays; `results` provenance, `uns` and linked-file records are JSON
+attributes.  The full layout is in `uchrom/core/spec.md`.
 
-- **Row order.**  Spots are stored sorted by (cell, trace, bin), so the
-  rows of a cell or trace are contiguous.  Reading returns that order;
-  every spot keeps its values.  `ChromData.read(path, original_order=True)`
-  restores the order of the object that was written (the store keeps the
-  permutation in `index/source_row`).
+- **Row order.**  Spots are stored chromosome › cell › trace › bin: one
+  partition per chromosome, sorted by (cell, trace, bin) inside it.  A
+  trace (single-chromosome) is one contiguous slice of one partition, a
+  chromosome is one partition, a cell is one slice per chromosome it has.
+  Reading returns that order; every spot keeps its values.
+  `ChromData.read(path, original_order=True)` restores the order of the
+  object that was written (the store keeps the permutation in
+  `index/source_row`).
 - **Backed mode.**  `ChromData.read(path, backed=True)` loads only the
   small tables (bins, cells, traces, tracks per bin, results, uns) and the
   index; `coords`, `spots`, `spot_tracks` and `layers` stay on disk.
   `get_cell` / `get_trace` / `get_chrom` read the rows they need and
-  return an ordinary in-memory `ChromData`; `iter_traces(batch=...)` /
-  `iter_cells(batch=...)` stream chunks (in-memory objects yield the
-  same chunks); `to_memory()` loads everything.
+  return an ordinary in-memory `ChromData`; `iter_traces(batch=...,
+  chrom=...)` / `iter_cells(batch=...)` stream chunks (in-memory objects
+  yield the same chunks; `batch="auto"` sizes them from
+  `uchrom.settings.memory_budget`); `to_memory()` loads everything.
+- **Column selection.**  `get_*`, `iter_*`, `to_memory` and
+  `read(..., backed=...)` take `columns=` / `tracks=`: `columns="coords"`
+  reads the coordinates and the key columns (`trace_id`, `cell_id`,
+  `bin_id`, loci) only — e.g. without the 62 per-spot z-scores of the
+  Takei 2025 data; `columns=[...]` adds named spot columns, spot tracks or
+  layers; `tracks=[...]` picks spot tracks.  The default reads everything.
 
 ```python
 big = ChromData.read("cerebellum.chromdata.zarr", backed=True)   # ~0.03 s
-cell = big.get_cell("R1_P0_C12")          # reads one Parquet row group
-for chunk in big.iter_cells(batch=64):    # constant memory
+cell = big.get_cell("R1_P0_C12")                 # one row group per chromosome
+chr7 = big.get_chrom("chr7", columns="coords")   # one partition, xyz + keys only
+for chunk in big.iter_traces("auto", chrom="chr7", columns="coords"):   # bounded memory
     ...
 ```
 
 - **Options.**  `cd.write(path, coord_dtype="float32")` halves the
-  coordinate columns; `row_group_rows=` (default 65,536, groups end on
-  cell boundaries) and `compression_level=` (zstd, default 3) tune the
-  Parquet files.
+  coordinate columns; `row_group_rows=` (default 16,384, groups end on
+  cell boundaries within a partition) and `compression_level=` (zstd,
+  default 3) tune the Parquet files.
+- **Format 2.0 stores** (one `tables/spots.parquet`, sorted cell › trace ›
+  bin) stay readable, in memory and backed; rewrite them with
+  `python -m uchrom.io.upgrade old.chromdata.zarr new.chromdata.zarr`.
+  Readers of format 2.0 cannot read 2.1 stores (the spot tables moved).
 - **`.h5cd`** stays readable; writing it still works in this release but
   warns (`DeprecationWarning`).
+
+### Larger than memory: streaming import and analysis
+
+```python
+import uchrom
+uchrom.settings.memory_budget = "8GB"        # default: half of the available RAM
+
+# import in chunks, writing the store as it goes (returns it backed)
+cd = ChromData.from_fofct("core.csv", cell_table="cells.csv", out="big.chromdata.zarr")
+from uchrom.io import read_seqfish_multiomics
+cd = read_seqfish_multiomics("raw/cerebellum_rep1_pos*.csv", locus_annotation=..., out="cerebellum.chromdata.zarr")
+
+# any chunks: ChromData objects or arrays
+with ChromData.writer("big.chromdata.zarr") as w:
+    for chunk in chunks:
+        w.append(chunk)                  # or w.append(coords=..., spots=..., spot_tracks=...)
+    w.finish(cells=cells, uns={...})
+
+# population statistics streamed over the traces
+from uchrom.fea import distance_map
+m = distance_map(cd, "chr7", "median")   # exact median distance per bin pair
+loops = uchrom.strc.loop.call_loops_axiswise_f(cd, chrom="chr7")   # streams on a backed cd
+```
+
+- The streaming writer spills each chunk to temporary per-chromosome runs
+  and merges each partition in pieces of whole cells that fit the budget;
+  the store equals what `ChromData(...).write()` writes for the
+  concatenated input (same rows, order, index).
+- `distance_map` (median / mean) is exact: medians are taken one row band
+  of the matrix at a time (the pair observations of a band fit the
+  budget), means accumulate in trace order — both identical to the dense
+  in-memory computation.  The ArcFISH callers (`call_loops_axiswise_f`,
+  `call_tads_by_pval`) build their axis-variance cube the same way
+  (`streaming=True`, default on backed data): exact medians and outlier
+  masks, variances equal up to floating-point rounding.
 
 ### Migrating 1.x files (format 2.0)
 

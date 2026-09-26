@@ -125,6 +125,7 @@ def machine_info() -> Dict[str, Any]:
             vers[mod] = None
     from uchrom.core.cdata import FORMAT_VERSION
     vers["uchrom_h5cd_format"] = FORMAT_VERSION
+    vers["uchrom_zarr_format"] = _zarr_version()
     try:
         vers["uchrom_git"] = sh(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"])
     except Exception:
@@ -249,10 +250,16 @@ class Format:
 
 
 class FofctCSV(Format):
+    """FOF-CT core table: written with the official ``uchrom.io.write_fofct``
+    (``cd.to_fofct``: core columns, extra spot columns, spot / bin tracks as
+    extra columns, ``##`` header), read with ``ChromData.from_fofct``.  (The
+    first panel-b series used the minimal ``write_fofct`` above.)"""
     label, ext = "FOF-CT / CSV", ".csv"
+    writer = "uchrom.io.write_fofct"
 
     def write(self, cd, path):
-        write_fofct(cd, path)
+        from uchrom.io import write_fofct as official
+        official(cd, path)
 
     def read(self, path):
         from uchrom import ChromData
@@ -312,10 +319,25 @@ class H5cd2(Format):
         return ChromData.read(path)
 
 
+def _zarr_version() -> str:
+    try:
+        from uchrom.core.zarrcd import ZARR_FORMAT_VERSION
+    except ImportError:  # pragma: no cover - older checkout
+        return "2.0"
+    return ZARR_FORMAT_VERSION
+
+
 class ChromDataZarr(Format):
-    """The format 2.0 container: Zarr v3 + Parquet (``cd.write`` defaults)."""
-    label, ext = "chromdata.zarr 2.0", ".chromdata.zarr"
+    """The Zarr v3 + Parquet container (``cd.write`` defaults), labelled with
+    this checkout's container version ("chromdata.zarr 2.1": spots
+    partitioned by chromosome)."""
+    ext = ".chromdata.zarr"
     options: Dict[str, Any] = {}
+    suffix = ""
+
+    @property
+    def label(self):
+        return f"chromdata.zarr {_zarr_version()}{self.suffix}"
 
     def write(self, cd, path):
         cd.write(path, **self.options)
@@ -326,8 +348,8 @@ class ChromDataZarr(Format):
 
 
 class ChromDataZarrF32(ChromDataZarr):
-    label = "chromdata.zarr 2.0 (float32 coords)"
     options = {"coord_dtype": "float32"}
+    suffix = " (float32 coords)"
 
 
 FORMATS: Dict[str, Format] = {k: f for k, f in (("fofct", FofctCSV()), ("parquet", Parquet()),

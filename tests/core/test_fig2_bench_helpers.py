@@ -67,6 +67,48 @@ def test_subset_by_cells_keeps_cells_whole(common):
     assert (part == full.loc[part.index]).all()
 
 
+def test_replicate_store_partitioned(common, tmp_path):
+    """replicate_store.py on a 2.1 store = whole relabelled copies + the
+    lowest-code cells, read back value-identical, index consistent."""
+    import subprocess
+    import sys
+
+    from uchrom import ChromData
+
+    cd = _toy()
+    src = tmp_path / "src.chromdata.zarr"
+    cd.write(src, row_group_rows=7)
+    n_target = 2 * cd.n_spots + 40
+    dst = tmp_path / "big.chromdata.zarr"
+    subprocess.run([sys.executable, str(ROOT / "benchmarks" / "fig2" / "replicate_store.py"), str(src),
+                    str(dst), "--n", str(n_target)], check=True, capture_output=True,
+                   env={"PYTHONPATH": str(ROOT), "PATH": "/usr/bin:/bin"})
+    big = ChromData.read(dst, backed=True)
+    assert big.partitioned and big.n_spots >= n_target
+    mem = ChromData.read(src)
+    # expected: copies r=0,1 of every cell, plus copy 2 of the cells with the lowest codes
+    cells = list(mem.spots["cell_id"].cat.categories)
+    lens = mem.spots.groupby("cell_id", observed=True).size().reindex(cells).to_numpy()
+    k = int(np.searchsorted(np.cumsum(lens), 40, side="left") + 1)
+    parts = [mem, common._relabel(mem, "r1"),
+             common._relabel(mem[np.isin(mem.spots["cell_id"].astype(str), cells[:k])], "r2")]
+    exp = pd.concat([p.to_dataframe() for p in parts], ignore_index=True)
+    got = big.to_dataframe()
+    key = ["cell_id", "trace_id", "start"]
+    for df in (exp, got):
+        for c in ("cell_id", "trace_id", "chrom"):
+            df[c] = df[c].astype(str)
+    pd.testing.assert_frame_equal(got.sort_values(key).reset_index(drop=True),
+                                  exp.sort_values(key).reset_index(drop=True), check_like=True)
+    # index-based access agrees with a scan
+    full = big.to_memory()
+    for c in ("c1_r1", "c0_r2", "c3"):
+        pd.testing.assert_frame_equal(big.get_cell(c).to_dataframe(), full.get_cell(c).to_dataframe())
+    for ch in ("chr1", "chr2"):
+        pd.testing.assert_frame_equal(big.get_chrom(ch).to_dataframe(), full.get_chrom(ch).to_dataframe())
+    assert sum(x.n_spots for x in big.iter_traces(5)) == big.n_spots
+
+
 def test_subset_by_cells_replicates_with_new_ids(common):
     cd = _toy()
     big, info = common.subset_by_cells(cd, 3 * cd.n_spots + 10)

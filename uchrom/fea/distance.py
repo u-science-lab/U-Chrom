@@ -113,6 +113,125 @@ def mean_distance_matrix(
     return agg, bin_ids, len(trace_ids)
 
 
+class DistanceMap(dict):
+    """Result of :func:`distance_map` (a dict with attribute access):
+    ``matrix`` (n_bins × n_bins), ``count`` (traces observing each pair;
+    the diagonal counts the traces observing the bin), ``bins`` (``bin_id``,
+    ``chrom``, ``start``, ``end`` of the rows), ``n_traces``, ``stat``,
+    ``streaming``, ``n_passes`` (reads of the chromosome's traces) and
+    ``n_bands``."""
+
+    __getattr__ = dict.__getitem__
+
+
+def distance_map(cd, chrom, stat: str = "median", *, streaming=None, batch="auto",
+                 memory_budget=None, observed: bool = True) -> DistanceMap:
+    """Population median / mean 3-D distance of every bin pair of one
+    chromosome — exact, in memory or streaming over the traces.
+
+    Same definition as :func:`mean_distance_matrix` (per trace, the
+    Euclidean distance of its two spots; NaN / missing spots skipped; a
+    trace observing a bin twice keeps its last spot), but without the dense
+    ``(n_traces, n_bins, n_bins)`` tensor, so it runs on genome-wide data:
+
+    * ``stat="mean"`` accumulates per-pair sums and counts in trace order
+      (``np.add.at``) — the additions the dense ``np.nanmean`` makes, in the
+      same order, so the result is bitwise identical (``float64``); memory
+      ``O(n_bins²)``.
+    * ``stat="median"`` is an **exact** median (the mean of the two middle
+      values for an even count, as ``np.nanmedian``).  An exact median needs
+      all values of a pair at once, so the observations are gathered for one
+      *row band* of the matrix at a time — the rows ``i`` whose pairs
+      ``(i, j > i)`` fit ``memory_budget`` (``BYTES_PER_OBS`` bytes each) —
+      and reduced with a grouped median (pandas).  A band costs one pass over
+      the chromosome's traces; memory is the band plus the ``n_bins²``
+      output, independent of the number of traces.  No approximation.
+
+    Parameters
+    ----------
+    cd : ChromData, in memory or backed
+    chrom : chromosome name
+    stat : ``"median"`` or ``"mean"``
+    streaming : read the traces in batches (``iter_traces(chrom=...,
+        columns="coords")``) and band the median; default ``True`` for a
+        backed object.  ``False`` gathers every observation at once (the
+        in-memory baseline).
+    batch : traces per batch, or ``"auto"`` (from the memory budget)
+    memory_budget : default :data:`uchrom.settings.memory_budget`
+    observed : rows / columns = the chromosome's observed bins sorted by
+        start (the :func:`mean_distance_matrix` convention), or every bin of
+        the chromosome in ``cd.bins``
+
+    Returns
+    -------
+    DistanceMap
+    """
+    from uchrom.utils.memory import release_memory
+
+    from ._pairs import BYTES_PER_OBS, MAX_BLOCK_PAIRS, ChromPairs, pair_distance
+
+    if stat not in ("median", "mean"):
+        raise ValueError("stat must be 'median' or 'mean'")
+    P = ChromPairs(cd, chrom, streaming=streaming, batch=batch, observed=observed,
+                   memory_budget=memory_budget)
+    P.prepare()
+    B = P.n_bins
+    passes = 1
+    idx_dtype = np.int32 if B * B < 2 ** 31 else np.int64
+    count = np.zeros(B * B, dtype=np.int32)
+    out = np.full(B * B, np.nan)
+    if stat == "mean":
+        total = np.zeros(B * B, dtype=np.float64)
+        for i, j, ci, cj in P.pairs():
+            idx = i * B + j
+            np.add.at(total, idx, pair_distance(ci, cj))
+            np.add.at(count, idx, 1)
+        passes += 1
+        n_bands = 1
+        with np.errstate(invalid="ignore", divide="ignore"):
+            np.divide(total, count, out=out, where=count > 0)
+        del total
+    else:
+        # the n_bins² outputs, a block of pairs, a batch of traces
+        fixed = B * B * 12 + MAX_BLOCK_PAIRS * 100 + int(0.1 * P.memory_budget)
+        bands = P.bands(BYTES_PER_OBS, fixed_bytes=fixed)
+        n_bands = len(bands)
+        for lo, hi in bands:
+            n_obs = int(P.row_counts[lo:hi].sum())
+            if not n_obs:
+                continue
+            idx = np.empty(n_obs, dtype=idx_dtype)
+            d = np.empty(n_obs, dtype=np.float64)
+            pos = 0
+            for i, j, ci, cj in P.pairs(lo, hi):
+                m = len(i)
+                idx[pos:pos + m] = i * B + j
+                d[pos:pos + m] = pair_distance(ci, cj)
+                pos += m
+            passes += 1
+            if pos != n_obs:  # pragma: no cover - the two passes must agree
+                raise RuntimeError(f"pair count changed between passes ({pos} != {n_obs})")
+            g = pd.Series(d, copy=False).groupby(idx, sort=True)
+            med = g.median()
+            del d
+            keys = med.index.to_numpy()
+            out[keys] = med.to_numpy()
+            count[keys] = g.size().to_numpy()
+            del g, med, idx, keys
+            release_memory()
+    mat = out.reshape(B, B)
+    cnt = count.reshape(B, B)
+    for i in range(B - 1):                 # mirror the upper triangle, in place
+        mat[i + 1:, i] = mat[i, i + 1:]
+        cnt[i + 1:, i] = cnt[i, i + 1:]
+    diag = np.arange(B)
+    cnt[diag, diag] = P.bin_counts
+    mat[diag, diag] = np.where(P.bin_counts > 0, 0.0, np.nan)
+    return DistanceMap(matrix=mat, count=cnt, bins=P.bin_table(), n_traces=int(P.n_traces),
+                       stat=stat, streaming=P.streaming, n_passes=passes, n_bands=n_bands,
+                       chrom=str(chrom))
+
+
 def contact_frequency(
     df: pd.DataFrame,
     threshold: float,
@@ -168,6 +287,8 @@ def radius_of_gyration(df: pd.DataFrame, chrom=None) -> pd.Series:
 
 
 __all__ = [
+    "DistanceMap",
+    "distance_map",
     "mean_distance_matrix",
     "contact_frequency",
     "radius_of_gyration",

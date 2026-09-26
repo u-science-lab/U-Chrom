@@ -239,6 +239,9 @@ def call_loops_axiswise_f(
     key_added: Optional[str] = UNSET,
     copy: bool = False,
     verbose: bool = False,
+    streaming: Optional[bool] = None,
+    batch="auto",
+    memory_budget=None,
     store=UNSET,
     result_key=UNSET,
 ):
@@ -263,6 +266,16 @@ def call_loops_axiswise_f(
         not store.
     copy : bool
         ``True`` → return a new ChromData holding the result.
+    streaming : bool, optional
+        Compute the axis-variance cube by streaming over the traces
+        (:func:`uchrom.fea.arc_stream.axis_cube_streaming`: exact medians per
+        row band, memory ``O(n_bins²)`` instead of
+        ``O(n_traces × n_bins²)``).  Default: ``True`` for a backed
+        ``ChromData``.  Results equal the in-memory path up to
+        floating-point rounding of the variance sums.
+    batch, memory_budget
+        Traces per batch (``"auto"``) and working-memory budget of the
+        streaming path (default :data:`uchrom.settings.memory_budget`).
 
     Returns
     -------
@@ -285,7 +298,9 @@ def call_loops_axiswise_f(
     params = params or LoopCallerParams()
     work = select_spots(cd, trace_ids=trace_ids, cells=cells)
     chroms = resolve_chroms(work, chrom)
-    frames = [_call_loops_chrom(work, c, params, device, verbose) for c in chroms]
+    streaming = bool(getattr(work, "backed", False)) if streaming is None else bool(streaming)
+    frames = [_call_loops_chrom(work, c, params, device, verbose, streaming=streaming, batch=batch,
+                                memory_budget=memory_budget) for c in chroms]
     table = merge_tables(frames, _empty_result())
     return store_and_return(
         cd, table, key_added=key_added, copy=copy, kind="intervals", interval_kind="pair",
@@ -295,18 +310,34 @@ def call_loops_axiswise_f(
 
 
 def _call_loops_chrom(cd, chrom: str, params: LoopCallerParams,
-                      device: str, verbose: bool) -> pd.DataFrame:
+                      device: str, verbose: bool, *, streaming: bool = False, batch="auto",
+                      memory_budget=None) -> pd.DataFrame:
     """Per-chromosome kernel of :func:`call_loops_axiswise_f` (no storing)."""
     from scipy.stats import f as _f_dist
 
     # Step 1 + 2: variances + LOWESS normalisation
     if verbose:
-        print(f"[loop/{chrom}] computing axis variance cube...")
-    cube = axis_variance_cube(cd, chrom=chrom, device=device)
-    if verbose:
-        print(f"[loop/{chrom}] {cube['n_traces']} traces, "
-              f"{len(cube['bin_ids'])} bins; normalising...")
-    cube = filter_normalize(cube, k_sigma=params.k_sigma, frac=params.frac)
+        print(f"[loop/{chrom}] computing axis variance cube"
+              f"{' (streaming)' if streaming else ''}...")
+    if streaming:
+        from uchrom.fea.arc_stream import axis_cube_streaming, pseudo_contact_frequency_streaming
+
+        cube = axis_cube_streaming(cd, chrom, k_sigma=params.k_sigma, frac=params.frac,
+                                   streaming=True, batch=batch, memory_budget=memory_budget)
+        w = cube["axis_weight"]
+
+        def freq_of(bin_ids):
+            return pseudo_contact_frequency_streaming(cube["pairs"])
+    else:
+        cube = axis_variance_cube(cd, chrom=chrom, device=device)
+        if verbose:
+            print(f"[loop/{chrom}] {cube['n_traces']} traces, "
+                  f"{len(cube['bin_ids'])} bins; normalising...")
+        cube = filter_normalize(cube, k_sigma=params.k_sigma, frac=params.frac)
+        w = axis_weight(cd, chrom=chrom, device=device)
+
+        def freq_of(bin_ids):
+            return _pseudo_contact_frequency(cd, chrom, bin_ids, device=device)
 
     bin_ids = cube["bin_ids"]
     B = len(bin_ids)
@@ -314,8 +345,7 @@ def _call_loops_chrom(cd, chrom: str, params: LoopCallerParams,
     count = cube["count"]                           # (3, B, B)
     d1d = cube["genomic_distance"]                  # (B, B)
 
-    # Step 3: axis weights
-    w = axis_weight(cd, chrom=chrom, device=device)
+    # Step 3: axis weights (computed with the cube)
     if verbose:
         print(f"[loop/{chrom}] axis weights x={w[0]:.3f}, y={w[1]:.3f}, z={w[2]:.3f}")
 
@@ -404,7 +434,7 @@ def _call_loops_chrom(cd, chrom: str, params: LoopCallerParams,
     # Step 7: pseudo-contact frequency filter
     # Build the (n_traces, n_bins, n_bins) 3D pdist matrix.  Uses the same
     # coord cube as filter_normalize — compute once, store on CPU.
-    freq_mat = _pseudo_contact_frequency(cd, chrom, bin_ids, device=device)
+    freq_mat = freq_of(bin_ids)
 
     # Step 8: final filter — p-value + pseudo-contact frequency
     rows = []
