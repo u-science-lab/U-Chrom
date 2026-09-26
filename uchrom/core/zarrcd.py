@@ -45,6 +45,7 @@ import re
 import shutil
 import struct
 import tempfile
+import threading
 import uuid
 import warnings
 import zipfile
@@ -1050,12 +1051,16 @@ class SpotRows:
         self._pf: Dict[str, Any] = {}
         self._cache: Dict[Tuple[str, int, Tuple[str, ...]], Any] = {}
         self._cache_n = cache_groups
+        # one reader at a time: ParquetFile objects and the cache are shared
+        # (the web server calls in from a thread pool)
+        self._lock = threading.RLock()
         self.coord_dtype = np.dtype(self.spot_meta.get("coord_dtype", "float64"))
 
     def pf(self, name: str):
-        if name not in self._pf:
-            self._pf[name] = self.c.parquet(self.files[name])
-        return self._pf[name]
+        with self._lock:
+            if name not in self._pf:
+                self._pf[name] = self.c.parquet(self.files[name])
+            return self._pf[name]
 
     def columns(self, name: str) -> List[str]:
         return list(self.pf(name).schema_arrow.names)
@@ -1063,18 +1068,20 @@ class SpotRows:
     # -- raw Arrow access --------------------------------------------------
 
     def read_all(self, name: str, columns: Optional[Sequence[str]] = None):
-        return self.pf(name).read(columns=list(columns) if columns is not None else None,
-                                  use_threads=True)
+        with self._lock:
+            return self.pf(name).read(columns=list(columns) if columns is not None else None,
+                                      use_threads=True)
 
     def _group(self, name: str, g: int, columns: Tuple[str, ...]):
         key = (name, g, columns)
-        t = self._cache.get(key)
-        if t is None:
-            t = self.pf(name).read_row_group(g, columns=list(columns), use_threads=True)
-            if len(self._cache) >= self._cache_n * max(1, len(self.files)):
-                self._cache.pop(next(iter(self._cache)))
-            self._cache[key] = t
-        return t
+        with self._lock:
+            t = self._cache.get(key)
+            if t is None:
+                t = self.pf(name).read_row_group(g, columns=list(columns), use_threads=True)
+                if len(self._cache) >= self._cache_n * max(1, len(self.files)):
+                    self._cache.pop(next(iter(self._cache)))
+                self._cache[key] = t
+            return t
 
     def read_ranges(self, name: str, ranges: Sequence[Tuple[int, int]],
                     columns: Optional[Sequence[str]] = None):
