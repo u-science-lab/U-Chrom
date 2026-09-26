@@ -767,7 +767,8 @@ class Dataset:
         if k > 1:
             nb = int(np.ceil(len(bins) / k))
             with np.errstate(invalid="ignore"), warnings_ignored():
-                P = np.stack([np.nanmean(P[:, i * k:(i + 1) * k], axis=1) for i in range(nb)], axis=1)
+                pad = np.full((P.shape[0], nb * k - P.shape[1], 3), np.nan)
+                P = np.nanmean(np.concatenate([P, pad], axis=1).reshape(P.shape[0], nb, k, 3), axis=2)
             ends = np.array([ends[min(len(ends), (i + 1) * k) - 1] for i in range(nb)])
             bins = bins[::k]
             notes.append(f"{k} bins pooled per cell")
@@ -778,16 +779,20 @@ class Dataset:
             sel = np.random.default_rng(0).choice(T, keep, replace=False)
             P = P[np.sort(sel)]
             notes.append(f"statistic over {keep} of {T} traces (random subset)")
-        D = np.linalg.norm(P[:, :, None, :] - P[:, None, :, :], axis=-1)  # (T, N, N)
         with warnings_ignored():
+            if stat == "median":
+                mat = _nanmedian_pairs(P)
+                value = "distance"
+            else:
+                D = np.linalg.norm(P[:, :, None, :] - P[:, None, :, :], axis=-1)  # (T, N, N)
             if stat == "contact":
                 thr = float(threshold) if threshold is not None else 0.5 * float(np.nanmedian(D))
                 valid = np.isfinite(D)
                 mat = np.where(valid.sum(0) > 0, (np.where(valid, D, np.inf) < thr).sum(0) / np.maximum(valid.sum(0), 1), np.nan)
                 value = "contact_frequency"
                 notes.append(f"threshold {thr:.3g}")
-            else:
-                mat = np.nanmedian(D, axis=0) if stat == "median" else np.nanmean(D, axis=0)
+            elif stat == "mean":
+                mat = np.nanmean(D, axis=0)
                 value = "distance"
         unit = self.cd.uns.get("xyz_unit") if isinstance(self.cd.uns, dict) else None
         header = {"chrom": chrom, "start": int(bins[0]), "end": int(ends[-1]),
@@ -902,9 +907,25 @@ class Dataset:
                 mask[:] = False
             else:
                 mask &= np.isin(a["cell"], [str(c) for c in flt.cell_ids])
-        idx = np.nonzero(mask)[0]
-        order = np.lexsort((a["start"][idx], a["trace_code"][idx], a["chrom_rank"][idx]))
-        return idx[order]
+        # the global (chrom, trace, start) order is computed once; filtering it keeps the order, and
+        # lexsort is stable, so this equals sorting the selection itself
+        order = self._draw_order()
+        return order[mask[order]]
+
+    def _draw_order(self) -> np.ndarray:
+        """All spot indices sorted by chrom, trace, start (cached)."""
+        if "draw_order" not in self._cache:
+            a = self._arrays()
+            start, trace, chrom = a["start"], a["trace_code"], a["chrom_rank"]
+            n_tr = int(trace.max()) + 1 if len(trace) else 1
+            n_st = int(start.max()) + 1 if len(start) else 1
+            if len(start) and start.min() >= 0 and (int(chrom.max()) + 1) * n_tr * n_st < 2 ** 63:
+                # one packed int64 key + a stable sort: same order as the lexsort, several times faster
+                key = (chrom.astype(np.int64) * n_tr + trace) * n_st + start
+                self._cache["draw_order"] = np.argsort(key, kind="stable")
+            else:
+                self._cache["draw_order"] = np.lexsort((start, trace, chrom))
+        return self._cache["draw_order"]
 
     def geometry(self, flt: GeometryFilter) -> bytes:
         return encode_geometry(self, self.select(flt), flt.max_points)
@@ -974,6 +995,27 @@ def _num(v) -> Any:
     """JSON-friendly number: ints stay ints."""
     f = float(v)
     return int(f) if f.is_integer() and abs(f) < 2**53 else f
+
+
+def _nanmedian_pairs(P: np.ndarray) -> np.ndarray:
+    """Per bin pair, the median over traces of the 3-D distance, for positions ``P`` (T, N, 3).
+
+    Equals ``np.nanmedian(norm(P[:, :, None] - P[:, None]), axis=0)``, computed on the upper triangle
+    only and without masked arrays (NaN sorts last; the median of the n finite values is the mean of the
+    two middle ones)."""
+    T, N = P.shape[:2]
+    iu = np.triu_indices(N)
+    d = P[:, iu[0]] - P[:, iu[1]]                                  # (T, M, 3)
+    v = np.sort(np.sqrt(np.einsum("tmk,tmk->tm", d, d)), axis=0)   # (T, M), NaN last
+    n = np.isfinite(v).sum(axis=0)
+    lo = np.clip((n - 1) // 2, 0, T - 1)
+    hi = np.clip(n // 2, 0, T - 1)
+    med = 0.5 * (np.take_along_axis(v, lo[None], 0)[0] + np.take_along_axis(v, hi[None], 0)[0])
+    med = np.where(n > 0, med, np.nan)
+    out = np.empty((N, N), dtype=med.dtype)
+    out[iu] = med
+    out[iu[1], iu[0]] = med
+    return out
 
 
 def _segment_bounds(dataset: Dataset, idx: np.ndarray):
@@ -1094,7 +1136,9 @@ class DatasetStore:
         p = Path(path).expanduser().resolve()
         if not p.is_file():
             raise FileNotFoundError(f"no such file: {p}")
-        return self.add(load_chromdata(p), name=p.stem, path=str(p))
+        ds = self.add(load_chromdata(p), name=p.stem, path=str(p))
+        ds._draw_order()  # sort once at open, so the first overview request does not pay for it
+        return ds
 
     def get(self, dataset_id: str) -> Dataset:
         try:

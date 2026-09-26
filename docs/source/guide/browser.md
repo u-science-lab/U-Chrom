@@ -172,6 +172,33 @@ nuclear size: Granule 1.16 µm (22 cells) < Bergmann 1.47 µm (8) < Purkinje
 1.86 µm (3).  On scHiCAR MOp the pseudo-bulk of a subclass is identical
 to that subclass's own `.cool` (coarsened to the same 1 Mb bins).
 
+### Driving the browser from Python (and agents)
+
+The open page can be driven from code with the same actions as its GUI — read what the researcher
+selected, open and arrange views, capture a view:
+
+```python
+import uchrom.browser as ub
+
+ws = ub.connect()                        # the running `python -m uchrom.browser --web …`
+cells = ws.selected_cells()              # the researcher's lasso (or focused group / cell)
+cd = ws.dataset()                        # the ChromData the browser has open
+g = ws.select_cells(cells=cells)["group"]
+ws.set_locus(chrom="chr15", start=3_000_000, end=33_000_000)
+ws.open_view("genome", cells=g, rows=[{"kind": "track", "track": "H3K27ac"},
+                                      {"kind": "distance", "cells": g},
+                                      {"kind": "distance", "cells": "field:cell_type=Granule"}])
+ws.open_view("stats", stats="rg", compare_groups=[g, "field:cell_type=Granule"])
+ws.capture(path="rg.png")
+```
+
+`ws.tools()` lists the actions (`describe_workspace`, `get_selection`, `select_cells`,
+`list_groups`, `focus`, `set_locus`, `open_view`, `show_view`, `close_view`, `arrange`, `color_by`,
+`capture_view`); they are defined in `uchrom/browser/web/ui_tools.json`.  Coding agents use the
+same client.  In browsers that support WebMCP (a W3C Community Group draft; Chrome behind a flag),
+the page also registers these actions as tools (`uchrom_open_view`, …) for agents running in the
+browser.  The HTTP side is documented under *Control* in `uchrom/browser/web/API.md`.
+
 ### Themes
 
 The ◐ menu at the right of the top bar switches the interface theme:

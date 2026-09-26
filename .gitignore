@@ -62,3 +62,8 @@ docs/build/
 # small in-repo example (must come after the *.h5cd / *.mcool rules)
 !example-data/sim_cell1/*.h5cd
 !example-data/sim_cell1/*.mcool
+# Fig 6c benchmark inputs (replicated Takei 2025 FOV 0; benchmarks/fig6/make_scaled.py)
+benchmarks/fig6/_data/
+# Spatial 3-D genome datasets (download_data.py --spatial_atac_hic / --spatial_hicrna)
+example-data/spatial_atac_hic/
+example-data/spatial_hicrna/

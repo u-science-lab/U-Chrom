@@ -16,8 +16,8 @@ auto-downloaded by the tutorials on first run into this directory.
 | `4DNFIJ52NVDV.csv`                    | 219 KB  | yes             | —             | Takei 2021 nascent RNA spots for `from_fofct(rna_table=…)`, web browser |
 | `takei2025_cerebellum_fixture/`       | ~750 KB | **missing** — listed but never committed (see its section) | — | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture) |
 | `sim_cell1/` (h5cd + mcool)           | 2.3 MB  | yes             | —             | web browser: single-cell 3-D structure + its own contacts (`build_sim_cell1.py`) |
-| `takei2025_fov0/takei2025_fov0.h5cd`  | 220 MB  | no              | Zenodo 7693825 (streamed) | web browser: 59 IF tracks per spot, 47 cells, IF embedding (`build_takei2025_fov0.py`); `benchmarks/omics_embeddings.py` |
-| `schicar_mop/*.h5cd, *.mcool, *.cool, *.scool` | ~440 MB | no  | built from GEO GSE305439 | web browser: scHiCAR without 3-D, RNA / ATAC / Hi-C embeddings (`build_schicar_mop.py`); `benchmarks/omics_embeddings.py` |
+| `takei2025_fov0/takei2025_fov0.h5cd`  | 220 MB  | no              | Zenodo 7693825 (streamed) | web browser: 59 IF tracks per spot, 47 cells, IF embedding (`build_takei2025_fov0.py`); `benchmarks/omics_embeddings.py`; Fig 6 (`paper/fig6/extract_data.py`, `benchmarks/fig6/`) |
+| `schicar_mop/*.h5cd, *.mcool, *.cool, *.scool` | ~440 MB | no  | built from GEO GSE305439 | web browser: scHiCAR without 3-D, RNA / ATAC / Hi-C embeddings (`build_schicar_mop.py`); `benchmarks/omics_embeddings.py`; `benchmarks/fig6/bench_server.py` (contact-map and pseudo-bulk latency) |
 | Takei 2025 full Zenodo dump           | ~8 GB   | no              | **manual**    | `seqfish_multiomics_cerebellum` tutorial (real-data run)                |
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
@@ -32,6 +32,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `schicar_mop/raw/GSE305439/` pairs | 1.47 GB | no | GEO GSE305439 (opt-in, `--schicar_dna`) | `build_schicar_mop.py` contact maps, scHiCAR tutorials |
 | `schicar_mop/raw/GSE305439/` ATAC fragments + `schicar_mop/raw/mm10.refGene.gtf.gz` | 1.35 GB + 13 MB | no | GEO GSE305439 + UCSC (opt-in, `--schicar_atac`) | `build_schicar_mop.py` ATAC embedding + gene activity |
 | `schicar_mop/raw/merfish_mop/` | 332 MB | no | Brain Image Library g.21 | `schicar_to_merfish_mapping.ipynb` (upstream input) |
+| `benchmarks/fig6/_data/takei2025_fov0_x{1,3,10,30}.h5cd` | 28 MB – 0.9 GB | no | **derived**: `benchmarks/fig6/make_scaled.py` tiles copies of the real FOV 0 cells (geometry only); labelled *replicated* wherever reported | Fig 6c browser benchmarks |
 | `schicar_mop/data/…`, `schicar_mop/organized_u_chrom_framework/…` | — | no | **derived — recipe pending** | scHiCAR tutorials (see below) |
 
 `*.csv`, `*.h5cd`, and the DNAseqFISH+ zip/folder are ignored by git;

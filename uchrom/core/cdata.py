@@ -955,6 +955,14 @@ class ChromData:
         mask = self.spots["cell_id"] == cell_id
         return self[mask.values]
 
+    def get_cells(self, cell_ids) -> "ChromData":
+        """Subset to several cells (ids compared as strings); unknown ids are ignored."""
+        if "cell_id" not in self.spots.columns:
+            raise KeyError("spots has no 'cell_id' column")
+        keep = {str(c) for c in cell_ids}
+        mask = self.spots["cell_id"].astype(str).isin(keep)
+        return self[mask.values]
+
     def get_trace(self, trace_id) -> "ChromData":
         mask = self.spots["trace_id"] == trace_id
         return self[mask.values]
