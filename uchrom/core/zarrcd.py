@@ -85,16 +85,17 @@ CONTAINER = "chromdata.zarr"
 ZARR_FORMAT_VERSION = "2.1"
 #: MINOR versions of the container this reader understands (2.0: one file per
 #: spot-aligned table, sorted by cell › trace › bin; 2.1: partitioned by
-#: chromosome; 2.2: the 2.0 primary + a coordinate projection partitioned by
-#: chromosome, lossless decimal float encoding)
-ZARR_LAYOUTS = {"2.0": "flat", "2.1": "partitioned", "2.2": "primary+projection"}
+#: chromosome; 2.2: coordinates + keys partitioned by chromosome, everything
+#: else in cell-sorted primary tables, stored once)
+ZARR_LAYOUTS = {"2.0": "flat", "2.1": "partitioned", "2.2": "primary+coords"}
 
 #: target rows per Parquet row group of the cell-sorted spot tables (row
 #: groups end on cell boundaries)
 DEFAULT_ROW_GROUP_ROWS = 65_536
 #: the same for the chromosome-partitioned tables (format 2.1 spot tables,
-#: the format 2.2 coordinate projection)
-DEFAULT_PROJECTION_ROW_GROUP_ROWS = 16_384
+#: the format 2.2 coordinate table)
+DEFAULT_COORDS_ROW_GROUP_ROWS = 16_384
+DEFAULT_PROJECTION_ROW_GROUP_ROWS = DEFAULT_COORDS_ROW_GROUP_ROWS   # PR #70 name
 #: decoded row groups kept by backed readers (LRU, bytes)
 DEFAULT_CACHE_BYTES = 256 << 20
 #: zstd level for Parquet and Zarr
@@ -282,11 +283,13 @@ def _spot_keys(cd) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 
 def sort_order(cell: np.ndarray, trace: np.ndarray, bin_id: np.ndarray,
-               chrom: Optional[np.ndarray] = None) -> Optional[np.ndarray]:
+               chrom: Optional[np.ndarray] = None, *, chrom_minor: bool = False) -> Optional[np.ndarray]:
     """Stable permutation sorting spots by ([chrom,] cell, trace, bin), or
     ``None`` when they already are sorted.  ``chrom`` (the chromosome code
     of every spot) is the format 2.1 partition key; without it the order is
-    the 2.0 one."""
+    the 2.0 one.  ``chrom_minor`` sorts by (cell, trace, chrom, bin) instead
+    — the format 2.2 primary order, in which every (cell, trace,
+    chromosome) run is contiguous."""
     n = len(bin_id)
     if n == 0:
         return None
@@ -295,13 +298,21 @@ def sort_order(cell: np.ndarray, trace: np.ndarray, bin_id: np.ndarray,
     nb = int(bin_id.max()) + 1
     nch = int(chrom.max()) + 2 if chrom is not None else 1
     if nch * nc * nt * nb < 2 ** 62:
-        key = ((cell + 1) * nt + (trace + 1)) * nb + bin_id
-        if chrom is not None:
-            key = key + (chrom + 1) * (nc * nt * nb)
+        if chrom is not None and chrom_minor:
+            key = (((cell + 1) * nt + (trace + 1)) * nch + (chrom + 1)) * nb + bin_id
+        else:
+            key = ((cell + 1) * nt + (trace + 1)) * nb + bin_id
+            if chrom is not None:
+                key = key + (chrom + 1) * (nc * nt * nb)
         if np.all(key[1:] >= key[:-1]):
             return None
         return np.argsort(key, kind="stable")
-    keys = (bin_id, trace, cell) if chrom is None else (bin_id, trace, cell, chrom)
+    if chrom is None:
+        keys = (bin_id, trace, cell)
+    elif chrom_minor:
+        keys = (bin_id, chrom, trace, cell)
+    else:
+        keys = (bin_id, trace, cell, chrom)
     order = np.lexsort(keys)
     if np.array_equal(order, np.arange(n)):
         return None
@@ -349,10 +360,11 @@ class _SpotTableWriter:
     to plain pages when a dictionary grows too large), floats are not;
     ``codec`` is the Parquet compression (zstd at ``level`` by default)."""
 
-    def __init__(self, path: Path, level: int, codec: str = "zstd", plain=None):
+    def __init__(self, path: Path, level: int, codec: str = "zstd", plain=None, dict_floats: bool = False):
         self.path = path
         self.level = level
         self.codec = codec
+        self.dict_floats = bool(dict_floats)
         self.plain = plain          # a container of column names, read at the first write
         self.writer = None
 
@@ -361,8 +373,10 @@ class _SpotTableWriter:
 
         if self.writer is None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
+            import pyarrow.types as pat
             dict_cols = [f.name for f in table.schema
-                         if (f.type.id in _INT_TYPE_IDS() or str(f.type) in ("string", "large_string"))
+                         if (f.type.id in _INT_TYPE_IDS() or str(f.type) in ("string", "large_string")
+                             or (self.dict_floats and pat.is_floating(f.type)))
                          and f.name not in (self.plain or ())]
             level = {"compression_level": self.level} if self.codec in ("zstd", "gzip", "brotli") else {}
             self.writer = pq.ParquetWriter(
@@ -488,8 +502,15 @@ class SpotPartitionWriter:
 
     def __init__(self, tpath: Path, tables: Sequence[str], *, level: int, row_group_rows: int,
                  has_cells: bool, layer_names: Mapping[str, str], flat: bool = False,
-                 codec: str = "zstd"):
+                 codec: str = "zstd", split_chrom: bool = False, prefix: str = "",
+                 dict_floats: bool = False):
         self.flat = bool(flat)
+        self.dict_floats = bool(dict_floats)
+        #: runs are (cell, trace, chromosome) runs (format 2.2 primary): ``add``
+        #: then needs the chromosome code of every row
+        self.split_chrom = bool(split_chrom)
+        #: directory of the files under ``tables/`` (format 2.2: "primary/")
+        self.prefix = str(prefix)
         self.codec = codec
         #: table → integer columns written without a dictionary (decimal-
         #: encoded floats whose plan says plain pages are smaller)
@@ -523,6 +544,7 @@ class SpotPartitionWriter:
             base = f"layers/{self.layer_names[key]}"
         else:
             base = name
+        base = self.prefix + base
         if self.flat:
             return f"{base}.parquet"
         return f"{base}/{pdir}/part-0.parquet"
@@ -534,6 +556,7 @@ class SpotPartitionWriter:
         self._cur = {"chrom": chrom_name, "code": int(chrom_code), "dir": pdir, "n_rows": 0,
                      "files": files}
         self._writers = {name: _SpotTableWriter(self.tpath / rel, self.level, codec=self.codec,
+                                                dict_floats=self.dict_floats,
                                                 plain=self.plain_columns.setdefault(name, set()))
                          for name, rel in files.items()}
         self._pending: Dict[str, List[Any]] = {name: [] for name in self.tables}
@@ -562,18 +585,26 @@ class SpotPartitionWriter:
         trace = np.asarray(trace, dtype=np.int64)
         new_cell = np.empty(m, dtype=bool)
         new_seg = np.empty(m, dtype=bool)
+        if self.split_chrom:
+            chrom = np.asarray(chrom, dtype=np.int64)
         if self._last is None:
             new_cell[0] = new_seg[0] = True
         else:
             new_cell[0] = cell[0] != self._last[0]
             new_seg[0] = new_cell[0] or trace[0] != self._last[1]
+            if self.split_chrom:
+                new_seg[0] = new_seg[0] or chrom[0] != self._last[2]
         new_cell[1:] = cell[1:] != cell[:-1]
         new_seg[1:] = new_cell[1:] | (trace[1:] != trace[:-1])
+        if self.split_chrom:
+            new_seg[1:] |= chrom[1:] != chrom[:-1]
         s = np.flatnonzero(new_seg)
         self._seg.append(self.n + s)
         self._seg_trace.append(trace[s])
         self._seg_cell.append(cell[s])
-        if chrom is None:
+        if self.split_chrom:
+            self._seg_chrom.append(chrom[s])
+        elif chrom is None:
             self._seg_chrom.append(np.full(len(s), cur["code"], dtype=np.int64))
         else:
             chrom = np.asarray(chrom, dtype=np.int64)
@@ -600,7 +631,7 @@ class SpotPartitionWriter:
         self._pend_n += m
         self.n += m
         cur["n_rows"] += m
-        self._last = (int(cell[-1]), int(trace[-1]))
+        self._last = (int(cell[-1]), int(trace[-1]), int(chrom[-1]) if self.split_chrom else 0)
         self._cut(final=False)
 
     def _cut(self, final: bool) -> None:
@@ -661,20 +692,22 @@ class SpotPartitionWriter:
 def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float64",
                row_group_rows: Optional[int] = None,
                compression_level: int = DEFAULT_ZSTD_LEVEL,
-               keep_source_order: bool = True, float_encoding: bool = True,
-               projection_row_group_rows: int = DEFAULT_PROJECTION_ROW_GROUP_ROWS,
-               compression: str = "zstd", _layout: str = ZARR_FORMAT_VERSION) -> None:
+               keep_source_order: bool = True, float_encoding=True,
+               coords_row_group_rows: int = DEFAULT_COORDS_ROW_GROUP_ROWS,
+               normalize_spot_columns: bool = True, float_dictionary: bool = False,
+               compression="zstd", _layout: str = ZARR_FORMAT_VERSION) -> None:
     """Write ``cd`` as a ``.chromdata.zarr`` directory, or a ``.cdz`` zip
     when ``path`` ends with ``.cdz``.  See :meth:`ChromData.write`.
 
     ``_layout`` writes an older layout ("2.0": one cell-sorted file per
     spot-aligned table; "2.1": every spot table partitioned by chromosome;
-    kept for compatibility tests and benchmarks).  ``float_encoding`` and
-    ``projection_row_group_rows`` apply to format 2.2."""
+    kept for compatibility tests and benchmarks).  ``float_encoding``,
+    ``coords_row_group_rows`` and ``normalize_spot_columns`` apply to format
+    2.2."""
     if _layout not in ZARR_LAYOUTS:
         raise ValueError(f"unknown layout {_layout!r}")
     if row_group_rows is None:
-        row_group_rows = DEFAULT_ROW_GROUP_ROWS if _layout != "2.1" else DEFAULT_PROJECTION_ROW_GROUP_ROWS
+        row_group_rows = DEFAULT_ROW_GROUP_ROWS if _layout != "2.1" else DEFAULT_COORDS_ROW_GROUP_ROWS
     path = Path(path)
     kind = "cdz" if path.name.lower().endswith(ZIP_SUFFIX) else "zarr"
     src = getattr(cd, "_backing_path", None)
@@ -689,7 +722,8 @@ def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float
     tmp = Path(tempfile.mkdtemp(prefix=f".{path.name}.", suffix=".tmp", dir=parent))
     opts = dict(coord_dtype=coord_dtype, row_group_rows=row_group_rows, level=compression_level,
                 keep_source_order=keep_source_order, layout=_layout, float_encoding=float_encoding,
-                projection_row_group_rows=projection_row_group_rows, codec=compression)
+                coords_row_group_rows=coords_row_group_rows, normalize=normalize_spot_columns,
+                codec=compression, float_dictionary=float_dictionary)
     try:
         if kind == "zarr":
             _write_tree(cd, tmp, **opts)
@@ -761,9 +795,9 @@ def _coord_arrays(coords, coord_dtype) -> List[Tuple[str, Any]]:
 
 
 def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level: int,
-                keep_source_order: bool, layout: str = ZARR_FORMAT_VERSION, float_encoding: bool = True,
-                projection_row_group_rows: int = DEFAULT_PROJECTION_ROW_GROUP_ROWS,
-                codec: str = "zstd") -> None:
+                keep_source_order: bool, layout: str = ZARR_FORMAT_VERSION, float_encoding=True,
+                coords_row_group_rows: int = DEFAULT_COORDS_ROW_GROUP_ROWS, normalize: bool = True,
+                codec="zstd", float_dictionary: bool = False) -> None:
     import pyarrow as pa
 
     zarr = _zarr()
@@ -773,6 +807,11 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
         raise ValueError("coord_dtype must be float32 or float64")
     comp = _compressor(level)
     root = zarr.open_group(str(root_path), mode="w", zarr_format=3)
+    if layout == "2.2":
+        return _write_tree_v22(cd, root, root_path, coord_dtype=coord_dtype, row_group_rows=row_group_rows,
+                               coords_row_group_rows=coords_row_group_rows, level=level,
+                               keep_source_order=keep_source_order, float_encoding=float_encoding,
+                               normalize=normalize, codec=codec, float_dictionary=float_dictionary)
     tpath = root_path / "tables"
     tables_meta: Dict[str, Any] = {}
 
@@ -808,23 +847,7 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
     for key, a in cd.layers.items():
         columns[f"layers/{key}"] = _coord_arrays(a, coord_dtype)
 
-    if layout == "2.2":
-        encode = float_encoding and coord_dtype == np.dtype("float64")
-        plan_rows = order[:PLAN_ROWS] if order is not None else None     # the first primary rows
-        for name in list(columns):
-            enc: Dict[str, Any] = {}
-            columns[name] = encode_float_columns(columns[name], enc, enabled=encode, plan_rows=plan_rows)
-            if name.startswith("layers/"):
-                tables_meta.setdefault("layer_encoding", {})[name.split("/", 1)[1]] = enc
-            else:
-                tables_meta[name]["encoding"] = enc
-        index, extra = _write_spots_v22(
-            columns, tpath, tables_meta, layer_names, cell=cell, trace=trace,
-            spot_chrom=spot_chrom, order=order, has_cells=has_cells,
-            chrom_names=[str(c) for c in cd.bins["chrom"].cat.categories],
-            row_group_rows=row_group_rows, projection_row_group_rows=projection_row_group_rows,
-            level=level, codec=codec)
-    elif layout == "2.0":
+    if layout == "2.0":
         index, extra = _write_spots_flat(columns, tpath, tables_meta, layer_names, n=n, cell=cell,
                                          trace=trace, spot_chrom=spot_chrom, order=order,
                                          has_cells=has_cells, row_group_rows=row_group_rows,
@@ -868,10 +891,10 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
 def _write_root_meta(root, meta: Dict[str, Any], *, layout: str = ZARR_FORMAT_VERSION) -> None:
     version = layout
     full = {"format": CONTAINER, "format_version": version, "uchrom_version": _uchrom_version(),
-            "spot_order": "chrom,cell,trace,bin" if layout == "2.1" else "cell,trace,bin",
+            "spot_order": {"2.1": "chrom,cell,trace,bin", "2.2": "cell,trace,chrom,bin"}.get(layout, "cell,trace,bin"),
             "layout": ZARR_LAYOUTS[layout], **meta}
     if layout == "2.2":
-        full["projection_order"] = "chrom,cell,trace,bin"
+        full["coords_order"] = "chrom,cell,trace,bin"
     root.attrs.update({"uchrom": full, "uchrom_format_version": version,
                        "uchrom_version": full["uchrom_version"]})
 
@@ -973,43 +996,259 @@ def plain_columns(encoding: Mapping[str, Any]) -> set:
     return {c for c, p in (encoding or {}).items() if p and not p.get("dictionary", True)}
 
 
-def projection_columns(spot_columns: Sequence[str], has_cells: bool) -> List[str]:
-    """Physical columns of the format 2.2 coordinate projection (keys +
-    the coordinate columns, encoded or not)."""
-    keys = [BIN_ID, "trace_id"] + (["cell_id"] if has_cells else [])
-    return keys + [c for c in spot_columns if c.split("#", 1)[0] in _COORD_COLUMNS]
+# ----------------------------------------------------------------------
+# Format 2.2: spot columns derived from a key (bin / cell / trace)
+# ----------------------------------------------------------------------
+
+#: keys a spot column can be a function of, in the order they are tried
+DERIVED_KEYS = (BIN_ID, "cell_id", "trace_id")
+_DERIVE_SAMPLE = 1 << 16
 
 
-def _write_spots_v22(columns, tpath: Path, tables_meta, layer_names, *, cell, trace, spot_chrom,
-                     order, has_cells, chrom_names, row_group_rows, projection_row_group_rows, level,
-                     codec="zstd"):
-    """The format 2.2 layout: a cell-sorted **primary** (one file per
-    spot-aligned table, all columns) and a coordinate **projection**
-    partitioned by chromosome (``tables/coords_by_chrom/chrom=<c>/``:
-    bin_id, trace / cell codes, x, y, z).
+def _derivable_kind(s: pd.Series) -> Optional[str]:
+    """``"category"`` / ``"numeric"`` / ``"object"`` (every value a ``str``)
+    for a spot column that may be stored per key, else ``None``."""
+    dt = s.dtype
+    if isinstance(dt, pd.CategoricalDtype):
+        return "category"
+    if isinstance(dt, np.dtype) and dt.kind in "biuf":
+        return "numeric"
+    if dt == object and len(s) and pd.api.types.infer_dtype(s, skipna=False) == "string":
+        return "object"
+    return None
 
-    ``cell`` / ``trace`` / ``spot_chrom`` are already in the primary
-    (sorted) order; ``order`` maps it to the rows of ``columns``."""
+
+def _bitwise_equal(a: np.ndarray, b: np.ndarray) -> bool:
+    if a.dtype == object:
+        return bool(np.array_equal(a, b))
+    if a.dtype != b.dtype:
+        return False
+    u = np.dtype(f"u{a.dtype.itemsize}")
+    return bool(np.array_equal(a.view(u), b.view(u)))
+
+
+def _per_key(values: np.ndarray, codes: np.ndarray, n_keys: int) -> Optional[np.ndarray]:
+    """``per`` with ``per[codes] == values`` (bitwise), or ``None`` when the
+    column is not a function of the key.  Keys never observed hold 0 / None."""
+    n = len(values)
+    for m in ((min(n, _DERIVE_SAMPLE), n) if n > _DERIVE_SAMPLE else (n,)):
+        c, v = codes[:m], values[:m]
+        per = np.full(n_keys, None, dtype=object) if v.dtype == object else np.zeros(n_keys, dtype=v.dtype)
+        per[c] = v
+        if not _bitwise_equal(per[c], v):
+            return None
+    return per
+
+
+def derive_spot_columns(spots: pd.DataFrame, columns: Sequence[str],
+                        keys: Mapping[str, Tuple[np.ndarray, int]],
+                        bins: Optional[pd.DataFrame] = None) -> Dict[str, Dict[str, Any]]:
+    """The spot columns that are a function of a key (format 2.2 stores them
+    once per key instead of once per spot).
+
+    ``keys`` maps a key name (``bin_id`` / ``cell_id`` / ``trace_id``, tried
+    in :data:`DERIVED_KEYS` order) to ``(code of every spot, number of
+    codes)``.  A column qualifies when every spot of a key holds the same
+    value — bitwise for numbers, equal ``str`` for object columns, the same
+    code for categoricals — so ``per_key[code]`` rebuilds it exactly.
+
+    Returns ``{column: {"key", "kind", "values"}}`` (``values``: one entry
+    per key code), plus ``"bins_column"`` when ``bins`` already holds the
+    column with the same dtype and values (nothing is stored then)."""
+    out: Dict[str, Dict[str, Any]] = {}
+    for col in columns:
+        s = spots[col]
+        kind = _derivable_kind(s)
+        if kind is None:
+            continue
+        if kind == "category":
+            values = np.asarray(s.cat.codes)
+        elif kind == "object":
+            values = s.to_numpy(dtype=object)
+        else:
+            values = s.to_numpy()
+        for key in DERIVED_KEYS:
+            if key not in keys:
+                continue
+            codes, n_keys = keys[key]
+            codes = np.asarray(codes, dtype=np.int64)
+            if not len(codes) or codes.min() < 0:
+                continue
+            per = _per_key(values, codes, int(n_keys))
+            if per is None:
+                continue
+            rec: Dict[str, Any] = {"key": key, "kind": kind, "values": per}
+            if (key == BIN_ID and bins is not None and col in bins.columns and kind != "category"
+                    and bins[col].dtype == s.dtype
+                    and _bitwise_equal(bins[col].to_numpy()[codes], values)):
+                rec["bins_column"] = col
+            out[str(col)] = rec
+            break
+    return out
+
+
+def _write_derived(derived: Mapping[str, Dict[str, Any]], spots: pd.DataFrame, tpath: Path,
+                   spot_meta: Dict[str, Any], cat_dir: Path, level: int) -> Dict[str, Any]:
+    """``tables/derived/<key>.parquet`` (one row per key code) of the derived
+    spot columns; returns their metadata."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    meta: Dict[str, Any] = {}
+    by_key: Dict[str, Dict[str, Any]] = {}
+    for col, rec in derived.items():
+        if "bins_column" in rec:
+            meta[col] = {"key": rec["key"], "kind": rec["kind"], "bins_column": rec["bins_column"]}
+        else:
+            by_key.setdefault(rec["key"], {})[col] = rec
+    for key, recs in by_key.items():
+        data = {}
+        for col, rec in recs.items():
+            s = spots[col]
+            if rec["kind"] == "category":
+                data[col] = pd.Categorical.from_codes(rec["values"], categories=s.cat.categories,
+                                                      ordered=bool(s.cat.ordered))
+            else:
+                data[col] = pd.Series(rec["values"], dtype=object if rec["kind"] == "object" else rec["values"].dtype)
+        frame = pd.DataFrame(data)
+        cols = _spot_frame_columns(frame, f"spots.{key}", spot_meta, cat_dir, level)
+        fname = f"derived/{key}.parquet"
+        (tpath / "derived").mkdir(parents=True, exist_ok=True)
+        pq.write_table(pa.Table.from_arrays([a for _, a in cols], names=[c for c, _ in cols]),
+                       tpath / fname, compression="zstd", compression_level=level)
+        for col, rec in recs.items():
+            meta[col] = {"key": key, "kind": rec["kind"], "file": fname}
+    return meta
+
+
+def match_runs(primary_index: Mapping[str, np.ndarray], coords_index: Mapping[str, np.ndarray]) -> np.ndarray:
+    """The primary run of every coordinate run (format 2.2).
+
+    Primary runs are the (cell, trace, chromosome) runs of the cell-sorted
+    primary, in increasing (cell, trace, chromosome) order; coordinate runs
+    are the (chromosome, cell, trace) runs of the chromosome partitions.
+    Both hold every (cell, trace, chromosome) once, with the rows in the
+    same (bin) order, so the runs match one to one."""
+    pc = np.asarray(primary_index["trace_cells"], dtype=np.int64)
+    pt = np.asarray(primary_index["trace_codes"], dtype=np.int64)
+    pch = np.asarray(primary_index["chrom_trace"], dtype=np.int64)
+    qc = np.asarray(coords_index["trace_cells"], dtype=np.int64)
+    qt = np.asarray(coords_index["trace_codes"], dtype=np.int64)
+    qch = np.asarray(coords_index["chrom_trace"], dtype=np.int64)
+    if len(qt) != len(pt):  # pragma: no cover - a writer bug
+        raise AssertionError(f"{len(qt)} coordinate runs, {len(pt)} primary runs")
+    o = np.lexsort((qch, qt, qc))           # coordinate runs in primary run order
+    if not (np.array_equal(qc[o], pc) and np.array_equal(qt[o], pt) and np.array_equal(qch[o], pch)):
+        raise AssertionError("coordinate and primary runs do not match")  # pragma: no cover
+    prun = np.empty(len(o), dtype=np.int64)
+    prun[o] = np.arange(len(o), dtype=np.int64)
+    return prun
+
+
+def _float_encoding_tables(float_encoding) -> set:
+    """Tables whose float64 columns are decimal-encoded: ``True`` → all,
+    ``False`` → none, or a collection of ``"coords"``, ``"spot_tracks"``,
+    ``"spots"``, ``"layers"``."""
+    if float_encoding is True:
+        return {"coords", "spot_tracks", "spots", "layers"}
+    if not float_encoding:
+        return set()
+    return {str(t) for t in float_encoding}
+
+
+def _write_tree_v22(cd, root, root_path: Path, *, coord_dtype, row_group_rows: int,
+                    coords_row_group_rows: int, level: int, keep_source_order: bool,
+                    float_encoding, normalize: bool, codec, float_dictionary: bool = False) -> None:
+    """Format 2.2: coordinates + keys stored once, partitioned by
+    chromosome (``tables/coords/chrom=<c>/``); every other spot-aligned
+    column in cell-sorted primary tables (``tables/primary/``); spot columns
+    that are a function of the bin / cell / trace stored per key
+    (``tables/derived/``)."""
     import pyarrow as pa
 
-    n = len(trace)
+    comp = _compressor(level)
+    tpath = root_path / "tables"
+    tables_meta: Dict[str, Any] = {}
+    n = int(cd.n_spots)
+    cell, trace, bin_id = _spot_keys(cd)
+    chrom_codes = np.asarray(cd.bins["chrom"].cat.codes, dtype=np.int64)
+    spot_chrom = chrom_codes[bin_id] if n else np.zeros(0, dtype=np.int64)
+    has_cells = "cell_id" in cd.spots.columns
+    spots = cd.spots.drop(columns=[c for c in LOCI if c in cd.spots.columns])
+    key_cols = [BIN_ID, "trace_id"] + (["cell_id"] if has_cells else [])
+    extra = [str(c) for c in spots.columns if c not in key_cols]
+
+    derived: Dict[str, Dict[str, Any]] = {}
+    if normalize and n and extra:
+        keys = {BIN_ID: (bin_id, int(cd.n_bins)),
+                "trace_id": (trace, len(cd.spots["trace_id"].cat.categories))}
+        if has_cells:
+            keys["cell_id"] = (cell, len(cd.spots["cell_id"].cat.categories))
+        derived = derive_spot_columns(spots, extra, keys, bins=cd.bins)
+    primary_cols = [c for c in extra if c not in derived]
+
+    # -- primary order: (cell, trace, chromosome, bin) ------------------------
+    order = sort_order(cell, trace, bin_id, chrom=spot_chrom, chrom_minor=True)
+    if order is not None:
+        cell, trace, spot_chrom = cell[order], trace[order], spot_chrom[order]
+
+    # -- columns (Arrow, in the object's row order) ----------------------------
+    cat_dir = tpath / "categories"
+    spot_meta: Dict[str, Any] = {}
+    kf = spots[key_cols].copy()
+    kf[BIN_ID] = kf[BIN_ID].to_numpy().astype(np.int32 if cd.n_bins < 2 ** 31 else np.int64)
+    coords_cols = (_spot_frame_columns(kf, "spots", spot_meta, cat_dir, level)
+                   + _coord_arrays(cd.coords, coord_dtype))
+    del kf
+    columns: Dict[str, List[Tuple[str, Any]]] = {}
+    if primary_cols:
+        columns["spots"] = _spot_frame_columns(spots[primary_cols], "spots", spot_meta, cat_dir, level)
+    dmeta = _write_derived(derived, spots, tpath, spot_meta, cat_dir, level)
+    del spots, derived
+    st = cd.spot_tracks
+    if len(st.columns):
+        st_meta: Dict[str, Any] = {}
+        columns["spot_tracks"] = _spot_frame_columns(st, "spot_tracks", st_meta, cat_dir, level)
+        tables_meta["spot_tracks"] = {"n_rows": n, "categorical": st_meta,
+                                      "spot_view_order": cd._spot_view_order}
+    layer_names = _safe_names(list(cd.layers))
+    for key, a in cd.layers.items():
+        columns[f"layers/{key}"] = _coord_arrays(a, coord_dtype)
+
+    # -- lossless decimal floats (planned on the first primary rows) ----------
+    enc_tables = _float_encoding_tables(float_encoding) if coord_dtype == np.dtype("float64") else set()
+    plan_rows = order[:PLAN_ROWS] if order is not None else None
+    enc_coords: Dict[str, Any] = {}
+    coords_cols = encode_float_columns(coords_cols, enc_coords, enabled="coords" in enc_tables,
+                                       plan_rows=plan_rows)
+    encodings: Dict[str, Dict[str, Any]] = {}
+    for name in list(columns):
+        enc: Dict[str, Any] = {}
+        kind = "layers" if name.startswith("layers/") else name
+        columns[name] = encode_float_columns(columns[name], enc, enabled=kind in enc_tables, plan_rows=plan_rows)
+        encodings[name] = enc
+
+    tables_meta["spots"] = {"n_rows": n, "categorical": spot_meta, "coords": list(_COORD_COLUMNS),
+                            "coord_dtype": coord_dtype.name, "column_order": [str(c) for c in cd.spots.columns],
+                            "layout": ZARR_LAYOUTS["2.2"], "columns": primary_cols, "derived": dmeta,
+                            "encoding": encodings.get("spots", {})}
+    if "spot_tracks" in tables_meta:
+        tables_meta["spot_tracks"]["encoding"] = encodings.get("spot_tracks", {})
+    tables_meta["layer_encoding"] = {name.split("/", 1)[1]: enc for name, enc in encodings.items()
+                                     if name.startswith("layers/")}
+
+    # -- primary tables ---------------------------------------------------------
     tables = {name: pa.Table.from_arrays([a for _, a in cols], names=[c for c, _ in cols])
               for name, cols in columns.items()}
+    del columns
     names = list(tables)
     primary = SpotPartitionWriter(tpath, names, level=level, row_group_rows=row_group_rows,
-                                  has_cells=has_cells, layer_names=layer_names, flat=True, codec=codec)
-    proj = SpotPartitionWriter(tpath, ["coords_by_chrom"], level=level,
-                               row_group_rows=projection_row_group_rows, has_cells=has_cells,
-                               layer_names={}, codec=codec)
+                                  has_cells=has_cells, layer_names=layer_names, flat=True,
+                                  codec=codec.get("primary", "zstd") if isinstance(codec, Mapping) else codec,
+                                  split_chrom=True, prefix="primary/", dict_floats=float_dictionary)
     for name in names:
-        primary.plain_columns[name] = plain_columns(
-            tables_meta.get("layer_encoding", {}).get(name.split("/", 1)[1], {}) if name.startswith("layers/")
-            else tables_meta[name].get("encoding", {}))
-    proj.plain_columns["coords_by_chrom"] = plain_columns(tables_meta["spots"].get("encoding", {}))
-    pcols = projection_columns(tables["spots"].column_names, has_cells)
-    ptable = tables["spots"].select(pcols)
+        primary.plain_columns[name] = plain_columns(encodings.get(name, {}))
     idx_arrow = pa.array(order) if order is not None else None
-
     primary.begin(-1, None, None)
     if n == 0:
         primary.write_empty(tables)
@@ -1023,77 +1262,81 @@ def _write_spots_v22(columns, tpath: Path, tables_meta, layer_names, *, cell, tr
         primary.add(part, cell[s0:s1], trace[s0:s1], chrom=spot_chrom[s0:s1])
         del part
     primary.end()
+    del tables
     pindex = primary.index()
 
-    # the projection: primary rows reordered chromosome-first (stable)
+    # -- coordinates + keys, one partition per chromosome ------------------------
+    ctable = pa.Table.from_arrays([a for _, a in coords_cols], names=[c for c, _ in coords_cols])
+    del coords_cols
+    cw = SpotPartitionWriter(tpath, ["coords"], level=level, row_group_rows=coords_row_group_rows,
+                             has_cells=has_cells, layer_names={},
+                             codec=codec.get("coords", "zstd") if isinstance(codec, Mapping) else codec)
+    cw.plain_columns["coords"] = plain_columns(enc_coords)
+    chrom_names = [str(c) for c in cd.bins["chrom"].cat.categories]
     if n == 0:
-        proj.begin(-1, None, "empty")
-        proj.write_empty({"coords_by_chrom": ptable})
-        proj.end()
+        cw.begin(-1, None, "empty")
+        cw.write_empty({"coords": ctable})
+        cw.end()
     else:
-        pperm = np.argsort(spot_chrom, kind="stable")
-        src_arrow = pa.array(order[pperm] if order is not None else pperm)
+        pperm = np.argsort(spot_chrom, kind="stable")      # primary rows → coordinate order
+        src = pa.array(order[pperm] if order is not None else pperm)
         chrom_s = spot_chrom[pperm]
         bounds = np.r_[0, np.flatnonzero(chrom_s[1:] != chrom_s[:-1]) + 1, n]
         codes = [int(chrom_s[a]) for a in bounds[:-1]]
         dirs = partition_dirs([chrom_names[c] for c in codes])
         for p, code in enumerate(codes):
             a, b = int(bounds[p]), int(bounds[p + 1])
-            proj.begin(code, chrom_names[code], dirs[p])
+            cw.begin(code, chrom_names[code], dirs[p])
             for s0 in range(a, b, _WRITE_SLICE_ROWS):
                 s1 = min(b, s0 + _WRITE_SLICE_ROWS)
-                part = {"coords_by_chrom": ptable.take(src_arrow.slice(s0, s1 - s0))}
                 sel = pperm[s0:s1]
-                proj.add(part, cell[sel], trace[sel])
-                del part
-            proj.end()
-    pidx = proj.index()
-    pidx["primary_run"] = primary_runs(pindex, pidx) if n else np.zeros(0, dtype=np.int64)
-
-    tables_meta["spots"]["file"] = "spots.parquet"
-    tables_meta["spots"]["layout"] = "primary"
-    if "spot_tracks" in tables_meta:
-        tables_meta["spot_tracks"]["file"] = "spot_tracks.parquet"
-    tables_meta["layers"] = {key: primary.rel_path(f"layers/{key}", None)
-                             for key in (nm.split("/", 1)[1] for nm in names if nm.startswith("layers/"))}
-    _projection_meta(tables_meta, proj, n=n, has_cells=has_cells, rows=projection_row_group_rows)
-    index = {k: pindex[k] for k in ("trace_offsets", "trace_codes", "trace_cells", "chrom_trace",
-                                    "cell_offsets", "cell_codes", "row_groups")}
-    index["coords_by_chrom"] = pidx
-    return index, {"n_partitions": len(proj.partitions), "row_group_rows": int(row_group_rows),
-                   "projection_row_group_rows": int(projection_row_group_rows)}
-
-
-def primary_runs(primary_index: Mapping[str, np.ndarray], proj_index: Mapping[str, np.ndarray]) -> np.ndarray:
-    """The primary trace run of every projection run (format 2.2).
-
-    Primary runs are the (cell, trace) runs of the cell-sorted primary, in
-    increasing (cell, trace) order; a projection run is a (chromosome,
-    cell, trace) run, so it belongs to the primary run of its (cell, trace)."""
-    pc = np.asarray(primary_index["trace_cells"], dtype=np.int64)
-    pt = np.asarray(primary_index["trace_codes"], dtype=np.int64)
-    qc = np.asarray(proj_index["trace_cells"], dtype=np.int64)
-    qt = np.asarray(proj_index["trace_codes"], dtype=np.int64)
-    if not len(qt):
-        return np.zeros(0, dtype=np.int64)
-    width = int(max(pt.max(initial=0), qt.max(initial=0))) + 2
-    pkey = (pc + 1) * width + (pt + 1)
-    qkey = (qc + 1) * width + (qt + 1)
-    k = np.searchsorted(pkey, qkey)
-    if np.any(k >= len(pkey)) or np.any(pkey[np.minimum(k, len(pkey) - 1)] != qkey):  # pragma: no cover
-        raise AssertionError("projection run without a primary run")
-    return k.astype(np.int64)
-
-
-def _projection_meta(tables_meta: Dict[str, Any], proj: "SpotPartitionWriter", *, n: int, has_cells: bool,
-                     rows: int) -> None:
-    tables_meta["coords_by_chrom"] = {
-        "n_rows": int(n),
-        "columns": [BIN_ID, "trace_id"] + (["cell_id"] if has_cells else []) + list(_COORD_COLUMNS),
-        "encoding": {c: e for c, e in tables_meta["spots"].get("encoding", {}).items() if c in _COORD_COLUMNS},
-        "row_group_rows": int(rows),
+                cw.add({"coords": ctable.take(src.slice(s0, s1 - s0))}, cell[sel], trace[sel])
+            cw.end()
+        del src, pperm
+    del ctable
+    cidx = cw.index()
+    cidx["primary_run"] = match_runs(pindex, cidx) if n else np.zeros(0, dtype=np.int64)
+    tables_meta["coords"] = {
+        "n_rows": n, "columns": key_cols + list(_COORD_COLUMNS), "encoding": enc_coords,
+        "row_group_rows": int(coords_row_group_rows),
         "partitions": [{"chrom": p["chrom"], "code": p["code"], "dir": p["dir"], "n_rows": int(p["n_rows"]),
-                        "files": dict(p["files"])} for p in proj.partitions]}
+                        "files": dict(p["files"])} for p in cw.partitions]}
+    files = {name: primary.rel_path(name, None) for name in names}
+    tables_meta["primary"] = {"row_group_rows": int(row_group_rows), "files": files}
+    if primary_cols:
+        tables_meta["spots"]["file"] = files["spots"]
+    if "spot_tracks" in tables_meta:
+        tables_meta["spot_tracks"]["file"] = files["spot_tracks"]
+    tables_meta["layers"] = {name.split("/", 1)[1]: rel for name, rel in files.items() if name.startswith("layers/")}
+
+    # -- index/ -------------------------------------------------------------------
+    ig = root.create_group("index")
+    for name in ("trace_offsets", "trace_codes", "trace_cells", "chrom_trace", "cell_offsets", "cell_codes",
+                 "row_groups"):
+        _zarr_array(ig, name, pindex[name], comp)
+    sub = ig.create_group("coords")
+    for name, data in cidx.items():
+        _zarr_array(sub, name, data, comp)
+    if order is not None and keep_source_order:
+        _zarr_array(ig, "source_row", order.astype(np.int64), comp)
+
+    _write_small_parts(root, root_path, tables_meta, level=level, bins=cd.bins,
+                       bin_tracks=cd.bin_tracks, cells=cd.cells, traces=cd.traces,
+                       intervals=cd.intervals, points=cd.points, cellm=cd.cellm, binm=cd.binm,
+                       results=cd.results, uns=cd.uns)
+    meta = {
+        "n_spots": n,
+        "n_bins": int(cd.n_bins),
+        "n_traces": int(len(np.unique(pindex["trace_codes"]))) if n else 0,
+        "n_cells": int(len(np.unique(pindex["cell_codes"]))) if has_cells else 0,
+        "n_row_groups": int(len(pindex["row_groups"]) - 1),
+        "has_source_row": bool(order is not None and keep_source_order),
+        "has_cell_id": bool(has_cells),
+        "n_partitions": len(cw.partitions),
+        "row_group_rows": int(row_group_rows),
+        "coords_row_group_rows": int(coords_row_group_rows),
+    }
+    _write_root_meta(root, meta, layout="2.2")
 
 
 def _partition_meta(tables_meta: Dict[str, Any], w: "SpotPartitionWriter", layer_names) -> None:
@@ -1360,7 +1603,26 @@ class Container:
             return {}
 
     def array(self, name: str) -> np.ndarray:
+        fut = self._prefetched.pop(name, None) if hasattr(self, "_prefetched") else None
+        if fut is not None:
+            return fut.result()
         return np.asarray(self.root[name][...])
+
+    def prefetch(self, names: Iterable[str]) -> None:
+        """Start reading the arrays ``names`` in threads (``array`` then
+        waits for them): zarr reads are small but each has a fixed cost."""
+        if not hasattr(self, "_prefetched"):
+            self._prefetched = {}
+        pool = _io_pool()
+
+        def one(name):
+            try:
+                return np.asarray(self.root[name][...])
+            except KeyError:
+                return None
+        for name in names:
+            if name not in self._prefetched:
+                self._prefetched[name] = pool.submit(one, name)
 
     def close(self) -> None:
         if self._zip is not None:
@@ -1433,6 +1695,18 @@ def _read_categories(c: Container, meta: dict) -> Dict[str, Tuple[pd.Index, bool
 def read_small_parts(c: Container) -> Dict[str, Any]:
     """Everything that is loaded eagerly — also in backed mode."""
     tmeta = c.group_attrs("tables").get("tables", {})
+    # index/ arrays read in threads while the small tables are read below
+    names = ["trace_offsets", "trace_codes", "trace_cells", "chrom_trace", "cell_offsets", "cell_codes",
+             "row_groups"]
+    pre = [f"index/{n}" for n in names]
+    layout = tmeta.get("spots", {}).get("layout")
+    if layout == "partitioned":
+        pre += [f"index/{n}" for n in ("cell_partition", "partition_offsets", "partition_groups",
+                                       "partition_chrom")]
+    elif layout == ZARR_LAYOUTS["2.2"]:
+        pre += [f"index/coords/{n}" for n in names + ["cell_partition", "partition_offsets",
+                                                       "partition_groups", "partition_chrom", "primary_run"]]
+    c.prefetch(pre)
     bins = c.read_frame("tables/bins.parquet")
     bins.index = pd.RangeIndex(len(bins), name=BIN_ID)
     if "chrom" not in bins.columns:
@@ -1492,15 +1766,36 @@ def read_small_parts(c: Container) -> Dict[str, Any]:
     for key, enc in (tmeta.get("layer_encoding") or {}).items():
         encoding[f"layers/{key}"] = dict(enc or {})
     parts["encoding"] = encoding
-    parts["projection"] = None
-    if "coords_by_chrom" in tmeta:
-        pmeta = tmeta["coords_by_chrom"]
-        pidx = {name: c.array(f"index/coords_by_chrom/{name}")
+    # format 2.2: the coordinate table (its own index) and the derived spot columns
+    parts["coords"] = None
+    parts["derived"] = {}
+    if tmeta.get("spots", {}).get("layout") == ZARR_LAYOUTS["2.2"]:
+        cidx = {name: c.array(f"index/coords/{name}")
                 for name in ("trace_offsets", "trace_codes", "trace_cells", "chrom_trace", "cell_offsets",
                              "cell_codes", "cell_partition", "row_groups", "partition_offsets",
                              "partition_groups", "partition_chrom", "primary_run")}
-        parts["projection"] = {"meta": pmeta, "index": pidx}
+        parts["coords"] = {"meta": tmeta["coords"], "index": cidx}
+        parts["derived"] = _read_derived(c, tmeta["spots"].get("derived") or {}, bins)
     return parts
+
+
+def _read_derived(c: Container, meta: Mapping[str, Any], bins: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+    """Per-key values of the derived spot columns (format 2.2): ``{column:
+    {"key", "kind", "values"}}`` (categoricals: codes)."""
+    out: Dict[str, Dict[str, Any]] = {}
+    tables: Dict[str, Any] = {}
+    for col, info in meta.items():
+        if "bins_column" in info:
+            values = bins[info["bins_column"]].to_numpy()
+        else:
+            f = info["file"]
+            if f not in tables:
+                tables[f] = c.parquet(f"tables/{f}").read()
+            values = tables[f].column(col).to_numpy(zero_copy_only=False)
+            if info.get("kind") == "object" and values.dtype != object:  # pragma: no cover
+                values = values.astype(object)
+        out[col] = {"key": info["key"], "kind": info.get("kind"), "values": values}
+    return out
 
 
 def _relocate_links(raw: Any, relpaths: Dict[str, str], store_path: Path) -> Any:
@@ -1599,6 +1894,12 @@ _COMBINE_MIN_ROWS = 1 << 18
 _FULL_READ_TASK_ROWS = 1 << 18
 #: rows per in-place decoding job of a decimal-encoded column
 _DECODE_BLOCK_ROWS = 1 << 18
+#: benchmarks only: read row groups one at a time on the calling thread
+#: (the pre-2.2 read path), for the ablation of the parallel reader
+_SERIAL_READ = os.environ.get("UCHROM_ZARR_SERIAL_READ", "") == "1"
+#: a range read touching at least this many partially covered row groups of
+#: one partition decodes them in parallel threads, bypassing the cache
+_PARALLEL_PART_GROUPS = 4
 
 
 class _ChunkStats:
@@ -1651,12 +1952,8 @@ _IO_POOL = None
 
 def _io_pool():
     """Shared thread pool for reading row groups of several partitions."""
-    global _IO_POOL
-    if _IO_POOL is None:
-        from concurrent.futures import ThreadPoolExecutor
-        _IO_POOL = ThreadPoolExecutor(max_workers=min(16, (os.cpu_count() or 4)),
-                                      thread_name_prefix="uchrom-io")
-    return _IO_POOL
+    from ._parallel import pool
+    return pool()
 
 
 class _ColumnFill:
@@ -1785,23 +2082,24 @@ class SpotRows:
     """
 
     def __init__(self, c: Container, parts: Dict[str, Any], cache_bytes: int = DEFAULT_CACHE_BYTES,
-                 *, projection: bool = False):
+                 *, coords: bool = False):
         from collections import OrderedDict
 
         self.c = c
         tmeta = parts["tables_meta"]
         self.spot_meta = tmeta.get("spots", {})
-        self.projection = bool(projection)
+        #: format 2.2 coordinate table (``"coords"``: keys + x, y, z, one
+        #: partition per chromosome); otherwise the primary / 2.0 / 2.1 tables
+        self.is_coords = bool(coords)
         #: table → {logical float column → decimal plan} (format 2.2)
         self.encoding: Dict[str, Dict[str, Any]] = dict(parts.get("encoding") or {})
-        if projection:
-            proj = parts["projection"]
-            idx = proj["index"]
-            pmeta = proj["meta"]
-            self.n = int(pmeta["n_rows"])
+        if coords:
+            cmeta = parts["coords"]["meta"]
+            idx = parts["coords"]["index"]
+            self.n = int(cmeta["n_rows"])
             self.partitioned = True
-            self.cats = {"coords_by_chrom": parts["categories"]["spots"]}
-            self.encoding = {"coords_by_chrom": dict(pmeta.get("encoding") or {})}
+            self.cats = {"coords": parts["categories"]["spots"]}
+            self.encoding = {"coords": dict(cmeta.get("encoding") or {})}
         else:
             idx = parts["index"]
             self.n = int(tmeta.get("spots", {}).get("n_rows", c.meta.get("n_spots", 0)))
@@ -1811,12 +2109,16 @@ class SpotRows:
         self.part_offsets = np.asarray(idx["partition_offsets"], dtype=np.int64)
         self.part_groups = np.asarray(idx["partition_groups"], dtype=np.int64)
         self.part_chrom = np.asarray(idx["partition_chrom"], dtype=np.int64)
-        if projection:
+        if coords:
             self.part_files = [{name: f"tables/{rel}" for name, rel in p["files"].items()}
-                               for p in parts["projection"]["meta"]["partitions"]]
+                               for p in parts["coords"]["meta"]["partitions"]]
         elif self.partitioned:
             self.part_files = [{name: f"tables/{rel}" for name, rel in p["files"].items()}
                                for p in tmeta["partitions"]]
+        elif parts.get("coords") is not None:
+            # format 2.2 primary: the tables that exist (possibly none)
+            self.part_files = [{name: f"tables/{rel}" for name, rel in
+                                (tmeta.get("primary", {}).get("files") or {}).items()}]
         else:
             files = {"spots": "tables/spots.parquet"}
             if "spot_tracks" in tmeta:
@@ -1837,6 +2139,8 @@ class SpotRows:
         # one reader at a time: ParquetFile objects and the cache are shared
         # (the web server calls in from a thread pool)
         self._lock = threading.RLock()
+        #: per-thread ParquetFile objects of the parallel range reads
+        self._tls = threading.local()
         self.coord_dtype = np.dtype(self.spot_meta.get("coord_dtype", "float64"))
 
     @property
@@ -1924,7 +2228,8 @@ class SpotRows:
     # -- raw Arrow access --------------------------------------------------
 
     def read_all(self, name: str, columns: Optional[Sequence[str]] = None,
-                 dest: Optional[Mapping[str, np.ndarray]] = None, deferred: bool = False):
+                 dest: Optional[Mapping[str, np.ndarray]] = None, deferred: bool = False,
+                 scatter: Optional[np.ndarray] = None):
         """The whole table (all partitions), decoded, with single-chunk columns.
 
         Row groups are read **in parallel** — tasks of about
@@ -1944,7 +2249,12 @@ class SpotRows:
         Returns an Arrow table of the logical columns (``dest`` columns left
         out: they are in the given arrays) — or, with ``deferred``, a
         function returning it once the in-place decoding started in the
-        background is done (the caller can convert other data meanwhile)."""
+        background is done (the caller can convert other data meanwhile).
+
+        ``scatter`` (int64, ``n`` rows, or a function ``(a, b)`` → the
+        output rows of table rows ``a:b``): row ``i`` of the table goes to row
+        ``scatter[i]`` of the output (format 2.2: coordinate rows → primary
+        order); numeric columns only."""
         import pyarrow as pa
         import pyarrow.types as pat
 
@@ -1972,6 +2282,8 @@ class SpotRows:
                 owners[c] = buf
                 bufs[c] = np.frombuffer(buf, dtype=dt, count=n)
             else:
+                if scatter is not None:
+                    raise ValueError(f"{name}.{c}: scattered reads need numeric columns")
                 chunked[c] = []
         # tasks: runs of row groups of one partition, in row order
         tasks: List[Tuple[int, List[int], int, int]] = []
@@ -2014,7 +2326,16 @@ class SpotRows:
                 pos = a
                 for piece in t.column(c).chunks:
                     m = len(piece)
-                    if m:
+                    if m and scatter is not None:
+                        where = scatter(pos, pos + m) if callable(scatter) else scatter[pos:pos + m]
+                        if isinstance(piece, pa.DictionaryArray):
+                            values = floatcodec.decode(piece.dictionary.to_numpy(zero_copy_only=False), plan)
+                            dst[where] = values[piece.indices.to_numpy(zero_copy_only=False)]
+                        elif plan is not None and c in dict_enc:  # pragma: no cover - plain pages
+                            dst[where] = floatcodec.decode(piece.to_numpy(zero_copy_only=False), plan)
+                        else:
+                            dst[where] = piece.to_numpy(zero_copy_only=False)
+                    elif m:
                         if isinstance(piece, pa.DictionaryArray):
                             # decode the dictionary only, then one gather
                             values = floatcodec.decode(piece.dictionary.to_numpy(zero_copy_only=False), plan)
@@ -2032,7 +2353,10 @@ class SpotRows:
         futures: List[Any] = []
         excs: Dict[str, List[Tuple[int, Any]]] = {}
         if n:
-            results = list(_io_pool().map(run, range(len(tasks)))) if len(tasks) > 1 else [run(0)]
+            if len(tasks) > 1 and not _SERIAL_READ:
+                results = list(_io_pool().map(run, range(len(tasks))))
+            else:
+                results = [run(i) for i in range(len(tasks))]
             for res in results:
                 for c, val in res.items():
                     if c.endswith(_EXC) and c[:-len(_EXC)] in enc:
@@ -2044,8 +2368,13 @@ class SpotRows:
             # in threads (numpy: no GIL), while the caller may go on (deferred)
             pool = _io_pool()
             block = _DECODE_BLOCK_ROWS
-            futures = [pool.submit(floatcodec.decode_inplace, bufs[c], enc[c], s0, min(n, s0 + block))
-                       for c in enc if c not in dict_enc for s0 in range(0, n, block)]
+            if _SERIAL_READ:
+                for c in enc:
+                    if c not in dict_enc:
+                        floatcodec.decode_inplace(bufs[c], enc[c], 0, n)
+            else:
+                futures = [pool.submit(floatcodec.decode_inplace, bufs[c], enc[c], s0, min(n, s0 + block))
+                           for c in enc if c not in dict_enc for s0 in range(0, n, block)]
 
         def finish():
             for fut in futures:
@@ -2058,7 +2387,13 @@ class SpotRows:
                         if valid.any():
                             vals = pc.fill_null(col, 0.0).to_numpy(zero_copy_only=False)
                             idx = np.flatnonzero(valid)
-                            bufs[c][a + idx] = vals[idx]
+                            if scatter is None:
+                                rows = a + idx
+                            elif callable(scatter):
+                                rows = scatter(a, a + len(valid))[idx]
+                            else:
+                                rows = scatter[a + idx]
+                            bufs[c][rows] = vals[idx]
             arrays, fields = [], []
             for f in schema:
                 c = f.name
@@ -2074,6 +2409,16 @@ class SpotRows:
             return pa.Table.from_arrays(arrays, schema=pa.schema(fields, metadata=schema.metadata))
 
         return finish if deferred else finish()
+
+    def _private_pf(self, tls, name: str, part: int):
+        """A ``ParquetFile`` of the calling thread (for parallel decoding)."""
+        cache = getattr(tls, "pf", None)
+        if cache is None:
+            cache = tls.pf = {}
+        key = (name, int(part))
+        if key not in cache:
+            cache[key] = self.c.parquet(self.part_files[int(part)][name])
+        return cache[key]
 
     def _local(self, g: int) -> Tuple[int, int]:
         p = int(self.group_part[g])
@@ -2152,16 +2497,26 @@ class SpotRows:
             else:
                 tasks.append(("part", g, local))
 
-        def do(task):
+        tls = self._tls
+
+        def do(task, private=False):
             if task[0] == "run":
                 gs = task[1]
                 p, lg0 = self._local(gs[0])
+                if private:
+                    t = self._private_pf(tls, name, p).read_row_groups(
+                        list(range(lg0, lg0 + len(gs))), columns=list(cols), use_threads=False)
+                    return t
                 pf = self.pf(name, p)
                 with self._file_lock(name, p):
                     return pf.read_row_groups(list(range(lg0, lg0 + len(gs))), columns=list(cols),
                                               use_threads=True)
             _, g, local = task
-            t = self._group(name, g, cols)
+            if private:   # many groups: decoded in this thread, not cached
+                p, lg = self._local(g)
+                t = self._private_pf(tls, name, p).read_row_group(lg, columns=list(cols), use_threads=False)
+            else:
+                t = self._group(name, g, cols)
             kept = sum(hi - lo for lo, hi in local)
             if len(local) == 1 and kept * 2 >= t.num_rows:
                 return t.slice(local[0][0], kept)
@@ -2176,7 +2531,13 @@ class SpotRows:
         for i, task in enumerate(tasks):
             by_part.setdefault(part_of(task), []).append(i)
         pieces: List[Any] = [None] * len(tasks)
-        if len(by_part) > 1:
+        n_part = sum(1 for t in tasks if t[0] == "part")
+        if len(by_part) == 1 and n_part >= _PARALLEL_PART_GROUPS and not _SERIAL_READ:
+            # e.g. a chromosome of a format 2.2 primary: a slice of every group
+            def work1(i):
+                pieces[i] = do(tasks[i], private=True)
+            list(_io_pool().map(work1, range(len(tasks))))
+        elif len(by_part) > 1 and not _SERIAL_READ:
             def work(ids):
                 for i in ids:
                     pieces[i] = do(tasks[i])

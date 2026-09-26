@@ -45,9 +45,9 @@ from .bins import BIN_ID, LOCI, bins_from_loci, map_loci_to_bins, normalise_bins
 from .zarrcd import (
     DEFAULT_PROJECTION_ROW_GROUP_ROWS, DEFAULT_ROW_GROUP_ROWS, DEFAULT_ZSTD_LEVEL, PLAN_ROWS,
     SpotPartitionWriter, ZARR_FORMAT_VERSION, ZARR_SUFFIX, _arrow_column, _code_dtype, _compressor,
-    _is_chromdata_dir, _partition_meta, _projection_meta, _rmtree, _safe_names, _write_frame,
+    _is_chromdata_dir, _partition_meta, _rmtree, _safe_names, _write_frame,
     _write_root_meta, _write_small_parts, _zarr, _zarr_array, encode_float_columns, partition_dirs,
-    plain_columns, primary_runs, projection_columns,
+    plain_columns,
 )
 
 PathLike = Union[str, Path]

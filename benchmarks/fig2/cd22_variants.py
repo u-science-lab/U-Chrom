@@ -124,6 +124,9 @@ def _zarr_read(path):
     return ChromData.read(path)
 
 
+_V22 = dict(_layout="2.2")
+
+
 VARIANTS = {
     "parquet": {"label": "Parquet (pyarrow defaults)", "ext": ".parquet",
                 "write": lambda cd, p: C.FORMATS["parquet"].write(cd, p),
@@ -140,9 +143,67 @@ VARIANTS = {
            "write": _zarr_writer(_layout="2.2", float_encoding=True), "read": _zarr_read, "store": True},
     "AB_zstd1": {"label": "2.2 layout + decimal floats, zstd level 1", "ext": ".chromdata.zarr",
                  "write": _zarr_writer(_layout="2.2", compression_level=1), "read": _zarr_read, "store": True},
-    "AB_lz4": {"label": "2.2 layout + decimal floats, lz4", "ext": ".chromdata.zarr",
-               "write": _zarr_writer(_layout="2.2", compression="lz4"), "read": _zarr_read, "store": True},
+    # -- second attempt (coordinates stored once + derived spot columns) -----
+    "zarr21_serial": {"label": "chromdata.zarr 2.1, serial reader (as on main)", "ext": ".chromdata.zarr",
+                      "write": _zarr_writer(_layout="2.1"), "read": _zarr_read, "store": True,
+                      "env": {"UCHROM_ZARR_SERIAL_READ": "1"}},
+    "D": {"label": "2.2: coords once + derived spot columns, float64", "ext": ".chromdata.zarr",
+          "write": _zarr_writer(**_V22, float_encoding=False), "read": _zarr_read, "store": True},
+    "D_serial": {"label": "D, serial reader (no C)", "ext": ".chromdata.zarr",
+                 "write": _zarr_writer(**_V22, float_encoding=False), "read": _zarr_read, "store": True,
+                 "env": {"UCHROM_ZARR_SERIAL_READ": "1"}},
+    "D_nonorm": {"label": "D without derived spot columns", "ext": ".chromdata.zarr",
+                 "write": _zarr_writer(**_V22, float_encoding=False, normalize_spot_columns=False),
+                 "read": _zarr_read, "store": True},
+    "D_rg32k": {"label": "D, 32,768-row primary row groups", "ext": ".chromdata.zarr",
+                "write": _zarr_writer(**_V22, float_encoding=False, row_group_rows=32768),
+                "read": _zarr_read, "store": True},
+    "D_rg16k": {"label": "D, 16,384-row primary row groups", "ext": ".chromdata.zarr",
+                "write": _zarr_writer(**_V22, float_encoding=False, row_group_rows=16384),
+                "read": _zarr_read, "store": True},
+    "D_fdict": {"label": "D + Parquet dictionary pages for float columns", "ext": ".chromdata.zarr",
+                "write": _zarr_writer(**_V22, float_encoding=False, float_dictionary=True),
+                "read": _zarr_read, "store": True},
+    "D_lz4dict": {"label": "D, primary lz4 + float dictionaries (coords zstd)", "ext": ".chromdata.zarr",
+                  "write": _zarr_writer(**_V22, float_encoding=False, float_dictionary=True,
+                                        compression={"primary": "lz4", "coords": "zstd"}),
+                  "read": _zarr_read, "store": True},
+    "D_snappydict": {"label": "D, primary snappy + float dictionaries (coords zstd)", "ext": ".chromdata.zarr",
+                     "write": _zarr_writer(**_V22, float_encoding=False, float_dictionary=True,
+                                           compression={"primary": "snappy", "coords": "zstd"}),
+                     "read": _zarr_read, "store": True},
+    "D_lz4": {"label": "D, primary lz4 (coords zstd)", "ext": ".chromdata.zarr",
+              "write": _zarr_writer(**_V22, float_encoding=False, compression={"primary": "lz4", "coords": "zstd"}),
+              "read": _zarr_read, "store": True},
+    "DF": {"label": "2.2: coords once + derived columns + float dictionary pages (primary)",
+           "ext": ".chromdata.zarr",
+           "write": _zarr_writer(**_V22, float_encoding=False, float_dictionary=True),
+           "read": _zarr_read, "store": True},
+    "DF_serial": {"label": "DF, serial reader (no C)", "ext": ".chromdata.zarr",
+                  "write": _zarr_writer(**_V22, float_encoding=False, float_dictionary=True),
+                  "read": _zarr_read, "store": True, "env": {"UCHROM_ZARR_SERIAL_READ": "1"}},
+    "DF_nonorm": {"label": "DF without derived spot columns", "ext": ".chromdata.zarr",
+                  "write": _zarr_writer(**_V22, float_encoding=False, float_dictionary=True,
+                                        normalize_spot_columns=False),
+                  "read": _zarr_read, "store": True},
+    "DFBc": {"label": "DF + decimal floats (coordinates)", "ext": ".chromdata.zarr",
+             "write": _zarr_writer(**_V22, float_encoding=("coords",), float_dictionary=True),
+             "read": _zarr_read, "store": True},
+    "DFB": {"label": "DF + decimal floats (all tables)", "ext": ".chromdata.zarr",
+            "write": _zarr_writer(**_V22, float_encoding=True, float_dictionary=True),
+            "read": _zarr_read, "store": True},
+    "DB": {"label": "D + decimal floats (all tables)", "ext": ".chromdata.zarr",
+           "write": _zarr_writer(**_V22, float_encoding=True), "read": _zarr_read, "store": True},
+    "DBc": {"label": "D + decimal floats (coordinates only)", "ext": ".chromdata.zarr",
+            "write": _zarr_writer(**_V22, float_encoding=("coords",)), "read": _zarr_read, "store": True},
+    "DBt": {"label": "D + decimal floats (spot tracks only)", "ext": ".chromdata.zarr",
+            "write": _zarr_writer(**_V22, float_encoding=("spot_tracks",)), "read": _zarr_read, "store": True},
 }
+
+
+def _apply_env(key):
+    for k, v in VARIANTS[key].get("env", {}).items():
+        os.environ[k] = v
 
 
 # ----------------------------------------------------------------------------- children
@@ -173,6 +234,7 @@ def child_write(key, stage, out):
 
 
 def child_read(key, path):
+    _apply_env(key)
     import pyarrow.parquet  # noqa: F401  (import cost out of the timing)
     import zarr  # noqa: F401
     import h5py  # noqa: F401
@@ -214,6 +276,7 @@ def main():
     ap.add_argument("--budget", default="2GB")
     ap.add_argument("--tag", default="", help="suffix of the variant key (e.g. 'C' after the read-path work)")
     ap.add_argument("--keep", action="store_true", help="keep the written stores")
+    ap.add_argument("--out", default="cd22_variants.json", help="results file under paper/fig2/results")
     ap.add_argument("--child", nargs="+", help=argparse.SUPPRESS)
     args = ap.parse_args()
     if args.child:
@@ -233,7 +296,7 @@ def main():
             n = int(float(s))
             st = C.stage_subset(n)
             stages[str(n)] = (st, C.stage_info(st))
-    out_json = C.RESULTS / "cd22_variants.json"
+    out_json = C.RESULTS / args.out
     res = json.loads(out_json.read_text()) if out_json.exists() else {"points": {}}
     res["machine"] = C.machine_info()
     res["protocol"] = {
@@ -257,7 +320,7 @@ def main():
                    "read_baseline_rss_mb": _summ(reads, "baseline_rss_mb")}
             line = (f"{args.data} {size:>9} {vkey:14s} {rec['size_mb']:8.1f} MB  write {w['write_s']:6.1f} s  "
                     f"read {rec['read_s']['median']:6.2f} s  peak {rec['read_peak_rss_mb']['median'] / 1024:6.2f} GB")
-            if v["store"] and not args.no_access:
+            if v["store"] and not args.no_access and not v.get("env"):
                 sys.path.insert(0, str(ACCESS.parent))
                 import c_access
                 runs = [C.run_child(ACCESS, ["--child", "zarr-backed", str(path), str(args.queries)])
@@ -272,7 +335,7 @@ def main():
                          f"{acc['chrom']['latency_s']['median'] * 1e3:7.1f}  chrom(coords) "
                          f"{acc['chrom_coords']['latency_s']['median'] * 1e3:6.1f} ms  rss(q) "
                          f"{(acc['rss_after_trace_cell_mb'] - acc['baseline_rss_mb']) / 1024:5.2f} GB")
-            if v["store"] and not args.no_stream and args.data == "takei":
+            if v["store"] and not args.no_stream and args.data == "takei" and not v.get("env"):
                 runs = [C.run_child(STREAM, ["--child", "streaming", str(path), args.chrom, args.budget, "-"])
                         for _ in range(args.repeats)]
                 rec["streaming"] = {"seconds": _summ(runs, "seconds"), "peak_rss_mb": _summ(runs, "peak_rss_mb"),
