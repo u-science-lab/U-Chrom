@@ -164,7 +164,7 @@ class BackedFrame:
     @property
     def dtypes(self) -> pd.Series:
         """Column dtypes, from the Parquet schema (no data is read)."""
-        empty = self._rows.pf(self._name).schema_arrow.empty_table()
+        empty = self._rows.empty(self._name)
         stored = self._rows.to_frame(self._name, empty).dtypes.to_dict()
         if self._name == "spots":
             stored.update({"chrom": self._owner._bins["chrom"].dtype,
@@ -257,8 +257,14 @@ class BackedChromData(ChromData):
         parts = read_small_parts(c)
         self._c = c
         self._parts = parts
-        self._rows = SpotRows(c, parts, **({} if cache_bytes is None else {"cache_bytes": cache_bytes}))
+        cache = {} if cache_bytes is None else {"cache_bytes": cache_bytes}
+        self._rows = SpotRows(c, parts, **cache)
         self._index = parts["index"]
+        # format 2.2: the coordinate projection (chromosome partitions of
+        # bin_id, trace / cell codes and x, y, z)
+        proj = parts.get("projection")
+        self._proj = SpotRows(c, parts, projection=True, **cache) if proj is not None else None
+        self._proj_index = proj["index"] if proj is not None else None
         self._backing_path = Path(path)
         self._source_path = Path(path)
         self._bins = parts["bins"]
@@ -314,6 +320,12 @@ class BackedChromData(ChromData):
     def partitioned(self) -> bool:
         """``True`` for a format 2.1 store (spots partitioned by chromosome)."""
         return bool(self._parts.get("partitioned"))
+
+    @property
+    def has_projection(self) -> bool:
+        """``True`` for a format 2.2 store: a cell-sorted primary plus a
+        coordinate projection partitioned by chromosome."""
+        return self._proj is not None
 
     @property
     def coords(self):  # type: ignore[override]
@@ -394,10 +406,21 @@ class BackedChromData(ChromData):
     # Row access → in-memory ChromData
     # ------------------------------------------------------------------
 
+    def _coords_only(self, columns=None, tracks=None) -> bool:
+        """Whether a selection is served by the coordinate projection
+        (coordinates + key columns, no spot tracks, extra columns or layers)."""
+        spot_cols, track_cols, layer_keys = self._selection(columns, tracks)
+        keys = {BIN_ID, "trace_id", "cell_id", *LOCI}
+        return not track_cols and not layer_keys and all(c in keys for c in spot_cols)
+
     def _build(self, *, ranges: Optional[Sequence[Tuple[int, int]]] = None,
                rows: Optional[np.ndarray] = None, subset: bool = True,
-               columns=None, tracks=None) -> ChromData:
-        r = self._rows
+               columns=None, tracks=None, src: Optional[SpotRows] = None) -> ChromData:
+        """In-memory ChromData of row ``ranges`` / ``rows`` (``None``: all)
+        of the primary tables, or of the coordinate projection (``src``;
+        coordinate selections only)."""
+        r = self._rows if src is None else src
+        spot_name = "spots" if src is None else "coords_by_chrom"
         spot_cols, track_cols, layer_keys = self._selection(columns, tracks)
 
         def read(name, cols=None):
@@ -409,10 +432,10 @@ class BackedChromData(ChromData):
 
         coord_cols = list(self._parts["spot_meta"].get("coords", ("x", "y", "z")))
         stored = [c for c in spot_cols if c not in LOCI]
-        t = read("spots", stored + coord_cols)
+        t = read(spot_name, stored + coord_cols)
         coords = r.coords_of(t, coord_cols)
         t = t.drop_columns(coord_cols)
-        spots = r.to_frame("spots", t)
+        spots = r.to_frame(spot_name, t)
         del t
         spot_tracks = None
         if "spot_tracks" in r.files and track_cols:
@@ -530,7 +553,30 @@ class BackedChromData(ChromData):
         keep = np.isin(sub.spots[BIN_ID].to_numpy(), ids)
         return sub if keep.all() else sub[keep]
 
+    def _chroms_subset(self, codes, *, columns="coords", tracks=None) -> ChromData:
+        """The spots of the chromosome codes ``codes`` (format 2.2 +
+        coordinate selection: from the projection; otherwise the runs that
+        may hold them, other chromosomes' spots of mixed runs included —
+        the web browser filters them)."""
+        codes = np.asarray(codes)
+        if self._proj is not None and self._coords_only(columns, tracks):
+            pi = self._proj_index
+            ranges = self._segment_ranges(np.isin(np.asarray(pi["partition_chrom"]), codes),
+                                          pi["partition_offsets"])
+            return self._build(ranges=ranges, columns=columns, tracks=tracks, src=self._proj)
+        if self.partitioned:
+            pc = np.asarray(self._index["partition_chrom"])
+            return self._build(ranges=self._segment_ranges(np.isin(pc, codes), self._index["partition_offsets"]),
+                               columns=columns, tracks=tracks)
+        seg_chrom = np.asarray(self._index["chrom_trace"])
+        mask = np.isin(seg_chrom, codes) | (seg_chrom < 0)
+        return self._build(ranges=self._segment_ranges(mask, self._index["trace_offsets"]), columns=columns,
+                           tracks=tracks)
+
     def get_chrom(self, chrom: str, *, columns=None, tracks=None) -> ChromData:
+        if self._proj is not None and self._coords_only(columns, tracks):
+            # format 2.2, coordinates only: one partition of the projection
+            return self._chroms_subset(self._chrom_codes(chrom), columns=columns, tracks=tracks)
         ranges, mixed = self._chrom_ranges(chrom)
         sub = self._build(ranges=ranges, columns=columns, tracks=tracks)
         return self._keep_chrom(sub, chrom) if mixed else sub
@@ -573,7 +619,60 @@ class BackedChromData(ChromData):
         size = resolve_batch(batch, mean_len, self._bytes_per_spot(columns, tracks))
         return [[(int(off[i]), int(off[min(i + size, hi)]))] for i in range(lo, hi, size)], mixed
 
+    def _projection_batches(self, batch, chrom=None, columns=None, tracks=None):
+        """Format 2.2: batches of (chromosome, cell, trace) runs of the
+        projection — the canonical stream order — as ``[(lo, hi)]`` run
+        index ranges."""
+        pi = self._proj_index
+        off = np.asarray(pi["trace_offsets"], dtype=np.int64)
+        lo, hi = 0, len(off) - 1
+        if chrom is not None:
+            sel = np.flatnonzero(np.isin(np.asarray(pi["chrom_trace"]), self._chrom_codes(chrom)))
+            if not len(sel):
+                return []
+            lo, hi = int(sel[0]), int(sel[-1]) + 1
+        n_runs = hi - lo
+        mean_len = (off[hi] - off[lo]) / max(1, n_runs)
+        size = resolve_batch(batch, mean_len, self._bytes_per_spot(columns, tracks))
+        return [(i, min(i + size, hi)) for i in range(lo, hi, size)]
+
+    def _primary_rows_of_runs(self, k0: int, k1: int) -> np.ndarray:
+        """Primary rows (in projection order) of projection runs ``k0:k1``."""
+        pi = self._proj_index
+        prun = np.asarray(pi["primary_run"], dtype=np.int64)[k0:k1]
+        run_chrom = np.asarray(pi["chrom_trace"], dtype=np.int64)[k0:k1]
+        off = np.asarray(self._index["trace_offsets"], dtype=np.int64)
+        pchrom = np.asarray(self._index["chrom_trace"], dtype=np.int64)
+        a, b = off[prun], off[prun + 1]
+        pure = pchrom[prun] >= 0
+        if pure.all():
+            lens = b - a
+            return np.repeat(a - np.r_[0, np.cumsum(lens)[:-1]], lens) + np.arange(int(lens.sum()))
+        bin_chrom = np.asarray(self._bins["chrom"].cat.codes, dtype=np.int64)
+        out = []
+        for i in range(len(prun)):
+            if pure[i]:
+                out.append(np.arange(a[i], b[i]))
+            else:   # a run over several chromosomes: this chromosome's rows
+                t = self._rows.read_ranges("spots", [(int(a[i]), int(b[i]))], [BIN_ID])
+                bid = np.asarray(t.column(BIN_ID).to_numpy(), dtype=np.int64)
+                out.append(a[i] + np.flatnonzero(bin_chrom[bid] == run_chrom[i]))
+        return np.concatenate(out) if out else np.zeros(0, dtype=np.int64)
+
     def iter_traces(self, batch=1024, *, chrom=None, columns=None, tracks=None) -> Iterator[ChromData]:
+        if self._proj is not None:
+            # format 2.2: the canonical order (chromosome › cell › trace);
+            # coordinates from the projection, other columns from the primary
+            off = np.asarray(self._proj_index["trace_offsets"], dtype=np.int64)
+            coords = self._coords_only(columns, tracks)
+            for k0, k1 in self._projection_batches(batch, chrom, columns, tracks):
+                if coords:
+                    yield self._build(ranges=[(int(off[k0]), int(off[k1]))], columns=columns,
+                                      tracks=tracks, src=self._proj)
+                else:
+                    yield self._build(rows=self._primary_rows_of_runs(k0, k1), columns=columns,
+                                      tracks=tracks)
+            return
         batches, mixed = self._run_batches(batch, chrom, columns, tracks)
         for ranges in batches:
             sub = self._build(ranges=ranges, columns=columns, tracks=tracks)
@@ -600,7 +699,15 @@ class BackedChromData(ChromData):
                 k1 = a + int(np.searchsorted(codes[a:b], c1, side="right"))
                 if k1 > k0:
                     ranges.append((int(off[k0]), int(off[k1])))
-            yield self._build(ranges=ranges, columns=columns, tracks=tracks)
+            sub = self._build(ranges=ranges, columns=columns, tracks=tracks)
+            if self._proj is not None:
+                # format 2.2: cell-sorted primary → the canonical chunk order
+                # (chromosome › cell › trace › bin), as in memory
+                chrom = np.asarray(self._bins["chrom"].cat.codes, dtype=np.int64)[
+                    sub.spots[BIN_ID].to_numpy()]
+                if len(chrom) and (np.diff(chrom) < 0).any():
+                    sub = sub[np.argsort(chrom, kind="stable")]
+            yield sub
 
     # ------------------------------------------------------------------
     # Whole-table operations (read the needed columns)

@@ -84,18 +84,24 @@ ZIP_SUFFIX = ".cdz"
 CONTAINER = "chromdata.zarr"
 ZARR_FORMAT_VERSION = "2.1"
 #: MINOR versions of the container this reader understands (2.0: one file per
-#: spot-aligned table, sorted by cell › trace › bin; 2.1: partitioned by chromosome)
-ZARR_LAYOUTS = {"2.0": "flat", "2.1": "partitioned"}
+#: spot-aligned table, sorted by cell › trace › bin; 2.1: partitioned by
+#: chromosome; 2.2: the 2.0 primary + a coordinate projection partitioned by
+#: chromosome, lossless decimal float encoding)
+ZARR_LAYOUTS = {"2.0": "flat", "2.1": "partitioned", "2.2": "primary+projection"}
 
-#: target rows per Parquet row group of the spot-aligned tables (row groups
-#: end on cell boundaries within a chromosome partition)
-DEFAULT_ROW_GROUP_ROWS = 16_384
+#: target rows per Parquet row group of the cell-sorted spot tables (row
+#: groups end on cell boundaries)
+DEFAULT_ROW_GROUP_ROWS = 65_536
+#: the same for the chromosome-partitioned tables (format 2.1 spot tables,
+#: the format 2.2 coordinate projection)
+DEFAULT_PROJECTION_ROW_GROUP_ROWS = 16_384
 #: decoded row groups kept by backed readers (LRU, bytes)
 DEFAULT_CACHE_BYTES = 256 << 20
 #: zstd level for Parquet and Zarr
 DEFAULT_ZSTD_LEVEL = 3
 
 _SPOT_TABLES = ("spots", "spot_tracks")
+_ULP, _EXC = "#ulp", "#exc"   # helper columns of a decimal-encoded float (floatcodec)
 _COORD_COLUMNS = ("x", "y", "z")
 _LINK_FAMILIES = {"linked_cool": "contacts", "linked_scool": "contacts",
                   "linked_anndata": "links", "linked_mudata": "links"}
@@ -337,11 +343,16 @@ def _code_dtype(n_categories: int):
 
 
 class _SpotTableWriter:
-    """Writes one spot-aligned table as Parquet, one row group per range."""
+    """Writes one spot-aligned table as Parquet, one row group per range.
 
-    def __init__(self, path: Path, level: int):
+    Integer and string columns are dictionary-encoded (Parquet falls back
+    to plain pages when a dictionary grows too large), floats are not;
+    ``codec`` is the Parquet compression (zstd at ``level`` by default)."""
+
+    def __init__(self, path: Path, level: int, codec: str = "zstd"):
         self.path = path
         self.level = level
+        self.codec = codec
         self.writer = None
 
     def write(self, table) -> None:
@@ -351,8 +362,9 @@ class _SpotTableWriter:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             dict_cols = [f.name for f in table.schema
                          if f.type.id in _INT_TYPE_IDS() or str(f.type) in ("string", "large_string")]
+            level = {"compression_level": self.level} if self.codec in ("zstd", "gzip", "brotli") else {}
             self.writer = pq.ParquetWriter(
-                self.path, table.schema, compression="zstd", compression_level=self.level,
+                self.path, table.schema, compression=self.codec, **level,
                 use_dictionary=dict_cols or False, write_statistics=True,
             )
         self.writer.write_table(table, row_group_size=max(1, table.num_rows))
@@ -410,6 +422,42 @@ def _spot_frame_columns(df: pd.DataFrame, table: str, cat_meta: dict, cat_dir: P
     return cols
 
 
+def encode_float_columns(cols: List[Tuple[str, Any]], enc_meta: Dict[str, Any], *,
+                         plans: Optional[Mapping[str, Any]] = None,
+                         enabled: bool = True) -> List[Tuple[str, Any]]:
+    """Replace the float64 columns of ``cols`` that pay for it by their
+    lossless decimal encoding (``<c>``, ``<c>#ulp``, ``<c>#exc``; see
+    :mod:`uchrom.core.floatcodec`).  ``plans`` fixes the plan of each column
+    (the streaming writer decides on its first chunk); otherwise a plan is
+    chosen per column and recorded in ``enc_meta``."""
+    import pyarrow as pa
+    import pyarrow.types as pat
+
+    from . import floatcodec
+
+    if not enabled:
+        return cols
+    names = {c for c, _ in cols}
+    out: List[Tuple[str, Any]] = []
+    for name, arr in cols:
+        if plans is not None:
+            p = plans.get(name)
+        elif (pat.is_float64(arr.type) and arr.null_count == 0
+              and not ({name + floatcodec.ULP_SUFFIX, name + floatcodec.EXC_SUFFIX} & names)):
+            p = floatcodec.plan(arr.to_numpy(zero_copy_only=False))
+        else:
+            p = None
+        if p is None:
+            out.append((name, arr))
+            continue
+        if arr.null_count:  # pragma: no cover - plans are made for null-free columns
+            arr = pa.compute.fill_null(arr, np.nan)
+        q, u, e = floatcodec.encode_arrow(arr.to_numpy(zero_copy_only=False), p)
+        enc_meta[name] = dict(p)
+        out += [(name, q), (name + floatcodec.ULP_SUFFIX, u), (name + floatcodec.EXC_SUFFIX, e)]
+    return out
+
+
 def partition_dirs(names: Sequence[Optional[str]]) -> List[str]:
     """``chrom=<name>`` directory of every partition (portable names; others,
     and case-insensitive clashes, become ``chrom=_<i>``)."""
@@ -430,7 +478,10 @@ class SpotPartitionWriter:
     """
 
     def __init__(self, tpath: Path, tables: Sequence[str], *, level: int, row_group_rows: int,
-                 has_cells: bool, layer_names: Mapping[str, str]):
+                 has_cells: bool, layer_names: Mapping[str, str], flat: bool = False,
+                 codec: str = "zstd"):
+        self.flat = bool(flat)
+        self.codec = codec
         self.tpath = Path(tpath)
         self.tables = list(tables)
         self.level = int(level)
@@ -450,13 +501,19 @@ class SpotPartitionWriter:
         self._cel: List[np.ndarray] = []
         self._cel_code: List[np.ndarray] = []
         self._cel_part: List[np.ndarray] = []
+        self._seg_cmin: List[np.ndarray] = []
+        self._seg_cmax: List[np.ndarray] = []
         self._cur: Optional[Dict[str, Any]] = None
 
-    def rel_path(self, name: str, pdir: str) -> str:
-        if name in _SPOT_TABLES:
-            return f"{name}/{pdir}/part-0.parquet"
-        key = name.split("/", 1)[1]
-        return f"layers/{self.layer_names[key]}/{pdir}/part-0.parquet"
+    def rel_path(self, name: str, pdir: Optional[str]) -> str:
+        if name.startswith("layers/"):
+            key = name.split("/", 1)[1]
+            base = f"layers/{self.layer_names[key]}"
+        else:
+            base = name
+        if self.flat:
+            return f"{base}.parquet"
+        return f"{base}/{pdir}/part-0.parquet"
 
     def begin(self, chrom_code: int, chrom_name: Optional[str], pdir: str) -> None:
         if self._cur is not None:
@@ -464,7 +521,8 @@ class SpotPartitionWriter:
         files = {name: self.rel_path(name, pdir) for name in self.tables}
         self._cur = {"chrom": chrom_name, "code": int(chrom_code), "dir": pdir, "n_rows": 0,
                      "files": files}
-        self._writers = {name: _SpotTableWriter(self.tpath / rel, self.level) for name, rel in files.items()}
+        self._writers = {name: _SpotTableWriter(self.tpath / rel, self.level, codec=self.codec)
+                         for name, rel in files.items()}
         self._pending: Dict[str, List[Any]] = {name: [] for name in self.tables}
         self._pend_n = 0
         self._pend_bounds: List[int] = []
@@ -476,9 +534,13 @@ class SpotPartitionWriter:
         for name in self.tables:
             self._writers[name].write(tables[name].slice(0, 0))
 
-    def add(self, tables: Mapping[str, Any], cell: np.ndarray, trace: np.ndarray) -> None:
+    def add(self, tables: Mapping[str, Any], cell: np.ndarray, trace: np.ndarray,
+            chrom: Optional[np.ndarray] = None) -> None:
         """Append sorted rows: ``tables[name]`` (Arrow tables of equal length)
-        with the cell / trace codes of the rows (cell = -1 without cell_id)."""
+        with the cell / trace codes of the rows (cell = -1 without cell_id).
+        A flat writer (one file per table, format 2.0 / 2.2 primary) also
+        takes the chromosome code of every row: ``index/chrom_trace`` is
+        the run's chromosome, or -1 for a run over several."""
         cur = self._cur
         m = len(trace)
         if m == 0:
@@ -498,7 +560,19 @@ class SpotPartitionWriter:
         self._seg.append(self.n + s)
         self._seg_trace.append(trace[s])
         self._seg_cell.append(cell[s])
-        self._seg_chrom.append(np.full(len(s), cur["code"], dtype=np.int64))
+        if chrom is None:
+            self._seg_chrom.append(np.full(len(s), cur["code"], dtype=np.int64))
+        else:
+            chrom = np.asarray(chrom, dtype=np.int64)
+            if len(s) == 0 or s[0] != 0:
+                # the first rows continue the previous run
+                head = chrom[:s[0] if len(s) else m]
+                self._seg_cmin[-1][-1] = min(int(self._seg_cmin[-1][-1]), int(head.min()))
+                self._seg_cmax[-1][-1] = max(int(self._seg_cmax[-1][-1]), int(head.max()))
+            if len(s):
+                self._seg_cmin.append(np.minimum.reduceat(chrom, s))
+                self._seg_cmax.append(np.maximum.reduceat(chrom, s))
+            self._seg_chrom.append(np.zeros(len(s), dtype=np.int64))   # filled in index()
         c = np.flatnonzero(new_cell)
         self._cel.append(self.n + c)
         self._cel_code.append(cell[c])
@@ -550,11 +624,16 @@ class SpotPartitionWriter:
         def cat(parts, dtype):
             return np.concatenate(parts).astype(dtype) if parts else np.zeros(0, dtype=dtype)
 
+        if self._seg_cmin:
+            cmin, cmax = cat(self._seg_cmin, np.int64), cat(self._seg_cmax, np.int64)
+            chrom_trace = np.where(cmin == cmax, cmin, -1).astype(np.int32)
+        else:
+            chrom_trace = cat(self._seg_chrom, np.int32)
         return {
             "trace_offsets": np.r_[cat(self._seg, np.int64), self.n].astype(np.int64),
             "trace_codes": cat(self._seg_trace, np.int32),
             "trace_cells": cat(self._seg_cell, np.int32),
-            "chrom_trace": cat(self._seg_chrom, np.int32),
+            "chrom_trace": chrom_trace,
             "cell_offsets": (np.r_[cat(self._cel, np.int64), self.n].astype(np.int64)
                              if self.has_cells else np.zeros(1, dtype=np.int64)),
             "cell_codes": cat(self._cel_code, np.int32) if self.has_cells else np.zeros(0, dtype=np.int32),
@@ -567,16 +646,22 @@ class SpotPartitionWriter:
 
 
 def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float64",
-               row_group_rows: int = DEFAULT_ROW_GROUP_ROWS,
+               row_group_rows: Optional[int] = None,
                compression_level: int = DEFAULT_ZSTD_LEVEL,
-               keep_source_order: bool = True, _layout: str = "2.1") -> None:
+               keep_source_order: bool = True, float_encoding: bool = True,
+               projection_row_group_rows: int = DEFAULT_PROJECTION_ROW_GROUP_ROWS,
+               compression: str = "zstd", _layout: str = ZARR_FORMAT_VERSION) -> None:
     """Write ``cd`` as a ``.chromdata.zarr`` directory, or a ``.cdz`` zip
     when ``path`` ends with ``.cdz``.  See :meth:`ChromData.write`.
 
-    ``_layout="2.0"`` writes the previous, unpartitioned layout (format 2.0;
-    kept for compatibility tests)."""
+    ``_layout`` writes an older layout ("2.0": one cell-sorted file per
+    spot-aligned table; "2.1": every spot table partitioned by chromosome;
+    kept for compatibility tests and benchmarks).  ``float_encoding`` and
+    ``projection_row_group_rows`` apply to format 2.2."""
     if _layout not in ZARR_LAYOUTS:
         raise ValueError(f"unknown layout {_layout!r}")
+    if row_group_rows is None:
+        row_group_rows = DEFAULT_ROW_GROUP_ROWS if _layout != "2.1" else DEFAULT_PROJECTION_ROW_GROUP_ROWS
     path = Path(path)
     kind = "cdz" if path.name.lower().endswith(ZIP_SUFFIX) else "zarr"
     src = getattr(cd, "_backing_path", None)
@@ -589,11 +674,12 @@ def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float
     parent = path.parent
     parent.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix=f".{path.name}.", suffix=".tmp", dir=parent))
+    opts = dict(coord_dtype=coord_dtype, row_group_rows=row_group_rows, level=compression_level,
+                keep_source_order=keep_source_order, layout=_layout, float_encoding=float_encoding,
+                projection_row_group_rows=projection_row_group_rows, codec=compression)
     try:
         if kind == "zarr":
-            _write_tree(cd, tmp, coord_dtype=coord_dtype, row_group_rows=row_group_rows,
-                        level=compression_level, keep_source_order=keep_source_order,
-                        layout=_layout)
+            _write_tree(cd, tmp, **opts)
             if path.exists():
                 old = parent / f".{path.name}.{uuid.uuid4().hex}.old"
                 os.replace(path, old)
@@ -603,9 +689,7 @@ def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float
                 os.replace(tmp, path)
         else:
             tree = tmp / "tree"
-            _write_tree(cd, tree, coord_dtype=coord_dtype, row_group_rows=row_group_rows,
-                        level=compression_level, keep_source_order=keep_source_order,
-                        layout=_layout)
+            _write_tree(cd, tree, **opts)
             zpath = tmp / "store.cdz"
             _zip_tree(tree, zpath)
             os.replace(zpath, path)
@@ -664,7 +748,9 @@ def _coord_arrays(coords, coord_dtype) -> List[Tuple[str, Any]]:
 
 
 def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level: int,
-                keep_source_order: bool, layout: str = "2.1") -> None:
+                keep_source_order: bool, layout: str = ZARR_FORMAT_VERSION, float_encoding: bool = True,
+                projection_row_group_rows: int = DEFAULT_PROJECTION_ROW_GROUP_ROWS,
+                codec: str = "zstd") -> None:
     import pyarrow as pa
 
     zarr = _zarr()
@@ -683,7 +769,7 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
     chrom_codes = np.asarray(cd.bins["chrom"].cat.codes, dtype=np.int64)
     spot_chrom = chrom_codes[bin_id] if n else np.zeros(0, dtype=np.int64)
     has_cells = "cell_id" in cd.spots.columns
-    order = sort_order(cell, trace, bin_id, chrom=None if layout == "2.0" else spot_chrom)
+    order = sort_order(cell, trace, bin_id, chrom=spot_chrom if layout == "2.1" else None)
     if order is not None:
         cell, trace, bin_id, spot_chrom = cell[order], trace[order], bin_id[order], spot_chrom[order]
 
@@ -709,7 +795,22 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
     for key, a in cd.layers.items():
         columns[f"layers/{key}"] = _coord_arrays(a, coord_dtype)
 
-    if layout == "2.0":
+    if layout == "2.2":
+        encode = float_encoding and coord_dtype == np.dtype("float64")
+        for name in list(columns):
+            enc: Dict[str, Any] = {}
+            columns[name] = encode_float_columns(columns[name], enc, enabled=encode)
+            if name.startswith("layers/"):
+                tables_meta.setdefault("layer_encoding", {})[name.split("/", 1)[1]] = enc
+            else:
+                tables_meta[name]["encoding"] = enc
+        index, extra = _write_spots_v22(
+            columns, tpath, tables_meta, layer_names, cell=cell, trace=trace,
+            spot_chrom=spot_chrom, order=order, has_cells=has_cells,
+            chrom_names=[str(c) for c in cd.bins["chrom"].cat.categories],
+            row_group_rows=row_group_rows, projection_row_group_rows=projection_row_group_rows,
+            level=level, codec=codec)
+    elif layout == "2.0":
         index, extra = _write_spots_flat(columns, tpath, tables_meta, layer_names, n=n, cell=cell,
                                          trace=trace, spot_chrom=spot_chrom, order=order,
                                          has_cells=has_cells, row_group_rows=row_group_rows,
@@ -723,7 +824,12 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
     del columns
     ig = root.create_group("index")
     for name, data in index.items():
-        _zarr_array(ig, name, data, comp)
+        if isinstance(data, dict):
+            sub = ig.create_group(name)
+            for k, d in data.items():
+                _zarr_array(sub, k, d, comp)
+        else:
+            _zarr_array(ig, name, data, comp)
     if order is not None and keep_source_order:
         _zarr_array(ig, "source_row", order.astype(np.int64), comp)
 
@@ -745,11 +851,13 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
     _write_root_meta(root, meta, layout=layout)
 
 
-def _write_root_meta(root, meta: Dict[str, Any], *, layout: str = "2.1") -> None:
+def _write_root_meta(root, meta: Dict[str, Any], *, layout: str = ZARR_FORMAT_VERSION) -> None:
     version = layout
     full = {"format": CONTAINER, "format_version": version, "uchrom_version": _uchrom_version(),
-            "spot_order": "chrom,cell,trace,bin" if layout != "2.0" else "cell,trace,bin",
+            "spot_order": "chrom,cell,trace,bin" if layout == "2.1" else "cell,trace,bin",
             "layout": ZARR_LAYOUTS[layout], **meta}
+    if layout == "2.2":
+        full["projection_order"] = "chrom,cell,trace,bin"
     root.attrs.update({"uchrom": full, "uchrom_format_version": version,
                        "uchrom_version": full["uchrom_version"]})
 
@@ -844,6 +952,107 @@ def _write_spots_partitioned(columns, tpath: Path, tables_meta, layer_names, *, 
             w.end()
     _partition_meta(tables_meta, w, layer_names)
     return w.index(), {"n_partitions": len(w.partitions)}
+
+
+def projection_columns(spot_columns: Sequence[str], has_cells: bool) -> List[str]:
+    """Physical columns of the format 2.2 coordinate projection (keys +
+    the coordinate columns, encoded or not)."""
+    keys = [BIN_ID, "trace_id"] + (["cell_id"] if has_cells else [])
+    return keys + [c for c in spot_columns if c.split("#", 1)[0] in _COORD_COLUMNS]
+
+
+def _write_spots_v22(columns, tpath: Path, tables_meta, layer_names, *, cell, trace, spot_chrom,
+                     order, has_cells, chrom_names, row_group_rows, projection_row_group_rows, level,
+                     codec="zstd"):
+    """The format 2.2 layout: a cell-sorted **primary** (one file per
+    spot-aligned table, all columns) and a coordinate **projection**
+    partitioned by chromosome (``tables/coords_by_chrom/chrom=<c>/``:
+    bin_id, trace / cell codes, x, y, z).
+
+    ``cell`` / ``trace`` / ``spot_chrom`` are already in the primary
+    (sorted) order; ``order`` maps it to the rows of ``columns``."""
+    import pyarrow as pa
+
+    n = len(trace)
+    tables = {name: pa.Table.from_arrays([a for _, a in cols], names=[c for c, _ in cols])
+              for name, cols in columns.items()}
+    names = list(tables)
+    primary = SpotPartitionWriter(tpath, names, level=level, row_group_rows=row_group_rows,
+                                  has_cells=has_cells, layer_names=layer_names, flat=True, codec=codec)
+    proj = SpotPartitionWriter(tpath, ["coords_by_chrom"], level=level,
+                               row_group_rows=projection_row_group_rows, has_cells=has_cells,
+                               layer_names={}, codec=codec)
+    pcols = projection_columns(tables["spots"].column_names, has_cells)
+    ptable = tables["spots"].select(pcols)
+    idx_arrow = pa.array(order) if order is not None else None
+
+    primary.begin(-1, None, None)
+    if n == 0:
+        primary.write_empty(tables)
+    for s0 in range(0, n, _WRITE_SLICE_ROWS):
+        s1 = min(n, s0 + _WRITE_SLICE_ROWS)
+        if idx_arrow is None:
+            part = {k: t.slice(s0, s1 - s0) for k, t in tables.items()}
+        else:
+            take = idx_arrow.slice(s0, s1 - s0)
+            part = {k: t.take(take) for k, t in tables.items()}
+        primary.add(part, cell[s0:s1], trace[s0:s1], chrom=spot_chrom[s0:s1])
+        del part
+    primary.end()
+    pindex = primary.index()
+
+    # the projection: primary rows reordered chromosome-first (stable)
+    if n == 0:
+        proj.begin(-1, None, "empty")
+        proj.write_empty({"coords_by_chrom": ptable})
+        proj.end()
+        primary_run = np.zeros(0, dtype=np.int64)
+    else:
+        pperm = np.argsort(spot_chrom, kind="stable")
+        src_arrow = pa.array(order[pperm] if order is not None else pperm)
+        chrom_s = spot_chrom[pperm]
+        bounds = np.r_[0, np.flatnonzero(chrom_s[1:] != chrom_s[:-1]) + 1, n]
+        codes = [int(chrom_s[a]) for a in bounds[:-1]]
+        dirs = partition_dirs([chrom_names[c] for c in codes])
+        for p, code in enumerate(codes):
+            a, b = int(bounds[p]), int(bounds[p + 1])
+            proj.begin(code, chrom_names[code], dirs[p])
+            for s0 in range(a, b, _WRITE_SLICE_ROWS):
+                s1 = min(b, s0 + _WRITE_SLICE_ROWS)
+                part = {"coords_by_chrom": ptable.take(src_arrow.slice(s0, s1 - s0))}
+                sel = pperm[s0:s1]
+                proj.add(part, cell[sel], trace[sel])
+                del part
+            proj.end()
+        # the primary trace run of every projection run
+        starts = pperm[proj.index()["trace_offsets"][:-1]]
+        primary_run = np.searchsorted(pindex["trace_offsets"], starts, side="right") - 1
+    pidx = proj.index()
+    pidx["primary_run"] = np.asarray(primary_run, dtype=np.int64)
+
+    tables_meta["spots"]["file"] = "spots.parquet"
+    tables_meta["spots"]["layout"] = "primary"
+    if "spot_tracks" in tables_meta:
+        tables_meta["spot_tracks"]["file"] = "spot_tracks.parquet"
+    tables_meta["layers"] = {key: primary.rel_path(f"layers/{key}", None)
+                             for key in (nm.split("/", 1)[1] for nm in names if nm.startswith("layers/"))}
+    _projection_meta(tables_meta, proj, n=n, has_cells=has_cells, rows=projection_row_group_rows)
+    index = {k: pindex[k] for k in ("trace_offsets", "trace_codes", "trace_cells", "chrom_trace",
+                                    "cell_offsets", "cell_codes", "row_groups")}
+    index["coords_by_chrom"] = pidx
+    return index, {"n_partitions": len(proj.partitions), "row_group_rows": int(row_group_rows),
+                   "projection_row_group_rows": int(projection_row_group_rows)}
+
+
+def _projection_meta(tables_meta: Dict[str, Any], proj: "SpotPartitionWriter", *, n: int, has_cells: bool,
+                     rows: int) -> None:
+    tables_meta["coords_by_chrom"] = {
+        "n_rows": int(n),
+        "columns": [BIN_ID, "trace_id"] + (["cell_id"] if has_cells else []) + list(_COORD_COLUMNS),
+        "encoding": {c: e for c, e in tables_meta["spots"].get("encoding", {}).items() if c in _COORD_COLUMNS},
+        "row_group_rows": int(rows),
+        "partitions": [{"chrom": p["chrom"], "code": p["code"], "dir": p["dir"], "n_rows": int(p["n_rows"]),
+                        "files": dict(p["files"])} for p in proj.partitions]}
 
 
 def _partition_meta(tables_meta: Dict[str, Any], w: "SpotPartitionWriter", layer_names) -> None:
@@ -1235,6 +1444,19 @@ def read_small_parts(c: Container) -> Dict[str, Any]:
         "spots": _read_categories(c, tmeta.get("spots", {}).get("categorical")),
         "spot_tracks": _read_categories(c, tmeta.get("spot_tracks", {}).get("categorical")),
     }
+    # format 2.2: decimal-encoded float columns; the coordinate projection
+    encoding = {name: dict(tmeta[name].get("encoding") or {}) for name in _SPOT_TABLES if name in tmeta}
+    for key, enc in (tmeta.get("layer_encoding") or {}).items():
+        encoding[f"layers/{key}"] = dict(enc or {})
+    parts["encoding"] = encoding
+    parts["projection"] = None
+    if "coords_by_chrom" in tmeta:
+        pmeta = tmeta["coords_by_chrom"]
+        pidx = {name: c.array(f"index/coords_by_chrom/{name}")
+                for name in ("trace_offsets", "trace_codes", "trace_cells", "chrom_trace", "cell_offsets",
+                             "cell_codes", "cell_partition", "row_groups", "partition_offsets",
+                             "partition_groups", "partition_chrom", "primary_run")}
+        parts["projection"] = {"meta": pmeta, "index": pidx}
     return parts
 
 
@@ -1470,21 +1692,37 @@ class SpotRows:
     be freed.
     """
 
-    def __init__(self, c: Container, parts: Dict[str, Any], cache_bytes: int = DEFAULT_CACHE_BYTES):
+    def __init__(self, c: Container, parts: Dict[str, Any], cache_bytes: int = DEFAULT_CACHE_BYTES,
+                 *, projection: bool = False):
         from collections import OrderedDict
 
         self.c = c
         tmeta = parts["tables_meta"]
-        idx = parts["index"]
-        self.n = int(tmeta.get("spots", {}).get("n_rows", c.meta.get("n_spots", 0)))
+        self.spot_meta = tmeta.get("spots", {})
+        self.projection = bool(projection)
+        #: table → {logical float column → decimal plan} (format 2.2)
+        self.encoding: Dict[str, Dict[str, Any]] = dict(parts.get("encoding") or {})
+        if projection:
+            proj = parts["projection"]
+            idx = proj["index"]
+            pmeta = proj["meta"]
+            self.n = int(pmeta["n_rows"])
+            self.partitioned = True
+            self.cats = {"coords_by_chrom": parts["categories"]["spots"]}
+            self.encoding = {"coords_by_chrom": dict(pmeta.get("encoding") or {})}
+        else:
+            idx = parts["index"]
+            self.n = int(tmeta.get("spots", {}).get("n_rows", c.meta.get("n_spots", 0)))
+            self.partitioned = bool(parts.get("partitioned"))
+            self.cats = parts["categories"]
         self.rg = np.asarray(idx["row_groups"], dtype=np.int64)
         self.part_offsets = np.asarray(idx["partition_offsets"], dtype=np.int64)
         self.part_groups = np.asarray(idx["partition_groups"], dtype=np.int64)
         self.part_chrom = np.asarray(idx["partition_chrom"], dtype=np.int64)
-        self.partitioned = bool(parts.get("partitioned"))
-        self.cats = parts["categories"]
-        self.spot_meta = tmeta.get("spots", {})
-        if self.partitioned:
+        if projection:
+            self.part_files = [{name: f"tables/{rel}" for name, rel in p["files"].items()}
+                               for p in parts["projection"]["meta"]["partitions"]]
+        elif self.partitioned:
             self.part_files = [{name: f"tables/{rel}" for name, rel in p["files"].items()}
                                for p in tmeta["partitions"]]
         else:
@@ -1521,10 +1759,71 @@ class SpotRows:
             return self._pf[key]
 
     def columns(self, name: str) -> List[str]:
-        return list(self.pf(name).schema_arrow.names)
+        """Logical column names (the helper columns of decimal-encoded
+        floats left out)."""
+        enc = self.encoding.get(name) or {}
+        names = list(self.pf(name).schema_arrow.names)
+        if not enc:
+            return names
+        helpers = {c + sfx for c in enc for sfx in (_ULP, _EXC)}
+        return [c for c in names if c not in helpers]
+
+    def physical(self, name: str, columns: Optional[Sequence[str]]) -> Optional[List[str]]:
+        """Stored columns holding the logical ``columns`` (``None``: all)."""
+        enc = self.encoding.get(name) or {}
+        if columns is None or not enc:
+            return None if columns is None else list(columns)
+        out = []
+        for c in columns:
+            out.append(c)
+            if c in enc:
+                out += [c + _ULP, c + _EXC]
+        return out
+
+    def decode(self, name: str, table):
+        """Stored (physical) table → logical table: decimal-encoded float
+        columns decoded to float64 (bitwise the written values); columns of
+        several at a time in threads."""
+        import pyarrow as pa
+
+        enc = self.encoding.get(name) or {}
+        if not enc or table is None:
+            return table
+        from . import floatcodec
+
+        names = table.column_names
+        todo = [c for c in names if c in enc and c + _ULP in names]
+        if not todo:
+            return table
+        n = table.num_rows
+
+        def one(col):
+            buf = pa.allocate_buffer(max(1, n * 8))
+            out = np.frombuffer(buf, dtype=np.float64, count=n)
+            if n:
+                floatcodec.decode_arrow(table.column(col), table.column(col + _ULP),
+                                        table.column(col + _EXC), enc[col], out=out)
+            return pa.Array.from_buffers(pa.float64(), n, [None, buf])
+
+        if len(todo) > 1 and n >= 1 << 16:
+            decoded = dict(zip(todo, _io_pool().map(one, todo)))
+        else:
+            decoded = {c: one(c) for c in todo}
+        helpers = {c + sfx for c in todo for sfx in (_ULP, _EXC)}
+        cols, fields = [], []
+        for c in names:
+            if c in helpers:
+                continue
+            if c in decoded:
+                cols.append(decoded[c])
+                fields.append(pa.field(c, pa.float64()))
+            else:
+                cols.append(table.column(c))
+                fields.append(table.schema.field(c))
+        return pa.Table.from_arrays(cols, schema=pa.schema(fields))
 
     def empty(self, name: str, columns: Optional[Sequence[str]] = None):
-        t = self.pf(name).schema_arrow.empty_table()
+        t = self.decode(name, self.pf(name).schema_arrow.empty_table())
         return t.select(list(columns)) if columns is not None else t
 
     def partition_range(self, part: int) -> Tuple[int, int]:
@@ -1540,10 +1839,10 @@ class SpotRows:
         :class:`_ColumnFill`), and ``to_pandas`` is zero-copy."""
         import pyarrow as pa
 
-        cols = list(columns) if columns is not None else None
+        cols = self.physical(name, columns)
         with self._lock:
             if self.n_partitions == 1:
-                return self.pf(name, 0).read(columns=cols, use_threads=True)
+                return self.decode(name, self.pf(name, 0).read(columns=cols, use_threads=True))
             fills = None
             schema = None
             for p in range(self.n_partitions):
@@ -1554,7 +1853,7 @@ class SpotRows:
                 for i, f in enumerate(fills):
                     f.add(t.column(i))
                 del t
-            return pa.Table.from_arrays([f.finish() for f in fills], schema=schema)
+            return self.decode(name, pa.Table.from_arrays([f.finish() for f in fills], schema=schema))
 
     def _local(self, g: int) -> Tuple[int, int]:
         p = int(self.group_part[g])
@@ -1605,7 +1904,7 @@ class SpotRows:
         one row group per chromosome)."""
         import pyarrow as pa
 
-        cols = tuple(columns) if columns is not None else tuple(self.columns(name))
+        cols = tuple(self.physical(name, columns if columns is not None else self.columns(name)))
         per_group: Dict[int, List[Tuple[int, int]]] = {}
         for a, b in ranges:
             a, b = int(a), int(b)
@@ -1666,21 +1965,22 @@ class SpotRows:
             for i, task in enumerate(tasks):
                 pieces[i] = do(task)
         if not pieces:
-            return self.empty(name, cols)
+            return self.empty(name, columns if columns is not None else self.columns(name))
         if len(pieces) == 1:
-            return pieces[0]
+            return self.decode(name, pieces[0])
         if sum(p.num_rows for p in pieces) >= _COMBINE_MIN_ROWS:
-            return combine_tables(pieces)
-        return pa.concat_tables(pieces)
+            return self.decode(name, combine_tables(pieces))
+        return self.decode(name, pa.concat_tables(pieces))
 
     def take(self, name: str, rows: np.ndarray, columns: Optional[Sequence[str]] = None):
         """Arbitrary rows (any order) of one table."""
         import pyarrow as pa
 
         rows = np.asarray(rows, dtype=np.int64)
-        cols = tuple(columns) if columns is not None else tuple(self.columns(name))
+        logical = list(columns) if columns is not None else self.columns(name)
+        cols = tuple(self.physical(name, logical))
         if len(rows) == 0:
-            return self.empty(name, cols)
+            return self.empty(name, logical)
         order = np.argsort(rows, kind="stable")
         srt = rows[order]
         g = np.searchsorted(self.rg, srt, side="right") - 1
@@ -1691,7 +1991,7 @@ class SpotRows:
         t = pa.concat_tables(pieces)
         inv = np.empty_like(order)
         inv[order] = np.arange(len(order))
-        return t.take(pa.array(inv))
+        return self.decode(name, t.take(pa.array(inv)))
 
     # -- conversion --------------------------------------------------------
     def to_frame(self, name: str, table) -> pd.DataFrame:

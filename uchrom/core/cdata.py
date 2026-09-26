@@ -1756,9 +1756,9 @@ class ChromData:
         if kind == "zarr" and not path.name.lower().endswith(".zarr"):
             raise ValueError("a zarr store needs a path ending in .chromdata.zarr (or .zarr)")
         if kind in ("zarr", "cdz"):
-            from .zarrcd import DEFAULT_ROW_GROUP_ROWS, DEFAULT_ZSTD_LEVEL
+            from .zarrcd import DEFAULT_ZSTD_LEVEL
             write_zarr(self, path, coord_dtype=coord_dtype,
-                       row_group_rows=row_group_rows or DEFAULT_ROW_GROUP_ROWS,
+                       row_group_rows=row_group_rows,
                        compression_level=(DEFAULT_ZSTD_LEVEL if compression_level is None
                                           else compression_level),
                        keep_source_order=keep_source_order)

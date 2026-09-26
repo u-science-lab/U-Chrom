@@ -224,9 +224,8 @@ class Dataset:
         if chroms:
             names = np.asarray(cd.bins["chrom"].cat.categories.astype(str))
             codes = np.flatnonzero(np.isin(names, [str(c) for c in chroms]))
-            seg_chrom = np.asarray(idx["chrom_trace"])
-            mask = np.isin(seg_chrom, codes) | (seg_chrom < 0)
-            return cd._build(ranges=cd._segment_ranges(mask, idx["trace_offsets"]), columns="coords")
+            # format 2.2: the coordinate projection (one partition per chromosome)
+            return cd._chroms_subset(codes, columns="coords")
         return None
 
     # ------------------------------------------------------------------
