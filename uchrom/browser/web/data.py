@@ -72,8 +72,19 @@ def _modality(key: str, meta: Dict[str, Any]) -> str:
 
 
 def load_chromdata(path: Path) -> ChromData:
-    """Load a ``.h5cd`` or a reconstruction CSV (chrom, start, end, x, y, z)."""
-    if path.suffix == ".h5cd":
+    """Open a ChromData store or a reconstruction CSV (chrom, start, end, x, y, z).
+
+    ``.chromdata.zarr`` / ``.cdz`` stores open **backed**: only the small
+    tables and the ``index/`` offsets are read, and the spots of a cell /
+    trace / chromosome are read when a view needs them.  ``.h5cd`` files
+    are loaded into memory.
+    """
+    from uchrom.core.zarrcd import container_kind
+
+    kind = container_kind(path)
+    if kind in ("zarr", "cdz"):
+        return ChromData.read(path, backed=True)
+    if kind == "h5cd":
         return ChromData.read(path)
     df = pd.read_csv(path, index_col=0)
     return ChromData.from_dataframe(df)
@@ -141,10 +152,95 @@ class Dataset:
         return self._cache["arrays"]
 
     # ------------------------------------------------------------------
+    # Backed stores: summaries from the index, geometry from row ranges
+    # ------------------------------------------------------------------
+
+    @property
+    def backed(self) -> bool:
+        return bool(getattr(self.cd, "backed", False))
+
+    def _segments(self) -> pd.DataFrame:
+        """Backed only: one row per (cell, trace, chromosome) run of the
+        stored spots — from ``index/`` plus the ``bin_id`` column, with no
+        per-spot strings.  Columns: ``trace``, ``cell`` (str / None),
+        ``chrom``, ``n_spots``, ``start`` (min), ``end`` (max)."""
+        if "segments" not in self._cache:
+            cd = self.cd
+            idx = cd._index
+            off = np.asarray(idx["trace_offsets"], dtype=np.int64)
+            n_seg = len(off) - 1
+            bins = cd.bins
+            chrom_codes = np.asarray(bins["chrom"].cat.codes, dtype=np.int64)
+            chrom_names = np.asarray(bins["chrom"].cat.categories.astype(str))
+            b_start = bins["start"].to_numpy(dtype=np.int64)
+            b_end = bins["end"].to_numpy(dtype=np.int64)
+            bin_id = cd.spots["bin_id"].to_numpy(dtype=np.int64)
+            seg_of_row = np.repeat(np.arange(n_seg), np.diff(off))
+            rc = chrom_codes[bin_id] if len(bin_id) else np.zeros(0, dtype=np.int64)
+            key = seg_of_row * max(1, len(chrom_names)) + rc
+            new = np.r_[True, key[1:] != key[:-1]] if len(key) else np.zeros(0, dtype=bool)
+            starts = np.flatnonzero(new)
+            run_seg = seg_of_row[starts]
+            trace_cats = np.asarray(cd._categories("trace_id")).astype(str)
+            tcode = np.asarray(idx["trace_codes"], dtype=np.int64)[run_seg]
+            df = pd.DataFrame({
+                "trace": np.where(tcode >= 0, trace_cats[np.maximum(tcode, 0)], "nan"),
+                "chrom": chrom_names[rc[starts]] if len(starts) else np.zeros(0, dtype=str),
+                "n_spots": np.diff(np.r_[starts, len(key)]).astype(np.int64),
+                "start": np.minimum.reduceat(b_start[bin_id], starts) if len(starts) else np.zeros(0, np.int64),
+                "end": np.maximum.reduceat(b_end[bin_id], starts) if len(starts) else np.zeros(0, np.int64),
+            })
+            if cd._has_cell_id():
+                cell_cats = np.asarray(cd._categories("cell_id")).astype(str)
+                ccode = np.asarray(idx["trace_cells"], dtype=np.int64)[run_seg]
+                df["cell"] = np.where(ccode >= 0, cell_cats[np.maximum(ccode, 0)], None)
+            else:
+                df["cell"] = None
+            self._cache["segments"] = df
+        return self._cache["segments"]
+
+    def _subset(self, flt: "GeometryFilter") -> Optional[ChromData]:
+        """Backed only: an in-memory ChromData holding every spot that can
+        match ``flt`` (whole cells / traces / chromosome runs), or ``None``
+        when the filter does not narrow the data."""
+        cd = self.cd
+        idx = cd._index
+        if flt.cell_ids is not None:
+            if not cd._has_cell_id():
+                return cd[np.zeros(0, dtype=np.int64)]
+            cats = pd.Index(np.asarray(cd._categories("cell_id")).astype(str))
+            codes = cats.get_indexer([str(c) for c in flt.cell_ids])
+            mask = np.isin(np.asarray(idx["cell_codes"]), codes[codes >= 0])
+            return cd._build(ranges=cd._segment_ranges(mask, idx["cell_offsets"]))
+        if flt.trace_ids is not None:
+            cats = pd.Index(np.asarray(cd._categories("trace_id")).astype(str))
+            codes = cats.get_indexer([str(t) for t in flt.trace_ids])
+            mask = np.isin(np.asarray(idx["trace_codes"]), codes[codes >= 0])
+            return cd._build(ranges=cd._segment_ranges(mask, idx["trace_offsets"]))
+        chroms = list(flt.chroms or []) + ([flt.region["chrom"]] if flt.region is not None else [])
+        if chroms:
+            names = np.asarray(cd.bins["chrom"].cat.categories.astype(str))
+            codes = np.flatnonzero(np.isin(names, [str(c) for c in chroms]))
+            seg_chrom = np.asarray(idx["chrom_trace"])
+            mask = np.isin(seg_chrom, codes) | (seg_chrom < 0)
+            return cd._build(ranges=cd._segment_ranges(mask, idx["trace_offsets"]))
+        return None
+
+    # ------------------------------------------------------------------
     # Summaries
     # ------------------------------------------------------------------
 
     def chrom_table(self) -> List[Dict[str, Any]]:
+        if "chroms" not in self._cache and self.backed:
+            seg = self._segments()
+            g = seg.groupby("chrom", sort=False)
+            table = g.agg(start=("start", "min"), end=("end", "max"),
+                          n_spots=("n_spots", "sum"), n_traces=("trace", "nunique"))
+            self._cache["chroms"] = [
+                {"name": c, "start": int(table.at[c, "start"]), "end": int(table.at[c, "end"]),
+                 "n_spots": int(table.at[c, "n_spots"]), "n_traces": int(table.at[c, "n_traces"])}
+                for c in sorted(table.index, key=natural_chrom_key)
+            ]
         if "chroms" not in self._cache:
             a = self._arrays()
             df = pd.DataFrame({
@@ -188,6 +284,14 @@ class Dataset:
 
     def traces(self, chrom: Optional[str] = None, offset: int = 0,
                limit: int = 500) -> Dict[str, Any]:
+        if "traces" not in self._cache and self.backed:
+            seg = self._segments().rename(columns={"trace": "trace_id", "cell": "cell_id"})
+            agg = {"n_spots": ("n_spots", "sum"), "start": ("start", "min"),
+                   "end": ("end", "max"), "cell_id": ("cell_id", "first")}
+            t = seg.groupby(["trace_id", "chrom"], sort=False).agg(**agg).reset_index()
+            t["_rank"] = t["chrom"].map(natural_chrom_key)
+            t = t.sort_values(["_rank", "trace_id"], kind="stable").drop(columns="_rank")
+            self._cache["traces"] = t.reset_index(drop=True)
         if "traces" not in self._cache:
             a = self._arrays()
             df = pd.DataFrame({
@@ -220,8 +324,18 @@ class Dataset:
 
     def cells(self, offset: int = 0, limit: int = 500) -> Dict[str, Any]:
         """Cell table in natural id order (empty when there is no cell_id)."""
+        if "cells" not in self._cache and self.backed and self.cd.n_spots and self.cd._has_cell_id():
+            seg = self._segments()
+            g = seg.groupby("cell", sort=False).agg(
+                n_spots=("n_spots", "sum"), n_traces=("trace", "nunique"),
+                n_chroms=("chrom", "nunique"))
+            self._cache["cells"] = [
+                {"cell_id": str(c), "n_spots": int(g.at[c, "n_spots"]),
+                 "n_traces": int(g.at[c, "n_traces"]), "n_chroms": int(g.at[c, "n_chroms"])}
+                for c in sorted(g.index, key=natural_key)
+            ]
         if "cells" not in self._cache:
-            a = self._arrays()
+            a = {"cell": None} if self.backed else self._arrays()
             if a["cell"] is None or len(a["cell"]) == 0:
                 # no 3-D spots (e.g. scHi-C / RNA only): list cd.cells
                 table = self._cells_table()
@@ -331,10 +445,14 @@ class Dataset:
     def known_cells(self) -> set:
         """Cell ids of this dataset (the cells table and the spots)."""
         if "known_cells" not in self._cache:
-            a = self._arrays()
             known = set(self._cells_table().index)
-            if a["cell"] is not None:
-                known.update(pd.unique(a["cell"]))
+            if self.backed:
+                if self.cd.n_spots and self.cd._has_cell_id():
+                    known.update(self._segments()["cell"].dropna().unique())
+            else:
+                a = self._arrays()
+                if a["cell"] is not None:
+                    known.update(pd.unique(a["cell"]))
             self._cache["known_cells"] = known
         return self._cache["known_cells"]
 
@@ -485,7 +603,8 @@ class Dataset:
     # ------------------------------------------------------------------
 
     def resolve(self, path: str) -> Path:
-        """Linked file path; relative paths are relative to the .h5cd."""
+        """Linked file path; relative paths are relative to the dataset's
+        directory (where the .chromdata.zarr / .cdz / .h5cd lives)."""
         p = Path(path).expanduser()
         if not p.is_absolute() and self.path:
             p = Path(self.path).parent / p
@@ -496,8 +615,9 @@ class Dataset:
         value per locus) or ``"spot"`` (``cd.spot_tracks``, per spot)."""
         out = []
         for level, table in (("bin", self.cd.bin_tracks), ("spot", self.cd.spot_tracks)):
+            dtypes = table.dtypes      # (a backed table reads no data for this)
             out += [{"name": str(c), "level": level} for c in table.columns
-                    if pd.api.types.is_numeric_dtype(table[c])]
+                    if pd.api.types.is_numeric_dtype(dtypes[c])]
         return out
 
     def _track_values(self, name: str) -> np.ndarray:
@@ -933,6 +1053,14 @@ class Dataset:
         return idx[order]
 
     def geometry(self, flt: GeometryFilter) -> bytes:
+        if self.backed:
+            sub = self._subset(flt)
+            if sub is not None:
+                # the same selection and encoding on the spots that can
+                # match, read from disk; the extent stays the dataset's
+                part = Dataset(id=self.id, name=self.name, path=self.path, cd=sub)
+                return encode_geometry(part, part.select(flt), flt.max_points,
+                                       chrom_extent=self.chrom_table())
         return encode_geometry(self, self.select(flt), flt.max_points)
 
 
@@ -1030,8 +1158,12 @@ def _segment_bounds(dataset: Dataset, idx: np.ndarray):
 
 
 def encode_geometry(dataset: Dataset, idx: np.ndarray,
-                    max_points: int = DEFAULT_MAX_POINTS) -> bytes:
-    """Encode the selected spots in the binary layout documented in API.md."""
+                    max_points: int = DEFAULT_MAX_POINTS,
+                    chrom_extent: Optional[List[Dict[str, Any]]] = None) -> bytes:
+    """Encode the selected spots in the binary layout documented in API.md.
+
+    ``chrom_extent`` (a :meth:`Dataset.chrom_table`) overrides the
+    dataset's own, for a subset of a larger dataset."""
     a = dataset._arrays()
     kept, offsets = _segment_bounds(dataset, idx)
     total = len(kept)
@@ -1073,7 +1205,8 @@ def encode_geometry(dataset: Dataset, idx: np.ndarray,
         "segments": segments,
         "bbox": bbox,
         "chrom_extent": {c["name"]: [c["start"], c["end"]]
-                         for c in dataset.chrom_table()},
+                         for c in (chrom_extent if chrom_extent is not None
+                                   else dataset.chrom_table())},
     }
     head = json.dumps(header, separators=(",", ":")).encode("utf-8")
     head += b" " * (-len(head) % 4)
@@ -1118,9 +1251,10 @@ class DatasetStore:
 
     def load(self, path) -> Dataset:
         p = Path(path).expanduser().resolve()
-        if not p.is_file():
+        if not p.exists():
             raise FileNotFoundError(f"no such file: {p}")
-        return self.add(load_chromdata(p), name=p.stem, path=str(p))
+        name = p.name[: -len(".chromdata.zarr")] if p.name.endswith(".chromdata.zarr") else p.stem
+        return self.add(load_chromdata(p), name=name, path=str(p))
 
     def get(self, dataset_id: str) -> Dataset:
         try:

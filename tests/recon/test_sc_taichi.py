@@ -33,7 +33,7 @@ def test_nucdyn_chr19_cpu(tmp_path):
     from uchrom import ChromData
     from uchrom.recon.sc.nucdyn.nucdyn import main
 
-    out = tmp_path / "nd.h5cd"
+    out = tmp_path / "nd.chromdata.zarr"
     main(str(PAIRS), str(out), arch="cpu", genome_ranges=["chr19"],
          size_steps=[1, 0.5], dyns=100)
     cd = ChromData.read(out)
@@ -47,7 +47,7 @@ def test_gem_chr19_cpu(tmp_path):
     from uchrom import ChromData
     from uchrom.recon.sc.gem.gem import main
 
-    out = tmp_path / "gem.h5cd"
+    out = tmp_path / "gem.chromdata.zarr"
     main(str(PAIRS), str(out), arch="cpu", genome_ranges=["chr19"],
          size_steps=[1], steps=300)
     cd = ChromData.read(out)

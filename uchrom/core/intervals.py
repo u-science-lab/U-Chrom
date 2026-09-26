@@ -99,7 +99,8 @@ class IntervalTable(pd.DataFrame):
         if column is None:
             return pd.Series(best, index=index)
         vals = self[column].to_numpy()
-        out = pd.Series([vals[b] if b >= 0 else None for b in best], index=index, name=column)
+        out = pd.Series([vals[b] if b >= 0 else None for b in best], index=index, name=column,
+                        dtype=object)
         if pd.api.types.is_numeric_dtype(self[column]):
             out = out.astype(float)
         return out

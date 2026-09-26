@@ -153,7 +153,7 @@ def test_add_sequence_features_updates_tracks_results_and_registry(tmp_path):
     assert cdata.uns["feature_registry"][0]["feature_group"] == "sequence"
     assert cdata.uns["feature_registry"][0]["genome_assembly"] == "toy"
 
-    path = tmp_path / "sequence_features.h5cd"
+    path = tmp_path / "sequence_features.chromdata.zarr"
     cdata.write(path)
     out = ChromData.read(path)
 

@@ -6,7 +6,7 @@
 ``atac.<gene>`` accessibility, … — or an explicit cells × features matrix
 into PCA (or LSI) / t-SNE / UMAP coordinates stored in ``cd.cellm`` (rows
 aligned with ``cd.cells``).  Parameters, including the normalisation, are
-recorded in ``cd.uns["embeddings"]`` so they round-trip through ``.h5cd``
+recorded in ``cd.uns["embeddings"]`` so they round-trip through ChromData files
 and the web browser can group the embeddings by modality.
 
 Normalisations (``normalization=``; ``"auto"`` picks one from ``source``):

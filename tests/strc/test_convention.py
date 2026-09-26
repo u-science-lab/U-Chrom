@@ -144,8 +144,8 @@ def test_results_round_trip_after_calling(tmp_path, two_chrom_data):
     cd = two_chrom_data["fishnet"].copy()
     call_domains_fishnet(cd, params=FISHnetParams(n_louvain_runs=2, max_thresholds=12),
                          max_traces=2)
-    cd.write(tmp_path / "f.h5cd")
-    back = ChromData.read(tmp_path / "f.h5cd").results
+    cd.write(tmp_path / "f.chromdata.zarr")
+    back = ChromData.read(tmp_path / "f.chromdata.zarr").results
     for key in cd.results:
         assert back.record(key).provenance == cd.results.record(key).provenance
     pd.testing.assert_frame_equal(

@@ -4,7 +4,7 @@
 chromatin 3D structures.
 
 ```bash
-python -m uchrom.browser out.h5cd       # ChromData
+python -m uchrom.browser out.chromdata.zarr   # ChromData (.cdz / .h5cd too)
 python -m uchrom.browser out.csv        # legacy CSV
 python -m uchrom.browser                 # no args — shows welcome page
 ```
@@ -15,8 +15,8 @@ The same browser also runs in a web page — no Qt required:
 
 ```bash
 pip install "u-chrom[web]"
-python -m uchrom.browser --web out.h5cd            # opens http://127.0.0.1:8765/
-python -m uchrom.browser --web a.h5cd b.csv --port=9000 --noopen_browser
+python -m uchrom.browser --web out.chromdata.zarr  # opens http://127.0.0.1:8765/
+python -m uchrom.browser --web a.chromdata.zarr b.csv --port=9000 --noopen_browser
 ```
 
 A local FastAPI server loads the files and streams coordinates to a

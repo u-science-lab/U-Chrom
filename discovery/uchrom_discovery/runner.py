@@ -124,7 +124,7 @@ def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> Discovery
         )
         enrichment_summary = enrich_for_discovery(cdata, enrichment_config)
         if enrichment_summary.get("enabled"):
-            enriched_h5cd_path = output_dir / "enriched.h5cd"
+            enriched_h5cd_path = output_dir / "enriched.chromdata.zarr"
             h5cd_path = enriched_h5cd_path
             enrichment_summary["enriched_h5cd_path"] = str(enriched_h5cd_path)
             enrichment_summary_path = output_dir / "enrichment_summary.json"

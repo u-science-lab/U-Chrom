@@ -125,15 +125,17 @@ def _all_kinds():
     }
 
 
-def test_every_kind_round_trips_with_provenance(tmp_path):
+@pytest.mark.filterwarnings("ignore:writing .*h5cd:DeprecationWarning")
+@pytest.mark.parametrize("suffix", [".h5cd", ".chromdata.zarr", ".cdz"])
+def test_every_kind_round_trips_with_provenance(tmp_path, suffix):
     cd = _cd()
     for key, (value, kind) in _all_kinds().items():
         cd.results.set(key, value, kind=kind, function=f"f.{key}",
                        params={"k": key, "arr": np.arange(2)}, inputs={"chrom": ["chr1"]})
-    path = tmp_path / "r.h5cd"
+    path = tmp_path / f"r{suffix}"
     cd.write(path)
-    with h5py.File(path, "r") as f:
-        assert f.attrs["uchrom_format_version"] == FORMAT_VERSION
+    from uchrom.io import file_format_version
+    assert file_format_version(path) == FORMAT_VERSION
     out = ChromData.read(path).results
 
     assert set(out) == set(cd.results)
@@ -151,14 +153,16 @@ def test_every_kind_round_trips_with_provenance(tmp_path):
     assert out.record("table").params == {"k": "table", "arr": [0, 1]}
 
 
-def test_empty_table_keeps_schema(tmp_path):
+@pytest.mark.filterwarnings("ignore:writing .*h5cd:DeprecationWarning")
+@pytest.mark.parametrize("suffix", [".h5cd", ".chromdata.zarr"])
+def test_empty_table_keeps_schema(tmp_path, suffix):
     empty = pd.DataFrame({
         "chrom": pd.Series(dtype=object), "start": pd.Series(dtype="int64"),
         "fdr": pd.Series(dtype="float64"),
     })
     cd = _cd({"empty": empty})
-    cd.write(tmp_path / "e.h5cd")
-    out = ChromData.read(tmp_path / "e.h5cd").results["empty"]
+    cd.write(tmp_path / f"e{suffix}")
+    out = ChromData.read(tmp_path / f"e{suffix}").results["empty"]
     pd.testing.assert_frame_equal(out, empty)
 
 

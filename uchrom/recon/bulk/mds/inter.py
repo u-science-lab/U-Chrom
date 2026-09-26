@@ -180,13 +180,13 @@ def inter_mds(input_path, resolution_inter=1000000, resolution_intra=100000,
         all_dfs.append(df)
 
         if output_dir:
-            out_path = os.path.join(output_dir, f"{display_name}.h5cd")
+            out_path = os.path.join(output_dir, f"{display_name}.chromdata.zarr")
             save_particles(df, out_path)
 
     genome_df = pd.concat(all_dfs, ignore_index=True)
 
     if output_dir:
-        save_particles(genome_df, os.path.join(output_dir, "genome.h5cd"))
+        save_particles(genome_df, os.path.join(output_dir, "genome.chromdata.zarr"))
 
     if verbose:
         print(f"\n  Total: {len(genome_df)} bins across "

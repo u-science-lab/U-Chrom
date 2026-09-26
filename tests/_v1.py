@@ -26,7 +26,7 @@ def _write_df_v1(f, name, df):
         return
     for col in df.columns:
         s = df[col]
-        if hasattr(s.dtype, "categories") or s.dtype == object:
+        if hasattr(s.dtype, "categories") or s.dtype == object or pd.api.types.is_string_dtype(s.dtype):
             grp.create_dataset(str(col), data=s.astype(str).to_numpy().astype("S"))
         else:
             grp.create_dataset(str(col), data=s.to_numpy())
