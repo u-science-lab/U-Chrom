@@ -129,6 +129,7 @@ ChromData (format 2.0)
 - `ChromData(coords, spots, ...)` — direct construction (spots with chrom/start/end → bins derived; or `bins=` + `bin_id`)
 - `ChromData.from_dataframe(df)` — from reconstruction CSV (chrom, start, end, x, y, z); auto-assigns one trace per chromosome
 - `ChromData.from_fofct(path, cell_table=None, rna_table=None)` — from FOF-CT core table; parses `##` headers into `uns`; companion cell table → `cells` (gene counts as `rna.<gene>`), RNA spot table → `points['rna']`
+- `cd.to_fofct(path, cell_table=None, rna_table=None)` / `uchrom.io.write_fofct(cd, path, …)` — the inverse: FOF-CT core table with `##`/`#` headers (from `uns['fofct_header']` or `uns`), optional cell and RNA tables; `from_fofct(to_fofct(cd))` round-trips coords, ids, loci, extra columns, cells and RNA spots exactly
 - `cd.write('data.h5cd')` / `ChromData.read('data.h5cd')` — HDF5 roundtrip
 - `cd.to_dataframe()` — export as flat DataFrame (loci derived from bins; `bin_id` left out unless `include_bin_id=True`)
 - `uchrom.io.upgrade_h5cd(src, dst)` / `python -m uchrom.io.upgrade` — rewrite 1.x files as format 2.0

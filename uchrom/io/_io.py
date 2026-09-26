@@ -591,3 +591,10 @@ if __name__ == "__main__":
     fire.Fire({
         "particles_to_pdb": particles_to_pdb
     })
+
+
+def write_fofct(cd, path, *, cell_table=None, rna_table=None, **kwargs):
+    """Write a ChromData as a 4DN FOF-CT core table (+ optional cell and
+    RNA-spot tables) — :meth:`ChromData.to_fofct` as a function, the
+    counterpart of :meth:`ChromData.from_fofct`."""
+    return cd.to_fofct(path, cell_table=cell_table, rna_table=rna_table, **kwargs)

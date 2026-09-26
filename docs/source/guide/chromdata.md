@@ -220,7 +220,7 @@ D = cd.compute_distances(trace_id=0)  # (n_spots_in_trace, n_spots_in_trace)
 | Input | Method |
 |-------|--------|
 | Reconstruction CSV (chrom, start, end, x, y, z) | `ChromData.from_dataframe` |
-| 4DN FOF-CT core table (+ cell / RNA tables) | `ChromData.from_fofct` |
+| 4DN FOF-CT core table (+ cell / RNA tables) | `ChromData.from_fofct`; write with `cd.to_fofct` |
 | `.h5cd` (HDF5) | `ChromData.read` |
 
 ```python
@@ -273,6 +273,7 @@ cd = ChromData.from_fofct(
 cd.cells[["nucleus_area_um2", "rna.Nanog"]]   # genes are prefixed "rna."
 cd.points["rna"].head()                        # x, y, z, gene, cell_id, …
 cd.get_cell("0_2").points["rna"]               # RNA spots of one cell
+cd.to_fofct("core.csv", cell_table="cell.csv", rna_table="rna.csv")   # and back to FOF-CT
 cd.write("takei2021_multiomics.h5cd")          # format 2.0
 ```
 

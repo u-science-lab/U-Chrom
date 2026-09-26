@@ -12,15 +12,16 @@ auto-downloaded by the tutorials on first run into this directory.
 | `cell1.pairs`                         | 4.7 MB  | yes             | —             | `reconstruction.ipynb`, root README CLI example                         |
 | `cell2.pairs.gz`                      | 5.4 MB  | yes             | —             | (available for experimentation; bulkier variant of `cell1.pairs`)       |
 | `IMR90_chr21_30kb.cool`               | 280 KB  | yes             | —             | `gem_fish_reconstruction` tutorial (Hi-C side); `call_tads_di` test + `benchmarks/cd2_callers_validation.py` |
-| `4DNFIFINA2U9.csv`                    | 58 KB   | yes             | —             | Takei 2021 cell table (RNA counts, nuclear area) for `from_fofct(cell_table=…)`, web browser; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0) |
-| `4DNFIJ52NVDV.csv`                    | 219 KB  | yes             | —             | Takei 2021 nascent RNA spots for `from_fofct(rna_table=…)`, web browser; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0) |
+| `4DNFIFINA2U9.csv`                    | 58 KB   | yes             | —             | Takei 2021 cell table (RNA counts, nuclear area) for `from_fofct(cell_table=…)`, web browser; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer) |
+| `4DNFIJ52NVDV.csv`                    | 219 KB  | yes             | —             | Takei 2021 nascent RNA spots for `from_fofct(rna_table=…)`, web browser; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer) |
 | `takei2025_cerebellum_fixture/`       | ~750 KB | **missing** — listed but never committed (see its section) | — | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture) |
 | `sim_cell1/` (h5cd + mcool)           | 2.3 MB  | yes             | —             | web browser: single-cell 3-D structure + its own contacts (`build_sim_cell1.py`); `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0) |
 | `mESC_Sox2_5cells_{wnan,imputed_linear,imputed_snapfish}.h5cd` | 24 KB each | yes | — | imputation tests / tutorial (Huang 2021 mESC Sox2, 5 cells; see `mESC_Sox2_README.md`); `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0) |
 | `takei2025_fov0/takei2025_fov0.h5cd`  | 220 MB  | no              | Zenodo 7693825 (streamed) | web browser: 59 IF tracks per spot, 47 cells, IF embedding (`build_takei2025_fov0.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0) |
 | `schicar_mop/*.h5cd, *.mcool, *.cool, *.scool` | ~440 MB | no  | built from GEO GSE305439 | web browser: scHiCAR without 3-D, RNA / ATAC / Hi-C embeddings (`build_schicar_mop.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0) |
 | Takei 2025 full Zenodo dump           | ~8 GB   | no              | **manual**    | `seqfish_multiomics_cerebellum` tutorial (real-data run)                |
-| `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials |
+| `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials; `tests/core/test_fofct_writer.py` (skipped when absent); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer) |
+| `liu2025_mop/4DNFID46OABK.csv` + `4DNFICX8IVEK.csv` | 1.68 GB + 17 MB | no | 4DN public S3 (see its section) | `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer) |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
 | `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial                                     |
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
@@ -239,7 +240,28 @@ using.
 - **Used by** (all use the `find_fofct()` helper):
   `loop_calling.ipynb`, `tad_calling.ipynb`, `compartment.ipynb`,
   `fishnet_domains.ipynb`; `benchmarks/cd2_callers_validation.py`
-  (ChromData 2.0 validation, all 20 chromosomes).
+  (ChromData 2.0 validation, all 20 chromosomes);
+  `tests/core/test_fofct_writer.py` and `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer)
+  (with the cell / RNA tables `4DNFIFINA2U9.csv`, `4DNFIJ52NVDV.csv`).
+
+### `liu2025_mop/` — Liu et al. 2025 mouse MOp DNA-MERFISH, 4DN FOF-CT (1.7 GB)
+
+- **Source**: Liu S, … Zhuang X. "Cell type-specific 3D-genome
+  organization and transcription regulation in the brain." *Sci Adv*
+  (2025).  4DN experiment set
+  [4DNESMTNNB3N](https://data.4dnucleome.org/experiment-set-replicates/4DNESMTNNB3N/),
+  wild-type mouse primary motor cortex.
+  - core table [4DNFID46OABK](https://data.4dnucleome.org/4DNFID46OABK/)
+    (1,684,734,602 B):
+    `https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/7c153998-3e92-4dbe-8e35-7a09570e6ed3/4DNFID46OABK.csv`
+  - cell table [4DNFICX8IVEK](https://data.4dnucleome.org/4DNFICX8IVEK/)
+    (16,564,294 B):
+    `https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/ad72715d-57cc-4d68-8ddb-536b94ed9bb0/4DNFICX8IVEK.csv`
+- **Content**: 9,582,069 spots, 188,891 traces, 11,045 traced cells
+  (14,733 rows in the cell table, with 240 RNA counts and cell types).
+  The download helper and build script (`download_data.py --liu2025_mop`,
+  `build_liu2025_mop.py`) come with PR #64.
+- **Used by**: `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer).
 
 ### `IMR90_chr21-18-20Mb.csv` — Bintu 2018 IMR90 chr21:18.6–20.6 Mb chromatin tracing (2 MB)
 

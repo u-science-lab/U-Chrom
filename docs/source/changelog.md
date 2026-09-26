@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **FOF-CT writer**: `cd.to_fofct(path, cell_table=None, rna_table=None)`
+  and `uchrom.io.write_fofct` write the 4DN FOF-CT core table (with its
+  `##` / `#` header lines, from `uns['fofct_header']` or `uns`) and
+  optionally the cell and RNA-spot companion tables — the inverse of
+  `from_fofct`.  `from_fofct` now parses floats exactly
+  (`float_precision="round_trip"`; the default parser could be 1 ulp off),
+  so FOF-CT round trips are value-identical.
 - `cd.results` is now a `ResultsStore` of `ResultRecord`s: every result
   carries its kind, producing function, parameters, inputs, uchrom
   version and timestamp.  Unwritable values raise `TypeError` at
