@@ -138,6 +138,10 @@ VARIANTS = {
           "write": _zarr_writer(_layout="2.2", float_encoding=False), "read": _zarr_read, "store": True},
     "AB": {"label": "2.2 layout + decimal floats", "ext": ".chromdata.zarr",
            "write": _zarr_writer(_layout="2.2", float_encoding=True), "read": _zarr_read, "store": True},
+    "AB_zstd1": {"label": "2.2 layout + decimal floats, zstd level 1", "ext": ".chromdata.zarr",
+                 "write": _zarr_writer(_layout="2.2", compression_level=1), "read": _zarr_read, "store": True},
+    "AB_lz4": {"label": "2.2 layout + decimal floats, lz4", "ext": ".chromdata.zarr",
+               "write": _zarr_writer(_layout="2.2", compression="lz4"), "read": _zarr_read, "store": True},
 }
 
 
@@ -240,7 +244,7 @@ def main():
     for size, (stage, info) in stages.items():
         for key in args.variants.split(","):
             v = VARIANTS[key]
-            vkey = key + (f"+{args.tag}" if args.tag else "")
+            vkey = key + (f"+{args.tag}" if args.tag and v["store"] else "")
             path = work / f"{args.data}_{size}_{key}{v['ext']}"
             C.remove(path)
             w = C.run_child(SCRIPT, ["--child", "write", key, str(stage), str(path)])
