@@ -19,9 +19,9 @@ placeholder data from `mock_data()`, to be replaced by `load_results()`.
 | Panel | Status | What the figure shows |
 |---|---|---|
 | a | schematic, matches the code | tables joined by keys; right: the actual `x.chromdata.zarr` layout written by `uchrom.core.zarrcd` (tables/*.parquet, index/, cellm/ · binm/, results/ · uns/, contacts/ · links/; `.cdz` = one zip); filled / hollow markers = eager / lazy parts of `read(backed=True)` |
-| b | **real** (Takei 2025 rep 1, 1e4–1e7 spots) | chromdata.zarr 2.0 (solid indigo), float32 variant, h5cd 2.0 (dashed), h5cd 1.x (dotted, light), Parquet, AnnData, FOF-CT; 1e8 infeasible in memory for every format |
-| c | **real** (1e4–1e7; backed also 1e8 by replicated cells, hollow markers) | get_trace / get_cell / get_chrom and open time: backed chromdata.zarr from disk (solid) vs h5cd 1.x in memory (dashed; open = full load); memory used, backed vs in memory |
-| d | **mock** | needs streaming (roadmap step 7); marked MOCK in the panel and in the watermark |
+| b | **real** (Takei 2025 rep 1, 1e4–1e7 spots) | chromdata.zarr 2.0 vs Parquet, AnnData (spots as obs) and FOF-CT; 1e8 infeasible in memory for every format.  The ChromData version comparison (h5cd 1.x, h5cd 2.0, chromdata.zarr, float32) is the supplementary `figS_formats.pdf` (`make_figS_formats.py`) |
+| c | **real** (1e4–1e7; backed also 1e8 by replicated cells, hollow markers) | backed chromdata.zarr from disk: get_trace / get_cell / get_chrom and open (solid) vs the common baseline "load the flat table, then subset" with Parquet and AnnData (dashed / dotted, load + get_trace); memory used, backed vs whole table loaded |
+| d | **mock** | needs streaming (roadmap step 7); grey dashed box "planned (roadmap step 7) — placeholder data" (no watermark; the mock figure boxes b–f) |
 | e | **real** (scHiCAR 1 Mb .scool) | linked vs copied (uncompressed, gzip) size; pseudo-bulk first query vs cached |
 | f | **real** | chromdata.zarr, FOF-CT (official `uchrom.io.write_fofct`), AnnData, .cool / .scool, PDB, .3dg round trips |
 

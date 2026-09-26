@@ -135,10 +135,9 @@ def draw(c: C) -> None:
     c.t(cx + 4, sy + sh + 2.4, "coords", size=7, weight="bold", ha="center", color=ORANGE)
     c.t(cx + 4, sy + sh + 5.2, "+ layers", size=6, color=GREY, ha="center")
     # on disk, spots and coords are one table: x, y, z are columns of spots.parquet
-    bx0, bx1, byb = sx, cx + 8, sy + sh + 7.4
-    c.line([bx0, bx0, bx1, bx1], [byb - 0.8, byb, byb, byb - 0.8], color=GREY, lw=0.4)
-    c.t((bx0 + bx1) / 2, byb + 1.9, "on disk: one table, spots.parquet (x · y · z columns)", size=6,
-        color=GREY, ha="center")
+    bx0, bx1, byb = sx, cx + 8, sy + sh + 8.4
+    c.line([bx0, bx0, bx1, bx1], [byb - 0.9, byb, byb, byb - 0.9], color=GREY, lw=0.4)
+    c.t((bx0 + bx1) / 2, byb + 2.4, "on disk: one table, spots.parquet", size=6, color=GREY, ha="center")
     tx = cx + 13
     table(c, tx, sy, 8, sh, PURPLE, rows=12)
     c.t(tx + 4, sy - 1.4, "IF · …", size=6, color=PURPLE, ha="center", weight="bold")
