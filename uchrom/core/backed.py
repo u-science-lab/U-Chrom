@@ -432,17 +432,56 @@ class BackedChromData(ChromData):
 
         coord_cols = list(self._parts["spot_meta"].get("coords", ("x", "y", "z")))
         stored = [c for c in spot_cols if c not in LOCI]
-        t = read(spot_name, stored + coord_cols)
-        coords = r.coords_of(t, coord_cols)
-        t = t.drop_columns(coord_cols)
-        spots = r.to_frame(spot_name, t)
+        full = rows is None and ranges is None
+        st_job = None
+        want_st = "spot_tracks" in r.files and bool(track_cols)
+        if want_st:
+            all_st = list(self._spot_tracks_proxy.columns)
+            st_cols = None if track_cols == all_st else track_cols
+            if full:
+                # a full read decodes the spot tracks while the spots are
+                # converted (string columns hold the GIL; Parquet does not)
+                import threading
+                box: dict = {}
+
+                def st_read():
+                    try:
+                        box["df"] = r.to_frame("spot_tracks", r.read_all("spot_tracks", st_cols))
+                    except BaseException as exc:  # pragma: no cover - re-raised below
+                        box["err"] = exc
+
+                st_job = threading.Thread(target=st_read, name="uchrom-spot-tracks")
+                st_job.start()
+        if full:
+            # full read: coordinates decoded straight into the (n, 3) array
+            coords = np.empty((r.n, 3), dtype=np.float64)
+            t = r.read_all(spot_name, stored + coord_cols,
+                           dest={c: coords[:, j] for j, c in enumerate(coord_cols)})
+        else:
+            t = read(spot_name, stored + coord_cols)
+            coords = r.coords_of(t, coord_cols)
+            t = t.drop_columns(coord_cols)
+        try:
+            spots = r.to_frame(spot_name, t)
+        finally:
+            if st_job is not None:
+                st_job.join()
         del t
         spot_tracks = None
-        if "spot_tracks" in r.files and track_cols:
-            all_st = list(self._spot_tracks_proxy.columns)
-            spot_tracks = r.to_frame("spot_tracks", read("spot_tracks", None if track_cols == all_st
-                                                         else track_cols))
-        layers = {k: r.coords_of(read(f"layers/{k}")) for k in layer_keys}
+        if st_job is not None:
+            if "err" in box:
+                raise box["err"]
+            spot_tracks = box["df"]
+        elif want_st:
+            spot_tracks = r.to_frame("spot_tracks", read("spot_tracks", st_cols))
+        def layer(k):
+            if rows is None and ranges is None:
+                a = np.empty((r.n, 3), dtype=np.float64)
+                r.read_all(f"layers/{k}", ["x", "y", "z"], dest={c: a[:, j] for j, c in enumerate("xyz")})
+                return a
+            return r.coords_of(read(f"layers/{k}"))
+
+        layers = {k: layer(k) for k in layer_keys}
         if subset:
             traces = self._filter_traces(spots)
             cells, cellm = self._filter_cells(spots)
@@ -464,8 +503,9 @@ class BackedChromData(ChromData):
                 or (spot_tracks is not None and c in spot_tracks.columns)]
         out._spot_view_order = view or None
         order = [c for c in self._spots_proxy.columns if c in spot_cols]
-        out.spots = out.spots[[c for c in order if c in out.spots.columns]
-                              + [c for c in out.spots.columns if c not in order]]
+        want = [c for c in order if c in out.spots.columns] + [c for c in out.spots.columns if c not in order]
+        if want != list(out.spots.columns):
+            out.spots = out.spots[want]
         return out
 
     def to_memory(self, *, columns=None, tracks=None) -> ChromData:

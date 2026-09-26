@@ -101,7 +101,7 @@ DEFAULT_CACHE_BYTES = 256 << 20
 DEFAULT_ZSTD_LEVEL = 3
 
 _SPOT_TABLES = ("spots", "spot_tracks")
-_ULP, _EXC = "#ulp", "#exc"   # helper columns of a decimal-encoded float (floatcodec)
+_EXC = "#exc"   # exception column of a decimal-encoded float (floatcodec)
 _COORD_COLUMNS = ("x", "y", "z")
 _LINK_FAMILIES = {"linked_cool": "contacts", "linked_scool": "contacts",
                   "linked_anndata": "links", "linked_mudata": "links"}
@@ -349,10 +349,11 @@ class _SpotTableWriter:
     to plain pages when a dictionary grows too large), floats are not;
     ``codec`` is the Parquet compression (zstd at ``level`` by default)."""
 
-    def __init__(self, path: Path, level: int, codec: str = "zstd"):
+    def __init__(self, path: Path, level: int, codec: str = "zstd", plain=None):
         self.path = path
         self.level = level
         self.codec = codec
+        self.plain = plain          # a container of column names, read at the first write
         self.writer = None
 
     def write(self, table) -> None:
@@ -361,7 +362,8 @@ class _SpotTableWriter:
         if self.writer is None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             dict_cols = [f.name for f in table.schema
-                         if f.type.id in _INT_TYPE_IDS() or str(f.type) in ("string", "large_string")]
+                         if (f.type.id in _INT_TYPE_IDS() or str(f.type) in ("string", "large_string"))
+                         and f.name not in (self.plain or ())]
             level = {"compression_level": self.level} if self.codec in ("zstd", "gzip", "brotli") else {}
             self.writer = pq.ParquetWriter(
                 self.path, table.schema, compression=self.codec, **level,
@@ -422,14 +424,20 @@ def _spot_frame_columns(df: pd.DataFrame, table: str, cat_meta: dict, cat_dir: P
     return cols
 
 
+#: the float encoding of a column is planned on its first rows in stored
+#: (primary) order — the same rows for the in-memory and the streaming writer
+PLAN_ROWS = 1 << 16
+
+
 def encode_float_columns(cols: List[Tuple[str, Any]], enc_meta: Dict[str, Any], *,
-                         plans: Optional[Mapping[str, Any]] = None,
-                         enabled: bool = True) -> List[Tuple[str, Any]]:
+                         plans: Optional[Mapping[str, Any]] = None, enabled: bool = True,
+                         plan_rows: Optional[np.ndarray] = None) -> List[Tuple[str, Any]]:
     """Replace the float64 columns of ``cols`` that pay for it by their
-    lossless decimal encoding (``<c>``, ``<c>#ulp``, ``<c>#exc``; see
+    lossless decimal encoding (``<c>`` packed int64, ``<c>#exc``; see
     :mod:`uchrom.core.floatcodec`).  ``plans`` fixes the plan of each column
-    (the streaming writer decides on its first chunk); otherwise a plan is
-    chosen per column and recorded in ``enc_meta``."""
+    (the streaming writer reuses the plans of its first piece); otherwise a
+    plan is chosen per column from the rows ``plan_rows`` (default: the
+    first :data:`PLAN_ROWS` rows) and recorded in ``enc_meta``."""
     import pyarrow as pa
     import pyarrow.types as pat
 
@@ -443,8 +451,9 @@ def encode_float_columns(cols: List[Tuple[str, Any]], enc_meta: Dict[str, Any], 
         if plans is not None:
             p = plans.get(name)
         elif (pat.is_float64(arr.type) and arr.null_count == 0
-              and not ({name + floatcodec.ULP_SUFFIX, name + floatcodec.EXC_SUFFIX} & names)):
-            p = floatcodec.plan(arr.to_numpy(zero_copy_only=False))
+              and name + floatcodec.EXC_SUFFIX not in names):
+            values = arr.to_numpy(zero_copy_only=False)
+            p = floatcodec.plan(values[plan_rows] if plan_rows is not None else values[:PLAN_ROWS])
         else:
             p = None
         if p is None:
@@ -452,9 +461,9 @@ def encode_float_columns(cols: List[Tuple[str, Any]], enc_meta: Dict[str, Any], 
             continue
         if arr.null_count:  # pragma: no cover - plans are made for null-free columns
             arr = pa.compute.fill_null(arr, np.nan)
-        q, u, e = floatcodec.encode_arrow(arr.to_numpy(zero_copy_only=False), p)
+        q, e = floatcodec.encode_arrow(arr.to_numpy(zero_copy_only=False), p)
         enc_meta[name] = dict(p)
-        out += [(name, q), (name + floatcodec.ULP_SUFFIX, u), (name + floatcodec.EXC_SUFFIX, e)]
+        out += [(name, q), (name + floatcodec.EXC_SUFFIX, e)]
     return out
 
 
@@ -482,6 +491,9 @@ class SpotPartitionWriter:
                  codec: str = "zstd"):
         self.flat = bool(flat)
         self.codec = codec
+        #: table → integer columns written without a dictionary (decimal-
+        #: encoded floats whose plan says plain pages are smaller)
+        self.plain_columns: Dict[str, set] = {}
         self.tpath = Path(tpath)
         self.tables = list(tables)
         self.level = int(level)
@@ -521,7 +533,8 @@ class SpotPartitionWriter:
         files = {name: self.rel_path(name, pdir) for name in self.tables}
         self._cur = {"chrom": chrom_name, "code": int(chrom_code), "dir": pdir, "n_rows": 0,
                      "files": files}
-        self._writers = {name: _SpotTableWriter(self.tpath / rel, self.level, codec=self.codec)
+        self._writers = {name: _SpotTableWriter(self.tpath / rel, self.level, codec=self.codec,
+                                                plain=self.plain_columns.setdefault(name, set()))
                          for name, rel in files.items()}
         self._pending: Dict[str, List[Any]] = {name: [] for name in self.tables}
         self._pend_n = 0
@@ -797,9 +810,10 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
 
     if layout == "2.2":
         encode = float_encoding and coord_dtype == np.dtype("float64")
+        plan_rows = order[:PLAN_ROWS] if order is not None else None     # the first primary rows
         for name in list(columns):
             enc: Dict[str, Any] = {}
-            columns[name] = encode_float_columns(columns[name], enc, enabled=encode)
+            columns[name] = encode_float_columns(columns[name], enc, enabled=encode, plan_rows=plan_rows)
             if name.startswith("layers/"):
                 tables_meta.setdefault("layer_encoding", {})[name.split("/", 1)[1]] = enc
             else:
@@ -954,6 +968,11 @@ def _write_spots_partitioned(columns, tpath: Path, tables_meta, layer_names, *, 
     return w.index(), {"n_partitions": len(w.partitions)}
 
 
+def plain_columns(encoding: Mapping[str, Any]) -> set:
+    """Encoded float columns stored without a Parquet dictionary."""
+    return {c for c, p in (encoding or {}).items() if p and not p.get("dictionary", True)}
+
+
 def projection_columns(spot_columns: Sequence[str], has_cells: bool) -> List[str]:
     """Physical columns of the format 2.2 coordinate projection (keys +
     the coordinate columns, encoded or not)."""
@@ -982,6 +1001,11 @@ def _write_spots_v22(columns, tpath: Path, tables_meta, layer_names, *, cell, tr
     proj = SpotPartitionWriter(tpath, ["coords_by_chrom"], level=level,
                                row_group_rows=projection_row_group_rows, has_cells=has_cells,
                                layer_names={}, codec=codec)
+    for name in names:
+        primary.plain_columns[name] = plain_columns(
+            tables_meta.get("layer_encoding", {}).get(name.split("/", 1)[1], {}) if name.startswith("layers/")
+            else tables_meta[name].get("encoding", {}))
+    proj.plain_columns["coords_by_chrom"] = plain_columns(tables_meta["spots"].get("encoding", {}))
     pcols = projection_columns(tables["spots"].column_names, has_cells)
     ptable = tables["spots"].select(pcols)
     idx_arrow = pa.array(order) if order is not None else None
@@ -1006,7 +1030,6 @@ def _write_spots_v22(columns, tpath: Path, tables_meta, layer_names, *, cell, tr
         proj.begin(-1, None, "empty")
         proj.write_empty({"coords_by_chrom": ptable})
         proj.end()
-        primary_run = np.zeros(0, dtype=np.int64)
     else:
         pperm = np.argsort(spot_chrom, kind="stable")
         src_arrow = pa.array(order[pperm] if order is not None else pperm)
@@ -1024,11 +1047,8 @@ def _write_spots_v22(columns, tpath: Path, tables_meta, layer_names, *, cell, tr
                 proj.add(part, cell[sel], trace[sel])
                 del part
             proj.end()
-        # the primary trace run of every projection run
-        starts = pperm[proj.index()["trace_offsets"][:-1]]
-        primary_run = np.searchsorted(pindex["trace_offsets"], starts, side="right") - 1
     pidx = proj.index()
-    pidx["primary_run"] = np.asarray(primary_run, dtype=np.int64)
+    pidx["primary_run"] = primary_runs(pindex, pidx) if n else np.zeros(0, dtype=np.int64)
 
     tables_meta["spots"]["file"] = "spots.parquet"
     tables_meta["spots"]["layout"] = "primary"
@@ -1042,6 +1062,27 @@ def _write_spots_v22(columns, tpath: Path, tables_meta, layer_names, *, cell, tr
     index["coords_by_chrom"] = pidx
     return index, {"n_partitions": len(proj.partitions), "row_group_rows": int(row_group_rows),
                    "projection_row_group_rows": int(projection_row_group_rows)}
+
+
+def primary_runs(primary_index: Mapping[str, np.ndarray], proj_index: Mapping[str, np.ndarray]) -> np.ndarray:
+    """The primary trace run of every projection run (format 2.2).
+
+    Primary runs are the (cell, trace) runs of the cell-sorted primary, in
+    increasing (cell, trace) order; a projection run is a (chromosome,
+    cell, trace) run, so it belongs to the primary run of its (cell, trace)."""
+    pc = np.asarray(primary_index["trace_cells"], dtype=np.int64)
+    pt = np.asarray(primary_index["trace_codes"], dtype=np.int64)
+    qc = np.asarray(proj_index["trace_cells"], dtype=np.int64)
+    qt = np.asarray(proj_index["trace_codes"], dtype=np.int64)
+    if not len(qt):
+        return np.zeros(0, dtype=np.int64)
+    width = int(max(pt.max(initial=0), qt.max(initial=0))) + 2
+    pkey = (pc + 1) * width + (pt + 1)
+    qkey = (qc + 1) * width + (qt + 1)
+    k = np.searchsorted(pkey, qkey)
+    if np.any(k >= len(pkey)) or np.any(pkey[np.minimum(k, len(pkey) - 1)] != qkey):  # pragma: no cover
+        raise AssertionError("projection run without a primary run")
+    return k.astype(np.int64)
 
 
 def _projection_meta(tables_meta: Dict[str, Any], proj: "SpotPartitionWriter", *, n: int, has_cells: bool,
@@ -1284,8 +1325,9 @@ class Container:
             return rel in self._members
         return (self.path / rel).exists()
 
-    def parquet(self, rel: str):
-        """``pyarrow.parquet.ParquetFile`` of a member.
+    def parquet(self, rel: str, read_dictionary: Optional[Sequence[str]] = None):
+        """``pyarrow.parquet.ParquetFile`` of a member (``read_dictionary``:
+        columns read as Arrow dictionary arrays).
 
         Plain file reads, not memory maps: mapped pages would count as
         resident memory in backed mode.  A ``.cdz`` member (stored
@@ -1294,18 +1336,19 @@ class Container:
         import pyarrow as pa
         import pyarrow.parquet as pq
 
+        kw = {"read_dictionary": list(read_dictionary)} if read_dictionary else {}
         if self._zip is None:
-            return pq.ParquetFile(str(self.path / rel))
+            return pq.ParquetFile(str(self.path / rel), **kw)
         info = self._members[rel]
         if info.compress_type != zipfile.ZIP_STORED:
             with self._zip.open(info) as fh:
-                return pq.ParquetFile(pa.BufferReader(fh.read()))
+                return pq.ParquetFile(pa.BufferReader(fh.read()), **kw)
         with open(self.path, "rb") as fh:
             fh.seek(info.header_offset)
             header = fh.read(30)
         name_len, extra_len = struct.unpack("<HH", header[26:30])
         offset = info.header_offset + 30 + name_len + extra_len
-        return pq.ParquetFile(pa.PythonFile(_ByteRange(self.path, offset, info.file_size), mode="r"))
+        return pq.ParquetFile(pa.PythonFile(_ByteRange(self.path, offset, info.file_size), mode="r"), **kw)
 
     def read_frame(self, rel: str) -> pd.DataFrame:
         return _arrow_to_frame(self.parquet(rel).read())
@@ -1552,6 +1595,53 @@ def _read_uns(c: Container, rel: str, group=None) -> dict:
 #: reads of at least this many rows from several pieces are combined into
 #: single-chunk columns (so the pandas conversion is zero-copy)
 _COMBINE_MIN_ROWS = 1 << 18
+#: rows per parallel task of a full-table read (whole row groups)
+_FULL_READ_TASK_ROWS = 1 << 18
+
+
+class _ChunkStats:
+    """Parquet column-chunk statistics of the files of one table (per
+    partition): which chunks hold nulls or are all null."""
+
+    def __init__(self, pfs):
+        self.mds = [pf.metadata for pf in pfs]
+        self.names = [list(pf.schema_arrow.names) for pf in pfs]
+        self._memo: Dict[Tuple[int, int, str], Any] = {}
+
+    def _stat(self, p: int, g: int, col: str):
+        key = (p, g, col)
+        if key not in self._memo:
+            try:
+                j = self.names[p].index(col)
+            except ValueError:
+                self._memo[key] = None
+                return None
+            cc = self.mds[p].row_group(g).column(j)
+            st = cc.statistics
+            self._memo[key] = (cc.num_values, st if st is not None else None)
+        return self._memo[key]
+
+    def any_nulls(self, col: str) -> bool:
+        for p, md in enumerate(self.mds):
+            for g in range(md.num_row_groups):
+                r = self._stat(p, g, col)
+                if r is None:
+                    continue
+                _, st = r
+                if st is None or not st.has_null_count or st.null_count:
+                    return True
+        return False
+
+    def all_null(self, p: int, groups: Sequence[int], col: str) -> bool:
+        for g in groups:
+            r = self._stat(p, g, col)
+            if r is None:
+                continue
+            nv, st = r
+            if st is None or not st.has_null_count or st.null_count != nv:
+                return False
+        return True
+
 
 
 _IO_POOL = None
@@ -1765,7 +1855,7 @@ class SpotRows:
         names = list(self.pf(name).schema_arrow.names)
         if not enc:
             return names
-        helpers = {c + sfx for c in enc for sfx in (_ULP, _EXC)}
+        helpers = {c + _EXC for c in enc}
         return [c for c in names if c not in helpers]
 
     def physical(self, name: str, columns: Optional[Sequence[str]]) -> Optional[List[str]]:
@@ -1777,7 +1867,7 @@ class SpotRows:
         for c in columns:
             out.append(c)
             if c in enc:
-                out += [c + _ULP, c + _EXC]
+                out.append(c + _EXC)
         return out
 
     def decode(self, name: str, table):
@@ -1792,7 +1882,7 @@ class SpotRows:
         from . import floatcodec
 
         names = table.column_names
-        todo = [c for c in names if c in enc and c + _ULP in names]
+        todo = [c for c in names if c in enc and pa.types.is_integer(table.schema.field(c).type)]
         if not todo:
             return table
         n = table.num_rows
@@ -1801,15 +1891,15 @@ class SpotRows:
             buf = pa.allocate_buffer(max(1, n * 8))
             out = np.frombuffer(buf, dtype=np.float64, count=n)
             if n:
-                floatcodec.decode_arrow(table.column(col), table.column(col + _ULP),
-                                        table.column(col + _EXC), enc[col], out=out)
+                floatcodec.decode_arrow(table.column(col), table.column(col + _EXC) if col + _EXC in names
+                                        else None, enc[col], out=out)
             return pa.Array.from_buffers(pa.float64(), n, [None, buf])
 
         if len(todo) > 1 and n >= 1 << 16:
             decoded = dict(zip(todo, _io_pool().map(one, todo)))
         else:
             decoded = {c: one(c) for c in todo}
-        helpers = {c + sfx for c in todo for sfx in (_ULP, _EXC)}
+        helpers = {c + _EXC for c in todo}
         cols, fields = [], []
         for c in names:
             if c in helpers:
@@ -1831,29 +1921,142 @@ class SpotRows:
 
     # -- raw Arrow access --------------------------------------------------
 
-    def read_all(self, name: str, columns: Optional[Sequence[str]] = None):
-        """The whole table (all partitions), with single-chunk columns.
+    def read_all(self, name: str, columns: Optional[Sequence[str]] = None,
+                 dest: Optional[Mapping[str, np.ndarray]] = None):
+        """The whole table (all partitions), decoded, with single-chunk columns.
 
-        Partitions are decoded one at a time and copied into preallocated
-        buffers, so the peak is the table plus one partition (see
-        :class:`_ColumnFill`), and ``to_pandas`` is zero-copy."""
+        Row groups are read and decoded **in parallel** — tasks of about
+        :data:`_FULL_READ_TASK_ROWS` rows, one ``ParquetFile`` per thread —
+        straight into one preallocated buffer per numeric column (from
+        Arrow's pool, so ``to_pandas`` is zero-copy; decimal-encoded floats
+        are decoded into it).  ``dest`` maps logical columns to float64 /
+        integer arrays of ``n`` rows to fill instead (e.g. the columns of a
+        coordinate array).  Helper columns of encoded floats whose Parquet
+        statistics show nothing to apply (no exceptions) are not read.  Non-numeric columns (strings, booleans)
+        and integer columns with nulls are gathered as chunks and combined.
+        Returns an Arrow table of the logical columns (``dest`` columns
+        left out: they are in the given arrays)."""
         import pyarrow as pa
+        import pyarrow.types as pat
 
-        cols = self.physical(name, columns)
-        with self._lock:
-            if self.n_partitions == 1:
-                return self.decode(name, self.pf(name, 0).read(columns=cols, use_threads=True))
-            fills = None
-            schema = None
-            for p in range(self.n_partitions):
-                t = self.pf(name, p).read(columns=cols, use_threads=True)
-                if fills is None:
-                    schema = t.schema
-                    fills = [_ColumnFill(f.type, self.n) for f in schema]
-                for i, f in enumerate(fills):
-                    f.add(t.column(i))
-                del t
-            return self.decode(name, pa.Table.from_arrays([f.finish() for f in fills], schema=schema))
+        from . import floatcodec
+
+        logical = list(columns) if columns is not None else self.columns(name)
+        enc = {c: p for c, p in (self.encoding.get(name) or {}).items() if c in logical}
+        schema = self.empty(name, logical).schema
+        n = self.n
+        dest = dict(dest or {})
+        pf0 = [self.pf(name, p) for p in range(self.n_partitions)]
+        stats = _ChunkStats(pf0)
+        # numeric columns go into buffers unless an integer column holds nulls
+        bufs: Dict[str, np.ndarray] = {}
+        owners: Dict[str, Any] = {}
+        chunked: Dict[str, List[Any]] = {}
+        for f in schema:
+            c = f.name
+            numeric = pat.is_integer(f.type) or pat.is_floating(f.type)
+            if c in dest:
+                bufs[c] = dest[c]
+            elif numeric and (pat.is_floating(f.type) or c in enc or not stats.any_nulls(c)):
+                dt = np.dtype(f.type.to_pandas_dtype())
+                buf = pa.allocate_buffer(max(1, n * dt.itemsize))
+                owners[c] = buf
+                bufs[c] = np.frombuffer(buf, dtype=dt, count=n)
+            else:
+                chunked[c] = []
+        # string columns are read as dictionaries: one Python string per
+        # distinct value, not per row (see ``to_frame``)
+        str_cols = [f.name for f in schema if f.name in chunked
+                    and (pat.is_string(f.type) or pat.is_large_string(f.type))]
+        # tasks: runs of row groups of one partition, in row order
+        tasks: List[Tuple[int, List[int], int, int]] = []
+        for p in range(self.n_partitions):
+            g0, g1 = int(self.part_groups[p]), int(self.part_groups[p + 1])
+            g = g0
+            while g < g1:
+                h = g + 1
+                while h < g1 and self.rg[h + 1] - self.rg[g] <= _FULL_READ_TASK_ROWS:
+                    h += 1
+                tasks.append((p, list(range(g - g0, h - g0)), int(self.rg[g]), int(self.rg[h])))
+                g = h
+        local = threading.local()
+
+        def pf_of(p):
+            cache = getattr(local, "pf", None)
+            if cache is None:
+                cache = local.pf = {}
+            key = (name, p)
+            if key not in cache:
+                cache[key] = self.c.parquet(self.part_files[p][name], read_dictionary=str_cols)
+            return cache[key]
+
+        def run(i):
+            p, groups, a, b = tasks[i]
+            want = []
+            for c in logical:
+                want.append(c)
+                if c in enc:
+                    if not stats.all_null(p, groups, c + _EXC):
+                        want.append(c + _EXC)
+            t = pf_of(p).read_row_groups(groups, columns=want, use_threads=False)
+            names = set(t.column_names)
+            out = {}
+            for c in logical:
+                if c in bufs:
+                    # encoded floats: the packed integers, decoded in place below
+                    col = t.column(c)
+                    dst = bufs[c].view(np.int64) if c in enc else bufs[c]
+                    pos = a
+                    for piece in col.chunks:
+                        m = len(piece)
+                        if m:
+                            dst[pos:pos + m] = piece.to_numpy(zero_copy_only=False)
+                        pos += m
+                    if c + _EXC in names:
+                        out[c + _EXC] = (a, t.column(c + _EXC))
+                else:
+                    out[c] = t.column(c).chunks
+            return out
+
+        if n:
+            results = list(_io_pool().map(run, range(len(tasks)))) if len(tasks) > 1 else [run(0)]
+            excs: Dict[str, List[Tuple[int, Any]]] = {}
+            for res in results:
+                for c, val in res.items():
+                    if c.endswith(_EXC) and c[:-len(_EXC)] in enc:
+                        excs.setdefault(c[:-len(_EXC)], []).append(val)
+                    else:
+                        chunked[c].extend(val)
+            # decode in blocks (cache-sized, several columns at a time in threads)
+            block = 1 << 20
+            jobs = [(c, s0, min(n, s0 + block)) for c in enc for s0 in range(0, n, block)]
+            list(_io_pool().map(lambda j: floatcodec.decode_inplace(bufs[j[0]], enc[j[0]], j[1], j[2]), jobs))
+            for c, parts in excs.items():
+                for a, col in parts:
+                    import pyarrow.compute as pc
+                    valid = pc.is_valid(col).to_numpy(zero_copy_only=False)
+                    if valid.any():
+                        vals = pc.fill_null(col, 0.0).to_numpy(zero_copy_only=False)
+                        idx = np.flatnonzero(valid)
+                        bufs[c][a + idx] = vals[idx]
+        arrays, fields = [], []
+        for f in schema:
+            c = f.name
+            if c in dest:
+                continue
+            fields.append(f)
+            if c in owners:
+                arrays.append(pa.Array.from_buffers(f.type, n, [None, owners[c]]))
+            elif c in str_cols:
+                chunks = chunked[c]
+                typ = pa.dictionary(pa.int32(), f.type)
+                fields[-1] = pa.field(c, typ)
+                arrays.append(pa.chunked_array(chunks, type=typ) if chunks else pa.chunked_array([], type=typ))
+            else:
+                chunks = chunked[c]
+                arrays.append(pa.chunked_array(chunks, type=f.type).combine_chunks() if chunks
+                              else pa.array([], type=f.type))
+        return pa.Table.from_arrays(arrays, schema=pa.schema(fields, metadata=schema.metadata))
 
     def _local(self, g: int) -> Tuple[int, int]:
         p = int(self.group_part[g])
@@ -1996,25 +2199,36 @@ class SpotRows:
     # -- conversion --------------------------------------------------------
     def to_frame(self, name: str, table) -> pd.DataFrame:
         """Arrow table of a spot-aligned file → DataFrame (codes → categoricals)."""
+        import pyarrow as pa
+
         cats = self.cats.get(name, {})
         names = list(table.column_names)
         coded = [c for c in names if c in cats]
         codes = {c: table.column(c).to_numpy() for c in coded}
+        # strings read as dictionaries (full reads): object columns sharing
+        # one Python string per distinct value
+        strs = {c: _dictionary_strings(table.column(c)) for c in names if c not in cats
+                and pa.types.is_dictionary(table.schema.field(c).type)}
+        coded += list(strs)
         plain = table.drop_columns(coded) if coded else table
         # Arrow's own conversion: multi-threaded, one block per column
         df = plain.to_pandas(split_blocks=True, self_destruct=True, use_threads=True) \
             if plain.num_columns else pd.DataFrame(index=pd.RangeIndex(table.num_rows))
         del plain, table
+        df.index = pd.RangeIndex(len(df))
+        # categoricals inserted at their places (no copy of the other columns)
         for c in coded:
+            if c in strs:
+                df.insert(names.index(c), c, strs[c])
+                continue
             categories, ordered = cats[c]
             if _FROM_CODES_VALIDATE:
-                df[c] = pd.Categorical.from_codes(codes[c], categories=categories,
-                                                  ordered=ordered, validate=False)
+                cat = pd.Categorical.from_codes(codes[c], categories=categories, ordered=ordered, validate=False)
             else:  # pragma: no cover - pandas < 2.1
-                df[c] = pd.Categorical.from_codes(codes[c], categories=categories, ordered=ordered)
-        if list(df.columns) != names:
+                cat = pd.Categorical.from_codes(codes[c], categories=categories, ordered=ordered)
+            df.insert(names.index(c), c, cat)
+        if list(df.columns) != names:  # pragma: no cover - insert keeps the order
             df = df[names]
-        df.index = pd.RangeIndex(len(df))
         return df
 
     def coords_of(self, table, columns=_COORD_COLUMNS) -> np.ndarray:
@@ -2022,6 +2236,29 @@ class SpotRows:
         for j, c in enumerate(columns):
             out[:, j] = table.column(c).to_numpy()
         return out
+
+
+def _dictionary_strings(col) -> np.ndarray:
+    """Object array of a (chunked) dictionary-encoded string column; nulls
+    become ``None``, as ``to_pandas`` makes them."""
+    import pyarrow as pa
+
+    col = col if isinstance(col, pa.ChunkedArray) else pa.chunked_array([col])
+    n = len(col)
+    out = np.empty(n, dtype=object)
+    if not n:
+        return out
+    col = col.unify_dictionaries()
+    values = col.chunk(0).dictionary.to_numpy(zero_copy_only=False)
+    values = np.append(values, None)                    # index -1: null
+    pos = 0
+    for ch in col.chunks:
+        m = len(ch)
+        idx = ch.indices.fill_null(-1).to_numpy(zero_copy_only=False) if ch.null_count else \
+            ch.indices.to_numpy(zero_copy_only=False)
+        np.take(values, idx, out=out[pos:pos + m])
+        pos += m
+    return out
 
 
 def _is_numeric(t) -> bool:

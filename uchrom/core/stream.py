@@ -43,9 +43,11 @@ import pandas as pd
 
 from .bins import BIN_ID, LOCI, bins_from_loci, map_loci_to_bins, normalise_bins
 from .zarrcd import (
-    DEFAULT_ROW_GROUP_ROWS, DEFAULT_ZSTD_LEVEL, SpotPartitionWriter, ZARR_SUFFIX, _arrow_column,
-    _code_dtype, _compressor, _is_chromdata_dir, _partition_meta, _rmtree, _safe_names,
-    _write_frame, _write_root_meta, _write_small_parts, _zarr, _zarr_array, partition_dirs,
+    DEFAULT_PROJECTION_ROW_GROUP_ROWS, DEFAULT_ROW_GROUP_ROWS, DEFAULT_ZSTD_LEVEL, PLAN_ROWS,
+    SpotPartitionWriter, ZARR_FORMAT_VERSION, ZARR_SUFFIX, _arrow_column, _code_dtype, _compressor,
+    _is_chromdata_dir, _partition_meta, _projection_meta, _rmtree, _safe_names, _write_frame,
+    _write_root_meta, _write_small_parts, _zarr, _zarr_array, encode_float_columns, partition_dirs,
+    plain_columns, primary_runs, projection_columns,
 )
 
 PathLike = Union[str, Path]
@@ -76,18 +78,32 @@ class ChromDataWriter:
         loci must be rows of it.  Default: derived from the loci seen, as
         ``ChromData`` derives them (chromosome, start, end order).  Can also
         be given to :meth:`finish`.
-    coord_dtype, row_group_rows, compression_level, keep_source_order
+    coord_dtype, row_group_rows, compression_level, keep_source_order, float_encoding,
+    projection_row_group_rows
         As for :meth:`ChromData.write`.
+    layout : ``"2.2"`` (default) or ``"2.1"``
+        Store layout (format version) to write.
     memory_budget : int or str, optional
         Working-memory target of :meth:`finish` (default
         :data:`uchrom.settings.memory_budget`).
     """
 
     def __init__(self, path: PathLike, *, bins: Optional[pd.DataFrame] = None,
-                 coord_dtype: str = "float64", row_group_rows: int = DEFAULT_ROW_GROUP_ROWS,
+                 coord_dtype: str = "float64", row_group_rows: Optional[int] = None,
                  compression_level: int = DEFAULT_ZSTD_LEVEL, keep_source_order: bool = True,
-                 memory_budget=None, spill_dir: Optional[PathLike] = None):
+                 memory_budget=None, spill_dir: Optional[PathLike] = None,
+                 float_encoding: bool = True,
+                 projection_row_group_rows: int = DEFAULT_PROJECTION_ROW_GROUP_ROWS,
+                 layout: str = ZARR_FORMAT_VERSION):
         from uchrom.settings import settings
+
+        if layout not in ("2.1", "2.2"):
+            raise ValueError("the streaming writer writes format 2.1 or 2.2")
+        self.layout = layout
+        self.float_encoding = bool(float_encoding)
+        self.projection_row_group_rows = int(projection_row_group_rows)
+        if row_group_rows is None:
+            row_group_rows = DEFAULT_ROW_GROUP_ROWS if layout == "2.2" else DEFAULT_PROJECTION_ROW_GROUP_ROWS
 
         self.path = Path(path)
         if not self.path.name.lower().endswith(".zarr"):
@@ -504,6 +520,9 @@ class ChromDataWriter:
             names.append("spot_tracks")
         layer_names = _safe_names(list(self._layer_keys))
         names += [f"layers/{k}" for k in self._layer_keys]
+        if self.layout == "2.2":
+            return self._write_v22(root, root_path, tpath, tables_meta, names, layer_names, bins, pmap, cats,
+                                   extra_cats, schema, comp, small)
         w = SpotPartitionWriter(tpath, names, level=self.level, row_group_rows=self.row_group_rows,
                                 has_cells=has_cells, layer_names=layer_names)
 
@@ -545,7 +564,7 @@ class ChromDataWriter:
                                                   schema))
                 piece = pieces[0] if len(pieces) == 1 else pa.concat_tables(pieces)
                 del pieces
-                out, cell_c, trace_c, seq = self._encode(piece, pmap, cats, extra_cats, n_bins)
+                out, cell_c, trace_c, seq, _ = self._encode(piece, pmap, cats, extra_cats, n_bins)
                 del piece
                 w.add(out, cell_c, trace_c)
                 seq_parts.append(seq)
@@ -624,7 +643,199 @@ class ChromDataWriter:
             out[f"layers/{k}"] = pa.Table.from_arrays(
                 [pa.array(piece.column(f"l:{k}:{c}").take(take).to_numpy().astype(self.coord_dtype, copy=False))
                  for c in ("x", "y", "z")], names=["x", "y", "z"])
-        return out, cell_c, trace_c, seq
+        return out, cell_c, trace_c, seq, bin_id
+
+    def _write_v22(self, root, root_path: Path, tpath: Path, tables_meta, names, layer_names, bins, pmap,
+                   cats, extra_cats, schema, comp, small) -> None:
+        """Format 2.2: the cell-sorted primary (pieces of whole cells merged
+        from every chromosome's spill runs), then the coordinate projection
+        (one chromosome at a time) — the store the in-memory writer makes."""
+        import pyarrow as pa
+
+        has_cells = bool(self._has_cells)
+        n_bins = len(bins)
+        chrom_names = [str(c) for c in bins["chrom"].cat.categories]
+        bin_chrom = np.asarray(bins["chrom"].cat.codes, dtype=np.int64)
+        run_chrom = {name: chrom_names.index(name) if name in chrom_names else None for name in self._runs}
+        for name, code in run_chrom.items():
+            if code is None:
+                raise ValueError(f"chromosome {name!r} of the spots is not in bins")
+        primary = SpotPartitionWriter(tpath, names, level=self.level, row_group_rows=self.row_group_rows,
+                                      has_cells=has_cells, layer_names=layer_names, flat=True)
+        proj = SpotPartitionWriter(tpath, ["coords_by_chrom"], level=self.level,
+                                   row_group_rows=self.projection_row_group_rows, has_cells=has_cells,
+                                   layer_names={})
+        encode = self.float_encoding and self.coord_dtype == np.dtype("float64")
+        plans: Optional[Dict[str, Dict[str, Any]]] = None
+        enc_meta: Dict[str, Dict[str, Any]] = {name: {} for name in names}
+        budget_rows = max(1, int(self.memory_budget // (4 * self._row_bytes(schema)))) if schema else 1
+        key_cats = cats.get("cell_id" if has_cells else "trace_id")
+
+        def encoded(out):
+            nonlocal plans
+            res = {}
+            for name in names:
+                t = out[name]
+                cols = [(c, t.column(c).combine_chunks()) for c in t.column_names]
+                res[name] = encode_float_columns(cols, enc_meta[name], enabled=encode,
+                                                 plans=None if plans is None else plans[name])
+            if plans is None:
+                plans = {name: dict(enc_meta[name]) for name in names}
+                for name in names:
+                    primary.plain_columns.setdefault(name, set()).update(plain_columns(plans[name]))
+                proj.plain_columns.setdefault("coords_by_chrom", set()).update(plain_columns(plans["spots"]))
+            return {name: pa.Table.from_arrays([a for _, a in cols], names=[c for c, _ in cols])
+                    for name, cols in res.items()}
+
+        # -- primary: pieces of whole cells over all chromosomes --------------
+        runs = [r for name in self._runs for r in self._runs[name]]
+        seq_parts: List[np.ndarray] = []
+        primary.begin(-1, None, None)
+        if runs:
+            run_codes = [key_cats.get_indexer(r["keys"]) for r in runs]
+            all_codes = np.unique(np.concatenate(run_codes))
+            counts = np.zeros(len(all_codes), dtype=np.int64)
+            for r, rc in zip(runs, run_codes):
+                counts[np.searchsorted(all_codes, rc)] += np.diff(r["starts"])
+            csum = np.cumsum(counts)
+            cuts = [0]
+            while cuts[-1] < len(all_codes):
+                base = csum[cuts[-1] - 1] if cuts[-1] else 0
+                # the first piece holds the rows the float encoding is planned on
+                want = budget_rows if cuts[-1] else max(budget_rows, PLAN_ROWS)
+                k = int(np.searchsorted(csum, base + want, side="right"))
+                cuts.append(min(len(all_codes), max(k, cuts[-1] + 1)))
+            for c0, c1 in zip(cuts[:-1], cuts[1:]):
+                lo_code, hi_code = all_codes[c0], all_codes[c1 - 1]
+                pieces = []
+                for r, rc in zip(runs, run_codes):
+                    k0 = int(np.searchsorted(rc, lo_code, side="left"))
+                    k1 = int(np.searchsorted(rc, hi_code, side="right"))
+                    if k1 > k0:
+                        pieces.append(_read_slice(r["path"], int(r["starts"][k0]), int(r["starts"][k1]), schema))
+                piece = pieces[0] if len(pieces) == 1 else pa.concat_tables(pieces)
+                del pieces
+                out, cell_c, trace_c, seq, bin_id = self._encode(piece, pmap, cats, extra_cats, n_bins)
+                del piece
+                primary.add(encoded(out), cell_c, trace_c, chrom=bin_chrom[bin_id])
+                seq_parts.append(seq)
+                del out
+        else:
+            primary.write_empty(encoded(self._empty_tables(n_bins, cats)))
+        primary.end()
+        pindex = primary.index()
+
+        # -- the coordinate projection: one chromosome at a time ---------------
+        coord_plans = {c: p for c, p in (plans or {}).get("spots", {}).items() if c in ("x", "y", "z")}
+        order = sorted(self._runs, key=lambda nm: run_chrom[nm])
+        dirs = partition_dirs(order)
+        pcols = None
+        for p, name in enumerate(order):
+            cruns = self._runs[name]
+            proj.begin(run_chrom[name], name, dirs[p])
+            cr_codes = [key_cats.get_indexer(r["keys"]) for r in cruns]
+            all_codes = np.unique(np.concatenate(cr_codes))
+            counts = np.zeros(len(all_codes), dtype=np.int64)
+            for r, rc in zip(cruns, cr_codes):
+                counts[np.searchsorted(all_codes, rc)] += np.diff(r["starts"])
+            csum = np.cumsum(counts)
+            cuts = [0]
+            while cuts[-1] < len(all_codes):
+                base = csum[cuts[-1] - 1] if cuts[-1] else 0
+                k = int(np.searchsorted(csum, base + 4 * budget_rows, side="right"))
+                cuts.append(max(k, cuts[-1] + 1))
+            for c0, c1 in zip(cuts[:-1], cuts[1:]):
+                lo_code, hi_code = all_codes[c0], all_codes[c1 - 1]
+                pieces = []
+                for r, rc in zip(cruns, cr_codes):
+                    k0 = int(np.searchsorted(rc, lo_code, side="left"))
+                    k1 = int(np.searchsorted(rc, hi_code, side="right"))
+                    if k1 > k0:
+                        pieces.append(_read_slice(r["path"], int(r["starts"][k0]), int(r["starts"][k1]), schema,
+                                                  columns=self._proj_spill_columns()))
+                piece = pieces[0] if len(pieces) == 1 else pa.concat_tables(pieces)
+                del pieces
+                t, cell_c, trace_c = self._encode_projection(piece, pmap, cats, n_bins)
+                del piece
+                cols = encode_float_columns([(c, t.column(c).combine_chunks()) for c in t.column_names], {},
+                                            enabled=encode, plans=coord_plans)
+                pcols = pcols or projection_columns([c for c, _ in cols], has_cells)
+                proj.add({"coords_by_chrom": pa.Table.from_arrays([a for _, a in cols],
+                                                                  names=[c for c, _ in cols]).select(pcols)},
+                         cell_c, trace_c)
+            proj.end()
+        if not order:
+            proj.begin(-1, None, "empty")
+            e = self._empty_tables(n_bins, cats)["spots"]
+            cols = encode_float_columns([(c, e.column(c).combine_chunks()) for c in e.column_names], {},
+                                        enabled=encode, plans=coord_plans)
+            et = pa.Table.from_arrays([a for _, a in cols], names=[c for c, _ in cols])
+            proj.write_empty({"coords_by_chrom": et.select(projection_columns(et.column_names, has_cells))})
+            proj.end()
+        pidx = proj.index()
+        pidx["primary_run"] = primary_runs(pindex, pidx)
+
+        for name in names:
+            if name.startswith("layers/"):
+                tables_meta.setdefault("layer_encoding", {})[name.split("/", 1)[1]] = enc_meta[name]
+            else:
+                tables_meta[name]["encoding"] = enc_meta[name]
+        tables_meta["spots"]["file"] = "spots.parquet"
+        tables_meta["spots"]["layout"] = "primary"
+        if "spot_tracks" in tables_meta:
+            tables_meta["spot_tracks"]["file"] = "spot_tracks.parquet"
+        tables_meta["layers"] = {k: primary.rel_path(f"layers/{k}", None) for k in self._layer_keys}
+        _projection_meta(tables_meta, proj, n=self.n, has_cells=has_cells, rows=self.projection_row_group_rows)
+        ig = root.create_group("index")
+        for nm in ("trace_offsets", "trace_codes", "trace_cells", "chrom_trace", "cell_offsets",
+                   "cell_codes", "row_groups"):
+            _zarr_array(ig, nm, pindex[nm], comp)
+        sub = ig.create_group("coords_by_chrom")
+        for nm, data in pidx.items():
+            _zarr_array(sub, nm, data, comp)
+        seq = np.concatenate(seq_parts) if seq_parts else np.zeros(0, dtype=np.int64)
+        sorted_already = bool(np.all(seq[1:] > seq[:-1])) if len(seq) else True
+        if not sorted_already and self.keep_source_order:
+            _zarr_array(ig, "source_row", seq.astype(np.int64), comp)
+        _write_small_parts(root, root_path, tables_meta, level=self.level, bins=bins, **small)
+        meta = {
+            "n_spots": int(self.n), "n_bins": int(n_bins),
+            "n_traces": int(len(np.unique(pindex["trace_codes"]))) if self.n else 0,
+            "n_cells": int(len(np.unique(pindex["cell_codes"]))) if has_cells else 0,
+            "n_row_groups": int(len(pindex["row_groups"]) - 1),
+            "has_source_row": bool(not sorted_already and self.keep_source_order),
+            "has_cell_id": has_cells, "n_partitions": len(proj.partitions),
+            "row_group_rows": int(self.row_group_rows),
+            "projection_row_group_rows": int(self.projection_row_group_rows),
+            "written_by": "uchrom.core.stream.ChromDataWriter",
+        }
+        _write_root_meta(root, meta, layout="2.2")
+
+    def _proj_spill_columns(self) -> List[str]:
+        return [_TRACE, _PID, _SEQ] + ([_CELL] if self._has_cells else []) + ["x", "y", "z"]
+
+    def _encode_projection(self, piece, pmap, cats, n_bins):
+        """Spill rows → projection rows (bin_id, trace / cell codes, x, y, z)
+        sorted by (cell, trace, bin, input row)."""
+        import pyarrow as pa
+
+        has_cells = bool(self._has_cells)
+        trace_c = cats["trace_id"].get_indexer(_col_values(piece, _TRACE))
+        cell_c = (cats["cell_id"].get_indexer(_col_values(piece, _CELL)) if has_cells
+                  else np.full(piece.num_rows, -1, dtype=np.int64))
+        bin_id = pmap[piece.column(_PID).to_numpy()]
+        seq = piece.column(_SEQ).to_numpy()
+        order = np.lexsort((seq, bin_id, trace_c, cell_c))
+        take = pa.array(order)
+        cell_c, trace_c, bin_id = cell_c[order], trace_c[order], bin_id[order]
+        arrays = {"bin_id": pa.array(bin_id.astype(np.int32 if n_bins < 2 ** 31 else np.int64)),
+                  "trace_id": pa.array(trace_c.astype(_code_dtype(len(cats["trace_id"]))))}
+        if has_cells:
+            arrays["cell_id"] = pa.array(cell_c.astype(_code_dtype(len(cats["cell_id"]))))
+        for c in ("x", "y", "z"):
+            a = piece.column(c).take(take).to_numpy()
+            arrays[c] = pa.array(a.astype(self.coord_dtype, copy=False))
+        return pa.table(arrays), cell_c, trace_c
 
     def _empty_tables(self, n_bins, cats):
         import pyarrow as pa
@@ -660,16 +871,18 @@ def _col_values(table, name: str) -> np.ndarray:
         return np.asarray(col.to_pylist(), dtype=object)
 
 
-def _read_slice(path: Path, a: int, b: int, schema):
+def _read_slice(path: Path, a: int, b: int, schema, columns: Optional[List[str]] = None):
     """Rows ``[a, b)`` of a spill run, cast to the unified schema."""
     import pyarrow.parquet as pq
 
     pf = pq.ParquetFile(str(path))
     g0, g1 = a // _SPILL_GROUP_ROWS, (b - 1) // _SPILL_GROUP_ROWS
-    t = pf.read_row_groups(list(range(g0, g1 + 1)))
+    t = pf.read_row_groups(list(range(g0, g1 + 1)), columns=columns)
     t = t.slice(a - g0 * _SPILL_GROUP_ROWS, b - a)
-    if schema is not None and t.schema != schema:
-        t = t.cast(schema)
+    if schema is not None:
+        sch = schema if columns is None else __import__("pyarrow").schema([schema.field(c) for c in columns])
+        if t.schema != sch:
+            t = t.cast(sch)
     return t
 
 

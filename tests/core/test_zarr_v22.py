@@ -79,12 +79,12 @@ def test_layout_and_encoding(tmp_path):
     assert set(enc) == {"x", "y", "z"} and enc["x"]["exp"] == 6
     assert "IF" in tmeta["spot_tracks"]["encoding"] and "plain" not in tmeta["spot_tracks"]["encoding"]
     names = pq.ParquetFile(t / "spots.parquet").schema_arrow.names
-    assert {"x", "x#ulp", "x#exc"} <= set(names)
-    assert str(pq.ParquetFile(t / "spots.parquet").schema_arrow.field("x").type) == "int32"
+    assert {"x", "x#exc"} <= set(names)
+    assert str(pq.ParquetFile(t / "spots.parquet").schema_arrow.field("x").type) == "int64"
     # projection: keys + coordinates only
     part = t / "coords_by_chrom" / "chrom=chr1" / "part-0.parquet"
-    assert set(pq.ParquetFile(part).schema_arrow.names) == {"bin_id", "trace_id", "cell_id", "x", "x#ulp",
-                                                             "x#exc", "y", "y#ulp", "y#exc", "z", "z#ulp", "z#exc"}
+    assert set(pq.ParquetFile(part).schema_arrow.names) == {"bin_id", "trace_id", "cell_id", "x", "x#exc",
+                                                             "y", "y#exc", "z", "z#exc"}
     # row groups of the primary hold whole cells
     rg = root["index/row_groups"][:]
     assert set(rg) <= set(root["index/cell_offsets"][:])
