@@ -4,8 +4,14 @@ Contract between the Python server (`uchrom.browser.web.server`) and the
 React/Three.js frontend (`uchrom/browser/web/frontend`).  All endpoints are
 under `/api`; the built frontend is served from `/`.
 
-The server is a *local* tool (`python -m uchrom.browser --web data.h5cd`):
+The server is a *local* tool (`python -m uchrom.browser --web data.chromdata.zarr`):
 paths are local filesystem paths on the machine running the server.
+
+`.chromdata.zarr` / `.cdz` stores are opened **backed**: loading reads only
+the small tables and the store's `index/`; the summary, trace and cell lists
+come from the index, and a geometry request that names cells, traces or
+chromosomes reads just those spots.  `.h5cd` and `.csv` files are loaded
+into memory.  The responses are the same either way.
 
 ## Datasets
 
@@ -27,7 +33,7 @@ List loaded datasets.
   {
     "id": "d1",
     "name": "cell1",
-    "path": "/abs/path/cell1.h5cd",
+    "path": "/abs/path/cell1.chromdata.zarr",
     "n_spots": 105700,
     "n_bins": 2600,                 // cd.bins (ChromData format 2.0 locus axis)
     "n_traces": 20,
@@ -86,7 +92,8 @@ as `coords`, e.g. nascent RNA spots); `labels` are sorted by count.
 
 ### `POST /api/datasets`
 
-Body `{"path": "/abs/path/data.h5cd"}` (`.h5cd` or reconstruction `.csv`).
+Body `{"path": "/abs/path/data.chromdata.zarr"}` (a `.chromdata.zarr`
+directory, `.cdz`, `.h5cd` or reconstruction `.csv`).
 Loads the file and returns its summary (same shape as a list item above).
 `400` with `{"detail": "..."}` if the file is missing or unreadable.
 

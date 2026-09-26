@@ -28,7 +28,8 @@ From the structure table, downstream modules perform:
 
 ```
 uchrom/
-├── core/            ChromData container (cdata.py) + format spec (spec.md)
+├── core/            ChromData container (cdata.py), .chromdata.zarr storage
+│                    (zarrcd.py), backed mode (backed.py) + format spec (spec.md)
 ├── io/              Data I/O (.pairs, .cool, .hic, .3dg, .csv, .pdb, seqFISH multi-omics)
 ├── recon/           3D reconstruction
 │   ├── _base.py     Shared simulation base (Taichi)
@@ -57,7 +58,7 @@ uchrom/
 └── op.py            Misc operations (mark empty particles)
 
 discovery/           Separate package `uchrom-discovery` (import uchrom_discovery):
-                     LLM-driven multi-omics auto-discovery — h5cd schema → ideas →
+                     LLM-driven multi-omics auto-discovery — ChromData schema → ideas →
                      notebooks → verification → evidence; iterative idea graph,
                      pre-discovery enrichment, Pantheon / Claude / Codex CLI
                      backends, graph UI.  Own pyproject and tests/.
@@ -110,8 +111,9 @@ ChromData (format 2.0)
 - **FOF-CT compatible**: `ChromData.from_fofct(path)` reads the 4DN FISH Omics Format core table. Column mapping: Spot_ID→spot_id, Trace_ID→trace_id, X/Y/Z→coords, Chrom→chrom, Chrom_Start/End→start/end.
 - **Typed results with provenance**: `cd.results` is a `ResultsStore` (dict-like; `cd.results[key]` → value, `cd.results.record(key)` → `ResultRecord(kind, value, params, function, uchrom_version, inputs, created_utc)`).  Unwritable values raise `TypeError` at assignment.  Analysis functions store via `cd.results.set(key, value, kind=, function=, params=, inputs=)`.
 - **Calling convention** (`uchrom/core/convention.py`): `fn(cd, *, chrom=None, trace_ids=None, cells=None, params=<*Params>, device="auto", key_added="<what>.<method>", copy=False)`.  `chrom=None` runs every chromosome and merges into one table under one key; `copy=False` returns the table, `copy=True` a new ChromData.  Deprecated 1.x forms (positional `chrom`, `store=`, `result_key=`) must keep working with a `DeprecationWarning` and the 1.x key.  `uchrom.tl` / `uchrom.pp` are flat aliases; implementations stay in the domain modules.
-- **HDF5 persistence**: `.h5cd` format via `cd.write(path)` / `ChromData.read(path)`. DataFrames stored as per-column datasets, categorical as byte strings.
-- **Format versioning**: root HDF5 attrs `uchrom_format_version` (MAJOR.MINOR) and `uchrom_version`. Read-side dispatches to `_read_vN()` (`_SUPPORTED_MAJORS = (1, 2)`; writers always emit the current format, 2.0). 1.x files are upgraded in memory by `_read_v1` (bins from spot loci; spot-aligned tracks split into bin/spot tracks); `uchrom.io.upgrade_h5cd(src, dst)` / `python -m uchrom.io.upgrade` rewrites them. Same MAJOR + higher MINOR warns but reads; unknown MAJOR raises. Missing attr → legacy 1.0 with warning. To bump format: update `FORMAT_VERSION` in `cdata.py`, add `_read_vN` function for the new MAJOR.
+- **Persistence — `.chromdata.zarr` (format 2.0)**: `cd.write(path)` / `ChromData.read(path)` pick the container from the path.  `*.chromdata.zarr` = Zarr v3 group with Parquet tables (`uchrom/core/zarrcd.py`; layout in `uchrom/core/spec.md`): `tables/spots.parquet` (bin_id, trace_id / cell_id as integer codes, x, y, z, extra columns) sorted by (cell, trace, bin) with row groups on cell boundaries, row-aligned `spot_tracks.parquet` / `layers/<key>.parquet`, small tables as Parquet, `cellm` / `binm` / `index/` / result arrays as Zarr arrays, provenance / `uns` / linked records as JSON attrs.  `*.cdz` = the same tree in one uncompressed zip.  **Row order changes on a round trip** (sorted); compare after sorting by a stable key, or read with `original_order=True` (uses `index/source_row`).  `.h5cd` (HDF5 1.x / 2.0) is read indefinitely; writing it is deprecated (`DeprecationWarning`) but still supported this release.  Writers are atomic (temp dir + rename).
+- **Backed mode**: `ChromData.read(path, backed=True)` on a zarr / cdz store → `BackedChromData` (`uchrom/core/backed.py`): small tables eager; `coords` / `layers` (`BackedArray`) and `spots` / `spot_tracks` (`BackedFrame`) read on access; `get_cell` / `get_trace` / `get_chrom` / `cd[rows]` / `iter_traces(batch)` / `iter_cells(batch)` read only the needed row ranges and return in-memory `ChromData`; `to_memory()` loads all.  Spot-aligned data are read-only on a backed object.  `iter_traces` / `iter_cells` exist on in-memory objects too and yield identical chunks.  The web browser opens stores backed.
+- **Format versioning**: `uchrom_format_version` (MAJOR.MINOR) and `uchrom_version` as root attrs (HDF5 attrs / zarr.json attributes). HDF5 read-side dispatches to `_read_vN()` (`_SUPPORTED_MAJORS = (1, 2)`); zarr stores are checked by `_check_zarr_version`. 1.x files are upgraded in memory by `_read_v1` (bins from spot loci; spot-aligned tracks split into bin/spot tracks); `uchrom.io.upgrade_h5cd(src[, dst])` / `python -m uchrom.io.upgrade SRC [DST]` converts them (default target `<stem>.chromdata.zarr`). Same MAJOR + higher MINOR warns but reads; unknown MAJOR raises. Missing attr → legacy 1.0 with warning. To bump format: update `FORMAT_VERSION` in `cdata.py` (and `ZARR_FORMAT_VERSION` in `zarrcd.py`), add a reader for the new MAJOR.
 - **Validation on construction**: Checks coords shape, spots required columns, tracks alignment, layers shape.
 - **Flat storage, hierarchical access**: All spots across all cells stored flat. Use `cd.get_cell(id)` / `cd.get_trace(id)` / `cd.get_chrom(name)` for subsetting, which returns a new ChromData.
 
@@ -130,9 +132,9 @@ ChromData (format 2.0)
 - `ChromData.from_dataframe(df)` — from reconstruction CSV (chrom, start, end, x, y, z); auto-assigns one trace per chromosome
 - `ChromData.from_fofct(path, cell_table=None, rna_table=None)` — from FOF-CT core table; parses `##` headers into `uns`; companion cell table → `cells` (gene counts as `rna.<gene>`), RNA spot table → `points['rna']`
 - `cd.to_fofct(path, cell_table=None, rna_table=None)` / `uchrom.io.write_fofct(cd, path, …)` — the inverse: FOF-CT core table with `##`/`#` headers (from `uns['fofct_header']` or `uns`), optional cell and RNA tables; `from_fofct(to_fofct(cd))` round-trips coords, ids, loci, extra columns, cells and RNA spots exactly
-- `cd.write('data.h5cd')` / `ChromData.read('data.h5cd')` — HDF5 roundtrip
+- `cd.write('data.chromdata.zarr')` / `ChromData.read('data.chromdata.zarr'[, backed=True])` — format 2.0 round trip (`.cdz` = one zip file; `.h5cd` still read, deprecated for writing)
 - `cd.to_dataframe()` — export as flat DataFrame (loci derived from bins; `bin_id` left out unless `include_bin_id=True`)
-- `uchrom.io.upgrade_h5cd(src, dst)` / `python -m uchrom.io.upgrade` — rewrite 1.x files as format 2.0
+- `uchrom.io.upgrade_h5cd(src[, dst])` / `python -m uchrom.io.upgrade` — convert `.h5cd` 1.x / 2.0 to `.chromdata.zarr` (or `.cdz` / `.h5cd` by the target suffix)
 
 ## Validation discipline — always run on real data
 
@@ -186,7 +188,7 @@ All datasets consumed by tutorials and benchmarks live in
 - **Whenever a tutorial or benchmark pulls in a new dataset, the
   catalog must be updated in the same PR** — this is a hard rule.
   Do not add silent downloads.
-- Tutorial-produced outputs (e.g. `with_loops.h5cd`, synthetic
+- Tutorial-produced outputs (e.g. `with_loops.chromdata.zarr`, synthetic
   `fofct_core.csv` fallbacks) are gitignored, not committed.
 
 ## Technical Notes
@@ -203,6 +205,7 @@ All datasets consumed by tutorials and benchmarks live in
   - Legacy: `recon.sc.gem` is Taichi-based.  If it ever needs ensembles
     or more complex loss terms, consider migrating to PyTorch.
 - **Python package name**: `uchrom` (import name), `u-chrom` (pip name)
+- **Python ≥ 3.11** (zarr ≥ 3, needed by the `.chromdata.zarr` container, has no 3.10 wheels); `zarr` and `pyarrow` are core dependencies.
 - **`uchrom/io/` naming**: The internal file is `_io.py` to avoid shadowing Python's stdlib `io` module. Use `gzip.open(path, mode + "t")` instead of `io.TextIOWrapper`.
 - **CLI entry points**: All via `python -m` (e.g., `python -m uchrom.recon.sc.nucdyn`, `python -m uchrom.browser`)
 - **Browser backend**: PyVista only (VisPy backend was removed)

@@ -68,8 +68,8 @@ def test_companion_tables_real_takei(tmp_path):
     assert set(rna["cell_id"]) <= set(ids)
     assert cd.uns["fofct_companions"]["rna"]["source"] == "4DNFIJ52NVDV.csv"
 
-    # round trip (format 1.3) and subsetting keep points with their cells
-    path = tmp_path / "multi.h5cd"
+    # round trip and subsetting keep points with their cells
+    path = tmp_path / "multi.chromdata.zarr"
     cd.write(path)
     back = ChromData.read(path)
     assert len(back.points["rna"]) == 3335

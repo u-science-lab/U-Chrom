@@ -121,7 +121,7 @@ def test_anndata_link_roundtrips_h5cd_cell_axis(tmp_path):
     )
     cd.link_anndata(adata)
 
-    path = tmp_path / "linked.h5cd"
+    path = tmp_path / "linked.chromdata.zarr"
     cd.write(path)
     out = ChromData.read(path)
 

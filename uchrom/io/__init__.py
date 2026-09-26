@@ -34,6 +34,7 @@ _EXPORTS = {
     "write_higashi_inputs": (".contacts", "write_higashi_inputs"),
     "upgrade_h5cd": (".upgrade", "upgrade_h5cd"),
     "file_format_version": (".upgrade", "file_format_version"),
+    "convert_chromdata": (".upgrade", "convert"),
 }
 
 __all__ = sorted(_EXPORTS)

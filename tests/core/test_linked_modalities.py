@@ -52,7 +52,7 @@ def test_linked_mudata_and_scool_metadata_roundtrip(tmp_path):
         bin_size=1_000_000,
     )
 
-    path = tmp_path / "linked.h5cd"
+    path = tmp_path / "linked.chromdata.zarr"
     cd.write(path)
     out = ChromData.read(path)
 
@@ -113,7 +113,7 @@ def test_cell_spatial_coordinates_align_by_cell_id_and_roundtrip(tmp_path):
         inferred=True,
     )
 
-    path = tmp_path / "spatial_cells.h5cd"
+    path = tmp_path / "spatial_cells.chromdata.zarr"
     cd.write(path)
     out = ChromData.read(path)
 

@@ -345,9 +345,12 @@ def test_upgrade_h5cd_and_cli(tmp_path, capsys):
         upgrade_h5cd(src, src)
     with pytest.raises(FileExistsError):
         upgrade_h5cd(src, tmp_path / "new.h5cd")
-    assert main([str(src), "--out-dir", str(tmp_path / "out")]) == 0
-    assert "(1.4) ->" in capsys.readouterr().out
+    assert main([str(src), "--out-dir", str(tmp_path / "out"), "--format", "h5cd"]) == 0
+    assert "(1.4, h5cd) ->" in capsys.readouterr().out
     assert file_format_version(tmp_path / "out" / "old.h5cd") == "2.0"
+    # the default target is the zarr container (tests/core/test_zarr_format.py)
+    assert main([str(src), "--out-dir", str(tmp_path / "out")]) == 0
+    assert file_format_version(tmp_path / "out" / "old.chromdata.zarr") == "2.0"
 
 
 def test_write_compression_options(tmp_path):

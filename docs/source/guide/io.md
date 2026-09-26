@@ -12,7 +12,7 @@ reconstruction output.
 | `.hic` | `load_hic`, `load_hic_inter`, `load_hic_genome` | bin+matrix |
 | `.3dg` | `read_3dg` | DataFrame (chrom, start, x, y, z) |
 | `.csv` (reconstruction) | `read_particles` | DataFrame |
-| `.h5cd` (ChromData) | `read_particles`, `ChromData.read` | DataFrame / `ChromData` |
+| `.chromdata.zarr` / `.cdz` / `.h5cd` (ChromData) | `read_particles`, `ChromData.read` | DataFrame / `ChromData` |
 | FOF-CT core CSV | `ChromData.from_fofct` | `ChromData` |
 
 ## Reconstruction output: `save_particles`
@@ -21,16 +21,18 @@ All reconstruction modules write through
 `uchrom.io.save_particles(df, path)`:
 
 - `path` ending in `.csv` → CSV (legacy)
-- `path` ending in `.h5cd` or anything else → `ChromData` HDF5 (default)
+- `.chromdata.zarr` / `.cdz` → `ChromData` format 2.0 (recommended)
+- `.h5cd` or anything else → `ChromData` HDF5 (deprecated)
 
 ```python
 from uchrom.io import save_particles
-save_particles(df, "out.h5cd")   # ChromData
-save_particles(df, "out.csv")    # plain CSV
+save_particles(df, "out.chromdata.zarr")   # ChromData
+save_particles(df, "out.csv")              # plain CSV
 ```
 
 `read_particles` auto-detects the format by extension so downstream code
-(browser, analysis) does not care which format is on disk.
+(browser, analysis) does not care which format is on disk; ChromData
+files come back in the row order they were saved in.
 
 ## FOF-CT import details
 
@@ -74,13 +76,20 @@ cd.to_fofct("out_core.csv", cell_table="out_cell.csv", rna_table="out_rna.csv",
             header={"lab_name": "My lab"})
 ```
 
-## .h5cd format versioning
+## ChromData files and format versioning
 
-The on-disk `.h5cd` layout is versioned with two root attributes:
+`cd.write(path)` / `ChromData.read(path)` pick the container from the
+path: `.chromdata.zarr` (Zarr v3 + Parquet, the default), `.cdz` (the
+same store zipped into one file), `.h5cd` (HDF5; read indefinitely,
+writing deprecated).  Convert older files with
+`python -m uchrom.io.upgrade old.h5cd` (→ `old.chromdata.zarr`) or
+`uchrom.io.upgrade_h5cd(src, dst)`.
+
+Every container records two attributes:
 
 | Attribute | Example |
 |-----------|---------|
-| `uchrom_format_version` | `"1.0"` |
+| `uchrom_format_version` | `"2.0"` |
 | `uchrom_version` | `"0.2.0"` |
 
 Read semantics:
@@ -90,5 +99,7 @@ Read semantics:
 - Missing attribute → assume legacy 1.0 with a warning
 
 New MAJOR versions add a `_read_vN(cls, f)` function in
-`uchrom/core/cdata.py` plus any migration helper needed; the dispatch in
-`ChromData.read` is the single place that maps version to reader.
+`uchrom/core/cdata.py` (HDF5) or a reader in `uchrom/core/zarrcd.py`
+(zarr) plus any migration helper needed; the dispatch in
+`ChromData.read` is the single place that maps path and version to
+reader.

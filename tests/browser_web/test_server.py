@@ -16,8 +16,8 @@ from uchrom.browser.web import create_app, decode_geometry  # noqa: E402
 from uchrom.browser.web.data import DatasetStore  # noqa: E402
 
 
-@pytest.fixture
-def client(tmp_path):
+@pytest.fixture(params=[".h5cd", ".chromdata.zarr"])     # in memory / backed
+def client(tmp_path, request):
     spots = pd.DataFrame({
         "chrom": ["chr1"] * 4 + ["chr2"] * 2,
         "start": [0, 10, 20, 30, 0, 10],
@@ -25,7 +25,7 @@ def client(tmp_path):
         "trace_id": ["a"] * 4 + ["b"] * 2,
     })
     cd = ChromData(np.arange(18, dtype=float).reshape(6, 3), spots)
-    path = tmp_path / "toy.h5cd"
+    path = tmp_path / f"toy{request.param}"
     cd.write(path)
     store = DatasetStore()
     store.load(path)

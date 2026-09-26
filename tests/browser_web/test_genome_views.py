@@ -9,7 +9,7 @@ import pytest
 from uchrom import ChromData
 from uchrom.browser.web.data import MAX_MATRIX_BINS, DatasetStore, decode_matrix
 
-SIM = Path(__file__).resolve().parents[2] / "example-data" / "sim_cell1" / "sim_cell1.h5cd"
+SIM = Path(__file__).resolve().parents[2] / "example-data" / "sim_cell1" / "sim_cell1.cdz"
 
 
 def _two_cell_dataset():
@@ -128,10 +128,11 @@ def test_contact_maps_cool_mcool_scool(tmp_path):
 
     spots = pd.DataFrame({"chrom": ["chr1"], "start": [0], "end": [100], "trace_id": ["t"]})
     cd = ChromData(np.zeros((1, 3)), spots)
-    cd.link_cool("bulk.mcool", key="bulk", label="Bulk")   # relative to the .h5cd
+    cd.link_cool("bulk.mcool", key="bulk", label="Bulk")   # relative to the dataset
     cd.link_scool("cells.scool", key="cells")
-    cd.write(tmp_path / "d.h5cd")
-    ds = DatasetStore().load(tmp_path / "d.h5cd")
+    cd.write(tmp_path / "d.chromdata.zarr")
+    ds = DatasetStore().load(tmp_path / "d.chromdata.zarr")
+    assert ds.backed
 
     maps = {m["key"]: m for m in ds.summary()["contact_maps"]}
     assert maps["bulk"]["kind"] == "mcool" and maps["bulk"]["resolutions"] == [100, 200]

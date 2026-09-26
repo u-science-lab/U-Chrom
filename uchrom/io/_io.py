@@ -27,13 +27,16 @@ def read_pairs(path):
 def read_particles(path):
     """Read reconstruction output. Auto-detects format by extension.
 
-    - ``.h5cd``           → ChromData HDF5 (returned as flat DataFrame)
+    - ``.chromdata.zarr`` / ``.cdz`` / ``.h5cd`` → ChromData, returned as a
+      flat DataFrame in the row order it was saved in
     - ``.csv`` or other   → CSV
     """
-    path_str = str(path)
-    if path_str.endswith(".h5cd"):
+    from uchrom.core.zarrcd import container_kind
+
+    kind = container_kind(path)
+    if kind is not None:
         from uchrom.core import ChromData
-        cd = ChromData.read(path)
+        cd = ChromData.read(path, original_order=kind != "h5cd")
         df = cd.to_dataframe()
         df['chrom'] = df['chrom'].astype(str)
         return df
@@ -43,16 +46,17 @@ def read_particles(path):
 
 
 def save_particles(df, path, cell_id=None):
-    """Save reconstruction output. Default format is ``.h5cd`` (ChromData).
+    """Save reconstruction output as a ChromData file or a CSV.
 
     Format inferred from file extension:
 
-    - ``.csv``            → CSV via ``df.to_csv``
-    - ``.h5cd`` or other  → ChromData HDF5 (default)
+    - ``.csv``                        → CSV via ``df.to_csv``
+    - ``.chromdata.zarr`` / ``.cdz``  → ChromData format 2.0 (recommended)
+    - ``.h5cd`` or other              → ChromData HDF5 (deprecated)
 
-    ``cell_id`` is only propagated into the ``.h5cd`` branch (CSV has no
-    dedicated cell column).  When writing ``.h5cd`` it is passed through
-    to :meth:`ChromData.from_dataframe`.
+    ``cell_id`` is only propagated into the ChromData branch (CSV has no
+    dedicated cell column); it is passed through to
+    :meth:`ChromData.from_dataframe`.
     """
     path_str = str(path)
     if path_str.endswith(".csv"):

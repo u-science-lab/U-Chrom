@@ -45,3 +45,15 @@ Interval tables
 
 .. automodule:: uchrom.core.intervals
    :members: IntervalTable, IntervalStore, INTERVAL_KINDS
+
+Storage: .chromdata.zarr
+------------------------
+
+.. automodule:: uchrom.core.zarrcd
+   :members: write_zarr, container_kind, Container, SpotRows, sort_order
+
+Backed mode
+-----------
+
+.. automodule:: uchrom.core.backed
+   :members: BackedChromData, BackedArray, BackedFrame

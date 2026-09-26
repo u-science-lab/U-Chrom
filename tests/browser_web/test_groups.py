@@ -9,7 +9,10 @@ import pytest
 from uchrom import ChromData
 from uchrom.browser.web.data import DatasetStore, decode_matrix
 
-TAKEI = Path(__file__).resolve().parents[2] / "example-data" / "takei2025_fov0" / "takei2025_fov0.h5cd"
+_FOV0 = Path(__file__).resolve().parents[2] / "example-data" / "takei2025_fov0"
+# built by example-data/build_takei2025_fov0.py (.chromdata.zarr; older builds wrote .h5cd)
+TAKEI = next((p for p in (_FOV0 / "takei2025_fov0.chromdata.zarr", _FOV0 / "takei2025_fov0.h5cd")
+              if p.exists()), _FOV0 / "takei2025_fov0.chromdata.zarr")
 
 
 def _three_cells():
@@ -93,8 +96,8 @@ def test_scool_pseudobulk(tmp_path):
     cd = ChromData(np.zeros((0, 3)), spots, cells=cells)
     cd.link_scool("cells.scool", key="cells")
     cd.link_cool("bulk.cool", key="bulk")
-    cd.write(tmp_path / "d.h5cd")
-    ds = DatasetStore().load(tmp_path / "d.h5cd")
+    cd.write(tmp_path / "d.chromdata.zarr")
+    ds = DatasetStore().load(tmp_path / "d.chromdata.zarr")
 
     m = decode_matrix(ds.contacts("cells", "chr1", group="field:cell_type=A"))
     assert np.all(m["matrix"] == 3)  # 1 + 2, symmetric

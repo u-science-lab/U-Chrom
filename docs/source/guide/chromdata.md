@@ -187,9 +187,9 @@ cd.results.set("my_table", df, function="my.fn", params={"k": 3})
 | `mapping` | nested `dict` of the value types here |
 | `scalar` | JSON-compatible scalar / list / tuple |
 
-A value that cannot be written to `.h5cd` raises `TypeError` **when it
-is assigned**.  Values and provenance round-trip through `.h5cd`
-(format 1.4).  Files from older versions read unchanged, with records
+A value that cannot be written to disk raises `TypeError` **when it
+is assigned**.  Values and provenance round-trip through
+`.chromdata.zarr` and `.h5cd` (format 1.4 and later).  Files from older versions read unchanged, with records
 that carry no provenance.
 
 Analysis functions share one calling convention (`cd` first; then
@@ -221,29 +221,68 @@ D = cd.compute_distances(trace_id=0)  # (n_spots_in_trace, n_spots_in_trace)
 |-------|--------|
 | Reconstruction CSV (chrom, start, end, x, y, z) | `ChromData.from_dataframe` |
 | 4DN FOF-CT core table (+ cell / RNA tables) | `ChromData.from_fofct`; write with `cd.to_fofct` |
-| `.h5cd` (HDF5) | `ChromData.read` |
+| `.chromdata.zarr` / `.cdz` / `.h5cd` | `ChromData.read` |
 
 ```python
-cd.write("data.h5cd")                  # format 2.0, gzip-4 compressed
-cd.write("fast.h5cd", compression="lzf")   # or compression=None
-cd2 = ChromData.read("data.h5cd")      # 2.0, or 1.x upgraded in memory
+cd.write("data.chromdata.zarr")        # format 2.0: Zarr + Parquet (a directory)
+cd.write("data.cdz")                   # the same store as one zip file
+cd2 = ChromData.read("data.chromdata.zarr")
+cd3 = ChromData.read("old.h5cd")       # HDF5 2.0, or 1.x upgraded in memory
 ```
+
+### Storage: `.chromdata.zarr`
+
+A `.chromdata.zarr` store is a Zarr v3 directory whose tables are Parquet
+files (zstd): `tables/spots.parquet` (`bin_id`, `trace_id`, `cell_id`,
+`x, y, z`, extra columns), `spot_tracks.parquet`, `layers/`, `bins`,
+`bin_tracks`, `cells`, `traces`, `intervals/`, `points/`; `cellm`,
+`binm`, result arrays and the `index/` offsets are Zarr arrays;
+`results` provenance, `uns` and linked-file records are JSON attributes.
+The full layout is in `uchrom/core/spec.md`.
+
+- **Row order.**  Spots are stored sorted by (cell, trace, bin), so the
+  rows of a cell or trace are contiguous.  Reading returns that order;
+  every spot keeps its values.  `ChromData.read(path, original_order=True)`
+  restores the order of the object that was written (the store keeps the
+  permutation in `index/source_row`).
+- **Backed mode.**  `ChromData.read(path, backed=True)` loads only the
+  small tables (bins, cells, traces, tracks per bin, results, uns) and the
+  index; `coords`, `spots`, `spot_tracks` and `layers` stay on disk.
+  `get_cell` / `get_trace` / `get_chrom` read the rows they need and
+  return an ordinary in-memory `ChromData`; `iter_traces(batch=...)` /
+  `iter_cells(batch=...)` stream chunks (in-memory objects yield the
+  same chunks); `to_memory()` loads everything.
+
+```python
+big = ChromData.read("cerebellum.chromdata.zarr", backed=True)   # ~0.03 s
+cell = big.get_cell("R1_P0_C12")          # reads one Parquet row group
+for chunk in big.iter_cells(batch=64):    # constant memory
+    ...
+```
+
+- **Options.**  `cd.write(path, coord_dtype="float32")` halves the
+  coordinate columns; `row_group_rows=` (default 65,536, groups end on
+  cell boundaries) and `compression_level=` (zstd, default 3) tune the
+  Parquet files.
+- **`.h5cd`** stays readable; writing it still works in this release but
+  warns (`DeprecationWarning`).
 
 ### Migrating 1.x files (format 2.0)
 
 `ChromData.read` reads 1.x files transparently: `bins` become the unique
 spot loci, and the spot-aligned 1.x `tracks` table is split into
 `bin_tracks` (columns constant within every bin) and `spot_tracks` (the
-rest).  To rewrite files once:
+rest).  To rewrite files once as `.chromdata.zarr`:
 
 ```python
 from uchrom.io import upgrade_h5cd
-upgrade_h5cd("old.h5cd", "new.h5cd")   # the source is never modified
+upgrade_h5cd("old.h5cd")               # → old.chromdata.zarr; the source is never modified
+upgrade_h5cd("old.h5cd", "old.cdz")    # the target suffix picks the container
 ```
 
 ```bash
-python -m uchrom.io.upgrade old.h5cd new.h5cd
-python -m uchrom.io.upgrade data/*.h5cd --out-dir upgraded/
+python -m uchrom.io.upgrade old.h5cd                 # → old.chromdata.zarr
+python -m uchrom.io.upgrade data/*.h5cd --out-dir converted/ [--format cdz|h5cd]
 ```
 
 Code changes, if any:
@@ -262,7 +301,7 @@ Code changes, if any:
 ### Multi-omics FOF-CT: cell table and RNA spots
 
 4DN FOF-CT data sets can ship companion tables next to the core DNA
-table.  Pass them to `from_fofct` to keep everything in one `.h5cd`:
+table.  Pass them to `from_fofct` to keep everything in one store:
 
 ```python
 cd = ChromData.from_fofct(
@@ -274,7 +313,7 @@ cd.cells[["nucleus_area_um2", "rna.Nanog"]]   # genes are prefixed "rna."
 cd.points["rna"].head()                        # x, y, z, gene, cell_id, …
 cd.get_cell("0_2").points["rna"]               # RNA spots of one cell
 cd.to_fofct("core.csv", cell_table="cell.csv", rna_table="rna.csv")   # and back to FOF-CT
-cd.write("takei2021_multiomics.h5cd")          # format 2.0
+cd.write("takei2021_multiomics.chromdata.zarr")
 ```
 
 Cell embeddings from the RNA counts (stored in `cd.cellm`, parameters in
@@ -355,8 +394,8 @@ The web browser (`python -m uchrom.browser --web`) can colour cells by any
 of these cell fields, draw the RNA spots with the chromatin traces, and
 show the embeddings as a 2-D view linked to the 3-D one.
 
-The `.h5cd` format has a version stamp and gracefully handles legacy
-files.  See [Concepts — On-disk format](../concepts.md) for details.
+Every ChromData file has a format version stamp; legacy files are read
+and upgraded.  See [Concepts — On-disk format](../concepts.md) for details.
 
 ## Why not AnnData?
 

@@ -149,30 +149,127 @@ df = cd.to_dataframe()   # Flat DataFrame: chrom, start, end, x, y, z, trace_id,
 ### Persistence
 
 ```python
-cd.write('data.h5cd')              # Write to HDF5
-cd = ChromData.read('data.h5cd')   # Read from HDF5
+cd.write('data.chromdata.zarr')                    # format 2.0: Zarr v3 + Parquet (a directory)
+cd.write('data.cdz')                               # the same store in one zip file
+cd = ChromData.read('data.chromdata.zarr')         # in memory (spots in stored order)
+cd = ChromData.read('data.chromdata.zarr', original_order=True)   # rows as written
+cd = ChromData.read('data.chromdata.zarr', backed=True)           # out of core
+cd = ChromData.read('old.h5cd')                    # HDF5 1.x / 2.0: still read
 ```
 
-## File Format (.h5cd)
+The format follows the path: `*.zarr` → Zarr directory, `*.cdz` → zip,
+`*.h5cd` → HDF5 (deprecated for writing; `DeprecationWarning`).  An
+existing path without one of these suffixes is sniffed.
+`python -m uchrom.io.upgrade old.h5cd` converts to
+`old.chromdata.zarr`.
+
+### Backed mode
+
+`ChromData.read(path, backed=True)` on a `.chromdata.zarr` / `.cdz`
+returns a `BackedChromData` (`cd.backed is True`):
+
+- **eager** (read on open): `bins`, `bin_tracks`, `binm`, `cells`, `cellm`,
+  `traces`, `intervals`, `points`, `results`, `uns`, `index/`;
+- **lazy**: `coords` / `layers[...]` (`BackedArray`: `shape`, row slicing,
+  `np.asarray`) and `spots` / `spot_tracks` (`BackedFrame`: `columns`,
+  `dtypes`, `frame[col]`, `frame.iloc[rows]`, `to_pandas()`), read from
+  Parquet on access;
+- `get_cell` / `get_trace` / `get_chrom` / `cd[rows]` read only the row
+  ranges they need and return an in-memory `ChromData`;
+- `iter_traces(batch)` / `iter_cells(batch)` stream in-memory chunks
+  (identical chunks on in-memory objects);
+- `to_memory()` loads everything; `write()` loads, then writes.
+
+Spot-aligned data are read-only on a backed object; the small tables can
+be edited and are saved by `write()`.
+
+## File Format
 
 ### Versioning
 
-The on-disk format is versioned via two root-group HDF5 attributes:
+Every container records the data-model version and the package that
+wrote it:
 
 | Attribute | Example | Description |
 |-----------|---------|-------------|
-| `uchrom_format_version` | `"1.0"` | `MAJOR.MINOR` version of the `.h5cd` format. MAJOR bumps are breaking; MINOR bumps are backwards-compatible (additive). |
+| `uchrom_format_version` | `"2.0"` | `MAJOR.MINOR` version of the ChromData format. MAJOR bumps are breaking; MINOR bumps are backwards-compatible (additive). |
 | `uchrom_version` | `"0.2.0"` | Version of the U-Chrom package that wrote the file. For provenance. |
 
-Read semantics (implemented in `ChromData.read`):
+In a `.chromdata.zarr` store they are root-group attributes (plus
+`attrs["uchrom"]["format_version"]`); in `.h5cd` root HDF5 attributes.
+
+Read semantics (implemented in `ChromData.read`, for both containers):
 
 - **Same MAJOR**: read successfully. Higher MINOR triggers a warning; unknown fields are ignored.
 - **Different MAJOR**: `ValueError` with guidance to upgrade or convert.
-- **Missing attribute** (pre-versioning files): warning, assumed to be the legacy 1.0 layout.
+- **Missing attribute** (pre-versioning `.h5cd` files): warning, assumed to be the legacy 1.0 layout.
 
 New MAJOR versions should add a `_read_vN` function in `cdata.py` and may include a migration helper that converts old on-disk data to the current in-memory form.
 
-### HDF5 layout (format 2.0)
+### `.chromdata.zarr` layout (format 2.0, the default)
+
+A Zarr v3 group; everything with rows is Parquet (zstd), everything
+n-dimensional is a Zarr array (zstd), metadata is JSON attributes:
+
+```
+data.chromdata.zarr/
+├── zarr.json               attrs: uchrom_format_version "2.0", uchrom_version,
+│                           uchrom = {format "chromdata.zarr", format_version,
+│                           spot_order "cell,trace,bin", n_spots, n_bins, n_traces,
+│                           n_cells, n_row_groups, has_source_row, has_cell_id}
+├── tables/                 zarr group; attrs["tables"] = per-table metadata
+│   ├── spots.parquet       one row per spot, sorted by (cell, trace, bin):
+│   │                       bin_id int32, trace_id / cell_id integer codes,
+│   │                       x, y, z (float64, or float32 with coord_dtype=),
+│   │                       extra spot columns; row groups of ~65,536 rows
+│   │                       ending on cell boundaries; statistics on
+│   ├── spot_tracks.parquet row-aligned with spots.parquet (same row groups)
+│   ├── layers/<key>.parquet row-aligned x, y, z
+│   ├── categories/<table>.<column>.parquet   the values of each coded column
+│   ├── bins.parquet        chrom (dictionary), start, end, [name, resolution, …]
+│   ├── bin_tracks.parquet  n_bins rows
+│   ├── cells.parquet, traces.parquet   index kept (pandas metadata)
+│   ├── intervals/<key>.parquet         kind + source_result in tables attrs
+│   └── points/<key>.parquet
+├── index/                  zarr arrays over the stored spot order:
+│   ├── trace_offsets       int64 (n_segments + 1): rows of each (cell, trace) run
+│   ├── trace_codes         int32 (n_segments): trace_id code of each run
+│   ├── trace_cells         int32 (n_segments): cell_id code (-1: none)
+│   ├── chrom_trace         int32 (n_segments): chrom code (-1: several chromosomes)
+│   ├── cell_offsets        int64 (n_cells + 1), cell_codes int32 (n_cells)
+│   ├── row_groups          int64: row offsets of the Parquet row groups
+│   └── source_row          int64 (n_spots), when the writer sorted: each spot's
+│                           row in the object that was written
+├── cellm/<key>, binm/<key> zarr arrays; attrs["keys"] maps key → node name
+├── results/<key>           a zarr group or array per result; attrs = provenance
+│                           (_kind, _function, _params, _inputs, _uchrom_version,
+│                           _created_utc) + _type: dataframe / series (table.parquet
+│                           inside), ndarray, dict (children), json, or ref
+│                           (_value_ref = "intervals/<key>")
+├── uns/                    attrs {values (JSON), nodes, order}; numeric arrays of
+│                           > 64 elements as sub-arrays / groups
+├── contacts/               attrs: uns["linked_cool"] / uns["linked_scool"] records
+└── links/                  attrs: uns["linked_anndata"] / uns["linked_mudata"] records
+```
+
+- Categorical spot-aligned columns are stored as integer codes with the
+  categories in `tables/categories/`, so every row group decodes without
+  string work; categoricals of the small tables use Parquet dictionaries.
+- `spots.chrom / start / end` are derived from `bins` and not stored.
+- Keys that are not portable file / node names (or that clash
+  case-insensitively) get `_<i>` names; the attrs map the real keys.
+- Linked-file records keep their paths verbatim; absolute paths that live
+  next to the store also get a relative copy (`relpaths`), used when the
+  absolute path no longer exists (a moved project folder).
+- `x.cdz` is the same tree in one zip archive, uncompressed
+  (`ZIP_STORED`) with `zarr.json` first; Parquet members are read in place.
+- The writer builds the store in a temporary sibling directory and renames
+  it into place, so readers never see a half-written store.
+
+### HDF5 layout (`.h5cd`, format 2.0 — deprecated)
+
+`.h5cd` files (1.x and 2.0) remain readable; writing them still works in
+this release but warns.
 
 ```
 data.h5cd
@@ -199,12 +296,9 @@ data.h5cd
 Categorical columns are stored as `{codes, categories}` groups.  Datasets
 of ≥ 4,096 elements are chunked (65,536 rows per chunk) and compressed —
 gzip level 4 by default, `cd.write(path, compression="lzf" | None)` to
-change it.  1.x
-files (spots with `chrom/start/end`, spot-aligned `tracks/`) are read by
-`_read_v1` and upgraded in memory; `uchrom.io.upgrade_h5cd(src, dst)` /
-`python -m uchrom.io.upgrade` rewrites them.  Not in 2.0 yet: sorted
-spots + `index/` offsets and backed mode (2.1), `contacts/` / `links/`
-(linked files stay in `uns["linked_*"]`), `binsets/`.
+change it.  1.x files (spots with `chrom/start/end`, spot-aligned
+`tracks/`) are read by `_read_v1` and upgraded in memory.  The HDF5
+container has no `index/`, no sorted spots and no backed mode.
 
 ## FOF-CT Compatibility
 
@@ -228,4 +322,4 @@ Header fields (`##Genome_Assembly`, `##XYZ_Unit`, `#Lab_Name`, etc.) are stored 
 
 - `chrom`, `trace_id`, `cell_id` are stored as pandas Categorical dtype, reducing memory ~10x compared to Python strings.
 - Pairwise distance matrices are not stored. Use `compute_distances(trace_id=...)` to compute per-trace on demand.
-- For datasets exceeding available RAM, consider processing per-cell or per-chromosome via subsetting.
+- For datasets exceeding available RAM, write a `.chromdata.zarr` store and open it with `ChromData.read(path, backed=True)`: `get_cell` / `get_trace` / `get_chrom` and `iter_traces` / `iter_cells` read only the rows they need.

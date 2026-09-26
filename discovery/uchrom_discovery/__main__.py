@@ -157,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
 
     enrich_p = sub.add_parser(
         "enrich",
-        help="Add reusable sequence, annotation, structure, and peak features to an h5cd file",
+        help="Add reusable sequence, annotation, structure, and peak features to a ChromData file (.chromdata.zarr / .h5cd)",
     )
     enrich_p.add_argument("h5cd_path")
     enrich_p.add_argument("output_h5cd_path")

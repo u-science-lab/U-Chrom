@@ -35,6 +35,9 @@ run_whole_genome.py
 *.hic
 *.mcool
 *.h5cd
+*.chromdata.zarr
+*.cdz
+!example-data/sim_cell1/sim_cell1.cdz
 *.h5ad
 *.tar.gz
 example-data/**/*.zip

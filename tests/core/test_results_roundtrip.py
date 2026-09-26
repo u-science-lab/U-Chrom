@@ -18,13 +18,19 @@ def _cd(results):
     return ChromData(np.arange(12, dtype=float).reshape(4, 3), spots, results=results)
 
 
-def _roundtrip(tmp_path, results):
-    path = tmp_path / "r.h5cd"
+# every container: the HDF5 .h5cd (deprecated writer) and the zarr ones
+SUFFIXES = pytest.mark.parametrize("suffix", [".h5cd", ".chromdata.zarr", ".cdz"])
+pytestmark = pytest.mark.filterwarnings("ignore:writing .*h5cd:DeprecationWarning")
+
+
+def _roundtrip(tmp_path, results, suffix=".h5cd"):
+    path = tmp_path / f"r{suffix}"
     _cd(results).write(path)
     return ChromData.read(path).results
 
 
-def test_all_supported_types_roundtrip(tmp_path):
+@SUFFIXES
+def test_all_supported_types_roundtrip(tmp_path, suffix):
     tads = pd.DataFrame({"chrom": ["chr1"], "start": [0], "end": [20]})
     series = pd.Series([0.1, 0.2, 0.3], index=["a", "b", "c"], name="score")
     results = {
@@ -45,7 +51,7 @@ def test_all_supported_types_roundtrip(tmp_path):
         "window": [3, 5, 7],
         "shape": (2, 3),
     }
-    out = _roundtrip(tmp_path, results)
+    out = _roundtrip(tmp_path, results, suffix)
 
     assert set(out) == set(results)
     pd.testing.assert_frame_equal(out["tads"], tads)
@@ -68,24 +74,28 @@ def test_all_supported_types_roundtrip(tmp_path):
     assert out["shape"] == (2, 3)
 
 
-def test_unsupported_value_raises_instead_of_dropping(tmp_path):
+@SUFFIXES
+def test_unsupported_value_raises_instead_of_dropping(tmp_path, suffix):
     with pytest.raises(TypeError, match=r"results\['bad'\]"):
-        _cd({"bad": object()}).write(tmp_path / "x.h5cd")
+        _cd({"bad": object()}).write(tmp_path / f"x{suffix}")
 
 
-def test_nested_unsupported_value_reports_path(tmp_path):
+@SUFFIXES
+def test_nested_unsupported_value_reports_path(tmp_path, suffix):
     with pytest.raises(TypeError, match=r"results\['outer'\]\['bad'\]"):
-        _cd({"outer": {"bad": {1, 2}}}).write(tmp_path / "x.h5cd")
+        _cd({"outer": {"bad": {1, 2}}}).write(tmp_path / f"x{suffix}")
 
 
-def test_object_array_raises(tmp_path):
+@SUFFIXES
+def test_object_array_raises(tmp_path, suffix):
     with pytest.raises(TypeError, match="object-dtype"):
-        _cd({"arr": np.array([{"a": 1}], dtype=object)}).write(tmp_path / "x.h5cd")
+        _cd({"arr": np.array([{"a": 1}], dtype=object)}).write(tmp_path / f"x{suffix}")
 
 
-def test_slash_in_key_raises(tmp_path):
+@SUFFIXES
+def test_slash_in_key_raises(tmp_path, suffix):
     with pytest.raises(ValueError, match="'/'"):
-        _cd({"a/b": np.zeros(2)}).write(tmp_path / "x.h5cd")
+        _cd({"a/b": np.zeros(2)}).write(tmp_path / f"x{suffix}")
 
 
 def test_legacy_untyped_results_still_read(tmp_path):
