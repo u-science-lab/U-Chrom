@@ -28,7 +28,7 @@ def test_read_pairs_cell1():
     df = read_pairs(str(path))
     assert list(df.columns) == ["read", "chr1", "pos1", "chr2", "pos2", "strand1", "strand2"]
     assert len(df) == 105_700
-    assert df["chr1"].dtype == object
+    assert pd.api.types.is_string_dtype(df["chr1"])      # object (pandas 2) or str (pandas 3)
 
 
 def test_read_pairs_gz_with_header(tmp_path):

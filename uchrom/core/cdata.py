@@ -2900,6 +2900,8 @@ def _read_dataframe(f, name: str) -> pd.DataFrame:
                 data[col] = _read_categorical(item)
             continue
         arr = item[:]
+        if arr.dtype.kind == "O" and len(arr) and isinstance(arr[0], bytes):
+            arr = arr.astype("S")        # variable-length strings (h5py returns bytes)
         if arr.dtype.kind == "S":
             arr = _decode_bytes(arr)
         data[col] = arr
