@@ -234,8 +234,13 @@ text below, as built:
 - Bins derived from spots are ordered by chromosome (category order),
   start, end — not first occurrence — so `bin_id` follows genome order.
 - `binsets` / `rebin` are not implemented yet.
-- Categorical columns are stored as `{codes, categories}`; spots are not
-  sorted and `index/` is not written (step 6, `@spot_order = "unsorted"`).
+- Categorical columns are stored as `{codes, categories}`, and the
+  compression part of step 6 already ships with 2.0: `write()` chunks
+  datasets of ≥ 4,096 elements (65,536 rows per chunk) and compresses them
+  with gzip level 4 by default (`compression="lzf"` / `None` opt-in;
+  both built into h5py).  Strings are encoded / decoded vectorised.
+  Spots are not sorted and `index/` is not written (step 6,
+  `@spot_order = "unsorted"`); coords stay float64.
 
 ### Motivation
 

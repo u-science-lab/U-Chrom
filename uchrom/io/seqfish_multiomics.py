@@ -164,11 +164,22 @@ def read_seqfish_multiomics(
         cerebellum mapping is used (Granule/Bergmann/MLI1/Purkinje/MLI2+PLI),
         with all uncovered clusters labelled ``'Other'``.
     allele_col
-        Which homologous-chromosome assignment to use for ``trace_id``.
+        Which homologous-chromosome assignment defines ``trace_id``.
         One of ``'dbscan_allele'``, ``'dbscan_ldp_allele'``,
         ``'dbscan_ldp_nbr_allele'``.  Defaults to the highest-recall
         ``dbscan_ldp_nbr_allele`` (the column referenced as canonical in
         the published analysis notebooks).
+
+        .. warning::
+           ``dbscan_ldp_nbr_allele`` often merges the two homologs of a
+           chromosome into one trace.  On the Takei 2025 cerebellum data
+           (1e7 spots) 75.6 % of its traces observe some locus twice and
+           the median genomic–spatial Spearman ρ per trace is 0.19;
+           ``dbscan_ldp_allele`` gives 0 % such traces and ρ = 0.41 but
+           keeps only 54 % of the spots.  For analyses that need one
+           fibre per trace (distance maps, TAD / loop calling, tracing
+           statistics) prefer ``allele_col="dbscan_ldp_allele"``; check
+           ``traces["n_duplicate_loci"]`` whichever column you use.
     keep_unclustered
         DBSCAN noise spots have ``allele == -1``.  When ``False``
         (default) these are dropped before constructing the
@@ -184,8 +195,12 @@ def read_seqfish_multiomics(
           ``f"{rep}_{fov}_{cellID}_{chrom}_a{allele}"``)
         - ``tracks``: 62 columns = 59 z-scores +
           ``dot_int, n_rad_score, n_per_dist(um)``
-        - ``traces``: diagnostic ``dbscan_allele`` / ``dbscan_ldp_allele``
-          per trace
+        - ``traces`` (index ``trace_id``): ``allele`` (the ``allele_col``
+          value that defines the trace), ``n_spots``, ``n_loci``,
+          ``n_duplicate_loci`` (spots whose locus already occurs in the
+          trace — > 0 means homologs were merged), and for each other
+          allele column ``<col>_majority`` / ``<col>_agreement`` (its most
+          common value in the trace and the fraction of spots with it)
         - ``cells`` and ``cellm['umap']`` if ``cell_clustering`` is given
         - ``uns``: genome_assembly='mm10', xyz_unit='um', voxel sizes,
           Zenodo record id, the leiden map actually used, and the
@@ -832,11 +847,7 @@ def _process_one_csv(
         tracks[col] = pd.to_numeric(tracks[col], errors="coerce")
     tracks = tracks.reset_index(drop=True)
 
-    traces = (
-        merged.groupby("trace_id", sort=False)
-        .agg({"dbscan_allele": "first", "dbscan_ldp_allele": "first"})
-    )
-    traces.index.name = "trace_id"
+    traces = _trace_table(merged, allele_col)
 
     del merged, df
     gc.collect()
@@ -847,6 +858,37 @@ def _process_one_csv(
         "tracks": tracks,
         "traces": traces,
     }
+
+
+def _trace_table(merged: pd.DataFrame, allele_col: str) -> pd.DataFrame:
+    """Per-trace diagnostics (vectorised; no per-trace Python loop).
+
+    ``allele`` is constant within a trace by construction.  The other
+    allele columns can disagree within a trace, so they are summarised
+    as majority value + agreement fraction rather than an arbitrary
+    first spot's value.
+    """
+    g = merged.groupby("trace_id", sort=False)
+    traces = pd.DataFrame({
+        "allele": g[allele_col].first().astype(np.int64),
+        "n_spots": g.size().astype(np.int64),
+        "n_loci": g["name"].nunique().astype(np.int64),
+    })
+    dup = merged.duplicated(["trace_id", "name"])
+    traces["n_duplicate_loci"] = (
+        dup.groupby(merged["trace_id"], sort=False).sum().reindex(traces.index).astype(np.int64)
+    )
+    for col in _ALLELE_COLUMNS:
+        if col == allele_col or col not in merged.columns:
+            continue
+        counts = (merged.groupby(["trace_id", col], sort=False, observed=True).size()
+                  .rename("_n").reset_index())
+        top = (counts.sort_values(["trace_id", "_n"], ascending=[True, False], kind="mergesort")
+               .drop_duplicates("trace_id").set_index("trace_id"))
+        traces[f"{col}_majority"] = top[col].reindex(traces.index).astype(np.int64)
+        traces[f"{col}_agreement"] = (top["_n"].reindex(traces.index) / traces["n_spots"]).astype(float)
+    traces.index.name = "trace_id"
+    return traces
 
 
 def _assign_trace_id(

@@ -348,3 +348,29 @@ def test_upgrade_h5cd_and_cli(tmp_path, capsys):
     assert main([str(src), "--out-dir", str(tmp_path / "out")]) == 0
     assert "(1.4) ->" in capsys.readouterr().out
     assert file_format_version(tmp_path / "out" / "old.h5cd") == "2.0"
+
+
+def test_write_compression_options(tmp_path):
+    n = 5000
+    spots = pd.DataFrame({"chrom": ["chr1"] * n, "start": np.arange(n) * 10,
+                          "end": np.arange(n) * 10 + 10, "trace_id": np.arange(n) // 50,
+                          "label": np.array(["é-x", "b"] * (n // 2))})     # non-ASCII survives
+    cd = ChromData(np.random.default_rng(0).normal(size=(n, 3)), spots)
+    paths = {}
+    for name, kw in {"default": {}, "floats": {"compress_floats": True},
+                     "lzf": {"compression": "lzf"}, "none": {"compression": None}}.items():
+        paths[name] = tmp_path / f"{name}.h5cd"
+        cd.write(paths[name], **kw)
+        pd.testing.assert_frame_equal(ChromData.read(paths[name]).to_dataframe(), cd.to_dataframe())
+    with h5py.File(paths["default"], "r") as f:
+        assert f["spots/bin_id"].compression == "gzip" and f["spots/bin_id"].chunks[0] == n
+        assert f["coords"].compression is None               # floats off by default
+        assert f["spots/label"].compression == "gzip"
+    with h5py.File(paths["floats"], "r") as f:
+        assert f["coords"].compression == "gzip"
+    with h5py.File(paths["lzf"], "r") as f:
+        assert f["spots/bin_id"].compression == "lzf"
+    with h5py.File(paths["none"], "r") as f:
+        assert f["spots/bin_id"].compression is None
+    with pytest.raises(ValueError, match="compression"):
+        cd.write(tmp_path / "x.h5cd", compression="zstd")

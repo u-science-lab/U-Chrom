@@ -35,8 +35,14 @@ def file_format_version(path: PathLike) -> str:
     return v.decode() if isinstance(v, bytes) else str(v)
 
 
-def upgrade_h5cd(src: PathLike, dst: PathLike, *, overwrite: bool = False) -> dict:
+def upgrade_h5cd(src: PathLike, dst: PathLike, *, overwrite: bool = False,
+                 compression: Optional[str] = "gzip", compression_opts: Optional[int] = 4,
+                 compress_floats: bool = False) -> dict:
     """Read ``src`` (any supported format) and write it as format 2.0 to ``dst``.
+
+    ``compression`` / ``compression_opts`` / ``compress_floats`` are passed
+    to :meth:`ChromData.write` (gzip level 4 on integer / string data by
+    default; ``"lzf"`` or ``None``).
 
     Returns a summary: source / target versions, ``n_spots``, ``n_bins``
     and which tracks became bin- vs spot-level.  ``src`` is never
@@ -51,7 +57,8 @@ def upgrade_h5cd(src: PathLike, dst: PathLike, *, overwrite: bool = False) -> di
         raise FileExistsError(f"{dst} exists; pass overwrite=True")
     before = file_format_version(src)
     cd = ChromData.read(src)
-    cd.write(dst)
+    cd.write(dst, compression=compression, compression_opts=compression_opts,
+             compress_floats=compress_floats)
     names = cd.track_names()
     return {
         "src": str(src), "dst": str(dst),
@@ -69,6 +76,11 @@ def main(argv: Optional[list] = None) -> int:
     ap.add_argument("paths", nargs="+", help="SRC DST, or several SRC with --out-dir")
     ap.add_argument("--out-dir", help="write each SRC to OUT_DIR/<name>")
     ap.add_argument("--overwrite", action="store_true", help="replace existing outputs")
+    ap.add_argument("--compression", default="gzip", choices=["gzip", "lzf", "none"],
+                    help="dataset filter (default gzip)")
+    ap.add_argument("--level", type=int, default=4, help="gzip level (default 4)")
+    ap.add_argument("--compress-floats", action="store_true",
+                    help="also compress coords / float tracks (smaller, slower reads)")
     args = ap.parse_args(argv)
 
     if args.out_dir:
@@ -80,7 +92,9 @@ def main(argv: Optional[list] = None) -> int:
     else:
         ap.error("give SRC DST, or several SRC with --out-dir")
     for src, dst in pairs:
-        info = upgrade_h5cd(src, dst, overwrite=args.overwrite)
+        comp = None if args.compression == "none" else args.compression
+        info = upgrade_h5cd(src, dst, overwrite=args.overwrite, compression=comp,
+                            compression_opts=args.level, compress_floats=args.compress_floats)
         print(f"{src} ({info['from_version']}) -> {dst} ({info['to_version']}): "
               f"{info['n_spots']} spots, {info['n_bins']} bins, "
               f"{len(info['bin_tracks'])} bin tracks, {len(info['spot_tracks'])} spot tracks")

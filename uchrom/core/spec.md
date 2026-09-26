@@ -196,7 +196,10 @@ data.h5cd
 └── uns/                scalars as attrs, arrays as datasets, dicts as sub-groups
 ```
 
-Categorical columns are stored as `{codes, categories}` groups.  1.x
+Categorical columns are stored as `{codes, categories}` groups.  Datasets
+of ≥ 4,096 elements are chunked (65,536 rows per chunk) and compressed —
+gzip level 4 by default, `cd.write(path, compression="lzf" | None)` to
+change it.  1.x
 files (spots with `chrom/start/end`, spot-aligned `tracks/`) are read by
 `_read_v1` and upgraded in memory; `uchrom.io.upgrade_h5cd(src, dst)` /
 `python -m uchrom.io.upgrade` rewrites them.  Not in 2.0 yet: sorted

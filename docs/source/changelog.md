@@ -26,7 +26,16 @@
   version is deprecated).  `cd.tracks` is a deprecated spot-aligned view.
   `uchrom.io.upgrade_h5cd` and `python -m uchrom.io.upgrade` rewrite 1.x
   files; the web browser lists bin- and spot-level tracks and typed
-  intervals.
+  intervals.  Large integer / string datasets are chunked and gzip-4
+  compressed (`write(compression=…, compress_floats=…)`); strings are
+  encoded / decoded vectorised.
+- Fix: `from_fofct` kept the last `##columns=` name intact when it ends in
+  `)` (`n_per_dist(um)` was read as `n_per_dist(um`).
+- seqFISH+ loader (Takei 2025): `traces` now reports `allele`, `n_spots`,
+  `n_loci`, `n_duplicate_loci` and per-column allele majority / agreement
+  instead of the first spot's `dbscan_*` values; the docstring warns that
+  the default `allele_col="dbscan_ldp_nbr_allele"` often merges homologs
+  (default unchanged).
 
 ## 0.2.0 — 2026-04
 

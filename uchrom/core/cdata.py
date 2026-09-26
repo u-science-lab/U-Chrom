@@ -1527,8 +1527,31 @@ class ChromData:
     # I/O
     # ------------------------------------------------------------------
 
-    def write(self, path: PathLike) -> None:
-        """Write to HDF5 (.h5cd) file."""
+    def write(
+        self,
+        path: PathLike,
+        *,
+        compression: Optional[str] = "gzip",
+        compression_opts: Optional[int] = 4,
+        compress_floats: bool = False,
+    ) -> None:
+        """Write to an HDF5 ``.h5cd`` file (format 2.0).
+
+        Parameters
+        ----------
+        compression : ``"gzip"`` (default), ``"lzf"`` or ``None``
+            Filter for the large integer / string datasets (``bin_id``,
+            categorical codes, string columns, integer tracks).  gzip is
+            part of every HDF5 build; lzf ships with h5py.  Datasets below
+            4,096 elements are stored contiguously, uncompressed.
+        compression_opts : int, optional
+            gzip level (default 4); ignored for ``"lzf"``.
+        compress_floats : bool
+            Also compress float datasets (``coords``, ``layers``, float
+            tracks).  Off by default: on real tracing data it saves only
+            ~15-20 % while making full reads ~4x slower (see the format
+            2.0 notes in ``docs/source/guide/chromdata_2_0_design.md``).
+        """
         import h5py
 
         try:
@@ -1538,6 +1561,16 @@ class ChromData:
 
         self._check_bin_ids()
         path = Path(path)
+        if compression not in (None, "gzip", "lzf"):
+            raise ValueError("compression must be 'gzip', 'lzf' or None")
+        _WRITE_OPTS.update(compression=compression, compress_floats=bool(compress_floats),
+                           compression_opts=compression_opts if compression == "gzip" else None)
+        try:
+            self._write_h5(h5py, path, _uchrom_version)
+        finally:
+            _WRITE_OPTS.update(compression=None, compression_opts=None, compress_floats=False)
+
+    def _write_h5(self, h5py, path: Path, _uchrom_version: str) -> None:
         spots = self.spots.drop(columns=[c for c in LOCI if c in self.spots.columns])
         spots[BIN_ID] = spots[BIN_ID].to_numpy().astype(
             np.int32 if self.n_bins < 2 ** 31 else np.int64)
@@ -1546,7 +1579,7 @@ class ChromData:
             f.attrs["uchrom_version"] = _uchrom_version
             f.attrs["spot_order"] = "unsorted"
             _write_dataframe(f, "bins", self._bins.reset_index(drop=True))
-            f.create_dataset("coords", data=self.coords)
+            _create_dataset(f, "coords", self.coords)
             _write_dataframe(f, "spots", spots)
             f["spots"].attrs["_column_order"] = json.dumps([str(c) for c in self.spots.columns])
             _write_dataframe(f, "tracks", self._bin_tracks.reset_index(drop=True),
@@ -2184,7 +2217,11 @@ def _read_fofct_table(path: Path):
             if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
                 stripped = stripped[1:-1]
             if stripped.lower().startswith("##columns="):
-                cols_str = stripped.split("=", 1)[1].strip().strip("()")
+                cols_str = stripped.split("=", 1)[1].strip()
+                # remove one enclosing pair only: str.strip("()") would also
+                # eat the ")" of a last column such as "n_per_dist(um)"
+                if cols_str.startswith("(") and cols_str.endswith(")"):
+                    cols_str = cols_str[1:-1]
                 columns = [c.strip() for c in cols_str.split(",")]
             elif stripped.startswith("##"):
                 key, _, val = stripped[2:].partition("=")
@@ -2538,9 +2575,9 @@ def _write_dataframe(f, name: str, df: Optional[pd.DataFrame], n_rows: Optional[
         else:
             data = series.values
         if data.dtype.kind in ("U", "S", "O"):
-            grp.create_dataset(col, data=data.astype("S"))
+            _create_dataset(grp, col, _encode_str(data) if data.dtype.kind != "S" else data)
         else:
-            grp.create_dataset(col, data=data)
+            _create_dataset(grp, col, data)
 
     # Preserve a non-trivial index — see format 1.1 note above.
     idx = df.index
@@ -2553,11 +2590,56 @@ def _write_dataframe(f, name: str, df: Optional[pd.DataFrame], n_rows: Optional[
     if not is_trivial_range:
         idx_vals = idx.to_numpy()
         if idx_vals.dtype == object or idx_vals.dtype.kind in ("U", "S"):
-            data = np.array([str(x) for x in idx_vals]).astype("S")
+            data = _encode_str(idx_vals.astype(str))
         else:
             data = idx_vals
         grp.create_dataset("_index", data=data)
         grp.attrs["_index_name"] = idx.name if idx.name is not None else ""
+
+
+# Filter settings for the current ``ChromData.write`` call (set / reset there).
+_WRITE_OPTS: Dict[str, Any] = {"compression": None, "compression_opts": None,
+                               "compress_floats": False}
+_COMPRESS_MIN_ELEMENTS = 4096
+_CHUNK_ROWS = 65536
+
+
+def _create_dataset(grp, name: str, data) -> Any:
+    """``create_dataset`` with the write call's compression for big arrays.
+
+    Arrays of at least 4,096 elements are chunked along the first axis
+    (up to 65,536 rows per chunk) and compressed; smaller ones are stored
+    contiguously, so tiny files do not pay the chunk-index overhead.
+    Float arrays are compressed only with ``compress_floats``.
+    """
+    data = np.asarray(data)
+    comp = _WRITE_OPTS.get("compression")
+    if data.dtype.kind in "fc" and not _WRITE_OPTS.get("compress_floats"):
+        comp = None
+    if comp is None or data.ndim == 0 or data.size < _COMPRESS_MIN_ELEMENTS:
+        return grp.create_dataset(name, data=data)
+    chunks = (min(len(data), _CHUNK_ROWS),) + tuple(data.shape[1:])
+    return grp.create_dataset(name, data=data, chunks=chunks, compression=comp,
+                              compression_opts=_WRITE_OPTS.get("compression_opts"),
+                              shuffle=data.dtype.kind in "iuf")
+
+
+def _encode_str(values) -> np.ndarray:
+    """str array → fixed-width UTF-8 bytes (vectorised; ASCII fast path)."""
+    arr = np.asarray(values, dtype=str)
+    try:
+        return arr.astype("S")
+    except UnicodeEncodeError:
+        return np.char.encode(arr, "utf-8")
+
+
+def _decode_bytes(arr: np.ndarray, dtype=None) -> np.ndarray:
+    """Fixed-width bytes → str (vectorised; ASCII fast path, UTF-8 fallback)."""
+    try:
+        out = arr.astype(str)
+    except UnicodeDecodeError:
+        out = np.char.decode(arr, "utf-8")
+    return out.astype(dtype) if dtype is not None else out
 
 
 def _write_categorical(grp, col: str, series: pd.Series) -> None:
@@ -2568,10 +2650,10 @@ def _write_categorical(grp, col: str, series: pd.Series) -> None:
     sub = grp.create_group(col)
     sub.attrs["_type"] = "categorical"
     sub.attrs["_ordered"] = bool(cat.ordered)
-    sub.create_dataset("codes", data=np.asarray(cat.codes).astype(code_dtype))
+    _create_dataset(sub, "codes", np.asarray(cat.codes).astype(code_dtype))
     cats = np.asarray(cat.categories)
     if cats.dtype.kind in "OUS":
-        sub.create_dataset("categories", data=np.array([str(c) for c in cats], dtype="S"))
+        sub.create_dataset("categories", data=_encode_str(cats.astype(str)))
     else:
         sub.create_dataset("categories", data=cats)
 
@@ -2579,7 +2661,7 @@ def _write_categorical(grp, col: str, series: pd.Series) -> None:
 def _read_categorical(sub) -> pd.Categorical:
     cats = sub["categories"][:]
     if cats.dtype.kind == "S":
-        cats = np.array([x.decode("utf-8") for x in cats], dtype=object)
+        cats = _decode_bytes(cats, dtype=object)
     return pd.Categorical.from_codes(
         sub["codes"][:].astype(np.int64), categories=cats,
         ordered=bool(sub.attrs.get("_ordered", False)),
@@ -2621,7 +2703,7 @@ def _read_dataframe(f, name: str) -> pd.DataFrame:
             continue
         arr = item[:]
         if arr.dtype.kind == "S":
-            arr = np.array([x.decode("utf-8") for x in arr])
+            arr = _decode_bytes(arr)
         data[col] = arr
     if not data:
         return pd.DataFrame()
@@ -2630,7 +2712,7 @@ def _read_dataframe(f, name: str) -> pd.DataFrame:
     if "_index" in grp:
         idx_arr = grp["_index"][:]
         if idx_arr.dtype.kind == "S":
-            idx_arr = np.array([x.decode("utf-8") for x in idx_arr])
+            idx_arr = _decode_bytes(idx_arr)
         name_attr = grp.attrs.get("_index_name", "")
         if isinstance(name_attr, bytes):
             name_attr = name_attr.decode("utf-8")
@@ -2643,7 +2725,7 @@ def _write_dict_of_arrays(f, name: str, d: dict):
     """Write a dict of numpy arrays to an HDF5 group."""
     grp = f.create_group(name)
     for key, arr in d.items():
-        grp.create_dataset(key, data=np.asarray(arr))
+        _create_dataset(grp, key, np.asarray(arr))
 
 
 def _read_dict_of_arrays(f, name: str) -> dict:

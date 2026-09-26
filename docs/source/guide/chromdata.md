@@ -224,7 +224,8 @@ D = cd.compute_distances(trace_id=0)  # (n_spots_in_trace, n_spots_in_trace)
 | `.h5cd` (HDF5) | `ChromData.read` |
 
 ```python
-cd.write("data.h5cd")                  # format 2.0
+cd.write("data.h5cd")                  # format 2.0, gzip-4 compressed
+cd.write("fast.h5cd", compression="lzf")   # or compression=None
 cd2 = ChromData.read("data.h5cd")      # 2.0, or 1.x upgraded in memory
 ```
 
