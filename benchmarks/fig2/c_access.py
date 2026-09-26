@@ -1,0 +1,207 @@
+"""Figure 2c — access by level: ``get_trace`` / ``get_cell`` / ``get_chrom`` latency vs n_spots.
+
+Data: the same whole-cell Takei 2025 subsets as panel b (``_common.stage_subset``),
+written once to ``.h5cd`` by this checkout.  For each size a fresh interpreter
+opens the file through a *backend* (``BACKENDS``), records the open/read time
+and RSS, then times ``n_queries`` random ids per level (fixed seed; chromosome
+names are drawn with replacement since there are only ~20).  Reported: median
+and IQR per level, plus the read time separately.
+
+Backends:
+
+* ``h5cd-1x-memory`` — ``ChromData.read`` then in-memory ``cd.get_*`` (a
+  boolean-mask scan over all spots); measured on a 1.x checkout.
+* ``h5cd-2-memory`` — the same on the HDF5 file written by format 2.0.
+* ``zarr-backed`` — ``ChromData.read(path, backed=True)`` on a
+  ``.chromdata.zarr`` store: only the small tables and ``index/`` are read on
+  open; ``get_*`` reads the row ranges it needs (Parquet row groups) and
+  returns an in-memory ChromData.  The page cache is not flushed (no root):
+  "from disk" means a fresh process, warm OS cache.
+* ``zarr-memory`` — full ``ChromData.read`` of the store, then the in-memory
+  scan.
+
+Each backend writes its own file (``ext`` / ``write``).  Besides the latency,
+every child records its RSS after open, after the trace and cell queries
+(before the chromosome scans) and its peak.
+
+    python benchmarks/fig2/c_access.py [--sizes 1e4,1e5,1e6,1e7] [--queries 20] [--backends h5cd-1x-memory]
+
+Writes ``paper/fig2/results/c_access.json``.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _common as C  # noqa: E402
+
+SCRIPT = Path(__file__).resolve()
+
+
+class H5cd1xMemory:
+    """Load the whole file (format 1.x), query in memory by mask scan."""
+
+    label = "h5cd 1.x (in memory, scan)"
+    ext = ".h5cd"
+
+    @staticmethod
+    def write(cd, path):
+        cd.write(path)
+
+    def open(self, path):
+        from uchrom import ChromData
+        self.cd = ChromData.read(path)
+
+    def ids(self):
+        s = self.cd.spots
+        return {"trace": list(s["trace_id"].cat.categories), "cell": list(s["cell_id"].cat.categories),
+                "chrom": list(s["chrom"].cat.categories)}
+
+    def get(self, level, key):
+        return {"trace": self.cd.get_trace, "cell": self.cd.get_cell, "chrom": self.cd.get_chrom}[level](key)
+
+
+class H5cd2Memory(H5cd1xMemory):
+    """HDF5 written by format 2.0 (#65), loaded whole, queried by mask scan."""
+
+    label = "h5cd 2.0 (in memory, scan)"
+
+    @staticmethod
+    def write(cd, path):
+        C.FORMATS["h5cd2"].write(cd, path)
+
+
+class ZarrMemory(H5cd1xMemory):
+    label = "chromdata.zarr 2.0 (in memory, scan)"
+    ext = ".chromdata.zarr"
+
+    @staticmethod
+    def write(cd, path):
+        cd.write(path)
+
+
+class ZarrBacked(ZarrMemory):
+    """Backed store: open reads the small tables + index; get_* reads row ranges."""
+
+    label = "chromdata.zarr 2.0 (backed, from disk)"
+
+    def open(self, path):
+        from uchrom import ChromData
+        self.cd = ChromData.read(path, backed=True)
+
+    def ids(self):
+        cd = self.cd
+        return {"trace": list(cd._categories("trace_id")), "cell": list(cd._categories("cell_id")),
+                "chrom": list(cd.bins["chrom"].cat.categories)}
+
+
+BACKENDS = {"h5cd-1x-memory": H5cd1xMemory, "h5cd-2-memory": H5cd2Memory,
+            "zarr-backed": ZarrBacked, "zarr-memory": ZarrMemory}
+
+
+def child(backend_key, path, n_queries):
+    be = BACKENDS[backend_key]()
+    import h5py  # noqa: F401  (import cost out of the timing)
+    from uchrom import ChromData  # noqa: F401
+    try:
+        import pyarrow.parquet, zarr  # noqa: F401,E401
+        import uchrom.core.backed  # noqa: F401
+    except ImportError:  # 1.x checkout
+        pass
+    base = C.current_rss_mb()
+    t0 = time.perf_counter()
+    be.open(Path(path))
+    open_s = time.perf_counter() - t0
+    rss_open = C.current_rss_mb()
+    ids = be.ids()
+    rng = np.random.default_rng(0)
+    out = {"open_s": open_s, "rss_after_open_mb": rss_open, "baseline_rss_mb": base}
+    for level in ("trace", "cell", "chrom"):
+        if level == "chrom":
+            out["rss_after_trace_cell_mb"] = C.current_rss_mb()
+            out["peak_rss_trace_cell_mb"] = C.peak_rss_mb()
+        pool = ids[level]
+        picks = rng.choice(len(pool), int(n_queries), replace=len(pool) < int(n_queries) or level == "chrom")
+        be.get(level, pool[picks[0]])  # warm-up (first-call imports / caches), not timed
+        times, sizes = [], []
+        for i in picks:
+            t0 = time.perf_counter()
+            sub = be.get(level, pool[i])
+            times.append(time.perf_counter() - t0)
+            sizes.append(int(sub.n_spots))
+        out[level] = {"latency_s": C.iqr(times), "times_s": times, "result_spots_median": float(np.median(sizes)),
+                      "n_ids": len(pool)}
+    out["peak_rss_mb"] = C.peak_rss_mb()
+    C.emit(out)
+
+
+def child_write(backend_key, stage, out):
+    cd = C.load_stage(Path(stage))
+    BACKENDS[backend_key].write(cd, out)
+    C.emit({"bytes": C.size_bytes(Path(out))})
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--sizes", default="1e4,1e5,1e6,1e7")
+    ap.add_argument("--queries", type=int, default=20)
+    ap.add_argument("--backends", default="h5cd-1x-memory")
+    ap.add_argument("--prebuilt", action="append", default=[], metavar="N=PATH",
+                    help="zarr backends: use this store for size N instead of staging + writing "
+                         "one (e.g. a 1e8-spot store from replicate_store.py); repeatable")
+    ap.add_argument("--child", nargs="+", help=argparse.SUPPRESS)
+    args = ap.parse_args()
+    if args.child:
+        if args.child[0] == "write":
+            return child_write(*args.child[1:])
+        return child(*args.child)
+
+    from uchrom.core.cdata import FORMAT_VERSION
+
+    sizes = [int(float(s)) for s in args.sizes.split(",")]
+    prebuilt = {int(float(k)): Path(v) for k, v in (p.split("=", 1) for p in args.prebuilt)}
+    work = C.WORK / "c_access"
+    work.mkdir(parents=True, exist_ok=True)
+    series = {}
+    for key in args.backends.split(","):
+        be = BACKENDS[key]
+        points = []
+        for n in sizes:
+            if n in prebuilt and key.startswith("zarr"):
+                h5 = prebuilt[n]
+                meta = json.loads((h5 / "zarr.json").read_text())["attributes"]["uchrom"]
+                info = {"n_spots": meta["n_spots"], "n_cells": meta["n_cells"],
+                        "replicated": bool(meta.get("replicated")),
+                        "prebuilt": str(h5), "replicated_from": meta.get("replicated")}
+            else:
+                stage = C.stage_subset(n)
+                info = C.stage_info(stage)
+                tag = "h5cd2" if key == "h5cd-2-memory" else "zarr" if key.startswith("zarr") else f"v{FORMAT_VERSION}"
+                h5 = work / f"n{n}_{tag}{be.ext}"
+                if not h5.exists():
+                    C.run_child(SCRIPT, ["--child", "write", key, str(stage), str(h5)])
+            r = C.run_child(SCRIPT, ["--child", key, str(h5), str(args.queries)])
+            points.append({"n_target": n, "n_spots": info["n_spots"], "n_cells": info["n_cells"],
+                           "replicated": info["replicated"], "file_mb": C.size_bytes(h5) / 2**20,
+                           **({"prebuilt": info["prebuilt"], "replicated_from": info["replicated_from"]}
+                              if "prebuilt" in info else {}), **r})
+            print(f"{be.label:28s} n={info['n_spots']:>11,}  open {r['open_s']:7.2f} s  "
+                  + "  ".join(f"{lv} {r[lv]['latency_s']['median'] * 1e3:8.2f} ms" for lv in ("trace", "cell", "chrom")),
+                  flush=True)
+        series[be.label] = {"backend": key, "format_version": FORMAT_VERSION, "points": points,
+                            "page_cache": "warm (fresh process; OS cache not flushed)"}
+        C.write_json("c_access", {"panel": "c", "machine": C.machine_info(), "queries_per_level": args.queries,
+                                  "dataset": "Takei 2025 cerebellum rep 1 whole-cell subsets (see b_storage.json)",
+                                  "series": series}, merge_key="series")
+    print(C.RESULTS / "c_access.json")
+
+
+if __name__ == "__main__":
+    main()

@@ -771,6 +771,31 @@ The authoritative layout is `uchrom/core/spec.md`; the code is
     the in-memory encoder, so responses are identical.  Other views load
     the per-spot columns they need on first use.
 
+### Measured (real data, one M5 Pro laptop, 64 GB)
+
+Takei 2025 cerebellum whole-cell subsets (62 per-spot tracks; #64 harness,
+fresh process per trial, warm OS cache, median of 3):
+
+| n_spots | format | size | write | full read | read peak RSS |
+|---|---|---|---|---|---|
+| 1.0e7 | h5cd 1.x (#64) | 5.50 GB | 3.5 s | 7.2 s | 23.0 GB |
+| | h5cd 2.0 (#65) | 4.96 GB | 5.4 s | 4.4 s | 20.2 GB |
+| | Parquet (flat table, snappy) | 2.11 GB | 13.3 s | 0.80 s | 12.8 GB |
+| | **chromdata.zarr 2.0** | **1.90 GB** | 17.4 s | **0.98 s** | **6.0 GB** |
+| | chromdata.zarr 2.0, float32 coords | 1.84 GB | 16.8 s | 0.94 s | 6.0 GB |
+
+Backed access (`read(backed=True)`, fresh process): open 0.03 s at 1e7 and
+0.19 s at 1e8 (a store of Takei rep 1 replicated 10×); `get_trace` /
+`get_cell` 7 / 8 ms at 1e7 and 16 / 22 ms at 1e8; resident memory after
+open 0.17 GB (1e7) / 0.43 GB (1e8).  `get_chrom` is a scan in this sort
+order (0.8 s at 1e7, 8.9 s at 1e8).  Converting the 10.9 M-spot 1.x file
+takes 45 s at 25 GB peak (the 1.x reader dominates); the store is 2.07 GB
+(1.x: 6.29 GB, h5cd 2.0: 5.41 GB) and reads back value-identical.  Full
+reads are ~20 % slower than a flat Parquet file: two zstd files instead of
+one snappy file, and building a `ChromData` (loci from `bins`,
+categoricals) instead of returning a flat DataFrame — but at half the peak
+memory.  Full numbers: PR #66 and `paper/fig2/results/`.
+
 ### Format 2.0 HDF5 layout (the first plan)
 
 As built by #65 (without `index/`, sorted spots, `contacts/`, `links/`),
