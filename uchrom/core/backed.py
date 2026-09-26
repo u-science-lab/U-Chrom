@@ -433,25 +433,11 @@ class BackedChromData(ChromData):
         coord_cols = list(self._parts["spot_meta"].get("coords", ("x", "y", "z")))
         stored = [c for c in spot_cols if c not in LOCI]
         full = rows is None and ranges is None
-        st_job = None
         want_st = "spot_tracks" in r.files and bool(track_cols)
+        st_cols = None
         if want_st:
             all_st = list(self._spot_tracks_proxy.columns)
             st_cols = None if track_cols == all_st else track_cols
-            if full:
-                # a full read decodes the spot tracks while the spots are
-                # converted (string columns hold the GIL; Parquet does not)
-                import threading
-                box: dict = {}
-
-                def st_read():
-                    try:
-                        box["df"] = r.to_frame("spot_tracks", r.read_all("spot_tracks", st_cols))
-                    except BaseException as exc:  # pragma: no cover - re-raised below
-                        box["err"] = exc
-
-                st_job = threading.Thread(target=st_read, name="uchrom-spot-tracks")
-                st_job.start()
         if full:
             # full read: coordinates decoded straight into the (n, 3) array
             coords = np.empty((r.n, 3), dtype=np.float64)
@@ -461,17 +447,17 @@ class BackedChromData(ChromData):
             t = read(spot_name, stored + coord_cols)
             coords = r.coords_of(t, coord_cols)
             t = t.drop_columns(coord_cols)
-        try:
-            spots = r.to_frame(spot_name, t)
-        finally:
-            if st_job is not None:
-                st_job.join()
+        st_finish = None
+        if want_st and full:
+            # the spot tracks are read now; their float decoding runs in
+            # threads (numpy, no GIL) while the spots are converted below
+            # (string columns hold the GIL)
+            st_finish = r.read_all("spot_tracks", st_cols, deferred=True)
+        spots = r.to_frame(spot_name, t)
         del t
         spot_tracks = None
-        if st_job is not None:
-            if "err" in box:
-                raise box["err"]
-            spot_tracks = box["df"]
+        if st_finish is not None:
+            spot_tracks = r.to_frame("spot_tracks", st_finish())
         elif want_st:
             spot_tracks = r.to_frame("spot_tracks", read("spot_tracks", st_cols))
         def layer(k):

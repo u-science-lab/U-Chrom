@@ -1597,6 +1597,8 @@ def _read_uns(c: Container, rel: str, group=None) -> dict:
 _COMBINE_MIN_ROWS = 1 << 18
 #: rows per parallel task of a full-table read (whole row groups)
 _FULL_READ_TASK_ROWS = 1 << 18
+#: rows per in-place decoding job of a decimal-encoded column
+_DECODE_BLOCK_ROWS = 1 << 18
 
 
 class _ChunkStats:
@@ -1922,20 +1924,27 @@ class SpotRows:
     # -- raw Arrow access --------------------------------------------------
 
     def read_all(self, name: str, columns: Optional[Sequence[str]] = None,
-                 dest: Optional[Mapping[str, np.ndarray]] = None):
+                 dest: Optional[Mapping[str, np.ndarray]] = None, deferred: bool = False):
         """The whole table (all partitions), decoded, with single-chunk columns.
 
-        Row groups are read and decoded **in parallel** — tasks of about
+        Row groups are read **in parallel** — tasks of about
         :data:`_FULL_READ_TASK_ROWS` rows, one ``ParquetFile`` per thread —
         straight into one preallocated buffer per numeric column (from
-        Arrow's pool, so ``to_pandas`` is zero-copy; decimal-encoded floats
-        are decoded into it).  ``dest`` maps logical columns to float64 /
-        integer arrays of ``n`` rows to fill instead (e.g. the columns of a
-        coordinate array).  Helper columns of encoded floats whose Parquet
-        statistics show nothing to apply (no exceptions) are not read.  Non-numeric columns (strings, booleans)
-        and integer columns with nulls are gathered as chunks and combined.
-        Returns an Arrow table of the logical columns (``dest`` columns
-        left out: they are in the given arrays)."""
+        Arrow's pool, so ``to_pandas`` is zero-copy).  Decimal-encoded
+        floats (format 2.2): a dictionary-encoded column is read as an Arrow
+        dictionary, whose values alone are decoded before one gather into
+        the buffer; a plain one is copied as packed integers and decoded in
+        place afterwards, in cache-sized blocks in threads.  Exception
+        columns whose Parquet statistics say they are all null are not read.
+        ``dest`` maps logical columns to float64 / integer arrays (or strided
+        views) of ``n`` rows to fill instead.  Non-numeric columns (strings,
+        booleans) and integer columns with nulls are gathered as chunks and
+        combined.
+
+        Returns an Arrow table of the logical columns (``dest`` columns left
+        out: they are in the given arrays) — or, with ``deferred``, a
+        function returning it once the in-place decoding started in the
+        background is done (the caller can convert other data meanwhile)."""
         import pyarrow as pa
         import pyarrow.types as pat
 
@@ -1943,11 +1952,11 @@ class SpotRows:
 
         logical = list(columns) if columns is not None else self.columns(name)
         enc = {c: p for c, p in (self.encoding.get(name) or {}).items() if c in logical}
+        dict_enc = [c for c in enc if enc[c].get("dictionary")]
         schema = self.empty(name, logical).schema
         n = self.n
         dest = dict(dest or {})
-        pf0 = [self.pf(name, p) for p in range(self.n_partitions)]
-        stats = _ChunkStats(pf0)
+        stats = _ChunkStats([self.pf(name, p) for p in range(self.n_partitions)])
         # numeric columns go into buffers unless an integer column holds nulls
         bufs: Dict[str, np.ndarray] = {}
         owners: Dict[str, Any] = {}
@@ -1964,10 +1973,6 @@ class SpotRows:
                 bufs[c] = np.frombuffer(buf, dtype=dt, count=n)
             else:
                 chunked[c] = []
-        # string columns are read as dictionaries: one Python string per
-        # distinct value, not per row (see ``to_frame``)
-        str_cols = [f.name for f in schema if f.name in chunked
-                    and (pat.is_string(f.type) or pat.is_large_string(f.type))]
         # tasks: runs of row groups of one partition, in row order
         tasks: List[Tuple[int, List[int], int, int]] = []
         for p in range(self.n_partitions):
@@ -1987,76 +1992,88 @@ class SpotRows:
                 cache = local.pf = {}
             key = (name, p)
             if key not in cache:
-                cache[key] = self.c.parquet(self.part_files[p][name], read_dictionary=str_cols)
+                cache[key] = self.c.parquet(self.part_files[p][name], read_dictionary=dict_enc)
             return cache[key]
 
         def run(i):
-            p, groups, a, b = tasks[i]
+            p, groups, a, _ = tasks[i]
             want = []
             for c in logical:
                 want.append(c)
-                if c in enc:
-                    if not stats.all_null(p, groups, c + _EXC):
-                        want.append(c + _EXC)
+                if c in enc and not stats.all_null(p, groups, c + _EXC):
+                    want.append(c + _EXC)
             t = pf_of(p).read_row_groups(groups, columns=want, use_threads=False)
             names = set(t.column_names)
             out = {}
             for c in logical:
-                if c in bufs:
-                    # encoded floats: the packed integers, decoded in place below
-                    col = t.column(c)
-                    dst = bufs[c].view(np.int64) if c in enc else bufs[c]
-                    pos = a
-                    for piece in col.chunks:
-                        m = len(piece)
-                        if m:
-                            dst[pos:pos + m] = piece.to_numpy(zero_copy_only=False)
-                        pos += m
-                    if c + _EXC in names:
-                        out[c + _EXC] = (a, t.column(c + _EXC))
-                else:
+                if c not in bufs:
                     out[c] = t.column(c).chunks
+                    continue
+                plan = enc.get(c)
+                dst = bufs[c].view(np.int64) if plan is not None and c not in dict_enc else bufs[c]
+                pos = a
+                for piece in t.column(c).chunks:
+                    m = len(piece)
+                    if m:
+                        if isinstance(piece, pa.DictionaryArray):
+                            # decode the dictionary only, then one gather
+                            values = floatcodec.decode(piece.dictionary.to_numpy(zero_copy_only=False), plan)
+                            np.take(values, piece.indices.to_numpy(zero_copy_only=False), out=dst[pos:pos + m],
+                                    mode="clip")
+                        elif plan is not None and c in dict_enc:  # pragma: no cover - plain pages
+                            floatcodec.decode(piece.to_numpy(zero_copy_only=False), plan, out=dst[pos:pos + m])
+                        else:  # numbers; packed integers are decoded in place below
+                            dst[pos:pos + m] = piece.to_numpy(zero_copy_only=False)
+                    pos += m
+                if c + _EXC in names:
+                    out[c + _EXC] = (a, t.column(c + _EXC))
             return out
 
+        futures: List[Any] = []
+        excs: Dict[str, List[Tuple[int, Any]]] = {}
         if n:
             results = list(_io_pool().map(run, range(len(tasks)))) if len(tasks) > 1 else [run(0)]
-            excs: Dict[str, List[Tuple[int, Any]]] = {}
             for res in results:
                 for c, val in res.items():
                     if c.endswith(_EXC) and c[:-len(_EXC)] in enc:
                         excs.setdefault(c[:-len(_EXC)], []).append(val)
                     else:
                         chunked[c].extend(val)
-            # decode in blocks (cache-sized, several columns at a time in threads)
-            block = 1 << 20
-            jobs = [(c, s0, min(n, s0 + block)) for c in enc for s0 in range(0, n, block)]
-            list(_io_pool().map(lambda j: floatcodec.decode_inplace(bufs[j[0]], enc[j[0]], j[1], j[2]), jobs))
-            for c, parts in excs.items():
-                for a, col in parts:
-                    import pyarrow.compute as pc
-                    valid = pc.is_valid(col).to_numpy(zero_copy_only=False)
-                    if valid.any():
-                        vals = pc.fill_null(col, 0.0).to_numpy(zero_copy_only=False)
-                        idx = np.flatnonzero(valid)
-                        bufs[c][a + idx] = vals[idx]
-        arrays, fields = [], []
-        for f in schema:
-            c = f.name
-            if c in dest:
-                continue
-            fields.append(f)
-            if c in owners:
-                arrays.append(pa.Array.from_buffers(f.type, n, [None, owners[c]]))
-            elif c in str_cols:
-                chunks = chunked[c]
-                typ = pa.dictionary(pa.int32(), f.type)
-                fields[-1] = pa.field(c, typ)
-                arrays.append(pa.chunked_array(chunks, type=typ) if chunks else pa.chunked_array([], type=typ))
-            else:
-                chunks = chunked[c]
-                arrays.append(pa.chunked_array(chunks, type=f.type).combine_chunks() if chunks
-                              else pa.array([], type=f.type))
-        return pa.Table.from_arrays(arrays, schema=pa.schema(fields, metadata=schema.metadata))
+            del results
+            # decode the plain packed columns in place, in cache-sized blocks,
+            # in threads (numpy: no GIL), while the caller may go on (deferred)
+            pool = _io_pool()
+            block = _DECODE_BLOCK_ROWS
+            futures = [pool.submit(floatcodec.decode_inplace, bufs[c], enc[c], s0, min(n, s0 + block))
+                       for c in enc if c not in dict_enc for s0 in range(0, n, block)]
+
+        def finish():
+            for fut in futures:
+                fut.result()
+            if excs:
+                import pyarrow.compute as pc
+                for c, parts in excs.items():
+                    for a, col in parts:
+                        valid = pc.is_valid(col).to_numpy(zero_copy_only=False)
+                        if valid.any():
+                            vals = pc.fill_null(col, 0.0).to_numpy(zero_copy_only=False)
+                            idx = np.flatnonzero(valid)
+                            bufs[c][a + idx] = vals[idx]
+            arrays, fields = [], []
+            for f in schema:
+                c = f.name
+                if c in dest:
+                    continue
+                fields.append(f)
+                if c in owners:
+                    arrays.append(pa.Array.from_buffers(f.type, n, [None, owners[c]]))
+                else:
+                    chunks = chunked[c]
+                    arrays.append(pa.chunked_array(chunks, type=f.type).combine_chunks() if chunks
+                                  else pa.array([], type=f.type))
+            return pa.Table.from_arrays(arrays, schema=pa.schema(fields, metadata=schema.metadata))
+
+        return finish if deferred else finish()
 
     def _local(self, g: int) -> Tuple[int, int]:
         p = int(self.group_part[g])
@@ -2205,11 +2222,6 @@ class SpotRows:
         names = list(table.column_names)
         coded = [c for c in names if c in cats]
         codes = {c: table.column(c).to_numpy() for c in coded}
-        # strings read as dictionaries (full reads): object columns sharing
-        # one Python string per distinct value
-        strs = {c: _dictionary_strings(table.column(c)) for c in names if c not in cats
-                and pa.types.is_dictionary(table.schema.field(c).type)}
-        coded += list(strs)
         plain = table.drop_columns(coded) if coded else table
         # Arrow's own conversion: multi-threaded, one block per column
         df = plain.to_pandas(split_blocks=True, self_destruct=True, use_threads=True) \
@@ -2218,9 +2230,6 @@ class SpotRows:
         df.index = pd.RangeIndex(len(df))
         # categoricals inserted at their places (no copy of the other columns)
         for c in coded:
-            if c in strs:
-                df.insert(names.index(c), c, strs[c])
-                continue
             categories, ordered = cats[c]
             if _FROM_CODES_VALIDATE:
                 cat = pd.Categorical.from_codes(codes[c], categories=categories, ordered=ordered, validate=False)
@@ -2236,29 +2245,6 @@ class SpotRows:
         for j, c in enumerate(columns):
             out[:, j] = table.column(c).to_numpy()
         return out
-
-
-def _dictionary_strings(col) -> np.ndarray:
-    """Object array of a (chunked) dictionary-encoded string column; nulls
-    become ``None``, as ``to_pandas`` makes them."""
-    import pyarrow as pa
-
-    col = col if isinstance(col, pa.ChunkedArray) else pa.chunked_array([col])
-    n = len(col)
-    out = np.empty(n, dtype=object)
-    if not n:
-        return out
-    col = col.unify_dictionaries()
-    values = col.chunk(0).dictionary.to_numpy(zero_copy_only=False)
-    values = np.append(values, None)                    # index -1: null
-    pos = 0
-    for ch in col.chunks:
-        m = len(ch)
-        idx = ch.indices.fill_null(-1).to_numpy(zero_copy_only=False) if ch.null_count else \
-            ch.indices.to_numpy(zero_copy_only=False)
-        np.take(values, idx, out=out[pos:pos + m])
-        pos += m
-    return out
 
 
 def _is_numeric(t) -> bool:

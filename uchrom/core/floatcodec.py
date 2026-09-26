@@ -145,7 +145,8 @@ def decode(packed, p: Dict[str, Any], exc_mask=None, exc_values=None,
     packed = np.asarray(packed, dtype=np.int64)
     contiguous = out is None or out.flags.c_contiguous
     res = out if (out is not None and contiguous) else np.empty(len(packed), dtype=np.float64)
-    tmp = np.right_shift(packed, _SHIFT)                 # q (arithmetic shift: floor)
+    tmp, _ = _scratch(len(packed)) if len(packed) <= _SCRATCH_MAX else (np.empty(len(packed), np.int64), None)
+    np.right_shift(packed, _SHIFT, out=tmp)              # q (arithmetic shift: floor)
     np.divide(tmp, s, out=res, casting="unsafe")
     np.bitwise_and(packed, (1 << _SHIFT) - 1, out=tmp)
     tmp -= _D                                            # d
@@ -159,14 +160,28 @@ def decode(packed, p: Dict[str, Any], exc_mask=None, exc_values=None,
     return res
 
 
+_SCRATCH = __import__("threading").local()
+_SCRATCH_MAX = 1 << 20
+
+
+def _scratch(m: int) -> Tuple[np.ndarray, np.ndarray]:
+    """Two reusable int64 work arrays of at least ``m`` rows (per thread: no
+    allocation, and no page faults, per call)."""
+    buf = getattr(_SCRATCH, "buf", None)
+    if buf is None or buf.shape[1] < m:
+        buf = _SCRATCH.buf = np.empty((2, max(m, 1 << 16)), dtype=np.int64)
+    return buf[0, :m], buf[1, :m]
+
+
 def decode_inplace(buf: np.ndarray, p: Dict[str, Any], start: int = 0, stop: Optional[int] = None) -> None:
     """Decode ``buf[start:stop]`` in place: a float64 array (or strided
     view) whose memory holds the packed int64 values."""
     s = 10.0 ** int(p["exp"])
     seg = buf[start:stop]
     packed = seg.view(np.int64)
-    q = np.right_shift(packed, _SHIFT)
-    d = np.bitwise_and(packed, (1 << _SHIFT) - 1)
+    q, d = _scratch(len(seg))
+    np.right_shift(packed, _SHIFT, out=q)
+    np.bitwise_and(packed, (1 << _SHIFT) - 1, out=d)
     d -= _D
     np.divide(q, s, out=seg, casting="unsafe")
     packed += d
