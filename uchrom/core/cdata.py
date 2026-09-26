@@ -1986,6 +1986,122 @@ class ChromData:
 
         return cls(coords, spots, uns=uns, **kwargs)
 
+    def to_fofct(
+        self,
+        path: PathLike,
+        *,
+        cell_table: Optional[PathLike] = None,
+        rna_table: Optional[PathLike] = None,
+        spot_tracks: bool = True,
+        bin_tracks: bool = False,
+        header: Optional[Mapping[str, Any]] = None,
+        cell_value_prefix: Optional[str] = "rna.",
+    ) -> Dict[str, Path]:
+        """Write a 4DN FOF-CT core table, optionally with its companion
+        cell and RNA-spot tables — the inverse of :meth:`from_fofct`.
+
+        The core table has the ``##`` / ``#`` header lines, then
+        ``Spot_ID, Trace_ID, X, Y, Z, Chrom, Chrom_Start, Chrom_End`` (+
+        ``Cell_ID`` / ``Sub_Cell_ROI_ID`` / ``Extra_Cell_ROI_ID`` when
+        present) and every other spot column, one row per spot in the
+        object's row order.
+
+        Parameters
+        ----------
+        path : path
+            Core table (``.csv``).
+        cell_table : path, optional
+            Also write :attr:`cells` as a ``4dn_FOF-CT_cell`` table
+            (``Cell_ID`` first; ``centroid_x/y/z`` → ``Cent_ROI_x/y/z``,
+            ``nucleus_area_um2`` → ``area(um2)``, ``cytoplasm_area_um2`` →
+            ``area_cyto(um2)``, and ``cell_value_prefix`` removed, so
+            ``rna.Nanog`` → ``Nanog``).
+        rna_table : path, optional
+            Also write ``points['rna']`` as a ``4dn_FOF-CT_rna`` table
+            (``Spot_ID, X, Y, Z, RNA_name, Gene_ID, Cell_ID, …``).
+        spot_tracks : bool
+            Append :attr:`spot_tracks` as extra columns (default).  They
+            come back as spot columns from :meth:`from_fofct`.
+        bin_tracks : bool
+            Also append :attr:`bin_tracks`, broadcast to spots.
+        header : mapping, optional
+            Header entries to add or override.  Defaults come from
+            ``uns['fofct_header']`` (what :meth:`from_fofct` read), else
+            ``FOF-CT_version=v0.1``, ``Table_namespace``, and
+            ``genome_assembly`` / ``XYZ_unit`` from :attr:`uns`.  The
+            required fields (``FOF-CT_version``, ``Table_namespace``,
+            ``genome_assembly``, ``XYZ_unit``) are written as ``##key=value``,
+            the others as ``#key: value``.
+
+        Returns
+        -------
+        dict
+            ``{"core": path, "cells": path, "rna": path}`` of the files
+            written.
+
+        Notes
+        -----
+        FOF-CT has no place for ``bins`` rows without spots, ``cellm``,
+        ``binm``, ``layers``, ``intervals``, ``results`` or other ``uns``
+        keys; those are not written.  Spots without ``spot_id`` get
+        ``Spot_ID = 0 .. n_spots - 1``.  Categorical extra columns come
+        back as plain columns.
+        """
+        written: Dict[str, Path] = {}
+        path = Path(path)
+        spots = self.spots_with_loci()
+        n = len(spots)
+        table = pd.DataFrame(index=pd.RangeIndex(n))
+        table["Spot_ID"] = (spots["spot_id"].to_numpy() if "spot_id" in spots.columns
+                            else np.arange(n, dtype=np.int64))
+        table["Trace_ID"] = _plain_values(spots["trace_id"])
+        coords = np.asarray(self.coords)
+        table["X"], table["Y"], table["Z"] = coords[:, 0], coords[:, 1], coords[:, 2]
+        table["Chrom"] = _plain_values(spots["chrom"])
+        table["Chrom_Start"] = spots["start"].to_numpy()
+        table["Chrom_End"] = spots["end"].to_numpy()
+        for col, name in (("cell_id", "Cell_ID"), ("sub_cell_roi_id", "Sub_Cell_ROI_ID"),
+                          ("extra_cell_roi_id", "Extra_Cell_ROI_ID")):
+            if col in spots.columns:
+                table[name] = _plain_values(spots[col])
+        skip = {"spot_id", "trace_id", "chrom", "start", "end", "cell_id", "sub_cell_roi_id",
+                "extra_cell_roi_id", BIN_ID}
+        for col in spots.columns:
+            if col not in skip:
+                table[str(col)] = _plain_values(spots[col])
+        extra = []
+        if spot_tracks:
+            extra += [(c, self._spot_tracks[c]) for c in self._spot_tracks.columns]
+        if bin_tracks and len(self._bin_tracks.columns):
+            bid = spots[BIN_ID].to_numpy()
+            extra += [(c, self._bin_tracks[c].iloc[bid].reset_index(drop=True))
+                      for c in self._bin_tracks.columns]
+        for col, values in extra:
+            if str(col) in table.columns:
+                raise ValueError(f"track {col!r} clashes with a FOF-CT / spot column")
+            table[str(col)] = _plain_values(values)
+        meta = _fofct_header_defaults(self.uns, "4dn_FOF-CT_core",
+                                      (self.uns.get("fofct_header") or {}), header)
+        _write_fofct_table(path, table, meta)
+        written["core"] = path
+
+        companions = self.uns.get("fofct_companions") or {}
+        if cell_table is not None:
+            cells = _fofct_cells_frame(self.cells, cell_value_prefix)
+            meta = _fofct_header_defaults(self.uns, "4dn_FOF-CT_cell",
+                                          (companions.get("cells") or {}).get("header") or {}, None)
+            _write_fofct_table(Path(cell_table), cells, meta)
+            written["cells"] = Path(cell_table)
+        if rna_table is not None:
+            if "rna" not in self.points:
+                raise ValueError("rna_table= needs points['rna']")
+            rna = _fofct_rna_frame(self.points["rna"])
+            meta = _fofct_header_defaults(self.uns, "4dn_FOF-CT_rna",
+                                          (companions.get("rna") or {}).get("header") or {}, None)
+            _write_fofct_table(Path(rna_table), rna, meta)
+            written["rna"] = Path(rna_table)
+        return written
+
     @classmethod
     def from_pyhim_trace(
         cls,
@@ -2451,7 +2567,9 @@ def _read_fofct_table(path: Path):
         raise ValueError(f"No data rows found in {path}")
 
     from io import StringIO as _StringIO
-    df = pd.read_csv(_StringIO("\n".join(data_lines)), header=None, skipinitialspace=True)
+    # round_trip: the float in the file, exactly (the default parser can be 1 ulp off)
+    df = pd.read_csv(_StringIO("\n".join(data_lines)), header=None, skipinitialspace=True,
+                     float_precision="round_trip")
     if columns is not None and len(columns) == len(df.columns):
         df.columns = columns
     elif columns is not None:
@@ -2521,6 +2639,114 @@ def _fofct_rna_table(path: Path):
     front = [c for c in ("x", "y", "z", "gene", "gene_id", "cell_id", "spot_id") if c in df.columns]
     df = df[front + [c for c in df.columns if c not in front]]
     return df, {"source": path.name, "header": meta, "n": int(len(df))}
+
+
+# FOF-CT header fields written as ``##key=value`` (the rest as ``#key: value``).
+_FOFCT_REQUIRED_HEADER = ("FOF-CT_version", "Table_namespace", "genome_assembly", "XYZ_unit")
+
+
+def _plain_values(values) -> np.ndarray:
+    """Column values for a CSV: categoricals as their values."""
+    s = values if isinstance(values, pd.Series) else pd.Series(values)
+    if isinstance(s.dtype, pd.CategoricalDtype):
+        return np.asarray(s.astype(s.cat.categories.dtype if len(s.cat.categories) else object))
+    return s.to_numpy()
+
+
+def _fofct_header_defaults(uns: Mapping, namespace: str, stored: Mapping,
+                           override: Optional[Mapping]) -> Dict[str, str]:
+    """Header entries for one table: the stored ones (what ``from_fofct``
+    read), filled in from ``uns`` and FOF-CT defaults, then ``override``."""
+    lower = {str(k).lower(): k for k in stored}
+    meta: Dict[str, str] = {}
+
+    def put(key, value):
+        k = lower.get(key.lower(), key)
+        meta[k] = str(value)
+
+    for k, v in stored.items():
+        meta[str(k)] = str(v)
+    if "fof-ct_version" not in lower:
+        put("FOF-CT_version", "v0.1")
+    if "table_namespace" not in lower:
+        put("Table_namespace", namespace)
+    if "genome_assembly" not in lower and uns.get("genome_assembly") is not None:
+        put("genome_assembly", uns["genome_assembly"])
+    if "xyz_unit" not in lower and uns.get("xyz_unit") is not None:
+        put("XYZ_unit", uns["xyz_unit"])
+    for k, v in (override or {}).items():
+        put(str(k), v)
+    # required fields first, in the FOF-CT order
+    req = {r.lower() for r in _FOFCT_REQUIRED_HEADER}
+    first = [k for r in _FOFCT_REQUIRED_HEADER for k in meta if k.lower() == r.lower()]
+    return {**{k: meta[k] for k in first}, **{k: v for k, v in meta.items() if k.lower() not in req}}
+
+
+def _fofct_header_line(key: str, value: str) -> str:
+    required = key.lower() in {r.lower() for r in _FOFCT_REQUIRED_HEADER}
+    line = f"##{key}={value}" if required else f"#{key}: {value}"
+    if "," in line or '"' in line:
+        line = '"' + line.replace('"', '""') + '"'   # the 4DN files quote such lines
+    return line
+
+
+def _write_fofct_table(path: Path, table: pd.DataFrame, meta: Mapping[str, str]) -> None:
+    """``##`` / ``#`` header lines, ``##columns=(…)`` and the CSV rows."""
+    for col in table.columns:
+        if "," in str(col) or "\n" in str(col):
+            raise ValueError(f"FOF-CT column names cannot contain ',': {col!r}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="") as fh:
+        for key, value in meta.items():
+            if str(key).lower() == "columns":
+                continue
+            fh.write(_fofct_header_line(str(key), str(value)) + "\n")
+        fh.write("##columns=(" + ",".join(str(c) for c in table.columns) + ")\n")
+        table.to_csv(fh, header=False, index=False, lineterminator="\n")
+
+
+_FOFCT_CELL_NAMES = {v: k for k, v in {
+    "Cell_ID": "cell_id", "Extra_Cell_ROI_ID": "extra_cell_roi_id",
+    "Cent_ROI_x": "centroid_x", "Cent_ROI_y": "centroid_y", "Cent_ROI_z": "centroid_z",
+    "area(um2)": "nucleus_area_um2", "area_cyto(um2)": "cytoplasm_area_um2",
+}.items()}
+
+
+def _fofct_cells_frame(cells: pd.DataFrame, value_prefix: Optional[str]) -> pd.DataFrame:
+    """``cd.cells`` → a FOF-CT cell table (``Cell_ID`` first)."""
+    if len(cells) == 0 and len(cells.columns) == 0:
+        raise ValueError("cell_table= needs cd.cells")
+    df = cells.copy()
+    if "cell_id" in df.columns:
+        df = df.set_index("cell_id")
+    out = pd.DataFrame({"Cell_ID": [str(c) for c in df.index]})
+    for col in df.columns:
+        name = _FOFCT_CELL_NAMES.get(str(col), str(col))
+        if value_prefix and name == str(col) and str(col).startswith(value_prefix):
+            name = str(col)[len(value_prefix):]
+        if name in out.columns:
+            raise ValueError(f"cell table column {col!r} maps onto an existing column {name!r}")
+        out[name] = _plain_values(df[col].reset_index(drop=True))
+    return out
+
+
+_FOFCT_RNA_NAMES = {"spot_id": "Spot_ID", "x": "X", "y": "Y", "z": "Z", "gene": "RNA_name",
+                    "gene_id": "Gene_ID", "cell_id": "Cell_ID",
+                    "extra_cell_roi_id": "Extra_Cell_ROI_ID", "peak_intensity": "Peak_Intensity"}
+
+
+def _fofct_rna_frame(points: pd.DataFrame) -> pd.DataFrame:
+    """``points['rna']`` → a FOF-CT RNA spot table."""
+    df = points.reset_index(drop=True)
+    out = pd.DataFrame(index=pd.RangeIndex(len(df)))
+    out["Spot_ID"] = df["spot_id"].to_numpy() if "spot_id" in df.columns else np.arange(len(df))
+    for col in ("x", "y", "z"):
+        out[_FOFCT_RNA_NAMES[col]] = df[col].to_numpy()
+    for col in df.columns:
+        if col in ("spot_id", "x", "y", "z"):
+            continue
+        out[_FOFCT_RNA_NAMES.get(str(col), str(col))] = _plain_values(df[col])
+    return out
 
 
 def _warn_unmatched_cells(spots: pd.DataFrame, companions: dict, kwargs: dict) -> None:
