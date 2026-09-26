@@ -36,13 +36,13 @@ from uchrom.strc.loop import call_loops_axiswise_f
 loops = call_loops_axiswise_f(cd, chrom="chr17", device="auto")
 
 # Persist
-cd.write("data.h5cd")
+cd.write("data.chromdata.zarr")
 ```
 
 Launch the interactive 3D browser:
 
 ```bash
-python -m uchrom.browser data.h5cd
+python -m uchrom.browser --web data.chromdata.zarr
 ```
 
 ```{toctree}

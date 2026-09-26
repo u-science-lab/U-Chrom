@@ -65,7 +65,7 @@ Key design choices are documented in
                 │
                 ▼ uchrom.recon.{sc,bulk}
 ┌──────────────────────────────────┐
-│   3D coordinates (.h5cd)         │──┐
+│   3D coordinates (ChromData)     │──┐
 └──────────────────────────────────┘  │
                                       │
 ┌──────────────────────────────────┐  │
@@ -74,7 +74,7 @@ Key design choices are documented in
                 │                     │
                 ▼ uchrom.im (WIP)     │
 ┌──────────────────────────────────┐  │
-│   3D coordinates (.h5cd)         │──┘
+│   3D coordinates (ChromData)     │──┘
 └──────────────────────────────────┘
                 │
                 ▼
@@ -90,24 +90,28 @@ Key design choices are documented in
 └──────────────────────────────────┘
 ```
 
-## On-disk format: `.h5cd`
+## On-disk format: `.chromdata.zarr`
 
-Serialisation is HDF5 with a small root-group schema:
+Format 2.0 is a Zarr v3 directory whose tables are Parquet files (the
+SpatialData approach); `<name>.cdz` is the same store as one zip file:
 
 ```
-data.h5cd (HDF5)
-├── @uchrom_format_version = "1.0"
-├── @uchrom_version        = "0.2.0"
-├── coords            (n_spots, 3) float64
-├── spots/            group of per-column datasets
-├── cells/            group
-├── tracks/           group
-├── traces/           group
-├── cellm/            group of per-key ndarrays
-├── layers/           group of (n_spots, 3) ndarrays
-├── results/          group (DataFrames as sub-groups, arrays as datasets)
-└── uns/              nested group (scalars as attrs, dicts as sub-groups)
+data.chromdata.zarr/
+├── zarr.json              @uchrom_format_version = "2.0", @uchrom_version
+├── tables/                spots.parquet (sorted by cell, trace, bin; x, y, z),
+│                          spot_tracks.parquet, layers/, bins, bin_tracks,
+│                          cells, traces, intervals/, points/, categories/
+├── index/                 row offsets per trace / cell, chromosome per trace
+├── cellm/, binm/          zarr arrays
+├── results/               values + provenance attrs
+├── uns/                   JSON attrs (+ arrays)
+└── contacts/, links/      linked .cool / .scool / .h5ad / .h5mu records
 ```
+
+The index makes a cell, trace or chromosome a few contiguous row ranges,
+so `ChromData.read(path, backed=True)` can open large data sets without
+loading them.  `.h5cd` (HDF5) files — format 1.x and 2.0 — are still read;
+`python -m uchrom.io.upgrade` converts them.
 
 Format version follows `MAJOR.MINOR`:
 

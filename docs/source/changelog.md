@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **`.chromdata.zarr` — the format 2.0 container** (Zarr v3 + Parquet, the
+  SpatialData approach) is the new default: `cd.write("x.chromdata.zarr")`
+  (or `x.cdz`, the same store in one zip file).  Spots are stored sorted by
+  (cell, trace, bin) with an `index/` of row offsets, so a round trip keeps
+  every spot but may change the row order (`ChromData.read(path,
+  original_order=True)` restores it).  **Backed mode**:
+  `ChromData.read(path, backed=True)` loads the small tables only;
+  `get_cell` / `get_trace` / `get_chrom` read the rows they need;
+  `iter_traces(batch)` / `iter_cells(batch)` stream chunks (also on
+  in-memory objects); `to_memory()` loads all.  `.h5cd` files (1.x and
+  2.0) are still read; writing `.h5cd` is deprecated (it warns).
+  `python -m uchrom.io.upgrade old.h5cd` converts to `old.chromdata.zarr`.
+  The web browser opens stores backed; the example-data builders, tutorials
+  and CLIs write the new format.  **Requires Python ≥ 3.11** and the new
+  core dependencies `zarr>=3` and `pyarrow`.
 - `cd.results` is now a `ResultsStore` of `ResultRecord`s: every result
   carries its kind, producing function, parameters, inputs, uchrom
   version and timestamp.  Unwritable values raise `TypeError` at
