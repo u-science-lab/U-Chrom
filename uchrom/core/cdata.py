@@ -112,9 +112,21 @@ tolerates several real-world FOF-CT quirks (case-insensitive
 ``##columns=``, header lines wrapped in double quotes with trailing
 commas, a CSV column header line after ``##columns=``, etc).
 
-On-disk format — ``.h5cd``
---------------------------
-HDF5 with two root-group attributes:
+On-disk formats
+---------------
+``cd.write(path)`` / ``ChromData.read(path)`` pick the container from the
+path:
+
+    <name>.chromdata.zarr   format 2.0 — Zarr v3 group with Parquet tables,
+                            spots sorted by (cell, trace, bin) plus an
+                            ``index/`` of row offsets; readable *backed*
+                            (``read(path, backed=True)``).  See
+                            :mod:`uchrom.core.zarrcd` and ``spec.md``.
+    <name>.cdz              the same store in one uncompressed zip file.
+    <name>.h5cd             HDF5 (below): format 1.x and 2.0 are read;
+                            writing it is deprecated.
+
+Both carry two root attributes:
 
     uchrom_format_version    "MAJOR.MINOR" contract of the file layout
     uchrom_version           uchrom package version that wrote the file
@@ -128,7 +140,7 @@ Semantics:
     * **Missing attribute** (pre-versioning files) — warn and assume
       legacy 1.0 layout.
 
-Layout (format 2.0)::
+HDF5 layout (format 2.0)::
 
     data.h5cd
     ├── @uchrom_format_version  = "2.0"
@@ -387,9 +399,13 @@ class ChromData:
         points: Optional[Dict[str, pd.DataFrame]] = None,
         linked_adata=None,
         validate: bool = True,
+        _own_spots: bool = False,
     ):
+        # _own_spots: the caller hands over a fresh spots frame (RangeIndex)
+        # that may be modified in place — readers use it to skip two copies
         self.coords = np.asarray(coords, dtype=np.float64)
-        self.spots, self._bins = _attach_bins(spots.reset_index(drop=True), bins, validate=validate)
+        self.spots, self._bins = _attach_bins(spots if _own_spots else spots.reset_index(drop=True),
+                                              bins, validate=validate, copy=not _own_spots)
         self.cells = cells if cells is not None else pd.DataFrame()
         self.cellm = cellm if cellm is not None else {}
         self.traces = traces if traces is not None else pd.DataFrame()
@@ -401,7 +417,7 @@ class ChromData:
         self.points = {k: v.reset_index(drop=True) for k, v in (points or {}).items()}
         self._linked_adata = linked_adata
 
-        self._bin_tracks = _empty_frame(self.n_bins)
+        self._bin_tracks = _empty_frame(self.n_bins, name=BIN_ID)
         self._spot_tracks = _empty_frame(len(self.spots))
         self._spot_view_order: Optional[List[str]] = None
         if spot_tracks is not None:
@@ -476,7 +492,7 @@ class ChromData:
     @bin_tracks.setter
     def bin_tracks(self, value: Optional[pd.DataFrame]) -> None:
         if value is None or len(value.columns) == 0:
-            self._bin_tracks = _empty_frame(self.n_bins)
+            self._bin_tracks = _empty_frame(self.n_bins, name=BIN_ID)
             return
         if len(value) != self.n_bins:
             raise ValueError(f"bin_tracks rows ({len(value)}) != n_bins ({self.n_bins})")
@@ -529,7 +545,7 @@ class ChromData:
     @tracks.setter
     def tracks(self, value: Optional[pd.DataFrame]) -> None:
         if value is None:
-            self._bin_tracks = _empty_frame(self.n_bins)
+            self._bin_tracks = _empty_frame(self.n_bins, name=BIN_ID)
             self._spot_tracks = _empty_frame(len(self.spots))
             self._spot_view_order = None
         elif _is_bin_level(value, self.n_bins, len(self.spots)):
@@ -645,7 +661,7 @@ class ChromData:
             bt.loc[ids < 0, :] = np.nan
             self.bin_tracks = bt
         else:
-            self._bin_tracks = _empty_frame(self.n_bins)
+            self._bin_tracks = _empty_frame(self.n_bins, name=BIN_ID)
         return self
 
     def _check_bin_ids(self) -> None:
@@ -1198,6 +1214,8 @@ class ChromData:
     # ------------------------------------------------------------------
 
     def __getitem__(self, index) -> "ChromData":
+        if isinstance(index, slice):
+            index = np.arange(*index.indices(self.n_spots))
         if isinstance(index, (pd.Series, np.ndarray)):
             if index.dtype == bool:
                 index = np.where(index)[0]
@@ -1310,6 +1328,55 @@ class ChromData:
         ids = np.where(self._bins["chrom"].astype(str).to_numpy() == str(chrom))[0]
         mask = np.isin(self.spots[BIN_ID].to_numpy(), ids)
         return self[mask]
+
+    # ------------------------------------------------------------------
+    # Streaming access (same batches in memory and backed)
+    # ------------------------------------------------------------------
+
+    @property
+    def backed(self) -> bool:
+        """``True`` for a :class:`~uchrom.core.backed.BackedChromData`."""
+        return False
+
+    def to_memory(self) -> "ChromData":
+        """An in-memory ``ChromData`` (``self`` — this object already is)."""
+        return self
+
+    def _sorted_segments(self):
+        from .zarrcd import _segments, _spot_keys, sort_order
+
+        cell, trace, bin_id = _spot_keys(self)
+        order = sort_order(cell, trace, bin_id)
+        if order is not None:
+            cell, trace = cell[order], trace[order]
+        seg, cel = _segments(cell, trace)
+        return order, seg, cel
+
+    def iter_traces(self, batch: int = 1024):
+        """Yield in-memory ``ChromData`` chunks of ``batch`` traces.
+
+        Traces are visited in (cell, trace) order — a trace id shared by
+        several cells counts once per cell — with the spots of a trace in
+        bin order, exactly as a ``.chromdata.zarr`` store holds them; a
+        backed object yields identical chunks while reading one row range
+        per chunk.
+        """
+        order, seg, _ = self._sorted_segments()
+        n_seg = len(seg) - 1
+        for i in range(0, n_seg, max(1, int(batch))):
+            a, b = int(seg[i]), int(seg[min(i + int(batch), n_seg)])
+            yield self[order[a:b] if order is not None else np.arange(a, b)]
+
+    def iter_cells(self, batch: int = 64):
+        """Yield in-memory ``ChromData`` chunks of ``batch`` cells (cell id
+        order; see :meth:`iter_traces`)."""
+        if "cell_id" not in self.spots.columns:
+            raise KeyError("spots has no 'cell_id' column")
+        order, _, cel = self._sorted_segments()
+        n = len(cel) - 1
+        for i in range(0, n, max(1, int(batch))):
+            a, b = int(cel[i]), int(cel[min(i + int(batch), n)])
+            yield self[order[a:b] if order is not None else np.arange(a, b)]
 
     # ------------------------------------------------------------------
     # Pairwise computation (on-demand, per-trace)
@@ -1531,14 +1598,53 @@ class ChromData:
         self,
         path: PathLike,
         *,
+        format: Optional[str] = None,
+        coord_dtype: str = "float64",
+        row_group_rows: Optional[int] = None,
+        compression_level: Optional[int] = None,
+        keep_source_order: bool = True,
         compression: Optional[str] = "gzip",
         compression_opts: Optional[int] = 4,
         compress_floats: bool = False,
     ) -> None:
-        """Write to an HDF5 ``.h5cd`` file (format 2.0).
+        """Write to disk; the format follows the path.
 
-        Parameters
-        ----------
+        * ``<name>.chromdata.zarr`` (any ``*.zarr``) — **the format 2.0
+          container**: a Zarr v3 directory whose large tables are Parquet
+          (see :mod:`uchrom.core.zarrcd` and ``spec.md``).  Spots are
+          written sorted by (cell, trace, bin) with ``index/`` offsets, so
+          :meth:`read` can open the store backed.
+        * ``<name>.cdz`` — the same tree in one uncompressed zip file.
+        * ``<name>.h5cd`` — HDF5 format 2.0 (**deprecated**; readable
+          indefinitely, still written in this release, with a
+          ``DeprecationWarning``).  Other suffixes also write HDF5, as
+          before.
+
+        ``format="zarr" | "cdz" | "h5cd"`` overrides the suffix.
+
+        **Row order.**  The zarr / cdz writer stores spots sorted by
+        (``cell_id`` code, ``trace_id`` code, ``bin_id``) — a stable sort,
+        so ties keep their order.  Reading returns that order; every spot
+        keeps its values (compare round trips after sorting by a stable
+        key).  ``index/source_row`` records each spot's row in the written
+        object, and ``ChromData.read(path, original_order=True)`` restores
+        it.  Objects that are already sorted are written unchanged.
+
+        Parameters (zarr / cdz)
+        -----------------------
+        coord_dtype : ``"float64"`` (default) or ``"float32"``
+            Storage dtype of ``coords`` and ``layers`` (always float64 in
+            memory).  float32 halves their size; see the format notes.
+        row_group_rows : int, optional
+            Target rows per Parquet row group of the spot-aligned tables
+            (default 65,536).  Groups end on cell boundaries.
+        compression_level : int, optional
+            zstd level for Parquet and Zarr (default 3).
+        keep_source_order : bool
+            Store ``index/source_row`` when the writer had to sort.
+
+        Parameters (h5cd)
+        -----------------
         compression : ``"gzip"`` (default), ``"lzf"`` or ``None``
             Filter for the large integer / string datasets (``bin_id``,
             categorical codes, string columns, integer tracks).  gzip is
@@ -1554,13 +1660,38 @@ class ChromData:
         """
         import h5py
 
+        from .zarrcd import container_kind, write_zarr
+
+        path = Path(path)
+        kind = format or container_kind(path) or "h5cd"
+        if kind not in ("zarr", "cdz", "h5cd"):
+            raise ValueError("format must be 'zarr', 'cdz' or 'h5cd'")
+        if kind == "cdz" and not path.name.lower().endswith(".cdz"):
+            raise ValueError("a .cdz store needs a path ending in .cdz")
+        if kind == "zarr" and not path.name.lower().endswith(".zarr"):
+            raise ValueError("a zarr store needs a path ending in .chromdata.zarr (or .zarr)")
+        if kind in ("zarr", "cdz"):
+            from .zarrcd import DEFAULT_ROW_GROUP_ROWS, DEFAULT_ZSTD_LEVEL
+            write_zarr(self, path, coord_dtype=coord_dtype,
+                       row_group_rows=row_group_rows or DEFAULT_ROW_GROUP_ROWS,
+                       compression_level=(DEFAULT_ZSTD_LEVEL if compression_level is None
+                                          else compression_level),
+                       keep_source_order=keep_source_order)
+            return
+        import warnings
+        warnings.warn(
+            f"writing {path.name}: the HDF5 .h5cd format is deprecated; write "
+            f"'<name>.chromdata.zarr' (or '.cdz') instead.  .h5cd files stay readable.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         try:
             from uchrom import __version__ as _uchrom_version
         except Exception:
             _uchrom_version = "unknown"
 
         self._check_bin_ids()
-        path = Path(path)
         if compression not in (None, "gzip", "lzf"):
             raise ValueError("compression must be 'gzip', 'lzf' or None")
         _WRITE_OPTS.update(compression=compression, compress_floats=bool(compress_floats),
@@ -1607,10 +1738,21 @@ class ChromData:
                     _write_dataframe(grp, key, df)
 
     @classmethod
-    def read(cls, path: PathLike) -> "ChromData":
-        """Read from HDF5 (.h5cd) file.
+    def read(cls, path: PathLike, *, backed: bool = False,
+             original_order: bool = False) -> "ChromData":
+        """Read a ChromData file; the format follows the path.
 
-        Dispatches to a version-specific reader based on
+        * ``.chromdata.zarr`` / ``.cdz`` (format 2.0 container) — with
+          ``backed=True`` returns a :class:`~uchrom.core.backed.BackedChromData`:
+          small tables are loaded, ``coords`` / ``spots`` / ``spot_tracks``
+          / ``layers`` stay on disk, and ``get_cell`` / ``get_trace`` /
+          ``get_chrom`` / ``iter_traces`` / ``iter_cells`` read only the
+          rows they need.  Spots come back in the stored (cell, trace, bin)
+          order; ``original_order=True`` restores the order of the object
+          that was written (in-memory reads only).
+        * ``.h5cd`` — HDF5, format 1.x or 2.0 (below); always in memory.
+
+        HDF5 ``.h5cd``: dispatches to a version-specific reader based on
         ``f.attrs['uchrom_format_version']``: MAJOR 2 → :func:`_read_v2`,
         MAJOR 1 → :func:`_read_v1`, which upgrades the file in memory
         (bins derived from the spot loci; the spot-aligned 1.x ``tracks``
@@ -1626,7 +1768,31 @@ class ChromData:
         import warnings
         import h5py
 
+        from .zarrcd import container_kind
+
         path = Path(path)
+        kind = container_kind(path)
+        if kind in ("zarr", "cdz"):
+            from .backed import BackedChromData
+
+            if not path.exists():
+                raise FileNotFoundError(path)
+            b = BackedChromData(path)
+            _check_zarr_version(path, b._c.meta.get("format_version", "2.0"))
+            if backed:
+                if original_order:
+                    raise ValueError("original_order=True needs an in-memory read (backed=False)")
+                return b
+            cd = b.to_memory()
+            if original_order and b._c.meta.get("has_source_row"):
+                src = b._c.array("index/source_row")
+                _permute_spot_rows(cd, np.argsort(src, kind="stable"))
+            return cd
+        if backed:
+            raise ValueError(
+                f"{path}: backed mode needs the .chromdata.zarr / .cdz format; convert with "
+                f"`python -m uchrom.io.upgrade {path} {path.with_suffix('.chromdata.zarr')}`"
+            )
         with h5py.File(path, "r") as f:
             version_str = f.attrs.get("uchrom_format_version")
             if version_str is None:
@@ -2179,6 +2345,36 @@ def _apply_pyhim_barcode_dict(
     return df
 
 
+def _check_zarr_version(path, version_str: str) -> None:
+    """Same MAJOR / MINOR rules as ``.h5cd`` for the zarr container."""
+    import warnings
+
+    major, minor = _parse_version(str(version_str))
+    cur_major, cur_minor = _parse_version(FORMAT_VERSION)
+    if major != cur_major:
+        raise ValueError(
+            f"{path}: format version {version_str} has incompatible MAJOR with this "
+            f"uchrom (supports {cur_major}.x). Upgrade uchrom or convert the file."
+        )
+    if minor > cur_minor:
+        warnings.warn(
+            f"{path}: written with format version {version_str} (reader supports up "
+            f"to {FORMAT_VERSION}). Forward-compatible — unknown fields will be ignored.",
+            stacklevel=3,
+        )
+
+
+def _permute_spot_rows(cd: "ChromData", pos: np.ndarray) -> None:
+    """Reorder the spot-aligned data of an in-memory object in place."""
+    cd.coords = cd.coords[pos]
+    cd.spots = cd.spots.iloc[pos].reset_index(drop=True)
+    if len(cd._spot_tracks.columns):
+        cd._spot_tracks = cd._spot_tracks.iloc[pos].reset_index(drop=True)
+    else:
+        cd._spot_tracks = _empty_frame(len(pos))
+    cd.layers = {k: np.asarray(v)[pos] for k, v in cd.layers.items()}
+
+
 def _parse_version(s: str):
     """Parse 'MAJOR.MINOR' into a (major, minor) int tuple."""
     parts = str(s).split(".")
@@ -2489,7 +2685,8 @@ def _is_bin_level(table: pd.DataFrame, n_bins: int, n_spots: int) -> bool:
     return len(table) == n_bins and n_bins != n_spots
 
 
-def _attach_bins(spots: pd.DataFrame, bins: Optional[pd.DataFrame], *, validate: bool = True):
+def _attach_bins(spots: pd.DataFrame, bins: Optional[pd.DataFrame], *, validate: bool = True,
+                 copy: bool = True):
     """Return ``(spots, bins)`` with ``spots.bin_id`` and loci derived from bins.
 
     * no ``bins``: bins are the unique spot loci (spots need
@@ -2499,7 +2696,8 @@ def _attach_bins(spots: pd.DataFrame, bins: Optional[pd.DataFrame], *, validate:
     * ``bins`` given: ``spots.bin_id`` is used (range-checked), else spot
       loci are looked up in ``bins``.
     """
-    spots = spots.copy()
+    if copy:
+        spots = spots.copy()
     if bins is None:
         if BIN_ID in spots.columns:
             if not all(c in spots.columns for c in LOCI):

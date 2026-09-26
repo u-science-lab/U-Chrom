@@ -36,8 +36,8 @@ def test_two_populations_separate_on_pc1_and_roundtrip(tmp_path):
     assert (np.sign(pc1[30:]) == -np.sign(pc1[0])).all()
     meta = cd.uns["embeddings"]["rna_pca"]
     assert meta["fields"] == [f"rna.g{j}" for j in range(6)] and meta["method"] == "pca"
-    cd.write(tmp_path / "e.h5cd")
-    back = ChromData.read(tmp_path / "e.h5cd")
+    cd.write(tmp_path / "e.chromdata.zarr")
+    back = ChromData.read(tmp_path / "e.chromdata.zarr")
     np.testing.assert_allclose(back.cellm["rna_tsne"], out["rna_tsne"])
     assert back.uns["embeddings"]["rna_tsne"]["label"] == "RNA t-SNE"
 
@@ -165,8 +165,8 @@ def test_aggregate_tracks_mean_by_and_corr(tmp_path):
     # rerunning replaces columns instead of duplicating them
     aggregate_tracks(cd, ["A", "B"], prefix="if")
     assert list(cd.cells.columns) == ["cell_type", "if.A", "if.B"]
-    cd.write(tmp_path / "t.h5cd")
-    assert ChromData.read(tmp_path / "t.h5cd").cells["if.A"].tolist() == [3.5, 3.5]
+    cd.write(tmp_path / "t.chromdata.zarr")
+    assert ChromData.read(tmp_path / "t.chromdata.zarr").cells["if.A"].tolist() == [3.5, 3.5]
     with pytest.raises(ValueError, match="stat"):
         aggregate_tracks(cd, ["A"], stat="max")
     with pytest.raises(KeyError):

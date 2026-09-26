@@ -69,7 +69,8 @@ def test_read_3dg(tmp_path):
     assert df.loc[1, "z"] == 3.5
 
 
-@pytest.mark.parametrize("ext", [".csv", ".h5cd"])
+@pytest.mark.filterwarnings("ignore:writing .*h5cd:DeprecationWarning")
+@pytest.mark.parametrize("ext", [".csv", ".h5cd", ".chromdata.zarr", ".cdz"])
 def test_particles_roundtrip(tmp_path, ext):
     from uchrom.io import read_particles, save_particles
 
