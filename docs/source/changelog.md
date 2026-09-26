@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **`.chromdata.zarr` format 2.2 — every spot value stored once.**
+  Coordinates + keys in a chromosome-partitioned table
+  (`tables/coords/chrom=<name>/`), every other spot-aligned column in
+  cell-sorted primary tables without key columns (`tables/primary/`), and
+  spot columns that are a function of the bin / cell / trace (probe names,
+  sample ids) once per key (`tables/derived/`; exact round trip).  Float
+  columns use Parquet dictionary pages; the lossless decimal codec
+  (`uchrom.core.floatcodec`) is opt-in (`float_encoding=`).  Parallel full
+  reads.  Takei 2025 (1e7 spots, 62 tracks): 1.81 GB (2.1: 2.58 GB; flat
+  Parquet: 2.11 GB), full read 0.57 s (2.1: 0.81 s; Parquet 0.76 s),
+  `get_cell` 8.5 ms (2.1: 25 ms), `get_chrom(columns="coords")` 15 ms;
+  Liu 2025 MOp 255 MB (2.1: 272 MB).  **Regression:** `get_chrom` with
+  spot tracks 0.53 s at 1e7 (2.1: 39 ms).  In-memory row order is now cell
+  › trace › chromosome › bin (`iter_traces` / `iter_cells` still stream
+  chromosome › cell › trace).  2.0 / 2.1 stores stay readable;
+  `python -m uchrom.io.upgrade` rewrites them (keeping the original row
+  order); the streaming writer and `benchmarks/fig2/replicate_store.py`
+  write 2.2.
 - **`.chromdata.zarr` format 2.1 — spot tables partitioned by
   chromosome.**  `tables/spots/chrom=<name>/part-0.parquet` (and the same
   for `spot_tracks` and `layers/<key>`), sorted cell › trace › bin inside a

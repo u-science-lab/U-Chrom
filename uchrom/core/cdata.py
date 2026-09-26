@@ -2612,7 +2612,7 @@ def _apply_pyhim_barcode_dict(
 
 def _check_zarr_version(path, version_str: str) -> None:
     """Same MAJOR / MINOR rules as ``.h5cd`` for the zarr container (whose
-    own version, :data:`uchrom.core.zarrcd.ZARR_FORMAT_VERSION`, is 2.1:
+    own version, :data:`uchrom.core.zarrcd.ZARR_FORMAT_VERSION`, is 2.2:
     2.0 stores are read as one unpartitioned table)."""
     import warnings
 

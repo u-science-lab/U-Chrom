@@ -894,6 +894,92 @@ additive for old readers, accepted because the container is new and
 rewrites stores.  The zarr container version is now separate from the
 `.h5cd` `FORMAT_VERSION` (2.0).
 
+### Format 2.2: coordinates once, cell-sorted primary tables, derived columns
+
+**Why.**  2.1 bought a 20× faster `get_chrom` with a 35 % larger Takei
+store and a 3× slower `get_cell` (one row group per chromosome for 62
+tracks).  A first attempt at "both" (PR #70: the 2.0 primary plus a
+chromosome-partitioned *copy* of the coordinates, and a lossless decimal
+float codec) reached 2.0's `get_cell` and 2.1's `get_chrom(coords)`, but
+duplicated the coordinates (Liu 2025: 387 MB vs 311 MB for a flat Parquet
+file) and read 39 % slower than flat Parquet.  Its profile named the
+costs: Arrow decode ~0.25 s, copies ~0.2 s, the float codec ~0.2 s, and
+~0.22 s turning the 10 M per-spot probe names (`"chr10-1393"`, one per
+bin) into Python strings.
+
+**Layout** (`uchrom/core/spec.md`):
+
+- Coordinates + keys (`bin_id`, trace / cell codes, x, y, z) are stored
+  **once**, partitioned by chromosome (`tables/coords/chrom=<c>/`, sorted
+  by (cell, trace, bin), 16,384-row groups).
+- Every other spot-aligned column (extra spot columns, `spot_tracks`,
+  `layers`) is in cell-sorted **primary** tables (`tables/primary/`,
+  order cell › trace › chromosome › bin, 65,536-row groups on cell
+  boundaries), with **no key columns**.  Each (cell, trace, chromosome)
+  triple is one run on both sides with its rows in the same order;
+  `index/coords/primary_run` maps the runs one to one.
+- Spot columns that are a function of the bin, the cell or the trace are
+  stored **once per key** (`tables/derived/<key>.parquet`), detected on
+  write (bitwise for numbers, `str` equality for object columns, codes for
+  categoricals), rebuilt with one gather on read — exact dtype and values.
+  Takei's `name` (one probe name per bin) and Liu's `Chrom_order`,
+  `Sample_ID`, `RNA/DNA_experiment_ID` (per bin) and `FOV_ID`,
+  `CellID_byFOV` (per cell) qualify.  A column already in `bins` with the
+  same values is referenced, not stored.
+- Float columns of the primary tables use Parquet dictionary pages
+  (per-spot z-scores repeat within a cell; Parquet falls back to plain
+  pages per column chunk).  The PR #70 decimal codec is kept as an option
+  (`float_encoding=`), off by default: it saves space but costs read time.
+- The reader decodes row groups in parallel threads into preallocated
+  buffers; a full read reads the coordinate partitions as stored, then
+  gathers them into primary order block by block (random reads, sequential
+  writes — scattering into the strided `(n, 3)` array was 3× slower);
+  derived columns and loci are materialised with multi-threaded gathers;
+  the `index/` arrays are fetched concurrently with the small tables.
+
+**Measured** (`benchmarks/fig2/cd22_variants.py` →
+`paper/fig2/results/cd22_v2_variants.json`; Takei 2025 rep 1 whole-cell
+subsets with 62 spot tracks, Liu 2025 MOp 9.58 M spots; 3 fresh processes,
+median, warm cache; 20 random ids × 3 per query level; streaming = exact
+chr11 median map under a 2 GB budget; Apple M5 Pro, 64 GB):
+
+| data | store | size | write | full read | read peak | get_trace | get_cell | get_chrom | get_chrom coords | streaming |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Takei 1e7 | Parquet (defaults) | 2115 MB | 14.7 s | 0.76 s | 12.8 GB | — | — | — | — | — |
+| Takei 1e7 | 2.1 | 2575 MB | 23.2 s | 0.81 s | 8.4 GB | 5.6 ms | 25.0 ms | 39 ms | 13.9 ms | 4.3 s, 1.64 GB |
+| Takei 1e7 | **2.2** | **1813 MB** | 18.8 s | **0.57 s** | **9.1 GB** | 5.9 ms | **8.5 ms** | 533 ms | 14.7 ms | 4.8 s, 1.69 GB |
+| Takei 1e6 | Parquet / 2.1 / 2.2 | 212 / 264 / 183 MB | 1.4 / 2.5 / 2.5 s | 0.13 / 0.14 / 0.14 s | 1.5 / 1.3 / 1.5 GB | — / 1.6 / 1.4 ms | — / 1.5 / 1.3 ms | — / 6.5 / 30 ms | — / 2.1 / 2.1 ms | — / 0.9 / 0.9 s |
+| Takei 1e5 | Parquet / 2.1 / 2.2 | 23 / 32 / 20 MB | 0.2 / 0.5 / 0.4 s | 0.05 / 0.07 / 0.07 s | 0.30 / 0.34 / 0.30 GB | | | | | |
+| Liu MOp | Parquet / 2.1 / 2.2 | 311 / 272 / **255** MB | 2.1 / 4.0 / 3.3 s | 0.23 / 0.28 / 0.25 s | 2.6 / 2.2 / **2.0** GB | — / 6.0 / 5.5 ms | — / 7.9 / 6.9 ms | — / 20 / 89 ms | — / 15.9 / 17.4 ms | |
+
+Ablations at Takei 1e7 (size, full read): the default 1813 MB, 0.55 s;
+without derived columns 1851 MB, 0.80 s (the probe-name strings); without
+float dictionary pages 1855 MB, 0.65 s; + decimal codec on the coordinates
+1771 MB, 0.55 s (Liu: 209 MB but 0.29 s); + decimal codec everywhere
+1624 MB, 0.76 s; the serial pre-2.2 reader 2.54 s (peak 6.0 GB).
+
+**Wins.**  Smaller than flat Parquet and than 2.1 on both datasets
+(Takei −14 % / −30 %, Liu −18 % / −6 %); full read 25 % faster than Parquet
+at 1e7 with 29 % less peak memory; `get_cell` back at 2.0 speed (8.5 ms vs
+25 ms in 2.1); `get_chrom(columns="coords")` and streaming unchanged.
+
+**Losses, stated plainly.**  `get_chrom` *with* the spot tracks reads a
+slice of every primary row group: 0.53 s at 1e7 (2.1: 39 ms; 2.0: 0.77 s)
+— use `columns="coords"` or `tracks=[...]`; full reads of small stores pay
+the open cost (1e5: 0.07 vs 0.05 s); Liu reads 9 % slower than Parquet
+(0.25 vs 0.23 s); writes are slower than Parquet (18.8 vs 14.7 s at 1e7).
+
+**Compatibility.**  `ZARR_FORMAT_VERSION = "2.2"`; readers dispatch on
+`tables.attrs["tables"]["spots"]["layout"]` ("primary+coords"); 2.0 and 2.1
+stores stay readable in memory and backed.  `python -m uchrom.io.upgrade`
+rewrites a store and keeps its original row order.  The streaming writer
+writes 2.2 (identical to the in-memory writer, derived columns included:
+one extra pass over the spill runs).  The real stores were converted
+(`benchmarks/cd22_convert_validate.py` →
+`paper/fig2/results/cd22_convert_validation.json`): Takei rep 1
+2.94 → 2.05 GB, Liu 285 → 267 MB, both bitwise identical in original
+order, backed subsets equal to in-memory ones.
+
 ### Streaming (roadmap step 7, as built)
 
 - **Memory budget**: `uchrom.settings.memory_budget` (bytes or `"8GB"`;

@@ -1,30 +1,33 @@
-"""The ``.chromdata.zarr`` container (format 2.1): Zarr + Parquet.
+"""The ``.chromdata.zarr`` container (format 2.2): Zarr + Parquet.
 
 A ChromData store is a Zarr v3 group whose large tables are Parquet files
 (the SpatialData approach): Parquet for anything with rows (spots, tracks,
 cells, traces, bins, intervals, points, result tables), Zarr for
 n-dimensional arrays (``cellm``, ``binm``, the ``index/`` offsets, result
 arrays) and JSON attributes for metadata (format version, ``uns``,
-provenance, linked files).  Layout (2.1)::
+provenance, linked files).  Layout (2.2)::
 
     x.chromdata.zarr/
     ├── zarr.json                 root group; attrs["uchrom"] = format metadata
     ├── tables/                   zarr group (attrs: table metadata)
-    │   ├── spots/chrom=<name>/part-0.parquet
-    │   │                         one partition per chromosome, sorted by
-    │   │                         (cell, trace, bin); bin_id, trace_id, cell_id
-    │   │                         (integer codes), x, y, z, extra columns
-    │   ├── spot_tracks/chrom=<name>/part-0.parquet   row-aligned with spots
-    │   ├── layers/<key>/chrom=<name>/part-0.parquet  row-aligned x, y, z
+    │   ├── coords/chrom=<name>/part-0.parquet
+    │   │                         coordinates + keys, one partition per
+    │   │                         chromosome, sorted by (cell, trace, bin):
+    │   │                         bin_id, trace_id, cell_id (integer codes), x, y, z
+    │   ├── primary/spots.parquet  spot_tracks.parquet  layers/<key>.parquet
+    │   │                         every other spot-aligned column, sorted by
+    │   │                         (cell, trace, chromosome, bin), no keys
+    │   ├── derived/<key>.parquet spot columns that are a function of the
+    │   │                         bin / cell / trace, one row per key code
     │   ├── categories/<table>.<column>.parquet   values of the coded columns
     │   ├── bins.parquet  bin_tracks.parquet  traces.parquet  cells.parquet
     │   ├── intervals/<key>.parquet
     │   └── points/<key>.parquet
-    ├── index/                    zarr arrays: trace_offsets, trace_codes,
-    │                             trace_cells, chrom_trace, cell_offsets,
-    │                             cell_codes, cell_partition, row_groups,
-    │                             partition_offsets, partition_groups,
-    │                             partition_chrom, [source_row]
+    ├── index/                    zarr arrays over the primary order: trace_offsets,
+    │   │                         trace_codes, trace_cells, chrom_trace, cell_offsets,
+    │   │                         cell_codes, row_groups, [source_row]
+    │   └── coords/               the same over the coordinate table + partition
+    │                             arrays and primary_run (run → primary run)
     ├── cellm/<key>  binm/<key>   zarr arrays (zstd)
     ├── results/<key>             zarr groups / arrays; attrs = provenance;
     │                             tables as <key>/table.parquet
@@ -32,18 +35,16 @@ provenance, linked files).  Layout (2.1)::
     ├── contacts/                 attrs: linked .cool / .scool records
     └── links/                    attrs: linked .h5ad / .h5mu records
 
-The spot-aligned tables are **partitioned by chromosome** (hive-style
-``chrom=<name>`` directories; a trace observes one chromosome, so a
-partition never splits a single-chromosome trace).  Rows are numbered
-globally in partition order (chromosome category order), and within a
-partition sorted by (cell, trace, bin): the stored order is
-chrom › cell › trace › bin.  ``index/`` offsets use the global row
-numbers; ``cell_offsets`` has one entry per (chromosome, cell) run, so a
-cell is one slice per chromosome it has.  ``get_chrom`` reads one
-partition, ``get_trace`` one slice of one partition.
+Every spot-aligned value is stored once.  Each (cell, trace, chromosome)
+triple is one run of the primary tables and one run of its chromosome
+partition, with the rows in the same order, so the two sides map run by
+run.  ``get_chrom(columns="coords")`` reads one partition, ``get_cell`` /
+``get_trace`` one primary slice plus their coordinate runs; a full read
+gathers the partitions into primary order.
 
-Format 2.0 stores (one ``tables/spots.parquet`` etc., sorted by
-(cell, trace, bin)) stay readable: they are read as a single partition.
+Format 2.1 stores (every spot table partitioned by chromosome,
+``tables/spots/chrom=<name>/``) and 2.0 stores (one ``tables/spots.parquet``
+etc., sorted by (cell, trace, bin)) stay readable.
 
 ``<name>.cdz`` is the same tree in one uncompressed (``ZIP_STORED``) zip
 archive, so every member can be read in place (Parquet through a byte

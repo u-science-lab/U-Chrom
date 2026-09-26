@@ -324,3 +324,16 @@ def test_sorted_rewrite_and_default_layout(tmp_path):
     meta2 = json.loads((tmp_path / "b.chromdata.zarr" / "zarr.json").read_text())["attributes"]["uchrom"]
     assert not meta2["has_source_row"]
     _same(back, ChromData.read(tmp_path / "b.chromdata.zarr"))
+
+
+def test_upgrade_21_to_22_keeps_original_order(tmp_path):
+    from uchrom.io.upgrade import file_format_version, upgrade_h5cd
+
+    cd = _decimal_cd()
+    write_zarr(cd, tmp_path / "old.chromdata.zarr", _layout="2.1")
+    info = upgrade_h5cd(tmp_path / "old.chromdata.zarr", tmp_path / "new.chromdata.zarr")
+    assert info["from_version"] == "2.1" and file_format_version(tmp_path / "new.chromdata.zarr") == "2.2"
+    back = ChromData.read(tmp_path / "new.chromdata.zarr", original_order=True)
+    pd.testing.assert_frame_equal(back.spots, cd.spots)
+    np.testing.assert_array_equal(_bits(back.coords), _bits(cd.coords))
+    pd.testing.assert_frame_equal(back.spot_tracks, cd.spot_tracks)

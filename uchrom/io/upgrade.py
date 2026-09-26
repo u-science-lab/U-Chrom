@@ -76,7 +76,8 @@ def upgrade_h5cd(src: PathLike, dst: Optional[PathLike] = None, *, overwrite: bo
                  coord_dtype: str = "float64", compression: Optional[str] = "gzip",
                  compression_opts: Optional[int] = 4, compress_floats: bool = False) -> dict:
     """Read ``src`` (``.h5cd`` 1.x / 2.0, or any ChromData store) and write
-    it to ``dst`` in format 2.0.
+    it to ``dst`` in the current format (``.chromdata.zarr`` 2.2, ``.h5cd`` 2.0);
+    a zarr / cdz source is read in its original row order.
 
     ``dst`` defaults to ``<src stem>.chromdata.zarr`` next to ``src``; its
     suffix picks the container (``.chromdata.zarr``, ``.cdz``, or the
@@ -101,7 +102,9 @@ def upgrade_h5cd(src: PathLike, dst: Optional[PathLike] = None, *, overwrite: bo
         raise FileExistsError(f"{dst} exists; pass overwrite=True")
     before = file_format_version(src)
     src_kind = container_kind(src) or "h5cd"
-    cd = ChromData.read(src)
+    # a zarr / cdz source: the rows of the object originally written (its
+    # index/source_row), so the new store's original order is that one too
+    cd = ChromData.read(src, original_order=src_kind in ("zarr", "cdz"))
     kind = container_kind(dst) or "h5cd"
     if kind == "h5cd":
         with warnings.catch_warnings():

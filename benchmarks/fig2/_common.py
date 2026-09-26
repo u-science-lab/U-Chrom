@@ -287,6 +287,42 @@ class AnnDataSpots(Format):
         return ad.read_h5ad(path)
 
 
+def to_spatialdata(cd):
+    """SpatialData (scverse; Zarr + Parquet): the spots as one 3-D **points**
+    element ``spots`` (x, y, z + chrom / start / end, bin_id, trace_id,
+    cell_id, the other spot columns and every spot track — the flat table),
+    and the cell table as a **table** element ``cells`` (AnnData: ``obs`` =
+    ``cd.cells``, ``obsm`` = ``cd.cellm``; not linked to a region, as the
+    cells are not a SpatialData element).  ``PointsModel.parse`` /
+    ``TableModel.parse`` / ``SpatialData.write`` with their defaults."""
+    import anndata as ad
+    import spatialdata as sd
+    from spatialdata.models import PointsModel, TableModel
+
+    df = flat_table(cd)
+    points = PointsModel.parse(df, coordinates={"x": "x", "y": "y", "z": "z"})
+    cells = cd.cells.copy()
+    cells.index = cells.index.astype(str)
+    table = TableModel.parse(ad.AnnData(obs=cells, obsm={k: np.asarray(v) for k, v in cd.cellm.items()}))
+    return sd.SpatialData(points={"spots": points}, tables={"cells": table})
+
+
+class SpatialDataZarr(Format):
+    """SpatialData ``.zarr`` (``to_spatialdata``); full read = ``read_zarr`` +
+    ``points["spots"].compute()`` (a pandas DataFrame) + the table."""
+    label, ext = "SpatialData (points + table)", ".sdata.zarr"
+
+    def write(self, cd, path):
+        to_spatialdata(cd).write(path)
+
+    def read(self, path):
+        import spatialdata as sd
+        sdata = sd.read_zarr(path)
+        df = sdata.points["spots"].compute()
+        _ = sdata.tables["cells"]
+        return df
+
+
 class H5cd(Format):
     """``cd.write`` / ``ChromData.read`` of whatever format this checkout writes."""
     ext = ".h5cd"
@@ -355,7 +391,8 @@ class ChromDataZarrF32(ChromDataZarr):
 FORMATS: Dict[str, Format] = {k: f for k, f in (("fofct", FofctCSV()), ("parquet", Parquet()),
                                                  ("anndata", AnnDataSpots()), ("h5cd", H5cd()),
                                                  ("h5cd2", H5cd2()), ("zarr", ChromDataZarr()),
-                                                 ("zarr_f32", ChromDataZarrF32()))}
+                                                 ("zarr_f32", ChromDataZarrF32()),
+                                                 ("spatialdata", SpatialDataZarr()))}
 
 
 # ----------------------------------------------------------------------------- real-data subsets

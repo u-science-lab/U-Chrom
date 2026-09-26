@@ -3,7 +3,7 @@
 `uchrom.ChromData` is the central container.  It is conceptually similar
 to [AnnData](https://anndata.readthedocs.io/) but organises the data
 around the chromatin-tracing hierarchy *Cell → Trace → Spot*, plus a
-locus axis, `bins`, shared by all cells (format 2.0; the `.chromdata.zarr` container is at 2.1).
+locus axis, `bins`, shared by all cells (format 2.0; the `.chromdata.zarr` container is at 2.2).
 
 ```text
 spots   tell what was observed      (one row per observation)
@@ -224,7 +224,7 @@ D = cd.compute_distances(trace_id=0)  # (n_spots_in_trace, n_spots_in_trace)
 | `.chromdata.zarr` / `.cdz` / `.h5cd` | `ChromData.read` |
 
 ```python
-cd.write("data.chromdata.zarr")        # format 2.1: Zarr + Parquet (a directory)
+cd.write("data.chromdata.zarr")        # format 2.2: Zarr + Parquet (a directory)
 cd.write("data.cdz")                   # the same store as one zip file
 cd2 = ChromData.read("data.chromdata.zarr")
 cd3 = ChromData.read("old.h5cd")       # HDF5 2.0, or 1.x upgraded in memory
@@ -233,20 +233,23 @@ cd3 = ChromData.read("old.h5cd")       # HDF5 2.0, or 1.x upgraded in memory
 ### Storage: `.chromdata.zarr`
 
 A `.chromdata.zarr` store is a Zarr v3 directory whose tables are Parquet
-files (zstd).  The spot-aligned tables are **partitioned by chromosome**:
-`tables/spots/chrom=<name>/part-0.parquet` (`bin_id`, `trace_id`,
-`cell_id`, `x, y, z`, extra columns), `tables/spot_tracks/chrom=<name>/`,
-`tables/layers/<key>/chrom=<name>/`; the small tables (`bins`,
+files (zstd).  Every spot-aligned value is stored once: the coordinates
+and key columns **partitioned by chromosome**
+(`tables/coords/chrom=<name>/part-0.parquet`: `bin_id`, `trace_id`,
+`cell_id`, `x, y, z`), every other spot-aligned column — extra spot
+columns, `spot_tracks`, `layers` — in **cell-sorted primary tables**
+(`tables/primary/`), and spot columns that only repeat a value of their
+bin, cell or trace (a probe name, a sample id) once per key
+(`tables/derived/`); the small tables (`bins`,
 `bin_tracks`, `cells`, `traces`, `intervals/`, `points/`) are single
 Parquet files; `cellm`, `binm`, result arrays and the `index/` offsets are
 Zarr arrays; `results` provenance, `uns` and linked-file records are JSON
 attributes.  The full layout is in `uchrom/core/spec.md`.
 
-- **Row order.**  Spots are stored chromosome › cell › trace › bin: one
-  partition per chromosome, sorted by (cell, trace, bin) inside it.  A
-  trace (single-chromosome) is one contiguous slice of one partition, a
-  chromosome is one partition, a cell is one slice per chromosome it has.
-  Reading returns that order; every spot keeps its values.
+- **Row order.**  Reading returns spots in the primary order, cell ›
+  trace › chromosome › bin; every spot keeps its values.  A cell or a trace
+  is one slice of the primary tables plus its coordinate runs (one per
+  chromosome); a chromosome's coordinates are one partition.
   `ChromData.read(path, original_order=True)` restores the order of the
   object that was written (the store keeps the permutation in
   `index/source_row`).
@@ -267,20 +270,19 @@ attributes.  The full layout is in `uchrom/core/spec.md`.
 
 ```python
 big = ChromData.read("cerebellum.chromdata.zarr", backed=True)   # ~0.03 s
-cell = big.get_cell("R1_P0_C12")                 # one row group per chromosome
+cell = big.get_cell("R1_P0_C12")                 # one primary slice + a coordinate run per chromosome
 chr7 = big.get_chrom("chr7", columns="coords")   # one partition, xyz + keys only
 for chunk in big.iter_traces("auto", chrom="chr7", columns="coords"):   # bounded memory
     ...
 ```
 
 - **Options.**  `cd.write(path, coord_dtype="float32")` halves the
-  coordinate columns; `row_group_rows=` (default 16,384, groups end on
-  cell boundaries within a partition) and `compression_level=` (zstd,
-  default 3) tune the Parquet files.
-- **Format 2.0 stores** (one `tables/spots.parquet`, sorted cell › trace ›
-  bin) stay readable, in memory and backed; rewrite them with
-  `python -m uchrom.io.upgrade old.chromdata.zarr new.chromdata.zarr`.
-  Readers of format 2.0 cannot read 2.1 stores (the spot tables moved).
+  coordinate columns; `row_group_rows=` (primary tables, default 65,536,
+  groups end on cell boundaries) and `compression_level=` (zstd, default
+  3) tune the Parquet files.
+- **Format 2.0 / 2.1 stores** stay readable, in memory and backed; rewrite
+  them with `python -m uchrom.io.upgrade old.chromdata.zarr
+  new.chromdata.zarr`.  Older readers cannot read newer stores.
 - **`.h5cd`** stays readable; writing it still works in this release but
   warns (`DeprecationWarning`).
 
