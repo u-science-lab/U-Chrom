@@ -1,11 +1,9 @@
 """Readers / writers for the sequencing-side formats."""
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
 
-DATA = Path(__file__).resolve().parents[2] / "example-data"
+from uchrom.datasets import example_path
 
 
 def _particles(n=12):
@@ -22,7 +20,7 @@ def _particles(n=12):
 def test_read_pairs_cell1():
     from uchrom.io import read_pairs
 
-    path = DATA / "cell1.pairs"
+    path = example_path("stevens2017_mesc", "cell1.pairs")
     if not path.exists():
         pytest.skip("cell1.pairs missing")
     df = read_pairs(str(path))
@@ -48,7 +46,7 @@ def test_read_pairs_gz_with_header(tmp_path):
 def test_load_cool_pixels():
     from uchrom.io import load_cool
 
-    path = DATA / "IMR90_chr21_30kb.cool"
+    path = example_path("imr90_hic", "IMR90_chr21_30kb.cool")
     if not path.exists():
         pytest.skip("IMR90 cool missing")
     px = load_cool(str(path))

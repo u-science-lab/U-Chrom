@@ -30,9 +30,9 @@ def main() -> None:
     from uchrom.core import ChromData
     from uchrom.emb.higashi import run as higashi_run
 
-    repo = Path(__file__).resolve().parent.parent.parent
-    p1 = repo / "example-data" / "cell1.pairs"
-    p2 = repo / "example-data" / "cell2.pairs.gz"
+    from uchrom.datasets import example_path
+    p1 = example_path("stevens2017_mesc", "cell1.pairs")
+    p2 = example_path("stevens2017_mesc", "cell2.pairs.gz")
     assert p1.exists() and p2.exists(), "example pairs missing"
 
     labels = pd.DataFrame({"cell_name": ["cell1", "cell2"]})

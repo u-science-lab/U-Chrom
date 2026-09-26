@@ -143,7 +143,7 @@ def main():
     if args.child:
         return child_query(args.child[0])
     if not SCHICAR.exists():
-        raise SystemExit(f"{SCHICAR} missing — run example-data/build_schicar_mop.py")
+        raise SystemExit(f"{SCHICAR} missing — run example-data/schicar_mop/build.py")
 
     work = C.WORK / "e_contacts"
     work.mkdir(parents=True, exist_ok=True)

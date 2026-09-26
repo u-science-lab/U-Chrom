@@ -1,12 +1,11 @@
 """Framework-free tests for the web browser's data layer."""
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
 
 from uchrom import ChromData
+from uchrom.datasets import example_path
 from uchrom.browser.web.data import (
     DatasetStore,
     GeometryFilter,
@@ -14,7 +13,7 @@ from uchrom.browser.web.data import (
     natural_chrom_key,
 )
 
-SOX2 = Path(__file__).resolve().parents[2] / "example-data" / "mESC_Sox2_5cells_wnan.h5cd"
+SOX2 = example_path("mesc_sox2", "mESC_Sox2_5cells_wnan.h5cd")
 
 
 def _toy():

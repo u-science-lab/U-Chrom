@@ -22,8 +22,8 @@ It then adds a histone / IF cell embedding (``--no-if`` skips it):
 
 Usage::
 
-    python example-data/build_takei2025_fov0.py [--rows 400000]
-    python example-data/build_takei2025_fov0.py --update   # only redo the IF embedding
+    python example-data/takei2025_fov0/build.py [--rows 400000]
+    python example-data/takei2025_fov0/build.py --update   # only redo the IF embedding
 """
 
 from __future__ import annotations
@@ -35,8 +35,9 @@ from pathlib import Path
 
 import pandas as pd
 
+# this script lives in its dataset folder: example-data/takei2025_fov0/
 HERE = Path(__file__).resolve().parent
-OUT = HERE / "takei2025_fov0"
+OUT = HERE
 TARBALL = "https://zenodo.org/records/7693825/files/cerebellum_rep1.tar.gz"
 MEMBER = "cerebellum_rep1/cerebellum_rep1_pos0.csv"
 GITHUB = "https://media.githubusercontent.com/media/CaiGroup/dna-seqfish-plus-multi-omics/main"

@@ -30,8 +30,8 @@ The builder
 
 Usage::
 
-    python example-data/build_takei2025_cerebellum.py [--data-dir DIR] [--fovs 0,1] [--no-combined]
-                                                     [--format zarr|cdz|h5cd]
+    python example-data/takei2025_cerebellum/build.py [--data-dir DIR] [--fovs 0,1] [--no-combined]
+                                                      [--format zarr|cdz|h5cd]
 
 ``--data-dir`` defaults to ``$UCHROM_EXAMPLE_DATA/takei2025_cerebellum`` or
 ``example-data/takei2025_cerebellum``.
@@ -41,7 +41,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import resource
 import subprocess
@@ -50,8 +49,9 @@ import tarfile
 import time
 from pathlib import Path
 
+# this script lives in its dataset folder: example-data/takei2025_cerebellum/
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))  # this checkout's uchrom, not an installed copy
+sys.path.insert(0, str(HERE.parents[1]))  # this checkout's uchrom, not an installed copy
 TARBALL = "cerebellum_rep1.tar.gz"
 LOCI = "LC1-100k-09022022-mm10-25kb-meta.csv"
 CLUSTERS = "cerebellum_mRNA_cluster_nuc_vol_filtered.csv"
@@ -60,8 +60,9 @@ SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz", "h5cd": ".h5cd"}
 
 
 def default_data_dir() -> Path:
-    root = os.environ.get("UCHROM_EXAMPLE_DATA")
-    return (Path(root) if root else HERE) / "takei2025_cerebellum"
+    from uchrom.datasets import example_path  # $UCHROM_EXAMPLE_DATA, else this checkout
+
+    return example_path("takei2025_cerebellum")
 
 
 def peak_rss_mb() -> float:

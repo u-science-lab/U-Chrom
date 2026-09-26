@@ -15,9 +15,10 @@ branch under test) can be compared::
 result and its provenance survive an ``.h5cd`` round trip.
 
 Data (see ``example-data/README.md``): Bintu 2018 IMR90 chr21
-(``IMR90_chr21-18-20Mb.csv`` → ``IMR90_chr21_pyhim.ecsv`` via
-``bintu_to_pyhim_ecsv.py``; needs astropy), Takei 2021 mESC FOF-CT
-(``4DNFIHF3JCBY.csv``) and the in-repo ``IMR90_chr21_30kb.cool``.
+(``bintu2018_imr90/IMR90_chr21-18-20Mb.csv`` → ``IMR90_chr21_pyhim.ecsv`` via
+``bintu2018_imr90/to_pyhim_ecsv.py``; needs astropy), Takei 2021 mESC FOF-CT
+(``takei2021_mesc/4DNFIHF3JCBY.csv``) and the in-repo
+``imr90_hic/IMR90_chr21_30kb.cool``.
 Set ``UCHROM_EXAMPLE_DATA`` if the large files live elsewhere.  CPU only.
 """
 import importlib.util
@@ -33,6 +34,8 @@ import numpy as np
 import pandas as pd
 
 REPO = Path(__file__).resolve().parents[1]
+# Same root as uchrom.datasets.example_data_dir(); resolved here without importing
+# uchrom because the 'old' pass runs against an older uchrom tree.
 DATA = Path(os.environ.get("UCHROM_EXAMPLE_DATA", REPO / "example-data"))
 DEV = "cpu"
 MODE = sys.argv[1]
@@ -77,13 +80,13 @@ warnings.simplefilter("ignore")
 
 
 def bintu_ecsv() -> Path:
-    out = DATA / "IMR90_chr21_pyhim.ecsv"
+    out = DATA / "bintu2018_imr90" / "IMR90_chr21_pyhim.ecsv"
     if not out.exists():
         out = SCRATCH / "IMR90_chr21_pyhim.ecsv"
-        spec = importlib.util.spec_from_file_location("b2p", WT / "example-data" / "bintu_to_pyhim_ecsv.py")
+        spec = importlib.util.spec_from_file_location("b2p", WT / "example-data" / "bintu2018_imr90" / "to_pyhim_ecsv.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        mod.CSV_PATH = DATA / "IMR90_chr21-18-20Mb.csv"
+        mod.CSV_PATH = DATA / "bintu2018_imr90" / "IMR90_chr21-18-20Mb.csv"
         mod.OUT_PATH = out
         mod.main()
     return out
@@ -128,7 +131,7 @@ else:
     res["bintu.provenance"] = {k: bintu.results.record(k).provenance for k in bintu.results}
 
 # ---------------------------------------------------------------- Takei 2021 mESC FOF-CT
-takei = ChromData.from_fofct(MAIN_DATA / "4DNFIHF3JCBY.csv")
+takei = ChromData.from_fofct(MAIN_DATA / "takei2021_mesc" / "4DNFIHF3JCBY.csv")
 print("takei", takei.n_spots, "spots", takei.n_traces, "traces", len(takei.chroms), "chroms")
 if MODE == "old":
     from uchrom.strc import call_compartments_multi, call_loops_multi, call_tads_multi
@@ -152,7 +155,7 @@ else:
     res["takei.roundtrip_values"] = {k: back[k] for k in takei.results}
 
 # ---------------------------------------------------------------- IMR90 Hi-C (DI TADs)
-cool = WT / "example-data" / "IMR90_chr21_30kb.cool"
+cool = WT / "example-data" / "imr90_hic" / "IMR90_chr21_30kb.cool"
 if MODE == "old":
     import cooler
     import torch

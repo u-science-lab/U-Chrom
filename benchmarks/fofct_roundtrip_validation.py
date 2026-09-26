@@ -4,7 +4,7 @@
 Datasets (catalogued in ``example-data/README.md``):
 
 * Takei 2021 mESC DNA seqFISH+ (4DN ``4DNFIHF3JCBY`` core + ``4DNFIFINA2U9``
-  cell + ``4DNFIJ52NVDV`` RNA tables);
+  cell + ``4DNFIJ52NVDV`` RNA tables), under ``takei2021_mesc/``;
 * Liu 2025 mouse MOp DNA-MERFISH (4DN ``4DNFID46OABK`` core, 1.68 GB, +
   ``4DNFICX8IVEK`` cell table), under ``liu2025_mop/``.
 
@@ -31,7 +31,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 DATASETS = {
-    "takei2021": ("4DNFIHF3JCBY.csv", "4DNFIFINA2U9.csv", "4DNFIJ52NVDV.csv"),
+    "takei2021": ("takei2021_mesc/4DNFIHF3JCBY.csv", "takei2021_mesc/4DNFIFINA2U9.csv",
+                  "takei2021_mesc/4DNFIJ52NVDV.csv"),
     "liu2025_mop": ("liu2025_mop/4DNFID46OABK.csv", "liu2025_mop/4DNFICX8IVEK.csv", None),
 }
 
@@ -84,7 +85,9 @@ def child(name, data, work):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=ROOT / "example-data")
+    from uchrom.datasets import example_data_dir
+
+    ap.add_argument("--data", type=Path, default=example_data_dir())
     ap.add_argument("--work", type=Path, default=Path("/tmp/fofct_roundtrip"))
     ap.add_argument("--only")
     ap.add_argument("--child", nargs=3, help=argparse.SUPPRESS)

@@ -1,14 +1,13 @@
 """FOF-CT core + companion tables (cell data, RNA spots) and ``cd.points``."""
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
 
 from uchrom import ChromData
+from uchrom.datasets import example_path
 
-DATA = Path(__file__).resolve().parents[2] / "example-data"
+DATA = example_path("takei2021_mesc")
 CELL_TABLE = DATA / "4DNFIFINA2U9.csv"   # Takei 2021 cell data (in repo)
 RNA_TABLE = DATA / "4DNFIJ52NVDV.csv"    # Takei 2021 nascent RNA spots (in repo)
 CORE = DATA / "4DNFIHF3JCBY.csv"         # Takei 2021 25-kb core table (downloaded)

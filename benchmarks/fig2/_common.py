@@ -37,11 +37,13 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT))  # this checkout's uchrom, not an installed copy
 
-DATA = Path(os.environ.get("UCHROM_EXAMPLE_DATA", ROOT / "example-data"))
-RESULTS = ROOT / "paper" / "fig2" / "results"
-WORK = Path(os.environ.get("UCHROM_FIG2_WORK", DATA / "fig2_work"))
+from uchrom.datasets import example_data_dir, example_path  # noqa: E402
 
-TAKEI_DIR = DATA / "takei2025_cerebellum"
+DATA = example_data_dir()  # $UCHROM_EXAMPLE_DATA, else this checkout's example-data/
+RESULTS = ROOT / "paper" / "fig2" / "results"
+WORK = Path(os.environ.get("UCHROM_FIG2_WORK", example_path("generated", "fig2_work")))
+
+TAKEI_DIR = example_path("takei2025_cerebellum")
 TAKEI_COMBINED = TAKEI_DIR / "takei2025_cerebellum_rep1.h5cd"
 
 
@@ -341,7 +343,7 @@ FORMATS: Dict[str, Format] = {k: f for k, f in (("fofct", FofctCSV()), ("parquet
 def load_takei_all():
     from uchrom import ChromData
     if not TAKEI_COMBINED.exists():
-        raise SystemExit(f"{TAKEI_COMBINED} missing — run example-data/build_takei2025_cerebellum.py")
+        raise SystemExit(f"{TAKEI_COMBINED} missing — run example-data/takei2025_cerebellum/build.py")
     return ChromData.read(TAKEI_COMBINED)
 
 

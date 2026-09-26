@@ -7,9 +7,10 @@ import pandas as pd
 import pytest
 
 from uchrom import ChromData
+from uchrom.datasets import example_path
 from uchrom.browser.web.data import MAX_MATRIX_BINS, DatasetStore, decode_matrix
 
-SIM = Path(__file__).resolve().parents[2] / "example-data" / "sim_cell1" / "sim_cell1.cdz"
+SIM = example_path("sim_cell1", "sim_cell1.cdz")
 
 
 def _two_cell_dataset():
@@ -170,7 +171,7 @@ def test_dataset_without_coords_lists_cells_from_table():
 
 @pytest.mark.skipif(not SIM.exists(), reason="sim_cell1 example missing")
 def test_simulated_structure_agrees_with_its_contacts():
-    """Real data: NucDynamics on cell1.pairs.  Bins that were in contact in
+    """Real data: NucDynamics on stevens2017_mesc/cell1.pairs.  Bins that were in contact in
     the input must be much closer in the reconstructed 3-D structure."""
     pytest.importorskip("cooler")
     ds = DatasetStore().load(SIM)

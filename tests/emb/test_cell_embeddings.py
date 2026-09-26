@@ -1,16 +1,15 @@
 """uchrom.emb.embed_cells / aggregate_tracks / scHiCluster on synthetic data and
 real (Takei 2021) RNA counts."""
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
 
 from uchrom import ChromData
+from uchrom.datasets import example_path
 from uchrom.emb import aggregate_tracks, embed_cells, normalize_counts, schicluster_features, tfidf_lsi
 
-DATA = Path(__file__).resolve().parents[2] / "example-data"
+DATA = example_path("takei2021_mesc")
 
 
 def _cd_with_counts(counts: np.ndarray):

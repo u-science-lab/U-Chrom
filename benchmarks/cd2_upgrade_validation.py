@@ -19,9 +19,9 @@ It also checks that ``from_fofct`` gives the same table in both versions.
 
 Data (see ``example-data/README.md``; set ``UCHROM_EXAMPLE_DATA``):
 ``sim_cell1/sim_cell1.h5cd``, ``takei2025_fov0/takei2025_fov0.h5cd``,
-``schicar_mop/schicar_mop.h5cd``, ``mESC_Sox2_5cells_*.h5cd`` and the
-Takei 2021 FOF-CT core table ``4DNFIHF3JCBY.csv`` with its in-repo cell
-(``4DNFIFINA2U9.csv``) and RNA (``4DNFIJ52NVDV.csv``) tables.
+``schicar_mop/schicar_mop.h5cd``, ``mesc_sox2/mESC_Sox2_5cells_*.h5cd`` and
+the Takei 2021 FOF-CT core table ``takei2021_mesc/4DNFIHF3JCBY.csv`` with its
+in-repo cell (``4DNFIFINA2U9.csv``) and RNA (``4DNFIJ52NVDV.csv``) tables.
 """
 import json
 import os
@@ -36,6 +36,8 @@ import numpy as np
 import pandas as pd
 
 REPO = Path(__file__).resolve().parents[1]
+# Same root as uchrom.datasets.example_data_dir(); resolved here without importing
+# uchrom because the 'old' pass runs against an older uchrom tree.
 DATA = Path(os.environ.get("UCHROM_EXAMPLE_DATA", REPO / "example-data"))
 MODE, WORK = sys.argv[1], Path(sys.argv[2])
 WORK.mkdir(parents=True, exist_ok=True)
@@ -45,14 +47,14 @@ H5CD = {
     "sim_cell1": DATA / "sim_cell1" / "sim_cell1.h5cd",
     "takei2025_fov0": DATA / "takei2025_fov0" / "takei2025_fov0.h5cd",
     "schicar_mop": DATA / "schicar_mop" / "schicar_mop.h5cd",
-    "mESC_Sox2_wnan": DATA / "mESC_Sox2_5cells_wnan.h5cd",
-    "mESC_Sox2_linear": DATA / "mESC_Sox2_5cells_imputed_linear.h5cd",
-    "mESC_Sox2_snapfish": DATA / "mESC_Sox2_5cells_imputed_snapfish.h5cd",
+    "mESC_Sox2_wnan": DATA / "mesc_sox2" / "mESC_Sox2_5cells_wnan.h5cd",
+    "mESC_Sox2_linear": DATA / "mesc_sox2" / "mESC_Sox2_5cells_imputed_linear.h5cd",
+    "mESC_Sox2_snapfish": DATA / "mesc_sox2" / "mESC_Sox2_5cells_imputed_snapfish.h5cd",
 }
 FOFCT = {
-    "takei2021_fofct": dict(core=DATA / "4DNFIHF3JCBY.csv",
-                            cell_table=DATA / "4DNFIFINA2U9.csv",
-                            rna_table=DATA / "4DNFIJ52NVDV.csv"),
+    "takei2021_fofct": dict(core=DATA / "takei2021_mesc" / "4DNFIHF3JCBY.csv",
+                            cell_table=DATA / "takei2021_mesc" / "4DNFIFINA2U9.csv",
+                            rna_table=DATA / "takei2021_mesc" / "4DNFIJ52NVDV.csv"),
 }
 
 

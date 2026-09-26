@@ -83,8 +83,9 @@ def cache_markers():
     from sklearn.neighbors import NearestNeighbors
 
     from uchrom import ChromData
+    from uchrom.datasets import example_path
     warnings.filterwarnings("ignore")
-    cd = ChromData.read(ROOT / "example-data/schicar_mop/schicar_mop.h5cd")
+    cd = ChromData.read(example_path("schicar_mop", "schicar_mop.h5cd"))
     c = cd.cells
     ct = c.cell_type.astype(str).to_numpy()
     genes = [g for g in c.columns if g.startswith("rna.")]
@@ -315,7 +316,9 @@ def hic_window():
     if out.exists():
         return np.load(out)
     import cooler
-    c = cooler.Cooler(str(ROOT / "example-data/schicar_mop/contacts_all.mcool") + "::resolutions/250000")
+
+    from uchrom.datasets import example_path
+    c = cooler.Cooler(str(example_path("schicar_mop", "contacts_all.mcool")) + "::resolutions/250000")
     ch, a, b = HIC_REGION
     m = c.matrix(balance=False).fetch(ch).astype(float)
     cov = m.sum(0)

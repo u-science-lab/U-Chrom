@@ -14,14 +14,13 @@ NaN-coordinate spots, file sizes, wall time, peak RSS of the FOF-CT read).
 
 Usage::
 
-    python example-data/build_liu2025_mop.py [--data-dir DIR] [--format zarr|cdz|h5cd]
+    python example-data/liu2025_mop/build.py [--data-dir DIR] [--format zarr|cdz|h5cd]
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import resource
 import sys
 import time
@@ -30,8 +29,9 @@ from pathlib import Path
 
 import numpy as np
 
+# this script lives in its dataset folder: example-data/liu2025_mop/
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))  # this checkout's uchrom, not an installed copy
+sys.path.insert(0, str(HERE.parents[1]))  # this checkout's uchrom, not an installed copy
 CORE, CELLS = "4DNFID46OABK.csv", "4DNFICX8IVEK.csv"
 SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz", "h5cd": ".h5cd"}
 
@@ -48,8 +48,9 @@ def peak_rss_mb() -> float:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    root = Path(os.environ.get("UCHROM_EXAMPLE_DATA", HERE))
-    ap.add_argument("--data-dir", type=Path, default=root / "liu2025_mop")
+    from uchrom.datasets import example_path  # $UCHROM_EXAMPLE_DATA, else this checkout
+
+    ap.add_argument("--data-dir", type=Path, default=example_path("liu2025_mop"))
     ap.add_argument("--format", default="zarr", choices=sorted(SUFFIX),
                     help="output container (default zarr: .chromdata.zarr)")
     args = ap.parse_args()

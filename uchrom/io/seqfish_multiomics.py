@@ -46,6 +46,8 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 
+from uchrom.datasets import example_path
+
 
 PathLike = Union[str, Path]
 
@@ -300,7 +302,7 @@ def read_seqfish_transcriptome(
     replicate: Optional[int] = None,
     observed_cell_ids: Optional[Iterable[str]] = None,
     download: bool = False,
-    data_dir: PathLike = "example-data",
+    data_dir: PathLike | None = None,
     chunksize: int = 500_000,
 ):
     """Read Takei 2025 RNA seqFISH spot CSVs into a cell × gene AnnData.
@@ -308,7 +310,10 @@ def read_seqfish_transcriptome(
     The Zenodo transcriptomic archive stores super-resolved RNA spots,
     not a precomputed expression matrix.  This function aggregates those
     spots into a sparse count matrix with cell ids matching
-    :func:`read_seqfish_multiomics`: ``rep_fov_cellID``.
+    :func:`read_seqfish_multiomics`: ``rep_fov_cellID``.  With
+    ``download=True`` the Zenodo archive is cached under ``data_dir``
+    (default ``example-data/takei2025_cerebellum/downloads``, see
+    :func:`uchrom.datasets.example_path`).
     """
     try:
         import anndata as ad
@@ -411,7 +416,7 @@ def load_seqfish_multiomics_linked(
     transcriptome_replicate: Optional[int] = None,
     transcriptome_chunksize: int = 500_000,
     download_transcriptome: bool = False,
-    data_dir: PathLike = "example-data",
+    data_dir: PathLike | None = None,
     h5cd_path: Optional[PathLike] = None,
     h5ad_path: Optional[PathLike] = None,
     **kwargs,
@@ -471,7 +476,7 @@ def load_seqfish_multiomics_linked(
 def load_takei2025_cerebellum(
     *,
     replicate: int = 1,
-    data_dir: PathLike = "example-data/takei2025_cerebellum",
+    data_dir: PathLike | None = None,
     download: bool = True,
     rebuild: bool = False,
     transcriptome_chunksize: int = 500_000,
@@ -493,7 +498,8 @@ def load_takei2025_cerebellum(
         Cerebellum replicate to load.  Currently ``1`` or ``2``.
     data_dir
         Cache/build directory for downloaded raw files and linked
-        artifacts.
+        artifacts.  Default: ``example-data/takei2025_cerebellum``
+        (:func:`uchrom.datasets.example_path`).
     download
         If False, missing raw/build artifacts raise ``FileNotFoundError``.
     rebuild
@@ -508,6 +514,8 @@ def load_takei2025_cerebellum(
 
     from uchrom.core import ChromData
 
+    if data_dir is None:
+        data_dir = example_path("takei2025_cerebellum")
     data_dir = Path(data_dir)
     cd_path = data_dir / f"takei2025_cerebellum_rep{replicate}.chromdata.zarr"
     legacy = data_dir / f"takei2025_cerebellum_rep{replicate}.h5cd"
@@ -600,13 +608,15 @@ def _resolve_transcriptome_sources(
     assay: str,
     replicate: Optional[int],
     download: bool,
-    data_dir: PathLike,
+    data_dir: PathLike | None,
 ) -> List[_TranscriptomeSource]:
     if transcriptomic_data is None:
         if not download:
             raise ValueError(
                 "transcriptomic_data is required unless download=True."
             )
+        if data_dir is None:
+            data_dir = example_path("takei2025_cerebellum", "downloads")
         transcriptomic_data = _download_transcriptomic_zip(data_dir)
 
     paths = _resolve_transcriptome_paths(transcriptomic_data)

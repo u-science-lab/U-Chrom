@@ -1,10 +1,10 @@
 """GEM-FISH on the in-repo IMR90 chr21 Hi-C slice, tiny iteration budget."""
-from pathlib import Path
-
 import numpy as np
 import pytest
 
-COOL = Path(__file__).resolve().parents[2] / "example-data" / "IMR90_chr21_30kb.cool"
+from uchrom.datasets import example_path
+
+COOL = example_path("imr90_hic", "IMR90_chr21_30kb.cool")
 pytest.importorskip("cooler")
 
 
@@ -20,7 +20,7 @@ def _params(**kw):
 @pytest.fixture(autouse=True)
 def _need_data():
     if not COOL.exists():
-        pytest.skip("example-data/IMR90_chr21_30kb.cool missing")
+        pytest.skip("example-data/imr90_hic/IMR90_chr21_30kb.cool missing")
 
 
 def test_gem_fish_hic_only():

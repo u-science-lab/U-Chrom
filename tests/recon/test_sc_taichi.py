@@ -1,18 +1,18 @@
 """Single-cell reconstruction (Taichi, CPU) on a slice of real scHi-C.
 
-Uses chr19 of ``example-data/cell1.pairs`` (Stevens 2017) at 1 Mb so each
+Uses chr19 of ``example-data/stevens2017_mesc/cell1.pairs`` (Stevens 2017) at 1 Mb so each
 run takes ~1 s.  Checks the output is a valid ChromData and that the
 polymer backbone is respected (adjacent particles closer than random
 pairs) — a cheap sanity bound, not a structural-accuracy benchmark.
 """
-from pathlib import Path
-
 import numpy as np
 import pytest
 
 ti = pytest.importorskip("taichi")
 
-PAIRS = Path(__file__).resolve().parents[2] / "example-data" / "cell1.pairs"
+from uchrom.datasets import example_path
+
+PAIRS = example_path("stevens2017_mesc", "cell1.pairs")
 
 
 def _backbone_ratio(X):
@@ -26,7 +26,7 @@ def _backbone_ratio(X):
 @pytest.fixture(autouse=True)
 def _need_data():
     if not PAIRS.exists():
-        pytest.skip("example-data/cell1.pairs missing")
+        pytest.skip("example-data/stevens2017_mesc/cell1.pairs missing")
 
 
 def test_nucdyn_chr19_cpu(tmp_path):

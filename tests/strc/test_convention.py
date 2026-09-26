@@ -1,15 +1,14 @@
 """Calling convention of the ``strc`` callers: chrom=None merging,
 key_added / copy, provenance records, and the deprecated 1.x forms."""
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
 
 from tests._synth import chain_traces, domain_traces
 from uchrom import ChromData
+from uchrom.datasets import example_path
 
-COOL = Path(__file__).resolve().parents[2] / "example-data" / "IMR90_chr21_30kb.cool"
+COOL = example_path("imr90_hic", "IMR90_chr21_30kb.cool")
 
 
 def _two_chroms(make, **kw):

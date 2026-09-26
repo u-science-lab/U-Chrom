@@ -16,8 +16,9 @@ Usage::
     python example-data/download_data.py --liu2025_mop           # opt-in, 1.7 GB FOF-CT
 
 Datasets marked ``"default": False`` are large and only fetched when
-requested explicitly.  Multi-file datasets list ``files`` as
-``(relative path, url)`` pairs.
+requested explicitly.  Every dataset lists ``files`` as ``(path relative to
+example-data/, url)`` pairs; the first path component is the dataset folder
+(one folder per dataset, see README.md).
 """
 
 from __future__ import annotations
@@ -37,30 +38,30 @@ _BIL_MERFISH_MOP = (
 
 DATASETS = {
     "takei": {
-        "filename": "4DNFIHF3JCBY.csv",
-        "url": (
-            "https://4dn-open-data-public.s3.amazonaws.com/"
-            "fourfront-webprod/wfoutput/"
-            "e699334e-fb34-4a0e-8ef6-670b2099831a/4DNFIHF3JCBY.csv"
-        ),
+        "files": [
+            ("takei2021_mesc/4DNFIHF3JCBY.csv",
+             "https://4dn-open-data-public.s3.amazonaws.com/"
+             "fourfront-webprod/wfoutput/"
+             "e699334e-fb34-4a0e-8ef6-670b2099831a/4DNFIHF3JCBY.csv"),
+        ],
         "size_mb": 22,
         "description": "Takei 2021 mESC FOF-CT chromatin tracing",
     },
     "seqfish": {
-        "filename": "DNAseqFISH+.zip",
-        "url": (
-            "https://zenodo.org/records/3735329/files/"
-            "DNAseqFISH%2B.zip?download=1"
-        ),
+        "files": [
+            ("takei2021_mesc/DNAseqFISH+.zip",
+             "https://zenodo.org/records/3735329/files/"
+             "DNAseqFISH%2B.zip?download=1"),
+        ],
         "size_mb": 144,
         "description": "Takei 2021 raw seqFISH+ spot detections",
     },
     "bintu_imr90": {
-        "filename": "IMR90_chr21-18-20Mb.csv",
-        "url": (
-            "https://raw.githubusercontent.com/BogdanBintu/"
-            "ChromatinImaging/master/Data/IMR90_chr21-18-20Mb.csv"
-        ),
+        "files": [
+            ("bintu2018_imr90/IMR90_chr21-18-20Mb.csv",
+             "https://raw.githubusercontent.com/BogdanBintu/"
+             "ChromatinImaging/master/Data/IMR90_chr21-18-20Mb.csv"),
+        ],
         "size_mb": 2,
         "description": "Bintu 2018 IMR90 chr21 chromatin tracing",
     },
@@ -100,9 +101,9 @@ DATASETS = {
         "description": "scHiCAR mouse brain ATAC fragments (GSE305439) + UCSC mm10 refGene GTF",
     },
     # Takei et al. 2025 (Nature) cerebellum DNA seqFISH+, rep 1, all FOVs
-    # (Zenodo 7693825, CC-BY-4.0).  Consumed by build_takei2025_cerebellum.py
+    # (Zenodo 7693825, CC-BY-4.0).  Consumed by takei2025_cerebellum/build.py
     # and benchmarks/fig2/.  The locus map + clustering CSVs come from the
-    # CaiGroup GitHub repo (same URLs as build_takei2025_fov0.py).
+    # CaiGroup GitHub repo (same URLs as takei2025_fov0/build.py).
     "takei2025_cerebellum": {
         "files": [
             ("takei2025_cerebellum/cerebellum_rep1.tar.gz",
@@ -192,7 +193,7 @@ def main() -> None:
 
     for key in selected:
         info = DATASETS[key]
-        files = info.get("files") or [(info["filename"], info["url"])]
+        files = info["files"]
         for rel, url in files:
             _download(url, HERE / rel, info["description"], info["size_mb"])
             want = info.get("md5", {}).get(rel)

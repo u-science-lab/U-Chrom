@@ -1,6 +1,7 @@
-"""Single-cell 3-D genome structure from the in-repo cell1.pairs.
+"""Single-cell 3-D genome structure from the in-repo stevens2017_mesc/cell1.pairs.
 
-Runs NucDynamics (``uchrom.recon.sc.nucdyn``) on ``cell1.pairs`` (Stevens et
+Runs NucDynamics (``uchrom.recon.sc.nucdyn``) on
+``../stevens2017_mesc/cell1.pairs`` (Stevens et
 al. 2017, mESC G1 cell, mm10) and links the cell's own contact map, so the
 browser can show structure, contacts and 3-D distances side by side:
 
@@ -11,7 +12,7 @@ browser can show structure, contacts and 3-D distances side by side:
 
 Usage::
 
-    python example-data/build_sim_cell1.py [--arch cpu]
+    python example-data/sim_cell1/build.py [--arch cpu]
 """
 
 from __future__ import annotations
@@ -24,8 +25,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+# this script lives in its dataset folder: example-data/sim_cell1/
 HERE = Path(__file__).resolve().parent
-OUT = HERE / "sim_cell1"
+OUT = HERE
+PAIRS = HERE.parent / "stevens2017_mesc" / "cell1.pairs"
 
 
 def contacts_mcool(pairs: Path, out: Path) -> None:
@@ -59,7 +62,7 @@ def main() -> None:
                     help="output container (default cdz: one file, checked in)")
     args = ap.parse_args()
     OUT.mkdir(exist_ok=True)
-    pairs = HERE / "cell1.pairs"
+    pairs = PAIRS
     structure = OUT / ("sim_cell1" + {"cdz": ".cdz", "zarr": ".chromdata.zarr", "h5cd": ".h5cd"}[args.format])
     if not structure.exists():
         subprocess.run([sys.executable, "-m", "uchrom.recon.sc.nucdyn", str(pairs), str(structure),
@@ -73,7 +76,7 @@ def main() -> None:
     cd = ChromData.read(structure)
     cd.uns.setdefault("genome_assembly", "mm10")
     cd.uns["xyz_unit"] = "model units (NucDynamics)"
-    cd.uns["source"] = "NucDynamics on example-data/cell1.pairs (Stevens et al. 2017)"
+    cd.uns["source"] = "NucDynamics on example-data/stevens2017_mesc/cell1.pairs (Stevens et al. 2017)"
     # relative to the dataset's folder, so the folder can be moved or shipped
     cd.link_cool(mcool.name, key="cell1_contacts", label="cell1 contacts (input to the model)")
     cd.write(structure)

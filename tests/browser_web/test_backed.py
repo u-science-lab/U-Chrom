@@ -2,17 +2,16 @@
 match the same data loaded in memory (summaries come from ``index/``,
 geometry from row ranges)."""
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
 
 from uchrom import ChromData
+from uchrom.datasets import example_path
 from uchrom.browser.web.data import DatasetStore, GeometryFilter, decode_geometry
 
-_FOV0 = Path(__file__).resolve().parents[2] / "example-data" / "takei2025_fov0"
-# built by example-data/build_takei2025_fov0.py (.chromdata.zarr; older builds wrote .h5cd)
+_FOV0 = example_path("takei2025_fov0")
+# built by example-data/takei2025_fov0/build.py (.chromdata.zarr; older builds wrote .h5cd)
 TAKEI = next((p for p in (_FOV0 / "takei2025_fov0.chromdata.zarr", _FOV0 / "takei2025_fov0.h5cd")
               if p.exists()), _FOV0 / "takei2025_fov0.chromdata.zarr")
 

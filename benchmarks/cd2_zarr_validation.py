@@ -42,9 +42,9 @@ sys.path.insert(0, str(ROOT))
 
 DATASETS = {
     # name: (source relative to --data, kind)
-    "mESC_Sox2_5cells_wnan": ("mESC_Sox2_5cells_wnan.h5cd", "h5cd"),
+    "mESC_Sox2_5cells_wnan": ("mesc_sox2/mESC_Sox2_5cells_wnan.h5cd", "h5cd"),
     "sim_cell1": ("sim_cell1/sim_cell1.h5cd", "h5cd"),
-    "takei2021_fofct": ("4DNFIHF3JCBY.csv", "fofct"),
+    "takei2021_fofct": ("takei2021_mesc/4DNFIHF3JCBY.csv", "fofct"),
     "schicar_mop": ("schicar_mop/schicar_mop.h5cd", "h5cd"),
     "takei2025_fov0": ("takei2025_fov0/takei2025_fov0.h5cd", "h5cd"),
     "liu2025_mop": ("liu2025_mop/liu2025_mop.h5cd", "h5cd"),
@@ -204,7 +204,9 @@ def run_child(args, timeout=3600):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=ROOT / "example-data")
+    from uchrom.datasets import example_data_dir
+
+    ap.add_argument("--data", type=Path, default=example_data_dir())
     ap.add_argument("--work", type=Path, required=False)
     ap.add_argument("--only")
     ap.add_argument("--out", type=Path, help="write the results as JSON")
@@ -232,7 +234,7 @@ def main():
         zarr = work / f"{name}.chromdata.zarr"
         row["zarr"] = run_child(["convert", str(src), kind, str(zarr), "{}"])
         if kind == "fofct":
-            row["source_bytes"] = sum(size_bytes(args.data / f) for f in
+            row["source_bytes"] = sum(size_bytes(args.data / "takei2021_mesc" / f) for f in
                                       ("4DNFIHF3JCBY.csv", "4DNFIFINA2U9.csv", "4DNFIJ52NVDV.csv"))
         h5 = work / f"{name}.v2.h5cd"
         row["h5cd_2_0"] = run_child(["convert", str(src), kind, str(h5), json.dumps({"format": "h5cd"})])

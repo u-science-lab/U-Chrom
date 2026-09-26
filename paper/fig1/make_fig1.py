@@ -61,10 +61,11 @@ def refresh_cache() -> None:
     import cooler
 
     from uchrom import ChromData
+    from uchrom.datasets import example_path
 
     warnings.filterwarnings("ignore")
     CACHE.mkdir(exist_ok=True)
-    cd = ChromData.read(ROOT / "example-data/takei2025_fov0/takei2025_fov0.h5cd")
+    cd = ChromData.read(example_path("takei2025_fov0", "takei2025_fov0.h5cd"))
     sp = cd.spots
     df = pd.DataFrame({"cell_id": sp.cell_id.astype(str), "chrom": sp.chrom.astype(str), "start": sp.start,
                        "trace_id": sp.trace_id.astype(str), "x": cd.coords[:, 0], "y": cd.coords[:, 1],
@@ -76,14 +77,14 @@ def refresh_cache() -> None:
     pd.DataFrame({"cell_id": c.index, "cell_type": c.cell_type, "vol": c.nuc_volume_um3}).to_csv(
         CACHE / "fov_cells.csv", index=False)
 
-    s = ChromData.read(ROOT / "example-data/schicar_mop/schicar_mop.h5cd")
+    s = ChromData.read(example_path("schicar_mop", "schicar_mop.h5cd"))
     u = s.cellm["paper_umap"]
     pd.DataFrame({"u1": u[:, 0], "u2": u[:, 1], "cell_type": s.cells["cell_type"].astype(str).values}).to_csv(
         CACHE / "schicar_umap.csv", index=False)
-    clr = cooler.Cooler(str(ROOT / "example-data/schicar_mop/contacts_all.mcool") + "::resolutions/250000")
+    clr = cooler.Cooler(str(example_path("schicar_mop", "contacts_all.mcool")) + "::resolutions/250000")
     np.save(CACHE / "schicar_chr2.npy", clr.matrix(balance=False).fetch("chr2:20,000,000-80,000,000"))
 
-    m = ChromData.read(ROOT / "example-data/sim_cell1/sim_cell1.h5cd")
+    m = ChromData.read(example_path("sim_cell1", "sim_cell1.h5cd"))
     pd.DataFrame({"chrom": m.spots.chrom.astype(str), "start": m.spots.start, "x": m.coords[:, 0],
                   "y": m.coords[:, 1], "z": m.coords[:, 2]}).to_csv(CACHE / "sim_cell1.csv", index=False)
 

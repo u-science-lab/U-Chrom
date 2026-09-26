@@ -1,14 +1,13 @@
 """``ChromData.to_fofct`` / ``uchrom.io.write_fofct``: FOF-CT core (+ cell
 and RNA) tables that ``from_fofct`` reads back exactly."""
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
 
 from uchrom import ChromData
+from uchrom.datasets import example_path
 
-DATA = Path(__file__).resolve().parents[2] / "example-data"
+DATA = example_path("takei2021_mesc")
 CORE = DATA / "4DNFIHF3JCBY.csv"
 CELLS = DATA / "4DNFIFINA2U9.csv"
 RNA = DATA / "4DNFIJ52NVDV.csv"
@@ -96,7 +95,7 @@ def test_options_and_errors(tmp_path):
         plain.to_fofct(tmp_path / "q.csv", cell_table=tmp_path / "r.csv")
 
 
-@pytest.mark.skipif(not CORE.exists(), reason="example-data/4DNFIHF3JCBY.csv not downloaded")
+@pytest.mark.skipif(not CORE.exists(), reason="example-data/takei2021_mesc/4DNFIHF3JCBY.csv not downloaded")
 def test_takei2021_real_round_trip(tmp_path):
     cd = ChromData.from_fofct(CORE, cell_table=CELLS, rna_table=RNA)
     cd.to_fofct(tmp_path / "core.csv", cell_table=tmp_path / "cell.csv", rna_table=tmp_path / "rna.csv")

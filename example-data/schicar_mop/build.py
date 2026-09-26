@@ -27,8 +27,8 @@ scHiCluster (convolution + random walk + binarise) on the 1 Mb scool.
 
 Usage::
 
-    python example-data/build_schicar_mop.py [--n-hvg 500] [--chunk 10000000]
-    python example-data/build_schicar_mop.py --update   # only redo ATAC + Hi-C embeddings
+    python example-data/schicar_mop/build.py [--n-hvg 500] [--chunk 10000000]
+    python example-data/schicar_mop/build.py --update   # only redo ATAC + Hi-C embeddings
 """
 
 from __future__ import annotations
@@ -42,10 +42,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+# this script lives in its dataset folder: example-data/schicar_mop/
 HERE = Path(__file__).resolve().parent
-RAW = HERE / "schicar_mop" / "raw" / "GSE305439"
-OUT = HERE / "schicar_mop"
-GTF = HERE / "schicar_mop" / "raw" / "mm10.refGene.gtf.gz"
+RAW = HERE / "raw" / "GSE305439"
+OUT = HERE
+GTF = HERE / "raw" / "mm10.refGene.gtf.gz"
 CHROMS = [f"chr{i}" for i in range(1, 20)] + ["chrX", "chrY"]
 
 

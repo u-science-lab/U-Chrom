@@ -1,7 +1,7 @@
 """Agreement of per-modality cell embeddings with cell type (real data).
 
 For every embedding in ``cd.uns["embeddings"]`` of the example datasets
-(``build_takei2025_fov0.py`` / ``build_schicar_mop.py`` outputs):
+(``takei2025_fov0/build.py`` / ``schicar_mop/build.py`` outputs):
 
 * kNN label purity — fraction of each cell's k nearest neighbours with the
   same ``cell_type`` (chance = mean over 20 label permutations);
@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-HERE = Path(__file__).resolve().parents[1] / "example-data"
+from uchrom.datasets import example_path
 
 
 def knn_purity(x: np.ndarray, y: np.ndarray, k: int) -> float:
@@ -76,8 +76,8 @@ def leiden_ari(cd, keys: dict, resolution: float = 1.0) -> pd.DataFrame:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--takei", default=HERE / "takei2025_fov0" / "takei2025_fov0.h5cd", type=Path)
-    ap.add_argument("--schicar", default=HERE / "schicar_mop" / "schicar_mop.h5cd", type=Path)
+    ap.add_argument("--takei", default=example_path("takei2025_fov0", "takei2025_fov0.h5cd"), type=Path)
+    ap.add_argument("--schicar", default=example_path("schicar_mop", "schicar_mop.h5cd"), type=Path)
     args = ap.parse_args()
 
     from uchrom import ChromData
