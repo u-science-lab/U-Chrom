@@ -8,6 +8,18 @@ Conditions (the only difference is the skills folder):
         --conditions docs,skills --reps 1 --jobs 4 --run pilot1
 
 Writes runs/<run>/<id>__<condition>__r<k>/{transcript.jsonl, answer.md, meta.json}.
+
+Isolation: the agent sees no path into this repository.  The dataset is cloned (APFS `cp -c`, no extra space)
+into ./data of a neutrally named temp dir, and `uchrom` comes from a venv with a non-editable wheel built from a
+clean `git archive` of a fixed commit, so `uchrom.__file__` is in site-packages.  Build that venv once:
+
+    SHA=$(git rev-parse --short HEAD); B=~/.cache/uchrom-bench/$SHA; mkdir -p $B/src
+    git archive HEAD | tar -x -C $B/src && (cd $B/src && uv build --wheel -o $B/dist) && rm -rf $B/src
+    uv pip freeze --python .venv/bin/python | grep -v '^-e ' > $B/requirements.txt
+    uv venv --python .venv/bin/python $B/venv && uv pip install --python $B/venv/bin/python -r $B/requirements.txt $B/dist/*.whl
+
+Each run's meta.json records `repo_refs` (tool calls naming this repo or the data root — should be 0) and
+`pkg_source_refs` (tool calls reading the installed uchrom source, which a real user could also do).
 """
 from __future__ import annotations
 
@@ -25,8 +37,12 @@ import yaml
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
+# sim: the in-repo h5cd — the .cdz under --data-root is ChromData 2.0, which the uchrom under test cannot read
+# (same spots and coordinates; checked against ground_truth._read_cdz).
 DATA = {"takei": "takei2025_fov0/takei2025_fov0.h5cd", "schicar": "schicar_mop/schicar_mop.h5cd",
-        "sim": "sim_cell1/sim_cell1.cdz"}
+        "sim": REPO / "example-data/sim_cell1/sim_cell1.h5cd"}
+# Files of a dataset folder that are not given to the agent: raw source tables and backups.
+DATA_EXCLUDE = ("*.csv", "*.bak.*")
 PROMPT = """You are analysing 3-D genome data with U-Chrom: the Python package `uchrom` is installed \
 (run it with `python`), and its documentation is in ./docs.
 
@@ -38,8 +54,42 @@ Work it out with code, then give a concise final answer: the key numbers with un
 and anything that limits the conclusion."""
 
 
+def clone_data(src: Path, w: Path) -> str:
+    """Clone the dataset's folder (top-level files, minus DATA_EXCLUDE) into w/data; return the relative path.
+
+    Linked files (.mcool / .scool next to the .h5cd) come along, since links are stored relative to the h5cd.
+    """
+    dst = w / "data" / src.parent.name
+    dst.mkdir(parents=True)
+    for f in src.parent.iterdir():
+        if f.is_file() and not any(f.match(x) for x in DATA_EXCLUDE):
+            subprocess.run(["cp", "-c", str(f), str(dst / f.name)], check=True)   # APFS clone
+    return f"./data/{src.parent.name}/{src.name}"
+
+
+def audit(lines: list[str], data_root: Path) -> dict:
+    """Count tool calls whose input names this repo / the data root, or the installed uchrom source."""
+    repo_marks = {str(REPO.parent), str(data_root.resolve())}
+    repo = pkg = 0
+    for l in lines:
+        try:
+            j = json.loads(l)
+        except ValueError:
+            continue
+        if j.get("type") != "assistant":
+            continue
+        for c in j["message"].get("content", []):
+            if c.get("type") != "tool_use":
+                continue
+            inp = json.dumps(c.get("input", {}))
+            repo += any(m in inp for m in repo_marks)
+            pkg += "site-packages/uchrom" in inp or "uchrom.__file__" in inp or "inspect.getsource" in inp
+    return {"repo_refs": repo, "pkg_source_refs": pkg}
+
+
 def workdir(condition: str, agent: str = "claude") -> Path:
-    w = Path(tempfile.mkdtemp(prefix=f"uchrom_bench_{condition}_"))
+    # neutral name: the agent should not learn it is in a benchmark, or which condition
+    w = Path(tempfile.mkdtemp(prefix="analysis_"))
     docs = w / "docs"
     docs.mkdir()
     shutil.copy(REPO / "README.md", docs / "README.md")
@@ -57,13 +107,14 @@ def workdir(condition: str, agent: str = "claude") -> Path:
 
 
 def run_one(q: dict, condition: str, rep: int, data_root: Path, out: Path, model: str | None, timeout: int,
-            agent: str = "claude"):
+            agent: str = "claude", venv: Path | None = None):
     d = out / f"{q['id']}__{condition}__r{rep}"
     if (d / "meta.json").exists():
         return json.loads((d / "meta.json").read_text())
     d.mkdir(parents=True, exist_ok=True)
     w = workdir(condition, agent)
-    prompt = PROMPT.format(data=(data_root / DATA[q["data"]]).resolve(), question=q["prompt"])
+    data = clone_data((data_root / DATA[q["data"]]).resolve(), w)
+    prompt = PROMPT.format(data=data, question=q["prompt"])
     if agent == "claude":
         cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose",
                "--allowedTools", "Bash", "Read", "Glob", "Grep", "Skill"]
@@ -74,8 +125,14 @@ def run_one(q: dict, condition: str, rep: int, data_root: Path, out: Path, model
                "-o", str(d / "answer_codex.md"), prompt]
         if model:
             cmd += ["-m", model]
-    env = {**os.environ, "PATH": f"{REPO / '.venv/bin'}{os.pathsep}{os.environ['PATH']}"}
-    env.pop("UCHROM_BROWSER_URL", None)
+    # uchrom from the isolated venv only: drop PATH entries inside the repo and any activated venv
+    path = [x for x in os.environ["PATH"].split(os.pathsep) if not x.startswith(str(REPO.parent))]
+    env = {**os.environ, "PATH": os.pathsep.join([str(venv / "bin"), *path])}
+    for k in ("UCHROM_BROWSER_URL", "VIRTUAL_ENV", "PYTHONPATH", "CONDA_PREFIX"):
+        env.pop(k, None)
+    # A Bash call past Claude Code's 120 s default is moved to the background, and under `claude -p` the agent
+    # then ends its turn without the result (TAD calls in B7/B8/C3).  Let such calls run in the foreground.
+    env["BASH_DEFAULT_TIMEOUT_MS"] = env["BASH_MAX_TIMEOUT_MS"] = "600000"
     t0 = time.time()
     try:
         p = subprocess.run(cmd, cwd=w, env=env, capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL)
@@ -104,11 +161,12 @@ def run_one(q: dict, condition: str, rep: int, data_root: Path, out: Path, model
     meta = {"id": q["id"], "condition": condition, "rep": rep, "agent": agent, "model_requested": model,
             "returncode": rc, "elapsed_s": time.time() - t0,
             "cost_usd": final.get("total_cost_usd"), "num_turns": final.get("num_turns"),
-            "model": init.get("model"), "skills_used": skills_used, "workdir": str(w)}
+            "model": init.get("model"), "skills_used": skills_used, "workdir": str(w), "venv": str(venv),
+            "claude_code_version": init.get("claude_code_version"), **audit(lines, data_root)}
     (d / "meta.json").write_text(json.dumps(meta, indent=1))
     shutil.rmtree(w, ignore_errors=True)
     print(f"{q['id']:4s} {condition:6s} r{rep}  {meta['elapsed_s']:5.0f} s  ${meta['cost_usd'] or 0:.2f}  "
-          f"turns {meta['num_turns']}  skills {skills_used}", flush=True)
+          f"turns {meta['num_turns']}  skills {skills_used}  repo_refs {meta['repo_refs']}", flush=True)
     return meta
 
 
@@ -123,7 +181,16 @@ def main():
     ap.add_argument("--agent", default="claude", choices=["claude", "codex"])
     ap.add_argument("--timeout", type=int, default=900)
     ap.add_argument("--run", default=time.strftime("run_%Y%m%d_%H%M"))
+    ap.add_argument("--venv", type=Path, default=None,
+                    help="isolated venv (default ~/.cache/uchrom-bench/<HEAD short sha>/venv; see module docstring)")
     a = ap.parse_args()
+    if a.venv is None:
+        sha = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short", "HEAD"], capture_output=True,
+                             text=True, check=True).stdout.strip()
+        a.venv = Path.home() / ".cache/uchrom-bench" / sha / "venv"
+    if not (a.venv / "bin/python").exists():
+        raise SystemExit(f"no benchmark venv at {a.venv}; build it as described in the module docstring")
+    a.venv = a.venv.resolve()
     qs = yaml.safe_load((HERE / "questions.yaml").read_text())["questions"]
     ids = set(filter(None, a.ids.split(",")))
     qs = [q for q in qs if not ids or q["id"] in ids]
@@ -134,7 +201,7 @@ def main():
         out.mkdir(parents=True, exist_ok=True)
         tasks += [(q, c, r, out, m) for r in range(a.reps) for q in qs for c in a.conditions.split(",")]
     with ThreadPoolExecutor(a.jobs) as ex:
-        list(ex.map(lambda t: run_one(t[0], t[1], t[2], a.data_root, t[3], t[4], a.timeout, a.agent), tasks))
+        list(ex.map(lambda t: run_one(t[0], t[1], t[2], a.data_root, t[3], t[4], a.timeout, a.agent, a.venv), tasks))
     print("->", HERE / "runs" / a.run)
 
 
