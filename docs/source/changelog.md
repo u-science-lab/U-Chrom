@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **`example-data/` is one folder per dataset** (`takei2021_mesc/`,
+  `stevens2017_mesc/`, `imr90_hic/`, `bintu2018_imr90/`, `mesc_sox2/`, …;
+  build scripts are `<dataset>/build.py`, tutorial outputs go to
+  `generated/`).  Code finds example files with
+  `uchrom.datasets.example_path(dataset, *parts)` (`$UCHROM_EXAMPLE_DATA`
+  still overrides the root).  Existing checkouts: run
+  `python example-data/migrate_layout.py` once to move downloaded / built
+  files into the new folders.
 - **`.chromdata.zarr` — the format 2.0 container** (Zarr v3 + Parquet, the
   SpatialData approach) is the new default: `cd.write("x.chromdata.zarr")`
   (or `x.cdz`, the same store in one zip file).  Spots are stored sorted by

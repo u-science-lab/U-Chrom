@@ -215,14 +215,14 @@ import pandas as pd
 from uchrom import ChromData
 
 # Change this to a FOF-CT file you have locally
-FOFCT = 'example-data/fofct_core.csv'  # or similar
+FOFCT = 'example-data/generated/fofct_core.csv'  # or similar
 
 # For this tutorial we build a synthetic example that looks like FOF-CT
 # output in case you do not have a file handy.  Skip this cell if you
 # downloaded a real file.
 import io, os
 if not os.path.exists(FOFCT):
-    os.makedirs('example-data', exist_ok=True)
+    os.makedirs('example-data/generated', exist_ok=True)
     rng = np.random.default_rng(0)
     header = '''##FOF-CT_Version=v1.0
 ##Table_Namespace=4dn_FOF-CT_core
@@ -333,7 +333,7 @@ converted to PyHiM ECSV format."""),
 
 We use a PyHiM-format ECSV derived from Bintu et al. 2018 (*Science*
 362:eaau1783) — IMR90 cells, chr21:18.6–20.6 Mb, 66 segments × 30 kb.
-The conversion script is in `example-data/bintu_to_pyhim_ecsv.py`."""),
+The conversion script is in `example-data/bintu2018_imr90/to_pyhim_ecsv.py`."""),
 
     code("""\
 from pathlib import Path
@@ -348,12 +348,12 @@ def _repo_root():
     return Path.cwd()
 
 root = _repo_root()
-ecsv_path = root / "example-data" / "IMR90_chr21_pyhim.ecsv"
+ecsv_path = root / "example-data" / "bintu2018_imr90" / "IMR90_chr21_pyhim.ecsv"
 
 if not ecsv_path.exists():
     # Generate it from the Bintu CSV
     import subprocess
-    script = root / "example-data" / "bintu_to_pyhim_ecsv.py"
+    script = root / "example-data" / "bintu2018_imr90" / "to_pyhim_ecsv.py"
     subprocess.run(["python", str(script)], check=True)
 
 print(f"ECSV: {ecsv_path}")
@@ -504,19 +504,19 @@ U-Chrom provides several 3D reconstruction algorithms:
 This notebook walks through a short single-cell reconstruction using Nuc
 Dynamics on the example data shipped with the repo."""),
 
-    md("## Locate the example data\n\nThe notebook looks for `example-data/cell1.pairs` in the repo; we walk up the directory tree to find the repo root so this runs from any cwd."),
+    md("## Locate the example data\n\nThe notebook looks for `example-data/stevens2017_mesc/cell1.pairs` in the repo; we walk up the directory tree to find the repo root so this runs from any cwd."),
 
     code("""\
 from pathlib import Path
 
 def find_repo_root(start: Path = Path.cwd()) -> Path:
     for p in [start, *start.parents]:
-        if (p / 'example-data' / 'cell1.pairs').exists():
+        if (p / 'example-data' / 'stevens2017_mesc' / 'cell1.pairs').exists():
             return p
-    raise FileNotFoundError('Could not locate example-data/cell1.pairs')
+    raise FileNotFoundError('Could not locate example-data/stevens2017_mesc/cell1.pairs')
 
 repo = find_repo_root()
-pairs = repo / 'example-data' / 'cell1.pairs'
+pairs = repo / 'example-data' / 'stevens2017_mesc' / 'cell1.pairs'
 out_path = repo / 'tutorials' / '_out_tutorial3.chromdata.zarr'
 print('pairs:', pairs)
 print('out  :', out_path)"""),
@@ -525,7 +525,7 @@ print('out  :', out_path)"""),
 
     code("""\
 # From the shell (uncomment to run):
-# !python -m uchrom.recon.sc.nucdyn example-data/cell1.pairs out.chromdata.zarr \\
+# !python -m uchrom.recon.sc.nucdyn example-data/stevens2017_mesc/cell1.pairs out.chromdata.zarr \\
 #     --arch=cpu --dyns=30 --size_steps='[2, 0.4]'
 
 from uchrom.recon.sc.nucdyn import main as nucdyn_main
@@ -640,7 +640,7 @@ correlation within 0.001)."""),
 The benchmark needs the GM12878 in-situ combined Hi-C file
 (`GSE63525_GM12878_insitu_primary+replicate_combined_30.hic`,
 ~40 GB).  Because of its size this file is **not** auto-downloaded;
-drop it into `example-data/` (or point `UCHROM_GM12878_HIC` at it).
+drop it into `example-data/gm12878_hic/` (or point `UCHROM_GM12878_HIC` at it).
 
 Download sources:
 
@@ -660,7 +660,7 @@ def find_repo_root(start: Path = Path.cwd()) -> Path:
     raise FileNotFoundError('Could not locate repo root')
 
 repo = find_repo_root()
-default_path = repo / 'example-data' / 'GSE63525_GM12878_insitu_primary+replicate_combined_30.hic'
+default_path = repo / 'example-data' / 'gm12878_hic' / 'GSE63525_GM12878_insitu_primary+replicate_combined_30.hic'
 HIC_PATH = Path(os.environ.get('UCHROM_GM12878_HIC', str(default_path)))
 
 if not HIC_PATH.exists():
@@ -1020,7 +1020,7 @@ import pandas as pd
 from uchrom import ChromData
 from uchrom.strc.loop import call_loops_axiswise_f, LoopCallerParams"""),
 
-    md("## Load a chromatin-tracing dataset\n\nWe use the Takei et al. 2021 Nature mESC chromatin-tracing dataset (4DN accession `4DNFIHF3JCBY`).  The helper below auto-downloads it from the public 4DN S3 bucket into `example-data/` on the first run, and re-uses the local copy afterwards.  If the download can't reach the network, the notebook falls back to a small synthetic FOF-CT with hand-crafted TAD + loop structure so the notebook still runs."),
+    md("## Load a chromatin-tracing dataset\n\nWe use the Takei et al. 2021 Nature mESC chromatin-tracing dataset (4DN accession `4DNFIHF3JCBY`).  The helper below auto-downloads it from the public 4DN S3 bucket into `example-data/takei2021_mesc/` on the first run, and re-uses the local copy afterwards.  If the download can't reach the network, the notebook falls back to a small synthetic FOF-CT with hand-crafted TAD + loop structure so the notebook still runs."),
 
     code("""\
 from pathlib import Path
@@ -1062,7 +1062,7 @@ def find_fofct() -> str:
     root = _repo_root()
     # 1) Fast path — any local copy already on disk
     candidates = [
-        root / 'example-data' / '4DNFIHF3JCBY.csv',
+        root / 'example-data' / 'takei2021_mesc' / '4DNFIHF3JCBY.csv',
         Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
         Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.h5cd',
         Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
@@ -1073,21 +1073,21 @@ def find_fofct() -> str:
             return str(c)
 
     # 2) Download to a stable repo-local location
-    dest = root / 'example-data' / '4DNFIHF3JCBY.csv'
+    dest = root / 'example-data' / 'takei2021_mesc' / '4DNFIHF3JCBY.csv'
     if _download_takei(dest):
         print(f'[data] using real Takei 2021 FOF-CT: {dest}')
         return str(dest)
 
     # 3) If a synthetic was already built (e.g. by an earlier run), reuse it
     for p in [Path.cwd(), *Path.cwd().parents]:
-        cand = p / 'example-data' / 'fofct_core.csv'
+        cand = p / 'example-data' / 'generated' / 'fofct_core.csv'
         if cand.exists():
             print(f'[data] using synthetic FOF-CT: {cand}')
             return str(cand)
 
     # 4) Last resort: synthesise a FOF-CT with built-in TAD + loop structure
     print('[data] generating synthetic FOF-CT (offline fallback)')
-    (root / 'example-data').mkdir(parents=True, exist_ok=True)
+    (root / 'example-data' / 'generated').mkdir(parents=True, exist_ok=True)
     import numpy as np
     rng = np.random.default_rng(0)
     header = '''##FOF-CT_Version=v1.0
@@ -1139,7 +1139,7 @@ def find_fofct() -> str:
                 rows.append((sid, f'{cell}_{trace}', x, y, z,
                              'chr17', s, s + 25_000, cell))
                 sid += 1
-    path = str(root / 'example-data' / 'fofct_core.csv')
+    path = str(root / 'example-data' / 'generated' / 'fofct_core.csv')
     with open(path, 'w') as f:
         f.write(header)
         for r in rows:
@@ -1245,7 +1245,8 @@ loops_genome.sort_values('pval').head(10)"""),
 
     code("""\
 cd.results['loops'] = loops_genome
-out = Path(FOFCT).parent / 'with_loops.chromdata.zarr'
+out = _repo_root() / 'example-data' / 'generated' / 'with_loops.chromdata.zarr'
+out.parent.mkdir(parents=True, exist_ok=True)
 cd.write(str(out))
 
 cd_reloaded = ChromData.read(str(out))
@@ -1298,7 +1299,7 @@ from uchrom.strc.tad import call_tads_by_pval, TADCallerParams
 from uchrom.fea import mean_distance_matrix
 from uchrom.pl import plot_distance_matrix"""),
 
-    md("## Load the example FOF-CT\n\nUses the Takei et al. 2021 Nature mESC chromatin-tracing dataset (4DN `4DNFIHF3JCBY`); auto-downloaded from the public 4DN S3 bucket on first run, cached under `example-data/`."),
+    md("## Load the example FOF-CT\n\nUses the Takei et al. 2021 Nature mESC chromatin-tracing dataset (4DN `4DNFIHF3JCBY`); auto-downloaded from the public 4DN S3 bucket on first run, cached under `example-data/takei2021_mesc/`."),
 
     code("""\
 from pathlib import Path
@@ -1321,7 +1322,7 @@ def _repo_root() -> Path:
 def find_fofct() -> str:
     root = _repo_root()
     candidates = [
-        root / 'example-data' / '4DNFIHF3JCBY.csv',
+        root / 'example-data' / 'takei2021_mesc' / '4DNFIHF3JCBY.csv',
         Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
         Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.h5cd',
         Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
@@ -1330,11 +1331,11 @@ def find_fofct() -> str:
         if c.exists():
             return str(c)
     # Fall back to an earlier synthetic build if present
-    cand = root / 'example-data' / 'fofct_core.csv'
+    cand = root / 'example-data' / 'generated' / 'fofct_core.csv'
     if cand.exists():
         return str(cand)
     # Download
-    dest = root / 'example-data' / '4DNFIHF3JCBY.csv'
+    dest = root / 'example-data' / 'takei2021_mesc' / '4DNFIHF3JCBY.csv'
     dest.parent.mkdir(parents=True, exist_ok=True)
     print(f'[data] downloading Takei 2021 (~22 MB) → {dest}')
     import urllib.request
@@ -1491,7 +1492,7 @@ from uchrom.strc.comp import call_compartments_axes_pc, CompartmentCallerParams
 from uchrom.fea import mean_distance_matrix
 from uchrom.pl import plot_distance_matrix"""),
 
-    md("## Load example data\n\nUses the Takei et al. 2021 Nature mESC chromatin-tracing dataset (4DN `4DNFIHF3JCBY`); auto-downloaded from the public 4DN S3 bucket on first run, cached under `example-data/`."),
+    md("## Load example data\n\nUses the Takei et al. 2021 Nature mESC chromatin-tracing dataset (4DN `4DNFIHF3JCBY`); auto-downloaded from the public 4DN S3 bucket on first run, cached under `example-data/takei2021_mesc/`."),
 
     code("""\
 from pathlib import Path
@@ -1513,7 +1514,7 @@ def _repo_root() -> Path:
 def find_fofct() -> str:
     root = _repo_root()
     candidates = [
-        root / 'example-data' / '4DNFIHF3JCBY.csv',
+        root / 'example-data' / 'takei2021_mesc' / '4DNFIHF3JCBY.csv',
         Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
         Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.h5cd',
         Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
@@ -1521,10 +1522,10 @@ def find_fofct() -> str:
     for c in candidates:
         if c.exists():
             return str(c)
-    cand = root / 'example-data' / 'fofct_core.csv'
+    cand = root / 'example-data' / 'generated' / 'fofct_core.csv'
     if cand.exists():
         return str(cand)
-    dest = root / 'example-data' / '4DNFIHF3JCBY.csv'
+    dest = root / 'example-data' / 'takei2021_mesc' / '4DNFIHF3JCBY.csv'
     dest.parent.mkdir(parents=True, exist_ok=True)
     print(f'[data] downloading Takei 2021 (~22 MB) → {dest}')
     import urllib.request
@@ -1656,7 +1657,7 @@ from uchrom.strc.tad import call_domains_fishnet, FISHnetParams
 from uchrom.fea import mean_distance_matrix
 from uchrom.pl import plot_distance_matrix"""),
 
-    md("## Load the example FOF-CT\n\nUses the Takei et al. 2021 Nature mESC chromatin-tracing dataset (4DN `4DNFIHF3JCBY`); auto-downloaded from the public 4DN S3 bucket on first run, cached under `example-data/`."),
+    md("## Load the example FOF-CT\n\nUses the Takei et al. 2021 Nature mESC chromatin-tracing dataset (4DN `4DNFIHF3JCBY`); auto-downloaded from the public 4DN S3 bucket on first run, cached under `example-data/takei2021_mesc/`."),
 
     code("""\
 from pathlib import Path
@@ -1675,14 +1676,14 @@ def _repo_root() -> Path:
 def find_fofct() -> str:
     root = _repo_root()
     candidates = [
-        root / 'example-data' / '4DNFIHF3JCBY.csv',
+        root / 'example-data' / 'takei2021_mesc' / '4DNFIHF3JCBY.csv',
         Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
         Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
     ]
     for c in candidates:
         if c.exists():
             return str(c)
-    dest = root / 'example-data' / '4DNFIHF3JCBY.csv'
+    dest = root / 'example-data' / 'takei2021_mesc' / '4DNFIHF3JCBY.csv'
     dest.parent.mkdir(parents=True, exist_ok=True)
     print(f'[data] downloading Takei 2021 (~22 MB) → {dest}')
     import urllib.request
@@ -1893,7 +1894,7 @@ def _repo_root() -> Path:
 def load_seqfish_spots(variant: str = '25kbloci-E14-replicate1') -> pd.DataFrame:
     '''Download (once) and read one replicate from the Zenodo zip.'''
     root = _repo_root()
-    zip_path = root / 'example-data' / 'DNAseqFISH+.zip'
+    zip_path = root / 'example-data' / 'takei2021_mesc' / 'DNAseqFISH+.zip'
     if not zip_path.exists():
         zip_path.parent.mkdir(parents=True, exist_ok=True)
         print(f'[data] downloading seqFISH+ (~144 MB) → {zip_path}')
@@ -2295,7 +2296,7 @@ plt.show()"""),
 ## Part 2 — Paper-faithful IMR90 chr21 reconstruction
 
 Load the real Bintu 2018 FISH data (auto-downloaded) and the real
-Rao 2014 IMR90 Hi-C (small 30-kb `.cool` shipped under `example-data/`,
+Rao 2014 IMR90 Hi-C (small 30-kb `.cool` shipped under `example-data/imr90_hic/`,
 derived from 4DN accession [4DNFI4QQPDMR](https://data.4dnucleome.org/4DNFI4QQPDMR/)),
 then run the **one-shot** `reconstruct_gem_fish` entry point."""),
 
@@ -2317,7 +2318,7 @@ def _repo_root():
 
 # Auto-download Bintu 2018 (~2 MB) if absent
 root = _repo_root()
-bintu_csv = root / 'example-data' / 'IMR90_chr21-18-20Mb.csv'
+bintu_csv = root / 'example-data' / 'bintu2018_imr90' / 'IMR90_chr21-18-20Mb.csv'
 if not bintu_csv.exists():
     print(f'[data] downloading Bintu 2018 (~2 MB) → {bintu_csv}')
     urllib.request.urlretrieve(DATA_URL, bintu_csv)
@@ -2332,7 +2333,7 @@ print(fish_cd)
 print(f'  n_traces: {fish_cd.traces.shape[0] if fish_cd.traces is not None else fish_cd.spots[\"trace_id\"].nunique()}')
 
 # Hi-C .cool is shipped in the repo (0.3 MB, chr21 only, 30 kb)
-hic_cool = root / 'example-data' / 'IMR90_chr21_30kb.cool'
+hic_cool = root / 'example-data' / 'imr90_hic' / 'IMR90_chr21_30kb.cool'
 print(f'Hi-C: {hic_cool} ({hic_cool.stat().st_size / 1e6:.2f} MB)')"""),
 
     code("""\
@@ -2626,7 +2627,7 @@ We use **Kim et al. 2020 sci-Hi-C** (H1Esc + HFF mix, 500 kb, hg19), as
 hosted by the Noble lab at
 `noble.gs.washington.edu/proj/schic-topic-model`.  The helper below
 auto-downloads the tarball (~128 MB) and labels file (~92 KB) into
-`example-data/` on first run.
+`example-data/h1esc_hff_scihic/` on first run.
 
 **Format note**: each cell's `.matrix` file is a sparse triplet
 `bin1<TAB>bin2<TAB>count<TAB>weight<TAB>chrom1<TAB>chrom2`, where
@@ -2661,7 +2662,7 @@ def _repo_root() -> Path:
 
 def find_kim2020():
     root = _repo_root()
-    data = root / "example-data"
+    data = root / "example-data" / "h1esc_hff_scihic"
     data.mkdir(parents=True, exist_ok=True)
     tar_path = data / "H1Esc-HFF.R1.tar.gz"
     matrices_dir = data / "H1Esc-HFF.R1"

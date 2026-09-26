@@ -73,7 +73,7 @@ def find_kim2020() -> tuple[Path, Path]:
     use — the extracted directory is reused on subsequent runs.
     """
     root = _repo_root()
-    data = root / "example-data"
+    data = root / "example-data" / "h1esc_hff_scihic"
     data.mkdir(parents=True, exist_ok=True)
 
     tar_path = data / "H1Esc-HFF.R1.tar.gz"

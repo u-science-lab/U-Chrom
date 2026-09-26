@@ -55,6 +55,7 @@ uchrom/
 ├── browser/         Interactive 3D browser: desktop (PyVista + PyQt5) and
 │   └── web/         web (FastAPI server + React/Three.js SPA in frontend/,
 │                    built into static/ and committed; API in API.md)
+├── datasets.py      example-data paths: example_path(dataset, *parts), DATASETS
 └── op.py            Misc operations (mark empty particles)
 
 discovery/           Separate package `uchrom-discovery` (import uchrom_discovery):
@@ -172,7 +173,17 @@ re-implementation of a paper):
 ## Example data
 
 All datasets consumed by tutorials and benchmarks live in
-`example-data/`.  Rules:
+`example-data/`, **one folder per dataset** (`example-data/<dataset>/`,
+flat — no modality level; e.g. `takei2021_mesc/`, `stevens2017_mesc/`).
+Rules:
+
+- **Layout**: a dataset's files, its build script (`<dataset>/build.py`)
+  and any per-dataset notes (`<dataset>/README.md`) live in its folder.
+  Tutorial / benchmark outputs go to `example-data/generated/`.  Code
+  reaches example files through `uchrom.datasets.example_path(dataset,
+  *parts)` (honours `$UCHROM_EXAMPLE_DATA`); a new folder is registered
+  in `uchrom.datasets.DATASETS`.  `example-data/migrate_layout.py`
+  moves files of the old flat layout (its table is the old → new map).
 
 - **Catalog is authoritative**: `example-data/README.md` lists every
   dataset with size, source / citation, download URL, format, and
@@ -183,13 +194,15 @@ All datasets consumed by tutorials and benchmarks live in
 - **≥ 10 MB → document + auto-download**.  Add a row to "Large
   datasets", an entry to `example-data/download_data.py`, and follow
   the existing `find_*()` pattern inside the tutorial that needs it
-  (see e.g. `find_fofct()` in `tutorials/_build_notebooks.py`).  Add
-  the filename(s) to `.gitignore`.
+  (see e.g. `find_fofct()` in `tutorials/_build_notebooks.py`, which
+  caches `takei2021_mesc/4DNFIHF3JCBY.csv`).  Add the filename(s) to the
+  example-data block of `.gitignore`.
 - **Whenever a tutorial or benchmark pulls in a new dataset, the
   catalog must be updated in the same PR** — this is a hard rule.
   Do not add silent downloads.
-- Tutorial-produced outputs (e.g. `with_loops.chromdata.zarr`, synthetic
-  `fofct_core.csv` fallbacks) are gitignored, not committed.
+- Tutorial-produced outputs (e.g. `generated/with_loops.chromdata.zarr`,
+  synthetic `generated/fofct_core.csv` fallbacks) are gitignored, not
+  committed.
 
 ## Technical Notes
 

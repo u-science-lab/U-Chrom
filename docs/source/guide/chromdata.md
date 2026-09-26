@@ -371,7 +371,7 @@ of per-cell means is ~0.1 of the within-cell SD), so per-cell means carry
 little cell-type signal.  The within-cell mark–mark correlations (how marks
 co-occur on the same loci) separated the cell types best — kNN-5 purity
 0.61 vs 0.44 for means, 0.39 for mark × chromosome, ~0.5 for mark × 10 Mb;
-chance ≈ 0.28 — and are what `build_takei2025_fov0.py` uses for
+chance ≈ 0.28 — and are what `example-data/takei2025_fov0/build.py` uses for
 `if_pca / if_tsne / if_umap` (the per-cell means stay as `if.*` for
 colouring).  With 47 cells these numbers are indicative only.
 
@@ -386,7 +386,7 @@ feats, cols, n_contacts = scool_cell_features("cells_1Mb.scool", cd.cells.index)
 embed_cells(cd, source="hic", matrix=feats, normalization="none", n_pcs=20)
 ```
 
-`example-data/build_schicar_mop.py` builds the scHiCAR dataset this way:
+`example-data/schicar_mop/build.py` builds the scHiCAR dataset this way:
 RNA (`rna_*`), ATAC (100 kb bins → LSI, `atac_*`; gene activity of the RNA
 HVGs as `atac.<gene>`), Hi-C (`hic_*`) and the paper's UMAP.
 

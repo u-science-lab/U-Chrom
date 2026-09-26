@@ -29,7 +29,7 @@ pip install u-chrom
 from uchrom import ChromData
 
 # Import FOF-CT imaging data
-cd = ChromData.from_fofct("example-data/core.csv")
+cd = ChromData.from_fofct("example-data/takei2021_mesc/4DNFIHF3JCBY.csv")
 
 # ArcFISH-style loop calling (GPU-accelerated)
 from uchrom.strc.loop import call_loops_axiswise_f

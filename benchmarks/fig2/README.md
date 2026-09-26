@@ -20,14 +20,14 @@ format-version comparison (supplementary `figS_formats.pdf`).
 
 ```bash
 python example-data/download_data.py --takei2025_cerebellum   # 2.85 GB (Zenodo 7693825)
-python example-data/build_takei2025_cerebellum.py              # per-FOV + combined .chromdata.zarr
-python example-data/download_data.py --schicar_rna --schicar_dna && python example-data/build_schicar_mop.py   # panel e
-python example-data/build_takei2025_fov0.py                    # panel f
+python example-data/takei2025_cerebellum/build.py              # per-FOV + combined .chromdata.zarr
+python example-data/download_data.py --schicar_rna --schicar_dna && python example-data/schicar_mop/build.py   # panel e
+python example-data/takei2025_fov0/build.py                    # panel f
 ```
 
 Environment variables: `UCHROM_EXAMPLE_DATA` (where the datasets live;
 default `example-data/`), `UCHROM_FIG2_WORK` (scratch for staged subsets and
-temporary files; default `example-data/fig2_work/`, tens of GB at 1e7 spots).
+temporary files; default `example-data/generated/fig2_work/`, tens of GB at 1e7 spots).
 The scripts put this checkout first on `sys.path`, so they measure the
 checkout's `uchrom`, not an installed copy.
 

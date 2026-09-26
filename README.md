@@ -59,7 +59,7 @@ $ pip install -e .
 ### Single-cell 3D reconstruction
 
 ```bash
-$ python -m uchrom.recon.sc.nucdyn --arch=cuda example-data/cell1.pairs ./out1.csv --use-grid=True --scale=0.01
+$ python -m uchrom.recon.sc.nucdyn --arch=cuda example-data/stevens2017_mesc/cell1.pairs ./out1.csv --use-grid=True --scale=0.01
 ```
 
 ### Bulk Hi-C 3D reconstruction

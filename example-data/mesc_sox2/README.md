@@ -61,14 +61,14 @@ Genomic region: chr{...} 34,601,078 - 35,006,078 (405 kb)
 import uchrom as uc
 
 # Load data with missing coordinates
-cd = uc.ChromData.read('example-data/mESC_Sox2_5cells_wnan.h5cd')
+cd = uc.ChromData.read('example-data/mesc_sox2/mESC_Sox2_5cells_wnan.h5cd')
 
 # Impute missing coordinates
 from uchrom.im.impute import impute_coordinates
 cd_imputed = impute_coordinates(cd, method='linear')
 
 # Save result
-cd_imputed.write('example-data/mESC_Sox2_5cells_imputed.h5cd')
+cd_imputed.write('example-data/mesc_sox2/mESC_Sox2_5cells_imputed.h5cd')
 ```
 
 ### Tutorial
