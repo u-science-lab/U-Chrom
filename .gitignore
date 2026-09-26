@@ -13,9 +13,6 @@ imgui.ini
 !discovery/uchrom_discovery/ui/package.json
 !discovery/uchrom_discovery/ui/package-lock.json
 !uchrom/browser/web/frontend/package.json
-!example-data/4DNFIFINA2U9.csv
-example-data/takei2025_fov0/
-!example-data/4DNFIJ52NVDV.csv
 !uchrom/browser/web/frontend/package-lock.json
 !uchrom/browser/web/frontend/tsconfig.json
 node_modules/
@@ -37,21 +34,8 @@ run_whole_genome.py
 *.h5cd
 *.chromdata.zarr
 *.cdz
-!example-data/sim_cell1/sim_cell1.cdz
 *.h5ad
 *.tar.gz
-example-data/**/*.zip
-example-data/4DNFIHF3JCBY.*
-example-data/DNAseqFISH+.zip
-example-data/DNAseqFISH+/
-example-data/fofct_core.csv
-example-data/with_loops.h5cd
-example-data/IMR90_chr21-18-20Mb.csv
-example-data/schicar_mop/
-example-data/IMR90_chr21_pyhim.ecsv
-example-data/H1Esc-HFF.R1.tar.gz
-example-data/H1Esc-HFF.R1.labeled
-example-data/H1Esc-HFF.R1/
 # venv + smoke test work
 .venv/
 .venv-pantheon/
@@ -62,12 +46,32 @@ docs/build/
 # Stray nested worktree paths must never be committed
 .claude/worktrees/
 
-# small in-repo example (must come after the *.h5cd / *.mcool rules)
+# Figure 2 benchmarks: result JSONs are committed (inputs / scratch: example-data block below)
+!paper/fig2/results/*.json
+
+# ---- example-data/: one folder per dataset (catalog: example-data/README.md) ----
+# Downloaded / built payloads stay out of git; the scripts and READMEs that
+# live next to them are tracked.  Keep this block after the global
+# *.csv / *.h5cd / *.mcool / *.cdz / *.tar.gz rules so the ! re-includes win.
+example-data/**/*.zip
+example-data/takei2021_mesc/4DNFIHF3JCBY.*
+example-data/takei2021_mesc/DNAseqFISH+/
+!example-data/takei2021_mesc/4DNFIFINA2U9.csv
+!example-data/takei2021_mesc/4DNFIJ52NVDV.csv
+example-data/bintu2018_imr90/IMR90_chr21-18-20Mb.csv
+example-data/bintu2018_imr90/IMR90_chr21_pyhim.ecsv
+!example-data/mesc_sox2/*.h5cd
+!example-data/sim_cell1/sim_cell1.cdz
 !example-data/sim_cell1/*.h5cd
 !example-data/sim_cell1/*.mcool
-
-# Figure 2 benchmarks: large inputs / scratch are ignored, result JSONs are committed
-example-data/takei2025_cerebellum/
-example-data/liu2025_mop/
-example-data/fig2_work/
-!paper/fig2/results/*.json
+example-data/h1esc_hff_scihic/
+example-data/gm12878_hic/
+# tutorial / benchmark outputs (with_loops, fofct_core.csv, fig2_work/, ...)
+example-data/generated/
+# built datasets: everything but the build script / README
+example-data/takei2025_fov0/*
+example-data/takei2025_cerebellum/*
+example-data/schicar_mop/*
+example-data/liu2025_mop/*
+!example-data/*/build.py
+!example-data/*/README.md
