@@ -2,16 +2,21 @@
 
 Rows (each through the uchrom API that exists today on main):
 
-* **h5cd 1.x** — ``cd.write`` → ``ChromData.read`` (baseline).
-* **FOF-CT** — ``_common.write_fofct`` (+ a FOF-CT *cell* table) →
-  ``ChromData.from_fofct(core, cell_table=…)``.  uchrom has no FOF-CT writer,
-  so the benchmark ships a minimal one.
+* **chromdata.zarr** — ``cd.write('x.chromdata.zarr')`` →
+  ``ChromData.read(…, original_order=True)`` (the format 2.0 container;
+  the writer sorts spots by cell › trace › bin and ``index/source_row``
+  restores the written order, so rows compare one to one).  Bin- and
+  spot-level tracks are compared separately.
+* **FOF-CT** — the official writer :func:`uchrom.io.write_fofct`
+  (``cd.to_fofct``; core table with every bin / spot track as an extra
+  column, plus the FOF-CT *cell* table) →
+  ``ChromData.from_fofct(core, cell_table=…)``.
 * **AnnData** — ``cd.to_anndata()`` → ``.h5ad`` → recorded in
-  ``uns['linked_anndata']`` → h5cd → ``ChromData.read`` →
+  ``uns['linked_anndata']`` → ``.chromdata.zarr`` → ``ChromData.read`` →
   ``load_linked_anndata()`` / ``link_anndata()`` into a fresh ChromData.
 * **.cool / .scool** — contacts are *linked*: ``link_cool`` (sim_cell1 .mcool)
-  and ``link_scool`` (scHiCAR 1 Mb .scool) → h5cd → read → the linked map's
-  pixels are compared with the source file's.
+  and ``link_scool`` (scHiCAR 1 Mb .scool) → ``.chromdata.zarr`` → read → the
+  linked map's pixels are compared with the source file's.
 * **PDB** — ``uchrom.io.export_pdb_coords`` of a genome structure (sim_cell1,
   NucDynamics) → parsed back (fixed PDB columns; no uchrom PDB reader).
 * **.3dg** — uchrom reads ``.3dg`` (``uchrom.io.read_3dg``) but has no writer:
@@ -24,9 +29,10 @@ Status per cell: ``preserved`` (tested, exact or within the stated tolerance),
 (representable but dropped), ``na`` (the format has no place for the field, or
 the API does not export it by design), ``untested``.
 
-Data: Takei 2025 FOV0 (``takei2025_fov0/takei2025_fov0.h5cd``: 383,674 spots,
-1,500 traces, 47 cells, 62 tracks, cell table + cellm) for the h5cd, FOF-CT
-and AnnData rows; ``sim_cell1`` (in repo) for PDB / .3dg / .cool;
+Data: Takei 2025 FOV0 (``takei2025_fov0/takei2025_fov0.chromdata.zarr``, or
+the ``.h5cd`` of older builds: 383,674 spots, 1,500 traces, 47 cells, 62
+tracks, cell table + cellm) for the chromdata.zarr, FOF-CT and AnnData rows;
+``sim_cell1`` (in repo, ``sim_cell1.cdz``) for PDB / .3dg / .cool;
 ``schicar_mop`` for .scool.
 
     python benchmarks/fig2/f_roundtrip.py
@@ -47,9 +53,22 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _common as C  # noqa: E402
 
-TAKEI_FOV0 = C.DATA / "takei2025_fov0" / "takei2025_fov0.h5cd"
-SIM = C.ROOT / "example-data" / "sim_cell1" / "sim_cell1.h5cd"
-SCHICAR = C.DATA / "schicar_mop" / "schicar_mop.h5cd"
+SUFFIXES = (".chromdata.zarr", ".cdz", ".h5cd")
+
+
+def existing(stem: Path) -> Path:
+    """A dataset as built by the current (``.chromdata.zarr`` / ``.cdz``) or an
+    older (``.h5cd``) builder; the first suffix that exists."""
+    for suf in SUFFIXES:
+        p = stem.with_name(stem.name + suf)
+        if p.exists():
+            return p
+    return stem.with_name(stem.name + SUFFIXES[0])
+
+
+TAKEI_FOV0 = existing(C.DATA / "takei2025_fov0" / "takei2025_fov0")
+SIM = existing(C.ROOT / "example-data" / "sim_cell1" / "sim_cell1")
+SCHICAR = existing(C.DATA / "schicar_mop" / "schicar_mop")
 COLS = ["coords", "cell › trace", "tracks", "cell table", "contacts"]
 
 
@@ -116,18 +135,21 @@ def pixels_digest(clr) -> str:
 
 # ----------------------------------------------------------------------------- rows
 
-def row_h5cd(cd, tmp):
+def row_zarr(cd, tmp):
     from uchrom import ChromData
-    p = tmp / "rt.h5cd"
+    p = tmp / "rt.chromdata.zarr"
     cd.write(p)
-    back = ChromData.read(p)
+    back = ChromData.read(p, original_order=True)
     out = {}
     ok, n = same_coords(cd.coords, back.coords)
     out["coords"] = cell("preserved" if ok else "lost", n)
     ok, n = same_hierarchy(cd.spots, back.spots)
-    out["cell › trace"] = cell("preserved" if ok else "lost", n)
-    ok, n = same_frame(cd.tracks, back.tracks)
-    out["tracks"] = cell("preserved" if ok else "partial", n)
+    tr_ok, tr_n = same_frame(cd.traces, back.traces)
+    out["cell › trace"] = cell("preserved" if ok and tr_ok else "lost", f"{n}; traces table: {tr_n}")
+    okb, nb = same_frame(cd.bin_tracks, back.bin_tracks)
+    oks, ns = same_frame(cd.spot_tracks, back.spot_tracks)
+    out["tracks"] = cell("preserved" if okb and oks else "partial",
+                         f"bin_tracks: {nb}; spot_tracks: {ns}")
     ok, n = same_frame(cd.cells, back.cells)
     cm = all(np.array_equal(cd.cellm[k], back.cellm[k]) for k in cd.cellm)
     out["cell table"] = cell("preserved" if ok and cm else "partial", f"{n}; cellm equal: {cm}")
@@ -135,20 +157,11 @@ def row_h5cd(cd, tmp):
     return out
 
 
-def write_fofct_cells(cells: pd.DataFrame, path: Path):
-    df = cells.copy()
-    df.insert(0, "Cell_ID", [str(i) for i in df.index])
-    with open(path, "w") as fh:
-        fh.write("##FOF-CT_version=v0.1\n##Table_namespace=4dn_FOF-CT_cell\n")
-        fh.write("##columns=(" + ",".join(df.columns) + ")\n")
-        df.to_csv(fh, header=False, index=False)
-
-
 def row_fofct(cd, tmp):
     from uchrom import ChromData
+    from uchrom.io import write_fofct
     core, cells = tmp / "core.csv", tmp / "cells.csv"
-    C.write_fofct(cd, core)
-    write_fofct_cells(cd.cells, cells)
+    write_fofct(cd, core, cell_table=cells, spot_tracks=True, bin_tracks=True, cell_value_prefix=None)
     back = ChromData.from_fofct(core, cell_table=cells, cell_value_prefix=None)
     out = {}
     ok, n = same_coords(cd.coords, back.coords)
@@ -158,18 +171,19 @@ def row_fofct(cd, tmp):
     out["cell › trace"] = cell("preserved" if ok else "lost",
                                n + ("; trace-level table (traces) not carried: FOF-CT core has no trace table"
                                     if tr_lost else ""), traces_table_lost=tr_lost)
-    tcols = list(cd.tracks.columns)
+    view = cd.tracks_spot_view()
+    tcols = list(view.columns)
     in_spots = [c for c in tcols if c in back.spots.columns]
     missing = [c for c in tcols if c not in back.spots.columns]
     renamed = [c for c in back.spots.columns if c not in cd.spots.columns and c not in tcols]
-    vals_ok, n = same_frame(cd.tracks[in_spots], back.spots[in_spots].set_axis(cd.tracks.index), rtol=TEXT_RTOL)
-    out["tracks"] = cell("partial" if vals_ok else "lost",
-                         f"{len(in_spots)}/{len(tcols)} track columns back, values: {n}; read back as extra *spot* "
-                         f"columns (FOF-CT has no spot-vs-track distinction; back.tracks is "
-                         f"{'None' if back.tracks is None else 'set'})"
-                         + (f"; missing {missing} — reader bug: from_fofct strips '()' from the whole "
-                            f"##columns list, so a last name ending in ')' comes back as {renamed}"
-                            if missing else ""), missing_columns=missing)
+    vals_ok, n = same_frame(view[in_spots], back.spots[in_spots].set_axis(view.index), rtol=TEXT_RTOL)
+    nb, ns = len(cd.bin_tracks.columns), len(cd.spot_tracks.columns)
+    out["tracks"] = cell("partial" if vals_ok and not missing else "lost",
+                         f"{len(in_spots)}/{len(tcols)} track columns back ({nb} bin + {ns} spot tracks, "
+                         f"bin tracks broadcast to spots), values: {n}; read back as extra *spot* columns "
+                         f"(FOF-CT has no bin-vs-spot track distinction)"
+                         + (f"; missing {missing}, extra {renamed}" if missing else ""),
+                         missing_columns=missing)
     ok, n = same_frame(cd.cells, back.cells.loc[[str(i) for i in cd.cells.index]], rtol=TEXT_RTOL)
     out["cell table"] = cell("partial" if ok else "lost",
                              f"cells: {n}; cellm ({', '.join(cd.cellm)}) has no FOF-CT table → dropped")
@@ -183,14 +197,15 @@ def row_anndata(cd, tmp):
     from uchrom import ChromData
     h5ad = tmp / "cells.h5ad"
     cd.to_anndata().write_h5ad(h5ad)
-    host = ChromData(cd.coords, cd.spots.copy(), tracks=cd.tracks, uns={"linked_anndata": {"path": str(h5ad)}})
-    host.write(tmp / "host.h5cd")
-    back = ChromData.read(tmp / "host.h5cd")
+    host = ChromData(cd.coords, cd.spots.copy(), uns={"linked_anndata": {"path": str(h5ad)}})
+    host.tracks = cd.tracks_spot_view()  # split into bin / spot tracks
+    host.write(tmp / "host.chromdata.zarr")
+    back = ChromData.read(tmp / "host.chromdata.zarr")
     adata = back.load_linked_anndata()
     fresh = ChromData(cd.coords, cd.spots.copy())
     n_matched = fresh.link_anndata(ad.read_h5ad(h5ad))
     out = {"coords": cell("na", "to_anndata exports the cell axis (obs = cells, obsm = cellm); "
-                                "spot coordinates stay in the h5cd by design")}
+                                "spot coordinates stay in the ChromData store by design")}
     ids_ok = list(adata.obs_names) == [str(i) for i in cd.cells.index]
     out["cell › trace"] = cell("partial", f"cell ids preserved: {ids_ok}; the trace level has no place in a "
                                           f"cells-as-obs AnnData", cell_ids_equal=ids_ok)
@@ -221,7 +236,7 @@ def row_cool(tmp):
     sim = ChromData.read(SIM)
     key, rec = next(iter(sim.uns["linked_cool"].items()))
     src = sim.resolve_link_path(rec["path"])
-    p = tmp / "sim.h5cd"
+    p = tmp / "sim.chromdata.zarr"
     sim.uns["linked_cool"][key]["path"] = str(src)
     sim.write(p)
     back = ChromData.read(p)
@@ -229,7 +244,8 @@ def row_cool(tmp):
     same = all(pixels_digest(cooler.Cooler(f"{back.resolve_link_path(back.uns['linked_cool'][key]['path'])}::{u}"))
                == pixels_digest(cooler.Cooler(f"{src}::{u}")) for u in res)
     ok_all &= same
-    notes.append(f"sim_cell1 .mcool ({len(res)} resolutions) pixels identical after h5cd round trip: {same}")
+    notes.append(f"sim_cell1 .mcool ({len(res)} resolutions) pixels identical after a .chromdata.zarr "
+                 f"round trip: {same}")
     # .scool linked to scHiCAR cells
     hier = None
     if SCHICAR.exists():
@@ -237,7 +253,7 @@ def row_cool(tmp):
         k2, rec2 = next(iter(sc.uns["linked_scool"].items()))
         src2 = sc.resolve_link_path(rec2["path"])
         sc.uns["linked_scool"][k2]["path"] = str(src2)
-        p2 = tmp / "schicar.h5cd"
+        p2 = tmp / "schicar.chromdata.zarr"
         sc.write(p2)
         back2 = ChromData.read(p2)
         listing = back2.load_linked_scool(key=k2)
@@ -249,7 +265,7 @@ def row_cool(tmp):
         covered = sum(c in names for c in cells)
         ok_all &= same2
         hier = (covered, len(cells))
-        notes.append(f"scHiCAR .scool: {covered}/{len(cells)} h5cd cells have a map; pixels of 25 random cells "
+        notes.append(f"scHiCAR .scool: {covered}/{len(cells)} ChromData cells have a map; pixels of 25 random cells "
                      f"identical via load_linked_scool: {same2}")
     out["contacts"] = cell("preserved" if ok_all else "lost", "linked, not copied — " + "; ".join(notes))
     out["cell › trace"] = cell("partial", (f"cell ↔ per-cell map: {hier[0]}/{hier[1]} cells matched by id; " if hier else "")
@@ -308,7 +324,7 @@ def row_3dg(tmp):
     return {
         "coords": cell("partial" if ok else "lost",
                        f"import only: .3dg → read_3dg → from_dataframe {n}; uchrom has no .3dg writer, "
-                       f"so h5cd → .3dg is not possible"),
+                       f"so ChromData → .3dg is not possible"),
         "cell › trace": cell("partial", "import only: one trace per chromosome; haplotype / cell ids absent in .3dg"),
         "tracks": cell("na", ".3dg has no per-bin values"),
         "cell table": cell("na", ".3dg has no cell table"),
@@ -327,7 +343,7 @@ def main():
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         cd = ChromData.read(TAKEI_FOV0)
-        for name, fn in (("h5cd 1.x", lambda: row_h5cd(cd, tmp)), ("FOF-CT", lambda: row_fofct(cd, tmp)),
+        for name, fn in (("chromdata.zarr", lambda: row_zarr(cd, tmp)), ("FOF-CT", lambda: row_fofct(cd, tmp)),
                          ("AnnData", lambda: row_anndata(cd, tmp)), (".cool / .scool", lambda: row_cool(tmp)),
                          ("PDB", lambda: row_pdb(tmp)), (".3dg", lambda: row_3dg(tmp))):
             rows[name] = fn()
@@ -335,9 +351,10 @@ def main():
     C.write_json("f_roundtrip", {
         "panel": "f", "machine": C.machine_info(), "cols": COLS, "rows": list(rows), "cells": rows,
         "status_values": {"preserved": 1.0, "partial": 0.5, "lost": 0.0, "na": 0.0, "untested": None},
-        "datasets": {"h5cd / FOF-CT / AnnData": "Takei 2025 FOV0 (takei2025_fov0.h5cd)",
-                     "PDB / .3dg / .cool": "sim_cell1 (NucDynamics on Stevens 2017 cell 1, in repo)",
-                     ".scool": "scHiCAR MOp (schicar_mop.h5cd + contacts_cells_1Mb.scool)"},
+        "datasets": {"chromdata.zarr / FOF-CT / AnnData": f"Takei 2025 FOV0 ({TAKEI_FOV0.name})",
+                     "PDB / .3dg / .cool": f"sim_cell1 (NucDynamics on Stevens 2017 cell 1, in repo, {SIM.name})",
+                     ".scool": f"scHiCAR MOp ({SCHICAR.name} + contacts_cells_1Mb.scool)"},
+        "fofct_writer": "uchrom.io.write_fofct (cd.to_fofct), spot + bin tracks, cell table",
     })
     print(C.RESULTS / "f_roundtrip.json")
 

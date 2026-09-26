@@ -6,10 +6,12 @@
 * ``run_child()`` — run one measurement in a fresh interpreter and collect its
   JSON (timings + peak RSS), so every trial starts with a cold Python heap;
 * ``FORMATS`` — the storage formats compared in panel b.  Each is a small
-  class with ``write(cd, path)`` / ``read(path)``.  The h5cd entry is labelled
-  from ``uchrom.core.cdata.FORMAT_VERSION`` ("h5cd 1.x" today); running the
-  same script on a 2.x checkout emits an "h5cd 2.x" series, merged into the
-  existing JSON next to the 1.x numbers;
+  class with ``write(cd, path)`` / ``read(path)``.  The ``h5cd`` entry is
+  labelled from ``uchrom.core.cdata.FORMAT_VERSION`` (the "h5cd 1.x" series
+  was measured on a 1.x checkout); ``h5cd2`` ("h5cd 2.0", the HDF5 writer of
+  format 2.0) and ``zarr`` ("chromdata.zarr 2.0", the Zarr + Parquet
+  container) need a 2.0 checkout.  Series are merged by label into the JSON;
+* ``size_bytes()`` — file or directory (a ``.chromdata.zarr`` store) size;
 * Takei 2025 whole-cell subsets for the scaling series (``stage_subset``).
 """
 
@@ -116,7 +118,7 @@ def machine_info() -> Dict[str, Any]:
     info["work_dir_free_gb"] = round(usage.free / 1e9, 1)
     vers = {}
     from importlib.metadata import PackageNotFoundError, version
-    for mod in ("numpy", "pandas", "h5py", "pyarrow", "anndata", "cooler", "psutil", "scipy"):
+    for mod in ("numpy", "pandas", "h5py", "pyarrow", "zarr", "anndata", "cooler", "psutil", "scipy"):
         try:
             vers[mod] = version(mod)
         except PackageNotFoundError:
@@ -156,6 +158,22 @@ def _jsonable(o):
     if isinstance(o, Path):
         return str(o)
     raise TypeError(type(o))
+
+
+def size_bytes(path: Path) -> int:
+    """Size of a file, or of every file under a directory store."""
+    path = Path(path)
+    if path.is_dir():
+        return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+    return path.stat().st_size
+
+
+def remove(path: Path) -> None:
+    path = Path(path)
+    if path.is_dir():
+        shutil.rmtree(path)
+    elif path.exists():
+        path.unlink()
 
 
 def timed(fn: Callable, *a, **kw):
@@ -279,8 +297,43 @@ class H5cd(Format):
         return ChromData.read(path)
 
 
+class H5cd2(Format):
+    """HDF5 ``.h5cd`` written by format 2.0 (#65; deprecated for writing)."""
+    label, ext = "h5cd 2.0", ".h5cd"
+
+    def write(self, cd, path):
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            cd.write(path, format="h5cd")
+
+    def read(self, path):
+        from uchrom import ChromData
+        return ChromData.read(path)
+
+
+class ChromDataZarr(Format):
+    """The format 2.0 container: Zarr v3 + Parquet (``cd.write`` defaults)."""
+    label, ext = "chromdata.zarr 2.0", ".chromdata.zarr"
+    options: Dict[str, Any] = {}
+
+    def write(self, cd, path):
+        cd.write(path, **self.options)
+
+    def read(self, path):
+        from uchrom import ChromData
+        return ChromData.read(path)
+
+
+class ChromDataZarrF32(ChromDataZarr):
+    label = "chromdata.zarr 2.0 (float32 coords)"
+    options = {"coord_dtype": "float32"}
+
+
 FORMATS: Dict[str, Format] = {k: f for k, f in (("fofct", FofctCSV()), ("parquet", Parquet()),
-                                                 ("anndata", AnnDataSpots()), ("h5cd", H5cd()))}
+                                                 ("anndata", AnnDataSpots()), ("h5cd", H5cd()),
+                                                 ("h5cd2", H5cd2()), ("zarr", ChromDataZarr()),
+                                                 ("zarr_f32", ChromDataZarrF32()))}
 
 
 # ----------------------------------------------------------------------------- real-data subsets
@@ -385,4 +438,24 @@ def stage_info(path: Path) -> Dict[str, Any]:
 
 def load_stage(path: Path):
     with open(path, "rb") as fh:
-        return pickle.load(fh)
+        cd = pickle.load(fh)
+    if "_bins" not in cd.__dict__ and "spots" in cd.__dict__:
+        cd = _upgrade_1x_object(cd)
+    return cd
+
+
+def _upgrade_1x_object(old):
+    """A ChromData pickled by a 1.x checkout (spot loci, spot-aligned
+    ``tracks``) → the 2.0 object ``ChromData.read`` makes of the same data
+    (bins from the loci, tracks split), so the staged subsets are reused."""
+    from uchrom import ChromData
+
+    d = old.__dict__
+    cd = ChromData(d["coords"], d["spots"], cells=d.get("cells"), cellm=d.get("cellm") or None,
+                   traces=d.get("traces"), layers=d.get("layers") or None,
+                   results=dict(d.get("results") or {}), uns=d.get("uns") or None,
+                   points=d.get("points") or None)
+    tracks = d.get("tracks")
+    if tracks is not None and len(tracks.columns):
+        cd._set_spot_aligned_tracks(tracks)
+    return cd

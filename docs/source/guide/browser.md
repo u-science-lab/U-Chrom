@@ -4,7 +4,7 @@
 chromatin 3D structures.
 
 ```bash
-python -m uchrom.browser out.h5cd       # ChromData
+python -m uchrom.browser out.chromdata.zarr   # ChromData (.cdz / .h5cd too)
 python -m uchrom.browser out.csv        # legacy CSV
 python -m uchrom.browser                 # no args — shows welcome page
 ```
@@ -15,8 +15,8 @@ The same browser also runs in a web page — no Qt required:
 
 ```bash
 pip install "u-chrom[web]"
-python -m uchrom.browser --web out.h5cd            # opens http://127.0.0.1:8765/
-python -m uchrom.browser --web a.h5cd b.csv --port=9000 --noopen_browser
+python -m uchrom.browser --web out.chromdata.zarr  # opens http://127.0.0.1:8765/
+python -m uchrom.browser --web a.chromdata.zarr b.csv --port=9000 --noopen_browser
 ```
 
 A local FastAPI server loads the files and streams coordinates to a
@@ -216,7 +216,7 @@ share a **locus** (chromosome + range) set in the workspace bar — type
     upper triangle rotated 45° (adjustable height / max distance, flip);
     stack several to compare, e.g. two cell types' pseudo-bulk Hi-C, or a
     cell's contacts above its 3-D distances;
-  - *track rows*: `cd.tracks` (e.g. Takei 2025's 59 per-spot IF channels:
+  - *track rows*: `cd.bin_tracks` (per locus) and `cd.spot_tracks` (per spot; e.g. Takei 2025's 59 per-spot IF channels:
     H3K27ac, H3K4me3, H3K9me3, LaminB1, …) aggregated per bin over all
     cells, one cell or a group (the row's *cells* setting);
   - *interval rows*: `cd.results` tables (TADs as boxes, loops as arcs),

@@ -39,10 +39,10 @@ def test_call_peaks_from_track_projects_peak_features():
     assert peaks.loc[0, "end"] == 40
     assert peaks.loc[0, "n_bins"] == 2
     assert "peaks:signal_track" in cdata.results
-    assert "peak.signal_track_overlap" in cdata.tracks
-    assert "peak.distance_to_signal_track" in cdata.tracks
-    assert list(cdata.tracks["peak.signal_track_overlap"]) == [0.0, 0.0, 0.0, 1.0, 1.0, 0.0]
-    assert list(cdata.tracks["peak.distance_to_signal_track"]) == [10.0, 10.0, 0.0, 0.0, 0.0, 0.0]
+    assert "peak.signal_track_overlap" in cdata.tracks_spot_view()
+    assert "peak.distance_to_signal_track" in cdata.tracks_spot_view()
+    assert list(cdata.tracks_spot_view()["peak.signal_track_overlap"]) == [0.0, 0.0, 0.0, 1.0, 1.0, 0.0]
+    assert list(cdata.tracks_spot_view()["peak.distance_to_signal_track"]) == [10.0, 10.0, 0.0, 0.0, 0.0, 0.0]
     assert cdata.uns["feature_registry"][0]["feature_group"] == "peaks"
 
 

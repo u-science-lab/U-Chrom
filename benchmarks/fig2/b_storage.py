@@ -53,14 +53,19 @@ def child_write(fmt_key, stage, out):
     t0 = time.perf_counter()
     fmt.write(cd, Path(out))
     dt = time.perf_counter() - t0
-    C.emit({"write_s": dt, "bytes": Path(out).stat().st_size, "write_peak_rss_mb": C.peak_rss_mb(),
+    C.emit({"write_s": dt, "bytes": C.size_bytes(Path(out)), "write_peak_rss_mb": C.peak_rss_mb(),
             "label": fmt.label})
 
 
 def child_read(fmt_key, path):
     fmt = C.FORMATS[fmt_key]
-    import anndata, h5py, pyarrow  # noqa: F401  (import cost out of the timing)
+    import anndata, h5py, pyarrow, pyarrow.parquet  # noqa: F401  (import cost out of the timing)
     from uchrom import ChromData  # noqa: F401
+    try:
+        import zarr  # noqa: F401
+        import uchrom.core.backed  # noqa: F401
+    except ImportError:  # 1.x checkout
+        pass
     base = C.current_rss_mb()
     t0 = time.perf_counter()
     obj = fmt.read(Path(path))
@@ -122,7 +127,7 @@ def main():
                 out = work / f"n{n}_{key}_{r}{fmt.ext}"
                 w = C.run_child(SCRIPT, ["--child", "write", key, st["path"], str(out)])
                 rd = C.run_child(SCRIPT, ["--child", "read", key, str(out)])
-                out.unlink()
+                C.remove(out)
                 trials.append({**w, **rd})
                 print(f"{fmt.label:24s} n={st['n_spots']:>11,} rep{r}: {w['bytes'] / 2**20:9.1f} MB  "
                       f"write {w['write_s']:8.2f} s  read {rd['read_s']:8.2f} s  peak {rd['read_peak_rss_mb']:9.0f} MB",
@@ -162,10 +167,15 @@ def _protocol(args):
             "peak_rss": "getrusage ru_maxrss of the read process (absolute; baseline = RSS after imports)",
             "read_target": {"FOF-CT / CSV": "ChromData (ChromData.from_fofct)", "Parquet": "pandas DataFrame",
                             "AnnData (spots as obs)": "AnnData (read_h5ad, in memory)",
-                            "h5cd": "ChromData (ChromData.read)"},
+                            "h5cd": "ChromData (ChromData.read)",
+                            "chromdata.zarr 2.0": "ChromData (ChromData.read, in memory)"},
             "compression": {"FOF-CT / CSV": "none", "Parquet": "snappy (pyarrow default)",
                             "AnnData (spots as obs)": "none (write_h5ad default)",
-                            "h5cd 1.x": "none (cd.write)"}}
+                            "h5cd 1.x": "none (cd.write)",
+                            "h5cd 2.0": "gzip-4 on integer / string data, floats uncompressed (cd.write default)",
+                            "chromdata.zarr 2.0": "Parquet zstd-3 + Zarr zstd-3; spots sorted by (cell, trace, "
+                                                  "bin), 65,536-row row groups on cell boundaries "
+                                                  "(cd.write default)"}}
 
 
 if __name__ == "__main__":

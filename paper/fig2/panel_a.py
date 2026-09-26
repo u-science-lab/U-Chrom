@@ -1,7 +1,9 @@
 """Figure 2a (DRAFT) — ChromData 2.0: tables, keys and on-disk layout.
 
 Follows docs/source/guide/chromdata_2_0_design.md (Overview, section 2 `bins`,
-section 4 "Format 2.0 HDF5 layout").  Schematic only — no data.
+section 4) and the on-disk layout actually written by ``uchrom.core.zarrcd``
+(``x.chromdata.zarr``: Zarr + Parquet).  Eager / lazy markers follow
+``uchrom.core.backed`` (``read(path, backed=True)``).  Schematic only — no data.
 
     python paper/fig2/panel_a.py      # -> fig2a_draft.pdf / .png
 """
@@ -17,7 +19,7 @@ from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Polygon, Rectang
 
 HERE = Path(__file__).resolve().parent
 MM = 1 / 25.4
-W, H = 170.0, 80.0
+W, H = 170.0, 88.0
 
 mpl.rcParams.update({"pdf.fonttype": 42, "font.family": "sans-serif", "font.sans-serif": ["Arial"]})
 
@@ -94,7 +96,7 @@ def draw(c: C) -> None:
         v = rng.gamma(1.5, 1, nb); v = v / v.max()
         for k, vv in enumerate(v):
             c.rect(bx + bw * k / nb + 0.6, yy + 2.6 - 2.2 * vv, bw / nb - 1.2, 2.2 * vv, fc=PURPLE, ec="none", z=3)
-        c.t(bx + bw + 1.5, yy + 1.3, f"tracks · {name}", size=6, color=PURPLE)
+        c.t(bx + bw + 1.5, yy + 1.3, f"bin_tracks · {name}", size=6, color=PURPLE)
     for a0, a1 in [(0, 4), (4, 9), (9, 14)]:
         x0, x1 = bx + bw * a0 / nb + 0.4, bx + bw * a1 / nb - 0.4
         c.ax.add_patch(Polygon([[x0, by - 0.4], [(x0 + x1) / 2, by - 3.6], [x1, by - 0.4]], closed=True,
@@ -132,6 +134,11 @@ def draw(c: C) -> None:
             c.line([cx + i * 8 / 3] * 2, [sy, sy + sh], color=ORANGE, lw=0.25)
     c.t(cx + 4, sy + sh + 2.4, "coords", size=7, weight="bold", ha="center", color=ORANGE)
     c.t(cx + 4, sy + sh + 5.2, "+ layers", size=6, color=GREY, ha="center")
+    # on disk, spots and coords are one table: x, y, z are columns of spots.parquet
+    bx0, bx1, byb = sx, cx + 8, sy + sh + 7.4
+    c.line([bx0, bx0, bx1, bx1], [byb - 0.8, byb, byb, byb - 0.8], color=GREY, lw=0.4)
+    c.t((bx0 + bx1) / 2, byb + 1.9, "on disk: one table, spots.parquet (x · y · z columns)", size=6,
+        color=GREY, ha="center")
     tx = cx + 13
     table(c, tx, sy, 8, sh, PURPLE, rows=12)
     c.t(tx + 4, sy - 1.4, "IF · …", size=6, color=PURPLE, ha="center", weight="bold")
@@ -176,39 +183,64 @@ def draw(c: C) -> None:
     c.t(ex + 9, 63.2, "uns", size=6, ha="center")
 
     # ---------------------------------------------------------------- on-disk layout (right column)
+    # the actual store written by uchrom.core.zarrcd (see its module docstring / spec.md);
+    # filled = read on open (BackedChromData eager parts), hollow = read on access (backed)
     dx, dy = 127, 8
-    c.rect(dx - 2, dy - 2.5, 44, 70, fc="#f7f8fa", ec=LGREY, lw=0.5, r=1.5, z=0)
-    c.t(dx, dy + 0.5, "data.h5cd", size=7, weight="bold")
-    c.t(dx + 15.5, dy + 0.5, "HDF5, versioned", size=6, color=GREY)
-    rows = [
-        ("bins/ · intervals/", "eager", GREY, ""),
-        ("tracks/ · binm/", "eager", PURPLE, "per bin"),
-        ("spots/", "lazy", INDIGO, "bin_id · trace_id · cell_id"),
-        ("coords · layers/", "lazy", ORANGE, "n_spots × 3, chunked"),
-        ("spot_tracks/", "lazy", PURPLE, "per spot"),
-        ("traces/ · cells/ · cellm/", "eager", GREY, ""),
-        ("index/", "eager", INDIGO, "cell & trace offsets"),
-        ("contacts/ · links/", "external", TEAL, "→ .cool · .scool · .h5mu"),
-        ("results/ · uns/", "eager", GREY, ""),
+    c.rect(dx - 2, dy - 2.5, 44.5, H - dy + 1.5, fc="#f7f8fa", ec=LGREY, lw=0.5, r=1.5, z=0)
+    c.t(dx, dy + 0.5, "x.chromdata.zarr", size=7, weight="bold")
+    c.t(dx, dy + 3.6, "Zarr + Parquet, format 2.0", size=6, color=GREY)
+    rows = [  # name, mode, colour, note (same line), note (next line), depth
+        ("zarr.json", "eager", GREY, "format 2.0 · spot_order", None, 0),
+        ("tables/", "dir", GREY, "Parquet", None, 0),
+        ("spots.parquet", "lazy", INDIGO, None, "sorted cell › trace › bin; bin_id,\ntrace / cell codes, x · y · z", 1),
+        ("spot_tracks · layers/", "lazy", PURPLE, None, "row-aligned with spots", 1),
+        ("categories/", "eager", GREY, "id values", None, 1),
+        ("bins · bin_tracks", "eager", PURPLE, None, None, 1),
+        ("cells · traces", "eager", GREY, None, None, 1),
+        ("intervals/ · points/", "eager", TEAL, None, None, 1),
+        ("index/", "eager", INDIGO, None, "trace & cell offsets, row_groups", 0),
+        ("cellm/ · binm/", "eager", PURPLE, "Zarr arrays", None, 0),
+        ("results/ · uns/", "eager", GREY, "+ provenance", None, 0),
+        ("contacts/ · links/", "external", TEAL, None, "→ .cool · .scool · .h5mu · .h5ad", 0),
     ]
-    for i, (name, mode, col, note) in enumerate(rows):
-        y = dy + 6.2 + i * 6.0
-        c.line([dx + 0.8, dx + 0.8], [y - 6.0 + 1.8 if i else y - 3.2, y], color=LGREY, lw=0.5)
-        c.line([dx + 0.8, dx + 3.0], [y, y], color=LGREY, lw=0.5)
+    y = dy + 8.8
+    last = {0: dy + 5.4, 1: None}  # y of the previous sibling (or the parent) per depth
+    for name, mode, col, inline, below, depth in rows:
+        x = dx + 0.8 + depth * 3.4
+        top = last[depth] if last[depth] is not None else last[depth - 1] + 1.4
+        c.line([x, x], [top, y], color=LGREY, lw=0.5)
+        c.line([x, x + 2.0], [y, y], color=LGREY, lw=0.5)
+        mx = x + 3.4
         if mode == "eager":
-            c.ax.plot(dx + 4.4, y, "o", ms=3.2, color=col, mec=col, zorder=5)
-        else:
-            c.ax.plot(dx + 4.4, y, "o", ms=3.2, mfc="white", mec=col, mew=0.8, zorder=5)
-        if mode == "external":
-            c.ax.plot(dx + 4.4, y, "o", ms=5.2, mfc="none", mec=col, mew=0.4, ls=":", zorder=5)
-        c.t(dx + 6.4, y, name, size=6.5, color=INK)
-        if note:
-            c.t(dx + 6.4, y + 2.5, note, size=6, color=GREY)
-    ly = dy + 6.2 + len(rows) * 6.0 + 0.4
-    for i, (lab, mfc) in enumerate([("loaded on open", INK), ("read on access", "white")]):
-        xx = dx + 1 + i * 20
-        c.ax.plot(xx, ly, "o", ms=3.0, mfc=mfc, mec=INK, mew=0.7, zorder=5)
-        c.t(xx + 1.8, ly, lab, size=6, color=GREY)
+            c.ax.plot(mx, y, "o", ms=3.0, color=col, mec=col, zorder=5)
+        elif mode == "lazy":
+            c.ax.plot(mx, y, "o", ms=3.0, mfc="white", mec=col, mew=0.8, zorder=5)
+        elif mode == "external":
+            c.ax.plot(mx, y, "o", ms=3.0, mfc="white", mec=col, mew=0.8, zorder=5)
+            c.ax.plot(mx, y, "o", ms=5.0, mfc="none", mec=col, mew=0.4, zorder=5)
+        else:  # a directory: no marker
+            c.ax.plot(mx, y, "s", ms=2.2, mfc=LGREY, mec=LGREY, zorder=5)
+        tx_ = mx + 1.9
+        c.t(tx_, y, name, size=6.5, color=INK)
+        if inline:
+            c.t(tx_ + 0.98 * len(name) + 1.8, y, inline, size=6, color=GREY)
+        step = 4.1
+        if below:
+            nl = below.count("\n") + 1
+            c.t(tx_, y + 1.4, below, size=6, color=GREY, va="top", linespacing=1.0)
+            step += 2.35 * nl
+        last[depth] = y
+        if depth == 0:
+            last[1] = None
+        y += step
+    ly = y + 0.4
+    for i, (lab, mfc) in enumerate([("read on open", INK), ("read on access (backed)", "white")]):
+        c.ax.plot(dx + 1, ly + 3.2 * i, "o", ms=3.0, mfc=mfc, mec=INK, mew=0.7, zorder=5)
+        c.t(dx + 2.8, ly + 3.2 * i, lab, size=6, color=GREY)
+    c.ax.plot(dx + 21, ly, "o", ms=3.0, mfc="white", mec=TEAL, mew=0.8, zorder=5)
+    c.ax.plot(dx + 21, ly, "o", ms=5.0, mfc="none", mec=TEAL, mew=0.4, zorder=5)
+    c.t(dx + 22.8, ly, "linked, not copied", size=6, color=GREY)
+    c.t(dx, ly + 7.0, ".cdz = the same store in one zip file", size=6, color=INK)
 
 
 def main() -> None:

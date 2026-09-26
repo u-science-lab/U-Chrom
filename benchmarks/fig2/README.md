@@ -3,7 +3,8 @@
 One script per panel of Figure 2 (`paper/fig2/PLAN.md`).  Each writes
 `paper/fig2/results/<panel>.json`; `python paper/fig2/make_fig2.py --real`
 draws the figure from those files (`fig2_real.pdf`, watermarked
-"PARTIAL — 1.x only" until h5cd 2.x numbers exist).
+"PARTIAL — panel d mock" until panel d has results; see the status table
+in `paper/fig2/PLAN.md`).
 
 | Script | Panel | Data | What it measures |
 |---|---|---|---|
@@ -11,14 +12,14 @@ draws the figure from those files (`fig2_real.pdf`, watermarked
 | `c_access.py` | c | same subsets | `get_trace` / `get_cell` / `get_chrom` latency (median, IQR of 20 random ids) and load time vs n_spots |
 | — | d | — | **not possible yet**: out-of-core analysis needs streaming (`iter_traces`, backed mode, roadmap steps 6–7).  Panel d stays mock. |
 | `e_contacts.py` | e | scHiCAR MOp `.h5cd` + 1 Mb `.scool` | on-disk size linked vs copied; web-browser pseudo-bulk time vs cells aggregated (first query vs cached) |
-| `f_roundtrip.py` | f | Takei 2025 FOV0, sim_cell1, scHiCAR | field-by-field round trips (h5cd, FOF-CT, AnnData, .cool/.scool, PDB, .3dg) → preserved / partial / lost / NA matrix |
+| `f_roundtrip.py` | f | Takei 2025 FOV0, sim_cell1, scHiCAR | field-by-field round trips (`.chromdata.zarr`, FOF-CT via `uchrom.io.write_fofct`, AnnData, .cool/.scool, PDB, .3dg) → preserved / partial / lost / NA matrix |
 | `allele_qc.py` | supplement | Takei 2025 raw spot CSVs | diagnostic of the published homolog calls (loci per trace, duplicate loci, genomic–spatial Spearman) |
 
 ## Setup
 
 ```bash
 python example-data/download_data.py --takei2025_cerebellum   # 2.85 GB (Zenodo 7693825)
-python example-data/build_takei2025_cerebellum.py              # per-FOV + combined .h5cd
+python example-data/build_takei2025_cerebellum.py              # per-FOV + combined .chromdata.zarr
 python example-data/download_data.py --schicar_rna --schicar_dna && python example-data/build_schicar_mop.py   # panel e
 python example-data/build_takei2025_fov0.py                    # panel f
 ```
@@ -39,9 +40,39 @@ checkout's `uchrom`, not an installed copy.
   Sizes above the real data size replicate real cells under new ids and are
   flagged `replicated`; sizes whose in-memory footprint cannot fit in RAM are
   listed under `infeasible` with the reason.
-* uchrom has **no FOF-CT writer**; `_common.write_fofct` is a minimal one
-  (core columns, then extra spot columns and tracks).  Reading uses the repo's
+* FOF-CT: panel f uses the official writer (`uchrom.io.write_fofct` /
+  `cd.to_fofct`, PR #67).  Panel b's FOF-CT series was measured with the
+  minimal `_common.write_fofct` (core columns, extra spot columns and tracks),
+  kept so the existing numbers stay reproducible.  Reading uses
   `ChromData.from_fofct`.
+
+## Format 2.0 series (PR #66)
+
+Run on the 2.0 checkout (the 1.x, FOF-CT and AnnData series are #64's, kept):
+
+```bash
+python benchmarks/fig2/b_storage.py --sizes 1e4,1e5,1e6,1e7,1e8 --formats parquet,h5cd2,zarr,zarr_f32
+python benchmarks/fig2/c_access.py --sizes 1e4,1e5,1e6,1e7 --backends h5cd-2-memory,zarr-memory
+python benchmarks/fig2/replicate_store.py takei2025_cerebellum.chromdata.zarr takei_1e8.chromdata.zarr --n 1e8
+python benchmarks/fig2/c_access.py --sizes 1e4,1e5,1e6,1e7,1e8 --backends zarr-backed \
+    --prebuilt 1e8=takei_1e8.chromdata.zarr
+```
+
+* b: `h5cd2` = "h5cd 2.0" (the HDF5 writer of format 2.0), `zarr` =
+  "chromdata.zarr 2.0" (`.chromdata.zarr`, `cd.write` defaults), `zarr_f32` =
+  the same with `coord_dtype="float32"`.  Parquet was re-run next to them.
+  Staged 1.x pickles are upgraded on load (`_common.load_stage`), so the
+  subsets are the same cells as #64's.  1e8 stays infeasible in memory for
+  every format (~53 GB table).
+* c: `h5cd-2-memory`, `zarr-memory` (full read, then the in-memory scan) and
+  `zarr-backed` (`read(backed=True)`; `get_*` reads row ranges).  The 1e8
+  point is a store built by `replicate_store.py` (whole Takei rep 1 copied
+  10x with renamed cells / traces, streamed row group by row group,
+  flagged `replicated`); only the backed backend can open it.
+* `make_fig2.py --real` draws every series of `b_storage.json` (labels
+  mapped in `FORMATS` / `FORMAT_LABEL`; an unknown label is an error) and,
+  in panel c, backed chromdata.zarr (solid) vs h5cd 1.x in memory
+  (dashed), with the open / load time as its own series.
 
 ## Adding h5cd 2.x
 

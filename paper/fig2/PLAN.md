@@ -1,6 +1,6 @@
 # Figure 2 — the shared index at real scale: plan
 
-Design: `fig2_mock.pdf`, built by `make_fig2.py`. Panel a (`panel_a.py`) is the ChromData 2.0 schematic; panels b–f use
+Design: `fig2_mock.pdf`, built by `make_fig2.py`; real numbers: `make_fig2.py --real` → `fig2_real.pdf`. Panel a (`panel_a.py`) is the ChromData 2.0 schematic; panels b–f use
 placeholder data from `mock_data()`, to be replaced by `load_results()`.
 
 ## Panels → evidence needed
@@ -13,6 +13,17 @@ placeholder data from `mock_data()`, to be replaced by `load_results()`.
 | d | Population analysis beyond RAM | Peak RSS vs n_traces for load-all vs `iter_traces` under a memory budget; identical results (median distance map, axis-wise loop F-test) | 7 |
 | e | Contacts linked, not copied | On-disk size linked vs copied; pseudo-bulk aggregation time vs n cells (scHiCAR .scool), first query vs cached | 4 (optional; current `link_scool` suffices) |
 | f | Lossless round trips | FOF-CT, AnnData/MuData, .cool/.scool, PDB, .3dg: which fields survive, checked by value equality / checksums | 3 |
+
+## Status (fig2_real.pdf)
+
+| Panel | Status | What the figure shows |
+|---|---|---|
+| a | schematic, matches the code | tables joined by keys; right: the actual `x.chromdata.zarr` layout written by `uchrom.core.zarrcd` (tables/*.parquet, index/, cellm/ · binm/, results/ · uns/, contacts/ · links/; `.cdz` = one zip); filled / hollow markers = eager / lazy parts of `read(backed=True)` |
+| b | **real** (Takei 2025 rep 1, 1e4–1e7 spots) | chromdata.zarr 2.0 (solid indigo), float32 variant, h5cd 2.0 (dashed), h5cd 1.x (dotted, light), Parquet, AnnData, FOF-CT; 1e8 infeasible in memory for every format |
+| c | **real** (1e4–1e7; backed also 1e8 by replicated cells, hollow markers) | get_trace / get_cell / get_chrom and open time: backed chromdata.zarr from disk (solid) vs h5cd 1.x in memory (dashed; open = full load); memory used, backed vs in memory |
+| d | **mock** | needs streaming (roadmap step 7); marked MOCK in the panel and in the watermark |
+| e | **real** (scHiCAR 1 Mb .scool) | linked vs copied (uncompressed, gzip) size; pseudo-bulk first query vs cached |
+| f | **real** | chromdata.zarr, FOF-CT (official `uchrom.io.write_fofct`), AnnData, .cool / .scool, PDB, .3dg round trips |
 
 ## Engineering order (one PR each, real-data validated per CLAUDE.md)
 

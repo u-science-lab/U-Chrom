@@ -6,7 +6,7 @@
 ``atac.<gene>`` accessibility, … — or an explicit cells × features matrix
 into PCA (or LSI) / t-SNE / UMAP coordinates stored in ``cd.cellm`` (rows
 aligned with ``cd.cells``).  Parameters, including the normalisation, are
-recorded in ``cd.uns["embeddings"]`` so they round-trip through ``.h5cd``
+recorded in ``cd.uns["embeddings"]`` so they round-trip through ChromData files
 and the web browser can group the embeddings by modality.
 
 Normalisations (``normalization=``; ``"auto"`` picks one from ``source``):
@@ -128,12 +128,13 @@ def tfidf_lsi(x, n_components: int = 30, *, depth: Optional[np.ndarray] = None,
 def aggregate_tracks(cd, fields: Optional[Sequence[str]] = None, *, prefix: str = "if",
                      stat: str = "mean", by: Union[None, str, int] = None,
                      min_spots: int = 1, write: bool = True) -> pd.DataFrame:
-    """Summarise per-spot ``cd.tracks`` into per-cell features.
+    """Summarise tracks (``cd.spot_tracks`` + ``cd.bin_tracks`` seen per
+    spot) into per-cell features.
 
     Parameters
     ----------
     cd : ChromData
-        With ``cd.tracks`` and a ``cell_id`` column in ``cd.spots``.
+        With tracks and a ``cell_id`` column in ``cd.spots``.
     fields : sequence of str, optional
         Track columns to use (default: every numeric track).
     prefix : str
@@ -159,13 +160,13 @@ def aggregate_tracks(cd, fields: Optional[Sequence[str]] = None, *, prefix: str 
         raise ValueError("stat must be 'mean', 'median', 'std' or 'corr'")
     if "cell_id" not in cd.spots.columns:
         raise ValueError("cd.spots has no cell_id column")
-    tracks = cd.tracks
+    tracks = cd.tracks_spot_view()
     if fields is None:
         fields = [c for c in tracks.columns if pd.api.types.is_numeric_dtype(tracks[c])]
     fields = [str(f) for f in fields]
     missing = [f for f in fields if f not in tracks.columns]
     if missing:
-        raise KeyError(f"not in cd.tracks: {missing[:5]}")
+        raise KeyError(f"unknown track(s): {missing[:5]}")
     cells_index = cd.cells.index.astype(str) if len(cd.cells) else None
     cell = cd.spots["cell_id"].astype(str).to_numpy()
     vals = tracks[fields].to_numpy(dtype=np.float64)

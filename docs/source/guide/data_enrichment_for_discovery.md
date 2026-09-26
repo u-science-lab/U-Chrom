@@ -117,7 +117,8 @@ cd.results["gene_annotations"]   # optional compact interval annotations
 
 ### Projected spot-level tracks
 
-Frequently used scalar values should be projected onto `cd.tracks`, because
+Frequently used scalar values should be projected onto `cd.bin_tracks` (one
+value per locus; seen per spot through `cd.tracks_spot_view()`), because
 notebook code and auto-discovery hypotheses commonly operate on spot-aligned
 tables.
 
@@ -203,13 +204,13 @@ annotations = compute_annotation_features(
 Projection:
 
 ```python
-from uchrom.fea.project import project_interval_features_to_spots
+from uchrom.fea.project import project_interval_features_to_bins
 
-cdata.tracks = project_interval_features_to_spots(
+cdata.bin_tracks = project_interval_features_to_bins(
     cdata,
     features,
     prefix="seq",
-    into=cdata.tracks,
+    into=cdata.bin_tracks,
 )
 ```
 
@@ -220,14 +221,14 @@ from uchrom.strc.tad import call_tads_by_pval
 from uchrom.strc.loop import call_loops_axiswise_f
 from uchrom.strc.comp import call_compartments_axes_pc
 
-for chrom in cdata.chroms:
-    call_tads_by_pval(cdata, chrom=chrom, result_key=f"tads:{chrom}")
-    call_loops_axiswise_f(cdata, chrom=chrom, result_key=f"loops:{chrom}")
-    call_compartments_axes_pc(cdata, chrom=chrom, result_key=f"compartments:{chrom}")
+# chrom=None runs every chromosome and stores ONE merged table per caller
+call_tads_by_pval(cdata)            # cd.results["tads.arcfish"]
+call_loops_axiswise_f(cdata)        # cd.results["loops.axiswise_f"]
+call_compartments_axes_pc(cdata)    # cd.results["compartments.axes_pc"]
 ```
 
-A later wrapper can merge per-chromosome tables into standard keys such as
-`cd.results["tads"]`, but the lower-level callers should remain reusable.
+`add_structural_features(cdata)` looks these keys up first and falls back
+to the 1.x keys (`"tads"`, `"loops"`, `"compartments"`).
 
 Peak callers:
 

@@ -8,16 +8,18 @@ Two modes:
 * ``--real``: ``load_results()`` reads the benchmark JSONs in ``results/``
   (written by ``benchmarks/fig2/*.py``) and replaces the mock values of every
   panel it has numbers for; panels without results keep their mock values and
-  are tagged "mock" in the corner.  Watermarked "PARTIAL — 1.x only" until
-  h5cd 2.x numbers exist → ``fig2_real.pdf / .png``.
+  are tagged "mock" in the corner.  Watermarked "PARTIAL — panel d mock"
+  while panel d has no results → ``fig2_real.pdf / .png``.
 
-  a  ChromData 2.0 schematic (``panel_a.py``; no data)
-  b  storage: file size and full-read time vs n_spots, h5cd vs common formats
-     ("h5cd 2.x" drawn only when present in the results)
-  c  access by level: get_trace / get_cell / get_chrom latency; 1.x scan (dashed),
-     2.x index (solid, only when present); resident memory after loading
-  d  out-of-core population analysis — not measurable before streaming (mock)
-  e  linked contacts: on-disk size linked vs copied; pseudo-bulk time vs cells aggregated
+  a  ChromData 2.0 schematic and the ``x.chromdata.zarr`` layout (``panel_a.py``; no data)
+  b  storage: file size and full-read time vs n_spots — chromdata.zarr 2.0,
+     h5cd 2.0, h5cd 1.x, Parquet, AnnData, FOF-CT (every series in b_storage.json)
+  c  access by level: get_trace / get_cell / get_chrom latency and the time to
+     open, backed chromdata.zarr from disk (solid, up to 1e8 spots; hollow =
+     replicated cells) vs h5cd 1.x in memory (dashed); memory backed vs in memory
+  d  out-of-core population analysis — needs streaming (roadmap step 7): mock
+  e  linked contacts: on-disk size linked vs copied (uncompressed / gzip);
+     pseudo-bulk time vs cells aggregated
   f  interoperability: what each round trip preserves
 
     python paper/fig2/make_fig2.py          # -> fig2_mock.pdf / .png
@@ -37,7 +39,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
 MM = 1 / 25.4
-W, H = 170.0, 197.0
+W, H = 170.0, 207.0
 
 mpl.rcParams.update({
     "pdf.fonttype": 42, "font.family": "sans-serif", "font.sans-serif": ["Arial"],
@@ -50,13 +52,33 @@ mpl.rcParams.update({
 
 ORANGE, TEAL, PURPLE, INDIGO = "#e07a3f", "#2a9d8f", "#8e7cc3", "#34568b"
 GREY, LGREY, INK, RED = "#8a8f98", "#c9ccd1", "#2b2f36", "#c0392b"
-# comparison formats: h5cd in indigo (2.x solid, 1.x dashed), others in greys
+LINDIGO = "#8fa3c7"
+# comparison formats (keys = series labels in b_storage.json): ChromData in indigo
+# (chromdata.zarr solid, h5cd 2.0 dashed, h5cd 1.x dotted light), others in greys / purple
 FORMATS = {
-    "FOF-CT / CSV": dict(color="#9aa0a8", ls="-", marker="o"),
+    "chromdata.zarr 2.0": dict(color=INDIGO, ls="-", marker="D", lw=1.3),
+    "chromdata.zarr 2.0 (float32 coords)": dict(color=INDIGO, ls="", marker="+", ms=4, mew=0.7),
+    "h5cd 2.0": dict(color=INDIGO, ls="--", marker="D", mfc="white"),
+    "h5cd 1.x": dict(color=LINDIGO, ls=":", marker="D", mfc="white"),
     "Parquet": dict(color="#6b7079", ls="-", marker="s"),
     "AnnData (spots as obs)": dict(color=PURPLE, ls="-", marker="^"),
-    "h5cd 1.x": dict(color=INDIGO, ls="--", marker="D", mfc="white"),
-    "h5cd 2.x": dict(color=INDIGO, ls="-", marker="D"),
+    "FOF-CT / CSV": dict(color="#9aa0a8", ls="-", marker="o"),
+}
+FORMAT_LABEL = {
+    "chromdata.zarr 2.0": "chromdata.zarr 2.0",
+    "chromdata.zarr 2.0 (float32 coords)": "chromdata.zarr, float32 xyz",
+    "h5cd 2.0": "h5cd 2.0 (HDF5)",
+    "h5cd 1.x": "h5cd 1.x",
+    "Parquet": "Parquet (flat table)",
+    "AnnData (spots as obs)": "AnnData (spots as obs)",
+    "FOF-CT / CSV": "FOF-CT (CSV)",
+}
+# panel c: colour = operation, line style = how the data is held
+LEVEL_COL = {"trace": ORANGE, "cell": INDIGO, "chromosome": GREY, "open": INK}
+LEVEL_LABEL = {"trace": "get_trace", "cell": "get_cell", "chromosome": "get_chrom", "open": "open / load"}
+ACCESS_MODES = {  # key -> (series label in c_access.json, legend label, line style)
+    "backed": ("chromdata.zarr 2.0 (backed, from disk)", "chromdata.zarr, backed (disk)", "-"),
+    "memory": ("h5cd 1.x (in memory, scan)", "h5cd 1.x, in memory", "--"),
 }
 STATUS_VAL = {"preserved": 1.0, "partial": 0.5, "lost": -1.0, "na": 0.0, "untested": 0.0}
 
@@ -79,23 +101,29 @@ def mock_data() -> dict:
         ("H1/HFF sci-Hi-C", "sequencing", 1.5e4, 3e8, 2000),
         ("scHiCAR MOp", "multi-omics", 5.3e3, 1.2e8, 3000),
     ]
-    size = {"FOF-CT / CSV": 9e-5, "Parquet": 3e-5, "AnnData (spots as obs)": 5e-5, "h5cd 1.x": 4e-5, "h5cd 2.x": 2e-5}
-    read = {"FOF-CT / CSV": 2e-6, "Parquet": 2e-7, "AnnData (spots as obs)": 6e-7, "h5cd 1.x": 5e-7, "h5cd 2.x": 3e-7}
+    size = {"FOF-CT / CSV": 9e-5, "Parquet": 3e-5, "AnnData (spots as obs)": 5e-5, "h5cd 1.x": 4e-5,
+            "h5cd 2.0": 3.5e-5, "chromdata.zarr 2.0": 2e-5, "chromdata.zarr 2.0 (float32 coords)": 1.9e-5}
+    read = {"FOF-CT / CSV": 2e-6, "Parquet": 2e-7, "AnnData (spots as obs)": 6e-7, "h5cd 1.x": 5e-7,
+            "h5cd 2.0": 4e-7, "chromdata.zarr 2.0": 3e-7, "chromdata.zarr 2.0 (float32 coords)": 2.9e-7}
     d["storage"] = {f: {"n": n, "size_mb": n * size[f], "read_s": n * read[f], "replicated": np.zeros(5, bool)}
                     for f in FORMATS}
-    d["access"] = {  # version -> level -> (n, latency)
-        "1.x": {lvl: (n, n * k1) for lvl, k1 in [("trace", 4e-8), ("cell", 4e-8), ("chromosome", 5e-8)]},
-        "2.x": {lvl: (n, np.full_like(n, k2) * (1 + 0.05 * np.log10(n)))
-                for lvl, k2 in [("trace", 2e-4), ("cell", 1e-3), ("chromosome", 2e-2)]},
+    rep = np.array([False] * 4 + [True])
+    d["access"] = {  # mode -> level -> dict(n, med, q1, q3, rep)
+        "memory": {lvl: dict(n=n[:4], med=n[:4] * k, q1=n[:4] * k * 0.9, q3=n[:4] * k * 1.1, rep=rep[:4])
+                   for lvl, k in [("trace", 4e-8), ("cell", 4e-8), ("chromosome", 5e-8), ("open", 7e-7)]},
+        "backed": {lvl: dict(n=n, med=k * (1 + 0.3 * np.log10(n / 1e4)) * (n / 1e4) ** e, q1=None, q3=None, rep=rep)
+                   for lvl, k, e in [("trace", 1e-3, 0.05), ("cell", 1e-3, 0.05), ("chromosome", 1e-3, 0.8),
+                                     ("open", 2e-2, 0.1)]},
     }
-    d["resident_mem"] = {"in memory": (n, n * 6e-5), "backed": (n, np.full_like(n, 60.0))}
+    d["resident_mem"] = {"memory": (n[:4], n[:4] * 1.3e-3, rep[:4]),
+                         "backed": (n, 30 * (n / 1e4) ** 0.35, rep)}
     t = np.logspace(3, 7, 5)
     d["n_traces"] = t
     d["peak_mem"] = {"in memory": t * 2e-3 + 50, "streaming": np.minimum(t * 2e-3 + 50, 800)}
     d["budget_mb"] = 1000
     x = rng.normal(size=400)
     d["identity"] = (x, x + rng.normal(scale=1e-6, size=400))
-    d["contacts_size"] = {"linked": (0.05, 3.0), "copied (1.x)": (11.0, 0), "copied (gzip)": (3.0, 0)}  # GB (own, external)
+    d["contacts_size"] = {"linked": (0.05, 3.0), "copied (uncompr.)": (11.0, 0), "copied (gzip)": (3.0, 0)}  # GB (own, external)
     c = np.array([50, 100, 500, 1000, 5313])
     d["agg_cells"] = c
     d["agg_time"] = {"cold": c * 3e-4, "cached": np.full_like(c, 1e-3, dtype=float)}
@@ -137,27 +165,34 @@ def load_results() -> dict:
     c = _load("c_access")
     if c:
         acc, mem = {}, {}
-        for label, s in c["series"].items():
-            ver = "2.x" if label.startswith("h5cd 2") else "1.x"
-            pts = s["points"]
+        for mode, (series, _, _) in ACCESS_MODES.items():
+            if series not in c["series"]:
+                continue
+            pts = c["series"][series]["points"]
             n = np.array([p["n_spots"] for p in pts], float)
-            acc[ver] = {lvl: (n, np.array([p[key]["latency_s"]["median"] for p in pts]),
-                              np.array([p[key]["latency_s"]["q1"] for p in pts]),
-                              np.array([p[key]["latency_s"]["q3"] for p in pts]))
-                        for lvl, key in (("trace", "trace"), ("cell", "cell"), ("chromosome", "chrom"))}
-            if ver == "1.x":
-                mem["in memory"] = (n, np.array([p["rss_after_open_mb"] - p["baseline_rss_mb"] for p in pts]))
-            elif "backed" in label:
-                mem["backed"] = (n, np.array([p["rss_after_open_mb"] - p["baseline_rss_mb"] for p in pts]))
-        out["access"], out["resident_mem"] = acc, mem
-        out["real"].add("c")
+            rep = np.array([bool(p["replicated"]) for p in pts])
+            acc[mode] = {lvl: dict(n=n, rep=rep,
+                                   med=np.array([p[key]["latency_s"]["median"] for p in pts]),
+                                   q1=np.array([p[key]["latency_s"]["q1"] for p in pts]),
+                                   q3=np.array([p[key]["latency_s"]["q3"] for p in pts]))
+                         for lvl, key in (("trace", "trace"), ("cell", "cell"), ("chromosome", "chrom"))}
+            acc[mode]["open"] = dict(n=n, rep=rep, med=np.array([p["open_s"] for p in pts]), q1=None, q3=None)
+            base = np.array([p["baseline_rss_mb"] for p in pts])
+            if mode == "backed":  # peak RSS over open + the get_trace / get_cell queries
+                used = np.array([p.get("peak_rss_trace_cell_mb") or p["rss_after_open_mb"] for p in pts])
+            else:  # the whole data set is resident after the load
+                used = np.array([p["rss_after_open_mb"] for p in pts])
+            mem[mode] = (n, used - base, rep)
+        if acc:
+            out["access"], out["resident_mem"] = acc, mem
+            out["real"].add("c")
     e = _load("e_contacts")
     if e:
         s = e["size"]
         gb = 1 / 2**30
         out["contacts_size"] = {
             "linked": (s["h5cd_linked_bytes"] * gb, s["scool_bytes"] * gb),
-            "copied (1.x)": (s["copied_h5cd_1x_settings_bytes"] * gb, 0),
+            "copied (uncompr.)": (s["copied_h5cd_1x_settings_bytes"] * gb, 0),
             "copied (gzip)": (s["copied_cooler_settings_gzip6_shuffle_bytes"] * gb, 0),
         }
         pts = e["aggregation"]["points"]
@@ -223,53 +258,88 @@ def panel_a(fig, d, x0, y0):
 def panel_b(fig, d, x0, y0):
     label(fig, x0, y0, "b"); title(fig, x0 + 5, y0 + 0.4, "Storage and full reads", mock=_mock(d, "b"))
     st = d["storage"]
-    for j, (key, ylab) in enumerate([("size_mb", "file size (MB)"), ("read_s", "full read (s)")]):
-        ax = ax_at(fig, x0 + 10 + j * 38, y0 + 9, 28, 30)
-        for f, sty in FORMATS.items():
-            if f not in st:  # e.g. "h5cd 2.x" before it exists: not drawn
+    unknown = sorted(set(st) - set(FORMATS))
+    if unknown:
+        raise KeyError(f"b_storage.json series without a style in FORMATS: {unknown}")
+    for j, (key, ylab) in enumerate([("size_mb", "file size (MB)"), ("read_s", "full read into memory (s)")]):
+        ax = ax_at(fig, x0 + 10 + j * 39, y0 + 8, 28, 30)
+        for f, sty in reversed(list(FORMATS.items())):  # ChromData drawn last, on top
+            if f not in st:
                 continue
             s = st[f]
-            ax.plot(s["n"], s[key], ms=2.5, **sty, label=f)
-            if key == "read_s" and "read_lo" in s:
-                ax.vlines(s["n"], s["read_lo"], s["read_hi"], color=sty["color"], lw=0.5)
+            sty = {"ms": 2.3, **sty}
+            ax.plot(s["n"], s[key], **sty, label=FORMAT_LABEL[f],
+                    zorder=4 if f.startswith("chromdata") else 3)
             rep = s["replicated"]
             if rep.any():
                 ax.scatter(s["n"][rep], s[key][rep], s=16, facecolor="none", edgecolor=RED, lw=0.5, zorder=5)
         loglog(ax); ax.set_xlabel("spots"); ax.set_ylabel(ylab)
+        nmax = max(float(v["n"].max()) for v in st.values())
+        ax.set_xticks([10.0 ** k for k in range(4, int(np.log10(nmax * 1.5)) + 1)])
     handles, labels = ax.get_legend_handles_labels()
+    order = [FORMAT_LABEL[f] for f in FORMATS if FORMAT_LABEL[f] in labels]
+    handles = [handles[labels.index(l)] for l in order]
+    labels = order
     if any(s["replicated"].any() for s in st.values()):
         handles.append(plt.Line2D([], [], marker="o", ls="", mfc="none", mec=RED, mew=0.5, ms=4))
         labels.append("replicated real cells")
-    fig.legend(handles, labels, loc="upper left", bbox_to_anchor=((x0 + 9) / W, 1 - (y0 + 48) / H),
-               ncol=3, frameon=False, columnspacing=1.0, handlelength=1.8)
+    fig.legend(handles, labels, loc="upper left", bbox_to_anchor=((x0 + 6) / W, 1 - (y0 + 45.5) / H),
+               ncol=2, frameon=False, columnspacing=1.2, handlelength=2.2, handletextpad=0.4,
+               labelspacing=0.35)
 
 
 def panel_c(fig, d, x0, y0):
     label(fig, x0, y0, "c"); title(fig, x0 + 5, y0 + 0.4, "Access by level", mock=_mock(d, "c"))
-    ax = ax_at(fig, x0 + 11, y0 + 9, 34, 32)
-    lvl_col = {"trace": ORANGE, "cell": INDIGO, "chromosome": GREY}
+    from matplotlib.lines import Line2D
     acc = d["access"]
-    for ver, ls, lw in (("1.x", "--", 0.9), ("2.x", "-", 1.2)):
-        for lvl, v in acc.get(ver, {}).items():
-            n, lat = v[0], v[1]
-            ax.plot(n, lat, color=lvl_col[lvl], ls=ls, lw=lw, label=f"get_{lvl}" if ver == "1.x" else None)
-            if len(v) > 2:
-                ax.fill_between(n, v[2], v[3], color=lvl_col[lvl], alpha=0.15, lw=0)
-    loglog(ax); ax.set_xlabel("spots"); ax.set_ylabel("latency (s)")
-    ax.legend(frameon=False, loc="upper left", handlelength=1.5)
-    key = "dashed: 1.x scan" + ("\nsolid: 2.x index" if "2.x" in acc else "")
-    ax.text(0.98, 0.03, key, transform=ax.transAxes, ha="right", va="bottom", fontsize=6, color=GREY)
-    ax2 = ax_at(fig, x0 + 55, y0 + 9, 22, 32)
-    for k, color in (("in memory", GREY), ("backed", INDIGO)):
-        if k in d["resident_mem"]:
-            n, m = d["resident_mem"][k]
-            ax2.plot(n, m, color=color, label=k)
-    loglog(ax2); ax2.set_xlabel("spots"); ax2.set_ylabel("resident memory (MB)")
-    ax2.legend(frameon=False, loc="upper left", handlelength=1.2)
+    ax = ax_at(fig, x0 + 11, y0 + 8, 36, 30)
+    for mode, (_, _, ls) in ACCESS_MODES.items():
+        for lvl, v in acc.get(mode, {}).items():
+            col = LEVEL_COL[lvl]
+            lw = 1.2 if ls == "-" else 0.9
+            ax.plot(v["n"], v["med"], color=col, ls=ls, lw=lw, zorder=3)
+            if v.get("q1") is not None:
+                ax.fill_between(v["n"], v["q1"], v["q3"], color=col, alpha=0.15, lw=0)
+            real = ~v["rep"]
+            ax.plot(v["n"][real], v["med"][real], ls="", marker="o", ms=2.2, color=col, zorder=4)
+            if v["rep"].any():
+                ax.plot(v["n"][v["rep"]], v["med"][v["rep"]], ls="", marker="o", ms=3.2, mfc="white",
+                        mec=col, mew=0.8, zorder=4)
+    loglog(ax); ax.set_xlabel("spots"); ax.set_ylabel("time (s)")
+    ax.set_xticks([1e4, 1e5, 1e6, 1e7, 1e8])
+    # memory: backed (peak over open + get_trace / get_cell) vs in memory (after the load)
+    ax2 = ax_at(fig, x0 + 58, y0 + 8, 19, 30)
+    mem = d["resident_mem"]
+    for mode, (_, lab, ls) in ACCESS_MODES.items():
+        if mode not in mem:
+            continue
+        n, m, rep = mem[mode]
+        ax2.plot(n, m, color=INDIGO, ls=ls, lw=1.2 if ls == "-" else 0.9)
+        ax2.plot(n[~rep], m[~rep], ls="", marker="o", ms=2.2, color=INDIGO)
+        if rep.any():
+            ax2.plot(n[rep], m[rep], ls="", marker="o", ms=3.2, mfc="white", mec=INDIGO, mew=0.8)
+    ax2.text(0.04, 0.99, "in memory\n(h5cd 1.x)", transform=ax2.transAxes, fontsize=6, color=INDIGO,
+             ha="left", va="top")
+    ax2.text(0.97, 0.18, "backed", transform=ax2.transAxes, fontsize=6, color=INDIGO, ha="right", va="top")
+    loglog(ax2); ax2.set_xlabel("spots"); ax2.set_ylabel("memory used (MB)")
+    ax2.set_xticks([1e4, 1e6, 1e8])
+    # legends below the axes: colour = operation, line style = storage mode
+    h1 = [Line2D([], [], color=LEVEL_COL[l], lw=1.2) for l in LEVEL_COL]
+    l1 = [LEVEL_LABEL[l] for l in LEVEL_COL]
+    h2 = [Line2D([], [], color=INK, ls=ls, lw=1.0) for _, _, ls in ACCESS_MODES.values()]
+    l2 = [lab for _, lab, _ in ACCESS_MODES.values()]
+    h2.append(Line2D([], [], ls="", marker="o", ms=3.2, mfc="white", mec=INK, mew=0.8))
+    l2.append("replicated cells (1e8)")
+    kw = dict(frameon=False, handlelength=2.2, handletextpad=0.4, columnspacing=0.9, labelspacing=0.35)
+    fig.legend(h1, l1, loc="upper left", bbox_to_anchor=((x0 + 5) / W, 1 - (y0 + 45.5) / H), ncol=4, **kw)
+    fig.legend(h2, l2, loc="upper left", bbox_to_anchor=((x0 + 5) / W, 1 - (y0 + 49.3) / H), ncol=2, **kw)
 
 
 def panel_d(fig, d, x0, y0):
     label(fig, x0, y0, "d"); title(fig, x0 + 5, y0 + 0.4, "Out-of-core analysis", mock=_mock(d, "d"))
+    if d.get("_mode") == "real":
+        fig.text((x0 + 5) / W, 1 - (y0 + 4.6) / H, "MOCK: needs streaming (roadmap step 7)", fontsize=6,
+                 color=RED, va="top", fontweight="bold")
     t = d["n_traces"]
     ax = ax_at(fig, x0 + 10, y0 + 9, 24, 30)
     ax.plot(t, d["peak_mem"]["in memory"], color=GREY, label="load all")
@@ -290,6 +360,8 @@ def panel_d(fig, d, x0, y0):
 
 def panel_e(fig, d, x0, y0):
     label(fig, x0, y0, "e"); title(fig, x0 + 5, y0 + 0.4, "Linked contacts", mock=_mock(d, "e"))
+    fig.text((x0 + 5) / W, 1 - (y0 + 4.6) / H, "no duplicate copy; stays in sync with .scool", fontsize=6,
+             color=GREY, va="top")
     ax = ax_at(fig, x0 + 10, y0 + 9, 13, 30)
     keys = list(d["contacts_size"])
     own = [d["contacts_size"][k][0] for k in keys]
@@ -298,16 +370,17 @@ def panel_e(fig, d, x0, y0):
     ax.bar(x, own, color=[TEAL] + [LGREY] * (len(keys) - 1), width=0.6, edgecolor=[TEAL] + [GREY] * (len(keys) - 1),
            lw=0.5)
     ax.bar(x, ext, bottom=own, color="white", width=0.6, edgecolor=TEAL, hatch="////", lw=0.5)
-    ax.set_xticks(x, [k.replace(" (", "\n(") for k in keys], rotation=90, fontsize=5.5)
+    ax.set_xticks(x, [k.replace(" (", "\n(") for k in keys], rotation=90, fontsize=6)
     ax.set_ylabel("on-disk size (GB)")
     if any(ext):
-        ax.text(0, own[0] + ext[0], "scool\n(external)", ha="center", va="bottom", fontsize=5, color=TEAL)
+        ax.text(0, own[0] + ext[0] + 0.015 * ax.get_ylim()[1], ".scool (external)", ha="center", va="bottom",
+                fontsize=6, color=TEAL, rotation=90)
     ax2 = ax_at(fig, x0 + 32, y0 + 9, 21, 30)
     c = d["agg_cells"]
     ax2.plot(c, d["agg_time"]["cold"], color=TEAL, marker="o", ms=2.5, label="first query")
     ax2.plot(c, d["agg_time"]["cached"], color=TEAL, ls="--", marker="o", ms=2.5, mfc="white", label="cached")
     loglog(ax2); ax2.set_xlabel("cells aggregated"); ax2.set_ylabel("time (s)")
-    ax2.legend(frameon=False, loc="upper left", handlelength=1.5)
+    ax2.legend(frameon=False, loc="center right", handlelength=1.5)
 
 
 def panel_f(fig, d, x0, y0):
@@ -357,7 +430,7 @@ def make_figure(real: bool = False):
     y2 = pa_h + 3
     panel_b(fig, d, 2, y2)
     panel_c(fig, d, 88, y2)
-    y3 = y2 + 59
+    y3 = y2 + 62
     panel_d(fig, d, 2, y3)
     panel_e(fig, d, 60, y3)
     panel_f(fig, d, 114, y3)
@@ -366,11 +439,10 @@ def make_figure(real: bool = False):
                  ha="center", va="center", rotation=30, fontweight="bold")
         stem = "fig2_mock"
     else:
-        has_2x = (("b" in d["real"] and "h5cd 2.x" in d["storage"])
-                  or ("c" in d["real"] and "2.x" in d["access"]))
-        if not has_2x:
-            fig.text(0.5, 0.28, "PARTIAL — 1.x only", fontsize=40, color="red", alpha=0.10,
-                     ha="center", va="center", rotation=30, fontweight="bold")
+        missing = sorted(set("bcdef") - d["real"])
+        if missing:
+            fig.text(0.5, 0.28, "PARTIAL — panel " + ", ".join(missing) + " mock", fontsize=36, color="red",
+                     alpha=0.10, ha="center", va="center", rotation=30, fontweight="bold")
         stem = "fig2_real"
     for ext in ("pdf", "png"):
         fig.savefig(HERE / f"{stem}.{ext}", dpi=300)

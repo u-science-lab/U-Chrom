@@ -1,5 +1,64 @@
 # Changelog
 
+## Unreleased
+
+- **`.chromdata.zarr` — the format 2.0 container** (Zarr v3 + Parquet, the
+  SpatialData approach) is the new default: `cd.write("x.chromdata.zarr")`
+  (or `x.cdz`, the same store in one zip file).  Spots are stored sorted by
+  (cell, trace, bin) with an `index/` of row offsets, so a round trip keeps
+  every spot but may change the row order (`ChromData.read(path,
+  original_order=True)` restores it).  **Backed mode**:
+  `ChromData.read(path, backed=True)` loads the small tables only;
+  `get_cell` / `get_trace` / `get_chrom` read the rows they need;
+  `iter_traces(batch)` / `iter_cells(batch)` stream chunks (also on
+  in-memory objects); `to_memory()` loads all.  `.h5cd` files (1.x and
+  2.0) are still read; writing `.h5cd` is deprecated (it warns).
+  `python -m uchrom.io.upgrade old.h5cd` converts to `old.chromdata.zarr`.
+  The web browser opens stores backed; the example-data builders, tutorials
+  and CLIs write the new format.  **Requires Python ≥ 3.11** and the new
+  core dependencies `zarr>=3` and `pyarrow`.
+- **FOF-CT writer**: `cd.to_fofct(path, cell_table=None, rna_table=None)`
+  and `uchrom.io.write_fofct` write the 4DN FOF-CT core table (with its
+  `##` / `#` header lines, from `uns['fofct_header']` or `uns`) and
+  optionally the cell and RNA-spot companion tables — the inverse of
+  `from_fofct`.  `from_fofct` now parses floats exactly
+  (`float_precision="round_trip"`; the default parser could be 1 ulp off),
+  so FOF-CT round trips are value-identical.
+- `cd.results` is now a `ResultsStore` of `ResultRecord`s: every result
+  carries its kind, producing function, parameters, inputs, uchrom
+  version and timestamp.  Unwritable values raise `TypeError` at
+  assignment.  `.h5cd` format 1.4 stores the provenance as attrs; older
+  files still read.
+- One calling convention for the structure callers
+  (`call_tads_by_pval`, `call_domains_fishnet`, `call_loops_axiswise_f`,
+  `call_compartments_axes_pc`, new `call_tads_di`): keyword-only
+  `chrom=None` (all chromosomes, one merged table), `trace_ids`,
+  `cells`, `params`, `key_added="<what>.<method>"`, `copy`.
+  Positional `chrom`, `store=`, `result_key=` and
+  `strc.call_*_multi` are deprecated (they warn and keep the 1.x keys).
+- `uchrom.tl` / `uchrom.pp` alias namespaces.
+- **`.h5cd` format 2.0 — the `bins` locus axis** (breaking on disk; 1.x
+  files still read).  `cd.bins` (index `bin_id`), required
+  `spots.bin_id` (derived from `chrom/start/end` by every constructor and
+  loader), bin-level `cd.bin_tracks` vs per-spot `cd.spot_tracks`,
+  `cd.binm`, typed `cd.intervals` (`domain | pair | peak | segment`, with
+  `to_bins`).  Structure callers also fill `cd.intervals`; compartments add
+  segments and a per-bin `pc2` track.  `fea` / `strc` feature writers
+  project onto bins (`fea.project_interval_features_to_bins`; the spot
+  version is deprecated).  `cd.tracks` is a deprecated spot-aligned view.
+  `uchrom.io.upgrade_h5cd` and `python -m uchrom.io.upgrade` rewrite 1.x
+  files; the web browser lists bin- and spot-level tracks and typed
+  intervals.  Large integer / string datasets are chunked and gzip-4
+  compressed (`write(compression=…, compress_floats=…)`); strings are
+  encoded / decoded vectorised.
+- Fix: `from_fofct` kept the last `##columns=` name intact when it ends in
+  `)` (`n_per_dist(um)` was read as `n_per_dist(um`).
+- seqFISH+ loader (Takei 2025): `traces` now reports `allele`, `n_spots`,
+  `n_loci`, `n_duplicate_loci` and per-column allele majority / agreement
+  instead of the first spot's `dbscan_*` values; the docstring warns that
+  the default `allele_col="dbscan_ldp_nbr_allele"` often merges homologs
+  (default unchanged).
+
 ## 0.2.0 — 2026-04
 
 - Renamed package from `nucbox` to `uchrom` / `u-chrom`.

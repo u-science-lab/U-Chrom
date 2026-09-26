@@ -25,23 +25,28 @@ def main(
     k_sigma: float = 4.0,
     frac: float = 0.1,
     verbose: bool = True,
-    format: str = "h5cd",
+    format: str = "chromdata",
+    key_added: str = "loops.axiswise_f",
 ):
     """Call loops on a single chromosome with the ArcFISH-style axis F-test.
 
     Parameters
     ----------
-    input : path to .h5cd or FOF-CT .csv
+    input : path to a ChromData file (``.chromdata.zarr`` / ``.cdz`` /
+        ``.h5cd``) or a FOF-CT ``.csv``
     output : path to save result.
         - ``.bedpe`` → write BEDPE TSV (six columns + score)
         - ``.csv`` → full CSV with all columns
-        - ``.h5cd`` (default) → update the input ChromData with
-          ``results['loops']`` and write back.
+        - ``.chromdata.zarr`` (recommended) / ``.cdz`` / ``.h5cd`` → update
+          the input ChromData with ``results[key_added]`` (default
+          ``'loops.axiswise_f'``) and write it to ``output``.
     chrom : chromosome to process (required).
     device : ``'auto' | 'cpu' | 'cuda' | 'mps'``
     """
+    from uchrom.core.zarrcd import container_kind
+
     input = str(input)
-    if input.endswith(".h5cd"):
+    if container_kind(input) is not None:
         cd = ChromData.read(input)
     else:
         cd = ChromData.from_fofct(input)
@@ -54,7 +59,7 @@ def main(
     )
     loops = call_loops_axiswise_f(
         cd, chrom=chrom, params=params, device=device,
-        store=True, verbose=verbose,
+        key_added=key_added, verbose=verbose,
     )
 
     out = str(output)
