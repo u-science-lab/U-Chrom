@@ -149,11 +149,14 @@ df = cd.to_dataframe()   # Flat DataFrame: chrom, start, end, x, y, z, trace_id,
 ### Persistence
 
 ```python
-cd.write('data.chromdata.zarr')                    # format 2.0: Zarr v3 + Parquet (a directory)
+cd.write('data.chromdata.zarr')                    # format 2.1: Zarr v3 + Parquet (a directory)
 cd.write('data.cdz')                               # the same store in one zip file
 cd = ChromData.read('data.chromdata.zarr')         # in memory (spots in stored order)
 cd = ChromData.read('data.chromdata.zarr', original_order=True)   # rows as written
 cd = ChromData.read('data.chromdata.zarr', backed=True)           # out of core
+cd = ChromData.read('data.chromdata.zarr', columns='coords')      # xyz + key columns only
+with ChromData.writer('big.chromdata.zarr') as w:  # streaming writer (chunks larger than RAM)
+    w.append(chunk)
 cd = ChromData.read('old.h5cd')                    # HDF5 1.x / 2.0: still read
 ```
 
@@ -161,7 +164,7 @@ The format follows the path: `*.zarr` → Zarr directory, `*.cdz` → zip,
 `*.h5cd` → HDF5 (deprecated for writing; `DeprecationWarning`).  An
 existing path without one of these suffixes is sniffed.
 `python -m uchrom.io.upgrade old.h5cd` converts to
-`old.chromdata.zarr`.
+`old.chromdata.zarr` (and rewrites a 2.0 `.chromdata.zarr` as 2.1).
 
 ### Backed mode
 
@@ -175,9 +178,16 @@ returns a `BackedChromData` (`cd.backed is True`):
   `dtypes`, `frame[col]`, `frame.iloc[rows]`, `to_pandas()`), read from
   Parquet on access;
 - `get_cell` / `get_trace` / `get_chrom` / `cd[rows]` read only the row
-  ranges they need and return an in-memory `ChromData`;
-- `iter_traces(batch)` / `iter_cells(batch)` stream in-memory chunks
-  (identical chunks on in-memory objects);
+  ranges they need and return an in-memory `ChromData` (a trace: one slice
+  of one partition; a chromosome: one partition; a cell: one slice per
+  chromosome);
+- `iter_traces(batch, chrom=None)` / `iter_cells(batch)` stream in-memory
+  chunks (identical chunks on in-memory objects; `batch="auto"` from
+  `uchrom.settings.memory_budget`);
+- every one of these, `to_memory()` and `read()` take `columns=` /
+  `tracks=`: `columns="coords"` reads coordinates and key columns only,
+  `columns=[...]` adds spot columns / spot tracks / layers by name,
+  `tracks=[...]` picks spot tracks (default: everything);
 - `to_memory()` loads everything; `write()` loads, then writes.
 
 Spot-aligned data are read-only on a backed object; the small tables can
@@ -192,7 +202,7 @@ wrote it:
 
 | Attribute | Example | Description |
 |-----------|---------|-------------|
-| `uchrom_format_version` | `"2.0"` | `MAJOR.MINOR` version of the ChromData format. MAJOR bumps are breaking; MINOR bumps are backwards-compatible (additive). |
+| `uchrom_format_version` | `"2.1"` | `MAJOR.MINOR` version of the ChromData format (`.chromdata.zarr`: 2.1; `.h5cd`: 2.0). MAJOR bumps are breaking; MINOR bumps keep old files readable. |
 | `uchrom_version` | `"0.2.0"` | Version of the U-Chrom package that wrote the file. For provenance. |
 
 In a `.chromdata.zarr` store they are root-group attributes (plus
@@ -206,38 +216,47 @@ Read semantics (implemented in `ChromData.read`, for both containers):
 
 New MAJOR versions should add a `_read_vN` function in `cdata.py` and may include a migration helper that converts old on-disk data to the current in-memory form.
 
-### `.chromdata.zarr` layout (format 2.0, the default)
+### `.chromdata.zarr` layout (format 2.1, the default)
 
 A Zarr v3 group; everything with rows is Parquet (zstd), everything
 n-dimensional is a Zarr array (zstd), metadata is JSON attributes:
 
 ```
 data.chromdata.zarr/
-├── zarr.json               attrs: uchrom_format_version "2.0", uchrom_version,
+├── zarr.json               attrs: uchrom_format_version "2.1", uchrom_version,
 │                           uchrom = {format "chromdata.zarr", format_version,
-│                           spot_order "cell,trace,bin", n_spots, n_bins, n_traces,
-│                           n_cells, n_row_groups, has_source_row, has_cell_id}
-├── tables/                 zarr group; attrs["tables"] = per-table metadata
-│   ├── spots.parquet       one row per spot, sorted by (cell, trace, bin):
+│                           layout "partitioned", spot_order "chrom,cell,trace,bin",
+│                           n_spots, n_bins, n_traces, n_cells, n_row_groups,
+│                           n_partitions, has_source_row, has_cell_id}
+├── tables/                 zarr group; attrs["tables"] = per-table metadata,
+│   │                       incl. "partitions": [{chrom, code, dir, n_rows, files}]
+│   ├── spots/chrom=<name>/part-0.parquet
+│   │                       one partition per chromosome (category order);
+│   │                       inside, one row per spot sorted by (cell, trace, bin):
 │   │                       bin_id int32, trace_id / cell_id integer codes,
 │   │                       x, y, z (float64, or float32 with coord_dtype=),
-│   │                       extra spot columns; row groups of ~65,536 rows
+│   │                       extra spot columns; row groups of ~16,384 rows
 │   │                       ending on cell boundaries; statistics on
-│   ├── spot_tracks.parquet row-aligned with spots.parquet (same row groups)
-│   ├── layers/<key>.parquet row-aligned x, y, z
+│   ├── spot_tracks/chrom=<name>/part-0.parquet   row-aligned with spots (same row groups)
+│   ├── layers/<key>/chrom=<name>/part-0.parquet  row-aligned x, y, z
 │   ├── categories/<table>.<column>.parquet   the values of each coded column
 │   ├── bins.parquet        chrom (dictionary), start, end, [name, resolution, …]
 │   ├── bin_tracks.parquet  n_bins rows
 │   ├── cells.parquet, traces.parquet   index kept (pandas metadata)
 │   ├── intervals/<key>.parquet         kind + source_result in tables attrs
 │   └── points/<key>.parquet
-├── index/                  zarr arrays over the stored spot order:
-│   ├── trace_offsets       int64 (n_segments + 1): rows of each (cell, trace) run
-│   ├── trace_codes         int32 (n_segments): trace_id code of each run
-│   ├── trace_cells         int32 (n_segments): cell_id code (-1: none)
-│   ├── chrom_trace         int32 (n_segments): chrom code (-1: several chromosomes)
-│   ├── cell_offsets        int64 (n_cells + 1), cell_codes int32 (n_cells)
-│   ├── row_groups          int64: row offsets of the Parquet row groups
+├── index/                  zarr arrays over the stored spot order (global row
+│   │                       numbers: partition after partition)
+│   ├── trace_offsets       int64 (n_runs + 1): rows of each (chrom, cell, trace) run
+│   ├── trace_codes         int32 (n_runs): trace_id code of each run
+│   ├── trace_cells         int32 (n_runs): cell_id code (-1: none)
+│   ├── chrom_trace         int32 (n_runs): chrom code of the run's partition
+│   ├── cell_offsets        int64 (n_cell_runs + 1): rows of each (chrom, cell) run
+│   ├── cell_codes          int32 (n_cell_runs), cell_partition int32 (n_cell_runs)
+│   ├── row_groups          int64: row offsets of all Parquet row groups
+│   ├── partition_offsets   int64 (n_partitions + 1): rows of each partition
+│   ├── partition_groups    int64 (n_partitions + 1): first row group of each
+│   ├── partition_chrom     int32 (n_partitions): chrom code of each partition
 │   └── source_row          int64 (n_spots), when the writer sorted: each spot's
 │                           row in the object that was written
 ├── cellm/<key>, binm/<key> zarr arrays; attrs["keys"] maps key → node name
@@ -252,6 +271,17 @@ data.chromdata.zarr/
 └── links/                  attrs: uns["linked_anndata"] / uns["linked_mudata"] records
 ```
 
+- Partition directories are `chrom=<name>` (hive style: DuckDB / Polars /
+  Arrow datasets prune on it); names that are not portable become
+  `chrom=_<i>`, the attrs map them back.  A store without spots has one
+  empty partition `empty/`.  A trace spanning several chromosomes is split
+  into one run per partition.
+- **Format 2.0** (still read): one `tables/spots.parquet`,
+  `spot_tracks.parquet`, `layers/<key>.parquet`, sorted by (cell, trace,
+  bin), row groups of ~65,536 rows; `index/` without the partition arrays,
+  one entry per cell in `cell_offsets`, `chrom_trace = -1` for a run over
+  several chromosomes.  Readers treat it as a single partition.  2.0
+  readers cannot read 2.1 stores (the spot tables moved).
 - Categorical spot-aligned columns are stored as integer codes with the
   categories in `tables/categories/`, so every row group decodes without
   string work; categoricals of the small tables use Parquet dictionaries.
@@ -323,3 +353,4 @@ Header fields (`##Genome_Assembly`, `##XYZ_Unit`, `#Lab_Name`, etc.) are stored 
 - `chrom`, `trace_id`, `cell_id` are stored as pandas Categorical dtype, reducing memory ~10x compared to Python strings.
 - Pairwise distance matrices are not stored. Use `compute_distances(trace_id=...)` to compute per-trace on demand.
 - For datasets exceeding available RAM, write a `.chromdata.zarr` store and open it with `ChromData.read(path, backed=True)`: `get_cell` / `get_trace` / `get_chrom` and `iter_traces` / `iter_cells` read only the rows they need.
+- Inputs larger than RAM: `ChromData.from_fofct(path, out=...)`, `read_seqfish_multiomics(..., out=...)` or `ChromData.writer(path)` stream into a store; `uchrom.fea.distance_map` and the ArcFISH callers (`streaming=True`) compute population statistics over `iter_traces` with memory `O(n_bins²)`; `uchrom.settings.memory_budget` bounds the working memory.

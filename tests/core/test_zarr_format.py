@@ -170,30 +170,95 @@ def test_round_trip_every_attribute(tmp_path, name):
 def test_disk_order_and_index(tmp_path):
     cd = _cd()
     path = tmp_path / "x.chromdata.zarr"
-    cd.write(path, row_group_rows=40)
+    cd.write(path, row_group_rows=10)
     back = ChromData.read(path)
     s = back.spots
-    key = pd.DataFrame({"c": s["cell_id"].cat.codes, "t": s["trace_id"].cat.codes, "b": s["bin_id"]})
-    assert key.equals(key.sort_values(["c", "t", "b"], kind="stable"))
+    chrom = back.bins["chrom"].cat.codes.to_numpy()[s["bin_id"].to_numpy()]
+    key = pd.DataFrame({"ch": chrom, "c": s["cell_id"].cat.codes, "t": s["trace_id"].cat.codes,
+                        "b": s["bin_id"]})
+    assert key.equals(key.sort_values(["ch", "c", "t", "b"], kind="stable"))
     meta = json.loads((path / "zarr.json").read_text())["attributes"]["uchrom"]
-    assert meta["format_version"] == "2.0" and meta["spot_order"] == "cell,trace,bin"
+    assert meta["format_version"] == "2.1" and meta["spot_order"] == "chrom,cell,trace,bin"
+    assert meta["layout"] == "partitioned" and meta["n_partitions"] == 3
     assert meta["has_source_row"] and meta["n_cells"] == 4 and meta["n_traces"] == 12
-    # row groups hold whole cells, and every spot-aligned file shares them
+    # one directory per chromosome, in chromosome category order
     import zarr
     root = zarr.open_group(str(path), mode="r")
+    assert sorted(p.name for p in (path / "tables" / "spots").iterdir()) == \
+        ["chrom=chr1", "chrom=chr2", "chrom=chrX"]
+    poff = root["index/partition_offsets"][:]
+    pgrp = root["index/partition_groups"][:]
+    pch = root["index/partition_chrom"][:]
+    names = list(back.bins["chrom"].cat.categories)
+    assert [names[c] for c in pch] == ["chr1", "chr2", "chrX"]
+    np.testing.assert_array_equal(np.diff(poff), [24, 24, 24])
+    # row groups hold whole cells of one partition, and every spot-aligned
+    # table shares them
     rg = root["index/row_groups"][:]
     cell_off = root["index/cell_offsets"][:]
-    assert set(rg) <= set(cell_off) and len(rg) > 2
-    for f in ("spots", "spot_tracks", "layers/raw"):
-        md = pq.ParquetFile(path / "tables" / f"{f}.parquet").metadata
-        assert [md.row_group(i).num_rows for i in range(md.num_row_groups)] == list(np.diff(rg))
-    assert pq.ParquetFile(path / "tables/spots.parquet").metadata.row_group(0).column(0).compression == "ZSTD"
+    assert set(rg) <= set(cell_off) and set(poff) <= set(rg)
+    assert len(cell_off) - 1 == 12 and len(root["index/cell_codes"][:]) == 12      # (chrom, cell) runs
+    np.testing.assert_array_equal(root["index/cell_partition"][:], np.repeat([0, 1, 2], 4))
+    tmeta = root["tables"].attrs["tables"]
+    for p, part in enumerate(tmeta["partitions"]):
+        for f in ("spots", "spot_tracks", "layers/raw"):
+            md = pq.ParquetFile(path / "tables" / part["files"][f]).metadata
+            assert [md.row_group(i).num_rows for i in range(md.num_row_groups)] == \
+                list(np.diff(rg[pgrp[p]:pgrp[p + 1] + 1]))
+    spots0 = path / "tables" / tmeta["partitions"][0]["files"]["spots"]
+    assert pq.ParquetFile(spots0).metadata.row_group(0).column(0).compression == "ZSTD"
     # writing an already sorted object keeps the order and stores no permutation
     back.write(tmp_path / "y.chromdata.zarr")
     meta2 = json.loads((tmp_path / "y.chromdata.zarr" / "zarr.json").read_text())["attributes"]["uchrom"]
     assert not meta2["has_source_row"]
     again = ChromData.read(tmp_path / "y.chromdata.zarr")
     pd.testing.assert_frame_equal(again.to_dataframe(), back.to_dataframe())
+
+
+def test_format_2_0_stores_stay_readable(tmp_path):
+    """The unpartitioned 2.0 layout (one file per table, cell › trace › bin)."""
+    cd = _cd(n_cells=6)
+    old = tmp_path / "old.chromdata.zarr"
+    write_zarr(cd, old, row_group_rows=40, _layout="2.0")
+    meta = json.loads((old / "zarr.json").read_text())["attributes"]["uchrom"]
+    assert meta["format_version"] == "2.0" and meta["spot_order"] == "cell,trace,bin"
+    assert (old / "tables" / "spots.parquet").exists()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        mem = ChromData.read(old)
+        bk = ChromData.read(old, backed=True)
+    assert bk.format_version == "2.0" and not bk.partitioned
+    s = mem.spots
+    key = pd.DataFrame({"c": s["cell_id"].cat.codes, "t": s["trace_id"].cat.codes, "b": s["bin_id"]})
+    assert key.equals(key.sort_values(["c", "t", "b"], kind="stable"))
+    pd.testing.assert_frame_equal(_sorted_df(mem), _sorted_df(cd))
+    pd.testing.assert_frame_equal(_sorted_tracks(mem), _sorted_tracks(cd))
+    new = tmp_path / "new.chromdata.zarr"
+    cd.write(new)
+    pd.testing.assert_frame_equal(_sorted_df(ChromData.read(new)), _sorted_df(mem))
+    for c in mem.spots["cell_id"].cat.categories:
+        pd.testing.assert_frame_equal(bk.get_cell(c).to_dataframe(), mem.get_cell(c).to_dataframe())
+    for ch in ("chr1", "chr2", "chrX"):
+        pd.testing.assert_frame_equal(bk.get_chrom(ch).to_dataframe(), mem.get_chrom(ch).to_dataframe())
+        sel = bk.get_chrom(ch, columns="coords")
+        assert list(sel.spots.columns) == ["chrom", "start", "end", "trace_id", "cell_id", "bin_id"]
+        assert sel.spot_tracks.shape[1] == 0 and not sel.layers
+        pd.testing.assert_frame_equal(sel.to_dataframe(), mem.get_chrom(ch, columns="coords").to_dataframe())
+    for t in mem.spots["trace_id"].cat.categories[:5]:
+        pd.testing.assert_frame_equal(bk.get_trace(t).to_dataframe(), mem.get_trace(t).to_dataframe())
+    # streaming over a 2.0 store: every spot once, whole traces
+    got = pd.concat([c.to_dataframe() for c in bk.iter_traces(5)], ignore_index=True)
+    pd.testing.assert_frame_equal(got, mem.to_dataframe())
+    got = pd.concat([c.to_dataframe() for c in bk.iter_traces(3, chrom="chr2")], ignore_index=True)
+    pd.testing.assert_frame_equal(got, mem.get_chrom("chr2").to_dataframe())
+    assert sum(c.n_spots for c in bk.iter_cells(4)) == mem.n_spots
+    # original order and an upgrade to 2.1 by rewriting
+    ref = ChromData.read(old, original_order=True)
+    pd.testing.assert_frame_equal(ref.to_dataframe(), cd.to_dataframe())
+    bk.write(tmp_path / "up.chromdata.zarr")
+    assert json.loads((tmp_path / "up.chromdata.zarr" / "zarr.json").read_text())["attributes"]["uchrom"][
+        "format_version"] == "2.1"
+    pd.testing.assert_frame_equal(_sorted_df(ChromData.read(tmp_path / "up.chromdata.zarr")), _sorted_df(cd))
 
 
 def test_float32_coords_and_options(tmp_path):
@@ -454,7 +519,7 @@ def test_convert_h5cd_1x_and_2x(tmp_path, capsys):
     info = upgrade_h5cd(src)                                       # default target
     dst = tmp_path / "old.chromdata.zarr"
     assert info["dst"] == str(dst) and info["to_container"] == "zarr" and info["from_version"] == "1.4"
-    assert file_format_version(dst) == "2.0" and file_format_version(src) == "1.4"
+    assert file_format_version(dst) == "2.1" and file_format_version(src) == "1.4"
     new = ChromData.read(dst, original_order=True)
     pd.testing.assert_frame_equal(new.to_dataframe(), ref.to_dataframe())
     pd.testing.assert_frame_equal(new.tracks_spot_view(), ref.tracks_spot_view())
@@ -468,7 +533,7 @@ def test_convert_h5cd_1x_and_2x(tmp_path, capsys):
         ref.write(tmp_path / "two.h5cd")
     assert file_format_version(tmp_path / "two.h5cd") == "2.0"
     convert_chromdata(tmp_path / "two.h5cd", tmp_path / "two.cdz")
-    assert file_format_version(tmp_path / "two.cdz") == "2.0"
+    assert file_format_version(tmp_path / "two.cdz") == "2.1"
     pd.testing.assert_frame_equal(ChromData.read(tmp_path / "two.cdz", original_order=True).to_dataframe(),
                                   ChromData.read(tmp_path / "two.h5cd").to_dataframe())
     assert main([str(src), str(tmp_path / "two.h5cd"), "--out-dir", str(tmp_path / "out")]) == 0

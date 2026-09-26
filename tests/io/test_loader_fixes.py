@@ -68,3 +68,48 @@ def test_seqfish_trace_table_reports_merged_homologs(tmp_path):
     assert cd2.traces["n_duplicate_loci"].tolist() == [0, 0]
     assert cd2.traces["allele"].tolist() == [0, 1]
     np.testing.assert_allclose(cd2.traces["dbscan_ldp_nbr_allele_agreement"], [1.0, 1.0])
+
+
+def test_seqfish_streaming_import_equals_in_memory(tmp_path):
+    """out= streams FOV by FOV; the store equals the in-memory result."""
+    import warnings
+
+    from uchrom.io import read_seqfish_multiomics
+
+    rng = np.random.default_rng(3)
+    names = [f"chr{c}-{i}" for c in (7, 19) for i in range(1, 7)]
+    pd.DataFrame({"name": names, "chrom": [n.split("-")[0] for n in names],
+                  "start": [(int(n.split("-")[1]) - 1) * 25_000 for n in names],
+                  "end": [int(n.split("-")[1]) * 25_000 for n in names]}).to_csv(tmp_path / "locus.csv",
+                                                                                   index=False)
+    for fov in range(3):
+        rows = []
+        for cell in rng.permutation(4) + 1:
+            for nm in rng.permutation(names):
+                rows.append({"rep": 1, "fov": fov, "cellID": int(cell), "name": nm,
+                             "chrom": nm.split("-")[0], "dbscan_allele": 0, "dbscan_ldp_allele": 0,
+                             "dbscan_ldp_nbr_allele": int(rng.integers(-1, 2)),
+                             "x_um": rng.normal(), "y_um": rng.normal(), "z_um": rng.normal(),
+                             "SOX2": rng.normal(), "dot_int": int(rng.integers(0, 100)),
+                             "n_rad_score": rng.random(), "n_per_dist(um)": rng.random()})
+        pd.DataFrame(rows).to_csv(tmp_path / f"cerebellum_rep1_pos{fov}.csv", index=False)
+    pd.DataFrame({"rep": 1, "fov": [0, 1, 2, 2], "cellID": [1, 2, 3, 9], "leiden": [0, 2, 4, 6],
+                  "umap_1": [0.1, 0.2, 0.3, 0.4], "umap_2": [1.0, 2.0, 3.0, 4.0], "x": 1.0, "y": 2.0,
+                  "z": 3.0, "nuc_volume(um3)": 100.0, "doublet": 0, "batch": 1}).to_csv(
+        tmp_path / "clusters.csv", index=False)
+    glob = str(tmp_path / "cerebellum_rep1_pos*.csv")
+    kw = dict(locus_annotation=tmp_path / "locus.csv", cell_clustering=tmp_path / "clusters.csv")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        mem = read_seqfish_multiomics(glob, **kw)
+        bk = read_seqfish_multiomics(glob, out=tmp_path / "st.chromdata.zarr", memory_budget="4KB", **kw)
+    mem.write(tmp_path / "mem.chromdata.zarr")
+    a = ChromData.read(tmp_path / "mem.chromdata.zarr")
+    b = bk.to_memory()
+    assert bk.backed and b.n_spots == a.n_spots
+    pd.testing.assert_frame_equal(a.to_dataframe(include_bin_id=True), b.to_dataframe(include_bin_id=True))
+    pd.testing.assert_frame_equal(a.spot_tracks, b.spot_tracks)
+    for key in ("bins", "cells", "traces"):
+        pd.testing.assert_frame_equal(getattr(a, key), getattr(b, key))
+    np.testing.assert_array_equal(a.cellm["umap"], b.cellm["umap"])
+    assert a.uns == b.uns

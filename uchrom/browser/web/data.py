@@ -202,7 +202,10 @@ class Dataset:
     def _subset(self, flt: "GeometryFilter") -> Optional[ChromData]:
         """Backed only: an in-memory ChromData holding every spot that can
         match ``flt`` (whole cells / traces / chromosome runs), or ``None``
-        when the filter does not narrow the data."""
+        when the filter does not narrow the data.  Geometry needs only the
+        coordinates and the key columns, so only those are read
+        (``columns="coords"``: no spot tracks, extra spot columns or
+        layers)."""
         cd = self.cd
         idx = cd._index
         if flt.cell_ids is not None:
@@ -211,19 +214,19 @@ class Dataset:
             cats = pd.Index(np.asarray(cd._categories("cell_id")).astype(str))
             codes = cats.get_indexer([str(c) for c in flt.cell_ids])
             mask = np.isin(np.asarray(idx["cell_codes"]), codes[codes >= 0])
-            return cd._build(ranges=cd._segment_ranges(mask, idx["cell_offsets"]))
+            return cd._build(ranges=cd._segment_ranges(mask, idx["cell_offsets"]), columns="coords")
         if flt.trace_ids is not None:
             cats = pd.Index(np.asarray(cd._categories("trace_id")).astype(str))
             codes = cats.get_indexer([str(t) for t in flt.trace_ids])
             mask = np.isin(np.asarray(idx["trace_codes"]), codes[codes >= 0])
-            return cd._build(ranges=cd._segment_ranges(mask, idx["trace_offsets"]))
+            return cd._build(ranges=cd._segment_ranges(mask, idx["trace_offsets"]), columns="coords")
         chroms = list(flt.chroms or []) + ([flt.region["chrom"]] if flt.region is not None else [])
         if chroms:
             names = np.asarray(cd.bins["chrom"].cat.categories.astype(str))
             codes = np.flatnonzero(np.isin(names, [str(c) for c in chroms]))
             seg_chrom = np.asarray(idx["chrom_trace"])
             mask = np.isin(seg_chrom, codes) | (seg_chrom < 0)
-            return cd._build(ranges=cd._segment_ranges(mask, idx["trace_offsets"]))
+            return cd._build(ranges=cd._segment_ranges(mask, idx["trace_offsets"]), columns="coords")
         return None
 
     # ------------------------------------------------------------------

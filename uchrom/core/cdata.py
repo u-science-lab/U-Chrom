@@ -210,7 +210,7 @@ import hashlib
 import json
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Union, Optional, Dict, List, Mapping
+from typing import Any, Union, Optional, Dict, List, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -1214,17 +1214,32 @@ class ChromData:
     # ------------------------------------------------------------------
 
     def __getitem__(self, index) -> "ChromData":
+        return self._take(index)
+
+    def _take(self, index, columns=None, tracks=None) -> "ChromData":
+        """Rows ``index`` (slice, integer or boolean array) as a new object,
+        with an optional ``columns`` / ``tracks`` selection
+        (:func:`resolve_selection`)."""
         if isinstance(index, slice):
             index = np.arange(*index.indices(self.n_spots))
         if isinstance(index, (pd.Series, np.ndarray)):
             if index.dtype == bool:
                 index = np.where(index)[0]
         idx = np.asarray(index)
+        if idx.dtype.kind not in "iu":
+            idx = idx.astype(np.int64)
 
+        spot_cols, track_cols, layer_keys = resolve_selection(
+            list(self.spots.columns), list(self._spot_tracks.columns), list(self.layers),
+            columns, tracks)
         new_coords = self.coords[idx]
-        new_spots = self.spots.iloc[idx].reset_index(drop=True)
-        new_spot_tracks = self._spot_tracks.iloc[idx].reset_index(drop=True)
-        new_layers = {k: v[idx] for k, v in self.layers.items()}
+        spots = self.spots if len(spot_cols) == len(self.spots.columns) else self.spots[spot_cols]
+        new_spots = spots.iloc[idx].reset_index(drop=True)
+        st = self._spot_tracks
+        if len(track_cols) != len(st.columns):
+            st = st[track_cols] if track_cols else _empty_frame(len(st))
+        new_spot_tracks = st.iloc[idx].reset_index(drop=True)
+        new_layers = {k: self.layers[k][idx] for k in layer_keys}
 
         # Filter traces/cells to those still referenced
         new_traces = self._filter_traces(new_spots)
@@ -1249,7 +1264,11 @@ class ChromData:
         )
         out._bin_tracks = self._bin_tracks
         out._spot_tracks = new_spot_tracks
-        out._spot_view_order = self._spot_view_order
+        if self._spot_view_order and len(track_cols) != len(self._spot_tracks.columns):
+            keep = set(self._bin_tracks.columns) | set(track_cols)
+            out._spot_view_order = [c for c in self._spot_view_order if c in keep] or None
+        else:
+            out._spot_view_order = self._spot_view_order
         return out
 
     def _filter_points(self, spots: pd.DataFrame) -> Dict[str, pd.DataFrame]:
@@ -1314,20 +1333,33 @@ class ChromData:
             return self._spot_cell_ids()
         return pd.Index([str(x) for x in self.cells.index], name="cell_id")
 
-    def get_cell(self, cell_id) -> "ChromData":
+    def get_cell(self, cell_id, *, columns=None, tracks=None) -> "ChromData":
+        """The spots of one cell (a new object).
+
+        ``columns`` / ``tracks`` select the spot-aligned columns to keep —
+        ``columns="coords"`` keeps the coordinates and the key columns
+        only, ``columns=[...]`` adds the named spot columns / spot tracks /
+        layers, ``tracks=[...]`` picks spot tracks (see
+        :func:`resolve_selection`).  The default keeps everything.  On a
+        backed object the selection decides what is read from disk.
+        """
         if "cell_id" not in self.spots.columns:
             raise KeyError("spots has no 'cell_id' column")
         mask = self.spots["cell_id"] == cell_id
-        return self[mask.values]
+        return self._take(mask.values, columns, tracks)
 
-    def get_trace(self, trace_id) -> "ChromData":
+    def get_trace(self, trace_id, *, columns=None, tracks=None) -> "ChromData":
+        """The spots of one trace (see :meth:`get_cell` for ``columns`` /
+        ``tracks``)."""
         mask = self.spots["trace_id"] == trace_id
-        return self[mask.values]
+        return self._take(mask.values, columns, tracks)
 
-    def get_chrom(self, chrom: str) -> "ChromData":
+    def get_chrom(self, chrom: str, *, columns=None, tracks=None) -> "ChromData":
+        """The spots of one chromosome (see :meth:`get_cell` for ``columns``
+        / ``tracks``)."""
         ids = np.where(self._bins["chrom"].astype(str).to_numpy() == str(chrom))[0]
         mask = np.isin(self.spots[BIN_ID].to_numpy(), ids)
-        return self[mask]
+        return self._take(mask, columns, tracks)
 
     # ------------------------------------------------------------------
     # Streaming access (same batches in memory and backed)
@@ -1338,45 +1370,96 @@ class ChromData:
         """``True`` for a :class:`~uchrom.core.backed.BackedChromData`."""
         return False
 
-    def to_memory(self) -> "ChromData":
-        """An in-memory ``ChromData`` (``self`` — this object already is)."""
-        return self
+    def to_memory(self, *, columns=None, tracks=None) -> "ChromData":
+        """An in-memory ``ChromData``: ``self`` (this object already is), or
+        a copy restricted to a ``columns`` / ``tracks`` selection."""
+        if columns is None and tracks is None:
+            return self
+        return self._take(slice(None), columns, tracks)
 
-    def _sorted_segments(self):
+    def _stream_layout(self):
+        """Stored (format 2.1) order of the spots and its runs.
+
+        Returns ``(order, chrom, cell, seg)``: the stable permutation sorting
+        spots by (chromosome, cell, trace, bin) (``None`` when already
+        sorted), the sorted chromosome / cell codes (cell = -1 without
+        ``cell_id``) and the offsets of the (chromosome, cell, trace) runs.
+        """
         from .zarrcd import _segments, _spot_keys, sort_order
 
         cell, trace, bin_id = _spot_keys(self)
-        order = sort_order(cell, trace, bin_id)
+        chrom_codes = np.asarray(self._bins["chrom"].cat.codes, dtype=np.int64)
+        chrom = chrom_codes[bin_id] if len(bin_id) else np.zeros(0, dtype=np.int64)
+        order = sort_order(cell, trace, bin_id, chrom=chrom)
         if order is not None:
-            cell, trace = cell[order], trace[order]
-        seg, cel = _segments(cell, trace)
-        return order, seg, cel
+            cell, trace, chrom = cell[order], trace[order], chrom[order]
+        seg, _ = _segments(cell, trace, chrom)
+        return order, chrom, cell, seg
 
-    def iter_traces(self, batch: int = 1024):
+    def _bytes_per_spot(self, columns=None, tracks=None) -> float:
+        spot_cols, track_cols, layer_keys = resolve_selection(
+            list(self.spots.columns), list(self._spot_tracks.columns), list(self.layers),
+            columns, tracks)
+        return 3.0 * (8 * 3 + 8 * (len(spot_cols) + len(track_cols)) + 24 * len(layer_keys))
+
+    def iter_traces(self, batch=1024, *, chrom=None, columns=None, tracks=None):
         """Yield in-memory ``ChromData`` chunks of ``batch`` traces.
 
-        Traces are visited in (cell, trace) order — a trace id shared by
-        several cells counts once per cell — with the spots of a trace in
-        bin order, exactly as a ``.chromdata.zarr`` store holds them; a
+        Traces are visited in the order a ``.chromdata.zarr`` store holds
+        them — chromosome › cell › trace, with the spots of a trace in bin
+        order; a trace id shared by several cells (or a trace spanning
+        several chromosomes) counts once per (chromosome, cell) run.  A
         backed object yields identical chunks while reading one row range
         per chunk.
-        """
-        order, seg, _ = self._sorted_segments()
-        n_seg = len(seg) - 1
-        for i in range(0, n_seg, max(1, int(batch))):
-            a, b = int(seg[i]), int(seg[min(i + int(batch), n_seg)])
-            yield self[order[a:b] if order is not None else np.arange(a, b)]
 
-    def iter_cells(self, batch: int = 64):
-        """Yield in-memory ``ChromData`` chunks of ``batch`` cells (cell id
-        order; see :meth:`iter_traces`)."""
+        Parameters
+        ----------
+        batch : int or ``"auto"``
+            Traces per chunk; ``"auto"`` sizes chunks from
+            :data:`uchrom.settings.memory_budget`.
+        chrom : str, optional
+            Only the traces of this chromosome.
+        columns, tracks
+            Column selection of the chunks (see :meth:`get_cell`), e.g.
+            ``columns="coords"`` for coordinates and keys only.
+        """
+        order, chrom_s, _, seg = self._stream_layout()
+        lo, hi = 0, len(seg) - 1
+        if chrom is not None:
+            names = np.asarray(self._bins["chrom"].cat.categories.astype(str))
+            codes = np.flatnonzero(names == str(chrom))
+            sel = np.flatnonzero(np.isin(chrom_s[seg[:-1]], codes)) if hi else np.zeros(0, np.int64)
+            if not len(sel):
+                return
+            lo, hi = int(sel[0]), int(sel[-1]) + 1
+        size = resolve_batch(batch, (seg[hi] - seg[lo]) / max(1, hi - lo),
+                             self._bytes_per_spot(columns, tracks))
+        for i in range(lo, hi, size):
+            a, b = int(seg[i]), int(seg[min(i + size, hi)])
+            yield self._take(order[a:b] if order is not None else np.arange(a, b), columns, tracks)
+
+    def iter_cells(self, batch=64, *, columns=None, tracks=None):
+        """Yield in-memory ``ChromData`` chunks of ``batch`` cells (cell code
+        order; the rows of a chunk in stored order, see :meth:`iter_traces`)."""
         if "cell_id" not in self.spots.columns:
             raise KeyError("spots has no 'cell_id' column")
-        order, _, cel = self._sorted_segments()
-        n = len(cel) - 1
-        for i in range(0, n, max(1, int(batch))):
-            a, b = int(cel[i]), int(cel[min(i + int(batch), n)])
-            yield self[order[a:b] if order is not None else np.arange(a, b)]
+        order, chrom_s, cell_s, _ = self._stream_layout()
+        uniq = np.unique(cell_s[cell_s >= 0])
+        if not len(uniq):
+            return
+        size = resolve_batch(batch, self.n_spots / len(uniq), self._bytes_per_spot(columns, tracks))
+        n = len(cell_s)
+        bounds = np.r_[0, np.flatnonzero(chrom_s[1:] != chrom_s[:-1]) + 1, n]
+        for i in range(0, len(uniq), size):
+            c0, c1 = uniq[i], uniq[min(i + size, len(uniq)) - 1]
+            rows = []
+            for a, b in zip(bounds[:-1], bounds[1:]):
+                k0 = a + int(np.searchsorted(cell_s[a:b], c0, side="left"))
+                k1 = a + int(np.searchsorted(cell_s[a:b], c1, side="right"))
+                if k1 > k0:
+                    rows.append(order[k0:k1] if order is not None else np.arange(k0, k1))
+            idx = np.concatenate(rows) if rows else np.zeros(0, dtype=np.int64)
+            yield self._take(idx, columns, tracks)
 
     # ------------------------------------------------------------------
     # Pairwise computation (on-demand, per-trace)
@@ -1610,10 +1693,11 @@ class ChromData:
         """Write to disk; the format follows the path.
 
         * ``<name>.chromdata.zarr`` (any ``*.zarr``) — **the format 2.0
-          container**: a Zarr v3 directory whose large tables are Parquet
-          (see :mod:`uchrom.core.zarrcd` and ``spec.md``).  Spots are
-          written sorted by (cell, trace, bin) with ``index/`` offsets, so
-          :meth:`read` can open the store backed.
+          container** (format 2.1): a Zarr v3 directory whose large tables
+          are Parquet (see :mod:`uchrom.core.zarrcd` and ``spec.md``).  The
+          spot-aligned tables are partitioned by chromosome and sorted by
+          (cell, trace, bin) within a partition, with ``index/`` offsets,
+          so :meth:`read` can open the store backed.
         * ``<name>.cdz`` — the same tree in one uncompressed zip file.
         * ``<name>.h5cd`` — HDF5 format 2.0 (**deprecated**; readable
           indefinitely, still written in this release, with a
@@ -1623,8 +1707,8 @@ class ChromData:
         ``format="zarr" | "cdz" | "h5cd"`` overrides the suffix.
 
         **Row order.**  The zarr / cdz writer stores spots sorted by
-        (``cell_id`` code, ``trace_id`` code, ``bin_id``) — a stable sort,
-        so ties keep their order.  Reading returns that order; every spot
+        (chromosome, ``cell_id`` code, ``trace_id`` code, ``bin_id``) — a
+        stable sort, so ties keep their order.  Reading returns that order; every spot
         keeps its values (compare round trips after sorting by a stable
         key).  ``index/source_row`` records each spot's row in the written
         object, and ``ChromData.read(path, original_order=True)`` restores
@@ -1637,7 +1721,8 @@ class ChromData:
             memory).  float32 halves their size; see the format notes.
         row_group_rows : int, optional
             Target rows per Parquet row group of the spot-aligned tables
-            (default 65,536).  Groups end on cell boundaries.
+            (default 16,384).  Groups end on cell boundaries within a
+            chromosome partition.
         compression_level : int, optional
             zstd level for Parquet and Zarr (default 3).
         keep_source_order : bool
@@ -1739,17 +1824,22 @@ class ChromData:
 
     @classmethod
     def read(cls, path: PathLike, *, backed: bool = False,
-             original_order: bool = False) -> "ChromData":
+             original_order: bool = False, columns=None, tracks=None) -> "ChromData":
         """Read a ChromData file; the format follows the path.
 
-        * ``.chromdata.zarr`` / ``.cdz`` (format 2.0 container) — with
+        * ``.chromdata.zarr`` / ``.cdz`` (format 2.x container) — with
           ``backed=True`` returns a :class:`~uchrom.core.backed.BackedChromData`:
           small tables are loaded, ``coords`` / ``spots`` / ``spot_tracks``
           / ``layers`` stay on disk, and ``get_cell`` / ``get_trace`` /
           ``get_chrom`` / ``iter_traces`` / ``iter_cells`` read only the
-          rows they need.  Spots come back in the stored (cell, trace, bin)
-          order; ``original_order=True`` restores the order of the object
-          that was written (in-memory reads only).
+          rows they need.  Spots come back in the stored order —
+          chromosome › cell › trace › bin (format 2.1; cell › trace › bin
+          for 2.0 stores); ``original_order=True`` restores the order of
+          the object that was written (in-memory reads only).
+          ``columns`` / ``tracks`` select the spot-aligned columns (see
+          :meth:`get_cell`): an in-memory read loads only those, a backed
+          object uses them as the default of ``get_*`` / ``iter_*``.  The
+          default reads everything.
         * ``.h5cd`` — HDF5, format 1.x or 2.0 (below); always in memory.
 
         HDF5 ``.h5cd``: dispatches to a version-specific reader based on
@@ -1777,17 +1867,19 @@ class ChromData:
 
             if not path.exists():
                 raise FileNotFoundError(path)
-            b = BackedChromData(path)
+            b = BackedChromData(path, columns=columns, tracks=tracks)
             _check_zarr_version(path, b._c.meta.get("format_version", "2.0"))
             if backed:
                 if original_order:
                     raise ValueError("original_order=True needs an in-memory read (backed=False)")
                 return b
-            cd = b.to_memory()
+            cd = b.to_memory(columns=columns, tracks=tracks)
             if original_order and b._c.meta.get("has_source_row"):
                 src = b._c.array("index/source_row")
                 _permute_spot_rows(cd, np.argsort(src, kind="stable"))
             return cd
+        if columns is not None or tracks is not None:
+            raise ValueError("columns= / tracks= need the .chromdata.zarr / .cdz format")
         if backed:
             raise ValueError(
                 f"{path}: backed mode needs the .chromdata.zarr / .cdz format; convert with "
@@ -1886,6 +1978,9 @@ class ChromData:
         cell_table: Optional[PathLike] = None,
         rna_table: Optional[PathLike] = None,
         cell_value_prefix: Optional[str] = "rna.",
+        out: Optional[PathLike] = None,
+        chunksize: Union[int, str] = "auto",
+        memory_budget=None,
         **kwargs,
     ) -> "ChromData":
         """Read a FOF-CT core table, optionally with its companion tables.
@@ -1908,83 +2003,64 @@ class ChromData:
         cell_value_prefix : str or None
             Prefix for unrecognised numeric cell-table columns; ``None``
             keeps their names.
+        out : path, optional
+            **Streaming import**: read the core table in chunks of
+            ``chunksize`` rows and write them to this ``.chromdata.zarr``
+            store with :class:`~uchrom.core.stream.ChromDataWriter`; returns
+            the store opened backed.  Peak memory is one chunk plus the
+            writer's merge pieces (bounded by ``memory_budget``), not the
+            table.  The store equals ``from_fofct(core_path, ...).write(out)``
+            (same spots, order, dtypes, small tables).  Without ``out`` the
+            table is read into memory (a ``ResourceWarning`` is issued when
+            the file is larger than a fifth of the memory budget).
+        chunksize : int or ``"auto"``
+            Rows per chunk of a streaming import (``"auto"``: from the
+            memory budget).
+        memory_budget : int or str, optional
+            Defaults to :data:`uchrom.settings.memory_budget`.
         **kwargs
             Additional keyword arguments passed to ChromData constructor
-            (e.g. cells, tracks, uns).
+            (e.g. cells, tracks, uns).  A streaming import accepts
+            ``cells``, ``cellm``, ``traces``, ``points`` and ``uns``.
         """
         path = Path(core_path)
+        if out is not None:
+            return _from_fofct_streaming(cls, path, out=Path(out), cell_table=cell_table,
+                                         rna_table=rna_table, cell_value_prefix=cell_value_prefix,
+                                         chunksize=chunksize, memory_budget=memory_budget, **kwargs)
+        from uchrom.settings import format_bytes, settings
+
+        budget = settings.resolve_budget(memory_budget)
+        if path.exists() and path.stat().st_size * 5 > budget:
+            import warnings
+            warnings.warn(
+                f"{path.name} ({format_bytes(path.stat().st_size)}) is read into memory, "
+                f"which takes several times its size (memory budget "
+                f"{format_bytes(budget)}); pass out='<name>.chromdata.zarr' for a streaming import.",
+                ResourceWarning, stacklevel=2)
         df, header_meta = _read_fofct_table(path)
-        if not any(str(c).lower() == "x" for c in df.columns):
-            # no column names in the file: assume the core-table order
-            default_cols = ["Spot_ID", "Trace_ID", "X", "Y", "Z",
-                            "Chrom", "Chrom_Start", "Chrom_End"]
-            n = len(df.columns)
-            df.columns = default_cols[:n] + [f"col_{i}" for i in range(len(default_cols), n)]
-
-        # Map FOF-CT columns to ChromData — case-insensitive.
-        canonical_map = {
-            "x": "x", "y": "y", "z": "z",
-            "chrom": "chrom",
-            "chrom_start": "start", "chromstart": "start",
-            "chrom_end": "end", "chromend": "end",
-            "trace_id": "trace_id", "traceid": "trace_id",
-            "spot_id": "spot_id", "spotid": "spot_id",
-            "cell_id": "cell_id", "cellid": "cell_id",
-            "sub_cell_roi_id": "sub_cell_roi_id",
-            "extra_cell_roi_id": "extra_cell_roi_id",
-        }
-        rename = {c: canonical_map[str(c).lower()] for c in df.columns if str(c).lower() in canonical_map}
-        df = df.rename(columns=rename)
-
-        missing = {"x", "y", "z"} - set(df.columns)
-        if missing:
-            raise ValueError(
-                f"FOF-CT core table missing coordinate columns {missing}. "
-                f"Parsed columns: {list(df.columns)}"
-            )
-
-        coords = df[["x", "y", "z"]].values.astype(np.float64)
-
-        # Spot-level columns: the required set first, then any extras carried
-        # through verbatim (custom FOF-CT columns like ``Readout``).
-        spot_cols = ["chrom", "start", "end", "trace_id"]
-        for extra in ("spot_id", "cell_id", "sub_cell_roi_id", "extra_cell_roi_id"):
-            if extra in df.columns and extra not in spot_cols:
-                spot_cols.append(extra)
-        coord_cols = {"x", "y", "z"}
-        for col in df.columns:
-            if col not in spot_cols and col not in coord_cols:
-                spot_cols.append(col)
-        spots = df[spot_cols].copy()
-
-        # Store FOF-CT header metadata (case-insensitive lookup for promotion).
-        uns = kwargs.pop("uns", {})
-        if header_meta:
-            uns["fofct_header"] = header_meta
-        lower_meta = {k.lower(): v for k, v in header_meta.items()}
-        if "xyz_unit" in lower_meta:
-            uns["xyz_unit"] = lower_meta["xyz_unit"]
-        if "genome_assembly" in lower_meta:
-            uns["genome_assembly"] = lower_meta["genome_assembly"]
-
-        companions = {}
-        if cell_table is not None:
-            cells, meta = _fofct_cell_table(Path(cell_table), cell_value_prefix)
-            if kwargs.get("cells") is not None:
-                raise ValueError("pass either cells= or cell_table=, not both")
-            kwargs["cells"] = cells
-            companions["cells"] = meta
-        if rna_table is not None:
-            rna, meta = _fofct_rna_table(Path(rna_table))
-            points = dict(kwargs.pop("points", None) or {})
-            points["rna"] = rna
-            kwargs["points"] = points
-            companions["rna"] = meta
+        coords, spots = _fofct_core_parts(df)
+        del df
+        uns = _fofct_uns(kwargs.pop("uns", {}), header_meta)
+        companions = _fofct_companions(kwargs, cell_table, rna_table, cell_value_prefix)
         if companions:
             uns["fofct_companions"] = companions
             _warn_unmatched_cells(spots, companions, kwargs)
 
         return cls(coords, spots, uns=uns, **kwargs)
+
+    @classmethod
+    def writer(cls, path: PathLike, **kwargs):
+        """A streaming :class:`~uchrom.core.stream.ChromDataWriter` for a
+        ``.chromdata.zarr`` store larger than memory::
+
+            with ChromData.writer("big.chromdata.zarr", memory_budget="4GB") as w:
+                for chunk in chunks:
+                    w.append(chunk)      # a ChromData, or coords= / spots= / spot_tracks=
+            cd = ChromData.read("big.chromdata.zarr", backed=True)
+        """
+        from .stream import ChromDataWriter
+        return ChromDataWriter(path, **kwargs)
 
     def to_fofct(
         self,
@@ -2411,6 +2487,79 @@ def _stable_metadata_id(prefix: str, record: Mapping[str, Any]) -> str:
     return f"{prefix}_{hashlib.sha1(payload.encode('utf-8')).hexdigest()[:10]}"
 
 
+#: spot columns every selection keeps (derived loci included)
+_REQUIRED_SPOT_COLUMNS = ("chrom", "start", "end", "trace_id", "cell_id", BIN_ID)
+
+
+def resolve_selection(spot_columns: Sequence[str], track_columns: Sequence[str],
+                      layer_keys: Sequence[str], columns=None, tracks=None):
+    """Spot-aligned columns of a ``columns=`` / ``tracks=`` selection.
+
+    Returns ``(spot columns, spot tracks, layer keys)`` to keep, each in the
+    object's own order.
+
+    * ``columns=None`` — everything (the default);
+    * ``columns="coords"`` (or ``[]``) — the coordinates and the key columns
+      (``trace_id``, ``cell_id``, ``bin_id`` and the derived loci) only;
+    * ``columns=[...]`` — the key columns plus the named spot columns, spot
+      tracks and layers (``"x"``, ``"y"``, ``"z"``, ``"coords"`` are
+      accepted and implied);
+    * ``tracks=`` (``None`` / a list / ``[]`` / ``False``) overrides the spot
+      tracks the ``columns`` choice implies.
+    """
+    spot_columns, track_columns, layer_keys = list(spot_columns), list(track_columns), list(layer_keys)
+    required = [c for c in spot_columns if c in _REQUIRED_SPOT_COLUMNS]
+    if columns is None:
+        spots, trk, lay = spot_columns, track_columns, layer_keys
+    else:
+        if isinstance(columns, str):
+            if columns != "coords":
+                columns = [columns]
+            else:
+                columns = []
+        names = [str(c) for c in columns]
+        known = set(spot_columns) | set(track_columns) | set(layer_keys) | {"x", "y", "z", "coords"}
+        missing = [c for c in names if c not in known]
+        if missing:
+            raise KeyError(f"unknown column(s) {missing}: not a spot column, spot track or layer")
+        want = set(names)
+        spots = [c for c in spot_columns if c in want or c in required]
+        trk = [c for c in track_columns if c in want]
+        lay = [k for k in layer_keys if k in want]
+    if tracks is not None:
+        if tracks is False:
+            tracks = []
+        elif isinstance(tracks, str):
+            tracks = [tracks]
+        want_t = [str(t) for t in tracks]
+        missing = [t for t in want_t if t not in track_columns]
+        if missing:
+            raise KeyError(f"unknown spot track(s) {missing}")
+        trk = [c for c in track_columns if c in set(want_t)]
+    return spots, trk, lay
+
+
+def resolve_batch(batch, units_mean: float, bytes_per_spot: float,
+                  memory_budget=None, fraction: float = 0.25) -> int:
+    """Units (traces / cells) per batch: an int as given, or ``"auto"`` —
+    as many as fit ``fraction`` of the memory budget
+    (:data:`uchrom.settings.memory_budget`)."""
+    from uchrom.settings import settings
+
+    if batch is None:
+        batch = settings.default_batch
+    if isinstance(batch, str):
+        if batch != "auto":
+            raise ValueError("batch must be a positive int or 'auto'")
+        budget = settings.resolve_budget(memory_budget) * float(fraction)
+        per_unit = max(1.0, float(units_mean)) * max(1.0, float(bytes_per_spot))
+        return max(1, int(budget // per_unit))
+    batch = int(batch)
+    if batch < 1:
+        raise ValueError("batch must be a positive int or 'auto'")
+    return batch
+
+
 def _pdist_matrix(coords: np.ndarray) -> np.ndarray:
     """Compute pairwise Euclidean distance matrix from (n, 3) coords."""
     diff = coords[:, None, :] - coords[None, :, :]
@@ -2462,11 +2611,15 @@ def _apply_pyhim_barcode_dict(
 
 
 def _check_zarr_version(path, version_str: str) -> None:
-    """Same MAJOR / MINOR rules as ``.h5cd`` for the zarr container."""
+    """Same MAJOR / MINOR rules as ``.h5cd`` for the zarr container (whose
+    own version, :data:`uchrom.core.zarrcd.ZARR_FORMAT_VERSION`, is 2.1:
+    2.0 stores are read as one unpartitioned table)."""
     import warnings
 
+    from .zarrcd import ZARR_FORMAT_VERSION
+
     major, minor = _parse_version(str(version_str))
-    cur_major, cur_minor = _parse_version(FORMAT_VERSION)
+    cur_major, cur_minor = _parse_version(ZARR_FORMAT_VERSION)
     if major != cur_major:
         raise ValueError(
             f"{path}: format version {version_str} has incompatible MAJOR with this "
@@ -2475,7 +2628,7 @@ def _check_zarr_version(path, version_str: str) -> None:
     if minor > cur_minor:
         warnings.warn(
             f"{path}: written with format version {version_str} (reader supports up "
-            f"to {FORMAT_VERSION}). Forward-compatible — unknown fields will be ignored.",
+            f"to {ZARR_FORMAT_VERSION}). Forward-compatible — unknown fields will be ignored.",
             stacklevel=3,
         )
 
@@ -2576,6 +2729,182 @@ def _read_fofct_table(path: Path):
         # Column count mismatch — trust the data and label the extras
         df.columns = (columns + [f"col_{i}" for i in range(len(columns), len(df.columns))])[: len(df.columns)]
     return df, header_meta
+
+
+_FOFCT_CANONICAL = {
+    "x": "x", "y": "y", "z": "z",
+    "chrom": "chrom",
+    "chrom_start": "start", "chromstart": "start",
+    "chrom_end": "end", "chromend": "end",
+    "trace_id": "trace_id", "traceid": "trace_id",
+    "spot_id": "spot_id", "spotid": "spot_id",
+    "cell_id": "cell_id", "cellid": "cell_id",
+    "sub_cell_roi_id": "sub_cell_roi_id",
+    "extra_cell_roi_id": "extra_cell_roi_id",
+}
+_FOFCT_DEFAULT_COLUMNS = ["Spot_ID", "Trace_ID", "X", "Y", "Z", "Chrom", "Chrom_Start", "Chrom_End"]
+
+
+def _fofct_core_parts(df: pd.DataFrame):
+    """A parsed FOF-CT core table (file column names) → ``(coords, spots)``."""
+    if not any(str(c).lower() == "x" for c in df.columns):
+        # no column names in the file: assume the core-table order
+        n = len(df.columns)
+        df.columns = (_FOFCT_DEFAULT_COLUMNS[:n]
+                      + [f"col_{i}" for i in range(len(_FOFCT_DEFAULT_COLUMNS), n)])
+
+    # Map FOF-CT columns to ChromData — case-insensitive.
+    rename = {c: _FOFCT_CANONICAL[str(c).lower()] for c in df.columns
+              if str(c).lower() in _FOFCT_CANONICAL}
+    df = df.rename(columns=rename)
+
+    missing = {"x", "y", "z"} - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"FOF-CT core table missing coordinate columns {missing}. "
+            f"Parsed columns: {list(df.columns)}"
+        )
+
+    coords = df[["x", "y", "z"]].values.astype(np.float64)
+
+    # Spot-level columns: the required set first, then any extras carried
+    # through verbatim (custom FOF-CT columns like ``Readout``).
+    spot_cols = ["chrom", "start", "end", "trace_id"]
+    for extra in ("spot_id", "cell_id", "sub_cell_roi_id", "extra_cell_roi_id"):
+        if extra in df.columns and extra not in spot_cols:
+            spot_cols.append(extra)
+    coord_cols = {"x", "y", "z"}
+    for col in df.columns:
+        if col not in spot_cols and col not in coord_cols:
+            spot_cols.append(col)
+    spots = df[spot_cols].copy()
+    return coords, spots
+
+
+def _fofct_uns(uns: Optional[dict], header_meta: Mapping[str, str]) -> dict:
+    """FOF-CT header metadata into ``uns`` (case-insensitive promotion of the
+    unit and assembly)."""
+    uns = dict(uns or {})
+    if header_meta:
+        uns["fofct_header"] = header_meta
+    lower_meta = {k.lower(): v for k, v in header_meta.items()}
+    if "xyz_unit" in lower_meta:
+        uns["xyz_unit"] = lower_meta["xyz_unit"]
+    if "genome_assembly" in lower_meta:
+        uns["genome_assembly"] = lower_meta["genome_assembly"]
+    return uns
+
+
+def _fofct_companions(kwargs: dict, cell_table, rna_table, cell_value_prefix) -> dict:
+    """Load the companion tables into ``kwargs`` (``cells``, ``points``);
+    returns their header metadata."""
+    companions = {}
+    if cell_table is not None:
+        cells, meta = _fofct_cell_table(Path(cell_table), cell_value_prefix)
+        if kwargs.get("cells") is not None:
+            raise ValueError("pass either cells= or cell_table=, not both")
+        kwargs["cells"] = cells
+        companions["cells"] = meta
+    if rna_table is not None:
+        rna, meta = _fofct_rna_table(Path(rna_table))
+        points = dict(kwargs.pop("points", None) or {})
+        points["rna"] = rna
+        kwargs["points"] = points
+        companions["rna"] = meta
+    return companions
+
+
+def _scan_fofct_header(path: Path):
+    """The header of a FOF-CT table without reading its data: returns
+    ``(header_meta, columns, n_skip)`` where ``n_skip`` is the number of lines
+    before the first data row (the ``##`` / ``#`` lines, blank lines and a
+    CSV header row).  Same rules as :func:`_read_fofct_table`; comment lines
+    must precede the data."""
+    header_meta = {}
+    columns = None
+    n_skip = 0
+    with open(path, "r") as fh:
+        for line in fh:
+            raw = line.strip()
+            if not raw:
+                n_skip += 1
+                continue
+            stripped = raw.rstrip(",").strip()
+            if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
+                stripped = stripped[1:-1]
+            if stripped.lower().startswith("##columns="):
+                cols_str = stripped.split("=", 1)[1].strip()
+                if cols_str.startswith("(") and cols_str.endswith(")"):
+                    cols_str = cols_str[1:-1]
+                columns = [c.strip() for c in cols_str.split(",")]
+            elif stripped.startswith("##"):
+                key, _, val = stripped[2:].partition("=")
+                header_meta[key.strip()] = val.strip()
+            elif stripped.startswith("#"):
+                key, _, val = stripped[1:].partition(":")
+                header_meta[key.strip()] = val.strip()
+            else:
+                first_token = raw.split(",", 1)[0].strip().strip('"')
+                has_csv_header = bool(first_token) and not (
+                    first_token[0].isdigit() or first_token[0] in ("-", "+", "."))
+                if has_csv_header and columns is not None and first_token not in columns:
+                    has_csv_header = False
+                if has_csv_header:
+                    if columns is None:
+                        columns = [c.strip() for c in raw.split(",")]
+                    n_skip += 1
+                break
+            n_skip += 1
+    return header_meta, columns, n_skip
+
+
+def _from_fofct_streaming(cls, path: Path, *, out: Path, cell_table, rna_table, cell_value_prefix,
+                          chunksize, memory_budget, **kwargs):
+    """``ChromData.from_fofct(..., out=)``: chunked read → streaming writer."""
+    from uchrom.settings import settings
+
+    from .stream import ChromDataWriter
+
+    allowed = {"cells", "cellm", "traces", "points", "uns"}
+    bad = set(kwargs) - allowed
+    if bad:
+        raise TypeError(f"streaming from_fofct does not take {sorted(bad)}")
+    header_meta, columns, n_skip = _scan_fofct_header(path)
+    budget = settings.resolve_budget(memory_budget)
+    if chunksize == "auto":
+        n_cols = len(columns) if columns else 16
+        chunksize = int(min(4_000_000, max(50_000, budget // (8 * 96 * max(n_cols, 1)))))
+    reader = pd.read_csv(path, header=None, skiprows=n_skip, chunksize=int(chunksize),
+                         skipinitialspace=True, float_precision="round_trip")
+    uns = _fofct_uns(kwargs.pop("uns", {}), header_meta)
+    companions = _fofct_companions(kwargs, cell_table, rna_table, cell_value_prefix)
+    w = ChromDataWriter(out, memory_budget=budget)
+    try:
+        n_rows = 0
+        for df in reader:
+            if columns is not None and len(columns) == len(df.columns):
+                df.columns = columns
+            elif columns is not None:
+                df.columns = (columns + [f"col_{i}" for i in range(len(columns), len(df.columns))]
+                              )[: len(df.columns)]
+            coords, spots = _fofct_core_parts(df)
+            del df
+            w.append(coords=coords, spots=spots)
+            n_rows += len(spots)
+            del coords, spots
+        if n_rows == 0:
+            raise ValueError(f"No data rows found in {path}")
+        if companions:
+            uns["fofct_companions"] = companions
+            if w._has_cells:
+                _warn_unmatched_cells(pd.DataFrame({"cell_id": w.unique("cell_id")}), companions, kwargs)
+        w.finish(cells=kwargs.get("cells"), cellm=kwargs.get("cellm"), traces=kwargs.get("traces"),
+                 points=kwargs.get("points"), uns=uns)
+    except BaseException:
+        if not w._closed:
+            w.abort()
+        raise
+    return cls.read(out, backed=True)
 
 
 # FOF-CT cell-table columns with a fixed meaning → ChromData.cells names.

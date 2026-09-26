@@ -79,7 +79,7 @@ def table(c, x, y, w, h, color, cols=None, rows=8, title=None, sub=None, ls="-")
 def draw(c: C) -> None:
     c.t(0.5, 1.5, "a", size=10, weight="bold", va="top")
     c.t(6, 1.8, "ChromData: tables joined by keys", size=8.5, weight="bold", va="top")
-    c.t(64, 2.2, "format 2.0", size=6, color=GREY, va="top")
+    c.t(64, 2.2, "format 2.1", size=6, color=GREY, va="top")
 
     # ---------------------------------------------------------------- bins axis (top)
     bx, by, bw, nb = 40, 13, 56, 14
@@ -122,7 +122,7 @@ def draw(c: C) -> None:
             c.rect(sx - 2.3, sy + sh * t0 + 0.2, 1.3, sh * (t1 - t0) - 0.4, fc="#9fb2d3", ec="none")
     c.t(sx - 3.35, sy - 1.0, "cell", size=6, color=INDIGO, ha="center", va="bottom", rotation=90)
     c.t(sx - 1.65, sy - 1.0, "trace", size=6, color=INDIGO, ha="center", va="bottom", rotation=90)
-    c.t(sx - 6.3, sy + sh / 2, "sorted cell › trace › bin", size=6, color=GREY, ha="center", rotation=90)
+    c.t(sx - 6.3, sy + sh / 2, "per chrom: cell › trace › bin", size=6, color=GREY, ha="center", rotation=90)
     # coords (+ layers) and spot_tracks
     cx = sx + sw + 3
     for k in (2, 1):
@@ -134,10 +134,10 @@ def draw(c: C) -> None:
             c.line([cx + i * 8 / 3] * 2, [sy, sy + sh], color=ORANGE, lw=0.25)
     c.t(cx + 4, sy + sh + 2.4, "coords", size=7, weight="bold", ha="center", color=ORANGE)
     c.t(cx + 4, sy + sh + 5.2, "+ layers", size=6, color=GREY, ha="center")
-    # on disk, spots and coords are one table: x, y, z are columns of spots.parquet
+    # on disk, spots and coords are one table: x, y, z are columns of tables/spots/chrom=…/
     bx0, bx1, byb = sx, cx + 8, sy + sh + 8.4
     c.line([bx0, bx0, bx1, bx1], [byb - 0.9, byb, byb, byb - 0.9], color=GREY, lw=0.4)
-    c.t((bx0 + bx1) / 2, byb + 2.4, "on disk: one table, spots.parquet", size=6, color=GREY, ha="center")
+    c.t((bx0 + bx1) / 2, byb + 2.4, "on disk: one table per chromosome, spots/chrom=…/", size=6, color=GREY, ha="center")
     tx = cx + 13
     table(c, tx, sy, 8, sh, PURPLE, rows=12)
     c.t(tx + 4, sy - 1.4, "IF · …", size=6, color=PURPLE, ha="center", weight="bold")
@@ -187,17 +187,17 @@ def draw(c: C) -> None:
     dx, dy = 127, 8
     c.rect(dx - 2, dy - 2.5, 44.5, H - dy + 1.5, fc="#f7f8fa", ec=LGREY, lw=0.5, r=1.5, z=0)
     c.t(dx, dy + 0.5, "x.chromdata.zarr", size=7, weight="bold")
-    c.t(dx, dy + 3.6, "Zarr + Parquet, format 2.0", size=6, color=GREY)
+    c.t(dx, dy + 3.6, "Zarr + Parquet, format 2.1", size=6, color=GREY)
     rows = [  # name, mode, colour, note (same line), note (next line), depth
-        ("zarr.json", "eager", GREY, "format 2.0 · spot_order", None, 0),
+        ("zarr.json", "eager", GREY, "format 2.1 · spot_order", None, 0),
         ("tables/", "dir", GREY, "Parquet", None, 0),
-        ("spots.parquet", "lazy", INDIGO, None, "sorted cell › trace › bin; bin_id,\ntrace / cell codes, x · y · z", 1),
+        ("spots/chrom=…/", "lazy", INDIGO, None, "one per chromosome: cell › trace ›\nbin; bin_id, codes, x · y · z", 1),
         ("spot_tracks · layers/", "lazy", PURPLE, None, "row-aligned with spots", 1),
         ("categories/", "eager", GREY, "id values", None, 1),
         ("bins · bin_tracks", "eager", PURPLE, None, None, 1),
         ("cells · traces", "eager", GREY, None, None, 1),
         ("intervals/ · points/", "eager", TEAL, None, None, 1),
-        ("index/", "eager", INDIGO, None, "trace & cell offsets, row_groups", 0),
+        ("index/", "eager", INDIGO, None, "offsets: traces, cells, partitions", 0),
         ("cellm/ · binm/", "eager", PURPLE, "Zarr arrays", None, 0),
         ("results/ · uns/", "eager", GREY, "+ provenance", None, 0),
         ("contacts/ · links/", "external", TEAL, None, "→ .cool · .scool · .h5mu · .h5ad", 0),

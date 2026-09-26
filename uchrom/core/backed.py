@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 
 from .bins import BIN_ID, LOCI, loci_of
-from .cdata import ChromData, _empty_frame
+from .cdata import ChromData, _empty_frame, resolve_batch, resolve_selection
 from .intervals import IntervalStore
 from .zarrcd import Container, SpotRows, read_small_parts
 
@@ -245,14 +245,19 @@ class BackedChromData(ChromData):
     Created by ``ChromData.read(path, backed=True)`` on a
     ``.chromdata.zarr`` directory or ``.cdz`` file.  See the module
     docstring for what is eager and what is lazy.
+
+    ``columns`` / ``tracks`` (see :meth:`ChromData.get_cell`) set the
+    default column selection of ``get_*``, ``iter_*``, ``cd[rows]`` and
+    :meth:`to_memory`; every one of those also takes them per call.
     """
 
-    def __init__(self, path, *, _container: Optional[Container] = None):  # noqa: D401
+    def __init__(self, path, *, columns=None, tracks=None, cache_bytes: Optional[int] = None,
+                 _container: Optional[Container] = None):  # noqa: D401
         c = _container or Container(path)
         parts = read_small_parts(c)
         self._c = c
         self._parts = parts
-        self._rows = SpotRows(c, parts)
+        self._rows = SpotRows(c, parts, **({} if cache_bytes is None else {"cache_bytes": cache_bytes}))
         self._index = parts["index"]
         self._backing_path = Path(path)
         self._source_path = Path(path)
@@ -289,6 +294,9 @@ class BackedChromData(ChromData):
             self._spot_tracks_proxy = None
         self.layers = {k: BackedArray(self._rows, f"layers/{k}")
                        for k in tmeta.get("layers", {})}
+        self._default_selection = (columns, tracks)
+        if columns is not None or tracks is not None:
+            self._selection(columns, tracks)  # validate early
 
     # ------------------------------------------------------------------
     # Lazy attributes
@@ -297,6 +305,15 @@ class BackedChromData(ChromData):
     @property
     def backed(self) -> bool:
         return True
+
+    @property
+    def format_version(self) -> str:
+        return str(self._c.meta.get("format_version", "2.0"))
+
+    @property
+    def partitioned(self) -> bool:
+        """``True`` for a format 2.1 store (spots partitioned by chromosome)."""
+        return bool(self._parts.get("partitioned"))
 
     @property
     def coords(self):  # type: ignore[override]
@@ -355,17 +372,33 @@ class BackedChromData(ChromData):
         if not self._has_cell_id():
             return pd.Index([], name="cell_id")
         cats = self._categories("cell_id")
-        codes = np.asarray(self._index["cell_codes"])
+        codes = np.unique(np.asarray(self._index["cell_codes"]))
         codes = codes[codes >= 0]
         return pd.Index([str(x) for x in np.asarray(cats)[codes]], name="cell_id")
+
+    # ------------------------------------------------------------------
+    # Column selection
+    # ------------------------------------------------------------------
+
+    def _selection(self, columns=None, tracks=None):
+        """``(spot columns to read, spot tracks, layer keys)`` of a selection
+        (``None`` / ``None`` → the default given to :meth:`ChromData.read`)."""
+        if columns is None and tracks is None:
+            columns, tracks = self._default_selection
+        st_cols = list(self._spot_tracks_proxy.columns) if self._spot_tracks_proxy is not None else []
+        spot_cols, track_cols, layer_keys = resolve_selection(
+            list(self._spots_proxy.columns), st_cols, list(self.layers), columns, tracks)
+        return spot_cols, track_cols, layer_keys
 
     # ------------------------------------------------------------------
     # Row access → in-memory ChromData
     # ------------------------------------------------------------------
 
     def _build(self, *, ranges: Optional[Sequence[Tuple[int, int]]] = None,
-               rows: Optional[np.ndarray] = None, subset: bool = True) -> ChromData:
+               rows: Optional[np.ndarray] = None, subset: bool = True,
+               columns=None, tracks=None) -> ChromData:
         r = self._rows
+        spot_cols, track_cols, layer_keys = self._selection(columns, tracks)
 
         def read(name, cols=None):
             if rows is not None:
@@ -374,16 +407,19 @@ class BackedChromData(ChromData):
                 return r.read_all(name, cols)
             return r.read_ranges(name, ranges, cols)
 
-        t = read("spots")
         coord_cols = list(self._parts["spot_meta"].get("coords", ("x", "y", "z")))
+        stored = [c for c in spot_cols if c not in LOCI]
+        t = read("spots", stored + coord_cols)
         coords = r.coords_of(t, coord_cols)
         t = t.drop_columns(coord_cols)
         spots = r.to_frame("spots", t)
         del t
         spot_tracks = None
-        if "spot_tracks" in r.files:
-            spot_tracks = r.to_frame("spot_tracks", read("spot_tracks"))
-        layers = {k: r.coords_of(read(f"layers/{k}")) for k in self.layers}
+        if "spot_tracks" in r.files and track_cols:
+            all_st = list(self._spot_tracks_proxy.columns)
+            spot_tracks = r.to_frame("spot_tracks", read("spot_tracks", None if track_cols == all_st
+                                                         else track_cols))
+        layers = {k: r.coords_of(read(f"layers/{k}")) for k in layer_keys}
         if subset:
             traces = self._filter_traces(spots)
             cells, cellm = self._filter_cells(spots)
@@ -401,24 +437,27 @@ class BackedChromData(ChromData):
         out._bin_tracks = self._bin_tracks
         if spot_tracks is not None:
             out._spot_tracks = spot_tracks
-        out._spot_view_order = list(self._spot_view_order) if self._spot_view_order else None
-        order = list(self._spots_proxy.columns)
+        view = [c for c in (self._spot_view_order or []) if c in out._bin_tracks.columns
+                or (spot_tracks is not None and c in spot_tracks.columns)]
+        out._spot_view_order = view or None
+        order = [c for c in self._spots_proxy.columns if c in spot_cols]
         out.spots = out.spots[[c for c in order if c in out.spots.columns]
                               + [c for c in out.spots.columns if c not in order]]
         return out
 
-    def to_memory(self) -> ChromData:
-        """Load everything into an in-memory :class:`ChromData` (the small
-        tables are shared with this object, not copied)."""
-        out = self._build(subset=False)
+    def to_memory(self, *, columns=None, tracks=None) -> ChromData:
+        """Load everything (or the selected columns) into an in-memory
+        :class:`ChromData` (the small tables are shared with this object,
+        not copied)."""
+        out = self._build(subset=False, columns=columns, tracks=tracks)
         out._source_path = self._source_path
         return out
 
-    def __getitem__(self, index) -> ChromData:
+    def _take(self, index, columns=None, tracks=None) -> ChromData:
         if isinstance(index, slice):
             start, stop, step = index.indices(self.n_spots)
             if step == 1:
-                return self._build(ranges=[(start, stop)])
+                return self._build(ranges=[(start, stop)], columns=columns, tracks=tracks)
             index = np.arange(start, stop, step)
         if isinstance(index, (pd.Series, pd.Index)):
             index = index.to_numpy()
@@ -427,18 +466,22 @@ class BackedChromData(ChromData):
             if len(idx) != self.n_spots:
                 raise IndexError("boolean index length != n_spots")
             idx = np.flatnonzero(idx)
-        return self._build(rows=idx.astype(np.int64))
+        return self._build(rows=idx.astype(np.int64), columns=columns, tracks=tracks)
+
+    def __getitem__(self, index) -> ChromData:
+        return self._take(index)
 
     def _segment_ranges(self, mask: np.ndarray, offsets: np.ndarray) -> List[Tuple[int, int]]:
         sel = np.flatnonzero(mask)
-        ranges: List[Tuple[int, int]] = []
-        for i in sel:
-            a, b = int(offsets[i]), int(offsets[i + 1])
-            if ranges and ranges[-1][1] == a:
-                ranges[-1] = (ranges[-1][0], b)
-            else:
-                ranges.append((a, b))
-        return ranges
+        if not len(sel):
+            return []
+        offsets = np.asarray(offsets, dtype=np.int64)
+        a, b = offsets[sel], offsets[sel + 1]
+        # coalesce touching runs
+        brk = np.r_[True, a[1:] != b[:-1]]
+        starts = a[brk]
+        ends = b[np.r_[brk[1:], True]]
+        return list(zip(starts.tolist(), ends.tolist()))
 
     @staticmethod
     def _code_of(cats: Optional[pd.Index], value) -> Optional[int]:
@@ -450,49 +493,114 @@ class BackedChromData(ChromData):
             return None
         return int(loc) if isinstance(loc, (int, np.integer)) else None
 
-    def get_trace(self, trace_id) -> ChromData:
+    def get_trace(self, trace_id, *, columns=None, tracks=None) -> ChromData:
         code = self._code_of(self._categories("trace_id"), trace_id)
         codes = np.asarray(self._index["trace_codes"])
         mask = codes == code if code is not None else np.zeros(len(codes), dtype=bool)
-        return self._build(ranges=self._segment_ranges(mask, self._index["trace_offsets"]))
+        return self._build(ranges=self._segment_ranges(mask, self._index["trace_offsets"]),
+                           columns=columns, tracks=tracks)
 
-    def get_cell(self, cell_id) -> ChromData:
+    def get_cell(self, cell_id, *, columns=None, tracks=None) -> ChromData:
         if not self._has_cell_id():
             raise KeyError("spots has no 'cell_id' column")
         code = self._code_of(self._categories("cell_id"), cell_id)
         codes = np.asarray(self._index["cell_codes"])
         mask = codes == code if code is not None else np.zeros(len(codes), dtype=bool)
-        return self._build(ranges=self._segment_ranges(mask, self._index["cell_offsets"]))
+        return self._build(ranges=self._segment_ranges(mask, self._index["cell_offsets"]),
+                           columns=columns, tracks=tracks)
 
-    def get_chrom(self, chrom: str) -> ChromData:
+    def _chrom_codes(self, chrom) -> np.ndarray:
         names = self._bins["chrom"].cat.categories.astype(str)
-        codes = np.flatnonzero(np.asarray(names) == str(chrom))
+        return np.flatnonzero(np.asarray(names) == str(chrom))
+
+    def _chrom_ranges(self, chrom) -> Tuple[List[Tuple[int, int]], bool]:
+        """Row ranges holding the spots of ``chrom``, and whether they may
+        also hold other chromosomes' spots (format 2.0 multi-chromosome runs)."""
+        codes = self._chrom_codes(chrom)
+        if self.partitioned:
+            pc = np.asarray(self._index["partition_chrom"])
+            return self._segment_ranges(np.isin(pc, codes), self._index["partition_offsets"]), False
         seg_chrom = np.asarray(self._index["chrom_trace"])
         pure = np.isin(seg_chrom, codes)
         mixed = seg_chrom < 0
-        sub = self._build(ranges=self._segment_ranges(pure | mixed, self._index["trace_offsets"]))
-        if mixed.any():
-            ids = np.flatnonzero(self._bins["chrom"].astype(str).to_numpy() == str(chrom))
-            keep = np.isin(sub.spots[BIN_ID].to_numpy(), ids)
-            if not keep.all():
-                sub = sub[keep]
-        return sub
+        return self._segment_ranges(pure | mixed, self._index["trace_offsets"]), bool(mixed.any())
 
-    def iter_traces(self, batch: int = 1024) -> Iterator[ChromData]:
+    def _keep_chrom(self, sub: ChromData, chrom) -> ChromData:
+        ids = np.flatnonzero(self._bins["chrom"].astype(str).to_numpy() == str(chrom))
+        keep = np.isin(sub.spots[BIN_ID].to_numpy(), ids)
+        return sub if keep.all() else sub[keep]
+
+    def get_chrom(self, chrom: str, *, columns=None, tracks=None) -> ChromData:
+        ranges, mixed = self._chrom_ranges(chrom)
+        sub = self._build(ranges=ranges, columns=columns, tracks=tracks)
+        return self._keep_chrom(sub, chrom) if mixed else sub
+
+    # -- streaming -----------------------------------------------------------
+
+    def _bytes_per_spot(self, columns=None, tracks=None) -> float:
+        """Estimated in-memory bytes per spot of a selection (decoded Arrow +
+        pandas + ChromData copies)."""
+        spot_cols, track_cols, layer_keys = self._selection(columns, tracks)
+        width = 8 * 3 + 8 * (len(spot_cols) + len(track_cols)) + 24 * len(layer_keys)
+        return 3.0 * width
+
+    def _run_batches(self, batch, chrom=None, columns=None, tracks=None):
         off = np.asarray(self._index["trace_offsets"], dtype=np.int64)
         n_seg = len(off) - 1
-        for i in range(0, n_seg, max(1, int(batch))):
-            j = min(i + int(batch), n_seg)
-            yield self._build(ranges=[(int(off[i]), int(off[j]))])
+        lo, hi, mixed = 0, n_seg, False
+        if chrom is not None:
+            codes = self._chrom_codes(chrom)
+            seg_chrom = np.asarray(self._index["chrom_trace"])
+            sel = np.flatnonzero(np.isin(seg_chrom, codes) | (seg_chrom < 0))
+            if not len(sel):
+                return [], False
+            if self.partitioned:
+                lo, hi = int(sel[0]), int(sel[-1]) + 1
+            else:
+                mixed = bool((seg_chrom[sel] < 0).any())
+                runs = sel
+                size = resolve_batch(batch, (off[runs + 1] - off[runs]).mean() if len(runs) else 1,
+                                     self._bytes_per_spot(columns, tracks))
+                out = []
+                for i in range(0, len(runs), size):
+                    part = runs[i:i + size]
+                    m = np.zeros(n_seg, dtype=bool)
+                    m[part] = True
+                    out.append(self._segment_ranges(m, off))
+                return out, mixed
+        n_runs = hi - lo
+        mean_len = (off[hi] - off[lo]) / max(1, n_runs)
+        size = resolve_batch(batch, mean_len, self._bytes_per_spot(columns, tracks))
+        return [[(int(off[i]), int(off[min(i + size, hi)]))] for i in range(lo, hi, size)], mixed
 
-    def iter_cells(self, batch: int = 64) -> Iterator[ChromData]:
+    def iter_traces(self, batch=1024, *, chrom=None, columns=None, tracks=None) -> Iterator[ChromData]:
+        batches, mixed = self._run_batches(batch, chrom, columns, tracks)
+        for ranges in batches:
+            sub = self._build(ranges=ranges, columns=columns, tracks=tracks)
+            yield self._keep_chrom(sub, chrom) if mixed else sub
+
+    def iter_cells(self, batch=64, *, columns=None, tracks=None) -> Iterator[ChromData]:
         if not self._has_cell_id():
             raise KeyError("spots has no 'cell_id' column")
+        codes = np.asarray(self._index["cell_codes"], dtype=np.int64)
         off = np.asarray(self._index["cell_offsets"], dtype=np.int64)
-        n = len(off) - 1
-        for i in range(0, n, max(1, int(batch))):
-            j = min(i + int(batch), n)
-            yield self._build(ranges=[(int(off[i]), int(off[j]))])
+        part = np.asarray(self._index["cell_partition"], dtype=np.int64)
+        uniq = np.unique(codes[codes >= 0])
+        if not len(uniq):
+            return
+        mean_cell = self.n_spots / len(uniq)
+        size = resolve_batch(batch, mean_cell, self._bytes_per_spot(columns, tracks))
+        bounds = np.r_[0, np.flatnonzero(part[1:] != part[:-1]) + 1, len(codes)]
+        for i in range(0, len(uniq), size):
+            c0, c1 = uniq[i], uniq[min(i + size, len(uniq)) - 1]
+            ranges = []
+            for a, b in zip(bounds[:-1], bounds[1:]):
+                # cell runs of one partition are sorted by cell code
+                k0 = a + int(np.searchsorted(codes[a:b], c0, side="left"))
+                k1 = a + int(np.searchsorted(codes[a:b], c1, side="right"))
+                if k1 > k0:
+                    ranges.append((int(off[k0]), int(off[k1])))
+            yield self._build(ranges=ranges, columns=columns, tracks=tracks)
 
     # ------------------------------------------------------------------
     # Whole-table operations (read the needed columns)
@@ -531,8 +639,8 @@ class BackedChromData(ChromData):
 
     def compute_distances(self, trace_id=None) -> np.ndarray:
         if trace_id is not None:
-            return self.get_trace(trace_id).compute_distances()
-        return self.to_memory().compute_distances()
+            return self.get_trace(trace_id, columns="coords").compute_distances()
+        return self.to_memory(columns="coords").compute_distances()
 
     def copy(self) -> ChromData:
         return self.to_memory().copy()

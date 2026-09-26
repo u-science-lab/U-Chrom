@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+- **`.chromdata.zarr` format 2.1 — spot tables partitioned by
+  chromosome.**  `tables/spots/chrom=<name>/part-0.parquet` (and the same
+  for `spot_tracks` and `layers/<key>`), sorted cell › trace › bin inside a
+  partition, 16,384-row row groups (was 65,536); `index/` gains
+  `partition_offsets` / `partition_groups` / `partition_chrom` /
+  `cell_partition` and one `cell_offsets` entry per (chromosome, cell).
+  Backed `get_chrom` reads one partition (Takei 2025, 1e7 spots: 0.77 s →
+  0.04 s; 1e8: 8.9 s → 0.49 s); `get_cell` reads one row group per
+  chromosome and is slower (8 → 23 ms at 1e7; 22 → 42 ms at 1e8; with
+  `columns="coords"` 4.4 / 22 ms).  Stores with many per-spot tracks grow
+  (Takei: +35 %, the per-spot z-scores compress worse once a cell's
+  chromosomes are apart; no Parquet option recovers it —
+  `benchmarks/fig2/spot_tracks_encoding.py`); Liu 2025 MOp shrinks 3 %.
+  Full reads: 0.98 → 1.11 s at 1e7.
+  **Stored row order is now chromosome › cell › trace › bin**, also for
+  in-memory `iter_traces` / `iter_cells`.  2.0 stores stay readable
+  (in memory and backed); 2.0 readers cannot read 2.1 stores —
+  `python -m uchrom.io.upgrade old.chromdata.zarr new.chromdata.zarr`
+  rewrites them.
+- **Column selection**: `get_cell` / `get_trace` / `get_chrom`,
+  `iter_traces` / `iter_cells`, `to_memory` and `ChromData.read` take
+  `columns=` / `tracks=` (`columns="coords"`: coordinates and key columns
+  only); the web browser reads geometry with `columns="coords"`.
+  `iter_traces(chrom=...)`; `batch="auto"`.
+- **Streaming (roadmap step 7)**: `uchrom.settings.memory_budget`;
+  `ChromData.writer(path)` (`uchrom.core.stream.ChromDataWriter`: append
+  chunks, spill per chromosome, merge each partition in pieces within the
+  budget — the store equals the in-memory writer's);
+  `ChromData.from_fofct(..., out=...)` (chunked) and
+  `read_seqfish_multiomics(..., out=...)` (FOV by FOV) return the store
+  backed.  `uchrom.fea.distance_map`: exact per-chromosome median / mean
+  distance maps streamed over the traces (median per row band; bitwise
+  equal to the dense `mean_distance_matrix`).  `call_loops_axiswise_f` and
+  `call_tads_by_pval` take `streaming=` (default on backed data;
+  `uchrom.fea.arc_stream.axis_cube_streaming`): memory `O(n_bins²)`
+  instead of `O(n_traces × n_bins²)`, same calls.
 - **`.chromdata.zarr` — the format 2.0 container** (Zarr v3 + Parquet, the
   SpatialData approach) is the new default: `cd.write("x.chromdata.zarr")`
   (or `x.cdz`, the same store in one zip file).  Spots are stored sorted by

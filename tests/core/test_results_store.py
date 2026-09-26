@@ -135,7 +135,8 @@ def test_every_kind_round_trips_with_provenance(tmp_path, suffix):
     path = tmp_path / f"r{suffix}"
     cd.write(path)
     from uchrom.io import file_format_version
-    assert file_format_version(path) == FORMAT_VERSION
+    from uchrom.core.zarrcd import ZARR_FORMAT_VERSION
+    assert file_format_version(path) == (FORMAT_VERSION if suffix == ".h5cd" else ZARR_FORMAT_VERSION)
     out = ChromData.read(path).results
 
     assert set(out) == set(cd.results)
