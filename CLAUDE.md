@@ -92,7 +92,7 @@ ChromData
 ├── traces      pd.DataFrame (n_traces)     trace-level metadata
 ├── layers      dict[str, ndarray]           alternative coords, each (n_spots, 3)
 ├── points      dict[str, DataFrame]         non-genomic 3-D points (RNA spots, IF puncta) in the coords frame
-├── results     dict                         analysis outputs (tads, loops, compartments)
+├── results     ResultsStore                 analysis outputs + provenance (ResultRecord)
 └── uns         dict                         metadata (genome_assembly, xyz_unit, ...)
 ```
 
@@ -102,6 +102,8 @@ ChromData
 - **Categorical dtypes**: `chrom`, `trace_id`, `cell_id` are auto-converted to `pd.Categorical` for ~10x memory savings on string columns.
 - **Linked modalities stay external**: scHi-C contacts (`.scool`) and multi-modal matrices (`.h5mu`) are referenced, not copied — `cd.link_scool()` / `cd.link_mudata()` record paths + cell mapping in `uns`, `cd.validate_links()` checks them, `cd.set_cell_spatial_coordinates()` stores cell-level (possibly inferred) positions in `cells`.  Never put contacts or inferred positions into `coords`.
 - **FOF-CT compatible**: `ChromData.from_fofct(path)` reads the 4DN FISH Omics Format core table. Column mapping: Spot_ID→spot_id, Trace_ID→trace_id, X/Y/Z→coords, Chrom→chrom, Chrom_Start/End→start/end.
+- **Typed results with provenance**: `cd.results` is a `ResultsStore` (dict-like; `cd.results[key]` → value, `cd.results.record(key)` → `ResultRecord(kind, value, params, function, uchrom_version, inputs, created_utc)`).  Unwritable values raise `TypeError` at assignment.  Analysis functions store via `cd.results.set(key, value, kind=, function=, params=, inputs=)`.
+- **Calling convention** (`uchrom/core/convention.py`): `fn(cd, *, chrom=None, trace_ids=None, cells=None, params=<*Params>, device="auto", key_added="<what>.<method>", copy=False)`.  `chrom=None` runs every chromosome and merges into one table under one key; `copy=False` returns the table, `copy=True` a new ChromData.  Deprecated 1.x forms (positional `chrom`, `store=`, `result_key=`) must keep working with a `DeprecationWarning` and the 1.x key.  `uchrom.tl` / `uchrom.pp` are flat aliases; implementations stay in the domain modules.
 - **HDF5 persistence**: `.h5cd` format via `cd.write(path)` / `ChromData.read(path)`. DataFrames stored as per-column datasets, categorical as byte strings.
 - **Format versioning**: root HDF5 attrs `uchrom_format_version` (MAJOR.MINOR) and `uchrom_version`. Read-side dispatches to `_read_vN()`. Same MAJOR + higher MINOR warns but reads; different MAJOR raises. Missing attr → legacy 1.0 with warning. To bump format: update `FORMAT_VERSION` in `cdata.py`, add `_read_vN` function for the new MAJOR.
 - **Validation on construction**: Checks coords shape, spots required columns, tracks alignment, layers shape.

@@ -47,7 +47,7 @@ savings on large datasets.
 | `traces` | `(n_traces, ?)` | per-trace metadata |
 | `layers` | dict | alternative coordinate sets |
 | `points` | dict of DataFrames | non-genomic 3-D points in the same frame (nascent RNA spots, IF puncta): `x, y, z`, `cell_id`, `gene`, … |
-| `results` | dict | analysis outputs (loops, TADs, …) |
+| `results` | `ResultsStore` | analysis outputs with provenance (loops, TADs, …) — see [Results](#results) |
 | `uns` | dict | unstructured metadata |
 
 Properties: `cd.n_spots`, `cd.n_traces`, `cd.n_cells`, `cd.chroms`.
@@ -67,6 +67,52 @@ cd[:100]                       # first 100 spots
 
 All children (coords, spots, tracks, layers, cellm, and `points` via
 their `cell_id`) are filtered consistently; traces and cells that become empty are dropped.
+
+## Results
+
+`cd.results` is a `ResultsStore` — a dict-like mapping from a key to a
+`ResultRecord` (value + provenance).  Indexing returns the value, so it
+reads like a dict; analysis functions store their output with
+provenance:
+
+```python
+from uchrom.strc.tad import call_tads_by_pval
+
+tads = call_tads_by_pval(cd)              # chrom=None → all chromosomes, one table
+cd.results["tads.arcfish"] is tads        # True
+rec = cd.results.record("tads.arcfish")
+rec.kind, rec.function, rec.params, rec.inputs, rec.uchrom_version, rec.created_utc
+
+cd.results["my_table"] = df               # plain assignment: no provenance
+cd.results.set("my_table", df, function="my.fn", params={"k": 3})
+```
+
+| kind | value |
+|------|-------|
+| `table` | `DataFrame` / `Series` |
+| `intervals` | `DataFrame` of genomic intervals (TADs, loops, domains) |
+| `array` | `ndarray` (not object dtype) |
+| `mapping` | nested `dict` of the value types here |
+| `scalar` | JSON-compatible scalar / list / tuple |
+
+A value that cannot be written to `.h5cd` raises `TypeError` **when it
+is assigned**.  Values and provenance round-trip through `.h5cd`
+(format 1.4).  Files from older versions read unchanged, with records
+that carry no provenance.
+
+Analysis functions share one calling convention (`cd` first; then
+keyword-only `chrom=None`, `trace_ids`, `cells`, `params`, `device`,
+`key_added="<what>.<method>"`, `copy=False`) — see
+[Structure identification](structure.md#calling-convention).  The
+`uc.tl` / `uc.pp` namespaces are flat aliases:
+
+```python
+import uchrom as uc
+uc.tl.call_tads(cd, method="arcfish")     # strc.tad.call_tads_by_pval
+uc.tl.call_loops(cd)                      # strc.loop.call_loops_axiswise_f
+uc.tl.call_compartments(cd)               # strc.comp.call_compartments_axes_pc
+uc.pp.impute(cd, method="linear")         # im.impute.impute_coordinates
+```
 
 ## On-demand distance matrix
 

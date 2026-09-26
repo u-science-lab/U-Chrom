@@ -24,9 +24,10 @@ Algorithm (per chromosome)
 
 Output
 ------
-A DataFrame with columns ``chrom, start, end, compartment, pc2,
- cluster, bin_index``.  Also written to ``cd.results['compartments']``
-when ``store=True``.
+A DataFrame with columns ``chrom, start, end, bin_index, cluster,
+compartment, pc2`` (one row per bin, all requested chromosomes merged),
+stored with provenance at ``cd.results[key_added]`` (default
+``"compartments.axes_pc"``).
 """
 
 from __future__ import annotations
@@ -37,6 +38,15 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from uchrom.core.convention import (
+    UNSET,
+    merge_tables,
+    parse_legacy_call,
+    resolve_chroms,
+    select_spots,
+    selection_inputs,
+    store_and_return,
+)
 from uchrom.fea.arc import axis_variance_cube, filter_normalize, axis_weight
 
 
@@ -102,21 +112,68 @@ def _filter_small_compartments(labels: np.ndarray, min_bins: int) -> np.ndarray:
 
 def call_compartments_axes_pc(
     cd,
-    chrom: str,
+    *args,
+    chrom=None,
+    trace_ids=None,
+    cells=None,
     params: Optional[CompartmentCallerParams] = None,
     device: str = "auto",
-    store: bool = True,
-    result_key: str = "compartments",
+    key_added: Optional[str] = UNSET,
+    copy: bool = False,
     verbose: bool = False,
-) -> pd.DataFrame:
-    """Call A/B compartments on a single chromosome.
+    store=UNSET,
+    result_key=UNSET,
+):
+    """Call A/B compartments (ArcFISH axes-PC; chromatin tracing).
 
-    Returns a DataFrame indexed by bin.  Stores it in
-    ``cd.results[result_key]`` when ``store=True``.
+    Parameters
+    ----------
+    cd : ChromData
+    chrom : str, sequence of str, or None
+        ``None`` (default) calls every chromosome and merges the tables.
+    trace_ids, cells : sequence, optional
+        Restrict the population to these traces / cells.
+    params : CompartmentCallerParams, optional
+    device : ``'auto' | 'cpu' | 'cuda' | 'mps'``
+    key_added : str or None
+        ``cd.results`` key (default ``"compartments.axes_pc"``); ``None``
+        does not store.
+    copy : bool
+        ``True`` → return a new ChromData holding the result.
+
+    Returns
+    -------
+    DataFrame (``copy=False``) or ChromData (``copy=True``)
+        One row per bin: ``chrom, start, end, bin_index, cluster,
+        compartment, pc2`` (``bin_index`` counts within the chromosome).
+
+    Notes
+    -----
+    Deprecated 1.x forms (positional ``chrom``, ``store=``,
+    ``result_key=``) still work with a ``DeprecationWarning`` and default
+    to the 1.x key ``"compartments"``.
     """
-    from sklearn.cluster import KMeans
-
+    chrom, key_added, _ = parse_legacy_call(
+        "call_compartments_axes_pc", args, chrom=chrom, key_added=key_added,
+        store=store, result_key=result_key, default_key="compartments.axes_pc",
+        legacy_key="compartments", copy=copy,
+    )
     params = params or CompartmentCallerParams()
+    work = select_spots(cd, trace_ids=trace_ids, cells=cells)
+    chroms = resolve_chroms(work, chrom)
+    frames = [_call_compartments_chrom(work, c, params, device, verbose) for c in chroms]
+    table = merge_tables(frames, _empty_compartments())
+    return store_and_return(
+        cd, table, key_added=key_added, copy=copy, kind="table",
+        function="uchrom.strc.comp.call_compartments_axes_pc", params=params,
+        inputs=selection_inputs(work, chroms, trace_ids, cells),
+    )
+
+
+def _call_compartments_chrom(cd, chrom: str, params: CompartmentCallerParams,
+                             device: str, verbose: bool) -> pd.DataFrame:
+    """Per-chromosome kernel of :func:`call_compartments_axes_pc`."""
+    from sklearn.cluster import KMeans
 
     if verbose:
         print(f"[comp/{chrom}] variance cube + normalise...")
@@ -187,16 +244,19 @@ def call_compartments_axes_pc(
             "compartment": str(compartment[i]),
             "pc2": float(track[i]),
         })
-    df = pd.DataFrame(rows)
-    if store:
-        _store(cd, result_key, df)
-    return df
+    return pd.DataFrame(rows)
 
 
-def _store(cd, key: str, df: pd.DataFrame):
-    if getattr(cd, "results", None) is None:
-        cd.results = {}
-    cd.results[key] = df
+def _empty_compartments() -> pd.DataFrame:
+    return pd.DataFrame({
+        "chrom": pd.Series(dtype=str),
+        "start": pd.Series(dtype="int64"),
+        "end": pd.Series(dtype="int64"),
+        "bin_index": pd.Series(dtype="int64"),
+        "cluster": pd.Series(dtype="int64"),
+        "compartment": pd.Series(dtype=str),
+        "pc2": pd.Series(dtype="float64"),
+    })
 
 
 __all__ = [

@@ -87,7 +87,10 @@ def enrich_for_discovery(cdata, config: DiscoveryEnrichmentConfig | dict[str, An
         return summary
 
     from uchrom.fea import add_annotation_features, add_sequence_features, call_peaks_from_track
-    from uchrom.strc import add_structural_features, call_structures_multi
+    from uchrom.strc import add_structural_features
+    from uchrom.strc.comp import call_compartments_axes_pc
+    from uchrom.strc.loop import call_loops_axiswise_f
+    from uchrom.strc.tad import call_tads_by_pval
 
     if config.fasta:
         table = add_sequence_features(
@@ -113,14 +116,22 @@ def enrich_for_discovery(cdata, config: DiscoveryEnrichmentConfig | dict[str, An
         summary["annotation_features"] = [c for c in table.columns if c not in {"chrom", "start", "end"}]
         summary["gtf"] = str(config.gtf)
     if config.structures:
-        called = call_structures_multi(
-            cdata,
-            structures=config.structures,
-            chroms=config.chroms,
-            device=config.device,
-            store=True,
-            verbose=config.verbose,
-        )
+        callers = {
+            "tads": call_tads_by_pval,
+            "loops": call_loops_axiswise_f,
+            "compartments": call_compartments_axes_pc,
+        }
+        unknown = set(config.structures) - set(callers)
+        if unknown:
+            raise ValueError(f"unknown structural callers: {sorted(unknown)}")
+        called = {}
+        for name in config.structures:
+            called[name] = callers[name](
+                cdata,
+                chrom=None if config.chroms is None else [str(c) for c in config.chroms],
+                device=config.device,
+                verbose=config.verbose,
+            )
         table = add_structural_features(cdata, project=config.project, overwrite=config.overwrite)
         summary["structures"] = sorted(called.keys())
         summary["structural_features"] = [c for c in table.columns if c not in {"chrom", "start", "end"}]

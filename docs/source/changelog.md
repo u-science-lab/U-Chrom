@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- `cd.results` is now a `ResultsStore` of `ResultRecord`s: every result
+  carries its kind, producing function, parameters, inputs, uchrom
+  version and timestamp.  Unwritable values raise `TypeError` at
+  assignment.  `.h5cd` format 1.4 stores the provenance as attrs; older
+  files still read.
+- One calling convention for the structure callers
+  (`call_tads_by_pval`, `call_domains_fishnet`, `call_loops_axiswise_f`,
+  `call_compartments_axes_pc`, new `call_tads_di`): keyword-only
+  `chrom=None` (all chromosomes, one merged table), `trace_ids`,
+  `cells`, `params`, `key_added="<what>.<method>"`, `copy`.
+  Positional `chrom`, `store=`, `result_key=` and
+  `strc.call_*_multi` are deprecated (they warn and keep the 1.x keys).
+- `uchrom.tl` / `uchrom.pp` alias namespaces.
+
 ## 0.2.0 — 2026-04
 
 - Renamed package from `nucbox` to `uchrom` / `u-chrom`.

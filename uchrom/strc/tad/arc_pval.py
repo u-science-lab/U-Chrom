@@ -29,10 +29,9 @@ Algorithm (per chromosome)
 
 Output
 ------
-A DataFrame with columns
-``chrom, start, end, level, score, pval, fdr, boundary_bin_l,
- boundary_bin_r``.  Also written to ``cd.results['tads']`` when
-``store=True``.
+A DataFrame with columns ``chrom, start, end, level, score, pval, fdr``,
+one merged table over all requested chromosomes, stored with provenance
+at ``cd.results[key_added]`` (default ``"tads.arcfish"``).
 """
 
 from __future__ import annotations
@@ -43,6 +42,15 @@ from typing import List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from uchrom.core.convention import (
+    UNSET,
+    merge_tables,
+    parse_legacy_call,
+    resolve_chroms,
+    select_spots,
+    selection_inputs,
+    store_and_return,
+)
 from uchrom.fea.arc import axis_variance_cube, filter_normalize, axis_weight
 from uchrom.utils.stats import cauchy_combination
 
@@ -221,24 +229,72 @@ def _emit_tads(
 
 def call_tads_by_pval(
     cd,
-    chrom: str,
+    *args,
+    chrom=None,
+    trace_ids=None,
+    cells=None,
     params: Optional[TADCallerParams] = None,
     device: str = "auto",
-    store: bool = True,
-    result_key: str = "tads",
+    key_added: Optional[str] = UNSET,
+    copy: bool = False,
     verbose: bool = False,
-) -> pd.DataFrame:
-    """ArcFISH-style TAD caller on a single chromosome.
+    store=UNSET,
+    result_key=UNSET,
+):
+    """ArcFISH-style TAD caller (chromatin tracing).
 
-    Returns a DataFrame of called TADs; stores it in
-    ``cd.results[result_key]`` when ``store=True``.  Columns:
-    ``chrom, start, end, level, score, pval, fdr``.  Level 1 is the
-    top-level TAD partition; higher levels are nested children when
-    ``params.hierarchical=True``.
+    Parameters
+    ----------
+    cd : ChromData
+    chrom : str, sequence of str, or None
+        Chromosome(s) to call.  ``None`` (default) calls every chromosome
+        with spots and merges the per-chromosome tables.
+    trace_ids, cells : sequence, optional
+        Restrict the population to these traces / cells.
+    params : TADCallerParams, optional
+    device : ``'auto' | 'cpu' | 'cuda' | 'mps'``
+    key_added : str or None
+        ``cd.results`` key for the merged table (default ``"tads.arcfish"``);
+        ``None`` does not store.
+    copy : bool
+        ``True`` → return a new ChromData with the result; ``cd`` is not
+        modified.
+
+    Returns
+    -------
+    DataFrame (``copy=False``) or ChromData (``copy=True``)
+        Columns ``chrom, start, end, level, score, pval, fdr``.  Level 1
+        is the finest partition (all boundaries); each further level
+        drops the weakest boundary when ``params.hierarchical=True``.
+
+    Notes
+    -----
+    Deprecated 1.x forms still work with a ``DeprecationWarning``:
+    positional ``chrom``, ``store=`` and ``result_key=``.  When any of
+    them is used and ``key_added`` is not given, the result is stored
+    under the 1.x key ``"tads"``.
     """
-    from scipy.signal import find_peaks
-
+    chrom, key_added, _ = parse_legacy_call(
+        "call_tads_by_pval", args, chrom=chrom, key_added=key_added,
+        store=store, result_key=result_key, default_key="tads.arcfish",
+        legacy_key="tads", copy=copy,
+    )
     params = params or TADCallerParams()
+    work = select_spots(cd, trace_ids=trace_ids, cells=cells)
+    chroms = resolve_chroms(work, chrom)
+    frames = [_call_tads_by_pval_chrom(work, c, params, device, verbose) for c in chroms]
+    table = merge_tables(frames, _empty_tads())
+    return store_and_return(
+        cd, table, key_added=key_added, copy=copy, kind="intervals",
+        function="uchrom.strc.tad.call_tads_by_pval", params=params,
+        inputs=selection_inputs(work, chroms, trace_ids, cells),
+    )
+
+
+def _call_tads_by_pval_chrom(cd, chrom: str, params: TADCallerParams,
+                             device: str, verbose: bool) -> pd.DataFrame:
+    """Per-chromosome kernel of :func:`call_tads_by_pval` (no storing)."""
+    from scipy.signal import find_peaks
 
     if verbose:
         print(f"[tad/{chrom}] variance cube...")
@@ -276,10 +332,7 @@ def call_tads_by_pval(
     if len(peak_idx) == 0:
         if verbose:
             print(f"[tad/{chrom}] no peaks found")
-        empty = _empty_tads()
-        if store:
-            _store(cd, result_key, empty)
-        return empty
+        return _empty_tads()
 
     peak_pvals = pvals[peak_idx]
     peak_fdr = _bh_fdr(peak_pvals)
@@ -287,10 +340,7 @@ def call_tads_by_pval(
     if len(accept) == 0:
         if verbose:
             print(f"[tad/{chrom}] no boundary passes fdr<{params.fdr_cutoff}")
-        empty = _empty_tads()
-        if store:
-            _store(cd, result_key, empty)
-        return empty
+        return _empty_tads()
 
     # Full per-bin fdr array (NaN for non-peaks)
     fdr_full = np.full(B, np.nan, dtype=np.float64)
@@ -321,8 +371,6 @@ def call_tads_by_pval(
     df_out = pd.DataFrame(rows)
     if df_out.empty:
         df_out = _empty_tads()
-    if store:
-        _store(cd, result_key, df_out)
     return df_out
 
 
@@ -336,12 +384,6 @@ def _empty_tads() -> pd.DataFrame:
         "pval":  pd.Series(dtype="float64"),
         "fdr":   pd.Series(dtype="float64"),
     })
-
-
-def _store(cd, key: str, df: pd.DataFrame):
-    if getattr(cd, "results", None) is None:
-        cd.results = {}
-    cd.results[key] = df
 
 
 __all__ = [

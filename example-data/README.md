@@ -11,7 +11,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | ------------------------------------- | ------- | --------------- | ------------- | ----------------------------------------------------------------------- |
 | `cell1.pairs`                         | 4.7 MB  | yes             | —             | `reconstruction.ipynb`, root README CLI example                         |
 | `cell2.pairs.gz`                      | 5.4 MB  | yes             | —             | (available for experimentation; bulkier variant of `cell1.pairs`)       |
-| `IMR90_chr21_30kb.cool`               | 280 KB  | yes             | —             | `gem_fish_reconstruction` tutorial (Hi-C side)                          |
+| `IMR90_chr21_30kb.cool`               | 280 KB  | yes             | —             | `gem_fish_reconstruction` tutorial (Hi-C side); `call_tads_di` test + `benchmarks/cd2_callers_validation.py` |
 | `4DNFIFINA2U9.csv`                    | 58 KB   | yes             | —             | Takei 2021 cell table (RNA counts, nuclear area) for `from_fofct(cell_table=…)`, web browser |
 | `4DNFIJ52NVDV.csv`                    | 219 KB  | yes             | —             | Takei 2021 nascent RNA spots for `from_fofct(rna_table=…)`, web browser |
 | `takei2025_cerebellum_fixture/`       | ~750 KB | **missing** — listed but never committed (see its section) | — | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture) |
@@ -213,7 +213,9 @@ using.
   - `Mask_id = Chromosome index` (each trace = one "cell")
   - `ROI # = 0`, `label = "None"`
 - **Used by**: `import_pyhim_ecsv.ipynb` — demonstrates
-  `ChromData.from_pyhim_trace()` on real chromatin tracing data.
+  `ChromData.from_pyhim_trace()` on real chromatin tracing data;
+  `benchmarks/cd2_callers_validation.py` (ChromData 2.0: structure
+  callers before / after the calling convention).
 - **Generated on demand**: If missing, the tutorial runs
   `bintu_to_pyhim_ecsv.py` to convert `IMR90_chr21-18-20Mb.csv` (which
   is auto-downloaded if needed).
@@ -235,7 +237,8 @@ using.
   ```
 - **Used by** (all use the `find_fofct()` helper):
   `loop_calling.ipynb`, `tad_calling.ipynb`, `compartment.ipynb`,
-  `fishnet_domains.ipynb`.
+  `fishnet_domains.ipynb`; `benchmarks/cd2_callers_validation.py`
+  (ChromData 2.0 validation, all 20 chromosomes).
 
 ### `IMR90_chr21-18-20Mb.csv` — Bintu 2018 IMR90 chr21:18.6–20.6 Mb chromatin tracing (2 MB)
 
