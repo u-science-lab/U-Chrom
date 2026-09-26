@@ -12,6 +12,8 @@ Usage::
     python example-data/download_data.py --seqfish # just seqFISH+ zip
     python example-data/download_data.py --schicar_dna  # opt-in, ~1.5 GB pairs
     python example-data/download_data.py --schicar_atac # opt-in, ~1.4 GB ATAC + mm10 GTF
+    python example-data/download_data.py --takei2025_cerebellum  # opt-in, 2.8 GB tarball
+    python example-data/download_data.py --liu2025_mop           # opt-in, 1.7 GB FOF-CT
 
 Datasets marked ``"default": False`` are large and only fetched when
 requested explicitly.  Multi-file datasets list ``files`` as
@@ -97,6 +99,47 @@ DATASETS = {
         "default": False,
         "description": "scHiCAR mouse brain ATAC fragments (GSE305439) + UCSC mm10 refGene GTF",
     },
+    # Takei et al. 2025 (Nature) cerebellum DNA seqFISH+, rep 1, all FOVs
+    # (Zenodo 7693825, CC-BY-4.0).  Consumed by build_takei2025_cerebellum.py
+    # and benchmarks/fig2/.  The locus map + clustering CSVs come from the
+    # CaiGroup GitHub repo (same URLs as build_takei2025_fov0.py).
+    "takei2025_cerebellum": {
+        "files": [
+            ("takei2025_cerebellum/cerebellum_rep1.tar.gz",
+             "https://zenodo.org/records/7693825/files/cerebellum_rep1.tar.gz"),
+            ("takei2025_cerebellum/LC1-100k-09022022-mm10-25kb-meta.csv",
+             "https://media.githubusercontent.com/media/CaiGroup/"
+             "dna-seqfish-plus-multi-omics/main/data/annotation/"
+             "LC1-100k-09022022-mm10-25kb-meta.csv"),
+            ("takei2025_cerebellum/cerebellum_mRNA_cluster_nuc_vol_filtered.csv",
+             "https://media.githubusercontent.com/media/CaiGroup/"
+             "dna-seqfish-plus-multi-omics/main/data/cerebellum/clustering/"
+             "100k-002-001-cerebellum_mRNA_cluster_nuc_vol_filtered.csv"),
+        ],
+        "md5": {"takei2025_cerebellum/cerebellum_rep1.tar.gz":
+                "758ebb152de837493a9c4d84471d62b4"},
+        "size_mb": 2854,
+        "default": False,
+        "description": "Takei 2025 cerebellum DNA seqFISH+ rep 1, all FOVs (Zenodo 7693825)",
+    },
+    # Liu et al. 2025 (Sci Adv) DNA-MERFISH of 2,000 loci in mouse MOp, WT,
+    # 4DN experiment 4DNEXBUVZYLI (set 4DNESMTNNB3N): the largest released
+    # wild-type FOF-CT core table on the 4DN portal + its cell table.
+    "liu2025_mop": {
+        "files": [
+            ("liu2025_mop/4DNFID46OABK.csv",
+             "https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/"
+             "wfoutput/7c153998-3e92-4dbe-8e35-7a09570e6ed3/4DNFID46OABK.csv"),
+            ("liu2025_mop/4DNFICX8IVEK.csv",
+             "https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/"
+             "wfoutput/ad72715d-57cc-4d68-8ddb-536b94ed9bb0/4DNFICX8IVEK.csv"),
+        ],
+        "md5": {"liu2025_mop/4DNFID46OABK.csv": "e2234c8d77d933a1b737c2fec75a4abb",
+                "liu2025_mop/4DNFICX8IVEK.csv": "f66afc5a37f24a876ccf26701728e5e5"},
+        "size_mb": 1701,
+        "default": False,
+        "description": "Liu 2025 mouse MOp DNA-MERFISH FOF-CT core + cell table (4DN)",
+    },
     # BICCN MERFISH mouse MOp atlas (Zhang et al. 2021, Nature), BIL doi:10.35077/g.21.
     "merfish_mop": {
         "files": [
@@ -126,6 +169,15 @@ def _download(url: str, dest: Path, description: str, size_mb: int) -> None:
         raise
 
 
+def _md5(path: Path) -> str:
+    import hashlib
+    h = hashlib.md5()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 24), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     for key, info in DATASETS.items():
@@ -143,6 +195,9 @@ def main() -> None:
         files = info.get("files") or [(info["filename"], info["url"])]
         for rel, url in files:
             _download(url, HERE / rel, info["description"], info["size_mb"])
+            want = info.get("md5", {}).get(rel)
+            if want and _md5(HERE / rel) != want:
+                raise SystemExit(f"[fail] md5 mismatch for {rel} (expected {want})")
 
     print(f"\nAll requested datasets staged under: {HERE}")
 

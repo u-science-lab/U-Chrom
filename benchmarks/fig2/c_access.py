@@ -19,6 +19,11 @@ Backends:
   "from disk" means a fresh process, warm OS cache.
 * ``zarr-memory`` — full ``ChromData.read`` of the store, then the in-memory
   scan.
+* ``parquet-memory`` — the common baseline without a ChromData: load the
+  whole flat spot table (``pd.read_parquet``, the panel-b Parquet file) and
+  subset it with a pandas boolean mask (``df[df.trace_id == id]``).
+* ``anndata-memory`` — the same with spots as obs in an ``.h5ad``
+  (``ad.read_h5ad``, then ``adata[mask].copy()``).
 
 Each backend writes its own file (``ext`` / ``write``).  Besides the latency,
 every child records its RSS after open, after the trace and cell queries
@@ -102,8 +107,56 @@ class ZarrBacked(ZarrMemory):
                 "chrom": list(cd.bins["chrom"].cat.categories)}
 
 
+class ParquetMemory:
+    """Baseline: load the whole flat table, subset with a pandas boolean mask."""
+
+    label = "Parquet (load + subset)"
+    ext = ".parquet"
+    key = "parquet"
+
+    @classmethod
+    def write(cls, cd, path):
+        C.FORMATS[cls.key].write(cd, path)
+
+    def open(self, path):
+        import pandas as pd
+        self.df = pd.read_parquet(path, engine="pyarrow")
+
+    def table(self):
+        return self.df
+
+    def ids(self):
+        t = self.table()
+        return {lv: list(t[col].unique()) for lv, col in (("trace", "trace_id"), ("cell", "cell_id"),
+                                                             ("chrom", "chrom"))}
+
+    def get(self, level, key):
+        col = {"trace": "trace_id", "cell": "cell_id", "chrom": "chrom"}[level]
+        return self.df[self.df[col] == key]
+
+
+class AnnDataMemory(ParquetMemory):
+    """Baseline: load the whole .h5ad (spots as obs), subset with a boolean mask."""
+
+    label = "AnnData (load + subset)"
+    ext = ".h5ad"
+    key = "anndata"
+
+    def open(self, path):
+        import anndata as ad
+        self.adata = ad.read_h5ad(path)
+
+    def table(self):
+        return self.adata.obs
+
+    def get(self, level, key):
+        col = {"trace": "trace_id", "cell": "cell_id", "chrom": "chrom"}[level]
+        return self.adata[(self.adata.obs[col] == key).to_numpy()].copy()
+
+
 BACKENDS = {"h5cd-1x-memory": H5cd1xMemory, "h5cd-2-memory": H5cd2Memory,
-            "zarr-backed": ZarrBacked, "zarr-memory": ZarrMemory}
+            "zarr-backed": ZarrBacked, "zarr-memory": ZarrMemory,
+            "parquet-memory": ParquetMemory, "anndata-memory": AnnDataMemory}
 
 
 def child(backend_key, path, n_queries):
@@ -111,7 +164,7 @@ def child(backend_key, path, n_queries):
     import h5py  # noqa: F401  (import cost out of the timing)
     from uchrom import ChromData  # noqa: F401
     try:
-        import pyarrow.parquet, zarr  # noqa: F401,E401
+        import pyarrow.parquet, zarr, anndata  # noqa: F401,E401
         import uchrom.core.backed  # noqa: F401
     except ImportError:  # 1.x checkout
         pass
@@ -135,7 +188,7 @@ def child(backend_key, path, n_queries):
             t0 = time.perf_counter()
             sub = be.get(level, pool[i])
             times.append(time.perf_counter() - t0)
-            sizes.append(int(sub.n_spots))
+            sizes.append(int(sub.n_spots) if hasattr(sub, "n_spots") else len(sub))
         out[level] = {"latency_s": C.iqr(times), "times_s": times, "result_spots_median": float(np.median(sizes)),
                       "n_ids": len(pool)}
     out["peak_rss_mb"] = C.peak_rss_mb()
@@ -183,7 +236,9 @@ def main():
             else:
                 stage = C.stage_subset(n)
                 info = C.stage_info(stage)
-                tag = "h5cd2" if key == "h5cd-2-memory" else "zarr" if key.startswith("zarr") else f"v{FORMAT_VERSION}"
+                tag = ("h5cd2" if key == "h5cd-2-memory" else "zarr" if key.startswith("zarr")
+                       else key.split("-")[0] if key in ("parquet-memory", "anndata-memory")
+                       else f"v{FORMAT_VERSION}")
                 h5 = work / f"n{n}_{tag}{be.ext}"
                 if not h5.exists():
                     C.run_child(SCRIPT, ["--child", "write", key, str(stage), str(h5)])

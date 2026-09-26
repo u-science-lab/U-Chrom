@@ -65,3 +65,9 @@ docs/build/
 # small in-repo example (must come after the *.h5cd / *.mcool rules)
 !example-data/sim_cell1/*.h5cd
 !example-data/sim_cell1/*.mcool
+
+# Figure 2 benchmarks: large inputs / scratch are ignored, result JSONs are committed
+example-data/takei2025_cerebellum/
+example-data/liu2025_mop/
+example-data/fig2_work/
+!paper/fig2/results/*.json
