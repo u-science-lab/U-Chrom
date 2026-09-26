@@ -27,6 +27,7 @@ from .peaks import (
     read_bedgraph,
 )
 from .project import (
+    project_interval_features_to_bins,
     project_interval_features_to_spots,
     unique_spot_intervals,
 )
@@ -57,6 +58,7 @@ __all__ = [
     "compute_peak_features",
     "macs_bdgpeaks_to_narrowpeak",
     "read_bedgraph",
+    "project_interval_features_to_bins",
     "project_interval_features_to_spots",
     "unique_spot_intervals",
     "append_feature_registry_entry",

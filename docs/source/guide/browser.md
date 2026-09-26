@@ -216,7 +216,7 @@ share a **locus** (chromosome + range) set in the workspace bar — type
     upper triangle rotated 45° (adjustable height / max distance, flip);
     stack several to compare, e.g. two cell types' pseudo-bulk Hi-C, or a
     cell's contacts above its 3-D distances;
-  - *track rows*: `cd.tracks` (e.g. Takei 2025's 59 per-spot IF channels:
+  - *track rows*: `cd.bin_tracks` (per locus) and `cd.spot_tracks` (per spot; e.g. Takei 2025's 59 per-spot IF channels:
     H3K27ac, H3K4me3, H3K9me3, LaminB1, …) aggregated per bin over all
     cells, one cell or a group (the row's *cells* setting);
   - *interval rows*: `cd.results` tables (TADs as boxes, loops as arcs),

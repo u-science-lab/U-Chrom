@@ -285,7 +285,7 @@ def call_tads_by_pval(
     frames = [_call_tads_by_pval_chrom(work, c, params, device, verbose) for c in chroms]
     table = merge_tables(frames, _empty_tads())
     return store_and_return(
-        cd, table, key_added=key_added, copy=copy, kind="intervals",
+        cd, table, key_added=key_added, copy=copy, kind="intervals", interval_kind="domain",
         function="uchrom.strc.tad.call_tads_by_pval", params=params,
         inputs=selection_inputs(work, chroms, trace_ids, cells),
     )

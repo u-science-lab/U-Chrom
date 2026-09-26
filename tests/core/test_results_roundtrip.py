@@ -90,12 +90,19 @@ def test_slash_in_key_raises(tmp_path):
 
 def test_legacy_untyped_results_still_read(tmp_path):
     """Pre-1.2 files: untyped groups are DataFrames, datasets are arrays."""
+    from tests._v1 import write_v1
+
     path = tmp_path / "legacy.h5cd"
-    _cd({"tads": pd.DataFrame({"start": [0, 10]}), "pc1": np.ones(4)}).write(path)
+    cd = _cd({"tads": pd.DataFrame({"start": [0, 10]}), "pc1": np.ones(4)})
+    write_v1(path, cd.coords, cd.to_dataframe().drop(columns=["x", "y", "z"]),
+             results={"tads": cd.results["tads"], "pc1": cd.results["pc1"]}, version="1.1")
     with h5py.File(path, "r+") as f:
-        f.attrs["uchrom_format_version"] = "1.1"
         for obj in (f["results"], f["results/tads"]):
             del obj.attrs["_type"]
+        for key in ("tads", "pc1"):
+            for attr in [a for a in f["results"][key].attrs if a.startswith("_") and a != "_columns"
+                         and a != "_n_rows"]:
+                del f["results"][key].attrs[attr]
     out = ChromData.read(path).results
     assert list(out["tads"]["start"]) == [0, 10]
     np.testing.assert_array_equal(out["pc1"], np.ones(4))

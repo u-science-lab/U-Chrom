@@ -116,7 +116,9 @@ class Dataset:
     def _arrays(self) -> Dict[str, Any]:
         if "arrays" not in self._cache:
             spots = self.cd.spots
-            chrom = spots["chrom"].astype(str).to_numpy()
+            bins = self.cd.bins
+            bin_id = spots["bin_id"].to_numpy(dtype=np.int64)
+            chrom = bins["chrom"].astype(str).to_numpy()[bin_id]
             trace = spots["trace_id"].astype(str).to_numpy()
             cell = (
                 spots["cell_id"].astype(str).to_numpy()
@@ -132,8 +134,9 @@ class Dataset:
                 "trace": trace,
                 "trace_code": pd.factorize(trace, sort=True)[0],
                 "cell": cell,
-                "start": spots["start"].to_numpy(dtype=np.int64),
-                "end": spots["end"].to_numpy(dtype=np.int64),
+                "start": bins["start"].to_numpy(dtype=np.int64)[bin_id],
+                "end": bins["end"].to_numpy(dtype=np.int64)[bin_id],
+                "bin_id": bin_id,
             }
         return self._cache["arrays"]
 
@@ -168,6 +171,7 @@ class Dataset:
             "name": self.name,
             "path": self.path,
             "n_spots": int(self.cd.n_spots),
+            "n_bins": int(self.cd.n_bins),
             "n_traces": int(self.cd.n_traces),
             "n_cells": int(self.cd.n_cells),
             "xyz_unit": None if unit is None else str(unit),
@@ -488,11 +492,20 @@ class Dataset:
         return p
 
     def track_names(self) -> List[Dict[str, Any]]:
-        tracks = self.cd.tracks
-        if tracks is None or len(tracks) == 0:
-            return []
-        return [{"name": str(c)} for c in tracks.columns
-                if pd.api.types.is_numeric_dtype(tracks[c])]
+        """Numeric tracks: ``level`` is ``"bin"`` (``cd.bin_tracks``, one
+        value per locus) or ``"spot"`` (``cd.spot_tracks``, per spot)."""
+        out = []
+        for level, table in (("bin", self.cd.bin_tracks), ("spot", self.cd.spot_tracks)):
+            out += [{"name": str(c), "level": level} for c in table.columns
+                    if pd.api.types.is_numeric_dtype(table[c])]
+        return out
+
+    def _track_values(self, name: str) -> np.ndarray:
+        """Spot-aligned float values of one track (bin tracks broadcast)."""
+        if name in self.cd.bin_tracks.columns:
+            vals = self.cd.bin_tracks[name].to_numpy(dtype=np.float64)
+            return vals[self._arrays()["bin_id"]]
+        return self.cd.spot_tracks[name].to_numpy(dtype=np.float64)
 
     def _select(self, chrom: str, start=None, end=None, cell_id=None, trace_id=None,
                 group=None) -> np.ndarray:
@@ -523,7 +536,7 @@ class Dataset:
         idx = self._select(chrom, start, end, cell_id, group=group)
         df = pd.DataFrame({"start": a["start"][idx], "end": a["end"][idx]})
         for n in names:
-            df[n] = self.cd.tracks[n].to_numpy(dtype=np.float64)[idx]
+            df[n] = self._track_values(n)[idx]
         g = df.groupby("start", sort=True)
         out = g[names].agg(agg) if names else pd.DataFrame(index=g.size().index)
         return {
@@ -536,16 +549,29 @@ class Dataset:
                        for n in names},
         }
 
+    def _interval_table(self, key: str) -> Optional[pd.DataFrame]:
+        """``cd.intervals[key]`` (typed) first, else a ``cd.results`` table."""
+        df = self.cd.intervals.get(key)
+        if df is None:
+            df = self.cd.results.get(key)
+        if isinstance(df, pd.DataFrame) and {"chrom", "start", "end"} <= set(df.columns):
+            return df
+        return None
+
     def interval_tables(self) -> List[Dict[str, Any]]:
-        out = []
-        for key, val in self.cd.results.items():
+        out, seen = [], set()
+        for key, val in list(self.cd.intervals.items()) + list(self.cd.results.items()):
+            if key in seen:
+                continue
             if isinstance(val, pd.DataFrame) and {"chrom", "start", "end"} <= set(val.columns):
-                out.append({"key": str(key), "n": int(len(val))})
+                kind = val.attrs.get("kind") if key in self.cd.intervals else None
+                out.append({"key": str(key), "n": int(len(val)), "kind": kind})
+                seen.add(key)
         return out
 
     def intervals(self, key: str, chrom: str, start=None, end=None) -> Dict[str, Any]:
-        df = self.cd.results.get(key)
-        if not isinstance(df, pd.DataFrame) or not {"chrom", "start", "end"} <= set(df.columns):
+        df = self._interval_table(key)
+        if df is None:
             raise KeyError(key)
         m = df["chrom"].astype(str) == str(chrom)
         if start is not None:

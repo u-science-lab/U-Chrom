@@ -14,7 +14,7 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 
-from uchrom.fea.project import INTERVAL_COLUMNS, project_interval_features_to_spots, unique_spot_intervals
+from uchrom.fea.project import INTERVAL_COLUMNS, project_interval_features_to_bins, unique_spot_intervals
 from uchrom.fea.registry import append_feature_registry_entry, table_provenance
 
 
@@ -184,7 +184,7 @@ def add_structural_features(
     store: bool = True,
     overwrite: bool = False,
 ) -> pd.DataFrame:
-    """Project TAD/loop/compartment outputs into ``cdata.tracks``.
+    """Project TAD/loop/compartment outputs into ``cdata.bin_tracks`` (per bin).
 
     ``*_key=None`` looks the result up under the 2.0 key first
     (``"tads.arcfish"``, ``"loops.axiswise_f"``,
@@ -212,12 +212,12 @@ def add_structural_features(
             overwrite=overwrite,
         )
     if project:
-        cdata.tracks = project_interval_features_to_spots(
+        cdata.bin_tracks = project_interval_features_to_bins(
             cdata,
             table,
             prefix=prefix,
             value_columns=value_columns,
-            into=cdata.tracks,
+            into=cdata.bin_tracks,
             overwrite=overwrite,
         )
 

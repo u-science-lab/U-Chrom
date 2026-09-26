@@ -117,7 +117,8 @@ cd.results["gene_annotations"]   # optional compact interval annotations
 
 ### Projected spot-level tracks
 
-Frequently used scalar values should be projected onto `cd.tracks`, because
+Frequently used scalar values should be projected onto `cd.bin_tracks` (one
+value per locus; seen per spot through `cd.tracks_spot_view()`), because
 notebook code and auto-discovery hypotheses commonly operate on spot-aligned
 tables.
 
@@ -203,13 +204,13 @@ annotations = compute_annotation_features(
 Projection:
 
 ```python
-from uchrom.fea.project import project_interval_features_to_spots
+from uchrom.fea.project import project_interval_features_to_bins
 
-cdata.tracks = project_interval_features_to_spots(
+cdata.bin_tracks = project_interval_features_to_bins(
     cdata,
     features,
     prefix="seq",
-    into=cdata.tracks,
+    into=cdata.bin_tracks,
 )
 ```
 

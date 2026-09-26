@@ -31,6 +31,8 @@ _EXPORTS = {
     "make_higashi_config": (".contacts", "make_higashi_config"),
     "write_label_info": (".contacts", "write_label_info"),
     "write_higashi_inputs": (".contacts", "write_higashi_inputs"),
+    "upgrade_h5cd": (".upgrade", "upgrade_h5cd"),
+    "file_format_version": (".upgrade", "file_format_version"),
 }
 
 __all__ = sorted(_EXPORTS)

@@ -84,7 +84,7 @@ def _build_discovery_schema(
             "description": "Spot-level 3D coordinates.",
         },
         "spots": _dataframe_field(cdata.spots, axis="spot"),
-        "tracks": _dataframe_field(cdata.tracks, axis="spot"),
+        "tracks": _dataframe_field(_tracks_view(cdata), axis="spot"),
         "cells": _dataframe_field(cdata.cells, axis="cell"),
         "traces": _dataframe_field(cdata.traces, axis="trace"),
         "cellm": _array_mapping_field(cdata.cellm, axis="cell"),
@@ -106,7 +106,7 @@ def _build_discovery_schema(
     linked_scool = _linked_modality_records(cdata.uns.get("linked_scool"))
     cell_spatial = _linked_modality_records(cdata.uns.get("cell_spatial"))
 
-    tracks = _columns(cdata.tracks)
+    tracks = _columns(_tracks_view(cdata))
     track_groups = _track_groups(tracks)
     result_tables = _result_tables(cdata.results)
     feature_registry = _metadata_records(cdata.uns.get("feature_registry"))
@@ -819,6 +819,14 @@ def _track_groups(columns: list[str]) -> dict[str, list[str]]:
 
 def _has_feature_group(records: list[dict[str, Any]], name: str) -> bool:
     return any(str(record.get("feature_group")) == name for record in records)
+
+
+def _tracks_view(cdata):
+    """All tracks aligned to spots (bin-level tracks broadcast), or None."""
+    if hasattr(cdata, "tracks_spot_view"):
+        view = cdata.tracks_spot_view()
+        return view if len(view.columns) else None
+    return getattr(cdata, "tracks", None)
 
 
 def _result_family(key: str) -> str:
