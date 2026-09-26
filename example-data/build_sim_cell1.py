@@ -4,7 +4,9 @@ Runs NucDynamics (``uchrom.recon.sc.nucdyn``) on ``cell1.pairs`` (Stevens et
 al. 2017, mESC G1 cell, mm10) and links the cell's own contact map, so the
 browser can show structure, contacts and 3-D distances side by side:
 
-  sim_cell1/sim_cell1.h5cd        20 chromosomes, ~25.6k particles at 100 kb
+  sim_cell1/sim_cell1.cdz         20 chromosomes, ~25.6k particles at 100 kb
+                                  (one-file ChromData store, checked in; ``--format``
+                                  zarr / h5cd for the other containers)
   sim_cell1/cell1_contacts.mcool  the same cell's contacts, 100 kb … 1 Mb
 
 Usage::
@@ -53,10 +55,12 @@ def contacts_mcool(pairs: Path, out: Path) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--arch", default="cpu", help="taichi arch for NucDynamics (cpu / gpu / cuda / metal)")
+    ap.add_argument("--format", default="cdz", choices=["cdz", "zarr", "h5cd"],
+                    help="output container (default cdz: one file, checked in)")
     args = ap.parse_args()
     OUT.mkdir(exist_ok=True)
     pairs = HERE / "cell1.pairs"
-    structure = OUT / "sim_cell1.h5cd"
+    structure = OUT / ("sim_cell1" + {"cdz": ".cdz", "zarr": ".chromdata.zarr", "h5cd": ".h5cd"}[args.format])
     if not structure.exists():
         subprocess.run([sys.executable, "-m", "uchrom.recon.sc.nucdyn", str(pairs), str(structure),
                         f"--arch={args.arch}"], check=True)
@@ -70,7 +74,7 @@ def main() -> None:
     cd.uns.setdefault("genome_assembly", "mm10")
     cd.uns["xyz_unit"] = "model units (NucDynamics)"
     cd.uns["source"] = "NucDynamics on example-data/cell1.pairs (Stevens et al. 2017)"
-    # relative to the .h5cd, so the folder can be moved or shipped
+    # relative to the dataset's folder, so the folder can be moved or shipped
     cd.link_cool(mcool.name, key="cell1_contacts", label="cell1 contacts (input to the model)")
     cd.write(structure)
     print(cd)

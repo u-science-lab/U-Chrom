@@ -4,7 +4,7 @@ scHiCAR (Wei et al. 2026, Nat Biotechnol) profiles RNA, ATAC and chromatin
 contacts in the same cells — but no 3-D coordinates.  This script turns the
 GEO supplementary files into:
 
-  schicar_mop/schicar_mop.h5cd          ChromData without 3-D spots:
+  schicar_mop/schicar_mop.chromdata.zarr   ChromData without 3-D spots (``--format h5cd``: .h5cd):
                                           cells  (cell type, QC, 500 HVG counts as rna.<gene>,
                                                   ATAC gene activity of the same genes as atac.<gene>)
                                           cellm  (paper_umap, rna_pca/_tsne/_umap,
@@ -328,12 +328,34 @@ def write_contacts(merged, offsets, res, types, cells, chromsizes) -> dict:
     return written
 
 
+
+SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz", "h5cd": ".h5cd"}
+
+
+def existing(stem: Path):
+    """The dataset as built by this or an older version of the script."""
+    return next((stem.with_name(stem.name + s) for s in SUFFIX.values()
+                 if stem.with_name(stem.name + s).exists()), None)
+
+
+def save(cd, out: Path) -> None:
+    """Write ``cd``; replaces ``out`` atomically, so a running browser never
+    sees a half-written store (the zarr / cdz writer is atomic itself)."""
+    if out.suffix == ".h5cd":
+        tmp = out.with_suffix(".tmp.h5cd")
+        cd.write(tmp)
+        tmp.replace(out)
+    else:
+        cd.write(out)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--format", default="zarr", choices=sorted(SUFFIX), help="output container (default zarr)")
     ap.add_argument("--n-hvg", type=int, default=500)
     ap.add_argument("--chunk", type=int, default=10_000_000)
     ap.add_argument("--update", action="store_true",
-                    help="reuse the existing schicar_mop.h5cd and contact maps; only (re)compute "
+                    help="reuse the existing schicar_mop dataset and contact maps; only (re)compute "
                          "the ATAC / Hi-C cell embeddings")
     ap.add_argument("--no-atac", action="store_true", help="skip the ATAC step")
     ap.add_argument("--no-hic", action="store_true", help="skip the scHiCluster Hi-C embedding")
@@ -349,11 +371,12 @@ def main() -> None:
     from uchrom.emb import embed_cells
 
     chromsizes = cooler.util.fetch_chromsizes("mm10")
-    out = OUT / "schicar_mop.h5cd"
+    stem = OUT / "schicar_mop"
+    out = stem.with_name(stem.name + SUFFIX[args.format])
     paper_meta = {"method": "umap", "label": "Paper UMAP (RNA)", "modality": "Published",
                   "source": "GSE305439 metadata", "axis_prefix": "UMAP"}
     if args.update:
-        cd = ChromData.read(out)
+        cd = ChromData.read(existing(stem) or out)
         cd.uns.setdefault("embeddings", {})["paper_umap"] = paper_meta
         embed_cells(cd, source="rna", library_size=True, n_pcs=30)  # refresh metadata (modality, …)
     else:
@@ -369,7 +392,7 @@ def main() -> None:
                             "coordinate_status": "no 3-D coordinates: contacts only",
                             "embeddings": {"paper_umap": paper_meta}})
         embed_cells(cd, source="rna", library_size=True, n_pcs=30)
-        # link paths relative to the .h5cd (same folder) so the dataset can move
+        # link paths relative to the dataset (same folder) so the folder can move
         cd.link_cool(files["all"].name, key="all_cells", label="All cells (merged)")
         for k, path in files.items():
             if k.startswith("type:"):
@@ -381,9 +404,7 @@ def main() -> None:
         add_atac(cd, chromsizes, args.atac_bin, args.chunk, args.atac_min_cells)
     if not args.no_hic:
         add_hic(cd, OUT / "contacts_cells_1Mb.scool")
-    tmp = out.with_suffix(".tmp.h5cd")
-    cd.write(tmp)
-    tmp.replace(out)  # atomic: a running browser never sees a half-written file
+    save(cd, out)
     log(f"wrote {out}: {cd}")
 
 

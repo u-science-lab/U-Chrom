@@ -423,6 +423,10 @@ def load_seqfish_multiomics_linked(
     as ``cd.linked_adata``.  Both objects are ordered on the same cell
     ids, and the ChromData receives ``adata.obs``/``adata.obsm`` via
     :meth:`ChromData.link_anndata`.
+
+    ``h5cd_path`` (despite its name) is where the ChromData is written, in
+    the format its suffix selects — ``.chromdata.zarr`` is recommended,
+    ``.h5cd`` is deprecated.
     """
     cd = read_seqfish_multiomics(
         spot_glob,
@@ -477,8 +481,8 @@ def load_takei2025_cerebellum(
 
     This convenience loader returns a ``ChromData``.  The aggregated RNA
     expression matrix is available as ``cd.linked_adata``.  If paired
-    ``.h5cd`` / ``.h5ad`` artifacts already exist under ``data_dir``,
-    they are reused.  Otherwise, when ``download=True``, the required
+    ``.chromdata.zarr`` (or, from older builds, ``.h5cd``) / ``.h5ad``
+    artifacts already exist under ``data_dir``, they are reused.  Otherwise, when ``download=True``, the required
     DNA seqFISH+ archive and transcriptome zip are downloaded from
     Zenodo record 7693825, annotation/clustering tables are downloaded
     from the CaiGroup GitHub repository, and linked artifacts are built.
@@ -493,7 +497,7 @@ def load_takei2025_cerebellum(
     download
         If False, missing raw/build artifacts raise ``FileNotFoundError``.
     rebuild
-        If True, rebuild the paired artifacts even when ``.h5cd`` exists.
+        If True, rebuild the paired artifacts even when they exist.
     transcriptome_chunksize
         Chunk size used while aggregating RNA spot CSVs into AnnData.
     **kwargs
@@ -505,17 +509,19 @@ def load_takei2025_cerebellum(
     from uchrom.core import ChromData
 
     data_dir = Path(data_dir)
-    h5cd_path = data_dir / f"takei2025_cerebellum_rep{replicate}.h5cd"
+    cd_path = data_dir / f"takei2025_cerebellum_rep{replicate}.chromdata.zarr"
+    legacy = data_dir / f"takei2025_cerebellum_rep{replicate}.h5cd"
     h5ad_path = data_dir / f"takei2025_cerebellum_rep{replicate}.h5ad"
-    if h5cd_path.exists() and not rebuild:
-        cd = ChromData.read(h5cd_path)
+    existing = cd_path if cd_path.exists() else legacy if legacy.exists() else None
+    if existing is not None and not rebuild:
+        cd = ChromData.read(existing)
         if h5ad_path.exists():
             cd.uns.setdefault("linked_anndata", {})["path"] = str(h5ad_path)
         return cd
 
     if not download:
         raise FileNotFoundError(
-            f"{h5cd_path} does not exist. Pass download=True to build it."
+            f"{cd_path} does not exist. Pass download=True to build it."
         )
 
     archive_name = f"cerebellum_rep{replicate}.tar.gz"
@@ -546,7 +552,7 @@ def load_takei2025_cerebellum(
         transcriptomic_data=transcriptome_zip,
         transcriptome_replicate=replicate,
         transcriptome_chunksize=transcriptome_chunksize,
-        h5cd_path=h5cd_path,
+        h5cd_path=cd_path,
         h5ad_path=h5ad_path,
         **kwargs,
     )

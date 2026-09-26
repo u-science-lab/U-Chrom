@@ -17,7 +17,8 @@ It then adds a histone / IF cell embedding (``--no-if`` skips it):
   types better (kNN-5 purity 0.61) than per-cell means (0.44), mark ×
   chromosome (0.39) or mark × 10 Mb means (0.47–0.50); chance ≈ 0.28.
 
-  takei2025_fov0/takei2025_fov0.h5cd   (~220 MB; not checked in)
+  takei2025_fov0/takei2025_fov0.chromdata.zarr   (~76 MB; not checked in;
+  ``--format h5cd`` writes the deprecated ~200 MB .h5cd instead)
 
 Usage::
 
@@ -88,19 +89,42 @@ def add_if_embedding(cd) -> None:
             "source": "Takei 2025 clustering CSV (mRNA seqFISH)", "axis_prefix": "UMAP"}
 
 
+
+SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz", "h5cd": ".h5cd"}
+
+
+def existing(stem: Path):
+    """The dataset as built by this or an older version of the script."""
+    return next((stem.with_name(stem.name + s) for s in SUFFIX.values()
+                 if stem.with_name(stem.name + s).exists()), None)
+
+
+def save(cd, out: Path) -> None:
+    """Write ``cd``; replaces ``out`` atomically, so a running browser never
+    sees a half-written store (the zarr / cdz writer is atomic itself)."""
+    if out.suffix == ".h5cd":
+        tmp = out.with_suffix(".tmp.h5cd")
+        cd.write(tmp)
+        tmp.replace(out)
+    else:
+        cd.write(out)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rows", type=int, default=400_000)
-    ap.add_argument("--update", action="store_true", help="reuse the existing h5cd; only redo the IF embedding")
+    ap.add_argument("--update", action="store_true", help="reuse the existing dataset; only redo the IF embedding")
     ap.add_argument("--no-if", action="store_true", help="skip the IF / histone embedding")
+    ap.add_argument("--format", default="zarr", choices=sorted(SUFFIX), help="output container (default zarr)")
     args = ap.parse_args()
     OUT.mkdir(exist_ok=True)
-    out = OUT / "takei2025_fov0.h5cd"
+    stem = OUT / "takei2025_fov0"
+    out = stem.with_name(stem.name + SUFFIX[args.format])
 
     from uchrom import ChromData
 
     if args.update:
-        cd = ChromData.read(out)
+        cd = ChromData.read(existing(stem) or out)
     else:
         raw = stream_rows(args.rows, OUT / "cerebellum_rep1_pos0_head.csv")
         df = pd.read_csv(raw)
@@ -117,9 +141,7 @@ def main() -> None:
         )
     if not args.no_if:
         add_if_embedding(cd)
-    tmp = out.with_suffix(".tmp.h5cd")
-    cd.write(tmp)
-    tmp.replace(out)  # atomic: a running browser never sees a half-written file
+    save(cd, out)
     print(cd)
 
 
