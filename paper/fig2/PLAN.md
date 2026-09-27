@@ -49,7 +49,7 @@ The JSON files keep their old names: `b_storage` → c, `c_access` → d / e, `d
   - Row 1: (a) one trace and (b) one chromosome across formats (`c_access.json`); (c) RNA UMAP with three
     Leiden clusters (`f_crossmodal.json`).
   - Row 2: (d) pseudo-bulk maps of two clusters with a shared colour bar and the identity vs the published
-    per-type `.cool` (22/22; `f_crossmodal.json`, `e_query.json`); (e) P(s) with the slopes (`f_crossmodal.json`).
+    per-type `.cool` (22/22; `f_crossmodal.json`, `e_query.json`); (e) log2 ratio of the two maps (`f_crossmodal.json` window_log2_ratio); the P(s) panel was dropped (modest differences, a biological comparison that belongs in Fig. 5).
   - Row 3, contacts performance: (f) pseudo-bulk query time vs cells (`e_contacts.json`); (g) on-disk size,
     (h) import time, (i) query per cell type, linked vs copied (`e_query.json`).
 - `figS_formats.pdf` (`make_figS_formats.py`): format layouts, flat Parquet and round trips; kept for reference,

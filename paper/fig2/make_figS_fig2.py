@@ -8,7 +8,7 @@ Every panel is drawn from the JSONs in ``results/`` (written by ``benchmarks/fig
   row 2  d  pseudo-bulk contact maps of two clusters, summed from the linked
             per-cell .scool, and the identity with the published per-type .cool
             (f_crossmodal.json, e_query.json)
-         e  contact probability vs distance, P(s), with slopes (f_crossmodal.json)
+         e  log2 ratio of the two maps (f_crossmodal.json window_log2_ratio)
   row 3  f  pseudo-bulk query time vs cells aggregated        (e_contacts.json)
          g  on-disk size, linked vs copied contacts           (e_query.json)
          h  import time, link vs copy                         (e_query.json)
@@ -138,8 +138,8 @@ def umap(fig, x0, y0, fx):
         sp.set_visible(False)
     ax.set_xlabel("RNA UMAP 1", labelpad=1); ax.set_ylabel("RNA UMAP 2", labelpad=1)
     # direct labels, placed in empty space beside each cluster
-    place = {"neuronal": (0.99, 0.60, "right", "bottom"), "oligodendrocyte": (0.0, 0.31, "left", "top"),
-             "astrocyte": (0.0, 0.62, "left", "bottom")}
+    place = {"neuronal": (0.99, 0.60, "right", "bottom"), "oligodendrocyte": (0.07, 0.31, "left", "top"),
+             "astrocyte": (0.07, 0.62, "left", "bottom")}
     for r in ROLES:
         g = groups[r]
         px, py, ha, va = place[r]
@@ -191,26 +191,42 @@ def maps(fig, x0, y0, fx, q):
              fontsize=6, color=F.INK, va="top")
 
 
-def ps(fig, x0, y0, fx):
-    groups = fx["groups"]
-    head(fig, x0, y0, "e", "Contact probability vs distance", "all chromosomes; slope over 2–30 Mb")
-    px = F.ax_at(fig, x0 + 13, y0 + AX_DY, 50, ROW2_H)
-    items = []
-    for r in ROLES:
-        g = groups[r]
-        s, p = np.asarray(g["ps_s_mb"], float), np.asarray(g["ps"], float)
-        px.plot(s, p, color=ROLE_COL[r], lw=1.0)
-        items.append((s[-1], p[-1], f"{NAMES[r]}  {g['ps_slope']:.2f}".replace("-", "−"), ROLE_COL[r]))
-    F.loglog(px)
-    px.set_xlabel("distance s (Mb)"); px.set_ylabel("P(s)")
-    ticks(px, "x", [1, 10], "plain")
-    px.set_ylim(3e-3, 0.6)
-    ticks(px, "y", [1e-2, 1e-1], "plain")
-    # slopes listed top right (the line ends crowd together), ordered as the lines end
-    px.text(0.98, 0.97, "slope", transform=px.transAxes, fontsize=6, color=F.GREY, ha="right", va="top")
-    for i, (_, _, lab, col) in enumerate(sorted(items, key=lambda t: -t[1])):
-        px.text(0.98, 0.97 - 0.085 * (i + 1), lab, transform=px.transAxes, fontsize=6, color=col,
-                ha="right", va="top")
+def ratio(fig, x0, y0, fx):
+    """log2(oligodendrocytes / neurons) of the two pseudo-bulk maps in d (same window)."""
+    rr = fx["window_log2_ratio"]
+    w = fx["groups"]["neuronal"]["window"]
+    num, den = rr["numerator"], rr["denominator"]
+    head(fig, x0, y0, "e", "Difference between the groups",
+         f"log2({NAMES[num]} / {NAMES[den]}), same window")
+    mat = np.asarray(rr["matrix"], float)
+    lim = float(np.nanpercentile(np.abs(mat[np.isfinite(mat)]), 98))
+    norm = mpl.colors.TwoSlopeNorm(vmin=-lim, vcenter=0.0, vmax=lim)
+    cmap = LinearSegmentedColormap.from_list("div", [ROLE_COL[den], "#ffffff", ROLE_COL[num]])
+    side = ROW2_H - 4.0
+    top = y0 + AX_DY + 4.0
+    mx = F.ax_at(fig, x0 + 4, top, side, side)
+    mx.imshow(mat, cmap=cmap, norm=norm, interpolation="nearest")
+    n = mat.shape[0]
+    mx.set_xticks([-0.5, n - 0.5], [f"{w['start'] // 10**6}", f"{w['end'] // 10**6} Mb"])
+    mx.set_yticks([])
+    mx.tick_params(axis="x", length=1.5, pad=1)
+    mx.get_xticklabels()[0].set_ha("left"); mx.get_xticklabels()[1].set_ha("right")
+    for sp in mx.spines.values():
+        sp.set_visible(True)
+        sp.set_linewidth(0.6)
+        sp.set_color(F.GREY)
+    mx.set_title(f"{NAMES[num]} vs {NAMES[den]}", fontsize=6.5, color=F.INK, pad=2)
+    cx = x0 + 4 + side + 2.5
+    cax = F.ax_at(fig, cx, top + 2, 1.6, side - 4)
+    cb = fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax)
+    cb.outline.set_linewidth(0.4)
+    cb.ax.tick_params(labelsize=TICK, width=0.4, length=1.5, pad=1)
+    t = np.floor(lim * 2) / 2
+    cb.set_ticks([-t, 0, t], labels=[f"{-t:g}".replace("-", "−"), "0", f"+{t:g}"])
+    fig.text((cx - 1) / W, 1 - (top + 1.0) / H, f"higher in\n{NAMES[num]}", fontsize=6, color=ROLE_COL[num],
+             va="bottom", ha="left", linespacing=1.05)
+    fig.text((cx - 1) / W, 1 - (top + side - 1.0) / H, f"higher in\n{NAMES[den]}", fontsize=6, color=ROLE_COL[den],
+             va="top", ha="left", linespacing=1.05)
 
 
 # --------------------------------------------------------------------------- row 3
@@ -318,7 +334,7 @@ def main() -> None:
     umap(fig, 114, ROW1, fx)
 
     maps(fig, 0, ROW2, fx, q["identity"])
-    ps(fig, 104, ROW2, fx)
+    ratio(fig, 104, ROW2, fx)
 
     query_time(fig, 0, ROW3, e)
     sizes(fig, 42, ROW3, q["import"])
