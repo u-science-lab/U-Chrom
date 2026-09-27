@@ -135,14 +135,16 @@ def map_loci_to_bins(spots: pd.DataFrame, bins: pd.DataFrame) -> np.ndarray:
 
 def loci_of(bins: pd.DataFrame, bin_id: np.ndarray) -> dict:
     """Spot-aligned ``chrom`` (categorical) / ``start`` / ``end`` columns."""
+    from ._parallel import take
+
     bin_id = np.asarray(bin_id, dtype=np.int64)
     chrom = bins["chrom"].cat
     return {
         "chrom": pd.Categorical.from_codes(
-            np.asarray(chrom.codes)[bin_id] if len(bin_id) else np.zeros(0, dtype=np.int8),
+            take(np.asarray(chrom.codes), bin_id) if len(bin_id) else np.zeros(0, dtype=np.int8),
             categories=chrom.categories),
-        "start": bins["start"].to_numpy(dtype=np.int64)[bin_id],
-        "end": bins["end"].to_numpy(dtype=np.int64)[bin_id],
+        "start": take(bins["start"].to_numpy(dtype=np.int64), bin_id),
+        "end": take(bins["end"].to_numpy(dtype=np.int64), bin_id),
     }
 
 

@@ -18,6 +18,7 @@ import pytest
 
 from tests._v1 import write_v1
 from uchrom import ChromData
+from uchrom.core.zarrcd import write_zarr
 from uchrom.core.backed import BackedArray, BackedChromData, BackedFrame
 from uchrom.core.zarrcd import container_kind, write_zarr
 
@@ -170,7 +171,7 @@ def test_round_trip_every_attribute(tmp_path, name):
 def test_disk_order_and_index(tmp_path):
     cd = _cd()
     path = tmp_path / "x.chromdata.zarr"
-    cd.write(path, row_group_rows=10)
+    write_zarr(cd, path, row_group_rows=10, _layout="2.1")      # the 2.1 layout (2.2: test_zarr_v22.py)
     back = ChromData.read(path)
     s = back.spots
     chrom = back.bins["chrom"].cat.codes.to_numpy()[s["bin_id"].to_numpy()]
@@ -208,7 +209,7 @@ def test_disk_order_and_index(tmp_path):
     spots0 = path / "tables" / tmeta["partitions"][0]["files"]["spots"]
     assert pq.ParquetFile(spots0).metadata.row_group(0).column(0).compression == "ZSTD"
     # writing an already sorted object keeps the order and stores no permutation
-    back.write(tmp_path / "y.chromdata.zarr")
+    write_zarr(back, tmp_path / "y.chromdata.zarr", _layout="2.1")
     meta2 = json.loads((tmp_path / "y.chromdata.zarr" / "zarr.json").read_text())["attributes"]["uchrom"]
     assert not meta2["has_source_row"]
     again = ChromData.read(tmp_path / "y.chromdata.zarr")
@@ -252,12 +253,12 @@ def test_format_2_0_stores_stay_readable(tmp_path):
     got = pd.concat([c.to_dataframe() for c in bk.iter_traces(3, chrom="chr2")], ignore_index=True)
     pd.testing.assert_frame_equal(got, mem.get_chrom("chr2").to_dataframe())
     assert sum(c.n_spots for c in bk.iter_cells(4)) == mem.n_spots
-    # original order and an upgrade to 2.1 by rewriting
+    # original order and an upgrade to the current format by rewriting
     ref = ChromData.read(old, original_order=True)
     pd.testing.assert_frame_equal(ref.to_dataframe(), cd.to_dataframe())
     bk.write(tmp_path / "up.chromdata.zarr")
     assert json.loads((tmp_path / "up.chromdata.zarr" / "zarr.json").read_text())["attributes"]["uchrom"][
-        "format_version"] == "2.1"
+        "format_version"] == "2.2"
     pd.testing.assert_frame_equal(_sorted_df(ChromData.read(tmp_path / "up.chromdata.zarr")), _sorted_df(cd))
 
 
@@ -519,7 +520,7 @@ def test_convert_h5cd_1x_and_2x(tmp_path, capsys):
     info = upgrade_h5cd(src)                                       # default target
     dst = tmp_path / "old.chromdata.zarr"
     assert info["dst"] == str(dst) and info["to_container"] == "zarr" and info["from_version"] == "1.4"
-    assert file_format_version(dst) == "2.1" and file_format_version(src) == "1.4"
+    assert file_format_version(dst) == "2.2" and file_format_version(src) == "1.4"
     new = ChromData.read(dst, original_order=True)
     pd.testing.assert_frame_equal(new.to_dataframe(), ref.to_dataframe())
     pd.testing.assert_frame_equal(new.tracks_spot_view(), ref.tracks_spot_view())
@@ -533,7 +534,7 @@ def test_convert_h5cd_1x_and_2x(tmp_path, capsys):
         ref.write(tmp_path / "two.h5cd")
     assert file_format_version(tmp_path / "two.h5cd") == "2.0"
     convert_chromdata(tmp_path / "two.h5cd", tmp_path / "two.cdz")
-    assert file_format_version(tmp_path / "two.cdz") == "2.1"
+    assert file_format_version(tmp_path / "two.cdz") == "2.2"
     pd.testing.assert_frame_equal(ChromData.read(tmp_path / "two.cdz", original_order=True).to_dataframe(),
                                   ChromData.read(tmp_path / "two.h5cd").to_dataframe())
     assert main([str(src), str(tmp_path / "two.h5cd"), "--out-dir", str(tmp_path / "out")]) == 0

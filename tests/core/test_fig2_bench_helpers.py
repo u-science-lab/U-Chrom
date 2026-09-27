@@ -84,7 +84,7 @@ def test_replicate_store_partitioned(common, tmp_path):
                     str(dst), "--n", str(n_target)], check=True, capture_output=True,
                    env={"PYTHONPATH": str(ROOT), "PATH": "/usr/bin:/bin"})
     big = ChromData.read(dst, backed=True)
-    assert big.partitioned and big.n_spots >= n_target
+    assert (big.partitioned or big.has_coords_table) and big.n_spots >= n_target
     mem = ChromData.read(src)
     # expected: copies r=0,1 of every cell, plus copy 2 of the cells with the lowest codes
     cells = list(mem.spots["cell_id"].cat.categories)
