@@ -20,43 +20,15 @@ from uchrom.core import ChromData
 from uchrom.fea.distance import radius_of_gyration
 
 HERE = Path(__file__).resolve().parent
-DATA = {"takei": "takei2025_fov0/takei2025_fov0.h5cd", "schicar": "schicar_mop/schicar_mop.h5cd",
+DATA = {"takei": "takei2025_fov0/takei2025_fov0.chromdata.zarr", "schicar": "schicar_mop/schicar_mop.chromdata.zarr",
         "sim": "sim_cell1/sim_cell1.cdz"}
 _CACHE: dict = {}
 
 
 def load(root: Path, key: str) -> ChromData:
     if key not in _CACHE:
-        path = root / DATA[key]
-        try:
-            _CACHE[key] = ChromData.read(str(path))
-        except OSError:
-            if path.suffix != ".cdz":
-                raise
-            _CACHE[key] = _read_cdz(path)
+        _CACHE[key] = ChromData.read(str(root / DATA[key]))
     return _CACHE[key]
-
-
-def _read_cdz(path: Path) -> ChromData:
-    """Minimal reader for a chromdata.zarr 2.0 ``.cdz`` (zip) store, for uchrom builds that predate it.
-
-    Reads only what the sim questions need: spots (chrom/start/end from the bins table via bin_id,
-    trace_id / cell_id categories) + coords + uns values.  Needs pyarrow.
-    """
-    import io
-    import zipfile
-    with zipfile.ZipFile(path) as z:
-        rd = lambda n: pd.read_parquet(io.BytesIO(z.read(n)))  # noqa: E731
-        sp, bins = rd("tables/spots.parquet"), rd("tables/bins.parquet")
-        cats = {c: rd(f"tables/categories/spots.{c}.parquet")["value"].astype(str).to_numpy()
-                for c in ("trace_id", "cell_id")}
-        uns = json.loads(z.read("uns/zarr.json"))["attributes"]["values"]
-    b = bins.iloc[sp["bin_id"].to_numpy()].reset_index(drop=True)
-    spots = pd.DataFrame({"chrom": b["chrom"].astype(str), "start": b["start"].astype(np.int64),
-                          "end": b["end"].astype(np.int64),
-                          "trace_id": cats["trace_id"][sp["trace_id"].to_numpy()],
-                          "cell_id": cats["cell_id"][sp["cell_id"].to_numpy()]})
-    return ChromData(coords=sp[["x", "y", "z"]].to_numpy(float), spots=spots, uns=dict(uns))
 
 
 def spots_df(cd: ChromData) -> pd.DataFrame:
@@ -416,7 +388,7 @@ def tads_arcfish(root, chrom="chr15"):
     n_bins_native = int(df["start"].nunique())
     res = {}
     for w in (1e5, 4e6):
-        t = call_tads_by_pval(cdb, chrom, params=TADCallerParams(window_bp=w), device="cpu", store=False)
+        t = call_tads_by_pval(cdb, chrom=chrom, params=TADCallerParams(window_bp=w), device="cpu", key_added=None)
         res[w] = t
     t = res[4e6]
     lvl1 = t[t["level"] == 1] if len(t) else t
@@ -437,8 +409,8 @@ def compartments_h3k27ac(root, chrom="chr15"):
     from uchrom.strc.comp import call_compartments_axes_pc
     cd = load(root, "takei")
     cdb, df = binned_chrom(cd, chrom)
-    comp = call_compartments_axes_pc(cdb, chrom, device="cpu", store=False)
-    tr = cd.tracks.loc[df.index, "H3K27ac"]
+    comp = call_compartments_axes_pc(cdb, chrom=chrom, device="cpu", key_added=None)
+    tr = cd.spot_tracks.loc[df.index, "H3K27ac"]
     k27 = tr.groupby(df["b"].to_numpy()).mean()
     comp["H3K27ac"] = k27.reindex((comp["start"] // 1_000_000).to_numpy()).to_numpy()
     by = comp.groupby("compartment")["H3K27ac"].mean()
@@ -571,7 +543,7 @@ def rna_counts_top(root):
 # ------------------------------------------------------------------ D (remaining)
 def laminb1_vs_radial_spots(root):
     cd = load(root, "takei")
-    t = cd.tracks
+    t = cd.spot_tracks
     rho, p = spearman(t["LaminB1"], t["n_rad_score"])
     df = spots_df(cd)
     cen = df.groupby("cell_id", observed=True)[["x", "y", "z"]].transform("mean").to_numpy()
@@ -591,7 +563,7 @@ def laminb1_vs_radial_spots(root):
 def h3k27ac_vs_radial_bins(root, chrom="chr15"):
     cd = load(root, "takei")
     m = (cd.spots["chrom"].astype(str) == chrom).to_numpy()
-    s, t = cd.spots[m], cd.tracks[m]
+    s, t = cd.spots[m], cd.spot_tracks[m]
     b = (((s["start"] + s["end"]) // 2) // 1_000_000).to_numpy()
     g = t[["H3K27ac", "n_rad_score"]].groupby(b).mean()
     rho, p = spearman(g["H3K27ac"], g["n_rad_score"])
@@ -753,7 +725,10 @@ def rg_equal_spots(root, n_loci=150, n_draws=20, seed=0):
     df["_loc"] = df["chrom"].astype(str) + ":" + df["start"].astype(str)
     nloc = df.groupby("trace_id", observed=True)["_loc"].nunique()
     keep = nloc.index[nloc >= n_loci]
-    df = df[df["trace_id"].isin(keep)].reset_index(drop=True)
+    df = df[df["trace_id"].isin(keep)]
+    # canonical row order, so the random draws do not depend on how the store orders its rows
+    df = df.assign(_t=df["trace_id"].astype(str)).sort_values(["_t", "chrom", "start", "x", "y", "z"], kind="mergesort")
+    df = df.drop(columns="_t").reset_index(drop=True)
     ct = cell_type(cd)
     rng = np.random.default_rng(seed)
     rgs, meds = [], []

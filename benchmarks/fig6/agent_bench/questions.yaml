@@ -1,9 +1,10 @@
 # Fig 6e agent benchmark — questions (DRAFT for review; no model has seen them).
 #
 # Datasets (paths passed to the agent in the prompt; all catalogued in example-data/README.md):
-#   takei   = takei2025_fov0/takei2025_fov0.h5cd   (DNA seqFISH+ + IF + RNA, 47 cells, 1 FOV)
-#   schicar = schicar_mop/schicar_mop.h5cd         (scHi-C + RNA + ATAC, 5,313 cells; linked .scool/.cool)
-#   sim     = sim_cell1/sim_cell1.h5cd             (one reconstructed cell + its own contact map)
+#   takei   = takei2025_fov0/takei2025_fov0.chromdata.zarr   (DNA seqFISH+ + IF + RNA, 47 cells, 1 FOV)
+#   schicar = schicar_mop/schicar_mop.chromdata.zarr         (scHi-C + RNA + ATAC, 5,313 cells; linked .scool/.cool)
+#   sim     = sim_cell1/sim_cell1.cdz                         (one reconstructed cell + its own contact map)
+#   (main1-main3 used the 1.x .h5cd files of the same datasets.)
 #
 # Each question has: category, split (dev: may be looked at while writing skills; test: never),
 # the prompt, the answer (computed by ground_truth.py — `truth` names the function), how it is graded

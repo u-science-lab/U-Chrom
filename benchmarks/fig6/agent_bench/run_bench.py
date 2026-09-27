@@ -41,12 +41,13 @@ import yaml
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
-# sim: the in-repo h5cd — the .cdz under --data-root is ChromData 2.0, which the uchrom under test cannot read
-# (same spots and coordinates; checked against ground_truth._read_cdz).
-DATA = {"takei": "takei2025_fov0/takei2025_fov0.h5cd", "schicar": "schicar_mop/schicar_mop.h5cd",
-        "sim": REPO / "example-data/sim_cell1/sim_cell1.h5cd"}
-# Files of a dataset folder that are not given to the agent: raw source tables and backups.
-DATA_EXCLUDE = ("*.csv", "*.bak.*")
+# ChromData stores (.chromdata.zarr is a directory, .cdz the same store zipped).  main1-main3 used the
+# 1.x .h5cd files and, for sim, the in-repo sim_cell1.h5cd (same spots and coordinates as the .cdz).
+DATA = {"takei": "takei2025_fov0/takei2025_fov0.chromdata.zarr", "schicar": "schicar_mop/schicar_mop.chromdata.zarr",
+        "sim": "sim_cell1/sim_cell1.cdz"}
+# Entries of a dataset folder that are not given to the agent: raw source tables, backups, the legacy .h5cd
+# copy of the store, older-format stores.
+DATA_EXCLUDE = ("*.csv", "*.bak.*", "*.h5cd", "*.v2[0-9].chromdata.zarr")
 PROMPT = """You are analysing 3-D genome data with U-Chrom: the Python package `uchrom` is installed \
 (run it with `python`), and its documentation is in ./docs.
 
@@ -59,15 +60,20 @@ and anything that limits the conclusion."""
 
 
 def clone_data(src: Path, w: Path) -> str:
-    """Clone the dataset's folder (top-level files, minus DATA_EXCLUDE) into w/data; return the relative path.
+    """Clone the dataset's folder (top-level files and *.zarr stores, minus DATA_EXCLUDE) into w/data; return
+    the relative path.
 
-    Linked files (.mcool / .scool next to the .h5cd) come along, since links are stored relative to the h5cd.
+    Linked files (.mcool / .scool next to the store) come along, since links are stored relative to the store.
     """
     dst = w / "data" / src.parent.name
     dst.mkdir(parents=True)
     for f in src.parent.iterdir():
-        if f.is_file() and not any(f.match(x) for x in DATA_EXCLUDE):
-            subprocess.run(["cp", "-c", str(f), str(dst / f.name)], check=True)   # APFS clone
+        if any(f.match(x) for x in DATA_EXCLUDE):
+            continue
+        if f.is_file():
+            subprocess.run(["cp", "-c", str(f), str(dst / f.name)], check=True)          # APFS clone
+        elif f.is_dir() and f.name.endswith(".zarr"):
+            subprocess.run(["cp", "-c", "-R", str(f), str(dst / f.name)], check=True)
     return f"./data/{src.parent.name}/{src.name}"
 
 
