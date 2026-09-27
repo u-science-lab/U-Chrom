@@ -27,7 +27,7 @@ import { useFieldColors } from '../useFieldColors'
 import { loadFieldValues } from '../useOmicsLoader'
 import { useTheme } from '../useTheme'
 import { useGroupInfo, usePaneScope, useScopeCells } from '../useGroups'
-import { fitPlot, nearestPoint, project } from '../render/embedding'
+import { IDENTITY_VIEW, applyView, fitPlot, isIdentity, nearestPoint, panBy, project, zoomAt, type View2D } from '../render/embedding'
 import { activeView, defaultCategoryField, fieldKey, useStore } from '../store'
 import type { CellField, CellValue, Embedding, EmbeddingInfo } from '../types'
 import { defaultEmbeddingKey, pinnedCell, updatePane, type Pane } from '../workspace'
@@ -452,10 +452,30 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
   useEffect(() => setHover(null), [emb, size.w, size.h])
 
   const plotH = Math.max(40, size.h - 24) // axis labels below
-  const px = useMemo(() => {
+  const basePx = useMemo(() => {
     if (!emb) return null
     return project(emb.x, emb.y, fitPlot(emb.x, emb.y, size.w, plotH, PAD))
   }, [emb, size.w, plotH])
+  // zoom / pan: wheel zooms at the cursor, drag pans, double-click (or ⤢) resets;
+  // drawing, hover, click and lasso all use the transformed points
+  const [zoom, setZoom] = useState<View2D>(IDENTITY_VIEW)
+  useEffect(() => setZoom(IDENTITY_VIEW), [emb])
+  const px = useMemo(() => (basePx ? applyView(basePx, zoom) : null), [basePx, zoom])
+  const pan = useRef<{ x: number; y: number; v: View2D; moved: boolean } | null>(null)
+  const [panning, setPanning] = useState(false)
+  useEffect(() => {
+    const cv = canvasRef.current
+    if (!cv) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault() // zoom the plot, not the page
+      const rect = cv.getBoundingClientRect()
+      const f = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015))
+      setZoom((v) => zoomAt(v, e.clientX - rect.left, e.clientY - rect.top, f))
+      setHover(null)
+    }
+    cv.addEventListener('wheel', onWheel, { passive: false })
+    return () => cv.removeEventListener('wheel', onWheel)
+  }, [])
 
   // per-dot colours and draw keys: the pane's own colouring, else the 3-D
   // overview colouring.  Memoised apart from size / opacity / shape so that
@@ -605,7 +625,18 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
     return [e.clientX - rect.left, e.clientY - rect.top]
   }
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (e.button !== 0 || !(lassoTool || e.shiftKey) || !px) return
+    if (e.button !== 0 || !px) return
+    if (!(lassoTool || e.shiftKey)) {
+      // plain drag: pan (a click without movement still focuses a dot)
+      const [x, y] = local(e)
+      pan.current = { x, y, v: zoom, moved: false }
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId)
+      } catch {
+        /* capture is only a convenience */
+      }
+      return
+    }
     e.preventDefault()
     try {
       e.currentTarget.setPointerCapture(e.pointerId) // keep the lasso when the pointer leaves the canvas
@@ -616,11 +647,29 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
     setHover(null)
   }
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const p0 = pan.current
+    if (p0) {
+      const [x, y] = local(e)
+      if (!p0.moved && Math.hypot(x - p0.x, y - p0.y) < 3) return
+      if (!p0.moved) {
+        p0.moved = true
+        setPanning(true)
+        setHover(null)
+      }
+      setZoom(panBy(p0.v, x - p0.x, y - p0.y))
+      return
+    }
     if (!path.current) return
     path.current.push(local(e))
     drawLasso()
   }
   const onPointerUp = () => {
+    if (pan.current) {
+      if (pan.current.moved) suppressClick.current = true // a drag is not a click on a dot
+      pan.current = null
+      setPanning(false)
+      return
+    }
     const p = path.current
     path.current = null
     drawLasso()
@@ -636,7 +685,7 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
   }
 
   const onMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!px || path.current) return
+    if (!px || path.current || pan.current?.moved) return
     const rect = e.currentTarget.getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
@@ -668,7 +717,8 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
       {error && <div className="error">{error}</div>}
       <canvas
         ref={canvasRef}
-        style={{ width: size.w, height: plotH, cursor: lassoTool ? 'crosshair' : hover ? 'pointer' : 'default', touchAction: 'none' }}
+        style={{ width: size.w, height: plotH, cursor: lassoTool ? 'crosshair' : panning ? 'grabbing' : hover ? 'pointer' : 'grab', touchAction: 'none' }}
+        onDoubleClick={() => setZoom(IDENTITY_VIEW)}
         onMouseMove={onMove}
         onMouseLeave={() => setHover(null)}
         onClick={onClick}
@@ -682,6 +732,11 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
           <button className={lassoTool ? 'active' : ''} onClick={() => setLassoTool(!lassoTool)} title="Lasso: drag around cells to select them (or shift-drag any time)">
             ◌ lasso
           </button>
+          {!isIdentity(zoom) && (
+            <button onClick={() => setZoom(IDENTITY_VIEW)} title="Show all cells again (or double-click the plot)">
+              ⤢ {zoom.k.toFixed(zoom.k < 10 ? 1 : 0)}×
+            </button>
+          )}
         </div>
       )}
       {selection && (
