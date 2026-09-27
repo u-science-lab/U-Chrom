@@ -6,7 +6,7 @@ Every panel is drawn from the JSONs in ``results/`` (written by ``benchmarks/fig
          b  one chromosome, across formats                    (c_access.json)
          c  RNA UMAP: three Leiden clusters computed in ChromData (f_crossmodal.json)
   row 2  d  pseudo-bulk contact maps of two clusters, summed from the linked
-            per-cell .scool, and the identity with the published per-type .cool
+            per-cell .scool, and the identity with per-type maps binned from the contact pairs
             (f_crossmodal.json, e_query.json)
          e  log2 ratio of the two maps (f_crossmodal.json window_log2_ratio)
   row 3  f  pseudo-bulk query time vs cells aggregated        (e_contacts.json)
@@ -187,7 +187,7 @@ def maps(fig, x0, y0, fx, q):
     fig.text((cx - 1) / W, 1 - (top - 1.2) / H, "contacts per\nmillion cis", fontsize=6, color=F.GREY,
              va="bottom", ha="left", linespacing=1.05)
     fig.text((x0 + 4) / W, 1 - (top + side + 5.2) / H,
-             f"Equals the published per-type .cool for {q['n_identical']}/{q['n_types']} cell types; "
+             f"Identical to per-type maps binned from the contact pairs, {q['n_identical']}/{q['n_types']} cell types; "
              f"max |Δ| = {q['max_abs_diff']:g} over {q['n_pixels'] / 1e6:.1f} M pixels",
              fontsize=6, color=F.INK, va="top")
 

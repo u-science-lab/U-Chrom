@@ -309,7 +309,7 @@ def panel_d(fig, x0, y0):
     kax = ax_at(fig, kx, ky - 1.5, 3, 3)
     kax.plot([0.5], [0.5], "o", ms=3.2, mfc="white", mec=INK, mew=0.8)
     kax.set_xlim(0, 1); kax.set_ylim(0, 1); kax.axis("off")
-    fig.text((kx + 3.2) / W, 1 - ky / H, "1e8 spots: the real cells replicated 10× (not new cells)",
+    fig.text((kx + 3.2) / W, 1 - ky / H, "1e8 spots: the real cells copied under new ids (not new cells)",
              fontsize=6, color=GREY, va="center")
     a = access()
     lv = {k: (lab, col) for k, lab, col, _ in LEVELS}
