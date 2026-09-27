@@ -81,7 +81,7 @@
  "B5": {
   "values": {
    "top_chrom": "chr1",
-   "top_median": 1.6752305913649264,
+   "top_median": 1.6752305913649266,
    "by_chrom": {
     "chr1": 1.675,
     "chr7": 1.601,
@@ -329,8 +329,8 @@
    "caller_label_of_high_H3K27ac": "B",
    "caller_label_agrees_with_H3K27ac": false,
    "mean_H3K27ac_by_caller_label": {
-    "A": 0.0047863401906965445,
-    "B": 0.6294126155454741
+    "A": 0.004786340190696543,
+    "B": 0.6294126155454739
    },
    "mwu_p_H3K27ac_between_compartments": 7.118157245337993e-11,
    "method": "uchrom.strc.comp.call_compartments_axes_pc(cd_chr15_1Mb, 'chr15', device='cpu') with default CompartmentCallerParams; per-bin mean of the per-spot H3K27ac track; the cluster with higher mean H3K27ac is A",
@@ -489,10 +489,10 @@
  },
  "D2": {
   "values": {
-   "rho": 0.18855505308214554,
+   "rho": 0.18855505308214746,
    "p": 0.0,
    "n_spots": 383674,
-   "rho_laminb1_vs_distance_to_periphery_um": -0.17328120884864676,
+   "rho_laminb1_vs_distance_to_periphery_um": -0.17328120884864848,
    "median_within_cell_rho": 0.28770007002165454,
    "n_rad_score_meaning": "larger = more peripheral (Spearman with distance from the cell's spot centroid = 0.68; with n_per_dist(um) = -0.95)",
    "direction": "higher LaminB1 -> more peripheral",
@@ -667,12 +667,12 @@
  },
  "E5": {
   "values": {
-   "median_a": 1.686983541834005,
-   "median_b": 1.537796110823103,
+   "median_a": 1.684119648866528,
+   "median_b": 1.5387876799630555,
    "n_a": 8,
    "n_b": 22,
-   "p": 0.18524720545710055,
-   "rank_biserial": 0.3295454545454546,
+   "p": 0.20154503944608895,
+   "rank_biserial": 0.3181818181818181,
    "group_a": "Bergmann",
    "group_b": "Granule",
    "n_loci": 150,
@@ -680,8 +680,8 @@
    "seed": 0,
    "n_traces_kept": 905,
    "n_traces_total": 1500,
-   "sd_over_draws_median_a": 0.02224348581688974,
-   "sd_over_draws_median_b": 0.011784748115282627,
+   "sd_over_draws_median_a": 0.015543838702898872,
+   "sd_over_draws_median_b": 0.010661506112935523,
    "unequalised_median_a": 1.420923919845671,
    "unequalised_median_b": 1.1390827786318347,
    "method": "traces with >= 150 distinct loci kept; per draw: one random spot per distinct locus, then 150 random loci per trace; uchrom radius_of_gyration; per-trace Rg averaged over 20 draws (numpy default_rng(0)); per-cell median; Mann-Whitney two-sided",
