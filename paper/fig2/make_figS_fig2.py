@@ -36,7 +36,7 @@ sys.path.insert(0, str(HERE))
 
 import make_fig2 as F  # noqa: E402
 
-W, H = 170.0, 180.0
+W, H = 170.0, 177.0
 TICK = 6.5                       # tick-label size (pt)
 
 ROLE_COL = {"neuronal": F.INDIGO, "oligodendrocyte": F.ORANGE, "astrocyte": F.TEAL}
@@ -260,10 +260,12 @@ def query_speed(fig, x0, y0, e, q):
         ax.set_ylim(1e-5, 30)
         ticks(ax, "y", [1e-4, 1e-2, 1e0], "time")
         ax.set_title(sub, fontsize=6, color=F.INK, pad=2)
-    hs = [Line2D([], [], color=F.TEAL, marker="o", ms=2.4, lw=1.1),
-          Line2D([], [], color=F.TEAL, ls="--", marker="o", ms=2.4, mfc="white", lw=1.0)]
-    F.legend(fig, hs, ["first query", "cached (LRU)"], x0 + 13, y0 + AX_DY + ROW3_H + 7.0, ncol=2,
-             handlelength=2.2, columnspacing=1.2)
+        if k == 0:                      # legend in the empty band between the solid and dashed lines
+            hs = [Line2D([], [], color=F.TEAL, marker="o", ms=2.4, lw=1.1),
+                  Line2D([], [], color=F.TEAL, ls="--", marker="o", ms=2.4, mfc="white", lw=1.0)]
+            ax.legend(hs, ["first query", "cached (LRU)"], loc="center right", bbox_to_anchor=(1.0, 0.5),
+                      frameon=False, fontsize=6, handlelength=2.0, handletextpad=0.4, labelspacing=0.3,
+                      borderaxespad=0.2)
 
 
 def sizes(fig, x0, y0, imp):
