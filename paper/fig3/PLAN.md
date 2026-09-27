@@ -29,15 +29,21 @@ Imputation is Fig. 4 and is not covered here.
    "in situ Hi-C on non-heat treated K562 cells" (set 4DNESU95RUNO, Ray et al. 2019, PNAS 116:19431,
    doi:10.1073/pnas.1901244116). Re-deriving chr21 at 30 kb from the downloaded mcool (md5 verified)
    reproduces the file exactly. Chr21 has 1.06 M contacts vs 9.2 M in real Rao 2014 IMR90. The catalog
-   now says so; the file name is kept for the tests. Anything that used it as IMR90 (the GEM-FISH
-   tutorial, `call_tads_di` test, `cd2_callers_validation.py`) was pairing IMR90 imaging with K562 Hi-C.
+   now says so. Anything that used it as IMR90 (the GEM-FISH tutorial, `call_tads_di` test,
+   `cd2_callers_validation.py`) was pairing IMR90 imaging with K562 Hi-C.
+   **Resolved (data-hygiene PR):** renamed to `K562_chr21_30kb.cool` (no alias); the tests, the DI benchmark
+   and the docs use it as a generic (K562) Hi-C matrix; the GEM-FISH tutorial moved to real IMR90.
 2. **The GEM-FISH tutorial (part 2) synthesises Hi-C from the FISH mean** — against the "never fabricate
    inputs" rule. Real Hi-C for that region now exists (`rao2014_imr90/`, below); the tutorial should be
-   switched to it.
+   switched to it. (The notebook code itself ran on the K562 cool; only its intro said "synthesises".)
+   **Resolved:** part 2 now runs on Rao 2014 IMR90 chr21 (5 kb slice checked in, summed to 30 kb on the
+   Bintu segment grid, hg19): Pearson 0.71–0.73, mean relative error 0.33–0.35 vs the FISH median distances
+   (before, on K562: 0.77 / 0.35); Hi-C vs 1/distance Spearman over chr21 only 0.03 (K562: 0.16).
 3. **`cell1.pairs` cited the wrong GEO series** (GSE80006 is Flyamer 2017). Stevens 2017 is **GSE80280**;
    fixed in the catalog. `cell1.pairs` is Stevens Cell 1 (every distinct contact is in the NucDynamics
-   repo's `Cell_1_contacts.ncc`). `cell2.pairs.gz` (503,720 reads) does not match any GSE80280 cell file
-   size and is marked unverified.
+   repo's `Cell_1_contacts.ncc`). `cell2.pairs.gz` (503,696 contacts) does not match any GSE80280 cell file
+   size and is marked unverified. It carries hickit haplotype-phase columns (diploid, phased mouse cell), so it
+   is not Stevens 2017 at all; source still unidentified; only `tests/smoke/fasthigashi_smoke.py` uses it.
 4. **U-Chrom "GEM" is not GEM.** `uchrom.recon.sc.gem` has GEM's stretch / bend terms but no manifold
    learning (no KL divergence, no Hi-C probability distribution, no conformation mixture) and uses
    the inverse-power-law distance restraints that GEM was designed to avoid. GEM itself (Zhu et al. 2018)
@@ -47,7 +53,7 @@ Imputation is Fig. 4 and is not covered here.
      independently, scrambling which particles every scHi-C contact joins (feeds both NucDynamics and
      "GEM"). Now `axis=1`. Effect on Cell 1 at 100 kb: contacts violated by > 5 radii 11 % → 0 %,
      model-to-model RMSD 5.3 → 2.6 radii (panel a). The in-repo `sim_cell1` structure was built with the
-     bug and should be rebuilt (`build_sim_cell1.py`) in a follow-up.
+     bug and should be rebuilt (`build_sim_cell1.py`) after the NucDynamics port PR (finding 6).
    - `reconstruct_gem_fish(tads=...)` crashed when the TAD windows leave gaps (as the Wang 2016 TADs do):
      coordinates were built for the TAD bins, spots for every bin. Spots now cover the TAD bins only.
 6. **Further NucDynamics port defects (not fixed here, listed for the port PR)**, from a line-by-line
@@ -207,7 +213,7 @@ distance-matrix correlations to the imaging median. Cheap once a and c exist.
 | Bintu GitHub repo has no licence file | Redistribution unclear | Do not commit the CSVs; download on demand (as now) |
 | Hi-C normalisation / MAPQ differ from the papers (MAPQ > 0 raw slices vs MAPQ ≥ 30 KR) | Small numeric differences | Add `--norm KR` / `_30.hic` to the slicer before the final runs |
 | Cross-cell control fails for K562 imaging | Weakens "cell-type specific" claim | Report as is; claim only what IMR90 / Su / Takei support |
-| `cell2.pairs.gz` provenance unverified | — | Not used in Fig. 3 |
+| `cell2.pairs.gz` provenance unverified (phased diploid mouse cell, not Stevens) | — | Not used in Fig. 3; only a manual FastHigashi smoke script uses it |
 
 ## Estimated engineering effort
 
@@ -219,7 +225,7 @@ distance-matrix correlations to the imaging median. Cheap once a and c exist.
 | GEM-FISH: align port with paper (list above), chr20/21/22, 10 held-out splits | 4–6 days |
 | Panel b final (bootstrap CIs, radius sweep, figure-ready JSON) | 1–2 days |
 | Panel e + figure assembly + legend | 2–3 days |
-| Fix GEM-FISH tutorial (real Hi-C), rename / replace `IMR90_chr21_30kb.cool` | 1 day |
+| ~~Fix GEM-FISH tutorial (real Hi-C), rename / replace `IMR90_chr21_30kb.cool`~~ (done) | — |
 | **Total** | **≈ 3–4 weeks** |
 
 ## Recommendation for the panel set

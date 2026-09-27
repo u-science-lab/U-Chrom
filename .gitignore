@@ -82,7 +82,9 @@ example-data/stevens2017_mesc/
 example-data/bintu2018/
 example-data/su2020_imr90/
 example-data/abbas2019_gemfish/
-example-data/rao2014_imr90/
+# rao2014_imr90: only the chr21 5 kb slice (3.8 MB) is checked in (GEM-FISH tutorial)
+example-data/rao2014_imr90/*
+!example-data/rao2014_imr90/IMR90_chr21_5kb_hg19.cool
 example-data/rao2014_k562/
 example-data/rao2014_gm12878/
 example-data/ray2019_k562/
