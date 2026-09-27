@@ -601,9 +601,10 @@ def draw_umap_b(ax, lasso=LASSO):
     # axis key in axes coordinates, both arrows the same physical length (the pane is not square)
     bb = ax.get_position()
     wh = (bb.width * fig.get_figwidth()) / (bb.height * fig.get_figheight())
-    x0, y0, Lx = 0.04, 0.07, 0.07          # bottom-left, below the MLI1 label
+    x0, y0, Lx = 0.04, 0.07, 0.12          # bottom-left, clear of the MLI1 label
     Ly = Lx * wh
-    kw = dict(xycoords="axes fraction", arrowprops=dict(arrowstyle="-|>", lw=0.5, color=GREY, mutation_scale=4))
+    kw = dict(xycoords="axes fraction", arrowprops=dict(arrowstyle="-|>", lw=0.7, color=GREY, mutation_scale=5,
+                                                        shrinkA=0, shrinkB=0))
     ax.annotate("", (x0 + Lx, y0), (x0, y0), **kw)
     ax.annotate("", (x0, y0 + Ly), (x0, y0), **kw)
     ax.text(x0 + Lx + 0.015, y0, "UMAP", transform=ax.transAxes, fontsize=F(3.9), color=GREY, va="center")
