@@ -1,5 +1,6 @@
 % U-Chrom manuscript — journal-neutral draft.
-% Build: latexmk -xelatex main.tex   (or: make; the Supplementary Information: make supp)
+% Build: latexmk -xelatex main.tex   (or: make). The Supplementary Information is appended;
+% `make supp` also builds it on its own (supplement.pdf) from the same supp/body.tex.
 \documentclass[11pt]{article}
 
 \usepackage{fontspec}
@@ -14,12 +15,16 @@
 \usepackage[numbers,sort&compress]{natbib}
 \usepackage[labelfont=bf,labelsep=space,font=footnotesize,singlelinecheck=false]{caption}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{array,booktabs,longtable}
+\usepackage{pdflscape}
 \usepackage{xurl}
 \usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
 
 \graphicspath{{figures/}}
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 \newcommand{\pkg}[1]{\texttt{#1}}
+\input{supp/macros}
 \setlength{\emergencystretch}{3em}  % no overfull lines around long identifiers
 
 \title{U-Chrom: a unified framework for sequencing- and imaging-based 3-D genome data}
@@ -249,5 +254,19 @@ All data analysed are public: Zenodo record 7693825 (Takei et al.\ 2025)~\citep{
 
 \bibliographystyle{unsrtnat}
 \bibliography{refs}
+
+% ------------------------------------------------ Supplementary Information (appendix)
+\clearpage
+\appendix
+\nolinenumbers
+\singlespacing
+\setcounter{figure}{0}\setcounter{table}{0}
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\figurename}{Supplementary Fig.}
+\renewcommand{\tablename}{Supplementary Table}
+\section*{Supplementary Information}
+\addcontentsline{toc}{section}{Supplementary Information}
+\input{supp/body}
 
 \end{document}

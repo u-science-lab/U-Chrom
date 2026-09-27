@@ -1,0 +1,10 @@
+% Macros shared by main.tex (appendix) and supplement.tex.
+% Marks of Fig. 2b / Supplementary Table S1.
+\definecolor{markblue}{HTML}{2F4B7C}
+\definecolor{markteal}{HTML}{2A9D8F}
+\newcommand{\mNative}{\tikz[baseline=-0.6ex]\fill[markblue] (0,0) circle (0.9ex);}
+\newcommand{\mLinked}{\tikz[baseline=-0.6ex]{\draw[markteal,line width=0.5pt] (0,0) circle (0.85ex);\fill[markteal] (0,0) circle (0.45ex);}}
+\newcommand{\mConv}{\tikz[baseline=-0.6ex]\draw[markblue,line width=0.7pt] (0,0) circle (0.8ex);}
+\newcommand{\mNone}{\tikz[baseline=-0.6ex]\draw[black!60,line width=0.7pt] (-0.7ex,0) -- (0.7ex,0);}
+\newcommand{\rot}[1]{\rotatebox{90}{#1}}
+\makeatletter\newcommand{\inputrows}[1]{\@@input #1 }\makeatother
