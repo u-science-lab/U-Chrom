@@ -44,18 +44,24 @@
   "checks": {
    "n_cells": {
     "pass": true,
-    "given": "47"
+    "given": "47 cells",
+    "value": 47,
+    "judge_pass": true
    },
    "n_traces": {
     "pass": true,
-    "given": "1,500"
+    "given": "1,500 traces",
+    "value": 1500,
+    "judge_pass": true
    },
    "n_spots": {
     "pass": true,
-    "given": "383,674"
+    "given": "383,674 spots",
+    "value": 383674,
+    "judge_pass": true
    }
   },
-  "comment": "All three reported numbers exactly match the reference values."
+  "comment": "All three headline values match the reference exactly."
  },
  "A1__skills__r0": {
   "id": "A1",
@@ -109,18 +115,24 @@
   "checks": {
    "n_cells": {
     "pass": true,
-    "given": "47"
+    "given": "47 cells",
+    "value": 47,
+    "judge_pass": true
    },
    "n_traces": {
     "pass": true,
-    "given": "1,500"
+    "given": "1,500 traces",
+    "value": 1500,
+    "judge_pass": true
    },
    "n_spots": {
     "pass": true,
-    "given": "383,674"
+    "given": "383,674 spots",
+    "value": 383674,
+    "judge_pass": true
    }
   },
-  "comment": "All three counts exactly match the reference values."
+  "comment": "All three headline values exactly match the reference."
  },
  "A2__docs__r0": {
   "id": "A2",
@@ -171,10 +183,12 @@
    },
    "n": {
     "pass": true,
-    "given": "22"
+    "given": "22 of 47 cells (about 47%)",
+    "value": 22,
+    "judge_pass": true
    }
   },
-  "comment": "Answer correctly identifies Granule as the largest cell type with 22 cells, matching the reference counts exactly."
+  "comment": "Answer correctly identifies Granule as the most common cell type with 22 cells, matching the reference exactly."
  },
  "A2__skills__r0": {
   "id": "A2",
@@ -226,16 +240,18 @@
   "pkg_source_refs": 0,
   "score": 1.0,
   "checks": {
-   "n": {
-    "pass": true,
-    "given": "22"
-   },
    "cell_type": {
     "pass": true,
     "given": "Granule"
+   },
+   "n": {
+    "pass": true,
+    "given": "22 of 47 cells (~47%)",
+    "value": 22,
+    "judge_pass": true
    }
   },
-  "comment": "Answer correctly identifies Granule as the largest cell type with 22 cells, matching the reference exactly."
+  "comment": "Answer correctly identifies Granule as the largest cell type with n=22, matching the reference exactly and even reproducing the full breakdown."
  },
  "A3__docs__r0": {
   "id": "A3",
@@ -282,10 +298,12 @@
   "checks": {
    "n": {
     "pass": true,
-    "given": "48"
+    "given": "48 immunofluorescence antibody channels per cell",
+    "value": 48,
+    "judge_pass": true
    }
   },
-  "comment": "The answer correctly identifies 48 IF antibody channels per cell, matching the reference exactly."
+  "comment": "Answer correctly reports 48, matching the reference count and channel list exactly."
  },
  "A3__skills__r0": {
   "id": "A3",
@@ -339,10 +357,12 @@
   "checks": {
    "n": {
     "pass": true,
-    "given": "48"
+    "given": "48",
+    "value": 48,
+    "judge_pass": true
    }
   },
-  "comment": "The answer correctly counts 48 if.* antibody channels in cd.cells, matching the reference exactly."
+  "comment": "The answer correctly counts 48 if.-prefixed antibody columns in cells, matching the reference exactly."
  },
  "A4__docs__r0": {
   "id": "A4",
@@ -389,14 +409,16 @@
   "checks": {
    "n_spots": {
     "pass": true,
-    "given": "31,557"
+    "given": "chr1 has 31,557 imaged spots",
+    "value": 31557,
+    "judge_pass": true
    },
    "chrom": {
     "pass": true,
     "given": "chr1"
    }
   },
-  "comment": "Answer correctly identifies chr1 with exactly 31,557 spots, matching the reference values."
+  "comment": "Both the chromosome and spot count exactly match the reference values."
  },
  "A4__skills__r0": {
   "id": "A4",
@@ -450,14 +472,17 @@
   "checks": {
    "chrom": {
     "pass": true,
-    "given": "chr1"
+    "given": "chr1",
+    "value": null
    },
    "n_spots": {
     "pass": true,
-    "given": "31,557"
+    "given": "31,557",
+    "value": 31557,
+    "judge_pass": true
    }
   },
-  "comment": "Answer correctly identifies chr1 with exactly 31,557 spots, matching the reference values."
+  "comment": "Answer correctly identifies chr1 with exactly 31,557 spots as the headline result, matching the reference."
  },
  "A5__docs__r0": {
   "id": "A5",
@@ -504,14 +529,18 @@
   "checks": {
    "n_cells": {
     "pass": true,
-    "given": "5,313 cells"
+    "given": "All 5,313 cells have a single-cell Hi-C contact map",
+    "value": 5313,
+    "judge_pass": true
    },
    "resolution_bp": {
     "pass": true,
-    "given": "1 Mb (1,000,000 bp)"
+    "given": "1 Mb resolution (1,000,000 bp fixed bins)",
+    "value": 1000000,
+    "judge_pass": true
    }
   },
-  "comment": "Answer correctly states 5,313 cells at 1,000,000 bp resolution, matching reference values."
+  "comment": "Both headline values match the reference exactly (5,313 cells at 1,000,000 bp resolution)."
  },
  "A5__skills__r0": {
   "id": "A5",
@@ -565,14 +594,18 @@
   "checks": {
    "n_cells": {
     "pass": true,
-    "given": "5,313 cells"
+    "given": "5,313 cells",
+    "value": 5313,
+    "judge_pass": true
    },
    "resolution_bp": {
     "pass": true,
-    "given": "1 Mb (1,000,000 bp)"
+    "given": "1 Mb resolution (bin size 1,000,000 bp)",
+    "value": 1000000,
+    "judge_pass": true
    }
   },
-  "comment": "Answer correctly states 5,313 cells at 1 Mb resolution, matching reference values exactly."
+  "comment": "Answer correctly reports 5,313 cells at 1 Mb resolution, matching the reference exactly."
  },
  "A6__docs__r0": {
   "id": "A6",
@@ -623,10 +656,12 @@
    },
    "median_contacts": {
     "pass": true,
-    "given": "23,157 Hi-C contacts per cell"
+    "given": "23,157 Hi-C contacts per cell",
+    "value": 23157.0,
+    "judge_pass": true
    }
   },
-  "comment": "Both the cell type (L5IT) and median contacts (23,157) match the reference values exactly."
+  "comment": "Answer correctly identifies L5IT (642 cells) with median 23,157 Hi-C contacts, matching the reference exactly."
  },
  "A6__skills__r0": {
   "id": "A6",
@@ -680,14 +715,17 @@
   "checks": {
    "cell_type": {
     "pass": true,
-    "given": "L5IT"
+    "given": "L5IT",
+    "value": null
    },
    "median_contacts": {
     "pass": true,
-    "given": "23,157 Hi-C contacts per cell"
+    "given": "23,157 Hi-C contacts per cell",
+    "value": 23157,
+    "judge_pass": true
    }
   },
-  "comment": "Both the cell type (L5IT) and median contacts (23,157, exact match) are correct."
+  "comment": "Answer correctly identifies L5IT (642 cells) with median 23,157 contacts, matching the reference exactly."
  },
  "A7__docs__r0": {
   "id": "A7",
@@ -734,14 +772,16 @@
   "checks": {
    "median": {
     "pass": true,
-    "given": "1.09 model units"
+    "given": "about 1.09 model units (1.089)",
+    "value": 1.089,
+    "judge_pass": true
    },
    "unit": {
     "pass": true,
-    "given": "NucDynamics model units, explicitly not \u00b5m/nm"
+    "given": "NucDynamics model units, not \u00b5m or nm"
    }
   },
-  "comment": "Median value (1.09) matches reference within tolerance and unit is correctly identified as model units."
+  "comment": "Reported median (1.089) matches the reference within tolerance and the unit is correctly identified as model units."
  },
  "A7__skills__r0": {
   "id": "A7",
@@ -795,14 +835,16 @@
   "checks": {
    "median": {
     "pass": true,
-    "given": "1.0891 model units"
+    "given": "about 1.09 model units (1.0891)",
+    "value": 1.0891,
+    "judge_pass": true
    },
    "unit": {
     "pass": true,
-    "given": "NucDynamics model units (not a physical length)"
+    "given": "NucDynamics model unit (not a physical length, cannot convert to \u00b5m/nm)"
    }
   },
-  "comment": "Median matches reference within tolerance and unit is correctly identified as NucDynamics model units."
+  "comment": "Value matches reference within tolerance and correctly identifies the unit as arbitrary NucDynamics model units rather than a physical length."
  },
  "A8__docs__r0": {
   "id": "A8",
@@ -849,14 +891,16 @@
   "checks": {
    "xyz_unit": {
     "pass": true,
-    "given": "micrometres (\u00b5m) \u2014 metadata field xyz_unit is 'um', confirmed via voxel size and plausibility checks"
+    "given": "micrometres (\u00b5m)",
+    "value": null
    },
    "genome_assembly": {
     "pass": true,
-    "given": "mouse mm10 (GRCm38) \u2014 metadata field genome_assembly is 'mm10', confirmed via chromosome count and probe-end vs assembly length checks"
+    "given": "mm10 (GRCm38)",
+    "value": null
    }
   },
-  "comment": "Answer correctly names both um and mm10 with supporting evidence."
+  "comment": "Answer correctly names both um and mm10, matching the reference values."
  },
  "A8__skills__r0": {
   "id": "A8",
@@ -910,14 +954,16 @@
   "checks": {
    "xyz_unit": {
     "pass": true,
-    "given": "micrometres (\u00b5m), from uns[\"xyz_unit\"] = \"um\""
+    "given": "micrometres (\u00b5m)",
+    "value": null
    },
    "genome_assembly": {
     "pass": true,
-    "given": "mm10 (GRCm38), from uns[\"genome_assembly\"] = \"mm10\""
+    "given": "mm10 (GRCm38)",
+    "value": null
    }
   },
-  "comment": "Answer correctly names both um and mm10, matching the reference values."
+  "comment": "Answer correctly names both um and mm10, with supporting verification detail."
  },
  "B1__docs__r0": {
   "id": "B1",
@@ -964,14 +1010,16 @@
   "checks": {
    "median_um": {
     "pass": true,
-    "given": "0.74 \u00b5m"
+    "given": "0.74 \u00b5m",
+    "value": 0.74,
+    "judge_pass": true
    },
    "unit": {
     "pass": true,
-    "given": "\u00b5m (micrometers)"
+    "given": "\u00b5m"
    }
   },
-  "comment": "Reported median 0.74 \u00b5m matches reference 0.7392 within tolerance, with units correctly stated as \u00b5m."
+  "comment": "Reported median (0.74 \u00b5m) and pair pooling/unit match the reference (0.7392 \u00b5m, 11533 pairs) within tolerance."
  },
  "B1__skills__r0": {
   "id": "B1",
@@ -1025,14 +1073,16 @@
   "checks": {
    "median_um": {
     "pass": true,
-    "given": "0.74 \u00b5m"
+    "given": "0.74 \u00b5m (median over all pairs)",
+    "value": 0.74,
+    "judge_pass": true
    },
    "unit": {
     "pass": true,
     "given": "\u00b5m"
    }
   },
-  "comment": "Median (0.74 \u00b5m) and n_pairs (11,533) match the reference within tolerance, with unit correctly stated as \u00b5m."
+  "comment": "Reported median (0.74 \u00b5m) and n_pairs (11,533) match the reference closely, with unit correctly stated as \u00b5m."
  },
  "B2__docs__r0": {
   "id": "B2",
@@ -1079,10 +1129,12 @@
   "checks": {
    "exponent": {
     "pass": false,
-    "given": "\u03b1 \u2248 0.32 (fitted line R(s) \u2248 0.83 \u00b5m \u00d7 (s/1Mb)^0.32)"
+    "given": "\u03b1 \u2248 0.32 (fitted R(s) \u2248 0.83 \u00b5m \u00d7 (s/1Mb)^0.32)",
+    "value": 0.32,
+    "judge_pass": false
    }
   },
-  "comment": "The reported exponent 0.32 differs from the reference 0.3325 by about 3.75%, just outside the \u00b13% tolerance."
+  "comment": "Reported exponent 0.32 differs from the reference 0.3325 by about 3.8%, just outside the \u00b13% tolerance."
  },
  "B2__skills__r0": {
   "id": "B2",
@@ -1136,10 +1188,12 @@
   "checks": {
    "exponent": {
     "pass": true,
-    "given": "\u03b1 \u2248 0.33 (reported as 0.33 in the summary line)"
+    "given": "\u03b1 \u2248 0.33 (95% bootstrap CI 0.27\u20130.37)",
+    "value": 0.33,
+    "judge_pass": true
    }
   },
-  "comment": "The reported exponent of ~0.33 matches the reference value 0.3324805858469874 within tolerance."
+  "comment": "Reported exponent 0.33 matches reference 0.3325 within tolerance despite different dataset/methodology than the benchmark's canonical computation."
  },
  "B3__docs__r0": {
   "id": "B3",
@@ -1186,10 +1240,12 @@
   "checks": {
    "slope": {
     "pass": true,
-    "given": "-0.268 (stated as -0.27 in headline, -0.268 in method)"
+    "given": "P(s) \u221d s^-0.27 (slope -0.268, or -0.269 including empty bins)",
+    "value": -0.268,
+    "judge_pass": true
    }
   },
-  "comment": "The computed slope (-0.268) matches the reference (-0.269) within tolerance, despite the answer's extensive (valid) caveats about robustness."
+  "comment": "The reported slope (-0.268/-0.269) matches the reference (-0.2690) within tolerance despite the answer's extensive caveats about reliability."
  },
  "B3__skills__r0": {
   "id": "B3",
@@ -1243,10 +1299,12 @@
   "checks": {
    "slope": {
     "pass": true,
-    "given": "-0.27"
+    "given": "-0.27 \u00b1 0.14 SE, R\u00b2=0.17, 19 diagonals 2-20 Mb",
+    "value": -0.27,
+    "judge_pass": true
    }
   },
-  "comment": "Answer's slope of -0.27 matches the reference -0.269 well within 5% tolerance."
+  "comment": "Reported slope -0.27 matches reference -0.269 within tolerance, with matching methodology (raw counts, 19 diagonals, log-log OLS)."
  },
  "B4__docs__r0": {
   "id": "B4",
@@ -1293,14 +1351,16 @@
   "checks": {
    "rho": {
     "pass": true,
-    "given": "\u03c1 = \u22120.33 (n=944)"
+    "given": "\u03c1 = \u22120.33 (n=944, off-diagonal contacting pairs)",
+    "value": -0.33,
+    "judge_pass": true
    },
    "sign_negative": {
     "pass": true,
-    "given": "negative correlation reported"
+    "given": "reports negative correlation, more contacts \u2192 closer distance"
    }
   },
-  "comment": "Reported rho (-0.33, n=944) matches reference within tolerance and correct sign."
+  "comment": "Answer's headline \u03c1=-0.33 matches reference -0.327 within tolerance, correct sign, and matches n_pairs/p as well."
  },
  "B4__skills__r0": {
   "id": "B4",
@@ -1355,14 +1415,16 @@
   "checks": {
    "rho": {
     "pass": true,
-    "given": "\u03c1 = \u22120.33 (944 pairs, p\u22485\u00d710\u207b\u00b2\u2075)"
+    "given": "Spearman \u03c1 = \u22120.33",
+    "value": -0.33,
+    "judge_pass": true
    },
    "sign_negative": {
     "pass": true,
-    "given": "negative sign confirmed: closer 3-D distance associated with higher contact count"
+    "given": "sign is right, since bins with more contacts sit closer together"
    }
   },
-  "comment": "Answer's rho (-0.33) matches reference (-0.3273) within tolerance and correctly reports the negative sign, with matching n_pairs and p-value."
+  "comment": "Answer's rho (-0.33) matches reference (-0.327) within tolerance and correctly reports negative sign, with matching n_pairs and p-value as well."
  },
  "B5__docs__r0": {
   "id": "B5",
@@ -1409,14 +1471,16 @@
   "checks": {
    "top_median": {
     "pass": true,
-    "given": "chr1 median Rg = 1.675 \u00b5m (rounded to 1.68 \u00b5m in prose)"
+    "given": "chr1 median Rg = 1.675 \u00b5m (also reported as 1.68 \u00b5m rounded in headline)",
+    "value": 1.675,
+    "judge_pass": true
    },
    "top_chrom": {
     "pass": true,
     "given": "chr1"
    }
   },
-  "comment": "Answer correctly identifies chr1 as having the largest median Rg with value 1.675 matching the reference closely, plus full per-chromosome table and caveats."
+  "comment": "Answer correctly identifies chr1 as top chromosome with median Rg 1.675, matching reference within tolerance, and full by_chrom table matches reference values closely."
  },
  "B5__skills__r0": {
   "id": "B5",
@@ -1470,14 +1534,16 @@
   "checks": {
    "top_median": {
     "pass": true,
-    "given": "1.68 (median Rg for chr1)"
+    "given": "1.68 \u00b5m (median Rg over traces for chr1)",
+    "value": 1.68,
+    "judge_pass": true
    },
    "top_chrom": {
     "pass": true,
-    "given": "chr1"
+    "given": "chr1 (though flagged as a near-tie with chr2 under a per-cell-median alternative)"
    }
   },
-  "comment": "Answer correctly identifies chr1 as largest with median Rg 1.68, within tolerance of reference 1.675."
+  "comment": "Both headline values match the reference within tolerance and chr1 is correctly named as largest, with appropriate caveats noted."
  },
  "B6__docs__r0": {
   "id": "B6",
@@ -1524,10 +1590,12 @@
   "checks": {
    "fraction": {
     "pass": true,
-    "given": "18.6% (0.186, using 250kb resolution)"
+    "given": "About 18.6% (18.63% at 250kb resolution, >10Mb cutoff)",
+    "value": 0.186,
+    "judge_pass": true
    }
   },
-  "comment": "0.186 is within \u00b12% of the reference 0.1847 (reference itself notes 250kb value is 0.18625), so the check passes despite using a different resolution than the reference method."
+  "comment": "Headline value 0.186 is within 2% of the reference 0.1847, and the answer's own 250kb figure (0.18625) matches the reference's 250kb context value almost exactly."
  },
  "B6__skills__r0": {
   "id": "B6",
@@ -1582,10 +1650,12 @@
   "checks": {
    "fraction": {
     "pass": true,
-    "given": "18.6% at 250kb (primary); also reports 18.5% at 1Mb, both within tolerance of 0.1847"
+    "given": "18.6% (1.33M of 7.15M contacts >10Mb apart on chr1, computed at 250kb resolution; noted 18.5% at 1Mb)",
+    "value": 0.186,
+    "judge_pass": true
    }
   },
-  "comment": "Total chr1 contacts (7,148,741) match the reference exactly, and the reported fraction (18.5\u201318.6% depending on resolution) is within 2% of the reference 0.18469."
+  "comment": "Headline value 0.186 is within 2% tolerance of the reference 0.184694, and the answer correctly notes the 1 Mb-resolution figure (18.5%) closely matching the reference method."
  },
  "B7__docs__r0": {
   "id": "B7",
@@ -1632,10 +1702,12 @@
   "checks": {
    "n_domains": {
     "pass": false,
-    "given": "386 domains total across 4 hierarchical levels (98/97/96/95); did not settle on a single partition count matching 15"
+    "given": "386 domains total across 4 hierarchical levels (98, 97, 96, 95); notes level 1 gives 98",
+    "value": 386,
+    "judge_pass": false
    }
   },
-  "comment": "The answer reports 386 (or per-level 95-98) rather than the reference 15, and also used 86 chr15 traces without the paper's per-1Mb-bin averaging approach, so it fails the n_domains check."
+  "comment": "The reference's finest-level (level-1) partition count is 15, but the answer used 1 Mb-native chr15 data with default 100kb window yielding 98 level-1 domains (and reported 386 as a combined multi-level total), not matching the reference's specific window-scaled methodology or count."
  },
  "B7__skills__r0": {
   "id": "B7",
@@ -1689,10 +1761,12 @@
   "checks": {
    "n_domains": {
     "pass": false,
-    "given": "14 domains"
+    "given": "14 domains at level 1 (1 Mb bins, 4 Mb window)",
+    "value": 14,
+    "judge_pass": false
    }
   },
-  "comment": "Reference expects 15 domains; the answer's 14 (via a different 1 Mb binning/window choice) is within tolerance-0 but off by one, so it fails the exact-match check."
+  "comment": "Answer reports 14 domains vs. reference 15, outside tolerance despite a reasonable methodology writeup."
  },
  "B8__docs__r0": {
   "id": "B8",
@@ -1739,14 +1813,16 @@
   "checks": {
    "fraction": {
     "pass": false,
-    "given": "93.5% of bins (3580/3829) computed at native 25kb resolution, vs reference 52.5% at 1Mb resolution \u2014 far outside \u00b15% tolerance"
+    "given": "93.5% of chr15 bins (3,580 of 3,829) in the higher-H3K27ac compartment (labeled caller's 'A')",
+    "value": 0.935,
+    "judge_pass": false
    },
    "assigns_A_by_H3K27ac": {
     "pass": true,
-    "given": "explicitly computed mean H3K27ac per caller compartment and reported the fraction for whichever compartment had higher H3K27ac, noting the A/B label itself is arbitrary"
+    "given": "Answer explicitly computed mean H3K27ac per caller cluster and identified/answered in terms of the higher-H3K27ac compartment rather than assuming caller's raw A label"
    }
   },
-  "comment": "The answer used the native 25kb bins (which the reference explicitly notes is infeasible/too sparse and should be 1Mb-binned), producing a fraction (93.5%) wildly different from and not within tolerance of the reference (52.5%), even though it correctly reasoned about assigning the high-H3K27ac label independent of the caller's raw A/B naming."
+  "comment": "The answer used native 25kb bins (3,829 bins) instead of the intended 1Mb aggregation (101 bins), giving a wildly different and much more unbalanced split (93.5% vs reference 52.5%), well outside tolerance, though it did correctly identify the compartment by comparing H3K27ac means rather than blindly trusting the caller's A/B label."
  },
  "B8__skills__r0": {
   "id": "B8",
@@ -1800,14 +1876,16 @@
   "checks": {
    "fraction": {
     "pass": true,
-    "given": "52.5% (53 of 101 bins)"
+    "given": "52.5% of chr15 bins (53 of 101 bins) are in the compartment with higher H3K27ac",
+    "value": 0.5247524752475248,
+    "judge_pass": true
    },
    "assigns_A_by_H3K27ac": {
     "pass": true,
-    "given": "identifies caller's raw label for the high-H3K27ac compartment as \"B\" (opposite of the usual A=active convention)"
+    "given": "Used per-spot H3K27ac track averaged per bin (B=0.63, A=0.005, MWU p\u22487e-11) to determine the caller's 'B' label is the high-H3K27ac compartment, noting its A/B labels run opposite the usual convention"
    }
   },
-  "comment": "Fraction matches exactly (53/101) and the answer correctly flags that the caller's own B label, not A, corresponds to higher H3K27ac."
+  "comment": "Answer's fraction (53/101 = 0.5248) and identification of caller label 'B' as the high-H3K27ac compartment (via per-bin H3K27ac means matching reference almost exactly) both match the reference."
  },
  "C10__docs__r0": {
   "id": "C10",
@@ -1854,18 +1932,21 @@
   "checks": {
    "cell_type": {
     "pass": true,
-    "given": "PT (layer-5 pyramidal tract) neurons have the most RNA counts per cell"
+    "given": "PT",
+    "value": null
    },
    "test_named": {
     "pass": true,
-    "given": "Mann\u2013Whitney U: p = 0.004 (also mentions Welch t-test on log counts as supplementary)"
+    "given": "Mann\u2013Whitney U (p=0.004), also reports Welch t-test on log counts as supplementary",
+    "value": null
    },
    "n_cells_reported": {
     "pass": true,
-    "given": "PT: 331 cells, L5IT: 642 cells (matches reference n_a=331, n_b=642)"
+    "given": "PT n=331, L5IT n=642",
+    "value": null
    }
   },
-  "comment": "Answer correctly identifies PT as top, L5IT as runner-up, reports matching medians/n and the Mann-Whitney test with p=0.004, matching the reference closely."
+  "comment": "Answer correctly identifies PT as top cell type, reports matching medians (28832 vs 25896) and n's (331 vs 642), names Mann-Whitney U test with p=0.004 matching the reference."
  },
  "C10__skills__r0": {
   "id": "C10",
@@ -1919,18 +2000,21 @@
   "checks": {
    "cell_type": {
     "pass": true,
-    "given": "PT (layer-5 pyramidal-tract neurons) have the most RNA counts per cell"
+    "given": "PT",
+    "value": null
    },
    "test_named": {
     "pass": true,
-    "given": "Mann-Whitney two-sided test, p = 0.0041 (also mentions rank-biserial effect size)"
+    "given": "Mann-Whitney two-sided (U-test), also reports rank-biserial effect size",
+    "value": null
    },
    "n_cells_reported": {
     "pass": true,
-    "given": "PT n=331, L5IT n=642 (shown in table)"
+    "given": "PT n=331, L5IT n=642",
+    "value": null
    }
   },
-  "comment": "All three checks pass: correct cell type, named Mann-Whitney test with matching p-value, and reported n for both groups matching reference exactly."
+  "comment": "Answer correctly identifies PT as top cell type with matching medians (28,832 vs 25,896), n's (331/642), Mann-Whitney p=0.0041, and rank-biserial r=0.11, all consistent with reference values."
  },
  "C1__docs__r0": {
   "id": "C1",
@@ -1977,34 +2061,38 @@
   "checks": {
    "median_a": {
     "pass": true,
-    "given": "Per-cell median Rg Bergmann = 1.42 \u00b5m"
+    "given": "Per-cell median Rg for Bergmann glia: 1.42 \u00b5m",
+    "value": 1.42,
+    "judge_pass": true
    },
    "median_b": {
     "pass": true,
-    "given": "Per-cell median Rg Granule = 1.14 \u00b5m"
+    "given": "Per-cell median Rg for granule cells: 1.14 \u00b5m",
+    "value": 1.14,
+    "judge_pass": true
    },
    "cell_is_unit": {
     "pass": true,
-    "given": "explicitly states 'the cell is the unit of replication' and compares per-cell medians (8 vs 22 cells)"
+    "given": "Compared per-cell median Rg with cell as unit of replication, 8 vs 22 cells, Mann-Whitney"
    },
    "n_cells_reported": {
     "pass": true,
-    "given": "8 Bergmann cells and 22 granule cells reported"
+    "given": "8 Bergmann cells (245 traces) and 22 granule cells (729 traces)"
    },
    "test_named": {
     "pass": true,
-    "given": "Mann\u2013Whitney test named, p = 0.0009"
+    "given": "Mann\u2013Whitney test named explicitly"
    },
    "mentions_nuclear_volume": {
     "pass": true,
-    "given": "notes Bergmann nuclei tend to be larger (median 297 vs 210 \u00b5m\u00b3) and that this partly confounds the Rg difference"
+    "given": "Discusses nuclear size confound: Bergmann nuclei larger (median 297 vs 210 \u00b5m\u00b3), adjusting for volume changes result to -6%"
    },
    "one_fov": {
     "pass": true,
-    "given": "notes data are 'one field of view, one replicate and one animal'"
+    "given": "Notes data is 8 Bergmann cells from one field of view, one replicate and one animal"
    }
   },
-  "comment": "Answer correctly reproduces both group medians, n's, and the Mann-Whitney p-value, uses cell-level replication, and explicitly flags both nuclear volume and single-FOV/replicate as confounds/limitations."
+  "comment": "Answer correctly reproduces both medians and the core stats, uses cell-level replication with the right test, and thoroughly addresses nuclear-volume confounding and single-FOV limitation."
  },
  "C1__skills__r0": {
   "id": "C1",
@@ -2058,34 +2146,38 @@
   "checks": {
    "median_a": {
     "pass": true,
-    "given": "1.42 \u00b5m (raw per-cell median Rg for Bergmann glia)"
+    "given": "Raw per-cell median Rg for Bergmann glia = 1.42 \u00b5m",
+    "value": 1.42,
+    "judge_pass": true
    },
    "median_b": {
     "pass": true,
-    "given": "1.14 \u00b5m (raw per-cell median Rg for granule cells)"
+    "given": "Raw per-cell median Rg for granule cells = 1.14 \u00b5m",
+    "value": 1.14,
+    "judge_pass": true
    },
    "cell_is_unit": {
     "pass": true,
-    "given": "used median Rg over traces as each cell's value, compared cells (not traces) with Mann-Whitney"
+    "given": "Used median Rg over traces as each cell's value, then Mann-Whitney across cells; 'Each cell counts once, not each trace.'"
    },
    "n_cells_reported": {
     "pass": true,
-    "given": "8 Bergmann cells vs 22 granule cells"
+    "given": "Bergmann (8 cells, 245 traces), Granule (22 cells, 729 traces)"
    },
    "test_named": {
     "pass": true,
-    "given": "Mann-Whitney test named explicitly"
+    "given": "Mann\u2013Whitney test"
    },
    "mentions_nuclear_volume": {
     "pass": true,
-    "given": "notes Rg tracks nuclear volume (Spearman rho=0.72) and that difference shrinks/loses significance after controlling for nuclear size"
+    "given": "Notes Rg tracks nuclear volume (Spearman \u03c1 = 0.72) and that controlling for nuclear size shrinks/removes the effect"
    },
    "one_fov": {
     "pass": true,
-    "given": "states data are from a single field of view and batch, so no biological replicate"
+    "given": "States only 8 Bergmann cells 'from a single field of view and batch, so there is no biological replicate'"
    }
   },
-  "comment": "All quantitative checks and rubric items are satisfied; the answer also adds thoughtful confound analysis (loci count, nuclear volume) beyond what was required."
+  "comment": "Headline medians, n, test, nuclear-volume confound, and single-FOV caveat all match the reference and are correctly reported."
  },
  "C2__docs__r0": {
   "id": "C2",
@@ -2132,18 +2224,21 @@
   "checks": {
    "flags_n3_too_few": {
     "pass": true,
-    "given": "States only 3 Purkinje cells (one FOV, one replicate), so p-value can't go below 0.00043 and the result may not generalize"
+    "given": "Explicitly states only 3 Purkinje cells, calls out that p can't be smaller than 0.00043 with n=3, and that the result may not hold across animals/sections",
+    "value": null
    },
    "cell_is_unit": {
     "pass": true,
-    "given": "Used per-cell median trace Rg for the group comparison (3 vs 22 cells), giving p=0.00043/0.00087 matching reference"
+    "given": "Used per-cell median trace Rg and ran Mann-Whitney U on 3 Purkinje cells vs 22 granule cells as the main/headline test (p=0.00043 one-sided, 0.00087 two-sided)",
+    "value": 0.0008695652173913044
    },
    "no_trace_level_pvalue_claim": {
     "pass": true,
-    "given": "Mentions trace-level p=7.6e-15 but explicitly labels it as treating non-independent traces as independent and 'overstates the evidence', not the headline evidence"
+    "given": "Trace-level p (~7.6e-15) is reported only as a secondary/caveated number, explicitly noted as overstating evidence because traces aren't independent; the cell-level p-value is presented as the main evidence",
+    "value": null
    }
   },
-  "comment": "Answer correctly uses cell-level Mann-Whitney as primary evidence, explicitly caveats the trace-level p-value, and flags the n=3 limitation."
+  "comment": "Answer correctly uses cell-level Mann-Whitney U (matching reference two-sided p=0.00087) as its headline result, explicitly flags n=3 as too few, and clearly caveats the trace-level p-value rather than using it as evidence."
  },
  "C2__skills__r0": {
   "id": "C2",
@@ -2197,18 +2292,21 @@
   "checks": {
    "flags_n3_too_few": {
     "pass": true,
-    "given": "Explicitly states 'Too few Purkinje cells... shouldn't be read as strong evidence' and flags n=3 throughout."
+    "given": "explicitly notes only 3 Purkinje cells, says p-value is 'simply the smallest one a rank test can give for complete separation' and 'shouldn't be read as strong evidence'",
+    "value": null
    },
    "cell_is_unit": {
     "pass": true,
-    "given": "Computed per-trace Rg, took median per cell, then ran Mann-Whitney on the 3 vs 22 per-cell medians."
+    "given": "computed per-cell median Rg and ran Mann-Whitney on 3 Purkinje cells vs 22 granule cells (matches n_a=3, n_b=22, p=8.7e-4)",
+    "value": null
    },
    "no_trace_level_pvalue_claim": {
     "pass": true,
-    "given": "Never reports a ~1e-14-scale trace-level p-value as evidence; all reported p-values (8.7e-4, 4.3e-4, 0.97) come from cell-level or per-cell-summary tests."
+    "given": "never cites a ~1e-14 trace-level p-value as evidence; the 'trace' mentions are about loci-per-trace subsampling to control for detection differences, with the group test still done per-cell",
+    "value": null
    }
   },
-  "comment": "Answer correctly identifies the cell-level test, matches reference statistics, flags the small-n caveat, and additionally surfaces a nuclear-size confound without ever substituting a trace-level p-value as evidence."
+  "comment": "Answer correctly uses cells as the unit, reports the matching p=8.7e-4, and explicitly flags the n=3 caveat without leaning on a trace-level p-value."
  },
  "C3__docs__r0": {
   "id": "C3",
@@ -2255,18 +2353,21 @@
   "checks": {
    "mark": {
     "pass": true,
-    "given": "Answer states 'The IF mark that differs most is SOX2', with p\u22484.7e-5 and BH-FDR\u22480.002, matching reference values closely."
+    "given": "SOX2",
+    "value": null
    },
    "multiple_testing_corrected": {
     "pass": true,
-    "given": "Explicitly applies Benjamini-Hochberg FDR correction across 48 marks and states SOX2 is the only mark surviving correction."
+    "given": "Applied Benjamini-Hochberg FDR correction across all 48 marks; SOX2 remains significant (q=0.002) after correction",
+    "value": null
    },
    "cell_is_unit": {
     "pass": true,
-    "given": "Uses per-cell mean IF values (cells['if.<mark>']) with n=8 Bergmann cells vs n=39 other cells as the unit for the group comparison, not spots/traces."
+    "given": "Compared per-cell mean IF z-scores (Bergmann n=8 vs other cells n=39), not spot- or trace-level values",
+    "value": null
    }
   },
-  "comment": "Answer correctly identifies SOX2, applies BH-FDR correction across all 48 marks, and uses per-cell summaries as the unit of replication."
+  "comment": "Answer correctly identifies SOX2, applies BH-FDR correction across 48 marks, and uses per-cell mean IF values as the unit of replication for the group comparison."
  },
  "C3__skills__r0": {
   "id": "C3",
@@ -2318,20 +2419,23 @@
   "pkg_source_refs": 0,
   "score": 1.0,
   "checks": {
-   "text_mark": {
+   "mark": {
     "pass": true,
-    "given": "SOX2"
+    "given": "SOX2",
+    "value": null
    },
    "multiple_testing_corrected": {
     "pass": true,
-    "given": "Benjamini\u2013Hochberg FDR correction across all 48 channels; reports q-values"
+    "given": "Applied Benjamini-Hochberg FDR correction across all 48 channels, reporting q-values",
+    "value": null
    },
    "cell_is_unit": {
     "pass": true,
-    "given": "per-cell mean of per-spot z-scores, Mann\u2013Whitney on per-cell values with each cell counted once (n=8 vs n=39 cells)"
+    "given": "Used per-cell mean of per-spot z-scores as the unit for Mann-Whitney test, n=8 Bergmann cells vs n=39 other cells",
+    "value": null
    }
   },
-  "comment": "Correctly identifies SOX2 with proper FDR correction and cell-level unit of replication, matching reference statistics closely."
+  "comment": "Answer correctly identifies SOX2, applies BH-FDR correction across 48 channels, and uses per-cell aggregated values as the unit of replication."
  },
  "C4__docs__r0": {
   "id": "C4",
@@ -2378,26 +2482,30 @@
   "checks": {
    "median_a": {
     "pass": false,
-    "given": "0.180 (median over cell's spots) / 0.250 (mean over cell's spots)"
+    "given": "Table gives two candidate stats for Granule: 'Median over the cell's spots' = 0.180, and 'Mean over the cell's spots' = 0.250 \u00b1 0.100",
+    "value": 0.18,
+    "judge_pass": false
    },
    "median_b": {
     "pass": false,
-    "given": "0.318 (median over cell's spots) / 0.382 (mean over cell's spots)"
+    "given": "Table gives two candidate stats for Bergmann: 'Median over the cell's spots' = 0.318, and 'Mean over the cell's spots' = 0.382 \u00b1 0.170",
+    "value": 0.318,
+    "judge_pass": false
    },
    "direction_correct": {
     "pass": true,
-    "given": "concludes H3K9me3 is not higher (slightly lower) in granule cells than Bergmann glia, matching 'granule lower'"
+    "given": "Answer concludes H3K9me3 is not higher in granule cells, 'if anything, slightly lower than in Bergmann glia', matching the reference's 'granule lower' direction"
    },
    "n_cells_reported": {
     "pass": true,
-    "given": "22 granule cells and 8 Bergmann glia"
+    "given": "Explicitly reports n=22 granule cells and n=8 Bergmann glia, matching n_a=22, n_b=8"
    },
    "test_named": {
     "pass": true,
-    "given": "two-sided Mann-Whitney U test"
+    "given": "Names 'two-sided Mann\u2013Whitney U test' explicitly"
    }
   },
-  "comment": "Direction, n, and test are correctly reported, but neither the answer's per-cell mean nor per-cell median values fall within 5% of the reference median_a/median_b for both groups."
+  "comment": "Direction, cell counts, and test name are all correctly reported, but the answer's own 'Median over the cell's spots' values (0.180 Granule, 0.318 Bergmann) diverge from the reference medians by 25% and 8%, outside the \u00b15% tolerance."
  },
  "C4__skills__r0": {
   "id": "C4",
@@ -2451,26 +2559,30 @@
   "checks": {
    "median_a": {
     "pass": true,
-    "given": "0.240"
+    "given": "Granule cells median H3K9me3 = 0.240",
+    "value": 0.24,
+    "judge_pass": true
    },
    "median_b": {
     "pass": true,
-    "given": "0.347"
+    "given": "Bergmann glia median H3K9me3 = 0.347",
+    "value": 0.347,
+    "judge_pass": true
    },
    "direction_correct": {
     "pass": true,
-    "given": "granule cells trend lower than Bergmann glia, not significant (p=0.056)"
+    "given": "Granule cells trend lower than Bergmann glia, difference not significant"
    },
    "n_cells_reported": {
     "pass": true,
-    "given": "Granule cells (22 cells), Bergmann glia (8 cells)"
+    "given": "22 granule cells, 8 Bergmann glia cells"
    },
    "test_named": {
     "pass": true,
-    "given": "Mann\u2013Whitney U test (rank-biserial r reported)"
+    "given": "Mann\u2013Whitney U test (with rank-biserial effect size)"
    }
   },
-  "comment": "All numeric values, direction, sample sizes, and test name match the reference within tolerance."
+  "comment": "All quantitative values, direction, cell counts, and test name match the reference closely."
  },
  "C5__docs__r0": {
   "id": "C5",
@@ -2517,22 +2629,26 @@
   "checks": {
    "median_a": {
     "pass": true,
-    "given": "297 \u00b5m\u00b3 (median)"
+    "given": "297 \u00b5m\u00b3 (Bergmann median)",
+    "value": 297,
+    "judge_pass": true
    },
    "median_b": {
     "pass": true,
-    "given": "210 \u00b5m\u00b3 (median)"
+    "given": "210 \u00b5m\u00b3 (Granule median)",
+    "value": 210,
+    "judge_pass": true
    },
    "direction_correct": {
     "pass": true,
-    "given": "Bergmann glia nuclei are about 1.4\u00d7 larger than granule-cell nuclei"
+    "given": "States Bergmann glia nuclei are larger (median ratio 1.42, though not statistically significant)"
    },
    "test_named": {
     "pass": true,
-    "given": "Mann\u2013Whitney U (two-sided): p = 0.078"
+    "given": "Names Mann\u2013Whitney U test (p=0.078), also mentions Welch's t-test on log volume"
    }
   },
-  "comment": "Both medians match within tolerance, direction and test are correctly identified, though the answer emphasizes non-significance (p=0.078) consistent with the reference p-value."
+  "comment": "Both medians match within tolerance, direction and test name are correctly reported, matching the reference's own non-significant but Bergmann-larger finding."
  },
  "C5__skills__r0": {
   "id": "C5",
@@ -2586,22 +2702,26 @@
   "checks": {
    "median_a": {
     "pass": true,
-    "given": "297 \u00b5m\u00b3"
+    "given": "297 \u00b5m\u00b3",
+    "value": 297,
+    "judge_pass": true
    },
    "median_b": {
     "pass": true,
-    "given": "210 \u00b5m\u00b3"
+    "given": "210 \u00b5m\u00b3",
+    "value": 210,
+    "judge_pass": true
    },
    "direction_correct": {
     "pass": true,
-    "given": "Bergmann glia nuclei look bigger than granule cell nuclei"
+    "given": "Bergmann glia nuclei look bigger than granule cell nuclei (median ~1.42x larger, Bergmann > granule)"
    },
    "test_named": {
     "pass": true,
-    "given": "Mann\u2013Whitney U test"
+    "given": "Mann-Whitney U test"
    }
   },
-  "comment": "All values match within tolerance, direction and test name correctly identified."
+  "comment": "Medians, direction, and test name all match the reference closely, with correctly reported p-value and rank-biserial effect size."
  },
  "C6__docs__r0": {
   "id": "C6",
@@ -2648,22 +2768,26 @@
   "checks": {
    "median_a": {
     "pass": true,
-    "given": "18,173"
+    "given": "Oligo median 18,173 contacts/cell",
+    "value": 18173,
+    "judge_pass": true
    },
    "median_b": {
     "pass": true,
-    "given": "21,460"
+    "given": "L2/3 IT (pooled) median 21,460 contacts/cell",
+    "value": 21460,
+    "judge_pass": true
    },
    "direction_correct": {
     "pass": true,
-    "given": "Oligo has fewer contacts than L2/3 IT (~15% fewer), answer is 'No'"
+    "given": "Answer concludes 'No', Oligo has ~15% fewer contacts than L2/3 IT, matching reference direction 'Oligo fewer'"
    },
    "n_cells_reported": {
     "pass": true,
-    "given": "Oligo n=268, L2/3 IT pooled n=982 (575+260+147)"
+    "given": "Oligo n=268; L2/3 IT pooled n=982 (575+260+147 across the three subclusters)"
    }
   },
-  "comment": "All four checks pass: medians match reference almost exactly, direction (Oligo fewer) is correctly identified, and both group sizes are reported."
+  "comment": "All four checks pass: medians match closely, direction correctly identified as Oligo having fewer contacts, and both group cell counts are reported correctly."
  },
  "C6__skills__r0": {
   "id": "C6",
@@ -2718,22 +2842,26 @@
   "checks": {
    "median_a": {
     "pass": true,
-    "given": "18,173"
+    "given": "18,173",
+    "value": 18173,
+    "judge_pass": true
    },
    "median_b": {
     "pass": true,
-    "given": "21,460"
+    "given": "21,460",
+    "value": 21460,
+    "judge_pass": true
    },
    "direction_correct": {
     "pass": true,
-    "given": "Oligodendrocytes have fewer contacts than L2/3 IT (about 15% fewer at median)"
+    "given": "No \u2014 Oligo fewer contacts than L2/3 IT (Oligo/L2-3IT median ratio 0.85)"
    },
    "n_cells_reported": {
     "pass": true,
-    "given": "Oligo n=268, L2/3 IT pooled n=982"
+    "given": "Oligo n=268, L2/3 IT pooled n=982 (table), plus per-subtype n's"
    }
   },
-  "comment": "All numeric values match reference within tolerance, direction and cell counts are correctly reported."
+  "comment": "Both medians match reference closely, direction and cell counts are correctly reported."
  },
  "C7__docs__r0": {
   "id": "C7",
@@ -2780,22 +2908,26 @@
   "checks": {
    "slope_a": {
     "pass": true,
-    "given": "-0.92 (chr1, 1-10 Mb, 500 kb bins) for Oligo"
+    "given": "\u22120.92 (500 kb bins, 1\u201310 Mb)",
+    "value": -0.92,
+    "judge_pass": true
    },
    "slope_b": {
     "pass": true,
-    "given": "-1.41 (chr1, 1-10 Mb, 500 kb bins) for pooled L2/3 IT (L23IT.1+2+3)"
+    "given": "\u22121.41 (500 kb bins, 1\u201310 Mb)",
+    "value": -1.41,
+    "judge_pass": true
    },
    "uses_pseudobulk_or_subclass_cool": {
     "pass": true,
-    "given": "used per-cell-type pseudo-bulk cools (contacts_Oligo.cool, contacts_L23IT_1/2/3.cool summed)"
+    "given": "Used per-type pseudo-bulk cools (contacts_Oligo.cool, summed contacts_L23IT_{1,2,3}.cool)"
    },
    "depth_normalised": {
     "pass": false,
-    "given": "explicitly states raw (unbalanced) counts were used with 'no correction for coverage' between cell types, not a depth-normalized P(s)"
+    "given": "Answer explicitly states \u2018raw counts were used, with no correction for coverage or for differences between the cell types\u2019 \u2014 no depth normalization applied"
    }
   },
-  "comment": "Slope values match within tolerance and pseudo-bulk cools were used correctly, but the answer explicitly disavows depth normalization, using raw counts instead."
+  "comment": "Slope values match the reference within tolerance and pseudo-bulk cools were used correctly, but the answer explicitly used raw un-normalized counts rather than depth-normalizing P(s)."
  },
  "C7__skills__r0": {
   "id": "C7",
@@ -2850,22 +2982,26 @@
   "checks": {
    "slope_a": {
     "pass": true,
-    "given": "-0.92"
+    "given": "-0.92",
+    "value": -0.92,
+    "judge_pass": true
    },
    "slope_b": {
     "pass": true,
-    "given": "-1.41"
+    "given": "-1.41",
+    "value": -1.41,
+    "judge_pass": true
    },
    "uses_pseudobulk_or_subclass_cool": {
     "pass": true,
-    "given": "used linked per-cell-type pseudo-bulk .cool maps at 500kb (Oligo single map; L2/3 IT = sum of three sub-cluster cools)"
+    "given": "Used linked per-cell-type pseudo-bulk .cool maps at 500 kb (uns['linked_cool']); Oligo map alone, L2/3 IT as sum of three subtype cools"
    },
    "depth_normalised": {
     "pass": true,
-    "given": "P(s) = mean contacts per diagonal divided by total chr1 cis contacts, explicitly stated to correct for differing sequencing depth"
+    "given": "P(s) computed as mean contacts per diagonal divided by total chr1 cis contacts to correct for differing sequencing depth between groups"
    }
   },
-  "comment": "Both slopes are within tolerance of reference and the method correctly uses depth-normalised pseudo-bulk cools."
+  "comment": "Both slopes match the reference within tolerance, and the answer correctly uses linked pseudo-bulk cools with explicit depth normalization."
  },
  "C8__docs__r0": {
   "id": "C8",
@@ -2912,18 +3048,21 @@
   "checks": {
    "adjusts_for_nuclear_volume": {
     "pass": true,
-    "given": "normalized Rg by nuclear equivalent-sphere radius (from nuc_volume) and also regressed log(Rg) on log(nuclear radius), using residuals as a second normalization check"
+    "given": "Normalized Rg by dividing by nuclear equivalent-sphere radius derived from segmented nuc_volume_um3, and also cross-checked via log(Rg)~log(nuclear radius) regression residuals",
+    "value": null
    },
    "cell_is_unit": {
     "pass": true,
-    "given": "took per-cell median Rg (22 granule, 3 Purkinje cells) and ran Mann-Whitney at the cell level, explicitly noting trace-level tests are shown only for reference since traces from the same cell aren't independent"
+    "given": "Took median Rg per cell (22 granule, 3 Purkinje) and ran Mann-Whitney with cell as the unit, explicitly noting trace-level tests are shown only for reference since traces within a cell aren't independent",
+    "value": null
    },
    "flags_n3_too_few": {
     "pass": true,
-    "given": "states 'Only 3 Purkinje cells (6 traces)... There is no power to detect small effects, so \"no evidence of more compaction\" is the most this supports'"
+    "given": "Explicitly states only 3 Purkinje cells (6 traces) from one FOV/replicate gives no power to detect small effects, so the result only shows 'no evidence of more compaction,' not equal compactness",
+    "value": null
    }
   },
-  "comment": "All three rubric checks are satisfied, though the answer's own p-values differ substantially from the reference's (0.86 vs 0.311 adjusted), suggesting a different normalization/pipeline was used even though the qualitative conclusion and methodology align."
+  "comment": "The answer's adjusted-Rg medians and direction (granule slightly less compact than Purkinje after normalization, non-significant) closely track the reference values and all three rubric checks are satisfied."
  },
  "C8__skills__r0": {
   "id": "C8",
@@ -2977,18 +3116,21 @@
   "checks": {
    "adjusts_for_nuclear_volume": {
     "pass": true,
-    "given": "Divides each cell's Rg by nuclear radius R=(3V/4\u03c0)^(1/3) computed from nuc_volume_um3, reporting adjusted ratio 1.17 and p=0.31 matching reference direction/magnitude"
+    "given": "Divided each cell's Rg by nuclear radius R=(3V/4\u03c0)^(1/3) computed from nuc_volume_um3; cross-checked with a regression-residual approach and equal-detection resampling. Adjusted p=0.31, rank-biserial=+0.39, matching reference p_adjusted=0.311/rank_biserial_adjusted=0.394 (values scaled by a constant since answer used sphere radius instead of raw volume^(1/3), but direction/significance identical).",
+    "value": null
    },
    "cell_is_unit": {
     "pass": true,
-    "given": "Computes per-cell median trace Rg, explicitly compares '22 cells' vs '3 cells' rather than traces, states test compares 'cell groups rather than traces'"
+    "given": "Computed per-cell median trace Rg (22 granule cells, 3 Purkinje cells) and ran Mann-Whitney between cells, not pooling traces or spots as independent samples.",
+    "value": null
    },
    "flags_n3_too_few": {
     "pass": true,
-    "given": "States 'Only 3 Purkinje cells (6 traces). That is below the minimum of 5 cells per group, so none of the p-values can be relied on'"
+    "given": "States explicitly: 'Only 3 Purkinje cells (6 traces). That is below the minimum of 5 cells per group, so none of the p-values can be relied on.'",
+    "value": null
    }
   },
-  "comment": "Answer correctly concludes no (granule not more compact after adjustment), uses per-cell summaries as the unit of replication, applies a nuclear-size adjustment whose ratio and p-value closely match the reference, and explicitly flags the n=3 Purkinje limitation."
+  "comment": "Answer correctly concludes 'no' with numbers closely matching the reference stats, properly uses cells as the unit of replication, and explicitly flags the n=3 Purkinje sample as too few."
  },
  "C9__docs__r0": {
   "id": "C9",
@@ -3035,22 +3177,26 @@
   "checks": {
    "identity_bergmann": {
     "pass": true,
-    "given": "These 8 cells are exactly the Bergmann glia in this FOV (8/8 Bergmann, other 39 contain none)"
+    "given": "8 cells are exactly the Bergmann glia in the FOV; other 39 cells contain no Bergmann cells at all",
+    "value": null
    },
    "top_mark_sox2": {
     "pass": true,
-    "given": "SOX2 is the one difference surviving correction (p=4.7e-5, q=0.0026)"
+    "given": "SOZ2 (SOX2) is the one difference that survives correction, p=4.7e-05, q=0.0026",
+    "value": null
    },
    "cell_is_unit": {
     "pass": true,
-    "given": "Compared per-cell summary values (mean levels per cell) between 8 vs 39 cells via Mann-Whitney"
+    "given": "compared per-cell summary values (mean channel levels, volume) for 8 vs 39 cells via Mann-Whitney",
+    "value": null
    },
    "multiple_testing_corrected": {
     "pass": true,
-    "given": "Applied Benjamini-Hochberg correction across 55 tests"
+    "given": "applied Benjamini-Hochberg correction across 55 tests",
+    "value": null
    }
   },
-  "comment": "Answer correctly identifies Bergmann glia and SOX2, uses cell-level Mann-Whitney with BH-FDR correction, matching the reference method and findings."
+  "comment": "Answer correctly identifies the Bergmann glia identity and SOX2 as the sole significant marker, using per-cell Mann-Whitney with BH-FDR correction, matching all rubric criteria."
  },
  "C9__skills__r0": {
   "id": "C9",
@@ -3104,22 +3250,26 @@
   "checks": {
    "identity_bergmann": {
     "pass": true,
-    "given": "States all 8 selected cells are Bergmann glia and that this equals every Bergmann cell in the FOV (0 of other 39 are Bergmann)."
+    "given": "8/8 selected cells are Bergmann glia, every Bergmann cell in the FOV",
+    "value": null
    },
    "top_mark_sox2": {
     "pass": true,
-    "given": "Identifies SOX2 IF as the top/only significant differential mark, with p=5e-05, q=0.002, matching reference values closely."
+    "given": "SOX2 IF, only feature passing q<0.05, p=5e-5, q=0.002, rank-biserial 0.83",
+    "value": null
    },
    "cell_is_unit": {
     "pass": true,
-    "given": "Explicitly runs Mann-Whitney on per-cell values (8 vs 39 cells) and states 'the unit of replication is the cell, not the 245 vs 1,255 traces.'"
+    "given": "explicitly used per-cell medians/values, Mann-Whitney on 8 vs 39 cells, and explicitly notes unit of replication is the cell not traces",
+    "value": null
    },
    "multiple_testing_corrected": {
     "pass": true,
-    "given": "Applies Benjamini-Hochberg FDR correction across all 53 tested features and reports q-values."
+    "given": "Benjamini-Hochberg FDR correction across all 53 tested features",
+    "value": null
    }
   },
-  "comment": "The answer correctly identifies the Bergmann glia identity and SOX2 as the top marker, uses cell-level per-cell tests, and applies BH-FDR correction, satisfying all four checks."
+  "comment": "Answer correctly identifies the Bergmann glia selection and SOX2 as the sole significant mark after BH-FDR correction, using cell-level tests as the unit of replication."
  },
  "D1__docs__r0": {
   "id": "D1",
@@ -3166,18 +3316,20 @@
   "checks": {
    "rho": {
     "pass": true,
-    "given": "Spearman \u03c1 = +0.49, p = 4\u00d710\u207b\u2074 (reference 0.492)"
+    "given": "Spearman \u03c1 = +0.49 (p = 4\u00d710\u207b\u2074), n=47 cells",
+    "value": 0.49,
+    "judge_pass": true
    },
    "level_cell": {
     "pass": true,
-    "given": "explicitly computed 'across the 47 cells' using per-cell median Rg vs per-cell H3K9me3"
+    "given": "explicitly computed 'Across the 47 cells' using per-cell median Rg vs per-cell H3K9me3"
    },
    "mentions_nuclear_volume": {
     "pass": true,
-    "given": "notes median Rg tracks nuclear volume (r=+0.74) and that the H3K9me3-Rg link disappears once nuclear volume is accounted for"
+    "given": "notes median Rg tracks nuclear volume (r=+0.74) and H3K9me3 rises with nuclear volume (r=+0.37); after controlling for nuclear volume + cell type, H3K9me3 effect is not significant (p=0.36)"
    }
   },
-  "comment": "All three checks pass: rho matches within tolerance, association is explicitly framed at the cell level, and nuclear volume is identified as a confound."
+  "comment": "Rho value and sign match the reference within tolerance, and the answer explicitly frames the correlation as cell-level and flags nuclear volume as a likely confound."
  },
  "D1__skills__r0": {
   "id": "D1",
@@ -3231,18 +3383,20 @@
   "checks": {
    "rho": {
     "pass": true,
-    "given": "Raw Spearman \u03c1 = +0.49, p = 4\u00d710\u207b\u2074 (matches reference 0.492, p=0.00044)"
+    "given": "Spearman \u03c1 = +0.49, p = 4\u00d710\u207b\u2074",
+    "value": 0.49,
+    "judge_pass": true
    },
    "level_cell": {
     "pass": true,
-    "given": "Explicitly computed as one value per cell across n=47 cells"
+    "given": "explicitly states association is across cells, n=47 cells, one value per cell"
    },
    "mentions_nuclear_volume": {
     "pass": true,
-    "given": "States nuclear volume confounds the result; reports partial \u03c1 controlling for nuclear volume = +0.30, matching reference 0.299"
+    "given": "reports partial correlation controlling for nuclear volume (+0.30) and notes nuclear volume correlates with both Rg and H3K9me3 as a confound"
    }
   },
-  "comment": "All three checks pass: rho matches within tolerance, association is explicitly framed at the cell level, and nuclear volume is identified and quantified as a confounder matching the reference partial correlation."
+  "comment": "Answer's headline rho (0.49) and p-value match the reference within tolerance, and it correctly identifies the cell-level scope and nuclear volume as a confound, going further with additional partial correlations."
  },
  "D2__docs__r0": {
   "id": "D2",
@@ -3285,22 +3439,24 @@
   ],
   "repo_refs": 0,
   "pkg_source_refs": 0,
-  "score": 1.0,
+  "score": 0.6666666666666666,
   "checks": {
    "rho": {
-    "pass": true,
-    "given": "pooled spot-level \u03c1 = \u22120.17 (LaminB1 vs n_per_dist(um)), matching reference's alternate rho_laminb1_vs_distance_to_periphery_um = \u22120.1733 within ~2%"
+    "pass": false,
+    "given": "Spots, pooled (n = 383,674): \u03c1 = \u22120.17 (LaminB1 vs distance-to-periphery n_per_dist(um), which the answer itself notes is anti-correlated with n_rad_score at \u03c1=-0.95)",
+    "value": -0.17,
+    "judge_pass": true
    },
    "level_spot": {
     "pass": true,
-    "given": "explicitly reports spot-level Spearman correlation across all 383,674 spots as one of the analysis levels"
+    "given": "Performed spot-level pooled Spearman on all 383,674 spots, matching reference method exactly"
    },
    "direction_correct": {
     "pass": true,
-    "given": "concludes higher LaminB1 signal corresponds to closer proximity to the nuclear periphery"
+    "given": "Concludes higher LaminB1 -> closer to periphery / more peripheral, consistent across pooled, within-cell, and per-locus analyses"
    }
   },
-  "comment": "Answer used the distance-to-periphery-in-um metric instead of n_rad_score, but its pooled rho (-0.17) closely matches the reference's own alternate value for that metric (-0.1733), and direction/level match."
+  "comment": "The answer's pooled spot-level value (-0.17, using distance-to-periphery) matches the benchmark's provided equivalent metric (rho_laminb1_vs_distance_to_periphery_um = -0.173) within tolerance and correctly identifies the higher-LaminB1-more-peripheral direction at the spot level."
  },
  "D2__skills__r0": {
   "id": "D2",
@@ -3354,18 +3510,20 @@
   "checks": {
    "rho": {
     "pass": false,
-    "given": "Main result \u03c1 = -0.35 (per-locus, n=2,752); spot-level distance version \u03c1 = -0.17 (footnote only); none reported \u22480.1886"
+    "given": "Spearman rho = -0.35 (locus-averaged mean LaminB1 vs mean distance to periphery, n=2,752 loci, p\u22481e-80) reported as the main result",
+    "value": -0.35,
+    "judge_pass": false
    },
    "level_spot": {
     "pass": false,
-    "given": "Averaged spots per genomic locus (n=2,752 loci) as the primary analysis; pooled spot-level result reported only as a discounted 'contrast' check"
+    "given": "Headline analysis aggregates spots into per-locus means across cells (n=2,752 loci), not spot-level; a true spot-level Spearman (rho=-0.17, n=383,674 spots) is computed only as a secondary 'contrast' check and explicitly not used as the answer's main result"
    },
    "direction_correct": {
     "pass": true,
-    "given": "Concludes higher LaminB1 -> shorter distance to periphery / more peripheral, matching reference direction"
+    "given": "Concludes higher LaminB1 -> shorter distance to periphery, i.e. more peripheral, matching the reference direction"
    }
   },
-  "comment": "Direction of effect matches, but the headline analysis is done at an aggregated per-locus level (not spot level as the reference method specifies) and no reported number is within 5% of the reference rho."
+  "comment": "Direction matches, but the headline numeric result comes from a locus-averaged (not spot-level) analysis whose magnitude (0.35) is far outside tolerance of the reference spot-level rho (0.189), even though a buried spot-level check (-0.17) closely matches the reference's alternate distance-based statistic."
  },
  "D3__docs__r0": {
   "id": "D3",
@@ -3412,14 +3570,16 @@
   "checks": {
    "rho": {
     "pass": true,
-    "given": "Spearman \u03c1 = \u22120.86 (bin-level H3K27ac vs radial score across 101 chr15 bins)"
+    "given": "Spearman \u03c1 = \u22120.86 (bin-level, H3K27ac vs radial score)",
+    "value": -0.86,
+    "judge_pass": true
    },
    "level_bin": {
     "pass": true,
-    "given": "Grouped chr15 spots from all cells into 101 1\u2009Mb bins, averaged H3K27ac and n_rad_score per bin, then computed Spearman across bins"
+    "given": "Computed at 1 Mb bin level across all cells (per-bin mean H3K27ac and mean n_rad_score), matching reference method"
    }
   },
-  "comment": "Answer's bin-level Spearman rho (-0.86, 101 bins, H3K27ac vs n_rad_score) matches the reference method and value within tolerance."
+  "comment": "The answer's bin-level Spearman rho of -0.86 matches the reference (-0.856) within tolerance and correctly identifies the direction and method."
  },
  "D3__skills__r0": {
   "id": "D3",
@@ -3473,14 +3633,16 @@
   "checks": {
    "rho": {
     "pass": true,
-    "given": "\u03c1 = \u22120.86 (n_rad_score vs mean H3K27ac, bin-level)"
+    "given": "Spearman rho = -0.86 (n_rad_score vs H3K27ac, bin-level, p=3e-30)",
+    "value": -0.86,
+    "judge_pass": true
    },
    "level_bin": {
     "pass": true,
-    "given": "explicitly binned chr15 into 1 Mb bins, averaged H3K27ac and n_rad_score per bin, then computed Spearman across the 101 bins"
+    "given": "Correctly computed at bin level: averaged H3K27ac and n_rad_score per 1 Mb bin across all cells (101 bins), then Spearman across bins, matching reference method"
    }
   },
-  "comment": "Reported rho (-0.86) is within 5% of the reference (-0.8565) and the analysis was correctly done at bin level with matching direction and n_bins=101."
+  "comment": "Answer's bin-level rho (-0.86) matches the reference (-0.856) within tolerance, correct direction, and correct bin-level methodology (101 bins, per-bin means, Spearman across bins)."
  },
  "D4__docs__r0": {
   "id": "D4",
@@ -3527,14 +3689,16 @@
   "checks": {
    "rho": {
     "pass": true,
-    "given": "Spearman \u03c1 = 0.75 (n=47)"
+    "given": "Spearman \u03c1 = 0.75 (also Pearson r = 0.74)",
+    "value": 0.75,
+    "judge_pass": true
    },
    "level_cell": {
     "pass": true,
-    "given": "explicitly analyzed across 47 cells: cell-level correlation of median trace Rg vs nuclear volume"
+    "given": "explicitly analyzed 'across the 47 cells' using per-cell median trace Rg vs nuc_volume_um3"
    }
   },
-  "comment": "Answer matches reference rho within tolerance and correctly frames the association at the cell level."
+  "comment": "Answer correctly reports cell-level Spearman rho (0.75) and OLS slope (1.05e-3) matching reference values within tolerance."
  },
  "D4__skills__r0": {
   "id": "D4",
@@ -3588,14 +3752,17 @@
   "checks": {
    "rho": {
     "pass": true,
-    "given": "Spearman \u03c1 = 0.75 (p = 1.1e-9)"
+    "given": "Spearman \u03c1 = 0.75 (p = 1.1\u00d710\u207b\u2079)",
+    "value": 0.75,
+    "judge_pass": true
    },
    "level_cell": {
     "pass": true,
-    "given": "Per-cell median trace Rg vs nuc_volume_um3 across the 47 cells"
+    "given": "explicitly stated as across-cell association: 'Across the 47 cells in this field of view'",
+    "value": null
    }
   },
-  "comment": "Rho matches within tolerance and the answer correctly frames the association at the cell level with slope reported."
+  "comment": "Answer correctly reports cell-level Spearman rho (0.75 vs 0.752) and OLS slope (0.00105 vs 0.00105 um/um3), matching the reference within tolerance."
  },
  "D5__docs__r0": {
   "id": "D5",
@@ -3642,14 +3809,18 @@
   "checks": {
    "purity_hic": {
     "pass": true,
-    "given": "0.242"
+    "given": "0.24 for Hi-C (also reported as 0.242)",
+    "value": 0.242,
+    "judge_pass": true
    },
    "purity_rna": {
     "pass": true,
-    "given": "0.443"
+    "given": "0.44 for RNA (also reported as 0.443)",
+    "value": 0.443,
+    "judge_pass": true
    }
   },
-  "comment": "Both reported purity values (0.242 for Hi-C, 0.443 for RNA) match the reference within tolerance."
+  "comment": "Both headline values (0.242 Hi-C, 0.443 RNA) match the reference within tolerance, and the reported methodology (15-NN, Euclidean, self excluded, per-cell mean) matches the reference method."
  },
  "D5__skills__r0": {
   "id": "D5",
@@ -3703,14 +3874,18 @@
   "checks": {
    "purity_hic": {
     "pass": true,
-    "given": "0.24"
+    "given": "0.24 for Hi-C",
+    "value": 0.24,
+    "judge_pass": true
    },
    "purity_rna": {
     "pass": true,
-    "given": "0.44"
+    "given": "0.44 for RNA",
+    "value": 0.44,
+    "judge_pass": true
    }
   },
-  "comment": "Both reported values (0.24 and 0.44) fall within 2% of the reference purities."
+  "comment": "Both headline values (0.24 Hi-C, 0.44 RNA) match the reference within tolerance."
  },
  "D6__docs__r0": {
   "id": "D6",
@@ -3757,18 +3932,20 @@
   "checks": {
    "rho": {
     "pass": true,
-    "given": "Spearman \u03c1 \u2248 0.28 (p \u2248 1e-97), matches reference 0.2818 within tolerance"
+    "given": "Spearman \u03c1 \u2248 0.28 (p \u2248 1e-97)",
+    "value": 0.28,
+    "judge_pass": true
    },
    "level_cell": {
     "pass": true,
-    "given": "States association is across all 5,313 cells (cell-level)"
+    "given": "\"Across all 5,313 cells, cells with more Hi-C contacts tend to have more RNA counts\""
    },
    "checks_within_type": {
     "pass": true,
-    "given": "Computed within each of 22 cell types, median \u03c1 = 0.29, matching reference median_within_type_rho"
+    "given": "\"Within each cell type (22 types with \u2265 30 cells) | median \u03c1 = 0.29\""
    }
   },
-  "comment": "All three checks pass: rho matches closely, the answer is framed at the cell level, and it explicitly checks and reports the within-cell-type correlation."
+  "comment": "All quantities and both rubric points match the reference within tolerance."
  },
  "D6__skills__r0": {
   "id": "D6",
@@ -3822,18 +3999,20 @@
   "checks": {
    "rho": {
     "pass": true,
-    "given": "Spearman \u03c1 = 0.28 (p \u2248 1.5 \u00d7 10\u207b\u2079\u2077)"
+    "given": "Spearman \u03c1 = 0.28 (p \u2248 1.5 \u00d7 10\u207b\u2079\u2077)",
+    "value": 0.28,
+    "judge_pass": true
    },
    "level_cell": {
     "pass": true,
-    "given": "explicitly analyzed 'across cells' with one value per cell, n=5,313 cells"
+    "given": "one value per cell, n = 5,313 cells; Spearman \u03c1 across cells"
    },
    "checks_within_type": {
     "pass": true,
-    "given": "within cell types: positive in 21/22 types, range 0.16\u20130.50, median 0.29, pooled within-type \u03c1=0.27"
+    "given": "positive in 21 of 22 types (range 0.16\u20130.50, median 0.29); pooled within-type ranks \u03c1 = 0.27"
    }
   },
-  "comment": "All three checks are satisfied: rho matches within tolerance, the analysis is explicitly cell-level, and within-type correlation is checked and reported with a median matching the reference."
+  "comment": "Rho and p-value match the reference closely and the answer explicitly addresses both cell-level correlation and within-type consistency."
  },
  "D7__docs__r0": {
   "id": "D7",
@@ -3880,14 +4059,16 @@
   "checks": {
    "rho_all": {
     "pass": true,
-    "given": "All cells, Spearman \u03c1 = 0.131 (p \u2248 7e-22), matches reference 0.1317 within tolerance"
+    "given": "All cells, Spearman \u03c1 = 0.131 (p \u2248 7e-22, n=5,313)",
+    "value": 0.131,
+    "judge_pass": true
    },
    "checks_within_type": {
     "pass": true,
-    "given": "Answer explicitly computes within-type correlations (range -0.13 to +0.16, mostly non-significant) and concludes the overall association is driven by the Oligo cell-type outlier rather than a true within-type relationship, consistent with the reference's near-zero median within-type rho (0.033)"
+    "given": "Explicitly computed per-cell-type Spearman correlations (range -0.13 to 0.16, mostly weak/non-significant) and concluded the overall correlation is driven almost entirely by Oligo cell-type differences rather than within-type covariation"
    }
   },
-  "comment": "The answer's rho_all matches the reference within tolerance and it directly investigates and correctly concludes that the correlation is driven by cell-type identity (Oligo) rather than a within-type signal."
+  "comment": "Headline Spearman rho (0.131) matches reference closely and the answer correctly demonstrates the correlation is driven by cell type (Oligo) with weak within-type associations."
  },
  "D7__skills__r0": {
   "id": "D7",
@@ -3941,14 +4122,16 @@
   "checks": {
    "rho_all": {
     "pass": true,
-    "given": "Spearman \u03c1 = 0.13 (p = 5\u00d710\u207b\u00b2\u00b2) across all cells"
+    "given": "Spearman \u03c1 = 0.13 (p = 5\u00d710\u207b\u00b2\u00b2) across all cells",
+    "value": 0.13,
+    "judge_pass": true
    },
    "checks_within_type": {
     "pass": true,
-    "given": "within-type pooled \u03c1 \u2248 0.03 (median of per-type \u03c1 = 0.03), vs 0.13 overall; concludes correlation is 'nearly all' driven by cell type (oligodendrocyte identity), with within-type association barely present"
+    "given": "Reports within-type median \u03c1 = 0.03 (p=0.02), per-type range \u22120.13 to +0.17, only Oligo and Pvalb nominally significant, and attributes the overall correlation to cell-type identity (Oligo high in both RNA/ATAC) rather than a true within-type coupling"
    }
   },
-  "comment": "Answer's rho_all (0.13) matches reference within tolerance, and it correctly identifies the within-type median rho (~0.03) as much weaker than the overall correlation, attributing the bulk of the association to cell-type (oligodendrocyte) differences."
+  "comment": "Headline rho_all (0.13) and within-type median rho (0.03) both match the reference closely, and the answer correctly concludes the association is driven by cell type (Oligo) rather than within-type coupling."
  },
  "D8__docs__r0": {
   "id": "D8",
@@ -3995,18 +4178,21 @@
   "checks": {
    "flags_n8_small": {
     "pass": true,
-    "given": "Explicitly notes only 8 Bergmann cells from one FOV/replicate, giving cell-level analysis 'very little power'"
+    "given": "notes only 8 Bergmann cells from a single FOV/replicate, giving very low power for the cell-level test",
+    "value": 8
    },
    "level_cell": {
     "pass": true,
-    "given": "Reports a cell-level (n=8) analysis: SOX2 vs compaction score, rho=0.81, p=0.015, distinct from spot-level analyses"
+    "given": "explicitly reports a cell-level (n=8) correlation between per-cell SOX2 and a per-cell compaction score (rho=0.81, p=0.015), separate from its spot-level analyses",
+    "value": 0.81
    },
    "within_group": {
     "pass": true,
-    "given": "Restricts entire analysis to the 8 Bergmann glia in FOV 0, using Bergmann-only pairs/expected distances throughout"
+    "given": "restricts the entire analysis (spot- and cell-level) to the 8 Bergmann glia alone, no other cell types used",
+    "value": null
    }
   },
-  "comment": "Answer addresses all three rubric points (flags small n, reports a cell-level correlation, and stays within the Bergmann-glia group) even though its own computed cell-level rho/p (0.81/0.015) differ numerically from the reference (0.595/0.12) due to using a custom compaction metric instead of trace Rg."
+  "comment": "The answer uses its own compaction metric rather than median trace Rg (getting rho=0.81/p=0.015 vs reference's rho=0.595/p=0.120) but still surfaces all three required elements: the small-n caveat, an explicit cell-level result, and a strictly within-Bergmann-glia scope."
  },
  "D8__skills__r0": {
   "id": "D8",
@@ -4060,18 +4246,21 @@
   "checks": {
    "flags_n8_small": {
     "pass": true,
-    "given": "explicitly notes n=8 gives little power, CIs include no-effect and strong effects, 'not detectable, not absent'"
+    "given": "n=8 gives very little power; CIs include both no effect and strong effects; 'not detectable, not absent'",
+    "value": null
    },
    "level_cell": {
     "pass": true,
-    "given": "states level is 'one value per cell' using per-cell if.SOX2 vs per-cell median trace Rg"
+    "given": "one value per cell: SOX2 IF per cell vs median trace Rg per cell",
+    "value": null
    },
    "within_group": {
     "pass": true,
-    "given": "restricts analysis to the 8 cells labelled Bergmann glia, computing rho=0.60 (matches ref 0.595) and p=0.12 (matches ref 0.1195) within that subgroup"
+    "given": "restricted to the 8 cells labelled Bergmann in this field of view",
+    "value": null
    }
   },
-  "comment": "Answer correctly restricts to Bergmann-only cells at cell level, reproduces the reference rho/p closely, and explicitly flags the small n=8 as underpowered."
+  "comment": "Answer correctly restricts to Bergmann cells at the cell level, reports rho=0.60 (matches 0.595) and p=0.12 (matches 0.1195), and explicitly flags the small n=8 as underpowered."
  },
  "E1__docs__r0": {
   "id": "E1",
@@ -4118,18 +4307,20 @@
   "checks": {
    "frac_cell_chrom_gt2": {
     "pass": true,
-    "given": "answer states ~13% of cell-chromosome pairs have 3-7 traces (91+27 of ~920-940), close to reference 12.83%"
+    "given": "States '13% with 3\u20137 traces' (derived from table rows for counts 3 and 4-7), matching the >2-trace fraction",
+    "value": 0.13,
+    "judge_pass": true
    },
    "flags_more_than_two_alleles": {
     "pass": true,
-    "given": "explicitly flags 23/47 cells with a chromosome >2 traces, up to 7, and calls the dataset only 'partly' diploid"
+    "given": "Explicitly reports counts up to 7 traces per chromosome, a full distribution table, and states cells/pairs with 3-7 traces are common (13%), calling this inconsistent with clean diploidy"
    },
    "proposes_handling": {
     "pass": true,
-    "given": "proposes capping at two largest traces per chromosome, flagging outlier/doublet cells, treating homologues as interchangeable (not by suffix), normalizing for coverage, and logging split/merge status before cross-cell comparison"
+    "given": "Proposes capping at the two largest traces per chromosome or filtering by minimum spot count, flagging outlier/doublet cells, treating homologues as interchangeable (not matching a1-to-a1 across cells), normalizing for coverage, and recording split/merge status per cell-chromosome"
    }
   },
-  "comment": "All three checks pass: the fraction estimate is within tolerance of the reference, and the answer clearly flags the >2-allele issue with concrete pre-comparison handling steps."
+  "comment": "All three checks pass: the answer's raw counts match the reference distribution exactly and it explicitly flags the >2-allele issue with concrete remediation steps."
  },
  "E1__skills__r0": {
   "id": "E1",
@@ -4183,18 +4374,20 @@
   "checks": {
    "frac_cell_chrom_gt2": {
     "pass": true,
-    "given": "118/920 = 12.8% chromosomes with >2 traces (exact match to reference)"
+    "given": "118/920 pairs (12.8%) have more than 2 traces; also noted 12.6% of all 940 pairs",
+    "value": 0.128260869565,
+    "judge_pass": true
    },
    "flags_more_than_two_alleles": {
     "pass": true,
-    "given": "Explicitly reports 12.8% of chromosomes have >2 traces, with distribution table showing counts up to 7 traces, and discusses over-splitting/replication causes"
+    "given": "Explicitly reports 118 (cell,chrom) pairs >2 traces (12.8%), discusses over-splitting, replication, mis-assignment as causes"
    },
    "proposes_handling": {
     "pass": true,
-    "given": "Proposes per-cell summarization (median per chromosome), sensitivity checks on low-count cells, averaging duplicate spots per locus, and controlling for spot count before comparing cells"
+    "given": "Proposes per-cell median summarization instead of per-trace, sensitivity checks on low-count cells, merging split traces, and averaging duplicate spots before comparing cells"
    }
   },
-  "comment": "All three checks pass: the frac_cell_chrom_gt2 figure matches the reference exactly, and the answer both flags the excess-allele issue and proposes concrete handling steps before cross-cell comparison."
+  "comment": "Answer's exact per-(cell,chrom) computation (118/920=12.8%) matches the reference precisely, and it clearly flags excess alleles and proposes concrete pre-comparison handling steps."
  },
  "E2__docs__r0": {
   "id": "E2",
@@ -4241,14 +4434,16 @@
   "checks": {
    "frac_traces_with_duplicates": {
     "pass": true,
-    "given": "About 85% of traces (1,274 of 1,500)"
+    "given": "About 85% of traces (1,274 of 1,500) contain at least one genomic locus more than once",
+    "value": 0.8493333333333334,
+    "judge_pass": true
    },
    "explains_duplicates_handling": {
     "pass": true,
-    "given": "Recommends resolving repeats before building the distance matrix (default: NaN out repeats; alternative: keep the better-fitting copy; don't average copies; don't rely on current row-order-dependent overwrite behavior)"
+    "given": "Recommends resolving repeats before building the distance matrix: default set repeated loci to NaN per trace, or optionally keep the better-fitting copy, never average copies, and don't rely on the package's row-order-dependent overwrite behavior; notes the package currently overwrites duplicates silently based on row order."
    }
   },
-  "comment": "Both the quantitative match and the handling explanation are correct and well-supported."
+  "comment": "Headline fraction and count match the reference exactly, and the answer gives a clear, correct rubric-satisfying explanation of how to handle duplicate loci in a per-trace distance matrix."
  },
  "E2__skills__r0": {
   "id": "E2",
@@ -4302,14 +4497,16 @@
   "checks": {
    "frac_traces_with_duplicates": {
     "pass": true,
-    "given": "85% of traces (1,274 of 1,500) contain a locus more than once \u2014 matches reference exactly (0.8493, 1274/1500)"
+    "given": "85% of traces (1,274 of 1,500) contain duplicates",
+    "value": 0.85,
+    "judge_pass": true
    },
    "explains_duplicates_handling": {
     "pass": true,
-    "given": "Collapse to one coordinate per (trace, locus) before computing distances: average close copies (<~0.5\u00b5m), for far-apart copies keep the one nearest its genomic neighbors or mark missing, since averaging would create a fake intermediate point; notes distance matrix inflation (1386x1386 vs 1273 unique loci) and caveats that whole-trace stats can still use all spots if noted"
+    "given": "Collapse to one coordinate per (trace, locus): average close copies, keep nearest-neighbor copy or mask far-apart copies, since averaging would create a fake intermediate point; notes distances-over-spots vs distances-over-loci matrix size difference"
    }
   },
-  "comment": "Both checks pass: the duplicate-trace fraction matches the reference exactly and the answer gives a clear, justified handling strategy for building the per-trace distance matrix."
+  "comment": "Headline fraction matches reference within tolerance and the answer gives a thorough, well-reasoned explanation of how to handle duplicate loci in a per-trace distance matrix."
  },
  "E3__docs__r0": {
   "id": "E3",
@@ -4356,22 +4553,26 @@
   "checks": {
    "median_granule": {
     "pass": false,
-    "given": "Median spots/trace for Granule = 156 (trace-pooled), vs. reference per-cell median 159.25 (2.04% off, outside \u00b12%)"
+    "given": "156 spots/trace for Granule (trace-pooled median, from answer's summary table)",
+    "value": 156,
+    "judge_pass": false
    },
    "median_purkinje": {
     "pass": false,
-    "given": "Median spots/trace for Purkinje = 337 (trace-pooled), vs. reference per-cell median 365.0 (7.7% off, outside \u00b12%)"
+    "given": "337 spots/trace for Purkinje (trace-pooled median, from answer's summary table)",
+    "value": 337,
+    "judge_pass": false
    },
    "flags_detection_bias": {
     "pass": true,
-    "given": "Explicitly shows spot counts differ significantly by cell type (Kruskal-Wallis p\u22484e-34/7e-5) and are strongly linked to Rg and nucleus size/cell type, creating confounding"
+    "given": "Explicitly finds spot counts differ strongly by cell type (Kruskal-Wallis p\u22484e-34/7e-5) and are tightly linked to Rg (\u03c1=0.74-0.92), discussing at length how this could bias cell-type Rg comparisons"
    },
    "proposes_correction": {
     "pass": true,
-    "given": "Recommends reporting Rg per chromosome/allele, comparing with and without spot-count adjustment or matching on count, using cells as the statistical unit, and reporting alongside nucleus volume"
+    "given": "Recommends reporting Rg per chromosome/allele, showing results with and without spot-count adjustment or count-matching, using cells as the statistical unit, and reporting alongside nucleus volume"
    }
   },
-  "comment": "Detection-bias flagging and correction proposal are solid, but the reported spot-count medians match the trace-pooled reference values (156, 337) rather than the per-cell median values the benchmark asks for (159.25, 365.0), putting both outside the \u00b12% tolerance."
+  "comment": "Bias flagging and correction proposal are thorough and pass, but the headline spots/trace values reported (156, 337, trace-pooled) miss the reference's cell-level medians (159.25, 365) outside the 2% tolerance."
  },
  "E3__skills__r0": {
   "id": "E3",
@@ -4426,22 +4627,26 @@
   "checks": {
    "median_granule": {
     "pass": true,
-    "given": "159 spots/trace for Granule (median of per-cell medians)"
+    "given": "159 spots per trace for Granule (median of per-cell medians)",
+    "value": 159,
+    "judge_pass": true
    },
    "median_purkinje": {
     "pass": true,
-    "given": "365 spots/trace for Purkinje"
+    "given": "365 spots per trace for Purkinje (median of per-cell medians)",
+    "value": 365,
+    "judge_pass": true
    },
    "flags_detection_bias": {
     "pass": true,
-    "given": "explicitly states spots/trace differs significantly by cell type (Kruskal-Wallis p=0.0024) and correlates with Rg (rho~0.7), biasing the comparison"
+    "given": "Explicitly states spot counts differ significantly by cell type and bias the Rg comparison, with correlation between Rg and spot count (rho ~0.69-0.73)"
    },
    "proposes_correction": {
     "pass": true,
-    "given": "proposes subsampling a fixed number of random loci per trace (e.g. 87/145) to equalize detection before recomputing Rg"
+    "given": "Proposes equalizing spot counts by subsampling k random loci per trace (k=87, k=145) and recomputing Rg/tests"
    }
   },
-  "comment": "Both numeric medians match reference within tolerance, and the answer clearly flags the detection-count bias and proposes a subsampling-based correction with quantified before/after effect."
+  "comment": "Both headline numeric values match the reference within tolerance, and the answer clearly identifies and quantifies the detection bias while proposing and testing a subsampling-based correction."
  },
  "E4__docs__r0": {
   "id": "E4",
@@ -4488,18 +4693,20 @@
   "checks": {
    "total_contacts_chr1": {
     "pass": true,
-    "given": "317,232 contacts in total (raw counts, upper triangle incl. diagonal), matching provided map exactly"
+    "given": "317,232 contacts on chr1 at 1Mb, matching the provided Oligo map exactly",
+    "value": 317232.0,
+    "judge_pass": true
    },
    "uses_per_cell_scool": {
     "pass": true,
-    "given": "Summed raw chr1 1Mb pixels for all 268 Oligo cells from contacts_cells_1Mb.scool"
+    "given": "Summed raw chr1 pixels for each of 268 Oligo cells from contacts_cells_1Mb.scool into one 196x196 matrix"
    },
    "compares_with_provided_cool": {
     "pass": true,
-    "given": "Compared pseudo-bulk to contacts_Oligo.cool (500kb, coarsened x2 to 1Mb), reporting matching totals and correlation"
+    "given": "Coarsened contacts_Oligo.cool from 500kb to 1Mb and compared pixel-by-pixel against the pseudo-bulk sum"
    }
   },
-  "comment": "Total contacts and both rubric behaviors match the reference, though the answer overstates the agreement as a perfect pixel match (Pearson=1.0) whereas reference pixel Pearson is 0.9996, not part of the graded checks here."
+  "comment": "Total contacts and methodology checks pass, though the answer's claim of a perfect 0-difference/r=1.0 match overstates precision relative to the reference's r=0.9996 pixel correlation."
  },
  "E4__skills__r0": {
   "id": "E4",
@@ -4554,18 +4761,20 @@
   "checks": {
    "total_contacts_chr1": {
     "pass": true,
-    "given": "317,232 contacts computed from summed per-cell chr1 1 Mb maps; matches provided map exactly"
+    "given": "317,232 contacts (196x196 bin map: 171,241 diagonal + 145,991 off-diagonal)",
+    "value": 317232,
+    "judge_pass": true
    },
    "uses_per_cell_scool": {
     "pass": true,
-    "given": "Summed raw chr1 contact matrices of all 268 Oligo-labelled cells from the per-cell maps file"
+    "given": "summed raw chr1 1 Mb contact matrices from all 268 cells labelled Oligo in the per-cell maps file"
    },
    "compares_with_provided_cool": {
     "pass": true,
-    "given": "Compared to contacts_Oligo.cool, coarsened 500kb->1Mb (merging upper triangle only), found identical totals/diagonal/off-diagonal values"
+    "given": "coarsened contacts_Oligo.cool from 500kb to 1Mb (merging upper triangle) and found totals, diagonal, and all bin values identical to the summed map"
    }
   },
-  "comment": "All checks pass: total matches reference exactly, per-cell maps were summed, and the result was compared against the provided coarsened Oligo cool file."
+  "comment": "Answer's headline total (317,232) matches the reference exactly and it correctly builds the pseudo-bulk map from per-cell data and validates against the provided coarsened cool file."
  },
  "E5__docs__r0": {
   "id": "E5",
@@ -4612,22 +4821,26 @@
   "checks": {
    "median_a": {
     "pass": false,
-    "given": "No equalized-median value reported for Bergmann (\u00b5m) matching the reference's resample-to-150-loci method; answer instead reports ratios (0.85/1.00/1.01) and unequalized median 1.42"
+    "given": "No spot-equalized median Rg is reported in the reference's units/protocol; answer gives raw per-cell median 1.42 \u00b5m (unequalized) and only ratios (~1.00-1.01, or 0.85-0.88 under fixed-count thinning) for the equalized comparisons",
+    "value": null,
+    "judge_pass": false
    },
    "median_b": {
     "pass": false,
-    "given": "No equalized-median value reported for Granule (\u00b5m) matching the reference's resample-to-150-loci method; answer instead reports ratios and unequalized median 1.14"
+    "given": "Same issue: raw per-cell median 1.14 \u00b5m (unequalized) reported, but no explicit equalized median Rg value given for Granule, only ratios",
+    "value": null,
+    "judge_pass": false
    },
    "equalises_spot_number": {
     "pass": true,
-    "given": "Explicitly thins traces to fixed spot counts (30/50/100/150), matches traces on closest spot count, and regresses on log(spot count) to control for it"
+    "given": "Controls for spot count via log-spot-count regression, spot-count-matched trace pairs, quintile bins, and explicit downsampling to fixed spot counts (30/50/100/150)"
    },
    "cell_is_unit": {
     "pass": true,
-    "given": "Uses per-cell median Rg for the group comparison and clusters regression standard errors by cell, and reports per-cell sign consistency in matched pairs"
+    "given": "Uses per-cell median Rg with Mann-Whitney, cell-clustered SEs in regression, and per-cell aggregation of matched-pair differences (8/8 cells)"
    }
   },
-  "comment": "Rubric criteria (equalizing spot count, treating cell as unit) are satisfied, but the answer never reports the specific equalized group-median Rg values the reference computes, so the two numeric checks fail."
+  "comment": "The answer correctly equalizes for spot count and treats cells as the unit of replication, but never reports the specific equalized median Rg values in the reference's protocol, and its qualitative conclusion (gap disappears via regression/matching, ratio ~1.00) partly conflicts with its own thinning result (ratio 0.85-0.88, gap persists) and with the reference's actual equalized medians (1.687 vs 1.538, still nominally higher for Bergmann just not significant)."
  },
  "E5__skills__r0": {
   "id": "E5",
@@ -4681,22 +4894,26 @@
   "checks": {
    "median_a": {
     "pass": false,
-    "given": "Main reported value: 1.51 \u00b5m (using k=87 loci/trace); a secondary row at k=150 gives 1.67 \u00b5m which would pass, but the answer designates k=87 as its main result"
+    "given": "Headline (k=87, bolded 'main') Bergmann median Rg = 1.51 \u00b5m",
+    "value": 1.51,
+    "judge_pass": false
    },
    "median_b": {
     "pass": false,
-    "given": "Main reported value: 1.26 \u00b5m (using k=87 loci/trace); a secondary row at k=150 gives 1.54 \u00b5m which would pass, but the answer designates k=87 as its main result"
+    "given": "Headline (k=87, bolded 'main') Granule median Rg = 1.26 \u00b5m",
+    "value": 1.26,
+    "judge_pass": false
    },
    "equalises_spot_number": {
     "pass": true,
-    "given": "Randomly subsamples a fixed number of loci per trace (k=50/87/150) and averages over 20 draws, matching the equalization approach"
+    "given": "Recomputed Rg per trace using k randomly chosen loci (draws of 50/87/150), averaged over 20 draws, dropping traces with fewer than k spots"
    },
    "cell_is_unit": {
     "pass": true,
-    "given": "Explicitly computes per-cell median Rg over traces and runs Mann-Whitney on those per-cell values, never on individual traces"
+    "given": "Explicitly states each cell counts once via median Rg over its traces, with Mann-Whitney run on per-cell values, never traces"
    }
   },
-  "comment": "The answer's chosen 'main' equalization (k=87, an arbitrary quartile choice) yields medians (1.51/1.26) outside tolerance and a significant p-value, contradicting the reference's exact-match protocol (n_loci=150) which the answer relegates to a secondary table row where its own numbers (1.67/1.54, p=0.20) actually match closely."
+  "comment": "The answer's designated headline result uses k=87 loci (median_a=1.51, median_b=1.26), which misses the reference's k=150 values by >8%, even though its own k=150 sensitivity row (1.67/1.54, p=0.20) closely reproduces the reference and correctly notes the effect is not significant there."
  },
  "E8__docs__r0": {
   "id": "E8",
@@ -4743,14 +4960,16 @@
   "checks": {
    "n_embeddings": {
     "pass": true,
-    "given": "10 embeddings from three modalities plus one published UMAP"
+    "given": "10 embeddings (three modalities plus one published UMAP)",
+    "value": 10,
+    "judge_pass": true
    },
    "identifies_hic_embedding": {
     "pass": true,
-    "given": "recommends hic_pca as the Hi-C-based embedding to compare cell types by chromatin conformation, with hic_umap/hic_tsne for display"
+    "given": "Recommends hic_pca as the sole Hi-C-derived embedding for comparing cell types by chromatin conformation, noting hic_umap/hic_tsne are for plotting"
    }
   },
-  "comment": "Answer correctly reports 10 embeddings and correctly identifies hic_pca (Hi-C-derived) as the recommended embedding for comparing chromatin conformation across cell types."
+  "comment": "Answer correctly reports 10 embeddings, correctly lists hic_pca/hic_tsne/hic_umap as the Hi-C-based embeddings, and correctly recommends hic_pca for chromatin-conformation comparison, matching the reference."
  },
  "E8__skills__r0": {
   "id": "E8",
@@ -4805,13 +5024,15 @@
   "checks": {
    "n_embeddings": {
     "pass": true,
-    "given": "10 embeddings for 5,313 cells, matching the three Hi-C/RNA/ATAC modalities plus paper_umap"
+    "given": "10 embeddings for 5,313 cells",
+    "value": 10,
+    "judge_pass": true
    },
    "identifies_hic_embedding": {
     "pass": true,
-    "given": "Correctly lists hic_pca, hic_umap, hic_tsne as the three Hi-C-based embeddings, and recommends hic_pca (not the 2-D UMAP/t-SNE projections) as the one to use for comparing cell types by chromatin conformation"
+    "given": "Identifies hic_pca, hic_umap, hic_tsne as Hi-C based; recommends hic_pca for comparing cell types by chromatin conformation"
    }
   },
-  "comment": "Answer correctly inventories all 10 embeddings with modality/method and singles out hic_pca as the Hi-C-derived embedding for structural comparison, matching both the count and the rubric."
+  "comment": "Answer correctly reports 10 embeddings, correctly identifies all three Hi-C-based embeddings, and recommends hic_pca as the right one for comparing chromatin conformation, matching the reference."
  }
 }

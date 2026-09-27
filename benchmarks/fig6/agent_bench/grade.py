@@ -3,7 +3,9 @@
     python benchmarks/fig6/agent_bench/grade.py --run pilot1 [--judge-model sonnet]
 
 Each check is binary: a number within tolerance of the reference, a named text answer, or a rubric item
-(defined in RUBRIC below).  Score of a run = fraction of its checks passed.  Writes grades.json and prints a
+(defined in RUBRIC below).  For numbers the judge only extracts the value the answer reports (converted to the
+reference's unit and scale); the tolerance test is done here in code (`number_pass`), and the judge's own
+verdict is kept as `judge_pass` for auditing — in main3 a judge marked a correct count wrong.  Score of a run = fraction of its checks passed.  Writes grades.json and prints a
 table by question × condition.
 """
 from __future__ import annotations
@@ -42,7 +44,10 @@ def build_prompt(q, ref, answer):
     checks = []
     for name in g.get("numbers", []):
         checks.append(f'- number "{name}": reference {ref.get(name)!r}; correct if within ±{g.get("tol", 0) * 100:g}% '
-                      f'(or exact if tolerance is 0)')
+                      f'(or exact if tolerance is 0).  Also give "value": the number the answer reports as its result '
+                      f'for this quantity (its headline value, not an alternative it mentions), converted to the same '
+                      f'unit and scale as the reference (e.g. 25% -> 0.25 if the reference is a fraction); null if the '
+                      f'answer gives none')
     txt = g.get("text")
     for name in ([txt] if isinstance(txt, str) else (txt or [])):
         checks.append(f'- text "{name}": reference {ref.get(name, name)!r}; correct if the answer names it')
@@ -62,17 +67,37 @@ Answer to grade:
 {answer}
 >>>
 
-Reply with JSON only: {{"checks": {{"<check name>": {{"pass": true|false, "given": "<what the answer said, short>"}}}}, "comment": "<one sentence>"}}"""
+Reply with JSON only: {{"checks": {{"<check name>": {{"pass": true|false, "given": "<what the answer said, short>", "value": <number or null, number checks only>}}}}, "comment": "<one sentence>"}}"""
 
 
-def judge(prompt, model):
+def number_pass(value, ref, tol: float) -> bool:
+    """Tolerance test for a number check: relative ``tol``; tol 0 means exact (integers) or 1e-9 relative."""
+    if value is None or isinstance(value, bool):
+        return False
+    try:
+        v, r = float(value), float(ref)
+    except (TypeError, ValueError):
+        return False
+    if tol == 0:
+        return round(v) == r if float(r).is_integer() else abs(v - r) <= 1e-9 * max(abs(r), 1e-12)
+    return abs(v - r) <= tol * abs(r)
+
+
+def judge(prompt, model, tries: int = 3):
+    """One judge call; retried on timeout or unparsable output (a single hang used to abort a whole run)."""
     cmd = ["claude", "-p", prompt, "--output-format", "json"]
     if model:
         cmd += ["--model", model]
-    out = subprocess.run(cmd, capture_output=True, text=True, timeout=300).stdout
-    text = json.loads(out).get("result", "")
-    m = re.search(r"\{.*\}", text, re.S)
-    return json.loads(m.group(0))
+    err = None
+    for _ in range(tries):
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=300).stdout
+            text = json.loads(out).get("result", "")
+            m = re.search(r"\{.*\}", text, re.S)
+            return json.loads(m.group(0))
+        except (subprocess.TimeoutExpired, ValueError, AttributeError) as e:
+            err = e
+    raise RuntimeError(f"judge failed {tries} times: {err!r}")
 
 
 def main():
@@ -91,6 +116,11 @@ def main():
         q = qs[meta["id"]]
         g = judge(build_prompt(q, answers[meta["id"]]["values"], (p / "answer.md").read_text()), a.judge_model)
         checks = g.get("checks", {})
+        ref, spec = answers[meta["id"]]["values"], q.get("grade", {})
+        for name in spec.get("numbers", []):
+            c = checks.setdefault(name, {"pass": False, "given": "(judge returned no check)"})
+            c["judge_pass"] = bool(c.get("pass"))
+            c["pass"] = number_pass(c.get("value"), ref.get(name), spec.get("tol", 0))
         score = sum(bool(v.get("pass")) for v in checks.values()) / max(len(checks), 1)
         return p.name, {**meta, "score": score, "checks": checks, "comment": g.get("comment", "")}
 
