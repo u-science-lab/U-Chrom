@@ -12,7 +12,8 @@
   "AnnData / MuData (and SpatialData table) elements rated in their most favourable orientation (spots, cells or loci as observations); these orientations exclude each other in one object (one AnnData, one MuData modality)",
   "a test that needed a generic slot backs at most 'by convention', an external file 'linked'",
   "a data table serialised to JSON text in a descriptive metadata attribute does not count (recorded with counted: false); provenance metadata there does, and so do scalar key-values describing the object that carries the attribute (each cell's own cooler in a .scool)",
-  "partial reads: native = one cell's / chromosome's rows are read from disk without reading the other rows (beyond the selection key column); by convention = only by scanning every row (streamed) or with part of the data loaded whole"
+  "partial reads: native = one cell's / chromosome's rows are read from disk without reading the other rows (beyond the selection key column); by convention = only by scanning every row (streamed) or with part of the data loaded whole",
+  "by convention needs a normal use of the format that just lacks the structure; an encoding that merely writes (e.g. tracing traces as per-trace column sets of cooler bins tables, an embedding as one metadata key per dimension) is rated not supported, with the test still reported"
  ],
  "rows": [
   "chromdata.zarr",
@@ -877,41 +878,43 @@
     }
    },
    "hierarchy": {
-    "value": "convention",
-    "note": "cells are the .scool cell groups, each with its own bins table (create_scool takes one per cell); traces only as sets of extra bins columns (x_<trace>, y_<trace>, z_<trace>), spots as bins rows (test)",
+    "value": "none",
+    "note": "no trace or spot level: a .scool has per-cell groups, but traces and spots could only be forced in as sets of per-trace bins columns (x_<trace>, ...; the test shows this writes), which is not a use of the format (rule 6)",
     "evidence": [
      "https://cooler.readthedocs.io/en/latest/schema.html"
     ],
     "version": "0.10.4",
     "audit": {
      "date": "2026-09-27",
-     "before": "none",
-     "reason": "re-check: create_scool accepts a bins table per cell, so cell \u203a trace \u203a spot fits in extra bins columns (generic slot); before: '.scool has cells, but no traces or spots'"
+     "before": "convention",
+     "reason": "rule 6: by convention needs a normal use of the format, not a technically possible encoding; per-trace column sets in each cell's bins table are not how cooler is used"
     },
     "test": {
      "script": "benchmarks/fig2/b_capabilities.py",
      "ok": true,
      "slot": "generic",
-     "detail": "cells = .scool cell groups (each with its own bins table); traces = sets of extra bins columns x_<trace>, y_<trace>, z_<trace>; spots = bins rows"
+     "detail": "cells = .scool cell groups (each with its own bins table); traces = sets of extra bins columns x_<trace>, y_<trace>, z_<trace>; spots = bins rows (writes; not counted, rule 6: not a use of the format)",
+     "counted": false
     }
    },
    "spot_signals": {
-    "value": "convention",
-    "note": "one extra bins column per trace (intensity_<trace>) in each cell's bins table (test)",
+    "value": "none",
+    "note": "no spot level; per-trace intensity columns in each cell's bins table would write (test) but are not a use of the format (rule 6)",
     "evidence": [
      "https://cooler.readthedocs.io/en/latest/schema.html"
     ],
     "version": "0.10.4",
     "audit": {
      "date": "2026-09-27",
-     "before": "none",
-     "reason": "re-check: same per-cell bins columns as the hierarchy; before: 'no spot level'"
+     "before": "convention",
+     "reason": "rule 6, as for the hierarchy"
     },
     "test": {
      "script": "benchmarks/fig2/b_capabilities.py",
      "ok": true,
      "slot": "generic",
-     "detail": "one extra bins column per trace (intensity_<trace>) in each cell's bins table"
+     "detail": "one extra bins column per trace (intensity_<trace>) in each cell's bins table (writes; not counted, rule 6)",
+     "counted": false
     }
    },
    "bin_signals": {
@@ -948,22 +951,23 @@
     }
    },
    "cell_emb": {
-    "value": "convention",
-    "note": "Judgement call: no per-cell arrays; one scalar key per dimension (umap_1, umap_2) in each cell's metadata works (test), as FOF-CT's one optional column per dimension, which is also rated by convention. Awkward for a 64-dimensional embedding; an embedding matrix as JSON in one attribute is not counted",
+    "value": "none",
+    "note": "no per-cell arrays; one scalar metadata key per dimension (umap_1, umap_2, ...) writes (test) but is not a use of the format for a 10- to 64-dimensional embedding (rule 6)",
     "evidence": [
      "https://cooler.readthedocs.io/en/latest/schema.html"
     ],
     "version": "0.10.4",
     "audit": {
      "date": "2026-09-27",
-     "before": "none",
-     "reason": "same slot as the cell table; consistent with FOF-CT (one scalar per dimension = by convention)"
+     "before": "convention",
+     "reason": "rule 6: a few scalar properties per cell are a normal use of the metadata attribute, an embedding split into one key per dimension is not"
     },
     "test": {
      "script": "benchmarks/fig2/b_capabilities.py",
      "ok": true,
      "slot": "generic",
-     "detail": "one scalar key per embedding dimension (umap_1, umap_2) in each cell's metadata, as FOF-CT's one column per dimension"
+     "detail": "one scalar key per embedding dimension (umap_1, umap_2) in each cell's metadata (writes; not counted, rule 6)",
+     "counted": false
     }
    },
    "cell_pos": {
@@ -1080,16 +1084,16 @@
   {
    "row": "cooler (.cool / .scool)",
    "col": "hierarchy",
-   "before": "none",
-   "after": "convention",
-   "reason": "re-check: create_scool accepts a bins table per cell, so cell \u203a trace \u203a spot fits in extra bins columns (generic slot); before: '.scool has cells, but no traces or spots'"
+   "before": "convention",
+   "after": "none",
+   "reason": "rule 6: by convention needs a normal use of the format, not a technically possible encoding; per-trace column sets in each cell's bins table are not how cooler is used"
   },
   {
    "row": "cooler (.cool / .scool)",
    "col": "spot_signals",
-   "before": "none",
-   "after": "convention",
-   "reason": "re-check: same per-cell bins columns as the hierarchy; before: 'no spot level'"
+   "before": "convention",
+   "after": "none",
+   "reason": "rule 6, as for the hierarchy"
   },
   {
    "row": "cooler (.cool / .scool)",
@@ -1101,9 +1105,9 @@
   {
    "row": "cooler (.cool / .scool)",
    "col": "cell_emb",
-   "before": "none",
-   "after": "convention",
-   "reason": "same slot as the cell table; consistent with FOF-CT (one scalar per dimension = by convention)"
+   "before": "convention",
+   "after": "none",
+   "reason": "rule 6: a few scalar properties per cell are a normal use of the metadata attribute, an embedding split into one key per dimension is not"
   },
   {
    "row": "cooler (.cool / .scool)",

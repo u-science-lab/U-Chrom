@@ -505,9 +505,11 @@ def t_cooler(tmp):
                 trace_back[i] = (g.rsplit("/", 1)[-1], t)
     out["hierarchy"] = T(trace_back == list(zip(sp_["cell_id"], sp_["trace_id"])) and np.allclose(xyz_back, d["xyz"]),
                          GEN, "cells = .scool cell groups (each with its own bins table); traces = sets of extra "
-                              "bins columns x_<trace>, y_<trace>, z_<trace>; spots = bins rows")
+                              "bins columns x_<trace>, y_<trace>, z_<trace>; spots = bins rows (writes; not "
+                              "counted, rule 6: not a use of the format)", counted=False)
     out["spot_signals"] = T(np.allclose(sig_back, d["spot_sig"]), GEN,
-                            "one extra bins column per trace (intensity_<trace>) in each cell's bins table")
+                            "one extra bins column per trace (intensity_<trace>) in each cell's bins table "
+                            "(writes; not counted, rule 6)", counted=False)
     # Per-cell properties in each cell's own cooler (.scool /cells/<name>): cooler.create_cooler on the
     # cell group URI writes that cell's `metadata` attribute (scalar key-values; rule 4: counted, generic).
     sc = str(tmp / "cells_meta.scool")
@@ -526,8 +528,8 @@ def t_cooler(tmp):
                      "(/cells/<name>), written with cooler.create_cooler(uri, ..., metadata=); a scan of every "
                      "cell group rebuilds the table")
     out["cell_emb"] = T(valid and np.allclose([[back[c]["umap_1"], back[c]["umap_2"]] for c in cid], d["emb"]),
-                        GEN, "one scalar key per embedding dimension (umap_1, umap_2) in each cell's metadata, "
-                             "as FOF-CT's one column per dimension")
+                        GEN, "one scalar key per embedding dimension (umap_1, umap_2) in each cell's metadata "
+                             "(writes; not counted, rule 6)", counted=False)
     out["cell_pos"] = T(valid and np.allclose([[back[c]["centroid_x"], back[c]["centroid_y"]] for c in cid],
                                               d["cell_xy"]), GEN,
                         "centroid_x / centroid_y (+ a unit key) in each cell's metadata; no frame, no outline")
@@ -703,14 +705,14 @@ MARKS = {
     "cooler (.cool / .scool)": {
         "coords": ("convention", "extra bin columns x, y, z: one structure per file (or per cell of a .scool, one "
                                  "column set per trace); no spot table", [CO_DOC]),
-        "hierarchy": ("convention", "cells are the .scool cell groups, each with its own bins table (create_scool "
-                                    "takes one per cell); traces only as sets of extra bins columns (x_<trace>, "
-                                    "y_<trace>, z_<trace>), spots as bins rows (test)", [CO_DOC], "none",
-                      "re-check: create_scool accepts a bins table per cell, so cell › trace › spot fits in extra "
-                      "bins columns (generic slot); before: '.scool has cells, but no traces or spots'"),
-        "spot_signals": ("convention", "one extra bins column per trace (intensity_<trace>) in each cell's bins "
-                                       "table (test)", [CO_DOC], "none",
-                         "re-check: same per-cell bins columns as the hierarchy; before: 'no spot level'"),
+        "hierarchy": ("none", "no trace or spot level: a .scool has per-cell groups, but traces and spots could "
+                              "only be forced in as sets of per-trace bins columns (x_<trace>, ...; the test shows "
+                              "this writes), which is not a use of the format (rule 6)", [CO_DOC], "convention",
+                      "rule 6: by convention needs a normal use of the format, not a technically possible "
+                      "encoding; per-trace column sets in each cell's bins table are not how cooler is used"),
+        "spot_signals": ("none", "no spot level; per-trace intensity columns in each cell's bins table would "
+                                 "write (test) but are not a use of the format (rule 6)", [CO_DOC], "convention",
+                         "rule 6, as for the hierarchy"),
         "bin_signals": ("native", "bins table, which the schema allows to carry extra columns (e.g. weight, "
                                   "signals)", [CO_DOC]),
         "cells": ("convention", "no cell table, but every cell of a .scool is a cooler with its own metadata "
@@ -719,12 +721,11 @@ MARKS = {
                   [CO_DOC], "none", "per-cell metadata of each cell's cooler is a general-purpose slot for that "
                                     "cell's properties (rule 4: key-values describing their own object count; a "
                                     "whole table as JSON in one attribute still does not)"),
-        "cell_emb": ("convention", JUDGEMENT + "no per-cell arrays; one scalar key per dimension (umap_1, umap_2) "
-                                   "in each cell's metadata works (test), as FOF-CT's one optional column per "
-                                   "dimension, which is also rated by convention. Awkward for a 64-dimensional "
-                                   "embedding; an embedding matrix as JSON in one attribute is not counted",
-                     [CO_DOC], "none", "same slot as the cell table; consistent with FOF-CT (one scalar per "
-                                       "dimension = by convention)"),
+        "cell_emb": ("none", "no per-cell arrays; one scalar metadata key per dimension (umap_1, umap_2, ...) "
+                             "writes (test) but is not a use of the format for a 10- to 64-dimensional "
+                             "embedding (rule 6)", [CO_DOC], "convention",
+                     "rule 6: a few scalar properties per cell are a normal use of the metadata attribute, "
+                     "an embedding split into one key per dimension is not"),
         "cell_pos": ("convention", "centroid_x / centroid_y (+ a unit key) in each cell's metadata (test); no "
                                    "coordinate frame, no outline", [CO_DOC], "none",
                      "same slot as the cell table: a centroid is two scalar properties of the cell"),
@@ -825,7 +826,10 @@ def main() -> None:
                   "describing the object that carries the attribute (each cell's own cooler in a .scool)",
                   "partial reads: native = one cell's / chromosome's rows are read from disk without reading the "
                   "other rows (beyond the selection key column); by convention = only by scanning every row "
-                  "(streamed) or with part of the data loaded whole"],
+                  "(streamed) or with part of the data loaded whole",
+                  "by convention needs a normal use of the format that just lacks the structure; an encoding that "
+                  "merely writes (e.g. tracing traces as per-trace column sets of cooler bins tables, an embedding "
+                  "as one metadata key per dimension) is rated not supported, with the test still reported"],
         "rows": ROWS, "cols": [c for c, _ in COLS], "col_labels": dict(COLS), "col_defs": COL_DEFS,
         "cells": cells, "versions": versions, "audit_date": AUDIT_DATE, "audit_changes": changes,
         "label_changes": [{"col": "coords", "before": "3-D coordinates", "after": dict(COLS)["coords"],
@@ -882,7 +886,10 @@ def write_table(payload) -> Path:
         "stored as data. (5) *Partial reads*: native when one cell's or one chromosome's rows are read from "
         "disk without reading the other rows (beyond the selection key column); by convention when that is "
         "only possible by scanning every row (streamed, memory bounded) or with part of the data (e.g. `obs` / "
-        "`obsm`) loaded whole.",
+        "`obsm`) loaded whole. (6) *By convention* needs a normal use of the format that only lacks the "
+        "dedicated structure; an encoding that merely writes (tracing traces as per-trace column sets of cooler "
+        "bins tables, an embedding split into one metadata key per dimension) is rated *not supported*, and "
+        "its test is still reported.",
         "",
         "**Tests.** ✓ = a tiny test in `benchmarks/fig2/b_capabilities.py` stored the element with that "
         "library's own API, wrote it to disk, read it back and compared the values; the slot it used "
