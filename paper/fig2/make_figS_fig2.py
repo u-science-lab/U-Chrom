@@ -27,6 +27,7 @@ from pathlib import Path
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.lines import Line2D
 from matplotlib.colors import LinearSegmentedColormap, LogNorm
 from matplotlib.patches import Patch
 
@@ -84,7 +85,7 @@ def head(fig, x0, y0, letter, title, sub=None):
     F.label(fig, x0, y0, letter)
     F.title(fig, x0 + 5, y0 + 0.4, title)
     if sub:
-        fig.text((x0 + 5) / W, 1 - (y0 + 4.6) / H, sub, fontsize=6, color=F.GREY, va="top")
+        fig.text((x0 + 5) / W, 1 - (y0 + 4.6) / H, sub, fontsize=6, color=F.GREY, va="top", linespacing=1.05)
 
 
 # --------------------------------------------------------------------------- row 1
@@ -231,26 +232,47 @@ def ratio(fig, x0, y0, fx):
 
 # --------------------------------------------------------------------------- row 3
 
-def query_time(fig, x0, y0, e):
-    head(fig, x0, y0, "f", "Pseudo-bulk query", "chr1, from the linked .scool")
-    tx = F.ax_at(fig, x0 + 13, y0 + AX_DY, 24, ROW3_H)
+def query_speed(fig, x0, y0, e, q):
+    """Linked .scool query speed: per cell type (all chromosomes) | one chromosome vs cells aggregated."""
+    per = q["identity"]["per_type"]
+    n_chr = len(q["identity"]["scope"].split("(")[1].split(")")[0].split(","))
+    head(fig, x0, y0, "g", "Linked contacts are fast to query",
+         "pseudo-bulk summed from the linked per-cell .scool")
+    n = np.array([p["n_cells"] for p in per]); o = np.argsort(n)
+    first = np.array([p["first_query_s_total"] for p in per])
+    cached = np.array([p["cached_query_s_median"] for p in per]) * n_chr
     c = np.array([p["n_cells"] for p in e])
     cold = np.array([p["cold_s"]["median"] for p in e])
-    cached = np.array([p["cached_s"]["median"] for p in e])
-    tx.plot(c, cold, color=F.TEAL, marker="o", ms=2.2, lw=1.0)
-    tx.plot(c, cached, color=F.TEAL, ls="--", marker="o", ms=2.2, mfc="white", lw=1.0)
-    F.loglog(tx)
-    tx.set_xlabel("cells aggregated"); tx.set_ylabel("time")
-    F.decades(tx, c.min(), c.max())
-    ticks(tx, "x", [1e2, 1e3], "count")
-    tx.set_ylim(1e-5, 10)
-    ticks(tx, "y", [1e-4, 1e-2, 1e0], "time")
-    tx.text(c[-1], cold[-1] * 2.2, "first query", fontsize=6, color=F.TEAL, va="bottom", ha="right")
-    tx.text(c[0], cached[0] * 3.5, "cached", fontsize=6, color=F.TEAL, va="bottom")
+    cc = np.array([p["cached_s"]["median"] for p in e])
+    panels = [(n[o], first[o], cached[o], f"each cell type, all {n_chr} chromosomes", "cells of the type"),
+              (c, cold, cc, "chr1, random groups of cells", "cells aggregated")]
+    aw = 25.0
+    for k, (xs, f_, c_, sub, xl) in enumerate(panels):
+        ax = F.ax_at(fig, x0 + 13 + k * (aw + 8), y0 + AX_DY, aw, ROW3_H)
+        ax.plot(xs, f_, color=F.TEAL, marker="o", ms=2.0, lw=1.1)
+        ax.plot(xs, c_, color=F.TEAL, ls="--", marker="o", ms=2.0, mfc="white", lw=1.0)
+        F.loglog(ax)
+        ax.set_xlabel(xl)
+        if k == 0:
+            ax.set_ylabel("time")
+        ax.set_xlim(xs.min() / 1.6, xs.max() * 1.6)
+        ticks(ax, "x", [v for v in (1e2, 1e3) if xs.min() / 1.6 < v < xs.max() * 1.6], "count")
+        ax.set_ylim(1e-5, 30)
+        ticks(ax, "y", [1e-4, 1e-2, 1e0], "time")
+        ax.set_title(sub, fontsize=6, color=F.INK, pad=2)
+        if k == 1:                      # legend in the empty upper-left corner of the right sub-plot
+            hs = [Line2D([], [], color=F.TEAL, marker="o", ms=2.4, lw=1.1),
+                  Line2D([], [], color=F.TEAL, ls="--", marker="o", ms=2.4, mfc="white", lw=1.0)]
+            ax.legend(hs, ["first query", "cached (LRU)"], loc="upper left",
+                      frameon=False, fontsize=6, handlelength=2.0, handletextpad=0.4, labelspacing=0.3,
+                      borderaxespad=0.2)
 
 
 def sizes(fig, x0, y0, imp):
-    head(fig, x0, y0, "g", "On-disk size", "contacts linked vs copied")
+    mb_ = 1 / 2**20
+    lk, cp = imp["link"]["store_bytes"] * mb_, imp["copy"]["store_bytes"] * mb_
+    head(fig, x0, y0, "h", "Linking saves storage",
+         f"ChromData store: {lk:.0f} MB linked vs {cp:.0f} MB copied;\nthe .scool itself is kept either way")
     ax = F.ax_at(fig, x0 + 10, y0 + AX_DY, 38, ROW3_H)
     mb = 1 / 2**20
     scool = imp["link"]["scool_bytes"] * mb
@@ -275,7 +297,8 @@ def sizes(fig, x0, y0, imp):
 
 
 def import_time(fig, x0, y0, imp):
-    head(fig, x0, y0, "h", "Import time", "median of 3")
+    head(fig, x0, y0, "f", "Linking is fast to set up",
+         "link: record path + cell map\ncopy: write all pixels into the store")
     ax = F.ax_at(fig, x0 + 12, y0 + AX_DY, 15, ROW3_H)
     t = [imp["link"]["seconds"], imp["copy"]["seconds"]]
     med = np.array([v["median"] for v in t])
@@ -294,27 +317,6 @@ def import_time(fig, x0, y0, imp):
     n_px = imp["copy"].get("n_pixels") or 0
     ax.text(0.5, -0.12, f"copy: {n_px / 1e6:.0f} M pixels", transform=ax.transAxes, ha="center", va="top",
             fontsize=6, color=F.GREY)
-
-
-def per_type(fig, x0, y0, q):
-    per = q["identity"]["per_type"]
-    n_chr = len(q["identity"]["scope"].split("(")[1].split(")")[0].split(","))
-    head(fig, x0, y0, "i", "Query per cell type", f"cis, all {n_chr} chromosomes, 22 types")
-    ax = F.ax_at(fig, x0 + 13, y0 + AX_DY, 25, ROW3_H)
-    n = np.array([p["n_cells"] for p in per])
-    first = np.array([p["first_query_s_total"] for p in per])
-    cached = np.array([p["cached_query_s_median"] for p in per]) * n_chr
-    o = np.argsort(n)
-    ax.plot(n[o], first[o], color=F.TEAL, marker="o", ms=2.0, lw=1.0)
-    ax.plot(n[o], cached[o], color=F.TEAL, ls="--", marker="o", ms=2.0, mfc="white", lw=1.0)
-    F.loglog(ax)
-    ax.set_xlabel("cells of the type"); ax.set_ylabel("time")
-    F.decades(ax, n.min(), n.max())
-    ticks(ax, "x", [1e1, 1e2, 1e3], "count")
-    ax.set_ylim(1e-4, 30)
-    ticks(ax, "y", [1e-4, 1e-2, 1e0], "time")
-    ax.text(0.97, 0.93, "first query", transform=ax.transAxes, fontsize=6, color=F.TEAL, ha="right", va="top")
-    ax.text(0.97, 0.30, "cached", transform=ax.transAxes, fontsize=6, color=F.TEAL, ha="right", va="bottom")
 
 
 # --------------------------------------------------------------------------- figure
@@ -336,10 +338,9 @@ def main() -> None:
     maps(fig, 0, ROW2, fx, q["identity"])
     ratio(fig, 104, ROW2, fx)
 
-    query_time(fig, 0, ROW3, e)
-    sizes(fig, 42, ROW3, q["import"])
-    import_time(fig, 95, ROW3, q["import"])
-    per_type(fig, 128, ROW3, q)
+    import_time(fig, 0, ROW3, q["import"])
+    query_speed(fig, 43, ROW3, e, q)
+    sizes(fig, 118, ROW3, q["import"])
 
     for ext in ("pdf", "png"):
         fig.savefig(HERE / f"figS_fig2.{ext}", dpi=300)
