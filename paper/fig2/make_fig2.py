@@ -5,8 +5,8 @@ Every data panel is drawn from the JSONs in ``results/`` (written by
 
   a  data model and the ``x.chromdata.zarr`` 2.2 layout (``panel_a.py``; schematic)
   b  what each format can represent: chromdata.zarr, FOF-CT, AnnData,
-     SpatialData, MuData, cooler × ten chromatin data elements, native /
-     by convention / not supported (``b_capabilities.json``, evidence per cell)
+     SpatialData, MuData, cooler × twelve chromatin data elements, native /
+     linked / by convention / not supported (``b_capabilities.json``, evidence per cell)
   c  storage and full reads vs spots: chromdata.zarr vs the storage schemes
      the community uses for chromatin tracing — FOF-CT (4DN CSV), AnnData
      (spots as obs), SpatialData (points + table) (``b_storage.json``)
@@ -93,10 +93,11 @@ BASELINES = [  # c_access series, short label, colour, line style
 # panel b: capability marks
 MARK_ROWS = {"chromdata.zarr": "chromdata.zarr", "FOF-CT (4DN)": "FOF-CT (4DN)", "AnnData": "AnnData",
              "SpatialData": "SpatialData", "MuData": "MuData", "cooler (.cool / .scool)": "cooler (.cool, .scool)"}
-MARK_COLS = {"coords": "3-D\ncoordinates", "hierarchy": "cell › trace\n› spot", "spot_signals": "per-spot\nsignals",
-             "bin_signals": "per-locus\nsignals", "cells": "cells &\nembeddings", "contacts": "contact\nmaps",
-             "intervals": "intervals\n(TADs, loops)", "points": "RNA spots\n(points)",
-             "provenance": "results +\nprovenance", "partial": "partial reads\n(cell, chrom)"}
+MARK_COLS = {"coords": "3-D coordinates", "hierarchy": "cell › trace › spot", "spot_signals": "per-spot signals",
+             "bin_signals": "per-locus signals", "cells": "cell table", "cell_emb": "cell embeddings",
+             "cell_pos": "cell spatial position", "contacts": "contact maps",
+             "intervals": "intervals (TADs, loops)", "points": "RNA spots (points)",
+             "provenance": "results + provenance", "partial": "partial reads (cell, chrom)"}
 
 
 # --------------------------------------------------------------------------- data
@@ -238,8 +239,8 @@ def panel_b(fig, x0, y0):
     title(fig, x0 + 5, y0 + 0.4, "What each format can represent", "evidence for every cell: Supplementary Table S1")
     cap = _load("b_capabilities")
     rows, cols = [r for r in MARK_ROWS if r in cap["cells"]], [c for c in MARK_COLS if c in cap["cols"]]
-    cw, rh = 5.0, 3.8
-    gx, gy = x0 + 26, y0 + 22.0
+    cw, rh = 4.7, 3.6
+    gx, gy = x0 + 24.5, y0 + 26.5
     ax = ax_at(fig, gx, gy, cw * len(cols), rh * len(rows))
     ax.set_xlim(0, len(cols)); ax.set_ylim(len(rows), 0)
     ax.axhspan(0, 1, color="#e7ecf4", lw=0, zorder=0)           # our row
@@ -247,17 +248,21 @@ def panel_b(fig, x0, y0):
         for j, c in enumerate(cols):
             v = cap["cells"][r][c]["value"]
             if v == "native":
-                ax.plot(j + 0.5, i + 0.5, marker="o", ms=4.6, color=INDIGO, mec=INDIGO, mew=0.6)
+                ax.plot(j + 0.5, i + 0.5, marker="o", ms=4.4, color=INDIGO, mec=INDIGO, mew=0.6)
             elif v == "linked":                              # external file, queried through the index
-                ax.plot(j + 0.5, i + 0.5, marker="o", ms=4.6, mfc="white", mec=TEAL, mew=0.8, ls="")
-                ax.plot(j + 0.5, i + 0.5, marker="o", ms=2.0, color=TEAL, mec=TEAL, ls="")
+                ax.plot(j + 0.5, i + 0.5, marker="o", ms=4.4, mfc="white", mec=TEAL, mew=0.8, ls="")
+                ax.plot(j + 0.5, i + 0.5, marker="o", ms=1.9, color=TEAL, mec=TEAL, ls="")
             elif v == "convention":
-                ax.plot(j + 0.5, i + 0.5, marker="o", ms=4.6, mfc="white", mec=INDIGO, mew=0.8)
+                ax.plot(j + 0.5, i + 0.5, marker="o", ms=4.4, mfc="white", mec=INDIGO, mew=0.8)
             else:
                 ax.plot([j + 0.36, j + 0.64], [i + 0.5, i + 0.5], color=GREY, lw=0.8, solid_capstyle="butt")
-    ax.set_xticks(np.arange(len(cols)) + 0.5, [MARK_COLS[c] for c in cols], rotation=90, ha="center",
-                  va="bottom", linespacing=1.0)
-    ax.xaxis.tick_top(); ax.tick_params(length=0, pad=1.5)
+    # column headers: 45°, anchored bottom-left just above each column, reading up-right
+    ax.set_xticks([])
+    for j, c in enumerate(cols):
+        ax.annotate(MARK_COLS[c], (j + 0.5, 0), xytext=(-1.2, 2.0), textcoords="offset points",
+                    rotation=45, ha="left", va="bottom", rotation_mode="anchor", fontsize=6,
+                    annotation_clip=False)
+    ax.tick_params(length=0, pad=1.5)
     ax.set_yticks(np.arange(len(rows)) + 0.5, [MARK_ROWS[r] for r in rows])
     ax.get_yticklabels()[0].set_fontweight("bold")
     for sp in ax.spines.values():
@@ -411,7 +416,7 @@ def make_figure():
     panel_a.draw(panel_a.C(fig, rect=(0, 1 - pa_h / H, panel_a.W / W, pa_h / H)))
     y2 = pa_h + 2.0
     panel_b(fig, 1, y2)
-    panel_c(fig, 90, y2)
+    panel_c(fig, 100, y2)
     y3 = y2 + 52.5
     panel_d(fig, 1, y3)
     panel_e(fig, 102, y3)

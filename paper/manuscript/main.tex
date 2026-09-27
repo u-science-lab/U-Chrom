@@ -78,7 +78,7 @@
 \subsection*{Benchmarks}
 Baselines were chosen as the storage schemes publicly used by the community for chromatin-tracing data: the 4DN FOF-CT core table (CSV), AnnData with spots as observations and SpatialData (spots as a 3-D points element), each written and read with its library's defaults.
 Flat Parquet, the storage engine under \pkg{chromdata.zarr}, is reported separately as the lower bound without hierarchy, index or metadata (Supplementary Fig.~S1).
-The capability comparison (Fig.~\ref{fig:store}b) was checked element by element: for AnnData, SpatialData, MuData and cooler a small test stores each data element with that library's own API, writes it, reads it back and compares the values; the FOF-CT row rests on its v1.0 specification; if in doubt the other tool received the better mark (Supplementary Table~S1).
+The capability comparison (Fig.~\ref{fig:store}b) was checked element by element: for AnnData, SpatialData, MuData and cooler a small test stores each data element with that library's own API, writes it, reads it back and compares the values; the FOF-CT row rests on its v1.0 specification pages. Each test records whether the element needed a dedicated, a general-purpose or an external slot, and a general-purpose slot backs at most `by convention'; the evidence decides, and only genuinely ambiguous cells gave the other tool the better mark, flagged as judgement calls (Supplementary Table~S1).
 Every timed trial runs in a fresh process (median of 3, warm OS page cache); scripts and results are in \texttt{benchmarks/fig2/} and \texttt{paper/fig2/results/}.
 \todo{Full protocol.}
 
