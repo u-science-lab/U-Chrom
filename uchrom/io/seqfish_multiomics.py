@@ -136,6 +136,8 @@ def read_seqfish_multiomics(
     leiden_to_cell_type: Optional[Dict[int, str]] = None,
     allele_col: str = "dbscan_ldp_nbr_allele",
     keep_unclustered: bool = False,
+    out: Optional[PathLike] = None,
+    memory_budget=None,
 ) -> "ChromData":
     """Load Takei 2025 DNA seqFISH+ cerebellum data into a ChromData.
 
@@ -156,24 +158,51 @@ def read_seqfish_multiomics(
         Optional path to the per-cell clustering CSV
         (``data/cerebellum/clustering/100k-002-001-cerebellum_mRNA_cluster_nuc_vol_filtered.csv``).
         If given, the loader populates ``cells`` (with ``leiden``,
-        ``cell_type``, centroid, nuclear volume, doublet, batch) and
-        ``cellm['umap']``.
+        ``cell_type``, the cell position ``centroid_x/y/z`` — voxel
+        coordinates in the FOV, recorded in ``uns['cell_spatial']`` with the
+        voxel size, so ``cd.cell_positions(physical=True)`` is in µm in the
+        frame of ``coords`` — ``fov`` (``"{rep}_{fov}"``), nuclear volume,
+        doublet, batch) and ``cellm['umap']``.  (Before format 2.3 the
+        centroid columns were ``x_centroid`` …; ``cell_positions()`` still
+        reads them.)
     leiden_to_cell_type
         Mapping from leiden cluster id (int) to cell-type string.  Used
         to derive ``cells.cell_type``.  If ``None``, the published
         cerebellum mapping is used (Granule/Bergmann/MLI1/Purkinje/MLI2+PLI),
         with all uncovered clusters labelled ``'Other'``.
     allele_col
-        Which homologous-chromosome assignment to use for ``trace_id``.
+        Which homologous-chromosome assignment defines ``trace_id``.
         One of ``'dbscan_allele'``, ``'dbscan_ldp_allele'``,
         ``'dbscan_ldp_nbr_allele'``.  Defaults to the highest-recall
         ``dbscan_ldp_nbr_allele`` (the column referenced as canonical in
         the published analysis notebooks).
+
+        .. warning::
+           ``dbscan_ldp_nbr_allele`` often merges the two homologs of a
+           chromosome into one trace.  On the Takei 2025 cerebellum data
+           (1e7 spots) 75.6 % of its traces observe some locus twice and
+           the median genomic–spatial Spearman ρ per trace is 0.19;
+           ``dbscan_ldp_allele`` gives 0 % such traces and ρ = 0.41 but
+           keeps only 54 % of the spots.  For analyses that need one
+           fibre per trace (distance maps, TAD / loop calling, tracing
+           statistics) prefer ``allele_col="dbscan_ldp_allele"``; check
+           ``traces["n_duplicate_loci"]`` whichever column you use.
     keep_unclustered
         DBSCAN noise spots have ``allele == -1``.  When ``False``
         (default) these are dropped before constructing the
         ``ChromData``.  Set ``True`` to keep them as their own
         ``allele=-1`` traces (useful for QC).
+    out
+        **Streaming import**: write the result to this ``.chromdata.zarr``
+        store, one CSV (FOV) at a time, with
+        :class:`~uchrom.core.stream.ChromDataWriter`, and return it opened
+        backed.  Peak memory is one FOV's parse (the raw CSV frame) — not
+        the sum of the FOVs — plus the writer's merge pieces (bounded by
+        ``memory_budget``).  The store equals
+        ``read_seqfish_multiomics(...).write(out)``.
+    memory_budget
+        Working-memory budget of the streaming writer (default
+        :data:`uchrom.settings.memory_budget`).
 
     Returns
     -------
@@ -184,8 +213,12 @@ def read_seqfish_multiomics(
           ``f"{rep}_{fov}_{cellID}_{chrom}_a{allele}"``)
         - ``tracks``: 62 columns = 59 z-scores +
           ``dot_int, n_rad_score, n_per_dist(um)``
-        - ``traces``: diagnostic ``dbscan_allele`` / ``dbscan_ldp_allele``
-          per trace
+        - ``traces`` (index ``trace_id``): ``allele`` (the ``allele_col``
+          value that defines the trace), ``n_spots``, ``n_loci``,
+          ``n_duplicate_loci`` (spots whose locus already occurs in the
+          trace — > 0 means homologs were merged), and for each other
+          allele column ``<col>_majority`` / ``<col>_agreement`` (its most
+          common value in the trace and the fraction of spots with it)
         - ``cells`` and ``cellm['umap']`` if ``cell_clustering`` is given
         - ``uns``: genome_assembly='mm10', xyz_unit='um', voxel sizes,
           Zenodo record id, the leiden map actually used, and the
@@ -206,6 +239,11 @@ def read_seqfish_multiomics(
     paths = _resolve_spot_paths(spot_glob)
     if not paths:
         raise ValueError(f"spot_glob matched no files: {spot_glob!r}")
+
+    if out is not None:
+        return _read_seqfish_streaming(
+            paths, locus_df, out=Path(out), cell_clustering=cell_clustering, leiden_map=leiden_map,
+            allele_col=allele_col, keep_unclustered=keep_unclustered, memory_budget=memory_budget)
 
     # Stream per-CSV: process and immediately filter each file so the
     # heavy raw frames (~12 GB / FOV) do not all live in memory at once.
@@ -242,18 +280,72 @@ def read_seqfish_multiomics(
     cells_kept, cellm = _build_cells_and_umap(
         cell_clustering, leiden_map, spots,
     )
-    uns = _build_uns(leiden_map, allele_col, keep_unclustered)
+    uns = _build_uns(leiden_map, allele_col, keep_unclustered, cells=cells_kept)
 
     from uchrom.core import ChromData
     return ChromData(
         coords=coords,
         spots=spots,
+        bins=_panel_bins(locus_df, spots),
         cells=cells_kept,
         cellm=cellm if cellm else None,
-        tracks=tracks,
+        spot_tracks=tracks,          # per-spot z-scores (not per-locus)
         traces=traces,
         uns=uns,
     )
+
+
+def _read_seqfish_streaming(paths, locus_df, *, out: Path, cell_clustering, leiden_map,
+                            allele_col, keep_unclustered, memory_budget):
+    """:func:`read_seqfish_multiomics` with ``out=``: FOV by FOV into a
+    :class:`~uchrom.core.stream.ChromDataWriter`."""
+    from uchrom.core import ChromData
+    from uchrom.core.stream import ChromDataWriter
+
+    w = ChromDataWriter(out, memory_budget=memory_budget)
+    try:
+        traces_chunks: List[pd.DataFrame] = []
+        for p in paths:
+            if not p.exists():
+                raise FileNotFoundError(p)
+            chunk = _process_one_csv(p, locus_df, allele_col=allele_col,
+                                     keep_unclustered=keep_unclustered)
+            w.append(coords=chunk["coords"], spots=chunk["spots"], spot_tracks=chunk["tracks"])
+            traces_chunks.append(chunk["traces"])
+            del chunk
+            gc.collect()
+        traces = pd.concat(traces_chunks) if len(traces_chunks) > 1 else traces_chunks[0]
+        # the loci / cell ids seen stand in for the spots (same result)
+        loci = w.loci()
+        cells_kept, cellm = _build_cells_and_umap(
+            cell_clustering, leiden_map, pd.DataFrame({"cell_id": w.unique("cell_id")}))
+        w.finish(bins=_panel_bins(locus_df, loci), cells=cells_kept, cellm=cellm or None,
+                 traces=traces, uns=_build_uns(leiden_map, allele_col, keep_unclustered, cells=cells_kept))
+    except BaseException:
+        if not w._closed:
+            w.abort()
+        raise
+    return ChromData.read(out, backed=True)
+
+
+def _panel_bins(locus_df: pd.DataFrame, spots: pd.DataFrame) -> Optional[pd.DataFrame]:
+    """The probe panel as ``bins`` (one row per annotated locus, with its
+    ``name``), restricted to the chromosomes that have spots.  ``None`` —
+    bins then come from the spot loci — if the panel has duplicate loci or
+    misses a spot locus (e.g. a spot whose source chrom disagrees)."""
+    from uchrom.core.bins import map_loci_to_bins, normalise_bins
+
+    chroms = set(spots["chrom"].astype(str))
+    panel = locus_df[locus_df["chrom"].astype(str).isin(chroms)]
+    panel = panel.sort_values(["chrom", "start", "end"], kind="mergesort")
+    panel = panel[["chrom", "start", "end", "name"]].reset_index(drop=True)
+    try:
+        bins = normalise_bins(panel)
+    except (ValueError, TypeError):
+        return None
+    if (map_loci_to_bins(spots, bins) < 0).any():
+        return None
+    return bins
 
 
 def read_seqfish_transcriptome(
@@ -387,6 +479,10 @@ def load_seqfish_multiomics_linked(
     as ``cd.linked_adata``.  Both objects are ordered on the same cell
     ids, and the ChromData receives ``adata.obs``/``adata.obsm`` via
     :meth:`ChromData.link_anndata`.
+
+    ``h5cd_path`` (despite its name) is where the ChromData is written, in
+    the format its suffix selects — ``.chromdata.zarr`` is recommended,
+    ``.h5cd`` is deprecated.
     """
     cd = read_seqfish_multiomics(
         spot_glob,
@@ -441,8 +537,8 @@ def load_takei2025_cerebellum(
 
     This convenience loader returns a ``ChromData``.  The aggregated RNA
     expression matrix is available as ``cd.linked_adata``.  If paired
-    ``.h5cd`` / ``.h5ad`` artifacts already exist under ``data_dir``,
-    they are reused.  Otherwise, when ``download=True``, the required
+    ``.chromdata.zarr`` (or, from older builds, ``.h5cd``) / ``.h5ad``
+    artifacts already exist under ``data_dir``, they are reused.  Otherwise, when ``download=True``, the required
     DNA seqFISH+ archive and transcriptome zip are downloaded from
     Zenodo record 7693825, annotation/clustering tables are downloaded
     from the CaiGroup GitHub repository, and linked artifacts are built.
@@ -457,7 +553,7 @@ def load_takei2025_cerebellum(
     download
         If False, missing raw/build artifacts raise ``FileNotFoundError``.
     rebuild
-        If True, rebuild the paired artifacts even when ``.h5cd`` exists.
+        If True, rebuild the paired artifacts even when they exist.
     transcriptome_chunksize
         Chunk size used while aggregating RNA spot CSVs into AnnData.
     **kwargs
@@ -469,17 +565,19 @@ def load_takei2025_cerebellum(
     from uchrom.core import ChromData
 
     data_dir = Path(data_dir)
-    h5cd_path = data_dir / f"takei2025_cerebellum_rep{replicate}.h5cd"
+    cd_path = data_dir / f"takei2025_cerebellum_rep{replicate}.chromdata.zarr"
+    legacy = data_dir / f"takei2025_cerebellum_rep{replicate}.h5cd"
     h5ad_path = data_dir / f"takei2025_cerebellum_rep{replicate}.h5ad"
-    if h5cd_path.exists() and not rebuild:
-        cd = ChromData.read(h5cd_path)
+    existing = cd_path if cd_path.exists() else legacy if legacy.exists() else None
+    if existing is not None and not rebuild:
+        cd = ChromData.read(existing)
         if h5ad_path.exists():
             cd.uns.setdefault("linked_anndata", {})["path"] = str(h5ad_path)
         return cd
 
     if not download:
         raise FileNotFoundError(
-            f"{h5cd_path} does not exist. Pass download=True to build it."
+            f"{cd_path} does not exist. Pass download=True to build it."
         )
 
     archive_name = f"cerebellum_rep{replicate}.tar.gz"
@@ -510,7 +608,7 @@ def load_takei2025_cerebellum(
         transcriptomic_data=transcriptome_zip,
         transcriptome_replicate=replicate,
         transcriptome_chunksize=transcriptome_chunksize,
-        h5cd_path=h5cd_path,
+        h5cd_path=cd_path,
         h5ad_path=h5ad_path,
         **kwargs,
     )
@@ -811,11 +909,7 @@ def _process_one_csv(
         tracks[col] = pd.to_numeric(tracks[col], errors="coerce")
     tracks = tracks.reset_index(drop=True)
 
-    traces = (
-        merged.groupby("trace_id", sort=False)
-        .agg({"dbscan_allele": "first", "dbscan_ldp_allele": "first"})
-    )
-    traces.index.name = "trace_id"
+    traces = _trace_table(merged, allele_col)
 
     del merged, df
     gc.collect()
@@ -826,6 +920,37 @@ def _process_one_csv(
         "tracks": tracks,
         "traces": traces,
     }
+
+
+def _trace_table(merged: pd.DataFrame, allele_col: str) -> pd.DataFrame:
+    """Per-trace diagnostics (vectorised; no per-trace Python loop).
+
+    ``allele`` is constant within a trace by construction.  The other
+    allele columns can disagree within a trace, so they are summarised
+    as majority value + agreement fraction rather than an arbitrary
+    first spot's value.
+    """
+    g = merged.groupby("trace_id", sort=False)
+    traces = pd.DataFrame({
+        "allele": g[allele_col].first().astype(np.int64),
+        "n_spots": g.size().astype(np.int64),
+        "n_loci": g["name"].nunique().astype(np.int64),
+    })
+    dup = merged.duplicated(["trace_id", "name"])
+    traces["n_duplicate_loci"] = (
+        dup.groupby(merged["trace_id"], sort=False).sum().reindex(traces.index).astype(np.int64)
+    )
+    for col in _ALLELE_COLUMNS:
+        if col == allele_col or col not in merged.columns:
+            continue
+        counts = (merged.groupby(["trace_id", col], sort=False, observed=True).size()
+                  .rename("_n").reset_index())
+        top = (counts.sort_values(["trace_id", "_n"], ascending=[True, False], kind="mergesort")
+               .drop_duplicates("trace_id").set_index("trace_id"))
+        traces[f"{col}_majority"] = top[col].reindex(traces.index).astype(np.int64)
+        traces[f"{col}_agreement"] = (top["_n"].reindex(traces.index) / traces["n_spots"]).astype(float)
+    traces.index.name = "trace_id"
+    return traces
 
 
 def _assign_trace_id(
@@ -869,9 +994,12 @@ def _load_cells(
     cells = pd.DataFrame({
         "leiden": df["leiden"].values,
         "cell_type": df["cell_type"].values,
-        "x_centroid": df["x"].values,
-        "y_centroid": df["y"].values,
-        "z_centroid": df["z"].values,
+        # cell positions (ChromData schema, uns['cell_spatial']): the CSV's
+        # x, y, z are voxel coordinates in the FOV (103 nm xy, 250 nm z)
+        "fov": (df["rep"].astype(int).astype(str) + "_" + df["fov"].astype(int).astype(str)).values,
+        "centroid_x": df["x"].values,
+        "centroid_y": df["y"].values,
+        "centroid_z": df["z"].values,
         "nuc_volume_um3": df["nuc_volume(um3)"].values,
         "doublet": df["doublet"].astype(int).values,
         "batch": df["batch"].astype(int).values,
@@ -913,12 +1041,34 @@ def _build_cells_and_umap(
     return cells_kept, cellm
 
 
+#: voxel size of the Takei 2025 DNA seqFISH+ images (x, y, z; µm)
+VOXEL_SIZE_UM = (0.103, 0.103, 0.25)
+
+
+def _cell_spatial_record() -> dict:
+    """``uns['cell_spatial']['default']`` for the clustering CSV centroids."""
+    from uchrom.core.cellspatial import position_record
+
+    return position_record(
+        ("centroid_x", "centroid_y", "centroid_z"), unit="voxel", voxel_size=VOXEL_SIZE_UM,
+        voxel_unit="um", frame="fov", region_col="fov", in_coords_frame=True, status="measured",
+        source="cell clustering CSV (Takei et al. 2025): x, y, z voxel coordinates of each cell",
+        method="segmentation (Takei et al. 2025)")
+
+
 def _build_uns(
-    leiden_map: Dict[int, str], allele_col: str, keep_unclustered: bool,
+    leiden_map: Dict[int, str], allele_col: str, keep_unclustered: bool, cells=None,
 ) -> dict:
     # HDF5 attribute keys must be strings; stringify the leiden->cell_type
     # dict for storage.  Callers can recover int keys via
     # ``{int(k): v for k, v in cd.uns['leiden_to_cell_type'].items()}``.
+    uns = _base_uns(leiden_map, allele_col, keep_unclustered)
+    if cells is not None and "centroid_x" in getattr(cells, "columns", ()):
+        uns["cell_spatial"] = {"default": _cell_spatial_record()}
+    return uns
+
+
+def _base_uns(leiden_map: Dict[int, str], allele_col: str, keep_unclustered: bool) -> dict:
     return {
         "genome_assembly": "mm10",
         "xyz_unit": "um",

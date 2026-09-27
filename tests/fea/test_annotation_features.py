@@ -88,16 +88,16 @@ def test_add_annotation_features_updates_tracks_results_and_registry(tmp_path):
 
     assert len(table) == 4
     assert "bin_features" in cdata.results
-    assert "gtf.gene_body_overlap_fraction" in cdata.tracks
-    assert "gtf.nearest_tss_distance" in cdata.tracks
-    assert cdata.tracks.loc[0, "gtf.gene_body_overlap_fraction"] == 0.8
+    assert "gtf.gene_body_overlap_fraction" in cdata.tracks_spot_view()
+    assert "gtf.nearest_tss_distance" in cdata.tracks_spot_view()
+    assert cdata.tracks_spot_view().loc[0, "gtf.gene_body_overlap_fraction"] == 0.8
     assert cdata.uns["feature_registry"][0]["feature_group"] == "annotation"
     assert cdata.uns["feature_registry"][0]["genome_assembly"] == "toy"
 
-    path = tmp_path / "annotation_features.h5cd"
+    path = tmp_path / "annotation_features.chromdata.zarr"
     cdata.write(path)
     out = ChromData.read(path)
 
-    assert "gtf.nearest_tss_distance" in out.tracks
+    assert "gtf.nearest_tss_distance" in out.tracks_spot_view()
     assert "bin_features" in out.results
     assert out.uns["feature_registry"][0]["created_by"] == "uchrom.fea.annotation"

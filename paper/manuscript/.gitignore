@@ -8,3 +8,7 @@
 *.xdv
 *.synctex.gz
 main.pdf
+supplement.pdf
+*.lof
+*.lot
+*.toc

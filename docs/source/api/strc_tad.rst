@@ -25,6 +25,13 @@ F-test caller
 Directionality index
 --------------------
 
+.. autoclass:: uchrom.strc.tad.di_caller.DICallerParams
+   :members:
+
+.. autofunction:: uchrom.strc.tad.di_caller.call_tads_di
+
+Low-level kernels:
+
 .. automodule:: uchrom.strc.tad.di
    :members:
 

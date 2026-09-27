@@ -45,10 +45,27 @@ class UChromProject:
         return record
 
     def set_cell_spatial_coordinates(self, xy, *, key: str = "default", **metadata: Any) -> dict:
+        """Deprecated: use :meth:`set_cell_positions`."""
         self._require_chromdata()
         record = self.chromdata.set_cell_spatial_coordinates(xy, key=key, **metadata)
         self.links = self.chromdata.describe_links()
         return record
+
+    def set_cell_positions(self, positions=None, *, key: str = "default", **metadata: Any) -> dict:
+        self._require_chromdata()
+        record = self.chromdata.set_cell_positions(positions, key=key, **metadata)
+        self.links = self.chromdata.describe_links()
+        return record
+
+    def link_spatialdata(self, path: PathLike, *, key: str = "default", **metadata: Any) -> dict:
+        self._require_chromdata()
+        record = self.chromdata.link_spatialdata(path, key=key, **metadata)
+        self.links = self.chromdata.describe_links()
+        return record
+
+    def load_spatialdata(self, *, key: str = "default", cells=None):
+        self._require_chromdata()
+        return self.chromdata.load_linked_spatialdata(key=key, cells=cells)
 
     def load_mudata(self, *, key: str = "default"):
         self._require_chromdata()

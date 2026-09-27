@@ -174,7 +174,10 @@ analysis_code requirements:
 
 ChromData access rules:
 - Do not index ChromData with string field paths like cdata['tracks.H3K27me3'].
-- Use cdata.spots, cdata.tracks, cdata.cells, cdata.cellm, cdata.coords directly.
+- Use cdata.spots, cdata.cells, cdata.cellm, cdata.coords directly.  For
+  tracks use cdata.tracks_spot_view() (every track aligned to spots; the
+  schema's tracks.* fields), cdata.bin_tracks (per locus, indexed by
+  spots['bin_id']) or cdata.spot_tracks (per spot).
 - To select spots by cell type, get cell IDs from cdata.cells and mask
   cdata.spots['cell_id'].
 - To combine spot-level tracks with RNA expression, aggregate tracks per cell_id first, then align to adata.obs_names.

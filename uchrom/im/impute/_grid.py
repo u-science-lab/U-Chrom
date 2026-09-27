@@ -114,12 +114,24 @@ def grid_to_chromdata(grid, has_cell, template_cd):
     out_spots = grid[cols].reset_index(drop=True)
     out_coords = grid[["x", "y", "z"]].to_numpy(dtype=float)
 
-    return ChromData(
-        coords=out_coords,
-        spots=out_spots,
+    kwargs = dict(
         cells=getattr(template_cd, "cells", None),
         traces=getattr(template_cd, "traces", None),
         cellm=getattr(template_cd, "cellm", None),
         results=getattr(template_cd, "results", None),
         uns=getattr(template_cd, "uns", None),
     )
+    # Keep the template's locus axis (and its bin-level tracks / binm /
+    # intervals) when every grid locus is one of its bins; a panel with
+    # new loci (``ann=``) gets fresh bins.
+    bins = getattr(template_cd, "bins", None)
+    if bins is not None:
+        from uchrom.core.bins import map_loci_to_bins
+
+        if not (map_loci_to_bins(out_spots, bins) < 0).any():
+            out = ChromData(out_coords, out_spots, bins=bins, binm=template_cd.binm,
+                            intervals=template_cd.intervals, **kwargs)
+            if len(template_cd.bin_tracks.columns):
+                out.bin_tracks = template_cd.bin_tracks
+            return out
+    return ChromData(coords=out_coords, spots=out_spots, **kwargs)

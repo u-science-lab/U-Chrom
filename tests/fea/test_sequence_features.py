@@ -75,12 +75,13 @@ def test_project_interval_features_to_duplicate_spots():
         "gc_fraction": [0.5, 0.75, 1.0],
     })
 
-    tracks = project_interval_features_to_spots(
-        cdata,
-        features,
-        prefix="seq",
-        into=cdata.tracks,
-    )
+    with pytest.warns(DeprecationWarning, match="project_interval_features_to_bins"):
+        tracks = project_interval_features_to_spots(
+            cdata,
+            features,
+            prefix="seq",
+            into=cdata.tracks_spot_view(),
+        )
 
     assert list(tracks["existing"]) == [1, 2, 3, 4, 5]
     assert list(tracks["seq.gc_fraction"][:3]) == [0.5, 0.5, 0.75]
@@ -99,8 +100,26 @@ def test_project_interval_features_rejects_duplicate_feature_rows():
         "gc_fraction": [0.5, 0.6],
     })
 
-    with pytest.raises(ValueError, match="duplicate intervals"):
+    with pytest.raises(ValueError, match="duplicate intervals"), pytest.warns(DeprecationWarning):
         project_interval_features_to_spots(cdata, features)
+
+
+def test_project_interval_features_to_bins_once_per_locus():
+    from uchrom.fea.project import project_interval_features_to_bins
+
+    cdata = _make_cd()
+    features = pd.DataFrame({
+        "chrom": ["chr1", "chr1", "chr2"],
+        "start": [0, 4, 0],
+        "end": [4, 10, 4],
+        "gc_fraction": [0.5, 0.75, 1.0],
+    })
+    out = project_interval_features_to_bins(cdata, features, prefix="seq", into=cdata.bin_tracks)
+    assert len(out) == cdata.n_bins == 4 and out.index.name == "bin_id"
+    # bins: chr1:0-4, chr1:4-10, chr1:6-27, chr2:0-4
+    np.testing.assert_array_equal(out["seq.gc_fraction"].to_numpy(), [0.5, 0.75, np.nan, 1.0])
+    # the 1.x "existing" track differs between the two spots of chr1:0-4 → spot-level
+    assert "existing" not in out.columns and "existing" in cdata.spot_tracks.columns
 
 
 def test_add_sequence_features_updates_tracks_results_and_registry(tmp_path):
@@ -126,17 +145,18 @@ def test_add_sequence_features_updates_tracks_results_and_registry(tmp_path):
         "gc_fraction",
         "g4_motif_count",
     ]
-    assert "seq.gc_fraction" in cdata.tracks
-    assert "seq.g4_motif_count" in cdata.tracks
-    assert cdata.tracks.loc[0, "seq.gc_fraction"] == 0.5
-    assert cdata.tracks.loc[1, "seq.gc_fraction"] == 0.5
+    assert "seq.gc_fraction" in cdata.tracks_spot_view()
+    assert "seq.g4_motif_count" in cdata.tracks_spot_view()
+    assert cdata.tracks_spot_view().loc[0, "seq.gc_fraction"] == 0.5
+    assert cdata.tracks_spot_view().loc[1, "seq.gc_fraction"] == 0.5
+    assert "seq.gc_fraction" in cdata.bin_tracks.columns   # per locus, not per spot
     assert cdata.uns["feature_registry"][0]["feature_group"] == "sequence"
     assert cdata.uns["feature_registry"][0]["genome_assembly"] == "toy"
 
-    path = tmp_path / "sequence_features.h5cd"
+    path = tmp_path / "sequence_features.chromdata.zarr"
     cdata.write(path)
     out = ChromData.read(path)
 
-    assert "seq.gc_fraction" in out.tracks
+    assert "seq.gc_fraction" in out.tracks_spot_view()
     assert "bin_features" in out.results
     assert out.uns["feature_registry"][0]["created_by"] == "uchrom.fea.sequence"

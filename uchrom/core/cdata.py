@@ -36,19 +36,30 @@ Cell → Trace → Spot::
 Attributes summary
 ------------------
 
+    bins        DataFrame (n_bins)           locus axis, index = bin_id:
+                                              chrom, start, end, [name, ...]
+    bin_tracks  DataFrame (n_bins, ?)        per-locus signals (ATAC, GC,
+                                              features, compartment score)
+    binm        dict[str, (n_bins, ...)]     per-locus multi-dim
+    intervals   dict[str, IntervalTable]     typed TADs / loops / peaks /
+                                              segments
     coords      (n_spots, 3) ndarray         x, y, z per spot
-    spots       DataFrame (n_spots, ≥4)      chrom, start, end, trace_id,
-                                              [cell_id, spot_id, ...]
+    spots       DataFrame (n_spots, ≥2)      bin_id, trace_id, [cell_id,
+                                              spot_id, ...]; chrom / start /
+                                              end derived from bins
+    spot_tracks DataFrame (n_spots, ?)       per-spot signals (IF, z-scores)
+    tracks      (deprecated) spot-aligned view of bin_tracks + spot_tracks
     cells       DataFrame (n_cells, ?)       cell_type, position, ...
     cellm       dict[str, ndarray]            per-cell multi-dim
                                               (embedding, UMAP, ...)
-    tracks      DataFrame (n_spots, n_track) epigenomic signals aligned
-                                              to spots (ATAC, ChIP, ...)
     traces      DataFrame (n_traces, ?)      trace-level metadata
     layers      dict[str, (n_spots, 3)]      alt. coordinate sets
     points      dict[str, DataFrame]         non-genomic 3-D points (RNA spots, …)
+    cell_shapes dict[str, DataFrame]         cell outlines (cell_id, WKB geometry);
+                                              centroids: cells columns +
+                                              uns['cell_spatial'] (format 2.3)
                                               (raw / corrected / aligned)
-    results     dict                          analysis outputs
+    results     ResultsStore                  analysis outputs + provenance
                                               (loops, tads, compartments)
     uns         dict                          unstructured metadata
                                               (genome_assembly, xyz_unit,
@@ -58,10 +69,14 @@ See :attr:`_SPOTS_REQUIRED_COLUMNS` below for the contract on ``spots``.
 
 Spot required columns
 ---------------------
-    chrom      str (stored as ``pd.Categorical``)
-    start      int, 0-based BED-style start
-    end        int, non-inclusive end
+    bin_id     int → ``bins.index`` (derived by the constructor from
+               ``chrom / start / end`` when not given)
     trace_id   int or str (stored as ``pd.Categorical``)
+
+``spots["chrom" / "start" / "end"]`` are derived from ``bins`` (kept in
+memory for convenience, not stored on disk); ``cd.spots_with_loci()`` is
+the stable accessor.  Constructors keep accepting spots with
+``chrom / start / end`` and no ``bin_id``: bins are the unique loci.
 
 Optional but conventional columns:
 
@@ -100,9 +115,21 @@ tolerates several real-world FOF-CT quirks (case-insensitive
 ``##columns=``, header lines wrapped in double quotes with trailing
 commas, a CSV column header line after ``##columns=``, etc).
 
-On-disk format — ``.h5cd``
---------------------------
-HDF5 with two root-group attributes:
+On-disk formats
+---------------
+``cd.write(path)`` / ``ChromData.read(path)`` pick the container from the
+path:
+
+    <name>.chromdata.zarr   format 2.0 — Zarr v3 group with Parquet tables,
+                            spots sorted by (cell, trace, bin) plus an
+                            ``index/`` of row offsets; readable *backed*
+                            (``read(path, backed=True)``).  See
+                            :mod:`uchrom.core.zarrcd` and ``spec.md``.
+    <name>.cdz              the same store in one uncompressed zip file.
+    <name>.h5cd             HDF5 (below): format 1.x and 2.0 are read;
+                            writing it is deprecated.
+
+Both carry two root attributes:
 
     uchrom_format_version    "MAJOR.MINOR" contract of the file layout
     uchrom_version           uchrom package version that wrote the file
@@ -116,15 +143,21 @@ Semantics:
     * **Missing attribute** (pre-versioning files) — warn and assume
       legacy 1.0 layout.
 
-Layout::
+HDF5 layout (format 2.0)::
 
     data.h5cd
-    ├── @uchrom_format_version  = "1.0"
+    ├── @uchrom_format_version  = "2.0"
     ├── @uchrom_version         = "0.2.0"
+    ├── @spot_order             = "unsorted"
+    ├── bins/                group — chrom (codes + categories), start, end, …
     ├── coords               (n_spots, 3) float64
-    ├── spots/               group — one dataset per DataFrame column
+    ├── spots/               group — bin_id (int32), trace_id / cell_id as
+    │                         {codes, categories}, extra columns
+    ├── tracks/              group — bin-level tracks, n_bins rows
+    ├── spot_tracks/         group — spot-level tracks, n_spots rows
+    ├── binm/                group of (n_bins, ...) ndarrays per key
+    ├── intervals/<key>/     DataFrame group, @_kind, @_source_result
     ├── cells/               group
-    ├── tracks/              group
     ├── traces/              group
     ├── cellm/               group of (n_cells, ...) ndarrays per key
     ├── layers/              group of (n_spots, 3) ndarrays per key
@@ -133,12 +166,17 @@ Layout::
     ├── results/             group — typed entries (``_type`` attr):
     │                         DataFrame / Series / nested dict as
     │                         sub-groups, ndarrays as datasets,
-    │                         scalars & lists as JSON string datasets
+    │                         scalars & lists as JSON string datasets;
+    │                         provenance attrs (``_kind``, ``_function``,
+    │                         ``_params``, …) on each entry (1.4)
     └── uns/                 nested group — scalars as attrs,
                               dicts as sub-groups
 
 New MAJOR versions should add a ``_read_vN`` function at the bottom of
-this module and extend the dispatch in :meth:`ChromData.read`.
+this module and extend the dispatch in :meth:`ChromData.read`.  1.x files
+(``coords, spots`` with loci, spot-aligned ``tracks``) are read by
+:func:`_read_v1` and upgraded in memory; ``uchrom.io.upgrade_h5cd``
+rewrites them as 2.0.
 
 Design decisions (why this shape)
 ---------------------------------
@@ -175,15 +213,27 @@ import hashlib
 import json
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Union, Optional, Dict, List, Mapping
+from typing import Any, Union, Optional, Dict, List, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
 
+from .bins import (
+    BIN_ID,
+    LOCI,
+    bins_from_loci,
+    loci_of,
+    map_loci_to_bins,
+    normalise_bins,
+    split_spot_tracks,
+)
+from .intervals import IntervalStore, IntervalTable
+from .results import ResultRecord, ResultsStore, jsonable as _results_jsonable, validate_value
+
 
 PathLike = Union[str, Path]
 
-_SPOTS_REQUIRED_COLUMNS = ("chrom", "start", "end", "trace_id")
+_SPOTS_REQUIRED_COLUMNS = ("bin_id", "trace_id")
 _CATEGORICAL_COLUMNS = ("chrom", "trace_id", "cell_id")
 _UNS_JSON_PREFIX = "__uchrom_json__:"
 _SERIES_COLUMN = "_value"
@@ -206,8 +256,25 @@ _SERIES_COLUMN = "_value"
 # 1.3: optional ``points/`` group — named DataFrames of non-genomic 3-D
 #      points (x, y, z + columns such as cell_id, gene) in the coords frame,
 #      e.g. nascent RNA spots.  Older readers ignore the group.
-FORMAT_VERSION = "1.3"
-_SUPPORTED_MAJOR = 1
+# 1.4: ``results`` entries carry provenance (``cd.results`` is a
+#      :class:`~uchrom.core.results.ResultsStore`).  Each top-level item of
+#      ``results/`` gains attrs ``_kind``, ``_function``, ``_params`` (JSON),
+#      ``_inputs`` (JSON), ``_uchrom_version`` and ``_created_utc``.  The
+#      value itself is stored in place exactly as in 1.2/1.3, so older
+#      readers still read the value and ignore the extra attrs.
+#
+# 2.0: the ``bins`` locus axis (MAJOR bump; ChromData 2.0 roadmap step 3).
+#      ``bins/`` (index = bin_id), bin-level ``tracks/`` (n_bins rows),
+#      ``binm/``, spot-level ``spot_tracks/``, typed ``intervals/<key>``
+#      (``@kind``, ``@source_result``).  ``spots/`` stores ``bin_id``
+#      (int32) instead of chrom/start/end, which are derived from ``bins``
+#      on read.  Categorical columns are stored as ``{codes, categories}``
+#      groups.  A ``results/<key>`` whose value is ``intervals/<key>`` holds
+#      only its provenance attrs plus ``_value_ref``.  1.x files are
+#      upgraded on read (see :func:`_read_v1`) and by
+#      :func:`uchrom.io.upgrade_h5cd`.
+FORMAT_VERSION = "2.0"
+_SUPPORTED_MAJORS = (1, 2)
 
 
 class ChromData:
@@ -232,24 +299,36 @@ class ChromData:
     ----------
     coords : ndarray, shape (n_spots, 3)
         3-D coordinates (x, y, z) per spot.
-    spots : DataFrame, shape (n_spots, ≥4)
-        Per-spot metadata.  **Required columns:**
-        ``chrom`` (str, will be categorified),
-        ``start`` (int, 0-based BED-style),
-        ``end`` (int, non-inclusive),
-        ``trace_id`` (int or str, will be categorified).
+    spots : DataFrame, shape (n_spots, ≥2)
+        Per-spot metadata.  **Required:** ``trace_id`` (int or str, will
+        be categorified) and either ``bin_id`` (with ``bins=``) or the
+        locus columns ``chrom`` / ``start`` (0-based) / ``end``
+        (non-inclusive), from which ``bins`` and ``bin_id`` are derived.
         Optional: ``cell_id`` (int or str), ``spot_id``, FOF-CT
         ``sub_cell_roi_id`` / ``extra_cell_roi_id``, and any
         experiment-specific annotation column (carried through
         verbatim).
+    bins : DataFrame, optional
+        Locus axis (``chrom, start, end`` + optional ``resolution``,
+        ``name``, …); row ``i`` is ``bin_id`` ``i``.  Derived from the spot
+        loci when omitted (ordered by chromosome, start, end).
     cells : DataFrame, optional
         Per-cell metadata indexed by cell_id.
     cellm : dict[str, ndarray], optional
         Per-cell multi-dimensional annotations (embeddings, UMAP, …).
         Each array's first axis length = ``n_cells``.
     tracks : DataFrame, optional
-        Epigenomic signals (ATAC, ChIP-seq, …) row-aligned to ``spots``.
-        Length must equal ``n_spots``.
+        Per-locus signals (ATAC, ChIP-seq, …): ``n_bins`` rows (or an
+        index named ``bin_id``) → :attr:`bin_tracks`.  A spot-aligned
+        1.x table (``n_spots`` rows) is still accepted with a
+        ``DeprecationWarning`` and split (columns constant within every
+        bin → ``bin_tracks``, the rest → ``spot_tracks``).
+    spot_tracks : DataFrame, optional
+        Per-spot signals (IF intensity, seqFISH z-scores), ``n_spots`` rows.
+    binm : dict[str, ndarray], optional
+        Per-locus multi-dimensional arrays, first axis ``n_bins``.
+    intervals : dict[str, DataFrame], optional
+        Typed interval tables (see :mod:`uchrom.core.intervals`).
     traces : DataFrame, optional
         Per-trace metadata indexed by trace_id.
     layers : dict[str, ndarray], optional
@@ -260,11 +339,15 @@ class ChromData:
         ``coords`` — e.g. nascent RNA spots or IF puncta.  Each DataFrame
         needs ``x, y, z``; ``cell_id`` (if present) links points to cells
         and is used when subsetting.
-    results : dict, optional
-        Analysis outputs.  Conventional keys:
-        ``'loops'`` → DataFrame (chrom1, start1, end1, …),
-        ``'tads'`` → DataFrame (chrom, start, end, …),
-        ``'compartments'`` → ndarray or DataFrame per bin.
+    cell_shapes : dict[str, DataFrame], optional
+        Cell outlines: ``cell_id`` + ``geometry`` (WKB bytes), one row per
+        cell (see :meth:`set_cell_shapes`); subset with the cells.
+    results : dict or ResultsStore, optional
+        Analysis outputs, stored as a :class:`~uchrom.core.results.ResultsStore`
+        (``cd.results[key]`` returns the value, ``cd.results.record(key)``
+        the value plus provenance).  Keys follow ``"<what>.<method>"``:
+        ``'tads.arcfish'``, ``'loops.axiswise_f'``,
+        ``'compartments.axes_pc'``, ….
     uns : dict, optional
         Unstructured metadata preserved on disk.  Conventional keys:
         ``'genome_assembly'``, ``'xyz_unit'``, ``'fofct_header'``.
@@ -308,28 +391,59 @@ class ChromData:
         coords: np.ndarray,
         spots: pd.DataFrame,
         *,
+        bins: Optional[pd.DataFrame] = None,
         cells: Optional[pd.DataFrame] = None,
         cellm: Optional[Dict[str, np.ndarray]] = None,
         tracks: Optional[pd.DataFrame] = None,
+        spot_tracks: Optional[pd.DataFrame] = None,
+        binm: Optional[Dict[str, np.ndarray]] = None,
+        intervals: Optional[Mapping[str, pd.DataFrame]] = None,
         traces: Optional[pd.DataFrame] = None,
         layers: Optional[Dict[str, np.ndarray]] = None,
         results: Optional[dict] = None,
         uns: Optional[dict] = None,
         points: Optional[Dict[str, pd.DataFrame]] = None,
+        cell_shapes: Optional[Dict[str, pd.DataFrame]] = None,
         linked_adata=None,
         validate: bool = True,
+        _own_spots: bool = False,
     ):
+        # _own_spots: the caller hands over a fresh spots frame (RangeIndex)
+        # that may be modified in place — readers use it to skip two copies
         self.coords = np.asarray(coords, dtype=np.float64)
-        self.spots = spots.reset_index(drop=True)
+        self.spots, self._bins = _attach_bins(spots if _own_spots else spots.reset_index(drop=True),
+                                              bins, validate=validate, copy=not _own_spots)
         self.cells = cells if cells is not None else pd.DataFrame()
         self.cellm = cellm if cellm is not None else {}
-        self.tracks = tracks
         self.traces = traces if traces is not None else pd.DataFrame()
         self.layers = layers if layers is not None else {}
+        self.binm = dict(binm) if binm is not None else {}
+        self.intervals = intervals if intervals is not None else {}
         self.results = results if results is not None else {}
         self.uns = uns if uns is not None else {}
         self.points = {k: v.reset_index(drop=True) for k, v in (points or {}).items()}
+        self.cell_shapes = {k: v.reset_index(drop=True) for k, v in (cell_shapes or {}).items()}
         self._linked_adata = linked_adata
+
+        self._bin_tracks = _empty_frame(self.n_bins, name=BIN_ID)
+        self._spot_tracks = _empty_frame(len(self.spots))
+        self._spot_view_order: Optional[List[str]] = None
+        if spot_tracks is not None:
+            self.spot_tracks = spot_tracks
+        if tracks is not None:
+            if _is_bin_level(tracks, self.n_bins, len(self.spots)):
+                self.bin_tracks = tracks
+            else:
+                import warnings
+                warnings.warn(
+                    "ChromData(tracks=<spot-aligned table>) is deprecated: pass "
+                    "per-spot signals as spot_tracks= and per-locus signals as "
+                    "a bins-aligned tracks=.  The table was split automatically "
+                    "(columns constant within every bin became bin-level).",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                self._set_spot_aligned_tracks(tracks)
 
         # Convert string-heavy columns to categorical for memory efficiency
         self._categorify()
@@ -342,8 +456,256 @@ class ChromData:
     # ------------------------------------------------------------------
 
     @property
+    def results(self) -> ResultsStore:
+        """Analysis outputs — a :class:`~uchrom.core.results.ResultsStore`.
+
+        Behaves like a ``dict`` of values; assigning a plain ``dict``
+        converts it.  Values that cannot be written to ``.h5cd`` raise
+        ``TypeError`` on assignment.
+        """
+        return self._results
+
+    @results.setter
+    def results(self, value) -> None:
+        self._results = ResultsStore.coerce(value)
+
+    @property
     def n_spots(self) -> int:
         return self.coords.shape[0]
+
+    # -- locus axis (format 2.0) -------------------------------------------
+
+    @property
+    def bins(self) -> pd.DataFrame:
+        """Locus axis: ``DataFrame`` indexed by ``bin_id`` with ``chrom``
+        (category), ``start``, ``end`` and optional per-locus columns
+        (``resolution``, ``name``, …).  Shared by all cells; subsetting
+        spots keeps every bin."""
+        return self._bins
+
+    @property
+    def n_bins(self) -> int:
+        return len(self._bins)
+
+    @property
+    def bin_tracks(self) -> pd.DataFrame:
+        """Per-locus signals (bulk ATAC, ChIP, GC, annotation features,
+        compartment scores …), ``n_bins`` rows indexed by ``bin_id``.
+
+        This is the table the 2.0 design calls ``tracks``; during the 2.x
+        series ``cd.tracks`` remains the deprecated spot-aligned view.
+        """
+        return self._bin_tracks
+
+    @bin_tracks.setter
+    def bin_tracks(self, value: Optional[pd.DataFrame]) -> None:
+        if value is None or len(value.columns) == 0:
+            self._bin_tracks = _empty_frame(self.n_bins, name=BIN_ID)
+            return
+        if len(value) != self.n_bins:
+            raise ValueError(f"bin_tracks rows ({len(value)}) != n_bins ({self.n_bins})")
+        out = value.copy()
+        out.index = pd.RangeIndex(self.n_bins, name=BIN_ID)
+        self._bin_tracks = out
+        self._drop_view_order_extras()
+
+    @property
+    def spot_tracks(self) -> pd.DataFrame:
+        """Per-observation signals (per-spot IF intensity, seqFISH
+        z-scores …), row-aligned to ``spots``."""
+        return self._spot_tracks
+
+    @spot_tracks.setter
+    def spot_tracks(self, value: Optional[pd.DataFrame]) -> None:
+        if value is None or len(value.columns) == 0:
+            self._spot_tracks = _empty_frame(len(self.spots))
+            return
+        if len(value) != len(self.spots):
+            raise ValueError(f"spot_tracks rows ({len(value)}) != n_spots ({len(self.spots)})")
+        self._spot_tracks = value.reset_index(drop=True)
+        self._drop_view_order_extras()
+
+    @property
+    def tracks(self) -> Optional[pd.DataFrame]:
+        """Deprecated spot-aligned view of all tracks (1.x ``cd.tracks``).
+
+        Returns :meth:`tracks_spot_view` — bin-level tracks broadcast to
+        spots plus spot-level tracks — or ``None`` when there are none.
+        Use :attr:`bin_tracks` / :attr:`spot_tracks` instead.  Assigning a
+        spot-aligned table splits it (columns constant within every bin
+        go to ``bin_tracks``, the rest to ``spot_tracks``); assigning a
+        table with ``n_bins`` rows (or index named ``bin_id``) sets
+        ``bin_tracks``.
+        """
+        import warnings
+        warnings.warn(
+            "cd.tracks is the deprecated spot-aligned view; use cd.bin_tracks "
+            "(per locus), cd.spot_tracks (per spot) or cd.tracks_spot_view().",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if len(self._bin_tracks.columns) == 0 and len(self._spot_tracks.columns) == 0:
+            return None
+        view = _TracksView(self.tracks_spot_view())
+        view._uchrom_owner = self
+        return view
+
+    @tracks.setter
+    def tracks(self, value: Optional[pd.DataFrame]) -> None:
+        if value is None:
+            self._bin_tracks = _empty_frame(self.n_bins, name=BIN_ID)
+            self._spot_tracks = _empty_frame(len(self.spots))
+            self._spot_view_order = None
+        elif _is_bin_level(value, self.n_bins, len(self.spots)):
+            self.bin_tracks = value
+        else:
+            self._set_spot_aligned_tracks(value)
+
+    def _set_spot_aligned_tracks(self, value: pd.DataFrame) -> None:
+        if len(value) != len(self.spots):
+            raise ValueError(f"tracks rows ({len(value)}) != n_spots ({len(self.spots)})")
+        bt, st, order = split_spot_tracks(value.reset_index(drop=True),
+                                          self.spots[BIN_ID].to_numpy(), self.n_bins)
+        self._bin_tracks = bt
+        self._spot_tracks = st
+        self._spot_view_order = order
+
+    def _set_track_column(self, name: str, values) -> None:
+        """Write one spot-aligned column (``cd.tracks[name] = values``).
+
+        Stored bin-level when the column already is a bin track and the new
+        values are constant within every bin, otherwise spot-level."""
+        from .bins import constant_per_bin
+
+        col = pd.Series(np.asarray(values), name=name).reset_index(drop=True)
+        if len(col) != self.n_spots:
+            raise ValueError(f"track {name!r} has {len(col)} values, expected n_spots={self.n_spots}")
+        bin_id = self.spots[BIN_ID].to_numpy()
+        order = np.argsort(bin_id, kind="stable")
+        if name in self._bin_tracks.columns and constant_per_bin(col, bin_id, order):
+            bt = self._bin_tracks.copy()
+            bt.iloc[bin_id, bt.columns.get_loc(name)] = col.to_numpy()
+            self._bin_tracks = bt
+        else:
+            if name in self._bin_tracks.columns:
+                self._bin_tracks = self._bin_tracks.drop(columns=[name])
+            st = self._spot_tracks.copy()
+            st[name] = col.to_numpy()
+            self._spot_tracks = st
+        if self._spot_view_order is not None and name not in self._spot_view_order:
+            self._spot_view_order.append(name)
+
+    def _drop_view_order_extras(self) -> None:
+        if self._spot_view_order is None:
+            return
+        present = set(map(str, self._bin_tracks.columns)) | set(map(str, self._spot_tracks.columns))
+        self._spot_view_order = [c for c in self._spot_view_order if c in present]
+
+    def tracks_spot_view(self, columns: Optional[List[str]] = None) -> pd.DataFrame:
+        """All tracks aligned to spots (the 1.x ``tracks`` layout).
+
+        Bin-level tracks are broadcast through ``spots.bin_id``;
+        spot-level tracks are appended.  ``columns`` selects a subset.
+        """
+        bt, st = self._bin_tracks, self._spot_tracks
+        if columns is not None:
+            columns = [str(c) for c in columns]
+            missing = [c for c in columns if c not in bt.columns and c not in st.columns]
+            if missing:
+                raise KeyError(f"unknown track(s): {missing}")
+            bt = bt[[c for c in columns if c in bt.columns]]
+            st = st[[c for c in columns if c in st.columns]]
+        parts = []
+        if len(bt.columns):
+            view = bt.iloc[self.spots[BIN_ID].to_numpy()].reset_index(drop=True)
+            parts.append(view)
+        if len(st.columns):
+            parts.append(st.reset_index(drop=True))
+        if not parts:
+            return pd.DataFrame(index=pd.RangeIndex(len(self.spots)))
+        out = pd.concat(parts, axis=1) if len(parts) > 1 else parts[0]
+        order = columns if columns is not None else self._spot_view_order
+        if order:
+            front = [c for c in order if c in out.columns]
+            out = out[front + [c for c in out.columns if c not in front]]
+        return out
+
+    def track_names(self) -> Dict[str, List[str]]:
+        """``{"bin": [...], "spot": [...]}`` — names of the stored tracks."""
+        return {"bin": [str(c) for c in self._bin_tracks.columns],
+                "spot": [str(c) for c in self._spot_tracks.columns]}
+
+    @property
+    def intervals(self) -> IntervalStore:
+        """Typed interval tables (TADs, loops, peaks, segments) — see
+        :mod:`uchrom.core.intervals`."""
+        return self._intervals
+
+    @intervals.setter
+    def intervals(self, value) -> None:
+        self._intervals = IntervalStore.coerce(value)
+
+    def spots_with_loci(self) -> pd.DataFrame:
+        """A copy of ``spots`` with ``chrom`` / ``start`` / ``end`` derived
+        from ``bins`` via ``bin_id`` (the stable way to get spot loci)."""
+        out = self.spots.copy()
+        for col, vals in loci_of(self._bins, out[BIN_ID].to_numpy()).items():
+            out[col] = vals
+        return out
+
+    def rebuild_bins(self) -> "ChromData":
+        """Re-derive ``bins`` / ``bin_id`` from the spots' ``chrom`` /
+        ``start`` / ``end`` after they were edited in place.  Bin-level
+        tracks are carried over for loci that still exist; ``binm`` must be
+        empty.  Returns ``self``."""
+        if self.binm:
+            raise ValueError("rebuild_bins() cannot remap binm; clear cd.binm first")
+        old_bins, old_bt = self._bins, self._bin_tracks
+        spots = self.spots.drop(columns=[BIN_ID])
+        self.spots, self._bins = _attach_bins(spots, None, validate=True)
+        if len(old_bt.columns):
+            ids = map_loci_to_bins(self._bins, old_bins)  # new bins located in old
+            bt = old_bt.iloc[np.where(ids >= 0, ids, 0)].reset_index(drop=True)
+            bt.loc[ids < 0, :] = np.nan
+            self.bin_tracks = bt
+        else:
+            self._bin_tracks = _empty_frame(self.n_bins, name=BIN_ID)
+        return self
+
+    def _check_bin_ids(self) -> None:
+        """Spots must carry a valid ``bin_id`` whose bin matches the spot's
+        chrom / start / end (the loci columns are derived, not independent)."""
+        if BIN_ID not in self.spots.columns:
+            if all(c in self.spots.columns for c in LOCI):
+                ids = map_loci_to_bins(self.spots, self._bins)
+                if (ids < 0).any():
+                    raise ValueError(
+                        "spots have no bin_id and some loci are not in cd.bins; "
+                        "call cd.rebuild_bins()"
+                    )
+                self.spots[BIN_ID] = ids
+                return
+            raise ValueError("spots missing required column 'bin_id'")
+        ids = self.spots[BIN_ID].to_numpy()
+        if len(ids) and (ids.min() < 0 or ids.max() >= self.n_bins):
+            raise ValueError(f"spots.bin_id out of range [0, {self.n_bins})")
+        derived = loci_of(self._bins, ids.astype(np.int64))
+        for col in LOCI:
+            if col not in self.spots.columns:
+                self.spots[col] = derived[col]
+                continue
+            have = self.spots[col]
+            if col == "chrom":
+                same = np.asarray(have.astype(str)) == np.asarray(pd.Series(derived[col]).astype(str))
+            else:
+                same = have.to_numpy() == derived[col]
+            if not np.all(same):
+                raise ValueError(
+                    f"spots[{col!r}] disagrees with bins[spots.bin_id] for "
+                    f"{int((~np.asarray(same)).sum())} spot(s).  chrom/start/end "
+                    f"are derived from bins in format 2.0: edit cd.bins, or call "
+                    f"cd.rebuild_bins() after editing spot loci."
+                )
 
     @property
     def n_traces(self) -> int:
@@ -359,9 +721,7 @@ class ChromData:
 
     @property
     def chroms(self) -> List[str]:
-        return list(self.spots["chrom"].cat.categories
-                    if hasattr(self.spots["chrom"], "cat")
-                    else self.spots["chrom"].unique())
+        return [str(c) for c in self._bins["chrom"].cat.categories]
 
     @property
     def linked_adata(self):
@@ -526,6 +886,175 @@ class ChromData:
             cell_uri = f"/cells/{cell_uri}"
         return cooler.Cooler(f"{self.resolve_link_path(path)}::{cell_uri}")
 
+    # ------------------------------------------------------------------
+    # Cell spatial position (centroids, outlines, linked SpatialData)
+    # ------------------------------------------------------------------
+
+    def _cell_ids_axis(self) -> pd.Index:
+        ids = self._cells_axis_ids()
+        return pd.Index(ids if ids is not None else [str(x) for x in self.cells.index], name="cell_id")
+
+    def _align_cell_rows(self, arr: np.ndarray, cell_ids) -> np.ndarray:
+        """Rows of ``arr`` (one per ``cell_ids``) placed on the ``cells`` axis
+        (NaN for cells not given); creates ``cells`` when it is empty."""
+        if cell_ids is None:
+            if len(self.cells) == 0:
+                raise ValueError("cell_ids are required when cells is empty.")
+            if len(self.cells) != arr.shape[0]:
+                raise ValueError("position rows must match cells rows when cell_ids is not provided.")
+            return arr
+        ids = pd.Index([str(x) for x in cell_ids], name="cell_id")
+        if len(ids) != arr.shape[0]:
+            raise ValueError("cell_ids length must match the position rows.")
+        if ids.has_duplicates:
+            raise ValueError("cell_ids must be unique.")
+        if len(self.cells) == 0:
+            self.cells = pd.DataFrame(index=ids)
+            return arr
+        positions = self._cell_ids_axis().get_indexer(ids)
+        if np.any(positions < 0):
+            missing = ids[positions < 0]
+            raise ValueError(f"cell_ids are not present in cells: {list(missing[:5])}")
+        aligned = np.full((len(self.cells), arr.shape[1]), np.nan, dtype=np.float64)
+        aligned[positions] = arr
+        return aligned
+
+    def set_cell_positions(
+        self,
+        positions=None,
+        *,
+        key: str = "default",
+        cell_ids: Optional[Sequence[Any]] = None,
+        columns: Optional[Sequence[str]] = None,
+        unit: Optional[str] = None,
+        frame: Optional[str] = None,
+        region_col: Optional[str] = None,
+        in_coords_frame: Optional[bool] = None,
+        status: str = "measured",
+        source: Optional[str] = None,
+        method: Optional[str] = None,
+        shapes: Optional[str] = None,
+        **metadata: Any,
+    ) -> dict:
+        """Store where each cell is (its centroid, 2-D or 3-D) in ``cells``.
+
+        Cell positions describe cells, not chromatin spots: they are
+        ``cells`` columns — ``centroid_x``, ``centroid_y`` [, ``centroid_z``]
+        for ``key="default"``, ``<key>_centroid_x`` … otherwise — described
+        by the record ``uns['cell_spatial'][key]`` (schema in
+        ``uchrom/core/spec.md``).  Read them back with
+        :meth:`cell_positions`.
+
+        Parameters
+        ----------
+        positions : (n, 2) / (n, 3) array or DataFrame, optional
+            Centroids.  A DataFrame uses its ``x, y[, z]`` columns (or its
+            first 2 / 3 columns) and, without ``cell_ids``, its index as the
+            cell ids.  ``None`` registers existing ``cells`` columns given as
+            ``columns`` (e.g. a loader's ``cell_center_x_global``).
+        cell_ids : sequence, optional
+            Cell of each row; rows are aligned onto the ``cells`` axis (cells
+            not given get NaN).  Without it, rows follow ``cells``.
+        columns : sequence of str, optional
+            ``cells`` column names to write (or to register).
+        unit : str, optional
+            Length unit (``"um"``, ``"nm"``, ``"px"`` …).
+        frame : str, optional
+            Coordinate system: ``"fov"`` (local to one field of view — name
+            it with ``region_col``), ``"tissue"`` / ``"global"`` (one
+            stitched frame per section / sample) or any other name.
+        region_col : str, optional
+            ``cells`` column naming the region / FOV a local frame belongs to.
+        in_coords_frame : bool, optional
+            True when the positions share the frame of ``cd.coords``.
+        status : {"measured", "inferred"}
+            ``"inferred"`` (e.g. mapped by Tangram) needs ``source``.
+        source, method : str, optional
+            Where the positions come from and how they were obtained.
+        shapes : str, optional
+            Key of :attr:`cell_shapes` holding the outlines of these cells.
+        **metadata
+            Kept in the record, e.g. ``voxel_size=[0.103, 0.103, 0.25]`` and
+            ``voxel_unit="um"`` for positions stored in voxels (``unit="voxel"``;
+            ``cell_positions(physical=True)`` applies them).
+
+        Returns the record.
+        """
+        from . import cellspatial as _cs
+
+        _cs.check_status(status, source, "set_cell_positions")
+        if positions is None:
+            if not columns:
+                raise ValueError("pass positions, or columns= naming existing cells columns")
+            cols = [str(c) for c in columns]
+            missing = [c for c in cols if c not in self.cells.columns]
+            if missing:
+                raise KeyError(f"columns {missing} are not in cd.cells")
+            if len(cols) not in (2, 3):
+                raise ValueError("columns must name 2 or 3 columns (x, y[, z])")
+        else:
+            if isinstance(positions, pd.DataFrame):
+                if cell_ids is None:
+                    cell_ids = [str(x) for x in positions.index]
+                use = ([c for c in ("x", "y", "z") if c in positions.columns]
+                       if {"x", "y"} <= set(positions.columns) else list(positions.columns[:3]))
+                arr = positions[use].to_numpy(dtype=np.float64)
+            else:
+                arr = np.asarray(positions, dtype=np.float64)
+            if arr.ndim != 2 or arr.shape[1] not in (2, 3):
+                raise ValueError("positions must have shape (n_cells, 2) or (n_cells, 3).")
+            if columns and len(columns) != arr.shape[1]:
+                raise ValueError(f"columns names {len(columns)} columns for {arr.shape[1]}-D positions")
+            arr = self._align_cell_rows(arr, cell_ids)
+            cols = [str(c) for c in columns] if columns else list(_cs.centroid_columns(key, arr.shape[1]))
+            for j, c in enumerate(cols):
+                self.cells[c] = arr[:, j]
+        if region_col is not None and region_col not in self.cells.columns:
+            raise KeyError(f"region_col {region_col!r} is not a cells column")
+        if shapes is not None and shapes not in self.cell_shapes:
+            raise KeyError(f"no cell_shapes[{shapes!r}]")
+        record = {
+            "x_col": cols[0], "y_col": cols[1], "z_col": cols[2] if len(cols) == 3 else None,
+            "ndim": len(cols), "unit": unit, "frame": frame, "region_col": region_col,
+            "in_coords_frame": None if in_coords_frame is None else bool(in_coords_frame),
+            "status": status, "source": source, "method": method, "shapes": shapes,
+            **metadata,
+        }
+        record = _clean_metadata_record(record)
+        _set_linked_record(self.uns, _cs.POSITIONS_FAMILY, key, record)
+        return record
+
+    def cell_positions(self, key: str = "default", *, physical: bool = False) -> pd.DataFrame:
+        """Cell centroids as a DataFrame indexed by ``cell_id``: ``x``, ``y``
+        [, ``z``] (float, NaN where unknown) [+ ``region``]; the record
+        (unit, frame, status, …) is in ``.attrs['cell_spatial']``.
+
+        Reads the record ``uns['cell_spatial'][key]`` (1.x records and their
+        ``spatial_x`` / ``spatial_y`` columns included).  Without a record,
+        ``key="default"`` falls back to known column names —
+        ``centroid_x/y/z``, then the older ``x_centroid/y_centroid/z_centroid``
+        and ``spatial_x/spatial_y`` — with ``status`` unknown
+        (``attrs['cell_spatial']['unrecorded'] is True``).  ``KeyError`` when
+        there is no position set.  ``physical=True`` converts positions
+        stored in voxels (record ``voxel_size`` / ``voxel_unit``) to physical
+        units.
+        """
+        from . import cellspatial as _cs
+
+        records = _linked_records(self.uns.get(_cs.POSITIONS_FAMILY))
+        if key in records and records[key].get("x_col"):
+            rec = _cs.normalize_record(records[key])
+        elif key == "default" and len(self.cells):
+            found = _cs.legacy_columns(self.cells)
+            if found is None:
+                raise KeyError("no cell positions: no uns['cell_spatial'] record and no centroid columns")
+            rec = {"x_col": found[0], "y_col": found[1], "z_col": found[2],
+                   "ndim": 3 if found[2] else 2, "unrecorded": True}
+            rec = {k: v for k, v in rec.items() if v is not None}
+        else:
+            raise KeyError(f"no cell position set {key!r}; known: {sorted(records)}")
+        return _cs.positions_frame(self.cells, self._cell_ids_axis(), rec, physical=physical)
+
     def set_cell_spatial_coordinates(
         self,
         xy: np.ndarray,
@@ -540,55 +1069,183 @@ class ChromData:
         inferred: bool = True,
         **metadata: Any,
     ) -> dict:
-        """Store cell-level 2D spatial coordinates in ``cells``.
+        """Deprecated: use :meth:`set_cell_positions`.
 
-        These coordinates describe cells, not chromatin spots.  They are
-        therefore stored in ``cells`` with provenance in
-        ``uns['cell_spatial']`` rather than in ``coords``.
+        Kept for 1.x callers: ``coordinate_system`` becomes ``frame``,
+        ``inferred`` the ``status``, ``x_col`` / ``y_col`` the column names.
+        Columns now default to the schema names (``centroid_x`` …, was
+        ``spatial_x`` …); positions written by older versions stay readable
+        through :meth:`cell_positions`.
         """
+        import warnings
+
+        from . import cellspatial as _cs
+
+        warnings.warn(
+            "set_cell_spatial_coordinates() is deprecated; use set_cell_positions(positions, "
+            "frame=..., unit=..., status='measured' | 'inferred', source=...)",
+            DeprecationWarning, stacklevel=2,
+        )
         arr = np.asarray(xy, dtype=np.float64)
         if arr.ndim != 2 or arr.shape[1] != 2:
             raise ValueError("xy must have shape (n_cells, 2).")
+        columns = None
+        if x_col or y_col:
+            default = _cs.centroid_columns(key, 2)
+            columns = [x_col or default[0], y_col or default[1]]
+        status = "inferred" if inferred else "measured"
+        if status == "inferred" and not source:
+            source = method or "unspecified"
+        return self.set_cell_positions(arr, key=key, cell_ids=cell_ids, columns=columns, frame=coordinate_system,
+                                       status=status, source=source, method=method, **metadata)
 
-        if cell_ids is not None:
-            axis_ids = self._cells_axis_ids()
-            ids = pd.Index([str(x) for x in cell_ids], name="cell_id")
-            if len(ids) != arr.shape[0]:
-                raise ValueError("cell_ids length must match xy rows.")
-            if len(self.cells) == 0:
-                self.cells = pd.DataFrame(index=ids)
-            else:
-                current = pd.Index(axis_ids.astype(str) if axis_ids is not None else self.cells.index.astype(str))
-                positions = current.get_indexer(ids)
-                if np.any(positions < 0):
-                    missing = ids[positions < 0]
-                    raise ValueError(f"cell_ids are not present in cells: {list(missing[:5])}")
-                aligned = np.full((len(self.cells), 2), np.nan, dtype=np.float64)
-                aligned[positions] = arr
-                arr = aligned
-        elif len(self.cells) == 0:
-            raise ValueError("cell_ids are required when cells is empty.")
-        elif len(self.cells) != arr.shape[0]:
-            raise ValueError("xy rows must match cells rows when cell_ids is not provided.")
+    def set_cell_shapes(
+        self,
+        shapes,
+        *,
+        key: str = "cell",
+        cell_ids: Optional[Sequence[Any]] = None,
+        unit: Optional[str] = None,
+        frame: Optional[str] = None,
+        in_coords_frame: Optional[bool] = None,
+        status: str = "measured",
+        source: Optional[str] = None,
+        method: Optional[str] = None,
+        **metadata: Any,
+    ) -> dict:
+        """Store cell outlines (polygons) as ``cell_shapes[key]``.
 
-        prefix = "" if key == "default" else f"{key}_"
-        x_name = x_col or f"{prefix}spatial_x"
-        y_name = y_col or f"{prefix}spatial_y"
-        self.cells[x_name] = arr[:, 0]
-        self.cells[y_name] = arr[:, 1]
+        ``shapes``: a GeoDataFrame / GeoSeries (index = cell ids), a
+        DataFrame with ``cell_id`` + WKB ``geometry``, a mapping ``cell_id →
+        shape``, or a sequence (with ``cell_ids``) of shapely geometries, WKB
+        bytes or ``(n, 2)`` / ``(n, 3)`` vertex arrays of the exterior ring.
+        Vertex arrays and WKB need no geometry library; shapely / geopandas
+        are only needed to read them back as geometries
+        (:meth:`cell_shapes_geodataframe`).  Common keys: ``"cell"``
+        (segmented cell boundary), ``"nucleus"``.  Frame / unit / status are
+        recorded in ``uns['cell_shapes'][key]`` (the same fields as
+        :meth:`set_cell_positions`).  Stored as GeoParquet
+        (``tables/cell_shapes/<key>.parquet``) in ``.chromdata.zarr`` /
+        ``.cdz``.  Returns the record.
+        """
+        from . import cellspatial as _cs
 
+        _cs.check_status(status, source, "set_cell_shapes")
+        if not key or "/" in key:
+            raise ValueError(f"cell_shapes key must be non-empty without '/': {key!r}")
+        df = _cs.to_wkb(shapes, cell_ids)
+        self.cell_shapes[key] = df
         record = {
-            "x_col": x_name,
-            "y_col": y_name,
-            "source": source,
-            "method": method,
-            "coordinate_system": coordinate_system,
-            "inferred": bool(inferred),
+            "geometry_types": sorted({_cs.wkb_type(w) for w in df["geometry"]}),
+            "n": int(len(df)), "unit": unit, "frame": frame,
+            "in_coords_frame": None if in_coords_frame is None else bool(in_coords_frame),
+            "status": status, "source": source, "method": method, **metadata,
+        }
+        record = _clean_metadata_record(record)
+        _set_linked_record(self.uns, _cs.SHAPES_FAMILY, key, record)
+        return record
+
+    def cell_shapes_geodataframe(self, key: str = "cell"):
+        """``cell_shapes[key]`` as a ``geopandas.GeoDataFrame`` indexed by
+        ``cell_id`` (needs shapely + geopandas; the record is in
+        ``.attrs['cell_shapes']``)."""
+        from . import cellspatial as _cs
+
+        if key not in self.cell_shapes:
+            raise KeyError(f"no cell_shapes[{key!r}]; known: {sorted(self.cell_shapes)}")
+        meta = _linked_records(self.uns.get(_cs.SHAPES_FAMILY)).get(key)
+        return _cs.shapes_geodataframe(self.cell_shapes[key], meta)
+
+    def link_spatialdata(
+        self,
+        path: PathLike,
+        *,
+        key: str = "default",
+        table: Optional[str] = None,
+        region: Optional[Any] = None,
+        region_key: Optional[str] = None,
+        instance_key: Optional[str] = None,
+        cell_col: Optional[str] = None,
+        coordinate_system: Optional[str] = None,
+        read_attrs: bool = True,
+        **metadata: Any,
+    ) -> dict:
+        """Record a linked SpatialData zarr store in ``uns['linked_spatialdata']``.
+
+        The store stays external (images, labels, shapes, other tables).  The
+        cell map joins its annotating ``table`` to ChromData cells: rows
+        whose ``region_key`` column equals ``region`` are cells, and their
+        ``instance_key`` value equals the ChromData ``cell_id`` — or the value
+        of the ``cells`` column ``cell_col`` when the ids differ.  With
+        ``read_attrs`` (and spatialdata installed) ``table`` / ``region`` /
+        ``region_key`` / ``instance_key`` default to the table's
+        ``spatialdata_attrs``.  Relative paths resolve against the directory
+        of the ChromData store (as for :meth:`link_scool`).
+        """
+        from . import cellspatial as _cs
+
+        if cell_col is not None and cell_col not in self.cells.columns:
+            raise KeyError(f"cell_col {cell_col!r} is not a cells column")
+        version = None
+        resolved = self.resolve_link_path(path)
+        if read_attrs and resolved.exists():
+            try:
+                sd = _cs.require_spatialdata()
+            except ImportError:
+                sd = None
+            if sd is not None:
+                version = getattr(sd, "__version__", None)
+                name, attrs, names = _cs.spatialdata_table_attrs(resolved, table)
+                if name is None and len(names) > 1:
+                    raise ValueError(f"the SpatialData store has several tables {names}; pass table=")
+                table = table or name
+                region = region if region is not None else attrs.get("region")
+                region_key = region_key or attrs.get("region_key")
+                instance_key = instance_key or attrs.get("instance_key")
+        record = {
+            "path": str(path), "format": "spatialdata", "table": table,
+            "region": list(region) if isinstance(region, (list, tuple)) else region,
+            "region_key": region_key, "instance_key": instance_key, "cell_col": cell_col,
+            "coordinate_system": coordinate_system, "spatialdata_version": version,
             **metadata,
         }
         record = _clean_metadata_record(record)
-        _set_linked_record(self.uns, "cell_spatial", key, record)
+        _set_linked_record(self.uns, _cs.SPATIALDATA_FAMILY, key, record)
         return record
+
+    def load_linked_spatialdata(self, *, key: str = "default", cells: Optional[Sequence[Any]] = None,
+                                elements: Optional[Sequence[str]] = None):
+        """The linked SpatialData object (``spatialdata`` needed).
+
+        ``cells`` (ChromData cell ids) subsets the annotating table and the
+        elements it annotates to those cells
+        (``spatialdata.match_sdata_to_table``); ``elements`` reads only the
+        named elements (plus the tables).
+        """
+        from . import cellspatial as _cs
+
+        record = _linked_record(self.uns.get(_cs.SPATIALDATA_FAMILY), key)
+        if not record.get("path"):
+            raise ValueError(f"No linked SpatialData path is recorded for key {key!r}.")
+        return _cs.load_spatialdata(self, record, cells=cells, elements=elements)
+
+    def to_spatialdata(self, *, positions_key: str = "default", shapes_key: Optional[str] = None,
+                       spots: bool = True, points: bool = True, cell_table: bool = True,
+                       coordinate_system: Optional[str] = None):
+        """Export to a :class:`spatialdata.SpatialData` (spatialdata +
+        geopandas needed): spots as a 3-D points element ``spots`` (with
+        chrom / start / end / bin_id / trace_id / cell_id columns), each
+        ``points[key]`` as ``points_<key>``, the cell centroids as points
+        ``cell_centroids``, the outlines ``cell_shapes[key]`` as a shapes
+        element ``cell_shapes_<key>``, and ``cells`` (+ ``cellm`` in obsm) as
+        the table ``cells`` annotating the outlines.  Spots and cell
+        positions get separate coordinate systems (``"spots"`` and the
+        position frame); the unit and the records are in
+        ``sdata.attrs['uchrom']``."""
+        from . import cellspatial as _cs
+
+        return _cs.to_spatialdata(self, positions_key=positions_key, shapes_key=shapes_key, spots=spots,
+                                  points=points, cell_table=cell_table, coordinate_system=coordinate_system)
 
     def coord_status(self) -> dict:
         """Return a compact status summary for ``coords``."""
@@ -614,6 +1271,8 @@ class ChromData:
             "linked_scool": _linked_records(self.uns.get("linked_scool")),
             "linked_cool": _linked_records(self.uns.get("linked_cool")),
             "cell_spatial": _linked_records(self.uns.get("cell_spatial")),
+            "cell_shapes": _linked_records(self.uns.get("cell_shapes")),
+            "linked_spatialdata": _linked_records(self.uns.get("linked_spatialdata")),
         }
 
     def validate_links(self, *, check_files: bool = True) -> List[str]:
@@ -627,7 +1286,7 @@ class ChromData:
             )
 
         for family, expected_format in (("linked_mudata", "h5mu"), ("linked_scool", "scool"),
-                                        ("linked_cool", "cool|mcool")):
+                                        ("linked_cool", "cool|mcool"), ("linked_spatialdata", "spatialdata")):
             records = _linked_records(self.uns.get(family))
             for key, record in records.items():
                 path = record.get("path")
@@ -652,6 +1311,62 @@ class ChromData:
                 except ImportError:
                     issues.append("cooler is not installed; linked_scool validity could not be checked")
 
+        issues += self._validate_cell_spatial(check_files=check_files)
+        return issues
+
+    def _validate_cell_spatial(self, *, check_files: bool) -> List[str]:
+        """Issues of the cell-position / cell-shape records and of the linked
+        SpatialData stores (their table, instance key and cell map)."""
+        from . import cellspatial as _cs
+
+        issues: List[str] = []
+        for key, raw in _linked_records(self.uns.get(_cs.POSITIONS_FAMILY)).items():
+            rec = _cs.normalize_record(raw)
+            cols = [rec.get("x_col"), rec.get("y_col")] + ([rec["z_col"]] if rec.get("z_col") else [])
+            missing = [c for c in cols if not c or c not in self.cells.columns]
+            if missing:
+                issues.append(f"cell_spatial.{key} columns missing from cells: {missing}")
+            if rec.get("status") not in _cs.STATUSES:
+                issues.append(f"cell_spatial.{key} status={rec.get('status')!r} not in {_cs.STATUSES}")
+            elif rec["status"] == "inferred" and not rec.get("source"):
+                issues.append(f"cell_spatial.{key} is inferred but has no source")
+            if rec.get("shapes") and rec["shapes"] not in self.cell_shapes:
+                issues.append(f"cell_spatial.{key} names missing cell_shapes[{rec['shapes']!r}]")
+        shape_recs = _linked_records(self.uns.get(_cs.SHAPES_FAMILY))
+        for key in self.cell_shapes:
+            if key not in shape_recs:
+                issues.append(f"cell_shapes[{key!r}] has no uns['cell_shapes'] record")
+        for key, rec in _linked_records(self.uns.get(_cs.SPATIALDATA_FAMILY)).items():
+            for field in ("table", "instance_key"):
+                if not rec.get(field):
+                    issues.append(f"linked_spatialdata.{key} missing {field} (the cell map)")
+            path = rec.get("path")
+            if not (check_files and path and rec.get("table") and rec.get("instance_key")
+                    and self.resolve_link_path(path).exists()):
+                continue
+            try:
+                ids = _cs.spatialdata_instances(self.resolve_link_path(path), rec["table"], rec["instance_key"],
+                                                rec.get("region_key"), rec.get("region"))
+            except ImportError:
+                issues.append("spatialdata is not installed; linked_spatialdata could not be checked")
+                continue
+            except Exception as exc:  # unreadable store, missing table / column
+                issues.append(f"linked_spatialdata.{key} unreadable: {type(exc).__name__}: {exc}")
+                continue
+            if rec.get("cell_col"):
+                if rec["cell_col"] not in self.cells.columns:
+                    issues.append(f"linked_spatialdata.{key} cell_col {rec['cell_col']!r} is not a cells column")
+                    continue
+                ours = pd.Index(self.cells[rec["cell_col"]].dropna().astype(str))
+            else:
+                ours = self._cell_ids_axis() if len(self.cells) else self._spot_cell_ids()
+            found = ours.isin(set(ids))
+            if len(ours) and not found.any():
+                issues.append(f"linked_spatialdata.{key}: no ChromData cell matches a "
+                              f"{rec['instance_key']!r} value of table {rec['table']!r}")
+            elif not found.all():
+                issues.append(f"linked_spatialdata.{key}: {int((~found).sum())} of {len(ours)} ChromData "
+                              f"cells have no row in table {rec['table']!r}")
         return issues
 
     @property
@@ -822,10 +1537,15 @@ class ChromData:
         for col in _SPOTS_REQUIRED_COLUMNS:
             if col not in self.spots.columns:
                 raise ValueError(f"spots missing required column: '{col}'")
-        if self.tracks is not None and len(self.tracks) != self.n_spots:
-            raise ValueError(
-                f"tracks rows ({len(self.tracks)}) != n_spots ({self.n_spots})"
-            )
+        self._check_bin_ids()
+        if len(self._bin_tracks) != self.n_bins:
+            raise ValueError(f"bin_tracks rows ({len(self._bin_tracks)}) != n_bins ({self.n_bins})")
+        if len(self._spot_tracks) != self.n_spots:
+            raise ValueError(f"spot_tracks rows ({len(self._spot_tracks)}) != n_spots ({self.n_spots})")
+        for key, arr in self.binm.items():
+            arr = np.asarray(arr)
+            if arr.ndim == 0 or arr.shape[0] != self.n_bins:
+                raise ValueError(f"binm['{key}'] first axis must be n_bins ({self.n_bins})")
         cell_axis_len = len(self.cells) if len(self.cells) > 0 else self.n_cells
         for key, arr in self.cellm.items():
             arr = np.asarray(arr)
@@ -846,6 +1566,9 @@ class ChromData:
             missing = [c for c in ("x", "y", "z") if c not in df.columns]
             if missing:
                 raise ValueError(f"points['{key}'] missing coordinate columns {missing}")
+        for key, df in self.cell_shapes.items():
+            if not isinstance(df, pd.DataFrame) or not {"cell_id", "geometry"} <= set(df.columns):
+                raise ValueError(f"cell_shapes['{key}'] must be a DataFrame with cell_id and geometry (WKB)")
 
     def _categorify(self):
         for col in _CATEGORICAL_COLUMNS:
@@ -857,35 +1580,64 @@ class ChromData:
     # ------------------------------------------------------------------
 
     def __getitem__(self, index) -> "ChromData":
+        return self._take(index)
+
+    def _take(self, index, columns=None, tracks=None) -> "ChromData":
+        """Rows ``index`` (slice, integer or boolean array) as a new object,
+        with an optional ``columns`` / ``tracks`` selection
+        (:func:`resolve_selection`)."""
+        if isinstance(index, slice):
+            index = np.arange(*index.indices(self.n_spots))
         if isinstance(index, (pd.Series, np.ndarray)):
             if index.dtype == bool:
                 index = np.where(index)[0]
         idx = np.asarray(index)
+        if idx.dtype.kind not in "iu":
+            idx = idx.astype(np.int64)
 
+        spot_cols, track_cols, layer_keys = resolve_selection(
+            list(self.spots.columns), list(self._spot_tracks.columns), list(self.layers),
+            columns, tracks)
         new_coords = self.coords[idx]
-        new_spots = self.spots.iloc[idx].reset_index(drop=True)
-        new_tracks = self.tracks.iloc[idx].reset_index(drop=True) if self.tracks is not None else None
-        new_layers = {k: v[idx] for k, v in self.layers.items()}
+        spots = self.spots if len(spot_cols) == len(self.spots.columns) else self.spots[spot_cols]
+        new_spots = spots.iloc[idx].reset_index(drop=True)
+        st = self._spot_tracks
+        if len(track_cols) != len(st.columns):
+            st = st[track_cols] if track_cols else _empty_frame(len(st))
+        new_spot_tracks = st.iloc[idx].reset_index(drop=True)
+        new_layers = {k: self.layers[k][idx] for k in layer_keys}
 
         # Filter traces/cells to those still referenced
         new_traces = self._filter_traces(new_spots)
         new_cells, new_cellm = self._filter_cells(new_spots)
         new_points = self._filter_points(new_spots)
+        new_shapes = self._filter_cell_shapes(new_spots)
 
-        return ChromData(
+        out = ChromData(
             new_coords,
             new_spots,
+            bins=self._bins,
             cells=new_cells,
             cellm=new_cellm,
-            tracks=new_tracks,
+            binm=self.binm,
+            intervals=self._intervals,
             traces=new_traces,
             layers=new_layers,
             results=self.results,
             uns=self.uns,
             points=new_points,
+            cell_shapes=new_shapes,
             linked_adata=None,
             validate=False,
         )
+        out._bin_tracks = self._bin_tracks
+        out._spot_tracks = new_spot_tracks
+        if self._spot_view_order and len(track_cols) != len(self._spot_tracks.columns):
+            keep = set(self._bin_tracks.columns) | set(track_cols)
+            out._spot_view_order = [c for c in self._spot_view_order if c in keep] or None
+        else:
+            out._spot_view_order = self._spot_view_order
+        return out
 
     def _filter_points(self, spots: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         """Keep points of the cells that still have spots (sets without a
@@ -899,6 +1651,14 @@ class ChromData:
                 df = df[df["cell_id"].astype(str).isin(keep)].reset_index(drop=True)
             out[key] = df
         return out
+
+    def _filter_cell_shapes(self, spots: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+        """Keep the outlines of the cells that still have spots."""
+        if not self.cell_shapes or "cell_id" not in spots.columns:
+            return dict(self.cell_shapes)
+        keep = {str(x) for x in spots["cell_id"].unique()}
+        return {k: df[df["cell_id"].astype(str).isin(keep)].reset_index(drop=True)
+                for k, df in self.cell_shapes.items()}
 
     def _filter_traces(self, spots: pd.DataFrame) -> pd.DataFrame:
         if len(self.traces) == 0:
@@ -949,27 +1709,142 @@ class ChromData:
             return self._spot_cell_ids()
         return pd.Index([str(x) for x in self.cells.index], name="cell_id")
 
-    def get_cell(self, cell_id) -> "ChromData":
+    def get_cell(self, cell_id, *, columns=None, tracks=None) -> "ChromData":
+        """The spots of one cell (a new object).
+
+        ``columns`` / ``tracks`` select the spot-aligned columns to keep —
+        ``columns="coords"`` keeps the coordinates and the key columns
+        only, ``columns=[...]`` adds the named spot columns / spot tracks /
+        layers, ``tracks=[...]`` picks spot tracks (see
+        :func:`resolve_selection`).  The default keeps everything.  On a
+        backed object the selection decides what is read from disk.
+        """
         if "cell_id" not in self.spots.columns:
             raise KeyError("spots has no 'cell_id' column")
         mask = self.spots["cell_id"] == cell_id
-        return self[mask.values]
+        return self._take(mask.values, columns, tracks)
 
-    def get_cells(self, cell_ids) -> "ChromData":
-        """Subset to several cells (ids compared as strings); unknown ids are ignored."""
+    def get_cells(self, cell_ids, *, columns=None, tracks=None) -> "ChromData":
+        """The spots of several cells (ids compared as strings; unknown ids are
+        ignored).  See :meth:`get_cell` for ``columns`` / ``tracks``."""
         if "cell_id" not in self.spots.columns:
             raise KeyError("spots has no 'cell_id' column")
         keep = {str(c) for c in cell_ids}
         mask = self.spots["cell_id"].astype(str).isin(keep)
-        return self[mask.values]
+        return self._take(mask.values, columns, tracks)
 
-    def get_trace(self, trace_id) -> "ChromData":
+    def get_trace(self, trace_id, *, columns=None, tracks=None) -> "ChromData":
+        """The spots of one trace (see :meth:`get_cell` for ``columns`` /
+        ``tracks``)."""
         mask = self.spots["trace_id"] == trace_id
-        return self[mask.values]
+        return self._take(mask.values, columns, tracks)
 
-    def get_chrom(self, chrom: str) -> "ChromData":
-        mask = self.spots["chrom"] == chrom
-        return self[mask.values]
+    def get_chrom(self, chrom: str, *, columns=None, tracks=None) -> "ChromData":
+        """The spots of one chromosome (see :meth:`get_cell` for ``columns``
+        / ``tracks``)."""
+        ids = np.where(self._bins["chrom"].astype(str).to_numpy() == str(chrom))[0]
+        mask = np.isin(self.spots[BIN_ID].to_numpy(), ids)
+        return self._take(mask, columns, tracks)
+
+    # ------------------------------------------------------------------
+    # Streaming access (same batches in memory and backed)
+    # ------------------------------------------------------------------
+
+    @property
+    def backed(self) -> bool:
+        """``True`` for a :class:`~uchrom.core.backed.BackedChromData`."""
+        return False
+
+    def to_memory(self, *, columns=None, tracks=None) -> "ChromData":
+        """An in-memory ``ChromData``: ``self`` (this object already is), or
+        a copy restricted to a ``columns`` / ``tracks`` selection."""
+        if columns is None and tracks is None:
+            return self
+        return self._take(slice(None), columns, tracks)
+
+    def _stream_layout(self):
+        """Stored (format 2.1) order of the spots and its runs.
+
+        Returns ``(order, chrom, cell, seg)``: the stable permutation sorting
+        spots by (chromosome, cell, trace, bin) (``None`` when already
+        sorted), the sorted chromosome / cell codes (cell = -1 without
+        ``cell_id``) and the offsets of the (chromosome, cell, trace) runs.
+        """
+        from .zarrcd import _segments, _spot_keys, sort_order
+
+        cell, trace, bin_id = _spot_keys(self)
+        chrom_codes = np.asarray(self._bins["chrom"].cat.codes, dtype=np.int64)
+        chrom = chrom_codes[bin_id] if len(bin_id) else np.zeros(0, dtype=np.int64)
+        order = sort_order(cell, trace, bin_id, chrom=chrom)
+        if order is not None:
+            cell, trace, chrom = cell[order], trace[order], chrom[order]
+        seg, _ = _segments(cell, trace, chrom)
+        return order, chrom, cell, seg
+
+    def _bytes_per_spot(self, columns=None, tracks=None) -> float:
+        spot_cols, track_cols, layer_keys = resolve_selection(
+            list(self.spots.columns), list(self._spot_tracks.columns), list(self.layers),
+            columns, tracks)
+        return 3.0 * (8 * 3 + 8 * (len(spot_cols) + len(track_cols)) + 24 * len(layer_keys))
+
+    def iter_traces(self, batch=1024, *, chrom=None, columns=None, tracks=None):
+        """Yield in-memory ``ChromData`` chunks of ``batch`` traces.
+
+        Traces are visited in the order a ``.chromdata.zarr`` store holds
+        them — chromosome › cell › trace, with the spots of a trace in bin
+        order; a trace id shared by several cells (or a trace spanning
+        several chromosomes) counts once per (chromosome, cell) run.  A
+        backed object yields identical chunks while reading one row range
+        per chunk.
+
+        Parameters
+        ----------
+        batch : int or ``"auto"``
+            Traces per chunk; ``"auto"`` sizes chunks from
+            :data:`uchrom.settings.memory_budget`.
+        chrom : str, optional
+            Only the traces of this chromosome.
+        columns, tracks
+            Column selection of the chunks (see :meth:`get_cell`), e.g.
+            ``columns="coords"`` for coordinates and keys only.
+        """
+        order, chrom_s, _, seg = self._stream_layout()
+        lo, hi = 0, len(seg) - 1
+        if chrom is not None:
+            names = np.asarray(self._bins["chrom"].cat.categories.astype(str))
+            codes = np.flatnonzero(names == str(chrom))
+            sel = np.flatnonzero(np.isin(chrom_s[seg[:-1]], codes)) if hi else np.zeros(0, np.int64)
+            if not len(sel):
+                return
+            lo, hi = int(sel[0]), int(sel[-1]) + 1
+        size = resolve_batch(batch, (seg[hi] - seg[lo]) / max(1, hi - lo),
+                             self._bytes_per_spot(columns, tracks))
+        for i in range(lo, hi, size):
+            a, b = int(seg[i]), int(seg[min(i + size, hi)])
+            yield self._take(order[a:b] if order is not None else np.arange(a, b), columns, tracks)
+
+    def iter_cells(self, batch=64, *, columns=None, tracks=None):
+        """Yield in-memory ``ChromData`` chunks of ``batch`` cells (cell code
+        order; the rows of a chunk in stored order, see :meth:`iter_traces`)."""
+        if "cell_id" not in self.spots.columns:
+            raise KeyError("spots has no 'cell_id' column")
+        order, chrom_s, cell_s, _ = self._stream_layout()
+        uniq = np.unique(cell_s[cell_s >= 0])
+        if not len(uniq):
+            return
+        size = resolve_batch(batch, self.n_spots / len(uniq), self._bytes_per_spot(columns, tracks))
+        n = len(cell_s)
+        bounds = np.r_[0, np.flatnonzero(chrom_s[1:] != chrom_s[:-1]) + 1, n]
+        for i in range(0, len(uniq), size):
+            c0, c1 = uniq[i], uniq[min(i + size, len(uniq)) - 1]
+            rows = []
+            for a, b in zip(bounds[:-1], bounds[1:]):
+                k0 = a + int(np.searchsorted(cell_s[a:b], c0, side="left"))
+                k1 = a + int(np.searchsorted(cell_s[a:b], c1, side="right"))
+                if k1 > k0:
+                    rows.append(order[k0:k1] if order is not None else np.arange(k0, k1))
+            idx = np.concatenate(rows) if rows else np.zeros(0, dtype=np.int64)
+            yield self._take(idx, columns, tracks)
 
     # ------------------------------------------------------------------
     # Pairwise computation (on-demand, per-trace)
@@ -1187,27 +2062,143 @@ class ChromData:
     # I/O
     # ------------------------------------------------------------------
 
-    def write(self, path: PathLike) -> None:
-        """Write to HDF5 (.h5cd) file."""
+    def write(
+        self,
+        path: PathLike,
+        *,
+        format: Optional[str] = None,
+        coord_dtype: str = "float64",
+        row_group_rows: Optional[int] = None,
+        compression_level: Optional[int] = None,
+        keep_source_order: bool = True,
+        compression: Optional[str] = "gzip",
+        compression_opts: Optional[int] = 4,
+        compress_floats: bool = False,
+    ) -> None:
+        """Write to disk; the format follows the path.
+
+        * ``<name>.chromdata.zarr`` (any ``*.zarr``) — **the format 2.0
+          container** (format 2.1): a Zarr v3 directory whose large tables
+          are Parquet (see :mod:`uchrom.core.zarrcd` and ``spec.md``).  The
+          spot-aligned tables are partitioned by chromosome and sorted by
+          (cell, trace, bin) within a partition, with ``index/`` offsets,
+          so :meth:`read` can open the store backed.
+        * ``<name>.cdz`` — the same tree in one uncompressed zip file.
+        * ``<name>.h5cd`` — HDF5 format 2.0 (**deprecated**; readable
+          indefinitely, still written in this release, with a
+          ``DeprecationWarning``).  Other suffixes also write HDF5, as
+          before.
+
+        ``format="zarr" | "cdz" | "h5cd"`` overrides the suffix.
+
+        **Row order.**  The zarr / cdz writer stores spots sorted by
+        (chromosome, ``cell_id`` code, ``trace_id`` code, ``bin_id``) — a
+        stable sort, so ties keep their order.  Reading returns that order; every spot
+        keeps its values (compare round trips after sorting by a stable
+        key).  ``index/source_row`` records each spot's row in the written
+        object, and ``ChromData.read(path, original_order=True)`` restores
+        it.  Objects that are already sorted are written unchanged.
+
+        Parameters (zarr / cdz)
+        -----------------------
+        coord_dtype : ``"float64"`` (default) or ``"float32"``
+            Storage dtype of ``coords`` and ``layers`` (always float64 in
+            memory).  float32 halves their size; see the format notes.
+        row_group_rows : int, optional
+            Target rows per Parquet row group of the spot-aligned tables
+            (default 16,384).  Groups end on cell boundaries within a
+            chromosome partition.
+        compression_level : int, optional
+            zstd level for Parquet and Zarr (default 3).
+        keep_source_order : bool
+            Store ``index/source_row`` when the writer had to sort.
+
+        Parameters (h5cd)
+        -----------------
+        compression : ``"gzip"`` (default), ``"lzf"`` or ``None``
+            Filter for the large integer / string datasets (``bin_id``,
+            categorical codes, string columns, integer tracks).  gzip is
+            part of every HDF5 build; lzf ships with h5py.  Datasets below
+            4,096 elements are stored contiguously, uncompressed.
+        compression_opts : int, optional
+            gzip level (default 4); ignored for ``"lzf"``.
+        compress_floats : bool
+            Also compress float datasets (``coords``, ``layers``, float
+            tracks).  Off by default: on real tracing data it saves only
+            ~15-20 % while making full reads ~4x slower (see the format
+            2.0 notes in ``docs/source/guide/chromdata_2_0_design.md``).
+        """
         import h5py
+
+        from .zarrcd import container_kind, write_zarr
+
+        path = Path(path)
+        kind = format or container_kind(path) or "h5cd"
+        if kind not in ("zarr", "cdz", "h5cd"):
+            raise ValueError("format must be 'zarr', 'cdz' or 'h5cd'")
+        if kind == "cdz" and not path.name.lower().endswith(".cdz"):
+            raise ValueError("a .cdz store needs a path ending in .cdz")
+        if kind == "zarr" and not path.name.lower().endswith(".zarr"):
+            raise ValueError("a zarr store needs a path ending in .chromdata.zarr (or .zarr)")
+        if kind in ("zarr", "cdz"):
+            from .zarrcd import DEFAULT_ZSTD_LEVEL
+            write_zarr(self, path, coord_dtype=coord_dtype,
+                       row_group_rows=row_group_rows,
+                       compression_level=(DEFAULT_ZSTD_LEVEL if compression_level is None
+                                          else compression_level),
+                       keep_source_order=keep_source_order)
+            return
+        import warnings
+        warnings.warn(
+            f"writing {path.name}: the HDF5 .h5cd format is deprecated; write "
+            f"'<name>.chromdata.zarr' (or '.cdz') instead.  .h5cd files stay readable.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
         try:
             from uchrom import __version__ as _uchrom_version
         except Exception:
             _uchrom_version = "unknown"
 
-        path = Path(path)
+        self._check_bin_ids()
+        if compression not in (None, "gzip", "lzf"):
+            raise ValueError("compression must be 'gzip', 'lzf' or None")
+        _WRITE_OPTS.update(compression=compression, compress_floats=bool(compress_floats),
+                           compression_opts=compression_opts if compression == "gzip" else None)
+        try:
+            self._write_h5(h5py, path, _uchrom_version)
+        finally:
+            _WRITE_OPTS.update(compression=None, compression_opts=None, compress_floats=False)
+
+    def _write_h5(self, h5py, path: Path, _uchrom_version: str) -> None:
+        spots = self.spots.drop(columns=[c for c in LOCI if c in self.spots.columns])
+        spots[BIN_ID] = spots[BIN_ID].to_numpy().astype(
+            np.int32 if self.n_bins < 2 ** 31 else np.int64)
         with h5py.File(path, "w") as f:
             f.attrs["uchrom_format_version"] = FORMAT_VERSION
             f.attrs["uchrom_version"] = _uchrom_version
-            f.create_dataset("coords", data=self.coords)
-            _write_dataframe(f, "spots", self.spots)
+            f.attrs["spot_order"] = "unsorted"
+            _write_dataframe(f, "bins", self._bins.reset_index(drop=True))
+            _create_dataset(f, "coords", self.coords)
+            _write_dataframe(f, "spots", spots)
+            f["spots"].attrs["_column_order"] = json.dumps([str(c) for c in self.spots.columns])
+            _write_dataframe(f, "tracks", self._bin_tracks.reset_index(drop=True),
+                             n_rows=self.n_bins)
+            _write_dataframe(f, "spot_tracks", self._spot_tracks, n_rows=self.n_spots)
+            if self._spot_view_order:
+                f["spot_tracks"].attrs["_spot_view_order"] = json.dumps(self._spot_view_order)
+            _write_dict_of_arrays(f, "binm", self.binm)
             _write_dataframe(f, "cells", self.cells)
-            _write_dataframe(f, "tracks", self.tracks)
             _write_dataframe(f, "traces", self.traces)
             _write_dict_of_arrays(f, "layers", self.layers)
             _write_dict_of_arrays(f, "cellm", self.cellm)
-            _write_results(f, "results", self.results)
+            grp = f.create_group("intervals")
+            for key, table in self._intervals.items():
+                _write_dataframe(grp, key, pd.DataFrame(table))
+                grp[key].attrs["_kind"] = table.kind or ""
+                grp[key].attrs["_source_result"] = table.source_result or ""
+            _write_results(f, "results", self.results, intervals=self._intervals)
             _write_uns(f, "uns", self.uns)
             if self.points:
                 grp = f.create_group("points")
@@ -1215,15 +2206,37 @@ class ChromData:
                     if "/" in key or not key:
                         raise ValueError(f"points key must be non-empty without '/': {key!r}")
                     _write_dataframe(grp, key, df)
+            if self.cell_shapes:
+                import warnings
+                warnings.warn("cell_shapes are not stored in .h5cd; write a .chromdata.zarr / .cdz to keep "
+                              "the cell outlines", UserWarning, stacklevel=3)
 
     @classmethod
-    def read(cls, path: PathLike) -> "ChromData":
-        """Read from HDF5 (.h5cd) file.
+    def read(cls, path: PathLike, *, backed: bool = False,
+             original_order: bool = False, columns=None, tracks=None) -> "ChromData":
+        """Read a ChromData file; the format follows the path.
 
-        Dispatches to a version-specific reader based on
-        ``f.attrs['uchrom_format_version']``.  Files written before
-        versioning was introduced are read with a warning using the v1.0
-        reader (the on-disk layout has been stable from the start).
+        * ``.chromdata.zarr`` / ``.cdz`` (format 2.x container) — with
+          ``backed=True`` returns a :class:`~uchrom.core.backed.BackedChromData`:
+          small tables are loaded, ``coords`` / ``spots`` / ``spot_tracks``
+          / ``layers`` stay on disk, and ``get_cell`` / ``get_trace`` /
+          ``get_chrom`` / ``iter_traces`` / ``iter_cells`` read only the
+          rows they need.  Spots come back in the stored order —
+          chromosome › cell › trace › bin (format 2.1; cell › trace › bin
+          for 2.0 stores); ``original_order=True`` restores the order of
+          the object that was written (in-memory reads only).
+          ``columns`` / ``tracks`` select the spot-aligned columns (see
+          :meth:`get_cell`): an in-memory read loads only those, a backed
+          object uses them as the default of ``get_*`` / ``iter_*``.  The
+          default reads everything.
+        * ``.h5cd`` — HDF5, format 1.x or 2.0 (below); always in memory.
+
+        HDF5 ``.h5cd``: dispatches to a version-specific reader based on
+        ``f.attrs['uchrom_format_version']``: MAJOR 2 → :func:`_read_v2`,
+        MAJOR 1 → :func:`_read_v1`, which upgrades the file in memory
+        (bins derived from the spot loci; the spot-aligned 1.x ``tracks``
+        split into ``bin_tracks`` / ``spot_tracks``).  Files written before
+        versioning was introduced are read with a warning as 1.0.
 
         Forward compatibility:
 
@@ -1234,7 +2247,33 @@ class ChromData:
         import warnings
         import h5py
 
+        from .zarrcd import container_kind
+
         path = Path(path)
+        kind = container_kind(path)
+        if kind in ("zarr", "cdz"):
+            from .backed import BackedChromData
+
+            if not path.exists():
+                raise FileNotFoundError(path)
+            b = BackedChromData(path, columns=columns, tracks=tracks)
+            _check_zarr_version(path, b._c.meta.get("format_version", "2.0"))
+            if backed:
+                if original_order:
+                    raise ValueError("original_order=True needs an in-memory read (backed=False)")
+                return b
+            cd = b.to_memory(columns=columns, tracks=tracks)
+            if original_order and b._c.meta.get("has_source_row"):
+                src = b._c.array("index/source_row")
+                _permute_spot_rows(cd, np.argsort(src, kind="stable"))
+            return cd
+        if columns is not None or tracks is not None:
+            raise ValueError("columns= / tracks= need the .chromdata.zarr / .cdz format")
+        if backed:
+            raise ValueError(
+                f"{path}: backed mode needs the .chromdata.zarr / .cdz format; convert with "
+                f"`python -m uchrom.io.upgrade {path} {path.with_suffix('.chromdata.zarr')}`"
+            )
         with h5py.File(path, "r") as f:
             version_str = f.attrs.get("uchrom_format_version")
             if version_str is None:
@@ -1248,14 +2287,14 @@ class ChromData:
                 version_str = version_str.decode("utf-8")
 
             major, minor = _parse_version(version_str)
-            if major != _SUPPORTED_MAJOR:
+            if major not in _SUPPORTED_MAJORS:
                 raise ValueError(
                     f"{path}: format version {version_str} has incompatible "
-                    f"MAJOR with this uchrom (supports MAJOR={_SUPPORTED_MAJOR}). "
-                    f"Upgrade uchrom or convert the file."
+                    f"MAJOR with this uchrom (supports MAJOR in "
+                    f"{list(_SUPPORTED_MAJORS)}). Upgrade uchrom or convert the file."
                 )
             cur_major, cur_minor = _parse_version(FORMAT_VERSION)
-            if minor > cur_minor:
+            if major == cur_major and minor > cur_minor:
                 warnings.warn(
                     f"{path}: written with format version {version_str} "
                     f"(reader supports up to {FORMAT_VERSION}). "
@@ -1263,7 +2302,10 @@ class ChromData:
                     stacklevel=2,
                 )
 
-            cd = _read_v1(cls, f)
+            # 1.x files are upgraded in memory (bins derived from the spot
+            # loci, spot-aligned tracks split); uchrom.io.upgrade_h5cd
+            # rewrites them as 2.0 on disk.
+            cd = _read_v1(cls, f) if major == 1 else _read_v2(cls, f)
         cd._source_path = path
         return cd
 
@@ -1308,8 +2350,9 @@ class ChromData:
         elif cell_id is not None:
             spots["cell_id"] = cell_id
 
-        # Carry over extra columns (e.g. contact_count)
-        skip = required | {"index", "cell_id"}
+        # Carry over extra columns (e.g. contact_count); a bin_id from
+        # to_dataframe(include_bin_id=True) is re-derived, not copied
+        skip = required | {"index", "cell_id", BIN_ID}
         for col in df.columns:
             if col not in skip and col not in spots.columns:
                 spots[col] = df[col].values
@@ -1323,7 +2366,11 @@ class ChromData:
         *,
         cell_table: Optional[PathLike] = None,
         rna_table: Optional[PathLike] = None,
+        mapping_table: Optional[PathLike] = None,
         cell_value_prefix: Optional[str] = "rna.",
+        out: Optional[PathLike] = None,
+        chunksize: Union[int, str] = "auto",
+        memory_budget=None,
         **kwargs,
     ) -> "ChromData":
         """Read a FOF-CT core table, optionally with its companion tables.
@@ -1339,6 +2386,18 @@ class ChromData:
             ``nucleus_area_um2`` / ``cytoplasm_area_um2``, and every other
             numeric column (per-cell RNA copy numbers in 4DN tables) is
             prefixed with ``cell_value_prefix`` (``Nanog`` → ``rna.Nanog``).
+            Centroid columns become the cell positions
+            (``uns['cell_spatial']``, :meth:`cell_positions`):
+            ``Cent_ROI_x/y[/z]`` (as ``centroid_x/y[/z]``) or
+            ``cell_center_x_global`` / ``cell_center_y_global`` (Liu et al.
+            2025, global frame), in the table's ``XYZ_unit``.
+        mapping_table : path, optional
+            FOF-CT *Cell/ROI mapping* table (``4dn_FOF-CT_mapping``):
+            ``ROI_Boundaries`` of each ``Cell_ID`` in global coordinates, as
+            OME polygon points strings (``"x1,y1 x2,y2 …"``) →
+            ``cell_shapes['cell']`` (``uns['cell_shapes']['cell']``: frame
+            ``"global"``).  Rows keyed by sub- / extra-cell ROI ids and OBJ
+            meshes are skipped with a warning.
         rna_table : path, optional
             FOF-CT *RNA spot* table (``4dn_FOF-CT_rna``).  Loaded into
             ``points['rna']`` with columns ``x, y, z, gene, gene_id,
@@ -1346,83 +2405,203 @@ class ChromData:
         cell_value_prefix : str or None
             Prefix for unrecognised numeric cell-table columns; ``None``
             keeps their names.
+        out : path, optional
+            **Streaming import**: read the core table in chunks of
+            ``chunksize`` rows and write them to this ``.chromdata.zarr``
+            store with :class:`~uchrom.core.stream.ChromDataWriter`; returns
+            the store opened backed.  Peak memory is one chunk plus the
+            writer's merge pieces (bounded by ``memory_budget``), not the
+            table.  The store equals ``from_fofct(core_path, ...).write(out)``
+            (same spots, order, dtypes, small tables).  Without ``out`` the
+            table is read into memory (a ``ResourceWarning`` is issued when
+            the file is larger than a fifth of the memory budget).
+        chunksize : int or ``"auto"``
+            Rows per chunk of a streaming import (``"auto"``: from the
+            memory budget).
+        memory_budget : int or str, optional
+            Defaults to :data:`uchrom.settings.memory_budget`.
         **kwargs
             Additional keyword arguments passed to ChromData constructor
-            (e.g. cells, tracks, uns).
+            (e.g. cells, tracks, uns).  A streaming import accepts
+            ``cells``, ``cellm``, ``traces``, ``points`` and ``uns``.
         """
         path = Path(core_path)
+        if out is not None:
+            return _from_fofct_streaming(cls, path, out=Path(out), cell_table=cell_table,
+                                         rna_table=rna_table, mapping_table=mapping_table,
+                                         cell_value_prefix=cell_value_prefix,
+                                         chunksize=chunksize, memory_budget=memory_budget, **kwargs)
+        from uchrom.settings import format_bytes, settings
+
+        budget = settings.resolve_budget(memory_budget)
+        if path.exists() and path.stat().st_size * 5 > budget:
+            import warnings
+            warnings.warn(
+                f"{path.name} ({format_bytes(path.stat().st_size)}) is read into memory, "
+                f"which takes several times its size (memory budget "
+                f"{format_bytes(budget)}); pass out='<name>.chromdata.zarr' for a streaming import.",
+                ResourceWarning, stacklevel=2)
         df, header_meta = _read_fofct_table(path)
-        if not any(str(c).lower() == "x" for c in df.columns):
-            # no column names in the file: assume the core-table order
-            default_cols = ["Spot_ID", "Trace_ID", "X", "Y", "Z",
-                            "Chrom", "Chrom_Start", "Chrom_End"]
-            n = len(df.columns)
-            df.columns = default_cols[:n] + [f"col_{i}" for i in range(len(default_cols), n)]
-
-        # Map FOF-CT columns to ChromData — case-insensitive.
-        canonical_map = {
-            "x": "x", "y": "y", "z": "z",
-            "chrom": "chrom",
-            "chrom_start": "start", "chromstart": "start",
-            "chrom_end": "end", "chromend": "end",
-            "trace_id": "trace_id", "traceid": "trace_id",
-            "spot_id": "spot_id", "spotid": "spot_id",
-            "cell_id": "cell_id", "cellid": "cell_id",
-            "sub_cell_roi_id": "sub_cell_roi_id",
-            "extra_cell_roi_id": "extra_cell_roi_id",
-        }
-        rename = {c: canonical_map[str(c).lower()] for c in df.columns if str(c).lower() in canonical_map}
-        df = df.rename(columns=rename)
-
-        missing = {"x", "y", "z"} - set(df.columns)
-        if missing:
-            raise ValueError(
-                f"FOF-CT core table missing coordinate columns {missing}. "
-                f"Parsed columns: {list(df.columns)}"
-            )
-
-        coords = df[["x", "y", "z"]].values.astype(np.float64)
-
-        # Spot-level columns: the required set first, then any extras carried
-        # through verbatim (custom FOF-CT columns like ``Readout``).
-        spot_cols = ["chrom", "start", "end", "trace_id"]
-        for extra in ("spot_id", "cell_id", "sub_cell_roi_id", "extra_cell_roi_id"):
-            if extra in df.columns and extra not in spot_cols:
-                spot_cols.append(extra)
-        coord_cols = {"x", "y", "z"}
-        for col in df.columns:
-            if col not in spot_cols and col not in coord_cols:
-                spot_cols.append(col)
-        spots = df[spot_cols].copy()
-
-        # Store FOF-CT header metadata (case-insensitive lookup for promotion).
-        uns = kwargs.pop("uns", {})
-        if header_meta:
-            uns["fofct_header"] = header_meta
-        lower_meta = {k.lower(): v for k, v in header_meta.items()}
-        if "xyz_unit" in lower_meta:
-            uns["xyz_unit"] = lower_meta["xyz_unit"]
-        if "genome_assembly" in lower_meta:
-            uns["genome_assembly"] = lower_meta["genome_assembly"]
-
-        companions = {}
-        if cell_table is not None:
-            cells, meta = _fofct_cell_table(Path(cell_table), cell_value_prefix)
-            if kwargs.get("cells") is not None:
-                raise ValueError("pass either cells= or cell_table=, not both")
-            kwargs["cells"] = cells
-            companions["cells"] = meta
-        if rna_table is not None:
-            rna, meta = _fofct_rna_table(Path(rna_table))
-            points = dict(kwargs.pop("points", None) or {})
-            points["rna"] = rna
-            kwargs["points"] = points
-            companions["rna"] = meta
+        coords, spots = _fofct_core_parts(df)
+        del df
+        uns = _fofct_uns(kwargs.pop("uns", {}), header_meta)
+        companions = _fofct_companions(kwargs, cell_table, rna_table, cell_value_prefix, mapping_table)
         if companions:
             uns["fofct_companions"] = companions
+            _fofct_cell_spatial(uns, kwargs, companions)
             _warn_unmatched_cells(spots, companions, kwargs)
 
         return cls(coords, spots, uns=uns, **kwargs)
+
+    @classmethod
+    def writer(cls, path: PathLike, **kwargs):
+        """A streaming :class:`~uchrom.core.stream.ChromDataWriter` for a
+        ``.chromdata.zarr`` store larger than memory::
+
+            with ChromData.writer("big.chromdata.zarr", memory_budget="4GB") as w:
+                for chunk in chunks:
+                    w.append(chunk)      # a ChromData, or coords= / spots= / spot_tracks=
+            cd = ChromData.read("big.chromdata.zarr", backed=True)
+        """
+        from .stream import ChromDataWriter
+        return ChromDataWriter(path, **kwargs)
+
+    def to_fofct(
+        self,
+        path: PathLike,
+        *,
+        cell_table: Optional[PathLike] = None,
+        rna_table: Optional[PathLike] = None,
+        mapping_table: Optional[PathLike] = None,
+        spot_tracks: bool = True,
+        bin_tracks: bool = False,
+        header: Optional[Mapping[str, Any]] = None,
+        cell_value_prefix: Optional[str] = "rna.",
+    ) -> Dict[str, Path]:
+        """Write a 4DN FOF-CT core table, optionally with its companion
+        cell and RNA-spot tables — the inverse of :meth:`from_fofct`.
+
+        The core table has the ``##`` / ``#`` header lines, then
+        ``Spot_ID, Trace_ID, X, Y, Z, Chrom, Chrom_Start, Chrom_End`` (+
+        ``Cell_ID`` / ``Sub_Cell_ROI_ID`` / ``Extra_Cell_ROI_ID`` when
+        present) and every other spot column, one row per spot in the
+        object's row order.
+
+        Parameters
+        ----------
+        path : path
+            Core table (``.csv``).
+        cell_table : path, optional
+            Also write :attr:`cells` as a ``4dn_FOF-CT_cell`` table
+            (``Cell_ID`` first; ``centroid_x/y/z`` → ``Cent_ROI_x/y/z``,
+            ``nucleus_area_um2`` → ``area(um2)``, ``cytoplasm_area_um2`` →
+            ``area_cyto(um2)``, and ``cell_value_prefix`` removed, so
+            ``rna.Nanog`` → ``Nanog``).
+        rna_table : path, optional
+            Also write ``points['rna']`` as a ``4dn_FOF-CT_rna`` table
+            (``Spot_ID, X, Y, Z, RNA_name, Gene_ID, Cell_ID, …``).
+        mapping_table : path, optional
+            Also write ``cell_shapes['cell']`` as a ``4dn_FOF-CT_mapping``
+            table (``Cell_ID, ROI_Boundaries``: the exterior ring as an OME
+            polygon points string, ``##ROI_Boundaries_Format``).
+        spot_tracks : bool
+            Append :attr:`spot_tracks` as extra columns (default).  They
+            come back as spot columns from :meth:`from_fofct`.
+        bin_tracks : bool
+            Also append :attr:`bin_tracks`, broadcast to spots.
+        header : mapping, optional
+            Header entries to add or override.  Defaults come from
+            ``uns['fofct_header']`` (what :meth:`from_fofct` read), else
+            ``FOF-CT_version=v0.1``, ``Table_namespace``, and
+            ``genome_assembly`` / ``XYZ_unit`` from :attr:`uns`.  The
+            required fields (``FOF-CT_version``, ``Table_namespace``,
+            ``genome_assembly``, ``XYZ_unit``) are written as ``##key=value``,
+            the others as ``#key: value``.
+
+        Returns
+        -------
+        dict
+            ``{"core": path, "cells": path, "rna": path}`` of the files
+            written.
+
+        Notes
+        -----
+        FOF-CT has no place for ``bins`` rows without spots, ``cellm``,
+        ``binm``, ``layers``, ``intervals``, ``results`` or other ``uns``
+        keys; those are not written.  Spots without ``spot_id`` get
+        ``Spot_ID = 0 .. n_spots - 1``.  Categorical extra columns come
+        back as plain columns.
+        """
+        written: Dict[str, Path] = {}
+        path = Path(path)
+        spots = self.spots_with_loci()
+        n = len(spots)
+        table = pd.DataFrame(index=pd.RangeIndex(n))
+        table["Spot_ID"] = (spots["spot_id"].to_numpy() if "spot_id" in spots.columns
+                            else np.arange(n, dtype=np.int64))
+        table["Trace_ID"] = _plain_values(spots["trace_id"])
+        coords = np.asarray(self.coords)
+        table["X"], table["Y"], table["Z"] = coords[:, 0], coords[:, 1], coords[:, 2]
+        table["Chrom"] = _plain_values(spots["chrom"])
+        table["Chrom_Start"] = spots["start"].to_numpy()
+        table["Chrom_End"] = spots["end"].to_numpy()
+        for col, name in (("cell_id", "Cell_ID"), ("sub_cell_roi_id", "Sub_Cell_ROI_ID"),
+                          ("extra_cell_roi_id", "Extra_Cell_ROI_ID")):
+            if col in spots.columns:
+                table[name] = _plain_values(spots[col])
+        skip = {"spot_id", "trace_id", "chrom", "start", "end", "cell_id", "sub_cell_roi_id",
+                "extra_cell_roi_id", BIN_ID}
+        for col in spots.columns:
+            if col not in skip:
+                table[str(col)] = _plain_values(spots[col])
+        extra = []
+        if spot_tracks:
+            extra += [(c, self._spot_tracks[c]) for c in self._spot_tracks.columns]
+        if bin_tracks and len(self._bin_tracks.columns):
+            bid = spots[BIN_ID].to_numpy()
+            extra += [(c, self._bin_tracks[c].iloc[bid].reset_index(drop=True))
+                      for c in self._bin_tracks.columns]
+        for col, values in extra:
+            if str(col) in table.columns:
+                raise ValueError(f"track {col!r} clashes with a FOF-CT / spot column")
+            table[str(col)] = _plain_values(values)
+        meta = _fofct_header_defaults(self.uns, "4dn_FOF-CT_core",
+                                      (self.uns.get("fofct_header") or {}), header)
+        _write_fofct_table(path, table, meta)
+        written["core"] = path
+
+        companions = self.uns.get("fofct_companions") or {}
+        if cell_table is not None:
+            cells = _fofct_cells_frame(self.cells, cell_value_prefix)
+            meta = _fofct_header_defaults(self.uns, "4dn_FOF-CT_cell",
+                                          (companions.get("cells") or {}).get("header") or {}, None)
+            _write_fofct_table(Path(cell_table), cells, meta)
+            written["cells"] = Path(cell_table)
+        if rna_table is not None:
+            if "rna" not in self.points:
+                raise ValueError("rna_table= needs points['rna']")
+            rna = _fofct_rna_frame(self.points["rna"])
+            meta = _fofct_header_defaults(self.uns, "4dn_FOF-CT_rna",
+                                          (companions.get("rna") or {}).get("header") or {}, None)
+            _write_fofct_table(Path(rna_table), rna, meta)
+            written["rna"] = Path(rna_table)
+        if mapping_table is not None:
+            from . import cellspatial as _cs
+
+            if "cell" not in self.cell_shapes:
+                raise ValueError("mapping_table= needs cell_shapes['cell']")
+            shp = self.cell_shapes["cell"]
+            table = pd.DataFrame({"Cell_ID": shp["cell_id"].astype(str).to_numpy(),
+                                  "ROI_Boundaries": [_cs.format_ome_polygon(w) for w in shp["geometry"]]})
+            stored = dict((companions.get("mapping") or {}).get("header") or {})
+            rec = _linked_records(self.uns.get(_cs.SHAPES_FAMILY)).get("cell") or {}
+            stored.setdefault("ROI_Boundaries_Format", _cs.OME_POLYGON_FORMAT)
+            if rec.get("unit"):
+                stored.setdefault("XYZ_unit", rec["unit"])
+            meta = _fofct_header_defaults(self.uns, "4dn_FOF-CT_mapping", stored, None)
+            _write_fofct_table(Path(mapping_table), table, meta)
+            written["mapping"] = Path(mapping_table)
+        return written
 
     @classmethod
     def from_pyhim_trace(
@@ -1578,9 +2757,13 @@ class ChromData:
         from uchrom.io.seqfish_multiomics import load_takei2025_cerebellum
         return load_takei2025_cerebellum(**kwargs)
 
-    def to_dataframe(self) -> pd.DataFrame:
-        """Export as a flat DataFrame with coords + spots columns."""
-        df = self.spots.copy()
+    def to_dataframe(self, include_bin_id: bool = False) -> pd.DataFrame:
+        """Export as a flat DataFrame: ``chrom, start, end, x, y, z`` (loci
+        derived from ``bins``) followed by the other spot columns.
+        ``bin_id`` is left out unless ``include_bin_id=True``."""
+        df = self.spots_with_loci()
+        if not include_bin_id:
+            df = df.drop(columns=[BIN_ID])
         df["x"] = self.coords[:, 0]
         df["y"] = self.coords[:, 1]
         df["z"] = self.coords[:, 2]
@@ -1594,20 +2777,30 @@ class ChromData:
     # ------------------------------------------------------------------
 
     def copy(self) -> "ChromData":
-        return ChromData(
+        out = ChromData(
             self.coords.copy(),
             self.spots.copy(),
+            bins=self._bins.copy(),
             cells=self.cells.copy() if len(self.cells) > 0 else None,
             cellm={k: v.copy() for k, v in self.cellm.items()} or None,
-            tracks=self.tracks.copy() if self.tracks is not None else None,
+            binm={k: np.array(v, copy=True) for k, v in self.binm.items()} or None,
             traces=self.traces.copy() if len(self.traces) > 0 else None,
             layers={k: v.copy() for k, v in self.layers.items()} or None,
-            results=deepcopy(self.results) or None,
             uns=deepcopy(self.uns) or None,
             points={k: v.copy() for k, v in self.points.items()} or None,
+            cell_shapes={k: v.copy() for k, v in self.cell_shapes.items()} or None,
             linked_adata=self._linked_adata.copy() if self._linked_adata is not None else None,
             validate=False,
         )
+        out._bin_tracks = self._bin_tracks.copy()
+        out._spot_tracks = self._spot_tracks.copy()
+        out._spot_view_order = list(self._spot_view_order) if self._spot_view_order else None
+        # results and intervals share interval tables ("same object"): copy
+        # them together so the link survives
+        memo: dict = {}
+        out._intervals = deepcopy(self._intervals, memo)
+        out.results = deepcopy(self.results, memo)
+        return out
 
     # ------------------------------------------------------------------
     # Repr
@@ -1619,6 +2812,7 @@ class ChromData:
         ]
         if self.n_cells > 0:
             parts[0] += f", n_cells={self.n_cells}"
+        parts[0] += f", n_bins={self.n_bins}"
 
         spot_cols = list(self.spots.columns)
         parts.append(f"  spots:   {spot_cols}")
@@ -1628,8 +2822,14 @@ class ChromData:
         if self.cellm:
             shapes = {k: v.shape for k, v in self.cellm.items()}
             parts.append(f"  cellm:   {shapes}")
-        if self.tracks is not None:
-            parts.append(f"  tracks:  {list(self.tracks.columns)}")
+        if len(self._bin_tracks.columns):
+            parts.append(f"  tracks (bins):  {list(self._bin_tracks.columns)}")
+        if len(self._spot_tracks.columns):
+            parts.append(f"  spot_tracks:    {list(self._spot_tracks.columns)}")
+        if self.binm:
+            parts.append(f"  binm:    {list(self.binm.keys())}")
+        if len(self._intervals):
+            parts.append(f"  intervals: {list(self._intervals.keys())}")
         if len(self.traces) > 0:
             parts.append(f"  traces:  {list(self.traces.columns)} ({len(self.traces)} traces)")
         if self.layers:
@@ -1637,6 +2837,9 @@ class ChromData:
         if self.points:
             sizes = {k: len(v) for k, v in self.points.items()}
             parts.append(f"  points:  {sizes}")
+        if self.cell_shapes:
+            sizes = {k: len(v) for k, v in self.cell_shapes.items()}
+            parts.append(f"  cell_shapes: {sizes}")
         if self.results:
             parts.append(f"  results: {list(self.results.keys())}")
         if self.uns:
@@ -1713,6 +2916,79 @@ def _stable_metadata_id(prefix: str, record: Mapping[str, Any]) -> str:
     return f"{prefix}_{hashlib.sha1(payload.encode('utf-8')).hexdigest()[:10]}"
 
 
+#: spot columns every selection keeps (derived loci included)
+_REQUIRED_SPOT_COLUMNS = ("chrom", "start", "end", "trace_id", "cell_id", BIN_ID)
+
+
+def resolve_selection(spot_columns: Sequence[str], track_columns: Sequence[str],
+                      layer_keys: Sequence[str], columns=None, tracks=None):
+    """Spot-aligned columns of a ``columns=`` / ``tracks=`` selection.
+
+    Returns ``(spot columns, spot tracks, layer keys)`` to keep, each in the
+    object's own order.
+
+    * ``columns=None`` — everything (the default);
+    * ``columns="coords"`` (or ``[]``) — the coordinates and the key columns
+      (``trace_id``, ``cell_id``, ``bin_id`` and the derived loci) only;
+    * ``columns=[...]`` — the key columns plus the named spot columns, spot
+      tracks and layers (``"x"``, ``"y"``, ``"z"``, ``"coords"`` are
+      accepted and implied);
+    * ``tracks=`` (``None`` / a list / ``[]`` / ``False``) overrides the spot
+      tracks the ``columns`` choice implies.
+    """
+    spot_columns, track_columns, layer_keys = list(spot_columns), list(track_columns), list(layer_keys)
+    required = [c for c in spot_columns if c in _REQUIRED_SPOT_COLUMNS]
+    if columns is None:
+        spots, trk, lay = spot_columns, track_columns, layer_keys
+    else:
+        if isinstance(columns, str):
+            if columns != "coords":
+                columns = [columns]
+            else:
+                columns = []
+        names = [str(c) for c in columns]
+        known = set(spot_columns) | set(track_columns) | set(layer_keys) | {"x", "y", "z", "coords"}
+        missing = [c for c in names if c not in known]
+        if missing:
+            raise KeyError(f"unknown column(s) {missing}: not a spot column, spot track or layer")
+        want = set(names)
+        spots = [c for c in spot_columns if c in want or c in required]
+        trk = [c for c in track_columns if c in want]
+        lay = [k for k in layer_keys if k in want]
+    if tracks is not None:
+        if tracks is False:
+            tracks = []
+        elif isinstance(tracks, str):
+            tracks = [tracks]
+        want_t = [str(t) for t in tracks]
+        missing = [t for t in want_t if t not in track_columns]
+        if missing:
+            raise KeyError(f"unknown spot track(s) {missing}")
+        trk = [c for c in track_columns if c in set(want_t)]
+    return spots, trk, lay
+
+
+def resolve_batch(batch, units_mean: float, bytes_per_spot: float,
+                  memory_budget=None, fraction: float = 0.25) -> int:
+    """Units (traces / cells) per batch: an int as given, or ``"auto"`` —
+    as many as fit ``fraction`` of the memory budget
+    (:data:`uchrom.settings.memory_budget`)."""
+    from uchrom.settings import settings
+
+    if batch is None:
+        batch = settings.default_batch
+    if isinstance(batch, str):
+        if batch != "auto":
+            raise ValueError("batch must be a positive int or 'auto'")
+        budget = settings.resolve_budget(memory_budget) * float(fraction)
+        per_unit = max(1.0, float(units_mean)) * max(1.0, float(bytes_per_spot))
+        return max(1, int(budget // per_unit))
+    batch = int(batch)
+    if batch < 1:
+        raise ValueError("batch must be a positive int or 'auto'")
+    return batch
+
+
 def _pdist_matrix(coords: np.ndarray) -> np.ndarray:
     """Compute pairwise Euclidean distance matrix from (n, 3) coords."""
     diff = coords[:, None, :] - coords[None, :, :]
@@ -1763,6 +3039,40 @@ def _apply_pyhim_barcode_dict(
     return df
 
 
+def _check_zarr_version(path, version_str: str) -> None:
+    """Same MAJOR / MINOR rules as ``.h5cd`` for the zarr container (whose
+    own version, :data:`uchrom.core.zarrcd.ZARR_FORMAT_VERSION`, is 2.2:
+    2.0 stores are read as one unpartitioned table)."""
+    import warnings
+
+    from .zarrcd import ZARR_FORMAT_VERSION
+
+    major, minor = _parse_version(str(version_str))
+    cur_major, cur_minor = _parse_version(ZARR_FORMAT_VERSION)
+    if major != cur_major:
+        raise ValueError(
+            f"{path}: format version {version_str} has incompatible MAJOR with this "
+            f"uchrom (supports {cur_major}.x). Upgrade uchrom or convert the file."
+        )
+    if minor > cur_minor:
+        warnings.warn(
+            f"{path}: written with format version {version_str} (reader supports up "
+            f"to {ZARR_FORMAT_VERSION}). Forward-compatible — unknown fields will be ignored.",
+            stacklevel=3,
+        )
+
+
+def _permute_spot_rows(cd: "ChromData", pos: np.ndarray) -> None:
+    """Reorder the spot-aligned data of an in-memory object in place."""
+    cd.coords = cd.coords[pos]
+    cd.spots = cd.spots.iloc[pos].reset_index(drop=True)
+    if len(cd._spot_tracks.columns):
+        cd._spot_tracks = cd._spot_tracks.iloc[pos].reset_index(drop=True)
+    else:
+        cd._spot_tracks = _empty_frame(len(pos))
+    cd.layers = {k: np.asarray(v)[pos] for k, v in cd.layers.items()}
+
+
 def _parse_version(s: str):
     """Parse 'MAJOR.MINOR' into a (major, minor) int tuple."""
     parts = str(s).split(".")
@@ -1801,7 +3111,11 @@ def _read_fofct_table(path: Path):
             if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
                 stripped = stripped[1:-1]
             if stripped.lower().startswith("##columns="):
-                cols_str = stripped.split("=", 1)[1].strip().strip("()")
+                cols_str = stripped.split("=", 1)[1].strip()
+                # remove one enclosing pair only: str.strip("()") would also
+                # eat the ")" of a last column such as "n_per_dist(um)"
+                if cols_str.startswith("(") and cols_str.endswith(")"):
+                    cols_str = cols_str[1:-1]
                 columns = [c.strip() for c in cols_str.split(",")]
             elif stripped.startswith("##"):
                 key, _, val = stripped[2:].partition("=")
@@ -1835,13 +3149,275 @@ def _read_fofct_table(path: Path):
         raise ValueError(f"No data rows found in {path}")
 
     from io import StringIO as _StringIO
-    df = pd.read_csv(_StringIO("\n".join(data_lines)), header=None, skipinitialspace=True)
+    # round_trip: the float in the file, exactly (the default parser can be 1 ulp off)
+    df = pd.read_csv(_StringIO("\n".join(data_lines)), header=None, skipinitialspace=True,
+                     float_precision="round_trip")
     if columns is not None and len(columns) == len(df.columns):
         df.columns = columns
     elif columns is not None:
         # Column count mismatch — trust the data and label the extras
         df.columns = (columns + [f"col_{i}" for i in range(len(columns), len(df.columns))])[: len(df.columns)]
     return df, header_meta
+
+
+_FOFCT_CANONICAL = {
+    "x": "x", "y": "y", "z": "z",
+    "chrom": "chrom",
+    "chrom_start": "start", "chromstart": "start",
+    "chrom_end": "end", "chromend": "end",
+    "trace_id": "trace_id", "traceid": "trace_id",
+    "spot_id": "spot_id", "spotid": "spot_id",
+    "cell_id": "cell_id", "cellid": "cell_id",
+    "sub_cell_roi_id": "sub_cell_roi_id",
+    "extra_cell_roi_id": "extra_cell_roi_id",
+}
+_FOFCT_DEFAULT_COLUMNS = ["Spot_ID", "Trace_ID", "X", "Y", "Z", "Chrom", "Chrom_Start", "Chrom_End"]
+
+
+def _fofct_core_parts(df: pd.DataFrame):
+    """A parsed FOF-CT core table (file column names) → ``(coords, spots)``."""
+    if not any(str(c).lower() == "x" for c in df.columns):
+        # no column names in the file: assume the core-table order
+        n = len(df.columns)
+        df.columns = (_FOFCT_DEFAULT_COLUMNS[:n]
+                      + [f"col_{i}" for i in range(len(_FOFCT_DEFAULT_COLUMNS), n)])
+
+    # Map FOF-CT columns to ChromData — case-insensitive.
+    rename = {c: _FOFCT_CANONICAL[str(c).lower()] for c in df.columns
+              if str(c).lower() in _FOFCT_CANONICAL}
+    df = df.rename(columns=rename)
+
+    missing = {"x", "y", "z"} - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"FOF-CT core table missing coordinate columns {missing}. "
+            f"Parsed columns: {list(df.columns)}"
+        )
+
+    coords = df[["x", "y", "z"]].values.astype(np.float64)
+
+    # Spot-level columns: the required set first, then any extras carried
+    # through verbatim (custom FOF-CT columns like ``Readout``).
+    spot_cols = ["chrom", "start", "end", "trace_id"]
+    for extra in ("spot_id", "cell_id", "sub_cell_roi_id", "extra_cell_roi_id"):
+        if extra in df.columns and extra not in spot_cols:
+            spot_cols.append(extra)
+    coord_cols = {"x", "y", "z"}
+    for col in df.columns:
+        if col not in spot_cols and col not in coord_cols:
+            spot_cols.append(col)
+    spots = df[spot_cols].copy()
+    return coords, spots
+
+
+def _fofct_uns(uns: Optional[dict], header_meta: Mapping[str, str]) -> dict:
+    """FOF-CT header metadata into ``uns`` (case-insensitive promotion of the
+    unit and assembly)."""
+    uns = dict(uns or {})
+    if header_meta:
+        uns["fofct_header"] = header_meta
+    lower_meta = {k.lower(): v for k, v in header_meta.items()}
+    if "xyz_unit" in lower_meta:
+        uns["xyz_unit"] = lower_meta["xyz_unit"]
+    if "genome_assembly" in lower_meta:
+        uns["genome_assembly"] = lower_meta["genome_assembly"]
+    return uns
+
+
+def _fofct_companions(kwargs: dict, cell_table, rna_table, cell_value_prefix, mapping_table=None) -> dict:
+    """Load the companion tables into ``kwargs`` (``cells``, ``points``,
+    ``cell_shapes``); returns their header metadata."""
+    companions = {}
+    if mapping_table is not None:
+        shapes, meta = _fofct_mapping_table(Path(mapping_table))
+        if len(shapes):
+            cs = dict(kwargs.pop("cell_shapes", None) or {})
+            cs["cell"] = shapes
+            kwargs["cell_shapes"] = cs
+        companions["mapping"] = meta
+    if cell_table is not None:
+        cells, meta = _fofct_cell_table(Path(cell_table), cell_value_prefix)
+        if kwargs.get("cells") is not None:
+            raise ValueError("pass either cells= or cell_table=, not both")
+        kwargs["cells"] = cells
+        companions["cells"] = meta
+    if rna_table is not None:
+        rna, meta = _fofct_rna_table(Path(rna_table))
+        points = dict(kwargs.pop("points", None) or {})
+        points["rna"] = rna
+        kwargs["points"] = points
+        companions["rna"] = meta
+    return companions
+
+
+def _fofct_mapping_table(path: Path):
+    """FOF-CT Cell/ROI mapping table → (cell_shapes frame, meta): the
+    ``ROI_Boundaries`` of the ``Cell_ID`` rows as WKB polygons."""
+    import warnings
+
+    from . import cellspatial as _cs
+
+    df, meta = _read_fofct_table(path)
+    cols = {str(c).strip().lower(): c for c in df.columns}
+    if "roi_boundaries" not in cols:
+        raise ValueError(f"{path}: mapping table has no ROI_Boundaries column; columns: {list(df.columns)}")
+    id_col = cols.get("cell_id")
+    if id_col is None:
+        warnings.warn(f"{path}: mapping table is not keyed by Cell_ID (sub- / extra-cell ROIs); "
+                      f"no cell outlines read", UserWarning, stacklevel=4)
+        return pd.DataFrame(columns=["cell_id", "geometry"]), {"source": path.name, "header": meta, "n": 0}
+    fmt = next((v for k, v in meta.items() if str(k).lower() == "roi_boundaries_format"), "")
+    ids, geoms, skipped = [], [], 0
+    for cid, text in zip(df[id_col].astype(str), df[cols["roi_boundaries"]]):
+        try:
+            geoms.append(_cs.polygon_wkb(_cs.parse_ome_polygon(text)))
+            ids.append(cid)
+        except ValueError:
+            skipped += 1
+    if skipped:
+        warnings.warn(f"{path}: {skipped} ROI_Boundaries value(s) are not OME polygon points strings "
+                      f"(e.g. OBJ meshes) and were skipped", UserWarning, stacklevel=4)
+    shapes = _cs.to_wkb(geoms, ids)
+    extra = [c for c in df.columns if c not in (id_col, cols["roi_boundaries"])]
+    if extra and len(shapes):
+        keep = df[df[id_col].astype(str).isin(set(ids))].drop_duplicates(id_col)
+        shapes = pd.concat([shapes, keep[extra].reset_index(drop=True)], axis=1)
+    return shapes, {"source": path.name, "header": meta, "n": int(len(shapes)), "format": fmt,
+                    "n_skipped": skipped}
+
+
+#: FOF-CT cell-table centroid columns (after renaming) → (frame, source label)
+_FOFCT_CENTROIDS = (
+    (("centroid_x", "centroid_y", "centroid_z"), None, "FOF-CT cell table Cent_ROI_x / Cent_ROI_y [/ Cent_ROI_z]"),
+    (("cell_center_x_global", "cell_center_y_global", None), "global",
+     "FOF-CT cell table cell_center_x_global / cell_center_y_global"),
+)
+
+
+def _fofct_cell_spatial(uns: dict, kwargs: dict, companions: Mapping) -> None:
+    """Records for the cell positions / outlines a FOF-CT import found:
+    ``uns['cell_spatial']['default']`` for centroid columns of the cell
+    table, ``uns['cell_shapes']['cell']`` for mapping-table outlines."""
+    from . import cellspatial as _cs
+
+    def unit_of(meta):
+        header = (meta or {}).get("header") or {}
+        for k, v in header.items():
+            if str(k).lower() == "xyz_unit":
+                return str(v)
+        return uns.get("xyz_unit")
+
+    cells = kwargs.get("cells")
+    shapes = (kwargs.get("cell_shapes") or {}).get("cell")
+    if shapes is not None and len(shapes):
+        rec = {"geometry_types": sorted({_cs.wkb_type(w) for w in shapes["geometry"]}), "n": int(len(shapes)),
+               "unit": unit_of(companions.get("mapping")), "frame": "global", "status": "measured",
+               "source": f"FOF-CT Cell/ROI mapping table ROI_Boundaries ({companions['mapping']['source']})"}
+        _set_linked_record(uns, _cs.SHAPES_FAMILY, "cell", _clean_metadata_record(rec))
+    if cells is None or not len(cells):
+        return
+    for (x, y, z), frame, source in _FOFCT_CENTROIDS:
+        if x in cells.columns and y in cells.columns:
+            cols = [x, y] + ([z] if z and z in cells.columns else [])
+            rec = _cs.position_record(cols, unit=unit_of(companions.get("cells")), frame=frame,
+                                      status="measured", source=source,
+                                      shapes="cell" if shapes is not None and len(shapes) else None)
+            _set_linked_record(uns, _cs.POSITIONS_FAMILY, "default", rec)
+            return
+
+
+def _scan_fofct_header(path: Path):
+    """The header of a FOF-CT table without reading its data: returns
+    ``(header_meta, columns, n_skip)`` where ``n_skip`` is the number of lines
+    before the first data row (the ``##`` / ``#`` lines, blank lines and a
+    CSV header row).  Same rules as :func:`_read_fofct_table`; comment lines
+    must precede the data."""
+    header_meta = {}
+    columns = None
+    n_skip = 0
+    with open(path, "r") as fh:
+        for line in fh:
+            raw = line.strip()
+            if not raw:
+                n_skip += 1
+                continue
+            stripped = raw.rstrip(",").strip()
+            if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
+                stripped = stripped[1:-1]
+            if stripped.lower().startswith("##columns="):
+                cols_str = stripped.split("=", 1)[1].strip()
+                if cols_str.startswith("(") and cols_str.endswith(")"):
+                    cols_str = cols_str[1:-1]
+                columns = [c.strip() for c in cols_str.split(",")]
+            elif stripped.startswith("##"):
+                key, _, val = stripped[2:].partition("=")
+                header_meta[key.strip()] = val.strip()
+            elif stripped.startswith("#"):
+                key, _, val = stripped[1:].partition(":")
+                header_meta[key.strip()] = val.strip()
+            else:
+                first_token = raw.split(",", 1)[0].strip().strip('"')
+                has_csv_header = bool(first_token) and not (
+                    first_token[0].isdigit() or first_token[0] in ("-", "+", "."))
+                if has_csv_header and columns is not None and first_token not in columns:
+                    has_csv_header = False
+                if has_csv_header:
+                    if columns is None:
+                        columns = [c.strip() for c in raw.split(",")]
+                    n_skip += 1
+                break
+            n_skip += 1
+    return header_meta, columns, n_skip
+
+
+def _from_fofct_streaming(cls, path: Path, *, out: Path, cell_table, rna_table, cell_value_prefix,
+                          chunksize, memory_budget, mapping_table=None, **kwargs):
+    """``ChromData.from_fofct(..., out=)``: chunked read → streaming writer."""
+    from uchrom.settings import settings
+
+    from .stream import ChromDataWriter
+
+    allowed = {"cells", "cellm", "traces", "points", "uns", "cell_shapes"}
+    bad = set(kwargs) - allowed
+    if bad:
+        raise TypeError(f"streaming from_fofct does not take {sorted(bad)}")
+    header_meta, columns, n_skip = _scan_fofct_header(path)
+    budget = settings.resolve_budget(memory_budget)
+    if chunksize == "auto":
+        n_cols = len(columns) if columns else 16
+        chunksize = int(min(4_000_000, max(50_000, budget // (8 * 96 * max(n_cols, 1)))))
+    reader = pd.read_csv(path, header=None, skiprows=n_skip, chunksize=int(chunksize),
+                         skipinitialspace=True, float_precision="round_trip")
+    uns = _fofct_uns(kwargs.pop("uns", {}), header_meta)
+    companions = _fofct_companions(kwargs, cell_table, rna_table, cell_value_prefix, mapping_table)
+    w = ChromDataWriter(out, memory_budget=budget)
+    try:
+        n_rows = 0
+        for df in reader:
+            if columns is not None and len(columns) == len(df.columns):
+                df.columns = columns
+            elif columns is not None:
+                df.columns = (columns + [f"col_{i}" for i in range(len(columns), len(df.columns))]
+                              )[: len(df.columns)]
+            coords, spots = _fofct_core_parts(df)
+            del df
+            w.append(coords=coords, spots=spots)
+            n_rows += len(spots)
+            del coords, spots
+        if n_rows == 0:
+            raise ValueError(f"No data rows found in {path}")
+        if companions:
+            uns["fofct_companions"] = companions
+            _fofct_cell_spatial(uns, kwargs, companions)
+            if w._has_cells:
+                _warn_unmatched_cells(pd.DataFrame({"cell_id": w.unique("cell_id")}), companions, kwargs)
+        w.finish(cells=kwargs.get("cells"), cellm=kwargs.get("cellm"), traces=kwargs.get("traces"),
+                 points=kwargs.get("points"), uns=uns, cell_shapes=kwargs.get("cell_shapes"))
+    except BaseException:
+        if not w._closed:
+            w.abort()
+        raise
+    return cls.read(out, backed=True)
 
 
 # FOF-CT cell-table columns with a fixed meaning → ChromData.cells names.
@@ -1907,6 +3483,115 @@ def _fofct_rna_table(path: Path):
     return df, {"source": path.name, "header": meta, "n": int(len(df))}
 
 
+# FOF-CT header fields written as ``##key=value`` (the rest as ``#key: value``).
+_FOFCT_REQUIRED_HEADER = ("FOF-CT_version", "Table_namespace", "genome_assembly", "XYZ_unit",
+                          "ROI_Boundaries_Format")
+
+
+def _plain_values(values) -> np.ndarray:
+    """Column values for a CSV: categoricals as their values."""
+    s = values if isinstance(values, pd.Series) else pd.Series(values)
+    if isinstance(s.dtype, pd.CategoricalDtype):
+        return np.asarray(s.astype(s.cat.categories.dtype if len(s.cat.categories) else object))
+    return s.to_numpy()
+
+
+def _fofct_header_defaults(uns: Mapping, namespace: str, stored: Mapping,
+                           override: Optional[Mapping]) -> Dict[str, str]:
+    """Header entries for one table: the stored ones (what ``from_fofct``
+    read), filled in from ``uns`` and FOF-CT defaults, then ``override``."""
+    lower = {str(k).lower(): k for k in stored}
+    meta: Dict[str, str] = {}
+
+    def put(key, value):
+        k = lower.get(key.lower(), key)
+        meta[k] = str(value)
+
+    for k, v in stored.items():
+        meta[str(k)] = str(v)
+    if "fof-ct_version" not in lower:
+        put("FOF-CT_version", "v0.1")
+    if "table_namespace" not in lower:
+        put("Table_namespace", namespace)
+    if "genome_assembly" not in lower and uns.get("genome_assembly") is not None:
+        put("genome_assembly", uns["genome_assembly"])
+    if "xyz_unit" not in lower and uns.get("xyz_unit") is not None:
+        put("XYZ_unit", uns["xyz_unit"])
+    for k, v in (override or {}).items():
+        put(str(k), v)
+    # required fields first, in the FOF-CT order
+    req = {r.lower() for r in _FOFCT_REQUIRED_HEADER}
+    first = [k for r in _FOFCT_REQUIRED_HEADER for k in meta if k.lower() == r.lower()]
+    return {**{k: meta[k] for k in first}, **{k: v for k, v in meta.items() if k.lower() not in req}}
+
+
+def _fofct_header_line(key: str, value: str) -> str:
+    required = key.lower() in {r.lower() for r in _FOFCT_REQUIRED_HEADER}
+    line = f"##{key}={value}" if required else f"#{key}: {value}"
+    if "," in line or '"' in line:
+        line = '"' + line.replace('"', '""') + '"'   # the 4DN files quote such lines
+    return line
+
+
+def _write_fofct_table(path: Path, table: pd.DataFrame, meta: Mapping[str, str]) -> None:
+    """``##`` / ``#`` header lines, ``##columns=(…)`` and the CSV rows."""
+    for col in table.columns:
+        if "," in str(col) or "\n" in str(col):
+            raise ValueError(f"FOF-CT column names cannot contain ',': {col!r}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="") as fh:
+        for key, value in meta.items():
+            if str(key).lower() == "columns":
+                continue
+            fh.write(_fofct_header_line(str(key), str(value)) + "\n")
+        fh.write("##columns=(" + ",".join(str(c) for c in table.columns) + ")\n")
+        table.to_csv(fh, header=False, index=False, lineterminator="\n")
+
+
+_FOFCT_CELL_NAMES = {v: k for k, v in {
+    "Cell_ID": "cell_id", "Extra_Cell_ROI_ID": "extra_cell_roi_id",
+    "Cent_ROI_x": "centroid_x", "Cent_ROI_y": "centroid_y", "Cent_ROI_z": "centroid_z",
+    "area(um2)": "nucleus_area_um2", "area_cyto(um2)": "cytoplasm_area_um2",
+}.items()}
+
+
+def _fofct_cells_frame(cells: pd.DataFrame, value_prefix: Optional[str]) -> pd.DataFrame:
+    """``cd.cells`` → a FOF-CT cell table (``Cell_ID`` first)."""
+    if len(cells) == 0 and len(cells.columns) == 0:
+        raise ValueError("cell_table= needs cd.cells")
+    df = cells.copy()
+    if "cell_id" in df.columns:
+        df = df.set_index("cell_id")
+    out = pd.DataFrame({"Cell_ID": [str(c) for c in df.index]})
+    for col in df.columns:
+        name = _FOFCT_CELL_NAMES.get(str(col), str(col))
+        if value_prefix and name == str(col) and str(col).startswith(value_prefix):
+            name = str(col)[len(value_prefix):]
+        if name in out.columns:
+            raise ValueError(f"cell table column {col!r} maps onto an existing column {name!r}")
+        out[name] = _plain_values(df[col].reset_index(drop=True))
+    return out
+
+
+_FOFCT_RNA_NAMES = {"spot_id": "Spot_ID", "x": "X", "y": "Y", "z": "Z", "gene": "RNA_name",
+                    "gene_id": "Gene_ID", "cell_id": "Cell_ID",
+                    "extra_cell_roi_id": "Extra_Cell_ROI_ID", "peak_intensity": "Peak_Intensity"}
+
+
+def _fofct_rna_frame(points: pd.DataFrame) -> pd.DataFrame:
+    """``points['rna']`` → a FOF-CT RNA spot table."""
+    df = points.reset_index(drop=True)
+    out = pd.DataFrame(index=pd.RangeIndex(len(df)))
+    out["Spot_ID"] = df["spot_id"].to_numpy() if "spot_id" in df.columns else np.arange(len(df))
+    for col in ("x", "y", "z"):
+        out[_FOFCT_RNA_NAMES[col]] = df[col].to_numpy()
+    for col in df.columns:
+        if col in ("spot_id", "x", "y", "z"):
+            continue
+        out[_FOFCT_RNA_NAMES.get(str(col), str(col))] = _plain_values(df[col])
+    return out
+
+
 def _warn_unmatched_cells(spots: pd.DataFrame, companions: dict, kwargs: dict) -> None:
     """Warn when companion tables mention cells the core table lacks (or vice versa)."""
     import warnings
@@ -1935,7 +3620,16 @@ def _warn_unmatched_cells(spots: pd.DataFrame, companions: dict, kwargs: dict) -
 
 
 def _read_v1(cls, f) -> "ChromData":
-    """Reader for .h5cd format MAJOR version 1."""
+    """Reader for .h5cd format MAJOR version 1, upgraded to the 2.0 model.
+
+    ``bins`` are the unique ``(chrom, start, end)`` of the spots (ordered
+    by chromosome, start, end) and ``spots.bin_id`` points into them.  The
+    spot-aligned 1.x ``tracks`` table is split: columns that are constant
+    for every spot of a bin become ``bin_tracks``, the rest ``spot_tracks``
+    (logged at INFO level on the ``uchrom`` logger).
+    """
+    import logging
+
     coords = f["coords"][:]
     spots = _read_dataframe(f, "spots")
     cells = _read_dataframe(f, "cells")
@@ -1943,38 +3637,188 @@ def _read_v1(cls, f) -> "ChromData":
     traces = _read_dataframe(f, "traces")
     layers = _read_dict_of_arrays(f, "layers")
     cellm = _read_dict_of_arrays(f, "cellm")
-    results = _read_results(f, "results")
+    results = _read_results_store(f, "results")
     uns = _read_uns(f, "uns")
     points = {k: _read_dataframe(f["points"], k) for k in f["points"]} if "points" in f else {}
+    if len(spots) == 0 and not all(c in spots.columns for c in LOCI):
+        for col in LOCI:
+            if col not in spots.columns:
+                spots[col] = pd.Series(dtype=object if col == "chrom" else np.int64)
 
-    return cls(
+    cd = cls(
         coords,
         spots,
         cells=cells if len(cells) > 0 else None,
         cellm=cellm or None,
-        tracks=tracks if len(tracks) > 0 else None,
         traces=traces if len(traces) > 0 else None,
         layers=layers or None,
-        results=results or None,
+        results=results,
         uns=uns or None,
         points=points or None,
     )
+    if len(tracks) > 0 and len(tracks.columns) > 0:
+        cd._set_spot_aligned_tracks(tracks)
+        names = cd.track_names()
+        logging.getLogger("uchrom").info(
+            "format 1.x upgrade: %d track(s) -> bin_tracks %s; %d -> spot_tracks %s",
+            len(names["bin"]), names["bin"], len(names["spot"]), names["spot"],
+        )
+    return cd
+
+
+def _read_v2(cls, f) -> "ChromData":
+    """Reader for .h5cd format MAJOR version 2."""
+    bins = _read_dataframe(f, "bins")
+    if len(bins.columns) == 0:
+        bins = pd.DataFrame({"chrom": pd.Series(dtype=object),
+                             "start": pd.Series(dtype=np.int64),
+                             "end": pd.Series(dtype=np.int64)})
+    bins.index = pd.RangeIndex(len(bins), name=BIN_ID)
+    coords = f["coords"][:]
+    spots = _read_dataframe(f, "spots")
+    if BIN_ID not in spots.columns:
+        spots[BIN_ID] = np.zeros(len(spots), dtype=np.int64)
+    spots[BIN_ID] = spots[BIN_ID].to_numpy().astype(np.int64)
+    bin_tracks = _read_dataframe(f, "tracks")
+    spot_tracks = _read_dataframe(f, "spot_tracks")
+    intervals = {}
+    if "intervals" in f:
+        for key in f["intervals"]:
+            table = _read_dataframe(f["intervals"], key)
+            attrs = f["intervals"][key].attrs
+            intervals[key] = IntervalTable.from_frame(
+                table,
+                kind=_attr_str(attrs.get("_kind")) or None,
+                source_result=_attr_str(attrs.get("_source_result")) or None,
+            )
+    cd = cls(
+        coords,
+        spots,
+        bins=bins,
+        cells=_nonempty(_read_dataframe(f, "cells")),
+        cellm=_read_dict_of_arrays(f, "cellm") or None,
+        binm=_read_dict_of_arrays(f, "binm") or None,
+        intervals=intervals,
+        traces=_nonempty(_read_dataframe(f, "traces")),
+        layers=_read_dict_of_arrays(f, "layers") or None,
+        results=_read_results_store(f, "results", intervals=intervals),
+        uns=_read_uns(f, "uns") or None,
+        points={k: _read_dataframe(f["points"], k) for k in f["points"]} if "points" in f else None,
+    )
+    if len(bin_tracks.columns):
+        cd.bin_tracks = bin_tracks
+    if len(spot_tracks.columns):
+        cd.spot_tracks = spot_tracks
+    order = _attr_str(f["spot_tracks"].attrs.get("_spot_view_order")) if "spot_tracks" in f else None
+    if order:
+        cd._spot_view_order = json.loads(order)
+    col_order = _attr_str(f["spots"].attrs.get("_column_order")) if "spots" in f else None
+    if col_order:
+        wanted = [c for c in json.loads(col_order) if c in cd.spots.columns]
+        cd.spots = cd.spots[wanted + [c for c in cd.spots.columns if c not in wanted]]
+    return cd
+
+
+class _TracksView(pd.DataFrame):
+    """The deprecated ``cd.tracks`` view.  ``view[col] = values`` writes
+    through to the owning ChromData; other mutations (``.loc[...] = ``)
+    only change the view.  Derived frames are plain DataFrames."""
+
+    _metadata = ["_uchrom_owner"]
+
+    @property
+    def _constructor(self):
+        return pd.DataFrame
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        owner = getattr(self, "_uchrom_owner", None)
+        if owner is not None and isinstance(key, str):
+            owner._set_track_column(key, self[key].to_numpy())
+
+
+def _nonempty(df: pd.DataFrame) -> Optional[pd.DataFrame]:
+    return df if len(df) > 0 else None
+
+
+def _empty_frame(n: int, name: Optional[str] = None) -> pd.DataFrame:
+    """A column-less DataFrame with ``n`` rows (the empty track tables)."""
+    return pd.DataFrame(index=pd.RangeIndex(n, name=name))
+
+
+def _is_bin_level(table: pd.DataFrame, n_bins: int, n_spots: int) -> bool:
+    """Is a ``tracks=`` table bin-aligned?  Yes when its index is named
+    ``bin_id``, or when it has ``n_bins`` rows and ``n_bins != n_spots``."""
+    if table.index.name == BIN_ID:
+        return True
+    return len(table) == n_bins and n_bins != n_spots
+
+
+def _attach_bins(spots: pd.DataFrame, bins: Optional[pd.DataFrame], *, validate: bool = True,
+                 copy: bool = True):
+    """Return ``(spots, bins)`` with ``spots.bin_id`` and loci derived from bins.
+
+    * no ``bins``: bins are the unique spot loci (spots need
+      ``chrom/start/end``).  A ``bin_id`` column is then re-derived — it
+      refers to some other object's bins (e.g. spots concatenated from two
+      ChromData) — and without loci it is an error;
+    * ``bins`` given: ``spots.bin_id`` is used (range-checked), else spot
+      loci are looked up in ``bins``.
+    """
+    if copy:
+        spots = spots.copy()
+    if bins is None:
+        if BIN_ID in spots.columns:
+            if not all(c in spots.columns for c in LOCI):
+                raise ValueError("spots has a 'bin_id' column but no bins= table was given")
+            spots = spots.drop(columns=[BIN_ID])
+        bins, bin_id = bins_from_loci(spots)
+    else:
+        if validate or not (isinstance(bins.index, pd.RangeIndex) and bins.index.name == BIN_ID):
+            bins = normalise_bins(bins)
+        if BIN_ID in spots.columns:
+            bin_id = spots[BIN_ID].to_numpy().astype(np.int64)
+            if len(bin_id) and (bin_id.min() < 0 or bin_id.max() >= len(bins)):
+                raise ValueError(f"spots.bin_id out of range [0, {len(bins)})")
+            if validate and all(c in spots.columns for c in LOCI):
+                have = map_loci_to_bins(spots, bins)
+                if not np.array_equal(have, bin_id):
+                    raise ValueError("spots chrom/start/end disagree with bins[spots.bin_id]")
+        else:
+            bin_id = map_loci_to_bins(spots, bins)
+            if (bin_id < 0).any():
+                bad = spots.loc[bin_id < 0, list(LOCI)].head(3).to_dict("records")
+                raise ValueError(f"{int((bin_id < 0).sum())} spot locus/loci not in bins, e.g. {bad}")
+    spots[BIN_ID] = bin_id
+    derived = loci_of(bins, bin_id)
+    for pos, col in enumerate(LOCI):
+        if col in spots.columns:
+            spots[col] = derived[col]
+        else:
+            spots.insert(pos, col, derived[col])
+    return spots, bins
 
 
 # ======================================================================
 # HDF5 I/O helpers
 # ======================================================================
 
-def _write_dataframe(f, name: str, df: Optional[pd.DataFrame]):
+def _write_dataframe(f, name: str, df: Optional[pd.DataFrame], n_rows: Optional[int] = None):
     """Write a DataFrame to an HDF5 group, one dataset per column.
 
     Format 1.1: when the index is not a trivial ``RangeIndex`` or has a
     name, it is written to a reserved ``_index`` dataset with the name
     stored in ``_index_name``.  Old (1.0) readers ignore both and
     reconstruct a default RangeIndex — the historical behaviour.
+
+    Format 2.0: categorical columns are sub-groups ``{codes, categories}``
+    (``_type = "categorical"``) instead of one byte string per row.
+    ``n_rows`` records the row count of a column-less table.
     """
-    if df is None or (len(df) == 0 and len(df.columns) == 0):
-        f.create_group(name)
+    if df is None or len(df.columns) == 0:
+        grp = f.create_group(name)
+        if n_rows is not None:
+            grp.attrs["_n_rows"] = int(n_rows)
         return
     grp = f.create_group(name)
     grp.attrs["_n_rows"] = len(df)
@@ -1983,21 +3827,24 @@ def _write_dataframe(f, name: str, df: Optional[pd.DataFrame]):
         # coordinates) so required columns survive a round trip
         grp.attrs["_columns"] = [str(c) for c in df.columns]
         grp.attrs["_empty"] = True
+        # dtypes of the empty columns (additive, format 1.4) so that an
+        # empty result table keeps its schema on a round trip
+        grp.attrs["_dtypes"] = [_empty_dtype_str(df[c].dtype) for c in df.columns]
         return
     grp.attrs["_columns"] = list(df.columns)
     for col in df.columns:
         series = df[col]
         if hasattr(series.dtype, "categories"):
-            # Store categorical as string
-            data = series.astype(str).values
+            _write_categorical(grp, col, series)
+            continue
         elif series.dtype == object:
             data = series.astype(str).values
         else:
             data = series.values
         if data.dtype.kind in ("U", "S", "O"):
-            grp.create_dataset(col, data=data.astype("S"))
+            _create_dataset(grp, col, _encode_str(data) if data.dtype.kind != "S" else data)
         else:
-            grp.create_dataset(col, data=data)
+            _create_dataset(grp, col, data)
 
     # Preserve a non-trivial index — see format 1.1 note above.
     idx = df.index
@@ -2010,11 +3857,93 @@ def _write_dataframe(f, name: str, df: Optional[pd.DataFrame]):
     if not is_trivial_range:
         idx_vals = idx.to_numpy()
         if idx_vals.dtype == object or idx_vals.dtype.kind in ("U", "S"):
-            data = np.array([str(x) for x in idx_vals]).astype("S")
+            data = _encode_str(idx_vals.astype(str))
         else:
             data = idx_vals
         grp.create_dataset("_index", data=data)
         grp.attrs["_index_name"] = idx.name if idx.name is not None else ""
+
+
+# Filter settings for the current ``ChromData.write`` call (set / reset there).
+_WRITE_OPTS: Dict[str, Any] = {"compression": None, "compression_opts": None,
+                               "compress_floats": False}
+_COMPRESS_MIN_ELEMENTS = 4096
+_CHUNK_ROWS = 65536
+
+
+def _create_dataset(grp, name: str, data) -> Any:
+    """``create_dataset`` with the write call's compression for big arrays.
+
+    Arrays of at least 4,096 elements are chunked along the first axis
+    (up to 65,536 rows per chunk) and compressed; smaller ones are stored
+    contiguously, so tiny files do not pay the chunk-index overhead.
+    Float arrays are compressed only with ``compress_floats``.
+    """
+    data = np.asarray(data)
+    comp = _WRITE_OPTS.get("compression")
+    if data.dtype.kind in "fc" and not _WRITE_OPTS.get("compress_floats"):
+        comp = None
+    if comp is None or data.ndim == 0 or data.size < _COMPRESS_MIN_ELEMENTS:
+        return grp.create_dataset(name, data=data)
+    chunks = (min(len(data), _CHUNK_ROWS),) + tuple(data.shape[1:])
+    return grp.create_dataset(name, data=data, chunks=chunks, compression=comp,
+                              compression_opts=_WRITE_OPTS.get("compression_opts"),
+                              shuffle=data.dtype.kind in "iuf")
+
+
+def _encode_str(values) -> np.ndarray:
+    """str array → fixed-width UTF-8 bytes (vectorised; ASCII fast path)."""
+    arr = np.asarray(values, dtype=str)
+    try:
+        return arr.astype("S")
+    except UnicodeEncodeError:
+        return np.char.encode(arr, "utf-8")
+
+
+def _decode_bytes(arr: np.ndarray, dtype=None) -> np.ndarray:
+    """Fixed-width bytes → str (vectorised; ASCII fast path, UTF-8 fallback)."""
+    try:
+        out = arr.astype(str)
+    except UnicodeDecodeError:
+        out = np.char.decode(arr, "utf-8")
+    return out.astype(dtype) if dtype is not None else out
+
+
+def _write_categorical(grp, col: str, series: pd.Series) -> None:
+    """Categorical column → ``{codes, categories}`` sub-group (format 2.0)."""
+    cat = series.cat
+    n = len(cat.categories)
+    code_dtype = np.int8 if n < 2 ** 7 else np.int16 if n < 2 ** 15 else np.int32
+    sub = grp.create_group(col)
+    sub.attrs["_type"] = "categorical"
+    sub.attrs["_ordered"] = bool(cat.ordered)
+    _create_dataset(sub, "codes", np.asarray(cat.codes).astype(code_dtype))
+    cats = np.asarray(cat.categories)
+    if cats.dtype.kind in "OUS":
+        sub.create_dataset("categories", data=_encode_str(cats.astype(str)))
+    else:
+        sub.create_dataset("categories", data=cats)
+
+
+def _read_categorical(sub) -> pd.Categorical:
+    cats = sub["categories"][:]
+    if cats.dtype.kind == "S":
+        cats = _decode_bytes(cats, dtype=object)
+    return pd.Categorical.from_codes(
+        sub["codes"][:].astype(np.int64), categories=cats,
+        ordered=bool(sub.attrs.get("_ordered", False)),
+    )
+
+
+def _empty_dtype_str(dtype) -> str:
+    """dtype name for an empty column; anything exotic → ``object``."""
+    if hasattr(dtype, "categories"):
+        return "object"
+    try:
+        np.dtype(dtype)
+    except TypeError:
+        return "object"
+    return str(dtype)
 
 
 def _read_dataframe(f, name: str) -> pd.DataFrame:
@@ -2024,16 +3953,26 @@ def _read_dataframe(f, name: str) -> pd.DataFrame:
     grp = f[name]
     if "_columns" not in grp.attrs:
         return pd.DataFrame()
-    columns = list(grp.attrs["_columns"])
+    columns = [_attr_str(c) for c in grp.attrs["_columns"]]
     if grp.attrs.get("_empty", False):
-        return pd.DataFrame({c: pd.Series(dtype=object) for c in columns})
+        dtypes = [_attr_str(d) for d in grp.attrs.get("_dtypes", [])]
+        if len(dtypes) != len(columns):
+            dtypes = ["object"] * len(columns)
+        return pd.DataFrame({c: pd.Series(dtype=d) for c, d in zip(columns, dtypes)})
     data = {}
     for col in columns:
         if col not in grp:
             continue
-        arr = grp[col][:]
+        item = grp[col]
+        if isinstance(item, type(grp)):
+            if _attr_str(item.attrs.get("_type")) == "categorical":
+                data[col] = _read_categorical(item)
+            continue
+        arr = item[:]
+        if arr.dtype.kind == "O" and len(arr) and isinstance(arr[0], bytes):
+            arr = arr.astype("S")        # variable-length strings (h5py returns bytes)
         if arr.dtype.kind == "S":
-            arr = np.array([x.decode("utf-8") for x in arr])
+            arr = _decode_bytes(arr)
         data[col] = arr
     if not data:
         return pd.DataFrame()
@@ -2042,7 +3981,7 @@ def _read_dataframe(f, name: str) -> pd.DataFrame:
     if "_index" in grp:
         idx_arr = grp["_index"][:]
         if idx_arr.dtype.kind == "S":
-            idx_arr = np.array([x.decode("utf-8") for x in idx_arr])
+            idx_arr = _decode_bytes(idx_arr)
         name_attr = grp.attrs.get("_index_name", "")
         if isinstance(name_attr, bytes):
             name_attr = name_attr.decode("utf-8")
@@ -2055,7 +3994,7 @@ def _write_dict_of_arrays(f, name: str, d: dict):
     """Write a dict of numpy arrays to an HDF5 group."""
     grp = f.create_group(name)
     for key, arr in d.items():
-        grp.create_dataset(key, data=np.asarray(arr))
+        _create_dataset(grp, key, np.asarray(arr))
 
 
 def _read_dict_of_arrays(f, name: str) -> dict:
@@ -2066,11 +4005,42 @@ def _read_dict_of_arrays(f, name: str) -> dict:
     return {key: grp[key][:] for key in grp}
 
 
-def _write_results(f, name: str, results: dict, _path: str = "results"):
-    """Write a results dict to HDF5, recursing into nested dicts.
+def _write_results(f, name: str, results, _path: str = "results", intervals=None):
+    """Write ``cd.results`` (a ResultsStore or plain dict) to HDF5.
 
-    Format 1.2: every entry carries a ``_type`` attr so the reader can
-    restore it faithfully —
+    Values are written by :func:`_write_result_value` (format 1.2 typed
+    layout).  Format 1.4: when ``results`` is a :class:`ResultsStore`, the
+    provenance of each top-level record is added as attrs on the value's
+    group / dataset (``_kind``, ``_function``, ``_params``, ``_inputs``,
+    ``_uchrom_version``, ``_created_utc``).
+    """
+    grp = f.create_group(name)
+    grp.attrs["_type"] = "dict"
+    records = results.records() if isinstance(results, ResultsStore) else None
+    ref_of = {id(t): k for k, t in (intervals or {}).items()}
+    for key, val in results.items():
+        key = str(key)
+        where = f"{_path}[{key!r}]"
+        if records is not None and records[key].kind == "intervals" and id(val) in ref_of:
+            # format 2.0: the value lives in intervals/<key>; store a reference
+            sub = grp.create_group(key)
+            sub.attrs["_type"] = "ref"
+            sub.attrs["_value_ref"] = f"intervals/{ref_of[id(val)]}"
+        else:
+            _write_result_value(grp, key, val, where)
+        if records is not None:
+            rec = records[key]
+            attrs = grp[key].attrs
+            attrs["_kind"] = rec.kind
+            attrs["_function"] = rec.function or ""
+            attrs["_params"] = json.dumps(rec.params, allow_nan=True, sort_keys=True)
+            attrs["_inputs"] = json.dumps(rec.inputs, allow_nan=True, sort_keys=True)
+            attrs["_uchrom_version"] = rec.uchrom_version or ""
+            attrs["_created_utc"] = rec.created_utc or ""
+
+
+def _write_result_value(grp, key: str, val: Any, where: str) -> None:
+    """Write one results value (format 1.2 typed layout).
 
     * ``dataframe`` — sub-group, one dataset per column (1.0 layout)
     * ``series``    — as ``dataframe`` with a single column
@@ -2082,61 +4052,82 @@ def _write_results(f, name: str, results: dict, _path: str = "results"):
     Values that fit none of these raise ``TypeError`` instead of being
     silently dropped (the pre-1.2 behaviour).
     """
-    grp = f.create_group(name)
-    grp.attrs["_type"] = "dict"
-    for key, val in results.items():
-        key = str(key)
-        where = f"{_path}[{key!r}]"
-        if "/" in key or key in (".", ""):
-            raise ValueError(f"{where}: result keys must be non-empty and contain no '/'.")
-        if isinstance(val, pd.DataFrame):
-            _write_dataframe(grp, key, val)
-            grp[key].attrs["_type"] = "dataframe"
-        elif isinstance(val, pd.Series):
-            _write_dataframe(grp, key, val.to_frame(name=_SERIES_COLUMN))
-            grp[key].attrs["_type"] = "series"
-            if val.name is not None:
-                grp[key].attrs["_series_name"] = str(val.name)
-        elif isinstance(val, Mapping):
-            _write_results(grp, key, val, _path=where)
-        elif isinstance(val, np.ndarray):
-            if val.dtype == object:
-                raise TypeError(
-                    f"{where}: object-dtype arrays cannot be stored in .h5cd; "
-                    f"convert to a numeric/string dtype or a list first."
-                )
-            grp.create_dataset(key, data=val)
-        else:
-            if isinstance(val, np.generic):
-                val = val.item()
-            try:
-                doc = json.dumps(_results_jsonable(val), allow_nan=True)
-            except TypeError as exc:
-                raise TypeError(
-                    f"{where}: cannot serialise value of type "
-                    f"{type(val).__name__} to .h5cd results. Supported: "
-                    f"DataFrame, Series, ndarray, dict, and JSON-compatible "
-                    f"scalars / lists."
-                ) from exc
-            ds = grp.create_dataset(key, data=doc)
-            ds.attrs["_type"] = "json"
-            if isinstance(val, tuple):
-                ds.attrs["_pytype"] = "tuple"
+    if "/" in key or key in (".", ""):
+        raise ValueError(f"{where}: result keys must be non-empty and contain no '/'.")
+    if isinstance(val, pd.DataFrame):
+        _write_dataframe(grp, key, val)
+        grp[key].attrs["_type"] = "dataframe"
+    elif isinstance(val, pd.Series):
+        _write_dataframe(grp, key, val.to_frame(name=_SERIES_COLUMN))
+        grp[key].attrs["_type"] = "series"
+        if val.name is not None:
+            grp[key].attrs["_series_name"] = str(val.name)
+    elif isinstance(val, Mapping):
+        sub = grp.create_group(key)
+        sub.attrs["_type"] = "dict"
+        for k, v in val.items():
+            k = str(k)
+            _write_result_value(sub, k, v, f"{where}[{k!r}]")
+    elif isinstance(val, np.ndarray):
+        if val.dtype == object:
+            raise TypeError(
+                f"{where}: object-dtype arrays cannot be stored in .h5cd; "
+                f"convert to a numeric/string dtype or a list first."
+            )
+        grp.create_dataset(key, data=val)
+    else:
+        if isinstance(val, np.generic):
+            val = val.item()
+        try:
+            doc = json.dumps(_results_jsonable(val), allow_nan=True)
+        except TypeError as exc:
+            raise TypeError(
+                f"{where}: cannot serialise value of type "
+                f"{type(val).__name__} to .h5cd results. Supported: "
+                f"DataFrame, Series, ndarray, dict, and JSON-compatible "
+                f"scalars / lists."
+            ) from exc
+        ds = grp.create_dataset(key, data=doc)
+        ds.attrs["_type"] = "json"
+        if isinstance(val, tuple):
+            ds.attrs["_pytype"] = "tuple"
 
 
-def _results_jsonable(value: Any) -> Any:
-    """Normalise numpy scalars / nested containers for ``json.dumps``."""
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, (list, tuple)):
-        return [_results_jsonable(v) for v in value]
-    if isinstance(value, Mapping):
-        return {str(k): _results_jsonable(v) for k, v in value.items()}
-    return value
+def _read_results_store(f, name: str, intervals=None) -> ResultsStore:
+    """Read ``results/`` into a :class:`ResultsStore`.
+
+    Items with format-1.4 provenance attrs become full records; older
+    items (no ``_kind``) become records with an inferred kind and no
+    provenance.
+    """
+    store = ResultsStore()
+    if name not in f:
+        return store
+    values = _read_results(f, name)
+    grp = f[name]
+    for key, value in values.items():
+        attrs = grp[key].attrs
+        ref = _attr_str(attrs.get("_value_ref"))
+        if ref:
+            value = (intervals or {})[ref.split("/", 1)[1]]
+        kind = _attr_str(attrs.get("_kind"))
+        if not kind:
+            store[key] = value
+            continue
+        store[key] = ResultRecord(
+            kind=kind,
+            value=value,
+            params=json.loads(_attr_str(attrs.get("_params")) or "{}"),
+            function=_attr_str(attrs.get("_function")) or None,
+            uchrom_version=_attr_str(attrs.get("_uchrom_version")) or "unknown",
+            inputs=json.loads(_attr_str(attrs.get("_inputs")) or "{}"),
+            created_utc=_attr_str(attrs.get("_created_utc")) or "",
+        )
+    return store
 
 
 def _read_results(f, name: str) -> dict:
-    """Read a results dict from HDF5 (inverse of :func:`_write_results`).
+    """Read a results dict of plain values (inverse of :func:`_write_results`).
 
     Pre-1.2 files have no ``_type`` attrs: groups are DataFrames and
     datasets are arrays, which is exactly the fallback below.
@@ -2149,7 +4140,9 @@ def _read_results(f, name: str) -> dict:
         item = grp[key]
         kind = _attr_str(item.attrs.get("_type"))
         if isinstance(item, type(grp)):
-            if kind == "dict":
+            if kind == "ref":
+                results[key] = None      # resolved by _read_results_store
+            elif kind == "dict":
                 results[key] = _read_results(grp, key)
             elif kind == "series":
                 series = _read_dataframe(grp, key)[_SERIES_COLUMN]

@@ -36,8 +36,8 @@ def test_two_populations_separate_on_pc1_and_roundtrip(tmp_path):
     assert (np.sign(pc1[30:]) == -np.sign(pc1[0])).all()
     meta = cd.uns["embeddings"]["rna_pca"]
     assert meta["fields"] == [f"rna.g{j}" for j in range(6)] and meta["method"] == "pca"
-    cd.write(tmp_path / "e.h5cd")
-    back = ChromData.read(tmp_path / "e.h5cd")
+    cd.write(tmp_path / "e.chromdata.zarr")
+    back = ChromData.read(tmp_path / "e.chromdata.zarr")
     np.testing.assert_allclose(back.cellm["rna_tsne"], out["rna_tsne"])
     assert back.uns["embeddings"]["rna_tsne"]["label"] == "RNA t-SNE"
 
@@ -165,8 +165,8 @@ def test_aggregate_tracks_mean_by_and_corr(tmp_path):
     # rerunning replaces columns instead of duplicating them
     aggregate_tracks(cd, ["A", "B"], prefix="if")
     assert list(cd.cells.columns) == ["cell_type", "if.A", "if.B"]
-    cd.write(tmp_path / "t.h5cd")
-    assert ChromData.read(tmp_path / "t.h5cd").cells["if.A"].tolist() == [3.5, 3.5]
+    cd.write(tmp_path / "t.chromdata.zarr")
+    assert ChromData.read(tmp_path / "t.chromdata.zarr").cells["if.A"].tolist() == [3.5, 3.5]
     with pytest.raises(ValueError, match="stat"):
         aggregate_tracks(cd, ["A"], stat="max")
     with pytest.raises(KeyError):
@@ -221,3 +221,33 @@ def test_scool_cell_features_roundtrip(tmp_path):
     feats, cols, depth = scool_cell_features(path, names, n_per_chrom=2)
     assert feats.shape == (7, 2) and cols == ["chr1_PC1", "chr1_PC2"]  # chr2 empty: skipped
     assert depth[-1] == 0 and depth[0] == 20
+
+
+def test_cluster_cells_and_markers():
+    pytest.importorskip("leidenalg")
+    pytest.importorskip("sklearn")
+    import numpy as np
+    import pandas as pd
+
+    from uchrom import ChromData
+    from uchrom.emb import cluster_cells, marker_features
+
+    rng = np.random.default_rng(0)
+    n = 90
+    centers = np.array([[0, 0], [8, 0], [0, 8]], float)
+    lab = np.repeat([0, 1, 2], [40, 30, 20])
+    emb = centers[lab] + rng.normal(scale=0.5, size=(n, 2))
+    cells = pd.DataFrame({"rna.A": np.where(lab == 0, 50, 1), "rna.B": np.where(lab == 1, 50, 1),
+                          "rna.C": np.where(lab == 2, 50, 1)},
+                         index=pd.Index([f"c{i}" for i in range(n)], name="cell_id"))
+    cd = ChromData(np.zeros((1, 3)), pd.DataFrame({"chrom": ["chr1"], "start": [0], "end": [1],
+                                                   "trace_id": ["t"]}),
+                   cells=cells, cellm={"rna_pca": emb})
+    s = cluster_cells(cd, use="rna_pca", n_neighbors=10, resolution=0.5)
+    assert s.name == "leiden_rna_pca" and "leiden_rna_pca" in cd.cells
+    # three well-separated groups give three clusters, numbered by size
+    assert list(s.cat.categories) == ["0", "1", "2"]
+    assert pd.crosstab(s.to_numpy(), lab).max(axis=1).tolist() == [40, 30, 20]
+    assert cd.uns["clusters"]["leiden_rna_pca"]["n_clusters"] == 3
+    m = marker_features(cd, "leiden_rna_pca", n_top=1)
+    assert m == {"0": ["A"], "1": ["B"], "2": ["C"]}

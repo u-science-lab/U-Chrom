@@ -11,6 +11,7 @@ class MenuBar(QMenuBar):
         self.show_axis = False
 
         self.action_open = QAction("&Open...", self)
+        self.action_open_store = QAction("Open ChromData &store (.chromdata.zarr)...", self)
         self.action_save_session = QAction("&Save Session...", self)
         self.action_load_session = QAction("&Load Session...", self)
         self.action_add_canvas_hor = QAction("&Add canvas(right)", self)
@@ -22,6 +23,7 @@ class MenuBar(QMenuBar):
 
         file_menu = QMenu("&File", self)
         file_menu.addAction(self.action_open)
+        file_menu.addAction(self.action_open_store)
         file_menu.addAction(self.action_save_session)
         file_menu.addAction(self.action_load_session)
         self.addMenu(file_menu)

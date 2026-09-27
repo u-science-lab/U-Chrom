@@ -1,0 +1,1172 @@
+{
+ "panel": "b",
+ "title": "What each format can represent",
+ "marks": {
+  "native": "first-class, with its own structure",
+  "linked": "held as an external community-standard file (not copied) and queried through the shared index",
+  "convention": "representable by convention: stored and read back through the public API in a general-purpose slot, structure lost or ad hoc",
+  "none": "not supported"
+ },
+ "rules": [
+  "the evidence decides; only a genuinely ambiguous cell gives the other tool the better mark, and its note starts with 'Judgement call'",
+  "AnnData / MuData (and SpatialData table) elements rated in their most favourable orientation (spots, cells or loci as observations); these orientations exclude each other in one object (one AnnData, one MuData modality)",
+  "a test that needed a generic slot backs at most 'by convention', an external file 'linked'",
+  "a data table serialised to JSON text in a descriptive metadata attribute does not count (recorded with counted: false); provenance metadata there does, and so do scalar key-values describing the object that carries the attribute (each cell's own cooler in a .scool)",
+  "partial reads: native = one cell's / chromosome's rows are read from disk without reading the other rows (beyond the selection key column); by convention = only by scanning every row (streamed) or with part of the data loaded whole",
+  "by convention needs a normal use of the format that just lacks the structure; an encoding that merely writes (e.g. tracing traces as per-trace column sets of cooler bins tables, an embedding as one metadata key per dimension) is rated not supported, with the test still reported"
+ ],
+ "rows": [
+  "chromdata.zarr",
+  "FOF-CT (4DN)",
+  "AnnData",
+  "SpatialData",
+  "MuData",
+  "cooler (.cool / .scool)"
+ ],
+ "cols": [
+  "coords",
+  "hierarchy",
+  "spot_signals",
+  "bin_signals",
+  "cells",
+  "cell_emb",
+  "cell_pos",
+  "contacts",
+  "intervals",
+  "points",
+  "provenance",
+  "partial"
+ ],
+ "col_labels": {
+  "coords": "spot coordinates (x, y, z)",
+  "hierarchy": "cell \u203a trace \u203a spot hierarchy",
+  "spot_signals": "per-spot signals",
+  "bin_signals": "per-locus (bin) signals",
+  "cells": "cell table",
+  "cell_emb": "cell embeddings (multi-dimensional)",
+  "cell_pos": "cell spatial position (centroid / outline)",
+  "contacts": "contact maps",
+  "intervals": "genomic intervals (TADs / loops)",
+  "points": "non-genomic points (RNA spots)",
+  "provenance": "analysis results with provenance",
+  "partial": "partial reads by cell / chromosome"
+ },
+ "col_defs": {
+  "coords": "the x, y, z position of every spot (one imaged or reconstructed locus in one trace), with its unit.",
+  "hierarchy": "which trace and which cell each spot belongs to, as nested levels rather than loose labels.",
+  "spot_signals": "values measured per spot, such as immunofluorescence intensity or z-scores at that spot.",
+  "bin_signals": "values per genomic bin shared by all cells, such as bulk ATAC / ChIP tracks or GC content.",
+  "cells": "a table of scalar properties per cell, such as cell type, volume or RNA counts.",
+  "cell_emb": "a multi-dimensional vector per cell, such as a PCA, UMAP or learned embedding.",
+  "cell_pos": "where each cell is in the tissue or field of view (centroid and / or outline), with unit and coordinate frame.",
+  "contacts": "locus \u00d7 locus contact counts (Hi-C-type maps), in bulk or per cell.",
+  "intervals": "genomic intervals and interval pairs called on the data, such as TADs and loops.",
+  "points": "3-D points that are not genomic loci, such as RNA spots or protein puncta.",
+  "provenance": "analysis results stored as data together with the function, parameters and version that produced them.",
+  "partial": "reading one cell's or one chromosome's rows from disk without reading the rest of the data."
+ },
+ "cells": {
+  "chromdata.zarr": {
+   "coords": {
+    "value": "native",
+    "note": "coords (n_spots, 3) + layers; unit in uns",
+    "evidence": [
+     "uchrom/core/spec.md"
+    ],
+    "version": "0.2.0",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "coords (n_spots, 3)"
+    }
+   },
+   "hierarchy": {
+    "value": "native",
+    "note": "spots \u2192 traces \u2192 cells via trace_id / cell_id; traces and cells tables",
+    "evidence": [
+     "uchrom/core/spec.md"
+    ],
+    "version": "0.2.0",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "spots.trace_id / cell_id \u2192 traces / cells"
+    }
+   },
+   "spot_signals": {
+    "value": "native",
+    "note": "spot_tracks, row-aligned with spots",
+    "evidence": [
+     "uchrom/core/spec.md"
+    ],
+    "version": "0.2.0",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "spot_tracks"
+    }
+   },
+   "bin_signals": {
+    "value": "native",
+    "note": "bins (locus axis, bin_id) + bin_tracks / binm",
+    "evidence": [
+     "uchrom/core/spec.md"
+    ],
+    "version": "0.2.0",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "bins + bin_tracks"
+    }
+   },
+   "cells": {
+    "value": "native",
+    "note": "cells table indexed by cell_id",
+    "evidence": [
+     "uchrom/core/spec.md"
+    ],
+    "version": "0.2.0",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "cells table"
+    }
+   },
+   "cell_emb": {
+    "value": "native",
+    "note": "cellm: per-cell multi-dimensional arrays (embeddings, UMAP)",
+    "evidence": [
+     "uchrom/core/spec.md"
+    ],
+    "version": "0.2.0",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "cellm['X_umap'] (n_cells, 2)"
+    }
+   },
+   "cell_pos": {
+    "value": "native",
+    "note": "spec.md 'Cell spatial position' (format 2.3): cells columns centroid_x / centroid_y [/ centroid_z] described by uns['cell_spatial'] (unit, frame fov / tissue / global, region, measured / inferred + source, voxel size); outlines as cell_shapes, GeoParquet WKB polygons (tables/cell_shapes/<key>.parquet, the SpatialData shapes representation); set_cell_positions / cell_positions / set_cell_shapes; loaders fill it (seqFISH+, FOF-CT cell and mapping tables)",
+    "evidence": [
+     "uchrom/core/spec.md",
+     "tests/core/test_cell_spatial.py",
+     "uchrom/core/cellspatial.py"
+    ],
+    "version": "0.2.0",
+    "audit": {
+     "date": "2026-09-27",
+     "before": "convention",
+     "reason": "cell positions became a schema element (centroid columns + record, GeoParquet outlines; format 2.3, PR #77); before: two ad-hoc 2-D cells columns, no outline"
+    },
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "set_cell_positions: cells centroid_x / y / z + uns['cell_spatial'] record (unit, frame, status); set_cell_shapes: outlines as GeoParquet tables/cell_shapes/cell.parquet (spec.md 'Cell spatial position', format 2.3)"
+    }
+   },
+   "contacts": {
+    "value": "linked",
+    "note": "linked, not copied: uns['linked_scool' / 'linked_cool'] records path, bin size and cell map; load_linked_scool / Dataset.contacts(group=) read them (test: a real .scool read back after the round trip). Our own call: the pixels stay in the external .scool / .cool by design.",
+    "evidence": [
+     "uchrom/core/spec.md",
+     "uchrom/core/cdata.py"
+    ],
+    "version": "0.2.0",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "external",
+     "detail": "link_scool \u2192 uns['linked_scool'] record; load_linked_scool(cell='c1') reads the external .scool after the round trip"
+    }
+   },
+   "intervals": {
+    "value": "native",
+    "note": "intervals: typed IntervalTable (domain / pair / peak / segment); TADs as domain, loops as pair",
+    "evidence": [
+     "uchrom/core/spec.md"
+    ],
+    "version": "0.2.0",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "intervals: IntervalTable kind='domain' (TADs) and kind='pair' (loops)"
+    }
+   },
+   "points": {
+    "value": "native",
+    "note": "points: non-genomic 3-D points in the coords frame",
+    "evidence": [
+     "uchrom/core/spec.md"
+    ],
+    "version": "0.2.0",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "points['rna']"
+    }
+   },
+   "provenance": {
+    "value": "native",
+    "note": "results: ResultsStore of ResultRecord(kind, params, function, version, inputs, created_utc)",
+    "evidence": [
+     "uchrom/core/spec.md"
+    ],
+    "version": "0.2.0",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "results: ResultRecord(function, params, ...)"
+    }
+   },
+   "partial": {
+    "value": "native",
+    "note": "read(backed=True): get_cell / get_trace / get_chrom read only the needed row ranges (index/ runs; Fig. 2d)",
+    "evidence": [
+     "uchrom/core/spec.md",
+     "uchrom/core/backed.py"
+    ],
+    "version": "0.2.0",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "read(backed=True).get_cell / get_chrom (index/ row ranges)"
+    }
+   }
+  },
+  "FOF-CT (4DN)": {
+   "coords": {
+    "value": "native",
+    "note": "core table X, Y, Z (required) + ##XYZ_Unit",
+    "evidence": [
+     "https://fish-omics-format.readthedocs.io/en/latest/core.html"
+    ],
+    "version": "v1.0 (specification pages checked 2026-09-27)"
+   },
+   "hierarchy": {
+    "value": "native",
+    "note": "Spot_ID \u2192 Trace_ID \u2192 Cell_ID in the core table; Trace Data and Cell Data tables indexed by Trace_ID / Cell_ID",
+    "evidence": [
+     "https://fish-omics-format.readthedocs.io/en/latest/core.html",
+     "https://fish-omics-format.readthedocs.io/en/latest/trace.html",
+     "https://fish-omics-format.readthedocs.io/en/latest/cell.html"
+    ],
+    "version": "v1.0 (specification pages checked 2026-09-27)"
+   },
+   "spot_signals": {
+    "value": "native",
+    "note": "Spot Biological Data / Spot Quality tables indexed by Spot_ID (user-defined columns declared with #^ lines)",
+    "evidence": [
+     "https://fish-omics-format.readthedocs.io/en/latest/bio.html",
+     "https://fish-omics-format.readthedocs.io/en/latest/quality.html"
+    ],
+    "version": "v1.0 (specification pages checked 2026-09-27)"
+   },
+   "bin_signals": {
+    "value": "convention",
+    "note": "none of the 12 tables is indexed by genomic locus; a per-locus value can only be repeated on every spot as an optional column",
+    "evidence": [
+     "https://fish-omics-format.readthedocs.io/en/latest/format_overview.html"
+    ],
+    "version": "v1.0 (specification pages checked 2026-09-27)"
+   },
+   "cells": {
+    "value": "native",
+    "note": "Cell Data table (4dn_FOF-CT_cell), mandatorily indexed by Cell_ID, with optional user-defined columns (cell type, volume, ...)",
+    "evidence": [
+     "https://fish-omics-format.readthedocs.io/en/latest/cell.html"
+    ],
+    "version": "v1.0 (specification pages checked 2026-09-27)"
+   },
+   "cell_emb": {
+    "value": "convention",
+    "note": "no embedding slot: the Cell Data table's columns are scalar optional columns, so an embedding is one #^ column per dimension",
+    "evidence": [
+     "https://fish-omics-format.readthedocs.io/en/latest/cell.html"
+    ],
+    "version": "v1.0 (specification pages checked 2026-09-27)"
+   },
+   "cell_pos": {
+    "value": "native",
+    "note": "Cell/ROI Mapping table (4dn_FOF-CT_mapping; conditionally required whenever a Cell Data table is deposited): ROI_Boundaries of each Cell_ID in global coordinates, format declared in ##ROI_Boundaries_Format (OME polygon or OBJ mesh) + ##XYZ_Unit. Outline native; a centroid only as an optional column",
+    "evidence": [
+     "https://fish-omics-format.readthedocs.io/en/latest/mapping.html",
+     "https://fish-omics-format.readthedocs.io/en/latest/cell.html"
+    ],
+    "version": "v1.0 (specification pages checked 2026-09-27)"
+   },
+   "contacts": {
+    "value": "none",
+    "note": "no contact-matrix table in the 12 FOF-CT tables",
+    "evidence": [
+     "https://fish-omics-format.readthedocs.io/en/latest/format_overview.html"
+    ],
+    "version": "v1.0 (specification pages checked 2026-09-27)"
+   },
+   "intervals": {
+    "value": "convention",
+    "note": "no genomic-interval table (the Sub-Cell ROI table's 'Chromosome_Domain' is a spatial ROI, not a genomic interval); domain labels only as an optional per-spot column, loops (pairs) not representable",
+    "evidence": [
+     "https://fish-omics-format.readthedocs.io/en/latest/format_overview.html",
+     "https://fish-omics-format.readthedocs.io/en/latest/subcell.html"
+    ],
+    "version": "v1.0 (specification pages checked 2026-09-27)"
+   },
+   "points": {
+    "value": "native",
+    "note": "RNA Spot Data table (RNA_Spot_ID, X, Y, Z, Gene_ID, RNA_name, link ids)",
+    "evidence": [
+     "https://fish-omics-format.readthedocs.io/en/latest/rna.html"
+    ],
+    "version": "v1.0 (specification pages checked 2026-09-27)"
+   },
+   "provenance": {
+    "value": "convention",
+    "note": "header #Software_* fields describe the tools that produced a table; analysis results only as optional columns",
+    "evidence": [
+     "https://fish-omics-format.readthedocs.io/en/latest/format_overview.html"
+    ],
+    "version": "v1.0 (specification pages checked 2026-09-27)"
+   },
+   "partial": {
+    "value": "convention",
+    "note": "plain CSV without an index: one cell or chromosome is found only by scanning every row (streamed, e.g. pandas chunksize, so memory stays bounded)",
+    "evidence": [
+     "https://fish-omics-format.readthedocs.io/en/latest/format_overview.html"
+    ],
+    "version": "v1.0 (specification pages checked 2026-09-27)"
+   }
+  },
+  "AnnData": {
+   "coords": {
+    "value": "convention",
+    "note": "obsm['spatial'] (n_obs, 3), a community convention; no trace / unit structure",
+    "evidence": [
+     "https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.html"
+    ],
+    "version": "0.12.11",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "spots as obs, obsm['spatial'] (n_obs, 3)"
+    }
+   },
+   "hierarchy": {
+    "value": "convention",
+    "note": "one obs axis: cell_id / trace_id only as obs columns; spots and cells cannot both be observations",
+    "evidence": [
+     "https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.html"
+    ],
+    "version": "0.12.11",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "trace_id / cell_id obs columns"
+    }
+   },
+   "spot_signals": {
+    "value": "native",
+    "note": "spots as obs: X / layers / obs columns. Rated in the most favourable orientation; one AnnData has a single obs axis, so spots, cells and loci cannot all be first-class in the same object (see the hierarchy column).",
+    "evidence": [
+     "https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.html"
+    ],
+    "version": "0.12.11",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "spots as obs, X"
+    }
+   },
+   "bin_signals": {
+    "value": "native",
+    "note": "loci as var (cells \u00d7 loci, as for scATAC peaks): var table. Rated in the most favourable orientation; one AnnData has a single obs axis, so spots, cells and loci cannot all be first-class in the same object (see the hierarchy column).",
+    "evidence": [
+     "https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.html"
+    ],
+    "version": "0.12.11",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "loci as var, var column"
+    }
+   },
+   "cells": {
+    "value": "native",
+    "note": "cells as obs: obs table. Rated in the most favourable orientation; one AnnData has a single obs axis, so spots, cells and loci cannot all be first-class in the same object (see the hierarchy column).",
+    "evidence": [
+     "https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.html"
+    ],
+    "version": "0.12.11",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "cells as obs, obs table"
+    }
+   },
+   "cell_emb": {
+    "value": "native",
+    "note": "cells as obs: obsm (X_umap, X_pca), the slot designed for per-observation multi-dimensional annotations. Rated in the most favourable orientation; one AnnData has a single obs axis, so spots, cells and loci cannot all be first-class in the same object (see the hierarchy column).",
+    "evidence": [
+     "https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.html"
+    ],
+    "version": "0.12.11",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "cells as obs, obsm['X_umap']"
+    }
+   },
+   "cell_pos": {
+    "value": "convention",
+    "note": "cells as obs: obsm['spatial'] (n_cells, 2), the squidpy / scanpy convention; not an AnnData schema element (no coordinate system, unit or outline)",
+    "evidence": [
+     "https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.html",
+     "https://squidpy.readthedocs.io/en/stable/notebooks/tutorials/tutorial_visium_hne.html"
+    ],
+    "version": "0.12.11",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "cells as obs, obsm['spatial'] (squidpy convention; no coordinate system, no outline)"
+    }
+   },
+   "contacts": {
+    "value": "convention",
+    "note": "no contact-map type: one dense or sparse locus \u00d7 locus matrix can be put in varp (loci as var), without pixel/balancing schema, resolutions or per-cell maps. Rated in the most favourable orientation; one AnnData has a single obs axis, so spots, cells and loci cannot all be first-class in the same object (see the hierarchy column).",
+    "evidence": [
+     "https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.html"
+    ],
+    "version": "0.12.11",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "one locus \u00d7 locus matrix in varp"
+    }
+   },
+   "intervals": {
+    "value": "convention",
+    "note": "a DataFrame in uns",
+    "evidence": [
+     "https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.html"
+    ],
+    "version": "0.12.11",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "DataFrame in uns"
+    }
+   },
+   "points": {
+    "value": "convention",
+    "note": "a DataFrame in uns (or a second AnnData)",
+    "evidence": [
+     "https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.html"
+    ],
+    "version": "0.12.11",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "DataFrame in uns"
+    }
+   },
+   "provenance": {
+    "value": "convention",
+    "note": "free-form dicts in uns (scanpy writes uns['<tool>']['params'])",
+    "evidence": [
+     "https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.html"
+    ],
+    "version": "0.12.11",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "dict in uns"
+    }
+   },
+   "partial": {
+    "value": "native",
+    "note": "Judgement call: anndata.experimental.read_lazy (0.12, experimental API) opens obs as a lazy xarray Dataset and obsm / X as dask arrays; a cell mask reads the cell_id column, to_memory() then reads only the selected chunks. No per-cell index.",
+    "evidence": [
+     "https://anndata.readthedocs.io/en/stable/generated/anndata.experimental.read_lazy.html"
+    ],
+    "version": "0.12.11",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "read_lazy: obs / obsm / X are lazy (xarray / dask); mask from the cell_id column, to_memory() reads only the selected chunks"
+    }
+   }
+  },
+  "SpatialData": {
+   "coords": {
+    "value": "native",
+    "note": "points element with x, y, z (3-D points are supported) and coordinate-system transformations",
+    "evidence": [
+     "https://spatialdata.scverse.org/en/stable/design_doc.html"
+    ],
+    "version": "0.7.2",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "3-D points element (x, y, z)"
+    }
+   },
+   "hierarchy": {
+    "value": "convention",
+    "note": "cell_id / trace_id as columns of the points; a table annotates one element level (region + instance_key), no nested cell \u203a trace \u203a spot",
+    "evidence": [
+     "https://spatialdata.scverse.org/en/stable/design_doc.html"
+    ],
+    "version": "0.7.2",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "trace_id / cell_id point columns"
+    }
+   },
+   "spot_signals": {
+    "value": "native",
+    "note": "a table annotating the spots points element (region + instance_key = spot_id): get_element_annotators lists it and get_values joins it to the points (test); extra columns of the points DataFrame also work",
+    "evidence": [
+     "https://spatialdata.scverse.org/en/stable/design_doc.html"
+    ],
+    "version": "0.7.2",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "a table annotating the spots points (region='spots', instance_key='spot_id'); get_element_annotators lists it and get_values joins it to the points"
+    }
+   },
+   "bin_signals": {
+    "value": "native",
+    "note": "Judgement call: no genomic locus axis among the spatial elements, but a table is an AnnData: loci as var of a cells \u00d7 loci table annotating the cell shapes, var columns = per-locus signals, as for AnnData (test uses this orientation instead of a dummy table annotating no element). Rated in the most favourable orientation; one AnnData has a single obs axis, so spots, cells and loci cannot all be first-class in the same object (see the hierarchy column).",
+    "evidence": [
+     "https://spatialdata.scverse.org/en/stable/design_doc.html"
+    ],
+    "version": "0.7.2",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "var column of a cells \u00d7 loci table annotating the cell shapes"
+    }
+   },
+   "cells": {
+    "value": "native",
+    "note": "shapes (or labels) for cells + a table annotating them",
+    "evidence": [
+     "https://spatialdata.scverse.org/en/stable/design_doc.html"
+    ],
+    "version": "0.7.2",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "table annotating the cell shapes"
+    }
+   },
+   "cell_emb": {
+    "value": "native",
+    "note": "obsm of the table annotating the cells",
+    "evidence": [
+     "https://spatialdata.scverse.org/en/stable/design_doc.html"
+    ],
+    "version": "0.7.2",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "obsm['X_umap'] of the cell table"
+    }
+   },
+   "cell_pos": {
+    "value": "native",
+    "note": "shapes element: circles (centroid + radius) or polygons (outline), with coordinate-system transformations",
+    "evidence": [
+     "https://spatialdata.scverse.org/en/stable/design_doc.html"
+    ],
+    "version": "0.7.2",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "shapes elements: circles (centroid + radius) and polygons (outline), each with a coordinate-system transformation"
+    }
+   },
+   "contacts": {
+    "value": "convention",
+    "note": "no contact-map element: a table is an AnnData, so one locus \u00d7 locus matrix in varp, as for AnnData",
+    "evidence": [
+     "https://spatialdata.scverse.org/en/stable/design_doc.html"
+    ],
+    "version": "0.7.2",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "one locus \u00d7 locus matrix in varp of a table"
+    }
+   },
+   "intervals": {
+    "value": "convention",
+    "note": "interval rows as obs of a table annotating no element",
+    "evidence": [
+     "https://spatialdata.scverse.org/en/stable/design_doc.html"
+    ],
+    "version": "0.7.2",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "interval rows as obs of a table annotating no element"
+    }
+   },
+   "points": {
+    "value": "native",
+    "note": "a second points element (feature_key = gene)",
+    "evidence": [
+     "https://spatialdata.scverse.org/en/stable/design_doc.html"
+    ],
+    "version": "0.7.2",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "points element, feature_key='gene'"
+    }
+   },
+   "provenance": {
+    "value": "convention",
+    "note": "SpatialData.attrs / table uns (free-form)",
+    "evidence": [
+     "https://spatialdata.scverse.org/en/stable/design_doc.html"
+    ],
+    "version": "0.7.2",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "SpatialData.attrs"
+    }
+   },
+   "partial": {
+    "value": "convention",
+    "note": "points are lazy dask DataFrames without an index on cell or chromosome: a filter on cell_id then compute() streams every partition (Fig. 2d, 0.75 s at 1e7 spots). Spatial bounding-box / polygon queries are native but select by space, not by cell or chromosome.",
+    "evidence": [
+     "https://spatialdata.scverse.org/en/stable/design_doc.html"
+    ],
+    "version": "0.7.2",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "lazy dask points: a filter on cell_id streams every partition (no index)",
+     "partitions": 1
+    }
+   }
+  },
+  "MuData": {
+   "coords": {
+    "value": "convention",
+    "note": "obsm['spatial'] of a spots modality",
+    "evidence": [
+     "https://mudata.readthedocs.io/stable/io/mudata.html"
+    ],
+    "version": "0.3.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "obsm['spatial'] of a spots modality"
+    }
+   },
+   "hierarchy": {
+    "value": "convention",
+    "note": "spots and cells as separate modalities; the link is an obs column, no parent / child relation",
+    "evidence": [
+     "https://mudata.readthedocs.io/stable/io/mudata.html"
+    ],
+    "version": "0.3.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "trace_id / cell_id obs columns of the spots modality"
+    }
+   },
+   "spot_signals": {
+    "value": "native",
+    "note": "a spots modality (spots as obs): X / obs",
+    "evidence": [
+     "https://mudata.readthedocs.io/stable/io/mudata.html"
+    ],
+    "version": "0.3.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "spots modality X"
+    }
+   },
+   "bin_signals": {
+    "value": "native",
+    "note": "var of a cells \u00d7 loci modality (loci as var). A MuData can hold a spots and a cells modality side by side, but within one modality the orientations exclude each other, as for AnnData",
+    "evidence": [
+     "https://mudata.readthedocs.io/stable/io/mudata.html"
+    ],
+    "version": "0.3.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "var of a cells \u00d7 loci modality"
+    }
+   },
+   "cells": {
+    "value": "native",
+    "note": "global obs or the obs of a cells modality",
+    "evidence": [
+     "https://mudata.readthedocs.io/stable/io/mudata.html"
+    ],
+    "version": "0.3.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "obs of a cells modality"
+    }
+   },
+   "cell_emb": {
+    "value": "native",
+    "note": "obsm of a cells modality, or the global obsm (multimodal embeddings)",
+    "evidence": [
+     "https://mudata.readthedocs.io/stable/io/mudata.html"
+    ],
+    "version": "0.3.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "obsm['X_umap'] of a cells modality"
+    }
+   },
+   "cell_pos": {
+    "value": "convention",
+    "note": "obsm['spatial'] of a cells modality (the AnnData / squidpy convention)",
+    "evidence": [
+     "https://mudata.readthedocs.io/stable/io/mudata.html",
+     "https://squidpy.readthedocs.io/en/stable/notebooks/tutorials/tutorial_visium_hne.html"
+    ],
+    "version": "0.3.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "obsm['spatial'] of a cells modality (convention)"
+    }
+   },
+   "contacts": {
+    "value": "convention",
+    "note": "no contact-map type: varp of a cells \u00d7 loci modality (one matrix, as for AnnData)",
+    "evidence": [
+     "https://mudata.readthedocs.io/stable/io/mudata.html"
+    ],
+    "version": "0.3.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "one locus \u00d7 locus matrix in varp"
+    }
+   },
+   "intervals": {
+    "value": "convention",
+    "note": "a DataFrame in uns",
+    "evidence": [
+     "https://mudata.readthedocs.io/stable/io/mudata.html"
+    ],
+    "version": "0.3.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "DataFrame in uns"
+    }
+   },
+   "points": {
+    "value": "convention",
+    "note": "an RNA-spot modality with obsm['spatial']",
+    "evidence": [
+     "https://mudata.readthedocs.io/stable/io/mudata.html"
+    ],
+    "version": "0.3.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "an RNA-spot modality, positions in obsm['spatial']"
+    }
+   },
+   "provenance": {
+    "value": "convention",
+    "note": "free-form uns",
+    "evidence": [
+     "https://mudata.readthedocs.io/stable/io/mudata.html"
+    ],
+    "version": "0.3.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "dict in uns"
+    }
+   },
+   "partial": {
+    "value": "convention",
+    "note": "read_h5mu(backed=True) keeps only each modality's X on disk (sliced by row); obs and obsm, i.e. the ids and the coordinates, are loaded whole (test). MuData 0.3 has no lazy reader.",
+    "evidence": [
+     "https://mudata.readthedocs.io/stable/io/mudata.html"
+    ],
+    "version": "0.3.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "read_h5mu(backed=True): X is sliced from disk by row, but obs and obsm (the coordinates) are loaded whole",
+     "obsm_loaded_whole": true
+    }
+   }
+  },
+  "cooler (.cool / .scool)": {
+   "coords": {
+    "value": "convention",
+    "note": "extra bin columns x, y, z: one structure per file (or per cell of a .scool, one column set per trace); no spot table",
+    "evidence": [
+     "https://cooler.readthedocs.io/en/latest/schema.html"
+    ],
+    "version": "0.10.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "extra bin columns x, y, z (one structure per file)"
+    }
+   },
+   "hierarchy": {
+    "value": "none",
+    "note": "no trace or spot level: a .scool has per-cell groups, but traces and spots could only be forced in as sets of per-trace bins columns (x_<trace>, ...; the test shows this writes), which is not a use of the format (rule 6)",
+    "evidence": [
+     "https://cooler.readthedocs.io/en/latest/schema.html"
+    ],
+    "version": "0.10.4",
+    "audit": {
+     "date": "2026-09-27",
+     "before": "convention",
+     "reason": "rule 6: by convention needs a normal use of the format, not a technically possible encoding; per-trace column sets in each cell's bins table are not how cooler is used"
+    },
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "cells = .scool cell groups (each with its own bins table); traces = sets of extra bins columns x_<trace>, y_<trace>, z_<trace>; spots = bins rows (writes; not counted, rule 6: not a use of the format)",
+     "counted": false
+    }
+   },
+   "spot_signals": {
+    "value": "none",
+    "note": "no spot level; per-trace intensity columns in each cell's bins table would write (test) but are not a use of the format (rule 6)",
+    "evidence": [
+     "https://cooler.readthedocs.io/en/latest/schema.html"
+    ],
+    "version": "0.10.4",
+    "audit": {
+     "date": "2026-09-27",
+     "before": "convention",
+     "reason": "rule 6, as for the hierarchy"
+    },
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "one extra bins column per trace (intensity_<trace>) in each cell's bins table (writes; not counted, rule 6)",
+     "counted": false
+    }
+   },
+   "bin_signals": {
+    "value": "native",
+    "note": "bins table, which the schema allows to carry extra columns (e.g. weight, signals)",
+    "evidence": [
+     "https://cooler.readthedocs.io/en/latest/schema.html"
+    ],
+    "version": "0.10.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "bins table column"
+    }
+   },
+   "cells": {
+    "value": "convention",
+    "note": "no cell table, but every cell of a .scool is a cooler with its own metadata attribute: the cell's properties as scalar key-values there (cooler.create_cooler on /cells/<name>, test); the table is rebuilt by opening every cell group",
+    "evidence": [
+     "https://cooler.readthedocs.io/en/latest/schema.html"
+    ],
+    "version": "0.10.4",
+    "audit": {
+     "date": "2026-09-27",
+     "before": "none",
+     "reason": "per-cell metadata of each cell's cooler is a general-purpose slot for that cell's properties (rule 4: key-values describing their own object count; a whole table as JSON in one attribute still does not)"
+    },
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "each cell's properties as scalar key-values in the metadata attribute of its own cooler (/cells/<name>), written with cooler.create_cooler(uri, ..., metadata=); a scan of every cell group rebuilds the table"
+    }
+   },
+   "cell_emb": {
+    "value": "none",
+    "note": "no per-cell arrays; one scalar metadata key per dimension (umap_1, umap_2, ...) writes (test) but is not a use of the format for a 10- to 64-dimensional embedding (rule 6)",
+    "evidence": [
+     "https://cooler.readthedocs.io/en/latest/schema.html"
+    ],
+    "version": "0.10.4",
+    "audit": {
+     "date": "2026-09-27",
+     "before": "convention",
+     "reason": "rule 6: a few scalar properties per cell are a normal use of the metadata attribute, an embedding split into one key per dimension is not"
+    },
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "one scalar key per embedding dimension (umap_1, umap_2) in each cell's metadata (writes; not counted, rule 6)",
+     "counted": false
+    }
+   },
+   "cell_pos": {
+    "value": "convention",
+    "note": "centroid_x / centroid_y (+ a unit key) in each cell's metadata (test); no coordinate frame, no outline",
+    "evidence": [
+     "https://cooler.readthedocs.io/en/latest/schema.html"
+    ],
+    "version": "0.10.4",
+    "audit": {
+     "date": "2026-09-27",
+     "before": "none",
+     "reason": "same slot as the cell table: a centroid is two scalar properties of the cell"
+    },
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "centroid_x / centroid_y (+ a unit key) in each cell's metadata; no frame, no outline"
+    }
+   },
+   "contacts": {
+    "value": "native",
+    "note": "pixels (bulk .cool; per cell .scool; multi-resolution .mcool)",
+    "evidence": [
+     "https://cooler.readthedocs.io/en/latest/schema.html"
+    ],
+    "version": "0.10.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "pixels"
+    }
+   },
+   "intervals": {
+    "value": "convention",
+    "note": "domain membership as a per-bin label column of the bins table (data, not JSON); loops (pairs) have no place",
+    "evidence": [
+     "https://cooler.readthedocs.io/en/latest/schema.html"
+    ],
+    "version": "0.10.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "per-bin domain label column"
+    }
+   },
+   "points": {
+    "value": "none",
+    "note": "no place for non-genomic points; JSON text in the metadata attribute works for 2e5 spots (test) but is not counted",
+    "evidence": [
+     "https://cooler.readthedocs.io/en/latest/schema.html"
+    ],
+    "version": "0.10.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "2e5 RNA spots as JSON text in the metadata attribute (stored; not counted, rule 4)",
+     "counted": false
+    }
+   },
+   "provenance": {
+    "value": "convention",
+    "note": "the result as data (a bins column, as for intervals) and its parameters in the free-form JSON metadata attribute next to generated-by / creation-date (provenance metadata counts under rule 4; a result table as JSON would not)",
+    "evidence": [
+     "https://cooler.readthedocs.io/en/latest/schema.html"
+    ],
+    "version": "0.10.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "generic",
+     "detail": "result as a bins column, its parameters as JSON in the metadata attribute"
+    }
+   },
+   "partial": {
+    "value": "native",
+    "note": "indexed fetch by genomic region (bin1_offset / chrom_offset indexes); one cell group of a .scool",
+    "evidence": [
+     "https://cooler.readthedocs.io/en/latest/schema.html"
+    ],
+    "version": "0.10.4",
+    "test": {
+     "script": "benchmarks/fig2/b_capabilities.py",
+     "ok": true,
+     "slot": "dedicated",
+     "detail": "indexed fetch('chr2'); one cell group of a .scool"
+    }
+   }
+  }
+ },
+ "versions": {
+  "uchrom": "0.2.0",
+  "anndata": "0.12.11",
+  "spatialdata": "0.7.2",
+  "mudata": "0.3.4",
+  "cooler": "0.10.4",
+  "zarr": "3.1.6",
+  "h5py": "3.16.0",
+  "FOF-CT": "v1.0 (specification pages checked 2026-09-27)"
+ },
+ "audit_date": "2026-09-27",
+ "audit_changes": [
+  {
+   "row": "chromdata.zarr",
+   "col": "cell_pos",
+   "before": "convention",
+   "after": "native",
+   "reason": "cell positions became a schema element (centroid columns + record, GeoParquet outlines; format 2.3, PR #77); before: two ad-hoc 2-D cells columns, no outline"
+  },
+  {
+   "row": "cooler (.cool / .scool)",
+   "col": "hierarchy",
+   "before": "convention",
+   "after": "none",
+   "reason": "rule 6: by convention needs a normal use of the format, not a technically possible encoding; per-trace column sets in each cell's bins table are not how cooler is used"
+  },
+  {
+   "row": "cooler (.cool / .scool)",
+   "col": "spot_signals",
+   "before": "convention",
+   "after": "none",
+   "reason": "rule 6, as for the hierarchy"
+  },
+  {
+   "row": "cooler (.cool / .scool)",
+   "col": "cells",
+   "before": "none",
+   "after": "convention",
+   "reason": "per-cell metadata of each cell's cooler is a general-purpose slot for that cell's properties (rule 4: key-values describing their own object count; a whole table as JSON in one attribute still does not)"
+  },
+  {
+   "row": "cooler (.cool / .scool)",
+   "col": "cell_emb",
+   "before": "convention",
+   "after": "none",
+   "reason": "rule 6: a few scalar properties per cell are a normal use of the metadata attribute, an embedding split into one key per dimension is not"
+  },
+  {
+   "row": "cooler (.cool / .scool)",
+   "col": "cell_pos",
+   "before": "none",
+   "after": "convention",
+   "reason": "same slot as the cell table: a centroid is two scalar properties of the cell"
+  }
+ ],
+ "label_changes": [
+  {
+   "col": "coords",
+   "before": "3-D coordinates",
+   "after": "spot coordinates (x, y, z)",
+   "reason": "per-spot, and distinct from the cell spatial position"
+  }
+ ],
+ "prior_audit": {
+  "date": "2026-09-26",
+  "note": "New columns: cell embeddings (split from 'cells & embeddings') and cell spatial position.",
+  "changes": [
+   {
+    "row": "FOF-CT (4DN)",
+    "col": "cell_emb",
+    "before": "native",
+    "after": "convention",
+    "reason": "split from 'cells & embeddings': FOF-CT has a cell table but no multi-dimensional per-cell slot"
+   },
+   {
+    "row": "SpatialData",
+    "col": "partial",
+    "before": "native",
+    "after": "convention",
+    "reason": "criterion made explicit: a full partition scan is 'by convention'"
+   },
+   {
+    "row": "MuData",
+    "col": "partial",
+    "before": "native",
+    "after": "convention",
+    "reason": "criterion made explicit: backed mode loads obs / obsm (the coordinates) whole"
+   }
+  ]
+ },
+ "uncounted_tests": {
+  "cooler (.cool / .scool)": {
+   "cells_table_json": {
+    "ok": true,
+    "slot": "generic",
+    "detail": "a whole cell table as JSON text in the file-level metadata attribute (stored; not counted, rule 4)",
+    "counted": false
+   },
+   "cell_emb_matrix_json": {
+    "ok": true,
+    "slot": "generic",
+    "detail": "an embedding matrix as JSON text in the file-level metadata attribute (stored; not counted, rule 4)",
+    "counted": false
+   }
+  }
+ },
+ "mismatches": []
+}

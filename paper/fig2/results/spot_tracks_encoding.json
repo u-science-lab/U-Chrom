@@ -1,0 +1,102 @@
+{
+ "machine": {
+  "os": "macOS 26.4.1 (25.4.0)",
+  "platform": "macOS-26.4.1-arm64-arm-64bit",
+  "python": "3.11.15",
+  "machine": "arm64",
+  "cpu": "Apple M5 Pro",
+  "n_cpu": 18,
+  "ram_gb": 64.0,
+  "disk": "File System Personality=APFS; Protocol=Apple Fabric; Solid State=Yes",
+  "work_dir_free_gb": 681.9,
+  "versions": {
+   "numpy": "2.4.3",
+   "pandas": "2.3.3",
+   "h5py": "3.16.0",
+   "pyarrow": "23.0.1",
+   "zarr": "3.1.6",
+   "anndata": "0.12.11",
+   "cooler": "0.10.4",
+   "psutil": "7.2.2",
+   "scipy": "1.17.1",
+   "uchrom_h5cd_format": "2.0",
+   "uchrom_zarr_format": "2.1",
+   "uchrom_git": "20796a8"
+  }
+ },
+ "table_bytes": {
+  "2.0": {
+   "spots": 264843318,
+   "spot_tracks": 1882532264,
+   "total": 2169702412
+  },
+  "2.1": {
+   "spots": 241660321,
+   "spot_tracks": 2681137039,
+   "total": 2935369563
+  }
+ },
+ "n_rows": 10912638,
+ "n_columns": 62,
+ "n_float_columns": 61,
+ "order": {
+  "2.0 order (cell>trace>bin)": {
+   "bytes": 1909017455,
+   "write_s": 13.625522083000021,
+   "read_s": 0.8616461670000035
+  },
+  "2.1 order (chrom>cell>trace>bin)": {
+   "bytes": 2683769462,
+   "write_s": 18.393384500000025,
+   "read_s": 0.5229588330000183
+  }
+ },
+ "options_2_1_order": {
+  "zstd-3, 16k rows (2.1 default)": {
+   "bytes": 2683769462,
+   "write_s": 19.26792466699999,
+   "read_s": 0.5311691669999732
+  },
+  "zstd-3, 65k rows": {
+   "bytes": 2690263778,
+   "write_s": 20.428435250000007,
+   "read_s": 0.3654999579999867
+  },
+  "zstd-3, 262k rows": {
+   "bytes": 2649274936,
+   "write_s": 20.782351458999983,
+   "read_s": 0.34130849999996826
+  },
+  "zstd-6": {
+   "bytes": 2618174976,
+   "write_s": 66.114231916,
+   "read_s": 27.156278625000027
+  },
+  "zstd-9": {
+   "bytes": 2552880293,
+   "write_s": 101.20697795800004,
+   "read_s": 0.6137249159999101
+  },
+  "zstd-15": {
+   "bytes": 2524662231,
+   "write_s": 209.903308583,
+   "read_s": 0.6877376659999754
+  },
+  "dictionary (floats)": {
+   "bytes": 3586435954,
+   "write_s": 64.50495695799998,
+   "read_s": 0.8076637499999606
+  },
+  "byte_stream_split (floats), zstd-3": {
+   "bytes": 4849371323,
+   "write_s": 38.09359837499994,
+   "read_s": 0.6324488749999091
+  },
+  "byte_stream_split (floats), zstd-9": {
+   "bytes": 4851261364,
+   "write_s": 81.24392749999993,
+   "read_s": 0.5057476660001612
+  }
+ },
+ "what": "Why the format 2.1 store is larger on Takei 2025, and what Parquet options recover it."
+}

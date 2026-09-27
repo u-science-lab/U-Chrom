@@ -18,13 +18,19 @@ def _cd(results):
     return ChromData(np.arange(12, dtype=float).reshape(4, 3), spots, results=results)
 
 
-def _roundtrip(tmp_path, results):
-    path = tmp_path / "r.h5cd"
+# every container: the HDF5 .h5cd (deprecated writer) and the zarr ones
+SUFFIXES = pytest.mark.parametrize("suffix", [".h5cd", ".chromdata.zarr", ".cdz"])
+pytestmark = pytest.mark.filterwarnings("ignore:writing .*h5cd:DeprecationWarning")
+
+
+def _roundtrip(tmp_path, results, suffix=".h5cd"):
+    path = tmp_path / f"r{suffix}"
     _cd(results).write(path)
     return ChromData.read(path).results
 
 
-def test_all_supported_types_roundtrip(tmp_path):
+@SUFFIXES
+def test_all_supported_types_roundtrip(tmp_path, suffix):
     tads = pd.DataFrame({"chrom": ["chr1"], "start": [0], "end": [20]})
     series = pd.Series([0.1, 0.2, 0.3], index=["a", "b", "c"], name="score")
     results = {
@@ -45,7 +51,7 @@ def test_all_supported_types_roundtrip(tmp_path):
         "window": [3, 5, 7],
         "shape": (2, 3),
     }
-    out = _roundtrip(tmp_path, results)
+    out = _roundtrip(tmp_path, results, suffix)
 
     assert set(out) == set(results)
     pd.testing.assert_frame_equal(out["tads"], tads)
@@ -68,34 +74,45 @@ def test_all_supported_types_roundtrip(tmp_path):
     assert out["shape"] == (2, 3)
 
 
-def test_unsupported_value_raises_instead_of_dropping(tmp_path):
+@SUFFIXES
+def test_unsupported_value_raises_instead_of_dropping(tmp_path, suffix):
     with pytest.raises(TypeError, match=r"results\['bad'\]"):
-        _cd({"bad": object()}).write(tmp_path / "x.h5cd")
+        _cd({"bad": object()}).write(tmp_path / f"x{suffix}")
 
 
-def test_nested_unsupported_value_reports_path(tmp_path):
+@SUFFIXES
+def test_nested_unsupported_value_reports_path(tmp_path, suffix):
     with pytest.raises(TypeError, match=r"results\['outer'\]\['bad'\]"):
-        _cd({"outer": {"bad": {1, 2}}}).write(tmp_path / "x.h5cd")
+        _cd({"outer": {"bad": {1, 2}}}).write(tmp_path / f"x{suffix}")
 
 
-def test_object_array_raises(tmp_path):
+@SUFFIXES
+def test_object_array_raises(tmp_path, suffix):
     with pytest.raises(TypeError, match="object-dtype"):
-        _cd({"arr": np.array([{"a": 1}], dtype=object)}).write(tmp_path / "x.h5cd")
+        _cd({"arr": np.array([{"a": 1}], dtype=object)}).write(tmp_path / f"x{suffix}")
 
 
-def test_slash_in_key_raises(tmp_path):
+@SUFFIXES
+def test_slash_in_key_raises(tmp_path, suffix):
     with pytest.raises(ValueError, match="'/'"):
-        _cd({"a/b": np.zeros(2)}).write(tmp_path / "x.h5cd")
+        _cd({"a/b": np.zeros(2)}).write(tmp_path / f"x{suffix}")
 
 
 def test_legacy_untyped_results_still_read(tmp_path):
     """Pre-1.2 files: untyped groups are DataFrames, datasets are arrays."""
+    from tests._v1 import write_v1
+
     path = tmp_path / "legacy.h5cd"
-    _cd({"tads": pd.DataFrame({"start": [0, 10]}), "pc1": np.ones(4)}).write(path)
+    cd = _cd({"tads": pd.DataFrame({"start": [0, 10]}), "pc1": np.ones(4)})
+    write_v1(path, cd.coords, cd.to_dataframe().drop(columns=["x", "y", "z"]),
+             results={"tads": cd.results["tads"], "pc1": cd.results["pc1"]}, version="1.1")
     with h5py.File(path, "r+") as f:
-        f.attrs["uchrom_format_version"] = "1.1"
         for obj in (f["results"], f["results/tads"]):
             del obj.attrs["_type"]
+        for key in ("tads", "pc1"):
+            for attr in [a for a in f["results"][key].attrs if a.startswith("_") and a != "_columns"
+                         and a != "_n_rows"]:
+                del f["results"][key].attrs[attr]
     out = ChromData.read(path).results
     assert list(out["tads"]["start"]) == [0, 10]
     np.testing.assert_array_equal(out["pc1"], np.ones(4))

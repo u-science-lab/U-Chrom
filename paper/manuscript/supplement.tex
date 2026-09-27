@@ -1,0 +1,46 @@
+% U-Chrom manuscript — Supplementary Information (built separately: make supp).
+\documentclass[11pt]{article}
+
+\usepackage{fontspec}
+\setmainfont{texgyretermes}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]
+\setsansfont{texgyreheros}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{authblk}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[labelfont=bf,labelsep=period,font=small,singlelinecheck=false]{caption}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{array,booktabs,longtable}
+\usepackage{pdflscape}
+\usepackage{xurl}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+
+\graphicspath{{figures/}}
+\newcommand{\pkg}[1]{\texttt{#1}}
+\setlength{\emergencystretch}{3em}  % no overfull lines around long identifiers
+
+% Supplementary numbering: "Supplementary Fig. S1", "Supplementary Table S1".
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\figurename}{Supplementary Fig.}
+\renewcommand{\tablename}{Supplementary Table}
+
+\input{supp/macros}
+
+\title{Supplementary Information\\[4pt]\large U-Chrom: a unified framework for sequencing- and imaging-based 3-D genome data}
+\author[1]{Author One}
+\author[1]{Author Two}
+\affil[1]{Affiliation to be added}
+\date{}
+
+\begin{document}
+\maketitle
+
+\input{supp/body}
+
+\bibliographystyle{unsrtnat}
+\bibliography{refs}
+
+\end{document}

@@ -6,7 +6,7 @@
 ``atac.<gene>`` accessibility, … — or an explicit cells × features matrix
 into PCA (or LSI) / t-SNE / UMAP coordinates stored in ``cd.cellm`` (rows
 aligned with ``cd.cells``).  Parameters, including the normalisation, are
-recorded in ``cd.uns["embeddings"]`` so they round-trip through ``.h5cd``
+recorded in ``cd.uns["embeddings"]`` so they round-trip through ChromData files
 and the web browser can group the embeddings by modality.
 
 Normalisations (``normalization=``; ``"auto"`` picks one from ``source``):
@@ -30,7 +30,8 @@ from typing import Dict, List, Optional, Sequence, Union
 import numpy as np
 import pandas as pd
 
-__all__ = ["embed_cells", "normalize_counts", "tfidf_lsi", "aggregate_tracks",
+__all__ = ["embed_cells", "cluster_cells", "marker_features", "normalize_counts", "tfidf_lsi",
+           "aggregate_tracks",
            "MODALITY_LABELS"]
 
 _METHODS = ("pca", "tsne", "umap")
@@ -128,12 +129,13 @@ def tfidf_lsi(x, n_components: int = 30, *, depth: Optional[np.ndarray] = None,
 def aggregate_tracks(cd, fields: Optional[Sequence[str]] = None, *, prefix: str = "if",
                      stat: str = "mean", by: Union[None, str, int] = None,
                      min_spots: int = 1, write: bool = True) -> pd.DataFrame:
-    """Summarise per-spot ``cd.tracks`` into per-cell features.
+    """Summarise tracks (``cd.spot_tracks`` + ``cd.bin_tracks`` seen per
+    spot) into per-cell features.
 
     Parameters
     ----------
     cd : ChromData
-        With ``cd.tracks`` and a ``cell_id`` column in ``cd.spots``.
+        With tracks and a ``cell_id`` column in ``cd.spots``.
     fields : sequence of str, optional
         Track columns to use (default: every numeric track).
     prefix : str
@@ -159,13 +161,13 @@ def aggregate_tracks(cd, fields: Optional[Sequence[str]] = None, *, prefix: str 
         raise ValueError("stat must be 'mean', 'median', 'std' or 'corr'")
     if "cell_id" not in cd.spots.columns:
         raise ValueError("cd.spots has no cell_id column")
-    tracks = cd.tracks
+    tracks = cd.tracks_spot_view()
     if fields is None:
         fields = [c for c in tracks.columns if pd.api.types.is_numeric_dtype(tracks[c])]
     fields = [str(f) for f in fields]
     missing = [f for f in fields if f not in tracks.columns]
     if missing:
-        raise KeyError(f"not in cd.tracks: {missing[:5]}")
+        raise KeyError(f"unknown track(s): {missing[:5]}")
     cells_index = cd.cells.index.astype(str) if len(cd.cells) else None
     cell = cd.spots["cell_id"].astype(str).to_numpy()
     vals = tracks[fields].to_numpy(dtype=np.float64)
@@ -416,3 +418,82 @@ def embedding_keys(cd) -> List[str]:
     n = len(cd.cells)
     return [k for k, v in cd.cellm.items()
             if np.ndim(v) == 2 and np.shape(v)[1] >= 2 and (n == 0 or np.shape(v)[0] == n)]
+
+
+def cluster_cells(cd, *, use: str = "rna_pca", n_neighbors: int = 15, resolution: float = 1.0,
+                  n_components: Optional[int] = None, random_state: int = 0,
+                  key_added: Optional[str] = None) -> pd.Series:
+    """Leiden clusters of the cells from an embedding in ``cd.cellm``.
+
+    A k-nearest-neighbour graph (``n_neighbors``, Euclidean, symmetrised) of
+    ``cd.cellm[use]`` (first ``n_components`` columns) is partitioned with
+    the Leiden algorithm (``leidenalg``, RB configuration model at
+    ``resolution``, seeded).  Clusters are numbered ``"0", "1", …`` by
+    decreasing size and stored as a categorical column
+    ``cd.cells[key_added]`` (default ``f"leiden_{use}"``); the parameters go
+    to ``cd.uns["clusters"][key_added]``.  Needs ``leidenalg`` and
+    ``python-igraph`` (``pip install leidenalg``).
+
+    Returns the cluster labels (a Series indexed like ``cd.cells``).
+    """
+    try:
+        import igraph as ig
+        import leidenalg
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise ImportError("cluster_cells needs leidenalg and python-igraph "
+                          "(pip install leidenalg)") from exc
+    from sklearn.neighbors import NearestNeighbors
+
+    if use not in cd.cellm:
+        raise KeyError(f"cd.cellm has no {use!r}; available: {sorted(cd.cellm)}")
+    x = np.asarray(cd.cellm[use], dtype=np.float64)
+    if n_components is not None:
+        x = x[:, :int(n_components)]
+    n = len(x)
+    if n != len(cd.cells):
+        raise ValueError(f"cellm[{use!r}] has {n} rows, cells {len(cd.cells)}")
+    k = int(min(n_neighbors, n - 1))
+    nn = NearestNeighbors(n_neighbors=k + 1).fit(x)
+    idx = nn.kneighbors(x, return_distance=False)[:, 1:]
+    src = np.repeat(np.arange(n), k)
+    dst = idx.ravel()
+    pairs = np.unique(np.sort(np.stack([src, dst], axis=1), axis=1), axis=0)
+    g = ig.Graph(n=n, edges=pairs.tolist(), directed=False)
+    part = leidenalg.find_partition(g, leidenalg.RBConfigurationVertexPartition,
+                                    resolution_parameter=float(resolution), seed=int(random_state),
+                                    n_iterations=-1)
+    memb = np.asarray(part.membership)
+    sizes = np.bincount(memb)
+    rank = np.empty_like(sizes)
+    rank[np.argsort(-sizes, kind="stable")] = np.arange(len(sizes))
+    labels = rank[memb].astype(str)
+    key = key_added or f"leiden_{use}"
+    cats = [str(i) for i in range(len(sizes))]
+    s = pd.Series(pd.Categorical(labels, categories=cats), index=cd.cells.index, name=key)
+    cd.cells[key] = s
+    reg = dict(cd.uns.get("clusters") or {})
+    reg[key] = {"method": "leiden", "use": use, "n_neighbors": k, "resolution": float(resolution),
+                "n_components": None if n_components is None else int(n_components),
+                "random_state": int(random_state), "n_clusters": int(len(sizes)),
+                "function": "uchrom.emb.cluster_cells"}
+    cd.uns["clusters"] = reg
+    return s
+
+
+def marker_features(cd, groups: Union[str, pd.Series], *, prefix: str = "rna.", n_top: int = 5,
+                    log: bool = True) -> Dict[str, List[str]]:
+    """Top features of each group of cells: the ``prefix`` columns of
+    ``cd.cells`` ranked by the difference of the mean (``log1p`` when
+    ``log``) between the group and the other cells."""
+    lab = cd.cells[groups] if isinstance(groups, str) else pd.Series(groups, index=cd.cells.index)
+    lab = lab.astype(str)
+    cols = [c for c in cd.cells.columns if str(c).startswith(prefix)]
+    x = cd.cells[cols].to_numpy(dtype=np.float64)
+    if log:
+        x = np.log1p(np.clip(x, 0, None))
+    out: Dict[str, List[str]] = {}
+    for g in pd.unique(lab):
+        m = (lab == g).to_numpy()
+        diff = x[m].mean(axis=0) - x[~m].mean(axis=0)
+        out[str(g)] = [str(cols[i])[len(prefix):] for i in np.argsort(-diff)[:n_top]]
+    return out

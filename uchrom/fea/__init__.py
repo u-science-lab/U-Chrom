@@ -1,4 +1,6 @@
 from .distance import (
+    DistanceMap,
+    distance_map,
     mean_distance_matrix,
     contact_frequency,
     radius_of_gyration,
@@ -27,6 +29,7 @@ from .peaks import (
     read_bedgraph,
 )
 from .project import (
+    project_interval_features_to_bins,
     project_interval_features_to_spots,
     unique_spot_intervals,
 )
@@ -37,6 +40,8 @@ from .sequence import (
 )
 
 __all__ = [
+    "DistanceMap",
+    "distance_map",
     "mean_distance_matrix",
     "contact_frequency",
     "radius_of_gyration",
@@ -57,6 +62,7 @@ __all__ = [
     "compute_peak_features",
     "macs_bdgpeaks_to_narrowpeak",
     "read_bedgraph",
+    "project_interval_features_to_bins",
     "project_interval_features_to_spots",
     "unique_spot_intervals",
     "append_feature_registry_entry",

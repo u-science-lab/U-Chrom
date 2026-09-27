@@ -1,0 +1,14 @@
+\textbf{One ChromData store holds more kinds of chromatin data than existing containers and serves them at scale.}
+\textbf{a}~Data model: spots (one row per observation) point at a shared locus axis (bins) and at traces and cells through keys; coordinates and per-spot tracks are row-aligned with the spots; contact maps are linked, not copied.
+Right, the chromdata.zarr layout; glyphs give each node's storage type (Parquet table, Zarr array, JSON attributes).
+\textbf{b}~What each format can represent: filled, native; teal ring, linked (external community file queried through the shared index); open, by convention (general-purpose slot only); dash, not supported. Definitions, rules and evidence: Methods; Supplementary Table~S1.
+\textbf{c}~File size and full-read time for whole-cell subsets of the Takei et al.\ 2025 cerebellum DNA seqFISH+ data (62 per-spot tracks)~\citep{takei2025}. At $10^{7}$ spots chromdata.zarr stores 1.8\,GB and reads in 0.57\,s (FOF-CT 6.7\,GB, 99\,s; AnnData 5.6\,GB, 5.4\,s; SpatialData 2.2\,GB, 2.2\,s).
+\textbf{d}~Access speed (median of 20 random ids; shading, interquartile range).
+Left, backed chromdata.zarr by level.
+Right, time to open or load the file and get one cell (chromdata.zarr 45\,ms, SpatialData 0.75\,s, AnnData 7.6\,s at $10^{7}$ spots); FOF-CT stops at $10^{6}$ spots (memory limit).
+\textbf{e}~Out-of-memory analysis.
+Left, memory to open the data and answer the queries of \textbf{d}.
+Right, peak memory of the exact median distance map of chr11, loaded whole or streamed with \texttt{iter\_traces} under a 2\,GB budget (12.3 against 1.55\,GB at $10^{7}$ spots); the two maps are bitwise identical.
+Open markers ($10^{8}$ spots): replicated cells (the Takei cells copied under new ids), not new cells; at this size the whole table does not fit in 64\,GB of RAM.
+Protocol: Methods.
+Zarr and Apache Parquet logos are marks of their owners, used for identification only.

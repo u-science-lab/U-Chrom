@@ -1,23 +1,31 @@
 % U-Chrom manuscript — journal-neutral draft.
-% Build: latexmk -xelatex main.tex   (or: make)
+% Build: latexmk -xelatex main.tex   (or: make). The Supplementary Information is appended;
+% `make supp` also builds it on its own (supplement.pdf) from the same supp/body.tex.
 \documentclass[11pt]{article}
 
 \usepackage{fontspec}
 \setmainfont{texgyretermes}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]  % Times-like body
 \setsansfont{texgyreheros}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]  % Helvetica/Arial-like
 \usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{microtype}
 \usepackage{setspace}
 \usepackage[running]{lineno}
 \usepackage{graphicx}
 \usepackage{authblk}
 \usepackage[numbers,sort&compress]{natbib}
-\usepackage[labelfont=bf,labelsep=space,font=small]{caption}
+\usepackage[labelfont=bf,labelsep=space,font=footnotesize,singlelinecheck=false]{caption}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{array,booktabs,longtable}
+\usepackage{pdflscape}
+\usepackage{xurl}
 \usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
 
 \graphicspath{{figures/}}
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 \newcommand{\pkg}[1]{\texttt{#1}}
+\input{supp/macros}
+\setlength{\emergencystretch}{3em}  % no overfull lines around long identifiers
 
 \title{U-Chrom: a unified framework for sequencing- and imaging-based 3-D genome data}
 \author[1]{Author One}
@@ -46,9 +54,49 @@
 
 \begin{figure}[p]
   \centering
-  \includegraphics[width=\textwidth]{fig1.pdf}
-  \caption[U-Chrom overview]{\input{captions/fig1}\unskip}
+  \includegraphics[width=0.94\textwidth]{fig1.pdf}
+  \caption[U-Chrom overview]{\sloppy\input{captions/fig1}\unskip}
   \label{fig:overview}
+\end{figure}
+
+\subsection*{One store at real scale, next to the community formats}
+A ChromData object is a set of tables joined by keys (Fig.~\ref{fig:store}a).
+Each observed locus is a spot, one row of the spot table, which points at a shared locus axis (\pkg{bins}) and at its trace and cell; coordinates, alternative coordinate layers and per-spot signals are row-aligned with the spots, whereas per-locus signals, intervals and per-cell tables and embeddings are stored once per bin or cell.
+Contact maps stay in their community files (.cool, .scool) and are linked through the bins and a cell map.
+On disk the object is a chromdata.zarr store: a Zarr container~\citep{zarr} whose tables are Apache Parquet files~\citep{parquet} and whose multi-dimensional arrays and metadata are Zarr arrays and JSON attributes.
+Every spot-aligned value is written once, with the coordinates and keys partitioned by chromosome and all other spot columns in cell-sorted tables, so that a cell, a trace or a chromosome can be read without touching the rest of the file (Methods).
+
+We compared what this store can represent with the containers used for chromatin tracing and single-cell data: the 4DN FOF-CT tables~\citep{fofct}, AnnData~\citep{anndata}, SpatialData~\citep{spatialdata} and MuData~\citep{mudata} from the scverse ecosystem~\citep{scverse}, and cooler~\citep{cooler} (Fig.~\ref{fig:store}b).
+Every mark of a library rests on a test that stores the element with the library's own API, writes it, reads it back and records which kind of slot held it; the rules, versions and per-cell evidence are in Methods and Supplementary Table~S1.
+chromdata.zarr holds 11 of the 12 elements natively and the twelfth, contact maps, as linked external files.
+FOF-CT is native for the spot-level elements, the cell table, cell outlines and RNA spots, but has no contact maps and keeps per-locus signals, embeddings, intervals and results only as extra columns.
+AnnData and MuData hold signals, cell tables and embeddings natively, but only in one orientation per object, so spots, cells and loci cannot all be first-class together and the cell\,›\,trace\,›\,spot hierarchy is a set of labels.
+SpatialData is native for spot coordinates, cell positions and non-genomic points; cooler is native for contact maps, per-locus signals and region queries but has no spot or trace level.
+None of the other formats stores genomic intervals or analysis results with their provenance other than in a general-purpose slot.
+
+For storage and full reads we used whole-cell subsets of the Takei et al.\ 2025 mouse cerebellum DNA seqFISH+ data~\citep{takei2025}, with 62 per-spot signal tracks, from $10^{4}$ to $10^{7}$ spots (Fig.~\ref{fig:store}c).
+At $10^{7}$ spots the chromdata.zarr store takes 1.8\,GB and reads into memory in 0.57\,s, against 2.2\,GB and 2.2\,s for SpatialData, 5.6\,GB and 5.4\,s for AnnData and 6.7\,GB and 99\,s for the FOF-CT CSV; its read peaks at 9.0\,GB, against 29\,GB for SpatialData.
+Access from disk is where the layout matters most (Fig.~\ref{fig:store}d).
+Opened in backed mode, a $10^{7}$-spot store returns one trace in 6.2\,ms, one cell in 9.0\,ms and the coordinates of one chromosome in 13\,ms, and opening it takes 36\,ms; a store of $10^{8}$ spots, built by replicating the Takei cells, answers in 16\,ms, 26\,ms and 0.14\,s after a 0.20-s open.
+Counting the open or load, one cell takes 45\,ms from chromdata.zarr, 0.75\,s from SpatialData (a lazy filter that scans every partition) and 7.6\,s from AnnData at $10^{7}$ spots, and 8.4\,s from FOF-CT already at $10^{6}$ spots.
+One trace behaves like one cell (42\,ms at $10^{7}$ spots; Supplementary Fig.~S1a).
+One chromosome is the stated trade-off of the layout (Supplementary Fig.~S1b): its coordinates come from one partition (49\,ms including the open), but with all 62 per-spot tracks the read touches every cell-sorted row group and takes 0.56\,s, still faster than SpatialData (0.89\,s) and AnnData (7.8\,s).
+
+Because a backed store reads only the rows a query needs, the memory to open it and answer the trace and cell queries stays at 0.79\,GB above the interpreter baseline at $10^{7}$ spots and 1.1\,GB at $10^{8}$, whereas loading the whole table takes 16\,GB (AnnData) and 22\,GB (SpatialData) at $10^{7}$ spots and does not fit in 64\,GB of RAM at $10^{8}$ (Fig.~\ref{fig:store}e, left).
+Population statistics stream in the same way.
+The exact median 3-D distance map of chr11, computed over \pkg{iter\_traces} batches under a 2\,GB budget, peaks at 1.55\,GB at $10^{7}$ spots, against 12.3\,GB when the store is loaded whole, and at 2.41\,GB for the 24,544 chr11 traces of the $10^{8}$-spot store (Fig.~\ref{fig:store}e, right).
+The streamed maps are bitwise identical to the in-memory ones at every size (10.7\,M bin pairs at $10^{7}$ spots; at $10^{8}$, against the chromosome loaded alone), because the median is computed exactly, band by band, rather than approximated (Methods).
+
+The shared index also connects modalities that are stored apart.
+In the scHiCAR mouse motor cortex data~\citep{schicar}, Leiden clustering~\citep{leiden} of the RNA profiles inside ChromData defined 16 groups of cells, among them oligodendrocytes, astrocytes and a neuronal cluster (Supplementary Fig.~S1c).
+Their pseudo-bulk contact maps were summed from the linked per-cell .scool through the cell map, without copying any contacts into the store (Supplementary Fig.~S1d), and compared directly (Supplementary Fig.~S1e); the same path reproduces, pixel for pixel, the per-type maps binned directly from the contact pairs for all 22 annotated cell types.
+Linking the 5,313 per-cell maps took 0.34\,s, against 7.6\,s to copy their 51\,M pixels into the store (Supplementary Fig.~S1f); a first pseudo-bulk query of chr1 over all 5,313 cells took 1.4\,s and a repeated one 33\,\textmu s (Supplementary Fig.~S1g); and the linked store occupies 5\,MB, against 135\,MB for a copy (Supplementary Fig.~S1h).
+
+\begin{figure}[p]
+  \centering
+  \includegraphics[width=0.93\textwidth]{fig2.pdf}
+  \caption[ChromData storage, capabilities and access at scale]{\sloppy\input{captions/fig2}\unskip}
+  \label{fig:store}
 \end{figure}
 
 \subsection*{An open ecosystem}
@@ -61,16 +109,164 @@
 \todo{}
 
 \section*{Methods}
-\subsection*{Data}
-\todo{Takei et al.\ 2025 cerebellum DNA seqFISH+; scHiCAR mouse MOp (GSE305439); see \texttt{example-data/README.md}.}
 
-\subsection*{Software availability}
-\todo{Repository URL, licence, version, documentation.}
+\subsection*{ChromData data model}
+ChromData organises 3-D genome data as tables joined by integer or categorical keys (Fig.~\ref{fig:store}a).
+The locus axis \pkg{bins} has one row per genomic bin (chromosome, start, end, optionally a name and resolution), indexed by \pkg{bin\_id} and shared by all cells; per-locus signals such as bulk ATAC or ChIP tracks are columns of \pkg{bin\_tracks}, per-locus multi-dimensional arrays are kept in \pkg{binm}, and called structures are typed interval tables in \pkg{intervals} (domains such as TADs, pairs such as loops, peaks and labelled segments).
+The spot table \pkg{spots} has one row per observation, one locus in one trace, with \pkg{bin\_id}, \pkg{trace\_id} and optionally \pkg{cell\_id} and \pkg{spot\_id}; its genomic coordinates are derived from \pkg{bins} and are not stored per spot.
+Row-aligned with the spots are the coordinates (an $n_\mathrm{spots}\times 3$ array), alternative coordinate sets (\pkg{layers}, e.g.\ uncorrected positions) and per-spot signals (\pkg{spot\_tracks}, e.g.\ immunofluorescence intensities).
+\pkg{traces} and \pkg{cells} hold per-trace and per-cell properties, and \pkg{cellm} per-cell multi-dimensional arrays such as embeddings and UMAP coordinates.
+\pkg{points} holds 3-D points that are not genomic loci (for example nascent RNA spots) in the frame of the coordinates, \pkg{uns} unstructured metadata (genome assembly, coordinate unit), and \pkg{results} analysis outputs with their provenance: every entry records the kind of result, the value, the function, its parameters and inputs, the package version and a UTC time stamp, and a value that cannot be written raises an error when it is assigned rather than when the object is saved.
+The chromosome, trace and cell keys are categorical.
+Pairwise distance or contact matrices of traces are not stored; they are computed per trace on demand.
+
+Data are held at four observation levels: the population (bins and their tracks), the cell, the trace and the spot.
+\pkg{get\_cell}, \pkg{get\_trace} and \pkg{get\_chrom} return a new object restricted to one cell, trace or chromosome, with all bins kept, so every subset shares the locus axis of the whole.
+Modalities measured in other files are linked rather than copied.
+\pkg{link\_cool} and \pkg{link\_scool} record a bulk, pseudo-bulk or per-cell contact file (path, bin size, genome assembly and the naming of the cells, i.e.\ the map from ChromData cells to .scool cell groups); \pkg{link\_mudata} and \pkg{link\_anndata} record multi-modal cell matrices; \pkg{link\_spatialdata} records a SpatialData store with the table, region and instance key that map its rows to ChromData cells.
+Relative paths resolve next to the store, so a project folder can be moved as a whole, and \pkg{validate\_links} checks that each linked file and its cell map are present.
+Where each cell sits in the tissue or field of view is part of the schema: centroid columns of \pkg{cells} described by a record that gives the unit (and voxel size), the coordinate frame (field of view, tissue or global), the region column of a local frame, whether the positions were measured or inferred (with their source), and the key of the outlines; outlines are polygons, one per cell, stored as well-known binary geometries in a GeoParquet table, the representation SpatialData uses for shapes.
+The seqFISH+ and FOF-CT readers fill these fields from the published cell tables and region-of-interest boundaries; the schema was validated on the Takei et al.\ 2021 and 2025 and Liu et al.\ 2025 cell tables.
+
+Analysis functions share one calling convention: the object first, then keyword arguments that select chromosomes, traces or cells (\pkg{chrom=None} runs every chromosome and merges the per-chromosome outputs into one table), a frozen parameter object, the compute device, the result key (\pkg{key\_added}, by default \pkg{"<what>.<method>"}) and \pkg{copy}, which returns either the result table or a new object.
+The twelve data elements compared in Fig.~\ref{fig:store}b are defined in Supplementary Table~S1; the chromdata.zarr row maps them onto the tables above (spot coordinates: coordinates and layers; cell\,›\,trace\,›\,spot: the \pkg{trace\_id} and \pkg{cell\_id} keys with their tables; per-spot and per-locus signals: \pkg{spot\_tracks}, \pkg{bin\_tracks}; cell table and embeddings: \pkg{cells}, \pkg{cellm}; cell spatial position: centroids and outlines; contact maps: linked files; intervals, points, results: the tables of the same names; partial reads: backed access, below).
+
+\subsection*{Storage format}
+A chromdata.zarr store is a Zarr group (Zarr format~3)~\citep{zarr}; tables with rows are Apache Parquet files~\citep{parquet,arrow} compressed with Zstandard, multi-dimensional arrays (\pkg{cellm}, \pkg{binm}, array results, the index) are Zarr arrays, and metadata, provenance and link records are JSON attributes.
+The layout stores every spot-aligned value once, on two sides that share one row mapping.
+(i)~The coordinates and the keys (\pkg{bin\_id} as 32-bit integers and the trace and cell ids as integer codes) are partitioned by chromosome, one Parquet file per chromosome in a hive-style directory that Arrow, DuckDB or Polars can prune, sorted by cell, trace and bin, in row groups of about 16,384 rows that end on cell boundaries.
+(ii)~Every other spot-aligned column (extra spot columns, per-spot tracks, layers) is in cell-sorted primary tables (order cell, trace, chromosome, bin) without key columns, in row groups of about 65,536 rows that end on cell boundaries and are shared by all primary tables.
+Each (cell, trace, chromosome) run is contiguous on both sides with its rows in the same order, and the \pkg{index/} arrays store the run offsets of both sides, the trace, cell and chromosome code of each run, the row-group offsets and the one-to-one map between the runs, so that any cell, trace or chromosome resolves to a few row ranges without scanning.
+(iii)~Spot columns that are a function of the bin, the cell or the trace (for example per-spot probe names that repeat the bin, or a sample id) are detected on writing (bitwise equality for numbers, string equality for text, equal codes for categoricals) and stored once per key; readers rebuild them with one gather, and the round trip is exact in values and types.
+Categorical spot columns are stored as integer codes with their categories in separate small tables, so that row groups decode without string work; float columns of the primary tables use Parquet dictionary pages, which pay off for per-spot values that repeat within a cell, and fall back to plain pages where they do not.
+Small tables (bins, bin tracks, cells, traces, intervals, points, cell outlines) are single Parquet files.
+When the writer sorts, the original row of every spot is kept (\pkg{index/source\_row}) so that a store can be read back in the order it was written.
+A store is written into a temporary sibling directory and renamed into place, so a reader never sees a half-written store; a \pkg{.cdz} file is the same tree in one uncompressed ZIP archive whose Parquet members are read in place.
+Earlier ChromData files in HDF5 (\pkg{.h5cd}) remain readable and can be converted to a store with one command.
+
+The layout is the result of measured trade-offs on the Takei data.
+A first HDF5 container stored the $10^{7}$-spot subset in 5.5\,GB and read it in 7.2\,s at a 23\,GB peak, against 2.1\,GB and 0.73\,s for a flat Parquet file, so the tables moved to Parquet in a Zarr container, as in SpatialData.
+Sorting all spot tables by cell then made cells and traces cheap to read, but a chromosome required a scan of the whole file (0.77\,s at $10^{7}$ and 8.9\,s at $10^{8}$ spots).
+Partitioning all spot tables by chromosome made that 16--22 times faster, but the store grew by 35\,\% and one cell became three times slower to read, because per-spot values that repeat within a cell across chromosomes were no longer compressed together.
+Storing only the coordinates and keys by chromosome, and the rest by cell, keeps both: at $10^{7}$ spots the store is 1.81\,GB, 14\,\% smaller than flat Parquet, reads in full in 0.57\,s, and returns one cell in 8.5\,ms and the coordinates of one chromosome in 15\,ms.
+The price is paid by one query, a chromosome with all per-spot tracks, which reads a slice of every cell-sorted row group (0.5\,s at $10^{7}$ spots, 6.7\,s at $10^{8}$); coordinate-only reads or a selection of tracks avoid it.
+The coordinate row-group size (16,384 rows) was chosen from a sweep of 8,192 to 65,536 rows: it keeps the file within 0.2\,\% of the smallest and makes one cell twice as fast to read as 65,536-row groups, whereas 8,192 rows gain 2\,ms for a 15\,\% larger file.
+Storing derived columns once reduced the full read from 0.80 to 0.55\,s (the per-spot probe names), and dictionary pages for floats from 0.65 to 0.55\,s.
+
+\subsection*{Backed access and streaming}
+\pkg{ChromData.read(path, backed=True)} opens a store with the small tables (bins, bin tracks, cells, traces, embeddings, intervals, points, results, metadata) and the index in memory, and the spot-aligned data as lazy proxies read from Parquet on access.
+\pkg{get\_trace} reads one primary slice and its coordinate run, \pkg{get\_cell} one primary slice and one coordinate run per chromosome, and \pkg{get\_chrom} one coordinate partition plus, if other spot columns are requested, the chromosome's rows of the primary tables; row groups are decoded in parallel threads into preallocated buffers, and each call returns an in-memory ChromData.
+Every read accepts \pkg{columns=}: \pkg{"coords"} reads coordinates and keys only, a list adds spot columns, tracks or layers by name.
+\pkg{iter\_traces} and \pkg{iter\_cells} stream the object in chunks of whole traces or cells (in chromosome, cell, trace order), identically on in-memory and backed objects; with \pkg{batch="auto"} the chunk size follows a memory budget (\pkg{uchrom.settings.memory\_budget}, by default half of the available RAM).
+
+Inputs larger than memory are imported by streaming.
+\pkg{ChromData.writer} spills each appended chunk, split by chromosome and sorted, to a temporary Parquet run, then fixes the bins and categories and writes each partition in pieces of whole cells through the same partition writer as the in-memory path, so the rows, order, index and row groups of the store are identical; \pkg{from\_fofct(..., out=)} and the seqFISH+ reader (one field of view at a time) use it.
+On the Liu et al.\ 2025 FOF-CT table (9.58\,M spots) the streaming import peaked at 1.3\,GB against 12.6\,GB in memory, and on the three Takei et al.\ 2025 fields of view (10.9\,M spots) at 15.0\,GB against 28.1\,GB (the peak is one field of view's CSV parse); in both cases the two stores were value-identical.
+
+\pkg{uchrom.fea.distance\_map} computes the mean or median 3-D distance of every bin pair of a chromosome over its traces.
+The mean accumulates per-pair sums in trace order, the same additions in the same order as the dense computation, and is therefore bitwise equal to it.
+An exact median needs all observations of a pair, so the streaming path gathers them one row band of the matrix at a time: the rows $i$ whose pairs $(i, j>i)$ fit the budget (80 bytes per observation) are collected in one pass over the chromosome's traces and reduced with a grouped median, and the next band follows.
+Memory is one band plus the $n_\mathrm{bins}^2$ output, independent of the number of traces, and there is no approximation.
+For Fig.~\ref{fig:store}e the chr11 median map was computed with a 2\,GB budget: 4 bands for the 2,455 chr11 traces at $10^{7}$ spots and 31 bands at $10^{8}$ spots.
+The loop and TAD callers of the ArcFISH method~\citep{arcfish} stream the same way: per-pair axis statistics are accumulated over trace batches with exact lower medians and identical outlier masks, and the filtered variances equal the in-memory computation up to summation order.
+Streaming and in-memory results were compared on real data: median and mean maps were bitwise identical for chr1, chr11 and chr19 of the Takei et al.\ 2025 data and all 20 chromosomes of the Liu et al.\ 2025 data; on the Takei et al.\ 2021 mESC data both paths called the same 5 loops (identical p-values) and the same 223 TAD boundaries (maximum relative p-value difference $4\times10^{-12}$).
+
+\subsection*{Datasets}
+\textit{Takei et al.\ 2025, mouse cerebellum DNA seqFISH+}~\citep{takei2025}.
+Replicate~1 (\pkg{cerebellum\_rep1.tar.gz}, 2.85\,GB; Zenodo record 7693825~\citep{takei2025zenodo}, CC-BY-4.0) holds three fields of view as spot CSV files (7.9\,GB).
+Each field was read with the ChromData seqFISH+ reader with the published locus annotation and cell clustering from the authors' repository, keeping the trace (allele) assignments provided with the data, without the spots they mark as noise, and 62 per-spot signal tracks.
+The combined data have 10,912,638 spots in 59,112 traces and 1,799 cells.
+The published trace assignments often merge the two homologs of a chromosome; they were used as provided, since the benchmarks measure storage and access, not structure.
+Benchmark subsets consist of whole cells taken in a fixed random order (seed~0) until the target size is reached: 11,449, 101,463, 1,008,086 and 10,005,527 spots (2, 19, 166 and 1,656 cells).
+The $10^{8}$-spot store was built from the full store by copying its cells nine times, plus whole cells of a tenth copy, under new cell and trace ids (100,004,750 spots, 540,360 traces, 16,461 cells; 17.9\,GB), streamed row group by row group; its cells are replicates, not new measurements, and it serves only to test scale.
+
+\textit{Liu et al.\ 2025, mouse primary motor cortex DNA-MERFISH}~\citep{liu2025}.
+The 4DN FOF-CT core table (4DN file 4DNFID46OABK, 1.68\,GB) and cell table (4DNFICX8IVEK) of experiment set 4DNESMTNNB3N (wild type; 9,582,069 spots, 188,891 traces, 11,045 traced cells) were read from the 4DN open-data repository~\citep{liu2025data}.
+They were used to validate the streaming import and streaming distance maps, the cell-position schema and the storage layout on a second, differently structured data set.
+
+\textit{Takei et al.\ 2021, mouse embryonic stem cells, DNA seqFISH+}~\citep{takei2021}.
+The 4DN FOF-CT core table 4DNFIHF3JCBY (201 cells, 20 chromosomes $\times$ 60 bins of 25\,kb) with its cell table (4DNFIFINA2U9) and nascent RNA spot table (4DNFIJ52NVDV)~\citep{takei2021data} were used to validate the streaming loop and TAD callers, the FOF-CT reader and writer and the cell-position schema.
+
+\textit{scHiCAR, mouse motor cortex}~\citep{schicar}.
+From GEO series GSE305439~\citep{schicargeo} (mouse brain sample 1) we used the RNA count matrix and metadata (5,313 cells with 22 published cell types) and the deduplicated contact pairs (120,280,303 contacts).
+The RNA profiles (500 highly variable genes, library-size normalised, 30 principal components, UMAP~\citep{umap}) are stored in a ChromData object without spots.
+The pairs were binned into one 1-Mb map per cell in a .scool file (50,790,690 pixels) and, for reference, into 500-kb maps per published cell type (.cool), both linked to the object.
+
+\subsection*{Benchmarks}
+All timings were made on one Apple M5 Pro laptop (18 cores, 64\,GB RAM, internal SSD, macOS 26.4.1) with Python 3.11.15, NumPy 2.4.3, pandas 2.3.3, PyArrow 23.0.1, zarr 3.1.6, AnnData 0.12.11, SpatialData 0.7.2, cooler 0.10.4 and h5py 3.16.0.
+Every timed trial ran in a fresh Python process; library imports were excluded from the timings, and peak memory is the maximum resident set size of the process (\pkg{getrusage}) minus its resident size after the imports.
+The operating-system page cache was not flushed, so reads are warm-cache reads of a file written just before.
+Each point is the median of three processes (whiskers or shading, minimum to maximum or interquartile range, as stated in the legends).
+
+The baselines are the storage schemes publicly used by the community for chromatin-tracing data, each written and read with its library's defaults.
+FOF-CT: the core table as CSV with the spot columns and per-spot tracks as extra columns, written with \pkg{uchrom.io.write\_fofct} and read with \pkg{ChromData.from\_fofct}.
+AnnData: spots as observations, with the spot columns and tracks in \pkg{obs}, the coordinates in \pkg{obsm["spatial"]} and an empty \pkg{X}, written with \pkg{write\_h5ad} and read with \pkg{read\_h5ad}.
+SpatialData: the flat spot table (coordinates, loci, ids, spot columns and tracks) as one 3-D points element and the cell table as a table element, written with the library defaults; a full read is \pkg{read\_zarr} followed by computing the points and loading the table.
+chromdata.zarr was written with \pkg{ChromData.write} defaults and read with \pkg{ChromData.read}.
+A flat Parquet file of the same table, the storage engine under chromdata.zarr without its hierarchy, index and metadata, was measured as an internal reference and is not shown.
+File size is the size on disk of the file or directory.
+
+Access latency (Fig.~\ref{fig:store}d, Supplementary Fig.~S1a,b) was measured for 20 randomly chosen traces, cells and chromosomes per process, pooled over the three processes (median and interquartile range).
+For chromdata.zarr, the store was opened in backed mode and queried with \pkg{get\_trace}, \pkg{get\_cell} and \pkg{get\_chrom} (with all columns or with \pkg{columns="coords"}); the per-format comparison adds the open time to the query time.
+For AnnData and FOF-CT, a query is the full load followed by a boolean-mask subset in memory; for SpatialData, a lazy \pkg{read\_zarr} followed by a filter of the points on the id column and \pkg{.compute()}, which scans every partition (its spatial queries select by position, not by genomic id).
+The memory of Fig.~\ref{fig:store}e (left) is the peak resident memory above the baseline after opening or loading and answering the trace and cell queries.
+To protect the machine, runs whose peak memory would exceed 40\,GB were not made: the FOF-CT reader peaked at 37.7\,GB for the full read of the $10^{7}$-spot CSV, so the load-and-query series for FOF-CT stops at $10^{6}$ spots; at $10^{8}$ spots the table alone would need about 53\,GB in memory, so only backed chromdata.zarr and streaming were measured there.
+The streaming benchmark (Fig.~\ref{fig:store}e, right) compares \pkg{ChromData.read} followed by the in-memory median map with a backed store streamed by \pkg{iter\_traces} (coordinates only) under a 2\,GB budget; at $10^{8}$ spots the reference was chr11 read alone with \pkg{get\_chrom} and computed in memory.
+Benchmark scripts and raw results are available in the code repository (Code availability).
+
+\subsection*{Capability audit}
+Fig.~\ref{fig:store}b rates six containers on twelve data elements (definitions in Supplementary Table~S1): chromdata.zarr; the 4DN FOF-CT tables, version~1.0~\citep{fofct}; AnnData 0.12.11~\citep{anndata}; SpatialData 0.7.2~\citep{spatialdata}; MuData 0.3.4~\citep{mudata}; and cooler 0.10.4 (.cool and .scool)~\citep{cooler}.
+A cell is \emph{native} when the format has a first-class structure for the element, \emph{linked} when the element stays in an external community-standard file that is queried through the shared index (how chromdata.zarr holds contact maps), \emph{by convention} when it can be stored and read back through the public API only in a general-purpose slot (such as \pkg{uns}, \pkg{obsm}, \pkg{varp}, \pkg{attrs}, metadata attributes or optional columns), and \emph{not supported} otherwise.
+For every library cell a small test on toy data stored the element with that library's own API, wrote it to disk, read it back, compared the values and recorded which kind of slot held it; FOF-CT, a CSV specification rather than a library, was rated from its specification pages.
+Six rules, given in full in Supplementary Table~S1, fixed the ratings.
+(1)~The evidence decides; only genuinely ambiguous cells gave the other tool the better mark, and they are flagged as judgement calls (AnnData, partial reads via its experimental lazy reader; SpatialData, per-locus signals as the variables of a cells~$\times$~loci table).
+(2)~AnnData and MuData are rated in their most favourable orientation (spots, cells or loci as observations), although these orientations exclude each other in one object.
+(3)~A test that needed a general-purpose slot backs at most \emph{by convention}, and one that needed an external file \emph{linked}.
+(4)~A data table serialised to JSON text in a descriptive metadata attribute does not count, whereas provenance records and scalar properties of the object that carries the attribute (a cell's own properties in the metadata of its cooler in a .scool) count as a general-purpose slot.
+(5)~Partial reads are native when one cell's or chromosome's rows are read without reading the other rows, and by convention when this needs a scan of every row or loads part of the data whole (MuData's backed mode loads \pkg{obs} and \pkg{obsm}).
+(6)~\emph{By convention} requires a normal use of the format; encodings that merely write, such as traces as per-trace column sets of cooler bins tables or an embedding split into one metadata key per dimension, are rated not supported.
+The chromdata.zarr cell-position mark rests on the centroid and outline schema described above, validated on the Takei et al.\ 2021 and 2025 and Liu et al.\ 2025 cell tables; the evidence, documentation links and audit history of every cell are in Supplementary Table~S1.
+
+\subsection*{Linked contacts and the cross-modal query}
+Cells of the scHiCAR object were clustered with \pkg{uchrom.emb.cluster\_cells}: a symmetrised 15-nearest-neighbour graph (Euclidean) on the 30-component RNA PCA, partitioned with the Leiden algorithm~\citep{leiden} (RB configuration model, resolution~1.0, seed~0), gave 16 clusters.
+Marker genes of each cluster were ranked by the difference of the mean $\log(1+x)$ expression between the cluster and all other cells.
+The oligodendrocyte cluster (cluster~5, 294 cells; top markers \emph{Plp1}, \emph{St18}, \emph{Prr5l}, \emph{Mobp}) is the one with the highest mean expression of \emph{Mobp}, \emph{Plp1}, \emph{Mog} and \emph{Opalin}, and the astrocyte cluster (cluster~3, 448 cells; \emph{Gpc5}, \emph{Slc1a3}, \emph{Atp1a2}) the one with the highest mean of \emph{Slc1a3}, \emph{Gja1}, \emph{Gpc5} and \emph{Atp1a2} among the others.
+The neuronal cluster (cluster~0, 1,336 cells) is the largest remaining cluster whose glial and vascular marker score is at or below the median; it is therefore identified by the absence of glial and vascular markers rather than by neuronal markers, and its own top-ranked genes are not neuronal markers.
+Its published labels are mostly intratelencephalic excitatory neurons (L5 IT 407, L4/5 IT 215, L6 IT 194, L2/3 IT 186 cells), consistent with the assignment; 258 of the 294 oligodendrocyte-cluster cells and 401 of the 448 astrocyte-cluster cells carry the published oligodendrocyte and astrocyte labels.
+
+Pseudo-bulk maps were computed through the shared index with the query the web browser uses (\pkg{contacts(group=...)} of the browser's dataset layer): the cells of a group are mapped to their .scool cell groups through the recorded cell naming, and the pixels of each cell in the requested region are read with the cell's bin offset index and summed; results are kept in a least-recently-used cache.
+To check the path, the pseudo-bulk of each of the 22 published cell types was compared, over the cis maps of all 21 chromosomes (upper triangle including the diagonal, raw counts), with the 500-kb per-type map binned directly from the pairs and coarsened to 1\,Mb by summing: all 22 were identical (4.2\,M pixels, maximum absolute difference~0).
+For Supplementary Fig.~S1d,e each group's map over chr2:40--90\,Mb was divided by the group's total cis contacts over all chromosomes, and the log$_2$ ratio of the oligodendrocyte to the neuronal map was taken pixel by pixel.
+Query times (Supplementary Fig.~S1g) are the first query in a fresh process, after the map listing, and the same query repeated (cached), for chr1 over random groups of 50 to 5,313 cells and for the whole-genome cis maps of each cell type; three processes each.
+Link and copy (Supplementary Fig.~S1f,h) were timed in fresh processes (median of three): linking records the .scool path, bin size and cell naming in the store (\pkg{link\_scool}); copying reads every cell's pixels from the .scool and writes them into the store as one Parquet table (cell as 16-bit and bins and counts as 32-bit integers, Zstandard level~3).
+Sizes are on-disk sizes of the store with either, and of the store plus the .scool, which is kept in both cases.
+
+\subsection*{Code availability}
+\todo{Repository URL, licence, archived release (DOI), documentation.}
+The ChromData format specification, the benchmark scripts and their raw results are part of the code repository.
+
+\subsection*{Data availability}
+All data analysed are public: Zenodo record 7693825 (Takei et al.\ 2025)~\citep{takei2025zenodo}; 4DN experiment set 4DNESMTNNB3N (Liu et al.\ 2025)~\citep{liu2025data}; 4DN files 4DNFIHF3JCBY, 4DNFIFINA2U9 and 4DNFIJ52NVDV (Takei et al.\ 2021)~\citep{takei2021data}; GEO GSE305439 (scHiCAR)~\citep{schicargeo}.
+\todo{Deposit of derived stores, if any.}
 
 \section*{Declarations}
-\todo{Ethics, consent, data availability, competing interests, funding, authors' contributions, acknowledgements.}
+\todo{Ethics, consent, competing interests, funding, authors' contributions, acknowledgements.}
 
 \bibliographystyle{unsrtnat}
 \bibliography{refs}
+
+% ------------------------------------------------ Supplementary Information (appendix)
+\clearpage
+\appendix
+\nolinenumbers
+\singlespacing
+\setcounter{figure}{0}\setcounter{table}{0}
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\figurename}{Supplementary Fig.}
+\renewcommand{\tablename}{Supplementary Table}
+\section*{Supplementary Information}
+\addcontentsline{toc}{section}{Supplementary Information}
+\input{supp/body}
 
 \end{document}

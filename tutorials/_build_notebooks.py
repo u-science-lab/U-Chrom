@@ -69,14 +69,15 @@ nb1 = [
 `uchrom.ChromData` is the central data structure for U-Chrom, analogous to
 [AnnData](https://anndata.readthedocs.io/) for chromatin 3D structure data.
 It holds genomic bins mapped to 3D coordinates, grouped in a
-**Cell → Trace → Spot** hierarchy, and persists as `.h5cd` (HDF5) files.
+**Cell → Trace → Spot** hierarchy, and persists as `.chromdata.zarr` stores
+(Zarr + Parquet; format 2.0).
 
 This notebook covers:
 
 - Creating a ChromData from scratch
 - The three "core tables" (core / cell / chromatin) and auxiliary storage
 - Subsetting by chromosome, trace, or cell
-- Round-tripping to `.h5cd` with format versioning
+- Round-tripping to `.chromdata.zarr` with format versioning, and backed (out-of-core) reads
 - Importing from reconstruction CSV and FOF-CT"""),
 
     code("""\
@@ -134,17 +135,34 @@ d = cd.compute_distances(trace_id=0)
 print('distance matrix shape:', d.shape)
 print('diagonal is zero      :', np.allclose(np.diag(d), 0))"""),
 
-    md("## Persistence — `.h5cd`\n\n`ChromData` serialises to HDF5 with a format version attribute so future releases can migrate old files."),
+    md("""\
+## Persistence — `.chromdata.zarr`
+
+`ChromData` is stored as a Zarr v3 directory whose large tables are Parquet
+files, with a format version attribute so future releases can migrate old
+files (`<name>.cdz` is the same store in one zip file; older `.h5cd` files are
+still read).  Spots are stored sorted by cell, trace and bin, so a round trip
+keeps every spot but may change the row order; `original_order=True` restores
+it."""),
 
     code("""\
 import tempfile, os
 tmp = tempfile.mkdtemp()
-path = os.path.join(tmp, 'demo.h5cd')
+path = os.path.join(tmp, 'demo.chromdata.zarr')
 
 cd.write(path)
-cd2 = ChromData.read(path)
+cd2 = ChromData.read(path, original_order=True)
 print(cd2)
-print('coords match:', np.allclose(cd.coords, cd2.coords))"""),
+print('coords match:', np.allclose(cd.coords, cd2.coords, equal_nan=True))"""),
+
+    md("For data larger than memory, open the store **backed**: only the small tables are read, and `get_cell` / `get_trace` / `get_chrom` / `iter_traces` read just the rows they need and return ordinary in-memory objects."),
+
+    code("""\
+backed = ChromData.read(path, backed=True)
+print(backed)
+print(backed.get_trace(1))
+for chunk in backed.iter_traces(batch=1):
+    print('chunk:', chunk.n_spots, 'spots')"""),
 
     md("""\
 ## Importing from existing formats
@@ -153,7 +171,7 @@ print('coords match:', np.allclose(cd.coords, cd2.coords))"""),
 |--------|--------|
 | Reconstruction CSV (chrom, start, end, x, y, z) | `ChromData.from_dataframe(df)` |
 | 4DN FOF-CT core table | `ChromData.from_fofct(path)` |
-| `.h5cd` | `ChromData.read(path)` |"""),
+| `.chromdata.zarr` / `.cdz` / `.h5cd` | `ChromData.read(path)` |"""),
 
     code("""\
 # Example: from a reconstruction output CSV (here we build a fake one)
@@ -234,7 +252,7 @@ FOFCT"""),
     md("## Load the file"),
 
     code("""\
-cd = ChromData.read(FOFCT) if FOFCT.endswith(".h5cd") else ChromData.from_fofct(FOFCT)
+cd = ChromData.read(FOFCT) if FOFCT.endswith((".h5cd", ".zarr", ".cdz")) else ChromData.from_fofct(FOFCT)
 cd"""),
 
     md("## Inspect metadata\n\nThe FOF-CT header fields go into `cd.uns` so you can always trace the origin of a dataset."),
@@ -279,7 +297,7 @@ df.head()"""),
 ## Writing your own FOF-CT-compatible data
 
 If you produced tracing data with a tool that does not write FOF-CT, you
-can create a ChromData directly (see the ChromData basics tutorial) and write `.h5cd`.  The
+can create a ChromData directly (see the ChromData basics tutorial) and write `.chromdata.zarr`.  The
 on-disk format is versioned so downstream tools can safely consume it."""),
 ]
 
@@ -447,8 +465,8 @@ plt.tight_layout()"""),
     md("""\
 ## Next steps
 
-- **Save as `.h5cd`**: `cd.write("imr90_chr21.h5cd")` for fast reload
-- **3D browser**: `python -m uchrom.browser imr90_chr21.h5cd` (interactive PyVista viewer)
+- **Save**: `cd.write("imr90_chr21.chromdata.zarr")` for fast reload
+- **3D browser**: `python -m uchrom.browser --web imr90_chr21.chromdata.zarr`
 - **Structure calling**: TAD/loop/compartment callers work on imaging data too
 - **Embedding**: If you have multiple cells, run FastHigashi on the population
 
@@ -499,7 +517,7 @@ def find_repo_root(start: Path = Path.cwd()) -> Path:
 
 repo = find_repo_root()
 pairs = repo / 'example-data' / 'cell1.pairs'
-out_path = repo / 'tutorials' / '_out_tutorial3.h5cd'
+out_path = repo / 'tutorials' / '_out_tutorial3.chromdata.zarr'
 print('pairs:', pairs)
 print('out  :', out_path)"""),
 
@@ -507,7 +525,7 @@ print('out  :', out_path)"""),
 
     code("""\
 # From the shell (uncomment to run):
-# !python -m uchrom.recon.sc.nucdyn example-data/cell1.pairs out.h5cd \\
+# !python -m uchrom.recon.sc.nucdyn example-data/cell1.pairs out.chromdata.zarr \\
 #     --arch=cpu --dyns=30 --size_steps='[2, 0.4]'
 
 from uchrom.recon.sc.nucdyn import main as nucdyn_main
@@ -519,7 +537,7 @@ nucdyn_main(
     size_steps=[2, 0.4],  # only two resolution stages
 )"""),
 
-    md("## Load the reconstructed structure\n\nThe `.h5cd` output carries a `cell_id` derived from the filename and one trace per chromosome."),
+    md("## Load the reconstructed structure\n\nThe `.chromdata.zarr` output carries a `cell_id` derived from the filename and one trace per chromosome."),
 
     code("""\
 from uchrom import ChromData
@@ -547,14 +565,14 @@ fig.colorbar(im, ax=ax, label='distance')"""),
     md("""\
 ## Using other reconstruction backends
 
-`python -m uchrom.recon.sc.gem <in> <out.h5cd>` — energy-minimisation
+`python -m uchrom.recon.sc.gem <in> <out.chromdata.zarr>` — energy-minimisation
 variant (smoother, slower).
 
-`python -m uchrom.recon.bulk.mds <contact.mcool> <out.h5cd> --resolution=100000`
+`python -m uchrom.recon.bulk.mds <contact.mcool> <out.chromdata.zarr> --resolution=100000`
 — PyTorch SMACOF MDS on bulk Hi-C data.  Inter-chromosomal whole-genome
 reconstruction via `--inter` with the additional `--resolution_inter` flag.
 
-All three write the same `.h5cd` schema so downstream tools don't care
+All three write the same ChromData schema so downstream tools don't care
 which reconstructor was used."""),
 ]
 
@@ -601,7 +619,7 @@ following departures:
 | Zero-contact bins | `assert` crash on all-zero rows | Auto-filtered before MDS; bins returned in `nonzero_mask` |
 | Stress | Treats missing pairs as `d = 0` | Observed-pairs-only (weighted mask) |
 | Whole-genome | Manual per-chromosome script | `inter_mds()` one-liner |
-| Output | Custom TSV with NaN markers | `.h5cd` (ChromData HDF5) |
+| Output | Custom TSV with NaN markers | `.chromdata.zarr` (ChromData) |
 
 Both solvers exposed in `run_mds(method=...)` share this infrastructure:
 
@@ -835,16 +853,16 @@ ax2.set_title(f'{CHROM} — quality vs resolution')
 fig.tight_layout()"""),
 
     md("""\
-## Standard output format: `.h5cd`
+## Standard output format: `.chromdata.zarr`
 
-U-Chrom's reconstruction output is `.h5cd` — a ChromData HDF5 file
-that every reconstructor (NucDyn, GEM, bulk MDS) and every import
+U-Chrom's reconstruction output is a ChromData store (`.chromdata.zarr`;
+older `.h5cd` files are still read) that every reconstructor (NucDyn, GEM, bulk MDS) and every import
 path (FOF-CT, Hi-C .pairs) writes in the same schema.  That means you
 can feed any reconstruction to the same downstream tools (loop / TAD
 / compartment callers, browser, plotting helpers) without format
 adapters.
 
-Each `.h5cd` carries:
+Each store carries:
 
 - **coords** — per-bin 3D coordinates
 - **spots** — `chrom`, `start`, `end`, `trace_id` (+ optional `cell_id`)
@@ -852,7 +870,7 @@ Each `.h5cd` carries:
 - **optional** — cell metadata, epigenomic tracks, analysis results (loops/TADs/compartments)
 
 `save_particles()` auto-detects the format from the filename
-extension (`.h5cd` → ChromData HDF5, `.csv` → flat CSV)."""),
+extension (`.chromdata.zarr` / `.cdz` → ChromData, `.csv` → flat CSV)."""),
 
     code("""\
 from uchrom.io import save_particles, read_particles
@@ -870,12 +888,12 @@ def to_df(coords, bin_mask):
         'x': coords[:, 0], 'y': coords[:, 1], 'z': coords[:, 2],
     })
 
-save_particles(to_df(coords_smacof, mask), out_dir / 'smacof.h5cd')
-save_particles(to_df(coords_adam,   mask), out_dir / 'adam.h5cd')
+save_particles(to_df(coords_smacof, mask), out_dir / 'smacof.chromdata.zarr')
+save_particles(to_df(coords_adam,   mask), out_dir / 'adam.chromdata.zarr')
 
 print('Wrote:')
-print(f'  {out_dir}/smacof.h5cd')
-print(f'  {out_dir}/adam.h5cd')"""),
+print(f'  {out_dir}/smacof.chromdata.zarr')
+print(f'  {out_dir}/adam.chromdata.zarr')"""),
 
     md("""\
 ### Reading the output back
@@ -891,13 +909,13 @@ Two paths depending on what you need next:
 
     code("""\
 # Quick flat-DataFrame access
-df_smacof = read_particles(str(out_dir / 'smacof.h5cd'))
+df_smacof = read_particles(str(out_dir / 'smacof.chromdata.zarr'))
 print(df_smacof.head(3))
 print('shape:', df_smacof.shape)"""),
 
     code("""\
 # Full ChromData container
-cd = ChromData.read(str(out_dir / 'smacof.h5cd'))
+cd = ChromData.read(str(out_dir / 'smacof.chromdata.zarr'))
 print(cd)
 print('n_traces :', len(cd.traces))
 print('n_spots  :', cd.n_spots)"""),
@@ -906,11 +924,11 @@ print('n_spots  :', cd.n_spots)"""),
 ## Visualize side-by-side in the U-Chrom Browser
 
 The browser is a PyQt5 + PyVista GUI that renders any number of
-`.h5cd` files as linked 3D viewports.  Launch it from a terminal:
+ChromData files as linked 3D viewports.  Launch it from a terminal:
 
 ```bash
-python -m uchrom.browser tutorials/_out_benchmark/smacof.h5cd \\
-                         tutorials/_out_benchmark/adam.h5cd
+python -m uchrom.browser tutorials/_out_benchmark/smacof.chromdata.zarr \\
+                         tutorials/_out_benchmark/adam.chromdata.zarr
 ```
 
 Inside the browser:
@@ -938,7 +956,7 @@ The screenshot below shows the two reconstructions for this tutorial
     code("""\
 # Exact command printed again for easy copy-paste
 print('python -m uchrom.browser',
-      out_dir / 'smacof.h5cd', out_dir / 'adam.h5cd')"""),
+      out_dir / 'smacof.chromdata.zarr', out_dir / 'adam.chromdata.zarr')"""),
 
     md("""\
 ## Takeaways and next steps
@@ -1130,7 +1148,7 @@ def find_fofct() -> str:
 
 FOFCT = find_fofct()
 print('using', FOFCT)
-cd = ChromData.read(FOFCT) if FOFCT.endswith(".h5cd") else ChromData.from_fofct(FOFCT)
+cd = ChromData.read(FOFCT) if FOFCT.endswith((".h5cd", ".zarr", ".cdz")) else ChromData.from_fofct(FOFCT)
 print(cd)
 print()
 print('traces per chrom:')
@@ -1149,7 +1167,7 @@ loops = call_loops_axiswise_f(
     cd,
     chrom=chrom,
     device='auto',   # CUDA > MPS > CPU
-    store=True,      # also write to cd.results['loops']
+    key_added='loops',   # store under cd.results['loops'] (default key: 'loops.axiswise_f')
     verbose=True,
 )
 loops"""),
@@ -1203,7 +1221,7 @@ params_relaxed = LoopCallerParams(
     pval_cutoff=1e-3,    # more permissive raw p-value
 )
 loops_relaxed = call_loops_axiswise_f(cd, chrom=chrom, params=params_relaxed,
-                                      device='auto', store=False)
+                                      device='auto', key_added=None)
 print(f'default: {len(loops)} loops  |  relaxed: {len(loops_relaxed)} loops')
 if len(loops_relaxed) > len(loops):
     print('\\nExtra candidates at relaxed thresholds:')
@@ -1215,7 +1233,7 @@ if len(loops_relaxed) > len(loops):
 all_loops = []
 for chrom in cd.chroms:
     ls = call_loops_axiswise_f(cd, chrom=chrom, device='auto',
-                               store=False, verbose=False)
+                               key_added=None, verbose=False)
     ls['chrom'] = chrom
     all_loops.append(ls)
 
@@ -1223,17 +1241,17 @@ loops_genome = pd.concat(all_loops, ignore_index=True)
 print(f'Total called loops genome-wide: {len(loops_genome)}')
 loops_genome.sort_values('pval').head(10)"""),
 
-    md("## Persist results into the ChromData\n\nStore the genome-wide loop calls in `cd.results['loops']` and round-trip through `.h5cd`."),
+    md("## Persist results into the ChromData\n\nStore the genome-wide loop calls in `cd.results['loops']` and round-trip through `.chromdata.zarr`."),
 
     code("""\
 cd.results['loops'] = loops_genome
-out = Path(FOFCT).parent / 'with_loops.h5cd'
+out = Path(FOFCT).parent / 'with_loops.chromdata.zarr'
 cd.write(str(out))
 
 cd_reloaded = ChromData.read(str(out))
 print(cd_reloaded.results['loops'])"""),
 
-    md("## CLI\n\nFor batch scripts:\n\n```bash\npython -m uchrom.strc.loop --input=data.h5cd --output=data_loops.h5cd \\\n    --chrom=chr17 --device=auto\n\n# BEDPE export instead\npython -m uchrom.strc.loop --input=data.h5cd --output=loops.bedpe \\\n    --chrom=chr17 --device=auto\n```"),
+    md("## CLI\n\nFor batch scripts:\n\n```bash\npython -m uchrom.strc.loop --input=data.chromdata.zarr --output=data_loops.chromdata.zarr \\\n    --chrom=chr17 --device=auto\n\n# BEDPE export instead\npython -m uchrom.strc.loop --input=data.chromdata.zarr --output=loops.bedpe \\\n    --chrom=chr17 --device=auto\n```"),
 
     md("""\
 ## Comparison notes
@@ -1327,7 +1345,7 @@ def find_fofct() -> str:
 
 FOFCT = find_fofct()
 print(FOFCT)
-cd = ChromData.read(FOFCT) if FOFCT.endswith(".h5cd") else ChromData.from_fofct(FOFCT)
+cd = ChromData.read(FOFCT) if FOFCT.endswith((".h5cd", ".zarr", ".cdz")) else ChromData.from_fofct(FOFCT)
 cd"""),
 
     md("## Run the TAD caller"),
@@ -1517,7 +1535,7 @@ def find_fofct() -> str:
 
 FOFCT = find_fofct()
 print(FOFCT)
-cd = ChromData.read(FOFCT) if FOFCT.endswith(".h5cd") else ChromData.from_fofct(FOFCT)
+cd = ChromData.read(FOFCT) if FOFCT.endswith((".h5cd", ".zarr", ".cdz")) else ChromData.from_fofct(FOFCT)
 cd"""),
 
     md("## Run the compartment caller"),
@@ -1674,7 +1692,7 @@ def find_fofct() -> str:
     return str(dest)
 
 FOFCT = find_fofct()
-cd = ChromData.read(FOFCT) if FOFCT.endswith('.h5cd') else ChromData.from_fofct(FOFCT)
+cd = ChromData.read(FOFCT) if FOFCT.endswith(('.h5cd', '.zarr', '.cdz')) else ChromData.from_fofct(FOFCT)
 cd"""),
 
     md("## FISHnet on a single allele\n\nStart by looking at one trace.  The caller returns a dict with per-plateau domains, canonical boundary bin indices, and a (n_bins × n_bins) `domain_mask` counting how many plateaus grouped each bin pair together — a single-allele analogue of the ensemble domain mask."),
@@ -1734,7 +1752,7 @@ print('  mean domains per trace:', fishnet_df.groupby('trace_id', observed=True)
 fishnet_df.head()"""),
 
     code("""\
-ens = cd.results['fishnet_ensemble']
+ens = cd.results['tads.fishnet.ensemble'][chrom]   # one entry per chromosome
 mask = ens['mask']
 print(f'ensemble domain mask: shape={mask.shape}, max={mask.max()}, n_traces={ens[\"n_traces\"]}')
 
@@ -2052,7 +2070,7 @@ fishnet_df = call_domains_fishnet(
 print(f'{len(fishnet_df)} domains across {fishnet_df["trace_id"].nunique()} traces')"""),
 
     code("""\
-ens = cd.results['fishnet_ensemble']
+ens = cd.results['tads.fishnet.ensemble'][chr_to_use]
 dmat, _, _ = mean_distance_matrix(cd.get_chrom(chr_to_use).to_dataframe(), chrom=chr_to_use)
 
 fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
@@ -2514,7 +2532,7 @@ cd = reconstruct_gem_fish(
     fish_cd=fish_cd,           # swap in FISH for that chromosome
     params=GEMFISHParams(device='auto'),
 )
-cd.write('imr90_chr20_gemfish.h5cd')
+cd.write('imr90_chr20_gemfish.chromdata.zarr')
 ```"""),
 
     md("""\
@@ -2886,7 +2904,7 @@ except ImportError:
 ## Next steps
 
 - **Use the embedding** for cell-type / trajectory analysis — store it
-  in `cd.cellm[...]` and persist with `cd.write('with_higashi.h5cd')`.
+  in `cd.cellm[...]` and persist with `cd.write('with_higashi.chromdata.zarr')`.
 - **Imputed contact maps** are written under
   `cd.uns['higashi']['result_dir']` — not loaded into `ChromData` (per
   the "no `spotp`" design — O(n²) per cell is prohibitive).

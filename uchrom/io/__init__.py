@@ -13,6 +13,7 @@ _EXPORTS = {
     "export_pdb_coords": ("._io", "export_pdb_coords"),
     "particles_to_pdb": ("._io", "particles_to_pdb"),
     "read_bintu_tracing": ("._io", "read_bintu_tracing"),
+    "write_fofct": ("._io", "write_fofct"),
     "read_seqfish_multiomics": (".seqfish_multiomics", "read_seqfish_multiomics"),
     "read_seqfish_transcriptome": (".seqfish_multiomics", "read_seqfish_transcriptome"),
     "load_seqfish_multiomics_linked": (".seqfish_multiomics", "load_seqfish_multiomics_linked"),
@@ -31,6 +32,9 @@ _EXPORTS = {
     "make_higashi_config": (".contacts", "make_higashi_config"),
     "write_label_info": (".contacts", "write_label_info"),
     "write_higashi_inputs": (".contacts", "write_higashi_inputs"),
+    "upgrade_h5cd": (".upgrade", "upgrade_h5cd"),
+    "file_format_version": (".upgrade", "file_format_version"),
+    "convert_chromdata": (".upgrade", "convert"),
 }
 
 __all__ = sorted(_EXPORTS)

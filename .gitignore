@@ -35,6 +35,9 @@ run_whole_genome.py
 *.hic
 *.mcool
 *.h5cd
+*.chromdata.zarr
+*.cdz
+!example-data/sim_cell1/sim_cell1.cdz
 *.h5ad
 *.tar.gz
 example-data/**/*.zip
@@ -75,3 +78,14 @@ example-data/spatial_hicrna/
 benchmarks/fig6/agent_bench/runs/**
 !benchmarks/fig6/agent_bench/runs/**/
 !benchmarks/fig6/agent_bench/runs/**/grades.json
+
+# Figure 2 benchmarks: large inputs / scratch are ignored, result JSONs are committed
+example-data/takei2025_cerebellum/
+example-data/liu2025_mop/
+example-data/fig2_work/
+!paper/fig2/results/*.json
+# real-data validation results (benchmarks/*_validation.py --out)
+!benchmarks/results/*.json
+
+# Fig. 2 build cache (rasterised logos, previews)
+paper/fig2/_cache/

@@ -339,6 +339,7 @@ class MainWindow(QMainWindow):
 
     def _connect_events(self):
         self.menubar.action_open.triggered.connect(self.open_file_dialog)
+        self.menubar.action_open_store.triggered.connect(self.open_store_dialog)
         self.menubar.action_save_session.triggered.connect(self.save_session_dialog)
         self.menubar.action_load_session.triggered.connect(self.load_session_dialog)
         self.menubar.action_add_canvas_hor.triggered.connect(self.add_canvas_hor)
@@ -377,7 +378,20 @@ class MainWindow(QMainWindow):
     def open_file_dialog(self):
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
-        path, _ = QFileDialog.getOpenFileName(self, "Open", "", "Structure Files (*.h5cd *.csv);;ChromData (*.h5cd);;CSV Files (*.csv);;All Files (*)", options=options)
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open", "",
+            "Structure Files (*.cdz *.h5cd *.csv);;ChromData (*.cdz *.h5cd);;CSV Files (*.csv);;All Files (*)",
+            options=options)
+        self._open_path(path)
+
+    def open_store_dialog(self):
+        """Pick a ``.chromdata.zarr`` store (a directory)."""
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog | QFileDialog.ShowDirsOnly
+        path = QFileDialog.getExistingDirectory(self, "Open ChromData store", "", options=options)
+        self._open_path(path)
+
+    def _open_path(self, path):
         if path:
             try:
                 print(path)

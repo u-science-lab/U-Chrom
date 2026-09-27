@@ -36,6 +36,15 @@ from typing import List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from uchrom.core.convention import (
+    UNSET,
+    merge_tables,
+    parse_legacy_call,
+    resolve_chroms,
+    select_spots,
+    selection_inputs,
+    store_and_return,
+)
 from uchrom.fea.arc import axis_variance_cube, filter_normalize, axis_weight
 from uchrom.fea.arc import _coord_tensor, _diff_rows, _row_blocks
 from uchrom.utils.stats import cauchy_combination
@@ -221,49 +230,114 @@ def _cluster_summits(
 
 def call_loops_axiswise_f(
     cd,
-    chrom: str,
+    *args,
+    chrom=None,
+    trace_ids=None,
+    cells=None,
     params: Optional[LoopCallerParams] = None,
     device: str = "auto",
-    store: bool = True,
-    result_key: str = "loops",
+    key_added: Optional[str] = UNSET,
+    copy: bool = False,
     verbose: bool = False,
-) -> pd.DataFrame:
-    """ArcFISH-style loop caller on a single chromosome.
+    streaming: Optional[bool] = None,
+    batch="auto",
+    memory_budget=None,
+    store=UNSET,
+    result_key=UNSET,
+):
+    """ArcFISH-style axis-wise F-test loop caller (chromatin tracing).
 
     Parameters
     ----------
     cd : :class:`uchrom.ChromData`
-        Tracing data.  Must contain ``trace_id`` in ``spots`` and positive
-        coordinates.
-    chrom : str
-        Chromosome name — matched against ``cd.spots['chrom']``.
+        Tracing data.  Must contain ``trace_id`` in ``spots``.
+    chrom : str, sequence of str, or None
+        Chromosome(s) — matched against ``cd.spots['chrom']``.  ``None``
+        (default) calls every chromosome and merges the tables.
+    trace_ids, cells : sequence, optional
+        Restrict the population to these traces / cells.
     params : LoopCallerParams, optional
         Override any default.
     device : str
         ``'auto' | 'cpu' | 'cuda' | 'mps'`` — passed to GPU-friendly
         preprocessing.
-    store : bool
-        If True, also write the result DataFrame into
-        ``cd.results[result_key]``.
-    result_key : str
-        Key under which to store the result (default ``'loops'``).
+    key_added : str or None
+        ``cd.results`` key (default ``"loops.axiswise_f"``); ``None`` does
+        not store.
+    copy : bool
+        ``True`` → return a new ChromData holding the result.
+    streaming : bool, optional
+        Compute the axis-variance cube by streaming over the traces
+        (:func:`uchrom.fea.arc_stream.axis_cube_streaming`: exact medians per
+        row band, memory ``O(n_bins²)`` instead of
+        ``O(n_traces × n_bins²)``).  Default: ``True`` for a backed
+        ``ChromData``.  Results equal the in-memory path up to
+        floating-point rounding of the variance sums.
+    batch, memory_budget
+        Traces per batch (``"auto"``) and working-memory budget of the
+        streaming path (default :data:`uchrom.settings.memory_budget`).
 
     Returns
     -------
-    DataFrame
-        One row per called loop summit.
+    DataFrame (``copy=False``) or ChromData (``copy=True``)
+        One row per called loop summit (BEDPE-style ``chrom1 … end2`` plus
+        ``score, pval, fdr, cluster_size, contact_freq, summit_i,
+        summit_j``; the summit indices are per-chromosome bin indices).
+
+    Notes
+    -----
+    Deprecated 1.x forms (positional ``chrom``, ``store=``,
+    ``result_key=``) still work with a ``DeprecationWarning`` and default
+    to the 1.x key ``"loops"``.
     """
+    chrom, key_added, _ = parse_legacy_call(
+        "call_loops_axiswise_f", args, chrom=chrom, key_added=key_added,
+        store=store, result_key=result_key, default_key="loops.axiswise_f",
+        legacy_key="loops", copy=copy,
+    )
     params = params or LoopCallerParams()
+    work = select_spots(cd, trace_ids=trace_ids, cells=cells)
+    chroms = resolve_chroms(work, chrom)
+    streaming = bool(getattr(work, "backed", False)) if streaming is None else bool(streaming)
+    frames = [_call_loops_chrom(work, c, params, device, verbose, streaming=streaming, batch=batch,
+                                memory_budget=memory_budget) for c in chroms]
+    table = merge_tables(frames, _empty_result())
+    return store_and_return(
+        cd, table, key_added=key_added, copy=copy, kind="intervals", interval_kind="pair",
+        function="uchrom.strc.loop.call_loops_axiswise_f", params=params,
+        inputs=selection_inputs(work, chroms, trace_ids, cells),
+    )
+
+
+def _call_loops_chrom(cd, chrom: str, params: LoopCallerParams,
+                      device: str, verbose: bool, *, streaming: bool = False, batch="auto",
+                      memory_budget=None) -> pd.DataFrame:
+    """Per-chromosome kernel of :func:`call_loops_axiswise_f` (no storing)."""
     from scipy.stats import f as _f_dist
 
     # Step 1 + 2: variances + LOWESS normalisation
     if verbose:
-        print(f"[loop/{chrom}] computing axis variance cube...")
-    cube = axis_variance_cube(cd, chrom=chrom, device=device)
-    if verbose:
-        print(f"[loop/{chrom}] {cube['n_traces']} traces, "
-              f"{len(cube['bin_ids'])} bins; normalising...")
-    cube = filter_normalize(cube, k_sigma=params.k_sigma, frac=params.frac)
+        print(f"[loop/{chrom}] computing axis variance cube"
+              f"{' (streaming)' if streaming else ''}...")
+    if streaming:
+        from uchrom.fea.arc_stream import axis_cube_streaming, pseudo_contact_frequency_streaming
+
+        cube = axis_cube_streaming(cd, chrom, k_sigma=params.k_sigma, frac=params.frac,
+                                   streaming=True, batch=batch, memory_budget=memory_budget)
+        w = cube["axis_weight"]
+
+        def freq_of(bin_ids):
+            return pseudo_contact_frequency_streaming(cube["pairs"])
+    else:
+        cube = axis_variance_cube(cd, chrom=chrom, device=device)
+        if verbose:
+            print(f"[loop/{chrom}] {cube['n_traces']} traces, "
+                  f"{len(cube['bin_ids'])} bins; normalising...")
+        cube = filter_normalize(cube, k_sigma=params.k_sigma, frac=params.frac)
+        w = axis_weight(cd, chrom=chrom, device=device)
+
+        def freq_of(bin_ids):
+            return _pseudo_contact_frequency(cd, chrom, bin_ids, device=device)
 
     bin_ids = cube["bin_ids"]
     B = len(bin_ids)
@@ -271,8 +345,7 @@ def call_loops_axiswise_f(
     count = cube["count"]                           # (3, B, B)
     d1d = cube["genomic_distance"]                  # (B, B)
 
-    # Step 3: axis weights
-    w = axis_weight(cd, chrom=chrom, device=device)
+    # Step 3: axis weights (computed with the cube)
     if verbose:
         print(f"[loop/{chrom}] axis weights x={w[0]:.3f}, y={w[1]:.3f}, z={w[2]:.3f}")
 
@@ -291,10 +364,7 @@ def call_loops_axiswise_f(
     if cand_idx.size == 0:
         if verbose:
             print(f"[loop/{chrom}] no candidates in [{params.cut_lo}, {params.cut_up}]")
-        empty = _empty_result()
-        if store:
-            _store_result(cd, result_key, empty)
-        return empty
+        return _empty_result()
 
     # Step 4: per-axis F-test
     if verbose:
@@ -344,10 +414,7 @@ def call_loops_axiswise_f(
     if not accept.any():
         if verbose:
             print(f"[loop/{chrom}] no candidates pass FDR < {params.fdr_cutoff}")
-        empty = _empty_result()
-        if store:
-            _store_result(cd, result_key, empty)
-        return empty
+        return _empty_result()
 
     # Step 6: cluster accepted hits by 1D distance between midpoints.
     # We order candidates inside a cluster by a full-precision log-p
@@ -367,7 +434,7 @@ def call_loops_axiswise_f(
     # Step 7: pseudo-contact frequency filter
     # Build the (n_traces, n_bins, n_bins) 3D pdist matrix.  Uses the same
     # coord cube as filter_normalize — compute once, store on CPU.
-    freq_mat = _pseudo_contact_frequency(cd, chrom, bin_ids, device=device)
+    freq_mat = freq_of(bin_ids)
 
     # Step 8: final filter — p-value + pseudo-contact frequency
     rows = []
@@ -409,20 +476,7 @@ def call_loops_axiswise_f(
     df_out = pd.DataFrame(rows)
     if df_out.empty:
         df_out = _empty_result()
-
-    if store:
-        _store_result(cd, result_key, df_out)
-
     return df_out
-
-
-def _store_result(cd, key: str, df: pd.DataFrame):
-    """Assign ``df`` into ``cd.results[key]``, creating ``cd.results`` if needed."""
-    results = getattr(cd, "results", None)
-    if results is None:
-        cd.results = {}
-        results = cd.results
-    results[key] = df
 
 
 def _pseudo_contact_frequency(cd, chrom, bin_ids, device="auto"):

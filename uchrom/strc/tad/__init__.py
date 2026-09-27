@@ -13,6 +13,10 @@ from .arc_pval import (
     call_tads_by_pval,
     TADCallerParams,
 )
+from .di_caller import (
+    call_tads_di,
+    DICallerParams,
+)
 from .fishnet import (
     call_domains_fishnet,
     call_domains_fishnet_trace,
@@ -26,6 +30,8 @@ __all__ = [
     "load_tad_from_bed",
     "substructures_from_tads",
     "call_tads_by_pval",
+    "call_tads_di",
+    "DICallerParams",
     "TADCallerParams",
     "call_domains_fishnet",
     "call_domains_fishnet_trace",

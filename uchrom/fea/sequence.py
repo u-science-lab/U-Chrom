@@ -10,7 +10,7 @@ from typing import Iterable, Sequence
 import numpy as np
 import pandas as pd
 
-from .project import INTERVAL_COLUMNS, project_interval_features_to_spots, unique_spot_intervals
+from .project import INTERVAL_COLUMNS, project_interval_features_to_bins, unique_spot_intervals
 from .registry import append_feature_registry_entry, table_provenance
 
 
@@ -105,7 +105,7 @@ def add_sequence_features(
 
     The canonical interval table is returned.  When ``store=True`` it is also
     merged into ``cdata.results[result_key]``.  When ``project=True`` feature
-    columns are projected onto ``cdata.tracks`` using ``prefix``.
+    columns are projected onto ``cdata.bin_tracks`` using ``prefix``.
     """
     requested = _validate_features(features)
     intervals = unique_spot_intervals(cdata)
@@ -127,12 +127,12 @@ def add_sequence_features(
 
     projected_columns = [_prefixed_name(col, prefix) for col in requested]
     if project:
-        cdata.tracks = project_interval_features_to_spots(
+        cdata.bin_tracks = project_interval_features_to_bins(
             cdata,
             table,
             prefix=prefix,
             value_columns=requested,
-            into=cdata.tracks,
+            into=cdata.bin_tracks,
             overwrite=overwrite,
         )
 

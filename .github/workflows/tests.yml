@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.11", "3.12"]
 
     steps:
       - name: Check out repository
@@ -55,7 +55,7 @@ jobs:
       - name: Install package
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[browser,web,anndata,im,snapfish]" pytest httpx
+          pip install -e ".[browser,web,anndata,im,snapfish,spatial]" pytest httpx
 
       - name: Run tests
         run: |
