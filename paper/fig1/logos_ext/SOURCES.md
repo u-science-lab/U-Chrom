@@ -34,3 +34,13 @@ owners and are used for identification only" is recommended.
 - **Open2C**: only a 160 px raster exists (no SVG, no brand page).
 - **Higashi, pyHiM**: official logos exist, but only as small rasters (426×200 and 237×220). pyHiM has no transparency.
 - **HDF5**: no current official SVG found. The 512 px PNG mark is used.
+
+## zarr — `zarr.svg`
+- Source: https://github.com/zarr-developers/zarr-logo (`zarr-pink-horizontal.svg`), the official logo repository referenced by zarr-developers/community.
+- Licence / terms: no explicit licence file in the logo repository; the logo is used across the Zarr community (zarr-python README, GitHub org, docs).
+- Use: identification of the Zarr format in Fig. 1c, unaltered. Low risk; permission optional (Zarr is a NumFOCUS-sponsored project).
+
+## parquet — `parquet.png`
+- Source: https://www.apache.org/logos/res/parquet/parquet_highres.png (Apache Software Foundation project logo page, 3600×734 px).
+- Licence / terms: Apache Parquet and its logo are trademarks of the ASF; the ASF trademark policy (https://www.apache.org/foundation/marks/) allows nominative use to refer to the project without permission, unaltered, with attribution.
+- Use: identification of Parquet tables in Fig. 1c, unaltered. Safe; no permission needed.
