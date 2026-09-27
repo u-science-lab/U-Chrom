@@ -131,8 +131,13 @@ def run_one(q: dict, condition: str, rep: int, data_root: Path, out: Path, model
     data = clone_data((data_root / DATA[q["data"]]).resolve(), w)
     prompt = PROMPT.format(data=data, question=q["prompt"])
     if agent == "claude":
+        # Project settings only, no MCP servers: the user's own skills, plugins and claude.ai connectors
+        # would otherwise be listed next to the benchmark skills (36 extra in main2).  Built-in skills remain.
+        mcp = w.parent / f"{w.name}.mcp.json"          # outside the workdir, like the sandbox profile
+        mcp.write_text('{"mcpServers": {}}')
         cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose",
-               "--allowedTools", "Bash", "Read", "Glob", "Grep", "Skill"]
+               "--allowedTools", "Bash", "Read", "Glob", "Grep", "Skill",
+               "--setting-sources", "project", "--strict-mcp-config", "--mcp-config", str(mcp)]
         if model:
             cmd += ["--model", model]
     else:  # codex (read-only data, writes only in its workdir)
@@ -182,9 +187,12 @@ def run_one(q: dict, condition: str, rep: int, data_root: Path, out: Path, model
             "cost_usd": final.get("total_cost_usd"), "num_turns": final.get("num_turns"),
             "model": init.get("model"), "skills_used": skills_used, "workdir": str(w), "venv": str(venv),
             "claude_code_version": init.get("claude_code_version"),
-            "sandbox_deny": [str(x) for x in deny or []], **audit(lines, data_root)}
+            "sandbox_deny": [str(x) for x in deny or []], "skills_listed": init.get("skills"),
+            **audit(lines, data_root)}
     (d / "meta.json").write_text(json.dumps(meta, indent=1))
     shutil.rmtree(w, ignore_errors=True)
+    if agent == "claude":
+        mcp.unlink(missing_ok=True)
     if deny:
         prof.unlink(missing_ok=True)
     print(f"{q['id']:4s} {condition:6s} r{rep}  {meta['elapsed_s']:5.0f} s  ${meta['cost_usd'] or 0:.2f}  "
