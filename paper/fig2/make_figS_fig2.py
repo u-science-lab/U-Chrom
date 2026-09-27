@@ -260,10 +260,10 @@ def query_speed(fig, x0, y0, e, q):
         ax.set_ylim(1e-5, 30)
         ticks(ax, "y", [1e-4, 1e-2, 1e0], "time")
         ax.set_title(sub, fontsize=6, color=F.INK, pad=2)
-        if k == 0:                      # legend in the empty band between the solid and dashed lines
+        if k == 1:                      # legend in the empty upper-left corner of the right sub-plot
             hs = [Line2D([], [], color=F.TEAL, marker="o", ms=2.4, lw=1.1),
                   Line2D([], [], color=F.TEAL, ls="--", marker="o", ms=2.4, mfc="white", lw=1.0)]
-            ax.legend(hs, ["first query", "cached (LRU)"], loc="center right", bbox_to_anchor=(1.0, 0.5),
+            ax.legend(hs, ["first query", "cached (LRU)"], loc="upper left",
                       frameon=False, fontsize=6, handlelength=2.0, handletextpad=0.4, labelspacing=0.3,
                       borderaxespad=0.2)
 
