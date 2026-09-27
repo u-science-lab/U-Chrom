@@ -405,11 +405,17 @@ def reconstruct_gem_fish(
     if params.verbose:
         print(f"[gem_fish] done.  Output: {final_coords.shape}")
 
-    # --- Wrap into ChromData
+    # --- Wrap into ChromData.  The model covers only the bins inside the
+    # TAD windows (in window order): user TADs may leave gaps (e.g. the
+    # Wang 2016 imaged TADs), so bins outside every window get no spot.
+    model_bins = bin_df.iloc[np.concatenate([np.arange(s, e) for (s, e) in tad_windows])]
+    if len(model_bins) != len(final_coords):
+        raise RuntimeError(f"assembled {len(final_coords)} coordinates for "
+                           f"{len(model_bins)} bins in the TAD windows")
     spots = pd.DataFrame({
-        "chrom": bin_df["chrom"].values,
-        "start": bin_df["start"].astype(int).values,
-        "end": bin_df["end"].astype(int).values,
+        "chrom": model_bins["chrom"].values,
+        "start": model_bins["start"].astype(int).values,
+        "end": model_bins["end"].astype(int).values,
         "trace_id": 0,
     })
     uns = {

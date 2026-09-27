@@ -14,6 +14,12 @@ Usage::
     python example-data/download_data.py --schicar_atac # opt-in, ~1.4 GB ATAC + mm10 GTF
     python example-data/download_data.py --takei2025_cerebellum  # opt-in, 2.8 GB tarball
     python example-data/download_data.py --liu2025_mop           # opt-in, 1.7 GB FOF-CT
+    python example-data/download_data.py --fig3                  # all Fig. 3 inputs (~370 MB)
+    python example-data/download_data.py --ray2019_k562          # opt-in, 849 MB K562 mcool
+    python example-data/download_data.py --dest /shared/example-data --bintu2018
+
+Fig. 3 also needs Rao 2014 Hi-C slices that are *built*, not downloaded
+(the GEO .hic files are 9-51 GB): ``python example-data/build_rao2014_slices.py``.
 
 Datasets marked ``"default": False`` are large and only fetched when
 requested explicitly.  Multi-file datasets list ``files`` as
@@ -31,6 +37,12 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 _GSE305439 = "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE305nnn/GSE305439/suppl"
+_GEMFISH = ("https://raw.githubusercontent.com/ahmedabbas81/GEM-FISH/"
+            "e83fdb46183586bcaecd6f13927283efb02dd646")
+_BINTU = "https://raw.githubusercontent.com/BogdanBintu/ChromatinImaging/master/Data"
+_SU2020 = "https://zenodo.org/records/3928890/files"
+# Stevens et al. 2017 (GEO GSE80280): Cell 1-8 = GSM2219497-GSM2219504
+_STEVENS = [(n, f"GSM{2219496 + n}") for n in range(1, 9)]
 _BIL_MERFISH_MOP = (
     "https://download.brainimagelibrary.org/cf/1c/cf1c1a431ef8d021/processed_data"
 )
@@ -140,6 +152,81 @@ DATASETS = {
         "default": False,
         "description": "Liu 2025 mouse MOp DNA-MERFISH FOF-CT core + cell table (4DN)",
     },
+    # ---- Fig. 3 (paper/fig3/PLAN.md): bridges between contacts and geometry ----
+    # Stevens et al. 2017 (Nature 544:59) haploid mESC single-cell Hi-C, GEO
+    # GSE80280: per-cell contact pairs + the paper's own 10-model 100 kb
+    # structures (.pdb) -- the NucDynamics reference.  GEO gives no md5.
+    "stevens2017": {
+        "files": [
+            (f"stevens2017_mesc/{gsm}_Cell_{n}_{kind}",
+             f"https://ftp.ncbi.nlm.nih.gov/geo/samples/{gsm[:7]}nnn/{gsm}/suppl/{gsm}_Cell_{n}_{kind}")
+            for n, gsm in _STEVENS
+            for kind in ("contact_pairs.txt.gz", "genome_structure_model.pdb.gz")
+        ],
+        "size_mb": 43,
+        "default": False,
+        "fig3": True,
+        "description": "Stevens 2017 mESC scHi-C contacts + published structures, 8 cells (GEO GSE80280)",
+    },
+    # Bintu et al. 2018 (Science 362:eaau1783) chr21:28-30 Mb tracing in IMR90
+    # and K562 (the 18.6-20.6 Mb IMR90 file is the "bintu_imr90" entry above).
+    "bintu2018": {
+        "files": [
+            (f"bintu2018/{name}", f"{_BINTU}/{name}")
+            for name in ("IMR90_chr21-28-30Mb.csv", "K562_chr21-28-30Mb.csv")
+        ],
+        "size_mb": 28,
+        "default": False,
+        "fig3": True,
+        "description": "Bintu 2018 chr21:28-30 Mb tracing, IMR90 + K562 (GitHub)",
+    },
+    # Su et al. 2020 (Cell 182:1641) IMR90 whole-chr21 tracing (651 x 50 kb)
+    # + the authors' Rao 2014 Hi-C summed into the imaged bins (Zenodo 3928890).
+    "su2020_chr21": {
+        "files": [
+            ("su2020_imr90/chromosome21.tsv", f"{_SU2020}/chromosome21.tsv?download=1"),
+            ("su2020_imr90/Hi-C_contacts_chromosome21.tsv",
+             f"{_SU2020}/Hi-C_contacts_chromosome21.tsv?download=1"),
+            ("su2020_imr90/README_August_2020.txt", f"{_SU2020}/README_August%202020.txt?download=1"),
+        ],
+        "md5": {"su2020_imr90/chromosome21.tsv": "170d9d8b081edaa5f4ccaad8aad25eff",
+                "su2020_imr90/Hi-C_contacts_chromosome21.tsv": "7842ef3149e139fe08c6de7df13b3084",
+                "su2020_imr90/README_August_2020.txt": "a93629f38fcc11acdb46ced5fc74bee1"},
+        "size_mb": 262,
+        "default": False,
+        "fig3": True,
+        "description": "Su 2020 IMR90 chr21 chromatin tracing + binned Hi-C (Zenodo 3928890)",
+    },
+    # GEM-FISH (Abbas et al. 2019, Nat Commun 10:2049) repo data, MIT licence,
+    # pinned commit: Wang et al. 2016 FISH of chr20/21/22 TADs in IMR90, the
+    # hg19 TAD windows, Rao 2014 IMR90 chr20 / per-TAD 5 kb Hi-C, and the
+    # paper's final 5 kb models (reference structures).
+    "abbas2019_gemfish": {
+        "files": [
+            (f"abbas2019_gemfish/{name}", f"{_GEMFISH}/{name}")
+            for name in ("complete_example.zip", "GEM-FISH_TAD-level-resolution.zip",
+                         "GEM-FISH_TAD-conformations.zip", "validation_tests_final_models.zip")
+        ],
+        "md5": {"abbas2019_gemfish/complete_example.zip": "6af7dd785744d594ac8a925ffaaabb3b",
+                "abbas2019_gemfish/GEM-FISH_TAD-level-resolution.zip": "0cad10dd88d378ea15be2583873bdac4",
+                "abbas2019_gemfish/GEM-FISH_TAD-conformations.zip": "7a9c04dd4e911057c0caec235444f919",
+                "abbas2019_gemfish/validation_tests_final_models.zip": "31d5e7164675680b0dcfbf3183a02fad"},
+        "size_mb": 40,
+        "default": False,
+        "fig3": True,
+        "description": "GEM-FISH repo data: Wang 2016 FISH, TADs, Hi-C, final models (GitHub, MIT)",
+    },
+    # 4DN 4DNFI4QQPDMR: K562 in situ Hi-C (Ray et al. 2019, set 4DNESU95RUNO).
+    # IMR90_chr21_30kb.cool was cut from this file -- it is K562, not IMR90.
+    "ray2019_k562": {
+        "files": [("ray2019_k562/4DNFI4QQPDMR.mcool",
+                   "https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/"
+                   "1c856462-1e76-4850-bfa6-defcf1524d42/4DNFI4QQPDMR.mcool")],
+        "md5": {"ray2019_k562/4DNFI4QQPDMR.mcool": "84f4e708e2e7b55078b670ed4b8db709"},
+        "size_mb": 849,
+        "default": False,
+        "description": "K562 in situ Hi-C mcool (4DN 4DNFI4QQPDMR; source of IMR90_chr21_30kb.cool)",
+    },
     # BICCN MERFISH mouse MOp atlas (Zhang et al. 2021, Nature), BIL doi:10.35077/g.21.
     "merfish_mop": {
         "files": [
@@ -185,8 +272,15 @@ def main() -> None:
             f"--{key}", action="store_true",
             help=f"fetch {info['description']} ({info['size_mb']} MB)",
         )
+    ap.add_argument("--fig3", action="store_true",
+                    help="fetch every Fig. 3 input (bintu_imr90 + the entries marked fig3)")
+    ap.add_argument("--dest", type=Path, default=HERE,
+                    help="directory to stage into (default: this example-data folder)")
     args = ap.parse_args()
     selected = [k for k in DATASETS if getattr(args, k)]
+    if args.fig3:
+        selected += [k for k, info in DATASETS.items()
+                     if (info.get("fig3") or k == "bintu_imr90") and k not in selected]
     if not selected:
         selected = [k for k, info in DATASETS.items() if info.get("default", True)]
 
@@ -194,12 +288,12 @@ def main() -> None:
         info = DATASETS[key]
         files = info.get("files") or [(info["filename"], info["url"])]
         for rel, url in files:
-            _download(url, HERE / rel, info["description"], info["size_mb"])
+            _download(url, args.dest / rel, info["description"], info["size_mb"])
             want = info.get("md5", {}).get(rel)
-            if want and _md5(HERE / rel) != want:
+            if want and _md5(args.dest / rel) != want:
                 raise SystemExit(f"[fail] md5 mismatch for {rel} (expected {want})")
 
-    print(f"\nAll requested datasets staged under: {HERE}")
+    print(f"\nAll requested datasets staged under: {args.dest}")
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | ------------------------------------- | ------- | --------------- | ------------- | ----------------------------------------------------------------------- |
 | `cell1.pairs`                         | 4.7 MB  | yes             | —             | `reconstruction.ipynb`, root README CLI example                         |
 | `cell2.pairs.gz`                      | 5.4 MB  | yes             | —             | (available for experimentation; bulkier variant of `cell1.pairs`)       |
-| `IMR90_chr21_30kb.cool`               | 280 KB  | yes             | —             | `gem_fish_reconstruction` tutorial (Hi-C side); `call_tads_di` test + `benchmarks/cd2_callers_validation.py` |
+| `IMR90_chr21_30kb.cool` (**K562 data**, see its section) | 280 KB  | yes             | —             | `gem_fish_reconstruction` tutorial (Hi-C side); `call_tads_di` test + `benchmarks/cd2_callers_validation.py` |
 | `4DNFIFINA2U9.csv`                    | 58 KB   | yes             | —             | Takei 2021 cell table (RNA counts, nuclear area) for `from_fofct(cell_table=…)`, web browser; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | `4DNFIJ52NVDV.csv`                    | 219 KB  | yes             | —             | Takei 2021 nascent RNA spots for `from_fofct(rna_table=…)`, web browser; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer) |
 | `takei2025_cerebellum_fixture/`       | ~750 KB | **missing** — listed but never committed (see its section) | — | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture) |
@@ -24,7 +24,13 @@ auto-downloaded by the tutorials on first run into this directory.
 | Takei 2025 other Zenodo archives (cerebellum rep 2, E14, NMuMG) | 5.3–11 GB each | no | **manual** | `seqfish_multiomics_cerebellum` tutorial (real-data run) |
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials; `tests/core/test_fofct_writer.py` (skipped when absent); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd21_streaming_validation.py` (streaming vs in-memory ArcFISH loop / TAD calls); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
-| `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial                                     |
+| `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial; Fig. 3b / 3c (`benchmarks/fig3/b_first_look.py`, `c_gemfish_first_look.py`) |
+| `stevens2017_mesc/` (8 cells: contact pairs + published `.pdb` structures) | 43 MB | no | GEO GSE80280 (`--stevens2017`) | Fig. 3a (NucDynamics reference; `benchmarks/fig3/a_sc_consistency.py`) |
+| `bintu2018/{IMR90,K562}_chr21-28-30Mb.csv` | 7.8 MB + 20 MB | no | GitHub raw (`--bintu2018`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
+| `su2020_imr90/chromosome21.tsv` + `Hi-C_contacts_chromosome21.tsv` | 261 MB + 1 MB | no | Zenodo 3928890 (`--su2020_chr21`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
+| `abbas2019_gemfish/*.zip` (Wang 2016 FISH, TADs, Hi-C, GEM-FISH final models) | 40 MB | no | GitHub, pinned commit (`--abbas2019_gemfish`) | Fig. 3a / 3c (`benchmarks/fig3/c_gemfish_wang2016.py`) |
+| `rao2014_{imr90,k562}/*_chr21_5kb_hg19.cool` | 3.8 MB each | no | **built** from GEO GSE63525 `.hic` by HTTP range reads (`build_rao2014_slices.py`) | Fig. 3b / 3c |
+| `ray2019_k562/4DNFI4QQPDMR.mcool` | 849 MB | no | 4DN public S3 (opt-in, `--ray2019_k562`) | provenance of `IMR90_chr21_30kb.cool` (K562) |
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
 | `H1Esc-HFF.R1.tar.gz`                 | 128 MB  | no              | UW Noble lab  | `higashi_embedding` tutorial (sci-Hi-C H1Esc+HFF mix)                   |
 | `H1Esc-HFF.R1.labeled`                | 92 KB   | no              | UW Noble lab  | `higashi_embedding` tutorial (cell-type labels)                         |
@@ -50,18 +56,28 @@ and `python -m uchrom.io.upgrade` converts them).
 
 - **Format**: plain-text `.pairs` (no header) with 7 tab-separated columns
   `read_id, chrom1, pos1, chrom2, pos2, strand1, strand2`.
-- **Content**: 105,700 paired-end reads from one mESC G1 cell.
+- **Content**: 105,700 paired-end reads from one haploid mESC G1 cell
+  (Stevens *Cell 1*, mm10).
 - **Source**: Stevens et al. 2017, *Nature* 544:59–64, "3D structures of
-  individual mammalian genomes studied by single-cell Hi-C".  GEO
-  accession [GSE80006](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE80006).
-  Distributed with the Nuc Dynamics software (github.com/tjs23/nuc_dynamics).
+  individual mammalian genomes studied by single-cell Hi-C",
+  doi:[10.1038/nature21429](https://doi.org/10.1038/nature21429).  GEO
+  accession [GSE80280](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE80280)
+  (Cell 1 = GSM2219497).  *Earlier versions of this catalog cited GSE80006,
+  which is Flyamer et al. 2017 (oocyte / zygote snHi-C), not this study.*
+  Distributed with the Nuc Dynamics software (github.com/tjs23/nuc_dynamics,
+  `example_chromo_data.tar.gz` → `Cell_1_contacts.ncc`): every distinct
+  contact of `cell1.pairs` appears in that NCC file (minus-strand ends differ
+  by ~70 bp: `cell1.pairs` stores the read start on both strands).  The GEO
+  per-cell file (`stevens2017_mesc/`) has 111,838 contacts.
 - **Used by**: `tutorials/reconstruction.ipynb` (Nuc Dynamics worked example);
   mentioned in the root `README.md` CLI demo.
 
 ### `cell2.pairs.gz` — single-cell Hi-C (v1.0 pairs format, gzipped)
 
 - **Format**: gzipped pairs **v1.0** (with `##` header), 503,720 reads.
-- **Source**: same Stevens 2017 dataset, a different cell.
+- **Source**: stated to be the same Stevens 2017 dataset, a different
+  cell — **unverified**: 503,720 reads is more than any GSE80280 cell file
+  (31–112 k contacts), so it may be unfiltered reads or another study.
 - **Used by**: not wired into any tutorial yet — kept for users who want
   to experiment with a larger, header-carrying pairs file.
 
@@ -149,16 +165,29 @@ and `python -m uchrom.io.upgrade` converts them).
 - The same set also has sequential IF (17 chromatin marks) described in the
   paper; it is not among the 4DN FOF-CT files.
 
-### `IMR90_chr21_30kb.cool` — Rao 2014 IMR90 chr21 at 30 kb (0.3 MB)
+### `IMR90_chr21_30kb.cool` — chr21 at 30 kb (0.3 MB) — **K562, not IMR90**
 
+- **Provenance correction (Fig. 3 data check, 2026-09)**: despite its name,
+  this file is **K562** Hi-C.  Its source, 4DN
+  [4DNFI4QQPDMR](https://data.4dnucleome.org/4DNFI4QQPDMR/) (849,258,990 B,
+  md5 `84f4e708e2e7b55078b670ed4b8db709`), is "in situ Hi-C on non-heat
+  treated K562 cells with MboI" — experiment set 4DNESU95RUNO, Ray et al.
+  2019 (PMID 31506350, GEO GSE130758), Lis lab — not Rao et al. 2014
+  IMR90.  Re-deriving chr21 from that mcool with the recipe below gives a
+  matrix identical to this file (all 1 557 × 1 557 entries).  Its chr21
+  total is 1.06 M contacts vs 9.2 M in real Rao 2014 IMR90.  The file name
+  is kept so tests and tutorials keep working; **do not use it as IMR90**.
+  Real Rao 2014 IMR90: GEO GSE63525 (hg19; sliced by
+  `build_rao2014_slices.py` → `rao2014_imr90/`) or 4DN set 4DNES1ZEJNRU
+  (GRCh38 mcools 4DNFIR1JDZH7, 4.6 GB, and 4DNFIJTOIGOI, 8.3 GB — both
+  range-readable over HTTP).
 - **Format**: single-resolution cooler.  1 557 bins × 30 kb covering
   chr21 (hg38).
-- **Content**: IMR90 in situ Hi-C pair counts from Rao et al. 2014,
-  aggregated from the native 5 kb to 30 kb to match the Bintu 2018
-  chromatin-tracing resolution.
+- **Content**: K562 in situ Hi-C pair counts (Ray et al. 2019, control
+  condition), aggregated from the native 5 kb to 30 kb.
 - **Source**: 4DN accession [4DNFI4QQPDMR](https://data.4dnucleome.org/4DNFI4QQPDMR/)
-  (the full 810 MB IMR90 `.mcool`; we extract chr21 at 30 kb into this
-  small `.cool` for redistribution).
+  (849 MB K562 `.mcool`, `download_data.py --ray2019_k562`; we extract
+  chr21 at 30 kb into this small `.cool` for redistribution).
 - **How it was derived**:
   ```python
   from cooler import Cooler; import cooler, numpy as np, pandas as pd
@@ -286,9 +315,11 @@ using.
   ``https://raw.githubusercontent.com/BogdanBintu/ChromatinImaging/master/Data/IMR90_chr21-18-20Mb.csv``
 - **Used by**: ``gem_fish_reconstruction.ipynb`` (part 2 — real FISH
   data).  The tutorial synthesises a matching Hi-C from the FISH
-  population-mean so it runs offline; to reproduce the paper's exact
-  setup, substitute the Rao 2014 IMR90 ``.mcool`` from 4DN at 30 kb
-  resolution.
+  population-mean so it runs offline — this breaks the "never fabricate
+  inputs" rule and is flagged in ``paper/fig3/PLAN.md``; the real Hi-C for
+  this region is ``rao2014_imr90/IMR90_chr21_5kb_hg19.cool`` (Bintu's hg19
+  coordinates: chr21:20,000,032–21,949,831).  Also Fig. 3b / 3c:
+  ``benchmarks/fig3/b_first_look.py``, ``c_gemfish_first_look.py``.
 
 ### `GSE63525_GM12878_insitu_primary+replicate_combined_30.hic` — GM12878 in-situ combined Hi-C (~40 GB)
 
@@ -573,6 +604,134 @@ public data alone** and are shipped with their recorded outputs.
   `benchmarks/fofct_roundtrip_validation.py`
   (FOF-CT writer); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`).
 
+## Figure 3 datasets — bridges between contacts and geometry
+
+Inputs of `benchmarks/fig3/` (plan and reference numbers:
+`paper/fig3/PLAN.md`).  All opt-in: `python example-data/download_data.py
+--fig3` fetches the downloadable ones (~370 MB), and
+`python example-data/build_rao2014_slices.py` builds the Hi-C slices.
+Everything is gitignored.  DOIs checked against Crossref (2026-09-27).
+
+### `stevens2017_mesc/` — Stevens 2017 haploid mESC single-cell Hi-C + published structures (43 MB)
+
+- **Source**: Stevens TJ *et al.* "3D structures of individual mammalian
+  genomes studied by single-cell Hi-C." *Nature* 544:59–64 (2017),
+  doi:[10.1038/nature21429](https://doi.org/10.1038/nature21429).  GEO
+  [GSE80280](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE80280),
+  Cells 1–8 = GSM2219497–GSM2219504; open access.
+- **Files** (per cell, `https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2219nnn/<GSM>/suppl/`):
+  `<GSM>_Cell_<n>_contact_pairs.txt.gz` (0.3–1 MB; tab-separated
+  `chrA posA chrB posB`, no header; 31,507–111,838 contacts) and
+  `<GSM>_Cell_<n>_genome_structure_model.pdb.gz` (~4.7 MB; the paper's 10
+  final NucDynamics models at 100 kb, coordinates in particle radii).
+  Not fetched: `Cell-<n>.hdf5.gz` (~2.6 GB each) and `GSE80280_RAW.tar`
+  (20 GB).  GEO publishes no checksums; checked by parsing (8 × 10 models).
+- **Content**: haploid 129/Ola mESC in G1, mm10.
+- **Download**: `download_data.py --stevens2017`.
+- **Used by**: Fig. 3a — NucDynamics reference structures and the
+  paper's precision metric (`benchmarks/fig3/a_sc_consistency.py`).
+
+### `bintu2018/` — Bintu 2018 chr21:28–30 Mb tracing, IMR90 + K562 (28 MB)
+
+- **Source**: Bintu B *et al.* "Super-resolution chromatin tracing reveals
+  domains and cooperative interactions in single cells." *Science*
+  362:eaau1783 (2018), doi:[10.1126/science.aau1783](https://doi.org/10.1126/science.aau1783).
+  GitHub [BogdanBintu/ChromatinImaging](https://github.com/BogdanBintu/ChromatinImaging)
+  `Data/` (no licence file in the repo; data published with the paper).
+- **Files**: `IMR90_chr21-28-30Mb.csv` (7,795,158 B; 4,871 chromosomes)
+  and `K562_chr21-28-30Mb.csv` (20,080,720 B; 13,996 chromosomes); sizes
+  match the GitHub API.  Same CSV layout as `IMR90_chr21-18-20Mb.csv`
+  (`Chromosome index, Segment index, Z, X, Y`, nm; 65 × 30 kb segments).
+- **Coordinates**: hg38 chr21:28,000,071–29,949,939; hg19
+  chr21:29,372,390–31,322,257 (from the repo's `Data/README.md`).
+- **Download**: `download_data.py --bintu2018`.
+- **Used by**: Fig. 3b (`benchmarks/fig3/b_first_look.py`): imaging
+  contact frequency vs Rao 2014 Hi-C of the same cell line, and the
+  cross-cell-line controls.
+
+### `su2020_imr90/` — Su 2020 IMR90 whole-chr21 tracing + binned Hi-C (262 MB)
+
+- **Source**: Su J-H *et al.* "Genome-Scale Imaging of the 3D Organization
+  and Transcriptional Activity of Chromatin." *Cell* 182:1641–1659 (2020),
+  doi:[10.1016/j.cell.2020.07.032](https://doi.org/10.1016/j.cell.2020.07.032).
+  Zenodo [3928890](https://zenodo.org/records/3928890)
+  (doi:10.5281/zenodo.3928890), CC-BY-4.0.
+- **Files** (md5 from Zenodo, verified): `chromosome21.tsv` (260,629,499 B,
+  `170d9d8b…`; columns `Z(nm) X(nm) Y(nm)`, `Genomic coordinate`,
+  `Chromosome copy number`, genes / transcription / TSS),
+  `Hi-C_contacts_chromosome21.tsv` (1,045,862 B, `7842ef31…`; the authors'
+  Rao 2014 IMR90 reads summed into the 651 imaged bins), and
+  `README_August_2020.txt`.
+- **Content**: IMR90, hg38, 651 × 50 kb loci across chr21
+  (10.4–46.7 Mb), 7,591 traced chromosome copies.  The other Zenodo files
+  (chr2, genome-scale DNA-MERFISH, 0.08–0.65 GB each) are not fetched.
+- **Download**: `download_data.py --su2020_chr21`.
+- **Used by**: Fig. 3b (`benchmarks/fig3/b_first_look.py`), whole-chromosome
+  imaging vs Hi-C.
+
+### `abbas2019_gemfish/` — GEM-FISH repository data (40 MB)
+
+- **Source**: Abbas A *et al.* "Integrating Hi-C and FISH data for modeling
+  of the 3D organization of chromosomes." *Nat Commun* 10:2049 (2019),
+  doi:[10.1038/s41467-019-10005-6](https://doi.org/10.1038/s41467-019-10005-6).
+  GitHub [ahmedabbas81/GEM-FISH](https://github.com/ahmedabbas81/GEM-FISH),
+  MIT licence, pinned at commit `e83fdb4` (2019-01-02).  The FISH is Wang S
+  *et al.* *Science* 353:598–602 (2016),
+  doi:[10.1126/science.aaf8084](https://doi.org/10.1126/science.aaf8084);
+  the Hi-C is Rao 2014 IMR90 (GSE63525).
+- **Files** (md5 verified): `complete_example.zip` (21.8 MB; Wang 2016
+  `chr20/21/22.xlsx` — per-cell TAD-centre coordinates in µm, 30 / 34 / 27
+  TADs — the hg19 TAD windows `tads_chr2{0,1,2}_hg19.txt`, chr20 Rao 2014
+  IMR90 5–100 kb RAWobserved + KR vectors), `GEM-FISH_TAD-level-resolution.zip`
+  (0.2 MB; chr21 TAD-level input), `GEM-FISH_TAD-conformations.zip` (4.2 MB;
+  chr21 per-TAD 5 kb Hi-C), `validation_tests_final_models.zip` (14 MB; the
+  paper's **final 5 kb models** of chr20/21/22 in nm, per-TAD Hi-C).  No
+  chrX data in the repo.
+- **Download**: `download_data.py --abbas2019_gemfish`.
+- **Used by**: Fig. 3a / 3c (`benchmarks/fig3/c_gemfish_wang2016.py`).
+  The shipped final chr21 model scores a mean relative error of 0.143
+  against the shipped FISH, reproducing the paper's Table 1 (0.14).
+
+### `rao2014_imr90/`, `rao2014_k562/` — Rao 2014 Hi-C slices (built, 3.8 MB each)
+
+- **Source**: Rao SSP *et al.* "A 3D Map of the Human Genome at Kilobase
+  Resolution Reveals Principles of Chromatin Looping." *Cell*
+  159:1665–1680 (2014), doi:[10.1016/j.cell.2014.11.021](https://doi.org/10.1016/j.cell.2014.11.021).
+  GEO [GSE63525](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE63525):
+  `GSE63525_IMR90_combined.hic` (13 GB) and `GSE63525_K562_combined.hic`,
+  hg19, MAPQ > 0 — the files Bintu 2018 used.
+- **Recipe**: `python example-data/build_rao2014_slices.py [--cell IMR90 K562]
+  [--chroms 21] [--res 5000]` reads only the needed blocks over HTTP range
+  requests with `hicstraw` (~30 s per chromosome, < 2 GB RAM) and writes
+  raw observed counts to `rao2014_<cell>/<CELL>_chr21_5kb_hg19.cool`
+  (chr21: 10.27 M IMR90 / 9.54 M K562 contacts).  Other chromosomes,
+  resolutions and GM12878 work the same way (`--cell GM12878 --chroms 22
+  --res 100000` for the miniMDS benchmark).
+- **Checked**: the IMR90 chr21:28–30 Mb block reproduces Bintu 2018
+  Fig. 1J (median distance vs Hi-C, ρ = −0.96; here −0.975).
+- **Used by**: Fig. 3b / 3c (`benchmarks/fig3/`).
+
+### `ray2019_k562/4DNFI4QQPDMR.mcool` — K562 in situ Hi-C (849 MB, opt-in)
+
+- **Source**: Ray J *et al.* "Chromatin conformation remains stable upon
+  extensive transcriptional changes driven by heat shock." *PNAS*
+  116:19431 (2019), doi:[10.1073/pnas.1901244116](https://doi.org/10.1073/pnas.1901244116);
+  4DN [4DNFI4QQPDMR](https://data.4dnucleome.org/4DNFI4QQPDMR/) (set
+  4DNESU95RUNO, GEO GSE130758), GRCh38, md5 `84f4e708e2e7b55078b670ed4b8db709`
+  (verified).  S3: `https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/1c856462-1e76-4850-bfa6-defcf1524d42/4DNFI4QQPDMR.mcool`.
+- **Download**: `download_data.py --ray2019_k562`.
+- **Used by**: provenance check only — `IMR90_chr21_30kb.cool` equals its
+  chr21 summed to 30 kb (see that section).
+
+### Large Fig. 3 sources — documented, not downloaded (slice instead)
+
+| Dataset | Accession / URL | Size | Build | Slice recipe |
+| --- | --- | --- | --- | --- |
+| Rao 2014 GM12878 in situ (miniMDS benchmark) | GEO GSE63525 `GSE63525_GM12878_insitu_primary+replicate_combined.hic` | 51 GB (`_30.hic` 37 GB) | hg19 | `build_rao2014_slices.py --cell GM12878 --chroms 22 --res 100000` (and 10 kb) |
+| Rao 2014 IMR90 in situ, 4DN | set 4DNES1ZEJNRU: [4DNFIR1JDZH7](https://data.4dnucleome.org/4DNFIR1JDZH7/) (4,639,622,711 B, md5 `f91b77fa…`), [4DNFIJTOIGOI](https://data.4dnucleome.org/4DNFIJTOIGOI/) (8.3 GB) | 4.6–8.3 GB | GRCh38 | range-read one resolution: `h5py.File(fsspec.open(url).open())` → `cooler.Cooler(h['resolutions/5000'])` (~10 s per region) |
+| Bonev 2017 mESC Hi-C (Takei 2021's comparison) | GEO GSE96107; 4DN set 4DNESDXUWBD9 [4DNFIC21MG3U](https://data.4dnucleome.org/4DNFIC21MG3U/) (12.6 GB, mm10) | 11–13 GB | mm10 | same fsspec range read, the 20 Takei 2021 loci × 25 kb; smaller unsorted-ES mcool 4DNFIDA2WGV8 (0.9 GB) |
+| Stevens 2017 HDF5 + raw | GSE80280 `Cell-<n>.hdf5.gz`, `GSE80280_RAW.tar` | 2.6 GB each / 20 GB | mm10 | not needed (contacts + `.pdb` suffice) |
+
 ## Generated outputs
 
 - `with_loops.chromdata.zarr` (older runs: `with_loops.h5cd`) — created at the end of `loop_calling.ipynb` as a
@@ -591,8 +750,11 @@ offline / CI environments), run:
 
 ```bash
 python example-data/download_data.py
+python example-data/download_data.py --fig3        # Fig. 3 inputs (opt-in)
+python example-data/build_rao2014_slices.py         # Fig. 3 Hi-C slices (built)
 ```
 
+`--dest DIR` stages into another directory (e.g. a shared data folder).
 This is idempotent — files already present are skipped.
 
 ## Adding a new dataset
