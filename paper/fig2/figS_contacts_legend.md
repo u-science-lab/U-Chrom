@@ -1,5 +1,0 @@
-**Supplementary Figure S3 — Linked vs copied contacts (scHiCAR mouse MOp, 5,313 cells, per-cell 1 Mb `.scool`).**
-**a**, On-disk size. Left: the ChromData store alone when the per-cell contact maps are *linked* (the store records the `.scool` path, bin size and cell naming; 5 MB) or *copied* (every cell's pixels written into the store as a Parquet table, zstd-3; 135 MB). Right: the user's total footprint, where the community `.scool` (253 MB, hatched) is kept either way: 258 MB linked vs 388 MB copied.
-**b**, Import time on the `.chromdata.zarr` container, fresh process, median of 3 (whiskers min–max): linking 0.34 s vs copying all 51 M pixels 7.6 s.
-**c**, Whole-genome cis pseudo-bulk of each of the 22 cell types, queried through the shared index (`Dataset.contacts(group=…)`, the web browser's path), summed over all 21 chromosomes: first query vs the same query again (LRU cache). Every pseudo-bulk equals the published per-type `.cool` (coarsened to 1 Mb; max |Δ| = 0 over 4.2 M pixels; Supplementary Fig. S2b).
-Data: `paper/fig2/results/e_query.json` (`benchmarks/fig2/e_contacts_query.py`); machine: Apple M5 Pro, 64 GB, macOS 26.4, warm OS cache.
