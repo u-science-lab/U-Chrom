@@ -67,6 +67,9 @@ def child_read(fmt_key, path):
         import uchrom.core.backed  # noqa: F401
     except ImportError:  # 1.x checkout
         pass
+    if fmt_key == "spatialdata":
+        import spatialdata  # noqa: F401  (import cost out of the timing, like the others)
+        import dask.dataframe  # noqa: F401
     base = C.current_rss_mb()
     t0 = time.perf_counter()
     obj = fmt.read(Path(path))

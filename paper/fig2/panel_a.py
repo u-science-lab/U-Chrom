@@ -1,4 +1,4 @@
-"""Figure 2a (DRAFT) — ChromData 2.0: tables, keys and on-disk layout.
+"""Figure 2a — ChromData: tables, keys and the on-disk layout (format 2.2).
 
 Follows docs/source/guide/chromdata_2_0_design.md (Overview, section 2 `bins`,
 section 4) and the on-disk layout actually written by ``uchrom.core.zarrcd``
@@ -68,7 +68,7 @@ def table(c, x, y, w, h, color, cols=None, rows=8, title=None, sub=None, ls="-")
         cw = w / len(cols)
         for i, col in enumerate(cols):
             if i:
-                c.line([x + i * cw] * 2, [y, y + h], color=color, lw=0.25)
+                c.line([x + i * cw] * 2, [y, y + h], color=color, lw=0.3)
             c.t(x + (i + 0.5) * cw, y - 1.0, col, size=6, color=color, ha="center", va="bottom", rotation=90)
     if title:
         c.t(x + w / 2, y + h + 2.2, title, size=7, weight="bold", color=INK, ha="center")
@@ -79,7 +79,7 @@ def table(c, x, y, w, h, color, cols=None, rows=8, title=None, sub=None, ls="-")
 def draw(c: C) -> None:
     c.t(0.5, 1.5, "a", size=10, weight="bold", va="top")
     c.t(6, 1.8, "ChromData: tables joined by keys", size=8.5, weight="bold", va="top")
-    c.t(64, 2.2, "format 2.1", size=6, color=GREY, va="top")
+    c.t(64, 2.2, "format 2.2", size=6, color=GREY, va="top")
 
     # ---------------------------------------------------------------- bins axis (top)
     bx, by, bw, nb = 40, 13, 56, 14
@@ -87,7 +87,7 @@ def draw(c: C) -> None:
     c.t(bx - 1.5, by + 4.6, "genomic loci", size=6, color=GREY, ha="right")
     c.rect(bx, by, bw, 3.2, fc=TINT[GREY], ec=LINE, lw=0.5)
     for k in range(1, nb):
-        c.line([bx + bw * k / nb] * 2, [by, by + 3.2], color=GREY, lw=0.25)
+        c.line([bx + bw * k / nb] * 2, [by, by + 3.2], color=GREY, lw=0.3)
     c.t(bx + bw + 1.5, by + 1.6, "chrom · start · end", size=6, color=GREY)
     rng = np.random.default_rng(3)
     for r, name in enumerate(["ATAC", "ChIP"]):
@@ -109,7 +109,7 @@ def draw(c: C) -> None:
     for i, col in enumerate(["bin_id", "trace_id", "cell_id"]):
         c.t(sx + (i + 0.5) * sw / 3, sy - 1.4, col, size=6, color=INDIGO, ha="center", weight="bold")
         if i:
-            c.line([sx + i * sw / 3] * 2, [sy, sy + sh], color=INDIGO, lw=0.25)
+            c.line([sx + i * sw / 3] * 2, [sy, sy + sh], color=INDIGO, lw=0.3)
     c.t(sx + sw / 2, sy + sh + 2.4, "spots", size=7, weight="bold", ha="center")
     c.t(sx + sw / 2, sy + sh + 5.2, "one row per observation", size=6, color=GREY, ha="center")
     cells_b = [0, 0.45, 0.8, 1.0]
@@ -122,7 +122,7 @@ def draw(c: C) -> None:
             c.rect(sx - 2.3, sy + sh * t0 + 0.2, 1.3, sh * (t1 - t0) - 0.4, fc="#9fb2d3", ec="none")
     c.t(sx - 3.35, sy - 1.0, "cell", size=6, color=INDIGO, ha="center", va="bottom", rotation=90)
     c.t(sx - 1.65, sy - 1.0, "trace", size=6, color=INDIGO, ha="center", va="bottom", rotation=90)
-    c.t(sx - 6.3, sy + sh / 2, "per chrom: cell › trace › bin", size=6, color=GREY, ha="center", rotation=90)
+    c.t(sx - 6.3, sy + sh / 2, "cell › trace › bin", size=6, color=GREY, ha="center", rotation=90)
     # coords (+ layers) and spot_tracks
     cx = sx + sw + 3
     for k in (2, 1):
@@ -131,18 +131,22 @@ def draw(c: C) -> None:
     for i, col in enumerate("xyz"):
         c.t(cx + (i + 0.5) * 8 / 3, sy - 1.4, col, size=6, color=ORANGE, ha="center", weight="bold")
         if i:
-            c.line([cx + i * 8 / 3] * 2, [sy, sy + sh], color=ORANGE, lw=0.25)
+            c.line([cx + i * 8 / 3] * 2, [sy, sy + sh], color=ORANGE, lw=0.3)
     c.t(cx + 4, sy + sh + 2.4, "coords", size=7, weight="bold", ha="center", color=ORANGE)
     c.t(cx + 4, sy + sh + 5.2, "+ layers", size=6, color=GREY, ha="center")
-    # on disk, spots and coords are one table: x, y, z are columns of tables/spots/chrom=…/
+    # on disk (format 2.2): keys + x, y, z once, one table per chromosome (tables/coords/);
+    # every other spot-aligned column in cell-sorted primary tables (tables/primary/)
     bx0, bx1, byb = sx, cx + 8, sy + sh + 8.4
     c.line([bx0, bx0, bx1, bx1], [byb - 0.9, byb, byb, byb - 0.9], color=GREY, lw=0.4)
-    c.t((bx0 + bx1) / 2, byb + 2.4, "on disk: one table per chromosome, spots/chrom=…/", size=6, color=GREY, ha="center")
+    c.t((bx0 + bx1) / 2, byb + 1.3, "on disk: keys + xyz stored once,\none table per chromosome", size=6,
+        color=GREY, ha="center", va="top", linespacing=1.0)
     tx = cx + 13
     table(c, tx, sy, 8, sh, PURPLE, rows=12)
     c.t(tx + 4, sy - 1.4, "IF · …", size=6, color=PURPLE, ha="center", weight="bold")
     c.t(tx + 4, sy + sh + 2.4, "spot_tracks", size=7, weight="bold", ha="center", color=PURPLE)
     c.t(tx + 4, sy + sh + 5.2, "per spot", size=6, color=GREY, ha="center")
+    c.line([tx, tx, tx + 8, tx + 8], [byb - 0.9, byb, byb, byb - 0.9], color=GREY, lw=0.4)
+    c.t(tx + 4, byb + 1.3, "cell-sorted\nprimary", size=6, color=GREY, ha="center", va="top", linespacing=1.0)
 
     # bin_id → bins
     c.arrow((sx + sw / 6, sy - 3.2), (bx + 3, by + 10.4), rad=-0.3)
@@ -182,48 +186,41 @@ def draw(c: C) -> None:
     c.t(ex + 9, 63.2, "uns", size=6, ha="center")
 
     # ---------------------------------------------------------------- on-disk layout (right column)
-    # the actual store written by uchrom.core.zarrcd (see its module docstring / spec.md);
-    # filled = read on open (BackedChromData eager parts), hollow = read on access (backed)
-    dx, dy = 127, 8
+    # the actual store written by uchrom.core.zarrcd (format 2.2; spec.md); a glyph per node gives
+    # its storage type: Parquet table, Zarr array or JSON attributes
+    dx, dy = 127, 7
     c.rect(dx - 2, dy - 2.5, 44.5, H - dy + 1.5, fc="#f7f8fa", ec=LGREY, lw=0.5, r=1.5, z=0)
-    c.t(dx, dy + 0.5, "x.chromdata.zarr", size=7, weight="bold")
-    c.t(dx, dy + 3.6, "Zarr + Parquet, format 2.1", size=6, color=GREY)
-    rows = [  # name, mode, colour, note (same line), note (next line), depth
-        ("zarr.json", "eager", GREY, "format 2.1 · spot_order", None, 0),
-        ("tables/", "dir", GREY, "Parquet", None, 0),
-        ("spots/chrom=…/", "lazy", INDIGO, None, "one per chromosome: cell › trace ›\nbin; bin_id, codes, x · y · z", 1),
-        ("spot_tracks · layers/", "lazy", PURPLE, None, "row-aligned with spots", 1),
-        ("categories/", "eager", GREY, "id values", None, 1),
-        ("bins · bin_tracks", "eager", PURPLE, None, None, 1),
-        ("cells · traces", "eager", GREY, None, None, 1),
-        ("intervals/ · points/", "eager", TEAL, None, None, 1),
-        ("index/", "eager", INDIGO, None, "offsets: traces, cells, partitions", 0),
-        ("cellm/ · binm/", "eager", PURPLE, "Zarr arrays", None, 0),
-        ("results/ · uns/", "eager", GREY, "+ provenance", None, 0),
-        ("contacts/ · links/", "external", TEAL, None, "→ .cool · .scool · .h5mu · .h5ad", 0),
+    c.t(dx, dy + 0.4, "x.chromdata.zarr", size=7, weight="bold")
+    c.t(dx + 21.5, dy + 0.5, "format 2.2", size=6, color=GREY)
+    c.t(dx, dy + 4.1, "Zarr + Parquet", size=6, color=GREY)
+    logo(c, "zarr", dx + 16.2, dy + 2.55, h=3.1)
+    logo(c, "parquet", dx + 26.6, dy + 2.7, h=2.8)
+    rows = [  # name, storage, colour, note (same line), note (next line), depth
+        ("zarr.json", "json", GREY, "version · orders", None, 0),
+        ("tables/", "dir", GREY, None, None, 0),
+        ("coords/chrom=…/", "parquet", ORANGE, None, "x · y · z + keys, one table per\nchromosome (cell › trace › bin)", 1),
+        ("primary/", "parquet", PURPLE, None, "spot tracks · layers · other spot\ncolumns, cell-sorted, no keys", 1),
+        ("derived/", "parquet", INDIGO, None, "spot columns stored once per\nbin / cell / trace", 1),
+        ("bins · cells · traces", "parquet", GREY, None, None, 1),
+        ("intervals/ · points/", "parquet", TEAL, None, None, 1),
+        ("index/", "zarr", INDIGO, None, "run offsets: primary ↔ coords", 0),
+        ("cellm/ · binm/", "zarr", PURPLE, None, None, 0),
+        ("results/ · uns/", "json", GREY, "+ provenance", None, 0),
+        ("contacts/ · links/", "json", TEAL, None, "→ .cool · .scool · .h5mu · .h5ad", 0),
     ]
-    y = dy + 8.8
+    y = dy + 8.6
     last = {0: dy + 5.4, 1: None}  # y of the previous sibling (or the parent) per depth
-    for name, mode, col, inline, below, depth in rows:
+    for name, kind, col, inline, below, depth in rows:
         x = dx + 0.8 + depth * 3.4
         top = last[depth] if last[depth] is not None else last[depth - 1] + 1.4
         c.line([x, x], [top, y], color=LGREY, lw=0.5)
         c.line([x, x + 2.0], [y, y], color=LGREY, lw=0.5)
-        mx = x + 3.4
-        if mode == "eager":
-            c.ax.plot(mx, y, "o", ms=3.0, color=col, mec=col, zorder=5)
-        elif mode == "lazy":
-            c.ax.plot(mx, y, "o", ms=3.0, mfc="white", mec=col, mew=0.8, zorder=5)
-        elif mode == "external":
-            c.ax.plot(mx, y, "o", ms=3.0, mfc="white", mec=col, mew=0.8, zorder=5)
-            c.ax.plot(mx, y, "o", ms=5.0, mfc="none", mec=col, mew=0.4, zorder=5)
-        else:  # a directory: no marker
-            c.ax.plot(mx, y, "s", ms=2.2, mfc=LGREY, mec=LGREY, zorder=5)
-        tx_ = mx + 1.9
+        glyph(c, kind, x + 3.4, y, col)
+        tx_ = x + 5.6
         c.t(tx_, y, name, size=6.5, color=INK)
         if inline:
             c.t(tx_ + 0.98 * len(name) + 1.8, y, inline, size=6, color=GREY)
-        step = 4.1
+        step = 3.9
         if below:
             nl = below.count("\n") + 1
             c.t(tx_, y + 1.4, below, size=6, color=GREY, va="top", linespacing=1.0)
@@ -232,22 +229,74 @@ def draw(c: C) -> None:
         if depth == 0:
             last[1] = None
         y += step
-    ly = y + 0.4
-    for i, (lab, mfc) in enumerate([("read on open", INK), ("read on access (backed)", "white")]):
-        c.ax.plot(dx + 1, ly + 3.2 * i, "o", ms=3.0, mfc=mfc, mec=INK, mew=0.7, zorder=5)
-        c.t(dx + 2.8, ly + 3.2 * i, lab, size=6, color=GREY)
-    c.ax.plot(dx + 21, ly, "o", ms=3.0, mfc="white", mec=TEAL, mew=0.8, zorder=5)
-    c.ax.plot(dx + 21, ly, "o", ms=5.0, mfc="none", mec=TEAL, mew=0.4, zorder=5)
-    c.t(dx + 22.8, ly, "linked, not copied", size=6, color=GREY)
-    c.t(dx, ly + 7.0, ".cdz = the same store in one zip file", size=6, color=INK)
+    ly = y + 0.6
+    for i, (kind, lab) in enumerate([("parquet", "Parquet"), ("zarr", "Zarr array"), ("json", "JSON")]):
+        xx = dx + 0.8 + [0, 12.0, 26.5][i]
+        glyph(c, kind, xx + 1.2, ly, INK)
+        c.t(xx + 3.4, ly, lab, size=6, color=GREY)
+    c.t(dx, ly + 3.6, "spot tables read on access (backed);", size=6, color=GREY)
+    c.t(dx, ly + 6.4, ".cdz = the same store in one zip file", size=6, color=GREY)
+    # logos are images: keep the mm coordinate frame
+    c.ax.set_xlim(0, W); c.ax.set_ylim(H, 0); c.ax.set_aspect("auto")
+
+
+def glyph(c: "C", kind: str, x: float, y: float, col: str) -> None:
+    """Storage-type glyph centred at (x, y): a small table (Parquet), a
+    stacked-cube chunk (Zarr array), braces (JSON attributes), a dash
+    (directory)."""
+    if kind == "parquet":
+        w, h = 2.6, 2.2
+        c.rect(x - w / 2, y - h / 2, w, h, fc="white", ec=col, lw=0.5, z=5)
+        c.rect(x - w / 2, y - h / 2, w, h / 3, fc=col, ec="none", z=5)
+        c.line([x - w / 2, x + w / 2], [y + h / 6, y + h / 6], color=col, lw=0.3, z=6)
+        c.line([x, x], [y - h / 6, y + h / 2], color=col, lw=0.3, z=6)
+    elif kind == "zarr":
+        s = 1.8
+        c.rect(x - s / 2 + 0.55, y - s / 2 - 0.55, s, s, fc="white", ec=col, lw=0.4, z=5)
+        c.rect(x - s / 2, y - s / 2, s, s, fc=col, ec=col, lw=0.4, z=6)
+    elif kind == "json":
+        c.t(x, y - 0.1, "{ }", size=5.5, color=col, ha="center", weight="bold", zorder=6)
+    else:
+        c.line([x - 1.0, x + 1.0], [y, y], color=LGREY, lw=1.2, z=5)
+
+
+_LOGO_CACHE: dict = {}
+
+
+def logo(c: "C", key: str, x: float, y: float, h: float) -> None:
+    """An official logo from ``paper/fig1/logos_ext/`` (``<key>.svg``,
+    rasterised with rsvg-convert, or ``<key>.png``; unaltered, the empty
+    canvas around it trimmed), placed at (x, y) (top left, mm) with height
+    ``h`` mm (aspect kept)."""
+    import subprocess
+
+    from PIL import Image
+
+    if key not in _LOGO_CACHE:
+        base = HERE.parent / "fig1" / "logos_ext"
+        svg, src = base / f"{key}.svg", base / f"{key}.png"
+        if svg.exists():
+            src = HERE / "_cache" / f"logo_{key}.png"
+            src.parent.mkdir(exist_ok=True)
+            if not src.exists() or src.stat().st_mtime < svg.stat().st_mtime:
+                subprocess.run(["rsvg-convert", "-h", "600", str(svg), "-o", str(src)], check=True)
+        im = Image.open(src).convert("RGBA")
+        _LOGO_CACHE[key] = np.asarray(im.crop(im.getchannel("A").getbbox()))   # empty canvas trimmed
+    im = _LOGO_CACHE[key]
+    w = h * im.shape[1] / im.shape[0]
+    # resample once to 1200 dpi at the printed size (no aliasing at 300 dpi output)
+    px = max(8, int(round(h / 25.4 * 1200)))
+    small = np.asarray(Image.fromarray(im).resize((max(8, int(round(px * w / h))), px), Image.LANCZOS))
+    c.ax.imshow(small, extent=(x, x + w, y + h, y), zorder=8, interpolation="antialiased")
 
 
 def main() -> None:
     fig = plt.figure(figsize=(W * MM, H * MM))
     draw(C(fig))
-    for ext in ("pdf", "png"):
-        fig.savefig(HERE / f"fig2a_draft.{ext}", dpi=300)
-    print(HERE / "fig2a_draft.pdf")
+    out = HERE / "_cache" / "panel_a_preview.png"
+    out.parent.mkdir(exist_ok=True)
+    fig.savefig(out, dpi=300)
+    print(out)
 
 
 if __name__ == "__main__":

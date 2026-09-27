@@ -24,6 +24,10 @@ Backends:
   subset it with a pandas boolean mask (``df[df.trace_id == id]``).
 * ``anndata-memory`` — the same with spots as obs in an ``.h5ad``
   (``ad.read_h5ad``, then ``adata[mask].copy()``).
+* ``fofct-memory`` — the FOF-CT core table loaded with
+  ``ChromData.from_fofct``, then the in-memory ``get_*``.
+* ``spatialdata-lazy`` — SpatialData: ``read_zarr`` (lazy dask points), then
+  a dask filter on the id column + ``.compute()`` per query.
 
 Each backend writes its own file (``ext`` / ``write``).  Besides the latency,
 every child records its RSS after open, after the trace and cell queries
@@ -175,15 +179,64 @@ class AnnDataMemory(ParquetMemory):
         return self.adata[(self.adata.obs[col] == key).to_numpy()].copy()
 
 
+class FofctMemory(H5cd1xMemory):
+    """Baseline: load the FOF-CT core table (``ChromData.from_fofct``; file
+    written by the official ``uchrom.io.write_fofct``), then the in-memory
+    ``get_*`` (boolean-mask scan)."""
+
+    label = "FOF-CT (load + subset)"
+    ext = ".csv"
+
+    @staticmethod
+    def write(cd, path):
+        C.FORMATS["fofct"].write(cd, path)
+
+    def open(self, path):
+        from uchrom import ChromData
+        self.cd = ChromData.from_fofct(path)
+
+
+class SpatialDataLazy:
+    """Baseline: SpatialData (scverse).  Spots as a 3-D points element
+    (``_common.to_spatialdata``); open = ``spatialdata.read_zarr`` (points are
+    a lazy dask DataFrame); a query = the idiomatic dask filter on the id
+    column + ``.compute()`` (``pts[pts.trace_id == id].compute()``).  Its
+    spatial queries (bounding box, polygon) do not address genomic ids."""
+
+    label = "SpatialData (lazy open + filter)"
+    ext = ".sdata.zarr"
+
+    @staticmethod
+    def write(cd, path):
+        C.FORMATS["spatialdata"].write(cd, path)
+
+    def open(self, path):
+        import spatialdata as sd
+        self.sdata = sd.read_zarr(path)
+        self.pts = self.sdata.points["spots"]
+
+    def ids(self):
+        keys = self.pts[["trace_id", "cell_id", "chrom"]].compute()   # not timed
+        return {lv: list(keys[col].astype(str).unique()) for lv, col in
+                (("trace", "trace_id"), ("cell", "cell_id"), ("chrom", "chrom"))}
+
+    def get(self, level, key):
+        col = {"trace": "trace_id", "cell": "cell_id", "chrom": "chrom"}[level]
+        return self.pts[self.pts[col] == key].compute()
+
+
 BACKENDS = {"h5cd-1x-memory": H5cd1xMemory, "h5cd-2-memory": H5cd2Memory,
             "zarr-backed": ZarrBacked, "zarr-memory": ZarrMemory,
-            "parquet-memory": ParquetMemory, "anndata-memory": AnnDataMemory}
+            "parquet-memory": ParquetMemory, "anndata-memory": AnnDataMemory,
+            "fofct-memory": FofctMemory, "spatialdata-lazy": SpatialDataLazy}
 
 
 def child(backend_key, path, n_queries):
     be = BACKENDS[backend_key]()
     import h5py  # noqa: F401  (import cost out of the timing)
     from uchrom import ChromData  # noqa: F401
+    if backend_key == "spatialdata-lazy":
+        import spatialdata  # noqa: F401
     try:
         import pyarrow.parquet, zarr, anndata  # noqa: F401,E401
         import uchrom.core.backed  # noqa: F401
@@ -286,7 +339,8 @@ def main():
                 info = C.stage_info(stage)
                 tag = ("h5cd2" if key == "h5cd-2-memory"
                        else f"zarr{_zarr_version().replace('.', '')}" if key.startswith("zarr")
-                       else key.split("-")[0] if key in ("parquet-memory", "anndata-memory")
+                       else key.split("-")[0] if key in ("parquet-memory", "anndata-memory", "fofct-memory",
+                                                         "spatialdata-lazy")
                        else f"v{FORMAT_VERSION}")
                 h5 = work / f"n{n}_{tag}{be.ext}"
                 if not h5.exists():

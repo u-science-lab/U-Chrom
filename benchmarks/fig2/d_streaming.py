@@ -107,7 +107,7 @@ def main():
         else:
             stage = C.stage_subset(n)
             info = dict(C.stage_info(stage))
-            path = C.WORK / "c_access" / f"n{n}_zarr21.chromdata.zarr"
+            path = C.WORK / "c_access" / f"n{n}_zarr{C._zarr_version().replace('.', '')}.chromdata.zarr"
             if not path.exists():
                 C.run_child(ACCESS, ["--child", "write", "zarr-backed", str(stage), str(path)])
             meta = json.loads((path / "zarr.json").read_text())["attributes"]["uchrom"]
