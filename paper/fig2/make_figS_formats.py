@@ -107,11 +107,12 @@ def by_format(fig, x0, y0, letter, key, title, sub):
     F.direct_labels(ax, items, min_gap_mm=2.4)
 
 
-def main() -> None:
+def main(fig=None) -> None:
     F.W, F.H = W, H          # the helpers of make_fig2 place in mm on this canvas
     st = F.storage(list(F.SUPP_FORMATS))
     c = F._load("c_access")["series"]
-    fig = plt.figure(figsize=(W * F.MM, H * F.MM))
+    standalone = fig is None
+    fig = fig if fig is not None else plt.figure(figsize=(W * F.MM, H * F.MM))
     axes = [F.ax_at(fig, 10 + j * 42, 13, 30, 30) for j in range(4)]
     for k, (ax, (key, ylab)) in enumerate(zip(axes[:2], [("size_mb", "file size (MB)"),
                                                         ("read_s", "full read into memory (s)")])):
@@ -158,9 +159,11 @@ def main() -> None:
     by_format(fig, 62, y2, "f", "trace", "One trace, across formats", "open or load the file, then get one trace")
     by_format(fig, 115, y2, "g", "chrom", "One chromosome, across formats",
               "open or load the file, then get one chromosome")
-    for ext in ("pdf", "png"):
-        fig.savefig(F.HERE / f"figS_formats.{ext}", dpi=300)
-    print(F.HERE / "figS_formats.pdf")
+    if standalone:
+        for ext in ("pdf", "png"):
+            fig.savefig(F.HERE / f"figS_formats.{ext}", dpi=300)
+        print(F.HERE / "figS_formats.pdf")
+    return fig
 
 
 if __name__ == "__main__":

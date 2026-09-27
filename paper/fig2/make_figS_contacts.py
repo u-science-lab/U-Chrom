@@ -47,11 +47,12 @@ def label(fig, x, y, s, t):
     fig.text((x + 5) / W, 1 - (y + 0.4) / H, t, fontsize=8.5, fontweight="bold", va="top")
 
 
-def main():
+def main(fig=None):
     q = json.loads((HERE / "results" / "e_query.json").read_text())
     imp = q["import"]
     gb = 1 / 2**30
-    fig = plt.figure(figsize=(W * MM, H * MM))
+    standalone = fig is None
+    fig = fig if fig is not None else plt.figure(figsize=(W * MM, H * MM))
 
     # a: sizes
     label(fig, 2, 2, "a", "On-disk size")
@@ -109,9 +110,11 @@ def main():
     ax.set_xscale("log"); ax.set_yscale("log")
     ax.set_xlabel("cells of the type"); ax.set_ylabel(f"time, all {n_chr} chromosomes (s)")
     ax.legend(frameon=False, loc="center right", handlelength=1.6)
-    for ext in ("pdf", "png"):
-        fig.savefig(HERE / f"figS_contacts.{ext}", dpi=300)
-    print(HERE / "figS_contacts.pdf")
+    if standalone:
+        for ext in ("pdf", "png"):
+            fig.savefig(HERE / f"figS_contacts.{ext}", dpi=300)
+        print(HERE / "figS_contacts.pdf")
+    return fig
 
 
 if __name__ == "__main__":

@@ -30,13 +30,14 @@ ROLES = ["neuronal", "oligodendrocyte", "astrocyte"]
 NAMES = {"neuronal": "neurons", "oligodendrocyte": "oligodendrocytes", "astrocyte": "astrocytes"}
 
 
-def main() -> None:
+def main(fig=None) -> None:
     F.W, F.H = W, H
     fx = F._load("f_crossmodal")
     q = F._load("e_query")["identity"]
     e = F._load("e_contacts")["aggregation"]["points"]
     groups = fx["groups"]
-    fig = plt.figure(figsize=(W * F.MM, H * F.MM))
+    standalone = fig is None
+    fig = fig if fig is not None else plt.figure(figsize=(W * F.MM, H * F.MM))
     fig.text(1 / W, 1 - 1 / H, "Groups from one modality, structure from another", fontsize=8.5,
              fontweight="bold", va="top")
     fig.text(1 / W, 1 - 5.2 / H, f"scHiCAR mouse primary motor cortex ({fx['dataset']['n_cells']:,} cells): RNA "
@@ -134,9 +135,11 @@ def main() -> None:
     tx.set_ylim(cached.min() / 3, cold.max() * 6)
     tx.text(c[-1], cold[-1] * 2.0, "first query", fontsize=6, color=F.TEAL, va="bottom", ha="right")
     tx.text(c[0], cached[0] * 3.5, "cached", fontsize=6, color=F.TEAL, va="bottom")
-    for ext in ("pdf", "png"):
-        fig.savefig(F.HERE / f"figS_crossmodal.{ext}", dpi=300)
-    print(F.HERE / "figS_crossmodal.pdf")
+    if standalone:
+        for ext in ("pdf", "png"):
+            fig.savefig(F.HERE / f"figS_crossmodal.{ext}", dpi=300)
+        print(F.HERE / "figS_crossmodal.pdf")
+    return fig
 
 
 if __name__ == "__main__":
