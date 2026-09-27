@@ -17,7 +17,7 @@ its functions). First run *load-data* if you have not looked at the dataset.
 ## Pick the method by data type
 | question | tracing / seqFISH+ (3-D coords) | contact maps (scHi-C, Hi-C) |
 |---|---|---|
-| distance at separation s | `structures.py dist-at data.h5cd --chrom <CHROM> --sep <SEP> --tol 0.1` | — |
+| distance at separation s | `structures.py dist-at data.chromdata.zarr --chrom <CHROM> --sep <SEP> --tol 0.1` | — |
 | scaling | `scaling --chrom chrN` (median distance per log bin, exponent of d ∝ s^α) | `ps` (P(s) slope) |
 | radius of gyration | `rg` (per trace; median per chromosome over traces and over cells) | — |
 | TADs | `tads --chrom chrN` → `uchrom.strc.tad.call_tads_by_pval` | `uchrom.strc.tad.get_domains` (directionality index) on a balanced matrix |
@@ -31,7 +31,7 @@ says "from the contact map", use the map.
 Callers read the spot loci as bins. With sparse traces (each trace detects a few % of the loci, as in
 genome-wide DNA seqFISH+) the native-resolution map is mostly empty and the caller's default window
 (ArcFISH `window_bp = 1e5` ≈ 4 × 25 kb bins, made for dense tracing) calls noise. So:
-1. `structures.py coverage data.h5cd --chrom chrN` → per bin size: median fraction of bins a trace
+1. `structures.py coverage data.chromdata.zarr --chrom chrN` → per bin size: median fraction of bins a trace
    observes, expected traces per bin pair.
 2. Use the finest bin size where the median trace observes ≥ 50 % of bins (`--bin-size auto`; dense
    tracing data stays at native resolution). `bin_traces()` averages a trace's spots per bin (this also
@@ -59,8 +59,8 @@ res = call_tads(cd, "<CHROM>", bin_size="auto", window_bins=4)   # res["n_domain
 
 ## Contact maps: P(s)
 ```bash
-python structures.py ps data.h5cd --cool <linked_cool key>[,<key2>,...] [--res <BIN>] --chrom <CHROM> --smin <S_MIN> --smax <S_MAX>
-python structures.py ps data.h5cd --cool <linked_scool key> --cells c1,c2,... ...   # sum chosen cells
+python structures.py ps data.chromdata.zarr --cool <linked_cool key>[,<key2>,...] [--res <BIN>] --chrom <CHROM> --smin <S_MIN> --smax <S_MAX>
+python structures.py ps data.chromdata.zarr --cool <linked_scool key> --cells c1,c2,... ...   # sum chosen cells
 python structures.py ps file.mcool::/resolutions/<BIN> --chrom <CHROM> ...
 ```
 - Raw counts (`balance=False`; single-cell maps can't be balanced). P(s) per diagonal = mean contacts

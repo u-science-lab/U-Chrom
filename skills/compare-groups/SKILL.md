@@ -7,7 +7,7 @@ description: Use for any comparison of cell groups in U-Chrom data — do X cell
 
 ## When to use
 "Are X cells different from Y?", "what is special about the cells I selected?", "is chromatin
-more compact in …?", "which mark differs most …?" — any group comparison on a ChromData (`.h5cd`).
+more compact in …?", "which mark differs most …?" — any group comparison on a ChromData (`.chromdata.zarr` / `.cdz`; older `.h5cd` files read too).
 For contact-map statistics per group (P(s) of pseudo-bulk maps) compute them with *call-structures*
 and compare there; for correlations use *associate-modalities*.
 
@@ -18,7 +18,7 @@ and compare there; for correlations use *associate-modalities*.
    disjoint; "vs all other cells" means `rest`, not a single other type.
 2. **One statistic** — run `scripts/compare_groups.py` (CLI) or import `compare()`:
    ```bash
-   python <skill dir>/scripts/compare_groups.py data.h5cd --a field:cell_type=<TYPE_A> --b field:cell_type=<TYPE_B> --stat rg
+   python <skill dir>/scripts/compare_groups.py data.chromdata.zarr --a field:cell_type=<TYPE_A> --b field:cell_type=<TYPE_B> --stat rg
    ```
    ```python
    import sys; sys.path.insert(0, "<skill dir>/scripts")

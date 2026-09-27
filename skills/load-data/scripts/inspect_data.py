@@ -1,7 +1,7 @@
 """Inspect a U-Chrom dataset and run the QC a report needs — the load-data skill's recipe.
 
-    python inspect_data.py data.h5cd                 # JSON summary + QC checks
-    python inspect_data.py data.h5cd --group cell_type
+    python inspect_data.py data.chromdata.zarr                 # JSON summary + QC checks
+    python inspect_data.py data.chromdata.zarr --group cell_type
     # or from Python:  from inspect_data import summarize; s = summarize(cd)
 
 What it reports (every block is skipped when the data has no such part):
@@ -168,9 +168,11 @@ def summarize(cd, path=None, group: str | None = "cell_type") -> dict:
             cats[c] = {str(k): int(v) for k, v in cells[c].astype(str).value_counts().items()}
     s["cells"]["categorical"] = cats
     s["spots_columns"] = [str(c) for c in cd.spots.columns]
-    if cd.tracks is not None and len(cd.tracks.columns):
-        s["tracks"] = {"n": int(cd.tracks.shape[1]), "columns": [str(c) for c in cd.tracks.columns],
-                       "note": "per-spot values, aligned row-for-row with spots"}
+    for attr, note in (("spot_tracks", "per-spot values (cd.spot_tracks), aligned row-for-row with spots"),
+                       ("bin_tracks", "per-locus values (cd.bin_tracks), one row per bin")):
+        t = getattr(cd, attr, None)
+        if t is not None and len(t.columns):
+            s[attr] = {"n": int(t.shape[1]), "columns": [str(c) for c in t.columns], "note": note}
     if cd.traces is not None and len(cd.traces.columns):
         s["traces_columns"] = [str(c) for c in cd.traces.columns]
     emb = cd.uns.get("embeddings") or {}

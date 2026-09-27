@@ -2,12 +2,12 @@
 associate-modalities skill's recipe.
 
     # cell level: one value per cell, confounders partialled out, within cell types
-    python associate.py cell data.h5cd --x if.<MARK> --y rg [--covar nuc_volume_um3,n_spots] [--group cell_type]
-    python associate.py cell data.h5cd --x atac.<GENE> --y rna.<GENE> --group cell_type
+    python associate.py cell data.chromdata.zarr --x if.<MARK> --y rg [--covar nuc_volume_um3,n_spots] [--group cell_type]
+    python associate.py cell data.chromdata.zarr --x atac.<GENE> --y rna.<GENE> --group cell_type
     # bin level: per genomic bin, the mean of a spot track vs the mean of a structural spot feature
-    python associate.py bin data.h5cd --x <TRACK> --y <TRACK> --chrom <CHROM> --bin-size <BIN>
+    python associate.py bin data.chromdata.zarr --x <TRACK> --y <TRACK> --chrom <CHROM> --bin-size <BIN>
     # embedding: k-nearest-neighbour label purity of a 2-D / n-D embedding in cellm
-    python associate.py purity data.h5cd --emb hic_umap,rna_umap --label cell_type --k 15
+    python associate.py purity data.chromdata.zarr --emb hic_umap,rna_umap --label cell_type --k 15
 
 Per-cell values (``--x`` / ``--y``):
   a ``cells`` column (``if.<MARK>``, ``rna.<GENE>``, ``nuc_volume_um3``, …);
@@ -70,7 +70,7 @@ def per_cell(cd, spec: str) -> pd.Series:
     if spec.startswith("track:"):
         name = spec[len("track:"):]
         cid = cd.spots["cell_id"].astype(str).to_numpy()
-        return pd.Series(pd.to_numeric(cd.tracks[name], errors="coerce").to_numpy()).groupby(cid).mean().rename(spec)
+        return pd.Series(pd.to_numeric(_spot_track(cd, name), errors="coerce")).groupby(cid).mean().rename(spec)
     if cd.cells is None or spec not in cd.cells.columns:
         raise KeyError(f"{spec!r} is not a cells column nor one of rg, span, rg_norm, n_spots, track:<name>")
     return pd.Series(pd.to_numeric(cd.cells[spec], errors="coerce").to_numpy(), index=_cell_index(cd), name=spec)
@@ -158,7 +158,18 @@ def spot_values(cd, name: str) -> np.ndarray:
         df = _trace_frame(cd)
         cen = df.groupby("cell_id")[["x", "y", "z"]].transform("mean").to_numpy()
         return np.linalg.norm(df[["x", "y", "z"]].to_numpy() - cen, axis=1)
-    return pd.to_numeric(cd.tracks[name], errors="coerce").to_numpy(float)
+    return pd.to_numeric(_spot_track(cd, name), errors="coerce").astype(float)
+
+
+def _spot_track(cd, name: str) -> np.ndarray:
+    """A track as one value per spot: a spot track as is, a bin (locus) track broadcast through bin_id."""
+    st = getattr(cd, "spot_tracks", None)
+    if st is not None and name in st.columns:
+        return st[name].to_numpy()
+    bt = getattr(cd, "bin_tracks", None)
+    if bt is not None and name in bt.columns:
+        return bt[name].reindex(cd.spots["bin_id"].to_numpy()).to_numpy()
+    raise KeyError(f"{name!r} is neither a spot track nor a bin track")
 
 
 def bin_level(cd, x: str, y: str, chrom: str, bin_size: float = 1e6, cells=None, method: str = "spearman",

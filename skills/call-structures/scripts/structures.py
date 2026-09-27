@@ -2,17 +2,17 @@
 
 Tracing data (3-D coordinates in a ChromData):
 
-    python structures.py dist-at data.h5cd --chrom <CHROM> --sep <SEP> [--tol 0.1]
-    python structures.py scaling  data.h5cd --chrom <CHROM>            # distance vs separation + exponent
-    python structures.py rg       data.h5cd                          # radius of gyration per chromosome
-    python structures.py coverage data.h5cd --chrom <CHROM>            # detection per bin size -> resolution
-    python structures.py tads     data.h5cd --chrom <CHROM> [--bin-size auto|native|<BIN>] [--window-bins 4]
-    python structures.py comps    data.h5cd --chrom <CHROM> [--bin-size auto]
+    python structures.py dist-at data.chromdata.zarr --chrom <CHROM> --sep <SEP> [--tol 0.1]
+    python structures.py scaling  data.chromdata.zarr --chrom <CHROM>            # distance vs separation + exponent
+    python structures.py rg       data.chromdata.zarr                          # radius of gyration per chromosome
+    python structures.py coverage data.chromdata.zarr --chrom <CHROM>            # detection per bin size -> resolution
+    python structures.py tads     data.chromdata.zarr --chrom <CHROM> [--bin-size auto|native|<BIN>] [--window-bins 4]
+    python structures.py comps    data.chromdata.zarr --chrom <CHROM> [--bin-size auto]
 
 Contact maps (.cool / .mcool / .scool, e.g. ``uns['linked_cool']``):
 
-    python structures.py ps data.h5cd --cool <key> --res <BIN> --chrom <CHROM> --smin <S_MIN> --smax <S_MAX>
-    python structures.py ps data.h5cd --cool <key_A>,<key_B> --chrom <CHROM> ...     # summed pseudo-bulk
+    python structures.py ps data.chromdata.zarr --cool <key> --res <BIN> --chrom <CHROM> --smin <S_MIN> --smax <S_MAX>
+    python structures.py ps data.chromdata.zarr --cool <key_A>,<key_B> --chrom <CHROM> ...     # summed pseudo-bulk
     python structures.py ps map.mcool::/resolutions/<BIN> --chrom <CHROM> ...     # a file directly
 
 Every command prints one JSON object with the numbers, the n behind them, and ``checks``.
@@ -199,7 +199,7 @@ def call_tads(cd, chrom: str, bin_size="auto", window_bins: float = 4, fdr: floa
     from uchrom.strc.tad import TADCallerParams, call_tads_by_pval
     sub, nat, bs, cov = _prepare(cd, chrom, bin_size)
     params = TADCallerParams(window_bp=float(window_bins * bs), fdr_cutoff=fdr)
-    tads = call_tads_by_pval(sub, chrom=chrom, params=params, device=device, store=False)
+    tads = call_tads_by_pval(sub, chrom=chrom, params=params, device=device, key_added=None)
     lvl1 = tads[tads["level"] == 1] if len(tads) else tads
     res = {"chrom": chrom, "caller": "uchrom.strc.tad.call_tads_by_pval", "native_bin_bp": nat, "bin_size_bp": bs,
            "window_bp": params.window_bp, "fdr_cutoff": fdr, "n_traces": int(sub.n_traces),
@@ -215,7 +215,7 @@ def call_compartments(cd, chrom: str, bin_size="auto", device: str = "auto") -> 
     """A/B compartments (``uchrom.strc.comp.call_compartments_axes_pc``) on binned traces."""
     from uchrom.strc.comp import call_compartments_axes_pc
     sub, nat, bs, cov = _prepare(cd, chrom, bin_size)
-    comp = call_compartments_axes_pc(sub, chrom=chrom, device=device)
+    comp = call_compartments_axes_pc(sub, chrom=chrom, device=device, key_added=None)
     lab = comp["compartment"].astype(str).to_numpy()
     n_seg = int(1 + (lab[1:] != lab[:-1]).sum()) if len(lab) else 0
     res = {"chrom": chrom, "caller": "uchrom.strc.comp.call_compartments_axes_pc", "native_bin_bp": nat,
@@ -330,7 +330,8 @@ def main():
     a = ap.parse_args()
     from uchrom.core import ChromData
     if a.cmd == "ps":
-        cd = ChromData.read(a.data) if a.data.endswith(".h5cd") else None
+        is_cd = a.data.rstrip("/").endswith((".chromdata.zarr", ".cdz", ".zarr", ".h5cd"))
+        cd = ChromData.read(a.data) if is_cd else None
         if cd is None:
             clrs = [open_cooler(a.data, res=a.res)]
         elif a.cells:

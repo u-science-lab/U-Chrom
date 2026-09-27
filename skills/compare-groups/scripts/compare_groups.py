@@ -4,9 +4,9 @@ The unit of replication is the **cell**: per-trace (or per-spot) values are firs
 cell (median), and the test compares cells.  Traces of one cell are not independent; testing them
 as if they were inflates n and makes almost any difference "significant".
 
-    python compare_groups.py data.h5cd --a <cell_id>,<cell_id>,... --b field:cell_type=<TYPE> --stat rg
-    python compare_groups.py data.h5cd --a field:cell_type=<TYPE> --b rest --stat rg --equalize 100
-    python compare_groups.py data.h5cd --a <cell_id>,<cell_id>,... --b rest --scan if.     # every if.* column, BH-FDR
+    python compare_groups.py data.chromdata.zarr --a <cell_id>,<cell_id>,... --b field:cell_type=<TYPE> --stat rg
+    python compare_groups.py data.chromdata.zarr --a field:cell_type=<TYPE> --b rest --stat rg --equalize 100
+    python compare_groups.py data.chromdata.zarr --a <cell_id>,<cell_id>,... --b rest --scan if.     # every if.* column, BH-FDR
     # or from Python:  from compare_groups import compare, scan; compare(cd, a, b, stat="rg")
 
 Groups: comma-separated cell ids, ``field:<column>=<value>`` / ``field:<column>!=<value>`` (cells column),
@@ -58,13 +58,17 @@ def resolve_group(cd, spec, other=None) -> list:
 
 
 def _equalized(df: pd.DataFrame, stat: str, k: int, draws: int, seed: int) -> pd.Series:
-    """Per trace: mean over ``draws`` random subsets of k loci of Rg (or span); traces with < k loci dropped."""
-    rng = np.random.default_rng(seed)
+    """Per trace: mean over ``draws`` random subsets of k loci of Rg (or span); traces with < k loci dropped.
+
+    Each trace draws from its own generator seeded by (seed, trace id), and loci are ordered by
+    (start, x, y, z), so the result does not depend on the stored row or trace order."""
+    import zlib
     out = {}
     for tid, t in df.groupby("trace_id", observed=True):
         if len(t) < k:
             continue
-        t = t.sort_values("start")
+        rng = np.random.default_rng([seed, zlib.crc32(str(tid).encode())])
+        t = t.sort_values(["start", "x", "y", "z"], kind="mergesort")
         xyz = t[["x", "y", "z"]].to_numpy()
         vals = []
         for _ in range(draws):

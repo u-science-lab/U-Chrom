@@ -1,12 +1,12 @@
 ---
 name: load-data
-description: START HERE for any U-Chrom .h5cd question, even simple counts — how many cells / traces / spots / IF channels / genes, contact-map resolution (.scool/.mcool), units, distance between consecutive loci / particles, traces per chromosome per cell (ploidy), spots per trace by cell type. QC script; routes to the analysis skills.
+description: START HERE for any U-Chrom data question (.chromdata.zarr, .cdz, .h5cd), even simple counts — how many cells / traces / spots / IF channels / genes, contact-map resolution (.scool/.mcool), units, distance between consecutive loci / particles, traces per chromosome per cell (ploidy), spots per trace by cell type. QC script; routes to the analysis skills.
 ---
 
 # Load and inspect a U-Chrom dataset
 
 ## When to use
-First step on any `.h5cd` (ChromData: chromatin tracing, DNA seqFISH+, ORCA/Hi-M, simulated structures,
+First step on any ChromData store — `.chromdata.zarr`, `.cdz` (the same store zipped) or a legacy `.h5cd` (ChromData: chromatin tracing, DNA seqFISH+, ORCA/Hi-M, simulated structures,
 scHi-C/scHiCAR with linked `.scool/.mcool/.cool`, RNA/ATAC, embeddings), and for questions about the data
 itself: counts, channels, genes, cell types, contact-map resolution and coverage, units, consecutive-locus
 distance, traces per chromosome per cell (ploidy), spots per trace by group, duplicate / missing loci.
@@ -25,18 +25,18 @@ are what the answer is judged on.
 ## Steps
 1. **One call summary.** Run the script (it prints JSON; ~1–2 s even on 400k spots):
    ```bash
-   python <skill dir>/scripts/inspect_data.py data.h5cd [--group cell_type]
+   python <skill dir>/scripts/inspect_data.py data.chromdata.zarr [--group cell_type]
    ```
    or `from inspect_data import summarize; s = summarize(ChromData.read(path))`.
    It reports `counts`, `uns` (assembly, `xyz_unit`, `coordinate_status`), `cells` columns grouped by
-   prefix, categorical columns with counts, `tracks`, `traces` columns, `cellm` embeddings with their
+   prefix, categorical columns with counts, `spot_tracks` / `bin_tracks`, `traces` columns, `cellm` embeddings with their
    recipe, `linked` contact maps (existence, resolutions, number of cells in a `.scool`), `qc`, `checks`.
 2. **Answer "how many" from the right table** (don't guess from one place):
    | question | where |
    |---|---|
    | cells | `len(cd.cells)`; cells with 3-D data: `cd.spots.cell_id.nunique()` (can differ) |
    | traces / spots | `cd.n_traces`, `cd.n_spots` (a trace = one allele's copy of one chromosome/region) |
-   | IF antibody channels, genes | count the `cells` columns with the prefix (`if.`, `rna.`, `atac.`); `tracks` may also hold non-antibody signals (repeat FISH, RNA, spot intensity, radial scores) — list and exclude them |
+   | IF antibody channels, genes | count the `cells` columns with the prefix (`if.`, `rna.`, `atac.`); `spot_tracks` may also hold non-antibody signals (repeat FISH, RNA, spot intensity, radial scores) — list and exclude them |
    | embeddings | `cd.cellm[key]` (n_cells × d) + `cd.uns["embeddings"][key]` (modality, method, input) |
    | contact maps | `cd.uns["linked_scool"]` (per cell), `cd.uns["linked_cool"]` (pseudo-bulk / merged); open with `cooler` (`cooler.fileops.list_scool_cells`, `list_coolers` for `.mcool` levels) — the resolution is the cooler's `binsize` |
    | units | `cd.uns["xyz_unit"]` — "model units" (NucDynamics etc.) are *not* µm; never convert |
