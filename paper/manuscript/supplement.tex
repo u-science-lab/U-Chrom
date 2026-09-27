@@ -27,15 +27,7 @@
 \renewcommand{\figurename}{Supplementary Fig.}
 \renewcommand{\tablename}{Supplementary Table}
 
-% Marks of Fig. 2b / Supplementary Table S1.
-\definecolor{markblue}{HTML}{2F4B7C}
-\definecolor{markteal}{HTML}{2A9D8F}
-\newcommand{\mNative}{\tikz[baseline=-0.6ex]\fill[markblue] (0,0) circle (0.9ex);}
-\newcommand{\mLinked}{\tikz[baseline=-0.6ex]{\draw[markteal,line width=0.5pt] (0,0) circle (0.85ex);\fill[markteal] (0,0) circle (0.45ex);}}
-\newcommand{\mConv}{\tikz[baseline=-0.6ex]\draw[markblue,line width=0.7pt] (0,0) circle (0.8ex);}
-\newcommand{\mNone}{\tikz[baseline=-0.6ex]\draw[black!60,line width=0.7pt] (-0.7ex,0) -- (0.7ex,0);}
-\newcommand{\rot}[1]{\rotatebox{65}{#1}}
-\makeatletter\newcommand{\inputrows}[1]{\@@input #1 }\makeatother
+\input{supp/macros}
 
 \title{Supplementary Information\\[4pt]\large U-Chrom: a unified framework for sequencing- and imaging-based 3-D genome data}
 \author[1]{Author One}
@@ -46,101 +38,7 @@
 \begin{document}
 \maketitle
 
-\noindent Contents: Supplementary Fig.~\ref{fig:S1} (Fig.~2 supplement: access by format beyond one cell, cross-modal groups, linked contacts) and Supplementary Table~\ref{tab:S1} (what each format can represent: definitions, rules and evidence for every cell of Fig.~2b).
-Methods, datasets and benchmark protocol are described in the main text (Methods).
-
-% ------------------------------------------------------------------ Fig. S1
-\begin{figure}[p]
-  \centering
-  \includegraphics[width=0.94\textwidth]{figS1.pdf}
-  \caption[Fig.~2 supplement: access by format, cross-modal groups, linked contacts]{\input{captions/figS1}\unskip}
-  \label{fig:S1}
-\end{figure}
-\clearpage
-
-% ---------------------------------------------------------------- Table S1
-\begin{landscape}
-\setlength{\LTleft}{0pt}\setlength{\LTright}{0pt plus 1fill}
-\footnotesize
-\begin{longtable}{@{}l*{12}{c}@{}}
-\caption[What each format can represent]{\textbf{What each format can represent (evidence for Fig.~2b).}
-Marks as in Fig.~2b: \mNative{}~native, first-class with its own structure; \mLinked{}~linked, kept in an external community-standard file (not copied) and queried through the shared index; \mConv{}~by convention, stored and read back through the library's public API but only in a general-purpose slot (\pkg{uns}, \pkg{obsm}, \pkg{varp}, \pkg{attrs}, metadata attributes, extra or optional columns), so the structure is lost or ad hoc; \mNone{}~not supported, no place for it in the format or its API.
-Column definitions, rules and the evidence for every cell follow the matrix.}
-\label{tab:S1}\\
-\toprule
-Container & \rot{spot coordinates (x, y, z)} & \rot{cell › trace › spot hierarchy} & \rot{per-spot signals} & \rot{per-locus (bin) signals} & \rot{cell table} & \rot{cell embeddings} & \rot{cell spatial position} & \rot{contact maps} & \rot{intervals (TADs / loops)} & \rot{non-genomic points (RNA spots)} & \rot{results with provenance} & \rot{partial reads (cell / chrom.)} \\
-\midrule
-\endfirsthead
-\toprule
-Container & \multicolumn{12}{c}{(continued)}\\
-\midrule
-\endhead
-\inputrows{supp/tableS1_matrix.tex}
-\bottomrule
-\end{longtable}
-
-\normalsize
-\noindent\textbf{Columns.}
-\emph{Spot coordinates (x, y, z)}: the position of every spot (one imaged or reconstructed locus in one trace), with its unit.
-\emph{Cell › trace › spot hierarchy}: which trace and which cell each spot belongs to, as nested levels rather than loose labels.
-\emph{Per-spot signals}: values measured per spot, such as immunofluorescence intensity or z-scores at that spot.
-\emph{Per-locus (bin) signals}: values per genomic bin shared by all cells, such as bulk ATAC / ChIP tracks or GC content.
-\emph{Cell table}: scalar properties per cell, such as cell type, volume or RNA counts.
-\emph{Cell embeddings}: a multi-dimensional vector per cell, such as a PCA, UMAP or learned embedding.
-\emph{Cell spatial position}: where each cell is in the tissue or field of view (centroid and / or outline), with unit and coordinate frame.
-\emph{Contact maps}: locus~$\times$~locus contact counts (Hi-C-type maps), in bulk or per cell.
-\emph{Intervals}: genomic intervals and interval pairs called on the data, such as TADs and loops.
-\emph{Non-genomic points}: 3-D points that are not genomic loci, such as RNA spots or protein puncta.
-\emph{Results with provenance}: analysis results stored as data together with the function, parameters and version that produced them.
-\emph{Partial reads}: reading one cell's or one chromosome's rows from disk without reading the rest of the data.
-
-\medskip\noindent\textbf{Rules.}
-(1)~The evidence decides; only where it is genuinely ambiguous does the other tool get the better mark, and the note starts with \emph{Judgement call}.
-(2)~AnnData and MuData are rated in their most favourable orientation (spots, cells or loci as observations), and these orientations exclude each other in one object (one AnnData, one MuData modality; a MuData can hold one modality per orientation, linked only by \pkg{obs} columns). The hierarchy column is where that shows; the same holds for a SpatialData table, which is an AnnData.
-(3)~A test that needed a general-purpose slot can back at most \emph{by convention}, one that needed an external file \emph{linked}; the audit fails on any mismatch between a mark and its test.
-(4)~A data table serialised to JSON text inside a descriptive metadata attribute (cooler's \pkg{metadata}) does not count; such tests are still run and reported as \emph{not counted}. Parameter and software records (provenance) there do count, and so do scalar key--values that describe the object carrying the attribute (each cell's own cooler in a .scool), as a general-purpose slot; the result itself must be stored as data.
-(5)~\emph{Partial reads}: native when one cell's or one chromosome's rows are read from disk without reading the other rows (beyond the selection key column); by convention when that is only possible by scanning every row (streamed, memory bounded) or with part of the data (e.g.\ \pkg{obs} / \pkg{obsm}) loaded whole.
-(6)~\emph{By convention} needs a normal use of the format that only lacks the dedicated structure; an encoding that merely writes (tracing traces as per-trace column sets of cooler bins tables, an embedding split into one metadata key per dimension) is rated \emph{not supported}, and its test is still reported.
-
-\medskip\noindent\textbf{Tests.}
-Every library cell was verified by a store-and-read-back test: a tiny object stored the element with that library's own API, was written to disk, read back and compared; the slot it used (dedicated, general-purpose or external) is given in the last column below.
-FOF-CT is a CSV specification, not a library, so its row rests on the specification pages alone (core, trace, cell, mapping, bio, quality, rna, subcell and the format overview)~\citep{fofct}.
-The test code is available in the code repository (Methods, Code availability).
-
-\medskip\noindent\textbf{Versions checked.}
-AnnData 0.12.11~\citep{anndata}; SpatialData 0.7.2~\citep{spatialdata}; MuData 0.3.4~\citep{mudata}; cooler 0.10.4~\citep{cooler}; zarr 3.1.6~\citep{zarr}; h5py 3.16.0; FOF-CT v1.0 (specification pages checked 2026-09-27).
-
-\medskip\noindent\textbf{Judgement calls:} AnnData, partial reads; SpatialData, per-locus signals (see the evidence below).
-
-\bigskip\noindent\textbf{Changes after the audits.}
-\begingroup\footnotesize
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{3.6cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}p{11.5cm}@{}}
-\toprule
-Container & Element & Before & After & Reason \\
-\midrule
-\endhead
-\inputrows{supp/tableS1_changes.tex}
-\bottomrule
-\end{longtable}
-\endgroup
-
-\begingroup\footnotesize
-\noindent\textbf{Evidence per cell.} Documentation links are given as URLs; ``dedicated'', ``general-purpose'' and ``external'' name the slot the store-and-read-back test used.
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{11.6cm}>{\raggedright\arraybackslash}p{6.4cm}@{}}
-\toprule
-Element & Mark & Evidence & Store-and-read-back test \\
-\midrule
-\endfirsthead
-\toprule
-Element & Mark & Evidence & Store-and-read-back test \\
-\midrule
-\endhead
-\bottomrule
-\endfoot
-\inputrows{supp/tableS1_evidence.tex}
-\end{longtable}
-\endgroup
-\end{landscape}
+\input{supp/body}
 
 \bibliographystyle{unsrtnat}
 \bibliography{refs}

@@ -4,7 +4,7 @@ all: main.pdf
 
 supp: supplement.pdf
 
-main.pdf: main.tex refs.bib captions/*.tex figures/*.pdf
+main.pdf: main.tex refs.bib captions/*.tex figures/*.pdf supp/*.tex
 	latexmk -xelatex -interaction=nonstopmode -halt-on-error main.tex
 
 supplement.pdf: supplement.tex refs.bib captions/figS1.tex supp/*.tex figures/figS1.pdf
