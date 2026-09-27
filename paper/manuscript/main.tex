@@ -11,7 +11,7 @@
 \usepackage{graphicx}
 \usepackage{authblk}
 \usepackage[numbers,sort&compress]{natbib}
-\usepackage[labelfont=bf,labelsep=space,font=small]{caption}
+\usepackage[labelfont=bf,labelsep=space,font=small,singlelinecheck=false]{caption}
 \usepackage{xcolor}
 \usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
 
@@ -51,6 +51,17 @@
   \label{fig:overview}
 \end{figure}
 
+\subsection*{One store at real scale, next to the community formats}
+\todo{Storage layout, interoperability, access by level, analysis beyond RAM and cross-modal groups (Fig.~\ref{fig:store}).}
+
+\begin{figure}[p]
+  \centering
+  \includegraphics[width=\textwidth,height=0.5\textheight,keepaspectratio]{fig2.pdf}
+  \captionsetup{font=scriptsize}
+  \caption[ChromData at real scale]{\input{captions/fig2}\unskip}
+  \label{fig:store}
+\end{figure}
+
 \subsection*{An open ecosystem}
 \todo{Formats, methods and interfaces (Fig.~\ref{fig:overview}c).}
 
@@ -63,6 +74,12 @@
 \section*{Methods}
 \subsection*{Data}
 \todo{Takei et al.\ 2025 cerebellum DNA seqFISH+; scHiCAR mouse MOp (GSE305439); see \texttt{example-data/README.md}.}
+
+\subsection*{Benchmarks}
+Baselines were chosen as the storage schemes publicly used by the community for chromatin-tracing data: the 4DN FOF-CT core table (CSV), AnnData with spots as observations and SpatialData (spots as a 3-D points element), each written and read with its library's defaults.
+Flat Parquet, the storage engine under \pkg{chromdata.zarr}, is reported separately as the lower bound without hierarchy, index or metadata (Supplementary Fig.~S1).
+Every timed trial runs in a fresh process (median of 3, warm OS page cache); scripts and results are in \texttt{benchmarks/fig2/} and \texttt{paper/fig2/results/}.
+\todo{Full protocol.}
 
 \subsection*{Software availability}
 \todo{Repository URL, licence, version, documentation.}

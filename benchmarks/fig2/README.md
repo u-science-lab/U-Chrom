@@ -17,6 +17,7 @@ format-version comparison (supplementary `figS_formats.pdf`).
 | `rowgroup_sweep.py` | format 2.1 | Takei 1e7 subset | row-group size (8k / 16k / 32k / 65k): size, full read, get_cell / get_trace / get_chrom (± `columns="coords"`) |
 | `spot_tracks_encoding.py` | format 2.1 | Takei 1e7 subset | why 2.1 is larger on Takei: size per table, 2.0 vs 2.1 row order, Parquet options (row groups, zstd level, dictionary, byte_stream_split) |
 | `replicate_store.py` | c, d | Takei 2.1 store | the 1e8-spot store (whole copies with renamed cells / traces, streamed per partition) |
+| `f_crossmodal.py` | f (new) | scHiCAR MOp `.h5cd` + linked 1 Mb `.scool` | Leiden clusters of the RNA PCA (`uchrom.emb.cluster_cells`), marker genes, the chosen clusters' pseudo-bulk maps via `Dataset.contacts(group=)`, P(s) and slopes |
 | `f_roundtrip.py` | f | Takei 2025 FOV0, sim_cell1, scHiCAR | field-by-field round trips (`.chromdata.zarr`, FOF-CT via `uchrom.io.write_fofct`, AnnData, .cool/.scool, PDB, .3dg) → preserved / partial / lost / NA matrix |
 | `allele_qc.py` | supplement | Takei 2025 raw spot CSVs | diagnostic of the published homolog calls (loci per trace, duplicate loci, genomic–spatial Spearman) |
 
@@ -125,3 +126,39 @@ python benchmarks/cd21_streaming_validation.py --data example-data --work /tmp/c
   containing "backed" feeds the resident-memory plot).
 * Re-run `make_fig2.py --real`: the watermark disappears once 2.x numbers are
   present.
+
+## Figure 2 redesign (format 2.2; panels a–f)
+
+Panel letters: **b** interoperability (`f_roundtrip.json`), **c** storage (`b_storage.json`), **d** access
+(`c_access.json`), **e** beyond RAM (`c_access.json` memory + `d_streaming.json`), **f** cross-modal
+(`f_crossmodal.json`, `e_query.json`, `e_contacts.json`).  The JSON names are kept.
+
+Baselines of the main figure: the storage schemes publicly used by the community for chromatin-tracing data —
+FOF-CT, AnnData (spots as obs) and **SpatialData** (`spatialdata` 0.7.2, already in the environment):
+
+* `_common.to_spatialdata`: the flat spot table (coordinates, loci, ids, other spot columns, all spot tracks) as
+  one 3-D points element (`PointsModel.parse(df, coordinates={"x","y","z"})`) and the cell table as a table
+  element (`TableModel.parse`, not linked to a region because cells are not a SpatialData element);
+  `SpatialData.write` defaults.  Full read (`b_storage.py --formats spatialdata`) = `read_zarr` +
+  `points["spots"].compute()` + the table (import of `spatialdata` / `dask` kept out of the timing, like the other
+  readers).  Note the peak: 30 GB for 1e7 spots (dask partitions concatenated).
+* `c_access.py --backends spatialdata-lazy`: open = `read_zarr` (lazy dask points); a query = the idiomatic dask
+  filter on the id column + `.compute()` (`pts[pts.trace_id == id].compute()`).  Its spatial queries (bounding
+  box, polygon) do not address genomic ids.
+* `c_access.py --backends fofct-memory`: `ChromData.from_fofct` + in-memory `get_*` (1e4–1e6; at 1e7 the FOF-CT
+  reader peaks at 37.7 GB, above the machine-safety limit, see `b_storage.json`).
+
+Flat Parquet moves to `figS_formats` as the overhead reference.
+
+```bash
+python benchmarks/fig2/b_storage.py --sizes 1e4,1e5,1e6,1e7 --formats zarr,spatialdata --repeats 3
+python benchmarks/fig2/replicate_store.py takei2025_cerebellum_rep1.v22.chromdata.zarr takei_1e8.v22.chromdata.zarr --n 1e8
+python benchmarks/fig2/c_access.py --sizes 1e4,1e5,1e6,1e7,1e8 --backends zarr-backed --repeats 3 --prebuilt 1e8=takei_1e8.v22.chromdata.zarr
+python benchmarks/fig2/d_streaming.py --sizes 1e4,1e5,1e6,1e7 --prebuilt 1e8=takei_1e8.v22.chromdata.zarr --repeats 3
+python benchmarks/fig2/c_access.py --sizes 1e4,1e5,1e6,1e7 --backends spatialdata-lazy --repeats 3
+python benchmarks/fig2/c_access.py --sizes 1e4,1e5,1e6 --backends fofct-memory --repeats 3
+python benchmarks/fig2/f_crossmodal.py
+python paper/fig2/make_fig2.py && python paper/fig2/make_figS_formats.py && python paper/fig2/make_figS_contacts.py
+```
+
+`replicate_store.py` now also takes a 2.2 source (primary row groups copied; coordinate codes shifted).
