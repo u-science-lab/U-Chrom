@@ -303,7 +303,14 @@ def panel_c(fig, x0, y0):
 
 def panel_d(fig, x0, y0):
     label(fig, x0, y0, "d")
-    title(fig, x0 + 5, y0 + 0.4, "Access from disk")
+    title(fig, x0 + 5, y0 + 0.4, "Access speed")
+    # key for the hollow markers used in d and e
+    kx, ky = x0 + 34, y0 + 2.6                  # a real hollow marker, as drawn in the plots
+    kax = ax_at(fig, kx, ky - 1.5, 3, 3)
+    kax.plot([0.5], [0.5], "o", ms=3.2, mfc="white", mec=INK, mew=0.8)
+    kax.set_xlim(0, 1); kax.set_ylim(0, 1); kax.axis("off")
+    fig.text((kx + 3.2) / W, 1 - ky / H, "1e8 spots: the real cells replicated 10× (not new cells)",
+             fontsize=6, color=GREY, va="center")
     a = access()
     lv = {k: (lab, col) for k, lab, col, _ in LEVELS}
     aw, ah = 27.0, 29.0
@@ -353,12 +360,12 @@ def panel_d(fig, x0, y0):
 
 def panel_e(fig, x0, y0):
     label(fig, x0, y0, "e")
-    title(fig, x0 + 5, y0 + 0.4, "Beyond RAM")
+    title(fig, x0 + 5, y0 + 0.4, "Out-of-memory analysis")
     a = access()
     ah = 29.0
     # left: memory to open the data and run the trace / cell queries
     ax = ax_at(fig, x0 + 10, y0 + 13, 20, ah)
-    fig.text((x0 + 5) / W, 1 - (y0 + 6.0) / H, "Open + query", fontsize=6.5, color=INK, va="top",
+    fig.text((x0 + 5) / W, 1 - (y0 + 6.0) / H, "Open and query", fontsize=6.5, color=INK, va="top",
              fontweight="bold")
     fig.text((x0 + 5) / W, 1 - (y0 + 9.0) / H, "formats as in d", fontsize=6, color=GREY, va="top")
     for series, _, col, _ in BASELINES:
@@ -376,7 +383,7 @@ def panel_e(fig, x0, y0):
     dd = _load("d_streaming")
     pts = dd["points"]
     ax2 = ax_at(fig, x0 + 43, y0 + 13, 22, ah)
-    fig.text((x0 + 36) / W, 1 - (y0 + 6.0) / H, "Population analysis", fontsize=6.5, color=INK, va="top",
+    fig.text((x0 + 36) / W, 1 - (y0 + 6.0) / H, "Streaming analysis", fontsize=6.5, color=INK, va="top",
              fontweight="bold")
     fig.text((x0 + 36) / W, 1 - (y0 + 9.0) / H, f"median distance map, {dd['chrom']}", fontsize=6,
              color=GREY, va="top")
@@ -402,7 +409,7 @@ def panel_e(fig, x0, y0):
     ax2.text(lt[-1] * 0.7, lm[-1] / 1024 * 1.1, "load all", fontsize=6, color=GREY, ha="right", va="bottom")
     ax2.text(tr[-1], st[-1] / 1024 * 0.55, "stream", fontsize=6, color=INDIGO, ha="right", va="top")
     if any("load_all" not in p for p in pts):
-        ax2.text(0.04, 0.99, "1e8 (○): load all\nexceeds RAM", fontsize=6, color=GREY, ha="left", va="top",
+        ax2.text(0.04, 0.99, "at 1e8, load all\nexceeds 64 GB RAM", fontsize=6, color=GREY, ha="left", va="top",
                  transform=ax2.transAxes, linespacing=1.0)
     return ax, ax2
 
