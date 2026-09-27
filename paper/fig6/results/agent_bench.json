@@ -1,0 +1,184 @@
+{
+ "run": "main2",
+ "judge": "claude-sonnet-5",
+ "reps": 1,
+ "n_tasks": 40,
+ "categories": [
+  "associate",
+  "compare",
+  "inspect",
+  "knowhow",
+  "structure"
+ ],
+ "category_sizes": {
+  "associate": 8,
+  "compare": 10,
+  "inspect": 8,
+  "knowhow": 6,
+  "structure": 8
+ },
+ "models": {
+  "haiku": {
+   "model": "claude-haiku-4-5-20251001",
+   "conditions": {
+    "docs": {
+     "n_tasks": 40,
+     "score": 0.677202380952381,
+     "by_category": {
+      "associate": 0.6458333333333334,
+      "compare": 0.7504761904761905,
+      "inspect": 0.875,
+      "knowhow": 0.6527777777777778,
+      "structure": 0.4375
+     },
+     "by_split": {
+      "dev": 0.6910714285714286,
+      "test": 0.6633333333333333
+     },
+     "n_perfect": 18,
+     "n_zero": 6,
+     "n_skill_loaded": 0,
+     "n_failed_runs": 0,
+     "cost_usd": 4.8520369,
+     "median_time_s": 54.22430098056793
+    },
+    "skills": {
+     "n_tasks": 40,
+     "score": 0.6571428571428571,
+     "by_category": {
+      "associate": 0.6666666666666666,
+      "compare": 0.5369047619047619,
+      "inspect": 1.0,
+      "knowhow": 0.6805555555555556,
+      "structure": 0.4375
+     },
+     "by_split": {
+      "dev": 0.6392857142857142,
+      "test": 0.675
+     },
+     "n_perfect": 17,
+     "n_zero": 6,
+     "n_skill_loaded": 0,
+     "n_failed_runs": 0,
+     "cost_usd": 4.42231355,
+     "median_time_s": 59.221874356269836
+    }
+   },
+   "paired": {
+    "mean_diff": -0.020059523809523812,
+    "better": 6,
+    "worse": 9,
+    "same": 25,
+    "wilcoxon_p": 0.8417353405253295
+   }
+  },
+  "opus": {
+   "model": "claude-opus-5-5",
+   "conditions": {
+    "docs": {
+     "n_tasks": 40,
+     "score": 0.8991666666666667,
+     "by_category": {
+      "associate": 0.9583333333333334,
+      "compare": 0.93,
+      "inspect": 1.0,
+      "knowhow": 0.8333333333333334,
+      "structure": 0.75
+     },
+     "by_split": {
+      "dev": 0.875,
+      "test": 0.9233333333333333
+     },
+     "n_perfect": 32,
+     "n_zero": 2,
+     "n_skill_loaded": 0,
+     "n_failed_runs": 0,
+     "cost_usd": 15.0759842,
+     "median_time_s": 49.56671643257141
+    },
+    "skills": {
+     "n_tasks": 40,
+     "score": 0.9270833333333334,
+     "by_category": {
+      "associate": 0.9166666666666666,
+      "compare": 0.975,
+      "inspect": 1.0,
+      "knowhow": 0.9166666666666666,
+      "structure": 0.8125
+     },
+     "by_split": {
+      "dev": 0.9125,
+      "test": 0.9416666666666667
+     },
+     "n_perfect": 35,
+     "n_zero": 1,
+     "n_skill_loaded": 11,
+     "n_failed_runs": 0,
+     "cost_usd": 14.1512762,
+     "median_time_s": 49.20445954799652
+    }
+   },
+   "paired": {
+    "mean_diff": 0.027916666666666666,
+    "better": 4,
+    "worse": 1,
+    "same": 35,
+    "wilcoxon_p": 0.3125
+   }
+  },
+  "sonnet": {
+   "model": "claude-sonnet-5",
+   "conditions": {
+    "docs": {
+     "n_tasks": 40,
+     "score": 0.845,
+     "by_category": {
+      "associate": 1.0,
+      "compare": 0.83,
+      "inspect": 1.0,
+      "knowhow": 0.9166666666666666,
+      "structure": 0.5
+     },
+     "by_split": {
+      "dev": 0.85,
+      "test": 0.84
+     },
+     "n_perfect": 31,
+     "n_zero": 5,
+     "n_skill_loaded": 0,
+     "n_failed_runs": 2,
+     "cost_usd": 16.813249,
+     "median_time_s": 128.97710859775543
+    },
+    "skills": {
+     "n_tasks": 40,
+     "score": 0.8833333333333333,
+     "by_category": {
+      "associate": 0.9583333333333334,
+      "compare": 0.95,
+      "inspect": 1.0,
+      "knowhow": 0.7777777777777778,
+      "structure": 0.6875
+     },
+     "by_split": {
+      "dev": 0.875,
+      "test": 0.8916666666666666
+     },
+     "n_perfect": 31,
+     "n_zero": 2,
+     "n_skill_loaded": 12,
+     "n_failed_runs": 0,
+     "cost_usd": 15.4130938,
+     "median_time_s": 85.85868644714355
+    }
+   },
+   "paired": {
+    "mean_diff": 0.03833333333333333,
+    "better": 5,
+    "worse": 3,
+    "same": 32,
+    "wilcoxon_p": 0.53125
+   }
+  }
+ }
+}

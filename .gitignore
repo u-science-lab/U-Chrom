@@ -67,3 +67,11 @@ benchmarks/fig6/_data/
 # Spatial 3-D genome datasets (download_data.py --spatial_atac_hic / --spatial_hicrna)
 example-data/spatial_atac_hic/
 example-data/spatial_hicrna/
+
+# Fig 6e agent benchmark: answer key, figure data and grades are tracked; raw agent
+# transcripts (~40 MB per run) stay local (archive with the paper's data).
+!benchmarks/fig6/agent_bench/answers.json
+!paper/fig6/results/*.json
+benchmarks/fig6/agent_bench/runs/**
+!benchmarks/fig6/agent_bench/runs/**/
+!benchmarks/fig6/agent_bench/runs/**/grades.json
