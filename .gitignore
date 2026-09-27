@@ -18,6 +18,8 @@ example-data/takei2025_fov0/
 !example-data/4DNFIJ52NVDV.csv
 !uchrom/browser/web/frontend/package-lock.json
 !uchrom/browser/web/frontend/tsconfig.json
+# browser action schema shared by WebMCP and the Python client (control.py / client.py)
+!uchrom/browser/web/ui_tools.json
 node_modules/
 discovery/uchrom_discovery/ui/node_modules/
 
