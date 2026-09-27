@@ -96,7 +96,7 @@ usable by Codex. Each skill gives the `uchrom` calls, a script template, the che
 
 | Skill | Recipe | Checks it enforces |
 |---|---|---|
-| `load-data` | FOF-CT / seqFISH+ / .scool / .pairs → h5cd, QC summary | ploidy, spots per trace, missing loci |
+| `load-data` | FOF-CT / seqFISH+ / .scool / .pairs → .chromdata.zarr, QC summary | ploidy, spots per trace, missing loci |
 | `call-structures` | TADs, loops, compartments with the right caller per modality | resolution vs bin size, min traces |
 | `compare-groups` | a statistic between cell groups, with test and effect size | ≥ n cells per group, report n and test, open the view |
 | `associate-modalities` | feature ↔ structure at the spot, cell or cell-type level (Fig 1b) | level stated, confounders (nuclear size) |
@@ -124,7 +124,7 @@ public API.
 3. Python client `uchrom.browser.connect()` over the same actions.
 4. WebMCP registration of the actions, feature-detected; tested in Chrome with the flag.
 5. Skills, starting with `compare-groups`, `show-in-browser` and `load-data`.
-6. `paper/fig6/capture.py` (Playwright, Paper theme, 300 dpi) and the Takei 2025 all-FOV h5cd (shared with Fig 5).
+6. `paper/fig6/capture.py` (Playwright, Paper theme, 300 dpi) and the Takei 2025 all-FOV .chromdata.zarr (shared with Fig 5).
 7. Benchmarks: browser performance and the agent benchmark → `paper/fig6/results/*.json`.
 8. Demo video recorded with the same script, including the WebMCP route.
 
