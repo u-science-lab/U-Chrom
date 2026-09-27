@@ -1,0 +1,120 @@
+{
+ "takei2021": {
+  "dataset": "Takei 2021 mESC (4DN FOF-CT)",
+  "import_s": 0.8,
+  "n_cells_in_cells_table": 201,
+  "n_cells_with_position": 201,
+  "n_rows_in_source_cell_table": 201,
+  "n_cells_with_spots": 201,
+  "n_cells_with_spots_and_position": 201,
+  "record": {
+   "x_col": "centroid_x",
+   "y_col": "centroid_y",
+   "ndim": 2,
+   "status": "measured",
+   "unit": "micron",
+   "source": "FOF-CT cell table Cent_ROI_x / Cent_ROI_y [/ Cent_ROI_z]"
+  },
+  "max_abs_diff_to_source": 0.0,
+  "round_trip_equal": true,
+  "peak_rss_mb": 520.7,
+  "position_vs_spot_mean_xy": {
+   "n_cells": 201,
+   "axes": [
+    "x",
+    "y"
+   ],
+   "median_distance": 0.49817570647816034,
+   "p95_distance": 0.9962497865007685,
+   "median_abs_by_axis": {
+    "x": 0.22636824485891793,
+    "y": 0.32489344262293685
+   }
+  }
+ },
+ "takei2025": {
+  "dataset": "Takei 2025 cerebellum rep 1 (seqFISH+ loader, streaming)",
+  "import_s": 176.5,
+  "n_cells_in_cells_table": 1799,
+  "n_cells_with_position": 1799,
+  "n_cells_in_source_csv_rep1": 1799,
+  "cells_per_fov": {
+   "1_0": 545,
+   "1_1": 592,
+   "1_2": 662
+  },
+  "record": {
+   "x_col": "centroid_x",
+   "y_col": "centroid_y",
+   "z_col": "centroid_z",
+   "ndim": 3,
+   "status": "measured",
+   "unit": "voxel",
+   "voxel_size": [
+    0.103,
+    0.103,
+    0.25
+   ],
+   "voxel_unit": "um",
+   "frame": "fov",
+   "region_col": "fov",
+   "in_coords_frame": true,
+   "source": "cell clustering CSV (Takei et al. 2025): x, y, z voxel coordinates of each cell",
+   "method": "segmentation (Takei et al. 2025)"
+  },
+  "max_abs_diff_to_source": 0.0,
+  "unmatched_in_source": 0,
+  "round_trip_equal": true,
+  "position_vs_spot_mean_um": {
+   "n_cells": 1799,
+   "axes": [
+    "x",
+    "y",
+    "z"
+   ],
+   "median_distance": 0.8603714003815874,
+   "p95_distance": 2.0780714305558434,
+   "median_abs_by_axis": {
+    "x": 0.12401525245140022,
+    "y": 0.1379136738428457,
+    "z": 0.8067711660329531
+   }
+  },
+  "spots_frame_note": "physical = voxel \u00d7 (0.103, 0.103, 0.25) \u00b5m; spots are x_um / y_um / z_um of the same FOV",
+  "peak_rss_mb": 18055.1
+ },
+ "liu2025_mop": {
+  "dataset": "Liu 2025 MOp (4DN FOF-CT)",
+  "import_s": 25.9,
+  "n_cells_in_cells_table": 14733,
+  "n_cells_with_position": 14733,
+  "n_rows_in_source_cell_table": 14733,
+  "n_cells_with_spots": 11045,
+  "n_cells_with_spots_and_position": 11038,
+  "record": {
+   "x_col": "cell_center_x_global",
+   "y_col": "cell_center_y_global",
+   "ndim": 2,
+   "status": "measured",
+   "unit": "micron",
+   "frame": "global",
+   "source": "FOF-CT cell table cell_center_x_global / cell_center_y_global"
+  },
+  "max_abs_diff_to_source": 0.0,
+  "round_trip_equal": true,
+  "peak_rss_mb": 5015.1,
+  "position_vs_spot_mean_xy": {
+   "n_cells": 11038,
+   "axes": [
+    "x",
+    "y"
+   ],
+   "median_distance": 3708.579854127339,
+   "p95_distance": 4762.37928973085,
+   "median_abs_by_axis": {
+    "x": 2495.597503085998,
+    "y": 1678.321041712863
+   }
+  }
+ }
+}

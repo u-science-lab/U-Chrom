@@ -452,6 +452,7 @@ class BackedChromData(ChromData):
         self.results = parts["results"]
         self.uns = parts["uns"]
         self.points = parts["points"]
+        self.cell_shapes = parts.get("cell_shapes") or {}
         self._linked_adata = None
         bt = parts["bin_tracks"]
         if bt is not None and len(bt.columns):
@@ -662,15 +663,17 @@ class BackedChromData(ChromData):
             traces = self._filter_traces(spots)
             cells, cellm = self._filter_cells(spots)
             points = self._filter_points(spots)
+            shapes = self._filter_cell_shapes(spots)
         else:
             traces, cells, cellm, points = self.traces, self.cells, self.cellm, self.points
+            shapes = self.cell_shapes
         out = ChromData(
             coords, spots, bins=self._bins,
             cells=cells if len(cells) or len(cells.columns) else None,
             cellm=cellm or None, binm=self.binm or None, intervals=self._intervals,
             traces=traces if len(traces) or len(traces.columns) else None,
             layers=layers or None, results=self.results, uns=self.uns,
-            points=points or None, validate=False, _own_spots=True,
+            points=points or None, cell_shapes=shapes or None, validate=False, _own_spots=True,
         )
         out._bin_tracks = self._bin_tracks
         if spot_tracks is not None:

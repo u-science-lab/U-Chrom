@@ -350,7 +350,7 @@ def test_upgrade_h5cd_and_cli(tmp_path, capsys):
     assert file_format_version(tmp_path / "out" / "old.h5cd") == "2.0"
     # the default target is the zarr container (tests/core/test_zarr_format.py)
     assert main([str(src), "--out-dir", str(tmp_path / "out")]) == 0
-    assert file_format_version(tmp_path / "out" / "old.chromdata.zarr") == "2.2"
+    assert file_format_version(tmp_path / "out" / "old.chromdata.zarr") == "2.3"
 
 
 def test_write_compression_options(tmp_path):

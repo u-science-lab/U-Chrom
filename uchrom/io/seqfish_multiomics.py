@@ -158,8 +158,13 @@ def read_seqfish_multiomics(
         Optional path to the per-cell clustering CSV
         (``data/cerebellum/clustering/100k-002-001-cerebellum_mRNA_cluster_nuc_vol_filtered.csv``).
         If given, the loader populates ``cells`` (with ``leiden``,
-        ``cell_type``, centroid, nuclear volume, doublet, batch) and
-        ``cellm['umap']``.
+        ``cell_type``, the cell position ``centroid_x/y/z`` — voxel
+        coordinates in the FOV, recorded in ``uns['cell_spatial']`` with the
+        voxel size, so ``cd.cell_positions(physical=True)`` is in µm in the
+        frame of ``coords`` — ``fov`` (``"{rep}_{fov}"``), nuclear volume,
+        doublet, batch) and ``cellm['umap']``.  (Before format 2.3 the
+        centroid columns were ``x_centroid`` …; ``cell_positions()`` still
+        reads them.)
     leiden_to_cell_type
         Mapping from leiden cluster id (int) to cell-type string.  Used
         to derive ``cells.cell_type``.  If ``None``, the published
@@ -275,7 +280,7 @@ def read_seqfish_multiomics(
     cells_kept, cellm = _build_cells_and_umap(
         cell_clustering, leiden_map, spots,
     )
-    uns = _build_uns(leiden_map, allele_col, keep_unclustered)
+    uns = _build_uns(leiden_map, allele_col, keep_unclustered, cells=cells_kept)
 
     from uchrom.core import ChromData
     return ChromData(
@@ -315,7 +320,7 @@ def _read_seqfish_streaming(paths, locus_df, *, out: Path, cell_clustering, leid
         cells_kept, cellm = _build_cells_and_umap(
             cell_clustering, leiden_map, pd.DataFrame({"cell_id": w.unique("cell_id")}))
         w.finish(bins=_panel_bins(locus_df, loci), cells=cells_kept, cellm=cellm or None,
-                 traces=traces, uns=_build_uns(leiden_map, allele_col, keep_unclustered))
+                 traces=traces, uns=_build_uns(leiden_map, allele_col, keep_unclustered, cells=cells_kept))
     except BaseException:
         if not w._closed:
             w.abort()
@@ -989,9 +994,12 @@ def _load_cells(
     cells = pd.DataFrame({
         "leiden": df["leiden"].values,
         "cell_type": df["cell_type"].values,
-        "x_centroid": df["x"].values,
-        "y_centroid": df["y"].values,
-        "z_centroid": df["z"].values,
+        # cell positions (ChromData schema, uns['cell_spatial']): the CSV's
+        # x, y, z are voxel coordinates in the FOV (103 nm xy, 250 nm z)
+        "fov": (df["rep"].astype(int).astype(str) + "_" + df["fov"].astype(int).astype(str)).values,
+        "centroid_x": df["x"].values,
+        "centroid_y": df["y"].values,
+        "centroid_z": df["z"].values,
         "nuc_volume_um3": df["nuc_volume(um3)"].values,
         "doublet": df["doublet"].astype(int).values,
         "batch": df["batch"].astype(int).values,
@@ -1033,12 +1041,34 @@ def _build_cells_and_umap(
     return cells_kept, cellm
 
 
+#: voxel size of the Takei 2025 DNA seqFISH+ images (x, y, z; µm)
+VOXEL_SIZE_UM = (0.103, 0.103, 0.25)
+
+
+def _cell_spatial_record() -> dict:
+    """``uns['cell_spatial']['default']`` for the clustering CSV centroids."""
+    from uchrom.core.cellspatial import position_record
+
+    return position_record(
+        ("centroid_x", "centroid_y", "centroid_z"), unit="voxel", voxel_size=VOXEL_SIZE_UM,
+        voxel_unit="um", frame="fov", region_col="fov", in_coords_frame=True, status="measured",
+        source="cell clustering CSV (Takei et al. 2025): x, y, z voxel coordinates of each cell",
+        method="segmentation (Takei et al. 2025)")
+
+
 def _build_uns(
-    leiden_map: Dict[int, str], allele_col: str, keep_unclustered: bool,
+    leiden_map: Dict[int, str], allele_col: str, keep_unclustered: bool, cells=None,
 ) -> dict:
     # HDF5 attribute keys must be strings; stringify the leiden->cell_type
     # dict for storage.  Callers can recover int keys via
     # ``{int(k): v for k, v in cd.uns['leiden_to_cell_type'].items()}``.
+    uns = _base_uns(leiden_map, allele_col, keep_unclustered)
+    if cells is not None and "centroid_x" in getattr(cells, "columns", ()):
+        uns["cell_spatial"] = {"default": _cell_spatial_record()}
+    return uns
+
+
+def _base_uns(leiden_map: Dict[int, str], allele_col: str, keep_unclustered: bool) -> dict:
     return {
         "genome_assembly": "mm10",
         "xyz_unit": "um",

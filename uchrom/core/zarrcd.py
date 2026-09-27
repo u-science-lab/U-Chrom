@@ -1,4 +1,4 @@
-"""The ``.chromdata.zarr`` container (format 2.2): Zarr + Parquet.
+"""The ``.chromdata.zarr`` container (format 2.3): Zarr + Parquet.
 
 A ChromData store is a Zarr v3 group whose large tables are Parquet files
 (the SpatialData approach): Parquet for anything with rows (spots, tracks,
@@ -22,7 +22,8 @@ provenance, linked files).  Layout (2.2)::
     │   ├── categories/<table>.<column>.parquet   values of the coded columns
     │   ├── bins.parquet  bin_tracks.parquet  traces.parquet  cells.parquet
     │   ├── intervals/<key>.parquet
-    │   └── points/<key>.parquet
+    │   ├── points/<key>.parquet
+    │   └── cell_shapes/<key>.parquet  cell outlines, GeoParquet (cell_id, WKB geometry; 2.3)
     ├── index/                    zarr arrays over the primary order: trace_offsets,
     │   │                         trace_codes, trace_cells, chrom_trace, cell_offsets,
     │   │                         cell_codes, row_groups, [source_row]
@@ -33,7 +34,7 @@ provenance, linked files).  Layout (2.2)::
     │                             tables as <key>/table.parquet
     ├── uns/                      attrs (JSON) + arrays
     ├── contacts/                 attrs: linked .cool / .scool records
-    └── links/                    attrs: linked .h5ad / .h5mu records
+    └── links/                    attrs: linked .h5ad / .h5mu / SpatialData records
 
 Every spot-aligned value is stored once.  Each (cell, trace, chromosome)
 triple is one run of the primary tables and one run of its chromosome
@@ -83,12 +84,18 @@ PathLike = Union[str, Path]
 ZARR_SUFFIX = ".chromdata.zarr"
 ZIP_SUFFIX = ".cdz"
 CONTAINER = "chromdata.zarr"
-ZARR_FORMAT_VERSION = "2.2"
+ZARR_FORMAT_VERSION = "2.3"
+#: the spot-table layout the current version writes: 2.3 is the 2.2 layout
+#: plus the optional cell outlines (``tables/cell_shapes/<key>.parquet``,
+#: GeoParquet) and the cell-position records (``uns['cell_spatial']``,
+#: ``uns['cell_shapes']``, ``links`` attrs ``linked_spatialdata``) — additive,
+#: so 2.2 readers read 2.3 stores (with a warning) and ignore the new parts
+ZARR_LAYOUT_VERSION = "2.2"
 #: MINOR versions of the container this reader understands (2.0: one file per
 #: spot-aligned table, sorted by cell › trace › bin; 2.1: partitioned by
-#: chromosome; 2.2: coordinates + keys partitioned by chromosome, everything
-#: else in cell-sorted primary tables, stored once)
-ZARR_LAYOUTS = {"2.0": "flat", "2.1": "partitioned", "2.2": "primary+coords"}
+#: chromosome; 2.2 / 2.3: coordinates + keys partitioned by chromosome,
+#: everything else in cell-sorted primary tables, stored once)
+ZARR_LAYOUTS = {"2.0": "flat", "2.1": "partitioned", "2.2": "primary+coords", "2.3": "primary+coords"}
 
 #: target rows per Parquet row group of the cell-sorted spot tables (row
 #: groups end on cell boundaries)
@@ -110,7 +117,7 @@ _SPOT_TABLES = ("spots", "spot_tracks")
 _EXC = "#exc"   # exception column of a decimal-encoded float (floatcodec)
 _COORD_COLUMNS = ("x", "y", "z")
 _LINK_FAMILIES = {"linked_cool": "contacts", "linked_scool": "contacts",
-                  "linked_anndata": "links", "linked_mudata": "links"}
+                  "linked_anndata": "links", "linked_mudata": "links", "linked_spatialdata": "links"}
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,120}$")
 
 
@@ -700,7 +707,7 @@ def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float
                keep_source_order: bool = True, float_encoding=DEFAULT_FLOAT_ENCODING,
                coords_row_group_rows: int = DEFAULT_COORDS_ROW_GROUP_ROWS,
                normalize_spot_columns: bool = True, float_dictionary: bool = DEFAULT_FLOAT_DICTIONARY,
-               compression="zstd", _layout: str = ZARR_FORMAT_VERSION) -> None:
+               compression="zstd", _layout: str = ZARR_LAYOUT_VERSION) -> None:
     """Write ``cd`` as a ``.chromdata.zarr`` directory, or a ``.cdz`` zip
     when ``path`` ends with ``.cdz``.  See :meth:`ChromData.write`.
 
@@ -711,6 +718,8 @@ def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float
     2.2."""
     if _layout not in ZARR_LAYOUTS:
         raise ValueError(f"unknown layout {_layout!r}")
+    if _layout == ZARR_FORMAT_VERSION:
+        _layout = ZARR_LAYOUT_VERSION
     if row_group_rows is None:
         row_group_rows = DEFAULT_ROW_GROUP_ROWS if _layout != "2.1" else DEFAULT_COORDS_ROW_GROUP_ROWS
     path = Path(path)
@@ -800,7 +809,7 @@ def _coord_arrays(coords, coord_dtype) -> List[Tuple[str, Any]]:
 
 
 def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level: int,
-                keep_source_order: bool, layout: str = ZARR_FORMAT_VERSION,
+                keep_source_order: bool, layout: str = ZARR_LAYOUT_VERSION,
                 float_encoding=DEFAULT_FLOAT_ENCODING,
                 coords_row_group_rows: int = DEFAULT_COORDS_ROW_GROUP_ROWS, normalize: bool = True,
                 codec="zstd", float_dictionary: bool = DEFAULT_FLOAT_DICTIONARY) -> None:
@@ -879,7 +888,7 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
     _write_small_parts(root, root_path, tables_meta, level=level, bins=cd.bins,
                        bin_tracks=cd.bin_tracks, cells=cd.cells, traces=cd.traces,
                        intervals=cd.intervals, points=cd.points, cellm=cd.cellm, binm=cd.binm,
-                       results=cd.results, uns=cd.uns)
+                       results=cd.results, uns=cd.uns, cell_shapes=getattr(cd, "cell_shapes", None))
     seg_trace = index["trace_codes"]
     meta = {
         "n_spots": n,
@@ -894,8 +903,9 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
     _write_root_meta(root, meta, layout=layout)
 
 
-def _write_root_meta(root, meta: Dict[str, Any], *, layout: str = ZARR_FORMAT_VERSION) -> None:
-    version = layout
+def _write_root_meta(root, meta: Dict[str, Any], *, layout: str = ZARR_LAYOUT_VERSION) -> None:
+    # the current layout is written as the current version (2.3 = layout 2.2 + cell shapes)
+    version = ZARR_FORMAT_VERSION if layout == ZARR_LAYOUT_VERSION else layout
     full = {"format": CONTAINER, "format_version": version, "uchrom_version": _uchrom_version(),
             "spot_order": {"2.1": "chrom,cell,trace,bin", "2.2": "cell,trace,chrom,bin"}.get(layout, "cell,trace,bin"),
             "layout": ZARR_LAYOUTS[layout], **meta}
@@ -1352,7 +1362,7 @@ def _write_tree_v22(cd, root, root_path: Path, *, coord_dtype, row_group_rows: i
     _write_small_parts(root, root_path, tables_meta, level=level, bins=cd.bins,
                        bin_tracks=cd.bin_tracks, cells=cd.cells, traces=cd.traces,
                        intervals=cd.intervals, points=cd.points, cellm=cd.cellm, binm=cd.binm,
-                       results=cd.results, uns=cd.uns)
+                       results=cd.results, uns=cd.uns, cell_shapes=getattr(cd, "cell_shapes", None))
     meta = {
         "n_spots": n,
         "n_bins": int(cd.n_bins),
@@ -1380,10 +1390,10 @@ def _partition_meta(tables_meta: Dict[str, Any], w: "SpotPartitionWriter", layer
 
 def _write_small_parts(root, root_path: Path, tables_meta: Dict[str, Any], *, level: int, bins,
                        bin_tracks, cells, traces, intervals, points, cellm, binm, results,
-                       uns) -> None:
+                       uns, cell_shapes=None) -> None:
     """Everything but the spot-aligned tables and ``index/``: bins, bin
-    tracks, cells, traces, intervals, points, cellm / binm, results, uns and
-    the linked-file records."""
+    tracks, cells, traces, intervals, points, cell shapes (GeoParquet),
+    cellm / binm, results, uns and the linked-file records."""
     comp = _compressor(level)
     tpath = root_path / "tables"
     tables = root.create_group("tables")
@@ -1412,6 +1422,19 @@ def _write_small_parts(root, root_path: Path, tables_meta: Dict[str, Any], *, le
         _write_frame(df, tpath / fname, level)
         pt_meta[str(key)] = fname
     tables_meta["points"] = pt_meta
+    if cell_shapes:
+        from .cellspatial import write_shapes_parquet
+
+        cs_names = _safe_names(list(cell_shapes))
+        cs_meta = {}
+        for key, df in cell_shapes.items():
+            if "/" in key or not key:
+                raise ValueError(f"cell_shapes key must be non-empty without '/': {key!r}")
+            fname = f"cell_shapes/{cs_names[key]}.parquet"
+            types = write_shapes_parquet(df, tpath / fname, level)
+            cs_meta[str(key)] = {"file": fname, "n_rows": int(len(df)), "encoding": "WKB",
+                                 "geometry_types": types}
+        tables_meta["cell_shapes"] = cs_meta
     tables.attrs.update({"tables": tables_meta})
 
     for gname, d in (("cellm", cellm), ("binm", binm)):
@@ -1755,6 +1778,13 @@ def read_small_parts(c: Container) -> Dict[str, Any]:
             source_result=info.get("source_result") or None)
     parts["intervals"] = intervals
     parts["points"] = {k: c.read_frame(f"tables/{f}") for k, f in tmeta.get("points", {}).items()}
+    if tmeta.get("cell_shapes"):
+        from .cellspatial import read_shapes_frame
+
+        parts["cell_shapes"] = {k: read_shapes_frame(c.read_frame(f"tables/{info['file']}"))
+                                for k, info in tmeta["cell_shapes"].items()}
+    else:
+        parts["cell_shapes"] = {}
     for gname in ("cellm", "binm"):
         names = c.group_attrs(gname).get("keys", {})
         parts[gname] = {k: c.array(f"{gname}/{node}") for k, node in names.items()}
@@ -2659,6 +2689,6 @@ except TypeError:  # pragma: no cover - pandas < 2.1
 
 __all__ = [
     "CONTAINER", "Container", "DEFAULT_CACHE_BYTES", "DEFAULT_ROW_GROUP_ROWS", "DEFAULT_ZSTD_LEVEL",
-    "SpotPartitionWriter", "SpotRows", "ZARR_FORMAT_VERSION", "ZARR_LAYOUTS", "ZARR_SUFFIX",
+    "SpotPartitionWriter", "SpotRows", "ZARR_FORMAT_VERSION", "ZARR_LAYOUT_VERSION", "ZARR_LAYOUTS", "ZARR_SUFFIX",
     "ZIP_SUFFIX", "container_kind", "partition_dirs", "read_small_parts", "sort_order", "write_zarr",
 ]

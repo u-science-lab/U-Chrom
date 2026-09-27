@@ -71,6 +71,8 @@ example-data/takei2025_cerebellum/
 example-data/liu2025_mop/
 example-data/fig2_work/
 !paper/fig2/results/*.json
+# real-data validation results (benchmarks/*_validation.py --out)
+!benchmarks/results/*.json
 
 # Fig. 2 build cache (rasterised logos, previews)
 paper/fig2/_cache/

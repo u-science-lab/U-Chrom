@@ -45,7 +45,7 @@ from .bins import BIN_ID, LOCI, bins_from_loci, map_loci_to_bins, normalise_bins
 from .zarrcd import (
     DEFAULT_COORDS_ROW_GROUP_ROWS, DEFAULT_FLOAT_DICTIONARY, DEFAULT_FLOAT_ENCODING, DEFAULT_ROW_GROUP_ROWS,
     DEFAULT_ZSTD_LEVEL, PLAN_ROWS,
-    SpotPartitionWriter, ZARR_FORMAT_VERSION, ZARR_SUFFIX, _arrow_column, _code_dtype, _compressor,
+    SpotPartitionWriter, ZARR_FORMAT_VERSION, ZARR_LAYOUT_VERSION, ZARR_SUFFIX, _arrow_column, _code_dtype, _compressor,
     _is_chromdata_dir, _partition_meta, _rmtree, _safe_names, _write_frame,
     _write_root_meta, _write_small_parts, _zarr, _zarr_array, encode_float_columns, partition_dirs,
     plain_columns,
@@ -96,11 +96,13 @@ class ChromDataWriter:
                  float_encoding=DEFAULT_FLOAT_ENCODING, float_dictionary: bool = DEFAULT_FLOAT_DICTIONARY,
                  coords_row_group_rows: int = DEFAULT_COORDS_ROW_GROUP_ROWS,
                  normalize_spot_columns: bool = True, compression="zstd",
-                 layout: str = ZARR_FORMAT_VERSION):
+                 layout: str = ZARR_LAYOUT_VERSION):
         from uchrom.settings import settings
 
+        if layout == ZARR_FORMAT_VERSION:
+            layout = ZARR_LAYOUT_VERSION
         if layout not in ("2.1", "2.2"):
-            raise ValueError("the streaming writer writes format 2.1 or 2.2")
+            raise ValueError("the streaming writer writes format 2.1 or 2.3 (the 2.2 layout)")
         self.layout = layout
         self.float_encoding = float_encoding
         self.float_dictionary = bool(float_dictionary)
@@ -143,7 +145,8 @@ class ChromDataWriter:
         self._cat_cols: Dict[str, List[Any]] = {}
         self._track_cols: Optional[List[str]] = None
         self._layer_keys: Optional[List[str]] = None
-        self._parts: Dict[str, List[Any]] = {"cells": [], "cellm": [], "traces": [], "points": []}
+        self._parts: Dict[str, List[Any]] = {"cells": [], "cellm": [], "traces": [], "points": [],
+                                             "cell_shapes": []}
         self._uns: Dict[str, Any] = {}
         self._run_id = 0
         self._chunk_sorted = True
@@ -201,6 +204,8 @@ class ChromDataWriter:
                 self._parts["cellm"].append(dict(chunk.cellm))
             if chunk.points:
                 self._parts["points"].append(dict(chunk.points))
+            if getattr(chunk, "cell_shapes", None):
+                self._parts["cell_shapes"].append(dict(chunk.cell_shapes))
             if not self._uns:
                 self._uns = dict(chunk.uns)
         if spots is None or coords is None:
@@ -353,7 +358,7 @@ class ChromDataWriter:
                cellm: Optional[Mapping[str, np.ndarray]] = None,
                traces: Optional[pd.DataFrame] = None, bin_tracks: Optional[pd.DataFrame] = None,
                binm: Optional[Mapping[str, np.ndarray]] = None, intervals=None, points=None,
-               results=None, uns: Optional[Mapping[str, Any]] = None) -> Path:
+               results=None, uns: Optional[Mapping[str, Any]] = None, cell_shapes=None) -> Path:
         """Write the store (atomically) and remove the spill files.  Small
         tables given here replace the ones collected from the chunks."""
         if self._closed:
@@ -374,6 +379,11 @@ class ChromDataWriter:
             if points is None:
                 points = ({k: pd.concat([d[k] for d in self._parts["points"]], ignore_index=True)
                            for k in self._parts["points"][0]} if self._parts["points"] else {})
+            if cell_shapes is None:
+                cell_shapes = ({k: pd.concat([d[k] for d in self._parts["cell_shapes"] if k in d],
+                                             ignore_index=True).drop_duplicates("cell_id")
+                                for k in dict.fromkeys(k for d in self._parts["cell_shapes"] for k in d)}
+                               if self._parts["cell_shapes"] else {})
             uns = dict(uns) if uns is not None else dict(self._uns)
             if bin_tracks is None:
                 bin_tracks = pd.DataFrame(index=pd.RangeIndex(len(final_bins), name=BIN_ID))
@@ -388,7 +398,8 @@ class ChromDataWriter:
                             traces=traces if traces is not None else pd.DataFrame(), cellm=dict(cellm),
                             bin_tracks=bin_tracks, binm=dict(binm or {}),
                             intervals=IntervalStore.coerce(intervals or {}), points=dict(points),
-                            results=results if results is not None else ResultsStore(), uns=uns)
+                            results=results if results is not None else ResultsStore(), uns=uns,
+                            cell_shapes=dict(cell_shapes))
                 import os
                 if self.path.exists():
                     old = self.path.parent / f".{self.path.name}.{uuid.uuid4().hex}.old"

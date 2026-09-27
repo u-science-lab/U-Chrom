@@ -43,24 +43,25 @@ def test_discovery_schema_reports_linked_mudata_and_scool(tmp_path):
 def test_cell_spatial_coordinates_align_by_cell_id_and_roundtrip(tmp_path):
     from uchrom import ChromData
     cd = _make_cd()
-    cd.set_cell_spatial_coordinates(
+    cd.set_cell_positions(
         np.array([[20.0, 30.0], [10.0, 15.0]]),
         key="tangram_merfish",
         cell_ids=["cell_b", "cell_a"],
         source="MERFISH centroid",
         method="Tangram map_cells_to_space",
-        coordinate_system="micron",
-        inferred=True,
+        unit="um",
+        frame="tissue",
+        status="inferred",
     )
 
-    path = tmp_path / "spatial_cells.h5cd"
+    path = tmp_path / "spatial_cells.chromdata.zarr"
     cd.write(path)
     out = ChromData.read(path)
 
-    assert out.cells.loc["cell_a", "tangram_merfish_spatial_x"] == 10.0
-    assert out.cells.loc["cell_a", "tangram_merfish_spatial_y"] == 15.0
-    assert out.cells.loc["cell_b", "tangram_merfish_spatial_x"] == 20.0
-    assert out.describe_links()["cell_spatial"]["tangram_merfish"]["inferred"] is True
+    assert out.cells.loc["cell_a", "tangram_merfish_centroid_x"] == 10.0
+    assert out.cells.loc["cell_a", "tangram_merfish_centroid_y"] == 15.0
+    assert out.cells.loc["cell_b", "tangram_merfish_centroid_x"] == 20.0
+    assert out.describe_links()["cell_spatial"]["tangram_merfish"]["status"] == "inferred"
 
     schema = build_discovery_schema(out)
     assert schema["cell_spatial"]["present"] is True
