@@ -17,10 +17,9 @@ Every data panel is drawn from the JSONs in ``results/`` (written by
      ``c_access.json``) and the streaming population analysis
      (``d_streaming.json``)
 
-Supplementary: ``make_figS_formats.py`` (format versions, flat Parquet,
-backed access by layout, per-format get_trace / get_chrom, round trips),
-``make_figS_crossmodal.py`` (RNA groups → pseudo-bulk Hi-C),
-``make_figS_contacts.py`` (linked vs copied contacts).
+Supplementary Figure S1: ``make_figS_fig2.py`` (per-format get_trace / get_chrom,
+RNA groups → pseudo-bulk Hi-C, linked vs copied contacts; one mm grid).
+``make_figS_formats.py`` (format layouts, flat Parquet, round trips) is not in the paper.
 
     python paper/fig2/make_fig2.py        # -> fig2.pdf / fig2.png
 """
