@@ -1,15 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchEmbedding, registerGroup } from '../api'
+import { cmapGradient, COLORMAPS, type ColormapName } from '../colormaps'
 import { cellRgb, rgbCss } from '../colors'
+import {
+  autoFieldRange,
+  categoryDotColors,
+  categoryLegend,
+  defaultRangeMode,
+  dotRadius,
+  drawOrder,
+  fieldScaleRange,
+  numericDotColors,
+  OPACITY_MIN,
+  patchEmbStyle,
+  resolveEmbStyle,
+  SIZE_MAX,
+  SIZE_MIN,
+  solidDotColors,
+  sortedFinite,
+  type DotColors,
+  type EmbRangeMode,
+  type EmbStyle,
+} from '../embeddingStyle'
 import { lassoSelect, simplifyPath, type Pt } from '../groups'
 import { useFieldColors } from '../useFieldColors'
+import { loadFieldValues } from '../useOmicsLoader'
 import { useTheme } from '../useTheme'
 import { useGroupInfo, usePaneScope, useScopeCells } from '../useGroups'
 import { fitPlot, nearestPoint, project } from '../render/embedding'
-import { activeView, useStore } from '../store'
-import type { Embedding, EmbeddingInfo } from '../types'
+import { activeView, defaultCategoryField, fieldKey, useStore } from '../store'
+import type { CellField, CellValue, Embedding, EmbeddingInfo } from '../types'
 import { defaultEmbeddingKey, pinnedCell, updatePane, type Pane } from '../workspace'
-import { fmtValue } from './format'
+import { FieldPicker, groupTitle } from './FieldPicker'
+import { colourableFields, fieldLabel, fmtNum, fmtValue } from './format'
 
 const PAD = 14
 
@@ -97,7 +120,268 @@ export function EmbeddingControls({ pane }: { pane: Pane }) {
             ))}
           </select>
         ))}
+      <EmbeddingStyleControls pane={pane} />
     </>
+  )
+}
+
+/** Group key of the categorical fields in the colour-by menu. */
+const CATEGORY_GROUP = '\u0000category'
+
+/**
+ * The colouring a pane asks for, resolved against the active dataset: its
+ * style, the field (loaded on demand) with its values, and — for numeric
+ * fields — the sorted finite values and the colour range.  A field the
+ * dataset lacks falls back to the overview colouring.
+ */
+export function usePaneColoring(pane: Pane) {
+  const dsId = useStore((s) => s.activeDatasetId)
+  const fields = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId)?.cell_fields)
+  const st = useMemo(() => resolveEmbStyle(pane.embStyle), [pane.embStyle])
+  const field: CellField | null = st.colorBy === 'field' ? (fields?.find((f) => f.name === st.field) ?? null) : null
+  const mode: EmbStyle['colorBy'] = st.colorBy === 'field' && !field ? 'overview' : st.colorBy
+  useEffect(() => {
+    if (dsId && field) loadFieldValues(dsId, field.name)
+  }, [dsId, field])
+  const values = useStore((s) => (dsId && field ? (s.cellValues[fieldKey(dsId, field.name)] ?? null) : null))
+  const numeric = !!field && field.kind !== 'category'
+  const sorted = useMemo(() => (numeric && values ? sortedFinite(values.values()) : null), [numeric, values])
+  const range = useMemo<[number, number] | null>(
+    () => (sorted ? fieldScaleRange(sorted, { range: st.range, lo: st.lo, hi: st.hi, field: st.field }) : null),
+    [sorted, st.range, st.lo, st.hi, st.field],
+  )
+  return { st, mode, field, values, numeric, sorted, range }
+}
+
+/** A labelled row of the style controls. */
+function Row({ label, title, children }: { label: string; title?: string; children: React.ReactNode }) {
+  return (
+    <div className="emb-row" title={title}>
+      <span className="emb-lab">{label}</span>
+      <div className="emb-ctl">{children}</div>
+    </div>
+  )
+}
+
+/** Segmented buttons of a small choice. */
+function Seg<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange(v: T): void }) {
+  return (
+    <div className="seg emb-seg">
+      {options.map(([v, text]) => (
+        <button key={v} className={value === v ? 'active' : ''} onClick={() => onChange(v)}>
+          {text}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Point style and colouring of one Embedding pane (inspector): colour by
+ * the overview colouring, a cell field of its own (categorical → legend,
+ * numeric → colormap / range / log1p) or one colour; dot size, opacity,
+ * shape and outline.  Stored on the pane (only the changes).
+ */
+export function EmbeddingStyleControls({ pane }: { pane: Pane }) {
+  const setWorkspace = useStore((s) => s.setWorkspace)
+  const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
+  const { st, mode, field, numeric, sorted, range } = usePaneColoring(pane)
+  const set = (patch: Partial<EmbStyle>) =>
+    setWorkspace((ws) => updatePane(ws, pane.id, { embStyle: patchEmbStyle(ws.panes.find((p) => p.id === pane.id)?.embStyle, patch) }))
+  const fields = useMemo(() => colourableFields(ds?.cell_fields ?? []), [ds?.cell_fields])
+  const groups = useMemo(() => {
+    const m = new Map<string, CellField[]>()
+    if (fields.some((f) => f.kind === 'category')) m.set(CATEGORY_GROUP, [])
+    for (const f of fields) {
+      const g = f.kind === 'category' ? CATEGORY_GROUP : f.group
+      m.set(g, [...(m.get(g) ?? []), f])
+    }
+    return m
+  }, [fields])
+  const titleOf = (g: string) => {
+    if (g !== CATEGORY_GROUP) return groupTitle(g)
+    const fs = groups.get(g) ?? []
+    const one = fs.length === 1 ? fieldLabel(fs[0].name) : 'type'
+    return one[0].toUpperCase() + one.slice(1)
+  }
+  const group = field ? (field.kind === 'category' ? CATEGORY_GROUP : field.group) : null
+  const menuValue = mode === 'field' && group !== null ? `g:${group}` : mode
+  const pickMenu = (v: string) => {
+    if (v === 'overview' || v === 'solid') return set({ colorBy: v })
+    const g = v.slice(2)
+    const fs = groups.get(g) ?? []
+    if (!fs.length) return
+    const keep = fs.find((f) => f.name === st.field)
+    const cat = g === CATEGORY_GROUP ? fs.find((f) => f.name === defaultCategoryField(ds)?.name) : undefined
+    set({ colorBy: 'field', field: (keep ?? cat ?? fs[0]).name })
+  }
+  const auto = sorted ? autoFieldRange(sorted, (st.range ?? defaultRangeMode(st.field)) === 'quantile' ? 'quantile' : 'auto') : null
+  const rangeMode: EmbRangeMode = st.range ?? defaultRangeMode(st.field)
+  return (
+    <div className="emb-style">
+      <Row label="colour by" title="Colour of the dots in this view only">
+        <select value={menuValue} onChange={(e) => pickMenu(e.target.value)}>
+          <option value="overview">same as overview</option>
+          {[...groups.keys()].map((g) => (
+            <option key={g} value={`g:${g}`}>
+              {titleOf(g)}
+            </option>
+          ))}
+          <option value="solid">single colour</option>
+        </select>
+      </Row>
+      {mode === 'field' && group !== null && (groups.get(group)?.length ?? 0) > 1 && (
+        <Row label="">
+          <FieldPicker
+            key={group}
+            fields={groups.get(group) ?? []}
+            value={st.field}
+            placeholder={`search ${titleOf(group).toLowerCase()}…`}
+            onPick={(name) => set({ colorBy: 'field', field: name })}
+          />
+        </Row>
+      )}
+      {mode === 'solid' && (
+        <Row label="colour">
+          <input type="color" value={st.solid} onChange={(e) => set({ solid: e.target.value })} />
+        </Row>
+      )}
+      {mode === 'field' && numeric && (
+        <>
+          <Row label="colormap">
+            <select value={st.cmap} onChange={(e) => set({ cmap: e.target.value as ColormapName })}>
+              {COLORMAPS.filter((c) => !c.diverging && c.name !== 'fall').map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </Row>
+          <Row label="">
+            <div className="cmap-preview" style={{ background: cmapGradient(st.cmap, st.reverse) }} title="low → high" />
+          </Row>
+          <Row label="range" title="Colour range: min–max, 1st–99th percentile (sparse data such as genes), or manual">
+            <select value={rangeMode} onChange={(e) => set({ range: e.target.value as EmbRangeMode })}>
+              <option value="auto">min – max</option>
+              <option value="quantile">1 – 99 %</option>
+              <option value="manual">manual</option>
+            </select>
+          </Row>
+          {rangeMode === 'manual' && (
+            <Row label="">
+              <div className="emb-range">
+                <NumInput value={st.lo} placeholder={auto ? fmtNum(auto[0]) : 'min'} onCommit={(v) => set({ lo: v })} title="Low end (empty = automatic)" />
+                <span className="muted">–</span>
+                <NumInput value={st.hi} placeholder={auto ? fmtNum(auto[1]) : 'max'} onCommit={(v) => set({ hi: v })} title="High end (empty = automatic)" />
+              </div>
+            </Row>
+          )}
+          <Row label="">
+            <div className="emb-checks">
+              <label className="check small" title="Swap the ends of the colormap">
+                <input type="checkbox" checked={st.reverse} onChange={(e) => set({ reverse: e.target.checked })} /> reverse
+              </label>
+              <label className="check small" title="log1p of the offset from the range start">
+                <input type="checkbox" checked={st.log} onChange={(e) => set({ log: e.target.checked })} /> log1p
+              </label>
+              <label className="check small" title="Draw high values last so expressing cells are not hidden (missing values always underneath)">
+                <input type="checkbox" checked={st.highOnTop} onChange={(e) => set({ highOnTop: e.target.checked })} /> high on top
+              </label>
+            </div>
+          </Row>
+          {range && <div className="muted small emb-note">range {fmtNum(range[0])} – {fmtNum(range[1])}</div>}
+        </>
+      )}
+      {mode === 'field' && (
+        <Row label="legend" title={numeric ? 'Colour bar in the view' : 'Legend in the view: click an entry to grey it out here, double-click to show only it'}>
+          <div className="emb-checks">
+            <label className="check small">
+              <input type="checkbox" checked={st.legend} onChange={(e) => set({ legend: e.target.checked })} /> show
+            </label>
+            {!numeric && st.hidden.length > 0 && (
+              <button className="link" onClick={() => set({ hidden: [] })}>
+                show all ({st.hidden.length} hidden)
+              </button>
+            )}
+          </div>
+        </Row>
+      )}
+      <Row label="size" title="Dot radius in pixels (auto: by cell count and view size)">
+        <div className="emb-slider">
+          <input
+            type="range"
+            min={SIZE_MIN}
+            max={SIZE_MAX}
+            step={0.5}
+            value={st.size ?? 2}
+            className={st.size === null ? 'auto' : ''}
+            onChange={(e) => set({ size: +e.target.value })}
+          />
+          <span className="val">{st.size === null ? 'auto' : `${st.size}px`}</span>
+          {st.size !== null && (
+            <button className="link" onClick={() => set({ size: null })} title="Automatic size (by cell count and view size)">
+              auto
+            </button>
+          )}
+        </div>
+      </Row>
+      <Row label="opacity">
+        <div className="emb-slider">
+          <input type="range" min={OPACITY_MIN} max={1} step={0.05} value={st.opacity} onChange={(e) => set({ opacity: +e.target.value })} />
+          <span className="val">{st.opacity.toFixed(2)}</span>
+        </div>
+      </Row>
+      <Row label="shape" title="Squares draw much faster for many cells">
+        <Seg
+          value={st.shape}
+          options={[
+            ['circle', 'circle'],
+            ['square', 'square'],
+          ]}
+          onChange={(v) => set({ shape: v })}
+        />
+      </Row>
+      <Row label="outline" title="Thin ring around each dot (auto: on light themes only)">
+        <Seg
+          value={st.outline}
+          options={[
+            ['auto', 'auto'],
+            ['on', 'on'],
+            ['off', 'off'],
+          ]}
+          onChange={(v) => set({ outline: v })}
+        />
+      </Row>
+      {pane.embStyle && (
+        <button className="link emb-reset" onClick={() => setWorkspace((ws) => updatePane(ws, pane.id, { embStyle: undefined }))} title="Back to the default style">
+          reset style
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Number input committed on blur / Enter; empty → null (automatic). */
+function NumInput({ value, placeholder, title, onCommit }: { value: number | null; placeholder: string; title: string; onCommit(v: number | null): void }) {
+  const [text, setText] = useState(value === null ? '' : String(value))
+  useEffect(() => setText(value === null ? '' : String(value)), [value])
+  const commit = () => {
+    const t = text.trim()
+    if (!t) return onCommit(null)
+    const v = Number(t)
+    if (Number.isFinite(v)) onCommit(v)
+    else setText(value === null ? '' : String(value))
+  }
+  return (
+    <input
+      className="num"
+      value={text}
+      placeholder={placeholder}
+      title={title}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+    />
   )
 }
 
@@ -173,21 +457,37 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
     return project(emb.x, emb.y, fitPlot(emb.x, emb.y, size.w, plotH, PAD))
   }, [emb, size.w, plotH])
 
-  // per-dot colours = the 3-D overview colouring
-  const colors = useMemo(() => {
-    if (!emb) return []
-    const cellIndex = new Map((cells ?? []).map((c, i) => [c.cell_id, i]))
-    const opts = {
-      cellIndex,
-      ...fieldColors,
+  // per-dot colours and draw keys: the pane's own colouring, else the 3-D
+  // overview colouring.  Memoised apart from size / opacity / shape so that
+  // dragging those sliders only redraws.
+  const coloring = usePaneColoring(pane)
+  const { st, mode, field: paneField, values: paneValues, range } = coloring
+  const hiddenKey = st.hidden.join('\u0000')
+  const dots = useMemo<DotColors | null>(() => {
+    if (!emb) return null
+    const ids = emb.cell_ids
+    if (mode === 'solid') return solidDotColors(ids.length, st.solid)
+    if (mode === 'field' && paneField) {
+      if (paneField.kind === 'category') return categoryDotColors(ids, paneValues, paneField, st.hidden)
+      return numericDotColors(ids, paneValues, st, range ?? [0, 1])
     }
-    return emb.cell_ids.map((id) => rgbCss(cellRgb(id, view.overviewColor, custom, opts)))
-  }, [emb, cells, fieldColors, view.overviewColor, custom])
+    const cellIndex = new Map((cells ?? []).map((c, i) => [c.cell_id, i]))
+    const opts = { cellIndex, ...fieldColors }
+    return { css: ids.map((id) => rgbCss(cellRgb(id, view.overviewColor, custom, opts))), key: new Float64Array(ids.length) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emb, mode, paneField, paneValues, range, st.solid, st.cmap, st.reverse, st.log, st.highOnTop, hiddenKey, cells, fieldColors, view.overviewColor, custom])
+  // draw order: missing / hidden underneath, high values on top, group members last
+  const order = useMemo(() => {
+    if (!emb || !dots) return null
+    const ids = emb.cell_ids
+    return drawOrder(ids.length, dots.key, groupSet ? (i) => groupSet.has(ids[i]) : null)
+  }, [emb, dots, groupSet])
+  const outline = st.outline === 'off' ? null : st.outline === 'on' ? (pal.dotRing !== 'transparent' ? pal.dotRing : 'rgba(0, 0, 0, 0.6)') : pal.dotRing !== 'transparent' ? pal.dotRing : null
 
   // draw
   useEffect(() => {
     const cv = canvasRef.current
-    if (!cv || !px || !emb) return
+    if (!cv || !px || !emb || !dots) return
     const dpr = window.devicePixelRatio || 1
     cv.width = Math.round(size.w * dpr)
     cv.height = Math.round(plotH * dpr)
@@ -196,29 +496,40 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
     g.setTransform(dpr, 0, 0, dpr, 0, 0)
     g.clearRect(0, 0, size.w, plotH)
     const n = emb.cell_ids.length
-    // dots grow a little with the panel (full-size tab / split pane)
-    const grow = Math.min(2, Math.max(1, Math.min(size.w, plotH) / 340))
-    const r = (n > 3000 ? 1.6 : n > 800 ? 2.4 : 3.4) * grow
+    const r = dotRadius(st, n, size.w, plotH)
+    const colors = dots.css
     const focus = view.focusCell
-    // group in scope: members on top at full opacity, the rest faint
-    const order = groupSet ? [...Array(n).keys()].sort((a, b) => +groupSet.has(emb.cell_ids[a]) - +groupSet.has(emb.cell_ids[b])) : null
+    const base = st.opacity
+    const square = st.shape === 'square'
+    const lw = Math.min(0.6, r * 0.4)
+    if (outline) {
+      g.strokeStyle = outline
+      g.lineWidth = lw
+    }
+    const dot = (x: number, y: number, rad: number) => {
+      if (square) {
+        g.fillRect(x - rad, y - rad, 2 * rad, 2 * rad)
+        if (outline) g.strokeRect(x - rad, y - rad, 2 * rad, 2 * rad)
+        return
+      }
+      g.beginPath()
+      g.arc(x, y, rad, 0, 2 * Math.PI)
+      g.fill()
+      if (outline) g.stroke()
+    }
+    let alpha = -1
+    let fill = ''
     for (let k = 0; k < n; k++) {
       const i = order ? order[k] : k
       const x = px[2 * i]
       const y = px[2 * i + 1]
       if (Number.isNaN(x)) continue
       const member = groupSet?.has(emb.cell_ids[i])
-      g.globalAlpha = groupSet ? (member ? 0.95 : 0.14) : focus && emb.cell_ids[i] !== focus ? 0.55 : 0.95
-      g.fillStyle = colors[i]
-      g.beginPath()
-      g.arc(x, y, member ? r * 1.15 : r, 0, 2 * Math.PI)
-      g.fill()
-      // light themes: a thin outline keeps pale colours / viridis yellow visible on white
-      if (pal.dotRing !== 'transparent') {
-        g.strokeStyle = pal.dotRing
-        g.lineWidth = 0.6
-        g.stroke()
-      }
+      // group in scope: members at full opacity, the rest faint; else the focused cell stands out
+      const a = groupSet ? (member ? base : base * 0.15) : focus && emb.cell_ids[i] !== focus ? base * 0.58 : base
+      if (a !== alpha) g.globalAlpha = alpha = a
+      if (colors[i] !== fill) g.fillStyle = fill = colors[i]
+      dot(x, y, member ? r * 1.15 : r)
     }
     g.globalAlpha = 1
     const ring = (i: number, rad: number, color: string, width: number) => {
@@ -233,24 +544,24 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
     }
     if (focus) {
       const fi = emb.cell_ids.indexOf(focus)
-      if (fi >= 0) {
+      if (fi >= 0 && !Number.isNaN(px[2 * fi])) {
         g.fillStyle = colors[fi]
-        g.beginPath()
-        g.arc(px[2 * fi], px[2 * fi + 1], r * 2, 0, 2 * Math.PI)
-        g.fill()
-        ring(fi, r * 2 + 2, pal.strong, 2)
+        if (outline) g.strokeStyle = outline
+        dot(px[2 * fi], px[2 * fi + 1], Math.max(r * 2, 3))
+        ring(fi, Math.max(r * 2, 3) * (square ? 1.42 : 1) + 2, pal.strong, 2)
       }
     }
     // this pane's pinned cell: accent ring + label, in addition to the focus
+    const rr = Math.max(r * 2, 3)
     const pin = pinnedCell(pane)
     const pi = pin ? emb.cell_ids.indexOf(pin) : -1
     if (pi >= 0) {
-      ring(pi, r * 2 + 5, pal.accent, 2.5)
+      ring(pi, rr + 5, pal.accent, 2.5)
       g.fillStyle = pal.accent
       g.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
       g.textAlign = 'left'
       g.textBaseline = 'middle'
-      if (!Number.isNaN(px[2 * pi])) g.fillText(`📌 ${pin}`, px[2 * pi] + r * 2 + 9, px[2 * pi + 1])
+      if (!Number.isNaN(px[2 * pi])) g.fillText(`📌 ${pin}`, px[2 * pi] + rr + 9, px[2 * pi + 1])
     }
     if (hover) ring(hover.i, r + 4, pal.strong, 1.5)
     if (groupSet && groupInfo) {
@@ -261,7 +572,8 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
       g.textBaseline = 'top'
       g.fillText(`${groupInfo.name} · ${groupSet.size} cells`, size.w - 8, 8)
     }
-  }, [px, colors, emb, size.w, plotH, view.focusCell, hover, pane.scope, groupSet, groupInfo, pal])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [px, dots, order, emb, size.w, plotH, view.focusCell, hover, pane.scope, groupSet, groupInfo, pal, st.size, st.opacity, st.shape, outline])
 
   // ---- lasso ----------------------------------------------------------------
   const drawLasso = () => {
@@ -345,7 +657,9 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
   }
 
   const hoverId = hover && emb ? emb.cell_ids[hover.i] : null
-  const hoverVal = hoverId && view.overviewColor === 'field' && fieldValues ? fieldValues.get(hoverId) : undefined
+  const tipField = mode === 'field' ? paneField?.name : mode === 'overview' && view.overviewColor === 'field' ? view.cellField : null
+  const tipValues = mode === 'field' ? paneValues : mode === 'overview' ? fieldValues : null
+  const hoverVal = hoverId && tipField && tipValues ? tipValues.get(hoverId) : undefined
   const axis = emb?.axis_labels ?? ['', '']
 
   return (
@@ -400,6 +714,7 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
           </button>
         </div>
       )}
+      {mode === 'field' && paneField && st.legend && <PaneLegend pane={pane} coloring={coloring} />}
       <div className="embedding-axes muted small">
         <span>{axis[0]} →</span>
         <span>↑ {axis[1]}</span>
@@ -407,9 +722,61 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
       {hover && hoverId && (
         <div className="embedding-tip" style={{ left: hover.x + 12, top: hover.y + 12 }}>
           cell {hoverId}
-          {hoverVal !== undefined && ` · ${fmtValue(hoverVal)}`}
+          {tipField && tipValues && ` · ${fieldLabel(tipField)}: ${fmtValue(hoverVal)}`}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Legend (categorical) or colour bar (numeric) of a pane's own colouring, drawn over the plot. */
+function PaneLegend({ pane, coloring }: { pane: Pane; coloring: ReturnType<typeof usePaneColoring> }) {
+  const setWorkspace = useStore((s) => s.setWorkspace)
+  const { st, field, values, sorted, range } = coloring
+  const legend = useMemo(() => (field && field.kind === 'category' ? categoryLegend(field, values, st.hidden) : null), [field, values, st.hidden])
+  if (!field) return null
+  const title = field.group === 'cell' ? fieldLabel(field.name) : `${groupTitle(field.group)} · ${field.label}`
+  const setHidden = (hidden: string[]) =>
+    setWorkspace((ws) => updatePane(ws, pane.id, { embStyle: patchEmbStyle(ws.panes.find((p) => p.id === pane.id)?.embStyle, { hidden }) }))
+  if (legend) {
+    const names = legend.rows.map((r) => r.value)
+    const toggle = (v: string) => setHidden(st.hidden.includes(v) ? st.hidden.filter((h) => h !== v) : [...st.hidden, v])
+    return (
+      <div className="emb-legend">
+        <div className="emb-legend-title">{title}</div>
+        <div className="emb-legend-list">
+          {legend.rows.map((r) => (
+            <div
+              key={r.value}
+              className={`emb-legend-row${r.off ? ' off' : ''}`}
+              onClick={() => toggle(r.value)}
+              onDoubleClick={() => setHidden(names.filter((n) => n !== r.value))}
+              title={`${r.value}: ${r.count.toLocaleString('en-US')} cells · click to grey out / restore in this view · double-click to show only this one`}
+            >
+              <span className="swatch" style={{ background: r.color }} />
+              <span className="name">{r.value}</span>
+              <span className="muted count">{r.count.toLocaleString('en-US')}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+  if (!range || !sorted) return <div className="emb-legend emb-colorbar muted small">{title} …</div>
+  const min = sorted.length ? sorted[0] : range[0]
+  const max = sorted.length ? sorted[sorted.length - 1] : range[1]
+  let missing = 0
+  if (values) for (const v of values.values() as Iterable<CellValue>) if (typeof v !== 'number' || !Number.isFinite(v)) missing++
+  return (
+    <div className="emb-legend emb-colorbar">
+      <div className="emb-legend-title">{title}</div>
+      <div className="colorbar-ramp" style={{ background: cmapGradient(st.cmap, st.reverse) }} />
+      <div className="colorbar-ticks">
+        <span>{`${range[0] > min ? '≤' : ''}${fmtNum(range[0])}`}</span>
+        {st.log && <span className="muted">log1p</span>}
+        <span>{`${range[1] < max ? '≥' : ''}${fmtNum(range[1])}`}</span>
+      </div>
+      {missing > 0 && <div className="muted small">grey = missing ({missing.toLocaleString('en-US')})</div>}
     </div>
   )
 }
