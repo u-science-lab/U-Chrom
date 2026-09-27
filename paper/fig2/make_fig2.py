@@ -1,28 +1,26 @@
 """Figure 2 — ChromData at real scale: one store, many communities.
 
-Every panel is drawn from the benchmark JSONs in ``results/`` (written by
+Every data panel is drawn from the JSONs in ``results/`` (written by
 ``benchmarks/fig2/*.py``); nothing is mock data.
 
   a  data model and the ``x.chromdata.zarr`` 2.2 layout (``panel_a.py``; schematic)
-  b  interoperability with community formats: what survives export → import
-     (``f_roundtrip.json``)
+  b  what each format can represent: chromdata.zarr, FOF-CT, AnnData,
+     SpatialData, MuData, cooler × ten chromatin data elements, native /
+     by convention / not supported (``b_capabilities.json``, evidence per cell)
   c  storage and full reads vs spots: chromdata.zarr vs the storage schemes
      the community uses for chromatin tracing — FOF-CT (4DN CSV), AnnData
      (spots as obs), SpatialData (points + table) (``b_storage.json``)
-  d  access by level: latency of backed chromdata.zarr (get_trace / get_cell /
-     get_chrom / get_chrom coordinates only / open) vs the in-memory route
-     "load, then subset" (FOF-CT, AnnData) and SpatialData's lazy filter
+  d  left: access by level, backed chromdata.zarr only (get_trace / get_cell /
+     get_chrom coordinates only / open); right: one cell, across formats
      (``c_access.json``)
   e  beyond RAM: memory to open and query (backed vs whole table loaded,
      ``c_access.json``) and the streaming population analysis
      (``d_streaming.json``)
-  f  groups from one modality, structure from another: RNA Leiden clusters
-     of scHiCAR MOp cells → pseudo-bulk Hi-C from the linked per-cell .scool
-     (``f_crossmodal.json``, ``e_query.json``, ``e_contacts.json``)
 
-Flat Parquet (the storage engine under chromdata.zarr) and the ChromData
-format versions are in ``make_figS_formats.py``; linked vs copied contacts
-in ``make_figS_contacts.py``.
+Supplementary: ``make_figS_formats.py`` (format versions, flat Parquet,
+backed access by layout, per-format get_trace / get_chrom, round trips),
+``make_figS_crossmodal.py`` (RNA groups → pseudo-bulk Hi-C),
+``make_figS_contacts.py`` (linked vs copied contacts).
 
     python paper/fig2/make_fig2.py        # -> fig2.pdf / fig2.png
 """
@@ -40,7 +38,7 @@ from matplotlib.lines import Line2D
 HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
 MM = 1 / 25.4
-W, H = 170.0, 222.0
+W, H = 170.0, 194.0
 
 mpl.rcParams.update({
     "pdf.fonttype": 42, "font.family": "sans-serif", "font.sans-serif": ["Arial"],
@@ -81,17 +79,23 @@ SUPP_FORMATS = {
     "h5cd 2.0": dict(color=GREY, ls="--", marker="o", mfc="white", label="h5cd 2.0 (HDF5)"),
     "h5cd 1.x": dict(color=LGREY, ls=":", marker="o", mfc="white", label="h5cd 1.x"),
 }
-# panel d: backed operations
+# panel d (left): backed operations of chromdata.zarr; get_chrom with all tracks is in the supplement
 LEVELS = [("trace", "get_trace", ORANGE, "-"), ("cell", "get_cell", INDIGO, "-"),
-          ("chrom", "get_chrom", TEAL, "-"), ("chrom_coords", "get_chrom, coords only", TEAL, (0, (2.5, 1.2))),
-          ("open", "open store", INK, "-")]
-BASELINES = [  # c_access series, legend label, colour, line style
-    ("FOF-CT (load + subset)", "FOF-CT: load + query", FOFCOL, "--"),
-    ("AnnData (load + subset)", "AnnData: load + query", ADCOL, "--"),
-    ("SpatialData (lazy open + filter)", "SpatialData: lazy filter", SDCOL, (0, (1.2, 1.2))),
+          ("chrom", "get_chrom", TEAL, "-"), ("chrom_coords", "get_chrom,\ncoords only", TEAL, "-"),
+          ("open", "open", INK, "-")]
+D_LEVELS = ["open", "chrom_coords", "cell", "trace"]
+BASELINES = [  # c_access series, short label, colour, line style
+    ("FOF-CT (load + subset)", "FOF-CT", FOFCOL, "-"),
+    ("AnnData (load + subset)", "AnnData", ADCOL, "-"),
+    ("SpatialData (lazy open + filter)", "SpatialData", SDCOL, "-"),
 ]
-STATUS_VAL = {"preserved": 1.0, "partial": 0.5, "lost": -1.0, "na": 0.0, "untested": 0.0}
-ROLE_COL = {"neuronal": INDIGO, "oligodendrocyte": ORANGE, "astrocyte": TEAL}
+# panel b: capability marks
+MARK_ROWS = {"chromdata.zarr": "chromdata.zarr", "FOF-CT (4DN)": "FOF-CT (4DN)", "AnnData": "AnnData",
+             "SpatialData": "SpatialData", "MuData": "MuData", "cooler (.cool / .scool)": "cooler (.cool, .scool)"}
+MARK_COLS = {"coords": "3-D\ncoordinates", "hierarchy": "cell › trace\n› spot", "spot_signals": "per-spot\nsignals",
+             "bin_signals": "per-locus\nsignals", "cells": "cells &\nembeddings", "contacts": "contact\nmaps",
+             "intervals": "intervals\n(TADs, loops)", "points": "RNA spots\n(points)",
+             "provenance": "results +\nprovenance", "partial": "partial reads\n(cell, chrom)"}
 
 
 # --------------------------------------------------------------------------- data
@@ -143,7 +147,9 @@ def access() -> dict:
             continue
         bp = s[series]["points"]
         n = _arr(bp, lambda p: float(p["n_spots"]))
-        base[series] = (n, _arr(bp, lambda p: p["open_s"] + p["trace"]["latency_s"]["median"]))
+        # time to get one trace / cell / chromosome from the file: load (or lazy open) + the query
+        base[series] = {"n": n, **{k: _arr(bp, lambda p, k=k: p["open_s"] + p[k]["latency_s"]["median"])
+                                   for k in ("trace", "cell", "chrom")}}
         mem[series] = (n, _arr(bp, lambda p: (p.get("peak_rss_trace_cell_mb") or p["rss_after_open_mb"])
                                 - p["baseline_rss_mb"]))
     out["base"], out["base_mem"] = base, mem
@@ -196,44 +202,67 @@ def legend(fig, handles, labels, x, y, ncol=1, **kw):
 
 # --------------------------------------------------------------------------- panels
 
+def direct_labels(ax, items, min_gap_mm=2.5, dx_pts=3.0, size=6):
+    """Label line ends directly: ``items`` = [(x_end, y_end, text, colour)].  Labels sit to the right of
+    each line end and are spread in log-y so that neighbours are at least ``min_gap_mm`` apart."""
+    import matplotlib.transforms as mt
+
+    fig = ax.figure
+    h_mm = ax.get_position().height * fig.get_figheight() * 25.4
+    lo, hi = np.log10(ax.get_ylim())
+    gap = min_gap_mm / h_mm * (hi - lo)
+    items = sorted(items, key=lambda t: t[1])
+    pos = [np.log10(t[1]) for t in items]
+    hts = [1 + 0.9 * t[2].count("\n") for t in items]      # label height in lines
+    for _ in range(500):
+        moved = False
+        for i in range(1, len(pos)):
+            need = gap * (hts[i] + hts[i - 1]) / 2
+            d = pos[i] - pos[i - 1]
+            if d < need - 1e-9:
+                pos[i - 1] -= (need - d) / 2
+                pos[i] += (need - d) / 2
+                moved = True
+        if not moved:
+            break
+    off = mt.offset_copy(ax.transData, fig=fig, x=dx_pts, y=0, units="points")
+    for (xe, _, text, col), p in zip(items, pos):
+        ax.text(xe, 10 ** p, text, transform=off, fontsize=size, color=col, va="center", ha="left",
+                clip_on=False, linespacing=1.0)
+
+
 def panel_b(fig, x0, y0):
-    """Interoperability dot matrix (f_roundtrip.json)."""
+    """What each format can represent (b_capabilities.json)."""
     label(fig, x0, y0, "b")
-    title(fig, x0 + 5, y0 + 0.4, "Interoperability with\ncommunity formats")
-    fig.text((x0 + 5) / W, 1 - (y0 + 8.2) / H, "what survives export → import", fontsize=6, color=GREY, va="top")
-    f = _load("f_roundtrip")
-    rows, cols = list(f["rows"]), list(f["cols"])
-    v = np.array([[STATUS_VAL[f["cells"][r][c]["status"]] for c in cols] for r in rows])
-    direction = {"PDB": "export only", ".3dg": "import only"}
-    rh = 4.2
-    ax = ax_at(fig, x0 + 19.5, y0 + 23, 24, rh * len(rows))
-    for i in range(v.shape[0]):
-        for j in range(v.shape[1]):
-            val = float(v[i, j])
-            if val < 0:
-                ax.plot(j + 0.5, i + 0.5, marker="x", ms=4, color=RED, mew=0.8)
-                continue
-            fill = {1.0: "full", 0.5: "left", 0.0: "none"}[val]
-            col = INDIGO if val else LGREY
-            ax.plot(j + 0.5, i + 0.5, marker="o", ms=5.2, fillstyle=fill, color=col, mec=col, mew=0.6,
-                    markerfacecoloralt="white")
-    ax.set_xlim(0, v.shape[1]); ax.set_ylim(v.shape[0], 0)
-    ax.set_xticks(np.arange(v.shape[1]) + 0.5, cols, rotation=50, ha="left", rotation_mode="anchor")
-    ax.xaxis.tick_top(); ax.tick_params(length=0, pad=1.5)
-    ax.set_yticks(np.arange(v.shape[0]) + 0.5, rows)
-    for s in ax.spines.values():
-        s.set_visible(False)
+    title(fig, x0 + 5, y0 + 0.4, "What each format can represent", "evidence for every cell: Supplementary Table S1")
+    cap = _load("b_capabilities")
+    rows, cols = [r for r in MARK_ROWS if r in cap["cells"]], [c for c in MARK_COLS if c in cap["cols"]]
+    cw, rh = 5.0, 3.8
+    gx, gy = x0 + 26, y0 + 22.0
+    ax = ax_at(fig, gx, gy, cw * len(cols), rh * len(rows))
+    ax.set_xlim(0, len(cols)); ax.set_ylim(len(rows), 0)
+    ax.axhspan(0, 1, color="#e7ecf4", lw=0, zorder=0)           # our row
     for i, r in enumerate(rows):
-        if r in direction:
-            ax.annotate(direction[r], (0, i + 0.5), xytext=(-2.5, -5.6), textcoords="offset points", ha="right",
-                        va="center", fontsize=6, color=GREY, annotation_clip=False)
-    hs = [Line2D([], [], marker="o", ls="", ms=4.6, fillstyle=fs, color=c, mec=c, mew=0.6,
-                 markerfacecoloralt="white") for fs, c in (("full", INDIGO), ("left", INDIGO), ("none", LGREY))]
-    labs = ["preserved", "partial, or not representable\nin that format", "not applicable"]
-    if (v < 0).any():
-        hs.append(Line2D([], [], marker="x", ls="", ms=4, color=RED, mew=0.8))
-        labs.append("lost")
-    legend(fig, hs, labs, x0 + 2.5, y0 + 23 + rh * len(rows) + 2.6, handlelength=1.0, labelspacing=0.35)
+        for j, c in enumerate(cols):
+            v = cap["cells"][r][c]["value"]
+            if v == "native":
+                ax.plot(j + 0.5, i + 0.5, marker="o", ms=4.6, color=INDIGO, mec=INDIGO, mew=0.6)
+            elif v == "convention":
+                ax.plot(j + 0.5, i + 0.5, marker="o", ms=4.6, mfc="white", mec=INDIGO, mew=0.8)
+            else:
+                ax.plot([j + 0.36, j + 0.64], [i + 0.5, i + 0.5], color=GREY, lw=0.8, solid_capstyle="butt")
+    ax.set_xticks(np.arange(len(cols)) + 0.5, [MARK_COLS[c] for c in cols], rotation=90, ha="center",
+                  va="bottom", linespacing=1.0)
+    ax.xaxis.tick_top(); ax.tick_params(length=0, pad=1.5)
+    ax.set_yticks(np.arange(len(rows)) + 0.5, [MARK_ROWS[r] for r in rows])
+    ax.get_yticklabels()[0].set_fontweight("bold")
+    for sp in ax.spines.values():
+        sp.set_visible(False)
+    hs = [Line2D([], [], marker="o", ls="", ms=4.2, color=INDIGO, mec=INDIGO, mew=0.6),
+          Line2D([], [], marker="o", ls="", ms=4.2, mfc="white", mec=INDIGO, mew=0.8),
+          Line2D([], [], color=GREY, lw=0.8)]
+    legend(fig, hs, ["native", "by convention", "not supported"], x0 + 3, gy + rh * len(rows) + 2.4, ncol=3,
+           handlelength=1.0, handletextpad=0.4, columnspacing=1.2)
 
 
 def panel_c(fig, x0, y0):
@@ -262,65 +291,82 @@ def panel_c(fig, x0, y0):
 
 def panel_d(fig, x0, y0):
     label(fig, x0, y0, "d")
-    title(fig, x0 + 5, y0 + 0.4, "Access by level")
-    fig.text((x0 + 5) / W, 1 - (y0 + 4.6) / H, "one query, from disk", fontsize=6, color=GREY, va="top")
+    title(fig, x0 + 5, y0 + 0.4, "Access from disk")
     a = access()
-    ax = ax_at(fig, x0 + 10, y0 + 11, 44, 27)
-    for series, _, col, ls in BASELINES:
-        if series in a["base"]:
-            n, t = a["base"][series]
-            points(ax, n, t, col, ls=ls, lw=1.0, ms=2.0, z=2)
-    for key, _, col, ls in LEVELS:
+    lv = {k: (lab, col) for k, lab, col, _ in LEVELS}
+    aw, ah = 27.0, 29.0
+    # left: our store only, by level
+    axl = ax_at(fig, x0 + 10, y0 + 13, aw, ah)
+    fig.text((x0 + 5) / W, 1 - (y0 + 6.0) / H, "Access by level", fontsize=6.5, color=INK, va="top",
+             fontweight="bold")
+    fig.text((x0 + 5) / W, 1 - (y0 + 9.0) / H, "chromdata.zarr, backed", fontsize=6, color=GREY, va="top")
+    dash = {"chrom_coords": (0, (2.5, 1.2))}
+    for key in D_LEVELS:
+        lab, col = lv[key]
         if key + "_q" in a:
             q1, q3 = a[key + "_q"]
-            ax.fill_between(a["n"], q1, q3, color=col, alpha=0.12, lw=0, zorder=1)
-        points(ax, a["n"], a[key], col, ls=ls, rep=a["rep"], lw=0.9 if key == "chrom_coords" else 1.2)
-    loglog(ax)
-    ax.set_xlabel("spots"); ax.set_ylabel("time per query (s)")
-    decades(ax, 1e4, 1e8)
-    lo = min(np.nanmin(a[k]) for k, *_ in LEVELS)
-    hi = max([np.nanmax(t) for _, t in a["base"].values()] + [np.nanmax(a[k]) for k, *_ in LEVELS])
-    ax.set_ylim(lo / 2, hi * 2)
-    decades(ax, lo / 2, hi * 2, axis="y")
-    h1 = [Line2D([], [], color=c, ls=ls, lw=0.9 if k == "chrom_coords" else 1.2) for k, _, c, ls in LEVELS]
-    l1 = [lab for _, lab, _, _ in LEVELS]
-    fig.text((x0 + 3.5) / W, 1 - (y0 + 46.0) / H, "chromdata.zarr 2.2, backed:", fontsize=6, color=INK,
-             fontweight="bold", va="top")
-    h1.append(Line2D([], [], ls="", marker="o", ms=3.2, mfc="white", mec=INK, mew=0.8))
-    l1.append("replicated cells")
-    legend(fig, h1, l1, x0 + 3, y0 + 48.8, ncol=2, handlelength=1.5, columnspacing=0.7)
-    h2 = [Line2D([], [], color=c, ls=ls, lw=1.0) for _, _, c, ls in BASELINES]
-    l2 = [lab for _, lab, _, _ in BASELINES]
-    legend(fig, h2, l2, x0 + 3, y0 + 58.4, ncol=2, handlelength=1.5, columnspacing=0.7)
-    return ax
+            axl.fill_between(a["n"], q1, q3, color=col, alpha=0.12, lw=0, zorder=1)
+        points(axl, a["n"], a[key], col, ls=dash.get(key, "-"), rep=a["rep"], lw=1.2)
+    loglog(axl)
+    axl.set_xlabel("spots"); axl.set_ylabel("time (s)")
+    decades(axl, 1e4, 1e8)
+    axl.set_xticks([1e4, 1e6, 1e8])
+    axl.set_ylim(4e-4, 1)
+    decades(axl, 1e-3, 1, axis="y")
+    direct_labels(axl, [(a["n"][-1], a[k][-1], lv[k][0], lv[k][1]) for k in D_LEVELS], min_gap_mm=2.4)
+    # right: one cell's data, across formats
+    axr = ax_at(fig, x0 + 60, y0 + 13, aw, ah)
+    fig.text((x0 + 55) / W, 1 - (y0 + 6.0) / H, "One cell, across formats", fontsize=6.5, color=INK,
+             va="top", fontweight="bold")
+    fig.text((x0 + 55) / W, 1 - (y0 + 9.0) / H, "open or load the file, then get one cell", fontsize=6,
+             color=GREY, va="top")
+    items = []
+    for series, lab, col, _ in BASELINES:
+        if series in a["base"]:
+            b = a["base"][series]
+            points(axr, b["n"], b["cell"], col, lw=1.1)
+            items.append((b["n"][-1], b["cell"][-1], lab, col))
+    ours = a["open"] + a["cell"]
+    points(axr, a["n"], ours, INDIGO, rep=a["rep"], lw=1.3)
+    items.append((a["n"][-1], ours[-1], "chromdata\n.zarr", INDIGO))
+    loglog(axr)
+    axr.set_xlabel("spots"); axr.set_ylabel("time (s)")
+    decades(axr, 1e4, 1e8)
+    axr.set_xticks([1e4, 1e6, 1e8])
+    axr.set_ylim(1e-2, 30)
+    decades(axr, 1e-2, 30, axis="y")
+    direct_labels(axr, items, min_gap_mm=2.4)
+    return axl, axr
 
 
 def panel_e(fig, x0, y0):
     label(fig, x0, y0, "e")
     title(fig, x0 + 5, y0 + 0.4, "Beyond RAM")
     a = access()
+    ah = 29.0
     # left: memory to open the data and run the trace / cell queries
-    ax = ax_at(fig, x0 + 10, y0 + 13, 21, 27)
-    fig.text((x0 + 7) / W, 1 - (y0 + 6.2) / H, "open + query", fontsize=6.5, color=INK, va="top",
+    ax = ax_at(fig, x0 + 10, y0 + 13, 20, ah)
+    fig.text((x0 + 5) / W, 1 - (y0 + 6.0) / H, "Open + query", fontsize=6.5, color=INK, va="top",
              fontweight="bold")
-    for series, _, col, ls in BASELINES:
+    fig.text((x0 + 5) / W, 1 - (y0 + 9.0) / H, "formats as in d", fontsize=6, color=GREY, va="top")
+    for series, _, col, _ in BASELINES:
         if series in a["base_mem"]:
             n, m = a["base_mem"][series]
-            points(ax, n, m / 1024, col, ls=ls, lw=1.0, ms=2.0, z=2)
+            points(ax, n, m / 1024, col, lw=1.0, ms=2.0, z=2)
     points(ax, a["n"], a["mem"] / 1024, INDIGO, rep=a["rep"], lw=1.2)
     loglog(ax)
     ax.set_xlabel("spots"); ax.set_ylabel("memory used (GB)")
     decades(ax, 1e4, 1e8)
     ax.set_xticks([1e4, 1e6, 1e8])
-    ax.text(0.03, 0.99, "load all", transform=ax.transAxes, fontsize=6, color=GREY, va="top")
-    ax.text(0.97, 0.05, "backed", transform=ax.transAxes, fontsize=6, color=INDIGO, ha="right", va="bottom")
+    ax.text(0.04, 0.99, "load all", transform=ax.transAxes, fontsize=6, color=GREY, va="top")
+    ax.text(0.97, 0.04, "backed", transform=ax.transAxes, fontsize=6, color=INDIGO, ha="right", va="bottom")
     # right: streaming population analysis (d_streaming.json)
     dd = _load("d_streaming")
     pts = dd["points"]
-    ax2 = ax_at(fig, x0 + 40, y0 + 13, 24, 27)
-    fig.text((x0 + 37) / W, 1 - (y0 + 6.2) / H, "population analysis", fontsize=6.5, color=INK, va="top",
+    ax2 = ax_at(fig, x0 + 43, y0 + 13, 22, ah)
+    fig.text((x0 + 36) / W, 1 - (y0 + 6.0) / H, "Population analysis", fontsize=6.5, color=INK, va="top",
              fontweight="bold")
-    fig.text((x0 + 37) / W, 1 - (y0 + 9.2) / H, f"exact median distance map, {dd['chrom']}", fontsize=6,
+    fig.text((x0 + 36) / W, 1 - (y0 + 9.0) / H, f"median distance map, {dd['chrom']}", fontsize=6,
              color=GREY, va="top")
     tr = _arr(pts, lambda p: float(p["n_traces"]))
     rep = _arr(pts, lambda p: bool(p.get("replicated")))
@@ -338,126 +384,15 @@ def panel_e(fig, x0, y0):
     ax2.set_xticks([1e2, 1e4, 1e6])
     lo, hi = ax2.get_ylim()
     ax2.set_ylim(lo, max(hi, budget * 45))
-    ax2.text(1.02, budget, f"{budget:g} GB\nbudget", fontsize=6, color=INDIGO, va="center",
-             transform=ax2.get_yaxis_transform(), linespacing=1.0)
-    for p in pts:
-        if "load_all" not in p:
-            x = float(p["n_traces"])
-            ax2.text(tr.min() * 0.8, budget * 22, "1e8 spots (○): load all\ndoes not fit in RAM", fontsize=6,
-                     color=GREY, ha="left", va="center", linespacing=1.0)
-    # identity inset
-    sc = dd.get("scatter")
-    if sc:
-        ins = ax_at(fig, x0 + 54.5, y0 + 30.0, 9.0, 6.0)
-        a1, b1 = np.asarray(sc["load_all"]), np.asarray(sc["streaming"])
-        ins.scatter(a1, b1, s=0.6, color=INDIGO, lw=0, rasterized=True)
-        lim = [min(a1.min(), b1.min()), max(a1.max(), b1.max())]
-        ins.plot(lim, lim, color=LGREY, lw=0.5, zorder=0)
-        ins.set_xticks([]); ins.set_yticks([])
-        for sp in ins.spines.values():
-            sp.set_linewidth(0.4)
-        ins.text(0.02, 0.98, "identical", transform=ins.transAxes, fontsize=6, color=GREY, va="top")
-        ins.set_xlabel("in memory", fontsize=6, labelpad=0.5)
-        ins.set_ylabel("stream", fontsize=6, labelpad=0.5)
-    h = [Line2D([], [], color=INDIGO, marker="o", ms=2.2, lw=1.2), Line2D([], [], color=GREY, marker="o", ms=2.2,
-                                                                          lw=1.1)]
-    labs = ["chromdata.zarr: backed (left), streaming iter_traces (right)",
-            "load the whole table (left: formats as in d)"]
-    legend(fig, h, labs, x0 + 3, y0 + 48.0, handlelength=1.5)
-
-
-def panel_f(fig, x0, y0):
-    from matplotlib.colors import LinearSegmentedColormap, LogNorm
-
-    label(fig, x0, y0, "f")
-    title(fig, x0 + 5, y0 + 0.4, "Groups from one modality, structure from another")
-    fig.text((x0 + 5) / W, 1 - (y0 + 4.6) / H, "scHiCAR mouse MOp (5,313 cells): RNA clusters → pseudo-bulk Hi-C "
-             "from the linked .scool", fontsize=6, color=GREY, va="top")
-    fx = _load("f_crossmodal")
-    q = _load("e_query")["identity"]
-    e = _load("e_contacts")["aggregation"]["points"]
-    groups = fx["groups"]
-    roles = ["neuronal", "oligodendrocyte", "astrocyte"]
-    names = {"neuronal": "neurons", "oligodendrocyte": "oligodendrocytes", "astrocyte": "astrocytes"}
-    # UMAP of the RNA embedding: Leiden clusters (grey), the three chosen ones coloured
-    ax = ax_at(fig, x0 + 2, y0 + 12, 22, 22)
-    um = fx["umap"]
-    xs, ys, cl = np.asarray(um["x"]), np.asarray(um["y"]), np.asarray(um["cluster"])
-    ax.scatter(xs, ys, s=0.4, color="#d9dce1", lw=0, rasterized=True)
-    for r in roles:
-        m = cl == groups[r]["cluster"]
-        ax.scatter(xs[m], ys[m], s=0.5, color=ROLE_COL[r], lw=0, rasterized=True)
-    ax.set_xticks([]); ax.set_yticks([])
-    for sp in ax.spines.values():
-        sp.set_visible(False)
-    ax.set_xlabel("RNA UMAP", labelpad=1)
-    ax.set_title(f"{fx['clustering']['n_clusters']} Leiden clusters\non the RNA PCA", fontsize=6, color=GREY, pad=1.5,
-                 linespacing=1.0)
-    hs, labs = [], []
-    for r in roles:
-        g = groups[r]
-        hs.append(Line2D([], [], ls="", marker="o", ms=3.0, color=ROLE_COL[r]))
-        labs.append(f"cl. {g['cluster']}: {names[r]} (n = {g['n_cells']:,})")
-    legend(fig, hs, labs, x0 + 0.5, y0 + 38.2, handlelength=0.7, handletextpad=0.3, labelspacing=0.2)
-    # two pseudo-bulk maps of the same window (each normalised to its cis total)
-    cmap = LinearSegmentedColormap.from_list("wt", ["#ffffff", "#b9d9f0", INDIGO, "#101d33"])
-    pair = ["neuronal", "oligodendrocyte"]
-    mats = [np.asarray(groups[r]["window"]["matrix"], float) / groups[r]["total_cis_contacts"] * 1e6 for r in pair]
-    pos = np.concatenate([m[m > 0] for m in mats])
-    norm = LogNorm(vmin=np.percentile(pos, 5), vmax=np.percentile(pos, 99.5))
-    w = groups[pair[0]]["window"]
-    for k, (r, mat) in enumerate(zip(pair, mats)):
-        mx = ax_at(fig, x0 + 29 + k * 21, y0 + 12, 19.5, 19.5)
-        mx.imshow(mat, cmap=cmap, norm=norm, interpolation="nearest")
-        mx.set_xticks([]); mx.set_yticks([])
-        for sp in mx.spines.values():
-            sp.set_linewidth(0.6)
-            sp.set_color(ROLE_COL[r])
-        mx.set_title(f"{names[r]} (cl. {groups[r]['cluster']})", fontsize=6, color=ROLE_COL[r], pad=1.5)
-    cax = ax_at(fig, x0 + 70.5, y0 + 13, 1.3, 17.5)
-    cb = fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax)
-    cb.outline.set_linewidth(0.4)
-    cb.ax.tick_params(labelsize=6, width=0.4, length=1.5, pad=1)
-    fig.text((x0 + 78.5) / W, 1 - (y0 + 13) / H, "contacts\nper million\ncis contacts", fontsize=6, color=GREY,
-             va="top", linespacing=1.0)
-    fig.text((x0 + 29) / W, 1 - (y0 + 32.4) / H,
-             f"{w['chrom']}:{w['start'] // 10**6}–{w['end'] // 10**6} Mb, 1 Mb bins, pseudo-bulk of each cluster",
-             fontsize=6, color=GREY, va="top")
-    # correctness (e_query.json)
-    fig.text((x0 + 29) / W, 1 - (y0 + 35.6) / H,
-             f"Pseudo-bulk from the per-cell .scool equals the published per-type .cool\n"
-             f"for {q['n_identical']}/{q['n_types']} cell types (max |Δ| = {q['max_abs_diff']:g} over "
-             f"{q['n_pixels'] / 1e6:.1f} M pixels)", fontsize=6, color=INK, va="top", linespacing=1.1)
-    # P(s) per group
-    px = ax_at(fig, x0 + 8, y0 + 45.5, 23, 12.5)
-    for r in roles:
-        g = groups[r]
-        s, p = np.asarray(g["ps_s_mb"], float), np.asarray(g["ps"], float)
-        px.plot(s, p, color=ROLE_COL[r], lw=1.0)
-    loglog(px)
-    px.set_xlabel("distance s (Mb)"); px.set_ylabel("P(s)")
-    px.set_xticks([1, 10]); px.set_xticklabels(["1", "10"])
-    px.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
-    fig.text((x0 + 33) / W, 1 - (y0 + 45.5) / H, "slope, 2–30 Mb", fontsize=6, color=GREY, va="top")
-    for i, r in enumerate(roles):
-        fig.text((x0 + 33) / W, 1 - (y0 + 48.7 + 3.0 * i) / H, f"{groups[r]['ps_slope']:.2f}  {names[r]}",
-                 fontsize=6, color=ROLE_COL[r], va="top")
-    # pseudo-bulk time vs cells (e_contacts.json)
-    tx = ax_at(fig, x0 + 66, y0 + 45.5, 20, 12.5)
-    c = np.array([p["n_cells"] for p in e])
-    cold = np.array([p["cold_s"]["median"] for p in e])
-    cached = np.array([p["cached_s"]["median"] for p in e])
-    tx.plot(c, cold, color=TEAL, marker="o", ms=2.0, lw=1.0)
-    tx.plot(c, cached, color=TEAL, ls="--", marker="o", ms=2.0, mfc="white", lw=1.0)
-    loglog(tx)
-    tx.set_xlabel("cells aggregated"); tx.set_ylabel("time (s)")
-    decades(tx, c.min(), c.max())
-    tx.set_yticks([1e-4, 1e-2, 1e0])
-    tx.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
-    tx.set_ylim(cached.min() / 3, cold.max() * 6)
-    tx.text(c[-1], cold[-1] * 2.0, "first query", fontsize=6, color=TEAL, va="bottom", ha="right")
-    tx.text(c[0], cached[0] * 3.5, "cached", fontsize=6, color=TEAL, va="bottom")
-    fig.text((x0 + 60) / W, 1 - (y0 + 41.8) / H, "pseudo-bulk of chr1", fontsize=6, color=GREY, va="top")
+    ax2.text(0.03, budget * 0.85, f"{budget:g} GB\nbudget", fontsize=6, color=INDIGO, va="top", ha="left",
+             linespacing=1.0,
+             transform=ax2.get_yaxis_transform())
+    ax2.text(lt[-1] * 0.7, lm[-1] / 1024 * 1.1, "load all", fontsize=6, color=GREY, ha="right", va="bottom")
+    ax2.text(tr[-1], st[-1] / 1024 * 0.55, "stream", fontsize=6, color=INDIGO, ha="right", va="top")
+    if any("load_all" not in p for p in pts):
+        ax2.text(0.04, 0.99, "1e8 (○): load all\nexceeds RAM", fontsize=6, color=GREY, ha="left", va="top",
+                 transform=ax2.transAxes, linespacing=1.0)
+    return ax, ax2
 
 
 def make_figure():
@@ -466,13 +401,12 @@ def make_figure():
     fig = plt.figure(figsize=(W * MM, H * MM))
     pa_h = panel_a.H
     panel_a.draw(panel_a.C(fig, rect=(0, 1 - pa_h / H, panel_a.W / W, pa_h / H)))
-    y2 = pa_h + 1.5
+    y2 = pa_h + 2.0
     panel_b(fig, 1, y2)
-    panel_c(fig, 50, y2)
-    panel_d(fig, 113, y2)
-    y3 = y2 + 66
-    panel_e(fig, 1, y3)
-    panel_f(fig, 72, y3)
+    panel_c(fig, 90, y2)
+    y3 = y2 + 52.5
+    panel_d(fig, 1, y3)
+    panel_e(fig, 102, y3)
     for ext in ("pdf", "png"):
         fig.savefig(HERE / f"fig2.{ext}", dpi=300)
     return HERE / "fig2.pdf"

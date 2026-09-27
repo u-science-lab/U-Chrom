@@ -9,6 +9,7 @@ format-version comparison (supplementary `figS_formats.pdf`).
 
 | Script | Panel | Data | What it measures |
 |---|---|---|---|
+| `b_capabilities.py` | b (current Fig. 2b) + Supp. Table S1 | tiny synthetic toy objects (no dataset) | what each container can represent: stores each data element with the AnnData / SpatialData / MuData / cooler / uchrom API, writes, reads back and compares (seconds, < 1 GB); marks + evidence URLs → `b_capabilities.json`, `paper/fig2/tableS_capabilities.md` |
 | `b_storage.py` | b | Takei 2025 cerebellum rep 1, all FOVs (whole-cell subsets) | file size, write time, full-read time, peak RSS vs n_spots for FOF-CT/CSV, Parquet, AnnData (spots as obs), h5cd N.x |
 | `c_access.py` | c | same subsets | `get_trace` / `get_cell` / `get_chrom` latency (median, IQR of 20 random ids) and open / load time vs n_spots; backed chromdata.zarr vs the in-memory baseline (Parquet / AnnData: load the flat table, subset with a pandas boolean mask) |
 | `d_streaming.py` | d | same subsets + the 1e8 replicated store | exact median distance map of one chromosome (`uchrom.fea.distance_map`): peak RSS and time, "load all" (`ChromData.read` + in-memory) vs streaming (`backed=True`, `iter_traces` under a 2 GB budget); bitwise identity of the two results + a scatter |
@@ -17,8 +18,8 @@ format-version comparison (supplementary `figS_formats.pdf`).
 | `rowgroup_sweep.py` | format 2.1 | Takei 1e7 subset | row-group size (8k / 16k / 32k / 65k): size, full read, get_cell / get_trace / get_chrom (± `columns="coords"`) |
 | `spot_tracks_encoding.py` | format 2.1 | Takei 1e7 subset | why 2.1 is larger on Takei: size per table, 2.0 vs 2.1 row order, Parquet options (row groups, zstd level, dictionary, byte_stream_split) |
 | `replicate_store.py` | c, d | Takei 2.1 store | the 1e8-spot store (whole copies with renamed cells / traces, streamed per partition) |
-| `f_crossmodal.py` | f (new) | scHiCAR MOp `.h5cd` + linked 1 Mb `.scool` | Leiden clusters of the RNA PCA (`uchrom.emb.cluster_cells`), marker genes, the chosen clusters' pseudo-bulk maps via `Dataset.contacts(group=)`, P(s) and slopes |
-| `f_roundtrip.py` | f | Takei 2025 FOV0, sim_cell1, scHiCAR | field-by-field round trips (`.chromdata.zarr`, FOF-CT via `uchrom.io.write_fofct`, AnnData, .cool/.scool, PDB, .3dg) → preserved / partial / lost / NA matrix |
+| `f_crossmodal.py` | Supp. Fig. S2 (was f) | scHiCAR MOp `.h5cd` + linked 1 Mb `.scool` | Leiden clusters of the RNA PCA (`uchrom.emb.cluster_cells`), marker genes, the chosen clusters' pseudo-bulk maps via `Dataset.contacts(group=)`, P(s) and slopes |
+| `f_roundtrip.py` | Supp. Fig. S1e (was b) | Takei 2025 FOV0, sim_cell1, scHiCAR | field-by-field round trips (`.chromdata.zarr`, FOF-CT via `uchrom.io.write_fofct`, AnnData, .cool/.scool, PDB, .3dg) → preserved / partial / lost / NA matrix |
 | `allele_qc.py` | supplement | Takei 2025 raw spot CSVs | diagnostic of the published homolog calls (loci per trace, duplicate loci, genomic–spatial Spearman) |
 
 ## Setup
