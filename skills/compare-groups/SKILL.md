@@ -12,13 +12,13 @@ For contact-map statistics per group (P(s) of pseudo-bulk maps) compute them wit
 and compare there; for correlations use *associate-modalities*.
 
 ## Steps
-1. **Get the groups.** Cell ids (`a,b,c`), `field:<cells column>=<value>` (e.g. `field:cell_type=Granule`),
+1. **Get the groups.** Cell ids (`a,b,c`), `field:<cells column>=<value>` (e.g. `field:cell_type=<TYPE>`),
    `field:<col>!=<value>`, or `rest` for b (= every other cell). From an open browser:
    `ws = uchrom.browser.connect(); cells = ws.selected_cells()` (*show-in-browser*). Make the groups
    disjoint; "vs all other cells" means `rest`, not a single other type.
 2. **One statistic** — run `scripts/compare_groups.py` (CLI) or import `compare()`:
    ```bash
-   python <skill dir>/scripts/compare_groups.py data.h5cd --a field:cell_type=Bergmann --b field:cell_type=Granule --stat rg
+   python <skill dir>/scripts/compare_groups.py data.h5cd --a field:cell_type=<TYPE_A> --b field:cell_type=<TYPE_B> --stat rg
    ```
    ```python
    import sys; sys.path.insert(0, "<skill dir>/scripts")

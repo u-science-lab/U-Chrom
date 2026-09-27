@@ -2,18 +2,18 @@
 
 Tracing data (3-D coordinates in a ChromData):
 
-    python structures.py dist-at data.h5cd --chrom chr15 --sep 1e6 [--tol 0.1]
-    python structures.py scaling  data.h5cd --chrom chr15            # distance vs separation + exponent
+    python structures.py dist-at data.h5cd --chrom <CHROM> --sep <SEP> [--tol 0.1]
+    python structures.py scaling  data.h5cd --chrom <CHROM>            # distance vs separation + exponent
     python structures.py rg       data.h5cd                          # radius of gyration per chromosome
-    python structures.py coverage data.h5cd --chrom chr15            # detection per bin size -> resolution
-    python structures.py tads     data.h5cd --chrom chr15 [--bin-size auto|native|1e6] [--window-bins 4]
-    python structures.py comps    data.h5cd --chrom chr15 [--bin-size auto]
+    python structures.py coverage data.h5cd --chrom <CHROM>            # detection per bin size -> resolution
+    python structures.py tads     data.h5cd --chrom <CHROM> [--bin-size auto|native|<BIN>] [--window-bins 4]
+    python structures.py comps    data.h5cd --chrom <CHROM> [--bin-size auto]
 
 Contact maps (.cool / .mcool / .scool, e.g. ``uns['linked_cool']``):
 
-    python structures.py ps data.h5cd --cool all_cells --res 1e6 --chrom chr1 --smin 2e6 --smax 2e7
-    python structures.py ps data.h5cd --cool type_A,type_B --chrom chr1 ...     # summed pseudo-bulk
-    python structures.py ps map.mcool::/resolutions/1000000 --chrom chr1 ...     # a file directly
+    python structures.py ps data.h5cd --cool <key> --res <BIN> --chrom <CHROM> --smin <S_MIN> --smax <S_MAX>
+    python structures.py ps data.h5cd --cool <key_A>,<key_B> --chrom <CHROM> ...     # summed pseudo-bulk
+    python structures.py ps map.mcool::/resolutions/<BIN> --chrom <CHROM> ...     # a file directly
 
 Every command prints one JSON object with the numbers, the n behind them, and ``checks``.
 Statistics use every spot, like ``uchrom.fea``; binning for the callers averages spots per (trace, bin).
@@ -223,7 +223,7 @@ def call_compartments(cd, chrom: str, bin_size="auto", device: str = "auto") -> 
            "n_bins": int(len(comp)), "frac_A": float((lab == "A").mean()) if len(lab) else None, "n_segments": n_seg,
            "compartments": comp[["start", "end", "compartment", "pc2"]].to_dict("records"),
            "checks": ["A/B orientation is a convention (compact cluster = A); check against gene density or an "
-                      "active mark (e.g. H3K27ac track) before calling a bin 'active'"]}
+                      "active histone-mark track before calling a bin 'active'"]}
     _caller_checks(res, sub, nat, bs, cov)
     return res
 

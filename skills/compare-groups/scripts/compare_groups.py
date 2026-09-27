@@ -4,15 +4,15 @@ The unit of replication is the **cell**: per-trace (or per-spot) values are firs
 cell (median), and the test compares cells.  Traces of one cell are not independent; testing them
 as if they were inflates n and makes almost any difference "significant".
 
-    python compare_groups.py data.h5cd --a 1_0_34,1_0_61,... --b field:cell_type=Granule --stat rg
-    python compare_groups.py data.h5cd --a field:cell_type=Bergmann --b rest --stat rg --equalize 100
-    python compare_groups.py data.h5cd --a 1_0_34,1_0_61,... --b rest --scan if.     # every if.* column, BH-FDR
+    python compare_groups.py data.h5cd --a <cell_id>,<cell_id>,... --b field:cell_type=<TYPE> --stat rg
+    python compare_groups.py data.h5cd --a field:cell_type=<TYPE> --b rest --stat rg --equalize 100
+    python compare_groups.py data.h5cd --a <cell_id>,<cell_id>,... --b rest --scan if.     # every if.* column, BH-FDR
     # or from Python:  from compare_groups import compare, scan; compare(cd, a, b, stat="rg")
 
 Groups: comma-separated cell ids, ``field:<column>=<value>`` / ``field:<column>!=<value>`` (cells column),
 ``all``, or ``rest`` (for b: every cell not in a).
 Stats: ``rg`` (radius of gyration per trace), ``span`` (end-to-end distance per trace), ``n_spots`` (spots
-per trace), or any numeric ``cells`` column (e.g. ``nuc_volume_um3``, ``if.H3K9me3``) — then there is one
+per trace), or any numeric ``cells`` column (e.g. ``nuc_volume_um3``, ``if.<MARK>``) — then there is one
 value per cell.  ``equalize=k`` recomputes ``rg``/``span`` on k randomly drawn loci per trace (traces with
 fewer are dropped; averaged over draws), so groups with different detection are compared at equal loci.
 ``scan`` compares many cells columns at once with Benjamini–Hochberg FDR, plus categorical composition.

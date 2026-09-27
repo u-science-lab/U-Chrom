@@ -17,16 +17,16 @@ Script: `<skill dir>/scripts/associate.py` (CLI prints JSON; or import `cell_lev
 ## 1. Choose the level — and say it
 | the question is about… | level | unit of n | command |
 |---|---|---|---|
-| cells ("across cells", "cells with more X…") | **cell** | cells | `associate.py cell data.h5cd --x if.H3K9me3 --y rg` |
-| genomic positions ("bins / loci / regions with more X…", "along chrN") | **bin** | bins | `associate.py bin data.h5cd --x H3K27ac --y n_rad_score --chrom chr15 --bin-size 1e6` |
+| cells ("across cells", "cells with more X…") | **cell** | cells | `associate.py cell data.h5cd --x if.<MARK> --y rg` |
+| genomic positions ("bins / loci / regions with more X…", "along chrN") | **bin** | bins | `associate.py bin data.h5cd --x <TRACK> --y <TRACK> --chrom <CHROM> --bin-size <BIN>` |
 | cell types | **cell type** | cell types (few!) | per-type medians (`between_group_medians_rho`) — descriptive only |
 | embeddings | **cell** | cells | `associate.py purity data.h5cd --emb hic_umap,rna_umap --k 15` |
 
 Spot-level correlations (every spot a sample) are pseudo-replicated — never the headline; the `bin`
 command prints one only for contrast.
 
-Per-cell values — prefer the per-cell measurement when one exists (`if.H3K9me3` in `cells` is the
-cell's IF value; `track:H3K9me3` is the mean at DNA spots, a different quantity — name which you used): a `cells` column (`if.*`, `rna.*`, `atac.*`, `nuc_volume_um3`), `rg` / `span`
+Per-cell values — prefer the per-cell measurement when one exists (`if.<MARK>` in `cells` is the
+cell's IF value; `track:<MARK>` is the mean at DNA spots, a different quantity — name which you used): a `cells` column (`if.*`, `rna.*`, `atac.*`, `nuc_volume_um3`), `rg` / `span`
 (**median over the cell's traces**), `rg_norm` (Rg ÷ its chromosome's median, removes chromosome
 composition), `n_spots`, or `track:<name>` (mean of a per-spot track). Per-spot values for `bin`: any
 `tracks` column (IF at the DNA locus, a radial score such as `n_rad_score`, distance to the nuclear

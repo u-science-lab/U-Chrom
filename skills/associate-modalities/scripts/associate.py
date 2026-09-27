@@ -2,15 +2,15 @@
 associate-modalities skill's recipe.
 
     # cell level: one value per cell, confounders partialled out, within cell types
-    python associate.py cell data.h5cd --x if.H3K9me3 --y rg [--covar nuc_volume_um3,n_spots] [--group cell_type]
-    python associate.py cell data.h5cd --x atac.Mobp --y rna.Mobp --group cell_type
+    python associate.py cell data.h5cd --x if.<MARK> --y rg [--covar nuc_volume_um3,n_spots] [--group cell_type]
+    python associate.py cell data.h5cd --x atac.<GENE> --y rna.<GENE> --group cell_type
     # bin level: per genomic bin, the mean of a spot track vs the mean of a structural spot feature
-    python associate.py bin data.h5cd --x H3K27ac --y n_rad_score --chrom chr15 --bin-size 1e6
+    python associate.py bin data.h5cd --x <TRACK> --y <TRACK> --chrom <CHROM> --bin-size <BIN>
     # embedding: k-nearest-neighbour label purity of a 2-D / n-D embedding in cellm
     python associate.py purity data.h5cd --emb hic_umap,rna_umap --label cell_type --k 15
 
 Per-cell values (``--x`` / ``--y``):
-  a ``cells`` column (``if.H3K9me3``, ``rna.Mobp``, ``nuc_volume_um3``, …);
+  a ``cells`` column (``if.<MARK>``, ``rna.<GENE>``, ``nuc_volume_um3``, …);
   ``rg`` / ``span`` — median over the cell's traces of the trace radius of gyration / end-to-end distance;
   ``rg_norm`` — the same after dividing each trace's Rg by the median Rg of its chromosome (removes
   chromosome-composition differences between cells);
