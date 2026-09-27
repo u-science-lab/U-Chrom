@@ -1005,7 +1005,7 @@ def draw_agent_umap(ax, cax, lasso=LASSO):
 
 # --------------------------------------------------------------------------- e  skills
 
-BENCH_CATS = [("inspect", "inspect\ndata"), ("structure", "call\nstructures"), ("compare", "compare\ngroups"),
+BENCH_CATS = [("inspect", "inspect\ndata"), ("structure", "struc-\ntures"), ("compare", "compare\ngroups"),
               ("associate", "cross-\nmodal"), ("knowhow", "know-\nhow")]
 BENCH_MODELS = [("opus", "Opus 5.5", "o"), ("sonnet", "Sonnet 5", "s"), ("haiku", "Haiku 4.5", "^")]
 
@@ -1026,25 +1026,27 @@ def panel_e(r, x0=108, y0=133):
     # e2: mean score (% of grading checks passed) per task category, docs only vs docs + skills.
     # Bars = mean of the three Claude models; markers = each model.
     ms = r["models"]
-    keys = [k for k, _ in BENCH_CATS] + ["all"]
-    labels = [lab for _, lab in BENCH_CATS] + ["all\ntasks"]
+    keys = [k for k, _ in BENCH_CATS] + ["all", "test"]
+    labels = [lab for _, lab in BENCH_CATS] + ["all\ntasks", "held-\nout"]
 
     def score(m, c, k):
         cond = ms[m]["conditions"][c]
-        return 100 * (cond["score"] if k == "all" else cond["by_category"][k])
+        if k == "all":
+            return 100 * cond["score"]
+        return 100 * (cond["by_split"]["test"] if k == "test" else cond["by_category"][k])
 
     ax = ax_mm(x0 + 9, ty + 27, 53, 22)
     cols, labs = [LGREY, ORANGE], ["API docs only", "API docs + skills"]
     bw = 0.36
     for j, c in enumerate(("docs", "skills")):
-        xx = np.arange(len(keys)) + (j - 0.5) * bw + np.array([0.25 if k == "all" else 0 for k in keys])
+        xx = np.arange(len(keys)) + (j - 0.5) * bw + np.array([0.25 if k in ("all", "test") else 0 for k in keys])
         v = [np.mean([score(m, c, k) for m, _, _ in BENCH_MODELS]) for k in keys]
         ax.bar(xx, v, width=bw, color=cols[j], label=labs[j])
         for m, _, mk in BENCH_MODELS:
             ax.scatter(xx, [score(m, c, k) for k in keys], s=3, marker=mk, facecolor="white", edgecolor=INK,
                        lw=0.4, zorder=4, clip_on=False)
-    ax.axvline(len(keys) - 1.5 + 0.125, color=LGREY, lw=0.4, ls=(0, (2, 2)))
-    ax.set_xticks(np.arange(len(keys)) + np.array([0.25 if k == "all" else 0 for k in keys]), labels,
+    ax.axvline(len(keys) - 2.5 + 0.125, color=LGREY, lw=0.4, ls=(0, (2, 2)))
+    ax.set_xticks(np.arange(len(keys)) + np.array([0.25 if k in ("all", "test") else 0 for k in keys]), labels,
                   fontsize=F(4.4), linespacing=1.0)
     ax.set_ylabel("checks passed (%)", labelpad=1), ax.set_ylim(0, 100)
     ax.tick_params(axis="x", length=0)
@@ -1057,7 +1059,7 @@ def panel_e(r, x0=108, y0=133):
                             labelcolor=GREY, borderaxespad=0))
     ax.legend(frameon=False, fontsize=F(4.5), ncol=2, loc="upper center", bbox_to_anchor=(0.5, 1.22),
               handles=ax.get_legend_handles_labels()[0][:2], handlelength=0.8, columnspacing=0.8)
-    ax.text(0.5, -0.50, "n/40: skill loaded · 1 run per task · judge Sonnet 5",
+    ax.text(0.5, -0.50, "n/40: skill loaded · held-out: 20 tasks unseen when tuning skills",
             transform=ax.transAxes, fontsize=F(4.1), color=GREY, ha="center")
 
 

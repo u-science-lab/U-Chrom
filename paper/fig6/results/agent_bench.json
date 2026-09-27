@@ -1,5 +1,5 @@
 {
- "run": "main2",
+ "run": "main3",
  "judge": "claude-sonnet-5",
  "reps": 1,
  "n_tasks": 40,
@@ -23,53 +23,53 @@
    "conditions": {
     "docs": {
      "n_tasks": 40,
-     "score": 0.677202380952381,
+     "score": 0.6997023809523809,
      "by_category": {
-      "associate": 0.6458333333333334,
-      "compare": 0.7504761904761905,
-      "inspect": 0.875,
-      "knowhow": 0.6527777777777778,
-      "structure": 0.4375
+      "associate": 0.7083333333333333,
+      "compare": 0.6904761904761905,
+      "inspect": 1.0,
+      "knowhow": 0.7361111111111112,
+      "structure": 0.375
      },
      "by_split": {
-      "dev": 0.6910714285714286,
-      "test": 0.6633333333333333
+      "dev": 0.7077380952380953,
+      "test": 0.6916666666666667
      },
-     "n_perfect": 18,
+     "n_perfect": 19,
      "n_zero": 6,
      "n_skill_loaded": 0,
      "n_failed_runs": 0,
-     "cost_usd": 4.8520369,
-     "median_time_s": 54.22430098056793
+     "cost_usd": 4.7138224,
+     "median_time_s": 55.43660044670105
     },
     "skills": {
      "n_tasks": 40,
-     "score": 0.6571428571428571,
+     "score": 0.7595238095238095,
      "by_category": {
-      "associate": 0.6666666666666666,
-      "compare": 0.5369047619047619,
+      "associate": 0.7916666666666666,
+      "compare": 0.763095238095238,
       "inspect": 1.0,
-      "knowhow": 0.6805555555555556,
-      "structure": 0.4375
+      "knowhow": 0.9027777777777778,
+      "structure": 0.375
      },
      "by_split": {
-      "dev": 0.6392857142857142,
-      "test": 0.675
+      "dev": 0.7857142857142857,
+      "test": 0.7333333333333333
      },
-     "n_perfect": 17,
-     "n_zero": 6,
-     "n_skill_loaded": 0,
+     "n_perfect": 24,
+     "n_zero": 5,
+     "n_skill_loaded": 33,
      "n_failed_runs": 0,
-     "cost_usd": 4.42231355,
-     "median_time_s": 59.221874356269836
+     "cost_usd": 3.3725885,
+     "median_time_s": 43.813762068748474
     }
    },
    "paired": {
-    "mean_diff": -0.020059523809523812,
-    "better": 6,
-    "worse": 9,
-    "same": 25,
-    "wilcoxon_p": 0.8417353405253295
+    "mean_diff": 0.059821428571428574,
+    "better": 11,
+    "worse": 5,
+    "same": 24,
+    "wilcoxon_p": 0.10923029373683307
    }
   },
   "opus": {
@@ -77,53 +77,53 @@
    "conditions": {
     "docs": {
      "n_tasks": 40,
-     "score": 0.8991666666666667,
+     "score": 0.89625,
      "by_category": {
-      "associate": 0.9583333333333334,
-      "compare": 0.93,
+      "associate": 1.0,
+      "compare": 0.935,
       "inspect": 1.0,
       "knowhow": 0.8333333333333334,
-      "structure": 0.75
+      "structure": 0.6875
      },
      "by_split": {
-      "dev": 0.875,
-      "test": 0.9233333333333333
+      "dev": 0.8875,
+      "test": 0.905
      },
-     "n_perfect": 32,
+     "n_perfect": 33,
      "n_zero": 2,
      "n_skill_loaded": 0,
      "n_failed_runs": 0,
-     "cost_usd": 15.0759842,
-     "median_time_s": 49.56671643257141
+     "cost_usd": 11.0949,
+     "median_time_s": 38.973087549209595
     },
     "skills": {
      "n_tasks": 40,
-     "score": 0.9270833333333334,
+     "score": 0.9458333333333333,
      "by_category": {
       "associate": 0.9166666666666666,
-      "compare": 0.975,
+      "compare": 1.0,
       "inspect": 1.0,
       "knowhow": 0.9166666666666666,
-      "structure": 0.8125
+      "structure": 0.875
      },
      "by_split": {
-      "dev": 0.9125,
-      "test": 0.9416666666666667
+      "dev": 0.925,
+      "test": 0.9666666666666667
      },
-     "n_perfect": 35,
+     "n_perfect": 37,
      "n_zero": 1,
-     "n_skill_loaded": 11,
+     "n_skill_loaded": 40,
      "n_failed_runs": 0,
-     "cost_usd": 14.1512762,
-     "median_time_s": 49.20445954799652
+     "cost_usd": 8.1453214,
+     "median_time_s": 31.602434515953064
     }
    },
    "paired": {
-    "mean_diff": 0.027916666666666666,
-    "better": 4,
+    "mean_diff": 0.04958333333333333,
+    "better": 5,
     "worse": 1,
-    "same": 35,
-    "wilcoxon_p": 0.3125
+    "same": 34,
+    "wilcoxon_p": 0.28125
    }
   },
   "sonnet": {
@@ -131,53 +131,53 @@
    "conditions": {
     "docs": {
      "n_tasks": 40,
-     "score": 0.845,
+     "score": 0.8914285714285715,
      "by_category": {
       "associate": 1.0,
-      "compare": 0.83,
+      "compare": 0.9157142857142857,
       "inspect": 1.0,
-      "knowhow": 0.9166666666666666,
-      "structure": 0.5
-     },
-     "by_split": {
-      "dev": 0.85,
-      "test": 0.84
-     },
-     "n_perfect": 31,
-     "n_zero": 5,
-     "n_skill_loaded": 0,
-     "n_failed_runs": 2,
-     "cost_usd": 16.813249,
-     "median_time_s": 128.97710859775543
-    },
-    "skills": {
-     "n_tasks": 40,
-     "score": 0.8833333333333333,
-     "by_category": {
-      "associate": 0.9583333333333334,
-      "compare": 0.95,
-      "inspect": 1.0,
-      "knowhow": 0.7777777777777778,
+      "knowhow": 0.8333333333333334,
       "structure": 0.6875
      },
      "by_split": {
-      "dev": 0.875,
-      "test": 0.8916666666666666
+      "dev": 0.8678571428571429,
+      "test": 0.915
      },
      "n_perfect": 31,
      "n_zero": 2,
-     "n_skill_loaded": 12,
+     "n_skill_loaded": 1,
      "n_failed_runs": 0,
-     "cost_usd": 15.4130938,
-     "median_time_s": 85.85868644714355
+     "cost_usd": 13.668352,
+     "median_time_s": 93.1439437866211
+    },
+    "skills": {
+     "n_tasks": 40,
+     "score": 0.8958333333333334,
+     "by_category": {
+      "associate": 0.9166666666666666,
+      "compare": 1.0,
+      "inspect": 0.9375,
+      "knowhow": 0.8333333333333334,
+      "structure": 0.75
+     },
+     "by_split": {
+      "dev": 0.925,
+      "test": 0.8666666666666667
+     },
+     "n_perfect": 34,
+     "n_zero": 2,
+     "n_skill_loaded": 40,
+     "n_failed_runs": 0,
+     "cost_usd": 8.3740756,
+     "median_time_s": 63.233017563819885
     }
    },
    "paired": {
-    "mean_diff": 0.03833333333333333,
-    "better": 5,
-    "worse": 3,
-    "same": 32,
-    "wilcoxon_p": 0.53125
+    "mean_diff": 0.004404761904761903,
+    "better": 8,
+    "worse": 4,
+    "same": 28,
+    "wilcoxon_p": 0.9287109375
    }
   }
  }

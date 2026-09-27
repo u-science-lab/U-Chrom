@@ -1,0 +1,4809 @@
+{
+ "A1__docs__r0": {
+  "id": "A1",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 26.509309768676758,
+  "cost_usd": 0.08652810000000001,
+  "num_turns": 8,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_7aravcxp",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "n_cells": {
+    "pass": true,
+    "given": "47 cells"
+   },
+   "n_traces": {
+    "pass": true,
+    "given": "1,500 traces"
+   },
+   "n_spots": {
+    "pass": true,
+    "given": "383,674 spots"
+   }
+  },
+  "comment": "All three counts exactly match the reference values."
+ },
+ "A1__skills__r0": {
+  "id": "A1",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 18.80948829650879,
+  "cost_usd": 0.0413915,
+  "num_turns": 4,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_ndp3r3pj",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "n_cells": {
+    "pass": true,
+    "given": "47 cells"
+   },
+   "n_traces": {
+    "pass": true,
+    "given": "1,500 traces"
+   },
+   "n_spots": {
+    "pass": true,
+    "given": "383,674 spots"
+   }
+  },
+  "comment": "All three reported values exactly match the reference."
+ },
+ "A2__docs__r0": {
+  "id": "A2",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 28.316004037857056,
+  "cost_usd": 0.08063329999999999,
+  "num_turns": 12,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_3wg3azc2",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "n": {
+    "pass": true,
+    "given": "22"
+   },
+   "cell_type": {
+    "pass": true,
+    "given": "Granule"
+   }
+  },
+  "comment": "Answer correctly identifies Granule as the most frequent cell type with 22 cells, matching the reference exactly."
+ },
+ "A2__skills__r0": {
+  "id": "A2",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 18.989883184432983,
+  "cost_usd": 0.044136100000000004,
+  "num_turns": 5,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_dgrl2056",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "cell_type": {
+    "pass": true,
+    "given": "Granule"
+   },
+   "n": {
+    "pass": true,
+    "given": "22"
+   }
+  },
+  "comment": "Answer correctly identifies Granule as the most common cell type with 22 cells, matching the reference."
+ },
+ "A3__docs__r0": {
+  "id": "A3",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 44.52578616142273,
+  "cost_usd": 0.0906475,
+  "num_turns": 11,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_i596rtvl",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "n": {
+    "pass": true,
+    "given": "48 immunofluorescence antibody channels"
+   }
+  },
+  "comment": "The answer correctly reports 48 IF channels, matching the reference count exactly."
+ },
+ "A3__skills__r0": {
+  "id": "A3",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 16.279956102371216,
+  "cost_usd": 0.0402459,
+  "num_turns": 4,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_x22g13tm",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "n": {
+    "pass": true,
+    "given": "48"
+   }
+  },
+  "comment": "Answer correctly states 48 IF antibody channels, matching the reference count and channel list."
+ },
+ "A4__docs__r0": {
+  "id": "A4",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 40.17771601676941,
+  "cost_usd": 0.10944269999999999,
+  "num_turns": 12,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_2g09f_s9",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "chrom": {
+    "pass": true,
+    "given": "chr1"
+   },
+   "n_spots": {
+    "pass": true,
+    "given": "31,557"
+   }
+  },
+  "comment": "Answer matches reference exactly on both chromosome (chr1) and spot count (31,557)."
+ },
+ "A4__skills__r0": {
+  "id": "A4",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 19.423737049102783,
+  "cost_usd": 0.0459603,
+  "num_turns": 5,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_fbykv2hj",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "chrom": {
+    "pass": true,
+    "given": "chr1"
+   },
+   "n_spots": {
+    "pass": true,
+    "given": "31,557"
+   }
+  },
+  "comment": "Answer correctly identifies chr1 with exactly 31,557 spots, matching the reference values."
+ },
+ "A5__docs__r0": {
+  "id": "A5",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 44.5565710067749,
+  "cost_usd": 0.09755180000000001,
+  "num_turns": 13,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_9ll3qmp5",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "n_cells": {
+    "pass": true,
+    "given": "5,313 cells"
+   },
+   "resolution_bp": {
+    "pass": true,
+    "given": "1 Mb resolution (1,000,000 bp)"
+   }
+  },
+  "comment": "Both numeric values match the reference exactly, though the answer's speculative note about yeast vs mouse metadata discrepancy is irrelevant noise."
+ },
+ "A5__skills__r0": {
+  "id": "A5",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 16.736396074295044,
+  "cost_usd": 0.039301,
+  "num_turns": 4,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_o879q4ul",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "n_cells": {
+    "pass": true,
+    "given": "5,313 cells"
+   },
+   "resolution_bp": {
+    "pass": true,
+    "given": "1 Mb (1,000,000 bp)"
+   }
+  },
+  "comment": "Both values match the reference exactly."
+ },
+ "A6__docs__r0": {
+  "id": "A6",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 33.066651821136475,
+  "cost_usd": 0.0977937,
+  "num_turns": 10,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_p6zwxxam",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "cell_type": {
+    "pass": true,
+    "given": "L5IT"
+   },
+   "median_contacts": {
+    "pass": true,
+    "given": "23,157 contacts"
+   }
+  },
+  "comment": "Both the cell type (L5IT) and median contacts (23,157) match the reference values exactly."
+ },
+ "A6__skills__r0": {
+  "id": "A6",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 26.344543933868408,
+  "cost_usd": 0.048364199999999996,
+  "num_turns": 5,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_u8sco8q9",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "cell_type": {
+    "pass": true,
+    "given": "L5IT"
+   },
+   "median_contacts": {
+    "pass": true,
+    "given": "23,157 contacts"
+   }
+  },
+  "comment": "Both the cell type (L5IT) and median contacts (23,157) match the reference values exactly."
+ },
+ "A7__docs__r0": {
+  "id": "A7",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 44.63563394546509,
+  "cost_usd": 0.09376000000000001,
+  "num_turns": 13,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_6znawjsu",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "median": {
+    "pass": true,
+    "given": "1.089 model units"
+   },
+   "unit": {
+    "pass": true,
+    "given": "model units (NucDynamics), arbitrary/relative units from the reconstruction algorithm"
+   }
+  },
+  "comment": "Median value and unit both match the reference within tolerance."
+ },
+ "A7__skills__r0": {
+  "id": "A7",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 30.547434091567993,
+  "cost_usd": 0.06287150000000001,
+  "num_turns": 8,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_8or8p6r1",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "median": {
+    "pass": true,
+    "given": "1.0891 model units"
+   },
+   "unit": {
+    "pass": true,
+    "given": "model units (NucDynamics)"
+   }
+  },
+  "comment": "Median value matches reference within tolerance and unit is correctly identified as NucDynamics model units."
+ },
+ "A8__docs__r0": {
+  "id": "A8",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 18.200788021087646,
+  "cost_usd": 0.0455032,
+  "num_turns": 6,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_hs9hwlik",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "xyz_unit": {
+    "pass": true,
+    "given": "Micrometers (\u03bcm)"
+   },
+   "genome_assembly": {
+    "pass": true,
+    "given": "mm10 (mouse, version 10)"
+   }
+  },
+  "comment": "Answer correctly names both um and mm10, matching the metadata extracted from uns."
+ },
+ "A8__skills__r0": {
+  "id": "A8",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 14.550696849822998,
+  "cost_usd": 0.0383424,
+  "num_turns": 4,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_4ij89fz6",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "xyz_unit": {
+    "pass": true,
+    "given": "micrometers (\u00b5m); xyz_unit = \"um\""
+   },
+   "genome_assembly": {
+    "pass": true,
+    "given": "mm10 (Mus musculus GRCm38)"
+   }
+  },
+  "comment": "Both values correctly identified and sourced from cd.uns metadata."
+ },
+ "B1__docs__r0": {
+  "id": "B1",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 34.347517013549805,
+  "cost_usd": 0.0636194,
+  "num_turns": 8,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_qu86hryp",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "median_um": {
+    "pass": true,
+    "given": "0.739 \u03bcm"
+   },
+   "unit": {
+    "pass": true,
+    "given": "micrometers (\u03bcm)"
+   }
+  },
+  "comment": "Median (0.739 \u00b5m) and n_pairs (11,533) match the reference exactly, and units are explicitly stated as \u00b5m."
+ },
+ "B1__skills__r0": {
+  "id": "B1",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 91.96766185760498,
+  "cost_usd": 0.1200145,
+  "num_turns": 13,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "call-structures",
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_btgyq8nj",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.5,
+  "checks": {
+   "median_um": {
+    "pass": false,
+    "given": "3.50 \u00b5m (median over all pairs), 3.65 \u00b5m (median of per-cell medians)"
+   },
+   "unit": {
+    "pass": true,
+    "given": "\u00b5m (micrometers)"
+   }
+  },
+  "comment": "Reported median distance (3.50 \u00b5m) is far outside the \u00b15% tolerance of the reference value (0.739 \u00b5m), though the unit is correctly stated as \u00b5m."
+ },
+ "B2__docs__r0": {
+  "id": "B2",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 105.57395911216736,
+  "cost_usd": 0.13581719999999997,
+  "num_turns": 11,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_5fq5bpr_",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.0,
+  "checks": {
+   "exponent": {
+    "pass": false,
+    "given": "0.366 (\u00b10.022)"
+   }
+  },
+  "comment": "Given exponent 0.366 differs from reference 0.33248 by ~10%, exceeding the \u00b13% tolerance, and the method used a different dataset/approach (Takei seqFISH+ subset with curve_fit) rather than the specified chr15 within-trace pairs with log-spaced bins and OLS on log10 values."
+ },
+ "B2__skills__r0": {
+  "id": "B2",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 74.6511857509613,
+  "cost_usd": 0.08293810000000001,
+  "num_turns": 7,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_ph7z2r_s",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.0,
+  "checks": {
+   "exponent": {
+    "pass": false,
+    "given": "\u03b1 = -0.305 \u00b1 0.012 (magnitude 0.305, wrong sign, ~8.3% off reference)"
+   }
+  },
+  "comment": "Answer's exponent magnitude (0.305) differs from the reference (0.3325) by more than 3%, and is reported with an inconsistent/wrong sign relative to the expected increasing distance-vs-separation trend."
+ },
+ "B3__docs__r0": {
+  "id": "B3",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 64.99208998680115,
+  "cost_usd": 0.1143971,
+  "num_turns": 13,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_228i2rq8",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.0,
+  "checks": {
+   "slope": {
+    "pass": false,
+    "given": "-0.49 (\u00b10.02), computed from 3D coordinates/distance thresholding, not from the mcool contact map raw counts"
+   }
+  },
+  "comment": "The answer used a fabricated 3D-distance-threshold contact definition instead of the actual mcool contact map counts specified by the method, yielding -0.49 vs reference -0.269, far outside \u00b15% tolerance."
+ },
+ "B3__skills__r0": {
+  "id": "B3",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 39.76156997680664,
+  "cost_usd": 0.0678591,
+  "num_turns": 6,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_60c5_fsf",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.0,
+  "checks": {
+   "slope": {
+    "pass": false,
+    "given": "0.170 (computed from 3D distance vs genomic distance scaling exponent, not from contact map P(s) slope)"
+   }
+  },
+  "comment": "The answer computed a completely different quantity (3D Euclidean distance vs genomic distance scaling exponent from atomic coordinates) rather than the requested contact-probability-vs-genomic-distance slope from the cell's contact map, giving 0.170 vs the reference -0.269."
+ },
+ "B4__docs__r0": {
+  "id": "B4",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 153.31922101974487,
+  "cost_usd": 0.1114868,
+  "num_turns": 11,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_mm3v2ht2",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.5,
+  "checks": {
+   "rho": {
+    "pass": false,
+    "given": "\u03c1 = -0.0883"
+   },
+   "sign_negative": {
+    "pass": true,
+    "given": "negative correlation reported"
+   }
+  },
+  "comment": "Sign matches but the magnitude (-0.0883) is far outside \u00b15% of the reference -0.3273, and N=18,528 pairs also diverges greatly from the reference's 944 pairs, indicating a different/incorrect methodology."
+ },
+ "B4__skills__r0": {
+  "id": "B4",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 55.58504295349121,
+  "cost_usd": 0.10831229999999999,
+  "num_turns": 11,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_d79wbcxh",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.5,
+  "checks": {
+   "rho": {
+    "pass": false,
+    "given": "-0.3831 (reference -0.32729, ~17% off, outside \u00b15%)"
+   },
+   "sign_negative": {
+    "pass": true,
+    "given": "rho = -0.3831 (negative)"
+   }
+  },
+  "comment": "Correct sign but the reported rho (-0.3831) and n_pairs (102,607 vs reference 944) diverge substantially, indicating a different binning/methodology and failing the \u00b15% tolerance."
+ },
+ "B5__docs__r0": {
+  "id": "B5",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 45.33427596092224,
+  "cost_usd": 0.09234880000000001,
+  "num_turns": 13,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_wm7ds0_v",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "top_median": {
+    "pass": true,
+    "given": "1.6752 \u03bcm for chr1"
+   },
+   "top_chrom": {
+    "pass": true,
+    "given": "chr1"
+   }
+  },
+  "comment": "Both the top chromosome (chr1) and its median Rg (1.6752, matching reference within tolerance) are correctly identified."
+ },
+ "B5__skills__r0": {
+  "id": "B5",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 28.27270197868347,
+  "cost_usd": 0.0590724,
+  "num_turns": 7,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "call-structures",
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_6s_5dqz9",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "top_median": {
+    "pass": true,
+    "given": "1.68 \u00b5m for chr1"
+   },
+   "top_chrom": {
+    "pass": true,
+    "given": "chr1"
+   }
+  },
+  "comment": "Answer correctly identifies chr1 as having the largest median radius of gyration (1.68 vs reference 1.675), within tolerance."
+ },
+ "B6__docs__r0": {
+  "id": "B6",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 72.78387093544006,
+  "cost_usd": 0.18273509999999996,
+  "num_turns": 18,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_qfj6k5ym",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.0,
+  "checks": {
+   "fraction": {
+    "pass": false,
+    "given": "0.8896 (approximately 89%)"
+   }
+  },
+  "comment": "The answer's fraction (~0.89) is roughly the complement of the reference value (~0.185), suggesting an inverted or misinterpreted calculation, and falls far outside the \u00b12% tolerance."
+ },
+ "B6__skills__r0": {
+  "id": "B6",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 43.005959272384644,
+  "cost_usd": 0.0734892,
+  "num_turns": 7,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_9z9_6la0",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.0,
+  "checks": {
+   "fraction": {
+    "pass": false,
+    "given": "0.2521 (25.21%)"
+   }
+  },
+  "comment": "The answer's fraction (0.2521) deviates from the reference (0.1847) by far more than 2%, likely due to using a different resolution/method than specified."
+ },
+ "B7__docs__r0": {
+  "id": "B7",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 246.29594707489014,
+  "cost_usd": 0.11661730000000001,
+  "num_turns": 17,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_uyitrh_9",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.0,
+  "checks": {
+   "n_domains": {
+    "pass": false,
+    "given": "98 domains"
+   }
+  },
+  "comment": "Answer reports 98 domains vs. reference 15, far outside tolerance."
+ },
+ "B7__skills__r0": {
+  "id": "B7",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 157.98321270942688,
+  "cost_usd": 0.0675218,
+  "num_turns": 8,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_jh5z4pc7",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.0,
+  "checks": {
+   "n_domains": {
+    "pass": false,
+    "given": "386 domains (top-level filter to level==1 gives 98 domains)"
+   }
+  },
+  "comment": "The answer's 386 (or even its level-1 subset of 98) does not match the reference 15 domains, indicating a materially different aggregation/parameter setup than the intended faithful reproduction."
+ },
+ "B8__docs__r0": {
+  "id": "B8",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 110.50209307670593,
+  "cost_usd": 0.0826913,
+  "num_turns": 9,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_xedt9plc",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.5,
+  "checks": {
+   "fraction": {
+    "pass": false,
+    "given": "0.9350 (3580/3829 bins, computed on native 25kb bins instead of 1Mb bins)"
+   },
+   "assigns_A_by_H3K27ac": {
+    "pass": true,
+    "given": "Labeled the higher-H3K27ac compartment as 'A'"
+   }
+  },
+  "comment": "The answer used native 25kb bins (3,829) instead of the required 1Mb aggregation (101 bins), yielding a fraction (0.935) far outside tolerance of the reference (0.5248), despite correctly assigning A to the higher-H3K27ac cluster."
+ },
+ "B8__skills__r0": {
+  "id": "B8",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 87.28812026977539,
+  "cost_usd": 0.12497420000000001,
+  "num_turns": 10,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "call-structures",
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_n2sjh3x4",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "fraction": {
+    "pass": true,
+    "given": "0.525 (53/101 bins in compartment B)"
+   },
+   "assigns_A_by_H3K27ac": {
+    "pass": true,
+    "given": "Answer explicitly computed mean H3K27ac per caller label (A: -0.025, B: +0.578) and identified B as higher-H3K27ac, noting caller's own A does not correspond to the active/H3K27ac-high compartment"
+   }
+  },
+  "comment": "Fraction (0.5248) matches reference almost exactly and the answer correctly determined which caller label has higher H3K27ac by direct computation rather than assuming convention."
+ },
+ "C10__docs__r0": {
+  "id": "C10",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 55.83645486831665,
+  "cost_usd": 0.11194690000000002,
+  "num_turns": 14,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_mkxa3ko8",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.6666666666666666,
+  "checks": {
+   "cell_type": {
+    "pass": false,
+    "given": "Vip is the cell type with the most RNA counts per cell (mean 610.86, n=99)"
+   },
+   "test_named": {
+    "pass": true,
+    "given": "Independent t-test and Mann-Whitney U test"
+   },
+   "n_cells_reported": {
+    "pass": true,
+    "given": "n=99 for Vip, n=93 for Lamp5"
+   }
+  },
+  "comment": "The answer names the wrong top cell type (Vip instead of PT) and thus the wrong comparison, though it does report a statistical test and group sizes."
+ },
+ "C10__skills__r0": {
+  "id": "C10",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 29.142966985702515,
+  "cost_usd": 0.050899299999999995,
+  "num_turns": 5,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_lprhee0_",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "cell_type": {
+    "pass": true,
+    "given": "PT (pyramidal tract) neurons have the most RNA counts per cell"
+   },
+   "test_named": {
+    "pass": true,
+    "given": "Mann-Whitney U test"
+   },
+   "n_cells_reported": {
+    "pass": true,
+    "given": "PT n=331 cells; L5IT n=642 cells"
+   }
+  },
+  "comment": "Correctly identifies PT as top and L5IT as runner-up with matching n and a named significant test, though it ranked/reported means (30,995 vs 27,837) rather than the reference's medians (28,832 vs 25,896)."
+ },
+ "C1__docs__r0": {
+  "id": "C1",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 44.03008198738098,
+  "cost_usd": 0.10607809999999998,
+  "num_turns": 10,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_v4xm1bju",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.5714285714285714,
+  "checks": {
+   "median_a": {
+    "pass": false,
+    "given": "Bergmann glia mean Rg = 3.24 \u00b1 0.44 \u03bcm"
+   },
+   "median_b": {
+    "pass": false,
+    "given": "Granule cells mean Rg = 2.94 \u00b1 0.49 \u03bcm"
+   },
+   "cell_is_unit": {
+    "pass": true,
+    "given": "computed Rg per cell, then averaged within each cell type (n=8 vs n=22 cells)"
+   },
+   "n_cells_reported": {
+    "pass": true,
+    "given": "n=8 Bergmann glia, n=22 granule cells"
+   },
+   "test_named": {
+    "pass": true,
+    "given": "t-test, p = 0.142, Cohen's d \u2248 0.62"
+   },
+   "mentions_nuclear_volume": {
+    "pass": false,
+    "given": "not mentioned anywhere in answer"
+   },
+   "one_fov": {
+    "pass": true,
+    "given": "'Single FOV: Data from only one field of view (rep 1, FOV 0) of the cerebellum dataset'"
+   }
+  },
+  "comment": "Reported Rg magnitudes and difference direction match qualitatively but values are far outside tolerance of reference medians, and the answer omits the nuclear-volume confound while also reporting a non-significant t-test contradicting the reference's highly significant result."
+ },
+ "C1__skills__r0": {
+  "id": "C1",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 72.96512699127197,
+  "cost_usd": 0.12211559999999999,
+  "num_turns": 10,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_0klni1zt",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.7142857142857143,
+  "checks": {
+   "median_a": {
+    "pass": true,
+    "given": "Bergmann glia median Rg = 1.466 \u00b5m (ref 1.4209, ~3.2% diff)"
+   },
+   "median_b": {
+    "pass": true,
+    "given": "Granule cell median Rg = 1.165 \u00b5m (ref 1.1391, ~2.3% diff)"
+   },
+   "cell_is_unit": {
+    "pass": false,
+    "given": "Test run on pooled traces (245 vs 729) not per-cell summaries; reported p=1.3e-9 is far smaller than achievable with n=8 vs 22, confirming traces/spots were treated as independent samples"
+   },
+   "n_cells_reported": {
+    "pass": true,
+    "given": "States 'Bergmann glia (8 cells, 245 traces)' and 'granule cells (22 cells, 729 traces)'"
+   },
+   "test_named": {
+    "pass": true,
+    "given": "Names 'Mann-Whitney U test'"
+   },
+   "mentions_nuclear_volume": {
+    "pass": false,
+    "given": "No mention of nuclear volume/size as a possible confound anywhere in the answer"
+   },
+   "one_fov": {
+    "pass": true,
+    "given": "Limitations note 'Single field of view: no biological replicates beyond this specimen'"
+   }
+  },
+  "comment": "Numeric medians and test name/n_cells are reported correctly, but the test was actually run on pooled traces rather than per-cell values (impossible p-value for n=8 vs 22 confirms this) and nuclear volume is never mentioned as a confound."
+ },
+ "C2__docs__r0": {
+  "id": "C2",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 40.3475878238678,
+  "cost_usd": 0.0871153,
+  "num_turns": 13,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_stelg33t",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.0,
+  "checks": {
+   "flags_n3_too_few": {
+    "pass": false,
+    "given": "Answer never mentions per-cell n or that only 3 Purkinje cells exist; treats n=104 Purkinje traces as the sample size"
+   },
+   "cell_is_unit": {
+    "pass": false,
+    "given": "Used traces as independent samples (729 granule traces vs 104 Purkinje traces) rather than per-cell summaries"
+   },
+   "no_trace_level_pvalue_claim": {
+    "pass": false,
+    "given": "Reports p=7.6e-15 from trace-level Mann-Whitney U test as the key evidence for the difference"
+   }
+  },
+  "comment": "The answer performs the analysis entirely at the trace level, ignoring cell as the unit of replication and never flagging the tiny n=3 Purkinje cell sample, and presents the trace-level p-value (~1e-14) as the main result \u2014 exactly what the rubric warns against."
+ },
+ "C2__skills__r0": {
+  "id": "C2",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 42.37296986579895,
+  "cost_usd": 0.0672473,
+  "num_turns": 6,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_yoxhcq4n",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.0,
+  "checks": {
+   "flags_n3_too_few": {
+    "pass": false,
+    "given": "Notes small sample size (3 vs 22) as a limitation but simultaneously calls the finding 'statistically robust,' never stating the conclusion isn't firm"
+   },
+   "cell_is_unit": {
+    "pass": false,
+    "given": "Primary comparison and headline p-value use all traces (104 vs 729) as independent samples; per-cell median p-value (0.0004) is only a secondary aside"
+   },
+   "no_trace_level_pvalue_claim": {
+    "pass": false,
+    "given": "Headline 'p-value: < 0.0001 (Mann-Whitney U test, one-sided; per-trace level)' is presented as the key evidence"
+   }
+  },
+  "comment": "The answer reaches the right qualitative conclusion but bases its headline p-value on pooled traces rather than per-cell summaries and undercuts its own small-n caveat by calling the result statistically robust."
+ },
+ "C3__docs__r0": {
+  "id": "C3",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 30.732545852661133,
+  "cost_usd": 0.052095899999999994,
+  "num_turns": 4,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_1j_te_m4",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.6666666666666666,
+  "checks": {
+   "mark": {
+    "pass": true,
+    "given": "SOX2"
+   },
+   "multiple_testing_corrected": {
+    "pass": false,
+    "given": "Tested across all 48 IF marks but reported only a raw p-value (4.66e-05) with no mention of FDR/Bonferroni correction or q-value"
+   },
+   "cell_is_unit": {
+    "pass": true,
+    "given": "Used per-cell means (n=8 Bergmann glia vs n=39 other cells) and ran Mann-Whitney U at the cell level"
+   }
+  },
+  "comment": "Correctly identifies SOX2 with matching p-value and uses cells as the unit of replication, but fails to apply or mention multiple-testing correction despite testing 48 marks."
+ },
+ "C3__skills__r0": {
+  "id": "C3",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 25.721214056015015,
+  "cost_usd": 0.056720099999999996,
+  "num_turns": 7,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "compare-groups",
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_skf67laa",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "mark": {
+    "pass": true,
+    "given": "SOX2"
+   },
+   "multiple_testing_corrected": {
+    "pass": true,
+    "given": "BH-FDR corrected, q = 0.0022 (1 of 48 IF marks below q<0.05)"
+   },
+   "cell_is_unit": {
+    "pass": true,
+    "given": "Cell-level statistics using Mann\u2013Whitney U test on per-cell median IF signal, 8 Bergmann vs 39 other cells"
+   }
+  },
+  "comment": "Answer correctly identifies SOX2 with matching p/q values, applies BH-FDR correction, and uses per-cell medians (8 vs 39 cells) as the unit of replication."
+ },
+ "C4__docs__r0": {
+  "id": "C4",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 45.04079985618591,
+  "cost_usd": 0.10395180000000002,
+  "num_turns": 9,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_636urp3j",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "median_a": {
+    "pass": true,
+    "given": "Granule cells median = 0.240"
+   },
+   "median_b": {
+    "pass": true,
+    "given": "Bergmann glia median = 0.347"
+   },
+   "direction_correct": {
+    "pass": true,
+    "given": "States H3K9me3 is higher in Bergmann glia than granule cells (i.e., granule lower), matching reference direction"
+   },
+   "n_cells_reported": {
+    "pass": true,
+    "given": "n=22 granule cells, n=8 Bergmann glia"
+   },
+   "test_named": {
+    "pass": true,
+    "given": "Names t-test (t=-2.63, p=0.014, Cohen's d=-1.13)"
+   }
+  },
+  "comment": "Medians and direction match reference closely and n's are correct, but the answer used a t-test (p=0.014, called significant) rather than a rank-based test matching the reference's rank-biserial effect size (p=0.056, not significant)."
+ },
+ "C4__skills__r0": {
+  "id": "C4",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 39.51694393157959,
+  "cost_usd": 0.068268,
+  "num_turns": 8,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "compare-groups",
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_oes4cpk1",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "median_a": {
+    "pass": true,
+    "given": "Granule cells median = 0.240"
+   },
+   "median_b": {
+    "pass": true,
+    "given": "Bergmann glia median = 0.347"
+   },
+   "direction_correct": {
+    "pass": true,
+    "given": "H3K9me3 higher in Bergmann glia than granule cells (i.e., granule lower)"
+   },
+   "n_cells_reported": {
+    "pass": true,
+    "given": "Bergmann glia n=8, Granule cells n=22"
+   },
+   "test_named": {
+    "pass": true,
+    "given": "Mann\u2013Whitney U test, p=0.056"
+   }
+  },
+  "comment": "All numeric values, direction, cell counts, and test name match the reference within tolerance."
+ },
+ "C5__docs__r0": {
+  "id": "C5",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 29.230751991271973,
+  "cost_usd": 0.052843299999999996,
+  "num_turns": 5,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_0q3r3g54",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "median_a": {
+    "pass": true,
+    "given": "297.32 \u03bcm\u00b3"
+   },
+   "median_b": {
+    "pass": true,
+    "given": "209.79 \u03bcm\u00b3"
+   },
+   "direction_correct": {
+    "pass": true,
+    "given": "Bergmann glia larger (1.51x)"
+   },
+   "test_named": {
+    "pass": true,
+    "given": "Mann-Whitney U test (p=0.0784), also reports t-test"
+   }
+  },
+  "comment": "Medians and direction match the reference exactly and Mann-Whitney U is explicitly named with the matching p-value, though the headline 'significant' claim leans on the t-test rather than the non-significant Mann-Whitney result."
+ },
+ "C5__skills__r0": {
+  "id": "C5",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 27.94818425178528,
+  "cost_usd": 0.0611076,
+  "num_turns": 8,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "compare-groups",
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis__h9suyym",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "median_a": {
+    "pass": true,
+    "given": "297.3 \u00b5m\u00b3"
+   },
+   "median_b": {
+    "pass": true,
+    "given": "209.8 \u00b5m\u00b3"
+   },
+   "direction_correct": {
+    "pass": true,
+    "given": "Bergmann glia nuclei larger (1.42x median ratio)"
+   },
+   "test_named": {
+    "pass": true,
+    "given": "Mann\u2013Whitney U test"
+   }
+  },
+  "comment": "Medians and direction match reference within tolerance, and the Mann\u2013Whitney U test is explicitly named."
+ },
+ "C6__docs__r0": {
+  "id": "C6",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 38.206928968429565,
+  "cost_usd": 0.0901758,
+  "num_turns": 8,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis__mseq230",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.5,
+  "checks": {
+   "median_a": {
+    "pass": false,
+    "given": "19,846 (reported as mean, not median; ref median 18173, diff ~9.2%)"
+   },
+   "median_b": {
+    "pass": false,
+    "given": "23,160 (reported as mean, not median; ref median 21459.5, diff ~7.9%)"
+   },
+   "direction_correct": {
+    "pass": true,
+    "given": "Concludes Oligo do NOT have more contacts than L2/3 IT (L2/3 IT higher), matching 'Oligo fewer' direction"
+   },
+   "n_cells_reported": {
+    "pass": true,
+    "given": "n=268 for Oligo, n=982 for L2/3 IT"
+   }
+  },
+  "comment": "Direction and cell counts are correct, but the answer reports means (not medians) which deviate from the reference medians by more than 2%."
+ },
+ "C6__skills__r0": {
+  "id": "C6",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 28.717807054519653,
+  "cost_usd": 0.053677300000000004,
+  "num_turns": 5,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_w27ngzui",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "median_a": {
+    "pass": true,
+    "given": "18,173 (Oligo median)"
+   },
+   "median_b": {
+    "pass": true,
+    "given": "21,460 (L2/3 IT pooled median)"
+   },
+   "direction_correct": {
+    "pass": true,
+    "given": "Oligo have fewer contacts than L2/3 IT (0.86x, 14% fewer)"
+   },
+   "n_cells_reported": {
+    "pass": true,
+    "given": "Oligo n=268, L2/3 IT n=982 (575+260+147)"
+   }
+  },
+  "comment": "All numeric values match reference within tolerance and direction/n reporting are correct."
+ },
+ "C7__docs__r0": {
+  "id": "C7",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 81.12650609016418,
+  "cost_usd": 0.17922329999999997,
+  "num_turns": 16,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_1gjgwy9q",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.75,
+  "checks": {
+   "slope_a": {
+    "pass": true,
+    "given": "-0.943 (Oligo)"
+   },
+   "slope_b": {
+    "pass": true,
+    "given": "-1.452 (L2/3 IT)"
+   },
+   "uses_pseudobulk_or_subclass_cool": {
+    "pass": true,
+    "given": "used pseudo-bulk contact maps (500kb) from scHiCAR for both cell types"
+   },
+   "depth_normalised": {
+    "pass": false,
+    "given": "no mention of normalizing by total chr1 cis contacts; used raw contact counts in log-log fit"
+   }
+  },
+  "comment": "Slopes are within tolerance and pseudo-bulk maps were used, but the method description never normalizes by sequencing depth/total contacts as the reference method requires."
+ },
+ "C7__skills__r0": {
+  "id": "C7",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 81.99951386451721,
+  "cost_usd": 0.17278390000000002,
+  "num_turns": 13,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_ajxrd_gu",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.5,
+  "checks": {
+   "slope_a": {
+    "pass": false,
+    "given": "Oligo slope = -0.797 (\u03b1=0.797), outside \u00b15% of reference -0.9166"
+   },
+   "slope_b": {
+    "pass": true,
+    "given": "L2/3 IT slope = -1.396 (\u03b1=1.396), within \u00b15% of reference -1.4128"
+   },
+   "uses_pseudobulk_or_subclass_cool": {
+    "pass": true,
+    "given": "Used pseudo-bulk contact maps per cell type, with L2/3 IT as sum of three subtype cools"
+   },
+   "depth_normalised": {
+    "pass": false,
+    "given": "No mention of normalizing P(s) by total chr1 cis contacts or sequencing depth"
+   }
+  },
+  "comment": "Oligo slope is off (0.797 vs -0.9166), L23IT slope passes tolerance, pseudobulk/subtype summing is used correctly, but depth normalization is never described."
+ },
+ "C8__docs__r0": {
+  "id": "C8",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 147.97166991233826,
+  "cost_usd": 0.19139710000000001,
+  "num_turns": 12,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_7ncra6uq",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "adjusts_for_nuclear_volume": {
+    "pass": true,
+    "given": "Normalized RG by dividing by cube root of nuclear volume (0.1946 vs 0.1658 normalized RG for Granule vs Purkinje)"
+   },
+   "cell_is_unit": {
+    "pass": true,
+    "given": "Reports n=22 cells (Granule) vs n=3 cells (Purkinje) with per-cell normalized RG values (0.1946, 0.1658) that closely match the reference's per-cell median_adj values (0.195, 0.167), indicating cell-level aggregation was used for the group test"
+   },
+   "flags_n3_too_few": {
+    "pass": true,
+    "given": "Limitations explicitly state 'Small Purkinje sample limits generalizability' and 'may reflect sampling variability given the small Purkinje sample (n=3)'"
+   }
+  },
+  "comment": "Answer correctly identifies that after adjustment Purkinje becomes more compact than Granule (matching reference's flip from raw to adjusted), uses per-cell summaries, and flags the n=3 limitation, though it overstates confidence with a bolded 'Yes' despite p=0.386 (vs reference's non-significant p_adjusted=0.311) not being significant."
+ },
+ "C8__skills__r0": {
+  "id": "C8",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 101.94410920143127,
+  "cost_usd": 0.1508967,
+  "num_turns": 12,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "call-structures",
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_1567peko",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.6666666666666666,
+  "checks": {
+   "adjusts_for_nuclear_volume": {
+    "pass": false,
+    "given": "Used 3D coordinate span (in \u00b5m) as a proxy for nuclear size and linear-regression residuals to 'control' for it, explicitly noting in limitations that this was 'not a precise volumetric measurement' \u2014 never computed nuclear volume or divided Rg by volume^(1/3)."
+   },
+   "cell_is_unit": {
+    "pass": true,
+    "given": "Computed per-cell median Rg (n=22 granule cells, n=3 Purkinje cells) and ran Mann-Whitney U on those cell-level medians."
+   },
+   "flags_n3_too_few": {
+    "pass": true,
+    "given": "Limitations section states 'Small Purkinje sample (n=3 cells only; 6 traces)\u2014exploratory power limited.'"
+   }
+  },
+  "comment": "Correctly uses per-cell summaries and flags the n=3 caveat, but never actually adjusts by nuclear volume\u2014substitutes a coordinate-span proxy and admits it isn't volumetric."
+ },
+ "C9__docs__r0": {
+  "id": "C9",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 67.87292909622192,
+  "cost_usd": 0.09916359999999999,
+  "num_turns": 10,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_luzqp8nb",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.75,
+  "checks": {
+   "identity_bergmann": {
+    "pass": true,
+    "given": "States all 8 selected cells are Bergmann glial cells"
+   },
+   "top_mark_sox2": {
+    "pass": true,
+    "given": "Names SOX2 as top marker, 4.56-fold enriched"
+   },
+   "cell_is_unit": {
+    "pass": true,
+    "given": "Describes IF intensities averaged per cell across the 8 selected cells vs other cell types (cell-level comparison), no mention of treating traces/spots as independent samples"
+   },
+   "multiple_testing_corrected": {
+    "pass": false,
+    "given": "No mention of p-values, significance testing, or any multiple-testing correction (FDR/Bonferroni) across the many IF marks/fields; only reports raw fold-changes"
+   }
+  },
+  "comment": "Correctly identifies the Bergmann glia identity and SOX2 as the top marker with a plausible cell-level analysis description, but omits any statistical testing or multiple-testing correction across the marks/fields."
+ },
+ "C9__skills__r0": {
+  "id": "C9",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 47.87895178794861,
+  "cost_usd": 0.060479200000000004,
+  "num_turns": 4,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_8_kewgd6",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.75,
+  "checks": {
+   "identity_bergmann": {
+    "pass": true,
+    "given": "100% Bergmann (all 8 selected), all 8 in same Leiden cluster 2"
+   },
+   "top_mark_sox2": {
+    "pass": true,
+    "given": "SOX2 named as top marker, p=4.66e-05, d=1.67 (large)"
+   },
+   "cell_is_unit": {
+    "pass": true,
+    "given": "Uses per-cell means (selected mean vs rest mean) with n=8 vs rest, cell type/cluster as unit"
+   },
+   "multiple_testing_corrected": {
+    "pass": false,
+    "given": "Reports raw p-values with a p<0.05 cutoff table (e.g. lists H3K27ac at p=0.003, several marks down to p=0.044) with no mention of FDR/Bonferroni or multiple-testing correction"
+   }
+  },
+  "comment": "Correctly identifies Bergmann glia and SOX2 as the top marker using per-cell summaries, but never corrects for testing many marks (uses raw p<0.05 instead of FDR/q-values)."
+ },
+ "D1__docs__r0": {
+  "id": "D1",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 85.80753588676453,
+  "cost_usd": 0.17464419999999997,
+  "num_turns": 12,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_wxed6k19",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.6666666666666666,
+  "checks": {
+   "rho": {
+    "pass": true,
+    "given": "Spearman \u03c1 = +0.492, p = 0.0004 (matches reference within tolerance)"
+   },
+   "level_cell": {
+    "pass": true,
+    "given": "States correlation computed across 47 cells (per-cell mean IF vs per-cell median Rg)"
+   },
+   "mentions_nuclear_volume": {
+    "pass": false,
+    "given": "No mention of nuclear volume/size as a potential confound or partial correlation control"
+   }
+  },
+  "comment": "Numeric and cell-level checks pass, but the answer never addresses nuclear volume as a possible confound despite the reference partial correlation dropping substantially (0.49\u21920.30)."
+ },
+ "D1__skills__r0": {
+  "id": "D1",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 57.06042408943176,
+  "cost_usd": 0.08505589999999999,
+  "num_turns": 9,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "associate-modalities",
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_anukeplm",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "rho": {
+    "pass": true,
+    "given": "Spearman \u03c1 = 0.492, p = 4.4\u00d710\u207b\u2074, n=47"
+   },
+   "level_cell": {
+    "pass": true,
+    "given": "Explicitly frames correlation 'Across cells' with n=47 cells"
+   },
+   "mentions_nuclear_volume": {
+    "pass": true,
+    "given": "Reports partial correlation controlling for nuclear volume (\u03c1=0.299) and notes Rg correlates strongly with nuclear volume (\u03c1=0.75), calling it a confound"
+   }
+  },
+  "comment": "Answer's rho matches reference within tolerance and explicitly addresses cell-level framing and nuclear-volume confounding."
+ },
+ "D2__docs__r0": {
+  "id": "D2",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 67.48767495155334,
+  "cost_usd": 0.1408473,
+  "num_turns": 10,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_dzb5ij7g",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.6666666666666666,
+  "checks": {
+   "rho": {
+    "pass": false,
+    "given": "Pearson r = -0.082 (not Spearman; magnitude ~0.082, far outside \u00b15% of reference 0.1886)"
+   },
+   "level_spot": {
+    "pass": true,
+    "given": "Correlated LaminB1 vs distance-to-periphery across all 383,674 individual loci (matches n_spots)"
+   },
+   "direction_correct": {
+    "pass": true,
+    "given": "Concludes higher LaminB1 loci sit closer to the nuclear periphery, matching reference direction"
+   }
+  },
+  "comment": "Direction and spot-level scope match, but the reported correlation (Pearson -0.082) is the wrong statistic and far below the reference Spearman rho of 0.1886, so the rho check fails."
+ },
+ "D2__skills__r0": {
+  "id": "D2",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 109.50300431251526,
+  "cost_usd": 0.1369527,
+  "num_turns": 9,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_5c75_pi_",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "rho": {
+    "pass": true,
+    "given": "\u03c1 = 0.1886"
+   },
+   "level_spot": {
+    "pass": true,
+    "given": "spot level, all 383,674 spots/loci"
+   },
+   "direction_correct": {
+    "pass": true,
+    "given": "higher LaminB1 -> closer to periphery (positive correlation with radial score)"
+   }
+  },
+  "comment": "rho matches reference within tolerance, computed at spot level across all loci, and direction (higher LaminB1 -> more peripheral) matches the reference."
+ },
+ "D3__docs__r0": {
+  "id": "D3",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 58.32772493362427,
+  "cost_usd": 0.0829242,
+  "num_turns": 10,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_71v2s7dt",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.0,
+  "checks": {
+   "rho": {
+    "pass": false,
+    "given": "Pearson r=0.104 (p=1.85e-36); Spearman rho=0.128 (p=1.21e-54) \u2014 positive sign, wrong magnitude, vs reference rho=-0.856"
+   },
+   "level_bin": {
+    "pass": false,
+    "given": "Used 25 kb bins over a tiny 0.4\u20135.1 Mb sub-region and per-spot/per-cell distance-from-centroid metric, not 1 Mb bin-level mean H3K27ac vs mean n_rad_score across all of chr15 (n=101 bins)"
+   }
+  },
+  "comment": "Answer reports the opposite sign and a much smaller magnitude correlation using a different bin resolution, region, and centrality metric than the reference bin-level (1 Mb, n_rad_score) method."
+ },
+ "D3__skills__r0": {
+  "id": "D3",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 119.56513619422913,
+  "cost_usd": 0.1584433,
+  "num_turns": 17,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "associate-modalities",
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_nvi6o6wp",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.5,
+  "checks": {
+   "rho": {
+    "pass": false,
+    "given": "Spearman rho = 0.851 (positive), whereas reference is -0.856470588235294 \u2014 same magnitude but opposite sign because the answer used distance-to-periphery instead of a peripherality score"
+   },
+   "level_bin": {
+    "pass": true,
+    "given": "Computed per-bin means of H3K27ac and radial-distance metric across 101 1Mb bins on chr15 (all cells pooled), then Spearman correlation across bins"
+   }
+  },
+  "comment": "The qualitative conclusion (more H3K27ac -> more central) matches, and bin-level aggregation is correct, but the literal rho value reported (+0.851) has the opposite sign from the reference (-0.856) since the answer's centrality metric is inverted relative to n_rad_score."
+ },
+ "D4__docs__r0": {
+  "id": "D4",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 55.03674602508545,
+  "cost_usd": 0.10348929999999999,
+  "num_turns": 13,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_8k26tfru",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "rho": {
+    "pass": true,
+    "given": "0.7440 (Pearson r, labeled as 'Correlation'); reference rho=0.7523 is Spearman, but 0.7440 is within tolerance if compared as pearson_r, and even vs rho it's within ~1.1%"
+   },
+   "level_cell": {
+    "pass": true,
+    "given": "Aggregated to median RG per cell (47 cells) and regressed against nuclear volume \u2014 explicitly cell-level"
+   }
+  },
+  "comment": "The answer reports 0.7440, which matches the reference pearson_r closely (and is also within 5% of the Spearman rho), correctly frames the analysis at the cell level with n=47, and gives a matching slope."
+ },
+ "D4__skills__r0": {
+  "id": "D4",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 55.59093999862671,
+  "cost_usd": 0.0804969,
+  "num_turns": 8,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_p28e2acw",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.5,
+  "checks": {
+   "rho": {
+    "pass": false,
+    "given": "r = 0.665 (Pearson)"
+   },
+   "level_cell": {
+    "pass": true,
+    "given": "per-cell median Rg (n=47 cells) vs per-cell nuclear volume"
+   }
+  },
+  "comment": "The answer reports Pearson r=0.665 rather than the Spearman rho=0.752 reference, and even as a Pearson comparison (ref pearson_r=0.744) it's off and mislabeled as the primary correlation, though it correctly analyzes at the cell level."
+ },
+ "D5__docs__r0": {
+  "id": "D5",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 48.29392409324646,
+  "cost_usd": 0.1049959,
+  "num_turns": 9,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_snfv60jn",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "purity_hic": {
+    "pass": true,
+    "given": "0.242"
+   },
+   "purity_rna": {
+    "pass": true,
+    "given": "0.443"
+   }
+  },
+  "comment": "Both reported purity values match the reference within tolerance."
+ },
+ "D5__skills__r0": {
+  "id": "D5",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 77.79031610488892,
+  "cost_usd": 0.098376,
+  "num_turns": 8,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_35e8r3wb",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "purity_hic": {
+    "pass": true,
+    "given": "Mean purity Hi-C = 0.242"
+   },
+   "purity_rna": {
+    "pass": true,
+    "given": "Mean purity RNA = 0.443"
+   }
+  },
+  "comment": "Both reported mean purity values (0.242 for Hi-C, 0.443 for RNA) match the reference values closely."
+ },
+ "D6__docs__r0": {
+  "id": "D6",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 43.765894174575806,
+  "cost_usd": 0.09171879999999999,
+  "num_turns": 7,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_14q8sw41",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.6666666666666666,
+  "checks": {
+   "rho": {
+    "pass": true,
+    "given": "Spearman \u03c1 = 0.282 (also reports Pearson r = 0.273)"
+   },
+   "level_cell": {
+    "pass": true,
+    "given": "States correlation is across 5,313 cells (per-cell aggregate Hi-C contacts vs RNA counts)"
+   },
+   "checks_within_type": {
+    "pass": false,
+    "given": "No within-cell-type analysis performed; only speculates that 'both likely respond to cell-type identity' without computing within-type correlation"
+   }
+  },
+  "comment": "Reports the correct rho (via Spearman) and correctly frames it as a cross-cell correlation, but never checks or reports whether the association holds within cell types."
+ },
+ "D6__skills__r0": {
+  "id": "D6",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 44.621564865112305,
+  "cost_usd": 0.0761239,
+  "num_turns": 10,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "associate-modalities",
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_ymu8zrlz",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "rho": {
+    "pass": true,
+    "given": "Spearman \u03c1 = 0.282 (p = 1.5e-97, n = 5,313 cells)"
+   },
+   "level_cell": {
+    "pass": true,
+    "given": "States correlation is across cells, n=5,313 cells"
+   },
+   "checks_within_type": {
+    "pass": true,
+    "given": "Median within-type \u03c1 = 0.295 across 22 cell types, holds consistently within cell types"
+   }
+  },
+  "comment": "All values match reference closely and the answer explicitly addresses both cell-level framing and within-type consistency."
+ },
+ "D7__docs__r0": {
+  "id": "D7",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 75.74881672859192,
+  "cost_usd": 0.15379449999999997,
+  "num_turns": 16,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_q4nh285a",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "rho_all": {
+    "pass": true,
+    "given": "Spearman \u03c1 = 0.1317 (p = 5.45e-22), matches reference exactly"
+   },
+   "checks_within_type": {
+    "pass": true,
+    "given": "Computed within-cell-type correlation (r=0.0921, much weaker than overall), plus variance decomposition and Oligo-driven analysis, concluding correlation is substantially driven by cell type rather than holding uniformly within types"
+   }
+  },
+  "comment": "Answer's Spearman rho_all matches the reference almost exactly, and it directly addresses the within-cell-type question, showing weak within-type correlation and attributing the overall signal mainly to cell-type (esp. Oligo) differences, consistent with the reference's low median within-type rho relative to rho_all."
+ },
+ "D7__skills__r0": {
+  "id": "D7",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 28.91786003112793,
+  "cost_usd": 0.0586462,
+  "num_turns": 7,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "associate-modalities",
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_aoqnyi0e",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "rho_all": {
+    "pass": true,
+    "given": "Spearman \u03c1 = 0.132, p = 5.4\u00d710\u207b\u00b2\u00b2 (matches reference 0.1317, p 5.4e-22)"
+   },
+   "checks_within_type": {
+    "pass": true,
+    "given": "Computed within-cell-type correlation (median \u03c1 = 0.033, matching reference 0.0327) and concluded the overall association is cell-type-driven, not present within types"
+   }
+  },
+  "comment": "Answer correctly reproduces rho_all and explicitly addresses the within-cell-type breakdown, concluding the correlation is largely driven by cell type."
+ },
+ "D8__docs__r0": {
+  "id": "D8",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 149.059100151062,
+  "cost_usd": 0.2177704,
+  "num_turns": 17,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_lo4k1nyd",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.6666666666666666,
+  "checks": {
+   "flags_n8_small": {
+    "pass": true,
+    "given": "\"Only 8 Bergmann glia cells; correlation could reflect idiosyncratic cell behavior\""
+   },
+   "level_cell": {
+    "pass": false,
+    "given": "Analysis is at the spot level (82,918 spots), using per-spot SOX2 IF vs per-spot k-NN distance, not per-cell values"
+   },
+   "within_group": {
+    "pass": true,
+    "given": "Analysis restricted to Bergmann glia cells specifically, compared against other cell types"
+   }
+  },
+  "comment": "The answer correctly restricts to Bergmann glia and flags the small-n caveat, but it computes the association at the spot/pixel level (tens of thousands of spots) rather than per-cell (n=8) as in the reference, so it doesn't match the required cell-level analysis."
+ },
+ "D8__skills__r0": {
+  "id": "D8",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 85.36809015274048,
+  "cost_usd": 0.1043259,
+  "num_turns": 8,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_5_p4cqps",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.3333333333333333,
+  "checks": {
+   "flags_n8_small": {
+    "pass": false,
+    "given": "Answer reports n=245 traces for Bergmann glia, no mention of small n=8 cells or its limitation"
+   },
+   "level_cell": {
+    "pass": false,
+    "given": "Answer computes correlation per-trace (n=245), not per-cell (n=8 cells)"
+   },
+   "within_group": {
+    "pass": true,
+    "given": "Answer does report a Bergmann-glia-specific correlation (r=0.351, p<0.001, n=245), analyzed within that group alone"
+   }
+  },
+  "comment": "The answer analyzes at the wrong unit of analysis (per-trace, n=245) instead of per-cell (n=8), giving an opposite/incorrect conclusion and missing the key caveat about the tiny n=8 cell sample."
+ },
+ "E1__docs__r0": {
+  "id": "E1",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 76.00453019142151,
+  "cost_usd": 0.1154843,
+  "num_turns": 11,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_ateupojq",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "frac_cell_chrom_gt2": {
+    "pass": true,
+    "given": "12.7% of pairs (118/920) have >2 traces"
+   },
+   "flags_more_than_two_alleles": {
+    "pass": true,
+    "given": "explicitly notes 12.7% (118) of cell-chromosome pairs have >2 traces, calling them 'unseparated or overlapping alleles'"
+   },
+   "proposes_handling": {
+    "pass": true,
+    "given": "proposes filtering to exactly-2-trace pairs, allele-aware grouping with exclusion of >2 pairs, or trace-agnostic merging, plus QC filtering by completeness"
+   }
+  },
+  "comment": "Numbers match reference (118/920) despite a minor 12.7%-vs-12.8% rounding slip, and the answer both flags the non-diploid excess and proposes concrete handling strategies before cross-cell comparison."
+ },
+ "E1__skills__r0": {
+  "id": "E1",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 27.02088499069214,
+  "cost_usd": 0.0521287,
+  "num_turns": 5,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_mk0n0l7x",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "frac_cell_chrom_gt2": {
+    "pass": true,
+    "given": "13% (118/920 pairs) have >2 traces per cell-chrom, matches 0.1282... exactly"
+   },
+   "flags_more_than_two_alleles": {
+    "pass": true,
+    "given": "Explicitly flags 118/920 pairs (91 with 3, 22 with 4, 5 with 5+, 1 with 7) as over-split alleles"
+   },
+   "proposes_handling": {
+    "pass": true,
+    "given": "Proposes summarizing per cell, optionally filtering cells/pairs with >2 traces, and averaging duplicate spots before distance/structure analysis"
+   }
+  },
+  "comment": "Answer's quantitative breakdown matches the reference exactly and it both flags and proposes handling for the >2-allele cases."
+ },
+ "E2__docs__r0": {
+  "id": "E2",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 89.49212789535522,
+  "cost_usd": 0.1352731,
+  "num_turns": 14,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_nmxnxp6q",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "frac_traces_with_duplicates": {
+    "pass": true,
+    "given": "85% (1,274/1,500 traces) contain duplicates, matching reference exactly"
+   },
+   "explains_duplicates_handling": {
+    "pass": true,
+    "given": "Recommends using first occurrence per genomic bin (or averaging duplicate coordinates) when building the per-trace distance matrix"
+   }
+  },
+  "comment": "Numeric fraction matches reference exactly and the answer gives a clear, actionable handling recommendation for the distance matrix."
+ },
+ "E2__skills__r0": {
+  "id": "E2",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 64.1250159740448,
+  "cost_usd": 0.0887481,
+  "num_turns": 9,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_jolg40qk",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "frac_traces_with_duplicates": {
+    "pass": true,
+    "given": "84.93% (1,274 of 1,500 traces)"
+   },
+   "explains_duplicates_handling": {
+    "pass": true,
+    "given": "Recommends averaging coordinates of duplicate (locus) spots per trace (or alternatively keeping the brightest/first spot) before computing per-trace distance matrices/TADs, citing minimal Rg impact"
+   }
+  },
+  "comment": "Fraction matches the reference exactly and the answer clearly explains handling duplicates via averaging/collapsing before distance-matrix computation."
+ },
+ "E3__docs__r0": {
+  "id": "E3",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 117.60268783569336,
+  "cost_usd": 0.1932597,
+  "num_turns": 20,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_fnyq6e0p",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.5,
+  "checks": {
+   "median_granule": {
+    "pass": false,
+    "given": "Granule ~199 spots (vs. reference 159.25 median)"
+   },
+   "median_purkinje": {
+    "pass": false,
+    "given": "Purkinje ~401 spots (vs. reference 365.0 median)"
+   },
+   "flags_detection_bias": {
+    "pass": true,
+    "given": "Notes spot counts differ significantly by cell type and flags that systematic detection-efficiency differences could bias/confound RoG comparisons"
+   },
+   "proposes_correction": {
+    "pass": true,
+    "given": "Proposes/uses covariate-adjusted regression (RoG ~ cell_type + spot_count) as a correction check"
+   }
+  },
+  "comment": "Both reported spot-count medians deviate well beyond \u00b12% from the reference values, though the answer does address detection bias and proposes a regression-based correction."
+ },
+ "E3__skills__r0": {
+  "id": "E3",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 151.70042395591736,
+  "cost_usd": 0.2279809,
+  "num_turns": 16,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "call-structures",
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_w_f90wbj",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 1,
+  "score": 1.0,
+  "checks": {
+   "median_granule": {
+    "pass": true,
+    "given": "159 median spots/trace for Granule"
+   },
+   "median_purkinje": {
+    "pass": true,
+    "given": "365 median spots/trace for Purkinje"
+   },
+   "flags_detection_bias": {
+    "pass": true,
+    "given": "notes strong spot-count/Rg correlation (r=0.747) and a 2.29x detection difference between cell types, discussing it as a potential confound before concluding the resulting bias is small"
+   },
+   "proposes_correction": {
+    "pass": true,
+    "given": "recommends equalizing/subsampling to ~159 spots/trace to isolate intrinsic structure differences"
+   }
+  },
+  "comment": "Both numeric medians are within tolerance and the answer both flags the detection-count disparity as a possible confound and proposes subsampling/equalization as a correction."
+ },
+ "E4__docs__r0": {
+  "id": "E4",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 152.41022324562073,
+  "cost_usd": 0.2503015,
+  "num_turns": 17,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_hzkfixnq",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.6666666666666666,
+  "checks": {
+   "total_contacts_chr1": {
+    "pass": false,
+    "given": "463,223 (pseudo-bulk) vs 476,630 (provided) \u2014 2.8% difference"
+   },
+   "uses_per_cell_scool": {
+    "pass": true,
+    "given": "Loaded all 268 oligodendrocyte cells from contacts_cells_1Mb.scool per-cell contact maps and summed them"
+   },
+   "compares_with_provided_cool": {
+    "pass": true,
+    "given": "Compared to provided oligodendrocyte map (aggregated 500kb to 1Mb), reporting Pearson r=0.9995 and total contact counts"
+   }
+  },
+  "comment": "The pipeline and comparison approach are correct, but the reported totals (463,223 vs 476,630) don't match the reference (317,232 for both, ratio 1.0), exceeding the \u00b11% tolerance."
+ },
+ "E4__skills__r0": {
+  "id": "E4",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 116.43112421035767,
+  "cost_usd": 0.14193009999999998,
+  "num_turns": 11,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_quo3yz0h",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.6666666666666666,
+  "checks": {
+   "total_contacts_chr1": {
+    "pass": false,
+    "given": "463,223 (vs reference 476,630 they cite; both far from correct reference value of 317,232 \u2014 off by ~46%, well outside \u00b11% tolerance)"
+   },
+   "uses_per_cell_scool": {
+    "pass": true,
+    "given": "summed chr1 1Mb matrices from all 268 oligodendrocyte cells in contacts_cells_1Mb.scool"
+   },
+   "compares_with_provided_cool": {
+    "pass": true,
+    "given": "compared pseudo-bulk to provided reference map via Spearman (1.0000) and Pearson (0.9995) correlation and total contact count"
+   }
+  },
+  "comment": "Correlation checks are in the right ballpark but the reported total contact counts (463,223 vs their own cited 476,630) are both wildly inconsistent with the correct reference total of 317,232, indicating a computation error despite the comparison steps being present."
+ },
+ "E5__docs__r0": {
+  "id": "E5",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 103.40701603889465,
+  "cost_usd": 0.14685820000000002,
+  "num_turns": 15,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_s36m26iu",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.25,
+  "checks": {
+   "median_a": {
+    "pass": false,
+    "given": "Equalized Bergmann Rg reported as 1.312 \u00b5m (matched-pairs) / trace-level, not within 8% of reference 1.687"
+   },
+   "median_b": {
+    "pass": false,
+    "given": "Equalized Granule Rg reported as 1.338 \u00b5m (matched-pairs) / trace-level, not within 8% of reference 1.538"
+   },
+   "equalises_spot_number": {
+    "pass": true,
+    "given": "Used matched-pairs (nearest spot-count matching) and ANCOVA regressing out n_spots to control for spot count"
+   },
+   "cell_is_unit": {
+    "pass": false,
+    "given": "Analysis operates at trace level (e.g. 'n=245 traces', matched-pairs of traces, ANCOVA on traces) rather than aggregating to per-cell medians before testing"
+   }
+  },
+  "comment": "Answer reaches the same qualitative conclusion (no significant difference after equalization) but via trace-level matching/ANCOVA rather than per-cell median aggregation, and its reported Rg values don't match the reference medians within tolerance."
+ },
+ "E5__skills__r0": {
+  "id": "E5",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 61.73592281341553,
+  "cost_usd": 0.080847,
+  "num_turns": 8,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "compare-groups",
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_ebumfdu2",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 0.75,
+  "checks": {
+   "median_a": {
+    "pass": true,
+    "given": "Bergmann equalized median Rg = 1.62 \u03bcm (120 spots/trace)"
+   },
+   "median_b": {
+    "pass": false,
+    "given": "Granule equalized median Rg = 1.35 \u03bcm (120 spots/trace), off from reference 1.538 by ~12%"
+   },
+   "equalises_spot_number": {
+    "pass": true,
+    "given": "Resampled 120 random loci per trace, excluding traces with fewer spots, to equalize detection before comparing"
+   },
+   "cell_is_unit": {
+    "pass": true,
+    "given": "Summarized Rg as per-cell median across traces, then ran Mann-Whitney on per-cell values (n=8 vs n=22)"
+   }
+  },
+  "comment": "Correct overall conclusion and approach (per-cell summaries, spot-number equalization, non-significant result after equalizing), but the equalized Granule median (1.35) deviates from the reference (1.538) by more than 8%."
+ },
+ "E8__docs__r0": {
+  "id": "E8",
+  "condition": "docs",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 50.021241188049316,
+  "cost_usd": 0.1268966,
+  "num_turns": 12,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_ljwg_d4h",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "n_embeddings": {
+    "pass": true,
+    "given": "10 embeddings across 3 modalities (RNA, ATAC, Hi-C) for 5,313 cells"
+   },
+   "identifies_hic_embedding": {
+    "pass": true,
+    "given": "Recommends hic_pca (20D, from scHiCluster on 1Mb contact maps) for chromatin conformation comparison, with hic_umap/hic_tsne as 2D visualization alternatives"
+   }
+  },
+  "comment": "Answer correctly counts 10 embeddings and identifies hic_pca as the recommendation, though it omits the 4th 'Published' modality (paper_umap) from its modality count."
+ },
+ "E8__skills__r0": {
+  "id": "E8",
+  "condition": "skills",
+  "rep": 0,
+  "agent": "claude",
+  "model_requested": "haiku",
+  "returncode": 0,
+  "elapsed_s": 28.420028924942017,
+  "cost_usd": 0.053543400000000005,
+  "num_turns": 5,
+  "model": "claude-haiku-4-5-20251001",
+  "skills_used": [
+   "load-data"
+  ],
+  "workdir": "/var/folders/tq/285915z105g568z0ss3ll7_w0000gn/T/analysis_u0715d9g",
+  "venv": "/Users/weizexu/.cache/uchrom-bench/a4ea32b/venv",
+  "claude_code_version": "2.1.283",
+  "sandbox_deny": [
+   "/Users/weizexu/Projects/U-Chrom",
+   "/Users/weizexu/orca/workspaces/U-Chrom"
+  ],
+  "skills_listed": [
+   "associate-modalities",
+   "call-structures",
+   "compare-groups",
+   "load-data",
+   "show-in-browser",
+   "deep-research",
+   "design",
+   "design-sync",
+   "dataviz",
+   "update-config",
+   "verify",
+   "debug",
+   "code-review",
+   "simplify",
+   "batch",
+   "fewer-permission-prompts",
+   "doctor",
+   "loop",
+   "schedule",
+   "claude-api",
+   "workflow-authoring",
+   "run",
+   "run-skill-generator"
+  ],
+  "repo_refs": 0,
+  "pkg_source_refs": 0,
+  "score": 1.0,
+  "checks": {
+   "n_embeddings": {
+    "pass": true,
+    "given": "10 total: hic_pca, hic_tsne, hic_umap, atac_lsi, atac_tsne, atac_umap, rna_pca, rna_tsne, rna_umap, paper_umap"
+   },
+   "identifies_hic_embedding": {
+    "pass": true,
+    "given": "Identifies hic_pca, hic_tsne, hic_umap as Hi-C-based and recommends hic_pca for comparing cell types by chromatin conformation"
+   }
+  },
+  "comment": "Answer correctly enumerates all 10 embeddings with modality/method, and correctly recommends hic_pca as the Hi-C-derived embedding for comparing chromatin conformation."
+ }
+}
