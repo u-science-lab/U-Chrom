@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **Cell spatial position is first-class (`.chromdata.zarr` format 2.3).**
+  Centroids are `cells` columns `centroid_x`, `centroid_y` [, `centroid_z`]
+  with a record `uns['cell_spatial'][key]` (unit, frame fov / tissue /
+  global, `region_col`, `in_coords_frame`, status measured / inferred,
+  source, optional voxel size): `cd.set_cell_positions()`,
+  `cd.cell_positions(key, physical=)`.  Optional outlines
+  `cd.cell_shapes[key]` (`cell_id` + WKB polygons) are stored as GeoParquet
+  (`tables/cell_shapes/<key>.parquet`, readable by `geopandas.read_parquet`);
+  `cd.set_cell_shapes()` needs no geometry library,
+  `cd.cell_shapes_geodataframe()` needs shapely + geopandas (new extra
+  `u-chrom[spatial]`).  `cd.link_spatialdata()` records an external
+  SpatialData store and its cell map (`region` / `instance_key` ↔
+  `cell_id`), checked by `validate_links()`;
+  `cd.load_linked_spatialdata(cells=)`, `cd.to_spatialdata()` (extra
+  `u-chrom[spatialdata]`).  Loaders: `read_seqfish_multiomics` writes
+  `centroid_x/y/z` (voxels, per FOV; **was `x_centroid` …**) and a `fov`
+  cells column; `from_fofct(cell_table=)` registers `Cent_ROI_x/y[/z]` or
+  `cell_center_x_global / _y_global`; `from_fofct(mapping_table=)` /
+  `to_fofct(mapping_table=)` read / write the Cell/ROI Mapping table
+  (`ROI_Boundaries`, OME polygons).  `set_cell_spatial_coordinates()` is
+  deprecated and now writes the schema (`centroid_x`, was `spatial_x`);
+  older columns stay readable through `cell_positions()`.  Format 2.3 =
+  the 2.2 layout + these additive parts: 2.2 readers read 2.3 stores with a
+  warning; 2.0–2.2 stores read unchanged.  Real data
+  (`benchmarks/cell_spatial_validation.py`): Takei 2025 cerebellum 1,799 /
+  1,799 cells, Takei 2021 201 / 201, Liu 2025 MOp 14,733 / 14,733, all equal
+  to the source tables.
+
 - **`.chromdata.zarr` format 2.2 — every spot value stored once.**
   Coordinates + keys in a chromosome-partitioned table
   (`tables/coords/chrom=<name>/`), every other spot-aligned column in

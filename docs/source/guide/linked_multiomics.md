@@ -91,25 +91,47 @@ cd.uns["spot_semantics"] = "cell_by_genomic_bin_feature_rows"
 ## Store Cell-Level Spatial Coordinates
 
 Tangram maps cells to tissue-space positions.  Those positions describe
-cells, not genomic bins, so store them in `cells` and record provenance under
-`uns["cell_spatial"]`.
+cells, not genomic bins, so store them in `cells` (columns
+`<key>_centroid_x` / `_y`) with a record under `uns["cell_spatial"]`
+(schema in `uchrom/core/spec.md`):
 
 ```python
-cd.set_cell_spatial_coordinates(
-    xy,  # shape: n_cells x 2
+cd.set_cell_positions(
+    xy,  # shape: n_cells x 2 (or x 3)
     key="tangram_merfish",
     cell_ids=schicar_cell_ids,
+    unit="um",
+    frame="tissue",
+    status="inferred",                  # inferred positions need a source
     source="MERFISH centroid",
     method="Tangram map_cells_to_space",
-    coordinate_system="micron",
-    inferred=True,
 )
+cd.cell_positions("tangram_merfish")    # x, y indexed by cell_id
 ```
 
 Use this only when `cd.cells` is on the same cell axis as `cell_ids`.  If
 `cd.cells` contains MERFISH cells but `xy` contains scHiCAR cells, keep the
 scHiCAR coordinates in the linked MuData/AnnData object instead and record
-that link from `ChromData`.
+that link from `ChromData`.  (`set_cell_spatial_coordinates()` is the
+deprecated form of this call.)
+
+## Link SpatialData
+
+Imaging data sets often come with a SpatialData store (images, segmentation
+labels, cell shapes, tables).  Link it rather than copying it:
+
+```python
+cd.link_spatialdata("sample.sdata.zarr")             # table / region / instance_key from the store
+cd.link_spatialdata("sample.sdata.zarr", key="seg",  # explicit cell map
+                    table="table", region="cell_boundaries",
+                    region_key="region", instance_key="cell_id",
+                    cell_col="sdata_cell")           # when the ids differ: a cells column
+sdata = cd.load_linked_spatialdata(cells=["c1", "c2"])   # subset to two cells
+cd.validate_links()                                  # path, table, instance key, matched cells
+```
+
+`cd.to_spatialdata()` goes the other way: spots as 3-D points, cell
+centroids, outlines (`cd.cell_shapes`) and the cell table.
 
 ## Validate Links
 
@@ -124,6 +146,10 @@ Validation checks:
 - all-NaN coordinates have explicit coordinate-status metadata
 - linked file paths exist
 - linked scool files can be recognized by `cooler`
+- linked SpatialData stores have the recorded table and instance key, and
+  the cell map finds the ChromData cells
+- cell-position records name existing `cells` columns and have a valid
+  status (inferred ones a source)
 - linked metadata records have expected formats
 
 ## Project Wrapper

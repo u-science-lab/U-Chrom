@@ -258,7 +258,7 @@ def test_format_2_0_stores_stay_readable(tmp_path):
     pd.testing.assert_frame_equal(ref.to_dataframe(), cd.to_dataframe())
     bk.write(tmp_path / "up.chromdata.zarr")
     assert json.loads((tmp_path / "up.chromdata.zarr" / "zarr.json").read_text())["attributes"]["uchrom"][
-        "format_version"] == "2.2"
+        "format_version"] == "2.3"
     pd.testing.assert_frame_equal(_sorted_df(ChromData.read(tmp_path / "up.chromdata.zarr")), _sorted_df(cd))
 
 
@@ -520,7 +520,7 @@ def test_convert_h5cd_1x_and_2x(tmp_path, capsys):
     info = upgrade_h5cd(src)                                       # default target
     dst = tmp_path / "old.chromdata.zarr"
     assert info["dst"] == str(dst) and info["to_container"] == "zarr" and info["from_version"] == "1.4"
-    assert file_format_version(dst) == "2.2" and file_format_version(src) == "1.4"
+    assert file_format_version(dst) == "2.3" and file_format_version(src) == "1.4"
     new = ChromData.read(dst, original_order=True)
     pd.testing.assert_frame_equal(new.to_dataframe(), ref.to_dataframe())
     pd.testing.assert_frame_equal(new.tracks_spot_view(), ref.tracks_spot_view())
@@ -534,7 +534,7 @@ def test_convert_h5cd_1x_and_2x(tmp_path, capsys):
         ref.write(tmp_path / "two.h5cd")
     assert file_format_version(tmp_path / "two.h5cd") == "2.0"
     convert_chromdata(tmp_path / "two.h5cd", tmp_path / "two.cdz")
-    assert file_format_version(tmp_path / "two.cdz") == "2.2"
+    assert file_format_version(tmp_path / "two.cdz") == "2.3"
     pd.testing.assert_frame_equal(ChromData.read(tmp_path / "two.cdz", original_order=True).to_dataframe(),
                                   ChromData.read(tmp_path / "two.h5cd").to_dataframe())
     assert main([str(src), str(tmp_path / "two.h5cd"), "--out-dir", str(tmp_path / "out")]) == 0

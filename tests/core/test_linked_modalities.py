@@ -100,28 +100,34 @@ def test_uchrom_project_delegates_linking_and_validation(tmp_path):
 
 
 def test_cell_spatial_coordinates_align_by_cell_id_and_roundtrip(tmp_path):
+    """The deprecated 1.x setter still works and now writes the schema."""
+    import pytest
+
     from uchrom import ChromData
 
     cd = _make_cd()
-    cd.set_cell_spatial_coordinates(
-        np.array([[20.0, 30.0], [10.0, 15.0]]),
-        key="tangram_merfish",
-        cell_ids=["cell_b", "cell_a"],
-        source="MERFISH centroid",
-        method="Tangram map_cells_to_space",
-        coordinate_system="micron",
-        inferred=True,
-    )
+    with pytest.warns(DeprecationWarning, match="set_cell_positions"):
+        cd.set_cell_spatial_coordinates(
+            np.array([[20.0, 30.0], [10.0, 15.0]]),
+            key="tangram_merfish",
+            cell_ids=["cell_b", "cell_a"],
+            source="MERFISH centroid",
+            method="Tangram map_cells_to_space",
+            coordinate_system="micron",
+            inferred=True,
+        )
 
     path = tmp_path / "spatial_cells.chromdata.zarr"
     cd.write(path)
     out = ChromData.read(path)
 
-    assert out.cells.loc["cell_a", "tangram_merfish_spatial_x"] == 10.0
-    assert out.cells.loc["cell_a", "tangram_merfish_spatial_y"] == 15.0
-    assert out.cells.loc["cell_b", "tangram_merfish_spatial_x"] == 20.0
-    assert out.describe_links()["cell_spatial"]["tangram_merfish"]["inferred"] is True
-
+    assert out.cells.loc["cell_a", "tangram_merfish_centroid_x"] == 10.0
+    assert out.cells.loc["cell_a", "tangram_merfish_centroid_y"] == 15.0
+    assert out.cells.loc["cell_b", "tangram_merfish_centroid_x"] == 20.0
+    rec = out.describe_links()["cell_spatial"]["tangram_merfish"]
+    assert rec["status"] == "inferred" and rec["frame"] == "micron" and rec["source"] == "MERFISH centroid"
+    pos = out.cell_positions("tangram_merfish")
+    assert pos.loc["cell_b"].tolist() == [20.0, 30.0]
 
 
 def test_link_cool_records_and_validates(tmp_path):

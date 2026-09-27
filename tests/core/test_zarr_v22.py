@@ -78,7 +78,7 @@ def test_layout_and_encoding(tmp_path):
     path = tmp_path / "x.chromdata.zarr"
     write_zarr(cd, path, row_group_rows=40, coords_row_group_rows=10, _layout="2.2", float_encoding=True)
     meta = json.loads((path / "zarr.json").read_text())["attributes"]["uchrom"]
-    assert meta["format_version"] == "2.2" and meta["layout"] == "primary+coords"
+    assert meta["format_version"] == "2.3" and meta["layout"] == "primary+coords"
     assert meta["spot_order"] == "cell,trace,chrom,bin" and meta["coords_order"] == "chrom,cell,trace,bin"
     t = path / "tables"
     assert (t / "primary" / "spots.parquet").exists() and (t / "primary" / "spot_tracks.parquet").exists()
@@ -139,7 +139,7 @@ def test_backed_matches_in_memory(store):
     cd, path = store
     mem = ChromData.read(path)
     bk = ChromData.read(path, backed=True)
-    assert bk.has_coords_table and bk.format_version == "2.2" and not bk.partitioned
+    assert bk.has_coords_table and bk.format_version == "2.3" and not bk.partitioned
     _assert_same_small(mem, bk)
     for c in list(mem.spots["cell_id"].cat.categories) + ["nope"]:
         _same(mem.get_cell(c), bk.get_cell(c))
@@ -320,7 +320,7 @@ def test_sorted_rewrite_and_default_layout(tmp_path):
     cd.write(tmp_path / "a.chromdata.zarr")
     back = ChromData.read(tmp_path / "a.chromdata.zarr")
     meta = json.loads((tmp_path / "a.chromdata.zarr" / "zarr.json").read_text())["attributes"]["uchrom"]
-    assert meta["format_version"] == "2.2" and meta["has_source_row"]
+    assert meta["format_version"] == "2.3" and meta["has_source_row"]
     back.write(tmp_path / "b.chromdata.zarr")
     meta2 = json.loads((tmp_path / "b.chromdata.zarr" / "zarr.json").read_text())["attributes"]["uchrom"]
     assert not meta2["has_source_row"]
@@ -333,7 +333,7 @@ def test_upgrade_21_to_22_keeps_original_order(tmp_path):
     cd = _decimal_cd()
     write_zarr(cd, tmp_path / "old.chromdata.zarr", _layout="2.1")
     info = upgrade_h5cd(tmp_path / "old.chromdata.zarr", tmp_path / "new.chromdata.zarr")
-    assert info["from_version"] == "2.1" and file_format_version(tmp_path / "new.chromdata.zarr") == "2.2"
+    assert info["from_version"] == "2.1" and file_format_version(tmp_path / "new.chromdata.zarr") == "2.3"
     back = ChromData.read(tmp_path / "new.chromdata.zarr", original_order=True)
     pd.testing.assert_frame_equal(back.spots, cd.spots)
     np.testing.assert_array_equal(_bits(back.coords), _bits(cd.coords))

@@ -3,7 +3,7 @@
 `uchrom.ChromData` is the central container.  It is conceptually similar
 to [AnnData](https://anndata.readthedocs.io/) but organises the data
 around the chromatin-tracing hierarchy *Cell → Trace → Spot*, plus a
-locus axis, `bins`, shared by all cells (format 2.0; the `.chromdata.zarr` container is at 2.2).
+locus axis, `bins`, shared by all cells (format 2.0; the `.chromdata.zarr` container is at 2.3).
 
 ```text
 spots   tell what was observed      (one row per observation)
@@ -85,6 +85,7 @@ savings on large datasets.
 | `traces` | `(n_traces, ?)` | per-trace metadata |
 | `layers` | dict | alternative coordinate sets |
 | `points` | dict of DataFrames | non-genomic 3-D points in the same frame (nascent RNA spots, IF puncta): `x, y, z`, `cell_id`, `gene`, … |
+| `cell_shapes` | dict of DataFrames | cell outlines: `cell_id`, `geometry` (WKB polygons) — see [Cell spatial position](#cell-spatial-position) |
 | `results` | `ResultsStore` | analysis outputs with provenance (loops, TADs, …) — see [Results](#results) |
 | `uns` | dict | unstructured metadata |
 
@@ -144,6 +145,52 @@ The structure callers store interval outputs in `cd.results` **and**
 `cd.intervals` (the same object); on disk the result references
 `intervals/<key>` instead of storing the table twice.
 
+## Cell spatial position
+
+Where each cell sits in the tissue or field of view is cell-level data,
+kept apart from the per-spot `coords`.  Centroids are `cells` columns
+(`centroid_x`, `centroid_y`, optionally `centroid_z`) described by a record
+in `uns['cell_spatial']` (unit, frame, measured / inferred, source);
+outlines are polygons in `cd.cell_shapes`, stored as GeoParquet — the
+representation SpatialData uses for shapes.
+
+```python
+cd.set_cell_positions(xyz, cell_ids=ids, unit="um", frame="fov", region_col="fov",
+                      status="measured", source="nuclear segmentation")
+cd.cell_positions()                     # x, y, z (+ region) indexed by cell_id; record in .attrs
+cd.set_cell_positions(xy_tangram, key="tangram", cell_ids=ids,     # a second, inferred set
+                      frame="tissue", status="inferred", source="MERFISH atlas", method="Tangram")
+cd.set_cell_shapes(polygons, cell_ids=ids, unit="um", frame="fov")  # vertex arrays, WKB or shapely
+cd.cell_shapes_geodataframe("cell")     # GeoDataFrame (needs u-chrom[spatial])
+```
+
+- **Frames.** `frame="fov"` positions are local to one field of view
+  (`region_col` names it); `"tissue"` / `"global"` are stitched frames.
+  `in_coords_frame=True` says the positions share the frame of `coords`.
+  Positions stored in voxels carry `voxel_size` / `voxel_unit`;
+  `cell_positions(physical=True)` converts them.
+- **Loaders.** `read_seqfish_multiomics(cell_clustering=…)` fills the
+  Takei 2025 centroids (voxels, per FOV); `from_fofct(cell_table=…)`
+  registers `Cent_ROI_x/y` (→ `centroid_x/y`) or Liu et al.'s
+  `cell_center_x_global / _y_global`; `from_fofct(mapping_table=…)` reads
+  the Cell/ROI Mapping table's `ROI_Boundaries` polygons into
+  `cell_shapes['cell']`, and `to_fofct(mapping_table=…)` writes it.
+- **SpatialData.**  `cd.link_spatialdata("sample.sdata.zarr")` records an
+  external SpatialData store and the cell map (its table's `region` /
+  `instance_key` ↔ `cell_id`); `cd.load_linked_spatialdata(cells=[...])`
+  returns it, subset to those cells; `cd.to_spatialdata()` exports spots,
+  centroids, outlines, the cell table and `points`.
+- **Compatibility.**  `set_cell_spatial_coordinates()` is deprecated (it
+  now writes the schema); columns written by older versions (`spatial_x`,
+  the seqFISH+ loader's `x_centroid`) stay readable by `cell_positions()`.
+
+On real data (`benchmarks/cell_spatial_validation.py`): Takei 2025
+cerebellum rep 1, 1,799 / 1,799 cells with a 3-D position equal to the
+clustering CSV, 0.86 µm median distance to the mean of the cell's spots
+(xy 0.12 µm); Takei 2021 mESC, 201 / 201 cells (2-D, 0.50 µm to the spot
+mean); Liu 2025 MOp, 14,733 / 14,733 cells in the global frame.  None of
+these data sets ships cell outlines.
+
 ## Subsetting
 
 Subset operations return **new** `ChromData` instances — they never
@@ -157,8 +204,8 @@ cd[cd.spots["chrom"] == "chr1"]  # boolean mask
 cd[:100]                       # first 100 spots
 ```
 
-All children (coords, spots, tracks, layers, cellm, and `points` via
-their `cell_id`) are filtered consistently; traces and cells that become empty are dropped.
+All children (coords, spots, tracks, layers, cellm, and `points` /
+`cell_shapes` via their `cell_id`) are filtered consistently; traces and cells that become empty are dropped.
 
 ## Results
 
@@ -224,7 +271,7 @@ D = cd.compute_distances(trace_id=0)  # (n_spots_in_trace, n_spots_in_trace)
 | `.chromdata.zarr` / `.cdz` / `.h5cd` | `ChromData.read` |
 
 ```python
-cd.write("data.chromdata.zarr")        # format 2.2: Zarr + Parquet (a directory)
+cd.write("data.chromdata.zarr")        # format 2.3: Zarr + Parquet (a directory)
 cd.write("data.cdz")                   # the same store as one zip file
 cd2 = ChromData.read("data.chromdata.zarr")
 cd3 = ChromData.read("old.h5cd")       # HDF5 2.0, or 1.x upgraded in memory

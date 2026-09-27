@@ -55,6 +55,9 @@ Attributes summary
     traces      DataFrame (n_traces, ?)      trace-level metadata
     layers      dict[str, (n_spots, 3)]      alt. coordinate sets
     points      dict[str, DataFrame]         non-genomic 3-D points (RNA spots, …)
+    cell_shapes dict[str, DataFrame]         cell outlines (cell_id, WKB geometry);
+                                              centroids: cells columns +
+                                              uns['cell_spatial'] (format 2.3)
                                               (raw / corrected / aligned)
     results     ResultsStore                  analysis outputs + provenance
                                               (loops, tads, compartments)
@@ -336,6 +339,9 @@ class ChromData:
         ``coords`` — e.g. nascent RNA spots or IF puncta.  Each DataFrame
         needs ``x, y, z``; ``cell_id`` (if present) links points to cells
         and is used when subsetting.
+    cell_shapes : dict[str, DataFrame], optional
+        Cell outlines: ``cell_id`` + ``geometry`` (WKB bytes), one row per
+        cell (see :meth:`set_cell_shapes`); subset with the cells.
     results : dict or ResultsStore, optional
         Analysis outputs, stored as a :class:`~uchrom.core.results.ResultsStore`
         (``cd.results[key]`` returns the value, ``cd.results.record(key)``
@@ -397,6 +403,7 @@ class ChromData:
         results: Optional[dict] = None,
         uns: Optional[dict] = None,
         points: Optional[Dict[str, pd.DataFrame]] = None,
+        cell_shapes: Optional[Dict[str, pd.DataFrame]] = None,
         linked_adata=None,
         validate: bool = True,
         _own_spots: bool = False,
@@ -415,6 +422,7 @@ class ChromData:
         self.results = results if results is not None else {}
         self.uns = uns if uns is not None else {}
         self.points = {k: v.reset_index(drop=True) for k, v in (points or {}).items()}
+        self.cell_shapes = {k: v.reset_index(drop=True) for k, v in (cell_shapes or {}).items()}
         self._linked_adata = linked_adata
 
         self._bin_tracks = _empty_frame(self.n_bins, name=BIN_ID)
@@ -878,6 +886,175 @@ class ChromData:
             cell_uri = f"/cells/{cell_uri}"
         return cooler.Cooler(f"{self.resolve_link_path(path)}::{cell_uri}")
 
+    # ------------------------------------------------------------------
+    # Cell spatial position (centroids, outlines, linked SpatialData)
+    # ------------------------------------------------------------------
+
+    def _cell_ids_axis(self) -> pd.Index:
+        ids = self._cells_axis_ids()
+        return pd.Index(ids if ids is not None else [str(x) for x in self.cells.index], name="cell_id")
+
+    def _align_cell_rows(self, arr: np.ndarray, cell_ids) -> np.ndarray:
+        """Rows of ``arr`` (one per ``cell_ids``) placed on the ``cells`` axis
+        (NaN for cells not given); creates ``cells`` when it is empty."""
+        if cell_ids is None:
+            if len(self.cells) == 0:
+                raise ValueError("cell_ids are required when cells is empty.")
+            if len(self.cells) != arr.shape[0]:
+                raise ValueError("position rows must match cells rows when cell_ids is not provided.")
+            return arr
+        ids = pd.Index([str(x) for x in cell_ids], name="cell_id")
+        if len(ids) != arr.shape[0]:
+            raise ValueError("cell_ids length must match the position rows.")
+        if ids.has_duplicates:
+            raise ValueError("cell_ids must be unique.")
+        if len(self.cells) == 0:
+            self.cells = pd.DataFrame(index=ids)
+            return arr
+        positions = self._cell_ids_axis().get_indexer(ids)
+        if np.any(positions < 0):
+            missing = ids[positions < 0]
+            raise ValueError(f"cell_ids are not present in cells: {list(missing[:5])}")
+        aligned = np.full((len(self.cells), arr.shape[1]), np.nan, dtype=np.float64)
+        aligned[positions] = arr
+        return aligned
+
+    def set_cell_positions(
+        self,
+        positions=None,
+        *,
+        key: str = "default",
+        cell_ids: Optional[Sequence[Any]] = None,
+        columns: Optional[Sequence[str]] = None,
+        unit: Optional[str] = None,
+        frame: Optional[str] = None,
+        region_col: Optional[str] = None,
+        in_coords_frame: Optional[bool] = None,
+        status: str = "measured",
+        source: Optional[str] = None,
+        method: Optional[str] = None,
+        shapes: Optional[str] = None,
+        **metadata: Any,
+    ) -> dict:
+        """Store where each cell is (its centroid, 2-D or 3-D) in ``cells``.
+
+        Cell positions describe cells, not chromatin spots: they are
+        ``cells`` columns — ``centroid_x``, ``centroid_y`` [, ``centroid_z``]
+        for ``key="default"``, ``<key>_centroid_x`` … otherwise — described
+        by the record ``uns['cell_spatial'][key]`` (schema in
+        ``uchrom/core/spec.md``).  Read them back with
+        :meth:`cell_positions`.
+
+        Parameters
+        ----------
+        positions : (n, 2) / (n, 3) array or DataFrame, optional
+            Centroids.  A DataFrame uses its ``x, y[, z]`` columns (or its
+            first 2 / 3 columns) and, without ``cell_ids``, its index as the
+            cell ids.  ``None`` registers existing ``cells`` columns given as
+            ``columns`` (e.g. a loader's ``cell_center_x_global``).
+        cell_ids : sequence, optional
+            Cell of each row; rows are aligned onto the ``cells`` axis (cells
+            not given get NaN).  Without it, rows follow ``cells``.
+        columns : sequence of str, optional
+            ``cells`` column names to write (or to register).
+        unit : str, optional
+            Length unit (``"um"``, ``"nm"``, ``"px"`` …).
+        frame : str, optional
+            Coordinate system: ``"fov"`` (local to one field of view — name
+            it with ``region_col``), ``"tissue"`` / ``"global"`` (one
+            stitched frame per section / sample) or any other name.
+        region_col : str, optional
+            ``cells`` column naming the region / FOV a local frame belongs to.
+        in_coords_frame : bool, optional
+            True when the positions share the frame of ``cd.coords``.
+        status : {"measured", "inferred"}
+            ``"inferred"`` (e.g. mapped by Tangram) needs ``source``.
+        source, method : str, optional
+            Where the positions come from and how they were obtained.
+        shapes : str, optional
+            Key of :attr:`cell_shapes` holding the outlines of these cells.
+        **metadata
+            Kept in the record, e.g. ``voxel_size=[0.103, 0.103, 0.25]`` and
+            ``voxel_unit="um"`` for positions stored in voxels (``unit="voxel"``;
+            ``cell_positions(physical=True)`` applies them).
+
+        Returns the record.
+        """
+        from . import cellspatial as _cs
+
+        _cs.check_status(status, source, "set_cell_positions")
+        if positions is None:
+            if not columns:
+                raise ValueError("pass positions, or columns= naming existing cells columns")
+            cols = [str(c) for c in columns]
+            missing = [c for c in cols if c not in self.cells.columns]
+            if missing:
+                raise KeyError(f"columns {missing} are not in cd.cells")
+            if len(cols) not in (2, 3):
+                raise ValueError("columns must name 2 or 3 columns (x, y[, z])")
+        else:
+            if isinstance(positions, pd.DataFrame):
+                if cell_ids is None:
+                    cell_ids = [str(x) for x in positions.index]
+                use = ([c for c in ("x", "y", "z") if c in positions.columns]
+                       if {"x", "y"} <= set(positions.columns) else list(positions.columns[:3]))
+                arr = positions[use].to_numpy(dtype=np.float64)
+            else:
+                arr = np.asarray(positions, dtype=np.float64)
+            if arr.ndim != 2 or arr.shape[1] not in (2, 3):
+                raise ValueError("positions must have shape (n_cells, 2) or (n_cells, 3).")
+            if columns and len(columns) != arr.shape[1]:
+                raise ValueError(f"columns names {len(columns)} columns for {arr.shape[1]}-D positions")
+            arr = self._align_cell_rows(arr, cell_ids)
+            cols = [str(c) for c in columns] if columns else list(_cs.centroid_columns(key, arr.shape[1]))
+            for j, c in enumerate(cols):
+                self.cells[c] = arr[:, j]
+        if region_col is not None and region_col not in self.cells.columns:
+            raise KeyError(f"region_col {region_col!r} is not a cells column")
+        if shapes is not None and shapes not in self.cell_shapes:
+            raise KeyError(f"no cell_shapes[{shapes!r}]")
+        record = {
+            "x_col": cols[0], "y_col": cols[1], "z_col": cols[2] if len(cols) == 3 else None,
+            "ndim": len(cols), "unit": unit, "frame": frame, "region_col": region_col,
+            "in_coords_frame": None if in_coords_frame is None else bool(in_coords_frame),
+            "status": status, "source": source, "method": method, "shapes": shapes,
+            **metadata,
+        }
+        record = _clean_metadata_record(record)
+        _set_linked_record(self.uns, _cs.POSITIONS_FAMILY, key, record)
+        return record
+
+    def cell_positions(self, key: str = "default", *, physical: bool = False) -> pd.DataFrame:
+        """Cell centroids as a DataFrame indexed by ``cell_id``: ``x``, ``y``
+        [, ``z``] (float, NaN where unknown) [+ ``region``]; the record
+        (unit, frame, status, …) is in ``.attrs['cell_spatial']``.
+
+        Reads the record ``uns['cell_spatial'][key]`` (1.x records and their
+        ``spatial_x`` / ``spatial_y`` columns included).  Without a record,
+        ``key="default"`` falls back to known column names —
+        ``centroid_x/y/z``, then the older ``x_centroid/y_centroid/z_centroid``
+        and ``spatial_x/spatial_y`` — with ``status`` unknown
+        (``attrs['cell_spatial']['unrecorded'] is True``).  ``KeyError`` when
+        there is no position set.  ``physical=True`` converts positions
+        stored in voxels (record ``voxel_size`` / ``voxel_unit``) to physical
+        units.
+        """
+        from . import cellspatial as _cs
+
+        records = _linked_records(self.uns.get(_cs.POSITIONS_FAMILY))
+        if key in records and records[key].get("x_col"):
+            rec = _cs.normalize_record(records[key])
+        elif key == "default" and len(self.cells):
+            found = _cs.legacy_columns(self.cells)
+            if found is None:
+                raise KeyError("no cell positions: no uns['cell_spatial'] record and no centroid columns")
+            rec = {"x_col": found[0], "y_col": found[1], "z_col": found[2],
+                   "ndim": 3 if found[2] else 2, "unrecorded": True}
+            rec = {k: v for k, v in rec.items() if v is not None}
+        else:
+            raise KeyError(f"no cell position set {key!r}; known: {sorted(records)}")
+        return _cs.positions_frame(self.cells, self._cell_ids_axis(), rec, physical=physical)
+
     def set_cell_spatial_coordinates(
         self,
         xy: np.ndarray,
@@ -892,55 +1069,183 @@ class ChromData:
         inferred: bool = True,
         **metadata: Any,
     ) -> dict:
-        """Store cell-level 2D spatial coordinates in ``cells``.
+        """Deprecated: use :meth:`set_cell_positions`.
 
-        These coordinates describe cells, not chromatin spots.  They are
-        therefore stored in ``cells`` with provenance in
-        ``uns['cell_spatial']`` rather than in ``coords``.
+        Kept for 1.x callers: ``coordinate_system`` becomes ``frame``,
+        ``inferred`` the ``status``, ``x_col`` / ``y_col`` the column names.
+        Columns now default to the schema names (``centroid_x`` …, was
+        ``spatial_x`` …); positions written by older versions stay readable
+        through :meth:`cell_positions`.
         """
+        import warnings
+
+        from . import cellspatial as _cs
+
+        warnings.warn(
+            "set_cell_spatial_coordinates() is deprecated; use set_cell_positions(positions, "
+            "frame=..., unit=..., status='measured' | 'inferred', source=...)",
+            DeprecationWarning, stacklevel=2,
+        )
         arr = np.asarray(xy, dtype=np.float64)
         if arr.ndim != 2 or arr.shape[1] != 2:
             raise ValueError("xy must have shape (n_cells, 2).")
+        columns = None
+        if x_col or y_col:
+            default = _cs.centroid_columns(key, 2)
+            columns = [x_col or default[0], y_col or default[1]]
+        status = "inferred" if inferred else "measured"
+        if status == "inferred" and not source:
+            source = method or "unspecified"
+        return self.set_cell_positions(arr, key=key, cell_ids=cell_ids, columns=columns, frame=coordinate_system,
+                                       status=status, source=source, method=method, **metadata)
 
-        if cell_ids is not None:
-            axis_ids = self._cells_axis_ids()
-            ids = pd.Index([str(x) for x in cell_ids], name="cell_id")
-            if len(ids) != arr.shape[0]:
-                raise ValueError("cell_ids length must match xy rows.")
-            if len(self.cells) == 0:
-                self.cells = pd.DataFrame(index=ids)
-            else:
-                current = pd.Index(axis_ids.astype(str) if axis_ids is not None else self.cells.index.astype(str))
-                positions = current.get_indexer(ids)
-                if np.any(positions < 0):
-                    missing = ids[positions < 0]
-                    raise ValueError(f"cell_ids are not present in cells: {list(missing[:5])}")
-                aligned = np.full((len(self.cells), 2), np.nan, dtype=np.float64)
-                aligned[positions] = arr
-                arr = aligned
-        elif len(self.cells) == 0:
-            raise ValueError("cell_ids are required when cells is empty.")
-        elif len(self.cells) != arr.shape[0]:
-            raise ValueError("xy rows must match cells rows when cell_ids is not provided.")
+    def set_cell_shapes(
+        self,
+        shapes,
+        *,
+        key: str = "cell",
+        cell_ids: Optional[Sequence[Any]] = None,
+        unit: Optional[str] = None,
+        frame: Optional[str] = None,
+        in_coords_frame: Optional[bool] = None,
+        status: str = "measured",
+        source: Optional[str] = None,
+        method: Optional[str] = None,
+        **metadata: Any,
+    ) -> dict:
+        """Store cell outlines (polygons) as ``cell_shapes[key]``.
 
-        prefix = "" if key == "default" else f"{key}_"
-        x_name = x_col or f"{prefix}spatial_x"
-        y_name = y_col or f"{prefix}spatial_y"
-        self.cells[x_name] = arr[:, 0]
-        self.cells[y_name] = arr[:, 1]
+        ``shapes``: a GeoDataFrame / GeoSeries (index = cell ids), a
+        DataFrame with ``cell_id`` + WKB ``geometry``, a mapping ``cell_id →
+        shape``, or a sequence (with ``cell_ids``) of shapely geometries, WKB
+        bytes or ``(n, 2)`` / ``(n, 3)`` vertex arrays of the exterior ring.
+        Vertex arrays and WKB need no geometry library; shapely / geopandas
+        are only needed to read them back as geometries
+        (:meth:`cell_shapes_geodataframe`).  Common keys: ``"cell"``
+        (segmented cell boundary), ``"nucleus"``.  Frame / unit / status are
+        recorded in ``uns['cell_shapes'][key]`` (the same fields as
+        :meth:`set_cell_positions`).  Stored as GeoParquet
+        (``tables/cell_shapes/<key>.parquet``) in ``.chromdata.zarr`` /
+        ``.cdz``.  Returns the record.
+        """
+        from . import cellspatial as _cs
 
+        _cs.check_status(status, source, "set_cell_shapes")
+        if not key or "/" in key:
+            raise ValueError(f"cell_shapes key must be non-empty without '/': {key!r}")
+        df = _cs.to_wkb(shapes, cell_ids)
+        self.cell_shapes[key] = df
         record = {
-            "x_col": x_name,
-            "y_col": y_name,
-            "source": source,
-            "method": method,
-            "coordinate_system": coordinate_system,
-            "inferred": bool(inferred),
+            "geometry_types": sorted({_cs.wkb_type(w) for w in df["geometry"]}),
+            "n": int(len(df)), "unit": unit, "frame": frame,
+            "in_coords_frame": None if in_coords_frame is None else bool(in_coords_frame),
+            "status": status, "source": source, "method": method, **metadata,
+        }
+        record = _clean_metadata_record(record)
+        _set_linked_record(self.uns, _cs.SHAPES_FAMILY, key, record)
+        return record
+
+    def cell_shapes_geodataframe(self, key: str = "cell"):
+        """``cell_shapes[key]`` as a ``geopandas.GeoDataFrame`` indexed by
+        ``cell_id`` (needs shapely + geopandas; the record is in
+        ``.attrs['cell_shapes']``)."""
+        from . import cellspatial as _cs
+
+        if key not in self.cell_shapes:
+            raise KeyError(f"no cell_shapes[{key!r}]; known: {sorted(self.cell_shapes)}")
+        meta = _linked_records(self.uns.get(_cs.SHAPES_FAMILY)).get(key)
+        return _cs.shapes_geodataframe(self.cell_shapes[key], meta)
+
+    def link_spatialdata(
+        self,
+        path: PathLike,
+        *,
+        key: str = "default",
+        table: Optional[str] = None,
+        region: Optional[Any] = None,
+        region_key: Optional[str] = None,
+        instance_key: Optional[str] = None,
+        cell_col: Optional[str] = None,
+        coordinate_system: Optional[str] = None,
+        read_attrs: bool = True,
+        **metadata: Any,
+    ) -> dict:
+        """Record a linked SpatialData zarr store in ``uns['linked_spatialdata']``.
+
+        The store stays external (images, labels, shapes, other tables).  The
+        cell map joins its annotating ``table`` to ChromData cells: rows
+        whose ``region_key`` column equals ``region`` are cells, and their
+        ``instance_key`` value equals the ChromData ``cell_id`` — or the value
+        of the ``cells`` column ``cell_col`` when the ids differ.  With
+        ``read_attrs`` (and spatialdata installed) ``table`` / ``region`` /
+        ``region_key`` / ``instance_key`` default to the table's
+        ``spatialdata_attrs``.  Relative paths resolve against the directory
+        of the ChromData store (as for :meth:`link_scool`).
+        """
+        from . import cellspatial as _cs
+
+        if cell_col is not None and cell_col not in self.cells.columns:
+            raise KeyError(f"cell_col {cell_col!r} is not a cells column")
+        version = None
+        resolved = self.resolve_link_path(path)
+        if read_attrs and resolved.exists():
+            try:
+                sd = _cs.require_spatialdata()
+            except ImportError:
+                sd = None
+            if sd is not None:
+                version = getattr(sd, "__version__", None)
+                name, attrs, names = _cs.spatialdata_table_attrs(resolved, table)
+                if name is None and len(names) > 1:
+                    raise ValueError(f"the SpatialData store has several tables {names}; pass table=")
+                table = table or name
+                region = region if region is not None else attrs.get("region")
+                region_key = region_key or attrs.get("region_key")
+                instance_key = instance_key or attrs.get("instance_key")
+        record = {
+            "path": str(path), "format": "spatialdata", "table": table,
+            "region": list(region) if isinstance(region, (list, tuple)) else region,
+            "region_key": region_key, "instance_key": instance_key, "cell_col": cell_col,
+            "coordinate_system": coordinate_system, "spatialdata_version": version,
             **metadata,
         }
         record = _clean_metadata_record(record)
-        _set_linked_record(self.uns, "cell_spatial", key, record)
+        _set_linked_record(self.uns, _cs.SPATIALDATA_FAMILY, key, record)
         return record
+
+    def load_linked_spatialdata(self, *, key: str = "default", cells: Optional[Sequence[Any]] = None,
+                                elements: Optional[Sequence[str]] = None):
+        """The linked SpatialData object (``spatialdata`` needed).
+
+        ``cells`` (ChromData cell ids) subsets the annotating table and the
+        elements it annotates to those cells
+        (``spatialdata.match_sdata_to_table``); ``elements`` reads only the
+        named elements (plus the tables).
+        """
+        from . import cellspatial as _cs
+
+        record = _linked_record(self.uns.get(_cs.SPATIALDATA_FAMILY), key)
+        if not record.get("path"):
+            raise ValueError(f"No linked SpatialData path is recorded for key {key!r}.")
+        return _cs.load_spatialdata(self, record, cells=cells, elements=elements)
+
+    def to_spatialdata(self, *, positions_key: str = "default", shapes_key: Optional[str] = None,
+                       spots: bool = True, points: bool = True, cell_table: bool = True,
+                       coordinate_system: Optional[str] = None):
+        """Export to a :class:`spatialdata.SpatialData` (spatialdata +
+        geopandas needed): spots as a 3-D points element ``spots`` (with
+        chrom / start / end / bin_id / trace_id / cell_id columns), each
+        ``points[key]`` as ``points_<key>``, the cell centroids as points
+        ``cell_centroids``, the outlines ``cell_shapes[key]`` as a shapes
+        element ``cell_shapes_<key>``, and ``cells`` (+ ``cellm`` in obsm) as
+        the table ``cells`` annotating the outlines.  Spots and cell
+        positions get separate coordinate systems (``"spots"`` and the
+        position frame); the unit and the records are in
+        ``sdata.attrs['uchrom']``."""
+        from . import cellspatial as _cs
+
+        return _cs.to_spatialdata(self, positions_key=positions_key, shapes_key=shapes_key, spots=spots,
+                                  points=points, cell_table=cell_table, coordinate_system=coordinate_system)
 
     def coord_status(self) -> dict:
         """Return a compact status summary for ``coords``."""
@@ -966,6 +1271,8 @@ class ChromData:
             "linked_scool": _linked_records(self.uns.get("linked_scool")),
             "linked_cool": _linked_records(self.uns.get("linked_cool")),
             "cell_spatial": _linked_records(self.uns.get("cell_spatial")),
+            "cell_shapes": _linked_records(self.uns.get("cell_shapes")),
+            "linked_spatialdata": _linked_records(self.uns.get("linked_spatialdata")),
         }
 
     def validate_links(self, *, check_files: bool = True) -> List[str]:
@@ -979,7 +1286,7 @@ class ChromData:
             )
 
         for family, expected_format in (("linked_mudata", "h5mu"), ("linked_scool", "scool"),
-                                        ("linked_cool", "cool|mcool")):
+                                        ("linked_cool", "cool|mcool"), ("linked_spatialdata", "spatialdata")):
             records = _linked_records(self.uns.get(family))
             for key, record in records.items():
                 path = record.get("path")
@@ -1004,6 +1311,62 @@ class ChromData:
                 except ImportError:
                     issues.append("cooler is not installed; linked_scool validity could not be checked")
 
+        issues += self._validate_cell_spatial(check_files=check_files)
+        return issues
+
+    def _validate_cell_spatial(self, *, check_files: bool) -> List[str]:
+        """Issues of the cell-position / cell-shape records and of the linked
+        SpatialData stores (their table, instance key and cell map)."""
+        from . import cellspatial as _cs
+
+        issues: List[str] = []
+        for key, raw in _linked_records(self.uns.get(_cs.POSITIONS_FAMILY)).items():
+            rec = _cs.normalize_record(raw)
+            cols = [rec.get("x_col"), rec.get("y_col")] + ([rec["z_col"]] if rec.get("z_col") else [])
+            missing = [c for c in cols if not c or c not in self.cells.columns]
+            if missing:
+                issues.append(f"cell_spatial.{key} columns missing from cells: {missing}")
+            if rec.get("status") not in _cs.STATUSES:
+                issues.append(f"cell_spatial.{key} status={rec.get('status')!r} not in {_cs.STATUSES}")
+            elif rec["status"] == "inferred" and not rec.get("source"):
+                issues.append(f"cell_spatial.{key} is inferred but has no source")
+            if rec.get("shapes") and rec["shapes"] not in self.cell_shapes:
+                issues.append(f"cell_spatial.{key} names missing cell_shapes[{rec['shapes']!r}]")
+        shape_recs = _linked_records(self.uns.get(_cs.SHAPES_FAMILY))
+        for key in self.cell_shapes:
+            if key not in shape_recs:
+                issues.append(f"cell_shapes[{key!r}] has no uns['cell_shapes'] record")
+        for key, rec in _linked_records(self.uns.get(_cs.SPATIALDATA_FAMILY)).items():
+            for field in ("table", "instance_key"):
+                if not rec.get(field):
+                    issues.append(f"linked_spatialdata.{key} missing {field} (the cell map)")
+            path = rec.get("path")
+            if not (check_files and path and rec.get("table") and rec.get("instance_key")
+                    and self.resolve_link_path(path).exists()):
+                continue
+            try:
+                ids = _cs.spatialdata_instances(self.resolve_link_path(path), rec["table"], rec["instance_key"],
+                                                rec.get("region_key"), rec.get("region"))
+            except ImportError:
+                issues.append("spatialdata is not installed; linked_spatialdata could not be checked")
+                continue
+            except Exception as exc:  # unreadable store, missing table / column
+                issues.append(f"linked_spatialdata.{key} unreadable: {type(exc).__name__}: {exc}")
+                continue
+            if rec.get("cell_col"):
+                if rec["cell_col"] not in self.cells.columns:
+                    issues.append(f"linked_spatialdata.{key} cell_col {rec['cell_col']!r} is not a cells column")
+                    continue
+                ours = pd.Index(self.cells[rec["cell_col"]].dropna().astype(str))
+            else:
+                ours = self._cell_ids_axis() if len(self.cells) else self._spot_cell_ids()
+            found = ours.isin(set(ids))
+            if len(ours) and not found.any():
+                issues.append(f"linked_spatialdata.{key}: no ChromData cell matches a "
+                              f"{rec['instance_key']!r} value of table {rec['table']!r}")
+            elif not found.all():
+                issues.append(f"linked_spatialdata.{key}: {int((~found).sum())} of {len(ours)} ChromData "
+                              f"cells have no row in table {rec['table']!r}")
         return issues
 
     @property
@@ -1203,6 +1566,9 @@ class ChromData:
             missing = [c for c in ("x", "y", "z") if c not in df.columns]
             if missing:
                 raise ValueError(f"points['{key}'] missing coordinate columns {missing}")
+        for key, df in self.cell_shapes.items():
+            if not isinstance(df, pd.DataFrame) or not {"cell_id", "geometry"} <= set(df.columns):
+                raise ValueError(f"cell_shapes['{key}'] must be a DataFrame with cell_id and geometry (WKB)")
 
     def _categorify(self):
         for col in _CATEGORICAL_COLUMNS:
@@ -1245,6 +1611,7 @@ class ChromData:
         new_traces = self._filter_traces(new_spots)
         new_cells, new_cellm = self._filter_cells(new_spots)
         new_points = self._filter_points(new_spots)
+        new_shapes = self._filter_cell_shapes(new_spots)
 
         out = ChromData(
             new_coords,
@@ -1259,6 +1626,7 @@ class ChromData:
             results=self.results,
             uns=self.uns,
             points=new_points,
+            cell_shapes=new_shapes,
             linked_adata=None,
             validate=False,
         )
@@ -1283,6 +1651,14 @@ class ChromData:
                 df = df[df["cell_id"].astype(str).isin(keep)].reset_index(drop=True)
             out[key] = df
         return out
+
+    def _filter_cell_shapes(self, spots: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+        """Keep the outlines of the cells that still have spots."""
+        if not self.cell_shapes or "cell_id" not in spots.columns:
+            return dict(self.cell_shapes)
+        keep = {str(x) for x in spots["cell_id"].unique()}
+        return {k: df[df["cell_id"].astype(str).isin(keep)].reset_index(drop=True)
+                for k, df in self.cell_shapes.items()}
 
     def _filter_traces(self, spots: pd.DataFrame) -> pd.DataFrame:
         if len(self.traces) == 0:
@@ -1821,6 +2197,10 @@ class ChromData:
                     if "/" in key or not key:
                         raise ValueError(f"points key must be non-empty without '/': {key!r}")
                     _write_dataframe(grp, key, df)
+            if self.cell_shapes:
+                import warnings
+                warnings.warn("cell_shapes are not stored in .h5cd; write a .chromdata.zarr / .cdz to keep "
+                              "the cell outlines", UserWarning, stacklevel=3)
 
     @classmethod
     def read(cls, path: PathLike, *, backed: bool = False,
@@ -1977,6 +2357,7 @@ class ChromData:
         *,
         cell_table: Optional[PathLike] = None,
         rna_table: Optional[PathLike] = None,
+        mapping_table: Optional[PathLike] = None,
         cell_value_prefix: Optional[str] = "rna.",
         out: Optional[PathLike] = None,
         chunksize: Union[int, str] = "auto",
@@ -1996,6 +2377,18 @@ class ChromData:
             ``nucleus_area_um2`` / ``cytoplasm_area_um2``, and every other
             numeric column (per-cell RNA copy numbers in 4DN tables) is
             prefixed with ``cell_value_prefix`` (``Nanog`` → ``rna.Nanog``).
+            Centroid columns become the cell positions
+            (``uns['cell_spatial']``, :meth:`cell_positions`):
+            ``Cent_ROI_x/y[/z]`` (as ``centroid_x/y[/z]``) or
+            ``cell_center_x_global`` / ``cell_center_y_global`` (Liu et al.
+            2025, global frame), in the table's ``XYZ_unit``.
+        mapping_table : path, optional
+            FOF-CT *Cell/ROI mapping* table (``4dn_FOF-CT_mapping``):
+            ``ROI_Boundaries`` of each ``Cell_ID`` in global coordinates, as
+            OME polygon points strings (``"x1,y1 x2,y2 …"``) →
+            ``cell_shapes['cell']`` (``uns['cell_shapes']['cell']``: frame
+            ``"global"``).  Rows keyed by sub- / extra-cell ROI ids and OBJ
+            meshes are skipped with a warning.
         rna_table : path, optional
             FOF-CT *RNA spot* table (``4dn_FOF-CT_rna``).  Loaded into
             ``points['rna']`` with columns ``x, y, z, gene, gene_id,
@@ -2026,7 +2419,8 @@ class ChromData:
         path = Path(core_path)
         if out is not None:
             return _from_fofct_streaming(cls, path, out=Path(out), cell_table=cell_table,
-                                         rna_table=rna_table, cell_value_prefix=cell_value_prefix,
+                                         rna_table=rna_table, mapping_table=mapping_table,
+                                         cell_value_prefix=cell_value_prefix,
                                          chunksize=chunksize, memory_budget=memory_budget, **kwargs)
         from uchrom.settings import format_bytes, settings
 
@@ -2042,9 +2436,10 @@ class ChromData:
         coords, spots = _fofct_core_parts(df)
         del df
         uns = _fofct_uns(kwargs.pop("uns", {}), header_meta)
-        companions = _fofct_companions(kwargs, cell_table, rna_table, cell_value_prefix)
+        companions = _fofct_companions(kwargs, cell_table, rna_table, cell_value_prefix, mapping_table)
         if companions:
             uns["fofct_companions"] = companions
+            _fofct_cell_spatial(uns, kwargs, companions)
             _warn_unmatched_cells(spots, companions, kwargs)
 
         return cls(coords, spots, uns=uns, **kwargs)
@@ -2068,6 +2463,7 @@ class ChromData:
         *,
         cell_table: Optional[PathLike] = None,
         rna_table: Optional[PathLike] = None,
+        mapping_table: Optional[PathLike] = None,
         spot_tracks: bool = True,
         bin_tracks: bool = False,
         header: Optional[Mapping[str, Any]] = None,
@@ -2095,6 +2491,10 @@ class ChromData:
         rna_table : path, optional
             Also write ``points['rna']`` as a ``4dn_FOF-CT_rna`` table
             (``Spot_ID, X, Y, Z, RNA_name, Gene_ID, Cell_ID, …``).
+        mapping_table : path, optional
+            Also write ``cell_shapes['cell']`` as a ``4dn_FOF-CT_mapping``
+            table (``Cell_ID, ROI_Boundaries``: the exterior ring as an OME
+            polygon points string, ``##ROI_Boundaries_Format``).
         spot_tracks : bool
             Append :attr:`spot_tracks` as extra columns (default).  They
             come back as spot columns from :meth:`from_fofct`.
@@ -2176,6 +2576,22 @@ class ChromData:
                                           (companions.get("rna") or {}).get("header") or {}, None)
             _write_fofct_table(Path(rna_table), rna, meta)
             written["rna"] = Path(rna_table)
+        if mapping_table is not None:
+            from . import cellspatial as _cs
+
+            if "cell" not in self.cell_shapes:
+                raise ValueError("mapping_table= needs cell_shapes['cell']")
+            shp = self.cell_shapes["cell"]
+            table = pd.DataFrame({"Cell_ID": shp["cell_id"].astype(str).to_numpy(),
+                                  "ROI_Boundaries": [_cs.format_ome_polygon(w) for w in shp["geometry"]]})
+            stored = dict((companions.get("mapping") or {}).get("header") or {})
+            rec = _linked_records(self.uns.get(_cs.SHAPES_FAMILY)).get("cell") or {}
+            stored.setdefault("ROI_Boundaries_Format", _cs.OME_POLYGON_FORMAT)
+            if rec.get("unit"):
+                stored.setdefault("XYZ_unit", rec["unit"])
+            meta = _fofct_header_defaults(self.uns, "4dn_FOF-CT_mapping", stored, None)
+            _write_fofct_table(Path(mapping_table), table, meta)
+            written["mapping"] = Path(mapping_table)
         return written
 
     @classmethod
@@ -2363,6 +2779,7 @@ class ChromData:
             layers={k: v.copy() for k, v in self.layers.items()} or None,
             uns=deepcopy(self.uns) or None,
             points={k: v.copy() for k, v in self.points.items()} or None,
+            cell_shapes={k: v.copy() for k, v in self.cell_shapes.items()} or None,
             linked_adata=self._linked_adata.copy() if self._linked_adata is not None else None,
             validate=False,
         )
@@ -2411,6 +2828,9 @@ class ChromData:
         if self.points:
             sizes = {k: len(v) for k, v in self.points.items()}
             parts.append(f"  points:  {sizes}")
+        if self.cell_shapes:
+            sizes = {k: len(v) for k, v in self.cell_shapes.items()}
+            parts.append(f"  cell_shapes: {sizes}")
         if self.results:
             parts.append(f"  results: {list(self.results.keys())}")
         if self.uns:
@@ -2795,10 +3215,17 @@ def _fofct_uns(uns: Optional[dict], header_meta: Mapping[str, str]) -> dict:
     return uns
 
 
-def _fofct_companions(kwargs: dict, cell_table, rna_table, cell_value_prefix) -> dict:
-    """Load the companion tables into ``kwargs`` (``cells``, ``points``);
-    returns their header metadata."""
+def _fofct_companions(kwargs: dict, cell_table, rna_table, cell_value_prefix, mapping_table=None) -> dict:
+    """Load the companion tables into ``kwargs`` (``cells``, ``points``,
+    ``cell_shapes``); returns their header metadata."""
     companions = {}
+    if mapping_table is not None:
+        shapes, meta = _fofct_mapping_table(Path(mapping_table))
+        if len(shapes):
+            cs = dict(kwargs.pop("cell_shapes", None) or {})
+            cs["cell"] = shapes
+            kwargs["cell_shapes"] = cs
+        companions["mapping"] = meta
     if cell_table is not None:
         cells, meta = _fofct_cell_table(Path(cell_table), cell_value_prefix)
         if kwargs.get("cells") is not None:
@@ -2812,6 +3239,82 @@ def _fofct_companions(kwargs: dict, cell_table, rna_table, cell_value_prefix) ->
         kwargs["points"] = points
         companions["rna"] = meta
     return companions
+
+
+def _fofct_mapping_table(path: Path):
+    """FOF-CT Cell/ROI mapping table → (cell_shapes frame, meta): the
+    ``ROI_Boundaries`` of the ``Cell_ID`` rows as WKB polygons."""
+    import warnings
+
+    from . import cellspatial as _cs
+
+    df, meta = _read_fofct_table(path)
+    cols = {str(c).strip().lower(): c for c in df.columns}
+    if "roi_boundaries" not in cols:
+        raise ValueError(f"{path}: mapping table has no ROI_Boundaries column; columns: {list(df.columns)}")
+    id_col = cols.get("cell_id")
+    if id_col is None:
+        warnings.warn(f"{path}: mapping table is not keyed by Cell_ID (sub- / extra-cell ROIs); "
+                      f"no cell outlines read", UserWarning, stacklevel=4)
+        return pd.DataFrame(columns=["cell_id", "geometry"]), {"source": path.name, "header": meta, "n": 0}
+    fmt = next((v for k, v in meta.items() if str(k).lower() == "roi_boundaries_format"), "")
+    ids, geoms, skipped = [], [], 0
+    for cid, text in zip(df[id_col].astype(str), df[cols["roi_boundaries"]]):
+        try:
+            geoms.append(_cs.polygon_wkb(_cs.parse_ome_polygon(text)))
+            ids.append(cid)
+        except ValueError:
+            skipped += 1
+    if skipped:
+        warnings.warn(f"{path}: {skipped} ROI_Boundaries value(s) are not OME polygon points strings "
+                      f"(e.g. OBJ meshes) and were skipped", UserWarning, stacklevel=4)
+    shapes = _cs.to_wkb(geoms, ids)
+    extra = [c for c in df.columns if c not in (id_col, cols["roi_boundaries"])]
+    if extra and len(shapes):
+        keep = df[df[id_col].astype(str).isin(set(ids))].drop_duplicates(id_col)
+        shapes = pd.concat([shapes, keep[extra].reset_index(drop=True)], axis=1)
+    return shapes, {"source": path.name, "header": meta, "n": int(len(shapes)), "format": fmt,
+                    "n_skipped": skipped}
+
+
+#: FOF-CT cell-table centroid columns (after renaming) → (frame, source label)
+_FOFCT_CENTROIDS = (
+    (("centroid_x", "centroid_y", "centroid_z"), None, "FOF-CT cell table Cent_ROI_x / Cent_ROI_y [/ Cent_ROI_z]"),
+    (("cell_center_x_global", "cell_center_y_global", None), "global",
+     "FOF-CT cell table cell_center_x_global / cell_center_y_global"),
+)
+
+
+def _fofct_cell_spatial(uns: dict, kwargs: dict, companions: Mapping) -> None:
+    """Records for the cell positions / outlines a FOF-CT import found:
+    ``uns['cell_spatial']['default']`` for centroid columns of the cell
+    table, ``uns['cell_shapes']['cell']`` for mapping-table outlines."""
+    from . import cellspatial as _cs
+
+    def unit_of(meta):
+        header = (meta or {}).get("header") or {}
+        for k, v in header.items():
+            if str(k).lower() == "xyz_unit":
+                return str(v)
+        return uns.get("xyz_unit")
+
+    cells = kwargs.get("cells")
+    shapes = (kwargs.get("cell_shapes") or {}).get("cell")
+    if shapes is not None and len(shapes):
+        rec = {"geometry_types": sorted({_cs.wkb_type(w) for w in shapes["geometry"]}), "n": int(len(shapes)),
+               "unit": unit_of(companions.get("mapping")), "frame": "global", "status": "measured",
+               "source": f"FOF-CT Cell/ROI mapping table ROI_Boundaries ({companions['mapping']['source']})"}
+        _set_linked_record(uns, _cs.SHAPES_FAMILY, "cell", _clean_metadata_record(rec))
+    if cells is None or not len(cells):
+        return
+    for (x, y, z), frame, source in _FOFCT_CENTROIDS:
+        if x in cells.columns and y in cells.columns:
+            cols = [x, y] + ([z] if z and z in cells.columns else [])
+            rec = _cs.position_record(cols, unit=unit_of(companions.get("cells")), frame=frame,
+                                      status="measured", source=source,
+                                      shapes="cell" if shapes is not None and len(shapes) else None)
+            _set_linked_record(uns, _cs.POSITIONS_FAMILY, "default", rec)
+            return
 
 
 def _scan_fofct_header(path: Path):
@@ -2859,13 +3362,13 @@ def _scan_fofct_header(path: Path):
 
 
 def _from_fofct_streaming(cls, path: Path, *, out: Path, cell_table, rna_table, cell_value_prefix,
-                          chunksize, memory_budget, **kwargs):
+                          chunksize, memory_budget, mapping_table=None, **kwargs):
     """``ChromData.from_fofct(..., out=)``: chunked read → streaming writer."""
     from uchrom.settings import settings
 
     from .stream import ChromDataWriter
 
-    allowed = {"cells", "cellm", "traces", "points", "uns"}
+    allowed = {"cells", "cellm", "traces", "points", "uns", "cell_shapes"}
     bad = set(kwargs) - allowed
     if bad:
         raise TypeError(f"streaming from_fofct does not take {sorted(bad)}")
@@ -2877,7 +3380,7 @@ def _from_fofct_streaming(cls, path: Path, *, out: Path, cell_table, rna_table, 
     reader = pd.read_csv(path, header=None, skiprows=n_skip, chunksize=int(chunksize),
                          skipinitialspace=True, float_precision="round_trip")
     uns = _fofct_uns(kwargs.pop("uns", {}), header_meta)
-    companions = _fofct_companions(kwargs, cell_table, rna_table, cell_value_prefix)
+    companions = _fofct_companions(kwargs, cell_table, rna_table, cell_value_prefix, mapping_table)
     w = ChromDataWriter(out, memory_budget=budget)
     try:
         n_rows = 0
@@ -2896,10 +3399,11 @@ def _from_fofct_streaming(cls, path: Path, *, out: Path, cell_table, rna_table, 
             raise ValueError(f"No data rows found in {path}")
         if companions:
             uns["fofct_companions"] = companions
+            _fofct_cell_spatial(uns, kwargs, companions)
             if w._has_cells:
                 _warn_unmatched_cells(pd.DataFrame({"cell_id": w.unique("cell_id")}), companions, kwargs)
         w.finish(cells=kwargs.get("cells"), cellm=kwargs.get("cellm"), traces=kwargs.get("traces"),
-                 points=kwargs.get("points"), uns=uns)
+                 points=kwargs.get("points"), uns=uns, cell_shapes=kwargs.get("cell_shapes"))
     except BaseException:
         if not w._closed:
             w.abort()
@@ -2971,7 +3475,8 @@ def _fofct_rna_table(path: Path):
 
 
 # FOF-CT header fields written as ``##key=value`` (the rest as ``#key: value``).
-_FOFCT_REQUIRED_HEADER = ("FOF-CT_version", "Table_namespace", "genome_assembly", "XYZ_unit")
+_FOFCT_REQUIRED_HEADER = ("FOF-CT_version", "Table_namespace", "genome_assembly", "XYZ_unit",
+                          "ROI_Boundaries_Format")
 
 
 def _plain_values(values) -> np.ndarray:

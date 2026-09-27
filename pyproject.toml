@@ -53,6 +53,18 @@ anndata = [
 umap = [
     "umap-learn>=0.5",
 ]
+# Cell outlines as geometry objects (ChromData.cell_shapes_geodataframe);
+# storing them (WKB / GeoParquet) needs neither.
+spatial = [
+    "shapely>=2.0",
+    "geopandas>=0.14",
+]
+# Linked / exported SpatialData stores (ChromData.link_spatialdata validation,
+# load_linked_spatialdata, to_spatialdata).
+spatialdata = [
+    "u-chrom[spatial]",
+    "spatialdata>=0.2",
+]
 # Linked MuData files (ChromData.link_mudata / load_linked_mudata).
 multiome = [
     "mudata>=0.2.0",

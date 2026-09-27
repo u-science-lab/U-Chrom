@@ -54,11 +54,84 @@ Cell
 | `cells` | DataFrame | (n_cells, ?) | Cell-level metadata. Index = cell_id. |
 | `cellm` | dict[str, ndarray] | varies | Per-cell multi-dimensional annotations. |
 
-`cells` can hold columns like `cell_type`, `x_centroid`, `y_centroid`, `z_centroid`, etc.
+`cells` can hold any per-cell column (`cell_type`, volume, RNA counts, …).
 
 `cellm` stores arrays aligned to the cells axis, e.g.:
 - `cellm['embedding']` — shape (n_cells, 128), single-cell structure embeddings.
 - `cellm['umap']` — shape (n_cells, 2), UMAP coordinates.
+
+### Cell spatial position (format 2.3)
+
+Where each cell sits in the tissue / field of view.  This is cell-level
+data, kept apart from the chromatin `coords` (one row per spot).
+
+**Centroids** are columns of `cells`, described by a record in
+`uns['cell_spatial'][key]`:
+
+| Column (key `"default"`) | Column (other key `k`) | Type | Required |
+|---|---|---|---|
+| `centroid_x`, `centroid_y` | `k_centroid_x`, `k_centroid_y` | float | yes |
+| `centroid_z` | `k_centroid_z` | float | no (2-D positions) |
+
+Record fields (`uns['cell_spatial'][key]`):
+
+| Field | Description |
+|---|---|
+| `x_col`, `y_col`, `z_col` | the `cells` columns (the canonical names above unless registered otherwise, e.g. a loader's `cell_center_x_global`) |
+| `ndim` | 2 or 3 |
+| `unit` | length unit of the stored values (`"um"`, `"micron"`, `"nm"`, `"voxel"`, …) |
+| `voxel_size`, `voxel_unit` | per-axis voxel size when `unit` is `"voxel"`; `cell_positions(physical=True)` multiplies by it |
+| `frame` | coordinate system: `"fov"` (local to one field of view), `"tissue"` / `"global"` (one stitched frame per section / sample), or another name |
+| `region_col` | `cells` column naming the FOV / region a local frame belongs to |
+| `in_coords_frame` | `true` when the positions (in physical units) share the frame of `coords` |
+| `status` | `"measured"` (imaged / segmented) or `"inferred"` (mapped, e.g. Tangram) |
+| `source`, `method` | where the positions come from and how; `source` is required when `status` is `"inferred"` |
+| `shapes` | key of `cell_shapes` holding the outlines of these cells |
+
+`cd.set_cell_positions(positions, key=, cell_ids=, unit=, frame=, status=, source=, …)`
+writes the columns and the record (rows aligned by `cell_ids`, NaN for
+cells not given; `positions=None, columns=[…]` registers existing
+columns); `cd.cell_positions(key)` returns `x, y[, z]` (+ `region`) indexed
+by `cell_id`, the record in `.attrs['cell_spatial']`.  Without a record,
+`cell_positions()` recognises `centroid_x/y/z` and the pre-2.3 names
+`x_centroid/y_centroid/z_centroid` (seqFISH+ loader) and
+`spatial_x/spatial_y` (the deprecated `set_cell_spatial_coordinates`); 1.x
+records (`coordinate_system`, `inferred`) are read as `frame`, `status`.
+
+**Outlines** (optional) are `cell_shapes[key]` (e.g. `"cell"`,
+`"nucleus"`): a DataFrame with `cell_id` (str) and `geometry` (WKB bytes,
+Polygon / Polygon Z), one row per cell, extra columns allowed; subsetting
+keeps the outlines of the retained cells.  Stored as GeoParquet
+(`tables/cell_shapes/<key>.parquet`, `geo` metadata: encoding WKB, CRS
+null), the representation SpatialData uses for shapes, so
+`geopandas.read_parquet` reads it.  `uns['cell_shapes'][key]` records
+`geometry_types`, `n`, `unit`, `frame`, `in_coords_frame`, `status`,
+`source`.  `cd.set_cell_shapes(...)` takes vertex arrays or WKB (no
+geometry library needed), shapely geometries or a GeoDataFrame;
+`cd.cell_shapes_geodataframe(key)` needs shapely + geopandas (optional
+dependencies, `pip install u-chrom[spatial]`; a clear `ImportError`
+otherwise).  `.h5cd` does not store outlines (warning).
+
+**Linked SpatialData** (`uns['linked_spatialdata'][key]`, stored with the
+other link records under `links/`): `path` (relative paths resolve next to
+the store), `format: "spatialdata"`, `table`, `region`, `region_key`,
+`instance_key` (the cell map: rows of `table` with `region_key == region`
+are cells whose `instance_key` value is the ChromData `cell_id`, or the
+value of the `cells` column `cell_col`), `coordinate_system`,
+`spatialdata_version`.  `cd.link_spatialdata(path, ...)` fills the table
+attributes from the store; `cd.validate_links()` checks the path, the
+table, the instance key and how many ChromData cells the map finds;
+`cd.load_linked_spatialdata(cells=[...])` returns the SpatialData object
+(subset to those cells); `cd.to_spatialdata()` exports spots, centroids,
+outlines, the cell table and `points`.
+
+**Loaders**: `read_seqfish_multiomics(cell_clustering=…)` writes
+`centroid_x/y/z` (voxels, frame `"fov"`, `region_col="fov"`, voxel size
+0.103 / 0.103 / 0.25 µm); `from_fofct(cell_table=…)` registers
+`Cent_ROI_x/y[/z]` (→ `centroid_*`) or `cell_center_x_global / _y_global`
+(frame `"global"`), and `from_fofct(mapping_table=…)` reads the Cell/ROI
+Mapping table's `ROI_Boundaries` (OME polygons) into `cell_shapes['cell']`;
+`to_fofct(mapping_table=…)` writes it back.
 
 ### Tracks
 
@@ -72,6 +145,7 @@ spot-aligned view of both (`cd.tracks_spot_view()` without the warning).
 |-----------|------|-------------|
 | `traces` | DataFrame (n_traces) | Trace-level metadata. Index = trace_id. |
 | `layers` | dict[str, ndarray] | Alternative coordinate representations, each (n_spots, 3). e.g. `layers['raw']` for uncorrected coordinates. |
+| `cell_shapes` | dict[str, DataFrame] | Cell outlines: `cell_id` + `geometry` (WKB), one row per cell; see *Cell spatial position*. Format ≥ 2.3 (zarr). |
 | `points` | dict[str, DataFrame] | Non-genomic 3-D points in the `coords` frame (columns `x, y, z` + e.g. `cell_id`, `gene`): nascent RNA spots, IF puncta. Subsetting keeps the points of retained cells. Format ≥ 1.3. |
 | `results` | `ResultsStore` | Analysis results with provenance. Dict-like: `cd.results[key]` is the value, `cd.results.record(key)` a `ResultRecord` (`kind, value, params, function, uchrom_version, inputs, created_utc`). Values may be DataFrames, Series, ndarrays, nested dicts of these, or JSON-compatible scalars / lists; anything else raises `TypeError` on assignment. |
 | `uns` | dict | Unstructured metadata (genome assembly, coordinate unit, etc.). |
@@ -149,7 +223,7 @@ df = cd.to_dataframe()   # Flat DataFrame: chrom, start, end, x, y, z, trace_id,
 ### Persistence
 
 ```python
-cd.write('data.chromdata.zarr')                    # format 2.2: Zarr v3 + Parquet (a directory)
+cd.write('data.chromdata.zarr')                    # format 2.3: Zarr v3 + Parquet (a directory)
 cd.write('data.cdz')                               # the same store in one zip file
 cd = ChromData.read('data.chromdata.zarr')         # in memory (spots in stored order)
 cd = ChromData.read('data.chromdata.zarr', original_order=True)   # rows as written
@@ -164,7 +238,7 @@ The format follows the path: `*.zarr` → Zarr directory, `*.cdz` → zip,
 `*.h5cd` → HDF5 (deprecated for writing; `DeprecationWarning`).  An
 existing path without one of these suffixes is sniffed.
 `python -m uchrom.io.upgrade old.h5cd` converts to
-`old.chromdata.zarr` (and rewrites a 2.0 / 2.1 `.chromdata.zarr` as 2.2).
+`old.chromdata.zarr` (and rewrites a 2.0 / 2.1 / 2.2 `.chromdata.zarr` as 2.3).
 
 ### Backed mode
 
@@ -202,7 +276,7 @@ wrote it:
 
 | Attribute | Example | Description |
 |-----------|---------|-------------|
-| `uchrom_format_version` | `"2.2"` | `MAJOR.MINOR` version of the ChromData format (`.chromdata.zarr`: 2.2; `.h5cd`: 2.0). MAJOR bumps are breaking; MINOR bumps keep old files readable. |
+| `uchrom_format_version` | `"2.3"` | `MAJOR.MINOR` version of the ChromData format (`.chromdata.zarr`: 2.3; `.h5cd`: 2.0). MAJOR bumps are breaking; MINOR bumps keep old files readable. |
 | `uchrom_version` | `"0.2.0"` | Version of the U-Chrom package that wrote the file. For provenance. |
 
 In a `.chromdata.zarr` store they are root-group attributes (plus
@@ -216,7 +290,15 @@ Read semantics (implemented in `ChromData.read`, for both containers):
 
 New MAJOR versions should add a `_read_vN` function in `cdata.py` and may include a migration helper that converts old on-disk data to the current in-memory form.
 
-### `.chromdata.zarr` layout (format 2.2, the default)
+### `.chromdata.zarr` layout (format 2.3, the default)
+
+Format 2.3 is the 2.2 layout below plus the optional cell outlines
+(`tables/cell_shapes/<key>.parquet`, GeoParquet) and the cell-position
+records (`uns['cell_spatial']`, `uns['cell_shapes']`, `links/` records
+`linked_spatialdata`) — all additive.  A 2.2 reader reads a 2.3 store with
+the usual higher-MINOR warning and ignores the outlines (rewriting it with
+that reader drops them); 2.3 readers read 2.0–2.2 stores unchanged.
+(`zarrcd.write_zarr(..., _layout="2.2")`, the current layout, is written as 2.3.)
 
 A Zarr v3 group; everything with rows is Parquet (zstd), everything
 n-dimensional is a Zarr array (zstd), metadata is JSON attributes.  Every
@@ -227,7 +309,7 @@ bin, the cell or the trace once per key.
 
 ```
 data.chromdata.zarr/
-├── zarr.json               attrs: uchrom_format_version "2.2", uchrom_version,
+├── zarr.json               attrs: uchrom_format_version "2.3", uchrom_version,
 │                           uchrom = {format "chromdata.zarr", format_version,
 │                           layout "primary+coords", spot_order "cell,trace,chrom,bin",
 │                           coords_order "chrom,cell,trace,bin", n_spots, n_bins,
@@ -260,7 +342,10 @@ data.chromdata.zarr/
 │   ├── bin_tracks.parquet  n_bins rows
 │   ├── cells.parquet, traces.parquet   index kept (pandas metadata)
 │   ├── intervals/<key>.parquet         kind + source_result in tables attrs
-│   └── points/<key>.parquet
+│   ├── points/<key>.parquet
+│   └── cell_shapes/<key>.parquet       cell outlines (2.3): cell_id, geometry (WKB),
+│                           GeoParquet "geo" metadata; tables attrs cell_shapes =
+│                           {key: {file, n_rows, encoding, geometry_types}}
 ├── index/                  zarr arrays over the primary order
 │   ├── trace_offsets       int64 (n_runs + 1): rows of each (cell, trace, chromosome) run
 │   ├── trace_codes         int32 (n_runs): trace_id code of each run
@@ -285,7 +370,8 @@ data.chromdata.zarr/
 ├── uns/                    attrs {values (JSON), nodes, order}; numeric arrays of
 │                           > 64 elements as sub-arrays / groups
 ├── contacts/               attrs: uns["linked_cool"] / uns["linked_scool"] records
-└── links/                  attrs: uns["linked_anndata"] / uns["linked_mudata"] records
+└── links/                  attrs: uns["linked_anndata"] / uns["linked_mudata"] /
+                            uns["linked_spatialdata"] records
 ```
 
 - **Two orders, one mapping.**  In memory (a full read) spots are in the
