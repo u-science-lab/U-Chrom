@@ -598,12 +598,15 @@ def draw_umap_b(ax, lasso=LASSO):
     ax.set_xlim(u[:, 0].min() - pad[0], u[:, 0].max() + pad[0])
     ax.set_ylim(u[:, 1].min() - pad[1] * 1.3, u[:, 1].max() + pad[1])
     _clean(ax)
-    x0, y0 = ax.get_xlim()[0] + pad[0] * 0.25, ax.get_ylim()[0] + pad[1] * 0.25
-    L = span.mean() * 0.12
-    ax.annotate("", (x0 + L, y0), (x0, y0), arrowprops=dict(arrowstyle="-|>", lw=0.5, color=GREY, mutation_scale=4))
-    ax.annotate("", (x0, y0 + L * span[1] / span[0]), (x0, y0),
-                arrowprops=dict(arrowstyle="-|>", lw=0.5, color=GREY, mutation_scale=4))
-    ax.text(x0 + L * 1.1, y0, "UMAP", fontsize=F(3.9), color=GREY, va="center")
+    # axis key in axes coordinates, both arrows the same physical length (the pane is not square)
+    bb = ax.get_position()
+    wh = (bb.width * fig.get_figwidth()) / (bb.height * fig.get_figheight())
+    x0, y0, Lx = 0.04, 0.07, 0.07          # bottom-left, below the MLI1 label
+    Ly = Lx * wh
+    kw = dict(xycoords="axes fraction", arrowprops=dict(arrowstyle="-|>", lw=0.5, color=GREY, mutation_scale=4))
+    ax.annotate("", (x0 + Lx, y0), (x0, y0), **kw)
+    ax.annotate("", (x0, y0 + Ly), (x0, y0), **kw)
+    ax.text(x0 + Lx + 0.015, y0, "UMAP", transform=ax.transAxes, fontsize=F(3.9), color=GREY, va="center")
 
 
 def _sphere(ax, c, r, col, alpha=1.0, z=1):
