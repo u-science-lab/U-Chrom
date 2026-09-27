@@ -143,7 +143,7 @@ describe('default rows per dataset', () => {
   })
   it('scHi-C without coordinates: merged map over the per-cell map, no tracks', () => {
     const maps = [cmap('all_cells'), cmap('type_L5IT'), cmap('per_cell', true)]
-    expect(sig(defaultRows(ds({ has_coords: false, n_spots: 0, contact_maps: maps })))).toEqual(['matrix:all_cells', 'matrix:per_cell'])
+    expect(sig(defaultRows(ds({ has_coords: false, n_spots: 0, contact_maps: maps })))).toEqual(['matrix:per_cell', 'matrix:all_cells'])
   })
   it('coordinates only: the distance triangle; interval tables become rows', () => {
     expect(sig(defaultRows(ds({})))).toEqual(['matrix:distance'])

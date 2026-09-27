@@ -161,8 +161,8 @@ export function applyRowSetting(rows: GenomeRow[], id: string, setting: RowSetti
 type DsLike = Pick<DatasetSummary, 'has_coords' | 'n_spots' | 'contact_maps' | 'tracks' | 'intervals'>
 
 /**
- * Default rows for a dataset: the first bulk contact map, the first per-cell
- * map (follows the focused cell), the 3-D distance triangle when there are
+ * Default rows for a dataset: the first per-cell contact map (follows the
+ * focused cell / group), the first bulk map, the 3-D distance triangle when there are
  * coordinates, then interval tables and up to six marks as tracks
  * (`tracks`: an earlier track selection, e.g. from an old Tracks pane).
  */
@@ -172,8 +172,9 @@ export function defaultRows(ds: DsLike | undefined, tracks?: string[] | null): G
   const maps = ds.contact_maps ?? []
   const bulk = maps.find((m) => !m.per_cell)
   const perCell = maps.find((m) => m.per_cell)
-  if (bulk) rows = addRow(rows, { kind: 'matrix', source: bulk.key })
+  // the per-cell map first: it follows the focused cell / group; the bulk map is fixed
   if (perCell) rows = addRow(rows, { kind: 'matrix', source: perCell.key })
+  if (bulk) rows = addRow(rows, { kind: 'matrix', source: bulk.key })
   if (ds.has_coords !== false && ds.n_spots > 0) rows = addRow(rows, { kind: 'matrix', source: 'distance' })
   for (const iv of ds.intervals ?? []) rows = addRow(rows, { kind: 'intervals', key: iv.key })
   const names = (ds.tracks ?? []).map((t) => t.name)
