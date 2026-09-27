@@ -27,6 +27,7 @@ from pathlib import Path
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.lines import Line2D
 from matplotlib.colors import LinearSegmentedColormap, LogNorm
 from matplotlib.patches import Patch
 
@@ -35,7 +36,7 @@ sys.path.insert(0, str(HERE))
 
 import make_fig2 as F  # noqa: E402
 
-W, H = 170.0, 177.0
+W, H = 170.0, 180.0
 TICK = 6.5                       # tick-label size (pt)
 
 ROLE_COL = {"neuronal": F.INDIGO, "oligodendrocyte": F.ORANGE, "astrocyte": F.TEAL}
@@ -232,31 +233,37 @@ def ratio(fig, x0, y0, fx):
 # --------------------------------------------------------------------------- row 3
 
 def query_speed(fig, x0, y0, e, q):
-    """Linked .scool query speed vs cells aggregated: per cell type (all chromosomes) and a size sweep (chr1)."""
+    """Linked .scool query speed: per cell type (all chromosomes) | one chromosome vs cells aggregated."""
     per = q["identity"]["per_type"]
     n_chr = len(q["identity"]["scope"].split("(")[1].split(")")[0].split(","))
     head(fig, x0, y0, "g", "Linked contacts are fast to query",
-         "pseudo-bulk summed from the linked per-cell .scool;\nsolid: first query, dashed: cached")
-    ax = F.ax_at(fig, x0 + 13, y0 + AX_DY, 52, ROW3_H)
+         "pseudo-bulk summed from the linked per-cell .scool")
     n = np.array([p["n_cells"] for p in per]); o = np.argsort(n)
     first = np.array([p["first_query_s_total"] for p in per])
     cached = np.array([p["cached_query_s_median"] for p in per]) * n_chr
-    ax.plot(n[o], first[o], color=F.TEAL, marker="o", ms=2.0, lw=1.1)
-    ax.plot(n[o], cached[o], color=F.TEAL, ls="--", marker="o", ms=2.0, mfc="white", lw=1.0)
     c = np.array([p["n_cells"] for p in e])
     cold = np.array([p["cold_s"]["median"] for p in e])
     cc = np.array([p["cached_s"]["median"] for p in e])
-    ax.plot(c, cold, color=F.GREY, marker="s", ms=2.0, lw=1.0)
-    ax.plot(c, cc, color=F.GREY, ls="--", marker="s", ms=2.0, mfc="white", lw=1.0)
-    F.loglog(ax)
-    ax.set_xlabel("cells aggregated"); ax.set_ylabel("time")
-    ax.set_xlim(30, 9000)
-    ticks(ax, "x", [1e2, 1e3], "count")
-    ax.set_ylim(1e-5, 30)
-    ticks(ax, "y", [1e-4, 1e-2, 1e0], "time")
-    ax.text(n[o][-1] * 1.15, first[o][-1], f"one cell type,\nall {n_chr} chromosomes", fontsize=6, color=F.TEAL,
-            ha="left", va="center", linespacing=1.0)
-    ax.text(c[-1] * 1.15, cold[-1] * 0.8, "chr1", fontsize=6, color=F.GREY, ha="left", va="top")
+    panels = [(n[o], first[o], cached[o], f"each cell type, all {n_chr} chromosomes", "cells of the type"),
+              (c, cold, cc, "chr1, random groups of cells", "cells aggregated")]
+    aw = 25.0
+    for k, (xs, f_, c_, sub, xl) in enumerate(panels):
+        ax = F.ax_at(fig, x0 + 13 + k * (aw + 8), y0 + AX_DY, aw, ROW3_H)
+        ax.plot(xs, f_, color=F.TEAL, marker="o", ms=2.0, lw=1.1)
+        ax.plot(xs, c_, color=F.TEAL, ls="--", marker="o", ms=2.0, mfc="white", lw=1.0)
+        F.loglog(ax)
+        ax.set_xlabel(xl)
+        if k == 0:
+            ax.set_ylabel("time")
+        ax.set_xlim(xs.min() / 1.6, xs.max() * 1.6)
+        ticks(ax, "x", [v for v in (1e2, 1e3) if xs.min() / 1.6 < v < xs.max() * 1.6], "count")
+        ax.set_ylim(1e-5, 30)
+        ticks(ax, "y", [1e-4, 1e-2, 1e0], "time")
+        ax.set_title(sub, fontsize=6, color=F.INK, pad=2)
+    hs = [Line2D([], [], color=F.TEAL, marker="o", ms=2.4, lw=1.1),
+          Line2D([], [], color=F.TEAL, ls="--", marker="o", ms=2.4, mfc="white", lw=1.0)]
+    F.legend(fig, hs, ["first query", "cached (LRU)"], x0 + 13, y0 + AX_DY + ROW3_H + 7.0, ncol=2,
+             handlelength=2.2, columnspacing=1.2)
 
 
 def sizes(fig, x0, y0, imp):
@@ -330,7 +337,7 @@ def main() -> None:
     ratio(fig, 104, ROW2, fx)
 
     import_time(fig, 0, ROW3, q["import"])
-    query_speed(fig, 44, ROW3, e, q)
+    query_speed(fig, 43, ROW3, e, q)
     sizes(fig, 118, ROW3, q["import"])
 
     for ext in ("pdf", "png"):
