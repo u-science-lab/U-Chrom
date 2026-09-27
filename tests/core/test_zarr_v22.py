@@ -119,7 +119,7 @@ def test_round_trip_bitwise(store):
     _assert_uns_equal(cd.uns, back.uns)
     orig = ChromData.read(path, original_order=True)
     pd.testing.assert_frame_equal(orig.spots, cd.spots)
-    assert orig.spots["name"].dtype == object and orig.spots["fov"].dtype == np.int64
+    assert orig.spots["name"].dtype == cd.spots["name"].dtype and orig.spots["fov"].dtype == np.int64
     np.testing.assert_array_equal(_bits(orig.spots["order"]), _bits(cd.spots["order"]))
     np.testing.assert_array_equal(_bits(orig.coords), _bits(cd.coords))
     for c in cd.spot_tracks.columns:
@@ -274,7 +274,8 @@ def test_bins_column_is_reused(tmp_path):
     write_zarr(cd, path, _layout="2.2")
     import zarr
     tmeta = zarr.open_group(str(path), mode="r")["tables"].attrs["tables"]
-    assert tmeta["spots"]["derived"]["probe"] == {"key": "bin_id", "kind": "object", "bins_column": "probe"}
+    d = tmeta["spots"]["derived"]["probe"]
+    assert d["key"] == "bin_id" and d["bins_column"] == "probe" and "file" not in d
     back = ChromData.read(path, original_order=True)
     pd.testing.assert_frame_equal(back.spots, cd.spots)
     pd.testing.assert_frame_equal(back.bins, cd.bins)

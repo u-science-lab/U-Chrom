@@ -1013,15 +1013,29 @@ _DERIVE_SAMPLE = 1 << 16
 
 def _derivable_kind(s: pd.Series) -> Optional[str]:
     """``"category"`` / ``"numeric"`` / ``"object"`` (every value a ``str``)
-    for a spot column that may be stored per key, else ``None``."""
+    / ``"string"`` (a pandas string dtype without missing values — the
+    default for text in pandas 3) for a spot column that may be stored per
+    key, else ``None``."""
     dt = s.dtype
     if isinstance(dt, pd.CategoricalDtype):
         return "category"
+    if isinstance(dt, pd.StringDtype):
+        return "string" if len(s) and not s.isna().any() else None
     if isinstance(dt, np.dtype) and dt.kind in "biuf":
         return "numeric"
     if dt == object and len(s) and pd.api.types.infer_dtype(s, skipna=False) == "string":
         return "object"
     return None
+
+
+def string_dtype_meta(dt) -> Dict[str, Any]:
+    """JSON description of a pandas ``StringDtype`` (storage, NA value)."""
+    return {"storage": str(dt.storage), "na_value": "nan" if dt.na_value is np.nan else "NA"}
+
+
+def string_dtype_of(meta: Mapping[str, Any]):
+    """The pandas ``StringDtype`` of :func:`string_dtype_meta`."""
+    return pd.StringDtype(storage=meta["storage"], na_value=np.nan if meta["na_value"] == "nan" else pd.NA)
 
 
 def _bitwise_equal(a: np.ndarray, b: np.ndarray) -> bool:
@@ -1069,7 +1083,7 @@ def derive_spot_columns(spots: pd.DataFrame, columns: Sequence[str],
             continue
         if kind == "category":
             values = np.asarray(s.cat.codes)
-        elif kind == "object":
+        elif kind in ("object", "string"):
             values = s.to_numpy(dtype=object)
         else:
             values = s.to_numpy()
@@ -1084,6 +1098,8 @@ def derive_spot_columns(spots: pd.DataFrame, columns: Sequence[str],
             if per is None:
                 continue
             rec: Dict[str, Any] = {"key": key, "kind": kind, "values": per}
+            if kind == "string":
+                rec["string_dtype"] = string_dtype_meta(s.dtype)
             if (key == BIN_ID and bins is not None and col in bins.columns and kind != "category"
                     and bins[col].dtype == s.dtype
                     and _bitwise_equal(bins[col].to_numpy()[codes], values)):
@@ -1104,8 +1120,9 @@ def _write_derived(derived: Mapping[str, Dict[str, Any]], categories: Mapping[st
     meta: Dict[str, Any] = {}
     by_key: Dict[str, Dict[str, Any]] = {}
     for col, rec in derived.items():
+        extra = {"string_dtype": rec["string_dtype"]} if "string_dtype" in rec else {}
         if "bins_column" in rec:
-            meta[col] = {"key": rec["key"], "kind": rec["kind"], "bins_column": rec["bins_column"]}
+            meta[col] = {"key": rec["key"], "kind": rec["kind"], "bins_column": rec["bins_column"], **extra}
         else:
             by_key.setdefault(rec["key"], {})[col] = rec
     for key, recs in by_key.items():
@@ -1115,7 +1132,8 @@ def _write_derived(derived: Mapping[str, Dict[str, Any]], categories: Mapping[st
                 cats, ordered = categories[col]
                 data[col] = pd.Categorical.from_codes(rec["values"], categories=cats, ordered=bool(ordered))
             else:
-                data[col] = pd.Series(rec["values"], dtype=object if rec["kind"] == "object" else rec["values"].dtype)
+                data[col] = pd.Series(rec["values"], dtype=object if rec["kind"] in ("object", "string")
+                                      else rec["values"].dtype)
         frame = pd.DataFrame(data)
         cols = _spot_frame_columns(frame, f"spots.{key}", spot_meta, cat_dir, level)
         fname = f"derived/{key}.parquet"
@@ -1123,7 +1141,8 @@ def _write_derived(derived: Mapping[str, Dict[str, Any]], categories: Mapping[st
         pq.write_table(pa.Table.from_arrays([a for _, a in cols], names=[c for c, _ in cols]),
                        tpath / fname, compression="zstd", compression_level=level)
         for col, rec in recs.items():
-            meta[col] = {"key": key, "kind": rec["kind"], "file": fname}
+            meta[col] = {"key": key, "kind": rec["kind"], "file": fname,
+                         **({"string_dtype": rec["string_dtype"]} if "string_dtype" in rec else {})}
     return meta
 
 
@@ -1795,16 +1814,24 @@ def _read_derived(c: Container, meta: Mapping[str, Any], bins: pd.DataFrame) -> 
     out: Dict[str, Dict[str, Any]] = {}
     tables: Dict[str, Any] = {}
     for col, info in meta.items():
+        arrow = None
         if "bins_column" in info:
-            values = bins[info["bins_column"]].to_numpy()
+            b = bins[info["bins_column"]]
+            values = b.to_numpy(dtype=object) if info.get("kind") in ("object", "string") else b.to_numpy()
         else:
             f = info["file"]
             if f not in tables:
                 tables[f] = c.parquet(f"tables/{f}").read()
-            values = tables[f].column(col).to_numpy(zero_copy_only=False)
-            if info.get("kind") == "object" and values.dtype != object:  # pragma: no cover
+            arrow = tables[f].column(col).combine_chunks()
+            values = arrow.to_numpy(zero_copy_only=False)
+            if info.get("kind") in ("object", "string") and values.dtype != object:  # pragma: no cover
                 values = values.astype(object)
-        out[col] = {"key": info["key"], "kind": info.get("kind"), "values": values}
+        rec = {"key": info["key"], "kind": info.get("kind"), "values": values}
+        if info.get("kind") == "string":
+            import pyarrow as pa
+            rec["dtype"] = string_dtype_of(info["string_dtype"])
+            rec["arrow"] = arrow if arrow is not None else pa.array(values, type=pa.large_string())
+        out[col] = rec
     return out
 
 

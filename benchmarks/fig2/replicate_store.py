@@ -216,6 +216,7 @@ def replicate_v22(args, c, parts) -> None:
         f = info.get("file")
         if not f or (tdir / f).exists():
             continue
+        (tdir / f).parent.mkdir(parents=True, exist_ok=True)
         if info["key"] == "bin_id":
             shutil.copy(args.src / "tables" / f, tdir / f)
         else:   # per cell / per trace: one block per copy

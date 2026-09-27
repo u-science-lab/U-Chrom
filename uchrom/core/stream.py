@@ -698,15 +698,19 @@ class ChromDataWriter:
         concatenated input), from one pass over the spill runs."""
         import pyarrow.types as pat
 
-        from .zarrcd import DERIVED_KEYS, _bitwise_equal
+        from .zarrcd import DERIVED_KEYS, _bitwise_equal, string_dtype_meta
 
+        # text columns become the pandas default string dtype in memory
+        # (object in pandas 2, "str" in pandas 3): decide as the in-memory writer
+        default_text = pd.Series(["a"]).dtype
+        text_kind = "string" if isinstance(default_text, pd.StringDtype) else "object"
         kinds: Dict[str, str] = {}
         for col in self._spot_cols:
             typ = schema.field(f"s:{col}").type
             if col in extra_cats:
                 kinds[col] = "category"
             elif pat.is_string(typ) or pat.is_large_string(typ):
-                kinds[col] = "object"
+                kinds[col] = text_kind
             elif pat.is_integer(typ) or pat.is_floating(typ) or pat.is_boolean(typ):
                 kinds[col] = "numeric"
         if not kinds or not self.n:
@@ -726,7 +730,7 @@ class ChromDataWriter:
                     arr = piece.column(f"s:{col}")
                     if kind == "category":
                         v = extra_cats[col].get_indexer(_col_values(piece, f"s:{col}")).astype(np.int64)
-                    elif kind == "object":
+                    elif kind in ("object", "string"):
                         if arr.null_count:
                             for k in n_keys:
                                 state[(col, k)]["ok"] = False
@@ -765,10 +769,15 @@ class ChromDataWriter:
                 if st is None or not st["ok"] or st["per"] is None:
                     continue
                 rec: Dict[str, Any] = {"key": k, "kind": kind, "values": st["per"]}
+                if kind == "string":
+                    rec["string_dtype"] = string_dtype_meta(default_text)
+                want_dtype = default_text if kind == "string" else st["per"].dtype
                 if (k == BIN_ID and kind != "category" and col in bins.columns
-                        and bins[col].dtype == st["per"].dtype):
+                        and bins[col].dtype == want_dtype):
                     seen = st["seen"]
-                    if _bitwise_equal(bins[col].to_numpy()[seen], st["per"][seen]):
+                    bvals = bins[col].to_numpy(dtype=object) if kind in ("object", "string") \
+                        else bins[col].to_numpy()
+                    if _bitwise_equal(bvals[seen], st["per"][seen]):
                         rec["bins_column"] = col
                 out[col] = rec
                 break

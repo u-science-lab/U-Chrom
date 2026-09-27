@@ -384,6 +384,17 @@ class _SpotsFrame22(BackedFrame):
 _XYZ = ("x", "y", "z")
 
 
+def _string_take(d, codes):
+    """A derived pandas-string column: an Arrow gather of the per-key values."""
+    import pyarrow as pa
+
+    dt = d["dtype"]
+    taken = d["arrow"].take(pa.array(np.asarray(codes, dtype=np.int64)))
+    if dt.storage in ("pyarrow", "pyarrow_numpy"):
+        return dt.__from_arrow__(taken)
+    return pd.array(taken.to_numpy(zero_copy_only=False), dtype=dt)
+
+
 def _par_serial() -> bool:
     import os
     return os.environ.get("UCHROM_ZARR_SERIAL_READ", "") == "1"
@@ -819,6 +830,9 @@ class BackedChromData(ChromData):
                      "cell_id": np.asarray(self._index["trace_cells"])} if full else {})
         for c in der_cols:
             d = self._derived[c]
+            if d["kind"] == "string":   # a pandas string column (pandas 3 text)
+                data[c] = _string_take(d, keycodes[d["key"]])
+                continue
             if d["key"] in run_keys:     # constant over primary runs: one repeat
                 vals = _par.repeat(d["values"][run_keys[d["key"]]], np.diff(self._poff))
             else:
@@ -831,7 +845,8 @@ class BackedChromData(ChromData):
         if ptab is not None:
             pf = R.to_frame("spots", ptab)
             for c in prim_cols:
-                data[c] = pf[c].array if isinstance(pf[c].dtype, pd.CategoricalDtype) else pf[c].to_numpy()
+                col = pf[c]
+                data[c] = col.to_numpy() if isinstance(col.dtype, np.dtype) else col.array
             del pf, ptab
         # one frame, columns in their stored order (no reordering copy)
         spots = pd.DataFrame({c: data[c] for c in self._spots_proxy.columns if c in data}, copy=False)
