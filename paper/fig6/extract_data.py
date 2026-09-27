@@ -40,7 +40,8 @@ def main(path: Path):
         "cell_id": cells["cell_id"].to_numpy(str),
         "cell_type": cells["cell_type"].astype(str).to_numpy(str),
         "umap": np.asarray(cd.cellm["umap"], float),
-        "centroid": cells[["x_centroid", "y_centroid", "z_centroid"]].to_numpy(float),
+        # centroid_x/y/z (format 2.3) or the older x_centroid/…, whichever the store has
+        "centroid": cd.cell_positions().reindex(cells["cell_id"].to_numpy())[["x", "y", "z"]].to_numpy(float),
         "nuc_volume": cells["nuc_volume_um3"].to_numpy(float),
     }
     # 3-D pane: spots of a few chromosomes, all cells (x, y, z, cell index, trace index)
