@@ -93,7 +93,7 @@ BASELINES = [  # c_access series, short label, colour, line style
 # panel b: capability marks
 MARK_ROWS = {"chromdata.zarr": "chromdata.zarr", "FOF-CT (4DN)": "FOF-CT (4DN)", "AnnData": "AnnData",
              "SpatialData": "SpatialData", "MuData": "MuData", "cooler (.cool / .scool)": "cooler (.cool, .scool)"}
-MARK_COLS = {"coords": "3-D coordinates", "hierarchy": "cell › trace › spot", "spot_signals": "per-spot signals",
+MARK_COLS = {"coords": "spot coordinates (x, y, z)", "hierarchy": "cell › trace › spot", "spot_signals": "per-spot signals",
              "bin_signals": "per-locus signals", "cells": "cell table", "cell_emb": "cell embeddings",
              "cell_pos": "cell spatial position", "contacts": "contact maps",
              "intervals": "intervals (TADs, loops)", "points": "RNA spots (points)",
