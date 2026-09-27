@@ -64,7 +64,7 @@ class Workspace:
             raise BrowserError(f"{exc.code}: {detail}") from None
         except urllib.error.URLError as exc:
             raise BrowserError(f"cannot reach the browser server at {self.url} ({exc.reason}); "
-                               "start it with `python -m uchrom.browser --web data.h5cd`") from None
+                               "start it with `python -m uchrom.browser --web data.chromdata.zarr`") from None
 
     def call(self, action: str, /, **args) -> Any:
         """Run one browser action (see :meth:`tools`) on the active page and return its result (a dict)."""

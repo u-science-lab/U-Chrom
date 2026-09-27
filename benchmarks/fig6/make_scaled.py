@@ -5,7 +5,7 @@ ids suffixed ``_r<k>``.  Only geometry is kept (spots, coords, cells.cell_type):
 would not fit in memory at 10^7 spots and are not used by the geometry benchmarks.  The replicated files
 are **labelled as replicated** wherever they are reported.
 
-    python benchmarks/fig6/make_scaled.py --src example-data/takei2025_fov0/takei2025_fov0.h5cd \
+    python benchmarks/fig6/make_scaled.py --src example-data/takei2025_fov0/takei2025_fov0.chromdata.zarr \
         --out benchmarks/fig6/_data --factors 1 3 10 30
 """
 from __future__ import annotations
@@ -57,10 +57,18 @@ def main():
     for k in a.factors:
         t = time.time()
         rep = replicate(cd, k)
-        path = out / f"takei2025_fov0_x{k}.h5cd"
+        path = out / f"takei2025_fov0_x{k}.chromdata.zarr"
         rep.write(str(path))
         print(f"x{k}: {rep.n_spots:,} spots, {rep.n_cells} cells -> {path} "
-              f"({path.stat().st_size / 1e6:.0f} MB, {time.time() - t:.1f} s)")
+              f"({store_mb(path):.0f} MB, {time.time() - t:.1f} s)")
+
+
+def store_mb(path: Path) -> float:
+    """Size on disk of a file or a directory store (.chromdata.zarr), in MB."""
+    path = Path(path)
+    if path.is_dir():
+        return sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) / 1e6
+    return path.stat().st_size / 1e6
 
 
 if __name__ == "__main__":

@@ -7,9 +7,9 @@ the first call of every interaction (cold) is reported separately.  Drawing time
 measured by bench_frontend.py.
 
     .venv/bin/python benchmarks/fig6/bench_server.py \
-        --imaging example-data/takei2025_fov0/takei2025_fov0.h5cd \
-        --scaled benchmarks/fig6/_data/takei2025_fov0_x10.h5cd benchmarks/fig6/_data/takei2025_fov0_x30.h5cd \
-        --hic example-data/schicar_mop/schicar_mop.h5cd --out paper/fig6/results/server.json
+        --imaging example-data/takei2025_fov0/takei2025_fov0.chromdata.zarr \
+        --scaled benchmarks/fig6/_data/takei2025_fov0_x10.chromdata.zarr benchmarks/fig6/_data/takei2025_fov0_x30.chromdata.zarr \
+        --hic example-data/schicar_mop/schicar_mop.chromdata.zarr --out paper/fig6/results/server.json
 """
 from __future__ import annotations
 

@@ -6,7 +6,7 @@ frontend's performance marks (`uchrom:geometry-request / -loaded / -drawn`, see 
 the resource timing of the geometry request.  Frame rate is the requestAnimationFrame rate over a few
 seconds with the overview drawn (the render loop redraws every frame).
 
-    .venv/bin/python benchmarks/fig6/bench_frontend.py benchmarks/fig6/_data/takei2025_fov0_x*.h5cd \
+    .venv/bin/python benchmarks/fig6/bench_frontend.py benchmarks/fig6/_data/takei2025_fov0_x*.chromdata.zarr \
         --out paper/fig6/results/frontend.json
 """
 from __future__ import annotations
@@ -20,6 +20,14 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+
+def store_mb(path: Path) -> float:
+    """Size on disk of a file or a directory store (.chromdata.zarr), in MB."""
+    path = Path(path)
+    if path.is_dir():
+        return sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) / 1e6
+    return path.stat().st_size / 1e6
 
 import requests
 from playwright.sync_api import sync_playwright
@@ -101,7 +109,7 @@ def bench_one(path: Path, reps: int, fps_ms: int, browser) -> dict:
             ctx.close()
             print(f"  rep {i}: first frame {rec['first_frame_ms']:.0f} ms, points {rec['points']:,}, "
                   f"{(rec['bytes'] or 0) / 1e6:.1f} MB" + (f", {rec['fps']['fps']:.0f} fps" if 'fps' in rec else ""))
-        return {"file": path.name, "file_mb": path.stat().st_size / 1e6, "n_spots": info["n_spots"],
+        return {"file": path.name, "file_mb": store_mb(path), "n_spots": info["n_spots"],
                 "n_cells": info["n_cells"], "n_traces": info["n_traces"], "open_s": open_s, "loads": loads}
     finally:
         proc.terminate()

@@ -64,7 +64,7 @@ export function TopBar() {
         >
           <input
             autoFocus
-            placeholder="/path/to/data.h5cd or .csv (on the server)"
+            placeholder="/path/to/data.chromdata.zarr (.cdz, .h5cd, .csv) on the server"
             value={path}
             onChange={(e) => setPath(e.target.value)}
             onKeyDown={(e) => e.key === 'Escape' && setOpening(false)}
