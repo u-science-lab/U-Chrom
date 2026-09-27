@@ -213,7 +213,7 @@ MONO = "Menlo"
 
 FIG1 = HERE.parent / "fig1"
 LOGO = {k: HERE / "_cache/logos" / f"{k}.png" for k in ["claudecode", "codex", "jupyter", "pantheon"]}
-LOGO.update({k: FIG1 / "_cache/logos" / f"{k}.png" for k in ["python", "hdf5", "cooler", "mudata"]})
+LOGO.update({k: FIG1 / "_cache/logos" / f"{k}.png" for k in ["python", "zarr", "cooler", "mudata"]})
 LOGO.update({"uchrom": FIG1 / "logos/uchrom_logo.png", "uchrom_mark": FIG1 / "logos/uchrom_mark.png"})
 
 
@@ -311,12 +311,12 @@ def panel_a(x0=0, y0=2):
                zorder=5)
     # data strip
     text(mx + 1.8, ty + 19.4, "data", 4.6, GREY, va="center")
-    items = [("hdf5", "data.h5cd", INDIGO, "-"), ("cooler", ".cool · .scool", TEAL, (0, (2, 1))),
+    items = [("zarr", ".chromdata.zarr", INDIGO, "-"), ("cooler", ".cool · .scool", TEAL, (0, (2, 1))),
              ("mudata", ".h5mu", TEAL, (0, (2, 1)))]
     for k, (key, lab, col, ls) in enumerate(items):
         bx = mx + 1.8 + k * 17
         box(bx, ty + 21, 16, 9.2, fc="white", ec=col, lw=0.5, r=0.8, ls=ls, z=3)
-        lh = {"hdf5": 3.8, "cooler": 3.0, "mudata": 3.8}[key]
+        lh = {"zarr": 3.6, "cooler": 3.0, "mudata": 3.8}[key]
         from PIL import Image as _I
         iw, ih = _I.open(LOGO[key]).size
         place_png(LOGO[key], bx + 8 - lh * iw / ih / 2, ty + 22.0 + (3.8 - lh) / 2, h=lh)
@@ -731,7 +731,7 @@ def draw_scatter_b(ax, lasso=LASSO):
 def panel_b(x0=0, y0=61, w=104, h=66):
     panel(x0, y0, "b", "Linked exploration in the browser",
           "Takei 2025 cerebellum · lasso Bergmann cells in the RNA UMAP; every pane follows the selection")
-    y = window(x0, y0 + 8, w, h - 8, "localhost:8765  ·  U-Chrom", right="takei2025_fov0.h5cd")
+    y = window(x0, y0 + 8, w, h - 8, "localhost:8765  ·  U-Chrom", right="takei2025_fov0.chromdata.zarr")
     # toolbar
     A.add_patch(Rectangle((x0 + 0.35, y), w - 0.7, 3.6, fc="white", ec="none", zorder=2))
     A.plot([x0 + 0.4, x0 + w - 0.4], [y + 3.6, y + 3.6], color="#e3e6eb", lw=0.4, zorder=3)

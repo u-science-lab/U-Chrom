@@ -1,6 +1,6 @@
 """Extract the small real-data caches that the Fig 6 mock draws (Takei 2025 FOV 0).
 
-    PYTHONPATH=<repo> python paper/fig6/extract_data.py [path/to/takei2025_fov0.h5cd]
+    PYTHONPATH=<repo> python paper/fig6/extract_data.py [path/to/takei2025_fov0.chromdata.zarr]
 
 Dataset: `example-data/takei2025_fov0/` (catalogued in example-data/README.md; built by
 `example-data/build_takei2025_fov0.py`). Writes `_cache/takei_fov0.npz`.
@@ -17,7 +17,7 @@ from uchrom.fea.distance import mean_distance_matrix, radius_of_gyration
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-DEFAULT = REPO / "example-data/takei2025_fov0/takei2025_fov0.h5cd"
+DEFAULT = REPO / "example-data/takei2025_fov0/takei2025_fov0.chromdata.zarr"
 CHROM = "chr15"
 GROUPS = ["Bergmann", "Granule"]
 TRACKS = ["H3K27ac", "H3K9me3", "LaminB1"]
