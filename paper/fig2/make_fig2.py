@@ -33,6 +33,7 @@ from pathlib import Path
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.legend_handler import HandlerTuple
 from matplotlib.lines import Line2D
 
 HERE = Path(__file__).resolve().parent
@@ -247,6 +248,9 @@ def panel_b(fig, x0, y0):
             v = cap["cells"][r][c]["value"]
             if v == "native":
                 ax.plot(j + 0.5, i + 0.5, marker="o", ms=4.6, color=INDIGO, mec=INDIGO, mew=0.6)
+            elif v == "linked":                              # external file, queried through the index
+                ax.plot(j + 0.5, i + 0.5, marker="o", ms=4.6, mfc="white", mec=TEAL, mew=0.8, ls="")
+                ax.plot(j + 0.5, i + 0.5, marker="o", ms=2.0, color=TEAL, mec=TEAL, ls="")
             elif v == "convention":
                 ax.plot(j + 0.5, i + 0.5, marker="o", ms=4.6, mfc="white", mec=INDIGO, mew=0.8)
             else:
@@ -259,10 +263,14 @@ def panel_b(fig, x0, y0):
     for sp in ax.spines.values():
         sp.set_visible(False)
     hs = [Line2D([], [], marker="o", ls="", ms=4.2, color=INDIGO, mec=INDIGO, mew=0.6),
+          (Line2D([], [], marker="o", ls="", ms=4.2, mfc="white", mec=TEAL, mew=0.8),
+           Line2D([], [], marker="o", ls="", ms=1.8, color=TEAL, mec=TEAL)),
           Line2D([], [], marker="o", ls="", ms=4.2, mfc="white", mec=INDIGO, mew=0.8),
           Line2D([], [], color=GREY, lw=0.8)]
-    legend(fig, hs, ["native", "by convention", "not supported"], x0 + 3, gy + rh * len(rows) + 2.4, ncol=3,
-           handlelength=1.0, handletextpad=0.4, columnspacing=1.2)
+    legend(fig, hs, ["native", "linked", "by convention", "not supported"],
+           x0 + 3, gy + rh * len(rows) + 1.6, ncol=4,
+           handlelength=1.0, handletextpad=0.4, columnspacing=1.2,
+           handler_map={tuple: HandlerTuple(ndivide=1, pad=0)})
 
 
 def panel_c(fig, x0, y0):

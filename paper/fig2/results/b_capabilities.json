@@ -3,6 +3,7 @@
  "title": "What each format can represent",
  "marks": {
   "native": "first-class, with its own structure",
+  "linked": "held as an external community-standard file (not copied) and queried through the shared index",
   "convention": "representable by convention: stored and read back through the public API in a general-purpose slot, structure lost or ad hoc",
   "none": "not supported"
  },
@@ -106,7 +107,7 @@
     }
    },
    "contacts": {
-    "value": "native",
+    "value": "linked",
     "note": "linked, not copied: uns['linked_scool' / 'linked_cool'] records path, bin size and cell map; load_linked_scool / Dataset.contacts(group=) read them. Our own call: the pixels stay in the external .scool / .cool by design.",
     "evidence": [
      "uchrom/core/spec.md"
@@ -314,8 +315,8 @@
     }
    },
    "contacts": {
-    "value": "native",
-    "note": "one locus \u00d7 locus map fits varp (loci as var); per-cell maps have no slot. Ambiguous; given the better mark. Rated in the most favourable orientation; one AnnData has a single obs axis, so spots, cells and loci cannot all be first-class in the same object (see the hierarchy column).",
+    "value": "convention",
+    "note": "no contact-map type: one dense or sparse locus \u00d7 locus matrix can be put in varp (loci as var), without pixel/balancing schema, resolutions or per-cell maps. Rated in the most favourable orientation; one AnnData has a single obs axis, so spots, cells and loci cannot all be first-class in the same object (see the hierarchy column).",
     "evidence": [
      "https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.html"
     ],
@@ -436,8 +437,8 @@
     }
    },
    "contacts": {
-    "value": "native",
-    "note": "a table is an AnnData: one locus \u00d7 locus map in varp, as for AnnData (ambiguous; given the better mark)",
+    "value": "convention",
+    "note": "no contact-map element: a table is an AnnData, so one locus \u00d7 locus matrix in varp, as for AnnData",
     "evidence": [
      "https://spatialdata.scverse.org/en/stable/design_doc.html"
     ],
@@ -558,8 +559,8 @@
     }
    },
    "contacts": {
-    "value": "native",
-    "note": "varp of a cells \u00d7 loci modality (one map; as for AnnData, given the better mark)",
+    "value": "convention",
+    "note": "no contact-map type: varp of a cells \u00d7 loci modality (one matrix, as for AnnData)",
     "evidence": [
      "https://mudata.readthedocs.io/stable/io/mudata.html"
     ],
