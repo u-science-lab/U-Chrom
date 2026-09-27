@@ -64,7 +64,7 @@ ZARR = "chromdata.zarr 2.2"
 BACKED = "chromdata.zarr 2.2 (backed, from disk)"
 # panel c: the storage schemes the community uses for chromatin tracing
 FORMATS = {
-    ZARR: dict(color=INDIGO, ls="-", marker="D", lw=1.3, label="chromdata.zarr 2.2"),
+    ZARR: dict(color=INDIGO, ls="-", marker="D", lw=1.3, label="chromdata.zarr"),
     "FOF-CT / CSV": dict(color=FOFCOL, ls="-", marker="o", label="FOF-CT (4DN CSV)"),
     "AnnData (spots as obs)": dict(color=ADCOL, ls="-", marker="^", label="AnnData (spots as obs)"),
     "SpatialData (points + table)": dict(color=SDCOL, ls="-", marker="v", label="SpatialData (points)"),

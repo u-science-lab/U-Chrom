@@ -79,7 +79,6 @@ def table(c, x, y, w, h, color, cols=None, rows=8, title=None, sub=None, ls="-")
 def draw(c: C) -> None:
     c.t(0.5, 1.5, "a", size=10, weight="bold", va="top")
     c.t(6, 1.8, "ChromData: tables joined by keys", size=8.5, weight="bold", va="top")
-    c.t(64, 2.2, "format 2.3", size=6, color=GREY, va="top")
 
     # ---------------------------------------------------------------- bins axis (top)
     bx, by, bw, nb = 40, 13, 56, 14
@@ -191,7 +190,6 @@ def draw(c: C) -> None:
     dx, dy = 127, 7
     c.rect(dx - 2, dy - 2.5, 44.5, H - dy + 1.5, fc="#f7f8fa", ec=LGREY, lw=0.5, r=1.5, z=0)
     c.t(dx, dy + 0.4, "x.chromdata.zarr", size=7, weight="bold")
-    c.t(dx + 21.5, dy + 0.5, "format 2.3", size=6, color=GREY)
     c.t(dx, dy + 4.1, "Zarr + Parquet", size=6, color=GREY)
     logo(c, "zarr", dx + 16.2, dy + 2.55, h=3.1)
     logo(c, "parquet", dx + 26.6, dy + 2.7, h=2.8)

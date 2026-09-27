@@ -3,7 +3,7 @@
 Stacks the three supplementary figures of Fig. 2 as matplotlib subfigures, each drawn by its
 own script in its own mm frame, and letters the panels consecutively:
 
-  1  format versions, access by layout and by format, round trips   (make_figS_formats.py)
+  1  one trace / one chromosome, across formats                    (make_figS_access.py)
   2  cross-modal query: RNA groups -> pseudo-bulk Hi-C               (make_figS_crossmodal.py)
   3  linked vs copied contacts                                       (make_figS_contacts.py)
 
@@ -24,14 +24,14 @@ sys.path.insert(0, str(HERE))
 
 import make_figS_contacts as SC  # noqa: E402
 import make_figS_crossmodal as SX  # noqa: E402
-import make_figS_formats as SF  # noqa: E402
+import make_figS_access as SA  # noqa: E402
 
 MM = 1 / 25.4
 W = 170.0
 GAP = 8.0                                    # mm between sections
-SECTIONS = [(SF, SF.H), (SX, SX.H), (SC, SC.H)]
+SECTIONS = [(SA, SA.H), (SX, SX.H), (SC, SC.H)]
 SEP_TITLES = [None, "Linked vs copied contacts"]   # section 2 carries its own title; section 3 does not
-LEGENDS = ["figS_formats_legend.md", "figS_crossmodal_legend.md", "figS_contacts_legend.md"]
+LEGENDS = ["figS_access_legend.md", "figS_crossmodal_legend.md", "figS_contacts_legend.md"]
 
 
 def _panel_letters(fig):
@@ -44,11 +44,11 @@ def _panel_letters(fig):
 def write_legend(offsets) -> Path:
     """One legend: the three section legends with their panel letters shifted."""
     import re
-    parts = ["**Supplementary Figure S1 — Fig. 2 supplement: format versions, access by layout and by format, "
-             "round trips (a–g); cross-modal query (h–k); linked vs copied contacts (l–n).**"]
+    parts = ["**Supplementary Figure S1 — Fig. 2 supplement: access by format (a, b); cross-modal query (c–f); "
+             "linked vs copied contacts (g–i).**"]
     for name, off in zip(LEGENDS, offsets):
         txt = (HERE / name).read_text().strip()
-        txt = re.sub(r"^\*\*Supplementary Figure S\d+\s*[—-]\s*", "**", txt, count=1)   # keep the section title
+        txt = re.sub(r"^\*\*Supplementary Figure S\d+[a-z,–-]*\s*[—-]\s*", "**", txt, count=1)   # keep the section title
         txt = re.sub(r"\*\*([a-z])\*\*", lambda m: f"**{string.ascii_lowercase[off + ord(m.group(1)) - 97]}**", txt)
         parts.append(txt)
     out = HERE / "figS_fig2_legend.md"
