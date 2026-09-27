@@ -28,12 +28,19 @@ owners and are used for identification only" is recommended.
 | python | `python.svg` (vector, includes ™) | https://www.python.org/static/community_logos/python-logo-generic.svg (linked from https://www.python.org/community/logos/) | Python Software Foundation trademark. PSF Trademark Usage Policy (https://www.python.org/psf/trademarks/): stating accurately that software is written in Python is "always allowed … you may use the word 'Python' or the unaltered logos to indicate this, without our prior approval". The logos page asks you to "ask first when using a derived version". | Safe; no permission needed if used unaltered. |
 | mcp | `mcp.svg` (vector, icon + "Model Context Protocol" wordmark, dark-on-light) | https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/main/docs/logo/light.svg (same file served as the logo on modelcontextprotocol.io; dark-background version: `docs/logo/dark.svg`) | Site footer: "Copyright © Model Context Protocol a Series of LF Projects, LLC. For web site terms of use, trademark policy and other project policies please see https://lfprojects.org". Repo: Apache-2.0 (code/spec), CC-BY-4.0 (docs), with some parts still MIT. The LF Projects trademark policy allows nominative use to refer to the project. | Safe for identification; no permission needed. If space is tight, the icon alone is acceptable, because MCP uses it on its own as the site favicon (`docs/favicon.svg`). |
 
-| zarr | `zarr.svg` (vector, horizontal pink "Zarr" logo; used in Fig. 2a) | https://raw.githubusercontent.com/zarr-developers/zarr-logo/main/zarr-pink-horizontal.svg (official logo repository `zarr-developers/zarr-logo`; linked from zarr.dev and the `zarr-developers/community` logo README) | The logo repository has no licence file and no usage page. Zarr is a NumFOCUS fiscally sponsored project, so the NumFOCUS Trademark Guidelines apply. They allow using the logo "in illustrations within the document, as long as the use does not suggest that we have published, endorse, or agree with your work". | Safe for identification in a journal figure; no permission needed. Use unaltered, and do not imply endorsement. |
-| parquet | `parquet.svg` (vector, horizontal logo with the "Parquet" wordmark; file `logo/parquet-logos_2.svg`, renamed only; used in Fig. 2a) | https://raw.githubusercontent.com/apache/parquet-format/master/logo/parquet-logos_2.svg (official `apache/parquet-format` repository, `logo/`; the site parquet.apache.org uses the same mark) | The file is licensed to the ASF under the Apache License 2.0 (header). "Apache Parquet", "Parquet" and the Parquet logo are trademarks of The Apache Software Foundation. The ASF Trademark Policy (https://www.apache.org/foundation/marks/) permits nominative use to refer to the project, if the logo is not altered and endorsement is not implied. It asks for attribution: "Apache Parquet and the Parquet logo are trademarks of The Apache Software Foundation." | Safe for identification; no permission needed. Include the ASF attribution in the legend. |
-
 ## Not found / caveats
 
 - **Juicer**: no official Juicer logo exists. The Aiden Lab logo is provided as a stand-in and needs permission; a text label is recommended instead.
 - **Open2C**: only a 160 px raster exists (no SVG, no brand page).
 - **Higashi, pyHiM**: official logos exist, but only as small rasters (426×200 and 237×220). pyHiM has no transparency.
 - **HDF5**: no current official SVG found. The 512 px PNG mark is used.
+
+## zarr — `zarr.svg`
+- Source: https://github.com/zarr-developers/zarr-logo (`zarr-pink-horizontal.svg`), the official logo repository referenced by zarr-developers/community.
+- Licence / terms: no explicit licence file in the logo repository; the logo is used across the Zarr community (zarr-python README, GitHub org, docs).
+- Use: identification of the Zarr format in Fig. 1c, unaltered. Low risk; permission optional (Zarr is a NumFOCUS-sponsored project).
+
+## parquet — `parquet.png`
+- Source: https://www.apache.org/logos/res/parquet/parquet_highres.png (Apache Software Foundation project logo page, 3600×734 px).
+- Licence / terms: Apache Parquet and its logo are trademarks of the ASF; the ASF trademark policy (https://www.apache.org/foundation/marks/) allows nominative use to refer to the project without permission, unaltered, with attribution.
+- Use: identification of Parquet tables in Fig. 1c, unaltered. Safe; no permission needed.

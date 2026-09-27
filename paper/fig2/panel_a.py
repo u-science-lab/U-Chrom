@@ -264,20 +264,23 @@ _LOGO_CACHE: dict = {}
 
 
 def logo(c: "C", key: str, x: float, y: float, h: float) -> None:
-    """An official logo (``paper/fig1/logos_ext/<key>.svg``, unaltered),
-    rasterised at 1200 px height with rsvg-convert, placed at (x, y) (top
-    left, mm) with height ``h`` mm (aspect kept)."""
+    """An official logo from ``paper/fig1/logos_ext/`` (``<key>.svg``,
+    rasterised with rsvg-convert, or ``<key>.png``; unaltered, the empty
+    canvas around it trimmed), placed at (x, y) (top left, mm) with height
+    ``h`` mm (aspect kept)."""
     import subprocess
 
     from PIL import Image
 
     if key not in _LOGO_CACHE:
-        svg = HERE.parent / "fig1" / "logos_ext" / f"{key}.svg"
-        png = HERE / "_cache" / f"logo_{key}.png"
-        png.parent.mkdir(exist_ok=True)
-        if not png.exists() or png.stat().st_mtime < svg.stat().st_mtime:
-            subprocess.run(["rsvg-convert", "-h", "600", str(svg), "-o", str(png)], check=True)
-        im = Image.open(png).convert("RGBA")
+        base = HERE.parent / "fig1" / "logos_ext"
+        svg, src = base / f"{key}.svg", base / f"{key}.png"
+        if svg.exists():
+            src = HERE / "_cache" / f"logo_{key}.png"
+            src.parent.mkdir(exist_ok=True)
+            if not src.exists() or src.stat().st_mtime < svg.stat().st_mtime:
+                subprocess.run(["rsvg-convert", "-h", "600", str(svg), "-o", str(src)], check=True)
+        im = Image.open(src).convert("RGBA")
         _LOGO_CACHE[key] = np.asarray(im.crop(im.getchannel("A").getbbox()))   # empty canvas trimmed
     im = _LOGO_CACHE[key]
     w = h * im.shape[1] / im.shape[0]
