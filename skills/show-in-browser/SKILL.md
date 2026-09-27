@@ -1,6 +1,6 @@
 ---
 name: show-in-browser
-description: Read what the researcher selected in the U-Chrom web browser and show results there — select or focus cells, set the genomic locus, open Genome / Stats / Embedding / 3D / Matrix views scoped to groups, arrange and capture them. Use whenever a U-Chrom browser is open (python -m uchrom.browser --web) and a result should be seen, or the question refers to "these cells", "my selection", "what I'm looking at".
+description: Only when a U-Chrom web browser is running or the user asks to show results in it — read the researcher's selection, open / arrange / capture views. Not for computing answers.
 ---
 
 # Show results in the researcher's browser
