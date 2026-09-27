@@ -1,0 +1,113 @@
+{
+ "150kb": {
+  "uchrom_run_mds_s": 0.18,
+  "n_bins": 312,
+  "n_uchrom": 218,
+  "n_minimds": 218,
+  "minimds_full_vs_uchrom": {
+   "n": 218,
+   "pearson": 0.9632,
+   "spearman": 0.9531,
+   "rmsd_rg": 0.4924
+  },
+  "fit_hic_uchrom": {
+   "spearman": 0.865,
+   "pearson": 0.8381
+  },
+  "fit_hic_minimds": {
+   "spearman": 0.8613,
+   "pearson": 0.8354
+  },
+  "minimds_full_rep1_vs_rep2": {
+   "n": 218,
+   "pearson": 0.9424,
+   "spearman": 0.93,
+   "rmsd_rg": 0.6012
+  }
+ },
+ "90kb": {
+  "uchrom_run_mds_s": 0.19,
+  "n_bins": 519,
+  "n_uchrom": 359,
+  "n_minimds": 359,
+  "minimds_full_vs_uchrom": {
+   "n": 359,
+   "pearson": 0.9993,
+   "spearman": 0.9994,
+   "rmsd_rg": 0.0445
+  },
+  "fit_hic_uchrom": {
+   "spearman": 0.7728,
+   "pearson": 0.7675
+  },
+  "fit_hic_minimds": {
+   "spearman": 0.7728,
+   "pearson": 0.7679
+  },
+  "minimds_full_rep1_vs_rep2": {
+   "n": 359,
+   "pearson": 0.9982,
+   "spearman": 0.9984,
+   "rmsd_rg": 0.0755
+  }
+ },
+ "30kb": {
+  "uchrom_run_mds_s": 0.86,
+  "n_bins": 1557,
+  "n_uchrom": 1062,
+  "n_minimds": 1062,
+  "minimds_full_vs_uchrom": {
+   "n": 1062,
+   "pearson": 0.9982,
+   "spearman": 0.9975,
+   "rmsd_rg": 0.0506
+  },
+  "fit_hic_uchrom": {
+   "spearman": 0.6679,
+   "pearson": 0.6777
+  },
+  "fit_hic_minimds": {
+   "spearman": 0.6679,
+   "pearson": 0.6789
+  },
+  "minimds_full_rep1_vs_rep2": {
+   "n": 1062,
+   "pearson": 0.9984,
+   "spearman": 0.9978,
+   "rmsd_rg": 0.0493
+  },
+  "uchrom_partitioned_s": 0.64,
+  "minimds_part_vs_uchrom_part": {
+   "n": 1056,
+   "pearson": 0.8923,
+   "spearman": 0.8711,
+   "rmsd_rg": 0.3598
+  },
+  "minimds_part_vs_minimds_full": {
+   "n": 1062,
+   "pearson": 0.7927,
+   "spearman": 0.7874,
+   "rmsd_rg": 0.6226
+  },
+  "uchrom_part_vs_uchrom_full": {
+   "n": 1056,
+   "pearson": 0.7688,
+   "spearman": 0.7626,
+   "rmsd_rg": 0.6642
+  },
+  "fit_hic_uchrom_part": {
+   "spearman": 0.6374,
+   "pearson": 0.6394
+  },
+  "fit_hic_minimds_part": {
+   "spearman": 0.6863,
+   "pearson": 0.6731
+  },
+  "minimds_part_rep1_vs_rep2": {
+   "n": 1062,
+   "pearson": 0.9448,
+   "spearman": 0.9217,
+   "rmsd_rg": 0.5131
+  }
+ }
+}

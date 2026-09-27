@@ -57,6 +57,21 @@ def test_gem_fish_with_fish_constraints():
     assert isinstance(inter, dict)
 
 
+def test_gem_fish_user_tads_with_gaps():
+    """User TADs that skip bins: one spot per bin inside a TAD, no crash."""
+    import pandas as pd
+    from uchrom.recon.fish import reconstruct_gem_fish
+
+    tads = pd.DataFrame({"start": [18_000_000, 18_600_000, 19_500_000],
+                         "end": [18_300_000, 19_200_000, 19_800_000]})
+    cd = reconstruct_gem_fish(str(COOL), "chr21", tads=tads, params=_params())
+    st = cd.spots_with_loci()["start"].to_numpy()
+    assert len(st) == 10 + 20 + 10
+    assert st.min() == 18_000_000 and st.max() == 19_770_000
+    assert not ((st >= 18_300_000) & (st < 18_600_000)).any()
+    assert np.isfinite(cd.coords).all()
+
+
 def test_mds_seed_all_missing_returns_finite_cloud():
     """Regression: an all-NaN FISH matrix (no FISH) used to crash eigh."""
     from uchrom.recon.fish._tad_level import _mds_seed

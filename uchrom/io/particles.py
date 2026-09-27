@@ -76,7 +76,8 @@ def count_contacts(df, particles, min_skip=2):
             ix = np.searchsorted(sub_prat['start'], sub_df[p], side='right') - 1
             idxs.append(sub_prat.iloc[ix,:].index)
         if not "count" in df.columns:  # pairs
-            idx_pair = np.sort(np.c_[idxs[0], idxs[1]], axis=0)
+            # sort each (i, j) pair, not each column (axis=0 scrambled the pairing)
+            idx_pair = np.sort(np.c_[idxs[0], idxs[1]], axis=1)
             pair, cnt = np.unique(idx_pair, axis=0, return_counts=True)
         else:  # cool
             idx_df = pd.DataFrame({"ix1": idxs[0], "ix2": idxs[1], "count": sub_df['count']})

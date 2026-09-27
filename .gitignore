@@ -76,3 +76,14 @@ example-data/fig2_work/
 
 # Fig. 2 build cache (rasterised logos, previews)
 paper/fig2/_cache/
+
+# Figure 3 inputs (example-data/download_data.py --fig3, build_rao2014_slices.py); feasibility JSONs are committed
+example-data/stevens2017_mesc/
+example-data/bintu2018/
+example-data/su2020_imr90/
+example-data/abbas2019_gemfish/
+example-data/rao2014_imr90/
+example-data/rao2014_k562/
+example-data/rao2014_gm12878/
+example-data/ray2019_k562/
+!paper/fig3/feasibility/*.json
