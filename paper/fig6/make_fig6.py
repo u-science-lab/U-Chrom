@@ -1,15 +1,15 @@
 """Figure 6 — analysis in code, visualization in the browser, for researchers and agents (draft).
 
 Real data where it exists: b and the views in d draw Takei 2025 FOV 0 (``extract_data.py`` ->
-``_cache/takei_fov0.npz``); c reads the browser benchmarks (``benchmarks/fig6`` -> ``results/*.json``).
-Everything that is not yet a real result sits in a red dashed **placeholder** frame, with the reason:
-the skills benchmark in e (``mock_data()``, benchmark pending).
+``_cache/takei_fov0.npz``); c reads the browser benchmarks (``benchmarks/fig6`` -> ``results/*.json``); e reads
+the agent benchmark (``benchmarks/fig6/agent_bench/summarize.py`` -> ``results/agent_bench.json``).  Anything
+that is not yet a real result sits in a red dashed **placeholder** frame, with the reason.
 
   a  analysis = uchrom Python API (notebooks; coding agents + skills); visualization = browser (GUI; WebMCP)
   b  linked exploration in the browser (annotated screenshot, Takei 2025)
   c  browser performance: time to first frame, interaction latency
   d  handoff: coding agent reads the lasso, analyses in uchrom, opens views in the browser
-  e  skills: anatomy of a skill; task success with API docs only vs + skills
+  e  skills: anatomy of a skill; agent benchmark score with API docs only vs + skills
 
     python paper/fig6/make_fig6.py          # -> fig6.pdf / fig6.png
 """
@@ -72,16 +72,13 @@ def mock_data() -> dict:
                for k, m, s in [("Granule", 1.16, 400), ("Bergmann", 1.47, 160), ("Purkinje", 1.86, 60)]}
     x = RNG.lognormal(2, 1.2, 1500)
     d["pb"] = (x, x)
-    d["bench"] = {  # task category -> success (%) for no tools / MCP / MCP + skills  (to be measured)
-        "inspect data": (55, 85, 92), "call structures": (30, 60, 82),
-        "compare groups": (35, 62, 88), "cross-modal": (15, 40, 70)}
     return d
 
 
 def load_results() -> dict:
     """Real benchmark results (benchmarks/fig6 -> results/*.json); missing files -> {}."""
     out = {}
-    for k in ("frontend", "server"):
+    for k in ("frontend", "server", "agent_bench"):
         f = HERE / "results" / f"{k}.json"
         if f.exists():
             import json
@@ -1008,8 +1005,13 @@ def draw_agent_umap(ax, cax, lasso=LASSO):
 
 # --------------------------------------------------------------------------- e  skills
 
-def panel_e(d, x0=108, y0=133):
-    panel(x0, y0, "e", "Skills make agents reliable")
+BENCH_CATS = [("inspect", "inspect\ndata"), ("structure", "call\nstructures"), ("compare", "compare\ngroups"),
+              ("associate", "cross-\nmodal"), ("knowhow", "know-\nhow")]
+BENCH_MODELS = [("opus", "Opus 5.5", "o"), ("sonnet", "Sonnet 5", "s"), ("haiku", "Haiku 4.5", "^")]
+
+
+def panel_e(r, x0=108, y0=133):
+    panel(x0, y0, "e", "Agent skills: anatomy and benchmark")
     ty = y0 + 9
     box(x0 + 2, ty, 60, 21, fc="#fcefe6", ec=ORANGE, lw=0.5)
     chat_line(x0 + 3.5, ty + 1.2, "skills/compare-groups/", ORANGE, 4.8, mono=True, weight="bold")
@@ -1020,22 +1022,43 @@ def panel_e(d, x0=108, y0=133):
     for k, (a_, b_) in enumerate(rows):
         chat_line(x0 + 3.5, ty + 5.2 + k * 3.8, a_, INK, 4.5, mono=a_.endswith((".md", "/")), weight="bold")
         chat_line(x0 + 16, ty + 5.2 + k * 3.8, b_, GREY, 4.4)
+
+    # e2: mean score (% of grading checks passed) per task category, docs only vs docs + skills.
+    # Bars = mean of the three Claude models; markers = each model.
+    ms = r["models"]
+    keys = [k for k, _ in BENCH_CATS] + ["all"]
+    labels = [lab for _, lab in BENCH_CATS] + ["all\ntasks"]
+
+    def score(m, c, k):
+        cond = ms[m]["conditions"][c]
+        return 100 * (cond["score"] if k == "all" else cond["by_category"][k])
+
     ax = ax_mm(x0 + 9, ty + 27, 53, 22)
-    cats = list(d["bench"])
-    v = np.array([d["bench"][c] for c in cats])[:, 1:]
     cols, labs = [LGREY, ORANGE], ["API docs only", "API docs + skills"]
     bw = 0.36
-    for j in range(2):
-        xx = np.arange(len(cats)) + (j - 0.5) * bw
-        ax.bar(xx, v[:, j], width=bw, color=cols[j], label=labs[j])
-        for k, mk in enumerate(["o", "s"]):  # per agent (Claude Code, Codex) — placeholder
-            ax.scatter(xx, v[:, j] + (k - 0.5) * 8, s=3, marker=mk, color=INK, zorder=4, lw=0)
-    ax.set_xticks(np.arange(len(cats)), [c.replace(" ", "\n") for c in cats], fontsize=F(4.6), linespacing=1.0)
-    ax.set_ylabel("tasks solved (%)", labelpad=1), ax.set_ylim(0, 100)
-    ax.legend(frameon=False, fontsize=F(4.5), ncol=2, loc="upper center", bbox_to_anchor=(0.5, 1.22),
-              handlelength=0.8, columnspacing=0.8)
-    ax.text(1.0, -0.32, "● Claude Code  ■ Codex", transform=ax.transAxes, fontsize=F(4.2), color=GREY, ha="right")
+    for j, c in enumerate(("docs", "skills")):
+        xx = np.arange(len(keys)) + (j - 0.5) * bw + np.array([0.25 if k == "all" else 0 for k in keys])
+        v = [np.mean([score(m, c, k) for m, _, _ in BENCH_MODELS]) for k in keys]
+        ax.bar(xx, v, width=bw, color=cols[j], label=labs[j])
+        for m, _, mk in BENCH_MODELS:
+            ax.scatter(xx, [score(m, c, k) for k in keys], s=3, marker=mk, facecolor="white", edgecolor=INK,
+                       lw=0.4, zorder=4, clip_on=False)
+    ax.axvline(len(keys) - 1.5 + 0.125, color=LGREY, lw=0.4, ls=(0, (2, 2)))
+    ax.set_xticks(np.arange(len(keys)) + np.array([0.25 if k == "all" else 0 for k in keys]), labels,
+                  fontsize=F(4.4), linespacing=1.0)
+    ax.set_ylabel("checks passed (%)", labelpad=1), ax.set_ylim(0, 100)
     ax.tick_params(axis="x", length=0)
+    from matplotlib.lines import Line2D
+    hs = [Line2D([], [], ls="none", marker=mk, ms=2.6, mfc="white", mec=INK, mew=0.4,
+                 label=f"{name} {ms[m]['conditions']['skills']['n_skill_loaded']}/"
+                       f"{ms[m]['conditions']['skills']['n_tasks']}") for m, name, mk in BENCH_MODELS]
+    ax.add_artist(ax.legend(handles=hs, frameon=False, fontsize=F(4.1), ncol=3, loc="upper center",
+                            bbox_to_anchor=(0.5, -0.29), handlelength=0.6, handletextpad=0.3, columnspacing=0.7,
+                            labelcolor=GREY, borderaxespad=0))
+    ax.legend(frameon=False, fontsize=F(4.5), ncol=2, loc="upper center", bbox_to_anchor=(0.5, 1.22),
+              handles=ax.get_legend_handles_labels()[0][:2], handlelength=0.8, columnspacing=0.8)
+    ax.text(0.5, -0.50, "n/40: skill loaded · 1 run per task · judge Sonnet 5",
+            transform=ax.transAxes, fontsize=F(4.1), color=GREY, ha="center")
 
 
 # --------------------------------------------------------------------------- main
@@ -1063,8 +1086,11 @@ def main():
     panel_b()
     panel_c(d)
     panel_d(d)
-    panel_e(d)
-    placeholder(108.5, 163.2, 61.5, 36.4, "placeholder numbers · benchmark pending")
+    r = load_results()
+    if "agent_bench" in r:
+        panel_e(r["agent_bench"])
+    else:
+        raise SystemExit("results/agent_bench.json missing: run benchmarks/fig6/agent_bench/summarize.py")
     fig.savefig(HERE / "fig6.pdf")
     fig.savefig(HERE / "fig6.png", dpi=300)
 
