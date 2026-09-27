@@ -1,4 +1,4 @@
-"""Figure 2a — ChromData: tables, keys and the on-disk layout (format 2.2).
+"""Figure 2a — ChromData: tables, keys and the on-disk layout (format 2.3).
 
 Follows docs/source/guide/chromdata_2_0_design.md (Overview, section 2 `bins`,
 section 4) and the on-disk layout actually written by ``uchrom.core.zarrcd``
@@ -79,7 +79,7 @@ def table(c, x, y, w, h, color, cols=None, rows=8, title=None, sub=None, ls="-")
 def draw(c: C) -> None:
     c.t(0.5, 1.5, "a", size=10, weight="bold", va="top")
     c.t(6, 1.8, "ChromData: tables joined by keys", size=8.5, weight="bold", va="top")
-    c.t(64, 2.2, "format 2.2", size=6, color=GREY, va="top")
+    c.t(64, 2.2, "format 2.3", size=6, color=GREY, va="top")
 
     # ---------------------------------------------------------------- bins axis (top)
     bx, by, bw, nb = 40, 13, 56, 14
@@ -186,12 +186,12 @@ def draw(c: C) -> None:
     c.t(ex + 9, 63.2, "uns", size=6, ha="center")
 
     # ---------------------------------------------------------------- on-disk layout (right column)
-    # the actual store written by uchrom.core.zarrcd (format 2.2; spec.md); a glyph per node gives
+    # the actual store written by uchrom.core.zarrcd (format 2.3; spec.md); a glyph per node gives
     # its storage type: Parquet table, Zarr array or JSON attributes
     dx, dy = 127, 7
     c.rect(dx - 2, dy - 2.5, 44.5, H - dy + 1.5, fc="#f7f8fa", ec=LGREY, lw=0.5, r=1.5, z=0)
     c.t(dx, dy + 0.4, "x.chromdata.zarr", size=7, weight="bold")
-    c.t(dx + 21.5, dy + 0.5, "format 2.2", size=6, color=GREY)
+    c.t(dx + 21.5, dy + 0.5, "format 2.3", size=6, color=GREY)
     c.t(dx, dy + 4.1, "Zarr + Parquet", size=6, color=GREY)
     logo(c, "zarr", dx + 16.2, dy + 2.55, h=3.1)
     logo(c, "parquet", dx + 26.6, dy + 2.7, h=2.8)
@@ -202,7 +202,7 @@ def draw(c: C) -> None:
         ("primary/", "parquet", PURPLE, None, "spot tracks · layers · other spot\ncolumns, cell-sorted, no keys", 1),
         ("derived/", "parquet", INDIGO, None, "spot columns stored once per\nbin / cell / trace", 1),
         ("bins · cells · traces", "parquet", GREY, None, None, 1),
-        ("intervals/ · points/", "parquet", TEAL, None, None, 1),
+        ("intervals · points · cell_shapes", "parquet", TEAL, None, None, 1),
         ("index/", "zarr", INDIGO, None, "run offsets: primary ↔ coords", 0),
         ("cellm/ · binm/", "zarr", PURPLE, None, None, 0),
         ("results/ · uns/", "json", GREY, "+ provenance", None, 0),

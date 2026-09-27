@@ -37,7 +37,10 @@ Rules:
   slot must hold the data as data (arrays, tables, columns, AnnData ``uns``
   DataFrames).  Parameters / software records (provenance) in such an
   attribute do count, the analysis result itself must be stored as data.
-  The JSON tests are still run and recorded (``counted: false``);
+  Scalar key-values describing the object that carries the attribute do
+  count, as a general-purpose slot: each cell's own properties in the
+  ``metadata`` of that cell's cooler in a ``.scool``.  The JSON tests that
+  do not count are still run and recorded (``counted: false``);
 * partial reads: ``native`` when one cell's (or one chromosome's) rows can be
   read while reading from disk only those rows plus, at most, the selection
   key column (an index, row groups or chunked arrays); ``convention`` when the
@@ -71,7 +74,7 @@ warnings.filterwarnings("ignore")
 
 ROWS = ["chromdata.zarr", "FOF-CT (4DN)", "AnnData", "SpatialData", "MuData", "cooler (.cool / .scool)"]
 COLS = [
-    ("coords", "3-D coordinates"),
+    ("coords", "spot coordinates (x, y, z)"),
     ("hierarchy", "cell › trace › spot hierarchy"),
     ("spot_signals", "per-spot signals"),
     ("bin_signals", "per-locus (bin) signals"),
@@ -84,6 +87,38 @@ COLS = [
     ("provenance", "analysis results with provenance"),
     ("partial", "partial reads by cell / chromosome"),
 ]
+
+#: one-sentence definition of every column (legend, caption and Table S1)
+COL_DEFS = {
+    "coords": "the x, y, z position of every spot (one imaged or reconstructed locus in one trace), with its unit.",
+    "hierarchy": "which trace and which cell each spot belongs to, as nested levels rather than loose labels.",
+    "spot_signals": "values measured per spot, such as immunofluorescence intensity or z-scores at that spot.",
+    "bin_signals": "values per genomic bin shared by all cells, such as bulk ATAC / ChIP tracks or GC content.",
+    "cells": "a table of scalar properties per cell, such as cell type, volume or RNA counts.",
+    "cell_emb": "a multi-dimensional vector per cell, such as a PCA, UMAP or learned embedding.",
+    "cell_pos": "where each cell is in the tissue or field of view (centroid and / or outline), with unit and "
+                "coordinate frame.",
+    "contacts": "locus × locus contact counts (Hi-C-type maps), in bulk or per cell.",
+    "intervals": "genomic intervals and interval pairs called on the data, such as TADs and loops.",
+    "points": "3-D points that are not genomic loci, such as RNA spots or protein puncta.",
+    "provenance": "analysis results stored as data together with the function, parameters and version that "
+                  "produced them.",
+    "partial": "reading one cell's or one chromosome's rows from disk without reading the rest of the data.",
+}
+AUDIT_DATE = "2026-09-27"
+#: the changes of the previous audit (2026-09-26, PR #76), kept in Table S1
+PRIOR_AUDIT = {
+    "date": "2026-09-26",
+    "changes": [
+        ("FOF-CT (4DN)", "cell_emb", "native", "convention",
+         "split from 'cells & embeddings': FOF-CT has a cell table but no multi-dimensional per-cell slot"),
+        ("SpatialData", "partial", "native", "convention",
+         "criterion made explicit: a full partition scan is 'by convention'"),
+        ("MuData", "partial", "native", "convention",
+         "criterion made explicit: backed mode loads obs / obsm (the coordinates) whole"),
+    ],
+    "note": "New columns: cell embeddings (split from 'cells & embeddings') and cell spatial position.",
+}
 
 RNG = np.random.default_rng(0)
 N_CELL, N_TRACE_PER_CELL, N_BIN = 3, 2, 8
@@ -110,12 +145,14 @@ def toy():
     cells = pd.DataFrame({"cell_type": ["a", "b", "a"]}, index=[f"c{c}" for c in range(N_CELL)])
     emb = RNG.normal(size=(N_CELL, 2))
     cell_xy = RNG.uniform(0, 100, size=(N_CELL, 2))           # cell centroids in the tissue / FOV
+    cell_z = RNG.uniform(0, 10, size=N_CELL)
+    outlines = [np.array([(x - 5, y - 5), (x + 5, y - 5), (x + 5, y + 5), (x - 5, y + 5)]) for x, y in cell_xy]
     contacts = pd.DataFrame({"bin1_id": [0, 0, 1, 5], "bin2_id": [0, 1, 3, 7], "count": [5, 3, 2, 1]})
     tads = pd.DataFrame({"chrom": ["chr1", "chr1"], "start": [0, 200], "end": [200, 500]})
     rna = pd.DataFrame({"x": RNG.normal(size=20), "y": RNG.normal(size=20), "z": RNG.normal(size=20),
                         "gene": RNG.choice(["Actb", "Gapdh"], 20), "cell_id": RNG.choice(["c0", "c1", "c2"], 20)})
     return dict(bins=bins, spots=spots, xyz=xyz, spot_sig=spot_sig, bin_sig=bin_sig, cells=cells, emb=emb,
-                cell_xy=cell_xy, contacts=contacts, tads=tads, rna=rna)
+                cell_xy=cell_xy, cell_z=cell_z, outlines=outlines, contacts=contacts, tads=tads, rna=rna)
 
 
 def dense(contacts, n=N_BIN):
@@ -161,7 +198,9 @@ def t_chromdata(tmp):
                    spot_tracks=pd.DataFrame({"intensity": d["spot_sig"]}),
                    tracks=pd.DataFrame({"atac": d["bin_sig"]}),
                    points={"rna": d["rna"]})
-    cd.set_cell_spatial_coordinates(d["cell_xy"], coordinate_system="fov_um", source="segmentation")
+    cd.set_cell_positions(np.c_[d["cell_xy"], d["cell_z"]], cell_ids=list(d["cells"].index), unit="um",
+                          frame="fov", status="measured", source="segmentation")
+    cd.set_cell_shapes(d["outlines"], cell_ids=list(d["cells"].index), unit="um", frame="fov")
     cd.intervals.add("tads", d["tads"], kind="domain")
     cd.intervals.add("loops", pd.DataFrame({"chrom1": ["chr1"], "start1": [0], "end1": [100],
                                             "chrom2": ["chr1"], "start2": [300], "end2": [400]}), kind="pair")
@@ -176,8 +215,9 @@ def t_chromdata(tmp):
     one = b.get_cell("c1")
     ch = b.get_chrom("chr2")
     c1 = r.load_linked_scool(cell="c1")
-    sp = r.uns["cell_spatial"]
-    sp = sp.get("default", sp)
+    pos = r.cell_positions()
+    shp = r.cell_shapes["cell"].set_index("cell_id")
+    from uchrom.core.cellspatial import polygon_rings
     loops = r.intervals["loops"]
     return {
         "coords": T(np.allclose(r.coords, cd.coords), DED, "coords (n_spots, 3)"),
@@ -188,10 +228,12 @@ def t_chromdata(tmp):
         "bin_signals": T(np.allclose(r.bin_tracks["atac"], d["bin_sig"]), DED, "bins + bin_tracks"),
         "cells": T(r.cells["cell_type"].astype(str).tolist() == ["a", "b", "a"], DED, "cells table"),
         "cell_emb": T(np.allclose(r.cellm["X_umap"], d["emb"]), DED, "cellm['X_umap'] (n_cells, 2)"),
-        "cell_pos": T(np.allclose(r.cells[[sp["x_col"], sp["y_col"]]].to_numpy(), d["cell_xy"])
-                      and sp["coordinate_system"] == "fov_um", GEN,
-                      "set_cell_spatial_coordinates: two extra columns of the cells table (spatial_x, "
-                      "spatial_y) + a uns['cell_spatial'] record; 2-D, no outline"),
+        "cell_pos": T(np.allclose(pos[["x", "y", "z"]].to_numpy(), np.c_[d["cell_xy"], d["cell_z"]])
+                      and pos.attrs["cell_spatial"]["frame"] == "fov" and pos.attrs["cell_spatial"]["unit"] == "um"
+                      and np.allclose(polygon_rings(shp.loc["c1", "geometry"])[0][:4], d["outlines"][1]), DED,
+                      "set_cell_positions: cells centroid_x / y / z + uns['cell_spatial'] record (unit, frame, "
+                      "status); set_cell_shapes: outlines as GeoParquet tables/cell_shapes/cell.parquet "
+                      "(spec.md 'Cell spatial position', format 2.3)"),
         "contacts": T(np.allclose(c1.matrix(balance=False)[:], sym(d["contacts"]))
                       and r.uns["linked_scool"]["default"]["bin_size"] == 100, EXT,
                       "link_scool → uns['linked_scool'] record; load_linked_scool(cell='c1') reads the "
@@ -315,6 +357,8 @@ def t_spatialdata(tmp):
     p = r.points["spots"].compute().sort_values("spot_id")
     rs = r.tables["spot_table"]
     rs_sig = pd.Series(np.asarray(rs.X).ravel(), index=rs.obs["spot_id"].to_numpy()).sort_index()
+    # the table is an annotator of the points element: get_values joins it through instance_key
+    got = sd.get_values(value_key="intensity", sdata=r, element_name="spots", table_name="spot_table")
     rct = r.tables["cell_table"]
     circ = r.shapes["cells"].loc[cid]
     poly = r.shapes["cell_outlines"].loc[cid]
@@ -322,8 +366,11 @@ def t_spatialdata(tmp):
         "coords": T(np.allclose(p[["x", "y", "z"]].to_numpy(), d["xyz"]), DED, "3-D points element (x, y, z)"),
         "hierarchy": T(p["trace_id"].tolist() == df["trace_id"].tolist(), GEN, "trace_id / cell_id point columns"),
         "spot_signals": T(np.allclose(rs_sig.to_numpy(), d["spot_sig"])
-                          and rs.uns["spatialdata_attrs"]["region"] == "spots", DED,
-                          "a table annotating the spots points (region='spots', instance_key='spot_id')"),
+                          and rs.uns["spatialdata_attrs"]["region"] == "spots"
+                          and "spot_table" in sd.get_element_annotators(r, "spots")
+                          and np.allclose(np.sort(got.to_numpy().ravel()), np.sort(d["spot_sig"])), DED,
+                          "a table annotating the spots points (region='spots', instance_key='spot_id'); "
+                          "get_element_annotators lists it and get_values joins it to the points"),
         "bin_signals": T(np.allclose(rct.var["atac"], d["bin_sig"]), DED,
                          "var column of a cells × loci table annotating the cell shapes"),
         "cells": T(rct.obs["cell_type"].tolist() == ["a", "b", "a"], DED, "table annotating the cell shapes"),
@@ -434,20 +481,71 @@ def t_cooler(tmp):
     out["partial"] = T(c.matrix(balance=False).fetch("chr2").shape == (3, 3)
                        and one.matrix(balance=False).fetch("chr1").shape == (5, 5), DED,
                        "indexed fetch('chr2'); one cell group of a .scool")
-    # Data tables serialised to JSON text in the metadata attribute are recorded but NOT counted
-    # (rule 3): a cell table, an embedding, cell centroids and 2e5 RNA spots.
+    # Traces and spots in a .scool: create_scool accepts one bins table per cell; each trace of the cell
+    # becomes a set of extra bins columns (x_<trace>, y_<trace>, z_<trace>, intensity_<trace>).
+    tr = str(tmp / "traces.scool")
+    sp_ = d["spots"]
+    per_cell_bins = {}
+    for c in d["cells"].index:
+        b = d["bins"].copy()
+        for t in sorted(sp_.loc[sp_["cell_id"] == c, "trace_id"].unique()):
+            m = (sp_["trace_id"] == t).to_numpy()
+            b[[f"x_{t}", f"y_{t}", f"z_{t}"]] = d["xyz"][m][sp_.loc[m, "bin_id"].to_numpy()]
+            b[f"intensity_{t}"] = d["spot_sig"][m][sp_.loc[m, "bin_id"].to_numpy()]
+        per_cell_bins[c] = b
+    cooler.create_scool(tr, per_cell_bins, {c: d["contacts"] for c in d["cells"].index})
+    xyz_back, sig_back, trace_back = np.zeros_like(d["xyz"]), np.zeros(N_SPOT), [None] * N_SPOT
+    for g in cooler.fileops.list_scool_cells(tr):
+        rb_c = cooler.Cooler(f"{tr}::{g}").bins()[:]
+        for t in [col[2:] for col in rb_c.columns if col.startswith("x_")]:
+            m = np.flatnonzero((sp_["trace_id"] == t).to_numpy())
+            xyz_back[m] = rb_c[[f"x_{t}", f"y_{t}", f"z_{t}"]].to_numpy()[sp_.loc[m, "bin_id"].to_numpy()]
+            sig_back[m] = rb_c[f"intensity_{t}"].to_numpy()[sp_.loc[m, "bin_id"].to_numpy()]
+            for i in m:
+                trace_back[i] = (g.rsplit("/", 1)[-1], t)
+    out["hierarchy"] = T(trace_back == list(zip(sp_["cell_id"], sp_["trace_id"])) and np.allclose(xyz_back, d["xyz"]),
+                         GEN, "cells = .scool cell groups (each with its own bins table); traces = sets of extra "
+                              "bins columns x_<trace>, y_<trace>, z_<trace>; spots = bins rows")
+    out["spot_signals"] = T(np.allclose(sig_back, d["spot_sig"]), GEN,
+                            "one extra bins column per trace (intensity_<trace>) in each cell's bins table")
+    # Per-cell properties in each cell's own cooler (.scool /cells/<name>): cooler.create_cooler on the
+    # cell group URI writes that cell's `metadata` attribute (scalar key-values; rule 4: counted, generic).
+    sc = str(tmp / "cells_meta.scool")
+    cid = list(d["cells"].index)
+    cooler.create_scool(sc, d["bins"], {c: d["contacts"] for c in cid})
+    for i, c in enumerate(cid):
+        meta_c = {"cell_type": d["cells"].loc[c, "cell_type"],
+                  "umap_1": float(d["emb"][i, 0]), "umap_2": float(d["emb"][i, 1]),
+                  "centroid_x": float(d["cell_xy"][i, 0]), "centroid_y": float(d["cell_xy"][i, 1]), "xy_unit": "um"}
+        cooler.create_cooler(f"{sc}::/cells/{c}", d["bins"], d["contacts"], metadata=meta_c, mode="a")
+    back = {c.rsplit("/", 1)[-1]: cooler.Cooler(f"{sc}::{c}").info["metadata"]
+            for c in cooler.fileops.list_scool_cells(sc)}
+    valid = cooler.fileops.is_scool_file(sc) and sorted(back) == cid
+    out["cells"] = T(valid and [back[c]["cell_type"] for c in cid] == ["a", "b", "a"], GEN,
+                     "each cell's properties as scalar key-values in the metadata attribute of its own cooler "
+                     "(/cells/<name>), written with cooler.create_cooler(uri, ..., metadata=); a scan of every "
+                     "cell group rebuilds the table")
+    out["cell_emb"] = T(valid and np.allclose([[back[c]["umap_1"], back[c]["umap_2"]] for c in cid], d["emb"]),
+                        GEN, "one scalar key per embedding dimension (umap_1, umap_2) in each cell's metadata, "
+                             "as FOF-CT's one column per dimension")
+    out["cell_pos"] = T(valid and np.allclose([[back[c]["centroid_x"], back[c]["centroid_y"]] for c in cid],
+                                              d["cell_xy"]), GEN,
+                        "centroid_x / centroid_y (+ a unit key) in each cell's metadata; no frame, no outline")
+    # Data tables serialised to JSON text in one metadata attribute are recorded but NOT counted
+    # (rule 4): a whole cell table and an embedding matrix in the file-level attribute, and 2e5 RNA spots.
     big = pd.DataFrame({"x": RNG.normal(size=200_000), "y": RNG.normal(size=200_000),
                         "z": RNG.normal(size=200_000)})
     for col, payload, what in (
-            ("cells", {"cells": {"c0": {"cell_type": "a"}}}, "a cell table as JSON text in the metadata attribute"),
-            ("cell_emb", {"X_umap": d["emb"].tolist()}, "an embedding as JSON text in the metadata attribute"),
-            ("cell_pos", {"cell_xy": d["cell_xy"].tolist()}, "cell centroids as JSON text in the metadata attribute"),
+            ("cells_table_json", {"cells": {"c0": {"cell_type": "a"}}},
+             "a whole cell table as JSON text in the file-level metadata attribute"),
+            ("cell_emb_matrix_json", {"X_umap": d["emb"].tolist()},
+             "an embedding matrix as JSON text in the file-level metadata attribute"),
             ("points", {"rna_spots": big.to_dict("list")}, "2e5 RNA spots as JSON text in the metadata attribute")):
         try:
             cooler.create_cooler(str(tmp / f"{col}.cool"), d["bins"], d["contacts"], metadata=payload)
             back = cooler.Cooler(str(tmp / f"{col}.cool")).info["metadata"]
             ok = back == json.loads(json.dumps(payload))
-            out[col] = T(ok, GEN, what + " (stored; not counted, rule 3)", counted=False)
+            out[col] = T(ok, GEN, what + " (stored; not counted, rule 4)", counted=False)
         except Exception as exc:
             out[col] = T(False, GEN, f"{what}: {type(exc).__name__}: {exc}", counted=False)
     return out
@@ -477,11 +575,15 @@ MARKS = {
         "bin_signals": ("native", "bins (locus axis, bin_id) + bin_tracks / binm", [CD_SPEC]),
         "cells": ("native", "cells table indexed by cell_id", [CD_SPEC]),
         "cell_emb": ("native", "cellm: per-cell multi-dimensional arrays (embeddings, UMAP)", [CD_SPEC]),
-        "cell_pos": ("convention", "set_cell_spatial_coordinates() writes two extra columns of the cells table "
-                                   "(spatial_x / spatial_y, names configurable) and a uns['cell_spatial'] record "
-                                   "(coordinate system, source); 2-D only, no outline, and not a schema element "
-                                   "of spec.md (which only suggests x_centroid-style cells columns)",
-                     [CD_SPEC, CD_CODE], "new column", "new column"),
+        "cell_pos": ("native", "spec.md 'Cell spatial position' (format 2.3): cells columns centroid_x / "
+                               "centroid_y [/ centroid_z] described by uns['cell_spatial'] (unit, frame fov / tissue "
+                               "/ global, region, measured / inferred + source, voxel size); outlines as "
+                               "cell_shapes, GeoParquet WKB polygons (tables/cell_shapes/<key>.parquet, the "
+                               "SpatialData shapes representation); set_cell_positions / cell_positions / "
+                               "set_cell_shapes; loaders fill it (seqFISH+, FOF-CT cell and mapping tables)",
+                     [CD_SPEC, "tests/core/test_cell_spatial.py", "uchrom/core/cellspatial.py"], "convention",
+                     "cell positions became a schema element (centroid columns + record, GeoParquet outlines; "
+                     "format 2.3, PR #77); before: two ad-hoc 2-D cells columns, no outline"),
         "contacts": ("linked", "linked, not copied: uns['linked_scool' / 'linked_cool'] records path, bin size "
                                "and cell map; load_linked_scool / Dataset.contacts(group=) read them (test: a real "
                                ".scool read back after the round trip). Our own call: the pixels stay in the "
@@ -507,13 +609,12 @@ MARKS = {
                             "user-defined columns (cell type, volume, ...)", [FOF + "cell.html"]),
         "cell_emb": ("convention", "no embedding slot: the Cell Data table's columns are scalar optional columns, "
                                    "so an embedding is one #^ column per dimension",
-                     [FOF + "cell.html"], "native", "split from 'cells & embeddings': FOF-CT has a cell table "
-                                                    "but no multi-dimensional per-cell slot"),
+                     [FOF + "cell.html"]),
         "cell_pos": ("native", "Cell/ROI Mapping table (4dn_FOF-CT_mapping; conditionally required whenever a Cell "
                                "Data table is deposited): ROI_Boundaries of each Cell_ID in global coordinates, "
                                "format declared in ##ROI_Boundaries_Format (OME polygon or OBJ mesh) + ##XYZ_Unit. "
                                "Outline native; a centroid only as an optional column",
-                     [FOF + "mapping.html", FOF + "cell.html"], "new column", "new column"),
+                     [FOF + "mapping.html", FOF + "cell.html"]),
         "contacts": ("none", "no contact-matrix table in the 12 FOF-CT tables", [FOF + "format_overview.html"]),
         "intervals": ("convention", "no genomic-interval table (the Sub-Cell ROI table's 'Chromosome_Domain' is a "
                                     "spatial ROI, not a genomic interval); domain labels only as an optional "
@@ -532,7 +633,7 @@ MARKS = {
                    [AD_DOC]),
         "hierarchy": ("convention", "one obs axis: cell_id / trace_id only as obs columns; spots and cells cannot "
                                     "both be observations", [AD_DOC]),
-        "spot_signals": ("native", "spots as obs: X / layers / obs columns", [AD_DOC]),
+        "spot_signals": ("native", "spots as obs: X / layers / obs columns. " + FAVOURABLE, [AD_DOC]),
         "bin_signals": ("native", "loci as var (cells × loci, as for scATAC peaks): var table. " + FAVOURABLE,
                         [AD_DOC]),
         "cells": ("native", "cells as obs: obs table. " + FAVOURABLE, [AD_DOC]),
@@ -540,7 +641,7 @@ MARKS = {
                                "multi-dimensional annotations. " + FAVOURABLE, [AD_DOC]),
         "cell_pos": ("convention", "cells as obs: obsm['spatial'] (n_cells, 2), the squidpy / scanpy convention; "
                                    "not an AnnData schema element (no coordinate system, unit or outline)",
-                     [AD_DOC, SQ_DOC], "new column", "new column"),
+                     [AD_DOC, SQ_DOC]),
         "contacts": ("convention", "no contact-map type: one dense or sparse locus × locus matrix can be put in varp "
                                    "(loci as var), without pixel/balancing schema, resolutions or per-cell maps. "
                                    + FAVOURABLE, [AD_DOC]),
@@ -557,8 +658,9 @@ MARKS = {
                              "transformations", [SD_DOC]),
         "hierarchy": ("convention", "cell_id / trace_id as columns of the points; a table annotates one element "
                                     "level (region + instance_key), no nested cell › trace › spot", [SD_DOC]),
-        "spot_signals": ("native", "a table annotating the spots points element (region + instance_key = spot_id); "
-                                   "test uses this, not extra point columns", [SD_DOC]),
+        "spot_signals": ("native", "a table annotating the spots points element (region + instance_key = spot_id): "
+                                   "get_element_annotators lists it and get_values joins it to the points (test); "
+                                   "extra columns of the points DataFrame also work", [SD_DOC]),
         "bin_signals": ("native", JUDGEMENT + "no genomic locus axis among the spatial elements, but a table is an "
                                   "AnnData: loci as var of a cells × loci table annotating the cell shapes, var "
                                   "columns = per-locus signals, as for AnnData (test uses this orientation instead "
@@ -566,7 +668,7 @@ MARKS = {
         "cells": ("native", "shapes (or labels) for cells + a table annotating them", [SD_DOC]),
         "cell_emb": ("native", "obsm of the table annotating the cells", [SD_DOC]),
         "cell_pos": ("native", "shapes element: circles (centroid + radius) or polygons (outline), with "
-                               "coordinate-system transformations", [SD_DOC], "new column", "new column"),
+                               "coordinate-system transformations", [SD_DOC]),
         "contacts": ("convention", "no contact-map element: a table is an AnnData, so one locus × locus matrix in "
                                    "varp, as for AnnData", [SD_DOC]),
         "intervals": ("convention", "interval rows as obs of a table annotating no element", [SD_DOC]),
@@ -575,19 +677,20 @@ MARKS = {
         "partial": ("convention", "points are lazy dask DataFrames without an index on cell or chromosome: a filter "
                                   "on cell_id then compute() streams every partition (Fig. 2d, 0.75 s at 1e7 spots). "
                                   "Spatial bounding-box / polygon queries are native but select by space, not by "
-                                  "cell or chromosome.", [SD_DOC], "native",
-                    "criterion made explicit: a full partition scan is 'by convention'"),
+                                  "cell or chromosome.", [SD_DOC]),
     },
     "MuData": {
         "coords": ("convention", "obsm['spatial'] of a spots modality", [MU_DOC]),
         "hierarchy": ("convention", "spots and cells as separate modalities; the link is an obs column, "
                                     "no parent / child relation", [MU_DOC]),
-        "spot_signals": ("native", "a spots modality: X / obs", [MU_DOC]),
-        "bin_signals": ("native", "var of a cells × loci modality", [MU_DOC]),
+        "spot_signals": ("native", "a spots modality (spots as obs): X / obs", [MU_DOC]),
+        "bin_signals": ("native", "var of a cells × loci modality (loci as var). A MuData can hold a spots and a "
+                                  "cells modality side by side, but within one modality the orientations exclude "
+                                  "each other, as for AnnData", [MU_DOC]),
         "cells": ("native", "global obs or the obs of a cells modality", [MU_DOC]),
         "cell_emb": ("native", "obsm of a cells modality, or the global obsm (multimodal embeddings)", [MU_DOC]),
         "cell_pos": ("convention", "obsm['spatial'] of a cells modality (the AnnData / squidpy convention)",
-                     [MU_DOC, SQ_DOC], "new column", "new column"),
+                     [MU_DOC, SQ_DOC]),
         "contacts": ("convention", "no contact-map type: varp of a cells × loci modality (one matrix, as for "
                                    "AnnData)", [MU_DOC]),
         "intervals": ("convention", "a DataFrame in uns", [MU_DOC]),
@@ -595,22 +698,36 @@ MARKS = {
         "provenance": ("convention", "free-form uns", [MU_DOC]),
         "partial": ("convention", "read_h5mu(backed=True) keeps only each modality's X on disk (sliced by row); "
                                   "obs and obsm, i.e. the ids and the coordinates, are loaded whole (test). MuData "
-                                  "0.3 has no lazy reader.", [MU_DOC], "native",
-                    "criterion made explicit: backed mode loads obs / obsm (the coordinates) whole"),
+                                  "0.3 has no lazy reader.", [MU_DOC]),
     },
     "cooler (.cool / .scool)": {
-        "coords": ("convention", "extra bin columns x, y, z: one structure per file, no spots or traces",
-                   [CO_DOC]),
-        "hierarchy": ("none", ".scool has cells, but no traces or spots", [CO_DOC]),
-        "spot_signals": ("none", "no spot level", [CO_DOC]),
+        "coords": ("convention", "extra bin columns x, y, z: one structure per file (or per cell of a .scool, one "
+                                 "column set per trace); no spot table", [CO_DOC]),
+        "hierarchy": ("convention", "cells are the .scool cell groups, each with its own bins table (create_scool "
+                                    "takes one per cell); traces only as sets of extra bins columns (x_<trace>, "
+                                    "y_<trace>, z_<trace>), spots as bins rows (test)", [CO_DOC], "none",
+                      "re-check: create_scool accepts a bins table per cell, so cell › trace › spot fits in extra "
+                      "bins columns (generic slot); before: '.scool has cells, but no traces or spots'"),
+        "spot_signals": ("convention", "one extra bins column per trace (intensity_<trace>) in each cell's bins "
+                                       "table (test)", [CO_DOC], "none",
+                         "re-check: same per-cell bins columns as the hierarchy; before: 'no spot level'"),
         "bin_signals": ("native", "bins table, which the schema allows to carry extra columns (e.g. weight, "
                                   "signals)", [CO_DOC]),
-        "cells": ("none", ".scool names its cells (one map per cell) but has no cell attribute table; JSON text in "
-                          "the metadata attribute works (test) but is not counted", [CO_DOC]),
-        "cell_emb": ("none", "no per-cell arrays; JSON text in the metadata attribute works (test) but is not "
-                             "counted", [CO_DOC]),
-        "cell_pos": ("none", "no cell geometry; JSON text in the metadata attribute works (test) but is not "
-                             "counted", [CO_DOC], "new column", "new column"),
+        "cells": ("convention", "no cell table, but every cell of a .scool is a cooler with its own metadata "
+                                "attribute: the cell's properties as scalar key-values there (cooler.create_cooler "
+                                "on /cells/<name>, test); the table is rebuilt by opening every cell group",
+                  [CO_DOC], "none", "per-cell metadata of each cell's cooler is a general-purpose slot for that "
+                                    "cell's properties (rule 4: key-values describing their own object count; a "
+                                    "whole table as JSON in one attribute still does not)"),
+        "cell_emb": ("convention", JUDGEMENT + "no per-cell arrays; one scalar key per dimension (umap_1, umap_2) "
+                                   "in each cell's metadata works (test), as FOF-CT's one optional column per "
+                                   "dimension, which is also rated by convention. Awkward for a 64-dimensional "
+                                   "embedding; an embedding matrix as JSON in one attribute is not counted",
+                     [CO_DOC], "none", "same slot as the cell table; consistent with FOF-CT (one scalar per "
+                                       "dimension = by convention)"),
+        "cell_pos": ("convention", "centroid_x / centroid_y (+ a unit key) in each cell's metadata (test); no "
+                                   "coordinate frame, no outline", [CO_DOC], "none",
+                     "same slot as the cell table: a centroid is two scalar properties of the cell"),
         "contacts": ("native", "pixels (bulk .cool; per cell .scool; multi-resolution .mcool)", [CO_DOC]),
         "intervals": ("convention", "domain membership as a per-bin label column of the bins table (data, not "
                                     "JSON); loops (pairs) have no place", [CO_DOC]),
@@ -618,7 +735,7 @@ MARKS = {
                            "spots (test) but is not counted", [CO_DOC]),
         "provenance": ("convention", "the result as data (a bins column, as for intervals) and its parameters in "
                                      "the free-form JSON metadata attribute next to generated-by / creation-date "
-                                     "(provenance metadata counts under rule 3; a result table as JSON would not)",
+                                     "(provenance metadata counts under rule 4; a result table as JSON would not)",
                        [CO_DOC]),
         "partial": ("native", "indexed fetch by genomic region (bin1_offset / chrom_offset indexes); one cell group "
                               "of a .scool", [CO_DOC]),
@@ -654,8 +771,8 @@ def main() -> None:
             versions[mod] = importlib.import_module(mod).__version__
         except Exception:  # pragma: no cover
             versions[mod] = None
-    versions["FOF-CT"] = "v1.0 (specification pages checked 2026-09-26)"
-    cells, failures, changes = {}, [], []
+    versions["FOF-CT"] = f"v1.0 (specification pages checked {AUDIT_DATE})"
+    cells, failures, changes, extra_tests = {}, [], [], {}
     with tempfile.TemporaryDirectory() as td:
         for row in ROWS:
             test = {}
@@ -669,15 +786,16 @@ def main() -> None:
                     print(res.get("traceback", ""))
                     test = {c: {"ok": False, "detail": res["detail"]} for c, _ in COLS}
             cells[row] = {}
+            known = {c for c, _ in COLS}
+            if any(k not in known for k in test):
+                extra_tests[row] = {k: v for k, v in test.items() if k not in known}
             for col, _ in COLS:
                 mark, note, urls, *chg = MARKS[row][col]
                 entry = {"value": mark, "note": note, "evidence": urls,
                          "version": versions["FOF-CT"] if row.startswith("FOF") else versions[LIB[row]]}
                 if chg:
-                    entry["audit"] = {"before": chg[0], "reason": chg[1]}
-                    if chg[0] != "new column":
-                        changes.append({"row": row, "col": col, "before": chg[0], "after": mark,
-                                        "reason": chg[1]})
+                    entry["audit"] = {"date": AUDIT_DATE, "before": chg[0], "reason": chg[1]}
+                    changes.append({"row": row, "col": col, "before": chg[0], "after": mark, "reason": chg[1]})
                 t = test.get(col)
                 if t is not None:
                     entry["test"] = {"script": "benchmarks/fig2/b_capabilities.py", **t}
@@ -698,15 +816,24 @@ def main() -> None:
                   "none": "not supported"},
         "rules": ["the evidence decides; only a genuinely ambiguous cell gives the other tool the better mark, "
                   "and its note starts with 'Judgement call'",
-                  "AnnData (and SpatialData table) elements rated in their most favourable orientation",
+                  "AnnData / MuData (and SpatialData table) elements rated in their most favourable orientation "
+                  "(spots, cells or loci as observations); these orientations exclude each other in one object "
+                  "(one AnnData, one MuData modality)",
                   "a test that needed a generic slot backs at most 'by convention', an external file 'linked'",
                   "a data table serialised to JSON text in a descriptive metadata attribute does not count "
-                  "(recorded with counted: false); provenance metadata there does",
+                  "(recorded with counted: false); provenance metadata there does, and so do scalar key-values "
+                  "describing the object that carries the attribute (each cell's own cooler in a .scool)",
                   "partial reads: native = one cell's / chromosome's rows are read from disk without reading the "
                   "other rows (beyond the selection key column); by convention = only by scanning every row "
                   "(streamed) or with part of the data loaded whole"],
-        "rows": ROWS, "cols": [c for c, _ in COLS], "col_labels": dict(COLS),
-        "cells": cells, "versions": versions, "audit_changes": changes,
+        "rows": ROWS, "cols": [c for c, _ in COLS], "col_labels": dict(COLS), "col_defs": COL_DEFS,
+        "cells": cells, "versions": versions, "audit_date": AUDIT_DATE, "audit_changes": changes,
+        "label_changes": [{"col": "coords", "before": "3-D coordinates", "after": dict(COLS)["coords"],
+                           "reason": "per-spot, and distinct from the cell spatial position"}],
+        "prior_audit": {"date": PRIOR_AUDIT["date"], "note": PRIOR_AUDIT["note"],
+                        "changes": [{"row": r, "col": c, "before": b, "after": a, "reason": why}
+                                    for r, c, b, a, why in PRIOR_AUDIT["changes"]]},
+        "uncounted_tests": extra_tests,
         "mismatches": [list(map(str, f)) for f in failures],
     }
     print(C.write_json("b_capabilities", payload))
@@ -729,24 +856,32 @@ def write_table(payload) -> Path:
         "Generated by `benchmarks/fig2/b_capabilities.py` from `paper/fig2/results/b_capabilities.json`; "
         "do not edit by hand.",
         "",
+        "**Columns.**",
+        "",
+    ]
+    out += [f"- *{lab[c]}*: {payload['col_defs'][c]}" for c in cols]
+    out += [
+        "",
         "**Marks.** ● *native*: first-class, with its own structure. ◎ *linked*: kept in an external "
         "community-standard file (not copied) and queried through the shared index. ○ *by convention*: stored "
         "and read back through the library's public API, but only in a general-purpose slot (`uns`, `obsm`, "
-        "`varp`, `attrs`, extra or optional columns), so the structure is lost or ad hoc. – *not supported*: "
-        "no place for it in the format or its API.",
+        "`varp`, `attrs`, metadata attributes, extra or optional columns), so the structure is lost or ad hoc. "
+        "– *not supported*: no place for it in the format or its API.",
         "",
         "**Rules.** (1) The evidence decides; only where it is genuinely ambiguous does the other tool get the "
-        "better mark, and the note starts with *Judgement call*. (2) AnnData has a single observation axis: "
-        "each element is rated in its most favourable orientation (spots, cells or loci as `obs` / `var`), "
-        "although these orientations exclude each other in one object; the hierarchy column is where that "
-        "shows (the same holds for a SpatialData table, which is an AnnData). (3) A test that needed a "
-        "general-purpose slot can back at most *by convention*, one that needed an external file *linked*; the "
-        "script fails on any inconsistency. (4) A data table serialised to JSON text inside a descriptive "
-        "metadata attribute (cooler's `metadata`) does not count; such tests are still run and reported as *not "
-        "counted*. Parameters / software records (provenance) there do count; the result itself must be stored "
-        "as data. (5) *Partial reads*: native when one cell's or one chromosome's rows are read from disk "
-        "without reading the other rows (beyond the selection key column); by convention when that is only "
-        "possible by scanning every row (streamed, memory bounded) or with part of the data (e.g. `obs` / "
+        "better mark, and the note starts with *Judgement call*. (2) AnnData and MuData are rated in their most "
+        "favourable orientation (spots, cells or loci as observations), and these orientations exclude each "
+        "other in one object (one AnnData, one MuData modality; a MuData can hold one modality per orientation, "
+        "linked only by `obs` columns). The hierarchy column is where that shows; the same holds for a "
+        "SpatialData table, which is an AnnData. (3) A test that needed a general-purpose slot can back at most "
+        "*by convention*, one that needed an external file *linked*; the script fails on any inconsistency. "
+        "(4) A data table serialised to JSON text inside a descriptive metadata attribute (cooler's `metadata`) "
+        "does not count; such tests are still run and reported as *not counted*. Parameters / software records "
+        "(provenance) there do count, and so do scalar key-values that describe the object carrying the "
+        "attribute (each cell's own cooler in a `.scool`), as a general-purpose slot; the result itself must be "
+        "stored as data. (5) *Partial reads*: native when one cell's or one chromosome's rows are read from "
+        "disk without reading the other rows (beyond the selection key column); by convention when that is "
+        "only possible by scanning every row (streamed, memory bounded) or with part of the data (e.g. `obs` / "
         "`obsm`) loaded whole.",
         "",
         "**Tests.** ✓ = a tiny test in `benchmarks/fig2/b_capabilities.py` stored the element with that "
@@ -763,14 +898,26 @@ def write_table(payload) -> Path:
     short = {"native": "●", "linked": "◎", "convention": "○", "none": "–"}
     for r in rows:
         out.append(f"| {r} | " + " | ".join(short[payload["cells"][r][c]["value"]] for c in cols) + " |")
+    jc = [(r, c) for r in rows for c in cols if payload["cells"][r][c]["note"].startswith(JUDGEMENT)]
+    if jc:
+        out += ["", "**Judgement calls:** " + "; ".join(f"{r} — {lab[c]}" for r, c in jc)
+                + " (see the notes below)."]
+    out += ["", f"## Changes after the audit of {payload.get('audit_date', AUDIT_DATE)}", ""]
     if payload.get("audit_changes"):
-        out += ["", "## Changes after the audit (2026-09-26)", "",
-                "| Container | Element | Before | After | Reason |", "|---|---|---|---|---|"]
+        out += ["| Container | Element | Before | After | Reason |", "|---|---|---|---|---|"]
         for ch in payload["audit_changes"]:
             out.append(f"| {ch['row']} | {lab[ch['col']]} | {SYMBOL[ch['before']]} | {SYMBOL[ch['after']]} | "
                        f"{ch['reason']} |")
-        out += ["", "New columns: *cell embeddings* (split from *cells & embeddings*) and *cell spatial "
-                    "position*."]
+    for lc in payload.get("label_changes", []):
+        out += ["", f"Column renamed: *{lc['before']}* → *{lc['after']}* ({lc['reason']})."]
+    prior = payload.get("prior_audit")
+    if prior:
+        out += ["", f"## Changes after the audit of {prior['date']}", "",
+                "| Container | Element | Before | After | Reason |", "|---|---|---|---|---|"]
+        for ch in prior["changes"]:
+            out.append(f"| {ch['row']} | {lab[ch['col']]} | {SYMBOL[ch['before']]} | {SYMBOL[ch['after']]} | "
+                       f"{ch['reason']} |")
+        out += ["", prior["note"]]
     out += ["", "## Evidence per cell", ""]
     for r in rows:
         out += [f"### {r}", "", "| Element | Mark | Evidence | Test |", "|---|---|---|---|"]
@@ -788,6 +935,9 @@ def write_table(payload) -> Path:
             note = e["note"].replace("|", "\\|")
             ts = ts.replace("|", "\\|")
             out.append(f"| {lab[c]} | {SYMBOL[e['value']]} | {note} ({links}) | {ts} |")
+        for k, t in (payload.get("uncounted_tests") or {}).get(r, {}).items():
+            ts = (("✓ " if t["ok"] else "✗ ") + "not counted: " + t.get("detail", "")).replace("|", "\\|")
+            out.append(f"| (extra test: {k}) | — | — | {ts} |")
         out.append("")
     path = C.ROOT / "paper" / "fig2" / "tableS_capabilities.md"
     path.write_text("\n".join(out))
