@@ -9,13 +9,13 @@ The floor shows H3K27ac, LaminB1 and H3K9me3 IF signals along chr15 in one cereb
 Each modality is stored as its own layer: geometry ($x$, $y$, $z$ coordinates), contacts (bin~$\times$~bin maps; large maps are linked rather than copied) and molecular features (RNA, ATAC, ChIP, IF).
 The same genomic bins index every layer (dashed lines).
 Observation level is independent of modality (left): any layer can be held at the population, cell or trace\,›\,spot level.
-Aggregation moves data up a level; spots are assembled into traces and missing loci are imputed; deconvolution from population to cell is planned.
-Bridges connect the layers (right): structures are reconstructed from contacts (recon), and distances are converted into contact frequencies.
+Aggregation moves data up a level (spots are assembled into traces); deconvolution from population to cell is planned.
+Operations on and between layers (right): missing loci are imputed within the geometry layer (impute), structures are reconstructed from contacts (recon), and distances are converted into contact frequencies.
 Molecular features are associated with, or projected onto, the structure layers through a shared spot, cell or cell type.
 Plate contents are schematic but derived from the data in \textbf{a}: the smoothed chr15 trace, its IF signals, and TADs from the chr7 window.
 \textbf{c}~The U-Chrom ecosystem.
 Community formats are read, or linked without copying (dashed boxes).
-ChromData is stored as versioned HDF5 (.h5cd), and structures are exported as PDB.
+ChromData is stored as a versioned .chromdata.zarr store (Zarr container with Parquet tables; .cdz is the same store in one zip file), and structures are exported as PDB.
 Five analysis modules share one API: reconstruction (\pkg{uchrom.recon}), imaging-side processing (\pkg{uchrom.im}), structure calling (\pkg{uchrom.strc}), geometric features (\pkg{uchrom.fea}) and cell embeddings (\pkg{uchrom.emb}).
 The data are accessible through a Python API, a command-line interface, a web browser, and a Model Context Protocol (MCP) server with agent skills.
 The illustration in \textbf{a} is AI-generated and edited by the authors; apart from the contact map and signal tracks, it is conceptual.

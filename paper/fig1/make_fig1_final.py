@@ -84,7 +84,10 @@ def cache_markers():
 
     from uchrom import ChromData
     warnings.filterwarnings("ignore")
-    cd = ChromData.read(ROOT / "example-data/schicar_mop/schicar_mop.h5cd")
+    src = ROOT / "example-data/schicar_mop/schicar_mop.chromdata.zarr"
+    if not src.exists():
+        src = src.with_name("schicar_mop.h5cd")        # older builds
+    cd = ChromData.read(src)
     c = cd.cells
     ct = c.cell_type.astype(str).to_numpy()
     genes = [g for g in c.columns if g.startswith("rna.")]
@@ -506,9 +509,8 @@ def level_strip(cv: Canvas, x, y_top, y_bot, w):
     y0_, y1_ = rows[1][2] + 6.4, rows[2][2] - 2.4
     cv.arrow((ax_, y1_), (ax_, y0_), color=CORE, lw=0.6, head=2.4)
     ym = (y0_ + y1_) / 2
-    cv.text(lx, ym - 2.6, "aggregate", size=F_SEC, color=CORE, z=30)
-    cv.text(lx, ym + 0.2, "assemble ·", size=F_SEC, color=grey, z=30)
-    cv.text(lx, ym + 2.8, "impute", size=F_SEC, color=grey, z=30)
+    cv.text(lx, ym - 1.3, "aggregate", size=F_SEC, color=CORE, z=30)
+    cv.text(lx, ym + 1.5, "(assemble)", size=F_SEC, color=grey, z=30)
     cv.text(cx, y_bot - 5.4, "each layer", size=F_SEC, color=GREY, ha="center", z=30)
     cv.text(cx, y_bot - 2.8, "at every level", size=F_SEC, color=GREY, ha="center", z=30)
 
@@ -635,6 +637,11 @@ def panel_b(cv: Canvas, cell, hic):
     cv.arrow((xa, rc[1] - 0.6), (xa, rg[1] + 1.6), color=SEQ, lw=0.8, rad=-0.22)
     cv.arrow((xa + 2.6, rg[1] + 2.6), (xa + 2.6, rc[1] - 1.6), color=IMG, lw=0.8, rad=-0.16)
     tx, ym = xa + 5.2, (rg[1] + rc[1]) / 2
+    # impute: fill missing loci within the geometry layer
+    ci = np.array([xa + 1.6, rg[1] - 9.5])
+    loop_arrow(cv, ci, 1.6, IMG, lw=0.8, a0=60, a1=380)
+    cv.text(ci[0] + 3.0, ci[1] - 1.1, "impute", size=F_LABEL, color="#c4561f", weight="bold")
+    cv.text(ci[0] + 3.0, ci[1] + 1.7, "missing loci", size=F_SEC, color=GREY)
     cv.text(tx, ym - 4.6, "↑ recon", size=F_LABEL, color=SEQ, weight="bold")
     cv.text(tx, ym - 1.8, "contacts→3-D", size=F_SEC, color=GREY)
     cv.text(tx, ym + 1.8, "↓ distance", size=F_LABEL, color="#c4561f", weight="bold")
@@ -712,9 +719,10 @@ def tag(cv, x, y, s, ec, fc, h=4.4, pad=1.3, dashed=False, z=21):
 def group(cv, x, y, label, color, tags, lg=None, lg_h=LOGO_H, plate=False):
     """[logo] label over tags.  A tag is str, (str,) for 'linked', or (str, icon_key)."""
     blk = 7.0                                           # label row + tag row
-    if lg:
-        lw_, _ = logo(cv, lg, x, y + (blk - lg_h) / 2, lg_h, z=22, plate=LIGHTGREY if plate else None)
-        x += lw_ + 1.8
+    if lg:                                              # one key, or [(key, height), ...]
+        for key, h in ([(lg, lg_h)] if isinstance(lg, str) else lg):
+            lw_, _ = logo(cv, key, x, y + (blk - h) / 2, h, z=22, plate=LIGHTGREY if plate else None)
+            x += lw_ + 1.8
     x_lab_end = x
     if label:
         t = cv.text(x + 0.2, y + 1.0, label, size=F_SEC, color=color, weight="bold")
@@ -797,7 +805,7 @@ def panel_c(cv: Canvas, y0: float):
     chromdata_mark(cv, x_l + 3.0, y + 0.5, 6.2)
     cv.text(x_l + 11.5, y + h3 / 2, "ChromData", size=F_TITLE, color="white", weight="bold", z=25)
     cv.text(xs0 + 9.0, y + h3 / 2,
-            "cell › trace › spot   ·   geometry · contacts · features   ·   .h5cd, versioned spec",
+            "cell › trace › spot   ·   geometry · contacts · features   ·   .chromdata.zarr, versioned spec",
             size=F_LABEL, color="white", z=25)
     core_y = y
     y += h3 + 1.8
@@ -825,11 +833,11 @@ def panel_c(cv: Canvas, y0: float):
               lg_h=LOGO_H - 0.6, plate=True)
     group(cv, max(x, col2), r3, "structures", "#5d636b", [".3dg"])
     xw = split + 2.4
-    x = group(cv, xw, r1, "U-Chrom (HDF5)", CORE, [".h5cd"], lg="hdf5", lg_h=3.8)
-    group(cv, x + 2.0, r1, "structures (export)", "#5d636b", ["PDB → PyMOL / ChimeraX"])
+    group(cv, xw, r1, "U-Chrom", CORE, [".chromdata.zarr", ".cdz"], lg=[("zarr", 3.6), ("parquet", 2.4)])
     group(cv, xw, r2, None, OMX, [("AnnData", "anndata", "linked"), ("MuData", "mudata", "linked")],
           lg="scverse", lg_h=3.8)
-    group(cv, xw, r3, "Open2C", SEQ, [(".mcool",), (".scool",)])
+    x = group(cv, xw, r3, "Open2C", SEQ, [(".mcool",), (".scool",)])
+    group(cv, x, r3, "structures (export)", "#5d636b", ["PDB → PyMOL / ChimeraX"])
 
 
 
