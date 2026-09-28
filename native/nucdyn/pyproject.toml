@@ -1,0 +1,27 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "u-chrom-nucdyn"
+version = "0.1.0"
+description = "Native NucDynamics engine for U-Chrom (Rust; multi-core CPU and wgpu GPU)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "LGPL-3.0-or-later" }
+authors = [{ name = "Weize Xu", email = "vet.xwz@gmail.com" }]
+dependencies = ["numpy>=1.24"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "uchrom_nucdyn._engine"
+# CPU-only wheels: `maturin build --no-default-features --features python`
+features = ["python", "gpu"]
