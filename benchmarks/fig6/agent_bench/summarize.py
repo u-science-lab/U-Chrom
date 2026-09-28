@@ -35,7 +35,8 @@ def main():
         for c in ("docs", "skills"):
             R = [r for r in rows if r["condition"] == c]
             m["conditions"][c] = {
-                "n_tasks": len(R),
+                "n_tasks": len({r["id"] for r in R}),
+                "n_runs": len(R),
                 "score": st.mean(r["score"] for r in R),
                 "by_category": {k: st.mean(r["score"] for r in R if qs[r["id"]]["category"] == k) for k in cats},
                 "by_split": {s: st.mean(r["score"] for r in R if qs[r["id"]]["split"] == s) for s in ("dev", "test")},
@@ -47,12 +48,18 @@ def main():
                 "median_time_s": st.median(r["elapsed_s"] for r in R),
             }
         ids = sorted({r["id"] for r in rows})
-        d = [g[f"{i}__skills__r0"]["score"] - g[f"{i}__docs__r0"]["score"] for i in ids]
+        # paired over tasks, each task's score averaged over its repeats
+        tm = {(i, c): st.mean(r["score"] for r in rows if r["id"] == i and r["condition"] == c)
+              for i in ids for c in ("docs", "skills")}
+        d = [tm[(i, "skills")] - tm[(i, "docs")] for i in ids]
         nz = [x for x in d if x]
         m["paired"] = {"mean_diff": st.mean(d), "better": sum(x > 0 for x in d), "worse": sum(x < 0 for x in d),
                        "same": sum(x == 0 for x in d), "wilcoxon_p": wilcoxon(nz).pvalue if nz else None}
         models[gfile.parent.name.removeprefix("claude-")] = m
-    out = {"run": a.run, "judge": a.judge, "reps": 1, "n_tasks": len(qs), "categories": cats,
+    reps = sorted({len({r["rep"] for r in json.loads(f.read_text()).values() if r["id"] == i and r["condition"] == c})
+                   for f in (HERE / "runs" / a.run).glob("*/grades.json")
+                   for i in qs for c in ("docs", "skills")})
+    out = {"run": a.run, "judge": a.judge, "reps": reps[0] if len(reps) == 1 else reps, "n_tasks": len(qs), "categories": cats,
            "category_sizes": {k: sum(q["category"] == k for q in qs.values()) for k in cats}, "models": models}
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(out, indent=1))

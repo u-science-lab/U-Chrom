@@ -1,7 +1,7 @@
 {
- "run": "main3",
+ "run": "main4",
  "judge": "claude-sonnet-5",
- "reps": 1,
+ "reps": 3,
  "n_tasks": 40,
  "categories": [
   "associate",
@@ -23,53 +23,55 @@
    "conditions": {
     "docs": {
      "n_tasks": 40,
-     "score": 0.687202380952381,
+     "n_runs": 120,
+     "score": 0.7032539682539682,
      "by_category": {
-      "associate": 0.6458333333333333,
-      "compare": 0.6904761904761905,
+      "associate": 0.6875,
+      "compare": 0.6741269841269841,
       "inspect": 1.0,
-      "knowhow": 0.7361111111111112,
-      "structure": 0.375
+      "knowhow": 0.7037037037037037,
+      "structure": 0.4583333333333333
      },
      "by_split": {
-      "dev": 0.6827380952380953,
-      "test": 0.6916666666666667
+      "dev": 0.7115079365079365,
+      "test": 0.695
      },
-     "n_perfect": 18,
-     "n_zero": 6,
+     "n_perfect": 58,
+     "n_zero": 14,
      "n_skill_loaded": 0,
      "n_failed_runs": 0,
-     "cost_usd": 4.7138224,
-     "median_time_s": 55.43660044670105
+     "cost_usd": 14.7856769,
+     "median_time_s": 65.36628651618958
     },
     "skills": {
      "n_tasks": 40,
-     "score": 0.7803571428571429,
+     "n_runs": 120,
+     "score": 0.7800396825396826,
      "by_category": {
-      "associate": 0.8541666666666666,
-      "compare": 0.7964285714285714,
-      "inspect": 1.0,
-      "knowhow": 0.9027777777777778,
-      "structure": 0.375
+      "associate": 0.8194444444444444,
+      "compare": 0.8590476190476191,
+      "inspect": 0.9375,
+      "knowhow": 0.787037037037037,
+      "structure": 0.4791666666666667
      },
      "by_split": {
-      "dev": 0.8107142857142857,
-      "test": 0.75
+      "dev": 0.8178571428571428,
+      "test": 0.7422222222222222
      },
-     "n_perfect": 25,
-     "n_zero": 4,
-     "n_skill_loaded": 33,
+     "n_perfect": 79,
+     "n_zero": 13,
+     "n_skill_loaded": 102,
      "n_failed_runs": 0,
-     "cost_usd": 3.3725885,
-     "median_time_s": 43.813762068748474
+     "cost_usd": 11.1771904,
+     "median_time_s": 57.99235951900482
     }
    },
    "paired": {
-    "mean_diff": 0.0931547619047619,
-    "better": 13,
+    "mean_diff": 0.07678571428571429,
+    "better": 14,
     "worse": 5,
-    "same": 22,
-    "wilcoxon_p": 0.050056833413259394
+    "same": 21,
+    "wilcoxon_p": 0.02389416576308286
    }
   },
   "opus": {
@@ -77,53 +79,55 @@
    "conditions": {
     "docs": {
      "n_tasks": 40,
-     "score": 0.8879166666666667,
+     "n_runs": 120,
+     "score": 0.9270833333333334,
      "by_category": {
       "associate": 0.9583333333333334,
-      "compare": 0.935,
+      "compare": 0.9916666666666667,
       "inspect": 1.0,
       "knowhow": 0.8333333333333334,
-      "structure": 0.6875
+      "structure": 0.8125
      },
      "by_split": {
-      "dev": 0.8875,
-      "test": 0.8883333333333333
+      "dev": 0.8958333333333334,
+      "test": 0.9583333333333334
      },
-     "n_perfect": 32,
-     "n_zero": 2,
+     "n_perfect": 104,
+     "n_zero": 3,
      "n_skill_loaded": 0,
      "n_failed_runs": 0,
-     "cost_usd": 11.0949,
-     "median_time_s": 38.973087549209595
+     "cost_usd": 35.9602778,
+     "median_time_s": 99.86066842079163
     },
     "skills": {
      "n_tasks": 40,
-     "score": 0.9458333333333333,
+     "n_runs": 120,
+     "score": 0.95,
      "by_category": {
       "associate": 0.9166666666666666,
       "compare": 1.0,
       "inspect": 1.0,
-      "knowhow": 0.9166666666666666,
+      "knowhow": 0.9444444444444444,
       "structure": 0.875
      },
      "by_split": {
-      "dev": 0.925,
+      "dev": 0.9333333333333333,
       "test": 0.9666666666666667
      },
-     "n_perfect": 37,
-     "n_zero": 1,
-     "n_skill_loaded": 40,
+     "n_perfect": 112,
+     "n_zero": 3,
+     "n_skill_loaded": 120,
      "n_failed_runs": 0,
-     "cost_usd": 8.1453214,
-     "median_time_s": 31.602434515953064
+     "cost_usd": 25.1827166,
+     "median_time_s": 103.9344220161438
     }
    },
    "paired": {
-    "mean_diff": 0.057916666666666665,
-    "better": 5,
+    "mean_diff": 0.02291666666666667,
+    "better": 4,
     "worse": 1,
-    "same": 34,
-    "wilcoxon_p": 0.09375
+    "same": 35,
+    "wilcoxon_p": 0.3125
    }
   },
   "sonnet": {
@@ -131,53 +135,55 @@
    "conditions": {
     "docs": {
      "n_tasks": 40,
-     "score": 0.8872619047619048,
+     "n_runs": 120,
+     "score": 0.844265873015873,
      "by_category": {
-      "associate": 1.0,
-      "compare": 0.9157142857142857,
+      "associate": 0.8541666666666666,
+      "compare": 0.8965079365079365,
       "inspect": 1.0,
-      "knowhow": 0.6388888888888888,
-      "structure": 0.8125
+      "knowhow": 0.7731481481481481,
+      "structure": 0.6666666666666666
      },
      "by_split": {
-      "dev": 0.8261904761904761,
-      "test": 0.9483333333333334
+      "dev": 0.8140873015873016,
+      "test": 0.8744444444444445
      },
-     "n_perfect": 30,
-     "n_zero": 2,
-     "n_skill_loaded": 1,
-     "n_failed_runs": 0,
-     "cost_usd": 13.668352,
-     "median_time_s": 93.1439437866211
+     "n_perfect": 87,
+     "n_zero": 10,
+     "n_skill_loaded": 0,
+     "n_failed_runs": 6,
+     "cost_usd": 40.6227984,
+     "median_time_s": 143.22433805465698
     },
     "skills": {
      "n_tasks": 40,
-     "score": 0.9083333333333333,
+     "n_runs": 120,
+     "score": 0.9451388888888889,
      "by_category": {
       "associate": 0.9166666666666666,
       "compare": 1.0,
       "inspect": 1.0,
-      "knowhow": 0.8333333333333334,
-      "structure": 0.75
+      "knowhow": 0.912037037037037,
+      "structure": 0.875
      },
      "by_split": {
-      "dev": 0.925,
-      "test": 0.8916666666666667
+      "dev": 0.9291666666666667,
+      "test": 0.9611111111111111
      },
-     "n_perfect": 35,
-     "n_zero": 2,
-     "n_skill_loaded": 40,
+     "n_perfect": 110,
+     "n_zero": 3,
+     "n_skill_loaded": 120,
      "n_failed_runs": 0,
-     "cost_usd": 8.3740756,
-     "median_time_s": 63.233017563819885
+     "cost_usd": 23.6791632,
+     "median_time_s": 111.31170499324799
     }
    },
    "paired": {
-    "mean_diff": 0.02107142857142857,
-    "better": 9,
-    "worse": 3,
-    "same": 28,
-    "wilcoxon_p": 0.58642578125
+    "mean_diff": 0.10087301587301588,
+    "better": 16,
+    "worse": 1,
+    "same": 23,
+    "wilcoxon_p": 0.0011561044695967129
    }
   }
  }

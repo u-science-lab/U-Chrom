@@ -1064,13 +1064,14 @@ def panel_e(r, x0=108, y0=133):
     from matplotlib.lines import Line2D
     hs = [Line2D([], [], ls="none", marker=mk, ms=2.6, mfc="white", mec=INK, mew=0.4,
                  label=f"{name} {ms[m]['conditions']['skills']['n_skill_loaded']}/"
-                       f"{ms[m]['conditions']['skills']['n_tasks']}") for m, name, mk in BENCH_MODELS]
+                       f"{ms[m]['conditions']['skills'].get('n_runs', ms[m]['conditions']['skills']['n_tasks'])}")
+          for m, name, mk in BENCH_MODELS]
     ax.add_artist(ax.legend(handles=hs, frameon=False, fontsize=F(4.1), ncol=3, loc="upper center",
                             bbox_to_anchor=(0.5, -0.29), handlelength=0.6, handletextpad=0.3, columnspacing=0.7,
                             labelcolor=GREY, borderaxespad=0))
     ax.legend(frameon=False, fontsize=F(4.5), ncol=2, loc="upper center", bbox_to_anchor=(0.5, 1.22),
               handles=ax.get_legend_handles_labels()[0][:2], handlelength=0.8, columnspacing=0.8)
-    ax.text(0.5, -0.50, "n/40: skill loaded · held-out: 20 tasks unseen when tuning skills",
+    ax.text(0.5, -0.50, f"n: runs with a skill · {r['n_tasks']} tasks × {r['reps']} runs · held-out: 20 unseen",
             transform=ax.transAxes, fontsize=F(4.1), color=GREY, ha="center")
 
 
