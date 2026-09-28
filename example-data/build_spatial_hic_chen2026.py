@@ -16,7 +16,8 @@ For each tissue this script writes spatial_hic_chen2026/<tissue>.chromdata.zarr,
           cell_positions("image"): the Seurat image coordinates (px), where the object has an image
   bins    the 500-kb (and 250-kb) bins of the ssA/B scores (column resolution)
   cellm   <assay>_<reduction>.<Seurat object>: the published PCA / UMAP / BANKSY embeddings (NaN for
-          spots of other objects)
+          spots of other objects); spatial.<section>: the section's spot grid (column, -row) as a
+          2-D layout for the browser
   <tissue>_ssab.h5ad   uns["linked_ssab"]: single-spot A/B scores (Higashi-imputed), Hi-C spots x
           bins (var bin_id = row of bins)
   <tissue>_rna.h5ad    uns["linked_anndata"]: spatial RNA counts, RNA spots x genes
@@ -344,6 +345,16 @@ def build_tissue(name: str, spec: dict, chromsizes: pd.Series, chunk: int, conta
         embeddings[key] = {"method": "umap" if "umap" in red.lower() else red, "reduction": red,
                            "modality": "Hi-C (ssA/B)" if assay == "hic" else "RNA",
                            "label": f"{obj} · {assay.upper()} {red}", "source": f"{SOURCE}; Seurat object {obj}"}
+
+    # the browser draws 2-D cellm arrays: one spatial layout per section (grid column, -row, so the
+    # tissue is upright as in the image); the positions themselves are the cell_positions below
+    grid = cells[["grid_col", "grid_row"]].to_numpy(np.float32) * np.array([1, -1], dtype=np.float32)
+    for sec in cells["section"].cat.categories:
+        m = (cells["section"] == sec).to_numpy()
+        cellm[f"spatial.{sec}"] = np.where(m[:, None], grid, np.nan).astype(np.float32)
+        embeddings[f"spatial.{sec}"] = {"method": "spatial", "modality": "spatial",
+                                         "label": f"{sec} · tissue (spot grid)", "axis_prefix": "grid ",
+                                         "source": "spot grid column / row (cell_positions)"}
 
     empty = pd.DataFrame({c: pd.Series(dtype=t) for c, t in
                           [("chrom", str), ("start", np.int64), ("end", np.int64), ("trace_id", str), ("cell_id", str)]})

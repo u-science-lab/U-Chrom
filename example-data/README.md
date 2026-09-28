@@ -594,7 +594,9 @@ public data alone** and are shipped with their recorded outputs.
     object has an image.
   - **`bins`**: the ssA/B bins, with a `resolution` column.
   - **`cellm`**: the published PCA / UMAP / BANKSY embeddings, keyed
-    `<assay>_<reduction>.<Seurat object>`.
+    `<assay>_<reduction>.<Seurat object>`; `spatial.<section>` holds each section's spot grid (column,
+    −row).  It is a copy of the positions as a 2-D layout, because the browser shows cells through
+    embeddings.
   - **Linked files** (paths relative to the store):
     - `<tissue>_ssab.h5ad` (`uns['linked_ssab']`): single-spot A/B scores, Hi-C spots × bins
       (`var.bin_id` = row of `bins`).  They are not in `cellm` because `cellm` is read on open.
