@@ -56,6 +56,34 @@ def validation_tables(v: dict, labels: list[str]) -> str:
     return "\n".join(out)
 
 
+def scaling_tables(sp: dict) -> str:
+    out = []
+    for key, runs in sp.get("runs", {}).items():
+        if key.startswith("models"):
+            out.append(f"\n**Ensemble size ({key}; {runs[0].get('temp_steps', 500)} temperature steps per stage, "
+                       "totals scaled to the default 500)**\n")
+            out.append("| device | models | wall s (scaled) | CPU s (scaled) | wall s per model | models / hour (wall) | peak RSS MB |")
+            out.append("|---|---|---|---|---|---|---|")
+            for r in runs:
+                if "error" in r:
+                    continue
+                k = 500 / r.get("temp_steps", 500)
+                t = r["engine_seconds"] * k
+                out.append(f"| {r['device']} | {r['n_models']} | {t:.0f} | {r['cpu_seconds'] * k:.0f} | "
+                           f"{t / r['n_models']:.1f} | {3600 * r['n_models'] / t:.0f} | {r['peak_rss_mb']:.0f} |")
+        if key.startswith("particles"):
+            out.append(f"\n**Final resolution ({key}; 10 models, totals scaled to 500 temperature steps)**\n")
+            out.append("| device | final | particles | wall s (scaled) | CPU s (scaled) | peak RSS MB |")
+            out.append("|---|---|---|---|---|---|")
+            for r in runs:
+                if "error" in r:
+                    continue
+                k = 500 / r.get("temp_steps", 500)
+                out.append(f"| {r['device']} | {r['final']} | {r['n_particles']} | {r['engine_seconds'] * k:.0f} | "
+                           f"{r['cpu_seconds'] * k:.0f} | {r['peak_rss_mb']:.0f} |")
+    return "\n".join(out)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--results", type=Path, default=ROOT / "paper" / "fig3" / "results")
@@ -65,6 +93,9 @@ def main():
     if vp.exists():
         v = json.loads(vp.read_text())
         print(validation_tables(v, v["labels"]))
+    sp = args.results / "a_nucdyn_engine_speed.json"
+    if sp.exists():
+        print(scaling_tables(json.loads(sp.read_text())))
 
 
 if __name__ == "__main__":
