@@ -1053,15 +1053,47 @@ mod tests {
         let mut a = Model::new(pos.clone(), Rng::new(0));
         a.nl.build(&pos, &sys.radii, 0.5, false);
         let ea = compute_forces_mode(&sys, &mut a, 0.7, 25.0, false, true, false);
-        let mut b = Model::new(pos, Rng::new(0));
+        let mut b = Model::new(pos.clone(), Rng::new(0));
         let eb = compute_forces_mode(&sys, &mut b, 0.7, 25.0, true, true, true);
         assert!((ea.0 - eb.0).abs() <= 1e-9 * ea.0.abs().max(1.0), "{ea:?} {eb:?}");
+        // without energies the cell path takes the branch-free loop
+        let mut h = Model::new(pos, Rng::new(0));
+        compute_forces_mode(&sys, &mut h, 0.7, 25.0, true, false, true);
+        for i in 0..sys.n {
+            for d in 0..3 {
+                let (x, y) = (a.force[i][d], h.force[i][d]);
+                assert!((x - y).abs() <= 1e-9 * (1.0 + x.abs()), "half shell, particle {i}: {x} vs {y}");
+            }
+        }
         for i in 0..sys.n {
             for d in 0..3 {
                 let (x, y) = (a.force[i][d], b.force[i][d]);
                 assert!((x - y).abs() <= 1e-9 * (1.0 + x.abs()), "particle {i}: {x} vs {y}");
             }
         }
+    }
+
+    #[test]
+    fn cell_grid_dynamics_independent_of_threads() {
+        let (sys, pos) = toy_chain(6000, 13);
+        let dp = DynParams {
+            t_ref: 1000.0,
+            t_step: 0.001,
+            n_steps: 40,
+            f_rep: 0.5,
+            f_dist: 25.0,
+            beta: 10.0,
+            tot0: 20.458,
+            skin: 1.0,
+            original_nl_schedule: false,
+            use_cells: true,
+            emulate_overflow: false,
+        };
+        let mut a = Model::new(pos.clone(), Rng::new(3));
+        let mut b = Model::new(pos, Rng::new(3));
+        run_dynamics(&sys, &mut a, &dp, false, None);
+        run_dynamics(&sys, &mut b, &dp, true, None);
+        assert_eq!(a.pos, b.pos);
     }
 
     #[test]

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import resource
 import sys
@@ -72,12 +73,16 @@ def main() -> None:
         path = args.geo_dir / f"{GSM[cell]}_Cell_{cell}_contact_pairs.txt.gz"
         c = un.read_contact_pairs(str(path))
         t0 = time.time()
+        ru0 = resource.getrusage(resource.RUSAGE_SELF)
+        load0 = os.getloadavg()
         res = un.calc_genome_structure(
             c["chrom_a"], c["pos_a"], c["chrom_b"], c["pos_b"],
             protocol=args.protocol, particle_sizes=sizes, n_models=args.n_models, seed=args.seed,
             device=args.device, n_threads=args.n_threads, temp_steps=[args.temp_steps],
             dynamics_steps=[args.dyn_steps], verbose=True, **json.loads(args.extra))
         wall = time.time() - t0
+        ru1 = resource.getrusage(resource.RUSAGE_SELF)
+        cpu = (ru1.ru_utime - ru0.ru_utime) + (ru1.ru_stime - ru0.ru_stime)
         # pos in the 2017 convention (particle = (pos - size, pos]); release_1.3
         # particles are [p, p + size), i.e. pos = p + size
         pos = np.asarray(res["position"], np.int64)
@@ -89,7 +94,8 @@ def main() -> None:
             "cell": cell, "input": str(path.name), "n_contacts_input": int(len(c["pos_a"])),
             "device": args.device, "n_models": args.n_models, "n_threads": args.n_threads,
             "seed": args.seed, "protocol": args.protocol, "wall_seconds": wall,
-            "engine_seconds": res["seconds_total"], "peak_rss_mb": peak_rss_mb(),
+            "engine_seconds": res["seconds_total"], "cpu_seconds": cpu, "peak_rss_mb": peak_rss_mb(),
+            "load_avg_before": load0, "load_avg_after": os.getloadavg(),
             "stages": res["stages"], "params": res["params"], "engine_version": un.__version__,
             "gpu": un.gpu_info() if args.device == "gpu" else None,
             "machine": platform.platform(), "processor": platform.processor(),

@@ -15,7 +15,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `4DNFIFINA2U9.csv`                    | 58 KB   | yes             | —             | Takei 2021 cell table (RNA counts, nuclear area) for `from_fofct(cell_table=…)`, web browser; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | `4DNFIJ52NVDV.csv`                    | 219 KB  | yes             | —             | Takei 2021 nascent RNA spots for `from_fofct(rna_table=…)`, web browser; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer) |
 | `takei2025_cerebellum_fixture/`       | ~750 KB | **missing** — listed but never committed (see its section) | — | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture) |
-| `sim_cell1/` (`sim_cell1.cdz` + mcool) | 1.4 MB | yes             | —             | web browser: single-cell 3-D structure + its own contacts (`build_sim_cell1.py`); `tests/browser_web/test_genome_views.py`; `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`) (from the former 1.x `.h5cd`); `benchmarks/fig2/f_roundtrip.py` (PDB / .3dg / .mcool rows) |
+| `sim_cell1/` (`sim_cell1.cdz` + mcool) | 3.2 MB | yes             | —             | web browser: single-cell 3-D structure ensemble + its own contacts (`build_sim_cell1.py`, native NucDynamics engine); `tests/browser_web/test_genome_views.py`; `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`) (from the former 1.x `.h5cd`); `benchmarks/fig2/f_roundtrip.py` (PDB / .3dg / .mcool rows) |
 | `mESC_Sox2_5cells_{wnan,imputed_linear,imputed_snapfish}.h5cd` | 24 KB each | yes | — | imputation tests / tutorial (Huang 2021 mESC Sox2, 5 cells; see `mESC_Sox2_README.md`); `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); kept as 1.x files so the upgrade path stays exercised |
 | `takei2025_fov0/takei2025_fov0.chromdata.zarr` (older builds: `.h5cd`) | 73 MB (h5cd 1.x: 220 MB) | no | Zenodo 7693825 (streamed) | web browser: 59 IF tracks per spot, 47 cells, IF embedding (`build_takei2025_fov0.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `tests/browser_web` (real-data checks); `benchmarks/fig2/f_roundtrip.py` (chromdata.zarr / FOF-CT / AnnData rows) |
 | `schicar_mop/*.chromdata.zarr` (older builds: `.h5cd`), `*.mcool, *.cool, *.scool` | ~400 MB | no  | built from GEO GSE305439 | web browser: scHiCAR without 3-D, RNA / ATAC / Hi-C embeddings (`build_schicar_mop.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fig2/e_contacts.py`, `e_contacts_query.py` (Fig. 2f and supplement: group pseudo-bulk vs the per-type `contacts_<type>.cool`; link vs copy import), `f_crossmodal.py` (Fig. 2f: RNA Leiden clusters → pseudo-bulk maps and P(s) from the linked `.scool`), `f_roundtrip.py` (Fig. 2b, .scool row) |
@@ -25,7 +25,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials; `tests/core/test_fofct_writer.py` (skipped when absent); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd21_streaming_validation.py` (streaming vs in-memory ArcFISH loop / TAD calls); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
 | `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial; Fig. 3b / 3c (`benchmarks/fig3/b_first_look.py`, `c_gemfish_first_look.py`) |
-| `stevens2017_mesc/` (8 cells: contact pairs + published `.pdb` structures) | 43 MB | no | GEO GSE80280 (`--stevens2017`) | Fig. 3a (NucDynamics reference; `benchmarks/fig3/a_sc_consistency.py`) |
+| `stevens2017_mesc/` (8 cells: contact pairs + published `.pdb` structures) | 43 MB | no | GEO GSE80280 (`--stevens2017`) | Fig. 3a (NucDynamics reference; `benchmarks/fig3/a_sc_consistency.py`; native-engine validation and speed `benchmarks/fig3/a_nucdyn_engine_*.py`) |
 | `bintu2018/{IMR90,K562}_chr21-28-30Mb.csv` | 7.8 MB + 20 MB | no | GitHub raw (`--bintu2018`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
 | `su2020_imr90/chromosome21.tsv` + `Hi-C_contacts_chromosome21.tsv` | 261 MB + 1 MB | no | Zenodo 3928890 (`--su2020_chr21`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
 | `abbas2019_gemfish/*.zip` (Wang 2016 FISH, TADs, Hi-C, GEM-FISH final models) | 40 MB | no | GitHub, pinned commit (`--abbas2019_gemfish`) | Fig. 3a / 3c (`benchmarks/fig3/c_gemfish_wang2016.py`) |
@@ -461,20 +461,28 @@ Until the build scripts land (tracked as an open item; see the
 tutorials' first cell), these two notebooks are **not reproducible from
 public data alone** and are shipped with their recorded outputs.
 
-### `sim_cell1/` — NucDynamics single-cell structure + its contacts (1.4 MB, in repo)
+### `sim_cell1/` — NucDynamics single-cell structure + its contacts (3.2 MB, in repo)
 
-- **Content**: `sim_cell1.cdz` (0.7 MB; a one-file `.chromdata.zarr`
-  store, converted from the former 1.3 `sim_cell1.h5cd` of 1.6 MB with
-  `python -m uchrom.io.upgrade`) — NucDynamics (`uchrom.recon.sc.nucdyn`,
-  CPU) on `cell1.pairs` (Stevens et al. 2017, mESC G1, mm10): 20
-  chromosomes, 25,654 particles at ~100 kb, one trace per chromosome,
-  coordinates in model units; `cell1_contacts.mcool` — the same cell's
-  105,700 contacts at 100 kb / 200 kb / 500 kb / 1 Mb, linked with
-  `cd.link_cool("cell1_contacts.mcool")` (path relative to the store).
-- **Rebuild**: `python example-data/build_sim_cell1.py [--arch cpu] [--format cdz|zarr|h5cd]`.
-- **Check**: bins in contact in the input are ~2× closer in the model
-  (median 3D distance of contacted / non-contacted 1 Mb pairs = 0.44–0.59
-  on chr1, 2, 5, 11, 19) — `tests/browser_web/test_genome_views.py`.
+- **Content**: `sim_cell1.cdz` (2.5 MB; a one-file `.chromdata.zarr`
+  store) — NucDynamics on `cell1.pairs` (Stevens et al. 2017, mESC G1,
+  mm10), computed with the native engine (`uchrom.recon.sc.nucdyn.reconstruct_nucdyn`,
+  `uchrom_nucdyn` 0.1.0, protocol `nuc_dynamics_2017` = the 2017 code's
+  algorithm, default schedule 8 → 0.1 Mb, 500 × 100 steps per stage, GPU,
+  seed 1): an ensemble of 4 models, 21 chromosomes, 25,681 particles at
+  100 kb, one trace per chromosome; `coords` = model 0,
+  `layers["model_0" … "model_3"]` = every model; coordinates in particle
+  radii.  (Rebuilt in the native-engine PR; the previous file came from the
+  Taichi port, which had the `count_contacts` bug and other defects.)
+  `cell1_contacts.mcool` — the same cell's 105,700 contacts at 100 kb /
+  200 kb / 500 kb / 1 Mb, linked with `cd.link_cool("cell1_contacts.mcool")`
+  (path relative to the store).
+- **Rebuild**: `pip install ./native/nucdyn`, then
+  `python example-data/build_sim_cell1.py [--device auto|cpu|gpu] [--n-models 4] [--seed 1] [--format cdz|zarr|h5cd]`
+  (delete `sim_cell1.cdz` first; ~4 min on a laptop GPU).
+- **Check**: bins in contact in the input are 2–3.7× closer in the model
+  (median 3D distance of contacted / non-contacted 1 Mb pairs = 0.27–0.50
+  on chr1, 2, 5, 11, 19; 0.44–0.59 with the Taichi port) —
+  `tests/browser_web/test_genome_views.py`.
 - **Used by**: web browser (3D + contact + distance matrices).
 
 ### `takei2025_fov0/` — Takei 2025 cerebellum, rep 1 FOV 0, first 47 cells (73 MB, built)
@@ -629,7 +637,13 @@ Everything is gitignored.  DOIs checked against Crossref (2026-09-27).
 - **Content**: haploid 129/Ola mESC in G1, mm10.
 - **Download**: `download_data.py --stevens2017`.
 - **Used by**: Fig. 3a — NucDynamics reference structures and the
-  paper's precision metric (`benchmarks/fig3/a_sc_consistency.py`).
+  paper's precision metric (`benchmarks/fig3/a_sc_consistency.py`); the
+  native NucDynamics engine's validation on all 8 cells (ensemble RMSD vs
+  ED Table 2, RMSD / distance-matrix r vs these models, restraint
+  violations: `a_nucdyn_engine_run.py`, `a_nucdyn_engine_score.py`) and its
+  speed benchmarks against the original code (`a_nucdyn_engine_speed.py`,
+  `a_nucdyn_engine_original_timing.py`, `a_nucdyn_engine_original_run.py`;
+  Cell 1).
 
 ### `bintu2018/` — Bintu 2018 chr21:28–30 Mb tracing, IMR90 + K562 (28 MB)
 
