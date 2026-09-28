@@ -10,6 +10,8 @@
 #   factors.txt       meta.csv columns that are factors (clusters, annotations)
 #   meta.csv          spot metadata (meta.data) + spot, grid column/row parsed from the spot name
 #                     ("<col>x<row>") and the image coordinates of GetTissueCoordinates()
+#   image.png         the section's tissue image (spot coordinates are in its pixels, scale 1);
+#   image.txt         the image class and scale factors
 #   red_<name>.csv    cell embeddings of each reduction (pca, umap, ...)
 #   assay_<name>/     the assay's "counts" layer (its "data" layer when counts is empty, named in
 #                     layer.txt) as a compressed sparse column matrix (features x spots):
@@ -82,6 +84,10 @@ for (u in units) {
     if ("cell" %in% colnames(tc)) rownames(tc) <- tc$cell
     tc <- tc[cells, , drop = FALSE]
     for (cn in colnames(tc)) if (is.numeric(tc[[cn]])) md[[paste0("image_", cn)]] <- tc[[cn]]
+    im <- o@images[[u$image]]
+    png::writePNG(im@image, file.path(d, "image.png"))
+    sf <- unlist(im@scale.factors)
+    writeLines(c(class(im)[1], paste(names(sf), sf)), file.path(d, "image.txt"))
   }
   write.csv(md, file.path(d, "meta.csv"), row.names = FALSE)
   writeLines(names(md)[vapply(md, is.factor, logical(1))], file.path(d, "factors.txt"))

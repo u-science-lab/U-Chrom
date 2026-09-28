@@ -16,9 +16,10 @@ For each tissue this script writes spatial_hic_chen2026/<tissue>.chromdata.zarr,
           cell_positions("image"): the Seurat image coordinates (px), where the object has an image
   bins    the 500-kb (and 250-kb) bins of the ssA/B scores (column resolution)
   cellm   <assay>_<reduction>.<Seurat object>: the published PCA / UMAP / BANKSY embeddings (NaN for
-          spots of other objects); spatial.<section>: the section's spot grid (column, -row) as a
-          2-D layout for the browser
-  <tissue>_ssab.h5ad   uns["linked_ssab"]: single-spot A/B scores (Higashi-imputed), Hi-C spots x
+          spots of other objects)
+  <tissue>_images/<section>.png   uns["linked_images"]: the section images (bright-field), in the
+          pixels of cell_positions("image")
+  <tissue>_ssab.h5ad   uns["linked_bin_matrices"]["ssAB"]: single-spot A/B scores (Higashi-imputed), Hi-C spots x
           bins (var bin_id = row of bins)
   <tissue>_rna.h5ad    uns["linked_anndata"]: spatial RNA counts, RNA spots x genes
   E13.5 embryo only: <tissue>_spots_1Mb.scool (one cis map per spot of section 1, cells named by
@@ -44,6 +45,7 @@ import csv
 import gzip
 import itertools
 import json
+import shutil
 import re
 import subprocess
 import time
@@ -266,7 +268,7 @@ def build_tissue(name: str, spec: dict, chromsizes: pd.Series, chunk: int, conta
     from uchrom import ChromData
 
     stem = ROOT / name
-    metas, hic_mats, rna_mats, reds = [], [], [], []
+    metas, hic_mats, rna_mats, reds, images = [], [], [], [], {}
     for assay in ("hic", "rna"):
         for sec, d in sections(EXPORT / spec[assay]):
             if assay not in sec.lower():                       # Hi-C and RNA sections may share a name
@@ -277,6 +279,8 @@ def build_tissue(name: str, spec: dict, chromsizes: pd.Series, chunk: int, conta
             md.insert(1, "section", sec)
             md.insert(2, "assay", assay)
             metas.append(md)
+            if (d / "image.png").exists():
+                images[sec] = d / "image.png"
             obj = (d / "object.txt").read_text().strip()
             for red in sorted(d.glob("red_*.csv")):
                 e = pd.read_csv(red).set_index("spot")
@@ -346,16 +350,6 @@ def build_tissue(name: str, spec: dict, chromsizes: pd.Series, chunk: int, conta
                            "modality": "Hi-C (ssA/B)" if assay == "hic" else "RNA",
                            "label": f"{obj} · {assay.upper()} {red}", "source": f"{SOURCE}; Seurat object {obj}"}
 
-    # the browser draws 2-D cellm arrays: one spatial layout per section (grid column, -row, so the
-    # tissue is upright as in the image); the positions themselves are the cell_positions below
-    grid = cells[["grid_col", "grid_row"]].to_numpy(np.float32) * np.array([1, -1], dtype=np.float32)
-    for sec in cells["section"].cat.categories:
-        m = (cells["section"] == sec).to_numpy()
-        cellm[f"spatial.{sec}"] = np.where(m[:, None], grid, np.nan).astype(np.float32)
-        embeddings[f"spatial.{sec}"] = {"method": "spatial", "modality": "spatial",
-                                         "label": f"{sec} · tissue (spot grid)", "axis_prefix": "grid ",
-                                         "source": "spot grid column / row (cell_positions)"}
-
     empty = pd.DataFrame({c: pd.Series(dtype=t) for c, t in
                           [("chrom", str), ("start", np.int64), ("end", np.int64), ("trace_id", str), ("cell_id", str)]})
     cd = ChromData(np.zeros((0, 3)), empty, bins=bins, cells=cells, cellm=cellm,
@@ -363,20 +357,40 @@ def build_tissue(name: str, spec: dict, chromsizes: pd.Series, chunk: int, conta
                         "doi": "10.1038/s41592-026-03218-3",
                         "coordinate_status": "no 3-D coordinates: spots of a spatial barcode grid",
                         "spot_size_um": spec["spot_um"], "embeddings": embeddings,
-                        "linked_ssab": {"path": ssab_path.name, "format": "h5ad",
-                                        "description": "single-spot A/B compartment score (Higashi-imputed), "
-                                                       "the Seurat assay values as published",
-                                        "seurat_assays": {f"{r // 1000}kb": sorted(v) for r, v in assays_used.items()},
-                                        "cell_axis": "obs index = cells index (Hi-C spots)",
-                                        "var_axis": "var bin_id = row of bins (column resolution)"}})
+                        "linked_bin_matrices": {"ssAB": {
+                            "path": ssab_path.name, "format": "h5ad", "label": "ssA/B",
+                            "description": "single-spot A/B compartment score (Higashi-imputed), the Seurat "
+                                           "assay values as published",
+                            "seurat_assays": {f"{r // 1000}kb": sorted(v) for r, v in assays_used.items()},
+                            "cell_axis": "obs index = cells index (Hi-C spots)",
+                            "var_axis": "var bin_id = row of bins (column resolution)"}}})
     cd.set_cell_positions(cells[["grid_col", "grid_row"]].to_numpy(float), unit="spot", frame="tissue",
                           region_col="section", status="measured",
                           source="spot grid column / row from the Seurat spot names (<col>x<row>)",
-                          spot_size_um=spec["spot_um"])
-    if {"image_imagecol", "image_imagerow"} <= set(cells.columns):
-        cd.set_cell_positions(cells[["image_imagecol", "image_imagerow"]].to_numpy(float), key="image",
-                              unit="px", frame="tissue", region_col="section", status="measured",
-                              source="Seurat GetTissueCoordinates (image column, row)")
+                          spot_size_um=spec["spot_um"], y_axis="down")
+    # image pixels (x right, y down): VisiumV1 objects give imagecol / imagerow, VisiumV2 ones x (= row)
+    # / y (= column); checked against the image (spots sit on darker tissue)
+    col = lambda k: cells[k] if k in cells.columns else pd.Series(np.nan, index=cells.index)  # noqa: E731
+    px = np.c_[col("image_imagecol").fillna(col("image_y")), col("image_imagerow").fillna(col("image_x"))]
+    if np.isfinite(px).all(axis=1).any():
+        cd.set_cell_positions(px.astype(float), key="image", unit="px", frame="tissue", region_col="section",
+                              status="measured", y_axis="down",
+                              source="Seurat GetTissueCoordinates, in the pixels of the section image")
+    # section images (grayscale bright-field, 1080 x 1080): linked PNGs in the "image" positions' pixels
+    if images:
+        from PIL import Image
+
+        img_dir = stem.with_name(stem.name + "_images")
+        img_dir.mkdir(exist_ok=True)
+        recs = {}
+        for sec, src in images.items():
+            dst = img_dir / f"{sec}.png"
+            shutil.copyfile(src, dst)
+            w, h = Image.open(dst).size
+            recs[sec] = {"path": f"{img_dir.name}/{dst.name}", "format": "png", "positions": "image",
+                         "region": sec, "extent": [0, w, 0, h], "kind": "bright-field",
+                         "description": "tissue image of the section (Seurat object), spot coordinates in its pixels"}
+        cd.uns["linked_images"] = recs
 
     # spatial RNA: spots x genes counts, linked as AnnData
     if rna_mats:

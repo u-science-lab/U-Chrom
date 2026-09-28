@@ -20,7 +20,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `mESC_Sox2_5cells_{wnan,imputed_linear,imputed_snapfish}.h5cd` | 24 KB each | yes | — | imputation tests / tutorial (Huang 2021 mESC Sox2, 5 cells; see `mESC_Sox2_README.md`); `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); kept as 1.x files so the upgrade path stays exercised |
 | `takei2025_fov0/takei2025_fov0.chromdata.zarr` (older builds: `.h5cd`) | 73 MB (h5cd 1.x: 220 MB) | no | Zenodo 7693825 (streamed) | web browser: 59 IF tracks per spot, 47 cells, IF embedding (`build_takei2025_fov0.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `tests/browser_web` (real-data checks); `benchmarks/fig2/f_roundtrip.py` (chromdata.zarr / FOF-CT / AnnData rows); Fig 6 (`paper/fig6/extract_data.py`, `benchmarks/fig6/`, agent benchmark `benchmarks/fig6/agent_bench/`) |
 | `schicar_mop/*.chromdata.zarr` (older builds: `.h5cd`), `*.mcool, *.cool, *.scool` | ~400 MB | no  | built from GEO GSE305439 | web browser: scHiCAR without 3-D, RNA / ATAC / Hi-C embeddings (`build_schicar_mop.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fig2/e_contacts.py`, `e_contacts_query.py` (Fig. 2f and supplement: group pseudo-bulk vs the per-type `contacts_<type>.cool`; link vs copy import), `f_crossmodal.py` (Fig. 2f: RNA Leiden clusters → pseudo-bulk maps and P(s) from the linked `.scool`), `f_roundtrip.py` (Fig. 2b, .scool row); `benchmarks/fig6/bench_server.py` (contact-map and pseudo-bulk latency); agent benchmark `benchmarks/fig6/agent_bench/` |
-| `spatial_hic_chen2026/*.chromdata.zarr` + linked `*_ssab.h5ad`, `*_rna.h5ad`, E13.5 `*.scool` / `*.mcool` | 15.9 GB download (Zenodo); built: stores 0.7–16 MB, h5ad 18–880 MB, scool 120 MB + mcool 94 MB | no | Zenodo 17961135 + 22144954 (opt-in, `--spatial_hic_chen2026`), built by `build_spatial_hic_chen2026.py` (needs R: `spatial_hic_chen2026_export.R`) | Spatial Hi-C mouse embryo / brain without 3-D (Chen, Guo et al. 2026): six tissue stores; `benchmarks/spatial_hic_chen2026_validation.py` |
+| `spatial_hic_chen2026/*.chromdata.zarr` + linked `*_ssab.h5ad`, `*_rna.h5ad`, `*_images/`, E13.5 `*.scool` / `*.mcool` | 15.9 GB download (Zenodo); built: stores 0.7–16 MB, h5ad 18–880 MB, scool 120 MB + mcool 94 MB | no | Zenodo 17961135 + 22144954 (opt-in, `--spatial_hic_chen2026`), built by `build_spatial_hic_chen2026.py` (needs R: `spatial_hic_chen2026_export.R`) | Spatial Hi-C mouse embryo / brain without 3-D (Chen, Guo et al. 2026): six tissue stores; `benchmarks/spatial_hic_chen2026_validation.py` |
 | `takei2025_cerebellum/` (tarball + per-FOV and combined `.chromdata.zarr`; older builds: `.h5cd`) | 2.85 GB download; 7.9 GB raw CSV; combined store 2.05 GB as format 2.2 (`*.v22.chromdata.zarr`; 2.94 GB as 2.1, 2.17 GB as 2.0; h5cd 1.x: 6.3 GB) | no | Zenodo 7693825 (opt-in, `--takei2025_cerebellum`) | `benchmarks/fig2/` (b, c, d, allele QC, `rowgroup_sweep.py`, `spot_tracks_encoding.py`; 1e8 store by `replicate_store.py`) via `build_takei2025_cerebellum.py` (`--stream`: FOV-by-FOV streaming import); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1 conversion, streaming seqFISH+ import from `raw/`, streaming distance maps); `benchmarks/cd22_convert_validate.py` (2.1 → 2.2 conversion, bitwise check); `benchmarks/fig2/cd22_variants.py` (format 2.2 variants); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | `liu2025_mop/4DNFID46OABK.csv` + `4DNFICX8IVEK.csv` (+ built `liu2025_mop.chromdata.zarr`, 294 MB; `.v22.chromdata.zarr` 267 MB) | 1.68 GB + 17 MB | no | 4DN public S3 (opt-in, `--liu2025_mop`) | largest wild-type 4DN FOF-CT; `build_liu2025_mop.py` (Fig. 2 dataset scale); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1, streaming `from_fofct(out=)` vs in memory, streaming distance maps vs the dense reference); `benchmarks/cd22_convert_validate.py` / `benchmarks/fig2/cd22_variants.py` (format 2.2); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | Takei 2025 other Zenodo archives (cerebellum rep 2, E14, NMuMG) | 5.3–11 GB each | no | **manual** | `seqfish_multiomics_cerebellum` tutorial (real-data run) |
@@ -590,16 +590,19 @@ public data alone** and are shipped with their recorded outputs.
     rna), grid column and row, Seurat image coordinates, and the Seurat metadata (QC, clusters,
     annotations, label-transfer and pseudotime scores).  R factors are stored as categories.
   - **Cell positions**: `cell_positions()` gives the grid column and row (unit "spot", one frame per
-    section, `spot_size_um` recorded).  `cell_positions("image")` gives the image pixels, where the
-    object has an image.
+    section, `spot_size_um` recorded).  `cell_positions("image")` gives the pixels of the section
+    image.  VisiumV1 objects store `imagecol` / `imagerow`, VisiumV2 ones `x` (= row) / `y` (=
+    column).  The orientation was checked against the images: spots sit on darker tissue.
   - **`bins`**: the ssA/B bins, with a `resolution` column.
   - **`cellm`**: the published PCA / UMAP / BANKSY embeddings, keyed
-    `<assay>_<reduction>.<Seurat object>`; `spatial.<section>` holds each section's spot grid (column,
-    −row).  It is a copy of the positions as a 2-D layout, because the browser shows cells through
-    embeddings.
+    `<assay>_<reduction>.<Seurat object>`.
   - **Linked files** (paths relative to the store):
-    - `<tissue>_ssab.h5ad` (`uns['linked_ssab']`): single-spot A/B scores, Hi-C spots × bins
-      (`var.bin_id` = row of `bins`).  They are not in `cellm` because `cellm` is read on open.
+    - `<tissue>_ssab.h5ad` (`uns['linked_bin_matrices']['ssAB']`): single-spot A/B scores, Hi-C
+      spots × bins (`var.bin_id` = row of `bins`).  They are not in `cellm` because `cellm` is read
+      on open.
+    - `<tissue>_images/<section>.png` (`uns['linked_images']`): the 1080 × 1080 image of each
+      section, taken from the Seurat object.  It is a grayscale bright-field image, **not** an H&E
+      stain.  Its pixels are the units of `cell_positions("image")`.
     - `<tissue>_rna.h5ad` (`uns['linked_anndata']`): spatial RNA counts.
   - **E13.5 section 1 only**: the per-read BEDPE becomes `e13_embryo_50um_spots_1Mb.scool` (one
     cis map per spot, cells named by cell id) and `e13_embryo_50um_bulk.mcool` (25 kb – 1 Mb).
@@ -614,8 +617,9 @@ public data alone** and are shipped with their recorded outputs.
     chromosome: median |r| = 0.956 (min 0.923, chr3).
   - Every store: links resolve, all spots have positions, the ssA/B and RNA AnnData are aligned with
     the Hi-C / RNA spots.
-- **Used by**: web browser data layer (checked: cell fields, embeddings, E13.5 per-spot and pseudo-bulk
-  contact maps); `benchmarks/spatial_hic_chen2026_validation.py`.
+- **Used by**: web browser — the Spatial view (sections over their images), the Genome view
+  (ssA/B tracks per spot / group; E13.5 per-spot and pseudo-bulk contact maps), embeddings;
+  `benchmarks/spatial_hic_chen2026_validation.py`.
 
 ### `takei2025_cerebellum/` — Takei 2025 cerebellum, replicate 1, all FOVs (Fig. 2 benchmarks)
 

@@ -61,7 +61,7 @@ def eig_vs_ssab() -> None:
     clr = cooler.Cooler(f"{mc}::/resolutions/500000")
     import anndata as ad
 
-    ssab = ad.read_h5ad(cd.resolve_link_path(cd.uns["linked_ssab"]["path"]))
+    ssab = ad.read_h5ad(cd.resolve_link_path(cd.uns["linked_bin_matrices"]["ssAB"]["path"]))
     ssab = ssab[ssab.obs["section"] == "E13_HiC_R1", (ssab.var["resolution"] == 500_000).to_numpy()]
     ss = np.nanmean(np.asarray(ssab.X), axis=0)
     bins = cd.bins.iloc[ssab.var["bin_id"].to_numpy()].reset_index(drop=True)
@@ -100,7 +100,7 @@ def stores() -> None:
         pos = cd.cell_positions()
         import anndata
 
-        ssab = anndata.read_h5ad(cd.resolve_link_path(cd.uns["linked_ssab"]["path"]))
+        ssab = anndata.read_h5ad(cd.resolve_link_path(cd.uns["linked_bin_matrices"]["ssAB"]["path"]))
         x = np.asarray(ssab.X)
         cover = {f"{r // 1000}kb": float(np.isfinite(x[:, (ssab.var["resolution"] == r).to_numpy()]).any(1).mean())
                  for r in sorted(ssab.var["resolution"].unique(), reverse=True)}
