@@ -12,6 +12,8 @@ Usage::
     python example-data/download_data.py --seqfish # just seqFISH+ zip
     python example-data/download_data.py --schicar_dna  # opt-in, ~1.5 GB pairs
     python example-data/download_data.py --schicar_atac # opt-in, ~1.4 GB ATAC + mm10 GTF
+    python example-data/download_data.py --spatial_atac_hic  # opt-in, ~9.5 GB (GSE307620)
+    python example-data/download_data.py --spatial_hicrna    # opt-in, ~2.3 GB processed (GSE311199)
     python example-data/download_data.py --takei2025_cerebellum  # opt-in, 2.8 GB tarball
     python example-data/download_data.py --liu2025_mop           # opt-in, 1.7 GB FOF-CT
     python example-data/download_data.py --fig3                  # all Fig. 3 inputs (~370 MB)
@@ -43,6 +45,40 @@ _BINTU = "https://raw.githubusercontent.com/BogdanBintu/ChromatinImaging/master/
 _SU2020 = "https://zenodo.org/records/3928890/files"
 # Stevens et al. 2017 (GEO GSE80280): Cell 1-8 = GSM2219497-GSM2219504
 _STEVENS = [(n, f"GSM{2219496 + n}") for n in range(1, 9)]
+
+_GEO_SAMPLE = "https://ftp.ncbi.nlm.nih.gov/geo/samples"
+
+
+def _gsm(name: str) -> str:
+    """GEO per-sample supplementary URL of a file named 'GSM<id>_…'."""
+    gsm = name.split("_", 1)[0]
+    return f"{_GEO_SAMPLE}/{gsm[:-3]}nnn/{gsm}/suppl/{name}"
+
+
+# Spatial ATAC-Hi-C, mouse brain (Nat Methods 2026, doi:10.1038/s41592-026-03217-4), GEO GSE307620.
+_SPATIAL_ATAC_HIC = [
+    f"{gsm}_{part}"
+    for gsm, tag, merged in (("GSM9228169", "MouseBrainR6", "MBR6merge"), ("GSM9228170", "MouseBrainR8", "MBR8merge"))
+    for part in (f"{merged}.fragments.tsv.gz", f"{merged}.fragments.tsv.gz.tbi.gz",
+                 f"{merged}.hic.fragments.sorted.header.tsv.gz", f"{merged}.hic.fragments.sorted.header.tsv.gz.tbi.gz",
+                 f"{tag}_metadata.json.gz", f"{tag}_scalefactors_json.json.gz", f"{tag}_tissue_hires_image.png.gz",
+                 f"{tag}_tissue_lowres_image.png.gz", f"{tag}_tissue_positions_list.csv.gz")
+]
+
+# Spatial Hi-C-RNA (Guo et al. 2026, Cell, doi:10.1016/j.cell.2026.07.039), GEO GSE311199 — processed files
+# only; the per-sample .pairs (6.6–159 GB each, ~680 GB) are not fetched.
+_SPATIAL_HICRNA = [
+    "GSM9320916_mouse_brain_r1_HIC_RNA.h5ad.gz", "GSM9320917_mouse_brain_r1_Image.tar.gz",
+    "GSM9320917_mouse_brain_r1_RNA.tar.gz", "GSM9320919_mouse_brain_r2_Image.tar.gz",
+    "GSM9320919_mouse_brain_r2_RNA.tar.gz", "GSM9320920_mouse_embryo_E11.5_HIC_RNA.h5ad.gz",
+    "GSM9320921_mouse_embryo_E11.5_Image.tar.gz", "GSM9320921_mouse_embryo_E11.5_RNA.tar.gz",
+    "GSM9320922_Human_melanoma_HIC_RNA.h5ad.gz", "GSM9320923_Human_melanoma_Image.tar.gz",
+    "GSM9320923_Human_melanoma_RNA.tar.gz", "GSM9320924_Human_melanoma_ATAC_Image.tar.gz",
+    "GSM9738330_Human_melanoma_RNA_r2.tar.gz", "GSM9738330_Human_melanoma_r2_Image.tar.gz",
+    "GSM9738332_mouse_embryo_E13.5_RNA_r1.tar.gz", "GSM9738332_mouse_embryo_E13.5_r1_Image.tar.gz",
+    "GSM9738334_mouse_embryo_E13.5_RNA_r2.tar.gz", "GSM9738334_mouse_embryo_E13.5_r2_Image.tar.gz",
+]
+
 _BIL_MERFISH_MOP = (
     "https://download.brainimagelibrary.org/cf/1c/cf1c1a431ef8d021/processed_data"
 )
@@ -235,6 +271,18 @@ DATASETS = {
         ],
         "size_mb": 332,
         "description": "MERFISH mouse MOp cell x gene counts + cell labels (BIL g.21)",
+    },
+    "spatial_atac_hic": {
+        "files": [(f"spatial_atac_hic/raw/GSE307620/{n}", _gsm(n)) for n in _SPATIAL_ATAC_HIC],
+        "size_mb": 9500,
+        "default": False,
+        "description": "Spatial ATAC-Hi-C mouse brain, 2 sections: ATAC + Hi-C fragments, spots, images (GSE307620)",
+    },
+    "spatial_hicrna": {
+        "files": [(f"spatial_hicrna/raw/GSE311199/{n}", _gsm(n)) for n in _SPATIAL_HICRNA],
+        "size_mb": 2300,
+        "default": False,
+        "description": "Spatial Hi-C-RNA brain / embryo / melanoma: processed h5ad, RNA, images (GSE311199)",
     },
 }
 

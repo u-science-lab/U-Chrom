@@ -18,6 +18,8 @@ example-data/takei2025_fov0/
 !example-data/4DNFIJ52NVDV.csv
 !uchrom/browser/web/frontend/package-lock.json
 !uchrom/browser/web/frontend/tsconfig.json
+# browser action schema shared by WebMCP and the Python client (control.py / client.py)
+!uchrom/browser/web/ui_tools.json
 node_modules/
 discovery/uchrom_discovery/ui/node_modules/
 
@@ -65,6 +67,22 @@ docs/build/
 # small in-repo example (must come after the *.h5cd / *.mcool rules)
 !example-data/sim_cell1/*.h5cd
 !example-data/sim_cell1/*.mcool
+# Fig 6c benchmark inputs (replicated Takei 2025 FOV 0; benchmarks/fig6/make_scaled.py)
+benchmarks/fig6/_data/
+# Spatial 3-D genome datasets (download_data.py --spatial_atac_hic / --spatial_hicrna)
+example-data/spatial_atac_hic/
+example-data/spatial_hicrna/*
+# the Sherlock processing scripts and spot-position tables are tracked
+!example-data/spatial_hicrna/sherlock/
+!example-data/spatial_hicrna/sherlock/positions/*.csv
+
+# Fig 6e agent benchmark: answer key, figure data and grades are tracked; raw agent
+# transcripts (~40 MB per run) stay local (archive with the paper's data).
+!benchmarks/fig6/agent_bench/answers.json
+!paper/fig6/results/*.json
+benchmarks/fig6/agent_bench/runs/**
+!benchmarks/fig6/agent_bench/runs/**/
+!benchmarks/fig6/agent_bench/runs/**/grades.json
 
 # Figure 2 benchmarks: large inputs / scratch are ignored, result JSONs are committed
 example-data/takei2025_cerebellum/

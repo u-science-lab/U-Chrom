@@ -103,7 +103,7 @@ snapfish = [
 include-package-data = true
 
 [tool.setuptools.package-data]
-"uchrom.browser.web" = ["static/*", "static/**/*", "API.md"]
+"uchrom.browser.web" = ["static/*", "static/**/*", "API.md", "ui_tools.json"]
 
 [tool.setuptools.packages.find]
 include = ["uchrom*"]
