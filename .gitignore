@@ -72,6 +72,8 @@ benchmarks/fig6/_data/
 # Spatial 3-D genome datasets (download_data.py --spatial_atac_hic / --spatial_hicrna)
 example-data/spatial_atac_hic/
 example-data/spatial_hicrna/*
+# Chen 2026 spatial Hi-C (download_data.py --spatial_hic_chen2026; build_spatial_hic_chen2026.py)
+example-data/spatial_hic_chen2026/
 # the Sherlock processing scripts and spot-position tables are tracked
 !example-data/spatial_hicrna/sherlock/
 !example-data/spatial_hicrna/sherlock/positions/*.csv

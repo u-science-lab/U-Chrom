@@ -729,7 +729,7 @@ class ChromData:
         if self._linked_adata is None:
             path = self.uns.get("linked_anndata", {}).get("path")
             if path:
-                path = Path(path)
+                path = self.resolve_link_path(path)
                 if path.exists():
                     import anndata as ad
                     self._linked_adata = ad.read_h5ad(path)
@@ -746,7 +746,7 @@ class ChromData:
         if path is None:
             raise ValueError("No linked AnnData path is recorded in cd.uns['linked_anndata'].")
         import anndata as ad
-        self._linked_adata = ad.read_h5ad(path)
+        self._linked_adata = ad.read_h5ad(self.resolve_link_path(path))
         return self._linked_adata
 
     def link_mudata(

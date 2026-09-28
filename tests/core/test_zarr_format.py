@@ -487,6 +487,20 @@ def test_links_follow_a_moved_folder(tmp_path):
     assert "linked_anndata" in root["links"].attrs["records"]
 
 
+def test_linked_anndata_resolves_next_to_the_store(tmp_path, monkeypatch):
+    ad = pytest.importorskip("anndata")
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    ad.AnnData(X=np.ones((2, 3), dtype=np.float32)).write_h5ad(proj / "rna.h5ad")
+    cd = _cd()
+    cd.uns["linked_anndata"] = {"path": "rna.h5ad"}
+    cd.write(proj / "d.chromdata.zarr")
+    monkeypatch.chdir(tmp_path)                             # the relative path is not under the cwd
+    back = ChromData.read(proj / "d.chromdata.zarr")
+    assert back.linked_adata.shape == (2, 3)
+    assert ChromData.read(proj / "d.chromdata.zarr").load_linked_anndata().shape == (2, 3)
+
+
 def test_invalid_values_raise(tmp_path):
     cd = _cd()
     cd.cellm["bad"] = np.array([{"a": 1}] * 4, dtype=object)

@@ -14,6 +14,7 @@ Usage::
     python example-data/download_data.py --schicar_atac # opt-in, ~1.4 GB ATAC + mm10 GTF
     python example-data/download_data.py --spatial_atac_hic  # opt-in, ~9.5 GB (GSE307620)
     python example-data/download_data.py --spatial_hicrna    # opt-in, ~2.3 GB processed (GSE311199)
+    python example-data/download_data.py --spatial_hic_chen2026  # opt-in, ~15.9 GB processed (Zenodo 17961135)
     python example-data/download_data.py --takei2025_cerebellum  # opt-in, 2.8 GB tarball
     python example-data/download_data.py --liu2025_mop           # opt-in, 1.7 GB FOF-CT
     python example-data/download_data.py --fig3                  # all Fig. 3 inputs (~370 MB)
@@ -67,6 +68,30 @@ _SPATIAL_ATAC_HIC = [
 
 # Spatial Hi-C-RNA (Guo et al. 2026, Cell, doi:10.1016/j.cell.2026.07.039), GEO GSE311199 — processed files
 # only; the per-sample .pairs (6.6–159 GB each, ~680 GB) are not fetched.
+# Spatial Hi-C, mouse embryo / brain (Chen, Guo et al. 2026, Nat Methods, doi:10.1038/s41592-026-03218-3).
+# Processed data: Zenodo 17961135 (CC-BY-4.0): one per-read cis BEDPE (E13.5 embryo) and Seurat objects (.qs)
+# of the spatial Hi-C (ssA/B scores) and spatial RNA; raw reads are in GSA CRA016676 (not fetched).
+# The authors' code (Zenodo 22144954, MIT) holds the spot barcode tables used to place spots.
+_ZENODO_CHEN2026 = "https://zenodo.org/records/17961135/files"
+_SPATIAL_HIC_CHEN2026 = {  # file -> md5
+    "cis.E13all.R1_hicup_dedup.sort.bedpe.gz": "55599bdd125b3bfeced8fd12fbb4b5f1",
+    "seurat_Cere_hic_adult_final_20um.qs": "1834c5d50219f5309f1e2f3391d1fcec",
+    "seurat_Cere_rna_adult_final_20um.qs": "1514a14101c11d44e39a838ca818eb2f",
+    "seurat_E13_hic_embyro_final_50um.qs": "8d47fd98cab885abac9fc1ffa41da0b6",
+    "seurat_E13_rna_embyro_final_50um.qs": "7e1304bf60cf83999ff67f361945b9ff",
+    "seurat_brain_hic_cortex_final_10um.qs": "72299bf9f7e70640e4b09c5efabf84af",
+    "seurat_brain_hic_embyro_final_10um.qs": "8715a7429a7fb5564fa0f2d47e55528d",
+    "seurat_brain_hic_embyro_final_20um.qs": "da104d556cc13b56fca612a6dce6cbf2",
+    "seurat_brain_hic_hippo_final_10um.qs": "3b10fd9655ffa36b0ab2d0883edb4078",
+    "seurat_brain_rna_cortex_final_10um.qs": "fd04a9e6fbb95c7a4ab98cdbc5dab8b4",
+    "seurat_brain_rna_embyro_final_10um.qs": "cb18bb1b342d25c553cb8eebb66cb28d",
+    "seurat_brain_rna_empyro_final_20um.qs": "93aeee208ebadc52a9f6976510d40dcb",
+    "seurat_brain_rna_hippo_final_10um.qs": "6d1d25f9955bebfe8349c61f8c42feaa",
+}
+_CHEN2026_CODE = ("spatial_hic_chen2026/raw/code/Spatial-Hi-C-v1.0.0.zip",
+                  "https://zenodo.org/records/22144954/files/Monie820/Spatial-Hi-C-v1.0.0.zip",
+                  "17ddcfbb9636dda9fb2dedb0fa8edc1f")
+
 _SPATIAL_HICRNA = [
     "GSM9320916_mouse_brain_r1_HIC_RNA.h5ad.gz", "GSM9320917_mouse_brain_r1_Image.tar.gz",
     "GSM9320917_mouse_brain_r1_RNA.tar.gz", "GSM9320919_mouse_brain_r2_Image.tar.gz",
@@ -283,6 +308,15 @@ DATASETS = {
         "size_mb": 2300,
         "default": False,
         "description": "Spatial Hi-C-RNA brain / embryo / melanoma: processed h5ad, RNA, images (GSE311199)",
+    },
+    "spatial_hic_chen2026": {
+        "files": [(f"spatial_hic_chen2026/raw/zenodo17961135/{n}", f"{_ZENODO_CHEN2026}/{n}")
+                  for n in _SPATIAL_HIC_CHEN2026] + [_CHEN2026_CODE[:2]],
+        "md5": {**{f"spatial_hic_chen2026/raw/zenodo17961135/{n}": m for n, m in _SPATIAL_HIC_CHEN2026.items()},
+                _CHEN2026_CODE[0]: _CHEN2026_CODE[2]},
+        "size_mb": 15920,
+        "default": False,
+        "description": "Spatial Hi-C mouse embryo / brain (Chen et al. 2026): E13.5 cis BEDPE, Seurat .qs, code (Zenodo)",
     },
 }
 
