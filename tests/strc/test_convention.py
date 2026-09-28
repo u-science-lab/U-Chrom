@@ -9,7 +9,7 @@ import pytest
 from tests._synth import chain_traces, domain_traces
 from uchrom import ChromData
 
-COOL = Path(__file__).resolve().parents[2] / "example-data" / "IMR90_chr21_30kb.cool"
+COOL = Path(__file__).resolve().parents[2] / "example-data" / "K562_chr21_30kb.cool"
 
 
 def _two_chroms(make, **kw):
@@ -198,7 +198,7 @@ def test_tl_aliases_dispatch(two_chrom_data):
     assert callable(uc.pp.impute)
 
 
-@pytest.mark.skipif(not COOL.exists(), reason="IMR90 cool not present")
+@pytest.mark.skipif(not COOL.exists(), reason="K562 cool not present")
 def test_call_tads_di_matches_kernel_on_linked_cool():
     import cooler
     import torch
@@ -206,9 +206,9 @@ def test_call_tads_di_matches_kernel_on_linked_cool():
     from uchrom.strc.tad import DICallerParams, call_tads_di, get_domains
 
     cd = domain_traces(n_traces=2)
-    cd.link_cool(COOL, key="imr90")
+    cd.link_cool(COOL, key="k562")
     p = DICallerParams(window=10, smoothing_param=0.03, min_size_frac=0.02)
-    tads = call_tads_di(cd, contacts="imr90", chrom="chr21", params=p, device="cpu")
+    tads = call_tads_di(cd, contacts="k562", chrom="chr21", params=p, device="cpu")
 
     clr = cooler.Cooler(str(COOL))
     mat = np.nan_to_num(clr.matrix(balance="weight" in clr.bins().columns).fetch("chr21"))
@@ -216,5 +216,5 @@ def test_call_tads_di_matches_kernel_on_linked_cool():
                       smoothing_param=0.03, min_size_frac=0.02, device="cpu")
     assert list(zip(tads["start_bin"], tads["end_bin"])) == [(int(s), int(e)) for s, e in ref if e > s]
     rec = cd.results.record("tads.di")
-    assert rec.inputs["contacts"] == "imr90" and rec.inputs["resolution"] == 30_000
+    assert rec.inputs["contacts"] == "k562" and rec.inputs["resolution"] == 30_000
     assert rec.params == {"window": 10, "smoothing_param": 0.03, "min_size_frac": 0.02}
