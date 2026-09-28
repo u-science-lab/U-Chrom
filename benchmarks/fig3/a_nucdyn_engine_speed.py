@@ -98,6 +98,9 @@ def main() -> None:
     ap.add_argument("--temp-steps", type=int, default=50)
     ap.add_argument("--threads", type=int, default=os.cpu_count())
     ap.add_argument("--devices", nargs="+", default=["gpu", "cpu"], help="native engine devices to run")
+    ap.add_argument("--models", type=int, nargs="+", default=[1, 2, 4, 8, 16, 32, 64])
+    ap.add_argument("--no-cpu-ensemble10", action="store_true",
+                    help="skip the 10-model CPU run of the ensemble suite (e.g. timed by the validation runs)")
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
     if args.worker:
@@ -123,11 +126,12 @@ def main() -> None:
             if "gpu" in devs:
                 runs.append(run_sub({"engine": "native", "device": "gpu", "n_models": 10}))
             if "cpu" in devs:
-                runs.append(run_sub({"engine": "native", "device": "cpu", "n_models": 10, "n_threads": args.threads}))
+                if not args.no_cpu_ensemble10:
+                    runs.append(run_sub({"engine": "native", "device": "cpu", "n_models": 10, "n_threads": args.threads}))
                 runs.append(run_sub({"engine": "native", "device": "cpu", "n_models": 1, "n_threads": 1}))
         elif suite == "models":
             for dev in [d for d in ("gpu", "cpu") if d in devs]:
-                for m in (1, 2, 4, 8, 16, 32, 64):
+                for m in args.models:
                     runs.append(run_sub({"engine": "native", "device": dev, "n_models": m, "temp_steps": ts,
                                          "n_threads": args.threads}))
         elif suite == "particles":
