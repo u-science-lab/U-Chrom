@@ -23,10 +23,10 @@ within half a particle).
 
 Metrics per cell (``evaluate``):
 
-* **precision** — mean pairwise all-particle RMSD after optimal superposition (paper's metric,
-  ED Table 2), in radii: without mirror (``rmsd_pair_mean``) and best of mirror
-  (``rmsd_pair_mirror_mean``), plus the RMSD of each model to the iteratively superposed
-  ensemble mean;
+* **precision** — RMSD of each model to the iteratively superposed ensemble mean
+  (``rmsd_to_mean_mean``, radii): on the GEO models this reproduces ED Table 2 within 0.01 for
+  all 8 cells, so it is the paper's number (the footnote says "mean pairwise"); also the mean
+  pairwise RMSD without mirror (``rmsd_pair_mean``) and best of mirror (``rmsd_pair_mirror_mean``);
 * **vs published** — every engine model vs every GEO model: RMSD (best of mirror) and the median
   over chromosomes of the Pearson r between distance matrices; the same for GEO vs GEO (ceiling);
 * **restraints** — the cell's GEO contacts binned onto the ensemble's own particles; restraints
@@ -275,7 +275,8 @@ def precision(ms: ModelSet) -> dict:
             "rmsd_pair_mirror_mean": float(np.mean(mirr)) if pairs else None,
             "rmsd_pair_mirror_sem": sem(mirr) if pairs else None,
             "n_mirror_pairs": int(sum(m < p - 1e-9 for m, p in zip(mirr, plain))),
-            "rmsd_to_mean_mean": float(np.mean(to_mean))}
+            "rmsd_to_mean_mean": float(np.mean(to_mean)),
+            "rg_mean": float(np.mean([np.sqrt(((x - x.mean(0)) ** 2).sum(1).mean()) for x in X]))}
 
 
 def match(ours: ModelSet, ref: ModelSet) -> tuple[np.ndarray, np.ndarray]:
@@ -523,10 +524,12 @@ def cmd_evaluate(a) -> None:
         brief = {"cell": cell, "ED_rmsd": r["ed_table2"]["100kb_final"]["rmsd"]}
         for who in ("published", "engine"):
             if who in r:
-                brief[who] = {"rmsd_pair": round(r[who]["precision"]["rmsd_pair_mean"] or float("nan"), 3),
+                brief[who] = {"rmsd_to_mean": round(r[who]["precision"]["rmsd_to_mean_mean"], 3),
+                              "rmsd_pair": round(r[who]["precision"]["rmsd_pair_mean"] or float("nan"), 3),
                               "rmsd_pair_mirror": round(r[who]["precision"]["rmsd_pair_mirror_mean"] or float("nan"), 3),
                               "vs_pub_rmsd": round(r[who]["vs_published"]["rmsd_mirror_mean"], 3),
                               "vs_pub_r": round(r[who]["vs_published"]["dist_r_median_mean"], 4),
+                              "rg": round(r[who]["precision"]["rg_mean"], 2),
                               "N_rest": r[who]["restraints"]["N_rest"],
                               "V4": round(r[who]["restraints"]["pct_viol_gt4"], 3)}
         print(json.dumps(brief), flush=True)

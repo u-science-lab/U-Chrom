@@ -174,7 +174,20 @@ of the next chromosome in the sorted concatenation (index distance 1).
   `(0, 0)`, whose force is zero. **Repulsion is therefore switched off until the next rebuild**
   (next displacement > 1.0, which at low temperature may be after the whole 100-step call). An
   exact-reproduction engine should implement this behaviour behind a flag; a "fixed" engine should
-  report how often it occurs.
+  report how often it occurs. Measured with an instrumented copy of `dyn_util.pyx` (counters only),
+  Stevens Cell 1, one model: see the table below — it is not a rare corner case at the fine stages.
+
+  | stage | list builds | overflowing builds | steps with repulsion off (of 50,000) |
+  |---|---|---|---|
+  | 8 Mb | 3,519 | 125 | 498 (1.0 %) |
+  | 4 Mb | 3,263 | 60 | 206 (0.4 %) |
+  | 2 Mb | 3,123 | 1 | 4 (0.0 %) |
+  | 400 kb | 6,540 | 1,031 | 5,421 (10.8 %) |
+  <!-- NL_OVERFLOW_ROWS -->
+
+  The growth factor 1.05 of `anneal_model` is too small when the structure compacts between
+  temperature steps, so the first build of a call overflows and the whole call can run without
+  repulsion.
 
 ## 8. Annealing schedule — `nuc_dynamics.py:anneal_genome`, `anneal_model`
 
@@ -294,6 +307,18 @@ scan that stops once the distance grows), then the bracketing pair `(p1, p2)` an
 The GEO models are the paper's final structures (with the extra round). ED Table 2 reports four
 stages (400 kb, 200 kb, 100 kb without and with the ambiguous restraints); the harness
 (`nucdyn_harness.py`) carries the full table.
+
+**Metric calibration on the GEO models** (`paper/fig3/results/a_nucdyn_reference_published.json`):
+the "precision" of ED Table 2 is reproduced for all eight cells, within 0.01 radii, by the **RMSD of
+each model to the superposed ensemble mean** (Cell 1 0.414 vs 0.41 … Cell 7 1.742 vs 1.75), not by
+the mean pairwise RMSD (≈ 1.5 × larger, 0.615 for Cell 1), although the table's footnote says
+"mean pairwise". ED Table 2's restraint counts (`N_rest`) and violation shares are **not**
+reproducible from the deposited contact lists: e.g. Cell 8 has 32,482 restraints in the table
+but only 25,994 contacts between distinct particles in the GEO file; the violation shares match
+only for Cell 8 (0.03 / 0.02 %), the one cell whose GEO file has no duplicate lines. The harness
+therefore reports violations on one fixed definition (restraint = unique non-adjacent particle
+pair, `d_upper = 1.2 n^-0.33`, violated if `d > d_upper + δ`) and uses the published models as
+the baseline for that definition.
 
 ## 13. What changed in `release_1.3` (not the target)
 
