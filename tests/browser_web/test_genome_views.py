@@ -32,7 +32,7 @@ def test_summary_lists_genome_views():
     assert s["has_coords"] is True
     assert s["n_bins"] == 3
     # non-numeric columns are not tracks
-    assert s["tracks"] == [{"name": "ATAC", "level": "bin"}, {"name": "H3K27ac", "level": "spot"}]
+    assert s["tracks"] == [{"name": "ATAC", "level": "bin", "grid": "spots"}, {"name": "H3K27ac", "level": "spot", "grid": "spots"}]
     assert s["intervals"] == [{"key": "tads", "n": 3, "kind": None}]
     assert s["contact_maps"] == []
 

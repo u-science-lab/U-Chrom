@@ -354,6 +354,8 @@ export function GenomeView({ pane }: { pane: Pane }) {
 
   // tracks: one request per scope (rows may have their own group)
   const names = useMemo(() => new Set((ds?.tracks ?? []).map((t) => t.name)), [ds])
+  // tracks on other bins (a cell × bin matrix per resolution) go in a request of their own
+  const gridOf = useMemo(() => new Map((ds?.tracks ?? []).map((t) => [t.name, t.grid ?? 'spots'])), [ds])
   // one request per (cells, aggregate)
   const trackReqs = useMemo(() => {
     const m = new Map<string, { scope: Scope; agg: string; names: string[] }>()
@@ -361,13 +363,13 @@ export function GenomeView({ pane }: { pane: Pane }) {
       if (r.kind !== 'track' || !r.track || !names.has(r.track)) return
       const sc = rowScopes[i]
       const agg = r.agg ?? pane.agg ?? 'mean'
-      const k = `${scopeKey(sc)}|${agg}`
+      const k = `${scopeKey(sc)}|${agg}|${gridOf.get(r.track)}`
       const e = m.get(k) ?? { scope: sc, agg, names: [] }
       if (!e.names.includes(r.track)) e.names.push(r.track)
       m.set(k, e)
     })
     return m
-  }, [rows, names, rowScopes, pane.agg])
+  }, [rows, names, gridOf, rowScopes, pane.agg])
   const trackSig = [...trackReqs].map(([k, e]) => `${k}=${e.names.join(',')}`).join('|')
   const [tracks, setTracks] = useState<Record<string, TrackData>>({})
   const [trackError, setTrackError] = useState<string | null>(null)
@@ -519,7 +521,7 @@ export function GenomeView({ pane }: { pane: Pane }) {
                   height={heights[i]}
                   width={W}
                   locus={locus}
-                  data={tracks[`${scopeKey(rowScopes[i])}|${r.agg ?? pane.agg ?? 'mean'}`] ?? null}
+                  data={tracks[`${scopeKey(rowScopes[i])}|${r.agg ?? pane.agg ?? 'mean'}|${gridOf.get(r.track ?? '')}`] ?? null}
                   label={`${scopeText(rowScopes[i], rowScopes[i].kind === 'group' ? byRef.get((rowScopes[i] as { group: string }).group) : null, nAll)}${isMultiCell(rowScopes[i]) ? ` · ${r.agg ?? pane.agg ?? 'mean'}` : ''}`}
                   color={rowScopes[i].kind === 'group' ? (byRef.get((rowScopes[i] as { group: string }).group)?.color ?? null) : null}
                   register={register}

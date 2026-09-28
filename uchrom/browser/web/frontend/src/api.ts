@@ -1,5 +1,5 @@
 import { decodeMatrix, type MatrixData } from './matrix'
-import type { IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, TracePage } from './types'
+import type { IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, SpatialPoints, TracePage } from './types'
 
 async function request(url: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(url, init)
@@ -67,6 +67,14 @@ export async function fetchEmbedding(id: string, key: string, dims: [number, num
   const q = new URLSearchParams({ dims: `${dims[0]},${dims[1]}` })
   return (await request(`api/datasets/${encodeURIComponent(id)}/embedding/${encodeURIComponent(key)}?${q}`)).json()
 }
+
+export async function fetchSpatial(id: string, key: string, region: string | null): Promise<SpatialPoints> {
+  const q = region !== null ? `?${new URLSearchParams({ region })}` : ''
+  return (await request(`api/datasets/${encodeURIComponent(id)}/spatial/${encodeURIComponent(key)}${q}`)).json()
+}
+
+/** URL of a linked image (a region's tissue image). */
+export const imageUrl = (id: string, name: string) => `api/datasets/${encodeURIComponent(id)}/images/${encodeURIComponent(name)}`
 
 export async function fetchPointSet(id: string, name: string): Promise<PointSet> {
   const res = await request(`api/datasets/${encodeURIComponent(id)}/points/${encodeURIComponent(name)}`, {

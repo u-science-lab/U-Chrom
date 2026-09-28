@@ -12,10 +12,11 @@ import {
   moveSplitter,
   normalizeSizes,
   PANE_LABEL,
-  PANE_TYPES,
   removePane,
   retypePane,
   setLayout,
+  supportedPaneTypes,
+  type DataKind,
   type Pane,
   type PaneType,
   type WsLayout,
@@ -30,15 +31,96 @@ import { cellTitle, useCellTypes } from './PaneCell'
 import { useGroupInfo } from '../useGroups'
 import { savePanePng } from '../capture'
 import { StatsView } from './StatsView'
+import { RegionPicker, SpatialView } from './SpatialView'
 import { Viewport } from './Viewport'
 
 const TYPE_LABEL = PANE_LABEL
-const MENU_LABEL: Record<PaneType, string> = {
-  '3d': '3D view',
-  embedding: 'Embedding view',
-  genome: 'Genome (Hi-C / distance / tracks)',
-  matrix: 'Matrix (Hi-C / distance)',
-  stats: 'Statistics',
+/** What each view shows (menu descriptions). */
+const MENU_HINT: Record<PaneType, string> = {
+  '3d': '3-D chromatin structures',
+  spatial: 'cells in the tissue, over its image',
+  embedding: 'UMAP / t-SNE / PCA of the cells',
+  genome: 'contact maps, distances and tracks along a locus',
+  matrix: 'contact or distance matrix of a locus',
+  stats: 'distributions and per-cell statistics',
+}
+const MENU_ICON: Record<PaneType, string> = { '3d': '◈', spatial: '▦', embedding: '⁘', genome: '≋', matrix: '▤', stats: '▥' }
+
+/** What the active dataset offers, for the default views and the view menus. */
+function useDataKind(): DataKind {
+  const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
+  return {
+    hasEmbeddings: (ds?.embeddings?.length ?? 0) > 0,
+    hasCoords: !!ds && ds.has_coords !== false && ds.n_spots > 0,
+    hasTracks: (ds?.tracks?.length ?? 0) > 0,
+    hasContactMaps: (ds?.contact_maps?.length ?? 0) > 0,
+    hasSpatial: (ds?.spatial?.length ?? 0) > 0,
+    manyCells: (ds?.n_cells ?? 0) > 1,
+  }
+}
+
+/**
+ * Menu of view types (the + View menu and each pane's type switch): only
+ * the views this dataset can fill, each with what it shows; the current
+ * type is checked (and kept listed, marked, if the data lacks it).
+ */
+function ViewMenu({ current, onPick }: { current?: PaneType; onPick(t: PaneType): void }) {
+  const supported = supportedPaneTypes(useDataKind())
+  const types = current && !supported.includes(current) ? [...supported, current] : supported
+  return (
+    <ul className="view-menu" role="menu">
+      {types.map((t) => (
+        <li
+          key={t}
+          role="menuitemradio"
+          aria-checked={t === current}
+          className={`${t === current ? 'current' : ''}${supported.includes(t) ? '' : ' unsupported'}`}
+          onClick={() => onPick(t)}
+        >
+          <span className="vm-icon" aria-hidden>
+            {MENU_ICON[t]}
+          </span>
+          <span className="vm-text">
+            <span className="vm-name">{PANE_LABEL[t]}</span>
+            <span className="vm-hint">{supported.includes(t) ? MENU_HINT[t] : 'not available for this dataset'}</span>
+          </span>
+          <span className="vm-check" aria-hidden>
+            {t === current ? '✓' : ''}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** A pane's type switch: the view name with a caret, opening the view menu. */
+function PaneTypeSwitch({ pane }: { pane: Pane }) {
+  const setWorkspace = useStore((s) => s.setWorkspace)
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLButtonElement>(null)
+  const close = useCallback(() => setOpen(false), [])
+  return (
+    <>
+      <button ref={ref} className={`pane-type${open ? ' open' : ''}`} onClick={() => setOpen(!open)} title="View type" aria-haspopup="menu">
+        <span className="vm-icon" aria-hidden>
+          {MENU_ICON[pane.type]}
+        </span>
+        {TYPE_LABEL[pane.type]}
+        <span className="caret" aria-hidden>
+          ▾
+        </span>
+      </button>
+      <Popover anchor={ref} open={open} onClose={close} className="menu-popup">
+        <ViewMenu
+          current={pane.type}
+          onPick={(t) => {
+            setWorkspace((w) => retypePane(w, pane.id, t))
+            setOpen(false)
+          }}
+        />
+      </Popover>
+    </>
+  )
 }
 /** Views that follow the shared genomic locus. */
 const GENOME_PANES = new Set<PaneType>(['genome', 'matrix', 'stats'])
@@ -63,10 +145,7 @@ export function Workspace() {
   const ensureDefault = useStore((s) => s.ensureDefaultWorkspace)
   const datasetId = useStore((s) => s.activeDatasetId)
   const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
-  const hasEmbeddings = (ds?.embeddings?.length ?? 0) > 0
-  const hasCoords = !!ds && ds.has_coords !== false && ds.n_spots > 0
-  const hasTracks = (ds?.tracks?.length ?? 0) > 0
-  const hasContactMaps = (ds?.contact_maps?.length ?? 0) > 0
+  const { hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells } = useDataKind()
   const [resetKeys, setResetKeys] = useState<Record<string, number>>({})
   const [menu, setMenu] = useState(false)
   const addRef = useRef<HTMLButtonElement>(null)
@@ -75,8 +154,8 @@ export function Workspace() {
 
   // Until the user arranges views, the default follows the data.
   useEffect(() => {
-    if (datasetId) ensureDefault({ hasEmbeddings, hasCoords, hasTracks, hasContactMaps })
-  }, [datasetId, hasEmbeddings, hasCoords, hasTracks, hasContactMaps, ensureDefault])
+    if (datasetId) ensureDefault({ hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells })
+  }, [datasetId, hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells, ensureDefault])
 
   // Pins to cells the active dataset doesn't have (e.g. after switching) are dropped.
   const cellList = useStore((s) => (s.activeDatasetId ? s.cells[s.activeDatasetId] : undefined))
@@ -154,13 +233,7 @@ export function Workspace() {
             + View
           </button>
           <Popover anchor={addRef} open={menu} onClose={closeMenu} className="menu-popup">
-            <ul className="ws-menu">
-              {PANE_TYPES.map((t) => (
-                <li key={t} onClick={() => add(t)}>
-                  {MENU_LABEL[t]}
-                </li>
-              ))}
-            </ul>
+            <ViewMenu onPick={add} />
           </Popover>
         </div>
         <div className="seg ws-layouts" role="group" aria-label="Layout">
@@ -248,13 +321,8 @@ function PaneBox({
       onFocusCapture={activate}
     >
       <header className="pane-head">
-        <select value={pane.type} onChange={(e) => setWorkspace((w) => retypePane(w, pane.id, e.target.value as PaneType))} title="View type">
-          {PANE_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {TYPE_LABEL[t]}
-            </option>
-          ))}
-        </select>
+        <PaneTypeSwitch pane={pane} />
+        {pane.type === 'spatial' && <RegionPicker pane={pane} />}
         {cellPin && (
           <button className="pin-badge" onClick={() => activate()} title="Pinned to this cell — change it in the inspector (right, “cells”)">
             📌 {cellTitle(cellPin, types)}
@@ -296,6 +364,7 @@ function PaneBox({
       </header>
       <div className="pane-body" ref={bodyRef} data-pane={pane.id}>
         {pane.type === '3d' && <Viewport paneId={pane.id} resetKey={resetKey} scope={pane.scope} />}
+        {pane.type === 'spatial' && <SpatialView pane={pane} />}
         {pane.type === 'embedding' && <EmbeddingView pane={pane} />}
         {pane.type === 'genome' && <GenomeView pane={pane} />}
         {pane.type === 'matrix' && <MatrixView pane={pane} />}

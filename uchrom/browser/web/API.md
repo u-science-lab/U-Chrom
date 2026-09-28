@@ -49,6 +49,9 @@ List loaded datasets.
 ```
 
 `chroms` is ordered naturally (`chr1, chr2, …, chr10, …, chrX, chrY, chrM`).
+A dataset without spots (spatial Hi-C, scHi-C) lists the chromosomes of
+its `bins` (with `n_spots: 0`), so the genome views can show its contact
+maps and cell × bin tracks.
 
 Multi-omics fields (empty lists when the dataset has none):
 
@@ -169,6 +172,41 @@ Two components of a cell embedding for a 2-D scatter view:
 `dims` defaults to `0,1` (e.g. `2,3` for PC3/PC4).  Non-finite values →
 `null`.  `404` unknown key, `422` bad dims.
 
+## Cell positions and images
+
+### `GET /api/datasets/{id}/spatial/{key}?region=`
+
+The cells of one region (section / FOV) of a cell-position set
+(`cd.cell_positions(key)`), with the region's image:
+
+```json
+{"key": "image", "region": "E14_5_HiC", "unit": "px", "y_axis": "down",
+ "cell_ids": ["E14_5_HiC:1x15", …], "x": [1063.1, …], "y": [1074.4, …],
+ "image": {"name": "E14_5_HiC", "extent": [0, 1080, 0, 1080], "kind": "bright-field"}}
+```
+
+Without `region`, every cell with a position.  Sets are listed in the
+dataset summary:
+
+```json
+"spatial": [{"key": "image", "unit": "px", "frame": "tissue", "y_axis": "down",
+             "status": "measured", "source": "…", "n_images": 6,
+             "regions": [{"name": "E14_5_HiC", "n_cells": 5426, "image": "E14_5_HiC"}]}]
+```
+
+one per `uns["cell_spatial"]` record, sets with images first; `regions`
+are the values of the record's `region_col`.  `y_axis` is the record's
+(`"down"` for image pixels / grid rows; default `"down"` for units `px`
+and `spot`, else `"up"`).  Images are `uns["linked_images"][name]` records
+(`path` relative to the dataset, `positions` = the key whose units they are
+in, `region`, `extent` [x0, x1, y0, y1] with the image's first row at y0,
+optional `kind`).  `404` unknown key / region.
+
+### `GET /api/datasets/{id}/images/{name}`
+
+The image file of a `linked_images` record (e.g. PNG).  `404` unknown name
+or missing file.
+
 ## Point sets
 
 ### `POST /api/datasets/{id}/points/{name}`
@@ -258,8 +296,11 @@ The dataset summary gains:
 ```json
 {
   "has_coords": true,                    // false → no 3-D spots (hide/grey 3-D views)
-  "tracks": [{"name": "ATAC", "level": "bin"},     // numeric cd.bin_tracks columns (per locus)
-             {"name": "H3K27ac", "level": "spot"}], // numeric cd.spot_tracks columns (per spot)
+  "tracks": [{"name": "ATAC", "level": "bin", "grid": "spots"},     // numeric cd.bin_tracks columns (per locus)
+             {"name": "H3K27ac", "level": "spot", "grid": "spots"}, // numeric cd.spot_tracks columns (per spot)
+             {"name": "ssAB@500kb", "level": "cell_bin", "grid": "ssAB@500kb",
+              "label": "ssA/B 500 kb", "resolution": 500000, "n_cells": 17204}],
+      // cell_bin: a linked cell × bin matrix, one track per resolution (see /tracks)
   "contact_maps": [
     {"key": "bulk", "kind": "cool",      // cool | mcool | scool
      "label": "IMR90 Hi-C", "resolutions": [30000],
@@ -306,6 +347,16 @@ first, so `n_spots` and empty-bin omission behave the same for both levels:
 ```
 
 `agg`: `mean` (default) | `median` | `max`.  Empty bins are omitted.
+
+`cell_bin` tracks come from `uns["linked_bin_matrices"][key]`: an
+AnnData file (path relative to the dataset) of cells × bins, `obs` index =
+cell ids, `var["bin_id"]` = rows of `cd.bins` (`var["resolution"]` splits it
+into one track per bin size, named `<key>@<size>`, e.g. `ssAB@500kb`).  The
+value of a bin is the `agg` over the cells in scope that have one (all
+cells, one cell, a group); `n_spots` counts those cells; every bin of the
+window is returned (`null` = no value; a cell not in the matrix gets all
+`null`).  Tracks reported on different bins (`grid`) must be requested
+separately: mixing them is a `422`.
 
 ### `GET /api/datasets/{id}/intervals/{key}?chrom=chr7&start=&end=`
 

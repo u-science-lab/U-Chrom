@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -193,6 +193,20 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
             raise HTTPException(404, f"unknown embedding: {key}") from None
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
+
+    @app.get("/api/datasets/{dataset_id}/spatial/{key}")
+    def spatial(dataset_id: str, key: str, region: Optional[str] = None) -> Dict[str, Any]:
+        try:
+            return _dataset(dataset_id).spatial_points(key, region)
+        except KeyError:
+            raise HTTPException(404, f"unknown cell positions / region: {key} {region or ''}".strip()) from None
+
+    @app.get("/api/datasets/{dataset_id}/images/{name}")
+    def image(dataset_id: str, name: str) -> FileResponse:
+        try:
+            return FileResponse(_dataset(dataset_id).image_path(name))
+        except KeyError:
+            raise HTTPException(404, f"unknown image: {name}") from None
 
     @app.post("/api/datasets/{dataset_id}/points/{name}")
     def points(dataset_id: str, name: str, req: Optional[PointsRequest] = None) -> Dict[str, Any]:

@@ -13,6 +13,7 @@ import json
 import re
 import struct
 import threading
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -25,6 +26,14 @@ from uchrom.core import ChromData
 DEFAULT_MAX_POINTS = 5_000_000
 #: reserved group reference: every cell (e.g. the all-cell pseudo-bulk of a per-cell map)
 ALL_CELLS = "all"
+
+
+def _fmt_bp(n: int) -> str:
+    """A bin size as "500 kb", "1 Mb", "50 bp"."""
+    for unit, f in (("Mb", 1_000_000), ("kb", 1_000)):
+        if n >= f and n % f == 0:
+            return f"{n // f} {unit}"
+    return f"{n} bp"
 
 
 def natural_chrom_key(name: str):
@@ -246,6 +255,17 @@ class Dataset:
     # ------------------------------------------------------------------
 
     def chrom_table(self) -> List[Dict[str, Any]]:
+        if "chroms" not in self._cache and self.cd.n_spots == 0:
+            # no spots (spatial Hi-C, scHi-C): the locus axis still names the chromosomes, for the
+            # genome views of contact maps and cell x bin matrices
+            b = self.cd.bins
+            table = (b.assign(chrom=b["chrom"].astype(str)).groupby("chrom").agg(start=("start", "min"), end=("end", "max"))
+                     if len(b) else pd.DataFrame(columns=["start", "end"]))
+            self._cache["chroms"] = [
+                {"name": c, "start": int(table.at[c, "start"]), "end": int(table.at[c, "end"]),
+                 "n_spots": 0, "n_traces": 0}
+                for c in sorted(table.index, key=natural_chrom_key)
+            ]
         if "chroms" not in self._cache and self.backed:
             seg = self._segments()
             g = seg.groupby("chrom", sort=False)
@@ -295,6 +315,7 @@ class Dataset:
             "cell_fields": self.cell_fields(),
             "embeddings": self.embeddings(),
             "point_sets": self.point_sets(),
+            "spatial": self.spatial(),
         }
 
     def traces(self, chrom: Optional[str] = None, offset: int = 0,
@@ -570,6 +591,70 @@ class Dataset:
                 "x": fin(arr[:, a]), "y": fin(arr[:, b]),
                 "axis_labels": [f"{prefix}{a + 1}", f"{prefix}{b + 1}"]}
 
+    # ---- cell positions (uns['cell_spatial']) and section images (uns['linked_images']) ----
+
+    def _images(self) -> Dict[str, Dict[str, Any]]:
+        recs = self.cd.uns.get("linked_images") if isinstance(self.cd.uns, dict) else None
+        return {str(k): v for k, v in (recs or {}).items()
+                if isinstance(v, dict) and v.get("path") and self.resolve(v["path"]).exists()}
+
+    def spatial(self) -> List[Dict[str, Any]]:
+        """Cell-position sets: key, unit, y direction, regions (sections / FOVs) with cell counts
+        and the image of each region, if any.  Sets with images first."""
+        if "spatial" in self._cache:
+            return self._cache["spatial"]
+        recs = self.cd.uns.get("cell_spatial") if isinstance(self.cd.uns, dict) else None
+        images = self._images()
+        out = []
+        for key, rec in (recs or {}).items():
+            if not isinstance(rec, dict):
+                continue
+            try:
+                pos = self.cd.cell_positions(str(key))
+            except Exception:  # noqa: BLE001 - a malformed record is skipped, not fatal
+                continue
+            ok = pos[["x", "y"]].notna().all(axis=1)
+            reg = pos["region"].astype(str) if "region" in pos else pd.Series("all", index=pos.index)
+            counts = reg[ok].value_counts()
+            imgs = {r["region"]: name for name, r in images.items() if r.get("positions") == key and "region" in r}
+            regions = [{"name": r, "n_cells": int(counts[r]), "image": imgs.get(r)}
+                       for r in sorted(counts.index, key=natural_chrom_key)]
+            unit = rec.get("unit")
+            y_axis = rec.get("y_axis") or ("down" if unit in ("px", "pixel", "spot") else "up")
+            out.append({"key": str(key), "unit": unit, "frame": rec.get("frame"), "y_axis": y_axis,
+                        "status": rec.get("status"), "source": rec.get("source"),
+                        "regions": regions, "n_images": sum(1 for r in regions if r["image"])})
+        out.sort(key=lambda d: -d["n_images"])
+        self._cache["spatial"] = out
+        return out
+
+    def spatial_points(self, key: str, region: Optional[str] = None) -> Dict[str, Any]:
+        info = next((s for s in self.spatial() if s["key"] == key), None)
+        if info is None:
+            raise KeyError(key)
+        pos = self.cd.cell_positions(key)
+        ok = pos[["x", "y"]].notna().all(axis=1).to_numpy().copy()
+        if region is not None:
+            if "region" not in pos:
+                raise KeyError(region)
+            ok &= (pos["region"].astype(str) == str(region)).to_numpy()
+        sub = pos[ok]
+        r = next((x for x in info["regions"] if x["name"] == region), None) if region is not None else None
+        image = None
+        if r and r["image"]:
+            rec = self._images()[r["image"]]
+            image = {"name": r["image"], "extent": [float(v) for v in rec.get("extent", [])],
+                     "kind": rec.get("kind")}
+        return {"key": key, "region": region, "unit": info["unit"], "y_axis": info["y_axis"],
+                "cell_ids": [str(c) for c in sub.index],
+                "x": sub["x"].astype(float).tolist(), "y": sub["y"].astype(float).tolist(), "image": image}
+
+    def image_path(self, name: str) -> Path:
+        rec = self._images().get(name)
+        if rec is None:
+            raise KeyError(name)
+        return self.resolve(rec["path"])
+
     def point_sets(self) -> List[Dict[str, Any]]:
         if "point_sets" not in self._cache:
             out = []
@@ -627,13 +712,88 @@ class Dataset:
 
     def track_names(self) -> List[Dict[str, Any]]:
         """Numeric tracks: ``level`` is ``"bin"`` (``cd.bin_tracks``, one
-        value per locus) or ``"spot"`` (``cd.spot_tracks``, per spot)."""
+        value per locus), ``"spot"`` (``cd.spot_tracks``, per spot) or
+        ``"cell_bin"`` (a linked cell x bin matrix, one track per resolution,
+        averaged over the cells in scope).  ``grid`` names the bins a track
+        is reported on: tracks of one grid can be requested together."""
         out = []
         for level, table in (("bin", self.cd.bin_tracks), ("spot", self.cd.spot_tracks)):
             dtypes = table.dtypes      # (a backed table reads no data for this)
-            out += [{"name": str(c), "level": level} for c in table.columns
+            out += [{"name": str(c), "level": level, "grid": "spots"} for c in table.columns
                     if pd.api.types.is_numeric_dtype(dtypes[c])]
+        for name, t in self._cell_bin_tracks().items():
+            out.append({"name": name, "level": "cell_bin", "grid": name, "label": t["label"],
+                        "resolution": t["resolution"], "n_cells": t["n_cells"]})
         return out
+
+    # ---- cell x bin matrices (uns['linked_bin_matrices']: linked AnnData, var bin_id -> bins) ----
+
+    def _cell_bin_tracks(self) -> Dict[str, Dict[str, Any]]:
+        """``<key>@<res>kb`` -> {key, resolution, label, n_cells}; the files are opened lazily."""
+        if "cell_bin" in self._cache:
+            return self._cache["cell_bin"]
+        recs = self.cd.uns.get("linked_bin_matrices") if isinstance(self.cd.uns, dict) else None
+        out: Dict[str, Dict[str, Any]] = {}
+        for key, rec in (recs or {}).items():
+            if not isinstance(rec, dict) or not rec.get("path") or not self.resolve(rec["path"]).exists():
+                continue
+            m = self._bin_matrix(str(key))
+            label = str(rec.get("label") or key)
+            for res in sorted(m["var"]["resolution"].unique(), reverse=True):
+                size = _fmt_bp(int(res))
+                name = f"{key}@{size.replace(' ', '')}" if res else str(key)
+                out[name] = {"key": str(key), "resolution": int(res), "n_cells": len(m["rows"]),
+                             "label": f"{label} {size}" if res else label}
+        self._cache["cell_bin"] = out
+        return out
+
+    def _bin_matrix(self, key: str) -> Dict[str, Any]:
+        cache = self._cache.setdefault("bin_matrix", {})
+        if key not in cache:
+            import anndata as ad
+
+            rec = self.cd.uns["linked_bin_matrices"][key]
+            adata = ad.read_h5ad(self.resolve(rec["path"]), backed="r")
+            var = adata.var
+            bins = self.cd.bins
+            ids = var["bin_id"].to_numpy(np.int64)
+            v = pd.DataFrame({"col": np.arange(len(ids)), "chrom": bins["chrom"].astype(str).to_numpy()[ids],
+                              "start": bins["start"].to_numpy()[ids], "end": bins["end"].to_numpy()[ids],
+                              "resolution": (var["resolution"].to_numpy(np.int64) if "resolution" in var
+                                             else np.zeros(len(ids), np.int64))})
+            cache[key] = {"adata": adata, "var": v, "blocks": {},
+                          "rows": {str(c): i for i, c in enumerate(adata.obs_names)}}
+        return cache[key]
+
+    def _cell_bin_values(self, name: str, chrom: str, start, end, cell_id, group, agg: str):
+        t = self._cell_bin_tracks()[name]
+        m = self._bin_matrix(t["key"])
+        v = m["var"]
+        sel = v[(v["chrom"] == str(chrom)) & (v["resolution"] == t["resolution"])].sort_values("start")
+        if start is not None:
+            sel = sel[sel["end"] > int(start)]
+        if end is not None:
+            sel = sel[sel["start"] < int(end)]
+        bk = (name, str(chrom))
+        if bk not in m["blocks"]:                      # one chromosome of all cells: read once
+            allc = v[(v["chrom"] == str(chrom)) & (v["resolution"] == t["resolution"])]["col"].to_numpy()
+            lo, hi = (int(allc.min()), int(allc.max()) + 1) if len(allc) else (0, 0)
+            m["blocks"][bk] = (lo, np.asarray(m["adata"].X[:, lo:hi], dtype=np.float32))
+        lo, block = m["blocks"][bk]
+        rows = m["rows"]
+        if cell_id is not None:
+            r = [rows[str(cell_id)]] if str(cell_id) in rows else []
+        elif group is not None:
+            r = sorted(rows[c] for c in self.group_cells(group) if c in rows)
+        else:
+            r = None
+        x = block[:, sel["col"].to_numpy() - lo] if r is None else block[np.asarray(r, dtype=np.int64)][:, sel["col"].to_numpy() - lo]
+        n = np.isfinite(x).sum(axis=0)
+        with warnings.catch_warnings():                # all-NaN bins: NaN, quietly
+            warnings.simplefilter("ignore", RuntimeWarning)
+            f = {"mean": np.nanmean, "median": np.nanmedian, "max": np.nanmax}[agg]
+            val = f(x, axis=0) if x.shape[0] else np.full(len(sel), np.nan)
+        return sel, val, n
 
     def _track_values(self, name: str) -> np.ndarray:
         """Spot-aligned float values of one track (bin tracks broadcast)."""
@@ -661,12 +821,24 @@ class Dataset:
 
     def tracks(self, names: List[str], chrom: str, start=None, end=None,
                cell_id=None, agg: str = "mean", group=None) -> Dict[str, Any]:
-        known = {t["name"] for t in self.track_names()}
+        known = {t["name"]: t for t in self.track_names()}
         unknown = [n for n in names if n not in known]
         if unknown:
             raise KeyError(unknown[0])
         if agg not in ("mean", "median", "max"):
             raise ValueError("agg must be mean, median or max")
+        grids = {known[n]["grid"] for n in names}
+        if len(grids) > 1:
+            raise ValueError(f"tracks on different bins cannot be requested together: {sorted(grids)}")
+        if names and known[names[0]]["level"] == "cell_bin":
+            _one_scope(cell_id, group)
+            out_vals, sel, n = {}, None, None
+            for name in names:
+                sel, val, n = self._cell_bin_values(name, chrom, start, end, cell_id, group, agg)
+                out_vals[name] = [None if not np.isfinite(x) else float(x) for x in val]
+            return {"chrom": str(chrom), "group": group,
+                    "bin_starts": [int(x) for x in sel["start"]], "bin_ends": [int(x) for x in sel["end"]],
+                    "n_spots": [int(x) for x in n], "values": out_vals}
         a = self._arrays()
         idx = self._select(chrom, start, end, cell_id, group=group)
         df = pd.DataFrame({"start": a["start"][idx], "end": a["end"][idx]})

@@ -10,7 +10,7 @@ import { FOCUS, parseScopeSpec, type ScopeSpec } from './groups'
 import type { EmbeddingInfo } from './types'
 
 /** 'genome': combined tracks + matrix triangles on one axis (was 'tracks'). */
-export type PaneType = '3d' | 'embedding' | 'genome' | 'matrix' | 'stats'
+export type PaneType = '3d' | 'spatial' | 'embedding' | 'genome' | 'matrix' | 'stats'
 export type WsLayout = 'tabs' | 'columns' | 'rows' | 'grid'
 export type StatsKind = 'rg' | 'scaling' | 'hist' | 'scatter'
 export type TrackAgg = 'mean' | 'median' | 'max'
@@ -40,8 +40,14 @@ export interface PaneOptions {
   compareGroups?: string[]
   /** matrix: colour scale changes from the defaults (absent = defaults) */
   color?: ColorScaleSetting
-  /** embedding: point style and colouring changes from the defaults (absent = defaults) */
+  /** embedding / spatial: point style and colouring changes from the defaults (absent = defaults) */
   embStyle?: EmbStyleSetting
+  /** spatial: cell-position key (null → the first set, sets with images first) */
+  spatialKey?: string | null
+  /** spatial: region (section / FOV) shown (null → the first) */
+  region?: string | null
+  /** spatial: opacity of the region's image (0 hides it; absent → 1) */
+  imageOpacity?: number
 }
 
 export interface Pane extends PaneOptions {
@@ -61,6 +67,10 @@ export interface DataKind {
   hasCoords: boolean
   hasTracks: boolean
   hasContactMaps?: boolean
+  /** cell positions (cd.cell_positions) */
+  hasSpatial?: boolean
+  /** several cells (cell-level statistics, groups) */
+  manyCells?: boolean
 }
 
 export interface WorkspaceState {
@@ -74,8 +84,33 @@ export interface WorkspaceState {
 }
 
 export const LAYOUTS: WsLayout[] = ['tabs', 'columns', 'rows', 'grid']
-export const PANE_TYPES: PaneType[] = ['3d', 'embedding', 'genome', 'matrix', 'stats']
-export const PANE_LABEL: Record<PaneType, string> = { '3d': '3D', embedding: 'Embedding', genome: 'Genome', matrix: 'Matrix', stats: 'Stats' }
+export const PANE_TYPES: PaneType[] = ['3d', 'spatial', 'embedding', 'genome', 'matrix', 'stats']
+export const PANE_LABEL: Record<PaneType, string> = {
+  '3d': '3D',
+  spatial: 'Spatial',
+  embedding: 'Embedding',
+  genome: 'Genome',
+  matrix: 'Matrix',
+  stats: 'Stats',
+}
+
+/**
+ * The views a dataset can fill: 3D needs 3-D spots, Spatial cell positions,
+ * Embedding cell embeddings, Genome spots / tracks / contact maps, Matrix
+ * spots (distances) or contact maps, Stats spots or several cells (cell
+ * fields).  In PANE_TYPES order.
+ */
+export function supportedPaneTypes(k: DataKind): PaneType[] {
+  const ok: Record<PaneType, boolean> = {
+    '3d': k.hasCoords,
+    spatial: !!k.hasSpatial,
+    embedding: k.hasEmbeddings,
+    genome: k.hasCoords || k.hasTracks || !!k.hasContactMaps,
+    matrix: k.hasCoords || !!k.hasContactMaps,
+    stats: k.hasCoords || !!k.manyCells,
+  }
+  return PANE_TYPES.filter((t) => ok[t])
+}
 export const MIN_FRAC = 0.1
 
 const pane = (id: string, type: PaneType): Pane => ({ id, type, embeddingKey: null, dims: [0, 1] })
@@ -84,6 +119,7 @@ const pane = (id: string, type: PaneType): Pane => ({ id, type, embeddingKey: nu
  * Default views follow the data:
  * - 3-D coords + embeddings → 3D | Embedding
  * - 3-D coords, no embeddings → 3D | Genome (tracks / contact maps) else 3D | Matrix (distances)
+ * - no 3-D coords, cell positions → Spatial | Genome (tracks / contact maps) else Spatial | Embedding
  * - no 3-D coords → Matrix | Embedding (or Matrix alone)
  * A bare boolean means "has embeddings" with 3-D coords (older callers).
  */
@@ -97,6 +133,8 @@ export function defaultWorkspace(kind: boolean | DataKind): WorkspaceState {
     maximized: null,
   })
   if (!k.hasCoords) {
+    // cells in tissue (spatial omics): where they are, next to their genome-wide signals
+    if (k.hasSpatial) return two('spatial', k.hasContactMaps || k.hasTracks ? 'genome' : k.hasEmbeddings ? 'embedding' : 'matrix', [0.5, 0.5])
     return k.hasEmbeddings ? two('matrix', 'embedding', [0.55, 0.45]) : { layout: 'columns', panes: [pane('P1', 'matrix')], activePane: 'P1', sizes: [1], maximized: null }
   }
   if (k.hasEmbeddings) return two('3d', 'embedding', [0.6, 0.4])
@@ -338,6 +376,9 @@ function parseOptions(p: Partial<Pane> & LegacyPane): PaneOptions & { scope?: Sc
   if (color) o.color = color
   const embStyle = parseEmbStyle(p.embStyle)
   if (embStyle) o.embStyle = embStyle
+  if (typeof p.spatialKey === 'string') o.spatialKey = p.spatialKey
+  if (typeof p.region === 'string') o.region = p.region
+  if (typeof p.imageOpacity === 'number' && p.imageOpacity >= 0 && p.imageOpacity <= 1) o.imageOpacity = p.imageOpacity
   return o
 }
 

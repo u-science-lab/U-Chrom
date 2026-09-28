@@ -32,10 +32,49 @@ export interface DatasetSummary {
   contact_maps?: ContactMapInfo[]
   /** interval tables in cd.results (TADs, loops, peaks) */
   intervals?: IntervalInfo[]
+  /** cell-position sets (cd.cell_positions) with their regions and images */
+  spatial?: SpatialInfo[]
 }
 
 export interface TrackInfo {
   name: string
+  /** "bin" / "spot" (cd.bin_tracks / spot_tracks) or "cell_bin" (a linked cell × bin matrix) */
+  level?: string
+  /** the bins a track is reported on: tracks of one grid are requested together */
+  grid?: string
+  label?: string
+}
+
+/** One section / FOV of a cell-position set. */
+export interface SpatialRegion {
+  name: string
+  n_cells: number
+  /** name of its image (GET images/<name>), or null */
+  image: string | null
+}
+
+export interface SpatialInfo {
+  key: string
+  unit: string | null
+  frame: string | null
+  /** "down": y grows downwards (image pixels, grid rows) */
+  y_axis: 'up' | 'down'
+  status: string | null
+  source: string | null
+  regions: SpatialRegion[]
+  n_images: number
+}
+
+/** Cell positions of one region, with the region's image (extent [x0, x1, y0, y1] in position units). */
+export interface SpatialPoints {
+  key: string
+  region: string | null
+  unit: string | null
+  y_axis: 'up' | 'down'
+  cell_ids: string[]
+  x: number[]
+  y: number[]
+  image: { name: string; extent: [number, number, number, number]; kind: string | null } | null
 }
 
 export interface ContactMapInfo {

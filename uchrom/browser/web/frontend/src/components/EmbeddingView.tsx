@@ -27,7 +27,7 @@ import { useFieldColors } from '../useFieldColors'
 import { loadFieldValues } from '../useOmicsLoader'
 import { useTheme } from '../useTheme'
 import { useGroupInfo, usePaneScope, useScopeCells } from '../useGroups'
-import { IDENTITY_VIEW, applyView, fitPlot, isIdentity, nearestPoint, panBy, project, zoomAt, type View2D } from '../render/embedding'
+import { IDENTITY_VIEW, applyView, fitPlot, fitPlotEqual, gridSpacing, isIdentity, nearestPoint, panBy, project, zoomAt, type View2D } from '../render/embedding'
 import { activeView, defaultCategoryField, fieldKey, useStore } from '../store'
 import type { CellField, CellValue, Embedding, EmbeddingInfo } from '../types'
 import { defaultEmbeddingKey, pinnedCell, updatePane, type Pane } from '../workspace'
@@ -386,12 +386,30 @@ function NumInput({ value, placeholder, title, onCommit }: { value: number | nul
 }
 
 /**
+ * Points given by the caller instead of a cellm embedding (the Spatial
+ * view): drawn with one scale on both axes, optionally over an image.
+ */
+export interface ScatterSource {
+  data: Embedding | null
+  error: string | null
+  /** y grows downwards (image pixels) */
+  yDown: boolean
+  /** fitted instead of the points' bounds, [x0, x1, y0, y1] in point units */
+  extent: [number, number, number, number] | null
+  /** drawn under the points over `extent` (row 0 at y0) */
+  image: { url: string; extent: [number, number, number, number]; opacity: number } | null
+  /** shown when there is nothing to draw */
+  empty?: string
+}
+
+/**
  * 2-D scatter of a cell embedding (UMAP / t-SNE / PCA) filling its pane,
  * coloured like the 3-D overview.  Click a dot to focus that cell (every
  * 3-D pane flies there).  Shift-drag (or the ◌ lasso tool) selects cells:
  * the selection becomes the focused group, and can be saved by name.
+ * With a `source` (Spatial view) it draws those points to scale instead.
  */
-export function EmbeddingView({ pane }: { pane: Pane }) {
+export function EmbeddingView({ pane, source }: { pane: Pane; source?: ScatterSource }) {
   const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
   const view = useStore(activeView)
   const focusCell = useStore((s) => s.focusCell)
@@ -427,12 +445,16 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
     setSize({ w: el.clientWidth, h: el.clientHeight })
     return () => ro.disconnect()
   }, [])
-  const [emb, setEmb] = useState<Embedding | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [fetched, setEmb] = useState<Embedding | null>(null)
+  const [fetchError, setError] = useState<string | null>(null)
+  const emb = source ? source.data : fetched
+  const error = source ? source.error : fetchError
+  const hasPoints = source ? !!source.data : list.length > 0
   const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
+    if (source) return // the caller supplies the points
     if (!ds || !key) {
       setEmb(null) // another dataset without embeddings: no stale dots
       return
@@ -446,16 +468,36 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
       live = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ds?.id, key, dims[0], dims[1]])
+  }, [ds?.id, key, dims[0], dims[1], !!source])
 
   // a new embedding / size invalidates the hovered dot's position
   useEffect(() => setHover(null), [emb, size.w, size.h])
 
   const plotH = Math.max(40, size.h - 24) // axis labels below
-  const basePx = useMemo(() => {
+  const yDown = source?.yDown ?? false
+  const extentKey = source?.extent?.join(',') ?? ''
+  const plot = useMemo(() => {
     if (!emb) return null
-    return project(emb.x, emb.y, fitPlot(emb.x, emb.y, size.w, plotH, PAD))
-  }, [emb, size.w, plotH])
+    return source ? fitPlotEqual(emb.x, emb.y, size.w, plotH, PAD, { yDown, extent: source.extent }) : fitPlot(emb.x, emb.y, size.w, plotH, PAD)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emb, size.w, plotH, !!source, yDown, extentKey])
+  const basePx = useMemo(() => (emb && plot ? project(emb.x, emb.y, plot) : null), [emb, plot])
+  // positions to scale: automatic dots as wide as the spot spacing (touching neighbours), zoom included
+  const spacing = useMemo(() => (source && emb ? gridSpacing(emb.x, emb.y) : null), [source, emb])
+  // the image under the points (Spatial view)
+  const imageUrl = source?.image?.url ?? null
+  const [img, setImg] = useState<HTMLImageElement | null>(null)
+  useEffect(() => {
+    setImg(null)
+    if (!imageUrl) return
+    let live = true
+    const im = new Image()
+    im.onload = () => live && setImg(im)
+    im.src = imageUrl
+    return () => {
+      live = false
+    }
+  }, [imageUrl])
   // zoom / pan: wheel zooms at the cursor, drag pans, double-click (or ⤢) resets;
   // drawing, hover, click and lasso all use the transformed points
   const [zoom, setZoom] = useState<View2D>(IDENTITY_VIEW)
@@ -515,8 +557,28 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
     if (!g) return
     g.setTransform(dpr, 0, 0, dpr, 0, 0)
     g.clearRect(0, 0, size.w, plotH)
+    const im = source?.image
+    if (img && im && plot && im.opacity > 0) {
+      // image corners → screen (plot transform, then zoom / pan); flipped when y grows up
+      const [ex0, ex1, ey0, ey1] = im.extent
+      const X0 = zoom.tx + zoom.k * plot.sx(ex0)
+      const X1 = zoom.tx + zoom.k * plot.sx(ex1)
+      const Y0 = zoom.ty + zoom.k * plot.sy(ey0)
+      const Y1 = zoom.ty + zoom.k * plot.sy(ey1)
+      g.save()
+      g.globalAlpha = im.opacity
+      g.imageSmoothingEnabled = zoom.k < 4 // pixels stay crisp when zoomed in
+      if (Y1 >= Y0) g.drawImage(img, X0, Y0, X1 - X0, Y1 - Y0)
+      else {
+        g.translate(X0, Y0)
+        g.scale(1, -1)
+        g.drawImage(img, 0, 0, X1 - X0, Y0 - Y1)
+      }
+      g.restore()
+    }
     const n = emb.cell_ids.length
-    const r = dotRadius(st, n, size.w, plotH)
+    const spot = spacing && plot && st.size === null ? 0.45 * Math.abs(plot.sx(spacing) - plot.sx(0)) * zoom.k : null
+    const r = spot ? Math.max(0.8, spot) : dotRadius(st, n, size.w, plotH)
     const colors = dots.css
     const focus = view.focusCell
     const base = st.opacity
@@ -593,7 +655,7 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
       g.fillText(`${groupInfo.name} · ${groupSet.size} cells`, size.w - 8, 8)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [px, dots, order, emb, size.w, plotH, view.focusCell, hover, pane.scope, groupSet, groupInfo, pal, st.size, st.opacity, st.shape, outline])
+  }, [px, dots, order, emb, size.w, plotH, view.focusCell, hover, pane.scope, groupSet, groupInfo, pal, st.size, st.opacity, st.shape, outline, img, plot, zoom, source?.image?.opacity, spacing])
 
   // ---- lasso ----------------------------------------------------------------
   const drawLasso = () => {
@@ -705,6 +767,17 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
     if (i >= 0) focusCell(emb.cell_ids[i])
   }
 
+  // the cells drawn here: the legend counts only these (not the whole dataset)
+  const shown = useMemo(() => {
+    if (!emb) return null
+    const out = new Set<string>()
+    emb.cell_ids.forEach((id, i) => {
+      const x = emb.x[i]
+      const y = emb.y[i]
+      if (x !== null && y !== null && Number.isFinite(x) && Number.isFinite(y)) out.add(id)
+    })
+    return out
+  }, [emb])
   const hoverId = hover && emb ? emb.cell_ids[hover.i] : null
   const tipField = mode === 'field' ? paneField?.name : mode === 'overview' && view.overviewColor === 'field' ? view.cellField : null
   const tipValues = mode === 'field' ? paneValues : mode === 'overview' ? fieldValues : null
@@ -713,7 +786,8 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
 
   return (
     <div ref={boxRef} className="embedding-view">
-      {!list.length && <div className="muted pane-empty">This dataset has no cell embeddings (see uchrom.emb.embed_cells).</div>}
+      {!source && !list.length && <div className="muted pane-empty">This dataset has no cell embeddings (see uchrom.emb.embed_cells).</div>}
+      {source && !source.data && !source.error && source.empty && <div className="muted pane-empty">{source.empty}</div>}
       {error && <div className="error">{error}</div>}
       <canvas
         ref={canvasRef}
@@ -727,7 +801,7 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
         onPointerUp={onPointerUp}
       />
       <canvas ref={lassoRef} className="emb-lasso-canvas" data-capture="skip" />
-      {list.length > 0 && (
+      {hasPoints && (
         <div className="emb-tools" data-capture="skip">
           <button className={lassoTool ? 'active' : ''} onClick={() => setLassoTool(!lassoTool)} title="Lasso: drag around cells to select them (or shift-drag any time)">
             ◌ lasso
@@ -769,7 +843,7 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
           </button>
         </div>
       )}
-      {mode === 'field' && paneField && st.legend && <PaneLegend pane={pane} coloring={coloring} />}
+      {mode === 'field' && paneField && st.legend && <PaneLegend pane={pane} coloring={coloring} shown={shown} />}
       <div className="embedding-axes muted small">
         <span>{axis[0]} →</span>
         <span>↑ {axis[1]}</span>
@@ -785,10 +859,10 @@ export function EmbeddingView({ pane }: { pane: Pane }) {
 }
 
 /** Legend (categorical) or colour bar (numeric) of a pane's own colouring, drawn over the plot. */
-function PaneLegend({ pane, coloring }: { pane: Pane; coloring: ReturnType<typeof usePaneColoring> }) {
+function PaneLegend({ pane, coloring, shown }: { pane: Pane; coloring: ReturnType<typeof usePaneColoring>; shown: ReadonlySet<string> | null }) {
   const setWorkspace = useStore((s) => s.setWorkspace)
   const { st, field, values, sorted, range } = coloring
-  const legend = useMemo(() => (field && field.kind === 'category' ? categoryLegend(field, values, st.hidden) : null), [field, values, st.hidden])
+  const legend = useMemo(() => (field && field.kind === 'category' ? categoryLegend(field, values, st.hidden, shown) : null), [field, values, st.hidden, shown])
   if (!field) return null
   const title = field.group === 'cell' ? fieldLabel(field.name) : `${groupTitle(field.group)} · ${field.label}`
   const setHidden = (hidden: string[]) =>
@@ -814,6 +888,11 @@ function PaneLegend({ pane, coloring }: { pane: Pane; coloring: ReturnType<typeo
             </div>
           ))}
         </div>
+        {legend.missing > 0 && (
+          <div className="muted small" title="Cells drawn here without a value of this field">
+            {legend.rows.length ? 'grey' : 'all grey'} = no value ({legend.missing.toLocaleString('en-US')})
+          </div>
+        )}
       </div>
     )
   }
@@ -821,7 +900,9 @@ function PaneLegend({ pane, coloring }: { pane: Pane; coloring: ReturnType<typeo
   const min = sorted.length ? sorted[0] : range[0]
   const max = sorted.length ? sorted[sorted.length - 1] : range[1]
   let missing = 0
-  if (values) for (const v of values.values() as Iterable<CellValue>) if (typeof v !== 'number' || !Number.isFinite(v)) missing++
+  if (values)
+    for (const [id, v] of values.entries() as Iterable<[string, CellValue]>)
+      if ((!shown || shown.has(id)) && (typeof v !== 'number' || !Number.isFinite(v))) missing++
   return (
     <div className="emb-legend emb-colorbar">
       <div className="emb-legend-title">{title}</div>

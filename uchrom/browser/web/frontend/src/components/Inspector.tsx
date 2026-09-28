@@ -3,6 +3,7 @@ import { ensureActivePane, inspectorSections, paneTitle, type DatasetFacts } fro
 import { hasCoords, useStore } from '../store'
 import { ChromLegend } from './ChromLegend'
 import { EmbeddingControls } from './EmbeddingView'
+import { SpatialControls } from './SpatialView'
 import { GenomeInspector } from './GenomeView'
 import { LayerPanel } from './LayerPanel'
 import { MatrixControls } from './MatrixView'
@@ -77,6 +78,12 @@ export function Inspector() {
         <section className="insp-controls">
           <h2>Embedding</h2>
           <EmbeddingControls pane={pane} />
+        </section>
+      )}
+      {sections.has('spatial') && (
+        <section className="insp-controls">
+          <h2>Spatial</h2>
+          <SpatialControls pane={pane} />
         </section>
       )}
       {sections.has('stats') && (

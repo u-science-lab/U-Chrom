@@ -5,6 +5,7 @@ import {
   addPane,
   defaultEmbeddingKey,
   defaultWorkspace,
+  supportedPaneTypes,
   handleWorkspaceKey,
   MIN_FRAC,
   moveSplitter,
@@ -158,5 +159,35 @@ describe('embedding picker', () => {
     // two published UMAPs: fall back to their labels
     const two = groupEmbeddings([e('a', 'umap', 'Published', 'Paper A'), e('b', 'umap', 'Published', 'Paper B')])
     expect(two[0].items.map((i) => i.text)).toEqual(['Published · Paper A', 'Published · Paper B'])
+  })
+})
+
+describe('views the data supports', () => {
+  const none = { hasEmbeddings: false, hasCoords: false, hasTracks: false }
+  it('lists only the views a dataset can fill', () => {
+    expect(supportedPaneTypes({ ...none, hasCoords: true, hasEmbeddings: true })).toEqual(['3d', 'embedding', 'genome', 'matrix', 'stats'])
+    // spatial Hi-C: positions, embeddings, ssA/B tracks, no 3-D, no contact map
+    expect(supportedPaneTypes({ ...none, hasEmbeddings: true, hasTracks: true, hasSpatial: true, manyCells: true })).toEqual([
+      'spatial',
+      'embedding',
+      'genome',
+      'stats',
+    ])
+    expect(supportedPaneTypes({ ...none, hasContactMaps: true })).toEqual(['genome', 'matrix'])
+  })
+  it('defaults to Spatial next to the genome signals for cells in tissue', () => {
+    const t = (k: Parameters<typeof defaultWorkspace>[0]) => defaultWorkspace(k).panes.map((p) => p.type)
+    expect(t({ ...none, hasSpatial: true, hasTracks: true, hasEmbeddings: true })).toEqual(['spatial', 'genome'])
+    expect(t({ ...none, hasSpatial: true, hasEmbeddings: true })).toEqual(['spatial', 'embedding'])
+    expect(t({ ...none, hasEmbeddings: true })).toEqual(['matrix', 'embedding'])
+  })
+  it('keeps the spatial pane options of a saved layout', () => {
+    const ws = parseWorkspace({
+      layout: 'columns',
+      panes: [{ id: 'P1', type: 'spatial', spatialKey: 'image', region: 'E14_5_HiC', imageOpacity: 0.4 }],
+      activePane: 'P1',
+      sizes: [1],
+    })
+    expect(ws?.panes[0]).toMatchObject({ type: 'spatial', spatialKey: 'image', region: 'E14_5_HiC', imageOpacity: 0.4 })
   })
 })

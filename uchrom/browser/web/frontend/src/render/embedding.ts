@@ -37,6 +37,47 @@ export function fitPlot(xs: (number | null)[], ys: (number | null)[], w: number,
   }
 }
 
+/**
+ * Fit positions into a `w × h` box keeping their aspect (one scale for both
+ * axes, centred) — for cell positions in a tissue.  `extent` [x0, x1, y0, y1]
+ * (an image) is fitted when given, else the points' bounds; `yDown`: y grows
+ * downwards (image pixels).
+ */
+export function fitPlotEqual(
+  xs: (number | null)[],
+  ys: (number | null)[],
+  w: number,
+  h: number,
+  pad: number,
+  opts: { yDown?: boolean; extent?: [number, number, number, number] | null } = {},
+): Plot {
+  let [x0, x1, y0, y1] = opts.extent ?? [Infinity, -Infinity, Infinity, -Infinity]
+  if (!opts.extent) {
+    for (let i = 0; i < xs.length; i++) {
+      const x = xs[i]
+      const y = ys[i]
+      if (x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) continue
+      x0 = Math.min(x0, x)
+      x1 = Math.max(x1, x)
+      y0 = Math.min(y0, y)
+      y1 = Math.max(y1, y)
+    }
+  }
+  if (!Number.isFinite(x0)) [x0, x1, y0, y1] = [0, 1, 0, 1]
+  if (x1 === x0) [x0, x1] = [x0 - 0.5, x1 + 0.5]
+  if (y1 === y0) [y0, y1] = [y0 - 0.5, y1 + 0.5]
+  const iw = Math.max(1, w - 2 * pad)
+  const ih = Math.max(1, h - 2 * pad)
+  const k = Math.min(iw / (x1 - x0), ih / (y1 - y0))
+  const ox = pad + (iw - k * (x1 - x0)) / 2
+  const oy = pad + (ih - k * (y1 - y0)) / 2
+  return {
+    sx: (x) => ox + (x - x0) * k,
+    sy: opts.yDown ? (y) => oy + (y - y0) * k : (y) => oy + (y1 - y) * k,
+    bounds: { x0, x1, y0, y1 },
+  }
+}
+
 /** Pixel positions of every point (NaN for missing values). */
 export function project(xs: (number | null)[], ys: (number | null)[], plot: Plot): Float32Array {
   const out = new Float32Array(2 * xs.length)
@@ -102,4 +143,21 @@ export function applyView(px: Float32Array, v: View2D): Float32Array {
     out[i + 1] = v.ty + v.k * px[i + 1]
   }
   return out
+}
+
+/**
+ * Typical spacing of points on a grid (spots of a spatial array): the
+ * smaller of the median gaps between distinct x and distinct y values, in
+ * data units; null for fewer than two distinct values.
+ */
+export function gridSpacing(xs: (number | null)[], ys: (number | null)[]): number | null {
+  const gap = (v: (number | null)[]) => {
+    const u = [...new Set(v.filter((x): x is number => x !== null && Number.isFinite(x)))].sort((a, b) => a - b)
+    if (u.length < 2) return null
+    const d = u.slice(1).map((x, i) => x - u[i]).sort((a, b) => a - b)
+    return d[Math.floor(d.length / 2)]
+  }
+  const gx = gap(xs)
+  const gy = gap(ys)
+  return gx === null ? gy : gy === null ? gx : Math.min(gx, gy)
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { NEUTRAL_RGB, cellColor, cellRgb, fieldColor, fieldRange, hexToRgb } from '../colors'
-import { IDENTITY_VIEW, MAX_ZOOM, applyView, fitPlot, isIdentity, nearestPoint, panBy, project, zoomAt } from './embedding'
+import { IDENTITY_VIEW, MAX_ZOOM, applyView, fitPlot, fitPlotEqual, gridSpacing, isIdentity, nearestPoint, panBy, project, zoomAt } from './embedding'
 
 describe('embedding scatter helpers', () => {
   it('fits each axis independently into the padded box, y up', () => {
@@ -61,5 +61,32 @@ describe('embedding zoom / pan', () => {
     expect(Number.isNaN(out[2]) && Number.isNaN(out[3])).toBe(true)
     expect(applyView(px, IDENTITY_VIEW)).toBe(px)
     expect(isIdentity(IDENTITY_VIEW)).toBe(true)
+  })
+})
+
+describe('fitPlotEqual (cell positions to scale)', () => {
+  it('one scale for both axes, centred; y down or up', () => {
+    // 200 x 100 data in a 100 x 100 box: scale 0.5, centred vertically
+    const p = fitPlotEqual([0, 200], [0, 100], 100, 100, 0)
+    expect(p.sx(0)).toBeCloseTo(0)
+    expect(p.sx(200)).toBeCloseTo(100)
+    expect(p.sy(100)).toBeCloseTo(25) // y up: the top of the data at the top
+    expect(p.sy(0)).toBeCloseTo(75)
+    const d = fitPlotEqual([0, 200], [0, 100], 100, 100, 0, { yDown: true })
+    expect(d.sy(0)).toBeCloseTo(25)
+    expect(d.sy(100)).toBeCloseTo(75)
+  })
+  it('fits an image extent instead of the points', () => {
+    const p = fitPlotEqual([10], [10], 100, 100, 0, { yDown: true, extent: [0, 1000, 0, 1000] })
+    expect(p.sx(1000)).toBeCloseTo(100)
+    expect(p.sy(500)).toBeCloseTo(50)
+  })
+})
+
+describe('gridSpacing', () => {
+  it('median gap of distinct coordinates', () => {
+    expect(gridSpacing([0, 10, 20, 20, 30], [5, 5, 5, 5, 5])).toBe(10)
+    expect(gridSpacing([1, 2, 3], [0, 0.5, 1])).toBe(0.5)
+    expect(gridSpacing([1, null], [2, 2])).toBeNull()
   })
 })

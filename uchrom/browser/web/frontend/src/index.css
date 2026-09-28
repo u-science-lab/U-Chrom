@@ -1932,3 +1932,95 @@ body.resizing-rows {
   background: transparent !important;
   outline: 1px solid var(--text-muted);
 }
+
+/* ---- view menu (+ View, a pane's type switch) ---- */
+.popover.menu-popup ul.view-menu {
+  min-width: 260px;
+  padding: 4px;
+}
+.view-menu li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  white-space: normal;
+}
+.view-menu li + li {
+  margin-top: 1px;
+}
+.view-menu li:hover {
+  background: var(--bg-hover);
+}
+.view-menu li.current {
+  background: var(--accent-soft);
+}
+.view-menu li.unsupported {
+  opacity: 0.55;
+}
+.view-menu .vm-icon {
+  flex: 0 0 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: var(--bg-input);
+  color: var(--accent);
+  font-size: 13px;
+}
+.view-menu .vm-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.view-menu .vm-name {
+  font-weight: 600;
+}
+.view-menu .vm-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.view-menu .vm-check {
+  flex: 0 0 12px;
+  color: var(--accent);
+  font-weight: 700;
+}
+.pane-head button.pane-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px 1px 3px;
+  font-weight: 600;
+  border-radius: 5px;
+}
+.pane-head button.pane-type .vm-icon {
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--bg-input);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 400;
+}
+.pane-head button.pane-type .caret {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.pane-head button.pane-type.open {
+  background: var(--bg-active);
+}
+/* spatial: section picker */
+.region-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.region-picker select {
+  max-width: 220px;
+}
+.pane-head .region-picker button {
+  padding: 1px 5px;
+}
