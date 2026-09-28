@@ -87,3 +87,4 @@ example-data/rao2014_k562/
 example-data/rao2014_gm12878/
 example-data/ray2019_k562/
 !paper/fig3/feasibility/*.json
+!paper/fig3/results/*.json
