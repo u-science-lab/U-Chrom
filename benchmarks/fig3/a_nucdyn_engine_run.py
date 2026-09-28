@@ -5,8 +5,9 @@ For every requested cell the GEO contact table (GSE80280,
 through ``uchrom_nucdyn.calc_genome_structure`` with the original schedule
 (8, 4, 2, 0.4, 0.2, 0.1 Mb; 500 x 100 steps per stage) and the models are
 written as ``<out>/cell<n>.npz`` with the keys the validation harness reads
-(``chrom``, ``pos`` = particle sequence position in the original's
-convention, ``coords`` (models, particles, 3)), plus the per-stage log,
+(``chrom``, ``pos`` = particle sequence position in the 2017 convention,
+i.e. the particle covers ``(pos - size, pos]``, ``coords`` (models,
+particles, 3)), plus the per-stage log,
 wall time and peak memory in ``<out>/cell<n>.json``.
 
 Usage::
@@ -77,7 +78,12 @@ def main() -> None:
             device=args.device, n_threads=args.n_threads, temp_steps=[args.temp_steps],
             dynamics_steps=[args.dyn_steps], verbose=True, **json.loads(args.extra))
         wall = time.time() - t0
-        np.savez_compressed(args.out / f"cell{cell}.npz", chrom=res["chrom"].astype(str), pos=res["position"],
+        # pos in the 2017 convention (particle = (pos - size, pos]); release_1.3
+        # particles are [p, p + size), i.e. pos = p + size
+        pos = np.asarray(res["position"], np.int64)
+        if res["position_convention"] == "start":
+            pos = pos + int(res["particle_size"])
+        np.savez_compressed(args.out / f"cell{cell}.npz", chrom=res["chrom"].astype(str), pos=pos,
                             coords=res["coords"])
         meta = {
             "cell": cell, "input": str(path.name), "n_contacts_input": int(len(c["pos_a"])),

@@ -41,6 +41,12 @@ web = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
 ]
+# Native NucDynamics engine (Rust; multi-core CPU + wgpu GPU) used by
+# uchrom.recon.sc.nucdyn.  Built from native/nucdyn (pip install ./native/nucdyn)
+# until wheels are published.
+nucdyn = [
+    "u-chrom-nucdyn>=0.1",
+]
 # Reading .hic files (uchrom.io load_hic / benchmark tutorial).
 hic = [
     "hic-straw",

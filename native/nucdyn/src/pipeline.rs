@@ -41,6 +41,10 @@ pub struct StageLog {
     pub seconds_dynamics: f64,
     pub removed_models: Vec<usize>,
     pub device: String,
+    /// emulated repulsion-list overflows / MD steps without repulsion (sum over models;
+    /// only with `emulate_rep_list_overflow`)
+    pub rep_list_overflows: u64,
+    pub steps_without_repulsion: u64,
 }
 
 pub struct Output {
@@ -69,6 +73,10 @@ pub trait StageEngine {
         params: &Params,
     ) -> Result<Vec<Vec<V3>>, String>;
     fn name(&self) -> String;
+    /// (list overflows, steps without repulsion) of the last `anneal` call
+    fn overflow_stats(&self) -> (u64, u64) {
+        (0, 0)
+    }
 }
 
 /// Multi-core CPU engine (f64).  Models run in parallel; when there are
@@ -76,13 +84,14 @@ pub trait StageEngine {
 pub struct CpuEngine {
     pool: rayon::ThreadPool,
     n_threads: usize,
+    last_overflow: (u64, u64),
 }
 
 impl CpuEngine {
     pub fn new(n_threads: usize) -> Result<CpuEngine, String> {
         let n = if n_threads == 0 { std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1) } else { n_threads };
         let pool = rayon::ThreadPoolBuilder::new().num_threads(n).build().map_err(|e| e.to_string())?;
-        Ok(CpuEngine { pool, n_threads: n })
+        Ok(CpuEngine { pool, n_threads: n, last_overflow: (0, 0) })
     }
     pub fn install<R: Send>(&self, f: impl FnOnce() -> R + Send) -> R {
         self.pool.install(f)
@@ -130,11 +139,15 @@ impl StageEngine for CpuEngine {
                         };
                         run_dynamics(sys, &mut m, &dp, inner, None);
                     }
-                    m.pos
+                    (m.pos, m.overflow_events, m.steps_without_repulsion)
                 })
                 .collect::<Vec<_>>()
         });
-        Ok(out)
+        self.last_overflow = (out.iter().map(|x| x.1).sum(), out.iter().map(|x| x.2).sum());
+        Ok(out.into_iter().map(|x| x.0).collect())
+    }
+    fn overflow_stats(&self) -> (u64, u64) {
+        self.last_overflow
     }
     fn name(&self) -> String {
         format!("cpu[{}]", self.n_threads)
@@ -369,6 +382,8 @@ pub fn calc_genome_structure_release13(input: &Input, p: &Params, engine: &mut d
             seconds_dynamics: t_dyn,
             removed_models: removed,
             device: engine.name(),
+            rep_list_overflows: 0,
+            steps_without_repulsion: 0,
         });
         prev = Some(st);
     }

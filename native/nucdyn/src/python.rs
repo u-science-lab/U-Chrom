@@ -95,7 +95,7 @@ fn from_v3<'py>(py: Python<'py>, v: &[V3]) -> Bound<'py, PyArray2<f64>> {
 /// One `run_dynamics` call on the CPU engine, with the original's arguments
 /// (for cross-checks against the Cython code).  Returns (coords, veloc).
 #[pyfunction]
-#[pyo3(signature = (coords, masses, radii, rest_indices, rest_limits, rest_weight, rest_ambig, t_ref, t_step, n_steps, f_rep, f_dist, beta=10.0, tot0=20.458, veloc=None, skin=None, parallel=false, seed=0, original_nl_schedule=false, use_cells=false, protocol="nuc_dynamics_2017", emulate_overflow=false))]
+#[pyo3(signature = (coords, masses, radii, rest_indices, rest_limits, rest_weight, rest_ambig, t_ref, t_step, n_steps, f_rep, f_dist, beta=10.0, tot0=20.458, veloc=None, skin=None, parallel=false, seed=0, original_nl_schedule=false, use_cells=false, protocol="nuc_dynamics_2017", emulate_overflow=false, stencil=1))]
 #[allow(clippy::too_many_arguments)]
 fn run_dynamics<'py>(
     py: Python<'py>,
@@ -121,6 +121,7 @@ fn run_dynamics<'py>(
     use_cells: bool,
     protocol: &str,
     emulate_overflow: bool,
+    stencil: usize,
 ) -> PyResult<(Bound<'py, PyArray2<f64>>, Bound<'py, PyArray2<f64>>)> {
     let pos = to_v3(&coords)?;
     let n = pos.len();
@@ -166,6 +167,7 @@ fn run_dynamics<'py>(
         let form = if master { crate::dynamics::RestraintForm::Master2017 } else { crate::dynamics::RestraintForm::Release13 };
         let sys = System::from_arrays(n, masses, radii, pairs, lims, w, groups).with_form(form);
         let mut m = Model::new(pos, Rng::new(seed));
+        m.grid.stencil = stencil.clamp(1, 4);
         let dp = DynParams { t_ref, t_step, n_steps, f_rep, f_dist, beta, tot0, skin, original_nl_schedule, use_cells, emulate_overflow };
         rd(&sys, &mut m, &dp, parallel, vel0.as_deref());
         (m.pos, m.vel)

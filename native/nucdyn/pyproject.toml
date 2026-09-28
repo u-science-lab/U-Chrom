@@ -23,5 +23,6 @@ test = ["pytest"]
 [tool.maturin]
 python-source = "python"
 module-name = "uchrom_nucdyn._engine"
-# CPU-only wheels: `maturin build --no-default-features --features python`
+# CPU-only wheels: `maturin build --release --features python` (a --features list
+# on the command line replaces this one, so the GPU backend is left out)
 features = ["python", "gpu"]

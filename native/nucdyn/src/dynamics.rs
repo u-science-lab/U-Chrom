@@ -474,6 +474,8 @@ pub struct CellGrid {
     pub sx: Vec<f64>,
     pub sy: Vec<f64>,
     pub sz: Vec<f64>,
+    /// particle index of each sorted slot as f64 (for the vectorised |i - j| test)
+    pub sif: Vec<f64>,
     /// cells per cutoff (1: 3x3x3 stencil of cutoff-sized cells; 2: 5x5x5 of half-size cells)
     pub stencil: usize,
     fill: Vec<u32>,
@@ -532,6 +534,7 @@ impl CellGrid {
         self.sx.resize(n, 0.0);
         self.sy.resize(n, 0.0);
         self.sz.resize(n, 0.0);
+        self.sif.resize(n, 0.0);
         // stable counting sort
         self.fill.clear();
         self.fill.extend_from_slice(&self.start[..ncell]);
@@ -544,6 +547,7 @@ impl CellGrid {
             self.sx[k] = pos[i][0];
             self.sy[k] = pos[i][1];
             self.sz[k] = pos[i][2];
+            self.sif[k] = i as f64;
             self.inv[i] = k as u32;
         }
     }
@@ -682,7 +686,7 @@ pub fn compute_forces_mode(
     let g = &m.grid;
     let [dx_, dy_, dz_] = g.dims;
     let (sidx, spos, start, pcell) = (&g.sidx, &g.spos, &g.start, &g.pcell);
-    let (sx, sy, sz) = (&g.sx[..], &g.sy[..], &g.sz[..]);
+    let (sx, sy, sz, sif) = (&g.sx[..], &g.sy[..], &g.sz[..], &g.sif[..]);
     let rep_u = 2.0 * max_r;
     let rep2_u = rep_u * rep_u;
     let kf = 4.0 * f_rep;
@@ -711,13 +715,16 @@ pub fn compute_forces_mode(
                             if uniform && !energies {
                                 // branch-free: w = rep^2 - d^2 inside the cutoff (and |i - j| >= 2), else 0
                                 let (mut ax, mut ay, mut az) = (0.0f64, 0.0f64, 0.0f64);
-                                let (xs, ys, zs, js) = (&sx[s..e], &sy[s..e], &sz[s..e], &sidx[s..e]);
-                                for t in 0..xs.len() {
+                                let fi = i as f64;
+                                let len = e - s;
+                                let (xs, ys, zs, js) = (&sx[s..e], &sy[s..e], &sz[s..e], &sif[s..e]);
+                                let (xs, ys, zs, js) = (&xs[..len], &ys[..len], &zs[..len], &js[..len]);
+                                for t in 0..len {
                                     let (ddx, ddy, ddz) = (xs[t] - p[0], ys[t] - p[1], zs[t] - p[2]);
                                     let d2 = ddx * ddx + ddy * ddy + ddz * ddz;
-                                    let j = js[t] as usize;
-                                    let near = (j + 1 >= i) & (j <= i + 1);
-                                    let w = if d2 <= rep2_u && !near { rep2_u - d2 } else { 0.0 };
+                                    // |i - j| >= 2 and inside the cutoff
+                                    let ok = (d2 <= rep2_u) & ((js[t] - fi).abs() > 1.5);
+                                    let w = if ok { rep2_u - d2 } else { 0.0 };
                                     ax -= ddx * w;
                                     ay -= ddy * w;
                                     az -= ddz * w;

@@ -337,6 +337,8 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
             seconds_dynamics: t_dyn,
             removed_models: vec![],
             device: engine.name(),
+            rep_list_overflows: engine.overflow_stats().0,
+            steps_without_repulsion: engine.overflow_stats().1,
         });
         prev = Some(st);
     }
