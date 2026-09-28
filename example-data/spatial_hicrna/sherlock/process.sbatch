@@ -8,6 +8,10 @@
 # Spatial Hi-C-RNA (GSE311199): download one sample's .pairs to $SCRATCH, build per-spot .scool +
 # pseudo-bulk .mcool, copy the results to Oak.  Usage: sbatch process.sbatch <sample> [max_lines]
 #   <sample> is a row of samples.tsv; max_lines > 0 processes only the first pairs (tests).
+# The #SBATCH defaults fit the small E13.5 r2 (6.6 GB: 22 min, 8.9 GB RSS).  Memory follows the number of
+# per-spot pixels (~240 B each): mouse_brain_r2 (87 GB, 3.4e9 pairs, 6,199 spots, 3.4e8 pixels) took
+# 3 h 16 min and 82 GB with --time=16:00:00 --mem=128G.  The other samples (101-158 GB, up to ~15k spots)
+# were submitted with --time=16:00:00 --mem=256G.
 set -euo pipefail
 SAMPLE=$1
 MAX_LINES=${2:-0}
