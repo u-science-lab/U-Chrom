@@ -8,9 +8,9 @@
   "browser": "chromium 153.0.8010.12"
  },
  "load_avg_start": [
-  1.77685546875,
-  2.427734375,
-  3.375
+  1.8720703125,
+  2.75927734375,
+  3.01953125
  ],
  "viewport": {
   "width": 1600,
@@ -19,273 +19,273 @@
  },
  "datasets": [
   {
-   "file": "takei2025_fov0_x1.h5cd",
-   "file_mb": 28.410316,
+   "file": "takei2025_fov0_x1.chromdata.zarr",
+   "file_mb": 8.526344,
    "n_spots": 383674,
    "n_cells": 47,
    "n_traces": 1500,
-   "open_s": 0.3312072909902781,
+   "open_s": 0.3087599169812165,
    "loads": [
     {
      "rep": 0,
-     "first_frame_ms": 196.69999998807907,
-     "request_ms": 86.09999996423721,
-     "loaded_ms": 148.30000001192093,
+     "first_frame_ms": 165.09999999403954,
+     "request_ms": 77.59999999403954,
+     "loaded_ms": 118.59999999403954,
      "points": 383674,
-     "response_start_ms": 142,
-     "response_end_ms": 144.89999997615814,
+     "response_start_ms": 112.80000001192093,
+     "response_end_ms": 114.7000000178814,
      "bytes": 6324592,
      "fps": {
-      "frames": 156,
-      "fps": 51.670111340756044,
-      "p50_ms": 16.699999999999818,
-      "p95_ms": 16.799999999999955
-     }
-    },
-    {
-     "rep": 1,
-     "first_frame_ms": 145.5999999642372,
-     "request_ms": 65.39999997615814,
-     "loaded_ms": 103.19999998807907,
-     "points": 383674,
-     "response_start_ms": 97.89999997615814,
-     "response_end_ms": 99.69999998807907,
-     "bytes": 6324592
-    },
-    {
-     "rep": 2,
-     "first_frame_ms": 152.30000001192093,
-     "request_ms": 70.19999998807907,
-     "loaded_ms": 107,
-     "points": 383674,
-     "response_start_ms": 101.60000002384186,
-     "response_end_ms": 103.19999998807907,
-     "bytes": 6324592
-    },
-    {
-     "rep": 3,
-     "first_frame_ms": 139.69999998807907,
-     "request_ms": 65.09999996423721,
-     "loaded_ms": 96.80000001192093,
-     "points": 383674,
-     "response_start_ms": 91.89999997615814,
-     "response_end_ms": 93.59999996423721,
-     "bytes": 6324592
-    },
-    {
-     "rep": 4,
-     "first_frame_ms": 156.10000002384186,
-     "request_ms": 72.39999997615814,
-     "loaded_ms": 112,
-     "points": 383674,
-     "response_start_ms": 106.39999997615814,
-     "response_end_ms": 108.19999998807907,
-     "bytes": 6324592
-    }
-   ]
-  },
-  {
-   "file": "takei2025_fov0_x3.h5cd",
-   "file_mb": 85.194558,
-   "n_spots": 1151022,
-   "n_cells": 141,
-   "n_traces": 4500,
-   "open_s": 0.9398208749480546,
-   "loads": [
-    {
-     "rep": 0,
-     "first_frame_ms": 317.89999997615814,
-     "request_ms": 71.69999998807907,
-     "loaded_ms": 234.89999997615814,
-     "points": 1151022,
-     "response_start_ms": 221.39999997615814,
-     "response_end_ms": 225.5,
-     "bytes": 18972172,
-     "fps": {
-      "frames": 157,
-      "fps": 52.00346689779318,
-      "p50_ms": 16.699999999999818,
-      "p95_ms": 16.799999999999727
-     }
-    },
-    {
-     "rep": 1,
-     "first_frame_ms": 277.19999998807907,
-     "request_ms": 72.69999998807907,
-     "loaded_ms": 192.30000001192093,
-     "points": 1151022,
-     "response_start_ms": 177.69999998807907,
-     "response_end_ms": 182,
-     "bytes": 18972172
-    },
-    {
-     "rep": 2,
-     "first_frame_ms": 270.39999997615814,
-     "request_ms": 70.30000001192093,
-     "loaded_ms": 183.30000001192093,
-     "points": 1151022,
-     "response_start_ms": 166.80000001192093,
-     "response_end_ms": 172.0999999642372,
-     "bytes": 18972172
-    },
-    {
-     "rep": 3,
-     "first_frame_ms": 274.80000001192093,
-     "request_ms": 72.80000001192093,
-     "loaded_ms": 187.39999997615814,
-     "points": 1151022,
-     "response_start_ms": 172.0999999642372,
-     "response_end_ms": 176.69999998807907,
-     "bytes": 18972172
-    },
-    {
-     "rep": 4,
-     "first_frame_ms": 282.69999998807907,
-     "request_ms": 70.69999998807907,
-     "loaded_ms": 195.80000001192093,
-     "points": 1151022,
-     "response_start_ms": 179.30000001192093,
-     "response_end_ms": 184.9000000357628,
-     "bytes": 18972172
-    }
-   ]
-  },
-  {
-   "file": "takei2025_fov0_x10.h5cd",
-   "file_mb": 283.943612,
-   "n_spots": 3836740,
-   "n_cells": 470,
-   "n_traces": 15000,
-   "open_s": 2.674911583017092,
-   "loads": [
-    {
-     "rep": 0,
-     "first_frame_ms": 870.1999999880791,
-     "request_ms": 81.29999995231628,
-     "loaded_ms": 649.5999999642372,
-     "points": 3836740,
-     "response_start_ms": 628,
-     "response_end_ms": 642.8999999761581,
-     "bytes": 63238732,
-     "fps": {
-      "frames": 182,
-      "fps": 60.00331510028178,
+      "frames": 158,
+      "fps": 52.33682245483032,
       "p50_ms": 16.699999999999818,
       "p95_ms": 16.700000000000273
      }
     },
     {
      "rep": 1,
-     "first_frame_ms": 745.7000000476837,
-     "request_ms": 84.5,
-     "loaded_ms": 525.2000000476837,
-     "points": 3836740,
-     "response_start_ms": 503.9000000357628,
-     "response_end_ms": 518.2000000476837,
-     "bytes": 63238732
+     "first_frame_ms": 138.90000000596046,
+     "request_ms": 68.69999998807907,
+     "loaded_ms": 96.19999998807907,
+     "points": 383674,
+     "response_start_ms": 89.59999999403954,
+     "response_end_ms": 92.2999999821186,
+     "bytes": 6324592
     },
     {
      "rep": 2,
-     "first_frame_ms": 735.4000000357628,
-     "request_ms": 81.80000001192093,
-     "loaded_ms": 516.9000000357628,
-     "points": 3836740,
-     "response_start_ms": 496,
-     "response_end_ms": 510.19999998807907,
-     "bytes": 63238732
+     "first_frame_ms": 142,
+     "request_ms": 69.2000000178814,
+     "loaded_ms": 96.80000001192093,
+     "points": 383674,
+     "response_start_ms": 90.5,
+     "response_end_ms": 92.30000001192093,
+     "bytes": 6324592
     },
     {
      "rep": 3,
-     "first_frame_ms": 737.5,
-     "request_ms": 78.5,
-     "loaded_ms": 514.6000000238419,
-     "points": 3836740,
-     "response_start_ms": 492,
-     "response_end_ms": 507.19999998807907,
-     "bytes": 63238732
+     "first_frame_ms": 139.59999999403954,
+     "request_ms": 70.5,
+     "loaded_ms": 97.09999999403954,
+     "points": 383674,
+     "response_start_ms": 91.90000000596046,
+     "response_end_ms": 93.7999999821186,
+     "bytes": 6324592
     },
     {
      "rep": 4,
-     "first_frame_ms": 733.5,
-     "request_ms": 80.90000003576279,
-     "loaded_ms": 516.1000000238419,
-     "points": 3836740,
-     "response_start_ms": 495.60000002384186,
-     "response_end_ms": 508,
-     "bytes": 63238732
+     "first_frame_ms": 134.80000001192093,
+     "request_ms": 64.30000001192093,
+     "loaded_ms": 91.40000000596046,
+     "points": 383674,
+     "response_start_ms": 85.90000000596046,
+     "response_end_ms": 87.60000002384186,
+     "bytes": 6324592
     }
    ]
   },
   {
-   "file": "takei2025_fov0_x30.h5cd",
-   "file_mb": 874.819902,
-   "n_spots": 11510220,
-   "n_cells": 1410,
-   "n_traces": 45000,
-   "open_s": 8.555795042018872,
+   "file": "takei2025_fov0_x3.chromdata.zarr",
+   "file_mb": 16.337378,
+   "n_spots": 1151022,
+   "n_cells": 141,
+   "n_traces": 4500,
+   "open_s": 0.4485717920179013,
    "loads": [
     {
      "rep": 0,
-     "first_frame_ms": 1872.5,
-     "request_ms": 120.19999998807907,
-     "loaded_ms": 1566.199999988079,
-     "points": 4999767,
-     "response_start_ms": 1539.1000000238419,
-     "response_end_ms": 1555.1000000238419,
-     "bytes": 81840880,
+     "first_frame_ms": 257.09999999403954,
+     "request_ms": 69.80000001192093,
+     "loaded_ms": 169.40000000596046,
+     "points": 1151022,
+     "response_start_ms": 153.40000000596046,
+     "response_end_ms": 157.80000001192093,
+     "bytes": 18972172,
+     "fps": {
+      "frames": 158,
+      "fps": 52.33507783592786,
+      "p50_ms": 16.699999999999818,
+      "p95_ms": 16.799999999999727
+     }
+    },
+    {
+     "rep": 1,
+     "first_frame_ms": 222.90000000596046,
+     "request_ms": 66.09999999403954,
+     "loaded_ms": 142.19999998807907,
+     "points": 1151022,
+     "response_start_ms": 125.80000001192093,
+     "response_end_ms": 130.19999998807907,
+     "bytes": 18972172
+    },
+    {
+     "rep": 2,
+     "first_frame_ms": 224.7000000178814,
+     "request_ms": 65.5,
+     "loaded_ms": 141.30000001192093,
+     "points": 1151022,
+     "response_start_ms": 125,
+     "response_end_ms": 129.5,
+     "bytes": 18972172
+    },
+    {
+     "rep": 3,
+     "first_frame_ms": 227.5,
+     "request_ms": 71.90000000596046,
+     "loaded_ms": 146,
+     "points": 1151022,
+     "response_start_ms": 131.40000000596046,
+     "response_end_ms": 135.80000001192093,
+     "bytes": 18972172
+    },
+    {
+     "rep": 4,
+     "first_frame_ms": 228.69999998807907,
+     "request_ms": 67.09999999403954,
+     "loaded_ms": 141.19999998807907,
+     "points": 1151022,
+     "response_start_ms": 125.5,
+     "response_end_ms": 129.90000000596046,
+     "bytes": 18972172
+    }
+   ]
+  },
+  {
+   "file": "takei2025_fov0_x10.chromdata.zarr",
+   "file_mb": 33.304587,
+   "n_spots": 3836740,
+   "n_cells": 470,
+   "n_traces": 15000,
+   "open_s": 0.9769652079849038,
+   "loads": [
+    {
+     "rep": 0,
+     "first_frame_ms": 607.5999999940395,
+     "request_ms": 75.40000000596046,
+     "loaded_ms": 380.40000000596046,
+     "points": 3836740,
+     "response_start_ms": 312.80000001192093,
+     "response_end_ms": 370.40000000596046,
+     "bytes": 63238732,
      "fps": {
       "frames": 182,
-      "fps": 60.00132599615461,
+      "fps": 60.003315100281796,
       "p50_ms": 16.699999999999818,
       "p95_ms": 16.700000000000728
      }
     },
     {
      "rep": 1,
-     "first_frame_ms": 1399.5,
-     "request_ms": 118.30000001192093,
-     "loaded_ms": 1094.5,
+     "first_frame_ms": 523.4000000059605,
+     "request_ms": 68.2000000178814,
+     "loaded_ms": 301.10000002384186,
+     "points": 3836740,
+     "response_start_ms": 264.2000000178814,
+     "response_end_ms": 293,
+     "bytes": 63238732
+    },
+    {
+     "rep": 2,
+     "first_frame_ms": 545.6999999880791,
+     "request_ms": 74.69999998807907,
+     "loaded_ms": 324.5,
+     "points": 3836740,
+     "response_start_ms": 304.2999999821186,
+     "response_end_ms": 315.2999999821186,
+     "bytes": 63238732
+    },
+    {
+     "rep": 3,
+     "first_frame_ms": 542.1999999880791,
+     "request_ms": 75.5,
+     "loaded_ms": 321.5,
+     "points": 3836740,
+     "response_start_ms": 301,
+     "response_end_ms": 311.7999999821186,
+     "bytes": 63238732
+    },
+    {
+     "rep": 4,
+     "first_frame_ms": 537.0999999940395,
+     "request_ms": 71.19999998807907,
+     "loaded_ms": 316.7999999821186,
+     "points": 3836740,
+     "response_start_ms": 296.59999999403954,
+     "response_end_ms": 308.5,
+     "bytes": 63238732
+    }
+   ]
+  },
+  {
+   "file": "takei2025_fov0_x30.chromdata.zarr",
+   "file_mb": 72.894948,
+   "n_spots": 11510220,
+   "n_cells": 1410,
+   "n_traces": 45000,
+   "open_s": 2.5512025839998387,
+   "loads": [
+    {
+     "rep": 0,
+     "first_frame_ms": 1069.800000011921,
+     "request_ms": 73,
+     "loaded_ms": 760.6000000238419,
      "points": 4999767,
-     "response_start_ms": 1067.800000011921,
-     "response_end_ms": 1082.800000011921,
+     "response_start_ms": 735.7000000178814,
+     "response_end_ms": 749.9000000059605,
+     "bytes": 81840880,
+     "fps": {
+      "frames": 158,
+      "fps": 52.33507783592787,
+      "p50_ms": 16.699999999999818,
+      "p95_ms": 16.799999999999955
+     }
+    },
+    {
+     "rep": 1,
+     "first_frame_ms": 988.4000000059605,
+     "request_ms": 68.30000001192093,
+     "loaded_ms": 695.4000000059605,
+     "points": 4999767,
+     "response_start_ms": 669.4000000059605,
+     "response_end_ms": 686.5,
      "bytes": 81840880
     },
     {
      "rep": 2,
-     "first_frame_ms": 1421.8999999761581,
-     "request_ms": 124.09999996423721,
-     "loaded_ms": 1117.699999988079,
+     "first_frame_ms": 1010.5,
+     "request_ms": 74.40000000596046,
+     "loaded_ms": 717.3000000119209,
      "points": 4999767,
-     "response_start_ms": 1091.8999999761581,
-     "response_end_ms": 1107.199999988079,
+     "response_start_ms": 692.0999999940395,
+     "response_end_ms": 707.7000000178814,
      "bytes": 81840880
     },
     {
      "rep": 3,
-     "first_frame_ms": 1455.5,
-     "request_ms": 134,
-     "loaded_ms": 1162,
+     "first_frame_ms": 988,
+     "request_ms": 69.2999999821186,
+     "loaded_ms": 697.6999999880791,
      "points": 4999767,
-     "response_start_ms": 1135.8999999761581,
-     "response_end_ms": 1150.2999999523163,
+     "response_start_ms": 672.1999999880791,
+     "response_end_ms": 687.7999999821186,
      "bytes": 81840880
     },
     {
      "rep": 4,
-     "first_frame_ms": 1374.8999999761581,
-     "request_ms": 123.89999997615814,
-     "loaded_ms": 1075.3999999761581,
+     "first_frame_ms": 996.2999999821186,
+     "request_ms": 73.09999999403954,
+     "loaded_ms": 702,
      "points": 4999767,
-     "response_start_ms": 1049.5,
-     "response_end_ms": 1064.300000011921,
+     "response_start_ms": 676.4000000059605,
+     "response_end_ms": 691.9000000059605,
      "bytes": 81840880
     }
    ]
   }
  ],
  "load_avg_end": [
-  3.009765625,
-  2.65478515625,
-  3.4033203125
+  2.4599609375,
+  2.814453125,
+  3.02783203125
  ]
 }

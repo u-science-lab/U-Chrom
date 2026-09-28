@@ -840,6 +840,13 @@ def panel_c(d, x0=108, y0=61):
                 fontsize=F(4.3), color=INDIGO, va="top")
         ax.set_xscale("log"), ax.set_yscale("log")
         ax.set_xlim(2.5e5, 2e7)
+        # plain seconds on the log axis (the range now spans ~0.1-3 s: no 6×10⁻¹-style minor labels)
+        from matplotlib.ticker import FixedLocator, FuncFormatter, NullFormatter
+        lo, hi = ax.get_ylim()
+        ticks = [t for t in (0.1, 0.2, 0.5, 1, 2, 5, 10, 20) if lo <= t <= hi]
+        ax.yaxis.set_major_locator(FixedLocator(ticks))
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+        ax.yaxis.set_minor_formatter(NullFormatter())
         ax.legend(frameon=False, loc="lower right", fontsize=F(4.3), handlelength=1.6, borderaxespad=0.1)
     ax.set_xlabel("spots in the file  (● real · ○ tiled copies)", labelpad=1)
     ax.set_ylabel("time (s)", labelpad=1)
