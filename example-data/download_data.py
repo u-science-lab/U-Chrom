@@ -217,7 +217,7 @@ DATASETS = {
         "description": "GEM-FISH repo data: Wang 2016 FISH, TADs, Hi-C, final models (GitHub, MIT)",
     },
     # 4DN 4DNFI4QQPDMR: K562 in situ Hi-C (Ray et al. 2019, set 4DNESU95RUNO).
-    # IMR90_chr21_30kb.cool was cut from this file -- it is K562, not IMR90.
+    # K562_chr21_30kb.cool was cut from this file -- it is K562, not IMR90.
     "ray2019_k562": {
         "files": [("ray2019_k562/4DNFI4QQPDMR.mcool",
                    "https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/"
@@ -225,7 +225,7 @@ DATASETS = {
         "md5": {"ray2019_k562/4DNFI4QQPDMR.mcool": "84f4e708e2e7b55078b670ed4b8db709"},
         "size_mb": 849,
         "default": False,
-        "description": "K562 in situ Hi-C mcool (4DN 4DNFI4QQPDMR; source of IMR90_chr21_30kb.cool)",
+        "description": "K562 in situ Hi-C mcool (4DN 4DNFI4QQPDMR; source of K562_chr21_30kb.cool)",
     },
     # BICCN MERFISH mouse MOp atlas (Zhang et al. 2021, Nature), BIL doi:10.35077/g.21.
     "merfish_mop": {

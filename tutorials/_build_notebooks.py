@@ -2135,8 +2135,9 @@ The notebook has two parts.  The first runs end-to-end on a **fully
 synthetic** chain so you can see the pipeline's mechanics with a known
 ground truth.  The second downloads Bintu et al. 2018 (*Science*, the
 follow-up to the paper's original Wang 2016 FISH) per-trace imaging
-data for IMR90 chr21:18.6-20.6 Mb, synthesises a matching Hi-C from
-the population-mean distances, and runs GEM-FISH on it."""),
+data for IMR90 chr21:18.6-20.6 Mb, pairs it with the **real** Rao et al.
+2014 IMR90 in situ Hi-C of chr21 (GEO GSE63525, shipped as a 3.8 MB
+slice under `example-data/rao2014_imr90/`), and runs GEM-FISH on both."""),
 
     code("""\
 import numpy as np
@@ -2294,10 +2295,20 @@ plt.show()"""),
     md("""\
 ## Part 2 — Paper-faithful IMR90 chr21 reconstruction
 
-Load the real Bintu 2018 FISH data (auto-downloaded) and the real
-Rao 2014 IMR90 Hi-C (small 30-kb `.cool` shipped under `example-data/`,
-derived from 4DN accession [4DNFI4QQPDMR](https://data.4dnucleome.org/4DNFI4QQPDMR/)),
-then run the **one-shot** `reconstruct_gem_fish` entry point."""),
+Load the real Bintu 2018 FISH data (auto-downloaded, ~2 MB) and the
+real Rao et al. 2014 IMR90 in situ Hi-C (GEO
+[GSE63525](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE63525),
+`GSE63525_IMR90_combined.hic`, the map Bintu 2018 compared against).
+The chr21 slice at 5 kb (raw observed counts, **hg19**) is shipped in
+the repo as `example-data/rao2014_imr90/IMR90_chr21_5kb_hg19.cool`
+(3.8 MB; rebuilt by `python example-data/build_rao2014_slices.py`).
+
+Both inputs are put on the same **hg19** coordinates: Bintu's segment
+1 starts at hg19 chr21:20,000,032 (hg38 18,627,714, from the Bintu repo
+README), and the 5 kb Hi-C is summed into 30 kb bins on the Bintu
+segment grid (bin edges ≡ 20,000,000 mod 30 kb) so each FISH segment
+maps onto one Hi-C bin.  Then run the **one-shot**
+`reconstruct_gem_fish` entry point."""),
 
     code("""\
 from pathlib import Path
@@ -2322,18 +2333,49 @@ if not bintu_csv.exists():
     print(f'[data] downloading Bintu 2018 (~2 MB) → {bintu_csv}')
     urllib.request.urlretrieve(DATA_URL, bintu_csv)
 
-# Load into ChromData via the Bintu reader
+# Load into ChromData via the Bintu reader, in hg19 to match Rao 2014
+START_HG19 = 20_000_032     # segment 1; hg38 18,627,714 (Bintu repo README)
 fish_cd = read_bintu_tracing(
     str(bintu_csv), chrom='chr21',
-    start_bp=18_627_714,    # hg38, from the Bintu repo README
+    start_bp=START_HG19,
     resolution_bp=30_000,
 )
 print(fish_cd)
-print(f'  n_traces: {fish_cd.traces.shape[0] if fish_cd.traces is not None else fish_cd.spots[\"trace_id\"].nunique()}')
+print(f'  n_traces: {fish_cd.spots[\"trace_id\"].nunique()}')
 
-# Hi-C .cool is shipped in the repo (0.3 MB, chr21 only, 30 kb)
-hic_cool = root / 'example-data' / 'IMR90_chr21_30kb.cool'
-print(f'Hi-C: {hic_cool} ({hic_cool.stat().st_size / 1e6:.2f} MB)')"""),
+# Real Rao 2014 IMR90 Hi-C, chr21 at 5 kb (hg19), shipped in the repo
+hic_5kb = root / 'example-data' / 'rao2014_imr90' / 'IMR90_chr21_5kb_hg19.cool'
+if not hic_5kb.exists():
+    raise FileNotFoundError(
+        f'{hic_5kb} missing -- rebuild it with '
+        '`python example-data/build_rao2014_slices.py --cell IMR90` '
+        '(reads GSE63525_IMR90_combined.hic over HTTP, ~30 s)')
+print(f'Hi-C: {hic_5kb} ({hic_5kb.stat().st_size / 1e6:.2f} MB)')"""),
+
+    code("""\
+import cooler
+import pandas as pd
+import tempfile
+
+def rebin_on_grid(src, out, chrom='chr21', res=30_000, anchor=START_HG19):
+    \"\"\"Sum a fine cooler into ``res`` bins whose edges fall on ``anchor``'s grid.\"\"\"
+    c = cooler.Cooler(str(src))
+    L = int(c.chromsizes[chrom])
+    phase = anchor // c.binsize * c.binsize % res       # 20 kb for Bintu chr21
+    edges = np.unique(np.r_[0, np.arange(phase, L, res), L])
+    bins = pd.DataFrame({'chrom': chrom, 'start': edges[:-1], 'end': edges[1:]})
+    px = c.pixels(join=True).fetch(chrom)
+    b1 = np.searchsorted(edges, px['start1'].to_numpy(), side='right') - 1
+    b2 = np.searchsorted(edges, px['start2'].to_numpy(), side='right') - 1
+    agg = (pd.DataFrame({'bin1_id': b1, 'bin2_id': b2, 'count': px['count'].to_numpy()})
+           .groupby(['bin1_id', 'bin2_id'], as_index=False)['count'].sum())
+    cooler.create_cooler(str(out), bins, agg, assembly='hg19', ordered=True)
+    cooler.balance_cooler(cooler.Cooler(str(out)), store=True)   # ICE weights
+    return out
+
+hic_cool = rebin_on_grid(hic_5kb, Path(tempfile.mkdtemp()) / 'IMR90_chr21_30kb_hg19.cool')
+clr = cooler.Cooler(str(hic_cool))
+print(f'{clr.info[\"nbins\"]} bins x 30 kb, {clr.info[\"sum\"]:,} contacts on chr21')"""),
 
     code("""\
 from uchrom.recon.fish import reconstruct_gem_fish, GEMFISHParams
@@ -2367,22 +2409,33 @@ df_fish = fish_cd.to_dataframe()
 cube, fish_bin_ids, _ = _bin_coord_cube(df_fish, chrom='chr21')
 D_fish = np.nanmedian(_pairwise_distance_per_trace(cube), axis=0)
 
-# Map each FISH bin to its corresponding Hi-C bin
-bin_starts = cd.spots['start'].to_numpy()
-fish_starts = np.array([s for s, _ in fish_bin_ids])
-idx = np.array([int(np.argmin(np.abs(bin_starts - fs))) for fs in fish_starts])
+# Map each FISH segment to the Hi-C bin that contains its midpoint
+# (one to one: the Hi-C was binned on the Bintu segment grid)
+loci = cd.spots_with_loci()
+bin_starts, bin_ends = loci['start'].to_numpy(), loci['end'].to_numpy()
+fish_mids = np.array([(s + e) / 2 for s, e in fish_bin_ids])
+idx = np.array([int(np.flatnonzero((bin_starts <= m) & (bin_ends > m))[0]) for m in fish_mids])
+assert len(set(idx)) == len(idx)
 D_recon = cdist(cd.coords[idx], cd.coords[idx])
 
 iu_r = np.triu_indices(D_fish.shape[0], 1)
 finite = np.isfinite(D_fish[iu_r]) & np.isfinite(D_recon[iu_r])
-corr_real = np.corrcoef(D_fish[iu_r][finite], D_recon[iu_r][finite])[0, 1]
-print(f'Reconstruction vs FISH pop-mean correlation: {corr_real:.3f}')
-print(f'  evaluated over {finite.sum()} bin pairs in the Bintu imaged region')"""),
+m_, f_ = D_recon[iu_r][finite], D_fish[iu_r][finite]
+corr_real = np.corrcoef(f_, m_)[0, 1]
+# Mean relative error |s*d_model - d_FISH| / d_FISH (Abbas 2019's metric),
+# with the model rescaled to nm by the least-squares factor s
+s_fit = (m_ / f_).sum() / ((m_ / f_) ** 2).sum()
+rel_err = np.mean(np.abs(s_fit * m_ - f_) / f_)
+print(f'Reconstruction vs FISH median distances: Pearson {corr_real:.3f}, '
+      f'mean relative error {rel_err:.3f}')
+print(f'  evaluated over {finite.sum()} segment pairs in the Bintu imaged region')
+print('  (the same FISH also constrained the model, so this is a fit, '
+      'not a held-out score)')"""),
 
     code("""\
-# Visualise.  Scale the recon distance matrix back to nm via the mean
-# ratio with FISH so the two heat-maps are directly comparable.
-scale_est = np.nanmean(D_fish[iu_r][finite]) / np.mean(D_recon[iu_r][finite])
+# Visualise.  Scale the recon distance matrix to nm with the fitted
+# factor so the two heat-maps are directly comparable.
+scale_est = s_fit
 fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
 
 im0 = axes[0].imshow(D_fish, cmap='viridis_r', origin='lower')
@@ -2391,7 +2444,7 @@ plt.colorbar(im0, ax=axes[0])
 
 im1 = axes[1].imshow(D_recon * scale_est, cmap='viridis_r', origin='lower',
                       vmax=np.nanpercentile(D_fish, 98))
-axes[1].set_title(f'GEM-FISH reconstruction (corr={corr_real:.2f})')
+axes[1].set_title(f'GEM-FISH (Pearson {corr_real:.2f}, rel. err. {rel_err:.2f})')
 plt.colorbar(im1, ax=axes[1])
 
 for ax in axes:
@@ -2434,9 +2487,13 @@ show the **inverse** pattern: bright diagonal bands and loops in the
 contact map correspond to dark (short-distance) blocks in the
 distance matrix.
 
-We also compute the Spearman correlation between
-``log10(1 + contact)`` and ``1 / distance`` over all off-diagonal
-pairs — the paper reports ~0.6–0.8 on chr21."""),
+We also compute the Spearman correlation between the balanced
+contact and ``1 / distance`` over all off-diagonal pairs.  On this
+real IMR90 input it is **low** (≈ 0.03 over the whole chromosome,
+≈ 0.35 within 3 Mb of the diagonal): the TAD-level model plus the
+single-anchor assembly reproduces the FISH region far better than the
+genome-wide Hi-C pattern.  Treat it as a known limitation of this port
+(see the caveats below), not as a property of the data."""),
 
     code("""\
 from uchrom.recon.fish._hic import load_contact_matrix
@@ -2513,27 +2570,30 @@ print('   O/E-corrected shows the structural agreement beyond it)')"""),
     md("""\
 ## Scaling up to other chromosomes
 
-`IMR90_chr21_30kb.cool` only contains chr21.  For other chromosomes
-(or a different resolution) download the full Rao 2014 IMR90 `.mcool`
-from 4DN (~810 MB, public S3):
+`rao2014_imr90/IMR90_chr21_5kb_hg19.cool` only contains chr21.  Slice
+other chromosomes (or resolutions) of the same Rao 2014 IMR90 map with
+the builder, which reads only the needed blocks of the 13 GB GEO `.hic`
+over HTTP:
 
-```
-https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/
-1c856462-1e76-4850-bfa6-defcf1524d42/4DNFI4QQPDMR.mcool
+```bash
+python example-data/build_rao2014_slices.py --cell IMR90 --chroms 20 22 --res 5000
 ```
 
-Then:
+Then (FISH for that chromosome, in hg19 coordinates):
 
 ```python
 cd = reconstruct_gem_fish(
-    hic_path='4DNFI4QQPDMR.mcool',
+    hic_path='example-data/rao2014_imr90/IMR90_chr20-22_5kb_hg19.cool',
     chrom='chr20',
-    resolution=30_000,         # required for .mcool
+    resolution=None,           # single-resolution .cool
     fish_cd=fish_cd,           # swap in FISH for that chromosome
     params=GEMFISHParams(device='auto'),
 )
 cd.write('imr90_chr20_gemfish.chromdata.zarr')
-```"""),
+```
+
+(Do not use 4DN `4DNFI4QQPDMR.mcool` for IMR90: it is **K562** Hi-C,
+Ray et al. 2019; see `example-data/README.md`.)"""),
 
     md("""\
 ## Notes and caveats
@@ -2552,10 +2612,21 @@ cd.write('imr90_chr20_gemfish.chromdata.zarr')
   enough for the tutorial; for production use you may want to augment
   the initial rotation with a short local refinement step.
 - **FISH coverage**: the Bintu 2018 CSV only covers
-  chr21:18.6–20.6 Mb (65 bins out of the 1 557-bin chromosome).  The
+  chr21:20.0–21.95 Mb in hg19 (18.6–20.6 Mb in hg38; 65 segments out
+  of the 1 605-bin chromosome).  The
   FISH C_3 / C_4 terms influence only the TADs that fall inside that
   region; the rest of the chromosome is shaped by Hi-C alone, which
-  is the expected behaviour when FISH coverage is partial."""),
+  is the expected behaviour when FISH coverage is partial.
+- **How good is this on real data?**  With these settings the model
+  matches the Bintu median distances with Pearson ≈ 0.71–0.73 and a
+  mean relative error ≈ 0.33–0.35 (CPU vs GPU run; 30 kb segments, the
+  same FISH that constrained the model — a fit, not a held-out score),
+  while its agreement with the Hi-C outside the FISH region is weak
+  (Spearman ≈ 0.03 genome-wide on chr21).  The paper's 0.14 is a
+  different setup (Wang 2016 TAD-centre FISH, TAD-level distances,
+  paper-tuned weights), scored by `benchmarks/fig3/c_gemfish_wang2016.py`.  The
+  numbers here are a sanity check of the pipeline on real inputs, not a
+  benchmark."""),
 ]
 
 write_nb(Path("tutorials") / "gem_fish_reconstruction.ipynb", nb9)

@@ -168,8 +168,8 @@ caller reads the matrix from a `.cool` / `.mcool` linked with
 ```python
 from uchrom.strc.tad import call_tads_di, DICallerParams
 
-cd.link_cool("IMR90_chr21_30kb.cool", key="imr90")
-tads = call_tads_di(cd, contacts="imr90", chrom="chr21",
+cd.link_cool("K562_chr21_30kb.cool", key="k562")   # K562 Hi-C (Ray 2019)
+tads = call_tads_di(cd, contacts="k562", chrom="chr21",
                     params=DICallerParams(window=50, smoothing_param=0.1))
 # tads: DataFrame (chrom, start, end, start_bin, end_bin); cd.results['tads.di']
 ```

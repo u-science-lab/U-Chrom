@@ -83,7 +83,7 @@ def refresh_cache() -> None:
     clr = cooler.Cooler(str(ROOT / "example-data/schicar_mop/contacts_all.mcool") + "::resolutions/250000")
     np.save(CACHE / "schicar_chr2.npy", clr.matrix(balance=False).fetch("chr2:20,000,000-80,000,000"))
 
-    m = ChromData.read(ROOT / "example-data/sim_cell1/sim_cell1.h5cd")
+    m = ChromData.read(ROOT / "example-data/sim_cell1/sim_cell1.cdz")
     pd.DataFrame({"chrom": m.spots.chrom.astype(str), "start": m.spots.start, "x": m.coords[:, 0],
                   "y": m.coords[:, 1], "z": m.coords[:, 2]}).to_csv(CACHE / "sim_cell1.csv", index=False)
 
