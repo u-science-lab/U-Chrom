@@ -38,6 +38,7 @@ fn main() {
     let sys = System::new(n, vec![1.0; n], vec![1.0; n], &rs);
     for &(cells, par) in &[(true, false), (false, false), (true, true)] {
         let mut m = Model::new(pos.clone(), Rng::new(0));
+        m.grid.stencil = std::env::var("STENCIL").map(|x| x.parse().unwrap()).unwrap_or(1);
         m.nl.build(&pos, &sys.radii, 1.0, false);
         let reps = 50;
         let t = Instant::now();

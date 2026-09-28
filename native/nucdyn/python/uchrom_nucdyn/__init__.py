@@ -81,9 +81,11 @@ def calc_genome_structure(
 
     Returns
     -------
-    dict with ``coords`` (n_models, n_particles, 3; particle radii, models
-    superposed), ``chrom`` / ``start`` (per particle), ``particle_size``,
-    ``model_rmsds``, ``stages`` (per-stage log) and ``seconds_total``.
+    dict with ``coords`` (n_models, n_particles, 3; particle radii; each
+    model centred; superposed only in the release_1.3 protocol), ``chrom`` /
+    ``position`` (per particle, see ``position_convention``),
+    ``particle_size``, ``model_rmsds`` (release_1.3), ``stages`` (per-stage
+    log) and ``seconds_total``.
     """
     ca = np.asarray(chrom_a).astype(str)
     cb = np.asarray(chrom_b).astype(str)
@@ -114,7 +116,11 @@ def calc_genome_structure(
     return {
         "coords": res["coords"],
         "chrom": chrom,
-        "start": start,
+        # particle sequence position as the original reports it: 2017 protocol
+        # = end of the particle's interval (start - size, start]; release_1.3 =
+        # start of [start, start + size)
+        "position": start,
+        "position_convention": "end" if p["protocol"] == "nuc_dynamics_2017" else "start",
         "particle_size": res["particle_size"],
         "model_rmsds": list(res["model_rmsds"]),
         "stages": json.loads(res["stages_json"]),

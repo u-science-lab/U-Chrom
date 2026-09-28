@@ -470,12 +470,19 @@ pub struct CellGrid {
     pub pcell: Vec<u32>,
     pub inv: Vec<u32>,
     pub sforce: Vec<V3>,
+    /// sorted positions as separate x / y / z arrays (vectorisable inner loop)
+    pub sx: Vec<f64>,
+    pub sy: Vec<f64>,
+    pub sz: Vec<f64>,
+    /// cells per cutoff (1: 3x3x3 stencil of cutoff-sized cells; 2: 5x5x5 of half-size cells)
+    pub stencil: usize,
     fill: Vec<u32>,
 }
 
 impl CellGrid {
     pub fn build(&mut self, pos: &[V3], cutoff: f64) {
         let n = pos.len();
+        let st = self.stencil.max(1);
         let mut mn = [f64::INFINITY; 3];
         let mut mx = [f64::NEG_INFINITY; 3];
         for p in pos {
@@ -485,7 +492,7 @@ impl CellGrid {
             }
         }
         let mut cs = cutoff;
-        let max_cells = (4 * n).max(64) as f64;
+        let max_cells = (4 * st * st * st * n).max(64) as f64;
         let mut dims;
         loop {
             dims = [0usize; 3];
@@ -522,6 +529,9 @@ impl CellGrid {
         self.spos.resize(n, [0.0; 3]);
         self.inv.resize(n, 0);
         self.sforce.resize(n, [0.0; 3]);
+        self.sx.resize(n, 0.0);
+        self.sy.resize(n, 0.0);
+        self.sz.resize(n, 0.0);
         // stable counting sort
         self.fill.clear();
         self.fill.extend_from_slice(&self.start[..ncell]);
@@ -531,6 +541,9 @@ impl CellGrid {
             self.fill[l] += 1;
             self.sidx[k] = i as u32;
             self.spos[k] = pos[i];
+            self.sx[k] = pos[i][0];
+            self.sy[k] = pos[i][1];
+            self.sz[k] = pos[i][2];
             self.inv[i] = k as u32;
         }
     }
@@ -662,11 +675,17 @@ pub fn compute_forces_mode(
     }
     // cell-grid path
     let max_r = radii.iter().cloned().fold(0.0, f64::max);
-    m.grid.build(pos, 2.0 * max_r);
+    let uniform = radii.iter().all(|&r| r == max_r);
+    let stencil = m.grid.stencil.max(1);
+    m.grid.build(pos, 2.0 * max_r / stencil as f64);
     let mut sforce = std::mem::take(&mut m.grid.sforce);
     let g = &m.grid;
     let [dx_, dy_, dz_] = g.dims;
     let (sidx, spos, start, pcell) = (&g.sidx, &g.spos, &g.start, &g.pcell);
+    let (sx, sy, sz) = (&g.sx[..], &g.sy[..], &g.sz[..]);
+    let rep_u = 2.0 * max_r;
+    let rep2_u = rep_u * rep_u;
+    let kf = 4.0 * f_rep;
     let parts: Vec<f64> = sforce
         .par_chunks_mut(CHUNK)
         .enumerate()
@@ -684,19 +703,38 @@ pub fn compute_forces_mode(
                     let cx = l % dx_;
                     let cy = (l / dx_) % dy_;
                     let cz = l / (dx_ * dy_);
-                    let (x0, x1) = (cx.saturating_sub(1), (cx + 1).min(dx_ - 1));
-                    for z in cz.saturating_sub(1)..=(cz + 1).min(dz_ - 1) {
-                        for y in cy.saturating_sub(1)..=(cy + 1).min(dy_ - 1) {
+                    let (x0, x1) = (cx.saturating_sub(stencil), (cx + stencil).min(dx_ - 1));
+                    for z in cz.saturating_sub(stencil)..=(cz + stencil).min(dz_ - 1) {
+                        for y in cy.saturating_sub(stencil)..=(cy + stencil).min(dy_ - 1) {
                             let row = (z * dy_ + y) * dx_;
                             let (s, e) = (start[row + x0] as usize, start[row + x1 + 1] as usize);
-                            for t in s..e {
-                                let j = sidx[t] as usize;
-                                if j + 1 >= i && j <= i + 1 {
-                                    continue; // |i - j| < 2
+                            if uniform && !energies {
+                                // branch-free: w = rep^2 - d^2 inside the cutoff (and |i - j| >= 2), else 0
+                                let (mut ax, mut ay, mut az) = (0.0f64, 0.0f64, 0.0f64);
+                                let (xs, ys, zs, js) = (&sx[s..e], &sy[s..e], &sz[s..e], &sidx[s..e]);
+                                for t in 0..xs.len() {
+                                    let (ddx, ddy, ddz) = (xs[t] - p[0], ys[t] - p[1], zs[t] - p[2]);
+                                    let d2 = ddx * ddx + ddy * ddy + ddz * ddz;
+                                    let j = js[t] as usize;
+                                    let near = (j + 1 >= i) & (j <= i + 1);
+                                    let w = if d2 <= rep2_u && !near { rep2_u - d2 } else { 0.0 };
+                                    ax -= ddx * w;
+                                    ay -= ddy * w;
+                                    az -= ddz * w;
                                 }
-                                let e = repulse(&p, &spos[t], ri + radii[j], f_rep, &mut acc);
-                                if energies && i < j {
-                                    u += e;
+                                acc[0] += ax * kf;
+                                acc[1] += ay * kf;
+                                acc[2] += az * kf;
+                            } else {
+                                for t in s..e {
+                                    let j = sidx[t] as usize;
+                                    if j + 1 >= i && j <= i + 1 {
+                                        continue; // |i - j| < 2
+                                    }
+                                    let e = repulse(&p, &spos[t], ri + radii[j], f_rep, &mut acc);
+                                    if energies && i < j {
+                                        u += e;
+                                    }
                                 }
                             }
                         }

@@ -77,6 +77,11 @@ pub struct Params {
     /// CPU: repulsion pairs from a cell grid rebuilt every step (default)
     /// instead of a Verlet list with `nl_skin`.
     pub use_cells: bool,
+    /// Cell-grid resolution: cells per repulsion cutoff (1: 3x3x3 cells of
+    /// the cutoff size; 2: 5x5x5 cells of half the cutoff).  Performance
+    /// only: the pairs within the cutoff are the same.
+    pub cpu_stencil: usize,
+    pub gpu_stencil: usize,
     /// "cpu" or "gpu".
     pub device: String,
     /// Worker threads (0 = all logical cores).
@@ -120,6 +125,8 @@ impl Default for Params {
             ambig_min_bead_sep: 3,
             nl_skin: 1.0,
             use_cells: true,
+            cpu_stencil: 1,
+            gpu_stencil: 2,
             device: "cpu".to_string(),
             n_threads: 0,
             verbose: false,

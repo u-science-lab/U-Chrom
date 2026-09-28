@@ -113,6 +113,7 @@ impl StageEngine for CpuEngine {
                 .enumerate()
                 .map(|(mi, pos)| {
                     let mut m = Model::new(pos, Rng::from_keys(&[seed, stage as u64, mi as u64, STREAM_VELOC]));
+                    m.grid.stencil = p.cpu_stencil.clamp(1, 4);
                     for &(t_ref, f_rep) in schedule {
                         let dp = DynParams {
                             t_ref,
