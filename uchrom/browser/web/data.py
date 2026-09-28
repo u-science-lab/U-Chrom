@@ -809,7 +809,7 @@ class Dataset:
                 raise LookupError("per-cell contact map: pass cell=<cell id> or group=<group>")
             name = f"/cells/{cell}"
             if name not in self._scool_cells(path):
-                raise KeyError(f"cell {cell!r} not in {key!r}")
+                raise KeyError(f"cell {cell!r} has no map in {key!r} ({self._scool_coverage(path)})")
             uri = f"{path}::{name}"
         else:
             uri = str(path)
@@ -834,6 +834,13 @@ class Dataset:
             cells = self._cache[("scool_cells", str(path))] = set(cooler.fileops.list_scool_cells(str(path)))
         return cells
 
+    def _scool_coverage(self, path: Path) -> str:
+        """Which cells a .scool covers, for error messages (e.g. only one section of the data)."""
+        names = sorted(c.rsplit("/", 1)[-1] for c in self._scool_cells(path))
+        if not names:
+            return "it has no cells"
+        return f"it covers {len(names):,} of {len(self._cells_table()):,} cells, e.g. {names[0]!r}"
+
     def _pseudobulk(self, key: str, path: Path, group: str, chrom: str, lo: int, hi: int) -> bytes:
         """Sum of a group's per-cell maps over a region (raw counts).
 
@@ -853,7 +860,7 @@ class Dataset:
         available = self._scool_cells(path)
         names = [c for c in self.group_cells(group) if f"/cells/{c}" in available]
         if not names:
-            raise LookupError(f"no cell of group {group!r} has a map in {key!r}")
+            raise LookupError(f"no cell of group {group!r} has a map in {key!r} ({self._scool_coverage(path)})")
         notes = []
         if len(names) > PSEUDOBULK_MAX_CELLS:
             rng = np.random.default_rng(0)
