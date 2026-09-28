@@ -97,6 +97,7 @@ def main() -> None:
     ap.add_argument("--suite", nargs="+", default=["ensemble"])
     ap.add_argument("--temp-steps", type=int, default=50)
     ap.add_argument("--threads", type=int, default=os.cpu_count())
+    ap.add_argument("--devices", nargs="+", default=["gpu", "cpu"], help="native engine devices to run")
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
     if args.worker:
@@ -108,6 +109,7 @@ def main() -> None:
               "gpu": un.gpu_info(), "engine_version": un.__version__, "input": GEO.name, "runs": {}}
     if args.out and args.out.exists():
         report = json.loads(args.out.read_text())
+    devs = set(args.devices)
 
     def save():
         if args.out:
@@ -118,26 +120,28 @@ def main() -> None:
     for suite in args.suite:
         runs = []
         if suite == "ensemble":
-            runs.append(run_sub({"engine": "native", "device": "gpu", "n_models": 10}))
-            runs.append(run_sub({"engine": "native", "device": "cpu", "n_models": 10, "n_threads": args.threads}))
-            runs.append(run_sub({"engine": "native", "device": "cpu", "n_models": 1, "n_threads": 1}))
+            if "gpu" in devs:
+                runs.append(run_sub({"engine": "native", "device": "gpu", "n_models": 10}))
+            if "cpu" in devs:
+                runs.append(run_sub({"engine": "native", "device": "cpu", "n_models": 10, "n_threads": args.threads}))
+                runs.append(run_sub({"engine": "native", "device": "cpu", "n_models": 1, "n_threads": 1}))
         elif suite == "models":
-            for m in (1, 2, 4, 8, 16, 32, 64):
-                runs.append(run_sub({"engine": "native", "device": "gpu", "n_models": m, "temp_steps": ts}))
-            for m in (1, 2, 4, 8, 16, 32, 64):
-                runs.append(run_sub({"engine": "native", "device": "cpu", "n_models": m, "temp_steps": ts,
-                                     "n_threads": args.threads}))
+            for dev in [d for d in ("gpu", "cpu") if d in devs]:
+                for m in (1, 2, 4, 8, 16, 32, 64):
+                    runs.append(run_sub({"engine": "native", "device": dev, "n_models": m, "temp_steps": ts,
+                                         "n_threads": args.threads}))
         elif suite == "particles":
             schedules = {"1Mb": [8e6, 4e6, 2e6, 1e6], "500kb": [8e6, 4e6, 2e6, 5e5],
                          "200kb": [8e6, 4e6, 2e6, 4e5, 2e5], "100kb": [8e6, 4e6, 2e6, 4e5, 2e5, 1e5]}
-            for dev in ("gpu", "cpu"):
+            for dev in [d for d in ("gpu", "cpu") if d in devs]:
                 for name, sizes in schedules.items():
                     runs.append(run_sub({"engine": "native", "device": dev, "n_models": 10, "temp_steps": ts,
                                          "particle_sizes": sizes, "final": name, "n_threads": args.threads}))
         elif suite == "taichi":
             for arch in ("cpu", "gpu"):
                 runs.append(run_sub({"engine": "taichi", "arch": arch}))
-        report["runs"][suite] = runs
+        key = suite if devs == {"gpu", "cpu"} or suite == "taichi" else f"{suite}_{'_'.join(sorted(devs))}"
+        report["runs"][key] = runs
         save()
 
 
