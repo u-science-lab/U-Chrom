@@ -1053,6 +1053,19 @@ def panel_e(r, x0=108, y0=133):
         xx = np.arange(len(keys)) + (j - 0.5) * bw + np.array([0.25 if k in ("all", "test") else 0 for k in keys])
         v = [np.mean([score(m, c, k) for m, _, _ in BENCH_MODELS]) for k in keys]
         ax.bar(xx, v, width=bw, color=cols[j], label=labs[j])
+        # ± s.e.m. over tasks of the model-averaged task scores (when per-task scores are recorded)
+        tasks = r.get("tasks")
+        if tasks and all("per_task" in ms[m]["conditions"][c] for m, _, _ in BENCH_MODELS):
+            def members(k):
+                return [i for i, t in tasks.items()
+                        if k == "all" or (k == "test" and t["split"] == "test") or t["category"] == k]
+            err = []
+            for k in keys:
+                ts = [100 * np.mean([ms[m]["conditions"][c]["per_task"][i] for m, _, _ in BENCH_MODELS])
+                      for i in members(k)]
+                err.append(np.std(ts, ddof=1) / np.sqrt(len(ts)) if len(ts) > 1 else 0)
+            ax.errorbar(xx, v, yerr=err, fmt="none", ecolor=INK, elinewidth=0.5, capsize=1.2, capthick=0.5,
+                        zorder=3)
         for m, _, mk in BENCH_MODELS:
             ax.scatter(xx, [score(m, c, k) for k in keys], s=3, marker=mk, facecolor="white", edgecolor=INK,
                        lw=0.4, zorder=4, clip_on=False)
@@ -1071,7 +1084,7 @@ def panel_e(r, x0=108, y0=133):
                             labelcolor=GREY, borderaxespad=0))
     ax.legend(frameon=False, fontsize=F(4.5), ncol=2, loc="upper center", bbox_to_anchor=(0.5, 1.22),
               handles=ax.get_legend_handles_labels()[0][:2], handlelength=0.8, columnspacing=0.8)
-    ax.text(0.5, -0.50, f"n: runs with a skill · {r['n_tasks']} tasks × {r['reps']} runs · held-out: 20 unseen",
+    ax.text(0.5, -0.50, f"n: runs with a skill · {r['n_tasks']} tasks × {r['reps']} runs · ± s.e.m. over tasks",
             transform=ax.transAxes, fontsize=F(4.1), color=GREY, ha="center")
 
 

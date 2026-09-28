@@ -46,6 +46,8 @@ def main():
                 "n_failed_runs": sum(r["returncode"] != 0 for r in R),
                 "cost_usd": sum(r["cost_usd"] or 0 for r in R),
                 "median_time_s": st.median(r["elapsed_s"] for r in R),
+                # each task's score averaged over its repeats (error bars across tasks)
+                "per_task": {i: st.mean(r["score"] for r in R if r["id"] == i) for i in sorted({r["id"] for r in R})},
             }
         ids = sorted({r["id"] for r in rows})
         # paired over tasks, each task's score averaged over its repeats
@@ -59,7 +61,8 @@ def main():
     reps = sorted({len({r["rep"] for r in json.loads(f.read_text()).values() if r["id"] == i and r["condition"] == c})
                    for f in (HERE / "runs" / a.run).glob("*/grades.json")
                    for i in qs for c in ("docs", "skills")})
-    out = {"run": a.run, "judge": a.judge, "reps": reps[0] if len(reps) == 1 else reps, "n_tasks": len(qs), "categories": cats,
+    task_meta = {i: {"category": q["category"], "split": q["split"]} for i, q in qs.items()}
+    out = {"run": a.run, "judge": a.judge, "tasks": task_meta, "reps": reps[0] if len(reps) == 1 else reps, "n_tasks": len(qs), "categories": cats,
            "category_sizes": {k: sum(q["category"] == k for q in qs.values()) for k in cats}, "models": models}
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(out, indent=1))
