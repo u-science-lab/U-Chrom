@@ -319,6 +319,11 @@ Descriptions are kept to about 300 characters (1,494 in total) because the agent
 Random subsampling in the scripts (loci per trace) uses one generator per trace seeded by the trace id and a fixed order of the loci, so that results do not depend on the order in which a store keeps its rows.
 The scripts have unit tests on synthetic data with known answers and were run on the three data sets of the benchmark.
 
+The handoff of Fig.~\ref{fig:agents}d is one unedited session.
+With the Takei field of view open in the browser, 8 cells were lassoed in the embedding and a Claude Code agent (version 2.1.283, Opus 5.5) was started with the \pkg{show-in-browser} and \pkg{compare-groups} skills and the question ``What is different about the cells I just selected in the browser? Show me.''
+It ran for 13 turns and 65\,s; the figure shows its code and answer shortened, with the omissions marked, and the two views it opened redrawn from the data.
+The session ran on the 1.x HDF5 file of the same field of view, before the conversion to chromdata.zarr; the views and numbers are the same from the store.
+
 \subsection*{Agent benchmark}
 \textit{Questions.}
 Forty questions were written about three data sets, the Takei et al.\ 2025 field of view (26 questions), the scHiCAR object (11) and the reconstructed cell (3), in five categories: inspecting the data (8), calling structures and structural statistics (8), comparing groups of cells (10), relating modalities (8) and data-specific know-how (6), for example repeated loci within a trace or a difference in detected loci between cell types.
