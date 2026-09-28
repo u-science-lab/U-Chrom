@@ -38,6 +38,7 @@ import { ScopePicker, useNCells } from './ScopePicker'
 import { updatePane, type DistanceStat, type Pane, type TrackAgg } from '../workspace'
 import { CHART, drawColorRamp } from './chart'
 import { prepareCanvas, useSize } from './useSize'
+import { Select } from './Select'
 
 const AXIS_H = 26
 const STAT_LABEL: Record<DistanceStat, string> = { median: 'median distance', mean: 'mean distance', contact: 'contact frequency' }
@@ -250,13 +251,13 @@ function RowSettings({
       {row.kind === 'matrix' && <MatrixTools row={row} ds={ds} set={set} multi={multi} />}
       {row.kind === 'matrix' && <ColorScaleControls kind={rowMatrixKind(row)} value={row.color} onChange={setColor} auto={auto} />}
       {row.kind === 'track' && (
-        <select value={row.track ?? ''} onChange={(e) => set('track', e.target.value)} title="Track">
+        <Select value={row.track ?? ''} onChange={(e) => set('track', e.target.value)} title="Track">
           {(ds.tracks ?? []).map((t) => (
             <option key={t.name} value={t.name}>
               {t.name}
             </option>
           ))}
-        </select>
+        </Select>
       )}
       {rowTakesGroup(row, ds) && (
         <label className="insp-text small scope-line" title="Which cells this row shows">
@@ -268,13 +269,13 @@ function RowSettings({
       {perCellMap && multi && <div className="muted small">several cells: their maps are summed (pseudo-bulk)</div>}
       {row.kind === 'track' && <TrackAggregateControl agg={row.agg ?? defaultAgg} multi={multi} onAgg={(a) => set('agg', a)} />}
       {row.kind === 'intervals' && (
-        <select value={row.key ?? ''} onChange={(e) => set('key', e.target.value)} title="Interval table">
+        <Select value={row.key ?? ''} onChange={(e) => set('key', e.target.value)} title="Interval table">
           {(ds.intervals ?? []).map((t) => (
             <option key={t.key} value={t.key}>
               {t.key}
             </option>
           ))}
-        </select>
+        </Select>
       )}
       <TextSetting label="height" value={row.height ? String(row.height) : ''} placeholder={row.kind === 'matrix' ? 'auto' : String(ROW_HEIGHT[row.kind])} onCommit={(v) => set('height', v)} title="Row height in px (empty = default)" />
     </div>
@@ -617,7 +618,7 @@ function MatrixTools({ row, ds, set, multi }: { row: GenomeRow; ds: DatasetSumma
   const map = maps.find((m) => m.key === row.source)
   return (
     <>
-      <select value={row.source ?? ''} onChange={(e) => set('source', e.target.value)} title="Matrix source">
+      <Select value={row.source ?? ''} onChange={(e) => set('source', e.target.value)} title="Matrix source">
         <optgroup label="Follows the cells setting (focus, groups)">
           {maps
             .filter((m) => m.per_cell)
@@ -639,16 +640,16 @@ function MatrixTools({ row, ds, set, multi }: { row: GenomeRow; ds: DatasetSumma
               ))}
           </optgroup>
         )}
-      </select>
+      </Select>
       {map && map.resolutions.length > 1 && (
-        <select value={row.resolution ?? ''} onChange={(e) => set('resolution', e.target.value)} title="Resolution">
+        <Select value={row.resolution ?? ''} onChange={(e) => set('resolution', e.target.value)} title="Resolution">
           <option value="">auto resolution</option>
           {map.resolutions.map((r) => (
             <option key={r} value={r}>
               {fmtBp(r)}
             </option>
           ))}
-        </select>
+        </Select>
       )}
       {map && (
         <label className="check small" title="ICE-balanced values (if the cooler has weights)">
@@ -763,7 +764,7 @@ function MatrixRow({
         setLoading(true)
         cachedMatrix(key, load)
           .then((m) => live && (setMat(m), setError(null)))
-          .catch((e: Error) => live && setError(e.message))
+          .catch((e: Error) => live && (setMat(null), setError(e.message))) // no stale map under the message
           .finally(() => live && setLoading(false))
       },
       matrixCache.has(key) ? 0 : 200,
@@ -863,13 +864,17 @@ function MatrixRow({
       drawColorRamp(g, { x: width - rw - 8, y: row.flip ? height - 22 : 8, w: rw, h: 6 }, (t) => cscale.ramp(t), cscale.lo, cscale.hi)
       g.restore()
     }
+    // a per-cell map without this cell / group (e.g. one section of the data) is a note, not an error
+    const cover = error ? /(?:has no map|has a map) in '[^']*' \((.*)\)$/.exec(error) : null
     const msg = !valid
       ? title
       : waiting
         ? `“${map?.label || map?.key}” holds one map per cell — select a cell or a group (left), or give this row a group`
-        : error
+        : cover
+          ? `no map for ${cell ? 'this cell' : 'this group'} here — ${cover[1]}`
+          : error
     if (msg) {
-      g.fillStyle = error ? pal.error : CHART.muted
+      g.fillStyle = error && !cover ? pal.error : CHART.muted
       g.textAlign = 'center'
       g.textBaseline = 'middle'
       g.fillText(msg, width / 2, height / 2)

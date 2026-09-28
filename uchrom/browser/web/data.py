@@ -639,15 +639,25 @@ class Dataset:
                 raise KeyError(region)
             ok &= (pos["region"].astype(str) == str(region)).to_numpy()
         sub = pos[ok]
-        r = next((x for x in info["regions"] if x["name"] == region), None) if region is not None else None
-        image = None
-        if r and r["image"]:
+
+        def image_of(r: Optional[dict]) -> Optional[dict]:
+            if not r or not r["image"]:
+                return None
             rec = self._images()[r["image"]]
-            image = {"name": r["image"], "extent": [float(v) for v in rec.get("extent", [])],
-                     "kind": rec.get("kind")}
-        return {"key": key, "region": region, "unit": info["unit"], "y_axis": info["y_axis"],
-                "cell_ids": [str(c) for c in sub.index],
-                "x": sub["x"].astype(float).tolist(), "y": sub["y"].astype(float).tolist(), "image": image}
+            return {"name": r["image"], "extent": [float(v) for v in rec.get("extent", [])], "kind": rec.get("kind")}
+
+        out = {"key": key, "region": region, "unit": info["unit"], "y_axis": info["y_axis"],
+               "cell_ids": [str(c) for c in sub.index],
+               "x": sub["x"].astype(float).tolist(), "y": sub["y"].astype(float).tolist()}
+        if region is not None:
+            out["image"] = image_of(next((x for x in info["regions"] if x["name"] == region), None))
+        else:
+            # every region at once: the region of each cell and the image of each region, so a client can
+            # switch sections (e.g. to follow the focused cell) without another request
+            out["image"] = None
+            out["regions"] = sub["region"].astype(str).tolist() if "region" in sub else None
+            out["images"] = {x["name"]: image_of(x) for x in info["regions"] if x["image"]}
+        return out
 
     def image_path(self, name: str) -> Path:
         rec = self._images().get(name)

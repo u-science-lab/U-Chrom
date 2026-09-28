@@ -3,6 +3,7 @@ import { listTraces } from '../api'
 import { chromsOf, composeFilter, describeFilter, fmtBp, parseRegion, parseTraceSelection } from '../filters'
 import { useStore } from '../store'
 import type { DatasetSummary, Layer, LayerFilter, LayerStyle, TraceInfo } from '../types'
+import { Select } from './Select'
 
 type Tab = 'region' | 'trace'
 
@@ -89,11 +90,11 @@ function RegionTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
         submit()
       }}
     >
-      <select value={info.name} onChange={(e) => setChrom(e.target.value)}>
+      <Select value={info.name} onChange={(e) => setChrom(e.target.value)}>
         {chroms.map((c) => (
           <option key={c.name}>{c.name}</option>
         ))}
-      </select>
+      </Select>
       <input placeholder="start-end, e.g. 10M-20M" value={text} onChange={(e) => setText(e.target.value)} />
       <div className="muted small">
         valid: {fmtBp(lo)}-{fmtBp(hi)}
@@ -154,12 +155,12 @@ function TraceTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
         submit()
       }}
     >
-      <select value={chrom} onChange={(e) => setChrom(e.target.value)}>
+      <Select value={chrom} onChange={(e) => setChrom(e.target.value)}>
         {chroms.length > 1 && <option value="">all chromosomes</option>}
         {chroms.map((c) => (
           <option key={c.name}>{c.name}</option>
         ))}
-      </select>
+      </Select>
       <ul className="trace-list">
         {visible.map((t, i) => (
           <li key={t.trace_id} onClick={() => setText(t.trace_id)} title={`${t.chrom}:${fmtBp(t.start)}-${fmtBp(t.end)}`}>

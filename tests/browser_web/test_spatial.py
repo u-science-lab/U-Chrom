@@ -51,6 +51,9 @@ def test_spatial_listing_points_and_image(tmp_path):
     assert p["cell_ids"] == ["s1:1x1", "s1:2x1"] and p["x"] == [10.0, 30.0] and p["y"] == [20.0, 20.0]
     assert p["image"] == {"name": "s1", "extent": [0.0, 40.0, 0.0, 30.0], "kind": None}
     assert ds.spatial_points("default", "s2")["image"] is None
+    every = ds.spatial_points("default")
+    assert every["cell_ids"] == ["s1:1x1", "s1:2x1", "s2:1x1", "s2:1x2"] and every["regions"] == ["s1", "s1", "s2", "s2"]
+    assert every["images"] == {"s1": {"name": "s1", "extent": [0.0, 40.0, 0.0, 30.0], "kind": None}}
     assert ds.image_path("s1") == tmp_path / "img" / "s1.png"
     with pytest.raises(KeyError):
         ds.spatial_points("nope")

@@ -185,7 +185,9 @@ The cells of one region (section / FOV) of a cell-position set
  "image": {"name": "E14_5_HiC", "extent": [0, 1080, 0, 1080], "kind": "bright-field"}}
 ```
 
-Without `region`, every cell with a position.  Sets are listed in the
+Without `region`, every cell with a position, plus `"regions"` (the region of
+each cell, or `null` without a `region_col`) and `"images"` (region → image,
+as above) so a client can switch regions without another request.  Sets are listed in the
 dataset summary:
 
 ```json

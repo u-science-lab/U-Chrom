@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fmtLocus, parseLocus, zoomLocus } from '../genome'
 import { useLocus } from '../useLocus'
+import { Select } from './Select'
 
 /** Shared genomic window for the tracks / matrix / stats panes. */
 export function LocusBar() {
@@ -22,7 +23,7 @@ export function LocusBar() {
   }
   return (
     <div className="locus-bar" title={error ?? 'Genomic window shared by the Tracks / Matrix / Stats views'}>
-      <select
+      <Select
         value={locus.chrom}
         onChange={(e) => {
           const c = chroms.find((x) => x.name === e.target.value)
@@ -32,7 +33,7 @@ export function LocusBar() {
         {chroms.map((c) => (
           <option key={c.name}>{c.name}</option>
         ))}
-      </select>
+      </Select>
       <input
         className={error ? 'bad' : ''}
         value={text}

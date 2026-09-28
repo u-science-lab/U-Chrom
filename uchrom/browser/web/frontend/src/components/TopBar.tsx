@@ -3,6 +3,7 @@ import { closeDataset, openDataset } from '../api'
 import { useStore } from '../store'
 import { THEME_CHOICES } from '../theme'
 import { Popover } from './Popover'
+import { Select } from './Select'
 
 export function TopBar() {
   const datasets = useStore((s) => s.datasets)
@@ -46,14 +47,14 @@ export function TopBar() {
       <div className="brand">
         U-Chrom <span>Browser</span>
       </div>
-      <select value={activeId ?? ''} onChange={(e) => setActive(e.target.value || null)} disabled={!datasets.length}>
+      <Select value={activeId ?? ''} onChange={(e) => setActive(e.target.value || null)} disabled={!datasets.length}>
         {!datasets.length && <option value="">No dataset loaded</option>}
         {datasets.map((d) => (
           <option key={d.id} value={d.id}>
             {d.name}
           </option>
         ))}
-      </select>
+      </Select>
       {opening ? (
         <form
           className="open-form"

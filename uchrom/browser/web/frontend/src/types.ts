@@ -74,7 +74,18 @@ export interface SpatialPoints {
   cell_ids: string[]
   x: number[]
   y: number[]
-  image: { name: string; extent: [number, number, number, number]; kind: string | null } | null
+  image: SpatialImage | null
+  /** without a region: the region of each cell (null without a region column) */
+  regions?: (string | null)[] | null
+  /** without a region: the image of each region that has one */
+  images?: Record<string, SpatialImage>
+}
+
+export interface SpatialImage {
+  name: string
+  /** [x0, x1, y0, y1] in position units, the image's first row at y0 */
+  extent: [number, number, number, number]
+  kind: string | null
 }
 
 export interface ContactMapInfo {

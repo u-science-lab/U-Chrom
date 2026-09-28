@@ -3,7 +3,9 @@ import { fetchSpatial, imageUrl } from '../api'
 import { useStore } from '../store'
 import type { Embedding, SpatialInfo, SpatialPoints, SpatialRegion } from '../types'
 import { updatePane, type Pane } from '../workspace'
+import { usePaneScope, useScopeCells } from '../useGroups'
 import { EmbeddingStyleControls, EmbeddingView, type ScatterSource } from './EmbeddingView'
+import { Select } from './Select'
 
 /** The position set and region a Spatial pane shows, resolved against the dataset (first ones by default). */
 export function resolveSpatial(list: SpatialInfo[], pane: Pane): { info: SpatialInfo | undefined; region: SpatialRegion | null } {
@@ -17,40 +19,73 @@ function useSpatialList(): SpatialInfo[] {
 }
 
 /**
+ * The region to show for the cells in focus: the one holding most of them,
+ * or null when the current region already holds some (or none has any).
+ * Pure — tested.
+ */
+export function regionToFollow(regions: (string | null)[], ids: string[], cells: ReadonlySet<string> | null, current: string | null): string | null {
+  if (!cells || !cells.size) return null
+  const counts = new Map<string, number>()
+  ids.forEach((id, i) => {
+    const r = regions[i]
+    if (r !== null && cells.has(id)) counts.set(r, (counts.get(r) ?? 0) + 1)
+  })
+  if (!counts.size || (current !== null && counts.has(current))) return null
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0]
+}
+
+/**
  * Cells where they are in the tissue: one region (section / FOV) of a
  * cell-position set, to scale, over the region's image when it has one.
- * Colouring, lasso, zoom and focus work as in the Embedding view.
+ * Colouring, lasso, zoom and focus work as in the Embedding view.  The
+ * positions of every region are loaded once; when the focused cell / group
+ * is in another region the view follows it there.
  */
 export function SpatialView({ pane }: { pane: Pane }) {
   const dsId = useStore((s) => s.activeDatasetId)
+  const setWorkspace = useStore((s) => s.setWorkspace)
   const list = useSpatialList()
   const { info, region } = resolveSpatial(list, pane)
-  const [pts, setPts] = useState<SpatialPoints | null>(null)
+  const [all, setAll] = useState<SpatialPoints | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    setPts(null)
+    setAll(null)
     if (!dsId || !info) return
     let live = true
     setError(null)
-    fetchSpatial(dsId, info.key, region?.name ?? null)
-      .then((p) => live && setPts(p))
+    fetchSpatial(dsId, info.key, null)
+      .then((p) => live && setAll(p))
       .catch((e: Error) => live && setError(e.message))
     return () => {
       live = false
     }
-  }, [dsId, info?.key, region?.name, info])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dsId, info?.key])
+  // the region's cells
   const data = useMemo<Embedding | null>(() => {
-    if (!pts) return null
-    const u = pts.unit ? ` (${pts.unit})` : ''
-    return { key: pts.key, label: pts.region ?? pts.key, cell_ids: pts.cell_ids, x: pts.x, y: pts.y, axis_labels: [`x${u}`, `y${u}`] }
-  }, [pts])
+    if (!all) return null
+    const keep = all.regions && region ? all.regions.map((r) => r === region.name) : null
+    const pick = <T,>(v: T[]) => (keep ? v.filter((_, i) => keep[i]) : v)
+    const u = all.unit ? ` (${all.unit})` : ''
+    return { key: all.key, label: region?.name ?? all.key, cell_ids: pick(all.cell_ids), x: pick(all.x), y: pick(all.y), axis_labels: [`x${u}`, `y${u}`] }
+  }, [all, region])
+  // follow the focus into another region (only when the focus changes, so picking a region by hand sticks)
+  const scope = usePaneScope(pane)
+  const scopeCells = useScopeCells(scope)
+  useEffect(() => {
+    if (!all?.regions) return
+    const to = regionToFollow(all.regions, all.cell_ids, scopeCells, region?.name ?? null)
+    if (to) setWorkspace((ws) => updatePane(ws, pane.id, { region: to }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeCells, all])
+  const image = region && all?.images ? (all.images[region.name] ?? null) : null
   const opacity = pane.imageOpacity ?? 1
   const source: ScatterSource = {
     data,
     error,
-    yDown: (pts?.y_axis ?? info?.y_axis) === 'down',
-    extent: pts?.image?.extent ?? null,
-    image: pts?.image && dsId ? { url: imageUrl(dsId, pts.image.name), extent: pts.image.extent, opacity } : null,
+    yDown: (all?.y_axis ?? info?.y_axis) === 'down',
+    extent: image?.extent ?? null,
+    image: image && dsId ? { url: imageUrl(dsId, image.name), extent: image.extent, opacity } : null,
     empty: list.length ? 'Loading positions…' : 'This dataset has no cell positions (cd.set_cell_positions).',
   }
   return <EmbeddingView pane={pane} source={source} />
@@ -70,14 +105,14 @@ export function RegionPicker({ pane }: { pane: Pane }) {
       <button onClick={() => go(names[(i - 1 + names.length) % names.length])} title="Previous section">
         ‹
       </button>
-      <select value={region?.name ?? ''} onChange={(e) => go(e.target.value)} title="Section / field of view shown">
+      <Select value={region?.name ?? ''} onChange={(e) => go(e.target.value)} title="Section / field of view shown">
         {info.regions.map((r) => (
           <option key={r.name} value={r.name}>
             {r.name} · {r.n_cells.toLocaleString('en-US')}
             {r.image ? ' · image' : ''}
           </option>
         ))}
-      </select>
+      </Select>
       <button onClick={() => go(names[(i + 1) % names.length])} title="Next section">
         ›
       </button>
@@ -99,7 +134,7 @@ export function SpatialControls({ pane }: { pane: Pane }) {
         <div className="emb-row" title="Which cell positions (cd.cell_positions key)">
           <span className="emb-lab">positions</span>
           <div className="emb-ctl">
-            <select value={info.key} onChange={(e) => set({ spatialKey: e.target.value, region: null })}>
+            <Select value={info.key} onChange={(e) => set({ spatialKey: e.target.value, region: null })}>
               {list.map((s) => (
                 <option key={s.key} value={s.key}>
                   {s.key}
@@ -107,7 +142,7 @@ export function SpatialControls({ pane }: { pane: Pane }) {
                   {s.n_images ? ' · images' : ''}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
       )}

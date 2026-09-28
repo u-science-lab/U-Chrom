@@ -33,6 +33,7 @@ import type { CellField, CellValue, Embedding, EmbeddingInfo } from '../types'
 import { defaultEmbeddingKey, pinnedCell, updatePane, type Pane } from '../workspace'
 import { FieldPicker, groupTitle } from './FieldPicker'
 import { colourableFields, fieldLabel, fmtNum, fmtValue } from './format'
+import { Select } from './Select'
 
 const PAD = 14
 
@@ -84,7 +85,7 @@ export function EmbeddingControls({ pane }: { pane: Pane }) {
   const dimLabel = (i: number) => (info?.method === 'pca' ? `PC${i + 1}` : `${info?.method?.toUpperCase() ?? 'D'}${i + 1}`)
   return (
     <>
-      <select value={key ?? ''} onChange={(e) => setWorkspace((ws) => updatePane(ws, pane.id, { embeddingKey: e.target.value, dims: [0, 1] }))}>
+      <Select value={key ?? ''} onChange={(e) => setWorkspace((ws) => updatePane(ws, pane.id, { embeddingKey: e.target.value, dims: [0, 1] }))}>
         {groupEmbeddings(list).map((g, _, all) => {
           const opts = g.items.map(({ info: e, text }) => (
             <option key={e.key} value={e.key} title={`${e.label} (${e.key})`}>
@@ -99,11 +100,11 @@ export function EmbeddingControls({ pane }: { pane: Pane }) {
             opts
           )
         })}
-      </select>
+      </Select>
       {info &&
         info.n_dims > 2 &&
         [0, 1].map((k) => (
-          <select
+          <Select
             key={k}
             className="dim"
             value={dims[k]}
@@ -118,7 +119,7 @@ export function EmbeddingControls({ pane }: { pane: Pane }) {
                 {dimLabel(i)}
               </option>
             ))}
-          </select>
+          </Select>
         ))}
       <EmbeddingStyleControls pane={pane} />
     </>
@@ -220,7 +221,7 @@ export function EmbeddingStyleControls({ pane }: { pane: Pane }) {
   return (
     <div className="emb-style">
       <Row label="colour by" title="Colour of the dots in this view only">
-        <select value={menuValue} onChange={(e) => pickMenu(e.target.value)}>
+        <Select value={menuValue} onChange={(e) => pickMenu(e.target.value)}>
           <option value="overview">same as overview</option>
           {[...groups.keys()].map((g) => (
             <option key={g} value={`g:${g}`}>
@@ -228,7 +229,7 @@ export function EmbeddingStyleControls({ pane }: { pane: Pane }) {
             </option>
           ))}
           <option value="solid">single colour</option>
-        </select>
+        </Select>
       </Row>
       {mode === 'field' && group !== null && (groups.get(group)?.length ?? 0) > 1 && (
         <Row label="">
@@ -249,23 +250,23 @@ export function EmbeddingStyleControls({ pane }: { pane: Pane }) {
       {mode === 'field' && numeric && (
         <>
           <Row label="colormap">
-            <select value={st.cmap} onChange={(e) => set({ cmap: e.target.value as ColormapName })}>
+            <Select value={st.cmap} onChange={(e) => set({ cmap: e.target.value as ColormapName })}>
               {COLORMAPS.filter((c) => !c.diverging && c.name !== 'fall').map((c) => (
                 <option key={c.name} value={c.name}>
                   {c.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </Row>
           <Row label="">
             <div className="cmap-preview" style={{ background: cmapGradient(st.cmap, st.reverse) }} title="low → high" />
           </Row>
           <Row label="range" title="Colour range: min–max, 1st–99th percentile (sparse data such as genes), or manual">
-            <select value={rangeMode} onChange={(e) => set({ range: e.target.value as EmbRangeMode })}>
+            <Select value={rangeMode} onChange={(e) => set({ range: e.target.value as EmbRangeMode })}>
               <option value="auto">min – max</option>
               <option value="quantile">1 – 99 %</option>
               <option value="manual">manual</option>
-            </select>
+            </Select>
           </Row>
           {rangeMode === 'manual' && (
             <Row label="">

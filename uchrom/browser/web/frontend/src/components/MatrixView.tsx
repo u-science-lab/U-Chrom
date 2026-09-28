@@ -16,6 +16,7 @@ import { palette } from '../theme'
 import { updatePane, type Pane } from '../workspace'
 import { CHART, drawColorRamp } from './chart'
 import { prepareCanvas, useSize } from './useSize'
+import { Select } from './Select'
 
 const M = { left: 64, top: 10, right: 12, bottom: 76 }
 
@@ -40,23 +41,23 @@ export function MatrixControls({ pane }: { pane: Pane }) {
   if (!source) return null
   return (
     <>
-      <select value={source} onChange={(e) => upd({ source: e.target.value, resolution: null })} title="Matrix source">
+      <Select value={source} onChange={(e) => upd({ source: e.target.value, resolution: null })} title="Matrix source">
         {maps.map((m) => (
           <option key={m.key} value={m.key}>
             {m.label || m.key} ({m.kind})
           </option>
         ))}
         {hasCoords && <option value="distance">3-D distance</option>}
-      </select>
+      </Select>
       {map && map.resolutions.length > 1 && (
-        <select value={pane.resolution ?? ''} onChange={(e) => upd({ resolution: e.target.value ? +e.target.value : null })} title="Resolution">
+        <Select value={pane.resolution ?? ''} onChange={(e) => upd({ resolution: e.target.value ? +e.target.value : null })} title="Resolution">
           <option value="">auto</option>
           {map.resolutions.map((r) => (
             <option key={r} value={r}>
               {fmtBp(r)}
             </option>
           ))}
-        </select>
+        </Select>
       )}
       {map && (
         <label className="check small" title="ICE-balanced values (if the cooler has weights)">
