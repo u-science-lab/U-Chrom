@@ -346,3 +346,15 @@ paper's Table 1) — b (IMR90 28–30 Mb + Su whole-chr21 + Takei/Bonev, with ma
 - `paper/fig3/results/*.json` — baseline runs and the matching U-Chrom runs (3 splits, chr20/21/22)
 - `example-data/build_rao2014_slices.py` — Rao 2014 `.hic` slices over HTTP
 - `paper/fig3/feasibility/*.json` — outputs of the runs above
+
+## Decisions after the mock (2026-09-27)
+
+- **Related work in the text.** Panel c's discussion cites IGM (Boninsegna et al. 2022, `igm`) as the
+  other method that joins Hi-C with FISH distances, next to GEM-FISH (`gemfish`). Panel b cites HIPPS
+  (Shi & Thirumalai, Phys Rev X 2021, `hipps`; the 2019 FISH–Hi-C paradox paper is `fishhicparadox`) and DIMES (Nat Commun 2023, `dimes`) as the maximum-entropy link between
+  imaged distances and contact maps. All four are in `paper/manuscript/refs.bib`, checked on Crossref.
+  IGM is not run here (≈ 1 week of work; not needed for the claim).
+- **NucDynamics gets a speed panel.** Next to accuracy vs the published models, panel a shows wall time
+  per ensemble: original `nuc_dynamics` (single core and its own parallel mode) vs U-Chrom on CPU and
+  GPU (Taichi), on the same Stevens cell and schedule; any extrapolated original timing is labelled.
+- `uchrom.recon.sc.gem` is renamed (not GEM) and dropped from the figure.

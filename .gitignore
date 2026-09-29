@@ -113,3 +113,10 @@ example-data/ray2019_k562/
 native/nucdyn/target/
 native/nucdyn/python/uchrom_nucdyn/*.so
 native/nucdyn/python/uchrom_nucdyn/*.pyd
+
+# Fig. 3 renders: rebuildable inputs and raw pane captures (the cropped PNGs used in the figures are tracked)
+paper/fig3/renders/*.chromdata.zarr/
+paper/fig3/renders/hires/*.npz
+paper/fig3/renders/**/*.png
+!paper/fig3/renders/**/*_crop.png
+!paper/fig3/renders/hires/overview_100kb_10kb_1kb.png

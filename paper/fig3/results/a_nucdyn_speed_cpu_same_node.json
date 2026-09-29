@@ -1,0 +1,34 @@
+{
+ "node": "sh04-05n13 (AMD EPYC 9754), Sherlock partition xiaojie",
+ "input": "Stevens 2017 Cell 1, full schedule (8 Mb -> 100 kb, 500 x 100 steps per stage)",
+ "orig_1model_1core": {
+  "n_models": 1,
+  "wall_seconds": 28570.915279413108,
+  "cpu_seconds": 28568.788667,
+  "peak_rss_mb": 114.896
+ },
+ "orig_10models_10cores": {
+  "n_models": 10,
+  "wall_seconds": 33521.60591994692,
+  "cpu_seconds": 326778.80670099996,
+  "peak_rss_mb": 124.268
+ },
+ "native_1model_1thread": {
+  "n_models": 1,
+  "wall_seconds": 1472.1106171607971,
+  "cpu_seconds": 1472.054311,
+  "peak_rss_mb": 78.48
+ },
+ "native_10models_10threads": {
+  "n_models": 10,
+  "wall_seconds": 1576.291573524475,
+  "cpu_seconds": 15153.492018,
+  "peak_rss_mb": 154.656
+ },
+ "native_gpu_10models_h100": {
+  "n_models": 10,
+  "wall_seconds": 37.81849551200867,
+  "peak_rss_mb": 230.016,
+  "node": "sh04-04n05 (NVIDIA H100 80GB, Vulkan)"
+ }
+}
