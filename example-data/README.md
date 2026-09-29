@@ -31,6 +31,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `su2020_imr90/chromosome21.tsv` + `Hi-C_contacts_chromosome21.tsv` | 261 MB + 1 MB | no | Zenodo 3928890 (`--su2020_chr21`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
 | `abbas2019_gemfish/*.zip` (Wang 2016 FISH, TADs, Hi-C, GEM-FISH final models) | 40 MB | no | GitHub, pinned commit (`--abbas2019_gemfish`) | Fig. 3a / 3c (`benchmarks/fig3/c_gemfish_wang2016.py`) |
 | `rao2014_{imr90,k562}/*_chr21_5kb_hg19.cool` | 3.8 MB each | IMR90: yes; K562: no | **built** from GEO GSE63525 `.hic` by HTTP range reads (`build_rao2014_slices.py`) | Fig. 3b / 3c; IMR90 also the GEM-FISH tutorial |
+| `rao2014_imr90/IMR90_chr{20,22}_5kb_hg19.cool` | 7.8 MB + 3.3 MB | no | **built** the same way (`build_rao2014_slices.py --cell IMR90 --chroms 20`, then `--chroms 22`) | Fig. 3c chr20 / chr22 (`benchmarks/fig3/c_gemfish_wang2016.py --chrom`, `c_hipps_wang2016.py`) |
 | `ray2019_k562/4DNFI4QQPDMR.mcool` | 849 MB | no | 4DN public S3 (opt-in, `--ray2019_k562`) | provenance of `K562_chr21_30kb.cool` |
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
 | `H1Esc-HFF.R1.tar.gz`                 | 128 MB  | no              | UW Noble lab  | `higashi_embedding` tutorial (sci-Hi-C H1Esc+HFF mix)                   |
@@ -746,7 +747,10 @@ Everything is gitignored.  DOIs checked against Crossref (2026-09-27).
   [--chroms 21] [--res 5000]` reads only the needed blocks over HTTP range
   requests with `hicstraw` (~30 s per chromosome, < 2 GB RAM) and writes
   raw observed counts to `rao2014_<cell>/<CELL>_chr21_5kb_hg19.cool`
-  (chr21: 10.27 M IMR90 / 9.54 M K562 contacts).  Other chromosomes,
+  (chr21: 10.27 M IMR90 / 9.54 M K562 contacts).  For Fig. 3c chr20 / chr22
+  `--cell IMR90 --chroms 20` and `--chroms 22` (one file each) write
+  `IMR90_chr20_5kb_hg19.cool` (20.78 M contacts, 7.8 MB, 59 s) and
+  `IMR90_chr22_5kb_hg19.cool` (11.68 M contacts, 3.3 MB, 26 s).  Other chromosomes,
   resolutions and GM12878 work the same way (`--cell GM12878 --chroms 22
   --res 100000` for the miniMDS benchmark).
 - **Checked**: the IMR90 chr21:28–30 Mb block reproduces Bintu 2018
@@ -755,8 +759,10 @@ Everything is gitignored.  DOIs checked against Crossref (2026-09-27).
   md5 `f731fc98d5e4ae81936a066e46afa3fc`; 9,626 bins, 2,745,237 pixels,
   10,266,877 contacts) is checked in (< 10 MB) because the GEM-FISH
   tutorial needs it; the other slices stay gitignored.
-- **Used by**: Fig. 3b / 3c (`benchmarks/fig3/`); the IMR90 chr21 slice
-  also by `gem_fish_reconstruction.ipynb` part 2.
+- **Used by**: Fig. 3b / 3c (`benchmarks/fig3/`), incl. the HIPPS / DIMES
+  baselines (`c_hipps_wang2016.py`, `b_dimes.py`; their code is cloned, not
+  vendored: github.com/anyuzx/HIPPS-DIMES, MIT, commit `beee45d`); the IMR90
+  chr21 slice also by `gem_fish_reconstruction.ipynb` part 2.
 
 ### `ray2019_k562/4DNFI4QQPDMR.mcool` — K562 in situ Hi-C (849 MB, opt-in)
 
