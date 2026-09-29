@@ -87,3 +87,10 @@ example-data/rao2014_k562/
 example-data/rao2014_gm12878/
 example-data/ray2019_k562/
 !paper/fig3/feasibility/*.json
+
+# Fig. 3 renders: rebuildable inputs and raw pane captures (the cropped PNGs used in the figures are tracked)
+paper/fig3/renders/*.chromdata.zarr/
+paper/fig3/renders/hires/*.npz
+paper/fig3/renders/**/*.png
+!paper/fig3/renders/**/*_crop.png
+!paper/fig3/renders/hires/overview_100kb_10kb_1kb.png

@@ -1,0 +1,747 @@
+{
+ "machine": "Linux-3.10.0-1160.156.1.el7.tuxcare.els1.x86_64-x86_64-with-glibc2.17",
+ "processor": "x86_64",
+ "cpu_count": 64,
+ "gpu": "NVIDIA H100 80GB HBM3 (Vulkan, DiscreteGpu)",
+ "engine_version": "0.1.0",
+ "input": "GSM2219497_Cell_1_contact_pairs.txt.gz",
+ "runs": {
+  "models_gpu": [
+   {
+    "stages": [
+     {
+      "particle_size": 8000000.0,
+      "n_particles": 358,
+      "n_models": 1,
+      "seconds_dynamics": 4.119709586,
+      "seconds_prepare": 0.003293326
+     },
+     {
+      "particle_size": 4000000.0,
+      "n_particles": 687,
+      "n_models": 1,
+      "seconds_dynamics": 4.3320602489999995,
+      "seconds_prepare": 0.006536375
+     },
+     {
+      "particle_size": 2000000.0,
+      "n_particles": 1324,
+      "n_models": 1,
+      "seconds_dynamics": 4.300919055,
+      "seconds_prepare": 0.005434661
+     },
+     {
+      "particle_size": 400000.0,
+      "n_particles": 6464,
+      "n_models": 1,
+      "seconds_dynamics": 4.472143817,
+      "seconds_prepare": 0.022483336
+     },
+     {
+      "particle_size": 200000.0,
+      "n_particles": 12878,
+      "n_models": 1,
+      "seconds_dynamics": 4.677744376,
+      "seconds_prepare": 0.023995092
+     },
+     {
+      "particle_size": 100000.0,
+      "n_particles": 25724,
+      "n_models": 1,
+      "seconds_dynamics": 4.598212448,
+      "seconds_prepare": 0.023416862
+     }
+    ],
+    "engine_seconds": 26.598501393,
+    "n_particles": 25724,
+    "gpu": "NVIDIA H100 80GB HBM3 (Vulkan, DiscreteGpu)",
+    "wall_seconds": 27.959389234893024,
+    "cpu_seconds": 6.098354192,
+    "peak_rss_mb": 216.212,
+    "engine": "native",
+    "device": "gpu",
+    "n_models": 1,
+    "temp_steps": 500,
+    "n_threads": 64,
+    "load_avg_before": [
+     11.55,
+     11.17,
+     9.82
+    ],
+    "load_avg_after": [
+     11.54,
+     11.2,
+     9.87
+    ]
+   },
+   {
+    "stages": [
+     {
+      "particle_size": 8000000.0,
+      "n_particles": 358,
+      "n_models": 2,
+      "seconds_dynamics": 4.173913015,
+      "seconds_prepare": 0.003283269
+     },
+     {
+      "particle_size": 4000000.0,
+      "n_particles": 687,
+      "n_models": 2,
+      "seconds_dynamics": 4.418876954,
+      "seconds_prepare": 0.004780747
+     },
+     {
+      "particle_size": 2000000.0,
+      "n_particles": 1324,
+      "n_models": 2,
+      "seconds_dynamics": 4.466025485,
+      "seconds_prepare": 0.005430943
+     },
+     {
+      "particle_size": 400000.0,
+      "n_particles": 6464,
+      "n_models": 2,
+      "seconds_dynamics": 4.493989698,
+      "seconds_prepare": 0.014497932
+     },
+     {
+      "particle_size": 200000.0,
+      "n_particles": 12878,
+      "n_models": 2,
+      "seconds_dynamics": 4.494907728,
+      "seconds_prepare": 0.016866391
+     },
+     {
+      "particle_size": 100000.0,
+      "n_particles": 25724,
+      "n_models": 2,
+      "seconds_dynamics": 4.827533033,
+      "seconds_prepare": 0.027086276
+     }
+    ],
+    "engine_seconds": 26.95821361,
+    "n_particles": 25724,
+    "gpu": "NVIDIA H100 80GB HBM3 (Vulkan, DiscreteGpu)",
+    "wall_seconds": 28.09409167477861,
+    "cpu_seconds": 5.817118364,
+    "peak_rss_mb": 215.024,
+    "engine": "native",
+    "device": "gpu",
+    "n_models": 2,
+    "temp_steps": 500,
+    "n_threads": 64,
+    "load_avg_before": [
+     11.54,
+     11.2,
+     9.87
+    ],
+    "load_avg_after": [
+     11.54,
+     11.23,
+     9.92
+    ]
+   },
+   {
+    "stages": [
+     {
+      "particle_size": 8000000.0,
+      "n_particles": 358,
+      "n_models": 4,
+      "seconds_dynamics": 4.288886561,
+      "seconds_prepare": 0.003274817
+     },
+     {
+      "particle_size": 4000000.0,
+      "n_particles": 687,
+      "n_models": 4,
+      "seconds_dynamics": 4.48704338,
+      "seconds_prepare": 0.006393265
+     },
+     {
+      "particle_size": 2000000.0,
+      "n_particles": 1324,
+      "n_models": 4,
+      "seconds_dynamics": 4.542915077,
+      "seconds_prepare": 0.005564509
+     },
+     {
+      "particle_size": 400000.0,
+      "n_particles": 6464,
+      "n_models": 4,
+      "seconds_dynamics": 4.565923036,
+      "seconds_prepare": 0.021548156
+     },
+     {
+      "particle_size": 200000.0,
+      "n_particles": 12878,
+      "n_models": 4,
+      "seconds_dynamics": 5.045369149,
+      "seconds_prepare": 0.027580729
+     },
+     {
+      "particle_size": 100000.0,
+      "n_particles": 25724,
+      "n_models": 4,
+      "seconds_dynamics": 6.077346951,
+      "seconds_prepare": 0.026382107
+     }
+    ],
+    "engine_seconds": 29.109581943,
+    "n_particles": 25724,
+    "gpu": "NVIDIA H100 80GB HBM3 (Vulkan, DiscreteGpu)",
+    "wall_seconds": 30.2329678889364,
+    "cpu_seconds": 5.990807002,
+    "peak_rss_mb": 217.712,
+    "engine": "native",
+    "device": "gpu",
+    "n_models": 4,
+    "temp_steps": 500,
+    "n_threads": 64,
+    "load_avg_before": [
+     11.54,
+     11.23,
+     9.92
+    ],
+    "load_avg_after": [
+     11.86,
+     11.35,
+     10.0
+    ]
+   },
+   {
+    "stages": [
+     {
+      "particle_size": 8000000.0,
+      "n_particles": 358,
+      "n_models": 8,
+      "seconds_dynamics": 4.448346557,
+      "seconds_prepare": 0.003372552
+     },
+     {
+      "particle_size": 4000000.0,
+      "n_particles": 687,
+      "n_models": 8,
+      "seconds_dynamics": 4.640346948,
+      "seconds_prepare": 0.00697091
+     },
+     {
+      "particle_size": 2000000.0,
+      "n_particles": 1324,
+      "n_models": 8,
+      "seconds_dynamics": 4.592822532,
+      "seconds_prepare": 0.00550744
+     },
+     {
+      "particle_size": 400000.0,
+      "n_particles": 6464,
+      "n_models": 8,
+      "seconds_dynamics": 4.948896134,
+      "seconds_prepare": 0.020119571
+     },
+     {
+      "particle_size": 200000.0,
+      "n_particles": 12878,
+      "n_models": 8,
+      "seconds_dynamics": 6.425453697,
+      "seconds_prepare": 0.030694262
+     },
+     {
+      "particle_size": 100000.0,
+      "n_particles": 25724,
+      "n_models": 8,
+      "seconds_dynamics": 9.447076112,
+      "seconds_prepare": 0.030373381
+     }
+    ],
+    "engine_seconds": 34.610955168,
+    "n_particles": 25724,
+    "gpu": "NVIDIA H100 80GB HBM3 (Vulkan, DiscreteGpu)",
+    "wall_seconds": 35.76639650994912,
+    "cpu_seconds": 6.063202337,
+    "peak_rss_mb": 225.364,
+    "engine": "native",
+    "device": "gpu",
+    "n_models": 8,
+    "temp_steps": 500,
+    "n_threads": 64,
+    "load_avg_before": [
+     11.86,
+     11.35,
+     10.0
+    ],
+    "load_avg_after": [
+     12.1,
+     11.45,
+     10.09
+    ]
+   },
+   {
+    "stages": [
+     {
+      "particle_size": 8000000.0,
+      "n_particles": 358,
+      "n_models": 16,
+      "seconds_dynamics": 4.522107344,
+      "seconds_prepare": 0.003353184
+     },
+     {
+      "particle_size": 4000000.0,
+      "n_particles": 687,
+      "n_models": 16,
+      "seconds_dynamics": 4.68993783,
+      "seconds_prepare": 0.004902005
+     },
+     {
+      "particle_size": 2000000.0,
+      "n_particles": 1324,
+      "n_models": 16,
+      "seconds_dynamics": 4.676710232,
+      "seconds_prepare": 0.005633959
+     },
+     {
+      "particle_size": 400000.0,
+      "n_particles": 6464,
+      "n_models": 16,
+      "seconds_dynamics": 6.31368337,
+      "seconds_prepare": 0.027907477
+     },
+     {
+      "particle_size": 200000.0,
+      "n_particles": 12878,
+      "n_models": 16,
+      "seconds_dynamics": 9.647467628,
+      "seconds_prepare": 0.036418359
+     },
+     {
+      "particle_size": 100000.0,
+      "n_particles": 25724,
+      "n_models": 16,
+      "seconds_dynamics": 14.965523281,
+      "seconds_prepare": 0.039398732
+     }
+    ],
+    "engine_seconds": 44.943929866,
+    "n_particles": 25724,
+    "gpu": "NVIDIA H100 80GB HBM3 (Vulkan, DiscreteGpu)",
+    "wall_seconds": 46.03893237002194,
+    "cpu_seconds": 6.151000703999999,
+    "peak_rss_mb": 245.22,
+    "engine": "native",
+    "device": "gpu",
+    "n_models": 16,
+    "temp_steps": 500,
+    "n_threads": 64,
+    "load_avg_before": [
+     12.1,
+     11.45,
+     10.09
+    ],
+    "load_avg_after": [
+     11.92,
+     11.5,
+     10.17
+    ]
+   },
+   {
+    "stages": [
+     {
+      "particle_size": 8000000.0,
+      "n_particles": 358,
+      "n_models": 32,
+      "seconds_dynamics": 4.579823419,
+      "seconds_prepare": 0.003614083
+     },
+     {
+      "particle_size": 4000000.0,
+      "n_particles": 687,
+      "n_models": 32,
+      "seconds_dynamics": 4.792917277,
+      "seconds_prepare": 0.005108606
+     },
+     {
+      "particle_size": 2000000.0,
+      "n_particles": 1324,
+      "n_models": 32,
+      "seconds_dynamics": 5.138381564,
+      "seconds_prepare": 0.005911818
+     },
+     {
+      "particle_size": 400000.0,
+      "n_particles": 6464,
+      "n_models": 32,
+      "seconds_dynamics": 9.908407743,
+      "seconds_prepare": 0.044127166
+     },
+     {
+      "particle_size": 200000.0,
+      "n_particles": 12878,
+      "n_models": 32,
+      "seconds_dynamics": 15.663672169,
+      "seconds_prepare": 0.050466919
+     },
+     {
+      "particle_size": 100000.0,
+      "n_particles": 25724,
+      "n_models": 32,
+      "seconds_dynamics": 26.506298324,
+      "seconds_prepare": 0.054379581
+     }
+    ],
+    "engine_seconds": 66.765819747,
+    "n_particles": 25724,
+    "gpu": "NVIDIA H100 80GB HBM3 (Vulkan, DiscreteGpu)",
+    "wall_seconds": 67.92349688569084,
+    "cpu_seconds": 6.699606559,
+    "peak_rss_mb": 272.808,
+    "engine": "native",
+    "device": "gpu",
+    "n_models": 32,
+    "temp_steps": 500,
+    "n_threads": 64,
+    "load_avg_before": [
+     11.92,
+     11.5,
+     10.17
+    ],
+    "load_avg_after": [
+     8.99,
+     10.9,
+     10.06
+    ]
+   },
+   {
+    "stages": [
+     {
+      "particle_size": 8000000.0,
+      "n_particles": 358,
+      "n_models": 64,
+      "seconds_dynamics": 4.666701365,
+      "seconds_prepare": 0.003872166
+     },
+     {
+      "particle_size": 4000000.0,
+      "n_particles": 687,
+      "n_models": 64,
+      "seconds_dynamics": 5.22304213,
+      "seconds_prepare": 0.007039719
+     },
+     {
+      "particle_size": 2000000.0,
+      "n_particles": 1324,
+      "n_models": 64,
+      "seconds_dynamics": 6.037196546,
+      "seconds_prepare": 0.006305344
+     },
+     {
+      "particle_size": 400000.0,
+      "n_particles": 6464,
+      "n_models": 64,
+      "seconds_dynamics": 15.722782701,
+      "seconds_prepare": 0.068170848
+     },
+     {
+      "particle_size": 200000.0,
+      "n_particles": 12878,
+      "n_models": 64,
+      "seconds_dynamics": 27.79282571,
+      "seconds_prepare": 0.083988747
+     },
+     {
+      "particle_size": 100000.0,
+      "n_particles": 25724,
+      "n_models": 64,
+      "seconds_dynamics": 49.593994856,
+      "seconds_prepare": 0.10274404
+     }
+    ],
+    "engine_seconds": 109.31980034,
+    "n_particles": 25724,
+    "gpu": "NVIDIA H100 80GB HBM3 (Vulkan, DiscreteGpu)",
+    "wall_seconds": 110.51450283033773,
+    "cpu_seconds": 7.059106862,
+    "peak_rss_mb": 334.16,
+    "engine": "native",
+    "device": "gpu",
+    "n_models": 64,
+    "temp_steps": 500,
+    "n_threads": 64,
+    "load_avg_before": [
+     8.99,
+     10.9,
+     10.06
+    ],
+    "load_avg_after": [
+     3.3,
+     8.1,
+     9.14
+    ]
+   }
+  ],
+  "particles_gpu": [
+   {
+    "stages": [
+     {
+      "particle_size": 8000000.0,
+      "n_particles": 358,
+      "n_models": 10,
+      "seconds_dynamics": 4.460496123,
+      "seconds_prepare": 0.003298113
+     },
+     {
+      "particle_size": 4000000.0,
+      "n_particles": 687,
+      "n_models": 10,
+      "seconds_dynamics": 4.6508980730000005,
+      "seconds_prepare": 0.004856529
+     },
+     {
+      "particle_size": 2000000.0,
+      "n_particles": 1324,
+      "n_models": 10,
+      "seconds_dynamics": 4.642657947,
+      "seconds_prepare": 0.005512329
+     },
+     {
+      "particle_size": 1000000.0,
+      "n_particles": 2599,
+      "n_models": 10,
+      "seconds_dynamics": 4.604436282,
+      "seconds_prepare": 0.007404037
+     }
+    ],
+    "engine_seconds": 18.390378321,
+    "n_particles": 2599,
+    "gpu": "NVIDIA H100 80GB HBM3 (Vulkan, DiscreteGpu)",
+    "wall_seconds": 19.484716359060258,
+    "cpu_seconds": 4.2940002569999995,
+    "peak_rss_mb": 204.132,
+    "engine": "native",
+    "device": "gpu",
+    "n_models": 10,
+    "temp_steps": 500,
+    "particle_sizes": [
+     8000000.0,
+     4000000.0,
+     2000000.0,
+     1000000.0
+    ],
+    "final": "1Mb",
+    "n_threads": 64,
+    "load_avg_before": [
+     3.3,
+     8.1,
+     9.14
+    ],
+    "load_avg_after": [
+     3.01,
+     7.8,
+     9.02
+    ]
+   },
+   {
+    "stages": [
+     {
+      "particle_size": 8000000.0,
+      "n_particles": 358,
+      "n_models": 10,
+      "seconds_dynamics": 4.472036703,
+      "seconds_prepare": 0.003310168
+     },
+     {
+      "particle_size": 4000000.0,
+      "n_particles": 687,
+      "n_models": 10,
+      "seconds_dynamics": 4.6479613109999995,
+      "seconds_prepare": 0.004848192
+     },
+     {
+      "particle_size": 2000000.0,
+      "n_particles": 1324,
+      "n_models": 10,
+      "seconds_dynamics": 4.640292309,
+      "seconds_prepare": 0.005517013
+     },
+     {
+      "particle_size": 500000.0,
+      "n_particles": 5169,
+      "n_models": 10,
+      "seconds_dynamics": 4.977252104,
+      "seconds_prepare": 0.010207857
+     }
+    ],
+    "engine_seconds": 18.772590174,
+    "n_particles": 5169,
+    "gpu": "NVIDIA H100 80GB HBM3 (Vulkan, DiscreteGpu)",
+    "wall_seconds": 19.841959855053574,
+    "cpu_seconds": 4.455377096,
+    "peak_rss_mb": 206.56,
+    "engine": "native",
+    "device": "gpu",
+    "n_models": 10,
+    "temp_steps": 500,
+    "particle_sizes": [
+     8000000.0,
+     4000000.0,
+     2000000.0,
+     500000.0
+    ],
+    "final": "500kb",
+    "n_threads": 64,
+    "load_avg_before": [
+     3.01,
+     7.8,
+     9.02
+    ],
+    "load_avg_after": [
+     2.64,
+     7.41,
+     8.87
+    ]
+   },
+   {
+    "stages": [
+     {
+      "particle_size": 8000000.0,
+      "n_particles": 358,
+      "n_models": 10,
+      "seconds_dynamics": 4.468734826,
+      "seconds_prepare": 0.00330816
+     },
+     {
+      "particle_size": 4000000.0,
+      "n_particles": 687,
+      "n_models": 10,
+      "seconds_dynamics": 4.639354003,
+      "seconds_prepare": 0.004807923
+     },
+     {
+      "particle_size": 2000000.0,
+      "n_particles": 1324,
+      "n_models": 10,
+      "seconds_dynamics": 4.6626890979999995,
+      "seconds_prepare": 0.005547008
+     },
+     {
+      "particle_size": 400000.0,
+      "n_particles": 6464,
+      "n_models": 10,
+      "seconds_dynamics": 5.065446493,
+      "seconds_prepare": 0.021504296
+     },
+     {
+      "particle_size": 200000.0,
+      "n_particles": 12878,
+      "n_models": 10,
+      "seconds_dynamics": 6.737916309,
+      "seconds_prepare": 0.027318187
+     }
+    ],
+    "engine_seconds": 25.648508899,
+    "n_particles": 12878,
+    "gpu": "NVIDIA H100 80GB HBM3 (Vulkan, DiscreteGpu)",
+    "wall_seconds": 26.726051885169,
+    "cpu_seconds": 5.213409681000001,
+    "peak_rss_mb": 216.936,
+    "engine": "native",
+    "device": "gpu",
+    "n_models": 10,
+    "temp_steps": 500,
+    "particle_sizes": [
+     8000000.0,
+     4000000.0,
+     2000000.0,
+     400000.0,
+     200000.0
+    ],
+    "final": "200kb",
+    "n_threads": 64,
+    "load_avg_before": [
+     2.64,
+     7.41,
+     8.87
+    ],
+    "load_avg_after": [
+     2.23,
+     6.86,
+     8.64
+    ]
+   },
+   {
+    "stages": [
+     {
+      "particle_size": 8000000.0,
+      "n_particles": 358,
+      "n_models": 10,
+      "seconds_dynamics": 4.468846422,
+      "seconds_prepare": 0.003316537
+     },
+     {
+      "particle_size": 4000000.0,
+      "n_particles": 687,
+      "n_models": 10,
+      "seconds_dynamics": 4.663726518,
+      "seconds_prepare": 0.004867972
+     },
+     {
+      "particle_size": 2000000.0,
+      "n_particles": 1324,
+      "n_models": 10,
+      "seconds_dynamics": 4.650063568,
+      "seconds_prepare": 0.005521035
+     },
+     {
+      "particle_size": 400000.0,
+      "n_particles": 6464,
+      "n_models": 10,
+      "seconds_dynamics": 5.075947905,
+      "seconds_prepare": 0.023079338
+     },
+     {
+      "particle_size": 200000.0,
+      "n_particles": 12878,
+      "n_models": 10,
+      "seconds_dynamics": 6.794911362,
+      "seconds_prepare": 0.03837943
+     },
+     {
+      "particle_size": 100000.0,
+      "n_particles": 25724,
+      "n_models": 10,
+      "seconds_dynamics": 10.741994436,
+      "seconds_prepare": 0.035600098
+     }
+    ],
+    "engine_seconds": 36.517312732,
+    "n_particles": 25724,
+    "gpu": "NVIDIA H100 80GB HBM3 (Vulkan, DiscreteGpu)",
+    "wall_seconds": 37.622860085219145,
+    "cpu_seconds": 6.206415554,
+    "peak_rss_mb": 230.808,
+    "engine": "native",
+    "device": "gpu",
+    "n_models": 10,
+    "temp_steps": 500,
+    "particle_sizes": [
+     8000000.0,
+     4000000.0,
+     2000000.0,
+     400000.0,
+     200000.0,
+     100000.0
+    ],
+    "final": "100kb",
+    "n_threads": 64,
+    "load_avg_before": [
+     2.23,
+     6.86,
+     8.64
+    ],
+    "load_avg_after": [
+     2.03,
+     6.29,
+     8.38
+    ]
+   }
+  ]
+ }
+}

@@ -241,6 +241,37 @@ Query times (Supplementary Fig.~S1g) are the first query in a fresh process, aft
 Link and copy (Supplementary Fig.~S1f,h) were timed in fresh processes (median of three): linking records the .scool path, bin size and cell naming in the store (\pkg{link\_scool}); copying reads every cell's pixels from the .scool and writes them into the store as one Parquet table (cell as 16-bit and bins and counts as 32-bit integers, Zstandard level~3).
 Sizes are on-disk sizes of the store with either, and of the store plus the .scool, which is kept in both cases.
 
+\subsection*{Single-cell genome structure calculation}
+U-Chrom calculates single-cell genome structures with a native re-implementation of NucDynamics~\citep{stevens2017}, the simulated-annealing method that produced the published structures of haploid mouse embryonic stem cells.
+The algorithm is that of the original code~\citep{nucdynamicscode} and was re-implemented function by function from its description and behaviour, without copying code: isolated contacts are removed once; the genome is modelled as chains of equal particles at successively finer resolutions (8, 4, 2, 0.4, 0.2 and 0.1\,Mb, optionally continued to 50, 20 and 10\,kb and to 5, 2 and 1\,kb), each stage starting from coordinates interpolated from the previous one; contacts become distance restraints with bounds from the number of contacts per particle pair, backbone restraints keep consecutive particles together, and a soft repulsion acts between all non-bonded particles; every stage anneals from 5,000 to 10 temperature units in 500 steps of 100 velocity-Verlet steps with the original's thermostat, time step and force constants, and contacts violated in the ensemble are removed before the sub-megabase stages.
+On the first stage of Stevens Cell~1 the restraint set built by the engine was identical to the original's, and with the original's neighbour-list schedule and the same starting coordinates and velocities the two trajectories agreed to within $2\times10^{-13}$ particle radii after 100 steps.
+
+The engine is written in Rust and called from Python.
+On the CPU it works in double precision; the models of an ensemble run in parallel on a thread pool, and when there are fewer models than cores the force loops of each model are split across threads too.
+Forces are gathered per particle over fixed chunks, so a given seed gives bitwise-identical structures for any number of threads.
+Coordinates are stored as separate arrays per axis so that the inner loops vectorise.
+The largest single gain over the original comes from the neighbour search for the repulsion.
+The original builds a list of candidate pairs from sorted bounding boxes and rebuilds it whenever a particle has moved more than one radius, which at high annealing temperature is nearly every step; the engine instead sorts the particles into a grid of cells as wide as the repulsion cutoff at every step, so each particle visits only its 27 neighbouring cells, the cost per step is linear in the number of particles and no list has to be kept valid.
+On one core, over the same 100 steps, this reduced the time from 3.16\,s (original) to 1.78\,s with the original's list and to 0.29\,s with the cell grid.
+The grid also finds every pair within the cutoff at every step, whereas the original checks its list before moving the particles and can miss a pair that comes into range during a step.
+
+On the GPU the engine runs as compute shaders (WebGPU; Metal, Vulkan or Direct3D~12), in single precision.
+All models of an ensemble are advanced together in one set of buffers, every kernel is dispatched over particles and models, and nothing is read back to the host until the end of a stage.
+The repulsion grid is rebuilt at every step over the current bounding box of each model by a counting sort (atomic counts per cell, a prefix sum and a scatter of the particles in cell order), and the number of cells per model is capped at four times the number of particles by enlarging the cells when the box is large.
+Memory is therefore linear in the number of particles, about 140 bytes per particle and model, and does not depend on the volume the structure occupies or on a per-cell capacity.
+Because forces within a cell are summed with atomic operations, GPU runs are not bitwise reproducible; from the same start the GPU and CPU agree to about $3\times10^{-5}$ particle radii after 10 steps, and ensembles agree statistically (Results).
+
+Two behaviours of the original are not reproduced by default and can be switched on.
+When a rebuild finds more candidate pairs than the list can hold, the original replaces the list by zeros, which switches the repulsion off until the next rebuild; with this emulated, the engine reproduces the divergent ensembles the original gives for three of the eight cells (Supplementary Fig.~S4).
+The original also skips the pairs of one block of particles when the particle count is a multiple of its block size.
+Random numbers are drawn from independent streams per seed, stage and model (xoshiro256++ on the CPU, a counter-based hash with the Box--Muller transform on the GPU) with the original's distributions.
+
+Validation and timing used the eight G1-phase haploid cells of Stevens et al.~\citep{stevens2017geo} at 100\,kb, the full annealing schedule and ten models per cell, with the original code (the 2017 \pkg{master} branch, built with Cython) run on the same contact tables.
+Ensemble precision is the root-mean-square deviation of each model from the superposed ensemble mean, mirror images allowed, as in Extended Data Table~2 of Stevens et al.; recomputed for the deposited structures it reproduces that table.
+Agreement with the deposited structures is the median over chromosomes of the Pearson correlation between distance matrices, with particles matched by chromosome and position.
+The timings were made on the Stanford Sherlock cluster: CPU runs on one node with AMD EPYC 9754 processors, the original and the engine with the same number of cores, and GPU runs on one NVIDIA H100 (80\,GB).
+One model of Stevens Cell~1 took 28,571\,s with the original on one core and 1,472\,s with the engine on one thread; ten models on ten cores took 33,522\,s and 1,576\,s; on one GPU ten models took 38\,s at 100\,kb, 166\,s continued to 10\,kb (256,904 particles) and 1,260\,s continued to 1\,kb (2,568,721 particles), with 3.7\,GB of GPU memory at 1\,kb.
+
 \subsection*{Code availability}
 \todo{Repository URL, licence, archived release (DOI), documentation.}
 The ChromData format specification, the benchmark scripts and their raw results are part of the code repository.
