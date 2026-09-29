@@ -9,7 +9,7 @@
 # per chunk) and the finishing job after it.  Usage: [KEEP=1] sbatch split.sbatch <run> [max_pairs]
 # (KEEP=1: the finishing job keeps the fastq and chunks, e.g. for the pilot)
 set -euo pipefail
-source "$HOME/uchrom_chen2026/common.sh"
+source "${SLURM_SUBMIT_DIR:-$HOME/uchrom_chen2026}/common.sh"   # jobs are submitted from the scripts folder
 RUN=$1; MAX=${2:-0}
 [ -e "$RAW/$RUN/OK" ] || { echo "fastq of $RUN not downloaded (fetch_dtn.sh)"; exit 2; }
 OUT="$WORK/$RUN"; mkdir -p "$OUT"

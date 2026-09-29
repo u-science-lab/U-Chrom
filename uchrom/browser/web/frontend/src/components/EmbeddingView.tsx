@@ -505,6 +505,9 @@ export function EmbeddingView({ pane, source }: { pane: Pane; source?: ScatterSo
   useEffect(() => setZoom(IDENTITY_VIEW), [emb])
   const px = useMemo(() => (basePx ? applyView(basePx, zoom) : null), [basePx, zoom])
   const pan = useRef<{ x: number; y: number; v: View2D; moved: boolean } | null>(null)
+  // positions (Spatial view) may zoom out beyond the spots, to the image around them
+  const zoomOutRef = useRef(1)
+  zoomOutRef.current = source ? 0.2 : 1
   const [panning, setPanning] = useState(false)
   useEffect(() => {
     const cv = canvasRef.current
@@ -513,7 +516,7 @@ export function EmbeddingView({ pane, source }: { pane: Pane; source?: ScatterSo
       e.preventDefault() // zoom the plot, not the page
       const rect = cv.getBoundingClientRect()
       const f = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015))
-      setZoom((v) => zoomAt(v, e.clientX - rect.left, e.clientY - rect.top, f))
+      setZoom((v) => zoomAt(v, e.clientX - rect.left, e.clientY - rect.top, f, zoomOutRef.current))
       setHover(null)
     }
     cv.addEventListener('wheel', onWheel, { passive: false })

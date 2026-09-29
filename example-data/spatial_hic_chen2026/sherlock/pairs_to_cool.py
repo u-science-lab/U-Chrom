@@ -1,12 +1,22 @@
-"""Deduplicated spatial Hi-C .pairs (readID = "<bcB>_<bcA>") -> per-barcode-pair maps (.scool) + bulk (.mcool).
+"""Position-sorted spatial Hi-C .pairs (readID = "<bcB>_<bcA>") -> per-barcode-pair maps (.scool) + bulk (.mcool).
 
 Barcodes are corrected to the whitelist with at most one mismatch (the lists are >= 4 apart); pairs whose
-barcodes do not correct are dropped.  Cells of the .scool are named "<bcB>_<bcA>" (whitelist sequences);
+barcodes do not correct are dropped.  Duplicates are removed within each barcode pair: pairs with the same
+corrected barcodes, positions and strands (exact, as HiCUP; pairtools dedup with a 1-bp tolerance per
+barcode was ~100x too slow on 4e8 pairs).  The input must be sorted by position (pairtools sort / merge),
+so duplicates are adjacent; --dedup-out writes the kept pairs (readID = corrected barcode pair).  Cis pairs
+closer than --min-cis-dist (1 kb) are dropped: below 1 kb they are almost all inward-facing (+-), i.e.
+unligated / dangling-end fragments, while from 1 kb on the four strand orientations are equally frequent
+(CRR1161506); HiCUP drops such pairs too.  Cells of the .scool are named "<bcB>_<bcA>" (whitelist sequences);
 which spot of which section a pair is, is decided when the maps are linked to a store.  Only pairs with
 both ends on chr1-19 / chrX and mapq >= --min-mapq count.  Streams the file in chunks; memory grows with
 the number of distinct (barcode pair, bin1, bin2) pixels.
 
-    pigz -dc run.dedup.pairs.gz | python pairs_to_cool.py --grid 50|96 --barcodes DIR --out out/run
+    pairtools merge chunk_*.pairs.gz | python pairs_to_cool.py --b B.tsv --a A.tsv [--sep _] --out out/run \
+        --dedup-out out/run.dedup.pairs.gz
+
+readID ends with the barcode pair: barcode B = its first 8 bases, barcode A = its last 8 ("<B>_<A>" for
+Chen 2026, "<B><A>" = the 16-base spot barcode for spatial ATAC-Hi-C); maps are named "<B><sep><A>".
 
 Writes <out>.pixels_1Mb.scool, <out>.bulk.mcool (25 kb .. 1 Mb), <out>.barcode_stats.tsv (pairs, cis,
 trans, cis > 10 kb per barcode pair) and <out>.log.json.
@@ -69,23 +79,24 @@ def main() -> None:
 
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--pairs", default="-")
-    ap.add_argument("--grid", type=int, choices=(50, 96), required=True)
-    ap.add_argument("--barcodes", required=True, help="folder with barcodes_50_A/B.tsv and barcodes_96.tsv")
+    ap.add_argument("--a", required=True, help="barcode A whitelist (.tsv with a 'barcode' column)")
+    ap.add_argument("--b", required=True, help="barcode B whitelist (.tsv with a 'barcode' column)")
+    ap.add_argument("--sep", default="_", help="between B and A in the map names")
     ap.add_argument("--out", required=True)
     ap.add_argument("--spot-res", type=int, default=1_000_000)
     ap.add_argument("--bulk-res", type=int, default=25_000)
     ap.add_argument("--min-mapq", type=int, default=30)
+    ap.add_argument("--min-cis-dist", type=int, default=1000, help="drop cis pairs closer than this (bp)")
     ap.add_argument("--min-pairs", type=int, default=100, help="barcode pairs with fewer cis pairs get no map")
     ap.add_argument("--chunksize", type=int, default=5_000_000)
+    ap.add_argument("--dedup-out", default=None, help="write the deduplicated pairs here (.pairs.gz, via pigz)")
     a = ap.parse_args()
     t0 = time.time()
-    if a.grid == 50:
-        A = pd.read_csv(f"{a.barcodes}/barcodes_50_A.tsv", sep="\t")["barcode"].tolist()
-        B = pd.read_csv(f"{a.barcodes}/barcodes_50_B.tsv", sep="\t")["barcode"].tolist()
-    else:
-        A = B = pd.read_csv(f"{a.barcodes}/barcodes_96.tsv", sep="\t")["barcode"].tolist()
+    A = pd.read_csv(a.a, sep="\t")["barcode"].tolist()
+    B = pd.read_csv(a.b, sep="\t")["barcode"].tolist()
     ca, cb = corrector(A), corrector(B)
     nA = len(A)
+    names_bc = [f"{B[i // nA]}{a.sep}{A[i % nA]}" for i in range(len(B) * nA)]
     stream = sys.stdin if a.pairs == "-" else open(a.pairs)
     header, sizes = [], {}
     line = stream.readline()
@@ -104,8 +115,18 @@ def main() -> None:
         offs[res] = (dict(zip(CHROMS, np.r_[0, np.cumsum(n)[:-1]])), int(n.sum()))
     spot, bulk = Acc(), Acc()
     per_bc = np.zeros((4, len(B) * nA), dtype=np.int64)          # pairs, cis, trans, cis > 10 kb
-    st = dict(lines=0, kept=0, bad_barcode=0, low_mapq=0, other_chrom=0)
-    use = ["readID", "chrom1", "pos1", "chrom2", "pos2"] + (["mapq1", "mapq2"] if "mapq1" in cols else [])
+    st = dict(lines=0, kept=0, bad_barcode=0, low_mapq=0, other_chrom=0, duplicates=0, short_cis=0)
+    use = ["readID", "chrom1", "pos1", "chrom2", "pos2", "strand1", "strand2"] + (["mapq1", "mapq2"] if "mapq1" in cols else [])
+    key_cols = ["bc", "chrom1", "pos1", "chrom2", "pos2", "strand1", "strand2"]
+    tail = None                                  # rows at the last position of the previous chunk
+    dd = None
+    if a.dedup_out:
+        import subprocess
+
+        dd_file = open(a.dedup_out, "wb")
+        dd = subprocess.Popen(["pigz", "-c", "-p", "4"], stdin=subprocess.PIPE, stdout=dd_file)
+        dd.stdin.write("".join(h for h in header if not h.startswith("#columns")).encode())
+        dd.stdin.write(("#columns: " + " ".join(use) + "\n").encode())
     import io
 
     src = io.StringIO(first) if first else io.StringIO("")
@@ -113,9 +134,9 @@ def main() -> None:
                          chunksize=a.chunksize, dtype={"readID": str, "chrom1": str, "chrom2": str})
     for df in reader:
         st["lines"] += len(df)
-        rid = df["readID"].str[-17:]
-        ib = rid.str[:8].map(cb)
-        ia = rid.str[9:].map(ca)
+        rid = df["readID"]
+        ib = rid.str[-(16 + len(a.sep)):-(8 + len(a.sep))].map(cb)
+        ia = rid.str[-8:].map(ca)
         ok = ib.notna() & ia.notna()
         st["bad_barcode"] += int((~ok).sum())
         df, bc = df[ok], (ib[ok].astype(np.int64) * nA + ia[ok].astype(np.int64)).to_numpy()
@@ -125,7 +146,25 @@ def main() -> None:
             df, bc = df[q], bc[q.to_numpy()]
         main = df["chrom1"].isin(CHROMS) & df["chrom2"].isin(CHROMS)
         st["other_chrom"] += int((~main).sum())
-        df, bc = df[main], bc[main.to_numpy()]
+        df, bc = df[main].copy(), bc[main.to_numpy()]
+        near = ((df["chrom1"] == df["chrom2"]) & ((df["pos2"] - df["pos1"]).abs() < a.min_cis_dist)).to_numpy()
+        st["short_cis"] += int(near.sum())
+        df, bc = df[~near], bc[~near]
+        # duplicates within a barcode pair (adjacent in position order; the previous chunk's last position too)
+        df["bc"] = bc
+        both = df[key_cols] if tail is None else pd.concat([tail, df[key_cols]], ignore_index=True)
+        dup = both.duplicated(keep="first").to_numpy()[0 if tail is None else len(tail):]
+        st["duplicates"] += int(dup.sum())
+        df, bc = df[~dup], bc[~dup]
+        if len(df):
+            last = df.iloc[-1]
+            at_last = ((df["chrom1"] == last["chrom1"]) & (df["chrom2"] == last["chrom2"]) &
+                       (df["pos1"] == last["pos1"]) & (df["pos2"] == last["pos2"]))
+            tail = df.loc[at_last, key_cols]
+        if dd is not None:
+            out = df[use].copy()
+            out["readID"] = [names_bc[i] for i in bc]
+            dd.stdin.write(out.to_csv(sep="\t", header=False, index=False).encode())
         cis = (df["chrom1"] == df["chrom2"]).to_numpy()
         p1, p2 = df["pos1"].to_numpy(np.int64), df["pos2"].to_numpy(np.int64)
         np.add.at(per_bc[0], bc, 1)
@@ -144,8 +183,12 @@ def main() -> None:
                 key = bc[cis] * (n * n) + key
             acc.add(key)
         print(f"[{time.time() - t0:.0f}s] {st['lines']:,} pairs read, {st['kept']:,} kept", flush=True)
+    if dd is not None:
+        dd.stdin.close()
+        dd.wait()
+        dd_file.close()
     # per barcode pair: one cis map when it has enough pairs
-    names = [f"{B[i // nA]}_{A[i % nA]}" for i in range(len(B) * nA)]
+    names = names_bc
     keep = per_bc[1] >= a.min_pairs
     s = spot.total()
     _, n = offs[a.spot_res]
@@ -170,7 +213,7 @@ def main() -> None:
     pd.DataFrame({"barcode_pair": names, "pairs": per_bc[0], "cis": per_bc[1], "trans": per_bc[2],
                   "cis_more_10kb": per_bc[3], "has_map": keep}).to_csv(f"{a.out}.barcode_stats.tsv", sep="\t", index=False)
     st.update(maps=len(cells), seconds=round(time.time() - t0), spot_res=a.spot_res, bulk_res=a.bulk_res,
-              min_mapq=a.min_mapq, min_pairs=a.min_pairs)
+              min_mapq=a.min_mapq, min_pairs=a.min_pairs, min_cis_dist=a.min_cis_dist)
     json.dump(st, open(f"{a.out}.log.json", "w"), indent=1)
     print(json.dumps(st), flush=True)
 

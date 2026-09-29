@@ -21,6 +21,8 @@ auto-downloaded by the tutorials on first run into this directory.
 | `takei2025_fov0/takei2025_fov0.chromdata.zarr` (older builds: `.h5cd`) | 73 MB (h5cd 1.x: 220 MB) | no | Zenodo 7693825 (streamed) | web browser: 59 IF tracks per spot, 47 cells, IF embedding (`build_takei2025_fov0.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `tests/browser_web` (real-data checks); `benchmarks/fig2/f_roundtrip.py` (chromdata.zarr / FOF-CT / AnnData rows); Fig 6 (`paper/fig6/extract_data.py`, `benchmarks/fig6/`, agent benchmark `benchmarks/fig6/agent_bench/`) |
 | `schicar_mop/*.chromdata.zarr` (older builds: `.h5cd`), `*.mcool, *.cool, *.scool` | ~400 MB | no  | built from GEO GSE305439 | web browser: scHiCAR without 3-D, RNA / ATAC / Hi-C embeddings (`build_schicar_mop.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fig2/e_contacts.py`, `e_contacts_query.py` (Fig. 2f and supplement: group pseudo-bulk vs the per-type `contacts_<type>.cool`; link vs copy import), `f_crossmodal.py` (Fig. 2f: RNA Leiden clusters → pseudo-bulk maps and P(s) from the linked `.scool`), `f_roundtrip.py` (Fig. 2b, .scool row); `benchmarks/fig6/bench_server.py` (contact-map and pseudo-bulk latency); agent benchmark `benchmarks/fig6/agent_bench/` |
 | `spatial_hic_chen2026/*.chromdata.zarr` + linked `*_ssab.h5ad`, `*_rna.h5ad`, `*_images/`, E13.5 `*.scool` / `*.mcool` | 15.9 GB download (Zenodo); built: stores 0.7–16 MB, h5ad 18–880 MB, scool 120 MB + mcool 94 MB | no | Zenodo 17961135 + 22144954 (opt-in, `--spatial_hic_chen2026`), built by `build_spatial_hic_chen2026.py` (needs R: `spatial_hic_chen2026_export.R`) | Spatial Hi-C mouse embryo / brain without 3-D (Chen, Guo et al. 2026): six tissue stores; `benchmarks/spatial_hic_chen2026_validation.py` |
+| `spatial_atac_hic/mouse_brain.chromdata.zarr` + `mouse_brain_atac.h5ad`, `mouse_brain_images/` | 9.5 GB download (GEO); built store + links ~0.3 GB | no | GEO GSE307620 (opt-in, `--spatial_atac_hic`), built by `build_spatial_atac_hic.py`; contacts from SRA raw reads on Sherlock (`spatial_atac_hic/sherlock/`) | Spatial ATAC-Hi-C mouse brain (Wang P. et al. 2026): Spatial view, ATAC tracks / domains |
+| `spatial_hicrna/raw/GSE311199/` (processed h5ad, RNA, images) + Sherlock contact maps on Oak | 2.3 GB download; 7 × `.pairs.gz` 7–160 GB processed on Sherlock | no | GEO GSE311199 (opt-in, `--spatial_hicrna`); `.pairs` -> `.scool` / `.mcool` by `spatial_hicrna/sherlock/` | Spatial Hi-C-RNA brain / embryo / melanoma (Guo et al. 2026, Cell): per-spot contacts (store: pending) |
 | `takei2025_cerebellum/` (tarball + per-FOV and combined `.chromdata.zarr`; older builds: `.h5cd`) | 2.85 GB download; 7.9 GB raw CSV; combined store 2.05 GB as format 2.2 (`*.v22.chromdata.zarr`; 2.94 GB as 2.1, 2.17 GB as 2.0; h5cd 1.x: 6.3 GB) | no | Zenodo 7693825 (opt-in, `--takei2025_cerebellum`) | `benchmarks/fig2/` (b, c, d, allele QC, `rowgroup_sweep.py`, `spot_tracks_encoding.py`; 1e8 store by `replicate_store.py`) via `build_takei2025_cerebellum.py` (`--stream`: FOV-by-FOV streaming import); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1 conversion, streaming seqFISH+ import from `raw/`, streaming distance maps); `benchmarks/cd22_convert_validate.py` (2.1 → 2.2 conversion, bitwise check); `benchmarks/fig2/cd22_variants.py` (format 2.2 variants); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | `liu2025_mop/4DNFID46OABK.csv` + `4DNFICX8IVEK.csv` (+ built `liu2025_mop.chromdata.zarr`, 294 MB; `.v22.chromdata.zarr` 267 MB) | 1.68 GB + 17 MB | no | 4DN public S3 (opt-in, `--liu2025_mop`) | largest wild-type 4DN FOF-CT; `build_liu2025_mop.py` (Fig. 2 dataset scale); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1, streaming `from_fofct(out=)` vs in memory, streaming distance maps vs the dense reference); `benchmarks/cd22_convert_validate.py` / `benchmarks/fig2/cd22_variants.py` (format 2.2); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | Takei 2025 other Zenodo archives (cerebellum rep 2, E14, NMuMG) | 5.3–11 GB each | no | **manual** | `seqfish_multiomics_cerebellum` tutorial (real-data run) |
@@ -617,9 +619,70 @@ public data alone** and are shipped with their recorded outputs.
     chromosome: median |r| = 0.956 (min 0.923, chr3).
   - Every store: links resolve, all spots have positions, the ssA/B and RNA AnnData are aligned with
     the Hi-C / RNA spots.
+- **Contacts of the other sections from the raw reads** (`spatial_hic_chen2026/sherlock/`):
+  - Source: GSA CRA016676 (2.31 TB, 15 spatial Hi-C runs).  `runs.tsv` maps runs to sections, from
+    the GSA metadata (`raw/CRA016676.xlsx`); the mapping agrees with the barcode pixels.
+  - Pipeline: read-1 barcodes → bwa mem -5SP → pairtools parse / sort / merge → exact
+    deduplication within each spot → cis pairs ≥ 1 kb → per-barcode-pair `.scool` + `.mcool`.
+  - Pilot CRR1161506 (= E13_HiC_R1) against the authors:
+    - cis > 10 kb: 81.60 M vs 81.65 M; trans: 43.07 M vs 42.87 M.
+    - Per-spot counts: Pearson r (log) 0.999.
+    - Bulk 500-kb E1 against E1 from the authors' BEDPE: median |r| 0.999.
+    - Pairs shorter than 1 kb are almost all inward-facing (+-), i.e. unligated fragments, and are
+      dropped as HiCUP does.
+  - Validation script: `benchmarks/spatial_hic_chen2026_reprocess_validation.py`.
 - **Used by**: web browser — the Spatial view (sections over their images), the Genome view
   (ssA/B tracks per spot / group; E13.5 per-spot and pseudo-bulk contact maps), embeddings;
   `benchmarks/spatial_hic_chen2026_validation.py`.
+
+### `spatial_atac_hic/` — Spatial ATAC-Hi-C, mouse brain, no 3-D (Wang P. et al. 2026)
+
+- **Source**: Wang P. et al., "Spatial chromatin architecture and accessibility co-profiling of
+  mammalian tissues", *Nature Methods* 2026 (doi:10.1038/s41592-026-03217-4).
+  - Data: GEO [GSE307620](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE307620).
+  - Code: GitHub `wangjuan001/Spatial-ATAC-Hi-C` (MIT), used for the read layout.
+  - Two coronal sections: MouseBrainR6 (GSM9228169) and MouseBrainR8 (GSM9228170), each a 50 × 50
+    grid.  The same spot barcodes carry both the ATAC and the Hi-C reads.
+- **Processed files** (`download_data.py --spatial_atac_hic`, 9.5 GB):
+  - cellranger-atac fragments of the ATAC library and of the Hi-C library.  **The Hi-C "fragments" are
+    single fragments: the contact pairing is not in them.**
+  - Visium-style tissue positions, scale factors and hires / lowres images (grayscale bright-field).
+- **Build**: `python example-data/build_spatial_atac_hic.py` (~10 min, 9 GB RAM) writes
+  `mouse_brain.chromdata.zarr`.  It is a ChromData without spots with:
+  - 4,290 in-tissue spots (R6 1,966, R8 2,324), with ATAC and Hi-C fragment counts per spot.
+  - Grid and image-pixel positions, and the linked hires images.
+  - `atac_cpm.<section>` bulk tracks on 500-kb bins.
+  - `linked_bin_matrices["ATAC"]`: spots × 500-kb log1p CPM, shown as genome tracks per spot / group.
+  - ATAC LSI / t-SNE / UMAP from the 50,000 5-kb bins with the most fragments.
+  - `atac_cluster` (k-means, k = 12).
+- **Embedding choice**:
+  - 100-kb / 500-kb bins carried little tissue structure: the grid distance of each spot's 10
+    embedding neighbours was 18–20 against 24 for random.
+  - The top 5-kb bins give 14–16, and LSI components 1–5 are spatially smooth (neighbour r 0.6–0.9).
+  - The clusters follow the anatomy (striatum, white matter, cortical layers).
+- **Contacts from the raw reads** (SRA, 4 runs, 177 GB; `spatial_atac_hic/sherlock/`):
+  - All four runs show the same layout and about 10 % ligation junctions (`GATCGATC`): each section's
+    two runs are two sequencing rounds of one ATAC-Hi-C library, and they are merged.
+  - Read 2 carries the barcodes: read2[22:30] + read2[60:68] = the 16-base spot barcode.  Both linkers
+    are required (the authors' `bcsplit.py` / `00.filter-linker.sh`).
+  - Mapping, per-spot deduplication and the 1-kb cis cut reuse the Chen 2026 pipeline (below).
+  - Contact maps are linked to the store when done.
+
+### `spatial_hicrna/` — Spatial Hi-C-RNA, mouse brain / embryo, human melanoma (Guo et al. 2026)
+
+- **Source**: Guo et al. 2026, *Cell* (doi:10.1016/j.cell.2026.07.039); GEO
+  [GSE311199](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE311199).
+  - Seven samples: mouse brain r1 / r2, mouse embryo E11.5 / E13.5 r1 / r2, human melanoma r1 / r2.
+  - Hi-C and RNA come from the **same spots**.  Checked on mouse_brain_r1: the 10,000 RNA barcodes are
+    the Hi-C grid barcodes, and all 6,275 in-tissue spots have both RNA (median 3,351 UMI) and contacts.
+- **Processed on Sherlock** (`spatial_hicrna/sherlock/`, `process.sbatch`):
+  - Input: the published `.nodups.pairs.gz`.
+  - Output on Oak (`$OAK/uchrom/spatial_3dgenome/<sample>/`, 21 GB): per-spot 1-Mb `.scool`, bulk
+    `.mcool` (25 kb – 1 Mb) and per-spot statistics.
+  - Kept: 31–47 × 10⁸ pairs per sample (1.2 × 10⁸ for E13.5 r2).
+  - In the two E13.5 embryos 37–44 % of the pairs fall on spots outside the published tissue positions
+    (about 1 % elsewhere); not yet explained.
+- **Store**: not built yet.
 
 ### `takei2025_cerebellum/` — Takei 2025 cerebellum, replicate 1, all FOVs (Fig. 2 benchmarks)
 

@@ -122,10 +122,14 @@ export function isIdentity(v: View2D): boolean {
   return v.k === 1 && v.tx === 0 && v.ty === 0
 }
 
-/** Zoom by `factor` keeping the screen point (cx, cy) fixed; k is clamped to [1, MAX_ZOOM], k = 1 → the full view. */
-export function zoomAt(v: View2D, cx: number, cy: number, factor: number): View2D {
-  const k = Math.min(MAX_ZOOM, Math.max(1, v.k * factor))
-  if (k === 1) return IDENTITY_VIEW
+/**
+ * Zoom by `factor` keeping the screen point (cx, cy) fixed; k is clamped to [minK, MAX_ZOOM].  With the
+ * default minK = 1, k = 1 is the full view; a smaller minK lets a view zoom out beyond its fit (e.g. to
+ * see a tissue image around the measured spots).
+ */
+export function zoomAt(v: View2D, cx: number, cy: number, factor: number, minK = 1): View2D {
+  const k = Math.min(MAX_ZOOM, Math.max(minK, v.k * factor))
+  if (k === 1 && minK >= 1) return IDENTITY_VIEW
   const f = k / v.k
   return { k, tx: cx - (cx - v.tx) * f, ty: cy - (cy - v.ty) * f }
 }
@@ -146,18 +150,38 @@ export function applyView(px: Float32Array, v: View2D): Float32Array {
 }
 
 /**
- * Typical spacing of points on a grid (spots of a spatial array): the
- * smaller of the median gaps between distinct x and distinct y values, in
- * data units; null for fewer than two distinct values.
+ * Typical spacing of points (spots of a spatial array): the median distance
+ * of a point to its nearest neighbour, over an evenly spaced sample of at
+ * most `maxSample` points; null for fewer than two points.  Robust to grids
+ * whose coordinates are not exact (pixel positions of an imaged array).
  */
-export function gridSpacing(xs: (number | null)[], ys: (number | null)[]): number | null {
-  const gap = (v: (number | null)[]) => {
-    const u = [...new Set(v.filter((x): x is number => x !== null && Number.isFinite(x)))].sort((a, b) => a - b)
-    if (u.length < 2) return null
-    const d = u.slice(1).map((x, i) => x - u[i]).sort((a, b) => a - b)
-    return d[Math.floor(d.length / 2)]
+export function gridSpacing(xs: (number | null)[], ys: (number | null)[], maxSample = 1500): number | null {
+  const px: number[] = []
+  const py: number[] = []
+  for (let i = 0; i < xs.length; i++) {
+    const x = xs[i]
+    const y = ys[i]
+    if (x !== null && y !== null && Number.isFinite(x) && Number.isFinite(y)) {
+      px.push(x)
+      py.push(y)
+    }
   }
-  const gx = gap(xs)
-  const gy = gap(ys)
-  return gx === null ? gy : gy === null ? gx : Math.min(gx, gy)
+  const n = px.length
+  if (n < 2) return null
+  const step = Math.max(1, Math.floor(n / maxSample))
+  const d: number[] = []
+  for (let i = 0; i < n; i += step) {
+    let best = Infinity
+    for (let j = 0; j < n; j++) {
+      if (j === i) continue
+      const dx = px[i] - px[j]
+      const dy = py[i] - py[j]
+      const e = dx * dx + dy * dy
+      if (e > 0 && e < best) best = e
+    }
+    if (Number.isFinite(best)) d.push(Math.sqrt(best))
+  }
+  if (!d.length) return null
+  d.sort((a, b) => a - b)
+  return d[Math.floor(d.length / 2)]
 }

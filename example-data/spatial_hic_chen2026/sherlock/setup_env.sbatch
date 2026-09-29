@@ -8,7 +8,7 @@
 # One-off: conda env for mapping + pairs (in $GROUP_HOME); mm10 (UCSC, 0.9 GB: small enough for a job)
 # main chromosomes, its bwa index and chrom sizes (on Oak).
 set -euo pipefail
-source "$HOME/uchrom_chen2026/common.sh"
+source "${SLURM_SUBMIT_DIR:-$HOME/uchrom_chen2026}/common.sh"   # jobs are submitted from the scripts folder
 source "$HOME/miniconda3/etc/profile.d/conda.sh"
 export CONDA_PKGS_DIRS="$SCRATCH/conda_pkgs"
 [ -x "$ENV/bin/pairtools" ] || mamba create -y -p "$ENV" -c conda-forge -c bioconda \

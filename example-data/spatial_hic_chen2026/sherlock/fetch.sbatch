@@ -10,7 +10,7 @@
 # The DTN only takes transfer commands (scp / rsync / sftp) and GSA offers no Globus endpoint, so the
 # download runs in a small job, as the GEO downloads of the spatial Hi-C-RNA data did.
 set -euo pipefail
-source "$HOME/uchrom_chen2026/common.sh"
+source "${SLURM_SUBMIT_DIR:-$HOME/uchrom_chen2026}/common.sh"   # jobs are submitted from the scripts folder
 for RUN in "$@"; do
   D="$RAW/$RUN"; mkdir -p "$D"; cd "$D"
   [ -e OK ] && { echo "$RUN already done"; continue; }

@@ -84,7 +84,7 @@ export function SpatialView({ pane }: { pane: Pane }) {
     data,
     error,
     yDown: (all?.y_axis ?? info?.y_axis) === 'down',
-    extent: image?.extent ?? null,
+    extent: null, // fit the spots (an image may reach far beyond the measured area); the image is drawn at its extent
     image: image && dsId ? { url: imageUrl(dsId, image.name), extent: image.extent, opacity } : null,
     empty: list.length ? 'Loading positions…' : 'This dataset has no cell positions (cd.set_cell_positions).',
   }

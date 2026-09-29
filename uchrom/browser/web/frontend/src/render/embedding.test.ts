@@ -85,8 +85,22 @@ describe('fitPlotEqual (cell positions to scale)', () => {
 
 describe('gridSpacing', () => {
   it('median gap of distinct coordinates', () => {
-    expect(gridSpacing([0, 10, 20, 20, 30], [5, 5, 5, 5, 5])).toBe(10)
-    expect(gridSpacing([1, 2, 3], [0, 0.5, 1])).toBe(0.5)
+    expect(gridSpacing([0, 10, 20, 30], [5, 5, 5, 5])).toBe(10)
     expect(gridSpacing([1, null], [2, 2])).toBeNull()
+    // an imaged grid: pitch ~21 px with sub-pixel jitter (distinct x values are 0.1 apart)
+    const xs: number[] = []
+    const ys: number[] = []
+    for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) { xs.push(c * 21 + (r % 3) * 0.1); ys.push(r * 21 + (c % 2) * 0.1) }
+    expect(gridSpacing(xs, ys)!).toBeCloseTo(21, 0)
+  })
+})
+
+describe('zoomAt below the fit', () => {
+  it('stops at 1 by default, at minK when given', () => {
+    expect(zoomAt(IDENTITY_VIEW, 50, 50, 0.5)).toBe(IDENTITY_VIEW)
+    const v = zoomAt(IDENTITY_VIEW, 50, 50, 0.5, 0.2)
+    expect(v.k).toBeCloseTo(0.5)
+    expect(v.tx).toBeCloseTo(25) // the point under the cursor stays put: 25 + 0.5 * 50 = 50
+    expect(zoomAt(v, 50, 50, 0.01, 0.2).k).toBeCloseTo(0.2)
   })
 })
