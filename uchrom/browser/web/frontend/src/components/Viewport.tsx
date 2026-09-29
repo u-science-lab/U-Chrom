@@ -7,6 +7,7 @@ import { displayParts, subsetGeometry, type FocusSet } from '../render/partition
 import { buildPointMarkers, splitPoints, type BuiltPoints } from '../render/points'
 import { bboxDiagonal, findSegment } from '../render/segments'
 import { DEFAULT_STYLE } from '../layers'
+import { mark } from '../perf'
 import { activeView, useStore } from '../store'
 import { useFieldColors, type FieldColors } from '../useFieldColors'
 import { usePaneScope, useScopeCells } from '../useGroups'
@@ -334,6 +335,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     const warnings: string[] = []
     const w = t.renderer.domElement.clientWidth
     const h = t.renderer.domElement.clientHeight
+    const newGeometry: number[] = []
     for (const l of shown) {
       const key = {
         geometry: l.geometry!,
@@ -365,6 +367,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         continue
       }
       if (prev) drop(l.id, prev)
+      if (!prev || prev.key.geometry !== key.geometry) newGeometry.push(l.geometry!.header.n_points)
       // cut over-long bonds (unassigned spots, duplicate loci) before drawing
       const base = splitForView(l.geometry!, view.maxBond).geometry
       const { main, context } = displayParts(base, hidden, focus)
@@ -403,6 +406,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       t.entries.set(l.id, { key, parts })
     }
     setStatus(warnings.length ? warnings.join(' · ') : null)
+    // the render loop's callback for this frame was queued first, so this runs after the frame is drawn
+    if (newGeometry.length) requestAnimationFrame(() => mark('geometry-drawn', { points: newGeometry }))
 
     if (!fittedRef.current) {
       const box = unionBox(fixed && focus !== null ? mainGeometries(t) : drawnGeometries(t))

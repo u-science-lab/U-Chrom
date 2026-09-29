@@ -1795,3 +1795,140 @@ body.resizing-rows {
 .colorscale .range-input {
   width: 70px;
 }
+
+/* ---- embedding point style (inspector) + legend overlay --------------- */
+.emb-style {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.emb-row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.emb-row .emb-lab {
+  color: var(--text-muted);
+}
+.emb-row .emb-ctl {
+  min-width: 0;
+}
+.emb-row .emb-ctl > select,
+.emb-row .field-picker {
+  width: 100%;
+}
+.emb-row .seg.emb-seg {
+  margin: 0;
+}
+.emb-row input[type='color'] {
+  width: 48px;
+  height: 22px;
+  padding: 0;
+}
+.emb-slider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.emb-slider input[type='range'] {
+  flex: 1;
+  min-width: 0;
+}
+.emb-slider input[type='range'].auto {
+  opacity: 0.5;
+}
+.emb-slider .val {
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.emb-range {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.emb-range input.num {
+  width: 70px;
+  flex: 1;
+  min-width: 0;
+}
+.emb-checks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+}
+.props .emb-checks label.check {
+  margin: 0;
+}
+.emb-note {
+  padding-left: 64px;
+}
+.emb-reset {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+.emb-legend {
+  position: absolute;
+  z-index: 2;
+  right: 6px;
+  bottom: 30px;
+  max-width: min(220px, 45%);
+  max-height: calc(100% - 70px);
+  overflow-y: auto;
+  padding: 4px 6px;
+  background: var(--overlay-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 11px;
+}
+.emb-legend.emb-colorbar {
+  width: 180px;
+}
+.emb-legend-title {
+  font-weight: 600;
+  margin-bottom: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.emb-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 2px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.emb-legend-row:hover {
+  background: var(--bg-hover);
+}
+.emb-legend-row .swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+.emb-legend-row .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.emb-legend-row .count {
+  margin-left: auto;
+  padding-left: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.emb-legend-row.off {
+  color: var(--text-muted);
+}
+.emb-legend-row.off .swatch {
+  background: transparent !important;
+  outline: 1px solid var(--text-muted);
+}

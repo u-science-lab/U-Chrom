@@ -11,9 +11,11 @@ import { Workspace } from './components/Workspace'
 import { leftSections } from './inspector'
 import { STALE_SERVER_MESSAGE, isStaleServer, pageBundle } from './serverBundle'
 import { useStore } from './store'
+import { startControl } from './control'
 import { useCellLoader } from './useCellLoader'
 import { useGeometryLoader } from './useGeometryLoader'
 import { useOmicsLoader } from './useOmicsLoader'
+import { registerWebMcpTools } from './webmcp'
 
 export function App() {
   const setDatasets = useStore((s) => s.setDatasets)
@@ -33,6 +35,11 @@ export function App() {
       })
       .catch(() => {})
   }, [setDatasets, setError])
+  // code and agents drive this page through the same actions as the GUI (control channel, WebMCP)
+  useEffect(() => startControl(), [])
+  useEffect(() => {
+    registerWebMcpTools()
+  }, [])
 
   return (
     <div className="app">

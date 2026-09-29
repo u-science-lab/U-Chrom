@@ -29,15 +29,21 @@ Imputation is Fig. 4 and is not covered here.
    "in situ Hi-C on non-heat treated K562 cells" (set 4DNESU95RUNO, Ray et al. 2019, PNAS 116:19431,
    doi:10.1073/pnas.1901244116). Re-deriving chr21 at 30 kb from the downloaded mcool (md5 verified)
    reproduces the file exactly. Chr21 has 1.06 M contacts vs 9.2 M in real Rao 2014 IMR90. The catalog
-   now says so; the file name is kept for the tests. Anything that used it as IMR90 (the GEM-FISH
-   tutorial, `call_tads_di` test, `cd2_callers_validation.py`) was pairing IMR90 imaging with K562 Hi-C.
+   now says so. Anything that used it as IMR90 (the GEM-FISH tutorial, `call_tads_di` test,
+   `cd2_callers_validation.py`) was pairing IMR90 imaging with K562 Hi-C.
+   **Resolved (data-hygiene PR):** renamed to `K562_chr21_30kb.cool` (no alias); the tests, the DI benchmark
+   and the docs use it as a generic (K562) Hi-C matrix; the GEM-FISH tutorial moved to real IMR90.
 2. **The GEM-FISH tutorial (part 2) synthesises Hi-C from the FISH mean** — against the "never fabricate
    inputs" rule. Real Hi-C for that region now exists (`rao2014_imr90/`, below); the tutorial should be
-   switched to it.
+   switched to it. (The notebook code itself ran on the K562 cool; only its intro said "synthesises".)
+   **Resolved:** part 2 now runs on Rao 2014 IMR90 chr21 (5 kb slice checked in, summed to 30 kb on the
+   Bintu segment grid, hg19): Pearson 0.71–0.73, mean relative error 0.33–0.35 vs the FISH median distances
+   (before, on K562: 0.77 / 0.35); Hi-C vs 1/distance Spearman over chr21 only 0.03 (K562: 0.16).
 3. **`cell1.pairs` cited the wrong GEO series** (GSE80006 is Flyamer 2017). Stevens 2017 is **GSE80280**;
    fixed in the catalog. `cell1.pairs` is Stevens Cell 1 (every distinct contact is in the NucDynamics
-   repo's `Cell_1_contacts.ncc`). `cell2.pairs.gz` (503,720 reads) does not match any GSE80280 cell file
-   size and is marked unverified.
+   repo's `Cell_1_contacts.ncc`). `cell2.pairs.gz` (503,696 contacts) does not match any GSE80280 cell file
+   size and is marked unverified. It carries hickit haplotype-phase columns (diploid, phased mouse cell), so it
+   is not Stevens 2017 at all; source still unidentified; only `tests/smoke/fasthigashi_smoke.py` uses it.
 4. **U-Chrom "GEM" is not GEM.** `uchrom.recon.sc.gem` has GEM's stretch / bend terms but no manifold
    learning (no KL divergence, no Hi-C probability distribution, no conformation mixture) and uses
    the inverse-power-law distance restraints that GEM was designed to avoid. GEM itself (Zhu et al. 2018)
@@ -47,7 +53,7 @@ Imputation is Fig. 4 and is not covered here.
      independently, scrambling which particles every scHi-C contact joins (feeds both NucDynamics and
      "GEM"). Now `axis=1`. Effect on Cell 1 at 100 kb: contacts violated by > 5 radii 11 % → 0 %,
      model-to-model RMSD 5.3 → 2.6 radii (panel a). The in-repo `sim_cell1` structure was built with the
-     bug and should be rebuilt (`build_sim_cell1.py`) in a follow-up.
+     bug and should be rebuilt (`build_sim_cell1.py`) after the NucDynamics port PR (finding 6).
    - `reconstruct_gem_fish(tads=...)` crashed when the TAD windows leave gaps (as the Wang 2016 TADs do):
      coordinates were built for the TAD bins, spots for every bin. Spots now cover the TAD bins only.
 6. **Further NucDynamics port defects (not fixed here, listed for the port PR)**, from a line-by-line
@@ -189,6 +195,107 @@ sum); Rg target from the chromosome-volume scaling (port: per-TAD spot Rg², whi
 per TAD, so the Rg term is silently off); FISH-fitted bond lengths and assembly fallback (chr21 a = 0.038,
 b = 0.21; port: c = 1, β = 0.5); λ in consistent units.
 
+## External baselines: HIPPS (panel c) and DIMES (panel b)
+
+Code: the authors' repository github.com/anyuzx/HIPPS-DIMES (Guang Shi; MIT), commit `beee45d` (2026-09-25,
+package 4.0). Cloned, not vendored; imported from the clone by `--hipps-dimes PATH` (its dependencies are all
+in the U-Chrom environment; its own `tests/test_basic.py` pass there: 62 passed, 3 skipped). Citations: HIPPS
+is Shi & Thirumalai, *Phys Rev X* 11:011051 (2021), doi:10.1103/PhysRevX.11.011051; the contact–distance
+relation it builds on is *Nat Commun* 10:3894 (2019) — the `hipps` key planned for `refs.bib` points to the
+2019 paper, which is not the structure method. DIMES is *Nat Commun* 14:1150 (2023).
+Scripts: `benchmarks/fig3/c_hipps_wang2016.py`, `benchmarks/fig3/b_dimes.py`; results in
+`paper/fig3/results/`. All runs on one 18-core Mac shared with other jobs (load average 70–110 during the
+runs), so wall times are indicative only and inflated for every method.
+
+### Panel c — HIPPS as the Hi-C-only baseline
+
+Parameters (paper / code defaults, none tuned on FISH): α = 4 (<r> ∝ p^−1/4), p normalised by its maximum,
+maximum-entropy fit by iterative scaling, learning rate 10, 10,000 iterations, 1,000 conformations; TAD
+distance = ensemble mean distance. Hi-C: the same `rao2014_imr90/IMR90_chr<N>_5kb_hg19.cool` slices and ICE
+balancing (`ignore_diags=1`) as `c_gemfish_wang2016.py` (chr20 / chr22 slices built for this PR). Two ways to
+reach the TADs, both HIPPS's own: **TAD level** = HIPPS block average (PRX App. C) of balanced 5 kb contacts
+over each TAD × TAD block, then HIPPS on the 27–34 TADs; **100 kb** = the paper's resolution, raw counts
+summed to 100 kb, balanced, empty bins dropped (330–576 loci), TAD distance = mean over bin pairs (as for the
+U-Chrom and GEM-FISH models). Scoring is imported from `c_gemfish_wang2016.py`: same 90/10 cell splits
+(`default_rng(0)`, splits 0–2), relative error vs mean FISH, one least-squares scale fitted on the training
+FISH for every model except the paper's (nm). U-Chrom was re-run here for the same three splits on chr20/21/22
+(`c_gemfish_wang2016.py --chrom N`, new option; chr21 split 0 reproduces the feasibility numbers exactly).
+
+Mean relative error, mean of 3 splits (held-out SD across splits 0.002–0.021):
+
+| chrom | model | training cells | held-out 10 % | Pearson (held-out) | paper (Table 1 / Supp. Table 9) |
+|---|---|---|---|---|---|
+| chr20 | U-Chrom GEM-FISH, Hi-C only | 0.359 | 0.373 | 0.63 | GEM 0.30 / 0.352 |
+| chr20 | U-Chrom GEM-FISH, Hi-C + FISH | 0.214 | 0.235 | 0.67 | GEM-FISH 0.16 / 0.210 |
+| chr20 | **HIPPS, TAD level (Hi-C only)** | **0.122** | **0.157** | 0.65 | — |
+| chr20 | HIPPS, 100 kb (Hi-C only) | 0.129 | 0.158 | 0.66 | — |
+| chr20 | GEM-FISH paper final model (repo) | 0.163 | 0.193 | 0.69 | |
+| chr21 | U-Chrom GEM-FISH, Hi-C only | 0.303 | 0.325 | 0.65 | GEM 0.30 / 0.362 |
+| chr21 | U-Chrom GEM-FISH, Hi-C + FISH | 0.188 | 0.216 | 0.72 | GEM-FISH 0.14 / 0.188 |
+| chr21 | **HIPPS, TAD level (Hi-C only)** | **0.108** | **0.160** | 0.68 | — |
+| chr21 | HIPPS, 100 kb (Hi-C only) | 0.120 | 0.170 | 0.62 | — |
+| chr21 | GEM-FISH paper final model (repo) | 0.144 | 0.171 | 0.80 | |
+| chr22 | U-Chrom GEM-FISH, Hi-C only | 0.323 | 0.330 | 0.58 | GEM 0.20 / 0.237 |
+| chr22 | U-Chrom GEM-FISH, Hi-C + FISH | 0.205 | 0.227 | 0.58 | GEM-FISH 0.16 / 0.205 |
+| chr22 | **HIPPS, TAD level (Hi-C only)** | **0.076** | **0.123** | 0.73 | — |
+| chr22 | HIPPS, 100 kb (Hi-C only) | 0.085 | 0.127 | 0.71 | — |
+| chr22 | GEM-FISH paper final model (repo) | 0.156 | 0.173 | 0.75 | |
+
+**HIPPS, with no FISH at all beyond the one scale factor, beats every U-Chrom model on every chromosome,
+including U-Chrom Hi-C + FISH, and has a lower relative error than the GEM-FISH paper's own final model**
+(which is Hi-C + all FISH, in nm; fitting it the same one scale changes nothing: 0.164 / 0.144 / 0.155). On
+Pearson vs held-out FISH the paper's model stays best on chr20/21. Where the HIPPS gain comes from: its
+target alone, Λ·p^−1/4 before the maximum-entropy step, already scores 0.106–0.130 (training) — the
+power law on balanced Hi-C is simply a good predictor of Wang 2016 TAD distances; the max-ent step changes
+the error by ≤ 0.007. With the PRX paper's length scale (Λ = 117 nm per 100 kb, fitted there to GM12878
+chromosome volumes) and no FISH scale at all, the 100 kb model gives 0.153 / 0.128 / 0.329 (chr20 / 21 / 22),
+so the absolute scale does not transfer to every chromosome. IS convergence (relative loss): TAD level
+0.06–0.08, 100 kb 0.19–0.24; stopping at 1,000 iterations (PRX Fig. 11) changes the error by ≤ 0.008.
+Consequence for the paper: panel c cannot claim that U-Chrom's joint Hi-C + FISH model is the best
+predictor of held-out FISH; the port's Hi-C → distance step (finding list under "Needed port changes") is
+the likely gap, since a single power law does better than the full current pipeline.
+
+Runtime (wall, same loaded machine): HIPPS TAD level 3–8 s + 1–6 s Hi-C aggregation; HIPPS 100 kb
+214–1,146 s (330–576 loci × 10,000 eigendecompositions); U-Chrom GEM-FISH 1,500–1,760 s per model at
+6,289–6,364 5 kb bins (403 s for the same chr21 run on a quieter machine, see above).
+
+### Panel b — DIMES vs U-Chrom's direct contact frequency
+
+Input as in the DIMES paper (Eq. 10): the mean *squared* distance map of the traces (pair-wise NaN
+exclusion, as for U-Chrom). Fit: the code's direct inversion (`DI`), which the HIPPS-DIMES README prescribes
+for a valid mean-squared-distance map and which gives the same maximum-entropy model the paper's iterative
+scaling (γ = 10) converges to, in one step (fit loss ~1e−14); where the code refuses DI because pair-wise
+missing data make the map not a valid EDM (Bintu K562; 13 of 20 Takei chromosomes) it falls back to the
+paper's IS, γ = 10, 10,000 iterations (final relative loss 0.05 K562; Takei median 0.08, max 0.27). The
+paper's IS is also run on every map ≤ 100 loci as a check (`dimes_is`; same numbers within 0.01–0.04). On Su
+2020 (651 loci) IS at γ = 10 does not converge (loss rises 0.67 → 0.97 over 300 iterations), DI is exact.
+Contact frequency = fraction of 10,000 sampled conformations with d < r; the Gaussian model's analytic
+contact probability (infinite ensemble) is also reported. Hi-C, radii and the metric code are those of
+`b_first_look.py` / `b_takei_bonev.py`; U-Chrom numbers are recomputed in the same run and reproduce the
+feasibility table. r = 200 nm (Takei 0.2 µm):
+
+| Pairing | log–log r, U-Chrom | log–log r, DIMES (analytic) | O/E r, U-Chrom | O/E r, DIMES (analytic) |
+|---|---|---|---|---|
+| IMR90 28–30 Mb, matched | 0.968 | **0.973** (0.975) | 0.809 | **0.841** (0.854) |
+| K562 28–30 Mb, matched | **0.922** | 0.907 (0.910) | **0.579** | 0.547 (0.552) |
+| control: IMR90 imaging vs K562 Hi-C | 0.886 | 0.864 (0.864) | 0.363 | 0.227 (0.224) |
+| control: K562 imaging vs IMR90 Hi-C | 0.933 | 0.914 (0.919) | 0.618 | 0.572 (0.592) |
+| IMR90 18.6–20.6 Mb, matched | 0.900 | 0.893 (0.901) | −0.062 | −0.060 (−0.042) |
+| Su 2020 IMR90 whole chr21 | **0.840** | 0.836 (0.858) | **0.603** | 0.574 (0.619) |
+| Takei 2021 mESC vs Bonev (pooled, 35,399 pairs) | **0.885** | 0.818 (0.819) | **0.523** | 0.463 (0.464) |
+
+Cell-type control, matched minus mismatched O/E: IMR90 imaging U-Chrom 0.809 − 0.363 = **0.45**, DIMES
+0.841 − 0.227 = **0.61** (DIMES separates the cell types better); K562 imaging U-Chrom 0.579 − 0.618 =
+−0.04, DIMES 0.547 − 0.572 = −0.03 (neither separates them). Reading: on the IMR90 28–30 Mb block —
+the panel's main example — DIMES is better than direct counting on both metrics and on the control; on
+K562, whole-chromosome Su 2020 (sampled ensemble) and Takei mESC, direct counting is better (Takei by
+0.07 log–log, 0.06 O/E). On Su 2020 DIMES's analytic contact probability beats direct counting (0.858 /
+0.619) while its 10,000-conformation ensemble does not (0.836 / 0.574): sampling noise at the low contact
+probabilities of Mb-scale pairs. Spearman (not in the table) follows the same pattern (Takei 0.910 vs
+0.844). Runtime: U-Chrom direct counting 0.9–7.9 s per Bintu block, 2.9 s for Takei, 173 s for Su 2020 (NaN-aware
+pair-wise cube over 7,591 × 651 traces); DIMES fit 0.0–0.6 s (DI) / 20 s (IS, 65 loci) / 141 s (Takei, 20 fits),
+plus 5–7 s (Bintu), 86 s (Takei) and 330 s (Su) to sample 10,000 conformations and count contacts.
+
 ## Panel e (optional) — layers
 
 One ChromData for IMR90 chr21:28–30 Mb holding the Bintu traces (`coords`), the Hi-C (`link_cool`), and
@@ -207,7 +314,7 @@ distance-matrix correlations to the imaging median. Cheap once a and c exist.
 | Bintu GitHub repo has no licence file | Redistribution unclear | Do not commit the CSVs; download on demand (as now) |
 | Hi-C normalisation / MAPQ differ from the papers (MAPQ > 0 raw slices vs MAPQ ≥ 30 KR) | Small numeric differences | Add `--norm KR` / `_30.hic` to the slicer before the final runs |
 | Cross-cell control fails for K562 imaging | Weakens "cell-type specific" claim | Report as is; claim only what IMR90 / Su / Takei support |
-| `cell2.pairs.gz` provenance unverified | — | Not used in Fig. 3 |
+| `cell2.pairs.gz` provenance unverified (phased diploid mouse cell, not Stevens) | — | Not used in Fig. 3; only a manual FastHigashi smoke script uses it |
 
 ## Estimated engineering effort
 
@@ -219,7 +326,7 @@ distance-matrix correlations to the imaging median. Cheap once a and c exist.
 | GEM-FISH: align port with paper (list above), chr20/21/22, 10 held-out splits | 4–6 days |
 | Panel b final (bootstrap CIs, radius sweep, figure-ready JSON) | 1–2 days |
 | Panel e + figure assembly + legend | 2–3 days |
-| Fix GEM-FISH tutorial (real Hi-C), rename / replace `IMR90_chr21_30kb.cool` | 1 day |
+| ~~Fix GEM-FISH tutorial (real Hi-C), rename / replace `IMR90_chr21_30kb.cool`~~ (done) | — |
 | **Total** | **≈ 3–4 weeks** |
 
 ## Recommendation for the panel set
@@ -234,6 +341,8 @@ paper's Table 1) — b (IMR90 28–30 Mb + Su whole-chr21 + Takei/Bonev, with ma
 - `benchmarks/fig3/a_nucdyn_vs_published.py` — U-Chrom models vs Stevens 2017 GEO structures
 - `benchmarks/fig3/mds_vs_minimds/` — miniMDS side-by-side (IMR90 chr21, range-read)
 - `benchmarks/fig3/b_first_look.py`, `b_takei_bonev.py` — panel b
-- `benchmarks/fig3/c_gemfish_wang2016.py`, `c_gemfish_first_look.py` — panel c
+- `benchmarks/fig3/c_gemfish_wang2016.py` (`--chrom 20|21|22`), `c_gemfish_first_look.py` — panel c
+- `benchmarks/fig3/c_hipps_wang2016.py`, `b_dimes.py` — HIPPS / DIMES external baselines (panels c / b)
+- `paper/fig3/results/*.json` — baseline runs and the matching U-Chrom runs (3 splits, chr20/21/22)
 - `example-data/build_rao2014_slices.py` — Rao 2014 `.hic` slices over HTTP
 - `paper/fig3/feasibility/*.json` — outputs of the runs above

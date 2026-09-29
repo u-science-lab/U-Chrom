@@ -65,3 +65,41 @@ export function nearestPoint(px: Float32Array, mx: number, my: number, radius: n
   }
   return best
 }
+
+// ---- zoom / pan -------------------------------------------------------------
+
+/** Screen transform of an embedding plot: x' = tx + k·x (same for y). */
+export interface View2D {
+  k: number
+  tx: number
+  ty: number
+}
+export const IDENTITY_VIEW: View2D = { k: 1, tx: 0, ty: 0 }
+export const MAX_ZOOM = 200
+
+export function isIdentity(v: View2D): boolean {
+  return v.k === 1 && v.tx === 0 && v.ty === 0
+}
+
+/** Zoom by `factor` keeping the screen point (cx, cy) fixed; k is clamped to [1, MAX_ZOOM], k = 1 → the full view. */
+export function zoomAt(v: View2D, cx: number, cy: number, factor: number): View2D {
+  const k = Math.min(MAX_ZOOM, Math.max(1, v.k * factor))
+  if (k === 1) return IDENTITY_VIEW
+  const f = k / v.k
+  return { k, tx: cx - (cx - v.tx) * f, ty: cy - (cy - v.ty) * f }
+}
+
+export function panBy(v: View2D, dx: number, dy: number): View2D {
+  return { k: v.k, tx: v.tx + dx, ty: v.ty + dy }
+}
+
+/** Apply a view to projected points ([x0, y0, x1, y1, …]); NaN (missing) stays NaN; identity returns the input. */
+export function applyView(px: Float32Array, v: View2D): Float32Array {
+  if (isIdentity(v)) return px
+  const out = new Float32Array(px.length)
+  for (let i = 0; i < px.length; i += 2) {
+    out[i] = v.tx + v.k * px[i]
+    out[i + 1] = v.ty + v.k * px[i + 1]
+  }
+  return out
+}
