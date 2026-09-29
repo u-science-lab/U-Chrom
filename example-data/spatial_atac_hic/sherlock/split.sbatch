@@ -18,6 +18,6 @@ set -- $(for r in $(col "$SEC" runs | tr , ' '); do echo "$RAW/$SEC/${r}_1.fastq
 R1=$1; R2=$2; shift 2
 python -u "$HERE/barcodes.py" "$R1" "$R2" "$OUT/chunks" --layout atachic --more "$@" --chunk 60000000 --threads 4 --max-pairs "$MAX"
 N=$(ls "$OUT"/chunks/chunk_*_R1.fq.gz | wc -l)
-M=$(sbatch --parsable --array=0-$((N - 1)) "$HERE/map.sbatch" "$SEC")
+M=$(sbatch --parsable --array=0-$((N - 1))%6 "$HERE/map.sbatch" "$SEC")   # at most 6 chunks at once (shared partition)
 F=$(sbatch --parsable --dependency=afterok:$M "$HERE/finish.sbatch" "$SEC")
 echo "[$(date)] $N chunks; map array $M, finish $F"

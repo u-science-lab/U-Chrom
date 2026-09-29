@@ -18,6 +18,6 @@ export PATH="$ENV/bin:$PATH"
 python -u "$HERE/barcodes.py" "$RAW/$RUN/$(col $RUN r1)" "$RAW/$RUN/$(col $RUN r2)" "$OUT/chunks" \
     --chunk 60000000 --threads 4 --max-pairs "$MAX"
 N=$(ls "$OUT"/chunks/chunk_*_R1.fq.gz | wc -l)
-M=$(sbatch --parsable --array=0-$((N - 1)) "$HERE/map.sbatch" "$RUN")
+M=$(sbatch --parsable --array=0-$((N - 1))%6 "$HERE/map.sbatch" "$RUN")   # at most 6 chunks at once (shared partition)
 F=$(sbatch --parsable --dependency=afterok:$M "$HERE/finish.sbatch" "$RUN")
 echo "[$(date)] $N chunks; map array $M, finish $F"
