@@ -22,12 +22,13 @@ auto-downloaded by the tutorials on first run into this directory.
 | `takei2025_cerebellum/` (tarball + per-FOV and combined `.chromdata.zarr`; older builds: `.h5cd`) | 2.85 GB download; 7.9 GB raw CSV; combined store 2.05 GB as format 2.2 (`*.v22.chromdata.zarr`; 2.94 GB as 2.1, 2.17 GB as 2.0; h5cd 1.x: 6.3 GB) | no | Zenodo 7693825 (opt-in, `--takei2025_cerebellum`) | `benchmarks/fig2/` (b, c, d, allele QC, `rowgroup_sweep.py`, `spot_tracks_encoding.py`; 1e8 store by `replicate_store.py`) via `build_takei2025_cerebellum.py` (`--stream`: FOV-by-FOV streaming import); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1 conversion, streaming seqFISH+ import from `raw/`, streaming distance maps); `benchmarks/cd22_convert_validate.py` (2.1 → 2.2 conversion, bitwise check); `benchmarks/fig2/cd22_variants.py` (format 2.2 variants); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | `liu2025_mop/4DNFID46OABK.csv` + `4DNFICX8IVEK.csv` (+ built `liu2025_mop.chromdata.zarr`, 294 MB; `.v22.chromdata.zarr` 267 MB) | 1.68 GB + 17 MB | no | 4DN public S3 (opt-in, `--liu2025_mop`) | largest wild-type 4DN FOF-CT; `build_liu2025_mop.py` (Fig. 2 dataset scale); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1, streaming `from_fofct(out=)` vs in memory, streaming distance maps vs the dense reference); `benchmarks/cd22_convert_validate.py` / `benchmarks/fig2/cd22_variants.py` (format 2.2); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | Takei 2025 other Zenodo archives (cerebellum rep 2, E14, NMuMG) | 5.3–11 GB each | no | **manual** | `seqfish_multiomics_cerebellum` tutorial (real-data run) |
-| `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials; `tests/core/test_fofct_writer.py` (skipped when absent); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd21_streaming_validation.py` (streaming vs in-memory ArcFISH loop / TAD calls); `benchmarks/cell_spatial_validation.py` (cell positions) |
+| `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials; `tests/core/test_fofct_writer.py` (skipped when absent); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd21_streaming_validation.py` (streaming vs in-memory ArcFISH loop / TAD calls); `benchmarks/cell_spatial_validation.py` (cell positions); `benchmarks/screcon/simulate.py` (`takei2021_25kb` truth) |
+| `4DNFIFLJGGNR.csv`                    | 47 MB   | no              | 4DN public S3 (`--takei2021_1mb`) | `benchmarks/screcon/simulate.py` (`takei2021_1mb` truth: genome-wide 1 Mb loci) |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
 | `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial; Fig. 3b / 3c (`benchmarks/fig3/b_first_look.py`, `c_gemfish_first_look.py`) |
 | `stevens2017_mesc/` (8 cells: contact pairs + published `.pdb` structures) | 43 MB | no | GEO GSE80280 (`--stevens2017`) | Fig. 3a (NucDynamics reference; `benchmarks/fig3/a_sc_consistency.py`; native-engine validation and speed `benchmarks/fig3/a_nucdyn_engine_*.py`) |
 | `bintu2018/{IMR90,K562}_chr21-28-30Mb.csv` | 7.8 MB + 20 MB | no | GitHub raw (`--bintu2018`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
-| `su2020_imr90/chromosome21.tsv` + `Hi-C_contacts_chromosome21.tsv` | 261 MB + 1 MB | no | Zenodo 3928890 (`--su2020_chr21`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
+| `su2020_imr90/chromosome21.tsv` + `Hi-C_contacts_chromosome21.tsv` | 261 MB + 1 MB | no | Zenodo 3928890 (`--su2020_chr21`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`); `benchmarks/screcon/simulate.py` (`su2020_chr21` truth) |
 | `abbas2019_gemfish/*.zip` (Wang 2016 FISH, TADs, Hi-C, GEM-FISH final models) | 40 MB | no | GitHub, pinned commit (`--abbas2019_gemfish`) | Fig. 3a / 3c (`benchmarks/fig3/c_gemfish_wang2016.py`) |
 | `rao2014_{imr90,k562}/*_chr21_5kb_hg19.cool` | 3.8 MB each | no | **built** from GEO GSE63525 `.hic` by HTTP range reads (`build_rao2014_slices.py`) | Fig. 3b / 3c |
 | `ray2019_k562/4DNFI4QQPDMR.mcool` | 849 MB | no | 4DN public S3 (opt-in, `--ray2019_k562`) | provenance of `IMR90_chr21_30kb.cool` (K562) |
@@ -277,6 +278,32 @@ using.
   (ChromData 2.0 validation, all 20 chromosomes);
   `tests/core/test_fofct_writer.py` and `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer)
   (with the cell / RNA tables `4DNFIFINA2U9.csv`, `4DNFIJ52NVDV.csv`).
+
+### `4DNFIFLJGGNR.csv` — Takei 2021 mESC FOF-CT, 1 Mb genome-wide loci (47 MB)
+
+- **Format**: FOF-CT core table (same columns as `4DNFIHF3JCBY.csv`),
+  `##XYZ_unit=micron`, mm10.
+- **Content**: E14 mESC, replicate 1: 2,460 loci (25 kb each) at ~1 Mb
+  spacing across chr1–19 and chrX, 201 cells, 705,143 spots.  One
+  `Trace_ID` per (cell, chromosome) holds the spots of **both homologs**
+  (not resolved in the deposited table; ~1.8 spots per locus).
+  `benchmarks/screcon/truth.py` separates the homologs with a constrained
+  2-means (heuristic; checked on the homolog-resolved 25 kb table:
+  median 97.8 % of spots on the right homolog) and keeps chrX (male line)
+  as a single copy.
+- **Source**: Takei et al. 2021, *Nature* 590:344–350 (same study as
+  `4DNFIHF3JCBY.csv`).  4DN portal:
+  [data.4dnucleome.org/4DNFIFLJGGNR](https://data.4dnucleome.org/files-processed/4DNFIFLJGGNR/),
+  "DNA-Spot/Trace Data core table for the 2460 genomic loci across the
+  mouse genome at 1-Mb resolution in ESCs, replicate 1"; md5
+  `da9826551f13f944815fe35a33a8e9c1` (verified).
+- **Download URL** (public S3):
+  ```
+  https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/8189709b-f1e7-4f0b-bf68-89eb9fd0afcf/4DNFIFLJGGNR.csv
+  ```
+  or `python example-data/download_data.py --takei2021_1mb`.
+- **Used by**: `benchmarks/screcon/simulate.py truth --dataset takei2021_1mb`
+  (imaging-truth simulation benchmark for single-cell Hi-C 3-D reconstruction).
 
 ### `liu2025_mop/` — Liu et al. 2025 mouse MOp DNA-MERFISH, 4DN FOF-CT (1.7 GB)
 

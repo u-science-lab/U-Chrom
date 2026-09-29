@@ -10,6 +10,7 @@ Usage::
     python example-data/download_data.py           # fetch all default datasets
     python example-data/download_data.py --takei   # just Takei 2021 FOF-CT
     python example-data/download_data.py --seqfish # just seqFISH+ zip
+    python example-data/download_data.py --takei2021_1mb  # opt-in, 47 MB 1 Mb FOF-CT (screcon)
     python example-data/download_data.py --schicar_dna  # opt-in, ~1.5 GB pairs
     python example-data/download_data.py --schicar_atac # opt-in, ~1.4 GB ATAC + mm10 GTF
     python example-data/download_data.py --takei2025_cerebellum  # opt-in, 2.8 GB tarball
@@ -57,6 +58,21 @@ DATASETS = {
         ),
         "size_mb": 22,
         "description": "Takei 2021 mESC FOF-CT chromatin tracing",
+    },
+    # Takei 2021 mESC DNA seqFISH+ at 1 Mb (2,460 loci genome-wide), replicate 1;
+    # both homologs per (cell, chromosome) trace.  Single-cell Hi-C simulation truth
+    # (benchmarks/screcon).
+    "takei2021_1mb": {
+        "filename": "4DNFIFLJGGNR.csv",
+        "url": (
+            "https://4dn-open-data-public.s3.amazonaws.com/"
+            "fourfront-webprod/wfoutput/"
+            "8189709b-f1e7-4f0b-bf68-89eb9fd0afcf/4DNFIFLJGGNR.csv"
+        ),
+        "md5": {"4DNFIFLJGGNR.csv": "da9826551f13f944815fe35a33a8e9c1"},
+        "size_mb": 47,
+        "default": False,
+        "description": "Takei 2021 mESC FOF-CT 1 Mb genome-wide tracing (4DN 4DNFIFLJGGNR)",
     },
     "seqfish": {
         "filename": "DNAseqFISH+.zip",
