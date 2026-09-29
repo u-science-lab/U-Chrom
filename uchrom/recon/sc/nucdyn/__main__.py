@@ -1,3 +1,6 @@
-from .nucdyn import main
 import fire
-fire.Fire(main)
+
+from ._cli import main
+
+if __name__ == "__main__":
+    fire.Fire(main)

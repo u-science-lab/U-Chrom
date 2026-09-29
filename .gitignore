@@ -108,3 +108,8 @@ example-data/rao2014_gm12878/
 example-data/ray2019_k562/
 !paper/fig3/feasibility/*.json
 !paper/fig3/results/*.json
+
+# Native NucDynamics engine (native/nucdyn): cargo build output, built extension
+native/nucdyn/target/
+native/nucdyn/python/uchrom_nucdyn/*.so
+native/nucdyn/python/uchrom_nucdyn/*.pyd
