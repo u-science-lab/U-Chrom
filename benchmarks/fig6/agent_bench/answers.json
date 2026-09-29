@@ -1,0 +1,802 @@
+{
+ "A1": {
+  "values": {
+   "n_cells": 47,
+   "n_traces": 1500,
+   "n_spots": 383674
+  },
+  "truth": "counts"
+ },
+ "A3": {
+  "values": {
+   "n": 48,
+   "channels": [
+    "if.CPSF6",
+    "if.ATRX",
+    "if.H4K8ac",
+    "if.HDAC2",
+    "if.H3K9ac",
+    "if.H3K9me3",
+    "if.H3K9me2",
+    "if.RNAPIISer2-P",
+    "if.H3",
+    "if.H3K36me2",
+    "if.UBTF",
+    "if.LaminB1",
+    "if.RNAPIISer5-P",
+    "if.RYBP",
+    "if.HP1beta",
+    "if.RING1B",
+    "if.H2A.X",
+    "if.H3K4me1",
+    "if.H4K20me2",
+    "if.H3K27me2",
+    "if.JARID2",
+    "if.SF3A66",
+    "if.CBP",
+    "if.H2AK119u1",
+    "if.EZH2",
+    "if.H3K4me2",
+    "if.BRG1",
+    "if.HP1alpha",
+    "if.Fibrillarin",
+    "if.KAP1",
+    "if.H3K27ac",
+    "if.H3K4me3",
+    "if.H3K36ac",
+    "if.H3K14ac",
+    "if.H4K20me1",
+    "if.HP1gamma",
+    "if.H4K20me3",
+    "if.H3K27me3",
+    "if.mH2A1",
+    "if.CHD4",
+    "if.KAT3B_p300",
+    "if.H3K56ac",
+    "if.H3K36me3",
+    "if.HDAC1",
+    "if.SUZ12",
+    "if.H4K16ac",
+    "if.BRD4",
+    "if.SOX2"
+   ]
+  },
+  "truth": "n_if_channels"
+ },
+ "A5": {
+  "values": {
+   "n_cells": 5313,
+   "resolution_bp": 1000000,
+   "n_cells_in_table": 5313
+  },
+  "truth": "scool_cells"
+ },
+ "B1": {
+  "values": {
+   "median_um": 0.7392160473893424,
+   "n_pairs": 11533
+  },
+  "truth": "dist_at_1mb"
+ },
+ "B5": {
+  "values": {
+   "top_chrom": "chr1",
+   "top_median": 1.6752305913649266,
+   "by_chrom": {
+    "chr1": 1.675,
+    "chr7": 1.601,
+    "chr11": 1.548,
+    "chr5": 1.491,
+    "chr4": 1.471,
+    "chr2": 1.47,
+    "chr3": 1.427,
+    "chr10": 1.402,
+    "chr9": 1.345,
+    "chr6": 1.337,
+    "chr17": 1.3,
+    "chr8": 1.28,
+    "chr14": 1.206,
+    "chr13": 1.198,
+    "chrX": 1.193,
+    "chr16": 1.191,
+    "chr12": 1.184,
+    "chr18": 1.184,
+    "chr19": 1.15,
+    "chr15": 1.098
+   }
+  },
+  "truth": "rg_by_chrom"
+ },
+ "C1": {
+  "values": {
+   "median_a": 1.420923919845671,
+   "median_b": 1.1390827786318347,
+   "n_a": 8,
+   "n_b": 22,
+   "p": 0.0008966456942468936,
+   "rank_biserial": 0.7613636363636365,
+   "rho_rg_nuclear_volume": 0.7228031145717464
+  },
+  "truth": "rg_bergmann_vs_granule"
+ },
+ "C2": {
+  "values": {
+   "median_a": 1.8757061036030445,
+   "median_b": 1.1390827786318347,
+   "n_a": 3,
+   "n_b": 22,
+   "p": 0.0008695652173913044,
+   "rank_biserial": 1.0,
+   "trace_level_p": 1.5259990343304e-14
+  },
+  "truth": "rg_purkinje_vs_granule"
+ },
+ "C3": {
+  "values": {
+   "mark": "SOX2",
+   "p": 4.6632693553702706e-05,
+   "q": 0.00223836929057773,
+   "n_significant_q05": 1
+  },
+  "truth": "top_if_bergmann"
+ },
+ "D1": {
+  "values": {
+   "rho": 0.49225254394079554,
+   "p": 0.0004405056881789144,
+   "n_cells": 47,
+   "partial_rho_given_nuclear_volume": 0.29946919295993446
+  },
+  "truth": "h3k9me3_vs_rg_cells"
+ },
+ "D6": {
+  "values": {
+   "rho": 0.2817772573817007,
+   "p": 1.5167745373870816e-97,
+   "n_cells": 5313,
+   "median_within_type_rho": 0.29450091627042596,
+   "n_types": 22
+  },
+  "truth": "contacts_vs_rna"
+ },
+ "A2": {
+  "values": {
+   "cell_type": "Granule",
+   "n": 22,
+   "counts": {
+    "Granule": 22,
+    "Other": 9,
+    "Bergmann": 8,
+    "MLI1": 3,
+    "Purkinje": 3,
+    "MLI2+PLI": 2
+   }
+  },
+  "truth": "largest_cell_type"
+ },
+ "A4": {
+  "values": {
+   "chrom": "chr1",
+   "n_spots": 31557,
+   "runner_up": [
+    "chr2",
+    29213
+   ]
+  },
+  "truth": "top_chrom"
+ },
+ "A6": {
+  "values": {
+   "cell_type": "L5IT",
+   "n": 642,
+   "median_contacts": 23157.0,
+   "median_scool_pixel_sum": 23157.0,
+   "note": "median_contacts = cells['n_contacts_hic'] (per-cell Hi-C contact count stored with the cell metadata); the per-cell .scool pixel sums (1 Mb, all chromosomes) are given for context and differ because the .scool keeps only binned cis+trans contacts on the 21 chromosomes."
+  },
+  "truth": "schicar_top_type"
+ },
+ "A7": {
+  "values": {
+   "median": 1.0890957127207481,
+   "unit": "model units (NucDynamics)",
+   "n_particles": 1923,
+   "particle_bp": 100017.0,
+   "mean": 0.9939119316707865
+  },
+  "truth": "bond_length"
+ },
+ "A8": {
+  "values": {
+   "xyz_unit": "um",
+   "genome_assembly": "mm10"
+  },
+  "truth": "units"
+ },
+ "B2": {
+  "values": {
+   "exponent": 0.3324805858469874,
+   "n_pairs": 728432,
+   "exponent_10_bins": 0.33139464540243835,
+   "exponent_40_bins": 0.33256226331946626,
+   "method": "all within-trace spot pairs on chr15 (all traces), separation = bin-midpoint difference in [1, 20] Mb; 20 log-spaced separation bins; median 3-D distance and median separation per bin; OLS of log10(distance) on log10(separation)"
+  },
+  "truth": "scaling_exponent"
+ },
+ "B3": {
+  "values": {
+   "slope": -0.2690139756640109,
+   "n_offsets_used": 19,
+   "resolution_bp": 1000000,
+   "method": "sim_cell1/cell1_contacts.mcool::/resolutions/1000000, raw counts; P(s) = mean count on diagonal offset d = 2..20 bins (2-20 Mb) of the chr1 cis map; OLS log10 P vs log10 s"
+  },
+  "truth": "ps_slope"
+ },
+ "B4": {
+  "values": {
+   "rho": -0.32729312279970424,
+   "p": 5.241746140541124e-25,
+   "n_pairs": 944,
+   "rho_all_pairs_incl_zero": -0.2769400777388746,
+   "method": "chr1 particles grouped into the mcool's 1 Mb bins (by particle midpoint); 3-D distance between bin centroids; Spearman(count, distance) over off-diagonal bin pairs with count > 0"
+  },
+  "truth": "contacts_vs_distance"
+ },
+ "B6": {
+  "values": {
+   "fraction": 0.18469406011492093,
+   "fraction_250kb": 0.18625041808061027,
+   "total_chr1_contacts": 7148741.0,
+   "method": "linked all-cell pseudo-bulk contacts_all.mcool (uns['linked_cool']['all_cells']), 1 Mb, raw counts, chr1 cis upper triangle incl. diagonal; fraction of counts with bin separation > 10 Mb (i.e. >= 11 bins); 250 kb value for context. The .scool was not summed."
+  },
+  "truth": "long_range_fraction"
+ },
+ "B7": {
+  "values": {
+   "n_domains": 15,
+   "n_boundaries": 14,
+   "n_domains_default_window_1e5": 0,
+   "domains_level1": [
+    [
+     3000000,
+     5000000
+    ],
+    [
+     5000000,
+     11000000
+    ],
+    [
+     11000000,
+     14000000
+    ],
+    [
+     14000000,
+     23000000
+    ],
+    [
+     23000000,
+     26000000
+    ],
+    [
+     26000000,
+     49000000
+    ],
+    [
+     49000000,
+     52000000
+    ],
+    [
+     52000000,
+     55000000
+    ],
+    [
+     55000000,
+     60000000
+    ],
+    [
+     60000000,
+     66000000
+    ],
+    [
+     66000000,
+     71000000
+    ],
+    [
+     71000000,
+     86000000
+    ],
+    [
+     86000000,
+     98000000
+    ],
+    [
+     98000000,
+     101000000
+    ],
+    [
+     101000000,
+     104000000
+    ]
+   ],
+   "method": "uchrom.strc.tad.call_tads_by_pval(cd_chr15_1Mb, 'chr15', TADCallerParams(window_bp=4e6), device='cpu'); all other params default (fdr_cutoff=0.1, hierarchical, max_levels=4, k_sigma=4, frac=0.1); n_domains = level-1 (finest) partition",
+   "note": "ILL-POSED as worded: at native 25 kb chr15 has 3829 bins and only ~3 traces per bin; the caller's (3, n_traces, B, B) tensor would need >10 GB per copy and most bin pairs have <2 co-observations. Closest faithful version: each trace's spots averaged per 1 Mb bin, and the boundary window scaled to 4 bins (the default 100 kb window = 4 bins at 25 kb); the literal default window (100 kb) on 1 Mb bins yields no candidate boundaries."
+  },
+  "truth": "tads_arcfish"
+ },
+ "B8": {
+  "values": {
+   "fraction": 0.5247524752475248,
+   "n_bins": 101,
+   "caller_label_of_high_H3K27ac": "B",
+   "caller_label_agrees_with_H3K27ac": false,
+   "mean_H3K27ac_by_caller_label": {
+    "A": 0.004786340190696543,
+    "B": 0.6294126155454739
+   },
+   "mwu_p_H3K27ac_between_compartments": 7.118157245337993e-11,
+   "method": "uchrom.strc.comp.call_compartments_axes_pc(cd_chr15_1Mb, 'chr15', device='cpu') with default CompartmentCallerParams; per-bin mean of the per-spot H3K27ac track; the cluster with higher mean H3K27ac is A",
+   "note": "caller run on 1 Mb bins (each trace's spots averaged per bin): the native 25 kb chr15 (3,829 bins, ~3 traces/bin) is infeasible in memory and too sparse. The caller's own A/B label is a compaction convention; A is re-assigned here by H3K27ac."
+  },
+  "truth": "compartments_h3k27ac"
+ },
+ "C4": {
+  "values": {
+   "median_a": 0.24032678288903986,
+   "median_b": 0.34687117120257627,
+   "n_a": 22,
+   "n_b": 8,
+   "p": 0.056362929646287974,
+   "rank_biserial": -0.46590909090909094,
+   "group_a": "Granule",
+   "group_b": "Bergmann",
+   "direction": "granule lower"
+  },
+  "truth": "h3k9me3_granule_vs_bergmann"
+ },
+ "C5": {
+  "values": {
+   "median_a": 297.3215,
+   "median_b": 209.794,
+   "n_a": 8,
+   "n_b": 22,
+   "p": 0.07842813635917086,
+   "rank_biserial": 0.4318181818181819,
+   "group_a": "Bergmann",
+   "group_b": "Granule",
+   "unit": "um^3",
+   "direction": "Bergmann larger"
+  },
+  "truth": "nucvol_bergmann_vs_granule"
+ },
+ "C6": {
+  "values": {
+   "median_a": 18173.0,
+   "median_b": 21459.5,
+   "n_a": 268,
+   "n_b": 982,
+   "p": 1.2330831152008643e-05,
+   "rank_biserial": -0.17402042739459522,
+   "group_a": "Oligo",
+   "group_b": "L23IT.1+L23IT.2+L23IT.3 (pooled)",
+   "per_subtype_median": {
+    "L23IT.1": 22272.0,
+    "L23IT.2": 21220.5,
+    "L23IT.3": 19056.0
+   },
+   "direction": "Oligo fewer"
+  },
+  "truth": "contacts_oligo_vs_l23"
+ },
+ "C7": {
+  "values": {
+   "slope_a": -0.9166239382604575,
+   "slope_b": -1.4127539208582358,
+   "group_a": "Oligo",
+   "group_b": "L23IT.1+2+3 (summed cools)",
+   "chr1_cis_contacts_a": 317232.0,
+   "chr1_cis_contacts_b": 1370300.0,
+   "resolution_bp": 500000,
+   "slope_a_1Mb": -1.0189146224838976,
+   "slope_b_1Mb": -1.488779497578748,
+   "method": "linked per-type pseudo-bulk cools (uns['linked_cool'], native 500 kb, raw counts); L2/3 IT = sum of the three L23IT subtype cools; P(s) = mean count per diagonal offset / total chr1 cis contacts (depth-normalised), s = 1-10 Mb (offsets 2..20); OLS log10 P vs log10 s"
+  },
+  "truth": "ps_oligo_vs_l23"
+ },
+ "C8": {
+  "values": {
+   "group_a": "Granule",
+   "group_b": "Purkinje",
+   "median_rg_a": 1.1205033642057298,
+   "median_rg_b": 1.4685900373756802,
+   "p_raw": 0.15130434782608698,
+   "rank_biserial_raw": -0.5454545454545454,
+   "median_adj_a": 0.19495318522594193,
+   "median_adj_b": 0.16705512188954497,
+   "p_adjusted": 0.311304347826087,
+   "rank_biserial_adjusted": 0.39393939393939403,
+   "n_a": 22,
+   "n_b": 3,
+   "median_nuc_volume_a": 209.794,
+   "median_nuc_volume_b": 944.262,
+   "method": "chr15 traces only; per-cell median trace Rg; size adjustment = Rg / nuc_volume_um3^(1/3) (Rg in units of nuclear radius scale); Mann-Whitney two-sided; n_b = 3 is too few"
+  },
+  "truth": "rg_size_adjusted"
+ },
+ "C9": {
+  "values": {
+   "identity_bergmann": "all 8/8 selected cells are Bergmann glia (= every Bergmann cell in the FOV: 8)",
+   "top_mark_sox2": "SOX2",
+   "top_p": 4.6632693553702706e-05,
+   "top_q": 0.0022850019841314326,
+   "top_rank_biserial": 0.8333333333333333,
+   "n_sel": 8,
+   "n_rest": 39,
+   "selected_types": {
+    "Bergmann": 8
+   },
+   "top5": [
+    [
+     "if.SOX2",
+     0.0022850019841314326,
+     0.8333333333333333
+    ],
+    [
+     "if.H3K27ac",
+     0.08286435659611166,
+     0.641025641025641
+    ],
+    [
+     "if.H3K4me3",
+     0.12004942925593169,
+     0.5705128205128205
+    ],
+    [
+     "if.H3K4me2",
+     0.12004942925593169,
+     0.5576923076923077
+    ],
+    [
+     "if.RNAPIISer5-P",
+     0.12004942925593169,
+     0.5576923076923077
+    ]
+   ],
+   "n_significant_q05": 1,
+   "method": "cell-level Mann-Whitney (selected vs other 39 cells) on each if.* field + nuclear volume, BH-FDR across 49 fields"
+  },
+  "truth": "selection_vs_rest"
+ },
+ "C10": {
+  "values": {
+   "cell_type": "PT",
+   "runner_up": "L5IT",
+   "median_a": 28832.0,
+   "median_b": 25896.0,
+   "n_a": 331,
+   "n_b": 642,
+   "p": 0.004077733005704559,
+   "rank_biserial": 0.11226717866184788,
+   "top5_medians": {
+    "PT": 28832.0,
+    "L5IT": 25896.0,
+    "L23IT.1": 23156.0,
+    "CLA": 23070.0,
+    "L23IT.2": 21910.0
+   },
+   "top_with_L23IT_pooled": "PT",
+   "method": "per-cell n_counts_rna; rank types by median; Mann-Whitney two-sided top vs runner-up"
+  },
+  "truth": "rna_counts_top"
+ },
+ "D2": {
+  "values": {
+   "rho": 0.18855505308214746,
+   "p": 0.0,
+   "n_spots": 383674,
+   "rho_laminb1_vs_distance_to_periphery_um": -0.17328120884864848,
+   "median_within_cell_rho": 0.28770007002165454,
+   "n_rad_score_meaning": "larger = more peripheral (Spearman with distance from the cell's spot centroid = 0.68; with n_per_dist(um) = -0.95)",
+   "direction": "higher LaminB1 -> more peripheral",
+   "method": "spot level, all 383,674 spots: Spearman(tracks.LaminB1, tracks.n_rad_score)"
+  },
+  "truth": "laminb1_vs_radial_spots"
+ },
+ "D3": {
+  "values": {
+   "rho": -0.856470588235294,
+   "p": 3.4466666536443176e-30,
+   "n_bins": 101,
+   "direction": "more H3K27ac -> more central",
+   "method": "bin level: chr15 spots of all cells grouped into 1 Mb bins; per-bin mean H3K27ac and mean n_rad_score (larger = more peripheral); Spearman across bins. rho < 0 means more central."
+  },
+  "truth": "h3k27ac_vs_radial_bins"
+ },
+ "D4": {
+  "values": {
+   "rho": 0.7523126734505089,
+   "p": 1.0809100471803656e-09,
+   "n_cells": 47,
+   "slope_um_per_um3": 0.0010516483865007729,
+   "intercept_um": 1.025997456691326,
+   "pearson_r": 0.7440308502451705,
+   "method": "cell level: per-cell median trace Rg (all chromosomes) vs nuc_volume_um3; Spearman; OLS slope"
+  },
+  "truth": "nucvol_vs_rg"
+ },
+ "D5": {
+  "values": {
+   "purity_hic": 0.242449338101512,
+   "purity_rna": 0.4432774954514085,
+   "purity_hic_L23IT_pooled": 0.2707823577388795,
+   "purity_rna_L23IT_pooled": 0.49538866930171277,
+   "n_cells": 5313,
+   "n_types": 22,
+   "method": "cellm['hic_umap'] / cellm['rna_umap']; 15 nearest neighbours (Euclidean, self excluded); purity = mean fraction of neighbours with the same cells['cell_type'] (22 labels as given)"
+  },
+  "truth": "knn_purity"
+ },
+ "D7": {
+  "values": {
+   "rho_all": 0.13170071456062946,
+   "p": 5.447218744547912e-22,
+   "n_cells": 5313,
+   "median_within_type_rho": 0.03266170657738833,
+   "n_types": 22,
+   "n_types_defined": 22,
+   "rho_oligo": 0.14624260221334143,
+   "within_type": {
+    "Astro": 0.047,
+    "CLA": 0.057,
+    "D2MSN": -0.063,
+    "Endo": -0.132,
+    "L23IT.1": -0.038,
+    "L23IT.2": 0.051,
+    "L23IT.3": -0.05,
+    "L45IT": 0.029,
+    "L56NP": 0.138,
+    "L5IT": -0.008,
+    "L6CT": 0.036,
+    "L6IT": 0.085,
+    "LMC": 0.059,
+    "Lamp5": -0.062,
+    "MGL": -0.079,
+    "OPC": 0.137,
+    "Oligo": 0.146,
+    "PT": 0.044,
+    "Peri": -0.102,
+    "Pvalb": 0.171,
+    "Sst": -0.101,
+    "Vip": -0.007
+   },
+   "method": "cell level Spearman(atac.Mobp, rna.Mobp); within each cell type with >= 30 cells; median of the defined within-type rhos (NaN where a type has constant values)"
+  },
+  "truth": "mobp_atac_rna"
+ },
+ "D8": {
+  "values": {
+   "rho": 0.5952380952380953,
+   "p": 0.11952980613879274,
+   "n_cells": 8,
+   "method": "Bergmann cells only; per-cell if.SOX2 vs per-cell median trace Rg; Spearman (n = 8)"
+  },
+  "truth": "sox2_rg_within_bergmann"
+ },
+ "E1": {
+  "values": {
+   "frac_cell_chrom_gt2": 0.1282608695652174,
+   "n_cell_chrom_pairs": 920,
+   "distribution": {
+    "1": 492,
+    "2": 310,
+    "3": 91,
+    "4": 22,
+    "5": 4,
+    "7": 1
+   },
+   "max": 7,
+   "n_traces": 1500,
+   "allele_suffix_counts": {
+    "1": 920,
+    "2": 428,
+    "3": 118,
+    "4": 27,
+    "5": 5,
+    "6": 1,
+    "7": 1
+   },
+   "n_unassigned_traces_in_data": 0,
+   "allele_col_used": "dbscan_ldp_nbr_allele",
+   "keep_unclustered": "False",
+   "traces_table_minus1": {
+    "dbscan_allele": 25,
+    "dbscan_ldp_allele": 873
+   },
+   "note": "trace ids come from uns['allele_col'] (dbscan_ldp_nbr_allele); unassigned (-1) spots were dropped at load (keep_unclustered=False), so no trace has suffix a-1. The traces table's dbscan_allele / dbscan_ldp_allele are alternative allele calls; their -1 counts are how many of these traces those methods would leave unassigned."
+  },
+  "truth": "alleles_per_chrom"
+ },
+ "E2": {
+  "values": {
+   "frac_traces_with_duplicates": 0.8493333333333334,
+   "n_traces_with_duplicates": 1274,
+   "n_traces": 1500,
+   "n_duplicate_spots": 13367,
+   "frac_spots_duplicate": 0.03483947309434572,
+   "method": "a trace has duplicates if any (chrom, start) occurs more than once in it"
+  },
+  "truth": "duplicated_loci"
+ },
+ "E3": {
+  "values": {
+   "median_granule": 159.25,
+   "median_purkinje": 365.0,
+   "by_type_cell_level": {
+    "Bergmann": 307.5,
+    "Granule": 159.25,
+    "MLI1": 350.0,
+    "MLI2+PLI": 302.5,
+    "Other": 172.0,
+    "Purkinje": 365.0
+   },
+   "by_type_trace_pooled": {
+    "Bergmann": 291.0,
+    "Granule": 156.0,
+    "MLI1": 350.0,
+    "MLI2+PLI": 314.0,
+    "Other": 184.5,
+    "Purkinje": 337.0
+   },
+   "kruskal_p_across_types": 0.0002785181932940107,
+   "rho_cell_spots_vs_rg": 0.6865585407270762,
+   "method": "spots per trace; per-cell median over its traces, then median over cells of each type (trace-pooled medians given for context); Kruskal-Wallis across types on per-cell medians; Spearman across cells between median spots/trace and median trace Rg"
+  },
+  "truth": "spots_per_trace_by_type"
+ },
+ "E4": {
+  "values": {
+   "total_contacts_chr1": 317232.0,
+   "provided_total_chr1": 317232.0,
+   "ratio_provided_over_sum": 1.0,
+   "pearson_r_pixels": 0.9996120510867239,
+   "pearson_r_log1p_pixels": 0.9999821927749156,
+   "n_cells_summed": 268,
+   "provided_resolution_bp": 500000,
+   "n_bins_1Mb": 196,
+   "method": "sum of chr1 1 Mb raw matrices of all Oligo cells in the linked .scool; totals = upper triangle incl. diagonal (each contact once); provided contacts_Oligo.cool is 500 kb and was coarsened x2 to 1 Mb before the pixel Pearson r"
+  },
+  "truth": "pseudobulk_oligo_check"
+ },
+ "E5": {
+  "values": {
+   "median_a": 1.684119648866528,
+   "median_b": 1.5387876799630555,
+   "n_a": 8,
+   "n_b": 22,
+   "p": 0.20154503944608895,
+   "rank_biserial": 0.3181818181818181,
+   "group_a": "Bergmann",
+   "group_b": "Granule",
+   "n_loci": 150,
+   "n_draws": 20,
+   "seed": 0,
+   "n_traces_kept": 905,
+   "n_traces_total": 1500,
+   "sd_over_draws_median_a": 0.015543838702898872,
+   "sd_over_draws_median_b": 0.010661506112935523,
+   "unequalised_median_a": 1.420923919845671,
+   "unequalised_median_b": 1.1390827786318347,
+   "method": "traces with >= 150 distinct loci kept; per draw: one random spot per distinct locus, then 150 random loci per trace; uchrom radius_of_gyration; per-trace Rg averaged over 20 draws (numpy default_rng(0)); per-cell median; Mann-Whitney two-sided",
+   "note": "20 draws; group medians vary across single draws by the sd_over_draws_* values"
+  },
+  "truth": "rg_equal_spots"
+ },
+ "E8": {
+  "values": {
+   "n_embeddings": 10,
+   "hic_based": [
+    "hic_pca",
+    "hic_tsne",
+    "hic_umap"
+   ],
+   "inventory": {
+    "atac_lsi": {
+     "shape": [
+      5313,
+      30
+     ],
+     "modality": "ATAC",
+     "method": "lsi",
+     "label": "ATAC LSI"
+    },
+    "atac_tsne": {
+     "shape": [
+      5313,
+      2
+     ],
+     "modality": "ATAC",
+     "method": "tsne",
+     "label": "ATAC t-SNE"
+    },
+    "atac_umap": {
+     "shape": [
+      5313,
+      2
+     ],
+     "modality": "ATAC",
+     "method": "umap",
+     "label": "ATAC UMAP"
+    },
+    "hic_pca": {
+     "shape": [
+      5313,
+      20
+     ],
+     "modality": "Hi-C",
+     "method": "pca",
+     "label": "Hi-C PCA"
+    },
+    "hic_tsne": {
+     "shape": [
+      5313,
+      2
+     ],
+     "modality": "Hi-C",
+     "method": "tsne",
+     "label": "Hi-C t-SNE"
+    },
+    "hic_umap": {
+     "shape": [
+      5313,
+      2
+     ],
+     "modality": "Hi-C",
+     "method": "umap",
+     "label": "Hi-C UMAP"
+    },
+    "paper_umap": {
+     "shape": [
+      5313,
+      2
+     ],
+     "modality": "Published",
+     "method": "umap",
+     "label": "Paper UMAP (RNA)"
+    },
+    "rna_pca": {
+     "shape": [
+      5313,
+      30
+     ],
+     "modality": "RNA",
+     "method": "pca",
+     "label": "RNA PCA"
+    },
+    "rna_tsne": {
+     "shape": [
+      5313,
+      2
+     ],
+     "modality": "RNA",
+     "method": "tsne",
+     "label": "RNA t-SNE"
+    },
+    "rna_umap": {
+     "shape": [
+      5313,
+      2
+     ],
+     "modality": "RNA",
+     "method": "umap",
+     "label": "RNA UMAP"
+    }
+   },
+   "recommended": "hic_pca (scHiCluster PCA of the 1 Mb scHi-C maps) for analysis; hic_umap/hic_tsne for display",
+   "modalities": [
+    "ATAC",
+    "Hi-C",
+    "Published",
+    "RNA"
+   ]
+  },
+  "truth": "embeddings_inventory"
+ }
+}

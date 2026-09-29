@@ -1,4 +1,4 @@
-.PHONY: all supp clean fig1 fig2 figS1 figures tables
+.PHONY: all supp clean fig1 fig2 fig6 figS1 figures tables
 
 all: main.pdf
 
@@ -22,7 +22,11 @@ fig2:
 figS1:
 	cp ../fig2/figS_fig2.pdf figures/figS1.pdf
 
-figures: fig1 fig2 figS1
+# Copy the final Figure 6 (re-draw it with `python ../fig6/make_fig6.py` first).
+fig6:
+	cp ../fig6/fig6.pdf figures/fig6.pdf
+
+figures: fig1 fig2 fig6 figS1
 
 # Supplementary Table S1 bodies (supp/tableS1_*.tex) from the generated evidence table.
 tables:

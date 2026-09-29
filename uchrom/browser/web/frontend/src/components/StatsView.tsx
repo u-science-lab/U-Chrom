@@ -94,7 +94,7 @@ export function StatsControls({ pane }: { pane: Pane }) {
           <FieldSelect fields={fields} value={fy} onChange={(v) => upd({ fieldY: v })} title="y field" />
         </>
       )}
-      {(kind === 'rg' || kind === 'scaling') && <CompareGroups pane={pane} />}
+      {(kind === 'rg' || kind === 'scaling' || kind === 'hist') && <CompareGroups pane={pane} />}
     </>
   )
 }
@@ -388,16 +388,68 @@ export function StatsView({ pane }: { pane: Pane }) {
         g.fillText(l.text, plot.x + 8, plot.y + 10 + 14 * i)
       })
     } else if (kind === 'hist' && xs && fx) {
-      const hist = histogram(xs.values(), 40)
-      const top = Math.max(1, ...hist.counts)
+      // the base is the pane's group when it has one, else every cell; compared groups are overlaid
+      const valuesOf = (ids: readonly string[] | null) => (ids ? ids.map((id) => xs.get(id)) : [...xs.values()])
+      const baseVals = valuesOf(baseGroup && baseInfo?.cells ? baseInfo.cells : null)
+      const overlays = compare
+        .map((_, i) => ({ info: compareInfos[i], vals: compareInfos[i]?.cells ? valuesOf(compareInfos[i]!.cells!) : null }))
+        .filter((o): o is { info: GroupInfo | null; vals: CellValue[] } => !!o.vals)
+      const nums = (v: readonly (CellValue | undefined)[]) => v.filter((x): x is number => typeof x === 'number' && Number.isFinite(x))
+      const all = nums([...baseVals, ...overlays.flatMap((o) => o.vals)])
+      const range: [number, number] | undefined = all.length ? [Math.min(...all), Math.max(...all)] : undefined
+      // few cells → few bins (about 2√n, 8–40)
+      const nbins = Math.max(8, Math.min(40, Math.round(2 * Math.sqrt(all.length))))
+      const hist = histogram(baseVals, nbins, range)
+      const frac = overlays.length > 0
+      const norm = (c: number[]) => {
+        const t = c.reduce((a, b) => a + b, 0) || 1
+        return frac ? c.map((x) => x / t) : c
+      }
+      const baseCounts = norm(hist.counts)
+      const overlayHists = overlays.map((o) => ({ ...o, counts: norm(histogram(o.vals, nbins, range).counts) }))
+      const top = Math.max(frac ? 1e-9 : 1, ...baseCounts, ...overlayHists.flatMap((o) => o.counts))
       const sx = linear(hist.edges[0], hist.edges[hist.edges.length - 1], plot.x, plot.x + plot.w)
       const sy = linear(0, top, plot.y + plot.h, plot.y)
-      g.fillStyle = pal.bar
-      hist.counts.forEach((c, i) => {
+      g.fillStyle = baseGroup && baseInfo ? baseInfo.color : pal.bar
+      g.globalAlpha = frac ? 0.35 : 1
+      baseCounts.forEach((c, i) => {
         const x0 = sx(hist.edges[i])
         g.fillRect(x0 + 0.5, sy(c), Math.max(1, sx(hist.edges[i + 1]) - x0 - 1), plot.y + plot.h - sy(c))
       })
-      drawAxes(g, plot, { ticks: niceTicks(hist.edges[0], hist.edges[hist.edges.length - 1]), pos: sx, fmt: fmtAxis, label: fieldLabel(fx) }, { ticks: niceTicks(0, top, 4), pos: sy, fmt: fmtAxis, label: 'cells' })
+      g.globalAlpha = 1
+      for (const o of overlayHists) {
+        g.strokeStyle = o.info?.color ?? pal.strong
+        g.lineWidth = 2
+        g.beginPath()
+        o.counts.forEach((c, i) => {
+          const x0 = sx(hist.edges[i])
+          const x1 = sx(hist.edges[i + 1])
+          if (i === 0) g.moveTo(x0, sy(0))
+          g.lineTo(x0, sy(c))
+          g.lineTo(x1, sy(c))
+          if (i === o.counts.length - 1) g.lineTo(x1, sy(0))
+        })
+        g.stroke()
+      }
+      drawAxes(g, plot, { ticks: niceTicks(hist.edges[0], hist.edges[hist.edges.length - 1]), pos: sx, fmt: fmtAxis, label: fieldLabel(fx) }, { ticks: niceTicks(0, top, 4), pos: sy, fmt: fmtAxis, label: frac ? 'fraction of cells' : 'cells' })
+      if (frac) {
+        const med = (v: number[]) => {
+          const a = [...v].sort((x, y) => x - y)
+          return a.length ? (a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2) : NaN
+        }
+        const baseLabel = baseGroup ? scopeLabel({ kind: 'group', group: baseGroup }, baseInfo) : 'all cells'
+        const legend = [
+          { color: pal.text, text: `${baseLabel}: median ${fmtAxis(med(nums(baseVals)))} · ${nums(baseVals).length} cells` },
+          ...overlays.map((o) => ({ color: o.info?.color ?? pal.strong, text: `${o.info?.name ?? 'group'}: median ${fmtAxis(med(nums(o.vals)))} · ${nums(o.vals).length} cells` })),
+        ]
+        g.font = `11px ${getComputedStyle(document.body).fontFamily}`
+        g.textAlign = 'right'
+        legend.forEach((l, i) => {
+          g.fillStyle = l.color
+          g.fillText(l.text, plot.x + plot.w - 4, plot.y + 10 + 14 * i)
+        })
+        g.textAlign = 'left'
+      }
       const fv = focus ? xs.get(focus) : undefined
       if (typeof fv === 'number') {
         g.strokeStyle = pal.strong

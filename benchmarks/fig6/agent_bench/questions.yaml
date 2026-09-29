@@ -1,0 +1,312 @@
+# Fig 6e agent benchmark — questions (DRAFT for review; no model has seen them).
+#
+# Datasets (paths passed to the agent in the prompt; all catalogued in example-data/README.md):
+#   takei   = takei2025_fov0/takei2025_fov0.chromdata.zarr   (DNA seqFISH+ + IF + RNA, 47 cells, 1 FOV)
+#   schicar = schicar_mop/schicar_mop.chromdata.zarr         (scHi-C + RNA + ATAC, 5,313 cells; linked .scool/.cool)
+#   sim     = sim_cell1/sim_cell1.cdz                         (one reconstructed cell + its own contact map)
+#   (main1-main3 used the 1.x .h5cd files of the same datasets.)
+#
+# Each question has: category, split (dev: may be looked at while writing skills; test: never),
+# the prompt, the answer (computed by ground_truth.py — `truth` names the function), how it is graded
+# (numeric tolerance and/or rubric items matched in the final answer), and what it probes.
+# Conditions: "docs" = uchrom API docs only;  "skills" = docs + skills/*.
+
+questions:
+
+# ---------------------------------------------------------------- A. inspect the data (8)
+- id: A1
+  category: inspect
+  split: dev
+  data: takei
+  prompt: How many cells, traces and spots does this dataset have?
+  truth: counts
+  grade: {numbers: [n_cells, n_traces, n_spots], tol: 0}
+- id: A2
+  category: inspect
+  split: test
+  data: takei
+  prompt: Which cell type has the most cells, and how many?
+  truth: largest_cell_type
+  grade: {text: cell_type, numbers: [n], tol: 0}
+- id: A3
+  category: inspect
+  split: dev
+  data: takei
+  prompt: How many immunofluorescence antibody channels are measured per cell?
+  truth: n_if_channels
+  grade: {numbers: [n], tol: 0}
+  probes: per-cell `if.*` fields vs the per-spot track table (which also holds repeats and RNA)
+- id: A4
+  category: inspect
+  split: test
+  data: takei
+  prompt: Which chromosome has the most imaged loci (spots), and how many?
+  truth: top_chrom
+  grade: {text: chrom, numbers: [n_spots], tol: 0}
+- id: A5
+  category: inspect
+  split: dev
+  data: schicar
+  prompt: How many cells have a single-cell Hi-C contact map, and at what resolution?
+  truth: scool_cells
+  grade: {numbers: [n_cells, resolution_bp], tol: 0}
+  probes: finding linked, not copied, contact maps (uns["linked_scool"])
+- id: A6
+  category: inspect
+  split: test
+  data: schicar
+  prompt: Which cell type has the most cells, and what is its median number of Hi-C contacts per cell?
+  truth: schicar_top_type
+  grade: {text: cell_type, numbers: [median_contacts], tol: 0.01}
+- id: A7
+  category: inspect
+  split: dev
+  data: sim
+  prompt: What is the median distance between consecutive particles along chromosome 1 in this structure (with units)?
+  truth: bond_length
+  grade: {numbers: [median], tol: 0.02, rubric: [unit]}
+- id: A8
+  category: inspect
+  split: test
+  data: takei
+  prompt: What are the coordinate units and the genome assembly?
+  truth: units
+  grade: {text: [xyz_unit, genome_assembly]}
+
+# ---------------------------------------------------------------- B. structure / features (8)
+- id: B1
+  category: structure
+  split: dev
+  data: takei
+  prompt: On chr15, what is the median 3-D distance between loci 1 Mb apart (±10%), over all traces?
+  truth: dist_at_1mb
+  grade: {numbers: [median_um], tol: 0.05, rubric: [unit]}
+- id: B2
+  category: structure
+  split: test
+  data: takei
+  prompt: Fit the power-law exponent of median 3-D distance vs genomic separation on chr15 between 1 and 20 Mb.
+  truth: scaling_exponent
+  grade: {numbers: [exponent], tol: 0.03}
+- id: B3
+  category: structure
+  split: dev
+  data: sim
+  prompt: From the cell's own contact map (1 Mb), fit the slope of contact probability vs genomic distance on chr1 between 2 and 20 Mb.
+  truth: ps_slope
+  grade: {numbers: [slope], tol: 0.05}
+- id: B4
+  category: structure
+  split: test
+  data: sim
+  prompt: How well do the structure's 3-D distances agree with its own contacts on chr1? Report the Spearman correlation between contact counts and 3-D distance over contacting bin pairs at 1 Mb.
+  truth: contacts_vs_distance
+  grade: {numbers: [rho], tol: 0.05, rubric: [sign_negative]}
+- id: B5
+  category: structure
+  split: dev
+  data: takei
+  prompt: What is the median radius of gyration of a trace, per chromosome? Which chromosome has the largest?
+  truth: rg_by_chrom
+  grade: {text: top_chrom, numbers: [top_median], tol: 0.03}
+- id: B6
+  category: structure
+  split: test
+  data: schicar
+  prompt: Using the pseudo-bulk contact map of all cells, what fraction of contacts on chr1 are between loci more than 10 Mb apart?
+  truth: long_range_fraction
+  grade: {numbers: [fraction], tol: 0.02}
+- id: B7
+  category: structure
+  split: dev
+  data: takei
+  prompt: Call TADs on chr15 with U-Chrom's ArcFISH caller (default settings) from all traces. How many domains?
+  truth: tads_arcfish
+  grade: {numbers: [n_domains], tol: 0}
+  probes: finding and running the right caller on imaging data
+- id: B8
+  category: structure
+  split: test
+  data: takei
+  prompt: Call A/B compartments on chr15 with U-Chrom's compartment caller. What fraction of bins are in the compartment with higher H3K27ac?
+  truth: compartments_h3k27ac
+  grade: {numbers: [fraction], tol: 0.05, rubric: [assigns_A_by_H3K27ac]}
+  probes: A/B sign is arbitrary until anchored to an active mark
+
+# ---------------------------------------------------------------- C. compare groups (10)
+- id: C1
+  category: compare
+  split: dev
+  data: takei
+  prompt: Is chromatin less compact (larger trace radius of gyration) in Bergmann glia than in granule cells?
+  truth: rg_bergmann_vs_granule
+  grade: {numbers: [median_a, median_b], tol: 0.05,
+          rubric: [cell_is_unit, n_cells_reported, test_named, mentions_nuclear_volume, one_fov]}
+- id: C2
+  category: compare
+  split: test
+  data: takei
+  prompt: Do Purkinje cells have larger trace radius of gyration than granule cells? Give a p-value.
+  truth: rg_purkinje_vs_granule
+  grade: {rubric: [flags_n3_too_few, cell_is_unit, no_trace_level_pvalue_claim]}
+  probes: n = 3 cells — a trace-level test gives a tiny, meaningless p-value
+- id: C3
+  category: compare
+  split: dev
+  data: takei
+  prompt: Which immunofluorescence mark differs most between Bergmann glia and all other cells?
+  truth: top_if_bergmann
+  grade: {text: mark, rubric: [multiple_testing_corrected, cell_is_unit]}
+- id: C4
+  category: compare
+  split: test
+  data: takei
+  prompt: Is H3K9me3 immunofluorescence higher in granule cells than in Bergmann glia?
+  truth: h3k9me3_granule_vs_bergmann
+  grade: {numbers: [median_a, median_b], tol: 0.05, rubric: [direction_correct, n_cells_reported, test_named]}
+- id: C5
+  category: compare
+  split: dev
+  data: takei
+  prompt: Do Bergmann glia have larger nuclei than granule cells?
+  truth: nucvol_bergmann_vs_granule
+  grade: {numbers: [median_a, median_b], tol: 0.02, rubric: [direction_correct, test_named]}
+- id: C6
+  category: compare
+  split: test
+  data: schicar
+  prompt: Do oligodendrocytes have more Hi-C contacts per cell than L2/3 IT neurons?
+  truth: contacts_oligo_vs_l23
+  grade: {numbers: [median_a, median_b], tol: 0.02, rubric: [direction_correct, n_cells_reported]}
+- id: C7
+  category: compare
+  split: dev
+  data: schicar
+  prompt: Compare the distance decay of contacts (P(s) slope, 1–10 Mb, chr1) between the pseudo-bulk of oligodendrocytes and of L2/3 IT neurons.
+  truth: ps_oligo_vs_l23
+  grade: {numbers: [slope_a, slope_b], tol: 0.05, rubric: [uses_pseudobulk_or_subclass_cool, depth_normalised]}
+- id: C8
+  category: compare
+  split: test
+  data: takei
+  prompt: Are chromosome 15 traces more compact in granule cells than in Purkinje cells, after accounting for nuclear size?
+  truth: rg_size_adjusted
+  grade: {rubric: [adjusts_for_nuclear_volume, cell_is_unit, flags_n3_too_few]}
+- id: C9
+  category: compare
+  split: dev
+  data: takei
+  prompt: I selected cells 1_0_34, 1_0_61, 1_0_95, 1_0_119, 1_0_217, 1_0_269, 1_0_270 and 1_0_272. What is different about them?
+  truth: selection_vs_rest
+  grade: {text: [identity_bergmann, top_mark_sox2], rubric: [cell_is_unit, multiple_testing_corrected]}
+- id: C10
+  category: compare
+  split: test
+  data: schicar
+  prompt: Which cell type has the most RNA counts per cell, and is the difference to the next one significant?
+  truth: rna_counts_top
+  grade: {text: cell_type, rubric: [test_named, n_cells_reported]}
+
+# ---------------------------------------------------------------- D. cross-modal association (8)
+- id: D1
+  category: associate
+  split: dev
+  data: takei
+  prompt: Across cells, does H3K9me3 immunofluorescence correlate with how compact chromatin is (median trace radius of gyration)?
+  truth: h3k9me3_vs_rg_cells
+  grade: {numbers: [rho], tol: 0.05, rubric: [level_cell, mentions_nuclear_volume]}
+- id: D2
+  category: associate
+  split: test
+  data: takei
+  prompt: At the level of individual loci, are loci with higher LaminB1 signal closer to the nuclear periphery?
+  truth: laminb1_vs_radial_spots
+  grade: {numbers: [rho], tol: 0.05, rubric: [level_spot, direction_correct]}
+- id: D3
+  category: associate
+  split: dev
+  data: takei
+  prompt: Along chr15 (1 Mb bins, all cells), do bins with more H3K27ac tend to be more central in the nucleus?
+  truth: h3k27ac_vs_radial_bins
+  grade: {numbers: [rho], tol: 0.05, rubric: [level_bin]}
+- id: D4
+  category: associate
+  split: test
+  data: takei
+  prompt: Does nuclear volume predict median trace radius of gyration across cells? Report the correlation and the slope.
+  truth: nucvol_vs_rg
+  grade: {numbers: [rho], tol: 0.05, rubric: [level_cell]}
+- id: D5
+  category: associate
+  split: dev
+  data: schicar
+  prompt: How well do cell types separate in the Hi-C embedding compared with the RNA embedding? Use the 15-nearest-neighbour cell-type purity in each 2-D UMAP.
+  truth: knn_purity
+  grade: {numbers: [purity_hic, purity_rna], tol: 0.02}
+- id: D6
+  category: associate
+  split: test
+  data: schicar
+  prompt: Across cells, does the number of Hi-C contacts correlate with the number of RNA counts?
+  truth: contacts_vs_rna
+  grade: {numbers: [rho], tol: 0.03, rubric: [level_cell, checks_within_type]}
+- id: D7
+  category: associate
+  split: dev
+  data: schicar
+  prompt: For the gene Mobp, does ATAC gene activity correlate with RNA expression across cells, and is this driven by cell type?
+  truth: mobp_atac_rna
+  grade: {numbers: [rho_all], tol: 0.03, rubric: [checks_within_type]}
+- id: D8
+  category: associate
+  split: test
+  data: takei
+  prompt: Is SOX2 immunofluorescence associated with chromatin compaction within Bergmann glia alone?
+  truth: sox2_rg_within_bergmann
+  grade: {rubric: [flags_n8_small, level_cell, within_group]}
+
+# ---------------------------------------------------------------- E. U-Chrom / data know-how (6)
+# Pitfalls specific to these data and to how U-Chrom stores them; all answerable from the data + docs.
+- id: E1
+  category: knowhow
+  split: dev
+  data: takei
+  prompt: How many allele-level traces per chromosome does each cell have in this dataset? Is that consistent with a diploid genome, and what would you do about it before comparing traces between cells?
+  truth: alleles_per_chrom
+  grade: {numbers: [frac_cell_chrom_gt2], tol: 0.05, rubric: [flags_more_than_two_alleles, proposes_handling]}
+  probes: allele splitting yields up to 7 traces per chromosome per cell; unassigned (-1) traces
+- id: E2
+  category: knowhow
+  split: test
+  data: takei
+  prompt: What fraction of traces contain the same genomic locus more than once, and how should that be handled when computing a per-trace distance matrix?
+  truth: duplicated_loci
+  grade: {numbers: [frac_traces_with_duplicates], tol: 0.03, rubric: [explains_duplicates_handling]}
+- id: E3
+  category: knowhow
+  split: dev
+  data: takei
+  prompt: Does the number of detected spots per trace differ between cell types, and could that bias a comparison of trace radius of gyration between cell types?
+  truth: spots_per_trace_by_type
+  grade: {numbers: [median_granule, median_purkinje], tol: 0.02, rubric: [flags_detection_bias, proposes_correction]}
+- id: E4
+  category: knowhow
+  split: test
+  data: schicar
+  prompt: Build the pseudo-bulk contact map of oligodendrocytes on chr1 at 1 Mb from the per-cell contact maps, and check it against the oligodendrocyte map provided with the data.
+  truth: pseudobulk_oligo_check
+  grade: {numbers: [total_contacts_chr1], tol: 0.01, rubric: [uses_per_cell_scool, compares_with_provided_cool]}
+- id: E5
+  category: knowhow
+  split: dev
+  data: takei
+  prompt: Is the difference in trace radius of gyration between Bergmann glia and granule cells still there when traces are compared at the same number of spots?
+  truth: rg_equal_spots
+  grade: {numbers: [median_a, median_b], tol: 0.08, rubric: [equalises_spot_number, cell_is_unit]}
+- id: E8
+  category: knowhow
+  split: test
+  data: schicar
+  prompt: Which embeddings does this file contain, which modality was each computed from, and which one would you use to compare cell types by chromatin conformation?
+  truth: embeddings_inventory
+  grade: {numbers: [n_embeddings], tol: 0, rubric: [identifies_hic_embedding]}

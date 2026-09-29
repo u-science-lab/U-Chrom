@@ -98,23 +98,35 @@ def _coord_cube_for_chrom(cd, chrom):
 # Step 1: axis variance cube (3, n_bins, n_bins)
 # ----------------------------------------------------------------------
 
-def _pairwise_diff_tensor(cd, chrom: str, device: str = "auto"):
-    """Return the full ``(3, n_traces, n_bins, n_bins)`` pairwise difference.
+# Pairwise differences for all (i, j) are ``(3, T, B, B)`` — ~30 GB for a whole
+# chromosome at 25 kb (T ≈ 90, B ≈ 4,000, float64).  Every statistic below
+# reduces over traces independently per (i, j), so the tensor is built one
+# block of rows ``i`` at a time and each block holds about this many bytes.
+_BLOCK_BYTES = 256 * 2**20
 
-    ``diff[c, t, i, j] = coord_c[t, j] - coord_c[t, i]`` with NaN where a
-    trace is missing a bin.  Kept on ``device``; caller is responsible for
-    moving to CPU if needed.
-    """
+
+def _coord_tensor(cd, chrom: str, device: str = "auto"):
+    """``(coords, bin_ids, trace_ids)`` with ``coords`` a ``(T, B, 3)`` tensor on ``device``."""
     import torch
 
     cube, bin_ids, trace_ids = _coord_cube_for_chrom(cd, chrom)
     dev = get_device(device)
-    dtype = default_float_dtype(dev)
+    c = torch.as_tensor(cube, dtype=default_float_dtype(dev), device=dev)
+    return c, bin_ids, trace_ids
 
-    c = torch.as_tensor(cube, dtype=dtype, device=dev)   # (T, B, 3)
-    diff = c.unsqueeze(2) - c.unsqueeze(1)               # (T, B, B, 3)
-    diff = diff.permute(3, 0, 1, 2).contiguous()         # (3, T, B, B)
-    return diff, bin_ids, trace_ids
+
+def _row_blocks(c):
+    """Yield ``(i0, i1)`` row ranges whose ``(3, T, i1 - i0, B)`` diff fits in ``_BLOCK_BYTES``."""
+    T, B, _ = c.shape
+    per_row = 3 * T * B * c.element_size()
+    step = max(1, _BLOCK_BYTES // max(per_row, 1))
+    for i0 in range(0, B, step):
+        yield i0, min(i0 + step, B)
+
+
+def _diff_rows(c, i0: int, i1: int):
+    """``diff[a, t, i - i0, j] = c[t, i, a] - c[t, j, a]`` for rows ``i0 <= i < i1``; NaN where missing."""
+    return (c[:, i0:i1].unsqueeze(2) - c.unsqueeze(1)).permute(3, 0, 1, 2)   # (3, T, b, B)
 
 
 def axis_variance_cube(
@@ -126,32 +138,40 @@ def axis_variance_cube(
 
     Returns a dict with ``var``, ``count``, ``mean`` (all ``(3, B, B)``)
     plus ``bin_ids``, ``n_traces``, ``chrom``, and — for downstream
-    :func:`filter_normalize` — the full ``(3, T, B, B)`` pairwise diff
-    tensor on the GPU device under key ``"diff"``.
+    :func:`filter_normalize` — the ``(T, B, 3)`` coordinate tensor on the
+    torch device under key ``"coords"``.  Pairwise differences are formed
+    block by block, so memory stays near ``_BLOCK_BYTES`` whatever ``B``.
     """
     import torch
 
-    diff, bin_ids, trace_ids = _pairwise_diff_tensor(cd, chrom, device)
-    valid = ~torch.isnan(diff)
-    count = valid.sum(dim=1).to(torch.int64)            # (3, B, B)
+    c, bin_ids, trace_ids = _coord_tensor(cd, chrom, device)
+    B = c.shape[1]
+    var = torch.empty((3, B, B), dtype=c.dtype, device=c.device)
+    mean = torch.empty_like(var)
+    count = torch.empty((3, B, B), dtype=torch.int64, device=c.device)
+    for i0, i1 in _row_blocks(c):
+        diff = _diff_rows(c, i0, i1)
+        valid = ~torch.isnan(diff)
+        n = valid.sum(dim=1).to(torch.int64)                   # (3, b, B)
 
-    # NaN-aware mean + variance along trace dim
-    safe = torch.where(valid, diff, torch.zeros_like(diff))
-    safe_count = count.clamp(min=1).to(diff.dtype)
-    mean = safe.sum(dim=1) / safe_count
-    dev_sq = torch.where(valid, (diff - mean.unsqueeze(1)) ** 2,
-                         torch.zeros_like(diff))
-    var = dev_sq.sum(dim=1) / safe_count                # (3, B, B)
+        # NaN-aware mean + variance along trace dim
+        safe = torch.where(valid, diff, torch.zeros_like(diff))
+        safe_count = n.clamp(min=1).to(diff.dtype)
+        m = safe.sum(dim=1) / safe_count
+        dev_sq = torch.where(valid, (diff - m.unsqueeze(1)) ** 2,
+                             torch.zeros_like(diff))
+        v = dev_sq.sum(dim=1) / safe_count
 
-    no_obs = count == 0
-    var = torch.where(no_obs, torch.full_like(var, float("nan")), var)
-    mean = torch.where(no_obs, torch.full_like(mean, float("nan")), mean)
+        no_obs = n == 0
+        var[:, i0:i1] = torch.where(no_obs, torch.full_like(v, float("nan")), v)
+        mean[:, i0:i1] = torch.where(no_obs, torch.full_like(m, float("nan")), m)
+        count[:, i0:i1] = n
 
     return {
         "var": var.detach().cpu().numpy().astype(np.float64),
         "count": count.detach().cpu().numpy().astype(np.int64),
         "mean": mean.detach().cpu().numpy().astype(np.float64),
-        "diff": diff,                                   # stays on device
+        "coords": c,                                    # stays on device
         "bin_ids": bin_ids,
         "n_traces": len(trace_ids),
         "chrom": chrom,
@@ -180,37 +200,41 @@ def filter_normalize(
 ) -> dict:
     """ArcFISH-style per-trace LOWESS filter + normalise.
 
-    Operates on the full ``(3, n_traces, n_bins, n_bins)`` pairwise-diff
-    tensor kept on the GPU (under ``cube['diff']``).  Two passes:
+    Rebuilds the ``(3, n_traces, n_bins, n_bins)`` pairwise differences
+    block by block from ``cube['coords']``.  Two passes:
 
     1. Per-pair ``raw_var = nanmedian(trace_diff²)`` → LOWESS over
        ``log(genomic_distance)`` → ``strata_std``.  Individual trace
        observations where ``|diff - median(diff)| > k_sigma × strata_std``
-       are NaN'd in-place in the 4D tensor.
+       are dropped.
     2. After filtering, per-pair ``filtered_var = nanmean((diff - mean)²)``
        and per-pair ``count = n_valid`` recomputed.  LOWESS again over
        log(d1d) → expected; normalised variance = filtered / expected.
 
     Output (numpy, on CPU): ``var``, ``count`` (refreshed after filter),
     ``norm_var``, ``expected``, ``raw_var``, ``genomic_distance``.  The
-    original 4D tensor under ``"diff"`` is consumed (may be modified).
+    device tensor under ``"coords"`` is dropped from the output.
     """
     import torch
 
-    diff: "torch.Tensor" = cube["diff"]          # (3, T, B, B) on device
-    n_axes, T, B, _ = diff.shape
+    c: "torch.Tensor" = cube["coords"]           # (T, B, 3) on device
+    B = c.shape[1]
+    n_axes = 3
     bin_ids = cube["bin_ids"]
     d1d = _genomic_distance_matrix(bin_ids)      # (B, B) numpy
     iu = np.triu_indices(B, k=1)
     d_flat = d1d[iu]
 
     # -------- Pass 1: raw_var via nanmedian, LOWESS, outlier mask --------
-    # arr_dev[c, n, i, j] centred deviation from trace median.
-    # raw_var[c, i, j] = nanmedian_n((arr - nanmedian_n arr)²)
-    dev = diff - _nanmedian_along_dim(diff, 1, keepdim=True)   # (3, T, B, B)
-    sq = dev ** 2
-    # nanmedian along trace axis
-    raw_var = _nanmedian_along_dim(sq, 1, keepdim=False)       # (3, B, B)
+    # med[c, i, j] = nanmedian_n diff[c, n, i, j]
+    # raw_var[c, i, j] = nanmedian_n((diff - med)²)
+    med = torch.empty((n_axes, B, B), dtype=c.dtype, device=c.device)
+    raw_var = torch.empty_like(med)
+    for i0, i1 in _row_blocks(c):
+        diff = _diff_rows(c, i0, i1)
+        m = _nanmedian_along_dim(diff, 1, keepdim=True)          # (3, 1, b, B)
+        med[:, i0:i1] = m[:, 0]
+        raw_var[:, i0:i1] = _nanmedian_along_dim((diff - m) ** 2, 1, keepdim=False)
 
     # Replace near-zero → NaN
     raw_var = torch.where(raw_var < 1e-30,
@@ -231,27 +255,28 @@ def filter_normalize(
 
     # Per-trace outlier mask: |diff - median_t(diff)| > k_sigma * strata_std
     strata_std_t = torch.as_tensor(
-        strata_std, dtype=diff.dtype, device=diff.device
+        strata_std, dtype=c.dtype, device=c.device
     )  # (3, B, B)
-    # abs_dev[c, n, i, j]
-    abs_dev = (diff - _nanmedian_along_dim(diff, 1, keepdim=True)).abs()
-    threshold = (k_sigma * strata_std_t).unsqueeze(1)  # (3, 1, B, B)
-    outlier = abs_dev > threshold
-    # NaN out outliers in-place
-    diff = torch.where(outlier, torch.full_like(diff, float("nan")), diff)
+    threshold = k_sigma * strata_std_t
 
     # -------- Pass 2: filtered_var via nanmean squared deviation --------
-    valid = ~torch.isnan(diff)
-    count = valid.sum(dim=1).to(torch.int64)                   # (3, B, B)
-    safe_count = count.clamp(min=1).to(diff.dtype)
-    safe = torch.where(valid, diff, torch.zeros_like(diff))
-    mean = safe.sum(dim=1) / safe_count                        # (3, B, B)
-    dev_sq = torch.where(valid, (diff - mean.unsqueeze(1)) ** 2,
-                         torch.zeros_like(diff))
-    filtered_var = dev_sq.sum(dim=1) / safe_count              # (3, B, B)
-    filtered_var = torch.where(count == 0,
-                               torch.full_like(filtered_var, float("nan")),
-                               filtered_var)
+    filtered_var = torch.empty_like(med)
+    count = torch.empty((n_axes, B, B), dtype=torch.int64, device=c.device)
+    for i0, i1 in _row_blocks(c):
+        diff = _diff_rows(c, i0, i1)
+        outlier = (diff - med[:, i0:i1].unsqueeze(1)).abs() > threshold[:, i0:i1].unsqueeze(1)
+        diff = torch.where(outlier, torch.full_like(diff, float("nan")), diff)
+
+        valid = ~torch.isnan(diff)
+        n = valid.sum(dim=1).to(torch.int64)                       # (3, b, B)
+        safe_count = n.clamp(min=1).to(diff.dtype)
+        safe = torch.where(valid, diff, torch.zeros_like(diff))
+        m = safe.sum(dim=1) / safe_count                           # (3, b, B)
+        dev_sq = torch.where(valid, (diff - m.unsqueeze(1)) ** 2,
+                             torch.zeros_like(diff))
+        v = dev_sq.sum(dim=1) / safe_count
+        filtered_var[:, i0:i1] = torch.where(n == 0, torch.full_like(v, float("nan")), v)
+        count[:, i0:i1] = n
 
     fvar_np = filtered_var.detach().cpu().numpy().astype(np.float64)
     count_np = count.detach().cpu().numpy().astype(np.int64)
@@ -279,8 +304,8 @@ def filter_normalize(
     out["expected"] = expected
     out["norm_var"] = norm_var
     out["genomic_distance"] = d1d
-    # Drop large 4D tensor now — no longer needed downstream
-    out.pop("diff", None)
+    # Drop the device tensor — no longer needed downstream
+    out.pop("coords", None)
     return out
 
 

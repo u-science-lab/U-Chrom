@@ -217,6 +217,10 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
             raise HTTPException(422, str(exc)) from None
         return Response(ds.geometry(flt), media_type="application/octet-stream")
 
+    from .control import ActionBroker, add_routes
+    app.state.broker = ActionBroker()
+    add_routes(app, app.state.broker)
+
     if (STATIC_DIR / "index.html").is_file():
         app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
     else:
