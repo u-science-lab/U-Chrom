@@ -44,6 +44,7 @@ run_whole_genome.py
 *.tar.gz
 example-data/**/*.zip
 example-data/4DNFIHF3JCBY.*
+example-data/4DNFIFLJGGNR.*
 example-data/DNAseqFISH+.zip
 example-data/DNAseqFISH+/
 example-data/fofct_core.csv
