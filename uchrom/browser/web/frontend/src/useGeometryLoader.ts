@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { fetchGeometry } from './api'
+import { mark } from './perf'
 import { useStore } from './store'
 
 /** Fetch geometry for every layer that doesn't have it yet. */
@@ -12,8 +13,12 @@ export function useGeometryLoader() {
       const cur = useStore.getState().layers.find((x) => x.id === l.id)
       if (!cur || cur.geometry || cur.loading || cur.error) continue
       setLoading(l.id)
+      mark('geometry-request', { layer: l.id })
       fetchGeometry(l.datasetId, l.filter)
-        .then((g) => setGeometry(l.id, g))
+        .then((g) => {
+          mark('geometry-loaded', { layer: l.id, points: g.header.n_points })
+          setGeometry(l.id, g)
+        })
         .catch((e: Error) => setLayerError(l.id, e.message))
     }
   }, [layers])

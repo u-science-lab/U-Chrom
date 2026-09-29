@@ -46,7 +46,7 @@ from uchrom.core.convention import (
     store_and_return,
 )
 from uchrom.fea.arc import axis_variance_cube, filter_normalize, axis_weight
-from uchrom.fea.arc import _pairwise_diff_tensor
+from uchrom.fea.arc import _coord_tensor, _diff_rows, _row_blocks
 from uchrom.utils.stats import cauchy_combination
 
 
@@ -491,13 +491,9 @@ def _pseudo_contact_frequency(cd, chrom, bin_ids, device="auto"):
     """
     import torch
 
-    diff, _, _ = _pairwise_diff_tensor(cd, chrom, device)
-    # (3, T, B, B) → (T, B, B) 3D pdist
-    pdist = torch.sqrt((diff ** 2).sum(dim=0))
-    pdist_np = pdist.detach().cpu().numpy().astype(np.float64)
-
+    c, _, _ = _coord_tensor(cd, chrom, device)
     B = len(bin_ids)
-    if pdist_np.shape[1] != B:
+    if c.shape[1] != B:
         return np.ones((B, B))  # defensive
 
     # 1D distance between bins in bp
@@ -512,15 +508,29 @@ def _pseudo_contact_frequency(cd, chrom, bin_ids, device="auto"):
     if d1sel.sum() == 0:
         return np.ones((B, B))
 
-    cutoff = float(np.nanmean(pdist_np[:, d1sel]))
+    # (T, B, B) 3D pdist, one block of rows at a time: the cutoff (NaN-mean
+    # over the one-bin pairs) first, then the per-pair contact fraction.
+    def pdist_rows(i0, i1):
+        diff = _diff_rows(c, i0, i1)                            # (3, T, b, B)
+        return torch.sqrt((diff ** 2).sum(dim=0)).detach().cpu().numpy().astype(np.float64)
+
+    total, n_obs = 0.0, 0
+    for i0, i1 in _row_blocks(c):
+        vals = pdist_rows(i0, i1)[:, d1sel[i0:i1]]
+        total += float(np.nansum(vals))
+        n_obs += int(np.sum(~np.isnan(vals)))
+    cutoff = total / n_obs if n_obs else float("nan")
     if not np.isfinite(cutoff) or cutoff <= 0:
         return np.ones((B, B))
 
-    with np.errstate(invalid="ignore"):
-        n_contact = np.nansum(pdist_np < cutoff, axis=0)
-        n_valid = np.sum(~np.isnan(pdist_np), axis=0)
-        freq = np.where(n_valid > 0, n_contact / n_valid, 0.0)
-    return freq.astype(np.float64)
+    freq = np.empty((B, B), dtype=np.float64)
+    for i0, i1 in _row_blocks(c):
+        pd_rows = pdist_rows(i0, i1)
+        with np.errstate(invalid="ignore"):
+            n_contact = np.nansum(pd_rows < cutoff, axis=0)
+            n_valid = np.sum(~np.isnan(pd_rows), axis=0)
+            freq[i0:i1] = np.where(n_valid > 0, n_contact / n_valid, 0.0)
+    return freq
 
 
 def _empty_result() -> pd.DataFrame:

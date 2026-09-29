@@ -7,7 +7,7 @@
 
 import type { RGB } from './colors'
 
-export type ColormapName = 'fall' | 'viridis' | 'magma' | 'inferno' | 'reds' | 'ylorrd' | 'greys' | 'rdbu_r'
+export type ColormapName = 'fall' | 'viridis' | 'magma' | 'inferno' | 'plasma' | 'blues' | 'reds' | 'ylorrd' | 'greys' | 'rdbu_r'
 
 const u8 = (rows: number[][]): RGB[] => rows.map(([r, g, b]) => [r / 255, g / 255, b / 255])
 
@@ -33,6 +33,16 @@ export const COLORMAPS: { name: ColormapName; label: string; stops: RGB[]; diver
     name: 'inferno',
     label: 'inferno',
     stops: u8([[0, 0, 4], [31, 12, 72], [85, 15, 109], [136, 34, 106], [186, 54, 85], [227, 89, 51], [249, 140, 10], [249, 201, 50], [252, 255, 164]]),
+  },
+  {
+    name: 'plasma',
+    label: 'plasma',
+    stops: u8([[13, 8, 135], [76, 2, 161], [126, 3, 168], [170, 35, 149], [204, 71, 120], [230, 108, 92], [248, 149, 64], [253, 197, 39], [240, 249, 33]]),
+  },
+  {
+    name: 'blues',
+    label: 'Blues',
+    stops: u8([[247, 251, 255], [222, 235, 247], [198, 219, 239], [157, 202, 225], [106, 174, 214], [65, 145, 198], [32, 112, 180], [8, 80, 155], [8, 48, 107]]),
   },
   {
     name: 'reds',

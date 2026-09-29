@@ -59,4 +59,9 @@ def serve(paths: Iterable[str] = (), *, host: str = "127.0.0.1", port: int = 876
     print(f"[uchrom] browser at {url}  (Ctrl+C to stop)")
     if open_browser:
         threading.Timer(1.0, webbrowser.open, args=(url,)).start()
-    uvicorn.run(create_app(store), host=host, port=port, log_level="warning")
+    from ..client import clear_state, write_state
+    write_state(url)  # lets uchrom.browser.connect() find this server
+    try:
+        uvicorn.run(create_app(store), host=host, port=port, log_level="warning")
+    finally:
+        clear_state(url)
