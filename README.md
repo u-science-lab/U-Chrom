@@ -59,7 +59,8 @@ $ pip install -e .
 ### Single-cell 3D reconstruction
 
 ```bash
-$ python -m uchrom.recon.sc.nucdyn --arch=cuda example-data/cell1.pairs ./out1.csv --use-grid=True --scale=0.01
+$ pip install ./native/nucdyn   # native NucDynamics engine (Rust; CPU + GPU)
+$ python -m uchrom.recon.sc.nucdyn example-data/cell1.pairs ./cell1.chromdata.zarr --n_models=10 --device=auto
 ```
 
 ### Bulk Hi-C 3D reconstruction

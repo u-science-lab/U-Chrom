@@ -16,7 +16,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `4DNFIFINA2U9.csv`                    | 58 KB   | yes             | —             | Takei 2021 cell table (RNA counts, nuclear area) for `from_fofct(cell_table=…)`, web browser; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | `4DNFIJ52NVDV.csv`                    | 219 KB  | yes             | —             | Takei 2021 nascent RNA spots for `from_fofct(rna_table=…)`, web browser; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer) |
 | `takei2025_cerebellum_fixture/`       | ~750 KB | **missing** — listed but never committed (see its section) | — | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture) |
-| `sim_cell1/` (`sim_cell1.cdz` + mcool; **structure predates the `count_contacts` fix**, rebuild pending) | 1.4 MB | yes             | —             | web browser: single-cell 3-D structure + its own contacts (`build_sim_cell1.py`); `tests/browser_web/test_genome_views.py`; `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`) (from the former 1.x `.h5cd`); `benchmarks/fig2/f_roundtrip.py` (PDB / .3dg / .mcool rows); agent benchmark `benchmarks/fig6/agent_bench/` |
+| `sim_cell1/` (`sim_cell1.cdz` + mcool; **structure predates the `count_contacts` fix**; rebuild with the native engine deferred, see its section) | 1.4 MB | yes             | —             | web browser: single-cell 3-D structure + its own contacts (`build_sim_cell1.py`); `tests/browser_web/test_genome_views.py`; `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`) (from the former 1.x `.h5cd`); `benchmarks/fig2/f_roundtrip.py` (PDB / .3dg / .mcool rows); agent benchmark `benchmarks/fig6/agent_bench/` |
 | `mESC_Sox2_5cells_{wnan,imputed_linear,imputed_snapfish}.h5cd` | 24 KB each | yes | — | imputation tests / tutorial (Huang 2021 mESC Sox2, 5 cells; see `mESC_Sox2_README.md`); `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); kept as 1.x files so the upgrade path stays exercised |
 | `takei2025_fov0/takei2025_fov0.chromdata.zarr` (older builds: `.h5cd`) | 73 MB (h5cd 1.x: 220 MB) | no | Zenodo 7693825 (streamed) | web browser: 59 IF tracks per spot, 47 cells, IF embedding (`build_takei2025_fov0.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `tests/browser_web` (real-data checks); `benchmarks/fig2/f_roundtrip.py` (chromdata.zarr / FOF-CT / AnnData rows); Fig 6 (`paper/fig6/extract_data.py`, `benchmarks/fig6/`, agent benchmark `benchmarks/fig6/agent_bench/`) |
 | `schicar_mop/*.chromdata.zarr` (older builds: `.h5cd`), `*.mcool, *.cool, *.scool` | ~400 MB | no  | built from GEO GSE305439 | web browser: scHiCAR without 3-D, RNA / ATAC / Hi-C embeddings (`build_schicar_mop.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fig2/e_contacts.py`, `e_contacts_query.py` (Fig. 2f and supplement: group pseudo-bulk vs the per-type `contacts_<type>.cool`; link vs copy import), `f_crossmodal.py` (Fig. 2f: RNA Leiden clusters → pseudo-bulk maps and P(s) from the linked `.scool`), `f_roundtrip.py` (Fig. 2b, .scool row); `benchmarks/fig6/bench_server.py` (contact-map and pseudo-bulk latency); agent benchmark `benchmarks/fig6/agent_bench/` |
@@ -26,11 +26,12 @@ auto-downloaded by the tutorials on first run into this directory.
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials; `tests/core/test_fofct_writer.py` (skipped when absent); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd21_streaming_validation.py` (streaming vs in-memory ArcFISH loop / TAD calls); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
 | `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial (with `rao2014_imr90/` Hi-C); Fig. 3b / 3c (`benchmarks/fig3/b_first_look.py`, `c_gemfish_first_look.py`) |
-| `stevens2017_mesc/` (8 cells: contact pairs + published `.pdb` structures) | 43 MB | no | GEO GSE80280 (`--stevens2017`) | Fig. 3a (NucDynamics reference; `benchmarks/fig3/a_sc_consistency.py`) |
+| `stevens2017_mesc/` (8 cells: contact pairs + published `.pdb` structures) | 43 MB | no | GEO GSE80280 (`--stevens2017`) | Fig. 3a (NucDynamics reference; `benchmarks/fig3/a_sc_consistency.py`; native-engine validation and speed `benchmarks/fig3/a_nucdyn_engine_*.py`) |
 | `bintu2018/{IMR90,K562}_chr21-28-30Mb.csv` | 7.8 MB + 20 MB | no | GitHub raw (`--bintu2018`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
 | `su2020_imr90/chromosome21.tsv` + `Hi-C_contacts_chromosome21.tsv` | 261 MB + 1 MB | no | Zenodo 3928890 (`--su2020_chr21`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
 | `abbas2019_gemfish/*.zip` (Wang 2016 FISH, TADs, Hi-C, GEM-FISH final models) | 40 MB | no | GitHub, pinned commit (`--abbas2019_gemfish`) | Fig. 3a / 3c (`benchmarks/fig3/c_gemfish_wang2016.py`) |
 | `rao2014_{imr90,k562}/*_chr21_5kb_hg19.cool` | 3.8 MB each | IMR90: yes; K562: no | **built** from GEO GSE63525 `.hic` by HTTP range reads (`build_rao2014_slices.py`) | Fig. 3b / 3c; IMR90 also the GEM-FISH tutorial |
+| `rao2014_imr90/IMR90_chr{20,22}_5kb_hg19.cool` | 7.8 MB + 3.3 MB | no | **built** the same way (`build_rao2014_slices.py --cell IMR90 --chroms 20`, then `--chroms 22`) | Fig. 3c chr20 / chr22 (`benchmarks/fig3/c_gemfish_wang2016.py --chrom`, `c_hipps_wang2016.py`) |
 | `ray2019_k562/4DNFI4QQPDMR.mcool` | 849 MB | no | 4DN public S3 (opt-in, `--ray2019_k562`) | provenance of `K562_chr21_30kb.cool` |
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
 | `H1Esc-HFF.R1.tar.gz`                 | 128 MB  | no              | UW Noble lab  | `higashi_embedding` tutorial (sci-Hi-C H1Esc+HFF mix)                   |
@@ -485,7 +486,7 @@ Until the build scripts land (tracked as an open item; see the
 tutorials' first cell), these two notebooks are **not reproducible from
 public data alone** and are shipped with their recorded outputs.
 
-### `sim_cell1/` — NucDynamics single-cell structure + its contacts (1.4 MB, in repo)
+### `sim_cell1/` — NucDynamics single-cell structure + its contacts (3.2 MB, in repo)
 
 - **Content**: `sim_cell1.cdz` (0.7 MB; a one-file `.chromdata.zarr`
   store, converted from the former 1.3 `sim_cell1.h5cd` of 1.6 MB with
@@ -497,11 +498,17 @@ public data alone** and are shipped with their recorded outputs.
   `cd.link_cool("cell1_contacts.mcool")` (path relative to the store).
 - **Known issue**: the structure was computed before the
   `uchrom.io.count_contacts` axis fix (`paper/fig3/PLAN.md`, finding 5),
-  so its restraints joined scrambled particle pairs.  It will be rebuilt
-  after the NucDynamics port fixes land (separate PR); until then treat
-  it as a browser demo, not as a valid Cell 1 structure.  The mcool is
+  so its restraints joined scrambled particle pairs.  The native engine
+  (`native/nucdyn`, validated against the original on the 8 Stevens cells)
+  can rebuild it (`build_sim_cell1.py`, now using that engine), but the
+  rebuild is deferred: the Fig. 6 agent benchmark's ground truth
+  (`benchmarks/fig6/agent_bench/`, questions on bond length and
+  contacts vs distance) was computed on this file.  Until then treat it
+  as a browser / benchmark demo, not as a valid Cell 1 structure.  The mcool is
   built directly from `cell1.pairs` and is not affected.
-- **Rebuild**: `python example-data/build_sim_cell1.py [--arch cpu] [--format cdz|zarr|h5cd]`.
+- **Rebuild** (native engine): `pip install ./native/nucdyn`, then
+  `python example-data/build_sim_cell1.py [--device auto|cpu|gpu] [--n-models 4] [--seed 1] [--format cdz|zarr|h5cd]`
+  (then regenerate the Fig. 6 agent-benchmark answers).
 - **Check**: bins in contact in the input are ~2× closer in the model
   (median 3D distance of contacted / non-contacted 1 Mb pairs = 0.44–0.59
   on chr1, 2, 5, 11, 19) — `tests/browser_web/test_genome_views.py`.
@@ -659,7 +666,13 @@ Everything is gitignored.  DOIs checked against Crossref (2026-09-27).
 - **Content**: haploid 129/Ola mESC in G1, mm10.
 - **Download**: `download_data.py --stevens2017`.
 - **Used by**: Fig. 3a — NucDynamics reference structures and the
-  paper's precision metric (`benchmarks/fig3/a_sc_consistency.py`).
+  paper's precision metric (`benchmarks/fig3/a_sc_consistency.py`); the
+  native NucDynamics engine's validation on all 8 cells (ensemble RMSD vs
+  ED Table 2, RMSD / distance-matrix r vs these models, restraint
+  violations: `a_nucdyn_engine_run.py`, `a_nucdyn_engine_score.py`) and its
+  speed benchmarks against the original code (`a_nucdyn_engine_speed.py`,
+  `a_nucdyn_engine_original_timing.py`, `a_nucdyn_engine_original_run.py`;
+  Cell 1).
 
 ### `bintu2018/` — Bintu 2018 chr21:28–30 Mb tracing, IMR90 + K562 (28 MB)
 
@@ -734,7 +747,10 @@ Everything is gitignored.  DOIs checked against Crossref (2026-09-27).
   [--chroms 21] [--res 5000]` reads only the needed blocks over HTTP range
   requests with `hicstraw` (~30 s per chromosome, < 2 GB RAM) and writes
   raw observed counts to `rao2014_<cell>/<CELL>_chr21_5kb_hg19.cool`
-  (chr21: 10.27 M IMR90 / 9.54 M K562 contacts).  Other chromosomes,
+  (chr21: 10.27 M IMR90 / 9.54 M K562 contacts).  For Fig. 3c chr20 / chr22
+  `--cell IMR90 --chroms 20` and `--chroms 22` (one file each) write
+  `IMR90_chr20_5kb_hg19.cool` (20.78 M contacts, 7.8 MB, 59 s) and
+  `IMR90_chr22_5kb_hg19.cool` (11.68 M contacts, 3.3 MB, 26 s).  Other chromosomes,
   resolutions and GM12878 work the same way (`--cell GM12878 --chroms 22
   --res 100000` for the miniMDS benchmark).
 - **Checked**: the IMR90 chr21:28–30 Mb block reproduces Bintu 2018
@@ -743,8 +759,10 @@ Everything is gitignored.  DOIs checked against Crossref (2026-09-27).
   md5 `f731fc98d5e4ae81936a066e46afa3fc`; 9,626 bins, 2,745,237 pixels,
   10,266,877 contacts) is checked in (< 10 MB) because the GEM-FISH
   tutorial needs it; the other slices stay gitignored.
-- **Used by**: Fig. 3b / 3c (`benchmarks/fig3/`); the IMR90 chr21 slice
-  also by `gem_fish_reconstruction.ipynb` part 2.
+- **Used by**: Fig. 3b / 3c (`benchmarks/fig3/`), incl. the HIPPS / DIMES
+  baselines (`c_hipps_wang2016.py`, `b_dimes.py`; their code is cloned, not
+  vendored: github.com/anyuzx/HIPPS-DIMES, MIT, commit `beee45d`); the IMR90
+  chr21 slice also by `gem_fish_reconstruction.ipynb` part 2.
 
 ### `ray2019_k562/4DNFI4QQPDMR.mcool` — K562 in situ Hi-C (849 MB, opt-in)
 
