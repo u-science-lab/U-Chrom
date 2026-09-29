@@ -34,7 +34,8 @@ uchrom/
 ├── recon/           3D reconstruction
 │   ├── _base.py     Shared simulation base (Taichi)
 │   ├── sc/          Single-cell reconstruction
-│   │   ├── nucdyn/  Nuc Dynamics (molecular dynamics, Taichi GPU)
+│   │   ├── nucdyn/  NucDynamics: reconstruct_nucdyn / CLI on the native engine
+│   │   │            (native/nucdyn); deprecated Taichi port kept as fallback
 │   │   └── gem/     GEM (energy minimization, Taichi autodiff)
 │   ├── bulk/        Bulk reconstruction
 │   │   └── mds/     MDS/SMACOF (PyTorch GPU; partitioned + inter-chrom)
@@ -62,6 +63,13 @@ discovery/           Separate package `uchrom-discovery` (import uchrom_discover
                      notebooks → verification → evidence; iterative idea graph,
                      pre-discovery enrichment, Pantheon / Claude / Codex CLI
                      backends, graph UI.  Own pyproject and tests/.
+
+native/nucdyn/       Separate package `u-chrom-nucdyn` (import uchrom_nucdyn): Rust + PyO3
+                     (maturin, abi3) NucDynamics engine — contact preprocessing, hierarchical
+                     annealing, CPU (f64, rayon) and GPU (wgpu/WGSL, f32, feature `gpu`)
+                     backends, protocols nuc_dynamics_2017 (default) / release_1.3.
+                     `cargo test` in native/nucdyn; `pip install ./native/nucdyn`
+                     (= extra `u-chrom[nucdyn]`).  LGPL-3.0 (re-implementation of tjs23/nuc_dynamics).
 ```
 
 - **Dependency direction is one-way**: `uchrom_discovery` may import the
@@ -72,6 +80,8 @@ discovery/           Separate package `uchrom-discovery` (import uchrom_discover
   discovery.
 - Run the two test suites separately (both have a `tests` package):
   `pytest tests` from the root, `cd discovery && pytest tests`.
+- `uchrom` stays pure Python: it imports `uchrom_nucdyn` lazily (tests skip
+  when it is not installed); the native crate never imports `uchrom`.
 
 ## ChromData — Core Data Container
 
@@ -195,10 +205,16 @@ All datasets consumed by tutorials and benchmarks live in
 
 ## Technical Notes
 
-- **GPU frameworks**: Taichi and PyTorch coexist but don't interact.
-  - **MD simulations / tight inner loops with many cheap iterations → Taichi**
-    (e.g. `recon.sc.nucdyn` — molecular-dynamics style integration over
-    millions of timesteps where per-iteration launch overhead matters).
+- **GPU frameworks**: native Rust/wgpu, Taichi and PyTorch coexist but don't interact.
+  - **NucDynamics → native Rust engine** (`native/nucdyn`, `uchrom_nucdyn`):
+    CPU in f64 with rayon (models in parallel, force loops split when there
+    are fewer models than cores; per-particle gather → results independent
+    of the thread count) and GPU through wgpu (WGSL compute shaders: Metal on
+    macOS, Vulkan on Linux/NVIDIA; f32; all models of an ensemble batched in
+    one dispatch).  `recon.sc.nucdyn` uses it when installed and falls back
+    to the deprecated Taichi port with a `DeprecationWarning`.
+  - **Other MD-style tight loops with many cheap iterations → Taichi**
+    (legacy; new engines of this kind should follow the native pattern).
   - **Gradient-descent optimisation on a structured multi-term loss →
     PyTorch** (e.g. `recon.bulk.mds`, `recon.fish.gem_fish` — hundreds to
     thousands of iterations, each one doing dense matrix-level work; the
@@ -206,6 +222,9 @@ All datasets consumed by tutorials and benchmarks live in
     dim for ensemble models outweigh Taichi's per-iter speed).
   - Legacy: `recon.sc.gem` is Taichi-based.  If it ever needs ensembles
     or more complex loss terms, consider migrating to PyTorch.
+  - Native engine changes: `cargo test --release [--features gpu]` in
+    `native/nucdyn`, rebuild with `maturin develop --release`; WGSL lives in
+    `src/gpu/nucdyn.wgsl` (included at compile time).
 - **Python package name**: `uchrom` (import name), `u-chrom` (pip name)
 - **Python ≥ 3.11** (zarr ≥ 3, needed by the `.chromdata.zarr` container, has no 3.10 wheels); `zarr` and `pyarrow` are core dependencies.
 - **`uchrom/io/` naming**: The internal file is `_io.py` to avoid shadowing Python's stdlib `io` module. Use `gzip.open(path, mode + "t")` instead of `io.TextIOWrapper`.

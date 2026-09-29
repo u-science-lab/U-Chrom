@@ -1,0 +1,32 @@
+{
+ "n_matched_particles": 25724,
+ "n_particles": [
+  25724,
+  25724
+ ],
+ "original": {
+  "rmsd_pair_mean": 9.268557122844294,
+  "rmsd_pair_sem": 1.178876423393165,
+  "rmsd_pair_mirror_mean": 0.7978076757520346,
+  "rmsd_pair_mirror_sem": 0.010326828659957571,
+  "rmsd_to_mean_mean": 8.009688233873991,
+  "rmsd_to_mean_mirror_mean": 0.5355599316481046,
+  "n_models_mirror_of_model0": 4
+ },
+ "native_gpu": {
+  "rmsd_pair_mean": 8.22120818493846,
+  "rmsd_pair_sem": 1.1762024943208735,
+  "rmsd_pair_mirror_mean": 0.8397017342210653,
+  "rmsd_pair_mirror_sem": 0.009082992577609956,
+  "rmsd_to_mean_mean": 7.0129528649286685,
+  "rmsd_to_mean_mirror_mean": 0.563769658239639,
+  "n_models_mirror_of_model0": 3
+ },
+ "dist_r_within_original": 0.9980266690254211,
+ "dist_r_within_native_gpu": 0.99778613448143,
+ "dist_r_original_vs_native_gpu": 0.9976368695497513,
+ "rmsd_within_original": 0.7978076757520346,
+ "rmsd_within_native_gpu": 0.8397017342210653,
+ "rmsd_original_vs_native_gpu": 0.8214953373035219,
+ "rmsd_original_vs_native_gpu_min": 0.5987862865042103
+}

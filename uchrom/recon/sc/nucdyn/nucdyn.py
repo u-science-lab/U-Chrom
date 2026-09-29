@@ -322,7 +322,16 @@ def main(in_file, out_file,
          arch="gpu", device_memory_fraction=0.9,
          cell_id=None,
          **kwargs):
+    """Deprecated Taichi port of NucDynamics (kept until the native engine
+    replaces it everywhere); use ``uchrom.recon.sc.nucdyn.main`` /
+    ``reconstruct_nucdyn``."""
     import os
+    import warnings
+    warnings.warn(
+        "uchrom.recon.sc.nucdyn.nucdyn (Taichi port) is deprecated and not faithful to the "
+        "original NucDynamics; use uchrom.recon.sc.nucdyn.reconstruct_nucdyn / main with the "
+        "native engine (pip install u-chrom[nucdyn]).",
+        DeprecationWarning, stacklevel=2)
     prams = copy(default_params)
     prams.update(kwargs)
     print(in_file)
