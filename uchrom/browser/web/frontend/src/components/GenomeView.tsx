@@ -105,7 +105,13 @@ export function useGenomeRows(pane: Pane) {
 function newRow(kind: GenomeRowKind, rows: GenomeRow[], ds: DatasetSummary): Omit<GenomeRow, 'id'> {
   if (kind === 'matrix') {
     const used = new Set(rows.map((r) => r.source))
-    const options = [...(ds.contact_maps ?? []).map((m) => m.key), ...(hasCoords(ds) ? ['distance'] : [])]
+    const maps = ds.contact_maps ?? []
+    // sources that follow the cells setting (focus / groups) first, fixed maps last
+    const options = [
+      ...maps.filter((m) => m.per_cell).map((m) => m.key),
+      ...(hasCoords(ds) ? ['distance'] : []),
+      ...maps.filter((m) => !m.per_cell).map((m) => m.key),
+    ]
     return { kind, source: options.find((o) => !used.has(o)) ?? options[0] ?? null }
   }
   if (kind === 'track') {
@@ -258,7 +264,7 @@ function RowSettings({
           <ScopePicker value={row.scope} onChange={setScope} view={view} />
         </label>
       )}
-      {row.kind === 'matrix' && !rowTakesGroup(row, ds) && row.source !== 'distance' && <div className="muted small">bulk map: all cells in the file</div>}
+      {row.kind === 'matrix' && !rowTakesGroup(row, ds) && row.source !== 'distance' && <FixedMapNote row={row} ds={ds} />}
       {perCellMap && multi && <div className="muted small">several cells: their maps are summed (pseudo-bulk)</div>}
       {row.kind === 'track' && <TrackAggregateControl agg={row.agg ?? defaultAgg} multi={multi} onAgg={(a) => set('agg', a)} />}
       {row.kind === 'intervals' && (
@@ -271,6 +277,26 @@ function RowSettings({
         </select>
       )}
       <TextSetting label="height" value={row.height ? String(row.height) : ''} placeholder={row.kind === 'matrix' ? 'auto' : String(ROW_HEIGHT[row.kind])} onCommit={(v) => set('height', v)} title="Row height in px (empty = default)" />
+    </div>
+  )
+}
+
+/** Name of a per-cell contact map in the source list: says that it follows the cells. */
+export function perCellMapLabel(m: { key: string; label?: string | null; kind?: string | null; n_cells?: number | null }): string {
+  const name = m.label && m.label !== m.key ? m.label : 'Per-cell maps'
+  const n = m.n_cells ? `, ${m.n_cells.toLocaleString()} cells` : ''
+  return `${name} · summed over the cells (${m.kind ?? 'scool'}${n})`
+}
+
+/** Note under a fixed contact map: which cells it holds and how to follow the focus / a group instead. */
+function FixedMapNote({ row, ds }: { row: GenomeRow; ds: DatasetSummary }) {
+  const maps = ds.contact_maps ?? []
+  const map = maps.find((m) => m.key === row.source)
+  const perCell = maps.find((m) => m.per_cell)
+  return (
+    <div className="muted small">
+      fixed map: {map?.label || row.source} — it does not follow the focus or a group.
+      {perCell && <> Choose “{perCellMapLabel(perCell).split(' · ')[0]}” to sum the focused cells or a group.</>}
     </div>
   )
 }
@@ -590,12 +616,27 @@ function MatrixTools({ row, ds, set, multi }: { row: GenomeRow; ds: DatasetSumma
   return (
     <>
       <select value={row.source ?? ''} onChange={(e) => set('source', e.target.value)} title="Matrix source">
-        {maps.map((m) => (
-          <option key={m.key} value={m.key}>
-            {m.label || m.key} ({m.kind})
-          </option>
-        ))}
-        {hasCoords(ds) && <option value="distance">3-D distance</option>}
+        <optgroup label="Follows the cells setting (focus, groups)">
+          {maps
+            .filter((m) => m.per_cell)
+            .map((m) => (
+              <option key={m.key} value={m.key}>
+                {perCellMapLabel(m)}
+              </option>
+            ))}
+          {hasCoords(ds) && <option value="distance">3-D distance</option>}
+        </optgroup>
+        {maps.some((m) => !m.per_cell) && (
+          <optgroup label="Fixed maps (same whatever the focus)">
+            {maps
+              .filter((m) => !m.per_cell)
+              .map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.label || m.key} ({m.kind})
+                </option>
+              ))}
+          </optgroup>
+        )}
       </select>
       {map && map.resolutions.length > 1 && (
         <select value={row.resolution ?? ''} onChange={(e) => set('resolution', e.target.value)} title="Resolution">

@@ -17,7 +17,9 @@ result and its provenance survive an ``.h5cd`` round trip.
 Data (see ``example-data/README.md``): Bintu 2018 IMR90 chr21
 (``IMR90_chr21-18-20Mb.csv`` → ``IMR90_chr21_pyhim.ecsv`` via
 ``bintu_to_pyhim_ecsv.py``; needs astropy), Takei 2021 mESC FOF-CT
-(``4DNFIHF3JCBY.csv``) and the in-repo ``IMR90_chr21_30kb.cool``.
+(``4DNFIHF3JCBY.csv``) and the in-repo ``K562_chr21_30kb.cool`` (K562 Hi-C,
+Ray et al. 2019; only used to run the DI caller on a Hi-C matrix, not
+paired with the IMR90 imaging).
 Set ``UCHROM_EXAMPLE_DATA`` if the large files live elsewhere.  CPU only.
 """
 import importlib.util
@@ -151,8 +153,8 @@ else:
                               for k in takei.results}
     res["takei.roundtrip_values"] = {k: back[k] for k in takei.results}
 
-# ---------------------------------------------------------------- IMR90 Hi-C (DI TADs)
-cool = WT / "example-data" / "IMR90_chr21_30kb.cool"
+# ---------------------------------------------------------------- K562 Hi-C (DI TADs)
+cool = WT / "example-data" / "K562_chr21_30kb.cool"
 if MODE == "old":
     import cooler
     import torch
@@ -162,8 +164,8 @@ if MODE == "old":
     res["di"] = timed("di", lambda: [(int(s), int(e)) for s, e in get_domains(torch.as_tensor(mat), device=DEV)])
 else:
     from uchrom.strc.tad import call_tads_di
-    bintu.link_cool(cool, key="imr90")
-    t = timed("di", lambda: call_tads_di(bintu, contacts="imr90", chrom="chr21", device=DEV))
+    bintu.link_cool(cool, key="k562")  # K562 matrix; DI does not use the imaging
+    t = timed("di", lambda: call_tads_di(bintu, contacts="k562", chrom="chr21", device=DEV))
     res["di"] = [(int(s), int(e)) for s, e in zip(t["start_bin"], t["end_bin"])]
     res["di.table"] = t
 

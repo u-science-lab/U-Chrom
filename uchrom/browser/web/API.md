@@ -387,3 +387,39 @@ Registered groups: `[{"id": "g3f1c…", "name": "lasso 1", "n_cells": 2}]`.
 
 `{"group": "<ref>", "name": "Bergmann", "n_cells": 8, "cells": [...]}`
 (natural cell order for registered groups, `cd.cells` order for fields).
+
+## Control (drive the open page from code and agents)
+
+The page stays the owner of what is on screen.  A caller posts an action; the server forwards it
+to the active page over Server-Sent Events; the page runs it with the same functions as its GUI
+(`frontend/src/actions.ts`) and posts the result back.  Actions are defined once in
+`ui_tools.json` (name, description, JSON-schema input), which the page also registers as WebMCP
+tools (`frontend/src/webmcp.ts`, feature-detected, experimental).  Python:
+`uchrom.browser.connect()` (`uchrom/browser/client.py`).
+
+### `GET /api/control/tools`
+
+`ui_tools.json`: `{"version": 1, "tools": [{"name", "description", "inputSchema", "annotations"?}]}`.
+
+### `POST /api/control/actions`
+
+Body `{"name": "open_view", "args": {...}, "timeout": 30, "page": null}` → `{"ok": true, "result": …}`
+(the page's return value).  `404` unknown action; `409` no page is connected; `422` the page
+reported an error (`detail` is its message); `504` the page did not answer within `timeout` s.
+Without `page`, the most recently active page (last focused, else last connected) runs it.
+
+### `GET /api/control/events?page=<id>` (page side)
+
+`text/event-stream`: `event: hello` once, then `event: action` with
+`{"id", "name", "args"}` per action; a `: keepalive` comment every 15 s.
+
+### `POST /api/control/results/{action_id}` (page side)
+
+Body `{"ok": true, "result": …}` or `{"ok": false, "error": "…"}` → `{"accepted": bool}`.
+
+### `POST /api/control/active?page=<id>` · `GET /api/control/pages`
+
+The page marks itself active on window focus; `pages` lists connected pages, active first.
+
+`python -m uchrom.browser --web` records its URL in `~/.cache/uchrom/browser.json` (removed on
+exit) so that `connect()` finds a server that moved to another port.

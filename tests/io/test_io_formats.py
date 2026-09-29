@@ -48,9 +48,9 @@ def test_read_pairs_gz_with_header(tmp_path):
 def test_load_cool_pixels():
     from uchrom.io import load_cool
 
-    path = DATA / "IMR90_chr21_30kb.cool"
+    path = DATA / "K562_chr21_30kb.cool"
     if not path.exists():
-        pytest.skip("IMR90 cool missing")
+        pytest.skip("K562 cool missing")
     px = load_cool(str(path))
     assert {"chr1", "start1", "chr2", "start2", "count", "pos1", "pos2"} <= set(px.columns)
     assert (px["chr1"] == "chr21").all()

@@ -102,6 +102,39 @@ Linking the 5,313 per-cell maps took 0.34\,s, against 7.6\,s to copy their 51\,M
 \subsection*{An open ecosystem}
 \todo{Formats, methods and interfaces (Fig.~\ref{fig:overview}c).}
 
+\subsection*{Analysis in code, visualization in the browser, for researchers and agents}
+U-Chrom separates the two things a researcher does with 3-D genome data (Fig.~\ref{fig:agents}a).
+Analysis is the \pkg{uchrom} Python API: every computation, from a distance map to a TAD call, is implemented once there and its script is the record of the analysis.
+Visualization is a web browser that opens a chromdata.zarr store directly and computes nothing of its own; it asks the Python server for geometry, matrices, tracks and statistics.
+The browser's views are linked through cells and groups (Fig.~\ref{fig:agents}b).
+A lasso in a cell embedding becomes a group; the 3-D view, the Genome view with its per-spot immunofluorescence tracks and group distance maps, and the Stats view then show that group, and a view can instead keep its own cell or group.
+
+The browser stays interactive at the size of current experiments (Fig.~\ref{fig:agents}c).
+Because the store is opened in backed mode, the server opened one field of view of the Takei et al.\ 2025 cerebellum data (0.38\,M spots) in 0.31\,s and copies of its cells tiled to 11.5\,M spots in 2.6\,s, and the page drew the first frame of the 3-D overview 0.14 and 1.0\,s after it was opened; the frame rate stayed at 52--60 frames\,s$^{-1}$ at every size.
+Focusing a cell answered in 9--11\,ms at every size, re-scoping all views to a lassoed group of 8 cells in 0.13\,s (0.92\,s at 11.5\,M spots), a median distance map of chr15 over all cells in 0.39\,s, and a pseudo-bulk contact map of 500 cells summed from the scHiCAR per-cell maps in 0.11\,s.
+The interactions that reduce the data of many cells (distance maps, re-scoping to a group, pseudo-bulk maps of hundreds of cells) took 0.1--1.2\,s; focusing a cell, panning the tracks, a bulk contact map and a pseudo-bulk map of 50 cells answered within 70\,ms.
+
+The same actions that the GUI uses are open to agents (Fig.~\ref{fig:agents}a,d).
+A coding agent reads what the researcher has selected, analyses it with \pkg{uchrom} in Python, and opens views in the researcher's browser through \pkg{uchrom.browser.connect()}; an agent that runs in the browser gets the same actions as WebMCP tools registered by the page~\citep{webmcp}.
+In the session of Fig.~\ref{fig:agents}d the researcher selected 8 cells and asked a Claude Code agent~\citep{claudecode} what was different about them.
+The agent identified them as the Bergmann glia, compared every per-cell field with the other 39 cells, reported SOX2 immunofluorescence as the only difference that survived correction for multiple testing, declined to trust a borderline difference in trace radius of gyration because it tracked nuclear volume, noted that one field of view makes the comparison exploratory, and opened the two views that support these statements in the researcher's browser.
+
+What a skilled analyst knows beyond the API, which call fits which question and which checks an answer must pass, is packaged as agent skills~\citep{agentskills}: short instructions with scripts that load when a question matches (Fig.~\ref{fig:agents}e, top).
+Five skills cover inspecting a data set, calling structures, comparing groups of cells, relating modalities and showing results in the browser.
+We measured their effect on 40 questions about three data sets, each answered three times by Claude Code agents with the U-Chrom documentation only or with the documentation and the skills (Fig.~\ref{fig:agents}e, bottom; Methods).
+Skills raised the share of grading checks passed from 0.84 to 0.95 for Sonnet 5 ($P=0.001$, paired Wilcoxon test over questions) and from 0.70 to 0.78 for Haiku 4.5 ($P=0.02$); Opus 5.5 scored 0.93 without skills and 0.95 with them ($P=0.31$).
+On the 20 held-out questions, which were not seen while the skills were written, all three models improved (Sonnet 0.87 to 0.96, $P=0.055$; Haiku 0.70 to 0.74; Opus 0.96 to 0.97), but these differences were not significant on their own.
+With skills every model also spent less, by 30\,\% (Opus), 42\,\% (Sonnet) and 24\,\% (Haiku), and Sonnet answered in a median of 111 instead of 143\,s.
+
+% Figures 3-5 are drawn on other branches; keep this one numbered 6 (a no-op once they are in).
+\setcounter{figure}{5}
+\begin{figure}[p]
+  \centering
+  \includegraphics[width=0.90\textwidth]{fig6.pdf}
+  \caption[Analysis in code, visualization in the browser, for researchers and agents]{\sloppy\input{captions/fig6}\unskip}
+  \label{fig:agents}
+\end{figure}
+
 \section*{Discussion}
 \todo{}
 
@@ -191,6 +224,15 @@ The 4DN FOF-CT core table 4DNFIHF3JCBY (201 cells, 20 chromosomes $\times$ 60 bi
 From GEO series GSE305439~\citep{schicargeo} (mouse brain sample 1) we used the RNA count matrix and metadata (5,313 cells with 22 published cell types) and the deduplicated contact pairs (120,280,303 contacts).
 The RNA profiles (500 highly variable genes, library-size normalised, 30 principal components, UMAP~\citep{umap}) are stored in a ChromData object without spots.
 The pairs were binned into one 1-Mb map per cell in a .scool file (50,790,690 pixels) and, for reference, into 500-kb maps per published cell type (.cool), both linked to the object.
+For Fig.~\ref{fig:agents} the object also holds the published UMAP, 500 highly variable genes as per-cell fields, ATAC gene activity of 484 of them and embeddings computed from the RNA, the ATAC fragments and the per-cell contact maps.
+
+\textit{Takei et al.\ 2025, field of view~0.}
+For the browser and the agent benchmark (Fig.~\ref{fig:agents}) we used the first 47 complete cells of field of view~0 of replicate~1 (383,674 spots, 1,500 traces), read from the start of the Zenodo archive with the same reader, locus annotation and clustering as above, with 62 per-spot tracks (immunofluorescence of 48 antibodies, repeat and RNA FISH channels, spot intensity and radial scores), per-cell means of the 48 immunofluorescence channels as cell fields, embeddings of these per-cell profiles (PCA, t-SNE, UMAP), and the published RNA UMAP.
+The object was first written as a 1.x HDF5 file and converted to a chromdata.zarr store (69\,MB) with the upgrade command; the converted store returns the same spots, coordinates and cell fields.
+For the browser benchmarks, copies of its cells tiled side by side under new cell and trace ids (geometry and cell types only) gave stores of 1.15, 3.8 and 11.5\,M spots; they are replicates, not new cells.
+
+\textit{A single reconstructed cell.}
+One mouse embryonic stem cell of Stevens et al.\ 2017 (105,700 contacts)~\citep{stevens2017} was reconstructed with the NucDynamics implementation in \pkg{uchrom.recon} (20 chromosomes, 25,654 particles at about 100\,kb, model units) and stored with its own contact map (.mcool, 100\,kb to 1\,Mb) linked; it serves the agent benchmark questions that relate a structure to its contacts.
 
 \subsection*{Benchmarks}
 All timings were made on one Apple M5 Pro laptop (18 cores, 64\,GB RAM, internal SSD, macOS 26.4.1) with Python 3.11.15, NumPy 2.4.3, pandas 2.3.3, PyArrow 23.0.1, zarr 3.1.6, AnnData 0.12.11, SpatialData 0.7.2, cooler 0.10.4 and h5py 3.16.0.
@@ -240,6 +282,80 @@ For Supplementary Fig.~S1d,e each group's map over chr2:40--90\,Mb was divided b
 Query times (Supplementary Fig.~S1g) are the first query in a fresh process, after the map listing, and the same query repeated (cached), for chr1 over random groups of 50 to 5,313 cells and for the whole-genome cis maps of each cell type; three processes each.
 Link and copy (Supplementary Fig.~S1f,h) were timed in fresh processes (median of three): linking records the .scool path, bin size and cell naming in the store (\pkg{link\_scool}); copying reads every cell's pixels from the .scool and writes them into the store as one Parquet table (cell as 16-bit and bins and counts as 32-bit integers, Zstandard level~3).
 Sizes are on-disk sizes of the store with either, and of the store plus the .scool, which is kept in both cases.
+
+\subsection*{Web browser}
+The browser is started with \pkg{python -m uchrom.browser --web} followed by one or more stores; a FastAPI~\citep{fastapi} server listens on the local machine and serves a single-page application written in TypeScript with React~\citep{react} and three.js~\citep{threejs}, built into static files that ship with the package.
+The server holds the loaded data sets and answers the page over a documented HTTP interface (\pkg{uchrom/browser/web/API.md}); the page draws, and every number it shows is computed by the server with \pkg{uchrom}.
+chromdata.zarr stores are opened in backed mode: the summary, the trace and cell lists and the groups come from the index and the small tables, and a geometry request that names cells, traces or chromosomes reads only those rows, coordinates and keys only (\pkg{columns="coords"}).
+For the unfiltered overview the coordinates are read once with one full slice of the coordinate table and kept; indexing a backed store with an array of all rows instead reads it row group by row group (3.2\,s against 0.4\,s per overview request at 11.5\,M spots).
+Geometry is sent as one binary message: a 4-byte header length, a JSON header (one polyline segment per run of a trace on one chromosome, with its trace, chromosome, cell, number of points and genomic span; the bounding box; the chromosome extents), and the positions (32-bit floats), genomic starts and segment offsets (32-bit unsigned integers).
+Segments break at missing coordinates and at changes of trace or chromosome, and whole segments are sent until 5\,M points; the rest is reported as truncated.
+
+A workspace holds views of five kinds, arranged as tabs, columns, rows or a grid.
+The 3-D view draws traces as polylines, coloured by chromosome, by cell or by a cell field; a focused cell is drawn as tubes and the other cells fade into context.
+The Genome view stacks rows along one locus: contact maps from linked .cool or .mcool files at the resolution that fits at most 1,000 bins (finer maps pooled in blocks), per-cell maps from a linked .scool summed over the cells in scope (pseudo-bulk; up to 20,000 cells, the 16 most recent maps cached), 3-D distance maps (per bin pair, the median or mean distance or the fraction of traces within a contact threshold, over the traces in scope), per-spot tracks averaged, or taken as median or maximum, per bin over the cells in scope, and interval tables.
+The Matrix view shows one map at a time, the Embedding view any per-cell embedding with lasso selection, zoom and its own colouring and point style, and the Stats view per-trace radius of gyration and the scaling of distance with genomic separation by group.
+Cells are selected in three ways: a cell (the focus), a group defined by a categorical cell field (\pkg{field:<column>=<value>}, resolved by the server), and a list of cells (a lasso or a saved group), which the page registers with the server once per session and then names by the returned id; saved groups are kept by the page and re-registered after a server restart.
+By default each view follows the focused cell or group; a view, and each Genome row, can instead keep its own cell or group.
+
+The browser benchmarks (Fig.~\ref{fig:agents}c) were run on the laptop of the Benchmarks section with Chromium 153 (Playwright~\citep{playwright}, headless, Metal GPU, 1,600\,$\times$\,1,000 viewport at device scale 2) and Python 3.12.13, only when the one-minute load average was below 2 (it was 1.7--2.5 during the runs).
+For each store a fresh server was started without data and the store was opened through the interface (timed: the dashed line); the page was then loaded five times in new browser contexts, and the time to the first frame is the frontend's performance mark set when the overview has been drawn, counted from the navigation start (median of five).
+The frame rate is the \pkg{requestAnimationFrame} rate over a few seconds with the overview drawn.
+Interaction latency was measured against the running server over HTTP, end to end from the client: each interaction is the set of requests the page sends for it, sent in parallel where the page does so (focusing a cell: the cell's geometry and properties; re-scoping to a lasso of 8 cells: the group's geometry, chr15 distance map, radius-of-gyration statistics and two immunofluorescence tracks; panning: two tracks over 20\,Mb of chr15; distance maps of chr15 over all cells or a group of 20; a bulk contact map of chr1; pseudo-bulk maps of chr1 over 50 or 500 cells).
+Each interaction was repeated 20 times (5 for the distance map over all cells) with a new random cell or group every time, so no cached result was reused; the first, cold call is recorded separately and not shown.
+
+\subsection*{Interfaces for agents: browser actions, WebMCP and skills}
+Analysis and visualization are exposed to agents through the same two interfaces that researchers use, not through a separate tool server.
+An agent that runs code writes \pkg{uchrom} code, as a researcher writes a notebook, and the script is the record of what was done; an agent that runs in a web page uses the browser's actions.
+The browser's actions are defined once, in a JSON file of tool definitions (name, description, JSON Schema of the input and behaviour annotations), and implemented once, by the functions the GUI itself calls: describing the workspace, reading the current selection, selecting cells, listing groups, focusing a cell or group, setting the locus, opening, showing and closing views, arranging them, colouring by a cell field and capturing a view as an image (12 actions).
+The page registers these actions as WebMCP tools~\citep{webmcp} when the browser offers the interface (\pkg{document.modelContext.registerTool}, feature-detected; WebMCP is a community-group draft and was not benchmarked).
+Code outside the page calls them through the server: a client posts an action, the server forwards it over Server-Sent Events to the page the researcher used last, the page runs it and posts the result back, and the client receives it (or an error for an unknown action, no open page, a failed action or a timeout).
+The page thus remains the owner of what is on screen, and a view opened from code appears in the researcher's browser.
+The Python client (\pkg{uchrom.browser.connect()}) reads the tool definitions and offers each action as a method with the same arguments, returns the open data set as a ChromData object read from the same store, and finds the server through a state file written when the server starts.
+
+Skills follow the Agent Skills format~\citep{agentskills}: a folder with a \pkg{SKILL.md} file, whose front matter gives a name and a description that the agent sees before loading the skill, and whose body gives when to use it, the \pkg{uchrom} calls in order, the checks an answer must pass and how to report it, with scripts that implement the recipe on the public API.
+Five skills are provided: \pkg{load-data} (a summary and quality control of a store: observation levels, units, alleles per chromosome and cell, repeated loci within a trace, spots per trace by group, linked contact maps and embeddings), \pkg{call-structures} (distance at a genomic separation and its scaling, radius of gyration, the bin size a caller needs, TADs, compartments, contact-probability decay from linked maps), \pkg{compare-groups} (a statistic between groups of cells with the cell as the unit of replication, a rank test, an effect size, a false-discovery-rate correction when many fields are tested, confounders such as nuclear volume and spots per trace, and comparisons at an equal number of loci per trace), \pkg{associate-modalities} (a feature against structure at the level of spots, bins or cells, within and across cell types, with partial correlation on confounders, and the cell-type purity of embeddings) and \pkg{show-in-browser} (reading the selection and opening views that support an answer).
+Descriptions are kept to about 300 characters (1,494 in total) because the agent's list of available skills has a fixed length and longer descriptions are cut; examples in the skills use placeholders rather than names from the benchmark data.
+Random subsampling in the scripts (loci per trace) uses one generator per trace seeded by the trace id and a fixed order of the loci, so that results do not depend on the order in which a store keeps its rows.
+The scripts have unit tests on synthetic data with known answers and were run on the three data sets of the benchmark.
+
+The handoff of Fig.~\ref{fig:agents}d is one unedited session.
+With the Takei field of view open in the browser, 8 cells were lassoed in the embedding and a Claude Code agent (version 2.1.283, Opus 5.5) was started with the \pkg{show-in-browser} and \pkg{compare-groups} skills and the question ``What is different about the cells I just selected in the browser? Show me.''
+It ran for 13 turns and 65\,s; the figure shows its code and answer shortened, with the omissions marked, and the two views it opened redrawn from the data.
+The session ran on the 1.x HDF5 file of the same field of view, before the conversion to chromdata.zarr; the views and numbers are the same from the store.
+
+\subsection*{Agent benchmark}
+\textit{Questions.}
+Forty questions were written about three data sets, the Takei et al.\ 2025 field of view (26 questions), the scHiCAR object (11) and the reconstructed cell (3), in five categories: inspecting the data (8), calling structures and structural statistics (8), comparing groups of cells (10), relating modalities (8) and data-specific know-how (6), for example repeated loci within a trace or a difference in detected loci between cell types.
+Before any skill was written they were split, alternately in the order written within each category, into 20 development and 20 held-out questions (half of each category).
+The reference answer of each question was computed by a script with \pkg{uchrom} and recorded with its method; each question has checks: numbers with a relative tolerance (1--8\,\%, exact for counts), named answers, and rubric items such as ``treats the cell, not the trace, as the unit of replication'' or ``notes that nuclear volume may confound the result''.
+
+\textit{Skills.}
+The skills were written and tuned by a separate agent session that could read the documentation, the \pkg{uchrom} source, the plan of the skills and the 20 development questions with the answers and grading comments of an earlier run on them, and was barred from the held-out questions, the reference answers and the grading script.
+It tuned the descriptions until the relevant skill loaded on most development questions (99 runs on development questions only), and the examples were afterwards replaced by placeholders.
+
+\textit{Runs.}
+Each run is one non-interactive Claude Code session (version 2.1.283~\citep{claudecode}) with one of three models (Opus 5.5, \pkg{claude-opus-5-5}; Sonnet 5, \pkg{claude-sonnet-5}; Haiku 4.5, \pkg{claude-haiku-4-5-20251001}), given the path of the data and the question, and asked to work it out with code and report the key numbers with units, how they were computed and what limits the conclusion.
+It ran in a new temporary directory that held a copy of the U-Chrom documentation (README and user guides) and, in the skills condition only, the five skills; the data set was cloned into the directory.
+\pkg{uchrom} was installed from a wheel built from a fixed commit into a separate environment, so that the agent could read the installed package but not the repository.
+The session loaded only project settings and no MCP servers, and ran under a macOS sandbox profile that denied reading or writing the U-Chrom source trees and related agent memories on the machine; no transcript referenced them (0 of 720 runs).
+The allowed tools were shell commands, file reading and search, and skills; a session was stopped after 900\,s and a single shell command after 600\,s.
+Every model answered every question in both conditions three times (720 runs, four in parallel; cost 151 US dollars as reported by Claude Code).
+
+\textit{Grading.}
+Answers were graded by Sonnet 5 through Claude Code, given the question, the reference values, the checks and the answer.
+For a number check the grader only extracted the value the answer reports as its result, converted to the unit and scale of the reference; the tolerance was applied in code, because in an earlier grading the grader marked a correct count as wrong while stating that it was correct.
+Named answers and rubric items were decided by the grader.
+The score of a run is the fraction of its checks passed, and a run that timed out scores zero.
+
+\textit{Statistics.}
+Each question's score in a condition is the mean of its three runs.
+Conditions were compared with a two-sided Wilcoxon signed-rank test over questions on the paired differences, excluding zero differences (SciPy~\citep{scipy}).
+In Fig.~\ref{fig:agents}e a bar is the mean over the three models, and its whisker the standard error over the questions of the category of the model-averaged question score.
+Six of the 720 runs timed out, all Sonnet 5 without skills; each had spent time on a search of the whole file system while another benchmark loaded the machine, and they are kept as failures; without them Sonnet 5 scored 0.89 without and 0.95 with skills ($P=0.026$).
+The grader is one of the models under test.
+Two questions are ambiguous in hindsight and are kept as written: one asks for TADs called ``with default settings'' while its reference was called at 1-Mb bins, and one asks about ``individual loci'' while its reference correlates spots.
+Earlier runs, used to develop the harness on the .h5cd files of the same data, are not reported.
 
 \subsection*{Code availability}
 \todo{Repository URL, licence, archived release (DOI), documentation.}

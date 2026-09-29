@@ -1724,6 +1724,15 @@ class ChromData:
         mask = self.spots["cell_id"] == cell_id
         return self._take(mask.values, columns, tracks)
 
+    def get_cells(self, cell_ids, *, columns=None, tracks=None) -> "ChromData":
+        """The spots of several cells (ids compared as strings; unknown ids are
+        ignored).  See :meth:`get_cell` for ``columns`` / ``tracks``."""
+        if "cell_id" not in self.spots.columns:
+            raise KeyError("spots has no 'cell_id' column")
+        keep = {str(c) for c in cell_ids}
+        mask = self.spots["cell_id"].astype(str).isin(keep)
+        return self._take(mask.values, columns, tracks)
+
     def get_trace(self, trace_id, *, columns=None, tracks=None) -> "ChromData":
         """The spots of one trace (see :meth:`get_cell` for ``columns`` /
         ``tracks``)."""
