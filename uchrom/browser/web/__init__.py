@@ -4,7 +4,7 @@ A local FastAPI server exposes loaded ``ChromData`` over a small HTTP API
 (``API.md``); a React + Three.js single-page app (``frontend/``, built into
 ``static/``) renders it in the browser.
 
-    python -m uchrom.browser --web data.h5cd
+    python -m uchrom.browser --web data.chromdata.zarr
 
 Requires the ``web`` extra: ``pip install "u-chrom[web]"``.
 """

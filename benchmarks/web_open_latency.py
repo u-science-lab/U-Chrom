@@ -10,8 +10,8 @@ fresh process per file:
   then 5 more random cells: median);
 * peak RSS of the process.
 
-A ``.chromdata.zarr`` store is opened backed; an ``.h5cd`` is loaded into
-memory (the 1.x / HDF5 path).  The OS page cache is not flushed.
+A ``.chromdata.zarr`` / ``.cdz`` store is opened backed (the browser no
+longer opens ``.h5cd``).  The OS page cache is not flushed.
 
     python benchmarks/web_open_latency.py PATH [PATH ...]
 """

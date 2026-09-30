@@ -12,7 +12,7 @@ reconstruction output.
 | `.hic` | `load_hic`, `load_hic_inter`, `load_hic_genome` | bin+matrix |
 | `.3dg` | `read_3dg` | DataFrame (chrom, start, x, y, z) |
 | `.csv` (reconstruction) | `read_particles` | DataFrame |
-| `.chromdata.zarr` / `.cdz` / `.h5cd` (ChromData) | `read_particles`, `ChromData.read` | DataFrame / `ChromData` |
+| `.chromdata.zarr` / `.cdz` (ChromData) | `read_particles`, `ChromData.read` | DataFrame / `ChromData` |
 | FOF-CT core CSV | `ChromData.from_fofct` | `ChromData` |
 
 ## Reconstruction output: `save_particles`
@@ -21,8 +21,7 @@ All reconstruction modules write through
 `uchrom.io.save_particles(df, path)`:
 
 - `path` ending in `.csv` → CSV (legacy)
-- `.chromdata.zarr` / `.cdz` → `ChromData` format 2.0 (recommended)
-- `.h5cd` or anything else → `ChromData` HDF5 (deprecated)
+- `.chromdata.zarr` / `.cdz` → `ChromData` store (other suffixes raise)
 
 ```python
 from uchrom.io import save_particles
@@ -80,8 +79,8 @@ cd.to_fofct("out_core.csv", cell_table="out_cell.csv", rna_table="out_rna.csv",
 
 `cd.write(path)` / `ChromData.read(path)` pick the container from the
 path: `.chromdata.zarr` (Zarr v3 + Parquet, the default), `.cdz` (the
-same store zipped into one file), `.h5cd` (HDF5; read indefinitely,
-writing deprecated).  Convert older files with
+same store zipped into one file).  The HDF5 `.h5cd` container of format
+1.x / 2.0 is no longer read or written; convert such files once with
 `python -m uchrom.io.upgrade old.h5cd` (→ `old.chromdata.zarr`) or
 `uchrom.io.upgrade_h5cd(src, dst)`.
 

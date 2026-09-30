@@ -69,8 +69,7 @@ def test_read_3dg(tmp_path):
     assert df.loc[1, "z"] == 3.5
 
 
-@pytest.mark.filterwarnings("ignore:writing .*h5cd:DeprecationWarning")
-@pytest.mark.parametrize("ext", [".csv", ".h5cd", ".chromdata.zarr", ".cdz"])
+@pytest.mark.parametrize("ext", [".csv", ".chromdata.zarr", ".cdz"])
 def test_particles_roundtrip(tmp_path, ext):
     from uchrom.io import read_particles, save_particles
 
@@ -80,6 +79,16 @@ def test_particles_roundtrip(tmp_path, ext):
     back = read_particles(p)
     assert np.allclose(back[["x", "y", "z"]].to_numpy(), df[["x", "y", "z"]].to_numpy())
     assert list(back["chrom"]) == list(df["chrom"])
+
+
+def test_particles_refuse_h5cd(tmp_path):
+    from uchrom.io import read_particles, save_particles
+
+    with pytest.raises(ValueError, match="no longer supported"):
+        save_particles(_particles(), tmp_path / "p.h5cd")
+    (tmp_path / "q.h5cd").write_bytes(b"\x89HDF\r\n\x1a\n")
+    with pytest.raises(ValueError, match="uchrom.io.upgrade"):
+        read_particles(tmp_path / "q.h5cd")
 
 
 def test_particles_to_pdb_split_by_chrom(tmp_path):

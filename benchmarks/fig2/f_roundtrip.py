@@ -29,8 +29,7 @@ Status per cell: ``preserved`` (tested, exact or within the stated tolerance),
 (representable but dropped), ``na`` (the format has no place for the field, or
 the API does not export it by design), ``untested``.
 
-Data: Takei 2025 FOV0 (``takei2025_fov0/takei2025_fov0.chromdata.zarr``, or
-the ``.h5cd`` of older builds: 383,674 spots, 1,500 traces, 47 cells, 62
+Data: Takei 2025 FOV0 (``takei2025_fov0/takei2025_fov0.chromdata.zarr``: 383,674 spots, 1,500 traces, 47 cells, 62
 tracks, cell table + cellm) for the chromdata.zarr, FOF-CT and AnnData rows;
 ``sim_cell1`` (in repo, ``sim_cell1.cdz``) for PDB / .3dg / .cool;
 ``schicar_mop`` for .scool.
@@ -53,12 +52,11 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _common as C  # noqa: E402
 
-SUFFIXES = (".chromdata.zarr", ".cdz", ".h5cd")
+SUFFIXES = (".chromdata.zarr", ".cdz")
 
 
 def existing(stem: Path) -> Path:
-    """A dataset as built by the current (``.chromdata.zarr`` / ``.cdz``) or an
-    older (``.h5cd``) builder; the first suffix that exists."""
+    """A dataset as built (``.chromdata.zarr`` / ``.cdz``); the first suffix that exists."""
     for suf in SUFFIXES:
         p = stem.with_name(stem.name + suf)
         if p.exists():

@@ -43,7 +43,7 @@ def _make_cd():
     )
 
 
-def test_discovery_schema_roundtrips_inside_h5cd(tmp_path):
+def test_discovery_schema_roundtrips_inside_store(tmp_path):
     from uchrom import ChromData
     from uchrom_discovery.schema import DISCOVERY_SCHEMA_KEY
 
@@ -57,7 +57,7 @@ def test_discovery_schema_roundtrips_inside_h5cd(tmp_path):
     assert "statistical_hypothesis_test" in schema["recommended_verification"]
     assert validate_discovery_schema(cdata=cdata) == []
 
-    path = tmp_path / "schema.h5cd"
+    path = tmp_path / "schema.chromdata.zarr"
     cdata.write(path)
     out = ChromData.read(path)
 
@@ -202,7 +202,7 @@ def test_discovery_schema_includes_references_and_user_annotations(tmp_path):
     assert "Takei 2025 cerebellum multi-omics" in context
     assert "RNA and chromatin tracing are linked" in context
 
-    path = tmp_path / "schema_context.h5cd"
+    path = tmp_path / "schema_context.chromdata.zarr"
     cdata.write(path)
     out = ChromData.read(path)
 
@@ -331,7 +331,7 @@ def test_notebook_scaffold(tmp_path):
     notebook = create_exploration_notebook(
         idea,
         tmp_path / "idea.ipynb",
-        h5cd_path=tmp_path / "data.h5cd",
+        h5cd_path=tmp_path / "data.chromdata.zarr",
     )
     nb = json.loads(notebook.read_text())
     first_cell = "".join(nb["cells"][0]["source"])
@@ -360,7 +360,7 @@ def test_pantheon_notebook_prompt_requires_live_notebook_editing(tmp_path):
         idea_path=tmp_path / "idea.json",
         schema_path=tmp_path / "schema.json",
         context_path=tmp_path / "schema_context.md",
-        h5cd_path=tmp_path / "data.h5cd",
+        h5cd_path=tmp_path / "data.chromdata.zarr",
         output_dir=tmp_path / "run",
         notebook_path=tmp_path / "run" / "notebooks" / f"{idea.idea_id}.ipynb",
     )
@@ -394,7 +394,7 @@ def test_pantheon_notebook_prompt_requires_live_notebook_editing(tmp_path):
         idea_path=tmp_path / "idea.json",
         schema_path=tmp_path / "schema.json",
         context_path=tmp_path / "schema_context.md",
-        h5cd_path=tmp_path / "data.h5cd",
+        h5cd_path=tmp_path / "data.chromdata.zarr",
         output_dir=tmp_path / "run",
         notebook_path=tmp_path / "run" / "notebooks" / f"{idea.idea_id}.ipynb",
         generate_schematic_image=True,
@@ -644,7 +644,7 @@ def test_run_auto_discovery_executes_notebook_pipeline(monkeypatch, tmp_path):
     from uchrom_discovery import DiscoveryRunConfig, run_auto_discovery
 
     cdata = _make_cd()
-    h5cd_path = tmp_path / "data.h5cd"
+    h5cd_path = tmp_path / "data.chromdata.zarr"
     cdata.write(h5cd_path)
     idea = _make_idea()
     idea2 = _make_idea(title="Bergmann H3K27me3 compaction", cell_type="Bergmann")
@@ -769,7 +769,7 @@ def test_run_auto_discovery_enriches_before_schema_and_notebooks(monkeypatch, tm
     monkeypatch.setattr(runner, "_preflight_backends", lambda backend_ids: None)
 
     cdata = _make_cd()
-    h5cd_path = tmp_path / "data.h5cd"
+    h5cd_path = tmp_path / "data.chromdata.zarr"
     cdata.write(h5cd_path)
     fasta = tmp_path / "toy.fa"
     fasta.write_text(
@@ -1097,7 +1097,7 @@ def test_literature_claims_and_graph_html_viewer(tmp_path):
 def test_auto_discovery_defaults_to_pantheon_backend(tmp_path):
     from uchrom_discovery import DiscoveryRunConfig
 
-    config = DiscoveryRunConfig(h5cd_path=tmp_path / "data.h5cd", output_dir=tmp_path / "run")
+    config = DiscoveryRunConfig(h5cd_path=tmp_path / "data.chromdata.zarr", output_dir=tmp_path / "run")
 
     assert config.idea_source == "pantheon"
     assert config.code_source == "pantheon"
@@ -1162,7 +1162,7 @@ def test_iterative_auto_discovery_defaults_to_inline_schematics(monkeypatch, tmp
     monkeypatch.setattr(iterative, "write_idea_graph_html", lambda *_, **__: tmp_path / "graph.html")
 
     config = IterativeDiscoveryConfig(
-        h5cd_path=tmp_path / "data.h5cd",
+        h5cd_path=tmp_path / "data.chromdata.zarr",
         output_dir=tmp_path / "iterative",
         iterations=1,
         schematic_image_model="openai",
@@ -1194,7 +1194,7 @@ def test_runner_verification_marks_non_numeric_parameter_value_failed(tmp_path):
     from uchrom_discovery.runner import _verification_code_for_idea
 
     cdata = _make_cd()
-    h5cd_path = tmp_path / "data.h5cd"
+    h5cd_path = tmp_path / "data.chromdata.zarr"
     cdata.write(h5cd_path)
     idea = _make_idea()
     analysis_code = """
@@ -1244,7 +1244,7 @@ def test_notebook_scaffold_allows_dict_style_idea_access(tmp_path):
     from uchrom_discovery.notebooks import execute_notebook_python
 
     cdata = _make_cd()
-    h5cd_path = tmp_path / "data.h5cd"
+    h5cd_path = tmp_path / "data.chromdata.zarr"
     cdata.write(h5cd_path)
     idea = _make_idea()
     analysis_code = """
@@ -1311,7 +1311,7 @@ def test_analysis_prompt_requires_numeric_scalar_outputs(tmp_path):
         idea_path=tmp_path / "idea.json",
         schema_path=tmp_path / "schema.json",
         context_path=tmp_path / "schema_context.md",
-        h5cd_path=tmp_path / "data.h5cd",
+        h5cd_path=tmp_path / "data.chromdata.zarr",
         output_dir=tmp_path,
     )
 
@@ -1508,7 +1508,7 @@ def test_run_auto_discovery_preflights_unavailable_backend(tmp_path):
     )
 
     cdata = _make_cd()
-    h5cd_path = tmp_path / "data.h5cd"
+    h5cd_path = tmp_path / "data.chromdata.zarr"
     cdata.write(h5cd_path)
 
     class MissingBackend:

@@ -1,6 +1,6 @@
 """Figure 2e — linked contacts, queried through the shared index (scHiCAR MOp).
 
-**Correctness.**  ``schicar_mop.h5cd`` links the per-cell 1 Mb map
+**Correctness.**  ``schicar_mop.chromdata.zarr`` links the per-cell 1 Mb map
 ``contacts_cells_1Mb.scool`` (5,313 cells) and holds the cell table with
 ``cell_type`` (22 types).  For every cell type the group pseudo-bulk is
 computed through the library path the web browser uses —
@@ -53,7 +53,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _common as C  # noqa: E402
 
 SCRIPT = Path(__file__).resolve()
-SCHICAR = C.DATA / "schicar_mop" / "schicar_mop.h5cd"
+SCHICAR = C.DATA / "schicar_mop" / "schicar_mop.chromdata.zarr"
 FUNCTION = "uchrom.browser.web.data.Dataset.contacts(key, chrom, group=...) -> Dataset._pseudobulk"
 
 
@@ -210,7 +210,7 @@ def main():
     n_ok = sum(p["identical"] for p in ident["per_type"])
     C.write_json("e_query", {
         "panel": "e", "machine": C.machine_info(),
-        "dataset": {"name": "scHiCAR mouse brain (GSE305439)", "store": "schicar_mop/schicar_mop.h5cd",
+        "dataset": {"name": "scHiCAR mouse brain (GSE305439)", "store": "schicar_mop/schicar_mop.chromdata.zarr",
                     "scool": "schicar_mop/contacts_cells_1Mb.scool (5,313 cells, 1 Mb)",
                     "published_per_type": "schicar_mop/contacts_<type>.cool (500 kb)"},
         "function": FUNCTION,

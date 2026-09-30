@@ -131,6 +131,8 @@ def container_kind(path: PathLike) -> Optional[str]:
     Suffix first (``.chromdata.zarr`` or any ``.zarr`` directory, ``.cdz``,
     ``.h5cd``); an existing path without a known suffix is sniffed
     (a directory with ``zarr.json``, a zip archive, an HDF5 file).
+    ``"h5cd"`` (the legacy HDF5 container, no longer read) is reported so that
+    callers can point at ``python -m uchrom.io.upgrade``.
     """
     p = Path(path)
     name = p.name.lower()

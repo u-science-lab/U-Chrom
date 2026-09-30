@@ -4,7 +4,7 @@ scHiCAR (Wei et al. 2026, Nat Biotechnol) profiles RNA, ATAC and chromatin
 contacts in the same cells — but no 3-D coordinates.  This script turns the
 GEO supplementary files into:
 
-  schicar_mop/schicar_mop.chromdata.zarr   ChromData without 3-D spots (``--format h5cd``: .h5cd):
+  schicar_mop/schicar_mop.chromdata.zarr   ChromData without 3-D spots (``--format cdz``: .cdz):
                                           cells  (cell type, QC, 500 HVG counts as rna.<gene>,
                                                   ATAC gene activity of the same genes as atac.<gene>)
                                           cellm  (paper_umap, rna_pca/_tsne/_umap,
@@ -329,7 +329,7 @@ def write_contacts(merged, offsets, res, types, cells, chromsizes) -> dict:
 
 
 
-SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz", "h5cd": ".h5cd"}
+SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz"}
 
 
 def existing(stem: Path):
@@ -339,14 +339,9 @@ def existing(stem: Path):
 
 
 def save(cd, out: Path) -> None:
-    """Write ``cd``; replaces ``out`` atomically, so a running browser never
-    sees a half-written store (the zarr / cdz writer is atomic itself)."""
-    if out.suffix == ".h5cd":
-        tmp = out.with_suffix(".tmp.h5cd")
-        cd.write(tmp)
-        tmp.replace(out)
-    else:
-        cd.write(out)
+    """Write ``cd``; the zarr / cdz writer replaces ``out`` atomically, so a
+    running browser never sees a half-written store."""
+    cd.write(out)
 
 
 def main() -> None:

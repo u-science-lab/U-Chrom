@@ -1,7 +1,8 @@
 """Figure 2c — access by level: ``get_trace`` / ``get_cell`` / ``get_chrom`` latency vs n_spots.
 
 Data: the same whole-cell Takei 2025 subsets as panel b (``_common.stage_subset``),
-written once to ``.h5cd`` by this checkout.  For each size a fresh interpreter
+written once per backend (the HDF5 ``.h5cd`` baselines through
+``uchrom.io._h5cd_legacy``).  For each size a fresh interpreter
 opens the file through a *backend* (``BACKENDS``), records the open/read time
 and RSS, then times ``n_queries`` random ids per level (fixed seed; chromosome
 names are drawn with replacement since there are only ~20).  Reported: median
@@ -9,7 +10,7 @@ and IQR per level, plus the read time separately.
 
 Backends:
 
-* ``h5cd-1x-memory`` — ``ChromData.read`` then in-memory ``cd.get_*`` (a
+* ``h5cd-1x-memory`` — read the whole file, then in-memory ``cd.get_*`` (a
   boolean-mask scan over all spots); measured on a 1.x checkout.
 * ``h5cd-2-memory`` — the same on the HDF5 file written by format 2.0.
 * ``zarr-backed`` — ``ChromData.read(path, backed=True)`` on a
@@ -62,11 +63,10 @@ class H5cd1xMemory:
 
     @staticmethod
     def write(cd, path):
-        cd.write(path)
+        C.FORMATS["h5cd"].write(cd, path)
 
     def open(self, path):
-        from uchrom import ChromData
-        self.cd = ChromData.read(path)
+        self.cd = C.FORMATS["h5cd"].read(path)
 
     def ids(self):
         s = self.cd.spots
@@ -317,7 +317,7 @@ def main():
             return child_write(*args.child[1:])
         return child(*args.child)
 
-    from uchrom.core.cdata import FORMAT_VERSION
+    from uchrom.io._h5cd_legacy import FORMAT_VERSION
 
     sizes = [int(float(s)) for s in args.sizes.split(",")]
     prebuilt = {int(float(k)): Path(v) for k, v in (p.split("=", 1) for p in args.prebuilt)}

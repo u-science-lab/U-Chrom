@@ -17,8 +17,7 @@ It then adds a histone / IF cell embedding (``--no-if`` skips it):
   types better (kNN-5 purity 0.61) than per-cell means (0.44), mark ×
   chromosome (0.39) or mark × 10 Mb means (0.47–0.50); chance ≈ 0.28.
 
-  takei2025_fov0/takei2025_fov0.chromdata.zarr   (~76 MB; not checked in;
-  ``--format h5cd`` writes the deprecated ~200 MB .h5cd instead)
+  takei2025_fov0/takei2025_fov0.chromdata.zarr   (~76 MB; not checked in)
 
 Usage::
 
@@ -90,7 +89,7 @@ def add_if_embedding(cd) -> None:
 
 
 
-SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz", "h5cd": ".h5cd"}
+SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz"}
 
 
 def existing(stem: Path):
@@ -100,14 +99,9 @@ def existing(stem: Path):
 
 
 def save(cd, out: Path) -> None:
-    """Write ``cd``; replaces ``out`` atomically, so a running browser never
-    sees a half-written store (the zarr / cdz writer is atomic itself)."""
-    if out.suffix == ".h5cd":
-        tmp = out.with_suffix(".tmp.h5cd")
-        cd.write(tmp)
-        tmp.replace(out)
-    else:
-        cd.write(out)
+    """Write ``cd``; the zarr / cdz writer replaces ``out`` atomically, so a
+    running browser never sees a half-written store."""
+    cd.write(out)
 
 
 def main() -> None:

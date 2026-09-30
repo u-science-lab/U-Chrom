@@ -16,7 +16,6 @@ from typing import Any, Dict, Iterable, List, Optional
 DATASET_SUFFIXES = {
     ".chromdata.zarr": "chromdata.zarr",
     ".cdz": "cdz",
-    ".h5cd": "h5cd",
     ".csv": "csv",
     ".csv.gz": "csv",
 }

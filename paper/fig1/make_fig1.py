@@ -7,7 +7,7 @@
   d  one container, many modalities — real data panels
 
 Data come from example-data/ (see example-data/README.md); ``--refresh``
-re-extracts the small caches in ``_cache/`` from the .h5cd / .mcool files.
+re-extracts the small caches in ``_cache/`` from the .chromdata.zarr / .mcool files.
 
     python paper/fig1/make_fig1.py            # → paper/fig1/fig1_overview.pdf (+ .png preview)
 """
@@ -64,7 +64,7 @@ def refresh_cache() -> None:
 
     warnings.filterwarnings("ignore")
     CACHE.mkdir(exist_ok=True)
-    cd = ChromData.read(ROOT / "example-data/takei2025_fov0/takei2025_fov0.h5cd")
+    cd = ChromData.read(ROOT / "example-data/takei2025_fov0/takei2025_fov0.chromdata.zarr")
     sp = cd.spots
     df = pd.DataFrame({"cell_id": sp.cell_id.astype(str), "chrom": sp.chrom.astype(str), "start": sp.start,
                        "trace_id": sp.trace_id.astype(str), "x": cd.coords[:, 0], "y": cd.coords[:, 1],
@@ -76,7 +76,7 @@ def refresh_cache() -> None:
     pd.DataFrame({"cell_id": c.index, "cell_type": c.cell_type, "vol": c.nuc_volume_um3}).to_csv(
         CACHE / "fov_cells.csv", index=False)
 
-    s = ChromData.read(ROOT / "example-data/schicar_mop/schicar_mop.h5cd")
+    s = ChromData.read(ROOT / "example-data/schicar_mop/schicar_mop.chromdata.zarr")
     u = s.cellm["paper_umap"]
     pd.DataFrame({"u1": u[:, 0], "u2": u[:, 1], "cell_type": s.cells["cell_type"].astype(str).values}).to_csv(
         CACHE / "schicar_umap.csv", index=False)

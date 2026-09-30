@@ -9,7 +9,7 @@ def test_dataset_formats():
     assert dataset_format("a.chromdata.zarr", True) == "chromdata.zarr"
     assert dataset_format("a.chromdata.zarr", False) is None          # a file of that name: not a store
     assert dataset_format("x.cdz", False) == "cdz"
-    assert dataset_format("x.H5CD", False) == "h5cd"
+    assert dataset_format("x.H5CD", False) is None                     # legacy HDF5: not opened
     assert dataset_format("t.csv.gz", False) == "csv"
     assert dataset_format("notes.txt", False) is None
     assert dataset_format("folder", True) is None

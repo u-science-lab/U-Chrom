@@ -69,13 +69,13 @@ def infer_kind(value: Any) -> str:
 
 
 def validate_value(value: Any, where: str = "value") -> None:
-    """Raise ``TypeError`` if ``value`` has no ``.h5cd`` writer."""
+    """Raise ``TypeError`` if ``value`` cannot be written to a ChromData store."""
     if isinstance(value, (pd.DataFrame, pd.Series)):
         return
     if isinstance(value, np.ndarray):
         if value.dtype == object:
             raise TypeError(
-                f"{where}: object-dtype arrays cannot be stored in .h5cd; "
+                f"{where}: object-dtype arrays cannot be stored in a ChromData store; "
                 f"convert to a numeric/string dtype or a list first."
             )
         return

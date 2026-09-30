@@ -88,7 +88,7 @@ class DiscoveryRunResult:
 
 
 def run_auto_discovery(config: DiscoveryRunConfig | dict[str, Any]) -> DiscoveryRunResult:
-    """Run schema → idea → notebook → verification for one ``.h5cd``."""
+    """Run schema → idea → notebook → verification for one ChromData store."""
     if not isinstance(config, DiscoveryRunConfig):
         config = DiscoveryRunConfig(**dict(config))
 
@@ -717,7 +717,7 @@ def _write_report(
     lines = [
         "# U-Chrom Auto-Discovery Run",
         "",
-        f"h5cd: `{config.h5cd_path}`",
+        f"data: `{config.h5cd_path}`",
         f"schema_hash: `{schema.get('schema_hash')}`",
         f"generated ideas: {len(ideas)}",
         f"accepted ideas: {sum(1 for r in reviews if r.get('accepted'))}",

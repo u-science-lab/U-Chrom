@@ -26,8 +26,8 @@ def test_enrich_cli_adds_reusable_feature_layers(tmp_path):
         },
         uns={"genome_assembly": "toy"},
     )
-    input_path = tmp_path / "input.h5cd"
-    output_path = tmp_path / "enriched.h5cd"
+    input_path = tmp_path / "input.chromdata.zarr"
+    output_path = tmp_path / "enriched.chromdata.zarr"
     fasta = tmp_path / "toy.fa"
     fasta.write_text(">chr1\nACGTGGGGCCCCAAAA\n")
     gtf = tmp_path / "genes.gtf"

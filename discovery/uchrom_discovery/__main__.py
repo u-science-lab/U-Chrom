@@ -157,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
 
     enrich_p = sub.add_parser(
         "enrich",
-        help="Add reusable sequence, annotation, structure, and peak features to a ChromData file (.chromdata.zarr / .h5cd)",
+        help="Add reusable sequence, annotation, structure, and peak features to a ChromData store (.chromdata.zarr / .cdz)",
     )
     enrich_p.add_argument("h5cd_path")
     enrich_p.add_argument("output_h5cd_path")
@@ -277,7 +277,7 @@ def main(argv: list[str] | None = None) -> int:
     direction_p = sub.add_parser(
         "directions",
         aliases=["frontiers"],
-        help="Plan next-iteration discovery directions from a run graph and h5cd schema",
+        help="Plan next-iteration discovery directions from a run graph and dataset schema",
     )
     direction_p.add_argument("run_dir")
     direction_p.add_argument("h5cd_path")
@@ -358,7 +358,7 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "External-knowledge behavior for iterative runs. "
             "knowledge_guided is enabled by default and uses cached claims, "
-            "h5cd references, and user annotations."
+            "dataset references, and user annotations."
         ),
     )
     iter_p.add_argument(

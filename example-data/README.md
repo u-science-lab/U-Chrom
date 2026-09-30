@@ -17,7 +17,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `4DNFIJ52NVDV.csv`                    | 219 KB  | yes             | —             | Takei 2021 nascent RNA spots for `from_fofct(rna_table=…)`, web browser; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer) |
 | `takei2025_cerebellum_fixture/`       | ~750 KB | **missing** — listed but never committed (see its section) | — | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture) |
 | `sim_cell1/` (`sim_cell1.cdz` + mcool; **structure predates the `count_contacts` fix**, rebuild pending) | 1.4 MB | yes             | —             | web browser: single-cell 3-D structure + its own contacts (`build_sim_cell1.py`); `tests/browser_web/test_genome_views.py`; `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`) (from the former 1.x `.h5cd`); `benchmarks/fig2/f_roundtrip.py` (PDB / .3dg / .mcool rows); agent benchmark `benchmarks/fig6/agent_bench/` |
-| `mESC_Sox2_5cells_{wnan,imputed_linear,imputed_snapfish}.h5cd` | 24 KB each | yes | — | imputation tests / tutorial (Huang 2021 mESC Sox2, 5 cells; see `mESC_Sox2_README.md`); `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); kept as 1.x files so the upgrade path stays exercised |
+| `mESC_Sox2_5cells_{wnan,imputed_linear,imputed_snapfish}.chromdata.zarr` | 176 KB each (43 small files) | yes | — | imputation tests / `fish_imputation` tutorial / web browser tests (Huang 2021 mESC Sox2, 5 cells; see `mESC_Sox2_README.md`).  Converted from the former 1.1 `.h5cd` files (24 KB each; in git history) with `python -m uchrom.io.upgrade` |
 | `takei2025_fov0/takei2025_fov0.chromdata.zarr` (older builds: `.h5cd`) | 73 MB (h5cd 1.x: 220 MB) | no | Zenodo 7693825 (streamed) | web browser: 59 IF tracks per spot, 47 cells, IF embedding (`build_takei2025_fov0.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `tests/browser_web` (real-data checks); `benchmarks/fig2/f_roundtrip.py` (chromdata.zarr / FOF-CT / AnnData rows); Fig 6 (`paper/fig6/extract_data.py`, `benchmarks/fig6/`, agent benchmark `benchmarks/fig6/agent_bench/`) |
 | `schicar_mop/*.chromdata.zarr` (older builds: `.h5cd`), `*.mcool, *.cool, *.scool` | ~400 MB | no  | built from GEO GSE305439 | web browser: scHiCAR without 3-D, RNA / ATAC / Hi-C embeddings (`build_schicar_mop.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fig2/e_contacts.py`, `e_contacts_query.py` (Fig. 2f and supplement: group pseudo-bulk vs the per-type `contacts_<type>.cool`; link vs copy import), `f_crossmodal.py` (Fig. 2f: RNA Leiden clusters → pseudo-bulk maps and P(s) from the linked `.scool`), `f_roundtrip.py` (Fig. 2b, .scool row); `benchmarks/fig6/bench_server.py` (contact-map and pseudo-bulk latency); agent benchmark `benchmarks/fig6/agent_bench/` |
 | `spatial_hic_chen2026/*.chromdata.zarr` + linked `*_ssab.h5ad`, `*_rna.h5ad`, `*_images/`, E13.5 `*.scool` / `*.mcool` | 15.9 GB download (Zenodo); built: stores 0.7–16 MB, h5ad 18–880 MB, scool 120 MB + mcool 94 MB | no | Zenodo 17961135 + 22144954 (opt-in, `--spatial_hic_chen2026`), built by `build_spatial_hic_chen2026.py` (needs R: `spatial_hic_chen2026_export.R`) | Spatial Hi-C mouse embryo / brain without 3-D (Chen, Guo et al. 2026): six tissue stores; `benchmarks/spatial_hic_chen2026_validation.py` |
@@ -38,22 +38,23 @@ auto-downloaded by the tutorials on first run into this directory.
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
 | `H1Esc-HFF.R1.tar.gz`                 | 128 MB  | no              | UW Noble lab  | `higashi_embedding` tutorial (sci-Hi-C H1Esc+HFF mix)                   |
 | `H1Esc-HFF.R1.labeled`                | 92 KB   | no              | UW Noble lab  | `higashi_embedding` tutorial (cell-type labels)                         |
-| `with_loops.h5cd`                     | 24 MB   | no              | generated     | output of `loop_calling.ipynb` (intermediate cache, safe to delete)     |
+| `with_loops.chromdata.zarr`           | 24 MB   | no              | generated     | output of `loop_calling.ipynb` (intermediate cache, safe to delete)     |
 | `fofct_core.csv`                      | ~6 MB   | no              | generated     | synthetic offline fallback for tutorials 4/5/6/7                        |
 | `GSE63525_GM12878_insitu_primary+replicate_combined_30.hic` | ~40 GB | no | **manual** (too large) | `benchmark.ipynb` |
 | `schicar_mop/raw/GSE305439/` RNA + metadata | 61 MB | no | GEO GSE305439 | scHiCAR tutorials (upstream input) |
 | `schicar_mop/raw/GSE305439/` pairs | 1.47 GB | no | GEO GSE305439 (opt-in, `--schicar_dna`) | `build_schicar_mop.py` contact maps, scHiCAR tutorials |
 | `schicar_mop/raw/GSE305439/` ATAC fragments + `schicar_mop/raw/mm10.refGene.gtf.gz` | 1.35 GB + 13 MB | no | GEO GSE305439 + UCSC (opt-in, `--schicar_atac`) | `build_schicar_mop.py` ATAC embedding + gene activity |
 | `schicar_mop/raw/merfish_mop/` | 332 MB | no | Brain Image Library g.21 | `schicar_to_merfish_mapping.ipynb` (upstream input) |
-| `benchmarks/fig6/_data/takei2025_fov0_x{1,3,10,30}.h5cd` | 28 MB – 0.9 GB | no | **derived**: `benchmarks/fig6/make_scaled.py` tiles copies of the real FOV 0 cells (geometry only); labelled *replicated* wherever reported | Fig 6c browser benchmarks |
+| `benchmarks/fig6/_data/takei2025_fov0_x{1,3,10,30}.chromdata.zarr` | 28 MB – 0.9 GB | no | **derived**: `benchmarks/fig6/make_scaled.py` tiles copies of the real FOV 0 cells (geometry only); labelled *replicated* wherever reported | Fig 6c browser benchmarks |
 | `schicar_mop/data/…`, `schicar_mop/organized_u_chrom_framework/…` | — | no | **derived — recipe pending** | scHiCAR tutorials (see below) |
 
 `*.csv`, `*.h5cd`, `*.chromdata.zarr`, `*.cdz` (except
-`sim_cell1/sim_cell1.cdz`) and the DNAseqFISH+ zip/folder are ignored by
-git; they're either generated or downloaded on demand.  The builders write
-the format 2.0 `.chromdata.zarr` store (`--format h5cd` still writes the
-deprecated HDF5 file); older `.h5cd` builds keep working (they are read,
-and `python -m uchrom.io.upgrade` converts them).
+`sim_cell1/sim_cell1.cdz` and the `mESC_Sox2_5cells_*.chromdata.zarr`
+stores) and the DNAseqFISH+ zip/folder are ignored by git; they're either
+generated or downloaded on demand.  The builders write the
+`.chromdata.zarr` store (`--format cdz`: one zip file).  `.h5cd` files of
+older builds are no longer read: convert them once with
+`python -m uchrom.io.upgrade old.h5cd`, or rebuild.
 
 ## Small, in-repo datasets
 
@@ -132,7 +133,7 @@ and `python -m uchrom.io.upgrade` converts them).
   [7693825](https://zenodo.org/records/7693825).  Locus annotation +
   clustering CSVs: CaiGroup/dna-seqfish-plus-multi-omics GitHub repo.
 - **Used by**: `seqfish_multiomics_cerebellum.ipynb` (loader walk-through
-  + `.h5cd` round-trip).
+  + store round trip).
 - **Real-data run**: the full distribution (rep 1 + rep 2 tarballs,
   ~8 GB compressed; tens of GB uncompressed; tens of millions of spots)
   is *not* auto-fetched.  Manual download:
@@ -504,7 +505,7 @@ public data alone** and are shipped with their recorded outputs.
   after the NucDynamics port fixes land (separate PR); until then treat
   it as a browser demo, not as a valid Cell 1 structure.  The mcool is
   built directly from `cell1.pairs` and is not affected.
-- **Rebuild**: `python example-data/build_sim_cell1.py [--arch cpu] [--format cdz|zarr|h5cd]`.
+- **Rebuild**: `python example-data/build_sim_cell1.py [--arch cpu] [--format cdz|zarr]`.
 - **Check**: bins in contact in the input are ~2× closer in the model
   (median 3D distance of contacted / non-contacted 1 Mb pairs = 0.44–0.59
   on chr1, 2, 5, 11, 19) — `tests/browser_web/test_genome_views.py`.
@@ -705,10 +706,10 @@ public data alone** and are shipped with their recorded outputs.
   its own subprocess with `read_seqfish_multiomics` (default
   `dbscan_ldp_nbr_allele` traces, DBSCAN noise dropped, 62 spot tracks) →
   `fov/takei2025_cerebellum_rep1_pos<N>.chromdata.zarr`, then concatenated into
-  `takei2025_cerebellum_rep1.chromdata.zarr` (the format 2.0 default;
-  `--format h5cd` writes the deprecated HDF5 container); stats in
-  `build_summary.json`.  Per-FOV files from older builds (`fov/*.h5cd`,
-  1.x) are reused as they are.
+  `takei2025_cerebellum_rep1.chromdata.zarr` (`--format cdz`: one zip
+  file); stats in `build_summary.json`.  Per-FOV `.h5cd` files of older
+  builds are no longer read (convert them with `python -m uchrom.io.upgrade`
+  or rebuild).
 
   | | spots | traces | cells | h5cd 1.x | loader peak RSS |
   |---|---|---|---|---|---|
@@ -755,7 +756,7 @@ public data alone** and are shipped with their recorded outputs.
   (`4DNFIGJT3AN3` 572 MB, `4DNFIZ4TAGXZ` 248 MB).
 - **Content** (`python example-data/build_liu2025_mop.py` →
   `liu2025_mop.chromdata.zarr` 294 MB + `build_summary.json`;
-  `--format h5cd` → 1.57 GB as h5cd 1.x): **9,582,069 spots,
+  1.57 GB as the former h5cd 1.x): **9,582,069 spots,
   188,891 traces, 11,045 cells**, 20 chromosomes, median 50 spots per trace,
   µm, GRCm38.  The cell table has 14,733 rows (3,695 cells without traces;
   7 traced cells without a row), with 240 RNA counts and cell-type labels.
@@ -899,7 +900,7 @@ Everything is gitignored.  DOIs checked against Crossref (2026-09-27).
 
 ## Generated outputs
 
-- `with_loops.chromdata.zarr` (older runs: `with_loops.h5cd`) — created at the end of `loop_calling.ipynb` as a
+- `with_loops.chromdata.zarr` — created at the end of `loop_calling.ipynb` as a
   round-trip demonstration.  Safe to delete; the tutorial will
   regenerate it on next run.
 - `fofct_core.csv` — a small synthetic FOF-CT that tutorials 4–7

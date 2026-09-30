@@ -14,7 +14,7 @@ import pytest
 
 def _real_cd():
     from uchrom.core import ChromData
-    data = os.path.join("example-data", "mESC_Sox2_5cells_wnan.h5cd")
+    data = os.path.join("example-data", "mESC_Sox2_5cells_wnan.chromdata.zarr")
     if not os.path.exists(data):
         pytest.skip(f"real test data not found: {data}")
     return ChromData.read(data)

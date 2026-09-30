@@ -40,6 +40,9 @@ run_whole_genome.py
 *.chromdata.zarr
 *.cdz
 !example-data/sim_cell1/sim_cell1.cdz
+# small in-repo Sox2 FISH stores (example-data/README.md)
+!example-data/mESC_Sox2_5cells_*.chromdata.zarr
+!example-data/mESC_Sox2_5cells_*.chromdata.zarr/**/zarr.json
 *.h5ad
 *.tar.gz
 example-data/**/*.zip
@@ -47,7 +50,6 @@ example-data/4DNFIHF3JCBY.*
 example-data/DNAseqFISH+.zip
 example-data/DNAseqFISH+/
 example-data/fofct_core.csv
-example-data/with_loops.h5cd
 example-data/IMR90_chr21-18-20Mb.csv
 example-data/schicar_mop/
 example-data/IMR90_chr21_pyhim.ecsv
@@ -64,8 +66,7 @@ docs/build/
 # Stray nested worktree paths must never be committed
 .claude/worktrees/
 
-# small in-repo example (must come after the *.h5cd / *.mcool rules)
-!example-data/sim_cell1/*.h5cd
+# small in-repo example (must come after the *.mcool rule)
 !example-data/sim_cell1/*.mcool
 # Fig 6c benchmark inputs (replicated Takei 2025 FOV 0; benchmarks/fig6/make_scaled.py)
 benchmarks/fig6/_data/

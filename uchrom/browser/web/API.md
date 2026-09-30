@@ -10,8 +10,9 @@ paths are local filesystem paths on the machine running the server.
 `.chromdata.zarr` / `.cdz` stores are opened **backed**: loading reads only
 the small tables and the store's `index/`; the summary, trace and cell lists
 come from the index, and a geometry request that names cells, traces or
-chromosomes reads just those spots.  `.h5cd` and `.csv` files are loaded
-into memory.  The responses are the same either way.
+chromosomes reads just those spots.  `.csv` files are loaded into memory
+(the responses are the same either way).  A legacy `.h5cd` is refused
+(`400`; convert it with `python -m uchrom.io.upgrade`).
 
 ## Datasets
 
@@ -96,7 +97,7 @@ as `coords`, e.g. nascent RNA spots); `labels` are sorted by count.
 ### `POST /api/datasets`
 
 Body `{"path": "/abs/path/data.chromdata.zarr"}` (a `.chromdata.zarr`
-directory, `.cdz`, `.h5cd` or reconstruction `.csv`).
+directory, `.cdz` or reconstruction `.csv`).
 Loads the file and returns its summary (same shape as a list item above).
 `400` with `{"detail": "..."}` if the file is missing or unreadable.
 
@@ -112,7 +113,7 @@ One directory on the server, for the Open dataset dialog (default: the server's 
 ```
 
 - `kind`: `dir`, `dataset` or `file`.  A dataset is something `POST /api/datasets` opens: a
-  `*.chromdata.zarr` directory (listed as a dataset, not entered), `.cdz`, `.h5cd`, `.csv`, `.csv.gz`.
+  `*.chromdata.zarr` directory (listed as a dataset, not entered), `.cdz`, `.csv`, `.csv.gz`.
 - Order: directories, datasets, other files; by name within each.
 - `size` is in bytes (the total of the files of a store directory).
 - Hidden entries appear only with `hidden=true`.  At most 5,000 entries (`truncated`).

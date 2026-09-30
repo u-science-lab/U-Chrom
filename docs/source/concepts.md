@@ -110,8 +110,8 @@ data.chromdata.zarr/
 
 The index makes a cell, trace or chromosome a few contiguous row ranges,
 so `ChromData.read(path, backed=True)` can open large data sets without
-loading them.  `.h5cd` (HDF5) files — format 1.x and 2.0 — are still read;
-`python -m uchrom.io.upgrade` converts them.
+loading them.  `.h5cd` (HDF5) files — format 1.x and 2.0 — are no longer
+read; `python -m uchrom.io.upgrade` converts them once.
 
 Format version follows `MAJOR.MINOR`:
 

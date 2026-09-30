@@ -42,7 +42,7 @@ describe('layer tree helpers', () => {
 const ds: DatasetSummary = {
   id: 'd1',
   name: 'cell1',
-  path: '/tmp/cell1.h5cd',
+  path: '/tmp/cell1.chromdata.zarr',
   n_spots: 10,
   n_traces: 2,
   n_cells: 1,

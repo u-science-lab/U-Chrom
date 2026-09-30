@@ -1,7 +1,7 @@
 # 3D reconstruction
 
 U-Chrom ships three reconstruction backends under `uchrom.recon`, all
-writing the same `.h5cd` output format.
+writing the same `.chromdata.zarr` output format.
 
 | Backend | Module | Best for | Notes |
 |---------|--------|----------|-------|
@@ -12,12 +12,12 @@ writing the same `.h5cd` output format.
 ## Nuc Dynamics (single-cell)
 
 Input: `.pairs` / `.pairs.gz` / `.cool`.
-Output: `.h5cd` (one trace per chromosome).
+Output: `.chromdata.zarr` (one trace per chromosome).
 
 CLI:
 
 ```bash
-python -m uchrom.recon.sc.nucdyn cell1.pairs out.h5cd \
+python -m uchrom.recon.sc.nucdyn cell1.pairs out.chromdata.zarr \
     --arch=cuda --dyns=500 \
     --size_steps='[8, 4, 2, 0.4, 0.2, 0.1]'
 ```
@@ -38,7 +38,7 @@ Key parameters:
 Same CLI pattern:
 
 ```bash
-python -m uchrom.recon.sc.gem cell1.pairs out.h5cd --arch=cuda
+python -m uchrom.recon.sc.gem cell1.pairs out.chromdata.zarr --arch=cuda
 ```
 
 Writes four energy terms each step (stretch / bend / exclude / contact)
@@ -47,11 +47,11 @@ with Taichi's `ti.Tape` for autodiff gradient descent.
 ## Bulk MDS (PyTorch, whole-genome)
 
 Input: `.hic` / `.mcool` / `.cool`.
-Output: `.h5cd` (or per-chromosome for inter mode).
+Output: `.chromdata.zarr` (or per-chromosome for inter mode).
 
 ```bash
 # Single chromosome
-python -m uchrom.recon.bulk.mds data.mcool out.h5cd \
+python -m uchrom.recon.bulk.mds data.mcool out.chromdata.zarr \
     --resolution=100000 --chrom=chr1 --device=auto
 
 # Whole genome with inter-chromosomal contacts
@@ -79,12 +79,12 @@ Additional flags:
 
 ```python
 from uchrom.recon.sc.nucdyn import main as nucdyn_main
-nucdyn_main("cell1.pairs", "out.h5cd", arch="cuda", dyns=500)
+nucdyn_main("cell1.pairs", "out.chromdata.zarr", arch="cuda", dyns=500)
 
 from uchrom import ChromData
-cd = ChromData.read("out.h5cd")
+cd = ChromData.read("out.chromdata.zarr")
 ```
 
-All three backends write `.h5cd` with one trace per chromosome (single
+All three backends write `.chromdata.zarr` with one trace per chromosome (single
 cell) or one chromosome structure (bulk).  Downstream tools don't care
 which reconstructor you used.

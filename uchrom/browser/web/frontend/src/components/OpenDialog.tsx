@@ -18,7 +18,7 @@ const lastDir = () => {
 /**
  * Open a dataset on the server: places (server folder, home, the loaded datasets' folders) and recently
  * opened datasets on the left; breadcrumbs, a path field and a filter above a listing of the folder.
- * Folders open with a click; datasets (.chromdata.zarr, .cdz, .h5cd, .csv) open with a double-click or
+ * Folders open with a click; datasets (.chromdata.zarr, .cdz, .csv) open with a double-click or
  * Open.  Esc or a click outside closes it.
  */
 export function OpenDialog({ onClose }: { onClose(): void }) {
@@ -105,7 +105,7 @@ export function OpenDialog({ onClose }: { onClose(): void }) {
     const t = pathText.trim()
     if (!t) return
     // a dataset path typed / pasted: open it; else list the folder
-    if (/\.(chromdata\.zarr|cdz|h5cd|csv|csv\.gz)\/?$/i.test(t)) void open(t.replace(/\/$/, ''))
+    if (/\.(chromdata\.zarr|cdz|csv|csv\.gz)\/?$/i.test(t)) void open(t.replace(/\/$/, ''))
     else setDir(t)
   }
 
@@ -209,7 +209,7 @@ export function OpenDialog({ onClose }: { onClose(): void }) {
               {selected
                 ? selected.kind === 'dataset'
                   ? selected.path
-                  : `${selected.name}: not a dataset the browser opens (.chromdata.zarr, .cdz, .h5cd, .csv)`
+                  : `${selected.name}: not a dataset the browser opens (.chromdata.zarr, .cdz, .csv)`
                 : listing
                   ? `${nData} dataset${nData === 1 ? '' : 's'} in this folder${listing.truncated ? ' (listing truncated)' : ''}`
                   : ''}

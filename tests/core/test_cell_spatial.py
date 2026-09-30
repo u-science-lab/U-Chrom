@@ -3,7 +3,6 @@ outlines (``cell_shapes``, GeoParquet) and linked SpatialData stores."""
 
 import json
 import sys
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -205,13 +204,13 @@ def test_missing_shapely_gives_clear_error(monkeypatch):
         cd.cell_shapes_geodataframe()
 
 
-def test_h5cd_warns_that_shapes_are_dropped(tmp_path):
+def test_legacy_h5cd_writer_warns_that_shapes_are_dropped(tmp_path):
+    from uchrom.io._h5cd_legacy import write_h5cd
+
     cd = _cd()
     cd.set_cell_shapes(SQUARES)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        with pytest.warns(UserWarning, match="cell_shapes"):
-            cd.write(tmp_path / "x.h5cd")
+    with pytest.warns(UserWarning, match="cell_shapes"):
+        write_h5cd(cd, tmp_path / "x.h5cd")
 
 
 def test_streaming_writer_keeps_shapes(tmp_path):

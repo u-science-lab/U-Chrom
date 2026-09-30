@@ -8,7 +8,7 @@
 4. Save everything to this folder: the transcript (stream-json), the answer, the page screenshot, a
    PNG of each view the agent opened, and run metadata.
 
-    .venv/bin/python paper/fig6/agent_run/run_d.py [--data example-data/takei2025_fov0/takei2025_fov0.h5cd]
+    .venv/bin/python paper/fig6/agent_run/run_d.py [--data example-data/takei2025_fov0/takei2025_fov0.chromdata.zarr]
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ QUESTION = "What is different about the cells I just selected in the browser? Sh
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default=str(REPO / "example-data/takei2025_fov0/takei2025_fov0.h5cd"))
+    ap.add_argument("--data", default=str(REPO / "example-data/takei2025_fov0/takei2025_fov0.chromdata.zarr"))
     ap.add_argument("--model", default=None)
     ap.add_argument("--timeout", type=int, default=1200)
     a = ap.parse_args()

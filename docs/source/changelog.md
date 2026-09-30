@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **`.h5cd` is no longer a ChromData format.**  `ChromData.read` / `write`
+  (and every loader, CLI and the browser built on them) refuse the HDF5
+  `.h5cd` container of format 1.x / 2.0 with a `ValueError` that names the
+  converter; `python -m uchrom.io.upgrade old.h5cd` /
+  `uchrom.io.upgrade_h5cd` convert a file once (targets: `.chromdata.zarr`,
+  `.cdz`; the `--compression` / `--level` / `--compress-floats` options and
+  `.h5cd` targets are gone).  The reader lives on in the private
+  `uchrom.io._h5cd_legacy` (also used by the format benchmarks).  The
+  in-repo Sox2 FISH examples are now `mESC_Sox2_5cells_*.chromdata.zarr`.
+  `load_seqfish_multiomics_linked(h5cd_path=)` is renamed `cd_path=`
+  (the old name warns).
 - **Cell spatial position is first-class (`.chromdata.zarr` format 2.3).**
   Centroids are `cells` columns `centroid_x`, `centroid_y` [, `centroid_z`]
   with a record `uns['cell_spatial'][key]` (unit, frame fov / tissue /

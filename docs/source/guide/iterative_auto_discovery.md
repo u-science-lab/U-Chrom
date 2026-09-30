@@ -10,7 +10,7 @@ classification.
 
 The current auto-discovery workflow already supports:
 
-- h5cd-backed discovery schemas
+- store-backed discovery schemas
 - agent-generated structured ideas
 - schema review before execution
 - notebook-first exploration with free-form code
@@ -41,7 +41,7 @@ The first implementation pass now covers the local graph/follow-up-direction loo
 - `uchrom_discovery.graph.IdeaGraph` builds a discovery graph from
   `ideas.jsonl`, `reviews.jsonl`, and `results.jsonl`.
 - `uchrom_discovery.direction.plan_discovery_directions` reads that graph
-  plus the h5cd-backed schema and produces diverse next-iteration follow-up
+  plus the store-backed schema and produces diverse next-iteration follow-up
   directions.
 - `run_auto_discovery` writes `graph/idea_graph.json`,
   `graph/graph_summary.md`, `graph/idea_graph.html`,
@@ -60,10 +60,10 @@ The first implementation pass now covers the local graph/follow-up-direction loo
 - The CLI can regenerate these artifacts from an existing run:
 
 ```bash
-python -m uchrom_discovery directions RUN_DIR DATA.h5cd
+python -m uchrom_discovery directions RUN_DIR DATA.chromdata.zarr
 python -m uchrom_discovery view RUN_DIR/graph/idea_graph.json graph.html
 python -m uchrom_discovery claims RUN_DIR/graph/idea_graph.json RUN_DIR/browser/claims.jsonl
-python -m uchrom_discovery iterate DATA.h5cd ITERATIVE_OUT \
+python -m uchrom_discovery iterate DATA.chromdata.zarr ITERATIVE_OUT \
   --iterations 3 \
   --ideas-per-iteration 20
 ```
@@ -76,7 +76,7 @@ separate pass. Use `--no-generate-schematic-image` for a faster evidence-only
 run:
 
 ```bash
-python -m uchrom_discovery iterate DATA.h5cd ITERATIVE_OUT \
+python -m uchrom_discovery iterate DATA.chromdata.zarr ITERATIVE_OUT \
   --iterations 3 \
   --ideas-per-iteration 20 \
   --schematic-image-model openai
@@ -98,7 +98,7 @@ Agents do not call each other directly. Instead, each agent reads a graph
 slice and writes structured artifacts that are ingested back into the graph.
 
 ```text
-cdata / h5cd
+cdata / store
   -> discovery schema
   -> dataset references
   -> user annotations
@@ -136,7 +136,7 @@ This keeps responsibilities clear:
 store large notebooks, browser logs, or full graph artifacts. Instead, it
 should store lightweight context and pointers.
 
-Recommended h5cd metadata keys:
+Recommended store metadata keys:
 
 ```python
 cdata.uns["dataset_references"] = [...]
@@ -325,13 +325,13 @@ Example claim:
 
 External knowledge is a prior. It can motivate ideas, but it does not replace
 data validation. Notebook results remain the evidence for whether an idea is
-supported in the loaded h5cd dataset.
+supported in the loaded dataset.
 
 Suggested operation modes:
 
 ```text
 closed_world
-  Use only h5cd schema and previous discovery results.
+  Use only dataset schema and previous discovery results.
 
 knowledge_guided
   Use cached literature claims and user annotations, but do not browse.
@@ -355,7 +355,7 @@ the graph before planning the next step.
 7. Dispatch notebook agents over selected ideas.
 8. Re-execute notebooks with the U-Chrom runner.
 9. Classify evidence and update the graph.
-10. Write graph summaries and h5cd pointers.
+10. Write graph summaries and dataset pointers.
 ```
 
 Pseudo-code:
@@ -428,7 +428,7 @@ Follow-up directions can be generated from:
 - not-supported findings that should not be repeated exactly
 - coverage gaps in cell types, markers, genes, modalities, or parameter
   families
-- literature claims that have not yet been tested in this h5cd
+- literature claims that have not yet been tested in this dataset
 - user annotations that encode hypotheses or analysis constraints
 
 ## Diversity and Novelty
@@ -561,7 +561,7 @@ The graph then connects this result back to the idea with `supports`,
 
 ## Storage Layout
 
-The h5cd should stay lightweight. Full graph and agent artifacts should live
+The store should stay lightweight. Full graph and agent artifacts should live
 in the run directory.
 
 Recommended layout:
@@ -589,7 +589,7 @@ runs/iterative_001/
   notebooks/
 ```
 
-The h5cd pointer can remain small:
+The dataset pointer can remain small:
 
 ```json
 {
@@ -684,7 +684,7 @@ Deliverables:
 
 - Should the graph use `networkx` internally, a lightweight custom JSON graph,
   or both?
-- How much of the graph summary should be written back into h5cd versus kept
+- How much of the graph summary should be written back into the store versus kept
   only in run directories?
 - What should be the default portfolio constraints for small datasets?
 - How should literature claim confidence be represented when sources disagree?

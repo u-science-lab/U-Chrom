@@ -76,8 +76,8 @@ def _impute_interpolation(cd, kind, extrapolate, ann=None):
     from ._grid import build_dense_grid, grid_to_chromdata
 
     grid, _panel, has_cell = build_dense_grid(cd, ann=ann)
-    # np.array (not asarray) guarantees a writable copy; h5cd-backed coords
-    # can be read-only views.
+    # np.array (not asarray) guarantees a writable copy; coords read from a
+    # store can be read-only views.
     coords_imputed = np.array(grid[['x', 'y', 'z']].to_numpy(dtype=float))
     fill_value = 'extrapolate' if extrapolate else np.nan
 

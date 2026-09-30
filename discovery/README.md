@@ -3,7 +3,7 @@
 LLM-driven multi-omics auto-discovery on top of
 [U-Chrom](../README.md) `ChromData`.
 
-It turns an `.h5cd` file into an agent-readable schema, asks an agent
+It turns a ChromData store (`.chromdata.zarr`) into an agent-readable schema, asks an agent
 backend (Pantheon, Claude Code or Codex CLI) for structured hypotheses,
 reviews them against the schema, writes and executes one exploration
 notebook per idea, verifies the numbers, classifies the evidence, and
@@ -26,14 +26,14 @@ pip install -e "discovery/[pantheon]"   # optional Pantheon backend
 from uchrom import ChromData
 from uchrom_discovery import build_discovery_schema, describe_for_agent
 
-cdata = ChromData.read("data.h5cd")
+cdata = ChromData.read("data.chromdata.zarr")
 build_discovery_schema(cdata, store=True)   # -> cdata.uns["auto_discovery_schema"]
 print(describe_for_agent(cdata))
 ```
 
 ```bash
-uchrom-discovery run data.h5cd runs/example --backend claude
-python -m uchrom_discovery iterate data.h5cd runs/iterative
+uchrom-discovery run data.chromdata.zarr runs/example --backend claude
+python -m uchrom_discovery iterate data.chromdata.zarr runs/iterative
 ```
 
 Guides: `docs/source/guide/auto_discovery.md`,

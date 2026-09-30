@@ -85,8 +85,6 @@ def cache_markers():
     from uchrom import ChromData
     warnings.filterwarnings("ignore")
     src = ROOT / "example-data/schicar_mop/schicar_mop.chromdata.zarr"
-    if not src.exists():
-        src = src.with_name("schicar_mop.h5cd")        # older builds
     cd = ChromData.read(src)
     c = cd.cells
     ct = c.cell_type.astype(str).to_numpy()

@@ -8,7 +8,16 @@ import pandas as pd
 import pytest
 
 from uchrom import ChromData, ResultRecord, ResultsStore
-from uchrom.core.cdata import FORMAT_VERSION, _read_results
+from uchrom.io._h5cd_legacy import FORMAT_VERSION, _read_results, read_h5cd, write_h5cd
+
+
+def _write(cd, path):
+    """``.h5cd`` goes through the legacy module (conversion / benchmarks only)."""
+    write_h5cd(cd, path) if str(path).endswith(".h5cd") else cd.write(path)
+
+
+def _read(path):
+    return read_h5cd(path) if str(path).endswith(".h5cd") else ChromData.read(path)
 
 
 def _cd(results=None):
@@ -125,7 +134,6 @@ def _all_kinds():
     }
 
 
-@pytest.mark.filterwarnings("ignore:writing .*h5cd:DeprecationWarning")
 @pytest.mark.parametrize("suffix", [".h5cd", ".chromdata.zarr", ".cdz"])
 def test_every_kind_round_trips_with_provenance(tmp_path, suffix):
     cd = _cd()
@@ -133,11 +141,11 @@ def test_every_kind_round_trips_with_provenance(tmp_path, suffix):
         cd.results.set(key, value, kind=kind, function=f"f.{key}",
                        params={"k": key, "arr": np.arange(2)}, inputs={"chrom": ["chr1"]})
     path = tmp_path / f"r{suffix}"
-    cd.write(path)
+    _write(cd, path)
     from uchrom.io import file_format_version
     from uchrom.core.zarrcd import ZARR_FORMAT_VERSION
     assert file_format_version(path) == (FORMAT_VERSION if suffix == ".h5cd" else ZARR_FORMAT_VERSION)
-    out = ChromData.read(path).results
+    out = _read(path).results
 
     assert set(out) == set(cd.results)
     for key in cd.results:
@@ -154,7 +162,6 @@ def test_every_kind_round_trips_with_provenance(tmp_path, suffix):
     assert out.record("table").params == {"k": "table", "arr": [0, 1]}
 
 
-@pytest.mark.filterwarnings("ignore:writing .*h5cd:DeprecationWarning")
 @pytest.mark.parametrize("suffix", [".h5cd", ".chromdata.zarr"])
 def test_empty_table_keeps_schema(tmp_path, suffix):
     empty = pd.DataFrame({
@@ -162,8 +169,8 @@ def test_empty_table_keeps_schema(tmp_path, suffix):
         "fdr": pd.Series(dtype="float64"),
     })
     cd = _cd({"empty": empty})
-    cd.write(tmp_path / f"e{suffix}")
-    out = ChromData.read(tmp_path / f"e{suffix}").results["empty"]
+    _write(cd, tmp_path / f"e{suffix}")
+    out = _read(tmp_path / f"e{suffix}").results["empty"]
     pd.testing.assert_frame_equal(out, empty)
 
 
@@ -172,7 +179,7 @@ def test_old_reader_sees_values_unchanged(tmp_path):
     cd = _cd()
     cd.results.set("t", pd.DataFrame({"x": [1, 2]}), function="f")
     cd.results.set("m", {"a": np.ones(2)}, function="f")
-    cd.write(tmp_path / "v.h5cd")
+    write_h5cd(cd, tmp_path / "v.h5cd")
     with h5py.File(tmp_path / "v.h5cd", "r") as f:
         plain = _read_results(f, "results")
     pd.testing.assert_frame_equal(plain["t"], cd.results["t"])
@@ -194,7 +201,7 @@ def test_pre_provenance_file_reads_as_records_without_provenance(tmp_path):
             for attr in ("_kind", "_function", "_params", "_inputs",
                          "_uchrom_version", "_created_utc"):
                 del f["results"][key].attrs[attr]
-    out = ChromData.read(path).results
+    out = read_h5cd(path).results
     assert out.record("tads").kind == "table" and out.record("tads").function is None
     assert out.record("pc1").kind == "array"
     np.testing.assert_array_equal(out["pc1"], np.ones(4))

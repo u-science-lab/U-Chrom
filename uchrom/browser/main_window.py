@@ -380,7 +380,7 @@ class MainWindow(QMainWindow):
         options |= QFileDialog.DontUseNativeDialog
         path, _ = QFileDialog.getOpenFileName(
             self, "Open", "",
-            "Structure Files (*.cdz *.h5cd *.csv);;ChromData (*.cdz *.h5cd);;CSV Files (*.csv);;All Files (*)",
+            "Structure Files (*.cdz *.csv);;ChromData (*.cdz);;CSV Files (*.csv);;All Files (*)",
             options=options)
         self._open_path(path)
 

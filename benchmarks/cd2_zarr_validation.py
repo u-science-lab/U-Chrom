@@ -5,8 +5,11 @@ For every example dataset (all catalogued in ``example-data/README.md``):
 1. **convert** — ``uchrom.io.upgrade_h5cd`` from the 1.x ``.h5cd`` (or
    ``ChromData.from_fofct`` for the Takei 2021 FOF-CT) to
    ``.chromdata.zarr`` in a fresh process: wall time and peak RSS.  The same
-   source is also written as HDF5 2.0 (``.h5cd``, the #65 format) and as a
-   zarr store with float32 coords, for the size comparison.
+   source is also written as HDF5 2.0 (``.h5cd``, the #65 format, with the
+   legacy writer ``uchrom.io._h5cd_legacy.write_h5cd`` — ``.h5cd`` is no longer
+   a ChromData format) and as a zarr store with float32 coords, for the size
+   comparison.  The 1.x ``mESC_Sox2_5cells_wnan.h5cd`` source is in git
+   history (the repo now has the converted store).
 2. **verify** — a fresh process reads the source and the zarr store with
    ``original_order=True`` (the spots are stored sorted by cell / trace /
    bin; ``index/source_row`` restores the written order) and checks value
@@ -75,6 +78,9 @@ def load_source(src: Path, kind: str):
         data = src.parent
         return ChromData.from_fofct(src, cell_table=data / "4DNFIFINA2U9.csv",
                                     rna_table=data / "4DNFIJ52NVDV.csv")
+    if kind == "h5cd":
+        from uchrom.io._h5cd_legacy import read_h5cd
+        return read_h5cd(src)
     return ChromData.read(src)
 
 
@@ -91,7 +97,11 @@ def child_convert(src, kind, dst, opts):
     else:
         cd = load_source(Path(src), kind)
         t_read = time.perf_counter() - t0
-        cd.write(dst, **opts)
+        if opts.pop("format", None) == "h5cd":
+            from uchrom.io._h5cd_legacy import write_h5cd
+            write_h5cd(cd, dst, **opts)
+        else:
+            cd.write(dst, **opts)
     emit({"seconds": time.perf_counter() - t0, "read_s": t_read, "peak_rss_gb": peak_rss_gb(),
           "bytes": size_bytes(Path(dst))})
 

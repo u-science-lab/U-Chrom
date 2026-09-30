@@ -85,16 +85,14 @@ def load_chromdata(path: Path) -> ChromData:
 
     ``.chromdata.zarr`` / ``.cdz`` stores open **backed**: only the small
     tables and the ``index/`` offsets are read, and the spots of a cell /
-    trace / chromosome are read when a view needs them.  ``.h5cd`` files
-    are loaded into memory.
+    trace / chromosome are read when a view needs them.  A legacy ``.h5cd``
+    raises a ``ValueError`` that names the conversion command.
     """
     from uchrom.core.zarrcd import container_kind
 
     kind = container_kind(path)
-    if kind in ("zarr", "cdz"):
+    if kind is not None:  # zarr / cdz; "h5cd" raises (convert with python -m uchrom.io.upgrade)
         return ChromData.read(path, backed=True)
-    if kind == "h5cd":
-        return ChromData.read(path)
     df = pd.read_csv(path, index_col=0)
     return ChromData.from_dataframe(df)
 
@@ -714,7 +712,7 @@ class Dataset:
 
     def resolve(self, path: str) -> Path:
         """Linked file path; relative paths are relative to the dataset's
-        directory (where the .chromdata.zarr / .cdz / .h5cd lives)."""
+        directory (where the .chromdata.zarr / .cdz lives)."""
         p = Path(path).expanduser()
         if not p.is_absolute() and self.path:
             p = Path(self.path).parent / p

@@ -34,7 +34,7 @@ def load_contacts_from_mcool(path, resolution, chrom=None):
 
 def save_structure(coords, bins_df, output_path):
     """Save 3D structure. Format from the extension (``.chromdata.zarr``,
-    ``.cdz``, ``.csv``; ``.h5cd`` is deprecated) — see ``save_particles``."""
+    ``.cdz``, ``.csv``) — see ``save_particles``."""
     from uchrom.io import save_particles
 
     result = pd.DataFrame({

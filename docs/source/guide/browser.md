@@ -4,7 +4,7 @@
 chromatin 3D structures.
 
 ```bash
-python -m uchrom.browser out.chromdata.zarr   # ChromData (.cdz / .h5cd too)
+python -m uchrom.browser out.chromdata.zarr   # ChromData (.cdz too)
 python -m uchrom.browser out.csv        # legacy CSV
 python -m uchrom.browser                 # no args — shows welcome page
 ```

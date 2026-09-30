@@ -112,7 +112,7 @@ def review_idea_against_schema(
         if info is None:
             errors.append(f"unknown modality: {modality}")
         elif not info.get("present"):
-            errors.append(f"modality is not present in this h5cd: {modality}")
+            errors.append(f"modality is not present in this dataset: {modality}")
 
     known_cell_types = set((schema.get("catalogs", {}).get("cell_types", {}) or {}).get("values", []))
     for cell_type in idea.cell_types:

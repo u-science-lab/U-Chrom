@@ -32,12 +32,12 @@ def main(
 
     Parameters
     ----------
-    input : path to a ChromData file (``.chromdata.zarr`` / ``.cdz`` /
-        ``.h5cd``) or a FOF-CT ``.csv``
+    input : path to a ChromData store (``.chromdata.zarr`` / ``.cdz``) or a
+        FOF-CT ``.csv``
     output : path to save result.
         - ``.bedpe`` → write BEDPE TSV (six columns + score)
         - ``.csv`` → full CSV with all columns
-        - ``.chromdata.zarr`` (recommended) / ``.cdz`` / ``.h5cd`` → update
+        - ``.chromdata.zarr`` / ``.cdz`` → update
           the input ChromData with ``results[key_added]`` (default
           ``'loops.axiswise_f'``) and write it to ``output``.
     chrom : chromosome to process (required).

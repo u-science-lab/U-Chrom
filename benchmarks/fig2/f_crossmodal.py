@@ -1,7 +1,7 @@
 """Figure 2f — groups from one modality, structure from another (scHiCAR MOp).
 
 Everything is real data (``example-data/schicar_mop/``): the scHiCAR mouse
-brain store (``schicar_mop.h5cd``: 5,313 cells, RNA / ATAC / Hi-C
+brain store (``schicar_mop.chromdata.zarr``: 5,313 cells, RNA / ATAC / Hi-C
 embeddings in ``cellm``) and its linked per-cell 1 Mb contact maps
 (``contacts_cells_1Mb.scool``).
 
@@ -48,7 +48,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _common as C  # noqa: E402
 
-SCHICAR = C.DATA / "schicar_mop" / "schicar_mop.h5cd"
+SCHICAR = C.DATA / "schicar_mop" / "schicar_mop.chromdata.zarr"
 OLIGO = ("Mobp", "Plp1", "Mog", "Opalin")
 ASTRO = ("Slc1a3", "Gja1", "Gpc5", "Atp1a2")
 GLIA_VASC = OLIGO + ASTRO + ("Pdgfra", "Cspg4", "Csf1r", "P2ry12", "Cx3cr1", "Flt1", "Cldn5", "Rgs5", "Pdgfrb",
@@ -154,7 +154,7 @@ def main():
     umap = np.asarray(cd.cellm["rna_umap"], dtype=float)
     C.write_json("f_crossmodal", {
         "panel": "f", "machine": C.machine_info(),
-        "dataset": {"name": "scHiCAR mouse brain (GSE305439)", "store": "schicar_mop/schicar_mop.h5cd",
+        "dataset": {"name": "scHiCAR mouse brain (GSE305439)", "store": "schicar_mop/schicar_mop.chromdata.zarr",
                     "scool": "schicar_mop/contacts_cells_1Mb.scool (5,313 cells, 1 Mb)",
                     "n_cells": int(len(cells))},
         "clustering": {"function": "uchrom.emb.cluster_cells", "use": "rna_pca", "method": "leiden",

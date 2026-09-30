@@ -76,8 +76,8 @@ def leiden_ari(cd, keys: dict, resolution: float = 1.0) -> pd.DataFrame:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--takei", default=HERE / "takei2025_fov0" / "takei2025_fov0.h5cd", type=Path)
-    ap.add_argument("--schicar", default=HERE / "schicar_mop" / "schicar_mop.h5cd", type=Path)
+    ap.add_argument("--takei", default=HERE / "takei2025_fov0" / "takei2025_fov0.chromdata.zarr", type=Path)
+    ap.add_argument("--schicar", default=HERE / "schicar_mop" / "schicar_mop.chromdata.zarr", type=Path)
     args = ap.parse_args()
 
     from uchrom import ChromData

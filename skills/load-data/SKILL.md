@@ -1,12 +1,12 @@
 ---
 name: load-data
-description: START HERE for any U-Chrom data question (.chromdata.zarr, .cdz, .h5cd), even simple counts — how many cells / traces / spots / IF channels / genes, contact-map resolution (.scool/.mcool), units, distance between consecutive loci / particles, traces per chromosome per cell (ploidy), spots per trace by cell type. QC script; routes to the analysis skills.
+description: START HERE for any U-Chrom data question (.chromdata.zarr, .cdz), even simple counts — how many cells / traces / spots / IF channels / genes, contact-map resolution (.scool/.mcool), units, distance between consecutive loci / particles, traces per chromosome per cell (ploidy), spots per trace by cell type. QC script; routes to the analysis skills.
 ---
 
 # Load and inspect a U-Chrom dataset
 
 ## When to use
-First step on any ChromData store — `.chromdata.zarr`, `.cdz` (the same store zipped) or a legacy `.h5cd` (ChromData: chromatin tracing, DNA seqFISH+, ORCA/Hi-M, simulated structures,
+First step on any ChromData store — `.chromdata.zarr`, `.cdz` (the same store zipped; a legacy `.h5cd` must first be converted with `python -m uchrom.io.upgrade old.h5cd`) (ChromData: chromatin tracing, DNA seqFISH+, ORCA/Hi-M, simulated structures,
 scHi-C/scHiCAR with linked `.scool/.mcool/.cool`, RNA/ATAC, embeddings), and for questions about the data
 itself: counts, channels, genes, cell types, contact-map resolution and coverage, units, consecutive-locus
 distance, traces per chromosome per cell (ploidy), spots per trace by group, duplicate / missing loci.

@@ -21,6 +21,7 @@ from uchrom import ChromData
 from uchrom.core.zarrcd import write_zarr
 from uchrom.core.backed import BackedArray, BackedChromData, BackedFrame
 from uchrom.core.zarrcd import container_kind, write_zarr
+from uchrom.io._h5cd_legacy import read_h5cd, write_h5cd
 
 FORMATS = ["x.chromdata.zarr", "x.cdz"]
 
@@ -419,15 +420,20 @@ def test_dispatch_by_path(tmp_path):
     shutil.copy(tmp_path / "a.cdz", tmp_path / "noext")
     assert container_kind(tmp_path / "noext") == "cdz"
     assert ChromData.read(tmp_path / "noext").n_spots == cd.n_spots
-    # .h5cd: still written (HDF5 2.0) with a DeprecationWarning, read as before
-    del cd.results["strings"], cd.uns["names"]   # (HDF5 cannot store str arrays there)
-    with pytest.warns(DeprecationWarning, match="deprecated"):
+    # .h5cd (the legacy HDF5 container): neither written nor read; the error names the converter
+    with pytest.raises(ValueError, match="no longer supported"):
         cd.write(tmp_path / "a.h5cd")
-    h = ChromData.read(tmp_path / "a.h5cd")
-    # (HDF5 stores the None labels as the string "None"; the zarr container keeps them)
-    pd.testing.assert_frame_equal(h.to_dataframe().drop(columns="label"), cd.to_dataframe().drop(columns="label"))
-    with pytest.raises(ValueError, match="backed mode"):
-        ChromData.read(tmp_path / "a.h5cd", backed=True)
+    assert not (tmp_path / "a.h5cd").exists()
+    del cd.results["strings"], cd.uns["names"]   # (HDF5 cannot store str arrays there)
+    write_h5cd(cd, tmp_path / "a.h5cd")
+    for backed in (False, True):
+        with pytest.raises(ValueError, match="uchrom.io.upgrade"):
+            ChromData.read(tmp_path / "a.h5cd", backed=backed)
+    shutil.copy(tmp_path / "a.h5cd", tmp_path / "hdf5_noext")       # sniffed as HDF5: refused too
+    with pytest.raises(ValueError, match="uchrom.io.upgrade"):
+        ChromData.read(tmp_path / "hdf5_noext")
+    with pytest.raises(ValueError, match="cdz"):
+        cd.write(tmp_path / "b.hdf5")                               # other suffixes no longer write HDF5
     # format= overrides the suffix, but the path must fit the container
     with pytest.raises(ValueError, match="chromdata.zarr"):
         cd.write(tmp_path / "b.h5cd", format="zarr")
@@ -530,7 +536,7 @@ def test_convert_h5cd_1x_and_2x(tmp_path, capsys):
 
     src = tmp_path / "old.h5cd"
     _write_1x(src)
-    ref = ChromData.read(src)
+    ref = read_h5cd(src)
     info = upgrade_h5cd(src)                                       # default target
     dst = tmp_path / "old.chromdata.zarr"
     assert info["dst"] == str(dst) and info["to_container"] == "zarr" and info["from_version"] == "1.4"
@@ -543,21 +549,18 @@ def test_convert_h5cd_1x_and_2x(tmp_path, capsys):
     with pytest.raises(FileExistsError):
         upgrade_h5cd(src)
     # h5cd 2.0 → cdz, and the CLI
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        ref.write(tmp_path / "two.h5cd")
+    write_h5cd(ref, tmp_path / "two.h5cd")
     assert file_format_version(tmp_path / "two.h5cd") == "2.0"
     convert_chromdata(tmp_path / "two.h5cd", tmp_path / "two.cdz")
     assert file_format_version(tmp_path / "two.cdz") == "2.3"
     pd.testing.assert_frame_equal(ChromData.read(tmp_path / "two.cdz", original_order=True).to_dataframe(),
-                                  ChromData.read(tmp_path / "two.h5cd").to_dataframe())
+                                  read_h5cd(tmp_path / "two.h5cd").to_dataframe())
     assert main([str(src), str(tmp_path / "two.h5cd"), "--out-dir", str(tmp_path / "out")]) == 0
     out = capsys.readouterr().out
     assert "-> " in out and "zarr" in out
     assert {p.name for p in (tmp_path / "out").iterdir()} == {"old.chromdata.zarr", "two.chromdata.zarr"}
     assert main([str(src), "--out-dir", str(tmp_path / "o2"), "--format", "cdz"]) == 0
     assert (tmp_path / "o2" / "old.cdz").exists()
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", DeprecationWarning)             # no warning for explicit h5cd
-        upgrade_h5cd(src, tmp_path / "again.h5cd")
-    assert file_format_version(tmp_path / "again.h5cd") == "2.0"
+    with pytest.raises(ValueError, match="chromdata.zarr or .cdz"):
+        upgrade_h5cd(src, tmp_path / "again.h5cd")                  # .h5cd is not a target
+    assert not (tmp_path / "again.h5cd").exists()
