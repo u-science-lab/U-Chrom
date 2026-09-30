@@ -26,6 +26,9 @@ IGM_REF=edbb33135260443b8b41eb09d7ca4c37b19e330d
 LMP_SHORT=8a1a4cbb4d0bffda516c7f51cd3cf2f706ec3cb9   # lammpgen commit read for the spec
 ALAB_REF=${ALAB_REF:-2daab4710845674a224f524e0b50e893bf030e35}
 MAMBA=${MAMBA:-$HOME/miniconda3/bin/mamba}
+# package cache on $SCRATCH (the default ~/miniconda3/pkgs filled the 15 GB $HOME quota); env in $GROUP_HOME
+export CONDA_PKGS_DIRS=$SCRATCH/.cache/conda-pkgs
+mkdir -p "$CONDA_PKGS_DIRS"
 mkdir -p "$IGMO"
 ENV=$IGMO/env
 if [ ! -d "$ENV" ]; then

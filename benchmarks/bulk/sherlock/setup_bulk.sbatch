@@ -16,7 +16,9 @@ PIP=$VENV/bin/pip
 CONS=$(mktemp)
 $PY -c "import numpy, pandas, scipy; print(f'numpy=={numpy.__version__}\npandas=={pandas.__version__}\nscipy=={scipy.__version__}')" > "$CONS"
 cat "$CONS"
-$PIP install -q --only-binary=:all: -c "$CONS" cooler h5py fsspec requests aiohttp scikit-learn pytest
+# prefer binary wheels, but allow pure-Python sdists (cooler needs asciitree, sdist only: with
+# --only-binary=:all: pip backtracked to cooler 0.4.0); numpy / pandas / scipy stay at their pins
+$PIP install -q --prefer-binary -c "$CONS" "cooler>=0.9.3" h5py fsspec requests aiohttp scikit-learn pytest
 # hic-straw (only for .hic inputs: kr_check.py's GEO cases): optional, wheels exist for manylinux x86-64
 $PIP install -q --only-binary=:all: -c "$CONS" hic-straw || echo "hic-straw: no binary wheel - .hic inputs unavailable"
 $PY -c "import cooler, h5py, fsspec, sklearn, numpy, scipy, pandas; print('venv-main', cooler.__version__, h5py.__version__, sklearn.__version__, numpy.__version__, scipy.__version__, pandas.__version__)"
