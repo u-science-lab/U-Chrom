@@ -5,6 +5,7 @@ import { ChromLegend } from './ChromLegend'
 import { EmbeddingControls } from './EmbeddingView'
 import { FocusPanel } from './FocusPanel'
 import { SpatialControls } from './SpatialView'
+import { SideClose } from './SideClose'
 import { GenomeInspector } from './GenomeView'
 import { LayerPanel } from './LayerPanel'
 import { MatrixControls } from './MatrixView'
@@ -42,7 +43,7 @@ export function Inspector() {
     <aside className="props panel inspector" key={pane.id}>
       <div className="insp-title">
         <span>{paneTitle(ws, pane)}</span>
-        <span className="muted small">inspector</span>
+        <SideClose side="right" />
       </div>
       <FocusPanel />
       {sections.has('pin') && (

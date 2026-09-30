@@ -2718,3 +2718,78 @@ button.primary {
 button.primary:disabled {
   opacity: 0.45;
 }
+
+/* ---- search + cell order on one row (left side bar) ---- */
+.cell-search-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+.cell-search-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cell-search-row .cell-sort {
+  margin-left: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.cell-search-row .cell-sort button {
+  border: none;
+  border-radius: 0;
+  font-size: 11px;
+  padding: 0 7px;
+  background: var(--bg-input);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cell-search-row .cell-sort button + button {
+  border-left: 1px solid var(--border);
+}
+.cell-search-row .cell-sort button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ---- collapse buttons inside the side bars ---- */
+button.side-close {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  color: var(--text-muted);
+  background: none;
+  border-color: transparent;
+}
+button.side-close:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+.inspector .insp-title {
+  align-items: center;
+}
+.cell-search-row input {
+  flex: 1 1 110px;
+}
+.cell-search-row .cell-sort {
+  flex: 0 0 auto;
+  max-width: 55%;
+}
+.cell-search-row .cell-sort button:first-child {
+  flex: none;                    /* "id" never shrinks */
+  padding: 0 8px;
+}
+.cell-search-row .cell-sort button + button {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 130px;
+}
