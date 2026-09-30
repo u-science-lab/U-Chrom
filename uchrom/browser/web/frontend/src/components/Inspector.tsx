@@ -61,7 +61,7 @@ export function Inspector() {
       {sections.has('subset') && <OperationsPanel />}
       {sections.has('style') &&
         (layer ? (
-          <StyleSection layer={layer} hasCells={(facts?.nCells ?? 0) > 1} />
+          <StyleSection layer={layer} hasCells={(facts?.nCells ?? 0) > 1} paneId={pane.id} />
         ) : (
           <>
             <h2>Style</h2>

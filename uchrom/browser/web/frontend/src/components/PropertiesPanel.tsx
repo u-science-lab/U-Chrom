@@ -7,6 +7,7 @@ import { ColorBar } from './ColorBar'
 import { colourableFields, fieldLabel } from './format'
 import { FieldPicker, groupTitle } from './FieldPicker'
 import type { ColorMode, Layer, RenderMode } from '../types'
+import { effectiveStyle, setPaneLayerStyle } from '../workspace'
 
 /** Button group of the categorical cell fields (cell type, cluster, …). */
 const CATEGORY_GROUP = '\u0000category'
@@ -90,14 +91,18 @@ export function OverviewColour() {
   )
 }
 
-/** 3-D style of the selected layer (the focused cell's colouring on multi-cell data). */
-export function StyleSection({ layer, hasCells }: { layer: Layer; hasCells: boolean }) {
-  const setStyle = useStore((s) => s.setStyle)
+/**
+ * 3-D style of the selected layer in one 3-D view (`paneId`; the focused cell's colouring on
+ * multi-cell data).  Changes apply to that view only — another 3-D view keeps its own style.
+ */
+export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCells: boolean; paneId: string }) {
+  const setWorkspace = useStore((s) => s.setWorkspace)
+  const pane = useStore((s) => s.workspace.panes.find((p) => p.id === paneId))
   const view = useStore(activeView)
   const setMaxBond = useStore((s) => s.setMaxBond)
   const unit = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId)?.xyz_unit ?? '')
-  const st = layer.style
-  const upd = (p: Partial<typeof st>) => setStyle(layer.id, p)
+  const st = effectiveStyle(layer, pane)
+  const upd = (p: Partial<typeof st>) => setWorkspace((w) => setPaneLayerStyle(w, paneId, layer.name, p))
   const header = layer.geometry?.header
   // what is actually drawn in full (focused cell, visible chromosomes)
   const hidden = new Set(view.hiddenChroms)

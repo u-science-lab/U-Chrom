@@ -1,5 +1,6 @@
 import { chromColor } from '../colors'
 import { activeView, useStore } from '../store'
+import { effectiveStyle } from '../workspace'
 
 /**
  * Chromosome legend = visibility filter.  Swatches match the rainbow colour
@@ -11,7 +12,11 @@ export function ChromLegend() {
   const toggle = useStore((s) => s.toggleChrom)
   const setHidden = useStore((s) => s.setHiddenChroms)
   const hasCells = useStore((s) => ((s.activeDatasetId && s.cells[s.activeDatasetId]) || []).length > 1)
-  const layerMode = useStore((s) => s.layers.find((l) => l.id === s.selectedLayerId)?.style.colorMode)
+  // the selected layer's colouring as the active 3-D view draws it
+  const layerMode = useStore((s) => {
+    const l = s.layers.find((x) => x.id === s.selectedLayerId)
+    return l ? effectiveStyle(l, s.workspace.panes.find((p) => p.id === s.workspace.activePane)).colorMode : undefined
+  })
   if (!ds || ds.chroms.length < 2) return null
   const hidden = new Set(view.hiddenChroms)
   // swatches are only meaningful when the view is coloured by chromosome

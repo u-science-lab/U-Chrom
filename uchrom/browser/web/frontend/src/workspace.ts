@@ -7,7 +7,7 @@ import { migrateRows, parseRows, type GenomeRow } from './genomeRows'
 import { parseColorScale, type ColorScaleSetting } from './colormaps'
 import { parseEmbStyle, type EmbStyleSetting } from './embeddingStyle'
 import { FOCUS, parseScopeSpec, type ScopeSpec } from './groups'
-import type { EmbeddingInfo } from './types'
+import type { EmbeddingInfo, Layer, LayerStyle } from './types'
 
 /** 'genome': combined tracks + matrix triangles on one axis (was 'tracks'). */
 export type PaneType = '3d' | 'spatial' | 'embedding' | 'genome' | 'matrix' | 'stats'
@@ -18,6 +18,9 @@ export type DistanceStat = 'median' | 'mean' | 'contact'
 
 /** Per-pane settings of the genome-coordinate views (all optional). */
 export interface PaneOptions {
+  /** 3d: this view's style changes per layer name (render mode, colour, …) over the layer's own
+   *  style — each 3-D view is styled on its own */
+  layerStyles?: Record<string, Partial<LayerStyle>>
   /** genome: rows of the combined view per dataset name (absent → defaults for that dataset) */
   genomeRows?: Record<string, GenomeRow[]>
   /** genome: preferred track names for the default rows (from old Tracks panes) */
@@ -415,7 +418,44 @@ function parseOptions(p: Partial<Pane> & LegacyPane): PaneOptions & { scope?: Sc
   if (typeof p.spatialKey === 'string') o.spatialKey = p.spatialKey
   if (typeof p.region === 'string') o.region = p.region
   if (typeof p.imageOpacity === 'number' && p.imageOpacity >= 0 && p.imageOpacity <= 1) o.imageOpacity = p.imageOpacity
+  const layerStyles = parseLayerStyles(p.layerStyles)
+  if (layerStyles) o.layerStyles = layerStyles
   return o
+}
+
+/** Well-formed style changes of a saved 3-D pane (per layer name); undefined when none. */
+export function parseLayerStyles(raw: unknown): Record<string, Partial<LayerStyle>> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const out: Record<string, Partial<LayerStyle>> = {}
+  for (const [name, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!v || typeof v !== 'object') continue
+    const x = v as Record<string, unknown>
+    const st: Partial<LayerStyle> = {}
+    if (x.mode === 'line' || x.mode === 'tube' || x.mode === 'points') st.mode = x.mode
+    if (['rainbow', 'custom', 'trace', 'cell', 'field'].includes(x.colorMode as string)) st.colorMode = x.colorMode as LayerStyle['colorMode']
+    if (typeof x.color === 'string' && /^#[0-9a-f]{6}$/i.test(x.color)) st.color = x.color
+    if (typeof x.opacity === 'number' && x.opacity > 0 && x.opacity <= 1) st.opacity = x.opacity
+    if (typeof x.lineWidth === 'number' && x.lineWidth > 0) st.lineWidth = x.lineWidth
+    if (x.tubeRadius === null || (typeof x.tubeRadius === 'number' && x.tubeRadius > 0)) st.tubeRadius = x.tubeRadius as number | null
+    if (typeof x.pointSize === 'number' && x.pointSize > 0) st.pointSize = x.pointSize
+    if (typeof x.highQuality === 'boolean') st.highQuality = x.highQuality
+    if (Object.keys(st).length) out[name] = st
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
+/** A layer's style as a 3-D view draws it: the layer's own, with the view's changes on top. */
+export function effectiveStyle(layer: Pick<Layer, 'name' | 'style'>, pane?: Pick<Pane, 'layerStyles'> | null): LayerStyle {
+  const own = pane?.layerStyles?.[layer.name]
+  return own ? { ...layer.style, ...own } : layer.style
+}
+
+/** Change a layer's style in one 3-D view only. */
+export function setPaneLayerStyle(ws: WorkspaceState, paneId: string, layerName: string, patch: Partial<LayerStyle>): WorkspaceState {
+  return {
+    ...ws,
+    panes: ws.panes.map((p) => (p.id === paneId ? { ...p, layerStyles: { ...p.layerStyles, [layerName]: { ...p.layerStyles?.[layerName], ...patch } } } : p)),
+  }
 }
 
 /** Parse a persisted workspace; anything malformed → null (caller uses a default). */

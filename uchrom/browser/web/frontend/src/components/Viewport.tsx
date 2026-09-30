@@ -16,6 +16,7 @@ import type { ScopeSpec } from '../groups'
 import { isPointPick, type ColorMode, type Geometry, type LayerStyle, type PointSet, type SegmentInfo } from '../types'
 import { registerRenderHook } from '../capture'
 import { palette } from '../theme'
+import { effectiveStyle } from '../workspace'
 import { useTheme } from '../useTheme'
 import { PickLabel } from './PickLabel'
 
@@ -31,7 +32,7 @@ interface Part {
 
 interface Entry {
   /** inputs the parts were built from; rebuilt when any changes */
-  key: { geometry: Geometry; style: LayerStyle; focus: FocusSet; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null; theme: string }
+  key: { geometry: Geometry; style: string; focus: FocusSet; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null; theme: string }
   parts: Part[]
 }
 
@@ -209,6 +210,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
   const pointSets = useStore((s) => (s.activeDatasetId ? s.pointSets[s.activeDatasetId] : undefined))
   const setPick = useStore((s) => s.setPick)
   const setStatus = useStore((s) => s.setStatus)
+  // this view's own style changes (each 3-D view is styled on its own)
+  const paneStyles = useStore((s) => s.workspace.panes.find((p) => p.id === paneId)?.layerStyles)
   // drawn in full here: the pane's group, its pinned cell, else the global
   // focus (a cell or a group)
   const scope = usePaneScope({ scope: spec })
@@ -424,9 +427,10 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     const h = t.renderer.domElement.clientHeight
     const newGeometry: number[] = []
     for (const l of shown) {
+      const style = effectiveStyle(l, { layerStyles: paneStyles })
       const key = {
         geometry: l.geometry!,
-        style: l.style,
+        style: JSON.stringify(style),
         focus,
         hidden: hiddenKey(view.hiddenChroms),
         ctx: ctxOpacity,
@@ -469,9 +473,9 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       }
       // Multi-cell data: the overview (and the faint context around a
       // focused cell) uses the overview colouring — per cell by default.
-      const overviewStyle: LayerStyle = cellIndex.size > 1 ? { ...l.style, colorMode: view.overviewColor } : l.style
+      const overviewStyle: LayerStyle = cellIndex.size > 1 ? { ...style, colorMode: view.overviewColor } : style
       // one cell: the layer style (tubes); a group reads like a small overview
-      const mainStyle = typeof focus === 'string' ? l.style : overviewStyle
+      const mainStyle = typeof focus === 'string' ? style : overviewStyle
       const parts: Part[] = []
       // large line / point parts also get a thinned copy (tubes are built for one cell)
       const withLod = (geometry: Geometry, style: LayerStyle): Part['lod'] => {
@@ -521,7 +525,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     const pick = useStore.getState().pick
     if (pick && !isPointPick(pick) && !keep.has(pick.layerId)) setPick(null)
     t.dirty = true
-  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed, pal])
+  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed, pal, paneStyles])
 
   // Point sets (e.g. RNA spots): focused cell's points full, others faint.
   useEffect(() => {

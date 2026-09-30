@@ -6,6 +6,9 @@ import {
   defaultEmbeddingKey,
   defaultWorkspace,
   workspaceOf,
+  effectiveStyle,
+  parseLayerStyles,
+  setPaneLayerStyle,
   paneSignature,
   gridShape,
   gridSizes,
@@ -240,5 +243,19 @@ describe('views the data supports', () => {
       sizes: [1],
     })
     expect(ws?.panes[0]).toMatchObject({ type: 'spatial', spatialKey: 'image', region: 'E14_5_HiC', imageOpacity: 0.4 })
+  })
+})
+
+describe('3-D views styled on their own', () => {
+  it('keeps each view\'s style changes over the layer style, persisted', () => {
+    const layer = { name: 'ds', style: { mode: 'tube', colorMode: 'rainbow', color: '#ffffff', opacity: 1, lineWidth: 1, tubeRadius: null, pointSize: 4, highQuality: false } as const }
+    let ws = workspaceOf(['3d', '3d'])
+    ws = setPaneLayerStyle(ws, 'P1', 'ds', { mode: 'line' })
+    ws = setPaneLayerStyle(ws, 'P1', 'ds', { opacity: 0.5 })
+    expect(effectiveStyle(layer, ws.panes[0])).toMatchObject({ mode: 'line', opacity: 0.5, colorMode: 'rainbow' })
+    expect(effectiveStyle(layer, ws.panes[1])).toBe(layer.style) // the other view: untouched
+    const back = parseWorkspace(JSON.parse(JSON.stringify(ws)))!
+    expect(back.panes[0].layerStyles).toEqual({ ds: { mode: 'line', opacity: 0.5 } })
+    expect(parseLayerStyles({ ds: { mode: 'blob', opacity: 7, color: 'red' } })).toBeUndefined()
   })
 })
