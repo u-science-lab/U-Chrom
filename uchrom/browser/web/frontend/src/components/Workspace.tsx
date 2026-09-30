@@ -122,8 +122,8 @@ function PaneTypeSwitch({ pane }: { pane: Pane }) {
     </>
   )
 }
-/** Views that follow the shared genomic locus. */
-const GENOME_PANES = new Set<PaneType>(['genome', 'matrix', 'stats'])
+/** Whether a pane shows the shared genomic locus (Stats only when it looks at the locus chromosome). */
+const usesLocus = (p: Pane) => p.type === 'genome' || p.type === 'matrix' || (p.type === 'stats' && p.chromScope === 'locus')
 const LAYOUT_LABEL: Record<WsLayout, [string, string]> = {
   tabs: ['Tabs', 'One view at a time, switch with tabs'],
   columns: ['Columns', 'Views side by side'],
@@ -226,7 +226,6 @@ export function Workspace() {
     <div className="workspace">
       <div className="ws-bar">
         <FocusBar />
-        {ws.panes.some((p) => GENOME_PANES.has(p.type)) && <LocusBar />}
         <span className="spacer" />
         <div className="ws-add">
           <button ref={addRef} onClick={() => setMenu(!menu)} title="Add a view">
@@ -323,6 +322,7 @@ function PaneBox({
       <header className="pane-head">
         <PaneTypeSwitch pane={pane} />
         {pane.type === 'spatial' && <RegionPicker pane={pane} />}
+        {usesLocus(pane) && <LocusBar />}
         {cellPin && (
           <button className="pin-badge" onClick={() => activate()} title="Pinned to this cell — change it in the inspector (right, “cells”)">
             📌 {cellTitle(cellPin, types)}

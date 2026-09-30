@@ -3,7 +3,10 @@ import { fmtLocus, parseLocus, zoomLocus } from '../genome'
 import { useLocus } from '../useLocus'
 import { Select } from './Select'
 
-/** Shared genomic window for the tracks / matrix / stats panes. */
+/**
+ * The genomic window, in the header of each view that shows it (Genome, Matrix, Stats on the locus
+ * chromosome).  One window is shared: moving it in one view moves the others.
+ */
 export function LocusBar() {
   const { locus, chroms, ext, setLocus } = useLocus()
   const [text, setText] = useState('')
@@ -22,7 +25,7 @@ export function LocusBar() {
     }
   }
   return (
-    <div className="locus-bar" title={error ?? 'Genomic window shared by the Tracks / Matrix / Stats views'}>
+    <div className="locus-bar" title={error ?? 'Genomic window, shared by the Genome / Matrix / Stats views'}>
       <Select
         value={locus.chrom}
         onChange={(e) => {
