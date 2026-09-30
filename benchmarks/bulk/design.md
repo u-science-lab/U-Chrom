@@ -10,8 +10,9 @@ advanced together on one GPU. The algorithm to reproduce is specified from the o
 §7 is designed to measure how much of that population is actually determined by the data.
 
 Status: the IGM engine (M1–M4) and the Python entry point are implemented (branch
-`Nanguage/bulk-deconv-engine`); the benchmarks of §7 are Sherlock jobs
-(`benchmarks/bulk/sherlock/`), not yet run.  Section 0 lists where the implementation
+`Nanguage/bulk-deconv-engine`); the data side and the benchmark of §7 (preprocessing, truths, forward model,
+metrics, baselines, twins; `benchmarks/bulk/`, see its README) are implemented; the Sherlock jobs
+(`benchmarks/bulk/sherlock/`) are not yet run.  Section 0 lists where the implementation
 departs from this design and why; the rest of the document is the design as agreed.
 
 ## 0. Implementation notes — deviations from this design
@@ -321,13 +322,13 @@ for starting from an IGM population.
 |---|---|---|
 | Su 2020 IMR90 chr21, 651 × 50 kb (`su2020_imr90/chromosome21.tsv`, Zenodo 3928890) | (b) truth, (c) imaging | **catalogued** (`--su2020_chr21`) |
 | Su 2020 `Hi-C_contacts_chromosome21.tsv` (Rao 2014 summed into the 651 loci) | (c) input | **catalogued** |
-| Su 2020 **genome-scale** DNA-MERFISH `genomic-scale.tsv` (200,285,524 B; CC-BY-4.0) | (b) diploid genome-wide truth, (c) imaging | **not catalogued** — add to README + `download_data.py` + `.gitignore` |
-| Su 2020 `Hi-C_contacts_genome-scale.tsv` (2,846,153 B; Rao 2014 summed into 500 kb bins centred on the 1,041 loci) | (c) input | **not catalogued** — < 10 MB, can be checked in |
+| Su 2020 **genome-scale** DNA-MERFISH `genomic-scale.tsv` (200,285,524 B; CC-BY-4.0) | (b) diploid genome-wide truth, (c) imaging | **catalogued** (`--su2020_genome`) |
+| Su 2020 `Hi-C_contacts_genome-scale.tsv` (2,846,153 B; Rao 2014 summed into 500 kb bins centred on the 1,041 loci) | (c) input | **catalogued, checked in** |
 | Su 2020 `genomic-scale-with transcription and nuclear bodies.tsv` (654,711,554 B) | optional (speckle / nucleolus distances) | not catalogued; opt-in |
 | Takei 2021 mESC 1 Mb (`4DNFIFLJGGNR.csv`, 2,460 loci, homolog split by `truth.split_homologs`) | (b), (c) | **catalogued** (`--takei2021_1mb`) |
 | Takei 2021 mESC 25 kb (`4DNFIHF3JCBY.csv`, homolog-resolved) | (c) local windows | catalogued |
-| Bonev 2017 mESC Hi-C (4DN `4DNFIC21MG3U` mcool, 12.6 GB; range-read the 1 Mb level) | (c) input | **not catalogued** — `benchmarks/fig3/b_takei_bonev.py` range-reads it without a catalog row; add the row and a `build_*` recipe for the 1 Mb genome-wide matrix |
-| Rao 2014 IMR90 genome-wide (GEO GSE63525 `.hic`, hg19) or 4DN `4DNFIR1JDZH7` (GRCh38 mcool, 4.6 GB) | (c) input at 1 Mb / 500 kb | **partly** (only chr20/21/22 5 kb slices built by `build_rao2014_slices.py`); add a genome-wide 500 kb / 1 Mb build (range reads) |
+| Bonev 2017 mESC Hi-C (4DN `4DNFIC21MG3U` mcool, 12.6 GB; range-read the 1 Mb level) | (c) input | **catalogued** (`--bonev2017_mesc_4dn`, Sherlock; recipe `real_inputs.py` / `sherlock/build_real.sbatch`) |
+| Rao 2014 IMR90 genome-wide (GEO GSE63525 `.hic`, hg19) or 4DN `4DNFIR1JDZH7` (GRCh38 mcool, 4.6 GB) | (c) input at 1 Mb / 500 kb | **catalogued**: 4DN GRCh38 mcool (`--rao2014_imr90_4dn`, Sherlock) → 20 kb → IGM inputs (`real_inputs.py`); GEO `.hic` range-read for the KR check |
 | IGM demo `WTC11_HiC_2Mb.hcs` (3,908,025 B, GPL-3 repo) | (d) same-input comparison, smoke tests | not catalogued — < 10 MB but GPL-3 data file; download from the IGM repository at `edbb331` instead of checking in (open question 6) |
 
 What Su 2020 actually provides genome-wide (verified by streaming `genomic-scale.tsv`
