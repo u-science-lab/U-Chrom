@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { addRow, applyRowSetting, rowPatch, MAX_ROW_H, type GenomeRow } from './genomeRows'
 import { ensureActivePane, inspectorSections, leftSections, paneTitle, sidebarSections, type DatasetFacts } from './inspector'
-import { addPane, defaultWorkspace, PANE_TYPES, type WorkspaceState } from './workspace'
+import { addPane, defaultWorkspace, PANE_TYPES, workspaceOf, type WorkspaceState } from './workspace'
 
 const imaging: DatasetFacts = { hasCoords: true, nCells: 47, nChroms: 20, nPointSets: 0 }
 const withRna: DatasetFacts = { ...imaging, nPointSets: 1 }
@@ -46,7 +46,7 @@ describe('left side bar', () => {
 
 describe('active pane', () => {
   it('falls back to the first pane and titles panes by type and position', () => {
-    const ws = addPane(defaultWorkspace(false), 'genome')
+    const ws = addPane(workspaceOf(['3d', 'matrix'], [0.55, 0.45]), 'genome')
     expect(ensureActivePane(ws)).toBe(ws)
     expect(ensureActivePane({ ...ws, activePane: 'gone' }).activePane).toBe('P1')
     expect(paneTitle(ws, ws.panes[2])).toBe('Genome · pane 3')

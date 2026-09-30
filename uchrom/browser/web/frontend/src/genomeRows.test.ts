@@ -165,6 +165,6 @@ describe('migration of old Tracks panes', () => {
     expect(ws.panes[0].genomeRows).toEqual({ sim: rows })
   })
   it('defaults to a genome pane next to 3D for data with contact maps or tracks', () => {
-    expect(defaultWorkspace({ hasCoords: true, hasEmbeddings: false, hasTracks: false, hasContactMaps: true }).panes.map((p) => p.type)).toEqual(['3d', 'genome'])
+    expect(defaultWorkspace({ hasCoords: true, hasEmbeddings: false, hasTracks: false, hasContactMaps: true }).panes.map((p) => p.type)).toEqual(['3d', 'genome', 'matrix', 'stats'])
   })
 })

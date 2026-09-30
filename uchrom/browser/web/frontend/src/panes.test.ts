@@ -4,6 +4,7 @@ import {
   addPane,
   addPinnedPane,
   defaultWorkspace,
+  workspaceOf,
   dropUnknownPins,
   MAX_SPLIT_PANES,
   parseWorkspace,
@@ -15,7 +16,7 @@ import {
 } from './workspace'
 
 const pinPane = (ws: WorkspaceState, id: string, cell: string | null) => setPaneScope(ws, id, cell ? { kind: 'cell', cell } : { kind: 'focus' })
-const base = (): WorkspaceState => defaultWorkspace({ hasCoords: true, hasEmbeddings: true, hasTracks: false }) // 3D | Embedding
+const base = (): WorkspaceState => workspaceOf(['3d', 'embedding'], [0.6, 0.4]) // 3D | Embedding
 
 describe('pinning panes to cells', () => {
   it('pins and unpins a pane', () => {

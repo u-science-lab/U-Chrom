@@ -969,6 +969,29 @@ button.link {
   grid-auto-rows: 1fr;
   gap: 4px;
   padding: 4px;
+  position: relative;
+}
+/* boundaries of the grid layout: invisible until hovered / dragged */
+.ws-grid-splitter {
+  position: absolute;
+  z-index: 5;
+  border-radius: 2px;
+}
+.ws-grid-splitter.cols {
+  width: 8px;
+  transform: translateX(-50%);
+  cursor: col-resize;
+}
+.ws-grid-splitter.rows {
+  height: 8px;
+  transform: translateY(-50%);
+  cursor: row-resize;
+}
+.ws-grid-splitter:hover,
+body.resizing .ws-grid-splitter.cols:active,
+body.resizing-rows .ws-grid-splitter.rows:active {
+  background: var(--accent);
+  opacity: 0.6;
 }
 .ws-panes.layout-tabs > .pane,
 .ws-panes.maximized > .pane {
@@ -1633,6 +1656,14 @@ body.resizing-rows {
   display: flex;
   gap: 4px;
   z-index: 2;
+}
+.emb-tools button.emb-tool-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
 }
 .emb-tools button.active {
   background: var(--bg-active);

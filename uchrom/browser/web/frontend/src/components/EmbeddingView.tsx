@@ -406,7 +406,7 @@ export interface ScatterSource {
 /**
  * 2-D scatter of a cell embedding (UMAP / t-SNE / PCA) filling its pane,
  * coloured like the 3-D overview.  Click a dot to focus that cell (every
- * 3-D pane flies there); click empty space to go back to all cells.  Shift-drag (or the ◌ lasso tool) selects cells:
+ * 3-D pane flies there); click empty space to go back to all cells.  Shift-drag (or the lasso tool) selects cells:
  * the selection becomes the focused group, and can be saved by name.
  * With a `source` (Spatial view) it draws those points to scale instead.
  */
@@ -813,8 +813,14 @@ export function EmbeddingView({ pane, source }: { pane: Pane; source?: ScatterSo
       <canvas ref={lassoRef} className="emb-lasso-canvas" data-capture="skip" />
       {hasPoints && (
         <div className="emb-tools" data-capture="skip">
-          <button className={lassoTool ? 'active' : ''} onClick={() => setLassoTool(!lassoTool)} title="Lasso: drag around cells to select them (or shift-drag any time)">
-            ◌ lasso
+          <button
+            className={`emb-tool-icon${lassoTool ? ' active' : ''}`}
+            onClick={() => setLassoTool(!lassoTool)}
+            title="Lasso: drag around cells to select them (or shift-drag any time)"
+            aria-label="Lasso"
+            aria-pressed={lassoTool}
+          >
+            <LassoIcon />
           </button>
           {!isIdentity(zoom) && (
             <button onClick={() => setZoom(IDENTITY_VIEW)} title="Show all cells again (or double-click the plot)">
@@ -924,5 +930,16 @@ function PaneLegend({ pane, coloring, shown }: { pane: Pane; coloring: ReturnTyp
       </div>
       {missing > 0 && <div className="muted small">grey = missing ({missing.toLocaleString('en-US')})</div>}
     </div>
+  )
+}
+
+/** A lasso: a rope loop with a knot and a trailing end. */
+function LassoIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <path d="M5.3 9.9C3 9.3 1.7 7.9 2.1 6.3 2.7 3.9 6.1 2.4 9.7 2.8c3.4.4 5.3 2.3 4.5 4.3-.8 2-4.1 3.2-7.4 2.9" />
+      <circle cx="6" cy="10.2" r="1.1" />
+      <path d="M5.6 11.3c-.6 1-.4 1.9.4 2.4.7.5.6 1.3-.3 1.7" />
+    </svg>
   )
 }

@@ -79,6 +79,9 @@ export interface WorkspaceState {
   activePane: string
   /** size fractions of the panes in 'columns' / 'rows' (sum 1) */
   sizes: number[]
+  /** 'grid': column widths / row heights as fractions (sum 1; equal when absent or stale) */
+  gridCols?: number[]
+  gridRows?: number[]
   /** pane shown alone (all others kept mounted but hidden), or null */
   maximized: string | null
 }
@@ -116,29 +119,66 @@ export const MIN_FRAC = 0.1
 const pane = (id: string, type: PaneType): Pane => ({ id, type, embeddingKey: null, dims: [0, 1] })
 
 /**
- * Default views follow the data:
- * - 3-D coords + embeddings → 3D | Embedding
- * - 3-D coords, no embeddings → 3D | Genome (tracks / contact maps) else 3D | Matrix (distances)
- * - no 3-D coords, cell positions → Spatial | Genome (tracks / contact maps) else Spatial | Embedding
- * - no 3-D coords → Matrix | Embedding (or Matrix alone)
- * A bare boolean means "has embeddings" with 3-D coords (older callers).
+ * Default views follow the data: every view the dataset can fill
+ * (:func:`supportedPaneTypes`), in a grid — a single view fills the space.
+ * Data that fills none gets a Matrix view.  A bare boolean means "has
+ * embeddings" with 3-D coords (older callers).
  */
 export function defaultWorkspace(kind: boolean | DataKind): WorkspaceState {
   const k: DataKind = typeof kind === 'boolean' ? { hasEmbeddings: kind, hasCoords: true, hasTracks: false } : kind
-  const two = (a: PaneType, b: PaneType, sizes: [number, number]): WorkspaceState => ({
-    layout: 'columns',
-    panes: [pane('P1', a), pane('P2', b)],
-    activePane: 'P1',
-    sizes,
+  const types = supportedPaneTypes(k)
+  const panes = (types.length ? types : (['matrix'] as PaneType[])).map((t, i) => pane(`P${i + 1}`, t))
+  return {
+    layout: panes.length > 1 ? 'grid' : 'columns',
+    panes,
+    activePane: panes[0].id,
+    sizes: Array(panes.length).fill(1 / panes.length),
     maximized: null,
-  })
-  if (!k.hasCoords) {
-    // cells in tissue (spatial omics): where they are, next to their genome-wide signals
-    if (k.hasSpatial) return two('spatial', k.hasContactMaps || k.hasTracks ? 'genome' : k.hasEmbeddings ? 'embedding' : 'matrix', [0.5, 0.5])
-    return k.hasEmbeddings ? two('matrix', 'embedding', [0.55, 0.45]) : { layout: 'columns', panes: [pane('P1', 'matrix')], activePane: 'P1', sizes: [1], maximized: null }
   }
-  if (k.hasEmbeddings) return two('3d', 'embedding', [0.6, 0.4])
-  return k.hasTracks || k.hasContactMaps ? two('3d', 'genome', [0.5, 0.5]) : two('3d', 'matrix', [0.55, 0.45])
+}
+
+/** Panes of `types` side by side (columns; `sizes` default equal). */
+export function workspaceOf(types: PaneType[], sizes?: number[], layout: WsLayout = 'columns'): WorkspaceState {
+  const panes = types.map((t, i) => pane(`P${i + 1}`, t))
+  return { layout, panes, activePane: panes[0].id, sizes: normalizeSizes(sizes ?? [], panes.length), maximized: null }
+}
+
+/** Columns × rows of the grid layout for `n` panes (⌈√n⌉ columns). */
+export function gridShape(n: number): { cols: number; rows: number } {
+  const cols = Math.max(1, Math.ceil(Math.sqrt(n)))
+  return { cols, rows: Math.max(1, Math.ceil(n / cols)) }
+}
+
+/** Column / row fractions of the grid (equal when unset or saved for another shape). */
+export function gridSizes(ws: WorkspaceState): { cols: number[]; rows: number[] } {
+  const { cols, rows } = gridShape(ws.panes.length)
+  return { cols: normalizeSizes(ws.gridCols ?? [], cols), rows: normalizeSizes(ws.gridRows ?? [], rows) }
+}
+
+/** Columns pane `i` of `n` spans: the last pane fills the rest of an incomplete last row. */
+export function gridSpan(i: number, n: number): number {
+  const { cols, rows } = gridShape(n)
+  return i === n - 1 ? cols * rows - n + 1 : 1
+}
+
+/** Drag the grid boundary after column / row `index` to `frac` of the grid. */
+export function moveGridSplitter(ws: WorkspaceState, axis: 'cols' | 'rows', index: number, frac: number): WorkspaceState {
+  const g = gridSizes(ws)
+  const s = movePair(g[axis], index, frac)
+  if (!s) return ws
+  return axis === 'cols' ? { ...ws, gridCols: s, gridRows: g.rows } : { ...ws, gridCols: g.cols, gridRows: s }
+}
+
+/** Fractions with the boundary after `index` moved to `frac` (only the two neighbours change). */
+function movePair(sizes: number[], index: number, frac: number): number[] | null {
+  const s = [...sizes]
+  if (index < 0 || index >= s.length - 1) return null
+  const before = s.slice(0, index).reduce((a, b) => a + b, 0)
+  const pair = s[index] + s[index + 1]
+  const a = Math.min(pair - MIN_FRAC, Math.max(MIN_FRAC, frac - before))
+  s[index] = a
+  s[index + 1] = pair - a
+  return s
 }
 
 /** Pane types of a workspace, in order — to compare layouts. */
@@ -313,14 +353,8 @@ export function setLayout(ws: WorkspaceState, layout: WsLayout): WorkspaceState 
  * of the container (0–1); only the two neighbouring panes change.
  */
 export function moveSplitter(ws: WorkspaceState, index: number, frac: number): WorkspaceState {
-  const s = normalizeSizes(ws.sizes, ws.panes.length)
-  if (index < 0 || index >= s.length - 1) return ws
-  const before = s.slice(0, index).reduce((a, b) => a + b, 0)
-  const pair = s[index] + s[index + 1]
-  const a = Math.min(pair - MIN_FRAC, Math.max(MIN_FRAC, frac - before))
-  s[index] = a
-  s[index + 1] = pair - a
-  return { ...ws, sizes: s }
+  const s = movePair(normalizeSizes(ws.sizes, ws.panes.length), index, frac)
+  return s ? { ...ws, sizes: s } : ws
 }
 
 /** Pane fields of layouts saved before the explicit cells setting. */
@@ -410,7 +444,18 @@ export function parseWorkspace(raw: unknown): WorkspaceState | null {
   if (new Set(panes.map((p) => p.id)).size !== panes.length) return null
   const activePane = panes.some((p) => p.id === w.activePane) ? (w.activePane as string) : panes[0].id
   const maximized = panes.some((p) => p.id === w.maximized) ? (w.maximized as string) : null
-  return { layout: w.layout as WsLayout, panes, activePane, sizes: normalizeSizes(Array.isArray(w.sizes) ? w.sizes : [], panes.length), maximized }
+  const fracs = (v: unknown) => (Array.isArray(v) && v.length && v.every((x) => Number.isFinite(x) && x > 0) ? { v: v as number[] } : null)
+  const gc = fracs(w.gridCols)
+  const gr = fracs(w.gridRows)
+  return {
+    layout: w.layout as WsLayout,
+    panes,
+    activePane,
+    sizes: normalizeSizes(Array.isArray(w.sizes) ? w.sizes : [], panes.length),
+    maximized,
+    ...(gc ? { gridCols: gc.v } : {}),
+    ...(gr ? { gridRows: gr.v } : {}),
+  }
 }
 
 /**

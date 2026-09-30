@@ -10,6 +10,10 @@ import {
   handleWorkspaceKey,
   LAYOUTS,
   moveSplitter,
+  gridShape,
+  gridSizes,
+  gridSpan,
+  moveGridSplitter,
   normalizeSizes,
   PANE_LABEL,
   removePane,
@@ -298,6 +302,30 @@ export function Workspace() {
     window.addEventListener('pointerup', up)
   }
 
+  // grid: boundaries between columns / rows are dragged like the splitters
+  const grid = ws.layout === 'grid' && !ws.maximized && ws.panes.length > 1
+  const shape = gridShape(ws.panes.length)
+  const g = gridSizes(ws)
+  const onGridStart = (axis: 'cols' | 'rows', index: number) => (e: React.PointerEvent) => {
+    e.preventDefault()
+    const box = panesRef.current?.getBoundingClientRect()
+    if (!box) return
+    const n = axis === 'cols' ? shape.cols : shape.rows
+    const move = (ev: PointerEvent) => {
+      const [pos, len] = axis === 'cols' ? [ev.clientX - box.left, box.width] : [ev.clientY - box.top, box.height]
+      const frac = (pos - GRID_PAD - index * GRID_GAP - GRID_GAP / 2) / (len - 2 * GRID_PAD - (n - 1) * GRID_GAP)
+      setWorkspace((w) => moveGridSplitter(w, axis, index, frac))
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      document.body.classList.remove('resizing', 'resizing-rows')
+    }
+    document.body.classList.add(axis === 'cols' ? 'resizing' : 'resizing-rows')
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
   const add = (type: PaneType) => {
     setWorkspace((w) => addPane(w, type))
     setMenu(false)
@@ -329,7 +357,11 @@ export function Workspace() {
       <div
         ref={panesRef}
         className={`ws-panes layout-${ws.layout}${ws.maximized ? ' maximized' : ''}`}
-        style={ws.layout === 'grid' && !ws.maximized ? { gridTemplateColumns: ws.panes.length > 1 ? '1fr 1fr' : '1fr' } : undefined}
+        style={
+          grid
+            ? { gridTemplateColumns: g.cols.map((f) => `${f}fr`).join(' '), gridTemplateRows: g.rows.map((f) => `${f}fr`).join(' ') }
+            : undefined
+        }
       >
         {ws.panes.map((p, i) => (
           <Fragment key={p.id}>
@@ -337,7 +369,7 @@ export function Workspace() {
               pane={p}
               active={p.id === ws.activePane && ws.panes.length > 1}
               hidden={!visible(p)}
-              style={split ? { flex: `${sizes[i]} 1 0` } : undefined}
+              style={split ? { flex: `${sizes[i]} 1 0` } : grid && gridSpan(i, ws.panes.length) > 1 ? { gridColumn: `span ${gridSpan(i, ws.panes.length)}` } : undefined}
               canClose={ws.panes.length > 1}
               maximized={ws.maximized === p.id}
               resetKey={resetKeys[p.id] ?? 0}
@@ -348,8 +380,47 @@ export function Workspace() {
             )}
           </Fragment>
         ))}
+        {grid && <GridSplitters cols={g.cols} rows={g.rows} n={ws.panes.length} onStart={onGridStart} />}
       </div>
     </div>
+  )
+}
+
+/** Padding and gap of the grid layout (px; as in index.css `.layout-grid`). */
+const GRID_PAD = 4
+const GRID_GAP = 4
+
+/** Offset of the boundary after track `k` of `fracs` inside a grid box (CSS length). */
+const gridEdge = (fracs: number[], k: number) => {
+  const cum = fracs.slice(0, k + 1).reduce((a, b) => a + b, 0)
+  return `calc(${GRID_PAD}px + (100% - ${2 * GRID_PAD + (fracs.length - 1) * GRID_GAP}px) * ${cum} + ${k * GRID_GAP + GRID_GAP / 2}px)`
+}
+
+/**
+ * Drag handles on the boundaries of the grid: one per inner column edge (over the
+ * rows where that edge exists — not across a pane spanning the last row) and one
+ * per inner row edge.
+ */
+function GridSplitters({ cols, rows, n, onStart }: { cols: number[]; rows: number[]; n: number; onStart(axis: 'cols' | 'rows', k: number): (e: React.PointerEvent) => void }) {
+  const inLast = n - cols.length * (rows.length - 1) // panes in the last row
+  return (
+    <>
+      {cols.slice(0, -1).map((_, k) => {
+        const full = k < inLast - 1 || inLast === cols.length
+        return (
+          <div
+            key={`c${k}`}
+            className="ws-grid-splitter cols"
+            style={{ left: gridEdge(cols, k), top: GRID_PAD, ...(full ? { bottom: GRID_PAD } : { height: `calc(${gridEdge(rows, rows.length - 2)} - ${GRID_PAD + GRID_GAP / 2}px)` }) }}
+            onPointerDown={onStart('cols', k)}
+            title="Drag to resize"
+          />
+        )
+      })}
+      {rows.slice(0, -1).map((_, k) => (
+        <div key={`r${k}`} className="ws-grid-splitter rows" style={{ top: gridEdge(rows, k), left: GRID_PAD, right: GRID_PAD }} onPointerDown={onStart('rows', k)} title="Drag to resize" />
+      ))}
+    </>
   )
 }
 
