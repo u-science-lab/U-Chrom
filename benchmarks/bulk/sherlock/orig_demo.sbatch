@@ -41,8 +41,21 @@ print(json.dumps({"population_size": S, "seed": c["optimization"]["kernel_opts"]
 EOF
 cd "$RD"
 if [ "$CONTROLLER" = ipyparallel ]; then
-  ipcluster start -n "$SLURM_CPUS_PER_TASK" --daemonize=True
-  sleep 90
+  # ipyparallel 6.3 (IGM's era; 8.x fails to start its controller on Python 3.6).
+  # Wait for every engine to register and give up after 10 min instead of hanging.
+  timeout 120 ipcluster start -n "$SLURM_CPUS_PER_TASK" --daemonize=True
+  python - "$SLURM_CPUS_PER_TASK" <<'EOF2' || { echo "ipcluster did not come up"; ipcluster stop; exit 1; }
+import sys, time, ipyparallel as ipp
+n = int(sys.argv[1])
+for _ in range(120):
+    try:
+        if len(ipp.Client().ids) >= n:
+            print("ipcluster engines:", n); sys.exit(0)
+    except Exception:
+        pass
+    time.sleep(5)
+sys.exit(1)
+EOF2
 fi
 START=$(date +%s)
 /usr/bin/time -v igm-run config.json > igm_stdout.txt 2> igm_time.txt || echo "igm-run failed: see $RD/igm_stdout.txt, err_igm"

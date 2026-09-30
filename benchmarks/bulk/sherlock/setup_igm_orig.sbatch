@@ -33,7 +33,7 @@ mkdir -p "$IGMO"
 ENV=$IGMO/env
 if [ ! -d "$ENV" ]; then
   "$MAMBA" create -q -y -p "$ENV" -c conda-forge -c defaults python=3.6 pandas swig cython "cgal=4.14" hdf5 h5py \
-    numpy scipy matplotlib tornado ipyparallel cloudpickle gxx_linux-64 gcc_linux-64 make git
+    numpy scipy matplotlib tornado 'ipyparallel=6.3' cloudpickle gxx_linux-64 gcc_linux-64 make git
 fi
 export PATH=$ENV/bin:$PATH CPATH=$ENV/include LIBRARY_PATH=$ENV/lib LD_LIBRARY_PATH=$ENV/lib:${LD_LIBRARY_PATH:-}
 python --version
