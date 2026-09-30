@@ -1705,17 +1705,23 @@ body.resizing-rows {
   right: 6px;
   transform: none;
   max-width: none;
-  flex-wrap: wrap;
-  white-space: normal;
+  flex-wrap: nowrap;                 /* one line: the name field shrinks first, then the count text */
+  white-space: nowrap;
   justify-content: center;
 }
 .emb-selection > span {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .emb-selection input {
   flex: 1 1 80px;
-  min-width: 60px;
+  min-width: 40px;
   width: auto;
+}
+.emb-selection button {
+  flex: 0 0 auto;
 }
 
 /* swatches keep an outline on light backgrounds (pale categories, viridis yellow) */
