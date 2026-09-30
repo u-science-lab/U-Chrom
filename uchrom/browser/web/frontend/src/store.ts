@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { setGroupResolver } from './api'
 import { groupColor, nextGroupName, parseSavedGroups, removeGroup, renameGroup, upsertGroup, type GroupRef, type SavedGroup, type Selection } from './groups'
 import { DEFAULT_STYLE, removeCascade, uniqueName } from './layers'
+import { loadSidebars, saveSidebars, type Side, type Sidebars } from './sidebars'
 import { applyTheme, loadThemeChoice, resolveTheme, saveThemeChoice, systemPrefersDark, type Palette, type ThemeChoice } from './theme'
 import { isPointPick } from './types'
 import type { Locus } from './genome'
@@ -204,6 +205,9 @@ export interface AppState {
   saveSelection(name?: string): void
   renameSavedGroup(id: string, name: string): void
   deleteSavedGroup(id: string): void
+  /** which side bars are open (persisted per viewer) */
+  sidebars: Sidebars
+  toggleSidebar(side: Side): void
   /** interface theme: the choice (persisted) and the applied palette */
   themeChoice: ThemeChoice
   palette: Palette
@@ -440,6 +444,12 @@ export const useStore = create<AppState>((set, get) => {
     patchView({ focusCell: cellId, focusGroup: null }, { pick: null, flyToken: s.flyToken + 1 })
   },
   savedGroups,
+  sidebars: loadSidebars(),
+  toggleSidebar(side) {
+    const sidebars = { ...get().sidebars, [side]: !get().sidebars[side] }
+    saveSidebars(sidebars)
+    set({ sidebars })
+  },
   themeChoice: savedTheme,
   palette: initialPalette,
   setThemeChoice(choice) {

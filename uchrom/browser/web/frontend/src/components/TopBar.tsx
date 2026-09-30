@@ -92,6 +92,7 @@ export function TopBar() {
           {active.xyz_unit ? ` · ${active.xyz_unit}` : ''}
         </div>
       )}
+      <SidebarToggles />
       <ThemeMenu />
     </header>
   )
@@ -129,6 +130,31 @@ function ThemeMenu() {
           ))}
         </ul>
       </Popover>
+    </div>
+  )
+}
+
+/** Show / hide the left side bar (cells, groups, colour) and the right one (inspector). */
+function SidebarToggles() {
+  const sidebars = useStore((s) => s.sidebars)
+  const toggle = useStore((s) => s.toggleSidebar)
+  const icon = (side: 'left' | 'right') => (
+    <svg viewBox="0 0 16 14" width="16" height="14" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.3">
+      <rect x="1" y="1" width="14" height="12" rx="2" />
+      <rect x={side === 'left' ? 1 : 10.2} y="1" width="4.8" height="12" rx="1" fill="currentColor" fillOpacity={sidebars[side] ? 0.9 : 0.12} stroke="none" />
+    </svg>
+  )
+  const cmd = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl+'
+  return (
+    <div className="sidebar-toggles" role="group" aria-label="Side bars">
+      <button className={sidebars.left ? 'on' : ''} onClick={() => toggle('left')} aria-pressed={sidebars.left}
+              title={`${sidebars.left ? 'Hide' : 'Show'} the left side bar (${cmd}[)`}>
+        {icon('left')}
+      </button>
+      <button className={sidebars.right ? 'on' : ''} onClick={() => toggle('right')} aria-pressed={sidebars.right}
+              title={`${sidebars.right ? 'Hide' : 'Show'} the inspector (${cmd}])`}>
+        {icon('right')}
+      </button>
     </div>
   )
 }

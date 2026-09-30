@@ -2227,3 +2227,25 @@ button.focus-step {
 .focus-actions button {
   flex: 1;
 }
+
+/* ---- show / hide the side bars (top bar) ---- */
+.sidebar-toggles {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;                 /* right-aligned with the theme menu (after the summary when shown) */
+}
+.summary + .sidebar-toggles {
+  margin-left: 8px;
+}
+.sidebar-toggles + .theme-menu {
+  margin-left: 4px;
+}
+.sidebar-toggles button {
+  display: grid;
+  place-items: center;
+  padding: 3px 6px;
+  color: var(--text-muted);
+}
+.sidebar-toggles button.on {
+  color: var(--text);
+}

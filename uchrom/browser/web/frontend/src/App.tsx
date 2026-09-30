@@ -16,6 +16,7 @@ import { useCellLoader } from './useCellLoader'
 import { useGeometryLoader } from './useGeometryLoader'
 import { useOmicsLoader } from './useOmicsLoader'
 import { registerWebMcpTools } from './webmcp'
+import { sidebarKey } from './sidebars'
 
 export function App() {
   const setDatasets = useStore((s) => s.setDatasets)
@@ -40,14 +41,26 @@ export function App() {
   useEffect(() => {
     registerWebMcpTools()
   }, [])
+  const sidebars = useStore((s) => s.sidebars)
+  const toggleSidebar = useStore((s) => s.toggleSidebar)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const side = sidebarKey(e)
+      if (!side) return
+      e.preventDefault()
+      toggleSidebar(side)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toggleSidebar])
 
   return (
     <div className="app">
       <TopBar />
       <div className="main">
-        <LeftSidebar />
+        {sidebars.left && <LeftSidebar />}
         <Workspace />
-        <Inspector />
+        {sidebars.right && <Inspector />}
       </div>
       <StatusBar />
     </div>
