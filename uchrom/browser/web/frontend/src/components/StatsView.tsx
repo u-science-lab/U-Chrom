@@ -3,7 +3,7 @@ import { fetchCellValues, fetchRg, fetchScaling } from '../api'
 import { cellRgb } from '../colors'
 import { useFieldColors } from '../useFieldColors'
 import { fmtBp } from '../filters'
-import { logTicks, niceTicks } from '../genome'
+import { GENOME, logTicks, niceTicks } from '../genome'
 import { nearestPoint } from '../render/embedding'
 import { scopeLabel, type GroupInfo } from '../groups'
 import { activeView, fieldKey, useStore } from '../store'
@@ -176,7 +176,8 @@ export function StatsView({ pane }: { pane: Pane }) {
   const boxRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const size = useSize(boxRef)
-  const chrom = (pane.chromScope ?? 'all') === 'locus' ? (locus?.chrom ?? null) : null
+  // the whole-genome window: every chromosome
+  const chrom = (pane.chromScope ?? 'all') === 'locus' && locus?.chrom !== GENOME ? (locus?.chrom ?? null) : null
   const [rg, setRg] = useState<RgStats | null>(null)
   const [scaling, setScaling] = useState<{ pop: ScalingStats; cell: ScalingStats | null } | null>(null)
   // overlaid groups: ref → stats of the current kind

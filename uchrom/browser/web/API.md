@@ -319,6 +319,16 @@ These views are **peers** of the 3-D view and also work for datasets without
 3-D coordinates (e.g. single-cell Hi-C / RNA: `n_spots == 0`).  All share a
 *locus* `chrom, start, end` chosen in the client.
 
+**Whole genome.**  `chrom=*` asks for every chromosome end to end in
+*genome coordinates* (a chromosome's positions plus its `offset` in the
+summary's `genome` list: natural order, `length` = the largest extent of its
+bins / spots and of any contact map).  `start` / `end` are ignored — the whole
+genome comes back at once.  `tracks` pools k consecutive bins of a chromosome
+beyond 4,000 bins; `contacts` takes an `.mcool` at the finest resolution with at
+most 1,000 bins over the genome, else pools k × k bins within each chromosome
+(`note` says so); `intervals` returns every row with `start` / `end` shifted;
+`distance` answers `400` (3-D distances are per chromosome).
+
 The dataset summary gains:
 
 ```json
@@ -335,6 +345,8 @@ The dataset summary gains:
      "chroms": [{"name": "chr21", "length": 46709983}],
      "per_cell": false, "n_cells": 0}
   ],
+  "genome": [{"name": "chr1", "offset": 0, "length": 195471971},     // the whole-genome layout (chrom=*)
+             {"name": "chr2", "offset": 195471971, "length": 182113224}],
   "intervals": [{"key": "tads.arcfish", "n": 120, "kind": "domain"}]
       // cd.intervals tables (kind: domain | segment | peak) first, then other
       // cd.results DataFrames with chrom/start/end (kind: null)

@@ -306,6 +306,7 @@ class Dataset:
             "xyz_unit": None if unit is None else str(unit),
             "trace_mode": bool(self.cd.n_traces > len(chroms)),
             "chroms": chroms,
+            "genome": self.genome_layout(),
             "has_coords": bool(self.cd.n_spots > 0),
             "tracks": self.track_names(),
             "contact_maps": self.contact_maps(),
@@ -835,6 +836,8 @@ class Dataset:
             raise KeyError(unknown[0])
         if agg not in ("mean", "median", "max"):
             raise ValueError("agg must be mean, median or max")
+        if str(chrom) == GENOME:
+            return self._genome_tracks(names, cell_id, agg, group)
         grids = {known[n]["grid"] for n in names}
         if len(grids) > 1:
             raise ValueError(f"tracks on different bins cannot be requested together: {sorted(grids)}")
@@ -884,11 +887,75 @@ class Dataset:
                 seen.add(key)
         return out
 
+    def genome_layout(self) -> List[Dict[str, Any]]:
+        """The chromosomes end to end, for the whole-genome view (``chrom="*"``): name, offset
+        (bp before it) and length — the largest extent of its bins / spots and of any contact
+        map, in natural order."""
+        if "genome" not in self._cache:
+            length: Dict[str, int] = {}
+            for c in self.chrom_table():
+                length[c["name"]] = max(length.get(c["name"], 0), int(c["end"]))
+            for m in self.contact_maps():
+                for c in m.get("chroms") or []:
+                    length[c["name"]] = max(length.get(c["name"], 0), int(c["length"]))
+            out, off = [], 0
+            for name in sorted(length, key=natural_chrom_key):
+                out.append({"name": name, "offset": off, "length": length[name]})
+                off += length[name]
+            self._cache["genome"] = out
+        return self._cache["genome"]
+
+    def _genome_offsets(self) -> Dict[str, int]:
+        return {c["name"]: c["offset"] for c in self.genome_layout()}
+
+    def _genome_tracks(self, names: List[str], cell_id, agg: str, group) -> Dict[str, Any]:
+        """Tracks over the whole genome: each chromosome's bins in genome coordinates; beyond
+        MAX_GENOME_TRACK_BINS bins, k consecutive bins of a chromosome are pooled (``agg``)."""
+        layout = self.genome_layout()
+        parts = []
+        for c in layout:
+            d = self.tracks(names, c["name"], None, None, cell_id, agg, group)
+            if not d["bin_starts"]:
+                continue
+            f = pd.DataFrame({"chrom": c["name"], "off": c["offset"], "start": d["bin_starts"],
+                              "end": d["bin_ends"], "n": d["n_spots"]})
+            for n in names:
+                f[n] = np.array([np.nan if v is None else v for v in d["values"][n]], dtype=np.float64)
+            parts.append(f)
+        if not parts:
+            return {"chrom": GENOME, "group": group, "bin_starts": [], "bin_ends": [], "n_spots": [],
+                    "values": {n: [] for n in names}}
+        df = pd.concat(parts, ignore_index=True)
+        if len(df) > MAX_GENOME_TRACK_BINS:          # k consecutive bins of a chromosome pooled
+            k = int(np.ceil(len(df) / MAX_GENOME_TRACK_BINS))
+            df["win"] = df.groupby("off", sort=False).cumcount() // k
+            g = df.groupby(["off", "win"], sort=True)
+            with warnings_ignored():
+                vals = g[names].agg({"mean": "mean", "median": "median", "max": "max"}[agg]) if names else None
+            first = g.agg(chrom=("chrom", "first"), start=("start", "min"), end=("end", "max"), n=("n", "sum"))
+            df = first.reset_index().join(vals.reset_index(drop=True)) if names else first.reset_index()
+        return {
+            "chrom": GENOME, "group": group,
+            "bin_starts": [int(v) for v in df["off"] + df["start"]],
+            "bin_ends": [int(v) for v in df["off"] + df["end"]],
+            "n_spots": [int(v) for v in df["n"]],
+            "values": {n: [None if not np.isfinite(v) else float(v) for v in df[n].to_numpy()] for n in names},
+        }
+
     def intervals(self, key: str, chrom: str, start=None, end=None) -> Dict[str, Any]:
         df = self._interval_table(key)
         if df is None:
             raise KeyError(key)
-        m = df["chrom"].astype(str) == str(chrom)
+        if str(chrom) == GENOME:  # whole genome: every row, in genome coordinates
+            off = df["chrom"].astype(str).map(self._genome_offsets())
+            df = df[off.notna()].copy()
+            off = off[off.notna()].astype(np.int64)
+            df["start"] = df["start"].astype(np.int64) + off
+            df["end"] = df["end"].astype(np.int64) + off
+            start = end = None
+            m = np.ones(len(df), dtype=bool)
+        else:
+            m = df["chrom"].astype(str) == str(chrom)
         if start is not None:
             m &= df["end"] > int(start)
         if end is not None:
@@ -967,6 +1034,8 @@ class Dataset:
             raise KeyError(key)
         family = "linked_scool" if info["kind"] == "scool" else "linked_cool"
         path = self.resolve(str(self._link_records(family)[key]["path"]))
+        if str(chrom) == GENOME:
+            return self._genome_contacts(key, info, path, resolution, balance, cell, group)
         length = next((c["length"] for c in info["chroms"] if c["name"] == chrom), None)
         if length is None:
             raise ValueError(f"unknown chromosome {chrom!r} in contact map {key!r}")
@@ -1004,6 +1073,113 @@ class Dataset:
                   "value": "balanced" if balanced else "count", "unit": None,
                   "cell": cell, "group": None, "note": note}
         return encode_matrix(mat, starts, ends, header)
+
+    def _genome_contacts(self, key: str, info: dict, path: Path, resolution, balance: bool,
+                         cell: Optional[str], group: Optional[str]) -> bytes:
+        """The whole genome (chromosomes in :meth:`genome_layout` order) at most MAX_MATRIX_BINS
+        bins: an .mcool at its finest resolution that fits, else bins pooled k × k within each
+        chromosome.  Pixels are read straight from HDF5 (per cell for a group of a .scool) and
+        summed into the output bins; balanced values use the bins' weights.  Cached (LRU)."""
+        import cooler
+        import h5py
+
+        cache = self._cache.setdefault("genome_contacts", {})
+        ck = (key, resolution, bool(balance), cell, group)
+        if ck in cache:
+            cache[ck] = cache.pop(ck)
+            return cache[ck]
+        layout = self.genome_layout()
+        offsets = {c["name"]: c["offset"] for c in layout}
+        rank = {c["name"]: i for i, c in enumerate(layout)}
+        total = sum(c["length"] for c in layout)
+        notes, n_cells = ["whole genome"], None
+        if info["kind"] == "mcool":
+            res = int(resolution) if resolution else next(
+                (r for r in info["resolutions"] if total / r <= MAX_MATRIX_BINS), info["resolutions"][-1])
+            if res not in info["resolutions"]:
+                raise ValueError(f"resolution must be one of {info['resolutions']}")
+            groups = [f"resolutions/{res}"]
+        elif info["kind"] == "scool":
+            available = self._scool_cells(path)
+            if group is not None:
+                names = [c for c in self.group_cells(group) if f"/cells/{c}" in available]
+                if not names:
+                    raise LookupError(f"no cell of group {group!r} has a map in {key!r} ({self._scool_coverage(path)})")
+                if len(names) > PSEUDOBULK_MAX_CELLS:
+                    rng = np.random.default_rng(0)
+                    names = sorted(rng.choice(names, PSEUDOBULK_MAX_CELLS, replace=False).tolist(), key=natural_key)
+                    notes.append(f"sum over {PSEUDOBULK_MAX_CELLS} random cells of the group")
+                n_cells = len(names)
+            elif cell is not None:
+                if f"/cells/{cell}" not in available:
+                    raise KeyError(f"cell {cell!r} has no map in {key!r} ({self._scool_coverage(path)})")
+                names = [str(cell)]
+            else:
+                raise LookupError("per-cell contact map: pass cell=<cell id> or group=<group>")
+            groups = [f"cells/{c}" for c in names]
+        else:
+            groups = [""]
+        clr = cooler.Cooler(f"{path}::/{groups[0]}")
+        bins = clr.bins()[:]
+        chrom = bins["chrom"].astype(str).to_numpy()
+        starts = bins["start"].to_numpy(np.int64)
+        ends = bins["end"].to_numpy(np.int64)
+        kept = [c for c in sorted(set(chrom) & set(offsets), key=rank.get)]
+        n_kept = int(np.isin(chrom, kept).sum())
+        if not n_kept:
+            raise LookupError(f"contact map {key!r} has no chromosome of this dataset")
+        k = max(1, int(np.ceil(n_kept / MAX_MATRIX_BINS)))
+        out_idx = np.full(len(bins), -1, dtype=np.int64)
+        o_starts, o_ends, n_out = [], [], 0
+        for c in kept:
+            ix = np.flatnonzero(chrom == c)                     # bins of a chromosome are contiguous
+            m = int(np.ceil(len(ix) / k))
+            out_idx[ix] = n_out + np.arange(len(ix)) // k
+            o_starts += [offsets[c] + int(starts[ix[i * k]]) for i in range(m)]
+            o_ends += [offsets[c] + int(ends[ix[min(len(ix), (i + 1) * k) - 1]]) for i in range(m)]
+            n_out += m
+        if k > 1:
+            notes.append(f"{k}x{k} bins pooled")
+        balanced = bool(balance) and "weight" in bins.columns
+        weight = bins["weight"].to_numpy(np.float64) if balanced else None
+        acc = np.zeros(n_out * n_out, dtype=np.float64)
+        diag = np.zeros(n_out, dtype=np.float64)
+        n_contacts = 0.0
+        step = 5_000_000
+        with h5py.File(path, "r") as f:
+            for g in groups:
+                grp = f[g] if g else f
+                n_pix = grp["pixels/bin1_id"].shape[0]
+                for s0 in range(0, n_pix, step):
+                    b1 = grp["pixels/bin1_id"][s0: s0 + step]
+                    b2 = grp["pixels/bin2_id"][s0: s0 + step]
+                    v = grp["pixels/count"][s0: s0 + step].astype(np.float64)
+                    n_contacts += float(v.sum())
+                    if weight is not None:
+                        v = v * weight[b1] * weight[b2]
+                    o1, o2 = out_idx[b1], out_idx[b2]
+                    ok = (o1 >= 0) & (o2 >= 0) & np.isfinite(v)
+                    o1, o2, v, same = o1[ok], o2[ok], v[ok], (b1 == b2)[ok]
+                    acc += np.bincount(o1 * n_out + o2, weights=v, minlength=n_out * n_out)
+                    diag += np.bincount(o1[same], weights=v[same], minlength=n_out)
+        up = acc.reshape(n_out, n_out)
+        mat = (up + up.T - np.diag(diag)).astype(np.float32)   # cool stores one triangle
+        if weight is not None:                                 # bins without a weight: no value
+            dead = np.ones(n_out, dtype=bool)
+            live = out_idx[np.isfinite(weight) & (out_idx >= 0)]
+            dead[live] = False
+            mat[dead, :] = np.nan
+            mat[:, dead] = np.nan
+        header = {"chrom": GENOME, "start": 0, "end": total, "resolution": int(clr.binsize or 0) * k,
+                  "value": "balanced" if balanced else "count", "unit": None,
+                  "cell": cell if group is None else None, "group": group, "note": "; ".join(notes)}
+        if n_cells is not None:
+            header.update(n_cells=n_cells, n_contacts=n_contacts)
+        buf = encode_matrix(mat, np.asarray(o_starts, np.int64), np.asarray(o_ends, np.int64), header)
+        cache[ck] = buf
+        while len(cache) > PSEUDOBULK_CACHE:
+            cache.pop(next(iter(cache)))
+        return buf
 
     def _scool_cells(self, path: Path) -> set:
         """``/cells/<name>`` URIs of a .scool (listing is slow: cached)."""
@@ -1105,6 +1281,8 @@ class Dataset:
                  stat: str = "median", threshold: Optional[float] = None, group=None) -> bytes:
         if stat not in ("median", "mean", "contact"):
             raise ValueError("stat must be median, mean or contact")
+        if str(chrom) == GENOME:
+            raise ValueError("distance matrices are per chromosome: pick a chromosome")
         idx = self._select(chrom, start, end, cell_id, trace_id, group=group)
         if len(idx) == 0:
             raise LookupError("no spots with coordinates in this selection")
@@ -1288,6 +1466,10 @@ class Dataset:
 
 
 MAX_MATRIX_BINS = 1000
+#: the whole-genome view: ``chrom="*"`` (tracks, contact maps, intervals in genome coordinates)
+GENOME = "*"
+#: whole-genome tracks: bins pooled into at most this many windows
+MAX_GENOME_TRACK_BINS = 4000
 #: pseudo-bulk of a group over a per-cell (.scool) map: cells summed at most
 PSEUDOBULK_MAX_CELLS = 20_000
 #: pseudo-bulk matrices kept per dataset (LRU)

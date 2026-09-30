@@ -18,6 +18,8 @@ export interface DatasetSummary {
   xyz_unit: string | null
   trace_mode: boolean
   chroms: ChromInfo[]
+  /** chromosomes end to end for the whole-genome view (absent from older servers) */
+  genome?: GenomeChrom[]
   /** numeric columns of cd.cells (absent from older servers) */
   cell_fields?: CellField[]
   /** non-genomic 3D point sets (cd.points), e.g. nascent RNA spots */
@@ -368,4 +370,11 @@ export interface FileListing {
 export interface FilePlace {
   label: string
   path: string
+}
+
+/** A chromosome in the whole-genome layout: bp before it (offset) and its length. */
+export interface GenomeChrom {
+  name: string
+  offset: number
+  length: number
 }

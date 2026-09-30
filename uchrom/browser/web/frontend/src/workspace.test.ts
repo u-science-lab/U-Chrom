@@ -30,8 +30,9 @@ describe('default workspace', () => {
   it('opens every view the data supports in a grid', () => {
     const ws = defaultWorkspace(true)
     expect(ws.layout).toBe('grid')
-    expect(ws.panes.map((p) => p.type)).toEqual(['3d', 'embedding', 'genome', 'matrix', 'stats'])
-    expect(defaultWorkspace(false).panes.map((p) => p.type)).toEqual(['3d', 'genome', 'matrix', 'stats'])
+    // …but Matrix, whose maps the Genome view's matrix rows already show
+    expect(ws.panes.map((p) => p.type)).toEqual(['3d', 'embedding', 'genome', 'stats'])
+    expect(defaultWorkspace(false).panes.map((p) => p.type)).toEqual(['3d', 'genome', 'stats'])
     // one view: no grid
     expect(defaultWorkspace({ hasCoords: false, hasEmbeddings: false, hasTracks: false })).toMatchObject({ layout: 'columns', panes: [{ type: 'matrix' }] })
   })
@@ -82,7 +83,7 @@ describe('grid', () => {
     ])
     expect([0, 1, 2, 3, 4].map((i) => gridSpan(i, 5))).toEqual([1, 1, 1, 1, 2]) // the last fills its row
     expect(gridSpan(3, 4)).toBe(1)
-    let ws = defaultWorkspace(true) // 5 views: 3 × 2
+    let ws = workspaceOf(['3d', 'embedding', 'genome', 'matrix', 'stats'], undefined, 'grid') // 5 views: 3 × 2
     expect(gridSizes(ws)).toEqual({ cols: [1 / 3, 1 / 3, 1 / 3], rows: [0.5, 0.5] })
     ws = moveGridSplitter(ws, 'cols', 0, 0.5)
     expect(gridSizes(ws).cols[0]).toBeCloseTo(0.5)
@@ -228,7 +229,7 @@ describe('views the data supports', () => {
     const t = (k: Parameters<typeof defaultWorkspace>[0]) => defaultWorkspace(k).panes.map((p) => p.type)
     expect(t({ ...none, hasSpatial: true, hasTracks: true, hasEmbeddings: true })).toEqual(['spatial', 'embedding', 'genome'])
     expect(t({ ...none, hasSpatial: true, hasEmbeddings: true })).toEqual(['spatial', 'embedding'])
-    expect(t({ ...none, hasSpatial: true, hasContactMaps: true, manyCells: true })).toEqual(['spatial', 'genome', 'matrix', 'stats'])
+    expect(t({ ...none, hasSpatial: true, hasContactMaps: true, manyCells: true })).toEqual(['spatial', 'genome', 'stats'])
     expect(t({ ...none, hasEmbeddings: true })).toEqual(['embedding'])
   })
   it('keeps the spatial pane options of a saved layout', () => {

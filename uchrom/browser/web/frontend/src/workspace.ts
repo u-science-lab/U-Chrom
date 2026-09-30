@@ -120,13 +120,15 @@ const pane = (id: string, type: PaneType): Pane => ({ id, type, embeddingKey: nu
 
 /**
  * Default views follow the data: every view the dataset can fill
- * (:func:`supportedPaneTypes`), in a grid — a single view fills the space.
- * Data that fills none gets a Matrix view.  A bare boolean means "has
+ * (:func:`supportedPaneTypes`), in a grid — a single view fills the space —
+ * except Matrix when there is a Genome view, whose matrix rows show the same
+ * maps.  Data that fills none gets a Matrix view.  A bare boolean means "has
  * embeddings" with 3-D coords (older callers).
  */
 export function defaultWorkspace(kind: boolean | DataKind): WorkspaceState {
   const k: DataKind = typeof kind === 'boolean' ? { hasEmbeddings: kind, hasCoords: true, hasTracks: false } : kind
-  const types = supportedPaneTypes(k)
+  const all = supportedPaneTypes(k)
+  const types = all.includes('genome') ? all.filter((t) => t !== 'matrix') : all
   const panes = (types.length ? types : (['matrix'] as PaneType[])).map((t, i) => pane(`P${i + 1}`, t))
   return {
     layout: panes.length > 1 ? 'grid' : 'columns',

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchContacts, fetchDistance } from '../api'
 import { fmtBp } from '../filters'
+import { queryRegion, regionKey } from '../genome'
 import type { MatrixData } from '../matrix'
 import { ColorScaleControls, useMatrixScale } from './ColorScaleControls'
 import { ALL_CELLS_REF, isMultiCell, scopeText } from '../groups'
@@ -132,7 +133,7 @@ export function MatrixView({ pane }: { pane: Pane }) {
       const req =
         source === 'distance'
           ? fetchDistance(ds.id, locus, { cellId: cell, group, stat: pane.stat ?? 'median', threshold: pane.threshold ?? null })
-          : fetchContacts(ds.id, source, locus, { resolution: pane.resolution ?? null, balance: pane.balance ?? false, cell, group })
+          : fetchContacts(ds.id, source, queryRegion(locus), { resolution: pane.resolution ?? null, balance: pane.balance ?? false, cell, group })
       req
         .then((m) => live && (setMat(m), setError(null)))
         .catch((e: Error) => live && (setError(e.message), setMat(null)))
@@ -143,7 +144,7 @@ export function MatrixView({ pane }: { pane: Pane }) {
       clearTimeout(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ds?.id, source, locus?.chrom, locus?.start, locus?.end, cell, group, pane.stat, pane.threshold, pane.resolution, pane.balance, waitingForCell])
+  }, [ds?.id, source, regionKey(locus), cell, group, pane.stat, pane.threshold, pane.resolution, pane.balance, waitingForCell])
 
   const cscale = useMatrixScale(mat, pane.color, pane.id)
   const scale = cscale.kind ?? 'contacts'

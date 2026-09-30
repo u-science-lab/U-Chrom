@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fmtLocus, parseLocus, zoomLocus } from '../genome'
+import { fmtLocus, GENOME, GENOME_LABEL, parseLocus, zoomLocus } from '../genome'
 import { useLocus } from '../useLocus'
 import { Select } from './Select'
 
@@ -12,7 +12,7 @@ export function LocusBar() {
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    if (locus) setText(fmtLocus(locus))
+    if (locus) setText(fmtLocus(locus, chroms))
     setError(null)
   }, [locus?.chrom, locus?.start, locus?.end]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!locus || !chroms.length) return null
@@ -34,7 +34,9 @@ export function LocusBar() {
         }}
       >
         {chroms.map((c) => (
-          <option key={c.name}>{c.name}</option>
+          <option key={c.name} value={c.name}>
+            {c.name === GENOME ? GENOME_LABEL : c.name}
+          </option>
         ))}
       </Select>
       <input
@@ -42,7 +44,7 @@ export function LocusBar() {
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && go()}
-        onBlur={() => locus && setText(fmtLocus(locus))}
+        onBlur={() => locus && setText(fmtLocus(locus, chroms))}
         spellCheck={false}
       />
       <button className="locus-zoom" onClick={() => setLocus(zoomLocus(locus, 0.5, ext))} title="Zoom in">
@@ -51,7 +53,7 @@ export function LocusBar() {
       <button className="locus-zoom" onClick={() => setLocus(zoomLocus(locus, 2, ext))} title="Zoom out">
         −
       </button>
-      <button className="locus-zoom" onClick={() => ext && setLocus({ chrom: ext.name, start: ext.start, end: ext.end })} title="Whole chromosome">
+      <button className="locus-zoom" onClick={() => ext && setLocus({ chrom: ext.name, start: ext.start, end: ext.end })} title={locus.chrom === GENOME ? 'Whole genome' : 'Whole chromosome'}>
         full
       </button>
     </div>

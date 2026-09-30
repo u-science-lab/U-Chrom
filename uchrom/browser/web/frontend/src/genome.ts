@@ -5,7 +5,7 @@
  */
 
 import { fmtBp, parseGenomicNumber, parseRange } from './filters'
-import type { DatasetSummary } from './types'
+import type { DatasetSummary, GenomeChrom } from './types'
 
 export interface Locus {
   chrom: string
@@ -18,7 +18,59 @@ export interface ChromExtent {
   name: string
   start: number
   end: number
+  /** the whole genome (name GENOME): its chromosomes end to end */
+  layout?: GenomeChrom[]
 }
+
+/** "Chromosome" of the whole-genome view: positions are genome coordinates (chromosomes end to end). */
+export const GENOME = '*'
+export const GENOME_LABEL = 'All'
+export const isGenome = (l: { chrom: string } | null | undefined) => l?.chrom === GENOME
+
+/** The whole-genome extent of a layout (only for several chromosomes). */
+export function genomeExtent(layout: GenomeChrom[] | undefined): ChromExtent | null {
+  if (!layout || layout.length < 2) return null
+  const last = layout[layout.length - 1]
+  return { name: GENOME, start: 0, end: last.offset + last.length, layout }
+}
+
+/** Genome coordinate → chromosome and position (null outside the layout). */
+export function genomeToChrom(layout: GenomeChrom[], bp: number): { chrom: string; pos: number } | null {
+  let lo = 0
+  let hi = layout.length - 1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    const c = layout[mid]
+    if (bp < c.offset) hi = mid - 1
+    else if (bp >= c.offset + c.length) lo = mid + 1
+    else return { chrom: c.name, pos: bp - c.offset }
+  }
+  const last = layout[layout.length - 1]
+  return last && bp === last.offset + last.length ? { chrom: last.name, pos: last.length } : null
+}
+
+/** "chr3:12.5M" for a position on `chrom` (genome coordinates when chrom is GENOME). */
+export function fmtPos(chrom: string, bp: number, layout?: GenomeChrom[]): string {
+  if (chrom !== GENOME) return `${chrom}:${fmtBp(bp)}`
+  const c = layout ? genomeToChrom(layout, bp) : null
+  return c ? `${c.chrom}:${fmtBp(c.pos)}` : fmtBp(bp)
+}
+
+/** "chr3:10M-12M" for [start, end) on `chrom` (genome coordinates when chrom is GENOME). */
+export function fmtSpan(chrom: string, start: number, end: number, layout?: GenomeChrom[]): string {
+  if (chrom !== GENOME) return `${chrom}:${fmtBp(start)}-${fmtBp(end)}`
+  const c = layout ? genomeToChrom(layout, start) : null
+  return c ? `${c.chrom}:${fmtBp(c.pos)}-${fmtBp(c.pos + end - start)}` : `${fmtBp(start)}-${fmtBp(end)}`
+}
+
+/** The region a view requests: the whole genome at once in the whole-genome view (its data
+ *  do not change with the window), else the window. */
+export function queryRegion(l: Locus): { chrom: string; start?: number; end?: number } {
+  return l.chrom === GENOME ? { chrom: GENOME } : l
+}
+
+/** Key of `queryRegion` (effects re-request when it changes). */
+export const regionKey = (l: Locus | null | undefined) => (!l ? '' : l.chrom === GENOME ? GENOME : `${l.chrom}|${l.start}|${l.end}`)
 
 /** Smallest window the navigator zooms to (bp). */
 export const MIN_SPAN = 1_000
@@ -27,8 +79,9 @@ export const MIN_SPAN = 1_000
  * Chromosomes of a dataset for the locus navigator: those with 3-D spots
  * (their spot extent) plus those of every contact map (0 … length).
  */
-export function datasetChroms(ds: Pick<DatasetSummary, 'chroms' | 'contact_maps'> | undefined): ChromExtent[] {
+export function datasetChroms(ds: Pick<DatasetSummary, 'chroms' | 'contact_maps' | 'genome'> | undefined): ChromExtent[] {
   if (!ds) return []
+  const all = genomeExtent(ds.genome)
   const out = new Map<string, ChromExtent>()
   for (const c of ds.chroms ?? []) out.set(c.name, { name: c.name, start: c.start, end: c.end })
   for (const m of ds.contact_maps ?? []) {
@@ -37,12 +90,12 @@ export function datasetChroms(ds: Pick<DatasetSummary, 'chroms' | 'contact_maps'
       out.set(c.name, prev ? { name: c.name, start: Math.min(prev.start, 0), end: Math.max(prev.end, c.length) } : { name: c.name, start: 0, end: c.length })
     }
   }
-  return [...out.values()]
+  return all ? [all, ...out.values()] : [...out.values()]
 }
 
 /** Default locus: the whole first chromosome (spots first, else contact maps). */
 export function defaultLocus(chroms: ChromExtent[]): Locus | null {
-  const c = chroms[0]
+  const c = chroms.find((x) => x.name !== GENOME)
   return c ? { chrom: c.name, start: c.start, end: c.end } : null
 }
 
@@ -60,12 +113,28 @@ export function clampLocus(l: Locus, ext: ChromExtent | undefined): Locus {
 
 /**
  * Parse "chr7", "chr7:10.2M-12.5M", "chr7:10,200,000-12,500,000" or a bare
- * "10M-12M" (on `current`'s chromosome) into a clamped locus.
+ * "10M-12M" (on `current`'s chromosome) into a clamped locus; "All" (or
+ * "genome", "*") is the whole genome and "chr3:10M-chr5:20M" a window of it.
  */
 export function parseLocus(text: string, chroms: ChromExtent[], current?: Locus | null): Locus {
   const t = text.trim()
   if (!t) throw new Error('empty locus')
   const byName = new Map(chroms.map((c) => [c.name.toLowerCase(), c]))
+  const all = byName.get(GENOME)
+  if (all) {
+    if (['all', 'genome', GENOME].includes(t.toLowerCase())) return { chrom: GENOME, start: all.start, end: all.end }
+    const span = /^(\S+?):(\S+?)\s*(?:-|–|\.\.)\s*(\S+?):(\S+)$/.exec(t)
+    if (span && span[1].toLowerCase() !== span[3].toLowerCase()) {
+      const at = (name: string, pos: string) => {
+        const c = all.layout?.find((x) => x.name.toLowerCase() === name.toLowerCase())
+        if (!c) throw new Error(`unknown chromosome "${name}"`)
+        return c.offset + Math.min(c.length, Math.max(0, parseGenomicNumber(pos)))
+      }
+      const a = at(span[1], span[2])
+      const b = at(span[3], span[4])
+      return clampLocus({ chrom: GENOME, start: Math.min(a, b), end: Math.max(a, b) }, all)
+    }
+  }
   const colon = t.indexOf(':')
   let chromName: string
   let rangeText: string | null
@@ -96,8 +165,12 @@ export function parseLocus(text: string, chroms: ChromExtent[], current?: Locus 
   return clampLocus({ chrom: ext.name, start: Math.max(start, ext.start), end: Math.min(end, ext.end) }, ext)
 }
 
-export function fmtLocus(l: Locus): string {
-  return `${l.chrom}:${fmtBp(l.start)}-${fmtBp(l.end)}`
+/** "chr7:10.2M-12.5M"; in the whole genome "All", or "chr3:10M-chr5:20M" for a window of it. */
+export function fmtLocus(l: Locus, chroms?: ChromExtent[]): string {
+  if (l.chrom !== GENOME) return `${l.chrom}:${fmtBp(l.start)}-${fmtBp(l.end)}`
+  const all = chroms?.find((c) => c.name === GENOME)
+  if (!all?.layout || (l.start <= all.start && l.end >= all.end)) return GENOME_LABEL
+  return `${fmtPos(GENOME, l.start, all.layout)}-${fmtPos(GENOME, l.end, all.layout)}`
 }
 
 /** Zoom by `factor` (< 1 zooms in) around genomic position `center` (default: middle). */
