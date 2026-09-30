@@ -48,7 +48,7 @@ export function defaultLocus(chroms: ChromExtent[]): Locus | null {
 
 /** Clamp a window into the chromosome, keeping its span when possible. */
 export function clampLocus(l: Locus, ext: ChromExtent | undefined): Locus {
-  if (!ext) return l
+  if (!ext) return { chrom: l.chrom, start: Math.round(l.start), end: Math.round(l.end) } // whole bp even without an extent
   const full = ext.end - ext.start
   let span = Math.max(Math.min(MIN_SPAN, full), Math.min(l.end - l.start, full))
   if (!Number.isFinite(span) || span <= 0) span = full

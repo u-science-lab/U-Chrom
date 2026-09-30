@@ -89,6 +89,21 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
         except Exception as exc:  # unreadable / wrong format
             raise HTTPException(400, f"cannot load {req.path}: {exc}") from None
 
+    @app.get("/api/files")
+    def files(path: Optional[str] = None, hidden: bool = False) -> Dict[str, Any]:
+        from .files import list_dir
+        try:
+            return list_dir(path, show_hidden=hidden)
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            raise HTTPException(404, str(exc)) from None
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc)) from None
+
+    @app.get("/api/files/places")
+    def file_places() -> List[Dict[str, str]]:
+        from .files import places
+        return places(ds.path for ds in store.list())
+
     @app.delete("/api/datasets/{dataset_id}", status_code=204)
     def delete_dataset(dataset_id: str) -> Response:
         _dataset(dataset_id)

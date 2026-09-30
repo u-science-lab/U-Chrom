@@ -66,3 +66,13 @@ describe('ticks', () => {
     expect(logTicks(0, 10)).toEqual([])
   })
 })
+
+describe('locus stays in whole bp', () => {
+  it('zoom / pan without a chromosome extent round the window', () => {
+    const l = { chrom: 'chr4', start: 14_000_000, end: 15_000_000 }
+    const z = zoomLocus(l, 0.37, undefined, 14_326_200.86)
+    expect(Number.isInteger(z.start) && Number.isInteger(z.end)).toBe(true)
+    const p = panLocus(l, 1234.56)
+    expect(p).toEqual({ chrom: 'chr4', start: 14_001_235, end: 15_001_235 })
+  })
+})

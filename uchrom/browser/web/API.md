@@ -100,6 +100,31 @@ directory, `.cdz`, `.h5cd` or reconstruction `.csv`).
 Loads the file and returns its summary (same shape as a list item above).
 `400` with `{"detail": "..."}` if the file is missing or unreadable.
 
+### `GET /api/files?path=&hidden=false`
+
+One directory on the server, for the Open dataset dialog (default: the server's working directory):
+
+```json
+{"path": "/data/spatial", "parent": "/data", "sep": "/", "truncated": false,
+ "entries": [{"name": "raw", "path": "/data/spatial/raw", "kind": "dir", "format": null, "size": null, "mtime": 1790712482.5},
+             {"name": "brain.chromdata.zarr", "path": "…", "kind": "dataset", "format": "chromdata.zarr",
+              "size": 1342177, "mtime": 1790712482.5}]}
+```
+
+- `kind`: `dir`, `dataset` or `file`.  A dataset is something `POST /api/datasets` opens: a
+  `*.chromdata.zarr` directory (listed as a dataset, not entered), `.cdz`, `.h5cd`, `.csv`, `.csv.gz`.
+- Order: directories, datasets, other files; by name within each.
+- `size` is in bytes (the total of the files of a store directory).
+- Hidden entries appear only with `hidden=true`.  At most 5,000 entries (`truncated`).
+- Errors: `404` no such directory / not a directory, `403` permission denied.  Only names and `stat`
+  are read.
+
+### `GET /api/files/places`
+
+Starting points of the dialog: `[{"label": "Server folder", "path": …}, {"label": "Home", "path": …},
+…]` — the server's working directory, the home directory, then the folder of each loaded dataset
+(each folder once).
+
 ### `DELETE /api/datasets/{id}`
 
 Unload a dataset.  `204`.

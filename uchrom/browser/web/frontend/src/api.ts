@@ -1,5 +1,5 @@
 import { decodeMatrix, type MatrixData } from './matrix'
-import type { IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, SpatialPoints, TracePage } from './types'
+import type { FileListing, FilePlace, IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, SpatialPoints, TracePage } from './types'
 
 async function request(url: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(url, init)
@@ -31,6 +31,18 @@ export async function openDataset(path: string): Promise<DatasetSummary> {
     body: JSON.stringify({ path }),
   })
   return res.json()
+}
+
+/** A server directory for the Open dataset dialog (null: the server's working directory). */
+export async function listFiles(path: string | null, hidden = false): Promise<FileListing> {
+  const q = new URLSearchParams()
+  if (path) q.set('path', path)
+  if (hidden) q.set('hidden', 'true')
+  return (await request(`api/files?${q}`)).json()
+}
+
+export async function filePlaces(): Promise<FilePlace[]> {
+  return (await request('api/files/places')).json()
 }
 
 export async function closeDataset(id: string): Promise<void> {
@@ -202,9 +214,16 @@ export function resetGroupRegistrations() {
 }
 
 /** Build a query string, dropping null / undefined / '' values. */
+/** Genomic coordinates the server takes as integers (bp). */
+const BP_PARAMS = new Set(['start', 'end'])
+
 function query(params: Record<string, string | number | boolean | null | undefined>): string {
   const q = new URLSearchParams()
-  for (const [k, v] of Object.entries(params)) if (v !== null && v !== undefined && v !== '') q.set(k, String(v))
+  for (const [k, v] of Object.entries(params)) {
+    if (v === null || v === undefined || v === '') continue
+    // a window moved by the wheel / a drag can be fractional: the server wants whole bp
+    q.set(k, BP_PARAMS.has(k) && typeof v === 'number' ? String(Math.round(v)) : String(v))
+  }
   const s = q.toString()
   return s ? `?${s}` : ''
 }

@@ -345,3 +345,27 @@ export type PickInfo = TracePick | PointPick
 
 export const isPointPick = (p: PickInfo | null | undefined): p is PointPick => !!p && p.kind === 'point'
 
+
+/** One entry of a server directory (Open dataset dialog). */
+export interface FileEntry {
+  name: string
+  path: string
+  /** "dataset": something the browser opens (a *.chromdata.zarr directory is one) */
+  kind: 'dir' | 'dataset' | 'file'
+  format: string | null
+  size: number | null
+  mtime: number
+}
+
+export interface FileListing {
+  path: string
+  parent: string | null
+  sep: string
+  entries: FileEntry[]
+  truncated: boolean
+}
+
+export interface FilePlace {
+  label: string
+  path: string
+}
