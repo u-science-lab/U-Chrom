@@ -2160,3 +2160,70 @@ button.select.open .select-caret {
   flex: 0 0 auto;
   min-width: 62px;
 }
+
+/* ---- the layout switch (like + View) ---- */
+.ws-bar button.ws-layout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ws-bar button.ws-layout-btn .caret {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.ws-bar button.ws-layout-btn.open {
+  background: var(--bg-active);
+}
+.layout-icon {
+  display: block;
+  flex: 0 0 auto;
+}
+
+/* ---- the focused cell / group (inspector) ---- */
+.focus-card {
+  margin: 0 0 10px;
+  padding: 8px;
+  border: 1px solid var(--accent-mid);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+.focus-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.focus-head .insp-label {
+  flex: 0 0 auto;
+  margin-right: 2px;
+}
+.focus-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--accent);
+}
+.focus-name .swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 5px;
+}
+button.focus-step {
+  flex: 0 0 auto;
+  padding: 0 7px;
+  line-height: 18px;
+}
+.focus-meta {
+  margin: 2px 0 6px;
+}
+.focus-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.focus-actions button {
+  flex: 1;
+}

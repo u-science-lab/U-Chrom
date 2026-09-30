@@ -3,6 +3,7 @@ import { ensureActivePane, inspectorSections, paneTitle, type DatasetFacts } fro
 import { hasCoords, useStore } from '../store'
 import { ChromLegend } from './ChromLegend'
 import { EmbeddingControls } from './EmbeddingView'
+import { FocusPanel } from './FocusPanel'
 import { SpatialControls } from './SpatialView'
 import { GenomeInspector } from './GenomeView'
 import { LayerPanel } from './LayerPanel'
@@ -43,6 +44,7 @@ export function Inspector() {
         <span>{paneTitle(ws, pane)}</span>
         <span className="muted small">inspector</span>
       </div>
+      <FocusPanel />
       {sections.has('pin') && (
         <div className="insp-pin">
           <span className="insp-label">cells</span>

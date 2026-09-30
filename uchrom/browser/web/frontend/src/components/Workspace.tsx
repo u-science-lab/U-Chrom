@@ -22,7 +22,6 @@ import {
   type WsLayout,
 } from '../workspace'
 import { EmbeddingView } from './EmbeddingView'
-import { FocusBar } from './FocusBar'
 import { GenomeView } from './GenomeView'
 import { LocusBar } from './LocusBar'
 import { MatrixView } from './MatrixView'
@@ -125,10 +124,90 @@ function PaneTypeSwitch({ pane }: { pane: Pane }) {
 /** Whether a pane shows the shared genomic locus (Stats only when it looks at the locus chromosome). */
 const usesLocus = (p: Pane) => p.type === 'genome' || p.type === 'matrix' || (p.type === 'stats' && p.chromScope === 'locus')
 const LAYOUT_LABEL: Record<WsLayout, [string, string]> = {
-  tabs: ['Tabs', 'One view at a time, switch with tabs'],
-  columns: ['Columns', 'Views side by side'],
-  rows: ['Rows', 'Views stacked'],
-  grid: ['Grid', 'Views in a 2-column grid'],
+  tabs: ['Tabs', 'one view at a time, switch with tabs'],
+  columns: ['Columns', 'views side by side'],
+  rows: ['Rows', 'views stacked'],
+  grid: ['Grid', 'views in a 2-column grid'],
+}
+
+/** Small drawing of a layout (menu and button). */
+function LayoutIcon({ layout }: { layout: WsLayout }) {
+  const r = (x: number, y: number, w: number, h: number) => <rect x={x} y={y} width={w} height={h} rx="1" />
+  return (
+    <svg className="layout-icon" viewBox="0 0 16 12" width="16" height="12" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.2">
+      {layout === 'tabs' && (
+        <>
+          {r(1, 3, 14, 8)}
+          <path d="M1.5 3V1.5h5V3" />
+        </>
+      )}
+      {layout === 'columns' && (
+        <>
+          {r(1, 1, 6.2, 10)}
+          {r(8.8, 1, 6.2, 10)}
+        </>
+      )}
+      {layout === 'rows' && (
+        <>
+          {r(1, 1, 14, 4.2)}
+          {r(1, 6.8, 14, 4.2)}
+        </>
+      )}
+      {layout === 'grid' && (
+        <>
+          {r(1, 1, 6.2, 4.2)}
+          {r(8.8, 1, 6.2, 4.2)}
+          {r(1, 6.8, 6.2, 4.2)}
+          {r(8.8, 6.8, 6.2, 4.2)}
+        </>
+      )}
+    </svg>
+  )
+}
+
+/** The layout switch: the current layout as a button (like + View), the four layouts in a menu. */
+function LayoutMenu({ layout, onPick }: { layout: WsLayout; onPick(l: WsLayout): void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLButtonElement>(null)
+  const close = useCallback(() => setOpen(false), [])
+  return (
+    <div className="ws-add">
+      <button ref={ref} className={`ws-layout-btn${open ? ' open' : ''}`} onClick={() => setOpen(!open)} title="Layout of the views" aria-haspopup="menu">
+        <LayoutIcon layout={layout} />
+        {LAYOUT_LABEL[layout][0]}
+        <span className="caret" aria-hidden>
+          ▾
+        </span>
+      </button>
+      <Popover anchor={ref} open={open} onClose={close} className="menu-popup">
+        <ul className="view-menu" role="menu">
+          {LAYOUTS.map((l) => (
+            <li
+              key={l}
+              role="menuitemradio"
+              aria-checked={l === layout}
+              className={l === layout ? 'current' : ''}
+              onClick={() => {
+                onPick(l)
+                setOpen(false)
+              }}
+            >
+              <span className="vm-icon" aria-hidden>
+                <LayoutIcon layout={l} />
+              </span>
+              <span className="vm-text">
+                <span className="vm-name">{LAYOUT_LABEL[l][0]}</span>
+                <span className="vm-hint">{LAYOUT_LABEL[l][1]}</span>
+              </span>
+              <span className="vm-check" aria-hidden>
+                {l === layout ? '✓' : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Popover>
+    </div>
+  )
 }
 
 /**
@@ -225,7 +304,6 @@ export function Workspace() {
   return (
     <div className="workspace">
       <div className="ws-bar">
-        <FocusBar />
         <span className="spacer" />
         <div className="ws-add">
           <button ref={addRef} onClick={() => setMenu(!menu)} title="Add a view">
@@ -235,13 +313,7 @@ export function Workspace() {
             <ViewMenu onPick={add} />
           </Popover>
         </div>
-        <div className="seg ws-layouts" role="group" aria-label="Layout">
-          {LAYOUTS.map((l) => (
-            <button key={l} className={ws.layout === l ? 'active' : ''} title={LAYOUT_LABEL[l][1]} onClick={() => setWorkspace((w) => setLayout(w, l))}>
-              {LAYOUT_LABEL[l][0]}
-            </button>
-          ))}
-        </div>
+        <LayoutMenu layout={ws.layout} onPick={(l) => setWorkspace((w) => setLayout(w, l))} />
       </div>
       {ws.layout === 'tabs' && !ws.maximized && (
         <div className="ws-tabs">
