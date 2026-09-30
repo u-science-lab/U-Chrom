@@ -6,6 +6,7 @@ import {
   defaultEmbeddingKey,
   defaultWorkspace,
   workspaceOf,
+  addTracePane,
   effectiveStyle,
   parseLayerStyles,
   setPaneLayerStyle,
@@ -257,5 +258,16 @@ describe('3-D views styled on their own', () => {
     const back = parseWorkspace(JSON.parse(JSON.stringify(ws)))!
     expect(back.panes[0].layerStyles).toEqual({ ds: { mode: 'line', opacity: 0.5 } })
     expect(parseLayerStyles({ ds: { mode: 'blob', opacity: 7, color: 'red' } })).toBeUndefined()
+  })
+})
+
+describe('trace views', () => {
+  it('open a trace of a cell in a new 3-D view pinned to the cell, persisted', () => {
+    const ws = addTracePane(workspaceOf(['3d']), 'c7', 't12')
+    const p = ws.panes[1]
+    expect(p).toMatchObject({ type: '3d', trace: 't12', scope: { kind: 'cell', cell: 'c7' } })
+    expect(ws.activePane).toBe(p.id)
+    expect(parseWorkspace(JSON.parse(JSON.stringify(ws)))!.panes[1].trace).toBe('t12')
+    expect(addTracePane(workspaceOf(['3d']), null, 't1').panes[1]).toMatchObject({ trace: 't1' })
   })
 })

@@ -32,10 +32,11 @@ export function OperationsPanel() {
   return (
     <details className="panel subset">
       <summary>
-        <h2>Subset layer</h2>
+        <h2>Highlight a region / traces</h2>
       </summary>
       <div className="muted small">
-        new layer from <b>{parent.name}</b> — for comparing or exporting a region / set of traces
+        a new layer from <b>{parent.name}</b>, styled on its own — e.g. the whole cell as grey lines (select{' '}
+        <b>{parent.name}</b>, Style → Custom) with one region as coloured tubes (this layer, Style)
       </div>
       <div className="tabs">
         {tabs.map((t) => (
@@ -60,7 +61,8 @@ function useCreateSubset(ds: DatasetSummary, parent: Layer) {
       return
     }
     setError(null)
-    addLayer({ datasetId: ds.id, parentId: parent.id, name: name ?? describeFilter(own), filter, style: { ...parent.style, ...style } })
+    // a subset reads as a highlight: coloured tubes over its parent (restyle it in Style)
+    addLayer({ datasetId: ds.id, parentId: parent.id, name: name ?? describeFilter(own), filter, style: { ...parent.style, mode: 'tube', colorMode: 'rainbow', opacity: 1, ...style } })
   }
   return { create, error, setError }
 }

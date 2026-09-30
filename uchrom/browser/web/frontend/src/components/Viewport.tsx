@@ -6,7 +6,7 @@ import { splitForView } from '../render/bonds'
 import { displayParts, subsetGeometry, thinGeometry, type FocusSet } from '../render/partition'
 import { buildPointMarkers, splitPoints, type BuiltPoints } from '../render/points'
 import { raycastChunks } from '../render/raypick'
-import { bboxDiagonal, findSegment } from '../render/segments'
+import { autoTubeRadius, bboxDiagonal, findSegment } from '../render/segments'
 import { DEFAULT_STYLE } from '../layers'
 import { mark } from '../perf'
 import { activeView, useStore } from '../store'
@@ -32,7 +32,7 @@ interface Part {
 
 interface Entry {
   /** inputs the parts were built from; rebuilt when any changes */
-  key: { geometry: Geometry; style: string; focus: FocusSet; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null; theme: string }
+  key: { geometry: Geometry; style: string; focus: FocusSet; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null; theme: string; trace: string | null }
   parts: Part[]
 }
 
@@ -87,6 +87,20 @@ function setMoving(t: Three, moving: boolean) {
   const ratio = moving && any ? 1 : window.devicePixelRatio
   if (t.renderer.getPixelRatio() !== ratio) t.renderer.setPixelRatio(ratio)
   t.dirty = true
+}
+
+/** Draw after the other layers and win depth ties with coincident geometry (subset layers). */
+function highlightOnTop(o: THREE.Object3D) {
+  o.renderOrder = 1
+  o.traverse((x) => {
+    const m = (x as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined
+    for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
+      mat.polygonOffset = true
+      mat.polygonOffsetFactor = -2
+      mat.polygonOffsetUnits = -2
+      mat.depthFunc = THREE.LessEqualDepth
+    }
+  })
 }
 
 /** World axes as seen from the camera: arrows from one origin, named at their tips. */
@@ -212,6 +226,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
   const setStatus = useStore((s) => s.setStatus)
   // this view's own style changes (each 3-D view is styled on its own)
   const paneStyles = useStore((s) => s.workspace.panes.find((p) => p.id === paneId)?.layerStyles)
+  // a trace view: only this trace
+  const paneTrace = useStore((s) => s.workspace.panes.find((p) => p.id === paneId)?.trace ?? null)
   // drawn in full here: the pane's group, its pinned cell, else the global
   // focus (a cell or a group)
   const scope = usePaneScope({ scope: spec })
@@ -427,7 +443,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     const h = t.renderer.domElement.clientHeight
     const newGeometry: number[] = []
     for (const l of shown) {
-      const style = effectiveStyle(l, { layerStyles: paneStyles })
+      let style = effectiveStyle(l, { layerStyles: paneStyles })
       const key = {
         geometry: l.geometry!,
         style: JSON.stringify(style),
@@ -439,6 +455,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         values: view.overviewColor === 'field' ? fieldColors : null,
         maxBond: view.maxBond,
         theme: pal.name,
+        trace: paneTrace,
       }
       const prev = t.entries.get(l.id)
       if (
@@ -452,7 +469,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         prev.key.nCells === key.nCells &&
         prev.key.values === key.values &&
         prev.key.maxBond === key.maxBond &&
-        prev.key.theme === key.theme
+        prev.key.theme === key.theme &&
+        prev.key.trace === key.trace
       ) {
         for (const p of prev.parts) if (p.built.warning) warnings.push(`${l.name}: ${p.built.warning}`)
         continue
@@ -460,8 +478,17 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       if (prev) drop(l.id, prev)
       if (!prev || prev.key.geometry !== key.geometry) newGeometry.push(l.geometry!.header.n_points)
       // cut over-long bonds (unassigned spots, duplicate loci) before drawing
-      const base = splitForView(l.geometry!, view.maxBond).geometry
+      const cut = splitForView(l.geometry!, view.maxBond).geometry
+      const base = paneTrace ? subsetGeometry(cut, (s) => s.trace_id === paneTrace) : cut
       const { main, context } = displayParts(base, hidden, focus)
+      // a subset layer (a region / traces) is a highlight: its own style everywhere, and no
+      // faint context of its own (its parent draws that)
+      const isSubset = l.parentId !== null
+      // …and its tubes a little thicker than the parent's, so they show around them
+      if (isSubset && style.mode === 'tube' && style.tubeRadius === null) {
+        const parentGeom = layers.find((x) => x.id === l.parentId)?.geometry
+        if (parentGeom) style = { ...style, tubeRadius: autoTubeRadius(parentGeom) * 1.2 }
+      }
       // colour by chromosome whenever the layer itself has several, so hiding
       // chromosomes never switches the colour scheme away from the legend
       const colorOpts = {
@@ -473,7 +500,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       }
       // Multi-cell data: the overview (and the faint context around a
       // focused cell) uses the overview colouring — per cell by default.
-      const overviewStyle: LayerStyle = cellIndex.size > 1 ? { ...style, colorMode: view.overviewColor } : style
+      // (a trace view shows one cell's trace: its own style, not the overview colouring)
+      const overviewStyle: LayerStyle = cellIndex.size > 1 && !isSubset && !paneTrace ? { ...style, colorMode: view.overviewColor } : style
       // one cell: the layer style (tubes); a group reads like a small overview
       const mainStyle = typeof focus === 'string' ? style : overviewStyle
       const parts: Part[] = []
@@ -484,7 +512,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         return thin ? { built: buildLayerObject(thin.geometry, style, colorOpts), geometry: thin.geometry } : undefined
       }
       if (main) parts.push({ role: 'main', geometry: main, built: buildLayerObject(main, mainStyle, colorOpts), lod: withLod(main, mainStyle) })
-      if (context && ctxOpacity > 0) {
+      if (context && ctxOpacity > 0 && !isSubset) {
         // around a group, members share colours with the rest: grey context keeps them apart
         // (thousands of overlapping faint lines saturate otherwise)
         const groupCtx = focus !== null && typeof focus !== 'string'
@@ -497,6 +525,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         p.built.object.userData = { layerId: l.id, role: p.role }
         p.built.setResolution(w, h)
         if (p.role === 'context') p.built.object.renderOrder = -1
+        // a subset lies exactly on its parent: draw it last and let it win the depth ties
+        if (isSubset) for (const o of [p.built.object, p.lod?.built.object]) if (o) highlightOnTop(o)
         t.group.add(p.built.object)
         if (p.lod) {
           const o = p.lod.built.object
@@ -525,7 +555,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     const pick = useStore.getState().pick
     if (pick && !isPointPick(pick) && !keep.has(pick.layerId)) setPick(null)
     t.dirty = true
-  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed, pal, paneStyles])
+  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed, pal, paneStyles, paneTrace])
 
   // Point sets (e.g. RNA spots): focused cell's points full, others faint.
   useEffect(() => {

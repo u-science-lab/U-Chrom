@@ -245,7 +245,8 @@ export function Workspace() {
   // Pins to cells the active dataset doesn't have (e.g. after switching) are dropped.
   const cellList = useStore((s) => (s.activeDatasetId ? s.cells[s.activeDatasetId] : undefined))
   useEffect(() => {
-    if (!cellList) return
+    // [] = requested, still loading: every pin would look unknown
+    if (!cellList?.length) return
     setWorkspace((w) => dropUnknownPins(w, new Set(cellList.map((c) => c.cell_id))))
   }, [cellList, setWorkspace])
 
@@ -472,6 +473,11 @@ function PaneBox({
           <button className="pin-badge" onClick={() => activate()} title="Pinned to this cell — change it in the inspector (right, “cells”)">
             📌 {cellTitle(cellPin, types)}
           </button>
+        )}
+        {pane.type === '3d' && pane.trace && (
+          <span className="pin-badge" title="This view shows only this trace">
+            trace {pane.trace}
+          </span>
         )}
         {pane.scope?.kind === 'all' && (
           <button className="pin-badge" onClick={() => activate()} title="Always all cells — change it in the inspector (right, “cells”)">

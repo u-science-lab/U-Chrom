@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { fmtBp } from '../filters'
-import { useStore } from '../store'
+import { activeView, useStore } from '../store'
 import { isPointPick } from '../types'
 import { fmtNum } from './format'
 
@@ -10,6 +10,10 @@ export function PickLabel({ paneId }: { paneId?: string }) {
   const layer = useStore((s) => s.layers.find((l) => !isPointPick(s.pick) && l.id === s.pick?.layerId))
   const manyCells = useStore((s) => ((s.activeDatasetId && s.cells[s.activeDatasetId]) || []).length > 1)
   const openCellView = useStore((s) => s.openCellView)
+  const openTraceView = useStore((s) => s.openTraceView)
+  // the pane shows this cell alone (pinned, or the focused cell) — a trace view is the next step
+  const pane = useStore((s) => s.workspace.panes.find((p) => p.id === (paneId ?? s.workspace.activePane)))
+  const focusCell = useStore((s) => activeView(s).focusCell)
   const setPick = useStore((s) => s.setPick)
   // keep the label inside the pane (flip left / up near the edges)
   const ref = useRef<HTMLDivElement>(null)
@@ -60,6 +64,20 @@ export function PickLabel({ paneId }: { paneId?: string }) {
     )
   }
   const seg = pick.segment
+  const shownAlone = pane?.scope?.kind === 'cell' ? pane.scope.cell === seg.cell_id : seg.cell_id !== null && focusCell === seg.cell_id
+  const openTrace =
+    pane?.trace === seg.trace_id ? null : (
+      <button
+        className="pick-open"
+        onClick={() => {
+          openTraceView(seg.cell_id, seg.trace_id)
+          setPick(null)
+        }}
+        title="Open this trace in a new 3-D view"
+      >
+        ↗ Open trace in new view
+      </button>
+    )
   return (
     <div ref={ref} className="pick-label" style={pos ?? { left: pick.screen.x + 14, top: pick.screen.y + 14 }}>
       <div className="pick-title">trace {seg.trace_id}</div>
@@ -71,7 +89,9 @@ export function PickLabel({ paneId }: { paneId?: string }) {
         segment {seg.chrom}:{fmtBp(seg.start)}-{fmtBp(seg.end)} · {seg.n_points} spots
       </div>
       {layer && <div className="muted">layer {layer.name}</div>}
-      {open}
+      {openTrace}
+      {/* a cell already shown alone (pinned / focused here): its trace is what to open */}
+      {!shownAlone && open}
     </div>
   )
 }

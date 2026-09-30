@@ -6,7 +6,7 @@ import { loadSidebars, saveSidebars, type Side, type Sidebars } from './sidebars
 import { applyTheme, loadThemeChoice, resolveTheme, saveThemeChoice, systemPrefersDark, type Palette, type ThemeChoice } from './theme'
 import { isPointPick } from './types'
 import type { Locus } from './genome'
-import { addPinnedPane, defaultWorkspace, dropGroupScope, paneSignature, parseWorkspaces, type DataKind, type WorkspaceState } from './workspace'
+import { addPinnedPane, addTracePane, defaultWorkspace, dropGroupScope, paneSignature, parseWorkspaces, type DataKind, type WorkspaceState } from './workspace'
 import type { CellField, CellInfo, CellValue, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo, PointSet } from './types'
 
 let nextId = 1
@@ -181,6 +181,8 @@ export interface AppState {
   setWorkspace(update: (ws: WorkspaceState) => WorkspaceState): void
   /** open `cell` in a new view pinned to it (3-D, or Genome without coordinates) */
   openCellView(cell: string): void
+  /** open one trace (of `cell`) in a new 3-D view */
+  openTraceView(cell: string | null, trace: string): void
   setCells(datasetId: string, cells: CellInfo[]): void
   focusCell(cellId: string | null): void
   stepCell(delta: number): void
@@ -354,9 +356,9 @@ export const useStore = create<AppState>((set, get) => {
       loading: false,
       error: null,
     }
-    // A new subset hides its parent, like the desktop browser.
-    const next = parentId ? patchLayer(layers, parentId, { visible: false }) : layers
-    set({ layers: [...next, layer], selectedLayerId: id })
+    // A subset is drawn over its parent (a highlight: e.g. grey lines + a coloured region);
+    // hide the parent with its eye to see the subset alone.
+    set({ layers: [...layers, layer], selectedLayerId: id })
     return id
   },
 
@@ -447,6 +449,9 @@ export const useStore = create<AppState>((set, get) => {
   openCellView(cell) {
     const ds = get().datasets.find((d) => d.id === get().activeDatasetId)
     get().setWorkspace((ws) => addPinnedPane(ws, hasCoords(ds) ? '3d' : 'genome', cell))
+  },
+  openTraceView(cell, trace) {
+    get().setWorkspace((ws) => addTracePane(ws, cell, trace))
   },
   resetView() {
     set({ resetViewToken: get().resetViewToken + 1 })

@@ -91,6 +91,15 @@ export function OverviewColour() {
   )
 }
 
+/** Quick colours of the Custom colouring (grey first: a base under highlighted subsets). */
+const PRESETS: [string, string][] = [
+  ['#a0a4aa', 'grey'],
+  ['#5f6368', 'dark grey'],
+  ['#1f77b4', 'blue'],
+  ['#d62728', 'red'],
+  ['#ff7f0e', 'orange'],
+]
+
 /**
  * 3-D style of the selected layer in one 3-D view (`paneId`; the focused cell's colouring on
  * multi-cell data).  Changes apply to that view only — another 3-D view keeps its own style.
@@ -107,7 +116,9 @@ export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCel
   // what is actually drawn in full (focused cell, visible chromosomes)
   const hidden = new Set(view.hiddenChroms)
   const drawn = header?.segments.filter((s) => !hidden.has(s.chrom) && (view.focusCell === null || s.cell_id === view.focusCell))
-  const autoR = layer.geometry ? autoTubeRadius(layer.geometry) : null
+  // a subset's tubes: 1.2 × its parent's (drawn around them); else from its own spots
+  const parentGeom = useStore((s) => (layer.parentId ? s.layers.find((l) => l.id === layer.parentId)?.geometry : undefined))
+  const autoR = parentGeom ? autoTubeRadius(parentGeom) * 1.2 : layer.geometry ? autoTubeRadius(layer.geometry) : null
   // tube mode silently falls back to lines for big selections — say so here
   const drawnPoints = drawn ? drawn.reduce((a, s) => a + s.n_points, 0) : 0
   const tubeFallback =
@@ -158,7 +169,14 @@ export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCel
           </button>
         ))}
       </div>
-      {st.colorMode === 'custom' && <input type="color" value={st.color} onChange={(e) => upd({ color: e.target.value })} />}
+      {st.colorMode === 'custom' && (
+        <div className="colour-presets">
+          <input type="color" value={st.color} onChange={(e) => upd({ color: e.target.value })} />
+          {PRESETS.map(([c, name]) => (
+            <button key={c} className={`preset${st.color.toLowerCase() === c ? ' on' : ''}`} style={{ background: c }} title={name} aria-label={name} onClick={() => upd({ color: c })} />
+          ))}
+        </div>
+      )}
 
       <label>
         Opacity <span className="val">{st.opacity.toFixed(2)}</span>

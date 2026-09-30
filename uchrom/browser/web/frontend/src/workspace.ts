@@ -18,6 +18,8 @@ export type DistanceStat = 'median' | 'mean' | 'contact'
 
 /** Per-pane settings of the genome-coordinate views (all optional). */
 export interface PaneOptions {
+  /** 3d: only this trace of the pinned cell (a trace view) */
+  trace?: string
   /** 3d: this view's style changes per layer name (render mode, colour, …) over the layer's own
    *  style — each 3-D view is styled on its own */
   layerStyles?: Record<string, Partial<LayerStyle>>
@@ -245,6 +247,13 @@ export function addPinnedPane(ws: WorkspaceState, type: PaneType, cell: string):
   return addScopedPane(ws, type, { kind: 'cell', cell })
 }
 
+/** Open one trace of `cell` in a new 3-D view pinned to it. */
+export function addTracePane(ws: WorkspaceState, cell: string | null, trace: string): WorkspaceState {
+  const next = cell !== null ? addScopedPane(ws, '3d', { kind: 'cell', cell }) : addPane(ws, '3d')
+  const id = next.activePane
+  return { ...next, panes: next.panes.map((p) => (p.id === id ? { ...p, trace } : p)) }
+}
+
 /** Open a new view of `type` showing a group. */
 export function addGroupPane(ws: WorkspaceState, type: PaneType, group: string): WorkspaceState {
   return addScopedPane(ws, type, { kind: 'group', group })
@@ -418,6 +427,7 @@ function parseOptions(p: Partial<Pane> & LegacyPane): PaneOptions & { scope?: Sc
   if (typeof p.spatialKey === 'string') o.spatialKey = p.spatialKey
   if (typeof p.region === 'string') o.region = p.region
   if (typeof p.imageOpacity === 'number' && p.imageOpacity >= 0 && p.imageOpacity <= 1) o.imageOpacity = p.imageOpacity
+  if (typeof p.trace === 'string' && p.trace) o.trace = p.trace
   const layerStyles = parseLayerStyles(p.layerStyles)
   if (layerStyles) o.layerStyles = layerStyles
   return o

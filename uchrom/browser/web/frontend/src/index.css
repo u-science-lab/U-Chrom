@@ -2886,3 +2886,21 @@ button.side-close:hover {
   stroke: var(--viewport-bg);
   stroke-width: 3px;
 }
+
+/* Style → Custom: colour picker + quick colours */
+.colour-presets {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.colour-presets .preset {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+.colour-presets .preset.on {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
