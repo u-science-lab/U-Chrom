@@ -9,7 +9,28 @@ advanced together on one GPU. The algorithm to reproduce is specified from the o
 **deconvolution** of population Hi-C into a population of single-structure hypotheses, and
 §7 is designed to measure how much of that population is actually determined by the data.
 
-Status: design only. Nothing here has been implemented or run.
+Status: the IGM engine (M1–M4) and the Python entry point are implemented (branch
+`Nanguage/bulk-deconv-engine`); the benchmarks of §7 are Sherlock jobs
+(`benchmarks/bulk/sherlock/`), not yet run.  Section 0 lists where the implementation
+departs from this design and why; the rest of the document is the design as agreed.
+
+## 0. Implementation notes — deviations from this design
+
+| design | implemented | why |
+|---|---|---|
+| protocol names `igm2022` / `pgs2018`; module `uchrom.recon.bulk.pgs`, `reconstruct_population(hic, …)` | engine protocol `igm`; package `uchrom.recon.bulk.deconv` with the dispatcher `deconvolve(data, *, method="igm", …)`, the method in `uchrom/recon/bulk/deconv/igm/` (`deconvolve_igm`, `IgmParams`), the shared preprocessing in `deconv/preprocess.py` (separate work); PGS later as `method="pgs"` | user decisions (module name, entry point, method subpackages) |
+| input: path / matrix; preprocessing chosen by `probabilities=` | input is a probability matrix (`scipy.sparse` / dense + `bins`) or a ChromData + `probabilities=`; Hi-C → probabilities is `deconv.preprocess` | preprocessing is developed separately; the engine consumes probabilities only |
+| GPU in bead units (positions / r̄) | GPU in nm, f32 | f32 has ample precision in nm (ulp 5·10⁻⁴ nm at 5 µm); energies / temperatures then need no rescaling |
+| Gaussian velocities (deviation) | LAMMPS' uniform `velocity create` (zero momentum, dof 3N − 3) on CPU and GPU | as cheap as Gaussian, so no deviation is needed |
+| CSR entries `(partner, d0)` | partner only (`d0 = contact_range (r_i + r_j)` from the radii) | halves the largest buffer; every Hi-C bond has this d0 |
+| population resident bead-major `X[bead][s]` for the A-step | one structure-major buffer used by both A- and M-step; M-step batches index into it | no copies between steps; the A-step is not the bottleneck |
+| A-step: histogram (2,048 bins of log d) + exact select in the bin | count kernel → host computes p, o in f64 (bit-identical to the CPU rule) → radix select (4 × 8-bit passes on the f32 bit pattern) per pair | exact, simple, one workgroup per pair; the rank formula shares code with the CPU path |
+| per-structure CSR built by the A-step | built at the start of each M-step batch from the A-step rows (pre-pass of per-structure totals → batch plan → count / scan / fill) | batches are planned from the actual bond counts, so the CSR of a batch always fits one binding |
+| batched CG "Polak–Ribière with backtracking" | as designed: one state machine per structure; LAMMPS `backtrack` line search (IGM uses `quadratic`) | documented in `native/nucdyn/README.md` |
+| `.hss` import / export, resume from a snapshot | not implemented; the benchmark scripts read `.hss` with h5py | not needed for the engine; later |
+| `keep_intermediate="last_per_sigma" | "all" | None` | `keep_intermediate=False/True` (all rounds as `layers["round_<k>"]`) | user decision: intermediate rounds not kept by default, option to keep |
+| `inter_pooling="pgs"` sensitivity option | not implemented | IGM-only for now |
+| population memory | `S · N · 16 B` must fit one storage binding (4 GiB on NVIDIA Vulkan): 1 Mb × 10,000 and 200 kb × 1,000 fit; 200 kb × 10,000 does not | a host-resident population with per-batch upload is future work |
 
 ---
 

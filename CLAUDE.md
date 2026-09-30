@@ -38,7 +38,11 @@ uchrom/
 │   │   │            (native/nucdyn); deprecated Taichi port kept as fallback
 │   │   └── gem/     GEM (energy minimization, Taichi autodiff)
 │   ├── bulk/        Bulk reconstruction
-│   │   └── mds/     MDS/SMACOF (PyTorch GPU; partitioned + inter-chrom)
+│   │   ├── mds/     MDS/SMACOF (PyTorch GPU; partitioned + inter-chrom)
+│   │   └── deconv/  Population deconvolution of bulk Hi-C: deconvolve(..., method=)
+│   │                dispatcher; preprocess.py (Hi-C -> contact probabilities);
+│   │                igm/ (IGM A/M population modelling on the native engine,
+│   │                protocol "igm"; cells = structures, traces = chromosome copies)
 │   └── fish/        GEM-FISH: Hi-C + FISH combined (PyTorch; TAD-level + intra-TAD)
 ├── im/              Imaging-side processing
 │   ├── trace/       Chromatin tracing / spot-to-trace alignment (Jie aligner)
