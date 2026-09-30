@@ -11,6 +11,7 @@ import {
   moveSplitter,
   normalizeSizes,
   parseWorkspace,
+  parseWorkspaces,
   removePane,
   retypePane,
   setLayout,
@@ -102,6 +103,24 @@ describe('persistence', () => {
     useStore.getState().ensureDefaultWorkspace(false)
     expect(useStore.getState().workspace.layout).toBe('rows')
     expect(useStore.getState().workspace.panes).toHaveLength(2)
+  })
+  it('each dataset keeps its own layout', () => {
+    useStore.setState({ workspace: defaultWorkspace(false), workspaceOwner: null, savedWorkspaces: {}, workspaceTouched: false })
+    const st = () => useStore.getState()
+    st().ensureDefaultWorkspace(true, 'a')
+    expect(st().workspace.panes.map((p) => p.type)).toEqual(['3d', 'embedding'])
+    st().setWorkspace((w) => setLayout(w, 'rows'))
+    // another dataset: its own default, not a's layout
+    st().ensureDefaultWorkspace(false, 'b')
+    expect(st().workspace.layout).not.toBe('rows')
+    expect(st().workspaceTouched).toBe(false)
+    expect(st().workspace.panes.map((p) => p.type)).toEqual(defaultWorkspace(false).panes.map((p) => p.type))
+    // back to a: its arranged layout
+    st().ensureDefaultWorkspace(true, 'a')
+    expect(st().workspace.layout).toBe('rows')
+    expect(st().workspaceTouched).toBe(true)
+    expect(Object.keys(st().savedWorkspaces)).toEqual(['a'])
+    expect(parseWorkspaces({ a: st().workspace, junk: { layout: 'x' } })).toEqual({ a: st().workspace })
   })
 })
 

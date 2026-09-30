@@ -383,6 +383,17 @@ function parseOptions(p: Partial<Pane> & LegacyPane): PaneOptions & { scope?: Sc
 }
 
 /** Parse a persisted workspace; anything malformed → null (caller uses a default). */
+/** Saved layouts per dataset name; entries that don't parse are dropped. */
+export function parseWorkspaces(raw: unknown): Record<string, WorkspaceState> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out: Record<string, WorkspaceState> = {}
+  for (const [name, w] of Object.entries(raw)) {
+    const ws = parseWorkspace(w)
+    if (ws) out[name] = ws
+  }
+  return out
+}
+
 export function parseWorkspace(raw: unknown): WorkspaceState | null {
   if (!raw || typeof raw !== 'object') return null
   const w = raw as Partial<WorkspaceState>

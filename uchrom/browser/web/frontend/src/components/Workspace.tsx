@@ -231,10 +231,12 @@ export function Workspace() {
   const closeMenu = useCallback(() => setMenu(false), [])
   const panesRef = useRef<HTMLDivElement>(null)
 
-  // Until the user arranges views, the default follows the data.
+  // Each dataset has its own layout: switching restores the one arranged for it, else the
+  // default for its data (which follows the data until the user arranges views).
+  const owner = ds?.name ?? null
   useEffect(() => {
-    if (datasetId) ensureDefault({ hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells })
-  }, [datasetId, hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells, ensureDefault])
+    if (datasetId && owner) ensureDefault({ hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells }, owner)
+  }, [datasetId, owner, hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells, ensureDefault])
 
   // Pins to cells the active dataset doesn't have (e.g. after switching) are dropped.
   const cellList = useStore((s) => (s.activeDatasetId ? s.cells[s.activeDatasetId] : undefined))

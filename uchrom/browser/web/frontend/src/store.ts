@@ -6,7 +6,7 @@ import { loadSidebars, saveSidebars, type Side, type Sidebars } from './sidebars
 import { applyTheme, loadThemeChoice, resolveTheme, saveThemeChoice, systemPrefersDark, type Palette, type ThemeChoice } from './theme'
 import { isPointPick } from './types'
 import type { Locus } from './genome'
-import { addPinnedPane, defaultWorkspace, dropGroupScope, paneSignature, parseWorkspace, type DataKind, type WorkspaceState } from './workspace'
+import { addPinnedPane, defaultWorkspace, dropGroupScope, paneSignature, parseWorkspaces, type DataKind, type WorkspaceState } from './workspace'
 import type { CellField, CellInfo, CellValue, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo, PointSet } from './types'
 
 let nextId = 1
@@ -87,7 +87,8 @@ export function initialView(ds: DatasetSummary): DatasetView {
 /** Key of a cached cell-field vector. */
 export const fieldKey = (datasetId: string, field: string) => `${datasetId}\u0000${field}`
 
-const WS_KEY = 'uchrom.browser.workspace'
+const WS_KEY = 'uchrom.browser.workspaces'
+const LEGACY_WS_KEY = 'uchrom.browser.workspace' // one layout for every dataset (before per-dataset layouts)
 const GROUPS_KEY = 'uchrom.browser.groups'
 
 /** Saved cell groups per dataset name (per viewer; storage may be unavailable). */
@@ -108,22 +109,23 @@ function persistGroups(groups: Record<string, SavedGroup[]>) {
   }
 }
 
-/** Saved workspace (per viewer; storage may be unavailable or hold junk). */
-export function loadWorkspace(): WorkspaceState | null {
+/** Saved layouts per dataset name (per viewer; storage may be unavailable or hold junk). */
+export function loadWorkspaces(): Record<string, WorkspaceState> {
   try {
     localStorage.removeItem('uchrom.browser.ui') // pre-workspace float/tab/split prefs
+    localStorage.removeItem(LEGACY_WS_KEY)
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(WS_KEY) : null
-    return raw ? parseWorkspace(JSON.parse(raw)) : null
+    return raw ? parseWorkspaces(JSON.parse(raw)) : {}
   } catch {
-    return null
+    return {}
   }
 }
 
-function saveWorkspace(ws: WorkspaceState) {
+function saveWorkspaces(all: Record<string, WorkspaceState>) {
   try {
-    localStorage.setItem(WS_KEY, JSON.stringify(ws))
+    localStorage.setItem(WS_KEY, JSON.stringify(all))
   } catch {
-    /* private mode / blocked storage: layout just doesn't persist */
+    /* private mode / blocked storage: layouts just don't persist */
   }
 }
 
@@ -164,14 +166,18 @@ export interface AppState {
   setStatus(msg: string | null): void
   setError(msg: string | null): void
   resetView(): void
-  /** views laid out as equal panes */
+  /** views laid out as equal panes (the layout of the active dataset) */
   workspace: WorkspaceState
-  /** false until the user changes the layout (or one was saved): until then
-   *  the default follows the data (with / without embeddings) */
+  /** name of the dataset `workspace` belongs to */
+  workspaceOwner: string | null
+  /** layouts the user arranged, per dataset name (persisted) */
+  savedWorkspaces: Record<string, WorkspaceState>
+  /** false until the user changes the owner's layout (or one was saved): until
+   *  then the default follows the data (embeddings, coordinates, spatial, ...) */
   workspaceTouched: boolean
-  /** apply the data-dependent default unless the user has a layout */
-  ensureDefaultWorkspace(kind: boolean | DataKind): void
-  /** replace the workspace (used by the pane actions); persists it */
+  /** show dataset `owner`'s layout: its saved one, else the default for its data */
+  ensureDefaultWorkspace(kind: boolean | DataKind, owner?: string | null): void
+  /** replace the workspace (used by the pane actions); saves it for its dataset */
   setWorkspace(update: (ws: WorkspaceState) => WorkspaceState): void
   /** open `cell` in a new view pinned to it (3-D, or Genome without coordinates) */
   openCellView(cell: string): void
@@ -263,7 +269,6 @@ export function activeView(s: Pick<AppState, 'views' | 'activeDatasetId'>): Data
 const patchLayer = (layers: Layer[], id: string, patch: Partial<Layer>) =>
   layers.map((l) => (l.id === id ? { ...l, ...patch } : l))
 
-const savedWorkspace = loadWorkspace()
 const savedGroups = loadSavedGroups()
 const savedTheme = loadThemeChoice()
 const initialPalette = applyTheme(resolveTheme(savedTheme, systemPrefersDark()))
@@ -412,19 +417,32 @@ export const useStore = create<AppState>((set, get) => {
   setError(error) {
     set({ error })
   },
-  workspace: savedWorkspace ?? defaultWorkspace(false),
-  workspaceTouched: savedWorkspace !== null,
-  ensureDefaultWorkspace(kind) {
+  workspace: defaultWorkspace(false),
+  workspaceOwner: null,
+  savedWorkspaces: loadWorkspaces(),
+  workspaceTouched: false,
+  ensureDefaultWorkspace(kind, owner = get().workspaceOwner) {
     const s = get()
+    if (owner !== s.workspaceOwner) {
+      const saved = owner ? s.savedWorkspaces[owner] : undefined
+      set({ workspaceOwner: owner, workspace: saved ?? defaultWorkspace(kind), workspaceTouched: !!saved })
+      return
+    }
     if (s.workspaceTouched) return
     const ws = defaultWorkspace(kind)
     if (paneSignature(ws) !== paneSignature(s.workspace)) set({ workspace: ws })
   },
   setWorkspace(update) {
-    const workspace = update(get().workspace)
-    if (workspace === get().workspace) return
-    set({ workspace, workspaceTouched: true })
-    saveWorkspace(workspace)
+    const s = get()
+    const workspace = update(s.workspace)
+    if (workspace === s.workspace) return
+    if (!s.workspaceOwner) {
+      set({ workspace, workspaceTouched: true })
+      return
+    }
+    const savedWorkspaces = { ...s.savedWorkspaces, [s.workspaceOwner]: workspace }
+    set({ workspace, workspaceTouched: true, savedWorkspaces })
+    saveWorkspaces(savedWorkspaces)
   },
   openCellView(cell) {
     const ds = get().datasets.find((d) => d.id === get().activeDatasetId)
