@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { decodeGeometry } from '../api'
 import { encodeGeometry, sampleHeader } from '../testing'
-import { cellsOf, displayParts, subsetGeometry } from './partition'
+import { cellsOf, displayParts, subsetGeometry, thinGeometry } from './partition'
+import type { Geometry, SegmentInfo } from '../types'
 
 // three segments: t1 (c1, chr1, 3 pts) | t2 (null cell, chr1, 2 pts) | t3 (c2, chr2, 2 pts)
 function geom() {
@@ -52,5 +53,32 @@ describe('displayParts', () => {
   })
   it('lists cells in segment order', () => {
     expect(cellsOf(geom())).toEqual(['c1', 'c2'])
+  })
+})
+
+describe('thinned geometry (camera moving)', () => {
+  const seg = (cell: string | null, chrom = 'chr1') => ({ trace_id: 't', cell_id: cell, chrom, n: 2 }) as unknown as SegmentInfo
+  const geom = (segs: SegmentInfo[]): Geometry => {
+    const n = segs.length * 2
+    const offsets = Uint32Array.from({ length: segs.length + 1 }, (_, i) => 2 * i)
+    return {
+      header: { n_points: n, n_segments: segs.length, total_points: n, truncated: false, segments: segs, bbox: null, chrom_extent: {} },
+      positions: Float32Array.from({ length: 3 * n }, (_, i) => i),
+      starts: new Uint32Array(n),
+      offsets,
+    }
+  }
+  it('keeps every k-th cell whole and maps segments back', () => {
+    const g = geom([seg('a'), seg('a', 'chr2'), seg('b'), seg('c'), seg('c'), seg('d')])
+    expect(thinGeometry(g, 100)).toBeNull()
+    const t = thinGeometry(g, 6)! // 12 points → k = 2: cells a and c
+    expect(t.geometry.header.segments.map((s) => s.cell_id)).toEqual(['a', 'a', 'c', 'c'])
+    expect([...t.origSeg]).toEqual([0, 1, 3, 4])
+    // the kept points are the originals
+    expect(t.geometry.positions[6]).toBe(g.positions[6])
+  })
+  it('thins traces of data without cells', () => {
+    const t = thinGeometry(geom([seg(null), seg(null), seg(null), seg(null)]), 3)! // 8 points → k = 3
+    expect([...t.origSeg]).toEqual([0, 3])
   })
 })

@@ -2868,3 +2868,21 @@ button.side-close:hover {
   min-width: 0;
   max-width: 130px;
 }
+
+/* 3-D view: world axes as seen from the camera, bottom-left */
+.axis-key-3d {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  z-index: 2;
+  overflow: visible;
+  color: var(--text-muted);
+  font-size: 11px;
+  pointer-events: none;
+}
+.axis-key-3d text {
+  fill: currentColor;
+  paint-order: stroke;
+  stroke: var(--viewport-bg);
+  stroke-width: 3px;
+}
