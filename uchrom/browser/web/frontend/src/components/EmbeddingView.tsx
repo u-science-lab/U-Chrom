@@ -406,7 +406,7 @@ export interface ScatterSource {
 /**
  * 2-D scatter of a cell embedding (UMAP / t-SNE / PCA) filling its pane,
  * coloured like the 3-D overview.  Click a dot to focus that cell (every
- * 3-D pane flies there).  Shift-drag (or the ◌ lasso tool) selects cells:
+ * 3-D pane flies there); click empty space to go back to all cells.  Shift-drag (or the ◌ lasso tool) selects cells:
  * the selection becomes the focused group, and can be saved by name.
  * With a `source` (Spatial view) it draws those points to scale instead.
  */
@@ -769,6 +769,12 @@ export function EmbeddingView({ pane, source }: { pane: Pane; source?: ScatterSo
     const rect = e.currentTarget.getBoundingClientRect()
     const i = nearestPoint(px, e.clientX - rect.left, e.clientY - rect.top, 8)
     if (i >= 0) focusCell(emb.cell_ids[i])
+    else {
+      // a click on empty space: back to all cells, as the "All cells" button / Esc (an unsaved lasso
+      // selection is dropped too; saved groups stay)
+      if (selection) setSelection(null)
+      focusCell(null)
+    }
   }
 
   // the cells drawn here: the legend counts only these (not the whole dataset)
