@@ -190,11 +190,16 @@ select:focus,
   align-items: center;
   margin-right: 6px;
 }
+/* the U-Chrom mark (paper/fig1/logos/uchrom_mark.svg), on a white tile so its navy base shows on dark themes */
 .brand-logo {
   display: block;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
+  width: auto;
+  height: 30px;
+  padding: 2px 4px;
+  box-sizing: border-box;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #fff;
 }
 .open-form {
   display: flex;
