@@ -1,0 +1,25 @@
+# Real-data consensus runs (consensus_real.sbatch --array=1-N; N = data lines).  chroms: "genome" = whole genome
+# (all chromosomes minus Y / M / unplaced) or a comma list; sets: ConsensusParams overrides (key=json ...), "-" none;
+# alpha=@<cell> takes the imaging-calibrated alpha of calib/<cell>.json (oracle variant, flagged in the tables).
+tag	cell	resolution	chroms	n_runs	device	seed	sets
+imr90_1mb_s1	imr90	1000000	genome	16	gpu	1	-
+imr90_1mb_s2	imr90	1000000	genome	16	gpu	2	-
+imr90_250kb_s1	imr90	250000	genome	16	gpu	1	-
+imr90_250kb_s2	imr90	250000	genome	16	gpu	2	-
+imr90_250kb_s3	imr90	250000	genome	16	gpu	3	-
+imr90_250kb_lor	imr90	250000	genome	16	gpu	1	restraint_form="lorentzian"
+imr90_250kb_afit	imr90	250000	genome	16	gpu	1	alpha="fit"
+imr90_250kb_acal	imr90	250000	genome	16	gpu	1	alpha=@imr90
+imr90_250kb_notrans	imr90	250000	genome	16	gpu	1	use_trans=false
+imr90_250kb_mean	imr90	250000	genome	16	gpu	1	consensus="mean_refined"
+imr90_250kb_cpu	imr90	250000	genome	16	cpu	1	-
+imr90_100kb_s1	imr90	100000	genome	16	gpu	1	-
+imr90_50kb_s1	imr90	50000	genome	8	gpu	1	-
+imr90chr21_50kb_s1	imr90	50000	chr21	16	gpu	1	-
+imr90chr21_50kb_s2	imr90	50000	chr21	16	gpu	2	-
+imr90chr21_100kb_s1	imr90	100000	chr21	16	gpu	1	-
+bonev_1mb_s1	bonev	1000000	genome	16	gpu	1	-
+bonev_250kb_s1	bonev	250000	genome	16	gpu	1	-
+bonev_250kb_s2	bonev	250000	genome	16	gpu	2	-
+bonev_250kb_lor	bonev	250000	genome	16	gpu	1	restraint_form="lorentzian"
+bonev_100kb_s1	bonev	100000	genome	16	gpu	1	-

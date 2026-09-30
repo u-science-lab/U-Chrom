@@ -1,0 +1,12 @@
+# Scoring (consensus_score.sbatch --array=1-N): imaging set x one input resolution.  runs: run tags of tasks_real.tsv
+# (each scored as <tag> and, when present, <tag>_mean_refined); base: tag of tasks_baselines.tsv; hipps: CELL:RES;
+# IGM population zarrs are added from $IGM_<dataset> (a glob; optional).
+name	imaging	cell	runs	base	hipps
+su_genome__imr90_1mb	su2020_genome	imr90	imr90_1mb_s1,imr90_1mb_s2	imr90_1mb	imr90:1000000
+su_genome__imr90_250kb	su2020_genome	imr90	imr90_250kb_s1,imr90_250kb_s2,imr90_250kb_s3,imr90_250kb_lor,imr90_250kb_afit,imr90_250kb_acal,imr90_250kb_notrans,imr90_250kb_mean,imr90_250kb_cpu	imr90_250kb	imr90:250000
+su_genome__imr90_100kb	su2020_genome	imr90	imr90_100kb_s1	imr90_100kb	imr90:100000
+su_chr21__imr90_50kb	su2020_chr21	imr90	imr90chr21_50kb_s1,imr90chr21_50kb_s2,imr90_50kb_s1	imr90chr21_50kb	imr90:50000
+su_chr21__imr90_100kb	su2020_chr21	imr90	imr90chr21_100kb_s1,imr90_100kb_s1	imr90chr21_100kb	imr90:100000
+takei__bonev_1mb	takei2021_1mb	bonev	bonev_1mb_s1	bonev_1mb	bonev:1000000
+takei__bonev_250kb	takei2021_1mb	bonev	bonev_250kb_s1,bonev_250kb_s2,bonev_250kb_lor	bonev_250kb	bonev:250000
+takei__bonev_100kb	takei2021_1mb	bonev	bonev_100kb_s1	bonev_100kb	bonev:100000

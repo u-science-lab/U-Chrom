@@ -1,0 +1,10 @@
+# Baselines on the same balanced input (consensus_baselines.sbatch --array=1-N).  mds_full is skipped above 15,000 bins.
+tag	cell	resolution	chroms	methods
+imr90_1mb	imr90	1000000	genome	mds_full mds_chrom minimds
+imr90_250kb	imr90	250000	genome	mds_full mds_chrom minimds
+imr90_100kb	imr90	100000	genome	mds_chrom minimds
+imr90chr21_50kb	imr90	50000	chr21	mds_full minimds
+imr90chr21_100kb	imr90	100000	chr21	mds_full minimds
+bonev_1mb	bonev	1000000	genome	mds_full mds_chrom minimds
+bonev_250kb	bonev	250000	genome	mds_full mds_chrom minimds
+bonev_100kb	bonev	100000	genome	mds_chrom minimds

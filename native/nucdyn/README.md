@@ -4,7 +4,9 @@ Native NucDynamics engine for [U-Chrom](../../README.md): single-cell Hi-C
 genome structure calculation by simulated annealing of a particle model,
 written in Rust with PyO3 bindings.  It also runs protocol **"igm"**: population
 modelling of bulk Hi-C (the A/M deconvolution of IGM / PGS; see
-[Protocol "igm"](#protocol-igm-population-modelling-of-bulk-hi-c)).
+[Protocol "igm"](#protocol-igm-population-modelling-of-bulk-hi-c)), and protocol
+**"consensus"**: one representative structure per bulk Hi-C map by hierarchical
+restraint annealing (see [Protocol "consensus"](#protocol-consensus-one-structure-per-bulk-hi-c-map)).
 
 * **CPU**: f64, multi-core with rayon.  The models of an ensemble run in
   parallel; when there are fewer models than cores, the force loops of each
@@ -242,6 +244,30 @@ res["rounds"]          # per A/M round: sigma, iteration, restrained pairs, bond
   probabilities fitted again with another seed): Pearson 0.995 and mean |Δp| 0.02 over
   the pairs ≥ 0.05.  Synthetic data test correctness only; the real-data comparison
   with the original IGM is `benchmarks/bulk/sherlock/` (`igm_demo_*`).
+
+## Protocol "consensus": one structure per bulk Hi-C map
+
+`uchrom_nucdyn.calc_consensus(stages, params_json, start=None)` (U-Chrom:
+`uchrom.recon.bulk.consensus.reconstruct_consensus`) anneals `n_runs` independent runs through a list
+of resolution stages; each stage = beads (chromosome id, genomic position, one radius) + weighted
+distance restraints (pairs, lower / upper bounds, weights), a restraint form (`"saturating"` =
+release_1.3 form, or `"lorentzian"`), a force constant and a temperature schedule.  The first stage
+starts from random balls (or given coordinates), every later one from the previous stage interpolated
+at the new bead positions (`protocol2017::interpolate`); the integrator, thermostat, exact cell-grid
+repulsion and bead-scaled annealing schedule are those of the NucDynamics protocols, all runs batched on
+the GPU / parallel on the CPU.  Returns the final coordinates of every run, per-stage logs and per-run
+weighted energies and violation counts.  The restraint sets (contacts → targets, pair selection,
+carrying between stages; whole genome) are built by U-Chrom; design and validation:
+`benchmarks/bulk/consensus/design.md`.
+
+New engine terms (CPU f64 and GPU f32; finite-difference and GPU-vs-CPU tests in `consensus.rs` /
+`gpu/mod.rs`):
+
+* `RestraintForm::Lorentzian` — `U = w K c² δ² / (δ² + c²)` on the bound violation δ, `c =
+  lorentz_c · d_max`: harmonic for small violations, bounded and redescending for gross ones (the
+  Lorentzian objective of LorDG, Trieu & Cheng 2017, *NAR* 45:1049, doi:10.1093/nar/gkw1155, on a
+  flat-bottom restraint);
+* spherical confinement `½ k (|x| − R)²` beyond R (off unless set).
 
 ## Validation (Stevens et al. 2017, 8 cells, 100 kb)
 
