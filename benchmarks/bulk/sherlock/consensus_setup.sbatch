@@ -22,7 +22,11 @@ mkdir -p "$CARGO_HOME"
 P=$VENV/bin/pip
 $P install -q --upgrade pip maturin
 $P install -q --only-binary=:all: "numpy<2.3" "pandas<2.3" "scipy<1.15" psutil "zarr>=3" "pyarrow<18" fire networkx \
-    statsmodels matplotlib "h5py<3.13" cooler fsspec aiohttp requests scikit-learn pytest
+    statsmodels matplotlib "h5py<3.13" fsspec aiohttp requests scikit-learn pytest
+# cooler: prefer wheels but allow pure-Python sdists (its dependency asciitree is sdist only; with
+# --only-binary=:all: pip backtracked to cooler 0.4.0); numpy / pandas / scipy pinned as installed
+CONS=$(mktemp); $VENV/bin/python -c "import numpy, pandas, scipy; print(f'numpy=={numpy.__version__}\npandas=={pandas.__version__}\nscipy=={scipy.__version__}')" > "$CONS"
+$P install -q --prefer-binary -c "$CONS" "cooler>=0.9.3"
 $P install -q --only-binary=:all: "torch<2.6" || echo "WARNING: no torch wheel; the U-Chrom MDS baseline will be skipped"
 $P install -q -e "$REPO" --no-deps
 (cd "$REPO/native/nucdyn" && "$VENV/bin/maturin" build --release -o "$L_SCRATCH/wheels")
@@ -30,7 +34,7 @@ $P install -q --force-reinstall --no-deps "$L_SCRATCH"/wheels/u_chrom_nucdyn-*.w
 # miniMDS (Rieber & Mahony 2017; MIT) — full mode only (no --partitioned); needs numpy, scikit-learn, matplotlib
 if [ ! -d "$MINIMDS" ]; then
   git clone -q https://github.com/seqcode/miniMDS "$MINIMDS"
-  git -C "$MINIMDS" checkout -q 9915d21
+  (cd "$MINIMDS" && git checkout -q 9915d21)   # host git 1.8 has no -C
 fi
 # data (download_data.py skips files that are present and md5-checks the large ones)
 $PY "$REPO/example-data/download_data.py" --dest "$DATA" --su2020_genome --su2020_chr21 --takei2021_1mb
