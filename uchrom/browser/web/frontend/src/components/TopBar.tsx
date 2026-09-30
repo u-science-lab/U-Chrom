@@ -44,8 +44,8 @@ export function TopBar() {
 
   return (
     <header className="topbar">
-      <div className="brand">
-        U-Chrom <span>Browser</span>
+      <div className="brand" title="U-Chrom Browser">
+        <img className="brand-logo" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="U-Chrom Browser" width={28} height={28} />
       </div>
       <Select value={activeId ?? ''} onChange={(e) => setActive(e.target.value || null)} disabled={!datasets.length}>
         {!datasets.length && <option value="">No dataset loaded</option>}

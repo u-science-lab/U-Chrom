@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>U-Chrom Browser</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4f8ff0"/>
+      <stop offset="1" stop-color="#7a52e6"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)"/>
+  <!-- a chromatin fiber folded into a loop: its two anchors meet (a contact, as Hi-C sees it) -->
+  <path d="M9 53 C14 49 19 45 23 42 C10 33 12 12 32 11 C52 12 54 33 41 42 C45 45 50 49 55 53"
+        fill="none" stroke="#fff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#fff">
+    <circle cx="9" cy="53" r="3.3"/>
+    <circle cx="32" cy="11" r="3.3"/>
+    <circle cx="55" cy="53" r="3.3"/>
+  </g>
+  <line x1="23" y1="42" x2="41" y2="42" stroke="#ffd166" stroke-width="2.6" stroke-dasharray="3.2 3" stroke-linecap="round"/>
+  <circle cx="23" cy="42" r="4.4" fill="#ffd166" stroke="#fff" stroke-width="1.6"/>
+  <circle cx="41" cy="42" r="4.4" fill="#ffd166" stroke="#fff" stroke-width="1.6"/>
+</svg>

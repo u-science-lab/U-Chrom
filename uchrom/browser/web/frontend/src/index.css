@@ -186,12 +186,15 @@ select:focus,
   border-bottom: 1px solid var(--border);
 }
 .brand {
-  font-weight: 600;
-  margin-right: 8px;
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  margin-right: 6px;
 }
-.brand span {
-  color: var(--accent);
+.brand-logo {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
 }
 .open-form {
   display: flex;
