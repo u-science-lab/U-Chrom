@@ -84,7 +84,7 @@ Rao 2014 domain file has 2,320 domains (2,273 `domain`, 24 `gap`, 23 `CEN`; mean
 i.e. 4,640 beads (`Astep.py` comment "10000 * 4640 * 3"). **[paper]** Tjong 2016 main text
 reports 1,332 domains for the diploid genome at ~3.5 Mb for its TCC data set.
 
-### 1.2 IGM — no preprocessing in the code
+### 1.2 IGM — no preprocessing in the code (it is in the SI)
 
 `igm/README.md` ("Generate '.hcs' file from '.mcool' raw data"): IGM reads a ready
 probability matrix (`.hcs`, alabtools `Contactmatrix`, stored upper-triangular symmetric
@@ -99,7 +99,26 @@ alabtools still ships PGS-style helpers (`api.py:Contactmatrix.fmaxScaling` = di
 clip at 1; `iterativeScaling(domain, averageContact=24, theta=0.001, tol=0.01)` = bisection on
 `fmax` so that the mean non-zero rowsum of the top-mean summary matrix, after zeroing entries
 < θ, equals 24; summary by `cmtools.cpp:TopmeanSummaryMatrix`, top 10 % below the upper fence).
-Whether the 2022 populations used these is **[unverified]** (SI not accessible from here).
+Whether the 2022 populations used these is answered by the SI (below): yes, the same scheme.
+
+**IGM SI §6 "HFFc6 experimental data pre-processing" (Boninsegna et al. 2022, Supplementary
+Information, file `41592_2022_1527_MOESM1_ESM.pdf`, pp. 26–27; read 2026-09-29)** — the protocol
+used for the paper's populations (HFFc6 in situ Hi-C, 4DN 4DNES2R6PUEK, hg38):
+1. bins with sequence coverage < 3 % discarded; Knight–Ruiz normalisation at **20 kb** →
+   frequency matrix G = (g_ij);
+2. p_ij = min(g_ij / f_max, 1), f_max = the frequency at which two bins are in contact with
+   probability 1;
+3. 200 kb matrix: a_IJ = mean of the **top 10 %** of the 20 kb probabilities p_αβ,
+   α ∈ b(I), β ∈ b(J), after excluding outliers p > μ + 1.5 IQR (μ, IQR of that block);
+4. f_max and the 200 kb mapping are determined **jointly and iteratively** until the average
+   number of contacts per 200 kb region is maximally ~24 (packing saturation for the genome
+   occupancy, bead radius and contact tolerance of 2 bead radii) — i.e. alabtools
+   `iterativeScaling(averageContact=24)`;
+5. bins with spurious, isolated inter-chromosomal probabilities > 0.2 (50 of ~1.87e8 pairs) are
+   identified, the corresponding 20 kb bins removed (290 of 154,423), and the whole procedure
+   (KR at 20 kb, scaling, 200 kb mapping) repeated so that no inter-chromosomal probability exceeds 0.2;
+6. nearest-neighbour probabilities are set to 1 (chain integrity).
+This is the default preprocessing of the U-Chrom implementation (resolutions as parameters).
 
 ### 1.3 What an IGM input looks like (verified on `igm/demo/WTC11_HiC_2Mb.hcs`)
 
