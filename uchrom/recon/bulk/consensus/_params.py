@@ -36,15 +36,19 @@ class ConsensusParams:
     scaling to ``gamma / alpha`` so targets of different stages agree.  Bounds
     ``[lower, upper] x target``; targets below ``D_s`` are raised to ``D_s``.
 
-    **Which pairs.**  First stage with at most ``dense_max_bins`` beads: every
-    observed pair (cis and trans).  Later stages: cis pairs up to a band of
-    ``max(band_min_bins, band_factor x previous / current)`` bins; beyond it,
-    pairs with observed/expected ≥ ``oe_min`` and ≥ ``long_min_count`` reads,
-    at most ``max_long_per_bin`` per bin (at cis-only stages up to ``long_cis_max_bins`` bins: the window read per chromosome);
-    inter-chromosomal pairs only at stages with bins ≥
-    ``trans_max_resolution`` (thresholded the same way with ``oe_min_trans``);
-    every restraint of the previous stage that is not covered by the band is
-    carried to the new stage between representative beads (``carry``).
+    **Which pairs.**  A pair is *measurable* when the expected reads at its separation (or
+    of trans pairs) are ≥ ``min_expected`` (selection on the expectation, not on the lucky
+    observed count).  Stages with ≤ ``dense_max_bins`` beads take every measurable cis pair;
+    larger stages a cis band of ``max(band_min_bins, band_factor × previous / current)`` bins,
+    the ``max_long_per_bin`` most enriched long-range pairs (O/E ≥ ``oe_min``, ≥
+    ``long_min_count`` reads) and a log-spaced separation ladder (one random measurable pair
+    per bin, direction and slot ``[band q^k, band q^(k+1))``, q = ``long_ladder_ratio``; at
+    cis-only stages up to ``long_cis_max_bins``).  Inter-chromosomal pairs only at genome-wide
+    stages (bins ≥ ``trans_max_resolution`` or the first stage), always sparse: the
+    ``max_trans_per_bin`` most enriched (O/E ≥ ``oe_min_trans``) + ``trans_sample_per_bin``
+    random measurable partners per bin.  Every restraint of the previous stage outside the new
+    band is carried to the new stage between representative beads (``carry``) unless the new
+    stage restrains that pair itself.
 
     **Weights.**  ``n / (n + weight_n0)`` (n = reads of the pair; confidence
     saturating at high counts) × ``trans_weight`` for trans pairs; with
@@ -86,11 +90,11 @@ class ConsensusParams:
     nu_polymer: float = 1.0 / 3.0
     nu_bounds: Tuple[float, float] = (0.15, 0.6)
     ps_fit_max_bp: int = 10_000_000
-    lower: float = 0.8
-    upper: float = 1.2
+    lower: float = 0.9
+    upper: float = 1.1
     target_min: float = 1.0
     # which pairs
-    dense_max_bins: int = 1500
+    dense_max_bins: int = 3000
     min_expected: float = 5.0
     min_count: int = 1
     band_factor: float = 3.0
@@ -99,18 +103,18 @@ class ConsensusParams:
     oe_min: float = 2.0
     long_min_count: int = 5
     max_long_per_bin: int = 4
-    long_sample_per_bin: int = 4
+    long_ladder_ratio: float = 1.15
     use_trans: bool = True
     trans_max_resolution: int = 1_000_000
     oe_min_trans: float = 1.5
     max_trans_per_bin: int = 4
-    trans_sample_per_bin: int = 4
+    trans_sample_per_bin: int = 32
     carry: bool = True
     carry_weight: float = 1.0
     # weights
     weight_n0: float = 10.0
-    trans_weight: float = 1.0
-    relative_error: bool = True
+    trans_weight: float = 0.3
+    relative_error: bool = False
     backbone_weight: float = 3.0
     backbone_lower: float = 0.1
     backbone_upper: float = 1.2
@@ -119,6 +123,7 @@ class ConsensusParams:
     lorentz_width: float = 1.0
     lorentzian_first_stage: bool = False
     force_scale: float = 50.0
+    bead_radius: float = 0.5
     confinement_radius: float = 0.0
     confinement_k: float = 1.0
     # annealing

@@ -83,7 +83,8 @@ def _two_chrom_matrix(biased=True):
 
 def test_targets_bounds_and_weights():
     C, bins, f = _two_chrom_matrix()
-    p = ConsensusParams(balance="kr", min_coverage=0.0, dense_max_bins=1000, alpha=4.0, nu=0.3)
+    p = ConsensusParams(balance="kr", min_coverage=0.0, dense_max_bins=1000, alpha=4.0, nu=0.3, lower=0.8, upper=1.2,
+                        relative_error=True, trans_weight=0.5)
     px = load_stage(MatrixSource(C, bins), 100_000, ["chr1", "chr2"], "genome", 100, p)
     # balancing removes the bin biases: same balanced values as the unbiased matrix
     C0, _, _ = _two_chrom_matrix(biased=False)
@@ -101,10 +102,15 @@ def test_targets_bounds_and_weights():
     assert np.allclose(r["lo"], 0.8 * r["target"]) and np.allclose(r["hi"], 1.2 * r["target"])
     # confidence n / (n + n0) x relative-error factor (D / hi)^2
     assert np.allclose(r["w"], r["n"] / (r["n"] + 10.0) * (1.0 / r["hi"]) ** 2)
-    # trans and cis sep >= 2 present, adjacent pairs only as backbone
-    sep = np.abs(bi - bj)
+    # dense = every measurable cis pair with sep >= 2 (adjacent pairs only as backbone); trans sparse
     same = bins["chrom"].to_numpy()[bi] == bins["chrom"].to_numpy()[bj]
-    assert (~same).any() and (sep[same] >= 2).all()
+    assert same.all() and (np.abs(bi - bj) >= 2).all()
+    tr = sm.rest[sm.rest["kind"] == "trans"]
+    ti, tj = sm.bead_bin[tr["i"].to_numpy()], sm.bead_bin[tr["j"].to_numpy()]
+    assert len(tr) and (bins["chrom"].to_numpy()[ti] != bins["chrom"].to_numpy()[tj]).all()
+    assert np.allclose(tr["w_conf"], tr["n"] / (tr["n"] + 10.0) * 0.5)
+    # every bin gets at most trans_sample_per_bin random + max_trans_per_bin enriched partners (+ ties)
+    assert np.bincount(np.r_[ti, tj]).max() <= 2 * (p.trans_sample_per_bin + p.max_trans_per_bin)
     bb = sm.rest[sm.rest["kind"] == "backbone"]
     assert len(bb) == len(bins) - 2 and np.allclose(bb["hi"], 1.2)
     assert sm.force_const == pytest.approx(p.force_scale * sm.n_beads / sm.rest["w"].sum())
@@ -114,7 +120,7 @@ def test_measurable_selection_and_carry():
     C, bins, f = _two_chrom_matrix()
     src = MatrixSource(C, bins)
     p = ConsensusParams(balance="kr", min_coverage=0.0, dense_max_bins=10, band_min_bins=3, band_factor=3.0,
-                        long_sample_per_bin=2, max_long_per_bin=0, trans_max_resolution=200_000, min_expected=5.0)
+                        long_ladder_ratio=1.5, max_long_per_bin=0, trans_max_resolution=200_000, min_expected=5.0)
     px0 = load_stage(src, 400_000, ["chr1", "chr2"], "genome", 100, p)
     s0 = build_stage(px0, 0, 100_000, None, None, 4.0, 0.3, p)
     px1 = load_stage(src, 100_000, ["chr1", "chr2"], "cis", 50, p)

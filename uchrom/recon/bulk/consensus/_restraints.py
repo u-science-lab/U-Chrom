@@ -119,6 +119,21 @@ def load_stage(source, res: int, chroms: Sequence[str], kind: str, max_sep: int,
                        seconds=time.time() - t0)
 
 
+def ladder_pairs(i: np.ndarray, j: np.ndarray, sep: np.ndarray, band: int, q: float,
+                 rng: np.random.Generator) -> np.ndarray:
+    """Mask: for every bin and direction, one random pair per separation slot
+    ``floor(log(sep / band) / log(q))``."""
+    if len(i) == 0:
+        return np.zeros(0, bool)
+    slot = np.floor(np.log(np.maximum(sep, band) / band) / np.log(q)).astype(np.int64)
+    key = rng.random(len(i))
+    keep = np.zeros(len(i), bool)
+    for end in (i, j):
+        df = pd.DataFrame({"b": end, "s": slot, "k": key})
+        keep[df.groupby(["b", "s"])["k"].idxmin().to_numpy()] = True
+    return keep
+
+
 def random_per_bin(i: np.ndarray, j: np.ndarray, k: int, rng: np.random.Generator) -> np.ndarray:
     """Mask of a uniform random subset: every bin keeps (about) ``k`` of its pairs."""
     return top_per_bin(i, j, rng.random(len(i)), k)
@@ -233,9 +248,10 @@ def build_stage(px: StagePixels, stage: int, final_res: int, prev_res: Optional[
         kind[new] = name
 
     if dense:
+        # dense = every measurable cis pair; trans stays sparse (below): a dense trans set outnumbers
+        # the cis pairs ~20:1 genome-wide and its population-averaged, mutually inconsistent targets
+        # then dominate the fold (benchmarks/bulk/consensus/design.md, section 4)
         add(cis & (sep >= 2) & meas & obs, "dense")
-        if trans_ok:
-            add(~cis & meas & obs, "dense")
         band = None
     else:
         band = band if band is not None else int(max(p.band_min_bins, 12))
@@ -246,14 +262,18 @@ def build_stage(px: StagePixels, stage: int, final_res: int, prev_res: Optional[
         # enriched pairs (loops, compartment contacts): O/E >= oe_min with enough reads
         ci = np.flatnonzero(far & (oe >= p.oe_min) & (n >= p.long_min_count))
         add(np.isin(np.arange(len(i)), ci[top_per_bin(i[ci], j[ci], oe[ci], p.max_long_per_bin)]), "long_cis")
-        # plus an unbiased sample of the measurable long-range pairs (distance scale)
+        # plus the measurable long-range pairs on a log-spaced separation ladder: per bin and
+        # direction one random pair per slot [band q^k, band q^(k+1)), so every distance scale
+        # is represented with O(n log n) restraints (dense cis is O(n^2))
         ci = np.flatnonzero(far & meas & obs & ~use)
-        add(np.isin(np.arange(len(i)), ci[random_per_bin(i[ci], j[ci], p.long_sample_per_bin, rng)]), "long_cis")
-        if trans_ok:
-            ci = np.flatnonzero(~cis & (oe >= p.oe_min_trans) & (n >= p.long_min_count))
-            add(np.isin(np.arange(len(i)), ci[top_per_bin(i[ci], j[ci], oe[ci], p.max_trans_per_bin)]), "trans")
-            ci = np.flatnonzero(~cis & meas & obs & ~use)
-            add(np.isin(np.arange(len(i)), ci[random_per_bin(i[ci], j[ci], p.trans_sample_per_bin, rng)]), "trans")
+        add(np.isin(np.arange(len(i)), ci[ladder_pairs(i[ci], j[ci], sep[ci], band, p.long_ladder_ratio, rng)]),
+            "long_cis")
+    if trans_ok:
+        # enriched inter-chromosomal pairs + a random sample of the measurable ones per bin
+        ci = np.flatnonzero(~cis & (oe >= p.oe_min_trans) & (n >= p.long_min_count))
+        add(np.isin(np.arange(len(i)), ci[top_per_bin(i[ci], j[ci], oe[ci], p.max_trans_per_bin)]), "trans")
+        ci = np.flatnonzero(~cis & meas & obs & ~use)
+        add(np.isin(np.arange(len(i)), ci[random_per_bin(i[ci], j[ci], p.trans_sample_per_bin, rng)]), "trans")
     k = np.flatnonzero(use)
     target = D * np.power(np.maximum(b[k] / f_nn, 1e-300), -1.0 / alpha)
     target = np.maximum(target, p.target_min * D)
@@ -303,7 +323,7 @@ def build_stage(px: StagePixels, stage: int, final_res: int, prev_res: Optional[
             "exp_raw_trans": px.exp_raw_trans, "carried_dropped": n_carried_dropped,
             "balance": px.balance, "seconds_load": px.seconds, "pixels": int(len(px.i))}
     return StageModel(res=res, kind=px.kind, bins=px.bins, bead_bin=bead_bin, bead_chrom=bead_chrom,
-                      bead_pos=bead_pos.astype(np.int64), D=D, radius=0.5 * D, rest=rest, force_const=float(K),
+                      bead_pos=bead_pos.astype(np.int64), D=D, radius=p.bead_radius * D, rest=rest, force_const=float(K),
                       band_bins=band, f_nn=f_nn, info=info)
 
 
