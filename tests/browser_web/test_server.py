@@ -261,3 +261,20 @@ def test_categorical_cell_fields(tmp_path):
                                        {"value": "L23IT", "count": 1}]
     v = c.get("/api/datasets/d1/cell_values", params={"field": "cell_type"}).json()
     assert v["kind"] == "category" and v["values"][:2] == ["L5IT", "Astro"]
+
+
+def test_free_port_skips_live_listeners_only():
+    """_free_port moves past a port with a live listener, and binds as uvicorn does (SO_REUSEADDR)."""
+    import socket
+
+    from uchrom.browser.web import _free_port
+
+    with socket.socket() as live:
+        live.bind(("127.0.0.1", 0))
+        live.listen()
+        port = live.getsockname()[1]
+        assert _free_port("127.0.0.1", port) != port
+    with socket.socket() as probe:              # a free port is returned as is
+        probe.bind(("127.0.0.1", 0))
+        free = probe.getsockname()[1]
+    assert _free_port("127.0.0.1", free) == free

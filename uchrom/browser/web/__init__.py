@@ -12,6 +12,7 @@ Requires the ``web`` extra: ``pip install "u-chrom[web]"``.
 from __future__ import annotations
 
 import socket
+import sys
 import threading
 import webbrowser
 from typing import Iterable, Optional
@@ -29,8 +30,13 @@ def create_app(store: Optional[DatasetStore] = None):
 
 
 def _free_port(host: str, port: int, tries: int = 20) -> int:
+    """The first port from ``port`` on that the server can bind.  The test bind sets SO_REUSEADDR, as
+    uvicorn does: a port left with connections of a stopped server (e.g. an open browser tab) is free
+    for it, while a port with a live listener is still taken."""
     for candidate in range(port, port + tries):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if hasattr(socket, "SO_REUSEADDR") and sys.platform != "win32":
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 s.bind((host, candidate))
             except OSError:
