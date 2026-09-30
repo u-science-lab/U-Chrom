@@ -240,6 +240,97 @@ fn debug_setup_stage<'py>(
     Ok(out)
 }
 
+/// Protocol "igm": population of structures fitted to a haploid contact
+/// probability matrix (A/M iterations).  `on_round(log_json, coords)` is
+/// called after every M-step (`coords` = (S, N, 3) float32 when
+/// `round_coords`, else None).
+#[pyfunction]
+#[pyo3(signature = (hap_chrom, hap_start, hap_end, copies, prob_i, prob_j, prob_v, params_json, on_round=None, round_coords=false))]
+#[allow(clippy::too_many_arguments)]
+fn calc_population<'py>(
+    py: Python<'py>,
+    hap_chrom: PyReadonlyArray1<'py, u32>,
+    hap_start: PyReadonlyArray1<'py, i64>,
+    hap_end: PyReadonlyArray1<'py, i64>,
+    copies: Vec<u32>,
+    prob_i: PyReadonlyArray1<'py, u32>,
+    prob_j: PyReadonlyArray1<'py, u32>,
+    prob_v: PyReadonlyArray1<'py, f64>,
+    params_json: &str,
+    on_round: Option<Py<PyAny>>,
+    round_coords: bool,
+) -> PyResult<Bound<'py, PyDict>> {
+    use crate::igm::driver::{run_population, PopEngine, RoundLog};
+    use crate::igm::params::IgmParams;
+    let p: IgmParams = serde_json::from_str(params_json).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    p.validate().map_err(PyValueError::new_err)?;
+    let (hc, hs, he) = (hap_chrom.as_slice()?.to_vec(), hap_start.as_slice()?.to_vec(), hap_end.as_slice()?.to_vec());
+    let (pi, pj, pv) = (prob_i.as_slice()?.to_vec(), prob_j.as_slice()?.to_vec(), prob_v.as_slice()?.to_vec());
+    let flat32 = |pop: &[Vec<V3>]| -> (usize, usize, Vec<f32>) {
+        let s = pop.len();
+        let n = pop.first().map(|c| c.len()).unwrap_or(0);
+        let mut f = Vec::with_capacity(s * n * 3);
+        for c in pop {
+            for q in c {
+                f.extend_from_slice(&[q[0] as f32, q[1] as f32, q[2] as f32]);
+            }
+        }
+        (s, n, f)
+    };
+    let res = py.detach(move || {
+        let mut cb = |log: &RoundLog, eng: &mut dyn PopEngine| -> Result<(), String> {
+            let Some(f) = &on_round else { return Ok(()) };
+            let js = serde_json::to_string(log).map_err(|e| e.to_string())?;
+            let coords = if round_coords { Some(flat32(&eng.population()?)) } else { None };
+            Python::attach(|py| {
+                let arr: Option<Bound<'_, numpy::PyArray3<f32>>> = match coords {
+                    Some((s, n, v)) => Some(Array3::from_shape_vec((s, n, 3), v).map_err(|e| e.to_string())?.into_pyarray(py)),
+                    None => None,
+                };
+                f.call1(py, (js, arr)).map(|_| ()).map_err(|e| {
+                    e.print(py);
+                    format!("on_round callback failed: {e}")
+                })
+            })
+        };
+        run_population(&hc, &hs, &he, &copies, &pi, &pj, &pv, &p, &mut cb)
+    });
+    let pop = res.map_err(PyRuntimeError::new_err)?;
+    let d = PyDict::new(py);
+    let (s, n, v) = flat32(&pop.coords);
+    d.set_item("coords", Array3::from_shape_vec((s, n, 3), v).map_err(|e| PyRuntimeError::new_err(e.to_string()))?.into_pyarray(py))?;
+    let g = &pop.genome;
+    d.set_item("bead_hap", g.bead_hap.clone().into_pyarray(py))?;
+    d.set_item("bead_copy", g.bead_copy.clone().into_pyarray(py))?;
+    d.set_item("bead_chain", g.bead_chain.clone().into_pyarray(py))?;
+    d.set_item("radii", g.radii.clone().into_pyarray(py))?;
+    d.set_item("rounds_json", serde_json::to_string(&pop.out.rounds).unwrap())?;
+    d.set_item("final_stats_json", serde_json::to_string(&pop.out.final_stats).unwrap())?;
+    let c = &pop.cand;
+    let sel = &pop.out.last_sel;
+    let ai: Vec<u32> = sel.iter().map(|&k| c.i[k as usize]).collect();
+    let aj: Vec<u32> = sel.iter().map(|&k| c.j[k as usize]).collect();
+    let af: Vec<f64> = sel.iter().map(|&k| c.f[k as usize]).collect();
+    let ap: Vec<f64> = pop.out.last_res.iter().map(|r| r.p).collect();
+    let apn: Vec<f64> = pop.out.last_res.iter().map(|r| r.p_now).collect();
+    let ad: Vec<f64> = pop.out.last_res.iter().map(|r| if r.p > 0.0 { r.d2_act.sqrt() } else { f64::NAN }).collect();
+    d.set_item("act_i", ai.into_pyarray(py))?;
+    d.set_item("act_j", aj.into_pyarray(py))?;
+    d.set_item("act_f", af.into_pyarray(py))?;
+    d.set_item("act_p", ap.into_pyarray(py))?;
+    d.set_item("act_p_now", apn.into_pyarray(py))?;
+    d.set_item("act_d", ad.into_pyarray(py))?;
+    d.set_item("stopped_at_max_iterations", pop.out.stopped_at_max_iterations)?;
+    d.set_item("seconds_total", pop.out.seconds_total)?;
+    d.set_item("engine", pop.out.engine.clone())?;
+    Ok(d)
+}
+
+#[pyfunction]
+fn default_igm_params_json() -> String {
+    serde_json::to_string(&crate::igm::params::IgmParams::default()).unwrap()
+}
+
 #[pyfunction]
 fn gpu_available() -> bool {
     #[cfg(feature = "gpu")]
@@ -277,6 +368,8 @@ fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(gpu_available, m)?)?;
     m.add_function(wrap_pyfunction!(gpu_info, m)?)?;
     m.add_function(wrap_pyfunction!(default_params_json, m)?)?;
+    m.add_function(wrap_pyfunction!(calc_population, m)?)?;
+    m.add_function(wrap_pyfunction!(default_igm_params_json, m)?)?;
     m.add("__version__", crate::VERSION)?;
     m.add("HAS_GPU", cfg!(feature = "gpu"))?;
     Ok(())

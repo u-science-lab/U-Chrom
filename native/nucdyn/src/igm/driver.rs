@@ -324,3 +324,139 @@ mod tests {
         assert_ne!(pop[0], pop[1]);
     }
 }
+
+/// Everything a caller needs from a finished run.
+pub struct Population {
+    pub genome: Genome,
+    pub coords: Vec<Vec<V3>>,
+    pub cand: Candidates,
+    pub out: RunOutput,
+}
+
+/// Set up genome, candidates, force field and engine from arrays, and run.
+#[allow(clippy::too_many_arguments)]
+pub fn run_population(
+    hap_chrom: &[u32],
+    hap_start: &[i64],
+    hap_end: &[i64],
+    copies: &[u32],
+    prob_i: &[u32],
+    prob_j: &[u32],
+    prob_v: &[f64],
+    p: &IgmParams,
+    on_round: &mut dyn FnMut(&RoundLog, &mut dyn PopEngine) -> Result<(), String>,
+) -> Result<Population, String> {
+    p.validate()?;
+    let g = Genome::new(hap_chrom, hap_start, hap_end, copies, p)?;
+    let nh = g.n_hap();
+    if prob_i.len() != prob_j.len() || prob_i.len() != prob_v.len() {
+        return Err("probability arrays differ in length".into());
+    }
+    if prob_i.iter().chain(prob_j).any(|&x| x as usize >= nh) {
+        return Err("probability index out of range".into());
+    }
+    let min_sigma = p.intra_sigma_list.iter().chain(&p.inter_sigma_list).cloned().fold(f64::INFINITY, f64::min);
+    let mut cand = Candidates::from_coo(&g, prob_i, prob_j, prob_v, min_sigma);
+    // nearest-neighbour probabilities for the "hic" polymer style
+    let mut nn = vec![1.0; nh];
+    for ((&i, &j), &v) in prob_i.iter().zip(prob_j).zip(prob_v) {
+        let (a, b) = (i.min(j) as usize, i.max(j) as usize);
+        if b == a + 1 {
+            nn[a] = v;
+        }
+    }
+    let poly = g.polymer_bonds(p, &|h| nn[h]);
+    let ff = ForceField::new(g.radii.clone(), &poly, p.semiaxes(), p);
+    let mut engine: Box<dyn PopEngine> = match p.device.as_str() {
+        "cpu" => Box::new(CpuPopEngine::new(ff, p)?),
+        "gpu" => {
+            #[cfg(feature = "gpu")]
+            {
+                Box::new(crate::igm::gpu::GpuPopEngine::new(&ff, p)?)
+            }
+            #[cfg(not(feature = "gpu"))]
+            {
+                return Err("uchrom_nucdyn was built without the `gpu` feature".into());
+            }
+        }
+        d => return Err(format!("unknown device {d:?}")),
+    };
+    let out = run_igm(&g, &mut cand, p, engine.as_mut(), on_round)?;
+    let coords = engine.population()?;
+    Ok(Population { genome: g, coords, cand, out })
+}
+
+#[cfg(test)]
+mod e2e {
+    use super::*;
+
+    /// Tiny end-to-end run on the CPU: the population reproduces the input
+    /// probabilities of the restrained pairs.
+    #[test]
+    fn tiny_population_reproduces_contacts() {
+        let n = 20usize;
+        let chrom: Vec<u32> = (0..2 * n).map(|i| (i / n) as u32).collect();
+        let start: Vec<i64> = (0..2 * n).map(|i| ((i % n) * 1_000_000) as i64).collect();
+        let end: Vec<i64> = start.iter().map(|&x| x + 1_000_000).collect();
+        // neighbours 1, one long-range intra pair per chromosome at 0.6, one inter pair at 0.3
+        let (mut pi, mut pj, mut pv) = (vec![], vec![], vec![]);
+        for c in 0..2u32 {
+            for k in 0..n as u32 - 1 {
+                pi.push(c * n as u32 + k);
+                pj.push(c * n as u32 + k + 1);
+                pv.push(1.0);
+            }
+            pi.push(c * n as u32 + 2);
+            pj.push(c * n as u32 + 15);
+            pv.push(0.6);
+        }
+        pi.push(5);
+        pj.push(n as u32 + 5);
+        pv.push(0.3);
+        let stages: Vec<crate::igm::params::Stage> = crate::igm::params::demo_stages()
+            .into_iter()
+            .map(|mut s| {
+                s.mdsteps /= 20;
+                s
+            })
+            .collect();
+        let p = IgmParams {
+            n_structures: 40,
+            nucleus_radius: 1200.0,
+            occupancy: 0.2,
+            stages,
+            relax: None,
+            intra_sigma_list: vec![1.0, 0.2],
+            inter_sigma_list: vec![1.0, 0.2],
+            max_iterations: 3,
+            ..Default::default()
+        };
+        let pop = run_population(&chrom, &start, &end, &[2, 2], &pi, &pj, &pv, &p, &mut |_, _| Ok(())).unwrap();
+        let g = &pop.genome;
+        let freq = |i: usize, j: usize, intra: bool| {
+            let cb = crate::igm::astep::combos(g, i as u32, j as u32, intra);
+            let rc = 2.0 * (g.radii[cb[0][0] as usize] + g.radii[cb[0][1] as usize]);
+            let mut c = 0;
+            for st in &pop.coords {
+                for b in &cb {
+                    let (x, y) = (st[b[0] as usize], st[b[1] as usize]);
+                    if ((x[0] - y[0]).powi(2) + (x[1] - y[1]).powi(2) + (x[2] - y[2]).powi(2)).sqrt() <= rc {
+                        c += 1;
+                    }
+                }
+            }
+            c as f64 / (cb.len() * pop.coords.len()) as f64
+        };
+        let f_nn = freq(3, 4, true);
+        let f_long = freq(2, 15, true);
+        let f_inter = freq(5, n + 5, false);
+        let f_none = freq(2, 10, true);
+        eprintln!(
+            "contact frequencies: neighbours {f_nn:.2} (1), 2-15 {f_long:.2} (0.6), inter {f_inter:.2} (0.3), 2-10 {f_none:.2} (unrestrained); rounds {}",
+            pop.out.rounds.len()
+        );
+        assert!(f_nn > 0.95);
+        assert!((f_long - 0.6).abs() < 0.2, "{f_long}");
+        assert!((f_inter - 0.3).abs() < 0.2, "{f_inter}");
+    }
+}
