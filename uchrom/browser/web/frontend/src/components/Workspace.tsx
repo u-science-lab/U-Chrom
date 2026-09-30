@@ -475,8 +475,9 @@ function PaneBox({
           </button>
         )}
         {pane.type === '3d' && pane.trace && (
-          <span className="pin-badge" title="This view shows only this trace">
-            trace {pane.trace}
+          <span className="pin-badge" title={`This view shows only trace ${pane.trace}`}>
+            {/* the pin badge names the cell: drop it from the trace id */}
+            trace {cellPin && pane.trace.startsWith(`${cellPin}_`) ? pane.trace.slice(cellPin.length + 1) : pane.trace}
           </span>
         )}
         {pane.scope?.kind === 'all' && (

@@ -79,7 +79,8 @@ function RegionTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
   const hi = parent.filter.region?.chrom === info.name ? Math.min(info.end, parent.filter.region.end) : info.end
   const submit = () => {
     try {
-      create({ region: parseRegion({ ...info, start: lo, end: hi }, text) })
+      // empty: the whole chromosome (within the parent)
+      create({ region: text.trim() ? parseRegion({ ...info, start: lo, end: hi }, text) : { chrom: info.name, start: lo, end: hi } })
     } catch (e) {
       setError((e as Error).message)
     }
@@ -97,11 +98,11 @@ function RegionTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
           <option key={c.name}>{c.name}</option>
         ))}
       </Select>
-      <input placeholder="start-end, e.g. 10M-20M" value={text} onChange={(e) => setText(e.target.value)} />
+      <input placeholder="start-end, e.g. 10M-20M (empty: whole chromosome)" value={text} onChange={(e) => setText(e.target.value)} />
       <div className="muted small">
         valid: {fmtBp(lo)}-{fmtBp(hi)}
       </div>
-      <button type="submit" disabled={!text.trim()}>
+      <button type="submit">
         Create subset
       </button>
       {error && <div className="error">{error}</div>}

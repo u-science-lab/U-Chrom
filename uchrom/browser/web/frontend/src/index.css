@@ -1554,6 +1554,9 @@ body.resizing-rows {
 }
 .pane-head .pin-badge {
   max-width: 55%;
+  /* badges give way (ellipsis) before the action buttons do */
+  flex: 0 1 auto;
+  min-width: 3em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1562,6 +1565,9 @@ body.resizing-rows {
 }
 .pane-head {
   flex-wrap: nowrap;
+}
+.pane-head .spacer ~ * {
+  flex-shrink: 0;
 }
 
 /* ---- cell groups (left side bar) ------------------------------------ */
