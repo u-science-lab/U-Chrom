@@ -34,11 +34,40 @@ class IgmParams:
     ``ploidy``: ``"diploid"`` (every chromosome twice, as IGM's default),
     ``"male"`` (autosomes ×2, X and Y ×1), ``"haploid"``, or a dict
     ``{chrom: copies}``.
+
+    Opt-in options (IGM-Plus / IGM_2.0; every default is the IGM 1.0
+    behaviour, see ``native/nucdyn/README.md``):
+
+    ``occupancy`` / ``bead_radius``
+        Bead radii from the genome-to-nucleus volume occupancy (default 0.2
+        when neither is given) or one radius in nm for every bead
+        (IGM-Plus ``model/bead_radius``); mutually exclusive.
+    ``occupancy_scope``
+        What the occupancy refers to when only some chromosomes are
+        modelled (``deconvolve(..., chrom=)``): ``"model"`` (default; the
+        modelled chromosomes fill ``occupancy`` of the whole nucleus, as
+        IGM / IGM-Plus compute it), ``"genome"`` (all bins of the input,
+        times their copies: beads keep their whole-genome size and the
+        modelled chromosomes occupy their share of the nucleus), or a
+        genome size in bp (all copies).
+    ``iterative_correction``
+        False: the A-step uses ``p = f`` instead of the iteratively
+        corrected probability (IGM-Plus ``iter_corr_knob = 0``).
+    ``assignment_pooling``
+        ``"igm"`` (IGM 1.0) or ``"gp"`` (G. Polles' approximation, IGM_2.0
+        ``GP_ActivationDistanceStep``: all copy combinations pooled,
+        ``n_possible = min(copies)`` smallest per structure) — for the
+        sensitivity analysis of ``benchmarks/bulk/design.md``.
+    ``init_noise``
+        Gaussian noise (nm, standard deviation) added to every initial
+        coordinate (IGM-Plus ``model/init_noise``; with
+        ``deconvolve(..., init_positions=)``).
     """
 
     n_structures: int = 10_000
     ploidy: Union[str, Dict[str, int]] = "diploid"
-    occupancy: float = 0.2
+    #: None = 0.2 unless ``bead_radius`` is given
+    occupancy: Optional[float] = None
     nucleus_shape: str = "sphere"
     nucleus_radius: float = 5000.0
     nucleus_semiaxes: List[float] = field(default_factory=lambda: [5000.0, 5000.0, 5000.0])
@@ -73,6 +102,31 @@ class IgmParams:
     n_threads: int = 0
     batch_size: int = 0
     verbose: bool = False
+    # ---- opt-in (IGM-Plus / IGM_2.0); defaults = IGM 1.0 ----
+    bead_radius: Optional[float] = None
+    occupancy_scope: Union[str, float] = "model"
+    iterative_correction: bool = True
+    assignment_pooling: str = "igm"
+    init_noise: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.bead_radius is not None and self.occupancy is not None:
+            raise ValueError("bead_radius and occupancy are mutually exclusive (radii are either set "
+                             "directly or derived from the occupancy)")
+        if self.bead_radius is not None and not self.bead_radius > 0:
+            raise ValueError("bead_radius must be > 0 nm")
+        if self.assignment_pooling not in ("igm", "gp"):
+            raise ValueError(f"assignment_pooling must be 'igm' or 'gp', got {self.assignment_pooling!r}")
+        sc = self.occupancy_scope
+        if not (sc in ("model", "genome") or (isinstance(sc, (int, float)) and not isinstance(sc, bool) and sc > 0)):
+            raise ValueError(f"occupancy_scope must be 'model', 'genome' or a genome size in bp, got {sc!r}")
+
+    @property
+    def effective_occupancy(self) -> Optional[float]:
+        """The occupancy used (None when ``bead_radius`` sets the radii)."""
+        if self.bead_radius is not None:
+            return None
+        return 0.2 if self.occupancy is None else float(self.occupancy)
 
     @classmethod
     def boninsegna2022(cls, **kw: Any) -> "IgmParams":
@@ -80,16 +134,33 @@ class IgmParams:
         prolate ellipsoid (7,840, 6,470, 2,450) nm (use with 200 kb bins)."""
         base = dict(n_structures=1000, occupancy=0.4, nucleus_shape="ellipsoid",
                     nucleus_semiaxes=[7840.0, 6470.0, 2450.0])
+        if kw.get("bead_radius") is not None:
+            base.pop("occupancy")
         base.update(kw)
         return cls(**base)
 
     def replace(self, **kw: Any) -> "IgmParams":
+        """A copy with fields replaced; giving ``bead_radius`` alone drops the
+        occupancy (and vice versa), since the two are mutually exclusive."""
+        if kw.get("bead_radius") is not None and "occupancy" not in kw:
+            kw["occupancy"] = None
+        if kw.get("occupancy") is not None and "bead_radius" not in kw:
+            kw["bead_radius"] = None
         return dataclasses.replace(self, **kw)
 
     def to_native(self) -> Dict[str, Any]:
-        """Fields understood by ``uchrom_nucdyn.calc_population`` (without ploidy)."""
+        """Fields understood by ``uchrom_nucdyn.calc_population`` (without ploidy
+        and ``occupancy_scope``, which the caller resolves to
+        ``occupancy_total_bp``)."""
         d = dataclasses.asdict(self)
         d.pop("ploidy")
+        d.pop("occupancy_scope")
+        occ = self.effective_occupancy
+        d["occupancy"] = 0.0 if occ is None else occ
+        d["bead_radius"] = 0.0 if self.bead_radius is None else float(self.bead_radius)
+        # "model": the modelled beads; "genome" is resolved by deconvolve_igm from the input bins
+        sc = self.occupancy_scope
+        d["occupancy_total_bp"] = float(sc) if not isinstance(sc, str) and self.bead_radius is None else 0.0
         d["stages"] = [dict(s) for s in self.stages]
         d["nucleus_semiaxes"] = [float(x) for x in self.nucleus_semiaxes]
         return d

@@ -38,6 +38,9 @@ pub struct ForceField {
     /// polymer bonds, CSR per particle: (partner, d0); every bond at both ends
     pub poly_off: Vec<u32>,
     pub poly: Vec<(u32, f64)>,
+    /// chromosome of every bead (classifies Hi-C bonds as intra / inter in the
+    /// violation report; empty = all counted as intra)
+    pub bead_chrom: Vec<u32>,
 }
 
 /// Per-stage scaling (`fix adapt` excluded-volume prefactor, envelope factor).
@@ -124,7 +127,14 @@ impl ForceField {
             contact_range: p.contact_range,
             poly_off,
             poly,
+            bead_chrom: vec![],
         }
+    }
+
+    /// Whether the Hi-C bond (i, j) joins two chromosomes.
+    #[inline]
+    pub fn is_inter(&self, i: usize, j: usize) -> bool {
+        !self.bead_chrom.is_empty() && self.bead_chrom[i] != self.bead_chrom[j]
     }
 
     #[inline]
@@ -317,6 +327,8 @@ pub fn compute(ff: &ForceField, hic: &HicBonds, pos: &[V3], sc: Scale, grid: &mu
 /// Violation counts of one structure (spec §5, IGM `getViolationRatio`):
 /// Hi-C / polymer `(d − d0)/d0 > tol`; envelope `t / (k · 0.1 R̄) > tol`
 /// with `R̄` the mean semi-axis.  Excluded volume is not monitored.
+/// `hic_*` count all Hi-C restraints; `hic_inter_*` is the inter-chromosomal
+/// subset (IGM-Plus reports intra and inter Hi-C as separate restraints).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub struct Violations {
     pub hic_imposed: u64,
@@ -325,6 +337,8 @@ pub struct Violations {
     pub poly_violated: u64,
     pub env_imposed: u64,
     pub env_violated: u64,
+    pub hic_inter_imposed: u64,
+    pub hic_inter_violated: u64,
 }
 
 impl Violations {
@@ -335,6 +349,8 @@ impl Violations {
         self.poly_violated += o.poly_violated;
         self.env_imposed += o.env_imposed;
         self.env_violated += o.env_violated;
+        self.hic_inter_imposed += o.hic_inter_imposed;
+        self.hic_inter_violated += o.hic_inter_violated;
     }
     pub fn imposed(&self) -> u64 {
         self.hic_imposed + self.poly_imposed + self.env_imposed
@@ -362,10 +378,13 @@ pub fn violations(ff: &ForceField, hic: &HicBonds, pos: &[V3], tol: f64) -> Viol
         }
         for &j in &hic.partner[hic.off[i] as usize..hic.off[i + 1] as usize] {
             if (j as usize) > i {
+                let inter = ff.is_inter(i, j as usize);
                 v.hic_imposed += 1;
+                v.hic_inter_imposed += inter as u64;
                 let d0 = ff.hic_d0(i, j as usize);
                 if (dist(i, j as usize) - d0) / d0 > tol {
                     v.hic_violated += 1;
+                    v.hic_inter_violated += inter as u64;
                 }
             }
         }

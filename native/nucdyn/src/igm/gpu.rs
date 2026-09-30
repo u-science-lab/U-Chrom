@@ -5,7 +5,7 @@
 //! lists (CSR, both ends) are built on the device from the A-step rows.
 
 use crate::gpu::{buf_init, buf_zero, open_device, storage_entry, Ctx};
-use crate::igm::astep::{combos, p_and_rank, Candidates, PairResult};
+use crate::igm::astep::{p_and_rank_opt, pool_combos, Candidates, PairResult};
 use crate::igm::driver::{PopEngine, StructStats};
 use crate::igm::forces::{ForceField, Violations, V3};
 use crate::igm::genome::Genome;
@@ -143,6 +143,8 @@ pub struct GpuPopEngine {
     stencil: u32,
     rmax: f32,
     axes: [f64; 3],
+    /// chromosome per bead (flags inter-chromosomal Hi-C rows for the violation report)
+    bead_chrom: Vec<u32>,
     b_pos: Option<wgpu::Buffer>,
     b_rad: wgpu::Buffer,
     b_poly: wgpu::Buffer,
@@ -239,6 +241,7 @@ impl GpuPopEngine {
             stencil,
             rmax: ff.r_max as f32,
             axes: ff.axes,
+            bead_chrom: ff.bead_chrom.clone(),
             b_pos: None,
             b_rad,
             b_poly,
@@ -508,7 +511,9 @@ impl GpuPopEngine {
     }
 
     fn upload_rows(&mut self, rows: &[(u32, u32, f64)]) -> u64 {
-        let data: Vec<[u32; 4]> = rows.iter().map(|r| [r.0, r.1, (r.2 as f32).to_bits(), 0]).collect();
+        let bc = &self.bead_chrom;
+        let inter = |a: u32, b: u32| (!bc.is_empty() && bc[a as usize] != bc[b as usize]) as u32;
+        let data: Vec<[u32; 4]> = rows.iter().map(|r| [r.0, r.1, (r.2 as f32).to_bits(), inter(r.0, r.1)]).collect();
         let s = self.scratch.as_ref().unwrap();
         if !data.is_empty() {
             self.ctx.queue.write_buffer(&s.rows, 0, bytemuck::cast_slice(&data));
@@ -640,6 +645,8 @@ impl GpuPopEngine {
                         poly_violated: c[3] as u64,
                         env_imposed: c[4] as u64,
                         env_violated: c[5] as u64,
+                        hic_inter_imposed: c[6] as u64,
+                        hic_inter_violated: c[7] as u64,
                     },
                     n_hic: c[0] as u64,
                     energy: ms[b + 3 * 4] as f64,
@@ -804,13 +811,17 @@ impl PopEngine for GpuPopEngine {
 
     fn actdist(&mut self, g: &Genome, cand: &Candidates, sel: &[u32]) -> Result<Vec<PairResult>, String> {
         let s = self.s as u64;
+        let (ic, gp) = (self.p.iterative_correction, self.p.gp_pooling());
         let mut pairs = Vec::with_capacity(sel.len());
+        let mut npos = Vec::with_capacity(sel.len());
         let mut cmb: Vec<[u32; 2]> = Vec::new();
         for &k in sel {
             let k = k as usize;
-            let cb = combos(g, cand.i[k], cand.j[k], cand.intra[k]);
+            let (cb, np) = pool_combos(g, cand.i[k], cand.j[k], cand.intra[k], gp);
             let rc = self.p.contact_range * (g.radii[cb[0][0] as usize] + g.radii[cb[0][1] as usize]);
-            pairs.push([cmb.len() as u32, cb.len() as u32, ((rc * rc) as f32).to_bits(), 0]);
+            // 4th word: n_possible per structure for GP pooling (0 = every combination)
+            pairs.push([cmb.len() as u32, cb.len() as u32, ((rc * rc) as f32).to_bits(), if gp { np as u32 } else { 0 }]);
+            npos.push(np as u64);
             cmb.extend_from_slice(&cb);
         }
         // pairs in chunks, so no buffer exceeds a binding
@@ -824,11 +835,11 @@ impl PopEngine for GpuPopEngine {
         let mut sel_idx = vec![];
         for (q, &k) in sel.iter().enumerate() {
             let k = k as usize;
-            let nt = pairs[q][1] as u64 * s;
-            let (p_now, p, o) = p_and_rank(cand.f[k], cand.p_last[k], counts[q] as u64, nt);
+            let nt = npos[q] * s;
+            let (p_now, p, o) = p_and_rank_opt(cand.f[k], cand.p_last[k], counts[q] as u64, nt, ic);
             match o {
                 Some(o) => {
-                    sel_pairs.push([pairs[q][0], pairs[q][1], o as u32, 0]);
+                    sel_pairs.push([pairs[q][0], pairs[q][1], o as u32, pairs[q][3]]);
                     sel_idx.push(q);
                     res.push(PairResult { p_now, p, rank: o, d2_act: 0.0 });
                 }

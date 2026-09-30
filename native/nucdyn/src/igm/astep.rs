@@ -16,6 +16,17 @@
 //! 4. if p > 0: `o = min(nS − 1, round(n p S))` (Python's round-half-even),
 //!    `d_act² = sorted(d²)[o]`, one row per combination.
 //!
+//! Opt-in variants (`AStepOpts`; the defaults are the rule above):
+//!
+//! * `iterative_correction = false` (IGM-Plus `iter_corr_knob = 0`): step 3
+//!   becomes `p = f`;
+//! * `gp_pooling` (G. Polles' approximation, alberlab/IGM_2.0
+//!   `GP_ActivationDistanceStep.get_actdist`): every pair, intra or inter,
+//!   takes all `len ii · len jj` copy combinations; per structure only the
+//!   `n_possible = min(len ii, len jj)` smallest squared distances enter
+//!   `p_now` and the rank selection (`n_possible · S` values).  The rows
+//!   (which combinations get a restraint) are those of the IGM rule.
+//!
 //! Assignment (`intraHiC._apply` / `interHiC._apply`): a structure receives
 //! the bond of a row iff its current `d² ≤ d_act²` (IGM compares
 //! `d ≤ sqrt(d_act²)`; the square form avoids a rounding difference).
@@ -117,11 +128,48 @@ pub struct PairResult {
     pub d2_act: f64,
 }
 
+/// Options of the A-step (defaults: IGM 1.0).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AStepOpts {
+    pub iterative_correction: bool,
+    pub gp_pooling: bool,
+}
+
+impl Default for AStepOpts {
+    fn default() -> Self {
+        AStepOpts { iterative_correction: true, gp_pooling: false }
+    }
+}
+
+impl AStepOpts {
+    pub fn from_params(p: &crate::igm::params::IgmParams) -> AStepOpts {
+        AStepOpts { iterative_correction: p.iterative_correction, gp_pooling: p.gp_pooling() }
+    }
+}
+
+/// Copy combinations entering `p_now` / the rank selection, and `n_possible`
+/// per structure (IGM: the row combinations, all of them; GP: all copy
+/// combinations, the `min(copies)` smallest per structure).
+pub fn pool_combos(g: &Genome, i: u32, j: u32, intra: bool, gp: bool) -> (Vec<[u32; 2]>, usize) {
+    if gp {
+        let (ii, jj) = (&g.copy_index[i as usize], &g.copy_index[j as usize]);
+        (combos(g, i, j, false), ii.len().min(jj.len()))
+    } else {
+        let cb = combos(g, i, j, intra);
+        let n = cb.len();
+        (cb, n)
+    }
+}
+
 /// `p` and the rank `o` from the in-contact count (shared by CPU and GPU paths).
 pub fn p_and_rank(f: f64, p_last: f64, n_in: u64, n_total: u64) -> (f64, f64, Option<u64>) {
+    p_and_rank_opt(f, p_last, n_in, n_total, true)
+}
+
+/// As [`p_and_rank`]; `iterative_correction = false` uses `p = f`.
+pub fn p_and_rank_opt(f: f64, p_last: f64, n_in: u64, n_total: u64, iterative_correction: bool) -> (f64, f64, Option<u64>) {
     let p_now = n_in as f64 / n_total as f64;
-    let t = clean(p_now, p_last);
-    let p = clean(f, t);
+    let p = if iterative_correction { clean(f, clean(p_now, p_last)) } else { f };
     if p > 0.0 {
         let o = round_half_even(n_total as f64 * p).min((n_total - 1) as f64) as u64;
         (p_now, p, Some(o))
@@ -137,23 +185,38 @@ fn d2(a: &V3, b: &V3) -> f64 {
 
 /// Activation distances of the selected candidates over the population.
 pub fn actdist(g: &Genome, cand: &Candidates, sel: &[u32], pop: &[Vec<V3>], contact_range: f64) -> Vec<PairResult> {
+    actdist_opt(g, cand, sel, pop, contact_range, AStepOpts::default())
+}
+
+/// As [`actdist`] with the opt-in A-step variants.
+pub fn actdist_opt(g: &Genome, cand: &Candidates, sel: &[u32], pop: &[Vec<V3>], contact_range: f64, opts: AStepOpts) -> Vec<PairResult> {
     let s = pop.len();
     sel.par_iter()
         .map(|&k| {
             let k = k as usize;
             let (i, j) = (cand.i[k], cand.j[k]);
-            let cb = combos(g, i, j, cand.intra[k]);
+            let (cb, np) = pool_combos(g, i, j, cand.intra[k], opts.gp_pooling);
             let b0 = &cb[0];
             let rc = contact_range * (g.radii[b0[0] as usize] + g.radii[b0[1] as usize]);
             let rc2 = rc * rc;
-            let mut ds = Vec::with_capacity(cb.len() * s);
-            for c in &cb {
+            let mut ds = Vec::with_capacity(np * s);
+            if opts.gp_pooling {
+                let mut tmp = Vec::with_capacity(cb.len());
                 for st in pop {
-                    ds.push(d2(&st[c[0] as usize], &st[c[1] as usize]));
+                    tmp.clear();
+                    tmp.extend(cb.iter().map(|c| d2(&st[c[0] as usize], &st[c[1] as usize])));
+                    tmp.sort_by(|a, b| a.total_cmp(b));
+                    ds.extend_from_slice(&tmp[..np]);
+                }
+            } else {
+                for c in &cb {
+                    for st in pop {
+                        ds.push(d2(&st[c[0] as usize], &st[c[1] as usize]));
+                    }
                 }
             }
             let n_in = ds.iter().filter(|&&x| x <= rc2).count() as u64;
-            let (p_now, p, o) = p_and_rank(cand.f[k], cand.p_last[k], n_in, ds.len() as u64);
+            let (p_now, p, o) = p_and_rank_opt(cand.f[k], cand.p_last[k], n_in, ds.len() as u64, opts.iterative_correction);
             match o {
                 Some(o) => {
                     let (_, v, _) = ds.select_nth_unstable_by(o as usize, |a, b| a.total_cmp(b));
@@ -249,6 +312,62 @@ mod tests {
         let res = actdist(&g, &cand, &[0], &pop, 2.0);
         assert_eq!(res[0].p, 0.0);
         assert!(rows(&g, &cand, &[0], &res).is_empty());
+    }
+
+    /// Hand-computed GP pooling and the iterative-correction switch.
+    #[test]
+    fn gp_pooling_and_no_iterative_correction() {
+        let p = IgmParams { occupancy: 0.2, nucleus_radius: 1000.0, ..Default::default() };
+        let g = Genome::new(&[0, 0, 1], &[0, 100, 0], &[100, 200, 100], &[2, 2], &p).unwrap();
+        let r = g.radii[0];
+        let rc = 2.0 * (2.0 * r);
+        // beads: copy0 h0=0 h1=1 h2=2; copy1 h0=3 h1=4 h2=5.  Intra pair (h0, h1) has the
+        // four combinations (0,1) (0,4) (3,1) (3,4); on the x axis: 0 at 0, 3 at `far`,
+        // 1 at a, 4 at b -> d(0,1) = a, d(0,4) = b, d(3,1) = far - a, d(3,4) = far - b
+        let far = 100.0 * rc;
+        let mk = |a: f64, b: f64| {
+            let mut pos = vec![[0.0, 5e5, 0.0]; 6];
+            pos[0] = [0.0, 0.0, 0.0];
+            pos[3] = [far, 0.0, 0.0];
+            pos[1] = [a, 0.0, 0.0];
+            pos[4] = [b, 0.0, 0.0];
+            pos
+        };
+        // structure 0: d = 0.5, 100 - 0.8, 100 - 0.5, 0.8 (x rc): GP keeps {0.5, 0.8}, IGM (same copy) {0.5, 0.8}
+        // structure 1: d = 3, 2, 97, 98: GP keeps {2, 3}, IGM {3, 98}
+        let pop = vec![mk(0.5 * rc, far - 0.8 * rc), mk(3.0 * rc, 2.0 * rc)];
+        let cand = Candidates { i: vec![0], j: vec![1], f: vec![0.9], intra: vec![true], p_last: vec![0.2] };
+        let gp = AStepOpts { iterative_correction: true, gp_pooling: true };
+        let res = actdist_opt(&g, &cand, &[0], &pop, 2.0, gp);
+        // GP values 0.5 0.8 2 3: p_now = 2/4; t = clean(0.5, 0.2) = 0.375; p = clean(0.9, 0.375) = 0.84;
+        // o = round(4 * 0.84) = 3 -> d_act = 3 rc
+        assert!((res[0].p_now - 0.5).abs() < 1e-15);
+        assert!((res[0].p - 0.84).abs() < 1e-12, "{}", res[0].p);
+        assert_eq!(res[0].rank, 3);
+        assert!((res[0].d2_act.sqrt() / rc - 3.0).abs() < 1e-9);
+        // IGM values 0.5 0.8 3 98: p_now = 2/4 as well, rank 3 -> 98 rc
+        let igm = actdist_opt(&g, &cand, &[0], &pop, 2.0, AStepOpts::default());
+        assert_eq!(igm[0].rank, 3);
+        assert!((igm[0].d2_act.sqrt() / rc - 98.0).abs() < 1e-9);
+        assert_eq!(igm, actdist(&g, &cand, &[0], &pop, 2.0));
+        // the rows are the IGM rows (same-copy combinations for intra) in both modes
+        assert_eq!(rows(&g, &cand, &[0], &res).len(), 2);
+        // no iterative correction: p = f (o = min(3, round(3.6)) = 3)
+        let noic = AStepOpts { iterative_correction: false, gp_pooling: false };
+        let res = actdist_opt(&g, &cand, &[0], &pop, 2.0, noic);
+        assert_eq!(res[0].p, 0.9);
+        assert_eq!(res[0].rank, 3);
+        // f below p_now is still restrained without the correction (o = round(0.4) = 0)
+        let cand2 = Candidates { f: vec![0.1], ..cand.clone() };
+        let res = actdist_opt(&g, &cand2, &[0], &pop, 2.0, noic);
+        assert_eq!(res[0].p, 0.1);
+        assert_eq!(res[0].rank, 0);
+        // inter pair, diploid: GP pools 2 of 4 per structure, IGM all 4; intra IGM 2
+        assert_eq!(pool_combos(&g, 0, 2, false, true).1, 2);
+        assert_eq!(pool_combos(&g, 0, 2, false, true).0.len(), 4);
+        assert_eq!(pool_combos(&g, 0, 2, false, false).1, 4);
+        assert_eq!(pool_combos(&g, 0, 1, true, false).1, 2);
+        assert_eq!(pool_combos(&g, 0, 1, true, true).0.len(), 4);
     }
 
     #[test]

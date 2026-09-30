@@ -243,9 +243,11 @@ fn debug_setup_stage<'py>(
 /// Protocol "igm": population of structures fitted to a haploid contact
 /// probability matrix (A/M iterations).  `on_round(log_json, coords)` is
 /// called after every M-step (`coords` = (S, N, 3) float32 when
-/// `round_coords`, else None).
+/// `round_coords`, else None).  `init_*` (optional, equal length): loci
+/// placed at given initial positions (structure, haploid bin, copy, xyz
+/// (M, 3) nm), the beads between two pinned beads of a chain interpolated.
 #[pyfunction]
-#[pyo3(signature = (hap_chrom, hap_start, hap_end, copies, prob_i, prob_j, prob_v, params_json, on_round=None, round_coords=false))]
+#[pyo3(signature = (hap_chrom, hap_start, hap_end, copies, prob_i, prob_j, prob_v, params_json, on_round=None, round_coords=false, init_structure=None, init_bin=None, init_copy=None, init_xyz=None))]
 #[allow(clippy::too_many_arguments)]
 fn calc_population<'py>(
     py: Python<'py>,
@@ -259,13 +261,32 @@ fn calc_population<'py>(
     params_json: &str,
     on_round: Option<Py<PyAny>>,
     round_coords: bool,
+    init_structure: Option<PyReadonlyArray1<'py, u32>>,
+    init_bin: Option<PyReadonlyArray1<'py, u32>>,
+    init_copy: Option<PyReadonlyArray1<'py, u32>>,
+    init_xyz: Option<PyReadonlyArray1<'py, f64>>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    use crate::igm::driver::{run_population, PopEngine, RoundLog};
+    use crate::igm::driver::{run_population_with, InitPins, PopEngine, RoundLog};
     use crate::igm::params::IgmParams;
     let p: IgmParams = serde_json::from_str(params_json).map_err(|e| PyValueError::new_err(e.to_string()))?;
     p.validate().map_err(PyValueError::new_err)?;
     let (hc, hs, he) = (hap_chrom.as_slice()?.to_vec(), hap_start.as_slice()?.to_vec(), hap_end.as_slice()?.to_vec());
     let (pi, pj, pv) = (prob_i.as_slice()?.to_vec(), prob_j.as_slice()?.to_vec(), prob_v.as_slice()?.to_vec());
+    let mut pins = InitPins::default();
+    match (&init_structure, &init_bin, &init_copy, &init_xyz) {
+        (Some(s), Some(b), Some(c), Some(x)) => {
+            let x = x.as_slice()?;
+            if x.len() % 3 != 0 {
+                return Err(PyValueError::new_err("init_xyz must hold 3 values per pinned locus"));
+            }
+            pins.structure = s.as_slice()?.to_vec();
+            pins.hap = b.as_slice()?.to_vec();
+            pins.copy = c.as_slice()?.to_vec();
+            pins.xyz = x.chunks(3).map(|q| [q[0], q[1], q[2]]).collect();
+        }
+        (None, None, None, None) => {}
+        _ => return Err(PyValueError::new_err("init_structure, init_bin, init_copy and init_xyz go together")),
+    }
     let flat32 = |pop: &[Vec<V3>]| -> (usize, usize, Vec<f32>) {
         let s = pop.len();
         let n = pop.first().map(|c| c.len()).unwrap_or(0);
@@ -293,7 +314,7 @@ fn calc_population<'py>(
                 })
             })
         };
-        run_population(&hc, &hs, &he, &copies, &pi, &pj, &pv, &p, &mut cb)
+        run_population_with(&hc, &hs, &he, &copies, &pi, &pj, &pv, &pins, &p, &mut cb)
     });
     let pop = res.map_err(PyRuntimeError::new_err)?;
     let d = PyDict::new(py);
@@ -306,6 +327,7 @@ fn calc_population<'py>(
     d.set_item("radii", g.radii.clone().into_pyarray(py))?;
     d.set_item("rounds_json", serde_json::to_string(&pop.out.rounds).unwrap())?;
     d.set_item("final_stats_json", serde_json::to_string(&pop.out.final_stats).unwrap())?;
+    d.set_item("relax_json", serde_json::to_string(&pop.out.relax_log).unwrap())?;
     let c = &pop.cand;
     let sel = &pop.out.last_sel;
     let ai: Vec<u32> = sel.iter().map(|&k| c.i[k as usize]).collect();

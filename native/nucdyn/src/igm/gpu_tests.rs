@@ -209,3 +209,74 @@ fn gpu_astep_matches_cpu() {
     assert!(diff as usize <= rows.len(), "{diff} > {} rows", rows.len());
     assert!(diff as f64 <= 1e-3 * total as f64);
 }
+
+/// Intra / inter Hi-C violation breakdown (inter flag carried in the CSR partner word).
+#[test]
+fn gpu_inter_violation_breakdown_matches_cpu() {
+    let (g, mut ff, p, pop) = setup(150, 2, 12);
+    ff.bead_chrom = g.bead_hap.iter().map(|&h| g.hap_chrom[h as usize]).collect();
+    let pop: Vec<Vec<V3>> = pop.iter().map(|st| st.iter().map(|q| [(q[0] * 1.2) as f32 as f64, (q[1] * 1.2) as f32 as f64, (q[2] * 1.2) as f32 as f64]).collect()).collect();
+    let Ok(mut eng) = GpuPopEngine::new(&ff, &p) else {
+        eprintln!("no GPU adapter: skipped");
+        return;
+    };
+    let rows = random_rows(&g, 500, 13);
+    let mut q = p.clone();
+    q.cg_max_eval = 1;
+    eng.p = q;
+    let (_, stats) = eng.debug_cg(&pop, &rows, 1.0, 1.0).unwrap();
+    for s in 0..pop.len() {
+        let hic = HicBonds::from_pairs(ff.n, &astep::assign(&rows, &pop[s]));
+        let v = violations(&ff, &hic, &pop[s], p.violation_tolerance);
+        eprintln!("structure {s}: {v:?}");
+        assert_eq!(stats[s].viol, v);
+        assert!(v.hic_inter_imposed > 0 && v.hic_inter_imposed < v.hic_imposed);
+        assert!(v.hic_inter_violated <= v.hic_violated);
+    }
+}
+
+/// GP pooling and the iterative-correction switch in the GPU A-step.
+#[test]
+fn gpu_astep_options_match_cpu() {
+    let (g, ff, mut p, pop) = setup(40, 200, 6);
+    p.n_structures = pop.len();
+    let nh = g.n_hap() as u32;
+    let (mut pi, mut pj, mut pv) = (vec![], vec![], vec![]);
+    let mut rng = Rng::new(2);
+    for i in 0..nh {
+        for j in i + 1..nh {
+            pi.push(i);
+            pj.push(j);
+            pv.push(rng.uniform().powi(3));
+        }
+    }
+    let mut cand = Candidates::from_coo(&g, &pi, &pj, &pv, 0.0);
+    for k in 0..cand.len() {
+        cand.p_last[k] = if k % 3 == 0 { 0.5 * cand.f[k] } else { 0.0 };
+    }
+    let sel = cand.select(0.02, 0.02);
+    for (pool, ic) in [("gp", true), ("igm", false), ("gp", false)] {
+        let mut q = p.clone();
+        q.assignment_pooling = pool.into();
+        q.iterative_correction = ic;
+        let Ok(mut eng) = GpuPopEngine::new(&ff, &q) else {
+            eprintln!("no GPU adapter: skipped");
+            return;
+        };
+        eng.set_population(&pop).unwrap();
+        let gpu = eng.actdist(&g, &cand, &sel).unwrap();
+        let cpu = astep::actdist_opt(&g, &cand, &sel, &pop, q.contact_range, astep::AStepOpts::from_params(&q));
+        let (mut same_p, mut max_rel, mut restrained) = (0usize, 0.0f64, 0usize);
+        for (a, b) in gpu.iter().zip(&cpu) {
+            same_p += (a.p == b.p) as usize;
+            if a.p > 0.0 && b.p > 0.0 {
+                restrained += 1;
+                max_rel = max_rel.max((a.d2_act - b.d2_act).abs() / b.d2_act);
+            }
+        }
+        eprintln!("A-step {pool} (iterative correction {ic}) GPU vs CPU: {} pairs, identical p {same_p}, {restrained} restrained, max rel. diff d_act^2 {max_rel:.2e}", sel.len());
+        assert!(restrained > 100);
+        assert!(same_p as f64 >= 0.999 * sel.len() as f64);
+        assert!(max_rel < 1e-5);
+    }
+}

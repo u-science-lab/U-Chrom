@@ -82,8 +82,22 @@ impl Genome {
         if g.bead_hap.is_empty() {
             return Err("no beads".into());
         }
-        // radii from the volume occupancy (IGM `Preprocess`)
-        let total: f64 = g.bead_hap.iter().map(|&h| (hap_end[h as usize] - hap_start[h as usize]) as f64).sum();
+        if p.bead_radius > 0.0 {
+            // user-set uniform radius (IGM-Plus `model/bead_radius`)
+            g.radii = vec![p.bead_radius; g.bead_hap.len()];
+            return Ok(g);
+        }
+        // radii from the volume occupancy (IGM `Preprocess`); the occupancy
+        // refers to the modelled beads unless `occupancy_total_bp` is set
+        let modelled: f64 = g.bead_hap.iter().map(|&h| (hap_end[h as usize] - hap_start[h as usize]) as f64).sum();
+        let total = if p.occupancy_total_bp > 0.0 {
+            if p.occupancy_total_bp < modelled {
+                return Err(format!("occupancy_total_bp ({}) is smaller than the modelled genome ({modelled} bp)", p.occupancy_total_bp));
+            }
+            p.occupancy_total_bp
+        } else {
+            modelled
+        };
         let rho = p.occupancy * p.nucleus_volume() / total;
         let k = 4.0 * std::f64::consts::PI / 3.0;
         g.radii = g.bead_hap.iter().map(|&h| (rho * (hap_end[h as usize] - hap_start[h as usize]) as f64 / k).cbrt()).collect();
@@ -150,5 +164,35 @@ mod tests {
         let pb = g.polymer_bonds(&p, &|_| 1.0);
         assert_eq!(pb.len(), 2 + 1 + 2);
         assert!(pb.iter().all(|&(i, j, _)| g.bead_chain[i as usize] == g.bead_chain[j as usize]));
+    }
+
+    #[test]
+    fn user_bead_radius_and_occupancy_reference() {
+        let chrom = [0u32, 0, 0, 1, 1];
+        let start = [0i64, 100, 200, 0, 100];
+        let end = [100i64, 200, 250, 100, 200];
+        // bead_radius: uniform, occupancy must be 0
+        let p = IgmParams { bead_radius: 120.0, occupancy: 0.0, ..Default::default() };
+        p.validate().unwrap();
+        let g = Genome::new(&chrom, &start, &end, &[2, 1], &p).unwrap();
+        assert!(g.radii.iter().all(|&r| r == 120.0));
+        let bad = IgmParams { bead_radius: 120.0, ..Default::default() };
+        assert!(bad.validate().unwrap_err().contains("mutually exclusive"));
+        // single chromosome (chr0, 2 copies): occupancy over the modelled beads (IGM-Plus)
+        // vs over the whole genome (whole-genome bead sizes)
+        let p = IgmParams::default();
+        let whole = Genome::new(&chrom, &start, &end, &[2, 2], &p).unwrap();
+        let sub = Genome::new(&chrom[..3], &start[..3], &end[..3], &[2], &p).unwrap();
+        let vol = |g: &Genome| g.radii.iter().map(|r| 4.0 / 3.0 * std::f64::consts::PI * r.powi(3)).sum::<f64>();
+        assert!((vol(&sub) / (p.occupancy * p.nucleus_volume()) - 1.0).abs() < 1e-12);
+        let total_bp = 2.0 * (250.0 + 200.0);
+        let p2 = IgmParams { occupancy_total_bp: total_bp, ..Default::default() };
+        let sub2 = Genome::new(&chrom[..3], &start[..3], &end[..3], &[2], &p2).unwrap();
+        for k in 0..3 {
+            assert!((sub2.radii[k] - whole.radii[k]).abs() < 1e-9 * whole.radii[k]);
+        }
+        assert!(sub2.radii[0] < sub.radii[0]);
+        let p3 = IgmParams { occupancy_total_bp: 10.0, ..Default::default() };
+        assert!(Genome::new(&chrom[..3], &start[..3], &end[..3], &[2], &p3).is_err());
     }
 }

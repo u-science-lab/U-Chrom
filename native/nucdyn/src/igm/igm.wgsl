@@ -75,9 +75,9 @@ struct Params {
 @group(0) @binding(15) var<storage, read_write> bpart: array<vec4<f32>>;
 // per structure and bead: x0, g, h
 @group(0) @binding(16) var<storage, read_write> cgv: array<vec4<f32>>;
-// assignment rows: (bead a, bead b, d_act^2 bits, 0)
+// assignment rows: (bead a, bead b, d_act^2 bits, inter-chromosomal flag)
 @group(0) @binding(17) var<storage, read> rows: array<vec4<u32>>;
-// per structure 8 counters: hic imposed / violated, poly imposed / violated, env imposed / violated
+// per structure 8 counters: hic imposed / violated, poly imposed / violated, env imposed / violated, inter-chromosomal hic imposed / violated
 @group(0) @binding(18) var<storage, read_write> stats: array<atomic<u32>>;
 // per structure (whole population): Hi-C bond ends (2 per bond)
 @group(0) @binding(19) var<storage, read_write> totals: array<atomic<u32>>;
@@ -86,6 +86,8 @@ const WG: u32 = 256u;
 const BIG: f32 = 3.0e38;
 const PI: f32 = 3.141592653589793;
 const MS: u32 = 8u;
+// Hi-C CSR entries: partner bead | (inter-chromosomal flag << 31)
+const HIC_PARTNER: u32 = 0x7fffffffu;
 // mstate slots: 0 (kin, factor, step, inv_cell) 1 (origin, _) 2 (dims bits, ncell)
 // 3 (e0, alpha, fdoth, gg) 4 (beta, status bits, neval bits, niter bits)
 // 5 (e_start, _, _, op bits) 6 (mean v xyz, _) 7 (hic base bits, _, _, _)
@@ -419,7 +421,7 @@ fn total_force(i: u32, m: u32, p: vec3<f32>) -> vec4<f32> {
     let h0 = atomicLoad(&hic_off[hb + i]);
     let h1 = atomicLoad(&hic_off[hb + i + 1u]);
     for (var q = h0; q < h1; q = q + 1u) {
-        let j = hic[q];
+        let j = hic[q] & HIC_PARTNER;
         let d0 = P.contact_range * (ri + rad[j]);
         let r = upper_bond(p - pos[gb + j].xyz, d0, P.k_hic);
         f = f + r.xyz;
@@ -891,10 +893,11 @@ fn assign_fill(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_i
     for (var q = wg.x * WG + l.x; q < P.n_rows; q = q + nw.x * WG) {
         let r = rows[q];
         if (row_in(m, r)) {
+            let flag = (r.w & 1u) << 31u;
             let sa = atomicAdd(&cell_count[m * P.hc + r.x], 1u);
-            hic[sa] = r.y;
+            hic[sa] = r.y | flag;
             let sb = atomicAdd(&cell_count[m * P.hc + r.y], 1u);
-            hic[sb] = r.x;
+            hic[sb] = r.x | flag;
         }
     }
 }
@@ -921,7 +924,7 @@ fn violations_k(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_
     let gb = (P.m_off + m) * P.n;
     let p = pos[gb + i].xyz;
     let ri = rad[i];
-    var c = array<u32, 6>(0u, 0u, 0u, 0u, 0u, 0u);
+    var c = array<u32, 8>(0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u);
     let p0 = poly[i];
     let p1 = poly[i + 1u];
     for (var q = p0; q < p1; q = q + 1u) {
@@ -939,12 +942,16 @@ fn violations_k(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_
     let h0 = atomicLoad(&hic_off[hb + i]);
     let h1 = atomicLoad(&hic_off[hb + i + 1u]);
     for (var q = h0; q < h1; q = q + 1u) {
-        let j = hic[q];
+        let hq = hic[q];
+        let j = hq & HIC_PARTNER;
+        let inter = hq >> 31u;
         if (j > i) {
             let d0 = P.contact_range * (ri + rad[j]);
             c[0] = c[0] + 1u;
+            c[6] = c[6] + inter;
             if ((length(p - pos[gb + j].xyz) - d0) / d0 > P.tol) {
                 c[1] = c[1] + 1u;
+                c[7] = c[7] + inter;
             }
         }
     }
@@ -957,7 +964,7 @@ fn violations_k(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_
             c[5] = 1u;
         }
     }
-    for (var k = 0u; k < 6u; k = k + 1u) {
+    for (var k = 0u; k < 8u; k = k + 1u) {
         if (c[k] > 0u) {
             atomicAdd(&stats[8u * m + k], c[k]);
         }

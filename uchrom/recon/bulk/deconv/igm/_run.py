@@ -111,6 +111,69 @@ def _inputs(data: Any, probabilities: Any, bins: Optional[pd.DataFrame]):
     return _normalise_bins(bins), P
 
 
+def _occupancy_total_bp(p: IgmParams, bins_all: pd.DataFrame, un) -> float:
+    """Genome size (bp, all copies) the occupancy refers to; 0 = the modelled beads."""
+    sc = p.occupancy_scope
+    if sc == "model" or p.bead_radius is not None:
+        return 0.0
+    if sc == "genome":
+        size = (bins_all["end"] - bins_all["start"]).groupby(bins_all["chrom"], sort=False).sum()
+        copies = un.resolve_copies(list(size.index), p.ploidy)
+        return float(np.dot(size.to_numpy(np.float64), np.asarray(copies, dtype=np.float64)))
+    return float(sc)
+
+
+def _init_pins(init_positions: Any, bins: pd.DataFrame, s: int) -> Optional[Dict[str, np.ndarray]]:
+    """``init_positions`` table -> engine pins (structure, model bin, copy, xyz).
+
+    Columns: ``structure`` (index 0..S-1 or cell id ``"s00012"``), ``chrom``,
+    ``start`` (any position inside the bin, bp), ``copy`` (default 0),
+    ``x``, ``y``, ``z`` (nm, the nucleus frame: centre at the origin)."""
+    if init_positions is None:
+        return None
+    df = pd.DataFrame(init_positions)
+    need = {"structure", "chrom", "start", "x", "y", "z"}
+    missing = need - set(df.columns)
+    if missing:
+        raise ValueError(f"init_positions lacks columns {sorted(missing)}")
+    if len(df) == 0:
+        return None
+    st = df["structure"]
+    if st.dtype == object or isinstance(st.dtype, pd.CategoricalDtype) or pd.api.types.is_string_dtype(st):
+        ids = {c: k for k, c in enumerate(_structure_ids(s))}
+        try:
+            struct = np.array([ids[x] if isinstance(x, str) else int(x) for x in st], dtype=np.int64)
+        except KeyError as e:
+            raise ValueError(f"init_positions: unknown structure {e.args[0]!r}") from None
+    else:
+        struct = st.to_numpy(np.int64)
+    if struct.min() < 0 or struct.max() >= s:
+        raise ValueError(f"init_positions: structure index outside 0..{s - 1}")
+    copy = df["copy"].to_numpy(np.int64) if "copy" in df.columns else np.zeros(len(df), dtype=np.int64)
+    if copy.min() < 0:
+        raise ValueError("init_positions: negative copy")
+    chrom = df["chrom"].astype(str).to_numpy()
+    pos = pd.to_numeric(df["start"]).to_numpy(np.int64)
+    bin_idx = np.full(len(df), -1, dtype=np.int64)
+    bchrom = bins["chrom"].to_numpy()
+    for c in np.unique(chrom):
+        rows = np.flatnonzero(chrom == c)
+        cb = np.flatnonzero(bchrom == c)
+        if len(cb) == 0:
+            raise ValueError(f"init_positions: chromosome {c!r} is not modelled")
+        st_c = bins["start"].to_numpy()[cb]
+        en_c = bins["end"].to_numpy()[cb]
+        k = np.searchsorted(st_c, pos[rows], side="right") - 1
+        ok = (k >= 0) & (pos[rows] < en_c[np.clip(k, 0, None)])
+        if not ok.all():
+            raise ValueError(f"init_positions: {int((~ok).sum())} positions on {c} fall outside the bins")
+        bin_idx[rows] = cb[k]
+    xyz = df[["x", "y", "z"]].to_numpy(np.float64)
+    if not np.isfinite(xyz).all():
+        raise ValueError("init_positions: non-finite coordinates")
+    return {"structure": struct, "bin": bin_idx, "copy": copy, "xyz": xyz}
+
+
 def _structure_ids(s: int) -> List[str]:
     w = max(5, len(str(max(s - 1, 0))))
     return [f"s{k:0{w}d}" for k in range(s)]
@@ -187,9 +250,22 @@ def deconvolve_igm(
     keep_intermediate: bool = False,
     key_added: Optional[str] = "deconv.igm",
     progress: Optional[Any] = None,
+    init_positions: Optional[pd.DataFrame] = None,
     **overrides: Any,
 ):
     """IGM population modelling of a contact-probability matrix.
+
+    The defaults run the faithful IGM 1.0 protocol.  Opt-in options from
+    IGM-Plus (alberlab/IGM-Plus v2.0.2) and IGM_2.0 (fields of
+    :class:`IgmParams`, also accepted as keyword overrides): ``chrom=`` with
+    ``occupancy_scope`` (chromosome-subset models), ``bead_radius``
+    (radii set directly, exclusive with ``occupancy``),
+    ``iterative_correction=False``, ``assignment_pooling="gp"``,
+    ``init_positions`` + ``init_noise`` (expanded initialisation).  The
+    per-round logs always carry the violation breakdown by restraint kind
+    (Hi-C intra / inter, polymer, envelope) with the most violating
+    structure; ``uns["deconv"]["relax_init"]`` holds that of the initial
+    relaxation.
 
     Parameters
     ----------
@@ -200,7 +276,14 @@ def deconvolve_igm(
         contiguous): ``deconvolve_igm(P, bins=bins)``, or
         ``deconvolve_igm(cd, probabilities=P)`` with the bins of ``cd``.
     chrom
-        Restrict the model to these chromosomes (default: all bins).
+        Restrict the model to these chromosomes (default: all bins), e.g.
+        one chromosome: its copies follow ``ploidy`` (``"haploid"``,
+        ``"diploid"`` or ``{chrom: copies}``); the nuclear envelope stays the
+        full nucleus.  The bead radii follow ``params.occupancy_scope``:
+        ``"model"`` (default, as IGM-Plus: the modelled chromosomes alone
+        fill ``occupancy`` of the nucleus, so beads grow as fewer
+        chromosomes are modelled), ``"genome"`` (radii of the whole-genome
+        model of the input bins) — or set ``bead_radius``.
     params
         :class:`IgmParams`; keyword ``overrides`` replace single fields
         (``n_structures=1000``, ``occupancy=0.4``, ...).
@@ -219,7 +302,17 @@ def deconvolve_igm(
     key_added
         ``cd.results`` key of the last activation-distance table.
     progress
-        Callback ``progress(round_log: dict)`` after every M-step.
+        Callback ``progress(round_log: dict)`` after every M-step (round 0:
+        the initial relaxation).
+    init_positions
+        Optional table of loci placed at given initial positions (IGM-Plus
+        expanded initialisation): columns ``structure`` (0..S-1 or
+        ``"s00012"``), ``chrom``, ``start`` (a position inside the bin),
+        ``copy`` (default 0), ``x``, ``y``, ``z`` (nm, nucleus centred at the
+        origin).  Beads between two pinned beads of one chain are linearly
+        interpolated; the rest keep the random-territory start.  Only the
+        start is set — no positional restraint is added (see the stage-2
+        design in ``benchmarks/bulk/design.md``).
 
     Returns
     -------
@@ -228,7 +321,10 @@ def deconvolve_igm(
     **trace** per chromosome copy (``s00000:chr1:0``; ``traces`` has
     ``chrom`` / ``copy``), one spot per bead pointing to its bin; coordinates
     in nm.  ``bin_tracks["radius_nm"]``, ``bin_tracks["input_prob_rowsum"]``;
-    ``uns["deconv"]``: method, parameters, per-round log, engine, timing.
+    ``uns["deconv"]``: method, parameters, per-round log (with
+    ``breakdown``), ``relax_init``, engine, timing.  ``cells`` also has
+    ``hic_inter_imposed`` / ``hic_inter_violated`` (the inter-chromosomal
+    subset of ``hic_*``).
     """
     from uchrom.core import ChromData
     from uchrom.core.results import ResultsStore
@@ -241,6 +337,7 @@ def deconvolve_igm(
             raise TypeError(f"unknown IGM parameters: {sorted(unknown)}")
         p = p.replace(**overrides)
     bins_df, P = _inputs(data, probabilities, bins)
+    occ_total_bp = _occupancy_total_bp(p, bins_df, un)
     n_bins_all = len(bins_df)
     ii, jj, vv = _upper_coo(P, n_bins_all)
     if chrom is not None:
@@ -253,8 +350,10 @@ def deconvolve_igm(
         m = keep[ii] & keep[jj]
         ii, jj, vv = new[ii[m]].astype(np.uint32), new[jj[m]].astype(np.uint32), vv[m]
         bins_df = bins_df[keep].reset_index(drop=True)
+    pins = _init_pins(init_positions, bins_df, int(p.n_structures))
     dev = _resolve_device(device)
     native = p.to_native()
+    native["occupancy_total_bp"] = occ_total_bp
     for st in native["stages"]:
         st["mdsteps"] = int(st["mdsteps"])
     if native.get("relax"):
@@ -279,7 +378,7 @@ def deconvolve_igm(
         res = un.calc_population(
             bins_df["chrom"].to_numpy(), bins_df["start"].to_numpy(), bins_df["end"].to_numpy(),
             ii, jj, vv, ploidy=p.ploidy, on_round=on_round,
-            round_coords=bool(keep_intermediate), **native)
+            round_coords=bool(keep_intermediate), init_pins=pins, **native)
         S = int(res["coords"].shape[0])
         lay = _Layout(res, bins_df, S)
         # per-bin tracks
@@ -297,6 +396,10 @@ def deconvolve_igm(
                             "f": a["f"], "p": a["p"], "p_now": a["p_now"], "d_act_nm": a["d"]})
         prov = {k: v for k, v in native.items()}
         prov["ploidy"] = p.ploidy
+        prov["occupancy_scope"] = p.occupancy_scope
+        if pins is not None:
+            prov["init_positions"] = {"n_loci": int(len(pins["structure"])),
+                                      "n_structures": int(len(np.unique(pins["structure"])))}
         uns = {"deconv": {
             "method": "igm",
             "protocol": "igm (native uchrom_nucdyn)",
@@ -308,6 +411,7 @@ def deconvolve_igm(
             "n_beads": lay.n,
             "input": {"n_bins": int(len(bins_df)), "n_pairs": int(len(vv)), "chrom": chrom},
             "rounds": res["rounds"],
+            "relax_init": res.get("relax_init"),
             "stopped_at_max_iterations": res["stopped_at_max_iterations"],
             "seconds_engine": res["seconds_total"],
             "seconds_total": time.time() - t0,

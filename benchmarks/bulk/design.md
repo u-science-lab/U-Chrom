@@ -30,7 +30,9 @@ departs from this design and why; the rest of the document is the design as agre
 | batched CG "Polak–Ribière with backtracking" | as designed: one state machine per structure; LAMMPS `backtrack` line search (IGM uses `quadratic`) | documented in `native/nucdyn/README.md` |
 | `.hss` import / export, resume from a snapshot | not implemented; the benchmark scripts read `.hss` with h5py | not needed for the engine; later |
 | `keep_intermediate="last_per_sigma" | "all" | None` | `keep_intermediate=False/True` (all rounds as `layers["round_<k>"]`) | user decision: intermediate rounds not kept by default, option to keep |
-| `inter_pooling="pgs"` sensitivity option | not implemented | IGM-only for now |
+| `inter_pooling="pgs"` sensitivity option | not implemented; instead the IGM_2.0 rule of G. Polles is available as `assignment_pooling="gp"` (all copy combinations pooled, `n_possible = min(copies)` smallest per structure, intra and inter; `native/nucdyn/README.md`) | IGM-only for now; GP is the pooling sensitivity run of §9 |
+| IGM 1.0 only | opt-in IGM-Plus (v2.0.2) implementation options, defaults unchanged (fixed-seed CPU run bit-identical, regression tests in `igm/regression_tests.rs` and `tests/test_deconv_igm.py`): chromosome-subset models (`chrom=` + `occupancy_scope`), `bead_radius` (exclusive with `occupancy`), `iterative_correction=False` (`iter_corr_knob = 0`), `init_positions` + `init_noise` (pinned loci, same-chain interpolation), violation report after the initial relaxation and per restraint kind (Hi-C intra / inter, polymer, envelope) with the most violating structure | user decision (IGM-Plus review); table with the IGM-Plus source locations in `native/nucdyn/README.md` |
+| imaging restraints | not implemented; designed in §11 (stage 2) | would consume the imaging needed for validation unless split (§11.6) |
 | population memory | `S · N · 16 B` must fit one storage binding (4 GiB on NVIDIA Vulkan): 1 Mb × 10,000 and 200 kb × 1,000 fit; 200 kb × 10,000 does not | a host-resident population with per-batch upload is future work |
 
 ---
@@ -217,6 +219,8 @@ lists and the min / max iteration logic of `bin/igm-run` (spec §4.3), violation
 | `.hss` exchange through the file system replaced by device buffers | performance only; `.hss` import / export for interop (§5) | yes |
 | seeds and restart | a run is resumable per (σ, iteration) from the zarr snapshot (§5) | yes |
 | `ActivationDistance` inter pooling: `n_c = 2` (PGS / old IGM helper) | spec §12: the two code generations disagree; offered as `inter_pooling="pgs"` to test the sensitivity | no |
+| `assignment_pooling="gp"` (IGM_2.0 `GP_ActivationDistanceStep`): every pair pools all copy combinations, `n_possible = min(copies)` smallest per structure | the approximation IGM used before the 2021 "overcome Guido's approximations" change; sensitivity of the deconvolution to the pooling rule (§9) | no |
+| IGM-Plus options: `iterative_correction=False`, `bead_radius`, `occupancy_scope="genome"`, `init_positions` / `init_noise` | implementation variants of IGM-Plus (§0) | no |
 | `pgs2018` restraint pieces (TAD beads, fmax scaling, `min_k` groups, surface-distance bounds) | PGS reference; no IMP annealing schedule | no |
 | higher-order benchmarking hooks (keep every intermediate population) | for §7 only | no |
 
@@ -509,7 +513,12 @@ Total ≈ 7–9 weeks of development for the IGM path.
   with the contact distance. For simulated inputs we control it; for real data we must choose
   and document a rule (open question 2) and test sensitivity.
 * **Inter-pair pooling** differs between PGS and IGM (spec §12); a factor 2 in the effective
-  inter probabilities. Sensitivity run planned (`inter_pooling`).
+  inter probabilities. Sensitivity run planned (`inter_pooling`); the IGM_2.0 rule of
+  G. Polles (`assignment_pooling="gp"`: intra pairs also pooled over the four copy
+  combinations, `n_possible = min(copies)` per structure, inter pairs 2 of 4) is implemented
+  for this analysis: same input, seeds and σ lists with `"igm"` vs `"gp"`, compared on the
+  §7(a)/(b) metrics (and the homolog-pairing / trans-homolog contact statistics, which the GP
+  rule changes most).
 * **Convergence behaviour**: IGM stops at `max_iterations` without failing; populations at the last
   σ may carry many violations. We report violation scores per σ and never hide a non-converged run.
 * **Faithfulness of CG and velocity statistics** (§3.2): small, but trajectories will not match
@@ -541,3 +550,115 @@ Total ≈ 7–9 weeks of development for the IGM path.
 7. Module name: `uchrom.recon.bulk.pgs` (method family) or `uchrom.recon.bulk.igm`?
 8. Should DamID / FISH / SPRITE restraints be on the roadmap at all (they turn the method into
    data integration and would consume the imaging needed for validation)?
+
+## 11. Stage 2: imaging-informed restraints — design only, **NOT IMPLEMENTED**
+
+> Status: nothing in this section exists in the code.  It records how the deconvolution will
+> optionally accept IGM-Plus-style imaging data from a ChromData.  Stage 1 (implemented) only
+> has the imaging-free options of §0 plus `init_positions` (pinned *starting* positions,
+> no restraint).
+
+IGM-Plus (alberlab/IGM-Plus v2.0.2) models Hi-C together with per-cell imaging: volume
+confinement from imaged nuclear laminas, nucleoli and speckles (`restraints/genenvelope.py`,
+`ExpEnvelope` on a voxel map `<prefix><struct_id>/lamina/lamina.bin`), lamina DamID measured
+against the imaged lamina (`restraints/gendamid.py`), and chromatin tracing as (a) target
+positions of phased loci (`restraints/tracing.py`: an upper-bound bond to a static dummy
+particle at the target, radial tolerance 100 nm in the relaxation and 500 nm in the M-step),
+(b) single-cell pairwise distances (`restraints/singlecellfish.py`: lower and upper bounds at
+`d ± 300 nm`), (c) a fibre model from traced consecutive-locus distances
+(`steps/PolymerAssignmentStep.py` + `restraints/polymer_bis.py:PolymerDistrib`: each
+structure's consecutive-bead target distance assigned by rank matching, lower / upper bounds at
+`target ± tol`).  Imaged cell *k* is structure *k* (files indexed by `struct_id`; the tracing
+`assignment` array names the structure of every traced locus).
+
+### 11.1 Inputs from ChromData
+
+| data | ChromData source | restraint (per structure) |
+|---|---|---|
+| nuclear boundary | `cell_shapes["nucleus"]` (2-D outlines, WKB, `uns['cell_shapes']`) + a 3-D extent: `cells` columns of a fitted ellipsoid (`nucleus_axis_{a,b,c}`, rotation) **or** a 3-D label image in a linked SpatialData (`cd.link_spatialdata`, `load_linked_spatialdata(cells=)`) | per-structure ellipsoid envelope (existing kernel, per-structure axes + rotation) or a signed-distance map (SDF) confinement, `U = ½ k t²` outside, `t` = distance to the surface |
+| nucleolus, speckles | `cell_shapes["nucleolus"]`, `cell_shapes["speckles"]` / SpatialData labels | inverted SDF (exclusion): `U = ½ k t²` inside the body |
+| lamina DamID | `bin_tracks` column (probability of lamina contact per bin) + the imaged lamina of the structure | DamID A-step as IGM (`DamidActivationDistanceStep`): per locus an activation distance to the lamina over the population; bond to the nearest lamina surface point (SDF gradient) instead of the ellipsoid |
+| tracing (a) targets | `coords` / `spots` (`bin_id`, `trace_id`, `cell_id`) / `traces` (`chrom`, homolog `copy` when phased) of the imaged cells | positional upper bound to a static target, radial tolerance `tracing_tolerance` (IGM-Plus 100 / 500 nm), plus `init_positions` (implemented) |
+| tracing (b) distances | pairwise distances of one trace, `cd.compute_distances(trace_id=…)` on demand (no stored matrices) | lower + upper bound at `d ± distance_tolerance` for the selected pairs |
+| tracing (c) fibre | consecutive-bin distance distributions pooled over the traces of a cell type | consecutive-bead bounds `target ± tol`, targets assigned to structures by rank matching each A-step (replaces the `simple` polymer bond on the traced chromosomes) |
+
+Bins: the imaging loci must map onto the model bins (`bins` shared through `bin_id`); tracing
+probes finer than the model bins are averaged per bin (or the model uses the probe bins, as
+IGM-Plus does for tracing-resolution models).
+
+### 11.2 Imaged cells ↔ structures
+
+* `structure_map`: `"first"` (imaged cell *k* → structure *k*, the remaining `S − n` structures
+  unconstrained by imaging — IGM-Plus' layout), `"replicate"` (each imaged cell drives
+  `⌊S/n⌋` structures, which then differ only through Hi-C and the random start), or an explicit
+  table (`cell_id → structure`), recorded as `cells["imaging_cell_id"]` of the output.
+* Copies: phased traces (`traces["copy"]` / homolog labels) map to bead copies directly; unphased
+  traces are assigned to copies inside the A-step (the copy pairing that is closest in the current
+  structure, as the IGM FISH assignment does), re-decided every iteration.
+* Chromosomes / loci absent from the imaging get no imaging restraint in that structure.
+
+### 11.3 Units and frames
+
+* Coordinates in nm: `uns['xyz_unit']` of the imaging ChromData is converted; the model is
+  nucleus-centred.  Per cell the frame is taken from `uns['cell_spatial'][key]`
+  (`unit`, `frame` fov | tissue | global, `in_coords_frame`, `voxel_size` / `voxel_unit`,
+  `status` measured | inferred): positions and shapes are shifted by the nucleus centroid
+  (`cells["centroid_x/y/z"]`, `cd.cell_positions(key, physical=True)`), anisotropic z scaled by
+  the voxel size, optionally rotated to the principal axes of the nucleus.  Inferred positions
+  (`status="inferred"`) are refused unless explicitly allowed.
+* Nucleus size: per-cell geometry replaces `nucleus_radius` / `nucleus_semiaxes`; since nuclear
+  volumes differ between cells, the bead size is set with `bead_radius` (implemented) rather
+  than one occupancy (the occupancy would otherwise give each structure different beads).
+* Tracing chromatic / drift corrections are the imaging pipeline's job (`uchrom.im`), not the
+  deconvolution's.
+
+### 11.4 API sketch (names on `deconvolve`; not implemented)
+
+```python
+pop = deconvolve(P, bins=bins, method="igm", n_structures=1000,
+    imaging=cd_img,                    # ChromData with the imaged cells (same bins / genome)
+    imaging_cells=None,                # subset / order of cd_img.cells used as restraints
+    structure_map="first",             # "first" | "replicate" | DataFrame(cell_id, structure)
+    imaging_frame="nucleus",           # uns['cell_spatial'] key for centroids / frames
+    confinement={"nucleus": "cell_shapes:nucleus", "nucleolus": "cell_shapes:nucleolus",
+                 "speckles": None},    # or "ellipsoid" / a linked SpatialData label key
+    confinement_kspring=1.0,
+    damid="lmnb1_damid",               # bin_tracks column; lamina = the imaged nuclear boundary
+    tracing="targets",                 # None | "targets" | "distances" | "fibre" | a list of them
+    tracing_tolerance=(100.0, 500.0),  # nm: relaxation, M-step (IGM-Plus)
+    distance_tolerance=300.0, tracing_kspring=1.0,
+    holdout=0.2, holdout_by="cells",   # §11.6; recorded in uns['deconv']['imaging']
+    bead_radius=...,                   # required with per-cell nuclei
+)
+```
+
+Output: `cells["imaging_cell_id"]`, the imaging restraint violations as further kinds of the
+round `breakdown` (`tracing`, `sc_distance`, `volume`, `damid`), `uns['deconv']['imaging']`
+(inputs, frames, map, hold-out split, seeds).
+
+Engine work: typed per-structure restraint rows (the Hi-C CSR generalised to (partner or
+static target, d0, lower / upper, k)), per-structure envelopes (ellipsoid parameters or SDF
+volumes on the GPU, trilinear gradient), the DamID and fibre A-steps.  The violation report of
+§0 already separates restraint kinds.
+
+### 11.5 What stays out
+
+Imaging never enters the Hi-C → probability preprocessing; restraints from one modality are not
+re-derived from the population of the other.
+
+### 11.6 Validation caveat — restraints are not truth
+
+Data used as restraints cannot also serve as validation truth: a population that reproduces
+the tracing it was fitted to shows only that the optimiser works.  Therefore:
+
+* **Held-out splits, fixed before modelling** and stored in the provenance: (i) by cell —
+  restrain with ~80 % of the imaged cells, evaluate population statistics (distance
+  distributions, radial positions, contact frequencies at the imaging threshold, single-cell
+  structure matching) on the held-out cells; (ii) by locus — restrain every other traced locus,
+  evaluate distances involving held-out loci; (iii) by modality — restrain volumes / DamID,
+  evaluate tracing, and vice versa.
+* The §7(b)/(c) imaging truths are never restraints; a stage-2 benchmark uses separate
+  datasets or a recorded split of the same one, and reports held-out metrics as the result and
+  fit-to-restraint metrics only as convergence diagnostics, labelled as such.
+* Report the Hi-C-only population on the same held-out data as the baseline, so the gain from
+  imaging restraints is measured, not assumed.

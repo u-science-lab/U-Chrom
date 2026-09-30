@@ -86,6 +86,32 @@ pub struct IgmParams {
     /// GPU: structures per M-step batch (0 = automatic).
     pub batch_size: usize,
     pub verbose: bool,
+    // ---- opt-in options (IGM-Plus / IGM_2.0); the defaults are IGM 1.0 ----
+    /// Uniform bead radius (nm) set by the user instead of deriving radii from
+    /// `occupancy` (IGM-Plus `model/bead_radius`).  0 = off.  Mutually
+    /// exclusive with occupancy: when > 0, `occupancy` must be 0.
+    pub bead_radius: f64,
+    /// Genome size (bp, all modelled copies counted) the `occupancy` refers
+    /// to.  0 = the modelled beads (IGM / IGM-Plus: with a chromosome subset
+    /// the subset alone fills `occupancy` of the nucleus).  Set it to the
+    /// whole genome's size to keep whole-genome bead sizes when only some
+    /// chromosomes are modelled.
+    pub occupancy_total_bp: f64,
+    /// Iterative correction of the assignment probability in the A-step
+    /// (`p = clean(f, clean(p_now, p_last))`); false: `p = f` (IGM-Plus
+    /// `optimization/iter_corr_knob = 0`).
+    pub iterative_correction: bool,
+    /// A-step pooling of copy combinations: "igm" (IGM 1.0: intra pairs over
+    /// the same-copy combinations, inter pairs over all combinations) or "gp"
+    /// (G. Polles' approximation, alberlab/IGM_2.0
+    /// `GP_ActivationDistanceStep.get_actdist`: every pair over all copy
+    /// combinations, keeping per structure the n_possible = min(copies)
+    /// smallest distances).
+    pub assignment_pooling: String,
+    /// Standard deviation (nm) of Gaussian noise added to every initial
+    /// coordinate (after pinned loci and interpolation; IGM-Plus
+    /// `model/init_noise`).  0 = off.
+    pub init_noise: f64,
 }
 
 pub fn demo_stages() -> Vec<Stage> {
@@ -139,6 +165,11 @@ impl Default for IgmParams {
             n_threads: 0,
             batch_size: 0,
             verbose: false,
+            bead_radius: 0.0,
+            occupancy_total_bp: 0.0,
+            iterative_correction: true,
+            assignment_pooling: "igm".into(),
+            init_noise: 0.0,
         }
     }
 }
@@ -156,6 +187,11 @@ impl IgmParams {
     pub fn nucleus_volume(&self) -> f64 {
         let a = self.semiaxes();
         4.0 / 3.0 * std::f64::consts::PI * a[0] * a[1] * a[2]
+    }
+
+    /// A-step pooling of G. Polles (`assignment_pooling = "gp"`).
+    pub fn gp_pooling(&self) -> bool {
+        self.assignment_pooling == "gp"
     }
 
     pub fn init_radius(&self) -> f64 {
@@ -178,8 +214,25 @@ impl IgmParams {
         if self.semiaxes().iter().any(|&x| x <= 0.0) {
             return Err("nucleus size must be positive".into());
         }
-        if !(self.occupancy > 0.0 && self.occupancy < 1.0) {
+        if self.bead_radius < 0.0 || !self.bead_radius.is_finite() {
+            return Err("bead_radius must be >= 0 (0 = radii from occupancy)".into());
+        }
+        if self.bead_radius > 0.0 {
+            if self.occupancy != 0.0 {
+                return Err("bead_radius and occupancy are mutually exclusive: set occupancy to 0 when bead_radius is given".into());
+            }
+        } else if !(self.occupancy > 0.0 && self.occupancy < 1.0) {
             return Err("occupancy must be in (0, 1)".into());
+        }
+        if self.occupancy_total_bp < 0.0 {
+            return Err("occupancy_total_bp must be >= 0".into());
+        }
+        match self.assignment_pooling.as_str() {
+            "igm" | "gp" => {}
+            s => return Err(format!("unknown assignment_pooling {s:?} (\"igm\" or \"gp\")")),
+        }
+        if self.init_noise < 0.0 {
+            return Err("init_noise must be >= 0".into());
         }
         match self.polymer_bonds_style.as_str() {
             "simple" | "hic" => {}

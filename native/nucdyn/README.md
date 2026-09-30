@@ -188,6 +188,31 @@ res["rounds"]          # per A/M round: sigma, iteration, restrained pairs, bond
 | `ModelingStep` `getViolationRatio` | Hi-C / polymer `(d − d0)/d0 > tol`; envelope `t/(k · 0.1 R̄) > tol`; excluded volume not monitored | `forces.rs:violations`; WGSL `violations_k` |
 | `.hss` output (`coordinates` (N, S, 3)), intermediate `.hss` per iteration | population | returned arrays; U-Chrom writes a ChromData (cells = structures, traces = chromosome copies), intermediate rounds optional (`keep_intermediate`) |
 
+### Opt-in options from IGM-Plus and IGM_2.0 (defaults = IGM 1.0)
+
+IGM-Plus (github.com/alberlab/IGM-Plus v2.0.2, `b1891b4`, GPL-3.0; common ancestor
+with `alberlab/igm` 2021-09-17, same A-step) and IGM_2.0 (github.com/alberlab/IGM_2.0,
+`82143c0`, GPL-3.0) change a few implementation details.  They are available as opt-in
+parameters, re-implemented from the behaviour described below (no code copied); with
+the defaults the engine runs the IGM 1.0 protocol above bit for bit
+(`igm/regression_tests.rs:default_run_is_unchanged`, `tests/test_deconv_igm.py::test_default_run_unchanged_by_the_options`,
+CPU f64, hashes recorded before the options existed).
+
+| Original | What it does | Here (parameter, default) | Differences |
+|---|---|---|---|
+| IGM-Plus `_preprocess.py:PrepareGenomeIndex` (`genome/usechr`) + `Preprocess` | model a chromosome subset (e.g. one chromosome, haploid or diploid via `ploidy`); radii from the occupancy over the **modelled** index; envelope = the full nucleus | U-Chrom `deconvolve(..., chrom=)` (bins restricted before the engine) with `ploidy`; `occupancy_total_bp` (0 = modelled beads, as IGM-Plus); U-Chrom `IgmParams.occupancy_scope = "model"` / `"genome"` / bp | `"genome"` is an addition: radii of the whole-genome model (Σ input bin sizes × copies), so a subset keeps whole-genome bead sizes and fills its natural share of the nucleus |
+| IGM-Plus `_preprocess.py:Preprocess` (`model/bead_radius` when `model/occupancy` is absent) | one radius (nm) for every bead instead of radii from the occupancy | `bead_radius` (0 / `None` = off); requires `occupancy = 0` (Rust) / `occupancy=None` (Python; `replace(bead_radius=…)` drops it) | IGM-Plus silently prefers `occupancy` when both are given; here giving both is an error |
+| IGM-Plus `restraints/intra_hic.py:intraHiC` / `inter_hic.py:interHiC`, `ModelingStep.add_hic` | intra- and inter-chromosomal Hi-C bonds as two restraint objects (same `contact_range`, same `contact_kspring`), reported separately in the violation summary | `Violations.hic_inter_imposed / hic_inter_violated` (subset of `hic_*`); round logs' `breakdown` (`hic_intra`, `hic_inter`, `polymer`, `envelope`); GPU: inter flag in bit 31 of the CSR partner word (`igm.wgsl:assign_fill`, `violations_k`) | separate σ lists already existed (`intra_sigma_list` / `inter_sigma_list`, IGM 1.0); IGM-Plus adds no separate force constant or contact range, so neither is added; always reported (reporting only, no effect on the run) |
+| IGM-Plus `ActivationDistanceStep.__init__` / `get_actdist` (`optimization/iter_corr_knob`) | knob = 0: `p = p_wish` instead of `clean(p_wish, clean(p_now, p_last))` | `iterative_correction` (true); `astep.rs:p_and_rank_opt`; GPU host side | — |
+| IGM-Plus `RandomInit.task` (`restraints/tracing/assignment_file`, `model/init_noise`) | selected loci of a structure start at given xyz; loci between two consecutive pinned loci linearly interpolated; Gaussian noise `init_noise · N(0,1)` on every coordinate | `driver.rs:InitPins`, `apply_pins`, `initial_population`; `calc_population(init_pins=…)`; U-Chrom `deconvolve(init_positions=DataFrame)`; `init_noise` (0) | interpolation only between pins of the **same chain** (IGM-Plus interpolates between consecutive pinned bead indices, also across chain ends); noise whenever `init_noise > 0` (IGM-Plus: in tracing mode); the pins set the start only — IGM-Plus' `Tracing` positional restraint is stage 2 (`benchmarks/bulk/design.md`) |
+| IGM-Plus `RelaxInit.task` (violations after relaxation), `ModelingStep.log_stats` ("Mostly violated in structure …") | violation counts after the initial relaxation; per restraint kind the structure with the largest violated / imposed ratio (and the number of ties) | `RunOutput.relax_log` (`res["relax_init"]`, `uns["deconv"]["relax_init"]`); `RoundLog.breakdown` (`driver.rs:breakdown`), printed with `verbose` | reporting only |
+| IGM_2.0 `steps/GP_ActivationDistanceStep.py:get_actdist` (G. Polles) | every pair (intra and inter) pools all `len ii · len jj` copy combinations; per structure the `n_possible = min(len ii, len jj)` smallest distances enter `p_now` and the rank selection; rows as IGM 1.0 (intra: same copy, inter: all) | `assignment_pooling = "gp"` ("igm"); `astep.rs:pool_combos`, `actdist_opt`; GPU `astep.wgsl:item` (per-structure rank among ≤ 16 combinations; ≤ 4 copies) | — (for the sensitivity analysis of `benchmarks/bulk/design.md`) |
+
+Not adopted from IGM-Plus: the imaging-derived restraints (volume maps, lamina DamID with
+imaged laminas, tracing / single-cell FISH restraints; design in
+`benchmarks/bulk/design.md`, "Stage 2"), the `polymer/violations` switch (polymer bonds
+are always monitored, as in IGM 1.0), `polymer_bonds_style = "none"`.
+
 ### Deviations from the original, and why
 
 * **Line search of the final minimisation**: LAMMPS' `backtrack` (Armijo slope 0.4,
@@ -236,7 +261,12 @@ res["rounds"]          # per A/M round: sigma, iteration, restrained pairs, bond
   same velocities (max difference 4·10⁻⁴ nm after moves of 900 nm), energies and
   violation counts identical, CG final energies to 10⁻⁶, A-step p identical for all
   5,221 pairs and `d_act²` to 2·10⁻⁷ (assignment identical except the rank-o element
-  itself at exact ties of the f32 square).
+  itself at exact ties of the f32 square).  Opt-in options: hand-computed GP pooling
+  and `iterative_correction = false`, `bead_radius` / `occupancy_total_bp` radii,
+  pinned initialisation (placement, same-chain interpolation, errors), per-kind
+  violation breakdown and worst structure, every option changes the result, GPU vs CPU
+  for the GP / no-correction A-step (p identical for all pairs) and for the intra /
+  inter violation counts (identical), and the fixed-seed default run unchanged.
 * Python (`tests/test_deconv_igm.py`): synthetic end-to-end (2 chromosomes × 50 bins,
   diploid, 200 structures; truth population from a designed matrix, its contact
   probabilities fitted again with another seed): Pearson 0.995 and mean |Δp| 0.02 over

@@ -178,6 +178,7 @@ def calc_population(
     ploidy: Any = "diploid",
     on_round=None,
     round_coords: bool = False,
+    init_pins: Optional[Dict[str, Any]] = None,
     **params: Any,
 ) -> Dict[str, Any]:
     """Run the ``igm`` protocol on a haploid contact-probability matrix.
@@ -189,6 +190,10 @@ def calc_population(
     ``seed``, ``device``, ``occupancy``, ``nucleus_radius``, sigma lists, ...).
     ``on_round(log: dict, coords)`` is called after every M-step (``coords``
     (S, N, 3) float32 when ``round_coords``, else None).
+    ``init_pins``: optional dict of equal-length arrays ``structure``,
+    ``bin`` (haploid bin index), ``copy`` and ``xyz`` (M, 3) nm — loci placed
+    at these initial positions, the beads between two pinned beads of one
+    chain linearly interpolated (IGM-Plus expanded initialisation).
 
     Returns a dict with ``coords`` (S, N, 3) float32 nm, per bead
     ``bead_bin`` / ``bead_copy`` / ``bead_chain`` / ``radii``, ``chroms``
@@ -208,6 +213,13 @@ def calc_population(
     if unknown:
         raise TypeError(f"unknown igm parameters: {sorted(unknown)}")
     p.update(params)
+    pin_args = ()
+    if init_pins is not None:
+        xyz = np.ascontiguousarray(init_pins["xyz"], dtype=np.float64).reshape(-1, 3)
+        pin_args = (np.ascontiguousarray(init_pins["structure"], dtype=np.uint32),
+                    np.ascontiguousarray(init_pins["bin"], dtype=np.uint32),
+                    np.ascontiguousarray(init_pins["copy"], dtype=np.uint32),
+                    np.ascontiguousarray(xyz.ravel()))
     cb = None
     if on_round is not None:
         def cb(js, coords):
@@ -215,7 +227,7 @@ def calc_population(
     res = _calc_population(
         ci, np.ascontiguousarray(start, dtype=np.int64), np.ascontiguousarray(end, dtype=np.int64), copies,
         np.ascontiguousarray(prob_i, dtype=np.uint32), np.ascontiguousarray(prob_j, dtype=np.uint32),
-        np.ascontiguousarray(prob_v, dtype=np.float64), json.dumps(p), cb, bool(round_coords))
+        np.ascontiguousarray(prob_v, dtype=np.float64), json.dumps(p), cb, bool(round_coords), *pin_args)
     return {
         "coords": res["coords"],
         "bead_bin": res["bead_hap"].astype(np.int64),
@@ -226,6 +238,7 @@ def calc_population(
         "copies": dict(zip(names, copies)),
         "rounds": json.loads(res["rounds_json"]),
         "final_stats": json.loads(res["final_stats_json"]),
+        "relax_init": json.loads(res["relax_json"]),
         "actdist": {k: res["act_" + k] for k in ("i", "j", "f", "p", "p_now", "d")},
         "stopped_at_max_iterations": bool(res["stopped_at_max_iterations"]),
         "seconds_total": float(res["seconds_total"]),

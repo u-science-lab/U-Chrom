@@ -15,6 +15,12 @@
 //! * `astep`: activation distances and per-structure assignment (CPU f64);
 //! * `driver`: the σ / iteration A/M loop, random initial population;
 //! * `gpu` (feature `gpu`): the whole population on one device (f32).
+//!
+//! Opt-in IGM-Plus / IGM_2.0 variants (defaults = IGM 1.0, bit-identical on
+//! the CPU, see `regression_tests`): user bead radius and occupancy
+//! reference (`genome`), no iterative correction and GP pooling (`astep`),
+//! pinned initial loci + noise and the per-kind violation report (`driver`);
+//! table in `native/nucdyn/README.md`.
 
 pub mod astep;
 pub mod driver;
@@ -22,6 +28,9 @@ pub mod forces;
 pub mod genome;
 pub mod md;
 pub mod params;
+
+#[cfg(test)]
+mod regression_tests;
 
 #[cfg(feature = "gpu")]
 pub mod gpu;
