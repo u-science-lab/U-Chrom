@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { autoRange, defaultColorScale, effectiveRange, scaleColor } from './colormaps'
-import { binAt, decodeMatrix, matrixPixels, quantile, scaleFor } from './matrix'
+import { binAt, decodeMatrix, matrixPixels, matrixViewport, quantile, scaleFor, zoomMatrixView } from './matrix'
 
 function encode(header: object, data: number[]): ArrayBuffer {
   let json = new TextEncoder().encode(JSON.stringify(header))
@@ -77,5 +77,21 @@ describe('bin lookup', () => {
     expect(binAt(s, e, 30)).toBe(-1)
     expect(binAt(s, e, 55)).toBe(2)
     expect(binAt(s, e, 60)).toBe(-1)
+  })
+})
+
+describe('square matrix view', () => {
+  it('keeps one bp per px on both axes, y centred on the locus plus the offset', () => {
+    const v = matrixViewport({ start: 0, end: 1000 }, 500, 250, 0)
+    expect(v).toEqual({ xStart: 0, xEnd: 1000, yStart: 250, yEnd: 750, bpPerPx: 2 })
+    expect(matrixViewport({ start: 0, end: 1000 }, 500, 250, 100).yStart).toBe(350)
+  })
+  it('zooms about the pointer', () => {
+    const z = zoomMatrixView({ start: 0, end: 1000 }, 500, 250, 0, 0.5, 100, 50)
+    // the loci under the pointer (x 200 bp, y 350 bp) stay under it
+    const v = matrixViewport({ start: z.start, end: z.end }, 500, 250, z.yOff)
+    expect(v.xStart + 100 * v.bpPerPx).toBeCloseTo(200)
+    expect(v.yStart + 50 * v.bpPerPx).toBeCloseTo(350)
+    expect(v.bpPerPx).toBeCloseTo(1)
   })
 })

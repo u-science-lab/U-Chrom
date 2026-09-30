@@ -1120,6 +1120,27 @@ body.resizing-rows {
   color: var(--accent);
   background: var(--overlay-bg);
 }
+/* Matrix pane: the map fills the pane; the legend card floats over it */
+.matrix-legend {
+  position: absolute;
+  left: 64px;
+  bottom: 8px;
+  z-index: 2;
+  max-width: calc(100% - 240px);
+  padding: 4px 8px 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--overlay-bg);
+  pointer-events: none;
+}
+.genome-view .matrix-legend canvas {
+  position: static;
+}
+.matrix-legend-note {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .matrix-note {
   position: absolute;
   z-index: 2;

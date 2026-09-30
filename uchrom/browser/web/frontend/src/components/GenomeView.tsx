@@ -12,6 +12,11 @@ import {
   depthScale,
   moveRow,
   rasterTriangle,
+  rasterSquare,
+  squareBins,
+  windowMargin,
+  MATRIX_SHAPES,
+  type MatrixShape,
   removeRow,
   resizeRow,
   resolveHeights,
@@ -731,18 +736,35 @@ function MatrixTools({ row, ds, set, multi }: { row: GenomeRow; ds: DatasetSumma
           }
         />
       )}
-      <TextSetting
-        label="max dist"
-        value={row.maxDist ? fmtBp(row.maxDist) : ''}
-        placeholder="45°"
-        title="Deepest genomic separation shown over the row height (e.g. 5M); empty = true 45°"
-        onCommit={(v) => set('maxDist', v)}
-      />
-      <label className="check small" title="Diagonal at the top of the row (triangle pointing down)">
-        <input type="checkbox" checked={!!row.flip} onChange={(e) => set('flip', e.target.checked)} /> flip
-      </label>
+      <div className="seg" title="How the map is drawn">
+        {MATRIX_SHAPES.map((sh) => (
+          <button key={sh} className={(row.shape ?? 'triangle') === sh ? 'active' : ''} onClick={() => set('shape', sh)} title={SHAPE_TITLE[sh]}>
+            {sh}
+          </button>
+        ))}
+      </div>
+      {(row.shape ?? 'triangle') !== 'square' && (
+        <>
+          <TextSetting
+            label="max dist"
+            value={row.maxDist ? fmtBp(row.maxDist) : ''}
+            placeholder="45°"
+            title="Deepest genomic separation shown over the row height (e.g. 5M); empty = true 45°"
+            onCommit={(v) => set('maxDist', v)}
+          />
+          <label className="check small" title="Diagonal at the top of the row (pointing down)">
+            <input type="checkbox" checked={!!row.flip} onChange={(e) => set('flip', e.target.checked)} /> flip
+          </label>
+        </>
+      )}
     </>
   )
+}
+
+const SHAPE_TITLE: Record<MatrixShape, string> = {
+  triangle: 'Upper triangle of the window, rotated 45°',
+  window: 'Rotated 45° and filling the row: contacts of loci beyond the window edges too',
+  square: 'The window × window matrix, unrotated',
 }
 
 /** Canvas of one row (CSS size width × height at devicePixelRatio). */
@@ -808,6 +830,14 @@ function MatrixRow({
   const [mat, setMat] = useState<MatrixData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const shape = row.shape ?? 'triangle'
+  // whole genome: by default as deep as the longest chromosome (each one's map fills the row)
+  const maxDist = row.maxDist ?? (layout ? Math.max(...layout.map((c) => c.length)) : null)
+  const k = depthScale(maxDist, (locus.end - locus.start) / width, height)
+  const geom: TriangleGeom = { start: locus.start, bpPerPx: (locus.end - locus.start) / width, height, k, flip: !!row.flip, maxDist }
+  // window: loci beyond the axis edges too (the whole genome comes at once anyway)
+  const margin = shape === 'window' && locus.chrom !== GENOME ? Math.ceil(windowMargin(geom)) : 0
+  const region = margin ? { chrom: locus.chrom, start: Math.max(0, Math.round(locus.start - margin)), end: Math.round(locus.end + margin) } : queryRegion(locus)
 
   useEffect(() => {
     if (!valid || waiting) {
@@ -815,12 +845,12 @@ function MatrixRow({
       setError(null)
       return
     }
-    const key = [ds.id, row.source, regionKey(locus), row.resolution ?? '', row.balance ? 1 : 0, cell ?? '', groupRef ?? '', stat, row.threshold ?? ''].join('|')
+    const key = [ds.id, row.source, regionKey(locus), margin, row.resolution ?? '', row.balance ? 1 : 0, cell ?? '', groupRef ?? '', stat, row.threshold ?? ''].join('|')
     let live = true
     const load = () =>
       isDist
-        ? fetchDistance(ds.id, locus, { cellId: cell, group: groupRef, stat, threshold: row.threshold ?? null })
-        : fetchContacts(ds.id, row.source!, queryRegion(locus), { resolution: row.resolution ?? null, balance: row.balance ?? false, cell, group: groupRef })
+        ? fetchDistance(ds.id, region, { cellId: cell, group: groupRef, stat, threshold: row.threshold ?? null })
+        : fetchContacts(ds.id, row.source!, region, { resolution: row.resolution ?? null, balance: row.balance ?? false, cell, group: groupRef })
     // cached → at once; else debounced (pan / zoom move the locus continuously)
     const t = setTimeout(
       () => {
@@ -837,16 +867,12 @@ function MatrixRow({
       clearTimeout(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ds.id, row.source, regionKey(locus), row.resolution, row.balance, cell, groupRef, stat, row.threshold, valid, waiting])
+  }, [ds.id, row.source, regionKey(locus), margin, row.resolution, row.balance, cell, groupRef, stat, row.threshold, valid, waiting])
 
   // a stale matrix of another chromosome must not be drawn on this axis
   const shown = mat && mat.header.chrom === locus.chrom && !waiting && valid ? mat : null
   const cscale = useMatrixScale(shown, row.color, `${paneId}:${row.id}`)
   const colors = cscale.pixels
-  // whole genome: by default as deep as the longest chromosome (each one's map fills the row)
-  const maxDist = row.maxDist ?? (layout ? Math.max(...layout.map((c) => c.length)) : null)
-  const k = depthScale(maxDist, (locus.end - locus.start) / width, height)
-  const geom: TriangleGeom = { start: locus.start, bpPerPx: (locus.end - locus.start) / width, height, k, flip: !!row.flip, maxDist }
   const title = isDist ? `3-D distance · ${STAT_LABEL[stat]}` : map ? map.label || map.key : `unknown source “${row.source}”`
   const cellsNote = shown?.header.n_cells ? `${shown.header.n_cells} cells` : null
   const note = [
@@ -870,7 +896,11 @@ function MatrixRow({
     if (shown && colors) {
       // pixel-accurate: inverse-map every device pixel to its bin pair
       const dg: TriangleGeom = { ...geom, bpPerPx: geom.bpPerPx / dpr, height: cv.height }
-      const px = rasterTriangle(cv.width, cv.height, dg, shown.header.bin_starts, shown.header.bin_ends, colors)
+      const h = shown.header
+      const px =
+        shape === 'square'
+          ? rasterSquare(cv.width, cv.height, locus.start, dg.bpPerPx, h.bin_starts, h.bin_ends, colors)
+          : rasterTriangle(cv.width, cv.height, dg, h.bin_starts, h.bin_ends, colors, shape === 'window')
       g.putImageData(new ImageData(px as unknown as Uint8ClampedArray<ArrayBuffer>, cv.width, cv.height), 0, 0)
     }
     // interval boundaries as faint guides
@@ -887,11 +917,20 @@ function MatrixRow({
       }
       g.setLineDash([])
     }
-    // label + colour bar in the empty corner (top for ▲, bottom for ▼)
+    // label + colour bar in the empty corner (top for ▲, bottom for ▼); over the map (window,
+    // square) on a translucent backing
     const top = row.flip ? height - 44 : 4
     g.font = CHART.font
     g.textAlign = 'left'
     g.textBaseline = 'top'
+    if (shown && shape !== 'triangle') {
+      g.save()
+      g.globalAlpha = 0.78
+      g.fillStyle = pal.viewportBg
+      g.fillRect(2, top - 2, Math.max(g.measureText(title).width, note ? g.measureText(note).width + 12 : 0) + 10, note ? 32 : 17)
+      if (height >= 70) g.fillRect(width - 84, row.flip ? height - 26 : 4, 82, 28)
+      g.restore()
+    }
     g.fillStyle = CHART.text
     g.fillText(title, 6, top)
     if (note) {
@@ -906,7 +945,7 @@ function MatrixRow({
       g.fillStyle = CHART.muted
       g.fillText(note, x, top + 14)
     }
-    if (shown && colors && pal.matrixFrame !== 'transparent') {
+    if (shown && colors && shape === 'triangle' && pal.matrixFrame !== 'transparent') {
       // light themes: the white end of e.g. "fall" needs an edge — outline the
       // triangle's two sides (depth t sits t·k px in from each end; clipped by the row)
       const t = Math.min(height, width / 2 / (geom.k || 1))
@@ -953,12 +992,12 @@ function MatrixRow({
       g.fillText('loading…', width / 2, height / 2)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown, colors, width, height, locus, k, row.flip, maxDist, guides, title, note, error, waiting, valid, loading, group, groupRef, pal, cscale.lo, cscale.hi, cscale.cs])
+  }, [shown, colors, width, height, locus, k, row.flip, maxDist, shape, guides, title, note, error, waiting, valid, loading, group, groupRef, pal, cscale.lo, cscale.hi, cscale.cs])
 
   useRegister(register, row.id, (x, y) => {
     if (!shown) return null
     const h = shown.header
-    const b = triangleBins(x, y, geom, h.bin_starts, h.bin_ends)
+    const b = shape === 'square' ? squareBins(x, y, width, height, locus.start, geom.bpPerPx, h.bin_starts, h.bin_ends) : triangleBins(x, y, geom, h.bin_starts, h.bin_ends)
     if (!b) return null
     const [i, j] = b
     const v = shown.data[i * h.n_cols + j]
