@@ -474,7 +474,7 @@ export function EmbeddingView({ pane, source }: { pane: Pane; source?: ScatterSo
   // a new embedding / size invalidates the hovered dot's position
   useEffect(() => setHover(null), [emb, size.w, size.h])
 
-  const plotH = Math.max(40, size.h - 24) // axis labels below
+  const plotH = Math.max(40, size.h) // the axis key floats over the plot
   const yDown = source?.yDown ?? false
   const extentKey = source?.extent?.join(',') ?? ''
   const plot = useMemo(() => {
@@ -860,10 +860,7 @@ export function EmbeddingView({ pane, source }: { pane: Pane; source?: ScatterSo
         </div>
       )}
       {mode === 'field' && paneField && st.legend && <PaneLegend pane={pane} coloring={coloring} shown={shown} />}
-      <div className="embedding-axes muted small">
-        <span>{axis[0]} →</span>
-        <span>↑ {axis[1]}</span>
-      </div>
+      <AxisKey x={axis[0]} y={axis[1]} yDown={yDown} />
       {hover && hoverId && (
         <div className="embedding-tip" style={{ left: hover.x + 12, top: hover.y + 12 }}>
           cell {hoverId}
@@ -941,5 +938,36 @@ function LassoIcon() {
       <circle cx="6" cy="10.2" r="1.1" />
       <path d="M5.6 11.3c-.6 1-.4 1.9.4 2.4.7.5.6 1.3-.3 1.7" />
     </svg>
+  )
+}
+
+/**
+ * Axis key in the bottom-left corner (as in single-cell embedding plots): two short arrows
+ * from one origin, named at their tips; y points down for image coordinates.
+ */
+function AxisKey({ x, y, yDown }: { x: string; y: string; yDown: boolean }) {
+  if (!x && !y) return null
+  const L = 26
+  return (
+    <div className={`axis-key${yDown ? ' down' : ''}`} aria-hidden>
+      {!yDown && <span className="axis-key-y">{y}</span>}
+      <div className="axis-key-row">
+        <svg width={L + 6} height={L + 6} viewBox={`0 0 ${L + 6} ${L + 6}`} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+          {yDown ? (
+            <>
+              <path d={`M2 2H${L + 2}M${L - 2} -1l4 3-4 3`} />
+              <path d={`M2 2V${L + 2}M-1 ${L - 2}l3 4 3-4`} />
+            </>
+          ) : (
+            <>
+              <path d={`M2 ${L + 3}H${L + 3}M${L - 1} ${L}l4 3-4 3`} />
+              <path d={`M2 ${L + 3}V2M-1 6l3-4 3 4`} />
+            </>
+          )}
+        </svg>
+        <span className="axis-key-x">{x}</span>
+      </div>
+      {yDown && <span className="axis-key-y">{y}</span>}
+    </div>
   )
 }

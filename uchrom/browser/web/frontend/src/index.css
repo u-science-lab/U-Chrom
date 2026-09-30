@@ -802,10 +802,33 @@ button.link {
 .pane-empty {
   padding: 16px;
 }
-.embedding-axes {
+/* axis key: bottom-left corner of Embedding / Spatial views, over the plot */
+.axis-key {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  z-index: 2;
   display: flex;
-  justify-content: space-between;
-  padding: 2px 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  pointer-events: none;
+  text-shadow: 0 0 3px var(--viewport-bg), 0 0 3px var(--viewport-bg);
+}
+.axis-key svg {
+  overflow: visible;
+  display: block;
+}
+.axis-key-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+}
+.axis-key.down .axis-key-row {
+  align-items: flex-start;
 }
 .embedding-tip {
   position: absolute;
