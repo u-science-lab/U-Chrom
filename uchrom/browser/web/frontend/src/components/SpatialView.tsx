@@ -102,7 +102,7 @@ export function RegionPicker({ pane }: { pane: Pane }) {
   const go = (name: string) => setWorkspace((ws) => updatePane(ws, pane.id, { region: name }))
   return (
     <span className="region-picker">
-      <button onClick={() => go(names[(i - 1 + names.length) % names.length])} title="Previous section">
+      <button className="region-step" onClick={() => go(names[(i - 1 + names.length) % names.length])} title="Previous section">
         ‹
       </button>
       <Select value={region?.name ?? ''} onChange={(e) => go(e.target.value)} title="Section / field of view shown">
@@ -113,7 +113,7 @@ export function RegionPicker({ pane }: { pane: Pane }) {
           </option>
         ))}
       </Select>
-      <button onClick={() => go(names[(i + 1) % names.length])} title="Next section">
+      <button className="region-step" onClick={() => go(names[(i + 1) % names.length])} title="Next section">
         ›
       </button>
     </span>

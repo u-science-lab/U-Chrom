@@ -2249,3 +2249,53 @@ button.focus-step {
 .sidebar-toggles button.on {
   color: var(--text);
 }
+
+/* ---- pane headers: one line at any width (container queries on the pane) ---- */
+.pane {
+  container-type: inline-size;
+  container-name: pane;
+}
+.pane-head {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.pane-head > * {
+  flex-shrink: 0;
+}
+.pane-head > .spacer {
+  flex: 1 1 0;
+  min-width: 0;
+}
+/* the widgets that can give way: section picker, genomic window */
+.pane-head > .region-picker,
+.pane-head > .locus-bar {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.pane-head .region-picker .select {
+  flex: 0 1 auto;
+  min-width: 60px;
+  max-width: 240px;
+}
+.pane-head .locus-bar .locus-input {
+  flex: 1 1 150px;
+  width: 150px;
+  min-width: 60px;
+  text-overflow: ellipsis;
+}
+@container pane (max-width: 480px) {
+  .pane-head .locus-zoom {
+    display: none;              /* wheel zooms, drag pans in the view */
+  }
+}
+@container pane (max-width: 420px) {
+  .pane-head .region-step {
+    display: none;              /* the drop-down still picks the section */
+  }
+}
+@container pane (max-width: 340px) {
+  .pane-head .pane-type-label,
+  .pane-head .pane-type .caret {
+    display: none;              /* the view type as its icon only */
+  }
+}

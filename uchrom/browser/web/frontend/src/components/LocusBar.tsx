@@ -38,20 +38,20 @@ export function LocusBar() {
         ))}
       </Select>
       <input
-        className={error ? 'bad' : ''}
+        className={`locus-input${error ? ' bad' : ''}`}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && go()}
         onBlur={() => locus && setText(fmtLocus(locus))}
         spellCheck={false}
       />
-      <button onClick={() => setLocus(zoomLocus(locus, 0.5, ext))} title="Zoom in">
+      <button className="locus-zoom" onClick={() => setLocus(zoomLocus(locus, 0.5, ext))} title="Zoom in">
         +
       </button>
-      <button onClick={() => setLocus(zoomLocus(locus, 2, ext))} title="Zoom out">
+      <button className="locus-zoom" onClick={() => setLocus(zoomLocus(locus, 2, ext))} title="Zoom out">
         −
       </button>
-      <button onClick={() => ext && setLocus({ chrom: ext.name, start: ext.start, end: ext.end })} title="Whole chromosome">
+      <button className="locus-zoom" onClick={() => ext && setLocus({ chrom: ext.name, start: ext.start, end: ext.end })} title="Whole chromosome">
         full
       </button>
     </div>

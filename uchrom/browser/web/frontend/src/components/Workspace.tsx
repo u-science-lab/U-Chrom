@@ -104,7 +104,7 @@ function PaneTypeSwitch({ pane }: { pane: Pane }) {
         <span className="vm-icon" aria-hidden>
           {MENU_ICON[pane.type]}
         </span>
-        {TYPE_LABEL[pane.type]}
+        <span className="pane-type-label">{TYPE_LABEL[pane.type]}</span>
         <span className="caret" aria-hidden>
           ▾
         </span>
