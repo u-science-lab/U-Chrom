@@ -93,11 +93,13 @@ def read_hss(path) -> Dict[str, np.ndarray]:
 
     with h5py.File(path, "r") as f:
         crd = f["coordinates"][:]                    # (N, S, 3), bead-major
-        if "index/chromstr" in f:
-            chrom = np.array([_s(c) for c in f["index/chromstr"][:]])
-        else:
+        # genome/chroms[index/chrom] gives the real names; index/chromstr numbers them
+        # ("chr23" / "chr24" for X / Y in IGM's own populations).
+        if "genome/chroms" in f and "index/chrom" in f:
             names = np.array([_s(c) for c in f["genome/chroms"][:]])
             chrom = names[f["index/chrom"][:]]
+        else:
+            chrom = np.array([_s(c) for c in f["index/chromstr"][:]])
         out = {"coords": np.ascontiguousarray(np.transpose(crd, (1, 0, 2))).astype(np.float32),
                "chrom": chrom,
                "start": f["index/start"][:].astype(np.int64),
