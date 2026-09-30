@@ -39,6 +39,12 @@ struct GpuParams {
     seed_lo: u32,
     seed_hi: u32,
     tstep: u32,
+    /// form 2 (Lorentzian): width relative to d_max
+    lor_c: f32,
+    /// spherical confinement (bead units; conf_k = 0: off)
+    conf_r: f32,
+    conf_k: f32,
+    _pad: u32,
 }
 
 #[repr(C)]
@@ -334,7 +340,11 @@ impl GpuEngine {
             g,
             r: nr,
             hb,
-            form: if master { 0 } else { 1 },
+            form: match sys.form {
+                RestraintForm::Master2017 => 0,
+                RestraintForm::Release13 => 1,
+                RestraintForm::Lorentzian => 2,
+            },
             dt,
             rt_step: 0.5 * dt * dt,
             beta: beta as f32,
@@ -347,6 +357,11 @@ impl GpuEngine {
             seed_lo: seed as u32,
             seed_hi: (seed >> 32) as u32,
             tstep: 0,
+            lor_c: sys.lorentz_c as f32,
+            // energies in bead units are divided by u^2, so k is unchanged and R scales with 1/u
+            conf_r: (sys.conf_r / u) as f32,
+            conf_k: sys.conf_k as f32,
+            _pad: 0,
         };
         let (px, gx) = (nb, g.div_ceil(WG).max(1));
         let (mm, hbx) = (m as u32, hb);
@@ -468,6 +483,63 @@ mod tests {
         let groups = ambiguity_offsets(&rest);
         let rs = RestraintSet { rest, groups, n_contacts: 0 };
         (System::new(n, vec![1.0; n], vec![1.0; n], &rs).with_form(form), pos)
+    }
+
+    /// Protocol "consensus" terms (weighted Lorentzian restraints, spherical
+    /// confinement, bead units u = 0.5): f32 GPU vs f64 CPU from the same
+    /// start and velocities.
+    #[test]
+    fn gpu_matches_cpu_consensus_terms() {
+        let Ok(mut eng) = GpuEngine::new(0) else {
+            eprintln!("no GPU adapter: skipped");
+            return;
+        };
+        let bead = 0.5;
+        for (form, conf) in [(RestraintForm::Lorentzian, false), (RestraintForm::Lorentzian, true), (RestraintForm::Release13, true)] {
+            let (s0, pos0) = toy(3000, form);
+            // rescale the toy to radius `bead`, weights 0.3 .. 2.1
+            let pos: Vec<V3> = pos0.iter().map(|q| [q[0] * bead, q[1] * bead, q[2] * bead]).collect();
+            let lims: Vec<[f64; 2]> = s0.rest_lim.iter().map(|l| [l[0] * bead, l[1] * bead * 3.0]).collect();
+            let w: Vec<f64> = (0..s0.n_restraints()).map(|k| 0.3 + 0.6 * (k % 4) as f64).collect();
+            let mut sys = System::from_arrays(s0.n, vec![1.0; s0.n], vec![bead; s0.n], s0.rest_pairs.clone(), lims, w, s0.groups.clone())
+                .with_form(form);
+            sys.lorentz_c = 0.8;
+            if conf {
+                let rmax = pos.iter().map(|q| (q[0] * q[0] + q[1] * q[1] + q[2] * q[2]).sqrt()).fold(0.0, f64::max);
+                sys = sys.with_confinement(0.6 * rmax, 0.5);
+            }
+            let mut rng = Rng::new(5);
+            let vel: Vec<V3> = (0..sys.n).map(|_| [rng.normal() * bead, rng.normal() * bead, rng.normal() * bead]).collect();
+            let (t_ref, f_rep, f_dist, steps) = (300.0 * bead * bead, 0.6 / (bead * bead), 5.0, 10);
+            let mut m = Model::new(pos.clone(), Rng::new(0));
+            let dp = DynParams {
+                t_ref,
+                t_step: 0.001,
+                n_steps: steps,
+                f_rep,
+                f_dist,
+                beta: 10.0,
+                tot0: 20.458,
+                skin: 1.0,
+                original_nl_schedule: false,
+                use_cells: true,
+                emulate_overflow: false,
+            };
+            run_dynamics(&sys, &mut m, &dp, false, Some(&vel));
+            let out = eng
+                .run_schedule(&sys, vec![pos.clone()], &[(t_ref, f_rep)], steps, f_dist, bead, 0.001 * 20.458, 10.0 / 20.458, 1, Some(&[vel.clone()]))
+                .unwrap();
+            let (mut max_d, mut max_move) = (0.0f64, 0.0f64);
+            for i in 0..sys.n {
+                let d: f64 = (0..3).map(|k| (out[0][i][k] - m.pos[i][k]).powi(2)).sum::<f64>().sqrt();
+                let mv: f64 = (0..3).map(|k| (m.pos[i][k] - pos[i][k]).powi(2)).sum::<f64>().sqrt();
+                max_d = max_d.max(d);
+                max_move = max_move.max(mv);
+            }
+            eprintln!("{form:?} conf={conf}: GPU (f32) vs CPU (f64) after {steps} steps: max diff {max_d:.2e}, max move {max_move:.3}");
+            assert!(max_move > 0.02, "particles hardly moved ({max_move})");
+            assert!(max_d < 1e-3 * bead.max(max_move), "{form:?}: GPU vs CPU max difference {max_d} (max move {max_move})");
+        }
     }
 
     /// Same start, same velocities: f32 GPU vs f64 CPU after a few steps.

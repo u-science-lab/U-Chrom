@@ -19,7 +19,7 @@ struct Params {
     g: u32,        // restraint groups
     r: u32,        // restraints
     hb: u32,       // cell blocks (of 256) per model
-    form: u32,     // 0: 2017 master restraint form, 1: release_1.3 form
+    form: u32,     // 0: 2017 master restraint form, 1: release_1.3 form, 2: Lorentzian (consensus)
     dt: f32,       // time step (x tot0)
     rt_step: f32,  // 0.5 dt^2
     beta: f32,     // thermostat coupling / tot0
@@ -32,6 +32,10 @@ struct Params {
     seed_lo: u32,
     seed_hi: u32,
     tstep: u32,    // temperature step (velocity stream)
+    lor_c: f32,    // form 2 (Lorentzian): width relative to dmax
+    conf_r: f32,   // spherical confinement radius (conf_k = 0: off)
+    conf_k: f32,
+    pad0: u32,
 };
 
 struct Rest {
@@ -419,7 +423,7 @@ fn restraints(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id
             if (single && P.form == 0u) {
                 r2 = dd;
             } else {
-                let x = select(dd, max(dd, 1e-8), P.form == 1u);
+                let x = select(dd, max(dd, 1e-8), P.form >= 1u);
                 r2 = r2 + 1.0 / (x * x);
             }
         }
@@ -456,6 +460,24 @@ fn restraints(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id
         } else {
             return;
         }
+    } else if (P.form == 2u) {
+        // consensus: Lorentzian (Geman-McClure) on the bound violation, c = lor_c dmax
+        let c = P.lor_c * dmax;
+        let c2 = c * c;
+        if (r2 < dmin * dmin) {
+            r2 = max(r2, 1e-8);
+            r = sqrt(r2);
+            let dl = dmin - r;
+            let den = dl * dl + c2;
+            rjk = P.f_dist * 2.0 * dl * c2 * c2 / (den * den);
+        } else if (r2 <= dmax * dmax) {
+            return;
+        } else {
+            r = sqrt(r2);
+            let du = r - dmax;
+            let den = du * du + c2;
+            rjk = -P.f_dist * 2.0 * du * c2 * c2 / (den * den);
+        }
     } else {
         // release_1.3: switch at 0.5 dmax, constant force beyond
         let ds = dmax * 0.5;
@@ -483,9 +505,9 @@ fn restraints(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id
         if (single && P.form == 0u) {
             t = rjk / r;
         } else {
-            let s2 = max(dot(d, d), select(0.0, 1e-8, P.form == 1u));
+            let s2 = max(dot(d, d), select(0.0, 1e-8, P.form >= 1u));
             t = rjk * r2 * r2 * r / (s2 * s2 * s2);
-            if (P.form == 1u) {
+            if (P.form >= 1u) {
                 t = t * rr.w;
             }
         }
@@ -521,6 +543,12 @@ fn total_force(i: u32, m: u32, p: vec3<f32>) -> vec3<f32> {
                     f = f - dv * (kf * (rep2 - d2));
                 }
             }
+        }
+    }
+    if (P.conf_k > 0.0) {
+        let rc = length(p);
+        if (rc > P.conf_r) {
+            f = f - p * (P.conf_k * (rc - P.conf_r) / rc);
         }
     }
     let fb = m * P.r;

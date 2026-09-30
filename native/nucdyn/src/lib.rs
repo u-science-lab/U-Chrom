@@ -5,10 +5,13 @@
 //! * `contacts`, `restraints`, `pipeline`: contact preprocessing, restraints
 //!   and the hierarchical annealing protocol of the original.
 //! * `dynamics`: the particle dynamics on the CPU (f64, rayon).
+//! * `consensus`: protocol "consensus", one representative structure per
+//!   bulk Hi-C map by hierarchical restraint annealing (new).
 //! * `gpu` (feature `gpu`): all models of an ensemble in one batched wgpu
 //!   dispatch (f32).
 
 pub mod align;
+pub mod consensus;
 pub mod contacts;
 pub mod dynamics;
 pub mod igm;

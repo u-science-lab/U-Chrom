@@ -26,8 +26,10 @@ import numpy as np
 from ._engine import (  # noqa: F401
     HAS_GPU,
     __version__,
+    calc_consensus,
     calc_genome_structure as _calc_genome_structure,
     calc_population as _calc_population,
+    default_consensus_params_json,
     default_igm_params_json,
     default_params_json,
     gpu_available,
@@ -39,6 +41,8 @@ from .io import read_contact_pairs, read_ncc  # noqa: F401
 __all__ = [
     "calc_genome_structure",
     "calc_population",
+    "calc_consensus",
+    "default_consensus_params",
     "default_igm_params",
     "resolve_copies",
     "default_params",
@@ -50,6 +54,12 @@ __all__ = [
     "HAS_GPU",
     "__version__",
 ]
+
+
+def default_consensus_params() -> Dict[str, Any]:
+    """Engine parameters of protocol ``consensus`` (``calc_consensus(stages, params_json, start=None)``;
+    the stages / restraints are built by ``uchrom.recon.bulk.consensus``)."""
+    return json.loads(default_consensus_params_json())
 
 
 def default_params() -> Dict[str, Any]:

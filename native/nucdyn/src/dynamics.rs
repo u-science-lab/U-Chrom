@@ -25,6 +25,13 @@ pub enum RestraintForm {
     /// `release_1.3` `getRestraintForce`: switch at d_max + 0.5 d_max,
     /// constant force 2 K 0.5 d_max beyond; force scaled by the weight.
     Release13,
+    /// Protocol "consensus" (new): a bounded (redescending) Lorentzian /
+    /// Geman-McClure term on the bound violation `delta` (distance below
+    /// d_min or above d_max): `U = w K c^2 delta^2 / (delta^2 + c^2)` with
+    /// `c = lorentz_c * d_max`; harmonic `w K delta^2` for small violations,
+    /// force -> 0 for gross violations (restraints that are inconsistent with
+    /// the rest stop pulling).  Force scaled by the weight.
+    Lorentzian,
 }
 
 /// Particles and restraints of one stage.
@@ -38,6 +45,12 @@ pub struct System {
     pub rest_lim: Vec<[f64; 2]>,
     pub rest_w: Vec<f64>,
     pub groups: Vec<u32>,
+    /// `RestraintForm::Lorentzian`: width relative to d_max.
+    pub lorentz_c: f64,
+    /// Spherical confinement centred at the origin (protocol "consensus"):
+    /// `U = 1/2 k (|x| - R)^2` for `|x| > R`; off when `conf_k == 0`.
+    pub conf_r: f64,
+    pub conf_k: f64,
     /// particle -> incident restraints, `(restraint << 1) | side`
     /// (side 0: first particle, gets +f; side 1: second, gets -f).
     pub inc_off: Vec<u32>,
@@ -82,7 +95,21 @@ impl System {
                 }
             }
         }
-        System { n, form: RestraintForm::Release13, masses, radii, rest_pairs, rest_lim, rest_w, groups, inc_off: cnt, inc }
+        System {
+            n,
+            form: RestraintForm::Release13,
+            masses,
+            radii,
+            rest_pairs,
+            rest_lim,
+            rest_w,
+            groups,
+            lorentz_c: 1.0,
+            conf_r: 0.0,
+            conf_k: 0.0,
+            inc_off: cnt,
+            inc,
+        }
     }
 
     pub fn n_restraints(&self) -> usize {
@@ -93,6 +120,49 @@ impl System {
         self.form = form;
         self
     }
+
+    pub fn with_confinement(mut self, radius: f64, k: f64) -> System {
+        self.conf_r = radius;
+        self.conf_k = k;
+        self
+    }
+}
+
+/// Scalar Lorentzian restraint term at effective distance `r` (energy
+/// without the weight, and `rjk` = -dU/dr as in `group_force`).
+#[inline]
+pub fn lorentz_term(r: f64, dmin: f64, dmax: f64, c_rel: f64, f_const: f64) -> Option<(f64, f64)> {
+    let c = c_rel * dmax;
+    let c2 = c * c;
+    if r < dmin {
+        let d = dmin - r;
+        let den = d * d + c2;
+        Some((f_const * c2 * d * d / den, f_const * 2.0 * d * c2 * c2 / (den * den)))
+    } else if r <= dmax {
+        None
+    } else {
+        let d = r - dmax;
+        let den = d * d + c2;
+        Some((f_const * c2 * d * d / den, -f_const * 2.0 * d * c2 * c2 / (den * den)))
+    }
+}
+
+/// Spherical confinement of one particle: adds the force to `acc`, returns the energy.
+#[inline(always)]
+fn confine(sys: &System, p: &V3, acc: &mut V3) -> f64 {
+    if sys.conf_k == 0.0 {
+        return 0.0;
+    }
+    let r = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt();
+    if r <= sys.conf_r || r == 0.0 {
+        return 0.0;
+    }
+    let d = r - sys.conf_r;
+    let t = -sys.conf_k * d / r;
+    acc[0] += p[0] * t;
+    acc[1] += p[1] * t;
+    acc[2] += p[2] * t;
+    0.5 * sys.conf_k * d * d
 }
 
 /// Verlet neighbour list (full: every pair appears for both particles),
@@ -341,7 +411,18 @@ fn group_force(sys: &System, pos: &[V3], g: usize, f_const: f64, out: &mut [V3])
     let [dmin, dmax] = sys.rest_lim[s];
     let dist_switch = dmax * SWITCH_RATIO;
     let (ujk, rjk);
-    if r2 < dmin * dmin {
+    if sys.form == RestraintForm::Lorentzian {
+        if r2 < dmin * dmin {
+            r2 = r2.max(1e-8);
+        }
+        match lorentz_term(r2.sqrt(), dmin, dmax, sys.lorentz_c, f_const) {
+            None => return 0.0,
+            Some((u, f)) => {
+                ujk = u;
+                rjk = f;
+            }
+        }
+    } else if r2 < dmin * dmin {
         r2 = r2.max(1e-8);
         let d = dmin - r2.sqrt();
         ujk = f_const * d * d;
@@ -669,6 +750,10 @@ pub fn compute_forces_mode(
                             }
                         }
                     }
+                    let ec = confine(sys, &p, &mut acc);
+                    if energies {
+                        u += ec;
+                    }
                     add_restraints(sys, rest_f, i, &mut acc);
                     *f = acc;
                 }
@@ -746,6 +831,10 @@ pub fn compute_forces_mode(
                             }
                         }
                     }
+                }
+                let ec = confine(sys, &p, &mut acc);
+                if energies {
+                    u += ec;
                 }
                 add_restraints(sys, rest_f, i, &mut acc);
                 *f = acc;

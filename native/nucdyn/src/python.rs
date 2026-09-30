@@ -326,6 +326,84 @@ fn calc_population<'py>(
     Ok(d)
 }
 
+fn stage_from_dict(d: &Bound<'_, PyDict>) -> PyResult<crate::consensus::Stage> {
+    fn item<'py>(d: &Bound<'py, PyDict>, k: &str) -> PyResult<Bound<'py, PyAny>> {
+        d.get_item(k)?.ok_or_else(|| PyValueError::new_err(format!("stage dict lacks {k:?}")))
+    }
+    fn arr<T: numpy::Element + Copy>(d: &Bound<'_, PyDict>, k: &str) -> PyResult<Vec<T>> {
+        let a: PyReadonlyArray1<'_, T> = item(d, k)?.extract()?;
+        Ok(a.as_array().iter().copied().collect())
+    }
+    Ok(crate::consensus::Stage {
+        particle_size: item(d, "particle_size")?.extract()?,
+        radius: item(d, "radius")?.extract()?,
+        chrom: arr::<u32>(d, "chrom")?,
+        pos: arr::<i64>(d, "pos")?,
+        rest_i: arr::<u32>(d, "rest_i")?,
+        rest_j: arr::<u32>(d, "rest_j")?,
+        rest_lo: arr::<f64>(d, "rest_lo")?,
+        rest_hi: arr::<f64>(d, "rest_hi")?,
+        rest_w: arr::<f64>(d, "rest_w")?,
+        form: item(d, "form")?.extract()?,
+        force_const: item(d, "force_const")?.extract()?,
+        temp_start: item(d, "temp_start")?.extract()?,
+        temp_end: item(d, "temp_end")?.extract()?,
+        temp_steps: item(d, "temp_steps")?.extract()?,
+        dyn_steps: item(d, "dyn_steps")?.extract()?,
+    })
+}
+
+/// Protocol "consensus": hierarchical restraint annealing of `n_runs`
+/// independent runs over the given stages (list of dicts: particle_size,
+/// radius, chrom (u32), pos (i64), rest_i / rest_j (u32), rest_lo / rest_hi /
+/// rest_w (f64), form, force_const, temp_start, temp_end, temp_steps,
+/// dyn_steps).  `start`: (n_runs, n_beads_stage0, 3) start coordinates.
+#[pyfunction]
+#[pyo3(signature = (stages, params_json, start=None))]
+fn calc_consensus<'py>(
+    py: Python<'py>,
+    stages: Vec<Bound<'py, PyDict>>,
+    params_json: &str,
+    start: Option<numpy::PyReadonlyArray3<'py, f64>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    use crate::consensus::{run_consensus, ConsensusParams};
+    let p: ConsensusParams = serde_json::from_str(params_json).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    p.validate().map_err(PyValueError::new_err)?;
+    let st: Vec<crate::consensus::Stage> = stages.iter().map(stage_from_dict).collect::<PyResult<_>>()?;
+    let start: Option<Vec<Vec<V3>>> = match start {
+        None => None,
+        Some(a) => {
+            let v = a.as_array();
+            if v.shape()[2] != 3 {
+                return Err(PyValueError::new_err("start must be (n_runs, n_beads, 3)"));
+            }
+            Some((0..v.shape()[0]).map(|r| (0..v.shape()[1]).map(|i| [v[[r, i, 0]], v[[r, i, 1]], v[[r, i, 2]]]).collect()).collect())
+        }
+    };
+    let ep = p.engine_params();
+    let mut engine = make_engine(&ep)?;
+    let res = py.detach(move || run_consensus(&st, &p, engine.as_mut(), start));
+    let out = res.map_err(PyRuntimeError::new_err)?;
+    let to3 = |c: &[Vec<V3>]| -> PyResult<numpy::ndarray::Array3<f64>> {
+        let (r, n) = (c.len(), c.first().map(|x| x.len()).unwrap_or(0));
+        let flat: Vec<f64> = c.iter().flat_map(|x| x.iter().flat_map(|q| q.iter().copied())).collect();
+        Array3::from_shape_vec((r, n, 3), flat).map_err(|e| PyRuntimeError::new_err(e.to_string()))
+    };
+    let d = PyDict::new(py);
+    d.set_item("coords", to3(&out.coords)?.into_pyarray(py))?;
+    let sc: Vec<Bound<'py, numpy::PyArray3<f64>>> =
+        out.stage_coords.iter().map(|c| to3(c).map(|a| a.into_pyarray(py))).collect::<PyResult<_>>()?;
+    d.set_item("stage_coords", sc)?;
+    d.set_item("stages_json", serde_json::to_string(&out.stages).unwrap())?;
+    d.set_item("seconds_total", out.seconds_total)?;
+    Ok(d)
+}
+
+#[pyfunction]
+fn default_consensus_params_json() -> String {
+    serde_json::to_string(&crate::consensus::ConsensusParams::default()).unwrap()
+}
+
 #[pyfunction]
 fn default_igm_params_json() -> String {
     serde_json::to_string(&crate::igm::params::IgmParams::default()).unwrap()
@@ -370,6 +448,8 @@ fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(default_params_json, m)?)?;
     m.add_function(wrap_pyfunction!(calc_population, m)?)?;
     m.add_function(wrap_pyfunction!(default_igm_params_json, m)?)?;
+    m.add_function(wrap_pyfunction!(calc_consensus, m)?)?;
+    m.add_function(wrap_pyfunction!(default_consensus_params_json, m)?)?;
     m.add("__version__", crate::VERSION)?;
     m.add("HAS_GPU", cfg!(feature = "gpu"))?;
     Ok(())
