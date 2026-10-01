@@ -61,7 +61,8 @@ def main(argv=None) -> None:
     args = ap.parse_args(argv)
     import uchrom_nucdyn as un
 
-    params = {**ROBUST_DEFAULTS, **json.loads(args.params)}
+    # $ROBUST_PARAMS (JSON) sits between the defaults and --params (for harnesses that cannot pass --params)
+    params = {**ROBUST_DEFAULTS, **json.loads(os.environ.get("ROBUST_PARAMS", "{}")), **json.loads(args.params)}
     sizes = [float(x) * 1e6 for x in args.sizes.split(",")] if args.sizes else schedule(args.res)
     tr = time.time()
     c = read_contacts(args.contacts)
