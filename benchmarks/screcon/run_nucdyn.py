@@ -59,7 +59,9 @@ def main(argv=None) -> None:
     import uchrom_nucdyn as un
 
     sizes = [float(x) * 1e6 for x in args.sizes.split(",")] if args.sizes else schedule(args.res)
+    tr = time.time()
     c = read_contacts(args.contacts)
+    read_seconds = time.time() - tr
     t0 = time.time()
     ru0 = resource.getrusage(resource.RUSAGE_SELF)
     res = un.calc_genome_structure(
@@ -76,7 +78,7 @@ def main(argv=None) -> None:
     np.savez_compressed(args.out, chrom=res["chrom"].astype(str), pos=pos, coords=res["coords"])
     meta = {"method": f"uchrom_nucdyn_{args.device}", "contacts": str(args.contacts), "n_contacts": len(c),
             "particle_sizes": sizes, "n_models": args.n_models, "seed": args.seed, "device": args.device,
-            "wall_seconds": wall, "engine_seconds": res["seconds_total"],
+            "read_seconds": read_seconds, "wall_seconds": wall, "engine_seconds": res["seconds_total"],
             "cpu_seconds": (ru1.ru_utime - ru0.ru_utime) + (ru1.ru_stime - ru0.ru_stime),
             "peak_rss_mb": peak_rss_mb(), "stages": res["stages"], "params": res["params"],
             "engine_version": un.__version__, "gpu": un.gpu_info() if args.device == "gpu" else None,

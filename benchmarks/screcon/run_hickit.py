@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import resource
 import subprocess
 import sys
 import time
@@ -69,6 +70,16 @@ def _spans(c):
     lo = [int(min(c.pos_a[c.chrom_a == g].min(initial=2 ** 62), c.pos_b[c.chrom_b == g].min(initial=2 ** 62))) for g in chroms]
     hi = [int(max(c.pos_a[c.chrom_a == g].max(initial=0), c.pos_b[c.chrom_b == g].max(initial=0))) for g in chroms]
     return chroms, lo, hi
+
+
+def _final_beads(log: Path):
+    """Bead count of the last stage (``hk_bmap_merge_beads A => B``: B after merging empty beads)."""
+    n = None
+    if log.exists():
+        for line in log.read_text().splitlines():
+            if "hk_bmap_merge_beads" in line and "=>" in line:
+                n = int(line.rsplit("=>", 1)[1].split()[0])
+    return n
 
 
 def main(argv=None) -> None:
@@ -128,6 +139,9 @@ def main(argv=None) -> None:
     meta = {"method": "hickit 0.1.1 (haploid, -P1)", "contacts": str(args.contacts), "res": args.res,
             "cmd": runs[0][4][1:], "n_models": len(stack), "failed": failed, "wall_seconds": time.time() - t0,
             "seconds_per_model": [r[2] for r in runs], "n_particles": len(idx_key),
+            "n_beads_hickit": [_final_beads(Path(f"{stem}.m{k}.log")) for k, *_ in runs],
+            "peak_rss_mb_largest_child": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+            / (1e6 if sys.platform == "darwin" else 1e3),
             "slurm_job_id": os.environ.get("SLURM_JOB_ID")}
     Path(str(args.out) + ".json").write_text(json.dumps(meta, indent=1))
     print(json.dumps(meta), flush=True)
