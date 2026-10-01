@@ -127,6 +127,12 @@ pub struct Params {
     /// Particles sampled for the all-pairs kernel sum when there are more
     /// (0: all).
     pub robust_pair_sample: usize,
+    /// > 0: scale the restraint force constant by min(1, x N / W), W the sum of
+    /// contact-restraint weights, N the particles (bounds the contact pull per
+    /// particle at high depth).  0: the 2017 constant.
+    pub robust_force_norm: f64,
+    /// > 0: restraint target distance from min(count, cap) ** power_law.
+    pub robust_count_cap: u32,
 }
 
 impl Default for Params {
@@ -186,6 +192,8 @@ impl Default for Params {
             robust_remove_violated: true,
             robust_count_combine: true,
             robust_pair_sample: 4000,
+            robust_force_norm: 0.0,
+            robust_count_cap: 0,
         }
     }
 }

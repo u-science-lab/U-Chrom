@@ -428,6 +428,20 @@ fn contact_weights(d: &ContactDict, st: &Structure, sys: &System, nb: usize, n_i
     out
 }
 
+/// Restraint force constant: the 2017 constant, scaled by min(1, x N / W)
+/// with `robust_force_norm` = x > 0 (W: sum of contact-restraint weights,
+/// mean over models).
+fn force_constant(p: &Params, sys: &System, nb: usize, n: usize) -> f64 {
+    if p.robust_force_norm <= 0.0 {
+        return p.dist_force_const;
+    }
+    let w = match &sys.model_w {
+        Some(rows) => rows.iter().map(|r| r[nb..].iter().sum::<f64>()).sum::<f64>() / rows.len() as f64,
+        None => sys.rest_w[nb..].iter().sum::<f64>(),
+    };
+    p.dist_force_const * (p.robust_force_norm * n as f64 / w.max(1e-9)).min(1.0)
+}
+
 fn log(p: &Params, msg: &str) {
     if p.verbose {
         eprintln!("[uchrom_nucdyn] {msg}");
@@ -475,6 +489,16 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
         st.coords = start_coords(&st, n_models, prev.as_ref(), p, stage);
         let (mut rest, n_used, counts) =
             contact_restraints_counted(&d, &st, p.dist_power_law, p.contact_dist_lower, p.contact_dist_upper);
+        if p.robust_count_cap > 0 {
+            let (exp32, lo32, hi32) = (p.dist_power_law as f32, p.contact_dist_lower as f32 as f64, p.contact_dist_upper as f32 as f64);
+            let dist = (1.0f32 * (p.robust_count_cap as f32).powf(exp32)) as f64;
+            for (r, &c) in rest.iter_mut().zip(&counts) {
+                if c > p.robust_count_cap {
+                    r.lo = dist * lo32;
+                    r.hi = dist * hi32;
+                }
+            }
+        }
         let mut all = backbone_restraints(&st, psi, p.backbone_dist_lower, p.backbone_dist_upper);
         let nb = all.len();
         all.append(&mut rest);
@@ -502,6 +526,7 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
         let td = Instant::now();
         let mut coords = std::mem::take(&mut st.coords);
         let mut em_logs = vec![];
+        let mut f_dist = p.dist_force_const;
         let mut t_em = 0.0;
         for (seg, range) in parts.iter().enumerate() {
             if reweight {
@@ -525,7 +550,8 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
                 em_logs.push(l);
             }
             let key = stage + 1000 * seg;
-            coords = engine.anneal(&sys, coords, &schedule[range.clone()], dyn_steps, p.dist_force_const, 1.0, key, p)?;
+            f_dist = force_constant(p, &sys, nb, n);
+            coords = engine.anneal(&sys, coords, &schedule[range.clone()], dyn_steps, f_dist, 1.0, key, p)?;
         }
         for c in coords.iter_mut() {
             let k = c.len() as f64;
@@ -555,7 +581,7 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
             n_particles: n,
             n_contacts: n_used,
             n_restraints: sys.n_restraints(),
-            dist_force_const: p.dist_force_const,
+            dist_force_const: f_dist,
             temp_steps: schedule.len(),
             dynamics_steps: dyn_steps,
             seconds_prepare: t_prep + t_em,

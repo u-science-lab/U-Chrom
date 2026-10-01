@@ -4,7 +4,7 @@
 # sim_nucdyn_gpu.sbatch), then the truth scores (simulate.py score, no baselines) and the
 # noise diagnostics (robust_diag.py).  A variant = a name + engine parameters (JSON):
 #
-#   sbatch --export=ALL,VARIANT=v0,PARAMS='{}' benchmarks/screcon/sherlock/robust_sim.sbatch
+#   PARAMS='{"robust_segments": 2}' sbatch --export=ALL,VARIANT=v0 benchmarks/screcon/sherlock/robust_sim.sbatch
 #   (optional DEVICE=cpu, ONLY=<grep pattern on the table name>; timing runs: sbatch -C GPU_SKU:H100_SXM5)
 #
 # Writes $W/runs/robust/sim/{models,scores,diag}/$VARIANT/<dataset>/<name>...
