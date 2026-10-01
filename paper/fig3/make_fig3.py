@@ -11,11 +11,10 @@ from the values noted inside a dashed frame (``mock_frame``); nothing else is mo
   d  NucDynamics speed, original vs U-Chrom (CPU, GPU), and 10 kb / 1 kb on one GPU
   e  held-out contact prediction (8 cells x 3 folds) per genomic separation, all methods
   f  imaging-truth simulations (Su 2020 chr21, Takei 2021 1 Mb): distance agreement
-  g  Hi-C + FISH (GEM-FISH): held-out FISH error, with the paper's model and HIPPS
-  h  IGM: native vs original populations (WTC11 demo, S = 200 / 1,000), seed spread as reference
-  i  IGM speed: original (64 cores) vs native (1 GPU)
-  j  population size: seed-to-seed agreement of trans contacts vs S (placeholder: sweep running)
-  k  consensus reconstruction (new) vs Su 2020 imaging, with MDS and HIPPS (placeholder: preliminary)
+  g  IGM: native vs original populations (WTC11 demo, S = 200 / 1,000), seed spread as reference
+  h  IGM speed: original (64 cores) vs native (1 GPU)
+  i  population size: seed-to-seed agreement of trans contacts vs S (placeholder: sweep running)
+  j  consensus reconstruction (new) vs Su 2020 imaging, with MDS and HIPPS (placeholder: preliminary)
 
 Supplementary figures: ``make_figS_fig3_*.py`` (``make_figS_fig3_all.py`` builds the set).
 
@@ -330,7 +329,7 @@ def p_nd_speed(fig, d, x, y):
 def p_heldout_contacts(fig, d, x, y):
     head_(fig, x, y, "e", "Held-out contacts",
           f"8 cells × 3 folds; matched-separation negatives")
-    ax = ax_at(fig, x + 11, y + 11, 40, 28)
+    ax = ax_at(fig, x + 12, y + 11, 62, 28)
     b = d["ho_band"]
     xx = np.arange(len(BANDS))
     order = ["random_polymer", "hickit", "sic", "orig", "nucdyn_cpu", "nucdyn_gpu"]
@@ -351,7 +350,7 @@ def p_heldout_contacts(fig, d, x, y):
 
 def p_sim(fig, d, x, y):
     head_(fig, x, y, "f", "Imaging truth (simulated Hi-C)", "median model vs imaged distances")
-    ax = ax_at(fig, x + 11, y + 11, 38, 28)
+    ax = ax_at(fig, x + 12, y + 11, 62, 28)
     order = ["nucdyn_gpu", "nucdyn_cpu", "orig", "sic", "hickit", "pop_mean", "random_polymer"]
     dsets = [("su2020_chr21", "Su 2020\nchr21, 50 kb"), ("takei2021_1mb", "Takei 2021\ngenome, 1 Mb")]
     w = 0.11
@@ -379,19 +378,6 @@ def sc_legend(fig, x, y):
                fontsize=5.3, handlelength=1, handleheight=0.7, columnspacing=1.0)
 
 
-def p_heldout_fish(fig, d, x, y):
-    head_(fig, x, y, "g", "Hi-C + FISH (GEM-FISH)", "Wang 2016; 10 % of cells held out")
-    keys = ["U-Chrom, Hi-C only", "U-Chrom, Hi-C + FISH", "GEM-FISH (paper model)", "HIPPS, Hi-C only"]
-    ax = ax_at(fig, x + 11, y + 11, 30, 28)
-    chroms = ["chr20", "chr21", "chr22"]
-    w = 0.2
-    for k_, (key, col) in enumerate(zip(keys, [OURS2, OURS, ORIG, OTHER])):
-        ax.bar(np.arange(3) + (k_ - 1.5) * w, [d["joint"][c][key][1] for c in chroms], w, color=col, label=key)
-    ax.set_xticks(range(3), chroms); ax.set_ylabel("held-out relative error")
-    ax.legend(frameon=False, fontsize=5.2, ncol=1, loc="upper left", bbox_to_anchor=(-0.38, -0.13),
-              handlelength=1)
-
-
 # row 3 — population reconstruction
 
 IGM_KINDS = [("ours", "native vs native", OURS2), ("igm", "original vs original", ORIG),
@@ -399,7 +385,7 @@ IGM_KINDS = [("ours", "native vs native", OURS2), ("igm", "original vs original"
 
 
 def p_igm_equiv(fig, d, x, y):
-    head_(fig, x, y, "h", "IGM: native vs original", "WTC11 2 Mb; population agreement")
+    head_(fig, x, y, "g", "IGM: native vs original", "WTC11 2 Mb; population agreement")
     ax = ax_at(fig, x + 10, y + 11, 30, 28)
     feats = [("pearson_contact_intra", "intra\ncontacts"), ("pearson_contact_inter", "inter\ncontacts"),
              ("pearson_radial", "radial\nposition")]
@@ -420,7 +406,7 @@ def p_igm_equiv(fig, d, x, y):
 
 
 def p_igm_speed(fig, d, x, y):
-    head_(fig, x, y, "i", "IGM speed", "same input and schedule")
+    head_(fig, x, y, "h", "IGM speed", "same input and schedule")
     t = d["igm_time"]
     ax = ax_at(fig, x + 10, y + 11, 28, 28)
     for si, S in enumerate((200, 1000)):
@@ -434,7 +420,7 @@ def p_igm_speed(fig, d, x, y):
 
 
 def p_popsize(fig, d, x, y):
-    head_(fig, x, y, "j", "How many structures?", "seed-to-seed agreement, trans")
+    head_(fig, x, y, "i", "How many structures?", "seed-to-seed agreement, trans")
     ax = ax_at(fig, x + 10, y + 11, 30, 28)
     P = d["igm_pairs"]
     r200 = np.mean([r["pearson_contact_inter"] for r in P[(200, "ours")]])
@@ -452,7 +438,7 @@ def p_popsize(fig, d, x, y):
 
 
 def p_consensus(fig, d, x, y):
-    head_(fig, x, y, "k", "Consensus structure (new)", "IMR90 genome vs Su 2020 imaging")
+    head_(fig, x, y, "j", "Consensus structure (new)", "IMR90 genome vs Su 2020 imaging")
     ax = ax_at(fig, x + 10, y + 11, 30, 28)
     c = d["cons"]
     rows = [("cons.\n1 Mb", ("1 Mb", "consensus"), OURS), ("cons.\n250 kb", ("250 kb", "consensus"), OURS),
@@ -481,9 +467,8 @@ def main() -> None:
     p_nd_speed(fig, d, 128, 4)
     row_title(fig, 64.5, "one benchmark for every method")
     p_heldout_contacts(fig, d, 0, 68)
-    p_sim(fig, d, 56, 68)
+    p_sim(fig, d, 86, 68)
     sc_legend(fig, 8, 114)
-    p_heldout_fish(fig, d, 116, 68)
     row_title(fig, 128.5, "population reconstruction")
     p_igm_equiv(fig, d, 0, 132)
     p_igm_speed(fig, d, 44, 132)
