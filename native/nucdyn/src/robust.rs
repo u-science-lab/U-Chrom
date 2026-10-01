@@ -41,6 +41,7 @@ use crate::protocol2017::{
     start_coords,
 };
 use crate::restraints::RestraintSet;
+use crate::support::{support_evidence, SupportParams};
 use rayon::prelude::*;
 use serde::Serialize;
 use std::time::Instant;
@@ -532,10 +533,30 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
     chroms.sort_unstable();
     chroms.dedup();
     log(p, &format!("total number of contacts = {}", contact_count(&d)));
+    let last = *p.particle_sizes.last().unwrap();
+    // per-contact prior likelihood ratios: input x local support
+    let support_lr: Option<Vec<f64>> = if p.robust_support_rel > 0.0 {
+        let ts = Instant::now();
+        let sp = SupportParams { window: p.robust_support_rel * last, seed: p.seed, ..Default::default() };
+        let s = support_evidence(input.chr_a, input.pos_a, input.chr_b, input.pos_b, &sp);
+        for &(st, e, n, mu, size) in &s.strata {
+            log(p, &format!("  support stratum {st}: {n} contacts, false fraction {e:.3}, NB mean {mu:.2} size {size:.2}"));
+        }
+        log(p, &format!("support evidence ({} kb window) in {:.2} s", sp.window / 1e3, ts.elapsed().as_secs_f64()));
+        let mut lr = s.lr;
+        if let Some(x) = input.prior_lr {
+            for (a, b) in lr.iter_mut().zip(x) {
+                *a *= b;
+            }
+        }
+        Some(lr)
+    } else {
+        None
+    };
+    let prior_lr: Option<&[f64]> = support_lr.as_deref().or(input.prior_lr);
     remove_isolated_contacts(&mut d, p.isolation_threshold_cis, p.isolation_pos_error);
     log(p, &format!("contacts after removing isolated = {}", contact_count(&d)));
     let mut sizes = p.particle_sizes.clone();
-    let last = *sizes.last().unwrap();
     sizes.extend(std::iter::repeat_n(last, p.robust_refine));
     let mut prev: Option<Structure> = None;
     let mut stages = vec![];
@@ -570,7 +591,7 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
         all.append(&mut rest);
         let groups: Vec<u32> = (0..=all.len() as u32).collect();
         let pairs: Vec<[u32; 2]> = all[nb..].iter().map(|r| [r.i, r.j]).collect();
-        let odds = input.prior_lr.map(|lr| restraint_odds(&d, &st, lr));
+        let odds = prior_lr.map(|lr| restraint_odds(&d, &st, lr));
         if let Some((off, _)) = &odds {
             debug_assert_eq!(off.len(), pairs.len() + 1);
         }

@@ -17,6 +17,7 @@ pub mod protocol2017;
 pub mod restraints;
 pub mod robust;
 pub mod rng;
+pub mod support;
 
 #[cfg(feature = "gpu")]
 pub mod gpu;

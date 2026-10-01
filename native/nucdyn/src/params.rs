@@ -140,6 +140,9 @@ pub struct Params {
     pub robust_nc_d0: f64,
     pub robust_nc_s: f64,
     pub robust_nc_qmax: f64,
+    /// > 0: local-support evidence (`support.rs`) with window half-width
+    /// `robust_support_rel` x the final particle size; multiplies `prior_lr`.
+    pub robust_support_rel: f64,
 }
 
 impl Default for Params {
@@ -205,6 +208,7 @@ impl Default for Params {
             robust_nc_d0: 2.0,
             robust_nc_s: 0.5,
             robust_nc_qmax: 10.0,
+            robust_support_rel: 0.0,
         }
     }
 }
