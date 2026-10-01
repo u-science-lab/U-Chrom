@@ -45,6 +45,9 @@ pub struct StageLog {
     /// only with `emulate_rep_list_overflow`)
     pub rep_list_overflows: u64,
     pub steps_without_repulsion: u64,
+    /// protocol `robust`: the EM updates of this stage
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub robust: Vec<crate::robust::EmLog>,
 }
 
 pub struct Output {
@@ -56,6 +59,8 @@ pub struct Output {
     pub particle_size: f64,
     pub stages: Vec<StageLog>,
     pub seconds_total: f64,
+    /// protocol `robust`: final restraint weight of every input contact (NaN = filtered out); empty otherwise
+    pub contact_weights: Vec<f64>,
 }
 
 /// Something that anneals the models of one stage.
@@ -111,7 +116,7 @@ impl StageEngine for CpuEngine {
         p: &Params,
     ) -> Result<Vec<Vec<V3>>, String> {
         let inner = start.len() < self.n_threads && sys.n >= 2048;
-        let master = p.protocol == "nuc_dynamics_2017";
+        let master = p.is_2017_family();
         // 2017: list radius repDist + r_i + r_j; release_1.3: 2 (r_i + r_j)
         let skin = if master { p.rep_dist } else { p.nl_skin * bead };
         let emulate = master && p.emulate_rep_list_overflow;
@@ -121,6 +126,7 @@ impl StageEngine for CpuEngine {
                 .into_par_iter()
                 .enumerate()
                 .map(|(mi, pos)| {
+                    let sysm = sys.for_model(mi);
                     let mut m = Model::new(pos, Rng::from_keys(&[seed, stage as u64, mi as u64, STREAM_VELOC]));
                     m.grid.stencil = p.cpu_stencil.clamp(1, 4);
                     for &(t_ref, f_rep) in schedule {
@@ -137,7 +143,7 @@ impl StageEngine for CpuEngine {
                             use_cells: p.use_cells && !emulate,
                             emulate_overflow: emulate,
                         };
-                        run_dynamics(sys, &mut m, &dp, inner, None);
+                        run_dynamics(&sysm, &mut m, &dp, inner, None);
                     }
                     (m.pos, m.overflow_events, m.steps_without_repulsion)
                 })
@@ -249,6 +255,8 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
     check_input(input)?;
     if p.protocol == "nuc_dynamics_2017" {
         crate::protocol2017::calc_genome_structure(input, p, engine)
+    } else if p.protocol == "robust" {
+        crate::robust::calc_genome_structure(input, p, engine)
     } else {
         calc_genome_structure_release13(input, p, engine)
     }
@@ -384,6 +392,7 @@ pub fn calc_genome_structure_release13(input: &Input, p: &Params, engine: &mut d
             device: engine.name(),
             rep_list_overflows: 0,
             steps_without_repulsion: 0,
+            robust: vec![],
         });
         prev = Some(st);
     }
@@ -400,5 +409,6 @@ pub fn calc_genome_structure_release13(input: &Input, p: &Params, engine: &mut d
         particle_size: last_ps,
         stages,
         seconds_total: t0.elapsed().as_secs_f64(),
+        contact_weights: vec![],
     })
 }

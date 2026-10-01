@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 pub struct Params {
     /// "nuc_dynamics_2017" (the `master` code that produced the Stevens et
     /// al. 2017 structures; default) or "release_1.3" (the later
-    /// bead-size-scaled protocol with model selection).
+    /// bead-size-scaled protocol with model selection) or "robust" (the 2017
+    /// protocol with a noise-aware observation model: contact restraints
+    /// re-weighted by their posterior probability of being true, see
+    /// `robust.rs` and the `robust_*` fields).
     pub protocol: String,
     /// Hierarchical particle sizes in bp, applied in the given (descending) order.
     pub particle_sizes: Vec<f64>,
@@ -88,6 +91,42 @@ pub struct Params {
     pub n_threads: usize,
     /// Print progress to stderr.
     pub verbose: bool,
+    // ---- protocol "robust" only (ignored by the other protocols) ----
+    /// First stage whose restraints are re-weighted (0-based; the weights of
+    /// stage s come from the structure of stage s - 1, so >= 1).
+    pub robust_start_stage: usize,
+    /// Contact kernel f(d) = exp(-((d - d0)+ / s)^k), d in particle radii of
+    /// the structure the weights are computed from; k = 2 ("gauss") or 1 ("exp").
+    pub robust_kernel: String,
+    pub robust_d0: f64,
+    /// Kernel width s (start value when learned).
+    pub robust_s: f64,
+    /// Learn s by maximising the mixture likelihood over `robust_s_grid`.
+    pub robust_learn_s: bool,
+    pub robust_s_grid: Vec<f64>,
+    /// False-contact rate: start value / learned by EM.
+    pub robust_eps: f64,
+    pub robust_learn_eps: bool,
+    pub robust_eps_min: f64,
+    pub robust_eps_max: f64,
+    /// Responsibilities per model (each model its own weights) instead of
+    /// from the ensemble-mean contact probability (one weight set).
+    pub robust_per_model: bool,
+    /// EM updates per stage: the annealing schedule of a re-weighted stage is
+    /// split into this many parts, weights recomputed before each.
+    pub robust_segments: usize,
+    /// Lower bound of a restraint weight.
+    pub robust_w_floor: f64,
+    /// Extra annealing passes at the final particle size (weights from the
+    /// structure of the previous pass).
+    pub robust_refine: usize,
+    /// Keep the 2017 removal of contacts violated by >= 6 radii.
+    pub robust_remove_violated: bool,
+    /// Weight of a restraint from c contacts: 1 - (1 - r)^c (true) or r (false).
+    pub robust_count_combine: bool,
+    /// Particles sampled for the all-pairs kernel sum when there are more
+    /// (0: all).
+    pub robust_pair_sample: usize,
 }
 
 impl Default for Params {
@@ -130,11 +169,32 @@ impl Default for Params {
             device: "cpu".to_string(),
             n_threads: 0,
             verbose: false,
+            robust_start_stage: 1,
+            robust_kernel: "gauss".to_string(),
+            robust_d0: 2.0,
+            robust_s: 1.5,
+            robust_learn_s: true,
+            robust_s_grid: vec![0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0],
+            robust_eps: 0.1,
+            robust_learn_eps: true,
+            robust_eps_min: 1e-4,
+            robust_eps_max: 0.5,
+            robust_per_model: false,
+            robust_segments: 1,
+            robust_w_floor: 0.0,
+            robust_refine: 0,
+            robust_remove_violated: true,
+            robust_count_combine: true,
+            robust_pair_sample: 4000,
         }
     }
 }
 
 impl Params {
+    /// The 2017 code's units and restraint form (`nuc_dynamics_2017`, `robust`).
+    pub fn is_2017_family(&self) -> bool {
+        matches!(self.protocol.as_str(), "nuc_dynamics_2017" | "robust")
+    }
     pub fn temp_steps_for(&self, stage: usize) -> usize {
         by_stage(&self.temp_steps, stage)
     }
@@ -168,6 +228,27 @@ impl Params {
         }
         match self.protocol.as_str() {
             "nuc_dynamics_2017" | "release_1.3" => {}
+            "robust" => {
+                if self.robust_start_stage == 0 {
+                    return Err("robust_start_stage must be >= 1".into());
+                }
+                if !matches!(self.robust_kernel.as_str(), "gauss" | "exp") {
+                    return Err(format!("unknown robust_kernel {:?}", self.robust_kernel));
+                }
+                if self.robust_s <= 0.0 || self.robust_s_grid.iter().any(|&x| x <= 0.0) {
+                    return Err("robust kernel widths must be positive".into());
+                }
+                let (e0, e, e1) = (self.robust_eps_min, self.robust_eps, self.robust_eps_max);
+                if !(0.0 < e0 && e0 <= e && e <= e1 && e1 < 1.0) {
+                    return Err("need 0 < robust_eps_min <= robust_eps <= robust_eps_max < 1".into());
+                }
+                if self.robust_segments == 0 {
+                    return Err("robust_segments must be >= 1".into());
+                }
+                if !(0.0..=1.0).contains(&self.robust_w_floor) {
+                    return Err("robust_w_floor must be in [0, 1]".into());
+                }
+            }
             p => return Err(format!("unknown protocol {p:?}")),
         }
         match self.device.as_str() {

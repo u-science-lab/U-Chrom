@@ -15,6 +15,7 @@ pub mod params;
 pub mod pipeline;
 pub mod protocol2017;
 pub mod restraints;
+pub mod robust;
 pub mod rng;
 
 #[cfg(feature = "gpu")]

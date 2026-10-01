@@ -85,7 +85,9 @@ def calc_genome_structure(
     model centred; superposed only in the release_1.3 protocol), ``chrom`` /
     ``position`` (per particle, see ``position_convention``),
     ``particle_size``, ``model_rmsds`` (release_1.3), ``stages`` (per-stage
-    log) and ``seconds_total``.
+    log), ``seconds_total`` and, for ``protocol="robust"``, ``contact_weights``
+    (per input contact: the final weight of its restraint, the posterior
+    probability that it is a true contact; NaN when it was filtered out).
     """
     ca = np.asarray(chrom_a).astype(str)
     cb = np.asarray(chrom_b).astype(str)
@@ -120,10 +122,12 @@ def calc_genome_structure(
         # = end of the particle's interval (start - size, start]; release_1.3 =
         # start of [start, start + size)
         "position": start,
-        "position_convention": "end" if p["protocol"] == "nuc_dynamics_2017" else "start",
+        "position_convention": "end" if p["protocol"] in ("nuc_dynamics_2017", "robust") else "start",
         "particle_size": res["particle_size"],
         "model_rmsds": list(res["model_rmsds"]),
         "stages": json.loads(res["stages_json"]),
         "seconds_total": res["seconds_total"],
+        # protocol "robust": final restraint weight of every input contact (NaN = filtered out)
+        "contact_weights": np.asarray(res["contact_weights"], np.float64),
         "params": p,
     }

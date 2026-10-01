@@ -19,7 +19,7 @@ struct Params {
     g: u32,        // restraint groups
     r: u32,        // restraints
     hb: u32,       // cell blocks (of 256) per model
-    form: u32,     // 0: 2017 master restraint form, 1: release_1.3 form
+    form: u32,     // 0: 2017 master restraint form, 1: release_1.3 form, 2: 2017 weighted (robust), 3: as 2 with per-model weights
     dt: f32,       // time step (x tot0)
     rt_step: f32,  // 0.5 dt^2
     beta: f32,     // thermostat coupling / tot0
@@ -408,15 +408,18 @@ fn restraints(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id
     let e = groups[g + 1u];
     let base = m * P.n;
     let fb = m * P.r;
+    // forms 0 (2017), 2 / 3 (2017 weighted, robust; 3: one restraint table per model)
+    let master = P.form != 1u;
+    let rb = select(0u, m * P.r, P.form == 3u);
     var r2 = 0.0;
     let single = (e - s) == 1u;
     for (var q = s; q < e; q = q + 1u) {
         rest_f[fb + q] = vec4<f32>(0.0);
-        let rr = rest[q];
+        let rr = rest[rb + q];
         if (rr.i != rr.j) {
             let d = pos[base + rr.i].xyz - pos[base + rr.j].xyz;
             let dd = dot(d, d);
-            if (single && P.form == 0u) {
+            if (single && master) {
                 r2 = dd;
             } else {
                 let x = select(dd, max(dd, 1e-8), P.form == 1u);
@@ -424,7 +427,7 @@ fn restraints(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id
             }
         }
     }
-    if (!(single && P.form == 0u)) {
+    if (!(single && master)) {
         if (r2 <= 0.0) {
             return;
         }
@@ -433,11 +436,11 @@ fn restraints(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id
     if (r2 <= 0.0) {
         return;
     }
-    let dmin = rest[s].lo;
-    let dmax = rest[s].hi;
+    let dmin = rest[rb + s].lo;
+    let dmax = rest[rb + s].hi;
     var rjk = 0.0;
     var r = 1.0;
-    if (P.form == 0u) {
+    if (master) {
         // 2017: distSwitch 0.5 (absolute), asymptote 1, exponent 2
         let ds = 0.5;
         let b = ds * ds - 2.0 * ds * ds * ds;
@@ -474,18 +477,21 @@ fn restraints(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id
         }
     }
     for (var q = s; q < e; q = q + 1u) {
-        let rr = rest[q];
+        let rr = rest[rb + q];
         if (rr.i == rr.j) {
             continue;
         }
         let d = pos[base + rr.i].xyz - pos[base + rr.j].xyz;
         var t: f32;
-        if (single && P.form == 0u) {
+        if (single && master) {
             t = rjk / r;
+            if (P.form >= 2u) {
+                t = t * rr.w;
+            }
         } else {
             let s2 = max(dot(d, d), select(0.0, 1e-8, P.form == 1u));
             t = rjk * r2 * r2 * r / (s2 * s2 * s2);
-            if (P.form == 1u) {
+            if (P.form != 0u) {
                 t = t * rr.w;
             }
         }

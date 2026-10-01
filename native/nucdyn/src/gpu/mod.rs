@@ -260,7 +260,14 @@ impl GpuEngine {
         if sys.radii.iter().any(|&x| x != r0) {
             return Err("GPU engine supports equal radii only".into());
         }
-        let master = sys.form == RestraintForm::Master2017;
+        let master = matches!(sys.form, RestraintForm::Master2017 | RestraintForm::Weighted2017);
+        // per-model weights (robust): one restraint table per model
+        let per_model = sys.form == RestraintForm::Weighted2017 && sys.model_w.is_some();
+        if let Some(w) = &sys.model_w {
+            if w.len() != m {
+                return Err(format!("{} weight sets for {m} models", w.len()));
+            }
+        }
         // work in units of the particle radius scale `u` (1 for 2017, bead for release_1.3)
         let u = if master { 1.0 } else { bead };
         let device = &self.ctx.device;
@@ -289,15 +296,21 @@ impl GpuEngine {
         let b_start = buf_zero(device, "cell_start", (m as u64) * hc as u64 * 4, st);
         let b_blocks = buf_zero(device, "block_sums", (m as u64) * hb as u64 * 4, st);
         let b_pc = buf_zero(device, "pc", (m * n * 8) as u64, st);
-        let rest: Vec<GpuRest> = (0..nr as usize)
-            .map(|k| GpuRest {
-                i: sys.rest_pairs[k][0],
-                j: sys.rest_pairs[k][1],
-                lo: (sys.rest_lim[k][0] / u) as f32,
-                hi: (sys.rest_lim[k][1] / u) as f32,
-                w: sys.rest_w[k] as f32,
-            })
-            .collect();
+        let table = |w: &[f64]| -> Vec<GpuRest> {
+            (0..nr as usize)
+                .map(|k| GpuRest {
+                    i: sys.rest_pairs[k][0],
+                    j: sys.rest_pairs[k][1],
+                    lo: (sys.rest_lim[k][0] / u) as f32,
+                    hi: (sys.rest_lim[k][1] / u) as f32,
+                    w: w[k] as f32,
+                })
+                .collect()
+        };
+        let rest: Vec<GpuRest> = match (&sys.model_w, per_model) {
+            (Some(w), true) => w.iter().flat_map(|row| table(row)).collect(),
+            _ => table(&sys.rest_w),
+        };
         let b_rest = buf_init(device, "rest", &rest, st);
         let b_groups = buf_init(device, "groups", &sys.groups, st);
         let b_restf = buf_zero(device, "rest_f", (m as u64) * (nr.max(1) as u64) * 16, st);
@@ -334,7 +347,12 @@ impl GpuEngine {
             g,
             r: nr,
             hb,
-            form: if master { 0 } else { 1 },
+            form: match sys.form {
+                RestraintForm::Master2017 => 0,
+                RestraintForm::Release13 => 1,
+                RestraintForm::Weighted2017 if per_model => 3,
+                RestraintForm::Weighted2017 => 2,
+            },
             dt,
             rt_step: 0.5 * dt * dt,
             beta: beta as f32,
@@ -512,6 +530,67 @@ mod tests {
                 eprintln!("{form:?}: GPU (f32) vs CPU (f64) after {steps} steps: max diff {max_d:.2e}, max move {max_move:.3}");
                 assert!(max_move > 0.05, "particles hardly moved ({max_move})");
                 assert!(max_d < 1e-3, "{form:?}: GPU vs CPU max difference {max_d} (max move {max_move})");
+            }
+        }
+    }
+
+    /// `robust` (Weighted2017): shared and per-model weights, GPU vs CPU.
+    #[test]
+    fn gpu_matches_cpu_weighted() {
+        let Ok(mut eng) = GpuEngine::new(0) else {
+            eprintln!("no GPU adapter: skipped");
+            return;
+        };
+        let (base, pos) = toy(3000, RestraintForm::Weighted2017);
+        let nr = base.n_restraints();
+        let mut rng = Rng::new(17);
+        let wrow = |rng: &mut Rng| -> Vec<f64> { (0..nr).map(|_| rng.uniform()).collect() };
+        let shared = {
+            let mut s = base.clone();
+            s.rest_w = wrow(&mut rng);
+            s
+        };
+        let per_model = {
+            let mut s = base.clone();
+            s.model_w = Some(vec![wrow(&mut rng), wrow(&mut rng)]);
+            s
+        };
+        let vel: Vec<V3> = (0..base.n).map(|_| [rng.normal(), rng.normal(), rng.normal()]).collect();
+        let (t_ref, f_rep, f_dist, steps) = (300.0, 0.6, 25.0, 10);
+        let dp = DynParams {
+            t_ref,
+            t_step: 0.001,
+            n_steps: steps,
+            f_rep,
+            f_dist,
+            beta: 10.0,
+            tot0: 20.458,
+            skin: 1.0,
+            original_nl_schedule: false,
+            use_cells: true,
+            emulate_overflow: false,
+        };
+        for (name, sys) in [("shared", &shared), ("per-model", &per_model)] {
+            let out = eng
+                .run_schedule(sys, vec![pos.clone(), pos.clone()], &[(t_ref, f_rep)], steps, f_dist, 1.0, 0.001 * 20.458, 10.0 / 20.458, 1, Some(&[vel.clone(), vel.clone()]))
+                .unwrap();
+            let mut cpu = vec![];
+            for mi in 0..2 {
+                let sm = sys.for_model(mi);
+                let mut m = Model::new(pos.clone(), Rng::new(0));
+                run_dynamics(&sm, &mut m, &dp, false, Some(&vel));
+                cpu.push(m.pos);
+            }
+            for (mi, c) in out.iter().enumerate() {
+                let max_d = (0..base.n)
+                    .map(|i| (0..3).map(|k| (c[i][k] - cpu[mi][i][k]).powi(2)).sum::<f64>().sqrt())
+                    .fold(0.0, f64::max);
+                eprintln!("weighted {name}, model {mi}: GPU vs CPU max diff {max_d:.2e}");
+                assert!(max_d < 1e-3, "{name} model {mi}: {max_d}");
+            }
+            if name == "per-model" {
+                let diff = (0..base.n).map(|i| (cpu[0][i][0] - cpu[1][i][0]).abs()).fold(0.0, f64::max);
+                assert!(diff > 1e-3, "per-model weights had no effect");
             }
         }
     }

@@ -25,6 +25,9 @@ pub enum RestraintForm {
     /// `release_1.3` `getRestraintForce`: switch at d_max + 0.5 d_max,
     /// constant force 2 K 0.5 d_max beyond; force scaled by the weight.
     Release13,
+    /// `robust`: the 2017 form with energy and force scaled by the restraint
+    /// weight (the posterior probability that the contact is true).
+    Weighted2017,
 }
 
 /// Particles and restraints of one stage.
@@ -42,6 +45,9 @@ pub struct System {
     /// (side 0: first particle, gets +f; side 1: second, gets -f).
     pub inc_off: Vec<u32>,
     pub inc: Vec<u32>,
+    /// Per-model restraint weights (`Weighted2017` only): model m uses
+    /// `model_w[m]` instead of `rest_w`.
+    pub model_w: Option<Vec<Vec<f64>>>,
 }
 
 impl System {
@@ -82,7 +88,32 @@ impl System {
                 }
             }
         }
-        System { n, form: RestraintForm::Release13, masses, radii, rest_pairs, rest_lim, rest_w, groups, inc_off: cnt, inc }
+        System {
+            n,
+            form: RestraintForm::Release13,
+            masses,
+            radii,
+            rest_pairs,
+            rest_lim,
+            rest_w,
+            groups,
+            inc_off: cnt,
+            inc,
+            model_w: None,
+        }
+    }
+
+    /// The system model `m` sees: `self`, or a copy with that model's weights.
+    pub fn for_model(&self, m: usize) -> std::borrow::Cow<'_, System> {
+        match &self.model_w {
+            Some(w) => {
+                let mut s = self.clone();
+                s.rest_w = w[m].clone();
+                s.model_w = None;
+                std::borrow::Cow::Owned(s)
+            }
+            None => std::borrow::Cow::Borrowed(self),
+        }
     }
 
     pub fn n_restraints(&self) -> usize {
@@ -314,7 +345,10 @@ fn ordered_sum(parts: &[f64]) -> f64 {
 #[inline]
 fn group_force(sys: &System, pos: &[V3], g: usize, f_const: f64, out: &mut [V3]) -> f64 {
     if sys.form == RestraintForm::Master2017 {
-        return group_force_2017(sys, pos, g, f_const, out);
+        return group_force_2017::<false>(sys, pos, g, f_const, out);
+    }
+    if sys.form == RestraintForm::Weighted2017 {
+        return group_force_2017::<true>(sys, pos, g, f_const, out);
     }
     const EXPONENT: f64 = 2.0;
     const SWITCH_RATIO: f64 = 0.5;
@@ -376,8 +410,11 @@ fn group_force(sys: &System, pos: &[V3], g: usize, f_const: f64, out: &mut [V3])
 
 /// `getRestraintForce` of the 2017 `master` code (exponent 2, distSwitch
 /// 0.5 absolute, asymptote 1; single restraints and ambiguous groups).
+/// `WEIGHTED` (`robust`): energy and forces scaled by the restraint weight
+/// (the group's first weight for the energy); the unweighted path is the
+/// 2017 code unchanged.
 #[inline]
-fn group_force_2017(sys: &System, pos: &[V3], g: usize, f_const: f64, out: &mut [V3]) -> f64 {
+fn group_force_2017<const WEIGHTED: bool>(sys: &System, pos: &[V3], g: usize, f_const: f64, out: &mut [V3]) -> f64 {
     const DIST_SWITCH: f64 = 0.5;
     const ASYMPTOTE: f64 = 1.0;
     const EXPONENT: f64 = 2.0;
@@ -438,7 +475,10 @@ fn group_force_2017(sys: &System, pos: &[V3], g: usize, f_const: f64, out: &mut 
     if n_ambig == 1 {
         let [j, k] = sys.rest_pairs[s];
         let (p, q) = (pos[j as usize], pos[k as usize]);
-        let t = rjk / r;
+        let mut t = rjk / r;
+        if WEIGHTED {
+            t *= sys.rest_w[s];
+        }
         out[0] = [(p[0] - q[0]) * t, (p[1] - q[1]) * t, (p[2] - q[2]) * t];
     } else {
         for n in s..e {
@@ -449,11 +489,18 @@ fn group_force_2017(sys: &System, pos: &[V3], g: usize, f_const: f64, out: &mut 
             let (p, q) = (pos[j as usize], pos[k as usize]);
             let (dx, dy, dz) = (p[0] - q[0], p[1] - q[1], p[2] - q[2]);
             let s2 = dx * dx + dy * dy + dz * dz;
-            let t = rjk * r2 * r2 * r / (s2 * s2 * s2);
+            let mut t = rjk * r2 * r2 * r / (s2 * s2 * s2);
+            if WEIGHTED {
+                t *= sys.rest_w[n];
+            }
             out[n - s] = [dx * t, dy * t, dz * t];
         }
     }
-    ujk
+    if WEIGHTED {
+        ujk * sys.rest_w[s]
+    } else {
+        ujk
+    }
 }
 
 /// Cell grid rebuilt at every force evaluation: particles sorted by cell

@@ -76,6 +76,7 @@ fn calc_genome_structure<'py>(
     d.set_item("particle_size", out.particle_size)?;
     d.set_item("seconds_total", out.seconds_total)?;
     d.set_item("stages_json", serde_json::to_string(&out.stages).unwrap())?;
+    d.set_item("contact_weights", out.contact_weights.into_pyarray(py))?;
     Ok(d)
 }
 
@@ -204,7 +205,7 @@ fn debug_setup_stage<'py>(
         false,
     );
     let _ = &names;
-    let (st, sys, f_dist, n_contacts) = if p.protocol == "nuc_dynamics_2017" {
+    let (st, sys, f_dist, n_contacts) = if p.is_2017_family() {
         let mut d = d;
         crate::protocol2017::remove_isolated_contacts(&mut d, p.isolation_threshold_cis, p.isolation_pos_error);
         let mut chroms: Vec<u32> = chr_a.as_slice()?.iter().chain(chr_b.as_slice()?).copied().collect();
