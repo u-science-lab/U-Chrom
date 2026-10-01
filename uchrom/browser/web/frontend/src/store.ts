@@ -153,7 +153,7 @@ export interface AppState {
   addDataset(ds: DatasetSummary): void
   removeDataset(id: string): void
   setActiveDataset(id: string | null): void
-  addLayer(opts: { datasetId: string; parentId: string | null; name: string; filter: LayerFilter; style?: Partial<LayerStyle> }): string
+  addLayer(opts: { datasetId: string; parentId: string | null; name: string; filter: LayerFilter; style?: Partial<LayerStyle>; paneId?: string | null }): string
   removeLayer(id: string): void
   renameLayer(id: string, name: string): void
   setVisible(id: string, visible: boolean): void
@@ -341,7 +341,7 @@ export const useStore = create<AppState>((set, get) => {
     set({ activeDatasetId: id, selectedLayerId: root?.id ?? null, pick: null })
   },
 
-  addLayer({ datasetId, parentId, name, filter, style }) {
+  addLayer({ datasetId, parentId, name, filter, style, paneId }) {
     const id = newId()
     const layers = get().layers
     const layer: Layer = {
@@ -349,6 +349,7 @@ export const useStore = create<AppState>((set, get) => {
       name: uniqueName(layers.filter((l) => l.datasetId === datasetId), name),
       datasetId,
       parentId,
+      ...(paneId ? { paneId } : {}),
       filter,
       visible: true,
       style: { ...DEFAULT_STYLE, ...style },

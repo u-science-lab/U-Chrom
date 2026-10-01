@@ -12,7 +12,7 @@ import { MatrixControls } from './MatrixView'
 import { OperationsPanel } from './OperationsPanel'
 import { PointsPanel } from './PointsPanel'
 import { ScopePicker } from './ScopePicker'
-import { setPaneScope } from '../workspace'
+import { setPaneScope, layerInPane } from '../workspace'
 import { StyleSection } from './PropertiesPanel'
 import { StatsControls } from './StatsView'
 
@@ -33,7 +33,12 @@ export function Inspector() {
   const ws = useStore((s) => s.workspace)
   const setWorkspace = useStore((s) => s.setWorkspace)
   const facts = useDatasetFacts()
-  const layer = useStore((s) => s.layers.find((l) => l.id === s.selectedLayerId))
+  // the selected layer if it belongs to the active view (else the dataset's own layer)
+  const layer = useStore((s) => {
+    const active = s.workspace.panes.find((p) => p.id === s.workspace.activePane)
+    const sel = s.layers.find((l) => l.id === s.selectedLayerId && l.datasetId === s.activeDatasetId)
+    return sel && layerInPane(sel, active) ? sel : s.layers.find((l) => l.datasetId === s.activeDatasetId && l.parentId === null)
+  })
   // a workspace always has an active pane
   useEffect(() => setWorkspace(ensureActivePane), [ws.activePane, ws.panes, setWorkspace])
   const pane = ws.panes.find((p) => p.id === ws.activePane) ?? ws.panes[0]

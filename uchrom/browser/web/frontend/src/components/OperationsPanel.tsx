@@ -4,6 +4,7 @@ import { chromsOf, composeFilter, describeFilter, fmtBp, parseRegion, parseTrace
 import { useStore } from '../store'
 import type { DatasetSummary, Layer, LayerFilter, LayerStyle, TraceInfo } from '../types'
 import { Select } from './Select'
+import { layerInPane } from '../workspace'
 
 type Tab = 'region' | 'trace'
 
@@ -14,9 +15,11 @@ export function OperationsPanel() {
   const activeId = useStore((s) => s.activeDatasetId)
   const layers = useStore((s) => s.layers)
   const selectedId = useStore((s) => s.selectedLayerId)
+  // subsets belong to the active 3-D view
+  const paneId = useStore((s) => s.workspace.activePane)
   const ds = datasets.find((d) => d.id === activeId)
   const parent =
-    layers.find((l) => l.id === selectedId && l.datasetId === activeId) ??
+    layers.find((l) => l.id === selectedId && l.datasetId === activeId && layerInPane(l, { id: paneId })) ??
     layers.find((l) => l.datasetId === activeId && l.parentId === null)
 
   const tabs = useMemo(() => {
@@ -45,13 +48,13 @@ export function OperationsPanel() {
           </button>
         ))}
       </div>
-      {current === 'region' && <RegionTab ds={ds} parent={parent} />}
-      {current === 'trace' && <TraceTab ds={ds} parent={parent} />}
+      {current === 'region' && <RegionTab ds={ds} parent={parent} paneId={paneId} />}
+      {current === 'trace' && <TraceTab ds={ds} parent={parent} paneId={paneId} />}
     </details>
   )
 }
 
-function useCreateSubset(ds: DatasetSummary, parent: Layer) {
+function useCreateSubset(ds: DatasetSummary, parent: Layer, paneId: string) {
   const addLayer = useStore((s) => s.addLayer)
   const [error, setError] = useState<string | null>(null)
   const create = (own: LayerFilter, name?: string, style?: Partial<LayerStyle>) => {
@@ -62,17 +65,17 @@ function useCreateSubset(ds: DatasetSummary, parent: Layer) {
     }
     setError(null)
     // a subset reads as a highlight: coloured tubes over its parent (restyle it in Style)
-    addLayer({ datasetId: ds.id, parentId: parent.id, name: name ?? describeFilter(own), filter, style: { ...parent.style, mode: 'tube', colorMode: 'rainbow', opacity: 1, ...style } })
+    addLayer({ datasetId: ds.id, parentId: parent.id, name: name ?? describeFilter(own), filter, style: { ...parent.style, mode: 'tube', colorMode: 'rainbow', opacity: 1, ...style }, paneId })
   }
   return { create, error, setError }
 }
 
 
-function RegionTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
+function RegionTab({ ds, parent, paneId }: { ds: DatasetSummary; parent: Layer; paneId: string }) {
   const chroms = chromsOf(parent.filter, ds.chroms)
   const [chrom, setChrom] = useState(chroms[0]?.name ?? '')
   const [text, setText] = useState('')
-  const { create, error, setError } = useCreateSubset(ds, parent)
+  const { create, error, setError } = useCreateSubset(ds, parent, paneId)
   const info = chroms.find((c) => c.name === chrom) ?? chroms[0]
   if (!info) return null
   const lo = parent.filter.region?.chrom === info.name ? Math.max(info.start, parent.filter.region.start) : info.start
@@ -112,14 +115,14 @@ function RegionTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
 
 const PAGE = 500
 
-function TraceTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
+function TraceTab({ ds, parent, paneId }: { ds: DatasetSummary; parent: Layer; paneId: string }) {
   const chroms = chromsOf(parent.filter, ds.chroms)
   const [chrom, setChrom] = useState<string>(chroms.length === 1 ? chroms[0].name : '')
   const [traces, setTraces] = useState<TraceInfo[]>([])
   const [total, setTotal] = useState(0)
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
-  const { create, error, setError } = useCreateSubset(ds, parent)
+  const { create, error, setError } = useCreateSubset(ds, parent, paneId)
 
   const load = async (offset: number) => {
     setLoading(true)

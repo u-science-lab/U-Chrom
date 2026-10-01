@@ -16,7 +16,7 @@ import type { ScopeSpec } from '../groups'
 import { isPointPick, type ColorMode, type Geometry, type LayerStyle, type PointSet, type SegmentInfo } from '../types'
 import { registerRenderHook } from '../capture'
 import { palette } from '../theme'
-import { effectiveStyle } from '../workspace'
+import { effectiveStyle, layerShownIn } from '../workspace'
 import { useTheme } from '../useTheme'
 import { PickLabel } from './PickLabel'
 
@@ -226,6 +226,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
   const setStatus = useStore((s) => s.setStatus)
   // this view's own style changes (each 3-D view is styled on its own)
   const paneStyles = useStore((s) => s.workspace.panes.find((p) => p.id === paneId)?.layerStyles)
+  // layers drawn here: shared ones and this view's subsets, minus what this view hides
+  const paneHidden = useStore((s) => s.workspace.panes.find((p) => p.id === paneId)?.hiddenLayers)
   // a trace view: only this trace
   const paneTrace = useStore((s) => s.workspace.panes.find((p) => p.id === paneId)?.trace ?? null)
   // drawn in full here: the pane's group, its pinned cell, else the global
@@ -420,7 +422,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
   useEffect(() => {
     const t = threeRef.current
     if (!t) return
-    const shown = layers.filter((l) => l.datasetId === activeDatasetId && l.visible && l.geometry)
+    const shown = layers.filter((l) => l.datasetId === activeDatasetId && l.geometry && layerShownIn(l, { id: paneId, hiddenLayers: paneHidden }))
     const keep = new Set(shown.map((l) => l.id))
     const drop = (id: string, e: Entry) => {
       for (const p of e.parts) {
@@ -555,7 +557,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     const pick = useStore.getState().pick
     if (pick && !isPointPick(pick) && !keep.has(pick.layerId)) setPick(null)
     t.dirty = true
-  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed, pal, paneStyles, paneTrace])
+  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed, pal, paneStyles, paneTrace, paneHidden])
 
   // Point sets (e.g. RNA spots): focused cell's points full, others faint.
   useEffect(() => {

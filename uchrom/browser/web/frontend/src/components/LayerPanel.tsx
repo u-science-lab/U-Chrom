@@ -1,17 +1,21 @@
 import { useState } from 'react'
 import { treeOrder } from '../layers'
 import { useStore } from '../store'
+import { layerInPane, toggleLayerInPane } from '../workspace'
 
 export function LayerPanel() {
   const activeId = useStore((s) => s.activeDatasetId)
   const all = useStore((s) => s.layers)
   const selected = useStore((s) => s.selectedLayerId)
   const select = useStore((s) => s.selectLayer)
-  const setVisible = useStore((s) => s.setVisible)
+  // the active 3-D view: its own subsets, and what it shows / hides
+  const pane = useStore((s) => s.workspace.panes.find((p) => p.id === s.workspace.activePane))
+  const setWorkspace = useStore((s) => s.setWorkspace)
   const rename = useStore((s) => s.renameLayer)
   const remove = useStore((s) => s.removeLayer)
   const [editing, setEditing] = useState<string | null>(null)
-  const rows = treeOrder(all.filter((l) => l.datasetId === activeId))
+  const rows = treeOrder(all.filter((l) => l.datasetId === activeId && layerInPane(l, pane)))
+  const shownHere = (name: string) => !pane?.hiddenLayers?.includes(name)
 
   return (
     <section className="panel">
@@ -26,14 +30,14 @@ export function LayerPanel() {
             onClick={() => select(layer.id)}
           >
             <button
-              className={`eye ${layer.visible ? 'on' : ''}`}
-              title={layer.visible ? 'Hide' : 'Show'}
+              className={`eye ${shownHere(layer.name) ? 'on' : ''}`}
+              title={shownHere(layer.name) ? 'Hide in this view' : 'Show in this view'}
               onClick={(e) => {
                 e.stopPropagation()
-                setVisible(layer.id, !layer.visible)
+                if (pane) setWorkspace((w) => toggleLayerInPane(w, pane.id, layer.name))
               }}
             >
-              {layer.visible ? '●' : '○'}
+              {shownHere(layer.name) ? '●' : '○'}
             </button>
             {editing === layer.id ? (
               <input

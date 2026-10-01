@@ -18,6 +18,8 @@ export type DistanceStat = 'median' | 'mean' | 'contact'
 
 /** Per-pane settings of the genome-coordinate views (all optional). */
 export interface PaneOptions {
+  /** 3d: layers (by name) hidden in this view */
+  hiddenLayers?: string[]
   /** 3d: only this trace of the pinned cell (a trace view) */
   trace?: string
   /** 3d: this view's style changes per layer name (render mode, colour, …) over the layer's own
@@ -428,6 +430,7 @@ function parseOptions(p: Partial<Pane> & LegacyPane): PaneOptions & { scope?: Sc
   if (typeof p.region === 'string') o.region = p.region
   if (typeof p.imageOpacity === 'number' && p.imageOpacity >= 0 && p.imageOpacity <= 1) o.imageOpacity = p.imageOpacity
   if (typeof p.trace === 'string' && p.trace) o.trace = p.trace
+  if (Array.isArray(p.hiddenLayers) && p.hiddenLayers.every((x) => typeof x === 'string') && p.hiddenLayers.length) o.hiddenLayers = [...p.hiddenLayers]
   const layerStyles = parseLayerStyles(p.layerStyles)
   if (layerStyles) o.layerStyles = layerStyles
   return o
@@ -458,6 +461,26 @@ export function parseLayerStyles(raw: unknown): Record<string, Partial<LayerStyl
 export function effectiveStyle(layer: Pick<Layer, 'name' | 'style'>, pane?: Pick<Pane, 'layerStyles'> | null): LayerStyle {
   const own = pane?.layerStyles?.[layer.name]
   return own ? { ...layer.style, ...own } : layer.style
+}
+
+/** A layer belongs to this 3-D view: shared (no owner) or made in it. */
+export const layerInPane = (layer: Pick<Layer, 'paneId'>, pane: Pick<Pane, 'id'> | null | undefined) => !layer.paneId || layer.paneId === pane?.id
+
+/** A layer is drawn in this 3-D view: it belongs there and the view doesn't hide it. */
+export const layerShownIn = (layer: Pick<Layer, 'paneId' | 'name'>, pane: Pick<Pane, 'id' | 'hiddenLayers'> | null | undefined) =>
+  layerInPane(layer, pane) && !pane?.hiddenLayers?.includes(layer.name)
+
+/** Show / hide a layer in one 3-D view only. */
+export function toggleLayerInPane(ws: WorkspaceState, paneId: string, layerName: string): WorkspaceState {
+  return {
+    ...ws,
+    panes: ws.panes.map((p) => {
+      if (p.id !== paneId) return p
+      const hidden = p.hiddenLayers ?? []
+      const next = hidden.includes(layerName) ? hidden.filter((n) => n !== layerName) : [...hidden, layerName]
+      return { ...p, hiddenLayers: next.length ? next : undefined }
+    }),
+  }
 }
 
 /** Change a layer's style in one 3-D view only. */

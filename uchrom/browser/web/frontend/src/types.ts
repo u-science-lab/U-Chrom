@@ -309,6 +309,8 @@ export interface Layer {
   name: string
   datasetId: string
   parentId: string | null
+  /** the 3-D view (pane id) a subset was made in: listed and drawn only there (absent: every view) */
+  paneId?: string | null
   /** own filter composed with all ancestors' filters */
   filter: LayerFilter
   visible: boolean

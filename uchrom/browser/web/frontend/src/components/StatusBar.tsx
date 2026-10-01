@@ -1,4 +1,5 @@
 import { useStore } from '../store'
+import { layerShownIn } from '../workspace'
 
 export function StatusBar() {
   const status = useStore((s) => s.status)
@@ -6,7 +7,9 @@ export function StatusBar() {
   const setError = useStore((s) => s.setError)
   const layers = useStore((s) => s.layers)
   const activeId = useStore((s) => s.activeDatasetId)
-  const shown = layers.filter((l) => l.datasetId === activeId && l.visible && l.geometry)
+  // the layers the active 3-D view draws
+  const pane = useStore((s) => s.workspace.panes.find((p) => p.id === s.workspace.activePane))
+  const shown = layers.filter((l) => l.datasetId === activeId && l.geometry && layerShownIn(l, pane))
   const points = shown.reduce((acc, l) => acc + l.geometry!.header.n_points, 0)
   const loading = layers.some((l) => l.loading)
   const truncated = shown.some((l) => l.geometry!.header.truncated)

@@ -111,11 +111,13 @@ export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCel
   const setMaxBond = useStore((s) => s.setMaxBond)
   const unit = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId)?.xyz_unit ?? '')
   const st = effectiveStyle(layer, pane)
+  // the cell this view draws in full: its pinned cell, else the focused one (all / group: none)
+  const viewCell = pane?.scope?.kind === 'cell' ? pane.scope.cell : pane?.scope?.kind === 'all' || pane?.scope?.kind === 'group' ? null : view.focusCell
   const upd = (p: Partial<typeof st>) => setWorkspace((w) => setPaneLayerStyle(w, paneId, layer.name, p))
   const header = layer.geometry?.header
   // what is actually drawn in full (focused cell, visible chromosomes)
   const hidden = new Set(view.hiddenChroms)
-  const drawn = header?.segments.filter((s) => !hidden.has(s.chrom) && (view.focusCell === null || s.cell_id === view.focusCell))
+  const drawn = header?.segments.filter((s) => !hidden.has(s.chrom) && (viewCell === null || s.cell_id === viewCell))
   // a subset's tubes: 1.2 × its parent's (drawn around them); else from its own spots
   const parentGeom = useStore((s) => (layer.parentId ? s.layers.find((l) => l.id === layer.parentId)?.geometry : undefined))
   const autoR = parentGeom ? autoTubeRadius(parentGeom) * 1.2 : layer.geometry ? autoTubeRadius(layer.geometry) : null
@@ -131,7 +133,7 @@ export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCel
     ['trace', 'Trace'],
     ['custom', 'Custom'],
   ]
-  const colorLabel = !hasCells ? 'Colour' : view.focusCell ? `Colour · cell ${view.focusCell} & pinned cells` : 'Colour · focused / pinned cells'
+  const colorLabel = !hasCells ? 'Colour' : viewCell ? `Colour · cell ${viewCell}` : 'Colour · focused / pinned cells'
   return (
     <>
       <h2>Style</h2>
@@ -148,7 +150,7 @@ export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCel
       </div>
       {tubeFallback > 0 && (
         <div className="note small">
-          {hasCells && view.focusCell === null ? (
+          {hasCells && viewCell === null ? (
             <>
               All cells are drawn as <b>lines</b>: at this zoom a tube is thinner than a pixel, and {tubeFallback.toLocaleString('en-US')} traces exceed the tube
               budget. Select a cell to see tubes.
@@ -227,7 +229,7 @@ export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCel
 
       {header && (
         <dl className="stats">
-          <dt>{view.focusCell ? `cell ${view.focusCell}` : 'shown'} points</dt>
+          <dt>{viewCell ? `cell ${viewCell}` : 'shown'} points</dt>
           <dd>{drawn!.reduce((a, s) => a + s.n_points, 0).toLocaleString('en-US')}</dd>
           <dt>traces</dt>
           <dd>{new Set(drawn!.map((s) => s.trace_id)).size.toLocaleString('en-US')}</dd>

@@ -6,6 +6,9 @@ import {
   defaultEmbeddingKey,
   defaultWorkspace,
   workspaceOf,
+  layerInPane,
+  layerShownIn,
+  toggleLayerInPane,
   addTracePane,
   effectiveStyle,
   parseLayerStyles,
@@ -269,5 +272,23 @@ describe('trace views', () => {
     expect(ws.activePane).toBe(p.id)
     expect(parseWorkspace(JSON.parse(JSON.stringify(ws)))!.panes[1].trace).toBe('t12')
     expect(addTracePane(workspaceOf(['3d']), null, 't1').panes[1]).toMatchObject({ trace: 't1' })
+  })
+})
+
+describe('layers per 3-D view', () => {
+  it('a subset belongs to the view it was made in; showing / hiding is per view', () => {
+    const root = { name: 'ds', paneId: null }
+    const sub = { name: 'chr6:20M-60M', paneId: 'P2' }
+    let ws = workspaceOf(['3d', '3d'])
+    const [p1, p2] = ws.panes
+    expect(layerInPane(sub, p1)).toBe(false)
+    expect(layerShownIn(sub, p2)).toBe(true)
+    ws = toggleLayerInPane(ws, 'P2', 'ds')
+    expect(layerShownIn(root, ws.panes[1])).toBe(false) // hidden in P2 only
+    expect(layerShownIn(root, ws.panes[0])).toBe(true)
+    expect(parseWorkspace(JSON.parse(JSON.stringify(ws)))!.panes[1].hiddenLayers).toEqual(['ds'])
+    ws = toggleLayerInPane(ws, 'P2', 'ds')
+    expect(ws.panes[1].hiddenLayers).toBeUndefined()
+    expect(layerShownIn(root, p1)).toBe(true)
   })
 })

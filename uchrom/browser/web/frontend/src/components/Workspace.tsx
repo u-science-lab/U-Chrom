@@ -250,6 +250,16 @@ export function Workspace() {
     setWorkspace((w) => dropUnknownPins(w, new Set(cellList.map((c) => c.cell_id))))
   }, [cellList, setWorkspace])
 
+  // A closed 3-D view takes its subsets with it (only once this layout is the active
+  // dataset's — while switching, pane ids of another dataset's layout would not match).
+  const wsOwner = useStore((s) => s.workspaceOwner)
+  const layers = useStore((s) => s.layers)
+  useEffect(() => {
+    if (!ds || wsOwner !== ds.name) return
+    const ids = new Set(ws.panes.map((p) => p.id))
+    for (const l of layers) if (l.datasetId === ds.id && l.paneId && !ids.has(l.paneId)) useStore.getState().removeLayer(l.id)
+  }, [ws.panes, layers, ds, wsOwner])
+
   // Group scopes the active dataset doesn't know (another dataset's lasso group) are dropped.
   const fields = ds?.cell_fields
   const savedIds = useStore((s) => activeSavedGroups(s))
