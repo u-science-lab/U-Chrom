@@ -1,0 +1,226 @@
+{
+ "populations": {
+  "ours:ours_gpu_S200_s1": {
+   "n_structures": 200,
+   "n_beads": 3008,
+   "fit": {
+    "pearson_all_restrained": 0.9202591014696294,
+    "mae_all_restrained": 0.0064960623387147354,
+    "n_all_restrained": 614139,
+    "pearson_all_unrestrained": 0.15178641699197082,
+    "mae_all_unrestrained": 0.0029001023559368172,
+    "n_all_unrestrained": 433723,
+    "pearson_intra_restrained": 0.929984914740057,
+    "mae_intra_restrained": 0.049085457469171395,
+    "n_intra_restrained": 53640,
+    "pearson_intra_unrestrained": -0.15659887215540658,
+    "mae_intra_unrestrained": 0.014270265750114608,
+    "n_intra_unrestrained": 624,
+    "pearson_inter_restrained": 0.6612082986145817,
+    "mae_inter_restrained": 0.002420238555268744,
+    "n_inter_restrained": 560499,
+    "pearson_inter_unrestrained": 0.15767414844385597,
+    "mae_inter_unrestrained": 0.0028837204618249253,
+    "n_inter_unrestrained": 433099
+   }
+  },
+  "ours:ours_gpu_S200_s2": {
+   "n_structures": 200,
+   "n_beads": 3008,
+   "fit": {
+    "pearson_all_restrained": 0.9199852349741278,
+    "mae_all_restrained": 0.006475816858187679,
+    "n_all_restrained": 614139,
+    "pearson_all_unrestrained": 0.1527029502368716,
+    "mae_all_unrestrained": 0.00290014902526686,
+    "n_all_unrestrained": 433723,
+    "pearson_intra_restrained": 0.9294824326759858,
+    "mae_intra_restrained": 0.048940449476770585,
+    "n_intra_restrained": 53640,
+    "pearson_intra_unrestrained": -0.1336584192282298,
+    "mae_intra_unrestrained": 0.014318501674312686,
+    "n_intra_unrestrained": 624,
+    "pearson_inter_restrained": 0.6629625061813057,
+    "mae_inter_restrained": 0.002411932901818822,
+    "n_inter_restrained": 560499,
+    "pearson_inter_unrestrained": 0.15845102760384908,
+    "mae_inter_unrestrained": 0.0028836977010823096,
+    "n_inter_unrestrained": 433099
+   }
+  },
+  "ours:ours_gpu_S200_s3": {
+   "n_structures": 200,
+   "n_beads": 3008,
+   "fit": {
+    "pearson_all_restrained": 0.9196672124982005,
+    "mae_all_restrained": 0.006505954871975542,
+    "n_all_restrained": 614139,
+    "pearson_all_unrestrained": 0.15222238644707084,
+    "mae_all_unrestrained": 0.0028991959188521114,
+    "n_all_unrestrained": 433723,
+    "pearson_intra_restrained": 0.9293845606916862,
+    "mae_intra_restrained": 0.04924984746112917,
+    "n_intra_restrained": 53640,
+    "pearson_intra_unrestrained": -0.1063767506135413,
+    "mae_intra_unrestrained": 0.014069320124567289,
+    "n_intra_unrestrained": 624,
+    "pearson_inter_restrained": 0.6614115647153112,
+    "mae_inter_restrained": 0.0024153456140068395,
+    "n_inter_restrained": 560499,
+    "pearson_inter_unrestrained": 0.1576345891273082,
+    "mae_inter_unrestrained": 0.0028831022370279413,
+    "n_inter_unrestrained": 433099
+   }
+  },
+  "igm:orig_S200_s1": {
+   "n_structures": 200,
+   "n_beads": 3008,
+   "fit": {
+    "pearson_all_restrained": 0.9234172291759098,
+    "mae_all_restrained": 0.006244987142055899,
+    "n_all_restrained": 614139,
+    "pearson_all_unrestrained": 0.15216687484951297,
+    "mae_all_unrestrained": 0.002903081949570241,
+    "n_all_unrestrained": 433723,
+    "pearson_intra_restrained": 0.9317214957019142,
+    "mae_intra_restrained": 0.04658453243471874,
+    "n_intra_restrained": 53640,
+    "pearson_intra_unrestrained": -0.08394111933576634,
+    "mae_intra_unrestrained": 0.013699210894585869,
+    "n_intra_unrestrained": 624,
+    "pearson_inter_restrained": 0.6610541999439634,
+    "mae_inter_restrained": 0.0023844749743295807,
+    "n_inter_restrained": 560499,
+    "pearson_inter_unrestrained": 0.15736733896063046,
+    "mae_inter_unrestrained": 0.002887527112312039,
+    "n_inter_unrestrained": 433099
+   }
+  },
+  "igm:orig_S200_s2": {
+   "n_structures": 200,
+   "n_beads": 3008,
+   "fit": {
+    "pearson_all_restrained": 0.9230422222329738,
+    "mae_all_restrained": 0.006246750149994982,
+    "n_all_restrained": 614139,
+    "pearson_all_unrestrained": 0.1516089514531522,
+    "mae_all_unrestrained": 0.0028932195076207443,
+    "n_all_unrestrained": 433723,
+    "pearson_intra_restrained": 0.9311707961506098,
+    "mae_intra_restrained": 0.04660633629643046,
+    "n_intra_restrained": 53640,
+    "pearson_intra_unrestrained": -0.14244590854772332,
+    "mae_intra_unrestrained": 0.014210168239104605,
+    "n_intra_unrestrained": 624,
+    "pearson_inter_restrained": 0.6664882211130544,
+    "mae_inter_restrained": 0.0023843200637775237,
+    "n_inter_restrained": 560499,
+    "pearson_inter_unrestrained": 0.1571723224246986,
+    "mae_inter_unrestrained": 0.0028769142840842175,
+    "n_inter_unrestrained": 433099
+   }
+  }
+ },
+ "pairs": [
+  {
+   "a": "ours:ours_gpu_S200_s1",
+   "b": "ours:ours_gpu_S200_s2",
+   "kind": "ours",
+   "pearson_contact": 0.9903341234754428,
+   "pearson_contact_intra": 0.9925181986470211,
+   "pearson_contact_inter": 0.5827354930089561,
+   "pearson_radial": 0.9921472948126923,
+   "mean_abs_diff_contact": 0.0038055547867944448
+  },
+  {
+   "a": "ours:ours_gpu_S200_s1",
+   "b": "ours:ours_gpu_S200_s3",
+   "kind": "ours",
+   "pearson_contact": 0.9903237952247314,
+   "pearson_contact_intra": 0.9924925477483375,
+   "pearson_contact_inter": 0.581913015188377,
+   "pearson_radial": 0.9926936242017148,
+   "mean_abs_diff_contact": 0.0038083915152949547
+  },
+  {
+   "a": "ours:ours_gpu_S200_s1",
+   "b": "igm:orig_S200_s1",
+   "kind": "igm-ours",
+   "pearson_contact": 0.9902081287480916,
+   "pearson_contact_intra": 0.9924726997448806,
+   "pearson_contact_inter": 0.5802027349940887,
+   "pearson_radial": 0.9876427184695534,
+   "mean_abs_diff_contact": 0.0038045324670615004
+  },
+  {
+   "a": "ours:ours_gpu_S200_s1",
+   "b": "igm:orig_S200_s2",
+   "kind": "igm-ours",
+   "pearson_contact": 0.9901650356403212,
+   "pearson_contact_intra": 0.9924029909378816,
+   "pearson_contact_inter": 0.5816740610130552,
+   "pearson_radial": 0.9879247296802673,
+   "mean_abs_diff_contact": 0.0038059675319841732
+  },
+  {
+   "a": "ours:ours_gpu_S200_s2",
+   "b": "ours:ours_gpu_S200_s3",
+   "kind": "ours",
+   "pearson_contact": 0.9904219991912763,
+   "pearson_contact_intra": 0.9926331323507874,
+   "pearson_contact_inter": 0.5816106301135101,
+   "pearson_radial": 0.9942050204322281,
+   "mean_abs_diff_contact": 0.003798057377784479
+  },
+  {
+   "a": "ours:ours_gpu_S200_s2",
+   "b": "igm:orig_S200_s1",
+   "kind": "igm-ours",
+   "pearson_contact": 0.9903038457543931,
+   "pearson_contact_intra": 0.9926001002184942,
+   "pearson_contact_inter": 0.5798311397948396,
+   "pearson_radial": 0.9883923297035215,
+   "mean_abs_diff_contact": 0.003796052104189295
+  },
+  {
+   "a": "ours:ours_gpu_S200_s2",
+   "b": "igm:orig_S200_s2",
+   "kind": "igm-ours",
+   "pearson_contact": 0.9901570747003259,
+   "pearson_contact_intra": 0.9923838402575796,
+   "pearson_contact_inter": 0.5814826996443783,
+   "pearson_radial": 0.9910927923482833,
+   "mean_abs_diff_contact": 0.003802566559337012
+  },
+  {
+   "a": "ours:ours_gpu_S200_s3",
+   "b": "igm:orig_S200_s1",
+   "kind": "igm-ours",
+   "pearson_contact": 0.9902750214434194,
+   "pearson_contact_intra": 0.9925828213264657,
+   "pearson_contact_inter": 0.5778530763600345,
+   "pearson_radial": 0.9874975548067344,
+   "mean_abs_diff_contact": 0.0038029136947422457
+  },
+  {
+   "a": "ours:ours_gpu_S200_s3",
+   "b": "igm:orig_S200_s2",
+   "kind": "igm-ours",
+   "pearson_contact": 0.9901363693525482,
+   "pearson_contact_intra": 0.9923700120096101,
+   "pearson_contact_inter": 0.5801001836979442,
+   "pearson_radial": 0.9898605304930388,
+   "mean_abs_diff_contact": 0.003808220929855268
+  },
+  {
+   "a": "igm:orig_S200_s1",
+   "b": "igm:orig_S200_s2",
+   "kind": "igm",
+   "pearson_contact": 0.9903180088874103,
+   "pearson_contact_intra": 0.992602802410589,
+   "pearson_contact_inter": 0.57862154106661,
+   "pearson_radial": 0.9919704246852871,
+   "mean_abs_diff_contact": 0.0037786094447551295
+  }
+ ]
+}
