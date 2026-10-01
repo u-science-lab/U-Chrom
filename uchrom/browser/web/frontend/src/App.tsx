@@ -96,7 +96,6 @@ function LeftSidebar() {
   return (
     <div className="left">
       <div className="left-tabs" role="tablist">
-        <SideClose side="left" />
         <div className="seg left-tab-seg">
           {(
             [
@@ -109,6 +108,7 @@ function LeftSidebar() {
             </button>
           ))}
         </div>
+        <SideClose side="left" />
       </div>
       {tab === 'store' && <StorePanel />}
       {tab === 'cells' && sections.has('cells') && <CellPanel />}
