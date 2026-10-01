@@ -67,7 +67,8 @@ discovery/           Separate package `uchrom-discovery` (import uchrom_discover
 native/nucdyn/       Separate package `u-chrom-nucdyn` (import uchrom_nucdyn): Rust + PyO3
                      (maturin, abi3) NucDynamics engine — contact preprocessing, hierarchical
                      annealing, CPU (f64, rayon) and GPU (wgpu/WGSL, f32, feature `gpu`)
-                     backends, protocols nuc_dynamics_2017 (default) / release_1.3.
+                     backends, protocols nuc_dynamics_2017 (default) / release_1.3 /
+                     robust (new noise-aware method, src/robust.rs; PREREG in benchmarks/screcon).
                      `cargo test` in native/nucdyn; `pip install ./native/nucdyn`
                      (= extra `u-chrom[nucdyn]`).  LGPL-3.0 (re-implementation of tjs23/nuc_dynamics).
 ```

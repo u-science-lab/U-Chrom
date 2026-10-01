@@ -60,6 +60,22 @@ convention is the one of the GEO models).  `protocol="release_1.3"` follows
 the repository's later default branch (`release_1.3`, 2021–22: bead-size
 scaling, restraint weights, 3-D ambiguity resolution, model selection).
 
+`protocol="robust"` is **not** NucDynamics: it is the new single-cell
+method of U-Chrom (`benchmarks/screcon/PREREG.md` §7; milestone M2,
+annealing only), built on the 2017 protocol.  Each contact is modelled as a
+true proximity or a false contact (uniform over pairs, rate ε); before every
+stage from `robust_start_stage` on (and `robust_segments` times inside it,
+plus `robust_refine` extra passes at the final size) the contact restraints
+are re-weighted by the posterior probability that they are true (EM: ε and
+the contact-kernel width fitted to the current distances; `src/robust.rs`).
+Optional evidence: per-contact likelihood ratios (`prior_lr`), the
+structure-free local-support evidence (`robust_support_rel`, `src/support.rs`)
+and a Poisson "no contact" term (`robust_nc_scale`).  With re-weighting
+disabled (`robust_start_stage` beyond the schedule) it equals the 2017
+protocol bit for bit; the existing protocols are unchanged
+(`tests/regression.rs`, golden hashes recorded before `robust` was added).
+Development log: `benchmarks/screcon/robust_devlog.md`.
+
 ### Where each element of the original is implemented (2017 protocol)
 
 | Original (`master`) | What it does | Here |
