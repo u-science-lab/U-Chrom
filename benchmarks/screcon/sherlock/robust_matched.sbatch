@@ -25,7 +25,7 @@ nvidia-smi --query-gpu=name --format=csv,noheader || true
 tail -n +2 "$DEV" | cut -f1,5 | while IFS=$'\t' read -r cell table; do
   out=$O/models/$VARIANT/$cell.npz
   [ -f "$out" ] && continue
-  $PY $SC/run_robust.py --contacts "$table" --res 100000 --device gpu --n-models 2 --seed 1 --params "$PARAMS" \
+  $PY $SC/run_robust.py --contacts "$table" --res 100000 --device ${DEVICE:-gpu} --n-models 2 --seed 1 --params "$PARAMS" \
     --label "robust_$VARIANT" --out "$out" > "$O/models/$VARIANT/$cell.log" 2>&1 || echo "FAILED $cell"
 done
 echo "models: $(ls "$O"/models/$VARIANT/*.npz | wc -l)"
