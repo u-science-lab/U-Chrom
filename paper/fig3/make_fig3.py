@@ -8,7 +8,8 @@ from the values noted inside a dashed frame (``mock_frame``); nothing else is mo
   a  3-D render of the U-Chrom reconstruction of Stevens 2017 Cell 1 (U-Chrom web browser)
   b  NucDynamics (native engine) vs the published Stevens 2017 structure, Cell 1
   c  ensemble precision, 8 cells: published / original code / U-Chrom (ED Table 2 metric)
-  d  NucDynamics speed, original vs U-Chrom (CPU, GPU), and 10 kb / 1 kb on one GPU
+  d  time for one model vs resolution: U-Chrom NucDynamics (CPU 1 / 16 threads, GPU), original
+     NucDynamics, hickit, Si-C (robust: placeholder until its runs exist)
   e  held-out contact prediction (8 cells x 3 folds) per genomic separation, all methods
   f  imaging-truth simulations (Su 2020 chr21, Takei 2021 1 Mb): distance agreement
   g  Hi-C + FISH (GEM-FISH): held-out FISH error, with the paper's model and HIPPS
@@ -85,11 +86,6 @@ def load_core() -> dict:
     d["nd_prec_ours"] = [c["native_gpu_full"]["rmsd_to_mean_mirror_mean"] for c in sc]
     p = np.load(RES / "fig3_panels.npz")
     d["nd_scatter"] = (p["nd_pub_d"], p["nd_ours_d"])
-    sp = _j(RES / "a_nucdyn_speed_cpu_same_node.json")     # Cell 1, full schedule, one node
-    d["nd_time"] = {"labels": ["original", "U-Chrom", "U-Chrom"], "hw": ["10 CPU", "10 CPU", "1 GPU"],
-                    "t": [sp["orig_10models_10cores"]["wall_seconds"] / 60,
-                          sp["native_10models_10threads"]["wall_seconds"] / 60,
-                          sp["native_gpu_10models_h100"]["wall_seconds"] / 60]}
     # a2 MDS vs miniMDS, Rao 2014 IMR90 chr21 (feasibility run)
     m = _j(FEAS / "a_mds_vs_minimds_imr90_chr21.json")
     rs = ("100kb", "25kb")
@@ -187,17 +183,17 @@ def load_consensus(d: dict) -> None:
     d["cons_runs"] = {p.stem: _j(p) for p in sorted((RES / "consensus").glob("imr90*.json"))}
 
 
-def load_scale(d: dict) -> None:
-    """NucDynamics at 10 kb / 1 kb, Cell 1, 10 models, one H100."""
-    d["nd_hires"] = {r: _j(RES / f"a_nucdyn_gpu_{r}_cell1.json") for r in ("10kb", "1kb")}
+def load_speed(d: dict) -> None:
+    """One-model wall time per method x resolution (``benchmarks/fig3/speed_one_model.py``)."""
+    d["speed1"] = _j(RES / "speed_one_model.json")
 
 
 def load_results() -> dict:
     d = load_core()
+    load_speed(d)
     load_screcon(d)
     load_igm(d)
     load_consensus(d)
-    load_scale(d)
     return d
 
 
@@ -308,21 +304,71 @@ def p_nd_precision(fig, d, x, y):
               handletextpad=0.05, columnspacing=0.5)
 
 
+SPEED_STYLE = {   # (method, threads) -> label, colour, line style, marker
+    ("nucdyn_gpu", 0): ("U-Chrom GPU", OURS, "-", "D"),
+    ("nucdyn_cpu", 16): ("U-Chrom CPU 16 thr.", OURS2, "-", "o"),
+    ("nucdyn_cpu", 1): ("U-Chrom CPU 1 thr.", OURS2, (0, (2, 1)), "o"),
+    ("orig", 1): ("original", ORIG, "-", "s"),
+    ("sic", 1): ("Si-C", PURPLE, "-", "^"),
+    ("hickit", 1): ("hickit", TEAL, "-", "v"),
+    ("robust_gpu", 0): ("robust GPU", OURS, (0, (1, 1)), "D"),
+    ("robust_cpu", 16): ("robust CPU 16", OURS2, (0, (1, 1)), "o"),
+    ("robust_cpu", 1): ("robust CPU 1", OURS2, (0, (1, 1)), "o"),
+}
+
+
 def p_nd_speed(fig, d, x, y):
-    head_(fig, x, y, "d", "NucDynamics speed", "Cell 1, 10 models")
-    t = d["nd_time"]
-    tx = ax_at(fig, x + 11, y + 11, 29, 28)
-    for k_, (v, col) in enumerate(zip(t["t"], [ORIG, OURS2, OURS])):
-        tx.bar(k_, v, 0.65, color=col)
-        tx.text(k_, v * 1.35, f"{v:.0f}" if v >= 10 else f"{v:.1f}", ha="center", fontsize=5.5)
-    tx.set_yscale("log"); tx.set_ylim(0.2, max(t["t"]) * 6)
-    tx.set_xticks(range(3), [f"{a}\n{b}" for a, b in zip(["original", "U-Chrom", "U-Chrom"], t["hw"])],
-                  fontsize=5.3)
-    tx.set_xlim(-0.6, 2.6); tx.set_ylabel("wall time (min)")
-    h10, h1 = d["nd_hires"]["10kb"], d["nd_hires"]["1kb"]
-    tx.text(0.98, 0.99, f"1 GPU:\n10 kb {h10['wall_seconds'] / 60:.1f} min\n"
-            f"1 kb {h1['wall_seconds'] / 60:.0f} min\n(2.6 M particles)",
-            transform=tx.transAxes, fontsize=5.0, va="top", ha="right", color=INK, linespacing=1.1)
+    """Wall time of ONE model vs final resolution; censored runs (job cap) as open markers + arrow."""
+    sp = d["speed1"]
+    cap = sp["cap_hours"] * 3600
+    head_(fig, x, y, "d", "Time for one model", "Cell 1; CPU: EPYC 9754, GPU: H100")
+    ax = ax_at(fig, x + 12, y + 11, 28.5, 28)
+    rows = sp["rows"]
+    robust_done = any_failed = False
+    for (m, t), (lab, col, ls, mk) in SPEED_STYLE.items():
+        cfg = sorted([r for r in rows if r["method"] == m and r["threads"] == t], key=lambda r: -r["res"])
+        ok = [r for r in cfg if r["status"] == "ok"]
+        cen = [r for r in cfg if r["status"].startswith("censored")]
+        bad = [r for r in cfg if r["status"] == "failed"]
+        if m.startswith("robust"):
+            robust_done |= bool(ok or cen)
+        for r in bad:                                  # failed run (e.g. out of memory): cross above the cap
+            ax.plot(r["res"], cap * 2.2, marker="x", ms=2.6, mew=0.7, color=col, ls="none", zorder=4)
+            any_failed = True
+        if not ok and not cen:
+            continue
+        ax.plot([r["res"] for r in ok], [r["median_wall_seconds"] for r in ok], color=col, ls=ls, lw=0.8,
+                marker=mk, ms=2.2, mew=0, zorder=3)
+        if ok and cen:                                 # dotted link from the last finished point to the cap
+            last = ok[-1]
+            ax.plot([last["res"], cen[0]["res"]], [last["median_wall_seconds"], cap], color=col, ls=":", lw=0.6)
+        for r in cen:
+            ax.plot(r["res"], cap, marker=mk, ms=2.6, mfc="white", mec=col, mew=0.6, zorder=4, ls="none")
+            ax.annotate("", xy=(r["res"], cap * 4.5), xytext=(r["res"], cap * 1.25),
+                        arrowprops=dict(arrowstyle="-|>", lw=0.5, color=col, mutation_scale=4))
+    ax.axhline(cap, color=LGREY, lw=0.5, ls="--", zorder=0)
+    ax.text(5.5e5, cap * 0.62, f"{sp['cap_hours']:.0f} h cap", fontsize=4.8, color=GREY, va="top")
+    ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_xlim(7e5, 7e2)
+    res_ticks = [5e5, 1e5, 1e4, 1e3]
+    ax.set_xticks(res_ticks, ["500k", "100k", "10k", "1k"])
+    ax.set_xticks([5e4, 2e4], minor=True)
+    ax.set_ylim(1, cap * 8)
+    ax.set_yticks([1, 60, 3600, 86400], ["1 s", "1 min", "1 h", "1 d"])
+    ax.set_xlabel("final resolution (bp)", labelpad=1)
+    ax.set_ylabel("wall time, one model", labelpad=1)
+    hs = [mpl.lines.Line2D([], [], color=c, ls=ls, marker=mk, ms=2.2, mew=0, lw=0.8, label=lab)
+          for (m, t), (lab, c, ls, mk) in SPEED_STYLE.items() if not m.startswith("robust")]
+    hs.append(mpl.lines.Line2D([], [], color=OURS, ls=(0, (1, 1)), lw=0.8,
+                               label="robust" + ("" if robust_done else " (pending)")))
+    hs.append(mpl.lines.Line2D([], [], color=GREY, marker="o", ms=2.6, mfc="white", mew=0.6, ls="none",
+                               label="> cap (censored)"))
+    if any_failed:
+        hs.append(mpl.lines.Line2D([], [], color=GREY, marker="x", ms=2.6, mew=0.7, ls="none", label="failed"))
+    ax.legend(handles=hs, frameon=False, fontsize=4.8, ncol=2, loc="upper left", bbox_to_anchor=(-0.3, -0.22),
+              handlelength=1.6, handletextpad=0.3, columnspacing=0.6, labelspacing=0.25)
+    if not robust_done:
+        mock_frame(fig, x + 1.5, y + 8, 40.5, 51, "robust: runs pending")
 
 
 # row 2 — one benchmark for every method

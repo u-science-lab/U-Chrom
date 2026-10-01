@@ -1,0 +1,1111 @@
+{
+ "what": "wall time to compute ONE single-cell model (seed 1), Stevens 2017 Cell 1, per method and resolution",
+ "input": "GSM2219497_Cell_1_contact_pairs.txt.gz (GSE80280, haploid mESC, full contact table, 111,838 contacts); same file for all methods",
+ "timed": "method's own work from its input table to its model file (contact parsing, filtering / preparation, annealing / simulation, model output); excluded: environment setup, conversion of the GEO table to NCC (original) / .pairs (hickit) and of the outputs to .npz (wall_total_seconds includes them)",
+ "hardware": {
+  "cpu": [
+   "AMD EPYC 9754 128-Core Processor"
+  ],
+  "gpu": [
+   "NVIDIA H100 80GB HBM3, 81559 MiB, 550.163.01"
+  ],
+  "cpu_runs": "Slurm --constraint=CPU_SKU:9754 (AMD EPYC 9754, 256-core nodes, shared with other jobs), --cpus-per-task = thread count, one process per run",
+  "gpu_runs": "one NVIDIA H100 SXM5 80 GB (-G 1, -C GPU_SKU:H100_SXM5), wgpu / Vulkan, f32"
+ },
+ "threads": "1 thread for every CPU method (original NucDynamics, hickit and Si-C are single-threaded per model); U-Chrom CPU (and robust CPU) also with 16 threads (parallel force loops)",
+ "cap_hours": 48.0,
+ "repeats": "<= 15 min: 3 runs, <= 1 h: 2 runs, longer: 1 run; median reported; same seed in every repeat",
+ "schedules": {
+  "nucdyn": "2017 schedule extended below 100 kb (8, 4, 2, 0.4, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001 Mb), truncated above the target, target appended; 500 temperature x 100 dynamics steps per stage",
+  "hickit": "Dip-C: -r1m -c1 -r10m -c5 then -b4m -b1m -b200k (-D5 -b50k) (-D5 -b20k) truncated above the target, -b<target> appended, -P1 (haploid, no -S / imputation); empty beads merged",
+  "sic": "Si-C's own ladder: res x 2^k < 2 Mb, refined down to res (integer kb); one replica"
+ },
+ "caveats": [
+  "Si-C runs its precompiled x86-64 binaries (the C sources cannot be rebuilt); its 1 kb contact preparation is re-done in Python (the shipped script needs MySQL's `replace`).",
+  "hickit merges consecutive beads without contacts, so it simulates far fewer beads than the nominal resolution (n_particles = its final bead count; n_particles_grid = the regular grid).",
+  "Each method uses its own schedule (stages, steps); times are for each method's default protocol at the target resolution, not for equal work.",
+  "CPU nodes are shared with other jobs (fixed core count, not exclusive): memory bandwidth contention can add noise; load averages are in the records.",
+  "The GPU runs use 8 host cores of the GPU node (Intel Xeon 8462Y+), a different CPU from the CPU runs."
+ ],
+ "rows": [
+  {
+   "method": "nucdyn_cpu",
+   "label": "U-Chrom NucDynamics, CPU",
+   "device": "cpu",
+   "threads": 1,
+   "res": 500000,
+   "res_tag": "500kb",
+   "n_runs": 3,
+   "status": "ok",
+   "n": 3,
+   "median_wall_seconds": 273.35027527809143,
+   "wall_seconds": [
+    273.19426441192627,
+    273.35027527809143,
+    274.1583995819092
+   ],
+   "wall_total_seconds": [
+    274.76201936695725,
+    273.5439761672169,
+    274.4133456479758
+   ],
+   "peak_rss_mb": 83.24,
+   "n_particles": 5169,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-17n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "nucdyn_cpu",
+   "label": "U-Chrom NucDynamics, CPU",
+   "device": "cpu",
+   "threads": 1,
+   "res": 100000,
+   "res_tag": "100kb",
+   "n_runs": 2,
+   "status": "ok",
+   "n": 2,
+   "median_wall_seconds": 1464.7519097328186,
+   "wall_seconds": [
+    1464.532796382904,
+    1464.9710230827332
+   ],
+   "wall_total_seconds": [
+    1466.0877365428023,
+    1465.3402278912254
+   ],
+   "peak_rss_mb": 94.288,
+   "n_particles": 25724,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-17n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "nucdyn_cpu",
+   "label": "U-Chrom NucDynamics, CPU",
+   "device": "cpu",
+   "threads": 1,
+   "res": 50000,
+   "res_tag": "50kb",
+   "n_runs": 2,
+   "status": "ok",
+   "n": 2,
+   "median_wall_seconds": 2868.812302350998,
+   "wall_seconds": [
+    2866.3767161369324,
+    2871.2478885650635
+   ],
+   "wall_total_seconds": [
+    2867.9629938537255,
+    2871.5694622639567
+   ],
+   "peak_rss_mb": 105.056,
+   "n_particles": 51411,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-17n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "nucdyn_cpu",
+   "label": "U-Chrom NucDynamics, CPU",
+   "device": "cpu",
+   "threads": 1,
+   "res": 20000,
+   "res_tag": "20kb",
+   "n_runs": 1,
+   "status": "ok",
+   "n": 1,
+   "median_wall_seconds": 5711.1516172885895,
+   "wall_seconds": [
+    5711.1516172885895
+   ],
+   "wall_total_seconds": [
+    5712.90547169093
+   ],
+   "peak_rss_mb": 129.844,
+   "n_particles": 128473,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-17n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "nucdyn_cpu",
+   "label": "U-Chrom NucDynamics, CPU",
+   "device": "cpu",
+   "threads": 1,
+   "res": 10000,
+   "res_tag": "10kb",
+   "n_runs": 1,
+   "status": "ok",
+   "n": 1,
+   "median_wall_seconds": 12083.123470783234,
+   "wall_seconds": [
+    12083.123470783234
+   ],
+   "wall_total_seconds": [
+    12084.957650163968
+   ],
+   "peak_rss_mb": 176.904,
+   "n_particles": 256904,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-14n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "nucdyn_cpu",
+   "label": "U-Chrom NucDynamics, CPU",
+   "device": "cpu",
+   "threads": 1,
+   "res": 1000,
+   "res_tag": "1kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "no record yet (queued or running)"
+  },
+  {
+   "method": "nucdyn_cpu",
+   "label": "U-Chrom NucDynamics, CPU",
+   "device": "cpu",
+   "threads": 16,
+   "res": 500000,
+   "res_tag": "500kb",
+   "n_runs": 3,
+   "status": "ok",
+   "n": 3,
+   "median_wall_seconds": 188.49000668525696,
+   "wall_seconds": [
+    188.49000668525696,
+    184.71505737304688,
+    208.4883668422699
+   ],
+   "wall_total_seconds": [
+    189.76545782200992,
+    185.007632849738,
+    208.76711841579527
+   ],
+   "peak_rss_mb": 84.116,
+   "n_particles": 5169,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-12n15.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "nucdyn_cpu",
+   "label": "U-Chrom NucDynamics, CPU",
+   "device": "cpu",
+   "threads": 16,
+   "res": 100000,
+   "res_tag": "100kb",
+   "n_runs": 3,
+   "status": "ok",
+   "n": 3,
+   "median_wall_seconds": 651.0273766517639,
+   "wall_seconds": [
+    667.4035556316376,
+    651.0273766517639,
+    647.0662524700165
+   ],
+   "wall_total_seconds": [
+    668.8237117649987,
+    651.3412290199194,
+    647.3712611771189
+   ],
+   "peak_rss_mb": 96.32,
+   "n_particles": 25724,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-10n16.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "nucdyn_cpu",
+   "label": "U-Chrom NucDynamics, CPU",
+   "device": "cpu",
+   "threads": 16,
+   "res": 50000,
+   "res_tag": "50kb",
+   "n_runs": 2,
+   "status": "ok",
+   "n": 2,
+   "median_wall_seconds": 1071.4014974832535,
+   "wall_seconds": [
+    1090.8435442447662,
+    1051.9594507217407
+   ],
+   "wall_total_seconds": [
+    1092.4314681240357,
+    1052.420122361742
+   ],
+   "peak_rss_mb": 107.336,
+   "n_particles": 51411,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-12n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "nucdyn_cpu",
+   "label": "U-Chrom NucDynamics, CPU",
+   "device": "cpu",
+   "threads": 16,
+   "res": 20000,
+   "res_tag": "20kb",
+   "n_runs": 2,
+   "status": "ok",
+   "n": 2,
+   "median_wall_seconds": 1224.3899717330933,
+   "wall_seconds": [
+    1224.1680884361267,
+    1224.6118550300598
+   ],
+   "wall_total_seconds": [
+    1225.8772157011554,
+    1225.081538664177
+   ],
+   "peak_rss_mb": 131.304,
+   "n_particles": 128473,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-15n16.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "nucdyn_cpu",
+   "label": "U-Chrom NucDynamics, CPU",
+   "device": "cpu",
+   "threads": 16,
+   "res": 10000,
+   "res_tag": "10kb",
+   "n_runs": 2,
+   "status": "ok",
+   "n": 2,
+   "median_wall_seconds": 2183.233221769333,
+   "wall_seconds": [
+    2161.7610700130463,
+    2204.7053735256195
+   ],
+   "wall_total_seconds": [
+    2163.6912793791853,
+    2205.392086334061
+   ],
+   "peak_rss_mb": 178.252,
+   "n_particles": 256904,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-15n16.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "nucdyn_cpu",
+   "label": "U-Chrom NucDynamics, CPU",
+   "device": "cpu",
+   "threads": 16,
+   "res": 1000,
+   "res_tag": "1kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "no record yet (queued or running)"
+  },
+  {
+   "method": "nucdyn_gpu",
+   "label": "U-Chrom NucDynamics, GPU",
+   "device": "gpu",
+   "threads": 0,
+   "res": 500000,
+   "res_tag": "500kb",
+   "n_runs": 3,
+   "status": "ok",
+   "n": 3,
+   "median_wall_seconds": 17.841434955596924,
+   "wall_seconds": [
+    18.21179485321045,
+    17.75512146949768,
+    17.841434955596924
+   ],
+   "wall_total_seconds": [
+    19.915054447948933,
+    18.409042432904243,
+    18.512230042833835
+   ],
+   "peak_rss_mb": 245.292,
+   "n_particles": 5169,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-02n01.int"
+   ],
+   "cpu_model": [
+    "Intel(R) Xeon(R) Platinum 8462Y+"
+   ],
+   "gpu_memory_peak_above_baseline_mb": 250.0,
+   "gpu_name": "NVIDIA H100 80GB HBM3, 81559 MiB, 550.163.01"
+  },
+  {
+   "method": "nucdyn_gpu",
+   "label": "U-Chrom NucDynamics, GPU",
+   "device": "gpu",
+   "threads": 0,
+   "res": 100000,
+   "res_tag": "100kb",
+   "n_runs": 3,
+   "status": "ok",
+   "n": 3,
+   "median_wall_seconds": 27.02777624130249,
+   "wall_seconds": [
+    27.581625938415527,
+    26.71065902709961,
+    27.02777624130249
+   ],
+   "wall_total_seconds": [
+    28.27618267107755,
+    27.41620746208355,
+    27.76845974288881
+   ],
+   "peak_rss_mb": 229.576,
+   "n_particles": 25724,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-02n01.int"
+   ],
+   "cpu_model": [
+    "Intel(R) Xeon(R) Platinum 8462Y+"
+   ],
+   "gpu_memory_peak_above_baseline_mb": 250.0,
+   "gpu_name": "NVIDIA H100 80GB HBM3, 81559 MiB, 550.163.01"
+  },
+  {
+   "method": "nucdyn_gpu",
+   "label": "U-Chrom NucDynamics, GPU",
+   "device": "gpu",
+   "threads": 0,
+   "res": 50000,
+   "res_tag": "50kb",
+   "n_runs": 3,
+   "status": "ok",
+   "n": 3,
+   "median_wall_seconds": 32.064340591430664,
+   "wall_seconds": [
+    32.049853801727295,
+    32.064340591430664,
+    32.28781747817993
+   ],
+   "wall_total_seconds": [
+    32.830805263947695,
+    32.780219974927604,
+    33.081505443900824
+   ],
+   "peak_rss_mb": 234.948,
+   "n_particles": 51411,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-02n01.int"
+   ],
+   "cpu_model": [
+    "Intel(R) Xeon(R) Platinum 8462Y+"
+   ],
+   "gpu_memory_peak_above_baseline_mb": 250.0,
+   "gpu_name": "NVIDIA H100 80GB HBM3, 81559 MiB, 550.163.01"
+  },
+  {
+   "method": "nucdyn_gpu",
+   "label": "U-Chrom NucDynamics, GPU",
+   "device": "gpu",
+   "threads": 0,
+   "res": 20000,
+   "res_tag": "20kb",
+   "n_runs": 3,
+   "status": "ok",
+   "n": 3,
+   "median_wall_seconds": 38.34640145301819,
+   "wall_seconds": [
+    38.25033450126648,
+    38.51963210105896,
+    38.34640145301819
+   ],
+   "wall_total_seconds": [
+    39.18511564005166,
+    39.538266885560006,
+    39.35527617391199
+   ],
+   "peak_rss_mb": 248.808,
+   "n_particles": 128473,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-02n01.int"
+   ],
+   "cpu_model": [
+    "Intel(R) Xeon(R) Platinum 8462Y+"
+   ],
+   "gpu_memory_peak_above_baseline_mb": 250.0,
+   "gpu_name": "NVIDIA H100 80GB HBM3, 81559 MiB, 550.163.01"
+  },
+  {
+   "method": "nucdyn_gpu",
+   "label": "U-Chrom NucDynamics, GPU",
+   "device": "gpu",
+   "threads": 0,
+   "res": 10000,
+   "res_tag": "10kb",
+   "n_runs": 3,
+   "status": "ok",
+   "n": 3,
+   "median_wall_seconds": 49.5761296749115,
+   "wall_seconds": [
+    49.732070446014404,
+    48.66518950462341,
+    49.5761296749115
+   ],
+   "wall_total_seconds": [
+    50.95218198699877,
+    49.80435120407492,
+    50.6966166687198
+   ],
+   "peak_rss_mb": 274.564,
+   "n_particles": 256904,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-02n01.int"
+   ],
+   "cpu_model": [
+    "Intel(R) Xeon(R) Platinum 8462Y+"
+   ],
+   "gpu_memory_peak_above_baseline_mb": 250.0,
+   "gpu_name": "NVIDIA H100 80GB HBM3, 81559 MiB, 550.163.01"
+  },
+  {
+   "method": "nucdyn_gpu",
+   "label": "U-Chrom NucDynamics, GPU",
+   "device": "gpu",
+   "threads": 0,
+   "res": 1000,
+   "res_tag": "1kb",
+   "n_runs": 3,
+   "status": "ok",
+   "n": 3,
+   "median_wall_seconds": 180.37677764892578,
+   "wall_seconds": [
+    180.4846601486206,
+    180.37677764892578,
+    179.71262001991272
+   ],
+   "wall_total_seconds": [
+    186.50410929415375,
+    186.30002232873812,
+    185.562826952897
+   ],
+   "peak_rss_mb": 740.124,
+   "n_particles": 2568713,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-02n01.int"
+   ],
+   "cpu_model": [
+    "Intel(R) Xeon(R) Platinum 8462Y+"
+   ],
+   "gpu_memory_peak_above_baseline_mb": 946.0,
+   "gpu_name": "NVIDIA H100 80GB HBM3, 81559 MiB, 550.163.01"
+  },
+  {
+   "method": "orig",
+   "label": "NucDynamics (original)",
+   "device": "cpu",
+   "threads": 1,
+   "res": 500000,
+   "res_tag": "500kb",
+   "n_runs": 1,
+   "status": "ok",
+   "n": 1,
+   "median_wall_seconds": 5895.978028802201,
+   "wall_seconds": [
+    5895.978028802201
+   ],
+   "wall_total_seconds": [
+    5898.1929620290175
+   ],
+   "peak_rss_mb": 126.368,
+   "n_particles": 5169,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-17n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "orig",
+   "label": "NucDynamics (original)",
+   "device": "cpu",
+   "threads": 1,
+   "res": 100000,
+   "res_tag": "100kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "no record yet (queued or running)"
+  },
+  {
+   "method": "orig",
+   "label": "NucDynamics (original)",
+   "device": "cpu",
+   "threads": 1,
+   "res": 50000,
+   "res_tag": "50kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "no record yet (queued or running)"
+  },
+  {
+   "method": "orig",
+   "label": "NucDynamics (original)",
+   "device": "cpu",
+   "threads": 1,
+   "res": 20000,
+   "res_tag": "20kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "no record yet (queued or running)"
+  },
+  {
+   "method": "orig",
+   "label": "NucDynamics (original)",
+   "device": "cpu",
+   "threads": 1,
+   "res": 10000,
+   "res_tag": "10kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "no record yet (queued or running)"
+  },
+  {
+   "method": "orig",
+   "label": "NucDynamics (original)",
+   "device": "cpu",
+   "threads": 1,
+   "res": 1000,
+   "res_tag": "1kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "no record yet (queued or running)"
+  },
+  {
+   "method": "hickit",
+   "label": "hickit (Dip-C)",
+   "device": "cpu",
+   "threads": 1,
+   "res": 500000,
+   "res_tag": "500kb",
+   "n_runs": 3,
+   "status": "ok",
+   "n": 3,
+   "median_wall_seconds": 27.134923458099365,
+   "wall_seconds": [
+    27.150810718536377,
+    27.1322500705719,
+    27.134923458099365
+   ],
+   "wall_total_seconds": [
+    30.056226258166134,
+    28.78615266131237,
+    28.808681458234787
+   ],
+   "peak_rss_mb": 67.096,
+   "n_particles": 5096,
+   "n_particles_grid": 5144,
+   "hosts": [
+    "sh04-17n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "hickit",
+   "label": "hickit (Dip-C)",
+   "device": "cpu",
+   "threads": 1,
+   "res": 100000,
+   "res_tag": "100kb",
+   "n_runs": 3,
+   "status": "ok",
+   "n": 3,
+   "median_wall_seconds": 142.9154441356659,
+   "wall_seconds": [
+    142.8300700187683,
+    143.0349895954132,
+    142.9154441356659
+   ],
+   "wall_total_seconds": [
+    145.82901438791305,
+    144.83314529107884,
+    144.62512349430472
+   ],
+   "peak_rss_mb": 66.836,
+   "n_particles": 24169,
+   "n_particles_grid": 25702,
+   "hosts": [
+    "sh04-17n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "hickit",
+   "label": "hickit (Dip-C)",
+   "device": "cpu",
+   "threads": 1,
+   "res": 50000,
+   "res_tag": "50kb",
+   "n_runs": 3,
+   "status": "ok",
+   "n": 3,
+   "median_wall_seconds": 222.4944679737091,
+   "wall_seconds": [
+    221.9149079322815,
+    222.86436772346497,
+    222.4944679737091
+   ],
+   "wall_total_seconds": [
+    225.03567528584972,
+    224.7023852984421,
+    224.34131390834227
+   ],
+   "peak_rss_mb": 66.944,
+   "n_particles": 43847,
+   "n_particles_grid": 51390,
+   "hosts": [
+    "sh04-17n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "hickit",
+   "label": "hickit (Dip-C)",
+   "device": "cpu",
+   "threads": 1,
+   "res": 20000,
+   "res_tag": "20kb",
+   "n_runs": 3,
+   "status": "ok",
+   "n": 3,
+   "median_wall_seconds": 578.042543888092,
+   "wall_seconds": [
+    578.645706653595,
+    577.9909954071045,
+    578.042543888092
+   ],
+   "wall_total_seconds": [
+    582.0249088979326,
+    580.0454733278602,
+    580.0933662671596
+   ],
+   "peak_rss_mb": 66.88,
+   "n_particles": 80823,
+   "n_particles_grid": 128446,
+   "hosts": [
+    "sh04-17n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "hickit",
+   "label": "hickit (Dip-C)",
+   "device": "cpu",
+   "threads": 1,
+   "res": 10000,
+   "res_tag": "10kb",
+   "n_runs": 2,
+   "status": "ok",
+   "n": 2,
+   "median_wall_seconds": 1137.75819003582,
+   "wall_seconds": [
+    1137.7842197418213,
+    1137.7321603298187
+   ],
+   "wall_total_seconds": [
+    1141.513091456145,
+    1140.2495749439113
+   ],
+   "peak_rss_mb": 67.936,
+   "n_particles": 109905,
+   "n_particles_grid": 256874,
+   "hosts": [
+    "sh04-17n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "hickit",
+   "label": "hickit (Dip-C)",
+   "device": "cpu",
+   "threads": 1,
+   "res": 1000,
+   "res_tag": "1kb",
+   "n_runs": 2,
+   "status": "ok",
+   "n": 2,
+   "median_wall_seconds": 2083.343928337097,
+   "wall_seconds": [
+    2123.018771648407,
+    2043.6690850257874
+   ],
+   "wall_total_seconds": [
+    2136.7198099759407,
+    2055.1323883011937
+   ],
+   "peak_rss_mb": 66.188,
+   "n_particles": 164370,
+   "n_particles_grid": 2568610,
+   "hosts": [
+    "sh04-02n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "sic",
+   "label": "Si-C",
+   "device": "cpu",
+   "threads": 1,
+   "res": 500000,
+   "res_tag": "500kb",
+   "n_runs": 2,
+   "status": "ok",
+   "n": 2,
+   "median_wall_seconds": 4823.076550960541,
+   "wall_seconds": [
+    4652.48135304451,
+    4993.671748876572
+   ],
+   "wall_total_seconds": [
+    4655.047332528047,
+    4996.103303087002
+   ],
+   "peak_rss_mb": 66.94,
+   "n_particles": 5278,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-14n14.int",
+    "sh04-17n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "sic",
+   "label": "Si-C",
+   "device": "cpu",
+   "threads": 1,
+   "res": 100000,
+   "res_tag": "100kb",
+   "n_runs": 1,
+   "status": "ok",
+   "n": 1,
+   "median_wall_seconds": 8453.126835107803,
+   "wall_seconds": [
+    8453.126835107803
+   ],
+   "wall_total_seconds": [
+    8455.837557912979
+   ],
+   "peak_rss_mb": 66.228,
+   "n_particles": 26350,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-14n14.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
+  },
+  {
+   "method": "sic",
+   "label": "Si-C",
+   "device": "cpu",
+   "threads": 1,
+   "res": 50000,
+   "res_tag": "50kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "no record yet (queued or running)"
+  },
+  {
+   "method": "sic",
+   "label": "Si-C",
+   "device": "cpu",
+   "threads": 1,
+   "res": 20000,
+   "res_tag": "20kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "no record yet (queued or running)"
+  },
+  {
+   "method": "sic",
+   "label": "Si-C",
+   "device": "cpu",
+   "threads": 1,
+   "res": 10000,
+   "res_tag": "10kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "no record yet (queued or running)"
+  },
+  {
+   "method": "sic",
+   "label": "Si-C",
+   "device": "cpu",
+   "threads": 1,
+   "res": 1000,
+   "res_tag": "1kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "no record yet (queued or running)"
+  },
+  {
+   "method": "robust_cpu",
+   "label": "U-Chrom robust, CPU",
+   "device": "cpu",
+   "threads": 1,
+   "res": 500000,
+   "res_tag": "500kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_cpu",
+   "label": "U-Chrom robust, CPU",
+   "device": "cpu",
+   "threads": 1,
+   "res": 100000,
+   "res_tag": "100kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_cpu",
+   "label": "U-Chrom robust, CPU",
+   "device": "cpu",
+   "threads": 1,
+   "res": 50000,
+   "res_tag": "50kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_cpu",
+   "label": "U-Chrom robust, CPU",
+   "device": "cpu",
+   "threads": 1,
+   "res": 20000,
+   "res_tag": "20kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_cpu",
+   "label": "U-Chrom robust, CPU",
+   "device": "cpu",
+   "threads": 1,
+   "res": 10000,
+   "res_tag": "10kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_cpu",
+   "label": "U-Chrom robust, CPU",
+   "device": "cpu",
+   "threads": 1,
+   "res": 1000,
+   "res_tag": "1kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_cpu",
+   "label": "U-Chrom robust, CPU",
+   "device": "cpu",
+   "threads": 16,
+   "res": 500000,
+   "res_tag": "500kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_cpu",
+   "label": "U-Chrom robust, CPU",
+   "device": "cpu",
+   "threads": 16,
+   "res": 100000,
+   "res_tag": "100kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_cpu",
+   "label": "U-Chrom robust, CPU",
+   "device": "cpu",
+   "threads": 16,
+   "res": 50000,
+   "res_tag": "50kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_cpu",
+   "label": "U-Chrom robust, CPU",
+   "device": "cpu",
+   "threads": 16,
+   "res": 20000,
+   "res_tag": "20kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_cpu",
+   "label": "U-Chrom robust, CPU",
+   "device": "cpu",
+   "threads": 16,
+   "res": 10000,
+   "res_tag": "10kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_cpu",
+   "label": "U-Chrom robust, CPU",
+   "device": "cpu",
+   "threads": 16,
+   "res": 1000,
+   "res_tag": "1kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_gpu",
+   "label": "U-Chrom robust, GPU",
+   "device": "gpu",
+   "threads": 0,
+   "res": 500000,
+   "res_tag": "500kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_gpu",
+   "label": "U-Chrom robust, GPU",
+   "device": "gpu",
+   "threads": 0,
+   "res": 100000,
+   "res_tag": "100kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_gpu",
+   "label": "U-Chrom robust, GPU",
+   "device": "gpu",
+   "threads": 0,
+   "res": 50000,
+   "res_tag": "50kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_gpu",
+   "label": "U-Chrom robust, GPU",
+   "device": "gpu",
+   "threads": 0,
+   "res": 20000,
+   "res_tag": "20kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_gpu",
+   "label": "U-Chrom robust, GPU",
+   "device": "gpu",
+   "threads": 0,
+   "res": 10000,
+   "res_tag": "10kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  },
+  {
+   "method": "robust_gpu",
+   "label": "U-Chrom robust, GPU",
+   "device": "gpu",
+   "threads": 0,
+   "res": 1000,
+   "res_tag": "1kb",
+   "n_runs": 0,
+   "status": "pending",
+   "reason": "method under development (branch Nanguage/sc-robust); add with: speed_one_model.py manifest --methods robust_cpu,robust_gpu"
+  }
+ ],
+ "extrapolation": {
+  "note": "separate from the measured table: power-law fit (t ~ (1/res)^b) of the finished resolutions of the same configuration; NOT measured",
+  "rows": []
+ }
+}
