@@ -24,12 +24,18 @@ auto-downloaded by the tutorials on first run into this directory.
 | `liu2025_mop/4DNFID46OABK.csv` + `4DNFICX8IVEK.csv` (+ built `liu2025_mop.chromdata.zarr`, 294 MB; `.v22.chromdata.zarr` 267 MB) | 1.68 GB + 17 MB | no | 4DN public S3 (opt-in, `--liu2025_mop`) | largest wild-type 4DN FOF-CT; `build_liu2025_mop.py` (Fig. 2 dataset scale); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1, streaming `from_fofct(out=)` vs in memory, streaming distance maps vs the dense reference); `benchmarks/cd22_convert_validate.py` / `benchmarks/fig2/cd22_variants.py` (format 2.2); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | Takei 2025 other Zenodo archives (cerebellum rep 2, E14, NMuMG) | 5.3–11 GB each | no | **manual** | `seqfish_multiomics_cerebellum` tutorial (real-data run) |
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials; `tests/core/test_fofct_writer.py` (skipped when absent); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd21_streaming_validation.py` (streaming vs in-memory ArcFISH loop / TAD calls); `benchmarks/cell_spatial_validation.py` (cell positions); `benchmarks/screcon/simulate.py` (`takei2021_25kb` truth) |
-| `4DNFIFLJGGNR.csv`                    | 47 MB   | no              | 4DN public S3 (`--takei2021_1mb`) | `benchmarks/screcon/simulate.py` (`takei2021_1mb` truth: genome-wide 1 Mb loci) |
+| `4DNFIFLJGGNR.csv`                    | 47 MB   | no              | 4DN public S3 (`--takei2021_1mb`) | `benchmarks/screcon/simulate.py` (`takei2021_1mb` truth: genome-wide 1 Mb loci); `benchmarks/bulk/` (diploid mESC truth, heuristic homologs; vs Bonev 2017) |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
 | `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial (with `rao2014_imr90/` Hi-C); Fig. 3b / 3c (`benchmarks/fig3/b_first_look.py`, `c_gemfish_first_look.py`) |
 | `stevens2017_mesc/` (8 cells: contact pairs + published `.pdb` structures) | 43 MB | no | GEO GSE80280 (`--stevens2017`) | Fig. 3a (NucDynamics reference; `benchmarks/fig3/a_sc_consistency.py`; native-engine validation and speed `benchmarks/fig3/a_nucdyn_engine_*.py`) |
 | `bintu2018/{IMR90,K562}_chr21-28-30Mb.csv` | 7.8 MB + 20 MB | no | GitHub raw (`--bintu2018`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
-| `su2020_imr90/chromosome21.tsv` + `Hi-C_contacts_chromosome21.tsv` | 261 MB + 1 MB | no | Zenodo 3928890 (`--su2020_chr21`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`); `benchmarks/screcon/simulate.py` (`su2020_chr21` truth) |
+| `su2020_imr90/chromosome21.tsv` + `Hi-C_contacts_chromosome21.tsv` | 261 MB + 1 MB | no | Zenodo 3928890 (`--su2020_chr21`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`); `benchmarks/screcon/simulate.py` (`su2020_chr21` truth); `benchmarks/bulk/` (chr21 truth population) |
+| `su2020_imr90/genomic-scale.tsv` | 200 MB | no | Zenodo 3928890 (`--su2020_genome`) | `benchmarks/bulk/` (primary diploid genome-wide truth: 1,041 loci × 1,787 IMR90 cells, homologs resolved, lamina distances) |
+| `su2020_imr90/Hi-C_contacts_genome-scale.tsv` | 2.8 MB | **yes** | Zenodo 3928890 (`--su2020_genome`) | `benchmarks/bulk/real_inputs.py su_crosscheck` (the authors' Rao 2014 sums around the 1,041 loci vs our IMR90 builds) |
+| `igm/WTC11_HiC_2Mb.hcs` | 3.9 MB | no (GPL-3 data of github.com/alberlab/igm; downloaded on demand into `$UCHROM_IGM_CACHE`) | alberlab/igm repository, `demo/` (fetched by `benchmarks/bulk/_igm_bench.py:fetch_igm_demo`, md5 printed) | IGM protocol of the native engine vs the original IGM (`benchmarks/bulk/sherlock/ours_demo_*.sbatch`, `orig_demo.sbatch`, `compare_demo.sbatch`) |
+| `rao2014_imr90/4DNFIR1JDZH7.mcool` (Rao 2014 IMR90, 4DN GRCh38) | 4.6 GB | no | 4DN public S3 (opt-in, `--rao2014_imr90_4dn`; **Sherlock only**) | `benchmarks/bulk/` real-data input (`sherlock/build_real.sbatch`); `benchmarks/bulk/kr_check.py` (range reads) |
+| `bonev2017_mesc/4DNFIC21MG3U.mcool` (Bonev 2017 mESC, 4DN mm10) | 12.6 GB | no | 4DN public S3 (opt-in, `--bonev2017_mesc_4dn`; **Sherlock only**) | `benchmarks/bulk/` real-data input vs Takei 2021 (`sherlock/build_real.sbatch`); `benchmarks/fig3/b_takei_bonev.py` and `kr_check.py` (range reads) |
+| bulk IGM inputs (`fine_20kb.npz`, `igm_200kb.npz`, `su_3mb.npz`, `su_1mb.npz`, `takei_1mb.npz`) | 0.1–10 GB | no | **derived** on Sherlock (`benchmarks/bulk/real_inputs.py`, `sherlock/build_real.sbatch`) into `$SCRATCH/uchrom-nd/runs/bulk/real/` | `benchmarks/bulk/` (c): probabilities for `uchrom.recon.bulk.deconv.deconvolve(method="igm")` |
 | `abbas2019_gemfish/*.zip` (Wang 2016 FISH, TADs, Hi-C, GEM-FISH final models) | 40 MB | no | GitHub, pinned commit (`--abbas2019_gemfish`) | Fig. 3a / 3c (`benchmarks/fig3/c_gemfish_wang2016.py`) |
 | `rao2014_{imr90,k562}/*_chr21_5kb_hg19.cool` | 3.8 MB each | IMR90: yes; K562: no | **built** from GEO GSE63525 `.hic` by HTTP range reads (`build_rao2014_slices.py`) | Fig. 3b / 3c; IMR90 also the GEM-FISH tutorial |
 | `rao2014_imr90/IMR90_chr{20,22}_5kb_hg19.cool` | 7.8 MB + 3.3 MB | no | **built** the same way (`build_rao2014_slices.py --cell IMR90 --chroms 20`, then `--chroms 22`) | Fig. 3c chr20 / chr22 (`benchmarks/fig3/c_gemfish_wang2016.py --chrom`, `c_hipps_wang2016.py`) |
@@ -719,7 +725,7 @@ Everything is gitignored.  DOIs checked against Crossref (2026-09-27).
   contact frequency vs Rao 2014 Hi-C of the same cell line, and the
   cross-cell-line controls.
 
-### `su2020_imr90/` — Su 2020 IMR90 whole-chr21 tracing + binned Hi-C (262 MB)
+### `su2020_imr90/` — Su 2020 IMR90 chr21 + genome-scale tracing, binned Hi-C (465 MB)
 
 - **Source**: Su J-H *et al.* "Genome-Scale Imaging of the 3D Organization
   and Transcriptional Activity of Chromatin." *Cell* 182:1641–1659 (2020),
@@ -731,13 +737,29 @@ Everything is gitignored.  DOIs checked against Crossref (2026-09-27).
   `Chromosome copy number`, genes / transcription / TSS),
   `Hi-C_contacts_chromosome21.tsv` (1,045,862 B, `7842ef31…`; the authors'
   Rao 2014 IMR90 reads summed into the 651 imaged bins), and
-  `README_August_2020.txt`.
+  `README_August_2020.txt`; genome scale (`--su2020_genome`):
+  `genomic-scale.tsv` (200,285,524 B, md5 `a1d79c2b…`, verified) and
+  `Hi-C_contacts_genome-scale.tsv` (2,846,153 B, md5 `13e3607e…`, verified;
+  **checked in**, CC-BY-4.0, < 10 MB).
 - **Content**: IMR90, hg38, 651 × 50 kb loci across chr21
-  (10.4–46.7 Mb), 7,591 traced chromosome copies.  The other Zenodo files
-  (chr2, genome-scale DNA-MERFISH, 0.08–0.65 GB each) are not fetched.
-- **Download**: `download_data.py --su2020_chr21`.
+  (10.4–46.7 Mb), 7,591 traced chromosome copies.  Genome scale
+  (DNA-MERFISH): 1,041 loci of 100 kb (`chr1:2950000-3050000`, ~3 Mb
+  spacing) on chr1–22 and chrX, 1,787 cells from 3 experiments
+  (431 / 917 / 439), each row labelled with its **homolog (1 / 2)** —
+  3,720,534 rows = 1,787 × 2 × 1,041, 16.2 % of positions missing — plus the
+  distance of each spot to the nuclear lamina; columns `Z(nm) x(nm) y(nm)
+  genomic coordinate, homolog number, cell number, experiment number,
+  distance to lamina (nm)`.  `Hi-C_contacts_genome-scale.tsv`: 1,041 × 1,041
+  Rao 2014 IMR90 read counts summed into 500 kb bins centred on the loci.
+  The other Zenodo files (chr2, replicates with transcription / nuclear
+  bodies, α-amanitin; 0.08–0.65 GB each) are not fetched.
+- **Download**: `download_data.py --su2020_chr21` / `--su2020_genome`.
 - **Used by**: Fig. 3b (`benchmarks/fig3/b_first_look.py`), whole-chromosome
-  imaging vs Hi-C.
+  imaging vs Hi-C; `benchmarks/screcon/` (chr21 truth cells);
+  `benchmarks/bulk/` (population deconvolution benchmark: genome-scale =
+  primary diploid truth, chr21 = single-chromosome truth population;
+  `truths.py`, `forward.py`; the genome-scale Hi-C sums are the
+  cross-check of the IMR90 input, `real_inputs.py su_crosscheck`).
 
 ### `abbas2019_gemfish/` — GEM-FISH repository data (40 MB)
 
@@ -808,9 +830,45 @@ Everything is gitignored.  DOIs checked against Crossref (2026-09-27).
 | Dataset | Accession / URL | Size | Build | Slice recipe |
 | --- | --- | --- | --- | --- |
 | Rao 2014 GM12878 in situ (miniMDS benchmark) | GEO GSE63525 `GSE63525_GM12878_insitu_primary+replicate_combined.hic` | 51 GB (`_30.hic` 37 GB) | hg19 | `build_rao2014_slices.py --cell GM12878 --chroms 22 --res 100000` (and 10 kb) |
-| Rao 2014 IMR90 in situ, 4DN | set 4DNES1ZEJNRU: [4DNFIR1JDZH7](https://data.4dnucleome.org/4DNFIR1JDZH7/) (4,639,622,711 B, md5 `f91b77fa…`), [4DNFIJTOIGOI](https://data.4dnucleome.org/4DNFIJTOIGOI/) (8.3 GB) | 4.6–8.3 GB | GRCh38 | range-read one resolution: `h5py.File(fsspec.open(url).open())` → `cooler.Cooler(h['resolutions/5000'])` (~10 s per region) |
-| Bonev 2017 mESC Hi-C (Takei 2021's comparison) | GEO GSE96107; 4DN set 4DNESDXUWBD9 [4DNFIC21MG3U](https://data.4dnucleome.org/4DNFIC21MG3U/) (12.6 GB, mm10) | 11–13 GB | mm10 | same fsspec range read, the 20 Takei 2021 loci × 25 kb; smaller unsorted-ES mcool 4DNFIDA2WGV8 (0.9 GB) |
+| Rao 2014 IMR90 in situ, 4DN | set 4DNES1ZEJNRU: [4DNFIR1JDZH7](https://data.4dnucleome.org/4DNFIR1JDZH7/) (4,639,622,711 B, md5 `f91b77fa…`), [4DNFIJTOIGOI](https://data.4dnucleome.org/4DNFIJTOIGOI/) (8.3 GB) | 4.6–8.3 GB | GRCh38 | range-read one resolution: `h5py.File(fsspec.open(url).open())` → `cooler.Cooler(h['resolutions/5000'])` (~10 s per region); whole file on Sherlock: `download_data.py --rao2014_imr90_4dn` (bulk benchmark, see below) |
+| Bonev 2017 mESC Hi-C (Takei 2021's comparison) | GEO GSE96107; 4DN set 4DNESDXUWBD9 [4DNFIC21MG3U](https://data.4dnucleome.org/4DNFIC21MG3U/) (12,551,353,248 B, md5 `dda4ed67…`, mm10) | 11–13 GB | mm10 | same fsspec range read, the 20 Takei 2021 loci × 25 kb; smaller unsorted-ES mcool 4DNFIDA2WGV8 (0.9 GB); whole file on Sherlock: `download_data.py --bonev2017_mesc_4dn` (bulk benchmark, see below) |
 | Stevens 2017 HDF5 + raw | GSE80280 `Cell-<n>.hdf5.gz`, `GSE80280_RAW.tar` | 2.6 GB each / 20 GB | mm10 | not needed (contacts + `.pdb` suffice) |
+
+## Bulk Hi-C deconvolution benchmark (`benchmarks/bulk/`)
+
+Population deconvolution of bulk Hi-C (`uchrom.recon.bulk.deconv.deconvolve(method="igm")`;
+design `benchmarks/bulk/design.md` section 6-7, commands `benchmarks/bulk/README.md`).
+
+**Imaging truths** (catalogued above): Su 2020 genome-scale (`--su2020_genome`, primary
+diploid genome-wide truth), Su 2020 chr21 (`--su2020_chr21`), Takei 2021 1 Mb
+(`--takei2021_1mb`, homologs split heuristically by `benchmarks/screcon/truth.split_homologs`).
+
+**Real Hi-C** (whole files only on Sherlock; laptop checks use HTTP range reads):
+
+- **Rao 2014 IMR90, 4DN GRCh38** — `rao2014_imr90/4DNFIR1JDZH7.mcool`
+  (4,639,622,711 B, md5 `f91b77fa61acdc58360911c80b007646`, 4DN set 4DNES1ZEJNRU; Rao SSP
+  *et al.* *Cell* 159:1665 (2014), GEO GSE63525; 4DN data-use policy: open).  GRCh38 like the
+  Su 2020 loci, so no liftover.  Levels 1 kb–10 Mb (no 20 kb): the IGM 20 kb matrix is summed
+  from the 10 kb level.  `download_data.py --rao2014_imr90_4dn` (Sherlock:
+  `benchmarks/bulk/sherlock/build_real.sbatch`).
+- **Bonev 2017 mESC, 4DN mm10** — `bonev2017_mesc/4DNFIC21MG3U.mcool` (12,551,353,248 B, md5
+  `dda4ed67a1179f917721fb81b1adebe0`, 4DN set 4DNESDXUWBD9; Bonev B *et al.* *Cell* 171:557
+  (2017), doi:10.1016/j.cell.2017.09.043, GEO GSE96107).  `download_data.py
+  --bonev2017_mesc_4dn` (Sherlock).
+- **Rao 2014 IMR90, GEO hg19** `GSE63525_IMR90_combined.hic` (13 GB) — not downloaded; read
+  over HTTP range requests by `benchmarks/bulk/kr_check.py` (its Juicer KR vectors are the
+  reference for U-Chrom's KR balancing).
+
+**Derived inputs** (Sherlock, `$SCRATCH/uchrom-nd/runs/bulk/real/<cell>/`, not stored;
+recipe `benchmarks/bulk/real_inputs.py preprocess`, IGM SI section 6 protocol in
+`uchrom.recon.bulk.deconv.preprocess`): `fine_20kb.npz` (raw 20 kb counts, chr1–22 + X),
+`igm_200kb.npz` (whole genome, 200 kb, 24 contacts per bin), `su_3mb.npz` / `su_1mb.npz`
+(IMR90 onto 3 Mb / 1 Mb bins centred on the Su loci), `takei_1mb.npz` (mESC onto 1 Mb bins
+centred on the Takei loci), `su_crosscheck.json`.
+
+**Checked in**: `benchmarks/bulk/results/kr_check.json` (KR check, range reads) and
+`benchmarks/bulk/results/plumbing_imr90_chr21_22_igm200kb.json` (provenance of the
+laptop plumbing run: 4DN IMR90 chr21 + chr22, range-read 10 kb level → 20 kb → 200 kb).
 
 ## Generated outputs
 
@@ -831,6 +889,7 @@ offline / CI environments), run:
 ```bash
 python example-data/download_data.py
 python example-data/download_data.py --fig3        # Fig. 3 inputs (opt-in)
+python example-data/download_data.py --su2020_genome --su2020_chr21 --takei2021_1mb   # bulk benchmark truths
 python example-data/build_rao2014_slices.py         # Fig. 3 Hi-C slices (built)
 ```
 

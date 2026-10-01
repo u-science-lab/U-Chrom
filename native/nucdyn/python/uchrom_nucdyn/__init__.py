@@ -27,6 +27,8 @@ from ._engine import (  # noqa: F401
     HAS_GPU,
     __version__,
     calc_genome_structure as _calc_genome_structure,
+    calc_population as _calc_population,
+    default_igm_params_json,
     default_params_json,
     gpu_available,
     gpu_info,
@@ -36,6 +38,9 @@ from .io import read_contact_pairs, read_ncc  # noqa: F401
 
 __all__ = [
     "calc_genome_structure",
+    "calc_population",
+    "default_igm_params",
+    "resolve_copies",
     "default_params",
     "gpu_available",
     "gpu_info",
@@ -125,5 +130,118 @@ def calc_genome_structure(
         "model_rmsds": list(res["model_rmsds"]),
         "stages": json.loads(res["stages_json"]),
         "seconds_total": res["seconds_total"],
+        "params": p,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Protocol "igm": population modelling of bulk Hi-C (A/M deconvolution)
+# ---------------------------------------------------------------------------
+
+
+def default_igm_params() -> Dict[str, Any]:
+    """Default parameters of the ``igm`` protocol (IGM schema + demo annealing)."""
+    return json.loads(default_igm_params_json())
+
+
+_SEX = {"x": "X", "chrx": "X", "y": "Y", "chry": "Y"}
+
+
+def resolve_copies(chroms: Sequence[str], ploidy: Any = "diploid") -> list:
+    """Copies per chromosome: ``"diploid"`` (every chromosome x2, as alabtools
+    ``make_diploid``), ``"haploid"`` (x1), ``"male"`` (autosomes x2, X and Y
+    x1) or a dict ``{chrom: copies}`` (missing chromosomes: 2)."""
+    out = []
+    for c in chroms:
+        sex = _SEX.get(str(c).lower())
+        if isinstance(ploidy, dict):
+            out.append(int(ploidy.get(c, 2)))
+        elif ploidy == "diploid":
+            out.append(2)
+        elif ploidy == "haploid":
+            out.append(1)
+        elif ploidy == "male":
+            out.append(1 if sex in ("X", "Y") else 2)
+        else:
+            raise ValueError(f"unknown ploidy {ploidy!r}")
+    return out
+
+
+def calc_population(
+    chrom: Sequence[str],
+    start: Sequence[int],
+    end: Sequence[int],
+    prob_i: Sequence[int],
+    prob_j: Sequence[int],
+    prob_v: Sequence[float],
+    *,
+    ploidy: Any = "diploid",
+    on_round=None,
+    round_coords: bool = False,
+    init_pins: Optional[Dict[str, Any]] = None,
+    **params: Any,
+) -> Dict[str, Any]:
+    """Run the ``igm`` protocol on a haploid contact-probability matrix.
+
+    ``chrom`` / ``start`` / ``end``: haploid bins, each chromosome contiguous
+    (genome order).  ``prob_i`` / ``prob_j`` / ``prob_v``: the matrix as COO
+    (bin indices; upper triangle or symmetric; the diagonal is ignored).
+    ``**params``: fields of :func:`default_igm_params` (``n_structures``,
+    ``seed``, ``device``, ``occupancy``, ``nucleus_radius``, sigma lists, ...).
+    ``on_round(log: dict, coords)`` is called after every M-step (``coords``
+    (S, N, 3) float32 when ``round_coords``, else None).
+    ``init_pins``: optional dict of equal-length arrays ``structure``,
+    ``bin`` (haploid bin index), ``copy`` and ``xyz`` (M, 3) nm — loci placed
+    at these initial positions, the beads between two pinned beads of one
+    chain linearly interpolated (IGM-Plus expanded initialisation).
+
+    Returns a dict with ``coords`` (S, N, 3) float32 nm, per bead
+    ``bead_bin`` / ``bead_copy`` / ``bead_chain`` / ``radii``, ``chroms``
+    (chromosome order), ``rounds`` (per-round log), ``final_stats`` (per
+    structure), the last A-step (``actdist``: i, j, f, p, p_now, d) and
+    ``params``.
+    """
+    chrom = np.asarray(chrom).astype(str)
+    names = list(dict.fromkeys(chrom.tolist()))
+    idx = {c: k for k, c in enumerate(names)}
+    ci = np.fromiter((idx[c] for c in chrom), dtype=np.uint32, count=len(chrom))
+    if np.any(np.diff(ci.astype(np.int64)) < 0):
+        raise ValueError("bins must be grouped by chromosome (each chromosome contiguous)")
+    copies = resolve_copies(names, ploidy)
+    p = default_igm_params()
+    unknown = set(params) - set(p)
+    if unknown:
+        raise TypeError(f"unknown igm parameters: {sorted(unknown)}")
+    p.update(params)
+    pin_args = ()
+    if init_pins is not None:
+        xyz = np.ascontiguousarray(init_pins["xyz"], dtype=np.float64).reshape(-1, 3)
+        pin_args = (np.ascontiguousarray(init_pins["structure"], dtype=np.uint32),
+                    np.ascontiguousarray(init_pins["bin"], dtype=np.uint32),
+                    np.ascontiguousarray(init_pins["copy"], dtype=np.uint32),
+                    np.ascontiguousarray(xyz.ravel()))
+    cb = None
+    if on_round is not None:
+        def cb(js, coords):
+            on_round(json.loads(js), coords)
+    res = _calc_population(
+        ci, np.ascontiguousarray(start, dtype=np.int64), np.ascontiguousarray(end, dtype=np.int64), copies,
+        np.ascontiguousarray(prob_i, dtype=np.uint32), np.ascontiguousarray(prob_j, dtype=np.uint32),
+        np.ascontiguousarray(prob_v, dtype=np.float64), json.dumps(p), cb, bool(round_coords), *pin_args)
+    return {
+        "coords": res["coords"],
+        "bead_bin": res["bead_hap"].astype(np.int64),
+        "bead_copy": res["bead_copy"].astype(np.int64),
+        "bead_chain": res["bead_chain"].astype(np.int64),
+        "radii": res["radii"],
+        "chroms": names,
+        "copies": dict(zip(names, copies)),
+        "rounds": json.loads(res["rounds_json"]),
+        "final_stats": json.loads(res["final_stats_json"]),
+        "relax_init": json.loads(res["relax_json"]),
+        "actdist": {k: res["act_" + k] for k in ("i", "j", "f", "p", "p_now", "d")},
+        "stopped_at_max_iterations": bool(res["stopped_at_max_iterations"]),
+        "seconds_total": float(res["seconds_total"]),
+        "engine": res["engine"],
         "params": p,
     }

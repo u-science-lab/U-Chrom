@@ -68,13 +68,13 @@ const ENTRY_POINTS: [&str; 14] = [
     "force_update",
 ];
 
-struct Ctx {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    info: String,
+pub(crate) struct Ctx {
+    pub(crate) device: wgpu::Device,
+    pub(crate) queue: wgpu::Queue,
+    pub(crate) info: String,
 }
 
-fn open_device() -> Result<Ctx, String> {
+pub(crate) fn open_device() -> Result<Ctx, String> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::PRIMARY,
         ..wgpu::InstanceDescriptor::new_without_display_handle()
@@ -122,7 +122,7 @@ pub struct GpuEngine {
     pipelines: Vec<wgpu::ComputePipeline>,
 }
 
-fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
+pub(crate) fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,
@@ -185,7 +185,7 @@ impl GpuEngine {
     }
 }
 
-fn buf_init<T: Pod>(device: &wgpu::Device, label: &str, data: &[T], usage: wgpu::BufferUsages) -> wgpu::Buffer {
+pub(crate) fn buf_init<T: Pod>(device: &wgpu::Device, label: &str, data: &[T], usage: wgpu::BufferUsages) -> wgpu::Buffer {
     // wgpu rejects empty buffers bound as storage: pad to at least 16 bytes
     let bytes: &[u8] = bytemuck::cast_slice(data);
     let mut v = bytes.to_vec();
@@ -198,7 +198,7 @@ fn buf_init<T: Pod>(device: &wgpu::Device, label: &str, data: &[T], usage: wgpu:
     device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some(label), contents: &v, usage })
 }
 
-fn buf_zero(device: &wgpu::Device, label: &str, bytes: u64, usage: wgpu::BufferUsages) -> wgpu::Buffer {
+pub(crate) fn buf_zero(device: &wgpu::Device, label: &str, bytes: u64, usage: wgpu::BufferUsages) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(label),
         size: bytes.max(16).div_ceil(4) * 4,
