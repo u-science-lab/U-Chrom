@@ -632,6 +632,45 @@ public data alone** and are shipped with their recorded outputs.
     - Pairs shorter than 1 kb are almost all inward-facing (+-), i.e. unligated fragments, and are
       dropped as HiCUP does.
   - Validation script: `benchmarks/spatial_hic_chen2026_reprocess_validation.py`.
+  - Output on Oak (`$OAK/uchrom/spatial_hic_chen2026/<run>/`): dedup pairs, per-spot 1-Mb
+    `.scool`, bulk `.mcool` (25 kb – 1 Mb), per-barcode statistics.  Not public: copy each run's
+    `pixels_1Mb.scool`, `bulk.mcool`, `barcode_stats.tsv` and `log.json` into
+    `spatial_hic_chen2026/contacts/` over the DTN (4.6 GB for the 7 runs below).
+- **Reprocessed contacts linked into the stores**:
+  `python example-data/link_spatial_hic_chen2026_contacts.py [RUN …]` (seconds per run).
+  - Which barcode pair is which spot is decided on the data.  Every candidate pairing is scored:
+    each spot's contact-partner compartment profile (minus the mean over spots) against the
+    authors' ssA/B of the spot it would be (minus their mean), median Pearson r over 1,500 spots.
+    The right pairing scores ~0.3, every other ~0.  A run is linked only when the best beats the
+    runner-up by 0.05.
+  - Candidates: the 8 orientations of the grid (swap the barcodes, flip either index) with our
+    barcode order and with the authors' (`sherlock/barcodes_96_authors_index.tsv`, read off the
+    `pixel` / spot names of brain_embryo_20um: position 2 complete, position 1 91 of 96), and
+    `cells.pixel` (both orders) where a store has it.
+  - Per section: `per_spot.<section>` (`<store>_<section>.<run>.reprocessed_1Mb.scool`, cells
+    renamed to the store's ids) and `bulk.<section>` (`contacts/<run>.bulk.mcool`); `.reprocessed`
+    is appended when the section already has maps from the authors' BEDPE (E13_HiC_R1).
+    `uns['contacts_stats']['reprocessed'][<run>]` holds the counts, every candidate's score and
+    the choice.
+
+  | run | section (store) | pairing | score (runner-up) | spots linked |
+  |---|---|---|---|---|
+  | CRR1161506 | E13_HiC_R1 (e13_embryo_50um) | grid, swap, flip 2 — as the pilot | 0.316 (0.014) | 1,999 / 1,999 |
+  | CRR1161507 | E13_HiC_R2 (e13_embryo_50um) | grid, swap, no flip | 0.304 (0.011) | 2,011 / 2,011 |
+  | CRR1829212 | E14_5_HiC (brain_embryo_20um) | `pixel` as b1_b2 | 0.292 (0.002) | 3,533 / 3,533 |
+  | CRR1829214 | E16_5_HiC (brain_embryo_20um) | `pixel` as b1_b2 | 0.266 (0.002) | 4,479 / 4,479 |
+  | CRR1829213 | E14_5_HiC (brain_embryo_10um) | `pixel` as b1_b2 | 0.300 (0.001) | 5,426 / 5,426 |
+  | CRR1161509 | Cere_HiC_R1 (cerebellum_adult_20um) | **not linked** | 0.003 (0.001) | — |
+  | CRR1161510 | Cere_HiC_R2 (cerebellum_adult_20um) | **not linked** | 0.000 | — |
+
+  - E13_HiC_R1 has both: ours against the maps from the authors' BEDPE, chr2 at 1 Mb — per spot
+    median pixel r 0.947 (200 spots; IQR 0.941–0.953), all spots summed r 0.988 (log 0.9997);
+    ours hold 1.17× their contacts.
+  - The cerebellum sections need the authors' barcode order (laid out in it, our counts form a
+    coherent tissue image: Moran's I 0.85 / 0.76 against 0.26 / 0.40 in ours), but no orientation
+    of it matches the published spots.  Their chip's position-1 order differs from the embryo
+    chips' (E14.5 alone already swaps two pairs against E16.5 / E18.5); without the authors'
+    barcode table for that chip the pairing is left open rather than fitted.
 - **Used by**: web browser — the Spatial view (sections over their images), the Genome view
   (ssA/B tracks per spot / group; E13.5 per-spot and pseudo-bulk contact maps), embeddings;
   `benchmarks/spatial_hic_chen2026_validation.py`.
