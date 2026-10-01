@@ -53,6 +53,7 @@ pub struct EmLog {
     pub segment: usize,
     pub eps: f64,
     pub s: f64,
+    pub d0: f64,
     /// mixture log-likelihood per contact (+ ln N_pairs, so 0 = "no better than uniform")
     pub loglik: f64,
     /// contact-weighted mean restraint weight (mean over models)
@@ -356,15 +357,18 @@ pub fn em_update(data: &EmData, k: &Kernel, p: &Params, eps0: f64, s0: f64) -> E
         (ll / (wsum * rows.len() as f64), eps)
     };
     let grid: Vec<f64> = if p.robust_learn_s { p.robust_s_grid.clone() } else { vec![s0] };
-    let mut best: Option<(f64, f64, f64)> = None;
-    for &s in &grid {
+    let d0s: Vec<f64> = if p.robust_d0_grid.is_empty() { vec![k.d0] } else { p.robust_d0_grid.clone() };
+    let mut best: Option<(f64, f64, f64, f64)> = None;
+    for (&s, &d0) in grid.iter().flat_map(|s| d0s.iter().map(move |d| (s, d))) {
+        let k = &Kernel { d0, ..*k };
         let (phi, _) = data.phi(k, s);
         let (ll, eps) = fit(&rows_of(&phi));
         if best.is_none_or(|b| ll > b.0) {
-            best = Some((ll, s, eps));
+            best = Some((ll, s, eps, d0));
         }
     }
-    let (ll, s, eps) = best.unwrap();
+    let (ll, s, eps, d0) = best.unwrap();
+    let k = &Kernel { d0, ..*k };
     let (phi, g) = data.phi(k, s);
     let rows = rows_of(&phi);
     let weights: Vec<Vec<f64>> = rows
@@ -403,6 +407,7 @@ pub fn em_update(data: &EmData, k: &Kernel, p: &Params, eps0: f64, s0: f64) -> E
         eps,
         s,
         loglik: ll,
+        d0,
         mean_w: mean_w / (wsum * nr),
         frac_low: low / (wsum * nr),
         prox_frac: g_mean * u,
@@ -527,6 +532,8 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
     let t0 = Instant::now();
     let n_models = p.n_models;
     let kern = Kernel::from_params(p);
+    // histogram reach: the largest d0 of the grid
+    let kern_reach = Kernel { d0: p.robust_d0_grid.iter().cloned().fold(p.robust_d0, f64::max), ..kern };
     let s_max = p.robust_s_grid.iter().cloned().fold(p.robust_s, f64::max);
     let mut d = build_contact_dict(input.chr_a, input.pos_a, input.chr_b, input.pos_b, input.ambig, input.active, true);
     let mut chroms: Vec<u32> = input.chr_a.iter().chain(input.chr_b).copied().collect();
@@ -622,7 +629,7 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
         for (seg, range) in parts.iter().enumerate() {
             if reweight {
                 let te = Instant::now();
-                let mut data = EmData::new(&coords, &pairs, &counts, &kern, s_max, p.robust_pair_sample);
+                let mut data = EmData::new(&coords, &pairs, &counts, &kern_reach, s_max, p.robust_pair_sample);
                 data.odds = odds.clone();
                 let res = em_update(&data, &kern, p, eps, s);
                 eps = res.eps;
@@ -639,8 +646,8 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
                 log(
                     p,
                     &format!(
-                        "  EM (part {seg}): eps {:.4} s {:.2} mean w {:.3} low {:.3} prox {:.2e} q {:.3} ll {:.3} ({:.2} s)",
-                        l.eps, l.s, l.mean_w, l.frac_low, l.prox_frac, l.capture_q, l.loglik, l.seconds
+                        "  EM (part {seg}): eps {:.4} s {:.2} d0 {:.1} mean w {:.3} low {:.3} prox {:.2e} q {:.3} ll {:.3} ({:.2} s)",
+                        l.eps, l.s, l.d0, l.mean_w, l.frac_low, l.prox_frac, l.capture_q, l.loglik, l.seconds
                     ),
                 );
                 em_logs.push(l);

@@ -99,6 +99,8 @@ pub struct Params {
     /// the structure the weights are computed from; k = 2 ("gauss") or 1 ("exp").
     pub robust_kernel: String,
     pub robust_d0: f64,
+    /// Non-empty: learn d0 with s (likelihood over the grid product).
+    pub robust_d0_grid: Vec<f64>,
     /// Kernel width s (start value when learned).
     pub robust_s: f64,
     /// Learn s by maximising the mixture likelihood over `robust_s_grid`.
@@ -188,6 +190,7 @@ impl Default for Params {
             robust_start_stage: 1,
             robust_kernel: "gauss".to_string(),
             robust_d0: 2.0,
+            robust_d0_grid: vec![],
             robust_s: 1.5,
             robust_learn_s: true,
             robust_s_grid: vec![0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0],
