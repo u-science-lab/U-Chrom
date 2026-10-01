@@ -68,6 +68,7 @@ def main(argv=None) -> None:
     ap.add_argument("--nd-dir", required=True)
     ap.add_argument("--contacts", required=True)
     ap.add_argument("--res", type=float, default=1e5)
+    ap.add_argument("--sizes", help="explicit schedule, Mb, comma separated (overrides --res)")
     ap.add_argument("--models", type=int, default=10)
     ap.add_argument("--cpu", type=int, default=10)
     ap.add_argument("--temps", type=int, default=500)
@@ -80,7 +81,7 @@ def main(argv=None) -> None:
     ncc = Path(f"{stem}.ncc")
     c = read_contacts(args.contacts)
     n = to_ncc(c, ncc)
-    sizes = [s / 1e6 for s in schedule(args.res)]
+    sizes = [float(x) for x in args.sizes.split(",")] if args.sizes else [s / 1e6 for s in schedule(args.res)]
     n3d = Path(f"{stem}.n3d")
     cmd = [sys.executable, str(Path(args.nd_dir) / "nuc_dynamics.py"), str(ncc), "-o", str(n3d), "-f", "n3d",
            "-m", str(args.models), "-cpu", str(args.cpu), "-temps", str(args.temps), "-dyns", str(args.dyns),
