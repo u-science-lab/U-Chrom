@@ -14,6 +14,7 @@ imgui.ini
 !discovery/uchrom_discovery/ui/package-lock.json
 !uchrom/browser/web/frontend/package.json
 !example-data/4DNFIFINA2U9.csv
+!benchmarks/screcon/data/takei2021_1mb_loci.csv
 example-data/takei2025_fov0/
 !example-data/4DNFIJ52NVDV.csv
 !uchrom/browser/web/frontend/package-lock.json
@@ -107,6 +108,11 @@ example-data/rao2014_imr90/*
 example-data/rao2014_k562/
 example-data/rao2014_gm12878/
 example-data/ray2019_k562/
+# matched-modality comparison inputs (benchmarks/screcon/matched.py; download_data.py --nagano2017_hap
+# --takei2021_brain --tan2021_cortex)
+example-data/nagano2017_hap/
+example-data/takei2021_brain/
+example-data/tan2021_cortex/
 !paper/fig3/feasibility/*.json
 !paper/fig3/results/*.json
 
