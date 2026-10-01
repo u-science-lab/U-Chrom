@@ -92,6 +92,8 @@ pub struct Params {
     /// Print progress to stderr.
     pub verbose: bool,
     // ---- protocol "robust" only (ignored by the other protocols) ----
+    // Defaults: the parameter set recommended from the development set
+    // (benchmarks/screcon/robust_devlog.md, variant es4).
     /// First stage whose restraints are re-weighted (0-based; the weights of
     /// stage s come from the structure of stage s - 1, so >= 1).
     pub robust_start_stage: usize,
@@ -188,7 +190,7 @@ impl Default for Params {
             n_threads: 0,
             verbose: false,
             robust_start_stage: 1,
-            robust_kernel: "gauss".to_string(),
+            robust_kernel: "exp".to_string(),
             robust_d0: 2.0,
             robust_d0_grid: vec![],
             robust_s: 1.5,
@@ -199,9 +201,9 @@ impl Default for Params {
             robust_eps_min: 1e-4,
             robust_eps_max: 0.5,
             robust_per_model: false,
-            robust_segments: 1,
+            robust_segments: 2,
             robust_w_floor: 0.0,
-            robust_refine: 0,
+            robust_refine: 1,
             robust_remove_violated: true,
             robust_count_combine: true,
             robust_pair_sample: 4000,
@@ -211,7 +213,7 @@ impl Default for Params {
             robust_nc_d0: 2.0,
             robust_nc_s: 0.5,
             robust_nc_qmax: 10.0,
-            robust_support_rel: 0.0,
+            robust_support_rel: 4.0,
         }
     }
 }

@@ -30,8 +30,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from contacts import read_contacts  # noqa: E402
 from run_nucdyn import peak_rss_mb, schedule  # noqa: E402
 
-#: parameters of the method (engine defaults otherwise); changed only by dev-set experiments
-ROBUST_DEFAULTS: dict = {}
+#: parameters of the method (engine defaults otherwise); changed only by dev-set experiments.
+#: Recommended set (robust_devlog.md, variant es4): EM re-weighting before every stage from stage 2 on and
+#: once inside it, one extra pass at the final size, exponential contact kernel (width and false-contact
+#: rate learned), local-support evidence with a window of 4 x the final particle size.  The engine
+#: defaults of protocol "robust" are the same values.
+ROBUST_DEFAULTS: dict = {"robust_segments": 2, "robust_refine": 1, "robust_kernel": "exp", "robust_support_rel": 4.0}
 
 
 def main(argv=None) -> None:

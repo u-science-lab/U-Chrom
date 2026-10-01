@@ -214,6 +214,6 @@ def test_robust_without_reweighting_equals_2017():
 
     a = reconstruct_nucdyn(str(PAIRS), n_models=2, device="cpu", seed=3, **ROBUST_QUICK)
     b = reconstruct_nucdyn(str(PAIRS), n_models=2, device="cpu", seed=3, protocol="robust",
-                           robust_start_stage=99, **ROBUST_QUICK)
+                           robust_start_stage=99, robust_refine=0, **ROBUST_QUICK)
     for k in a.layers:
         np.testing.assert_array_equal(a.layers[k], b.layers[k])
