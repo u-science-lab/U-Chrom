@@ -180,6 +180,34 @@ def test_robust_protocol_downweights_injected_noise(tmp_path):
     np.testing.assert_array_equal(back.results["nucdyn.contact_weights"], w)
 
 
+@pytest.mark.gpu
+def test_robust_gpu_matches_cpu_statistics():
+    """protocol="robust" (weights, support evidence, no-contact term) on GPU vs CPU: same ensemble statistics
+    and contact weights."""
+    if not un.gpu_available():
+        pytest.skip("no GPU adapter")
+    from uchrom.recon.sc.nucdyn import reconstruct_nucdyn
+
+    kw = dict(n_models=6, seed=4, protocol="robust", robust_segments=2, robust_kernel="exp", robust_support_rel=4,
+              robust_nc_scale=5, robust_nc_qmax=1, genome_ranges=["chr19"], particle_sizes=[2e6, 4e5, 2e5],
+              temp_steps=[100], dynamics_steps=[100])
+    g = reconstruct_nucdyn(str(PAIRS), device="gpu", **kw)
+    c = reconstruct_nucdyn(str(PAIRS), device="cpu", **kw)
+
+    def stats(cd):
+        X = np.stack([cd.layers[k] for k in sorted(cd.layers)])
+        bb = np.median([np.median(np.linalg.norm(np.diff(x, axis=0), axis=1)) for x in X])
+        rg = np.median([np.sqrt(((x - x.mean(0)) ** 2).sum(1).mean()) for x in X])
+        return bb, rg
+
+    (bg, rg_g), (bc, rg_c) = stats(g), stats(c)
+    assert abs(bg - bc) < 0.1
+    assert abs(rg_g - rg_c) / rg_c < 0.15
+    wg, wc = g.results["nucdyn.contact_weights"], c.results["nucdyn.contact_weights"]
+    ok = np.isfinite(wg) & np.isfinite(wc)
+    assert abs(np.mean(wg[ok]) - np.mean(wc[ok])) < 0.05
+
+
 def test_robust_without_reweighting_equals_2017():
     """With re-weighting disabled (start stage beyond the schedule) robust is the 2017 protocol, bit for bit."""
     from uchrom.recon.sc.nucdyn import reconstruct_nucdyn
