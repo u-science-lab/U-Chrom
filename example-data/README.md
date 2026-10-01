@@ -24,8 +24,8 @@ auto-downloaded by the tutorials on first run into this directory.
 | `liu2025_mop/4DNFID46OABK.csv` + `4DNFICX8IVEK.csv` (+ built `liu2025_mop.chromdata.zarr`, 294 MB; `.v22.chromdata.zarr` 267 MB) | 1.68 GB + 17 MB | no | 4DN public S3 (opt-in, `--liu2025_mop`) | largest wild-type 4DN FOF-CT; `build_liu2025_mop.py` (Fig. 2 dataset scale); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1, streaming `from_fofct(out=)` vs in memory, streaming distance maps vs the dense reference); `benchmarks/cd22_convert_validate.py` / `benchmarks/fig2/cd22_variants.py` (format 2.2); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | Takei 2025 other Zenodo archives (cerebellum rep 2, E14, NMuMG) | 5.3–11 GB each | no | **manual** | `seqfish_multiomics_cerebellum` tutorial (real-data run) |
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials; `tests/core/test_fofct_writer.py` (skipped when absent); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd21_streaming_validation.py` (streaming vs in-memory ArcFISH loop / TAD calls); `benchmarks/cell_spatial_validation.py` (cell positions); `benchmarks/screcon/simulate.py` (`takei2021_25kb` truth) |
-| `4DNFIFLJGGNR.csv`                    | 47 MB   | no              | 4DN public S3 (`--takei2021_1mb`) | `benchmarks/screcon/simulate.py` (`takei2021_1mb` truth: genome-wide 1 Mb loci) |
-| `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
+| `4DNFIFLJGGNR.csv`                    | 47 MB   | no              | 4DN public S3 (`--takei2021_1mb`) | `benchmarks/screcon/simulate.py` (`takei2021_1mb` truth: genome-wide 1 Mb loci); `matched_data.py locus-map` (coordinates of the 2,460 locus names) |
+| `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial; `benchmarks/screcon/matched_data.py takei-mesc` (446-cell mESC imaging reference, replicates 1 + 2) and `locus-map` |
 | `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial (with `rao2014_imr90/` Hi-C); Fig. 3b / 3c (`benchmarks/fig3/b_first_look.py`, `c_gemfish_first_look.py`) |
 | `stevens2017_mesc/` (8 cells: contact pairs + published `.pdb` structures) | 43 MB | no | GEO GSE80280 (`--stevens2017`) | Fig. 3a (NucDynamics reference; `benchmarks/fig3/a_sc_consistency.py`; native-engine validation and speed `benchmarks/fig3/a_nucdyn_engine_*.py`) |
 | `bintu2018/{IMR90,K562}_chr21-28-30Mb.csv` | 7.8 MB + 20 MB | no | GitHub raw (`--bintu2018`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
@@ -34,6 +34,10 @@ auto-downloaded by the tutorials on first run into this directory.
 | `rao2014_{imr90,k562}/*_chr21_5kb_hg19.cool` | 3.8 MB each | IMR90: yes; K562: no | **built** from GEO GSE63525 `.hic` by HTTP range reads (`build_rao2014_slices.py`) | Fig. 3b / 3c; IMR90 also the GEM-FISH tutorial |
 | `rao2014_imr90/IMR90_chr{20,22}_5kb_hg19.cool` | 7.8 MB + 3.3 MB | no | **built** the same way (`build_rao2014_slices.py --cell IMR90 --chroms 20`, then `--chroms 22`) | Fig. 3c chr20 / chr22 (`benchmarks/fig3/c_gemfish_wang2016.py --chrom`, `c_hipps_wang2016.py`) |
 | `ray2019_k562/4DNFI4QQPDMR.mcool` | 849 MB | no | 4DN public S3 (opt-in, `--ray2019_k562`) | provenance of `K562_chr21_30kb.cool` |
+| `benchmarks/screcon/data/takei2021_1mb_loci.csv` (derived) + `tan2021_adult_cortex_cells.tsv` | 78 KB + 31 KB | yes | — | `benchmarks/screcon/matched_data.py` (locus axis; Tan cell list) |
+| `nagano2017_hap/` (Nagano 2017 haploid mESC scHi-C fend pairs + mm9 fends + chain) | 1.39 GB (+5 GB streamed, 253 MB kept) | no | schic2 S3 / GEO GSE94489 / UCSC (opt-in, `--nagano2017_hap`) | `benchmarks/screcon/matched_data.py nagano` → NucDynamics / hickit → `matched.py` (step 1) |
+| `takei2021_brain/` (Takei 2021 Science cortex seqFISH+ tables S5 / S7 / S8 / S10) | 597 MB | no | Zenodo 4708112 (opt-in, `--takei2021_brain`) | `benchmarks/screcon/matched.py` brain imaging reference (step 2) |
+| `tan2021_cortex/` (Tan 2021 Dip-C adult cortex, 510 cells: pairs + 5 clean 3dg) | 13 GB | no | GEO GSE146397 per-GSM (opt-in, `--tan2021_cortex`) | `benchmarks/screcon/matched.py` brain Dip-C baseline (step 2) |
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
 | `H1Esc-HFF.R1.tar.gz`                 | 128 MB  | no              | UW Noble lab  | `higashi_embedding` tutorial (sci-Hi-C H1Esc+HFF mix)                   |
 | `H1Esc-HFF.R1.labeled`                | 92 KB   | no              | UW Noble lab  | `higashi_embedding` tutorial (cell-type labels)                         |
@@ -324,7 +328,9 @@ using.
   ```
   or `python example-data/download_data.py --takei2021_1mb`.
 - **Used by**: `benchmarks/screcon/simulate.py truth --dataset takei2021_1mb`
-  (imaging-truth simulation benchmark for single-cell Hi-C 3-D reconstruction).
+  (imaging-truth simulation benchmark for single-cell Hi-C 3-D reconstruction);
+  `benchmarks/screcon/matched_data.py locus-map` (recovers the mm10 coordinates of the
+  2,460 locus names, see "Matched-modality datasets").
 
 ### `liu2025_mop/` — Liu et al. 2025 mouse MOp DNA-MERFISH, 4DN FOF-CT (1.7 GB)
 
@@ -413,6 +419,9 @@ using.
   ```
 - **Used by**: `jie_aligner.ipynb` (spot-to-fiber tracing).  The
   tutorial opens the CSV directly from the zip without extracting.
+  `benchmarks/screcon/matched_data.py takei-mesc` reads the 1 Mb tables of replicates
+  1 + 2 (201 + 245 = 446 E14 cells) as the mESC imaging reference of the
+  matched-modality comparison; `locus-map` joins replicate 1 with `4DNFIFLJGGNR.csv`.
 - **Coordinate conventions** (applied by the tutorial):
   `x, y` in pixels × 103 nm/pixel; `z` in pixels × 250 nm/pixel.
 
@@ -811,6 +820,117 @@ Everything is gitignored.  DOIs checked against Crossref (2026-09-27).
 | Rao 2014 IMR90 in situ, 4DN | set 4DNES1ZEJNRU: [4DNFIR1JDZH7](https://data.4dnucleome.org/4DNFIR1JDZH7/) (4,639,622,711 B, md5 `f91b77fa…`), [4DNFIJTOIGOI](https://data.4dnucleome.org/4DNFIJTOIGOI/) (8.3 GB) | 4.6–8.3 GB | GRCh38 | range-read one resolution: `h5py.File(fsspec.open(url).open())` → `cooler.Cooler(h['resolutions/5000'])` (~10 s per region) |
 | Bonev 2017 mESC Hi-C (Takei 2021's comparison) | GEO GSE96107; 4DN set 4DNESDXUWBD9 [4DNFIC21MG3U](https://data.4dnucleome.org/4DNFIC21MG3U/) (12.6 GB, mm10) | 11–13 GB | mm10 | same fsspec range read, the 20 Takei 2021 loci × 25 kb; smaller unsorted-ES mcool 4DNFIDA2WGV8 (0.9 GB) |
 | Stevens 2017 HDF5 + raw | GSE80280 `Cell-<n>.hdf5.gz`, `GSE80280_RAW.tar` | 2.6 GB each / 20 GB | mm10 | not needed (contacts + `.pdb` suffice) |
+
+## Matched-modality datasets — scHi-C structures vs chromatin tracing of the same cell type
+
+Used by `benchmarks/screcon/matched.py` (inputs built by `benchmarks/screcon/matched_data.py`;
+jobs `benchmarks/screcon/sherlock/{download,matched}_*.sbatch`).  All opt-in, all gitignored;
+facts below were checked on the downloaded files unless marked *unverified*.
+
+### Locus axis — `benchmarks/screcon/data/takei2021_1mb_loci.csv` (78 KB, in repo, **derived**)
+
+- 2,460 Takei 2021 ~1 Mb loci (25 kb probes, mm10): `name` (`chrN-#k` for the 1,267
+  channel-1 loci, a nearby gene for the 1,193 channel-2 loci), `chrom`, `start`, `end`.
+- The raw Zenodo tables (3735329, 4708112) give locus *names* only; the coordinates are in
+  the papers' Table S1, which is not on Zenodo.  Recovered instead from public files: the
+  4DN FOF-CT table `4DNFIFLJGGNR.csv` (coordinates, no names) holds exactly the 705,143
+  spots of `DNAseqFISH+1Mbloci-E14-replicate1.csv` in `DNAseqFISH+.zip` (201 cells;
+  X = x·0.103, Y = y·0.103, Z = z·0.25 µm); joining on (cell, rounded X/Y/Z) matches
+  683,808 spots and gives every name exactly one coordinate (no ambiguity).  Rebuild:
+  `python benchmarks/screcon/matched_data.py locus-map --fofct 4DNFIFLJGGNR.csv --zip DNAseqFISH+.zip`.
+  The brain Table S7 uses the same 2,460 names (all present).
+
+### `benchmarks/screcon/data/tan2021_adult_cortex_cells.tsv` (31 KB, in repo)
+
+510 rows (`gsm`, `name`, `age`, `cross`, `cell_type`): the Tan 2021 adult cortex cells that
+passed the authors' filter (`GSE146397_metadata.cells_contacts_100k.txt.gz`, ≥ 100 k
+contacts), matched to their GSM by the GEO sample records (`!Sample_description`).
+
+### `nagano2017_hap/` — Nagano 2017 haploid mESC single-cell Hi-C (1.39 GB + 253 MB extracted)
+
+- **Source**: Nagano T, Lubling Y *et al.* "Cell-cycle dynamics of chromosomal organization
+  at single-cell resolution." *Nature* 547:61–67 (2017), doi:10.1038/nature23001.  GEO
+  [GSE94489](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE94489) holds raw reads +
+  feature tables only; the per-cell contact maps are the authors' archives linked from
+  [github.com/tanaylab/schic2](https://github.com/tanaylab/schic2) (S3 bucket `schic2`).
+- **Files**: `schic_hap_serum_adj_files.tar.gz` (882,240,359 B; 790 cells `NST.<n>/adj`),
+  `schic_hap_2i_adj_files.tar.gz` (502,155,700 B; 982 cells `NXT.<n>/adj`) — `adj` =
+  tab-separated `fend1 fend2 count` (GATC fragment ends, MboII/DpnII);
+  `GSE94489_haploids_features_table.txt.gz` (123,901 B; 1,772 cells: `cond`
+  2i_all / 2i_G1 / Serum_G1/S, `passed_qc`, `total_contacts`, cell-cycle `group`, ...);
+  `GSE94489_README.txt` (barcodes); `GATC.fends` (253,322,243 B; `fend chr coord`, **mm9**)
+  streamed out of `schic2_mm9_db.tar.gz` (4,996,816,093 B; not kept);
+  `mm9ToMm10.over.chain.gz` (UCSC, 535,855 B) — contacts are lifted to mm10.
+- **Content** (verified): 1,772 haploid cells (2i 982, serum 790); `passed_qc` = 1 for
+  1,247.  Cell line per GEO: haploid ESC20 / H129-1 (ECACC 14040203), 129 background (GEO
+  calls it "hybrid ESC cell line"; *strain details unverified beyond the GEO text*).
+- **Selection** (stated rules, `sherlock/_matched_env.sh`): serum = `Serum_G1/S`,
+  `passed_qc == 1`, group G1 / early-S / late-S/G2 (no mitotic), ≥ 100 k contacts (403
+  cells); 2i = both 2i conditions, same QC, ≥ 50 k contacts, 200 drawn with seed 1.
+  Unique fend pairs per selected cell after mm10 liftover: serum median 181,883 (100,509 –
+  694,393), 2i median 77,415 (50,855 – 384,505); the adj row count matches the feature
+  table's `total_contacts` (±1, checked on 3 cells), < 0.01 % of pairs lost in the liftover.  The cell-cycle
+  `group` is the authors' inference from contact profiles; cells in S / G2 carry replicated
+  chromatin and are modelled as haploid anyway (the G1 subset is reported separately).
+- **Download**: `download_data.py --nagano2017_hap` (or `sherlock/download_matched.sbatch PART=mesc`).
+
+### `takei2021_brain/` — Takei 2021 Science mouse cortex DNA seqFISH+ (597 MB)
+
+- **Source**: Takei Y *et al.* "Single-cell nuclear architecture across cell types in the
+  mouse brain." *Science* 374:586–594 (2021), doi:10.1126/science.abj1966; Zenodo
+  [4708112](https://zenodo.org/records/4708112).  6–7-week-old female C57BL/6J mice
+  (bioRxiv 10.1101/2021.04.26.441547 methods); 3 biological replicates.
+- **Files**: `TableS7_brain_DNAseqFISH_1Mb_voxel_coordinates_2762cells.csv` (349,019,829 B;
+  4,752,662 spots; voxel coordinates, 103 × 103 × 250 nm; `cluster label`, `chromID`,
+  `geneID` = locus name, DBSCAN `labelID`, `XistID`), `TableS8_..._25kb_...csv`
+  (246,648,783 B), `TableS5_brain_RNA_profiles_2762cells.csv` (497,312 B),
+  `TableS10-median-radial-score-per-celltype-1Mb-resolution.csv` (441,276 B).  Not fetched:
+  the IF / DAPI / ncRNA zips (0.6–13.7 GB each).
+- **Content** (verified): 2,762 cells; `cluster label` sizes 155, 58, 41, 53, 152, 90,
+  240, 78, 1,895 (= the paper's Fig. 1I legend).  Names (from Table S5 marker means:
+  Pvalb, Vip, Ndnf, Sst, Mfge8 / Aldoc, Csf1r, Cldn5, Olig1 / Plp1, Slc17a7): 1 Pvalb, 2 Vip,
+  3 Ndnf, 4 Sst, 5 astrocyte, 6 microglia, 7 endothelial, 8 oligodendrocyte lineage,
+  9 excitatory.  Median 1,678 1 Mb spots per cell (≈ 34 % of 2 × 2,460); DBSCAN gives two
+  homolog clusters for 30 % of (cell, chromosome).
+- **Download**: `download_data.py --takei2021_brain`.
+
+### `tan2021_cortex/` — Tan 2021 Dip-C, adult mouse cortex (510 cells, 13 GB)
+
+- **Source**: Tan L *et al.* "Changes in genome architecture and transcriptional dynamics
+  progress independently of sensory experience during post-natal brain development."
+  *Cell* 184:741–758 (2021), doi:10.1016/j.cell.2020.12.032.  GEO SuperSeries
+  [GSE162511](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE162511); Dip-C SubSeries
+  GSE146397.  **Not fetched**: `GSE146397_RAW.tar` (all samples, 183 GB) — per-GSM files only.
+- **Files** (per cell, `https://ftp.ncbi.nlm.nih.gov/geo/samples/<GSMnnn>/<GSM>/suppl/<GSM>_<name>.*`):
+  `contacts.pairs.txt.gz` (hickit pairs, ~2.5 MB), `impute.pairs.txt.gz` (haplotype-imputed,
+  ~3 MB), `20k.{1..5}.clean.3dg.txt.gz` (dip-c 3DG, 20 kb particles per haplotype,
+  `chrom(mat|pat) start x y z`, contact-poor particles removed; ~3.5 MB each; the
+  structures the paper used); plus the metadata tables `GSE146397_metadata.*` and README.
+- **Content** (verified from GEO records + README): cortex P56 (251 cells), P309 (131),
+  P347 (128); P56 / P347 = CAST/EiJ ♀ × C57BL/6J ♂ (`cb`), P309 = the reciprocal cross
+  (`bc`); males (README: male processing for all ages except P1; *sex per cell not in the
+  GEO records*).  Structure types from `metadata.cells_contacts_100k`: L2–5 pyramidal 160,
+  oligodendrocyte 74, interneuron 56, L6 pyramidal 54, microglia 37, hippocampal
+  pyramidal 31, astrocyte 30, medium spiny neuron 29, OPC 24, other 19.  Contacts per
+  cell (`contacts.pairs`, every 25th cell): 207 k – 571 k, median ~420 k (the ≥ 100 k
+  filter is the authors').  The published `clean.3dg` cover a median 4,792 of the
+  2 × 2,460 locus copies.  *Unverified*: per-cell sex (GEO has none), whether the cell-type
+  labels came from the paper's own clustering of these exact structures (the metadata file
+  calls them "structure types").
+- **Download**: `download_data.py --tan2021_cortex` (or `sherlock/download_matched.sbatch PART=brain`).
+
+### Liu 2025 DNA-MERFISH, mouse cortex (4DN) — catalogued, not downloaded
+
+Liu S, … Zhuang X, *Sci Adv* (2025).  4DN experiment sets (sizes from the 4DN API, 2026-10-01):
+[4DNESMTNNB3N](https://data.4dnucleome.org/experiment-set-replicates/4DNESMTNNB3N/) wild-type
+MOp, 4 experiments, core FOF-CT tables 1.45–1.68 GB each (one, `4DNFID46OABK`, is the
+`liu2025_mop/` entry above) plus 0.9–1.8 GB and 7–9 GB companion tables;
+[4DNESPE924IP](https://data.4dnucleome.org/experiment-set-replicates/4DNESPE924IP/) Mecp2 +/−
+MOp (4 experiments, 1.3–2.1 GB + 6–10 GB tables);
+[4DNESQU9R2NY](https://data.4dnucleome.org/experiment-set-replicates/4DNESQU9R2NY/) Mecp2 +/−
+visual cortex (2 experiments, 1.8 GB + 8–9 GB tables).  ~2,000 loci genome-wide (different
+from the Takei loci) — a second imaging reference would need its own locus axis; too large to
+stage for a baseline.
 
 ## Generated outputs
 
