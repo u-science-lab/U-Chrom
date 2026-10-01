@@ -259,10 +259,23 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1e6)
     camera.position.set(0, 0, 10)
     scene.add(camera)
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55))
-    const key = new THREE.DirectionalLight(0xffffff, 1.6)
-    key.position.set(1, 1.5, 2)
-    camera.add(key) // headlight: lighting follows the view
+    // Lighting that follows the view, so no side of a tube stays dark: a soft sky/ground fill
+    // from everywhere, a key light from just above-right of the camera and a weaker fill from
+    // below-left — both aimed along the view (their targets ride with the camera too; a
+    // target left at the world origin made the light swing as the camera orbited).
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa0a8, 1.1))
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35))
+    const aim = new THREE.Object3D()
+    aim.position.set(0, 0, -1)
+    camera.add(aim)
+    const key = new THREE.DirectionalLight(0xffffff, 1.3)
+    key.position.set(0.45, 0.6, 1)
+    key.target = aim
+    camera.add(key)
+    const fill = new THREE.DirectionalLight(0xffffff, 0.55)
+    fill.position.set(-0.7, -0.5, 0.6)
+    fill.target = aim
+    camera.add(fill)
     const group = new THREE.Group()
     scene.add(group)
     const highlight = new THREE.Mesh(

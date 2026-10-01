@@ -2920,15 +2920,19 @@ button.side-close:hover {
   border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
 }
-.left-tabs button[role='tab'] {
-  flex: 1;
-  padding: 2px 8px;
-  font-size: 12px;
+.left-tabs .left-tab-seg {
+  display: inline-flex;
+  margin: 0;
+  gap: 2px;
 }
-.left-tabs button[role='tab'].active {
-  background: var(--bg-active);
-  border-color: var(--accent);
-  color: var(--accent);
+.left-tabs button[role='tab'] {
+  flex: 0 0 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 22px;
+  padding: 0;
 }
 .store-panel {
   flex: 1;

@@ -97,16 +97,18 @@ function LeftSidebar() {
     <div className="left">
       <div className="left-tabs" role="tablist">
         <SideClose side="left" />
-        {(
-          [
-            ['cells', 'Cells'],
-            ['store', 'Store'],
-          ] as [LeftTab, string][]
-        ).map(([t, label]) => (
-          <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'active' : ''} onClick={() => pick(t)} title={t === 'store' ? 'How the dataset is stored on disk' : 'Cells, groups and colouring'}>
-            {label}
-          </button>
-        ))}
+        <div className="seg left-tab-seg">
+          {(
+            [
+              ['cells', 'Cells — list, groups and colouring', <CellsIcon key="c" />],
+              ['store', 'Store — how the dataset is stored on disk', <StoreIcon key="s" />],
+            ] as [LeftTab, string, JSX.Element][]
+          ).map(([t, title, icon]) => (
+            <button key={t} role="tab" aria-selected={tab === t} aria-label={title} className={tab === t ? 'active' : ''} onClick={() => pick(t)} title={title}>
+              {icon}
+            </button>
+          ))}
+        </div>
       </div>
       {tab === 'store' && <StorePanel />}
       {tab === 'cells' && sections.has('cells') && <CellPanel />}
@@ -122,6 +124,26 @@ function LeftSidebar() {
         </div>
       )}
     </div>
+  )
+}
+
+function CellsIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+      <circle cx="3" cy="4" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="3" cy="8" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="3" cy="12" r="1.2" fill="currentColor" stroke="none" />
+      <path d="M6.5 4h7M6.5 8h7M6.5 12h7" />
+    </svg>
+  )
+}
+
+function StoreIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round">
+      <path d="M1.8 3.2h4l1.2 1.4h7.2v8.6H1.8z" />
+      <path d="M5 8.2h6M5 10.6h4" strokeLinecap="round" />
+    </svg>
   )
 }
 
