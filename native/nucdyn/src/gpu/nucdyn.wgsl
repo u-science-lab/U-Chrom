@@ -32,6 +32,10 @@ struct Params {
     seed_lo: u32,
     seed_hi: u32,
     tstep: u32,    // temperature step (velocity stream)
+    cut: f32,      // cell-grid cutoff: max(rep, no-contact cutoff)
+    nc_lambda: f32, // robust no-contact term (0: off)
+    nc_d0: f32,
+    nc_s: f32,
 };
 
 struct Rest {
@@ -158,7 +162,7 @@ fn setup_grid(model: u32, lid: u32) {
     if (lid == 0u) {
         let o = smin[0];
         let ext = max(smax[0] - o, vec3<f32>(0.0));
-        var cs = P.rep / f32(P.stencil);
+        var cs = P.cut / f32(P.stencil);
         var d = vec3<u32>(floor(ext / cs)) + vec3<u32>(1u);
         for (var it = 0u; it < 64u; it = it + 1u) {
             if (f32(d.x) * f32(d.y) * f32(d.z) <= f32(P.hc)) {
@@ -491,8 +495,10 @@ fn restraints(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id
         } else {
             let s2 = max(dot(d, d), select(0.0, 1e-8, P.form == 1u));
             t = rjk * r2 * r2 * r / (s2 * s2 * s2);
-            if (P.form != 0u) {
+            if (P.form == 1u) {
                 t = t * rr.w;
+            } else if (P.form >= 2u) {
+                t = t * rest[rb + s].w;  // group weight, as the CPU
             }
         }
         rest_f[fb + q] = vec4<f32>(d * t, 0.0);
@@ -501,12 +507,14 @@ fn restraints(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id
 
 fn total_force(i: u32, m: u32, p: vec3<f32>) -> vec3<f32> {
     var f = vec3<f32>(0.0);
-    if (P.f_rep != 0.0) {
+    if (P.f_rep != 0.0 || P.nc_lambda > 0.0) {
         let d = grid_dims(m);
         let c = vec3<i32>(cell_coord(m, p, d));
         let di = vec3<i32>(d);
         let st = i32(P.stencil);
         let rep2 = P.rep * P.rep;
+        let cut2 = P.cut * P.cut;
+        let nc_end = P.nc_d0 + 3.0 * P.nc_s;
         let kf = 4.0 * P.f_rep;
         let sb = m * P.n;
         let x0 = u32(max(c.x - st, 0));
@@ -521,10 +529,21 @@ fn total_force(i: u32, m: u32, p: vec3<f32>) -> vec3<f32> {
                     let j = bitcast<u32>(q4.w);
                     let dv = q4.xyz - p;
                     let d2 = dot(dv, dv);
-                    if (d2 > rep2 || (j + 1u >= i && j <= i + 1u)) {
+                    if (d2 > cut2 || (j + 1u >= i && j <= i + 1u)) {
                         continue;
                     }
-                    f = f - dv * (kf * (rep2 - d2));
+                    if (d2 <= rep2) {
+                        f = f - dv * (kf * (rep2 - d2));
+                    }
+                    if (P.nc_lambda > 0.0) {
+                        // robust "no contact" term: lambda exp(-((d - d0) / s)^2) for d0 < d < d0 + 3 s
+                        let dd = sqrt(d2);
+                        if (dd > P.nc_d0 && dd < nc_end) {
+                            let x = (dd - P.nc_d0) / P.nc_s;
+                            let en = P.nc_lambda * exp(-x * x);
+                            f = f - dv * (2.0 * en * x / (P.nc_s * dd));
+                        }
+                    }
                 }
             }
         }

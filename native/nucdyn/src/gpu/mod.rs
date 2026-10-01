@@ -39,6 +39,10 @@ struct GpuParams {
     seed_lo: u32,
     seed_hi: u32,
     tstep: u32,
+    cut: f32,
+    nc_lambda: f32,
+    nc_d0: f32,
+    nc_s: f32,
 }
 
 #[repr(C)]
@@ -365,6 +369,13 @@ impl GpuEngine {
             seed_lo: seed as u32,
             seed_hi: (seed >> 32) as u32,
             tstep: 0,
+            cut: (match sys.nc {
+                Some(x) => rep.max(x.cutoff() / u),
+                None => rep,
+            }) as f32,
+            nc_lambda: sys.nc.map_or(0.0, |x| x.lambda) as f32,
+            nc_d0: sys.nc.map_or(0.0, |x| x.d0 / u) as f32,
+            nc_s: sys.nc.map_or(1.0, |x| x.s / u) as f32,
         };
         let (px, gx) = (nb, g.div_ceil(WG).max(1));
         let (mm, hbx) = (m as u32, hb);
@@ -570,7 +581,12 @@ mod tests {
             use_cells: true,
             emulate_overflow: false,
         };
-        for (name, sys) in [("shared", &shared), ("per-model", &per_model)] {
+        let with_nc = {
+            let mut s = per_model.clone();
+            s.nc = Some(crate::dynamics::NoContact { lambda: 0.8, d0: 2.0, s: 0.7 });
+            s
+        };
+        for (name, sys) in [("shared", &shared), ("per-model", &per_model), ("no-contact", &with_nc)] {
             let out = eng
                 .run_schedule(sys, vec![pos.clone(), pos.clone()], &[(t_ref, f_rep)], steps, f_dist, 1.0, 0.001 * 20.458, 10.0 / 20.458, 1, Some(&[vel.clone(), vel.clone()]))
                 .unwrap();

@@ -33,7 +33,7 @@
 //! ensemble-mean contact probability.
 
 use crate::contacts::{build_contact_dict, contact_count, ContactDict, Structure};
-use crate::dynamics::{RestraintForm, System, V3};
+use crate::dynamics::{NoContact, RestraintForm, System, V3};
 use crate::params::{anneal_schedule, Params};
 use crate::pipeline::{Input, Output, StageEngine, StageLog};
 use crate::protocol2017::{
@@ -536,6 +536,10 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
                 eps = res.eps;
                 s = res.s;
                 set_weights(&mut sys, nb, &res.weights, n_models);
+                if p.robust_nc_scale > 0.0 {
+                    let q = res.log.capture_q.clamp(0.0, p.robust_nc_qmax);
+                    sys.nc = Some(NoContact { lambda: p.robust_nc_scale * q, d0: p.robust_nc_d0, s: p.robust_nc_s });
+                }
                 let mut l = res.log;
                 l.segment = seg;
                 l.seconds = te.elapsed().as_secs_f64();

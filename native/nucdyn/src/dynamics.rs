@@ -30,6 +30,34 @@ pub enum RestraintForm {
     Weighted2017,
 }
 
+/// "No contact" term of the `robust` observation model (Poisson capture):
+/// every pair |i - j| >= 2 gets U(d) = lambda exp(-((d - d0)+ / s)^2), the
+/// expected-contact penalty q f(d) of pairs that are close (it is flat inside
+/// d0, where the excluded-volume repulsion acts).  Cut at d0 + 3 s.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NoContact {
+    pub lambda: f64,
+    pub d0: f64,
+    pub s: f64,
+}
+
+impl NoContact {
+    pub fn cutoff(&self) -> f64 {
+        self.d0 + 3.0 * self.s
+    }
+    /// (energy, force coefficient c: force on i = c (p_i - p_j)) at squared distance d2.
+    #[inline]
+    pub fn eval(&self, d2: f64) -> (f64, f64) {
+        let d = d2.sqrt();
+        if d <= self.d0 || d >= self.cutoff() {
+            return (0.0, 0.0);
+        }
+        let x = (d - self.d0) / self.s;
+        let e = self.lambda * (-x * x).exp();
+        (e, 2.0 * e * x / (self.s * d))
+    }
+}
+
 /// Particles and restraints of one stage.
 #[derive(Clone, Debug)]
 pub struct System {
@@ -48,6 +76,8 @@ pub struct System {
     /// Per-model restraint weights (`Weighted2017` only): model m uses
     /// `model_w[m]` instead of `rest_w`.
     pub model_w: Option<Vec<Vec<f64>>>,
+    /// `robust`: soft "no contact" repulsion of every pair |i - j| >= 2 (cell-grid path only).
+    pub nc: Option<NoContact>,
 }
 
 impl System {
@@ -100,6 +130,7 @@ impl System {
             inc_off: cnt,
             inc,
             model_w: None,
+            nc: None,
         }
     }
 
@@ -491,7 +522,7 @@ fn group_force_2017<const WEIGHTED: bool>(sys: &System, pos: &[V3], g: usize, f_
             let s2 = dx * dx + dy * dy + dz * dz;
             let mut t = rjk * r2 * r2 * r / (s2 * s2 * s2);
             if WEIGHTED {
-                t *= sys.rest_w[n];
+                t *= sys.rest_w[s]; // group weight (= first member), consistent with the energy
             }
             out[n - s] = [dx * t, dy * t, dz * t];
         }
@@ -728,7 +759,12 @@ pub fn compute_forces_mode(
     let max_r = radii.iter().cloned().fold(0.0, f64::max);
     let uniform = radii.iter().all(|&r| r == max_r);
     let stencil = m.grid.stencil.max(1);
-    m.grid.build(pos, 2.0 * max_r / stencil as f64);
+    let nc = sys.nc;
+    let cut = match nc {
+        Some(x) => (2.0 * max_r).max(x.cutoff()),
+        None => 2.0 * max_r,
+    };
+    m.grid.build(pos, cut / stencil as f64);
     let mut sforce = std::mem::take(&mut m.grid.sforce);
     let g = &m.grid;
     let [dx_, dy_, dz_] = g.dims;
@@ -749,7 +785,7 @@ pub fn compute_forces_mode(
                 let p = spos[k];
                 let ri = radii[i];
                 let mut acc = [0.0f64; 3];
-                if f_rep != 0.0 {
+                if f_rep != 0.0 || nc.is_some() {
                     let l = pcell[i] as usize;
                     let cx = l % dx_;
                     let cy = (l / dx_) % dy_;
@@ -759,7 +795,7 @@ pub fn compute_forces_mode(
                         for y in cy.saturating_sub(stencil)..=(cy + stencil).min(dy_ - 1) {
                             let row = (z * dy_ + y) * dx_;
                             let (s, e) = (start[row + x0] as usize, start[row + x1 + 1] as usize);
-                            if uniform && !energies {
+                            if uniform && !energies && nc.is_none() {
                                 // branch-free: w = rep^2 - d^2 inside the cutoff (and |i - j| >= 2), else 0
                                 let (mut ax, mut ay, mut az) = (0.0f64, 0.0f64, 0.0f64);
                                 let fi = i as f64;
@@ -786,6 +822,17 @@ pub fn compute_forces_mode(
                                         continue; // |i - j| < 2
                                     }
                                     let e = repulse(&p, &spos[t], ri + radii[j], f_rep, &mut acc);
+                                    if let Some(x) = nc {
+                                        let q = spos[t];
+                                        let (ddx, ddy, ddz) = (p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+                                        let (en, cf) = x.eval(ddx * ddx + ddy * ddy + ddz * ddz);
+                                        acc[0] += ddx * cf;
+                                        acc[1] += ddy * cf;
+                                        acc[2] += ddz * cf;
+                                        if energies && i < j {
+                                            u += en;
+                                        }
+                                    }
                                     if energies && i < j {
                                         u += e;
                                     }
@@ -1072,6 +1119,40 @@ mod tests {
         }
         assert!(max_f > 1.0);
         assert!(max_err / max_f < 1e-5 || max_err < 1e-4, "max_err {max_err} max_f {max_f}");
+    }
+
+    #[test]
+    fn no_contact_and_weighted_forces_match_finite_differences() {
+        let (mut sys, pos) = toy_chain_w(80, 21, false);
+        sys.form = RestraintForm::Weighted2017;
+        let mut r = Rng::new(3);
+        sys.rest_w = (0..sys.n_restraints()).map(|_| r.uniform()).collect();
+        sys.nc = Some(NoContact { lambda: 0.8, d0: 2.0, s: 0.7 });
+        let (f_rep, f_dist) = (0.7, 25.0);
+        let energy = |p: &[V3]| -> f64 {
+            let mut m = Model::new(p.to_vec(), Rng::new(0));
+            m.grid.stencil = 2;
+            let (a, b) = compute_forces_mode(&sys, &mut m, f_rep, f_dist, false, true, true);
+            a + b
+        };
+        let mut m = Model::new(pos.clone(), Rng::new(0));
+        m.grid.stencil = 2;
+        compute_forces_mode(&sys, &mut m, f_rep, f_dist, false, false, true);
+        let h = 1e-6;
+        let (mut max_err, mut max_f) = (0.0f64, 0.0f64);
+        for i in 0..sys.n {
+            for d in 0..3 {
+                let mut p1 = pos.clone();
+                p1[i][d] += h;
+                let mut p2 = pos.clone();
+                p2[i][d] -= h;
+                let num = -(energy(&p1) - energy(&p2)) / (2.0 * h);
+                max_err = max_err.max((num - m.force[i][d]).abs());
+                max_f = max_f.max(num.abs());
+            }
+        }
+        assert!(max_f > 1.0);
+        assert!(max_err / max_f < 1e-5, "max_err {max_err} max_f {max_f}");
     }
 
     #[test]

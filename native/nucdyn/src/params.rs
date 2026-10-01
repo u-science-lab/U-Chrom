@@ -133,6 +133,13 @@ pub struct Params {
     pub robust_force_norm: f64,
     /// > 0: restraint target distance from min(count, cap) ** power_law.
     pub robust_count_cap: u32,
+    /// > 0: "no contact" term (Poisson capture) on every pair |i - j| >= 2:
+    /// U = x q exp(-((d - nc_d0)+ / nc_s)^2), q the capture efficiency of the
+    /// latest EM update (at most `robust_nc_qmax`); 0: off.
+    pub robust_nc_scale: f64,
+    pub robust_nc_d0: f64,
+    pub robust_nc_s: f64,
+    pub robust_nc_qmax: f64,
 }
 
 impl Default for Params {
@@ -194,6 +201,10 @@ impl Default for Params {
             robust_pair_sample: 4000,
             robust_force_norm: 0.0,
             robust_count_cap: 0,
+            robust_nc_scale: 0.0,
+            robust_nc_d0: 2.0,
+            robust_nc_s: 0.5,
+            robust_nc_qmax: 10.0,
         }
     }
 }
@@ -252,6 +263,9 @@ impl Params {
                 }
                 if self.robust_segments == 0 {
                     return Err("robust_segments must be >= 1".into());
+                }
+                if self.robust_nc_scale > 0.0 && (!self.use_cells || self.robust_nc_s <= 0.0) {
+                    return Err("robust_nc_scale needs use_cells and robust_nc_s > 0".into());
                 }
                 if !(0.0..=1.0).contains(&self.robust_w_floor) {
                     return Err("robust_w_floor must be in [0, 1]".into());
