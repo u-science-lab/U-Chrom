@@ -217,3 +217,19 @@ def test_robust_without_reweighting_equals_2017():
                            robust_start_stage=99, robust_refine=0, **ROBUST_QUICK)
     for k in a.layers:
         np.testing.assert_array_equal(a.layers[k], b.layers[k])
+
+
+def test_robust_sampling_and_adaptive_resolution():
+    """Snapshots multiply the models; merged runs come back on the full particle grid."""
+    from uchrom.recon.sc.nucdyn import reconstruct_nucdyn
+
+    kw = dict(n_models=2, device="cpu", seed=2, protocol="robust", genome_ranges=["chr19"],
+              particle_sizes=[2e6, 4e5, 1e5], temp_steps=[30], dynamics_steps=[20])
+    a = reconstruct_nucdyn(str(PAIRS), **kw)
+    b = reconstruct_nucdyn(str(PAIRS), robust_merge_below=2.1e6, robust_sample_temp=1000.0, robust_sample_steps=10,
+                           robust_sample_snapshots=3, **kw)
+    assert len(b.layers) == 6
+    np.testing.assert_array_equal(a.bins[["chrom", "start", "end"]].to_numpy(), b.bins[["chrom", "start", "end"]].to_numpy())
+    st = b.results["nucdyn.stages"]
+    assert st["n_particles"].iloc[-1] < len(b.bins)  # fewer simulated particles than output loci
+    assert np.isfinite(np.stack([b.layers[k] for k in b.layers])).all()

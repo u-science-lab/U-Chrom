@@ -905,6 +905,27 @@ mod tests {
     }
 
     #[test]
+    fn merging_keeps_contact_particles_and_expands_back() {
+        use crate::contacts::Contact;
+        let mut d: ContactDict = BTreeMap::new();
+        d.insert((0, 0), vec![Contact { pos_a: 150, pos_b: 950, ambig: 1, number: 0 }]);
+        let full: BTreeMap<u32, Vec<i64>> = [(0u32, (1..=12).map(|k| k * 100).collect::<Vec<i64>>())].into_iter().collect();
+        let kept = merge_empty_particles(&d, &full);
+        // contact ends 150 -> particle 200, 950 -> 1000; chromosome ends 100, 1200
+        assert_eq!(kept[&0], vec![100, 200, 1000, 1200]);
+        let mut st = Structure::new(&kept);
+        st.coords = vec![vec![[0.0; 3], [1.0, 0.0, 0.0], [9.0, 0.0, 0.0], [11.0, 0.0, 0.0]]];
+        let bb = merged_backbone_restraints(&st, 100, 0.1, 1.1, 0.5);
+        assert_eq!(bb.len(), 3);
+        assert!((bb[0].hi - 1.1f32 as f64).abs() < 1e-12); // gap 1: the 2017 bound
+        assert!((bb[1].hi - 8f64.sqrt() * (1.1f32 as f64)).abs() < 1e-12);
+        let (seq, coords) = expand_to_grid(&st, &full);
+        assert_eq!(seq[0], full[&0]);
+        let x: Vec<f64> = coords[0].iter().map(|q| q[0]).collect();
+        assert_eq!(x, vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]);
+    }
+
+    #[test]
     fn schedule_split_covers_all_steps() {
         let parts = split_schedule(500, 3);
         assert_eq!(parts.len(), 3);
