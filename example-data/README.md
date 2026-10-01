@@ -667,7 +667,34 @@ public data alone** and are shipped with their recorded outputs.
   - Read 2 carries the barcodes: read2[22:30] + read2[60:68] = the 16-base spot barcode.  Both linkers
     are required (the authors' `bcsplit.py` / `00.filter-linker.sh`).
   - Mapping, per-spot deduplication and the 1-kb cis cut reuse the Chen 2026 pipeline (below).
-  - Contact maps are linked to the store when done.
+  - Output on Oak (`$OAK/uchrom/spatial_atac_hic/<section>/`, 3.3 GB): dedup pairs, per-spot 1-Mb
+    `.scool`, bulk `.mcool` (25 kb – 1 Mb), per-barcode statistics.  Not public: copy the four files
+    each section needs into `spatial_atac_hic/contacts/` over the DTN (recipe in the script below;
+    655 MB for both sections).
+
+  | section | read pairs | kept contacts | spots with a map (in store) |
+  |---|---|---|---|
+  | MouseBrainR6 | 829.7 M | 90.6 M | 1,946 of 1,966 |
+  | MouseBrainR8 | 895.1 M | 108.7 M | 2,313 of 2,324 |
+
+  Removed: MAPQ < 30 (34 %), duplicates (11 %), cis pairs closer than 1 kb (39 %), barcodes off the
+  whitelist (3 %).
+- **Contacts linked into the store**: `python example-data/link_spatial_atac_hic_contacts.py`
+  (seconds; reads `contacts/`).  Per section:
+  - `per_spot.<section>`: `mouse_brain_<section>.spots_1Mb.scool`, the pipeline's `.scool` with each
+    cell renamed from its 16-base barcode to the store's id `<section>:<barcode>`.
+  - `bulk.<section>`: `contacts/<section>.bulk.mcool`.
+  - `uns['contacts_stats'][<section>]`: the counts above and the checks below.
+- **Validation against the authors** (`cells.n_fragments_hic`, their per-spot Hi-C fragment counts):
+  - Per-spot depth agrees: Pearson r of log counts 0.999 (R6) / 0.998 (R8); Spearman 0.998 / 0.997.
+  - Barcode order: with barcode B before A the correlation drops to 0.20 / −0.05, so A + B (read
+    order) is the store's barcode.
+  - Totals: ours are 0.32 × theirs.  Theirs (R6: 263 M) lie between our kept pairs (91 M) and kept +
+    the < 1 kb cis pairs (417 M); their filter is not documented closely enough to reproduce it.
+  - The sum of a section's spot maps equals its bulk map pixel for pixel (r = 1.000 on chr1 at 1 Mb;
+    0.92 of the bulk total — the bulk also has the spots outside the store and those under 100 pairs).
+  - Compartments: PC1 of the R6 bulk O/E correlation on chr1 (1 Mb) follows the ATAC signal,
+    |r| = 0.86.
 
 ### `spatial_hicrna/` — Spatial Hi-C-RNA, mouse brain / embryo, human melanoma (Guo et al. 2026)
 
