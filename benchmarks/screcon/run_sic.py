@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import resource
 import shutil
 import stat
 import subprocess
@@ -106,6 +107,8 @@ def main(argv=None) -> None:
     ap.add_argument("--replicas", type=int, default=10)
     ap.add_argument("--first-replica", type=int, default=1, help="replica ids (= Si-C seeds) start here")
     ap.add_argument("--jobs", type=int, default=0, help="replicas run in parallel (default: all)")
+    ap.add_argument("--prep-jobs", type=int, default=0,
+                    help="parallel gettargetcontact processes in the preparation (default: all cores)")
     ap.add_argument("--workdir", type=Path, required=True)
     ap.add_argument("--keep", action="store_true", help="keep the work directory")
     ap.add_argument("--out", type=Path, required=True)
@@ -127,7 +130,7 @@ def main(argv=None) -> None:
     shutil.copytree(src / "MD_simulation/replica/bk", W / "MD_simulation/replica/bk")
     chmod_x(W)
     t0 = time.time()
-    prep = prepare_1kb(c, chroms, W / "contact/1kb_prepare", jobs=max(os.cpu_count() or 1, 1))
+    prep = prepare_1kb(c, chroms, W / "contact/1kb_prepare", jobs=args.prep_jobs or max(os.cpu_count() or 1, 1))
     sizes = chrom_sizes_for(c, args.assembly)
     lenfile = W / "chrlenlist.dat"
     lenfile.write_text("".join(f"{i + 1}\t{sizes[ch]}\n" for i, ch in enumerate(chroms)))
@@ -175,7 +178,9 @@ def main(argv=None) -> None:
             "chroms": chroms, "chrom_lengths": sizes, "prepare": prep, "replicas": ids, "failed": failed,
             "n_beads": len(key[0]), "n_interpolated_beads": int(interp.sum()),
             "contact_seconds": t1 - t0, "md_seconds_wall": t2 - t1,
-            "md_seconds_per_replica": [t for _, _, t in runs], "slurm_job_id": os.environ.get("SLURM_JOB_ID")}
+            "md_seconds_per_replica": [t for _, _, t in runs],
+            "peak_rss_mb_largest_child": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+            / (1e6 if sys.platform == "darwin" else 1e3), "slurm_job_id": os.environ.get("SLURM_JOB_ID")}
     Path(str(args.out) + ".json").write_text(json.dumps(meta, indent=1))
     print(json.dumps({k: v for k, v in meta.items() if k not in ("chrom_lengths",)}), flush=True)
     if not args.keep:
