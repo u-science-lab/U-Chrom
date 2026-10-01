@@ -2910,3 +2910,137 @@ button.side-close:hover {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+/* ---- left side bar: Cells | Store tabs ------------------------------- */
+.left-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.left-tabs button[role='tab'] {
+  flex: 1;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+.left-tabs button[role='tab'].active {
+  background: var(--bg-active);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.store-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 6px 10px;
+  font-size: 12px;
+}
+.store-empty {
+  padding: 10px;
+}
+.store-head {
+  padding: 2px 4px 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.store-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.store-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin-top: 3px;
+}
+.store-tree,
+.store-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.store-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: 12px;
+  border-radius: var(--radius);
+}
+.store-row:hover {
+  background: var(--bg-hover, var(--bg-active));
+}
+.store-caret {
+  width: 10px;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+.store-icon {
+  width: 12px;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+.store-row.k-array .store-icon,
+.store-row.k-table .store-icon {
+  color: var(--accent);
+}
+.store-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.store-size {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.store-sub {
+  font-size: 11px;
+  margin: -1px 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.store-cols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: 2px 4px 5px 0;
+}
+.store-cols code {
+  font-size: 10.5px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.store-attrs {
+  margin: 2px 4px 6px 0;
+  font-size: 11px;
+}
+.store-attrs > div {
+  display: flex;
+  gap: 6px;
+}
+.store-attrs dt {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.store-attrs dd {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-family: ui-monospace, Menlo, monospace;
+}

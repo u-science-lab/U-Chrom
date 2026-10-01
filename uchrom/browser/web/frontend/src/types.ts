@@ -380,3 +380,31 @@ export interface GenomeChrom {
   offset: number
   length: number
 }
+
+/** One node of a store's on-disk structure (GET /store; API.md). */
+export interface StoreNode {
+  name: string
+  /** relative path in the store ('' = root) */
+  path: string
+  kind: 'group' | 'dir' | 'array' | 'table' | 'file'
+  bytes: number
+  /** Zarr attributes: key → JSON preview (shortened) */
+  attrs?: Record<string, string>
+  children?: StoreNode[]
+  /** children not listed */
+  more?: number
+  /** array */
+  shape?: number[]
+  dtype?: string
+  chunk_shape?: number[] | null
+  n_chunks?: number
+  /** Parquet table */
+  rows?: number
+  columns?: string[]
+  row_groups?: number
+  error?: string
+  /** root: 'zarr' (directory) or 'cdz' (one zip) */
+  container?: string
+  /** root: the store header (attrs.uchrom: format_version, n_spots, …) in full */
+  meta?: Record<string, string | number | boolean | null>
+}

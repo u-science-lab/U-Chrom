@@ -1,5 +1,5 @@
 import { decodeMatrix, type MatrixData } from './matrix'
-import type { FileListing, FilePlace, IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, SpatialPoints, TracePage } from './types'
+import type { FileListing, FilePlace, IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, SpatialPoints, StoreNode, TracePage } from './types'
 
 async function request(url: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(url, init)
@@ -232,6 +232,11 @@ export interface RegionQuery {
   chrom: string
   start?: number
   end?: number
+}
+
+/** The store's on-disk structure (groups, arrays, Parquet tables, sizes). */
+export async function fetchStore(id: string): Promise<StoreNode> {
+  return (await request(`${ds(id)}/store`)).json()
 }
 
 export async function fetchTracks(

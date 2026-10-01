@@ -373,6 +373,27 @@ server.
 Matrices are capped at 1,000 × 1,000 bins: larger requests are sum-pooled
 (contacts) / median-pooled (distances) and the header says so in `note`.
 
+### `GET /api/datasets/{id}/store`
+
+The on-disk structure of a `.chromdata.zarr` / `.cdz` store, for the Store tab
+(`422` for in-memory / CSV datasets).  A nested node:
+
+```json
+{"name": "x.chromdata.zarr", "path": "", "kind": "group", "bytes": 2935369563,
+ "container": "zarr",                          // root only: zarr (directory) | cdz (zip)
+ "attrs": {"uchrom": "{\"format_version\":\"2.3\",…}"},   // key → JSON preview (≤160 chars)
+ "children": [
+   {"name": "umap", "path": "cellm/umap", "kind": "array", "bytes": 27827,
+    "shape": [1799, 2], "dtype": "float64", "chunk_shape": [1799, 2], "n_chunks": 1},
+   {"name": "bins.parquet", "path": "tables/bins.parquet", "kind": "table", "bytes": 1203,
+    "rows": 41, "columns": ["chrom", "start", "end"], "row_groups": 1}
+ ]}
+```
+
+`kind`: `group` (Zarr group), `dir` (a plain folder, e.g. `chrom=chr1`),
+`array` (its chunk files are folded in: `n_chunks`), `table` (Parquet),
+`file`.  At most 400 children per node (`more` counts the rest).
+
 ### `GET /api/datasets/{id}/tracks?names=H3K27ac,H3K9me3&chrom=chr7&start=&end=&cell_id=&agg=mean&group=`
 
 Per-genomic-bin aggregate of tracks over the spots of the selection (all

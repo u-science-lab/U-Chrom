@@ -285,3 +285,13 @@ def test_free_port_skips_live_listeners_only():
         probe.bind(("127.0.0.1", 0))
         free = probe.getsockname()[1]
     assert _free_port("127.0.0.1", free) == free
+
+
+def test_store_structure(client):
+    c, path = client
+    t = c.get("/api/datasets/d1/store").json()
+    assert t["kind"] == "group" and t["container"] == "zarr" and t["name"] == path.name
+    names = {n["name"] for n in t["children"]}
+    assert {"tables", "index"} <= names and t["meta"]["format_version"]
+    # the rest of the API still answers (a route named like a server variable once shadowed it)
+    assert c.get("/api/datasets").status_code == 200

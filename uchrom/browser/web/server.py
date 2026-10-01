@@ -161,6 +161,10 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
     def group_cells(dataset_id: str, group: str) -> Dict[str, Any]:
         return _call(_dataset(dataset_id).group_info, group)
 
+    @app.get("/api/datasets/{dataset_id}/store")
+    def store_structure(dataset_id: str) -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).store_tree)
+
     @app.get("/api/datasets/{dataset_id}/tracks")
     def tracks(dataset_id: str, names: str, chrom: str, start: Optional[int] = None,
                end: Optional[int] = None, cell_id: Optional[str] = None, agg: str = "mean",

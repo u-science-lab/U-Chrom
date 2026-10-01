@@ -1,11 +1,13 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { fetchHealth, listDatasets } from './api'
 import { CellInfoPanel } from './components/CellInfoPanel'
 import { CellPanel } from './components/CellPanel'
 import { GroupPanel } from './components/GroupPanel'
 import { Inspector, useDatasetFacts } from './components/Inspector'
 import { OverviewColour } from './components/PropertiesPanel'
+import { SideClose } from './components/SideClose'
 import { StatusBar } from './components/StatusBar'
+import { StorePanel } from './components/StorePanel'
 import { TopBar } from './components/TopBar'
 import { Workspace } from './components/Workspace'
 import { leftSections } from './inspector'
@@ -67,19 +69,54 @@ export function App() {
   )
 }
 
-/** Left side bar: shared by every open view (never depends on the active pane). */
+type LeftTab = 'cells' | 'store'
+const LEFT_TAB_KEY = 'uchrom.browser.leftTab'
+
+/**
+ * Left side bar: shared by every open view (never depends on the active pane).  Two tabs:
+ * the cells (list, groups, info, colouring) and the store's on-disk structure.
+ */
 function LeftSidebar() {
   const sections = new Set(leftSections(useDatasetFacts()))
+  const [tab, setTab] = useState<LeftTab>(() => {
+    try {
+      return localStorage.getItem(LEFT_TAB_KEY) === 'store' ? 'store' : 'cells'
+    } catch {
+      return 'cells'
+    }
+  })
+  const pick = (t: LeftTab) => {
+    setTab(t)
+    try {
+      localStorage.setItem(LEFT_TAB_KEY, t)
+    } catch {
+      /* no storage */
+    }
+  }
   return (
     <div className="left">
-      {sections.has('cells') && <CellPanel />}
-      {sections.has('groups') && <GroupPanel />}
-      {sections.has('cellInfo') && (
+      <div className="left-tabs" role="tablist">
+        <SideClose side="left" />
+        {(
+          [
+            ['cells', 'Cells'],
+            ['store', 'Store'],
+          ] as [LeftTab, string][]
+        ).map(([t, label]) => (
+          <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'active' : ''} onClick={() => pick(t)} title={t === 'store' ? 'How the dataset is stored on disk' : 'Cells, groups and colouring'}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === 'store' && <StorePanel />}
+      {tab === 'cells' && sections.has('cells') && <CellPanel />}
+      {tab === 'cells' && sections.has('groups') && <GroupPanel />}
+      {tab === 'cells' && sections.has('cellInfo') && (
         <div className="panel left-info">
           <CellInfoPanel />
         </div>
       )}
-      {sections.has('colour') && (
+      {tab === 'cells' && sections.has('colour') && (
         <div className="panel left-colour">
           <OverviewColour />
         </div>

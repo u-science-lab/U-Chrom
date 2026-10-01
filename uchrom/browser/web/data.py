@@ -887,6 +887,19 @@ class Dataset:
                 seen.add(key)
         return out
 
+    def store_tree(self) -> Dict[str, Any]:
+        """The store's on-disk structure (``.chromdata.zarr`` / ``.cdz``; see store_tree.py); cached."""
+        from uchrom.core.zarrcd import container_kind
+
+        from .store_tree import store_tree
+
+        if "store_tree" not in self._cache:
+            p = Path(self.path) if self.path else None
+            if p is None or not p.exists() or container_kind(p) not in ("zarr", "cdz"):
+                raise LookupError("this dataset is not a .chromdata.zarr / .cdz store (nothing to list)")
+            self._cache["store_tree"] = store_tree(p)
+        return self._cache["store_tree"]
+
     def genome_layout(self) -> List[Dict[str, Any]]:
         """The chromosomes end to end, for the whole-genome view (``chrom="*"``): name, offset
         (bp before it) and length — the largest extent of its bins / spots and of any contact

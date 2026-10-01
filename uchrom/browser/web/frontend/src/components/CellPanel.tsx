@@ -4,7 +4,6 @@ import { activeView, defaultCategoryField, fieldKey, orderedCells, useStore } fr
 import { useFieldColors } from '../useFieldColors'
 import { useGroupInfo } from '../useGroups'
 import { fieldLabel, fmtValue } from './format'
-import { SideClose } from './SideClose'
 import { useSize } from './useSize'
 
 /** Row height of the cell list (px; must match `.cell-list li` in index.css). */
@@ -89,7 +88,6 @@ export function CellPanel() {
     <section className="panel cells">
       <h2>
         Cells <span className="muted">{all.length.toLocaleString('en-US')}</span>
-        <SideClose side="left" />
       </h2>
       <div className="cell-search-row">
         <input
