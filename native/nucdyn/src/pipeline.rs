@@ -23,6 +23,9 @@ pub struct Input<'a> {
     pub pos_b: &'a [i64],
     pub ambig: &'a [i64],
     pub active: &'a [bool],
+    /// protocol `robust`: per-contact likelihood ratio true / false from other
+    /// evidence (multiplies the posterior odds; 1 = none, 0 = certainly false).
+    pub prior_lr: Option<&'a [f64]>,
 }
 
 #[derive(Clone, Debug, Serialize)]

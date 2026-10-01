@@ -60,6 +60,7 @@ def calc_genome_structure(
     *,
     ambiguity: Optional[Sequence[int]] = None,
     active: Optional[Sequence[bool]] = None,
+    prior_lr: Optional[Sequence[float]] = None,
     **params: Any,
 ) -> Dict[str, Any]:
     """Run the hierarchical NucDynamics protocol on single-cell contacts.
@@ -75,6 +76,10 @@ def calc_genome_structure(
     active
         NCC activity flag; inactive contacts are only considered from the
         ``struct_ambig_size`` stage on.  ``None``: all active.
+    prior_lr
+        Protocol ``"robust"`` only: per-contact likelihood ratio (true / false)
+        from evidence other than the structure; multiplies each contact's
+        posterior odds (1 = no information, 0 = certainly false).
     **params
         Any field of :func:`default_params` (``particle_sizes``, ``n_models``,
         ``seed``, ``device``, ``n_threads``, ``temp_steps``, ...).
@@ -111,7 +116,8 @@ def calc_genome_structure(
         if np.isscalar(p[key]):
             p[key] = [int(p[key])]
     p["particle_sizes"] = [float(s) for s in p["particle_sizes"]]
-    res = _calc_genome_structure(names, ia, pa, ib, pb, amb, act, json.dumps(p))
+    lr = None if prior_lr is None else np.ascontiguousarray(prior_lr, dtype=np.float64)
+    res = _calc_genome_structure(names, ia, pa, ib, pb, amb, act, json.dumps(p), lr)
     chroms = [names[c] for c in res["chroms"]]
     chrom = np.concatenate([np.full(len(s), c, dtype=object) for c, s in zip(chroms, res["seq_pos"])])
     start = np.concatenate(res["seq_pos"]).astype(np.int64)

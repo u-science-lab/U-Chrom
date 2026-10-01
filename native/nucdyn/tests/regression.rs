@@ -67,7 +67,7 @@ fn run(protocol: &str, emulate: bool) -> u64 {
     let n = ca.len();
     let ambig: Vec<i64> = (1..=n as i64).collect();
     let active = vec![true; n];
-    let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &ambig, active: &active };
+    let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &ambig, active: &active, prior_lr: None };
     let p = Params {
         protocol: protocol.to_string(),
         particle_sizes: vec![4e6, 2e6, 4e5, 2e5],

@@ -28,8 +28,10 @@ fn make_engine(p: &Params) -> PyResult<Box<dyn StageEngine + Send>> {
     }
 }
 
-/// Run the full NucDynamics protocol.  `params_json` holds `Params` fields.
+/// Run the full NucDynamics protocol.  `params_json` holds `Params` fields;
+/// `prior_lr` (robust): per-contact likelihood ratio true / false.
 #[pyfunction]
+#[pyo3(signature = (names, chr_a, pos_a, chr_b, pos_b, ambig, active, params_json, prior_lr=None))]
 #[allow(clippy::too_many_arguments)]
 fn calc_genome_structure<'py>(
     py: Python<'py>,
@@ -41,9 +43,20 @@ fn calc_genome_structure<'py>(
     ambig: PyReadonlyArray1<'py, i64>,
     active: PyReadonlyArray1<'py, bool>,
     params_json: &str,
+    prior_lr: Option<PyReadonlyArray1<'py, f64>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let p: Params = serde_json::from_str(params_json).map_err(|e| PyValueError::new_err(e.to_string()))?;
     p.validate().map_err(PyValueError::new_err)?;
+    let lr: Option<Vec<f64>> = match prior_lr {
+        Some(a) => {
+            let v = a.as_slice()?.to_vec();
+            if v.len() != chr_a.len()? || v.iter().any(|x| !(*x >= 0.0)) {
+                return Err(PyValueError::new_err("prior_lr: one non-negative value per contact"));
+            }
+            Some(v)
+        }
+        None => None,
+    };
     let (ca, pa, cb, pb, am, ac) = (
         chr_a.as_slice()?.to_vec(),
         pos_a.as_slice()?.to_vec(),
@@ -54,7 +67,7 @@ fn calc_genome_structure<'py>(
     );
     let mut engine = make_engine(&p)?;
     let res = py.detach(move || {
-        let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &am, active: &ac };
+        let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &am, active: &ac, prior_lr: lr.as_deref() };
         cgs(&input, &p, engine.as_mut())
     });
     let out = res.map_err(PyRuntimeError::new_err)?;

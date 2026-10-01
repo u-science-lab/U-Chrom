@@ -47,6 +47,11 @@ def main(argv=None) -> None:
     ap.add_argument("--dyn-steps", type=int, default=100)
     ap.add_argument("--params", default="{}", help="JSON of engine parameters overriding ROBUST_DEFAULTS")
     ap.add_argument("--label", default="robust", help="method name written to the .json")
+    ap.add_argument("--prior-lr", help=".npy of per-contact likelihood ratios true / false (one per table row)")
+    ap.add_argument("--support-w", type=float, help="local-support prior (robust_prior.support_lr), window in bp")
+    ap.add_argument("--support-mix", type=float, help="calibrated local-support LR (robust_prior.support_mixture), window in bp")
+    ap.add_argument("--oracle-truth", help="DIAGNOSTIC ONLY (simulated tables): truth .npz; noise reads get\n"
+                    "likelihood ratio 0 (upper bound of re-weighting)")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     import uchrom_nucdyn as un
@@ -54,13 +59,27 @@ def main(argv=None) -> None:
     params = {**ROBUST_DEFAULTS, **json.loads(args.params)}
     sizes = [float(x) * 1e6 for x in args.sizes.split(",")] if args.sizes else schedule(args.res)
     c = read_contacts(args.contacts)
+    prior_lr = np.load(args.prior_lr) if args.prior_lr else None
+    if args.support_w:
+        from robust_prior import support_lr
+        prior_lr = support_lr(c.chrom_a, c.pos_a, c.chrom_b, c.pos_b, args.support_w)[1]
+    if args.support_mix:
+        from robust_prior import support_mixture
+        prior_lr = support_mixture(c.chrom_a, c.pos_a, c.chrom_b, c.pos_b, args.support_mix)["lr"]
+    if args.oracle_truth:
+        from robust_diag import noise_flags
+        from truth import load_truth
+        info = json.loads(Path(args.contacts + ".json").read_text())
+        is_noise, ra, rb, _ = noise_flags(load_truth(args.oracle_truth), info)
+        assert np.array_equal(ra, c.pos_a) and np.array_equal(rb, c.pos_b)
+        prior_lr = np.where(is_noise, 0.0, 1.0)
     t0 = time.time()
     ru0 = resource.getrusage(resource.RUSAGE_SELF)
     res = un.calc_genome_structure(
         c.chrom_a.astype(str), c.pos_a, c.chrom_b.astype(str), c.pos_b, protocol="robust",
         particle_sizes=sizes, n_models=args.n_models, seed=args.seed, device=args.device,
         n_threads=args.n_threads, temp_steps=[args.temp_steps], dynamics_steps=[args.dyn_steps], verbose=True,
-        **params)
+        **({"prior_lr": prior_lr} if prior_lr is not None else {}), **params)
     wall = time.time() - t0
     ru1 = resource.getrusage(resource.RUSAGE_SELF)
     pos = np.asarray(res["position"], np.int64)
@@ -72,7 +91,8 @@ def main(argv=None) -> None:
     w = res["contact_weights"]
     meta = {"method": args.label, "protocol": "robust", "contacts": str(args.contacts), "n_contacts": len(c),
             "particle_sizes": sizes, "n_models": args.n_models, "seed": args.seed, "device": args.device,
-            "robust_params": params, "wall_seconds": wall, "engine_seconds": res["seconds_total"],
+            "robust_params": params, "support_w": args.support_w, "support_mix": args.support_mix, "prior_lr_file": args.prior_lr,
+            "oracle": bool(args.oracle_truth), "wall_seconds": wall, "engine_seconds": res["seconds_total"],
             "cpu_seconds": (ru1.ru_utime - ru0.ru_utime) + (ru1.ru_stime - ru0.ru_stime),
             "peak_rss_mb": peak_rss_mb(), "stages": res["stages"], "params": res["params"],
             "contacts_kept": int(np.isfinite(w).sum()), "mean_weight_kept": float(np.nanmean(w)) if len(w) else None,

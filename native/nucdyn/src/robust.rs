@@ -219,9 +219,30 @@ pub struct EmData {
     pub bin: f64,
     pub n_pairs: f64,
     pub n_particles: usize,
+    /// Per-contact prior odds factors (input `prior`, p / (1 - p) relative to
+    /// the global rate), grouped by restraint: (offsets, values).  None: every
+    /// contact 1.
+    pub odds: Option<(Vec<u32>, Vec<f64>)>,
 }
 
 impl EmData {
+    /// Call `f(odds)` once per contact of restraint `k`.
+    #[inline]
+    pub fn for_contacts(&self, k: usize, mut f: impl FnMut(f64)) {
+        match &self.odds {
+            Some((off, o)) => {
+                for &x in &o[off[k] as usize..off[k + 1] as usize] {
+                    f(x)
+                }
+            }
+            None => {
+                for _ in 0..self.counts[k] {
+                    f(1.0)
+                }
+            }
+        }
+    }
+
     pub fn new(coords: &[Vec<V3>], pairs: &[[u32; 2]], counts: &[u32], k: &Kernel, s_max: f64, sample: usize) -> EmData {
         let bin = 0.02;
         let rmax = k.reach(s_max);
@@ -247,7 +268,7 @@ impl EmData {
                 h
             })
             .collect();
-        EmData { dist, counts: counts.to_vec(), hist, bin, n_pairs, n_particles: n }
+        EmData { dist, counts: counts.to_vec(), hist, bin, n_pairs, n_particles: n, odds: None }
     }
 
     /// φ[m][k] = f(d_k^m) / G_m(s) (probability of a true contact landing on
@@ -269,11 +290,16 @@ pub struct EmResult {
     pub log: EmLog,
 }
 
-/// Responsibility of a contact with probability `phi` under the true component.
+/// Posterior probability that a contact with prior odds factor `o` (1 = no
+/// prior information) on a pair of true-contact probability `phi` is true.
 #[inline]
-fn resp(phi: f64, eps: f64, u: f64) -> f64 {
-    let a = (1.0 - eps) * phi;
-    a / (a + eps * u)
+fn resp(o: f64, phi: f64, eps: f64, u: f64) -> f64 {
+    let a = o * (1.0 - eps) * phi;
+    if a <= 0.0 {
+        0.0
+    } else {
+        a / (a + eps * u)
+    }
 }
 
 /// E-step + M-step on fixed distances.  `per_model`: likelihood and
@@ -283,13 +309,12 @@ pub fn em_update(data: &EmData, k: &Kernel, p: &Params, eps0: f64, s0: f64) -> E
     let t0 = Instant::now();
     let u = 1.0 / data.n_pairs.max(1.0);
     let nm = data.dist.len();
+    let nk = data.counts.len();
     let wsum: f64 = data.counts.iter().map(|&c| c as f64).sum::<f64>().max(1.0);
-    // returns (loglik per contact, eps, responsibilities rows)
-    let fit = |phi: &[Vec<f64>]| -> (f64, f64, Vec<Vec<f64>>) {
-        let rows: Vec<Vec<f64>> = if p.robust_per_model {
+    let rows_of = |phi: &[Vec<f64>]| -> Vec<Vec<f64>> {
+        if p.robust_per_model {
             phi.to_vec()
         } else {
-            let nk = data.counts.len();
             let mut mean = vec![0.0; nk];
             for row in phi {
                 for (m, x) in mean.iter_mut().zip(row) {
@@ -297,14 +322,17 @@ pub fn em_update(data: &EmData, k: &Kernel, p: &Params, eps0: f64, s0: f64) -> E
                 }
             }
             vec![mean]
-        };
+        }
+    };
+    // (loglik per contact, eps)
+    let fit = |rows: &[Vec<f64>]| -> (f64, f64) {
         let mut eps = eps0;
         if p.robust_learn_eps {
             for _ in 0..200 {
                 let mut fsum = 0.0;
-                for row in &rows {
-                    for (&ph, &c) in row.iter().zip(&data.counts) {
-                        fsum += c as f64 * (1.0 - resp(ph, eps, u));
+                for row in rows {
+                    for (kk, &ph) in row.iter().enumerate() {
+                        data.for_contacts(kk, |o| fsum += 1.0 - resp(o, ph, eps, u));
                     }
                 }
                 let new = (fsum / (wsum * rows.len() as f64)).clamp(p.robust_eps_min, p.robust_eps_max);
@@ -316,31 +344,42 @@ pub fn em_update(data: &EmData, k: &Kernel, p: &Params, eps0: f64, s0: f64) -> E
             }
         }
         let mut ll = 0.0;
-        for row in &rows {
-            for (&ph, &c) in row.iter().zip(&data.counts) {
-                ll += c as f64 * (((1.0 - eps) * ph + eps * u) / u).ln();
+        for row in rows {
+            for (kk, &ph) in row.iter().enumerate() {
+                data.for_contacts(kk, |o| {
+                    let rho = o * (1.0 - eps) / (o * (1.0 - eps) + eps);
+                    ll += ((rho * ph + (1.0 - rho) * u) / u).ln();
+                });
             }
         }
-        let rr = rows.iter().map(|row| row.iter().map(|&ph| resp(ph, eps, u)).collect()).collect();
-        (ll / (wsum * rows.len() as f64), eps, rr)
+        (ll / (wsum * rows.len() as f64), eps)
     };
     let grid: Vec<f64> = if p.robust_learn_s { p.robust_s_grid.clone() } else { vec![s0] };
-    let mut best: Option<(f64, f64, f64, Vec<Vec<f64>>, Vec<f64>)> = None;
+    let mut best: Option<(f64, f64, f64)> = None;
     for &s in &grid {
-        let (phi, g) = data.phi(k, s);
-        let (ll, eps, rr) = fit(&phi);
-        if best.as_ref().is_none_or(|b| ll > b.0) {
-            best = Some((ll, s, eps, rr, g));
+        let (phi, _) = data.phi(k, s);
+        let (ll, eps) = fit(&rows_of(&phi));
+        if best.is_none_or(|b| ll > b.0) {
+            best = Some((ll, s, eps));
         }
     }
-    let (ll, s, eps, rr, g) = best.unwrap();
-    let weights: Vec<Vec<f64>> = rr
+    let (ll, s, eps) = best.unwrap();
+    let (phi, g) = data.phi(k, s);
+    let rows = rows_of(&phi);
+    let weights: Vec<Vec<f64>> = rows
         .iter()
         .map(|row| {
             row.iter()
-                .zip(&data.counts)
-                .map(|(&r, &c)| {
-                    let w = if p.robust_count_combine { 1.0 - (1.0 - r).powi(c as i32) } else { r };
+                .enumerate()
+                .map(|(kk, &ph)| {
+                    let (mut none, mut sum, mut n) = (1.0f64, 0.0f64, 0.0f64);
+                    data.for_contacts(kk, |o| {
+                        let r = resp(o, ph, eps, u);
+                        none *= 1.0 - r;
+                        sum += r;
+                        n += 1.0;
+                    });
+                    let w = if p.robust_count_combine { 1.0 - none } else { sum / n.max(1.0) };
                     w.max(p.robust_w_floor)
                 })
                 .collect()
@@ -442,6 +481,33 @@ fn force_constant(p: &Params, sys: &System, nb: usize, n: usize) -> f64 {
     p.dist_force_const * (p.robust_force_norm * n as f64 / w.max(1e-9)).min(1.0)
 }
 
+/// Prior likelihood ratios of the contacts of every contact restraint (same
+/// traversal as `contact_restraints_counted`): (offsets, values).
+fn restraint_odds(d: &ContactDict, st: &Structure, lr: &[f64]) -> (Vec<u32>, Vec<f64>) {
+    let mut off = vec![0u32];
+    let mut vals = vec![];
+    for (&(ca, cb), contacts) in d {
+        let (Some(sa), Some(sb)) = (st.chrom_slot(ca), st.chrom_slot(cb)) else {
+            continue;
+        };
+        let (pa, pb) = (&st.seq_pos[sa], &st.seq_pos[sb]);
+        let mut bins: std::collections::BTreeMap<(usize, usize), Vec<f64>> = Default::default();
+        for c in contacts {
+            let j = pa.partition_point(|&x| x < c.pos_a as i32 as i64);
+            let kk = pb.partition_point(|&x| x < c.pos_b as i32 as i64);
+            if j >= pa.len() || kk >= pb.len() {
+                continue;
+            }
+            bins.entry((j, kk)).or_default().push(lr.get(c.number as usize).copied().unwrap_or(1.0));
+        }
+        for (_, v) in bins {
+            vals.extend(v);
+            off.push(vals.len() as u32);
+        }
+    }
+    (off, vals)
+}
+
 fn log(p: &Params, msg: &str) {
     if p.verbose {
         eprintln!("[uchrom_nucdyn] {msg}");
@@ -504,6 +570,10 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
         all.append(&mut rest);
         let groups: Vec<u32> = (0..=all.len() as u32).collect();
         let pairs: Vec<[u32; 2]> = all[nb..].iter().map(|r| [r.i, r.j]).collect();
+        let odds = input.prior_lr.map(|lr| restraint_odds(&d, &st, lr));
+        if let Some((off, _)) = &odds {
+            debug_assert_eq!(off.len(), pairs.len() + 1);
+        }
         let rs = RestraintSet { rest: all, groups, n_contacts: n_used };
         let mut sys = System::new(n, vec![1.0; n], vec![1.0; n], &rs).with_form(RestraintForm::Weighted2017);
         let schedule = anneal_schedule(p.temp_start, p.temp_end, p.temp_steps_for(stage.min(p.particle_sizes.len() - 1)), 1.0);
@@ -531,7 +601,8 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
         for (seg, range) in parts.iter().enumerate() {
             if reweight {
                 let te = Instant::now();
-                let data = EmData::new(&coords, &pairs, &counts, &kern, s_max, p.robust_pair_sample);
+                let mut data = EmData::new(&coords, &pairs, &counts, &kern, s_max, p.robust_pair_sample);
+                data.odds = odds.clone();
                 let res = em_update(&data, &kern, p, eps, s);
                 eps = res.eps;
                 s = res.s;

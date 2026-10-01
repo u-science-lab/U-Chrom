@@ -5,7 +5,8 @@
 # noise diagnostics (robust_diag.py).  A variant = a name + engine parameters (JSON):
 #
 #   PARAMS='{"robust_segments": 2}' sbatch --export=ALL,VARIANT=v0 benchmarks/screcon/sherlock/robust_sim.sbatch
-#   (optional DEVICE=cpu, ONLY=<grep pattern on the table name>; timing runs: sbatch -C GPU_SKU:H100_SXM5)
+#   (optional DEVICE=cpu, ONLY=<grep pattern on the table name>, SUPPORT_REL=<x>: local-support prior with
+#   window x * final particle size (run_robust.py --support-mix); timing runs: sbatch -C GPU_SKU:H100_SXM5)
 #
 # Writes $W/runs/robust/sim/{models,scores,diag}/$VARIANT/<dataset>/<name>...
 #SBATCH --job-name=rb-sim
@@ -30,7 +31,8 @@ for t in $(seq 1 $N); do
   mkdir -p "$M" "$O/scores/$VARIANT/$DATASET" "$O/diag/$VARIANT/$DATASET"
   if [ ! -f "$M/robust.npz" ]; then
     $PY $SC/run_robust.py --contacts "$TABLE" --res $RES --device $DEVICE --n-models 5 --seed 1 \
-      --params "$PARAMS" --label "robust_$VARIANT" --out "$M/robust.npz" > "$M/robust.log" 2>&1 || { echo "FAILED $NAME"; tail -3 "$M/robust.log"; continue; }
+      --params "$PARAMS" --label "robust_$VARIANT" ${SUPPORT_REL:+--support-mix $(python3 -c "print($SUPPORT_REL * $RES)")} \
+      --out "$M/robust.npz" > "$M/robust.log" 2>&1 || { echo "FAILED $NAME"; tail -3 "$M/robust.log"; continue; }
   fi
   $PY $SC/simulate.py score --truth "$TRUTH" --population "$S/truth/$DATASET/population.npz" --no-baselines \
     --models "$M/robust.npz" --labels robust --out "$O/scores/$VARIANT/$DATASET/$NAME.json" > /dev/null
