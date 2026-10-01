@@ -38,7 +38,8 @@ baseline score files were copied filtered to development units before any compar
   nucdyn_gpu models: P2-dev +0.0001 [-0.001, +0.001], every stratum |diff| <= 0.002 -> run-to-run
   noise of the paired comparison is ~0.001.
 * GPU vs CPU: weighted restraints (shared and per-model weights) and the no-contact term agree to
-  < 3e-5 after 10 MD steps (`gpu::tests::gpu_matches_cpu_weighted`, Metal); ensemble statistics of a
+  < 3e-5 after 10 MD steps (`gpu::tests::gpu_matches_cpu_weighted`; Metal on the laptop, Vulkan on a
+  Sherlock RTX 2080 Ti); ensemble statistics of a
   full robust run agree (Python GPU test).
 
 ## Entries (chronological)
@@ -128,7 +129,13 @@ Fails the decision rule (frac stratum worse by > 0.01): **not in the recommended
 | es4_nc5q05 | 72 | +0.0569 [+0.040, +0.077] | +0.0068 [-0.001, +0.014] | +0.1005 [+0.073, +0.129] | +0.0033 [-0.000, +0.006] | +0.1363 [+0.070, +0.214] | takei eps 0 +0.0033 |  |  |
 | es4_nc5q2 | 72 | +0.0528 [+0.036, +0.073] | +0.0045 [-0.001, +0.010] | +0.1027 [+0.075, +0.133] | -0.0055 [-0.011, -0.000] | +0.1313 [+0.068, +0.205] | takei eps 0 -0.0055 |  |  |
 
-(es4_pm, es4_seg4, es4_s: see E7 / E6; filled in at the end of the log.)
+| es4_pm | 72 | +0.0387 [+0.023, +0.057] | -0.0025 [-0.005, +0.000] | +0.0647 [+0.047, +0.084] | -0.0004 [-0.002, +0.001] | +0.1220 [+0.058, +0.198] | su eps 0 -0.0025 |  |  |
+| es4_seg4 | 72 | +0.0380 [+0.022, +0.057] | -0.0025 [-0.005, -0.000] | +0.0634 [+0.045, +0.085] | -0.0010 [-0.003, +0.000] | +0.1235 [+0.059, +0.201] | su eps 0 -0.0025 |  |  |
+| es4_s | 72 | +0.0490 [+0.031, +0.069] | -0.0177 [-0.028, -0.009] | +0.0965 [+0.067, +0.126] | -0.0009 [-0.004, +0.003] | +0.1343 [+0.069, +0.212] | su eps 0 -0.0177 |  |  |
+| **final** (engine defaults = es4, build e6) | 72 | +0.0380 [+0.023, +0.056] | -0.0024 [-0.005, +0.000] | +0.0644 [+0.047, +0.084] | -0.0012 [-0.003, +0.001] | +0.1212 [+0.056, +0.199] | su eps 0 -0.0024 |  |  |
+
+The **final** row re-runs es4 through the new engine defaults (no parameters passed): it reproduces
+es4 within the ~0.001 run-to-run noise of the control.
 
 ## Recommended (development) parameter set — es4
 
