@@ -168,6 +168,46 @@ def heldout_report(df: pd.DataFrame) -> tuple[list[str], list[dict]]:
     return lines, recs
 
 
+REAL_KEYS = ["prec_rmsd_to_mean_per_unit", "viol_nd_pct_viol_gt3", "viol_nd_pct_viol_gt4", "viol_sic_pct_viol_gt2units",
+             "viol_median_contact_dist_units", "ref_dist_r_median", "ref_rmsd_rel_median"]
+
+
+def real_report(robust_dir: Path, base_dir: Path, base_label: str = "nucdyn_gpu") -> tuple[list[str], list[dict]]:
+    """Precision / violations / vs-GEO on development cells: robust variants vs the baseline, paired by tag."""
+    from aggregate import real_rows
+    import re
+    rows = []
+    for vdir in sorted(p for p in robust_dir.iterdir() if p.is_dir()):
+        for r in real_rows(vdir):
+            if r["method"] == "robust":
+                r["method"] = f"robust:{vdir.name}"
+                rows.append(r)
+            elif r["method"] == base_label:
+                rows.append(r)
+    rows += [r for r in real_rows(base_dir) if r["method"] == base_label]
+    df = pd.DataFrame(rows)
+    df["cell"] = df["tag"].map(lambda t: int(re.search(r"cell(\d+)", t).group(1)))
+    if set(df.loc[df["method"].str.startswith("robust:"), "cell"]) - DEV_CELLS:
+        raise SystemExit("robust real-data scores on non-development cells: stop and report")
+    df = df[df["cell"].isin(DEV_CELLS)].drop_duplicates(["tag", "method"])
+    lines, recs = [], []
+    for v in sorted(m for m in df["method"].unique() if m.startswith("robust:")):
+        lines.append(f"\n## real-data checks {v} (dev cells; paired by table)")
+        for k in REAL_KEYS:
+            if k not in df:
+                continue
+            pv = df.pivot_table(index="tag", columns="method", values=k)
+            if v not in pv or base_label not in pv:
+                continue
+            pv = pv[[v, base_label]].dropna()
+            d = (pv[v] - pv[base_label]).to_numpy()
+            m, lo, hi = boot_ci(d, np.array([re.search(r"cell(\d+)", t).group(1) for t in pv.index]))
+            lines.append(f"  {k:32s} robust {pv[v].mean():.4f}  {base_label} {pv[base_label].mean():.4f}  diff {_fmt(m, lo, hi)}  (n={len(pv)})")
+            recs.append({"variant": v, "stratum": f"real:{k}", "n": len(pv), "robust": pv[v].mean(),
+                         "base": pv[base_label].mean(), "diff": m, "lo": lo, "hi": hi})
+    return lines, recs
+
+
 def summary_markdown(recs: list[dict], metric: str = "med_dist_spearman_cis") -> str:
     """One row per variant: P2-dev, the eps strata, the worst simulation stratum, held-out P1 / frac."""
     df = pd.DataFrame(recs)
@@ -205,6 +245,8 @@ def main(argv=None) -> None:
     ap.add_argument("--base-sim", type=Path)
     ap.add_argument("--robust-heldout", type=Path)
     ap.add_argument("--base-heldout", type=Path)
+    ap.add_argument("--robust-real", type=Path, help="robust score_real outputs: <dir>/<variant>/<tag>.json")
+    ap.add_argument("--base-real", type=Path, help="baseline score_real outputs of the same tables")
     ap.add_argument("--metrics", nargs="+", default=["med_dist_spearman_cis", "med_rmsd_rel", "ens_dist_spearman_cis"])
     ap.add_argument("--out", type=Path)
     args = ap.parse_args(argv)
@@ -230,6 +272,10 @@ def main(argv=None) -> None:
         recs += r
         if args.out:
             df.to_csv(args.out / "heldout_dev.csv", index=False)
+    if args.robust_real:
+        l, r = real_report(args.robust_real, args.base_real)
+        lines += l
+        recs += r
     text = "\n".join(lines)
     print(text)
     if args.out:
