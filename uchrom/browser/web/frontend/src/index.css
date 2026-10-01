@@ -3048,3 +3048,39 @@ button.side-close:hover {
   color: var(--text-muted);
   font-family: ui-monospace, Menlo, monospace;
 }
+
+/* joined segmented control (Style: render as, colour, point shape) */
+.seg.joined {
+  /* in the inspector's flex column: never squeezed (overflow: hidden would let it shrink to 0) */
+  flex: 0 0 auto;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-input);
+}
+.seg.joined button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 12px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--text-muted);
+}
+.seg.joined button + button {
+  border-left: 1px solid var(--border);
+}
+.seg.joined button:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.seg.joined button.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}

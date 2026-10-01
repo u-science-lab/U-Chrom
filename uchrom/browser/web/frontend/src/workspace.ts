@@ -452,6 +452,8 @@ export function parseLayerStyles(raw: unknown): Record<string, Partial<LayerStyl
     if (x.tubeRadius === null || (typeof x.tubeRadius === 'number' && x.tubeRadius > 0)) st.tubeRadius = x.tubeRadius as number | null
     if (typeof x.pointSize === 'number' && x.pointSize > 0) st.pointSize = x.pointSize
     if (typeof x.highQuality === 'boolean') st.highQuality = x.highQuality
+    if (x.pointShape === 'sphere' || x.pointShape === 'disc' || x.pointShape === 'square') st.pointShape = x.pointShape
+    if (typeof x.pointScale === 'boolean') st.pointScale = x.pointScale
     if (Object.keys(st).length) out[name] = st
   }
   return Object.keys(out).length ? out : undefined

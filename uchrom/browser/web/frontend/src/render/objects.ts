@@ -50,12 +50,54 @@ export function buildLayerObject(geom: Geometry, style: LayerStyle, opts: ColorO
   return buildLines(geom, colors, style, warning)
 }
 
+/** Camera field of view of the 3-D view (degrees; three.js PerspectiveCamera in Viewport). */
+const FOV = 45
+
+/**
+ * Point sprites: a shaded ball (light from the upper left, like the lit tubes) or a flat disc,
+ * as alpha-tested textures the vertex colour tints; null without a DOM (tests) → squares.
+ */
+const spriteCache = new Map<string, THREE.Texture | null>()
+function pointSprite(shape: 'sphere' | 'disc'): THREE.Texture | null {
+  if (spriteCache.has(shape)) return spriteCache.get(shape)!
+  let tex: THREE.Texture | null = null
+  if (typeof document !== 'undefined') {
+    const n = 64
+    const cv = document.createElement('canvas')
+    cv.width = cv.height = n
+    const g = cv.getContext('2d')
+    if (g) {
+      g.beginPath()
+      g.arc(n / 2, n / 2, n / 2 - 1, 0, Math.PI * 2)
+      if (shape === 'sphere') {
+        const grad = g.createRadialGradient(n * 0.36, n * 0.34, n * 0.04, n / 2, n / 2, n / 2)
+        grad.addColorStop(0, '#ffffff')
+        grad.addColorStop(0.35, '#e9e9e9')
+        grad.addColorStop(0.85, '#8c8c8c')
+        grad.addColorStop(1, '#6e6e6e')
+        g.fillStyle = grad
+      } else g.fillStyle = '#ffffff'
+      g.fill()
+      tex = new THREE.CanvasTexture(cv)
+      tex.colorSpace = THREE.SRGBColorSpace
+    }
+  }
+  spriteCache.set(shape, tex)
+  return tex
+}
+
 function buildPoints(geom: Geometry, colors: Float32Array, style: LayerStyle, warning: string | null): BuiltLayer {
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.BufferAttribute(geom.positions, 3))
   g.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   g.computeBoundingSphere()
-  const mat = new THREE.PointsMaterial({ size: style.pointSize, sizeAttenuation: false, vertexColors: true })
+  const shape = style.pointShape ?? 'sphere'
+  const map = shape === 'square' ? null : pointSprite(shape)
+  // "grow with the zoom": a diameter d in data units (pointSize 4 ≈ a tube's thickness).
+  // On screen d spans d·(height/2)/(depth·tan(fov/2)) px, while three draws an attenuated
+  // size s at s·(height/2)/depth px — so s = d / tan(fov/2).
+  const size = style.pointScale ? (autoTubeRadius(geom) * 2 * (style.pointSize / 4)) / Math.tan(THREE.MathUtils.degToRad(FOV / 2)) : style.pointSize
+  const mat = new THREE.PointsMaterial({ size, sizeAttenuation: !!style.pointScale, vertexColors: true, map, alphaTest: map ? 0.5 : 0 })
   applyOpacity(mat, style.opacity)
   const obj = new THREE.Points(g, mat)
   return {

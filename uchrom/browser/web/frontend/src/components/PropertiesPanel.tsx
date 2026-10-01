@@ -6,7 +6,7 @@ import { CategoryLegend } from './CategoryLegend'
 import { ColorBar } from './ColorBar'
 import { colourableFields, fieldLabel } from './format'
 import { FieldPicker, groupTitle } from './FieldPicker'
-import type { ColorMode, Layer, RenderMode } from '../types'
+import type { ColorMode, Layer, PointShape, RenderMode } from '../types'
 import { effectiveStyle, setPaneLayerStyle } from '../workspace'
 
 /** Button group of the categorical cell fields (cell type, cluster, …). */
@@ -91,6 +91,30 @@ export function OverviewColour() {
   )
 }
 
+const MODE_TITLE: Record<RenderMode, string> = {
+  line: 'Lines between consecutive spots (fast, any number of cells)',
+  tube: 'Shaded tubes through the spots (one or a few cells)',
+  points: 'One marker per spot',
+}
+
+function ModeIcon({ mode }: { mode: RenderMode }) {
+  return (
+    <svg viewBox="0 0 16 12" width="16" height="12" aria-hidden fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+      {mode === 'line' && <path d="M1.5 9.5 5 3l3.5 5.5L12 2.5l2.5 4" strokeWidth="1.2" />}
+      {mode === 'tube' && <path d="M1.5 9.5 5 3l3.5 5.5L12 2.5l2.5 4" strokeWidth="3" />}
+      {mode === 'points' && (
+        <g fill="currentColor" stroke="none">
+          <circle cx="2.5" cy="8.5" r="1.4" />
+          <circle cx="5.5" cy="3.5" r="1.4" />
+          <circle cx="8.5" cy="8" r="1.4" />
+          <circle cx="12" cy="3" r="1.4" />
+          <circle cx="14" cy="7" r="1.4" />
+        </g>
+      )}
+    </svg>
+  )
+}
+
 /** Quick colours of the Custom colouring (grey first: a base under highlighted subsets). */
 const PRESETS: [string, string][] = [
   ['#a0a4aa', 'grey'],
@@ -141,10 +165,10 @@ export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCel
       <div className="muted small">filter: {describeFilter(layer.filter)}</div>
 
       <label>Render as</label>
-      <div className="seg">
+      <div className="seg joined">
         {(['line', 'tube', 'points'] as RenderMode[]).map((m) => (
-          <button key={m} className={st.mode === m ? 'active' : ''} onClick={() => upd({ mode: m })}>
-            {m}
+          <button key={m} className={st.mode === m ? 'active' : ''} onClick={() => upd({ mode: m })} title={MODE_TITLE[m]}>
+            <ModeIcon mode={m} /> {m}
           </button>
         ))}
       </div>
@@ -164,7 +188,7 @@ export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCel
       )}
 
       <label>{colorLabel}</label>
-      <div className="seg">
+      <div className="seg joined">
         {colorChoices.map(([m, label]) => (
           <button key={m} className={st.colorMode === m ? 'active' : ''} onClick={() => upd({ colorMode: m })}>
             {label}
@@ -218,10 +242,21 @@ export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCel
       )}
       {st.mode === 'points' && (
         <>
+          <label>Point shape</label>
+          <div className="seg joined">
+            {(['sphere', 'disc', 'square'] as PointShape[]).map((sh) => (
+              <button key={sh} className={(st.pointShape ?? 'sphere') === sh ? 'active' : ''} onClick={() => upd({ pointShape: sh })}>
+                {sh}
+              </button>
+            ))}
+          </div>
           <label>
-            Point size <span className="val">{st.pointSize}px</span>
+            Point size <span className="val">{st.pointScale ? `${(st.pointSize / 4).toFixed(2)}× tube` : `${st.pointSize}px`}</span>
           </label>
           <input type="range" min={1} max={20} step={1} value={st.pointSize} onChange={(e) => upd({ pointSize: +e.target.value })} />
+          <label className="check" title="Points keep their size in the data (they grow as you zoom in) instead of a fixed size on screen">
+            <input type="checkbox" checked={!!st.pointScale} onChange={(e) => upd({ pointScale: e.target.checked })} /> Scale with zoom
+          </label>
         </>
       )}
 

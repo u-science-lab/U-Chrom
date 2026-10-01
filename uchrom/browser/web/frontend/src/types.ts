@@ -290,6 +290,7 @@ export interface Geometry {
 }
 
 export type RenderMode = 'line' | 'tube' | 'points'
+export type PointShape = 'sphere' | 'disc' | 'square'
 export type ColorMode = 'rainbow' | 'custom' | 'trace' | 'cell' | 'field'
 
 export interface LayerStyle {
@@ -301,6 +302,10 @@ export interface LayerStyle {
   /** null = auto (0.3% of the bbox diagonal) */
   tubeRadius: number | null
   pointSize: number
+  /** points: shaded sphere (default), flat disc or square */
+  pointShape?: PointShape
+  /** points: grow with the zoom (a size in data units) instead of a fixed size on screen */
+  pointScale?: boolean
   highQuality: boolean
 }
 
