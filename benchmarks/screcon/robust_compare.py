@@ -168,6 +168,37 @@ def heldout_report(df: pd.DataFrame) -> tuple[list[str], list[dict]]:
     return lines, recs
 
 
+def summary_markdown(recs: list[dict], metric: str = "med_dist_spearman_cis") -> str:
+    """One row per variant: P2-dev, the eps strata, the worst simulation stratum, held-out P1 / frac."""
+    df = pd.DataFrame(recs)
+    if df.empty:
+        return ""
+    rows = ["| variant | n | P2-dev [95 % CI] | su eps 0 | su eps 0.2 | takei eps 0 | takei eps 0.2 | worst sim stratum | "
+            "held-out P1 | held-out frac |", "|---|---|---|---|---|---|---|---|---|---|"]
+    sim = df[df.get("metric", pd.Series(dtype=str)) == metric] if "metric" in df else df.iloc[0:0]
+
+    def cell(v, stratum, d=sim):
+        x = d[(d["variant"] == v) & (d["stratum"] == stratum)]
+        if x.empty:
+            return ""
+        r = x.iloc[0]
+        ci = f" [{r['lo']:+.3f}, {r['hi']:+.3f}]" if pd.notna(r["lo"]) else ""
+        return f"{r['diff']:+.4f}{ci}"
+
+    for v in sorted(set(df["variant"])):
+        s = sim[sim["variant"] == v]
+        n = int(s[s["stratum"] == "all"]["n"].iloc[0]) if not s[s["stratum"] == "all"].empty else 0
+        strata = s[(s["stratum"] != "all") & ~s["stratum"].str.contains("dataset=")]
+        worst = strata.sort_values("diff").iloc[0] if not strata.empty else None
+        w = f"{worst['stratum']} {worst['diff']:+.4f}" if worst is not None else ""
+        ho = df[df["variant"] == v]
+        rows.append(f"| {v.replace('robust:', '')} | {n} | {cell(v, 'all')} | {cell(v, 'su2020_chr21:eps=0.0')} | "
+                    f"{cell(v, 'su2020_chr21:eps=0.2')} | {cell(v, 'takei2021_1mb:eps=0.0')} | "
+                    f"{cell(v, 'takei2021_1mb:eps=0.2')} | {w} | {cell(v, 'heldout:median:bands_mean', ho)} | "
+                    f"{cell(v, 'heldout:frac:bands_mean', ho)} |")
+    return "\n".join(rows)
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--robust-sim", type=Path)
@@ -204,6 +235,7 @@ def main(argv=None) -> None:
     if args.out:
         args.out.mkdir(parents=True, exist_ok=True)
         (args.out / "report.txt").write_text(text)
+        (args.out / "summary.md").write_text(summary_markdown(recs, args.metrics[0]) + "\n")
         pd.DataFrame(recs).to_csv(args.out / "strata.csv", index=False)
 
 

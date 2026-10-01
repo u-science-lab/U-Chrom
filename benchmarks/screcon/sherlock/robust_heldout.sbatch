@@ -29,7 +29,8 @@ for CELL in ${CELLS:-1 2 3 4}; do
     mkdir -p "$M" "$O/scores/$VARIANT" "$O/real_scores/$VARIANT"
     if [ ! -f "$M/robust.npz" ]; then
       $PY $SC/run_robust.py --contacts "$SPLIT/train.txt.gz" --res 100000 --device gpu --n-models 10 --seed 1 \
-        --params "$PARAMS" --label "robust_$VARIANT" --out "$M/robust.npz" > "$M/robust.log" 2>&1 || { echo "FAILED $TAG"; tail -3 "$M/robust.log"; continue; }
+        --params "$PARAMS" --label "robust_$VARIANT" ${SUPPORT_REL:+--support-mix $(python3 -c "print($SUPPORT_REL * 100000)")} \
+        --out "$M/robust.npz" > "$M/robust.log" 2>&1 || { echo "FAILED $TAG"; tail -3 "$M/robust.log"; continue; }
     fi
     $PY $SC/heldout.py score --eval "$SPLIT/eval_pairs.npz" --models "$M/robust.npz" --labels robust \
       --n-boot 1000 --out "$O/scores/$VARIANT/$TAG.json" > /dev/null
