@@ -40,7 +40,8 @@ use crate::protocol2017::{
     backbone_restraints, calc_particles, contact_restraints_counted, remove_isolated_contacts, remove_violated_contacts,
     start_coords,
 };
-use crate::restraints::RestraintSet;
+use crate::restraints::{Restraint, RestraintSet};
+use std::collections::BTreeMap;
 use crate::support::{support_evidence, SupportParams};
 use rayon::prelude::*;
 use serde::Serialize;
@@ -487,6 +488,82 @@ fn force_constant(p: &Params, sys: &System, nb: usize, n: usize) -> f64 {
     p.dist_force_const * (p.robust_force_norm * n as f64 / w.max(1e-9)).min(1.0)
 }
 
+/// Adaptive resolution (`robust_merge_below`): keep only the particles that
+/// hold a contact end (a contact end at p goes to the first particle at or
+/// after p, as in `contact_restraints`) plus the first and last particle of
+/// each chromosome; runs of contact-free particles are dropped (their
+/// coordinates are interpolated in the output).
+pub fn merge_empty_particles(d: &ContactDict, full: &BTreeMap<u32, Vec<i64>>) -> BTreeMap<u32, Vec<i64>> {
+    let mut occ: BTreeMap<u32, Vec<bool>> = full.iter().map(|(&c, v)| (c, vec![false; v.len()])).collect();
+    for (&(ca, cb), contacts) in d {
+        for c in contacts {
+            for (chrom, pos) in [(ca, c.pos_a), (cb, c.pos_b)] {
+                if let (Some(sp), Some(o)) = (full.get(&chrom), occ.get_mut(&chrom)) {
+                    let k = sp.partition_point(|&x| x < pos as i32 as i64);
+                    if k < sp.len() {
+                        o[k] = true;
+                    }
+                }
+            }
+        }
+    }
+    full.iter()
+        .map(|(&c, sp)| {
+            let o = &occ[&c];
+            let n = sp.len();
+            (c, (0..n).filter(|&k| k == 0 || k + 1 == n || o[k]).map(|k| sp[k]).collect())
+        })
+        .collect()
+}
+
+/// Backbone restraints between consecutive kept particles: a gap of g
+/// particle sizes gets bounds (lower, upper) x g^nu (g = 1: the 2017 bounds).
+pub fn merged_backbone_restraints(st: &Structure, ps: i64, lower: f64, upper: f64, nu: f64) -> Vec<Restraint> {
+    let (bbl, bbu) = (lower as f32 as f64, upper as f32 as f64);
+    let mut out = vec![];
+    for (slot, sp) in st.seq_pos.iter().enumerate() {
+        let off = st.offsets[slot];
+        for k in 0..sp.len().saturating_sub(1) {
+            let g = (sp[k + 1] - sp[k]) as f64 / ps as f64;
+            let dist = if g > 1.0 { g.powf(nu) } else { g };
+            out.push(Restraint { i: (off + k) as u32, j: (off + k + 1) as u32, lo: dist * bbl, hi: dist * bbu, ambig: 0, weight: 1.0 });
+        }
+    }
+    out
+}
+
+/// Coordinates of `st` (kept particles) at every position of the full grid
+/// (linear interpolation, clamped at the ends).
+fn expand_to_grid(st: &Structure, full: &BTreeMap<u32, Vec<i64>>) -> (Vec<Vec<i64>>, Vec<Vec<V3>>) {
+    let seq: Vec<Vec<i64>> = st.chroms.iter().map(|c| full[c].clone()).collect();
+    let coords = (0..st.n_models())
+        .map(|m| {
+            let mut out = vec![];
+            for (slot, sp) in seq.iter().enumerate() {
+                let kp = &st.seq_pos[slot];
+                let kc = st.chrom_coords(m, slot);
+                for &x in sp {
+                    let j = kp.partition_point(|&y| y < x);
+                    let q = if j < kp.len() && kp[j] == x {
+                        kc[j]
+                    } else if j == 0 {
+                        kc[0]
+                    } else if j >= kp.len() {
+                        kc[kp.len() - 1]
+                    } else {
+                        let f = (x - kp[j - 1]) as f64 / (kp[j] - kp[j - 1]) as f64;
+                        let (a, b) = (kc[j - 1], kc[j]);
+                        [a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1]), a[2] + f * (b[2] - a[2])]
+                    };
+                    out.push(q);
+                }
+            }
+            out
+        })
+        .collect();
+    (seq, coords)
+}
+
 /// Prior likelihood ratios of the contacts of every contact restraint (same
 /// traversal as `contact_restraints_counted`): (offsets, values).
 fn restraint_odds(d: &ContactDict, st: &Structure, lr: &[f64]) -> (Vec<u32>, Vec<f64>) {
@@ -569,6 +646,9 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
     let mut stages = vec![];
     let (mut eps, mut s) = (p.robust_eps, p.robust_s);
     let mut final_weights = vec![];
+    let mut last_full: BTreeMap<u32, Vec<i64>> = BTreeMap::new();
+    let mut last_merged = false;
+    let mut snapshots: Vec<Vec<Vec<V3>>> = vec![];
     for (stage, &ps) in sizes.iter().enumerate() {
         let ts = Instant::now();
         if p.robust_remove_violated && stage > 0 && ps < 0.5e6 {
@@ -578,7 +658,9 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
             }
         }
         let psi = ps as i32 as i64;
-        let mut st = Structure::new(&calc_particles(&d, &chroms, psi));
+        let full = calc_particles(&d, &chroms, psi);
+        let merge = p.robust_merge_below > 0.0 && ps <= p.robust_merge_below;
+        let mut st = Structure::new(&if merge { merge_empty_particles(&d, &full) } else { full.clone() });
         let n = st.n_particles();
         st.coords = start_coords(&st, n_models, prev.as_ref(), p, stage);
         let (mut rest, n_used, counts) =
@@ -593,7 +675,11 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
                 }
             }
         }
-        let mut all = backbone_restraints(&st, psi, p.backbone_dist_lower, p.backbone_dist_upper);
+        let mut all = if merge {
+            merged_backbone_restraints(&st, psi, p.backbone_dist_lower, p.backbone_dist_upper, p.robust_merge_nu)
+        } else {
+            backbone_restraints(&st, psi, p.backbone_dist_lower, p.backbone_dist_upper)
+        };
         let nb = all.len();
         all.append(&mut rest);
         let groups: Vec<u32> = (0..=all.len() as u32).collect();
@@ -656,6 +742,19 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
             f_dist = force_constant(p, &sys, nb, n);
             coords = engine.anneal(&sys, coords, &schedule[range.clone()], dyn_steps, f_dist, 1.0, key, p)?;
         }
+        // sampling (calibrated ensembles): after the final annealing, constant temperature
+        // `robust_sample_temp` with the final repulsion, velocities re-drawn every temperature
+        // step (Andersen-like); one snapshot per model after each block of `robust_sample_steps`
+        if stage + 1 == sizes.len() && p.robust_sample_temp > 0.0 && p.robust_sample_steps > 0 {
+            let f_rep = schedule.last().map(|x| x.1).unwrap_or(1.0);
+            let block = vec![(p.robust_sample_temp, f_rep); p.robust_sample_steps];
+            let ds = if p.robust_sample_dyn_steps > 0 { p.robust_sample_dyn_steps } else { dyn_steps };
+            for k in 0..p.robust_sample_snapshots.max(1) {
+                coords = engine.anneal(&sys, coords, &block, ds, f_dist, 1.0, stage + 5000 + 1000 * k, p)?;
+                snapshots.push(coords.clone());
+            }
+            log(p, &format!("  sampled {} snapshot(s) per model at T = {}", snapshots.len(), p.robust_sample_temp));
+        }
         for c in coords.iter_mut() {
             let k = c.len() as f64;
             let mut m = [0.0; 3];
@@ -695,14 +794,39 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
             steps_without_repulsion: engine.overflow_stats().1,
             robust: em_logs,
         });
+        last_full = full;
+        last_merged = merge;
         prev = Some(st);
     }
-    let st = prev.unwrap();
-    let nm = st.coords.len();
+    let mut st = prev.unwrap();
+    if snapshots.len() > 1 {
+        // every snapshot of every model is a model of the output (snapshot-major)
+        st.coords = snapshots
+            .into_iter()
+            .flatten()
+            .map(|mut c| {
+                let k = c.len() as f64;
+                let mut m = [0.0; 3];
+                for q in c.iter() {
+                    for x in 0..3 {
+                        m[x] += q[x];
+                    }
+                }
+                for q in c.iter_mut() {
+                    for x in 0..3 {
+                        q[x] -= m[x] / k;
+                    }
+                }
+                c
+            })
+            .collect();
+    }
+    let (seq_pos, coords) = if last_merged { expand_to_grid(&st, &last_full) } else { (st.seq_pos, st.coords) };
+    let nm = coords.len();
     Ok(Output {
         chroms: st.chroms,
-        seq_pos: st.seq_pos,
-        coords: st.coords,
+        seq_pos,
+        coords,
         model_rmsds: vec![f64::NAN; nm],
         particle_size: last,
         stages,

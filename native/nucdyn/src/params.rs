@@ -147,6 +147,18 @@ pub struct Params {
     /// > 0: local-support evidence (`support.rs`) with window half-width
     /// `robust_support_rel` x the final particle size; multiplies `prior_lr`.
     pub robust_support_rel: f64,
+    /// Adaptive resolution: at particle sizes <= this (bp; 0 = never) runs of
+    /// contact-free particles are dropped and interpolated in the output; a
+    /// backbone gap of g sizes gets bounds x g^`robust_merge_nu`.
+    pub robust_merge_below: f64,
+    pub robust_merge_nu: f64,
+    /// Sampling after the final stage (0 = off): temperature, temperature steps
+    /// per snapshot, MD steps per temperature step (0 = as the stage),
+    /// snapshots per model (each becomes an output model).
+    pub robust_sample_temp: f64,
+    pub robust_sample_steps: usize,
+    pub robust_sample_dyn_steps: usize,
+    pub robust_sample_snapshots: usize,
 }
 
 impl Default for Params {
@@ -214,6 +226,12 @@ impl Default for Params {
             robust_nc_s: 0.5,
             robust_nc_qmax: 10.0,
             robust_support_rel: 4.0,
+            robust_merge_below: 0.0,
+            robust_merge_nu: 0.5,
+            robust_sample_temp: 0.0,
+            robust_sample_steps: 0,
+            robust_sample_dyn_steps: 0,
+            robust_sample_snapshots: 1,
         }
     }
 }

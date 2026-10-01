@@ -35,7 +35,8 @@ from run_nucdyn import peak_rss_mb, schedule  # noqa: E402
 #: once inside it, one extra pass at the final size, exponential contact kernel (width and false-contact
 #: rate learned), local-support evidence with a window of 4 x the final particle size.  The engine
 #: defaults of protocol "robust" are the same values.
-ROBUST_DEFAULTS: dict = {"robust_segments": 2, "robust_refine": 1, "robust_kernel": "exp", "robust_support_rel": 4.0}
+ROBUST_DEFAULTS: dict = {"robust_segments": 2, "robust_refine": 1, "robust_kernel": "exp", "robust_support_rel": 4.0,
+                         "temp_steps": [500], "dynamics_steps": [100]}
 
 
 def main(argv=None) -> None:
@@ -47,8 +48,8 @@ def main(argv=None) -> None:
     ap.add_argument("--n-models", type=int, default=10)
     ap.add_argument("--n-threads", type=int, default=0)
     ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--temp-steps", type=int, default=500)
-    ap.add_argument("--dyn-steps", type=int, default=100)
+    ap.add_argument("--temp-steps", type=int, help="temperature steps per stage (default: ROBUST_DEFAULTS)")
+    ap.add_argument("--dyn-steps", type=int, help="MD steps per temperature step (default: ROBUST_DEFAULTS)")
     ap.add_argument("--params", default="{}", help="JSON of engine parameters overriding ROBUST_DEFAULTS")
     ap.add_argument("--label", default="robust", help="method name written to the .json")
     ap.add_argument("--prior-lr", help=".npy of per-contact likelihood ratios true / false (one per table row)")
@@ -62,7 +63,13 @@ def main(argv=None) -> None:
 
     params = {**ROBUST_DEFAULTS, **json.loads(args.params)}
     sizes = [float(x) * 1e6 for x in args.sizes.split(",")] if args.sizes else schedule(args.res)
+    tr = time.time()
     c = read_contacts(args.contacts)
+    read_seconds = time.time() - tr
+    if args.temp_steps:
+        params["temp_steps"] = [args.temp_steps]
+    if args.dyn_steps:
+        params["dynamics_steps"] = [args.dyn_steps]
     prior_lr = np.load(args.prior_lr) if args.prior_lr else None
     if args.support_w:
         from robust_prior import support_lr
@@ -82,7 +89,7 @@ def main(argv=None) -> None:
     res = un.calc_genome_structure(
         c.chrom_a.astype(str), c.pos_a, c.chrom_b.astype(str), c.pos_b, protocol="robust",
         particle_sizes=sizes, n_models=args.n_models, seed=args.seed, device=args.device,
-        n_threads=args.n_threads, temp_steps=[args.temp_steps], dynamics_steps=[args.dyn_steps], verbose=True,
+        n_threads=args.n_threads, verbose=True,
         **({"prior_lr": prior_lr} if prior_lr is not None else {}), **params)
     wall = time.time() - t0
     ru1 = resource.getrusage(resource.RUSAGE_SELF)
@@ -96,7 +103,7 @@ def main(argv=None) -> None:
     meta = {"method": args.label, "protocol": "robust", "contacts": str(args.contacts), "n_contacts": len(c),
             "particle_sizes": sizes, "n_models": args.n_models, "seed": args.seed, "device": args.device,
             "robust_params": params, "support_w": args.support_w, "support_mix": args.support_mix, "prior_lr_file": args.prior_lr,
-            "oracle": bool(args.oracle_truth), "wall_seconds": wall, "engine_seconds": res["seconds_total"],
+            "oracle": bool(args.oracle_truth), "read_seconds": read_seconds, "wall_seconds": wall, "engine_seconds": res["seconds_total"],
             "cpu_seconds": (ru1.ru_utime - ru0.ru_utime) + (ru1.ru_stime - ru0.ru_stime),
             "peak_rss_mb": peak_rss_mb(), "stages": res["stages"], "params": res["params"],
             "contacts_kept": int(np.isfinite(w).sum()), "mean_weight_kept": float(np.nanmean(w)) if len(w) else None,
