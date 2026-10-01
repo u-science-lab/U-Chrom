@@ -151,6 +151,10 @@ pub struct Params {
     /// contact-free particles are dropped and interpolated in the output; a
     /// backbone gap of g sizes gets bounds x g^`robust_merge_nu`.
     pub robust_merge_below: f64,
+    /// Refinement passes: temperature steps (0 = as the final stage) and start
+    /// temperature (0 = `temp_start`).
+    pub robust_refine_temp_steps: usize,
+    pub robust_refine_temp_start: f64,
     pub robust_merge_nu: f64,
     /// Sampling after the final stage (0 = off): temperature, temperature steps
     /// per snapshot, MD steps per temperature step (0 = as the stage),
@@ -227,6 +231,8 @@ impl Default for Params {
             robust_nc_qmax: 10.0,
             robust_support_rel: 4.0,
             robust_merge_below: 0.0,
+            robust_refine_temp_steps: 0,
+            robust_refine_temp_start: 0.0,
             robust_merge_nu: 0.5,
             robust_sample_temp: 0.0,
             robust_sample_steps: 0,
