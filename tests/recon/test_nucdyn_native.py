@@ -142,3 +142,50 @@ def test_gpu_matches_cpu_ensemble_statistics():
     (bg, rg_g), (bc, rg_c) = stats(g), stats(c)
     assert abs(bg - bc) < 0.1
     assert abs(rg_g - rg_c) / rg_c < 0.15
+
+
+ROBUST_QUICK = dict(genome_ranges=["chr19"], particle_sizes=[2e6, 4e5, 2e5], temp_steps=[60], dynamics_steps=[50])
+
+
+def test_robust_protocol_downweights_injected_noise(tmp_path):
+    """protocol="robust": random (false) contacts added to chr19 get lower weights than the real ones."""
+    import pandas as pd
+
+    from uchrom import ChromData
+    from uchrom.io import read_pairs
+    from uchrom.recon.sc.nucdyn import reconstruct_nucdyn
+
+    df = read_pairs(str(PAIRS))
+    df = df[(df["chr1"] == "chr19") & (df["chr2"] == "chr19")].reset_index(drop=True)
+    rng = np.random.default_rng(0)
+    lo, hi = int(df[["pos1", "pos2"]].min().min()), int(df[["pos1", "pos2"]].max().max())
+    n_noise = len(df) // 5
+    noise = df.iloc[:n_noise].copy()
+    noise["pos1"] = rng.integers(lo, hi, n_noise)
+    noise["pos2"] = rng.integers(lo, hi, n_noise)
+    both = pd.concat([df, noise], ignore_index=True)
+    cd = reconstruct_nucdyn(both, n_models=4, device="cpu", seed=1, protocol="robust",
+                            robust_segments=2, **ROBUST_QUICK)
+    w = cd.results["nucdyn.contact_weights"]
+    assert w.shape == (len(both),)
+    is_noise = np.arange(len(both)) >= len(df)
+    ok = np.isfinite(w)
+    assert np.nanmean(w[~is_noise & ok]) > np.nanmean(w[is_noise & ok]) + 0.1
+    em = cd.results["nucdyn.em"]
+    assert {"eps", "s", "mean_w"} <= set(em.columns) and (em["eps"] > 0).all()
+    assert cd.uns["nucdyn"]["particle_position"] == "end"
+    out = tmp_path / "rb.chromdata.zarr"
+    cd.write(out)
+    back = ChromData.read(out)
+    np.testing.assert_array_equal(back.results["nucdyn.contact_weights"], w)
+
+
+def test_robust_without_reweighting_equals_2017():
+    """With re-weighting disabled (start stage beyond the schedule) robust is the 2017 protocol, bit for bit."""
+    from uchrom.recon.sc.nucdyn import reconstruct_nucdyn
+
+    a = reconstruct_nucdyn(str(PAIRS), n_models=2, device="cpu", seed=3, **ROBUST_QUICK)
+    b = reconstruct_nucdyn(str(PAIRS), n_models=2, device="cpu", seed=3, protocol="robust",
+                           robust_start_stage=99, **ROBUST_QUICK)
+    for k in a.layers:
+        np.testing.assert_array_equal(a.layers[k], b.layers[k])
