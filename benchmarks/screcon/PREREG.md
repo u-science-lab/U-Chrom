@@ -63,6 +63,26 @@ paper reports every endpoint of §3-§4 whatever the outcome.
 
 (none)
 
+### Additions made before the test set was looked at
+
+* **2026-10-01 — matched-imaging analysis (added secondary analysis, not pre-registered in
+  §3-§4; for development of milestone M3 "calibrated ensembles").**  The matched-modality
+  comparison of `matched.py` (Nagano 2017 haploid serum mESC structures vs Takei 2021 E14
+  imaging) is added as a secondary analysis.  Its cells are split *before any robust run on
+  them*: the 403 serum cells of `nagano/serum/manifest.tsv`, sorted by name and permuted with
+  `numpy.random.default_rng(20261001)` (`robust_matched_split.py`), first 201 = development
+  (tuning allowed), remaining 202 = held back (run once, with the frozen parameters, like the
+  test set); the Nagano 2i cells are not used for tuning.  Development metrics: the
+  per-pair variability ranking (`variab.cv_spearman`), the variability ratio
+  (`variab.cv_ratio`), radial position per locus (`radial.locus_spearman`) and the
+  P(s)-detrended pair medians (`pair.median_resid_spearman`), each against NucDynamics and
+  hickit on the same development cells and the size-matched imaging ceiling.  This analysis
+  is not part of the decision rule of §5.
+* **2026-10-01 — milestone M3 (speed and sampling) is developed on the development set of
+  §2 only; the method is not frozen yet.**  Schedule / resolution changes and the sampling
+  stage are accepted only if the development held-out (P1 and strata) and simulation (P2 and
+  strata) numbers do not get worse (`robust_devlog.md`).
+
 ## 7. The method being tested (design as of this date)
 
 * Observation model: each observed contact is a mixture of a true proximity and a false
