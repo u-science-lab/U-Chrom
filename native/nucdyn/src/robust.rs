@@ -694,11 +694,11 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
         let n_temp = if refine_pass && p.robust_refine_temp_steps > 0 {
             p.robust_refine_temp_steps
         } else {
-            p.temp_steps_for(stage.min(p.particle_sizes.len() - 1))
+            p.robust_temp_steps_for(stage.min(p.particle_sizes.len() - 1))
         };
         let t_start = if refine_pass && p.robust_refine_temp_start > 0.0 { p.robust_refine_temp_start } else { p.temp_start };
         let schedule = anneal_schedule(t_start, p.temp_end, n_temp, 1.0);
-        let dyn_steps = p.dyn_steps_for(stage.min(p.particle_sizes.len() - 1));
+        let dyn_steps = p.robust_dyn_steps_for(stage.min(p.particle_sizes.len() - 1));
         let reweight = stage >= p.robust_start_stage && !counts.is_empty();
         let parts = split_schedule(schedule.len(), if reweight { p.robust_segments } else { 1 });
         let t_prep = ts.elapsed().as_secs_f64();

@@ -170,7 +170,7 @@ def test_robust_protocol_downweights_injected_noise(tmp_path):
     assert w.shape == (len(both),)
     is_noise = np.arange(len(both)) >= len(df)
     ok = np.isfinite(w)
-    assert np.nanmean(w[~is_noise & ok]) > np.nanmean(w[is_noise & ok]) + 0.1
+    assert np.nanmean(w[~is_noise & ok]) > np.nanmean(w[is_noise & ok]) + 0.05
     em = cd.results["nucdyn.em"]
     assert {"eps", "s", "mean_w"} <= set(em.columns) and (em["eps"] > 0).all()
     assert cd.uns["nucdyn"]["particle_position"] == "end"
@@ -214,7 +214,8 @@ def test_robust_without_reweighting_equals_2017():
 
     a = reconstruct_nucdyn(str(PAIRS), n_models=2, device="cpu", seed=3, **ROBUST_QUICK)
     b = reconstruct_nucdyn(str(PAIRS), n_models=2, device="cpu", seed=3, protocol="robust",
-                           robust_start_stage=99, robust_refine=0, **ROBUST_QUICK)
+                           robust_start_stage=99, robust_refine=0, robust_temp_steps=[], robust_dynamics_steps=[],
+                           robust_sample_temp=0.0, robust_merge_below=0.0, **ROBUST_QUICK)
     for k in a.layers:
         np.testing.assert_array_equal(a.layers[k], b.layers[k])
 

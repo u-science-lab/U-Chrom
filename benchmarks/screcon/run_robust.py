@@ -31,12 +31,16 @@ from contacts import read_contacts  # noqa: E402
 from run_nucdyn import peak_rss_mb, schedule  # noqa: E402
 
 #: parameters of the method (engine defaults otherwise); changed only by dev-set experiments.
-#: Recommended set (robust_devlog.md, variant es4): EM re-weighting before every stage from stage 2 on and
-#: once inside it, one extra pass at the final size, exponential contact kernel (width and false-contact
-#: rate learned), local-support evidence with a window of 4 x the final particle size.  The engine
-#: defaults of protocol "robust" are the same values.
+#: Recommended set (robust_devlog.md: M2 variant es4 + M3 candidate c2): EM re-weighting before every
+#: stage from stage 2 on and once inside it, exponential contact kernel (width and false-contact rate
+#: learned), local-support evidence (window 4 x final size); 50 x 50 MD steps per stage, one refinement
+#: pass of 10 x 50 steps from T = 500, sampling at T = 1000 for 20 x 20 steps after the final anneal,
+#: contact-free particles merged below 25 kb.  The engine defaults of protocol "robust" are the same
+#: values (the M2 runs used 500 x 100 steps: pass robust_temp_steps / robust_dynamics_steps to reproduce).
 ROBUST_DEFAULTS: dict = {"robust_segments": 2, "robust_refine": 1, "robust_kernel": "exp", "robust_support_rel": 4.0,
-                         "temp_steps": [500], "dynamics_steps": [100]}
+                         "robust_temp_steps": [50], "robust_dynamics_steps": [50], "robust_refine_temp_steps": 10,
+                         "robust_refine_temp_start": 500.0, "robust_sample_temp": 1000.0, "robust_sample_steps": 20,
+                         "robust_sample_dyn_steps": 20, "robust_merge_below": 25000.0}
 
 
 def main(argv=None) -> None:
@@ -68,9 +72,9 @@ def main(argv=None) -> None:
     c = read_contacts(args.contacts)
     read_seconds = time.time() - tr
     if args.temp_steps:
-        params["temp_steps"] = [args.temp_steps]
+        params["robust_temp_steps"] = [args.temp_steps]
     if args.dyn_steps:
-        params["dynamics_steps"] = [args.dyn_steps]
+        params["robust_dynamics_steps"] = [args.dyn_steps]
     prior_lr = np.load(args.prior_lr) if args.prior_lr else None
     if args.support_w:
         from robust_prior import support_lr

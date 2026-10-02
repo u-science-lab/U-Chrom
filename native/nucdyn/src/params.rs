@@ -93,10 +93,16 @@ pub struct Params {
     pub verbose: bool,
     // ---- protocol "robust" only (ignored by the other protocols) ----
     // Defaults: the parameter set recommended from the development set
-    // (benchmarks/screcon/robust_devlog.md, variant es4).
+    // (benchmarks/screcon/robust_devlog.md: M2 variant es4 + M3 candidate c2 —
+    // 2,500 MD steps per stage, short cool refinement, sampling at T = 1000,
+    // adaptive resolution below 25 kb).
     /// First stage whose restraints are re-weighted (0-based; the weights of
     /// stage s come from the structure of stage s - 1, so >= 1).
     pub robust_start_stage: usize,
+    /// Schedule of the robust protocol (empty: `temp_steps` / `dynamics_steps`);
+    /// one value = every stage, else one per particle size.
+    pub robust_temp_steps: Vec<usize>,
+    pub robust_dynamics_steps: Vec<usize>,
     /// Contact kernel f(d) = exp(-((d - d0)+ / s)^k), d in particle radii of
     /// the structure the weights are computed from; k = 2 ("gauss") or 1 ("exp").
     pub robust_kernel: String,
@@ -206,6 +212,8 @@ impl Default for Params {
             n_threads: 0,
             verbose: false,
             robust_start_stage: 1,
+            robust_temp_steps: vec![50],
+            robust_dynamics_steps: vec![50],
             robust_kernel: "exp".to_string(),
             robust_d0: 2.0,
             robust_d0_grid: vec![],
@@ -230,13 +238,13 @@ impl Default for Params {
             robust_nc_s: 0.5,
             robust_nc_qmax: 10.0,
             robust_support_rel: 4.0,
-            robust_merge_below: 0.0,
-            robust_refine_temp_steps: 0,
-            robust_refine_temp_start: 0.0,
+            robust_merge_below: 25000.0,
+            robust_refine_temp_steps: 10,
+            robust_refine_temp_start: 500.0,
             robust_merge_nu: 0.5,
-            robust_sample_temp: 0.0,
-            robust_sample_steps: 0,
-            robust_sample_dyn_steps: 0,
+            robust_sample_temp: 1000.0,
+            robust_sample_steps: 20,
+            robust_sample_dyn_steps: 20,
             robust_sample_snapshots: 1,
         }
     }
@@ -246,6 +254,13 @@ impl Params {
     /// The 2017 code's units and restraint form (`nuc_dynamics_2017`, `robust`).
     pub fn is_2017_family(&self) -> bool {
         matches!(self.protocol.as_str(), "nuc_dynamics_2017" | "robust")
+    }
+    /// protocol robust: `robust_temp_steps` when set, else `temp_steps`
+    pub fn robust_temp_steps_for(&self, stage: usize) -> usize {
+        if self.robust_temp_steps.is_empty() { by_stage(&self.temp_steps, stage) } else { by_stage(&self.robust_temp_steps, stage) }
+    }
+    pub fn robust_dyn_steps_for(&self, stage: usize) -> usize {
+        if self.robust_dynamics_steps.is_empty() { by_stage(&self.dynamics_steps, stage) } else { by_stage(&self.robust_dynamics_steps, stage) }
     }
     pub fn temp_steps_for(&self, stage: usize) -> usize {
         by_stage(&self.temp_steps, stage)
@@ -293,6 +308,11 @@ impl Params {
                 let (e0, e, e1) = (self.robust_eps_min, self.robust_eps, self.robust_eps_max);
                 if !(0.0 < e0 && e0 <= e && e <= e1 && e1 < 1.0) {
                     return Err("need 0 < robust_eps_min <= robust_eps <= robust_eps_max < 1".into());
+                }
+                for (name, v) in [("robust_temp_steps", &self.robust_temp_steps), ("robust_dynamics_steps", &self.robust_dynamics_steps)] {
+                    if !v.is_empty() && ((v.len() != 1 && v.len() != ns) || v.contains(&0)) {
+                        return Err(format!("{name} must be empty or have 1 or {ns} positive entries"));
+                    }
                 }
                 if self.robust_segments == 0 {
                     return Err("robust_segments must be >= 1".into());
@@ -351,4 +371,28 @@ pub fn anneal_schedule(temp_start: f64, temp_end: f64, temp_steps: usize, bead: 
             (temp * bead * bead, repulse / (bead * bead))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn robust_defaults_are_the_recommended_set_and_leave_other_protocols_alone() {
+        let p = Params { protocol: "robust".into(), ..Default::default() };
+        p.validate().unwrap();
+        // M3 candidate c2: 50 x 50 per stage, refinement 10 steps from T 500, sampling at T 1000 (20 x 20)
+        assert_eq!((p.robust_temp_steps_for(3), p.robust_dyn_steps_for(3)), (50, 50));
+        assert_eq!((p.robust_refine_temp_steps, p.robust_refine_temp_start), (10, 500.0));
+        assert_eq!((p.robust_sample_temp, p.robust_sample_steps, p.robust_sample_dyn_steps), (1000.0, 20, 20));
+        assert_eq!(p.robust_merge_below, 25000.0);
+        // the shared schedule fields keep the NucDynamics defaults
+        let q = Params::default();
+        assert_eq!((q.temp_steps_for(0), q.dyn_steps_for(0)), (500, 100));
+        // an empty robust schedule falls back to temp_steps / dynamics_steps
+        let r = Params { robust_temp_steps: vec![], robust_dynamics_steps: vec![], ..p.clone() };
+        assert_eq!((r.robust_temp_steps_for(0), r.robust_dyn_steps_for(0)), (500, 100));
+        let bad = Params { robust_temp_steps: vec![1, 2], ..p };
+        assert!(bad.validate().is_err());
+    }
 }
