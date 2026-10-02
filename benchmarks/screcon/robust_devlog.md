@@ -197,3 +197,116 @@ evidence takes 0.1-0.3 s, each EM update < 0.2 s; the extra time is the refineme
   where it may be re-weighted by a calibrated capture efficiency.
 * Su noise is hard to detect (weight AUC 0.87, noise weights 0.77 on average); the oracle bound
   on the E4 table (oracle 0.858, es4 0.763, NucDynamics 0.707) shows room left.
+
+---
+
+# Milestone M3 — speed and calibrated ensembles (development set only; not frozen)
+
+Added before any run (PREREG §6, 2026-10-01): the matched-imaging development half (201 of the 403
+Nagano serum cells, `robust_matched_split.py`, seed 20261001); the other 202 and the 2i cells are
+untouched.  Engine additions (all off by default for the other protocols; regression hashes
+unchanged on macOS and Linux): adaptive resolution (`robust_merge_below`, `robust_merge_nu`:
+contact-free particles dropped, coordinates interpolated on the full grid), a sampling stage
+after the final anneal (`robust_sample_temp/_steps/_dyn_steps/_snapshots`, constant temperature,
+velocities re-drawn every temperature step), shorter / cooler refinement passes
+(`robust_refine_temp_steps`, `robust_refine_temp_start`); `run_robust.py` takes the schedule from
+`ROBUST_DEFAULTS` / `--params` / `$ROBUST_PARAMS`.  All M3 dev runs below are on CPU nodes
+(16 threads; 5 models for simulations, 10 for held-out) unless stated.
+
+## Profiling (where the CPU time goes)
+
+* NucDynamics' schedule is 500 x 100 = 50,000 MD steps per stage; hickit runs 1,000 gradient
+  iterations per stage on merged beads.  Our per step cost is not the problem: 0.2-0.35 us per
+  particle-step (laptop, 1 thread; ~0.6-0.8 us on the Sherlock EPYC 9754), against ~3.4 us per
+  bead-iteration for hickit.  The force evaluation (cell-grid repulsion) is ~85-100 % of a step.
+* Tried and dropped: f32 repulsion loop (no gain on aarch64 or x86), Verlet lists with a small
+  skin (rebuilt nearly every step at annealing temperatures: 6-8x slower), finer cell stencils.
+* So the speed lever is the number of steps (and of particles at fine resolution).
+
+## E9 — schedule length (sims + held-out, 72 / 12 dev units)
+
+| variant | steps / stage | P2-dev | su eps 0 | takei eps 0 | worst sim stratum | held-out P1 | held-out frac |
+|---|---|---|---|---|---|---|---|
+| es4 (M2) | 500 x 100 | +0.0376 [+0.022, +0.056] | -0.0013 | -0.0015 | takei eps 0 -0.0015 | -0.0004 | +0.0004 |
+| t100d50 | 100 x 50 | +0.0364 [+0.021, +0.054] | -0.0019 | -0.0009 | su eps 0 -0.0019 | +0.0002 | +0.0092 |
+| t50d50 | 50 x 50 | +0.0365 [+0.021, +0.054] | -0.0009 | -0.0014 | takei eps 0 -0.0014 | +0.0005 | +0.0134 |
+| t50d20 | 50 x 20 | +0.0346 [+0.019, +0.052] | **-0.0095 [-0.019, -0.002]** | -0.0039 | su eps 0 -0.0095 | -0.0008 | +0.0294 |
+| t25d20 | 25 x 20 | +0.0321 [+0.017, +0.050] | **-0.0100 [-0.020, -0.003]** | -0.0053 | su eps 0 -0.0100 | -0.0020 | +0.0414 |
+| t50d20dt2 | 50 x 20, dt x 2 | +0.0230 | -0.0155 | -0.0108 | su eps 0 -0.0155 | +0.0002 | +0.0170 |
+| t50d50dt2 | 50 x 50, dt x 2 | +0.0237 | -0.0131 | -0.0092 | su eps 0 -0.0131 | +0.0003 | +0.0102 |
+| t50d20m | 50 x 20 + merge <= 2 Mb | +0.0119 | **-0.0482** | **-0.0285** | su depth 40 -0.0486 | -0.0067 | +0.0194 |
+| t100d50r0 | 100 x 50, no refinement | +0.0329 | -0.0002 | -0.0024 | takei eps 0 -0.0024 | +0.0004 | +0.0084 |
+| t50d50r0 | 50 x 50, no refinement | +0.0332 | -0.0002 | -0.0023 | takei eps 0 -0.0023 | +0.0004 | +0.0140 |
+| t50d50r10 | 50 x 50, refinement 10 x 50 | +0.0354 | -0.0013 | -0.0019 | takei eps 0 -0.0019 | +0.0004 | +0.0256 |
+| t50d50r10c | as r10, refinement from T = 500 | +0.0349 | -0.0006 | -0.0021 | takei eps 0 -0.0021 | -0.0000 | +0.0148 |
+
+* 2,500 MD steps per stage (20x fewer than NucDynamics) lose nothing on the dev set; 1,000 or 500
+  steps cost ~0.01 at eps 0 (Su) — over the bar.  A larger time step hurts.  Shorter schedules
+  leave the models less converged and more diverse, which raises the held-out contact-fraction
+  score.
+* **Adaptive resolution** (merging contact-free particles) at 50 kb on the sparse Su tables costs
+  0.03-0.05: rejected at the resolutions the dev set covers.  It is kept only below 25 kb
+  (`robust_merge_below` 25 kb in the speed configuration), where it is needed for speed (1 kb:
+  2.56 M grid particles -> 0.195 M simulated) but **cannot be validated on the dev set** (no dev
+  benchmark finer than 50 kb): open problem.
+
+## E10 — sampling temperature (on t100d50; 50 temperature steps x 20 MD steps at T after the anneal)
+
+| variant | P2-dev | takei eps 0 | worst sim stratum | held-out P1 | held-out frac |
+|---|---|---|---|---|---|
+| t100d50 (no sampling) | +0.0364 | -0.0009 | su eps 0 -0.0019 | +0.0002 | +0.0092 |
+| T = 300 | +0.0363 | -0.0017 | su eps 0 -0.0020 | +0.0006 | +0.0227 |
+| T = 1000 | +0.0354 | -0.0034 [-0.006, -0.001] | takei eps 0 -0.0034 | +0.0021 | +0.0452 |
+| T = 3000 | +0.0316 | **-0.0094 [-0.012, -0.007]** | takei eps 0 -0.0094 | +0.0031 | +0.0877 |
+
+(T in the engine's units: final anneal temperature 10, start 5000.)  The contact-fraction score
+rises monotonically with T (hickit's dev level is +0.048 over NucDynamics); single-model
+accuracy in the simulations falls at T = 3000 (just inside the 0.01 bar, CI excluding 0).
+T = 1000 reaches hickit's contact-fraction level without a stratum loss > 0.005.
+
+## E11 — candidates c1 / c2 (speed + sampling)
+
+c1 = 50 x 50 per stage, refinement 10 x 50 from T = 500, sampling T = 1000 for 20 x 50 steps,
+merge below 25 kb (dev numbers = variant t50d50r10c_T1000, identical at >= 50 kb).
+c2 = c1 with a 20 x 20 sampling block (cheaper).
+
+**c2, every development stratum** (robust - nucdyn_gpu; 95 % CI):
+
+* Simulations (72 units, median-model cis Spearman): **P2-dev +0.0337 [+0.019, +0.052]** (cluster CI
+  [+0.025, +0.044]); su eps 0 / 0.05 / 0.2: -0.0010 [-0.004, +0.002] / +0.0216 / +0.0534; takei
+  eps 0 / 0.05 / 0.2: **-0.0042 [-0.008, -0.001]** / +0.0185 / +0.1139; su depth 40 / 160 / 640:
+  +0.0124 / +0.0268 / +0.0348; takei depth 10 / 40 / 160: -0.0004 / +0.0231 / +0.1056; su rc
+  0.5 / 1: +0.0310 / +0.0184; takei rc 0.5 / 1: +0.0600 / +0.0255.  RMSD/Rg: +0.036 better;
+  ensemble-mean Spearman +0.0315.
+* Held-out (12 cell x fold): **P1-dev +0.0015 [+0.0013, +0.0019]**; median-score bands +0.0014 /
+  +0.0027 / +0.0021 / +0.0011 / +0.0004, trans +0.0001; cis (all separations) **-0.0018
+  [-0.0023, -0.0015]**, all -0.0018, cis PR-AUC -0.0030.  **Contact-fraction score: bands mean
+  0.7323 vs 0.6860 (+0.0463 [+0.042, +0.051]; hickit 0.734)**, every band +0.026 ... +0.059, trans
+  +0.067, cis PR-AUC 0.136 vs 0.109.
+* Real-data checks on the training tables: precision 1.57 vs 1.71 bead units (n.s.), %V>3 0.66 vs
+  0.67, Si-C-style violations 9.2 % vs 8.4 % (+0.75 [+0.42, +1.05]), r vs GEO 0.9680 vs 0.9713
+  (-0.003), RMSD/Rg vs GEO 0.119 vs 0.107 — the sampled models are slightly less tight, as intended.
+* PREREG §5 rule on dev: P2 and P1 both > 0 with CIs excluding 0; worst stratum -0.0042 (> -0.01);
+  cost below (rule 3 met).  Stratum losses within 0.01 but with CI excluding 0: takei eps 0
+  (-0.004), held-out "cis all separations" (-0.002) and cis PR-AUC (-0.003).
+
+## E12 — one-model wall time (Fig. 3d protocol: Stevens Cell 1, 1 model, Sherlock AMD EPYC 9754 for CPU, median of repeats)
+
+hickit is single-threaded by design (lh3/hickit c945bb6 has no pthread / OpenMP), so the
+like-for-like comparison is robust 1 thread vs hickit 1 thread; 16 threads and GPU are reported
+separately.
+
+| resolution | hickit 1 t | NucDynamics 1 t | **robust c2 1 t** | robust c1 1 t | NucDynamics 16 t | robust c2 16 t | NucDynamics GPU (H100) |
+|---|---|---|---|---|---|---|---|
+| 500 kb | 27 s | 273 s | **22.8 s** | 25 s | 189 s | 13.2 s | 17.8 s |
+| 100 kb | 143 s | 1465 s | **112 s** | 125 s | 651 s | 34.5 s | 27 s |
+| 50 kb | 222 s | 2869 s | **202 s** | 234 s | 1071 s | 57.9 s | 32 s |
+| 20 kb | 578 s | 5711 s | **337 s** | 395 s | 1224 s | 89.4 s | 38 s |
+| 10 kb | 1138 s | 12083 s | **498 s** | 639 s | 2183 s | 135 s | 50 s |
+| 1 kb | 2083 s | — | **1183 s** | 1248 s | — | 259 s | 180 s |
+
+robust c2 on 1 thread is faster than hickit at every resolution (1.10x at 50 kb, 1.18x at 500 kb,
+1.28x at 100 kb, 1.7-2.3x at 20 kb ... 1 kb); 16 threads: 2-9x faster than hickit.  Peak RSS (1
+thread) 91 MB (500 kb) ... 440 MB (1 kb).  Simulated particles at 1 kb: 195,112 of 2,564,332 grid
+positions.  robust GPU (H100) timing: job submitted, result not collected (see status).  Margins
+at 50 kb / 500 kb on 1 thread are thin (10-18 %).
