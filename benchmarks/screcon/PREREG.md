@@ -82,6 +82,17 @@ paper reports every endpoint of §3-§4 whatever the outcome.
   §2 only; the method is not frozen yet.**  Schedule / resolution changes and the sampling
   stage are accepted only if the development held-out (P1 and strata) and simulation (P2 and
   strata) numbers do not get worse (`robust_devlog.md`).
+* **2026-10-02 — method frozen (tag `robust-frozen`).**  The method tested is protocol `"robust"`
+  of `native/nucdyn` with its engine defaults (= `ROBUST_DEFAULTS` of `run_robust.py`, the
+  development candidate "c2" of `robust_devlog.md`): 2017 NucDynamics base (particle sizes,
+  isolation filter, violated-contact removal, restraints, repulsion); EM re-weighting of contact
+  restraints from stage 2 on, twice per stage (exponential kernel, d0 = 2 radii, width and eps
+  learned); local-support evidence (window 4 x final particle size); 50 x 50 MD steps per stage;
+  one refinement pass at the final size (10 x 50 steps from T = 500); sampling at T = 1000 for
+  20 x 20 steps after the final anneal; contact-free particles merged below 25 kb.  Test runs
+  use the build of the tagged commit and `run_robust.py` with no `--params`, the same models /
+  seeds / resolutions as the NucDynamics baseline runs of each test (10 models held-out / real,
+  5 models simulations, seed 1).  No parameter or code change to the method after this line.
 
 ## 7. The method being tested (design as of this date)
 
