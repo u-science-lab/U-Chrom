@@ -310,3 +310,26 @@ robust c2 on 1 thread is faster than hickit at every resolution (1.10x at 50 kb,
 thread) 91 MB (500 kb) ... 440 MB (1 kb).  Simulated particles at 1 kb: 195,112 of 2,564,332 grid
 positions.  robust GPU (H100) timing: job submitted, result not collected (see status).  Margins
 at 50 kb / 500 kb on 1 thread are thin (10-18 %).
+
+## E13 — matched imaging, development Nagano half (PREREG §6 addition; 201 serum cells, 187 after masking)
+
+Model 0 of each cell (100 kb, 2 models) on the 2,460 Takei loci vs Takei 2021 E14 imaging;
+`model [size-matched imaging ceiling ± sd; best structure-free baseline]`.
+
+| method | variab.cv_ratio | variab.cv_spearman | radial.locus_spearman | pair.median_resid_spearman | radial.chrom_spearman | trans.spearman |
+|---|---|---|---|---|---|---|
+| NucDynamics (GPU) | 0.56 [1.00 ± 0.01; 0.51] | 0.42 [0.77 ± 0.01; 0.01] | 0.27 [0.73 ± 0.02; -0.10] | 0.57 [0.72 ± 0.01; 0.13] | 0.58 [0.62 ± 0.05; 0.75] | 0.35 [0.74; 0.71] |
+| hickit | 0.53 | 0.43 | 0.23 | 0.54 | 0.61 | 0.37 |
+| robust c2 (sampling T 1000) | 0.57 | **0.46** | 0.26 | 0.57 | 0.57 | 0.34 |
+| robust c2, no sampling | 0.57 | **0.46** | 0.26 | 0.58 | 0.58 | 0.34 |
+| robust c2, sampling T 3000 | 0.57 | 0.45 | 0.26 | 0.57 | 0.58 | 0.34 |
+
+* The per-pair variability ranking improves slightly (0.46 vs 0.42 / 0.43), the rest is unchanged
+  (within ±0.01 of NucDynamics; differences of this size are at the level of the imaging-ceiling sd).
+* **Sampling does not move the cell-to-cell variability ratio** (0.57 with or without sampling, also at
+  T = 3000): the comparison uses one model per cell, so within-cell ensemble spread adds little to the
+  across-cell spread, and the models remain ~half as variable as imaging (as are the structure-free
+  baselines, 0.51: imaging localisation error and homolog / cell-state mixing inflate the imaging CV).
+  The calibration that sampling achieves is *within* a cell (held-out contact-fraction score, E10-E11);
+  the matched-imaging gap is not addressed by it.  Radial position per locus stays far below the
+  ceiling for every method (0.23-0.27 vs 0.73).
