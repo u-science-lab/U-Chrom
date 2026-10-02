@@ -248,8 +248,13 @@ def main(argv=None) -> None:
     ap.add_argument("--robust-real", type=Path, help="robust score_real outputs: <dir>/<variant>/<tag>.json")
     ap.add_argument("--base-real", type=Path, help="baseline score_real outputs of the same tables")
     ap.add_argument("--metrics", nargs="+", default=["med_dist_spearman_cis", "med_rmsd_rel", "ens_dist_spearman_cis"])
+    ap.add_argument("--test", action="store_true",
+                    help="TEST SET (PREREG §2): truth cells 3-5 and cells 5-8 instead of the development units")
     ap.add_argument("--out", type=Path)
     args = ap.parse_args(argv)
+    if args.test:
+        global DEV_TRUTHS, DEV_CELLS
+        DEV_TRUTHS, DEV_CELLS = {"truth_3", "truth_4", "truth_5"}, {5, 6, 7, 8}
     lines, recs = [], []
     if args.robust_sim:
         df = sim_table(args.robust_sim, args.base_sim)
