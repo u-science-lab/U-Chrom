@@ -54,8 +54,9 @@ OURS, PAPER = INDIGO, "#9aa0a8"          # U-Chrom vs the original / published r
 OURS2 = "#7f9bd0"                        # U-Chrom, second backend (CPU)
 ORIG = "#6b7079"                         # original code
 OTHER = "#c9a227"                        # external baseline (HIPPS / DIMES)
+NEW, NEW_LABEL = "#d1495b", "new method"  # the new single-cell method (protocol "robust"; public name TBD)
 # methods of the single-cell benchmark: key -> (label, colour)
-SC_METHODS = {"nucdyn_gpu": ("U-Chrom GPU", OURS), "nucdyn_cpu": ("U-Chrom CPU", OURS2),
+SC_METHODS = {"robust": (NEW_LABEL, NEW), "nucdyn_gpu": ("U-Chrom GPU", OURS), "nucdyn_cpu": ("U-Chrom CPU", OURS2),
               "orig": ("NucDynamics (original)", ORIG), "sic": ("Si-C", PURPLE), "hickit": ("hickit (Dip-C)", TEAL),
               "pop_mean": ("population mean", OTHER), "random_polymer": ("random polymer", LGREY)}
 
@@ -82,6 +83,8 @@ def load_core() -> dict:
     d["nd_prec_pub"] = [c["published"]["rmsd_to_mean_mirror_mean"] for c in sc]
     d["nd_prec_orig"] = [c["orig_master_full"]["rmsd_to_mean_mirror_mean"] for c in sc]
     d["nd_prec_ours"] = [c["native_gpu_full"]["rmsd_to_mean_mirror_mean"] for c in sc]
+    rb = {c["cell"]: c["robust"]["rmsd_to_mean_mirror_mean"] for c in _j(RES / "robust" / "score_all.json")["cells"]}
+    d["nd_prec_new"] = [rb[k] for k in range(1, 9)]
     p = np.load(RES / "fig3_panels.npz")
     d["nd_scatter"] = (p["nd_pub_d"], p["nd_ours_d"])
     # a2 MDS vs miniMDS, Rao 2014 IMR90 chr21 (feasibility run)
@@ -125,14 +128,16 @@ BANDS = [("2-4", "0.2–0.4"), ("4-16", "0.4–1.6"), ("16-64", "1.6–6.4"), ("
 
 def load_screcon(d: dict) -> None:
     """Single-cell benchmark tables (``benchmarks/screcon/aggregate.py`` on Sherlock)."""
-    h = pd.read_csv(RES / "screcon" / "heldout.csv")
+    h = pd.concat([pd.read_csv(RES / "screcon" / "heldout.csv"),
+                   pd.read_csv(RES / "robust" / "heldout.csv").drop(columns="set")], ignore_index=True)
     med = h[h.score == "median"]
     band = med[med.subset == "cis_band"]
     d["ho_band"] = band.groupby(["method", "band"]).roc_auc.agg(["mean", "min", "max"])
     d["ho_trans"] = med[med.subset == "trans"].groupby("method").roc_auc.mean()
     d["ho_cis"] = med[med.subset == "cis"].groupby("method").roc_auc.mean()
     d["ho_n"] = med[["cell", "fold"]].drop_duplicates().shape[0]
-    s = pd.read_csv(RES / "screcon" / "sim.csv")
+    s = pd.concat([pd.read_csv(RES / "screcon" / "sim.csv"),
+                   pd.read_csv(RES / "robust" / "sim.csv").drop(columns="set")], ignore_index=True)
     keys = ["truth", "depth_per_mb", "rc_rel", "eps", "seed"]
     out = {}
     for ds, g in s.groupby("dataset"):
@@ -193,7 +198,12 @@ def load_consensus(d: dict) -> None:
 
 def load_speed(d: dict) -> None:
     """One-model wall time per method x resolution (``benchmarks/fig3/speed_one_model.py``)."""
-    d["speed1"] = _j(RES / "speed_one_model.json")
+    sp = _j(RES / "speed_one_model.json")
+    rb = _j(RES / "robust" / "speed_one_model.json")["table"]
+    sp["rows"] = [r for r in sp["rows"] if not r["method"].startswith("robust")] + [
+        {"method": r["method"], "threads": r["threads"], "res": r["res"], "status": "ok",
+         "median_wall_seconds": r["median_seconds"]} for r in rb]
+    d["speed1"] = sp
 
 
 def load_results() -> dict:
@@ -304,6 +314,7 @@ def p_nd_precision(fig, d, x, y):
     bx.scatter(cells, d["nd_prec_orig"], s=12, facecolor="none", edgecolor=ORIG, lw=0.7,
                label="original code", zorder=3)
     bx.scatter(cells, d["nd_prec_ours"], s=10, color=OURS, marker="D", label="U-Chrom", zorder=3)
+    bx.scatter(cells + 0.22, d["nd_prec_new"], s=10, color=NEW, marker="^", label=NEW_LABEL, zorder=3)
     bx.set_yscale("log"); bx.set_xticks(cells, [str(c) for c in cells])
     bx.set_yticks([0.5, 1, 2, 5], ["0.5", "1", "2", "5"]); bx.minorticks_off()
     bx.set_xlabel("cell"); bx.set_ylabel("RMSD to mean (radii)")
@@ -318,9 +329,9 @@ SPEED_STYLE = {   # (method, threads) -> label, colour, line style, marker
     ("orig", 1): ("original", ORIG, "-", "s"),
     ("sic", 1): ("Si-C", PURPLE, "-", "^"),
     ("hickit", 1): ("hickit", TEAL, "-", "v"),
-    ("robust_gpu", 0): ("robust GPU", OURS, (0, (1, 1)), "D"),
-    ("robust_cpu", 16): ("robust CPU 16", OURS2, (0, (1, 1)), "o"),
-    ("robust_cpu", 1): ("robust CPU 1", OURS2, (0, (1, 1)), "o"),
+    ("robust_gpu", 0): ("new, GPU", NEW, "-", "D"),
+    ("robust_cpu", 16): ("new, CPU 16 thr.", NEW, "-", "o"),
+    ("robust_cpu", 1): ("new, CPU 1 thr.", NEW, (0, (2, 1)), "o"),
 }
 
 
@@ -365,9 +376,7 @@ def p_nd_speed(fig, d, x, y):
     ax.set_xlabel("final resolution (bp)", labelpad=1)
     ax.set_ylabel("wall time, one model", labelpad=1)
     hs = [mpl.lines.Line2D([], [], color=c, ls=ls, marker=mk, ms=2.2, mew=0, lw=0.8, label=lab)
-          for (m, t), (lab, c, ls, mk) in SPEED_STYLE.items() if not m.startswith("robust")]
-    hs.append(mpl.lines.Line2D([], [], color=OURS, ls=(0, (1, 1)), lw=0.8,
-                               label="robust" + ("" if robust_done else " (pending)")))
+          for (m, t), (lab, c, ls, mk) in SPEED_STYLE.items()]
     hs.append(mpl.lines.Line2D([], [], color=GREY, marker="o", ms=2.6, mfc="white", mew=0.6, ls="none",
                                label="> cap (censored)"))
     if any_failed:
@@ -386,26 +395,26 @@ def p_heldout_contacts(fig, d, x, y):
     ax = ax_at(fig, x + 12, y + 11, 62, 28)
     b = d["ho_band"]
     xx = np.arange(len(BANDS))
-    order = ["random_polymer", "hickit", "sic", "orig", "nucdyn_cpu", "nucdyn_gpu"]
+    order = ["random_polymer", "hickit", "sic", "orig", "nucdyn_cpu", "nucdyn_gpu", "robust"]
     for m in order:
         lab, col = SC_METHODS[m]
         mean = [b.loc[(m, k), "mean"] for k, _ in BANDS]
         ls = (0, (2, 1)) if m == "nucdyn_cpu" else "-"
         ax.plot(xx, mean, color=col, marker="o" if m != "nucdyn_cpu" else None, ms=2.2, lw=0.9, ls=ls,
-                label=lab, zorder=3 if m.startswith("nucdyn") else 2)
+                label=lab, zorder=4 if m == "robust" else (3 if m.startswith("nucdyn") else 2))
     ax.set_xticks(xx, [b_ for _, b_ in BANDS], fontsize=5.5)
     ax.set_xlabel("genomic separation (Mb)"); ax.set_ylabel("ROC-AUC (held-out cis)")
     ax.set_ylim(0.45, 1.0); ax.axhline(0.5, color=LGREY, lw=0.5, zorder=0)
     tr = d["ho_trans"]
     ax.text(0.98, 0.14, "trans AUC\n" + "\n".join(f"{SC_METHODS[m][0].split(' (')[0]}  {tr[m]:.3f}"
-                                                 for m in ("nucdyn_gpu", "orig", "sic", "hickit")),
+                                                 for m in ("robust", "nucdyn_gpu", "sic", "hickit")),
             transform=ax.transAxes, ha="right", va="bottom", fontsize=4.8, color=GREY, linespacing=1.15)
 
 
 def p_sim(fig, d, x, y):
     head_(fig, x, y, "f", "Imaging truth (simulated Hi-C)", "median model vs imaged distances")
     ax = ax_at(fig, x + 12, y + 11, 62, 28)
-    order = ["nucdyn_gpu", "nucdyn_cpu", "orig", "sic", "hickit", "pop_mean", "random_polymer"]
+    order = ["robust", "nucdyn_gpu", "nucdyn_cpu", "orig", "sic", "hickit", "pop_mean", "random_polymer"]
     dsets = [("su2020_chr21", "Su 2020\nchr21, 50 kb"), ("takei2021_1mb", "Takei 2021\ngenome, 1 Mb")]
     w = 0.11
     for i_, (ds, _) in enumerate(dsets):
@@ -426,10 +435,10 @@ def p_sim(fig, d, x, y):
 
 def sc_legend(fig, x, y):
     """Shared legend of the single-cell methods (panels e, f), top-left at (x, y) mm."""
-    order = ["nucdyn_gpu", "nucdyn_cpu", "orig", "sic", "hickit", "pop_mean", "random_polymer"]
+    order = ["robust", "nucdyn_gpu", "nucdyn_cpu", "orig", "sic", "hickit", "pop_mean", "random_polymer"]
     hs = [mpl.patches.Patch(color=SC_METHODS[m][1], label=SC_METHODS[m][0]) for m in order]
     fig.legend(handles=hs, loc="upper left", bbox_to_anchor=(x / W, 1 - y / H), ncol=4, frameon=False,
-               fontsize=5.3, handlelength=1, handleheight=0.7, columnspacing=1.0)
+               fontsize=5.3, handlelength=1, handleheight=0.7, columnspacing=0.8)
 
 
 # row 3 — population reconstruction
