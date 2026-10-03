@@ -14,10 +14,10 @@ source "$SCRATCH/uchrom-nd/repo-diploid/benchmarks/screcon/sherlock/_env_diploid
 $PY $REPO/example-data/download_data.py --tan2018_gm12878 --dest "$DATA" || echo "some downloads failed (see above)"
 mkdir -p "$TAN18/cells"
 for k in $(seq -w 1 17); do
-  t=$(ls "$TAN18"/GSM*_gm12878_$k.tar.gz 2>/dev/null | head -1)
+  t=$(ls "$TAN18"/GSM*_gm12878_$k.tar.gz 2>/dev/null | head -1 || true)
   [ -n "$t" ] || { echo "missing tarball of cell $k"; continue; }
   d=$TAN18/cells/gm12878_$k
   [ -f "$d/gm12878_$k.pairs.gz" ] || { mkdir -p "$d" && tar -xzf "$t" -C "$d"; }
-  echo "cell $k: $(zcat "$d/gm12878_$k.pairs.gz" | grep -vc '^#') contacts; Dip-C 3dg: $(ls "$TAN18"/GSM*_gm12878_$k.impute3.round4.clean.3dg.txt.gz 2>/dev/null | wc -l)"
+  echo "cell $k: $(zcat "$d/gm12878_$k.pairs.gz" | grep -vc '^#') contacts; Dip-C 3dg: $(ls "$TAN18"/GSM*_gm12878_$k.impute3.round4.clean.3dg.txt.gz 2>/dev/null | wc -l || true)"
 done
 du -sh "$TAN18"

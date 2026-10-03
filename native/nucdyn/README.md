@@ -79,6 +79,46 @@ protocol bit for bit; the existing protocols are unchanged
 (`tests/regression.rs`, golden hashes recorded before `robust` was added).
 Development log: `benchmarks/screcon/robust_devlog.md`.
 
+### Diploid (homolog-resolved) input — protocols `nuc_dynamics_2017` and `robust` (EMber)
+
+`calc_genome_structure(..., hap_a=, hap_b=, ploidy=, phase_prior=)` (U-Chrom:
+`reconstruct_ember` / `reconstruct_nucdyn` on hickit `.pairs` with `phase0` / `phase1` or Dip-C
+`.con`; `src/diploid.rs`).  Each contact end has a haplotype (0, 1, unknown); each chromosome one
+or two copies (`ploidy="auto"`: male — X and Y single — when a Y chromosome is present, as hickit).
+
+* **Particles**: one chain per chromosome copy (copy id `2 c + h`), both copies on the haploid
+  particle grid of the chromosome; same schedule, start, backbone, repulsion and filters as the
+  haploid protocols (isolated contacts on genomic positions; violated contacts: closest
+  candidate).
+* **Candidates**: a phased end is on its homolog, an unphased end on either copy (single-copy
+  chromosomes: the copy) → 1, 2 or 4 candidate copy pairs.  Unphased ends of a cis contact
+  closer than `diploid_cis_sep` (10 Mb) are put on the same homolog — hickit's imputation prior
+  (`phase.c:spacial_adj`) gives P(same homolog) ≥ 0.99 there.  Contacts are binned per stage by
+  their set of candidate particle pairs (2017 bounds from the bin count).
+* **2017**: the candidates of a bin form one ambiguous restraint — the combined distance
+  (Σ d⁻⁴)^(−1/4) of the original's ambiguity groups (`dyn_util.pyx getRestraintForce`
+  `restAmbig` strides, unused by the 2017 `master` driver; NucProcess writes homolog ambiguity
+  as NCC ambiguity groups over `chrN.a` / `chrN.b`, release_1.3 `homologous_pair`).
+* **EMber**: the copy pair is a latent variable of the mixture model:
+  P(true, c) = o π_c (1−ε) φ_c / [o (1−ε) Σ π φ + ε / N_pairs] (π: uniform prior over the
+  candidates, or `phase_prior`, e.g. hickit's imputed `phase_prob00..11`).  From the first
+  re-weighted stage, with `robust_dip_split = true` every candidate is its own restraint
+  weighted by P(true, c); with `false` the candidates stay one ambiguous restraint weighted by
+  P(true).  ε and the kernel width are fitted with the marginal likelihood Σ π φ.  The
+  posteriors P(c | true) are the structure-inferred phases (the soft counterpart of Dip-C's
+  `impute3` and of IGM's A-step).
+* **Output**: copy chains; per input contact `phase_probs` (P(hap_a, hap_b | true): EM
+  posteriors of the last update, or 1 for the closest candidate of the final 2017 structure)
+  and, for EMber, `contact_weights` = P(true).
+* The dynamics are unchanged; ambiguous groups and weights were already supported on the CPU
+  and the GPU.  Haploid input takes the old code path: `tests/regression.rs` pins
+  nuc_dynamics_2017, release_1.3 and EMber's frozen defaults (macOS, Sherlock, GitHub runner).
+* Checks: `diploid::tests` (candidates and the cis rule, binning, EM phase inference, end-to-end
+  toy for both protocols: per-copy distance r and phase accuracy), `gpu::tests::
+  gpu_matches_cpu_ambiguous_groups` (max diff ~2e-5 after 10 steps for 2017, weighted and
+  per-model weights) and `gpu_matches_cpu_diploid_protocol`; Python `tests/recon/test_diploid.py`.
+  Validation on imaging truths and Dip-C GM12878: `benchmarks/screcon/diploid_devlog.md`.
+
 ### Where each element of the original is implemented (2017 protocol)
 
 | Original (`master`) | What it does | Here |
@@ -139,8 +179,9 @@ K = 215 N / n_contacts, output ÷ bead and superposed).
   `gpu_matches_cpu_for_short_runs`); ensembles agree statistically.
 * **Not implemented**: the paper's final round (ambiguous contacts
   disambiguated and isolated contacts re-added with the 100 kb structures,
-  then one more 100 kb calculation — in neither code version), diploid /
-  homologue ambiguity handling of release_1.3, starting from an N3D file,
+  then one more 100 kb calculation — in neither code version), release_1.3's
+  homologue handling for its own protocol (`resolve_homolog_ambiguous`, commented out there;
+  diploid input runs with the 2017 protocol and EMber, see above), starting from an N3D file,
   intermediate file output, the release_1.3 list-overflow quirk.
 
 ## Protocol "igm": population modelling of bulk Hi-C

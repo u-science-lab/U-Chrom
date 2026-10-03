@@ -45,7 +45,7 @@ for k in $CELLS; do
   [ -f "$IN" ] || { echo "no input for cell $k"; continue; }
   C=$O/cell$kk
   mkdir -p "$C"/{ref,full,mask,heldout,scores}
-  dipc=$(ls "$TAN18"/GSM*_gm12878_$kk.impute3.round4.clean.3dg.txt.gz "$TAN18"/GSM*_rep[12]_gm12878_$kk.impute3.round4.clean.3dg.txt.gz 2>/dev/null)
+  dipc=$(ls "$TAN18"/GSM*_gm12878_$kk.impute3.round4.clean.3dg.txt.gz "$TAN18"/GSM*_rep[12]_gm12878_$kk.impute3.round4.clean.3dg.txt.gz 2>/dev/null || true)
   if [[ " $STEPS " == *" ref "* ]]; then
     [ -f "$C/ref/dipc.npz" ] || $PY $SC/diploid_real.py ref --res $RES --contacts "$IN" --out "$C/ref/dipc.npz" $dipc
     [ -f "$C/ref/hickit.npz" ] || $PY $SC/diploid_real.py ref --res $RES --contacts "$IN" --out "$C/ref/hickit.npz" "$TAN18/cells/gm12878_$kk/gm12878_$kk.3dg.gz"
