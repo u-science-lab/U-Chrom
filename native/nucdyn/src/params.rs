@@ -178,6 +178,9 @@ pub struct Params {
     /// of an ambiguous contact is its own restraint, weighted by its posterior probability
     /// (true contact on that copy pair).  False: the candidates stay one ambiguous restraint
     /// (NucDynamics combined distance) weighted by the probability that the contact is true.
+    /// Default false: chosen on the diploid development set (benchmarks/screcon/diploid_devlog.md:
+    /// splitting the soft responsibilities pulls both homologs together early and loses
+    /// ~0.2 cis / ~0.3 whole-genome Spearman on the imaging truths).
     pub robust_dip_split: bool,
 }
 
@@ -257,7 +260,7 @@ impl Default for Params {
             robust_sample_dyn_steps: 20,
             robust_sample_snapshots: 1,
             diploid_cis_sep: 10_000_000,
-            robust_dip_split: true,
+            robust_dip_split: false,
         }
     }
 }

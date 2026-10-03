@@ -35,10 +35,12 @@
 //!   P(true, c | structure) = o π_c (1 - ε) φ_c / [ o (1 - ε) Σ_c' π_c' φ_c' + ε / N_pairs ]
 //!   ```
 //!
-//!   (o: the contact's prior odds, φ = f(d) / G).  From the first re-weighted stage on,
-//!   every candidate is its own restraint with weight 1 − Π_contacts (1 − P(true, c))
-//!   (`robust_dip_split`; else the candidates stay one ambiguous restraint weighted by
-//!   P(true)); ε and the kernel width are fitted as in `robust.rs` with the marginal
+//!   (o: the contact's prior odds, φ = f(d) / G).  From the first re-weighted stage on, the
+//!   candidates of a bin stay one ambiguous restraint (combined distance, as the 2017 protocol)
+//!   weighted by P(true) = Σ_c P(true, c) combined over its contacts (default); with
+//!   `robust_dip_split` every candidate is its own restraint with weight
+//!   1 − Π_contacts (1 − P(true, c)) — the literal soft M-step, which on the development set
+//!   pulls both homologs of an uncertain contact together and loses accuracy; ε and the kernel width are fitted as in `robust.rs` with the marginal
 //!   likelihood Σ_c π_c φ_c.  Phasing is thereby inferred from the structure: the soft
 //!   counterpart of Dip-C's `impute3` (which assigns a contact to the candidate whose 3-D
 //!   distance is < 0.5 x the second best) and of IGM's A-step (which assigns ambiguous
@@ -1055,7 +1057,7 @@ mod tests {
         let act = vec![true; n];
         let dip = DiploidInput { hap_a: &ha, hap_b: &hb, ploidy: &[2, 2, 2], prior: None };
         let inp = Input { dip: Some(dip), ..input(&names, &ca, &pa, &cb, &pb, &amb, &act) };
-        for (label, proto, split) in [("nuc_dynamics_2017", "nuc_dynamics_2017", true), ("robust", "robust", true), ("robust (no split)", "robust", false)] {
+        for (label, proto, split) in [("nuc_dynamics_2017", "nuc_dynamics_2017", true), ("robust", "robust", false), ("robust (split)", "robust", true)] {
             let p = Params {
                 protocol: proto.into(),
                 robust_dip_split: split,

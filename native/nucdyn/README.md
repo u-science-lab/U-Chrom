@@ -102,9 +102,9 @@ or two copies (`ploidy="auto"`: male — X and Y single — when a Y chromosome 
 * **EMber**: the copy pair is a latent variable of the mixture model:
   P(true, c) = o π_c (1−ε) φ_c / [o (1−ε) Σ π φ + ε / N_pairs] (π: uniform prior over the
   candidates, or `phase_prior`, e.g. hickit's imputed `phase_prob00..11`).  From the first
-  re-weighted stage, with `robust_dip_split = true` every candidate is its own restraint
-  weighted by P(true, c); with `false` the candidates stay one ambiguous restraint weighted by
-  P(true).  ε and the kernel width are fitted with the marginal likelihood Σ π φ.  The
+  re-weighted stage the candidates stay one ambiguous restraint weighted by P(true) (default;
+  `robust_dip_split = true`: every candidate its own restraint weighted by P(true, c) — the
+  literal soft M-step, clearly worse on the development set, `benchmarks/screcon/diploid_devlog.md`).  ε and the kernel width are fitted with the marginal likelihood Σ π φ.  The
   posteriors P(c | true) are the structure-inferred phases (the soft counterpart of Dip-C's
   `impute3` and of IGM's A-step).
 * **Output**: copy chains; per input contact `phase_probs` (P(hap_a, hap_b | true): EM

@@ -31,6 +31,7 @@ nvidia-smi --query-gpu=name --format=csv,noheader || true
 run_method() {   # method table out seed
   local m=$1 tab=$2 out=$3 seed=$4
   [ -f "$out" ] && return 0
+  mkdir -p "$(dirname "$out")"
   case $m in
     ember)         $PY $SC/run_diploid.py --method ember --contacts "$tab" --res $RES --device gpu --n-models $NM --seed $seed --label $m --out "$out" ;;
     ember_nosplit) $PY $SC/run_diploid.py --method ember --params '{"robust_dip_split": false}' --contacts "$tab" --res $RES --device gpu --n-models $NM --seed $seed --label $m --out "$out" ;;
@@ -45,7 +46,7 @@ for k in $CELLS; do
   [ -f "$IN" ] || { echo "no input for cell $k"; continue; }
   C=$O/cell$kk
   mkdir -p "$C"/{ref,full,mask,heldout,scores}
-  dipc=$(ls "$TAN18"/GSM*_gm12878_$kk.impute3.round4.clean.3dg.txt.gz "$TAN18"/GSM*_rep[12]_gm12878_$kk.impute3.round4.clean.3dg.txt.gz 2>/dev/null || true)
+  dipc=$(ls "$TAN18"/GSM*_gm12878_$kk.impute3.round4.clean.3dg.txt.gz 2>/dev/null | sort -u || true)   # main + rep1 + rep2
   if [[ " $STEPS " == *" ref "* ]]; then
     [ -f "$C/ref/dipc.npz" ] || $PY $SC/diploid_real.py ref --res $RES --contacts "$IN" --out "$C/ref/dipc.npz" $dipc
     [ -f "$C/ref/hickit.npz" ] || $PY $SC/diploid_real.py ref --res $RES --contacts "$IN" --out "$C/ref/hickit.npz" "$TAN18/cells/gm12878_$kk/gm12878_$kk.3dg.gz"
@@ -54,7 +55,7 @@ for k in $CELLS; do
     for m in $METHODS; do for s in 1 2; do run_method $m "$IN" "$C/full/${m}_s$s.npz" $s; done; done
     models=(); labels=()
     for m in $METHODS; do for s in 1 2; do [ -f "$C/full/${m}_s$s.npz" ] && { models+=("$C/full/${m}_s$s.npz"); labels+=("${m}_s$s"); }; done; done
-    $PY $SC/diploid_real.py score --refs "$C/ref/dipc.npz" "$C/ref/hickit.npz" --models "${models[@]}" --labels "${labels[@]}" \
+    [ ${#models[@]} -gt 0 ] && $PY $SC/diploid_real.py score --refs "$C/ref/dipc.npz" "$C/ref/hickit.npz" --models "${models[@]}" --labels "${labels[@]}" \
       --out "$C/scores/full.json" > "$C/scores/full.log" 2>&1 || echo "score full failed"
   fi
   if [[ " $STEPS " == *" mask "* ]]; then
@@ -63,7 +64,7 @@ for k in $CELLS; do
     for m in $METHODS hickit; do run_method $m "$MT" "$C/mask/$m.npz" 1; done
     models=(); labels=()
     for m in $METHODS hickit; do [ -f "$C/mask/$m.npz" ] && { models+=("$C/mask/$m.npz"); labels+=("$m"); }; done
-    $PY $SC/diploid_real.py score --refs "$C/ref/dipc.npz" "$C/ref/hickit.npz" --models "${models[@]}" --labels "${labels[@]}" \
+    [ ${#models[@]} -gt 0 ] && $PY $SC/diploid_real.py score --refs "$C/ref/dipc.npz" "$C/ref/hickit.npz" --models "${models[@]}" --labels "${labels[@]}" \
       --table "$MT" --mask "$MT.mask.npz" --out "$C/scores/mask.json" > "$C/scores/mask.log" 2>&1 || echo "score mask failed"
   fi
   if [[ " $STEPS " == *" heldout "* ]]; then
@@ -74,6 +75,7 @@ for k in $CELLS; do
       for m in $METHODS hickit; do run_method $m "$F/train.pairs.gz" "$C/heldout/fold$f/$m.npz" 1; done
       models=(); labels=()
       for m in $METHODS hickit; do [ -f "$C/heldout/fold$f/$m.npz" ] && { models+=("$C/heldout/fold$f/$m.npz"); labels+=("$m"); }; done
+      [ ${#models[@]} -gt 0 ] || continue
       for ev in eval_pairs eval_pairs_cis; do
         $PY $SC/heldout.py score --eval "$F/$ev.npz" --models "${models[@]}" --labels "${labels[@]}" \
           --out "$C/scores/heldout_fold${f}_$ev.json" > /dev/null 2>&1 || echo "score heldout fold $f $ev failed"

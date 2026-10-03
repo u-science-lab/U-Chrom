@@ -125,8 +125,12 @@ def write_phased(path, c: Phased, chrom_sizes: dict | None = None) -> int:
             if chrom_sizes and ch in chrom_sizes:
                 fh.write(f"#chromosome: {ch} {int(chrom_sizes[ch])}\n")
         fh.write("#columns: readID chr1 pos1 chr2 pos2 strand1 strand2 phase0 phase1\n")
-        for k in range(len(c)):
-            fh.write(f"r{k}\t{c.chrom_a[k]}\t{c.pos_a[k]}\t{c.chrom_b[k]}\t{c.pos_b[k]}\t.\t.\t{h(c.hap_a[k])}\t{h(c.hap_b[k])}\n")
+        import pandas as pd
+        hs = lambda x: np.where(x < 0, ".", x.astype(str))  # noqa: E731
+        pd.DataFrame({"r": np.char.add("r", np.arange(len(c)).astype(str)), "c1": c.chrom_a, "p1": c.pos_a,
+                      "c2": c.chrom_b, "p2": c.pos_b, "s1": ".", "s2": ".", "h1": hs(c.hap_a), "h2": hs(c.hap_b)}
+                     ).to_csv(fh, sep="\t", header=False, index=False)
+    del h
     return len(c)
 
 
