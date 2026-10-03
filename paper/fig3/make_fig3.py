@@ -54,7 +54,7 @@ OURS, PAPER = INDIGO, "#9aa0a8"          # U-Chrom vs the original / published r
 OURS2 = "#7f9bd0"                        # U-Chrom, second backend (CPU)
 ORIG = "#6b7079"                         # original code
 OTHER = "#c9a227"                        # external baseline (HIPPS / DIMES)
-NEW, NEW_LABEL = "#d1495b", "new method"  # the new single-cell method (protocol "robust"; public name TBD)
+NEW, NEW_LABEL = "#d1495b", "EMber"  # the new single-cell method (U-Chrom EMber; engine protocol "robust")
 # methods of the single-cell benchmark: key -> (label, colour)
 SC_METHODS = {"robust": (NEW_LABEL, NEW), "nucdyn_gpu": ("U-Chrom GPU", OURS), "nucdyn_cpu": ("U-Chrom CPU", OURS2),
               "orig": ("NucDynamics (original)", ORIG), "sic": ("Si-C", PURPLE), "hickit": ("hickit (Dip-C)", TEAL),
@@ -329,9 +329,9 @@ SPEED_STYLE = {   # (method, threads) -> label, colour, line style, marker
     ("orig", 1): ("original", ORIG, "-", "s"),
     ("sic", 1): ("Si-C", PURPLE, "-", "^"),
     ("hickit", 1): ("hickit", TEAL, "-", "v"),
-    ("robust_gpu", 0): ("new, GPU", NEW, "-", "D"),
-    ("robust_cpu", 16): ("new, CPU 16 thr.", NEW, "-", "o"),
-    ("robust_cpu", 1): ("new, CPU 1 thr.", NEW, (0, (2, 1)), "o"),
+    ("robust_gpu", 0): ("EMber GPU", NEW, "-", "D"),
+    ("robust_cpu", 16): ("EMber CPU 16 thr.", NEW, "-", "o"),
+    ("robust_cpu", 1): ("EMber CPU 1 thr.", NEW, (0, (2, 1)), "o"),
 }
 
 
