@@ -149,6 +149,12 @@ def reconstruct_nucdyn(
         ``"release_1.3"``: the later bead-size-scaled version with
         ambiguity resolution and model selection (2 x ``n_models`` above 1 Mb,
         the ``n_models`` closest to the mean kept).
+        ``"robust"``: the 2017 protocol with a noise-aware observation model
+        (contact restraints re-weighted by their posterior probability of
+        being true contacts; false-contact rate and contact-kernel width
+        learned by EM; ``robust_*`` engine parameters).  Adds the results
+        ``<key_added>.em`` (EM log) and ``<key_added>.contact_weights``
+        (final weight of every input contact, NaN = filtered out).
     particle_sizes
         Hierarchical particle sizes in bp (coarse to fine).
     genome_ranges
@@ -205,7 +211,8 @@ def reconstruct_nucdyn(
         cd.layers[f"model_{k:0{width}d}"] = coords[k].copy()
     cd.uns.setdefault("xyz_unit", "particle radii (NucDynamics)")
     if key_added is not None:
-        stages = pd.DataFrame([{k: v for k, v in s.items() if k != "removed_models"} for s in res["stages"]])
+        stages = pd.DataFrame([{k: v for k, v in s.items() if k not in ("removed_models", "robust")}
+                               for s in res["stages"]])
         info = {
             "engine": "uchrom_nucdyn", "engine_version": un.__version__, "device": dev,
             "gpu": un.gpu_info() if dev == "gpu" else None, "protocol": protocol,
@@ -221,4 +228,14 @@ def reconstruct_nucdyn(
                        params={k: v for k, v in res["params"].items() if k != "verbose"},
                        inputs={"contacts": str(contacts) if not isinstance(contacts, pd.DataFrame) else "DataFrame",
                                "n_contacts": int(len(c["pos_a"]))})
+        if protocol == "robust":
+            # EM log (one row per update) and the final weight of every input contact
+            em = pd.DataFrame([{"stage": s["stage"], "particle_size": s["particle_size"], **u}
+                               for s in res["stages"] for u in s.get("robust", [])])
+            cd.results.set(f"{key_added}.em", em, kind="table",
+                           function="uchrom.recon.sc.nucdyn.reconstruct_nucdyn", params={"protocol": "robust"})
+            cd.results.set(f"{key_added}.contact_weights", np.asarray(res["contact_weights"], np.float64),
+                           kind="array", function="uchrom.recon.sc.nucdyn.reconstruct_nucdyn",
+                           params={"protocol": "robust"},
+                           inputs={"rows": "input contacts in load_contacts order; NaN = filtered out"})
     return cd

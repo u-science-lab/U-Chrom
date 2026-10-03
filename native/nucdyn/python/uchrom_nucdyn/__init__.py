@@ -65,6 +65,7 @@ def calc_genome_structure(
     *,
     ambiguity: Optional[Sequence[int]] = None,
     active: Optional[Sequence[bool]] = None,
+    prior_lr: Optional[Sequence[float]] = None,
     **params: Any,
 ) -> Dict[str, Any]:
     """Run the hierarchical NucDynamics protocol on single-cell contacts.
@@ -80,6 +81,10 @@ def calc_genome_structure(
     active
         NCC activity flag; inactive contacts are only considered from the
         ``struct_ambig_size`` stage on.  ``None``: all active.
+    prior_lr
+        Protocol ``"robust"`` only: per-contact likelihood ratio (true / false)
+        from evidence other than the structure; multiplies each contact's
+        posterior odds (1 = no information, 0 = certainly false).
     **params
         Any field of :func:`default_params` (``particle_sizes``, ``n_models``,
         ``seed``, ``device``, ``n_threads``, ``temp_steps``, ...).
@@ -90,7 +95,9 @@ def calc_genome_structure(
     model centred; superposed only in the release_1.3 protocol), ``chrom`` /
     ``position`` (per particle, see ``position_convention``),
     ``particle_size``, ``model_rmsds`` (release_1.3), ``stages`` (per-stage
-    log) and ``seconds_total``.
+    log), ``seconds_total`` and, for ``protocol="robust"``, ``contact_weights``
+    (per input contact: the final weight of its restraint, the posterior
+    probability that it is a true contact; NaN when it was filtered out).
     """
     ca = np.asarray(chrom_a).astype(str)
     cb = np.asarray(chrom_b).astype(str)
@@ -114,7 +121,8 @@ def calc_genome_structure(
         if np.isscalar(p[key]):
             p[key] = [int(p[key])]
     p["particle_sizes"] = [float(s) for s in p["particle_sizes"]]
-    res = _calc_genome_structure(names, ia, pa, ib, pb, amb, act, json.dumps(p))
+    lr = None if prior_lr is None else np.ascontiguousarray(prior_lr, dtype=np.float64)
+    res = _calc_genome_structure(names, ia, pa, ib, pb, amb, act, json.dumps(p), lr)
     chroms = [names[c] for c in res["chroms"]]
     chrom = np.concatenate([np.full(len(s), c, dtype=object) for c, s in zip(chroms, res["seq_pos"])])
     start = np.concatenate(res["seq_pos"]).astype(np.int64)
@@ -125,11 +133,13 @@ def calc_genome_structure(
         # = end of the particle's interval (start - size, start]; release_1.3 =
         # start of [start, start + size)
         "position": start,
-        "position_convention": "end" if p["protocol"] == "nuc_dynamics_2017" else "start",
+        "position_convention": "end" if p["protocol"] in ("nuc_dynamics_2017", "robust") else "start",
         "particle_size": res["particle_size"],
         "model_rmsds": list(res["model_rmsds"]),
         "stages": json.loads(res["stages_json"]),
         "seconds_total": res["seconds_total"],
+        # protocol "robust": final restraint weight of every input contact (NaN = filtered out)
+        "contact_weights": np.asarray(res["contact_weights"], np.float64),
         "params": p,
     }
 

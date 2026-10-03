@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 pub struct Params {
     /// "nuc_dynamics_2017" (the `master` code that produced the Stevens et
     /// al. 2017 structures; default) or "release_1.3" (the later
-    /// bead-size-scaled protocol with model selection).
+    /// bead-size-scaled protocol with model selection) or "robust" (the 2017
+    /// protocol with a noise-aware observation model: contact restraints
+    /// re-weighted by their posterior probability of being true, see
+    /// `robust.rs` and the `robust_*` fields).
     pub protocol: String,
     /// Hierarchical particle sizes in bp, applied in the given (descending) order.
     pub particle_sizes: Vec<f64>,
@@ -88,6 +91,84 @@ pub struct Params {
     pub n_threads: usize,
     /// Print progress to stderr.
     pub verbose: bool,
+    // ---- protocol "robust" only (ignored by the other protocols) ----
+    // Defaults: the parameter set recommended from the development set
+    // (benchmarks/screcon/robust_devlog.md: M2 variant es4 + M3 candidate c2 —
+    // 2,500 MD steps per stage, short cool refinement, sampling at T = 1000,
+    // adaptive resolution below 25 kb).
+    /// First stage whose restraints are re-weighted (0-based; the weights of
+    /// stage s come from the structure of stage s - 1, so >= 1).
+    pub robust_start_stage: usize,
+    /// Schedule of the robust protocol (empty: `temp_steps` / `dynamics_steps`);
+    /// one value = every stage, else one per particle size.
+    pub robust_temp_steps: Vec<usize>,
+    pub robust_dynamics_steps: Vec<usize>,
+    /// Contact kernel f(d) = exp(-((d - d0)+ / s)^k), d in particle radii of
+    /// the structure the weights are computed from; k = 2 ("gauss") or 1 ("exp").
+    pub robust_kernel: String,
+    pub robust_d0: f64,
+    /// Non-empty: learn d0 with s (likelihood over the grid product).
+    pub robust_d0_grid: Vec<f64>,
+    /// Kernel width s (start value when learned).
+    pub robust_s: f64,
+    /// Learn s by maximising the mixture likelihood over `robust_s_grid`.
+    pub robust_learn_s: bool,
+    pub robust_s_grid: Vec<f64>,
+    /// False-contact rate: start value / learned by EM.
+    pub robust_eps: f64,
+    pub robust_learn_eps: bool,
+    pub robust_eps_min: f64,
+    pub robust_eps_max: f64,
+    /// Responsibilities per model (each model its own weights) instead of
+    /// from the ensemble-mean contact probability (one weight set).
+    pub robust_per_model: bool,
+    /// EM updates per stage: the annealing schedule of a re-weighted stage is
+    /// split into this many parts, weights recomputed before each.
+    pub robust_segments: usize,
+    /// Lower bound of a restraint weight.
+    pub robust_w_floor: f64,
+    /// Extra annealing passes at the final particle size (weights from the
+    /// structure of the previous pass).
+    pub robust_refine: usize,
+    /// Keep the 2017 removal of contacts violated by >= 6 radii.
+    pub robust_remove_violated: bool,
+    /// Weight of a restraint from c contacts: 1 - (1 - r)^c (true) or r (false).
+    pub robust_count_combine: bool,
+    /// Particles sampled for the all-pairs kernel sum when there are more
+    /// (0: all).
+    pub robust_pair_sample: usize,
+    /// > 0: scale the restraint force constant by min(1, x N / W), W the sum of
+    /// contact-restraint weights, N the particles (bounds the contact pull per
+    /// particle at high depth).  0: the 2017 constant.
+    pub robust_force_norm: f64,
+    /// > 0: restraint target distance from min(count, cap) ** power_law.
+    pub robust_count_cap: u32,
+    /// > 0: "no contact" term (Poisson capture) on every pair |i - j| >= 2:
+    /// U = x q exp(-((d - nc_d0)+ / nc_s)^2), q the capture efficiency of the
+    /// latest EM update (at most `robust_nc_qmax`); 0: off.
+    pub robust_nc_scale: f64,
+    pub robust_nc_d0: f64,
+    pub robust_nc_s: f64,
+    pub robust_nc_qmax: f64,
+    /// > 0: local-support evidence (`support.rs`) with window half-width
+    /// `robust_support_rel` x the final particle size; multiplies `prior_lr`.
+    pub robust_support_rel: f64,
+    /// Adaptive resolution: at particle sizes <= this (bp; 0 = never) runs of
+    /// contact-free particles are dropped and interpolated in the output; a
+    /// backbone gap of g sizes gets bounds x g^`robust_merge_nu`.
+    pub robust_merge_below: f64,
+    /// Refinement passes: temperature steps (0 = as the final stage) and start
+    /// temperature (0 = `temp_start`).
+    pub robust_refine_temp_steps: usize,
+    pub robust_refine_temp_start: f64,
+    pub robust_merge_nu: f64,
+    /// Sampling after the final stage (0 = off): temperature, temperature steps
+    /// per snapshot, MD steps per temperature step (0 = as the stage),
+    /// snapshots per model (each becomes an output model).
+    pub robust_sample_temp: f64,
+    pub robust_sample_steps: usize,
+    pub robust_sample_dyn_steps: usize,
+    pub robust_sample_snapshots: usize,
 }
 
 impl Default for Params {
@@ -130,11 +211,57 @@ impl Default for Params {
             device: "cpu".to_string(),
             n_threads: 0,
             verbose: false,
+            robust_start_stage: 1,
+            robust_temp_steps: vec![50],
+            robust_dynamics_steps: vec![50],
+            robust_kernel: "exp".to_string(),
+            robust_d0: 2.0,
+            robust_d0_grid: vec![],
+            robust_s: 1.5,
+            robust_learn_s: true,
+            robust_s_grid: vec![0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0],
+            robust_eps: 0.1,
+            robust_learn_eps: true,
+            robust_eps_min: 1e-4,
+            robust_eps_max: 0.5,
+            robust_per_model: false,
+            robust_segments: 2,
+            robust_w_floor: 0.0,
+            robust_refine: 1,
+            robust_remove_violated: true,
+            robust_count_combine: true,
+            robust_pair_sample: 4000,
+            robust_force_norm: 0.0,
+            robust_count_cap: 0,
+            robust_nc_scale: 0.0,
+            robust_nc_d0: 2.0,
+            robust_nc_s: 0.5,
+            robust_nc_qmax: 10.0,
+            robust_support_rel: 4.0,
+            robust_merge_below: 25000.0,
+            robust_refine_temp_steps: 10,
+            robust_refine_temp_start: 500.0,
+            robust_merge_nu: 0.5,
+            robust_sample_temp: 1000.0,
+            robust_sample_steps: 20,
+            robust_sample_dyn_steps: 20,
+            robust_sample_snapshots: 1,
         }
     }
 }
 
 impl Params {
+    /// The 2017 code's units and restraint form (`nuc_dynamics_2017`, `robust`).
+    pub fn is_2017_family(&self) -> bool {
+        matches!(self.protocol.as_str(), "nuc_dynamics_2017" | "robust")
+    }
+    /// protocol robust: `robust_temp_steps` when set, else `temp_steps`
+    pub fn robust_temp_steps_for(&self, stage: usize) -> usize {
+        if self.robust_temp_steps.is_empty() { by_stage(&self.temp_steps, stage) } else { by_stage(&self.robust_temp_steps, stage) }
+    }
+    pub fn robust_dyn_steps_for(&self, stage: usize) -> usize {
+        if self.robust_dynamics_steps.is_empty() { by_stage(&self.dynamics_steps, stage) } else { by_stage(&self.robust_dynamics_steps, stage) }
+    }
     pub fn temp_steps_for(&self, stage: usize) -> usize {
         by_stage(&self.temp_steps, stage)
     }
@@ -168,6 +295,35 @@ impl Params {
         }
         match self.protocol.as_str() {
             "nuc_dynamics_2017" | "release_1.3" => {}
+            "robust" => {
+                if self.robust_start_stage == 0 {
+                    return Err("robust_start_stage must be >= 1".into());
+                }
+                if !matches!(self.robust_kernel.as_str(), "gauss" | "exp") {
+                    return Err(format!("unknown robust_kernel {:?}", self.robust_kernel));
+                }
+                if self.robust_s <= 0.0 || self.robust_s_grid.iter().any(|&x| x <= 0.0) {
+                    return Err("robust kernel widths must be positive".into());
+                }
+                let (e0, e, e1) = (self.robust_eps_min, self.robust_eps, self.robust_eps_max);
+                if !(0.0 < e0 && e0 <= e && e <= e1 && e1 < 1.0) {
+                    return Err("need 0 < robust_eps_min <= robust_eps <= robust_eps_max < 1".into());
+                }
+                for (name, v) in [("robust_temp_steps", &self.robust_temp_steps), ("robust_dynamics_steps", &self.robust_dynamics_steps)] {
+                    if !v.is_empty() && ((v.len() != 1 && v.len() != ns) || v.contains(&0)) {
+                        return Err(format!("{name} must be empty or have 1 or {ns} positive entries"));
+                    }
+                }
+                if self.robust_segments == 0 {
+                    return Err("robust_segments must be >= 1".into());
+                }
+                if self.robust_nc_scale > 0.0 && (!self.use_cells || self.robust_nc_s <= 0.0) {
+                    return Err("robust_nc_scale needs use_cells and robust_nc_s > 0".into());
+                }
+                if !(0.0..=1.0).contains(&self.robust_w_floor) {
+                    return Err("robust_w_floor must be in [0, 1]".into());
+                }
+            }
             p => return Err(format!("unknown protocol {p:?}")),
         }
         match self.device.as_str() {
@@ -215,4 +371,28 @@ pub fn anneal_schedule(temp_start: f64, temp_end: f64, temp_steps: usize, bead: 
             (temp * bead * bead, repulse / (bead * bead))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn robust_defaults_are_the_recommended_set_and_leave_other_protocols_alone() {
+        let p = Params { protocol: "robust".into(), ..Default::default() };
+        p.validate().unwrap();
+        // M3 candidate c2: 50 x 50 per stage, refinement 10 steps from T 500, sampling at T 1000 (20 x 20)
+        assert_eq!((p.robust_temp_steps_for(3), p.robust_dyn_steps_for(3)), (50, 50));
+        assert_eq!((p.robust_refine_temp_steps, p.robust_refine_temp_start), (10, 500.0));
+        assert_eq!((p.robust_sample_temp, p.robust_sample_steps, p.robust_sample_dyn_steps), (1000.0, 20, 20));
+        assert_eq!(p.robust_merge_below, 25000.0);
+        // the shared schedule fields keep the NucDynamics defaults
+        let q = Params::default();
+        assert_eq!((q.temp_steps_for(0), q.dyn_steps_for(0)), (500, 100));
+        // an empty robust schedule falls back to temp_steps / dynamics_steps
+        let r = Params { robust_temp_steps: vec![], robust_dynamics_steps: vec![], ..p.clone() };
+        assert_eq!((r.robust_temp_steps_for(0), r.robust_dyn_steps_for(0)), (500, 100));
+        let bad = Params { robust_temp_steps: vec![1, 2], ..p };
+        assert!(bad.validate().is_err());
+    }
 }

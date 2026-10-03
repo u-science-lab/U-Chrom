@@ -69,8 +69,21 @@ pub fn calc_particles(d: &ContactDict, chroms: &[u32], ps: i64) -> BTreeMap<u32,
 /// `N ** power_law` (float32 arithmetic as the original), bounds
 /// `lower`/`upper` x target.
 pub fn contact_restraints(d: &ContactDict, st: &Structure, power_law: f64, lower: f64, upper: f64) -> (Vec<Restraint>, usize) {
+    let (r, n, _) = contact_restraints_counted(d, st, power_law, lower, upper);
+    (r, n)
+}
+
+/// `contact_restraints` + the number of contacts behind each restraint.
+pub fn contact_restraints_counted(
+    d: &ContactDict,
+    st: &Structure,
+    power_law: f64,
+    lower: f64,
+    upper: f64,
+) -> (Vec<Restraint>, usize, Vec<u32>) {
     let (exp32, lo32, hi32) = (power_law as f32, lower as f32 as f64, upper as f32 as f64);
     let mut out = vec![];
+    let mut counts = vec![];
     let mut n_used = 0usize;
     for (&(ca, cb), contacts) in d {
         let (Some(sa), Some(sb)) = (st.chrom_slot(ca), st.chrom_slot(cb)) else {
@@ -100,9 +113,10 @@ pub fn contact_restraints(d: &ContactDict, st: &Structure, power_law: f64, lower
                 ambig: 0,
                 weight: 1.0,
             });
+            counts.push(cnt);
         }
     }
-    (out, n_used)
+    (out, n_used, counts)
 }
 
 /// Backbone restraints (`concatenate_restraints`), float32 bounds.
@@ -220,7 +234,21 @@ pub fn setup_stage(
     let seq_pos = calc_particles(d, chroms, ps);
     let mut st = Structure::new(&seq_pos);
     let n = st.n_particles();
-    let coords: Vec<Vec<V3>> = match prev {
+    st.coords = start_coords(&st, num_models, prev, p, stage);
+    let (mut rest, n_used) = contact_restraints(d, &st, p.dist_power_law, p.contact_dist_lower, p.contact_dist_upper);
+    let mut all = backbone_restraints(&st, ps, p.backbone_dist_lower, p.backbone_dist_upper);
+    all.append(&mut rest);
+    let groups: Vec<u32> = (0..=all.len() as u32).collect();
+    let rs = RestraintSet { rest: all, groups, n_contacts: n_used };
+    let sys = System::new(n, vec![1.0; n], vec![1.0; n], &rs).with_form(RestraintForm::Master2017);
+    Ok((st, sys, n_used))
+}
+
+/// Start coordinates of a stage: the previous stage's (interpolated when the
+/// particles changed) or random in a ball.
+pub fn start_coords(st: &Structure, num_models: usize, prev: Option<&Structure>, p: &Params, stage: usize) -> Vec<Vec<V3>> {
+    let n = st.n_particles();
+    match prev {
         Some(pr) if pr.n_models() == num_models => {
             if pr.n_particles() == n {
                 pr.coords.clone()
@@ -245,15 +273,7 @@ pub fn setup_stage(
                 random_coords(n, p.random_radius, &mut rng)
             })
             .collect(),
-    };
-    st.coords = coords;
-    let (mut rest, n_used) = contact_restraints(d, &st, p.dist_power_law, p.contact_dist_lower, p.contact_dist_upper);
-    let mut all = backbone_restraints(&st, ps, p.backbone_dist_lower, p.backbone_dist_upper);
-    all.append(&mut rest);
-    let groups: Vec<u32> = (0..=all.len() as u32).collect();
-    let rs = RestraintSet { rest: all, groups, n_contacts: n_used };
-    let sys = System::new(n, vec![1.0; n], vec![1.0; n], &rs).with_form(RestraintForm::Master2017);
-    Ok((st, sys, n_used))
+    }
 }
 
 fn log(p: &Params, msg: &str) {
@@ -339,6 +359,7 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
             device: engine.name(),
             rep_list_overflows: engine.overflow_stats().0,
             steps_without_repulsion: engine.overflow_stats().1,
+            robust: vec![],
         });
         prev = Some(st);
     }
@@ -352,6 +373,7 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
         particle_size: last_ps,
         stages,
         seconds_total: t0.elapsed().as_secs_f64(),
+        contact_weights: vec![],
     })
 }
 
