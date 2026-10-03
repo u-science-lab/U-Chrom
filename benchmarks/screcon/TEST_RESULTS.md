@@ -1,5 +1,9 @@
 # Test-set results of `robust` vs NucDynamics (PREREG.md §2-§5)
 
+> **Name (2026-10-03):** the frozen method "robust" is published in U-Chrom as **EMber**
+> (`uchrom.recon.sc.reconstruct_ember`; engine protocol `"robust"`, alias `"ember"`).  Naming only:
+> no change to the method, its parameters or any result below.
+
 Run once, 2026-10-02, with the frozen method (tag `robust-frozen`, commit 075da66; engine build
 "frozen" of that commit: regression hashes of the existing protocols unchanged on Linux;
 `run_robust.py` without `--params`).  Test units exactly as pre-registered: held-out Stevens 2017

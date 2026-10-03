@@ -5,6 +5,7 @@ writing the same `.h5cd` output format.
 
 | Backend | Module | Best for | Notes |
 |---------|--------|----------|-------|
+| EMber | `uchrom.recon.sc.ember` | Single-cell Hi-C / Dip-C, noisy contacts | Native engine (protocol `"robust"`); noise-aware, sampled ensembles, fast |
 | NucDynamics | `uchrom.recon.sc.nucdyn` | Single-cell Hi-C / Dip-C | Native engine (Rust; multi-core CPU, wgpu GPU: Metal / Vulkan); ensembles |
 | GEM | `uchrom.recon.sc.gem` | Single-cell, energy minimisation | Taichi autodiff |
 | SMACOF MDS | `uchrom.recon.bulk.mds` | Bulk Hi-C, contact matrices | PyTorch GPU, inter-chromosomal support |
@@ -56,6 +57,28 @@ Key parameters:
 | `temp_steps` / `dynamics_steps` | 500 / 100 | Annealing temperature steps per stage / MD steps per temperature |
 | `temp_start` / `temp_end` | 5000 / 10 | Annealing temperatures |
 | `genome_ranges` | None | Restrict the contacts, e.g. `["chr19"]` |
+
+## EMber (single-cell, noise-aware)
+
+EMber (EM + annealing / sampling) runs on the same native engine as
+NucDynamics (engine protocol `"robust"`, alias `"ember"`).  It keeps the
+NucDynamics 2017 base and adds a mixture observation model — each contact is a
+true proximity or a false contact; contact restraints are re-weighted by
+their posterior probability of being true (EM; false-contact rate and contact
+kernel learned from the data, plus local-support evidence) — a short schedule,
+a finite-temperature sampling stage (calibrated ensembles) and adaptive
+resolution below 25 kb.  It was pre-registered, frozen and tested against
+NucDynamics on held-out contacts and imaging-truth simulations
+(`benchmarks/screcon/PREREG.md`, `TEST_RESULTS.md`): better on both primary
+endpoints, ~5x faster on one GPU; its real-data ensembles are less tight.
+
+```python
+from uchrom.recon.sc import reconstruct_ember
+cd = reconstruct_ember("cell1.pairs", n_models=10, device="auto", seed=1)
+cd.results["ember.contact_weights"]    # posterior weight of every input contact
+# also: uchrom.tl.reconstruct_sc(contacts, method="ember")
+#       reconstruct_nucdyn(contacts, protocol="ember")  (same coordinates for the same seed)
+```
 
 ## GEM (single-cell, energy minimisation)
 

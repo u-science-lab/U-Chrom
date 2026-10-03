@@ -116,3 +116,9 @@ than 0.01 (largest losses: simulation eps 0, -0.0045; held-out PR-AUC cis, -0.00
 time 0.2x NucDynamics.  By §5: **better than NucDynamics.**  Not thresholded by §5 but reported:
 real-data ensemble precision is worse (RMSD to mean 3.0 vs 1.1 bead units, cells 5-8 full
 tables) and the agreement with the published models slightly lower (r 0.950 vs 0.963).
+
+## 9. Name (2026-10-03)
+
+The frozen method "robust" is published in U-Chrom as **EMber** (`uchrom.recon.sc.reconstruct_ember`,
+engine protocol `"robust"` with the alias `"ember"`).  Naming only: the method, its frozen
+parameters and the results of §8 are unchanged.
