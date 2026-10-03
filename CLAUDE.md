@@ -34,6 +34,8 @@ uchrom/
 ├── recon/           3D reconstruction
 │   ├── _base.py     Shared simulation base (Taichi)
 │   ├── sc/          Single-cell reconstruction
+│   │   ├── ember.py EMber: reconstruct_ember (noise-aware; native engine protocol
+│   │   │            "robust", alias "ember"; PREREG / TEST_RESULTS in benchmarks/screcon)
 │   │   ├── nucdyn/  NucDynamics: reconstruct_nucdyn / CLI on the native engine
 │   │   │            (native/nucdyn); deprecated Taichi port kept as fallback
 │   │   └── gem/     GEM (energy minimization, Taichi autodiff)
@@ -72,7 +74,7 @@ native/nucdyn/       Separate package `u-chrom-nucdyn` (import uchrom_nucdyn): R
                      (maturin, abi3) NucDynamics engine — contact preprocessing, hierarchical
                      annealing, CPU (f64, rayon) and GPU (wgpu/WGSL, f32, feature `gpu`)
                      backends, protocols nuc_dynamics_2017 (default) / release_1.3 /
-                     robust (new noise-aware method, src/robust.rs; PREREG in benchmarks/screcon).
+                     robust (= EMber, alias "ember": noise-aware method, src/robust.rs; PREREG in benchmarks/screcon).
                      `cargo test` in native/nucdyn; `pip install ./native/nucdyn`
                      (= extra `u-chrom[nucdyn]`).  LGPL-3.0 (re-implementation of tjs23/nuc_dynamics).
 ```

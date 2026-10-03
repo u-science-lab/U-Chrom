@@ -19,6 +19,9 @@ __all__ = ["reconstruct_nucdyn", "native_available", "engine_info", "load_contac
 #: Default hierarchical schedule (bp), the original's ``-s 8 4 2 0.4 0.2 0.1``.
 DEFAULT_PARTICLE_SIZES = (8e6, 4e6, 2e6, 4e5, 2e5, 1e5)
 
+#: Public names of engine protocols: EMber is protocol "robust" of the native engine.
+PROTOCOL_ALIASES = {"ember": "robust"}
+
 
 def _engine():
     import uchrom_nucdyn
@@ -119,6 +122,7 @@ def reconstruct_nucdyn(
     key_added: Optional[str] = "nucdyn",
     params: Optional[Mapping[str, Any]] = None,
     verbose: bool = False,
+    _method: str = "nucdyn",
     **engine_params: Any,
 ):
     """Single-cell Hi-C genome structure ensemble with NucDynamics.
@@ -149,7 +153,8 @@ def reconstruct_nucdyn(
         ``"release_1.3"``: the later bead-size-scaled version with
         ambiguity resolution and model selection (2 x ``n_models`` above 1 Mb,
         the ``n_models`` closest to the mean kept).
-        ``"robust"``: the 2017 protocol with a noise-aware observation model
+        ``"robust"`` (public name **EMber**, alias ``"ember"``; see
+        :func:`uchrom.recon.sc.ember.reconstruct_ember`): the 2017 protocol with a noise-aware observation model
         (contact restraints re-weighted by their posterior probability of
         being true contacts; false-contact rate and contact-kernel width
         learned by EM; ``robust_*`` engine parameters).  Adds the results
@@ -185,6 +190,8 @@ def reconstruct_nucdyn(
     from uchrom.core import ChromData
 
     un = _engine()
+    protocol = PROTOCOL_ALIASES.get(protocol, protocol)
+    func = f"uchrom.recon.sc.{_method}.reconstruct_{_method}"
     c = load_contacts(contacts, genome_ranges)
     dev = _resolve_device(device)
     p = dict(params or {})
@@ -214,17 +221,18 @@ def reconstruct_nucdyn(
         stages = pd.DataFrame([{k: v for k, v in s.items() if k not in ("removed_models", "robust")}
                                for s in res["stages"]])
         info = {
-            "engine": "uchrom_nucdyn", "engine_version": un.__version__, "device": dev,
+            "method": _method, "engine": "uchrom_nucdyn", "engine_version": un.__version__, "device": dev,
             "gpu": un.gpu_info() if dev == "gpu" else None, "protocol": protocol,
             "n_models": int(len(coords)), "seed": int(seed), "particle_size": size,
             "particle_position": res["position_convention"],
             "model_layers": [f"model_{k:0{width}d}" for k in range(len(coords))],
             "seconds": float(res["seconds_total"]),
-            "citation": "Stevens et al. 2017, Nature 544:59, doi:10.1038/nature21429",
+            "citation": ("U-Chrom EMber (engine protocol \"robust\"), built on " if protocol == "robust" else "")
+            + "NucDynamics: Stevens et al. 2017, Nature 544:59, doi:10.1038/nature21429",
         }
         cd.uns[key_added] = info
         cd.results.set(f"{key_added}.stages", stages, kind="table",
-                       function="uchrom.recon.sc.nucdyn.reconstruct_nucdyn",
+                       function=func,
                        params={k: v for k, v in res["params"].items() if k != "verbose"},
                        inputs={"contacts": str(contacts) if not isinstance(contacts, pd.DataFrame) else "DataFrame",
                                "n_contacts": int(len(c["pos_a"]))})
@@ -233,9 +241,9 @@ def reconstruct_nucdyn(
             em = pd.DataFrame([{"stage": s["stage"], "particle_size": s["particle_size"], **u}
                                for s in res["stages"] for u in s.get("robust", [])])
             cd.results.set(f"{key_added}.em", em, kind="table",
-                           function="uchrom.recon.sc.nucdyn.reconstruct_nucdyn", params={"protocol": "robust"})
+                           function=func, params={"protocol": "robust"})
             cd.results.set(f"{key_added}.contact_weights", np.asarray(res["contact_weights"], np.float64),
-                           kind="array", function="uchrom.recon.sc.nucdyn.reconstruct_nucdyn",
+                           kind="array", function=func,
                            params={"protocol": "robust"},
                            inputs={"rows": "input contacts in load_contacts order; NaN = filtered out"})
     return cd

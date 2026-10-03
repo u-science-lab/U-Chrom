@@ -117,6 +117,8 @@ def calc_genome_structure(
     if unknown:
         raise TypeError(f"unknown NucDynamics parameters: {sorted(unknown)}")
     p.update(params)
+    # public name: EMber = protocol "robust" (the engine keeps the internal name)
+    p["protocol"] = {"ember": "robust"}.get(p["protocol"], p["protocol"])
     for key in ("temp_steps", "dynamics_steps"):
         if np.isscalar(p[key]):
             p[key] = [int(p[key])]
