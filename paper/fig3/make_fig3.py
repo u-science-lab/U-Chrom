@@ -1,20 +1,14 @@
-"""Figure 3 — reconstruction you can trust, afford and compare.
+"""Figure 3 — EMber (U-Chrom) for single-cell reconstruction, and fast IGM for populations.
 
-Three rows: single-cell reconstruction (faithful + fast), one benchmark for every method
-(comparable), population reconstruction (faithful + fast, and the new consensus method).
-Real results are read from ``results/``; panels whose runs are not finished are drawn
-from the values noted inside a dashed frame (``mock_frame``); nothing else is mocked.
+Real results are read from ``results/``.
 
-  a  3-D render of the U-Chrom reconstruction of Stevens 2017 Cell 1 (U-Chrom web browser)
-  b  NucDynamics (native engine) vs the published Stevens 2017 structure, Cell 1
-  c  ensemble precision, 8 cells: published / original code / U-Chrom (ED Table 2 metric)
-  d  time for one model vs resolution: U-Chrom NucDynamics (CPU 1 / 16 threads, GPU), original
-     NucDynamics, hickit, Si-C (robust: placeholder until its runs exist)
-  e  held-out contact prediction (8 cells x 3 folds) per genomic separation, all methods
-  f  imaging-truth simulations (Su 2020 chr21, Takei 2021 1 Mb): distance agreement
-  g  IGM: native vs original populations (WTC11 demo, S = 200 / 1,000), seed spread as reference
-  h  IGM speed: original (64 cores) vs native (1 GPU)
-  i  population size: seed-to-seed agreement and fit to input of trans contacts vs S (200-5,000)
+  a  time for one model vs resolution: EMber (U-Chrom; GPU, CPU 16 / 1 threads), original NucDynamics,
+     hickit, Si-C (same input, one CPU model / one H100; runs over the 48 h cap drawn as censored)
+  b  held-out contact prediction (8 cells x 3 folds) per genomic separation
+  c  imaging-truth simulations (Su 2020 chr21, Takei 2021 1 Mb): distance agreement
+  d  IGM: U-Chrom (native) vs original populations (WTC11 demo, S = 200 / 1,000)
+  e  IGM speed: original (64 cores) vs U-Chrom (1 GPU)
+  f  population size: seed-to-seed agreement and fit to input of trans contacts vs S (200-5,000)
 
 Supplementary figures: ``make_figS_fig3_*.py`` (``make_figS_fig3_all.py`` builds the set).
 
@@ -38,7 +32,7 @@ HERE = Path(__file__).resolve().parent
 RES = HERE / "results"
 FEAS = HERE / "feasibility"
 MM = 1 / 25.4
-W, H = 170.0, 192.0
+W, H = 170.0, 136.0
 
 mpl.rcParams.update({
     "pdf.fonttype": 42, "font.family": "sans-serif", "font.sans-serif": ["Arial"],
@@ -54,10 +48,10 @@ OURS, PAPER = INDIGO, "#9aa0a8"          # U-Chrom vs the original / published r
 OURS2 = "#7f9bd0"                        # U-Chrom, second backend (CPU)
 ORIG = "#6b7079"                         # original code
 OTHER = "#c9a227"                        # external baseline (HIPPS / DIMES)
-NEW, NEW_LABEL = "#d1495b", "EMber"  # the new single-cell method (U-Chrom EMber; engine protocol "robust")
+NEW, NEW_LABEL = "#d1495b", "EMber (U-Chrom)"  # the new single-cell method (U-Chrom EMber; engine protocol "robust")
 # methods of the single-cell benchmark: key -> (label, colour)
 SC_METHODS = {"robust": (NEW_LABEL, NEW), "nucdyn_gpu": ("U-Chrom GPU", OURS), "nucdyn_cpu": ("U-Chrom CPU", OURS2),
-              "orig": ("NucDynamics (original)", ORIG), "sic": ("Si-C", PURPLE), "hickit": ("hickit (Dip-C)", TEAL),
+              "orig": ("NucDynamics", ORIG), "sic": ("Si-C", PURPLE), "hickit": ("hickit (Dip-C)", TEAL),
               "pop_mean": ("population mean", OTHER), "random_polymer": ("random polymer", LGREY)}
 
 
@@ -323,15 +317,12 @@ def p_nd_precision(fig, d, x, y):
 
 
 SPEED_STYLE = {   # (method, threads) -> label, colour, line style, marker
-    ("nucdyn_gpu", 0): ("U-Chrom GPU", OURS, "-", "D"),
-    ("nucdyn_cpu", 16): ("U-Chrom CPU 16 thr.", OURS2, "-", "o"),
-    ("nucdyn_cpu", 1): ("U-Chrom CPU 1 thr.", OURS2, (0, (2, 1)), "o"),
-    ("orig", 1): ("original", ORIG, "-", "s"),
+    ("orig", 1): ("NucDynamics", ORIG, "-", "s"),
     ("sic", 1): ("Si-C", PURPLE, "-", "^"),
     ("hickit", 1): ("hickit", TEAL, "-", "v"),
-    ("robust_gpu", 0): ("EMber GPU", NEW, "-", "D"),
-    ("robust_cpu", 16): ("EMber CPU 16 thr.", NEW, "-", "o"),
-    ("robust_cpu", 1): ("EMber CPU 1 thr.", NEW, (0, (2, 1)), "o"),
+    ("robust_gpu", 0): ("EMber (U-Chrom), GPU", NEW, "-", "D"),
+    ("robust_cpu", 16): ("EMber (U-Chrom), CPU 16 thr.", NEW, "-", "o"),
+    ("robust_cpu", 1): ("EMber (U-Chrom), CPU 1 thr.", NEW, (0, (2, 1)), "o"),
 }
 
 
@@ -339,7 +330,7 @@ def p_nd_speed(fig, d, x, y):
     """Wall time of ONE model vs final resolution; censored runs (job cap) as open markers + arrow."""
     sp = d["speed1"]
     cap = sp["cap_hours"] * 3600
-    head_(fig, x, y, "d", "Time for one model", "Cell 1; CPU: EPYC 9754, GPU: H100")
+    head_(fig, x, y, "a", "Time for one model", "Cell 1; CPU: EPYC 9754, GPU: H100")
     ax = ax_at(fig, x + 12, y + 11, 28.5, 28)
     rows = sp["rows"]
     robust_done = any_failed = False
@@ -381,7 +372,7 @@ def p_nd_speed(fig, d, x, y):
                                label="> cap (censored)"))
     if any_failed:
         hs.append(mpl.lines.Line2D([], [], color=GREY, marker="x", ms=2.6, mew=0.7, ls="none", label="failed"))
-    ax.legend(handles=hs, frameon=False, fontsize=4.8, ncol=2, loc="upper left", bbox_to_anchor=(-0.3, -0.22),
+    ax.legend(handles=hs, frameon=False, fontsize=4.8, ncol=1, loc="upper left", bbox_to_anchor=(-0.3, -0.22),
               handlelength=1.6, handletextpad=0.3, columnspacing=0.6, labelspacing=0.25)
     if not robust_done:
         mock_frame(fig, x + 1.5, y + 8, 40.5, 51, "robust: runs pending")
@@ -390,12 +381,12 @@ def p_nd_speed(fig, d, x, y):
 # row 2 — one benchmark for every method
 
 def p_heldout_contacts(fig, d, x, y):
-    head_(fig, x, y, "e", "Held-out contacts",
+    head_(fig, x, y, "b", "Held-out contacts",
           f"8 cells × 3 folds; matched-separation negatives")
-    ax = ax_at(fig, x + 12, y + 11, 62, 28)
+    ax = ax_at(fig, x + 12, y + 11, 42, 28)
     b = d["ho_band"]
     xx = np.arange(len(BANDS))
-    order = ["random_polymer", "hickit", "sic", "orig", "nucdyn_cpu", "nucdyn_gpu", "robust"]
+    order = ["random_polymer", "hickit", "sic", "orig", "robust"]
     for m in order:
         lab, col = SC_METHODS[m]
         mean = [b.loc[(m, k), "mean"] for k, _ in BANDS]
@@ -407,16 +398,16 @@ def p_heldout_contacts(fig, d, x, y):
     ax.set_ylim(0.45, 1.0); ax.axhline(0.5, color=LGREY, lw=0.5, zorder=0)
     tr = d["ho_trans"]
     ax.text(0.98, 0.14, "trans AUC\n" + "\n".join(f"{SC_METHODS[m][0].split(' (')[0]}  {tr[m]:.3f}"
-                                                 for m in ("robust", "nucdyn_gpu", "sic", "hickit")),
+                                                 for m in ("robust", "orig", "sic", "hickit")),
             transform=ax.transAxes, ha="right", va="bottom", fontsize=4.8, color=GREY, linespacing=1.15)
 
 
 def p_sim(fig, d, x, y):
-    head_(fig, x, y, "f", "Imaging truth (simulated Hi-C)", "median model vs imaged distances")
-    ax = ax_at(fig, x + 12, y + 11, 62, 28)
-    order = ["robust", "nucdyn_gpu", "nucdyn_cpu", "orig", "sic", "hickit", "pop_mean", "random_polymer"]
+    head_(fig, x, y, "c", "Imaging truth (simulated Hi-C)", "median model vs imaged distances")
+    ax = ax_at(fig, x + 12, y + 11, 42, 28)
+    order = ["robust", "orig", "sic", "hickit", "pop_mean", "random_polymer"]
     dsets = [("su2020_chr21", "Su 2020\nchr21, 50 kb"), ("takei2021_1mb", "Takei 2021\ngenome, 1 Mb")]
-    w = 0.11
+    w = 0.13
     for i_, (ds, _) in enumerate(dsets):
         sc = d["sim"][ds]["spearman_cis"]
         for k_, m in enumerate(order):
@@ -435,9 +426,9 @@ def p_sim(fig, d, x, y):
 
 def sc_legend(fig, x, y):
     """Shared legend of the single-cell methods (panels e, f), top-left at (x, y) mm."""
-    order = ["robust", "nucdyn_gpu", "nucdyn_cpu", "orig", "sic", "hickit", "pop_mean", "random_polymer"]
+    order = ["robust", "orig", "sic", "hickit", "pop_mean", "random_polymer"]
     hs = [mpl.patches.Patch(color=SC_METHODS[m][1], label=SC_METHODS[m][0]) for m in order]
-    fig.legend(handles=hs, loc="upper left", bbox_to_anchor=(x / W, 1 - y / H), ncol=4, frameon=False,
+    fig.legend(handles=hs, loc="upper left", bbox_to_anchor=(x / W, 1 - y / H), ncol=3, frameon=False,
                fontsize=5.3, handlelength=1, handleheight=0.7, columnspacing=0.8)
 
 
@@ -448,7 +439,7 @@ IGM_KINDS = [("ours", "native vs native", OURS2), ("igm", "original vs original"
 
 
 def p_igm_equiv(fig, d, x, y):
-    head_(fig, x, y, "g", "IGM: native vs original", "WTC11 2 Mb; population agreement")
+    head_(fig, x, y, "d", "IGM: native vs original", "WTC11 2 Mb; population agreement")
     ax = ax_at(fig, x + 10, y + 11, 30, 28)
     feats = [("pearson_contact_intra", "intra\ncontacts"), ("pearson_contact_inter", "inter\ncontacts"),
              ("pearson_radial", "radial\nposition")]
@@ -469,7 +460,7 @@ def p_igm_equiv(fig, d, x, y):
 
 
 def p_igm_speed(fig, d, x, y):
-    head_(fig, x, y, "h", "IGM speed", "same input and schedule")
+    head_(fig, x, y, "e", "IGM speed", "same input and schedule")
     t = d["igm_time"]
     ax = ax_at(fig, x + 10, y + 11, 28, 28)
     for si, S in enumerate((200, 1000)):
@@ -483,7 +474,7 @@ def p_igm_speed(fig, d, x, y):
 
 
 def p_popsize(fig, d, x, y):
-    head_(fig, x, y, "i", "How many structures?", "WTC11 2 Mb, 3 seeds; grey: minutes on 1 GPU")
+    head_(fig, x, y, "f", "How many structures?", "WTC11 2 Mb, 3 seeds; grey: minutes on 1 GPU")
     ax = ax_at(fig, x + 10, y + 11, 34, 28)
     sw = d["igm_sweep"]
     Ss = sorted(sw)
@@ -508,19 +499,15 @@ def p_popsize(fig, d, x, y):
 def main() -> None:
     d = load_results()
     fig = plt.figure(figsize=(W * MM, H * MM))
-    row_title(fig, 0.5, "single-cell reconstruction")
-    p_renders(fig, d, 0, 4)
-    p_nd_scatter(fig, d, 42, 4)
-    p_nd_precision(fig, d, 86, 4)
-    p_nd_speed(fig, d, 128, 4)
-    row_title(fig, 64.5, "one benchmark for every method")
-    p_heldout_contacts(fig, d, 0, 68)
-    p_sim(fig, d, 86, 68)
-    sc_legend(fig, 8, 114)
-    row_title(fig, 128.5, "population reconstruction")
-    p_igm_equiv(fig, d, 0, 132)
-    p_igm_speed(fig, d, 58, 132)
-    p_popsize(fig, d, 114, 132)
+    row_title(fig, 0.5, "single-cell reconstruction: EMber vs existing methods, one benchmark")
+    p_nd_speed(fig, d, 0, 4)
+    p_heldout_contacts(fig, d, 56, 4)
+    p_sim(fig, d, 114, 4)
+    sc_legend(fig, 64, 52)
+    row_title(fig, 72.5, "population reconstruction (IGM)")
+    p_igm_equiv(fig, d, 0, 76)
+    p_igm_speed(fig, d, 58, 76)
+    p_popsize(fig, d, 114, 76)
     for ext in ("pdf", "png"):
         fig.savefig(HERE / f"fig3.{ext}", dpi=300)
     print(HERE / "fig3.pdf")
