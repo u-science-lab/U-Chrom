@@ -1015,18 +1015,23 @@ class Dataset:
     def _describe_contacts(self, key: str, rec: dict, path: Path, family: str) -> Dict[str, Any]:
         import cooler
 
-        uris = cooler.fileops.list_coolers(str(path))
-        kind = "scool" if family == "linked_scool" else ("mcool" if any("/resolutions/" in u for u in uris) else "cool")
         cells = []
-        if kind == "scool":
-            cells = cooler.fileops.list_scool_cells(str(path))
+        if family == "linked_scool":
+            kind, uris = "scool", []
+            import h5py
+
+            with h5py.File(path, "r") as f:  # cooler's tree walk costs minutes on a 30k-cell file
+                cells = [f"/cells/{name}" for name in f["cells"]]
             self._cache[("scool_cells", str(path))] = set(cells)  # listing is slow
             first = f"{path}::{cells[0]}" if cells else str(path)
             resolutions = [int(cooler.Cooler(first).binsize or 0)]
-        elif kind == "mcool":
+        else:
+            uris = cooler.fileops.list_coolers(str(path))
+            kind = "mcool" if any("/resolutions/" in u for u in uris) else "cool"
+        if kind == "mcool":
             resolutions = sorted(int(u.rsplit("/", 1)[-1]) for u in uris if "/resolutions/" in u)
             first = f"{path}::/resolutions/{resolutions[0]}"
-        else:
+        elif kind == "cool":
             first = str(path)
             resolutions = [int(cooler.Cooler(first).binsize or 0)]
         clr = cooler.Cooler(first)
