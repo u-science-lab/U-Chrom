@@ -115,8 +115,11 @@ paper reports every endpoint of §3-§4 whatever the outcome.
     `diploid_sim.py truth`), all conditions; Dip-C GM12878 (Tan et al. 2018, GSE117876) cells
     1-4 (GSM3271347-GSM3271350), all checks (held-out phased contacts, agreement with the
     published Dip-C structures, run-to-run precision).
+    *Amended 2026-10-03, before any real-data run*: the input is the authors' hickit
+    re-processing (GSM3314359+, phased pairs), which GEO lacks for cells 4, 8 and 16 (cell 8 has
+    no structure at all), so the GM12878 development cells are 1-3.
   * **Held back (one-shot test, after freezing the diploid parameters with a tag)**: truth cells
-    3-5 of both simulation datasets; Dip-C GM12878 cells 5-17; Uni-C GM12878 (Gao et al. 2025,
+    3-5 of both simulation datasets; Dip-C GM12878 cells 5-7, 9-15 and 17 (11 cells); Uni-C GM12878 (Gao et al. 2025,
     GSE267873, 11 cells) entirely — its split (proposed: cells sorted by GSM, first 3 for a
     resolution / runtime pilot that does not set parameters, remaining 8 test) is fixed in this
     file before any Uni-C reconstruction.

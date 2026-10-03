@@ -105,24 +105,12 @@ def fold_indices(n: int, frac: float | None, folds: int, seed: int) -> list[np.n
     return [np.sort(perm[f * k:(f + 1) * k]) for f in range(folds)]
 
 
-def build_eval_pairs(contacts, held_idx, res: int, n_neg: int = 10, seed: int = 0,
-                     sep_match: str = "exact", max_tries: int = 50, trans_match: str = "shuffle") -> dict:
-    """Positive / separation-matched negative bin pairs for one fold (see module docstring)."""
-    grid = Grid.from_contacts(contacts, res)
-    gi = grid.index(contacts.chrom_a, contacts.pos_a)
-    gj = grid.index(contacts.chrom_b, contacts.pos_b)
+def sample_negatives(grid, pa, pb, same, all_keys, n_neg: int, seed: int, max_tries: int = 50,
+                     trans_match: str = "shuffle"):
+    """Separation-matched negatives of the positives (pa, pb) (see the module docstring): never-contacted
+    bin pairs (not in ``all_keys``), ``n_neg`` per positive.  -> (neg_a, neg_b, neg_group, n band
+    fallbacks, n trans fallbacks)."""
     n = grid.n
-    ok = (gi >= 0) & (gj >= 0) & (gi != gj)
-    held = np.zeros(len(contacts), bool)
-    held[held_idx] = True
-    all_keys = set(_pair_keys(gi[ok], gj[ok], n).tolist())
-    train_keys = set(_pair_keys(gi[ok & ~held], gj[ok & ~held], n).tolist())
-    hk = np.unique(_pair_keys(gi[ok & held], gj[ok & held], n))
-    pa, pb = hk // n, hk % n
-    same = grid.chrom[pa] == grid.chrom[pb]
-    keep = np.array([k not in train_keys for k in hk.tolist()], bool) & (~same | (pb - pa >= 2))
-    pa, pb, same = pa[keep], pb[keep], same[keep]
-
     rng = np.random.default_rng(seed)
     chrom_of = grid.chrom
     offs = np.array([grid.offset[c] for c in grid.chroms])
@@ -185,6 +173,30 @@ def build_eval_pairs(contacts, held_idx, res: int, n_neg: int = 10, seed: int = 
                     continue
                 used.add(key); neg_a.append(min(x, y)); neg_b.append(max(x, y)); neg_g.append(g); got += 1
     neg_a, neg_b, neg_g = np.array(neg_a, np.int64), np.array(neg_b, np.int64), np.array(neg_g, np.int64)
+    return neg_a, neg_b, neg_g, fallback, trans_fallback
+
+
+def build_eval_pairs(contacts, held_idx, res: int, n_neg: int = 10, seed: int = 0,
+                     sep_match: str = "exact", max_tries: int = 50, trans_match: str = "shuffle") -> dict:
+    """Positive / separation-matched negative bin pairs for one fold (see module docstring)."""
+    grid = Grid.from_contacts(contacts, res)
+    gi = grid.index(contacts.chrom_a, contacts.pos_a)
+    gj = grid.index(contacts.chrom_b, contacts.pos_b)
+    n = grid.n
+    ok = (gi >= 0) & (gj >= 0) & (gi != gj)
+    held = np.zeros(len(contacts), bool)
+    held[held_idx] = True
+    all_keys = set(_pair_keys(gi[ok], gj[ok], n).tolist())
+    train_keys = set(_pair_keys(gi[ok & ~held], gj[ok & ~held], n).tolist())
+    hk = np.unique(_pair_keys(gi[ok & held], gj[ok & held], n))
+    pa, pb = hk // n, hk % n
+    same = grid.chrom[pa] == grid.chrom[pb]
+    keep = np.array([k not in train_keys for k in hk.tolist()], bool) & (~same | (pb - pa >= 2))
+    pa, pb, same = pa[keep], pb[keep], same[keep]
+
+    neg_a, neg_b, neg_g, fallback, trans_fallback = sample_negatives(
+        grid, pa, pb, same, all_keys, n_neg, seed, max_tries, trans_match)
+    chrom_of = grid.chrom
     return {
         "grid": grid, "pos_a": pa, "pos_b": pb, "pos_cis": same,
         "neg_a": neg_a, "neg_b": neg_b, "neg_group": neg_g,
