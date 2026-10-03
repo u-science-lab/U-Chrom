@@ -107,3 +107,12 @@ paper reports every endpoint of §3-§4 whatever the outcome.
   ensembles; adaptive resolution with an effective-resolution map.
 * Implementation: the U-Chrom native engine (`native/nucdyn`), same particle / neighbour
   grid / batched-ensemble machinery.
+
+## 8. Test results (2026-10-02)
+
+Run once with the frozen method (tag `robust-frozen`); full tables in `TEST_RESULTS.md`.
+P1 = +0.0028 [+0.0025, +0.0031], P2 = +0.0367 [+0.0291, +0.0448]; no §4 stratum worse by more
+than 0.01 (largest losses: simulation eps 0, -0.0045; held-out PR-AUC cis, -0.0031); H100 wall
+time 0.2x NucDynamics.  By §5: **better than NucDynamics.**  Not thresholded by §5 but reported:
+real-data ensemble precision is worse (RMSD to mean 3.0 vs 1.1 bead units, cells 5-8 full
+tables) and the agreement with the published models slightly lower (r 0.950 vs 0.963).

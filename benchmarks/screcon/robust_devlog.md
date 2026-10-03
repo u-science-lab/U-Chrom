@@ -333,3 +333,14 @@ Model 0 of each cell (100 kb, 2 models) on the 2,460 Takei loci vs Takei 2021 E1
   The calibration that sampling achieves is *within* a cell (held-out contact-fraction score, E10-E11);
   the matched-imaging gap is not addressed by it.  Radial position per locus stays far below the
   ceiling for every method (0.23-0.27 vs 0.73).
+
+# Freeze and test (2026-10-02)
+
+c2 frozen (PREREG §6, tag `robust-frozen` on 075da66) and the test set run once; results in
+`TEST_RESULTS.md` and PREREG §8: P1 +0.0028 [+0.0025, +0.0031], P2 +0.0367 [+0.0291, +0.0448],
+worst §4 strata -0.0045 (simulation eps 0) / -0.0031 (held-out PR-AUC cis), H100 cost 0.2x ->
+"better than NucDynamics" by §5.  Contact-fraction score 0.732 vs 0.683 (hickit 0.724).  Real-data
+precision on test cells 6-8 much looser than NucDynamics (2-5.6 vs 0.8-2.2 bead units), unlike the
+development cells.  Held-back matched half: as the development half.  The one-model GPU timing job
+of c2 (46238014) failed: the runner already carried the new parameter names while the pinned engine
+e8 predated them (no timing obtained); resubmitted with the frozen build (46383709).
