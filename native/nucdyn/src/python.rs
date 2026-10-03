@@ -29,9 +29,11 @@ fn make_engine(p: &Params) -> PyResult<Box<dyn StageEngine + Send>> {
 }
 
 /// Run the full NucDynamics protocol.  `params_json` holds `Params` fields;
-/// `prior_lr` (robust): per-contact likelihood ratio true / false.
+/// `prior_lr` (robust): per-contact likelihood ratio true / false.  Diploid input: `hap_a` /
+/// `hap_b` (0, 1, -1 = unknown per contact end), `ploidy` (1 or 2 per name) and optionally
+/// `phase_prior` (4 values per contact, index 2 hap_a + hap_b).
 #[pyfunction]
-#[pyo3(signature = (names, chr_a, pos_a, chr_b, pos_b, ambig, active, params_json, prior_lr=None))]
+#[pyo3(signature = (names, chr_a, pos_a, chr_b, pos_b, ambig, active, params_json, prior_lr=None, hap_a=None, hap_b=None, ploidy=None, phase_prior=None))]
 #[allow(clippy::too_many_arguments)]
 fn calc_genome_structure<'py>(
     py: Python<'py>,
@@ -44,6 +46,10 @@ fn calc_genome_structure<'py>(
     active: PyReadonlyArray1<'py, bool>,
     params_json: &str,
     prior_lr: Option<PyReadonlyArray1<'py, f64>>,
+    hap_a: Option<PyReadonlyArray1<'py, i8>>,
+    hap_b: Option<PyReadonlyArray1<'py, i8>>,
+    ploidy: Option<Vec<u8>>,
+    phase_prior: Option<PyReadonlyArray1<'py, f64>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let p: Params = serde_json::from_str(params_json).map_err(|e| PyValueError::new_err(e.to_string()))?;
     p.validate().map_err(PyValueError::new_err)?;
@@ -65,9 +71,27 @@ fn calc_genome_structure<'py>(
         ambig.as_slice()?.to_vec(),
         active.as_slice()?.to_vec(),
     );
+    let dip_arrays: Option<(Vec<i8>, Vec<i8>, Vec<u8>, Option<Vec<f64>>)> = match (hap_a, hap_b) {
+        (Some(a), Some(b)) => {
+            let ploidy = ploidy.unwrap_or_else(|| vec![2; names.len()]);
+            let pr = match phase_prior {
+                Some(x) => Some(x.as_slice()?.to_vec()),
+                None => None,
+            };
+            Some((a.as_slice()?.to_vec(), b.as_slice()?.to_vec(), ploidy, pr))
+        }
+        (None, None) => None,
+        _ => return Err(PyValueError::new_err("give both hap_a and hap_b, or neither")),
+    };
     let mut engine = make_engine(&p)?;
     let res = py.detach(move || {
-        let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &am, active: &ac, prior_lr: lr.as_deref() };
+        let dip = dip_arrays.as_ref().map(|(a, b, k, pr)| crate::diploid::DiploidInput {
+            hap_a: a,
+            hap_b: b,
+            ploidy: k,
+            prior: pr.as_deref(),
+        });
+        let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &am, active: &ac, prior_lr: lr.as_deref(), dip };
         cgs(&input, &p, engine.as_mut())
     });
     let out = res.map_err(PyRuntimeError::new_err)?;
@@ -90,6 +114,8 @@ fn calc_genome_structure<'py>(
     d.set_item("seconds_total", out.seconds_total)?;
     d.set_item("stages_json", serde_json::to_string(&out.stages).unwrap())?;
     d.set_item("contact_weights", out.contact_weights.into_pyarray(py))?;
+    d.set_item("diploid", out.diploid)?;
+    d.set_item("phase_probs", out.phase_probs.into_pyarray(py))?;
     Ok(d)
 }
 

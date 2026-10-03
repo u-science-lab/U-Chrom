@@ -67,6 +67,13 @@ pub struct EmLog {
     pub capture_q: f64,
     pub n_particles: usize,
     pub seconds: f64,
+    /// diploid input: fraction of the homolog-ambiguous contacts whose most likely copy pair
+    /// has posterior >= 0.9 (given that the contact is true); absent for haploid input
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phase_confident: Option<f64>,
+    /// diploid input: number of homolog-ambiguous contacts in the update
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub n_ambiguous: Option<usize>,
 }
 
 /// Contact kernel f(d) = exp(-((d - d0)+ / s)^k).
@@ -199,7 +206,7 @@ pub fn pair_histogram(pos: &[V3], rmax: f64, bin: f64, sample: usize) -> (Vec<f6
 
 /// Σ_pairs f(d): histogram bins at their centres; pairs beyond the histogram
 /// counted at f(rmax).
-fn kernel_sum(k: &Kernel, hist: &[f64], bin: f64, n_pairs: f64, s: f64) -> f64 {
+pub(crate) fn kernel_sum(k: &Kernel, hist: &[f64], bin: f64, n_pairs: f64, s: f64) -> f64 {
     let mut g = 0.0;
     let mut cnt = 0.0;
     for (b, &h) in hist.iter().enumerate() {
@@ -415,12 +422,14 @@ pub fn em_update(data: &EmData, k: &Kernel, p: &Params, eps0: f64, s0: f64) -> E
         capture_q: (1.0 - eps) * wsum / g_mean,
         n_particles: data.n_particles,
         seconds: t0.elapsed().as_secs_f64(),
+        phase_confident: None,
+        n_ambiguous: None,
     };
     EmResult { weights, eps, s, log }
 }
 
 /// Install contact-restraint weights (restraints `nb..`) into the system.
-fn set_weights(sys: &mut System, nb: usize, w: &[Vec<f64>], n_models: usize) {
+pub(crate) fn set_weights(sys: &mut System, nb: usize, w: &[Vec<f64>], n_models: usize) {
     let full = |row: &Vec<f64>| -> Vec<f64> {
         let mut v = vec![1.0; nb];
         v.extend_from_slice(row);
@@ -477,7 +486,7 @@ fn contact_weights(d: &ContactDict, st: &Structure, sys: &System, nb: usize, n_i
 /// Restraint force constant: the 2017 constant, scaled by min(1, x N / W)
 /// with `robust_force_norm` = x > 0 (W: sum of contact-restraint weights,
 /// mean over models).
-fn force_constant(p: &Params, sys: &System, nb: usize, n: usize) -> f64 {
+pub(crate) fn force_constant(p: &Params, sys: &System, nb: usize, n: usize) -> f64 {
     if p.robust_force_norm <= 0.0 {
         return p.dist_force_const;
     }
@@ -534,7 +543,7 @@ pub fn merged_backbone_restraints(st: &Structure, ps: i64, lower: f64, upper: f6
 
 /// Coordinates of `st` (kept particles) at every position of the full grid
 /// (linear interpolation, clamped at the ends).
-fn expand_to_grid(st: &Structure, full: &BTreeMap<u32, Vec<i64>>) -> (Vec<Vec<i64>>, Vec<Vec<V3>>) {
+pub(crate) fn expand_to_grid(st: &Structure, full: &BTreeMap<u32, Vec<i64>>) -> (Vec<Vec<i64>>, Vec<Vec<V3>>) {
     let seq: Vec<Vec<i64>> = st.chroms.iter().map(|c| full[c].clone()).collect();
     let coords = (0..st.n_models())
         .map(|m| {
@@ -598,7 +607,7 @@ fn log(p: &Params, msg: &str) {
 }
 
 /// Split `n` temperature steps into `k` contiguous parts (sizes differ by <= 1).
-fn split_schedule(n: usize, k: usize) -> Vec<std::ops::Range<usize>> {
+pub(crate) fn split_schedule(n: usize, k: usize) -> Vec<std::ops::Range<usize>> {
     let k = k.clamp(1, n.max(1));
     (0..k).map(|i| (i * n / k)..((i + 1) * n / k)).collect()
 }
@@ -839,6 +848,8 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
         stages,
         seconds_total: t0.elapsed().as_secs_f64(),
         contact_weights: final_weights,
+        diploid: false,
+        phase_probs: vec![],
     })
 }
 

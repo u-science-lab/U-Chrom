@@ -610,4 +610,176 @@ mod tests {
             }
         }
     }
+
+    /// Ambiguous restraint groups (diploid input: 2 or 4 candidate copy pairs combined as
+    /// (Σ d⁻⁴)^(−1/4)), unweighted (2017) and weighted (EMber, shared and per-model weights):
+    /// GPU vs CPU.
+    #[test]
+    fn gpu_matches_cpu_ambiguous_groups() {
+        let Ok(mut eng) = GpuEngine::new(0) else {
+            eprintln!("no GPU adapter: skipped");
+            return;
+        };
+        let n = 3000usize;
+        let mut rng = Rng::new(23);
+        let mut pos = vec![];
+        let mut p = [0.0f64; 3];
+        for _ in 0..n {
+            p = [p[0] + rng.normal() * 0.7, p[1] + rng.normal() * 0.7, p[2] + rng.normal() * 0.7];
+            pos.push(p);
+        }
+        let mut rest = vec![];
+        let mut groups = vec![];
+        for i in 0..n - 1 {
+            groups.push(rest.len() as u32);
+            rest.push(Restraint { i: i as u32, j: i as u32 + 1, lo: 0.1, hi: 1.1, ambig: 0, weight: 1.0 });
+        }
+        for k in 0..n {
+            groups.push(rest.len() as u32);
+            let size = [1usize, 2, 4][k % 3];
+            let w = rng.uniform();
+            for _ in 0..size {
+                let i = (rng.uniform() * n as f64) as u32;
+                let j = (rng.uniform() * n as f64) as u32;
+                rest.push(Restraint { i: i.min(j), j: i.max(j), lo: 0.8, hi: 1.2, ambig: 0, weight: w });
+            }
+        }
+        groups.push(rest.len() as u32);
+        let nr = rest.len();
+        let rs = RestraintSet { rest, groups, n_contacts: 0 };
+        let master = System::new(n, vec![1.0; n], vec![1.0; n], &rs).with_form(RestraintForm::Master2017);
+        let weighted = System::new(n, vec![1.0; n], vec![1.0; n], &rs).with_form(RestraintForm::Weighted2017);
+        let per_model = {
+            let mut s = weighted.clone();
+            s.model_w = Some((0..2).map(|_| (0..nr).map(|_| rng.uniform()).collect()).collect());
+            s
+        };
+        let vel: Vec<V3> = (0..n).map(|_| [rng.normal(), rng.normal(), rng.normal()]).collect();
+        let (t_ref, f_rep, f_dist, steps) = (300.0, 0.6, 25.0, 10);
+        let dp = DynParams {
+            t_ref,
+            t_step: 0.001,
+            n_steps: steps,
+            f_rep,
+            f_dist,
+            beta: 10.0,
+            tot0: 20.458,
+            skin: 1.0,
+            original_nl_schedule: false,
+            use_cells: true,
+            emulate_overflow: false,
+        };
+        for (name, sys) in [("2017", &master), ("weighted", &weighted), ("per-model", &per_model)] {
+            let out = eng
+                .run_schedule(sys, vec![pos.clone(), pos.clone()], &[(t_ref, f_rep)], steps, f_dist, 1.0, 0.001 * 20.458, 10.0 / 20.458, 1, Some(&[vel.clone(), vel.clone()]))
+                .unwrap();
+            for (mi, c) in out.iter().enumerate() {
+                let sm = sys.for_model(mi);
+                let mut m = Model::new(pos.clone(), Rng::new(0));
+                run_dynamics(&sm, &mut m, &dp, false, Some(&vel));
+                let max_d = (0..n).map(|i| (0..3).map(|k| (c[i][k] - m.pos[i][k]).powi(2)).sum::<f64>().sqrt()).fold(0.0, f64::max);
+                let max_move = (0..n).map(|i| (0..3).map(|k| (m.pos[i][k] - pos[i][k]).powi(2)).sum::<f64>().sqrt()).fold(0.0, f64::max);
+                eprintln!("ambiguous groups {name}, model {mi}: GPU vs CPU max diff {max_d:.2e} (max move {max_move:.3})");
+                assert!(max_move > 0.05);
+                assert!(max_d < 1e-3, "{name} model {mi}: {max_d}");
+            }
+        }
+    }
+
+    /// The whole diploid protocol (2017 and EMber) on the GPU vs the CPU: same particles, and
+    /// the per-copy structures agree statistically (distance-matrix r between the devices'
+    /// model 0 of the same copy chain vs between two CPU runs with different seeds).
+    #[test]
+    fn gpu_matches_cpu_diploid_protocol() {
+        use crate::diploid::DiploidInput;
+        use crate::params::Params;
+        use crate::pipeline::{calc_genome_structure, CpuEngine, Input};
+        let Ok(mut eng) = GpuEngine::new(0) else {
+            eprintln!("no GPU adapter: skipped");
+            return;
+        };
+        // 2 chromosomes x 2 homologs from random walks, a third of the ends phased
+        let mut rng = Rng::new(31);
+        let names: Vec<String> = vec!["chr1".into(), "chr2".into()];
+        let nloc = 120usize;
+        let walks: Vec<Vec<V3>> = (0..4)
+            .map(|k| {
+                let mut q = [(k / 2) as f64 * 6.0, (k % 2) as f64 * 9.0, 0.0];
+                (0..nloc)
+                    .map(|_| {
+                        q = [q[0] + rng.normal() * 0.35, q[1] + rng.normal() * 0.35, q[2] + rng.normal() * 0.35];
+                        q
+                    })
+                    .collect()
+            })
+            .collect();
+        let (mut ca, mut pa, mut cb, mut pb, mut ha, mut hb) = (vec![], vec![], vec![], vec![], vec![], vec![]);
+        for _ in 0..40_000 {
+            let (c1, h1) = ((rng.uniform() * 2.0) as usize, (rng.uniform() * 2.0) as usize);
+            let (c2, h2) = if rng.uniform() < 0.9 { (c1, h1) } else { ((rng.uniform() * 2.0) as usize, (rng.uniform() * 2.0) as usize) };
+            let (i, j) = ((rng.uniform() * nloc as f64) as usize, (rng.uniform() * nloc as f64) as usize);
+            let (a, b) = (walks[2 * c1 + h1][i], walks[2 * c2 + h2][j]);
+            if (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f64>() < 0.8 {
+                ca.push(c1 as u32);
+                pa.push(i as i64 * 100_000 + 50_000);
+                cb.push(c2 as u32);
+                pb.push(j as i64 * 100_000 + 50_000);
+                ha.push(if rng.uniform() < 0.35 { h1 as i8 } else { -1 });
+                hb.push(if rng.uniform() < 0.35 { h2 as i8 } else { -1 });
+            }
+        }
+        let nc = ca.len();
+        let amb: Vec<i64> = (1..=nc as i64).collect();
+        let act = vec![true; nc];
+        let dip = DiploidInput { hap_a: &ha, hap_b: &hb, ploidy: &[2, 2], prior: None };
+        let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &amb, active: &act, prior_lr: None, dip: Some(dip) };
+        let dm = |c: &[V3], s: usize, e: usize| -> Vec<f64> {
+            let mut v = vec![];
+            for a in s..e {
+                for b in a + 2..e {
+                    v.push((0..3).map(|k| (c[a][k] - c[b][k]).powi(2)).sum::<f64>().sqrt());
+                }
+            }
+            v
+        };
+        let r = |x: &[f64], y: &[f64]| -> f64 {
+            let n = x.len() as f64;
+            let (mx, my) = (x.iter().sum::<f64>() / n, y.iter().sum::<f64>() / n);
+            let (mut sxy, mut sxx, mut syy) = (0.0, 0.0, 0.0);
+            for (a, b) in x.iter().zip(y) {
+                sxy += (a - mx) * (b - my);
+                sxx += (a - mx).powi(2);
+                syy += (b - my).powi(2);
+            }
+            sxy / (sxx * syy).sqrt()
+        };
+        for proto in ["nuc_dynamics_2017", "robust"] {
+            let p = Params {
+                protocol: proto.into(),
+                particle_sizes: vec![4e6, 1e6, 4e5],
+                n_models: 2,
+                seed: 2,
+                temp_steps: vec![60],
+                dynamics_steps: vec![50],
+                robust_temp_steps: vec![60],
+                robust_dynamics_steps: vec![50],
+                ..Default::default()
+            };
+            let gpu = calc_genome_structure(&input, &Params { device: "gpu".into(), ..p.clone() }, &mut eng).unwrap();
+            let cpu = calc_genome_structure(&input, &p, &mut CpuEngine::new(2).unwrap()).unwrap();
+            let cpu2 = calc_genome_structure(&input, &Params { seed: 9, ..p.clone() }, &mut CpuEngine::new(2).unwrap()).unwrap();
+            assert_eq!(gpu.seq_pos, cpu.seq_pos);
+            assert_eq!(gpu.chroms, cpu.chroms);
+            let mut off = 0;
+            for sp in &gpu.seq_pos {
+                let (s, e) = (off, off + sp.len());
+                off = e;
+                let r_gc = r(&dm(&gpu.coords[0], s, e), &dm(&cpu.coords[0], s, e));
+                let r_cc = r(&dm(&cpu2.coords[0], s, e), &dm(&cpu.coords[0], s, e));
+                eprintln!("{proto}: copy chain of {} particles: r(GPU, CPU) {r_gc:.3}, r(CPU seed 9, CPU) {r_cc:.3}", sp.len());
+                assert!(r_gc > r_cc - 0.15, "{proto}: GPU vs CPU {r_gc} much lower than CPU vs CPU {r_cc}");
+                assert!(r_gc > 0.5, "{proto}: GPU vs CPU r {r_gc}");
+            }
+        }
+    }
 }

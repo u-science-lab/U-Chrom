@@ -71,7 +71,7 @@ fn run_with(protocol: &str, emulate: bool, f: impl Fn(Params) -> Params) -> u64 
     let n = ca.len();
     let ambig: Vec<i64> = (1..=n as i64).collect();
     let active = vec![true; n];
-    let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &ambig, active: &active, prior_lr: None };
+    let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &ambig, active: &active, prior_lr: None, dip: None };
     let p = Params {
         protocol: protocol.to_string(),
         particle_sizes: vec![4e6, 2e6, 4e5, 2e5],
@@ -100,9 +100,10 @@ const GOLDEN: [(&str, bool, &[u64], &[u64]); 3] = [
 ];
 
 /// EMber (protocol "robust") with its frozen defaults (tag `robust-frozen`), on the same toy
-/// contacts and a shortened schedule, recorded on the engine of the tag (before diploid support
-/// was added): (macOS aarch64, Linux x86-64: Sherlock, GitHub ubuntu-latest).
-const GOLDEN_ROBUST: (&[u64], &[u64]) = (&[0x0691d3b6eac2a99a], &[0]);
+/// contacts and a shortened schedule: (macOS aarch64, Linux x86-64: Sherlock, GitHub
+/// ubuntu-latest).  Recorded 2026-10-03 on commit 6fcf370, whose CPU engine is that of the tag,
+/// before diploid support was added (diploid input takes a separate path, `diploid.rs`).
+const GOLDEN_ROBUST: (&[u64], &[u64]) = (&[0x0691d3b6eac2a99a], &[0x50d611f3ba255008, 0xa6236727e14c942c]);
 
 #[test]
 fn existing_protocols_bit_identical() {

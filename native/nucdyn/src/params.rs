@@ -169,6 +169,16 @@ pub struct Params {
     pub robust_sample_steps: usize,
     pub robust_sample_dyn_steps: usize,
     pub robust_sample_snapshots: usize,
+    // ---- diploid (homolog-resolved) input only (`diploid.rs`; ignored for haploid input) ----
+    /// Unphased ends of an intra-chromosomal contact closer than this (bp) are taken to be on
+    /// the same homolog (hickit's imputation prior gives P(same homolog) >= 0.99 below
+    /// 10 Mb); 0: every copy combination is a candidate.
+    pub diploid_cis_sep: i64,
+    /// EMber (protocol robust): from the first re-weighted stage on, every candidate copy pair
+    /// of an ambiguous contact is its own restraint, weighted by its posterior probability
+    /// (true contact on that copy pair).  False: the candidates stay one ambiguous restraint
+    /// (NucDynamics combined distance) weighted by the probability that the contact is true.
+    pub robust_dip_split: bool,
 }
 
 impl Default for Params {
@@ -246,6 +256,8 @@ impl Default for Params {
             robust_sample_steps: 20,
             robust_sample_dyn_steps: 20,
             robust_sample_snapshots: 1,
+            diploid_cis_sep: 10_000_000,
+            robust_dip_split: true,
         }
     }
 }
