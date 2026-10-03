@@ -706,9 +706,17 @@
    "threads": 1,
    "res": 1000,
    "res_tag": "1kb",
-   "n_runs": 0,
-   "status": "pending",
-   "reason": "no record yet (queued or running)"
+   "n_runs": 1,
+   "status": "censored_short_cap",
+   "censored_at_seconds": 172185.5361503479,
+   "cap_seconds": 172185.47023820877,
+   "reason": "killed at the cap (47.83 h)",
+   "hosts": [
+    "sh04-05n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
   },
   {
    "method": "hickit",
@@ -1256,6 +1264,19 @@
     "threads": 1,
     "res": 10000,
     "seconds": 150428.64371799707,
+    "exponent": 0.6232935283598581,
+    "fit_resolutions": [
+     100000,
+     50000,
+     20000
+    ],
+    "label": "EXTRAPOLATED (power-law fit), not measured"
+   },
+   {
+    "method": "orig",
+    "threads": 1,
+    "res": 1000,
+    "seconds": 631864.6631285521,
     "exponent": 0.6232935283598581,
     "fit_resolutions": [
      100000,
