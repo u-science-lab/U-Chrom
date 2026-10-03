@@ -19,6 +19,9 @@ Usage::
     python example-data/download_data.py --liu2025_mop           # opt-in, 1.7 GB FOF-CT
     python example-data/download_data.py --fig3                  # all Fig. 3 inputs (~370 MB)
     python example-data/download_data.py --ray2019_k562          # opt-in, 849 MB K562 mcool
+    python example-data/download_data.py --nagano2017_hap        # opt-in, 1.4 GB (+5 GB streamed) scHi-C
+    python example-data/download_data.py --takei2021_brain       # opt-in, 0.6 GB brain seqFISH+ tables
+    python example-data/download_data.py --tan2021_cortex        # opt-in, ~13 GB Dip-C adult cortex
     python example-data/download_data.py --su2020_genome         # opt-in, 203 MB Su 2020 genome-scale (bulk benchmark)
     python example-data/download_data.py --rao2014_imr90_4dn     # opt-in, 4.6 GB IMR90 mcool (Sherlock only)
     python example-data/download_data.py --bonev2017_mesc_4dn    # opt-in, 12.6 GB mESC mcool (Sherlock only)
@@ -86,6 +89,29 @@ _SPATIAL_HICRNA = [
 _BIL_MERFISH_MOP = (
     "https://download.brainimagelibrary.org/cf/1c/cf1c1a431ef8d021/processed_data"
 )
+
+# ---- matched-modality comparison (benchmarks/screcon/matched.py) ----
+# Nagano et al. 2017 (Nature 547:61) haploid mESC single-cell Hi-C: the authors' per-cell fend-pair
+# tables (schic2 S3 bucket, linked from github.com/tanaylab/schic2); fend coordinates (mm9) only ship
+# inside the 5 GB misha database archive, so GATC.fends is streamed out of it (nothing else is kept).
+_SCHIC2 = "https://schic2.s3.eu-west-1.amazonaws.com"
+_GSE94489 = "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE94nnn/GSE94489/suppl"
+# Tan et al. 2021 (Cell 184:741) Dip-C, adult cortex (P56 / P309 / P347, >= 100 k contacts): 510 cells
+# listed in benchmarks/screcon/data/tan2021_adult_cortex_cells.tsv; per-GSM files of GSE146397.
+_TAN_CELLS = HERE.parent / "benchmarks" / "screcon" / "data" / "tan2021_adult_cortex_cells.tsv"
+_TAN_SUFFIXES = ("contacts.pairs", "impute.pairs", "20k.1.clean.3dg", "20k.2.clean.3dg", "20k.3.clean.3dg",
+                 "20k.4.clean.3dg", "20k.5.clean.3dg")
+
+
+def _tan2021_files() -> list[tuple[str, str]]:
+    if not _TAN_CELLS.exists():
+        return []
+    rows = [line.rstrip("\n").split("\t") for line in _TAN_CELLS.open()][1:]
+    return [(f"tan2021_cortex/cells/{name}/{name}.{suf}.txt.gz", _gsm(f"{gsm}_{name}.{suf}.txt.gz"))
+            for gsm, name, *_ in rows for suf in _TAN_SUFFIXES]
+
+
+_TAKEI_BRAIN = "https://zenodo.org/records/4708112/files"
 
 DATASETS = {
     "takei": {
@@ -336,6 +362,38 @@ DATASETS = {
         "default": False,
         "description": "Spatial ATAC-Hi-C mouse brain, 2 sections: ATAC + Hi-C fragments, spots, images (GSE307620)",
     },
+    "nagano2017_hap": {
+        "files": [
+            ("nagano2017_hap/schic_hap_serum_adj_files.tar.gz", f"{_SCHIC2}/schic_hap_serum_adj_files.tar.gz"),
+            ("nagano2017_hap/schic_hap_2i_adj_files.tar.gz", f"{_SCHIC2}/schic_hap_2i_adj_files.tar.gz"),
+            ("nagano2017_hap/GSE94489_haploids_features_table.txt.gz",
+             f"{_GSE94489}/GSE94489_haploids_features_table.txt.gz"),
+            ("nagano2017_hap/GSE94489_README.txt", f"{_GSE94489}/GSE94489_README.txt"),
+            ("nagano2017_hap/mm9ToMm10.over.chain.gz",
+             "https://hgdownload.soe.ucsc.edu/goldenPath/mm9/liftOver/mm9ToMm10.over.chain.gz"),
+        ],
+        # (destination, archive URL, member path suffix): streamed, only the member is written
+        "extract": [("nagano2017_hap/GATC.fends", f"{_SCHIC2}/schic2_mm9_db.tar.gz", "seq/redb/GATC.fends")],
+        "size_mb": 1386,
+        "default": False,
+        "description": "Nagano 2017 haploid mESC scHi-C fend pairs (2i + serum) + mm9 GATC fends + mm9->mm10 chain",
+    },
+    "takei2021_brain": {
+        "files": [(f"takei2021_brain/{n}", f"{_TAKEI_BRAIN}/{n}?download=1") for n in (
+            "TableS5_brain_RNA_profiles_2762cells.csv",
+            "TableS7_brain_DNAseqFISH_1Mb_voxel_coordinates_2762cells.csv",
+            "TableS8_brain_DNAseqFISH_25kb_voxel_coordinates_2762cells.csv",
+            "TableS10-median-radial-score-per-celltype-1Mb-resolution.csv")],
+        "size_mb": 597,
+        "default": False,
+        "description": "Takei 2021 Science mouse cortex DNA seqFISH+ 1 Mb / 25 kb spots, RNA, radial scores (Zenodo 4708112)",
+    },
+    "tan2021_cortex": {
+        "files": _tan2021_files(),
+        "size_mb": 13000,
+        "default": False,
+        "description": "Tan 2021 Dip-C adult cortex, 510 cells: contacts / impute pairs + 5 clean 3dg (GEO GSE146397)",
+    },
     "spatial_hicrna": {
         "files": [(f"spatial_hicrna/raw/GSE311199/{n}", _gsm(n)) for n in _SPATIAL_HICRNA],
         "size_mb": 2300,
@@ -360,6 +418,26 @@ def _download(url: str, dest: Path, description: str, size_mb: int) -> None:
             tmp.unlink()
         print(f"[fail] {dest.name}: {exc}", file=sys.stderr)
         raise
+
+
+def _extract_member(url: str, member_suffix: str, dest: Path) -> None:
+    """Stream a .tar.gz and write only the member whose path ends with ``member_suffix``."""
+    import shutil
+    import tarfile
+    if dest.exists():
+        print(f"[skip] {dest.name} already present")
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[pull] {member_suffix} streamed out of {url} → {dest}")
+    with urllib.request.urlopen(url) as resp, tarfile.open(fileobj=resp, mode="r|gz") as tf:
+        for m in tf:
+            if m.isfile() and m.name.endswith(member_suffix):
+                tmp = dest.with_suffix(dest.suffix + ".part")
+                with tf.extractfile(m) as src, open(tmp, "wb") as out:
+                    shutil.copyfileobj(src, out)
+                tmp.rename(dest)
+                return
+    raise SystemExit(f"[fail] {member_suffix} not found in {url}")
 
 
 def _md5(path: Path) -> str:
@@ -398,6 +476,8 @@ def main() -> None:
             want = info.get("md5", {}).get(rel)
             if want and _md5(args.dest / rel) != want:
                 raise SystemExit(f"[fail] md5 mismatch for {rel} (expected {want})")
+        for rel, url, member in info.get("extract", []):
+            _extract_member(url, member, args.dest / rel)
 
     print(f"\nAll requested datasets staged under: {args.dest}")
 
