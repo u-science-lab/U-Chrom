@@ -84,11 +84,14 @@ fn run(protocol: &str, emulate: bool) -> u64 {
     fnv(&out.coords)
 }
 
-/// (protocol, emulate overflow, macOS aarch64 hash, Linux x86_64 hash); 0 = not recorded.
-const GOLDEN: [(&str, bool, u64, u64); 3] = [
-    ("nuc_dynamics_2017", false, 0x003d34d7af96f678, 0x663497c2061b7ff3),
-    ("nuc_dynamics_2017", true, 0x392f2bedd2d54888, 0xf69e41b3cd003a3b),
-    ("release_1.3", false, 0x97aac5aaf948cf94, 0x8ce4aa5821323198),
+/// (protocol, emulate overflow, macOS aarch64 hashes, Linux x86-64 hashes).  libm differs between
+/// Linux distributions, so Linux has one hash per recorded system: Sherlock (CentOS 7, glibc 2.17)
+/// and the GitHub ubuntu-latest runner (recorded on 2026-10-03 by running this test on the
+/// pre-`robust` engine, commit 628746e, in CI).  An empty list = not recorded (hash printed).
+const GOLDEN: [(&str, bool, &[u64], &[u64]); 3] = [
+    ("nuc_dynamics_2017", false, &[0x003d34d7af96f678], &[0x663497c2061b7ff3, 0x66b4673be7e94246]),
+    ("nuc_dynamics_2017", true, &[0x392f2bedd2d54888], &[0xf69e41b3cd003a3b, 0x8f322f96b55ab2d0]),
+    ("release_1.3", false, &[0x97aac5aaf948cf94], &[0x8ce4aa5821323198, 0xca10c7de591660e9]),
 ];
 
 #[test]
@@ -96,18 +99,18 @@ fn existing_protocols_bit_identical() {
     let print = std::env::var("UCHROM_NUCDYN_PRINT_GOLDEN").is_ok();
     for (proto, emulate, mac, linux) in GOLDEN {
         let h = run(proto, emulate);
-        let want = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        let want: &[u64] = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
             mac
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
             linux
         } else {
-            0
+            &[]
         };
-        if print || want == 0 {
+        if print || want.is_empty() {
             eprintln!("golden {proto} emulate={emulate}: 0x{h:016x}");
         }
-        if want != 0 {
-            assert_eq!(h, want, "{proto} (emulate {emulate}) changed: 0x{h:016x} vs 0x{want:016x}");
+        if !want.is_empty() {
+            assert!(want.contains(&h), "{proto} (emulate {emulate}) changed: 0x{h:016x} not in {want:x?}");
         }
     }
 }
