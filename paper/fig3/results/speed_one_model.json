@@ -178,9 +178,25 @@
    "threads": 1,
    "res": 1000,
    "res_tag": "1kb",
-   "n_runs": 0,
-   "status": "pending",
-   "reason": "no record yet (queued or running)"
+   "n_runs": 1,
+   "status": "ok",
+   "n": 1,
+   "median_wall_seconds": 100916.83138108253,
+   "wall_seconds": [
+    100916.83138108253
+   ],
+   "wall_total_seconds": [
+    100923.55555464886
+   ],
+   "peak_rss_mb": 911.036,
+   "n_particles": 2568721,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-02n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
   },
   {
    "method": "nucdyn_cpu",
@@ -590,9 +606,25 @@
    "threads": 1,
    "res": 100000,
    "res_tag": "100kb",
-   "n_runs": 0,
-   "status": "pending",
-   "reason": "no record yet (queued or running)"
+   "n_runs": 1,
+   "status": "ok",
+   "n": 1,
+   "median_wall_seconds": 34445.59576270729,
+   "wall_seconds": [
+    34445.59576270729
+   ],
+   "wall_total_seconds": [
+    34449.50954017183
+   ],
+   "peak_rss_mb": 116.328,
+   "n_particles": 25724,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-02n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
   },
   {
    "method": "orig",
@@ -601,9 +633,25 @@
    "threads": 1,
    "res": 50000,
    "res_tag": "50kb",
-   "n_runs": 0,
-   "status": "pending",
-   "reason": "no record yet (queued or running)"
+   "n_runs": 1,
+   "status": "ok",
+   "n": 1,
+   "median_wall_seconds": 59068.67534832191,
+   "wall_seconds": [
+    59068.67534832191
+   ],
+   "wall_total_seconds": [
+    59070.58799110097
+   ],
+   "peak_rss_mb": 161.48,
+   "n_particles": 51411,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-11n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
   },
   {
    "method": "orig",
@@ -612,9 +660,25 @@
    "threads": 1,
    "res": 20000,
    "res_tag": "20kb",
-   "n_runs": 0,
-   "status": "pending",
-   "reason": "no record yet (queued or running)"
+   "n_runs": 1,
+   "status": "ok",
+   "n": 1,
+   "median_wall_seconds": 94822.9867447922,
+   "wall_seconds": [
+    94822.9867447922
+   ],
+   "wall_total_seconds": [
+    94824.12072859518
+   ],
+   "peak_rss_mb": 239.468,
+   "n_particles": 128473,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-17n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
   },
   {
    "method": "orig",
@@ -911,9 +975,25 @@
    "threads": 1,
    "res": 20000,
    "res_tag": "20kb",
-   "n_runs": 0,
-   "status": "pending",
-   "reason": "no record yet (queued or running)"
+   "n_runs": 1,
+   "status": "ok",
+   "n": 1,
+   "median_wall_seconds": 36190.297644138336,
+   "wall_seconds": [
+    36190.297644138336
+   ],
+   "wall_total_seconds": [
+    36193.16862360196
+   ],
+   "peak_rss_mb": 374.276,
+   "n_particles": 131700,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-14n14.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
   },
   {
    "method": "sic",
@@ -922,9 +1002,25 @@
    "threads": 1,
    "res": 10000,
    "res_tag": "10kb",
-   "n_runs": 0,
-   "status": "pending",
-   "reason": "no record yet (queued or running)"
+   "n_runs": 1,
+   "status": "ok",
+   "n": 1,
+   "median_wall_seconds": 72255.85785365105,
+   "wall_seconds": [
+    72255.85785365105
+   ],
+   "wall_total_seconds": [
+    72260.31128903502
+   ],
+   "peak_rss_mb": 1494.124,
+   "n_particles": 263389,
+   "n_particles_grid": null,
+   "hosts": [
+    "sh04-14n14.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
   },
   {
    "method": "sic",

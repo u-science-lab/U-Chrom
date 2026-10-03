@@ -1,0 +1,108 @@
+{
+ "populations": {
+  "ours:ours_gpu_S2000_s1": {
+   "n_structures": 2000,
+   "n_beads": 3008,
+   "fit": {
+    "pearson_all_restrained": 0.9356595057979837,
+    "mae_all_restrained": 0.005222284153979218,
+    "n_all_restrained": 614139,
+    "pearson_all_unrestrained": 0.21782686105975857,
+    "mae_all_unrestrained": 0.001948490650695662,
+    "n_all_unrestrained": 433723,
+    "pearson_intra_restrained": 0.9412607243011915,
+    "mae_intra_restrained": 0.04216089721635987,
+    "n_intra_restrained": 53640,
+    "pearson_intra_unrestrained": -0.10140275041933748,
+    "mae_intra_unrestrained": 0.012158476062697354,
+    "n_intra_unrestrained": 624,
+    "pearson_inter_restrained": 0.8396340213980287,
+    "mae_inter_restrained": 0.0016872426915214838,
+    "n_inter_restrained": 560499,
+    "pearson_inter_unrestrained": 0.2336176814861001,
+    "mae_inter_unrestrained": 0.0019337803168064376,
+    "n_inter_unrestrained": 433099
+   }
+  },
+  "ours:ours_gpu_S2000_s2": {
+   "n_structures": 2000,
+   "n_beads": 3008,
+   "fit": {
+    "pearson_all_restrained": 0.9354170623927024,
+    "mae_all_restrained": 0.005254046658348397,
+    "n_all_restrained": 614139,
+    "pearson_all_unrestrained": 0.21702502463126216,
+    "mae_all_unrestrained": 0.0019392704124230147,
+    "n_all_unrestrained": 433723,
+    "pearson_intra_restrained": 0.9412841186392581,
+    "mae_intra_restrained": 0.04252934044111369,
+    "n_intra_restrained": 53640,
+    "pearson_intra_unrestrained": -0.14983301244457162,
+    "mae_intra_unrestrained": 0.012356332652896899,
+    "n_intra_unrestrained": 624,
+    "pearson_inter_restrained": 0.8399024212476613,
+    "mae_inter_restrained": 0.0016867847033626966,
+    "n_inter_restrained": 560499,
+    "pearson_inter_unrestrained": 0.23376074971956662,
+    "mae_inter_unrestrained": 0.0019242617265612242,
+    "n_inter_unrestrained": 433099
+   }
+  },
+  "ours:ours_gpu_S2000_s3": {
+   "n_structures": 2000,
+   "n_beads": 3008,
+   "fit": {
+    "pearson_all_restrained": 0.9354931472772958,
+    "mae_all_restrained": 0.005241091110739467,
+    "n_all_restrained": 614139,
+    "pearson_all_unrestrained": 0.21654933605817023,
+    "mae_all_unrestrained": 0.0019362244211811063,
+    "n_all_unrestrained": 433723,
+    "pearson_intra_restrained": 0.9412425083205398,
+    "mae_intra_restrained": 0.04238958539771324,
+    "n_intra_restrained": 53640,
+    "pearson_intra_unrestrained": -0.1403297147985371,
+    "mae_intra_unrestrained": 0.012210349656837748,
+    "n_intra_unrestrained": 624,
+    "pearson_inter_restrained": 0.8403704625153283,
+    "mae_inter_restrained": 0.0016859639230847622,
+    "n_inter_restrained": 560499,
+    "pearson_inter_unrestrained": 0.23277022857946889,
+    "mae_inter_unrestrained": 0.0019214216759726203,
+    "n_inter_unrestrained": 433099
+   }
+  }
+ },
+ "pairs": [
+  {
+   "a": "ours:ours_gpu_S2000_s1",
+   "b": "ours:ours_gpu_S2000_s2",
+   "kind": "ours",
+   "pearson_contact": 0.9991730470327933,
+   "pearson_contact_intra": 0.9993332076302259,
+   "pearson_contact_inter": 0.941593688674682,
+   "pearson_radial": 0.9991568610126524,
+   "mean_abs_diff_contact": 0.0011033003391667984
+  },
+  {
+   "a": "ours:ours_gpu_S2000_s1",
+   "b": "ours:ours_gpu_S2000_s3",
+   "kind": "ours",
+   "pearson_contact": 0.9991845454237476,
+   "pearson_contact_intra": 0.9993480129295571,
+   "pearson_contact_inter": 0.9414627803280582,
+   "pearson_radial": 0.9991539943222065,
+   "mean_abs_diff_contact": 0.0011017373948096223
+  },
+  {
+   "a": "ours:ours_gpu_S2000_s2",
+   "b": "ours:ours_gpu_S2000_s3",
+   "kind": "ours",
+   "pearson_contact": 0.9991810545952391,
+   "pearson_contact_intra": 0.9993405393272458,
+   "pearson_contact_inter": 0.9413818912017556,
+   "pearson_radial": 0.9989495781367167,
+   "mean_abs_diff_contact": 0.0011013728429888673
+  }
+ ]
+}
