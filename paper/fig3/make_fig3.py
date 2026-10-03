@@ -14,7 +14,7 @@ from the values noted inside a dashed frame (``mock_frame``); nothing else is mo
   f  imaging-truth simulations (Su 2020 chr21, Takei 2021 1 Mb): distance agreement
   g  IGM: native vs original populations (WTC11 demo, S = 200 / 1,000), seed spread as reference
   h  IGM speed: original (64 cores) vs native (1 GPU)
-  i  population size: seed-to-seed agreement of trans contacts vs S (placeholder: sweep running)
+  i  population size: seed-to-seed agreement and fit to input of trans contacts vs S (200-5,000)
 
 Supplementary figures: ``make_figS_fig3_*.py`` (``make_figS_fig3_all.py`` builds the set).
 
@@ -160,6 +160,16 @@ def load_igm(d: dict) -> None:
             pairs.setdefault((S, r["kind"]), []).append(r)
     d["igm_pairs"] = pairs
     d["igm_fit"] = {S: c["populations"] for S, c in cmp_.items()}
+    # population-size sweep: native seeds 1-3 at every S (+ original at 200 / 1,000)
+    sweep = {}
+    for S in (200, 500, 1000, 2000, 5000):
+        c = _j(D / f"compare_S{S}.json")
+        sweep[S] = {"seed": [r["pearson_contact_inter"] for r in c["pairs"] if r["kind"] == "ours"],
+                    "vs_orig": [r["pearson_contact_inter"] for r in c["pairs"] if r["kind"] == "igm-ours"],
+                    "fit": [p["fit"]["pearson_inter_restrained"] for k, p in c["populations"].items()
+                            if k.startswith("ours")],
+                    "minutes": [_j(p)["seconds_wall"] / 60 for p in sorted(D.glob(f"ours_gpu_S{S}_s*/summary.json"))]}
+    d["igm_sweep"] = sweep
     t_ours = {S: [_j(p)["seconds_wall"] / 60 for p in sorted(D.glob(f"ours_gpu_S{S}_s*/summary.json"))]
               for S in (200, 1000)}
     t_orig = {S: [_j(p)["seconds_wall"] / 60 for p in sorted(D.glob(f"orig_S{S}_s*/timing.json"))]
@@ -464,21 +474,26 @@ def p_igm_speed(fig, d, x, y):
 
 
 def p_popsize(fig, d, x, y):
-    head_(fig, x, y, "i", "How many structures?", "seed-to-seed agreement, trans")
-    ax = ax_at(fig, x + 10, y + 11, 30, 28)
-    P = d["igm_pairs"]
-    r200 = np.mean([r["pearson_contact_inter"] for r in P[(200, "ours")]])
-    c = 200 * (1 / r200 - 1)                       # sampling-noise model r(S) = 1 / (1 + c / S)
-    S = np.geomspace(150, 6000, 100)
-    ax.plot(S, 1 / (1 + c / S), color=LGREY, lw=0.9, ls="--", label="sampling-noise model")
-    ax.scatter([200], [r200], s=12, color=OURS2, zorder=3, label="native vs native")
-    r1000 = [r["pearson_contact_inter"] for r in P[(1000, "igm-ours")]]
-    ax.scatter([1000] * len(r1000), r1000, s=16, marker="*", color=OURS, zorder=3, label="native vs original")
-    ax.set_xscale("log"); ax.set_xticks([200, 500, 1000, 2000, 5000], ["200", "500", "1k", "2k", "5k"])
-    ax.minorticks_off(); ax.set_ylim(0.4, 1.0)
+    head_(fig, x, y, "i", "How many structures?", "WTC11 2 Mb, 3 seeds; grey: minutes on 1 GPU")
+    ax = ax_at(fig, x + 10, y + 11, 34, 28)
+    sw = d["igm_sweep"]
+    Ss = sorted(sw)
+    r200 = np.mean(sw[200]["seed"])
+    c = 200 * (1 / r200 - 1)            # sampling-noise model r(S) = 1 / (1 + c / S), fitted at S = 200 only
+    grid = np.geomspace(150, 6500, 100)
+    ax.plot(grid, 1 / (1 + c / grid), color=LGREY, lw=0.9, ls="--", label="sampling noise (fit at S = 200)")
+    m = [np.mean(sw[S]["seed"]) for S in Ss]
+    ax.plot(Ss, m, color=OURS, marker="o", ms=2.8, lw=0.9, label="seed vs seed (native)")
+    vo = [(S, v) for S in Ss for v in sw[S]["vs_orig"]]
+    ax.scatter(*zip(*vo), s=16, marker="*", color=INK, zorder=4, lw=0, label="native vs original")
+    f = [np.mean(sw[S]["fit"]) for S in Ss]
+    ax.plot(Ss, f, color=TEAL, marker="s", ms=2.5, lw=0.9, label="fit to input Hi-C")
+    for S in Ss:
+        ax.text(S, 0.405, f"{np.mean(sw[S]['minutes']):.0f}", ha="center", va="bottom", fontsize=4.8, color=GREY)
+    ax.set_xscale("log"); ax.set_xticks(Ss, ["200", "500", "1k", "2k", "5k"])
+    ax.minorticks_off(); ax.set_ylim(0.4, 1.0); ax.set_xlim(150, 6500)
     ax.set_xlabel("structures in the population (S)"); ax.set_ylabel("Pearson r, trans contacts")
-    ax.legend(frameon=False, fontsize=5.0, loc="lower right")
-    mock_frame(fig, x + 1, y + 8, 41, 47, "S = 500–5,000 running")
+    ax.legend(frameon=False, fontsize=4.8, loc="lower right", handlelength=1.4)
 
 
 def main() -> None:
