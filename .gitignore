@@ -100,7 +100,8 @@ paper/fig2/_cache/
 # Figure 3 inputs (example-data/download_data.py --fig3, build_rao2014_slices.py); feasibility JSONs are committed
 example-data/stevens2017_mesc/
 example-data/bintu2018/
-example-data/su2020_imr90/
+example-data/su2020_imr90/*
+!example-data/su2020_imr90/Hi-C_contacts_genome-scale.tsv
 example-data/abbas2019_gemfish/
 # rao2014_imr90: only the chr21 5 kb slice (3.8 MB) is checked in (GEM-FISH tutorial)
 example-data/rao2014_imr90/*
@@ -113,6 +114,8 @@ example-data/ray2019_k562/
 example-data/nagano2017_hap/
 example-data/takei2021_brain/
 example-data/tan2021_cortex/
+# bulk deconvolution benchmark inputs (download_data.py --bonev2017_mesc_4dn; IMR90 4DN mcool lives in rao2014_imr90/)
+example-data/bonev2017_mesc/
 !paper/fig3/feasibility/*.json
 !paper/fig3/results/*.json
 

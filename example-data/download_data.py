@@ -22,6 +22,9 @@ Usage::
     python example-data/download_data.py --nagano2017_hap        # opt-in, 1.4 GB (+5 GB streamed) scHi-C
     python example-data/download_data.py --takei2021_brain       # opt-in, 0.6 GB brain seqFISH+ tables
     python example-data/download_data.py --tan2021_cortex        # opt-in, ~13 GB Dip-C adult cortex
+    python example-data/download_data.py --su2020_genome         # opt-in, 203 MB Su 2020 genome-scale (bulk benchmark)
+    python example-data/download_data.py --rao2014_imr90_4dn     # opt-in, 4.6 GB IMR90 mcool (Sherlock only)
+    python example-data/download_data.py --bonev2017_mesc_4dn    # opt-in, 12.6 GB mESC mcool (Sherlock only)
     python example-data/download_data.py --dest /shared/example-data --bintu2018
 
 Fig. 3 also needs Rao 2014 Hi-C slices that are *built*, not downloaded
@@ -274,6 +277,45 @@ DATASETS = {
         "default": False,
         "fig3": True,
         "description": "Su 2020 IMR90 chr21 chromatin tracing + binned Hi-C (Zenodo 3928890)",
+    },
+    # Su et al. 2020 genome-scale DNA-MERFISH (Zenodo 3928890, CC-BY-4.0): 1,041 loci x 1,787 IMR90
+    # cells, both homologs resolved, distance to lamina; + the authors' Rao 2014 Hi-C summed into
+    # 500 kb bins centred on the loci (2.8 MB, also checked in).  Bulk deconvolution benchmark truth.
+    "su2020_genome": {
+        "files": [
+            ("su2020_imr90/genomic-scale.tsv", f"{_SU2020}/genomic-scale.tsv?download=1"),
+            ("su2020_imr90/Hi-C_contacts_genome-scale.tsv",
+             f"{_SU2020}/Hi-C_contacts_genome-scale.tsv?download=1"),
+            ("su2020_imr90/README_August_2020.txt", f"{_SU2020}/README_August%202020.txt?download=1"),
+        ],
+        "md5": {"su2020_imr90/genomic-scale.tsv": "a1d79c2ba047c20411547431a728b621",
+                "su2020_imr90/Hi-C_contacts_genome-scale.tsv": "13e3607efab2d889e82b10f36e71ce5a",
+                "su2020_imr90/README_August_2020.txt": "a93629f38fcc11acdb46ced5fc74bee1"},
+        "size_mb": 203,
+        "default": False,
+        "description": "Su 2020 IMR90 genome-scale DNA-MERFISH (1,041 loci, homologs) + binned Hi-C (Zenodo 3928890)",
+    },
+    # Rao et al. 2014 IMR90 in situ Hi-C reprocessed by 4DN on GRCh38 (set 4DNES1ZEJNRU): the
+    # whole-genome input of the bulk deconvolution benchmark (20 kb built from the 10 kb level).
+    "rao2014_imr90_4dn": {
+        "files": [("rao2014_imr90/4DNFIR1JDZH7.mcool",
+                   "https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/"
+                   "d10655ab-5bdf-4449-ab5a-82188af29868/4DNFIR1JDZH7.mcool")],
+        "md5": {"rao2014_imr90/4DNFIR1JDZH7.mcool": "f91b77fa61acdc58360911c80b007646"},
+        "size_mb": 4640,
+        "default": False,
+        "description": "Rao 2014 IMR90 in situ Hi-C, 4DN GRCh38 mcool (4DNFIR1JDZH7; Sherlock only)",
+    },
+    # Bonev et al. 2017 mESC Hi-C (G1-sorted ES), 4DN GRCm38 mcool (set 4DNESDXUWBD9) - Takei 2021's
+    # comparison Hi-C; whole-genome input of the mESC deconvolution benchmark.
+    "bonev2017_mesc_4dn": {
+        "files": [("bonev2017_mesc/4DNFIC21MG3U.mcool",
+                   "https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/"
+                   "2b448d99-d3fb-4bb9-a126-386ccb99a6fd/4DNFIC21MG3U.mcool")],
+        "md5": {"bonev2017_mesc/4DNFIC21MG3U.mcool": "dda4ed67a1179f917721fb81b1adebe0"},
+        "size_mb": 12551,
+        "default": False,
+        "description": "Bonev 2017 mESC Hi-C, 4DN mm10 mcool (4DNFIC21MG3U; Sherlock only)",
     },
     # GEM-FISH (Abbas et al. 2019, Nat Commun 10:2049) repo data, MIT licence,
     # pinned commit: Wang et al. 2016 FISH of chr20/21/22 TADs in IMR90, the

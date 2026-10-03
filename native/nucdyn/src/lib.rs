@@ -11,6 +11,7 @@
 pub mod align;
 pub mod contacts;
 pub mod dynamics;
+pub mod igm;
 pub mod params;
 pub mod pipeline;
 pub mod protocol2017;
