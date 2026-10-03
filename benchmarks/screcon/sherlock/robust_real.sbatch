@@ -20,7 +20,7 @@ for c in ${CELLS:-1 2 3 4}; do
   M=$O/models/$VARIANT
   mkdir -p "$M" "$O/scores/$VARIANT"
   T="$GEO/${GSM[$c]}_Cell_${c}_contact_pairs.txt.gz"
-  [ -f "$M/cell$c.npz" ] || $PY $SC/run_robust.py --contacts "$T" --res 100000 --device gpu --n-models 10 --seed 1 \
+  [ -f "$M/cell$c.npz" ] || $PY $SC/run_robust.py --contacts "$T" --res 100000 --device ${DEVICE:-gpu} --n-models 10 --seed 1 \
     --params "$PARAMS" --label "robust_$VARIANT" ${SUPPORT_REL:+--support-mix $(python3 -c "print($SUPPORT_REL * 100000)")} \
     --out "$M/cell$c.npz" > "$M/cell$c.log" 2>&1 || { echo "FAILED cell$c"; tail -3 "$M/cell$c.log"; continue; }
   models=("$M/cell$c.npz"); labels=(robust)
