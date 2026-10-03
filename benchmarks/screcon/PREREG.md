@@ -94,6 +94,33 @@ paper reports every endpoint of §3-§4 whatever the outcome.
   seeds / resolutions as the NucDynamics baseline runs of each test (10 models held-out / real,
   5 models simulations, seed 1).  No parameter or code change to the method after this line.
 
+* **2026-10-03 — diploid (homolog-resolved) extension: development set fixed before any diploid
+  run on benchmark data.**  EMber is extended to phased diploid input (`native/nucdyn/src/diploid.rs`:
+  one chain per chromosome copy; the copy pair of a contact with an unphased end is a latent
+  variable of the same mixture model).  This is a *new* analysis, not part of the haploid test of
+  §3-§5, whose result (§8) is unchanged.  Rules:
+  * **Frozen**: every haploid parameter of EMber (the `robust_*` defaults of tag `robust-frozen`)
+    stays as frozen; the haploid code path is pinned by `native/nucdyn/tests/regression.rs`.
+  * **Diploid parameters that may be tuned, on the development units below only**:
+    `robust_dip_split` (each candidate copy pair its own restraint vs one ambiguous restraint
+    weighted by P(true)), the use of a prior over candidate copy pairs (none / hickit's imputed
+    `phase_prob`), and — only if the development numbers call for it — the same-homolog rule for
+    close unphased cis ends (`diploid_cis_sep`, 10 Mb from hickit's imputation prior, not tuned
+    unless reported here).  Every tuned value and the development numbers behind it go to
+    `diploid_devlog.md`.  The NucDynamics-2017 diploid baseline (ambiguous restraints) and
+    hickit (Dip-C schedule, `-u` imputation, `-S` split at 0.75) are not tuned.
+  * **Development units**: imaging-truth simulations — Su 2020 genome-scale IMR90 (1,041 loci,
+    homologs resolved experimentally) and Takei 2021 1 Mb mESC (homologs split by the screcon
+    heuristic), diploid truth cells 1-2 of each (cells drawn with seed 1 by
+    `diploid_sim.py truth`), all conditions; Dip-C GM12878 (Tan et al. 2018, GSE117876) cells
+    1-4 (GSM3271347-GSM3271350), all checks (held-out phased contacts, agreement with the
+    published Dip-C structures, run-to-run precision).
+  * **Held back (one-shot test, after freezing the diploid parameters with a tag)**: truth cells
+    3-5 of both simulation datasets; Dip-C GM12878 cells 5-17; Uni-C GM12878 (Gao et al. 2025,
+    GSE267873, 11 cells) entirely — its split (proposed: cells sorted by GSM, first 3 for a
+    resolution / runtime pilot that does not set parameters, remaining 8 test) is fixed in this
+    file before any Uni-C reconstruction.
+
 ## 7. The method being tested (design as of this date)
 
 * Observation model: each observed contact is a mixture of a true proximity and a false
