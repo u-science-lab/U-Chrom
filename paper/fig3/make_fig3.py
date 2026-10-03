@@ -51,7 +51,7 @@ OTHER = "#c9a227"                        # external baseline (HIPPS / DIMES)
 NEW, NEW_LABEL = "#d1495b", "EMber (U-Chrom)"  # the new single-cell method (U-Chrom EMber; engine protocol "robust")
 # methods of the single-cell benchmark: key -> (label, colour)
 SC_METHODS = {"robust": (NEW_LABEL, NEW), "nucdyn_gpu": ("U-Chrom GPU", OURS), "nucdyn_cpu": ("U-Chrom CPU", OURS2),
-              "orig": ("NucDynamics (original)", ORIG), "sic": ("Si-C", PURPLE), "hickit": ("hickit (Dip-C)", TEAL),
+              "orig": ("NucDynamics", ORIG), "sic": ("Si-C", PURPLE), "hickit": ("hickit (Dip-C)", TEAL),
               "pop_mean": ("population mean", OTHER), "random_polymer": ("random polymer", LGREY)}
 
 
@@ -317,7 +317,7 @@ def p_nd_precision(fig, d, x, y):
 
 
 SPEED_STYLE = {   # (method, threads) -> label, colour, line style, marker
-    ("orig", 1): ("NucDynamics (original)", ORIG, "-", "s"),
+    ("orig", 1): ("NucDynamics", ORIG, "-", "s"),
     ("sic", 1): ("Si-C", PURPLE, "-", "^"),
     ("hickit", 1): ("hickit", TEAL, "-", "v"),
     ("robust_gpu", 0): ("EMber (U-Chrom), GPU", NEW, "-", "D"),
