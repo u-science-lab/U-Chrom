@@ -687,9 +687,17 @@
    "threads": 1,
    "res": 10000,
    "res_tag": "10kb",
-   "n_runs": 0,
-   "status": "pending",
-   "reason": "no record yet (queued or running)"
+   "n_runs": 1,
+   "status": "censored_short_cap",
+   "censored_at_seconds": 172186.93582912534,
+   "cap_seconds": 172186.91333770752,
+   "reason": "killed at the cap (47.83 h)",
+   "hosts": [
+    "sh04-15n16.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
   },
   {
    "method": "orig",
@@ -1029,9 +1037,17 @@
    "threads": 1,
    "res": 1000,
    "res_tag": "1kb",
-   "n_runs": 0,
-   "status": "pending",
-   "reason": "no record yet (queued or running)"
+   "n_runs": 1,
+   "status": "censored_short_cap",
+   "censored_at_seconds": 172187.0014312747,
+   "cap_seconds": 172186.8742096424,
+   "reason": "killed at the cap (47.83 h)",
+   "hosts": [
+    "sh04-02n13.int"
+   ],
+   "cpu_model": [
+    "AMD EPYC 9754 128-Core Processor"
+   ]
   },
   {
    "method": "robust_cpu",
@@ -1234,6 +1250,33 @@
  ],
  "extrapolation": {
   "note": "separate from the measured table: power-law fit (t ~ (1/res)^b) of the finished resolutions of the same configuration; NOT measured",
-  "rows": []
+  "rows": [
+   {
+    "method": "orig",
+    "threads": 1,
+    "res": 10000,
+    "seconds": 150428.64371799707,
+    "exponent": 0.6232935283598581,
+    "fit_resolutions": [
+     100000,
+     50000,
+     20000
+    ],
+    "label": "EXTRAPOLATED (power-law fit), not measured"
+   },
+   {
+    "method": "sic",
+    "threads": 1,
+    "res": 1000,
+    "seconds": 661868.3384091201,
+    "exponent": 0.965404869949756,
+    "fit_resolutions": [
+     50000,
+     20000,
+     10000
+    ],
+    "label": "EXTRAPOLATED (power-law fit), not measured"
+   }
+  ]
  }
 }
