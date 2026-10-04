@@ -40,7 +40,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from contacts import Contacts, Grid  # noqa: E402
 from diploid import copy_name, read_phased, write_phased_subset  # noqa: E402
-from heldout import _pair_keys, _suffix, fold_indices, sample_negatives, save_eval  # noqa: E402
+from heldout import _pair_keys, fold_indices, sample_negatives, save_eval  # noqa: E402
 
 
 def ploidy_of(chroms) -> dict:
@@ -116,7 +116,9 @@ def cmd_split(args) -> None:
     c = read_phased(src)
     folds = fold_indices(len(c), args.frac, args.folds, args.seed)
     out = Path(args.out)
-    ext = _suffix(src)
+    # keep the format visible in the name (readers pick .con vs .pairs by suffix)
+    name = src.name[:-3] if src.name.endswith(".gz") else src.name
+    ext = (".con" if name.endswith((".con", ".con.txt")) else ".pairs") + (".gz" if src.name.endswith(".gz") else "")
     summary = []
     for f, held in enumerate(folds, 1):
         d = out / f"fold{f}"

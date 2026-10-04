@@ -34,7 +34,7 @@ run_method() {   # method table out seed
   [ -f "$out" ] && return 0
   mkdir -p "$(dirname "$out")"
   case $m in
-    ember)         $PY $SC/run_diploid.py --method ember --contacts "$tab" --res $RES --device gpu --n-models $NM --seed $seed --label $m --out "$out" ;;
+    ember)         $PY $SC/run_diploid.py --method ember --params '{"robust_dip_split": true}' --contacts "$tab" --res $RES --device gpu --n-models $NM --seed $seed --label $m --out "$out" ;;
     ember_nosplit) $PY $SC/run_diploid.py --method ember --params '{"robust_dip_split": false}' --contacts "$tab" --res $RES --device gpu --n-models $NM --seed $seed --label $m --out "$out" ;;
     ember_nosplit_prior) $PY $SC/run_diploid.py --method ember --params '{"robust_dip_split": false}' --hickit-prior "$HICKIT" --contacts "$tab" --res $RES --device gpu --n-models $NM --seed $seed --label $m --out "$out" ;;
     ember_nbr) $PY $SC/run_diploid.py --method ember --params '{"robust_dip_split": false, "robust_dip_nbr_prior": true}' --contacts "$tab" --res $RES --device gpu --n-models $NM --seed $seed --label $m --out "$out" ;;
