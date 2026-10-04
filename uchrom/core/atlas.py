@@ -17,7 +17,7 @@ The display text (title, paper, licence ...) comes from a hand-written JSON file
 everything countable is read from the stores, so the catalog cannot drift from the data.
 
     python -m uchrom.core.atlas build atlas/datasets.json --root example-data --out catalog.json
-    python -m uchrom.core.atlas show https://uchrom-atlas.u-science.org
+    python -m uchrom.core.atlas show https://uchrom-atlas-r2.u-science.org
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from .remote import is_url
 PathLike = Union[str, Path]
 CATALOG = "catalog.json"
 #: the public atlas the web browser lists unless ``--atlas`` / ``UCHROM_ATLAS`` says otherwise (empty: none)
-DEFAULT_ATLAS = "https://uchrom-atlas.u-science.org"
+DEFAULT_ATLAS = "https://uchrom-atlas-r2.u-science.org"
 CATALOG_VERSION = 1
 
 

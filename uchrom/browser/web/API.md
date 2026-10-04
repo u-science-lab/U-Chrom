@@ -128,7 +128,7 @@ Starting points of the dialog: `[{"label": "Server folder", "path": …}, {"labe
 
 ### `GET /api/atlas?refresh=false`
 
-The atlas the server lists (`--atlas URL`, `UCHROM_ATLAS`, default `https://uchrom-atlas.u-science.org`; an empty
+The atlas the server lists (`--atlas URL`, `UCHROM_ATLAS`, default `https://uchrom-atlas-r2.u-science.org`; an empty
 value turns it off): `{"root": <URL or folder>, "catalog": {"title", "description", "updated", "datasets": [...]}}`.
 Every dataset carries `url` (what `POST /api/datasets` opens: a `.chromdata.zarr` read over HTTP / S3 on demand),
 `title`, `paper`, `doi`, `source_url`, `license`, `organism`, `assembly`, `tissue`, `n_cells`, `sections`,
