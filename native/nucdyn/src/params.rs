@@ -182,6 +182,10 @@ pub struct Params {
     /// splitting the soft responsibilities pulls both homologs together early and loses
     /// ~0.2 cis / ~0.3 whole-genome Spearman on the imaging truths).
     pub robust_dip_split: bool,
+    /// EMber: multiply the candidate prior by a 2-D neighbourhood phase prior (phased contacts
+    /// near the contact in both ends vote for its copy pair; hickit's imputation, re-implemented
+    /// with hickit's settings: `diploid::neighbour_prior`).
+    pub robust_dip_nbr_prior: bool,
 }
 
 impl Default for Params {
@@ -261,6 +265,7 @@ impl Default for Params {
             robust_sample_snapshots: 1,
             diploid_cis_sep: 10_000_000,
             robust_dip_split: false,
+            robust_dip_nbr_prior: false,
         }
     }
 }

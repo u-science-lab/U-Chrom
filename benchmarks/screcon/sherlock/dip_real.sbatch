@@ -8,7 +8,8 @@
 #   mask      phase hold-back: 10 % of the phased ends unphased (seed 1); $METHODS + hickit's imputation
 #   heldout   3 folds x 10 % reads (diploid_heldout.py; strict + cis < 2 Mb same-homolog positives);
 #             $METHODS + hickit (Dip-C pipeline) on each training table, scored with heldout.py
-#   METHODS: ember (diploid split), ember_nosplit, nucdyn (2017 ambiguous restraints)
+#   METHODS: ember (diploid split), ember_nosplit, nucdyn (2017 ambiguous restraints); also
+#   ember_nosplit_prior (hickit 2-D imputation prior), ember_nbr (native neighbourhood prior)
 #
 #   sbatch benchmarks/screcon/sherlock/dip_real.sbatch                 # dev cells
 #   sbatch --export=ALL,CELLS="1",STEPS="full" ...
@@ -35,6 +36,8 @@ run_method() {   # method table out seed
   case $m in
     ember)         $PY $SC/run_diploid.py --method ember --contacts "$tab" --res $RES --device gpu --n-models $NM --seed $seed --label $m --out "$out" ;;
     ember_nosplit) $PY $SC/run_diploid.py --method ember --params '{"robust_dip_split": false}' --contacts "$tab" --res $RES --device gpu --n-models $NM --seed $seed --label $m --out "$out" ;;
+    ember_nosplit_prior) $PY $SC/run_diploid.py --method ember --params '{"robust_dip_split": false}' --hickit-prior "$HICKIT" --contacts "$tab" --res $RES --device gpu --n-models $NM --seed $seed --label $m --out "$out" ;;
+    ember_nbr) $PY $SC/run_diploid.py --method ember --params '{"robust_dip_split": false, "robust_dip_nbr_prior": true}' --contacts "$tab" --res $RES --device gpu --n-models $NM --seed $seed --label $m --out "$out" ;;
     nucdyn)        $PY $SC/run_diploid.py --method nucdyn --contacts "$tab" --res $RES --device gpu --n-models $NM --seed $seed --label $m --out "$out" ;;
     hickit)        $PY $SC/run_hickit.py --hickit "$HICKIT" --diploid --contacts "$tab" --res $RES --n-models $NM --seed $seed --jobs 10 --out "$out" ;;
   esac > "${out%.npz}.log" 2>&1 || echo "FAILED $m $tab: $(tail -2 "${out%.npz}.log")"

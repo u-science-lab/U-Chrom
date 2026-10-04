@@ -192,6 +192,205 @@ pub fn prepare_contacts(input: &Input, dip: &DiploidInput, cis_sep: i64) -> Resu
     Ok(out)
 }
 
+/// Settings of the 2-D neighbourhood phase prior (hickit 0.1.1 `hk_impute` defaults:
+/// `phase.c`, `main.c`).
+#[derive(Clone, Copy, Debug)]
+pub struct NbrPrior {
+    /// neighbourhood radius (bp, Chebyshev distance of the two ends; hickit `-r`, 10 Mb)
+    pub max_radius: i64,
+    /// minimum distance scale of the weights (bp; hickit `imput_min_radius`, 50 kb)
+    pub min_radius: i64,
+    /// neighbours per contact (hickit `imput_max_nei`, 50)
+    pub max_nei: usize,
+    /// pseudo-count (hickit `imput_pseudo_cnt`, 0.4)
+    pub pseudo: f64,
+    /// iterations (hickit runs `-n` = 1000; here at most this many, stopped earlier when no
+    /// probability moves by more than 1e-5)
+    pub max_iter: usize,
+}
+
+impl Default for NbrPrior {
+    fn default() -> Self {
+        NbrPrior { max_radius: 10_000_000, min_radius: 50_000, max_nei: 50, pseudo: 0.4, max_iter: 200 }
+    }
+}
+
+/// hickit `spacial_adj`: an intra-chromosomal contact at separation d has P(same homolog) of
+/// at least min(0.99, 1e7 / d).
+fn spatial_adj(c: &DipContact, p: &mut [f64; 4]) {
+    if c.ca != c.cb {
+        return;
+    }
+    let same = p[0] + p[3];
+    let diff = p[1] + p[2];
+    if same + 1.0 == 1.0 || diff + 1.0 == 1.0 {
+        return;
+    }
+    let d = (c.pb - c.pa).abs();
+    let mut r = if d > 0 { 1e7 / d as f64 } else { 1.0 };
+    if r < same {
+        return;
+    }
+    if r > 0.99 {
+        r = 0.99;
+    }
+    *p = [r * p[0] / same, (1.0 - r) * p[1] / diff, (1.0 - r) * p[2] / diff, r * p[3] / same];
+}
+
+/// 2-D neighbourhood phase prior (the imputation of hickit `hk_impute`, re-implemented): every
+/// contact gets a distribution over its candidate copy pairs from the distributions of its
+/// `max_nei` nearest contacts of the same chromosome pair (both ends within `max_radius`,
+/// Chebyshev distance d), weighted 1 / (d / r + 0.001) with r the contact's own span (trans:
+/// `max_radius`; at least `min_radius`), plus a pseudo-count; phased ends stay fixed; iterated
+/// (Jacobi) from uniform.  Returns the prior of every contact in its candidate order.
+/// Differences from hickit: the nearest neighbours are taken per contact (hickit adds each
+/// pair to both lists up to the per-contact cap), iterations stop at convergence, and the
+/// same-homolog rule of `diploid_cis_sep` has already removed candidates.
+pub fn neighbour_prior(contacts: &[DipContact], np: &NbrPrior) -> Vec<[f64; 4]> {
+    let n = contacts.len();
+    // group by chromosome pair, sorted by pos_a
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by_key(|&k| (contacts[k].ca, contacts[k].cb, contacts[k].pa, contacts[k].pb));
+    let mut group_start = vec![0usize; n]; // position range of k's group in `order`
+    let mut group_end = vec![0usize; n];
+    let mut rank = vec![0usize; n];
+    let mut s = 0;
+    while s < n {
+        let (ca, cb) = (contacts[order[s]].ca, contacts[order[s]].cb);
+        let mut e = s;
+        while e < n && contacts[order[e]].ca == ca && contacts[order[e]].cb == cb {
+            e += 1;
+        }
+        for (q, &k) in order[s..e].iter().enumerate() {
+            group_start[k] = s;
+            group_end[k] = e;
+            rank[k] = s + q;
+        }
+        s = e;
+    }
+    let pw = {
+        // hickit hk_pseudo_weight: mean of 1 / (d / R + 1e-3) over d in [0, R)
+        let m = 1000;
+        let step = (np.max_radius / m as i64) as f64;
+        (0..m).map(|i| 1.0 / ((i as f64 * step) / np.max_radius as f64 + 1e-3)).sum::<f64>() / m as f64
+    };
+    let coef = 1.0 / pw;
+    // neighbours (index, weight) of every contact
+    let nei: Vec<Vec<(u32, f64)>> = (0..n)
+        .into_par_iter()
+        .map(|k| {
+            let c = &contacts[k];
+            let mut best: Vec<(i64, u32)> = Vec::with_capacity(np.max_nei + 1);
+            let worst = |b: &Vec<(i64, u32)>| b.iter().map(|x| x.0).max().unwrap_or(i64::MAX);
+            let consider = |j: usize, best: &mut Vec<(i64, u32)>| -> bool {
+                let o = &contacts[j];
+                let y = (o.pa - c.pa).abs();
+                if y > np.max_radius || (best.len() >= np.max_nei && y > worst(best)) {
+                    return false; // further along this direction only gets worse
+                }
+                let z = (o.pb - c.pb).abs();
+                if z <= np.max_radius {
+                    let d = y.max(z);
+                    if best.len() < np.max_nei {
+                        best.push((d, j as u32));
+                    } else if d < worst(best) {
+                        let wi = (0..best.len()).max_by_key(|&i| best[i].0).unwrap();
+                        best[wi] = (d, j as u32);
+                    }
+                }
+                true
+            };
+            let r0 = rank[k];
+            let mut q = r0;
+            while q > group_start[k] {
+                q -= 1;
+                if !consider(order[q], &mut best) {
+                    break;
+                }
+            }
+            for &j in &order[r0 + 1..group_end[k]] {
+                if !consider(j, &mut best) {
+                    break;
+                }
+            }
+            let span = if c.ca != c.cb { np.max_radius } else { (c.pb - c.pa).abs() }.max(np.min_radius) as f64;
+            best.into_iter().map(|(d, j)| (j, coef / (d as f64 / span + 1e-3))).collect()
+        })
+        .collect();
+    // start: uniform over the candidates (hickit: 0.25 / 0.5 / 1 by phased ends)
+    let init = |c: &DipContact| -> [f64; 4] {
+        let mut p = [0.0; 4];
+        for &code in &c.cand[..c.n_cand as usize] {
+            p[code as usize] = 1.0 / c.n_cand as f64;
+        }
+        p
+    };
+    let mut cur: Vec<[f64; 4]> = contacts
+        .iter()
+        .map(|c| {
+            let mut p = init(c);
+            spatial_adj(c, &mut p);
+            p
+        })
+        .collect();
+    for _ in 0..np.max_iter {
+        let next: Vec<[f64; 4]> = (0..n)
+            .into_par_iter()
+            .map(|k| {
+                let c = &contacts[k];
+                if c.n_cand == 1 {
+                    return cur[k];
+                }
+                let mut v = [0.25 * np.pseudo; 4];
+                for &(j, w) in &nei[k] {
+                    let pj = &cur[j as usize];
+                    for x in 0..4 {
+                        v[x] += w * pj[x];
+                    }
+                }
+                let mut p = [0.0; 4];
+                let tot: f64 = c.cand[..c.n_cand as usize].iter().map(|&code| v[code as usize]).sum();
+                for &code in &c.cand[..c.n_cand as usize] {
+                    p[code as usize] = v[code as usize] / tot;
+                }
+                spatial_adj(c, &mut p);
+                p
+            })
+            .collect();
+        let delta = next.iter().zip(&cur).map(|(a, b)| (0..4).map(|x| (a[x] - b[x]).abs()).fold(0.0, f64::max)).fold(0.0, f64::max);
+        cur = next;
+        if delta < 1e-5 {
+            break;
+        }
+    }
+    contacts
+        .iter()
+        .zip(&cur)
+        .map(|(c, p)| {
+            let mut out = [0.0; 4];
+            let tot: f64 = c.cand[..c.n_cand as usize].iter().map(|&code| p[code as usize]).sum();
+            for (i, &code) in c.cand[..c.n_cand as usize].iter().enumerate() {
+                out[i] = if tot > 0.0 { p[code as usize] / tot } else { 1.0 / c.n_cand as f64 };
+            }
+            out
+        })
+        .collect()
+}
+
+/// The neighbourhood prior of every input contact as P(hap_a, hap_b) (4 values per contact,
+/// index 2 hap_a + hap_b, input orientation) — for validation against hickit's imputation.
+pub fn neighbour_phase_probs(input: &Input, dip: &DiploidInput, cis_sep: i64, np: &NbrPrior) -> Result<Vec<f64>, String> {
+    let contacts = prepare_contacts(input, dip, cis_sep)?;
+    let pr = neighbour_prior(&contacts, np);
+    let mut out = vec![0.0; 4 * contacts.len()];
+    for (c, q) in contacts.iter().zip(&pr) {
+        for i in 0..c.n_cand as usize {
+            out[4 * c.row as usize + input_code(c, c.cand[i])] = q[i];
+        }
+    }
+    Ok(out)
+}
+
 /// Base (copy-agnostic) contact dictionary of the kept contacts; `Contact::number` = index
 /// into `contacts`.
 fn base_dict(contacts: &[DipContact], keep: &[bool]) -> ContactDict {
@@ -556,7 +755,23 @@ pub fn calc_genome_structure(input: &Input, dip: &DiploidInput, p: &Params, engi
     let t0 = Instant::now();
     let n_models = p.n_models;
     let n_input = input.chr_a.len();
-    let contacts = prepare_contacts(input, dip, p.diploid_cis_sep)?;
+    let mut contacts = prepare_contacts(input, dip, p.diploid_cis_sep)?;
+    if robust && p.robust_dip_nbr_prior {
+        let ts = Instant::now();
+        let nb = neighbour_prior(&contacts, &NbrPrior::default());
+        for (c, q) in contacts.iter_mut().zip(nb) {
+            let k = c.n_cand as usize;
+            let mut tot = 0.0;
+            for i in 0..k {
+                c.prior[i] *= q[i];
+                tot += c.prior[i];
+            }
+            for i in 0..k {
+                c.prior[i] = if tot > 0.0 { c.prior[i] / tot } else { 1.0 / k as f64 };
+            }
+        }
+        log(p, &format!("2-D neighbourhood phase prior in {:.2} s", ts.elapsed().as_secs_f64()));
+    }
     let mut chroms: Vec<u32> = input.chr_a.iter().chain(input.chr_b).copied().collect();
     chroms.sort_unstable();
     chroms.dedup();
@@ -935,6 +1150,42 @@ mod tests {
         assert_eq!((nb, rs.groups.clone()), (0, vec![0, 1, 5]));
         let (rs, _) = restraint_set(vec![], &g, true);
         assert_eq!(rs.groups, vec![0, 1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn neighbour_prior_follows_phased_neighbours() {
+        // chr1: a block of contacts near (20 Mb, 40 Mb) phased (1, 1), another near (60, 90) phased
+        // (0, 0); one unphased contact in each block, one isolated far away
+        let names: Vec<String> = vec!["chr1".into()];
+        let (mut pa, mut pb, mut ha, mut hb) = (vec![], vec![], vec![], vec![]);
+        for k in 0..20i64 {
+            pa.push(20_000_000 + k * 10_000);
+            pb.push(40_000_000 + k * 7_000);
+            ha.push(1i8);
+            hb.push(if k % 2 == 0 { 1 } else { -1 });
+            pa.push(60_000_000 + k * 10_000);
+            pb.push(90_000_000 + k * 9_000);
+            ha.push(if k % 3 == 0 { -1 } else { 0 });
+            hb.push(0i8);
+        }
+        pa.extend([20_050_000, 60_050_000, 150_000_000]);
+        pb.extend([40_030_000, 90_020_000, 200_000_000]);
+        ha.extend([-1, -1, -1]);
+        hb.extend([-1, -1, -1]);
+        let n = pa.len();
+        let (ca, cb) = (vec![0u32; n], vec![0u32; n]);
+        let amb: Vec<i64> = (1..=n as i64).collect();
+        let act = vec![true; n];
+        let inp = input(&names, &ca, &pa, &cb, &pb, &amb, &act);
+        let dip = DiploidInput { hap_a: &ha, hap_b: &hb, ploidy: &[2], prior: None };
+        let p = neighbour_phase_probs(&inp, &dip, 10_000_000, &NbrPrior::default()).unwrap();
+        let q = |r: usize| &p[4 * r..4 * r + 4];
+        assert!(q(n - 3)[3] > 0.9, "{:?}", q(n - 3));
+        assert!(q(n - 2)[0] > 0.9, "{:?}", q(n - 2));
+        // no neighbours: hickit's spatial prior only (separation 50 Mb -> P(same) >= 0.2 -> uniform stays)
+        assert!((q(n - 1).iter().sum::<f64>() - 1.0).abs() < 1e-9 && q(n - 1).iter().all(|&x| (x - 0.25).abs() < 1e-9), "{:?}", q(n - 1));
+        // phased contacts keep their phases
+        assert_eq!(q(0)[3], 1.0);
     }
 
     #[test]

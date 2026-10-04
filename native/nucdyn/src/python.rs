@@ -119,6 +119,44 @@ fn calc_genome_structure<'py>(
     Ok(d)
 }
 
+/// The 2-D neighbourhood phase prior of diploid contacts (`diploid::neighbour_phase_probs`,
+/// hickit's imputation settings): flat array of 4 values per contact.
+#[pyfunction]
+#[pyo3(signature = (names, chr_a, pos_a, chr_b, pos_b, hap_a, hap_b, ploidy, cis_sep=10_000_000, max_iter=200))]
+#[allow(clippy::too_many_arguments)]
+fn diploid_neighbour_prior<'py>(
+    py: Python<'py>,
+    names: Vec<String>,
+    chr_a: PyReadonlyArray1<'py, u32>,
+    pos_a: PyReadonlyArray1<'py, i64>,
+    chr_b: PyReadonlyArray1<'py, u32>,
+    pos_b: PyReadonlyArray1<'py, i64>,
+    hap_a: PyReadonlyArray1<'py, i8>,
+    hap_b: PyReadonlyArray1<'py, i8>,
+    ploidy: Vec<u8>,
+    cis_sep: i64,
+    max_iter: usize,
+) -> PyResult<Bound<'py, numpy::PyArray1<f64>>> {
+    let (ca, pa, cb, pb, ha, hb) = (
+        chr_a.as_slice()?.to_vec(),
+        pos_a.as_slice()?.to_vec(),
+        chr_b.as_slice()?.to_vec(),
+        pos_b.as_slice()?.to_vec(),
+        hap_a.as_slice()?.to_vec(),
+        hap_b.as_slice()?.to_vec(),
+    );
+    let n = ca.len();
+    let res = py.detach(move || {
+        let amb: Vec<i64> = (1..=n as i64).collect();
+        let act = vec![true; n];
+        let dip = crate::diploid::DiploidInput { hap_a: &ha, hap_b: &hb, ploidy: &ploidy, prior: None };
+        let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &amb, active: &act, prior_lr: None, dip: None };
+        let np = crate::diploid::NbrPrior { max_iter, ..Default::default() };
+        crate::diploid::neighbour_phase_probs(&input, &dip, cis_sep, &np)
+    });
+    Ok(res.map_err(PyValueError::new_err)?.into_pyarray(py))
+}
+
 fn to_v3(a: &PyReadonlyArray2<'_, f64>) -> PyResult<Vec<V3>> {
     let v = a.as_array();
     if v.ncols() != 3 {
@@ -425,6 +463,7 @@ fn default_params_json() -> String {
 #[pymodule]
 fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(calc_genome_structure, m)?)?;
+    m.add_function(wrap_pyfunction!(diploid_neighbour_prior, m)?)?;
     m.add_function(wrap_pyfunction!(run_dynamics, m)?)?;
     m.add_function(wrap_pyfunction!(debug_setup_stage, m)?)?;
     m.add_function(wrap_pyfunction!(gpu_available, m)?)?;

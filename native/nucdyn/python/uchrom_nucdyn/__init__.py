@@ -74,6 +74,24 @@ def resolve_ploidy(names: Sequence[str], ploidy: Any = "auto") -> list:
     return k
 
 
+def neighbour_phase_prior(chrom_a, pos_a, chrom_b, pos_b, hap_a, hap_b, *, ploidy: Any = "auto",
+                          cis_sep: int = 10_000_000, max_iter: int = 200) -> np.ndarray:
+    """EMber's 2-D neighbourhood phase prior (``robust_dip_nbr_prior``; hickit's imputation
+    re-implemented): (n, 4) probability of (hap_a, hap_b) per contact, index 2 hap_a + hap_b."""
+    from ._engine import diploid_neighbour_prior as _nbr
+
+    ca = np.asarray(chrom_a).astype(str)
+    cb = np.asarray(chrom_b).astype(str)
+    names = sorted(set(ca.tolist()) | set(cb.tolist()))
+    idx = {n: i for i, n in enumerate(names)}
+    ia = np.fromiter((idx[c] for c in ca), dtype=np.uint32, count=len(ca))
+    ib = np.fromiter((idx[c] for c in cb), dtype=np.uint32, count=len(cb))
+    out = _nbr(names, ia, np.ascontiguousarray(pos_a, np.int64), ib, np.ascontiguousarray(pos_b, np.int64),
+               np.ascontiguousarray(hap_a, np.int8), np.ascontiguousarray(hap_b, np.int8),
+               [int(k) for k in resolve_ploidy(names, ploidy)], int(cis_sep), int(max_iter))
+    return np.asarray(out).reshape(len(ia), 4)
+
+
 def calc_genome_structure(
     chrom_a: Sequence[str],
     pos_a: Sequence[int],

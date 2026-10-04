@@ -25,6 +25,16 @@ echo "host=$(hostname) job=$SLURM_JOB_ID $(python3 --version) $(rustc --version)
 cd "$REPO/native/nucdyn"
 UCHROM_NUCDYN_PRINT_GOLDEN=1 cargo test --release ${CARGO_FEATURES:-} -- --nocapture 2>&1 | grep -E "golden|test result|FAILED|panicked" || true
 "$VENV/bin/maturin" build --release -o "$SCRATCH/uchrom-nd/wheels-diploid"
-"$VENV/bin/pip" install -q --force-reinstall --no-deps "$(ls -t "$SCRATCH"/uchrom-nd/wheels-diploid/u_chrom_nucdyn-*.whl | head -1)"
+WHL=$(ls -t "$SCRATCH"/uchrom-nd/wheels-diploid/u_chrom_nucdyn-*.whl | head -1)
+if [ -n "${ENGINE_TAG:-}" ]; then
+  # pinned copy only (jobs set ENGINE=<tag>, _env_diploid.sh); the venv's engine is left alone so
+  # running jobs keep theirs
+  rm -rf "$SCRATCH/uchrom-nd/engine-diploid/$ENGINE_TAG"
+  "$VENV/bin/pip" install -q --no-deps --target "$SCRATCH/uchrom-nd/engine-diploid/$ENGINE_TAG" "$WHL"
+  export PYTHONPATH=$SCRATCH/uchrom-nd/engine-diploid/$ENGINE_TAG
+  echo "engine pinned as $ENGINE_TAG"
+else
+  "$VENV/bin/pip" install -q --force-reinstall --no-deps "$WHL"
+fi
 "$VENV/bin/python" -c "import uchrom_nucdyn as un, numpy, scipy, pandas; print('uchrom_nucdyn', un.__version__, 'gpu build', un.HAS_GPU, numpy.__version__, scipy.__version__, pandas.__version__)"
 cd "$REPO" && "$VENV/bin/python" -m pytest -q benchmarks/screcon/tests -p no:cacheprovider 2>&1 | tail -3

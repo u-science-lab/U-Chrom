@@ -13,3 +13,9 @@ DP=$W/runs/diploid
 TAN18=$DATA/tan2018_gm12878
 export LD_LIBRARY_PATH=$BASE/vulkan-loader/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 mkdir -p "$DP"
+# ENGINE=<tag>: the engine build pinned by diploid_setup.sbatch (ENGINE_TAG=<tag>), so a rebuild
+# does not change the engine under running jobs
+if [ -n "${ENGINE:-}" ]; then
+  [ -d "$W/engine-diploid/$ENGINE" ] || { echo "engine $ENGINE not found"; exit 1; }
+  export PYTHONPATH=$W/engine-diploid/$ENGINE${PYTHONPATH:+:$PYTHONPATH}
+fi
