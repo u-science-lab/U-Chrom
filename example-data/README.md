@@ -660,6 +660,12 @@ public data alone** and are shipped with their recorded outputs.
   | CRR1829212 | E14_5_HiC (brain_embryo_20um) | `pixel` as b1_b2 | 0.292 (0.002) | 3,533 / 3,533 |
   | CRR1829214 | E16_5_HiC (brain_embryo_20um) | `pixel` as b1_b2 | 0.266 (0.002) | 4,479 / 4,479 |
   | CRR1829213 | E14_5_HiC (brain_embryo_10um) | `pixel` as b1_b2 | 0.300 (0.001) | 5,426 / 5,426 |
+  | CRR1829215 | E16_5_HiC (brain_embryo_10um) | `pixel` as b1_b2 (= authors' order) | 0.272 (0.004) | 5,470 / 5,470 |
+  | CRR1829216 | E18_5_HiC (brain_embryo_20um) | `pixel` as b1_b2 | 0.334 (0.007) | 5,677 / 5,677 |
+  | CRR1829217 | E18_5_HiC (brain_embryo_10um) | `pixel` as b1_b2, swap | 0.307 (0.007) | 6,308 / 6,308 |
+  | CRR1829219 | Adult16_HiC (cortex_adult_10um) | authors' order, both flipped | 0.292 (0.003) | 7,795 / 8,184 |
+  | CRR1829220 | Adult22_HiC (hippocampus_adult_10um) | authors' order, flip 2 | 0.254 (0.002) | 8,185 / 8,601 |
+  | CRR1831973 | E13_HiC_R3 (e13_embryo_50um) | **not linked** (grid only; no orientation stands out) | 0.011 (0.007) | — |
   | CRR1161509 | Cere_HiC_R1 (cerebellum_adult_20um) | **not linked** | 0.003 (0.001) | — |
   | CRR1161510 | Cere_HiC_R2 (cerebellum_adult_20um) | **not linked** | 0.000 | — |
 
@@ -786,8 +792,10 @@ public data alone** and are shipped with their recorded outputs.
   hicrna_mouse_brain 2.1 GB, hicrna_human_melanoma 2.5 GB, hicrna_mouse_embryo 4.3 GB, Chen brain_embryo_10um 1.2 GB /
   brain_embryo_20um 0.99 GB / e13_embryo_50um 0.68 GB, spatial_atac_hic mouse_brain 0.37 GB (maps, ssAB / ATAC, RNA h5ad,
   section images).  Checked by moving each store alone into an empty directory: every map, image and bin track served.
-  Chen cortex / hippocampus / cerebellum have no maps yet; re-run `python -m uchrom.core.embedded <store>` after linking
-  (already-embedded keys are skipped).
+  Chen cortex_adult_10um (0.63 GB) and hippocampus_adult_10um (0.29 GB) now have maps and are embedded too (brain_embryo_10um
+  1.8 GB, brain_embryo_20um 1.4 GB after the new runs); cerebellum_adult_20um has none (barcode table missing).  Re-run
+  `python -m uchrom.core.embedded <store>` after linking more runs (already-embedded keys are skipped); the link script's
+  final `cd.write` keeps the embedded copies.  CRR1829221 / CRR1829222 (Adult_H / Adult_Z, small runs) belong to no store.
 - **Open**: the E13.5 spots outside the published mask have no image / map in the stores; human ssAB layout;
   the pairs outside the mask (37–44 %) are unexplained.
 

@@ -46,7 +46,8 @@ from uchrom import ChromData
 
 HERE = Path(__file__).resolve().parent / "spatial_hic_chen2026"
 SRC = HERE / "contacts"
-RUNS = ["CRR1161506", "CRR1161507", "CRR1161509", "CRR1161510", "CRR1829212", "CRR1829213", "CRR1829214"]
+RUNS = ["CRR1161506", "CRR1161507", "CRR1161509", "CRR1161510", "CRR1829212", "CRR1829213", "CRR1829214",
+        "CRR1829215", "CRR1829216", "CRR1829217", "CRR1829219", "CRR1829220", "CRR1831973"]   # runs.tsv rows with a store
 MARGIN = 0.05
 N_SPOTS = 1500          # spots scored per candidate (random, fixed seed)
 
@@ -205,6 +206,12 @@ def score(scool: Path, mcool: Path, cand: dict, ssab: ad.AnnData, rng) -> dict:
     return out
 
 
+def same_pairing(a: dict, b: dict, frac: float = 0.9) -> bool:
+    """Whether two candidate pairings (map name -> store cell id) agree on at least ``frac`` of their maps."""
+    common = a.keys() & b.keys()
+    return bool(common) and sum(a[k] == b[k] for k in common) >= frac * max(len(a), len(b)) * 0.99
+
+
 def rename_scool(src: Path, dst: Path, rename: dict) -> int:
     tmp = dst.with_suffix(".tmp")
     shutil.copyfile(src, tmp)
@@ -250,7 +257,10 @@ def main(runs: list) -> None:
             sub = ssab[ssab.obs_names.isin(cells.index), res500].to_memory()   # this section, 500-kb columns
             sc = score(scool, mcool, cand, sub, rng)
             ranked = sorted(sc.items(), key=lambda kv: -np.nan_to_num(kv[1][0], nan=-9))
-            (best, (r1, k1)), (second, (r2, _)) = ranked[0], ranked[1]
+            best, (r1, k1) = ranked[0]
+            # the runner-up is the best candidate that maps the spots differently: several names describe
+            # the same pairing (e.g. "authors' order" and "pixel b1_b2"), those are not competitors
+            second, (r2, _) = next(((k, v) for k, v in ranked[1:] if not same_pairing(cand[best], cand[k])), ranked[1])
             print(f"{run} {sec}: " + " | ".join(f"{k} {v:.3f}" for k, (v, _) in ranked[:4]))
             info = {"section": sec, "store": store, "candidates": {k: round(v, 4) for k, (v, _) in sc.items()},
                     "chosen": best, "spots_scored": k1}
