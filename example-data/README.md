@@ -10,6 +10,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | File / target location                | Size    | Shipped in repo | Auto-download | Used by                                                                 |
 | ------------------------------------- | ------- | --------------- | ------------- | ----------------------------------------------------------------------- |
 | `cell1.pairs`                         | 4.7 MB  | yes             | —             | `reconstruction.ipynb`, root README CLI example                         |
+| `ref_hg38/hg38.gap.txt.gz`, `ref_hg38/hg38.centromeres.txt.gz` (UCSC hg38 `gap` and `centromeres` tables, goldenPath/hg38/database) | 12 KB + 1.5 KB | yes | — | `probe_human_ssab_layout.py` (bin layout of the human Hi-C-RNA single-spot A/B) |
 | `cell2.pairs.gz` (**source unverified**, see its section) | 5.4 MB  | yes             | —             | only `tests/smoke/fasthigashi_smoke.py` (manual FastHigashi smoke run, not collected by pytest) |
 | `K562_chr21_30kb.cool` (Ray 2019 K562; **was misnamed `IMR90_chr21_30kb.cool`**) | 280 KB  | yes             | —             | generic Hi-C matrix for tests (`call_tads_di`, `load_cool`, GEM-FISH smoke tests), `benchmarks/cd2_callers_validation.py`, `docs/source/guide/structure.md` — never paired with IMR90 imaging |
 | `rao2014_imr90/IMR90_chr21_5kb_hg19.cool` | 3.8 MB | yes (only this file of the folder) | built (`build_rao2014_slices.py`) | `gem_fish_reconstruction` tutorial part 2 (real IMR90 Hi-C for the Bintu 2018 region); Fig. 3b / 3c |
@@ -774,7 +775,14 @@ public data alone** and are shipped with their recorded outputs.
   (`hicrna_mouse_brain_ssab.h5ad`, 6,275 x 4,816 bins).  The bin layout is not given; it is chr1–19 in
   500-kb bins from 3 Mb, dropping the last bin of a chromosome if < 100 kb.  Check: against the bulk E1
   shifted by 0 / ±1 / ±2 bins the median |r| is 0.959 / 0.897, 0.848 / 0.789, 0.724 (best at shift 0).
-  The human ssAB (5,359 columns) is **not linked**: none of the layout rules tried reproduces it.
+  The human ssAB (5,359 columns) is **not linked**.  `example-data/probe_human_ssab_layout.py` shows what the data say:
+  500-kb bins from the start of each of chr1–22 (no 3 Mb offset as in the mouse), centromere models and the
+  `heterochromatin` / `short_arm` gaps of the UCSC hg38 tables (`ref_hg38/`) removed — chr1 columns match bulk E1
+  bin for bin (|r| 0.83–0.98) up to column ~240 and then again with an offset of exactly 43 bins (the 21.5 Mb of
+  centromere + heterochromatin), and every chromosome start located from the first 40 retained bins has |r| 0.74–0.98
+  (next-best position 0.5–0.86).  That rule gives 5,378 columns; the file has 5,359, and per chromosome the
+  column counts differ from the rule by −5..+2, so the exact bins dropped near the centromeres are not the
+  annotation's and the columns cannot be placed bin by bin without the authors' table.
 - **Validation** (real data, `benchmarks/spatial_hicrna_validation.py`):
   - Spearman of per-spot RNA UMI against Hi-C contacts: 0.66 – 0.91 over the 7 samples (lowest in E13.5).
   - Bulk compartment E1 (500 kb), replicate vs replicate, median |r| over chromosomes: brain 0.999,
