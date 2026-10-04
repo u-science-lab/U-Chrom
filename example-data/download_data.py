@@ -23,6 +23,7 @@ Usage::
     python example-data/download_data.py --takei2021_brain       # opt-in, 0.6 GB brain seqFISH+ tables
     python example-data/download_data.py --tan2021_cortex        # opt-in, ~13 GB Dip-C adult cortex
     python example-data/download_data.py --tan2018_gm12878       # opt-in, ~0.7 GB Dip-C GM12878 (diploid, phased)
+    python example-data/download_data.py --wu2025_scmicroc       # opt-in, 3.1 GB scMicro-C GM12878 pairs + 3dg (102 GB streamed)
     python example-data/download_data.py --su2020_genome         # opt-in, 203 MB Su 2020 genome-scale (bulk benchmark)
     python example-data/download_data.py --rao2014_imr90_4dn     # opt-in, 4.6 GB IMR90 mcool (Sherlock only)
     python example-data/download_data.py --bonev2017_mesc_4dn    # opt-in, 12.6 GB mESC mcool (Sherlock only)
@@ -119,6 +120,19 @@ _TAKEI_BRAIN = "https://zenodo.org/records/4708112/files"
 # published Dip-C structures (impute3.round4.clean.3dg of the "Cell k" / "Cell k-1" GSM, plus its rep1 /
 # rep2 replicate runs).  Cells 10-17 were sequenced in two libraries; the files sit on the "-1" GSM.
 _TAN18_DIPC_GSM = [3271347 + k for k in range(9)] + [3271356 + 2 * k for k in range(8)]
+
+
+# Wu et al. 2025 (Nat Genet, doi:10.1038/s41588-025-02247-6) scMicro-C, GM12878 (GEO GSE281150 SuperSeries,
+# scMicro-C SubSeries GSE192759, 355 cells, hg38).  The 12 cells with the largest hickit phased-pairs files
+# (GEO filelist.txt, 2026-10-04; contacts counted after download) -- the deepest public diploid single-cell
+# data with phase columns.  Per cell: ``GSM<id>_cell_<nnn>.impute.pairs.gz`` (hickit pairs, phase0 / phase1
+# + phase_prob00..11).  The authors' hickit structures (5 / 10 / 20 kb .3dg) exist only inside the 102 GB
+# series tarball; it is streamed once and only these cells' members are kept.
+_GSE192759 = "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE192nnn/GSE192759/suppl"
+_WU25_CELLS = [("GSM5764669", 35), ("GSM5764658", 24), ("GSM5764954", 320), ("GSM5764660", 26),
+               ("GSM5764662", 28), ("GSM5764651", 17), ("GSM5764681", 47), ("GSM5764683", 49),
+               ("GSM5764666", 32), ("GSM5764661", 27), ("GSM5764648", 14), ("GSM5764685", 51)]
+_WU25_3DG_RE = r"cell_(" + "|".join(f"{n:03d}" for _, n in _WU25_CELLS) + r")(?![0-9])"
 
 
 def _tan2018_files() -> list[tuple[str, str]]:
@@ -422,6 +436,16 @@ DATASETS = {
         "default": False,
         "description": "Tan 2018 Dip-C GM12878, 17 cells: hickit imputed phased pairs + 3dg, Dip-C clean 3dg x 3 (GEO GSE117876)",
     },
+    "wu2025_scmicroc": {
+        "files": [(f"wu2025_scmicroc/{g}_cell_{n:03d}.impute.pairs.gz", _gsm(f"{g}_cell_{n:03d}.impute.pairs.gz"))
+                  for g, n in _WU25_CELLS],
+        # (destination dir, archive URL, member-name regex): one streamed pass, matching members kept
+        "extract_many": [("wu2025_scmicroc/3dg", f"{_GSE192759}/GSE192759_5kb_10kb_20kb_3dg_files.tar.gz",
+                          _WU25_3DG_RE)],
+        "size_mb": 3100,
+        "default": False,
+        "description": "Wu 2025 scMicro-C GM12878, 12 deepest cells: hickit phased pairs + 5/10/20 kb 3dg (GSE192759)",
+    },
     "tan2021_cortex": {
         "files": _tan2021_files(),
         "size_mb": 13000,
@@ -474,6 +498,36 @@ def _extract_member(url: str, member_suffix: str, dest: Path) -> None:
     raise SystemExit(f"[fail] {member_suffix} not found in {url}")
 
 
+def _extract_many(url: str, pattern: str, dest_dir: Path) -> None:
+    """Stream a .tar.gz once; write every file member whose name matches ``pattern`` (regex search)
+    to ``dest_dir/<basename>`` and the archive's member list (size, name) to ``dest_dir/_members.txt``."""
+    import re
+    import shutil
+    import tarfile
+    listing = dest_dir / "_members.txt"
+    if listing.exists():
+        print(f"[skip] {dest_dir} already extracted ({listing.name} present)")
+        return
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    rx = re.compile(pattern)
+    print(f"[pull] members matching {pattern!r} streamed out of {url} → {dest_dir}")
+    names, kept = [], 0
+    with urllib.request.urlopen(url) as resp, tarfile.open(fileobj=resp, mode="r|gz") as tf:
+        for m in tf:
+            names.append(f"{m.size}\t{m.name}")
+            if m.isfile() and rx.search(m.name):
+                dest = dest_dir / Path(m.name).name
+                tmp = dest.with_suffix(dest.suffix + ".part")
+                with tf.extractfile(m) as src, open(tmp, "wb") as out:
+                    shutil.copyfileobj(src, out)
+                tmp.rename(dest)
+                kept += 1
+    tmp = listing.with_suffix(".part")
+    tmp.write_text("\n".join(names) + "\n")
+    tmp.rename(listing)
+    print(f"[done] {kept} of {len(names)} members kept")
+
+
 def _md5(path: Path) -> str:
     import hashlib
     h = hashlib.md5()
@@ -492,6 +546,8 @@ def main() -> None:
         )
     ap.add_argument("--fig3", action="store_true",
                     help="fetch every Fig. 3 input (bintu_imr90 + the entries marked fig3)")
+    ap.add_argument("--no-extract", action="store_true",
+                    help="only the direct downloads; skip members streamed out of archives")
     ap.add_argument("--dest", type=Path, default=HERE,
                     help="directory to stage into (default: this example-data folder)")
     args = ap.parse_args()
@@ -510,8 +566,12 @@ def main() -> None:
             want = info.get("md5", {}).get(rel)
             if want and _md5(args.dest / rel) != want:
                 raise SystemExit(f"[fail] md5 mismatch for {rel} (expected {want})")
+        if args.no_extract:
+            continue
         for rel, url, member in info.get("extract", []):
             _extract_member(url, member, args.dest / rel)
+        for rel, url, pattern in info.get("extract_many", []):
+            _extract_many(url, pattern, args.dest / rel)
 
     print(f"\nAll requested datasets staged under: {args.dest}")
 
