@@ -163,3 +163,64 @@ adopted (same real-data phases, worse on the simulations, needs hickit).
 EMber haploid parameters = tag `robust-frozen`; diploid: `diploid_cis_sep` 10 Mb (not tuned),
 `robust_dip_split` false, `robust_dip_nbr_prior` true (hickit's settings), no external phase
 prior.  The NucDynamics-2017 diploid baseline and hickit are untouched.
+
+## 5. Deep low-phasing data: scMicro-C GM12878 (PREREG §10, 2026-10-04)
+
+Development cells 035 / 024 / 320 (Wu et al. 2025, GSE192759; 3.01 / 2.85 / 2.64 M contacts, 5.6 % of
+the ends phased), 100 kb and 20 kb, 10 models, seeds 1 and 2 (`sherlock/deep_dev.sbatch`); r = per-copy
+distance r between the seeds (`highres.py score`, 50,000 random pairs per chain); held-out = strict cis
+ROC-AUC, 10 % of the reads, fold 1, 100 kb grid.  Full table: `data/deep_dev_table.tsv`; Dip-C
+non-regression (cells 1-3, §2 checks, `sherlock/deep_dipc.sbatch`): `data/deep_dipc_table.tsv`.
+Engines: frozen = main 3658fdb; candidates = `dev-d2ae722` (round 1), `dev-9a5ba13` (round 2), both
+identical to the frozen engine with the new settings off.
+
+**Diagnosis (frozen EMber).**
+
+| | 035 | 024 | 320 |
+| --- | --- | --- | --- |
+| seeds r, 100 kb / 20 kb | 0.58 / 0.54 | 0.60 / 0.54 | 0.39 / 0.37 |
+| 20 kb by separation < 2 / 2-20 / > 20 Mb | 0.37 / 0.32 / 0.29 | 0.40 / 0.38 / 0.32 | 0.27 / 0.22 / 0.15 |
+| down-sampled to 1.0 M contacts (Dip-C depth), 100 kb | 0.65 | 0.74 | 0.42 |
+| cis contacts < 20 kb removed, 100 kb | 0.56 | 0.69 | — |
+| hickit-like isolation filter `-r10m -c5`, 100 kb | 0.58 | 0.63 | 0.36 |
+| ε at the last 100 kb update | 0.49 (bound 0.5) | 0.50 | 0.00 |
+
+Not depth (1 M contacts recovers little), not Micro-C's short-range contacts, not isolated contacts,
+not the metric (the authors' hickit runs 0.98-0.99, our hickit 0.96; Dip-C cell 1 EMber 0.98 with the
+same scorer).  The share of ambiguous contacts is the same as on Dip-C (90.6 % vs 89.8 %), but far
+fewer of them can be phased with confidence: the neighbourhood prior reaches >= 0.75 for 20-32 % of
+the ambiguous scMicro-C contacts vs 43-45 % on Dip-C, so the confidently placed contacts are 27-38 %
+of the input (Dip-C ~49 %).  Every other contact is one ambiguous restraint that either homolog can
+satisfy; with 1.5-2.7 such contacts per anchored one the annealing settles each run into a different
+mixture of homolog assignments (and the noise estimate hits its bound, ε = 0.5, in two of three cells).
+The prior only weights P(true); it never decides which copy carries a contact.
+
+**Candidates** (seeds r at 100 / 20 kb; held-out cis AUC − NucDynamics-diploid on the same split;
+NucDynamics-diploid held-out AUC 0.695 / 0.645 / 0.615):
+
+| candidate | 035 | 024 | 320 | C1 (median ≥ 0.90, each ≥ 0.85, 20 kb) | C2 mean Δ ≥ −0.01 |
+| --- | --- | --- | --- | --- | --- |
+| frozen | 0.58 / 0.54, Δ +0.004 | 0.60 / 0.54, Δ −0.029 | 0.39 / 0.37, Δ −0.039 | fail | −0.021 fail |
+| `commit` 0.75, drop (n75drop) | 0.97 / 0.98, −0.009 | 0.95 / 0.99, −0.024 | 0.93 / 0.91, −0.026 | pass | −0.020 fail |
+| `commit` 0.75, keep (n75keep) | 0.93 / 0.88, 0.000 | 0.93 / 0.97, +0.002 | 0.80 / 0.73, +0.046 | fail | pass |
+| staged at 400 kb, keep (s3n75keep) | 0.90 / 0.89 | 0.94 / 0.96 | 0.74 / 0.62 | fail | — |
+| staged at 400 kb, drop (s3n75drop) | 0.86 / — | 0.94 / 0.96 | — | (incomplete) | — |
+| isolation `-r10m -c5` (iso5) | 0.58 / 0.51 | 0.63 / 0.60 | 0.36 / — | fail | — |
+| commit + re-admit at 400 kb (n75r3) | 0.98 / 0.98, −0.020 | 0.94 / 0.99, −0.022 | 0.92 / 0.86, +0.011 | pass | −0.010 fail (−0.0103) |
+| **commit + re-admit at 200 kb (n75r4)** | 0.98 / 0.98, −0.005 | 0.95 / 0.99, −0.027 | 0.93 / 0.89, +0.041 | **pass** (0.983; min 0.887) | **+0.003 pass** |
+
+(prototype on the table, not the engine: `deep_diploid.py derive --commit 0.75 --rest drop` 0.97-0.98
+at 100 kb, as n75drop; the remaining table prototypes were cancelled once the engine versions ran.)
+
+**C3, Dip-C cells 1-3** (mean over cells, Δ vs the frozen `ember_nbr` runs on disk): n75r4 r per chain
+vs published Dip-C +0.046, whole genome +0.070, held-out cis AUC −0.005, seeds r +0.045 (0.989),
+masked-phase accuracy +0.082 — **but** that accuracy is over the masked ends that still get a phase:
+committed-and-dropped contacts have none, so the assigned fraction falls from 0.94 to 0.73 (correct
+over all masked ends 0.71 vs 0.83).  n75drop: held-out −0.018 (fail); n75keep: all within 0.002.
+
+**Adopted by the §10 rule**: n75r4 = `robust_dip_commit` 0.75, `robust_dip_commit_drop` true,
+`robust_dip_readmit_stage` 4 (contacts the prior cannot phase are left out until the 200 kb stage,
+re-admitted there as ambiguous restraints, and from the next stage on kept only if the structure's
+posterior phases them at >= 0.75).  Caveats: C2 passes on the mean only because of cell 320 (+0.041;
+024 −0.027, 035 −0.005); C3's phase accuracy rises by losing coverage.  Not yet frozen or tested on
+the held-back cells.
