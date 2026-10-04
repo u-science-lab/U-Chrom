@@ -16,7 +16,7 @@ import threading
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -594,8 +594,27 @@ class Dataset:
 
     def _images(self) -> Dict[str, Dict[str, Any]]:
         recs = self.cd.uns.get("linked_images") if isinstance(self.cd.uns, dict) else None
+        embedded = self._embedded_images()
         return {str(k): v for k, v in (recs or {}).items()
-                if isinstance(v, dict) and v.get("path") and self.resolve(v["path"]).exists()}
+                if isinstance(v, dict) and v.get("path") and (str(k) in embedded or self.resolve(v["path"]).exists())}
+
+    def _embedded_images(self) -> Dict[str, str]:
+        """``{image key: group name}`` of the images embedded in the store."""
+        if "embedded_images" not in self._cache:
+            from ...core.embedded import list_embedded_images
+
+            loc = self._store_location()
+            self._cache["embedded_images"] = list_embedded_images(loc) if loc else {}
+        return self._cache["embedded_images"]
+
+    def image_bytes(self, name: str) -> Optional[Tuple[bytes, str]]:
+        """(bytes, media type) of an image embedded in the store, else None (a file: :meth:`image_path`)."""
+        group = self._embedded_images().get(name)
+        if group is None:
+            return None
+        from ...core.embedded import read_embedded_image
+
+        return read_embedded_image(self._store_location(), group)
 
     def spatial(self) -> List[Dict[str, Any]]:
         """Cell-position sets: key, unit, y direction, regions (sections / FOVs) with cell counts

@@ -800,6 +800,46 @@ class ChromData:
         _set_linked_record(self.uns, "linked_cool", key, record)
         return record
 
+    def embedded_links(self) -> Dict[str, Dict[str, str]]:
+        """Copies embedded in the store (:mod:`uchrom.core.embedded`): ``{"contacts": {key: group},
+        "anndata": {...}, "images": {...}}`` (empty for a store without them or a non-directory store)."""
+        src = getattr(self, "_source_path", None)
+        if src is None or not (isinstance(src, str) or Path(src).is_dir()):
+            return {"contacts": {}, "anndata": {}, "images": {}}
+        from .embedded import list_embedded, list_embedded_anndata, list_embedded_images
+
+        loc = str(src)
+        return {"contacts": list_embedded(loc), "anndata": list_embedded_anndata(loc), "images": list_embedded_images(loc)}
+
+    def _embedded_export_dir(self) -> Path:
+        """Scratch directory (removed at exit) for cooler files exported from embedded maps."""
+        d = getattr(self, "_export_dir", None)
+        if d is None:
+            import atexit
+            import shutil
+            import tempfile
+
+            d = Path(tempfile.mkdtemp(prefix="uchrom-embedded-"))
+            atexit.register(shutil.rmtree, d, True)
+            self._export_dir = d
+        return d
+
+    def linked_cool_path(self, key: str = "default") -> str:
+        """Path of the linked ``.cool`` / ``.mcool`` ``key``; when the file is gone but the map is embedded
+        in the store, it is exported once to a scratch ``.mcool`` and that path is returned."""
+        record = _linked_record(self.uns.get("linked_cool"), key)
+        path = record.get("path")
+        if path and self.resolve_link_path(path).exists():
+            return str(self.resolve_link_path(path))
+        if key in self.embedded_links()["contacts"]:
+            from .embedded import export_mcool
+
+            out = self._embedded_export_dir() / f"{key}.mcool".replace("/", "_")
+            if not out.exists():
+                export_mcool(str(self._source_path), key, out)
+            return str(out)
+        raise FileNotFoundError(f"linked_cool {key!r}: {path!r} does not exist and the map is not embedded in the store")
+
     def load_linked_scool(self, *, key: str = "default", cell: Optional[str] = None):
         """Load metadata or one cell cooler from a linked scool file.
 
@@ -815,6 +855,18 @@ class ChromData:
             import cooler
         except ImportError as exc:  # pragma: no cover - cooler is a core dep now
             raise ImportError("cooler is required to load linked scool files.") from exc
+
+        if not self.resolve_link_path(path).exists() and key in self.embedded_links()["contacts"]:
+            from .embedded import EmbeddedContacts, export_cool
+
+            loc = str(self._source_path)
+            if cell is None:
+                cells = EmbeddedContacts(loc, self.embedded_links()["contacts"][key]).cells
+                return {"path": None, "cells": [f"/cells/{c}" for c in cells], "record": record, "embedded": True}
+            out = self._embedded_export_dir() / f"{key}.{cell}.cool".replace("/", "_")
+            if not out.exists():
+                export_cool(loc, key, out, cell=str(cell).removeprefix("/cells/"))
+            return cooler.Cooler(str(out))
 
         if cell is None:
             path = str(self.resolve_link_path(path))
@@ -1225,6 +1277,7 @@ class ChromData:
                 "coords are all NaN but uns['coordinate_status'] or uns['coords_status'] is not set"
             )
 
+        embedded = self.embedded_links()["contacts"] if check_files else {}
         for family, expected_format in (("linked_mudata", "h5mu"), ("linked_scool", "scool"),
                                         ("linked_cool", "cool|mcool"), ("linked_spatialdata", "spatialdata")):
             records = _linked_records(self.uns.get(family))
@@ -1233,7 +1286,8 @@ class ChromData:
                 if not path:
                     issues.append(f"{family}.{key} missing path")
                     continue
-                if check_files and not self.resolve_link_path(path).exists():
+                if (check_files and not self.resolve_link_path(path).exists()
+                        and not (family in ("linked_scool", "linked_cool") and key in embedded)):
                     issues.append(f"{family}.{key} path does not exist: {path}")
                 fmt = record.get("format")
                 if fmt and str(fmt) not in expected_format.split("|"):

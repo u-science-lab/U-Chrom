@@ -782,6 +782,12 @@ public data alone** and are shipped with their recorded outputs.
   requests a cold reader makes: one spot on one chromosome 6 data GETs (0.06 MB), 500-spot pseudo-bulk of a
   chromosome 8 GETs (2.1 MB), bulk 10 Mb region at 25 kb 6 GETs (1.7 MB), one metadata GET to open a map
   (counted on the store layer, local disk, not measured on S3).
+- **Embedded copies of all stores** (self-contained, each opens alone in the browser; sizes of the whole store):
+  hicrna_mouse_brain 2.1 GB, hicrna_human_melanoma 2.5 GB, hicrna_mouse_embryo 4.3 GB, Chen brain_embryo_10um 1.2 GB /
+  brain_embryo_20um 0.99 GB / e13_embryo_50um 0.68 GB, spatial_atac_hic mouse_brain 0.37 GB (maps, ssAB / ATAC, RNA h5ad,
+  section images).  Checked by moving each store alone into an empty directory: every map, image and bin track served.
+  Chen cortex / hippocampus / cerebellum have no maps yet; re-run `python -m uchrom.core.embedded <store>` after linking
+  (already-embedded keys are skipped).
 - **Open**: the E13.5 spots outside the published mask have no image / map in the stores; human ssAB layout;
   the pairs outside the mask (37–44 %) are unexplained.
 

@@ -128,7 +128,7 @@ def consolidate_sections(store_path: PathLike) -> None:
     zarr = _zarr()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        for section in (GROUP, ANNDATA):
+        for section in (GROUP, ANNDATA, IMAGES):
             if (Path(store_path) / section).is_dir():
                 zarr.consolidate_metadata(str(store_path), path=section)
 
@@ -524,6 +524,129 @@ def read_embedded_anndata(store, name: str):
 
 
 # ======================================================================
+# images (section / FOV pictures of ``uns['linked_images']``)
+# ======================================================================
+
+IMAGES = "embedded/images"
+_MEDIA = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".tif": "image/tiff",
+          ".tiff": "image/tiff", ".webp": "image/webp", ".gif": "image/gif"}
+
+
+def embed_image(store_path: PathLike, key: str, image: PathLike, *, overwrite: bool = False) -> Dict[str, Any]:
+    """Embed an image file as a byte array (``embedded/images/<key>``); served unchanged."""
+    zarr = _zarr()
+    image = Path(image)
+    final, tmp = _begin(store_path, key, overwrite, IMAGES)
+    try:
+        raw = np.frombuffer(image.read_bytes(), dtype=np.uint8)
+        root = zarr.open_group(str(tmp), mode="w", zarr_format=3)
+        z = root.create_array("data", shape=raw.shape, chunks=(max(1, min(len(raw), 1 << 20)),), dtype=np.uint8,
+                              compressors=None)
+        z[:] = raw
+        meta = {"key": key, "source": image.name, "media_type": _MEDIA.get(image.suffix.lower(), "application/octet-stream"),
+                "bytes": int(len(raw))}
+        root.attrs["uchrom_image"] = meta
+        _commit(final, tmp, consolidate=False)
+        return meta
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+
+
+def list_embedded_images(store) -> Dict[str, str]:
+    zarr = _zarr()
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            grp = zarr.open_group(as_store(store), path=IMAGES, mode="r", use_consolidated=True)
+    except Exception:
+        return {}
+    return {str(sub.attrs["uchrom_image"]["key"]): name for name, sub in grp.groups()
+            if ".partial-" not in name and "uchrom_image" in sub.attrs}
+
+
+def read_embedded_image(store, name: str) -> Tuple[bytes, str]:
+    """(file bytes, media type) of an embedded image."""
+    zarr = _zarr()
+    g = zarr.open_group(as_store(store), path=f"{IMAGES}/{name}", mode="r")
+    return g["data"][:].tobytes(), str(g.attrs["uchrom_image"]["media_type"])
+
+
+# ======================================================================
+# export back to cooler files (interoperability; Python code that needs a cooler)
+# ======================================================================
+
+def _open(store, key: str) -> "EmbeddedContacts":
+    names = list_embedded(store)
+    if key not in names:
+        raise KeyError(f"no embedded contact map {key!r} (have {sorted(names)})")
+    return EmbeddedContacts(store, names[key])
+
+
+def _pixel_frame(e: "EmbeddedContacts", r: int, cell_idx=None):
+    import pandas as pd
+
+    blocks = list(e.iter_pixels(r, cell_idx))
+    if not blocks:
+        return pd.DataFrame({"bin1_id": np.zeros(0, np.int64), "bin2_id": np.zeros(0, np.int64),
+                             "count": np.zeros(0, np.int64)})
+    d = np.concatenate([np.column_stack(b) for b in blocks])
+    d = d[np.lexsort((d[:, 1], d[:, 0]))]
+    return pd.DataFrame({"bin1_id": d[:, 0], "bin2_id": d[:, 1], "count": d[:, 2]})
+
+
+def _bins_frame(e: "EmbeddedContacts", r: int):
+    b = e.bins(r)
+    return b[["chrom", "start", "end"] + (["weight"] if "weight" in b else [])]
+
+
+def export_cool(store, key: str, out: PathLike, *, resolution: Optional[int] = None,
+                cell: Optional[str] = None) -> Path:
+    """Write one resolution of a bulk map (or one cell of a per-cell map) as a ``.cool``.
+    A bulk map embedded without trans contacts at this resolution exports its cis pixels only."""
+    import cooler
+
+    e = _open(store, key)
+    r = e._res(resolution)
+    idx = None
+    if e.kind == "per_cell":
+        if cell is None:
+            raise ValueError("a per-cell map needs cell=<name> (or use export_scool)")
+        idx = [e.cells.index(str(cell))]
+    cooler.create_cooler(str(out), _bins_frame(e, r), _pixel_frame(e, r, idx), ordered=True,
+                         columns=["count"], dtypes={"count": "int32"}, ensure_sorted=False)
+    return Path(out)
+
+
+def export_mcool(store, key: str, out: PathLike) -> Path:
+    """Write a bulk map as a ``.mcool`` (every embedded resolution)."""
+    import cooler
+
+    e = _open(store, key)
+    if e.kind != "bulk":
+        raise ValueError(f"{key!r} is a per-cell map: use export_scool")
+    Path(out).unlink(missing_ok=True)
+    for r in e.resolutions:
+        cooler.create_cooler(f"{out}::/resolutions/{r}", _bins_frame(e, r), _pixel_frame(e, r), ordered=True,
+                             columns=["count"], dtypes={"count": "int32"}, mode="a")
+    return Path(out)
+
+
+def export_scool(store, key: str, out: PathLike, *, cells: Optional[Sequence[str]] = None) -> Path:
+    """Write a per-cell map (all cells or ``cells``) as a ``.scool``; the cells are built in memory."""
+    import cooler
+
+    e = _open(store, key)
+    if e.kind != "per_cell":
+        raise ValueError(f"{key!r} is a bulk map: use export_cool / export_mcool")
+    r = e.resolutions[0]
+    names = list(cells) if cells is not None else e.cells
+    maps = {c: _pixel_frame(e, r, [e.cells.index(c)]) for c in names}
+    cooler.create_scool(str(out), _bins_frame(e, r), maps, ordered=True)
+    return Path(out)
+
+
+# ======================================================================
 # whole store
 # ======================================================================
 
@@ -542,18 +665,24 @@ def embed_links(store_path: PathLike, *, overwrite: bool = False, keys: Optional
     ``linked_cool``, ``linked_scool``, ``linked_bin_matrices``, ``linked_anndata``) into the store.
 
     The link records stay, so the store still reads on a machine that has the files; a reader that
-    finds an embedded copy uses it.  Returns ``{key: summary}``."""
+    finds an embedded copy uses it.  Keys that are already embedded are skipped unless ``overwrite``.
+    Returns ``{key: summary}`` of what was embedded."""
     from .cdata import ChromData
 
     cd = ChromData.read(str(store_path), backed=True)
     done: Dict[str, Any] = {}
-    todo = [(fam, k, r) for fam in ("linked_cool", "linked_scool", "linked_bin_matrices", "linked_anndata")
+    todo = [(fam, k, r) for fam in ("linked_cool", "linked_scool", "linked_bin_matrices", "linked_anndata", "linked_images")
             for k, r in _records(cd.uns, fam).items() if keys is None or k in set(keys)]
     for fam, key, rec in todo:
         path = cd.resolve_link_path(rec["path"])
         if not path.exists():
             if verbose:
                 print(f"[embed] {fam}/{key}: {path} not found, skipped")
+            continue
+        section = {"linked_cool": GROUP, "linked_scool": GROUP, "linked_images": IMAGES}.get(fam, ANNDATA)
+        if not overwrite and (Path(store_path) / section / safe_name(key)).exists():
+            if verbose:
+                print(f"[embed] {fam}/{key}: already embedded, skipped (overwrite=True replaces it)")
             continue
         if verbose:
             print(f"[embed] {fam}/{key}: {path.name}", flush=True)
@@ -563,6 +692,8 @@ def embed_links(store_path: PathLike, *, overwrite: bool = False, keys: Optional
         elif fam == "linked_cool":
             done[key] = embed_cool(store_path, key, path, label=label, overwrite=overwrite,
                                    trans_min_resolution=trans_min_resolution)
+        elif fam == "linked_images":
+            done[key] = embed_image(store_path, key, path, overwrite=overwrite)
         else:
             done[key] = embed_anndata(store_path, key, path, family=fam, label=label, overwrite=overwrite)
     consolidate_sections(store_path)

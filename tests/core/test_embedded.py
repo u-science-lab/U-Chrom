@@ -48,6 +48,9 @@ def _store(tmp_path):
     cd.link_cool("bulk.mcool", key="bulk")
     cd.link_scool("cells.scool", key="cells")
     cd.uns["linked_bin_matrices"] = {"ssAB": {"path": "ssab.h5ad", "label": "ssAB"}}
+    (tmp_path / "sec.png").write_bytes(b"\x89PNG\r\n\x1a\n" + bytes(range(256)) * 40)
+    cd.uns["linked_images"] = {"secA": {"path": "sec.png", "kind": "png"}}
+    cd.uns["linked_anndata"] = {"path": "ssab.h5ad", "format": "h5ad"}
     cd.write(tmp_path / "linked.chromdata.zarr")
     shutil.copytree(tmp_path / "linked.chromdata.zarr", tmp_path / "emb.chromdata.zarr")
     return tmp_path / "linked.chromdata.zarr", tmp_path / "emb.chromdata.zarr"
@@ -57,7 +60,7 @@ def _store(tmp_path):
 def stores(tmp_path):
     linked, emb = _store(tmp_path)
     done = embedded.embed_links(emb, verbose=False, trans_min_resolution=RES)
-    assert set(done) == {"bulk", "cells", "ssAB"}
+    assert set(done) == {"bulk", "cells", "ssAB", "secA", "default"}
     return tmp_path, linked, emb
 
 
@@ -147,3 +150,66 @@ def test_store_still_reads_and_older_layout_unaffected(stores):
     cd = ChromData.read(str(emb), backed=True)
     assert cd.uns["linked_scool"]["path"] if "path" in cd.uns["linked_scool"] else cd.uns["linked_scool"]["cells"]["path"]
     assert embedded.list_embedded(str(linked)) == {}
+
+
+def test_image_embedded(stores):
+    tmp_path, _, emb = stores
+    (tmp_path / "sec.png").unlink()
+    ds = DatasetStore().load(emb)
+    assert "secA" in ds._images()
+    raw, media = ds.image_bytes("secA")
+    assert media == "image/png" and raw.startswith(b"\x89PNG") and len(raw) == 8 + 256 * 40
+
+
+def test_python_api_without_the_files(stores):
+    tmp_path, _, emb = stores
+    ref = {r: cooler.Cooler(f"{tmp_path / 'bulk.mcool'}::/resolutions/{r}").pixels()[:] for r in (RES, 2 * RES)}
+    ref_cell = cooler.Cooler(f"{tmp_path / 'cells.scool'}::/cells/c1").pixels()[:]
+    for f in ("bulk.mcool", "bulk.cool", "cells.scool", "ssab.h5ad", "sec.png"):
+        (tmp_path / f).unlink()
+    cd = ChromData.read(str(emb), backed=True)
+    assert set(cd.embedded_links()["contacts"]) == {"bulk", "cells"}
+    assert cd.validate_links() == [m for m in cd.validate_links() if "does not exist" not in m]
+    # a bulk map: an mcool exported from the embedded copy, same pixels
+    path = cd.linked_cool_path("bulk")
+    for r, px in ref.items():
+        got = cooler.Cooler(f"{path}::/resolutions/{r}").pixels()[:]
+        assert sorted(zip(got.bin1_id, got.bin2_id, got["count"])) == sorted(zip(px.bin1_id, px.bin2_id, px["count"]))
+    # one cell of a per-cell map, and the cell list
+    assert cd.load_linked_scool(key="cells")["cells"] == ["/cells/c0", "/cells/c1", "/cells/c2"]
+    got = cd.load_linked_scool(key="cells", cell="c1").pixels()[:]
+    assert sorted(zip(got.bin1_id, got.bin2_id, got["count"])) == sorted(zip(ref_cell.bin1_id, ref_cell.bin2_id, ref_cell["count"]))
+    # linked_adata falls back to the embedded AnnData
+    assert cd.linked_adata is not None and cd.linked_adata.shape == (3, 2 * N)
+
+
+def test_export_roundtrip(stores):
+    tmp_path, _, emb = stores
+    out = embedded.export_scool(str(emb), "cells", tmp_path / "again.scool")
+    for c in ("c0", "c1", "c2"):
+        a = cooler.Cooler(f"{out}::/cells/{c}").pixels()[:]
+        b = cooler.Cooler(f"{tmp_path / 'cells.scool'}::/cells/{c}").pixels()[:]
+        assert sorted(zip(a.bin1_id, a.bin2_id, a["count"])) == sorted(zip(b.bin1_id, b.bin2_id, b["count"]))
+    one = embedded.export_cool(str(emb), "bulk", tmp_path / "r.cool", resolution=2 * RES)
+    assert cooler.Cooler(str(one)).binsize == 2 * RES
+    with pytest.raises(ValueError):
+        embedded.export_cool(str(emb), "cells", tmp_path / "x.cool")
+
+
+def test_http_routes_without_the_files(stores):
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from uchrom.browser.web.server import create_app
+
+    tmp_path, _, emb = stores
+    for f in ("bulk.mcool", "bulk.cool", "cells.scool", "ssab.h5ad", "sec.png"):
+        (tmp_path / f).unlink()
+    store = DatasetStore()
+    ds = store.load(emb)
+    client = TestClient(create_app(store))
+    r = client.get(f"/api/datasets/{ds.id}/images/secA")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png" and r.content.startswith(b"\x89PNG")
+    assert client.get(f"/api/datasets/{ds.id}/images/nope").status_code == 404
+    r = client.get(f"/api/datasets/{ds.id}/contacts/cells", params={"chrom": "chr1", "cell": "c0"})
+    assert r.status_code == 200 and decode_matrix(r.content)["matrix"].shape == (N, N)

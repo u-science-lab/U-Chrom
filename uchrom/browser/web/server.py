@@ -223,7 +223,13 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
     @app.get("/api/datasets/{dataset_id}/images/{name}")
     def image(dataset_id: str, name: str) -> FileResponse:
         try:
-            return FileResponse(_dataset(dataset_id).image_path(name))
+            ds = _dataset(dataset_id)
+            if ds._images().get(name) is None:
+                raise KeyError(name)
+            emb = ds.image_bytes(name)          # embedded in the store: no file needed
+            if emb is not None:
+                return Response(emb[0], media_type=emb[1])
+            return FileResponse(ds.image_path(name))
         except KeyError:
             raise HTTPException(404, f"unknown image: {name}") from None
 

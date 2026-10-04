@@ -446,6 +446,7 @@ embedded/contacts/<name>/         attrs.uchrom_contacts = {key, kind: per_cell|b
     └── trans/{pix, cell_offset | bin1_offset}    genome-wide bin ids; bulk: only for resolutions >= 250 kb
 embedded/anndata/<name>/          an AnnData Zarr group (anndata >= 0.13 layout) +
                                   attrs.uchrom_anndata = {key, family: linked_anndata|linked_bin_matrices, ...}
+embedded/images/<name>/data       the bytes of a linked section image (uint8 array), attrs.uchrom_image = {key, media_type, bytes}
 ```
 
 - `pix` is chunked `(3, 16384)` and **sharded** (`(3, 4194304)` per shard, Zarr v3 sharding codec, zstd 9;
@@ -460,6 +461,10 @@ embedded/anndata/<name>/          an AnnData Zarr group (anndata >= 0.13 layout)
   `(1024, 256)`.  Bins must be uniform and start at 0 on every chromosome (checked when embedding).
 - Round trip: the embedded pixels are exactly those of the cooler file (tested), and the web browser
   returns byte-identical matrices from either source.
+- Back to cooler: `export_cool` / `export_mcool` / `export_scool` (`uchrom.core.embedded`) rebuild cooler
+  files from the embedded pixels (a bulk map embedded without trans at a fine resolution exports cis only);
+  `cd.linked_cool_path(key)` and `cd.load_linked_scool(key=, cell=)` use them when the linked file is gone,
+  and `cd.validate_links()` does not flag a missing file whose map is embedded.
 - Remote reading: `embedded/contacts` and `embedded/anndata` carry consolidated metadata (the listing of
   their children without listing the bucket), so a store served by plain HTTP or S3 needs no directory
   listing.  See `uchrom/core/remote.py`.
