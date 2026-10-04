@@ -2,16 +2,13 @@
 
 Real results are read from ``results/``.
 
-  a  EMber diploid at 5 kb on the deepest scMicro-C GM12878 cell (Wu 2025): U-Chrom web-browser pane captures
-     (whole nucleus by chromosome; chr1 homologs; a 3 Mb zoom at 5 kb and, exploratory, 2 kb); numbers in
-     ``results/highres/summary.json`` / Supplementary ``make_figS_fig3_highres.py``
-  b  time for one model vs resolution: EMber (U-Chrom; GPU, CPU 16 / 1 threads), original NucDynamics,
+  a  time for one model vs resolution: EMber (U-Chrom; GPU, CPU 16 / 1 threads), original NucDynamics,
      hickit, Si-C (same input, one CPU model / one H100; runs over the 48 h cap drawn as censored)
-  c  held-out contact prediction (8 cells x 3 folds) per genomic separation
-  d  imaging-truth simulations (Su 2020 chr21, Takei 2021 1 Mb): distance agreement
-  e  IGM: U-Chrom (native) vs original populations (WTC11 demo, S = 200 / 1,000)
-  f  IGM speed: original (64 cores) vs U-Chrom (1 GPU)
-  g  population size: seed-to-seed agreement and fit to input of trans contacts vs S (200-5,000)
+  b  held-out contact prediction (8 cells x 3 folds) per genomic separation
+  c  imaging-truth simulations (Su 2020 chr21, Takei 2021 1 Mb): distance agreement
+  d  IGM: U-Chrom (native) vs original populations (WTC11 demo, S = 200 / 1,000)
+  e  IGM speed: original (64 cores) vs U-Chrom (1 GPU)
+  f  population size: seed-to-seed agreement and fit to input of trans contacts vs S (200-5,000)
 
 Supplementary figures: ``make_figS_fig3_*.py`` (``make_figS_fig3_all.py`` builds the set).
 
@@ -35,7 +32,7 @@ HERE = Path(__file__).resolve().parent
 RES = HERE / "results"
 FEAS = HERE / "feasibility"
 MM = 1 / 25.4
-W, H = 170.0, 192.0
+W, H = 170.0, 136.0
 
 mpl.rcParams.update({
     "pdf.fonttype": 42, "font.family": "sans-serif", "font.sans-serif": ["Arial"],
@@ -208,7 +205,6 @@ def load_results() -> dict:
     load_speed(d)
     load_screcon(d)
     load_igm(d)
-    load_highres(d)
     return d
 
 
@@ -320,69 +316,6 @@ def p_nd_precision(fig, d, x, y):
               handletextpad=0.05, columnspacing=0.5)
 
 
-HIGHRES = HERE / "renders" / "highres"
-HAP_PAT, HAP_MAT = "#d1495b", "#2e6fbf"          # = capture_highres.PAT / MAT
-
-
-def load_highres(d: dict) -> None:
-    """High-resolution diploid demonstration (``benchmarks/screcon/highres.py summary``; Sherlock)."""
-    p = RES / "highres" / "summary.json"
-    d["highres"] = _j(p) if p.exists() else None
-
-
-def p_highres(fig, d, x, y):
-    """EMber at 5 kb on the deepest scMicro-C cell: U-Chrom web-browser pane captures
-    (``build_render_scmicroc.py`` + ``capture_highres.py``)."""
-    hr = d.get("highres")
-    cell = hr["cells"][HIGHRES_CELL] if hr else None
-    run = next((r for r in cell["runs"] if r["set"] == "ladder" and r["res"] == 5000 and r["seed"] == 1), None) \
-        if cell else None
-    note = "GM12878 scMicro-C (Wu 2025), deepest cell"
-    if run:
-        note = (f"GM12878 scMicro-C (Wu 2025), deepest cell: {run['n_contacts_input'] / 1e6:.2f} M contacts, "
-                f"{run['particles_grid'] / 1e6:.2f} M particles (2 × 23 chains); {run['n_models']} models in "
-                f"{run['wall_seconds'] / 60:.1f} min on one H100 ({run['gpu']['peak_mib'] / 1024:.1f} GB)")
-    head_(fig, x, y, "a", "EMber (U-Chrom): a diploid human genome at 5 kb", note)
-    sc = (cell or {}).get("scores", {})
-    r_seed = ((sc.get("res5000") or {}).get("a_vs_b") or {}).get("per_copy_r")
-    r_hk = ((sc.get("ref_res5000") or {}).get("a_within") or {}).get("per_copy_r")
-    if r_seed is not None and r_hk is not None:
-        fig.text((x + 5) / W, 1 - (y + 7.4) / H,
-                 f"one model shown; low run-to-run agreement on this data (seeds: r = {r_seed:.2f} per copy chain; "
-                 f"the authors' hickit runs: {r_hk:.2f}); Supplementary Fig. S8",
-                 fontsize=5.5, color=NEW, va="top", style="italic")
-    s = 39
-    for k, (name, cap) in enumerate((("cell035_genome_crop.png", "coloured by chromosome"),
-                                     ("cell035_homologs_chr1_crop.png", None))):
-        ax = ax_at(fig, x + 4 + k * (s + 2), y + 11, s, s)
-        ax.imshow(plt.imread(HIGHRES / name)); ax.axis("off")
-        if cap:
-            ax.text(0.5, -0.01, cap, transform=ax.transAxes, ha="center", va="top", fontsize=5.5, color=GREY)
-    ax = fig.axes[-1]
-    for xx, lab, col in ((0.2, "chr1 copies:", GREY), (0.52, "paternal", HAP_PAT), (0.8, "maternal", HAP_MAT)):
-        ax.text(xx, -0.01, lab, transform=ax.transAxes, ha="center", va="top", fontsize=5.5, color=col,
-                fontweight="normal" if col == GREY else "bold")
-    triad(fig, x - 1, y + 41, 9)
-    zooms = [(f, t) for f, t in (("cell035_zoom_crop.png", "5 kb"), ("cell035_2kb_zoom_crop.png", "2 kb*"),
-                                 ("cell035_1kb_zoom_crop.png", "1 kb*"))
-             if (HIGHRES / f).exists()]
-    zx = x + 4 + 2 * (s + 2) + 2
-    zw = (W - 2 - zx) / max(len(zooms), 1) - 1.5
-    for k, (f, t) in enumerate(zooms):
-        img = plt.imread(HIGHRES / f)
-        ax = ax_at(fig, zx + k * (zw + 1.5), y + 16, zw, zw)
-        ax.imshow(img); ax.axis("off")
-        ax.set_title(t, fontsize=6, color=INK, pad=1)
-    fig.text((zx + (W - 2 - zx) / 2) / W, 1 - (y + 18 + zw) / H,
-             "one model each, superposed on the 5 kb model\n* exploratory runs (5 models)",
-             ha="center", va="top", fontsize=5.5, color=GREY)
-    fig.text((zx + (W - 2 - zx) / 2) / W, 1 - (y + 10.5) / H, "chr1:53–56 Mb, paternal copy; rainbow along the region",
-             ha="center", va="top", fontsize=5.5, color=GREY)
-
-
-HIGHRES_CELL = "GSM5764669_cell_035"
-
-
 SPEED_STYLE = {   # (method, threads) -> label, colour, line style, marker
     ("orig", 1): ("NucDynamics", ORIG, "-", "s"),
     ("sic", 1): ("Si-C", PURPLE, "-", "^"),
@@ -397,7 +330,7 @@ def p_nd_speed(fig, d, x, y):
     """Wall time of ONE model vs final resolution; censored runs (job cap) as open markers + arrow."""
     sp = d["speed1"]
     cap = sp["cap_hours"] * 3600
-    head_(fig, x, y, "b", "Time for one model", "Cell 1; CPU: EPYC 9754, GPU: H100")
+    head_(fig, x, y, "a", "Time for one model", "Cell 1; CPU: EPYC 9754, GPU: H100")
     ax = ax_at(fig, x + 12, y + 11, 28.5, 28)
     rows = sp["rows"]
     robust_done = any_failed = False
@@ -448,7 +381,7 @@ def p_nd_speed(fig, d, x, y):
 # row 2 — one benchmark for every method
 
 def p_heldout_contacts(fig, d, x, y):
-    head_(fig, x, y, "c", "Held-out contacts",
+    head_(fig, x, y, "b", "Held-out contacts",
           f"8 cells × 3 folds; matched-separation negatives")
     ax = ax_at(fig, x + 12, y + 11, 42, 28)
     b = d["ho_band"]
@@ -470,7 +403,7 @@ def p_heldout_contacts(fig, d, x, y):
 
 
 def p_sim(fig, d, x, y):
-    head_(fig, x, y, "d", "Imaging truth (simulated Hi-C)", "median model vs imaged distances")
+    head_(fig, x, y, "c", "Imaging truth (simulated Hi-C)", "median model vs imaged distances")
     ax = ax_at(fig, x + 12, y + 11, 42, 28)
     order = ["robust", "orig", "sic", "hickit", "pop_mean", "random_polymer"]
     dsets = [("su2020_chr21", "Su 2020\nchr21, 50 kb"), ("takei2021_1mb", "Takei 2021\ngenome, 1 Mb")]
@@ -492,7 +425,7 @@ def p_sim(fig, d, x, y):
 
 
 def sc_legend(fig, x, y):
-    """Shared legend of the single-cell methods (panels c, d), top-left at (x, y) mm."""
+    """Shared legend of the single-cell methods (panels e, f), top-left at (x, y) mm."""
     order = ["robust", "orig", "sic", "hickit", "pop_mean", "random_polymer"]
     hs = [mpl.patches.Patch(color=SC_METHODS[m][1], label=SC_METHODS[m][0]) for m in order]
     fig.legend(handles=hs, loc="upper left", bbox_to_anchor=(x / W, 1 - y / H), ncol=3, frameon=False,
@@ -506,7 +439,7 @@ IGM_KINDS = [("ours", "native vs native", OURS2), ("igm", "original vs original"
 
 
 def p_igm_equiv(fig, d, x, y):
-    head_(fig, x, y, "e", "IGM: native vs original", "WTC11 2 Mb; population agreement")
+    head_(fig, x, y, "d", "IGM: native vs original", "WTC11 2 Mb; population agreement")
     ax = ax_at(fig, x + 10, y + 11, 30, 28)
     feats = [("pearson_contact_intra", "intra\ncontacts"), ("pearson_contact_inter", "inter\ncontacts"),
              ("pearson_radial", "radial\nposition")]
@@ -527,7 +460,7 @@ def p_igm_equiv(fig, d, x, y):
 
 
 def p_igm_speed(fig, d, x, y):
-    head_(fig, x, y, "f", "IGM speed", "same input and schedule")
+    head_(fig, x, y, "e", "IGM speed", "same input and schedule")
     t = d["igm_time"]
     ax = ax_at(fig, x + 10, y + 11, 28, 28)
     for si, S in enumerate((200, 1000)):
@@ -541,7 +474,7 @@ def p_igm_speed(fig, d, x, y):
 
 
 def p_popsize(fig, d, x, y):
-    head_(fig, x, y, "g", "How many structures?", "WTC11 2 Mb, 3 seeds; grey: minutes on 1 GPU")
+    head_(fig, x, y, "f", "How many structures?", "WTC11 2 Mb, 3 seeds; grey: minutes on 1 GPU")
     ax = ax_at(fig, x + 10, y + 11, 34, 28)
     sw = d["igm_sweep"]
     Ss = sorted(sw)
@@ -566,18 +499,15 @@ def p_popsize(fig, d, x, y):
 def main() -> None:
     d = load_results()
     fig = plt.figure(figsize=(W * MM, H * MM))
-    row_title(fig, 0.5, "single-cell reconstruction at high resolution (EMber, homolog-resolved)")
-    p_highres(fig, d, 0, 4)
-    dy = 56
-    row_title(fig, 0.5 + dy, "single-cell reconstruction: EMber vs existing methods, one benchmark")
-    p_nd_speed(fig, d, 0, 4 + dy)
-    p_heldout_contacts(fig, d, 56, 4 + dy)
-    p_sim(fig, d, 114, 4 + dy)
-    sc_legend(fig, 64, 52 + dy)
-    row_title(fig, 72.5 + dy, "population reconstruction (IGM)")
-    p_igm_equiv(fig, d, 0, 76 + dy)
-    p_igm_speed(fig, d, 58, 76 + dy)
-    p_popsize(fig, d, 114, 76 + dy)
+    row_title(fig, 0.5, "single-cell reconstruction: EMber vs existing methods, one benchmark")
+    p_nd_speed(fig, d, 0, 4)
+    p_heldout_contacts(fig, d, 56, 4)
+    p_sim(fig, d, 114, 4)
+    sc_legend(fig, 64, 52)
+    row_title(fig, 72.5, "population reconstruction (IGM)")
+    p_igm_equiv(fig, d, 0, 76)
+    p_igm_speed(fig, d, 58, 76)
+    p_popsize(fig, d, 114, 76)
     for ext in ("pdf", "png"):
         fig.savefig(HERE / f"fig3.{ext}", dpi=300)
     print(HERE / "fig3.pdf")

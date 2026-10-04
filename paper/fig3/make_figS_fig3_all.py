@@ -1,7 +1,7 @@
 """Build Fig. 3 and its supplementary figures as one numbered set.
 
-Supplementary Fig. S1 belongs to Fig. 2; Fig. 3's set is S2-S8 (S4 is the number the
-manuscript already cites for the overflow figure; S8 added for the high-resolution diploid panel):
+Supplementary Fig. S1 belongs to Fig. 2; Fig. 3's set is S2-S7 (S4 is the number the
+manuscript already cites for the overflow figure):
 
   S2  published vs U-Chrom, four viewpoints           make_figS_fig3_views.py
   S3  100 kb / 10 kb / 1 kb on one GPU                  make_figS_fig3_resolution.py
@@ -9,9 +9,8 @@ manuscript already cites for the overflow figure; S8 added for the high-resoluti
   S5  the single-cell benchmark in detail               make_figS_fig3_benchmark.py
   S6  imaged distances -> contacts (with DIMES)         make_figS_fig3.py
   S7  population and Hi-C + FISH reconstruction         make_figS_fig3_population.py
-  S8  EMber diploid at 5 kb (scMicro-C GM12878)         make_figS_fig3_highres.py
 
-Writes every figure, then ``figS_fig3_set.pdf`` (S2-S8 in order) and, with ``--manuscript``,
+Writes every figure, then ``figS_fig3_set.pdf`` (S2-S7 in order) and, with ``--manuscript``,
 copies ``fig3.pdf`` and ``figS<k>.pdf`` into ``paper/manuscript/figures/``.
 
     python paper/fig3/make_figS_fig3_all.py [--manuscript]
@@ -31,8 +30,7 @@ SET = [("S2", "make_figS_fig3_views.py", "figS_fig3_views.pdf"),
        ("S4", "make_figS_fig3_overflow.py", "figS_fig3_overflow.pdf"),
        ("S5", "make_figS_fig3_benchmark.py", "figS_fig3_benchmark.pdf"),
        ("S6", "make_figS_fig3.py", "figS_fig3.pdf"),
-       ("S7", "make_figS_fig3_population.py", "figS_fig3_population.pdf"),
-       ("S8", "make_figS_fig3_highres.py", "figS_fig3_highres.pdf")]
+       ("S7", "make_figS_fig3_population.py", "figS_fig3_population.pdf")]
 
 
 def main() -> None:
