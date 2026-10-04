@@ -21,6 +21,9 @@
 #SBATCH --output=%x-%j.out
 source "$SCRATCH/uchrom-nd/repo-highres/benchmarks/screcon/sherlock/_env_highres.sh"
 CELL=${CELL:?}
+# VARIANTS: space separated; or VARIANTS_FILE: one per line (needed for engine:<name>:<json> with commas,
+# which sbatch --export cannot pass)
+if [ -n "${VARIANTS_FILE:-}" ]; then VARIANTS=$(grep -v '^#' "$VARIANTS_FILE" | tr '\n' ' '); fi
 VARIANTS=${VARIANTS:?}
 RESS=${RESS:-"100000 20000"}
 NM=${NM:-10}

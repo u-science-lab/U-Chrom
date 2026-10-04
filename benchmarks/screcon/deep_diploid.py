@@ -83,6 +83,99 @@ def cmd_derive(args) -> None:
     print(json.dumps(stats), flush=True)
 
 
+def cmd_table(args) -> None:
+    """Development table: one row per cell x variant (``runs/highres/dev/<cell>/<variant>/``)."""
+    import pandas as pd
+    rows = []
+    for cdir in sorted(Path(args.root).iterdir()):
+        if not cdir.is_dir():
+            continue
+        for v in sorted(p for p in cdir.iterdir() if p.is_dir() and p.name != "split"):
+            r = {"cell": cdir.name.split("_", 1)[1], "variant": v.name}
+            for res in (100000, 20000, 10000, 5000):
+                f = v / f"score_res{res}.json"
+                if f.exists():
+                    s = json.loads(f.read_text())
+                    k = res // 1000
+                    ab = s.get("a_vs_b") or {}
+                    r[f"seeds_{k}k"] = ab.get("per_copy_r")
+                    r[f"seeds_whole_{k}k"] = ab.get("whole_r")
+                    for b, x in (ab.get("band_r") or {}).items():
+                        r[f"seeds_{b}_{k}k"] = x
+                    r[f"vs_hickit_{k}k"] = (s.get("a_vs_ref") or {}).get("per_copy_r")
+            for ev, lab in (("eval_pairs", "ho"), ("eval_pairs_cis", "ho2mb")):
+                f = v / f"heldout_{ev}.json"
+                if f.exists():
+                    m = next(iter(json.loads(f.read_text())["methods"].values()))
+                    r[f"{lab}_cis_auc"] = m["median"]["cis"]["roc_auc"]
+                    r[f"{lab}_trans_auc"] = m["median"]["trans"]["roc_auc"]
+            t = v / "table.pairs.gz.json"
+            if t.exists():
+                r["contacts"] = json.loads(t.read_text())["written"]
+            for res in (100000, 20000):
+                j = v / f"res{res}_s1.npz.json"
+                if j.exists():
+                    m = json.loads(j.read_text())
+                    r[f"wall_{res // 1000}k"] = m["wall_seconds"]
+                    st = m["stages"]
+                    st = json.loads(st) if isinstance(st, str) else st
+                    eps = [e["eps"] for s_ in st for e in s_.get("robust", [])]
+                    r[f"eps_last_{res // 1000}k"] = eps[-1] if eps else None
+            rows.append(r)
+    t = pd.DataFrame(rows)
+    pd.set_option("display.width", 250)
+    pd.set_option("display.max_columns", 60)
+    cols = [c for c in ["cell", "variant", "contacts", "seeds_100k", "seeds_whole_100k", "seeds_20k", "seeds_whole_20k",
+                        "seeds_lt2mb_20k", "seeds_2-20mb_20k", "seeds_gt20mb_20k", "vs_hickit_100k", "vs_hickit_20k",
+                        "ho_cis_auc", "ho_trans_auc", "ho2mb_cis_auc", "eps_last_100k", "eps_last_20k", "wall_20k"]
+            if c in t.columns]
+    print(t[cols].round(3).to_string(index=False))
+    if args.out:
+        t.to_csv(args.out, sep="\t", index=False)
+
+
+def cmd_dipc_table(args) -> None:
+    """Criterion C3 table: Dip-C development cells, every label scored by deep_dipc.sbatch
+    (``runs/highres/dipc/cell<k>/scores/<label>_*.json``), means over cells; differences vs ``ember_nbr``."""
+    import pandas as pd
+    rows = []
+    for cdir in sorted(Path(args.root).glob("cell*")):
+        labels = sorted({p.name.rsplit("_", 1)[0] for p in (cdir / "scores").glob("*_full.json")})
+        for lab in labels:
+            S = cdir / "scores"
+            r = {"cell": cdir.name, "label": lab}
+            f = json.loads((S / f"{lab}_full.json").read_text())["methods"]
+            for ref in ("dipc", "hickit"):
+                v = [m["vs"][ref] for m in f.values() if ref in m["vs"]]
+                r[f"r_chain_{ref}"] = float(np.mean([x["dist_r_median"] for x in v])) if v else None
+                r[f"r_whole_{ref}"] = float(np.mean([x["whole_r"] for x in v])) if v else None
+            r["precision"] = float(np.mean([m["precision"].get("rmsd_to_mean_per_unit") or np.nan for m in f.values()]))
+            if (S / f"{lab}_mask.json").exists():
+                m = next(iter(json.loads((S / f"{lab}_mask.json").read_text())["methods"].values()))
+                r["phase_acc"] = m.get("phase_holdback", {}).get("acc_all")
+            auc = []
+            for k in (1, 2, 3):
+                p = S / f"{lab}_heldout_fold{k}.json"
+                if p.exists():
+                    m = next(iter(json.loads(p.read_text())["methods"].values()))
+                    auc.append(m["median"]["cis"]["roc_auc"])
+            r["heldout_cis_auc"] = float(np.mean(auc)) if auc else None
+            if (S / f"{lab}_seeds.json").exists():
+                r["seeds_r"] = json.loads((S / f"{lab}_seeds.json").read_text())["a_vs_b"]["per_copy_r"]
+            rows.append(r)
+    t = pd.DataFrame(rows)
+    pd.set_option("display.width", 250)
+    print(t.round(4).to_string(index=False))
+    m = t.drop(columns="cell").groupby("label").mean(numeric_only=True)
+    print("\nmean over cells")
+    print(m.round(4).to_string())
+    if "ember_nbr" in m.index:
+        print("\ndifference vs ember_nbr (frozen)")
+        print((m - m.loc["ember_nbr"]).round(4).to_string())
+    if args.out:
+        t.to_csv(args.out, sep="\t", index=False)
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -97,6 +190,14 @@ def main(argv=None) -> None:
     d.add_argument("--iso-nei", type=int, default=0)
     d.add_argument("--iso-radius", type=int, default=10_000_000)
     d.set_defaults(fn=cmd_derive)
+    t = sub.add_parser("table")
+    t.add_argument("--root", required=True)
+    t.add_argument("--out")
+    t.set_defaults(fn=cmd_table)
+    t2 = sub.add_parser("dipc-table")
+    t2.add_argument("--root", required=True)
+    t2.add_argument("--out")
+    t2.set_defaults(fn=cmd_dipc_table)
     args = ap.parse_args(argv)
     args.fn(args)
 

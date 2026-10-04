@@ -261,3 +261,10 @@ they are.
   frozen §6 defaults would change (they do not: new settings off by default).  If no candidate meets
   C1-C3 the extension is reported as not working on deep low-phasing data, with the numbers, and
   Fig. 3 gets no scMicro-C panel.
+* *Added 2026-10-04, after the first development numbers (`diploid_devlog.md` §5), before any run
+  with it*: tunable 4, `robust_dip_readmit_stage` (-1 = off; tried 3 = 400 kb and 4 = 200 kb):
+  with `robust_dip_commit` by the prior and `drop`, the contacts the prior could not phase are
+  re-admitted at that stage as ambiguous restraints and committed at the next stage by the EM
+  posterior of the structure (>= the same τ) or dropped.  Reason: commitment by the prior with
+  `drop` reproduces (C1) but loses held-out AUC (C2 / C3) with two thirds of the contacts unused;
+  `keep` uses them but does not reproduce.  Criteria unchanged.

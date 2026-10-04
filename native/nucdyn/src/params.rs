@@ -200,6 +200,11 @@ pub struct Params {
     /// With `robust_dip_commit`: -1 = commit by the prior before stage 1; k >= 1 = commit by the
     /// EM posterior of the structure from stage k (0-based stage index k, so after k stages).
     pub robust_dip_commit_stage: i64,
+    /// With `robust_dip_commit` by the prior and `robust_dip_commit_drop`: -1 = off; k >= 1 = the
+    /// contacts dropped by the prior are re-admitted at stage k (0-based) as ambiguous restraints
+    /// and, at stage k + 1, committed by the EM posterior of the structure (>= the same
+    /// threshold) or dropped.
+    pub robust_dip_readmit_stage: i64,
     /// Diploid input, both protocols (0 = off): before stage 1, keep a contact only if at least
     /// this many other contacts of the same chromosome pair have both ends within
     /// `dip_isolation_radius` (Chebyshev; hickit `-r R -c K`).
@@ -288,6 +293,7 @@ impl Default for Params {
             robust_dip_commit: 0.0,
             robust_dip_commit_drop: true,
             robust_dip_commit_stage: -1,
+            robust_dip_readmit_stage: -1,
             dip_isolation_nei: 0,
             dip_isolation_radius: 10_000_000,
         }

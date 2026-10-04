@@ -15,6 +15,7 @@
 source "$SCRATCH/uchrom-nd/repo-highres/benchmarks/screcon/sherlock/_env_highres.sh"
 LABEL=${LABEL:?}
 PARAMS=${PARAMS:?}
+PARAMS=${PARAMS//;/,}      # sbatch --export splits on commas: pass ';' between JSON fields
 CELLS=${CELLS:-"01 02 03"}
 SRC=$W/runs/diploid/real/res100000
 O=$HR/dipc
