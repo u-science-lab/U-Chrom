@@ -1153,15 +1153,16 @@ class Dataset:
 
     def contacts(self, key: str, chrom: str, start=None, end=None, resolution=None,
                  balance: bool = False, cell: Optional[str] = None, group: Optional[str] = None) -> bytes:
-        import cooler
-
         _one_scope(cell, group)
 
         info = next((m for m in self.contact_maps() if m["key"] == key and m["kind"] != "error"), None)
         if info is None:
             raise KeyError(key)
         if info.get("embedded"):
+            # no cooler here: importing it creates multiprocessing semaphores, which a sandboxed container (Cloudflare
+            # Containers) does not have; embedded maps are read straight from Zarr
             return self._embedded_contacts(key, info, chrom, start, end, resolution, balance, cell, group)
+        import cooler
         family = "linked_scool" if info["kind"] == "scool" else "linked_cool"
         path = self.resolve(str(self._link_records(family)[key]["path"]))
         if str(chrom) == GENOME:
@@ -1426,13 +1427,13 @@ class Dataset:
 
     def _scool_cells(self, path: Path) -> set:
         """``/cells/<name>`` URIs of a .scool (listing is slow: cached)."""
-        import cooler
-
         cells = self._cache.get(("scool_cells", str(path)))
         if cells is None and str(path).startswith("embedded:"):    # an embedded map: read its cell list when needed
             e = self._embedded_maps()[str(path)[len("embedded:"):]]
             cells = self._cache[("scool_cells", str(path))] = {f"/cells/{c}" for c in e.cells}
         if cells is None:
+            import cooler      # only for a linked file (cooler cannot be imported in a sandboxed container)
+
             cells = self._cache[("scool_cells", str(path))] = set(cooler.fileops.list_scool_cells(str(path)))
         return cells
 

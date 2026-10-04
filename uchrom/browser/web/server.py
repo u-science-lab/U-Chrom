@@ -78,6 +78,24 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
     app = FastAPI(title="U-Chrom browser", docs_url="/api/docs",
                   openapi_url="/api/openapi.json")
     app.state.store = store
+
+    @app.exception_handler(Exception)
+    async def _unhandled(request, exc):
+        """An uncaught error: always logged (stderr: a container's log); the type and message go to the client only
+        with UCHROM_DEBUG set (a public server does not volunteer internals)."""
+        import logging
+        import traceback
+
+        from fastapi.responses import JSONResponse
+
+        logging.getLogger("uvicorn.error").error("%s %s\n%s", request.method, request.url.path, "".join(
+            traceback.format_exception(type(exc), exc, exc.__traceback__)))
+        detail = "Internal Server Error"
+        if os.environ.get("UCHROM_DEBUG"):
+            detail = f"{type(exc).__name__}: {exc}\n" + "".join(
+                traceback.format_exception(type(exc), exc, exc.__traceback__))[-2500:]
+        return JSONResponse({"detail": detail}, status_code=500)
+
     if hosted is not None:
         @app.middleware("http")
         async def _session(request, call_next):

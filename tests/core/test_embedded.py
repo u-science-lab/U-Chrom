@@ -270,3 +270,18 @@ def test_upgrade_makes_an_old_store_cheap_to_open(stores):
 
 def upgrade_twice(emb):
     return embedded.upgrade_store(emb)
+
+
+def test_embedded_maps_need_no_cooler(stores, monkeypatch):
+    """A sandboxed server cannot import cooler (multiprocessing semaphores): embedded maps must not need it."""
+    import sys
+
+    tmp_path, _, emb = stores
+    monkeypatch.setitem(sys.modules, "cooler", None)            # `import cooler` now raises ImportError
+    monkeypatch.setitem(sys.modules, "h5py", None)
+    ds = DatasetStore().load(emb)
+    assert {m["key"] for m in ds.contact_maps()} == {"bulk", "cells"}
+    for kw in (dict(key="bulk", chrom="chr1"), dict(key="bulk", chrom=GENOME), dict(key="cells", chrom="chr2", cell="c1"),
+               dict(key="cells", chrom=GENOME, cell="c2"), dict(key="cells", chrom="chr1", group="field:cell_type=A")):
+        assert decode_matrix(ds.contacts(**kw))["matrix"].size > 0
+    assert ds.image_bytes("secA") is not None

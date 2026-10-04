@@ -8,6 +8,8 @@ export class UChromBrowser extends Container {
 	defaultPort = 8000;
 	// the container sleeps (and stops being billed) after this long without a request
 	sleepAfter = "15m";
+	// TEMPORARY: the error type and message in 500 responses (remove once the hosted server is verified)
+	envVars = { UCHROM_DEBUG: "1" };
 }
 
 interface Env {
