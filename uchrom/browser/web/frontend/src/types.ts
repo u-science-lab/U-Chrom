@@ -379,6 +379,32 @@ export interface FilePlace {
   path: string
 }
 
+/** One dataset of an atlas catalog (`catalog.json`, written by `python -m uchrom.core.atlas build`). */
+export interface AtlasDataset {
+  id: string
+  url: string
+  title: string
+  description?: string
+  paper?: string
+  doi?: string
+  source_url?: string
+  license?: string
+  organism?: string
+  assembly?: string
+  tissue?: string
+  n_cells: number
+  sections?: string[]
+  modalities?: string[]
+  contact_maps?: number
+  images?: number
+  size_mb?: number
+}
+
+export interface AtlasResponse {
+  root: string | null
+  catalog: { title: string; description?: string; updated?: string; datasets: AtlasDataset[] } | null
+}
+
 /** A chromosome in the whole-genome layout: bp before it (offset) and its length. */
 export interface GenomeChrom {
   name: string

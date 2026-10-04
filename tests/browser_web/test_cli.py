@@ -16,11 +16,22 @@ def test_paths_next_to_boolean_flags(monkeypatch, argv, paths, opened):
     import uchrom.browser.web as web
 
     got = {}
-    monkeypatch.setattr(web, "serve", lambda p, host, port, open_browser: got.update(paths=p, open=open_browser))
+    monkeypatch.setattr(web, "serve", lambda p, host, port, open_browser, atlas=None: got.update(paths=p, open=open_browser, atlas=atlas))
     fire.Fire(cli.read_and_show, command=argv)
-    assert got == {"paths": paths, "open": opened}
+    assert got == {"paths": paths, "open": opened, "atlas": None}
 
 
 def test_unknown_option_is_an_error():
     with pytest.raises(SystemExit):
         fire.Fire(cli.read_and_show, command=["--web", "--bogus", "x"])
+
+
+def test_atlas_option(monkeypatch):
+    import uchrom.browser.web as web
+
+    got = {}
+    monkeypatch.setattr(web, "serve", lambda p, host, port, open_browser, atlas=None: got.update(paths=p, atlas=atlas))
+    fire.Fire(cli.read_and_show, command=["a.zarr", "--web", "--atlas", "https://x.example/atlas"])
+    assert got == {"paths": ("a.zarr",), "atlas": "https://x.example/atlas"}
+    fire.Fire(cli.read_and_show, command=["--web", "--atlas="])
+    assert got["atlas"] == ""

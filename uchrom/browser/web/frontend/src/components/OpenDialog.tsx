@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { filePlaces, listFiles, openDataset } from '../api'
+import { fetchAtlas, filePlaces, listFiles, openDataset } from '../api'
 import { addRecent, baseName, breadcrumbs, fmtDate, fmtSize, loadRecent, saveRecent } from '../datasets'
 import { useStore } from '../store'
-import type { FileEntry, FileListing, FilePlace } from '../types'
+import type { AtlasDataset, AtlasResponse, FileEntry, FileListing, FilePlace } from '../types'
 
 /** Last folder the dialog showed (per viewer), to reopen where one left off. */
 const LAST_DIR_KEY = 'uchrom.browser.openDir'
@@ -34,11 +34,21 @@ export function OpenDialog({ onClose }: { onClose(): void }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [hidden, setHidden] = useState(false)
   const filterRef = useRef<HTMLInputElement>(null)
+  // the atlas (catalog.json of an object-storage bucket): listed in its own panel, datasets open by URL
+  const [atlas, setAtlas] = useState<AtlasResponse | null>(null)
+  const [atlasError, setAtlasError] = useState<string | null>(null)
+  const [atlasOpen, setAtlasOpen] = useState(false)
+  const [atlasFilter, setAtlasFilter] = useState('')
 
   useEffect(() => {
     filePlaces()
       .then(setPlaces)
       .catch(() => {})
+  }, [])
+  useEffect(() => {
+    fetchAtlas()
+      .then(setAtlas)
+      .catch((e: Error) => setAtlasError(e.message))
   }, [])
   useEffect(() => {
     let live = true
@@ -120,9 +130,18 @@ export function OpenDialog({ onClose }: { onClose(): void }) {
         </header>
         <div className="od-body">
           <nav className="od-side">
+            {(atlas?.root || atlasError) && (
+              <>
+                <div className="od-side-title">Atlas</div>
+                <button className={`od-place${atlasOpen ? ' current' : ''}`} onClick={() => setAtlasOpen(true)} title={atlas?.root ?? 'the atlas could not be read'}>
+                  <DataIcon />
+                  <span>{atlas?.catalog?.title ?? 'U-Chrom Atlas'}</span>
+                </button>
+              </>
+            )}
             <div className="od-side-title">Places</div>
             {places.map((p) => (
-              <button key={p.path} className={`od-place${listing?.path === p.path ? ' current' : ''}`} onClick={() => setDir(p.path)} title={p.path}>
+              <button key={p.path} className={`od-place${!atlasOpen && listing?.path === p.path ? ' current' : ''}`} onClick={() => { setAtlasOpen(false); setDir(p.path) }} title={p.path}>
                 <FolderIcon />
                 <span>{p.label}</span>
               </button>
@@ -139,6 +158,9 @@ export function OpenDialog({ onClose }: { onClose(): void }) {
               </>
             )}
           </nav>
+          {atlasOpen ? (
+            <AtlasPanel atlas={atlas} error={atlasError} filter={atlasFilter} setFilter={setAtlasFilter} busy={busy} onOpen={(d) => void open(d.url)} />
+          ) : (
           <section className="od-main">
             <div className="od-crumbs">
               <button className="od-up" disabled={!listing?.parent} onClick={() => listing?.parent && setDir(listing.parent)} title="Up one folder">
@@ -200,10 +222,15 @@ export function OpenDialog({ onClose }: { onClose(): void }) {
               {!listing && !error && <div className="od-empty muted">Loading…</div>}
             </div>
           </section>
+          )}
         </div>
         <footer className="od-foot">
           {error ? (
             <span className="error od-msg">{error}</span>
+          ) : atlasOpen ? (
+            <span className="muted od-msg">
+              {atlas?.catalog ? `${atlas.catalog.datasets.length} datasets · ${atlas.root}` : (atlasError ?? 'Loading the atlas…')}
+            </span>
           ) : (
             <span className="muted od-msg">
               {selected
@@ -216,13 +243,92 @@ export function OpenDialog({ onClose }: { onClose(): void }) {
             </span>
           )}
           <button onClick={onClose}>Cancel</button>
-          <button className="primary" disabled={!selected || selected.kind !== 'dataset' || !!busy} onClick={() => selected && void open(selected.path)}>
+          <button className="primary" disabled={atlasOpen || !selected || selected.kind !== 'dataset' || !!busy} onClick={() => selected && void open(selected.path)}>
             {busy ? 'Opening…' : 'Open'}
           </button>
         </footer>
       </div>
     </div>,
     document.body,
+  )
+}
+
+/** The atlas catalog as a list of dataset cards; a card opens its store by URL (read over HTTP, on demand). */
+function AtlasPanel({
+  atlas,
+  error,
+  filter,
+  setFilter,
+  busy,
+  onOpen,
+}: {
+  atlas: AtlasResponse | null
+  error: string | null
+  filter: string
+  setFilter(v: string): void
+  busy: string | null
+  onOpen(d: AtlasDataset): void
+}) {
+  const f = filter.trim().toLowerCase()
+  const shown = (atlas?.catalog?.datasets ?? []).filter(
+    (d) => !f || [d.title, d.paper, d.organism, d.tissue, d.assembly, d.description, ...(d.modalities ?? [])].some((t) => t?.toLowerCase().includes(f)),
+  )
+  return (
+    <section className="od-main">
+      <div className="od-tools">
+        <input className="od-filter atlas-filter" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by title, paper, organism, tissue, modality…" autoFocus />
+      </div>
+      {atlas?.catalog?.description && <p className="muted small atlas-intro">{atlas.catalog.description}</p>}
+      <div className="od-list atlas-list">
+        {error && <div className="od-empty error">{error}</div>}
+        {!atlas && !error && <div className="od-empty muted">Loading the atlas…</div>}
+        {shown.map((d) => (
+          <article key={d.id} className="atlas-card" onDoubleClick={() => onOpen(d)}>
+            <div className="atlas-head">
+              <h3>{d.title}</h3>
+              <button className="primary" disabled={!!busy} onClick={() => onOpen(d)}>
+                {busy === d.url ? 'Opening…' : 'Open'}
+              </button>
+            </div>
+            <div className="muted small">
+              {[d.organism, d.assembly, d.tissue].filter(Boolean).join(' · ')}
+              {' · '}
+              {d.n_cells.toLocaleString()} {d.n_cells === 1 ? 'spot / cell' : 'spots / cells'}
+              {d.size_mb != null ? ` · ${d.size_mb >= 1000 ? `${(d.size_mb / 1000).toFixed(1)} GB` : `${Math.round(d.size_mb)} MB`}` : ''}
+            </div>
+            {d.description && <p className="atlas-desc">{d.description}</p>}
+            <div className="atlas-chips">
+              {(d.modalities ?? []).map((m) => (
+                <span key={m} className="atlas-chip">
+                  {m}
+                </span>
+              ))}
+            </div>
+            <div className="muted small atlas-src">
+              {d.paper}
+              {d.doi && (
+                <>
+                  {' · '}
+                  <a href={`https://doi.org/${d.doi}`} target="_blank" rel="noreferrer">
+                    doi:{d.doi}
+                  </a>
+                </>
+              )}
+              {d.source_url && (
+                <>
+                  {' · '}
+                  <a href={d.source_url} target="_blank" rel="noreferrer">
+                    source
+                  </a>
+                </>
+              )}
+              {d.license && ` · ${d.license}`}
+            </div>
+          </article>
+        ))}
+        {atlas?.catalog && !shown.length && <div className="od-empty muted">Nothing matches the filter.</div>}
+      </div>
+    </section>
   )
 }
 

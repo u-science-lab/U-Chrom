@@ -57,8 +57,15 @@ class GeometryRequest(BaseModel):
     max_points: int = DEFAULT_MAX_POINTS
 
 
-def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
-    """Build the app around ``store`` (a fresh empty one by default)."""
+def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None) -> FastAPI:
+    """Build the app around ``store`` (a fresh empty one by default).  ``atlas``: root of the atlas the
+    Open dialog lists (URL or folder; default ``UCHROM_ATLAS`` or :data:`uchrom.core.atlas.DEFAULT_ATLAS`;
+    an empty string turns it off)."""
+    import os
+
+    from ...core.atlas import DEFAULT_ATLAS
+
+    atlas = atlas if atlas is not None else os.environ.get("UCHROM_ATLAS", DEFAULT_ATLAS)
     store = store if store is not None else DatasetStore()
     app = FastAPI(title="U-Chrom browser", docs_url="/api/docs",
                   openapi_url="/api/openapi.json")
@@ -98,6 +105,26 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
             raise HTTPException(404, str(exc)) from None
         except PermissionError as exc:
             raise HTTPException(403, str(exc)) from None
+
+    _atlas_cache: Dict[str, Any] = {}
+
+    @app.get("/api/atlas")
+    def atlas_catalog(refresh: bool = False) -> Dict[str, Any]:
+        """The atlas catalog (fetched here, so the page needs no CORS; cached 5 min): ``{"root", "catalog"}``,
+        every dataset with its ``url``; ``{"root": null}`` when no atlas is configured."""
+        import time
+
+        from ...core.atlas import fetch_catalog
+
+        if not atlas:
+            return {"root": None, "catalog": None}
+        hit = _atlas_cache.get("c")
+        if hit is None or refresh or time.time() - hit[0] > 300:
+            try:
+                _atlas_cache["c"] = hit = (time.time(), fetch_catalog(atlas))
+            except Exception as exc:
+                raise HTTPException(502, f"cannot read the atlas catalog at {atlas}: {type(exc).__name__}: {exc}") from None
+        return {"root": atlas, "catalog": hit[1]}
 
     @app.get("/api/files/places")
     def file_places() -> List[Dict[str, str]]:

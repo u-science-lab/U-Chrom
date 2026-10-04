@@ -1,5 +1,5 @@
 import { decodeMatrix, type MatrixData } from './matrix'
-import type { FileListing, FilePlace, IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, SpatialPoints, StoreNode, TracePage } from './types'
+import type { AtlasResponse, FileListing, FilePlace, IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, SpatialPoints, StoreNode, TracePage } from './types'
 
 async function request(url: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(url, init)
@@ -43,6 +43,11 @@ export async function listFiles(path: string | null, hidden = false): Promise<Fi
 
 export async function filePlaces(): Promise<FilePlace[]> {
   return (await request('api/files/places')).json()
+}
+
+/** The atlas catalog the server is configured with (`root: null` when none). */
+export async function fetchAtlas(refresh = false): Promise<AtlasResponse> {
+  return (await request(`api/atlas${refresh ? '?refresh=true' : ''}`)).json()
 }
 
 export async function closeDataset(id: string): Promise<void> {
