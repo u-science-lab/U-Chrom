@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addRecent, baseName, breadcrumbs, datasetBadges, datasetCounts, fmtSize, parseRecent, RECENT_MAX } from './datasets'
+import { addRecent, baseName, breadcrumbs, datasetBadges, datasetCounts, fmtSize, openParams, parseRecent, RECENT_MAX } from './datasets'
 import type { DatasetSummary } from './types'
 
 describe('dataset helpers', () => {
@@ -36,5 +36,17 @@ describe('dataset helpers', () => {
     expect(addRecent(many, '/new')).toHaveLength(RECENT_MAX)
     expect(parseRecent(['/a', 3, '', null])).toEqual(['/a'])
     expect(parseRecent('junk')).toEqual([])
+  })
+})
+
+describe('openParams', () => {
+  it('keeps remote chromdata stores only, once each', () => {
+    expect(
+      openParams(
+        '?open=https://d.example/a.chromdata.zarr/&open=s3://b/k.chromdata.zarr&open=https://d.example/a.chromdata.zarr' +
+          '&open=file:///etc/passwd&open=/local/x.chromdata.zarr&open=https://d.example/other.csv&x=1',
+      ),
+    ).toEqual(['https://d.example/a.chromdata.zarr', 's3://b/k.chromdata.zarr'])
+    expect(openParams('')).toEqual([])
   })
 })

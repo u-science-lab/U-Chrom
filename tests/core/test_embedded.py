@@ -226,3 +226,15 @@ def test_rewriting_the_same_store_keeps_the_embedded_copies(stores):
     other = ChromData.read(str(tmp_path / "linked.chromdata.zarr"))
     other.write(emb)                                    # another object over the store: nothing inherited
     assert embedded.list_embedded(str(emb)) == {}
+
+
+def test_pixel_blocks_equal_the_whole_read_and_stay_small(stores):
+    _, _, emb = stores
+    e = embedded.EmbeddedContacts(str(emb), embedded.list_embedded(str(emb))["cells"])
+    whole = e.cell_pixels("cis/chr1", [0, 1, 2])
+    blocks = list(e.cell_pixel_blocks("cis/chr1", [0, 1, 2], max_pixels=5))
+    assert len(blocks) > 1 and all(len(b) <= max(5, 40) for b in blocks)     # a cell bigger than the budget is a block of its own
+    np.testing.assert_array_equal(np.concatenate(blocks), whole)
+    full = [np.column_stack(b) for b in e.iter_pixels(cell_idx=[0, 1, 2])]
+    small = [np.column_stack(b) for b in e.iter_pixels(cell_idx=[0, 1, 2], max_pixels=7)]
+    assert sorted(map(tuple, np.concatenate(full))) == sorted(map(tuple, np.concatenate(small)))

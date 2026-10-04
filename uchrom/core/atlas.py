@@ -18,6 +18,7 @@ everything countable is read from the stores, so the catalog cannot drift from t
 
     python -m uchrom.core.atlas build atlas/datasets.json --root example-data --out catalog.json
     python -m uchrom.core.atlas show https://uchrom-atlas-r2.u-science.org
+    python -m uchrom.core.atlas site dist/site --catalog catalog.json    # the static page (atlas/site) to deploy
 """
 
 from __future__ import annotations
@@ -121,6 +122,29 @@ def fetch_catalog(root: str, timeout: float = 20.0) -> Dict[str, Any]:
     return cat
 
 
+def build_site(out: PathLike, catalog: PathLike, *, data_root: str = DEFAULT_ATLAS,
+               template: Optional[PathLike] = None, repo: str = "https://github.com/Nanguage/U-Chrom",
+               install: str = 'pip install "u-chrom[web]"') -> Path:
+    """Write the static atlas page to ``out`` (deploy the folder on any static host, e.g. Cloudflare Pages):
+    the template (``atlas/site``), ``catalog.json``, ``config.js`` (data root, install line, repo) and ``_headers``."""
+    import shutil
+
+    out = Path(out)
+    tpl = Path(template) if template else Path(__file__).resolve().parents[2] / "atlas" / "site"
+    if not (tpl / "index.html").is_file():
+        raise FileNotFoundError(f"no site template at {tpl}")
+    if out.exists():
+        shutil.rmtree(out)
+    shutil.copytree(tpl, out)
+    cat = json.loads(Path(catalog).read_text())
+    cat.pop("url", None)
+    (out / CATALOG).write_text(json.dumps(cat, ensure_ascii=False, indent=1) + "\n")
+    (out / "config.js").write_text("window.ATLAS_CONFIG = " + json.dumps(
+        {"dataRoot": data_root.rstrip("/"), "install": install, "repo": repo}, indent=1) + ";\n")
+    (out / "_headers").write_text("/catalog.json\n  Cache-Control: public, max-age=300\n/*\n  X-Content-Type-Options: nosniff\n")
+    return out
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -132,8 +156,15 @@ if __name__ == "__main__":
     b.add_argument("--out", default=CATALOG)
     s = sub.add_parser("show")
     s.add_argument("root")
+    w = sub.add_parser("site", help="write the static atlas page")
+    w.add_argument("out")
+    w.add_argument("--catalog", required=True)
+    w.add_argument("--data-root", default=DEFAULT_ATLAS)
+    w.add_argument("--template")
     a = ap.parse_args()
-    if a.cmd == "build":
+    if a.cmd == "site":
+        print("wrote", build_site(a.out, a.catalog, data_root=a.data_root, template=a.template))
+    elif a.cmd == "build":
         cat = build_catalog(a.config, a.root, a.out)
         print(f"wrote {a.out}: {len(cat['datasets'])} datasets")
     else:

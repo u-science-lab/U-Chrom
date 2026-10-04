@@ -37,6 +37,8 @@ ANNDATA = "embedded/anndata"
 CHUNK = 1 << 14    # pixels per chunk (the unit of a range read)
 SHARD = 1 << 22    # pixels per shard (one object on S3)
 ZSTD_LEVEL = 9
+#: pixels per block when a group of cells (or a big map) is summed: bounds the memory of a request
+BLOCK_PIXELS = 1_000_000
 #: bulk maps keep trans contacts only at resolutions of at least this many bp
 TRANS_MIN_RESOLUTION = 250_000
 _SAFE = re.compile(r"[^A-Za-z0-9._+-]")
@@ -380,12 +382,14 @@ class EmbeddedContacts:
 
     # -- pixels -------------------------------------------------------
 
-    def cell_pixels(self, part: str, cell_idx: Sequence[int], resolution: Optional[int] = None) -> np.ndarray:
-        """Pixels (n, 3) of the cells ``cell_idx`` in a partition (``cis/<chrom>`` or ``trans``);
-        neighbouring cells are read as one range."""
+    def cell_pixel_blocks(self, part: str, cell_idx: Sequence[int], resolution: Optional[int] = None,
+                          max_pixels: int = BLOCK_PIXELS) -> Iterator[np.ndarray]:
+        """Pixels (n, 3) of the cells ``cell_idx`` in a partition (``cis/<chrom>`` or ``trans``), in blocks of at
+        most about ``max_pixels`` (a bigger cell is a block of its own): memory stays bounded however many cells.
+        Neighbouring cells are read as one range."""
         r = self._res(resolution)
-        if f"{part}" not in self.g[f"r{r}"]:
-            return np.zeros((0, 3), np.int64)
+        if part not in self.g[f"r{r}"]:
+            return
         off = self._offsets(r, part, "cell_offset")
         pix = self.g[f"r{r}/{part}/pix"]
         idx = np.unique(np.asarray(cell_idx, np.int64))
@@ -393,8 +397,20 @@ class EmbeddedContacts:
         keep = hi > lo
         lo, hi = lo[keep], hi[keep]
         if len(lo) == 0:
-            return np.zeros((0, 3), np.int64)
-        # coalesce ranges whose gap is smaller than a chunk (one read instead of many)
+            return
+        # batches of cells whose pixels add up to about max_pixels
+        cum = np.cumsum(hi - lo)
+        start = 0
+        while start < len(lo):
+            base = cum[start - 1] if start else 0
+            end = int(np.searchsorted(cum, base + max_pixels, side="right"))
+            end = max(end, start + 1)
+            yield self._read_ranges(pix, lo[start:end], hi[start:end])
+            start = end
+
+    @staticmethod
+    def _read_ranges(pix, lo: np.ndarray, hi: np.ndarray) -> np.ndarray:
+        """Rows lo[k]:hi[k] of the pixel array; ranges whose gap is under a chunk are fetched as one read."""
         out, i = [], 0
         while i < len(lo):
             j = i
@@ -408,6 +424,11 @@ class EmbeddedContacts:
             i = j + 1
         return np.concatenate(out)
 
+    def cell_pixels(self, part: str, cell_idx: Sequence[int], resolution: Optional[int] = None) -> np.ndarray:
+        """All pixels (n, 3) of the cells ``cell_idx`` in a partition; for many cells use :meth:`cell_pixel_blocks`."""
+        blocks = list(self.cell_pixel_blocks(part, cell_idx, resolution, max_pixels=1 << 62))
+        return np.concatenate(blocks) if blocks else np.zeros((0, 3), np.int64)
+
     def region_pixels(self, chrom: str, lo_bin: int, hi_bin: int, resolution: Optional[int] = None) -> np.ndarray:
         """Bulk: cis pixels whose bin1 lies in chromosome-local bins ``[lo_bin, hi_bin)``."""
         r = self._res(resolution)
@@ -417,27 +438,22 @@ class EmbeddedContacts:
         return self.g[f"r{r}/{part}/pix"][:, s0:s1].T.astype(np.int64)
 
     def iter_pixels(self, resolution: Optional[int] = None, cell_idx: Optional[Sequence[int]] = None,
-                    trans: bool = True) -> Iterator[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
-        """All pixels as genome-wide ``(bin1, bin2, count)`` blocks (per_cell: of ``cell_idx``)."""
+                    trans: bool = True, max_pixels: int = BLOCK_PIXELS) -> Iterator[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        """All pixels as genome-wide ``(bin1, bin2, count)`` blocks of about ``max_pixels`` (per_cell: of ``cell_idx``)."""
         r = self._res(resolution)
-        for c in self.chroms:
-            part = f"cis/{c}"
-            if part not in self.g[f"r{r}"]:
-                continue
-            if self.kind == "per_cell":
-                d = self.cell_pixels(part, cell_idx if cell_idx is not None else range(len(self.cells)), r)
-            else:
-                d = self.g[f"r{r}/{part}/pix"][:].T.astype(np.int64)
-            f0 = self.first_bin(c, r)
-            if len(d):
-                yield d[:, 0] + f0, d[:, 1] + f0, d[:, 2]
+        cells = cell_idx if cell_idx is not None else range(len(self.cells))
+        parts = [(f"cis/{c}", self.first_bin(c, r)) for c in self.chroms if f"cis/{c}" in self.g[f"r{r}"]]
         if trans and "trans" in self.g[f"r{r}"]:
+            parts.append(("trans", 0))
+        for part, f0 in parts:
             if self.kind == "per_cell":
-                d = self.cell_pixels("trans", cell_idx if cell_idx is not None else range(len(self.cells)), r)
+                blocks = self.cell_pixel_blocks(part, cells, r, max_pixels)
             else:
-                d = self.g[f"r{r}/trans/pix"][:].T.astype(np.int64)
-            if len(d):
-                yield d[:, 0], d[:, 1], d[:, 2]
+                arr = self.g[f"r{r}/{part}/pix"]
+                blocks = (arr[:, s:s + max_pixels].T.astype(np.int64) for s in range(0, arr.shape[1], max_pixels))
+            for d in blocks:
+                if len(d):
+                    yield d[:, 0] + f0, d[:, 1] + f0, d[:, 2]
 
 
 def list_embedded(store) -> Dict[str, str]:

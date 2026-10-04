@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { fetchHealth, listDatasets } from './api'
+import { fetchHealth, listDatasets, openDataset } from './api'
+import { addRecent, loadRecent, openParams, saveRecent } from './datasets'
 import { CellInfoPanel } from './components/CellInfoPanel'
 import { CellPanel } from './components/CellPanel'
 import { GroupPanel } from './components/GroupPanel'
@@ -23,13 +24,28 @@ import { sidebarKey } from './sidebars'
 export function App() {
   const setDatasets = useStore((s) => s.setDatasets)
   const setError = useStore((s) => s.setError)
+  const addDataset = useStore((s) => s.addDataset)
   useGeometryLoader()
   useCellLoader()
   useOmicsLoader()
   useSystemTheme()
   useEffect(() => {
     listDatasets()
-      .then(setDatasets)
+      .then(async (ds) => {
+        setDatasets(ds)
+        // an atlas page links here with ?open=<store url>: open it, then drop the parameter (a reload does not re-open)
+        const wanted = openParams(window.location.search).filter((u) => !ds.some((d) => d.path === u))
+        if (!wanted.length) return
+        window.history.replaceState(null, '', window.location.pathname + window.location.hash)
+        for (const u of wanted) {
+          try {
+            addDataset(await openDataset(u))
+            saveRecent(addRecent(loadRecent(), u))
+          } catch (e) {
+            setError(`Cannot open ${u}: ${(e as Error).message}`)
+          }
+        }
+      })
       .catch((e: Error) => setError(`Cannot reach the U-Chrom server: ${e.message}`))
     fetchHealth()
       .then((h) => {
@@ -37,7 +53,7 @@ export function App() {
         if (isStaleServer(pageBundle(), h.bundle ?? null)) setError(STALE_SERVER_MESSAGE)
       })
       .catch(() => {})
-  }, [setDatasets, setError])
+  }, [setDatasets, setError, addDataset])
   // code and agents drive this page through the same actions as the GUI (control channel, WebMCP)
   useEffect(() => startControl(), [])
   useEffect(() => {

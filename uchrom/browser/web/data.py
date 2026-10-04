@@ -1367,9 +1367,11 @@ class Dataset:
             return cache[ck]
         b0, b1 = lo // res, min(-(-length // res), -(-hi // res))
         n = b1 - b0
-        d = e.region_pixels(chrom, b0, b1, res) if not per else e.cell_pixels(f"cis/{chrom}", idx, res)
-        d = d[(d[:, 0] >= b0) & (d[:, 1] < b1)]
-        acc = np.bincount((d[:, 0] - b0) * n + (d[:, 1] - b0), weights=d[:, 2], minlength=n * n)
+        acc = np.zeros(n * n, dtype=np.float64)
+        blocks = [e.region_pixels(chrom, b0, b1, res)] if not per else e.cell_pixel_blocks(f"cis/{chrom}", idx, res)
+        for d in blocks:                       # blocks of a few million pixels: memory does not grow with the group
+            d = d[(d[:, 0] >= b0) & (d[:, 1] < b1)]
+            acc += np.bincount((d[:, 0] - b0) * n + (d[:, 1] - b0), weights=d[:, 2], minlength=n * n)
         up = acc.reshape(n, n)
         mat = up + up.T - np.diag(np.diag(up))
         bins = e.bins(res)

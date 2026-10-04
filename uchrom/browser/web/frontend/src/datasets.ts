@@ -78,3 +78,16 @@ export function saveRecent(list: string[]): void {
 
 /** Last path component ("…/mouse_brain.chromdata.zarr" -> "mouse_brain.chromdata.zarr"). */
 export const baseName = (p: string) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? p
+
+/**
+ * Datasets named by `?open=<url>` in the page address (an atlas page links here): only remote
+ * `.chromdata.zarr` stores (http, https, s3, gs), each once.  A link may not make the server read anything else.
+ */
+export function openParams(search: string): string[] {
+  const out: string[] = []
+  for (const v of new URLSearchParams(search).getAll('open')) {
+    const u = v.trim().replace(/\/+$/, '')
+    if (/^(https?|s3|gs):\/\/[^\s]+\.chromdata\.zarr$/i.test(u) && !out.includes(u)) out.push(u)
+  }
+  return out
+}
