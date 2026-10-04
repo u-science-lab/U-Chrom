@@ -195,3 +195,69 @@ tables) and the agreement with the published models slightly lower (r 0.950 vs 0
 The frozen method "robust" is published in U-Chrom as **EMber** (`uchrom.recon.sc.reconstruct_ember`,
 engine protocol `"robust"` with the alias `"ember"`).  Naming only: the method, its frozen
 parameters and the results of §8 are unchanged.
+
+## 10. Deep low-phasing diploid extension (2026-10-04, registered before any run of it)
+
+**Why.**  A demonstration of the frozen diploid EMber (tag `ember-diploid-frozen`, §6) on scMicro-C
+GM12878 (Wu et al. 2025, GEO GSE192759; 2.2-3.0 M contacts per cell, 5.6 % of the ends phased,
+hickit `impute.pairs`) gave structures that do not reproduce between seeds (cell 035: per-copy
+distance r 0.58 at 100 kb, 0.54 at 20 kb, 0.47 at 5 kb; the authors' five hickit runs agree at
+0.98-0.99, our own hickit run at 0.96), and the NucDynamics-2017 diploid protocol of the same engine
+does no better (0.59).  On Dip-C GM12878 (§6 development cells, ~1 M contacts, 8 % phased) the same
+scorer gives 0.98.  This section registers a development cycle for a fix.  **The frozen diploid
+configuration of §6 and its test are untouched**: every new setting below defaults to off, the
+frozen code path stays pinned by `tests/regression.rs`, and the §6 test results are reported as
+they are.
+
+* **Already seen (before this entry)**: frozen-EMber runs of cells 035, 024, 320, 047, 028 at
+  100 / 20 / 10 / 5 kb (seeds 1, 2); scores looked at for 035 and 024 only (and the hickit-replicate
+  agreement of 320); for 035 also 2 / 1 kb runs, a held-out split at 10 kb, NucDynamics-diploid,
+  EMber with hickit's phase prior and our hickit run at 100 kb (`highres_*.sbatch`,
+  `paper/fig3/results/highres/summary.json`).  The frozen-EMber scores of 047 and 028 exist on disk
+  but were not inspected and are not used for any decision.
+* **Development cells** (fixed now): GSM5764669 cell 035, GSM5764658 cell 024, GSM5764954 cell 320.
+  Plus the §6 Dip-C GM12878 development cells 1-3 (non-regression only).
+* **Held back** (one-shot test after a freeze with a new tag): scMicro-C cells with the authors'
+  structures among the downloaded ones — 047, 028, 017, 049, 032, 027, 014 (GSM5764681, GSM5764662,
+  GSM5764651, GSM5764683, GSM5764666, GSM5764661, GSM5764648).  Cells 026 and 051 (no authors'
+  structures, 33 % / 12 % cis) are excluded.
+* **Diagnostics** (development cells only; descriptive, they set no parameter): reproducibility of
+  frozen EMber after down-sampling cell 035 to Dip-C depth (1.0 M contacts) and after removing cis
+  contacts < 20 kb; the noise estimate ε per stage; ambiguous restraints per stage; agreement per
+  separation band (< 2 / 2-20 / > 20 Mb).
+* **New tunables** (engine parameters, default = off = the frozen behaviour; values tried only on the
+  development cells, every value and number recorded in `diploid_devlog.md`):
+  1. `robust_dip_commit` τ (0 = off; tried 0.75 = hickit's `-S` threshold, and 0.9): a contact whose
+     phase prior (neighbourhood prior x external prior) gives one candidate copy pair probability
+     >= τ becomes unambiguous on that pair (hard phasing, hickit-like);
+     `robust_dip_commit_rest` = `keep` (the other ambiguous contacts stay ambiguous) or `drop`
+     (they are not used, as hickit `-S`).
+  2. `robust_dip_commit_stage` (staged commitment; -1 = off; tried: after the 2 Mb stage and after the
+     400 kb stage): from that stage on, contacts are committed by the EM posterior P(c | true) of the
+     current structure times the prior, with the same τ and rest rule.
+  3. `dip_isolation_nei` / `dip_isolation_radius` (0 = off; tried hickit's `-r10m -c5`: a contact
+     needs >= 5 other contacts with both ends within 10 Mb, Chebyshev; and `-r1m -c1`): an extra
+     isolated-contact filter before stage 1.
+  Combinations of 1-3 are allowed.  Nothing else of EMber is changed; if the development numbers
+  call for any other change (e.g. ε bounds), it is added here, dated, before it is run.
+* **Development criteria** (all must hold for a candidate to be adopted; fixed now):
+  * **C1 reproducibility**: per-copy distance r between seed 1 and seed 2 (`highres.py score`,
+    10 models each, median over model pairs and copy chains) at 20 kb: >= 0.90 in the median over
+    the three scMicro-C development cells and >= 0.85 in each.
+  * **C2 held-out contacts**: strict held-out cis ROC-AUC (`diploid_heldout.py split`, 10 % of the
+    reads, fold 1 of seed 1, eval grid 100 kb, positives with both ends phased; `heldout.py score`
+    median distance) at 100 kb, mean over the three development cells: candidate − NucDynamics-diploid
+    (same split) >= −0.01.
+  * **C3 no regression where diploid EMber works**: Dip-C GM12878 cells 1-3, 100 kb, the §6
+    development checks (`dip_real.sbatch` steps full / mask / heldout): per-chain and whole-genome r
+    vs the published Dip-C structure, strict held-out cis ROC-AUC (3 folds), masked-phase accuracy —
+    each, mean over cells, not worse than the frozen EMber runs already on disk (`ember_nbr`) by more
+    than 0.01.
+  * Reported, not thresholded: agreement with the authors' hickit structures (descriptive: hickit's
+    own output), whole-genome and per-band r, 5 kb reproducibility, wall time, GPU memory.
+* **Decision**: among candidates meeting C1-C3 the one with the fewest new settings is adopted (ties:
+  higher C1), frozen with a tag and tested once on the held-back cells with C1 and C2 per cell and
+  in the median; C3 is re-checked on Dip-C cells 5-7, 9-15, 17 with the §6 test protocol only if the
+  frozen §6 defaults would change (they do not: new settings off by default).  If no candidate meets
+  C1-C3 the extension is reported as not working on deep low-phasing data, with the numbers, and
+  Fig. 3 gets no scMicro-C panel.
