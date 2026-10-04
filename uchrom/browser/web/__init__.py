@@ -18,15 +18,16 @@ import webbrowser
 from typing import Iterable, Optional
 
 from .data import DatasetStore, decode_geometry, encode_geometry
+from .hosted import HostedConfig
 
 __all__ = ["DatasetStore", "create_app", "decode_geometry", "encode_geometry", "serve"]
 
 
-def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None):
+def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None, hosted=None):
     """Build the FastAPI app (imported lazily so ``data`` works without FastAPI)."""
     from .server import create_app as _create_app
 
-    return _create_app(store, atlas)
+    return _create_app(store, atlas, hosted)
 
 
 def _free_port(host: str, port: int, tries: int = 20) -> int:
@@ -46,7 +47,7 @@ def _free_port(host: str, port: int, tries: int = 20) -> int:
 
 
 def serve(paths: Iterable[str] = (), *, host: str = "127.0.0.1", port: int = 8765,
-          open_browser: bool = True, atlas: Optional[str] = None) -> None:
+          open_browser: bool = True, atlas: Optional[str] = None, hosted: bool = False) -> None:
     """Load ``paths`` and serve the browser until interrupted."""
     try:
         import uvicorn
@@ -68,6 +69,6 @@ def serve(paths: Iterable[str] = (), *, host: str = "127.0.0.1", port: int = 876
     from ..client import clear_state, write_state
     write_state(url)  # lets uchrom.browser.connect() find this server
     try:
-        uvicorn.run(create_app(store, atlas), host=host, port=port, log_level="warning")
+        uvicorn.run(create_app(store, atlas, HostedConfig() if hosted else None), host=host, port=port, log_level="warning")
     finally:
         clear_state(url)

@@ -57,7 +57,7 @@ class GeometryRequest(BaseModel):
     max_points: int = DEFAULT_MAX_POINTS
 
 
-def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None) -> FastAPI:
+def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None, hosted: Optional[Any] = None) -> FastAPI:
     """Build the app around ``store`` (a fresh empty one by default).  ``atlas``: root of the atlas the
     Open dialog lists (URL or folder; default ``UCHROM_ATLAS`` or :data:`uchrom.core.atlas.DEFAULT_ATLAS`;
     an empty string turns it off)."""
@@ -66,10 +66,34 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
     from ...core.atlas import DEFAULT_ATLAS
 
     atlas = atlas if atlas is not None else os.environ.get("UCHROM_ATLAS", DEFAULT_ATLAS)
+    if hosted is not None:     # the server of a public atlas: sessions, only atlas datasets, no folder listing
+        from . import data as _data
+        from .hosted import COOKIE, SessionStores, new_session_id, reset_session, set_session
+
+        if not hosted.allowed_prefixes and atlas:
+            hosted.allowed_prefixes = [atlas]
+        _data.PSEUDOBULK_MAX_CELLS = min(_data.PSEUDOBULK_MAX_CELLS, int(hosted.max_pseudobulk_cells))
+        store = SessionStores(hosted)
     store = store if store is not None else DatasetStore()
     app = FastAPI(title="U-Chrom browser", docs_url="/api/docs",
                   openapi_url="/api/openapi.json")
     app.state.store = store
+    if hosted is not None:
+        @app.middleware("http")
+        async def _session(request, call_next):
+            sid = request.cookies.get(COOKIE) or ""
+            fresh = not sid
+            if fresh:
+                sid = new_session_id()
+            token = set_session(sid)
+            try:
+                response = await call_next(request)
+            finally:
+                reset_session(token)
+            if fresh:
+                response.set_cookie(COOKIE, sid, httponly=True, samesite="lax", secure=request.url.scheme == "https",
+                                    max_age=int(hosted.ttl))
+            return response
     bundle = _bundle_id()
 
     def _dataset(dataset_id: str):
@@ -91,6 +115,8 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
     def load_dataset(req: LoadRequest) -> Dict[str, Any]:
         try:
             return store.load(req.path).summary()
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc)) from None
         except FileNotFoundError as exc:
             raise HTTPException(400, str(exc)) from None
         except Exception as exc:  # unreadable / wrong format
@@ -98,6 +124,8 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
 
     @app.get("/api/files")
     def files(path: Optional[str] = None, hidden: bool = False) -> Dict[str, Any]:
+        if hosted is not None:
+            raise HTTPException(403, "the server's folders cannot be listed on a hosted server")
         from .files import list_dir
         try:
             return list_dir(path, show_hidden=hidden)
@@ -128,6 +156,8 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
 
     @app.get("/api/files/places")
     def file_places() -> List[Dict[str, str]]:
+        if hosted is not None:
+            return []
         from .files import places
         return places(ds.path for ds in store.list())
 
