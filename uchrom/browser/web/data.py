@@ -1928,7 +1928,22 @@ class DatasetStore:
             p = str(path).rstrip("/")
             base = p.rsplit("/", 1)[-1]
             name = base[: -len(".chromdata.zarr")] if base.endswith(".chromdata.zarr") else base
-            ds = self.add(load_chromdata(p), name=name, path=p)
+            # the embedded sections' metadata (three independent requests) is read while the store itself is read
+            from concurrent.futures import ThreadPoolExecutor
+
+            from ...core.embedded import list_embedded_images, open_all, open_anndata_groups
+
+            with ThreadPoolExecutor(max_workers=3) as pool:
+                warm = {"embedded_maps": pool.submit(open_all, p),
+                        "embedded_bin": pool.submit(open_anndata_groups, p, "linked_bin_matrices"),
+                        "embedded_images": pool.submit(list_embedded_images, p)}
+                cd = load_chromdata(p)
+            ds = self.add(cd, name=name, path=p)
+            for k, f in warm.items():
+                try:
+                    ds._cache[k] = f.result()
+                except Exception:      # not readable: found again (and reported) when first used
+                    pass
             ds._draw_order()
             return ds
         p = Path(path).expanduser().resolve()

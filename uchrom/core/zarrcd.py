@@ -1679,7 +1679,20 @@ class Container:
         return pq.ParquetFile(pa.PythonFile(_ByteRange(self.path, offset, info.file_size), mode="r"), **kw)
 
     def read_frame(self, rel: str) -> pd.DataFrame:
+        fut = getattr(self, "_frame_futures", {}).pop(rel, None)
+        if fut is not None:           # started by prefetch_frames
+            return fut.result()
         return _arrow_to_frame(self.parquet(rel).read())
+
+    def prefetch_frames(self, rels: Iterable[str]) -> None:
+        """Start reading the Parquet tables ``rels`` in threads (``read_frame`` then waits for them): over HTTP
+        each table is a few round trips, and they do not depend on each other."""
+        if not hasattr(self, "_frame_futures"):
+            self._frame_futures = {}
+        pool = _io_pool()
+        for rel in rels:
+            if rel not in self._frame_futures and self.exists(rel):
+                self._frame_futures[rel] = pool.submit(lambda r=rel: _arrow_to_frame(self.parquet(r).read()))
 
     def group_attrs(self, name: str) -> dict:
         try:
@@ -1792,6 +1805,14 @@ def read_small_parts(c: Container) -> Dict[str, Any]:
         pre += [f"index/coords/{n}" for n in names + ["cell_partition", "partition_offsets",
                                                        "partition_groups", "partition_chrom", "primary_run"]]
     c.prefetch(pre)
+    if c._fs is not None:          # remote store: everything below that does not depend on anything else, at once
+        for gname in ("cellm", "binm"):
+            c.prefetch([f"{gname}/{node}" for node in c.group_attrs(gname).get("keys", {}).values()])
+        files = ["bins.parquet"] + [tmeta[k]["file"] for k in ("bin_tracks", "cells", "traces") if k in tmeta]
+        files += [i["file"] for i in tmeta.get("intervals", {}).values()] + list(tmeta.get("points", {}).values())
+        for tname in ("spots", "spot_tracks"):
+            files += [i["file"] for i in (tmeta.get(tname, {}).get("categorical") or {}).values()]
+        c.prefetch_frames(f"tables/{f}" for f in files if isinstance(f, str))
     bins = c.read_frame("tables/bins.parquet")
     bins.index = pd.RangeIndex(len(bins), name=BIN_ID)
     if "chrom" not in bins.columns:
