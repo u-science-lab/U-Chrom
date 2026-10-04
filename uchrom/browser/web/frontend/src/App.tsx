@@ -54,8 +54,23 @@ export function App() {
       })
       .catch(() => {})
   }, [setDatasets, setError, addDataset])
-  // code and agents drive this page through the same actions as the GUI (control channel, WebMCP)
-  useEffect(() => startControl(), [])
+  // code and agents drive this page through the same actions as the GUI (control channel, WebMCP).  A hosted
+  // server (public atlas) has no agent to drive and must be free to sleep: no long-lived connection there.
+  useEffect(() => {
+    let stop: (() => void) | undefined
+    let live = true
+    fetchHealth()
+      .then((h) => {
+        if (live && !h.hosted) stop = startControl()
+      })
+      .catch(() => {
+        if (live) stop = startControl()
+      })
+    return () => {
+      live = false
+      stop?.()
+    }
+  }, [])
   useEffect(() => {
     registerWebMcpTools()
   }, [])

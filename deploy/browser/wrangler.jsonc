@@ -1,0 +1,22 @@
+{
+	"name": "uchrom-browser",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-09-01",
+	"containers": [
+		{
+			"class_name": "UChromBrowser",
+			"image": "./Dockerfile",
+			"image_build_context": "../..",
+			"instance_type": "standard-1",
+			"max_instances": 2
+		}
+	],
+	"durable_objects": {
+		"bindings": [{ "name": "UCHROM", "class_name": "UChromBrowser" }]
+	},
+	"exports": {
+		"UChromBrowser": { "type": "durable-object", "storage": "sqlite" }
+	},
+	"vars": { "INSTANCES": "2" },
+	"routes": [{ "pattern": "uchrom-browser.u-science.org", "custom_domain": true }]
+}

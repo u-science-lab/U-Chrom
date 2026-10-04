@@ -30,7 +30,7 @@ async function request(url: string, init?: RequestInit): Promise<Response> {
   return (await p).clone() // each caller reads its own copy of the body
 }
 
-export async function fetchHealth(): Promise<{ status: string; version: string; bundle?: string | null }> {
+export async function fetchHealth(): Promise<{ status: string; version: string; bundle?: string | null; hosted?: boolean }> {
   return (await request('api/health')).json()
 }
 

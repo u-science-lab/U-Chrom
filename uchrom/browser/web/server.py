@@ -105,7 +105,7 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
     @app.get("/api/health")
     def health() -> Dict[str, Any]:
         from uchrom import __version__
-        return {"status": "ok", "version": __version__, "bundle": bundle}
+        return {"status": "ok", "version": __version__, "bundle": bundle, "hosted": hosted is not None}
 
     @app.get("/api/datasets")
     def list_datasets() -> List[Dict[str, Any]]:
