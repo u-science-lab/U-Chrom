@@ -431,7 +431,9 @@ store that must live alone on object storage, they can be *embedded* with
 `python -m uchrom.core.embedded STORE` (`uchrom.core.embed_links`).  The link records stay in place;
 a reader that finds an embedded copy uses it, otherwise it follows the link.  Stores without these
 groups, and readers that do not know them, are unaffected (so this is not a format version bump).
-`.cdz` archives and re-writing a store (`cd.write`) do not carry the groups: embed after writing.
+`.cdz` archives do not carry the groups.  `cd.write(path)` onto the store the object was read from keeps
+`embedded/` (the copies belong to the same data); writing any other object over a store, or to a new path,
+does not carry them: embed after writing (re-embed with `--overwrite` if a linked file changed).
 
 ```
 embedded/contacts/<name>/         attrs.uchrom_contacts = {key, kind: per_cell|bulk, label, source,

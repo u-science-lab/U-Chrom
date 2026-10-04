@@ -213,3 +213,16 @@ def test_http_routes_without_the_files(stores):
     assert client.get(f"/api/datasets/{ds.id}/images/nope").status_code == 404
     r = client.get(f"/api/datasets/{ds.id}/contacts/cells", params={"chrom": "chr1", "cell": "c0"})
     assert r.status_code == 200 and decode_matrix(r.content)["matrix"].shape == (N, N)
+
+
+def test_rewriting_the_same_store_keeps_the_embedded_copies(stores):
+    tmp_path, _, emb = stores
+    cd = ChromData.read(str(emb))                       # in memory, read from emb
+    cd.cells["note"] = "x"
+    cd.write(emb)                                       # same store: embedded/ survives
+    assert set(embedded.list_embedded(str(emb))) == {"bulk", "cells"}
+    assert ChromData.read(str(emb), backed=True).cells["note"].iloc[0] == "x"
+    assert decode_matrix(DatasetStore().load(emb).contacts("cells", "chr1", cell="c0"))["matrix"].shape == (N, N)
+    other = ChromData.read(str(tmp_path / "linked.chromdata.zarr"))
+    other.write(emb)                                    # another object over the store: nothing inherited
+    assert embedded.list_embedded(str(emb)) == {}

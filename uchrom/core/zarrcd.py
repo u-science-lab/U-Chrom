@@ -744,6 +744,11 @@ def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float
         if kind == "zarr":
             _write_tree(cd, tmp, **opts)
             if path.exists():
+                # re-writing the store this object was read from keeps its embedded copies
+                # (uchrom.core.embedded): they belong to the same data; any other object does not inherit them
+                origin = getattr(cd, "_source_path", None)
+                if (isinstance(origin, Path) and (path / "embedded").is_dir() and origin.resolve() == path.resolve()):
+                    os.replace(path / "embedded", tmp / "embedded")
                 old = parent / f".{path.name}.{uuid.uuid4().hex}.old"
                 os.replace(path, old)
                 os.replace(tmp, path)
