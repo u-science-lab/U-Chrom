@@ -21,6 +21,7 @@ it runs in the Sherlock `venv-main`, which has no U-Chrom install.  Reusable par
 | `run_nucdyn.py`, `run_nucdyn_original.py`, `run_sic.py`, `run_hickit.py` | baseline runners on any table, output the common `.npz` |
 | `models_io.py` | NucDynamics PDB / N3D, Si-C `genome.pdb`, hickit `.3dg` → `.npz` |
 | `aggregate.py` | tidy `heldout.csv`, `sim.csv`, `real.csv`, `summary.json` |
+| `diploid*.py`, `run_diploid.py` | diploid (homolog-resolved) benchmarks: copy-chain convention and phased I/O, imaging-truth simulation with phasing, held-out on copy chains, Dip-C GM12878 references / phase hold-back, aggregation and the pre-registered test (`diploid_devlog.md`, `DIPLOID_TEST_RESULTS.md`) |
 | `matched_data.py` | matched-modality inputs: structure sets on the 2,460 Takei 1 Mb loci (`data/takei2021_1mb_loci.csv`), Takei 2021 mESC / brain imaging (homolog copies), Nagano 2017 fend pairs → mm10 tables, models / Dip-C `.3dg` → sets |
 | `matched.py` | matched-modality comparison: scHi-C structures vs imaging of the same cell type as distributions over cells (§6) |
 | `sherlock/*.sbatch` | the jobs (`_env.sh` holds the paths) |
