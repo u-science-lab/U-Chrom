@@ -100,8 +100,12 @@ or two copies (`ploidy="auto"`: male — X and Y single — when a Y chromosome 
   `restAmbig` strides, unused by the 2017 `master` driver; NucProcess writes homolog ambiguity
   as NCC ambiguity groups over `chrN.a` / `chrN.b`, release_1.3 `homologous_pair`).
 * **EMber**: the copy pair is a latent variable of the mixture model:
-  P(true, c) = o π_c (1−ε) φ_c / [o (1−ε) Σ π φ + ε / N_pairs] (π: uniform prior over the
-  candidates, or `phase_prior`, e.g. hickit's imputed `phase_prob00..11`).  From the first
+  P(true, c) = o π_c (1−ε) φ_c / [o (1−ε) Σ π φ + ε / N_pairs] (π: prior over the
+  candidates — by default the 2-D neighbourhood phase prior `robust_dip_nbr_prior`, hickit's
+  imputation re-implemented in the engine (`diploid::neighbour_prior`: 50 nearest contacts within
+  10 Mb at both ends, weights 1/(d/r + 0.001), pseudo-count 0.4, spatial same-homolog prior;
+  masked-end accuracy on GM12878 cell 1 equal to `hickit -u`, 12x faster), times an optional
+  `phase_prior`, e.g. hickit's own `phase_prob00..11`).  From the first
   re-weighted stage the candidates stay one ambiguous restraint weighted by P(true) (default;
   `robust_dip_split = true`: every candidate its own restraint weighted by P(true, c) — the
   literal soft M-step, clearly worse on the development set, `benchmarks/screcon/diploid_devlog.md`).  ε and the kernel width are fitted with the marginal likelihood Σ π φ.  The

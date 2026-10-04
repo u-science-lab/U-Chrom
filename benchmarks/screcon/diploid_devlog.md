@@ -63,14 +63,103 @@ the restraint as P(true) and is reported as the phase posterior.
 **Not adopted**: the hickit prior (phase accuracy +0.03, structure unchanged; adds a hickit
 run).  It stays available (`run_diploid.py --hickit-prior`, `phase_prior=`).
 
-Pending (job 46440437, after this decision, reported as an addition): the same grid at 10 %
+Added afterwards (job 46440437, §3): the same grid at 10 %
 phased ends — Dip-C GM12878 has only 8 % of the ends phased (0.7 % of the contacts at both
 ends), well below the 20-40 % assumed at the outset.
 
-## 2. Dip-C GM12878, cell 1 (100 kb, 10 models)
+## 2. Dip-C GM12878, development cells 1-3 (100 kb, 10 models, one RTX 2080 Ti)
 
-See §3 for all three development cells; first numbers (cell 1, before the default change, so
-`ember` = split): agreement with the published Dip-C structure (median distance-matrix r per
-copy chain / whole genome): ember (split) 0.56 / 0.44, **ember_nosplit 0.945 / 0.962**,
-nucdyn 0.940 / 0.939 (published hickit structure vs published Dip-C: see §3).  Wall time on one
-RTX 2080 Ti: EMber 103-115 s, NucDynamics 2017 ~1,055 s.
+Input: the authors' hickit phased pairs (0.89-1.09 M contacts; 8 % of the ends phased, 0.7 % of
+the contacts at both ends).  References: the published Dip-C structure (`impute3.round4.clean.3dg`,
+3 replicate runs; NucDynamics-based, 20 kb) and the published hickit structure, both resampled to
+the 100 kb grid.  `ember` = split variant (rejected in §1), run with the split explicitly.
+
+**Agreement with the published Dip-C structure** (median distance-matrix r per copy chain /
+r over 2 M random particle pairs, whole genome incl. homologs and trans; all contacts, seeds 1
+and 2; mean over the 3 cells):
+
+| method | r per chain | r whole genome | precision (bead units) | wall time / cell |
+| --- | --- | --- | --- | --- |
+| nucdyn | 0.907 | 0.900 | 3.0 | ~1,055 s |
+| ember (split) | 0.567 | 0.349 | 2.0 | ~115 s |
+| ember_nosplit | 0.911 | 0.902 | 4.3 | ~105 s |
+| ember_nosplit_prior (hickit prior) | 0.905 | 0.907 | 3.6 | ~150 s |
+| ember_nbr (native prior) | 0.908 | 0.901 | 4.3 | ~120 s |
+| published hickit vs published Dip-C | 0.952 | — | — | — |
+| published Dip-C replicate runs (precision) | — | — | 0.24 | — |
+
+Per cell (r per chain, seed 1 / 2): cell 1 nucdyn 0.939 / 0.940, ember_nosplit 0.945 / 0.944,
+ember_nbr 0.943 / 0.945; cell 2 0.940 / 0.913, 0.927 / 0.906, 0.913 / 0.894; cell 3 0.851 /
+0.859, 0.869 / 0.875, 0.875 / 0.877.  Our hickit runs (masked input, below) reach 0.949-0.959
+per chain and 0.975-0.985 whole genome against the published Dip-C structure — **hickit agrees
+with the published structures better than any of our methods** (it is the pipeline that produced
+one of them, and its schedule / filters are close to Dip-C's), and the published structures are
+far more reproducible between runs (0.24 vs 3-4 bead units RMSD to the ensemble mean): EMber's
+finite-temperature sampling stage (frozen haploid parameter) keeps its ensembles broad.
+
+**Held-out contacts on copy chains** (3 folds x 3 cells; ROC-AUC of the median distance;
+strict = positives with both ends phased, ~100 per fold; cis-2 Mb = also one-end-phased cis reads
+< 2 Mb, ~620 per fold):
+
+| method | strict cis | strict trans | strict all | cis-2 Mb cis | cis-2 Mb all |
+| --- | --- | --- | --- | --- | --- |
+| nucdyn | 0.904 | 0.810 | 0.830 | 0.836 | 0.824 |
+| ember (split) | 0.816 | 0.799 | 0.774 | 0.748 | 0.739 |
+| ember_nosplit | 0.902 | 0.811 | 0.827 | 0.837 | 0.824 |
+| ember_nosplit_prior | 0.903 | 0.813 | 0.830 | 0.837 | 0.825 |
+| ember_nbr | 0.905 | 0.811 | 0.830 | 0.836 | 0.824 |
+| hickit | 0.843 | 0.810 | 0.798 | 0.744 | 0.739 |
+
+**Phase hold-back** (10 % of the phased ends unphased, seed 1; accuracy of the inferred
+haplotype of the masked ends; mean over cells):
+
+| method | all | cis < 10 Mb | cis >= 10 Mb | trans | fraction with p >= 0.75 (its accuracy) |
+| --- | --- | --- | --- | --- | --- |
+| nucdyn (closest candidate) | 0.803 | 0.711 | 0.965 | 0.975 | 1.00 (0.803) |
+| ember (split) | 0.714 | 0.642 | 0.820 | 0.896 | 0.41 (0.939) |
+| ember_nosplit | 0.800 | 0.703 | 0.975 | 0.988 | 0.54 (0.989) |
+| hickit (2-D imputation) | 0.853 | 0.812 | 0.929 | 0.909 | 0.72 (0.965) |
+| ember_nosplit_prior | 0.888 | 0.838 | 0.975 | 0.991 | 0.80 (0.973) |
+| **ember_nbr** | **0.888** | **0.838** | **0.974** | **0.991** | 0.80 (0.974) |
+
+The structure resolves distant (cis >= 10 Mb, trans) phases better than hickit's 2-D imputation
+(0.97-0.99 vs 0.91-0.93); close cis phases (both homologs fold alike at 100 kb) need the
+neighbourhood votes — combining both is best.
+
+## 3. Phase prior (2026-10-03; `robust_dip_nbr_prior` registered in PREREG §6 before any run)
+
+Native 2-D neighbourhood prior (`diploid::neighbour_prior`, hickit's `hk_impute` with hickit's
+settings) — check against hickit itself on GM12878 cell 1 (1 Mb plumbing run, 10 % masked):
+masked-end accuracy 0.855 (native) vs 0.855 (`hickit -u`), per stratum identical to 0.002, 3 s
+vs 38 s.
+
+Imaging truths, all 96 development tables (now incl. 10 % phased ends, job 46446007), paired vs
+`ember_nosplit` (95 % CI over the 4 truth cells):
+
+| metric | ember_nbr | ember_nosplit_prior (hickit) |
+| --- | --- | --- |
+| Spearman cis | −0.000 [−0.001, +0.001] | −0.001 [−0.003, +0.002] |
+| Spearman whole | +0.003 [−0.002, +0.008] | −0.004 [−0.012, +0.004] |
+| homolog Spearman | +0.012 [−0.000, +0.025] | +0.002 [−0.006, +0.011] |
+| swap fraction | −0.000 | +0.003 |
+| phase accuracy | **+0.058 [+0.041, +0.075]** | +0.026 [+0.019, +0.033] |
+
+Worst `ember_nbr − ember_nosplit` stratum (dataset, phased fraction, eps, depth, rc): −0.004
+(whole-genome, 10 % phased); phase accuracy gains +0.03 to +0.08 in every stratum.  At 10 %
+phased ends: phase accuracy ember_nbr 0.886, hickit 0.846, nucdyn 0.852, ember_nosplit 0.834.
+
+GM12878 (§2): phase hold-back +0.088 (0.888 vs 0.800; hickit 0.853); held-out AUCs within
+0.003; agreement with the published structures −0.003 per chain / −0.001 whole genome on
+average — cell 2 is −0.013 per chain, inside that cell's seed-to-seed spread (0.021-0.027 for
+every method).
+
+**Decision**: `robust_dip_nbr_prior = true` becomes the EMber default (no hickit dependency;
+best phases on both kinds of data; no structure metric worse beyond run-to-run noise; the cell-2
+per-chain −0.013 is the one number past 0.01 and is reported as such).  The hickit prior is not
+adopted (same real-data phases, worse on the simulations, needs hickit).
+
+## 4. Frozen diploid configuration (to be tagged before the test)
+
+EMber haploid parameters = tag `robust-frozen`; diploid: `diploid_cis_sep` 10 Mb (not tuned),
+`robust_dip_split` false, `robust_dip_nbr_prior` true (hickit's settings), no external phase
+prior.  The NucDynamics-2017 diploid baseline and hickit are untouched.

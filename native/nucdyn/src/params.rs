@@ -184,7 +184,9 @@ pub struct Params {
     pub robust_dip_split: bool,
     /// EMber: multiply the candidate prior by a 2-D neighbourhood phase prior (phased contacts
     /// near the contact in both ends vote for its copy pair; hickit's imputation, re-implemented
-    /// with hickit's settings: `diploid::neighbour_prior`).
+    /// with hickit's settings: `diploid::neighbour_prior`).  Default true: chosen on the diploid
+    /// development set (diploid_devlog.md §3: phase accuracy +0.06 on the imaging truths, +0.09
+    /// on masked GM12878 phases, structure metrics unchanged within 0.01).
     pub robust_dip_nbr_prior: bool,
 }
 
@@ -265,7 +267,7 @@ impl Default for Params {
             robust_sample_snapshots: 1,
             diploid_cis_sep: 10_000_000,
             robust_dip_split: false,
-            robust_dip_nbr_prior: false,
+            robust_dip_nbr_prior: true,
         }
     }
 }
