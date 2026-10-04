@@ -163,3 +163,8 @@ adopted (same real-data phases, worse on the simulations, needs hickit).
 EMber haploid parameters = tag `robust-frozen`; diploid: `diploid_cis_sep` 10 Mb (not tuned),
 `robust_dip_split` false, `robust_dip_nbr_prior` true (hickit's settings), no external phase
 prior.  The NucDynamics-2017 diploid baseline and hickit are untouched.
+
+## 5. Test (2026-10-04)
+
+The frozen configuration of §4 (tag `ember-diploid-frozen`) was tested once on the held-back units:
+`DIPLOID_TEST_RESULTS.md` (D1 +0.027, D2 +0.000, D3 +0.025; pass).  No development after the test.

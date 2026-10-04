@@ -195,3 +195,13 @@ tables) and the agreement with the published models slightly lower (r 0.950 vs 0
 The frozen method "robust" is published in U-Chrom as **EMber** (`uchrom.recon.sc.reconstruct_ember`,
 engine protocol `"robust"` with the alias `"ember"`).  Naming only: the method, its frozen
 parameters and the results of §8 are unchanged.
+
+## 10. Diploid test results (2026-10-04)
+
+Run once with the frozen diploid configuration (tag `ember-diploid-frozen`); full tables in
+`DIPLOID_TEST_RESULTS.md`, numbers in `results/diploid_test.json`.  D1 = +0.027 [+0.013, +0.040],
+D2 = +0.000 [−0.002, +0.002] (non-inferiority bound −0.01 met), D3 = +0.025 [+0.022, +0.028]; no
+secondary stratum worse by more than 0.01.  By the pre-registered rule: **EMber diploid is better
+than NucDynamics-diploid and hickit on this test.**  Descriptive: closer to NucDynamics than to
+hickit in agreement with the published (hickit / Dip-C) structures; broader ensembles (sampling);
+8.6x faster than NucDynamics-diploid.
