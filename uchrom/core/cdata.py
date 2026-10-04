@@ -664,6 +664,13 @@ class ChromData:
                 if path.exists():
                     import anndata as ad
                     self._linked_adata = ad.read_h5ad(path)
+            if self._linked_adata is None:   # no file: an AnnData embedded in the store (embed_links)
+                src = getattr(self, "_source_path", None)
+                if src is not None and Path(src).is_dir():
+                    from .embedded import list_embedded_anndata, read_embedded_anndata
+                    found = list_embedded_anndata(str(src), "linked_anndata")
+                    if found:
+                        self._linked_adata = read_embedded_anndata(str(src), next(iter(found.values())))
         return self._linked_adata
 
     @linked_adata.setter

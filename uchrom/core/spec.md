@@ -424,6 +424,43 @@ data.chromdata.zarr/
 - The writer builds the store in a temporary sibling directory and renames
   it into place, so readers never see a half-written store.
 
+### Embedded contacts and AnnData (additive part of 2.3)
+
+Linked `.cool` / `.mcool` / `.scool` / `.h5ad` files stay outside the store.  For an atlas, or any
+store that must live alone on object storage, they can be *embedded* with
+`python -m uchrom.core.embedded STORE` (`uchrom.core.embed_links`).  The link records stay in place;
+a reader that finds an embedded copy uses it, otherwise it follows the link.  Stores without these
+groups, and readers that do not know them, are unaffected (so this is not a format version bump).
+`.cdz` archives and re-writing a store (`cd.write`) do not carry the groups: embed after writing.
+
+```
+embedded/contacts/<name>/         attrs.uchrom_contacts = {key, kind: per_cell|bulk, label, source,
+│                                   resolutions, chroms, chrom_first_bin{res: [first bin of each chrom]},
+│                                   n_cells, n_pixels, count_max | has_weights, trans_min_resolution}
+├── cells                         per_cell: string array (cell names, the order of cell_offset)
+└── r<resolution>/                one per resolution (per_cell: one)
+    ├── bins/{chrom,start,end[,weight]}     chrom = code into attrs.chroms; weight = cooler balancing
+    ├── cis/<chrom>/pix           (3, n) unsigned ints, rows bin1, bin2 (chromosome-local), count; upper triangle
+    ├── cis/<chrom>/cell_offset   per_cell: (n_cells + 1) pixel offsets; pixels sorted by (cell, bin1, bin2)
+    ├── cis/<chrom>/bin1_offset   bulk: (n_bins_of_chrom + 1) offsets; pixels sorted by (bin1, bin2)
+    └── trans/{pix, cell_offset | bin1_offset}    genome-wide bin ids; bulk: only for resolutions >= 250 kb
+embedded/anndata/<name>/          an AnnData Zarr group (anndata >= 0.13 layout) +
+                                  attrs.uchrom_anndata = {key, family: linked_anndata|linked_bin_matrices, ...}
+```
+
+- `pix` is chunked `(3, 16384)` and **sharded** (`(3, 4194304)` per shard, Zarr v3 sharding codec, zstd 9;
+  a chunk holds each of the three rows contiguously, which compresses ~40 % better than interleaved columns), so
+  one object on S3 holds many small chunks and a read fetches the shard index plus the chunks it
+  needs; the group's metadata is consolidated (one request opens it).
+- The partition is by chromosome, like the coordinates: one cell's cis contacts of a chromosome are
+  one contiguous slice, the pseudo-bulk of a group is a few slices, a bulk region is a slice of the
+  `bin1_offset` index.  Cells are sorted within a partition, so neighbouring cells of a group read as
+  one range.
+- Counts and bin ids are `uint16` (`uint32` when needed); a dense AnnData `X` (e.g. ssAB) is chunked
+  `(1024, 256)`.  Bins must be uniform and start at 0 on every chromosome (checked when embedding).
+- Round trip: the embedded pixels are exactly those of the cooler file (tested), and the web browser
+  returns byte-identical matrices from either source.
+
 ### Legacy HDF5 container (`.h5cd`)
 
 ChromData format 1.x and 2.0 were HDF5 files (`.h5cd`).  They are no longer

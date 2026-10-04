@@ -743,8 +743,14 @@ class Dataset:
             return self._cache["cell_bin"]
         recs = self.cd.uns.get("linked_bin_matrices") if isinstance(self.cd.uns, dict) else None
         out: Dict[str, Dict[str, Any]] = {}
-        for key, rec in (recs or {}).items():
-            if not isinstance(rec, dict) or not rec.get("path") or not self.resolve(rec["path"]).exists():
+        embedded = self._embedded_bin_matrices()
+        items = {str(k): v for k, v in (recs or {}).items() if isinstance(v, dict) and k not in embedded}
+        items.update({k: {"label": a["label"], "path": None} for k, (_, a) in embedded.items()})
+        for key, rec in items.items():
+            if rec.get("path") is None:
+                if key not in embedded:
+                    continue
+            elif not self.resolve(rec["path"]).exists():
                 continue
             m = self._bin_matrix(str(key))
             label = str(rec.get("label") or key)
@@ -756,13 +762,41 @@ class Dataset:
         self._cache["cell_bin"] = out
         return out
 
+    def _embedded_bin_matrices(self) -> Dict[str, Any]:
+        """``{key: (zarr group, attrs)}`` of the cell x bin matrices embedded in the store."""
+        if "embedded_bin" not in self._cache:
+            import warnings
+
+            import zarr
+
+            from ...core.embedded import ANNDATA, list_embedded_anndata
+
+            out: Dict[str, Any] = {}
+            p = Path(self.path) if self.path else None
+            if p is not None and p.is_dir():
+                for key, name in list_embedded_anndata(str(p), "linked_bin_matrices").items():
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        g = zarr.open_group(str(p), path=f"{ANNDATA}/{name}", mode="r")
+                    out[key] = (g, dict(g.attrs["uchrom_anndata"]))
+            self._cache["embedded_bin"] = out
+        return self._cache["embedded_bin"]
+
     def _bin_matrix(self, key: str) -> Dict[str, Any]:
         cache = self._cache.setdefault("bin_matrix", {})
         if key not in cache:
             import anndata as ad
 
-            rec = self.cd.uns["linked_bin_matrices"][key]
-            adata = ad.read_h5ad(self.resolve(rec["path"]), backed="r")
+            emb = self._embedded_bin_matrices().get(key)
+            if emb is not None:      # embedded copy: X is read straight from the Zarr array
+                from types import SimpleNamespace
+
+                grp = emb[0]
+                adata = SimpleNamespace(X=grp["X"], var=ad.io.read_elem(grp["var"]),
+                                        obs_names=ad.io.read_elem(grp["obs"]).index)
+            else:
+                rec = self.cd.uns["linked_bin_matrices"][key]
+                adata = ad.read_h5ad(self.resolve(rec["path"]), backed="r")
             var = adata.var
             bins = self.cd.bins
             ids = var["bin_id"].to_numpy(np.int64)
@@ -998,8 +1032,20 @@ class Dataset:
     def contact_maps(self) -> List[Dict[str, Any]]:
         if "contact_maps" not in self._cache:
             out = []
+            embedded = self._embedded_maps()
+            for key, e in embedded.items():
+                per = e.kind == "per_cell"
+                if per:
+                    self._cache[("scool_cells", f"embedded:{key}")] = {f"/cells/{c}" for c in e.cells}
+                out.append({"key": key, "kind": "scool" if per else ("mcool" if len(e.resolutions) > 1 else "cool"),
+                            "label": e.label, "resolutions": list(e.resolutions),
+                            "chroms": [{"name": c, "length": n} for c, n in e.chromsizes().items()],
+                            "per_cell": per, "n_cells": len(e.cells) if per else 0,
+                            "balanced": bool(e.meta.get("has_weights")), "embedded": True})
             for family in ("linked_cool", "linked_scool"):
                 for key, rec in self._link_records(family).items():
+                    if key in embedded:      # the embedded copy wins: it needs no external file
+                        continue
                     path = self.resolve(str(rec["path"]))
                     if not path.is_file():
                         continue
@@ -1050,6 +1096,8 @@ class Dataset:
         info = next((m for m in self.contact_maps() if m["key"] == key and m["kind"] != "error"), None)
         if info is None:
             raise KeyError(key)
+        if info.get("embedded"):
+            return self._embedded_contacts(key, info, chrom, start, end, resolution, balance, cell, group)
         family = "linked_scool" if info["kind"] == "scool" else "linked_cool"
         path = self.resolve(str(self._link_records(family)[key]["path"]))
         if str(chrom) == GENOME:
@@ -1106,10 +1154,7 @@ class Dataset:
         if ck in cache:
             cache[ck] = cache.pop(ck)
             return cache[ck]
-        layout = self.genome_layout()
-        offsets = {c["name"]: c["offset"] for c in layout}
-        rank = {c["name"]: i for i, c in enumerate(layout)}
-        total = sum(c["length"] for c in layout)
+        total = sum(c["length"] for c in self.genome_layout())
         notes, n_cells = ["whole genome"], None
         if info["kind"] == "mcool":
             res = int(resolution) if resolution else next(
@@ -1138,7 +1183,30 @@ class Dataset:
         else:
             groups = [""]
         clr = cooler.Cooler(f"{path}::/{groups[0]}")
-        bins = clr.bins()[:]
+
+        def blocks(weight):
+            step = 5_000_000
+            with h5py.File(path, "r") as f:
+                for g in groups:
+                    grp = f[g] if g else f
+                    n_pix = grp["pixels/bin1_id"].shape[0]
+                    for s0 in range(0, n_pix, step):
+                        yield (grp["pixels/bin1_id"][s0: s0 + step], grp["pixels/bin2_id"][s0: s0 + step],
+                               grp["pixels/count"][s0: s0 + step].astype(np.float64))
+
+        buf = self._genome_matrix(key, clr.bins()[:], int(clr.binsize or 0), blocks, balance, cell, group, notes, n_cells)
+        cache[ck] = buf
+        while len(cache) > PSEUDOBULK_CACHE:
+            cache.pop(next(iter(cache)))
+        return buf
+
+    def _genome_matrix(self, key: str, bins: pd.DataFrame, binsize: int, blocks, balance: bool,
+                       cell: Optional[str], group: Optional[str], notes: List[str], n_cells: Optional[int]) -> bytes:
+        """Sum the pixel blocks ``blocks(weight)`` -> (bin1, bin2, count) into the whole-genome grid."""
+        layout = self.genome_layout()
+        offsets = {c["name"]: c["offset"] for c in layout}
+        rank = {c["name"]: i for i, c in enumerate(layout)}
+        total = sum(c["length"] for c in layout)
         chrom = bins["chrom"].astype(str).to_numpy()
         starts = bins["start"].to_numpy(np.int64)
         ends = bins["end"].to_numpy(np.int64)
@@ -1163,23 +1231,16 @@ class Dataset:
         acc = np.zeros(n_out * n_out, dtype=np.float64)
         diag = np.zeros(n_out, dtype=np.float64)
         n_contacts = 0.0
-        step = 5_000_000
-        with h5py.File(path, "r") as f:
-            for g in groups:
-                grp = f[g] if g else f
-                n_pix = grp["pixels/bin1_id"].shape[0]
-                for s0 in range(0, n_pix, step):
-                    b1 = grp["pixels/bin1_id"][s0: s0 + step]
-                    b2 = grp["pixels/bin2_id"][s0: s0 + step]
-                    v = grp["pixels/count"][s0: s0 + step].astype(np.float64)
-                    n_contacts += float(v.sum())
-                    if weight is not None:
-                        v = v * weight[b1] * weight[b2]
-                    o1, o2 = out_idx[b1], out_idx[b2]
-                    ok = (o1 >= 0) & (o2 >= 0) & np.isfinite(v)
-                    o1, o2, v, same = o1[ok], o2[ok], v[ok], (b1 == b2)[ok]
-                    acc += np.bincount(o1 * n_out + o2, weights=v, minlength=n_out * n_out)
-                    diag += np.bincount(o1[same], weights=v[same], minlength=n_out)
+        for b1, b2, v in blocks(weight):
+            v = np.asarray(v, dtype=np.float64)
+            n_contacts += float(v.sum())
+            if weight is not None:
+                v = v * weight[b1] * weight[b2]
+            o1, o2 = out_idx[b1], out_idx[b2]
+            ok = (o1 >= 0) & (o2 >= 0) & np.isfinite(v)
+            o1, o2, v, same = o1[ok], o2[ok], v[ok], (b1 == b2)[ok]
+            acc += np.bincount(o1 * n_out + o2, weights=v, minlength=n_out * n_out)
+            diag += np.bincount(o1[same], weights=v[same], minlength=n_out)
         up = acc.reshape(n_out, n_out)
         mat = (up + up.T - np.diag(diag)).astype(np.float32)   # cool stores one triangle
         if weight is not None:                                 # bins without a weight: no value
@@ -1188,15 +1249,120 @@ class Dataset:
             dead[live] = False
             mat[dead, :] = np.nan
             mat[:, dead] = np.nan
-        header = {"chrom": GENOME, "start": 0, "end": total, "resolution": int(clr.binsize or 0) * k,
+        header = {"chrom": GENOME, "start": 0, "end": total, "resolution": int(binsize) * k,
                   "value": "balanced" if balanced else "count", "unit": None,
                   "cell": cell if group is None else None, "group": group, "note": "; ".join(notes)}
         if n_cells is not None:
             header.update(n_cells=n_cells, n_contacts=n_contacts)
-        buf = encode_matrix(mat, np.asarray(o_starts, np.int64), np.asarray(o_ends, np.int64), header)
-        cache[ck] = buf
-        while len(cache) > PSEUDOBULK_CACHE:
-            cache.pop(next(iter(cache)))
+        return encode_matrix(mat, np.asarray(o_starts, np.int64), np.asarray(o_ends, np.int64), header)
+
+    def _embedded_maps(self) -> Dict[str, Any]:
+        """Contact maps embedded in the store (``embedded/contacts``), by key."""
+        if "embedded_maps" not in self._cache:
+            from ...core.embedded import EmbeddedContacts, list_embedded
+
+            maps: Dict[str, Any] = {}
+            p = Path(self.path) if self.path else None
+            if p is not None and p.is_dir():
+                for key, name in list_embedded(str(p)).items():
+                    try:
+                        maps[key] = EmbeddedContacts(str(p), name)
+                    except Exception:   # unreadable group: fall back to the link, if any
+                        continue
+            self._cache["embedded_maps"] = maps
+        return self._cache["embedded_maps"]
+
+    def _embedded_contacts(self, key: str, info: dict, chrom: str, start, end, resolution, balance: bool,
+                           cell: Optional[str], group: Optional[str]) -> bytes:
+        """The embedded counterpart of the .cool / .scool paths of :meth:`contacts`: a region of one
+        cell, of a group (pseudo-bulk) or of a bulk map, or the whole genome."""
+        e = self._embedded_maps()[key]
+        per = info["kind"] == "scool"
+        token = Path(f"embedded:{key}")
+        notes: List[str] = []
+        idx, n_cells = None, None
+        if per:
+            index = self._cache.setdefault(("emb_cell_index", key), {c: i for i, c in enumerate(e.cells)})
+            if group is not None:
+                names = [c for c in self.group_cells(group) if c in index]
+                if not names:
+                    raise LookupError(f"no cell of group {group!r} has a map in {key!r} ({self._scool_coverage(token)})")
+                if len(names) > PSEUDOBULK_MAX_CELLS:
+                    rng = np.random.default_rng(0)
+                    names = sorted(rng.choice(names, PSEUDOBULK_MAX_CELLS, replace=False).tolist(), key=natural_key)
+                    notes.append(f"sum over {PSEUDOBULK_MAX_CELLS} random cells of the group")
+                n_cells, idx = len(names), [index[c] for c in names]
+            elif cell is not None:
+                if str(cell) not in index:
+                    raise KeyError(f"cell {cell!r} has no map in {key!r} ({self._scool_coverage(token)})")
+                idx = [index[str(cell)]]
+            else:
+                raise LookupError("per-cell contact map: pass cell=<cell id> or group=<group>")
+        elif group is not None:
+            raise ValueError(f"contact map {key!r} is not per-cell: a group needs a per-cell (.scool) map")
+        chroms = {c["name"]: c["length"] for c in info["chroms"]}
+        if str(chrom) == GENOME:
+            cache = self._cache.setdefault("genome_contacts", {})
+            ck = (key, resolution, bool(balance), cell, group)
+            if ck in cache:
+                cache[ck] = cache.pop(ck)
+                return cache[ck]
+            total = sum(c["length"] for c in self.genome_layout())
+            res = int(resolution) if resolution else next(
+                (r for r in info["resolutions"] if total / r <= MAX_MATRIX_BINS), info["resolutions"][-1])
+            if res not in info["resolutions"]:
+                raise ValueError(f"resolution must be one of {info['resolutions']}")
+            buf = self._genome_matrix(key, e.bins(res), res, lambda weight: e.iter_pixels(res, idx),
+                                      balance, cell, group, ["whole genome"] + notes, n_cells)
+            cache[ck] = buf
+            while len(cache) > PSEUDOBULK_CACHE:
+                cache.pop(next(iter(cache)))
+            return buf
+        length = chroms.get(chrom)
+        if length is None:
+            raise ValueError(f"unknown chromosome {chrom!r} in contact map {key!r}")
+        lo = max(0, int(start or 0))
+        hi = min(length, int(end or length))
+        if hi <= lo:
+            raise ValueError("empty region")
+        res = int(resolution) if resolution else next(
+            (r for r in info["resolutions"] if (hi - lo) / r <= MAX_MATRIX_BINS), info["resolutions"][-1])
+        if res not in info["resolutions"]:
+            raise ValueError(f"resolution must be one of {info['resolutions']}")
+        ck = (key, group, chrom, lo, hi, res, bool(balance))
+        cache = self._cache.setdefault("pseudobulk", {})
+        if group is not None and ck in cache:
+            cache[ck] = cache.pop(ck)
+            return cache[ck]
+        b0, b1 = lo // res, min(-(-length // res), -(-hi // res))
+        n = b1 - b0
+        d = e.region_pixels(chrom, b0, b1, res) if not per else e.cell_pixels(f"cis/{chrom}", idx, res)
+        d = d[(d[:, 0] >= b0) & (d[:, 1] < b1)]
+        acc = np.bincount((d[:, 0] - b0) * n + (d[:, 1] - b0), weights=d[:, 2], minlength=n * n)
+        up = acc.reshape(n, n)
+        mat = up + up.T - np.diag(np.diag(up))
+        bins = e.bins(res)
+        f0 = e.first_bin(chrom, res)
+        rows = bins.iloc[f0 + b0: f0 + b1]
+        balanced = bool(balance) and "weight" in bins.columns and not per
+        if balanced:
+            w = rows["weight"].to_numpy(np.float64)
+            mat = mat * w[:, None] * w[None, :]
+        mat = mat.astype(np.float32)
+        starts, ends = rows["start"].to_numpy(np.int64), rows["end"].to_numpy(np.int64)
+        mat, starts, ends, note = _pool_square(mat, starts, ends, np.nansum)
+        if note:
+            notes.append(note)
+        header = {"chrom": chrom, "start": lo, "end": hi, "resolution": int(res),
+                  "value": "balanced" if balanced else "count", "unit": None,
+                  "cell": cell if group is None else None, "group": group, "note": "; ".join(notes) or None}
+        if group is not None:
+            header.update(n_cells=n_cells, n_contacts=float(np.triu(up).sum()))
+        buf = encode_matrix(mat, starts, ends, header)
+        if group is not None:
+            cache[ck] = buf
+            while len(cache) > PSEUDOBULK_CACHE:
+                cache.pop(next(iter(cache)))
         return buf
 
     def _scool_cells(self, path: Path) -> set:

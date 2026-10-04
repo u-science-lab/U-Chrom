@@ -1,0 +1,129 @@
+{
+ "sizes": {
+  "bulk.mouse_brain_r1": {
+   "linked_mb": 1221.5,
+   "embedded_mb": 383.0,
+   "ratio": 0.314
+  },
+  "bulk.mouse_brain_r2": {
+   "linked_mb": 913.5,
+   "embedded_mb": 337.8,
+   "ratio": 0.37
+  },
+  "per_spot.mouse_brain_r1": {
+   "linked_mb": 1015.0,
+   "embedded_mb": 791.1,
+   "ratio": 0.779
+  },
+  "per_spot.mouse_brain_r2": {
+   "linked_mb": 775.7,
+   "embedded_mb": 569.5,
+   "ratio": 0.734
+  },
+  "anndata.ssAB": {
+   "linked_mb": 111.5,
+   "embedded_mb": 110.7,
+   "ratio": 0.993
+  },
+  "anndata.default": {
+   "linked_mb": 48.6,
+   "embedded_mb": 38.4,
+   "ratio": 0.79
+  }
+ },
+ "exactness": {
+  "bulk chr2 (auto resolution)": {
+   "equal": true,
+   "linked_ms": 614,
+   "embedded_ms": 32
+  },
+  "bulk chr2 30-40 Mb, 25 kb": {
+   "equal": true,
+   "linked_ms": 73,
+   "embedded_ms": 13
+  },
+  "bulk chr5 (r2)": {
+   "equal": true,
+   "linked_ms": 97,
+   "embedded_ms": 10
+  },
+  "bulk whole genome": {
+   "equal": true,
+   "linked_ms": 157,
+   "embedded_ms": 78
+  },
+  "one spot chr1": {
+   "equal": true,
+   "linked_ms": 5,
+   "embedded_ms": 3
+  },
+  "one spot whole genome": {
+   "equal": true,
+   "linked_ms": 9,
+   "embedded_ms": 58
+  },
+  "500 spots chr7": {
+   "equal": true,
+   "linked_ms": 456,
+   "embedded_ms": 17
+  },
+  "500 spots whole genome": {
+   "equal": true,
+   "linked_ms": 2195,
+   "embedded_ms": 773
+  },
+  "ssAB chr1, every spot": {
+   "equal": true
+  }
+ },
+ "requests": {
+  "open a per-spot map (metadata only)": {
+   "metadata_requests": 1,
+   "data_requests": 3,
+   "data_mb": 0.0,
+   "ms": 2
+  },
+  "one spot, chr1 (cis)": {
+   "metadata_requests": 1,
+   "data_requests": 6,
+   "data_mb": 0.06,
+   "ms": 4
+  },
+  "one spot, whole genome (cis + trans)": {
+   "metadata_requests": 1,
+   "data_requests": 69,
+   "data_mb": 1.56,
+   "ms": 48
+  },
+  "500 spots, chr1 (pseudo-bulk)": {
+   "metadata_requests": 1,
+   "data_requests": 8,
+   "data_mb": 2.13,
+   "ms": 15
+  },
+  "500 spots, whole genome": {
+   "metadata_requests": 1,
+   "data_requests": 80,
+   "data_mb": 56.79,
+   "ms": 304
+  },
+  "open a bulk map (metadata only)": {
+   "metadata_requests": 1,
+   "data_requests": 3,
+   "data_mb": 0.0,
+   "ms": 10
+  },
+  "bulk chr2:30-40 Mb at 25 kb": {
+   "metadata_requests": 1,
+   "data_requests": 6,
+   "data_mb": 1.7,
+   "ms": 23
+  },
+  "bulk whole genome at 500 kb": {
+   "metadata_requests": 1,
+   "data_requests": 28,
+   "data_mb": 16.88,
+   "ms": 113
+  }
+ }
+}

@@ -775,6 +775,13 @@ public data alone** and are shipped with their recorded outputs.
     single spots hold few contacts, so this is weak evidence rather than a reproduction of ssAB.
   - Hi-C profile PCA, 15 nearest neighbours sharing the published label: cell type (23) 0.22 (shuffled
     0.11); CellCharter clusters (12) 0.42 (0.12); FH clusters (5) 0.58 (0.22).
+- **Embedding for an atlas** (`uchrom.core.embedded`, `benchmarks/embedded_contacts.py`): `python -m uchrom.core.embedded
+  <store>` copies the linked maps and h5ad files into the store (`embedded/…`, Zarr, sharded, partitioned by chromosome).
+  Mouse brain (2 bulk, 2 per-spot, ssAB, RNA): bulk 0.31–0.37x of the `.mcool`, per-spot 0.73–0.78x of the `.scool`,
+  ssAB 0.99x, RNA 0.79x; matrices from the embedded store equal the linked ones exactly (8 queries + ssAB chr1);
+  requests a cold reader makes: one spot on one chromosome 6 data GETs (0.06 MB), 500-spot pseudo-bulk of a
+  chromosome 8 GETs (2.1 MB), bulk 10 Mb region at 25 kb 6 GETs (1.7 MB), one metadata GET to open a map
+  (counted on the store layer, local disk, not measured on S3).
 - **Open**: the E13.5 spots outside the published mask have no image / map in the stores; human ssAB layout;
   the pairs outside the mask (37–44 %) are unexplained.
 
