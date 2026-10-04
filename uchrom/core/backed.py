@@ -441,8 +441,8 @@ class BackedChromData(ChromData):
             self._crun = np.empty_like(self._prun)
             self._crun[self._prun] = np.arange(len(self._prun), dtype=np.int64)
             self._derived = parts.get("derived") or {}
-        self._backing_path = Path(path)
-        self._source_path = Path(path)
+        self._backing_path = path if isinstance(path, str) and "://" in path else Path(path)
+        self._source_path = self._backing_path
         self._bins = parts["bins"]
         self.cells = parts["cells"] if parts["cells"] is not None else pd.DataFrame()
         self.cellm = parts["cellm"]
@@ -1138,7 +1138,7 @@ class BackedChromData(ChromData):
         self._c.close()
 
     def __repr__(self) -> str:
-        return super().__repr__().replace("ChromData:", f"ChromData (backed: {self._backing_path.name}):", 1)
+        return super().__repr__().replace("ChromData:", f"ChromData (backed: {Path(str(self._backing_path)).name}):", 1)
 
 
 __all__ = ["BackedArray", "BackedChromData", "BackedFrame"]

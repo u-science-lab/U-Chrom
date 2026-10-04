@@ -460,6 +460,9 @@ embedded/anndata/<name>/          an AnnData Zarr group (anndata >= 0.13 layout)
   `(1024, 256)`.  Bins must be uniform and start at 0 on every chromosome (checked when embedding).
 - Round trip: the embedded pixels are exactly those of the cooler file (tested), and the web browser
   returns byte-identical matrices from either source.
+- Remote reading: `embedded/contacts` and `embedded/anndata` carry consolidated metadata (the listing of
+  their children without listing the bucket), so a store served by plain HTTP or S3 needs no directory
+  listing.  See `uchrom/core/remote.py`.
 
 ### Legacy HDF5 container (`.h5cd`)
 

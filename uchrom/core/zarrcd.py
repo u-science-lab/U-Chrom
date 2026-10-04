@@ -1592,17 +1592,29 @@ class Container:
     """Read access to a ``.chromdata.zarr`` directory or a ``.cdz`` zip."""
 
     def __init__(self, path: PathLike):
-        path = Path(path)
-        kind = container_kind(path)
-        if kind not in ("zarr", "cdz"):
-            raise ValueError(f"{path} is not a .chromdata.zarr / .cdz store")
-        if not path.exists():
-            raise FileNotFoundError(path)
+        from .remote import filesystem, is_url, zarr_store
+
+        self._fs = None
+        if is_url(path):          # s3:// https:// ... : directory stores only
+            path = str(path).rstrip("/")
+            if container_kind(path) != "zarr":
+                raise ValueError(f"{path}: only .chromdata.zarr directories can be read remotely")
+            self._fs, self._root = filesystem(path)
+            kind = "zarr"
+        else:
+            path = Path(path)
+            kind = container_kind(path)
+            if kind not in ("zarr", "cdz"):
+                raise ValueError(f"{path} is not a .chromdata.zarr / .cdz store")
+            if not path.exists():
+                raise FileNotFoundError(path)
         zarr = _zarr()
         self.path = path
         self.kind = kind
         self._zip = None
-        if kind == "zarr":
+        if self._fs is not None:
+            store = zarr_store(path)
+        elif kind == "zarr":
             store = zarr.storage.LocalStore(str(path), read_only=True)
         else:
             self._zip = zipfile.ZipFile(path, "r")
@@ -1618,6 +1630,8 @@ class Container:
     # -- files -----------------------------------------------------------
 
     def exists(self, rel: str) -> bool:
+        if self._fs is not None:
+            return bool(self._fs.exists(f"{self._root}/{rel}"))
         if self._zip is not None:
             return rel in self._members
         return (self.path / rel).exists()
@@ -1634,6 +1648,9 @@ class Container:
         import pyarrow.parquet as pq
 
         kw = {"read_dictionary": list(read_dictionary)} if read_dictionary else {}
+        if self._fs is not None:    # range requests through fsspec's read-ahead cache
+            return pq.ParquetFile(self._fs.open(f"{self._root}/{rel}", "rb", cache_type="readahead",
+                                                block_size=1 << 20), **kw)
         if self._zip is None:
             return pq.ParquetFile(str(self.path / rel), **kw)
         info = self._members[rel]
@@ -1876,6 +1893,8 @@ def _relocate_links(raw: Any, relpaths: Dict[str, str], store_path: Path) -> Any
     single = "path" in raw
     recs = {"__single__": dict(raw)} if single else {k: dict(v) if isinstance(v, Mapping) else v
                                                      for k, v in raw.items()}
+    if isinstance(store_path, str) and "://" in store_path:   # remote store: nothing to relocate
+        return raw
     parent = Path(store_path).resolve().parent
     for key, rel in relpaths.items():
         rec = recs.get(key)

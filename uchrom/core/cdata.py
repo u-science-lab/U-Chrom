@@ -666,7 +666,7 @@ class ChromData:
                     self._linked_adata = ad.read_h5ad(path)
             if self._linked_adata is None:   # no file: an AnnData embedded in the store (embed_links)
                 src = getattr(self, "_source_path", None)
-                if src is not None and Path(src).is_dir():
+                if src is not None and (isinstance(src, str) or Path(src).is_dir()):
                     from .embedded import list_embedded_anndata, read_embedded_anndata
                     found = list_embedded_anndata(str(src), "linked_anndata")
                     if found:
@@ -770,6 +770,8 @@ class ChromData:
         so a dataset folder can be moved or shipped as a whole."""
         p = Path(path).expanduser()
         src = getattr(self, "_source_path", None)
+        if isinstance(src, str):      # remote store (URL): links do not resolve against it
+            return p
         if not p.is_absolute() and src is not None:
             p = Path(src).parent / p
         return p
@@ -2096,14 +2098,18 @@ class ChromData:
           are ignored silently by the lower-level helpers.
         - Different MAJOR           → raise ``ValueError`` with guidance.
         """
+        from .remote import is_url
         from .zarrcd import container_kind
 
-        path = Path(path)
+        remote = is_url(path)
+        path = str(path).rstrip("/") if remote else Path(path)
         kind = container_kind(path)
         if kind in ("zarr", "cdz"):
             from .backed import BackedChromData
 
-            if not path.exists():
+            if remote and not backed:
+                raise ValueError("a remote store is read backed: pass backed=True")
+            if not remote and not path.exists():
                 raise FileNotFoundError(path)
             b = BackedChromData(path, columns=columns, tracks=tracks)
             _check_zarr_version(path, b._c.meta.get("format_version", "2.0"))

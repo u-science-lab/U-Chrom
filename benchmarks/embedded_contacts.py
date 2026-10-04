@@ -2,15 +2,16 @@
 
 Prepare (once)::
 
-    cp -R example-data/spatial_hicrna/hicrna_mouse_brain.chromdata.zarr \\
-          example-data/spatial_hicrna/hicrna_mouse_brain_emb.chromdata.zarr
-    python -m uchrom.core.embedded example-data/spatial_hicrna/hicrna_mouse_brain_emb.chromdata.zarr   # ~3 min
+    python -m uchrom.core.embedded example-data/spatial_hicrna/hicrna_mouse_brain.chromdata.zarr      # ~3 min
     python benchmarks/embedded_contacts.py                                                              # ~1 min
+
+(the linked reference is a temporary copy of the store without ``embedded/``)
 
 Reports (``benchmarks/results/embedded_contacts.json``):
 
 1. size of every embedded object against the linked file;
 2. exactness: the web-browser matrices from the embedded store equal those from the linked store;
+4. the same over real HTTP range requests (a local server), requests and bytes on the wire;
 3. what an object store would see: the number of GET requests / bytes per operation, counted on the
    store layer (every ``get`` zarr issues, with its byte range; metadata separate from data).  The
    store is local, so times are the CPU / decode cost only.
@@ -31,8 +32,8 @@ from uchrom.core.embedded import EmbeddedContacts, list_embedded
 warnings.filterwarnings("ignore")
 ROOT = Path(__file__).resolve().parents[1]
 D = ROOT / "example-data" / "spatial_hicrna"
-LINKED = D / "hicrna_mouse_brain.chromdata.zarr"
-EMB = D / "hicrna_mouse_brain_emb.chromdata.zarr"
+EMB = D / "hicrna_mouse_brain.chromdata.zarr"
+LINKED = D / "_linked_reference.chromdata.zarr"      # the same store without embedded/ (links only)
 OUT = ROOT / "benchmarks" / "results" / "embedded_contacts.json"
 
 
@@ -153,11 +154,100 @@ def requests(res: dict) -> None:
     res["requests"] = out
 
 
+def http_requests(res: dict) -> None:
+    """The same operations over real HTTP (a local server with Range support): requests and bytes on the wire."""
+    import functools
+    import http.server
+    import threading
+
+    log: list = []
+
+    class H(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _send(self, body: bytes, code=200, extra=None):
+            self.send_response(code)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Accept-Ranges", "bytes")
+            for k, v in (extra or {}).items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_HEAD(self):
+            p = Path(self.translate_path(self.path))
+            if not p.is_file():
+                return self.send_error(404)
+            self.send_response(200)
+            self.send_header("Content-Length", str(p.stat().st_size))
+            self.send_header("Accept-Ranges", "bytes")
+            self.end_headers()
+
+        def do_GET(self):
+            p = Path(self.translate_path(self.path))
+            if not p.is_file():
+                return self.send_error(404)
+            size = p.stat().st_size
+            rng = self.headers.get("Range")
+            lo, hi = 0, size
+            if rng:
+                a, _, b = rng.removeprefix("bytes=").partition("-")
+                lo = int(a) if a else max(0, size - int(b))
+                hi = min(size, int(b) + 1) if (a and b) else size
+            with open(p, "rb") as f:
+                f.seek(lo)
+                body = f.read(hi - lo)
+            log.append((self.path, bool(rng), len(body)))
+            self._send(body, 206 if rng else 200,
+                       {"Content-Range": f"bytes {lo}-{hi - 1}/{size}"} if rng else None)
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(H, directory=str(D)))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_address[1]}/{EMB.name}"
+    print("[4] over HTTP (a real server with Range support; every request counted)")
+    out: dict = {}
+
+    def report(label, fn):
+        log.clear()
+        t = time.time(); fn(); dt = time.time() - t
+        nbytes = sum(b for _, _, b in log)
+        out[label] = {"requests": len(log), "range_requests": sum(1 for _, r, _ in log if r),
+                      "mb": round(nbytes / 1e6, 2), "ms": round(dt * 1000)}
+        r = out[label]
+        print(f"  {label:44s} {r['requests']:4d} req ({r['range_requests']} ranged)  {r['mb']:7.2f} MB  {r['ms']:5d} ms")
+
+    t = time.time()
+    s = DatasetStore()
+    report("open the store in the browser (backed)", lambda: s.load(url))
+    ds = s._datasets[max(s._datasets)]
+    cells = ds._embedded_maps()["per_spot.mouse_brain_r1"].cells
+    ds.group_cells = lambda g, _c=cells[1000:1500]: _c
+    report("contact map list (embedded)", lambda: ds.contact_maps())
+    report("bulk chr2 (auto resolution)", lambda: ds.contacts("bulk.mouse_brain_r1", "chr2"))
+    report("bulk chr2:30-40 Mb at 25 kb", lambda: ds.contacts("bulk.mouse_brain_r1", "chr2", start=30_000_000, end=40_000_000, resolution=25000))
+    report("bulk whole genome", lambda: ds.contacts("bulk.mouse_brain_r1", GENOME))
+    report("one spot, chr1", lambda: ds.contacts("per_spot.mouse_brain_r1", "chr1", cell=cells[3000]))
+    report("one spot, whole genome", lambda: ds.contacts("per_spot.mouse_brain_r1", GENOME, cell=cells[3000]))
+    report("500 spots, chr7", lambda: ds.contacts("per_spot.mouse_brain_r1", "chr7", group="g"))
+    report("500 spots, whole genome", lambda: ds.contacts("per_spot.mouse_brain_r1", GENOME, group="g"))
+    srv.shutdown()
+    res["http"] = out
+
+
 if __name__ == "__main__":
+    import shutil
+
     res: dict = {}
-    sizes(res)
-    exactness(res)
-    requests(res)
+    shutil.rmtree(LINKED, ignore_errors=True)
+    shutil.copytree(EMB, LINKED, ignore=shutil.ignore_patterns("embedded"))
+    try:
+        sizes(res)
+        exactness(res)
+        requests(res)
+        http_requests(res)
+    finally:
+        shutil.rmtree(LINKED, ignore_errors=True)
     OUT.parent.mkdir(exist_ok=True)
     OUT.write_text(json.dumps(res, indent=1))
     print("wrote", OUT.relative_to(ROOT))

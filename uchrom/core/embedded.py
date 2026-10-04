@@ -52,6 +52,13 @@ def _zarr():
     return zarr
 
 
+def as_store(store):
+    """A URL becomes a read-only fsspec store (see :mod:`uchrom.core.remote`); anything else is kept."""
+    from .remote import is_url, zarr_store
+
+    return zarr_store(str(store).rstrip("/")) if is_url(store) else store
+
+
 def _uint(maxval: int):
     return np.uint8 if maxval < 2**8 else np.uint16 if maxval < 2**16 else np.uint32
 
@@ -107,10 +114,23 @@ def _commit(final: Path, tmp: Path, consolidate: bool = True) -> None:
     if final.exists():
         shutil.rmtree(final)
     os.replace(tmp, final)
-    if consolidate:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")   # "consolidated metadata is not part of the v3 spec"
-            zarr.consolidate_metadata(str(final.parents[2]), path=f"{GROUP}/{final.name}")
+    store = str(final.parents[2])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")   # "consolidated metadata is not part of the v3 spec"
+        if consolidate:
+            zarr.consolidate_metadata(store, path=f"{GROUP}/{final.name}")
+    consolidate_sections(store)
+
+
+def consolidate_sections(store_path: PathLike) -> None:
+    """Consolidate the metadata of ``embedded/contacts`` and ``embedded/anndata`` (all children in
+    one document): a remote reader lists the embedded objects without listing the bucket."""
+    zarr = _zarr()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for section in (GROUP, ANNDATA):
+            if (Path(store_path) / section).is_dir():
+                zarr.consolidate_metadata(str(store_path), path=section)
 
 
 # ======================================================================
@@ -305,7 +325,7 @@ class EmbeddedContacts:
         self.name = name
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.g = zarr.open_group(store, path=f"{GROUP}/{name}", mode="r", use_consolidated=True)
+            self.g = zarr.open_group(as_store(store), path=f"{GROUP}/{name}", mode="r", use_consolidated=True)
         self.meta = dict(self.g.attrs["uchrom_contacts"])
         self.kind: str = self.meta["kind"]
         self.key: str = self.meta["key"]
@@ -424,7 +444,9 @@ def list_embedded(store) -> Dict[str, str]:
     """``{key: group name}`` of the embedded contact maps of a store ({} if none)."""
     zarr = _zarr()
     try:
-        grp = zarr.open_group(store, path=GROUP, mode="r")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            grp = zarr.open_group(as_store(store), path=GROUP, mode="r", use_consolidated=True)
     except (FileNotFoundError, KeyError, zarr.errors.GroupNotFoundError if hasattr(zarr.errors, "GroupNotFoundError") else KeyError):
         return {}
     out = {}
@@ -477,7 +499,9 @@ def list_embedded_anndata(store, family: Optional[str] = None) -> Dict[str, str]
     """``{key: group name}`` of the embedded AnnData groups (of one ``family``)."""
     zarr = _zarr()
     try:
-        grp = zarr.open_group(store, path=ANNDATA, mode="r")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            grp = zarr.open_group(as_store(store), path=ANNDATA, mode="r", use_consolidated=True)
     except Exception:
         return {}
     out = {}
@@ -495,7 +519,7 @@ def read_embedded_anndata(store, name: str):
     zarr = _zarr()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        grp = zarr.open_group(store, path=f"{ANNDATA}/{name}", mode="r")
+        grp = zarr.open_group(as_store(store), path=f"{ANNDATA}/{name}", mode="r")
         return ad.read_zarr(grp)
 
 
@@ -541,10 +565,11 @@ def embed_links(store_path: PathLike, *, overwrite: bool = False, keys: Optional
                                    trans_min_resolution=trans_min_resolution)
         else:
             done[key] = embed_anndata(store_path, key, path, family=fam, label=label, overwrite=overwrite)
+    consolidate_sections(store_path)
     return done
 
 
-if __name__ == "__main__":     # python -m uchrom.core.embedded STORE [--overwrite] [--keys a b ...]
+if __name__ == "__main__":     # python -m uchrom.core.embedded STORE [--overwrite] [--keys a b ...] [--reconsolidate]
     import argparse
 
     ap = argparse.ArgumentParser(description="Embed the linked contact maps / h5ad files into a .chromdata.zarr store")
@@ -552,5 +577,9 @@ if __name__ == "__main__":     # python -m uchrom.core.embedded STORE [--overwri
     ap.add_argument("--overwrite", action="store_true")
     ap.add_argument("--keys", nargs="*")
     ap.add_argument("--trans-min-resolution", type=int, default=TRANS_MIN_RESOLUTION)
+    ap.add_argument("--reconsolidate", action="store_true", help="only rebuild the metadata index of the embedded groups")
     a = ap.parse_args()
+    if a.reconsolidate:
+        consolidate_sections(a.store)
+        raise SystemExit(0)
     embed_links(a.store, overwrite=a.overwrite, keys=a.keys, trans_min_resolution=a.trans_min_resolution)

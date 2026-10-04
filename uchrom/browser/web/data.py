@@ -711,11 +711,23 @@ class Dataset:
     # Genome-coordinate views: tracks, intervals, contacts, distances, stats
     # ------------------------------------------------------------------
 
+    def _store_location(self) -> Optional[str]:
+        """The store as a URL or a local directory (what zarr opens), else None (.cdz, CSV)."""
+        from ...core.remote import is_url
+
+        if not self.path:
+            return None
+        if is_url(self.path):
+            return str(self.path)
+        return str(self.path) if Path(self.path).is_dir() else None
+
     def resolve(self, path: str) -> Path:
         """Linked file path; relative paths are relative to the dataset's
         directory (where the .chromdata.zarr / .cdz lives)."""
+        from ...core.remote import is_url
+
         p = Path(path).expanduser()
-        if not p.is_absolute() and self.path:
+        if not p.is_absolute() and self.path and not is_url(self.path):
             p = Path(self.path).parent / p
         return p
 
@@ -769,15 +781,15 @@ class Dataset:
 
             import zarr
 
-            from ...core.embedded import ANNDATA, list_embedded_anndata
+            from ...core.embedded import ANNDATA, as_store, list_embedded_anndata
 
             out: Dict[str, Any] = {}
-            p = Path(self.path) if self.path else None
-            if p is not None and p.is_dir():
-                for key, name in list_embedded_anndata(str(p), "linked_bin_matrices").items():
+            loc = self._store_location()
+            if loc is not None:
+                for key, name in list_embedded_anndata(loc, "linked_bin_matrices").items():
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
-                        g = zarr.open_group(str(p), path=f"{ANNDATA}/{name}", mode="r")
+                        g = zarr.open_group(as_store(loc), path=f"{ANNDATA}/{name}", mode="r")
                     out[key] = (g, dict(g.attrs["uchrom_anndata"]))
             self._cache["embedded_bin"] = out
         return self._cache["embedded_bin"]
@@ -1262,11 +1274,11 @@ class Dataset:
             from ...core.embedded import EmbeddedContacts, list_embedded
 
             maps: Dict[str, Any] = {}
-            p = Path(self.path) if self.path else None
-            if p is not None and p.is_dir():
-                for key, name in list_embedded(str(p)).items():
+            loc = self._store_location()
+            if loc is not None:
+                for key, name in list_embedded(loc).items():
                     try:
-                        maps[key] = EmbeddedContacts(str(p), name)
+                        maps[key] = EmbeddedContacts(loc, name)
                     except Exception:   # unreadable group: fall back to the link, if any
                         continue
             self._cache["embedded_maps"] = maps
@@ -1860,6 +1872,15 @@ class DatasetStore:
         return ds
 
     def load(self, path) -> Dataset:
+        from ...core.remote import is_url
+
+        if is_url(path):      # s3:// https:// ...: opened backed over fsspec
+            p = str(path).rstrip("/")
+            base = p.rsplit("/", 1)[-1]
+            name = base[: -len(".chromdata.zarr")] if base.endswith(".chromdata.zarr") else base
+            ds = self.add(load_chromdata(p), name=name, path=p)
+            ds._draw_order()
+            return ds
         p = Path(path).expanduser().resolve()
         if not p.exists():
             raise FileNotFoundError(f"no such file: {p}")

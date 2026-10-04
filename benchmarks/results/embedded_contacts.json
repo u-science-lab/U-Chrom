@@ -34,43 +34,43 @@
  "exactness": {
   "bulk chr2 (auto resolution)": {
    "equal": true,
-   "linked_ms": 614,
-   "embedded_ms": 32
+   "linked_ms": 365,
+   "embedded_ms": 31
   },
   "bulk chr2 30-40 Mb, 25 kb": {
    "equal": true,
-   "linked_ms": 73,
-   "embedded_ms": 13
+   "linked_ms": 72,
+   "embedded_ms": 10
   },
   "bulk chr5 (r2)": {
    "equal": true,
-   "linked_ms": 97,
-   "embedded_ms": 10
+   "linked_ms": 94,
+   "embedded_ms": 8
   },
   "bulk whole genome": {
    "equal": true,
-   "linked_ms": 157,
-   "embedded_ms": 78
+   "linked_ms": 160,
+   "embedded_ms": 73
   },
   "one spot chr1": {
    "equal": true,
-   "linked_ms": 5,
+   "linked_ms": 4,
    "embedded_ms": 3
   },
   "one spot whole genome": {
    "equal": true,
    "linked_ms": 9,
-   "embedded_ms": 58
+   "embedded_ms": 47
   },
   "500 spots chr7": {
    "equal": true,
-   "linked_ms": 456,
+   "linked_ms": 209,
    "embedded_ms": 17
   },
   "500 spots whole genome": {
    "equal": true,
-   "linked_ms": 2195,
-   "embedded_ms": 773
+   "linked_ms": 2210,
+   "embedded_ms": 738
   },
   "ssAB chr1, every spot": {
    "equal": true
@@ -93,37 +93,93 @@
    "metadata_requests": 1,
    "data_requests": 69,
    "data_mb": 1.56,
-   "ms": 48
+   "ms": 43
   },
   "500 spots, chr1 (pseudo-bulk)": {
    "metadata_requests": 1,
    "data_requests": 8,
    "data_mb": 2.13,
-   "ms": 15
+   "ms": 17
   },
   "500 spots, whole genome": {
    "metadata_requests": 1,
    "data_requests": 80,
    "data_mb": 56.79,
-   "ms": 304
+   "ms": 329
   },
   "open a bulk map (metadata only)": {
    "metadata_requests": 1,
    "data_requests": 3,
    "data_mb": 0.0,
-   "ms": 10
+   "ms": 11
   },
   "bulk chr2:30-40 Mb at 25 kb": {
    "metadata_requests": 1,
    "data_requests": 6,
    "data_mb": 1.7,
-   "ms": 23
+   "ms": 20
   },
   "bulk whole genome at 500 kb": {
    "metadata_requests": 1,
    "data_requests": 28,
    "data_mb": 16.88,
-   "ms": 113
+   "ms": 186
+  }
+ },
+ "http": {
+  "open the store in the browser (backed)": {
+   "requests": 46,
+   "range_requests": 7,
+   "mb": 4.94,
+   "ms": 94
+  },
+  "contact map list (embedded)": {
+   "requests": 16,
+   "range_requests": 0,
+   "mb": 0.16,
+   "ms": 23
+  },
+  "bulk chr2 (auto resolution)": {
+   "requests": 5,
+   "range_requests": 0,
+   "mb": 0.35,
+   "ms": 21
+  },
+  "bulk chr2:30-40 Mb at 25 kb": {
+   "requests": 3,
+   "range_requests": 2,
+   "mb": 1.7,
+   "ms": 12
+  },
+  "bulk whole genome": {
+   "requests": 25,
+   "range_requests": 0,
+   "mb": 4.7,
+   "ms": 79
+  },
+  "one spot, chr1": {
+   "requests": 3,
+   "range_requests": 2,
+   "mb": 0.06,
+   "ms": 4
+  },
+  "one spot, whole genome": {
+   "requests": 65,
+   "range_requests": 44,
+   "mb": 1.54,
+   "ms": 80
+  },
+  "500 spots, chr7": {
+   "requests": 2,
+   "range_requests": 2,
+   "mb": 1.19,
+   "ms": 15
+  },
+  "500 spots, whole genome": {
+   "requests": 55,
+   "range_requests": 52,
+   "mb": 56.5,
+   "ms": 635
   }
  }
 }
