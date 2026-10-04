@@ -10,6 +10,7 @@
 
 pub mod align;
 pub mod contacts;
+pub mod diploid;
 pub mod dynamics;
 pub mod igm;
 pub mod params;

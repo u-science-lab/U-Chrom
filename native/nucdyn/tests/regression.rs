@@ -63,11 +63,15 @@ fn fnv(coords: &[Vec<[f64; 3]>]) -> u64 {
 }
 
 fn run(protocol: &str, emulate: bool) -> u64 {
+    run_with(protocol, emulate, |p| p)
+}
+
+fn run_with(protocol: &str, emulate: bool, f: impl Fn(Params) -> Params) -> u64 {
     let (names, ca, pa, cb, pb) = toy_contacts();
     let n = ca.len();
     let ambig: Vec<i64> = (1..=n as i64).collect();
     let active = vec![true; n];
-    let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &ambig, active: &active, prior_lr: None };
+    let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &ambig, active: &active, prior_lr: None, dip: None };
     let p = Params {
         protocol: protocol.to_string(),
         particle_sizes: vec![4e6, 2e6, 4e5, 2e5],
@@ -79,6 +83,7 @@ fn run(protocol: &str, emulate: bool) -> u64 {
         n_threads: 3,
         ..Default::default()
     };
+    let p = f(p);
     let mut eng = CpuEngine::new(p.n_threads).unwrap();
     let out = calc_genome_structure(&input, &p, &mut eng).unwrap();
     fnv(&out.coords)
@@ -93,6 +98,12 @@ const GOLDEN: [(&str, bool, &[u64], &[u64]); 3] = [
     ("nuc_dynamics_2017", true, &[0x392f2bedd2d54888], &[0xf69e41b3cd003a3b, 0x8f322f96b55ab2d0]),
     ("release_1.3", false, &[0x97aac5aaf948cf94], &[0x8ce4aa5821323198, 0xca10c7de591660e9]),
 ];
+
+/// EMber (protocol "robust") with its frozen defaults (tag `robust-frozen`), on the same toy
+/// contacts and a shortened schedule: (macOS aarch64, Linux x86-64: Sherlock, GitHub
+/// ubuntu-latest).  Recorded 2026-10-03 on commit 6fcf370, whose CPU engine is that of the tag,
+/// before diploid support was added (diploid input takes a separate path, `diploid.rs`).
+const GOLDEN_ROBUST: (&[u64], &[u64]) = (&[0x0691d3b6eac2a99a], &[0x50d611f3ba255008, 0xa6236727e14c942c]);
 
 #[test]
 fn existing_protocols_bit_identical() {
@@ -112,5 +123,39 @@ fn existing_protocols_bit_identical() {
         if !want.is_empty() {
             assert!(want.contains(&h), "{proto} (emulate {emulate}) changed: 0x{h:016x} not in {want:x?}");
         }
+    }
+}
+
+/// EMber: the frozen defaults with the toy schedule (re-weighting, support evidence, refinement,
+/// sampling and adaptive resolution all active; particle sizes down to 20 kb so the merging of
+/// contact-free particles below 25 kb runs too).
+fn run_robust() -> u64 {
+    run_with("robust", false, |p| Params {
+        particle_sizes: vec![4e6, 2e6, 4e5, 1e5, 2e4],
+        robust_temp_steps: vec![12],
+        robust_dynamics_steps: vec![10],
+        robust_refine_temp_steps: 4,
+        robust_sample_steps: 3,
+        robust_sample_dyn_steps: 5,
+        ..p
+    })
+}
+
+#[test]
+fn ember_bit_identical() {
+    let print = std::env::var("UCHROM_NUCDYN_PRINT_GOLDEN").is_ok();
+    let h = run_robust();
+    let want: &[u64] = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        GOLDEN_ROBUST.0
+    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        GOLDEN_ROBUST.1
+    } else {
+        &[]
+    };
+    if print || want.is_empty() {
+        eprintln!("golden robust: 0x{h:016x}");
+    }
+    if !want.is_empty() {
+        assert!(want.contains(&h), "robust (EMber) changed: 0x{h:016x} not in {want:x?}");
     }
 }

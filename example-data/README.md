@@ -44,6 +44,8 @@ auto-downloaded by the tutorials on first run into this directory.
 | `nagano2017_hap/` (Nagano 2017 haploid mESC scHi-C fend pairs + mm9 fends + chain) | 1.39 GB (+5 GB streamed, 253 MB kept) | no | schic2 S3 / GEO GSE94489 / UCSC (opt-in, `--nagano2017_hap`) | `benchmarks/screcon/matched_data.py nagano` → NucDynamics / hickit → `matched.py` (step 1); `robust` matched-imaging analysis (serum cells split into development / held-back halves, `robust_matched_split.py`, PREREG §6) |
 | `takei2021_brain/` (Takei 2021 Science cortex seqFISH+ tables S5 / S7 / S8 / S10) | 597 MB | no | Zenodo 4708112 (opt-in, `--takei2021_brain`) | `benchmarks/screcon/matched.py` brain imaging reference (step 2) |
 | `tan2021_cortex/` (Tan 2021 Dip-C adult cortex, 510 cells: pairs + 5 clean 3dg) | 13 GB | no | GEO GSE146397 per-GSM (opt-in, `--tan2021_cortex`) | `benchmarks/screcon/matched.py` brain Dip-C baseline (step 2) |
+| `tan2018_gm12878/` (Tan 2018 Dip-C GM12878, 17 cells: hickit phased pairs + 3dg, Dip-C clean 3dg × 3, Dip-C 3-D-imputed contacts) | ~0.7 GB | no | GEO GSE117876 per-GSM (opt-in, `--tan2018_gm12878`) | diploid EMber / NucDynamics validation (`benchmarks/screcon/diploid_real.py`, `diploid_heldout.py`, `sherlock/dip_real.sbatch`; PREREG §6 diploid addition) |
+| `su2020_imr90/genomic-scale.tsv`, `4DNFIFLJGGNR.csv` (catalogued above) | — | no | — | also the diploid imaging-truth simulation (`benchmarks/screcon/diploid_sim.py`: both homologs) |
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
 | `H1Esc-HFF.R1.tar.gz`                 | 128 MB  | no              | UW Noble lab  | `higashi_embedding` tutorial (sci-Hi-C H1Esc+HFF mix)                   |
 | `H1Esc-HFF.R1.labeled`                | 92 KB   | no              | UW Noble lab  | `higashi_embedding` tutorial (cell-type labels)                         |
@@ -940,6 +942,27 @@ contacts), matched to their GSM by the GEO sample records (`!Sample_description`
   labels came from the paper's own clustering of these exact structures (the metadata file
   calls them "structure types").
 - **Download**: `download_data.py --tan2021_cortex` (or `sherlock/download_matched.sbatch PART=brain`).
+
+### `tan2018_gm12878/` — Tan 2018 Dip-C, GM12878 (17 cells, ~0.7 GB)
+
+- **Source**: Tan L, Xing D, Chang C-H, Li H, Xie XS. "Three-dimensional genome structures of
+  single diploid human cells." *Science* 361:924–928 (2018), doi:10.1126/science.aat5641.  GEO
+  [GSE117876](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE117876) (per-GSM files).
+- **Files**: per cell k (1–17) the hickit re-processing `GSM<3314358+k>_gm12878_<k>.tar.gz`
+  (~20 MB: `gm12878_<k>.pairs.gz` — 4DN pairs, hg19 names without `chr`, columns `readID chr1 pos1
+  chr2 pos2 strand1 strand2 phase0 phase1 phase_prob00..11`: `phase0/1` the SNP phases of the legs
+  (`0`, `1`, `.`), `phase_prob*` hickit's 2-D imputation; `gm12878_<k>.3dg.gz` hickit's structure,
+  copies `1a` / `1b`); the published Dip-C structures `<GSM>_[rep1_|rep2_]gm12878_<k>.impute3.round4.clean.3dg.txt.gz`
+  (20 kb, `1(pat)` / `1(mat)`; three replicate runs) and the contacts after Dip-C's 3-D phase
+  imputation `<GSM>_gm12878_<k>.impute3.round4.con.txt.gz`; `<GSM>` = GSM3271347 + k − 1 for k ≤ 9,
+  GSM3271356 + 2 (k − 10) for k ≥ 10 (cells 10–17 have two libraries; the files are on the "-1" GSM).
+- **Content** (verified from GEO / the files): GEO has no hickit re-processing for cells 4, 8, 16
+  and no structure for cell 8 (dedup / raw contacts only), so 14 cells have the pairs input.
+  Cell 1: 1,048,961 contacts, 8.0 % of the legs phased, 0.7 % of the contacts phased at both
+  ends, 14.7 % at one end; 78.7 % cis.  Haplotype 0 = paternal (`pat`), 1 = maternal (Dip-C
+  `classes.Haplotypes`); hickit copy `a` = haplotype 0.  GM12878 is female (chrX two copies).
+- **Download**: `download_data.py --tan2018_gm12878`; on Sherlock `sherlock/download_diploid.sbatch`
+  (also unpacks the tarballs to `cells/gm12878_<k>/`).
 
 ### Liu 2025 DNA-MERFISH, mouse cortex (4DN) — catalogued, not downloaded
 

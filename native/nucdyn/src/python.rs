@@ -29,9 +29,11 @@ fn make_engine(p: &Params) -> PyResult<Box<dyn StageEngine + Send>> {
 }
 
 /// Run the full NucDynamics protocol.  `params_json` holds `Params` fields;
-/// `prior_lr` (robust): per-contact likelihood ratio true / false.
+/// `prior_lr` (robust): per-contact likelihood ratio true / false.  Diploid input: `hap_a` /
+/// `hap_b` (0, 1, -1 = unknown per contact end), `ploidy` (1 or 2 per name) and optionally
+/// `phase_prior` (4 values per contact, index 2 hap_a + hap_b).
 #[pyfunction]
-#[pyo3(signature = (names, chr_a, pos_a, chr_b, pos_b, ambig, active, params_json, prior_lr=None))]
+#[pyo3(signature = (names, chr_a, pos_a, chr_b, pos_b, ambig, active, params_json, prior_lr=None, hap_a=None, hap_b=None, ploidy=None, phase_prior=None))]
 #[allow(clippy::too_many_arguments)]
 fn calc_genome_structure<'py>(
     py: Python<'py>,
@@ -44,6 +46,10 @@ fn calc_genome_structure<'py>(
     active: PyReadonlyArray1<'py, bool>,
     params_json: &str,
     prior_lr: Option<PyReadonlyArray1<'py, f64>>,
+    hap_a: Option<PyReadonlyArray1<'py, i8>>,
+    hap_b: Option<PyReadonlyArray1<'py, i8>>,
+    ploidy: Option<Vec<u8>>,
+    phase_prior: Option<PyReadonlyArray1<'py, f64>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let p: Params = serde_json::from_str(params_json).map_err(|e| PyValueError::new_err(e.to_string()))?;
     p.validate().map_err(PyValueError::new_err)?;
@@ -65,9 +71,27 @@ fn calc_genome_structure<'py>(
         ambig.as_slice()?.to_vec(),
         active.as_slice()?.to_vec(),
     );
+    let dip_arrays: Option<(Vec<i8>, Vec<i8>, Vec<u8>, Option<Vec<f64>>)> = match (hap_a, hap_b) {
+        (Some(a), Some(b)) => {
+            let ploidy = ploidy.unwrap_or_else(|| vec![2; names.len()]);
+            let pr = match phase_prior {
+                Some(x) => Some(x.as_slice()?.to_vec()),
+                None => None,
+            };
+            Some((a.as_slice()?.to_vec(), b.as_slice()?.to_vec(), ploidy, pr))
+        }
+        (None, None) => None,
+        _ => return Err(PyValueError::new_err("give both hap_a and hap_b, or neither")),
+    };
     let mut engine = make_engine(&p)?;
     let res = py.detach(move || {
-        let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &am, active: &ac, prior_lr: lr.as_deref() };
+        let dip = dip_arrays.as_ref().map(|(a, b, k, pr)| crate::diploid::DiploidInput {
+            hap_a: a,
+            hap_b: b,
+            ploidy: k,
+            prior: pr.as_deref(),
+        });
+        let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &am, active: &ac, prior_lr: lr.as_deref(), dip };
         cgs(&input, &p, engine.as_mut())
     });
     let out = res.map_err(PyRuntimeError::new_err)?;
@@ -90,7 +114,47 @@ fn calc_genome_structure<'py>(
     d.set_item("seconds_total", out.seconds_total)?;
     d.set_item("stages_json", serde_json::to_string(&out.stages).unwrap())?;
     d.set_item("contact_weights", out.contact_weights.into_pyarray(py))?;
+    d.set_item("diploid", out.diploid)?;
+    d.set_item("phase_probs", out.phase_probs.into_pyarray(py))?;
     Ok(d)
+}
+
+/// The 2-D neighbourhood phase prior of diploid contacts (`diploid::neighbour_phase_probs`,
+/// hickit's imputation settings): flat array of 4 values per contact.
+#[pyfunction]
+#[pyo3(signature = (names, chr_a, pos_a, chr_b, pos_b, hap_a, hap_b, ploidy, cis_sep=10_000_000, max_iter=200))]
+#[allow(clippy::too_many_arguments)]
+fn diploid_neighbour_prior<'py>(
+    py: Python<'py>,
+    names: Vec<String>,
+    chr_a: PyReadonlyArray1<'py, u32>,
+    pos_a: PyReadonlyArray1<'py, i64>,
+    chr_b: PyReadonlyArray1<'py, u32>,
+    pos_b: PyReadonlyArray1<'py, i64>,
+    hap_a: PyReadonlyArray1<'py, i8>,
+    hap_b: PyReadonlyArray1<'py, i8>,
+    ploidy: Vec<u8>,
+    cis_sep: i64,
+    max_iter: usize,
+) -> PyResult<Bound<'py, numpy::PyArray1<f64>>> {
+    let (ca, pa, cb, pb, ha, hb) = (
+        chr_a.as_slice()?.to_vec(),
+        pos_a.as_slice()?.to_vec(),
+        chr_b.as_slice()?.to_vec(),
+        pos_b.as_slice()?.to_vec(),
+        hap_a.as_slice()?.to_vec(),
+        hap_b.as_slice()?.to_vec(),
+    );
+    let n = ca.len();
+    let res = py.detach(move || {
+        let amb: Vec<i64> = (1..=n as i64).collect();
+        let act = vec![true; n];
+        let dip = crate::diploid::DiploidInput { hap_a: &ha, hap_b: &hb, ploidy: &ploidy, prior: None };
+        let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &amb, active: &act, prior_lr: None, dip: None };
+        let np = crate::diploid::NbrPrior { max_iter, ..Default::default() };
+        crate::diploid::neighbour_phase_probs(&input, &dip, cis_sep, &np)
+    });
+    Ok(res.map_err(PyValueError::new_err)?.into_pyarray(py))
 }
 
 fn to_v3(a: &PyReadonlyArray2<'_, f64>) -> PyResult<Vec<V3>> {
@@ -399,6 +463,7 @@ fn default_params_json() -> String {
 #[pymodule]
 fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(calc_genome_structure, m)?)?;
+    m.add_function(wrap_pyfunction!(diploid_neighbour_prior, m)?)?;
     m.add_function(wrap_pyfunction!(run_dynamics, m)?)?;
     m.add_function(wrap_pyfunction!(debug_setup_stage, m)?)?;
     m.add_function(wrap_pyfunction!(gpu_available, m)?)?;

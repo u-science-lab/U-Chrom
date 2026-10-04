@@ -22,6 +22,7 @@ Usage::
     python example-data/download_data.py --nagano2017_hap        # opt-in, 1.4 GB (+5 GB streamed) scHi-C
     python example-data/download_data.py --takei2021_brain       # opt-in, 0.6 GB brain seqFISH+ tables
     python example-data/download_data.py --tan2021_cortex        # opt-in, ~13 GB Dip-C adult cortex
+    python example-data/download_data.py --tan2018_gm12878       # opt-in, ~0.7 GB Dip-C GM12878 (diploid, phased)
     python example-data/download_data.py --su2020_genome         # opt-in, 203 MB Su 2020 genome-scale (bulk benchmark)
     python example-data/download_data.py --rao2014_imr90_4dn     # opt-in, 4.6 GB IMR90 mcool (Sherlock only)
     python example-data/download_data.py --bonev2017_mesc_4dn    # opt-in, 12.6 GB mESC mcool (Sherlock only)
@@ -112,6 +113,33 @@ def _tan2021_files() -> list[tuple[str, str]]:
 
 
 _TAKEI_BRAIN = "https://zenodo.org/records/4708112/files"
+
+# Tan et al. 2018 (Science 361:924) Dip-C, GM12878 (GEO GSE117876): 17 cells.  Per cell the hickit
+# re-processing (GSM3314359 + k - 1: tarball with the imputed phased pairs and hickit's 3dg) and the
+# published Dip-C structures (impute3.round4.clean.3dg of the "Cell k" / "Cell k-1" GSM, plus its rep1 /
+# rep2 replicate runs).  Cells 10-17 were sequenced in two libraries; the files sit on the "-1" GSM.
+_TAN18_DIPC_GSM = [3271347 + k for k in range(9)] + [3271356 + 2 * k for k in range(8)]
+
+
+def _tan2018_files() -> list[tuple[str, str]]:
+    # GEO has no hickit re-processing for cells 4, 8 and 16, and no Dip-C structure for cell 8
+    out = []
+    for k in range(1, 18):
+        cell = f"gm12878_{k:02d}"
+        if k not in (4, 8, 16):
+            hick = f"GSM{3314358 + k}_{cell}.tar.gz"
+            out.append((f"tan2018_gm12878/{hick}", _gsm(hick)))
+        if k == 8:
+            continue
+        g = f"GSM{_TAN18_DIPC_GSM[k - 1]}"
+        for pre in ("", "rep1_", "rep2_"):
+            name = f"{g}_{pre}{cell}.impute3.round4.clean.3dg.txt.gz"
+            out.append((f"tan2018_gm12878/{name}", _gsm(name)))
+        # Dip-C's contacts after its 3-D phase imputation (4 rounds): phases inferred from the structure
+        name = f"{g}_{cell}.impute3.round4.con.txt.gz"
+        out.append((f"tan2018_gm12878/{name}", _gsm(name)))
+    return out
+
 
 DATASETS = {
     "takei": {
@@ -387,6 +415,12 @@ DATASETS = {
         "size_mb": 597,
         "default": False,
         "description": "Takei 2021 Science mouse cortex DNA seqFISH+ 1 Mb / 25 kb spots, RNA, radial scores (Zenodo 4708112)",
+    },
+    "tan2018_gm12878": {
+        "files": _tan2018_files(),
+        "size_mb": 700,
+        "default": False,
+        "description": "Tan 2018 Dip-C GM12878, 17 cells: hickit imputed phased pairs + 3dg, Dip-C clean 3dg x 3 (GEO GSE117876)",
     },
     "tan2021_cortex": {
         "files": _tan2021_files(),

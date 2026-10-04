@@ -2,6 +2,8 @@
 
 _EXPORTS = {
     "read_pairs": ("._io", "read_pairs"),
+    "read_phased_pairs": (".phased", "read_phased_pairs"),
+    "write_phased_pairs": (".phased", "write_phased_pairs"),
     "load_cool": ("._io", "load_cool"),
     "load_hic": ("._io", "load_hic"),
     "load_hic_inter": ("._io", "load_hic_inter"),

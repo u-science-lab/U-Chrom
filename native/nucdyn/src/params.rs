@@ -169,6 +169,25 @@ pub struct Params {
     pub robust_sample_steps: usize,
     pub robust_sample_dyn_steps: usize,
     pub robust_sample_snapshots: usize,
+    // ---- diploid (homolog-resolved) input only (`diploid.rs`; ignored for haploid input) ----
+    /// Unphased ends of an intra-chromosomal contact closer than this (bp) are taken to be on
+    /// the same homolog (hickit's imputation prior gives P(same homolog) >= 0.99 below
+    /// 10 Mb); 0: every copy combination is a candidate.
+    pub diploid_cis_sep: i64,
+    /// EMber (protocol robust): from the first re-weighted stage on, every candidate copy pair
+    /// of an ambiguous contact is its own restraint, weighted by its posterior probability
+    /// (true contact on that copy pair).  False: the candidates stay one ambiguous restraint
+    /// (NucDynamics combined distance) weighted by the probability that the contact is true.
+    /// Default false: chosen on the diploid development set (benchmarks/screcon/diploid_devlog.md:
+    /// splitting the soft responsibilities pulls both homologs together early and loses
+    /// ~0.2 cis / ~0.3 whole-genome Spearman on the imaging truths).
+    pub robust_dip_split: bool,
+    /// EMber: multiply the candidate prior by a 2-D neighbourhood phase prior (phased contacts
+    /// near the contact in both ends vote for its copy pair; hickit's imputation, re-implemented
+    /// with hickit's settings: `diploid::neighbour_prior`).  Default true: chosen on the diploid
+    /// development set (diploid_devlog.md §3: phase accuracy +0.06 on the imaging truths, +0.09
+    /// on masked GM12878 phases, structure metrics unchanged within 0.01).
+    pub robust_dip_nbr_prior: bool,
 }
 
 impl Default for Params {
@@ -246,6 +265,9 @@ impl Default for Params {
             robust_sample_steps: 20,
             robust_sample_dyn_steps: 20,
             robust_sample_snapshots: 1,
+            diploid_cis_sep: 10_000_000,
+            robust_dip_split: false,
+            robust_dip_nbr_prior: true,
         }
     }
 }

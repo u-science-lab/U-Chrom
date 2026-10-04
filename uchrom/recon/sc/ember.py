@@ -18,6 +18,17 @@ the frozen method.
     cd = reconstruct_ember("cell1.pairs", n_models=10, device="auto")
     cd.layers["model_0"]                        # one model per layer
     cd.results["ember.contact_weights"]         # posterior weight of every input contact
+
+Phased (homolog-resolved) contacts — hickit ``.pairs`` with ``phase0`` / ``phase1``, Dip-C
+``.con`` — give a diploid reconstruction: one particle chain per chromosome copy, the copy pair
+of every contact with an unphased end inferred by EM from the structure (the copy pair is a
+latent variable of the same mixture model)::
+
+    cd = reconstruct_ember("cell.contacts.pairs.gz", ploidy="auto")   # traces chr1(pat), chr1(mat), ...
+    cd.results["ember.imputed_phase"]           # most probable (hap_a, hap_b) of every contact
+
+The diploid extension is new (not part of the frozen, pre-registered test); its haploid
+behaviour is unchanged.
 """
 
 from __future__ import annotations
@@ -49,6 +60,9 @@ def reconstruct_ember(
     key_added: Optional[str] = "ember",
     copy: bool = False,
     verbose: bool = False,
+    ploidy: Any = None,
+    hap_names: Sequence[str] = ("pat", "mat"),
+    phase_prior: bool = True,
     **engine_params: Any,
 ):
     """Single-cell Hi-C genome structure ensemble with EMber.
@@ -81,6 +95,13 @@ def reconstruct_ember(
     copy
         Reconstruction always creates a new ``ChromData`` from the contacts;
         accepted for the calling convention (no effect).
+    ploidy, hap_names, phase_prior
+        Phased (diploid) input, see :func:`uchrom.recon.sc.nucdyn.reconstruct_nucdyn`:
+        copies per chromosome (``None`` = ``"auto"``: male when chrY is present;
+        ``"haploid"`` ignores the phases), haplotype names in the trace ids, and whether
+        hickit's imputed phase probabilities (when present) are the prior of the copy pairs.
+        Adds the results ``<key>.phase_probs`` / ``<key>.imputed_phase`` and
+        ``uns[key]["diploid"]`` (phasing statistics).
 
     Returns
     -------
@@ -94,4 +115,5 @@ def reconstruct_ember(
     return reconstruct_nucdyn(
         contacts, n_models=n_models, device=device, n_threads=n_threads, seed=seed, protocol=EMBER_PROTOCOL,
         particle_sizes=particle_sizes, genome_ranges=chrom, cell_id=cell_id, key_added=key_added, params=params,
-        verbose=verbose, _method="ember", **engine_params)
+        verbose=verbose, ploidy=ploidy, hap_names=hap_names, phase_prior=phase_prior, _method="ember",
+        **engine_params)

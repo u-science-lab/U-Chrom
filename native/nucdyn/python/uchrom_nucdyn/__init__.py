@@ -34,7 +34,7 @@ from ._engine import (  # noqa: F401
     gpu_info,
     run_dynamics,
 )
-from .io import read_contact_pairs, read_ncc  # noqa: F401
+from .io import read_contact_pairs, read_ncc, read_phased_contacts  # noqa: F401
 
 __all__ = [
     "calc_genome_structure",
@@ -47,6 +47,8 @@ __all__ = [
     "run_dynamics",
     "read_ncc",
     "read_contact_pairs",
+    "read_phased_contacts",
+    "resolve_ploidy",
     "HAS_GPU",
     "__version__",
 ]
@@ -55,6 +57,39 @@ __all__ = [
 def default_params() -> Dict[str, Any]:
     """Default calculation parameters (those of the original command line)."""
     return json.loads(default_params_json())
+
+
+def resolve_ploidy(names: Sequence[str], ploidy: Any = "auto") -> list:
+    """Copies (1 or 2) of each chromosome for diploid input.
+
+    ``"auto"`` (hickit's rule): ``"male"`` when a Y chromosome is among ``names`` (X and Y
+    single copy, autosomes two), else every chromosome two copies.  ``"diploid"``,
+    ``"male"``, ``"haploid"`` or a dict ``{chrom: copies}`` as :func:`resolve_copies`.
+    """
+    if ploidy == "auto":
+        ploidy = "male" if any(_SEX.get(str(c).lower()) == "Y" for c in names) else "diploid"
+    k = resolve_copies(names, ploidy)
+    if any(x not in (1, 2) for x in k):
+        raise ValueError("diploid input: 1 or 2 copies per chromosome")
+    return k
+
+
+def neighbour_phase_prior(chrom_a, pos_a, chrom_b, pos_b, hap_a, hap_b, *, ploidy: Any = "auto",
+                          cis_sep: int = 10_000_000, max_iter: int = 200) -> np.ndarray:
+    """EMber's 2-D neighbourhood phase prior (``robust_dip_nbr_prior``; hickit's imputation
+    re-implemented): (n, 4) probability of (hap_a, hap_b) per contact, index 2 hap_a + hap_b."""
+    from ._engine import diploid_neighbour_prior as _nbr
+
+    ca = np.asarray(chrom_a).astype(str)
+    cb = np.asarray(chrom_b).astype(str)
+    names = sorted(set(ca.tolist()) | set(cb.tolist()))
+    idx = {n: i for i, n in enumerate(names)}
+    ia = np.fromiter((idx[c] for c in ca), dtype=np.uint32, count=len(ca))
+    ib = np.fromiter((idx[c] for c in cb), dtype=np.uint32, count=len(cb))
+    out = _nbr(names, ia, np.ascontiguousarray(pos_a, np.int64), ib, np.ascontiguousarray(pos_b, np.int64),
+               np.ascontiguousarray(hap_a, np.int8), np.ascontiguousarray(hap_b, np.int8),
+               [int(k) for k in resolve_ploidy(names, ploidy)], int(cis_sep), int(max_iter))
+    return np.asarray(out).reshape(len(ia), 4)
 
 
 def calc_genome_structure(
@@ -66,6 +101,10 @@ def calc_genome_structure(
     ambiguity: Optional[Sequence[int]] = None,
     active: Optional[Sequence[bool]] = None,
     prior_lr: Optional[Sequence[float]] = None,
+    hap_a: Optional[Sequence[int]] = None,
+    hap_b: Optional[Sequence[int]] = None,
+    ploidy: Any = "auto",
+    phase_prior: Optional[Any] = None,
     **params: Any,
 ) -> Dict[str, Any]:
     """Run the hierarchical NucDynamics protocol on single-cell contacts.
@@ -85,6 +124,18 @@ def calc_genome_structure(
         Protocol ``"robust"`` only: per-contact likelihood ratio (true / false)
         from evidence other than the structure; multiplies each contact's
         posterior odds (1 = no information, 0 = certainly false).
+    hap_a, hap_b
+        Diploid (homolog-resolved) input: haplotype of each contact end, 0, 1 or -1
+        (unknown), e.g. ``phase0`` / ``phase1`` of hickit pairs.  Both or neither; with them
+        every chromosome copy is its own particle chain (protocols ``nuc_dynamics_2017`` and
+        ``robust`` / EMber; see the engine's ``diploid.rs``).
+    ploidy
+        Diploid input: copies per chromosome, see :func:`resolve_ploidy` (default
+        ``"auto"``: male when a Y chromosome is present).
+    phase_prior
+        Diploid input, optional: (n, 4) prior over the copy pair of each contact (index
+        2 hap_a + hap_b), e.g. hickit's imputed ``phase_prob00 .. phase_prob11``; EMber uses
+        it as the prior of its candidate copy pairs.
     **params
         Any field of :func:`default_params` (``particle_sizes``, ``n_models``,
         ``seed``, ``device``, ``n_threads``, ``temp_steps``, ...).
@@ -98,6 +149,11 @@ def calc_genome_structure(
     log), ``seconds_total`` and, for ``protocol="robust"``, ``contact_weights``
     (per input contact: the final weight of its restraint, the posterior
     probability that it is a true contact; NaN when it was filtered out).
+    Diploid input adds ``copy`` (haplotype of each particle's chain; particles are
+    grouped by chromosome, then copy), ``ploidy`` ({chrom: copies}) and ``phase_probs``
+    ((n, 4): per input contact the probability of each (hap_a, hap_b) given that it is a
+    true contact - EMber's posteriors, or 1 for the closest candidate in the final 2017
+    structure; NaN = filtered out); ``contact_weights`` (EMber) is then P(true).
     """
     ca = np.asarray(chrom_a).astype(str)
     cb = np.asarray(chrom_b).astype(str)
@@ -124,11 +180,31 @@ def calc_genome_structure(
             p[key] = [int(p[key])]
     p["particle_sizes"] = [float(s) for s in p["particle_sizes"]]
     lr = None if prior_lr is None else np.ascontiguousarray(prior_lr, dtype=np.float64)
-    res = _calc_genome_structure(names, ia, pa, ib, pb, amb, act, json.dumps(p), lr)
-    chroms = [names[c] for c in res["chroms"]]
+    diploid = hap_a is not None or hap_b is not None
+    if diploid:
+        if hap_a is None or hap_b is None:
+            raise ValueError("give both hap_a and hap_b, or neither")
+        h_a = np.ascontiguousarray(hap_a, dtype=np.int8)
+        h_b = np.ascontiguousarray(hap_b, dtype=np.int8)
+        if len(h_a) != n or len(h_b) != n:
+            raise ValueError("hap_a / hap_b: one value per contact")
+        copies = resolve_ploidy(names, ploidy)
+        pr = None
+        if phase_prior is not None:
+            pr = np.ascontiguousarray(np.asarray(phase_prior, dtype=np.float64).reshape(n, 4)).ravel()
+        res = _calc_genome_structure(names, ia, pa, ib, pb, amb, act, json.dumps(p), lr, h_a, h_b,
+                                     [int(k) for k in copies], pr)
+    else:
+        res = _calc_genome_structure(names, ia, pa, ib, pb, amb, act, json.dumps(p), lr)
+    ids = list(res["chroms"])
+    if res["diploid"]:
+        chroms = [names[c // 2] for c in ids]
+        copy = np.concatenate([np.full(len(s), c % 2, dtype=np.int8) for c, s in zip(ids, res["seq_pos"])])
+    else:
+        chroms = [names[c] for c in ids]
     chrom = np.concatenate([np.full(len(s), c, dtype=object) for c, s in zip(chroms, res["seq_pos"])])
     start = np.concatenate(res["seq_pos"]).astype(np.int64)
-    return {
+    out = {
         "coords": res["coords"],
         "chrom": chrom,
         # particle sequence position as the original reports it: 2017 protocol
@@ -143,7 +219,13 @@ def calc_genome_structure(
         # protocol "robust": final restraint weight of every input contact (NaN = filtered out)
         "contact_weights": np.asarray(res["contact_weights"], np.float64),
         "params": p,
+        "diploid": bool(res["diploid"]),
     }
+    if res["diploid"]:
+        out["copy"] = copy
+        out["ploidy"] = {c: int(k) for c, k in zip(names, copies)}
+        out["phase_probs"] = np.asarray(res["phase_probs"], np.float64).reshape(n, 4)
+    return out
 
 
 # ---------------------------------------------------------------------------

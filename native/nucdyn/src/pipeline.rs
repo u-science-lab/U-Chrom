@@ -26,6 +26,9 @@ pub struct Input<'a> {
     /// protocol `robust`: per-contact likelihood ratio true / false from other
     /// evidence (multiplies the posterior odds; 1 = none, 0 = certainly false).
     pub prior_lr: Option<&'a [f64]>,
+    /// Diploid (homolog-resolved) input: haplotype of each contact end and copies per
+    /// chromosome (`diploid.rs`).  None: haploid (one particle chain per chromosome).
+    pub dip: Option<crate::diploid::DiploidInput<'a>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -64,6 +67,12 @@ pub struct Output {
     pub seconds_total: f64,
     /// protocol `robust`: final restraint weight of every input contact (NaN = filtered out); empty otherwise
     pub contact_weights: Vec<f64>,
+    /// Diploid input: `chroms` are copy ids (2 x chromosome + haplotype, `diploid::copy_id`).
+    pub diploid: bool,
+    /// Diploid input: per input contact 4 values, the probability of each (hap_a, hap_b)
+    /// (index 2 hap_a + hap_b, input orientation) given that the contact is true (NaN =
+    /// filtered out); empty otherwise.
+    pub phase_probs: Vec<f64>,
 }
 
 /// Something that anneals the models of one stage.
@@ -256,6 +265,9 @@ fn log(p: &Params, msg: &str) {
 pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEngine) -> Result<Output, String> {
     p.validate()?;
     check_input(input)?;
+    if let Some(dip) = &input.dip {
+        return crate::diploid::calc_genome_structure(input, dip, p, engine);
+    }
     if p.protocol == "nuc_dynamics_2017" {
         crate::protocol2017::calc_genome_structure(input, p, engine)
     } else if p.protocol == "robust" {
@@ -413,5 +425,7 @@ pub fn calc_genome_structure_release13(input: &Input, p: &Params, engine: &mut d
         stages,
         seconds_total: t0.elapsed().as_secs_f64(),
         contact_weights: vec![],
+        diploid: false,
+        phase_probs: vec![],
     })
 }

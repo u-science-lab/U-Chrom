@@ -374,6 +374,8 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
         stages,
         seconds_total: t0.elapsed().as_secs_f64(),
         contact_weights: vec![],
+        diploid: false,
+        phase_probs: vec![],
     })
 }
 

@@ -94,6 +94,79 @@ paper reports every endpoint of §3-§4 whatever the outcome.
   seeds / resolutions as the NucDynamics baseline runs of each test (10 models held-out / real,
   5 models simulations, seed 1).  No parameter or code change to the method after this line.
 
+* **2026-10-03 — diploid (homolog-resolved) extension: development set fixed before any diploid
+  run on benchmark data.**  EMber is extended to phased diploid input (`native/nucdyn/src/diploid.rs`:
+  one chain per chromosome copy; the copy pair of a contact with an unphased end is a latent
+  variable of the same mixture model).  This is a *new* analysis, not part of the haploid test of
+  §3-§5, whose result (§8) is unchanged.  Rules:
+  * **Frozen**: every haploid parameter of EMber (the `robust_*` defaults of tag `robust-frozen`)
+    stays as frozen; the haploid code path is pinned by `native/nucdyn/tests/regression.rs`.
+  * **Diploid parameters that may be tuned, on the development units below only**:
+    `robust_dip_split` (each candidate copy pair its own restraint vs one ambiguous restraint
+    weighted by P(true)), the use of a prior over candidate copy pairs (none / hickit's imputed
+    `phase_prob`), and — only if the development numbers call for it — the same-homolog rule for
+    close unphased cis ends (`diploid_cis_sep`, 10 Mb from hickit's imputation prior, not tuned
+    unless reported here).  Every tuned value and the development numbers behind it go to
+    `diploid_devlog.md`.
+    *Added 2026-10-03, before any run with it*: `robust_dip_nbr_prior` — a 2-D neighbourhood
+    phase prior computed inside EMber (phased contacts within hickit's imputation radius vote for
+    the copy pair of a contact with an unphased end; hickit's neighbour count, weights,
+    pseudo-count and radius are taken as they are, not tuned): on / off, decided on the
+    development units only, adopted only if phase accuracy improves without any structure metric
+    or stratum getting worse by more than 0.01.  The hickit-imputation prior is re-evaluated on
+    the same terms.  The NucDynamics-2017 diploid baseline (ambiguous restraints) and
+    hickit (Dip-C schedule, `-u` imputation, `-S` split at 0.75) are not tuned.
+  * **Development units**: imaging-truth simulations — Su 2020 genome-scale IMR90 (1,041 loci,
+    homologs resolved experimentally) and Takei 2021 1 Mb mESC (homologs split by the screcon
+    heuristic), diploid truth cells 1-2 of each (cells drawn with seed 1 by
+    `diploid_sim.py truth`), all conditions; Dip-C GM12878 (Tan et al. 2018, GSE117876) cells
+    1-4 (GSM3271347-GSM3271350), all checks (held-out phased contacts, agreement with the
+    published Dip-C structures, run-to-run precision).
+    *Amended 2026-10-03, before any real-data run*: the input is the authors' hickit
+    re-processing (GSM3314359+, phased pairs), which GEO lacks for cells 4, 8 and 16 (cell 8 has
+    no structure at all), so the GM12878 development cells are 1-3.
+  * **Held back (one-shot test, after freezing the diploid parameters with a tag)**: truth cells
+    3-5 of both simulation datasets; Dip-C GM12878 cells 5-7, 9-15 and 17 (11 cells); Uni-C GM12878 (Gao et al. 2025,
+    GSE267873, 11 cells) entirely — its split (proposed: cells sorted by GSM, first 3 for a
+    resolution / runtime pilot that does not set parameters, remaining 8 test) is fixed in this
+    file before any Uni-C reconstruction.
+
+* **2026-10-04 — diploid configuration frozen (tag `ember-diploid-frozen`) and the diploid test
+  pre-registered, before any test run.**
+  * **Frozen method** ("EMber diploid"): protocol `"robust"` of `native/nucdyn` at the tagged
+    commit with its engine defaults — the haploid parameters of tag `robust-frozen` unchanged, and
+    `diploid_cis_sep` = 10 Mb, `robust_dip_split` = false, `robust_dip_nbr_prior` = true, no external
+    phase prior, ploidy `"auto"`.  Development record: `diploid_devlog.md`.  No parameter or code
+    change to the method after this line.
+  * **Comparators** (not tuned): NucDynamics 2017 protocol with diploid ambiguous restraints
+    (`run_diploid.py --method nucdyn`), hickit 0.1.1 Dip-C pipeline (`run_hickit.py --diploid`).
+  * **Test units** (never run before this entry): imaging-truth simulation truth cells 3-5 of
+    `su2020_genome` and `takei2021_1mb`, all 24 conditions (depth 20 / 80, rc 0.5 / 1.0, eps 0.05 / 0.2,
+    phased ends 0.1 / 0.2 / 0.4; 144 tables), 1 Mb, 5 models, seed 1 (`dip_sim_run.sbatch SET=test`);
+    Dip-C GM12878 cells 5-7, 9-15, 17 (11 cells; hickit phased pairs), 100 kb, 10 models, seed 1
+    (`dip_real.sbatch`: references, all contacts with seeds 1 and 2, phase hold-back 10 % seed 1,
+    held-out 3 folds x 10 % seed 1).
+  * **Primary endpoints** (paired differences, 95 % percentile bootstrap, `diploid_test.py`, written
+    before the test):
+    **D1** simulation within-chain Spearman, EMber − NucDynamics, unit = truth cell (6);
+    **D2** GM12878 strict held-out cis ROC-AUC (positives with both ends phased), EMber − NucDynamics,
+    unit = cell x fold (33);
+    **D3** GM12878 masked-phase accuracy, EMber − hickit, unit = cell (11).
+  * **Secondary** (reported in full): simulation within-chain / whole-genome / homolog Spearman and
+    swapped homologs per dataset, depth, rc, eps and phased fraction; held-out strict trans / all and
+    cis-2 Mb cis / trans / all AUC; masked-phase accuracy cis < 10 Mb / cis >= 10 Mb / trans (vs
+    hickit).  **Descriptive only**: agreement with the published Dip-C / hickit structures (those are
+    hickit's / Dip-C's own outputs, so agreement measures closeness to those pipelines, not accuracy),
+    ensemble precision (EMber samples a finite-temperature ensemble; its spread is reported as a
+    number, not as an error), run-to-run agreement, wall time.
+  * **Decision rule**: EMber diploid is called **better than NucDynamics-diploid and hickit on this
+    test** only if the D1 and D3 CIs are above 0, the D2 CI lower bound is above −0.01
+    (non-inferiority), and no secondary stratum is worse by more than 0.01 with a CI excluding 0.
+    Otherwise reported as it is ("better on X, equal on Y, worse on Z").
+  * **Not part of this test**: Uni-C GM12878 (GSE267873) — its pairs carry no phases; it needs
+    read-level phasing (re-alignment with GM12878 trio-phased SNPs) and gets its own
+    pre-registration later.  Resolutions finer than 100 kb.
+
 ## 7. The method being tested (design as of this date)
 
 * Observation model: each observed contact is a mixture of a true proximity and a false
