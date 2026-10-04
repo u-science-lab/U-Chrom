@@ -188,6 +188,23 @@ pub struct Params {
     /// development set (diploid_devlog.md §3: phase accuracy +0.06 on the imaging truths, +0.09
     /// on masked GM12878 phases, structure metrics unchanged within 0.01).
     pub robust_dip_nbr_prior: bool,
+    /// EMber, deep low-phasing data (benchmarks/screcon/PREREG.md §10; 0 = off, the frozen
+    /// behaviour): commit an ambiguous contact to one copy pair when its phase probability is
+    /// >= this threshold (hard phasing as hickit `-S`, which uses 0.75).  The probability is the
+    /// candidate prior (neighbourhood prior x external prior) before stage
+    /// `robust_dip_commit_stage`, or the EM posterior P(c | true) of the structure at that stage.
+    pub robust_dip_commit: f64,
+    /// With `robust_dip_commit`: the ambiguous contacts below the threshold are dropped (true, as
+    /// hickit `-S`) or kept as ambiguous restraints (false).
+    pub robust_dip_commit_drop: bool,
+    /// With `robust_dip_commit`: -1 = commit by the prior before stage 1; k >= 1 = commit by the
+    /// EM posterior of the structure from stage k (0-based stage index k, so after k stages).
+    pub robust_dip_commit_stage: i64,
+    /// Diploid input, both protocols (0 = off): before stage 1, keep a contact only if at least
+    /// this many other contacts of the same chromosome pair have both ends within
+    /// `dip_isolation_radius` (Chebyshev; hickit `-r R -c K`).
+    pub dip_isolation_nei: u32,
+    pub dip_isolation_radius: i64,
 }
 
 impl Default for Params {
@@ -268,6 +285,11 @@ impl Default for Params {
             diploid_cis_sep: 10_000_000,
             robust_dip_split: false,
             robust_dip_nbr_prior: true,
+            robust_dip_commit: 0.0,
+            robust_dip_commit_drop: true,
+            robust_dip_commit_stage: -1,
+            dip_isolation_nei: 0,
+            dip_isolation_radius: 10_000_000,
         }
     }
 }
@@ -293,6 +315,9 @@ impl Params {
     pub fn validate(&self) -> Result<(), String> {
         if self.particle_sizes.is_empty() {
             return Err("particle_sizes is empty".into());
+        }
+        if self.robust_dip_commit != 0.0 && !(self.robust_dip_commit > 0.5 && self.robust_dip_commit <= 1.0) {
+            return Err("robust_dip_commit: 0 (off) or a threshold in (0.5, 1]".into());
         }
         if self.particle_sizes.iter().any(|&s| s <= 0.0) {
             return Err("particle sizes must be positive".into());
