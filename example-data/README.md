@@ -669,6 +669,10 @@ public data alone** and are shipped with their recorded outputs.
   | CRR1161509 | Cere_HiC_R1 (cerebellum_adult_20um) | **not linked** | 0.003 (0.001) | — |
   | CRR1161510 | Cere_HiC_R2 (cerebellum_adult_20um) | **not linked** | 0.000 | — |
 
+  - Checks that do not use the linking criterion (`benchmarks/spatial_hic_chen2026_reprocessed.py`, all 10 linked sections):
+    per-spot contact totals laid out on the grid form a tissue image, Moran's I 0.07–0.44 (shuffled spots -0.005–0.010; lowest
+    brain_embryo_10um E16_5 0.072 and cortex 0.119); bulk compartment E1 (500 kb) against the authors' mean A/B of the
+    section, median |r| over the 19 autosomes + X 0.92–0.96 (worst chromosome 0.45 in E16_5 20 µm, 0.47 in E16_5 10 µm).
   - E13_HiC_R1 has both: ours against the maps from the authors' BEDPE, chr2 at 1 Mb — per spot
     median pixel r 0.947 (200 spots; IQR 0.941–0.953), all spots summed r 0.988 (log 0.9997);
     ours hold 1.17× their contacts.
