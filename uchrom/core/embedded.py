@@ -86,10 +86,17 @@ def _small(group, name: str, arr: np.ndarray) -> None:
 
 def _store_group(store_path: PathLike):
     zarr = _zarr()
-    root = zarr.open_group(str(store_path), mode="r+")
+    # writes must not trust the consolidated metadata (it predates the groups added here)
+    root = zarr.open_group(str(store_path), mode="r+", zarr_format=3, use_consolidated=False)
     if "uchrom" not in root.attrs:
         raise ValueError(f"{store_path}: not a ChromData store")
     return root
+
+
+def _chromsizes(chrom: np.ndarray, end: np.ndarray, names: Sequence[str]) -> Dict[str, int]:
+    """Chromosome lengths (end of the last bin) from a bin table: kept in the attrs so that describing a map
+    reads no array."""
+    return {str(names[c]): int(end[chrom == c].max()) for c in np.unique(chrom)}
 
 
 def _check_uniform(bins_start: np.ndarray, bins_chrom: np.ndarray, binsize: int) -> None:
@@ -122,6 +129,51 @@ def _commit(final: Path, tmp: Path, consolidate: bool = True) -> None:
         if consolidate:
             zarr.consolidate_metadata(store, path=f"{GROUP}/{final.name}")
     consolidate_sections(store)
+
+
+def upgrade_store(store_path: PathLike) -> Dict[str, Any]:
+    """Make an already embedded store cheap to open over HTTP (no data is rewritten): put the chromosome lengths
+    into the attrs of every contact map that lacks them, then rebuild the consolidated metadata of the embedded
+    sections and of the store root (one request instead of one per array).  Returns what changed."""
+    zarr = _zarr()
+    done = {"chromsizes": [], "root_consolidated": False}
+    for key, name in list_embedded(str(store_path)).items():
+        e = EmbeddedContacts(str(store_path), name)
+        if e.meta.get("chromsizes"):
+            continue
+        meta = dict(e.meta)
+        meta["chromsizes"] = e.chromsizes()
+        g = zarr.open_group(str(store_path), path=f"{GROUP}/{name}", mode="r+", zarr_format=3, use_consolidated=False)
+        g.attrs["uchrom_contacts"] = meta
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            zarr.consolidate_metadata(str(store_path), path=f"{GROUP}/{name}")
+        done["chromsizes"].append(key)
+    done["var"] = []
+    for key, (g, meta) in open_anndata_groups(str(store_path), "linked_bin_matrices").items():
+        if g.attrs.get("uchrom_var"):
+            continue
+        v = bin_matrix_var(g)
+        gw = zarr.open_group(str(store_path), path=f"{ANNDATA}/{safe_name(key)}", mode="r+", zarr_format=3, use_consolidated=False)
+        gw.attrs["uchrom_var"] = {"bin_id": v["bin_id"].astype(int).tolist(),
+                                  "resolution": (v["resolution"].astype(int).tolist() if "resolution" in v else [0] * len(v))}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            zarr.consolidate_metadata(str(store_path), path=f"{ANNDATA}/{safe_name(key)}")
+        done["var"].append(key)
+    consolidate_sections(store_path)
+    consolidate_root(store_path)
+    done["root_consolidated"] = True
+    return done
+
+
+def consolidate_root(store_path: PathLike) -> None:
+    """Consolidate the metadata of the whole store (all arrays in the root ``zarr.json``): opening a store over
+    HTTP then needs one request for all array metadata instead of one per array."""
+    zarr = _zarr()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        zarr.consolidate_metadata(str(store_path))
 
 
 def consolidate_sections(store_path: PathLike) -> None:
@@ -208,7 +260,8 @@ def embed_scool(store_path: PathLike, key: str, scool: PathLike, *, label: Optio
             npix["trans" if p == n_c else chroms[p]] = int(len(data))
         meta = {"key": key, "kind": "per_cell", "label": label or key, "source": Path(scool).name,
                 "resolutions": [binsize], "chroms": chroms, "chrom_first_bin": {str(binsize): first.tolist()},
-                "n_cells": n_cells, "n_pixels": npix, "count_max": cmax}
+                "n_cells": n_cells, "n_pixels": npix, "count_max": cmax,
+                "chromsizes": _chromsizes(chrom, end, chroms)}
         root.attrs["uchrom_contacts"] = meta
         _commit(final, tmp)
         return meta
@@ -251,7 +304,7 @@ def embed_cool(store_path: PathLike, key: str, cool: PathLike, *, label: Optiona
     final, tmp = _begin(store_path, key, overwrite)
     try:
         root = zarr.open_group(str(tmp), mode="w", zarr_format=3)
-        chroms, first, weights, npix = None, {}, False, {}
+        chroms, first, weights, npix, chromsizes = None, {}, False, {}, None
         for res in sorted(res_uri):
             clr = cooler.Cooler(res_uri[res])
             bins = clr.bins()[:]
@@ -264,6 +317,8 @@ def embed_cool(store_path: PathLike, key: str, cool: PathLike, *, label: Optiona
             fb = np.array([int(np.flatnonzero(chrom == c)[0]) for c in range(len(cnames))], np.int64)
             chroms = cnames
             first[str(res)] = fb.tolist()
+            if chromsizes is None:
+                chromsizes = _chromsizes(chrom, end, cnames)
             g = root.create_group(f"r{res}")
             bg = g.create_group("bins")
             _small(bg, "chrom", chrom.astype(np.uint8 if len(cnames) < 256 else np.uint16))
@@ -306,7 +361,8 @@ def embed_cool(store_path: PathLike, key: str, cool: PathLike, *, label: Optiona
                 npix[f"r{res}/trans"] = int(len(tr))
         meta = {"key": key, "kind": "bulk", "label": label or key, "source": Path(cool.split("::")[0]).name,
                 "resolutions": sorted(res_uri), "chroms": chroms, "chrom_first_bin": first,
-                "has_weights": weights, "trans_min_resolution": int(trans_min_resolution), "n_pixels": npix}
+                "has_weights": weights, "trans_min_resolution": int(trans_min_resolution), "n_pixels": npix,
+                "chromsizes": chromsizes}
         root.attrs["uchrom_contacts"] = meta
         _commit(final, tmp)
         return meta
@@ -322,12 +378,15 @@ def embed_cool(store_path: PathLike, key: str, cool: PathLike, *, label: Optiona
 class EmbeddedContacts:
     """Read access to one embedded map (``store`` may be a path, URL or zarr store)."""
 
-    def __init__(self, store, name: str):
+    def __init__(self, store, name: str, group=None):
         zarr = _zarr()
         self.name = name
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            self.g = zarr.open_group(as_store(store), path=f"{GROUP}/{name}", mode="r", use_consolidated=True)
+        if group is not None:        # a child of the consolidated ``embedded/contacts`` group: no request
+            self.g = group
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                self.g = zarr.open_group(as_store(store), path=f"{GROUP}/{name}", mode="r", use_consolidated=True, zarr_format=3)
         self.meta = dict(self.g.attrs["uchrom_contacts"])
         self.kind: str = self.meta["kind"]
         self.key: str = self.meta["key"]
@@ -352,6 +411,8 @@ class EmbeddedContacts:
         return self._cache[("bins", r)]
 
     def chromsizes(self, resolution: Optional[int] = None) -> Dict[str, int]:
+        if self.meta.get("chromsizes"):
+            return {str(c): int(n) for c, n in self.meta["chromsizes"].items()}
         b = self.bins(resolution)
         return {str(c): int(e) for c, e in b.groupby("chrom", sort=False)["end"].max().items()}
 
@@ -456,13 +517,60 @@ class EmbeddedContacts:
                     yield d[:, 0] + f0, d[:, 1] + f0, d[:, 2]
 
 
+def _open_section(store, section: str):
+    zarr = _zarr()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return zarr.open_group(as_store(store), path=section, mode="r", use_consolidated=True, zarr_format=3)
+
+
+def open_all(store) -> Dict[str, "EmbeddedContacts"]:
+    """Every embedded contact map of a store, from one request (the consolidated metadata of the section holds
+    all the maps); the arrays are read when a map is used."""
+    try:
+        grp = _open_section(store, GROUP)
+    except Exception:
+        return {}
+    out = {}
+    for name, sub in grp.groups():
+        if ".partial-" not in name and sub.attrs.get("uchrom_contacts"):
+            e = EmbeddedContacts(store, name, group=sub)
+            out[e.key] = e
+    return out
+
+
+def open_anndata_groups(store, family: Optional[str] = None) -> Dict[str, Tuple[Any, Dict[str, Any]]]:
+    """``{key: (zarr group, attrs)}`` of the embedded AnnData groups (of one ``family``) from one request."""
+    try:
+        grp = _open_section(store, ANNDATA)
+    except Exception:
+        return {}
+    return {str(sub.attrs["uchrom_anndata"]["key"]): (sub, dict(sub.attrs["uchrom_anndata"]))
+            for name, sub in grp.groups()
+            if ".partial-" not in name and "uchrom_anndata" in sub.attrs
+            and (family is None or sub.attrs["uchrom_anndata"].get("family") == family)}
+
+
+def bin_matrix_var(group) -> Any:
+    """The ``bin_id`` / ``resolution`` columns of an embedded cell x bin matrix: from the attrs (``uchrom_var``)
+    when present, else read from the ``var`` table (one request per column)."""
+    import pandas as pd
+
+    v = group.attrs.get("uchrom_var")
+    if v:
+        return pd.DataFrame({"bin_id": np.asarray(v["bin_id"], np.int64), "resolution": np.asarray(v["resolution"], np.int64)})
+    import anndata as ad
+
+    return ad.io.read_elem(group["var"])
+
+
 def list_embedded(store) -> Dict[str, str]:
     """``{key: group name}`` of the embedded contact maps of a store ({} if none)."""
     zarr = _zarr()
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            grp = zarr.open_group(as_store(store), path=GROUP, mode="r", use_consolidated=True)
+            grp = zarr.open_group(as_store(store), path=GROUP, mode="r", use_consolidated=True, zarr_format=3)
     except (FileNotFoundError, KeyError, zarr.errors.GroupNotFoundError if hasattr(zarr.errors, "GroupNotFoundError") else KeyError):
         return {}
     out = {}
@@ -501,6 +609,10 @@ def embed_anndata(store_path: PathLike, key: str, h5ad: PathLike, *, family: str
                 "n_obs": int(adata.n_obs), "n_vars": int(adata.n_vars), "dense": bool(dense)}
         g = zarr.open_group(str(tmp), mode="r+")
         g.attrs["uchrom_anndata"] = meta
+        if "bin_id" in adata.var:      # a cell x bin matrix: its column table in the attrs (read with the metadata)
+            g.attrs["uchrom_var"] = {"bin_id": adata.var["bin_id"].astype(int).tolist(),
+                                     "resolution": (adata.var["resolution"].astype(int).tolist() if "resolution" in adata.var
+                                                    else [0] * adata.n_vars)}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             zarr.consolidate_metadata(str(tmp))
@@ -517,7 +629,7 @@ def list_embedded_anndata(store, family: Optional[str] = None) -> Dict[str, str]
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            grp = zarr.open_group(as_store(store), path=ANNDATA, mode="r", use_consolidated=True)
+            grp = zarr.open_group(as_store(store), path=ANNDATA, mode="r", use_consolidated=True, zarr_format=3)
     except Exception:
         return {}
     out = {}
@@ -535,7 +647,7 @@ def read_embedded_anndata(store, name: str):
     zarr = _zarr()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        grp = zarr.open_group(as_store(store), path=f"{ANNDATA}/{name}", mode="r")
+        grp = zarr.open_group(as_store(store), path=f"{ANNDATA}/{name}", mode="r", zarr_format=3)
         return ad.read_zarr(grp)
 
 
@@ -574,7 +686,7 @@ def list_embedded_images(store) -> Dict[str, str]:
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            grp = zarr.open_group(as_store(store), path=IMAGES, mode="r", use_consolidated=True)
+            grp = zarr.open_group(as_store(store), path=IMAGES, mode="r", use_consolidated=True, zarr_format=3)
     except Exception:
         return {}
     return {str(sub.attrs["uchrom_image"]["key"]): name for name, sub in grp.groups()
@@ -584,7 +696,7 @@ def list_embedded_images(store) -> Dict[str, str]:
 def read_embedded_image(store, name: str) -> Tuple[bytes, str]:
     """(file bytes, media type) of an embedded image."""
     zarr = _zarr()
-    g = zarr.open_group(as_store(store), path=f"{IMAGES}/{name}", mode="r")
+    g = zarr.open_group(as_store(store), path=f"{IMAGES}/{name}", mode="r", zarr_format=3)
     return g["data"][:].tobytes(), str(g.attrs["uchrom_image"]["media_type"])
 
 
@@ -725,7 +837,12 @@ if __name__ == "__main__":     # python -m uchrom.core.embedded STORE [--overwri
     ap.add_argument("--keys", nargs="*")
     ap.add_argument("--trans-min-resolution", type=int, default=TRANS_MIN_RESOLUTION)
     ap.add_argument("--reconsolidate", action="store_true", help="only rebuild the metadata index of the embedded groups")
+    ap.add_argument("--upgrade", action="store_true",
+                    help="make an embedded store cheap to open over HTTP (chromsizes in the attrs, consolidated root metadata)")
     a = ap.parse_args()
+    if a.upgrade:
+        print(upgrade_store(a.store))
+        raise SystemExit(0)
     if a.reconsolidate:
         consolidate_sections(a.store)
         raise SystemExit(0)

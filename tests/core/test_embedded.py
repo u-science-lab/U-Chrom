@@ -238,3 +238,35 @@ def test_pixel_blocks_equal_the_whole_read_and_stay_small(stores):
     full = [np.column_stack(b) for b in e.iter_pixels(cell_idx=[0, 1, 2])]
     small = [np.column_stack(b) for b in e.iter_pixels(cell_idx=[0, 1, 2], max_pixels=7)]
     assert sorted(map(tuple, np.concatenate(full))) == sorted(map(tuple, np.concatenate(small)))
+
+
+def test_upgrade_makes_an_old_store_cheap_to_open(stores):
+    """A store embedded before chromsizes / uchrom_var / the consolidated root existed: --upgrade adds them."""
+    import zarr
+
+    _, _, emb = stores
+    for name in embedded.list_embedded(str(emb)).values():              # strip what newer embeds write
+        g = zarr.open_group(str(emb), path=f"embedded/contacts/{name}", mode="r+", zarr_format=3, use_consolidated=False)
+        meta = dict(g.attrs["uchrom_contacts"]); meta.pop("chromsizes"); g.attrs["uchrom_contacts"] = meta
+    g = zarr.open_group(str(emb), path="embedded/anndata/ssAB", mode="r+", zarr_format=3, use_consolidated=False)
+    del g.attrs["uchrom_var"]
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for sub in [f"embedded/contacts/{n}" for n in embedded.list_embedded(str(emb)).values()] + ["embedded/anndata/ssAB"]:
+            zarr.consolidate_metadata(str(emb), path=sub)       # each group as an earlier embed left it
+    embedded.consolidate_sections(emb)
+    assert not embedded.open_all(str(emb))["bulk"].meta.get("chromsizes")
+    done = embedded.upgrade_store(emb)
+    assert set(done["chromsizes"]) == {"bulk", "cells"} and done["var"] == ["ssAB"] and done["root_consolidated"]
+    maps = embedded.open_all(str(emb))
+    assert maps["bulk"].meta["chromsizes"] == {"chr1": N * RES, "chr2": N * RES}
+    var = embedded.bin_matrix_var(embedded.open_anndata_groups(str(emb), "linked_bin_matrices")["ssAB"][0])
+    assert list(var["bin_id"]) == list(range(2 * N)) and set(var["resolution"]) == {RES}
+    ds = DatasetStore().load(emb)                                       # still reads, and now from the consolidated root
+    assert {m["key"] for m in ds.contact_maps()} == {"bulk", "cells"} and "ssAB@100bp" in ds._cell_bin_tracks()
+    assert upgrade_twice(emb) == {"chromsizes": [], "var": [], "root_consolidated": True}
+
+
+def upgrade_twice(emb):
+    return embedded.upgrade_store(emb)

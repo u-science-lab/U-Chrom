@@ -97,6 +97,49 @@ def load_chromdata(path: Path) -> ChromData:
     return ChromData.from_dataframe(df)
 
 
+class _LazyNames:
+    """Cell names of an embedded cell x bin matrix: read (one request) when first needed; ``len`` is known."""
+
+    def __init__(self, load, n: int):
+        self._load, self._n, self._v = load, n, None
+
+    def __len__(self) -> int:
+        return self._n
+
+    def values(self):
+        if self._v is None:
+            self._v = self._load()
+        return self._v
+
+
+class _LazyRows(dict):
+    """``{cell id: row}`` of a :class:`_LazyNames`, built on first lookup; ``len`` without reading anything."""
+
+    def __init__(self, names: _LazyNames):
+        super().__init__()
+        self._names, self._built = names, False
+
+    def _build(self) -> None:
+        if not self._built:
+            self.update({str(c): i for i, c in enumerate(self._names.values())})
+            self._built = True
+
+    def __len__(self) -> int:
+        return len(self._names)
+
+    def __getitem__(self, k):
+        self._build()
+        return super().__getitem__(k)
+
+    def __contains__(self, k) -> bool:
+        self._build()
+        return super().__contains__(k)
+
+    def get(self, k, default=None):
+        self._build()
+        return super().get(k, default)
+
+
 @dataclass
 class GeometryFilter:
     """Layer filter; every field is optional and they combine with AND."""
@@ -794,23 +837,12 @@ class Dataset:
         return out
 
     def _embedded_bin_matrices(self) -> Dict[str, Any]:
-        """``{key: (zarr group, attrs)}`` of the cell x bin matrices embedded in the store."""
+        """``{key: (zarr group, attrs)}`` of the cell x bin matrices embedded in the store (one request)."""
         if "embedded_bin" not in self._cache:
-            import warnings
+            from ...core.embedded import open_anndata_groups
 
-            import zarr
-
-            from ...core.embedded import ANNDATA, as_store, list_embedded_anndata
-
-            out: Dict[str, Any] = {}
             loc = self._store_location()
-            if loc is not None:
-                for key, name in list_embedded_anndata(loc, "linked_bin_matrices").items():
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore")
-                        g = zarr.open_group(as_store(loc), path=f"{ANNDATA}/{name}", mode="r")
-                    out[key] = (g, dict(g.attrs["uchrom_anndata"]))
-            self._cache["embedded_bin"] = out
+            self._cache["embedded_bin"] = open_anndata_groups(loc, "linked_bin_matrices") if loc else {}
         return self._cache["embedded_bin"]
 
     def _bin_matrix(self, key: str) -> Dict[str, Any]:
@@ -822,9 +854,11 @@ class Dataset:
             if emb is not None:      # embedded copy: X is read straight from the Zarr array
                 from types import SimpleNamespace
 
+                from ...core.embedded import bin_matrix_var
+
                 grp = emb[0]
-                adata = SimpleNamespace(X=grp["X"], var=ad.io.read_elem(grp["var"]),
-                                        obs_names=ad.io.read_elem(grp["obs"]).index)
+                adata = SimpleNamespace(X=grp["X"], var=bin_matrix_var(grp), obs_names=_LazyNames(
+                    lambda: ad.io.read_elem(grp["obs"]).index, int(emb[1]["n_obs"])))
             else:
                 rec = self.cd.uns["linked_bin_matrices"][key]
                 adata = ad.read_h5ad(self.resolve(rec["path"]), backed="r")
@@ -836,7 +870,8 @@ class Dataset:
                               "resolution": (var["resolution"].to_numpy(np.int64) if "resolution" in var
                                              else np.zeros(len(ids), np.int64))})
             cache[key] = {"adata": adata, "var": v, "blocks": {},
-                          "rows": {str(c): i for i, c in enumerate(adata.obs_names)}}
+                          "rows": _LazyRows(adata.obs_names) if isinstance(adata.obs_names, _LazyNames)
+                          else {str(c): i for i, c in enumerate(adata.obs_names)}}
         return cache[key]
 
     def _cell_bin_values(self, name: str, chrom: str, start, end, cell_id, group, agg: str):
@@ -1066,12 +1101,10 @@ class Dataset:
             embedded = self._embedded_maps()
             for key, e in embedded.items():
                 per = e.kind == "per_cell"
-                if per:
-                    self._cache[("scool_cells", f"embedded:{key}")] = {f"/cells/{c}" for c in e.cells}
                 out.append({"key": key, "kind": "scool" if per else ("mcool" if len(e.resolutions) > 1 else "cool"),
                             "label": e.label, "resolutions": list(e.resolutions),
                             "chroms": [{"name": c, "length": n} for c, n in e.chromsizes().items()],
-                            "per_cell": per, "n_cells": len(e.cells) if per else 0,
+                            "per_cell": per, "n_cells": int(e.meta.get("n_cells") or 0) if per else 0,
                             "balanced": bool(e.meta.get("has_weights")), "embedded": True})
             for family in ("linked_cool", "linked_scool"):
                 for key, rec in self._link_records(family).items():
@@ -1288,19 +1321,12 @@ class Dataset:
         return encode_matrix(mat, np.asarray(o_starts, np.int64), np.asarray(o_ends, np.int64), header)
 
     def _embedded_maps(self) -> Dict[str, Any]:
-        """Contact maps embedded in the store (``embedded/contacts``), by key."""
+        """Contact maps embedded in the store (``embedded/contacts``), by key (one request opens them all)."""
         if "embedded_maps" not in self._cache:
-            from ...core.embedded import EmbeddedContacts, list_embedded
+            from ...core.embedded import open_all
 
-            maps: Dict[str, Any] = {}
             loc = self._store_location()
-            if loc is not None:
-                for key, name in list_embedded(loc).items():
-                    try:
-                        maps[key] = EmbeddedContacts(loc, name)
-                    except Exception:   # unreadable group: fall back to the link, if any
-                        continue
-            self._cache["embedded_maps"] = maps
+            self._cache["embedded_maps"] = open_all(loc) if loc is not None else {}
         return self._cache["embedded_maps"]
 
     def _embedded_contacts(self, key: str, info: dict, chrom: str, start, end, resolution, balance: bool,
@@ -1403,6 +1429,9 @@ class Dataset:
         import cooler
 
         cells = self._cache.get(("scool_cells", str(path)))
+        if cells is None and str(path).startswith("embedded:"):    # an embedded map: read its cell list when needed
+            e = self._embedded_maps()[str(path)[len("embedded:"):]]
+            cells = self._cache[("scool_cells", str(path))] = {f"/cells/{c}" for c in e.cells}
         if cells is None:
             cells = self._cache[("scool_cells", str(path))] = set(cooler.fileops.list_scool_cells(str(path)))
         return cells

@@ -743,6 +743,7 @@ def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float
     try:
         if kind == "zarr":
             _write_tree(cd, tmp, **opts)
+            _consolidate_root(tmp)       # one request for every array's metadata when the store is read over HTTP
             if path.exists():
                 # re-writing the store this object was read from keeps its embedded copies
                 # (uchrom.core.embedded): they belong to the same data; any other object does not inherit them
@@ -764,6 +765,14 @@ def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float
     finally:
         if tmp.exists():
             _rmtree(tmp)
+
+
+def _consolidate_root(root: Path) -> None:
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")        # "consolidated metadata is not part of the Zarr v3 specification"
+        _zarr().consolidate_metadata(str(root))
 
 
 def _rmtree(p: Path) -> None:
@@ -1626,7 +1635,7 @@ class Container:
             self._members = {i.filename: i for i in self._zip.infolist()}
             store = zarr.storage.ZipStore(str(path), mode="r")
         self.store = store
-        self.root = zarr.open_group(store=store, mode="r")
+        self.root = zarr.open_group(store=store, mode="r", zarr_format=3)
         attrs = dict(self.root.attrs)
         if "uchrom" not in attrs:
             raise ValueError(f"{path}: not a ChromData store (no 'uchrom' attributes)")
