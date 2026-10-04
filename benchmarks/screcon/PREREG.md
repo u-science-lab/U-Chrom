@@ -107,7 +107,14 @@ paper reports every endpoint of §3-§4 whatever the outcome.
     `phase_prob`), and — only if the development numbers call for it — the same-homolog rule for
     close unphased cis ends (`diploid_cis_sep`, 10 Mb from hickit's imputation prior, not tuned
     unless reported here).  Every tuned value and the development numbers behind it go to
-    `diploid_devlog.md`.  The NucDynamics-2017 diploid baseline (ambiguous restraints) and
+    `diploid_devlog.md`.
+    *Added 2026-10-03, before any run with it*: `robust_dip_nbr_prior` — a 2-D neighbourhood
+    phase prior computed inside EMber (phased contacts within hickit's imputation radius vote for
+    the copy pair of a contact with an unphased end; hickit's neighbour count, weights,
+    pseudo-count and radius are taken as they are, not tuned): on / off, decided on the
+    development units only, adopted only if phase accuracy improves without any structure metric
+    or stratum getting worse by more than 0.01.  The hickit-imputation prior is re-evaluated on
+    the same terms.  The NucDynamics-2017 diploid baseline (ambiguous restraints) and
     hickit (Dip-C schedule, `-u` imputation, `-S` split at 0.75) are not tuned.
   * **Development units**: imaging-truth simulations — Su 2020 genome-scale IMR90 (1,041 loci,
     homologs resolved experimentally) and Takei 2021 1 Mb mESC (homologs split by the screcon
