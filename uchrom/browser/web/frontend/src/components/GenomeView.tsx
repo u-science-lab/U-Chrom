@@ -830,6 +830,7 @@ function MatrixRow({
   const [mat, setMat] = useState<MatrixData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const loadedOnce = useRef(false) // the first map of the row loads at once; only later pan / zoom is debounced
   const shape = row.shape ?? 'triangle'
   // whole genome: by default as deep as the longest chromosome (each one's map fills the row)
   const maxDist = row.maxDist ?? (layout ? Math.max(...layout.map((c) => c.length)) : null)
@@ -856,11 +857,11 @@ function MatrixRow({
       () => {
         setLoading(true)
         cachedMatrix(key, load)
-          .then((m) => live && (setMat(m), setError(null)))
+          .then((m) => live && (loadedOnce.current = true, setMat(m), setError(null)))
           .catch((e: Error) => live && (setMat(null), setError(e.message))) // no stale map under the message
           .finally(() => live && setLoading(false))
       },
-      matrixCache.has(key) ? 0 : 200,
+      matrixCache.has(key) || !loadedOnce.current ? 0 : 200,
     )
     return () => {
       live = false

@@ -1,7 +1,7 @@
 import { decodeMatrix, type MatrixData } from './matrix'
 import type { AtlasResponse, FileListing, FilePlace, IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, SpatialPoints, StoreNode, TracePage } from './types'
 
-async function request(url: string, init?: RequestInit): Promise<Response> {
+async function fetchChecked(url: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(url, init)
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`
@@ -14,6 +14,20 @@ async function request(url: string, init?: RequestInit): Promise<Response> {
     throw new Error(detail)
   }
   return res
+}
+
+/** GETs in flight, by URL: panes asking for the same thing at once (e.g. the same cell field) share one request. */
+const inflight = new Map<string, Promise<Response>>()
+
+async function request(url: string, init?: RequestInit): Promise<Response> {
+  const isGet = !init || ((init.method ?? 'GET') === 'GET' && !init.signal)
+  if (!isGet) return fetchChecked(url, init)
+  let p = inflight.get(url)
+  if (!p) {
+    p = fetchChecked(url, init).finally(() => inflight.delete(url))
+    inflight.set(url, p)
+  }
+  return (await p).clone() // each caller reads its own copy of the body
 }
 
 export async function fetchHealth(): Promise<{ status: string; version: string; bundle?: string | null }> {
