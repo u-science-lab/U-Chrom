@@ -759,6 +759,10 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
                 );
                 em_logs.push(l);
             }
+            if p.mix_density_rho > 0.0 && stage as i64 >= p.mix_density_stage {
+                // opt-in shape-free density cap (off by default: the frozen EMber is unchanged)
+                sys.density = Some(crate::dynamics::DensityCap { kappa: p.mix_density_kappa, r: p.mix_density_r, rho_max: p.mix_density_rho });
+            }
             let key = stage + 1000 * seg;
             f_dist = force_constant(p, &sys, nb, n);
             coords = engine.anneal(&sys, coords, &schedule[range.clone()], dyn_steps, f_dist, 1.0, key, p)?;

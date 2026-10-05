@@ -33,7 +33,7 @@ pub struct TriGraph {
 pub fn build_graph(contacts: &[MixContact], keep: &[bool], res: i64, min_sep: i64, max_nei: usize, seed: u64) -> TriGraph {
     let n = contacts.len();
     let mut locus: HashMap<(u32, i64), u32> = HashMap::new();
-    let mut lid = |c: u32, p: i64, locus: &mut HashMap<(u32, i64), u32>| -> u32 {
+    let lid = |c: u32, p: i64, locus: &mut HashMap<(u32, i64), u32>| -> u32 {
         let l = locus.len() as u32;
         *locus.entry((c, p / res)).or_insert(l)
     };
@@ -215,4 +215,77 @@ pub fn triangle_seed(contacts: &[MixContact], keep: &[bool], k: usize, res: i64,
         }
     }
     out
+}
+
+/// Trans-triangle links: trans contacts binned on a locus grid (`res`) are edges; two edges are
+/// linked when they form a closed triangle with a third trans edge, the three loci on three
+/// different chromosomes.  Such triangles are almost always of one cell (development pools:
+/// closure 12 % vs 1.9 % for same- vs different-cell partner pairs in the simulations, 18 % vs
+/// 0.3 % in Stevens 2017 pools).  Returns the edge of every contact (-1 = none) and the linked
+/// edges of every edge.
+pub fn trans_triangle_links(contacts: &[MixContact], keep: &[bool], res: i64) -> (Vec<i64>, Vec<Vec<u32>>) {
+    let n = contacts.len();
+    let mut locus: HashMap<(u32, i64), u32> = HashMap::new();
+    let mut lchrom: Vec<u32> = vec![];
+    let mut edge_key: HashMap<(u32, u32), u32> = HashMap::new();
+    let mut edges: Vec<(u32, u32)> = vec![];
+    let mut edge_of = vec![-1i64; n];
+    for (i, c) in contacts.iter().enumerate() {
+        if !keep[i] || c.ca == c.cb {
+            continue;
+        }
+        let mut lid = |ch: u32, p: i64| -> u32 {
+            let l = locus.len() as u32;
+            *locus.entry((ch, p / res)).or_insert_with(|| {
+                lchrom.push(ch);
+                l
+            })
+        };
+        let (a, b) = (lid(c.ca, c.pa), lid(c.cb, c.pb));
+        let key = (a.min(b), a.max(b));
+        let e = *edge_key.entry(key).or_insert_with(|| {
+            edges.push(key);
+            (edges.len() - 1) as u32
+        });
+        edge_of[i] = e as i64;
+    }
+    let nl = locus.len();
+    let mut adj: Vec<Vec<(u32, u32)>> = vec![vec![]; nl];
+    for (e, &(a, b)) in edges.iter().enumerate() {
+        adj[a as usize].push((b, e as u32));
+        adj[b as usize].push((a, e as u32));
+    }
+    for v in adj.iter_mut() {
+        v.sort_unstable();
+    }
+    let links: Vec<Vec<u32>> = (0..edges.len())
+        .into_par_iter()
+        .map(|e| {
+            let (u, v) = edges[e];
+            let (cu, cv) = (lchrom[u as usize], lchrom[v as usize]);
+            let (au, av) = (&adj[u as usize], &adj[v as usize]);
+            // common neighbours w (sorted merge) on a third chromosome
+            let (mut i, mut j) = (0, 0);
+            let mut out = vec![];
+            while i < au.len() && j < av.len() {
+                if au[i].0 < av[j].0 {
+                    i += 1;
+                } else if au[i].0 > av[j].0 {
+                    j += 1;
+                } else {
+                    let cw = lchrom[au[i].0 as usize];
+                    if cw != cu && cw != cv {
+                        out.push(au[i].1);
+                        out.push(av[j].1);
+                    }
+                    i += 1;
+                    j += 1;
+                }
+            }
+            out.sort_unstable();
+            out.dedup();
+            out
+        })
+        .collect();
+    (edge_of, links)
 }

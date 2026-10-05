@@ -121,6 +121,8 @@ def main(argv=None) -> None:
     ap.add_argument("--oracle-prior", type=float, default=None,
                     help="DIAGNOSTIC ONLY: seed with the true cell of every row (the pool's .origin.npz); the\n"
                          "value is the fraction of rows whose seed is replaced by a random cell")
+    ap.add_argument("--oracle-subset", default="all", choices=["all", "trans"],
+                    help="DIAGNOSTIC ONLY: rows that get the oracle seed (trans: cis rows uniform)")
     ap.add_argument("--label")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
@@ -144,6 +146,8 @@ def main(argv=None) -> None:
             cell = np.where(flip, rng.integers(0, args.k, len(cell)), cell)
             prior = np.zeros((len(cell), args.k))
             prior[np.arange(len(cell)), cell] = 1.0
+            if args.oracle_subset == "trans":
+                prior[c.chrom_a == c.chrom_b] = 1.0 / args.k
             meta["oracle_prior"] = args.oracle_prior
         res = run_ember(c, sizes, args.n_models, args.seed, args.device, params, args.n_threads, prior)
         chrom, pos, X = res["chrom"].astype(str), _pos_end(res), res["coords"]

@@ -184,9 +184,9 @@ fn run_diploid(f: impl Fn(Params) -> Params) -> u64 {
 /// the prior, drop, re-admit at stage 4).  (label, macOS aarch64, Linux x86-64 Sherlock).  Recorded
 /// 2026-10-05 with the engine of origin/main c7c7d0f (before the few-cell deconvolution was added).
 const GOLDEN_DIPLOID: [(&str, &[u64], &[u64]); 3] = [
-    ("diploid nuc_dynamics_2017", &[0x9b77dca2cc24252b], &[]),
-    ("diploid EMber", &[0xffb80847cb3c9f99], &[]),
-    ("diploid EMber deep", &[0x30867b583bbb4f59], &[]),
+    ("diploid nuc_dynamics_2017", &[0x9b77dca2cc24252b], &[0xa8a261bebb58dc0e]),
+    ("diploid EMber", &[0xffb80847cb3c9f99], &[0xf5c03b747ac96513]),
+    ("diploid EMber deep", &[0x30867b583bbb4f59], &[0x2761ea8585e413ce]),
 ];
 
 #[test]

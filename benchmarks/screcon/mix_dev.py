@@ -71,6 +71,8 @@ def main(argv=None) -> None:
                    "--params", json.dumps(eng), "--out", str(out)]
             if "_oracle_prior" in opts:
                 cmd += ["--oracle-prior", str(opts["_oracle_prior"])]
+            if "_oracle_subset" in opts:
+                cmd += ["--oracle-subset", opts["_oracle_subset"]]
             if args.force or not out.exists():
                 with open(str(out) + ".log", "w") as log:
                     subprocess.run(cmd, check=True, stderr=log, stdout=subprocess.DEVNULL)

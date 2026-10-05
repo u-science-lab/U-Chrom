@@ -234,6 +234,10 @@ pub struct Params {
     pub mix_tri_iters: usize,
     pub mix_tri_t0: f64,
     pub mix_tri_t1: f64,
+    /// Trans-triangle coupling of the cell priors in the EM (exponent; 0 = off; locus grid
+    /// `mix_tri_res`) and its pseudo-count.
+    pub mix_tri_prior: f64,
+    pub mix_tri_pseudo: f64,
     /// E-step prior over the cells after the first stage: "uniform" (the seed kept by
     /// `mix_seed_keep`) or "posterior" (the previous update's posterior^`mix_prior_temp`, mixed
     /// with `mix_prior_floor` of uniform).
@@ -363,6 +367,8 @@ impl Default for Params {
             mix_tri_iters: 200,
             mix_tri_t0: 2.0,
             mix_tri_t1: 0.05,
+            mix_tri_prior: 0.0,
+            mix_tri_pseudo: 1.0,
             mix_prior_mode: "uniform".to_string(),
             mix_assign_d0: 0.0,
             mix_density_rho: 0.0,
