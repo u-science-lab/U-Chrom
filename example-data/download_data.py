@@ -20,6 +20,15 @@ Usage::
     python example-data/download_data.py --fig3                  # all Fig. 3 inputs (~370 MB)
     python example-data/download_data.py --ray2019_k562          # opt-in, 849 MB K562 mcool
     python example-data/download_data.py --dest /shared/example-data --bintu2018
+    python example-data/download_data.py --hires2023_meta        # HiRES metadata + RNA (~70 MB)
+    python example-data/download_data.py --hires2023             # HiRES per-cell pairs + 20 kb structures (~75 GB)
+    python example-data/download_data.py --dschic2025_aging      # dscHi-C cortex 3 / 12 / 23 months (~44 GB)
+    python example-data/download_data.py --gageseq2024           # GAGE-seq pairs + RNA (~38 GB)
+    python example-data/download_data.py --droplet_hic2024_meta  # Droplet Hi-C / Paired Hi-C metadata (~4 MB)
+    python example-data/download_data.py --droplet_hic2024       # Droplet Hi-C + Paired Hi-C mouse cortex (~72 GB)
+
+Single-cell entries with thousands of per-cell files (HiRES) read their file list from GEO's ``filelist.txt``
+and download in parallel.
 
 Fig. 3 also needs Rao 2014 Hi-C slices that are *built*, not downloaded
 (the GEO .hic files are 9-51 GB): ``python example-data/build_rao2014_slices.py``.
@@ -54,6 +63,58 @@ def _gsm(name: str) -> str:
     """GEO per-sample supplementary URL of a file named 'GSM<id>_…'."""
     gsm = name.split("_", 1)[0]
     return f"{_GEO_SAMPLE}/{gsm[:-3]}nnn/{gsm}/suppl/{name}"
+
+
+def _geo_filelist(gse: str, pattern: str = "", cache: Path = HERE / ".geo_filelists") -> list:
+    """Names of a GEO series' supplementary files (its ``filelist.txt``, fetched once and cached), GSM files
+    included."""
+    import re
+    path = cache / f"{gse}_filelist.txt"
+    if not path.is_file():
+        url = f"https://ftp.ncbi.nlm.nih.gov/geo/series/{gse[:-3]}nnn/{gse}/suppl/filelist.txt"
+        req = urllib.request.Request(url, headers={"User-Agent": "u-chrom example-data"})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            text = r.read().decode()
+        cache.mkdir(exist_ok=True)
+        path.write_text(text)
+    rows = [line.split("\t") for line in path.read_text().splitlines()[1:]]
+    return [row[1] for row in rows if len(row) > 1 and row[1].startswith("GSM") and re.search(pattern, row[1])]
+
+
+def _gse(gse: str, name: str) -> str:
+    return f"https://ftp.ncbi.nlm.nih.gov/geo/series/{gse[:-3]}nnn/{gse}/suppl/{name}"
+
+
+# Single-cell Hi-C / multi-omics cited by Guo et al. 2026 (Cell) -- the atlas' single-cell studies.
+# HiRES (Liu et al. 2023, Science, doi:10.1126/science.adg3797), GEO GSE223917: 7,895 cells (mouse embryo
+# E7.0-E11.5 + brain), per cell .pairs.gz and the authors' 20 kb diploid structure (.3dg), RNA UMI counts.
+_HIRES_META = ["GSE223917_HiRES_emb_metadata.xlsx", "GSE223917_HiRES_brain_metadata.xlsx",
+               "GSE223917_HiRES_emb.rna.umicount.tsv.gz", "GSE223917_HiRES_brain.rna.umicount.tsv.gz"]
+# dscHi-C (Wu et al. 2025, Cell Discov., doi:10.1038/s41421-025-00770-8), GEO GSE285812 (super-series).
+_DSCHIC_AGING = [f"{gsm}_b{m}-month-BC-dscHiC.{part}"
+                 for gsm, m in (("GSM8709626", 3), ("GSM8698919", 12), ("GSM8709603", 23))
+                 for part in ("contacts.pairs.gz", "metadata.txt.gz")]
+# GAGE-seq (Zhou et al. 2024, Nat. Genet., doi:10.1038/s41588-024-01745-3), GEO GSE238001: mouse cortex (mBC)
+# and human bone marrow CD34+ (CD) libraries, contacts + RNA per library.
+_GAGESEQ = [f"{gsm}_{kind}_{lib}" for gsm, kind, lib in (
+    ("GSM7657697", "RNA", "mBC-RNA-0716-1.tsv.gz"), ("GSM7657698", "contact", "mBC-HiC-0716-1.pairs.gz"),
+    ("GSM7657699", "RNA", "mBC-RNA-0716-2.tsv.gz"), ("GSM7657700", "contact", "mBC-HiC-0716-2.pairs.gz"),
+    ("GSM7657701", "RNA", "mBC-RNA-0814-1.tsv.gz"), ("GSM7657702", "contact", "mBC-HiC-0814-1.pairs.gz"),
+    ("GSM7657703", "RNA", "CD-RNA-0722-1.tsv.gz"), ("GSM7657704", "contact", "CD-HiC-0722-1.pairs.gz"),
+    ("GSM7657705", "RNA", "CD-RNA-0722-2.tsv.gz"), ("GSM7657706", "contact", "CD-HiC-0722-2.pairs.gz"),
+    ("GSM7657707", "RNA", "CD-RNA-0722-4.tsv.gz"), ("GSM7657708", "contact", "CD-HiC-0722-4.pairs.gz"))]
+# Droplet Hi-C (Chang et al. 2024, Nat. Biotechnol., doi:10.1038/s41587-024-02447-1), GEO GSE253407: mouse cortex
+# Droplet Hi-C (LC462, LC716) and Paired Hi-C (Hi-C LC464 / LC465 / LC608 + RNA LC466 / LC467 / LC613).
+_DROPLET_META = ["GSE253407_Droplet_Hi-C_mouse_ctx_metadata.xls.gz", "GSE253407_Paired_Hi-C_mouse_ctx_metadata.xls.gz"]
+_DROPLET = [f"{gsm}_{name}" for gsm, name in (
+    ("GSM8020244", "LC462_mm10.sc.pairs.gz"), ("GSM8020244", "LC462_valid_bc.txt.gz"),
+    ("GSM8020245", "LC716_mm10.sc.pairs.gz"), ("GSM8020245", "LC716_valid_bc.txt.gz"),
+    ("GSM8020251", "LC464_merged_mm10.sc.pairs.gz"), ("GSM8020251", "LC464_valid_bc.txt.gz"),
+    ("GSM8020252", "LC466_raw_feature_bc_matrix.h5"), ("GSM8020252", "LC466_valid_bc.txt.gz"),
+    ("GSM8020253", "LC465_mm10.sc.pairs.gz"), ("GSM8020253", "LC465_valid_bc.txt.gz"),
+    ("GSM8020254", "LC467_raw_feature_bc_matrix.h5"), ("GSM8020254", "LC467_valid_bc.txt.gz"),
+    ("GSM8020255", "LC608_mm10.sc.pairs.gz"), ("GSM8020255", "LC608_valid_bc.txt.gz"),
+    ("GSM8020256", "LC613_raw_feature_bc_matrix.h5"), ("GSM8020256", "LC613_valid_bc.txt.gz"))]
 
 
 # Spatial ATAC-Hi-C, mouse brain (Nat Methods 2026, doi:10.1038/s41592-026-03217-4), GEO GSE307620.
@@ -318,24 +379,85 @@ DATASETS = {
         "default": False,
         "description": "Spatial Hi-C mouse embryo / brain (Chen et al. 2026): E13.5 cis BEDPE, Seurat .qs, code (Zenodo)",
     },
+    "hires2023_meta": {
+        "files": [(f"hires2023/raw/GSE223917/{n}", _gse("GSE223917", n)) for n in _HIRES_META],
+        "size_mb": 70,
+        "default": False,
+        "description": "HiRES cell metadata + RNA UMI counts, embryo and brain (GSE223917)",
+    },
+    "hires2023": {
+        "files": lambda: [(f"hires2023/raw/GSE223917/cells/{n}", _gsm(n))
+                          for n in _geo_filelist("GSE223917", r"\.(pairs\.gz|20k(\.0\.clean)?\.3dg\.txt\.gz)$")],
+        "size_mb": 76000,
+        "default": False,
+        "parallel": 2,
+        "description": "HiRES per-cell contact pairs + 20 kb structures, 7,895 cells (GSE223917)",
+    },
+    "dschic2025_aging": {
+        "files": [(f"dschic2025/raw/GSE285812/{n}", _gsm(n)) for n in _DSCHIC_AGING],
+        "size_mb": 44000,
+        "default": False,
+        "description": "dscHi-C mouse cortex at 3 / 12 / 23 months: contacts + metadata (GSE285812)",
+    },
+    "gageseq2024": {
+        "files": [(f"gageseq2024/raw/GSE238001/{n}", _gsm(n)) for n in _GAGESEQ] + [
+            # the authors' cell-type annotation (GitHub ma-compbio/GAGE-seq, MIT), pinned commit
+            (f"gageseq2024/raw/github/{n}", f"https://raw.githubusercontent.com/ma-compbio/GAGE-seq/"
+                                            f"360cea7a17d232f0ea24b3a86cf1337e4d7d3740/meta_info/cell_type_annotation/{n}")
+            for n in ("meta-Seurat_mBC_complete_mm10_filtered.csv", "meta-python_CD_complete_hg38_filtered.csv")] + [
+            # gene symbols of the Ensembl ids of the RNA (Ensembl 98 = the 10x 2020-A references)
+            (f"gageseq2024/raw/ensembl98/{n}", f"https://ftp.ensembl.org/pub/release-98/gtf/{sp}/{n}")
+            for sp, n in (("mus_musculus", "Mus_musculus.GRCm38.98.gtf.gz"),
+                          ("homo_sapiens", "Homo_sapiens.GRCh38.98.gtf.gz"))],
+        "size_mb": 38000,
+        "default": False,
+        "parallel": 2,
+        "description": "GAGE-seq mouse cortex + human bone marrow CD34+: contacts + RNA (GSE238001)",
+    },
+    "droplet_hic2024_meta": {
+        "files": [(f"droplet_hic2024/raw/GSE253407/{n}", _gse("GSE253407", n)) for n in _DROPLET_META],
+        "size_mb": 4,
+        "default": False,
+        "description": "Droplet Hi-C / Paired Hi-C mouse cortex cell metadata (GSE253407)",
+    },
+    "droplet_hic2024": {
+        "files": [(f"droplet_hic2024/raw/GSE253407/{n}", _gsm(n)) for n in _DROPLET],
+        "size_mb": 72000,
+        "default": False,
+        "parallel": 2,
+        "description": "Droplet Hi-C + Paired Hi-C mouse cortex: contacts, barcodes, RNA (GSE253407)",
+    },
 }
 
 
-def _download(url: str, dest: Path, description: str, size_mb: int) -> None:
+def _download(url: str, dest: Path, description: str, size_mb: int, tries: int = 7) -> None:
+    """Fetch ``url`` to ``dest`` (via ``dest.part``); a refused / throttled request (NCBI answers 403 / 429 / 503
+    when hit too often) is retried after 30 s, 60 s, 120 s ..."""
+    import time
+    import urllib.error
+
     if dest.exists():
         print(f"[skip] {dest.name} already present ({description})")
         return
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".part")
-    print(f"[pull] {description} (~{size_mb} MB) → {dest}")
-    try:
-        urllib.request.urlretrieve(url, tmp)
-        tmp.rename(dest)
-    except Exception as exc:
-        if tmp.exists():
-            tmp.unlink()
-        print(f"[fail] {dest.name}: {exc}", file=sys.stderr)
-        raise
+    print(f"[pull] {description} (~{size_mb} MB) → {dest}", flush=True)
+    for k in range(tries):
+        try:
+            urllib.request.urlretrieve(url, tmp)
+            tmp.rename(dest)
+            return
+        except Exception as exc:
+            if tmp.exists():
+                tmp.unlink()
+            retry = (isinstance(exc, urllib.error.HTTPError) and exc.code in (403, 429, 500, 502, 503, 504)) or \
+                isinstance(exc, (urllib.error.URLError, ConnectionError, TimeoutError))
+            if not retry or k == tries - 1:
+                print(f"[fail] {dest.name}: {exc}", file=sys.stderr, flush=True)
+                raise
+            wait = 30 * 2 ** k
+            print(f"[wait] {dest.name}: {exc}; retry in {wait} s", file=sys.stderr, flush=True)
+            time.sleep(wait)
 
 
 def _md5(path: Path) -> str:
@@ -369,11 +491,31 @@ def main() -> None:
     for key in selected:
         info = DATASETS[key]
         files = info.get("files") or [(info["filename"], info["url"])]
-        for rel, url in files:
+        files = files() if callable(files) else files
+
+        def fetch(item, info=info):
+            rel, url = item
             _download(url, args.dest / rel, info["description"], info["size_mb"])
             want = info.get("md5", {}).get(rel)
             if want and _md5(args.dest / rel) != want:
                 raise SystemExit(f"[fail] md5 mismatch for {rel} (expected {want})")
+
+        if info.get("parallel", 1) > 1:     # keep it polite: NCBI throttles many parallel requests
+            from concurrent.futures import ThreadPoolExecutor
+
+            def safe(item):
+                try:
+                    fetch(item)
+                except Exception as exc:
+                    return f"{item[0]}: {exc}"
+
+            with ThreadPoolExecutor(info["parallel"]) as pool:
+                failed = [f for f in pool.map(safe, files) if f]
+            if failed:
+                raise SystemExit(f"[fail] {len(failed)} files of {key} (rerun to fetch them): {failed[:3]}")
+        else:
+            for item in files:
+                fetch(item)
 
     print(f"\nAll requested datasets staged under: {args.dest}")
 

@@ -40,7 +40,7 @@ def test_catalog_is_read_from_the_stores(atlas_dir):
     d = cat["datasets"][0]
     assert cat["version"] == 1 and d["title"] == "A toy dataset" and d["license"] == "CC0"
     assert d["n_cells"] == 3 and d["contact_maps"] == 2 and d["images"] == 1
-    assert {"Hi-C per spot", "Hi-C bulk", "RNA", "A/B per spot", "images"} <= set(d["modalities"])
+    assert {"Hi-C per cell", "Hi-C bulk", "RNA", "A/B per spot", "images"} <= set(d["modalities"])  # no positions
     assert d["size_mb"] > 0 and d["files"] > 10
 
 
@@ -127,3 +127,36 @@ def test_figures_fall_back_to_an_embedding_and_cell_sums(atlas_dir, tmp_path):
     cells = embedded.EmbeddedContacts(str(store), embedded.list_embedded(str(store))["cells"])
     got = atlas._map_png(cells, "chr1", tmp_path / "sum.webp")
     assert got["resolution"] == RES and (got["start"], got["end"]) == (0, 600) and (tmp_path / "sum.webp").is_file()
+
+
+def test_figures_draw_a_cell_structure(tmp_path):
+    import numpy as np
+    import pandas as pd
+    from PIL import Image
+
+    from uchrom import ChromData
+
+    rng = np.random.default_rng(0)
+    rows = [(c, i * 100, i * 100 + 100, f"{cell}_{c}", cell) for cell in ("a", "b") for c in ("chr1", "chr2")
+            for i in range(10)]
+    spots = pd.DataFrame(rows, columns=["chrom", "start", "end", "trace_id", "cell_id"])
+    cd = ChromData(np.cumsum(rng.normal(size=(len(spots), 3)), 0), spots,
+                   cells=pd.DataFrame({"rmsd_20k": [2.0, 1.0]}, index=pd.Index(["a", "b"], name="cell_id")))
+    cd.write(tmp_path / "xyz.chromdata.zarr")
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text(json.dumps({"datasets": [{"id": "xyz", "store": "xyz.chromdata.zarr", "path": "xyz", "title": "x"}]}))
+    info = atlas.render_figures(cfg, tmp_path, tmp_path / "f", size=48)["xyz"]
+    assert info["layout"] == "structure" and info["layout_key"] == "b"      # the lowest RMSD
+    assert info["color_by"] == "chromosome" and info["n"] == 20 and "map" not in info
+    assert Image.open(tmp_path / "f" / info["space"]).size == (48, 48)
+
+
+def test_download_is_the_store_as_one_cdz(atlas_dir):
+    from uchrom import ChromData
+
+    d = json.loads((atlas_dir / "catalog.json").read_text())["datasets"][0]
+    assert d["download"] == "toy.cdz" and d["download_mb"] == d["size_mb"]
+    out = atlas.pack(atlas_dir / "toy.chromdata.zarr", atlas_dir / d["download"])
+    cd = ChromData.read(out, backed=True)
+    assert cd.n_cells == 3 and set(cd.embedded_links()["contacts"]) == {"bulk", "cells"}
+    assert out.stat().st_size / 1e6 >= d["size_mb"] * 0.9

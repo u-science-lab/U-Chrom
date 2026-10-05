@@ -25,6 +25,7 @@
     (kids || []).forEach(function (c) { if (c) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
     return e;
   }
+  function fmtSize(mb) { return mb >= 1000 ? (mb / 1000).toFixed(1) + ' GB' : Math.max(1, Math.round(mb)) + ' MB'; }
   function fmtN(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : n.toLocaleString('en-US'); }
   function fmtMb(bp) { return Math.round(bp / 1e6) + ''; }
   function urlOf(d) { return d.url || (DATA + '/' + String(d.path).replace(/^\/+/, '')); }
@@ -85,9 +86,15 @@
         })),
         d.description ? el('p', { class: 'desc', text: d.description }) : null,
         d.note ? el('p', { class: 'note', text: d.note }) : null,
-        href ? el('a', { class: 'open', href: href, target: '_blank', rel: 'noopener',
-                         title: 'Open in the U-Chrom browser (the first open after a quiet spell takes a few seconds)' },
-                  ['Open in browser ', el('span', { 'aria-hidden': 'true', text: '→' })]) : null
+        el('div', { class: 'actions' }, [
+          href ? el('a', { class: 'open', href: href, target: '_blank', rel: 'noopener',
+                           title: 'Open in the U-Chrom browser (the first open after a quiet spell takes a few seconds)' },
+                    ['Open in browser ', el('span', { 'aria-hidden': 'true', text: '→' })]) : null,
+          d.download ? el('a', { class: 'download', href: DATA + '/' + d.download, download: '',
+                                 title: 'The whole dataset as one .cdz file (a ChromData store in one zip): open it with the U-Chrom browser or ChromData.read' },
+                          [el('span', { class: 'dl-icon', 'aria-hidden': 'true', text: '↓' }), 'Download',
+                           el('span', { class: 'dl-size', text: '.cdz · ' + fmtSize(d.download_mb || d.size_mb || 0) })]) : null
+        ])
       ])
     ];
     return el('article', { class: 'card', id: d.id }, kids);
@@ -133,12 +140,25 @@
     });
   }
 
+  var CATEGORY_TITLES = { 'Spatial': 'Spatial', 'Single-cell': 'Single cell' };
+
   function render() {
     var shown = state.cat.datasets.filter(matches), box = $('studies');
     box.textContent = '';
+    var cats = {}, last = null;
+    state.order.forEach(function (sid) { var s = state.studies[sid]; if (s && s.category) cats[s.category] = 1; });
+    var several = Object.keys(cats).length > 1;
     state.order.forEach(function (sid) {
       var ds = shown.filter(function (d) { return (d.study || '') === sid; });
-      if (ds.length) box.appendChild(studyBlock(state.studies[sid] || { id: sid, citation: ds[0].paper }, ds));
+      if (!ds.length) return;
+      var s = state.studies[sid] || { id: sid, citation: ds[0].paper };
+      if (several && s.category && s.category !== last) {    // a heading per kind of data
+        last = s.category;
+        var n = shown.filter(function (d) { var t = study(d); return t && t.category === last; }).length;
+        box.appendChild(el('div', { class: 'category', id: 'category-' + last.toLowerCase() }, [
+          el('h3', { text: CATEGORY_TITLES[last] || last }), el('span', { text: n + (n === 1 ? ' dataset' : ' datasets') })]));
+      }
+      box.appendChild(studyBlock(s, ds));
     });
     $('empty').hidden = shown.length > 0;
     renderChips();
@@ -148,7 +168,8 @@
     var ds = cat.datasets, cells = ds.reduce(function (a, d) { return a + (d.n_cells || 0); }, 0);
     var species = {}; ds.forEach(function (d) { if (d.organism) species[d.organism] = 1; });
     var box = $('stats'); box.textContent = '';
-    [[String(ds.length), 'datasets'], [fmtN(cells), 'cells and spots'], [String(state.order.length), 'studies'],
+    var studies = {}; ds.forEach(function (d) { studies[d.study || d.paper || d.id] = 1; });
+    [[String(ds.length), 'datasets'], [fmtN(cells), 'cells and spots'], [String(Object.keys(studies).length), 'studies'],
      [String(Object.keys(species).length), 'species']].forEach(function (i) {
       box.appendChild(el('div', {}, [el('dt', { text: i[1] }), el('dd', { text: i[0] })]));
     });
@@ -158,6 +179,7 @@
   function colouredBy(f) { return /cell_?type|anno/i.test(f.color_by || '') ? 'cell type' : 'cluster'; }
   // what a figure shows, in words: "spots coloured by cluster" / "cells in rna_umap, coloured by cell type"
   function layoutText(f, d) {
+    if (f.layout === 'structure') return '3-D structure of cell ' + f.layout_key + ', chromosomes coloured';
     var what = f.layout === 'embedding' ? unit(d) + ' in ' + (f.layout_key || 'an embedding') : unit(d);
     return f.color_by ? what + (f.layout === 'embedding' ? ', ' : ' ') + 'coloured by ' + colouredBy(f) : what;
   }
@@ -204,7 +226,6 @@
     var hash = location.hash.slice(1); if (hash && document.getElementById(hash)) document.getElementById(hash).scrollIntoView();
   }
 
-  if (CFG.repo) { $('repo-link').href = CFG.repo; $('repo-link-2').href = CFG.repo; }
   $('q').addEventListener('input', function (e) { state.q = e.target.value.trim().toLowerCase(); if (state.cat) render(); });
   $('reset').addEventListener('click', function () { state.q = ''; state.on = {}; $('q').value = ''; render(); });
   fetch('catalog.json', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(start).catch(function (e) {

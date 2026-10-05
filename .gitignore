@@ -124,3 +124,8 @@ example-data/ray2019_k562/
 deploy/*/dist/
 deploy/*/node_modules/
 deploy/*/.wrangler/
+example-data/.geo_filelists/
+example-data/hires2023/
+example-data/dschic2025/
+example-data/gageseq2024/
+example-data/droplet_hic2024/

@@ -168,5 +168,24 @@
   "end": 67400000,
   "resolution": 100000,
   "map": "atac_hic_mouse_brain.map.webp"
+ },
+ "stevens2017_mesc": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "Cell_1",
+  "caption": "Haploid mouse ES cell 1",
+  "n": 25724,
+  "categories": 20,
+  "grid": false,
+  "space": "stevens2017_mesc.space.webp",
+  "map_key": "bulk",
+  "map_label": "All 8 cells (merged)",
+  "chrom": "chr2",
+  "start": 0,
+  "end": 183000000,
+  "resolution": 1000000,
+  "fill": 0.178,
+  "map": "stevens2017_mesc.map.webp"
  }
 }

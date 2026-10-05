@@ -20,6 +20,8 @@ older readers, are unaffected.  Layout (``spec.md``, "Embedded contacts")::
 
 from __future__ import annotations
 
+import functools
+
 import os
 import re
 import shutil
@@ -55,10 +57,23 @@ def _zarr():
 
 
 def as_store(store):
-    """A URL becomes a read-only fsspec store (see :mod:`uchrom.core.remote`); anything else is kept."""
+    """A URL becomes a read-only fsspec store (see :mod:`uchrom.core.remote`), a ``.cdz`` file a read-only zip
+    store (the same tree in one zip); anything else is kept."""
     from .remote import is_url, zarr_store
 
-    return zarr_store(str(store).rstrip("/")) if is_url(store) else store
+    if is_url(store):
+        return zarr_store(str(store).rstrip("/"))
+    if isinstance(store, (str, Path)) and str(store).lower().endswith(".cdz") and Path(store).is_file():
+        p = Path(store).resolve()
+        return _zip_store(str(p), p.stat().st_mtime_ns)
+    return store
+
+
+@functools.lru_cache(maxsize=16)
+def _zip_store(path: str, mtime_ns: int):
+    """One read-only ZipStore per ``.cdz`` (and version of it): the zip's directory is read once."""
+    zarr = _zarr()
+    return zarr.storage.ZipStore(path, mode="r")
 
 
 def _uint(maxval: int):

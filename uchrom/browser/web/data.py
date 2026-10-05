@@ -774,14 +774,16 @@ class Dataset:
     # ------------------------------------------------------------------
 
     def _store_location(self) -> Optional[str]:
-        """The store as a URL or a local directory (what zarr opens), else None (.cdz, CSV)."""
+        """The store as a URL, a local directory or a ``.cdz`` file (what the embedded readers open), else None
+        (CSV, PDB ...)."""
         from ...core.remote import is_url
 
         if not self.path:
             return None
         if is_url(self.path):
             return str(self.path)
-        return str(self.path) if Path(self.path).is_dir() else None
+        p = Path(self.path)
+        return str(p) if p.is_dir() or (p.is_file() and p.name.lower().endswith(".cdz")) else None
 
     def resolve(self, path: str) -> Path:
         """Linked file path; relative paths are relative to the dataset's

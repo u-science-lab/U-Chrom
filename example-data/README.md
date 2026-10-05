@@ -30,7 +30,11 @@ auto-downloaded by the tutorials on first run into this directory.
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials; `tests/core/test_fofct_writer.py` (skipped when absent); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd21_streaming_validation.py` (streaming vs in-memory ArcFISH loop / TAD calls); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial                                                 |
 | `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial (with `rao2014_imr90/` Hi-C); Fig. 3b / 3c (`benchmarks/fig3/b_first_look.py`, `c_gemfish_first_look.py`) |
-| `stevens2017_mesc/` (8 cells: contact pairs + published `.pdb` structures) | 43 MB | no | GEO GSE80280 (`--stevens2017`) | Fig. 3a (NucDynamics reference; `benchmarks/fig3/a_sc_consistency.py`) |
+| `stevens2017_mesc/` (8 cells: contact pairs + published `.pdb` structures) | 43 MB | no | GEO GSE80280 (`--stevens2017`) | Fig. 3a (NucDynamics reference; `benchmarks/fig3/a_sc_consistency.py`); atlas store `stevens2017_mesc.chromdata.zarr` (`build_stevens2017.py`) |
+| `hires2023/raw/GSE223917/` (per-cell `.pairs.gz` + 20 kb `.3dg`, metadata, RNA) | 75 GB (GEO `GSE223917_RAW.tar`, 7,895 cells) + 70 MB | no | GEO GSE223917 (`--hires2023_meta`, `--hires2023`) | Atlas: HiRES mouse embryo / brain, contacts + RNA + 3-D (`build_hires2023.py`) |
+| `dschic2025/raw/GSE285812/` (3 × `.contacts.pairs.gz` + metadata) | 44 GB | no | GEO GSE285812 (`--dschic2025_aging`) | Atlas: dscHi-C mouse cortex at 3 / 12 / 23 months (`build_dschic2025.py`) |
+| `gageseq2024/raw/` (6 × contacts / RNA, annotations, Ensembl 98 GTFs) | 38 GB | no | GEO GSE238001 + GitHub ma-compbio/GAGE-seq + Ensembl (`--gageseq2024`) | Atlas: GAGE-seq mouse cortex / human bone marrow CD34+ (`build_gageseq2024.py`) |
+| `droplet_hic2024/raw/GSE253407/` (5 × `.sc.pairs.gz`, 3 × 10x RNA `.h5`, metadata) | 72 GB | no | GEO GSE253407 (`--droplet_hic2024_meta`, `--droplet_hic2024`) | Atlas: Droplet Hi-C / Paired Hi-C mouse cortex (`build_droplet_hic2024.py`) |
 | `bintu2018/{IMR90,K562}_chr21-28-30Mb.csv` | 7.8 MB + 20 MB | no | GitHub raw (`--bintu2018`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
 | `su2020_imr90/chromosome21.tsv` + `Hi-C_contacts_chromosome21.tsv` | 261 MB + 1 MB | no | Zenodo 3928890 (`--su2020_chr21`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
 | `abbas2019_gemfish/*.zip` (Wang 2016 FISH, TADs, Hi-C, GEM-FISH final models) | 40 MB | no | GitHub, pinned commit (`--abbas2019_gemfish`) | Fig. 3a / 3c (`benchmarks/fig3/c_gemfish_wang2016.py`) |
@@ -890,6 +894,37 @@ public data alone** and are shipped with their recorded outputs.
 - **Used by**: `build_liu2025_mop.py` (dataset-scale entry for Fig. 2);
   `benchmarks/fofct_roundtrip_validation.py`
   (FOF-CT writer); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`).
+
+### Single-cell Hi-C / multi-omics of the atlas (`hires2023/`, `dschic2025/`, `gageseq2024/`, `droplet_hic2024/`, `stevens2017_mesc/`)
+
+The single-cell studies cited by Guo et al. 2026 (Cell; refs. 15-22) that have usable public data.  Each build
+streams the deposited pairs once (`sc_hic_common.py`: `gzip -dc | grep -v '^#'` into pyarrow, contacts binned into
+on-disk buckets) into a per-cell 1 Mb `.scool` and an all-cells bulk `.mcool` (50 kb - 1 Mb, ICE), writes the RNA
+as a linked `.h5ad`, computes RNA PCA / UMAP and a scHiCluster Hi-C embedding, and writes a `.chromdata.zarr`;
+`python -m uchrom.core.embedded STORE --upgrade` then embeds the links for the atlas.
+
+- **HiRES** (Liu et al. 2023, *Science*, doi:10.1126/science.adg3797; GEO GSE223917): 7,469 embryo cells
+  (E7.0 - E11.5) + 399 adult brain cells; per cell `.pairs.gz` and the authors' diploid 20 kb hickit structure
+  (`*.20k.0.clean.3dg`, brain `*.20k.3dg`), coarse-grained to 200 kb (mean of each bin's particles per copy);
+  RNA = the deposited UMI table.  Download: the series tar (one connection; per-file requests got HTTP 403 / 503
+  from NCBI after ~150 files).  Checked on 100 cells: per-cell map totals equal the pairs line counts
+  (135,083 = 135,083), 200 kb coordinates equal the mean of the 20 kb particles (max |diff| 2e-6).
+- **dscHi-C** (Wu et al. 2025, *Cell Discov.*, doi:10.1038/s41421-025-00770-8; GEO GSE285812): mouse cortex at
+  3 / 12 / 23 months, 32,777 annotated cells (`main_celltype`, `sub_celltype`), 3.24e9 pairs read, 2.60e9 on
+  annotated cells.  Not used: the dscHi-C-multiome deposit (GSE285233): its contact barcodes match none of the RNA
+  cells (no correlation of counts; neither a 10x ARC nor ATAC whitelist), so the modalities cannot be paired.
+- **GAGE-seq** (Zhou et al. 2024, *Nat. Genet.*, doi:10.1038/s41588-024-01745-3; GEO GSE238001): mouse cortex
+  (3 libraries, 3,296 annotated cells) and human bone marrow CD34+ (3 libraries, 1,445 cells); cell types from
+  the authors' GitHub (`meta_info/cell_type_annotation`, MIT, pinned commit); RNA = one line per UMI, gene
+  symbols from Ensembl 98.
+- **Droplet Hi-C / Paired Hi-C** (Chang et al. 2024, *Nat. Biotechnol.*, doi:10.1038/s41587-024-02447-1; GEO
+  GSE253407): mouse cortex, Droplet Hi-C 6,235 cells (LC462, LC716), Paired Hi-C 24,284 cells (Hi-C LC464 /
+  LC465 / LC608 with RNA LC466 / LC467 / LC613, barcodes paired by the metadata).  The pairs keep every read pair;
+  cis pairs < 1 kb are dropped.
+- **Stevens 2017** (`stevens2017_mesc/`, see above): the atlas store has the 8 cells' contacts and the 10 published
+  100 kb models (model 1 = coords, 2-10 = layers).
+- Not fetched: ChAIR (Nat. Methods 2025; CNCB OMIX009588 / 9589, 120 GB from China), Nagano 2013 (10 Th1 cells),
+  Ramani 2017 sciHi-C (cell lines, hg19 / mm10 mix).
 
 ## Figure 3 datasets — bridges between contacts and geometry
 

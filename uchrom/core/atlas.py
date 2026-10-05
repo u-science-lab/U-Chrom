@@ -14,7 +14,8 @@ Layout of an atlas root (an ``s3://`` / ``https://`` URL or a directory)::
        {"id", "path" (relative to the root), "study", "name", "title", "description", "paper", "doi", "source_url",
         "license", "organism", "assembly", "tissue", "n_cells", "n_bins", "sections": [...],
         "modalities": ["Hi-C per spot", "Hi-C bulk", "RNA", "A/B per spot", "images", ...],
-        "contact_maps": n, "images": n, "size_mb", "files", "format_version"}]}
+        "contact_maps": n, "images": n, "size_mb", "files", "format_version", "download" (the .cdz next to the
+        store, unless the config says ``"download": false``), "download_mb"}]}
 
 The display text (title, paper, licence ...) comes from a hand-written JSON file (``atlas/datasets.json``);
 everything countable is read from the stores, so the catalog cannot drift from the data.  The thumbnails of the
@@ -22,6 +23,7 @@ atlas page are drawn from the stores too (``render_figures``; committed under ``
 
     python -m uchrom.core.atlas build atlas/datasets.json --root example-data --out catalog.json
     python -m uchrom.core.atlas figures atlas/datasets.json --root example-data      # -> atlas/site/figures
+    python -m uchrom.core.atlas pack example-data/x.chromdata.zarr          # -> x.cdz, the download
     python -m uchrom.core.atlas show https://uchrom-atlas-r2.u-science.org
     python -m uchrom.core.atlas site dist/site --catalog catalog.json    # the static page (atlas/site) to deploy
 """
@@ -55,14 +57,16 @@ def describe_store(path: PathLike) -> Dict[str, Any]:
     cd = ChromData.read(str(p), backed=True)
     emb = cd.embedded_links()
     contacts = list(emb["contacts"])
+    uns = cd.uns if isinstance(cd.uns, dict) else {}
+    spatial = bool(uns.get("cell_spatial"))          # spots of a tissue section, or dissociated cells
+    per_cell = "Hi-C per spot" if spatial else "Hi-C per cell"
     kinds = set()
     if contacts:
         from .embedded import EmbeddedContacts
 
         for key, name in emb["contacts"].items():
-            kinds.add("Hi-C per spot" if EmbeddedContacts(str(p), name).kind == "per_cell" else "Hi-C bulk")
-    mods: List[str] = sorted(kinds, key=["Hi-C per spot", "Hi-C bulk"].index)
-    uns = cd.uns if isinstance(cd.uns, dict) else {}
+            kinds.add(per_cell if EmbeddedContacts(str(p), name).kind == "per_cell" else "Hi-C bulk")
+    mods: List[str] = sorted(kinds, key=[per_cell, "Hi-C bulk"].index)
     if uns.get("linked_anndata"):
         mods.append("RNA")
     for key in (uns.get("linked_bin_matrices") or {}):
@@ -93,6 +97,9 @@ def build_catalog(config: PathLike, root: PathLike, out: Optional[PathLike] = No
         d = dict(d)
         store = root / d.pop("store")
         info = describe_store(store)
+        if d.pop("download", True):          # the one-file copy next to the store (``pack``): same files, zipped
+            info["download"] = download_name(d["path"])
+            info["download_mb"] = info["size_mb"]
         datasets.append({**d, **info})
     cat = {"version": CATALOG_VERSION, "title": cfg.get("title", "U-Chrom Atlas"),
            "description": cfg.get("description", ""), "updated": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -179,9 +186,27 @@ def _spatial_png(pos, labels, out: Path, size: int, supersample: int = 3) -> Dic
     return {"n": int(len(p)), "categories": len(cats), "grid": grid}
 
 
-def _map_png(e, chrom: str, out: Path, region: Optional[str] = None, max_bins: int = 400) -> Dict[str, Any]:
+def _map_matrix(e, chrom: str, start: int, end: int, res: int):
+    import numpy as np
+
+    lo, hi = start // res, -(-end // res)
+    if e.kind == "per_cell":
+        d = e.sum_pixels(f"cis/{chrom}", res)
+        d = d[(d[:, 0] >= lo) & (d[:, 0] < hi)]
+    else:
+        d = e.region_pixels(chrom, lo, hi, res)
+    d = d[(d[:, 1] >= lo) & (d[:, 1] < hi)]
+    n = hi - lo
+    m = np.zeros((n, n), np.float64)
+    m[d[:, 0] - lo, d[:, 1] - lo] = d[:, 2]
+    return np.maximum(m, m.T), lo, hi
+
+
+def _map_png(e, chrom: str, out: Path, region: Optional[str] = None, max_bins: int = 400,
+             min_fill: float = 0.25) -> Dict[str, Any]:
     """A window of a contact map (log counts; a per-cell map: the all-cells sum) at the finest resolution that keeps
-    it under ``max_bins``."""
+    it under ``max_bins``.  A sparse map (under ``min_fill`` of the off-diagonal pixels seen: a few cells) is drawn
+    for the whole chromosome at the finest resolution that fills it instead."""
     import numpy as np
     from PIL import Image
 
@@ -198,17 +223,15 @@ def _map_png(e, chrom: str, out: Path, region: Optional[str] = None, max_bins: i
     if e.kind == "per_cell" and not region:      # per-cell maps are coarse: the whole chromosome
         start, end = 0, sizes[chrom]
     res = next((r for r in sorted(e.resolutions) if (end - start) / r <= max_bins), max(e.resolutions))
-    lo, hi = start // res, -(-end // res)
-    if e.kind == "per_cell":
-        d = e.sum_pixels(f"cis/{chrom}", res)
-        d = d[(d[:, 0] >= lo) & (d[:, 0] < hi)]
-    else:
-        d = e.region_pixels(chrom, lo, hi, res)
-    d = d[(d[:, 1] >= lo) & (d[:, 1] < hi)]
-    n = hi - lo
-    m = np.zeros((n, n), np.float64)
-    m[d[:, 0] - lo, d[:, 1] - lo] = d[:, 2]
-    m = np.maximum(m, m.T)
+    tries = [(start, end, res)]
+    if not region:
+        tries += [(0, sizes[chrom], r) for r in sorted(e.resolutions) if r > res and sizes[chrom] / r <= max_bins]
+    for start, end, res in tries:
+        m, lo, hi = _map_matrix(e, chrom, start, end, res)
+        n = hi - lo
+        fill = float((m[np.triu_indices(n, 1)] > 0).mean()) if n > 1 else 1.0
+        if fill >= min_fill:
+            break
     v = np.log1p(m)
     off = v[np.triu_indices(n, 1)]
     vmax = np.percentile(off[off > 0], 99.5) if (off > 0).any() else 1.0
@@ -220,7 +243,7 @@ def _map_png(e, chrom: str, out: Path, region: Optional[str] = None, max_bins: i
     rgb = ramp[i0] * (1 - f) + ramp[i0 + 1] * f
     Image.fromarray(rgb.astype(np.uint8), "RGB").save(out, quality=90, method=6)
     return {"map_key": e.key, "map_label": e.label, "chrom": chrom, "start": int(lo * res), "end": int(hi * res),
-            "resolution": int(res)}
+            "resolution": int(res), "fill": round(fill, 3)}
 
 
 def _cell_layout(cd, key: Optional[str]):
@@ -241,11 +264,55 @@ def _cell_layout(cd, key: Optional[str]):
     return pd.DataFrame({"x": xy[:, 0], "y": -xy[:, 1]}, index=cd.cells.index), "embedding", keys[0]
 
 
+def _chrom_rank(name: str) -> tuple:
+    c = str(name).removeprefix("chr")
+    return (0, int(c), "") if c.isdigit() else (1, 0, c)
+
+
+def _structure_png(cell_cd, out: Path, size: int, supersample: int = 3) -> Dict[str, Any]:
+    """One cell's 3-D structure: each trace (chromosome copy) a polyline coloured by chromosome, the cell turned
+    to its principal axes and projected on the first two; far segments are drawn first and paler."""
+    import numpy as np
+    from PIL import Image, ImageDraw
+
+    s = cell_cd.spots_with_loci()
+    xyz = np.asarray(cell_cd.coords, dtype=np.float64)
+    ok = np.isfinite(xyz).all(1)
+    s, xyz = s[ok].reset_index(drop=True), xyz[ok]
+    c = xyz - xyz.mean(0)
+    _, _, vt = np.linalg.svd(c, full_matrices=False)
+    p = c @ vt.T                                    # x: most spread, y: next, z: depth
+    span = float(np.ptp(p[:, :2], 0).max()) or 1.0
+    big = size * supersample
+    scale = big * 0.92 / span
+    xy = (p[:, :2] - (p[:, :2].min(0) + p[:, :2].max(0)) / 2) * scale + big / 2
+    depth = (p[:, 2] - p[:, 2].min()) / (np.ptp(p[:, 2]) or 1.0)          # 0 far ... 1 near
+    chroms = sorted(s["chrom"].astype(str).unique(), key=_chrom_rank)
+    lut = {ch: np.array(_hex(PALETTE[i % len(PALETTE)])[:3], float) for i, ch in enumerate(chroms)}
+    order = np.lexsort((s["start"].to_numpy(), s["trace_id"].astype(str).to_numpy()))
+    tr = s["trace_id"].astype(str).to_numpy()[order]
+    same = tr[1:] == tr[:-1]
+    i0, i1 = order[:-1][same], order[1:][same]
+    d = (depth[i0] + depth[i1]) / 2
+    segs = np.argsort(d)                             # far first
+    width = max(1, int(round(supersample * size / 480 * 1.6)))
+    img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    names = s["chrom"].astype(str).to_numpy()
+    for k in segs:                                   # depth cue by transparency: works on a light or dark page
+        a, b = i0[k], i1[k]
+        rgb = tuple(int(v) for v in lut[names[a]])
+        draw.line((xy[a, 0], xy[a, 1], xy[b, 0], xy[b, 1]), fill=rgb + (int(70 + 185 * d[k] ** 1.5),), width=width)
+    img.resize((size, size), Image.LANCZOS).save(out, quality=90, method=6)
+    return {"n": int(len(xyz)), "categories": len(chroms), "grid": False}
+
+
 def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int = 480, hero_size: int = 640,
                    only: Optional[List[str]] = None) -> Dict[str, Any]:
     """Thumbnails of every dataset of the display config, drawn from the stores under ``root``:
-    ``<id>.space.webp`` (one section, spots coloured by a label column, in tissue coordinates; a dataset without
-    positions: its cells in a 2-D embedding such as a UMAP) and ``<id>.map.webp`` (a 40-Mb window of that
+    ``<id>.space.webp`` (one section, spots coloured by a label column, in tissue coordinates; a dataset with 3-D
+    structures: one cell's structure, chromosomes coloured; a dataset without either: its cells in a 2-D embedding
+    such as a UMAP) and ``<id>.map.webp`` (a 40-Mb window of that
     section's bulk contact map, chr2 by default; without a bulk map: the all-cells sum of a per-cell map).  The
     config entry ``"figure"`` may pin ``section`` / ``color_by`` / ``positions`` / ``chrom`` / ``region``
     (``chr2:40e6-80e6``) and give the ``caption`` of what the hero figure shows.  The datasets of the config's
@@ -272,7 +339,21 @@ def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int
         section, column, bulk = _section_choice(cd, emb, spec.get("section"), spec.get("color_by"))
         if bulk is None:          # no bulk map: the all-cells sum of a per-cell map
             bulk = next((k for k, e in emb.items() if e.kind == "per_cell" and e.has_sum()), None)
-        pos, layout, layout_key = _cell_layout(cd, spec.get("positions"))
+        structure = None
+        try:
+            has_positions = bool(len(cd.cell_positions(spec.get("positions") or "default")))
+        except KeyError:
+            has_positions = False
+        per_cell_xyz = bool(cd.n_spots) and "cell_id" in cd.spots.columns
+        if spec.get("layout", "structure" if (per_cell_xyz and not has_positions) else "") == "structure":
+            cell = spec.get("cell")
+            if cell is None and "rmsd_20k" in cd.cells:                        # the best-determined structure
+                cell = cd.cells["rmsd_20k"].astype(float).idxmin()
+            cell = str(cell if cell is not None else cd.cells.index[0])
+            structure = cd.get_cell(cell)
+            pos, layout, layout_key = None, "structure", cell
+        else:
+            pos, layout, layout_key = _cell_layout(cd, spec.get("positions"))
         info: Dict[str, Any] = {"section": section, "color_by": column, "layout": layout, "layout_key": layout_key}
         if spec.get("caption"):
             info["caption"] = spec["caption"]
@@ -280,7 +361,12 @@ def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int
             pos = pos[(cd.cells.loc[pos.index, "section"].astype(str) == section).to_numpy()]
         labels = cd.cells.loc[pos.index, column] if (pos is not None and column) else None
         for tag, px in [("", size)] + ([("hero.", hero_size)] if d["id"] in hero else []):
-            if pos is not None and len(pos):
+            if structure is not None:
+                name = f"{d['id']}.{tag}space.webp"
+                info.update(_structure_png(structure, out / name, px))
+                info[f"{tag}space"] = name
+                info["color_by"] = "chromosome"
+            elif pos is not None and len(pos):
                 name = f"{d['id']}.{tag}space.webp"
                 info.update(_spatial_png(pos, labels, out / name, px))
                 info[f"{tag}space"] = name
@@ -292,6 +378,28 @@ def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int
         index[d["id"]] = info
     index_path.write_text(json.dumps(index, indent=1, ensure_ascii=False) + "\n")
     return index
+
+
+def download_name(path: str) -> str:
+    """The ``.cdz`` (one-file) name of an atlas store: ``x.chromdata.zarr`` -> ``x.cdz``."""
+    p = str(path).rstrip("/")
+    for suffix in (".chromdata.zarr", ".zarr"):
+        if p.endswith(suffix):
+            return p[: -len(suffix)] + ".cdz"
+    return p + ".cdz"
+
+
+def pack(store: PathLike, out: Optional[PathLike] = None) -> Path:
+    """The store as one ``.cdz`` file (the same tree in an uncompressed zip, embedded copies included): what the
+    atlas page offers for download.  ``ChromData.read`` and the web browser open it like the directory."""
+    from .zarrcd import _zip_tree
+
+    store = Path(store)
+    out = Path(out) if out else store.with_name(download_name(store.name))
+    tmp = out.with_name(out.name + ".part")
+    _zip_tree(store, tmp)
+    tmp.replace(out)
+    return out
 
 
 def catalog_url(root: str) -> str:
@@ -360,6 +468,9 @@ if __name__ == "__main__":
     b.add_argument("--out", default=CATALOG)
     s = sub.add_parser("show")
     s.add_argument("root")
+    k = sub.add_parser("pack", help="zip a store into the one-file .cdz offered for download")
+    k.add_argument("store")
+    k.add_argument("--out")
     f = sub.add_parser("figures", help="draw the dataset thumbnails of the atlas page from the stores")
     f.add_argument("config")
     f.add_argument("--root", required=True)
@@ -374,6 +485,9 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.cmd == "site":
         print("wrote", build_site(a.out, a.catalog, data_root=a.data_root, template=a.template, hosted=a.hosted))
+    elif a.cmd == "pack":
+        out = pack(a.store, a.out)
+        print(f"wrote {out} ({out.stat().st_size / 1e6:,.1f} MB)")
     elif a.cmd == "figures":
         for k, v in render_figures(a.config, a.root, a.out, only=a.only).items():
             print(f"{k:34s} {v}")

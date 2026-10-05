@@ -804,7 +804,7 @@ class ChromData:
         """Copies embedded in the store (:mod:`uchrom.core.embedded`): ``{"contacts": {key: group},
         "anndata": {...}, "images": {...}}`` (empty for a store without them or a non-directory store)."""
         src = getattr(self, "_source_path", None)
-        if src is None or not (isinstance(src, str) or Path(src).is_dir()):
+        if src is None or not (isinstance(src, str) or Path(src).is_dir() or str(src).lower().endswith(".cdz")):
             return {"contacts": {}, "anndata": {}, "images": {}}
         from .embedded import list_embedded, list_embedded_anndata, list_embedded_images
 

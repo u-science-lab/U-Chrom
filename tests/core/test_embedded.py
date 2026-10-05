@@ -318,3 +318,23 @@ def test_all_cells_sums(stores):
     again = DatasetStore().load(emb)
     for kw in (dict(key="cells", chrom="chr1", group="all"), dict(key="cells", chrom=GENOME, group="all")):
         np.testing.assert_array_equal(decode_matrix(ref.contacts(**kw))["matrix"], decode_matrix(again.contacts(**kw))["matrix"])
+
+
+def test_a_cdz_of_the_store_carries_the_embedded_copies(stores):
+    """The atlas download: the embedded store zipped as one .cdz reads like the directory, without the files."""
+    from uchrom.core.zarrcd import _zip_tree
+
+    tmp_path, _, emb = stores
+    cdz = tmp_path / "emb.cdz"
+    _zip_tree(emb, cdz)
+    for f in ("bulk.mcool", "bulk.cool", "cells.scool", "ssab.h5ad"):
+        (tmp_path / f).unlink()
+    cd = ChromData.read(cdz, backed=True)
+    assert set(cd.embedded_links()["contacts"]) == {"bulk", "cells"}
+    a, b = DatasetStore().load(emb), DatasetStore().load(cdz)
+    assert {m["key"] for m in b.contact_maps()} == {"bulk", "cells"}
+    for kw in ({"key": "bulk", "chrom": "chr1"}, {"key": "cells", "chrom": "chr2", "cell": "c1"}):
+        x, y = decode_matrix(a.contacts(**kw)), decode_matrix(b.contacts(**kw))
+        np.testing.assert_array_equal(x["matrix"], y["matrix"])
+    assert "ssAB@100bp" in b._cell_bin_tracks()
+    assert set(embedded.list_embedded_images(str(cdz))) == {"secA"}
