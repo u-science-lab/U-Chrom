@@ -16,7 +16,7 @@ rows (every ``spot_tracks`` value of the 1e7-spot subset):
 
     python benchmarks/fig2/spot_tracks_encoding.py OLD_2_0.chromdata.zarr NEW_2_1.chromdata.zarr
 
-Writes ``paper/fig2/results/spot_tracks_encoding.json``.
+Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/spot_tracks_encoding.json``.
 """
 
 from __future__ import annotations

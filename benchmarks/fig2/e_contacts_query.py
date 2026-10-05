@@ -36,7 +36,7 @@ where the ``.scool`` is always kept (linked = ``.scool`` + store, copied =
 
     python benchmarks/fig2/e_contacts_query.py [--repeats 3]
 
-Writes ``paper/fig2/results/e_query.json``.
+Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/e_query.json``.
 """
 
 from __future__ import annotations

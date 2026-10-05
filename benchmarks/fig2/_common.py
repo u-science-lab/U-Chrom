@@ -1,7 +1,7 @@
 """Shared helpers for the Figure 2 benchmarks (``benchmarks/fig2/*.py``).
 
 * paths: repo root, example-data (``$UCHROM_EXAMPLE_DATA`` overrides), results
-  (``paper/fig2/results``) and a scratch work dir (``$UCHROM_FIG2_WORK``);
+  (``<u-chrom-paper>/manuscripts/full/figures/fig2/results``, see ``benchmarks/_paper.py``) and a scratch work dir (``$UCHROM_FIG2_WORK``);
 * ``machine_info()`` — CPU / RAM / disk / OS / library versions for the JSON;
 * ``run_child()`` — run one measurement in a fresh interpreter and collect its
   JSON (timings + peak RSS), so every trial starts with a cold Python heap;
@@ -38,7 +38,10 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT))  # this checkout's uchrom, not an installed copy
 
 DATA = Path(os.environ.get("UCHROM_EXAMPLE_DATA", ROOT / "example-data"))
-RESULTS = ROOT / "paper" / "fig2" / "results"
+sys.path.insert(0, str(ROOT / "benchmarks"))
+from _paper import results_dir  # noqa: E402
+
+RESULTS = results_dir("fig2")          # u-chrom-paper: manuscripts/full/figures/fig2/results
 WORK = Path(os.environ.get("UCHROM_FIG2_WORK", DATA / "fig2_work"))
 
 TAKEI_DIR = DATA / "takei2025_cerebellum"
@@ -135,7 +138,7 @@ def machine_info() -> Dict[str, Any]:
 
 
 def write_json(name: str, payload: Dict[str, Any], merge_key: Optional[str] = None) -> Path:
-    """Write ``paper/fig2/results/<name>.json``.  With ``merge_key``, series in
+    """Write ``<u-chrom-paper>/manuscripts/full/figures/fig2/results/<name>.json``.  With ``merge_key``, series in
     ``payload[merge_key]`` are merged into an existing file's (other series,
     e.g. a 2.x run, are kept)."""
     RESULTS.mkdir(parents=True, exist_ok=True)

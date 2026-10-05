@@ -30,7 +30,7 @@ computed for the GEO models themselves.
 Usage::
 
     python benchmarks/fig3/a_nucdyn_engine_score.py --runs RUN_DIR [RUN_DIR ...] --labels cpu gpu \\
-        --cells 1-8 --out paper/fig3/results/a_nucdyn_engine_validation.json
+        --cells 1-8 --out u-chrom-paper/manuscripts/full/figures/fig3/results/a_nucdyn_engine_validation.json
 """
 
 from __future__ import annotations

@@ -18,7 +18,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `takei2025_cerebellum_fixture/`       | ~750 KB | **missing** — listed but never committed (see its section) | — | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture) |
 | `sim_cell1/` (`sim_cell1.cdz` + mcool; **structure predates the `count_contacts` fix**; rebuild with the native engine deferred, see its section) | 1.4 MB | yes             | —             | web browser: single-cell 3-D structure + its own contacts (`build_sim_cell1.py`); `tests/browser_web/test_genome_views.py`; `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`) (from the former 1.x `.h5cd`); `benchmarks/fig2/f_roundtrip.py` (PDB / .3dg / .mcool rows); agent benchmark `benchmarks/fig6/agent_bench/` |
 | `mESC_Sox2_5cells_{wnan,imputed_linear,imputed_snapfish}.h5cd` | 24 KB each | yes | — | imputation tests / tutorial (Huang 2021 mESC Sox2, 5 cells; see `mESC_Sox2_README.md`); `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); kept as 1.x files so the upgrade path stays exercised |
-| `takei2025_fov0/takei2025_fov0.chromdata.zarr` (older builds: `.h5cd`) | 73 MB (h5cd 1.x: 220 MB) | no | Zenodo 7693825 (streamed) | web browser: 59 IF tracks per spot, 47 cells, IF embedding (`build_takei2025_fov0.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `tests/browser_web` (real-data checks); `benchmarks/fig2/f_roundtrip.py` (chromdata.zarr / FOF-CT / AnnData rows); Fig 6 (`paper/fig6/extract_data.py`, `benchmarks/fig6/`, agent benchmark `benchmarks/fig6/agent_bench/`) |
+| `takei2025_fov0/takei2025_fov0.chromdata.zarr` (older builds: `.h5cd`) | 73 MB (h5cd 1.x: 220 MB) | no | Zenodo 7693825 (streamed) | web browser: 59 IF tracks per spot, 47 cells, IF embedding (`build_takei2025_fov0.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `tests/browser_web` (real-data checks); `benchmarks/fig2/f_roundtrip.py` (chromdata.zarr / FOF-CT / AnnData rows); Fig 6 (`u-chrom-paper/manuscripts/full/figures/fig6/extract_data.py`, `benchmarks/fig6/`, agent benchmark `benchmarks/fig6/agent_bench/`) |
 | `schicar_mop/*.chromdata.zarr` (older builds: `.h5cd`), `*.mcool, *.cool, *.scool` | ~400 MB | no  | built from GEO GSE305439 | web browser: scHiCAR without 3-D, RNA / ATAC / Hi-C embeddings (`build_schicar_mop.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fig2/e_contacts.py`, `e_contacts_query.py` (Fig. 2f and supplement: group pseudo-bulk vs the per-type `contacts_<type>.cool`; link vs copy import), `f_crossmodal.py` (Fig. 2f: RNA Leiden clusters → pseudo-bulk maps and P(s) from the linked `.scool`), `f_roundtrip.py` (Fig. 2b, .scool row); `benchmarks/fig6/bench_server.py` (contact-map and pseudo-bulk latency); agent benchmark `benchmarks/fig6/agent_bench/` |
 | `takei2025_cerebellum/` (tarball + per-FOV and combined `.chromdata.zarr`; older builds: `.h5cd`) | 2.85 GB download; 7.9 GB raw CSV; combined store 2.05 GB as format 2.2 (`*.v22.chromdata.zarr`; 2.94 GB as 2.1, 2.17 GB as 2.0; h5cd 1.x: 6.3 GB) | no | Zenodo 7693825 (opt-in, `--takei2025_cerebellum`) | `benchmarks/fig2/` (b, c, d, allele QC, `rowgroup_sweep.py`, `spot_tracks_encoding.py`; 1e8 store by `replicate_store.py`) via `build_takei2025_cerebellum.py` (`--stream`: FOV-by-FOV streaming import); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1 conversion, streaming seqFISH+ import from `raw/`, streaming distance maps); `benchmarks/cd22_convert_validate.py` (2.1 → 2.2 conversion, bitwise check); `benchmarks/fig2/cd22_variants.py` (format 2.2 variants); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | `liu2025_mop/4DNFID46OABK.csv` + `4DNFICX8IVEK.csv` (+ built `liu2025_mop.chromdata.zarr`, 294 MB; `.v22.chromdata.zarr` 267 MB) | 1.68 GB + 17 MB | no | 4DN public S3 (opt-in, `--liu2025_mop`) | largest wild-type 4DN FOF-CT; `build_liu2025_mop.py` (Fig. 2 dataset scale); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1, streaming `from_fofct(out=)` vs in memory, streaming distance maps vs the dense reference); `benchmarks/cd22_convert_validate.py` / `benchmarks/fig2/cd22_variants.py` (format 2.2); `benchmarks/cell_spatial_validation.py` (cell positions) |
@@ -45,7 +45,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `takei2021_brain/` (Takei 2021 Science cortex seqFISH+ tables S5 / S7 / S8 / S10) | 597 MB | no | Zenodo 4708112 (opt-in, `--takei2021_brain`) | `benchmarks/screcon/matched.py` brain imaging reference (step 2) |
 | `tan2021_cortex/` (Tan 2021 Dip-C adult cortex, 510 cells: pairs + 5 clean 3dg) | 13 GB | no | GEO GSE146397 per-GSM (opt-in, `--tan2021_cortex`) | `benchmarks/screcon/matched.py` brain Dip-C baseline (step 2) |
 | `tan2018_gm12878/` (Tan 2018 Dip-C GM12878, 17 cells: hickit phased pairs + 3dg, Dip-C clean 3dg × 3, Dip-C 3-D-imputed contacts) | ~0.7 GB | no | GEO GSE117876 per-GSM (opt-in, `--tan2018_gm12878`) | diploid EMber / NucDynamics validation (`benchmarks/screcon/diploid_real.py`, `diploid_heldout.py`, `sherlock/dip_real.sbatch`; PREREG §6 diploid addition) |
-| `wu2025_scmicroc/` (Wu 2025 scMicro-C GM12878, 12 deepest cells: hickit phased pairs + the authors' 5 / 10 / 20 kb hickit 3dg) | 3.1 GB (0.3 GB pairs + 2.8 GB 3dg; 102 GB streamed) | no | GEO GSE192759 per-GSM + series tarball (opt-in, `--wu2025_scmicroc`) | Fig. 3a / Fig. S8: EMber deep development (cells 035, 024, 320) and one-shot test (047, 028, 017, 049, 032, 027, 014), PREREG §11 (`benchmarks/screcon/deep_diploid.py`, `highres.py`, `sherlock/deep_dev.sbatch`, `highres_*.sbatch`; `paper/fig3/build_render_scmicroc.py`) |
+| `wu2025_scmicroc/` (Wu 2025 scMicro-C GM12878, 12 deepest cells: hickit phased pairs + the authors' 5 / 10 / 20 kb hickit 3dg) | 3.1 GB (0.3 GB pairs + 2.8 GB 3dg; 102 GB streamed) | no | GEO GSE192759 per-GSM + series tarball (opt-in, `--wu2025_scmicroc`) | Fig. 3a / Fig. S8: EMber deep development (cells 035, 024, 320) and one-shot test (047, 028, 017, 049, 032, 027, 014), PREREG §11 (`benchmarks/screcon/deep_diploid.py`, `highres.py`, `sherlock/deep_dev.sbatch`, `highres_*.sbatch`; `u-chrom-paper/manuscripts/full/figures/fig3/build_render_scmicroc.py`) |
 | `su2020_imr90/genomic-scale.tsv`, `4DNFIFLJGGNR.csv` (catalogued above) | — | no | — | also the diploid imaging-truth simulation (`benchmarks/screcon/diploid_sim.py`: both homologs) |
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
 | `H1Esc-HFF.R1.tar.gz`                 | 128 MB  | no              | UW Noble lab  | `higashi_embedding` tutorial (sci-Hi-C H1Esc+HFF mix)                   |
@@ -542,7 +542,7 @@ public data alone** and are shipped with their recorded outputs.
   105,700 contacts at 100 kb / 200 kb / 500 kb / 1 Mb, linked with
   `cd.link_cool("cell1_contacts.mcool")` (path relative to the store).
 - **Known issue**: the structure was computed before the
-  `uchrom.io.count_contacts` axis fix (`paper/fig3/PLAN.md`, finding 5),
+  `uchrom.io.count_contacts` axis fix (`u-chrom-paper/manuscripts/full/figures/fig3/PLAN.md`, finding 5),
   so its restraints joined scrambled particle pairs.  The native engine
   (`native/nucdyn`, validated against the original on the 8 Stevens cells)
   can rebuild it (`build_sim_cell1.py`, now using that engine), but the
@@ -648,7 +648,7 @@ public data alone** and are shipped with their recorded outputs.
   their three allele columns); `--drop-raw` deletes them.
 - **Caveat — allele calls**: the default `dbscan_ldp_nbr_allele` traces
   often merge both homologs / add off-trace spots; see
-  `benchmarks/fig2/allele_qc.py` and `paper/fig2/results/allele_qc.json`.
+  `benchmarks/fig2/allele_qc.py` and `u-chrom-paper/manuscripts/full/figures/fig2/results/allele_qc.json`.
 - **Used by**: `benchmarks/fig2/b_storage.py`, `c_access.py` (whole-cell
   subsets, 1e4–1e7 spots; 1e8 by replication, `replicate_store.py`),
   `allele_qc.py`; `benchmarks/cd2_zarr_validation.py`
@@ -689,7 +689,7 @@ public data alone** and are shipped with their recorded outputs.
 ## Figure 3 datasets — bridges between contacts and geometry
 
 Inputs of `benchmarks/fig3/` (plan and reference numbers:
-`paper/fig3/PLAN.md`).  All opt-in: `python example-data/download_data.py
+`u-chrom-paper/manuscripts/full/figures/fig3/PLAN.md`).  All opt-in: `python example-data/download_data.py
 --fig3` fetches the downloadable ones (~370 MB), and
 `python example-data/build_rao2014_slices.py` builds the Hi-C slices.
 Everything is gitignored.  DOIs checked against Crossref (2026-09-27).
@@ -992,7 +992,7 @@ contacts), matched to their GSM by the GEO sample records (`!Sample_description`
   with phase columns; Uni-C (GSE267873, `unic2025/`) is deeper but has no phase columns.
 - **Use**: EMber deep (PREREG §11: development cells 035, 024, 320; held-back test cells 047, 028, 017, 049, 032, 027, 014; `DEEP_TEST_RESULTS.md`) and Fig. 3a / S8:
   `sherlock/highres_download.sbatch`, `highres_run.sbatch`, `highres_score.sbatch`;
-  `paper/fig3/build_render_scmicroc.py`, `capture_highres.py`, `make_figS_fig3_highres.py`.
+  `u-chrom-paper/manuscripts/full/figures/fig3/build_render_scmicroc.py`, `capture_highres.py`, `make_figS_fig3_highres.py`.
 - **Download**: `download_data.py --wu2025_scmicroc` (`--no-extract`: pairs only).
 
 ### Liu 2025 DNA-MERFISH, mouse cortex (4DN) — catalogued, not downloaded
