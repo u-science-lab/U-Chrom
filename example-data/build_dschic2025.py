@@ -33,7 +33,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sc_hic_common import ContactBinner, chromsizes, empty_spots, log, stream_pairs  # noqa: E402
+from sc_hic_common import ContactBinner, balance_mcool, chromsizes, empty_spots, log, stream_pairs  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "dschic2025"
@@ -104,6 +104,8 @@ def add_hic_embedding(cd, scool: Path) -> None:
     chroms = [c for c in chromsizes(None) if c != "chrY"]
     feats, cols, depth = scool_cell_features(str(scool), [str(c) for c in cd.cells.index], chroms=chroms)
     log(f"scHiCluster features {feats.shape} in {time.time() - t0:.0f} s")
+    if "n_contacts" not in cd.cells:
+        cd.cells["n_contacts"] = np.asarray(depth, dtype=np.int64)
     embed_cells(cd, source="hic", matrix=feats, normalization="none", methods=("pca", "umap"), n_pcs=30,
                 features="scHiCluster (convolution + random walk + binarise) of the per-cell 1 Mb maps")
 
@@ -126,6 +128,8 @@ def main() -> None:
     if not (args.reuse_contacts and scool.exists() and mcool.exists()):
         scool, mcool, per_cell = bin_contacts(spec, cells, stem)
         cells["n_contacts"] = per_cell.reindex(cells.index).fillna(0).astype(np.int64).to_numpy()
+    else:
+        log(f"balanced {balance_mcool(mcool)} of {mcool.name}")
     cd = ChromData(np.zeros((0, 3)), empty_spots(), cells=cells,
                    uns={"genome_assembly": "mm10", "source": f"{SOURCE}; {spec['geo']}",
                         "coordinate_status": "no 3-D coordinates: contacts only"})

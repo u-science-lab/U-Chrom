@@ -298,7 +298,9 @@ class ContactBinner:
 
     def write_mcool(self, path: Path, resolutions: Sequence[int] = (50_000, 100_000, 250_000, 500_000, 1_000_000),
                     *, balance: bool = True) -> Path:
-        """The bulk map as a multi-resolution ``.mcool`` (base ``bulk_res``), ICE-balanced unless ``balance=False``."""
+        """The bulk map as a multi-resolution ``.mcool`` (base ``bulk_res``); the resolutions from
+        :data:`BALANCE_MIN_RES` up are ICE-balanced unless ``balance=False`` (at 50 kb ICE over 1e9 pixels takes
+        hours; the browser shows counts where a resolution has no weights)."""
         import cooler
 
         nb = self.bulk_nb
@@ -318,13 +320,28 @@ class ContactBinner:
         cooler.zoomify_cooler(str(base), str(path), res, chunksize=10_000_000)
         base.unlink()
         if balance:
-            for r in res:
-                c = cooler.Cooler(f"{path}::/resolutions/{r}")
-                cooler.balance_cooler(c, store=True, ignore_diags=2, min_nnz=10, mad_max=5, max_iters=500)
+            balance_mcool(path)
         return path
 
     def cleanup(self) -> None:
         shutil.rmtree(self.workdir, ignore_errors=True)
+
+
+BALANCE_MIN_RES = 250_000
+
+
+def balance_mcool(path: Path, min_res: int = BALANCE_MIN_RES) -> List[int]:
+    """ICE weights for the resolutions of an ``.mcool`` from ``min_res`` up (missing ones only)."""
+    import cooler
+
+    done = []
+    for uri in cooler.fileops.list_coolers(str(path)):
+        r = int(uri.rstrip("/").rsplit("/", 1)[-1])
+        c = cooler.Cooler(f"{path}::{uri}")
+        if r >= min_res and "weight" not in c.bins().columns:
+            cooler.balance_cooler(c, store=True, ignore_diags=2, min_nnz=10, mad_max=5, max_iters=500)
+            done.append(r)
+    return done
 
 
 # -- RNA -----------------------------------------------------------------------------------------------------

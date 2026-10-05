@@ -33,8 +33,8 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sc_hic_common import (ContactBinner, chromsizes, empty_spots, hvg_zscores, log, rna_h5ad,  # noqa: E402
-                           stream_pairs)
+from sc_hic_common import (ContactBinner, balance_mcool, chromsizes, empty_spots, hvg_zscores, log,  # noqa: E402
+                           rna_h5ad, stream_pairs)
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "gageseq2024"
@@ -152,6 +152,8 @@ def main() -> None:
     if not (args.reuse_contacts and scool.exists() and mcool.exists()):
         scool, mcool, per_cell, sizes, _ = bin_contacts(spec, cells, stem)
         cells["n_contacts"] = per_cell.reindex(cells.index).fillna(0).astype(np.int64).to_numpy()
+    else:
+        log(f"balanced {balance_mcool(mcool)} of {mcool.name}")
     counts, var = load_rna(spec, cells)
     cells["n_counts_rna"] = np.asarray(counts.sum(1)).ravel()
     cells["n_genes_rna"] = np.asarray((counts > 0).sum(1)).ravel()
@@ -165,7 +167,9 @@ def main() -> None:
     z, hvg = hvg_zscores(counts)
     embed_cells(cd, source="rna", matrix=z, normalization="none", methods=("pca", "umap"), n_pcs=30,
                 features=f"the {len(hvg):,} most variable genes (log1p CP10k, z-score, clipped at 10)")
-    feats, _, _ = scool_cell_features(str(scool), list(cells.index), chroms=[c for c in sizes if c != "chrY"])
+    feats, _, depth = scool_cell_features(str(scool), list(cells.index), chroms=[c for c in sizes if c != "chrY"])
+    if "n_contacts" not in cd.cells:
+        cd.cells["n_contacts"] = np.asarray(depth, dtype=np.int64)
     embed_cells(cd, source="hic", matrix=feats, normalization="none", methods=("pca", "umap"), n_pcs=30,
                 features="scHiCluster (convolution + random walk + binarise) of the per-cell 1 Mb maps")
     cd.link_cool(mcool.name, key="bulk", label="All cells (merged)")

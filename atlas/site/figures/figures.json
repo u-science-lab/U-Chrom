@@ -187,5 +187,24 @@
   "resolution": 1000000,
   "fill": 0.178,
   "map": "stevens2017_mesc.map.webp"
+ },
+ "hires_brain": {
+  "section": null,
+  "color_by": "chromosome",
+  "layout": "structure",
+  "layout_key": "ValaB8w3043",
+  "caption": "Mouse brain cell ValaB8w3043, diploid",
+  "n": 24910,
+  "categories": 20,
+  "grid": false,
+  "space": "hires_brain.space.webp",
+  "map_key": "bulk",
+  "map_label": "All cells (merged)",
+  "chrom": "chr2",
+  "start": 27300000,
+  "end": 67400000,
+  "resolution": 100000,
+  "fill": 0.714,
+  "map": "hires_brain.map.webp"
  }
 }

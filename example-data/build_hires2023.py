@@ -37,8 +37,8 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sc_hic_common import (ContactBinner, bin_table, chromsizes, empty_spots, hvg_zscores, log,  # noqa: E402
-                           rna_h5ad)
+from sc_hic_common import (ContactBinner, balance_mcool, bin_table, chromsizes, empty_spots, hvg_zscores,  # noqa: E402
+                           log, rna_h5ad)
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "hires2023"
@@ -190,6 +190,7 @@ def main() -> None:
     mcool = stem.with_name(stem.name + "_bulk.mcool")
     if args.reuse_contacts and scool.exists() and mcool.exists():
         sizes = chromsizes(files[cells.index[0]][0])
+        log(f"balanced {balance_mcool(mcool)} of {mcool.name}")
     else:
         scool, mcool, per_cell, sizes = bin_contacts(cells, files, stem, args.workers)
         cells["n_contacts"] = per_cell.reindex(cells.index).fillna(0).astype(np.int64).to_numpy()
@@ -206,7 +207,9 @@ def main() -> None:
                 features=f"the {len(hvg):,} most variable genes (log1p CP10k, z-score, clipped at 10)")
     if not args.no_hic_embedding:
         t0 = time.time()
-        feats, _, _ = scool_cell_features(str(scool), list(cells.index), chroms=[c for c in sizes if c != "chrY"])
+        feats, _, depth = scool_cell_features(str(scool), list(cells.index), chroms=[c for c in sizes if c != "chrY"])
+        if "n_contacts" not in meta.cells:
+            meta.cells["n_contacts"] = np.asarray(depth, dtype=np.int64)
         embed_cells(meta, source="hic", matrix=feats, normalization="none", methods=("pca", "umap"), n_pcs=30,
                     features="scHiCluster (convolution + random walk + binarise) of the per-cell 1 Mb maps")
         log(f"Hi-C embedding in {time.time() - t0:.0f} s")
