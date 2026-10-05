@@ -4,58 +4,39 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>U-Chrom Atlas</title>
-<meta name="description" content="Spatial and single-cell 3-D genome datasets in the ChromData format: per-spot Hi-C maps, A/B compartments, RNA and images, read over HTTP on demand.">
+<meta name="description" content="Explore spatial and single-cell 3-D genome datasets in your browser: per-spot Hi-C maps, A/B compartments, RNA and tissue images.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="top">
   <div class="wrap bar">
     <a class="brand" href="./"><span class="logo" aria-hidden="true"></span><span>U-Chrom <b>Atlas</b></span></a>
-    <nav>
-      <a href="#datasets">Datasets</a>
-      <a href="#start">Open a dataset</a>
-      <a id="repo-link" href="https://github.com/Nanguage/U-Chrom">GitHub</a>
-      <a href="catalog.json">catalog.json</a>
-    </nav>
+    <a id="repo-link" class="gh" href="https://github.com/Nanguage/U-Chrom">GitHub</a>
   </div>
 </header>
 
-<main>
-  <section class="hero wrap">
-    <h1>Browse 3-D genome datasets without downloading them</h1>
-    <p class="lead">Spatial Hi-C, Hi-C-RNA and ATAC-Hi-C sections, with per-spot contact maps, A/B compartments, RNA and tissue images,
-      stored in the <b>ChromData</b> format and read over HTTP on demand: opening a dataset fetches a few megabytes, not the whole store.</p>
+<main class="wrap">
+  <section class="hero">
+    <h1>Explore 3-D genome datasets in your browser</h1>
+    <p class="lead">Spatial Hi-C, Hi-C-RNA and ATAC-Hi-C sections with per-spot contact maps, A/B compartments, RNA and tissue images.
+      Nothing to download or install.</p>
     <div class="stats" id="stats" aria-live="polite"></div>
   </section>
 
-  <section class="wrap" id="datasets">
+  <section id="datasets">
     <div class="filters">
-      <input id="q" type="search" placeholder="Search title, paper, organism, tissue, modality…" aria-label="Search datasets">
+      <input id="q" type="search" placeholder="Search datasets" aria-label="Search datasets">
       <div class="chips" id="chips" role="group" aria-label="Filters"></div>
     </div>
-    <p class="muted" id="count"></p>
     <div class="grid" id="grid"></div>
-    <p class="muted err" id="err" hidden></p>
-  </section>
-
-  <section class="wrap start" id="start">
-    <h2>Open a dataset in U-Chrom</h2>
-    <p class="muted"><b>Open online</b> shows a dataset in the U-Chrom browser hosted for this atlas (the first open after a quiet period can take
-      a few seconds while its server wakes up).  To run the interactive browser on your own machine, which reads the data straight from this
-      atlas:</p>
-    <ol>
-      <li>Install U-Chrom: <code id="install"></code></li>
-      <li>Start the browser: <code>python -m uchrom.browser --web</code></li>
-      <li>Click <b>Open in U-Chrom</b> on a dataset below, or open the <b>Atlas</b> panel in the browser's <i>Open dataset</i> dialog.</li>
-    </ol>
-    <p class="muted">Local browser address: <input id="local" size="22" value="http://127.0.0.1:8765" aria-label="Local U-Chrom browser address"> (used by the Open buttons).</p>
-    <p class="muted">From Python: <code>ChromData.read(url, backed=True)</code> &mdash; the <b>Python</b> button on each card copies a ready-to-run snippet.</p>
+    <p class="empty" id="empty" hidden>No dataset matches.</p>
+    <p class="err" id="err" hidden></p>
   </section>
 </main>
 
 <footer class="wrap foot">
-  <p id="updated" class="muted"></p>
-  <p class="muted">The datasets are the work of the cited authors; each card gives the source and licence. Contact maps marked <i>reprocessed</i> were rebuilt by U-Chrom from the deposited read pairs.</p>
+  <p>Datasets belong to the authors cited on each card, with their source and licence. Contact maps marked <i>reprocessed</i> were rebuilt by U-Chrom from the deposited read pairs.</p>
+  <p id="updated"></p>
 </footer>
 <script src="config.js"></script>
 <script src="app.js"></script>
