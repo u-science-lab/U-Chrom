@@ -292,3 +292,10 @@ they are.
     r vs the authors' hickit structures, held-out trans / cis < 2 Mb, fraction of input contacts with an
     assigned copy pair (phase coverage), wall time.  **Result statement**: "C1 met / not met, C2 met /
     not met", with the numbers; no change to the method after the test is run.
+* **2026-10-04 — deep test result** (run once, tag `ember-deep-frozen`; `DEEP_TEST_RESULTS.md`):
+  **C1 met** (run-to-run per-copy r at 20 kb: median 0.983 over the 7 held-back cells, min 0.969);
+  **C2 met** (strict held-out cis ROC-AUC, EMber deep − NucDynamics-diploid: mean +0.0117; per cell
+  +0.004 / +0.058 / +0.015 / +0.020 / −0.021 / −0.001 / +0.006 for 047 / 028 / 017 / 049 / 032 / 027 / 014,
+  28-50 strict positives per cell).  Accepted costs as registered: 36-45 % of the input contacts carry
+  a copy pair and are used; cis < 2 Mb same-homolog held-out AUC lower than NucDynamics in 6 of 7 cells
+  (mean −0.016, secondary).  No change to the method after the test.

@@ -224,3 +224,10 @@ re-admitted there as ambiguous restraints, and from the next stage on kept only 
 posterior phases them at >= 0.75).  Caveats: C2 passes on the mean only because of cell 320 (+0.041;
 024 −0.027, 035 −0.005); C3's phase accuracy rises by losing coverage.  Not yet frozen or tested on
 the held-back cells.
+
+## 6. EMber deep frozen and tested (2026-10-04)
+
+Frozen as n75r4 (tag `ember-deep-frozen`, PREREG §10).  One-shot test on the 7 held-back scMicro-C
+cells: C1 met (20 kb run-to-run r median 0.983, min 0.969), C2 met (held-out cis AUC vs
+NucDynamics-diploid +0.0117 on the mean; two cells below, −0.021 and −0.001).  Details:
+`DEEP_TEST_RESULTS.md`, `data/deep_test.json`.

@@ -176,6 +176,106 @@ def cmd_dipc_table(args) -> None:
         t.to_csv(args.out, sep="\t", index=False)
 
 
+def _coverage(npz: Path):
+    if not npz.exists():
+        return None
+    pp = np.load(npz, allow_pickle=False)["phase_probs"]
+    return float(np.isfinite(pp).all(1).mean())
+
+
+def cmd_test(args) -> None:
+    """PREREG §10 deep test: C1 (20 kb seeds r: median >= 0.90, each >= 0.85) and C2 (mean held-out cis
+    AUC difference vs NucDynamics-diploid >= -0.01) over ``--cells``, from ``<root>/<cell>/{variant,nucdyn}``."""
+    rows = []
+    for cell in args.cells:
+        D = Path(args.root) / cell
+        V = D / args.variant
+        r = {"cell": cell}
+        for res in (100000, 20000):
+            f = V / f"score_res{res}.json"
+            if f.exists():
+                s = json.loads(f.read_text())
+                ab, ar = s.get("a_vs_b") or {}, s.get("a_vs_ref") or {}
+                k = res // 1000
+                r[f"seeds_{k}k"] = ab.get("per_copy_r")
+                r[f"seeds_whole_{k}k"] = ab.get("whole_r")
+                for b, x in (ab.get("band_r") or {}).items():
+                    r[f"seeds_{b}_{k}k"] = x
+                r[f"vs_hickit_{k}k"] = ar.get("per_copy_r")
+        for lab, d in ((args.variant, V), ("nucdyn", D / "nucdyn")):
+            for ev, tag in (("eval_pairs", "strict"), ("eval_pairs_cis", "cis2mb")):
+                f = d / f"heldout_{ev}.json"
+                if f.exists():
+                    m = next(iter(json.loads(f.read_text())["methods"].values()))["median"]
+                    r[f"{lab}_{tag}_cis_auc"] = m["cis"]["roc_auc"]
+                    r[f"{lab}_{tag}_trans_auc"] = m["trans"]["roc_auc"]
+                    if tag == "strict":
+                        r[f"{lab}_strict_n_pos"] = m["cis"]["n_pos"]
+        a, b = r.get(f"{args.variant}_strict_cis_auc"), r.get("nucdyn_strict_cis_auc")
+        r["c2_delta"] = a - b if a is not None and b is not None else None
+        r["phase_coverage_20k"] = _coverage(V / "res20000_s1.npz")
+        j = V / "res20000_s1.npz.json"
+        if j.exists():
+            r["wall_20k_s"] = json.loads(j.read_text())["wall_seconds"]
+        rows.append(r)
+    s20 = [r.get("seeds_20k") for r in rows]
+    d2 = [r.get("c2_delta") for r in rows]
+    complete = all(x is not None for x in s20 + d2)
+    out = {"variant": args.variant, "cells": rows, "complete": complete}
+    if complete:
+        out["C1_median"] = float(np.median(s20))
+        out["C1_min"] = float(np.min(s20))
+        out["C1_met"] = bool(out["C1_median"] >= 0.90 and out["C1_min"] >= 0.85)
+        out["C2_mean_delta"] = float(np.mean(d2))
+        out["C2_met"] = bool(out["C2_mean_delta"] >= -0.01)
+    print(json.dumps({k: v for k, v in out.items() if k != "cells"}, indent=1))
+    import pandas as pd
+    print(pd.DataFrame(rows).round(4).to_string(index=False))
+    if args.out:
+        Path(args.out).write_text(json.dumps(out, indent=1))
+
+
+def cmd_figjson(args) -> None:
+    """Numbers of the Fig. 3 panel / Fig. S8 (EMber deep): ladder of ``--cell`` (variant dir), the test
+    result JSON, development comparison frozen vs deep at 20 kb."""
+    root, hr = Path(args.root), Path(args.highres)
+    V = root / args.cell / args.variant
+    ladder = []
+    for res in (100000, 20000, 10000, 5000, 2000, 1000):
+        j = V / f"res{res}_s1.npz.json"
+        if not j.exists():
+            continue
+        m = json.loads(j.read_text())
+        st = m["stages"]
+        st = json.loads(st) if isinstance(st, str) else st
+        z = np.load(V / f"res{res}_s1.npz", allow_pickle=False)
+        r = {"res": res, "wall_seconds": m["wall_seconds"], "n_models": m["n_models"], "n_contacts": m["n_contacts"],
+             "particles_grid": int(z["coords"].shape[-2]), "particles_simulated": st[-1]["n_particles"],
+             "contacts_last_stage": st[-1]["n_contacts"], "gpu": m.get("gpu"),
+             "coverage": float(np.isfinite(z["phase_probs"]).all(1).mean())}
+        s = V / f"score_res{res}.json"
+        if s.exists():
+            s = json.loads(s.read_text())
+            r.update({"seeds_r": (s.get("a_vs_b") or {}).get("per_copy_r"), "seeds_whole": (s.get("a_vs_b") or {}).get("whole_r"),
+                      "seeds_bands": (s.get("a_vs_b") or {}).get("band_r"),
+                      "vs_hickit": (s.get("a_vs_ref") or {}).get("per_copy_r")})
+        h = hr / args.cell / "scores" / f"ref_res{res}.json"
+        if h.exists():
+            r["hickit_runs"] = json.loads(h.read_text())["a_within"]["per_copy_r"]
+        ladder.append(r)
+    dev = {}
+    for c in args.dev_cells:
+        dev[c] = {}
+        for lab, v in (("frozen", "frozen"), ("deep", args.dev_variant)):
+            f = root / c / v / "score_res20000.json"
+            if f.exists():
+                dev[c][lab] = json.loads(f.read_text())["a_vs_b"]["per_copy_r"]
+    out = {"cell": args.cell, "variant": args.variant, "ladder": ladder, "dev_seeds_20k": dev,
+           "test": json.loads(Path(args.test).read_text()) if args.test and Path(args.test).exists() else None}
+    Path(args.out).write_text(json.dumps(out, indent=1, default=float))
+    print(args.out)
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -198,6 +298,22 @@ def main(argv=None) -> None:
     t2.add_argument("--root", required=True)
     t2.add_argument("--out")
     t2.set_defaults(fn=cmd_dipc_table)
+    t3 = sub.add_parser("test")
+    t3.add_argument("--root", required=True)
+    t3.add_argument("--variant", default="deep")
+    t3.add_argument("--cells", nargs="+", required=True)
+    t3.add_argument("--out")
+    t3.set_defaults(fn=cmd_test)
+    t4 = sub.add_parser("figjson")
+    t4.add_argument("--root", required=True, help="runs/highres/dev")
+    t4.add_argument("--highres", required=True, help="runs/highres (authors' hickit scores)")
+    t4.add_argument("--cell", required=True)
+    t4.add_argument("--variant", default="deep")
+    t4.add_argument("--dev-cells", nargs="*", default=[])
+    t4.add_argument("--dev-variant", default="n75r4")
+    t4.add_argument("--test")
+    t4.add_argument("--out", required=True)
+    t4.set_defaults(fn=cmd_figjson)
     args = ap.parse_args(argv)
     args.fn(args)
 
