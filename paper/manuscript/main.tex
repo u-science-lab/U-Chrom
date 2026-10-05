@@ -108,6 +108,9 @@ Analysis is the \pkg{uchrom} Python API: every computation, from a distance map 
 Visualization is a web browser that opens a chromdata.zarr store directly and computes nothing of its own; it asks the Python server for geometry, matrices, tracks and statistics.
 The browser's views are linked through cells and groups (Fig.~\ref{fig:agents}b).
 A lasso in a cell embedding becomes a group; the 3-D view, the Genome view with its per-spot immunofluorescence tracks and group distance maps, and the Stats view then show that group, and a view can instead keep its own cell or group.
+Published viewers cover parts of this (Supplementary Table~S2).
+Contact-map browsers link maps and tracks along the genome~\citep{higlass,juiceboxjs,threedgb2,washu2022}, structure viewers add a 3-D model~\citep{washu3d,hicube,fourdgb}, tracing viewers show one trace at a time next to its distance map~\citep{spacewalk,olive}, and single-cell viewers link a cell embedding to per-cell contact maps~\citep{higashi} or to genomic profiles computed in advance per cell group~\citep{vitessce,sgs}.
+None of the fourteen we examined shows the contact maps of the spots of a tissue section, and none re-scopes contact maps, tracks and 3-D structures together to a selection of cells.
 
 The browser stays interactive at the size of current experiments (Fig.~\ref{fig:agents}c).
 Because the store is opened in backed mode, the server opened one field of view of the Takei et al.\ 2025 cerebellum data (0.38\,M spots) in 0.31\,s and copies of its cells tiled to 11.5\,M spots in 2.6\,s, and the page drew the first frame of the 3-D overview 0.14 and 1.0\,s after it was opened; the frame rate stayed at 52--60 frames\,s$^{-1}$ at every size.
@@ -303,6 +306,8 @@ For each store a fresh server was started without data and the store was opened 
 The frame rate is the \pkg{requestAnimationFrame} rate over a few seconds with the overview drawn.
 Interaction latency was measured against the running server over HTTP, end to end from the client: each interaction is the set of requests the page sends for it, sent in parallel where the page does so (focusing a cell: the cell's geometry and properties; re-scoping to a lasso of 8 cells: the group's geometry, chr15 distance map, radius-of-gyration statistics and two immunofluorescence tracks; panning: two tracks over 20\,Mb of chr15; distance maps of chr15 over all cells or a group of 20; a bulk contact map of chr1; pseudo-bulk maps of chr1 over 50 or 500 cells).
 Each interaction was repeated 20 times (5 for the distance map over all cells) with a new random cell or group every time, so no cached result was reused; the first, cold call is recorded separately and not shown.
+
+Supplementary Table~S2 compares fourteen published viewers with the U-Chrom browser on ten capabilities; every mark rests on the tool's papers, documentation or code (checked on 2026-10-05) and on the rules given with the table, and a mark that could be read two ways was given the stricter value.
 
 \subsection*{Interfaces for agents: browser actions, WebMCP and skills}
 Analysis and visualization are exposed to agents through the same two interfaces that researchers use, not through a separate tool server.

@@ -8,3 +8,5 @@
 \newcommand{\mNone}{\tikz[baseline=-0.6ex]\draw[black!60,line width=0.7pt] (-0.7ex,0) -- (0.7ex,0);}
 \newcommand{\rot}[1]{\rotatebox{90}{#1}}
 \makeatletter\newcommand{\inputrows}[1]{\@@input #1 }\makeatother
+% Marks of Supplementary Table S2 (viewers): native = \mNative, partial = half-filled, none = \mNone.
+\newcommand{\mPartial}{\tikz[baseline=-0.6ex]{\fill[markblue] (0,0) -- (90:0.85ex) arc (90:270:0.85ex) -- cycle;\draw[markblue,line width=0.6pt] (0,0) circle (0.85ex);}}

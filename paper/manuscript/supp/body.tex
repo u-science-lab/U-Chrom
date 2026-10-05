@@ -1,5 +1,5 @@
 % Supplementary Information body, shared by main.tex (appendix) and supplement.tex.
-\noindent Contents: Supplementary Fig.~\ref{fig:S1} (Fig.~2 supplement: access by format beyond one cell, cross-modal groups, linked contacts) and Supplementary Table~\ref{tab:S1} (what each format can represent: definitions, rules and evidence for every cell of Fig.~2b).
+\noindent Contents: Supplementary Fig.~\ref{fig:S1} (Fig.~2 supplement: access by format beyond one cell, cross-modal groups, linked contacts), Supplementary Table~\ref{tab:S1} (what each format can represent: definitions, rules and evidence for every cell of Fig.~2b) and Supplementary Table~\ref{tab:S2} (interactive viewers for 3-D genome data compared on ten capabilities).
 Methods, datasets and benchmark protocol are described in the main text (Methods).
 
 % ------------------------------------------------------------------ Fig. S1
@@ -74,6 +74,7 @@ Container & Element & Before & After & Reason \\
 \inputrows{supp/tableS1_changes.tex}
 \bottomrule
 \end{longtable}
+\addtocounter{table}{-1}  % longtable steps the table counter even without a caption: this one is part of Table S1
 \endgroup
 
 \begingroup\footnotesize
@@ -91,4 +92,7 @@ Element & Mark & Evidence & Store-and-read-back test \\
 \endfoot
 \inputrows{supp/tableS1_evidence.tex}
 \end{longtable}
+\addtocounter{table}{-1}  % longtable steps the table counter even without a caption: this one is part of Table S1
 \endgroup
+
+\input{supp/tableS2_viewers}
