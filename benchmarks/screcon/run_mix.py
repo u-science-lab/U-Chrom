@@ -154,6 +154,8 @@ def main(argv=None) -> None:
             prior = np.load(args.prior)
             meta["prior_file"] = args.prior
         passes = int(params.pop("passes", 0))
+        if passes < 0:                       # -j: k + j passes (one more cell is seeded per pass)
+            passes = args.k - passes
         popt = {key[5:]: params.pop(key) for key in list(params) if key.startswith("pass_")}
         if passes > 0:
             res = un.deconvolve_passes(c.chrom_a.astype(str), c.pos_a, c.chrom_b.astype(str), c.pos_b, passes=passes,
