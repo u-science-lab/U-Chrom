@@ -27,134 +27,122 @@
     <div>
       <p class="eyebrow">The software behind the atlas</p>
       <h1><span>One data structure</span> <span>for the 3-D genome</span></h1>
-      <p class="lead">U-Chrom (Universal Chromatin) is a Python toolkit for chromatin 3-D structure data. Chromatin
-        tracing, single-cell and spatial Hi-C and 3-D reconstructions all become one container, <b>ChromData</b>,
-        which every analysis module and the browser share.</p>
+      <p class="lead">U-Chrom (Universal Chromatin) is a Python toolkit for chromatin 3-D structure data. Each assay
+        sees one facet of the genome's folding: Hi-C which loci touch, chromatin tracing where they are, ChIP, ATAC,
+        RNA and immunofluorescence what they carry. U-Chrom puts them all in one container, <b>ChromData</b>, which
+        every analysis module and the browser share.</p>
       <p class="soon"><span class="dot" aria-hidden="true"></span>Source code coming soon</p>
     </div>
-    <ul class="sources" aria-label="Data that become a ChromData">
-      <li><b>Chromatin tracing</b><span>DNA FISH, seqFISH+, 4DN FOF-CT tables</span></li>
-      <li><b>Single-cell Hi-C</b><span>.pairs, per-cell maps, with RNA of the same cells</span></li>
-      <li><b>Spatial Hi-C</b><span>spots of a tissue section, images, RNA, ATAC</span></li>
-      <li><b>3-D structures</b><span>models from contacts: .3dg, PDB, U-Chrom's own</span></li>
-      <li class="into"><b>ChromData</b><span>one table of loci, coordinates and cells</span></li>
-    </ul>
+    <figure class="paper-fig hero-art">
+      <a href="paper/fig1a.webp" target="_blank" rel="noopener"><img src="paper/fig1a.webp" width="1400" height="1392"
+        alt="Three walls of a cube around a nucleus: a contact map (contacts, which loci touch), a traced chromatin fibre (geometry, where loci are) and histone-mark tracks (molecular state, what loci carry)"></a>
+      <figcaption><b>Three facets of 3-D genome organisation.</b> Contacts (Hi-C, scHi-C), geometry (chromatin
+        tracing) and molecular state (ChIP, ATAC, RNA, IF). The contact map is scHiCAR mouse motor cortex
+        (chr7:53–68 Mb) and the tracks IF along chr15 of one cerebellar cell (DNA seqFISH+); the rest is a
+        conceptual illustration, AI-generated and edited by the authors. <span class="src">U-Chrom manuscript, Fig. 1a</span></figcaption>
+    </figure>
   </section>
 
   <section class="wrap doc-section" id="chromdata">
     <div class="doc-head">
       <p class="kind">Data model</p>
-      <h2>ChromData</h2>
-      <p>Every row of a ChromData is a <i>spot</i>: one locus of one copy of a chromosome in one cell, with its
-        x, y, z when it has them. Spots are stored flat and read by cell, trace or chromosome; the loci live once,
-        on an axis that all cells share.</p>
+      <h2>ChromData: one shared index</h2>
+      <p>Not a joint model of the data: one index that every layer hangs from. Geometry (x, y, z), contacts
+        (bin × bin maps) and molecular features each keep their own form; the same genomic bins index all of them,
+        and any layer can sit at the level of a trace, a cell or a population.</p>
     </div>
-
-    <figure class="model" aria-label="The ChromData data model">
-      <div class="hier">
-        <div class="lvl"><b>Cell</b><span>cells · cellm</span></div>
-        <div class="arrow" aria-hidden="true">↓</div>
-        <div class="lvl"><b>Trace</b><span>one chromosome copy · traces</span></div>
-        <div class="arrow" aria-hidden="true">↓</div>
-        <div class="lvl"><b>Spot</b><span>spots · coords · spot_tracks</span></div>
-        <div class="arrow" aria-hidden="true">↓ bin_id</div>
-        <div class="lvl locus"><b>Bin</b><span>the locus axis · bins</span></div>
-      </div>
-      <div class="axes">
-        <div class="axis">
-          <h3>Locus axis <span>one row per locus, shared by all cells</span></h3>
-          <dl>
-            <dt>bins</dt><dd>chrom, start, end</dd>
-            <dt>bin_tracks</dt><dd>per-locus signals: bulk ATAC, ChIP, GC, compartment scores</dd>
-            <dt>intervals</dt><dd>typed TADs, loops, peaks, segments</dd>
-          </dl>
-        </div>
-        <div class="axis">
-          <h3>Spot axis <span>one row per locus of a chromosome copy</span></h3>
-          <dl>
-            <dt>spots</dt><dd>bin_id, trace_id, cell_id</dd>
-            <dt>coords</dt><dd>x, y, z (n × 3); alternative models in <i>layers</i></dd>
-            <dt>spot_tracks</dt><dd>per-spot signals: IF intensity, seqFISH z-scores</dd>
-          </dl>
-        </div>
-        <div class="axis">
-          <h3>Cell axis <span>one row per cell or spot of a tissue</span></h3>
-          <dl>
-            <dt>cells</dt><dd>cell type, stage, QC, position in the tissue</dd>
-            <dt>cellm</dt><dd>embeddings: RNA / Hi-C / ATAC PCA and UMAP</dd>
-            <dt>cell_shapes, points</dt><dd>outlines, RNA spots and other 3-D points</dd>
-          </dl>
-        </div>
-        <div class="axis linked">
-          <h3>Other modalities <span>linked, or embedded in the store</span></h3>
-          <dl>
-            <dt>contact maps</dt><dd>per cell (.scool) and bulk (.cool / .mcool)</dd>
-            <dt>AnnData</dt><dd>RNA, ATAC, A/B per cell or spot</dd>
-            <dt>images</dt><dd>tissue sections, in tissue coordinates</dd>
-          </dl>
-        </div>
-      </div>
-    </figure>
-
-    <ul class="principles">
-      <li><b>Contacts stay contacts.</b> Contact maps are kept as maps, linked or embedded, never forced into
-        coordinates; distances are computed per trace on demand rather than stored as matrices.</li>
-      <li><b>Results keep their provenance.</b> Called TADs, loops and compartments carry the function, parameters,
-        inputs and U-Chrom version that made them.</li>
-      <li><b>FOF-CT in and out.</b> The 4DN FISH Omics Format core table maps onto ChromData one to one, in both
-        directions.</li>
-    </ul>
-  </section>
-
-  <section class="wrap doc-section" id="format">
-    <div class="doc-head">
-      <p class="kind">On disk</p>
-      <h2>.chromdata.zarr</h2>
-      <p>A ChromData is written as a Zarr v3 group of Parquet tables and Zarr arrays: open formats that any
-        language can read. Coordinates are partitioned by chromosome and sorted by cell, and contact maps are
-        sharded, so a reader fetches only what it needs, from a disk or over HTTP.</p>
-    </div>
-    <div class="format">
-      <pre class="tree" aria-label="Layout of a .chromdata.zarr store"><code><b>x.chromdata.zarr/</b>
-  zarr.json                      <i>format version, metadata, provenance</i>
-  tables/bins.parquet            <i>the locus axis</i>
-  tables/cells.parquet           <i>cells; traces, intervals alike</i>
-  tables/coords/chrom=chr1/…     <i>x, y, z + ids, per chromosome</i>
-  tables/primary/*.parquet       <i>per-spot tracks, sorted by cell</i>
-  index/                         <i>row ranges of every cell and trace</i>
-  embedded/contacts/&lt;map&gt;/       <i>per-cell and bulk maps, by chromosome</i>
-  embedded/anndata/&lt;key&gt;/        <i>RNA, ATAC, A/B</i>
-  embedded/images/&lt;key&gt;          <i>tissue images</i></code></pre>
-      <ul class="facts-list">
-        <li><b>Read on demand.</b> Opening an atlas dataset over HTTP takes about seventeen small requests; a
-          cell, a chromosome or one region of a contact map is a range read.</li>
-        <li><b>Self-contained.</b> Contact maps, RNA and images can be embedded, so one store holds the whole
-          dataset.</li>
-        <li><b>One file when you want it.</b> <code>.cdz</code> is the same tree in one uncompressed zip: the
-          atlas' download format, opened like the directory.</li>
-        <li><b>Versioned.</b> Format 2.3; newer readers read older stores, and older formats convert in one
-          command.</li>
+    <div class="model-split">
+      <figure class="paper-fig">
+        <a href="paper/fig1b.webp" target="_blank" rel="noopener"><img src="paper/fig1b.webp" width="1100" height="1210"
+          alt="Layers of geometry, contacts and molecular features stacked on shared genomic bins, held at the trace, cell or population level"></a>
+        <figcaption><b>Layers on shared bins.</b> Aggregation moves a layer up a level; between layers, U-Chrom
+          imputes missing loci, reconstructs 3-D structures from contacts, turns distances into contact frequencies
+          and projects molecular features onto structures through a shared spot, cell or cell type.
+          <span class="src">Fig. 1b</span></figcaption>
+      </figure>
+      <ul class="principles stacked">
+        <li><b>Every row is a spot.</b> One locus of one chromosome copy in one cell, with its x, y, z when it has
+          them. Spots are stored flat and read by cell, trace or chromosome.</li>
+        <li><b>Loci live once.</b> Per-locus signals (bulk ATAC, ChIP, compartment scores, TADs, loops) sit on the
+          locus axis that all cells share; per-spot signals sit on the spots.</li>
+        <li><b>Contacts stay contacts.</b> Contact maps are kept as maps, linked or embedded, never forced into
+          coordinates; distances are computed per trace on demand rather than stored.</li>
+        <li><b>Results keep their provenance.</b> Called TADs, loops and compartments carry the function, parameters,
+          inputs and U-Chrom version that made them.</li>
+        <li><b>FOF-CT in and out.</b> The 4DN FISH Omics Format core table maps onto ChromData one to one, in both
+          directions.</li>
       </ul>
     </div>
+    <figure class="paper-fig wide">
+      <a href="paper/fig2a.webp" target="_blank" rel="noopener"><img src="paper/fig2a.webp" width="2400" height="1160"
+        alt="The spots table with bin_id, trace_id and cell_id keys pointing at the bins, traces and cells tables; coordinates and spot tracks row-aligned with the spots; contact maps linked; and the layout of a .chromdata.zarr store"></a>
+      <figcaption><b>Tables joined by keys.</b> Spots point at the locus axis (bins) and at traces and cells;
+        coordinates and per-spot tracks are row-aligned with the spots; contact maps are linked or embedded, not
+        copied. Right, the <code>.chromdata.zarr</code> layout: Zarr v3 with Parquet tables, coordinates one table per
+        chromosome; <code>.cdz</code> is the same store in one zip file. <span class="src">Fig. 2a</span></figcaption>
+    </figure>
+  </section>
+
+  <section class="wrap doc-section" id="performance">
+    <div class="doc-head">
+      <p class="kind">On disk and at scale</p>
+      <h2>.chromdata.zarr</h2>
+      <p>Open formats any language can read, laid out so that a reader fetches only what it needs, from a disk or
+        over HTTP. Benchmarks on the Takei et al. 2025 cerebellum DNA seqFISH+ data (62 per-spot tracks), up to
+        10<sup>7</sup> real spots and 10<sup>8</sup> replicated ones.</p>
+    </div>
+    <div class="bench-split">
+      <figure class="paper-fig">
+        <a href="paper/fig2b.webp" target="_blank" rel="noopener"><img src="paper/fig2b.webp" width="1600" height="740"
+          alt="Matrix of twelve kinds of chromatin data against six formats: chromdata.zarr represents all of them natively, contact maps linked"></a>
+        <figcaption><b>What each format can represent</b>: filled, native; ring, linked; open, by convention only;
+          dash, not supported. <span class="src">Fig. 2b</span></figcaption>
+      </figure>
+      <figure class="paper-fig">
+        <a href="paper/fig2c.webp" target="_blank" rel="noopener"><img src="paper/fig2c.webp" width="1100" height="708"
+          alt="File size and full-read time against the number of spots for chromdata.zarr, FOF-CT, AnnData and SpatialData"></a>
+        <figcaption><b>Storage and full reads.</b> At 10<sup>7</sup> spots: 1.8 GB, read in 0.57 s (FOF-CT 6.7 GB,
+          99 s; AnnData 5.6 GB, 5.4 s; SpatialData 2.2 GB, 2.2 s). <span class="src">Fig. 2c</span></figcaption>
+      </figure>
+    </div>
+    <figure class="paper-fig wide">
+      <a href="paper/fig2de.webp" target="_blank" rel="noopener"><img src="paper/fig2de.webp" width="2400" height="654"
+        alt="Access time by level, time to open a file and get one cell across formats, memory to open and query, and peak memory of a streamed distance map"></a>
+      <figcaption><b>Access speed and memory.</b> Opening a 10<sup>7</sup>-spot store and getting one cell takes
+        45 ms (SpatialData 0.75 s, AnnData 7.6 s); opening and querying stays under a few GB where loading everything does
+        not; a median distance map streamed under a 2 GB budget peaks at 1.55 GB instead of 12.3 GB, with a
+        bitwise-identical result. Open markers: 10<sup>8</sup> spots of replicated cells.
+        <span class="src">Fig. 2d, e</span></figcaption>
+    </figure>
+    <ul class="facts-list row">
+      <li><b>Read on demand.</b> Opening an atlas dataset over HTTP takes about seventeen small requests; a cell, a
+        chromosome or one region of a contact map is a range read.</li>
+      <li><b>Self-contained.</b> Contact maps, RNA and images can be embedded, so one store holds the whole
+        dataset.</li>
+      <li><b>One file when you want it.</b> <code>.cdz</code> is the same tree in one uncompressed zip: the atlas'
+        download format, opened like the directory.</li>
+      <li><b>Versioned.</b> Format 2.3; newer readers read older stores, and older formats convert in one
+        command.</li>
+    </ul>
   </section>
 
   <section class="wrap doc-section" id="package">
     <div class="doc-head">
       <p class="kind">The package</p>
-      <h2>Modules</h2>
-      <p>The modules meet in ChromData. Analysis functions share one calling convention: a chromosome, cell or
-        trace selection, typed parameters, and the result stored under a key with its provenance.</p>
+      <h2>An open ecosystem</h2>
+      <p>Community formats are read, or linked without copying; five analysis modules share one API, reached from
+        Python, the command line, the web browser this atlas runs on, and an MCP server for agents.</p>
     </div>
-    <div class="modules">
-      <div class="module"><code>uchrom.core</code><p>ChromData, the .chromdata.zarr format, backed and remote reading</p></div>
-      <div class="module"><code>uchrom.io</code><p>.pairs, .cool / .mcool / .scool, .hic, .3dg, PDB, FOF-CT, seqFISH+ multi-omics</p></div>
-      <div class="module"><code>uchrom.recon</code><p>3-D reconstruction: NucDynamics and GEM for single cells, MDS for bulk Hi-C, GEM-FISH for Hi-C with FISH</p></div>
-      <div class="module"><code>uchrom.im</code><p>Imaging: assigning spots to traces, imputing missing coordinates</p></div>
-      <div class="module"><code>uchrom.strc</code><p>Structures: TADs (directionality index, ArcFISH, FISHnet), loops, A/B compartments</p></div>
-      <div class="module"><code>uchrom.fea</code><p>Per-locus features: distances, sequence, gene annotation, peaks</p></div>
-      <div class="module"><code>uchrom.emb</code><p>Single-cell embeddings: Higashi, scHiCluster-style Hi-C features, RNA and ATAC</p></div>
-      <div class="module"><code>uchrom.browser</code><p>The interactive browser, desktop and web; the atlas runs the web browser</p></div>
-    </div>
+    <figure class="paper-fig wide">
+      <a href="paper/fig1c.webp" target="_blank" rel="noopener"><img src="paper/fig1c.webp" width="2400" height="1114"
+        alt="Interfaces (Python API, CLI, web browser, MCP server), the five method modules on ChromData, and the formats read, written or linked"></a>
+      <figcaption><b>Interfaces, methods and formats.</b> Reconstruction (<code>uchrom.recon</code>), imaging-side
+        processing (<code>uchrom.im</code>), structure calling (<code>uchrom.strc</code>), geometric features
+        (<code>uchrom.fea</code>) and cell embeddings (<code>uchrom.emb</code>) on one ChromData; FOF-CT, .pairs,
+        .cool / .mcool / .scool, .hic, .3dg and tracing tools read, AnnData / MuData and coolers linked, structures
+        exported as PDB. Logos are marks of their owners, used for identification only.
+        <span class="src">Fig. 1c</span></figcaption>
+    </figure>
   </section>
 
   <section class="wrap doc-section" id="example">
