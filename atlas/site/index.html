@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
 <link rel="stylesheet" href="style.css">
+<script src="theme.js"></script>
 </head>
 <body>
 <header class="top">
@@ -18,6 +19,10 @@
     <nav>
       <a href="#datasets">Datasets</a>
       <a href="uchrom.html">U-Chrom</a>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark theme" title="Switch to dark theme">
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>
+      </button>
     </nav>
   </div>
 </header>
@@ -33,10 +38,6 @@
     </div>
     <figure class="hero-anim">
       <canvas id="hero-canvas" role="img" aria-label="Animation: a tissue section on a slide; one cell after another is lifted from it, and its nucleus shows that cell's 3-D genome, a real single-cell Hi-C structure, turning slowly"></canvas>
-      <figcaption><b>Every cell of a tissue folds its genome its own way.</b> A diagram: the section is drawn after an
-        adult mouse cerebellum (spatial Hi-C, Chen, Guo et al. 2026); the genomes are real single-cell Hi-C structures of
-        three adult mouse brain cells (HiRES, Liu et al. 2023), one line per chromosome copy, three copies in colour. The
-        cells do not come from this section. <a id="hero-open" href="#hires_brain">Open these cells &rarr;</a></figcaption>
     </figure>
   </section>
 
@@ -48,6 +49,7 @@
     <div class="chips" id="chips" role="group" aria-label="Filters"></div>
     <p class="hint" id="hint" hidden>Datasets open in the U-Chrom browser hosted for this atlas. After a quiet spell the first one takes a few seconds to start.</p>
     <div id="studies"></div>
+    <nav class="pager" id="pager" aria-label="Pages" hidden></nav>
     <p class="empty" id="empty" hidden>No dataset matches. <button type="button" id="reset">Clear the filters</button></p>
     <p class="err" id="err" hidden></p>
   </section>

@@ -18,7 +18,7 @@
   }
   function readColors() {
     colors = { ink: css('--ink', '#1c1d21'), muted: css('--muted', '#73767d'), paper: css('--paper', '#fbfaf7'),
-               hl: [css('--atac', '#dc740d'), css('--rna', '#5b8f34'), css('--hic', '#be2d2a')] };
+               hl: [css('--logo-green', '#2a9d8f'), css('--logo-blue', '#34568b'), css('--logo-orange', '#e07a3f')] };   // the logo's
   }
   function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
   function smooth(x) { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); }
@@ -247,8 +247,14 @@
 
   fetch('hero.json').then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (d) {
     data = d; build(d); readColors(); resize();
-    var fixed = /[?&]hero=([0-9.]+)/.exec(location.search);       // ?hero=12.5: that moment, still (review)
-    if (fixed) { reduced = true; frame(parseFloat(fixed[1])); window.heroFrame = function (t) { readColors(); frame(t); }; return; }
+    var fixed = /[?&]hero=([0-9.]+)/.exec(location.search), still = fixed ? parseFloat(fixed[1]) : STILL;
+    // the page's theme changed (toggle or system): new colours; a still is drawn again, a running loop picks them up
+    document.addEventListener('themechange', function () { readColors(); if (reduced) frame(still); });
+    if (fixed) {                                                // ?hero=12.5: that moment, still (review)
+      reduced = true; frame(still);
+      window.heroFrame = function (t) { still = t; readColors(); frame(t); };
+      return;
+    }
     if (reduced) frame(STILL); else play();
     if (window.IntersectionObserver) {
       var hidden = null;
@@ -259,9 +265,6 @@
       }).observe(canvas);
     }
     window.addEventListener('resize', function () { resize(); if (reduced) frame(STILL); });
-    if (window.matchMedia) {
-      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () { readColors(); });
-    }
     document.dispatchEvent(new CustomEvent('hero-ready', { detail: d }));
   }).catch(function () { canvas.parentElement.classList.add('hero-failed'); });
 })();

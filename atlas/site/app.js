@@ -7,7 +7,8 @@
   var HOSTED = (CFG.hosted || '').replace(/\/+$/, '');
   var FIG = 'figures/';
   var $ = function (id) { return document.getElementById(id); };
-  var state = { cat: null, q: '', on: {} };   // on: {group: Set(values)}
+  var state = { cat: null, q: '', on: {}, page: 0 };   // on: {group: Set(values)}; page: 0-based
+  var PAGE = 10;         // datasets per page, about: a study is never split, a page holds studies up to this many
 
   // what the catalog's modality names are called on the page, and their colour (the U-Chrom logo palette)
   var MODS = {
@@ -133,7 +134,7 @@
         b.addEventListener('click', function () {
           var s = state.on[g[0]] || (state.on[g[0]] = new Set());
           if (s.has(v)) s.delete(v); else s.add(v);
-          render();
+          refilter();
         });
         grp.appendChild(b);
       });
@@ -141,29 +142,72 @@
     });
   }
 
-  var CATEGORY_TITLES = { 'Spatial': 'Spatial', 'Single-cell': 'Single cell', 'Imaging': 'Imaging' };
-
-  function render() {
-    var shown = state.cat.datasets.filter(matches), box = $('studies');
-    box.textContent = '';
-    var cats = {}, last = null;
-    state.order.forEach(function (sid) { var s = state.studies[sid]; if (s && s.category) cats[s.category] = 1; });
-    var several = Object.keys(cats).length > 1;
+  // the studies that have datasets to show, with those datasets, in the catalogue's order; then cut into pages
+  function groups() {
+    var shown = state.cat.datasets.filter(matches), out = [];
     state.order.forEach(function (sid) {
       var ds = shown.filter(function (d) { return (d.study || '') === sid; });
-      if (!ds.length) return;
-      var s = state.studies[sid] || { id: sid, citation: ds[0].paper };
-      if (several && s.category && s.category !== last) {    // a heading per kind of data
-        last = s.category;
-        var n = shown.filter(function (d) { var t = study(d); return t && t.category === last; }).length;
-        box.appendChild(el('div', { class: 'category', id: 'category-' + last.toLowerCase() }, [
-          el('h3', { text: CATEGORY_TITLES[last] || last }), el('span', { text: n + (n === 1 ? ' dataset' : ' datasets') })]));
-      }
-      box.appendChild(studyBlock(s, ds));
+      if (ds.length) out.push({ s: state.studies[sid] || { id: sid, citation: ds[0].paper }, ds: ds });
     });
-    $('empty').hidden = shown.length > 0;
+    return { shown: shown, groups: out };
+  }
+  function paginate(gs) {
+    var pages = [], cur = [], n = 0;
+    gs.forEach(function (g) {
+      if (cur.length && n + g.ds.length > PAGE) { pages.push(cur); cur = []; n = 0; }
+      cur.push(g); n += g.ds.length;
+    });
+    if (cur.length) pages.push(cur);
+    return pages;
+  }
+  function pageOf(id) {                     // the page that shows a dataset or study (a link to #id)
+    var pages = paginate(groups().groups);
+    for (var i = 0; i < pages.length; i++) {
+      if (pages[i].some(function (g) { return 'study-' + g.s.id === id || g.ds.some(function (d) { return d.id === id; }); })) return i;
+    }
+    return -1;
+  }
+
+  // what is shown: "All datasets", or the chosen filters and the search words
+  function heading(shown, nStudies) {
+    var parts = [];
+    GROUPS.forEach(function (g) { var sel = state.on[g[0]]; if (sel) sel.forEach(function (v) { parts.push(v); }); });
+    if (state.q) parts.push('“' + state.q + '”');
+    var count = shown.length + (shown.length === 1 ? ' dataset' : ' datasets') + ' · ' + nStudies + (nStudies === 1 ? ' study' : ' studies');
+    return el('div', { class: 'results', id: 'results' }, [el('h3', { text: parts.length ? parts.join(' · ') : 'All datasets' }), el('span', { text: count })]);
+  }
+
+  function pager(n) {
+    var box = $('pager'); box.textContent = '';
+    box.hidden = n < 2;
+    if (n < 2) return;
+    var go = function (i) {
+      return function () { state.page = i; render(); var r = $('results'); if (r) r.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    };
+    var prev = el('button', { type: 'button', class: 'pg-step', text: '← Previous' });
+    if (state.page === 0) prev.disabled = true; else prev.addEventListener('click', go(state.page - 1));
+    box.appendChild(prev);
+    for (var i = 0; i < n; i++) {
+      var b = el('button', { type: 'button', class: 'pg' + (i === state.page ? ' on' : ''), text: String(i + 1), 'aria-label': 'Page ' + (i + 1) });
+      if (i === state.page) b.setAttribute('aria-current', 'page'); else b.addEventListener('click', go(i));
+      box.appendChild(b);
+    }
+    var next = el('button', { type: 'button', class: 'pg-step', text: 'Next →' });
+    if (state.page === n - 1) next.disabled = true; else next.addEventListener('click', go(state.page + 1));
+    box.appendChild(next);
+  }
+
+  function render() {
+    var r = groups(), pages = paginate(r.groups), box = $('studies');
+    state.page = Math.max(0, Math.min(state.page, pages.length - 1));
+    box.textContent = '';
+    if (r.shown.length) box.appendChild(heading(r.shown, r.groups.length));
+    (pages[state.page] || []).forEach(function (g) { box.appendChild(studyBlock(g.s, g.ds)); });
+    pager(pages.length);
+    $('empty').hidden = r.shown.length > 0;
     renderChips();
   }
+  function refilter() { state.page = 0; render(); }
 
   function stats(cat) {
     var ds = cat.datasets, cells = ds.reduce(function (a, d) { return a + (d.n_cells || 0); }, 0);
@@ -188,25 +232,20 @@
     return f.chrom + ':' + fmtMb(f.start) + '–' + fmtMb(f.end) + ' Mb at ' + (f.resolution / 1e3) + ' kb, all ' + unit(d) + ' merged';
   }
 
-  function heroLink(cat) {          // the hero's genomes are cells of the HiRES brain dataset: open it in the hosted browser
-    var d = cat.datasets.filter(function (x) { return x.id === 'hires_brain'; })[0], a = $('hero-open');
-    if (!a) return;
-    if (d && openUrl(d)) { a.href = openUrl(d); a.target = '_blank'; a.rel = 'noopener'; }
-    else if (!d) a.remove();
-  }
-
   function start(cat) {
     state.cat = cat;
     state.studies = {}; state.order = [];
     (cat.studies || []).forEach(function (s) { state.studies[s.id] = s; state.order.push(s.id); });
     cat.datasets.forEach(function (d) { var k = d.study || ''; if (state.order.indexOf(k) < 0) state.order.push(k); });
-    stats(cat); render(); heroLink(cat);
+    var hash = location.hash.slice(1), at = hash ? pageOf(hash) : -1;
+    if (at > 0) state.page = at;
+    stats(cat); render();
     $('hint').hidden = !HOSTED;
-    var hash = location.hash.slice(1); if (hash && document.getElementById(hash)) document.getElementById(hash).scrollIntoView();
+    if (hash && document.getElementById(hash)) document.getElementById(hash).scrollIntoView();
   }
 
-  $('q').addEventListener('input', function (e) { state.q = e.target.value.trim().toLowerCase(); if (state.cat) render(); });
-  $('reset').addEventListener('click', function () { state.q = ''; state.on = {}; $('q').value = ''; render(); });
+  $('q').addEventListener('input', function (e) { state.q = e.target.value.trim().toLowerCase(); if (state.cat) refilter(); });
+  $('reset').addEventListener('click', function () { state.q = ''; state.on = {}; $('q').value = ''; refilter(); });
   fetch('catalog.json', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(start).catch(function (e) {
     var m = $('err'); m.hidden = false; m.textContent = 'Could not read the catalogue: ' + e.message;
   });
