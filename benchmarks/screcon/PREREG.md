@@ -268,3 +268,27 @@ they are.
   posterior of the structure (>= the same τ) or dropped.  Reason: commitment by the prior with
   `drop` reproduces (C1) but loses held-out AUC (C2 / C3) with two thirds of the contacts unused;
   `keep` uses them but does not reproduce.  Criteria unchanged.
+* **2026-10-04 — deep configuration frozen (tag `ember-deep-frozen`) and the deep test registered,
+  before any held-back run.**
+  * **Frozen method** ("EMber deep"): the frozen diploid EMber of §6 plus `robust_dip_commit` = 0.75,
+    `robust_dip_commit_drop` = true, `robust_dip_readmit_stage` = 4 (n75r4 in `diploid_devlog.md` §5);
+    `robust_dip_commit_stage` = -1, `dip_isolation_nei` = 0.  These are passed as parameters; the engine
+    defaults (= the §6 configuration) are unchanged, so §6 and its test are unaffected and the C3
+    re-check on the §6 Dip-C test cells is not run (rule above).
+  * **Accepted costs, reported in full**: lower phase coverage (Dip-C development cells: masked ends with
+    an assigned phase 0.94 → 0.73; correct over all masked ends 0.83 → 0.71) and C2 met on the mean only
+    (per cell −0.005 / −0.027 / +0.041 on the development cells).
+  * **Test units** (never run with any configuration except the frozen-EMber ladder runs of 047 / 028,
+    whose scores were not inspected): scMicro-C cells 047, 028, 017, 049, 032, 027, 014.
+  * **Protocol** (`sherlock/deep_dev.sbatch` with the frozen build of the tag, variants
+    `engine:deep:{"robust_dip_commit":0.75,"robust_dip_readmit_stage":4}` and `nucdyn`): 100 kb and 20 kb,
+    10 models, seeds 1 and 2; `highres.py score` (50,000 random pairs per chain); held-out split
+    `diploid_heldout.py split --folds 1 --seed 1 --eval-res 100000 --cis-same-homolog 2000000`, EMber deep
+    and NucDynamics-diploid (engine defaults, 2017 protocol) at 100 kb seed 1 on the training table,
+    `heldout.py score` strict cis ROC-AUC.
+  * **Endpoints**: **C1** median over the 7 cells of seed-1-vs-2 per-copy r at 20 kb >= 0.90 and every
+    cell >= 0.85; **C2** mean over the 7 cells of (EMber deep − NucDynamics-diploid) strict held-out cis
+    ROC-AUC >= −0.01.  Reported, not thresholded: per-cell values, 100 kb r, whole-genome and per-band r,
+    r vs the authors' hickit structures, held-out trans / cis < 2 Mb, fraction of input contacts with an
+    assigned copy pair (phase coverage), wall time.  **Result statement**: "C1 met / not met, C2 met /
+    not met", with the numbers; no change to the method after the test is run.
