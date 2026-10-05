@@ -2271,11 +2271,16 @@ class SpotRows:
         return len(self.part_files)
 
     def pf(self, name: str, part: int = 0):
+        # opened outside the lock: over HTTP an open is a request or two, and the partitions of one read are
+        # opened by parallel threads (two threads may open the same file; the first one kept wins)
+        key = (name, int(part))
         with self._lock:
-            key = (name, int(part))
-            if key not in self._pf:
-                self._pf[key] = self.c.parquet(self.part_files[int(part)][name])
-            return self._pf[key]
+            pf = self._pf.get(key)
+        if pf is None:
+            pf = self.c.parquet(self.part_files[int(part)][name])
+            with self._lock:
+                pf = self._pf.setdefault(key, pf)
+        return pf
 
     def columns(self, name: str) -> List[str]:
         """Logical column names (the helper columns of decimal-encoded

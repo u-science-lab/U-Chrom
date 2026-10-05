@@ -24,6 +24,11 @@ import pandas as pd
 from uchrom.core import ChromData
 
 DEFAULT_MAX_POINTS = 5_000_000
+#: a backed store with more spots than this is never read whole by the browser: summaries come from its index,
+#: geometry / statistics / distance maps from a sample of its cells or traces (format 2.2 stores)
+LARGE_SPOTS = 2_000_000
+#: spots read for a statistic (radius of gyration, P(s)) of a large store
+STATS_MAX_SPOTS = 2_000_000
 #: reserved group reference: every cell (e.g. the all-cell pseudo-bulk of a per-cell map)
 ALL_CELLS = "all"
 
@@ -227,6 +232,24 @@ class Dataset:
         stored spots — from ``index/`` plus the ``bin_id`` column, with no
         per-spot strings.  Columns: ``trace``, ``cell`` (str / None),
         ``chrom``, ``n_spots``, ``start`` (min), ``end`` (max)."""
+        if "segments" not in self._cache and self._index_segments():
+            # from the coordinate index alone (one run per chromosome copy): the per-spot bin ids of a large
+            # store are never read; start / end are the chromosome's extent on the locus axis
+            r = self._runs()
+            ext = self._chrom_extent()
+            names = np.asarray(self.cd.bins["chrom"].cat.categories.astype(str))
+            chrom = names[r["chrom"].to_numpy()]
+            trace_cats = np.asarray(self.cd._categories("trace_id")).astype(str)
+            df = pd.DataFrame({"trace": trace_cats[r["trace"].to_numpy()], "chrom": chrom,
+                               "n_spots": (r["hi"] - r["lo"]).to_numpy(np.int64),
+                               "start": ext.loc[chrom, "start"].to_numpy(np.int64),
+                               "end": ext.loc[chrom, "end"].to_numpy(np.int64)})
+            if self.cd._has_cell_id():
+                cell_cats = np.asarray(self.cd._categories("cell_id")).astype(str)
+                df["cell"] = cell_cats[r["cell"].to_numpy()]
+            else:
+                df["cell"] = None
+            self._cache["segments"] = df
         if "segments" not in self._cache:
             cd = self.cd
             idx = cd._index
@@ -289,6 +312,97 @@ class Dataset:
             codes = np.flatnonzero(np.isin(names, [str(c) for c in chroms]))
             # format 2.2: the coordinate projection (one partition per chromosome)
             return cd._chroms_subset(codes, columns="coords")
+        return None
+
+    # ------------------------------------------------------------------
+    # Large backed stores: read a sample, never the whole store
+    # ------------------------------------------------------------------
+
+    def _large(self) -> bool:
+        """Decided once per dataset (so its paths stay consistent)."""
+        if "large" not in self._cache:
+            cd = self.cd
+            self._cache["large"] = bool(self.backed and getattr(cd, "_v22", False) and int(cd.n_spots) > LARGE_SPOTS
+                                        and (np.asarray(cd._cidx["chrom_trace"]) >= 0).all())
+        return self._cache["large"]
+
+    def _index_segments(self) -> bool:
+        """Summaries from the coordinate index alone: a large store, or any store read over HTTP (where reading
+        every spot's bin id costs seconds); every run must be one chromosome copy."""
+        if "index_segments" not in self._cache:
+            from ...core.remote import is_url
+
+            cd = self.cd
+            self._cache["index_segments"] = bool(
+                self.backed and getattr(cd, "_v22", False) and (self._large() or (self.path and is_url(self.path)))
+                and (np.asarray(cd._cidx["chrom_trace"]) >= 0).all())
+        return self._cache["index_segments"]
+
+    def _runs(self) -> pd.DataFrame:
+        """The coordinate table's runs (chromosome > cell > trace; one per chromosome copy): row range and the
+        chromosome / cell / trace codes (cached)."""
+        if "runs" not in self._cache:
+            c = self.cd._cidx
+            off = np.asarray(c["trace_offsets"], dtype=np.int64)
+            self._cache["runs"] = pd.DataFrame({
+                "lo": off[:-1], "hi": off[1:], "chrom": np.asarray(c["chrom_trace"], dtype=np.int64),
+                "cell": np.asarray(c["trace_cells"], dtype=np.int64), "trace": np.asarray(c["trace_codes"], dtype=np.int64)})
+        return self._cache["runs"]
+
+    def _chrom_extent(self) -> pd.DataFrame:
+        b = self.cd.bins
+        return b.assign(chrom=b["chrom"].astype(str)).groupby("chrom").agg(start=("start", "min"), end=("end", "max"))
+
+    def _run_mask(self, chroms=None, cell_ids=None, trace_ids=None) -> np.ndarray:
+        r, cd = self._runs(), self.cd
+        mask = np.ones(len(r), dtype=bool)
+        if chroms:
+            names = np.asarray(cd.bins["chrom"].cat.categories.astype(str))
+            mask &= np.isin(r["chrom"].to_numpy(), np.flatnonzero(np.isin(names, [str(c) for c in chroms])))
+        if cell_ids is not None:
+            cats = pd.Index(np.asarray(cd._categories("cell_id")).astype(str)) if cd._has_cell_id() else pd.Index([])
+            codes = cats.get_indexer([str(c) for c in cell_ids])
+            mask &= np.isin(r["cell"].to_numpy(), codes[codes >= 0])
+        if trace_ids is not None:
+            cats = pd.Index(np.asarray(cd._categories("trace_id")).astype(str))
+            codes = cats.get_indexer([str(t) for t in trace_ids])
+            mask &= np.isin(r["trace"].to_numpy(), codes[codes >= 0])
+        return mask
+
+    def _sample(self, mask: np.ndarray, max_spots: int, *, unit: str = "cell", max_units: Optional[int] = None):
+        """Runs of ``mask`` for a sample: whole cells (or single traces, ``unit="trace"``) in a fixed random order
+        until ``max_spots`` (or ``max_units``) is reached.  Returns ``(row ranges, units used, units matching,
+        spots used, spots matching)``."""
+        r = self._runs()[mask]
+        n_all = int((r["hi"] - r["lo"]).sum())
+        if not self.cd._has_cell_id():
+            unit = "trace"
+        key = r["cell"].to_numpy() if unit == "cell" else np.arange(len(r))
+        units = np.unique(key)
+        order = np.random.default_rng(0).permutation(units)
+        size = pd.Series((r["hi"] - r["lo"]).to_numpy(), index=key).groupby(level=0).sum().reindex(order).to_numpy()
+        n = int(np.searchsorted(np.cumsum(size), max_spots, side="right"))
+        n = max(1, n) if len(order) else 0
+        if max_units is not None:
+            n = min(n, int(max_units))
+        keep = np.isin(key, order[:n])
+        sel = r[keep].sort_values("lo")
+        lo, hi = sel["lo"].to_numpy(), sel["hi"].to_numpy()
+        brk = np.r_[True, lo[1:] != hi[:-1]] if len(lo) else np.zeros(0, dtype=bool)
+        ranges = list(zip(lo[brk].tolist(), hi[np.r_[brk[1:], True]].tolist())) if len(lo) else []
+        return ranges, n, len(units), int((sel["hi"] - sel["lo"]).sum()), n_all
+
+    def _part(self, ranges) -> "Dataset":
+        """An in-memory Dataset of coordinate-table row ranges (coordinates + keys only)."""
+        sub = self.cd._build22(crd=ranges, columns="coords")
+        return Dataset(id=self.id, name=self.name, path=self.path, cd=sub)
+
+    def _scope_cells(self, cell_id=None, group=None) -> Optional[List[str]]:
+        _one_scope(cell_id, group)
+        if cell_id is not None:
+            return [str(cell_id)]
+        if group is not None:
+            return [str(c) for c in self.group_cells(group)]
         return None
 
     # ------------------------------------------------------------------
@@ -952,6 +1066,13 @@ class Dataset:
             return {"chrom": str(chrom), "group": group,
                     "bin_starts": [int(x) for x in sel["start"]], "bin_ends": [int(x) for x in sel["end"]],
                     "n_spots": [int(x) for x in n], "values": out_vals}
+        if self._index_segments():          # spot tracks of a sample of the matching cells
+            mask = self._run_mask([chrom], self._scope_cells(cell_id, group))
+            ranges, n_used, n_cells, used, total = self._sample(mask, STATS_MAX_SPOTS)
+            sub = Dataset(id=self.id, name=self.name, path=self.path, cd=self.cd._build22(crd=ranges))
+            out = sub.tracks(names, chrom, start, end, agg=agg)
+            out.update(group=group, note=f"{n_used:,} of {n_cells:,} cells (random sample)" if used < total else None)
+            return out
         a = self._arrays()
         idx = self._select(chrom, start, end, cell_id, group=group)
         df = pd.DataFrame({"start": a["start"][idx], "end": a["end"][idx]})
@@ -1533,11 +1654,32 @@ class Dataset:
         return traces, bins, ends, P
 
     def distance(self, chrom: str, start=None, end=None, cell_id=None, trace_id=None,
-                 stat: str = "median", threshold: Optional[float] = None, group=None) -> bytes:
+                 stat: str = "median", threshold: Optional[float] = None, group=None,
+                 _header: Optional[Dict[str, Any]] = None) -> bytes:
         if stat not in ("median", "mean", "contact"):
             raise ValueError("stat must be median, mean or contact")
         if str(chrom) == GENOME:
             raise ValueError("distance matrices are per chromosome: pick a chromosome")
+        if self._index_segments():
+            # a random subset of the matching traces, as many as the (traces x bins x bins) budget holds, is read
+            cells = self._scope_cells(cell_id, group)
+            mask = self._run_mask([chrom], cells, [trace_id] if trace_id is not None else None)
+            b = self.cd.bins
+            on = (b["chrom"].astype(str).to_numpy() == str(chrom))
+            if start is not None:
+                on &= b["end"].to_numpy() > int(start)
+            if end is not None:
+                on &= b["start"].to_numpy() < int(end)
+            n_bins = max(1, min(int(on.sum()), MAX_MATRIX_BINS))
+            keep = max(1, 60_000_000 // (n_bins * n_bins))
+            ranges, n, n_traces, used, total = self._sample(mask, int(self.cd.n_spots), unit="trace", max_units=keep)
+            if not ranges:
+                raise LookupError("no spots with coordinates in this selection")
+            n_cell = len(np.unique(self._runs()[mask]["cell"]))
+            note = f"statistic over {n} of {n_traces} traces (random subset)" if n < n_traces else None
+            return self._part(ranges).distance(chrom, start, end, stat=stat, threshold=threshold, _header={
+                "trace_id": trace_id, "cell_id": cell_id, "group": group, "n_cells_matching": n_cell,
+                "note_prefix": note})
         idx = self._select(chrom, start, end, cell_id, trace_id, group=group)
         if len(idx) == 0:
             raise LookupError("no spots with coordinates in this selection")
@@ -1582,6 +1724,12 @@ class Dataset:
                   "n_traces": int(len(traces)), "trace_id": trace_id, "cell_id": cell_id,
                   "group": group, "n_cells": self._n_cells_of(idx),
                   "note": "; ".join(notes) or None}
+        if _header:      # a sample of a large store: the request's scope, and how the sample was drawn
+            extra = dict(_header)
+            prefix = extra.pop("note_prefix", None)
+            header.update({k: v for k, v in extra.items() if k != "n_cells_matching"})
+            if prefix:
+                header["note"] = "; ".join([prefix] + notes)
         return encode_matrix(mat.astype(np.float32), bins, ends, header)
 
     # -- statistics -------------------------------------------------------
@@ -1602,7 +1750,20 @@ class Dataset:
         a = self._arrays()
         return None if a["cell"] is None else int(len(pd.unique(a["cell"][idx])))
 
+    def _stats_sample(self, chrom, cell_id, group):
+        """Large stores: (in-memory Dataset of a random sample of the matching cells, note or None)."""
+        cells = self._scope_cells(cell_id, group)
+        mask = self._run_mask([chrom] if chrom else None, cells)
+        ranges, n, n_cells, used, total = self._sample(mask, STATS_MAX_SPOTS)
+        note = f"{n:,} of {n_cells:,} cells (random sample)" if used < total else None
+        return self._part(ranges), note
+
     def stats_rg(self, chrom=None, cell_id=None, group=None) -> Dict[str, Any]:
+        if self._index_segments():
+            part, note = self._stats_sample(chrom, cell_id, group)
+            out = part.stats_rg(chrom)
+            out.update(group=group, note=note)
+            return out
         a = self._arrays()
         idx = self._stats_spots(chrom, cell_id, group)
         df = pd.DataFrame(self._coords()[idx], columns=["x", "y", "z"])
@@ -1622,6 +1783,11 @@ class Dataset:
                 "unit": None if unit is None else str(unit)}
 
     def stats_scaling(self, chrom=None, cell_id=None, n_bins: int = 24, group=None) -> Dict[str, Any]:
+        if self._index_segments():
+            part, note = self._stats_sample(chrom, cell_id, group)
+            out = part.stats_scaling(chrom, n_bins=n_bins)
+            out.update(group=group, note=note)
+            return out
         a = self._arrays()
         idx = self._stats_spots(chrom, cell_id, group)
         n_cells = self._n_cells_of(idx)
@@ -1709,6 +1875,15 @@ class Dataset:
         return self._cache["draw_order"]
 
     def geometry(self, flt: GeometryFilter) -> bytes:
+        if self._index_segments():
+            # the matching runs of a sample of whole cells, about max_points spots: the view is a random set of
+            # cells, never the whole store (the header keeps the matching total, truncated when sampled)
+            chroms = list(flt.chroms or []) + ([flt.region["chrom"]] if flt.region is not None else [])
+            mask = self._run_mask(chroms or None, flt.cell_ids, flt.trace_ids)
+            ranges, n, n_cells, used, total = self._sample(mask, flt.max_points)
+            part = self._part(ranges)
+            return encode_geometry(part, part.select(flt), flt.max_points, chrom_extent=self.chrom_table(),
+                                   total_points=total, sample={"cells": n, "of_cells": n_cells} if used < total else None)
         if self.backed:
             sub = self._subset(flt)
             if sub is not None:
@@ -1840,15 +2015,18 @@ def _segment_bounds(dataset: Dataset, idx: np.ndarray):
 
 def encode_geometry(dataset: Dataset, idx: np.ndarray,
                     max_points: int = DEFAULT_MAX_POINTS,
-                    chrom_extent: Optional[List[Dict[str, Any]]] = None) -> bytes:
+                    chrom_extent: Optional[List[Dict[str, Any]]] = None,
+                    total_points: Optional[int] = None, sample: Optional[Dict[str, int]] = None) -> bytes:
     """Encode the selected spots in the binary layout documented in API.md.
 
     ``chrom_extent`` (a :meth:`Dataset.chrom_table`) overrides the
-    dataset's own, for a subset of a larger dataset."""
+    dataset's own, for a subset of a larger dataset; ``total_points`` /
+    ``sample`` describe the whole selection when ``dataset`` is a sample
+    of a large store."""
     a = dataset._arrays()
     kept, offsets = _segment_bounds(dataset, idx)
     total = len(kept)
-    truncated = total > max_points
+    truncated = total > max_points or sample is not None
     if truncated:
         n_fit = int(np.searchsorted(offsets[1:], max_points, side="right"))
         if n_fit == 0:  # first segment alone exceeds the cap: cut it
@@ -1881,8 +2059,9 @@ def encode_geometry(dataset: Dataset, idx: np.ndarray,
     header = {
         "n_points": int(len(kept)),
         "n_segments": len(segments),
-        "total_points": int(total),
+        "total_points": int(total if total_points is None else max(total, total_points)),
         "truncated": bool(truncated),
+        "sample": sample,
         "segments": segments,
         "bbox": bbox,
         "chrom_extent": {c["name"]: [c["start"], c["end"]]
@@ -1953,14 +2132,15 @@ class DatasetStore:
                     ds._cache[k] = f.result()
                 except Exception:      # not readable: found again (and reported) when first used
                     pass
-            ds._draw_order()
+            # no pre-sort here: over HTTP it reads every spot's keys; the first geometry request sorts (once)
             return ds
         p = Path(path).expanduser().resolve()
         if not p.exists():
             raise FileNotFoundError(f"no such file: {p}")
         name = p.name[: -len(".chromdata.zarr")] if p.name.endswith(".chromdata.zarr") else p.stem
         ds = self.add(load_chromdata(p), name=name, path=str(p))
-        ds._draw_order()  # sort once at open, so the first overview request does not pay for it
+        if not ds._large():
+            ds._draw_order()  # sort once at open, so the first overview request does not pay for it
         return ds
 
     def get(self, dataset_id: str) -> Dataset:

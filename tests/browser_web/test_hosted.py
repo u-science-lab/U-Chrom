@@ -93,3 +93,27 @@ def test_sessions_expire_and_are_capped():
 def test_local_mode_is_unchanged(served):
     c = TestClient(create_app(atlas=served))
     assert c.get("/api/files/places").status_code == 200 and c.get("/api/files").status_code == 200
+
+
+def test_hosted_geometry_is_capped(tmp_path):
+    """A hosted server sends at most HostedConfig.max_points points of a 3-D view, whatever the request asks."""
+    import json
+    import struct
+
+    import numpy as np
+    import pandas as pd
+    from fastapi.testclient import TestClient
+
+    from uchrom import ChromData
+    from uchrom.browser.web.hosted import HostedConfig
+    from uchrom.browser.web.server import create_app
+
+    spots = pd.DataFrame({"chrom": "chr1", "start": np.arange(300) * 100, "end": np.arange(300) * 100 + 100,
+                          "trace_id": np.repeat(["t0", "t1", "t2"], 100)})
+    ChromData(np.random.default_rng(0).normal(size=(300, 3)), spots).write(tmp_path / "x.chromdata.zarr")
+    app = create_app(atlas=str(tmp_path), hosted=HostedConfig(allowed_prefixes=[str(tmp_path)], max_points=150))
+    c = TestClient(app)
+    d = c.post("/api/datasets", json={"path": str(tmp_path / "x.chromdata.zarr")}).json()
+    buf = c.post(f"/api/datasets/{d['id']}/geometry", json={"max_points": 10_000}).content
+    head = json.loads(buf[4:4 + struct.unpack("<I", buf[:4])[0]])
+    assert head["n_points"] == 100 and head["total_points"] == 300 and head["truncated"]

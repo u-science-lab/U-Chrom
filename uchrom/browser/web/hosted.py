@@ -35,6 +35,8 @@ class HostedConfig:
     max_sessions: int = 64
     ttl: float = 1800.0
     max_pseudobulk_cells: int = 5000
+    #: points of one 3-D view (a larger store shows a sample of its cells): ~16 bytes a point over the network
+    max_points: int = 500_000
 
 
 def new_session_id() -> str:

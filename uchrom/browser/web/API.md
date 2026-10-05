@@ -281,9 +281,17 @@ Body — a **layer filter**; all fields optional and combined with AND:
 ```
 
 Region selection keeps spots whose `[start, end)` overlaps the region.
-`max_points` (default 5,000,000) caps the response; when the selection is
+`max_points` (default 5,000,000; a hosted server caps it at
+`HostedConfig.max_points`, 500,000) caps the response; when the selection is
 larger the server keeps whole segments in order until the cap and sets
 `truncated: true`.
+
+**Large stores.**  A backed format 2.2 store with more than `LARGE_SPOTS`
+(2,000,000) spots whose traces are each one chromosome copy is never read
+whole: the server reads the matching runs of whole cells taken in a fixed
+random order until `max_points`, and the header says so in `"sample":
+{"cells": k, "of_cells": n}` (`null` otherwise) with `total_points` the
+size of the whole selection.  Stores read over HTTP take the same path.
 
 Response: `application/octet-stream`, little-endian:
 
@@ -301,8 +309,9 @@ Header:
 {
   "n_points": 1234,                 // N
   "n_segments": 3,                  // S
-  "total_points": 1234,             // before truncation
+  "total_points": 1234,             // before truncation (a sample: the whole selection)
   "truncated": false,
+  "sample": null,                   // or {"cells": 80, "of_cells": 399}
   "segments": [
     {"trace_id": "t1", "chrom": "chr1", "cell_id": null,
      "n_points": 400, "start": 3000000, "end": 12000000}
@@ -459,7 +468,9 @@ Pairwise 3-D distances between genomic bins from `coords`:
 - `group` → statistic over the traces of the group's cells;
 - none → population statistic over all traces on `chrom`.
 
-The header adds `"group"` and `"n_cells"` (cells contributing traces).
+The header adds `"group"` and `"n_cells"` (cells contributing traces).  A
+large store (see geometry) reads only a random subset of the matching traces,
+as many as the statistic's budget holds; `note` says how many.
 
 `stat`: `median` (default) | `mean` | `contact` (fraction of traces with
 distance < `threshold`, default 0.5 × dataset unit… or `threshold`).
@@ -469,13 +480,14 @@ Binary payload above (`value`: `distance` or `contact_frequency`).
 
 Radius of gyration per trace: `{"trace_ids": [...], "cell_ids": [...],
 "chroms": [...], "rg": [...], "n_spots": [...], "unit": "um",
-"group": null, "n_cells": 47}`.
+"group": null, "n_cells": 47, "note": null}`.  A large store (see geometry): over a random sample of
+the matching cells (about `STATS_MAX_SPOTS`, 2,000,000 spots); `note` = `"80 of 399 cells (random sample)"`.
 
 ### `GET /api/datasets/{id}/stats/scaling?chrom=&cell_id=&group=`
 
 Distance vs genomic separation (log-spaced separation bins):
 `{"sep_bp": [...], "median": [...], "q25": [...], "q75": [...], "n_pairs": [...],
-"unit": "um", "group": null, "n_cells": 47}`.
+"unit": "um", "group": null, "n_cells": 47, "note": null}` (a large store: a sample, as `stats/rg`).
 
 ## Cell groups
 

@@ -325,7 +325,7 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
                 region=None if req.region is None else req.region.model_dump(),
                 trace_ids=req.trace_ids,
                 cell_ids=req.cell_ids,
-                max_points=req.max_points,
+                max_points=req.max_points if hosted is None else min(req.max_points, int(hosted.max_points)),
             )
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
