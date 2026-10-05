@@ -148,3 +148,43 @@ better structure-free seed for k >= 3 and for deep cells (the trans-triangle sig
 vs 0.3-1.9 % closure — but its groups merge across cells once a pool is deep); (c) fragment-end
 exclusivity on real data with restriction-fragment coordinates (not available in the GEO tables used
 here).
+
+## 5. Cue 1 — cell-type prior from reference Dip-C (PREREG §12.1), development, pseudo-haploid (2026-10-05)
+
+Tan 2021 adult cortex, registered split (reference P 80 / O 37 / A 15 / M 18 cells), 28 development
+pools (7 compositions x 4), 200 kb, phases ignored everywhere (references included), laptop (Sherlock
+access was denied for part of the day).  Prior: per-type 1 Mb pseudo-bulk (cells weighted 1 / depth),
+smoothed (3 x 3 bins), pseudo-count 0.1 x mean, per-contact log-propensity, cell proportions by EM.
+Rows: `data/mix_type_dev_r1.tsv`.
+
+**The cue is weak per contact.**  ROC-AUC of the per-contact type log-likelihood ratio between the two
+cells of a pool: 0.55-0.62 overall (cis 2-20 Mb 0.60-0.68, trans 0.50-0.55), the same at 500 kb and with
+more smoothing.  Prior-only assignment is close to the cells' depth shares.  Aggregating the evidence over
+the contacts of a 2-D blob or over a neighbourhood of bins does not help: contacts of one blob share their
+bin pair, so their evidence is not independent (and aggregating over all rows of a bin pair mixes cells).
+
+Mean M2 (matched whole-genome Spearman vs each cell's own EMber reconstruction) by composition:
+
+| composition | naive | IGM S=k | prior-split | E (prior fixed) | E (posterior) | E + density cap | diag: 75 % seed |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| PO | 0.472 | 0.355 | 0.417 | 0.452 | 0.432 | 0.398 | 0.613 |
+| PA | 0.424 | 0.331 | 0.376 | 0.415 | 0.393 | 0.375 | 0.562 |
+| PM | 0.478 | 0.329 | 0.385 | 0.424 | 0.403 | 0.350 | 0.614 |
+| OM | 0.467 | 0.368 | 0.459 | 0.424 | 0.443 | 0.389 | 0.624 |
+| PAM | 0.420 | 0.349 | 0.329 | 0.386 | 0.377 | 0.325 | 0.570 |
+| PP (same type) | 0.486 | 0.328 | 0.496 | 0.424 | 0.436 | 0.364 | 0.614 |
+| PPO | 0.423 | 0.364 | 0.375 | 0.396 | 0.384 | 0.304 | 0.531 |
+
+All 28 pools: E (prior fixed) − naive M2 −0.036 [−0.048, −0.023]; E − prior-split M2 +0.012
+[−0.009, +0.033], M1 −0.052 [−0.094, −0.015]; E − IGM M2 +0.071 [+0.056, +0.086], M1 +0.001
+[−0.035, +0.034].  Mean M1: E 0.51 / 0.33 (k = 2 / 3), prior-only 0.58 / 0.34, IGM 0.50 / 0.34, oracle
+(closest of the true cells' structures) 0.69 / 0.53.
+
+**Reading.**  Cue 1 does not work on these data: the type prior is too weak per contact (AUC ~0.6), and on
+deep diploid cortex cells (300-500 k contacts each) even a 75 %-correct seed recovers less than on the
+Stevens cells (M2 0.53-0.62 vs 0.80).  The 3-D EM adds nothing on top of the prior (M2 +0.01 vs prior-split,
+M1 −0.05).  EMber-mix with the type prior is better than IGM S = k (M2 +0.07) but worse than naive EMber
+on the pool (M2 −0.04) in every composition.  The density cap hurts (−0.06 more).  Under §12.1's
+rule this would fail U1 and U2.  No further tuning (the §12.1 knobs left — reference resolution, smoothing,
+γ — move the per-contact AUC by < 0.01 on the development pools).  The diploid (cells × copies) runs are
+on Sherlock (§6 below when done).
