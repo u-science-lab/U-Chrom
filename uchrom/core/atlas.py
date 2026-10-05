@@ -71,6 +71,11 @@ def describe_store(path: PathLike) -> Dict[str, Any]:
         mods.append("RNA")
     for key in (uns.get("linked_bin_matrices") or {}):
         mods.append({"ssAB": "A/B per spot", "ATAC": "ATAC per spot"}.get(str(key), f"{key} per spot"))
+    # dissociated cells with accessibility of their own (gene activity ``atac.<gene>`` / an ATAC embedding)
+    if not spatial and "ATAC per spot" not in mods and (
+            any(str(c).startswith("atac.") for c in cd.cells.columns)
+            or any(str(k).startswith("atac_") for k in (getattr(cd, "cellm", {}) or {}))):
+        mods.append("ATAC per cell")
     if emb["images"]:
         mods.append("images")
     if len(getattr(cd.spot_tracks, "columns", [])):
@@ -323,7 +328,8 @@ def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int
     such as a UMAP) and ``<id>.map.webp`` (a 40-Mb window of that
     section's bulk contact map, chr2 by default; without a bulk map: the all-cells sum of a per-cell map).  The
     config entry ``"figure"`` may pin ``section`` / ``color_by`` / ``positions`` / ``chrom`` / ``region``
-    (``chr2:40e6-80e6``), ``layout`` (``structure``), ``cell`` or ``embedding`` (a ``cellm`` key) and give the ``caption`` of
+    (``chr2:40e6-80e6``), ``map`` (the contact-map key), ``layout`` (``structure``), ``cell`` or ``embedding`` (a ``cellm``
+    key) and give the ``caption`` of
     what the hero figure shows.  The datasets of the config's
     ``"hero"`` list are drawn again at ``hero_size`` (``<id>.hero.space.webp`` ...).  Writes ``figures.json``
     (what each figure shows: the page writes the captions from it) next to the images."""
@@ -346,6 +352,8 @@ def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int
         cd = ChromData.read(store, backed=True)
         emb = open_all(store)
         section, column, bulk = _section_choice(cd, emb, spec.get("section"), spec.get("color_by"))
+        if spec.get("map") in emb:          # the contact map named in the config
+            bulk = spec["map"]
         if bulk is None:          # no bulk map: the all-cells sum of a per-cell map
             bulk = next((k for k, e in emb.items() if e.kind == "per_cell" and e.has_sum()), None)
         structure = None

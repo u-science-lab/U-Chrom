@@ -322,5 +322,23 @@
   "categories": 20,
   "grid": false,
   "space": "takei2025_cerebellum.space.webp"
+ },
+ "schicar_mouse_cortex": {
+  "section": null,
+  "color_by": "cell_type",
+  "layout": "embedding",
+  "layout_key": "paper_umap",
+  "n": 5313,
+  "categories": 22,
+  "grid": false,
+  "space": "schicar_mouse_cortex.space.webp",
+  "map_key": "all_cells",
+  "map_label": "All cells (merged)",
+  "chrom": "chr2",
+  "start": 27250000,
+  "end": 67500000,
+  "resolution": 250000,
+  "fill": 0.958,
+  "map": "schicar_mouse_cortex.map.webp"
  }
 }

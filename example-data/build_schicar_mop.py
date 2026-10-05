@@ -10,9 +10,10 @@ GEO supplementary files into:
                                           cellm  (paper_umap, rna_pca/_tsne/_umap,
                                                   atac_lsi/_tsne/_umap, hic_pca/_tsne/_umap)
                                           links  (the contact maps below)
-  schicar_mop/contacts_all.mcool        all cells merged, 250 kb … 2 Mb
+  schicar_mop/contacts_all.mcool        all cells merged, 250 kb … 2 Mb (ICE-balanced, as the per-type maps)
   schicar_mop/contacts_<type>.cool      pseudo-bulk per cell type, 500 kb
   schicar_mop/contacts_cells_1Mb.scool  one contact map per cell, 1 Mb
+  schicar_mop/schicar_mop_rna.h5ad      RNA UMI counts of every gene, one row per cell (``uns['linked_anndata']``)
 
 Inputs (``python example-data/download_data.py --schicar_rna --schicar_dna
 --schicar_atac``): example-data/schicar_mop/raw/GSE305439/{RNA
@@ -36,6 +37,7 @@ from __future__ import annotations
 import argparse
 import gzip
 import re
+import sys
 import time
 from pathlib import Path
 
@@ -43,6 +45,7 @@ import numpy as np
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))          # sc_hic_common
 RAW = HERE / "schicar_mop" / "raw" / "GSE305439"
 OUT = HERE / "schicar_mop"
 GTF = HERE / "schicar_mop" / "raw" / "mm10.refGene.gtf.gz"
@@ -93,6 +96,27 @@ def load_rna(n_hvg: int):
     cells = pd.concat([cells, pd.DataFrame(counts, index=cells.index, columns=cols)], axis=1)
     umap = meta[["UMAP1", "UMAP2"]].to_numpy(dtype=np.float64)
     return cells, umap
+
+
+def link_rna(cd) -> None:
+    """Every gene's UMI counts as the store's linked AnnData (``schicar_mop_rna.h5ad``, rows in the order of
+    ``cd.cells``; ``cd.linked_adata``), next to the HVG columns of ``cells``, as the other single-cell RNA stores."""
+    import scipy.io
+    import scipy.sparse as sp
+
+    from sc_hic_common import rna_h5ad
+
+    barcodes = pd.read_csv(RAW / "GSE305439_RNA.barcodes.tsv.gz", header=None)[0].astype(str)
+    features = pd.read_csv(RAW / "GSE305439_RNA.features.tsv.gz", sep="\t", header=None)
+    x = sp.csc_matrix(scipy.io.mmread(RAW / "GSE305439_RNA.matrix.mtx.gz")).T.tocsr()     # cells × genes
+    rows = pd.Index(barcodes).get_indexer(cd.cells.index.astype(str))
+    if (rows < 0).any():
+        raise SystemExit(f"{(rows < 0).sum()} cells of the store are not in the RNA matrix")
+    var = pd.DataFrame({"gene_id": features[0].astype(str).to_numpy()}, index=pd.Index(features[1].astype(str), name="gene"))
+    cd.uns["linked_anndata"] = rna_h5ad(x[rows], cd.cells.index, var, OUT / "schicar_mop_rna.h5ad",
+                                        description="scHiCAR RNA: UMI counts (X) of every gene, one row per cell of "
+                                                    "cells (GSE305439_RNA.matrix.mtx)")
+    log(f"linked RNA: {x.shape[1]:,} genes × {len(rows):,} cells → schicar_mop_rna.h5ad")
 
 
 def gene_windows(genes, upstream: int = 2000) -> pd.DataFrame:
@@ -329,6 +353,22 @@ def write_contacts(merged, offsets, res, types, cells, chromsizes) -> dict:
 
 
 
+def balance_contacts() -> None:
+    """ICE weights (``weight``) of the merged ``.mcool`` and the per-type ``.cool`` files, where missing."""
+    import cooler
+
+    from sc_hic_common import balance_mcool
+
+    log(f"balanced contacts_all.mcool at {balance_mcool(OUT / 'contacts_all.mcool')}")
+    n = 0
+    for path in sorted(OUT.glob("contacts_*.cool")):
+        c = cooler.Cooler(str(path))
+        if "weight" not in c.bins().columns:
+            cooler.balance_cooler(c, store=True, ignore_diags=2, min_nnz=10, mad_max=5, max_iters=500)
+            n += 1
+    log(f"balanced {n} per-type .cool files")
+
+
 SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz"}
 
 
@@ -395,6 +435,9 @@ def main() -> None:
                              label=f"{k[5:]} (pseudo-bulk)")
         cd.link_scool(files["cells"].name, key="per_cell", cell_name="cell_id (RNA barcode)",
                       barcode_source="DNAbarcode", genome_assembly="mm10", bin_size=1_000_000)
+    balance_contacts()
+    if not args.update or not (OUT / "schicar_mop_rna.h5ad").exists() or not cd.uns.get("linked_anndata"):
+        link_rna(cd)
     if not args.no_atac:
         add_atac(cd, chromsizes, args.atac_bin, args.chunk, args.atac_min_cells)
     if not args.no_hic:

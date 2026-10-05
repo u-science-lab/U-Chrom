@@ -14,7 +14,8 @@
   var MODS = {
     'Hi-C per spot': ['Contact maps per spot', 'hic'], 'Hi-C per cell': ['Contact maps per cell', 'hic'],
     '3-D coordinates': ['3-D structures', 'xyz'], 'A/B per spot': ['A/B compartments', 'ab'],
-    'RNA': ['RNA', 'rna'], 'ATAC per spot': ['Accessibility (ATAC)', 'atac'], 'images': ['Tissue images', 'img'],
+    'RNA': ['RNA', 'rna'], 'ATAC per spot': ['Accessibility (ATAC)', 'atac'], 'ATAC per cell': ['Accessibility (ATAC)', 'atac'],
+    'images': ['Tissue images', 'img'],
     'signals per spot': ['Signals per locus (IF, RNA)', 'sig']
   };
   var HIDDEN = { 'Hi-C bulk': 1, 'embeddings': 1 };
