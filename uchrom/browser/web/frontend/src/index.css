@@ -3154,5 +3154,3 @@ button.side-close:hover {
 .activity-card .spinner { margin-top: 2px; }
 .activity-text { font-size: 13px; font-weight: 600; }
 .activity-hint { margin-top: 3px; line-height: 1.4; }
-.activity-line { margin-top: 8px; height: 2px; border-radius: 1px; background: var(--border); position: relative; overflow: hidden; }
-.activity-line::after { content: ''; position: absolute; inset: 0; width: 35%; background: var(--accent); animation: uc-slide 1.3s ease-in-out infinite; }

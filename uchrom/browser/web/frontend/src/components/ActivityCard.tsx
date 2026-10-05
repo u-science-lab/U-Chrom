@@ -38,7 +38,6 @@ export function ActivityCard() {
           {phase.text} <span className="muted">{secs >= 2 ? `${secs} s` : ''}</span>
         </div>
         {phase.hint && secs >= 6 && <div className="muted small activity-hint">{phase.hint}</div>}
-        <div className="activity-line" aria-hidden />
       </div>
     </div>
   )
