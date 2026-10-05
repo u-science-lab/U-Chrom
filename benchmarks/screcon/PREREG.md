@@ -450,3 +450,50 @@ run; this addition has its own development / held-back split.
   in full, every endpoint, without a threshold.
 * **Cue 2** (genotype labels, GM12878 + PBMC Dip-C) and **cue 3** (reference-structure templates) get
   their own dated additions before any run.
+
+### 12.2 Addition 2026-10-05 — externally assisted deconvolution, cue 2: genotype labels (GM12878 + PBMC Dip-C), registered before any run of it
+
+**Why.**  The user decided to test a cue that labels contacts directly: when the pooled cells come from
+different donors, a contact whose read covers a donor-distinguishing SNP carries its donor.  Only the
+development pools below are run until a freeze is approved.
+
+* **Data**: Tan et al. 2018 Dip-C (GEO GSE117876 / hickit re-processing GSE117874; SRA SRP149125, public):
+  GM12878 cells with hickit pairs (cells 1-3, 5-7, 9-15, 17; 14 cells) and PBMC cells 1-18 (one donor,
+  different from GM12878).  **Contact tables** = the authors' hickit phased pairs (as §6), haplotypes
+  of each donor's own phasing.  **Donor labels** come only from re-aligned reads (below).
+* **Split (fixed now)**: GM12878 cells (by number) permuted with `numpy.random.default_rng(20261007)`:
+  first 6 = development pool cells, the other 8 = held-back.  PBMC cells 1-18 permuted with
+  `default_rng(20261008)`: first 6 = GENOTYPING cells (their reads give the PBMC donor genotype; never
+  pooled), next 6 = development pool cells, last 6 = held-back.
+* **Donor-distinguishing sites**: GM12878 genotype = GIAB HG001 v3.3.2 GRCh37 high-confidence VCF and its
+  high-confidence regions; PBMC genotype = `bcftools mpileup | call` on the pooled reads of the 6
+  genotyping cells (re-aligned to hs37d5).  A site is used when it is a biallelic SNV inside the GIAB
+  high-confidence regions and the two donors are homozygous for different alleles: GIAB 1/1 (or 1|1)
+  with PBMC >= 4 reads all REF, or GIAB absent (hom-REF) with PBMC called 1/1 with >= 4 reads all ALT
+  (QUAL >= 30).  Het sites are not used.
+* **Labelling pipeline** (per pooled cell, Sherlock batch jobs; FASTQ / BAM deleted after use): SRA reads
+  → `bwa mem -5SP` to hs37d5 → `hickit.js sam2seg -v <donor VCF>` (the sites written as phased
+  hets, haplotype 0 = GM12878 allele, 1 = PBMC allele) → `chronly` → `hickit` pairs, whose phase
+  columns are donor labels.  A contact of the authors' table gets the donor of the re-aligned contact
+  with identical (chr1, pos1, chr2, pos2, strand1, strand2) when its labelled ends agree; otherwise it
+  is unlabelled.  Reported: fraction of contacts labelled per cell and per-contact label accuracy
+  (against the known cell).
+* **Pools**: compositions GP (1 GM12878 + 1 PBMC), GGP (2 + 1: two same-donor cells, the hard part),
+  GGPP (2 + 2); 6 development pools per composition from the development cells
+  (`default_rng(80_000 + 100 composition + pool)`), 8 held-back pools per composition from the held-back
+  cells (`default_rng(90_000 + 100 composition + pool)`).  Diploid (cells × copies, `src/mixdip.rs`),
+  200 kb.  **Reference** of every pooled cell = frozen EMber diploid (tag `ember-diploid-frozen`
+  defaults) on its own table, 2 models, seed 1.
+* **Prior**: labelled contact → probability 1 − δ on the pool's cells of that donor (equally), δ on the
+  others; unlabelled contacts get the donor distribution of their 2-D neighbours (hickit-style
+  imputation of `mix_nbr_*`: nearest labelled contacts within the radius, weights 1 / (d / span + 0.001),
+  pseudo-count), iterated; seed and E-step prior of the engine, then EM.
+* **Methods**: E (genotype prior + EM); prior-only (argmax; cells of one donor tie); prior-split (EMber
+  diploid on each cell's prior-assigned contacts); naive EMber diploid on the pool; IGM S = k
+  (diploid); oracle (the references).  Scoring `mix_score.py` (copy chains).
+* **Development knobs**: δ, the neighbour radius / count / pseudo-count / iterations of the spreading,
+  the engine configuration (prior fixed vs posterior accumulation, refinement passes, density cap).
+* **Test endpoints** (held-back pools, paired 95 % bootstrap over pools): **V1** M1 E − prior-only > 0;
+  **V2** M2 E − naive > 0; **V3** M2 and M1 E − IGM > 0; **V4** M2 E − prior-split >= −0.01; decision as
+  §12.1 (V1-V3 CIs above 0, V4 lower bound above −0.01, no composition worse than naive in M2 by > 0.01).
+  The separation of the two same-donor cells (GGP, GGPP) is reported in full.
