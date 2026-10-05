@@ -1,4 +1,4 @@
-"""Summarise graded Fig 6e runs into u-chrom-paper/figures/fig6/results/agent_bench.json.
+"""Summarise graded Fig 6e runs into u-chrom-paper/manuscripts/full/figures/fig6/results/agent_bench.json.
 
     python benchmarks/fig6/agent_bench/summarize.py --run main2
 

@@ -21,7 +21,7 @@ Steps (each measured in fresh processes; big ones run one at a time):
     python benchmarks/cd21_streaming_validation.py --data example-data --work /tmp/cd21 \\
         [--steps convert,fofct,seqfish,stats] [--only takei2025_cerebellum,liu2025_mop]
 
-Writes ``u-chrom-paper/figures/fig2/results/streaming_validation.json`` (merged per step).
+Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/streaming_validation.json`` (merged per step).
 """
 
 from __future__ import annotations

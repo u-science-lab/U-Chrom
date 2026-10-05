@@ -35,7 +35,7 @@ every child records its RSS after open, after the trace and cell queries
 
     python benchmarks/fig2/c_access.py [--sizes 1e4,1e5,1e6,1e7] [--queries 20] [--backends h5cd-1x-memory]
 
-Writes ``u-chrom-paper/figures/fig2/results/c_access.json``.
+Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/c_access.json``.
 """
 
 from __future__ import annotations

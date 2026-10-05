@@ -15,7 +15,7 @@ whole-cell Takei 2025 subset as panels b / c (1e7 spots by default):
 
     python benchmarks/fig2/rowgroup_sweep.py [--n 1e7] [--rows 8192,16384,32768,65536] [--repeats 3]
 
-Writes ``u-chrom-paper/figures/fig2/results/rowgroup_sweep.json``.
+Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/rowgroup_sweep.json``.
 """
 
 from __future__ import annotations

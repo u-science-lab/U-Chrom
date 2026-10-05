@@ -275,7 +275,7 @@ DATASETS = {
         "default": False,
         "description": "Liu 2025 mouse MOp DNA-MERFISH FOF-CT core + cell table (4DN)",
     },
-    # ---- Fig. 3 (u-chrom-paper/figures/fig3/PLAN.md): bridges between contacts and geometry ----
+    # ---- Fig. 3 (u-chrom-paper/manuscripts/full/figures/fig3/PLAN.md): bridges between contacts and geometry ----
     # Stevens et al. 2017 (Nature 544:59) haploid mESC single-cell Hi-C, GEO
     # GSE80280: per-cell contact pairs + the paper's own 10-model 100 kb
     # structures (.pdb) -- the NucDynamics reference.  GEO gives no md5.

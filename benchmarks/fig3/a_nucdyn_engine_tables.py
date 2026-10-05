@@ -2,7 +2,7 @@
 
 Usage::
 
-    python benchmarks/fig3/a_nucdyn_engine_tables.py [--results u-chrom-paper/figures/fig3/results]
+    python benchmarks/fig3/a_nucdyn_engine_tables.py [--results u-chrom-paper/manuscripts/full/figures/fig3/results]
 """
 
 from __future__ import annotations

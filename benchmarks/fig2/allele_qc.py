@@ -23,7 +23,7 @@ Diagnosis only — nothing is changed in the loader or the data.
     python benchmarks/fig2/allele_qc.py [--max-spots 300]
 
 Reads ``takei2025_cerebellum/raw/*.csv`` (kept by the builder) and writes
-``u-chrom-paper/figures/fig2/results/allele_qc.json``.
+``u-chrom-paper/manuscripts/full/figures/fig2/results/allele_qc.json``.
 """
 
 from __future__ import annotations

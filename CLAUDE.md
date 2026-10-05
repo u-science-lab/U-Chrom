@@ -88,7 +88,7 @@ native/nucdyn/       Separate package `u-chrom-nucdyn` (import uchrom_nucdyn): R
 - **The paper lives elsewhere**: manuscripts, figure scripts and figure results are in
   `u-science-lab/u-chrom-paper` (private; check it out next to this repository as
   `../u-chrom-paper`).  Benchmarks that feed a figure stay here and write
-  `figures/<fig>/results/*.json` there (`benchmarks/_paper.py`, `$UCHROM_PAPER`); library
+  `manuscripts/full/figures/<fig>/results/*.json` there (`benchmarks/_paper.py`, `$UCHROM_PAPER`); library
   changes a figure needs are made here first.  Never re-create `paper/` in this repository.
 - Run the two test suites separately (both have a `tests` package):
   `pytest tests` from the root, `cd discovery && pytest tests`.

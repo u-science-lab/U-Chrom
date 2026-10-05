@@ -7,7 +7,7 @@ the resource timing of the geometry request.  Frame rate is the requestAnimation
 seconds with the overview drawn (the render loop redraws every frame).
 
     .venv/bin/python benchmarks/fig6/bench_frontend.py benchmarks/fig6/_data/takei2025_fov0_x*.chromdata.zarr \
-        --out u-chrom-paper/figures/fig6/results/frontend.json
+        --out u-chrom-paper/manuscripts/full/figures/fig6/results/frontend.json
 """
 from __future__ import annotations
 

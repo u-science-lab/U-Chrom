@@ -24,7 +24,7 @@ Suites (``--suite``):
 Usage::
 
     python benchmarks/fig3/a_nucdyn_engine_speed.py --suite ensemble models particles taichi \\
-        --out u-chrom-paper/figures/fig3/results/a_nucdyn_engine_speed.json
+        --out u-chrom-paper/manuscripts/full/figures/fig3/results/a_nucdyn_engine_speed.json
 """
 
 from __future__ import annotations

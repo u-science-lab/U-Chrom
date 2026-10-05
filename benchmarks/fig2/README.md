@@ -1,15 +1,15 @@
 # Figure 2 benchmarks
 
-One script per panel of Figure 2 (`u-chrom-paper/figures/fig2/PLAN.md`).  Each writes
-`u-chrom-paper/figures/fig2/results/<panel>.json`; `python u-chrom-paper/figures/fig2/make_fig2.py --real`
+One script per panel of Figure 2 (`u-chrom-paper/manuscripts/full/figures/fig2/PLAN.md`).  Each writes
+`u-chrom-paper/manuscripts/full/figures/fig2/results/<panel>.json`; `python u-chrom-paper/manuscripts/full/figures/fig2/make_fig2.py --real`
 draws the figure from those files (`fig2_real.pdf`; panels still on
 placeholder data sit in a grey dashed box, see the status table in
-`u-chrom-paper/figures/fig2/PLAN.md`).  `make_figS_formats.py` draws the ChromData
+`u-chrom-paper/manuscripts/full/figures/fig2/PLAN.md`).  `make_figS_formats.py` draws the ChromData
 format-version comparison (supplementary `figS_formats.pdf`).
 
 | Script | Panel | Data | What it measures |
 |---|---|---|---|
-| `b_capabilities.py` | b (current Fig. 2b) + Supp. Table S1 | tiny synthetic toy objects (no dataset) | what each container can represent: stores each data element with the AnnData / SpatialData / MuData / cooler / uchrom API, writes, reads back and compares (seconds, < 1 GB); marks + evidence URLs → `b_capabilities.json`, `u-chrom-paper/figures/fig2/tableS_capabilities.md` |
+| `b_capabilities.py` | b (current Fig. 2b) + Supp. Table S1 | tiny synthetic toy objects (no dataset) | what each container can represent: stores each data element with the AnnData / SpatialData / MuData / cooler / uchrom API, writes, reads back and compares (seconds, < 1 GB); marks + evidence URLs → `b_capabilities.json`, `u-chrom-paper/manuscripts/full/figures/fig2/tableS_capabilities.md` |
 | `b_storage.py` | b | Takei 2025 cerebellum rep 1, all FOVs (whole-cell subsets) | file size, write time, full-read time, peak RSS vs n_spots for FOF-CT/CSV, Parquet, AnnData (spots as obs), h5cd N.x |
 | `c_access.py` | c | same subsets | `get_trace` / `get_cell` / `get_chrom` latency (median, IQR of 20 random ids) and open / load time vs n_spots; backed chromdata.zarr vs the in-memory baseline (Parquet / AnnData: load the flat table, subset with a pandas boolean mask) |
 | `d_streaming.py` | d | same subsets + the 1e8 replicated store | exact median distance map of one chromosome (`uchrom.fea.distance_map`): peak RSS and time, "load all" (`ChromData.read` + in-memory) vs streaming (`backed=True`, `iter_traces` under a 2 GB budget); bitwise identity of the two results + a scatter |
@@ -159,7 +159,7 @@ python benchmarks/fig2/d_streaming.py --sizes 1e4,1e5,1e6,1e7 --prebuilt 1e8=tak
 python benchmarks/fig2/c_access.py --sizes 1e4,1e5,1e6,1e7 --backends spatialdata-lazy --repeats 3
 python benchmarks/fig2/c_access.py --sizes 1e4,1e5,1e6 --backends fofct-memory --repeats 3
 python benchmarks/fig2/f_crossmodal.py
-python u-chrom-paper/figures/fig2/make_fig2.py && python u-chrom-paper/figures/fig2/make_figS_formats.py && python u-chrom-paper/figures/fig2/make_figS_contacts.py
+python u-chrom-paper/manuscripts/full/figures/fig2/make_fig2.py && python u-chrom-paper/manuscripts/full/figures/fig2/make_figS_formats.py && python u-chrom-paper/manuscripts/full/figures/fig2/make_figS_contacts.py
 ```
 
 `replicate_store.py` now also takes a 2.2 source (primary row groups copied; coordinate codes shifted).
