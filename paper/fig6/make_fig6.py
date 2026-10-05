@@ -227,7 +227,7 @@ def place_png(path, x, y, w=None, h=None, z=6):
     px = max(2, int(round(w * MM * 600)))            # pre-scale to 600 dpi at print size
     im = im.resize((px, max(2, int(round(px * ih / iw)))), Image.LANCZOS)
     ax = fig.add_axes(_rect(x, y, w, h))
-    ax.imshow(np.asarray(im), interpolation="antialiased")
+    ax.imshow(np.asarray(im), interpolation="none")            # vector backends embed the 600-dpi image as is
     ax.axis("off"), ax.set_zorder(z)
     return w, h
 
