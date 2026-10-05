@@ -337,7 +337,7 @@ are always monitored, as in IGM 1.0), `polymer_bonds_style = "none"`.
 
 ## Validation (Stevens et al. 2017, 8 cells, 100 kb)
 
-See the pull request / `paper/fig3/results/a_nucdyn_engine_*.json` and the
+See the pull request / `u-chrom-paper/figures/fig3/results/a_nucdyn_engine_*.json` and the
 scripts in `benchmarks/fig3/a_nucdyn_engine_*.py`:
 
 * `a_nucdyn_engine_crosscheck.py` — stage 1 restraint set vs the original

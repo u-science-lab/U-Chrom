@@ -23,7 +23,7 @@ does not fit, the in-memory reference is computed from the chromosome alone
     python benchmarks/fig2/d_streaming.py [--sizes 1e4,1e5,1e6,1e7] [--prebuilt 1e8=PATH] \\
         [--chrom chr11] [--budget 2GB] [--repeats 3]
 
-Writes ``paper/fig2/results/d_streaming.json``.
+Writes ``u-chrom-paper/figures/fig2/results/d_streaming.json``.
 """
 
 from __future__ import annotations

@@ -10,7 +10,7 @@ subsets (get_cell / get_trace / get_chrom, with and without
 
     python benchmarks/cd22_convert_validate.py [--data takei,liu]
 
-Writes ``paper/fig2/results/cd22_convert_validation.json``.
+Writes ``u-chrom-paper/figures/fig2/results/cd22_convert_validation.json``.
 """
 
 from __future__ import annotations
@@ -97,7 +97,9 @@ def main():
     args = ap.parse_args()
     from uchrom.io.upgrade import upgrade_h5cd
 
-    res_path = ROOT / "paper" / "fig2" / "results" / "cd22_convert_validation.json"
+    sys.path.insert(0, str(ROOT / "benchmarks"))
+    from _paper import results_dir
+    res_path = results_dir("fig2") / "cd22_convert_validation.json"
     res = json.loads(res_path.read_text()) if res_path.exists() else {}
     for key in args.data.split(","):
         src = STORES[key]

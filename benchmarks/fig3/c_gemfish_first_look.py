@@ -2,7 +2,7 @@
 
 Feasibility check, not the final benchmark (the paper-faithful setup is
 whole chromosomes with Wang et al. 2016 TAD-level FISH; see
-``paper/fig3/PLAN.md``).  Here:
+``u-chrom-paper/figures/fig3/PLAN.md``).  Here:
 
 * Hi-C: Rao et al. 2014 IMR90, raw 5 kb counts summed into the 65 × 30 kb
   segments of Bintu et al. 2018 chr21:18.6-20.6 Mb (hg19

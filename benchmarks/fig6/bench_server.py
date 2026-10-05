@@ -9,7 +9,7 @@ measured by bench_frontend.py.
     .venv/bin/python benchmarks/fig6/bench_server.py \
         --imaging example-data/takei2025_fov0/takei2025_fov0.chromdata.zarr \
         --scaled benchmarks/fig6/_data/takei2025_fov0_x10.chromdata.zarr benchmarks/fig6/_data/takei2025_fov0_x30.chromdata.zarr \
-        --hic example-data/schicar_mop/schicar_mop.chromdata.zarr --out paper/fig6/results/server.json
+        --hic example-data/schicar_mop/schicar_mop.chromdata.zarr --out u-chrom-paper/figures/fig6/results/server.json
 """
 from __future__ import annotations
 
@@ -19,7 +19,11 @@ import json
 import platform
 import time
 from concurrent.futures import ThreadPoolExecutor
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # benchmarks/: _paper
+from _paper import results_dir  # noqa: E402
 
 import numpy as np
 import requests
@@ -134,7 +138,7 @@ def main():
     ap.add_argument("--max-load", type=float, default=2.0)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--wait", type=float, default=1800, help="seconds to wait for a quiet machine")
-    ap.add_argument("--out", type=Path, default=Path("paper/fig6/results/server.json"))
+    ap.add_argument("--out", type=Path, default=results_dir("fig6") / "server.json")
     a = ap.parse_args()
     load = check_quiet(a.max_load, a.force, a.wait)
     port = free_port()

@@ -179,7 +179,7 @@ writes them back; the A-step always sees the full population. If h at 200 kb is 
 
 ### 2.7 Throughput estimate
 
-Measured with the existing engine on an H100 (`paper/fig3/results/a_nucdyn_speed_gpu_h100.json`):
+Measured with the existing engine on an H100 (`u-chrom-paper/figures/fig3/results/a_nucdyn_speed_gpu_h100.json`):
 64 models × 25,724 particles × 50,000 steps in 49.6 s ≈ **1.7·10⁹ particle-steps / s** at
 saturation (below ~10⁶ particle-models the run is launch-bound: ≈ 4.5 s per 50,000 steps).
 IGM M-step ≈ 45,000 MD steps + ≤ 500 CG iterations (spec §6.2). Assuming the new terms cost
