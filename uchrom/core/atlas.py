@@ -7,16 +7,21 @@ Layout of an atlas root (an ``s3://`` / ``https://`` URL or a directory)::
 
 ``catalog.json``::
 
-    {"version": 1, "title": "...", "updated": "<utc>", "datasets": [
-       {"id", "path" (relative to the root), "title", "description", "paper", "doi", "source_url", "license",
-        "organism", "assembly", "tissue", "n_cells", "n_bins", "sections": [...],
+    {"version": 1, "title": "...", "updated": "<utc>", "hero": [<id>, ...],
+     "studies": [{"id", "citation", "journal", "title", "kind", "category", "summary", "doi", "source",
+                  "source_url", "license"}],
+     "datasets": [
+       {"id", "path" (relative to the root), "study", "name", "title", "description", "paper", "doi", "source_url",
+        "license", "organism", "assembly", "tissue", "n_cells", "n_bins", "sections": [...],
         "modalities": ["Hi-C per spot", "Hi-C bulk", "RNA", "A/B per spot", "images", ...],
         "contact_maps": n, "images": n, "size_mb", "files", "format_version"}]}
 
 The display text (title, paper, licence ...) comes from a hand-written JSON file (``atlas/datasets.json``);
-everything countable is read from the stores, so the catalog cannot drift from the data.
+everything countable is read from the stores, so the catalog cannot drift from the data.  The thumbnails of the
+atlas page are drawn from the stores too (``render_figures``; committed under ``atlas/site/figures``).
 
     python -m uchrom.core.atlas build atlas/datasets.json --root example-data --out catalog.json
+    python -m uchrom.core.atlas figures atlas/datasets.json --root example-data      # -> atlas/site/figures
     python -m uchrom.core.atlas show https://uchrom-atlas-r2.u-science.org
     python -m uchrom.core.atlas site dist/site --catalog catalog.json    # the static page (atlas/site) to deploy
 """
@@ -91,10 +96,202 @@ def build_catalog(config: PathLike, root: PathLike, out: Optional[PathLike] = No
         datasets.append({**d, **info})
     cat = {"version": CATALOG_VERSION, "title": cfg.get("title", "U-Chrom Atlas"),
            "description": cfg.get("description", ""), "updated": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-           "datasets": datasets}
+           "studies": cfg.get("studies", []), "hero": cfg.get("hero") or [], "datasets": datasets}
     if out is not None:
         Path(out).write_text(json.dumps(cat, indent=1, ensure_ascii=False) + "\n")
     return cat
+
+
+# -- figures for the atlas page --------------------------------------------------------------------------------------
+
+#: cell columns tried, in order, to colour the spatial thumbnail (the first one that covers the section): spatial
+#: domains first (they draw the tissue), then cell types and clusters
+COLOR_COLUMNS = ("cluster_cellcharter", "banksy_cluster", "anno", "cell_type", "atac_cluster", "seurat_clusters",
+                 "leiden", "louvain", "cluster")
+#: categorical colours of the figures (muted, readable on a light and a dark page)
+PALETTE = ("#3651A2", "#DC740D", "#5B8F34", "#BE2D2A", "#7E5AA6", "#2A9D8F", "#E0A526", "#C1567E", "#4F86C6",
+           "#8C6D46", "#91B23A", "#E4704F", "#5C6F7E", "#B07AC9", "#3E8E5E", "#D9A07E", "#2F6B8F", "#A3A33C",
+           "#E07AA0", "#6C4F3D", "#77AADD", "#C2452D", "#4C9A8A", "#9E8FCF")
+NA_COLOR = "#B8B4AC"
+#: contact-map colour ramp (white → rose → red → dark red, as in Juicebox)
+MAP_RAMP = ((255, 255, 255), (247, 196, 178), (226, 104, 80), (178, 30, 38), (100, 10, 22))
+FIGURE_WINDOW = 40_000_000      # bp of the contact-map thumbnail (a window of the chromosome, not all of it)
+
+
+def _section_choice(cd, emb: Dict[str, Any], section: Optional[str], color_by: Optional[str]):
+    """(section, colour column, bulk map) of a thumbnail: a section with a bulk map and a covering label column."""
+    cells = cd.cells
+    sections = [str(s) for s in cells["section"].astype(str).unique()] if "section" in cells else [None]
+    bulk = {k: v for k, v in emb.items() if v.kind == "bulk"}
+
+    def bulk_of(s):       # the bulk map of a section is keyed bulk.<section>[.<variant>]
+        hits = [k for k in bulk if s is not None and (k == f"bulk.{s}" or k.startswith(f"bulk.{s}."))]
+        return min(hits, key=len) if hits else None
+
+    def column_of(s):
+        sub = cells if s is None else cells[cells["section"].astype(str) == s]
+        for c in ([color_by] if color_by else COLOR_COLUMNS):
+            if c in sub and len(sub) and sub[c].notna().mean() >= 0.9 and 1 < sub[c].nunique() <= 60:
+                return c
+        return None
+
+    order = [section] if section else sorted(sections, key=lambda s: (bulk_of(s) is None, column_of(s) is None))
+    s = order[0]
+    return s, column_of(s), bulk_of(s) or (next(iter(bulk)) if bulk and not section else None)
+
+
+def _hex(c: str):
+    return tuple(int(c[i:i + 2], 16) for i in (1, 3, 5)) + (255,)
+
+
+def _spatial_png(pos, labels, out: Path, size: int, supersample: int = 3) -> Dict[str, Any]:
+    """Spots as squares (a regular grid) or dots, in tissue coordinates (y down), on a transparent square."""
+    import numpy as np
+    from PIL import Image, ImageDraw
+    from scipy.spatial import cKDTree
+
+    xy = pos[["x", "y"]].to_numpy(float)
+    ok = np.isfinite(xy).all(1)
+    xy = xy[ok]
+    lab = labels[ok] if labels is not None else None
+    lo, hi = xy.min(0), xy.max(0)
+    span = float(max(hi - lo)) or 1.0
+    big = size * supersample
+    scale = big * 0.94 / span
+    origin = (big - (hi - lo) * scale) / 2 - lo * scale
+    p = xy * scale + origin
+    nn = cKDTree(xy).query(xy, k=2)[0][:, 1] if len(xy) > 2 else np.full(len(xy), span / 50)
+    step = float(np.median(nn))
+    grid = bool(np.mean(np.abs(nn - step) < 0.05 * step) > 0.8)
+    half = step * scale * (0.52 if grid else 0.45)
+    if lab is not None:
+        cats = lab.dropna().astype(str).value_counts().index.tolist()
+        lut = {c: _hex(PALETTE[i % len(PALETTE)]) for i, c in enumerate(cats)}
+        cols = [lut.get(str(v), _hex(NA_COLOR)) if v == v else _hex(NA_COLOR) for v in lab]
+    else:
+        cats, cols = [], [_hex(PALETTE[0])] * len(p)
+    img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    shape = draw.rectangle if grid else draw.ellipse
+    for (x, y), c in zip(p, cols):
+        shape((x - half, y - half, x + half, y + half), fill=c)
+    img.resize((size, size), Image.LANCZOS).save(out, quality=90, method=6)
+    return {"n": int(len(p)), "categories": len(cats), "grid": grid}
+
+
+def _map_png(e, chrom: str, out: Path, region: Optional[str] = None, max_bins: int = 400) -> Dict[str, Any]:
+    """A window of a contact map (log counts; a per-cell map: the all-cells sum) at the finest resolution that keeps
+    it under ``max_bins``."""
+    import numpy as np
+    from PIL import Image
+
+    sizes = e.chromsizes()
+    if region:
+        chrom, _, span = region.partition(":")
+        start, end = (int(float(v)) for v in span.replace(",", "").split("-"))
+    else:
+        if chrom not in sizes:
+            chrom = next(c for c in e.chroms if c in sizes)
+        width = min(FIGURE_WINDOW, sizes[chrom])
+        start = int(min(sizes[chrom] * 0.15, sizes[chrom] - width))
+        end = start + width
+    if e.kind == "per_cell" and not region:      # per-cell maps are coarse: the whole chromosome
+        start, end = 0, sizes[chrom]
+    res = next((r for r in sorted(e.resolutions) if (end - start) / r <= max_bins), max(e.resolutions))
+    lo, hi = start // res, -(-end // res)
+    if e.kind == "per_cell":
+        d = e.sum_pixels(f"cis/{chrom}", res)
+        d = d[(d[:, 0] >= lo) & (d[:, 0] < hi)]
+    else:
+        d = e.region_pixels(chrom, lo, hi, res)
+    d = d[(d[:, 1] >= lo) & (d[:, 1] < hi)]
+    n = hi - lo
+    m = np.zeros((n, n), np.float64)
+    m[d[:, 0] - lo, d[:, 1] - lo] = d[:, 2]
+    m = np.maximum(m, m.T)
+    v = np.log1p(m)
+    off = v[np.triu_indices(n, 1)]
+    vmax = np.percentile(off[off > 0], 99.5) if (off > 0).any() else 1.0
+    t = np.clip(v / vmax, 0, 1) ** 1.3
+    ramp = np.asarray(MAP_RAMP, float)
+    k = t * (len(ramp) - 1)
+    i0 = np.minimum(k.astype(int), len(ramp) - 2)
+    f = (k - i0)[..., None]
+    rgb = ramp[i0] * (1 - f) + ramp[i0 + 1] * f
+    Image.fromarray(rgb.astype(np.uint8), "RGB").save(out, quality=90, method=6)
+    return {"map_key": e.key, "map_label": e.label, "chrom": chrom, "start": int(lo * res), "end": int(hi * res),
+            "resolution": int(res)}
+
+
+def _cell_layout(cd, key: Optional[str]):
+    """Where to draw the cells: (x / y frame, "space" | "embedding", key).  Tissue positions (y down) when the
+    store has them, else a 2-D embedding of ``cellm`` (y up; a key with "umap" first), else ``None``."""
+    import pandas as pd
+
+    try:
+        return cd.cell_positions(key or "default"), "space", key or "default"
+    except KeyError:
+        pass
+    cellm = dict(getattr(cd, "cellm", {}) or {})
+    keys = [k for k in cellm if getattr(cellm[k], "ndim", 0) == 2 and cellm[k].shape[1] >= 2]
+    keys.sort(key=lambda k: ("umap" not in k.lower(), "tsne" not in k.lower(), k))
+    if not keys:
+        return None, None, None
+    xy = cellm[keys[0]][:, :2]
+    return pd.DataFrame({"x": xy[:, 0], "y": -xy[:, 1]}, index=cd.cells.index), "embedding", keys[0]
+
+
+def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int = 480, hero_size: int = 640,
+                   only: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Thumbnails of every dataset of the display config, drawn from the stores under ``root``:
+    ``<id>.space.webp`` (one section, spots coloured by a label column, in tissue coordinates; a dataset without
+    positions: its cells in a 2-D embedding such as a UMAP) and ``<id>.map.webp`` (a 40-Mb window of that
+    section's bulk contact map, chr2 by default; without a bulk map: the all-cells sum of a per-cell map).  The
+    config entry ``"figure"`` may pin ``section`` / ``color_by`` / ``positions`` / ``chrom`` / ``region``
+    (``chr2:40e6-80e6``) and give the ``caption`` of what the hero figure shows.  The datasets of the config's
+    ``"hero"`` list are drawn again at ``hero_size`` (``<id>.hero.space.webp`` ...).  Writes ``figures.json``
+    (what each figure shows: the page writes the captions from it) next to the images."""
+    from .cdata import ChromData
+    from .embedded import open_all
+
+    cfg = json.loads(Path(config).read_text())
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    index_path = out / "figures.json"
+    index = json.loads(index_path.read_text()) if index_path.is_file() else {}
+    hero = cfg.get("hero") or []
+    hero = [hero] if isinstance(hero, str) else list(hero)
+    hero_map = None           # the hero figure shows one contact map: of the first hero dataset (config order) with one
+    for d in cfg["datasets"]:
+        if only and d["id"] not in only:
+            continue
+        spec = d.get("figure", {})
+        store = str(Path(root) / d["store"])
+        cd = ChromData.read(store, backed=True)
+        emb = open_all(store)
+        section, column, bulk = _section_choice(cd, emb, spec.get("section"), spec.get("color_by"))
+        if bulk is None:          # no bulk map: the all-cells sum of a per-cell map
+            bulk = next((k for k, e in emb.items() if e.kind == "per_cell" and e.has_sum()), None)
+        pos, layout, layout_key = _cell_layout(cd, spec.get("positions"))
+        info: Dict[str, Any] = {"section": section, "color_by": column, "layout": layout, "layout_key": layout_key}
+        if spec.get("caption"):
+            info["caption"] = spec["caption"]
+        if pos is not None and section is not None and "section" in cd.cells:
+            pos = pos[(cd.cells.loc[pos.index, "section"].astype(str) == section).to_numpy()]
+        labels = cd.cells.loc[pos.index, column] if (pos is not None and column) else None
+        for tag, px in [("", size)] + ([("hero.", hero_size)] if d["id"] in hero else []):
+            if pos is not None and len(pos):
+                name = f"{d['id']}.{tag}space.webp"
+                info.update(_spatial_png(pos, labels, out / name, px))
+                info[f"{tag}space"] = name
+            if bulk and (not tag or hero_map in (None, d["id"])):
+                hero_map = d["id"] if tag else hero_map
+                mname = f"{d['id']}.{tag}map.webp"
+                info.update(_map_png(emb[bulk], spec.get("chrom", "chr2"), out / mname, spec.get("region")))
+                info[f"{tag}map"] = mname
+        index[d["id"]] = info
+    index_path.write_text(json.dumps(index, indent=1, ensure_ascii=False) + "\n")
+    return index
 
 
 def catalog_url(root: str) -> str:
@@ -138,6 +335,13 @@ def build_site(out: PathLike, catalog: PathLike, *, data_root: str = DEFAULT_ATL
     shutil.copytree(tpl, out)
     cat = json.loads(Path(catalog).read_text())
     cat.pop("url", None)
+    figs = out / "figures" / "figures.json"            # render_figures: what each thumbnail shows
+    if figs.is_file():
+        index = json.loads(figs.read_text())
+        for d in cat.get("datasets", []):
+            if d["id"] in index:
+                d["figures"] = index[d["id"]]
+        cat["hero"] = [h for h in (cat.get("hero") or [k for k, v in index.items() if "hero.space" in v]) if h in index]
     (out / CATALOG).write_text(json.dumps(cat, ensure_ascii=False, indent=1) + "\n")
     (out / "config.js").write_text("window.ATLAS_CONFIG = " + json.dumps(
         {"dataRoot": data_root.rstrip("/"), "install": install, "repo": repo, "hosted": hosted.rstrip("/")}, indent=1) + ";\n")
@@ -156,6 +360,11 @@ if __name__ == "__main__":
     b.add_argument("--out", default=CATALOG)
     s = sub.add_parser("show")
     s.add_argument("root")
+    f = sub.add_parser("figures", help="draw the dataset thumbnails of the atlas page from the stores")
+    f.add_argument("config")
+    f.add_argument("--root", required=True)
+    f.add_argument("--out", default="atlas/site/figures")
+    f.add_argument("--only", nargs="*")
     w = sub.add_parser("site", help="write the static atlas page")
     w.add_argument("out")
     w.add_argument("--catalog", required=True)
@@ -165,6 +374,9 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.cmd == "site":
         print("wrote", build_site(a.out, a.catalog, data_root=a.data_root, template=a.template, hosted=a.hosted))
+    elif a.cmd == "figures":
+        for k, v in render_figures(a.config, a.root, a.out, only=a.only).items():
+            print(f"{k:34s} {v}")
     elif a.cmd == "build":
         cat = build_catalog(a.config, a.root, a.out)
         print(f"wrote {a.out}: {len(cat['datasets'])} datasets")
