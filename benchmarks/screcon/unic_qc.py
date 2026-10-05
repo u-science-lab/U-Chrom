@@ -17,8 +17,10 @@ be phased at the read level.  What can be measured from the public ``.pairs.gz``
               the footprint) tells which convention the file uses.
 
 ``project``   Uni-C phased-leg fraction expected from a Dip-C-like pipeline = Uni-C footprint fraction x the
-              calibration (actual / footprint) of the reference datasets with phases; contacts with >= 1 / 2
-              phased ends assuming independent legs; JSON + table.
+              calibration (actual / footprint, same convention) of the reference datasets with phases; contacts
+              with >= 1 / 2 phased ends assuming independent legs.  Default convention ``both``: in the hickit pairs
+              of Dip-C and scMicro-C about half of the phased legs have their het downstream and half upstream of
+              the leg position (it is not the read's 5' end), so only the symmetric footprint is comparable.
 
     python benchmarks/screcon/unic_qc.py hets --vcf HG001_GRCh37...vcf.gz --strip-chr --out hets_grch37.npz
     python benchmarks/screcon/unic_qc.py stats --pairs cell.dd100.pairs.gz --hets hets_grch37.npz --label unic_1 --out S.json
@@ -208,19 +210,19 @@ def cmd_stats(args) -> None:
 # --------------------------------------------------------------------------- projection
 
 def cmd_project(args) -> None:
+    conv = args.convention
     refs = [json.loads(Path(p).read_text()) for p in args.ref]
     unic = [json.loads(Path(p).read_text()) for p in args.unic]
-    rows = []
     calib = {}
     for r in refs:
-        fp = r.get("footprint", {})
-        conv = max(fp.get("phased_legs_with_het", {"down": 0}).items(), key=lambda kv: kv[1])[0]
-        calib[r["label"]] = {"convention": conv, "phased_legs_with_het": fp["phased_legs_with_het"][conv],
+        fp = r["footprint"]
+        calib[r["label"]] = {"convention": conv, "phased_legs_with_het": fp["phased_legs_with_het"],
                              "ratio": fp["calibration"][conv], "actual_legs": r["actual"]["frac_legs_phased"],
                              "footprint_legs": fp[f"frac_legs_{conv}"]}
     ratios = [v["ratio"] for v in calib.values()]
+    rows = []
     for u in unic:
-        f = u["footprint"]["frac_legs_down"]          # pairtools pos = 5' end of the alignment
+        f = u["footprint"][f"frac_legs_{conv}"]
         row = {"label": u["label"], "contacts": u["contacts"], "footprint_legs": f}
         for name, q in (("min", min(ratios)), ("max", max(ratios))):
             p = f * q
@@ -229,7 +231,7 @@ def cmd_project(args) -> None:
             row[f"proj_both_{name}"] = p * p
             row[f"proj_ge1_contacts_{name}"] = u["contacts"] * (1 - (1 - p) ** 2)
         rows.append(row)
-    out = {"calibration": calib, "unic": rows,
+    out = {"convention": conv, "calibration": calib, "unic": rows,
            "refs": {r["label"]: {"contacts": r["contacts"], **r["actual"]} for r in refs}}
     Path(args.out).write_text(json.dumps(out, indent=1))
     print(json.dumps(out, indent=1))
@@ -254,6 +256,9 @@ def main(argv=None) -> None:
     p = sub.add_parser("project")
     p.add_argument("--unic", nargs="+", required=True)
     p.add_argument("--ref", nargs="+", required=True)
+    p.add_argument("--convention", default="both", choices=["down", "up", "both"],
+                   help="read footprint used for the calibration and the projection (default both: the leg "
+                        "positions of hickit pairs are not the read 5' end, see the module docstring)")
     p.add_argument("--out", required=True)
     p.set_defaults(fn=cmd_project)
     args = ap.parse_args(argv)

@@ -50,8 +50,11 @@ def test_stats_and_project(tmp_path):
     b = tmp_path / "u.json"
     b.write_text(json.dumps(u))
     out = tmp_path / "p.json"
-    unic_qc.main(["project", "--unic", str(b), "--ref", str(a), "--out", str(out)])
+    unic_qc.main(["project", "--unic", str(b), "--ref", str(a), "--convention", "down", "--out", str(out)])
     P = json.loads(out.read_text())
     assert P["calibration"]["ref"]["convention"] == "down"
     q = P["unic"][0]["proj_legs_min"]
     assert abs(q - 0.5) < 1e-9          # footprint 4/6 x calibration (3/6)/(4/6)
+    unic_qc.main(["project", "--unic", str(b), "--ref", str(a), "--out", str(out)])
+    P = json.loads(out.read_text())
+    assert abs(P["unic"][0]["proj_legs_min"] - 0.5) < 1e-9   # same file: projection = actual, any convention

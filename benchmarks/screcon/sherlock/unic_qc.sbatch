@@ -22,11 +22,13 @@ TMP=${L_SCRATCH_JOB:-$UN/tmp}
 mkdir -p "$TMP"
 nrows() { zcat -f "$1" | grep -vc '^#' || true; }
 
-hick() {   # in out [hickit options]
-  local in=$1 out=$2
-  shift 2
+# hickit runs its options in order: input filters (--dup-dist, --all-close-leg) must come BEFORE -i, actions
+# (-r / -c isolation filter) after it
+hick() {   # in out "input-filter options" ["action options"]
+  local in=$1 out=$2 pre=$3 post=${4:-}
   if [ ! -f "$out" ]; then
-    "$HICKIT" -i "$in" "$@" -o - 2> "$out.log" | gzip -1 > "$out.part"
+    # shellcheck disable=SC2086
+    "$HICKIT" $pre -i "$in" $post -o - 2> "$out.log" | gzip -1 > "$out.part"
     mv "$out.part" "$out"
   fi
 }
@@ -45,16 +47,16 @@ qc() {   # label input(pairs) build is_unic
         { n[$8]++; print $1, $2, $3, $4, $5, $6, $7 }
         END { for (t in n) print t "\t" n[t] > types }' > "$src"
       echo "$(grep -vc '^#' "$src")" > "$D/raw_rows.txt"
-      hick "$src" "$D/dd100.pairs.gz" --all-close-leg --dup-dist=100
-      hick "$src" "$D/dd1000_defaultclose.pairs.gz" --dup-dist=1000
-      hick "$src" "$D/dd1000.pairs.gz" --all-close-leg --dup-dist=1000
+      hick "$src" "$D/dd100.pairs.gz" "--all-close-leg --dup-dist=100"
+      hick "$src" "$D/dd1000_defaultclose.pairs.gz" "--dup-dist=1000"
+      hick "$src" "$D/dd1000.pairs.gz" "--all-close-leg --dup-dist=1000"
       rm -f "$src"
     fi
   else
-    hick "$in" "$D/dd1000.pairs.gz" --all-close-leg --dup-dist=1000
+    hick "$in" "$D/dd1000.pairs.gz" "--all-close-leg --dup-dist=1000"
   fi
-  hick "$D/dd1000.pairs.gz" "$D/iso_r1m_c1.pairs.gz" -r1m -c1
-  hick "$D/dd1000.pairs.gz" "$D/iso_r10m_c5.pairs.gz" -r10m -c5
+  hick "$D/dd1000.pairs.gz" "$D/iso_r1m_c1.pairs.gz" "--dup-dist=0" "-r1m -c1"
+  hick "$D/dd1000.pairs.gz" "$D/iso_r10m_c5.pairs.gz" "--dup-dist=0" "-r10m -c5"
   {
     echo "{"
     if [ -f "$D/raw_rows.txt" ]; then echo "\"raw\": $(cat "$D/raw_rows.txt"),"; fi

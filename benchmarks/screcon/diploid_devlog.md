@@ -236,3 +236,46 @@ Frozen as n75r4 (tag `ember-deep-frozen`, PREREG §11).  One-shot test on the 7 
 cells: C1 met (20 kb run-to-run r median 0.983, min 0.969), C2 met (held-out cis AUC vs
 NucDynamics-diploid +0.0117 on the mean; two cells below, −0.021 and −0.001).  Details:
 `DEEP_TEST_RESULTS.md`, `data/deep_test.json`.
+
+## 8. Uni-C GM12878: no public reads; contact QC and phasing-yield projection (PREREG §12, 2026-10-05)
+
+Exploratory; sets no parameter.  **Read-level phasing is not possible**: the SRA experiments of the GM12878 Uni-C
+cells (GSE267873; SRX24523753 …, study SRP507072) are status "hup" (`srapath`: 403 "object has not been published");
+the GEO pairs have positions and strands only.  No Uni-C reconstruction was run.  GSE267873 has 10 single GM12878
+cells + 1 bulk (not 11); pilot = cells 1-3, reserved test = cells 4-10 (PREREG §12).
+
+One pipeline for all (`unic_qc.py`, `sherlock/unic_qc.sbatch`, Sherlock job 46587296, 32 min on one CPU node):
+hickit 0.1.1 `--all-close-leg --dup-dist=1000 -i` (legs >= 1 kb; Dip-C-style de-duplication, both ends within
+1 kb), isolated contacts by hickit `-r1m -c1`; GIAB HG001 v3.3.2 pedigree-phased het SNVs (1.96 M GRCh37 /
+1.87 M GRCh38).  Numbers: `data/unic_qc.json`.
+
+| | Uni-C 1 / 2 / 3 | Dip-C 1 / 2 / 3 | scMicro-C 035 / 024 / 320 |
+| --- | --- | --- | --- |
+| rows in the published table | 159.4 / 135.7 / 145.8 M | 1.05 / 0.89 / 1.09 M | 3.01 / 2.85 / 2.64 M |
+| legs >= 1 kb + dedup 100 bp | 14.9 / 10.7 / 10.7 M | — | — |
+| legs >= 1 kb + dedup 1 kb (used below) | **8.43 / 6.46 / 5.67 M** | 1.03 / 0.87 / 1.06 M | 2.00 / 1.97 / 1.94 M (*) |
+| trans fraction | 0.218 / 0.214 / 0.237 | 0.215 / 0.198 / 0.226 | 0.122 / 0.095 / 0.177 |
+| kept by the isolation filter `-r1m -c1` | 0.968 / 0.959 / 0.954 | 0.966 / 0.962 / 0.963 | 0.951 / 0.949 / 0.920 |
+| P(s) slope 10-100 kb / 0.1-2 Mb | −0.84…−0.97 / −0.92…−1.12 | −0.92…−0.95 / −0.99…−1.03 | −0.93…−1.03 / −0.92…−1.27 |
+| legs per occupied 1 kb bin, mean (p99) | 6.5 (19) / 5.2 (17) / 4.8 (16) | 1.8-1.9 (5-6) | 1.9-2.0 (5-6) |
+| legs in 1 kb bins with > 16 legs | 8.8 / 4.6 / 5.0 % | 0 % | 0.0-0.2 % |
+| contacts per particle (diploid) at 100 kb / 5 kb / 1 kb | 139 / 6.9 / 1.4 (cell 1) | 17 / 0.85 / 0.17 (cell 1) | 33 / 1.6 / 0.32 (035) |
+| phased legs, actual | — (no reads) | 8.0 / 7.9 / 8.2 % | 5.6 / 5.5 / 5.8 % |
+| legs with a het SNV within ±150 bp | 16.3 / 16.2 / 16.1 % | 16.5 / 16.4 / 16.5 % | 15.5 % |
+| **phased legs, projected** (x actual / footprint of the six reference cells, 0.35-0.50) | **5.7-8.2 %** | | |
+| contacts with >= 1 phased end | projected 11-16 % = 0.94-1.32 / 0.72-1.01 / 0.62-0.88 M | 15 % = 0.16 M | 11 % = 0.32 M (published table) |
+
+(*) the 1 kb dedup merges distinct Micro-C contacts (MNase, nucleosome spacing): 30 % of the scMicro-C table goes; the
+published 3.0 M is the fair scMicro-C number.  The leg positions of the hickit pairs are not the read 5' end (about
+half of the phased legs have their het downstream, half upstream), so the projection uses the symmetric ±150 bp
+footprint (`unic_qc.py project --convention both`).  16 legs per kb = two copies x ~4 MboI fragments per kb x two
+ends: more legs than that in one 1 kb bin cannot all be distinct ligation products.
+
+Reading: (1) the phased-leg fraction is set by read length and SNP density, not by depth — Uni-C would be phased at
+about Dip-C's rate (projected 5.7-8.2 %), not higher; (2) after Dip-C-style processing Uni-C has 5.7-8.4 M contacts,
+3-4 x scMicro-C and 6-8 x Dip-C, with a Hi-C-like trans fraction, isolation rate and P(s); ~91 % of the published
+rows are < 1 kb WGS-like pairs or near-duplicates within 100 bp, and the 1 kb dedup removes another 39-47 %;
+(3) 5-9 % of the legs sit in 1 kb bins above the 16-legs ceiling, a lower bound on residual phi29 artefacts.
+Projected phased-anchor density (contacts with >= 1 phased end per particle) at 5 kb: Uni-C 0.5-1.1 vs scMicro-C
+0.27 (published table) and Dip-C 0.13; Uni-C would reach scMicro-C's 5 kb density at ~1-3 kb.  Not tested: no phased
+contacts, no reconstruction.
