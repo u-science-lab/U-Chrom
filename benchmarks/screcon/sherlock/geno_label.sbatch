@@ -1,7 +1,7 @@
 #!/bin/bash
 # Genotype cue (PREREG §12.2), step 4 (array over the rows of split.tsv with role ROLE = dev / test):
 # the authors' hickit pairs of the cell (GEO GSE117874 tarball) and its donor labels: the cell's BAM
-# (geno_align.sbatch) -> hickit.js sam2seg -v donor_sites.vcf -> chronly -> hickit pairs (phase = donor)
+# (geno_align.sbatch) -> hickit.js sam2seg -v donor_sites.tsv (vcf2tsv of donor_sites.vcf) -> chronly -> hickit pairs (phase = donor)
 # -> mix_geno.py label.  The BAM is deleted afterwards.
 #   sbatch --array=1-12 --export=ALL,ROLE=dev,ENGINE=<tag> benchmarks/screcon/sherlock/geno_label.sbatch
 #SBATCH --job-name=geno-label
@@ -26,9 +26,14 @@ if [ ! -s "$tag.pairs.gz" ]; then
   curl -sSfL -o "$tag.tar.gz" "${url/ftp:\/\//https://}"
   tar xzf "$tag.tar.gz" "$tag.pairs.gz" && rm -f "$tag.tar.gz"
 fi
+# sam2seg -v reads hickit's TSV (chr, pos, hap0 allele, hap1 allele), not a VCF: convert once (atomic)
+if [ ! -s "$GE/donor_sites.tsv" ]; then
+  "$HK/k8" "$HK/hickit.js" vcf2tsv "$GE/donor_sites.vcf" > "$GE/donor_sites.tsv.$SLURM_ARRAY_TASK_ID"
+  mv -f "$GE/donor_sites.tsv.$SLURM_ARRAY_TASK_ID" "$GE/donor_sites.tsv"
+fi
 if [ ! -s "$GE/labels/$tag.donor.pairs.gz" ]; then
   [ -s "$GE/bam/$tag.bam" ] || { echo "no BAM for $tag"; exit 1; }
-  samtools view -h "$GE/bam/$tag.bam" | "$HK/k8" "$HK/hickit.js" sam2seg -v "$GE/donor_sites.vcf" - \
+  samtools view -h "$GE/bam/$tag.bam" | "$HK/k8" "$HK/hickit.js" sam2seg -v "$GE/donor_sites.tsv" - \
     | "$HK/k8" "$HK/hickit.js" chronly - | gzip > "$GE/labels/$tag.donor.seg.gz"
   "$HK/hickit" -i "$GE/labels/$tag.donor.seg.gz" -o - | gzip > "$GE/labels/$tag.donor.pairs.gz"
 fi

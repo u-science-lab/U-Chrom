@@ -1,0 +1,4 @@
+{"A": {"mix_seed": "tri", "mix_seed_keep": 0.95, "mix_prior_mode": "posterior", "mix_prior_floor": 0.0, "robust_refine": 3},
+ "patchP0": {"mix_seed_keep": 0.95, "mix_prior_mode": "posterior", "mix_prior_floor": 0.0, "robust_refine": 3},
+ "diag_seed75": {"_oracle_prior": 0.5, "mix_seed_keep": 0.95, "mix_prior_mode": "posterior", "mix_prior_floor": 0.0, "robust_refine": 3},
+ "diag_trans": {"_oracle_prior": 0.0, "_oracle_subset": "trans", "mix_seed_keep": 0.95, "mix_prior_mode": "posterior", "mix_prior_floor": 0.0, "robust_refine": 3}}

@@ -16,12 +16,14 @@ GIAB=$DATA/giab_hg001/HG001_GRCh37_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLI
 BED=$DATA/geno_ref/HG001_GRCh37_v3.3.2_highconf.bed
 bams=$(awk -F'\t' 'NR > 1 && $3 == "genotype" {printf "%s/bam/pbmc_%02d.bam ", g, $2}' g="$GE" "$GE/split.tsv")
 echo "$bams"
+# -A: Dip-C reads are aligned with bwa mem -5SP (no proper pairs), which mpileup would otherwise skip as
+# anomalous pairs (first run: 0 sites).
 # (a) discovery calls, per chromosome in parallel, inside the GIAB high-confidence regions
 mkdir -p "$GE/calls"
 for c in $(seq 1 22) X; do
   [ -s "$GE/calls/calls_$c.vcf.gz" ] && continue
   ( awk -v c="$c" '$1 == c' "$BED" > "$GE/calls/bed_$c.bed"
-    bcftools mpileup -f "$REF" -r "$c" -R "$GE/calls/bed_$c.bed" -a AD,DP -q 20 -Q 13 -d 500 $bams 2>/dev/null \
+    bcftools mpileup -f "$REF" -r "$c" -R "$GE/calls/bed_$c.bed" -A -a AD,DP -q 20 -Q 13 -d 500 $bams 2>/dev/null \
       | bcftools call -mv -Oz -o "$GE/calls/calls_$c.vcf.gz" 2>/dev/null ) &
   while [ $(jobs -r | wc -l) -ge 22 ]; do sleep 5; done
 done
@@ -31,7 +33,7 @@ bcftools view -i 'GT="AA" && TYPE="snp"' "$GIAB" | bcftools query -f '%CHROM\t%P
 for c in $(seq 1 22) X; do
   [ -s "$GE/calls/homalt_$c.vcf.gz" ] && continue
   ( awk -v c="$c" '$1 == c' "$GE/calls/gm_homalt.tsv" > "$GE/calls/homalt_sites_$c.tsv"
-    bcftools mpileup -f "$REF" -r "$c" -T "$GE/calls/homalt_sites_$c.tsv" -a AD,DP -q 20 -Q 13 -d 500 $bams 2>/dev/null \
+    bcftools mpileup -f "$REF" -r "$c" -T "$GE/calls/homalt_sites_$c.tsv" -A -a AD,DP -q 20 -Q 13 -d 500 $bams 2>/dev/null \
       | bcftools call -m -Oz -o "$GE/calls/homalt_$c.vcf.gz" 2>/dev/null ) &
   while [ $(jobs -r | wc -l) -ge 22 ]; do sleep 5; done
 done

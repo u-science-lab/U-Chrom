@@ -1,0 +1,3 @@
+{"Efix": {"_prior": "{runs}/{pool}.prior.npy", "mix_seed_keep": 1.0, "robust_refine": 3},
+ "Epost": {"_prior": "{runs}/{pool}.prior.npy", "mix_seed_keep": 0.95, "mix_prior_mode": "posterior", "mix_prior_floor": 0.0, "robust_refine": 3},
+ "diag_seed75": {"_oracle_prior": 0.5, "mix_seed_keep": 0.95, "mix_prior_mode": "posterior", "mix_prior_floor": 0.0, "robust_refine": 3}}
