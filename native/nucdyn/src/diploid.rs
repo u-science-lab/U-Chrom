@@ -779,6 +779,7 @@ pub fn em_update_dip(data: &EmData, g: &DipGroups, odds: &[f64], k: &Kernel, p: 
         seconds: t0.elapsed().as_secs_f64(),
         phase_confident: Some(if n_amb > 0 { conf as f64 / n_amb as f64 } else { f64::NAN }),
         n_ambiguous: Some(n_amb),
+        ll_marginal: None,
     };
     DipEmResult { weights, group_w, r_true, post, eps, s, log }
 }
@@ -1221,6 +1222,8 @@ pub fn calc_genome_structure(input: &Input, dip: &DiploidInput, p: &Params, engi
         contact_weights,
         diploid: true,
         phase_probs,
+        mix_cells: 0,
+        cell_probs: vec![],
     })
 }
 

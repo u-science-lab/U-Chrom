@@ -376,6 +376,8 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
         contact_weights: vec![],
         diploid: false,
         phase_probs: vec![],
+        mix_cells: 0,
+        cell_probs: vec![],
     })
 }
 

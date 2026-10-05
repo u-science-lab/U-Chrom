@@ -36,6 +36,10 @@ struct Params {
     nc_lambda: f32, // robust no-contact term (0: off)
     nc_d0: f32,
     nc_s: f32,
+    dens_kappa: f32, // density cap (0: off): kappa / 2 sum_i (rho_i - rho_max)+^2, rho_i = sum_j (1 - d^2 / R^2)^2
+    dens_r: f32,
+    dens_rho: f32,
+    _pad: f32,
 };
 
 struct Rest {
@@ -505,9 +509,51 @@ fn restraints(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id
     }
 }
 
+// Density cap: local density of every particle, stored in pos[k].w (after scatter; motion resets it).
+@compute @workgroup_size(256)
+fn density_k(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id) l: vec3<u32>) {
+    let t = wg.x * WG + l.x;
+    let m = wg.y;
+    if (t >= P.n) {
+        return;
+    }
+    let q0 = spos[m * P.n + t];
+    let i = bitcast<u32>(q0.w);
+    let p = q0.xyz;
+    let d = grid_dims(m);
+    let c = vec3<i32>(cell_coord(m, p, d));
+    let di = vec3<i32>(d);
+    let st = i32(P.stencil);
+    let r2 = P.dens_r * P.dens_r;
+    let sb = m * P.n;
+    let x0 = u32(max(c.x - st, 0));
+    let x1 = u32(min(c.x + st, di.x - 1));
+    var rho = 0.0;
+    for (var z = max(c.z - st, 0); z <= min(c.z + st, di.z - 1); z = z + 1) {
+        for (var y = max(c.y - st, 0); y <= min(c.y + st, di.y - 1); y = y + 1) {
+            let row = (u32(z) * d.y + u32(y)) * d.x;
+            let b = cell_begin(m, row + x0);
+            let e = cell_begin(m, row + x1 + 1u);
+            for (var tt = b; tt < e; tt = tt + 1u) {
+                let q4 = spos[sb + tt];
+                let j = bitcast<u32>(q4.w);
+                let dv = q4.xyz - p;
+                let d2 = dot(dv, dv);
+                if (j != i && d2 < r2) {
+                    let u = 1.0 - d2 / r2;
+                    rho = rho + u * u;
+                }
+            }
+        }
+    }
+    let k = sb + i;
+    pos[k] = vec4<f32>(pos[k].xyz, rho);
+}
+
 fn total_force(i: u32, m: u32, p: vec3<f32>) -> vec3<f32> {
     var f = vec3<f32>(0.0);
-    if (P.f_rep != 0.0 || P.nc_lambda > 0.0) {
+    let dens = P.dens_kappa > 0.0;
+    if (P.f_rep != 0.0 || P.nc_lambda > 0.0 || dens) {
         let d = grid_dims(m);
         let c = vec3<i32>(cell_coord(m, p, d));
         let di = vec3<i32>(d);
@@ -517,6 +563,8 @@ fn total_force(i: u32, m: u32, p: vec3<f32>) -> vec3<f32> {
         let nc_end = P.nc_d0 + 3.0 * P.nc_s;
         let kf = 4.0 * P.f_rep;
         let sb = m * P.n;
+        let r2d = P.dens_r * P.dens_r;
+        let ei = select(0.0, max(pos[sb + i].w - P.dens_rho, 0.0), dens);
         let x0 = u32(max(c.x - st, 0));
         let x1 = u32(min(c.x + st, di.x - 1));
         for (var z = max(c.z - st, 0); z <= min(c.z + st, di.z - 1); z = z + 1) {
@@ -529,6 +577,13 @@ fn total_force(i: u32, m: u32, p: vec3<f32>) -> vec3<f32> {
                     let j = bitcast<u32>(q4.w);
                     let dv = q4.xyz - p;
                     let d2 = dot(dv, dv);
+                    if (dens && j != i && d2 < r2d) {
+                        // density cap: every pair within R, chain neighbours included
+                        let e = ei + max(pos[sb + j].w - P.dens_rho, 0.0);
+                        if (e > 0.0) {
+                            f = f - dv * (P.dens_kappa * e * 4.0 * (1.0 - d2 / r2d) / r2d);
+                        }
+                    }
                     if (d2 > cut2 || (j + 1u >= i && j <= i + 1u)) {
                         continue;
                     }

@@ -13,6 +13,8 @@ pub mod contacts;
 pub mod diploid;
 pub mod dynamics;
 pub mod igm;
+pub mod mix;
+pub mod mixseed;
 pub mod params;
 pub mod pipeline;
 pub mod protocol2017;

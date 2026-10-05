@@ -73,6 +73,12 @@ pub struct Output {
     /// (index 2 hap_a + hap_b, input orientation) given that the contact is true (NaN =
     /// filtered out); empty otherwise.
     pub phase_probs: Vec<f64>,
+    /// Few-cell deconvolution (`mix.rs`): number of cells (0 = off); `coords` are cell-major
+    /// (cell s = models s n .. (s + 1) n of n per cell).
+    pub mix_cells: usize,
+    /// Few-cell deconvolution: per input contact `mix_cells` values, P(cell | true) from the
+    /// final structures (every input contact, filtered ones included); empty otherwise.
+    pub cell_probs: Vec<f64>,
 }
 
 /// Something that anneals the models of one stage.
@@ -270,6 +276,8 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
     }
     if p.protocol == "nuc_dynamics_2017" {
         crate::protocol2017::calc_genome_structure(input, p, engine)
+    } else if p.protocol == "robust" && p.mix_cells >= 2 {
+        crate::mix::calc_genome_structure(input, p, engine)
     } else if p.protocol == "robust" {
         crate::robust::calc_genome_structure(input, p, engine)
     } else {
@@ -427,5 +435,7 @@ pub fn calc_genome_structure_release13(input: &Input, p: &Params, engine: &mut d
         contact_weights: vec![],
         diploid: false,
         phase_probs: vec![],
+        mix_cells: 0,
+        cell_probs: vec![],
     })
 }

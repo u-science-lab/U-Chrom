@@ -141,6 +141,86 @@ fn run_robust() -> u64 {
     })
 }
 
+/// Diploid toy: the haploid toy contacts with every chromosome given two copies; each contact end
+/// phased with probability 0.3 (seeded).
+fn run_diploid(f: impl Fn(Params) -> Params) -> u64 {
+    use uchrom_nucdyn::diploid::DiploidInput;
+    let (names, ca, pa, cb, pb) = toy_contacts();
+    let n = ca.len();
+    let mut rng = Rng::new(77);
+    let ha: Vec<i8> = (0..n).map(|_| if rng.uniform() < 0.3 { (rng.uniform() * 2.0) as i8 } else { -1 }).collect();
+    let hb: Vec<i8> = (0..n).map(|_| if rng.uniform() < 0.3 { (rng.uniform() * 2.0) as i8 } else { -1 }).collect();
+    let ambig: Vec<i64> = (1..=n as i64).collect();
+    let active = vec![true; n];
+    let ploidy = vec![2u8; names.len()];
+    let dip = DiploidInput { hap_a: &ha, hap_b: &hb, ploidy: &ploidy, prior: None };
+    let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &ambig, active: &active, prior_lr: None, dip: Some(dip) };
+    let p = f(Params {
+        particle_sizes: vec![4e6, 2e6, 1e6, 4e5, 2e5],
+        n_models: 2,
+        seed: 5,
+        temp_steps: vec![12],
+        dynamics_steps: vec![10],
+        robust_temp_steps: vec![12],
+        robust_dynamics_steps: vec![10],
+        robust_refine_temp_steps: 4,
+        robust_sample_steps: 3,
+        robust_sample_dyn_steps: 5,
+        n_threads: 3,
+        ..Default::default()
+    });
+    let mut eng = CpuEngine::new(p.n_threads).unwrap();
+    let out = calc_genome_structure(&input, &p, &mut eng).unwrap();
+    let mut h = fnv(&out.coords);
+    for x in &out.phase_probs {
+        h ^= x.to_bits();
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
+
+/// Diploid protocols on the CPU engine: NucDynamics-2017 diploid, frozen EMber diploid (tag
+/// `ember-diploid-frozen`, engine defaults) and EMber deep (tag `ember-deep-frozen`: commit 0.75 by
+/// the prior, drop, re-admit at stage 4).  (label, macOS aarch64, Linux x86-64 Sherlock).  Recorded
+/// 2026-10-05 with the engine of origin/main c7c7d0f (before the few-cell deconvolution was added).
+const GOLDEN_DIPLOID: [(&str, &[u64], &[u64]); 3] = [
+    ("diploid nuc_dynamics_2017", &[0x9b77dca2cc24252b], &[]),
+    ("diploid EMber", &[0xffb80847cb3c9f99], &[]),
+    ("diploid EMber deep", &[0x30867b583bbb4f59], &[]),
+];
+
+#[test]
+fn diploid_bit_identical() {
+    let print = std::env::var("UCHROM_NUCDYN_PRINT_GOLDEN").is_ok();
+    let hashes = [
+        run_diploid(|p| Params { protocol: "nuc_dynamics_2017".into(), ..p }),
+        run_diploid(|p| Params { protocol: "robust".into(), ..p }),
+        run_diploid(|p| Params {
+            protocol: "robust".into(),
+            robust_dip_commit: 0.75,
+            robust_dip_commit_drop: true,
+            robust_dip_readmit_stage: 4,
+            particle_sizes: vec![4e6, 2e6, 1e6, 4e5, 2e5, 1e5],
+            ..p
+        }),
+    ];
+    for ((label, mac, linux), h) in GOLDEN_DIPLOID.iter().zip(hashes) {
+        let want: &[u64] = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            mac
+        } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            linux
+        } else {
+            &[]
+        };
+        if print || want.is_empty() {
+            eprintln!("golden {label}: 0x{h:016x}");
+        }
+        if !want.is_empty() {
+            assert!(want.contains(&h), "{label} changed: 0x{h:016x} not in {want:x?}");
+        }
+    }
+}
+
 #[test]
 fn ember_bit_identical() {
     let print = std::env::var("UCHROM_NUCDYN_PRINT_GOLDEN").is_ok();

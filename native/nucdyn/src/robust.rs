@@ -74,6 +74,10 @@ pub struct EmLog {
     /// diploid input: number of homolog-ambiguous contacts in the update
     #[serde(skip_serializing_if = "Option::is_none")]
     pub n_ambiguous: Option<usize>,
+    /// few-cell deconvolution: mixture log-likelihood per contact with the cell prior ν replaced by
+    /// uniform (λ only; comparable between runs with different seeds / priors)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ll_marginal: Option<f64>,
 }
 
 /// Contact kernel f(d) = exp(-((d - d0)+ / s)^k).
@@ -424,6 +428,7 @@ pub fn em_update(data: &EmData, k: &Kernel, p: &Params, eps0: f64, s0: f64) -> E
         seconds: t0.elapsed().as_secs_f64(),
         phase_confident: None,
         n_ambiguous: None,
+        ll_marginal: None,
     };
     EmResult { weights, eps, s, log }
 }
@@ -850,6 +855,8 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
         contact_weights: final_weights,
         diploid: false,
         phase_probs: vec![],
+        mix_cells: 0,
+        cell_probs: vec![],
     })
 }
 

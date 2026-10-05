@@ -33,7 +33,7 @@ fn make_engine(p: &Params) -> PyResult<Box<dyn StageEngine + Send>> {
 /// `hap_b` (0, 1, -1 = unknown per contact end), `ploidy` (1 or 2 per name) and optionally
 /// `phase_prior` (4 values per contact, index 2 hap_a + hap_b).
 #[pyfunction]
-#[pyo3(signature = (names, chr_a, pos_a, chr_b, pos_b, ambig, active, params_json, prior_lr=None, hap_a=None, hap_b=None, ploidy=None, phase_prior=None))]
+#[pyo3(signature = (names, chr_a, pos_a, chr_b, pos_b, ambig, active, params_json, prior_lr=None, hap_a=None, hap_b=None, ploidy=None, phase_prior=None, mix_prior=None))]
 #[allow(clippy::too_many_arguments)]
 fn calc_genome_structure<'py>(
     py: Python<'py>,
@@ -50,6 +50,7 @@ fn calc_genome_structure<'py>(
     hap_b: Option<PyReadonlyArray1<'py, i8>>,
     ploidy: Option<Vec<u8>>,
     phase_prior: Option<PyReadonlyArray1<'py, f64>>,
+    mix_prior: Option<PyReadonlyArray1<'py, f64>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let p: Params = serde_json::from_str(params_json).map_err(|e| PyValueError::new_err(e.to_string()))?;
     p.validate().map_err(PyValueError::new_err)?;
@@ -83,6 +84,10 @@ fn calc_genome_structure<'py>(
         (None, None) => None,
         _ => return Err(PyValueError::new_err("give both hap_a and hap_b, or neither")),
     };
+    let mix_prior: Option<Vec<f64>> = match mix_prior {
+        Some(x) => Some(x.as_slice()?.to_vec()),
+        None => None,
+    };
     let mut engine = make_engine(&p)?;
     let res = py.detach(move || {
         let dip = dip_arrays.as_ref().map(|(a, b, k, pr)| crate::diploid::DiploidInput {
@@ -92,7 +97,11 @@ fn calc_genome_structure<'py>(
             prior: pr.as_deref(),
         });
         let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &am, active: &ac, prior_lr: lr.as_deref(), dip };
-        cgs(&input, &p, engine.as_mut())
+        match &mix_prior {
+            Some(pr) if p.protocol == "robust" && p.mix_cells >= 2 => crate::mix::calc_with_prior(&input, &p, engine.as_mut(), Some(pr)),
+            Some(_) => Err("mix_prior needs protocol robust with mix_cells >= 2".to_string()),
+            None => cgs(&input, &p, engine.as_mut()),
+        }
     });
     let out = res.map_err(PyRuntimeError::new_err)?;
     let d = PyDict::new(py);
@@ -116,6 +125,8 @@ fn calc_genome_structure<'py>(
     d.set_item("contact_weights", out.contact_weights.into_pyarray(py))?;
     d.set_item("diploid", out.diploid)?;
     d.set_item("phase_probs", out.phase_probs.into_pyarray(py))?;
+    d.set_item("mix_cells", out.mix_cells)?;
+    d.set_item("cell_probs", out.cell_probs.into_pyarray(py))?;
     Ok(d)
 }
 
@@ -460,10 +471,42 @@ fn default_params_json() -> String {
     serde_json::to_string(&Params::default()).unwrap()
 }
 
+/// Few-cell deconvolution: the symmetry-breaking seed of restart `restart` (`mix::seed_prior`,
+/// every contact kept) as a flat array of k values per contact.
+#[pyfunction]
+#[pyo3(signature = (names, chr_a, pos_a, chr_b, pos_b, params_json, restart=0))]
+#[allow(clippy::too_many_arguments)]
+fn mix_seed_prior<'py>(
+    py: Python<'py>,
+    names: Vec<String>,
+    chr_a: PyReadonlyArray1<'py, u32>,
+    pos_a: PyReadonlyArray1<'py, i64>,
+    chr_b: PyReadonlyArray1<'py, u32>,
+    pos_b: PyReadonlyArray1<'py, i64>,
+    params_json: &str,
+    restart: usize,
+) -> PyResult<Bound<'py, numpy::PyArray1<f64>>> {
+    let p: Params = serde_json::from_str(params_json).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    if p.mix_cells < 2 {
+        return Err(PyValueError::new_err("mix_cells must be >= 2"));
+    }
+    let (ca, pa, cb, pb) = (chr_a.as_slice()?.to_vec(), pos_a.as_slice()?.to_vec(), chr_b.as_slice()?.to_vec(), pos_b.as_slice()?.to_vec());
+    let n = ca.len();
+    let out = py.detach(move || {
+        let amb: Vec<i64> = (1..=n as i64).collect();
+        let act = vec![true; n];
+        let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &amb, active: &act, prior_lr: None, dip: None };
+        let cs = crate::mix::prepare_contacts(&input);
+        crate::mix::seed_prior(&cs, &vec![true; n], p.mix_cells, &p, restart)
+    });
+    Ok(out.into_pyarray(py))
+}
+
 #[pymodule]
 fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(calc_genome_structure, m)?)?;
     m.add_function(wrap_pyfunction!(diploid_neighbour_prior, m)?)?;
+    m.add_function(wrap_pyfunction!(mix_seed_prior, m)?)?;
     m.add_function(wrap_pyfunction!(run_dynamics, m)?)?;
     m.add_function(wrap_pyfunction!(debug_setup_stage, m)?)?;
     m.add_function(wrap_pyfunction!(gpu_available, m)?)?;

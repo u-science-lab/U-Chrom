@@ -43,6 +43,10 @@ struct GpuParams {
     nc_lambda: f32,
     nc_d0: f32,
     nc_s: f32,
+    dens_kappa: f32,
+    dens_r: f32,
+    dens_rho: f32,
+    _pad: f32,
 }
 
 #[repr(C)]
@@ -55,7 +59,7 @@ struct GpuRest {
     w: f32,
 }
 
-const ENTRY_POINTS: [&str; 14] = [
+const ENTRY_POINTS: [&str; 15] = [
     "vel_init",
     "vel_given",
     "temp_reduce_vinit",
@@ -70,6 +74,7 @@ const ENTRY_POINTS: [&str; 14] = [
     "restraints",
     "force_only",
     "force_update",
+    "density_k",
 ];
 
 pub(crate) struct Ctx {
@@ -372,11 +377,18 @@ impl GpuEngine {
             cut: (match sys.nc {
                 Some(x) => rep.max(x.cutoff() / u),
                 None => rep,
-            }) as f32,
+            })
+            .max(sys.density.map_or(0.0, |x| x.r / u)) as f32,
             nc_lambda: sys.nc.map_or(0.0, |x| x.lambda) as f32,
             nc_d0: sys.nc.map_or(0.0, |x| x.d0 / u) as f32,
             nc_s: sys.nc.map_or(1.0, |x| x.s / u) as f32,
+            // energy scale: kappa rho^2 is dimensionless in rho; forces scale as 1 / length
+            dens_kappa: sys.density.map_or(0.0, |x| x.kappa * u * u) as f32,
+            dens_r: sys.density.map_or(1.0, |x| x.r / u) as f32,
+            dens_rho: sys.density.map_or(0.0, |x| x.rho_max) as f32,
+            _pad: 0.0,
         };
+        let dens = sys.density.is_some();
         let (px, gx) = (nb, g.div_ceil(WG).max(1));
         let (mm, hbx) = (m as u32, hb);
         let vel0: Option<Vec<f32>> = init_vel.map(|v| {
@@ -412,6 +424,9 @@ impl GpuEngine {
                 run("scan_local", hbx, mm);
                 run("scan_blocks", 1, mm);
                 run("scatter", px, mm);
+                if dens {
+                    run("density_k", px, mm);
+                }
                 run("restraints", gx, mm);
                 run("force_only", px, mm);
                 for _ in 0..dyn_steps {
@@ -421,6 +436,9 @@ impl GpuEngine {
                     run("scan_local", hbx, mm);
                     run("scan_blocks", 1, mm);
                     run("scatter", px, mm);
+                    if dens {
+                        run("density_k", px, mm);
+                    }
                     run("restraints", gx, mm);
                     run("force_update", px, mm);
                     run("temp_reduce", 1, mm);
@@ -608,6 +626,54 @@ mod tests {
                 let diff = (0..base.n).map(|i| (cpu[0][i][0] - cpu[1][i][0]).abs()).fold(0.0, f64::max);
                 assert!(diff > 1e-3, "per-model weights had no effect");
             }
+        }
+    }
+
+    /// Density cap (few-cell deconvolution) with per-model weights: GPU vs CPU.
+    #[test]
+    fn gpu_matches_cpu_density_cap() {
+        let Ok(mut eng) = GpuEngine::new(0) else {
+            eprintln!("no GPU adapter: skipped");
+            return;
+        };
+        let (base, pos) = toy(3000, RestraintForm::Weighted2017);
+        // compress so that the cap is active
+        let pos: Vec<V3> = pos.iter().map(|q| [q[0] * 0.4, q[1] * 0.4, q[2] * 0.4]).collect();
+        let nr = base.n_restraints();
+        let mut rng = Rng::new(19);
+        let mut sys = base.clone();
+        sys.model_w = Some(vec![(0..nr).map(|_| rng.uniform()).collect(), (0..nr).map(|_| rng.uniform()).collect()]);
+        sys.density = Some(crate::dynamics::DensityCap { kappa: 0.5, r: 2.0, rho_max: 6.0 });
+        let vel: Vec<V3> = (0..base.n).map(|_| [rng.normal(), rng.normal(), rng.normal()]).collect();
+        let (t_ref, f_rep, f_dist, steps) = (300.0, 0.6, 25.0, 10);
+        let dp = DynParams {
+            t_ref,
+            t_step: 0.001,
+            n_steps: steps,
+            f_rep,
+            f_dist,
+            beta: 10.0,
+            tot0: 20.458,
+            skin: 1.0,
+            original_nl_schedule: false,
+            use_cells: true,
+            emulate_overflow: false,
+        };
+        let out = eng
+            .run_schedule(&sys, vec![pos.clone(), pos.clone()], &[(t_ref, f_rep)], steps, f_dist, 1.0, 0.001 * 20.458, 10.0 / 20.458, 1, Some(&[vel.clone(), vel.clone()]))
+            .unwrap();
+        let mut nocap = sys.clone();
+        nocap.density = None;
+        for (mi, c) in out.iter().enumerate() {
+            let mut m = Model::new(pos.clone(), Rng::new(0));
+            run_dynamics(&sys.for_model(mi), &mut m, &dp, false, Some(&vel));
+            let mut m0 = Model::new(pos.clone(), Rng::new(0));
+            run_dynamics(&nocap.for_model(mi), &mut m0, &dp, false, Some(&vel));
+            let max_d = (0..base.n).map(|i| (0..3).map(|k| (c[i][k] - m.pos[i][k]).powi(2)).sum::<f64>().sqrt()).fold(0.0, f64::max);
+            let effect = (0..base.n).map(|i| (0..3).map(|k| (m0.pos[i][k] - m.pos[i][k]).powi(2)).sum::<f64>().sqrt()).fold(0.0, f64::max);
+            eprintln!("density cap, model {mi}: GPU vs CPU max diff {max_d:.2e} (effect of the cap {effect:.3})");
+            assert!(effect > 1e-2, "the cap had no effect");
+            assert!(max_d < 1e-3, "model {mi}: {max_d}");
         }
     }
 

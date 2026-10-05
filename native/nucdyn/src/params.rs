@@ -210,6 +210,61 @@ pub struct Params {
     /// `dip_isolation_radius` (Chebyshev; hickit `-r R -c K`).
     pub dip_isolation_nei: u32,
     pub dip_isolation_radius: i64,
+    // ---- few-cell deconvolution ("EMber-mix", `mix.rs`; protocol "robust", haploid input) ----
+    /// Number of cells pooled in the input (0 / 1 = off: one structure).  >= 2: the contacts are
+    /// deconvolved into this many cells of `n_models` replicate models each (output cell-major).
+    pub mix_cells: usize,
+    /// Independent symmetry-breaking seeds annealed side by side; the one with the highest
+    /// mixture likelihood is kept after stage `mix_select_stage` (0-based).
+    pub mix_restarts: usize,
+    pub mix_select_stage: usize,
+    /// Symmetry-breaking seed of the first stage: "patch" (random 2-D patches of the contact map
+    /// to random cells), "random" (every contact to a random cell) or "uniform" (none).
+    pub mix_seed: String,
+    /// Mean contacts per seed patch.
+    pub mix_seed_patch: f64,
+    /// Contacts closer than this (bp, cis) are not seeded (uniform over the cells).
+    pub mix_seed_min_sep: i64,
+    /// Fraction of the seed kept in the E-step prior after the first stage (0: uniform prior).
+    pub mix_seed_keep: f64,
+    /// Seed "tri" (triangle consistency, `mixseed.rs`): locus grid (bp), neighbours per edge end,
+    /// mean-field iterations, temperature from t0 to t1.
+    pub mix_tri_res: i64,
+    pub mix_tri_max: usize,
+    pub mix_tri_iters: usize,
+    pub mix_tri_t0: f64,
+    pub mix_tri_t1: f64,
+    /// E-step prior over the cells after the first stage: "uniform" (the seed kept by
+    /// `mix_seed_keep`) or "posterior" (the previous update's posterior^`mix_prior_temp`, mixed
+    /// with `mix_prior_floor` of uniform).
+    pub mix_prior_mode: String,
+    /// Flat region of the contact kernel in the final cell assignment (radii; EMber's d0 = 2).
+    pub mix_assign_d0: f64,
+    /// Shape-free soft density cap (`dynamics::DensityCap`): ρ_max (0 = off), kernel radius R
+    /// (radii), strength κ, first stage (0-based) it acts in.
+    pub mix_density_rho: f64,
+    pub mix_density_r: f64,
+    pub mix_density_kappa: f64,
+    pub mix_density_stage: i64,
+    pub mix_prior_temp: f64,
+    pub mix_prior_floor: f64,
+    /// Learn the mixing weights λ (cells of different depth).
+    pub mix_learn_pi: bool,
+    pub mix_pi_floor: f64,
+    /// 2-D neighbourhood smoothing of the cell posteriors as the next prior: exponent γ (0 = off),
+    /// radius (bp, Chebyshev), neighbours per contact, pseudo-count.
+    pub mix_nbr_prior: f64,
+    pub mix_nbr_radius: i64,
+    pub mix_nbr_max: usize,
+    pub mix_nbr_pseudo: f64,
+    /// Staged commitment: from stage `mix_commit_stage` (0-based; -1 = off) a contact whose cell
+    /// posterior reaches `mix_commit` (0 = off) is restrained in that cell only; with
+    /// `mix_commit_drop` the others are left out at that stage and re-admitted at
+    /// `mix_readmit_stage` (-1 = never).
+    pub mix_commit: f64,
+    pub mix_commit_stage: i64,
+    pub mix_commit_drop: bool,
+    pub mix_readmit_stage: i64,
 }
 
 impl Default for Params {
@@ -296,6 +351,36 @@ impl Default for Params {
             robust_dip_readmit_stage: -1,
             dip_isolation_nei: 0,
             dip_isolation_radius: 10_000_000,
+            mix_cells: 0,
+            mix_restarts: 1,
+            mix_select_stage: 1,
+            mix_seed: "patch".to_string(),
+            mix_seed_patch: 50.0,
+            mix_seed_min_sep: 2_000_000,
+            mix_seed_keep: 0.0,
+            mix_tri_res: 1_000_000,
+            mix_tri_max: 64,
+            mix_tri_iters: 200,
+            mix_tri_t0: 2.0,
+            mix_tri_t1: 0.05,
+            mix_prior_mode: "uniform".to_string(),
+            mix_assign_d0: 0.0,
+            mix_density_rho: 0.0,
+            mix_density_r: 2.0,
+            mix_density_kappa: 1.0,
+            mix_density_stage: 0,
+            mix_prior_temp: 1.0,
+            mix_prior_floor: 0.05,
+            mix_learn_pi: true,
+            mix_pi_floor: 0.01,
+            mix_nbr_prior: 0.0,
+            mix_nbr_radius: 10_000_000,
+            mix_nbr_max: 50,
+            mix_nbr_pseudo: 0.4,
+            mix_commit: 0.0,
+            mix_commit_stage: -1,
+            mix_commit_drop: false,
+            mix_readmit_stage: -1,
         }
     }
 }
@@ -375,6 +460,17 @@ impl Params {
                 }
                 if !(0.0..=1.0).contains(&self.robust_w_floor) {
                     return Err("robust_w_floor must be in [0, 1]".into());
+                }
+                if self.mix_cells >= 2 {
+                    if !matches!(self.mix_seed.as_str(), "patch" | "random" | "uniform" | "tri") {
+                        return Err(format!("unknown mix_seed {:?}", self.mix_seed));
+                    }
+                    if self.mix_commit != 0.0 && !(self.mix_commit > 0.0 && self.mix_commit <= 1.0) {
+                        return Err("mix_commit: 0 (off) or a threshold in (0, 1]".into());
+                    }
+                    if self.mix_nbr_prior < 0.0 || self.mix_nbr_pseudo <= 0.0 {
+                        return Err("mix_nbr_prior must be >= 0 and mix_nbr_pseudo > 0".into());
+                    }
                 }
             }
             p => return Err(format!("unknown protocol {p:?}")),

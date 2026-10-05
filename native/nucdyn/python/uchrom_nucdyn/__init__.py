@@ -92,6 +92,26 @@ def neighbour_phase_prior(chrom_a, pos_a, chrom_b, pos_b, hap_a, hap_b, *, ploid
     return np.asarray(out).reshape(len(ia), 4)
 
 
+def mix_seed_prior(chrom_a, pos_a, chrom_b, pos_b, *, restart: int = 0, **params: Any) -> np.ndarray:
+    """Few-cell deconvolution: the first-stage seed (``mix_seed``) of every contact, (n, mix_cells)."""
+    from ._engine import mix_seed_prior as _seed
+
+    ca = np.asarray(chrom_a).astype(str)
+    cb = np.asarray(chrom_b).astype(str)
+    names = sorted(set(ca.tolist()) | set(cb.tolist()))
+    idx = {n: i for i, n in enumerate(names)}
+    ia = np.fromiter((idx[c] for c in ca), dtype=np.uint32, count=len(ca))
+    ib = np.fromiter((idx[c] for c in cb), dtype=np.uint32, count=len(cb))
+    p = default_params()
+    unknown = set(params) - set(p)
+    if unknown:
+        raise TypeError(f"unknown parameters: {sorted(unknown)}")
+    p.update(params)
+    out = _seed(names, ia, np.ascontiguousarray(pos_a, np.int64), ib, np.ascontiguousarray(pos_b, np.int64),
+                json.dumps(p), int(restart))
+    return np.asarray(out).reshape(len(ia), int(p["mix_cells"]))
+
+
 def calc_genome_structure(
     chrom_a: Sequence[str],
     pos_a: Sequence[int],
@@ -105,6 +125,7 @@ def calc_genome_structure(
     hap_b: Optional[Sequence[int]] = None,
     ploidy: Any = "auto",
     phase_prior: Optional[Any] = None,
+    mix_prior: Optional[Any] = None,
     **params: Any,
 ) -> Dict[str, Any]:
     """Run the hierarchical NucDynamics protocol on single-cell contacts.
@@ -136,6 +157,9 @@ def calc_genome_structure(
         Diploid input, optional: (n, 4) prior over the copy pair of each contact (index
         2 hap_a + hap_b), e.g. hickit's imputed ``phase_prob00 .. phase_prob11``; EMber uses
         it as the prior of its candidate copy pairs.
+    mix_prior
+        Few-cell deconvolution (``mix_cells`` >= 2), optional: (n, k) prior over the cell of every
+        contact, used as the first-stage seed instead of ``mix_seed`` (oracle / reference seeding).
     **params
         Any field of :func:`default_params` (``particle_sizes``, ``n_models``,
         ``seed``, ``device``, ``n_threads``, ``temp_steps``, ...).
@@ -194,6 +218,9 @@ def calc_genome_structure(
             pr = np.ascontiguousarray(np.asarray(phase_prior, dtype=np.float64).reshape(n, 4)).ravel()
         res = _calc_genome_structure(names, ia, pa, ib, pb, amb, act, json.dumps(p), lr, h_a, h_b,
                                      [int(k) for k in copies], pr)
+    elif mix_prior is not None:
+        mp = np.ascontiguousarray(np.asarray(mix_prior, dtype=np.float64).reshape(n, -1)).ravel()
+        res = _calc_genome_structure(names, ia, pa, ib, pb, amb, act, json.dumps(p), lr, None, None, None, None, mp)
     else:
         res = _calc_genome_structure(names, ia, pa, ib, pb, amb, act, json.dumps(p), lr)
     ids = list(res["chroms"])
@@ -221,6 +248,13 @@ def calc_genome_structure(
         "params": p,
         "diploid": bool(res["diploid"]),
     }
+    if res.get("mix_cells", 0):
+        # few-cell deconvolution: models cell-major (n_models per cell); per input contact
+        # P(cell | true) for every cell and P(true) (``contact_weights``), from the final structures
+        k = int(res["mix_cells"])
+        out["mix_cells"] = k
+        out["model_cell"] = np.repeat(np.arange(k), len(res["coords"]) // k)
+        out["cell_probs"] = np.asarray(res["cell_probs"], np.float64).reshape(n, k)
     if res["diploid"]:
         out["copy"] = copy
         out["ploidy"] = {c: int(k) for c, k in zip(names, copies)}

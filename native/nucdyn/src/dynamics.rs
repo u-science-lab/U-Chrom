@@ -58,6 +58,91 @@ impl NoContact {
     }
 }
 
+/// Shape-free soft density cap: local density ρ_i = Σ_{j != i} w(d_ij), w(d) = (1 - d²/R²)² for
+/// d < R; energy κ/2 Σ_i (ρ_i - ρ_max)₊².  It replaces a nuclear envelope: a structure may take any
+/// shape but cannot pack particles more densely than ρ_max (a structure that has to satisfy the
+/// contacts of several cells at once needs a higher density than one cell).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DensityCap {
+    pub kappa: f64,
+    pub r: f64,
+    pub rho_max: f64,
+}
+
+/// Local densities and the density-cap forces (added to `force`); returns the energy.  Gathered
+/// per particle in fixed chunks (thread-count independent).
+pub fn density_forces(cap: &DensityCap, pos: &[V3], force: &mut [V3], grid: &mut CellGrid, parallel: bool) -> f64 {
+    let n = pos.len();
+    if n == 0 {
+        return 0.0;
+    }
+    let min_len = if parallel { 1 } else { usize::MAX };
+    grid.stencil = 1;
+    grid.build(pos, cap.r);
+    let r2 = cap.r * cap.r;
+    let [dx_, dy_, dz_] = grid.dims;
+    let (sidx, spos, start, pcell) = (&grid.sidx, &grid.spos, &grid.start, &grid.pcell);
+    let visit = |i: usize, f: &mut dyn FnMut(usize, f64, [f64; 3])| {
+        let p = pos[i];
+        let l = pcell[i] as usize;
+        let (cx, cy, cz) = (l % dx_, (l / dx_) % dy_, l / (dx_ * dy_));
+        let (x0, x1) = (cx.saturating_sub(1), (cx + 1).min(dx_ - 1));
+        for z in cz.saturating_sub(1)..=(cz + 1).min(dz_ - 1) {
+            for y in cy.saturating_sub(1)..=(cy + 1).min(dy_ - 1) {
+                let row = (z * dy_ + y) * dx_;
+                for t in start[row + x0] as usize..start[row + x1 + 1] as usize {
+                    let j = sidx[t] as usize;
+                    if j == i {
+                        continue;
+                    }
+                    let q = spos[t];
+                    let d = [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
+                    let d2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+                    if d2 < r2 {
+                        f(j, d2, d);
+                    }
+                }
+            }
+        }
+    };
+    let rho: Vec<f64> = (0..n)
+        .into_par_iter()
+        .with_min_len(if parallel { CHUNK } else { usize::MAX })
+        .map(|i| {
+            let mut s = 0.0;
+            visit(i, &mut |_, d2, _| {
+                let u = 1.0 - d2 / r2;
+                s += u * u;
+            });
+            s
+        })
+        .collect();
+    let ex: Vec<f64> = rho.iter().map(|&x| (x - cap.rho_max).max(0.0)).collect();
+    let energy = 0.5 * cap.kappa * ex.iter().map(|e| e * e).sum::<f64>();
+    if ex.iter().all(|&e| e == 0.0) {
+        return energy;
+    }
+    force.par_chunks_mut(CHUNK).enumerate().with_min_len(min_len).for_each(|(c, fch)| {
+        for (kk, f) in fch.iter_mut().enumerate() {
+            let i = c * CHUNK + kk;
+            let mut acc = [0.0f64; 3];
+            visit(i, &mut |j, d2, d| {
+                let e = ex[i] + ex[j];
+                if e > 0.0 {
+                    let g = cap.kappa * e * 4.0 * (1.0 - d2 / r2) / r2;
+                    acc[0] += g * d[0];
+                    acc[1] += g * d[1];
+                    acc[2] += g * d[2];
+                }
+            });
+            f[0] += acc[0];
+            f[1] += acc[1];
+            f[2] += acc[2];
+        }
+    });
+    energy
+}
+
 /// Particles and restraints of one stage.
 #[derive(Clone, Debug)]
 pub struct System {
@@ -78,6 +163,9 @@ pub struct System {
     pub model_w: Option<Vec<Vec<f64>>>,
     /// `robust`: soft "no contact" repulsion of every pair |i - j| >= 2 (cell-grid path only).
     pub nc: Option<NoContact>,
+    /// Few-cell deconvolution: shape-free soft cap on the local particle density (cell-grid path,
+    /// CPU only so far).
+    pub density: Option<DensityCap>,
 }
 
 impl System {
@@ -131,6 +219,7 @@ impl System {
             inc,
             model_w: None,
             nc: None,
+            density: None,
         }
     }
 
@@ -296,6 +385,8 @@ pub struct Model {
     pub rest_f: Vec<V3>,
     pub nl: NeighbourList,
     pub grid: CellGrid,
+    /// cell grid of the density cap (`System::density`)
+    pub dgrid: CellGrid,
     pub rng: Rng,
     /// Emulated capacity of the original's repulsion list (0 = unset).
     pub rep_cap: usize,
@@ -318,6 +409,7 @@ impl Model {
             rest_f: vec![],
             nl: NeighbourList::default(),
             grid: CellGrid::default(),
+            dgrid: CellGrid::default(),
             rng,
             rep_cap: 0,
             rep_off: false,
@@ -855,7 +947,13 @@ pub fn compute_forces_mode(
         }
     });
     m.grid.sforce = sforce;
-    (ordered_sum(&parts), e_dist)
+    let mut e_rep = ordered_sum(&parts);
+    if let Some(cap) = sys.density {
+        let mut g = std::mem::take(&mut m.dgrid);
+        e_rep += density_forces(&cap, &m.pos, &mut m.force, &mut g, parallel);
+        m.dgrid = g;
+    }
+    (e_rep, e_dist)
 }
 
 /// `getStats`: number of violated restraints and RMS violation.
@@ -1119,6 +1217,46 @@ mod tests {
         }
         assert!(max_f > 1.0);
         assert!(max_err / max_f < 1e-5 || max_err < 1e-4, "max_err {max_err} max_f {max_f}");
+    }
+
+    #[test]
+    fn density_cap_forces_match_finite_differences() {
+        let (mut sys, pos) = toy_chain_w(120, 5, false);
+        // a compact cluster so that the cap is exceeded
+        let pos: Vec<V3> = pos.iter().map(|q| [q[0] * 0.3, q[1] * 0.3, q[2] * 0.3]).collect();
+        sys.density = Some(DensityCap { kappa: 0.7, r: 2.5, rho_max: 3.0 });
+        let (f_rep, f_dist) = (0.7, 25.0);
+        let energy = |p: &[V3]| -> f64 {
+            let mut m = Model::new(p.to_vec(), Rng::new(0));
+            let (a, b) = compute_forces_mode(&sys, &mut m, f_rep, f_dist, false, true, true);
+            a + b
+        };
+        let mut m = Model::new(pos.clone(), Rng::new(0));
+        compute_forces_mode(&sys, &mut m, f_rep, f_dist, false, false, true);
+        let mut m0 = Model::new(pos.clone(), Rng::new(0));
+        let mut s0 = sys.clone();
+        s0.density = None;
+        compute_forces_mode(&s0, &mut m0, f_rep, f_dist, false, false, true);
+        let h = 1e-6;
+        let (mut max_err, mut max_f, mut max_cap) = (0.0f64, 0.0f64, 0.0f64);
+        for i in 0..sys.n {
+            for d in 0..3 {
+                let mut p1 = pos.clone();
+                p1[i][d] += h;
+                let mut p2 = pos.clone();
+                p2[i][d] -= h;
+                let num = -(energy(&p1) - energy(&p2)) / (2.0 * h);
+                max_err = max_err.max((num - m.force[i][d]).abs());
+                max_f = max_f.max(num.abs());
+                max_cap = max_cap.max((m.force[i][d] - m0.force[i][d]).abs());
+            }
+        }
+        assert!(max_cap > 0.1, "the cap is not active ({max_cap})");
+        assert!(max_err / max_f < 1e-5, "max_err {max_err} max_f {max_f}");
+        // parallel == serial
+        let mut mp = Model::new(pos.clone(), Rng::new(0));
+        compute_forces_mode(&sys, &mut mp, f_rep, f_dist, true, false, true);
+        assert_eq!(mp.force, m.force);
     }
 
     #[test]
