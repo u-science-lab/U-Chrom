@@ -46,6 +46,8 @@ auto-downloaded by the tutorials on first run into this directory.
 | `tan2021_cortex/` (Tan 2021 Dip-C adult cortex, 510 cells: pairs + 5 clean 3dg) | 13 GB | no | GEO GSE146397 per-GSM (opt-in, `--tan2021_cortex`) | `benchmarks/screcon/matched.py` brain Dip-C baseline (step 2) |
 | `tan2018_gm12878/` (Tan 2018 Dip-C GM12878, 17 cells: hickit phased pairs + 3dg, Dip-C clean 3dg × 3, Dip-C 3-D-imputed contacts) | ~0.7 GB | no | GEO GSE117876 per-GSM (opt-in, `--tan2018_gm12878`) | diploid EMber / NucDynamics validation (`benchmarks/screcon/diploid_real.py`, `diploid_heldout.py`, `sherlock/dip_real.sbatch`; PREREG §6 diploid addition) |
 | `wu2025_scmicroc/` (Wu 2025 scMicro-C GM12878, 12 deepest cells: hickit phased pairs + the authors' 5 / 10 / 20 kb hickit 3dg) | 3.1 GB (0.3 GB pairs + 2.8 GB 3dg; 102 GB streamed) | no | GEO GSE192759 per-GSM + series tarball (opt-in, `--wu2025_scmicroc`) | Fig. 3a / Fig. S8: EMber deep development (cells 035, 024, 320) and one-shot test (047, 028, 017, 049, 032, 027, 014), PREREG §11 (`benchmarks/screcon/deep_diploid.py`, `highres.py`, `sherlock/deep_dev.sbatch`, `highres_*.sbatch`; `paper/fig3/build_render_scmicroc.py`) |
+| `unic2025/` (Gao 2025 Uni-C GM12878, pilot cells 1-3: pairtools pairs, GRCh37, no phases) | ~6.2 GB (3 × ~2 GB) | no | GEO GSE267873 per-GSM (opt-in, `--unic2025_gm12878`) | Uni-C contact QC / phasing-yield projection, PREREG §12 (`benchmarks/screcon/unic_qc.py`, `sherlock/unic_qc.sbatch`) |
+| `giab_hg001/` (GIAB HG001 = NA12878 v3.3.2 pedigree-phased high-confidence VCFs, GRCh37 + GRCh38) | 135 MB + 107 MB | no | NCBI GIAB FTP (opt-in, `--giab_hg001`, md5-checked) | phased het SNVs for the Uni-C phasing-yield projection and its Dip-C / scMicro-C calibration (`unic_qc.py hets`) |
 | `su2020_imr90/genomic-scale.tsv`, `4DNFIFLJGGNR.csv` (catalogued above) | — | no | — | also the diploid imaging-truth simulation (`benchmarks/screcon/diploid_sim.py`: both homologs) |
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
 | `H1Esc-HFF.R1.tar.gz`                 | 128 MB  | no              | UW Noble lab  | `higashi_embedding` tutorial (sci-Hi-C H1Esc+HFF mix)                   |
@@ -989,11 +991,44 @@ contacts), matched to their GSM by the GEO sample records (`!Sample_description`
   (2.85 M), 320 (2.64 M), 047 (2.24 M), 028 (2.23 M).  No chrY contacts (female; `ploidy="auto"` →
   two copies of every chromosome incl. chrX).  Cells 026 and 051 have only 33 % / 12 % cis contacts
   (likely damaged nuclei or doublets) and are not used.  The deepest public diploid single-cell data
-  with phase columns; Uni-C (GSE267873, `unic2025/`) is deeper but has no phase columns.
+  with phase columns; Uni-C (GSE267873, `unic2025/` below) is deeper but has no phase columns and no public reads.
 - **Use**: EMber deep (PREREG §11: development cells 035, 024, 320; held-back test cells 047, 028, 017, 049, 032, 027, 014; `DEEP_TEST_RESULTS.md`) and Fig. 3a / S8:
   `sherlock/highres_download.sbatch`, `highres_run.sbatch`, `highres_score.sbatch`;
   `paper/fig3/build_render_scmicroc.py`, `capture_highres.py`, `make_figS_fig3_highres.py`.
 - **Download**: `download_data.py --wu2025_scmicroc` (`--no-extract`: pairs only).
+
+### `unic2025/` — Gao 2025 Uni-C, GM12878 (pilot cells 1-3, ~6.2 GB)
+
+- **Source**: Gao … Lin D. "Identification of multiple genomic alterations and prediction of neoantigens from
+  circulating tumor cells at the single-cell level" (Uni-C), *Nature Communications* (2025),
+  doi:10.1038/s41467-025-62215-w.  GEO SuperSeries
+  [GSE267873](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE267873) (SubSeries GSE267872).
+- **Files**: per cell `GSM<id>_GM12878-Cell<k>.pairs.gz` (GEO per-GSM, ~2 GB each; pairtools 0.3 `parse
+  --min-mapq 40 --walks-policy 5unique` → `sort` → `dedup` → `split`; 4DN pairs, GRCh37 names without `chr`,
+  columns `readID chrom1 pos1 chrom2 pos2 strand1 strand2 pair_type`; **no phases, no sequence**).  GEO also has a
+  per-cell GATK VCF (not used).
+- **Content** (verified 2026-10-04): GSE267873 has 10 single GM12878 cells (GSM8280638-GSM8280647, `GM12878-Cell1`
+  … `Cell10`, BGISEQ-500) and one bulk library (GSM8280648).  Only the pilot cells 1-3 (GSM8280638-GSM8280640) are
+  fetched; cells 4-10 are reserved for a test (`benchmarks/screcon/PREREG.md` §12).  Cell 1: 159.4 M rows, 3.8 %
+  trans; most rows are < 1 kb WGS-like pairs or phi29 near-duplicates (5.6 M cis >= 1 kb + 1.6 M trans unique
+  contacts after collapsing both ends to a 1 kb grid).  **Raw reads are not public**: the SRA experiments of the
+  GM12878 cells (SRX24523753, -754, -765, -771 … -777; study SRP507072) have status "hup" and `srapath` answers 403
+  "object has not been published" (2026-10-04), so the contacts cannot be phased at the read level.
+- **Use**: contact QC and phasing-yield projection only (`benchmarks/screcon/unic_qc.py`,
+  `sherlock/unic_download.sbatch`, `sherlock/unic_qc.sbatch`).
+- **Download**: `download_data.py --unic2025_gm12878`.
+
+### `giab_hg001/` — GIAB NA12878 phased small variants (GRCh37 + GRCh38, 242 MB)
+
+- **Source**: Genome in a Bottle, HG001 (NA12878) NISTv3.3.2 high-confidence calls, phased by pedigree (Platinum
+  Genomes / RTG phase transfer): `https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/release/NA12878_HG001/NISTv3.3.2/{GRCh37,GRCh38}/`
+  `HG001_<build>_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz`
+  (md5 GRCh37 `fad41f8b3bab6356f67d1937479cd034`, GRCh38 `f17011674693b7fe1a0d072dfa2cac09`, from the release's
+  `md5sum` files; checked by `download_data.py`).  GRCh37 names without `chr` (same as Dip-C / Uni-C), GRCh38 with.
+- **Content**: high-confidence regions only, so fewer het SNVs than the genome-wide sets hickit / Dip-C used; the
+  projection in `unic_qc.py` is therefore calibrated on the Dip-C / scMicro-C phases (ratio actual / footprint).
+- **Use**: `benchmarks/screcon/unic_qc.py hets` → phased het SNV positions.
+- **Download**: `download_data.py --giab_hg001`.
 
 ### Liu 2025 DNA-MERFISH, mouse cortex (4DN) — catalogued, not downloaded
 

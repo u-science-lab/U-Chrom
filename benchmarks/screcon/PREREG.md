@@ -309,3 +309,20 @@ they are.
   28-50 strict positives per cell).  Accepted costs as registered: 36-45 % of the input contacts carry
   a copy pair and are used; cis < 2 Mb same-homolog held-out AUC lower than NucDynamics in 6 of 7 cells
   (mean −0.016, secondary).  No change to the method after the test.
+
+## 12. Uni-C GM12878: split fixed, pilot scope (2026-10-04, before any Uni-C reconstruction)
+
+* **Cells** (GEO GSE267873, Gao … Lin 2025): GSE267873 has **10** single GM12878 cells (GSM8280638-GSM8280647,
+  titles `GM12878-Cell1` … `Cell10`) and one bulk library (GSM8280648, `GM12878-BULK`); the "11 cells" of §6
+  counted the bulk library, which is excluded.  Sorted by GSM: **pilot** = Cell1-Cell3 (GSM8280638-GSM8280640),
+  **reserved test** = Cell4-Cell10 (GSM8280641-GSM8280647, 7 cells; not downloaded, not looked at).
+* **Pilot rules** (as §6): the pilot sets no parameter; any reconstruction uses a frozen configuration as tagged
+  (`ember-deep-frozen`) with no change.
+* **Raw reads not available**: the SRA experiments of every GSE267873 library except one tumour run
+  (SRX24523753 … SRX24523777 for the GM12878 cells, SRP507072) have status "hup" (not published; `srapath`
+  returns 403 "object has not been published", 2026-10-04), and the GEO pairs carry positions and strands only.
+  The contacts therefore cannot be phased at the read level and **no diploid reconstruction of Uni-C is run**.
+  What is run on the pilot cells is contact QC and a phasing-yield projection from the public pairs
+  (`unic_qc.py`, `sherlock/unic_qc.sbatch`; descriptive, exploratory), with Dip-C cells 1-3 and scMicro-C cells
+  035 / 024 / 320 (development cells of §6 / §11) processed by the same pipeline.  A Uni-C test is registered
+  here, before any test-cell run, only once phased contacts can be produced.

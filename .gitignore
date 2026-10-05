@@ -118,6 +118,9 @@ example-data/tan2021_cortex/
 example-data/tan2018_gm12878/
 # high-resolution diploid demonstration, Fig. 3 (download_data.py --wu2025_scmicroc)
 example-data/wu2025_scmicroc/
+# Uni-C GM12878 pilot pairs + GIAB NA12878 phased VCFs (download_data.py --unic2025_gm12878 / --giab_hg001)
+example-data/unic2025/
+example-data/giab_hg001/
 # bulk deconvolution benchmark inputs (download_data.py --bonev2017_mesc_4dn; IMR90 4DN mcool lives in rao2014_imr90/)
 example-data/bonev2017_mesc/
 !paper/fig3/feasibility/*.json

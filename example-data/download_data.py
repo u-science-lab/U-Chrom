@@ -24,6 +24,8 @@ Usage::
     python example-data/download_data.py --tan2021_cortex        # opt-in, ~13 GB Dip-C adult cortex
     python example-data/download_data.py --tan2018_gm12878       # opt-in, ~0.7 GB Dip-C GM12878 (diploid, phased)
     python example-data/download_data.py --wu2025_scmicroc       # opt-in, 3.1 GB scMicro-C GM12878 pairs + 3dg (102 GB streamed)
+    python example-data/download_data.py --unic2025_gm12878      # opt-in, ~6.2 GB Uni-C GM12878 pairs, pilot cells 1-3
+    python example-data/download_data.py --giab_hg001            # opt-in, 0.24 GB GIAB NA12878 phased VCFs (GRCh37 + GRCh38)
     python example-data/download_data.py --su2020_genome         # opt-in, 203 MB Su 2020 genome-scale (bulk benchmark)
     python example-data/download_data.py --rao2014_imr90_4dn     # opt-in, 4.6 GB IMR90 mcool (Sherlock only)
     python example-data/download_data.py --bonev2017_mesc_4dn    # opt-in, 12.6 GB mESC mcool (Sherlock only)
@@ -133,6 +135,14 @@ _WU25_CELLS = [("GSM5764669", 35), ("GSM5764658", 24), ("GSM5764954", 320), ("GS
                ("GSM5764662", 28), ("GSM5764651", 17), ("GSM5764681", 47), ("GSM5764683", 49),
                ("GSM5764666", 32), ("GSM5764661", 27), ("GSM5764648", 14), ("GSM5764685", 51)]
 _WU25_3DG_RE = r"cell_(" + "|".join(f"{n:03d}" for _, n in _WU25_CELLS) + r")(?![0-9])"
+
+# Uni-C GM12878 (Gao ... Lin 2025, Nat Commun, GEO GSE267873): per-cell pairtools pairs (GRCh37, no phases).
+# Only the pilot cells 1-3 (PREREG §6 / §12: first three by GSM); cells 4-10 (GSM8280641-GSM8280647) are the
+# reserved test cells and are not fetched here.
+_UNIC25_PILOT = [("GSM8280638", 1), ("GSM8280639", 2), ("GSM8280640", 3)]
+# GIAB HG001 (NA12878) v3.3.2 high-confidence calls, phased by pedigree (Platinum Genomes / RTG phase transfer)
+_GIAB_HG001 = "https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/release/NA12878_HG001/NISTv3.3.2"
+_GIAB_VCF = "HG001_{b}_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz"
 
 
 def _tan2018_files() -> list[tuple[str, str]]:
@@ -445,6 +455,22 @@ DATASETS = {
         "size_mb": 3100,
         "default": False,
         "description": "Wu 2025 scMicro-C GM12878, 12 deepest cells: hickit phased pairs + 5/10/20 kb 3dg (GSE192759)",
+    },
+    "unic2025_gm12878": {
+        "files": [(f"unic2025/{g}_GM12878-Cell{k}.pairs.gz", _gsm(f"{g}_GM12878-Cell{k}.pairs.gz"))
+                  for g, k in _UNIC25_PILOT],
+        "size_mb": 6200,
+        "default": False,
+        "description": "Uni-C GM12878 pilot cells 1-3: pairtools pairs, GRCh37, no phases (GSE267873)",
+    },
+    "giab_hg001": {
+        "files": [(f"giab_hg001/{_GIAB_VCF.format(b=b)}", f"{_GIAB_HG001}/{b}/{_GIAB_VCF.format(b=b)}")
+                  for b in ("GRCh37", "GRCh38")],
+        "md5": {f"giab_hg001/{_GIAB_VCF.format(b='GRCh37')}": "fad41f8b3bab6356f67d1937479cd034",
+                f"giab_hg001/{_GIAB_VCF.format(b='GRCh38')}": "f17011674693b7fe1a0d072dfa2cac09"},
+        "size_mb": 242,
+        "default": False,
+        "description": "GIAB HG001 (NA12878) v3.3.2 pedigree-phased high-confidence VCFs, GRCh37 + GRCh38",
     },
     "tan2021_cortex": {
         "files": _tan2021_files(),
