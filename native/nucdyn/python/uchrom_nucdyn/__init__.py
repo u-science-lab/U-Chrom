@@ -112,6 +112,23 @@ def mix_seed_prior(chrom_a, pos_a, chrom_b, pos_b, *, restart: int = 0, **params
     return np.asarray(out).reshape(len(ia), int(p["mix_cells"]))
 
 
+def mix_neighbours(chrom_a, pos_a, chrom_b, pos_b, *, radius: int = 10_000_000, min_span: int = 50_000,
+                   max_nei: int = 50):
+    """2-D neighbours of every contact (hickit's imputation neighbourhood, ``mix::neighbour_lists``):
+    (offsets (n + 1,), neighbour indices, weights 1 / (d / span + 0.001))."""
+    from ._engine import mix_neighbours as _nb
+
+    ca = np.asarray(chrom_a).astype(str)
+    cb = np.asarray(chrom_b).astype(str)
+    names = sorted(set(ca.tolist()) | set(cb.tolist()))
+    idx = {n: i for i, n in enumerate(names)}
+    ia = np.fromiter((idx[c] for c in ca), dtype=np.uint32, count=len(ca))
+    ib = np.fromiter((idx[c] for c in cb), dtype=np.uint32, count=len(cb))
+    off, nb, w = _nb(names, ia, np.ascontiguousarray(pos_a, np.int64), ib, np.ascontiguousarray(pos_b, np.int64),
+                     int(radius), int(min_span), int(max_nei))
+    return np.asarray(off), np.asarray(nb), np.asarray(w)
+
+
 def deconvolve_passes(chrom_a, pos_a, chrom_b, pos_b, *, mix_cells: int, passes: int = 3,
                       group_radius: int = 5_000_000, group_tri_min: int = 1, group_res: int = 1_000_000,
                       group_min_rows: int = 10, group_conf: float = 0.9, group_margin: float = 0.05,

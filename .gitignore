@@ -116,6 +116,9 @@ example-data/takei2021_brain/
 example-data/tan2021_cortex/
 # diploid validation input (download_data.py --tan2018_gm12878)
 example-data/tan2018_gm12878/
+# few-cell deconvolution, genotype cue (download_data.py --tan2018_pbmc --genotype_refs)
+example-data/tan2018_pbmc/
+example-data/geno_ref/
 # high-resolution diploid demonstration, Fig. 3 (download_data.py --wu2025_scmicroc)
 example-data/wu2025_scmicroc/
 # bulk deconvolution benchmark inputs (download_data.py --bonev2017_mesc_4dn; IMR90 4DN mcool lives in rao2014_imr90/)

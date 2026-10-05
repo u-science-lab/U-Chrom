@@ -430,6 +430,31 @@ DATASETS = {
         "default": False,
         "description": "Takei 2021 Science mouse cortex DNA seqFISH+ 1 Mb / 25 kb spots, RNA, radial scores (Zenodo 4708112)",
     },
+    "tan2018_pbmc": {
+        # Tan 2018 Dip-C PBMC (one donor), hickit re-processing GSE117874: phased pairs + 3dg per cell
+        "files": [(f"tan2018_pbmc/GSM{3314375 + n}_pbmc_{n:02d}.tar.gz", _gsm(f"GSM{3314375 + n}_pbmc_{n:02d}.tar.gz"))
+                  for n in range(1, 19)],
+        "size_mb": 450,
+        "default": False,
+        "description": "Tan 2018 Dip-C PBMC, 18 cells: hickit phased pairs + 3dg (GEO GSE117874)",
+    },
+    "genotype_refs": {
+        # few-cell deconvolution, genotype cue (PREREG §12.2): hs37d5 (contig names of the Tan 2018 pairs) and
+        # the GIAB HG001 v3.3.2 GRCh37 high-confidence VCF + regions
+        "files": [
+            ("geno_ref/hs37d5.fa.gz", "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/"
+                                      "phase2_reference_assembly_sequence/hs37d5.fa.gz"),
+            ("geno_ref/HG001_GRCh37_v3.3.2_highconf.bed",
+             "https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/release/NA12878_HG001/NISTv3.3.2/GRCh37/"
+             "HG001_GRCh37_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel.bed"),
+            ("geno_ref/HG001_GRCh37_v3.3.2_highconf_phased.vcf.gz",
+             "https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/release/NA12878_HG001/NISTv3.3.2/GRCh37/"
+             "HG001_GRCh37_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz"),
+        ],
+        "size_mb": 1000,
+        "default": False,
+        "description": "hs37d5 reference + GIAB HG001 GRCh37 v3.3.2 high-confidence VCF / regions (genotype cue)",
+    },
     "tan2018_gm12878": {
         "files": _tan2018_files(),
         "size_mb": 700,

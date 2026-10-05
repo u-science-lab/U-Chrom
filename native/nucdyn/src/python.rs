@@ -531,12 +531,50 @@ fn mix_groups<'py>(
     Ok(out.into_iter().map(|x| if x == u32::MAX { -1 } else { x as i64 }).collect::<Vec<i64>>().into_pyarray(py))
 }
 
+/// 2-D neighbours of every contact (`mix::neighbour_lists`): CSR offsets, neighbour indices, weights.
+#[pyfunction]
+#[pyo3(signature = (names, chr_a, pos_a, chr_b, pos_b, radius=10_000_000, min_span=50_000, max_nei=50))]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn mix_neighbours<'py>(
+    py: Python<'py>,
+    names: Vec<String>,
+    chr_a: PyReadonlyArray1<'py, u32>,
+    pos_a: PyReadonlyArray1<'py, i64>,
+    chr_b: PyReadonlyArray1<'py, u32>,
+    pos_b: PyReadonlyArray1<'py, i64>,
+    radius: i64,
+    min_span: i64,
+    max_nei: usize,
+) -> PyResult<(Bound<'py, numpy::PyArray1<i64>>, Bound<'py, numpy::PyArray1<i64>>, Bound<'py, numpy::PyArray1<f64>>)> {
+    let (ca, pa, cb, pb) = (chr_a.as_slice()?.to_vec(), pos_a.as_slice()?.to_vec(), chr_b.as_slice()?.to_vec(), pos_b.as_slice()?.to_vec());
+    let n = ca.len();
+    let lists = py.detach(move || {
+        let amb: Vec<i64> = (1..=n as i64).collect();
+        let act = vec![true; n];
+        let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &amb, active: &act, prior_lr: None, dip: None };
+        let cs = crate::mix::prepare_contacts(&input);
+        crate::mix::neighbour_lists(&cs, radius, min_span, max_nei)
+    });
+    let mut off = vec![0i64];
+    let mut nb = vec![];
+    let mut w = vec![];
+    for l in lists {
+        for (j, x) in l {
+            nb.push(j as i64);
+            w.push(x as f64);
+        }
+        off.push(nb.len() as i64);
+    }
+    Ok((off.into_pyarray(py), nb.into_pyarray(py), w.into_pyarray(py)))
+}
+
 #[pymodule]
 fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(calc_genome_structure, m)?)?;
     m.add_function(wrap_pyfunction!(diploid_neighbour_prior, m)?)?;
     m.add_function(wrap_pyfunction!(mix_seed_prior, m)?)?;
     m.add_function(wrap_pyfunction!(mix_groups, m)?)?;
+    m.add_function(wrap_pyfunction!(mix_neighbours, m)?)?;
     m.add_function(wrap_pyfunction!(run_dynamics, m)?)?;
     m.add_function(wrap_pyfunction!(debug_setup_stage, m)?)?;
     m.add_function(wrap_pyfunction!(gpu_available, m)?)?;
