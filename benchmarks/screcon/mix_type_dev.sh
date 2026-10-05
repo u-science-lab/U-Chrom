@@ -10,10 +10,10 @@ TAG=${3:-r1}
 POOLS=$MT/pools/dev
 RUNS=$MT/runs_$TAG
 mkdir -p "$RUNS"
-for p in $(ls "$POOLS"/*_p*.txt.gz | grep -v _cell); do
+for p in $(ls "$POOLS"/*_p*.txt.gz | grep -v _cell | grep -- "${ONLY:-.}"); do
   name=$(basename "$p" .txt.gz)
   [ -f "$RUNS/$name.prior.npy" ] || $PY "$SC/mix_type.py" prior --pool "$p" --ref "$MT/ref_1mb.npz" --params "$PRIOR" --out "$RUNS/$name.prior.npy"
   $PY "$SC/mix_dev.py" --res 2e5 --pools "$p" --runs "$RUNS" --refs-dir "$RUNS" --device gpu \
-    --baselines oracle naive igm "split:{runs}/{pool}.prior.npy" --variants "$(cat "$VARIANTS")" --table "$RUNS/table.tsv" \
+    --baselines oracle naive igm "split:{runs}/{pool}.prior.npy" --variants "$(cat "$VARIANTS")" --table "$RUNS/table.tsv" ${DIPLOID:+--diploid} \
     || echo "FAILED $name"
 done
