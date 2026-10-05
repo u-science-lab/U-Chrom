@@ -2,7 +2,13 @@ import { decodeMatrix, type MatrixData } from './matrix'
 import type { AtlasResponse, FileListing, FilePlace, IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, SpatialPoints, StoreNode, TracePage } from './types'
 
 async function fetchChecked(url: string, init?: RequestInit): Promise<Response> {
-  const res = await fetch(url, init)
+  let res = await fetch(url, init)
+  // a hosted server that is waking up answers 503 + Retry-After: wait and ask again (idempotent GETs only)
+  for (let i = 0; i < 8 && res.status === 503 && res.headers.has('Retry-After') && (!init || (init.method ?? 'GET') === 'GET'); i++) {
+    const wait = Math.min(15, Math.max(1, Number(res.headers.get('Retry-After')) || 5))
+    await new Promise((r) => setTimeout(r, wait * 1000))
+    res = await fetch(url, init)
+  }
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`
     try {

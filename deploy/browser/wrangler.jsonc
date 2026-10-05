@@ -17,6 +17,6 @@
 	"exports": {
 		"UChromBrowser": { "type": "durable-object", "storage": "sqlite" }
 	},
-	"vars": { "INSTANCES": "2" },
+	"vars": { "INSTANCES": "2", "RELEASE": "r7" },
 	"routes": [{ "pattern": "uchrom-browser.u-science.org", "custom_domain": true }]
 }

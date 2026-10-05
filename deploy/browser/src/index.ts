@@ -17,6 +17,9 @@ const START_TIMEOUTS = { instanceGetTimeoutMS: 120_000, portReadyTimeoutMS: 120_
 interface Env {
 	UCHROM: DurableObjectNamespace<UChromBrowser>;
 	INSTANCES?: string;
+	// bumped on every deploy: instances are named after it, so a deploy always starts fresh containers on the new image
+	// (a running one is not replaced by the rolling update reliably; the old ones sleep and stop by themselves)
+	RELEASE?: string;
 }
 
 const COOKIE = "uchrom_session";
@@ -48,12 +51,18 @@ export default {
 			headers.set("Cookie", old ? `${old}; ${COOKIE}=${sid}` : `${COOKIE}=${sid}`);
 			request = new Request(request, { headers });
 		}
-		const container = env.UCHROM.getByName(`browser-${fnv1a(sid) % n}`);
+		const container = env.UCHROM.getByName(`browser-${env.RELEASE ?? "r0"}-${fnv1a(sid) % n}`);
 		const retry = request.clone();                    // the body is consumed by the first attempt
-		let response = await container.fetch(request).catch(() => null as Response | null);
-		if (!response || response.status === 503) {
-			await container.startAndWaitForPorts(8000, START_TIMEOUTS);
-			response = await container.fetch(retry);
+		let response: Response;
+		try {
+			response = await container.fetch(request).catch(() => null as unknown as Response);
+			if (!response || response.status === 503) {
+				await container.startAndWaitForPorts(8000, START_TIMEOUTS);
+				response = await container.fetch(retry);
+			}
+		} catch {
+			// still starting (a cold container pulls its image on a new host): the page retries after a few seconds
+			return new Response("U-Chrom is starting, retrying shortly", { status: 503, headers: { "Retry-After": "5" } });
 		}
 		if (!fresh) return response;
 		const out = new Response(response.body, response);

@@ -4,6 +4,7 @@
   'use strict';
   var CFG = window.ATLAS_CONFIG || {};
   var DATA = (CFG.dataRoot || '').replace(/\/+$/, '');
+  var HOSTED = (CFG.hosted || '').replace(/\/+$/, '');
   var $ = function (id) { return document.getElementById(id); };
   var state = { cat: null, q: '', on: {} };   // on: {group: Set(values)}
 
@@ -58,8 +59,16 @@
     if (d.doi) { srcEl.appendChild(document.createTextNode(' · ')); srcEl.appendChild(el('a', { href: 'https://doi.org/' + d.doi, target: '_blank', rel: 'noopener', text: 'doi:' + d.doi })); }
     if (d.source_url) { srcEl.appendChild(document.createTextNode(' · ')); srcEl.appendChild(el('a', { href: d.source_url, target: '_blank', rel: 'noopener', text: 'source' })); }
     if (d.license) srcEl.appendChild(document.createTextNode(' · ' + d.license));
-    var open = el('a', { class: 'btn primary', text: 'Open in U-Chrom', title: 'Needs the local browser running (see below)', href: '#' });
+    var actions = [];
+    if (HOSTED) {   // the hosted browser: nothing to install
+      var online = el('a', { class: 'btn primary', text: 'Open online', title: 'Opens the dataset in the U-Chrom browser hosted for this atlas',
+                             href: HOSTED + '/?open=' + encodeURIComponent(urlOf(d)), target: '_blank', rel: 'noopener' });
+      actions.push(online);
+    }
+    var open = el('a', { class: HOSTED ? 'btn' : 'btn primary', text: HOSTED ? 'Open locally' : 'Open in U-Chrom',
+                         title: 'Needs the local browser running (see below)', href: '#' });
     open.addEventListener('click', function (e) { e.preventDefault(); window.open(localBase() + '/?open=' + encodeURIComponent(urlOf(d)), '_blank', 'noopener'); });
+    actions.push(open);
     var py = el('button', { class: 'btn', text: 'Python', title: 'Copy a snippet that reads this dataset' });
     py.addEventListener('click', function () { copy(snippet(d), py); });
     var cu = el('button', { class: 'btn', text: 'Copy URL' });
@@ -68,7 +77,7 @@
       el('h3', { text: d.title }), el('div', { class: 'meta', text: meta + (meta ? ' · ' : '') + facts.join(' · ') }),
       d.description ? el('p', { class: 'desc', text: d.description }) : null,
       el('div', { class: 'tags' }, (d.modalities || []).map(function (m) { return el('span', { class: 'tag', text: m }); })),
-      srcEl, el('div', { class: 'actions' }, [open, py, cu])
+      srcEl, el('div', { class: 'actions' }, actions.concat([py, cu]))
     ]);
   }
 

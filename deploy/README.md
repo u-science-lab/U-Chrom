@@ -15,12 +15,15 @@ The data (`u-chrom-atlas` R2 bucket at `uchrom-atlas-r2.u-science.org`) is separ
 
 ## The page
 
-    python -m uchrom.core.atlas site deploy/atlas-site/dist --catalog catalog.json    # catalog.json: atlas/PUBLISH.md step 3
+    python -m uchrom.core.atlas site deploy/atlas-site/dist --catalog catalog.json --hosted https://uchrom-browser.u-science.org
     cd deploy/atlas-site && npx wrangler deploy
 
 ## The browser
 
     cd deploy/browser && npm install && npx wrangler deploy      # builds the image (Docker), pushes it, creates the Worker
+
+**Bump `RELEASE` in `wrangler.jsonc` on every deploy**: instances are named after it, so a deploy starts fresh containers on the new image (a running
+container was not replaced reliably by the rolling update; the old ones sleep and stop by themselves; visitors' open datasets are lost).
 
 `instance_type` (`standard-1`: 1/2 vCPU, 4 GiB), `max_instances` / `INSTANCES` (2: visitors are spread over them by a
 hash of their session cookie) and `sleepAfter` (15 min) in `wrangler.jsonc` / `src/index.ts` set the cost; the server's own

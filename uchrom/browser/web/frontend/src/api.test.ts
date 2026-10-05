@@ -41,3 +41,20 @@ describe('request', () => {
     vi.unstubAllGlobals()
   })
 })
+
+describe('request while a hosted server wakes up', () => {
+  it('waits for a 503 with Retry-After and asks again', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('starting', { status: 503, headers: { 'Retry-After': '1' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'd9' }]), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const p = listDatasets()
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(await p).toEqual([{ id: 'd9' }])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+})

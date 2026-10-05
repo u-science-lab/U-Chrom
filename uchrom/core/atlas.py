@@ -124,7 +124,7 @@ def fetch_catalog(root: str, timeout: float = 20.0) -> Dict[str, Any]:
 
 def build_site(out: PathLike, catalog: PathLike, *, data_root: str = DEFAULT_ATLAS,
                template: Optional[PathLike] = None, repo: str = "https://github.com/Nanguage/U-Chrom",
-               install: str = 'pip install "u-chrom[web]"') -> Path:
+               install: str = 'pip install "u-chrom[web]"', hosted: str = "") -> Path:
     """Write the static atlas page to ``out`` (deploy the folder on any static host, e.g. Cloudflare Pages):
     the template (``atlas/site``), ``catalog.json``, ``config.js`` (data root, install line, repo) and ``_headers``."""
     import shutil
@@ -140,7 +140,7 @@ def build_site(out: PathLike, catalog: PathLike, *, data_root: str = DEFAULT_ATL
     cat.pop("url", None)
     (out / CATALOG).write_text(json.dumps(cat, ensure_ascii=False, indent=1) + "\n")
     (out / "config.js").write_text("window.ATLAS_CONFIG = " + json.dumps(
-        {"dataRoot": data_root.rstrip("/"), "install": install, "repo": repo}, indent=1) + ";\n")
+        {"dataRoot": data_root.rstrip("/"), "install": install, "repo": repo, "hosted": hosted.rstrip("/")}, indent=1) + ";\n")
     (out / "_headers").write_text("/catalog.json\n  Cache-Control: public, max-age=300\n/*\n  X-Content-Type-Options: nosniff\n")
     return out
 
@@ -161,9 +161,10 @@ if __name__ == "__main__":
     w.add_argument("--catalog", required=True)
     w.add_argument("--data-root", default=DEFAULT_ATLAS)
     w.add_argument("--template")
+    w.add_argument("--hosted", default="", help="URL of the hosted browser: adds an Open online button")
     a = ap.parse_args()
     if a.cmd == "site":
-        print("wrote", build_site(a.out, a.catalog, data_root=a.data_root, template=a.template))
+        print("wrote", build_site(a.out, a.catalog, data_root=a.data_root, template=a.template, hosted=a.hosted))
     elif a.cmd == "build":
         cat = build_catalog(a.config, a.root, a.out)
         print(f"wrote {a.out}: {len(cat['datasets'])} datasets")
