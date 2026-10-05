@@ -395,3 +395,58 @@ x n replicate models.  Development may change the method; the knobs below are th
   reported as it is.  **Breakdown k** (reported, not thresholded): per dataset, the smallest k at which
   the M2 gain of EMber-mix over naive EMber (each true cell scored against the single naive structure)
   has a 95 % CI that includes 0 or lies below it.  The oracle (per-cell EMber) gap is reported for every k.
+
+### 12.1 Addition 2026-10-05 — externally assisted deconvolution, cue 1: cell-type prior from reference single-cell Hi-C (registered before any run of it)
+
+**Why.**  §12 development (`mix_devlog.md` §1-§4) found that the engine recovers the cells from a
+partially correct labelling (a 75 %-correct seed reaches M2 0.45-0.80 on every development set) but
+that no structure-free seed provides one.  The user approved direction A: an *external* cue.  Cue 1 is
+the spatial Hi-C-RNA use case: the cell types present in a pool are known (from RNA), and reference
+single-cell Hi-C of those types gives type-specific contact propensities.  Nothing of the §12 test is
+run; this addition has its own development / held-back split.
+
+* **Data**: Tan et al. 2021 Dip-C, adult mouse cortex (GEO GSE146397; the 510 adult cells of
+  `data/tan2021_adult_cortex_cells.tsv`, cell types from the GEO metadata), per-cell hickit contacts
+  (`*.contacts.pairs.txt.gz`).  Types used: P = "Cortical L2–5 Pyramidal Cell" (160), O = "Mature
+  Oligodendrocyte" (74), A = "Adult Astrocyte" (30), M = "Microglia Etc." (37).
+* **Split (fixed now)**: per type, cells sorted by GSM and permuted with
+  `numpy.random.default_rng(20261006)`: first floor(n/2) = REFERENCE, next floor((n − ref)/2) =
+  development pool cells, the rest = held-back pool cells (P 80 / 40 / 40, O 37 / 18 / 19, A 15 / 7 / 8,
+  M 18 / 9 / 10).  Reference cells are never pooled; pool cells never enter a reference.
+* **Pools**: compositions PO, PA, PM, OM (k = 2, different types), PAM (k = 3, different types), PP
+  (k = 2, same type — the hard case, reported as such), PPO (k = 3, mixed).  Development: 4 pools per
+  composition from the development pool cells (`default_rng(60_000 + 100 composition index + pool)`,
+  cells of a pool distinct); held-back: 6 pools per composition from the held-back cells
+  (`default_rng(70_000 + 100 composition index + pool)`), run only after a freeze is approved.  A pool is
+  the concatenation of its cells' contact rows in random order with the origin stored.
+* **Ploidy (choice for this step)**: phases are ignored — every cell and every pool is reconstructed
+  as haploid (one chain per chromosome; the two homologs' contacts on one chain), both in the pools and
+  in the references.  This is a pseudo-haploid approximation (it does not model homologs) applied
+  identically to every method, so the deconvolution itself is what is measured.  A diploid mix engine
+  (cells × copies) is a later extension, compared on the development pools before any freeze if built.
+* **Resolution**: 200 kb (schedule 8, 4, 2, 0.4, 0.2 Mb).  **Reference of every pool cell**: frozen EMber
+  (tag `robust-frozen` defaults, phases ignored) on the cell's own contacts, 2 models, seed 1.
+* **The prior**: per reference type t, a pseudo-bulk contact map at `R_ref` (every reference cell's
+  contacts weighted 1 / its contact count), 2-D smoothed, plus a pseudo-count; L_t(c) = the normalised
+  propensity of the bin pair of contact c.  For a pool with declared type composition (cell s has type
+  t_s; the labels play the role of the RNA), the prior of contact c is
+  ν_cs ∝ exp(γ Σ_{j ∈ N(c) ∪ {c}} w_cj ln L_{t_s}(j)) (N: 2-D neighbours as `mix_nbr_*`; cells of the
+  same type get equal priors), used as the seed and the E-step prior of the mix engine (`mix_prior`),
+  followed by EM refinement.
+* **Methods compared** (development and test): **E** = EMber-mix with the type prior; **prior-only** =
+  argmax ν (no 3-D); **prior-split** = frozen EMber on each cell's prior-assigned contacts (structures
+  from the prior alone); **naive** = frozen EMber on the pool as one cell; **IGM** S = k (as §12);
+  **oracle** = the references.  Scoring = `mix_score.py` (M1 assignment accuracy over every pooled row,
+  Hungarian matching on structure r; M2 matched whole-genome Spearman r vs the references).
+* **Development knobs** (development pools only, recorded in `mix_devlog.md`): `R_ref` (1 Mb / 500 kb /
+  250 kb), smoothing, pseudo-count, γ, neighbourhood radius / weights, the EM configuration of the
+  engine (prior keep, posterior accumulation, refinement passes, density cap).
+* **Test endpoints** (held-back pools; paired differences, 95 % percentile bootstrap over pools):
+  on the different-type pools (PO, PA, PM, OM, PAM; 30 pools): **U1** M1 E − prior-only > 0 (3-D adds to
+  the prior); **U2** M2 E − naive > 0; **U3** M2 E − IGM > 0 and M1 E − IGM > 0; **U4** M2 E − prior-split
+  ≥ −0.01 (non-inferior).  **Decision**: type-assisted EMber-mix is called **useful for different-type
+  pools** only if U1-U3 CIs are above 0 and the U4 lower bound is above −0.01, with no composition worse
+  than naive in M2 by more than 0.01 (CI excluding 0).  Same-type (PP) and mixed (PPO) pools are reported
+  in full, every endpoint, without a threshold.
+* **Cue 2** (genotype labels, GM12878 + PBMC Dip-C) and **cue 3** (reference-structure templates) get
+  their own dated additions before any run.
