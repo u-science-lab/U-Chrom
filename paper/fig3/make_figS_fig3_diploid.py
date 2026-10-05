@@ -1,4 +1,4 @@
-"""Supplementary figure (DRAFT, development set) — EMber (U-Chrom) on diploid, partially phased data.
+"""Supplementary figure — EMber (U-Chrom) on diploid, partially phased data (pre-registered test set).
 
 Diploid EMber: one chain per chromosome copy; the copy pair of a contact with an unphased end is a
 latent variable of EMber's mixture model (candidates kept as one ambiguous restraint), with a
@@ -32,7 +32,7 @@ from make_fig3 import GREY, HERE, INK, LGREY, MM, NEW, ORIG, RES, TEAL, ax_at, l
 
 W, H = 170.0, 120.0
 F.W, F.H = W, H
-METH = [("ember_nbr", "EMber (U-Chrom)", NEW, "o"), ("nucdyn", "NucDynamics", ORIG, "s"),
+METH = [("ember", "EMber (U-Chrom)", NEW, "o"), ("nucdyn", "NucDynamics", ORIG, "s"),
         ("hickit", "hickit (Dip-C)", TEAL, "^")]
 DS = [("su2020_genome", "Su 2020\ngenome, IMR90"), ("takei2021_1mb", "Takei 2021\n1 Mb, mESC")]
 
@@ -43,25 +43,32 @@ def head_(fig, x, y, letter, name, note=None):
 
 
 def cell_bars(ax, df, col, meths, cells):
-    n = len(meths)
+    """Paired per-cell values: one grey line per cell across methods, coloured dots, mean bar."""
+    vals = np.array([[df[(df.cell == cl) & (df.m == m)][col].mean() for m, *_ in meths] for cl in cells])
+    xs = np.arange(len(meths))
+    for row in vals:
+        ax.plot(xs, row, color=LGREY, lw=0.5, zorder=1)
     for k, (m, lab, c, mk) in enumerate(meths):
-        v = [df[(df.cell == cl) & (df.m == m)][col].mean() for cl in cells]
-        ax.bar(np.arange(len(cells)) + (k - (n - 1) / 2) * 0.8 / n, v, 0.8 / n * 0.92, color=c)
-    ax.set_xticks(range(len(cells)), [c.replace("cell0", "") for c in cells]); ax.set_xlabel("cell", labelpad=1)
+        ax.scatter(np.full(len(cells), k), vals[:, k], s=7, color=c, marker=mk, zorder=2, lw=0)
+        ax.plot([k - 0.25, k + 0.25], [np.nanmean(vals[:, k])] * 2, color=INK, lw=1.0, zorder=3)
+    ax.set_xticks(xs, [lab.split(" (")[0] for _, lab, *_ in meths], fontsize=5, rotation=30)
+    ax.set_xlim(-0.5, len(meths) - 0.5)
 
 
 def main() -> None:
-    s = pd.read_csv(RES / "diploid" / "sim_rows.csv")
-    r = pd.read_csv(RES / "diploid" / "real_rows.csv")
+    s = pd.read_csv(RES / "diploid" / "test_sim_rows.csv")
+    s = s[s.truth.isin(["truth_3", "truth_4", "truth_5"])]
+    r = pd.read_csv(RES / "diploid" / "test_real_rows.csv")
+    r = r[~r.cell.isin(["cell01", "cell02", "cell03"])]
     r["m"] = r.method.str.replace(r"_s\d$", "", regex=True)
     cells = sorted(c for c in r.cell.unique())
     fig = plt.figure(figsize=(W * MM, H * MM))
-    fig.text(1, 1 - 0.5 / H, "DRAFT — development set (diploid parameters frozen after this; test pending)", ha="right",
+    fig.text(1, 1 - 0.5 / H, "pre-registered test set (held-back units), frozen configuration", ha="right",
              va="top", fontsize=6, color=GREY, style="italic")
     fig.text(0.5 / W, 1 - 0.5 / H, "simulated diploid scHi-C from imaged cells", fontsize=6.5, color=GREY,
              va="top", style="italic")
 
-    head_(fig, 0, 4, "a", "Per-copy structure", "96 tables, truth cells 1-2")
+    head_(fig, 0, 4, "a", "Per-copy structure", "144 tables, truth cells 3-5")
     ax = ax_at(fig, 11, 14, 30, 28)
     for i, (ds, dl) in enumerate(DS):
         for k, (m, lab, col, mk) in enumerate(METH):
@@ -91,7 +98,7 @@ def main() -> None:
             ax.plot(range(len(g)), g.values, color=c, marker=mk, ms=2.2, lw=0.8)
         lv = sorted(s[col_].unique())
         ax.set_xticks(range(len(lv)), [f"{v:g}" for v in lv], fontsize=4.8)
-        ax.set_xlim(-0.4, len(lv) - 0.6); ax.set_ylim(0.6, 1.0); ax.set_xlabel(xl, fontsize=5.2, labelpad=1)
+        ax.set_xlim(-0.4, len(lv) - 0.6); ax.set_ylim(0.4, 1.0); ax.set_xlabel(xl, fontsize=5.2, labelpad=1)
         if j:
             ax.set_yticklabels([])
         else:
@@ -110,14 +117,14 @@ def main() -> None:
     fig.legend(handles=hs, loc="upper left", bbox_to_anchor=(11 / W, 1 - 52 / H), ncol=3, frameon=False,
                fontsize=5.5, handlelength=1, columnspacing=1.0)
 
-    fig.text(0.5 / W, 1 - 62.5 / H, "Dip-C GM12878 (Tan 2018), development cells 1-3, 100 kb, 10 models",
+    fig.text(0.5 / W, 1 - 62.5 / H, "Dip-C GM12878 (Tan 2018), 11 held-back cells, 100 kb, 10 models",
              fontsize=6.5, color=GREY, va="top", style="italic")
     full = r[r.kind == "full"]
     head_(fig, 0, 66, "e", "Agreement with published", "distance-matrix r vs Dip-C")
     for j, (col_, nm) in enumerate((("dipc_r_cis", "within copy"), ("dipc_r_whole", "whole genome"))):
         ax = ax_at(fig, 11 + j * 21, 78, 17, 26)
         cell_bars(ax, full, col_, METH[:2], cells)
-        ax.set_ylim(0.8, 1.0); ax.set_title(nm, fontsize=5.8, pad=1)
+        ax.set_ylim(0.7, 1.0); ax.set_title(nm, fontsize=5.8, pad=1)
         if j == 0:
             ax.set_ylabel("r vs published")
         else:
@@ -127,15 +134,15 @@ def main() -> None:
     ho = ho.groupby(["cell", "m"], as_index=False).auc_cis.mean()
     ax = ax_at(fig, 64, 78, 24, 26)
     cell_bars(ax, ho, "auc_cis", METH, cells)
-    ax.set_ylim(0.7, 1.0); ax.set_ylabel("ROC-AUC")
+    ax.set_ylim(0.6, 1.0); ax.set_ylabel("ROC-AUC")
     head_(fig, 92, 66, "g", "Phase of masked ends", "known phases hidden, then inferred")
     mk_ = r[r.kind == "mask"]
     ax = ax_at(fig, 102, 78, 24, 26)
     cell_bars(ax, mk_, "phase_acc_all", METH, cells)
     ax.set_ylim(0.6, 0.95); ax.set_ylabel("accuracy")
-    head_(fig, 130, 66, "h", "Wall time", "Dip-C cell 1; RTX 2080 Ti")
+    head_(fig, 130, 66, "h", "Wall time", "structure: median of 11 cells; phase: cell 1")
     ax = ax_at(fig, 142, 78, 24, 26)
-    t = [("structure", [(NEW, 120), (ORIG, 1055)]), ("phase\nimputation", [(NEW, 3), (TEAL, 38)])]
+    t = [("structure", [(NEW, 149), (ORIG, 1236)]), ("phase\nimputation", [(NEW, 3), (TEAL, 38)])]
     for i, (nm, bars) in enumerate(t):
         for k, (c, v) in enumerate(bars):
             ax.bar(i + (k - 0.5) * 0.36, v, 0.34, color=c)
