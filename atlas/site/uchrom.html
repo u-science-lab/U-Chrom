@@ -27,52 +27,83 @@
     <div>
       <p class="eyebrow">The software behind the atlas</p>
       <h1><span>One data structure</span> <span>for the 3-D genome</span></h1>
-      <p class="lead">U-Chrom (Universal Chromatin) is a Python toolkit for chromatin 3-D structure data. Each assay
-        sees one facet of the genome's folding: Hi-C which loci touch, chromatin tracing where they are, ChIP, ATAC,
-        RNA and immunofluorescence what they carry. U-Chrom puts them all in one container, <b>ChromData</b>, which
-        every analysis module and the browser share.</p>
+      <p class="lead">U-Chrom (Universal Chromatin) is a Python toolkit for chromatin 3-D structure data. Chromatin
+        tracing, single-cell and spatial Hi-C and 3-D reconstructions all become one container, <b>ChromData</b>,
+        which every analysis module and the browser share.</p>
       <p class="soon"><span class="dot" aria-hidden="true"></span>Source code coming soon</p>
     </div>
-    <figure class="paper-fig hero-art">
-      <a href="paper/fig1a.webp" target="_blank" rel="noopener"><img src="paper/fig1a.webp" width="1400" height="1392"
-        alt="Three walls of a cube around a nucleus: a contact map (contacts, which loci touch), a traced chromatin fibre (geometry, where loci are) and histone-mark tracks (molecular state, what loci carry)"></a>
-      <figcaption><b>Three facets of 3-D genome organisation.</b> Contacts (Hi-C, scHi-C), geometry (chromatin
-        tracing) and molecular state (ChIP, ATAC, RNA, IF). The contact map is scHiCAR mouse motor cortex
-        (chr7:53–68 Mb) and the tracks IF along chr15 of one cerebellar cell (DNA seqFISH+); the rest is a
-        conceptual illustration, AI-generated and edited by the authors. <span class="src">U-Chrom manuscript, Fig. 1a</span></figcaption>
-    </figure>
+    <ul class="sources" aria-label="Data that become a ChromData">
+      <li><b>Chromatin tracing</b><span>DNA FISH, seqFISH+, 4DN FOF-CT tables</span></li>
+      <li><b>Single-cell Hi-C</b><span>.pairs, per-cell maps, with RNA of the same cells</span></li>
+      <li><b>Spatial Hi-C</b><span>spots of a tissue section, images, RNA, ATAC</span></li>
+      <li><b>3-D structures</b><span>models from contacts: .3dg, PDB, U-Chrom's own</span></li>
+      <li class="into"><b>ChromData</b><span>one table of loci, coordinates and cells</span></li>
+    </ul>
   </section>
 
   <section class="wrap doc-section" id="chromdata">
     <div class="doc-head">
       <p class="kind">Data model</p>
-      <h2>ChromData: one shared index</h2>
-      <p>Not a joint model of the data: one index that every layer hangs from. Geometry (x, y, z), contacts
-        (bin × bin maps) and molecular features each keep their own form; the same genomic bins index all of them,
-        and any layer can sit at the level of a trace, a cell or a population.</p>
+      <h2>ChromData</h2>
+      <p>Every row of a ChromData is a <i>spot</i>: one locus of one copy of a chromosome in one cell, with its
+        x, y, z when it has them. Spots are stored flat and read by cell, trace or chromosome; the loci live once,
+        on an axis that all cells share.</p>
     </div>
-    <div class="model-split">
-      <figure class="paper-fig">
-        <a href="paper/fig1b.webp" target="_blank" rel="noopener"><img src="paper/fig1b.webp" width="1100" height="1210"
-          alt="Layers of geometry, contacts and molecular features stacked on shared genomic bins, held at the trace, cell or population level"></a>
-        <figcaption><b>Layers on shared bins.</b> Aggregation moves a layer up a level; between layers, U-Chrom
-          imputes missing loci, reconstructs 3-D structures from contacts, turns distances into contact frequencies
-          and projects molecular features onto structures through a shared spot, cell or cell type.
-          <span class="src">Fig. 1b</span></figcaption>
-      </figure>
-      <ul class="principles stacked">
-        <li><b>Every row is a spot.</b> One locus of one chromosome copy in one cell, with its x, y, z when it has
-          them. Spots are stored flat and read by cell, trace or chromosome.</li>
-        <li><b>Loci live once.</b> Per-locus signals (bulk ATAC, ChIP, compartment scores, TADs, loops) sit on the
-          locus axis that all cells share; per-spot signals sit on the spots.</li>
-        <li><b>Contacts stay contacts.</b> Contact maps are kept as maps, linked or embedded, never forced into
-          coordinates; distances are computed per trace on demand rather than stored.</li>
-        <li><b>Results keep their provenance.</b> Called TADs, loops and compartments carry the function, parameters,
-          inputs and U-Chrom version that made them.</li>
-        <li><b>FOF-CT in and out.</b> The 4DN FISH Omics Format core table maps onto ChromData one to one, in both
-          directions.</li>
-      </ul>
-    </div>
+
+    <figure class="model" aria-label="The ChromData data model">
+      <div class="hier">
+        <div class="lvl"><b>Cell</b><span>cells · cellm</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="lvl"><b>Trace</b><span>one chromosome copy · traces</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="lvl"><b>Spot</b><span>spots · coords · spot_tracks</span></div>
+        <div class="arrow" aria-hidden="true">↓ bin_id</div>
+        <div class="lvl locus"><b>Bin</b><span>the locus axis · bins</span></div>
+      </div>
+      <div class="axes">
+        <div class="axis">
+          <h3>Locus axis <span>one row per locus, shared by all cells</span></h3>
+          <dl>
+            <dt>bins</dt><dd>chrom, start, end</dd>
+            <dt>bin_tracks</dt><dd>per-locus signals: bulk ATAC, ChIP, GC, compartment scores</dd>
+            <dt>intervals</dt><dd>typed TADs, loops, peaks, segments</dd>
+          </dl>
+        </div>
+        <div class="axis">
+          <h3>Spot axis <span>one row per locus of a chromosome copy</span></h3>
+          <dl>
+            <dt>spots</dt><dd>bin_id, trace_id, cell_id</dd>
+            <dt>coords</dt><dd>x, y, z (n × 3); alternative models in <i>layers</i></dd>
+            <dt>spot_tracks</dt><dd>per-spot signals: IF intensity, seqFISH z-scores</dd>
+          </dl>
+        </div>
+        <div class="axis">
+          <h3>Cell axis <span>one row per cell or spot of a tissue</span></h3>
+          <dl>
+            <dt>cells</dt><dd>cell type, stage, QC, position in the tissue</dd>
+            <dt>cellm</dt><dd>embeddings: RNA / Hi-C / ATAC PCA and UMAP</dd>
+            <dt>cell_shapes, points</dt><dd>outlines, RNA spots and other 3-D points</dd>
+          </dl>
+        </div>
+        <div class="axis linked">
+          <h3>Other modalities <span>linked, or embedded in the store</span></h3>
+          <dl>
+            <dt>contact maps</dt><dd>per cell (.scool) and bulk (.cool / .mcool)</dd>
+            <dt>AnnData</dt><dd>RNA, ATAC, A/B per cell or spot</dd>
+            <dt>images</dt><dd>tissue sections, in tissue coordinates</dd>
+          </dl>
+        </div>
+      </div>
+    </figure>
+
+    <ul class="principles">
+      <li><b>Contacts stay contacts.</b> Contact maps are kept as maps, linked or embedded, never forced into
+        coordinates; distances are computed per trace on demand rather than stored as matrices.</li>
+      <li><b>Results keep their provenance.</b> Called TADs, loops and compartments carry the function, parameters,
+        inputs and U-Chrom version that made them.</li>
+      <li><b>FOF-CT in and out.</b> The 4DN FISH Omics Format core table maps onto ChromData one to one, in both
+        directions.</li>
+    </ul>
     <figure class="paper-fig wide">
       <a href="paper/fig2a.webp" target="_blank" rel="noopener"><img src="paper/fig2a.webp" width="2400" height="1160"
         alt="The spots table with bin_id, trace_id and cell_id keys pointing at the bins, traces and cells tables; coordinates and spot tracks row-aligned with the spots; contact maps linked; and the layout of a .chromdata.zarr store"></a>

@@ -19,8 +19,6 @@ OUT = ROOT / "atlas" / "site" / "paper"
 SOURCES = {"fig1": ROOT / "paper" / "fig1" / "fig1_final.pdf", "fig2": ROOT / "paper" / "fig2" / "fig2.pdf"}
 #: panel -> (figure, x0, y0, x1, y1 in pixels of the 2007-px-wide 300-dpi page, width written); titles left out
 PANELS = {
-    "fig1a": ("fig1", 0, 94, 1072, 1160, 1400),       # three facets (illustration)
-    "fig1b": ("fig1", 1089, 150, 2007, 1160, 1100),   # one shared index: layers and levels
     "fig1c": ("fig1", 0, 1270, 2007, 2202, 2400),     # ecosystem: interfaces, methods, formats
     "fig2a": ("fig2", 0, 60, 2007, 1030, 2400),       # tables joined by keys + the .chromdata.zarr layout
     "fig2b": ("fig2", 0, 1140, 1150, 1672, 1600),     # what each format can represent
