@@ -115,6 +115,7 @@ def mix_seed_prior(chrom_a, pos_a, chrom_b, pos_b, *, restart: int = 0, **params
 def deconvolve_passes(chrom_a, pos_a, chrom_b, pos_b, *, mix_cells: int, passes: int = 3,
                       group_radius: int = 5_000_000, group_tri_min: int = 1, group_res: int = 1_000_000,
                       group_min_rows: int = 10, group_conf: float = 0.9, group_margin: float = 0.05,
+                      group_seed_first: int = 1,
                       mix_prior=None, log=None, **params: Any) -> Dict[str, Any]:
     """Few-cell deconvolution in passes (EMber-mix development driver).
 
@@ -134,17 +135,18 @@ def deconvolve_passes(chrom_a, pos_a, chrom_b, pos_b, *, mix_cells: int, passes:
     sizes = np.bincount(g[g >= 0]) if (g >= 0).any() else np.zeros(0, int)
     order = np.argsort(sizes)[::-1]
     prior = None if mix_prior is None else np.asarray(mix_prior, np.float64)
+    n_first = max(1, min(int(group_seed_first), k))
     if prior is None:
         prior = np.full((n, k), 1.0 / k)
-        if len(order):
-            rows = g == order[0]
+        for j, gi in enumerate(order[:n_first]):
+            rows = g == gi
             prior[rows] = (1 - group_conf) / (k - 1)
-            prior[rows, 0] = group_conf
+            prior[rows, j] = group_conf
     plog = []
     res = None
     # cells that have been seeded so far (pass 1: cell 0 only, unless a prior was given); one more
     # cell is seeded per pass, with the largest group that the seeded cells explain worst
-    seeded = list(range(k)) if mix_prior is not None else [0]
+    seeded = list(range(k)) if mix_prior is not None else list(range(n_first))
     for it in range(int(passes)):
         res = calc_genome_structure(chrom_a, pos_a, chrom_b, pos_b, mix_cells=k, mix_prior=prior, **params)
         P = res["cell_probs"]

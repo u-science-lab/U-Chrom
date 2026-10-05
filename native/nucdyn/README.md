@@ -188,6 +188,22 @@ K = 215 N / n_contacts, output ÷ bead and superposed).
   diploid input runs with the 2017 protocol and EMber, see above), starting from an N3D file,
   intermediate file output, the release_1.3 list-overflow quirk.
 
+### Few-cell deconvolution ("EMber-mix", in development) — protocol `robust` with `mix_cells` >= 2
+
+`calc_genome_structure(..., protocol="robust", mix_cells=k)` (U-Chrom:
+`uchrom.recon.sc.deconvolve_cells`; `src/mix.rs`, `src/mixseed.rs`): the pooled contacts of k
+haploid cells → k structure ensembles (models cell-major, `n_models` per cell) and per input contact
+`cell_probs` (P(cell | true), every contact, filtered ones included).  EMber's mixture with the cell
+as a latent variable; all cells annealed in one batched engine call (per-model weights, CPU and GPU);
+no nuclear envelope (opt-in shape-free density cap `mix_density_rho`, `dynamics::DensityCap`, CPU
+and WGSL).  Symmetry breaking is the open problem: `uchrom_nucdyn.deconvolve_passes` seeds groups
+of trans contacts (2-D blobs joined by trans-triangle links, `mix_groups`) and re-seeds them by the
+structures pass by pass; it separates two-cell pools of real cells (Stevens 2017) but not larger
+pools or the dense simulated pools yet (`benchmarks/screcon/mix_devlog.md`, PREREG §12; not frozen).
+Every existing protocol takes its old code path (`mix_cells` = 0); `tests/regression.rs` pins
+nuc_dynamics_2017, release_1.3, frozen EMber and the diploid protocols (NucDynamics-2017 diploid,
+EMber diploid, EMber deep).
+
 ## Protocol "igm": population modelling of bulk Hi-C
 
 `uchrom_nucdyn.calc_population(...)` (U-Chrom: `uchrom.recon.bulk.deconv.deconvolve(..., method="igm")`)

@@ -25,6 +25,6 @@ extra=()
 [ -n "${REFS:-}" ] && extra=(--refs-dir "$RUNS")
 for p in $list; do
   $PY $SC/mix_dev.py --pools "$p" --runs "$RUNS" --res "$RES" --device gpu --baselines ${BASELINES:-} \
-    --variants "$(cat "$VARIANTS")" --table "$RUNS/table.tsv" "${extra[@]}" || echo "FAILED $p"
+    --variants "$(cat "$VARIANTS")" --table "$RUNS/table.tsv" ${extra[@]+"${extra[@]}"} || echo "FAILED $p"
 done
 echo done
