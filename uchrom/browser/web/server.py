@@ -73,6 +73,7 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
         if not hosted.allowed_prefixes and atlas:
             hosted.allowed_prefixes = [atlas]
         _data.PSEUDOBULK_MAX_CELLS = min(_data.PSEUDOBULK_MAX_CELLS, int(hosted.max_pseudobulk_cells))
+        _data.STATS_MAX_SPOTS = min(_data.STATS_MAX_SPOTS, int(hosted.stats_max_spots))
         store = SessionStores(hosted)
     store = store if store is not None else DatasetStore()
     app = FastAPI(title="U-Chrom browser", docs_url="/api/docs",

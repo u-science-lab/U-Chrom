@@ -37,6 +37,8 @@ class HostedConfig:
     max_pseudobulk_cells: int = 5000
     #: points of one 3-D view (a larger store shows a sample of its cells): ~16 bytes a point over the network
     max_points: int = 500_000
+    #: spots read for a statistic of a large store (a container has half a CPU)
+    stats_max_spots: int = 1_000_000
 
 
 def new_session_id() -> str:

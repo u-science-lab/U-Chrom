@@ -22,7 +22,10 @@ def pool():
     global _POOL
     if _POOL is None:
         from concurrent.futures import ThreadPoolExecutor
-        _POOL = ThreadPoolExecutor(max_workers=min(16, (os.cpu_count() or 4)), thread_name_prefix="uchrom-io")
+        # row-group reads wait on disk / HTTP more than on the CPU: at least 16 threads even on a small machine
+        # (a store read over HTTP opens and reads its chromosome partitions in parallel); UCHROM_IO_THREADS overrides
+        n = int(os.environ.get("UCHROM_IO_THREADS", "0") or 0) or min(32, max(16, os.cpu_count() or 4))
+        _POOL = ThreadPoolExecutor(max_workers=n, thread_name_prefix="uchrom-io")
     return _POOL
 
 

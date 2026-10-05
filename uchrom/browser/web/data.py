@@ -369,17 +369,22 @@ class Dataset:
             mask &= np.isin(r["trace"].to_numpy(), codes[codes >= 0])
         return mask
 
-    def _sample(self, mask: np.ndarray, max_spots: int, *, unit: str = "cell", max_units: Optional[int] = None):
+    def _sample(self, mask: np.ndarray, max_spots: int, *, unit: str = "cell", max_units: Optional[int] = None,
+                block: int = 8):
         """Runs of ``mask`` for a sample: whole cells (or single traces, ``unit="trace"``) in a fixed random order
-        until ``max_spots`` (or ``max_units``) is reached.  Returns ``(row ranges, units used, units matching,
-        spots used, spots matching)``."""
+        until ``max_spots`` (or ``max_units``) is reached.  The order shuffles blocks of ``block`` neighbouring
+        units: neighbours share row groups, so a sample is a few reads per partition, not one per unit (over
+        HTTP, ten times fewer requests).  Returns ``(row ranges, units used, units matching, spots used, spots
+        matching)``."""
         r = self._runs()[mask]
         n_all = int((r["hi"] - r["lo"]).sum())
         if not self.cd._has_cell_id():
             unit = "trace"
         key = r["cell"].to_numpy() if unit == "cell" else np.arange(len(r))
         units = np.unique(key)
-        order = np.random.default_rng(0).permutation(units)
+        nb = -(-len(units) // block) if len(units) else 0
+        blocks = np.random.default_rng(0).permutation(nb)
+        order = np.concatenate([units[b * block:(b + 1) * block] for b in blocks]) if nb else units
         size = pd.Series((r["hi"] - r["lo"]).to_numpy(), index=key).groupby(level=0).sum().reindex(order).to_numpy()
         n = int(np.searchsorted(np.cumsum(size), max_spots, side="right"))
         n = max(1, n) if len(order) else 0
