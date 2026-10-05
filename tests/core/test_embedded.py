@@ -265,7 +265,7 @@ def test_upgrade_makes_an_old_store_cheap_to_open(stores):
     assert list(var["bin_id"]) == list(range(2 * N)) and set(var["resolution"]) == {RES}
     ds = DatasetStore().load(emb)                                       # still reads, and now from the consolidated root
     assert {m["key"] for m in ds.contact_maps()} == {"bulk", "cells"} and "ssAB@100bp" in ds._cell_bin_tracks()
-    assert upgrade_twice(emb) == {"chromsizes": [], "var": [], "root_consolidated": True}
+    assert upgrade_twice(emb) == {"chromsizes": [], "sum": [], "var": [], "root_consolidated": True}
 
 
 def upgrade_twice(emb):
@@ -285,3 +285,36 @@ def test_embedded_maps_need_no_cooler(stores, monkeypatch):
                dict(key="cells", chrom=GENOME, cell="c2"), dict(key="cells", chrom="chr1", group="field:cell_type=A")):
         assert decode_matrix(ds.contacts(**kw))["matrix"].size > 0
     assert ds.image_bytes("secA") is not None
+
+
+def test_all_cells_sums(stores):
+    """The precomputed 'all spots' sums answer the all-cells group exactly like summing every cell."""
+    tmp_path, linked, emb = stores
+    e = embedded.EmbeddedContacts(str(emb), embedded.list_embedded(str(emb))["cells"])
+    assert e.has_sum() and e.meta["has_sum"]
+    ref = DatasetStore().load(linked)
+    new = DatasetStore().load(emb)
+    for kw in (dict(key="cells", chrom="chr1", group="all"), dict(key="cells", chrom="chr2", start=100, end=500, group="all"),
+               dict(key="cells", chrom=GENOME, group="all")):
+        a, b = decode_matrix(ref.contacts(**kw)), decode_matrix(new.contacts(**kw))
+        np.testing.assert_array_equal(a["matrix"], b["matrix"])
+        assert a["header"]["n_cells"] == b["header"]["n_cells"] == 3 and a["header"]["n_contacts"] == b["header"]["n_contacts"]
+    # a store embedded before the sums existed: upgrade adds them, with the same numbers
+    import zarr, shutil
+
+    name = embedded.list_embedded(str(emb))["cells"]
+    for part in [p for p in (emb / "embedded" / "contacts" / name).rglob(embedded.SUM) if p.is_dir()]:
+        shutil.rmtree(part)
+    g = zarr.open_group(str(emb), path=f"embedded/contacts/{name}", mode="r+", zarr_format=3, use_consolidated=False)
+    meta = dict(g.attrs["uchrom_contacts"]); meta.pop("has_sum"); g.attrs["uchrom_contacts"] = meta
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        zarr.consolidate_metadata(str(emb), path=f"embedded/contacts/{name}")
+    embedded.consolidate_sections(emb)
+    assert not embedded.EmbeddedContacts(str(emb), name).has_sum()
+    done = embedded.upgrade_store(emb)
+    assert done["sum"] == ["cells"]
+    again = DatasetStore().load(emb)
+    for kw in (dict(key="cells", chrom="chr1", group="all"), dict(key="cells", chrom=GENOME, group="all")):
+        np.testing.assert_array_equal(decode_matrix(ref.contacts(**kw))["matrix"], decode_matrix(again.contacts(**kw))["matrix"])

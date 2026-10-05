@@ -99,6 +99,17 @@ def _chromsizes(chrom: np.ndarray, end: np.ndarray, names: Sequence[str]) -> Dic
     return {str(names[c]): int(end[chrom == c].max()) for c in np.unique(chrom)}
 
 
+SUM = "sum"    # pixels of the map summed over every cell, per partition: the "all spots" view without reading each cell
+
+
+def _sum_pixels(data: np.ndarray, width: int) -> np.ndarray:
+    """(n, 3) pixels (bin1, bin2, count) summed over duplicates of (bin1, bin2): the total over all cells."""
+    key = data[:, 0].astype(np.int64) * width + data[:, 1].astype(np.int64)
+    uk, inv = np.unique(key, return_inverse=True)
+    tot = np.bincount(inv, weights=data[:, 2].astype(np.float64), minlength=len(uk))
+    return np.column_stack([uk // width, uk % width, tot]).astype(np.int64)
+
+
 def _check_uniform(bins_start: np.ndarray, bins_chrom: np.ndarray, binsize: int) -> None:
     for c in np.unique(bins_chrom):
         s = bins_start[bins_chrom == c]
@@ -149,6 +160,12 @@ def upgrade_store(store_path: PathLike) -> Dict[str, Any]:
             warnings.simplefilter("ignore")
             zarr.consolidate_metadata(str(store_path), path=f"{GROUP}/{name}")
         done["chromsizes"].append(key)
+    done["sum"] = []
+    for key, name in list_embedded(str(store_path)).items():
+        e = EmbeddedContacts(str(store_path), name)
+        if e.kind == "per_cell" and not e.has_sum():
+            add_sums(store_path, name)
+            done["sum"].append(key)
     done["var"] = []
     for key, (g, meta) in open_anndata_groups(str(store_path), "linked_bin_matrices").items():
         if g.attrs.get("uchrom_var"):
@@ -165,6 +182,40 @@ def upgrade_store(store_path: PathLike) -> Dict[str, Any]:
     consolidate_root(store_path)
     done["root_consolidated"] = True
     return done
+
+
+def add_sums(store_path: PathLike, name: str, *, max_dense: int = 20_000) -> None:
+    """Add the all-cells sums to a per-cell map embedded without them: one pass over every cell's pixels in blocks
+    (memory = one dense matrix per partition), no data is rewritten."""
+    zarr = _zarr()
+    e = EmbeddedContacts(str(store_path), name)
+    r = e.resolutions[0]
+    idx = range(len(e.cells))
+    nb = len(e.bins(r))
+    gw = zarr.open_group(str(store_path), path=f"{GROUP}/{name}/r{r}", mode="r+", zarr_format=3, use_consolidated=False)
+    parts = [(f"cis/{c}", int(e.chromsizes()[c] // r) + 1) for c in e.chroms if f"cis/{c}" in e.g[f"r{r}"]]
+    parts.append(("trans", nb))
+    for part, width in parts:
+        if part not in e.g[f"r{r}"]:
+            continue
+        if width <= max_dense:                                   # dense accumulator, block by block
+            acc = np.zeros(width * width, np.float64)
+            for d in e.cell_pixel_blocks(part, idx, r):
+                acc += np.bincount(d[:, 0] * width + d[:, 1], weights=d[:, 2], minlength=width * width)
+            nz = np.flatnonzero(acc)
+            data = np.column_stack([nz // width, nz % width, acc[nz]]).astype(np.int64)
+        else:                                                    # too wide: sum the blocks' partial sums
+            data = np.zeros((0, 3), np.int64)
+            for d in e.cell_pixel_blocks(part, idx, r):
+                data = _sum_pixels(np.concatenate([data, _sum_pixels(d, width)]), width)
+        _pix_array(gw[part], SUM, data, np.uint32)
+    meta = dict(e.meta)
+    meta["has_sum"] = True
+    gm = zarr.open_group(str(store_path), path=f"{GROUP}/{name}", mode="r+", zarr_format=3, use_consolidated=False)
+    gm.attrs["uchrom_contacts"] = meta
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        zarr.consolidate_metadata(str(store_path), path=f"{GROUP}/{name}")
 
 
 def consolidate_root(store_path: PathLike) -> None:
@@ -254,6 +305,7 @@ def embed_scool(store_path: PathLike, key: str, scool: PathLike, *, label: Optio
                 continue
             part = g.create_group("trans" if p == n_c else f"cis/{chroms[p]}")
             _pix_array(part, "pix", data, dt)
+            _pix_array(part, SUM, _sum_pixels(data, nbins), np.uint32)     # every cell added: the "all spots" map
             off = np.zeros(n_cells + 1, np.int64)
             off[1:] = np.cumsum(counts[p])
             _small(part, "cell_offset", off)
@@ -261,7 +313,7 @@ def embed_scool(store_path: PathLike, key: str, scool: PathLike, *, label: Optio
         meta = {"key": key, "kind": "per_cell", "label": label or key, "source": Path(scool).name,
                 "resolutions": [binsize], "chroms": chroms, "chrom_first_bin": {str(binsize): first.tolist()},
                 "n_cells": n_cells, "n_pixels": npix, "count_max": cmax,
-                "chromsizes": _chromsizes(chrom, end, chroms)}
+                "chromsizes": _chromsizes(chrom, end, chroms), "has_sum": True}
         root.attrs["uchrom_contacts"] = meta
         _commit(final, tmp)
         return meta
@@ -489,6 +541,34 @@ class EmbeddedContacts:
         """All pixels (n, 3) of the cells ``cell_idx`` in a partition; for many cells use :meth:`cell_pixel_blocks`."""
         blocks = list(self.cell_pixel_blocks(part, cell_idx, resolution, max_pixels=1 << 62))
         return np.concatenate(blocks) if blocks else np.zeros((0, 3), np.int64)
+
+    def has_sum(self, resolution: Optional[int] = None) -> bool:
+        """Whether the map carries the precomputed all-cells sums (a per-cell map embedded recently, or upgraded)."""
+        r = self._res(resolution)
+        parts = [f"cis/{c}" for c in self.chroms if f"cis/{c}" in self.g[f"r{r}"]]
+        return self.kind == "per_cell" and bool(parts) and all(SUM in self.g[f"r{r}/{p}"] for p in parts)
+
+    def sum_pixels(self, part: str, resolution: Optional[int] = None) -> np.ndarray:
+        """(n, 3) pixels of a partition summed over every cell (partition-local bin ids for ``cis/``)."""
+        r = self._res(resolution)
+        if part not in self.g[f"r{r}"]:
+            return np.zeros((0, 3), np.int64)
+        return self.g[f"r{r}/{part}/{SUM}"][:].T.astype(np.int64)
+
+    def iter_sum_pixels(self, resolution: Optional[int] = None):
+        """:meth:`iter_pixels` of all cells at once, from the precomputed sums."""
+        r = self._res(resolution)
+        for c in self.chroms:
+            part = f"cis/{c}"
+            if part in self.g[f"r{r}"]:
+                d = self.sum_pixels(part, r)
+                f0 = self.first_bin(c, r)
+                if len(d):
+                    yield d[:, 0] + f0, d[:, 1] + f0, d[:, 2]
+        if "trans" in self.g[f"r{r}"]:
+            d = self.sum_pixels("trans", r)
+            if len(d):
+                yield d[:, 0], d[:, 1], d[:, 2]
 
     def region_pixels(self, chrom: str, lo_bin: int, hi_bin: int, resolution: Optional[int] = None) -> np.ndarray:
         """Bulk: cis pixels whose bin1 lies in chromosome-local bins ``[lo_bin, hi_bin)``."""

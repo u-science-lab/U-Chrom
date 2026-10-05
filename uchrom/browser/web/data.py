@@ -1338,18 +1338,20 @@ class Dataset:
         per = info["kind"] == "scool"
         token = Path(f"embedded:{key}")
         notes: List[str] = []
-        idx, n_cells = None, None
+        idx, n_cells, use_sum = None, None, False
         if per:
             index = self._cache.setdefault(("emb_cell_index", key), {c: i for i, c in enumerate(e.cells)})
             if group is not None:
                 names = [c for c in self.group_cells(group) if c in index]
                 if not names:
                     raise LookupError(f"no cell of group {group!r} has a map in {key!r} ({self._scool_coverage(token)})")
-                if len(names) > PSEUDOBULK_MAX_CELLS:
+                # every cell of the map: the precomputed sums answer at once (no cell is read, nothing is subsampled)
+                use_sum = len(names) == len(index) and e.has_sum()
+                if not use_sum and len(names) > PSEUDOBULK_MAX_CELLS:
                     rng = np.random.default_rng(0)
                     names = sorted(rng.choice(names, PSEUDOBULK_MAX_CELLS, replace=False).tolist(), key=natural_key)
                     notes.append(f"sum over {PSEUDOBULK_MAX_CELLS} random cells of the group")
-                n_cells, idx = len(names), [index[c] for c in names]
+                n_cells, idx = len(names), (None if use_sum else [index[c] for c in names])
             elif cell is not None:
                 if str(cell) not in index:
                     raise KeyError(f"cell {cell!r} has no map in {key!r} ({self._scool_coverage(token)})")
@@ -1370,7 +1372,8 @@ class Dataset:
                 (r for r in info["resolutions"] if total / r <= MAX_MATRIX_BINS), info["resolutions"][-1])
             if res not in info["resolutions"]:
                 raise ValueError(f"resolution must be one of {info['resolutions']}")
-            buf = self._genome_matrix(key, e.bins(res), res, lambda weight: e.iter_pixels(res, idx),
+            buf = self._genome_matrix(key, e.bins(res), res,
+                                      (lambda weight: e.iter_sum_pixels(res)) if use_sum else (lambda weight: e.iter_pixels(res, idx)),
                                       balance, cell, group, ["whole genome"] + notes, n_cells)
             cache[ck] = buf
             while len(cache) > PSEUDOBULK_CACHE:
@@ -1395,7 +1398,10 @@ class Dataset:
         b0, b1 = lo // res, min(-(-length // res), -(-hi // res))
         n = b1 - b0
         acc = np.zeros(n * n, dtype=np.float64)
-        blocks = [e.region_pixels(chrom, b0, b1, res)] if not per else e.cell_pixel_blocks(f"cis/{chrom}", idx, res)
+        if use_sum:
+            blocks = [e.sum_pixels(f"cis/{chrom}", res)]
+        else:
+            blocks = [e.region_pixels(chrom, b0, b1, res)] if not per else e.cell_pixel_blocks(f"cis/{chrom}", idx, res)
         for d in blocks:                       # blocks of a few million pixels: memory does not grow with the group
             d = d[(d[:, 0] >= b0) & (d[:, 1] < b1)]
             acc += np.bincount((d[:, 0] - b0) * n + (d[:, 1] - b0), weights=d[:, 2], minlength=n * n)
