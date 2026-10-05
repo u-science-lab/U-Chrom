@@ -115,7 +115,7 @@ def mix_seed_prior(chrom_a, pos_a, chrom_b, pos_b, *, restart: int = 0, **params
 def deconvolve_passes(chrom_a, pos_a, chrom_b, pos_b, *, mix_cells: int, passes: int = 3,
                       group_radius: int = 5_000_000, group_tri_min: int = 1, group_res: int = 1_000_000,
                       group_min_rows: int = 10, group_conf: float = 0.9, group_margin: float = 0.05,
-                      group_seed_first: int = 1,
+                      group_seed_first: int = 1, group_max_frac: float = 0.8,
                       mix_prior=None, log=None, **params: Any) -> Dict[str, Any]:
     """Few-cell deconvolution in passes (EMber-mix development driver).
 
@@ -129,8 +129,18 @@ def deconvolve_passes(chrom_a, pos_a, chrom_b, pos_b, *, mix_cells: int, passes:
     ``passes_log`` (per pass: seeded contacts per cell).
     """
     k = int(mix_cells)
-    g = mix_groups(chrom_a, pos_a, chrom_b, pos_b, radius=group_radius, min_sep=2**62, tri_min=group_tri_min,
-                   res=group_res)
+    if group_tri_min == "auto":
+        # the smallest trans-triangle threshold whose largest group holds at most `group_max_frac` of
+        # one cell's share of the trans rows (deep pools percolate into one mixed group otherwise)
+        n_trans = int(np.sum(np.asarray(chrom_a).astype(str) != np.asarray(chrom_b).astype(str)))
+        for tm in (1, 2, 3, 5, 10, 20, 40, 80):
+            g = mix_groups(chrom_a, pos_a, chrom_b, pos_b, radius=group_radius, min_sep=2**62, tri_min=tm, res=group_res)
+            big = np.bincount(g[g >= 0]).max() if (g >= 0).any() else 0
+            if big <= group_max_frac * n_trans / k:
+                break
+    else:
+        g = mix_groups(chrom_a, pos_a, chrom_b, pos_b, radius=group_radius, min_sep=2**62, tri_min=int(group_tri_min),
+                       res=group_res)
     n = len(g)
     sizes = np.bincount(g[g >= 0]) if (g >= 0).any() else np.zeros(0, int)
     order = np.argsort(sizes)[::-1]

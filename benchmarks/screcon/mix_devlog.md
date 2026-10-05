@@ -91,3 +91,60 @@ M2 0.20-0.48, M1 0.50-0.57): the simulated 1 Mb maps are dense (80 % of the read
 long-range partners per locus), trans triangles are far less specific (15 % cross-cell links) and 5 Mb
 blobs percolate across cells.  The simulations of §12 are much harder than the real pools for every
 cue tried.
+
+## 3. Development round 2 on Sherlock (2026-10-05, engine `dev-b34a9c4`)
+
+Jobs `mix_dev.sbatch` (one GPU each), all development pools of Stevens (11), Nagano k = 2 / 3 / 5
+(12), Takei and Su k = 2 / 3 / 5, pools 1-2, all four conditions (24 each).  Variants:
+`mix_variants/real_r2.json`, `sim_r2.json`.  Rows: `data/mix_dev_r2.tsv` (`mix_aggregate.py`).
+"Q" / "Qdc" = `deconvolve_passes` (k + 3 passes; Qdc with the density cap ρ 20); "A" = triangle
+seed + posterior accumulation + cap; `diag_*` are diagnostics that use the true origin (not methods).
+
+Mean M2 (matched whole-genome Spearman) by k:
+
+| dataset | k | naive | IGM S=k | Q / Qdc | A | diag: 75 % seed | diag: true trans labels / true labels | oracle |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Stevens | 2 | 0.400 | 0.359 | **0.545** | — | 0.801 | 0.933 | 1 |
+| Stevens | 3 | 0.294 | 0.281 | 0.340 | — | 0.682 | 0.914 | 1 |
+| Stevens | 4 | 0.229 | 0.269 | 0.278 | — | 0.640 | 0.905 | 1 |
+| Nagano | 2 | 0.491 | — | 0.476 | — | 0.749 | 0.742 | 1 |
+| Nagano | 3 | 0.384 | — | 0.336 | — | 0.607 | 0.684 | 1 |
+| Nagano | 5 | 0.324 | — | 0.314 | — | 0.516 | 0.688 | 1 |
+| Takei 1 Mb | 2 | 0.420 | 0.413 | 0.415 | 0.420 | 0.592 | 0.683 | 0.685 |
+| Takei 1 Mb | 3 | 0.349 | 0.343 | 0.310 | 0.329 | 0.521 | 0.631 | 0.600 |
+| Takei 1 Mb | 5 | 0.195 | 0.172 | 0.217 | 0.207 | 0.445 | 0.677 | 0.686 |
+| Su genome | 2 | 0.462 | 0.407 | 0.438 | 0.482 | 0.680 | 0.846 | 0.862 |
+| Su genome | 3 | 0.372 | 0.317 | 0.361 | 0.359 | 0.712 | 0.881 | 0.918 |
+| Su genome | 5 | 0.291 | 0.223 | 0.261 | 0.259 | 0.628 | 0.845 | 0.895 |
+
+Paired differences (95 % bootstrap over pools): Stevens Q − naive M2 +0.100 [+0.058, +0.146],
+Q − IGM M2 +0.124 [+0.069, +0.187], Q − IGM M1 −0.009 [−0.094, +0.054]; Nagano Q − naive M2
+−0.024 [−0.045, −0.002]; Takei Qdc − IGM M2 +0.005 [−0.022, +0.031]; Su Qdc − IGM M2 +0.038
+[+0.029, +0.048] (Qdc − naive −0.022).  IGM with S = k is at chance in M1 everywhere (0.20-0.52 =
+1/k) and below naive EMber in M2 on three of four datasets.
+
+**Reading.**  (1) The observation model and the engine are right: with the true labels (sims) the
+mixture reaches the per-cell oracle (Takei 0.68 vs 0.69, Su 0.85 vs 0.86-0.92 by k), and a 75 %-correct
+seed is amplified to M2 0.45-0.80 on every dataset and k — far above naive and IGM.  On real pools the
+true labels of the *trans* contacts alone give 0.68-0.93.  (2) What is missing is a reliable
+structure-free source of that partial labelling.  The trans-triangle group seeding works only for
+two-cell Stevens pools (5 of 6 deconvolved); it fails on Nagano pools (deeper, unequal cells: the
+trans groups percolate into one 80 %-pure group — an adaptive threshold, `group_tri_min="auto"`,
+did not fix it on the 4 Nagano k = 2 pools: M2 0.40-0.56 vs naive 0.40-0.55), on k >= 3 everywhere
+(sequential seeding of further cells; seeding the k largest groups at once; stricter merging — all
+tried on Stevens k = 3 / 4, no gain), and on the dense simulated pools.
+
+## 4. Recommendation (no freeze yet)
+
+No configuration meets the §12 development criterion (M1 and M2 improving on the development pools
+with no stratum worse by more than 0.01): the best candidate (Q, trans-group passes) improves M2 on
+Stevens k = 2 only and is worse than naive EMber on Nagano and on the simulations.  I recommend **not**
+freezing and **not** running the §12 test.  The registered test as written would fail T1-T4 by these
+numbers.  Possible next steps, each to be registered in §12 before it is run: (a) a reference- or
+annotation-assisted route (the "Tangram-like" route of the plan): any external partial labelling at
+the 75 % level — reference structures of the cell type, RNA-defined cell identity in spatial data,
+phased SNPs in F1 hybrids — is amplified by the existing engine (diagnostic rows above); (b) a
+better structure-free seed for k >= 3 and for deep cells (the trans-triangle signal is strong — 12-18 %
+vs 0.3-1.9 % closure — but its groups merge across cells once a pool is deep); (c) fragment-end
+exclusivity on real data with restriction-fragment coordinates (not available in the GEO tables used
+here).
