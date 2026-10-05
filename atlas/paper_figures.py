@@ -1,6 +1,6 @@
 """Panels of the U-Chrom paper figures for the atlas' U-Chrom page (atlas/site/uchrom.html).
 
-Renders figures/fig1/fig1_final.pdf and figures/fig2/fig2.pdf of the u-chrom-paper repository at 600 dpi (pdftoppm), crops the panels below and
+Renders manuscripts/full/figures/fig1/fig1_final.pdf and .../fig2/fig2.pdf of the u-chrom-paper repository at 600 dpi (pdftoppm), crops the panels below and
 writes them as WebP to atlas/site/paper/.  Rerun after a figure changes:
 
     python atlas/paper_figures.py
@@ -21,7 +21,8 @@ sys.path.insert(0, str(ROOT / "benchmarks"))
 from _paper import paper_root  # noqa: E402  (u-chrom-paper: $UCHROM_PAPER or next to the main checkout)
 
 PAPER = paper_root() or ROOT / "paper"         # before the move: this repository's paper/ folder
-SOURCES = {"fig1": PAPER / "figures" / "fig1" / "fig1_final.pdf", "fig2": PAPER / "figures" / "fig2" / "fig2.pdf"}
+FIGS = PAPER / "manuscripts" / "full" / "figures"
+SOURCES = {"fig1": FIGS / "fig1" / "fig1_final.pdf", "fig2": FIGS / "fig2" / "fig2.pdf"}
 if not SOURCES["fig1"].exists():                # the layout before the move
     SOURCES = {"fig1": ROOT / "paper" / "fig1" / "fig1_final.pdf", "fig2": ROOT / "paper" / "fig2" / "fig2.pdf"}
 #: panel -> (figure, x0, y0, x1, y1 in pixels of the 2007-px-wide 300-dpi page, width written); titles left out
