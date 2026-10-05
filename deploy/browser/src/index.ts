@@ -8,9 +8,11 @@ export class UChromBrowser extends Container {
 	defaultPort = 8000;
 	// the container sleeps (and stops being billed) after this long without a request
 	sleepAfter = "15m";
-	// TEMPORARY: the error type and message in 500 responses (remove once the hosted server is verified)
-	envVars = { UCHROM_DEBUG: "1" };
 }
+
+// A cold container (image pull, Python start) can take longer than the default wait for its port: the first request
+// of an instance waits up to two minutes instead of answering 503.
+const START_TIMEOUTS = { instanceGetTimeoutMS: 120_000, portReadyTimeoutMS: 120_000, waitInterval: 500 };
 
 interface Env {
 	UCHROM: DurableObjectNamespace<UChromBrowser>;
@@ -47,7 +49,12 @@ export default {
 			request = new Request(request, { headers });
 		}
 		const container = env.UCHROM.getByName(`browser-${fnv1a(sid) % n}`);
-		const response = await container.fetch(request);
+		const retry = request.clone();                    // the body is consumed by the first attempt
+		let response = await container.fetch(request).catch(() => null as Response | null);
+		if (!response || response.status === 503) {
+			await container.startAndWaitForPorts(8000, START_TIMEOUTS);
+			response = await container.fetch(retry);
+		}
 		if (!fresh) return response;
 		const out = new Response(response.body, response);
 		out.headers.append("Set-Cookie", `${COOKIE}=${sid}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=1800`);
