@@ -33,8 +33,8 @@ kept in the repository: put an R2 API token (Object Read & Write, this bucket on
 
        python -m uchrom.core.atlas figures atlas/datasets.json --root example-data      # -> atlas/site/figures
 
-   The hero animation's data (`atlas/site/hero.json`: a spatial Hi-C cerebellum section, a DNA seqFISH+ field of
-   nuclei and two cells' traced chromatin) is written by `python atlas/hero_data.py`; commit it too.
+   The hero animation's data (`atlas/site/hero.json`: a section drawn after a spatial Hi-C cerebellum section and
+   three HiRES brain cells' 3-D genomes) is written by `python atlas/hero_data.py`; commit it too.
    then `python -m uchrom.core.atlas site dist/site --catalog catalog.json --hosted URL` and deploy `dist/site`
    (`deploy/README.md`).
 

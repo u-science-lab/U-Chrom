@@ -188,8 +188,8 @@
     return f.chrom + ':' + fmtMb(f.start) + '–' + fmtMb(f.end) + ' Mb at ' + (f.resolution / 1e3) + ' kb, all ' + unit(d) + ' merged';
   }
 
-  function heroLink(cat) {          // the hero's cells live in the seqFISH+ dataset: open it in the hosted browser
-    var d = cat.datasets.filter(function (x) { return x.id === 'takei2025_cerebellum'; })[0], a = $('hero-open');
+  function heroLink(cat) {          // the hero's genomes are cells of the HiRES brain dataset: open it in the hosted browser
+    var d = cat.datasets.filter(function (x) { return x.id === 'hires_brain'; })[0], a = $('hero-open');
     if (!a) return;
     if (d && openUrl(d)) { a.href = openUrl(d); a.target = '_blank'; a.rel = 'noopener'; }
     else if (!d) a.remove();
