@@ -116,10 +116,13 @@ example-data/takei2021_brain/
 example-data/tan2021_cortex/
 # diploid validation input (download_data.py --tan2018_gm12878)
 example-data/tan2018_gm12878/
+# high-resolution diploid demonstration, Fig. 3 (download_data.py --wu2025_scmicroc)
+example-data/wu2025_scmicroc/
 # bulk deconvolution benchmark inputs (download_data.py --bonev2017_mesc_4dn; IMR90 4DN mcool lives in rao2014_imr90/)
 example-data/bonev2017_mesc/
 !paper/fig3/feasibility/*.json
 !paper/fig3/results/*.json
+!paper/fig3/results/highres/*.json
 
 # Native NucDynamics engine (native/nucdyn): cargo build output, built extension
 native/nucdyn/target/

@@ -391,6 +391,99 @@ pub fn neighbour_phase_probs(input: &Input, dip: &DiploidInput, cis_sep: i64, np
     Ok(out)
 }
 
+/// hickit-like isolated-contact filter (`-r radius -c min_nei`): true for the contacts with at
+/// least `min_nei` other contacts of the same chromosome pair whose ends are both within
+/// `radius` (Chebyshev distance on genomic positions).  Scans stop at `min_nei`.
+pub fn isolation_keep(contacts: &[DipContact], min_nei: u32, radius: i64) -> Vec<bool> {
+    let n = contacts.len();
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by_key(|&k| (contacts[k].ca, contacts[k].cb, contacts[k].pa));
+    let mut gstart = vec![0usize; n];
+    let mut gend = vec![0usize; n];
+    let mut s = 0;
+    while s < n {
+        let key = (contacts[order[s]].ca, contacts[order[s]].cb);
+        let mut e = s;
+        while e < n && (contacts[order[e]].ca, contacts[order[e]].cb) == key {
+            e += 1;
+        }
+        for q in s..e {
+            gstart[q] = s;
+            gend[q] = e;
+        }
+        s = e;
+    }
+    let ok: Vec<bool> = (0..n)
+        .into_par_iter()
+        .map(|q| {
+            let c = &contacts[order[q]];
+            let mut cnt = 0u32;
+            let mut j = q;
+            while j > gstart[q] {
+                j -= 1;
+                let o = &contacts[order[j]];
+                if c.pa - o.pa > radius {
+                    break;
+                }
+                if (o.pb - c.pb).abs() <= radius {
+                    cnt += 1;
+                    if cnt >= min_nei {
+                        return true;
+                    }
+                }
+            }
+            for &k in &order[q + 1..gend[q]] {
+                let o = &contacts[k];
+                if o.pa - c.pa > radius {
+                    break;
+                }
+                if (o.pb - c.pb).abs() <= radius {
+                    cnt += 1;
+                    if cnt >= min_nei {
+                        return true;
+                    }
+                }
+            }
+            cnt >= min_nei
+        })
+        .collect();
+    let mut keep = vec![false; n];
+    for (q, &k) in order.iter().enumerate() {
+        keep[k] = ok[q];
+    }
+    keep
+}
+
+/// Hard phasing (`robust_dip_commit`): every kept ambiguous contact whose probability over its
+/// candidates (`probs[k]`, candidate order; `None` = unknown) has its maximum >= `tau` becomes
+/// unambiguous on that candidate; the other ambiguous contacts are dropped (`drop`) or stay
+/// ambiguous.  Returns (committed, dropped).
+pub fn commit_contacts(contacts: &mut [DipContact], keep: &mut [bool], probs: &[Option<[f64; 4]>], tau: f64, drop: bool) -> (usize, usize) {
+    let (mut n_commit, mut n_drop) = (0, 0);
+    for (k, c) in contacts.iter_mut().enumerate() {
+        if !keep[k] || c.n_cand < 2 {
+            continue;
+        }
+        let best = probs[k].map(|p| {
+            (0..c.n_cand as usize).fold((0usize, f64::NEG_INFINITY), |a, i| if p[i] > a.1 { (i, p[i]) } else { a })
+        });
+        match best {
+            Some((i, x)) if x >= tau => {
+                c.cand = [c.cand[i], 0, 0, 0];
+                c.prior = [1.0, 0.0, 0.0, 0.0];
+                c.n_cand = 1;
+                n_commit += 1;
+            }
+            _ if drop => {
+                keep[k] = false;
+                n_drop += 1;
+            }
+            _ => {}
+        }
+    }
+    (n_commit, n_drop)
+}
+
 /// Base (copy-agnostic) contact dictionary of the kept contacts; `Contact::number` = index
 /// into `contacts`.
 fn base_dict(contacts: &[DipContact], keep: &[bool]) -> ContactDict {
@@ -807,7 +900,21 @@ pub fn calc_genome_structure(input: &Input, dip: &DiploidInput, p: &Params, engi
         None
     };
     // isolated contacts (genomic positions, both homologs together)
-    let mut keep = vec![true; contacts.len()];
+    let mut keep = if p.dip_isolation_nei > 0 {
+        let k = isolation_keep(&contacts, p.dip_isolation_nei, p.dip_isolation_radius);
+        log(
+            p,
+            &format!(
+                "contacts after the isolation filter (>= {} neighbours within {} kb) = {}",
+                p.dip_isolation_nei,
+                p.dip_isolation_radius / 1000,
+                k.iter().filter(|&&x| x).count()
+            ),
+        );
+        k
+    } else {
+        vec![true; contacts.len()]
+    };
     {
         let mut d = base_dict(&contacts, &keep);
         log(p, &format!("total number of contacts = {}", contact_count(&d)));
@@ -820,6 +927,19 @@ pub fn calc_genome_structure(input: &Input, dip: &DiploidInput, p: &Params, engi
         }
         log(p, &format!("contacts after removing isolated = {}", contact_count(&d)));
     }
+    let commit = robust && p.robust_dip_commit > 0.0;
+    // contacts dropped by the prior commitment (re-admitted at `robust_dip_readmit_stage`)
+    let mut dropped_by_prior = vec![false; contacts.len()];
+    if commit && p.robust_dip_commit_stage < 0 {
+        let probs: Vec<Option<[f64; 4]>> = contacts.iter().map(|c| Some(c.prior)).collect();
+        let before = keep.clone();
+        let (nc, nd) = commit_contacts(&mut contacts, &mut keep, &probs, p.robust_dip_commit, p.robust_dip_commit_drop);
+        for k in 0..contacts.len() {
+            dropped_by_prior[k] = before[k] && !keep[k];
+        }
+        log(p, &format!("phase commitment by the prior (>= {}): {nc} committed, {nd} dropped", p.robust_dip_commit));
+    }
+    let readmit = commit && p.robust_dip_commit_stage < 0 && p.robust_dip_commit_drop && p.robust_dip_readmit_stage >= 1;
     let mut sizes = p.particle_sizes.clone();
     if robust {
         sizes.extend(std::iter::repeat_n(last, p.robust_refine));
@@ -834,6 +954,42 @@ pub fn calc_genome_structure(input: &Input, dip: &DiploidInput, p: &Params, engi
     let mut last_em: Option<(DipGroups, Vec<f64>, Vec<[f64; 4]>)> = None;
     for (stage, &ps) in sizes.iter().enumerate() {
         let ts = Instant::now();
+        if readmit && stage as i64 == p.robust_dip_readmit_stage {
+            // re-admit the contacts the prior could not phase, as ambiguous restraints for one
+            // stage; the next stage commits them by the structure (below) or drops them
+            let n_re = dropped_by_prior.iter().filter(|&&x| x).count();
+            for (k, &d) in dropped_by_prior.iter().enumerate() {
+                if d {
+                    keep[k] = true;
+                }
+            }
+            log(p, &format!("stage {}: {n_re} contacts re-admitted as ambiguous", stage + 1));
+        }
+        let staged = p.robust_dip_commit_stage >= 1 && stage as i64 == p.robust_dip_commit_stage;
+        let after_readmit = readmit && stage as i64 == p.robust_dip_readmit_stage + 1;
+        if commit && (staged || after_readmit) {
+            // staged commitment: EM posterior P(c | true) of the structure so far (prior included)
+            let mut probs: Vec<Option<[f64; 4]>> = vec![None; contacts.len()];
+            if let Some((g, _, post)) = last_em.as_ref() {
+                for gi in 0..g.n_groups() {
+                    let s0 = g.goff[gi] as usize;
+                    let nc = g.goff[gi + 1] as usize - s0;
+                    for q in g.coff[gi] as usize..g.coff[gi + 1] as usize {
+                        let k = g.contacts[q] as usize;
+                        let c = &contacts[k];
+                        let mut pr = [0.0; 4];
+                        for j in 0..nc {
+                            if let Some(i) = c.cand[..c.n_cand as usize].iter().position(|&x| x == g.code[s0 + j]) {
+                                pr[i] = post[q][j];
+                            }
+                        }
+                        probs[k] = Some(pr);
+                    }
+                }
+            }
+            let (nc, nd) = commit_contacts(&mut contacts, &mut keep, &probs, p.robust_dip_commit, p.robust_dip_commit_drop);
+            log(p, &format!("phase commitment by the structure at stage {} (>= {}): {nc} committed, {nd} dropped", stage + 1, p.robust_dip_commit));
+        }
         let remove = if robust { p.robust_remove_violated } else { true };
         if remove && stage > 0 && ps < 0.5e6 {
             if let Some(pr) = prev.as_ref() {
@@ -1308,10 +1464,25 @@ mod tests {
         let act = vec![true; n];
         let dip = DiploidInput { hap_a: &ha, hap_b: &hb, ploidy: &[2, 2, 2], prior: None };
         let inp = Input { dip: Some(dip), ..input(&names, &ca, &pa, &cb, &pb, &amb, &act) };
-        for (label, proto, split) in [("nuc_dynamics_2017", "nuc_dynamics_2017", true), ("robust", "robust", false), ("robust (split)", "robust", true)] {
+        // (label, protocol, split, commit threshold, commit stage, drop, isolation neighbours, readmit stage)
+        let cases: [(&str, &str, bool, f64, i64, bool, u32, i64); 7] = [
+            ("nuc_dynamics_2017", "nuc_dynamics_2017", true, 0.0, -1, true, 0, -1),
+            ("robust", "robust", false, 0.0, -1, true, 0, -1),
+            ("robust (split)", "robust", true, 0.0, -1, true, 0, -1),
+            ("robust, commit 0.75 by prior, drop", "robust", false, 0.75, -1, true, 0, -1),
+            ("robust, commit 0.75 at stage 3, keep", "robust", false, 0.75, 2, false, 0, -1),
+            ("robust, isolation -c2 -r10m", "robust", false, 0.0, -1, true, 2, -1),
+            ("robust, commit 0.75 by prior, re-admit at stage 2", "robust", false, 0.75, -1, true, 0, 1),
+        ];
+        for (label, proto, split, tau, cstage, drop, iso, readmit) in cases {
             let p = Params {
                 protocol: proto.into(),
                 robust_dip_split: split,
+                robust_dip_commit: tau,
+                robust_dip_commit_stage: cstage,
+                robust_dip_commit_drop: drop,
+                dip_isolation_nei: iso,
+                robust_dip_readmit_stage: readmit,
                 particle_sizes: vec![4e6, 1e6, 4e5, 2e5],
                 n_models: 2,
                 seed: 3,
@@ -1378,10 +1549,63 @@ mod tests {
             eprintln!("{label}: per-copy distance r {rs:.3?} (mean {mean_r:.3}), phase accuracy {acc:.3} ({tot} informative contacts)");
             assert!(mean_r > 0.6, "{label}: mean r {mean_r}");
             assert!(acc > 0.9, "{label}: phase accuracy {acc}");
-            if proto == "robust" {
+            if proto == "robust" && tau == 0.0 {
                 assert!(out.contact_weights.iter().filter(|x| x.is_finite()).count() > n / 2);
                 assert!(out.stages.iter().any(|s| s.robust.iter().any(|l| l.n_ambiguous.unwrap_or(0) > 0)));
             }
         }
+    }
+
+    fn dc(ca: u32, pa: i64, cb: u32, pb: i64, cand: &[u8], prior: &[f64]) -> DipContact {
+        let mut c4 = [0u8; 4];
+        c4[..cand.len()].copy_from_slice(cand);
+        let mut p4 = [0.0; 4];
+        p4[..prior.len()].copy_from_slice(prior);
+        DipContact { ca, pa, cb, pb, row: 0, swapped: false, n_cand: cand.len() as u8, cand: c4, prior: p4 }
+    }
+
+    #[test]
+    fn commit_contacts_hard_phases_confident_and_drops_or_keeps_the_rest() {
+        let base = vec![
+            dc(0, 100, 0, 5_000, &[0, 3], &[0.8, 0.2]),
+            dc(0, 200, 0, 6_000, &[0, 3], &[0.6, 0.4]),
+            dc(0, 300, 1, 9_000, &[1], &[1.0]),
+            dc(0, 400, 1, 9_500, &[0, 1, 2, 3], &[0.1, 0.1, 0.05, 0.75]),
+        ];
+        let probs: Vec<Option<[f64; 4]>> = base.iter().map(|c| Some(c.prior)).collect();
+        for drop in [true, false] {
+            let mut cs = base.clone();
+            let mut keep = vec![true; 4];
+            let (nc, nd) = commit_contacts(&mut cs, &mut keep, &probs, 0.75, drop);
+            assert_eq!(nc, 2);
+            assert_eq!((cs[0].n_cand, cs[0].cand[0], cs[0].prior[0]), (1, 0, 1.0));
+            assert_eq!((cs[3].n_cand, cs[3].cand[0]), (1, 3));
+            assert_eq!(cs[2].n_cand, 1); // already unambiguous: untouched
+            if drop {
+                assert_eq!((nd, keep.clone()), (1, vec![true, false, true, true]));
+            } else {
+                assert_eq!((nd, keep.clone(), cs[1].n_cand), (0, vec![true; 4], 2));
+            }
+        }
+        // unknown probability: dropped / kept, never committed
+        let mut cs = base.clone();
+        let mut keep = vec![true; 4];
+        let (nc, nd) = commit_contacts(&mut cs, &mut keep, &[None, None, None, None], 0.75, true);
+        assert_eq!((nc, nd), (0, 3));
+    }
+
+    #[test]
+    fn isolation_keep_counts_neighbours_within_the_radius() {
+        // chromosome pair (0, 0): three contacts close together and one far away; (0, 1): one alone
+        let cs = vec![
+            dc(0, 1_000_000, 0, 5_000_000, &[0], &[1.0]),
+            dc(0, 1_500_000, 0, 5_200_000, &[0], &[1.0]),
+            dc(0, 2_000_000, 0, 4_800_000, &[0], &[1.0]),
+            dc(0, 1_200_000, 0, 30_000_000, &[0], &[1.0]),
+            dc(0, 1_000_000, 1, 5_000_000, &[0], &[1.0]),
+        ];
+        assert_eq!(isolation_keep(&cs, 2, 1_000_000), vec![true, true, true, false, false]);
+        assert_eq!(isolation_keep(&cs, 3, 1_000_000), vec![false; 5]);
+        assert_eq!(isolation_keep(&cs, 1, 100_000_000), vec![true, true, true, true, false]);
     }
 }

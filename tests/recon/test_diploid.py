@@ -178,3 +178,22 @@ def test_diploid_rejects_release13(tmp_path):
     df, _, _ = toy(n_try=5000)
     with pytest.raises(ValueError):
         reconstruct_nucdyn(df, protocol="release_1.3", **QUICK)
+
+
+def test_ember_default_matches_frozen_config(tmp_path):
+    """reconstruct_ember's default is the frozen diploid configuration: EMber's own neighbourhood
+    prior on, hickit's imputed phase_prob not used (PREREG §6); phase_prior=True opts in."""
+    import inspect
+
+    from uchrom.recon.sc import reconstruct_ember
+
+    assert inspect.signature(reconstruct_ember).parameters["phase_prior"].default is False
+    df, _, _ = toy(n_try=8_000)
+    probs = np.full((len(df), 4), 0.25)
+    write_pairs(df, tmp_path / "c.pairs.gz", probs=probs)
+    q = dict(QUICK, particle_sizes=[4e6, 1e6])
+    cd = reconstruct_ember(str(tmp_path / "c.pairs.gz"), cell_id="toy", **q)
+    assert cd.uns["ember"]["diploid"]["phase_prior"] is False
+    assert cd.uns["ember"]["diploid"] and cd.results.record("ember.stages").params["robust_dip_nbr_prior"] is True
+    cd = reconstruct_ember(str(tmp_path / "c.pairs.gz"), cell_id="toy", phase_prior=True, **q)
+    assert cd.uns["ember"]["diploid"]["phase_prior"] is True

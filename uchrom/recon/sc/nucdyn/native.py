@@ -200,7 +200,7 @@ def reconstruct_nucdyn(
     verbose: bool = False,
     ploidy: Any = None,
     hap_names: Sequence[str] = ("pat", "mat"),
-    phase_prior: bool = True,
+    phase_prior: bool = False,
     _method: str = "nucdyn",
     **engine_params: Any,
 ):
@@ -267,8 +267,9 @@ def reconstruct_nucdyn(
         Names of haplotypes 0 and 1 in the trace ids (default Dip-C's ``("pat", "mat")``:
         traces ``chr1(pat)`` / ``chr1(mat)``; single-copy chromosomes keep the plain name).
     phase_prior
-        Use hickit's imputed ``phase_prob00 .. phase_prob11`` (when present) as EMber's prior
-        over the candidate copy pairs.
+        Also use hickit's imputed ``phase_prob00 .. phase_prob11`` (when present) as a prior over
+        the candidate copy pairs (default ``False``, the frozen diploid EMber configuration:
+        EMber's own 2-D neighbourhood prior ``robust_dip_nbr_prior`` only, no external prior).
 
     Returns
     -------

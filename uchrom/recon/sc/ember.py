@@ -62,7 +62,7 @@ def reconstruct_ember(
     verbose: bool = False,
     ploidy: Any = None,
     hap_names: Sequence[str] = ("pat", "mat"),
-    phase_prior: bool = True,
+    phase_prior: bool = False,
     **engine_params: Any,
 ):
     """Single-cell Hi-C genome structure ensemble with EMber.
@@ -99,7 +99,9 @@ def reconstruct_ember(
         Phased (diploid) input, see :func:`uchrom.recon.sc.nucdyn.reconstruct_nucdyn`:
         copies per chromosome (``None`` = ``"auto"``: male when chrY is present;
         ``"haploid"`` ignores the phases), haplotype names in the trace ids, and whether
-        hickit's imputed phase probabilities (when present) are the prior of the copy pairs.
+        hickit's imputed phase probabilities (when present) are used as an extra prior of the
+        copy pairs (default ``False``: the frozen configuration, EMber's own neighbourhood prior
+        only; ``benchmarks/screcon/PREREG.md`` §6).
         Adds the results ``<key>.phase_probs`` / ``<key>.imputed_phase`` and
         ``uns[key]["diploid"]`` (phasing statistics).
 
