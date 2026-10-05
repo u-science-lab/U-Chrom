@@ -35,7 +35,7 @@ HERE = Path(__file__).resolve().parent
 RES = HERE / "results"
 FEAS = HERE / "feasibility"
 MM = 1 / 25.4
-W, H = 170.0, 192.0
+W, H = 170.0, 196.0
 
 mpl.rcParams.update({
     "pdf.fonttype": 42, "font.family": "sans-serif", "font.sans-serif": ["Arial"],
@@ -577,7 +577,7 @@ def main() -> None:
     fig = plt.figure(figsize=(W * MM, H * MM))
     row_title(fig, 0.5, "single-cell reconstruction at high resolution (EMber, homolog-resolved)")
     p_highres(fig, d, 0, 4)
-    dy = 56
+    dy = 60
     row_title(fig, 0.5 + dy, "single-cell reconstruction: EMber vs existing methods, one benchmark")
     p_nd_speed(fig, d, 0, 4 + dy)
     p_heldout_contacts(fig, d, 56, 4 + dy)
