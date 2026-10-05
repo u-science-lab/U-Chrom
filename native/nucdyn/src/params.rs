@@ -238,6 +238,16 @@ pub struct Params {
     /// `mix_tri_res`) and its pseudo-count.
     pub mix_tri_prior: f64,
     pub mix_tri_pseudo: f64,
+    /// Must-link groups: long-range contacts (>= `mix_seed_min_sep`, trans) within this Chebyshev
+    /// radius in 2-D are one group (single linkage, 0 = off); with `mix_group_tri_min` > 0, trans
+    /// groups joined by at least that many trans-triangle links are merged.  A group's cell
+    /// posterior is shared by its members.
+    pub mix_group_radius: i64,
+    pub mix_group_tri_min: u32,
+    /// Seed "group": the `mix_group_seed_n` largest must-link groups go to cells 0, 1, ...
+    /// (round-robin) with probability `mix_group_seed_conf`.
+    pub mix_group_seed_n: usize,
+    pub mix_group_seed_conf: f64,
     /// E-step prior over the cells after the first stage: "uniform" (the seed kept by
     /// `mix_seed_keep`) or "posterior" (the previous update's posterior^`mix_prior_temp`, mixed
     /// with `mix_prior_floor` of uniform).
@@ -369,6 +379,10 @@ impl Default for Params {
             mix_tri_t1: 0.05,
             mix_tri_prior: 0.0,
             mix_tri_pseudo: 1.0,
+            mix_group_radius: 0,
+            mix_group_tri_min: 0,
+            mix_group_seed_n: 1,
+            mix_group_seed_conf: 0.9,
             mix_prior_mode: "uniform".to_string(),
             mix_assign_d0: 0.0,
             mix_density_rho: 0.0,
@@ -468,7 +482,7 @@ impl Params {
                     return Err("robust_w_floor must be in [0, 1]".into());
                 }
                 if self.mix_cells >= 2 {
-                    if !matches!(self.mix_seed.as_str(), "patch" | "random" | "uniform" | "tri") {
+                    if !matches!(self.mix_seed.as_str(), "patch" | "random" | "uniform" | "tri" | "group") {
                         return Err(format!("unknown mix_seed {:?}", self.mix_seed));
                     }
                     if self.mix_commit != 0.0 && !(self.mix_commit > 0.0 && self.mix_commit <= 1.0) {

@@ -289,3 +289,90 @@ pub fn trans_triangle_links(contacts: &[MixContact], keep: &[bool], res: i64) ->
         .collect();
     (edge_of, links)
 }
+
+fn uf_find(parent: &mut [u32], mut x: u32) -> u32 {
+    while parent[x as usize] != x {
+        let p = parent[parent[x as usize] as usize];
+        parent[x as usize] = p;
+        x = p;
+    }
+    x
+}
+
+/// Must-link groups of the kept long-range contacts (cis >= `min_sep`, trans): single linkage in
+/// 2-D (both ends within `radius`, same chromosome pair) — a 2-D blob of long-range contacts is
+/// almost always of one cell (development pools: purity 0.92-0.97 at 0.5-1 Mb) — optionally
+/// merged across chromosome pairs when two trans groups share at least `tri_min` trans-triangle
+/// links (`trans_triangle_links` on the `res` grid).  Returns the group of every contact
+/// (u32::MAX = none), numbered 0..n_groups.
+pub fn blob_groups(contacts: &[MixContact], keep: &[bool], radius: i64, min_sep: i64, tri_min: u32, res: i64) -> Vec<u32> {
+    let n = contacts.len();
+    let elig: Vec<bool> = (0..n).map(|i| keep[i] && contacts[i].sep() >= min_sep).collect();
+    let mut parent: Vec<u32> = (0..n as u32).collect();
+    let mut by: HashMap<(u32, u32), Vec<usize>> = HashMap::new();
+    for i in 0..n {
+        if elig[i] {
+            by.entry((contacts[i].ca, contacts[i].cb)).or_default().push(i);
+        }
+    }
+    let mut keys: Vec<(u32, u32)> = by.keys().copied().collect();
+    keys.sort_unstable();
+    for key in keys {
+        let mut v = by.remove(&key).unwrap();
+        v.sort_by_key(|&i| (contacts[i].pa, contacts[i].pb));
+        for x in 0..v.len() {
+            let ci = &contacts[v[x]];
+            for &j in &v[x + 1..] {
+                let cj = &contacts[j];
+                if cj.pa - ci.pa > radius {
+                    break;
+                }
+                if (cj.pb - ci.pb).abs() <= radius {
+                    let (a, b) = (uf_find(&mut parent, v[x] as u32), uf_find(&mut parent, j as u32));
+                    if a != b {
+                        parent[a.max(b) as usize] = a.min(b);
+                    }
+                }
+            }
+        }
+    }
+    if tri_min > 0 {
+        let (edge_of, links) = trans_triangle_links(contacts, &elig, res);
+        // group of every edge: the root of one of its contacts
+        let mut egroup = vec![u32::MAX; links.len()];
+        for i in 0..n {
+            if edge_of[i] >= 0 && elig[i] {
+                egroup[edge_of[i] as usize] = uf_find(&mut parent, i as u32);
+            }
+        }
+        let mut cnt: HashMap<(u32, u32), u32> = HashMap::new();
+        for (e, l) in links.iter().enumerate() {
+            for &f in l {
+                if (f as usize) > e {
+                    let (a, b) = (egroup[e], egroup[f as usize]);
+                    if a != b && a != u32::MAX && b != u32::MAX {
+                        *cnt.entry((a.min(b), a.max(b))).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+        let mut pairs: Vec<((u32, u32), u32)> = cnt.into_iter().filter(|x| x.1 >= tri_min).collect();
+        pairs.sort_unstable();
+        for ((a, b), _) in pairs {
+            let (ra, rb) = (uf_find(&mut parent, a), uf_find(&mut parent, b));
+            if ra != rb {
+                parent[ra.max(rb) as usize] = ra.min(rb);
+            }
+        }
+    }
+    let mut id: HashMap<u32, u32> = HashMap::new();
+    let mut out = vec![u32::MAX; n];
+    for i in 0..n {
+        if elig[i] {
+            let r = uf_find(&mut parent, i as u32);
+            let l = id.len() as u32;
+            out[i] = *id.entry(r).or_insert(l);
+        }
+    }
+    out
+}

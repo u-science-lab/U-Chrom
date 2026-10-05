@@ -347,6 +347,7 @@ pub fn em_update_mix(
     p: &Params,
     eps0: f64,
     s0: f64,
+    groups: Option<&[u32]>,
 ) -> MixEm {
     let t0 = Instant::now();
     let u = 1.0 / data.n_pairs.max(1.0);
@@ -422,6 +423,44 @@ pub fn em_update_mix(
     let (ll, s, eps, d0) = best.unwrap();
     let kk = Kernel { d0, ..*kern };
     let (phi, g_mean) = phi_of(&kk, s);
+    // group posteriors (must-link groups of contacts, `mix_group_radius`): every member of a group
+    // comes from the same cell, so the group's cell posterior is λ_s Π_members [ν_cs (o (1 - ε) φ_sb + ε u)]
+    let gpost: Option<Vec<f64>> = groups.map(|gr| {
+        let ng = bins.contacts.iter().filter_map(|&c| (gr[c as usize] != u32::MAX).then_some(gr[c as usize] as usize + 1)).max().unwrap_or(0);
+        let terms: Vec<Vec<(u32, Vec<f64>)>> = (0..nb)
+            .into_par_iter()
+            .map(|b| {
+                bins.contacts[bins.off[b] as usize..bins.off[b + 1] as usize]
+                    .iter()
+                    .filter(|&&c| gr[c as usize] != u32::MAX)
+                    .map(|&c| {
+                        let c = c as usize;
+                        let o = odds[c];
+                        (gr[c], (0..k).map(|x| nu[c * k + x].max(1e-300).ln() + (o * (1.0 - eps) * phi[x][b] + eps * u).ln()).collect())
+                    })
+                    .collect()
+            })
+            .collect();
+        let mut sums = vec![0.0f64; ng * k];
+        for t in terms.into_iter().flatten() {
+            for x in 0..k {
+                sums[t.0 as usize * k + x] += t.1[x];
+            }
+        }
+        for gi in 0..ng {
+            let row = &mut sums[gi * k..(gi + 1) * k];
+            let mx = (0..k).map(|x| lambda[x].max(1e-300).ln() + row[x]).fold(f64::NEG_INFINITY, f64::max);
+            let mut tot = 0.0;
+            for x in 0..k {
+                row[x] = (lambda[x].max(1e-300).ln() + row[x] - mx).exp();
+                tot += row[x];
+            }
+            for x in 0..k {
+                row[x] /= tot;
+            }
+        }
+        sums
+    });
     // responsibilities, bin by bin
     let per_bin: Vec<(Vec<f64>, Vec<f64>, Vec<f64>)> = (0..nb)
         .into_par_iter()
@@ -434,6 +473,22 @@ pub fn em_update_mix(
             for &c in cs {
                 let c = c as usize;
                 let o = odds[c];
+                if let (Some(gp), Some(gr)) = (gpost.as_ref(), groups) {
+                    if gr[c] != u32::MAX {
+                        let g = gr[c] as usize;
+                        let mut tt = 0.0;
+                        for x in 0..k {
+                            let a = o * (1.0 - eps) * phi[x][b];
+                            let r = gp[g * k + x] * if a <= 0.0 { 0.0 } else { a / (a + eps * u) };
+                            none[x] *= 1.0 - r;
+                            sum[x] += r;
+                            tt += r;
+                            post.push(gp[g * k + x]);
+                        }
+                        rt.push(tt);
+                        continue;
+                    }
+                }
                 let a: Vec<f64> = (0..k).map(|x| o * lambda[x] * nu[c * k + x] * (1.0 - eps) * phi[x][b]).collect();
                 let at: f64 = a.iter().sum();
                 let den = at + eps * u;
@@ -709,6 +764,14 @@ pub fn calc_with_prior(input: &Input, p: &Params, engine: &mut dyn StageEngine, 
     } else {
         None
     };
+    let groups: Option<Vec<u32>> = if p.mix_group_radius > 0 {
+        let g = crate::mixseed::blob_groups(&contacts, &keep, p.mix_group_radius, p.mix_seed_min_sep, p.mix_group_tri_min, p.mix_tri_res);
+        let ng = g.iter().filter(|&&x| x != u32::MAX).map(|&x| x as usize + 1).max().unwrap_or(0);
+        log(p, &format!("must-link groups: {ng} groups over {} contacts", g.iter().filter(|&&x| x != u32::MAX).count()));
+        Some(g)
+    } else {
+        None
+    };
     // per restart: prior over the cells, mixing weights, EM state, last posteriors per contact
     let mut nu: Vec<Vec<f64>> = match prior {
         Some(pr) => {
@@ -720,6 +783,34 @@ pub fn calc_with_prior(input: &Input, p: &Params, engine: &mut dyn StageEngine, 
                 let r = c.row as usize;
                 v[r * k..(r + 1) * k].copy_from_slice(&pr[r * k..(r + 1) * k]);
             }
+            vec![v; n_restarts]
+        }
+        None if p.mix_seed == "group" => {
+            // the largest must-link groups (by contacts) seeded round-robin to the cells, the rest uniform
+            let gr = groups.as_ref().ok_or("mix_seed \"group\" needs mix_group_radius > 0")?;
+            let ng = gr.iter().filter(|&&x| x != u32::MAX).map(|&x| x as usize + 1).max().unwrap_or(0);
+            let mut size = vec![0usize; ng];
+            for &x in gr.iter() {
+                if x != u32::MAX {
+                    size[x as usize] += 1;
+                }
+            }
+            let mut order: Vec<usize> = (0..ng).collect();
+            order.sort_by_key(|&x| std::cmp::Reverse(size[x]));
+            let mut cellof = vec![usize::MAX; ng];
+            for (j, &x) in order.iter().take(p.mix_group_seed_n).enumerate() {
+                cellof[x] = j % k;
+            }
+            let conf = p.mix_group_seed_conf;
+            let mut v = vec![1.0 / k as f64; n_input * k];
+            for (i, &x) in gr.iter().enumerate() {
+                if x != u32::MAX && cellof[x as usize] != usize::MAX {
+                    for y in 0..k {
+                        v[i * k + y] = if y == cellof[x as usize] { conf } else { (1.0 - conf) / (k - 1) as f64 };
+                    }
+                }
+            }
+            log(p, &format!("group seed: {} largest groups ({:?} contacts)", p.mix_group_seed_n, order.iter().take(p.mix_group_seed_n).map(|&x| size[x]).collect::<Vec<_>>()));
             vec![v; n_restarts]
         }
         None => (0..n_restarts).map(|g| seed_prior(&contacts, &keep, k, p, g)).collect(),
@@ -861,7 +952,7 @@ pub fn calc_with_prior(input: &Input, p: &Params, engine: &mut dyn StageEngine, 
                     let gc = &coords[gi * per_group..(gi + 1) * per_group];
                     let data = EmData::new(gc, &bins.pairs, &vec![1u32; bins.n()], &kern_reach, s_max, p.robust_pair_sample);
                     let (eps, s) = em_state[g];
-                    let res = em_update_mix(&data, &bins, &odds, &nu[g], &lambda[g], k, m, &kern, p, eps, s);
+                    let res = em_update_mix(&data, &bins, &odds, &nu[g], &lambda[g], k, m, &kern, p, eps, s, groups.as_deref());
                     em_state[g] = (res.eps, res.s);
                     lambda[g] = res.lambda.clone();
                     last_ll[g] = res.log.loglik;
@@ -1021,7 +1112,7 @@ pub fn calc_with_prior(input: &Input, p: &Params, engine: &mut dyn StageEngine, 
                 let gc = &coords[gi * per_group..(gi + 1) * per_group];
                 let data = EmData::new(gc, &bins.pairs, &vec![1u32; bins.n()], &kern_reach, s_max, p.robust_pair_sample);
                 let (eps, s) = em_state[g];
-                let res = em_update_mix(&data, &bins, &odds, &nu[g], &lambda[g], k, m, &kern, p, eps, s);
+                let res = em_update_mix(&data, &bins, &odds, &nu[g], &lambda[g], k, m, &kern, p, eps, s, groups.as_deref());
                 lls.push(res.log.loglik);
             }
             let bi = (0..ng).max_by(|&a, &b| lls[a].partial_cmp(&lls[b]).unwrap()).unwrap();
@@ -1076,7 +1167,7 @@ pub fn calc_with_prior(input: &Input, p: &Params, engine: &mut dyn StageEngine, 
         let np = { let nn = st.n_particles() as f64; nn * (nn - 1.0) / 2.0 };
         let u = 1.0 / np.max(1.0);
         let lam = &lambda[g];
-        let res: Vec<(usize, Vec<f64>, f64)> = contacts
+        let mut res: Vec<(usize, Vec<f64>, f64, Vec<f64>)> = contacts
             .par_iter()
             .enumerate()
             .map(|(i, c)| {
@@ -1089,10 +1180,41 @@ pub fn calc_with_prior(input: &Input, p: &Params, engine: &mut dyn StageEngine, 
                 let a: Vec<f64> = (0..k).map(|x| odds_all[i] * lam[x] * pr[x] * (1.0 - eps) * phi[x]).collect();
                 let at: f64 = a.iter().sum();
                 let post: Vec<f64> = if at > 0.0 { a.iter().map(|x| x / at).collect() } else { vec![1.0 / k as f64; k] };
-                (c.row as usize, post, if at > 0.0 { at / (at + eps * u) } else { 0.0 })
+                // log-evidence per cell (contact explained by the cell, or noise) for the groups
+                let le: Vec<f64> = (0..k).map(|x| (odds_all[i] * (1.0 - eps) * phi[x] + eps * u).ln()).collect();
+                (c.row as usize, post, if at > 0.0 { at / (at + eps * u) } else { 0.0 }, le)
             })
             .collect();
-        for (r, post, pt) in res {
+        if let Some(gr) = &groups {
+            // grouped contacts share their group's posterior (contacts and rows are in the same order)
+            let ng = gr.iter().filter(|&&x| x != u32::MAX).map(|&x| x as usize + 1).max().unwrap_or(0);
+            let mut sums = vec![0.0f64; ng * k];
+            for (i, r) in res.iter().enumerate() {
+                if gr[i] != u32::MAX {
+                    for x in 0..k {
+                        sums[gr[i] as usize * k + x] += r.3[x];
+                    }
+                }
+            }
+            for gi in 0..ng {
+                let row = &mut sums[gi * k..(gi + 1) * k];
+                let mx = (0..k).map(|x| lam[x].max(1e-300).ln() + row[x]).fold(f64::NEG_INFINITY, f64::max);
+                let mut tot = 0.0;
+                for x in 0..k {
+                    row[x] = (lam[x].max(1e-300).ln() + row[x] - mx).exp();
+                    tot += row[x];
+                }
+                for x in 0..k {
+                    row[x] /= tot;
+                }
+            }
+            for (i, r) in res.iter_mut().enumerate() {
+                if gr[i] != u32::MAX && committed[i].is_none() {
+                    r.1 = sums[gr[i] as usize * k..(gr[i] as usize + 1) * k].to_vec();
+                }
+            }
+        }
+        for (r, post, pt, _) in res {
             cell_probs[r * k..(r + 1) * k].copy_from_slice(&post);
             contact_weights[r] = pt;
         }
@@ -1269,7 +1391,7 @@ mod tests {
         let kern = Kernel::from_params(&p);
         let data = EmData::new(&st.coords, &bins.pairs, &vec![1; bins.n()], &kern, 6.0, 0);
         let nu = vec![0.5; n * 2];
-        let res = em_update_mix(&data, &bins, &vec![1.0; n], &nu, &[0.5, 0.5], 2, 1, &kern, &p, 0.1, 1.5);
+        let res = em_update_mix(&data, &bins, &vec![1.0; n], &nu, &[0.5, 0.5], 2, 1, &kern, &p, 0.1, 1.5, None);
         // accuracy over long-range contacts (> 2 Mb or trans), where the cells differ
         let (mut right, mut tot) = (0usize, 0usize);
         for (q, &c) in bins.contacts.iter().enumerate() {

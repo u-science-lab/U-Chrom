@@ -502,11 +502,41 @@ fn mix_seed_prior<'py>(
     Ok(out.into_pyarray(py))
 }
 
+/// Few-cell deconvolution: must-link groups of the long-range contacts (`mixseed::blob_groups`,
+/// every contact kept): group id per contact, -1 = none.
+#[pyfunction]
+#[pyo3(signature = (names, chr_a, pos_a, chr_b, pos_b, radius, min_sep, tri_min=0, res=1_000_000))]
+#[allow(clippy::too_many_arguments)]
+fn mix_groups<'py>(
+    py: Python<'py>,
+    names: Vec<String>,
+    chr_a: PyReadonlyArray1<'py, u32>,
+    pos_a: PyReadonlyArray1<'py, i64>,
+    chr_b: PyReadonlyArray1<'py, u32>,
+    pos_b: PyReadonlyArray1<'py, i64>,
+    radius: i64,
+    min_sep: i64,
+    tri_min: u32,
+    res: i64,
+) -> PyResult<Bound<'py, numpy::PyArray1<i64>>> {
+    let (ca, pa, cb, pb) = (chr_a.as_slice()?.to_vec(), pos_a.as_slice()?.to_vec(), chr_b.as_slice()?.to_vec(), pos_b.as_slice()?.to_vec());
+    let n = ca.len();
+    let out = py.detach(move || {
+        let amb: Vec<i64> = (1..=n as i64).collect();
+        let act = vec![true; n];
+        let input = Input { names: &names, chr_a: &ca, pos_a: &pa, chr_b: &cb, pos_b: &pb, ambig: &amb, active: &act, prior_lr: None, dip: None };
+        let cs = crate::mix::prepare_contacts(&input);
+        crate::mixseed::blob_groups(&cs, &vec![true; n], radius, min_sep, tri_min, res)
+    });
+    Ok(out.into_iter().map(|x| if x == u32::MAX { -1 } else { x as i64 }).collect::<Vec<i64>>().into_pyarray(py))
+}
+
 #[pymodule]
 fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(calc_genome_structure, m)?)?;
     m.add_function(wrap_pyfunction!(diploid_neighbour_prior, m)?)?;
     m.add_function(wrap_pyfunction!(mix_seed_prior, m)?)?;
+    m.add_function(wrap_pyfunction!(mix_groups, m)?)?;
     m.add_function(wrap_pyfunction!(run_dynamics, m)?)?;
     m.add_function(wrap_pyfunction!(debug_setup_stage, m)?)?;
     m.add_function(wrap_pyfunction!(gpu_available, m)?)?;

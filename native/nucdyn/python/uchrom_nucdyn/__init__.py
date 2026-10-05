@@ -112,6 +112,98 @@ def mix_seed_prior(chrom_a, pos_a, chrom_b, pos_b, *, restart: int = 0, **params
     return np.asarray(out).reshape(len(ia), int(p["mix_cells"]))
 
 
+def deconvolve_passes(chrom_a, pos_a, chrom_b, pos_b, *, mix_cells: int, passes: int = 3,
+                      group_radius: int = 5_000_000, group_tri_min: int = 1, group_res: int = 1_000_000,
+                      group_min_rows: int = 10, group_conf: float = 0.9, group_margin: float = 0.05,
+                      mix_prior=None, log=None, **params: Any) -> Dict[str, Any]:
+    """Few-cell deconvolution in passes (EMber-mix development driver).
+
+    Trans contacts are grouped (2-D single linkage within ``group_radius`` per chromosome pair,
+    groups joined by trans-triangle links merged: ``mix_groups``); such groups are almost always of
+    one cell.  Pass 1 seeds the largest group to cell 0 (or uses ``mix_prior``); after every pass
+    each group of at least ``group_min_rows`` contacts is given, as a whole, the cell its contacts
+    prefer in that pass (mean ``cell_probs``, margin ``group_margin``), with probability
+    ``group_conf``, and the next pass starts from that seed.  A cell no group was given gets the
+    largest group with the weakest preference.  Returns the last pass's result with
+    ``passes_log`` (per pass: seeded contacts per cell).
+    """
+    k = int(mix_cells)
+    g = mix_groups(chrom_a, pos_a, chrom_b, pos_b, radius=group_radius, min_sep=2**62, tri_min=group_tri_min,
+                   res=group_res)
+    n = len(g)
+    sizes = np.bincount(g[g >= 0]) if (g >= 0).any() else np.zeros(0, int)
+    order = np.argsort(sizes)[::-1]
+    prior = None if mix_prior is None else np.asarray(mix_prior, np.float64)
+    if prior is None:
+        prior = np.full((n, k), 1.0 / k)
+        if len(order):
+            rows = g == order[0]
+            prior[rows] = (1 - group_conf) / (k - 1)
+            prior[rows, 0] = group_conf
+    plog = []
+    res = None
+    # cells that have been seeded so far (pass 1: cell 0 only, unless a prior was given); one more
+    # cell is seeded per pass, with the largest group that the seeded cells explain worst
+    seeded = list(range(k)) if mix_prior is not None else [0]
+    for it in range(int(passes)):
+        res = calc_genome_structure(chrom_a, pos_a, chrom_b, pos_b, mix_cells=k, mix_prior=prior, **params)
+        P = res["cell_probs"]
+        new = np.full((n, k), 1.0 / k)
+        assigned = np.zeros(k, int)
+        cand = []
+        for gi in order:
+            if sizes[gi] < group_min_rows:
+                break
+            rows = np.flatnonzero(g == gi)
+            m = np.nanmean(P[rows], 0)
+            if not np.isfinite(m).all():
+                continue
+            ms = m[seeded]
+            j = int(np.argmax(ms))
+            s = seeded[j]
+            rest = np.delete(m, s)
+            if len(seeded) < k and m[seeded].sum() < 0.5:
+                cand.append(gi)
+                continue
+            if m[s] - rest.max() < group_margin:
+                continue
+            new[rows] = (1 - group_conf) / (k - 1)
+            new[rows, s] = group_conf
+            assigned[s] += len(rows)
+        if len(seeded) < k and cand:
+            s = len(seeded)
+            rows = g == cand[0]
+            new[rows] = (1 - group_conf) / (k - 1)
+            new[rows, s] = group_conf
+            assigned[s] += int(rows.sum())
+            seeded.append(s)
+        plog.append({"pass": it + 1, "seeded_per_cell": assigned.tolist(), "cells_seeded": len(seeded),
+                     "n_groups": int((sizes >= group_min_rows).sum())})
+        if log:
+            log(plog[-1])
+        prior = new
+    res["passes_log"] = plog
+    res["groups"] = g
+    return res
+
+
+def mix_groups(chrom_a, pos_a, chrom_b, pos_b, *, radius: int, min_sep: int, tri_min: int = 0,
+               res: int = 1_000_000) -> np.ndarray:
+    """Few-cell deconvolution: must-link groups of the long-range contacts (2-D single linkage within
+    ``radius``; cis contacts closer than ``min_sep`` left out; trans groups joined by >= ``tri_min``
+    trans-triangle links merged): group id per contact, -1 = none."""
+    from ._engine import mix_groups as _groups
+
+    ca = np.asarray(chrom_a).astype(str)
+    cb = np.asarray(chrom_b).astype(str)
+    names = sorted(set(ca.tolist()) | set(cb.tolist()))
+    idx = {n: i for i, n in enumerate(names)}
+    ia = np.fromiter((idx[c] for c in ca), dtype=np.uint32, count=len(ca))
+    ib = np.fromiter((idx[c] for c in cb), dtype=np.uint32, count=len(cb))
+    return np.asarray(_groups(names, ia, np.ascontiguousarray(pos_a, np.int64), ib, np.ascontiguousarray(pos_b, np.int64),
+                              int(radius), int(min_sep), int(tri_min), int(res)))
+
+
 def calc_genome_structure(
     chrom_a: Sequence[str],
     pos_a: Sequence[int],

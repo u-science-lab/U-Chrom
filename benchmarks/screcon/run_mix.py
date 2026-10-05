@@ -121,6 +121,7 @@ def main(argv=None) -> None:
     ap.add_argument("--oracle-prior", type=float, default=None,
                     help="DIAGNOSTIC ONLY: seed with the true cell of every row (the pool's .origin.npz); the\n"
                          "value is the fraction of rows whose seed is replaced by a random cell")
+    ap.add_argument("--prior", help=".npy (n_rows, k): per-row prior over the cells (the first-stage seed)")
     ap.add_argument("--oracle-subset", default="all", choices=["all", "trans"],
                     help="DIAGNOSTIC ONLY: rows that get the oracle seed (trans: cis rows uniform)")
     ap.add_argument("--label")
@@ -149,7 +150,19 @@ def main(argv=None) -> None:
             if args.oracle_subset == "trans":
                 prior[c.chrom_a == c.chrom_b] = 1.0 / args.k
             meta["oracle_prior"] = args.oracle_prior
-        res = run_ember(c, sizes, args.n_models, args.seed, args.device, params, args.n_threads, prior)
+        if args.prior:
+            prior = np.load(args.prior)
+            meta["prior_file"] = args.prior
+        passes = int(params.pop("passes", 0))
+        popt = {key[5:]: params.pop(key) for key in list(params) if key.startswith("pass_")}
+        if passes > 0:
+            res = un.deconvolve_passes(c.chrom_a.astype(str), c.pos_a, c.chrom_b.astype(str), c.pos_b, passes=passes,
+                                       mix_prior=prior, particle_sizes=sizes, n_models=args.n_models, seed=args.seed,
+                                       device=args.device, n_threads=args.n_threads, protocol="robust", verbose=True,
+                                       log=lambda d: print(json.dumps(d), file=sys.stderr, flush=True), **popt, **params)
+            meta["passes_log"] = res["passes_log"]
+        else:
+            res = run_ember(c, sizes, args.n_models, args.seed, args.device, params, args.n_threads, prior)
         chrom, pos, X = res["chrom"].astype(str), _pos_end(res), res["coords"]
         model_cell = np.asarray(res["model_cell"])
         extra = {"cell_probs": res["cell_probs"], "contact_weights": res["contact_weights"]}

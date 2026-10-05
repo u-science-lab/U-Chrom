@@ -1,6 +1,7 @@
 """Single-cell 3-D genome reconstruction.
 
 * :func:`reconstruct_ember` — EMber, noise-aware reconstruction (native engine, protocol ``"robust"``);
+* :func:`deconvolve_cells` — few-cell deconvolution of pooled contacts (EMber-mix; in development);
 * :func:`reconstruct_nucdyn` — NucDynamics (native engine; protocols ``"nuc_dynamics_2017"``,
   ``"release_1.3"``, ``"robust"`` / ``"ember"``).
 
@@ -13,6 +14,10 @@ def __getattr__(name):
         from .ember import reconstruct_ember
 
         return reconstruct_ember
+    if name == "deconvolve_cells":
+        from .mix import deconvolve_cells
+
+        return deconvolve_cells
     if name == "reconstruct_nucdyn":
         from .nucdyn import reconstruct_nucdyn
 
@@ -20,4 +25,4 @@ def __getattr__(name):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["reconstruct_ember", "reconstruct_nucdyn"]
+__all__ = ["reconstruct_ember", "reconstruct_nucdyn", "deconvolve_cells"]
