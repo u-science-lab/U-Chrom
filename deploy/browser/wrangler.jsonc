@@ -8,7 +8,7 @@
 			"image": "./Dockerfile",
 			"image_build_context": "../..",
 			"instance_type": "standard-1",
-			"max_instances": 2
+			"max_instances": 4
 		}
 	],
 	"durable_objects": {
@@ -17,6 +17,6 @@
 	"exports": {
 		"UChromBrowser": { "type": "durable-object", "storage": "sqlite" }
 	},
-	"vars": { "INSTANCES": "2", "RELEASE": "r7" },
+	"vars": { "INSTANCES": "2", "RELEASE": "r9" },
 	"routes": [{ "pattern": "uchrom-browser.u-science.org", "custom_domain": true }]
 }

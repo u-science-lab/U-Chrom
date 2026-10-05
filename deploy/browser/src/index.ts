@@ -40,6 +40,17 @@ function fnv1a(s: string): number {
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
+		try {
+			return await handle(request, env);
+		} catch (e) {
+			console.error("uchrom-browser worker error:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+			return new Response("U-Chrom is starting, retrying shortly", { status: 503, headers: { "Retry-After": "5" } });
+		}
+	},
+} satisfies ExportedHandler<Env>;
+
+async function handle(request: Request, env: Env): Promise<Response> {
+	{
 		const n = Math.max(1, parseInt(env.INSTANCES ?? "2", 10) || 1);
 		let sid = sessionOf(request);
 		const fresh = !sid;
@@ -56,17 +67,22 @@ export default {
 		let response: Response;
 		try {
 			response = await container.fetch(request).catch(() => null as unknown as Response);
-			if (!response || response.status === 503) {
+			// 503, or a 500 that is not the app's (its errors are JSON): the container library's answer to a start that failed
+			const notReady = !response || response.status === 503 ||
+				(response.status === 500 && !(response.headers.get("content-type") ?? "").includes("json"));
+			if (notReady) {
+				if (response) console.error("container answered", response.status, (await response.clone().text()).slice(0, 300));
 				await container.startAndWaitForPorts(8000, START_TIMEOUTS);
 				response = await container.fetch(retry);
 			}
-		} catch {
+		} catch (e) {
 			// still starting (a cold container pulls its image on a new host): the page retries after a few seconds
+			console.error("container start failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
 			return new Response("U-Chrom is starting, retrying shortly", { status: 503, headers: { "Retry-After": "5" } });
 		}
 		if (!fresh) return response;
 		const out = new Response(response.body, response);
 		out.headers.append("Set-Cookie", `${COOKIE}=${sid}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=1800`);
 		return out;
-	},
-} satisfies ExportedHandler<Env>;
+	}
+}

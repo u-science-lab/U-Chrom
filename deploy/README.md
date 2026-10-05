@@ -25,7 +25,8 @@ The data (`u-chrom-atlas` R2 bucket at `uchrom-atlas-r2.u-science.org`) is separ
 **Bump `RELEASE` in `wrangler.jsonc` on every deploy**: instances are named after it, so a deploy starts fresh containers on the new image (a running
 container was not replaced reliably by the rolling update; the old ones sleep and stop by themselves; visitors' open datasets are lost).
 
-`instance_type` (`standard-1`: 1/2 vCPU, 4 GiB), `max_instances` / `INSTANCES` (2: visitors are spread over them by a
-hash of their session cookie) and `sleepAfter` (15 min) in `wrangler.jsonc` / `src/index.ts` set the cost; the server's own
+`instance_type` (`standard-1`: 1/2 vCPU, 4 GiB), `INSTANCES` (2: visitors are spread over them by a hash of their session cookie)
+and `max_instances` (4: the previous release's two instances keep running until `sleepAfter`, and **a new release cannot start
+while they fill the limit** — it must stay at least twice `INSTANCES`) and `sleepAfter` (15 min) in `wrangler.jsonc` / `src/index.ts` set the cost; the server's own
 limits (4 datasets and 30 idle minutes per visitor, 64 visitors per instance, pseudo-bulk of at most 5,000 cells) are
 `HostedConfig` in `uchrom/browser/web/hosted.py`.
