@@ -9,7 +9,7 @@ manuscript already cites for the overflow figure; S8 added for the high-resoluti
   S5  the single-cell benchmark in detail               make_figS_fig3_benchmark.py
   S6  imaged distances -> contacts (with DIMES)         make_figS_fig3.py
   S7  population and Hi-C + FISH reconstruction         make_figS_fig3_population.py
-  S8  EMber diploid at 5 kb (scMicro-C GM12878)         make_figS_fig3_highres.py
+  S8  EMber deep: scMicro-C GM12878 at 5 kb, test      make_figS_fig3_highres.py
 
 Writes every figure, then ``figS_fig3_set.pdf`` (S2-S8 in order) and, with ``--manuscript``,
 copies ``fig3.pdf`` and ``figS<k>.pdf`` into ``paper/manuscript/figures/``.

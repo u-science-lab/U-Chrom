@@ -2,9 +2,9 @@
 
 Real results are read from ``results/``.
 
-  a  EMber diploid at 5 kb on the deepest scMicro-C GM12878 cell (Wu 2025): U-Chrom web-browser pane captures
-     (whole nucleus by chromosome; chr1 homologs; a 3 Mb zoom at 5 kb and, exploratory, 2 kb); numbers in
-     ``results/highres/summary.json`` / Supplementary ``make_figS_fig3_highres.py``
+  a  EMber deep (PREREG §10) at 5 kb on the deepest scMicro-C GM12878 cell (Wu 2025): U-Chrom web-browser captures
+     (whole nucleus by chromosome; chr1 homologs; a 3 Mb zoom at 5 kb and, exploratory, 2 / 1 kb); numbers in
+     ``results/highres/deep.json`` / Supplementary ``make_figS_fig3_highres.py``
   b  time for one model vs resolution: EMber (U-Chrom; GPU, CPU 16 / 1 threads), original NucDynamics,
      hickit, Si-C (same input, one CPU model / one H100; runs over the 48 h cap drawn as censored)
   c  held-out contact prediction (8 cells x 3 folds) per genomic separation
@@ -325,32 +325,41 @@ HAP_PAT, HAP_MAT = "#d1495b", "#2e6fbf"          # = capture_highres.PAT / MAT
 
 
 def load_highres(d: dict) -> None:
-    """High-resolution diploid demonstration (``benchmarks/screcon/highres.py summary``; Sherlock)."""
-    p = RES / "highres" / "summary.json"
+    """EMber deep (PREREG §10) on scMicro-C (``benchmarks/screcon/deep_diploid.py figjson``; Sherlock)."""
+    p = RES / "highres" / "deep.json"
     d["highres"] = _j(p) if p.exists() else None
 
 
+def gpu_short(name) -> str:
+    """'NVIDIA GeForce RTX 2080 Ti (Vulkan, DiscreteGpu)' -> 'RTX 2080 Ti'."""
+    if not name:
+        return "GPU"
+    s = str(name).split(" (")[0]
+    for p in ("NVIDIA GeForce ", "NVIDIA "):
+        s = s.replace(p, "")
+    return s.replace(" 80GB HBM3", "")
+
+
 def p_highres(fig, d, x, y):
-    """EMber at 5 kb on the deepest scMicro-C cell: U-Chrom web-browser pane captures
+    """EMber deep at 5 kb on the deepest scMicro-C cell: U-Chrom web-browser pane captures
     (``build_render_scmicroc.py`` + ``capture_highres.py``)."""
-    hr = d.get("highres")
-    cell = hr["cells"][HIGHRES_CELL] if hr else None
-    run = next((r for r in cell["runs"] if r["set"] == "ladder" and r["res"] == 5000 and r["seed"] == 1), None) \
-        if cell else None
+    hr = d.get("highres") or {}
+    lad = {r["res"]: r for r in hr.get("ladder", [])}
+    run = lad.get(5000)
     note = "GM12878 scMicro-C (Wu 2025), deepest cell"
     if run:
-        note = (f"GM12878 scMicro-C (Wu 2025), deepest cell: {run['n_contacts_input'] / 1e6:.2f} M contacts, "
+        note = (f"GM12878 scMicro-C (Wu 2025), deepest cell: {run['n_contacts'] / 1e6:.2f} M contacts, "
                 f"{run['particles_grid'] / 1e6:.2f} M particles (2 × 23 chains); {run['n_models']} models in "
-                f"{run['wall_seconds'] / 60:.1f} min on one H100 ({run['gpu']['peak_mib'] / 1024:.1f} GB)")
-    head_(fig, x, y, "a", "EMber (U-Chrom): a diploid human genome at 5 kb", note)
-    sc = (cell or {}).get("scores", {})
-    r_seed = ((sc.get("res5000") or {}).get("a_vs_b") or {}).get("per_copy_r")
-    r_hk = ((sc.get("ref_res5000") or {}).get("a_within") or {}).get("per_copy_r")
-    if r_seed is not None and r_hk is not None:
-        fig.text((x + 5) / W, 1 - (y + 7.4) / H,
-                 f"one model shown; low run-to-run agreement on this data (seeds: r = {r_seed:.2f} per copy chain; "
-                 f"the authors' hickit runs: {r_hk:.2f}); Supplementary Fig. S8",
-                 fontsize=5.5, color=NEW, va="top", style="italic")
+                f"{run['wall_seconds'] / 60:.1f} min on one {gpu_short(run.get('gpu'))}")
+    head_(fig, x, y, "a", "EMber deep (U-Chrom): a diploid human genome at 5 kb", note)
+    t = hr.get("test") or {}
+    if run and run.get("seeds_r") is not None:
+        line = (f"run-to-run r = {run['seeds_r']:.2f} per copy chain at 5 kb (authors' hickit runs "
+                f"{run.get('hickit_runs', float('nan')):.2f}); {run['coverage'] * 100:.0f} % of contacts phased and used")
+        if t.get("complete"):
+            line += (f"; test, 7 held-back cells: 20 kb r median {t['C1_median']:.2f} (min {t['C1_min']:.2f}), "
+                     f"held-out AUC vs NucDynamics {t['C2_mean_delta']:+.3f}")
+        fig.text((x + 5) / W, 1 - (y + 7.4) / H, line, fontsize=5.3, color=INK, va="top")
     s = 39
     for k, (name, cap) in enumerate((("cell035_genome_crop.png", "coloured by chromosome"),
                                      ("cell035_homologs_chr1_crop.png", None))):
@@ -374,7 +383,7 @@ def p_highres(fig, d, x, y):
         ax.imshow(img); ax.axis("off")
         ax.set_title(t, fontsize=6, color=INK, pad=1)
     fig.text((zx + (W - 2 - zx) / 2) / W, 1 - (y + 18 + zw) / H,
-             "one model each, superposed on the 5 kb model\n* exploratory runs (5 models)",
+             "one model each, superposed on the 5 kb model\n* exploratory",
              ha="center", va="top", fontsize=5.5, color=GREY)
     fig.text((zx + (W - 2 - zx) / 2) / W, 1 - (y + 10.5) / H, "chr1:53–56 Mb, paternal copy; rainbow along the region",
              ha="center", va="top", fontsize=5.5, color=GREY)
