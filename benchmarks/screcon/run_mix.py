@@ -46,15 +46,36 @@ def _pos_end(res) -> np.ndarray:
 
 
 def run_ember(c, sizes, n_models, seed, device, params, n_threads=0, mix_prior=None):
+    """EMber / EMber-mix on contacts ``c``; phased contacts (``diploid.Phased``) run diploid (every
+    chromosome two copies)."""
     import uchrom_nucdyn as un
     kw = {} if mix_prior is None else {"mix_prior": mix_prior}
+    if hasattr(c, "hap_a"):
+        kw.update(hap_a=c.hap_a, hap_b=c.hap_b, ploidy="diploid")
     return un.calc_genome_structure(c.chrom_a.astype(str), c.pos_a, c.chrom_b.astype(str), c.pos_b, protocol="robust",
                                     particle_sizes=sizes, n_models=n_models, seed=seed, device=device,
                                     n_threads=n_threads, verbose=True, **kw, **params)
 
 
-def run_igm(c, k: int, res_bp: int, seed: int, device: str, params: dict):
-    """IGM (S = k, haploid) on the pooled contacts binned at ``res_bp``."""
+def chain_names(res) -> np.ndarray:
+    """Particle chain names: chromosomes, or copy chains ``chr1(0)`` / ``chr1(1)`` for diploid runs."""
+    if res.get("diploid"):
+        from diploid import copy_name
+        k = res["ploidy"]
+        return np.array([copy_name(ch, h, k[ch]) for ch, h in zip(res["chrom"].astype(str), res["copy"])])
+    return res["chrom"].astype(str)
+
+
+def load_table(path, diploid: bool):
+    if diploid:
+        from diploid import read_phased
+        return read_phased(path)
+    return read_contacts(path)
+
+
+def run_igm(c, k: int, res_bp: int, seed: int, device: str, params: dict, ploidy: str = "haploid"):
+    """IGM (S = k; haploid, or diploid with every chromosome two copies) on the pooled contacts binned at
+    ``res_bp`` (phases not used: IGM's probabilities are haploid)."""
     import uchrom_nucdyn as un
     from contacts import sort_chroms
     chroms = sort_chroms(np.concatenate([c.chrom_a, c.chrom_b]))
@@ -82,33 +103,31 @@ def run_igm(c, k: int, res_bp: int, seed: int, device: str, params: dict):
     key = pi.astype(np.int64) * len(chrom) + pj
     _, first_idx = np.unique(key, return_index=True)
     pi, pj, pv = pi[first_idx], pj[first_idx], pv[first_idx]
-    out = un.calc_population(chrom, start, end, pi, pj, pv, ploidy="haploid", n_structures=k, seed=seed,
+    out = un.calc_population(chrom, start, end, pi, pj, pv, ploidy=ploidy, n_structures=k, seed=seed,
                              device=device, **params)
     X = np.asarray(out["coords"], float)                      # (S, N_beads, 3) nm
     bead_bin = np.asarray(out["bead_bin"], np.int64)
-    return chrom[bead_bin], end[bead_bin], X, out
+    names = chrom[bead_bin]
+    if ploidy != "haploid":
+        from diploid import copy_name
+        names = np.array([copy_name(ch, h) for ch, h in zip(names, np.asarray(out["bead_copy"]))])
+    return names, end[bead_bin], X, out
 
 
 def closest_cell_probs(c, chrom, pos, X, model_cell, k):
-    """One-hot cell of every row: the cell whose (replicate-mean) distance of the row's particles is smallest."""
-    pidx = ParticleIndex(chrom, pos)
-    ia, ib = pidx(c.chrom_a, c.pos_a), pidx(c.chrom_b, c.pos_b)
-    ok = (ia >= 0) & (ib >= 0)
-    D = np.full((len(ia), k), np.inf)
-    for s in range(k):
-        Xs = X[model_cell == s]
-        d = np.linalg.norm(Xs[:, ia[ok]] - Xs[:, ib[ok]], axis=2).mean(0)
-        D[ok, s] = d
-    P = np.zeros((len(ia), k))
-    best = np.argmin(D, 1)
-    P[np.arange(len(ia)), best] = 1.0
-    P[~ok] = np.nan
+    """One-hot cell of every row: the cell whose (replicate-mean) structure places its ends closest."""
+    from mix_score import closest_assign
+    pred = closest_assign(c, chrom, pos, X, model_cell)
+    P = np.full((len(pred), k), np.nan)
+    ok = pred >= 0
+    P[ok] = 0.0
+    P[np.flatnonzero(ok), pred[ok]] = 1.0
     return P
 
 
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--method", required=True, choices=["mix", "naive", "igm", "oracle"])
+    ap.add_argument("--method", required=True, choices=["mix", "naive", "igm", "oracle", "split"])
     ap.add_argument("--contacts", required=True, help="pooled table (oracle: used for the row assignment only)")
     ap.add_argument("--k", type=int, required=True)
     ap.add_argument("--cell-tables", nargs="*", help="oracle: the cells' own tables, in pool order")
@@ -121,6 +140,7 @@ def main(argv=None) -> None:
     ap.add_argument("--oracle-prior", type=float, default=None,
                     help="DIAGNOSTIC ONLY: seed with the true cell of every row (the pool's .origin.npz); the\n"
                          "value is the fraction of rows whose seed is replaced by a random cell")
+    ap.add_argument("--diploid", action="store_true", help="phased contact tables (hickit pairs): diploid runs")
     ap.add_argument("--prior", help=".npy (n_rows, k): per-row prior over the cells (the first-stage seed)")
     ap.add_argument("--oracle-subset", default="all", choices=["all", "trans"],
                     help="DIAGNOSTIC ONLY: rows that get the oracle seed (trans: cis rows uniform)")
@@ -129,7 +149,7 @@ def main(argv=None) -> None:
     args = ap.parse_args(argv)
     import uchrom_nucdyn as un
     sizes = schedule(args.res)
-    c = read_contacts(args.contacts)
+    c = load_table(args.contacts, args.diploid)
     t0 = time.time()
     meta = {"method": args.method, "label": args.label or args.method, "contacts": args.contacts, "k": args.k,
             "particle_sizes": sizes, "n_models": args.n_models, "seed": args.seed, "device": args.device,
@@ -165,19 +185,20 @@ def main(argv=None) -> None:
             meta["passes_log"] = res["passes_log"]
         else:
             res = run_ember(c, sizes, args.n_models, args.seed, args.device, params, args.n_threads, prior)
-        chrom, pos, X = res["chrom"].astype(str), _pos_end(res), res["coords"]
+        chrom, pos, X = chain_names(res), _pos_end(res), res["coords"]
         model_cell = np.asarray(res["model_cell"])
         extra = {"cell_probs": res["cell_probs"], "contact_weights": res["contact_weights"]}
         meta.update(params=res["params"], stages=res["stages"])
     elif args.method == "naive":
         params = {**ROBUST_DEFAULTS, **json.loads(args.params)}
         res = run_ember(c, sizes, args.n_models, args.seed, args.device, params, args.n_threads)
-        chrom, pos, X = res["chrom"].astype(str), _pos_end(res), res["coords"]
+        chrom, pos, X = chain_names(res), _pos_end(res), res["coords"]
         model_cell = np.zeros(len(X), np.int64)
         meta.update(params=res["params"], stages=res["stages"])
     elif args.method == "igm":
         params = json.loads(args.params)
-        chrom, pos, X, out = run_igm(c, args.k, int(args.res), args.seed, args.device, params)
+        chrom, pos, X, out = run_igm(c, args.k, int(args.res), args.seed, args.device, params,
+                                     "diploid" if args.diploid else "haploid")
         model_cell = np.arange(len(X))
         extra = {"cell_probs": closest_cell_probs(c, chrom, pos, X, model_cell, args.k)}
         meta.update(params=out["params"], rounds=out["rounds"])
@@ -186,10 +207,19 @@ def main(argv=None) -> None:
         Xs, model_cell = [], []
         chrom = pos = None
         grids = []
-        for j, f in enumerate(args.cell_tables):
-            cc = read_contacts(f)
+        if args.method == "split":
+            # prior-split: every row to the cell of its largest prior (ties at random), frozen EMber per cell
+            P = np.load(args.prior)
+            rng = np.random.default_rng(args.seed)
+            best = np.argmax(P + 1e-9 * rng.random(P.shape), 1)
+            tables = [c.subset(best == j) for j in range(args.k)]
+            extra = {"cell_probs": np.eye(args.k)[best]}
+            meta["prior_file"] = args.prior
+        else:
+            tables = [load_table(f, args.diploid) for f in args.cell_tables]
+        for j, cc in enumerate(tables):
             res = run_ember(cc, sizes, args.n_models, args.seed, args.device, params, args.n_threads)
-            grids.append((res["chrom"].astype(str), _pos_end(res), res["coords"]))
+            grids.append((chain_names(res), _pos_end(res), res["coords"]))
             model_cell += [j] * len(res["coords"])
         # common particle set: union of the cells' grids; a cell's coordinates at particles it lacks
         # are taken from the nearest particle of its own grid on the same chromosome

@@ -320,8 +320,9 @@ def calc_genome_structure(
         pr = None
         if phase_prior is not None:
             pr = np.ascontiguousarray(np.asarray(phase_prior, dtype=np.float64).reshape(n, 4)).ravel()
+        mp = None if mix_prior is None else np.ascontiguousarray(np.asarray(mix_prior, dtype=np.float64).reshape(n, -1)).ravel()
         res = _calc_genome_structure(names, ia, pa, ib, pb, amb, act, json.dumps(p), lr, h_a, h_b,
-                                     [int(k) for k in copies], pr)
+                                     [int(k) for k in copies], pr, mp)
     elif mix_prior is not None:
         mp = np.ascontiguousarray(np.asarray(mix_prior, dtype=np.float64).reshape(n, -1)).ravel()
         res = _calc_genome_structure(names, ia, pa, ib, pb, amb, act, json.dumps(p), lr, None, None, None, None, mp)

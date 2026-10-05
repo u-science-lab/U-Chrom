@@ -705,8 +705,8 @@ pub fn calc_with_prior(input: &Input, p: &Params, engine: &mut dyn StageEngine, 
     if k < 2 {
         return Err("mix: mix_cells must be >= 2".into());
     }
-    if input.dip.is_some() {
-        return Err("mix: diploid input is not supported yet".into());
+    if let Some(dip) = &input.dip {
+        return crate::mixdip::calc_diploid_mix(input, dip, p, engine, prior);
     }
     let m = p.n_models;
     let n_restarts = p.mix_restarts.max(1);

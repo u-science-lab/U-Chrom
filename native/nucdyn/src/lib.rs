@@ -14,6 +14,7 @@ pub mod diploid;
 pub mod dynamics;
 pub mod igm;
 pub mod mix;
+pub mod mixdip;
 pub mod mixseed;
 pub mod params;
 pub mod pipeline;

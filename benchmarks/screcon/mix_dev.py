@@ -36,6 +36,7 @@ def main(argv=None) -> None:
     ap.add_argument("--refs-dir", help="real pools: directory with <pool>.oracle.npz references")
     ap.add_argument("--table", help="append result rows (tsv) here")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--diploid", action="store_true", help="run on the phased <pool>.pairs.gz tables (diploid)")
     args = ap.parse_args(argv)
     variants = json.loads(args.variants)
     runs = Path(args.runs)
@@ -47,15 +48,23 @@ def main(argv=None) -> None:
         k = int(meta["k"])
         name = Path(base).name
         labels, models = [], []
+        src = base + ".pairs.gz" if args.diploid else pool
+        dflag = ["--diploid"] if args.diploid else []
         for b in args.baselines:
             out = runs / f"{name}.{b}.npz"
             if b == "oracle":
-                cells = [f"{base}_cell{j}.txt.gz" for j in range(k)]
+                cells = [f"{base}_cell{j}.{'pairs' if args.diploid else 'txt'}.gz" for j in range(k)]
                 if not Path(cells[0]).exists():
                     cells = meta.get("tables")
-                cmd = [py, str(HERE / "run_mix.py"), "--method", "oracle", "--contacts", pool, "--cell-tables", *cells]
+                cmd = [py, str(HERE / "run_mix.py"), "--method", "oracle", "--contacts", src, "--cell-tables", *cells]
+            elif b.startswith("split:"):
+                cmd = [py, str(HERE / "run_mix.py"), "--method", "split", "--contacts", src,
+                       "--prior", b.split(":", 1)[1].format(runs=str(runs), pool=name)]
+                out = runs / f"{name}.split.npz"
+                b = "split"
             else:
-                cmd = [py, str(HERE / "run_mix.py"), "--method", b, "--contacts", pool]
+                cmd = [py, str(HERE / "run_mix.py"), "--method", b, "--contacts", src]
+            cmd += dflag
             cmd += ["--k", str(k), "--res", args.res, "--device", args.device, "--seed", "1", "--out", str(out)]
             if args.force or not out.exists():
                 with open(str(out) + ".log", "w") as log:
@@ -66,7 +75,7 @@ def main(argv=None) -> None:
             out = runs / f"{name}.{v}.npz"
             opts = {kk: vv for kk, vv in prm.items() if kk.startswith("_")}
             eng = {kk: vv for kk, vv in prm.items() if not kk.startswith("_")}
-            cmd = [py, str(HERE / "run_mix.py"), "--method", "mix", "--contacts", pool, "--k", str(k), "--res", args.res,
+            cmd = [py, str(HERE / "run_mix.py"), "--method", "mix", "--contacts", src, *dflag, "--k", str(k), "--res", args.res,
                    "--device", args.device, "--seed", str(opts.get("_seed", 1)), "--n-models", str(opts.get("_n_models", 2)),
                    "--params", json.dumps(eng), "--out", str(out)]
             if "_oracle_prior" in opts:

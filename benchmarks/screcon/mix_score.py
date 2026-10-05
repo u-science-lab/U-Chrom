@@ -109,17 +109,40 @@ def row_sep(c) -> np.ndarray:
     return np.where(cis, np.abs(c.pos_a - c.pos_b), -1)
 
 
-def closest_assign(c, chrom, pos, X, model_cell):
+def end_candidates(chrom, pos, cchrom, cpos) -> list:
+    """Particle index arrays of contact ends (``cchrom``, ``cpos``) on the model's chains: one array for
+    haploid models; for copy chains (``chr1(0)`` / ``chr1(1)``) one per copy (-1 = none)."""
+    chrom = np.asarray(chrom).astype(str)
     pidx = ParticleIndex(chrom, pos)
-    ia, ib = pidx(c.chrom_a, c.pos_a), pidx(c.chrom_b, c.pos_b)
-    ok = (ia >= 0) & (ib >= 0)
+    cchrom = np.asarray(cchrom).astype(str)
+    if not any("(" in x for x in np.unique(chrom)):
+        return [pidx(cchrom, cpos)]
+    out = []
+    for h in (0, 1):
+        names = np.char.add(np.char.add(cchrom, f"({h})"), "")
+        idx = pidx(names, cpos)
+        plain = pidx(cchrom, cpos)                 # single-copy chromosomes keep the plain name
+        out.append(np.where(idx >= 0, idx, plain))
+    return out
+
+
+def closest_assign(c, chrom, pos, X, model_cell):
+    """Cell whose (replicate-mean) structure places the row's ends closest (copy chains: the closest
+    copy pair)."""
+    ca = end_candidates(chrom, pos, c.chrom_a, c.pos_a)
+    cb = end_candidates(chrom, pos, c.chrom_b, c.pos_b)
     cells = np.unique(model_cell)
-    D = np.full((len(ia), len(cells)), np.inf)
+    D = np.full((len(c.pos_a), len(cells)), np.inf)
     for q, s in enumerate(cells):
         Xs = X[model_cell == s]
-        D[ok, q] = np.linalg.norm(Xs[:, ia[ok]] - Xs[:, ib[ok]], axis=2).mean(0)
+        for ia in ca:
+            for ib in cb:
+                ok = (ia >= 0) & (ib >= 0)
+                d = np.full(len(ia), np.inf)
+                d[ok] = np.linalg.norm(Xs[:, ia[ok]] - Xs[:, ib[ok]], axis=2).mean(0)
+                D[:, q] = np.minimum(D[:, q], d)
     pred = cells[np.argmin(D, 1)]
-    pred[~ok] = -1
+    pred[~np.isfinite(D).any(1)] = -1
     return pred
 
 

@@ -486,7 +486,7 @@ pub fn commit_contacts(contacts: &mut [DipContact], keep: &mut [bool], probs: &[
 
 /// Base (copy-agnostic) contact dictionary of the kept contacts; `Contact::number` = index
 /// into `contacts`.
-fn base_dict(contacts: &[DipContact], keep: &[bool]) -> ContactDict {
+pub(crate) fn base_dict(contacts: &[DipContact], keep: &[bool]) -> ContactDict {
     let mut d: ContactDict = BTreeMap::new();
     for (k, c) in contacts.iter().enumerate() {
         if keep[k] {
@@ -587,7 +587,7 @@ pub fn dip_groups(contacts: &[DipContact], keep: &[bool], st: &Structure, p: &Pa
 
 /// Restraint set: `backbone` then the candidates, as ambiguous groups (`split` false) or one
 /// restraint per candidate (`split` true).
-fn restraint_set(backbone: Vec<Restraint>, g: &DipGroups, split: bool) -> (RestraintSet, usize) {
+pub(crate) fn restraint_set(backbone: Vec<Restraint>, g: &DipGroups, split: bool) -> (RestraintSet, usize) {
     let nb = backbone.len();
     let mut rest = backbone;
     let mut groups: Vec<u32> = (0..nb as u32).collect();
@@ -785,7 +785,7 @@ pub fn em_update_dip(data: &EmData, g: &DipGroups, odds: &[f64], k: &Kernel, p: 
 }
 
 /// Model-mean distance of every candidate of a contact (ends interpolated on the copy chains).
-fn candidate_mean_dist(c: &DipContact, st: &Structure) -> Vec<f64> {
+pub(crate) fn candidate_mean_dist(c: &DipContact, st: &Structure) -> Vec<f64> {
     let nm = st.n_models();
     c.cand[..c.n_cand as usize]
         .iter()
@@ -829,7 +829,7 @@ fn centre(coords: &mut [Vec<V3>]) {
 
 /// Input-orientation code of canonical code `c` of a contact.
 #[inline]
-fn input_code(c: &DipContact, code: u8) -> usize {
+pub(crate) fn input_code(c: &DipContact, code: u8) -> usize {
     let (x, y) = (code >> 1, code & 1);
     if c.swapped {
         (2 * y + x) as usize

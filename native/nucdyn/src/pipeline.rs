@@ -272,6 +272,9 @@ pub fn calc_genome_structure(input: &Input, p: &Params, engine: &mut dyn StageEn
     p.validate()?;
     check_input(input)?;
     if let Some(dip) = &input.dip {
+        if p.protocol == "robust" && p.mix_cells >= 2 {
+            return crate::mixdip::calc_diploid_mix(input, dip, p, engine, None);
+        }
         return crate::diploid::calc_genome_structure(input, dip, p, engine);
     }
     if p.protocol == "nuc_dynamics_2017" {

@@ -222,6 +222,10 @@ impl Structure {
     pub fn n_particles(&self) -> usize {
         *self.offsets.last().unwrap()
     }
+    /// The same chains without coordinates.
+    pub fn clone_layout(&self) -> Structure {
+        Structure { chroms: self.chroms.clone(), seq_pos: self.seq_pos.clone(), offsets: self.offsets.clone(), coords: vec![] }
+    }
     pub fn n_models(&self) -> usize {
         self.coords.len()
     }
