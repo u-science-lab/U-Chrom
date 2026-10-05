@@ -50,6 +50,11 @@ h1 span { white-space: nowrap; }
 .stats div { display: flex; flex-direction: column; }
 .stats dt { color: var(--muted); font-size: 13px; }
 
+.hero-anim { margin: 0; }
+.hero-anim canvas { display: block; width: 100%; aspect-ratio: 1; }
+.hero-anim figcaption { margin-top: 10px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.hero-anim figcaption b { color: var(--ink-2); font-weight: 600; }
+.hero-failed canvas { display: none; }
 .hero-fig { margin: 0; }
 .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .panel { position: relative; display: block; aspect-ratio: 1; padding: 6%; background: var(--panel); border-radius: 4px; overflow: hidden; }
@@ -109,7 +114,7 @@ figcaption { margin-top: 14px; color: var(--muted); font-size: 13px; line-height
 .mod { display: inline-flex; align-items: center; gap: 6px; }
 .mod::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--img)); }
 .mod.hic { --c: var(--hic); } .mod.rna { --c: var(--rna); } .mod.ab { --c: var(--ab); } .mod.atac { --c: var(--atac); }
-.mod.img { --c: var(--img); } .mod.xyz { --c: var(--xyz); }
+.mod.img { --c: var(--img); } .mod.xyz { --c: var(--xyz); } .mod.sig { --c: var(--atac); }
 .desc { margin: 12px 0 0; color: var(--muted); font-size: 13.5px; line-height: 1.55;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .note { margin: 8px 0 0; color: var(--atac); font-size: 12.5px; }

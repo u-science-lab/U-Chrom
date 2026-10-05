@@ -15,6 +15,7 @@ imgui.ini
 !uchrom/browser/web/frontend/package.json
 !atlas/datasets.json
 !atlas/site/figures/figures.json
+!atlas/site/hero.json
 !deploy/browser/package.json
 !deploy/browser/package-lock.json
 !deploy/browser/tsconfig.json

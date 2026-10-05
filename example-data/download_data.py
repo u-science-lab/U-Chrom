@@ -87,7 +87,7 @@ def _gse(gse: str, name: str) -> str:
 
 # Single-cell Hi-C / multi-omics cited by Guo et al. 2026 (Cell) -- the atlas' single-cell studies.
 # HiRES (Liu et al. 2023, Science, doi:10.1126/science.adg3797), GEO GSE223917: 7,895 cells (mouse embryo
-# E7.0-E11.5 + brain), per cell .pairs.gz and the authors' 20 kb diploid structure (.3dg), RNA UMI counts.
+# E7.0-E9.5 + brain), per cell .pairs.gz and the authors' 20 kb diploid structure (.3dg), RNA UMI counts.
 _HIRES_META = ["GSE223917_HiRES_emb_metadata.xlsx", "GSE223917_HiRES_brain_metadata.xlsx",
                "GSE223917_HiRES_emb.rna.umicount.tsv.gz", "GSE223917_HiRES_brain.rna.umicount.tsv.gz"]
 # dscHi-C (Wu et al. 2025, Cell Discov., doi:10.1038/s41421-025-00770-8), GEO GSE285812 (super-series).

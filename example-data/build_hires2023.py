@@ -3,7 +3,7 @@
 HiRES profiles chromatin contacts and RNA of the same single cells; the authors deposit, per cell, the contact
 pairs and a diploid 3-D structure (20 kb particles, maternal / paternal copies, hickit).  Two stores:
 
-  hires2023/hires_embryo.chromdata.zarr   mouse embryo E7.0 - E11.5, 7,469 cells (GSE223917_HiRES_emb_metadata)
+  hires2023/hires_embryo.chromdata.zarr   mouse embryo E7.0 - E9.5, 7,469 cells (GSE223917_HiRES_emb_metadata)
   hires2023/hires_brain.chromdata.zarr    mouse brain, 399 cells (GSE223917_HiRES_brain_metadata)
 
 Each store has:

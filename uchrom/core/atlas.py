@@ -73,6 +73,8 @@ def describe_store(path: PathLike) -> Dict[str, Any]:
         mods.append({"ssAB": "A/B per spot", "ATAC": "ATAC per spot"}.get(str(key), f"{key} per spot"))
     if emb["images"]:
         mods.append("images")
+    if len(getattr(cd.spot_tracks, "columns", [])):
+        mods.append("signals per spot")
     if cd.n_spots:
         mods.append("3-D coordinates")
     if len(getattr(cd, "cellm", {}) or {}):
@@ -171,6 +173,8 @@ def _spatial_png(pos, labels, out: Path, size: int, supersample: int = 3) -> Dic
     step = float(np.median(nn))
     grid = bool(np.mean(np.abs(nn - step) < 0.05 * step) > 0.8)
     half = step * scale * (0.52 if grid else 0.45)
+    if not grid:                                   # an embedding: dots stay visible however close the cells are
+        half = max(half, 1.7 * supersample * size / 480)
     if lab is not None:
         cats = lab.dropna().astype(str).value_counts().index.tolist()
         lut = {c: _hex(PALETTE[i % len(PALETTE)]) for i, c in enumerate(cats)}
@@ -246,9 +250,10 @@ def _map_png(e, chrom: str, out: Path, region: Optional[str] = None, max_bins: i
             "resolution": int(res), "fill": round(fill, 3)}
 
 
-def _cell_layout(cd, key: Optional[str]):
+def _cell_layout(cd, key: Optional[str], embedding: Optional[str] = None):
     """Where to draw the cells: (x / y frame, "space" | "embedding", key).  Tissue positions (y down) when the
-    store has them, else a 2-D embedding of ``cellm`` (y up; a key with "umap" first), else ``None``."""
+    store has them, else a 2-D embedding of ``cellm`` (y up; ``embedding``, else a key with "umap" first), else
+    ``None``."""
     import pandas as pd
 
     try:
@@ -257,7 +262,7 @@ def _cell_layout(cd, key: Optional[str]):
         pass
     cellm = dict(getattr(cd, "cellm", {}) or {})
     keys = [k for k in cellm if getattr(cellm[k], "ndim", 0) == 2 and cellm[k].shape[1] >= 2]
-    keys.sort(key=lambda k: ("umap" not in k.lower(), "tsne" not in k.lower(), k))
+    keys.sort(key=lambda k: (k != embedding, "umap" not in k.lower(), "tsne" not in k.lower(), k))
     if not keys:
         return None, None, None
     xy = cellm[keys[0]][:, :2]
@@ -293,6 +298,9 @@ def _structure_png(cell_cd, out: Path, size: int, supersample: int = 3) -> Dict[
     tr = s["trace_id"].astype(str).to_numpy()[order]
     same = tr[1:] == tr[:-1]
     i0, i1 = order[:-1][same], order[1:][same]
+    seg = np.linalg.norm(xyz[i1] - xyz[i0], axis=1)
+    keep = seg <= 4 * np.median(seg) if len(seg) else seg > 0   # sparse tracing: no lines across big jumps
+    i0, i1 = i0[keep], i1[keep]
     d = (depth[i0] + depth[i1]) / 2
     segs = np.argsort(d)                             # far first
     width = max(1, int(round(supersample * size / 480 * 1.6)))
@@ -315,7 +323,8 @@ def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int
     such as a UMAP) and ``<id>.map.webp`` (a 40-Mb window of that
     section's bulk contact map, chr2 by default; without a bulk map: the all-cells sum of a per-cell map).  The
     config entry ``"figure"`` may pin ``section`` / ``color_by`` / ``positions`` / ``chrom`` / ``region``
-    (``chr2:40e6-80e6``) and give the ``caption`` of what the hero figure shows.  The datasets of the config's
+    (``chr2:40e6-80e6``), ``layout`` (``structure``), ``cell`` or ``embedding`` (a ``cellm`` key) and give the ``caption`` of
+    what the hero figure shows.  The datasets of the config's
     ``"hero"`` list are drawn again at ``hero_size`` (``<id>.hero.space.webp`` ...).  Writes ``figures.json``
     (what each figure shows: the page writes the captions from it) next to the images."""
     from .cdata import ChromData
@@ -353,7 +362,7 @@ def render_figures(config: PathLike, root: PathLike, out: PathLike, *, size: int
             structure = cd.get_cell(cell)
             pos, layout, layout_key = None, "structure", cell
         else:
-            pos, layout, layout_key = _cell_layout(cd, spec.get("positions"))
+            pos, layout, layout_key = _cell_layout(cd, spec.get("positions"), spec.get("embedding"))
         info: Dict[str, Any] = {"section": section, "color_by": column, "layout": layout, "layout_key": layout_key}
         if spec.get("caption"):
             info["caption"] = spec["caption"]

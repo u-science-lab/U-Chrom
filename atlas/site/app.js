@@ -13,7 +13,8 @@
   var MODS = {
     'Hi-C per spot': ['Contact maps per spot', 'hic'], 'Hi-C per cell': ['Contact maps per cell', 'hic'],
     '3-D coordinates': ['3-D structures', 'xyz'], 'A/B per spot': ['A/B compartments', 'ab'],
-    'RNA': ['RNA', 'rna'], 'ATAC per spot': ['Accessibility (ATAC)', 'atac'], 'images': ['Tissue images', 'img']
+    'RNA': ['RNA', 'rna'], 'ATAC per spot': ['Accessibility (ATAC)', 'atac'], 'images': ['Tissue images', 'img'],
+    'signals per spot': ['Signals per locus (IF, RNA)', 'sig']
   };
   var HIDDEN = { 'Hi-C bulk': 1, 'embeddings': 1 };
 
@@ -140,7 +141,7 @@
     });
   }
 
-  var CATEGORY_TITLES = { 'Spatial': 'Spatial', 'Single-cell': 'Single cell' };
+  var CATEGORY_TITLES = { 'Spatial': 'Spatial', 'Single-cell': 'Single cell', 'Imaging': 'Imaging' };
 
   function render() {
     var shown = state.cat.datasets.filter(matches), box = $('studies');
@@ -187,33 +188,11 @@
     return f.chrom + ':' + fmtMb(f.start) + '–' + fmtMb(f.end) + ' Mb at ' + (f.resolution / 1e3) + ' kb, all ' + unit(d) + ' merged';
   }
 
-  function hero(cat) {
-    var byId = {}; cat.datasets.forEach(function (d) { byId[d.id] = d; });
-    var ds = (cat.hero || []).map(function (id) { return byId[id]; }).filter(function (d) { return d && d.figures && d.figures['hero.space']; });
-    if (!ds.length) return;
-    var withMap = ds.filter(function (d) { return d.figures['hero.map']; })[0];
-    var panels = $('hero-panels'), caps = [], letters = 'abcd';
-    var add = function (src, alt, d, cls) {
-      var i = panels.childNodes.length, href = openUrl(d);
-      var img = el('img', { src: FIG + src, alt: alt });
-      panels.appendChild(el(href ? 'a' : 'div', href ? { class: 'panel ' + cls, href: href, target: '_blank', rel: 'noopener', title: 'Open ' + nameOf(d) } : { class: 'panel ' + cls },
-                            [el('span', { class: 'letter', text: letters[i] }), img]));
-      return letters[i];
-    };
-    ds.slice(0, withMap ? 3 : 4).forEach(function (d) {
-      var s = study(d), f = d.figures;
-      var l = add(f['hero.space'], nameOf(d) + ', ' + layoutText(f, d), d, 'space');
-      caps.push(l + ', ' + (f.caption || nameOf(d)) + (s ? ' (' + s.citation + ')' : '') + ', ' + layoutText(f, d) + '.');
-      d._letter = l;
-    });
-    var text = caps.join(' ');
-    if (withMap) {
-      var f = withMap.figures;
-      var l = add(f['hero.map'], 'Contact map of ' + nameOf(withMap), withMap, 'map');
-      text += ' ' + l + ', contact map of ' + (withMap._letter || nameOf(withMap)) + ', ' + mapText(f, withMap) + '.';
-    }
-    $('hero-caption').textContent = text;
-    $('hero').hidden = false;
+  function heroLink(cat) {          // the hero's cells live in the seqFISH+ dataset: open it in the hosted browser
+    var d = cat.datasets.filter(function (x) { return x.id === 'takei2025_cerebellum'; })[0], a = $('hero-open');
+    if (!a) return;
+    if (d && openUrl(d)) { a.href = openUrl(d); a.target = '_blank'; a.rel = 'noopener'; }
+    else if (!d) a.remove();
   }
 
   function start(cat) {
@@ -221,7 +200,7 @@
     state.studies = {}; state.order = [];
     (cat.studies || []).forEach(function (s) { state.studies[s.id] = s; state.order.push(s.id); });
     cat.datasets.forEach(function (d) { var k = d.study || ''; if (state.order.indexOf(k) < 0) state.order.push(k); });
-    stats(cat); hero(cat); render();
+    stats(cat); render(); heroLink(cat);
     $('hint').hidden = !HOSTED;
     var hash = location.hash.slice(1); if (hash && document.getElementById(hash)) document.getElementById(hash).scrollIntoView();
   }
