@@ -1,5 +1,5 @@
 #!/bin/bash
-# PREREG §10 criterion C3: a candidate engine setting on the Dip-C GM12878 development cells 1-3 at
+# PREREG §11 criterion C3: a candidate engine setting on the Dip-C GM12878 development cells 1-3 at
 # 100 kb with the §6 development checks (dip_real.sbatch steps full / mask / heldout), reusing that
 # run's inputs read-only (references, masked tables, held-out splits in runs/diploid/real/res100000)
 # and scoring the frozen `ember_nbr` runs already there the same way, side by side.

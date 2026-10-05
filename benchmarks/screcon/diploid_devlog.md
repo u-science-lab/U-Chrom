@@ -164,7 +164,12 @@ EMber haploid parameters = tag `robust-frozen`; diploid: `diploid_cis_sep` 10 Mb
 `robust_dip_split` false, `robust_dip_nbr_prior` true (hickit's settings), no external phase
 prior.  The NucDynamics-2017 diploid baseline and hickit are untouched.
 
-## 5. Deep low-phasing data: scMicro-C GM12878 (PREREG §10, 2026-10-04)
+## 5. Test (2026-10-04)
+
+The frozen configuration of §4 (tag `ember-diploid-frozen`) was tested once on the held-back units:
+`DIPLOID_TEST_RESULTS.md` (D1 +0.027, D2 +0.000, D3 +0.025; pass).  No development after the test.
+
+## 6. Deep low-phasing data: scMicro-C GM12878 (PREREG §11, 2026-10-04)
 
 Development cells 035 / 024 / 320 (Wu et al. 2025, GSE192759; 3.01 / 2.85 / 2.64 M contacts, 5.6 % of
 the ends phased), 100 kb and 20 kb, 10 models, seeds 1 and 2 (`sherlock/deep_dev.sbatch`); r = per-copy
@@ -218,16 +223,16 @@ masked-phase accuracy +0.082 — **but** that accuracy is over the masked ends t
 committed-and-dropped contacts have none, so the assigned fraction falls from 0.94 to 0.73 (correct
 over all masked ends 0.71 vs 0.83).  n75drop: held-out −0.018 (fail); n75keep: all within 0.002.
 
-**Adopted by the §10 rule**: n75r4 = `robust_dip_commit` 0.75, `robust_dip_commit_drop` true,
+**Adopted by the §11 rule**: n75r4 = `robust_dip_commit` 0.75, `robust_dip_commit_drop` true,
 `robust_dip_readmit_stage` 4 (contacts the prior cannot phase are left out until the 200 kb stage,
 re-admitted there as ambiguous restraints, and from the next stage on kept only if the structure's
 posterior phases them at >= 0.75).  Caveats: C2 passes on the mean only because of cell 320 (+0.041;
 024 −0.027, 035 −0.005); C3's phase accuracy rises by losing coverage.  Not yet frozen or tested on
 the held-back cells.
 
-## 6. EMber deep frozen and tested (2026-10-04)
+## 7. EMber deep frozen and tested (2026-10-04)
 
-Frozen as n75r4 (tag `ember-deep-frozen`, PREREG §10).  One-shot test on the 7 held-back scMicro-C
+Frozen as n75r4 (tag `ember-deep-frozen`, PREREG §11).  One-shot test on the 7 held-back scMicro-C
 cells: C1 met (20 kb run-to-run r median 0.983, min 0.969), C2 met (held-out cis AUC vs
 NucDynamics-diploid +0.0117 on the mean; two cells below, −0.021 and −0.001).  Details:
 `DEEP_TEST_RESULTS.md`, `data/deep_test.json`.

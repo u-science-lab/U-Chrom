@@ -196,7 +196,17 @@ The frozen method "robust" is published in U-Chrom as **EMber** (`uchrom.recon.s
 engine protocol `"robust"` with the alias `"ember"`).  Naming only: the method, its frozen
 parameters and the results of §8 are unchanged.
 
-## 10. Deep low-phasing diploid extension (2026-10-04, registered before any run of it)
+## 10. Diploid test results (2026-10-04)
+
+Run once with the frozen diploid configuration (tag `ember-diploid-frozen`); full tables in
+`DIPLOID_TEST_RESULTS.md`, numbers in `results/diploid_test.json`.  D1 = +0.027 [+0.013, +0.040],
+D2 = +0.000 [−0.002, +0.002] (non-inferiority bound −0.01 met), D3 = +0.025 [+0.022, +0.028]; no
+secondary stratum worse by more than 0.01.  By the pre-registered rule: **EMber diploid is better
+than NucDynamics-diploid and hickit on this test.**  Descriptive: closer to NucDynamics than to
+hickit in agreement with the published (hickit / Dip-C) structures; broader ensembles (sampling);
+8.6x faster than NucDynamics-diploid.
+
+## 11. Deep low-phasing diploid extension (2026-10-04, registered before any run of it; written as §10 on its branch — the tag message of `ember-deep-frozen` says §10 — and renumbered when merged after the diploid test results)
 
 **Why.**  A demonstration of the frozen diploid EMber (tag `ember-diploid-frozen`, §6) on scMicro-C
 GM12878 (Wu et al. 2025, GEO GSE192759; 2.2-3.0 M contacts per cell, 5.6 % of the ends phased,
@@ -261,7 +271,7 @@ they are.
   frozen §6 defaults would change (they do not: new settings off by default).  If no candidate meets
   C1-C3 the extension is reported as not working on deep low-phasing data, with the numbers, and
   Fig. 3 gets no scMicro-C panel.
-* *Added 2026-10-04, after the first development numbers (`diploid_devlog.md` §5), before any run
+* *Added 2026-10-04, after the first development numbers (`diploid_devlog.md` §6), before any run
   with it*: tunable 4, `robust_dip_readmit_stage` (-1 = off; tried 3 = 400 kb and 4 = 200 kb):
   with `robust_dip_commit` by the prior and `drop`, the contacts the prior could not phase are
   re-admitted at that stage as ambiguous restraints and committed at the next stage by the EM
@@ -271,7 +281,7 @@ they are.
 * **2026-10-04 — deep configuration frozen (tag `ember-deep-frozen`) and the deep test registered,
   before any held-back run.**
   * **Frozen method** ("EMber deep"): the frozen diploid EMber of §6 plus `robust_dip_commit` = 0.75,
-    `robust_dip_commit_drop` = true, `robust_dip_readmit_stage` = 4 (n75r4 in `diploid_devlog.md` §5);
+    `robust_dip_commit_drop` = true, `robust_dip_readmit_stage` = 4 (n75r4 in `diploid_devlog.md` §6);
     `robust_dip_commit_stage` = -1, `dip_isolation_nei` = 0.  These are passed as parameters; the engine
     defaults (= the §6 configuration) are unchanged, so §6 and its test are unaffected and the C3
     re-check on the §6 Dip-C test cells is not run (rule above).

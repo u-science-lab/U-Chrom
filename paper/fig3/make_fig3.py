@@ -2,7 +2,7 @@
 
 Real results are read from ``results/``.
 
-  a  EMber deep (PREREG §10) at 5 kb on the deepest scMicro-C GM12878 cell (Wu 2025): U-Chrom web-browser captures
+  a  EMber deep (PREREG §11) at 5 kb on the deepest scMicro-C GM12878 cell (Wu 2025): U-Chrom web-browser captures
      (whole nucleus by chromosome; chr1 homologs; a 3 Mb zoom at 5 kb and, exploratory, 2 / 1 kb); numbers in
      ``results/highres/deep.json`` / Supplementary ``make_figS_fig3_highres.py``
   b  time for one model vs resolution: EMber (U-Chrom; GPU, CPU 16 / 1 threads), original NucDynamics,
@@ -325,7 +325,7 @@ HAP_PAT, HAP_MAT = "#d1495b", "#2e6fbf"          # = capture_highres.PAT / MAT
 
 
 def load_highres(d: dict) -> None:
-    """EMber deep (PREREG §10) on scMicro-C (``benchmarks/screcon/deep_diploid.py figjson``; Sherlock)."""
+    """EMber deep (PREREG §11) on scMicro-C (``benchmarks/screcon/deep_diploid.py figjson``; Sherlock)."""
     p = RES / "highres" / "deep.json"
     d["highres"] = _j(p) if p.exists() else None
 

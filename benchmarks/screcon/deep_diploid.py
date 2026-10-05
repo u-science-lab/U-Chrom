@@ -1,4 +1,4 @@
-"""Deep low-phasing diploid development (PREREG §10): derived contact tables for diagnostics and for
+"""Deep low-phasing diploid development (PREREG §11): derived contact tables for diagnostics and for
 prototyping candidate fixes before they go into the engine.
 
 ``derive`` writes a hickit ``.pairs`` (phases only; hickit's ``phase_prob`` columns dropped) from a phased
@@ -184,7 +184,7 @@ def _coverage(npz: Path):
 
 
 def cmd_test(args) -> None:
-    """PREREG §10 deep test: C1 (20 kb seeds r: median >= 0.90, each >= 0.85) and C2 (mean held-out cis
+    """PREREG §11 deep test: C1 (20 kb seeds r: median >= 0.90, each >= 0.85) and C2 (mean held-out cis
     AUC difference vs NucDynamics-diploid >= -0.01) over ``--cells``, from ``<root>/<cell>/{variant,nucdyn}``."""
     rows = []
     for cell in args.cells:

@@ -1,3 +1,3 @@
-# PREREG §10 round 2 (tunable 4, re-admission), engine dev-9a5ba13
+# PREREG §11 round 2 (tunable 4, re-admission), engine dev-9a5ba13
 engine:n75r3:{"robust_dip_commit":0.75,"robust_dip_readmit_stage":3}
 engine:n75r4:{"robust_dip_commit":0.75,"robust_dip_readmit_stage":4}

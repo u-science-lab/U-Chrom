@@ -1,4 +1,4 @@
-# EMber deep — test results (PREREG §10, 2026-10-04)
+# EMber deep — test results (PREREG §11, 2026-10-04)
 
 Run once with the frozen configuration (tag `ember-deep-frozen`: frozen diploid EMber + `robust_dip_commit`
 0.75, `robust_dip_commit_drop` true, `robust_dip_readmit_stage` 4), engine built from the tag
@@ -43,7 +43,7 @@ descriptive only).
 * **Phase coverage**: EMber deep uses only the contacts committed to a copy pair (by the prior, or by
   the structure after re-admission at 200 kb): 36-45 % of the input contacts on the test cells.
   On the Dip-C development cells the masked phase ends that receive a phase fall from 0.94 to 0.73,
-  the correct fraction over all masked ends from 0.83 to 0.71 (`diploid_devlog.md` §5).
+  the correct fraction over all masked ends from 0.83 to 0.71 (`diploid_devlog.md` §6).
 * **Held-out per cell**: C2 holds on the mean; 2 of 7 test cells are below NucDynamics-diploid
   (032 −0.021, 027 −0.001).  Only 28-50 strict positives (both ends phased) per cell, so per-cell
   AUCs are noisy.

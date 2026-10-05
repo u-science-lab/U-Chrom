@@ -45,7 +45,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `takei2021_brain/` (Takei 2021 Science cortex seqFISH+ tables S5 / S7 / S8 / S10) | 597 MB | no | Zenodo 4708112 (opt-in, `--takei2021_brain`) | `benchmarks/screcon/matched.py` brain imaging reference (step 2) |
 | `tan2021_cortex/` (Tan 2021 Dip-C adult cortex, 510 cells: pairs + 5 clean 3dg) | 13 GB | no | GEO GSE146397 per-GSM (opt-in, `--tan2021_cortex`) | `benchmarks/screcon/matched.py` brain Dip-C baseline (step 2) |
 | `tan2018_gm12878/` (Tan 2018 Dip-C GM12878, 17 cells: hickit phased pairs + 3dg, Dip-C clean 3dg × 3, Dip-C 3-D-imputed contacts) | ~0.7 GB | no | GEO GSE117876 per-GSM (opt-in, `--tan2018_gm12878`) | diploid EMber / NucDynamics validation (`benchmarks/screcon/diploid_real.py`, `diploid_heldout.py`, `sherlock/dip_real.sbatch`; PREREG §6 diploid addition) |
-| `wu2025_scmicroc/` (Wu 2025 scMicro-C GM12878, 12 deepest cells: hickit phased pairs + the authors' 5 / 10 / 20 kb hickit 3dg) | 3.1 GB (0.3 GB pairs + 2.8 GB 3dg; 102 GB streamed) | no | GEO GSE192759 per-GSM + series tarball (opt-in, `--wu2025_scmicroc`) | Fig. 3a / Fig. S8: EMber deep development (cells 035, 024, 320) and one-shot test (047, 028, 017, 049, 032, 027, 014), PREREG §10 (`benchmarks/screcon/deep_diploid.py`, `highres.py`, `sherlock/deep_dev.sbatch`, `highres_*.sbatch`; `paper/fig3/build_render_scmicroc.py`) |
+| `wu2025_scmicroc/` (Wu 2025 scMicro-C GM12878, 12 deepest cells: hickit phased pairs + the authors' 5 / 10 / 20 kb hickit 3dg) | 3.1 GB (0.3 GB pairs + 2.8 GB 3dg; 102 GB streamed) | no | GEO GSE192759 per-GSM + series tarball (opt-in, `--wu2025_scmicroc`) | Fig. 3a / Fig. S8: EMber deep development (cells 035, 024, 320) and one-shot test (047, 028, 017, 049, 032, 027, 014), PREREG §11 (`benchmarks/screcon/deep_diploid.py`, `highres.py`, `sherlock/deep_dev.sbatch`, `highres_*.sbatch`; `paper/fig3/build_render_scmicroc.py`) |
 | `su2020_imr90/genomic-scale.tsv`, `4DNFIFLJGGNR.csv` (catalogued above) | — | no | — | also the diploid imaging-truth simulation (`benchmarks/screcon/diploid_sim.py`: both homologs) |
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
 | `H1Esc-HFF.R1.tar.gz`                 | 128 MB  | no              | UW Noble lab  | `higashi_embedding` tutorial (sci-Hi-C H1Esc+HFF mix)                   |
@@ -990,7 +990,7 @@ contacts), matched to their GSM by the GEO sample records (`!Sample_description`
   two copies of every chromosome incl. chrX).  Cells 026 and 051 have only 33 % / 12 % cis contacts
   (likely damaged nuclei or doublets) and are not used.  The deepest public diploid single-cell data
   with phase columns; Uni-C (GSE267873, `unic2025/`) is deeper but has no phase columns.
-- **Use**: EMber deep (PREREG §10: development cells 035, 024, 320; held-back test cells 047, 028, 017, 049, 032, 027, 014; `DEEP_TEST_RESULTS.md`) and Fig. 3a / S8:
+- **Use**: EMber deep (PREREG §11: development cells 035, 024, 320; held-back test cells 047, 028, 017, 049, 032, 027, 014; `DEEP_TEST_RESULTS.md`) and Fig. 3a / S8:
   `sherlock/highres_download.sbatch`, `highres_run.sbatch`, `highres_score.sbatch`;
   `paper/fig3/build_render_scmicroc.py`, `capture_highres.py`, `make_figS_fig3_highres.py`.
 - **Download**: `download_data.py --wu2025_scmicroc` (`--no-extract`: pairs only).

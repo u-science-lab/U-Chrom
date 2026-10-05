@@ -3,7 +3,7 @@ single-cell data (scMicro-C GM12878, Wu et al. 2025), behind Fig. 3a.
 
 EMber deep = the frozen diploid EMber plus hard phasing by the neighbourhood prior (>= 0.75), the
 unphased contacts re-admitted at 200 kb and kept only where the structure phases them (tag
-``ember-deep-frozen``; ``benchmarks/screcon/PREREG.md`` §10, ``diploid_devlog.md`` §5,
+``ember-deep-frozen``; ``benchmarks/screcon/PREREG.md`` §11, ``diploid_devlog.md`` §6,
 ``DEEP_TEST_RESULTS.md``).  Numbers: ``results/highres/deep.json``.
 
   a  resolution ladder of the deepest cell (035): particles, contacts used, wall time (one GPU),
@@ -112,7 +112,7 @@ def main() -> None:
         npos = [c.get("deep_strict_n_pos") for c in tc if c.get("deep_strict_n_pos") is not None]
     else:
         cov, npos = [], []
-    notes = ["Accepted costs (PREREG §10): fewer contacts carry a phase — on the Dip-C development cells the "
+    notes = ["Accepted costs (PREREG §11): fewer contacts carry a phase — on the Dip-C development cells the "
              "masked ends that receive a phase fall from 0.94 to 0.73 and the correct fraction over all masked ends "
              "from 0.83 to 0.71; on scMicro-C only the contacts committed to a copy pair are used"
              + (f" ({min(cov) * 100:.0f}-{max(cov) * 100:.0f} % of the input on the test cells)" if cov else "")

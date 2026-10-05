@@ -188,7 +188,7 @@ pub struct Params {
     /// development set (diploid_devlog.md §3: phase accuracy +0.06 on the imaging truths, +0.09
     /// on masked GM12878 phases, structure metrics unchanged within 0.01).
     pub robust_dip_nbr_prior: bool,
-    /// EMber, deep low-phasing data (benchmarks/screcon/PREREG.md §10; 0 = off, the frozen
+    /// EMber, deep low-phasing data (benchmarks/screcon/PREREG.md §11; 0 = off, the frozen
     /// behaviour): commit an ambiguous contact to one copy pair when its phase probability is
     /// >= this threshold (hard phasing as hickit `-S`, which uses 0.75).  The probability is the
     /// candidate prior (neighbourhood prior x external prior) before stage

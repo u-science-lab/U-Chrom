@@ -1,5 +1,5 @@
 #!/bin/bash
-# PREREG §10 development: per scMicro-C development cell ($CELL) and variant ($VARIANTS), EMber at
+# PREREG §11 development: per scMicro-C development cell ($CELL) and variant ($VARIANTS), EMber at
 # 100 kb and 20 kb, seeds 1 and 2 (10 models), scored seed vs seed and vs the authors' hickit
 # (highres.py score), and the held-out check at 100 kb (one split of the original table, fold 1;
 # the variant applied to the training table).  Variants:
