@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { withPhase } from './activity'
 import { fetchHealth, listDatasets, openDataset } from './api'
+import { ActivityBar, ActivityCard } from './components/ActivityCard'
 import { addRecent, loadRecent, openParams, saveRecent } from './datasets'
 import { CellInfoPanel } from './components/CellInfoPanel'
 import { CellPanel } from './components/CellPanel'
@@ -30,7 +32,7 @@ export function App() {
   useOmicsLoader()
   useSystemTheme()
   useEffect(() => {
-    listDatasets()
+    withPhase('boot', 'Connecting to the U-Chrom server…', () => listDatasets())
       .then(async (ds) => {
         setDatasets(ds)
         // an atlas page links here with ?open=<store url>: open it, then drop the parameter (a reload does not re-open)
@@ -39,7 +41,7 @@ export function App() {
         window.history.replaceState(null, '', window.location.pathname + window.location.hash)
         for (const u of wanted) {
           try {
-            addDataset(await openDataset(u))
+            addDataset(await withPhase('open', `Opening ${u.split('/').pop()?.replace('.chromdata.zarr', '')} from the atlas…`, () => openDataset(u), 'Only what is needed is read from the atlas, but the first open of a dataset takes a few seconds.'))
             saveRecent(addRecent(loadRecent(), u))
           } catch (e) {
             setError(`Cannot open ${u}: ${(e as Error).message}`)
@@ -89,6 +91,8 @@ export function App() {
 
   return (
     <div className="app">
+      <ActivityBar />
+      <ActivityCard />
       <TopBar />
       <div className="main">
         {sidebars.left && <LeftSidebar />}

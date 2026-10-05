@@ -80,6 +80,10 @@ async function handle(request: Request, env: Env): Promise<Response> {
 			console.error("container start failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
 			return new Response("U-Chrom is starting, retrying shortly", { status: 503, headers: { "Retry-After": "5" } });
 		}
+		if (response.status >= 400) {      // for the Workers log (observability): which instance, which request, what answered
+			console.warn(`uchrom-browser ${response.status} ${request.method} ${new URL(request.url).pathname} ` +
+				`instance=browser-${env.RELEASE ?? "r0"}-${fnv1a(sid) % n} ray=${request.headers.get("cf-ray") ?? ""}`);
+		}
 		if (!fresh) return response;
 		const out = new Response(response.body, response);
 		out.headers.append("Set-Cookie", `${COOKIE}=${sid}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=1800`);

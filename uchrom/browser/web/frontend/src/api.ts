@@ -1,25 +1,35 @@
+import { WAKE_HINT, useActivity } from './activity'
 import { decodeMatrix, type MatrixData } from './matrix'
 import type { AtlasResponse, FileListing, FilePlace, IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, SpatialPoints, StoreNode, TracePage } from './types'
 
 async function fetchChecked(url: string, init?: RequestInit): Promise<Response> {
-  let res = await fetch(url, init)
-  // a hosted server that is waking up answers 503 + Retry-After: wait and ask again (idempotent GETs only)
-  for (let i = 0; i < 8 && res.status === 503 && res.headers.has('Retry-After') && (!init || (init.method ?? 'GET') === 'GET'); i++) {
-    const wait = Math.min(15, Math.max(1, Number(res.headers.get('Retry-After')) || 5))
-    await new Promise((r) => setTimeout(r, wait * 1000))
-    res = await fetch(url, init)
-  }
-  if (!res.ok) {
-    let detail = `${res.status} ${res.statusText}`
-    try {
-      const body = await res.json()
-      if (body && body.detail) detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
-    } catch {
-      /* non-JSON error body */
+  const act = useActivity.getState()
+  act.begin()
+  try {
+    let res = await fetch(url, init)
+    // a hosted server that is waking up answers 503 + Retry-After: say so, wait and ask again (idempotent GETs only)
+    const idempotent = !init || (init.method ?? 'GET') === 'GET'
+    for (let i = 0; i < 12 && res.status === 503 && res.headers.has('Retry-After') && idempotent; i++) {
+      const wait = Math.min(15, Math.max(1, Number(res.headers.get('Retry-After')) || 5))
+      act.startPhase('wake', `Waking up the server… (attempt ${i + 2})`, WAKE_HINT)
+      await new Promise((r) => setTimeout(r, wait * 1000))
+      res = await fetch(url, init)
     }
-    throw new Error(detail)
+    act.endPhase('wake')
+    if (!res.ok) {
+      let detail = `${res.status} ${res.statusText}`
+      try {
+        const body = await res.json()
+        if (body && body.detail) detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+      } catch {
+        /* non-JSON error body */
+      }
+      throw new Error(detail)
+    }
+    return res
+  } finally {
+    act.end()
   }
-  return res
 }
 
 /** GETs in flight, by URL: panes asking for the same thing at once (e.g. the same cell field) share one request. */

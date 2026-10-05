@@ -18,7 +18,7 @@ export function StatusBar() {
       <span>
         {points.toLocaleString('en-US')} points in {shown.length} visible layer{shown.length === 1 ? '' : 's'}
       </span>
-      {loading && <span>loading…</span>}
+      {loading && <span><span className="spinner small" aria-hidden /> loading…</span>}
       {truncated && <span className="warn">some layers are truncated</span>}
       {status && <span className="warn">{status}</span>}
       {error && (

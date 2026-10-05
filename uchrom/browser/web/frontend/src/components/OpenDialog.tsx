@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { withPhase } from '../activity'
 import { fetchAtlas, filePlaces, listFiles, openDataset } from '../api'
 import { addRecent, baseName, breadcrumbs, fmtDate, fmtSize, loadRecent, saveRecent } from '../datasets'
 import { useStore } from '../store'
@@ -91,7 +92,7 @@ export function OpenDialog({ onClose }: { onClose(): void }) {
       setBusy(path)
       setError(null)
       try {
-        addDataset(await openDataset(path))
+        addDataset(await withPhase('open', `Opening ${baseName(path).replace('.chromdata.zarr', '')}…`, () => openDataset(path), 'A dataset on a remote atlas is read over the network: the first open takes a few seconds.'))
         const r = addRecent(loadRecent(), path)
         saveRecent(r)
         setRecent(r)

@@ -311,7 +311,7 @@ export function MatrixView({ pane }: { pane: Pane }) {
         style={{ cursor: 'grab' }}
         title="Drag to pan, wheel to zoom, double-click to centre the diagonal"
       />
-      {loading && <div className="pane-loading muted small">loading…</div>}
+      {loading && <div className="pane-loading muted small"><span className="spinner small" aria-hidden /> loading…</div>}
       {shown && !message && (
         <div className="matrix-legend">
           <MatrixLegend cscale={cscale} />

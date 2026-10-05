@@ -1010,7 +1010,7 @@ function MatrixRow({
   return (
     <>
       <canvas ref={ref} style={style} />
-      {loading && shown && <div className="gv-row-loading muted small">loading…</div>}
+      {loading && <div className="gv-row-loading muted small"><span className="spinner small" aria-hidden /> loading…</div>}
     </>
   )
 }
