@@ -28,7 +28,7 @@ deconvolution) and reading ChromData outputs need U-Chrom.
 | `run_deconv.py` | driver: input `.npz` → `deconvolve(method="igm")` → ChromData |
 | `sherlock/*.sbatch` | jobs (`_env.sh` holds the paths) |
 | `results/` | small checked-in results (KR check, laptop plumbing provenance) |
-| `tests/` | `pytest benchmarks/bulk/tests` (~10 s, synthetic toys; library tests: `pytest tests/recon/test_deconv_preprocess.py`) |
+| `tests/` | `pytest benchmarks/bulk/tests` (~10 s, synthetic toys; library tests: `cd packages/uchrom && pytest tests/recon/test_deconv_preprocess.py`) |
 
 ## 1. Hi-C → contact probabilities (`uchrom.recon.bulk.deconv.preprocess`)
 
@@ -165,7 +165,7 @@ pairwise-only baselines on the two inputs are the negative control.
 Laptop (tests, plumbing; < 2 min each):
 
 ```bash
-pytest tests/recon/test_deconv_preprocess.py benchmarks/bulk/tests
+(cd packages/uchrom && pytest tests/recon/test_deconv_preprocess.py); pytest benchmarks/bulk/tests
 python benchmarks/bulk/kr_check.py --out kr.json                     # range reads, ~2 min
 python benchmarks/bulk/real_inputs.py preprocess --source <4DNFIR1JDZH7 URL> --chroms chr21 chr22 \
     --fine 20000 --coarse 200000 --target 24 --out imr90_chr21_22.npz

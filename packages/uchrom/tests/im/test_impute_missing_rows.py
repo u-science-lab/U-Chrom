@@ -154,8 +154,8 @@ def test_missing_snapfish_deps_reports_specific_module():
     """Availability check must name the actually-missing module(s)."""
     from uchrom.im.impute import _missing_snapfish_deps
 
-    # all deps installed in this env -> empty
-    assert _missing_snapfish_deps() == []
+    # every import succeeds -> nothing missing (independent of what this environment has)
+    assert _missing_snapfish_deps(_import=lambda name: None) == []
     # with an injected importer, the missing one is named precisely
     def fake_import(name):
         if name == "skimage":

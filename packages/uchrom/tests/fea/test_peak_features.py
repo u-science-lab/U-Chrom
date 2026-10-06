@@ -130,17 +130,22 @@ def test_macs_bdgpeakcall_matches_macs3_summit_and_narrowpeak():
     )
 
 
-def test_macs_bdgpeakcall_matches_macs3_standard_fixture_when_available():
+def test_macs_bdgpeakcall_matches_the_macs3_standard_result(tmp_path):
+    """MACS3's own regression files (tests/fixtures/macs3): the port writes the same narrowPeak, byte for byte."""
+    import gzip
+    import shutil
+
     from uchrom.fea.peaks import (
         call_macs_bdgpeaks_from_bedgraph,
         macs_bdgpeaks_to_narrowpeak,
     )
 
-    fixture_dir = Path("tmp/macs3-source/test")
-    input_path = fixture_dir / "standard_results_bdgcmp/run_bdgcmp_FE.bdg"
-    expected_path = fixture_dir / "standard_results_bdgpeakcall/run_bdgpeakcall_w_prefix_c2.0_l200_g30_peaks.narrowPeak"
-    if not input_path.exists() or not expected_path.exists():
-        pytest.skip("MACS3 source fixtures are not available")
+    fixtures = Path(__file__).resolve().parents[1] / "fixtures" / "macs3"
+    input_path = tmp_path / "run_bdgcmp_FE.bdg"
+    with gzip.open(fixtures / "run_bdgcmp_FE.bdg.gz", "rb") as src, open(input_path, "wb") as dst:
+        shutil.copyfileobj(src, dst)
+    with gzip.open(fixtures / "run_bdgpeakcall_w_prefix_c2.0_l200_g30_peaks.narrowPeak.gz", "rt") as f:
+        expected = f.read()
 
     peaks = call_macs_bdgpeaks_from_bedgraph(
         input_path,
@@ -151,7 +156,7 @@ def test_macs_bdgpeakcall_matches_macs3_standard_fixture_when_available():
     )
     actual = macs_bdgpeaks_to_narrowpeak(peaks, name="run_bdgpeakcall_w_prefix", trackline=True)
 
-    assert actual == expected_path.read_text()
+    assert actual == expected
 
 
 def test_call_peaks_from_track_defaults_to_macs_bdgpeakcall():

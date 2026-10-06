@@ -1,7 +1,7 @@
 """Synthetic checks of the Figure 2 benchmark helpers (benchmarks/fig2/_common.py).
 
 The benchmarks themselves run on real data (see benchmarks/fig2/README.md);
-these tests only pin the helpers' correctness: the minimal FOF-CT writer
+these tests (``pytest benchmarks/fig2/tests``) only pin the helpers' correctness: the minimal FOF-CT writer
 round-trips through ``ChromData.from_fofct``, whole-cell subsetting keeps
 cells whole, and replication above the real size gives new unique ids.
 """
@@ -13,9 +13,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from tests import REPO
 
-ROOT = REPO
+ROOT = Path(__file__).resolve().parents[3]          # the repository
 
 
 @pytest.fixture(scope="module")

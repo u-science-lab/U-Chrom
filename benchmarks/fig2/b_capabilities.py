@@ -583,7 +583,7 @@ MARKS = {
                                "cell_shapes, GeoParquet WKB polygons (tables/cell_shapes/<key>.parquet, the "
                                "SpatialData shapes representation); set_cell_positions / cell_positions / "
                                "set_cell_shapes; loaders fill it (seqFISH+, FOF-CT cell and mapping tables)",
-                     [CD_SPEC, "tests/core/test_cell_spatial.py", "packages/chromdata/chromdata/cellspatial.py"], "convention",
+                     [CD_SPEC, "packages/chromdata/tests/test_cell_spatial.py", "packages/chromdata/chromdata/cellspatial.py"], "convention",
                      "cell positions became a schema element (centroid columns + record, GeoParquet outlines; "
                      "format 2.3, PR #77); before: two ad-hoc 2-D cells columns, no outline"),
         "contacts": ("linked", "linked, not copied: uns['linked_scool' / 'linked_cool'] records path, bin size "
