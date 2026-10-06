@@ -10,6 +10,8 @@ export function PickLabel({ paneId }: { paneId?: string }) {
   const layer = useStore((s) => s.layers.find((l) => !isPointPick(s.pick) && l.id === s.pick?.layerId))
   const manyCells = useStore((s) => ((s.activeDatasetId && s.cells[s.activeDatasetId]) || []).length > 1)
   const openCellView = useStore((s) => s.openCellView)
+  const openTraceView = useStore((s) => s.openTraceView)
+  const pane = useStore((s) => s.workspace.panes.find((p) => p.id === (paneId ?? s.workspace.activePane)))
   const setPick = useStore((s) => s.setPick)
   // keep the label inside the pane (flip left / up near the edges)
   const ref = useRef<HTMLDivElement>(null)
@@ -60,6 +62,22 @@ export function PickLabel({ paneId }: { paneId?: string }) {
     )
   }
   const seg = pick.segment
+  // a view pinned to this cell (a single-cell view): the next step is one of its traces; the
+  // global view (following the focus) opens the cell
+  const pinnedHere = pane?.scope?.kind === 'cell' && pane.scope.cell === seg.cell_id
+  const openTrace =
+    !pinnedHere || pane?.trace ? null : (
+      <button
+        className="pick-open"
+        onClick={() => {
+          openTraceView(seg.cell_id, seg.trace_id)
+          setPick(null)
+        }}
+        title="Open this trace in a new 3-D view"
+      >
+        ↗ Open trace in new view
+      </button>
+    )
   return (
     <div ref={ref} className="pick-label" style={pos ?? { left: pick.screen.x + 14, top: pick.screen.y + 14 }}>
       <div className="pick-title">trace {seg.trace_id}</div>
@@ -71,7 +89,7 @@ export function PickLabel({ paneId }: { paneId?: string }) {
         segment {seg.chrom}:{fmtBp(seg.start)}-{fmtBp(seg.end)} · {seg.n_points} spots
       </div>
       {layer && <div className="muted">layer {layer.name}</div>}
-      {open}
+      {pinnedHere ? openTrace : open}
     </div>
   )
 }

@@ -97,7 +97,7 @@
     },
     {
       "name": "open_view",
-      "description": "Open a new view (pane) and make it active. `cells`: 'focus' (default: follow the focus), 'all', a cell id or a group reference. Genome views take `rows` (top to bottom): {kind:'track', track, cells?} or {kind:'distance', cells?, stat?} or {kind:'contacts', source, cells?} or {kind:'intervals', key}. Stats views take `stats` (rg | scaling | hist | scatter), `compare_groups` (group references overlaid), `field_x` / `field_y` (cell fields for hist / scatter). Embedding views take `embedding` (a cellm key). Returns {pane}.",
+      "description": "Open a new view (pane) and make it active. `cells`: 'focus' (default: follow the focus), 'all', a cell id or a group reference. Genome views take `rows` (top to bottom): {kind:'track', track, cells?} or {kind:'distance', cells?, stat?} or {kind:'contacts', source, cells?} or {kind:'intervals', key}. Stats views take `stats` (rg | scaling | hist | scatter), `compare_groups` (group references overlaid), `field_x` / `field_y` (cell fields for hist / scatter). Embedding views take `embedding` (a cellm key). Spatial views (cells in the tissue, over its image) take `spatial` (a cell-position set), `region` and `image_opacity`. Returns {pane}.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -108,6 +108,7 @@
             "type": "string",
             "enum": [
               "3d",
+              "spatial",
               "embedding",
               "genome",
               "matrix",
@@ -153,6 +154,18 @@
           "source": {
             "type": "string",
             "description": "matrix view: a contact-map key or 'distance'"
+          },
+          "spatial": {
+            "type": "string",
+            "description": "spatial view: a cell-position set key (default: the first, sets with images first)"
+          },
+          "region": {
+            "type": "string",
+            "description": "spatial view: the region (section / FOV) shown (default: the first)"
+          },
+          "image_opacity": {
+            "type": "number",
+            "description": "spatial view: opacity of the region's image, 0-1 (0 hides it)"
           }
         }
       }

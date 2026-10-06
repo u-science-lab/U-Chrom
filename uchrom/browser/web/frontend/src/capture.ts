@@ -8,7 +8,7 @@
  */
 
 import { fmtBp } from './filters'
-import { datasetChroms } from './genome'
+import { datasetChroms, GENOME } from './genome'
 import { describeGroup, resolveScope, type Scope } from './groups'
 import { activeSavedGroups, activeView, fieldKey, useStore } from './store'
 import { palette } from './theme'
@@ -46,7 +46,7 @@ export function captureFilename(o: {
   date: Date
 }): string {
   const parts = ['uchrom', o.dataset, PANE_LABEL[o.type].toLowerCase()]
-  const locus = o.locus ? `${o.locus.chrom}-${fmtBp(o.locus.start)}-${fmtBp(o.locus.end)}` : null
+  const locus = o.locus ? `${o.locus.chrom === GENOME ? 'genome' : o.locus.chrom}-${fmtBp(o.locus.start)}-${fmtBp(o.locus.end)}` : null
   if (locus) parts.push(locus)
   if (o.scope || !locus) parts.push(o.scope || 'all')
   parts.push(timestamp(o.date))

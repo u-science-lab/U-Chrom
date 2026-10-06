@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from uchrom import ChromData
+from uchrom.io._h5cd_legacy import read_h5cd, write_h5cd
 
 
 def _cd(results):
@@ -18,15 +19,18 @@ def _cd(results):
     return ChromData(np.arange(12, dtype=float).reshape(4, 3), spots, results=results)
 
 
-# every container: the HDF5 .h5cd (deprecated writer) and the zarr ones
+# every container: the zarr ones and the legacy HDF5 .h5cd (kept for conversion / benchmarks)
 SUFFIXES = pytest.mark.parametrize("suffix", [".h5cd", ".chromdata.zarr", ".cdz"])
-pytestmark = pytest.mark.filterwarnings("ignore:writing .*h5cd:DeprecationWarning")
+
+
+def _write(cd, path):
+    write_h5cd(cd, path) if str(path).endswith(".h5cd") else cd.write(path)
 
 
 def _roundtrip(tmp_path, results, suffix=".h5cd"):
     path = tmp_path / f"r{suffix}"
-    _cd(results).write(path)
-    return ChromData.read(path).results
+    _write(_cd(results), path)
+    return (read_h5cd(path) if suffix == ".h5cd" else ChromData.read(path)).results
 
 
 @SUFFIXES
@@ -77,25 +81,25 @@ def test_all_supported_types_roundtrip(tmp_path, suffix):
 @SUFFIXES
 def test_unsupported_value_raises_instead_of_dropping(tmp_path, suffix):
     with pytest.raises(TypeError, match=r"results\['bad'\]"):
-        _cd({"bad": object()}).write(tmp_path / f"x{suffix}")
+        _write(_cd({"bad": object()}), tmp_path / f"x{suffix}")
 
 
 @SUFFIXES
 def test_nested_unsupported_value_reports_path(tmp_path, suffix):
     with pytest.raises(TypeError, match=r"results\['outer'\]\['bad'\]"):
-        _cd({"outer": {"bad": {1, 2}}}).write(tmp_path / f"x{suffix}")
+        _write(_cd({"outer": {"bad": {1, 2}}}), tmp_path / f"x{suffix}")
 
 
 @SUFFIXES
 def test_object_array_raises(tmp_path, suffix):
     with pytest.raises(TypeError, match="object-dtype"):
-        _cd({"arr": np.array([{"a": 1}], dtype=object)}).write(tmp_path / f"x{suffix}")
+        _write(_cd({"arr": np.array([{"a": 1}], dtype=object)}), tmp_path / f"x{suffix}")
 
 
 @SUFFIXES
 def test_slash_in_key_raises(tmp_path, suffix):
     with pytest.raises(ValueError, match="'/'"):
-        _cd({"a/b": np.zeros(2)}).write(tmp_path / f"x{suffix}")
+        _write(_cd({"a/b": np.zeros(2)}), tmp_path / f"x{suffix}")
 
 
 def test_legacy_untyped_results_still_read(tmp_path):
@@ -113,6 +117,6 @@ def test_legacy_untyped_results_still_read(tmp_path):
             for attr in [a for a in f["results"][key].attrs if a.startswith("_") and a != "_columns"
                          and a != "_n_rows"]:
                 del f["results"][key].attrs[attr]
-    out = ChromData.read(path).results
+    out = read_h5cd(path).results
     assert list(out["tads"]["start"]) == [0, 10]
     np.testing.assert_array_equal(out["pc1"], np.ones(4))

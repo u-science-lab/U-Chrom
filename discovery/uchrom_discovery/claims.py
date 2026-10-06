@@ -37,7 +37,7 @@ def refresh_literature_claims_for_iteration(
     """Materialize per-iteration literature/user claims.
 
     ``knowledge_guided`` keeps the run closed to network access and only
-    normalizes existing source-backed claim caches plus h5cd references and
+    normalizes existing source-backed claim caches plus dataset references and
     user annotations.  ``browser_refresh`` currently records that a network
     refresh was requested, then falls back to the same cached behavior; this
     keeps the iterative orchestrator ready for a real browser worker without

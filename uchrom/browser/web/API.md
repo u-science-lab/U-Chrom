@@ -10,8 +10,9 @@ paths are local filesystem paths on the machine running the server.
 `.chromdata.zarr` / `.cdz` stores are opened **backed**: loading reads only
 the small tables and the store's `index/`; the summary, trace and cell lists
 come from the index, and a geometry request that names cells, traces or
-chromosomes reads just those spots.  `.h5cd` and `.csv` files are loaded
-into memory.  The responses are the same either way.
+chromosomes reads just those spots.  `.csv` files are loaded into memory
+(the responses are the same either way).  A legacy `.h5cd` is refused
+(`400`; convert it with `python -m uchrom.io.upgrade`).
 
 ## Datasets
 
@@ -49,6 +50,9 @@ List loaded datasets.
 ```
 
 `chroms` is ordered naturally (`chr1, chr2, …, chr10, …, chrX, chrY, chrM`).
+A dataset without spots (spatial Hi-C, scHi-C) lists the chromosomes of
+its `bins` (with `n_spots: 0`), so the genome views can show its contact
+maps and cell × bin tracks.
 
 Multi-omics fields (empty lists when the dataset has none):
 
@@ -93,9 +97,44 @@ as `coords`, e.g. nascent RNA spots); `labels` are sorted by count.
 ### `POST /api/datasets`
 
 Body `{"path": "/abs/path/data.chromdata.zarr"}` (a `.chromdata.zarr`
-directory, `.cdz`, `.h5cd` or reconstruction `.csv`).
+directory, `.cdz` or reconstruction `.csv`).
 Loads the file and returns its summary (same shape as a list item above).
 `400` with `{"detail": "..."}` if the file is missing or unreadable.
+
+### `GET /api/files?path=&hidden=false`
+
+One directory on the server, for the Open dataset dialog (default: the server's working directory):
+
+```json
+{"path": "/data/spatial", "parent": "/data", "sep": "/", "truncated": false,
+ "entries": [{"name": "raw", "path": "/data/spatial/raw", "kind": "dir", "format": null, "size": null, "mtime": 1790712482.5},
+             {"name": "brain.chromdata.zarr", "path": "…", "kind": "dataset", "format": "chromdata.zarr",
+              "size": 1342177, "mtime": 1790712482.5}]}
+```
+
+- `kind`: `dir`, `dataset` or `file`.  A dataset is something `POST /api/datasets` opens: a
+  `*.chromdata.zarr` directory (listed as a dataset, not entered), `.cdz`, `.csv`, `.csv.gz`.
+- Order: directories, datasets, other files; by name within each.
+- `size` is in bytes (the total of the files of a store directory).
+- Hidden entries appear only with `hidden=true`.  At most 5,000 entries (`truncated`).
+- Errors: `404` no such directory / not a directory, `403` permission denied.  Only names and `stat`
+  are read.
+
+### `GET /api/files/places`
+
+Starting points of the dialog: `[{"label": "Server folder", "path": …}, {"label": "Home", "path": …},
+…]` — the server's working directory, the home directory, then the folder of each loaded dataset
+(each folder once).
+
+### `GET /api/atlas?refresh=false`
+
+The atlas the server lists (`--atlas URL`, `UCHROM_ATLAS`, default `https://uchrom-atlas-r2.u-science.org`; an empty
+value turns it off): `{"root": <URL or folder>, "catalog": {"title", "description", "updated", "datasets": [...]}}`.
+Every dataset carries `url` (what `POST /api/datasets` opens: a `.chromdata.zarr` read over HTTP / S3 on demand),
+`title`, `paper`, `doi`, `source_url`, `license`, `organism`, `assembly`, `tissue`, `n_cells`, `sections`,
+`modalities`, `contact_maps`, `images`, `size_mb`.  Fetched by the server (the page needs no CORS) and cached 5
+minutes (`refresh=true` re-reads).  `{"root": null, "catalog": null}` when no atlas is configured; `502` when the
+catalog cannot be read.  Format and builder: `uchrom/core/atlas.py` (`python -m uchrom.core.atlas build`).
 
 ### `DELETE /api/datasets/{id}`
 
@@ -169,6 +208,43 @@ Two components of a cell embedding for a 2-D scatter view:
 `dims` defaults to `0,1` (e.g. `2,3` for PC3/PC4).  Non-finite values →
 `null`.  `404` unknown key, `422` bad dims.
 
+## Cell positions and images
+
+### `GET /api/datasets/{id}/spatial/{key}?region=`
+
+The cells of one region (section / FOV) of a cell-position set
+(`cd.cell_positions(key)`), with the region's image:
+
+```json
+{"key": "image", "region": "E14_5_HiC", "unit": "px", "y_axis": "down",
+ "cell_ids": ["E14_5_HiC:1x15", …], "x": [1063.1, …], "y": [1074.4, …],
+ "image": {"name": "E14_5_HiC", "extent": [0, 1080, 0, 1080], "kind": "bright-field"}}
+```
+
+Without `region`, every cell with a position, plus `"regions"` (the region of
+each cell, or `null` without a `region_col`) and `"images"` (region → image,
+as above) so a client can switch regions without another request.  Sets are listed in the
+dataset summary:
+
+```json
+"spatial": [{"key": "image", "unit": "px", "frame": "tissue", "y_axis": "down",
+             "status": "measured", "source": "…", "n_images": 6,
+             "regions": [{"name": "E14_5_HiC", "n_cells": 5426, "image": "E14_5_HiC"}]}]
+```
+
+one per `uns["cell_spatial"]` record, sets with images first; `regions`
+are the values of the record's `region_col`.  `y_axis` is the record's
+(`"down"` for image pixels / grid rows; default `"down"` for units `px`
+and `spot`, else `"up"`).  Images are `uns["linked_images"][name]` records
+(`path` relative to the dataset, `positions` = the key whose units they are
+in, `region`, `extent` [x0, x1, y0, y1] with the image's first row at y0,
+optional `kind`).  `404` unknown key / region.
+
+### `GET /api/datasets/{id}/images/{name}`
+
+The image file of a `linked_images` record (e.g. PNG).  `404` unknown name
+or missing file.
+
 ## Point sets
 
 ### `POST /api/datasets/{id}/points/{name}`
@@ -205,9 +281,17 @@ Body — a **layer filter**; all fields optional and combined with AND:
 ```
 
 Region selection keeps spots whose `[start, end)` overlaps the region.
-`max_points` (default 5,000,000) caps the response; when the selection is
+`max_points` (default 5,000,000; a hosted server caps it at
+`HostedConfig.max_points`, 500,000) caps the response; when the selection is
 larger the server keeps whole segments in order until the cap and sets
 `truncated: true`.
+
+**Large stores.**  A backed format 2.2 store with more than `LARGE_SPOTS`
+(2,000,000) spots whose traces are each one chromosome copy is never read
+whole: the server reads the matching runs of whole cells taken in a fixed
+random order until `max_points`, and the header says so in `"sample":
+{"cells": k, "of_cells": n}` (`null` otherwise) with `total_points` the
+size of the whole selection.  Stores read over HTTP take the same path.
 
 Response: `application/octet-stream`, little-endian:
 
@@ -225,8 +309,9 @@ Header:
 {
   "n_points": 1234,                 // N
   "n_segments": 3,                  // S
-  "total_points": 1234,             // before truncation
+  "total_points": 1234,             // before truncation (a sample: the whole selection)
   "truncated": false,
+  "sample": null,                   // or {"cells": 80, "of_cells": 399}
   "segments": [
     {"trace_id": "t1", "chrom": "chr1", "cell_id": null,
      "n_points": 400, "start": 3000000, "end": 12000000}
@@ -253,19 +338,34 @@ These views are **peers** of the 3-D view and also work for datasets without
 3-D coordinates (e.g. single-cell Hi-C / RNA: `n_spots == 0`).  All share a
 *locus* `chrom, start, end` chosen in the client.
 
+**Whole genome.**  `chrom=*` asks for every chromosome end to end in
+*genome coordinates* (a chromosome's positions plus its `offset` in the
+summary's `genome` list: natural order, `length` = the largest extent of its
+bins / spots and of any contact map).  `start` / `end` are ignored — the whole
+genome comes back at once.  `tracks` pools k consecutive bins of a chromosome
+beyond 4,000 bins; `contacts` takes an `.mcool` at the finest resolution with at
+most 1,000 bins over the genome, else pools k × k bins within each chromosome
+(`note` says so); `intervals` returns every row with `start` / `end` shifted;
+`distance` answers `400` (3-D distances are per chromosome).
+
 The dataset summary gains:
 
 ```json
 {
   "has_coords": true,                    // false → no 3-D spots (hide/grey 3-D views)
-  "tracks": [{"name": "ATAC", "level": "bin"},     // numeric cd.bin_tracks columns (per locus)
-             {"name": "H3K27ac", "level": "spot"}], // numeric cd.spot_tracks columns (per spot)
+  "tracks": [{"name": "ATAC", "level": "bin", "grid": "spots"},     // numeric cd.bin_tracks columns (per locus)
+             {"name": "H3K27ac", "level": "spot", "grid": "spots"}, // numeric cd.spot_tracks columns (per spot)
+             {"name": "ssAB@500kb", "level": "cell_bin", "grid": "ssAB@500kb",
+              "label": "ssA/B 500 kb", "resolution": 500000, "n_cells": 17204}],
+      // cell_bin: a linked cell × bin matrix, one track per resolution (see /tracks)
   "contact_maps": [
     {"key": "bulk", "kind": "cool",      // cool | mcool | scool
      "label": "IMR90 Hi-C", "resolutions": [30000],
      "chroms": [{"name": "chr21", "length": 46709983}],
      "per_cell": false, "n_cells": 0}
   ],
+  "genome": [{"name": "chr1", "offset": 0, "length": 195471971},     // the whole-genome layout (chrom=*)
+             {"name": "chr2", "offset": 195471971, "length": 182113224}],
   "intervals": [{"key": "tads.arcfish", "n": 120, "kind": "domain"}]
       // cd.intervals tables (kind: domain | segment | peak) first, then other
       // cd.results DataFrames with chrom/start/end (kind: null)
@@ -292,6 +392,27 @@ server.
 Matrices are capped at 1,000 × 1,000 bins: larger requests are sum-pooled
 (contacts) / median-pooled (distances) and the header says so in `note`.
 
+### `GET /api/datasets/{id}/store`
+
+The on-disk structure of a `.chromdata.zarr` / `.cdz` store, for the Store tab
+(`422` for in-memory / CSV datasets).  A nested node:
+
+```json
+{"name": "x.chromdata.zarr", "path": "", "kind": "group", "bytes": 2935369563,
+ "container": "zarr",                          // root only: zarr (directory) | cdz (zip)
+ "attrs": {"uchrom": "{\"format_version\":\"2.3\",…}"},   // key → JSON preview (≤160 chars)
+ "children": [
+   {"name": "umap", "path": "cellm/umap", "kind": "array", "bytes": 27827,
+    "shape": [1799, 2], "dtype": "float64", "chunk_shape": [1799, 2], "n_chunks": 1},
+   {"name": "bins.parquet", "path": "tables/bins.parquet", "kind": "table", "bytes": 1203,
+    "rows": 41, "columns": ["chrom", "start", "end"], "row_groups": 1}
+ ]}
+```
+
+`kind`: `group` (Zarr group), `dir` (a plain folder, e.g. `chrom=chr1`),
+`array` (its chunk files are folded in: `n_chunks`), `table` (Parquet),
+`file`.  At most 400 children per node (`more` counts the rest).
+
 ### `GET /api/datasets/{id}/tracks?names=H3K27ac,H3K9me3&chrom=chr7&start=&end=&cell_id=&agg=mean&group=`
 
 Per-genomic-bin aggregate of tracks over the spots of the selection (all
@@ -306,6 +427,16 @@ first, so `n_spots` and empty-bin omission behave the same for both levels:
 ```
 
 `agg`: `mean` (default) | `median` | `max`.  Empty bins are omitted.
+
+`cell_bin` tracks come from `uns["linked_bin_matrices"][key]`: an
+AnnData file (path relative to the dataset) of cells × bins, `obs` index =
+cell ids, `var["bin_id"]` = rows of `cd.bins` (`var["resolution"]` splits it
+into one track per bin size, named `<key>@<size>`, e.g. `ssAB@500kb`).  The
+value of a bin is the `agg` over the cells in scope that have one (all
+cells, one cell, a group); `n_spots` counts those cells; every bin of the
+window is returned (`null` = no value; a cell not in the matrix gets all
+`null`).  Tracks reported on different bins (`grid`) must be requested
+separately: mixing them is a `422`.
 
 ### `GET /api/datasets/{id}/intervals/{key}?chrom=chr7&start=&end=`
 
@@ -337,7 +468,9 @@ Pairwise 3-D distances between genomic bins from `coords`:
 - `group` → statistic over the traces of the group's cells;
 - none → population statistic over all traces on `chrom`.
 
-The header adds `"group"` and `"n_cells"` (cells contributing traces).
+The header adds `"group"` and `"n_cells"` (cells contributing traces).  A
+large store (see geometry) reads only a random subset of the matching traces,
+as many as the statistic's budget holds; `note` says how many.
 
 `stat`: `median` (default) | `mean` | `contact` (fraction of traces with
 distance < `threshold`, default 0.5 × dataset unit… or `threshold`).
@@ -347,13 +480,14 @@ Binary payload above (`value`: `distance` or `contact_frequency`).
 
 Radius of gyration per trace: `{"trace_ids": [...], "cell_ids": [...],
 "chroms": [...], "rg": [...], "n_spots": [...], "unit": "um",
-"group": null, "n_cells": 47}`.
+"group": null, "n_cells": 47, "note": null}`.  A large store (see geometry): over a random sample of
+the matching cells (about `STATS_MAX_SPOTS`, 2,000,000 spots); `note` = `"80 of 399 cells (random sample)"`.
 
 ### `GET /api/datasets/{id}/stats/scaling?chrom=&cell_id=&group=`
 
 Distance vs genomic separation (log-spaced separation bins):
 `{"sep_bp": [...], "median": [...], "q25": [...], "q75": [...], "n_pairs": [...],
-"unit": "um", "group": null, "n_cells": 47}`.
+"unit": "um", "group": null, "n_cells": 47, "note": null}` (a large store: a sample, as `stats/rg`).
 
 ## Cell groups
 

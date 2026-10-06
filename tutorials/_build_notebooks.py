@@ -141,7 +141,7 @@ print('diagonal is zero      :', np.allclose(np.diag(d), 0))"""),
 `ChromData` is stored as a Zarr v3 directory whose large tables are Parquet
 files, with a format version attribute so future releases can migrate old
 files (`<name>.cdz` is the same store in one zip file; older `.h5cd` files are
-still read).  Spots are stored sorted by cell, trace and bin, so a round trip
+converted once with `python -m uchrom.io.upgrade`).  Spots are stored sorted by cell, trace and bin, so a round trip
 keeps every spot but may change the row order; `original_order=True` restores
 it."""),
 
@@ -171,7 +171,8 @@ for chunk in backed.iter_traces(batch=1):
 |--------|--------|
 | Reconstruction CSV (chrom, start, end, x, y, z) | `ChromData.from_dataframe(df)` |
 | 4DN FOF-CT core table | `ChromData.from_fofct(path)` |
-| `.chromdata.zarr` / `.cdz` / `.h5cd` | `ChromData.read(path)` |"""),
+| `.chromdata.zarr` / `.cdz` | `ChromData.read(path)` |
+| legacy `.h5cd` | `python -m uchrom.io.upgrade old.h5cd`, then `ChromData.read` |"""),
 
     code("""\
 # Example: from a reconstruction output CSV (here we build a fake one)
@@ -252,7 +253,7 @@ FOFCT"""),
     md("## Load the file"),
 
     code("""\
-cd = ChromData.read(FOFCT) if FOFCT.endswith((".h5cd", ".zarr", ".cdz")) else ChromData.from_fofct(FOFCT)
+cd = ChromData.read(FOFCT) if FOFCT.endswith((".zarr", ".cdz")) else ChromData.from_fofct(FOFCT)
 cd"""),
 
     md("## Inspect metadata\n\nThe FOF-CT header fields go into `cd.uns` so you can always trace the origin of a dataset."),
@@ -856,7 +857,7 @@ fig.tight_layout()"""),
 ## Standard output format: `.chromdata.zarr`
 
 U-Chrom's reconstruction output is a ChromData store (`.chromdata.zarr`;
-older `.h5cd` files are still read) that every reconstructor (NucDyn, GEM, bulk MDS) and every import
+older `.h5cd` files convert with `python -m uchrom.io.upgrade`) that every reconstructor (NucDyn, GEM, bulk MDS) and every import
 path (FOF-CT, Hi-C .pairs) writes in the same schema.  That means you
 can feed any reconstruction to the same downstream tools (loop / TAD
 / compartment callers, browser, plotting helpers) without format
@@ -1064,7 +1065,7 @@ def find_fofct() -> str:
     candidates = [
         root / 'example-data' / '4DNFIHF3JCBY.csv',
         Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
-        Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.h5cd',
+        Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.chromdata.zarr',
         Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
     ]
     for c in candidates:
@@ -1148,7 +1149,7 @@ def find_fofct() -> str:
 
 FOFCT = find_fofct()
 print('using', FOFCT)
-cd = ChromData.read(FOFCT) if FOFCT.endswith((".h5cd", ".zarr", ".cdz")) else ChromData.from_fofct(FOFCT)
+cd = ChromData.read(FOFCT) if FOFCT.endswith((".zarr", ".cdz")) else ChromData.from_fofct(FOFCT)
 print(cd)
 print()
 print('traces per chrom:')
@@ -1323,7 +1324,7 @@ def find_fofct() -> str:
     candidates = [
         root / 'example-data' / '4DNFIHF3JCBY.csv',
         Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
-        Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.h5cd',
+        Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.chromdata.zarr',
         Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
     ]
     for c in candidates:
@@ -1345,7 +1346,7 @@ def find_fofct() -> str:
 
 FOFCT = find_fofct()
 print(FOFCT)
-cd = ChromData.read(FOFCT) if FOFCT.endswith((".h5cd", ".zarr", ".cdz")) else ChromData.from_fofct(FOFCT)
+cd = ChromData.read(FOFCT) if FOFCT.endswith((".zarr", ".cdz")) else ChromData.from_fofct(FOFCT)
 cd"""),
 
     md("## Run the TAD caller"),
@@ -1515,7 +1516,7 @@ def find_fofct() -> str:
     candidates = [
         root / 'example-data' / '4DNFIHF3JCBY.csv',
         Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.csv',
-        Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.h5cd',
+        Path.home() / 'Downloads' / 'ArcFISH_data' / '4DNFIHF3JCBY.chromdata.zarr',
         Path.home() / 'Downloads' / '4DNFIHF3JCBY.csv',
     ]
     for c in candidates:
@@ -1535,7 +1536,7 @@ def find_fofct() -> str:
 
 FOFCT = find_fofct()
 print(FOFCT)
-cd = ChromData.read(FOFCT) if FOFCT.endswith((".h5cd", ".zarr", ".cdz")) else ChromData.from_fofct(FOFCT)
+cd = ChromData.read(FOFCT) if FOFCT.endswith((".zarr", ".cdz")) else ChromData.from_fofct(FOFCT)
 cd"""),
 
     md("## Run the compartment caller"),
@@ -1692,7 +1693,7 @@ def find_fofct() -> str:
     return str(dest)
 
 FOFCT = find_fofct()
-cd = ChromData.read(FOFCT) if FOFCT.endswith(('.h5cd', '.zarr', '.cdz')) else ChromData.from_fofct(FOFCT)
+cd = ChromData.read(FOFCT) if FOFCT.endswith(('.zarr', '.cdz')) else ChromData.from_fofct(FOFCT)
 cd"""),
 
     md("## FISHnet on a single allele\n\nStart by looking at one trace.  The caller returns a dict with per-plateau domains, canonical boundary bin indices, and a (n_bins × n_bins) `domain_mask` counting how many plateaus grouped each bin pair together — a single-allele analogue of the ensemble domain mask."),

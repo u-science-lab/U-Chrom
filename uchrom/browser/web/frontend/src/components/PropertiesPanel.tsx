@@ -6,7 +6,8 @@ import { CategoryLegend } from './CategoryLegend'
 import { ColorBar } from './ColorBar'
 import { colourableFields, fieldLabel } from './format'
 import { FieldPicker, groupTitle } from './FieldPicker'
-import type { ColorMode, Layer, RenderMode } from '../types'
+import type { ColorMode, Layer, PointShape, RenderMode } from '../types'
+import { effectiveStyle, setPaneLayerStyle } from '../workspace'
 
 /** Button group of the categorical cell fields (cell type, cluster, …). */
 const CATEGORY_GROUP = '\u0000category'
@@ -90,19 +91,60 @@ export function OverviewColour() {
   )
 }
 
-/** 3-D style of the selected layer (the focused cell's colouring on multi-cell data). */
-export function StyleSection({ layer, hasCells }: { layer: Layer; hasCells: boolean }) {
-  const setStyle = useStore((s) => s.setStyle)
+const MODE_TITLE: Record<RenderMode, string> = {
+  line: 'Lines between consecutive spots (fast, any number of cells)',
+  tube: 'Shaded tubes through the spots (one or a few cells)',
+  points: 'One marker per spot',
+}
+
+function ModeIcon({ mode }: { mode: RenderMode }) {
+  return (
+    <svg viewBox="0 0 16 12" width="16" height="12" aria-hidden fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+      {mode === 'line' && <path d="M1.5 9.5 5 3l3.5 5.5L12 2.5l2.5 4" strokeWidth="1.2" />}
+      {mode === 'tube' && <path d="M1.5 9.5 5 3l3.5 5.5L12 2.5l2.5 4" strokeWidth="3" />}
+      {mode === 'points' && (
+        <g fill="currentColor" stroke="none">
+          <circle cx="2.5" cy="8.5" r="1.4" />
+          <circle cx="5.5" cy="3.5" r="1.4" />
+          <circle cx="8.5" cy="8" r="1.4" />
+          <circle cx="12" cy="3" r="1.4" />
+          <circle cx="14" cy="7" r="1.4" />
+        </g>
+      )}
+    </svg>
+  )
+}
+
+/** Quick colours of the Custom colouring (grey first: a base under highlighted subsets). */
+const PRESETS: [string, string][] = [
+  ['#a0a4aa', 'grey'],
+  ['#5f6368', 'dark grey'],
+  ['#1f77b4', 'blue'],
+  ['#d62728', 'red'],
+  ['#ff7f0e', 'orange'],
+]
+
+/**
+ * 3-D style of the selected layer in one 3-D view (`paneId`; the focused cell's colouring on
+ * multi-cell data).  Changes apply to that view only — another 3-D view keeps its own style.
+ */
+export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCells: boolean; paneId: string }) {
+  const setWorkspace = useStore((s) => s.setWorkspace)
+  const pane = useStore((s) => s.workspace.panes.find((p) => p.id === paneId))
   const view = useStore(activeView)
   const setMaxBond = useStore((s) => s.setMaxBond)
   const unit = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId)?.xyz_unit ?? '')
-  const st = layer.style
-  const upd = (p: Partial<typeof st>) => setStyle(layer.id, p)
+  const st = effectiveStyle(layer, pane)
+  // the cell this view draws in full: its pinned cell, else the focused one (all / group: none)
+  const viewCell = pane?.scope?.kind === 'cell' ? pane.scope.cell : pane?.scope?.kind === 'all' || pane?.scope?.kind === 'group' ? null : view.focusCell
+  const upd = (p: Partial<typeof st>) => setWorkspace((w) => setPaneLayerStyle(w, paneId, layer.name, p))
   const header = layer.geometry?.header
   // what is actually drawn in full (focused cell, visible chromosomes)
   const hidden = new Set(view.hiddenChroms)
-  const drawn = header?.segments.filter((s) => !hidden.has(s.chrom) && (view.focusCell === null || s.cell_id === view.focusCell))
-  const autoR = layer.geometry ? autoTubeRadius(layer.geometry) : null
+  const drawn = header?.segments.filter((s) => !hidden.has(s.chrom) && (viewCell === null || s.cell_id === viewCell))
+  // a subset's tubes: 1.2 × its parent's (drawn around them); else from its own spots
+  const parentGeom = useStore((s) => (layer.parentId ? s.layers.find((l) => l.id === layer.parentId)?.geometry : undefined))
+  const autoR = parentGeom ? autoTubeRadius(parentGeom) * 1.2 : layer.geometry ? autoTubeRadius(layer.geometry) : null
   // tube mode silently falls back to lines for big selections — say so here
   const drawnPoints = drawn ? drawn.reduce((a, s) => a + s.n_points, 0) : 0
   const tubeFallback =
@@ -115,7 +157,7 @@ export function StyleSection({ layer, hasCells }: { layer: Layer; hasCells: bool
     ['trace', 'Trace'],
     ['custom', 'Custom'],
   ]
-  const colorLabel = !hasCells ? 'Colour' : view.focusCell ? `Colour · cell ${view.focusCell} & pinned cells` : 'Colour · focused / pinned cells'
+  const colorLabel = !hasCells ? 'Colour' : viewCell ? `Colour · cell ${viewCell}` : 'Colour · focused / pinned cells'
   return (
     <>
       <h2>Style</h2>
@@ -123,16 +165,16 @@ export function StyleSection({ layer, hasCells }: { layer: Layer; hasCells: bool
       <div className="muted small">filter: {describeFilter(layer.filter)}</div>
 
       <label>Render as</label>
-      <div className="seg">
+      <div className="seg joined">
         {(['line', 'tube', 'points'] as RenderMode[]).map((m) => (
-          <button key={m} className={st.mode === m ? 'active' : ''} onClick={() => upd({ mode: m })}>
-            {m}
+          <button key={m} className={st.mode === m ? 'active' : ''} onClick={() => upd({ mode: m })} title={MODE_TITLE[m]}>
+            <ModeIcon mode={m} /> {m}
           </button>
         ))}
       </div>
       {tubeFallback > 0 && (
         <div className="note small">
-          {hasCells && view.focusCell === null ? (
+          {hasCells && viewCell === null ? (
             <>
               All cells are drawn as <b>lines</b>: at this zoom a tube is thinner than a pixel, and {tubeFallback.toLocaleString('en-US')} traces exceed the tube
               budget. Select a cell to see tubes.
@@ -146,14 +188,21 @@ export function StyleSection({ layer, hasCells }: { layer: Layer; hasCells: bool
       )}
 
       <label>{colorLabel}</label>
-      <div className="seg">
+      <div className="seg joined">
         {colorChoices.map(([m, label]) => (
           <button key={m} className={st.colorMode === m ? 'active' : ''} onClick={() => upd({ colorMode: m })}>
             {label}
           </button>
         ))}
       </div>
-      {st.colorMode === 'custom' && <input type="color" value={st.color} onChange={(e) => upd({ color: e.target.value })} />}
+      {st.colorMode === 'custom' && (
+        <div className="colour-presets">
+          <input type="color" value={st.color} onChange={(e) => upd({ color: e.target.value })} />
+          {PRESETS.map(([c, name]) => (
+            <button key={c} className={`preset${st.color.toLowerCase() === c ? ' on' : ''}`} style={{ background: c }} title={name} aria-label={name} onClick={() => upd({ color: c })} />
+          ))}
+        </div>
+      )}
 
       <label>
         Opacity <span className="val">{st.opacity.toFixed(2)}</span>
@@ -193,10 +242,21 @@ export function StyleSection({ layer, hasCells }: { layer: Layer; hasCells: bool
       )}
       {st.mode === 'points' && (
         <>
+          <label>Point shape</label>
+          <div className="seg joined">
+            {(['sphere', 'disc', 'square'] as PointShape[]).map((sh) => (
+              <button key={sh} className={(st.pointShape ?? 'sphere') === sh ? 'active' : ''} onClick={() => upd({ pointShape: sh })}>
+                {sh}
+              </button>
+            ))}
+          </div>
           <label>
-            Point size <span className="val">{st.pointSize}px</span>
+            Point size <span className="val">{st.pointScale ? `${(st.pointSize / 4).toFixed(2)}× tube` : `${st.pointSize}px`}</span>
           </label>
           <input type="range" min={1} max={20} step={1} value={st.pointSize} onChange={(e) => upd({ pointSize: +e.target.value })} />
+          <label className="check" title="Points keep their size in the data (they grow as you zoom in) instead of a fixed size on screen">
+            <input type="checkbox" checked={!!st.pointScale} onChange={(e) => upd({ pointScale: e.target.checked })} /> Scale with zoom
+          </label>
         </>
       )}
 
@@ -204,7 +264,7 @@ export function StyleSection({ layer, hasCells }: { layer: Layer; hasCells: bool
 
       {header && (
         <dl className="stats">
-          <dt>{view.focusCell ? `cell ${view.focusCell}` : 'shown'} points</dt>
+          <dt>{viewCell ? `cell ${viewCell}` : 'shown'} points</dt>
           <dd>{drawn!.reduce((a, s) => a + s.n_points, 0).toLocaleString('en-US')}</dd>
           <dt>traces</dt>
           <dd>{new Set(drawn!.map((s) => s.trace_id)).size.toLocaleString('en-US')}</dd>

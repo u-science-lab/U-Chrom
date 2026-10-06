@@ -10,9 +10,8 @@ from uchrom import ChromData
 from uchrom.browser.web.data import DatasetStore, decode_matrix
 
 _FOV0 = Path(__file__).resolve().parents[2] / "example-data" / "takei2025_fov0"
-# built by example-data/build_takei2025_fov0.py (.chromdata.zarr; older builds wrote .h5cd)
-TAKEI = next((p for p in (_FOV0 / "takei2025_fov0.chromdata.zarr", _FOV0 / "takei2025_fov0.h5cd")
-              if p.exists()), _FOV0 / "takei2025_fov0.chromdata.zarr")
+# built by example-data/build_takei2025_fov0.py
+TAKEI = _FOV0 / "takei2025_fov0.chromdata.zarr"
 
 
 def _three_cells():

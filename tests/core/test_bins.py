@@ -8,6 +8,7 @@ import pytest
 from tests._v1 import write_v1
 from uchrom import ChromData
 from uchrom.core.intervals import IntervalTable
+from uchrom.io._h5cd_legacy import read_h5cd, write_h5cd
 
 
 def _spots():
@@ -92,12 +93,12 @@ def test_edited_spot_loci_are_detected_and_rebuild_bins_fixes_them(tmp_path):
     cd.bin_tracks = pd.DataFrame({"ATAC": [1.0, 2.0, 3.0]})
     cd.spots["start"] = cd.spots["start"] + 1
     with pytest.raises(ValueError, match="rebuild_bins"):
-        cd.write(tmp_path / "x.h5cd")
+        cd.write(tmp_path / "x.chromdata.zarr")
     cd.spots["end"] = cd.spots["end"] + 1
     cd.rebuild_bins()
     assert cd.bins["start"].tolist() == [1, 11, 1]
     assert np.isnan(cd.bin_tracks["ATAC"]).all()   # the old loci are gone
-    cd.write(tmp_path / "x.h5cd")
+    cd.write(tmp_path / "x.chromdata.zarr")
 
 
 def test_spots_with_loci_and_to_dataframe():
@@ -198,8 +199,8 @@ def test_callers_expose_intervals_and_bin_tracks(tmp_path):
     assert seg.kind == "segment" and seg["n_bins"].sum() == len(comp) == cc.n_bins
     np.testing.assert_allclose(cc.bin_tracks["compartments.axes_pc.pc2"], comp["pc2"])
 
-    cd.write(tmp_path / "t.h5cd")
-    back = ChromData.read(tmp_path / "t.h5cd")
+    cd.write(tmp_path / "t.chromdata.zarr")
+    back = ChromData.read(tmp_path / "t.chromdata.zarr")
     assert back.results["tads.arcfish"] is back.intervals["tads.arcfish"]
     assert back.intervals["tads.arcfish"].kind == "domain"
     pd.testing.assert_frame_equal(pd.DataFrame(back.intervals["tads.arcfish"]), pd.DataFrame(tads))
@@ -248,10 +249,10 @@ def _assert_same(a: ChromData, b: ChromData):
     pd.testing.assert_frame_equal(a.points["rna"], b.points["rna"])
 
 
-def test_format_2_round_trip(tmp_path):
+def test_legacy_h5cd_2_round_trip(tmp_path):
     cd = _full_cd()
     path = tmp_path / "v2.h5cd"
-    cd.write(path)
+    write_h5cd(cd, path)
     with h5py.File(path, "r") as f:
         assert f.attrs["uchrom_format_version"] == "2.0"
         assert set(f["spots"].keys()) >= {"bin_id", "trace_id", "cell_id"}
@@ -261,7 +262,7 @@ def test_format_2_round_trip(tmp_path):
         assert f["tracks"].attrs["_n_rows"] == 3 and f["spot_tracks"].attrs["_n_rows"] == 6
         assert f["intervals/tads"].attrs["_kind"] == "domain"
         assert f["results/tads"].attrs["_value_ref"] == "intervals/tads"
-    back = ChromData.read(path)
+    back = read_h5cd(path)
     _assert_same(cd, back)
     assert back.spots["trace_id"].cat.categories.dtype.kind == "i"   # ints survive
     assert back.uns["nested"]["k"] == 1
@@ -273,22 +274,22 @@ def test_round_trip_without_spots(tmp_path):
                           "end": pd.Series(dtype=int), "trace_id": pd.Series(dtype=str)})
     cells = pd.DataFrame({"n": [1, 2]}, index=pd.Index(["c1", "c2"], name="cell_id"))
     cd = ChromData(np.zeros((0, 3)), spots, cells=cells)
-    cd.write(tmp_path / "e.h5cd")
-    back = ChromData.read(tmp_path / "e.h5cd")
+    cd.write(tmp_path / "e.chromdata.zarr")
+    back = ChromData.read(tmp_path / "e.chromdata.zarr")
     assert back.n_spots == 0 and back.n_bins == 0 and len(back.cells) == 2
 
 
-def test_version_dispatch(tmp_path):
+def test_legacy_h5cd_version_dispatch(tmp_path):
     path = tmp_path / "v.h5cd"
-    ChromData(_coords(), _spots()).write(path)
+    write_h5cd(ChromData(_coords(), _spots()), path)
     with h5py.File(path, "r+") as f:
         f.attrs["uchrom_format_version"] = "2.9"
     with pytest.warns(UserWarning, match="Forward-compatible"):
-        ChromData.read(path)
+        read_h5cd(path)
     with h5py.File(path, "r+") as f:
         f.attrs["uchrom_format_version"] = "3.0"
     with pytest.raises(ValueError, match="incompatible"):
-        ChromData.read(path)
+        read_h5cd(path)
 
 
 # ----------------------------------------------------------------- 1.x → 2.0
@@ -315,7 +316,7 @@ def test_1x_file_is_upgraded_on_read(tmp_path, caplog):
     expected = _write_1x(path)
     import logging
     with caplog.at_level(logging.INFO, logger="uchrom"):
-        cd = ChromData.read(path)
+        cd = read_h5cd(path)
     assert "format 1.x upgrade" in caplog.text
     pd.testing.assert_frame_equal(cd.to_dataframe(), expected)
     pd.testing.assert_frame_equal(cd.tracks_spot_view(), _tracks_1x())
@@ -331,29 +332,27 @@ def test_upgrade_h5cd_and_cli(tmp_path, capsys):
 
     src = tmp_path / "old.h5cd"
     expected = _write_1x(src)
-    info = upgrade_h5cd(src, tmp_path / "new.h5cd")
-    assert info["from_version"] == "1.4" and info["to_version"] == "2.0"
+    new_path = tmp_path / "new.chromdata.zarr"
+    info = upgrade_h5cd(src, new_path)
+    assert info["from_version"] == "1.4" and info["to_version"] == "2.3"
     assert info["n_bins"] == 3 and info["spot_tracks"] == ["IF"]
     assert file_format_version(src) == "1.4"                       # source untouched
-    assert file_format_version(tmp_path / "new.h5cd") == "2.0"
-    new = ChromData.read(tmp_path / "new.h5cd")
-    pd.testing.assert_frame_equal(new.to_dataframe(), expected)
+    new = ChromData.read(new_path, original_order=True)
+    pd.testing.assert_frame_equal(new.to_dataframe(), expected, check_categorical=False)
     pd.testing.assert_frame_equal(new.tracks_spot_view(), _tracks_1x())
-    _assert_same(ChromData.read(src), new)
 
     with pytest.raises(ValueError, match="differ"):
         upgrade_h5cd(src, src)
     with pytest.raises(FileExistsError):
-        upgrade_h5cd(src, tmp_path / "new.h5cd")
-    assert main([str(src), "--out-dir", str(tmp_path / "out"), "--format", "h5cd"]) == 0
-    assert "(1.4, h5cd) ->" in capsys.readouterr().out
-    assert file_format_version(tmp_path / "out" / "old.h5cd") == "2.0"
-    # the default target is the zarr container (tests/core/test_zarr_format.py)
+        upgrade_h5cd(src, new_path)
+    with pytest.raises(ValueError, match="chromdata.zarr or .cdz"):
+        upgrade_h5cd(src, tmp_path / "again.h5cd")               # no .h5cd target any more
     assert main([str(src), "--out-dir", str(tmp_path / "out")]) == 0
+    assert "(1.4, h5cd) ->" in capsys.readouterr().out
     assert file_format_version(tmp_path / "out" / "old.chromdata.zarr") == "2.3"
 
 
-def test_write_compression_options(tmp_path):
+def test_legacy_h5cd_compression_options(tmp_path):
     n = 5000
     spots = pd.DataFrame({"chrom": ["chr1"] * n, "start": np.arange(n) * 10,
                           "end": np.arange(n) * 10 + 10, "trace_id": np.arange(n) // 50,
@@ -363,8 +362,8 @@ def test_write_compression_options(tmp_path):
     for name, kw in {"default": {}, "floats": {"compress_floats": True},
                      "lzf": {"compression": "lzf"}, "none": {"compression": None}}.items():
         paths[name] = tmp_path / f"{name}.h5cd"
-        cd.write(paths[name], **kw)
-        pd.testing.assert_frame_equal(ChromData.read(paths[name]).to_dataframe(), cd.to_dataframe())
+        write_h5cd(cd, paths[name], **kw)
+        pd.testing.assert_frame_equal(read_h5cd(paths[name]).to_dataframe(), cd.to_dataframe())
     with h5py.File(paths["default"], "r") as f:
         assert f["spots/bin_id"].compression == "gzip" and f["spots/bin_id"].chunks[0] == n
         assert f["coords"].compression is None               # floats off by default
@@ -376,4 +375,4 @@ def test_write_compression_options(tmp_path):
     with h5py.File(paths["none"], "r") as f:
         assert f["spots/bin_id"].compression is None
     with pytest.raises(ValueError, match="compression"):
-        cd.write(tmp_path / "x.h5cd", compression="zstd")
+        write_h5cd(cd, tmp_path / "x.h5cd", compression="zstd")

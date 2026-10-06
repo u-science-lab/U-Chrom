@@ -1,0 +1,6 @@
+{
+	"name": "uchrom-atlas",
+	"compatibility_date": "2026-09-01",
+	"assets": { "directory": "./dist" },
+	"routes": [{ "pattern": "uchrom-atlas.u-science.org", "custom_domain": true }]
+}

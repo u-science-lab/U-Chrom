@@ -6,6 +6,7 @@ import { fmtAxis } from '../stats'
 import { useStore } from '../store'
 import { useTheme } from '../useTheme'
 import { rgb } from './chart'
+import { Select } from './Select'
 
 /**
  * Colour scale of one matrix display (a Genome matrix row or the Matrix
@@ -35,13 +36,13 @@ export function ColorScaleControls({
     <div className="colorscale">
       <label className="insp-text small" title="Colormap">
         colormap
-        <select value={s.cmap} onChange={(e) => set({ cmap: e.target.value as ColorScaleSetting['cmap'] })}>
+        <Select value={s.cmap} onChange={(e) => set({ cmap: e.target.value as ColorScaleSetting['cmap'] })}>
           {COLORMAPS.map((c) => (
             <option key={c.name} value={c.name}>
               {c.label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <div className="cmap-preview" style={{ background: cmapGradient(s.cmap, s.reverse) }} title={`${s.cmap}${s.reverse ? ' (reversed)' : ''}: low → high`} />
       <div className="insp-line">
@@ -50,10 +51,10 @@ export function ColorScaleControls({
         </label>
         <label className="insp-text small" title="Map values linearly, or log-scaled (log1p of the offset from the range start)">
           scale
-          <select value={s.log ? 'log' : 'linear'} onChange={(e) => set({ log: e.target.value === 'log' })}>
+          <Select value={s.log ? 'log' : 'linear'} onChange={(e) => set({ log: e.target.value === 'log' })}>
             <option value="linear">linear</option>
             <option value="log">log</option>
-          </select>
+          </Select>
         </label>
       </div>
       <div className="insp-line">

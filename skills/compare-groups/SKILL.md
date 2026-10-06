@@ -7,7 +7,7 @@ description: Use for any comparison of cell groups in U-Chrom data — do X cell
 
 ## When to use
 "Are X cells different from Y?", "what is special about the cells I selected?", "is chromatin
-more compact in …?", "which mark differs most …?" — any group comparison on a ChromData (`.chromdata.zarr` / `.cdz`; older `.h5cd` files read too).
+more compact in …?", "which mark differs most …?" — any group comparison on a ChromData (`.chromdata.zarr` / `.cdz`; convert an older `.h5cd` first with `python -m uchrom.io.upgrade old.h5cd`).
 For contact-map statistics per group (P(s) of pseudo-bulk maps) compute them with *call-structures*
 and compare there; for correlations use *associate-modalities*.
 

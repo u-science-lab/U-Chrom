@@ -91,3 +91,30 @@ export function displayParts(geom: Geometry, hiddenChroms: ReadonlySet<string>, 
     context: context.header.n_points ? context : null,
   }
 }
+
+/**
+ * A lighter stand-in for a large geometry, drawn while the camera moves (and hit-tested on
+ * hover): every k-th cell in full (k so that about `maxPoints` points remain), or every k-th
+ * trace for data without cells.  Whole segments are kept, so colours and pick labels match
+ * the full geometry; `origSeg` maps each kept segment back to its index there.  Null when the
+ * geometry is small enough already.
+ */
+export function thinGeometry(geom: Geometry, maxPoints: number): { geometry: Geometry; origSeg: Uint32Array } | null {
+  const n = geom.header.n_points
+  if (n <= maxPoints) return null
+  const k = Math.ceil(n / maxPoints)
+  const rank = new Map<string, number>()
+  const origSeg: number[] = []
+  const g = subsetGeometry(geom, (seg, i) => {
+    let r: number
+    if (seg.cell_id === null) r = i
+    else {
+      r = rank.get(seg.cell_id) ?? rank.size
+      if (r === rank.size) rank.set(seg.cell_id, r)
+    }
+    const keep = r % k === 0
+    if (keep) origSeg.push(i)
+    return keep
+  })
+  return { geometry: g, origSeg: Uint32Array.from(origSeg) }
+}

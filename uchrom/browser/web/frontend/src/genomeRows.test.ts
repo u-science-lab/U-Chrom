@@ -5,8 +5,12 @@ import {
   depthScale,
   moveRow,
   parseRows,
+  rasterSquare,
   rasterTriangle,
   removeRow,
+  rowPatch,
+  squareBins,
+  windowMargin,
   resizeRow,
   resolveHeights,
   MIN_AUTO_MATRIX_H,
@@ -165,6 +169,39 @@ describe('migration of old Tracks panes', () => {
     expect(ws.panes[0].genomeRows).toEqual({ sim: rows })
   })
   it('defaults to a genome pane next to 3D for data with contact maps or tracks', () => {
-    expect(defaultWorkspace({ hasCoords: true, hasEmbeddings: false, hasTracks: false, hasContactMaps: true }).panes.map((p) => p.type)).toEqual(['3d', 'genome'])
+    expect(defaultWorkspace({ hasCoords: true, hasEmbeddings: false, hasTracks: false, hasContactMaps: true }).panes.map((p) => p.type)).toEqual(['3d', 'genome', 'stats'])
+  })
+})
+
+describe('matrix row shapes', () => {
+  // 4 bins of 10 bp over [0, 40); colour of cell (i, j) = its row i in R, column j in G
+  const starts = [0, 10, 20, 30]
+  const ends = [10, 20, 30, 40]
+  const colors = new Uint8ClampedArray(4 * 16)
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) colors.set([i * 60, j * 60, 7, 255], 4 * (i * 4 + j))
+  const alpha = (px: Uint8ClampedArray, w: number, x: number, y: number) => px[4 * (y * w + x) + 3]
+  it('is set from the inspector and persisted', () => {
+    expect(rowPatch('shape', 'window')).toEqual({ shape: 'window' })
+    expect(rowPatch('shape', 'hexagon')).toBeNull()
+    expect(parseRows([{ id: 'r', kind: 'matrix', shape: 'square' }])?.[0].shape).toBe('square')
+    expect(parseRows([{ id: 'r', kind: 'matrix', shape: 'blob' }])?.[0].shape).toBeUndefined()
+  })
+  it('window fills the corners a triangle leaves empty', () => {
+    // axis [10, 30) over 20 px; data over the whole [0, 40)
+    const g: TriangleGeom = { start: 10, bpPerPx: 1, height: 6, k: 1, flip: false, maxDist: null }
+    const tri = rasterTriangle(20, 6, g, starts, ends, colors)
+    const win = rasterTriangle(20, 6, g, starts, ends, colors, true)
+    expect(alpha(tri, 20, 0, 0)).toBe(0) // top-left corner: loci outside the axis
+    expect(alpha(win, 20, 0, 0)).toBe(255)
+    expect(alpha(win, 20, 19, 0)).toBe(255)
+    expect(alpha(tri, 20, 10, 5)).toBe(255) // on the diagonal both draw
+    expect(windowMargin(g)).toBe(6) // the deepest half-separation: 2·6·1·1 / 2
+  })
+  it('square draws the unrotated window, rows = loci top-down', () => {
+    const px = rasterSquare(40, 20, 0, 1, starts, ends, colors)
+    // column x = 25 → bin 2; row y = 15 → locus 30 → bin 3: cell (3, 2)
+    const o = 4 * (15 * 40 + 25)
+    expect([px[o], px[o + 1]]).toEqual([180, 120])
+    expect(squareBins(25, 15, 40, 20, 0, 1, starts, ends)).toEqual([3, 2])
   })
 })

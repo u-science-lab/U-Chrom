@@ -152,6 +152,10 @@ describe('dot colours and draw order', () => {
       { value: 'Y', count: 1, color: rgbCss(categoryColor(1, 'Y')), off: false },
     ])
     expect(lg.missing).toBe(1)
+    // only the cells a view draws: counts of those, absent categories left out, colours kept
+    const only = categoryLegend(field, values, [], new Set(['b', 'c']))
+    expect(only.rows).toEqual([{ value: 'Y', count: 1, color: rgbCss(categoryColor(1, 'Y')), off: false }])
+    expect(only.missing).toBe(1)
   })
   it('solid colour; bad hex falls back', () => {
     expect(solidDotColors(2, '#ff0000').css).toEqual(['rgb(255, 0, 0)', 'rgb(255, 0, 0)'])

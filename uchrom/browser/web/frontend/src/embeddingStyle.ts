@@ -272,17 +272,30 @@ export interface LegendRow {
 }
 
 /** Legend of a categorical field in a pane: rows in the field's order with counts, and the missing count. */
-export function categoryLegend(field: CellField, values: ReadonlyMap<string, CellValue> | null, hidden: readonly string[]): { rows: LegendRow[]; missing: number } {
+/**
+ * Legend rows of a categorical field; with `shown` (the cells a view draws)
+ * only those cells are counted and categories none of them has are left out
+ * — colours stay those of the whole dataset.
+ */
+export function categoryLegend(
+  field: CellField,
+  values: ReadonlyMap<string, CellValue> | null,
+  hidden: readonly string[],
+  shown?: ReadonlySet<string> | null,
+): { rows: LegendRow[]; missing: number } {
   const idx = categoryIndex(field, [], values?.values())
   const counts = new Map<string, number>()
   let missing = 0
   if (values) {
-    for (const v of values.values()) {
+    for (const [id, v] of values.entries()) {
+      if (shown && !shown.has(id)) continue
       if (v === null || v === undefined) missing++
       else counts.set(String(v), (counts.get(String(v)) ?? 0) + 1)
     }
   } else for (const c of field.categories ?? []) counts.set(c.value, c.count)
   const off = new Set(hidden)
-  const rows = [...idx.entries()].map(([value, i]) => ({ value, count: counts.get(value) ?? 0, color: rgbCss(categoryColor(i, value)), off: off.has(value) }))
+  const rows = [...idx.entries()]
+    .map(([value, i]) => ({ value, count: counts.get(value) ?? 0, color: rgbCss(categoryColor(i, value)), off: off.has(value) }))
+    .filter((r) => !shown || !values || r.count > 0)
   return { rows, missing }
 }

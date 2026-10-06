@@ -9,8 +9,10 @@ Formats (``_common.FORMATS``):
   snappy compression; read back with ``pd.read_parquet``;
 * **AnnData (spots as obs)** — spot columns + tracks in ``obs``, coords in
   ``obsm['spatial']``; ``write_h5ad`` / ``read_h5ad`` defaults;
-* **h5cd N.x** — ``cd.write`` / ``ChromData.read`` of this checkout (1.x on
-  main; run the same script on a 2.x checkout to add the 2.x series).
+* **h5cd N.x** — the HDF5 ``.h5cd`` baseline (the 1.x series was measured on
+  a 1.x checkout; on this checkout the legacy writer / reader of
+  ``uchrom.io._h5cd_legacy`` write and read format 2.0 — ``.h5cd`` is no
+  longer a ChromData format).
 
 Data: whole-cell subsets of the real Takei 2025 cerebellum rep-1 data (all
 FOVs, 62 spot tracks — ``_common.stage_subset``).  Sizes above the real size
@@ -173,7 +175,7 @@ def _protocol(args):
             "peak_rss": "getrusage ru_maxrss of the read process (absolute; baseline = RSS after imports)",
             "read_target": {"FOF-CT / CSV": "ChromData (ChromData.from_fofct)", "Parquet": "pandas DataFrame",
                             "AnnData (spots as obs)": "AnnData (read_h5ad, in memory)",
-                            "h5cd": "ChromData (ChromData.read)",
+                            "h5cd": "ChromData (ChromData.read on 1.x; uchrom.io._h5cd_legacy.read_h5cd now)",
                             "chromdata.zarr 2.0": "ChromData (ChromData.read, in memory)",
                             "chromdata.zarr 2.1": "ChromData (ChromData.read, in memory)"},
             "compression": {"FOF-CT / CSV": "none", "Parquet": "snappy (pyarrow default)",

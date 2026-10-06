@@ -7,10 +7,10 @@ import { migrateRows, parseRows, type GenomeRow } from './genomeRows'
 import { parseColorScale, type ColorScaleSetting } from './colormaps'
 import { parseEmbStyle, type EmbStyleSetting } from './embeddingStyle'
 import { FOCUS, parseScopeSpec, type ScopeSpec } from './groups'
-import type { EmbeddingInfo } from './types'
+import type { EmbeddingInfo, Layer, LayerStyle } from './types'
 
 /** 'genome': combined tracks + matrix triangles on one axis (was 'tracks'). */
-export type PaneType = '3d' | 'embedding' | 'genome' | 'matrix' | 'stats'
+export type PaneType = '3d' | 'spatial' | 'embedding' | 'genome' | 'matrix' | 'stats'
 export type WsLayout = 'tabs' | 'columns' | 'rows' | 'grid'
 export type StatsKind = 'rg' | 'scaling' | 'hist' | 'scatter'
 export type TrackAgg = 'mean' | 'median' | 'max'
@@ -18,6 +18,13 @@ export type DistanceStat = 'median' | 'mean' | 'contact'
 
 /** Per-pane settings of the genome-coordinate views (all optional). */
 export interface PaneOptions {
+  /** 3d: layers (by name) hidden in this view */
+  hiddenLayers?: string[]
+  /** 3d: only this trace of the pinned cell (a trace view) */
+  trace?: string
+  /** 3d: this view's style changes per layer name (render mode, colour, …) over the layer's own
+   *  style — each 3-D view is styled on its own */
+  layerStyles?: Record<string, Partial<LayerStyle>>
   /** genome: rows of the combined view per dataset name (absent → defaults for that dataset) */
   genomeRows?: Record<string, GenomeRow[]>
   /** genome: preferred track names for the default rows (from old Tracks panes) */
@@ -40,8 +47,14 @@ export interface PaneOptions {
   compareGroups?: string[]
   /** matrix: colour scale changes from the defaults (absent = defaults) */
   color?: ColorScaleSetting
-  /** embedding: point style and colouring changes from the defaults (absent = defaults) */
+  /** embedding / spatial: point style and colouring changes from the defaults (absent = defaults) */
   embStyle?: EmbStyleSetting
+  /** spatial: cell-position key (null → the first set, sets with images first) */
+  spatialKey?: string | null
+  /** spatial: region (section / FOV) shown (null → the first) */
+  region?: string | null
+  /** spatial: opacity of the region's image (0 hides it; absent → 1) */
+  imageOpacity?: number
 }
 
 export interface Pane extends PaneOptions {
@@ -61,6 +74,10 @@ export interface DataKind {
   hasCoords: boolean
   hasTracks: boolean
   hasContactMaps?: boolean
+  /** cell positions (cd.cell_positions) */
+  hasSpatial?: boolean
+  /** several cells (cell-level statistics, groups) */
+  manyCells?: boolean
 }
 
 export interface WorkspaceState {
@@ -69,38 +86,108 @@ export interface WorkspaceState {
   activePane: string
   /** size fractions of the panes in 'columns' / 'rows' (sum 1) */
   sizes: number[]
+  /** 'grid': column widths / row heights as fractions (sum 1; equal when absent or stale) */
+  gridCols?: number[]
+  gridRows?: number[]
   /** pane shown alone (all others kept mounted but hidden), or null */
   maximized: string | null
 }
 
 export const LAYOUTS: WsLayout[] = ['tabs', 'columns', 'rows', 'grid']
-export const PANE_TYPES: PaneType[] = ['3d', 'embedding', 'genome', 'matrix', 'stats']
-export const PANE_LABEL: Record<PaneType, string> = { '3d': '3D', embedding: 'Embedding', genome: 'Genome', matrix: 'Matrix', stats: 'Stats' }
+export const PANE_TYPES: PaneType[] = ['3d', 'spatial', 'embedding', 'genome', 'matrix', 'stats']
+export const PANE_LABEL: Record<PaneType, string> = {
+  '3d': '3D',
+  spatial: 'Spatial',
+  embedding: 'Embedding',
+  genome: 'Genome',
+  matrix: 'Matrix',
+  stats: 'Stats',
+}
+
+/**
+ * The views a dataset can fill: 3D needs 3-D spots, Spatial cell positions,
+ * Embedding cell embeddings, Genome spots / tracks / contact maps, Matrix
+ * spots (distances) or contact maps, Stats spots or several cells (cell
+ * fields).  In PANE_TYPES order.
+ */
+export function supportedPaneTypes(k: DataKind): PaneType[] {
+  const ok: Record<PaneType, boolean> = {
+    '3d': k.hasCoords,
+    spatial: !!k.hasSpatial,
+    embedding: k.hasEmbeddings,
+    genome: k.hasCoords || k.hasTracks || !!k.hasContactMaps,
+    matrix: k.hasCoords || !!k.hasContactMaps,
+    stats: k.hasCoords || !!k.manyCells,
+  }
+  return PANE_TYPES.filter((t) => ok[t])
+}
 export const MIN_FRAC = 0.1
 
 const pane = (id: string, type: PaneType): Pane => ({ id, type, embeddingKey: null, dims: [0, 1] })
 
 /**
- * Default views follow the data:
- * - 3-D coords + embeddings → 3D | Embedding
- * - 3-D coords, no embeddings → 3D | Genome (tracks / contact maps) else 3D | Matrix (distances)
- * - no 3-D coords → Matrix | Embedding (or Matrix alone)
- * A bare boolean means "has embeddings" with 3-D coords (older callers).
+ * Default views follow the data: every view the dataset can fill
+ * (:func:`supportedPaneTypes`), in a grid — a single view fills the space —
+ * except Matrix when there is a Genome view, whose matrix rows show the same
+ * maps.  Data that fills none gets a Matrix view.  A bare boolean means "has
+ * embeddings" with 3-D coords (older callers).
  */
 export function defaultWorkspace(kind: boolean | DataKind): WorkspaceState {
   const k: DataKind = typeof kind === 'boolean' ? { hasEmbeddings: kind, hasCoords: true, hasTracks: false } : kind
-  const two = (a: PaneType, b: PaneType, sizes: [number, number]): WorkspaceState => ({
-    layout: 'columns',
-    panes: [pane('P1', a), pane('P2', b)],
-    activePane: 'P1',
-    sizes,
+  const all = supportedPaneTypes(k)
+  const types = all.includes('genome') ? all.filter((t) => t !== 'matrix') : all
+  const panes = (types.length ? types : (['matrix'] as PaneType[])).map((t, i) => pane(`P${i + 1}`, t))
+  return {
+    layout: panes.length > 1 ? 'grid' : 'columns',
+    panes,
+    activePane: panes[0].id,
+    sizes: Array(panes.length).fill(1 / panes.length),
     maximized: null,
-  })
-  if (!k.hasCoords) {
-    return k.hasEmbeddings ? two('matrix', 'embedding', [0.55, 0.45]) : { layout: 'columns', panes: [pane('P1', 'matrix')], activePane: 'P1', sizes: [1], maximized: null }
   }
-  if (k.hasEmbeddings) return two('3d', 'embedding', [0.6, 0.4])
-  return k.hasTracks || k.hasContactMaps ? two('3d', 'genome', [0.5, 0.5]) : two('3d', 'matrix', [0.55, 0.45])
+}
+
+/** Panes of `types` side by side (columns; `sizes` default equal). */
+export function workspaceOf(types: PaneType[], sizes?: number[], layout: WsLayout = 'columns'): WorkspaceState {
+  const panes = types.map((t, i) => pane(`P${i + 1}`, t))
+  return { layout, panes, activePane: panes[0].id, sizes: normalizeSizes(sizes ?? [], panes.length), maximized: null }
+}
+
+/** Columns × rows of the grid layout for `n` panes (⌈√n⌉ columns). */
+export function gridShape(n: number): { cols: number; rows: number } {
+  const cols = Math.max(1, Math.ceil(Math.sqrt(n)))
+  return { cols, rows: Math.max(1, Math.ceil(n / cols)) }
+}
+
+/** Column / row fractions of the grid (equal when unset or saved for another shape). */
+export function gridSizes(ws: WorkspaceState): { cols: number[]; rows: number[] } {
+  const { cols, rows } = gridShape(ws.panes.length)
+  return { cols: normalizeSizes(ws.gridCols ?? [], cols), rows: normalizeSizes(ws.gridRows ?? [], rows) }
+}
+
+/** Columns pane `i` of `n` spans: the last pane fills the rest of an incomplete last row. */
+export function gridSpan(i: number, n: number): number {
+  const { cols, rows } = gridShape(n)
+  return i === n - 1 ? cols * rows - n + 1 : 1
+}
+
+/** Drag the grid boundary after column / row `index` to `frac` of the grid. */
+export function moveGridSplitter(ws: WorkspaceState, axis: 'cols' | 'rows', index: number, frac: number): WorkspaceState {
+  const g = gridSizes(ws)
+  const s = movePair(g[axis], index, frac)
+  if (!s) return ws
+  return axis === 'cols' ? { ...ws, gridCols: s, gridRows: g.rows } : { ...ws, gridCols: g.cols, gridRows: s }
+}
+
+/** Fractions with the boundary after `index` moved to `frac` (only the two neighbours change). */
+function movePair(sizes: number[], index: number, frac: number): number[] | null {
+  const s = [...sizes]
+  if (index < 0 || index >= s.length - 1) return null
+  const before = s.slice(0, index).reduce((a, b) => a + b, 0)
+  const pair = s[index] + s[index + 1]
+  const a = Math.min(pair - MIN_FRAC, Math.max(MIN_FRAC, frac - before))
+  s[index] = a
+  s[index + 1] = pair - a
+  return s
 }
 
 /** Pane types of a workspace, in order — to compare layouts. */
@@ -160,6 +247,13 @@ export const MAX_SPLIT_PANES = 3
  */
 export function addPinnedPane(ws: WorkspaceState, type: PaneType, cell: string): WorkspaceState {
   return addScopedPane(ws, type, { kind: 'cell', cell })
+}
+
+/** Open one trace of `cell` in a new 3-D view pinned to it. */
+export function addTracePane(ws: WorkspaceState, cell: string | null, trace: string): WorkspaceState {
+  const next = cell !== null ? addScopedPane(ws, '3d', { kind: 'cell', cell }) : addPane(ws, '3d')
+  const id = next.activePane
+  return { ...next, panes: next.panes.map((p) => (p.id === id ? { ...p, trace } : p)) }
 }
 
 /** Open a new view of `type` showing a group. */
@@ -275,14 +369,8 @@ export function setLayout(ws: WorkspaceState, layout: WsLayout): WorkspaceState 
  * of the container (0–1); only the two neighbouring panes change.
  */
 export function moveSplitter(ws: WorkspaceState, index: number, frac: number): WorkspaceState {
-  const s = normalizeSizes(ws.sizes, ws.panes.length)
-  if (index < 0 || index >= s.length - 1) return ws
-  const before = s.slice(0, index).reduce((a, b) => a + b, 0)
-  const pair = s[index] + s[index + 1]
-  const a = Math.min(pair - MIN_FRAC, Math.max(MIN_FRAC, frac - before))
-  s[index] = a
-  s[index + 1] = pair - a
-  return { ...ws, sizes: s }
+  const s = movePair(normalizeSizes(ws.sizes, ws.panes.length), index, frac)
+  return s ? { ...ws, sizes: s } : ws
 }
 
 /** Pane fields of layouts saved before the explicit cells setting. */
@@ -338,10 +426,85 @@ function parseOptions(p: Partial<Pane> & LegacyPane): PaneOptions & { scope?: Sc
   if (color) o.color = color
   const embStyle = parseEmbStyle(p.embStyle)
   if (embStyle) o.embStyle = embStyle
+  if (typeof p.spatialKey === 'string') o.spatialKey = p.spatialKey
+  if (typeof p.region === 'string') o.region = p.region
+  if (typeof p.imageOpacity === 'number' && p.imageOpacity >= 0 && p.imageOpacity <= 1) o.imageOpacity = p.imageOpacity
+  if (typeof p.trace === 'string' && p.trace) o.trace = p.trace
+  if (Array.isArray(p.hiddenLayers) && p.hiddenLayers.every((x) => typeof x === 'string') && p.hiddenLayers.length) o.hiddenLayers = [...p.hiddenLayers]
+  const layerStyles = parseLayerStyles(p.layerStyles)
+  if (layerStyles) o.layerStyles = layerStyles
   return o
 }
 
+/** Well-formed style changes of a saved 3-D pane (per layer name); undefined when none. */
+export function parseLayerStyles(raw: unknown): Record<string, Partial<LayerStyle>> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const out: Record<string, Partial<LayerStyle>> = {}
+  for (const [name, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!v || typeof v !== 'object') continue
+    const x = v as Record<string, unknown>
+    const st: Partial<LayerStyle> = {}
+    if (x.mode === 'line' || x.mode === 'tube' || x.mode === 'points') st.mode = x.mode
+    if (['rainbow', 'custom', 'trace', 'cell', 'field'].includes(x.colorMode as string)) st.colorMode = x.colorMode as LayerStyle['colorMode']
+    if (typeof x.color === 'string' && /^#[0-9a-f]{6}$/i.test(x.color)) st.color = x.color
+    if (typeof x.opacity === 'number' && x.opacity > 0 && x.opacity <= 1) st.opacity = x.opacity
+    if (typeof x.lineWidth === 'number' && x.lineWidth > 0) st.lineWidth = x.lineWidth
+    if (x.tubeRadius === null || (typeof x.tubeRadius === 'number' && x.tubeRadius > 0)) st.tubeRadius = x.tubeRadius as number | null
+    if (typeof x.pointSize === 'number' && x.pointSize > 0) st.pointSize = x.pointSize
+    if (typeof x.highQuality === 'boolean') st.highQuality = x.highQuality
+    if (x.pointShape === 'sphere' || x.pointShape === 'disc' || x.pointShape === 'square') st.pointShape = x.pointShape
+    if (typeof x.pointScale === 'boolean') st.pointScale = x.pointScale
+    if (Object.keys(st).length) out[name] = st
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
+/** A layer's style as a 3-D view draws it: the layer's own, with the view's changes on top. */
+export function effectiveStyle(layer: Pick<Layer, 'name' | 'style'>, pane?: Pick<Pane, 'layerStyles'> | null): LayerStyle {
+  const own = pane?.layerStyles?.[layer.name]
+  return own ? { ...layer.style, ...own } : layer.style
+}
+
+/** A layer belongs to this 3-D view: shared (no owner) or made in it. */
+export const layerInPane = (layer: Pick<Layer, 'paneId'>, pane: Pick<Pane, 'id'> | null | undefined) => !layer.paneId || layer.paneId === pane?.id
+
+/** A layer is drawn in this 3-D view: it belongs there and the view doesn't hide it. */
+export const layerShownIn = (layer: Pick<Layer, 'paneId' | 'name'>, pane: Pick<Pane, 'id' | 'hiddenLayers'> | null | undefined) =>
+  layerInPane(layer, pane) && !pane?.hiddenLayers?.includes(layer.name)
+
+/** Show / hide a layer in one 3-D view only. */
+export function toggleLayerInPane(ws: WorkspaceState, paneId: string, layerName: string): WorkspaceState {
+  return {
+    ...ws,
+    panes: ws.panes.map((p) => {
+      if (p.id !== paneId) return p
+      const hidden = p.hiddenLayers ?? []
+      const next = hidden.includes(layerName) ? hidden.filter((n) => n !== layerName) : [...hidden, layerName]
+      return { ...p, hiddenLayers: next.length ? next : undefined }
+    }),
+  }
+}
+
+/** Change a layer's style in one 3-D view only. */
+export function setPaneLayerStyle(ws: WorkspaceState, paneId: string, layerName: string, patch: Partial<LayerStyle>): WorkspaceState {
+  return {
+    ...ws,
+    panes: ws.panes.map((p) => (p.id === paneId ? { ...p, layerStyles: { ...p.layerStyles, [layerName]: { ...p.layerStyles?.[layerName], ...patch } } } : p)),
+  }
+}
+
 /** Parse a persisted workspace; anything malformed → null (caller uses a default). */
+/** Saved layouts per dataset name; entries that don't parse are dropped. */
+export function parseWorkspaces(raw: unknown): Record<string, WorkspaceState> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out: Record<string, WorkspaceState> = {}
+  for (const [name, w] of Object.entries(raw)) {
+    const ws = parseWorkspace(w)
+    if (ws) out[name] = ws
+  }
+  return out
+}
+
 export function parseWorkspace(raw: unknown): WorkspaceState | null {
   if (!raw || typeof raw !== 'object') return null
   const w = raw as Partial<WorkspaceState>
@@ -358,7 +521,18 @@ export function parseWorkspace(raw: unknown): WorkspaceState | null {
   if (new Set(panes.map((p) => p.id)).size !== panes.length) return null
   const activePane = panes.some((p) => p.id === w.activePane) ? (w.activePane as string) : panes[0].id
   const maximized = panes.some((p) => p.id === w.maximized) ? (w.maximized as string) : null
-  return { layout: w.layout as WsLayout, panes, activePane, sizes: normalizeSizes(Array.isArray(w.sizes) ? w.sizes : [], panes.length), maximized }
+  const fracs = (v: unknown) => (Array.isArray(v) && v.length && v.every((x) => Number.isFinite(x) && x > 0) ? { v: v as number[] } : null)
+  const gc = fracs(w.gridCols)
+  const gr = fracs(w.gridRows)
+  return {
+    layout: w.layout as WsLayout,
+    panes,
+    activePane,
+    sizes: normalizeSizes(Array.isArray(w.sizes) ? w.sizes : [], panes.length),
+    maximized,
+    ...(gc ? { gridCols: gc.v } : {}),
+    ...(gr ? { gridRows: gr.v } : {}),
+  }
 }
 
 /**

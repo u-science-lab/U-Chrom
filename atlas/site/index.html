@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>U-Chrom Atlas · The 3-D genome, cell by cell</title>
+<meta name="description" content="Single-cell and spatial 3-D genome datasets: contact maps, compartments, RNA and tissue images for every cell and spot, open in your browser.">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+<link rel="stylesheet" href="style.css">
+<script src="theme.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="wrap bar">
+    <a class="brand" href="./"><img src="logo.svg" alt="" width="18" height="24"><span>U-Chrom <em>Atlas</em></span></a>
+    <nav>
+      <a href="#datasets">Datasets</a>
+      <a href="uchrom.html">U-Chrom</a>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark theme" title="Switch to dark theme">
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero wrap">
+    <div class="hero-text">
+      <h1><span>The 3-D genome,</span> <span>cell by cell</span></h1>
+      <p class="lead">Single-cell and spatial 3-D genome datasets, with contact maps, compartments, RNA and tissue images
+        for every cell and spot. Open any of them in your browser: nothing to download or install.</p>
+      <a class="cta" href="#datasets">Browse the datasets <span aria-hidden="true">↓</span></a>
+      <dl class="stats" id="stats" aria-live="polite"></dl>
+    </div>
+    <figure class="hero-anim">
+      <canvas id="hero-canvas" role="img" aria-label="Animation: a tissue section on a slide; one cell after another is lifted from it, and its nucleus shows that cell's 3-D genome, a real single-cell Hi-C structure, turning slowly"></canvas>
+    </figure>
+  </section>
+
+  <section class="wrap catalog" id="datasets">
+    <div class="toolbar">
+      <h2 class="section-title">Datasets</h2>
+      <input id="q" type="search" placeholder="Search by tissue, species, method…" aria-label="Search datasets">
+    </div>
+    <div class="chips" id="chips" role="group" aria-label="Filters"></div>
+    <p class="hint" id="hint" hidden>Datasets open in the U-Chrom browser hosted for this atlas. After a quiet spell the first one takes a few seconds to start.</p>
+    <div id="studies"></div>
+    <nav class="pager" id="pager" aria-label="Pages" hidden></nav>
+    <p class="empty" id="empty" hidden>No dataset matches. <button type="button" id="reset">Clear the filters</button></p>
+    <p class="err" id="err" hidden></p>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-grid">
+    <div>
+      <a class="brand" href="./"><img src="logo.svg" alt="" width="15" height="20"><span>U-Chrom <em>Atlas</em></span></a>
+      <p>Built with <a href="uchrom.html">U-Chrom</a>, software for chromatin 3-D structure (source code coming soon).
+        Every dataset is one ChromData store, read on demand or downloaded as a single <code>.cdz</code> file.</p>
+    </div>
+    <div>
+      <p>The data belong to the authors of each study; see the study for its source and licence. Contact maps marked
+        <i>reprocessed</i> were rebuilt by U-Chrom from the deposited read pairs.</p>
+      <p id="updated"></p>
+    </div>
+  </div>
+</footer>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script src="hero.js"></script>
+</body>
+</html>

@@ -110,7 +110,7 @@ null), the representation SpatialData uses for shapes, so
 geometry library needed), shapely geometries or a GeoDataFrame;
 `cd.cell_shapes_geodataframe(key)` needs shapely + geopandas (optional
 dependencies, `pip install u-chrom[spatial]`; a clear `ImportError`
-otherwise).  `.h5cd` does not store outlines (warning).
+otherwise).
 
 **Linked SpatialData** (`uns['linked_spatialdata'][key]`, stored with the
 other link records under `links/`): `path` (relative paths resolve next to
@@ -231,14 +231,14 @@ cd = ChromData.read('data.chromdata.zarr', backed=True)           # out of core
 cd = ChromData.read('data.chromdata.zarr', columns='coords')      # xyz + key columns only
 with ChromData.writer('big.chromdata.zarr') as w:  # streaming writer (chunks larger than RAM)
     w.append(chunk)
-cd = ChromData.read('old.h5cd')                    # HDF5 1.x / 2.0: still read
 ```
 
-The format follows the path: `*.zarr` → Zarr directory, `*.cdz` → zip,
-`*.h5cd` → HDF5 (deprecated for writing; `DeprecationWarning`).  An
-existing path without one of these suffixes is sniffed.
-`python -m uchrom.io.upgrade old.h5cd` converts to
-`old.chromdata.zarr` (and rewrites a 2.0 / 2.1 / 2.2 `.chromdata.zarr` as 2.3).
+The format follows the path: `*.zarr` → Zarr directory, `*.cdz` → zip.  An
+existing path without one of these suffixes is sniffed.  The HDF5 `.h5cd`
+container (format 1.x / 2.0) is no longer read or written — `read` / `write`
+raise a `ValueError`; `python -m uchrom.io.upgrade old.h5cd` converts a file
+once to `old.chromdata.zarr` (and rewrites a 2.0 / 2.1 / 2.2
+`.chromdata.zarr` as 2.3).
 
 ### Backed mode
 
@@ -276,19 +276,18 @@ wrote it:
 
 | Attribute | Example | Description |
 |-----------|---------|-------------|
-| `uchrom_format_version` | `"2.3"` | `MAJOR.MINOR` version of the ChromData format (`.chromdata.zarr`: 2.3; `.h5cd`: 2.0). MAJOR bumps are breaking; MINOR bumps keep old files readable. |
+| `uchrom_format_version` | `"2.3"` | `MAJOR.MINOR` version of the ChromData format (`.chromdata.zarr`: 2.3). MAJOR bumps are breaking; MINOR bumps keep old files readable. |
 | `uchrom_version` | `"0.2.0"` | Version of the U-Chrom package that wrote the file. For provenance. |
 
 In a `.chromdata.zarr` store they are root-group attributes (plus
-`attrs["uchrom"]["format_version"]`); in `.h5cd` root HDF5 attributes.
+`attrs["uchrom"]["format_version"]`).
 
-Read semantics (implemented in `ChromData.read`, for both containers):
+Read semantics (implemented in `ChromData.read`):
 
 - **Same MAJOR**: read successfully. Higher MINOR triggers a warning; unknown fields are ignored.
 - **Different MAJOR**: `ValueError` with guidance to upgrade or convert.
-- **Missing attribute** (pre-versioning `.h5cd` files): warning, assumed to be the legacy 1.0 layout.
 
-New MAJOR versions should add a `_read_vN` function in `cdata.py` and may include a migration helper that converts old on-disk data to the current in-memory form.
+A new MINOR layout is read next to the old ones (as 2.2 reads 2.1 and 2.0); a new MAJOR comes with a converter (as `uchrom.io.upgrade` converts the old `.h5cd`).
 
 ### `.chromdata.zarr` layout (format 2.3, the default)
 
@@ -425,39 +424,59 @@ data.chromdata.zarr/
 - The writer builds the store in a temporary sibling directory and renames
   it into place, so readers never see a half-written store.
 
-### HDF5 layout (`.h5cd`, format 2.0 — deprecated)
+### Embedded contacts and AnnData (additive part of 2.3)
 
-`.h5cd` files (1.x and 2.0) remain readable; writing them still works in
-this release but warns.
+Linked `.cool` / `.mcool` / `.scool` / `.h5ad` files stay outside the store.  For an atlas, or any
+store that must live alone on object storage, they can be *embedded* with
+`python -m uchrom.core.embedded STORE` (`uchrom.core.embed_links`).  The link records stay in place;
+a reader that finds an embedded copy uses it, otherwise it follows the link.  Stores without these
+groups, and readers that do not know them, are unaffected (so this is not a format version bump).
+`.cdz` archives do not carry the groups.  `cd.write(path)` onto the store the object was read from keeps
+`embedded/` (the copies belong to the same data); writing any other object over a store, or to a new path,
+does not carry them: embed after writing (re-embed with `--overwrite` if a linked file changed).
 
 ```
-data.h5cd
-├── [attrs]
-│   ├── uchrom_format_version   "2.0"
-│   ├── uchrom_version          "0.2.0"
-│   └── spot_order              "unsorted"
-├── bins/               chrom {codes, categories}, start int64, end int64, …
-├── coords              float64 (n_spots, 3)
-├── spots/              bin_id int32, trace_id / cell_id {codes, categories}, extra columns
-│                        (@_column_order keeps the in-memory column order)
-├── tracks/             bin-level tracks, n_bins rows
-├── spot_tracks/        spot-level tracks, n_spots rows
-├── binm/               one (n_bins, …) dataset per key
-├── intervals/<key>/    DataFrame group, @_kind, @_source_result
-├── cells/, traces/     DataFrame groups
-├── cellm/, layers/     one dataset per key
-├── points/             optional group of DataFrames
-├── results/            typed entries + provenance attrs; an interval result holds
-│                        @_value_ref = "intervals/<key>" instead of a copy
-└── uns/                scalars as attrs, arrays as datasets, dicts as sub-groups
+embedded/contacts/<name>/         attrs.uchrom_contacts = {key, kind: per_cell|bulk, label, source,
+│                                   resolutions, chroms, chrom_first_bin{res: [first bin of each chrom]},
+│                                   n_cells, n_pixels, count_max | has_weights, trans_min_resolution}
+├── cells                         per_cell: string array (cell names, the order of cell_offset)
+└── r<resolution>/                one per resolution (per_cell: one)
+    ├── bins/{chrom,start,end[,weight]}     chrom = code into attrs.chroms; weight = cooler balancing
+    ├── cis/<chrom>/pix           (3, n) unsigned ints, rows bin1, bin2 (chromosome-local), count; upper triangle
+    ├── cis/<chrom>/cell_offset   per_cell: (n_cells + 1) pixel offsets; pixels sorted by (cell, bin1, bin2)
+    ├── cis/<chrom>/bin1_offset   bulk: (n_bins_of_chrom + 1) offsets; pixels sorted by (bin1, bin2)
+    └── trans/{pix, cell_offset | bin1_offset}    genome-wide bin ids; bulk: only for resolutions >= 250 kb
+embedded/anndata/<name>/          an AnnData Zarr group (anndata >= 0.13 layout) +
+                                  attrs.uchrom_anndata = {key, family: linked_anndata|linked_bin_matrices, ...}
+embedded/images/<name>/data       the bytes of a linked section image (uint8 array), attrs.uchrom_image = {key, media_type, bytes}
 ```
 
-Categorical columns are stored as `{codes, categories}` groups.  Datasets
-of ≥ 4,096 elements are chunked (65,536 rows per chunk) and compressed —
-gzip level 4 by default, `cd.write(path, compression="lzf" | None)` to
-change it.  1.x files (spots with `chrom/start/end`, spot-aligned
-`tracks/`) are read by `_read_v1` and upgraded in memory.  The HDF5
-container has no `index/`, no sorted spots and no backed mode.
+- `pix` is chunked `(3, 16384)` and **sharded** (`(3, 4194304)` per shard, Zarr v3 sharding codec, zstd 9;
+  a chunk holds each of the three rows contiguously, which compresses ~40 % better than interleaved columns), so
+  one object on S3 holds many small chunks and a read fetches the shard index plus the chunks it
+  needs; the group's metadata is consolidated (one request opens it).
+- The partition is by chromosome, like the coordinates: one cell's cis contacts of a chromosome are
+  one contiguous slice, the pseudo-bulk of a group is a few slices, a bulk region is a slice of the
+  `bin1_offset` index.  Cells are sorted within a partition, so neighbouring cells of a group read as
+  one range.
+- Counts and bin ids are `uint16` (`uint32` when needed); a dense AnnData `X` (e.g. ssAB) is chunked
+  `(1024, 256)`.  Bins must be uniform and start at 0 on every chromosome (checked when embedding).
+- Round trip: the embedded pixels are exactly those of the cooler file (tested), and the web browser
+  returns byte-identical matrices from either source.
+- Back to cooler: `export_cool` / `export_mcool` / `export_scool` (`uchrom.core.embedded`) rebuild cooler
+  files from the embedded pixels (a bulk map embedded without trans at a fine resolution exports cis only);
+  `cd.linked_cool_path(key)` and `cd.load_linked_scool(key=, cell=)` use them when the linked file is gone,
+  and `cd.validate_links()` does not flag a missing file whose map is embedded.
+- Remote reading: `embedded/contacts` and `embedded/anndata` carry consolidated metadata (the listing of
+  their children without listing the bucket), so a store served by plain HTTP or S3 needs no directory
+  listing.  See `uchrom/core/remote.py`.
+
+### Legacy HDF5 container (`.h5cd`)
+
+ChromData format 1.x and 2.0 were HDF5 files (`.h5cd`).  They are no longer
+read or written by `ChromData`; `python -m uchrom.io.upgrade old.h5cd`
+(`uchrom.io.upgrade_h5cd`) converts one to a `.chromdata.zarr`.  The reader
+and the layout description live in `uchrom/io/_h5cd_legacy.py`.
 
 ## FOF-CT Compatibility
 

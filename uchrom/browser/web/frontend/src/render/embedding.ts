@@ -37,6 +37,47 @@ export function fitPlot(xs: (number | null)[], ys: (number | null)[], w: number,
   }
 }
 
+/**
+ * Fit positions into a `w × h` box keeping their aspect (one scale for both
+ * axes, centred) — for cell positions in a tissue.  `extent` [x0, x1, y0, y1]
+ * (an image) is fitted when given, else the points' bounds; `yDown`: y grows
+ * downwards (image pixels).
+ */
+export function fitPlotEqual(
+  xs: (number | null)[],
+  ys: (number | null)[],
+  w: number,
+  h: number,
+  pad: number,
+  opts: { yDown?: boolean; extent?: [number, number, number, number] | null } = {},
+): Plot {
+  let [x0, x1, y0, y1] = opts.extent ?? [Infinity, -Infinity, Infinity, -Infinity]
+  if (!opts.extent) {
+    for (let i = 0; i < xs.length; i++) {
+      const x = xs[i]
+      const y = ys[i]
+      if (x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) continue
+      x0 = Math.min(x0, x)
+      x1 = Math.max(x1, x)
+      y0 = Math.min(y0, y)
+      y1 = Math.max(y1, y)
+    }
+  }
+  if (!Number.isFinite(x0)) [x0, x1, y0, y1] = [0, 1, 0, 1]
+  if (x1 === x0) [x0, x1] = [x0 - 0.5, x1 + 0.5]
+  if (y1 === y0) [y0, y1] = [y0 - 0.5, y1 + 0.5]
+  const iw = Math.max(1, w - 2 * pad)
+  const ih = Math.max(1, h - 2 * pad)
+  const k = Math.min(iw / (x1 - x0), ih / (y1 - y0))
+  const ox = pad + (iw - k * (x1 - x0)) / 2
+  const oy = pad + (ih - k * (y1 - y0)) / 2
+  return {
+    sx: (x) => ox + (x - x0) * k,
+    sy: opts.yDown ? (y) => oy + (y - y0) * k : (y) => oy + (y1 - y) * k,
+    bounds: { x0, x1, y0, y1 },
+  }
+}
+
 /** Pixel positions of every point (NaN for missing values). */
 export function project(xs: (number | null)[], ys: (number | null)[], plot: Plot): Float32Array {
   const out = new Float32Array(2 * xs.length)
@@ -81,10 +122,14 @@ export function isIdentity(v: View2D): boolean {
   return v.k === 1 && v.tx === 0 && v.ty === 0
 }
 
-/** Zoom by `factor` keeping the screen point (cx, cy) fixed; k is clamped to [1, MAX_ZOOM], k = 1 → the full view. */
-export function zoomAt(v: View2D, cx: number, cy: number, factor: number): View2D {
-  const k = Math.min(MAX_ZOOM, Math.max(1, v.k * factor))
-  if (k === 1) return IDENTITY_VIEW
+/**
+ * Zoom by `factor` keeping the screen point (cx, cy) fixed; k is clamped to [minK, MAX_ZOOM].  With the
+ * default minK = 1, k = 1 is the full view; a smaller minK lets a view zoom out beyond its fit (e.g. to
+ * see a tissue image around the measured spots).
+ */
+export function zoomAt(v: View2D, cx: number, cy: number, factor: number, minK = 1): View2D {
+  const k = Math.min(MAX_ZOOM, Math.max(minK, v.k * factor))
+  if (k === 1 && minK >= 1) return IDENTITY_VIEW
   const f = k / v.k
   return { k, tx: cx - (cx - v.tx) * f, ty: cy - (cy - v.ty) * f }
 }
@@ -102,4 +147,41 @@ export function applyView(px: Float32Array, v: View2D): Float32Array {
     out[i + 1] = v.ty + v.k * px[i + 1]
   }
   return out
+}
+
+/**
+ * Typical spacing of points (spots of a spatial array): the median distance
+ * of a point to its nearest neighbour, over an evenly spaced sample of at
+ * most `maxSample` points; null for fewer than two points.  Robust to grids
+ * whose coordinates are not exact (pixel positions of an imaged array).
+ */
+export function gridSpacing(xs: (number | null)[], ys: (number | null)[], maxSample = 1500): number | null {
+  const px: number[] = []
+  const py: number[] = []
+  for (let i = 0; i < xs.length; i++) {
+    const x = xs[i]
+    const y = ys[i]
+    if (x !== null && y !== null && Number.isFinite(x) && Number.isFinite(y)) {
+      px.push(x)
+      py.push(y)
+    }
+  }
+  const n = px.length
+  if (n < 2) return null
+  const step = Math.max(1, Math.floor(n / maxSample))
+  const d: number[] = []
+  for (let i = 0; i < n; i += step) {
+    let best = Infinity
+    for (let j = 0; j < n; j++) {
+      if (j === i) continue
+      const dx = px[i] - px[j]
+      const dy = py[i] - py[j]
+      const e = dx * dx + dy * dy
+      if (e > 0 && e < best) best = e
+    }
+    if (Number.isFinite(best)) d.push(Math.sqrt(best))
+  }
+  if (!d.length) return null
+  d.sort((a, b) => a - b)
+  return d[Math.floor(d.length / 2)]
 }

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchContacts, fetchDistance, fetchIntervals, fetchTracks } from '../api'
 import { fmtBp } from '../filters'
-import { niceTicks, panLocus, zoomLocus, type Locus } from '../genome'
+import { fmtPos, fmtSpan, genomeToChrom, isGenome, niceTicks, panLocus, queryRegion, regionKey, zoomLocus, GENOME, type Locus } from '../genome'
+import type { GenomeChrom } from '../types'
 import {
   addRow,
   applyRowSetting,
@@ -11,6 +12,11 @@ import {
   depthScale,
   moveRow,
   rasterTriangle,
+  rasterSquare,
+  squareBins,
+  windowMargin,
+  MATRIX_SHAPES,
+  type MatrixShape,
   removeRow,
   resizeRow,
   resolveHeights,
@@ -38,6 +44,7 @@ import { ScopePicker, useNCells } from './ScopePicker'
 import { updatePane, type DistanceStat, type Pane, type TrackAgg } from '../workspace'
 import { CHART, drawColorRamp } from './chart'
 import { prepareCanvas, useSize } from './useSize'
+import { Select } from './Select'
 
 const AXIS_H = 26
 const STAT_LABEL: Record<DistanceStat, string> = { median: 'median distance', mean: 'mean distance', contact: 'contact frequency' }
@@ -250,13 +257,13 @@ function RowSettings({
       {row.kind === 'matrix' && <MatrixTools row={row} ds={ds} set={set} multi={multi} />}
       {row.kind === 'matrix' && <ColorScaleControls kind={rowMatrixKind(row)} value={row.color} onChange={setColor} auto={auto} />}
       {row.kind === 'track' && (
-        <select value={row.track ?? ''} onChange={(e) => set('track', e.target.value)} title="Track">
+        <Select value={row.track ?? ''} onChange={(e) => set('track', e.target.value)} title="Track">
           {(ds.tracks ?? []).map((t) => (
             <option key={t.name} value={t.name}>
               {t.name}
             </option>
           ))}
-        </select>
+        </Select>
       )}
       {rowTakesGroup(row, ds) && (
         <label className="insp-text small scope-line" title="Which cells this row shows">
@@ -268,13 +275,13 @@ function RowSettings({
       {perCellMap && multi && <div className="muted small">several cells: their maps are summed (pseudo-bulk)</div>}
       {row.kind === 'track' && <TrackAggregateControl agg={row.agg ?? defaultAgg} multi={multi} onAgg={(a) => set('agg', a)} />}
       {row.kind === 'intervals' && (
-        <select value={row.key ?? ''} onChange={(e) => set('key', e.target.value)} title="Interval table">
+        <Select value={row.key ?? ''} onChange={(e) => set('key', e.target.value)} title="Interval table">
           {(ds.intervals ?? []).map((t) => (
             <option key={t.key} value={t.key}>
               {t.key}
             </option>
           ))}
-        </select>
+        </Select>
       )}
       <TextSetting label="height" value={row.height ? String(row.height) : ''} placeholder={row.kind === 'matrix' ? 'auto' : String(ROW_HEIGHT[row.kind])} onCommit={(v) => set('height', v)} title="Row height in px (empty = default)" />
     </div>
@@ -340,7 +347,9 @@ export function GenomeView({ pane }: { pane: Pane }) {
   const rowScopes = useMemo(() => rows.map((r) => resolveRowScope(r.scope, scope, focusState)), [rows, scope, focusState])
   const infos = useGroupInfos(rowScopes.map((sc) => (sc.kind === 'group' ? sc.group : null)))
   const byRef = useMemo(() => new Map(infos.filter((i): i is GroupInfo => !!i).map((i) => [i.ref, i])), [infos])
-  const { locus, ext, setLocus } = useLocus()
+  const { locus, chroms, ext, setLocus } = useLocus()
+  // the whole-genome view: its chromosomes end to end (hover texts, ruler, boundaries)
+  const layout = isGenome(locus) ? ext?.layout : undefined
   const boxRef = useRef<HTMLDivElement>(null)
   const rowsRef = useRef<HTMLDivElement>(null)
   const { w: W, h: rowsH } = useSize(rowsRef) // client width: excludes the scrollbar, so every row shares one axis
@@ -354,6 +363,8 @@ export function GenomeView({ pane }: { pane: Pane }) {
 
   // tracks: one request per scope (rows may have their own group)
   const names = useMemo(() => new Set((ds?.tracks ?? []).map((t) => t.name)), [ds])
+  // tracks on other bins (a cell × bin matrix per resolution) go in a request of their own
+  const gridOf = useMemo(() => new Map((ds?.tracks ?? []).map((t) => [t.name, t.grid ?? 'spots'])), [ds])
   // one request per (cells, aggregate)
   const trackReqs = useMemo(() => {
     const m = new Map<string, { scope: Scope; agg: string; names: string[] }>()
@@ -361,13 +372,13 @@ export function GenomeView({ pane }: { pane: Pane }) {
       if (r.kind !== 'track' || !r.track || !names.has(r.track)) return
       const sc = rowScopes[i]
       const agg = r.agg ?? pane.agg ?? 'mean'
-      const k = `${scopeKey(sc)}|${agg}`
+      const k = `${scopeKey(sc)}|${agg}|${gridOf.get(r.track)}`
       const e = m.get(k) ?? { scope: sc, agg, names: [] }
       if (!e.names.includes(r.track)) e.names.push(r.track)
       m.set(k, e)
     })
     return m
-  }, [rows, names, rowScopes, pane.agg])
+  }, [rows, names, gridOf, rowScopes, pane.agg])
   const trackSig = [...trackReqs].map(([k, e]) => `${k}=${e.names.join(',')}`).join('|')
   const [tracks, setTracks] = useState<Record<string, TrackData>>({})
   const [trackError, setTrackError] = useState<string | null>(null)
@@ -377,7 +388,7 @@ export function GenomeView({ pane }: { pane: Pane }) {
     const t = setTimeout(() => {
       for (const [k, e] of trackReqs) {
         const p = scopeParams(e.scope)
-        fetchTracks(ds.id, e.names, locus, { cellId: p.cellId, group: p.group, agg: e.agg })
+        fetchTracks(ds.id, e.names, queryRegion(locus), { cellId: p.cellId, group: p.group, agg: e.agg })
           .then((d) => live && (setTracks((m) => ({ ...m, [k]: d })), setTrackError(null)))
           .catch((err: Error) => live && setTrackError(err.message))
       }
@@ -387,7 +398,7 @@ export function GenomeView({ pane }: { pane: Pane }) {
       clearTimeout(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ds?.id, trackSig, locus?.chrom, locus?.start, locus?.end])
+  }, [ds?.id, trackSig, regionKey(locus)])
 
   // interval tables shown as rows (their boundaries also guide the matrix rows)
   const ivKeys = [...new Set(rows.filter((r) => r.kind === 'intervals' && r.key).map((r) => r.key!))]
@@ -398,7 +409,7 @@ export function GenomeView({ pane }: { pane: Pane }) {
     let live = true
     const t = setTimeout(() => {
       for (const k of ivKeys) {
-        fetchIntervals(ds.id, k, locus)
+        fetchIntervals(ds.id, k, queryRegion(locus))
           .then((tab) => live && setIntervals((m) => ({ ...m, [k]: tab })))
           .catch(() => undefined)
       }
@@ -408,9 +419,11 @@ export function GenomeView({ pane }: { pane: Pane }) {
       clearTimeout(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ds?.id, ivKey, locus?.chrom, locus?.start, locus?.end])
+  }, [ds?.id, ivKey, regionKey(locus)])
   const guides = useMemo(() => {
     if (!locus) return []
+    // whole genome: the chromosome boundaries
+    if (layout) return layout.map((c) => c.offset).filter((v) => v > locus.start && v < locus.end)
     const out = new Set<number>()
     for (const k of ivKeys) {
       const tab = intervals[k]
@@ -425,7 +438,7 @@ export function GenomeView({ pane }: { pane: Pane }) {
     }
     return [...out]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [intervals, ivKey, locus])
+  }, [intervals, ivKey, locus, layout])
 
   // wheel zoom (non-passive so the page doesn't scroll); not over row tools
   const currentLocus = useRef<Locus | null>(null)
@@ -477,7 +490,7 @@ export function GenomeView({ pane }: { pane: Pane }) {
       const r = cv.getBoundingClientRect()
       text = describers.current.get(rowEl.dataset.row!)?.(e.clientX - r.left, e.clientY - r.top) ?? null
     } else if (locus) {
-      text = `${locus.chrom}:${fmtBp(Math.round(locus.start + (x / rowsEl.clientWidth) * (locus.end - locus.start)))}`
+      text = fmtPos(locus.chrom, Math.round(locus.start + (x / rowsEl.clientWidth) * (locus.end - locus.start)), layout)
     }
     setHover({ x, y: e.clientY - b.top, text })
   }
@@ -491,7 +504,17 @@ export function GenomeView({ pane }: { pane: Pane }) {
     <div ref={boxRef} className="genome-view gv" onPointerDown={onPointerDown} onMouseMove={onMouseMove} onMouseLeave={() => setHover(null)}>
       {message && <div className="muted pane-empty">{message}</div>}
       {trackError && <div className="error pane-error">{trackError}</div>}
-      {locus && W > 0 && <AxisRuler width={W} locus={locus} />}
+      {locus && W > 0 && (
+        <AxisRuler
+          width={W}
+          locus={locus}
+          layout={layout}
+          onPickChrom={(name) => {
+            const c = chroms.find((x) => x.name === name)
+            if (c) setLocus({ chrom: c.name, start: c.start, end: c.end })
+          }}
+        />
+      )}
       <div ref={rowsRef} className="gv-rows">
         {ds &&
           locus &&
@@ -510,6 +533,7 @@ export function GenomeView({ pane }: { pane: Pane }) {
                   group={rowScopes[i].kind === 'group' ? (byRef.get((rowScopes[i] as { group: string }).group) ?? null) : null}
                   nAll={nAll}
                   guides={guides}
+                  layout={layout}
                   register={register}
                 />
               )}
@@ -519,14 +543,15 @@ export function GenomeView({ pane }: { pane: Pane }) {
                   height={heights[i]}
                   width={W}
                   locus={locus}
-                  data={tracks[`${scopeKey(rowScopes[i])}|${r.agg ?? pane.agg ?? 'mean'}`] ?? null}
+                  data={tracks[`${scopeKey(rowScopes[i])}|${r.agg ?? pane.agg ?? 'mean'}|${gridOf.get(r.track ?? '')}`] ?? null}
                   label={`${scopeText(rowScopes[i], rowScopes[i].kind === 'group' ? byRef.get((rowScopes[i] as { group: string }).group) : null, nAll)}${isMultiCell(rowScopes[i]) ? ` · ${r.agg ?? pane.agg ?? 'mean'}` : ''}`}
                   color={rowScopes[i].kind === 'group' ? (byRef.get((rowScopes[i] as { group: string }).group)?.color ?? null) : null}
+                  layout={layout}
                   register={register}
                 />
               )}
               {r.kind === 'intervals' && (
-                <IntervalRow row={r} height={heights[i]} width={W} locus={locus} table={r.key ? intervals[r.key] : undefined} register={register} />
+                <IntervalRow row={r} height={heights[i]} width={W} locus={locus} layout={layout} table={r.key ? intervals[r.key] : undefined} register={register} />
               )}
             </RowFrame>
           ))}
@@ -542,7 +567,7 @@ export function GenomeView({ pane }: { pane: Pane }) {
 }
 
 /** Genomic ruler along the top of the pane. */
-function AxisRuler({ width, locus }: { width: number; locus: Locus }) {
+function AxisRuler({ width, locus, layout, onPickChrom }: { width: number; locus: Locus; layout?: GenomeChrom[]; onPickChrom(name: string): void }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const pal = useTheme()
   useEffect(() => {
@@ -556,23 +581,65 @@ function AxisRuler({ width, locus }: { width: number; locus: Locus }) {
     g.strokeStyle = CHART.axis
     g.fillStyle = CHART.text
     g.textBaseline = 'top'
-    for (const t of niceTicks(locus.start, locus.end, Math.max(2, Math.floor(width / 110)))) {
-      const x = Math.round(X(t)) + 0.5
+    const tick = (x: number, h: number) => {
       g.beginPath()
-      g.moveTo(x, AXIS_H - 7)
+      g.moveTo(x, AXIS_H - h)
       g.lineTo(x, AXIS_H)
       g.stroke()
-      const label = fmtBp(t)
-      const half = g.measureText(label).width / 2
+    }
+    const label = (text: string, x: number, lo = 0, hi = width) => {
+      const half = g.measureText(text).width / 2
+      if (hi - lo < 2 * half + 4) return
       g.textAlign = 'center'
-      g.fillText(label, Math.max(half + 2, Math.min(x, width - half - 2)), 4)
+      g.fillText(text, Math.max(lo + half + 2, Math.min(x, hi - half - 2)), 4)
+    }
+    if (layout) {
+      // whole genome: chromosome boundaries and names; positions within a chromosome when
+      // few are in view
+      const shown = layout.filter((c) => c.offset + c.length > locus.start && c.offset < locus.end)
+      for (const c of shown) {
+        const x0 = Math.max(0, X(c.offset))
+        const x1 = Math.min(width, X(c.offset + c.length))
+        if (c.offset > locus.start) tick(Math.round(x0) + 0.5, AXIS_H)
+        if (shown.length <= 2) {
+          const lo = Math.max(0, locus.start - c.offset)
+          const hi = Math.min(c.length, locus.end - c.offset)
+          const ts = niceTicks(lo, hi, Math.max(1, Math.floor((x1 - x0) / 110)))
+          ts.forEach((t, k) => {
+            const x = Math.round(X(c.offset + t)) + 0.5
+            tick(x, 7)
+            label(k === 0 ? `${c.name}:${fmtBp(t)}` : fmtBp(t), x, x0, x1)
+          })
+        } else label(c.name, (x0 + x1) / 2, x0, x1)
+      }
+    } else {
+      for (const t of niceTicks(locus.start, locus.end, Math.max(2, Math.floor(width / 110)))) {
+        const x = Math.round(X(t)) + 0.5
+        tick(x, 7)
+        label(fmtBp(t), x)
+      }
     }
     g.beginPath()
     g.moveTo(0, AXIS_H - 0.5)
     g.lineTo(width, AXIS_H - 0.5)
     g.stroke()
-  }, [width, locus, pal])
-  return <canvas ref={ref} className="gv-axis" style={{ width, height: AXIS_H }} />
+  }, [width, locus, layout, pal])
+  // whole genome: double-click a chromosome to go to it
+  const onDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!layout) return
+    const x = e.clientX - e.currentTarget.getBoundingClientRect().left
+    const c = genomeToChrom(layout, locus.start + (x / width) * (locus.end - locus.start))
+    if (c) onPickChrom(c.chrom)
+  }
+  return (
+    <canvas
+      ref={ref}
+      className="gv-axis"
+      style={{ width, height: AXIS_H, cursor: layout ? 'pointer' : undefined }}
+      onDoubleClick={onDoubleClick}
+      title={layout ? 'Double-click a chromosome to go to it' : undefined}
+    />
+  )
 }
 
 /** Row chrome: a bottom edge to drag the height (settings live in the inspector). */
@@ -615,7 +682,7 @@ function MatrixTools({ row, ds, set, multi }: { row: GenomeRow; ds: DatasetSumma
   const map = maps.find((m) => m.key === row.source)
   return (
     <>
-      <select value={row.source ?? ''} onChange={(e) => set('source', e.target.value)} title="Matrix source">
+      <Select value={row.source ?? ''} onChange={(e) => set('source', e.target.value)} title="Matrix source">
         <optgroup label="Follows the cells setting (focus, groups)">
           {maps
             .filter((m) => m.per_cell)
@@ -637,16 +704,16 @@ function MatrixTools({ row, ds, set, multi }: { row: GenomeRow; ds: DatasetSumma
               ))}
           </optgroup>
         )}
-      </select>
+      </Select>
       {map && map.resolutions.length > 1 && (
-        <select value={row.resolution ?? ''} onChange={(e) => set('resolution', e.target.value)} title="Resolution">
+        <Select value={row.resolution ?? ''} onChange={(e) => set('resolution', e.target.value)} title="Resolution">
           <option value="">auto resolution</option>
           {map.resolutions.map((r) => (
             <option key={r} value={r}>
               {fmtBp(r)}
             </option>
           ))}
-        </select>
+        </Select>
       )}
       {map && (
         <label className="check small" title="ICE-balanced values (if the cooler has weights)">
@@ -669,18 +736,35 @@ function MatrixTools({ row, ds, set, multi }: { row: GenomeRow; ds: DatasetSumma
           }
         />
       )}
-      <TextSetting
-        label="max dist"
-        value={row.maxDist ? fmtBp(row.maxDist) : ''}
-        placeholder="45°"
-        title="Deepest genomic separation shown over the row height (e.g. 5M); empty = true 45°"
-        onCommit={(v) => set('maxDist', v)}
-      />
-      <label className="check small" title="Diagonal at the top of the row (triangle pointing down)">
-        <input type="checkbox" checked={!!row.flip} onChange={(e) => set('flip', e.target.checked)} /> flip
-      </label>
+      <div className="seg" title="How the map is drawn">
+        {MATRIX_SHAPES.map((sh) => (
+          <button key={sh} className={(row.shape ?? 'triangle') === sh ? 'active' : ''} onClick={() => set('shape', sh)} title={SHAPE_TITLE[sh]}>
+            {sh}
+          </button>
+        ))}
+      </div>
+      {(row.shape ?? 'triangle') !== 'square' && (
+        <>
+          <TextSetting
+            label="max dist"
+            value={row.maxDist ? fmtBp(row.maxDist) : ''}
+            placeholder="45°"
+            title="Deepest genomic separation shown over the row height (e.g. 5M); empty = true 45°"
+            onCommit={(v) => set('maxDist', v)}
+          />
+          <label className="check small" title="Diagonal at the top of the row (pointing down)">
+            <input type="checkbox" checked={!!row.flip} onChange={(e) => set('flip', e.target.checked)} /> flip
+          </label>
+        </>
+      )}
     </>
   )
+}
+
+const SHAPE_TITLE: Record<MatrixShape, string> = {
+  triangle: 'Upper triangle of the window, rotated 45°',
+  window: 'Rotated 45° and filling the row: contacts of loci beyond the window edges too',
+  square: 'The window × window matrix, unrotated',
 }
 
 /** Canvas of one row (CSS size width × height at devicePixelRatio). */
@@ -709,6 +793,7 @@ function MatrixRow({
   group,
   nAll,
   guides,
+  layout,
   register,
   paneId,
 }: {
@@ -725,13 +810,16 @@ function MatrixRow({
   /** number of cells of the dataset ("All cells · 47") */
   nAll: number
   guides: number[]
+  layout?: GenomeChrom[]
   register(id: string, f: Describe | null): void
 }) {
   const { ref, style } = useRowCanvas(width, height)
   const pal = useTheme()
   const map = (ds.contact_maps ?? []).find((m) => m.key === row.source)
   const isDist = row.source === 'distance'
-  const valid = isDist ? hasCoords(ds) : !!map
+  // 3-D distances are per chromosome: none in the whole-genome view
+  const genomeDist = isDist && locus.chrom === GENOME
+  const valid = isDist ? hasCoords(ds) && !genomeDist : !!map
   const needsCell = !!map?.per_cell
   const takesScope = needsCell || isDist
   // the row's cells: one cell, a group, or all (a per-cell map sums every cell's map)
@@ -742,6 +830,15 @@ function MatrixRow({
   const [mat, setMat] = useState<MatrixData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const loadedOnce = useRef(false) // the first map of the row loads at once; only later pan / zoom is debounced
+  const shape = row.shape ?? 'triangle'
+  // whole genome: by default as deep as the longest chromosome (each one's map fills the row)
+  const maxDist = row.maxDist ?? (layout ? Math.max(...layout.map((c) => c.length)) : null)
+  const k = depthScale(maxDist, (locus.end - locus.start) / width, height)
+  const geom: TriangleGeom = { start: locus.start, bpPerPx: (locus.end - locus.start) / width, height, k, flip: !!row.flip, maxDist }
+  // window: loci beyond the axis edges too (the whole genome comes at once anyway)
+  const margin = shape === 'window' && locus.chrom !== GENOME ? Math.ceil(windowMargin(geom)) : 0
+  const region = margin ? { chrom: locus.chrom, start: Math.max(0, Math.round(locus.start - margin)), end: Math.round(locus.end + margin) } : queryRegion(locus)
 
   useEffect(() => {
     if (!valid || waiting) {
@@ -749,36 +846,34 @@ function MatrixRow({
       setError(null)
       return
     }
-    const key = [ds.id, row.source, locus.chrom, locus.start, locus.end, row.resolution ?? '', row.balance ? 1 : 0, cell ?? '', groupRef ?? '', stat, row.threshold ?? ''].join('|')
+    const key = [ds.id, row.source, regionKey(locus), margin, row.resolution ?? '', row.balance ? 1 : 0, cell ?? '', groupRef ?? '', stat, row.threshold ?? ''].join('|')
     let live = true
     const load = () =>
       isDist
-        ? fetchDistance(ds.id, locus, { cellId: cell, group: groupRef, stat, threshold: row.threshold ?? null })
-        : fetchContacts(ds.id, row.source!, locus, { resolution: row.resolution ?? null, balance: row.balance ?? false, cell, group: groupRef })
+        ? fetchDistance(ds.id, region, { cellId: cell, group: groupRef, stat, threshold: row.threshold ?? null })
+        : fetchContacts(ds.id, row.source!, region, { resolution: row.resolution ?? null, balance: row.balance ?? false, cell, group: groupRef })
     // cached → at once; else debounced (pan / zoom move the locus continuously)
     const t = setTimeout(
       () => {
         setLoading(true)
         cachedMatrix(key, load)
-          .then((m) => live && (setMat(m), setError(null)))
-          .catch((e: Error) => live && setError(e.message))
+          .then((m) => live && (loadedOnce.current = true, setMat(m), setError(null)))
+          .catch((e: Error) => live && (setMat(null), setError(e.message))) // no stale map under the message
           .finally(() => live && setLoading(false))
       },
-      matrixCache.has(key) ? 0 : 200,
+      matrixCache.has(key) || !loadedOnce.current ? 0 : 200,
     )
     return () => {
       live = false
       clearTimeout(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ds.id, row.source, locus.chrom, locus.start, locus.end, row.resolution, row.balance, cell, groupRef, stat, row.threshold, valid, waiting])
+  }, [ds.id, row.source, regionKey(locus), margin, row.resolution, row.balance, cell, groupRef, stat, row.threshold, valid, waiting])
 
   // a stale matrix of another chromosome must not be drawn on this axis
   const shown = mat && mat.header.chrom === locus.chrom && !waiting && valid ? mat : null
   const cscale = useMatrixScale(shown, row.color, `${paneId}:${row.id}`)
   const colors = cscale.pixels
-  const k = depthScale(row.maxDist, (locus.end - locus.start) / width, height)
-  const geom: TriangleGeom = { start: locus.start, bpPerPx: (locus.end - locus.start) / width, height, k, flip: !!row.flip, maxDist: row.maxDist ?? null }
   const title = isDist ? `3-D distance · ${STAT_LABEL[stat]}` : map ? map.label || map.key : `unknown source “${row.source}”`
   const cellsNote = shown?.header.n_cells ? `${shown.header.n_cells} cells` : null
   const note = [
@@ -802,7 +897,11 @@ function MatrixRow({
     if (shown && colors) {
       // pixel-accurate: inverse-map every device pixel to its bin pair
       const dg: TriangleGeom = { ...geom, bpPerPx: geom.bpPerPx / dpr, height: cv.height }
-      const px = rasterTriangle(cv.width, cv.height, dg, shown.header.bin_starts, shown.header.bin_ends, colors)
+      const h = shown.header
+      const px =
+        shape === 'square'
+          ? rasterSquare(cv.width, cv.height, locus.start, dg.bpPerPx, h.bin_starts, h.bin_ends, colors)
+          : rasterTriangle(cv.width, cv.height, dg, h.bin_starts, h.bin_ends, colors, shape === 'window')
       g.putImageData(new ImageData(px as unknown as Uint8ClampedArray<ArrayBuffer>, cv.width, cv.height), 0, 0)
     }
     // interval boundaries as faint guides
@@ -819,11 +918,20 @@ function MatrixRow({
       }
       g.setLineDash([])
     }
-    // label + colour bar in the empty corner (top for ▲, bottom for ▼)
+    // label + colour bar in the empty corner (top for ▲, bottom for ▼); over the map (window,
+    // square) on a translucent backing
     const top = row.flip ? height - 44 : 4
     g.font = CHART.font
     g.textAlign = 'left'
     g.textBaseline = 'top'
+    if (shown && shape !== 'triangle') {
+      g.save()
+      g.globalAlpha = 0.78
+      g.fillStyle = pal.viewportBg
+      g.fillRect(2, top - 2, Math.max(g.measureText(title).width, note ? g.measureText(note).width + 12 : 0) + 10, note ? 32 : 17)
+      if (height >= 70) g.fillRect(width - 84, row.flip ? height - 26 : 4, 82, 28)
+      g.restore()
+    }
     g.fillStyle = CHART.text
     g.fillText(title, 6, top)
     if (note) {
@@ -838,7 +946,7 @@ function MatrixRow({
       g.fillStyle = CHART.muted
       g.fillText(note, x, top + 14)
     }
-    if (shown && colors && pal.matrixFrame !== 'transparent') {
+    if (shown && colors && shape === 'triangle' && pal.matrixFrame !== 'transparent') {
       // light themes: the white end of e.g. "fall" needs an edge — outline the
       // triangle's two sides (depth t sits t·k px in from each end; clipped by the row)
       const t = Math.min(height, width / 2 / (geom.k || 1))
@@ -861,13 +969,19 @@ function MatrixRow({
       drawColorRamp(g, { x: width - rw - 8, y: row.flip ? height - 22 : 8, w: rw, h: 6 }, (t) => cscale.ramp(t), cscale.lo, cscale.hi)
       g.restore()
     }
-    const msg = !valid
+    // a per-cell map without this cell / group (e.g. one section of the data) is a note, not an error
+    const cover = error ? /(?:has no map|has a map) in '[^']*' \((.*)\)$/.exec(error) : null
+    const msg = genomeDist
+      ? '3-D distances are per chromosome — pick one (or double-click it on the ruler)'
+      : !valid
       ? title
       : waiting
         ? `“${map?.label || map?.key}” holds one map per cell — select a cell or a group (left), or give this row a group`
-        : error
+        : cover
+          ? `no map for ${cell ? 'this cell' : 'this group'} here — ${cover[1]}`
+          : error
     if (msg) {
-      g.fillStyle = error ? pal.error : CHART.muted
+      g.fillStyle = error && !cover ? pal.error : CHART.muted
       g.textAlign = 'center'
       g.textBaseline = 'middle'
       g.fillText(msg, width / 2, height / 2)
@@ -879,22 +993,24 @@ function MatrixRow({
       g.fillText('loading…', width / 2, height / 2)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown, colors, width, height, locus, k, row.flip, row.maxDist, guides, title, note, error, waiting, valid, loading, group, groupRef, pal, cscale.lo, cscale.hi, cscale.cs])
+  }, [shown, colors, width, height, locus, k, row.flip, maxDist, shape, guides, title, note, error, waiting, valid, loading, group, groupRef, pal, cscale.lo, cscale.hi, cscale.cs])
 
   useRegister(register, row.id, (x, y) => {
     if (!shown) return null
     const h = shown.header
-    const b = triangleBins(x, y, geom, h.bin_starts, h.bin_ends)
+    const b = shape === 'square' ? squareBins(x, y, width, height, locus.start, geom.bpPerPx, h.bin_starts, h.bin_ends) : triangleBins(x, y, geom, h.bin_starts, h.bin_ends)
     if (!b) return null
     const [i, j] = b
     const v = shown.data[i * h.n_cols + j]
     const unit = cscale.kind === 'distance' && h.unit ? ` ${h.unit}` : ''
-    return `${title} · bins ${i}, ${j} · ${h.chrom}:${fmtBp(h.bin_starts[i])} × ${fmtBp(h.bin_starts[j])} · ${Number.isFinite(v) ? fmtAxis(v) : '—'}${unit}`
+    const pos = (bp: number) => (h.chrom === GENOME ? fmtPos(GENOME, bp, layout) : fmtBp(bp))
+    const where = h.chrom === GENOME ? `${pos(h.bin_starts[i])} × ${pos(h.bin_starts[j])}` : `${h.chrom}:${pos(h.bin_starts[i])} × ${pos(h.bin_starts[j])}`
+    return `${title} · bins ${i}, ${j} · ${where} · ${Number.isFinite(v) ? fmtAxis(v) : '—'}${unit}`
   })
   return (
     <>
       <canvas ref={ref} style={style} />
-      {loading && shown && <div className="gv-row-loading muted small">loading…</div>}
+      {loading && <div className="gv-row-loading muted small"><span className="spinner small" aria-hidden /> loading…</div>}
     </>
   )
 }
@@ -908,6 +1024,7 @@ function TrackRow({
   data,
   label,
   color,
+  layout,
   register,
 }: {
   row: GenomeRow
@@ -919,6 +1036,7 @@ function TrackRow({
   label: string
   /** group colour, when the cells are a group */
   color: string | null
+  layout?: GenomeChrom[]
   register(id: string, f: Describe | null): void
 }) {
   const { ref, style } = useRowCanvas(width, height)
@@ -981,7 +1099,7 @@ function TrackRow({
     const i = binIndexAt(data.bin_starts, data.bin_ends, bp, ((locus.end - locus.start) / width) * 2)
     if (i < 0) return null
     const v = vals[i]
-    return `${name} · ${data.chrom}:${fmtBp(data.bin_starts[i])}-${fmtBp(data.bin_ends[i])} · ${v === null || v === undefined ? '—' : fmtAxis(v)} (${data.n_spots[i]} spots)`
+    return `${name} · ${fmtSpan(data.chrom, data.bin_starts[i], data.bin_ends[i], layout)} · ${v === null || v === undefined ? '—' : fmtAxis(v)} (${data.n_spots[i]} spots)`
   })
   return <canvas ref={ref} style={style} />
 }
@@ -992,6 +1110,7 @@ function IntervalRow({
   height,
   width,
   locus,
+  layout,
   table,
   register,
 }: {
@@ -999,6 +1118,7 @@ function IntervalRow({
   height: number
   width: number
   locus: Locus
+  layout?: GenomeChrom[]
   table: IntervalTable | undefined
   register(id: string, f: Describe | null): void
 }) {
@@ -1009,7 +1129,7 @@ function IntervalRow({
     const c = (n: string) => table.columns.indexOf(n)
     const [cs, ce, cc, cs2, ce2] = [c('start'), c('end'), c('chrom'), c('start2'), c('end2')]
     return table.rows
-      .filter((r) => cc < 0 || r[cc] === locus.chrom)
+      .filter((r) => cc < 0 || locus.chrom === GENOME || r[cc] === locus.chrom) // whole genome: all, in genome coordinates
       .map((r) => ({
         s: Number(r[cs]),
         e: Number(r[ce]),
@@ -1050,7 +1170,7 @@ function IntervalRow({
   useRegister(register, row.id, (x) => {
     const bp = locus.start + (x / width) * (locus.end - locus.start)
     const hit = items.find((it) => it.s2 === null && bp >= it.s && bp < it.e)
-    return hit ? `${row.key} · ${locus.chrom}:${fmtBp(hit.s)}-${fmtBp(hit.e)}` : null
+    return hit ? `${row.key} · ${fmtSpan(locus.chrom, hit.s, hit.e, layout)}` : null
   })
   return <canvas ref={ref} style={style} />
 }

@@ -14,7 +14,7 @@ from uchrom.browser.web.data import (
     natural_chrom_key,
 )
 
-SOX2 = Path(__file__).resolve().parents[2] / "example-data" / "mESC_Sox2_5cells_wnan.h5cd"
+SOX2 = Path(__file__).resolve().parents[2] / "example-data" / "mESC_Sox2_5cells_wnan.chromdata.zarr"
 
 
 def _toy():
@@ -122,7 +122,7 @@ def test_store_load_csv_and_missing(tmp_path):
     store.remove(ds.id)
     assert store.list() == []
     with pytest.raises(FileNotFoundError):
-        store.load(tmp_path / "nope.h5cd")
+        store.load(tmp_path / "nope.chromdata.zarr")
 
 
 @pytest.mark.skipif(not SOX2.exists(), reason="in-repo Sox2 FISH fixture missing")

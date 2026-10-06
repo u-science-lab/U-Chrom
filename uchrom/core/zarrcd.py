@@ -131,6 +131,8 @@ def container_kind(path: PathLike) -> Optional[str]:
     Suffix first (``.chromdata.zarr`` or any ``.zarr`` directory, ``.cdz``,
     ``.h5cd``); an existing path without a known suffix is sniffed
     (a directory with ``zarr.json``, a zip archive, an HDF5 file).
+    ``"h5cd"`` (the legacy HDF5 container, no longer read) is reported so that
+    callers can point at ``python -m uchrom.io.upgrade``.
     """
     p = Path(path)
     name = p.name.lower()
@@ -741,7 +743,13 @@ def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float
     try:
         if kind == "zarr":
             _write_tree(cd, tmp, **opts)
+            _consolidate_root(tmp)       # one request for every array's metadata when the store is read over HTTP
             if path.exists():
+                # re-writing the store this object was read from keeps its embedded copies
+                # (uchrom.core.embedded): they belong to the same data; any other object does not inherit them
+                origin = getattr(cd, "_source_path", None)
+                if (isinstance(origin, Path) and (path / "embedded").is_dir() and origin.resolve() == path.resolve()):
+                    os.replace(path / "embedded", tmp / "embedded")
                 old = parent / f".{path.name}.{uuid.uuid4().hex}.old"
                 os.replace(path, old)
                 os.replace(tmp, path)
@@ -757,6 +765,14 @@ def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float
     finally:
         if tmp.exists():
             _rmtree(tmp)
+
+
+def _consolidate_root(root: Path) -> None:
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")        # "consolidated metadata is not part of the Zarr v3 specification"
+        _zarr().consolidate_metadata(str(root))
 
 
 def _rmtree(p: Path) -> None:
@@ -1590,24 +1606,36 @@ class Container:
     """Read access to a ``.chromdata.zarr`` directory or a ``.cdz`` zip."""
 
     def __init__(self, path: PathLike):
-        path = Path(path)
-        kind = container_kind(path)
-        if kind not in ("zarr", "cdz"):
-            raise ValueError(f"{path} is not a .chromdata.zarr / .cdz store")
-        if not path.exists():
-            raise FileNotFoundError(path)
+        from .remote import filesystem, is_url, zarr_store
+
+        self._fs = None
+        if is_url(path):          # s3:// https:// ... : directory stores only
+            path = str(path).rstrip("/")
+            if container_kind(path) != "zarr":
+                raise ValueError(f"{path}: only .chromdata.zarr directories can be read remotely")
+            self._fs, self._root = filesystem(path)
+            kind = "zarr"
+        else:
+            path = Path(path)
+            kind = container_kind(path)
+            if kind not in ("zarr", "cdz"):
+                raise ValueError(f"{path} is not a .chromdata.zarr / .cdz store")
+            if not path.exists():
+                raise FileNotFoundError(path)
         zarr = _zarr()
         self.path = path
         self.kind = kind
         self._zip = None
-        if kind == "zarr":
+        if self._fs is not None:
+            store = zarr_store(path)
+        elif kind == "zarr":
             store = zarr.storage.LocalStore(str(path), read_only=True)
         else:
             self._zip = zipfile.ZipFile(path, "r")
             self._members = {i.filename: i for i in self._zip.infolist()}
             store = zarr.storage.ZipStore(str(path), mode="r")
         self.store = store
-        self.root = zarr.open_group(store=store, mode="r")
+        self.root = zarr.open_group(store=store, mode="r", zarr_format=3)
         attrs = dict(self.root.attrs)
         if "uchrom" not in attrs:
             raise ValueError(f"{path}: not a ChromData store (no 'uchrom' attributes)")
@@ -1616,6 +1644,8 @@ class Container:
     # -- files -----------------------------------------------------------
 
     def exists(self, rel: str) -> bool:
+        if self._fs is not None:
+            return bool(self._fs.exists(f"{self._root}/{rel}"))
         if self._zip is not None:
             return rel in self._members
         return (self.path / rel).exists()
@@ -1632,6 +1662,9 @@ class Container:
         import pyarrow.parquet as pq
 
         kw = {"read_dictionary": list(read_dictionary)} if read_dictionary else {}
+        if self._fs is not None:    # range requests through fsspec's read-ahead cache
+            return pq.ParquetFile(self._fs.open(f"{self._root}/{rel}", "rb", cache_type="readahead",
+                                                block_size=1 << 20), **kw)
         if self._zip is None:
             return pq.ParquetFile(str(self.path / rel), **kw)
         info = self._members[rel]
@@ -1646,7 +1679,20 @@ class Container:
         return pq.ParquetFile(pa.PythonFile(_ByteRange(self.path, offset, info.file_size), mode="r"), **kw)
 
     def read_frame(self, rel: str) -> pd.DataFrame:
+        fut = getattr(self, "_frame_futures", {}).pop(rel, None)
+        if fut is not None:           # started by prefetch_frames
+            return fut.result()
         return _arrow_to_frame(self.parquet(rel).read())
+
+    def prefetch_frames(self, rels: Iterable[str]) -> None:
+        """Start reading the Parquet tables ``rels`` in threads (``read_frame`` then waits for them): over HTTP
+        each table is a few round trips, and they do not depend on each other."""
+        if not hasattr(self, "_frame_futures"):
+            self._frame_futures = {}
+        pool = _io_pool()
+        for rel in rels:
+            if rel not in self._frame_futures and self.exists(rel):
+                self._frame_futures[rel] = pool.submit(lambda r=rel: _arrow_to_frame(self.parquet(r).read()))
 
     def group_attrs(self, name: str) -> dict:
         try:
@@ -1759,6 +1805,14 @@ def read_small_parts(c: Container) -> Dict[str, Any]:
         pre += [f"index/coords/{n}" for n in names + ["cell_partition", "partition_offsets",
                                                        "partition_groups", "partition_chrom", "primary_run"]]
     c.prefetch(pre)
+    if c._fs is not None:          # remote store: everything below that does not depend on anything else, at once
+        for gname in ("cellm", "binm"):
+            c.prefetch([f"{gname}/{node}" for node in c.group_attrs(gname).get("keys", {}).values()])
+        files = ["bins.parquet"] + [tmeta[k]["file"] for k in ("bin_tracks", "cells", "traces") if k in tmeta]
+        files += [i["file"] for i in tmeta.get("intervals", {}).values()] + list(tmeta.get("points", {}).values())
+        for tname in ("spots", "spot_tracks"):
+            files += [i["file"] for i in (tmeta.get(tname, {}).get("categorical") or {}).values()]
+        c.prefetch_frames(f"tables/{f}" for f in files if isinstance(f, str))
     bins = c.read_frame("tables/bins.parquet")
     bins.index = pd.RangeIndex(len(bins), name=BIN_ID)
     if "chrom" not in bins.columns:
@@ -1874,6 +1928,8 @@ def _relocate_links(raw: Any, relpaths: Dict[str, str], store_path: Path) -> Any
     single = "path" in raw
     recs = {"__single__": dict(raw)} if single else {k: dict(v) if isinstance(v, Mapping) else v
                                                      for k, v in raw.items()}
+    if isinstance(store_path, str) and "://" in store_path:   # remote store: nothing to relocate
+        return raw
     parent = Path(store_path).resolve().parent
     for key, rel in relpaths.items():
         rec = recs.get(key)
@@ -2215,11 +2271,16 @@ class SpotRows:
         return len(self.part_files)
 
     def pf(self, name: str, part: int = 0):
+        # opened outside the lock: over HTTP an open is a request or two, and the partitions of one read are
+        # opened by parallel threads (two threads may open the same file; the first one kept wins)
+        key = (name, int(part))
         with self._lock:
-            key = (name, int(part))
-            if key not in self._pf:
-                self._pf[key] = self.c.parquet(self.part_files[int(part)][name])
-            return self._pf[key]
+            pf = self._pf.get(key)
+        if pf is None:
+            pf = self.c.parquet(self.part_files[int(part)][name])
+            with self._lock:
+                pf = self._pf.setdefault(key, pf)
+        return pf
 
     def columns(self, name: str) -> List[str]:
         """Logical column names (the helper columns of decimal-encoded

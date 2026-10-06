@@ -10,11 +10,11 @@ reads both with :meth:`ChromData.from_fofct` (``cell_table=``), writes
 ``liu2025_mop/liu2025_mop.chromdata.zarr`` and
 ``liu2025_mop/build_summary.json`` (n_spots / n_traces / n_cells,
 NaN-coordinate spots, file sizes, wall time, peak RSS of the FOF-CT read).
-``--format h5cd`` writes the deprecated HDF5 container instead.
+``--format cdz`` writes the one-file store instead.
 
 Usage::
 
-    python example-data/build_liu2025_mop.py [--data-dir DIR] [--format zarr|cdz|h5cd]
+    python example-data/build_liu2025_mop.py [--data-dir DIR] [--format zarr|cdz]
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))  # this checkout's uchrom, not an installed copy
 CORE, CELLS = "4DNFID46OABK.csv", "4DNFICX8IVEK.csv"
-SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz", "h5cd": ".h5cd"}
+SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz"}
 
 
 def size_bytes(p: Path) -> int:
@@ -68,12 +68,7 @@ def main() -> None:
     rss = peak_rss_mb()
     out = d / f"liu2025_mop{SUFFIX[args.format]}"
     t0 = time.perf_counter()
-    if out.suffix == ".h5cd":
-        tmp = out.with_suffix(".tmp.h5cd")
-        cd.write(tmp)
-        tmp.replace(out)
-    else:
-        cd.write(out)  # atomic
+    cd.write(out)  # atomic
     write_s = time.perf_counter() - t0
     nan = ~np.isfinite(cd.coords).all(axis=1)
     per_trace = cd.spots.groupby("trace_id", observed=True).size()

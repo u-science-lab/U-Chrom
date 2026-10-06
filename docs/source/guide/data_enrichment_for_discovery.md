@@ -53,7 +53,7 @@ The repo already has the main storage and structural-analysis foundations:
 
 - `ChromData.tracks` stores per-spot, row-aligned feature tracks.
 - `ChromData.results` stores analysis outputs such as DataFrames and arrays.
-- `.h5cd` persistence already writes both `tracks` and `results`.
+- `.chromdata.zarr` persistence already writes both `tracks` and `results`.
 - `uchrom.strc.tad.call_tads_by_pval` calls TADs from chromatin tracing data
   and can store them under `cd.results["tads"]`.
 - `uchrom.strc.loop.call_loops_axiswise_f` calls loop candidates and can store
@@ -278,17 +278,17 @@ the discovery schema.
 The runner uses the same layer as a default pre-discovery stage. For example:
 
 ```bash
-python -m uchrom_discovery run data.h5cd runs/example \
+python -m uchrom_discovery run data.chromdata.zarr runs/example \
   --fasta genome.fa \
   --gtf genes.gtf \
   --peak-track H3K27ac \
   --store-schema
 ```
 
-When enrichment is enabled, the run writes `enriched.h5cd` in the run
+When enrichment is enabled, the run writes `enriched.chromdata.zarr` in the run
 directory and uses it for schema generation and notebooks. With
 `--store-schema`, the enriched features, schema, and graph metadata are also
-written back to the input `.h5cd`.
+written back to the input `.chromdata.zarr`.
 
 ## Discovery Schema Extensions
 
@@ -348,7 +348,7 @@ The schema should also include:
 The enriched auto-discovery workflow should look like this:
 
 ```text
-raw or existing h5cd
+raw or existing store
   -> optional U-Chrom structural callers
   -> optional sequence feature calculation
   -> optional annotation feature calculation
@@ -366,7 +366,7 @@ thin composition layer.
 Example:
 
 ```bash
-python -m uchrom_discovery enrich data.h5cd enriched.h5cd \
+python -m uchrom_discovery enrich data.chromdata.zarr enriched.chromdata.zarr \
   --fasta genome.fa \
   --gtf genes.gtf \
   --sequence gc,cpg,n,g4 \
@@ -378,7 +378,7 @@ python -m uchrom_discovery enrich data.h5cd enriched.h5cd \
 Then:
 
 ```bash
-python -m uchrom_discovery iterate enriched.h5cd runs/enriched_iterative \
+python -m uchrom_discovery iterate enriched.chromdata.zarr runs/enriched_iterative \
   --iterations 2 \
   --ideas-per-iteration 10
 ```
@@ -403,7 +403,7 @@ python -m uchrom_discovery iterate enriched.h5cd runs/enriched_iterative \
 
 - Should canonical `bin_features` always be computed on unique `spots`
   intervals, or should users be able to provide an independent bin grid?
-- How should chromosome naming be normalized across `h5cd`, FASTA, GTF, BED,
+- How should chromosome naming be normalized across the store, FASTA, GTF, BED,
   cool, and hic inputs?
 - Should structural callers write one merged result table per feature type, or
   separate per-chromosome keys that a wrapper merges?

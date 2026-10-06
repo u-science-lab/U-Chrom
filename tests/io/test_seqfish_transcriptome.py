@@ -92,12 +92,12 @@ def test_read_seqfish_transcriptome_aggregates_spots(tmp_path):
     assert dense.loc["1_0_3"].sum() == 0
 
 
-def test_load_seqfish_multiomics_linked_writes_h5cd_and_h5ad(tmp_path):
+def test_load_seqfish_multiomics_linked_writes_store_and_h5ad(tmp_path):
     from uchrom import ChromData
     from uchrom.io.seqfish_multiomics import load_seqfish_multiomics_linked
 
     dna_path, locus_path, clustering_path, rna_path = _write_takei_like_inputs(tmp_path)
-    h5cd_path = tmp_path / "takei.h5cd"
+    cd_path = tmp_path / "takei.chromdata.zarr"
     h5ad_path = tmp_path / "takei_rna.h5ad"
 
     cd = load_seqfish_multiomics_linked(
@@ -105,13 +105,13 @@ def test_load_seqfish_multiomics_linked_writes_h5cd_and_h5ad(tmp_path):
         locus_annotation=locus_path,
         cell_clustering=clustering_path,
         transcriptomic_data=rna_path,
-        h5cd_path=h5cd_path,
+        cd_path=cd_path,
         h5ad_path=h5ad_path,
         transcriptome_chunksize=2,
     )
     adata = cd.linked_adata
 
-    assert h5cd_path.exists()
+    assert cd_path.exists()
     assert h5ad_path.exists()
     assert adata is not None
     assert list(cd.cells.index) == list(adata.obs_names) == ["1_0_1", "1_0_2"]
@@ -119,7 +119,7 @@ def test_load_seqfish_multiomics_linked_writes_h5cd_and_h5ad(tmp_path):
     assert "n_transcripts" in cd.cells.columns
     assert adata.shape == (2, 3)
 
-    cd2 = ChromData.read(h5cd_path)
+    cd2 = ChromData.read(cd_path)
     adata2 = cd2.linked_adata
     assert adata2 is not None
     assert list(cd2.cells.index) == list(adata2.obs_names)

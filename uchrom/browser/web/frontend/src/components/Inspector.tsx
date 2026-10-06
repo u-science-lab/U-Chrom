@@ -3,13 +3,16 @@ import { ensureActivePane, inspectorSections, paneTitle, type DatasetFacts } fro
 import { hasCoords, useStore } from '../store'
 import { ChromLegend } from './ChromLegend'
 import { EmbeddingControls } from './EmbeddingView'
+import { FocusPanel } from './FocusPanel'
+import { SpatialControls } from './SpatialView'
+import { SideClose } from './SideClose'
 import { GenomeInspector } from './GenomeView'
 import { LayerPanel } from './LayerPanel'
 import { MatrixControls } from './MatrixView'
 import { OperationsPanel } from './OperationsPanel'
 import { PointsPanel } from './PointsPanel'
 import { ScopePicker } from './ScopePicker'
-import { setPaneScope } from '../workspace'
+import { setPaneScope, layerInPane } from '../workspace'
 import { StyleSection } from './PropertiesPanel'
 import { StatsControls } from './StatsView'
 
@@ -30,7 +33,12 @@ export function Inspector() {
   const ws = useStore((s) => s.workspace)
   const setWorkspace = useStore((s) => s.setWorkspace)
   const facts = useDatasetFacts()
-  const layer = useStore((s) => s.layers.find((l) => l.id === s.selectedLayerId))
+  // the selected layer if it belongs to the active view (else the dataset's own layer)
+  const layer = useStore((s) => {
+    const active = s.workspace.panes.find((p) => p.id === s.workspace.activePane)
+    const sel = s.layers.find((l) => l.id === s.selectedLayerId && l.datasetId === s.activeDatasetId)
+    return sel && layerInPane(sel, active) ? sel : s.layers.find((l) => l.datasetId === s.activeDatasetId && l.parentId === null)
+  })
   // a workspace always has an active pane
   useEffect(() => setWorkspace(ensureActivePane), [ws.activePane, ws.panes, setWorkspace])
   const pane = ws.panes.find((p) => p.id === ws.activePane) ?? ws.panes[0]
@@ -40,8 +48,9 @@ export function Inspector() {
     <aside className="props panel inspector" key={pane.id}>
       <div className="insp-title">
         <span>{paneTitle(ws, pane)}</span>
-        <span className="muted small">inspector</span>
+        <SideClose side="right" />
       </div>
+      <FocusPanel />
       {sections.has('pin') && (
         <div className="insp-pin">
           <span className="insp-label">cells</span>
@@ -57,7 +66,7 @@ export function Inspector() {
       {sections.has('subset') && <OperationsPanel />}
       {sections.has('style') &&
         (layer ? (
-          <StyleSection layer={layer} hasCells={(facts?.nCells ?? 0) > 1} />
+          <StyleSection layer={layer} hasCells={(facts?.nCells ?? 0) > 1} paneId={pane.id} />
         ) : (
           <>
             <h2>Style</h2>
@@ -77,6 +86,12 @@ export function Inspector() {
         <section className="insp-controls">
           <h2>Embedding</h2>
           <EmbeddingControls pane={pane} />
+        </section>
+      )}
+      {sections.has('spatial') && (
+        <section className="insp-controls">
+          <h2>Spatial</h2>
+          <SpatialControls pane={pane} />
         </section>
       )}
       {sections.has('stats') && (

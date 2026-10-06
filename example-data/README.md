@@ -10,6 +10,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | File / target location                | Size    | Shipped in repo | Auto-download | Used by                                                                 |
 | ------------------------------------- | ------- | --------------- | ------------- | ----------------------------------------------------------------------- |
 | `cell1.pairs`                         | 4.7 MB  | yes             | —             | `reconstruction.ipynb`, root README CLI example                         |
+| `ref_hg38/hg38.gap.txt.gz`, `ref_hg38/hg38.centromeres.txt.gz` (UCSC hg38 `gap` and `centromeres` tables, goldenPath/hg38/database) | 12 KB + 1.5 KB | yes | — | `probe_human_ssab_layout.py` (bin layout of the human Hi-C-RNA single-spot A/B) |
 | `cell2.pairs.gz` (**source unverified**, see its section) | 5.4 MB  | yes             | —             | only `tests/smoke/fasthigashi_smoke.py` (manual FastHigashi smoke run, not collected by pytest) |
 | `K562_chr21_30kb.cool` (Ray 2019 K562; **was misnamed `IMR90_chr21_30kb.cool`**) | 280 KB  | yes             | —             | generic Hi-C matrix for tests (`call_tads_di`, `load_cool`, GEM-FISH smoke tests), `benchmarks/cd2_callers_validation.py`, `docs/source/guide/structure.md` — never paired with IMR90 imaging |
 | `rao2014_imr90/IMR90_chr21_5kb_hg19.cool` | 3.8 MB | yes (only this file of the folder) | built (`build_rao2014_slices.py`) | `gem_fish_reconstruction` tutorial part 2 (real IMR90 Hi-C for the Bintu 2018 region); Fig. 3b / 3c |
@@ -17,17 +18,25 @@ auto-downloaded by the tutorials on first run into this directory.
 | `4DNFIJ52NVDV.csv`                    | 219 KB  | yes             | —             | Takei 2021 nascent RNA spots for `from_fofct(rna_table=…)`, web browser; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer) |
 | `takei2025_cerebellum_fixture/`       | ~750 KB | **missing** — listed but never committed (see its section) | — | `seqfish_multiomics_cerebellum` tutorial (Takei 2025 loader fixture) |
 | `sim_cell1/` (`sim_cell1.cdz` + mcool; **structure predates the `count_contacts` fix**; rebuild with the native engine deferred, see its section) | 1.4 MB | yes             | —             | web browser: single-cell 3-D structure + its own contacts (`build_sim_cell1.py`); `tests/browser_web/test_genome_views.py`; `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`) (from the former 1.x `.h5cd`); `benchmarks/fig2/f_roundtrip.py` (PDB / .3dg / .mcool rows); agent benchmark `benchmarks/fig6/agent_bench/` |
-| `mESC_Sox2_5cells_{wnan,imputed_linear,imputed_snapfish}.h5cd` | 24 KB each | yes | — | imputation tests / tutorial (Huang 2021 mESC Sox2, 5 cells; see `mESC_Sox2_README.md`); `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); kept as 1.x files so the upgrade path stays exercised |
+| `mESC_Sox2_5cells_{wnan,imputed_linear,imputed_snapfish}.chromdata.zarr` | 176 KB each (43 small files) | yes | — | imputation tests / `fish_imputation` tutorial / web browser tests (Huang 2021 mESC Sox2, 5 cells; see `mESC_Sox2_README.md`).  Converted from the former 1.1 `.h5cd` files (24 KB each; in git history) with `python -m uchrom.io.upgrade` |
 | `takei2025_fov0/takei2025_fov0.chromdata.zarr` (older builds: `.h5cd`) | 73 MB (h5cd 1.x: 220 MB) | no | Zenodo 7693825 (streamed) | web browser: 59 IF tracks per spot, 47 cells, IF embedding (`build_takei2025_fov0.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `tests/browser_web` (real-data checks); `benchmarks/fig2/f_roundtrip.py` (chromdata.zarr / FOF-CT / AnnData rows); Fig 6 (`u-chrom-paper/manuscripts/full/figures/fig6/extract_data.py`, `benchmarks/fig6/`, agent benchmark `benchmarks/fig6/agent_bench/`) |
-| `schicar_mop/*.chromdata.zarr` (older builds: `.h5cd`), `*.mcool, *.cool, *.scool` | ~400 MB | no  | built from GEO GSE305439 | web browser: scHiCAR without 3-D, RNA / ATAC / Hi-C embeddings (`build_schicar_mop.py`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fig2/e_contacts.py`, `e_contacts_query.py` (Fig. 2f and supplement: group pseudo-bulk vs the per-type `contacts_<type>.cool`; link vs copy import), `f_crossmodal.py` (Fig. 2f: RNA Leiden clusters → pseudo-bulk maps and P(s) from the linked `.scool`), `f_roundtrip.py` (Fig. 2b, .scool row); `benchmarks/fig6/bench_server.py` (contact-map and pseudo-bulk latency); agent benchmark `benchmarks/fig6/agent_bench/` |
-| `takei2025_cerebellum/` (tarball + per-FOV and combined `.chromdata.zarr`; older builds: `.h5cd`) | 2.85 GB download; 7.9 GB raw CSV; combined store 2.05 GB as format 2.2 (`*.v22.chromdata.zarr`; 2.94 GB as 2.1, 2.17 GB as 2.0; h5cd 1.x: 6.3 GB) | no | Zenodo 7693825 (opt-in, `--takei2025_cerebellum`) | `benchmarks/fig2/` (b, c, d, allele QC, `rowgroup_sweep.py`, `spot_tracks_encoding.py`; 1e8 store by `replicate_store.py`) via `build_takei2025_cerebellum.py` (`--stream`: FOV-by-FOV streaming import); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1 conversion, streaming seqFISH+ import from `raw/`, streaming distance maps); `benchmarks/cd22_convert_validate.py` (2.1 → 2.2 conversion, bitwise check); `benchmarks/fig2/cd22_variants.py` (format 2.2 variants); `benchmarks/cell_spatial_validation.py` (cell positions) |
+| `schicar_mop/*.chromdata.zarr` (older builds: `.h5cd`), `*.mcool, *.cool, *.scool`, `schicar_mop_rna.h5ad` (every gene) | ~400 MB + h5ad | no  | built from GEO GSE305439 | web browser: scHiCAR without 3-D, RNA / ATAC / Hi-C embeddings (`build_schicar_mop.py`); atlas store `schicar_mouse_cortex` (embedded copies, `python -m uchrom.core.embedded`); `benchmarks/omics_embeddings.py`; `benchmarks/cd2_upgrade_validation.py` (1.x → 2.0); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/fig2/e_contacts.py`, `e_contacts_query.py` (Fig. 2f and supplement: group pseudo-bulk vs the per-type `contacts_<type>.cool`; link vs copy import), `f_crossmodal.py` (Fig. 2f: RNA Leiden clusters → pseudo-bulk maps and P(s) from the linked `.scool`), `f_roundtrip.py` (Fig. 2b, .scool row); `benchmarks/fig6/bench_server.py` (contact-map and pseudo-bulk latency); agent benchmark `benchmarks/fig6/agent_bench/`; `benchmarks/spatial_composition` (spot compartments vs cell-type composition) |
+| `spatial_hic_chen2026/*.chromdata.zarr` + linked `*_ssab.h5ad`, `*_rna.h5ad`, `*_images/`, E13.5 `*.scool` / `*.mcool` | 15.9 GB download (Zenodo); built: stores 0.7–16 MB, h5ad 18–880 MB, scool 120 MB + mcool 94 MB | no | Zenodo 17961135 + 22144954 (opt-in, `--spatial_hic_chen2026`), built by `build_spatial_hic_chen2026.py` (needs R: `spatial_hic_chen2026_export.R`) | Spatial Hi-C mouse embryo / brain without 3-D (Chen, Guo et al. 2026): six tissue stores; `benchmarks/spatial_hic_chen2026_validation.py`; the cerebellum section outlines of the atlas page's hero animation (`atlas/hero_data.py`); `benchmarks/spatial_composition` (spot compartments vs cell-type composition) |
+| `spatial_atac_hic/mouse_brain.chromdata.zarr` + `mouse_brain_atac.h5ad`, `mouse_brain_images/` | 9.5 GB download (GEO); built store + links ~0.3 GB | no | GEO GSE307620 (opt-in, `--spatial_atac_hic`), built by `build_spatial_atac_hic.py`; contacts from SRA raw reads on Sherlock (`spatial_atac_hic/sherlock/`) | Spatial ATAC-Hi-C mouse brain (Wang P. et al. 2026): Spatial view, ATAC tracks / domains |
+| `spatial_hicrna/raw/GSE311199/` (processed h5ad, RNA, images) + Sherlock contact maps on Oak | 2.3 GB download; 7 × `.pairs.gz` 7–160 GB processed on Sherlock | no | GEO GSE311199 (opt-in, `--spatial_hicrna`); `.pairs` -> `.scool` / `.mcool` by `spatial_hicrna/sherlock/` | Spatial Hi-C-RNA brain / embryo / melanoma (Guo et al. 2026, Cell): per-spot contacts; stores `hicrna_{mouse_brain,mouse_embryo,human_melanoma}.chromdata.zarr` (`build_spatial_hicrna.py`, `link_spatial_hicrna_contacts.py`); `benchmarks/spatial_composition` (spot compartments vs cell-type composition) |
+| `takei2025_cerebellum/` (tarball + per-FOV and combined `.chromdata.zarr`; older builds: `.h5cd`) | 2.85 GB download; 7.9 GB raw CSV; combined store 2.05 GB as format 2.2 (`*.v22.chromdata.zarr`; 2.94 GB as 2.1, 2.17 GB as 2.0; h5cd 1.x: 6.3 GB) | no | Zenodo 7693825 (opt-in, `--takei2025_cerebellum`) | `benchmarks/fig2/` (b, c, d, allele QC, `rowgroup_sweep.py`, `spot_tracks_encoding.py`; 1e8 store by `replicate_store.py`) via `build_takei2025_cerebellum.py` (`--stream`: FOV-by-FOV streaming import); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1 conversion, streaming seqFISH+ import from `raw/`, streaming distance maps); `benchmarks/cd22_convert_validate.py` (2.1 → 2.2 conversion, bitwise check); `benchmarks/fig2/cd22_variants.py` (format 2.2 variants); `benchmarks/cell_spatial_validation.py` (cell positions); atlas store `takei2025_cerebellum` (the `.v22` store, `--upgrade`d) |
 | `liu2025_mop/4DNFID46OABK.csv` + `4DNFICX8IVEK.csv` (+ built `liu2025_mop.chromdata.zarr`, 294 MB; `.v22.chromdata.zarr` 267 MB) | 1.68 GB + 17 MB | no | 4DN public S3 (opt-in, `--liu2025_mop`) | largest wild-type 4DN FOF-CT; `build_liu2025_mop.py` (Fig. 2 dataset scale); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1, streaming `from_fofct(out=)` vs in memory, streaming distance maps vs the dense reference); `benchmarks/cd22_convert_validate.py` / `benchmarks/fig2/cd22_variants.py` (format 2.2); `benchmarks/cell_spatial_validation.py` (cell positions) |
 | Takei 2025 other Zenodo archives (cerebellum rep 2, E14, NMuMG) | 5.3–11 GB each | no | **manual** | `seqfish_multiomics_cerebellum` tutorial (real-data run) |
 | `4DNFIHF3JCBY.csv`                    | 22 MB   | no              | 4DN public S3 | `loop_calling`, `tad_calling`, `compartment`, `fishnet_domains` tutorials; `tests/core/test_fofct_writer.py` (skipped when absent); `benchmarks/fofct_roundtrip_validation.py` (FOF-CT writer); `benchmarks/cd21_streaming_validation.py` (streaming vs in-memory ArcFISH loop / TAD calls); `benchmarks/cell_spatial_validation.py` (cell positions); `benchmarks/screcon/simulate.py` (`takei2021_25kb` truth) |
 | `4DNFIFLJGGNR.csv`                    | 47 MB   | no              | 4DN public S3 (`--takei2021_1mb`) | `benchmarks/screcon/simulate.py` (`takei2021_1mb` truth: genome-wide 1 Mb loci; also the `robust` development / test simulations, `robust_devlog.md`, `TEST_RESULTS.md`); `matched_data.py locus-map` (coordinates of the 2,460 locus names); `benchmarks/bulk/` (diploid mESC truth, heuristic homologs; vs Bonev 2017) |
 | `DNAseqFISH+.zip`                     | 144 MB  | no              | Zenodo 3735329 | `jie_aligner` tutorial; `benchmarks/screcon/matched_data.py takei-mesc` (446-cell mESC imaging reference, replicates 1 + 2; matched-imaging analysis of `robust`) and `locus-map` |
 | `IMR90_chr21-18-20Mb.csv`             | 2 MB    | no              | GitHub raw    | `gem_fish_reconstruction` tutorial (with `rao2014_imr90/` Hi-C); Fig. 3b / 3c (`benchmarks/fig3/b_first_look.py`, `c_gemfish_first_look.py`) |
-| `stevens2017_mesc/` (8 cells: contact pairs + published `.pdb` structures) | 43 MB | no | GEO GSE80280 (`--stevens2017`) | Fig. 3a (NucDynamics reference; `benchmarks/fig3/a_sc_consistency.py`; native-engine validation and speed `benchmarks/fig3/a_nucdyn_engine_*.py`) |
+| `stevens2017_mesc/` (8 cells: contact pairs + published `.pdb` structures) | 43 MB | no | GEO GSE80280 (`--stevens2017`) | Fig. 3a (NucDynamics reference; `benchmarks/fig3/a_sc_consistency.py`; native-engine validation and speed `benchmarks/fig3/a_nucdyn_engine_*.py`); atlas store `stevens2017_mesc.chromdata.zarr` (`build_stevens2017.py`) |
+| `hires2023/raw/GSE223917/` (per-cell `.pairs.gz` + 20 kb `.3dg`, metadata, RNA) | 75 GB (GEO `GSE223917_RAW.tar`, 7,895 cells) + 70 MB | no | GEO GSE223917 (`--hires2023_meta`, `--hires2023`) | Atlas: HiRES mouse embryo / brain, contacts + RNA + 3-D (`build_hires2023.py`); three brain cells' structures in the atlas page's hero animation (`atlas/hero_data.py`) |
+| `dschic2025/raw/GSE285812/` (3 × `.contacts.pairs.gz` + metadata) | 44 GB | no | GEO GSE285812 (`--dschic2025_aging`) | Atlas: dscHi-C mouse cortex at 3 / 12 / 23 months (`build_dschic2025.py`) |
+| `gageseq2024/raw/` (6 × contacts / RNA, annotations, Ensembl 98 GTFs) | 38 GB | no | GEO GSE238001 + GitHub ma-compbio/GAGE-seq + Ensembl (`--gageseq2024`) | Atlas: GAGE-seq mouse cortex / human bone marrow CD34+ (`build_gageseq2024.py`); `benchmarks/spatial_composition` (spot compartments vs cell-type composition) |
+| `droplet_hic2024/raw/GSE253407/` (5 × `.sc.pairs.gz`, 3 × 10x RNA `.h5`, metadata) | 72 GB | no | GEO GSE253407 (`--droplet_hic2024_meta`, `--droplet_hic2024`) | Atlas: Droplet Hi-C / Paired Hi-C mouse cortex (`build_droplet_hic2024.py`); `benchmarks/spatial_composition` (spot compartments vs cell-type composition) |
+| `unic2025/raw/GSE267873/` (48 × `.pairs.gz`: 43 single cells + 5 bulk libraries) | 110 GB | no | GEO GSE267873 (`--unic2025`) | Atlas: Uni-C human and mouse single cells and CTCs (`build_unic2025.py`) |
 | `bintu2018/{IMR90,K562}_chr21-28-30Mb.csv` | 7.8 MB + 20 MB | no | GitHub raw (`--bintu2018`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
 | `su2020_imr90/chromosome21.tsv` + `Hi-C_contacts_chromosome21.tsv` | 261 MB + 1 MB | no | Zenodo 3928890 (`--su2020_chr21`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`); `benchmarks/screcon/simulate.py` (`su2020_chr21` truth); `benchmarks/bulk/` (chr21 truth population) |
 | `su2020_imr90/genomic-scale.tsv` | 200 MB | no | Zenodo 3928890 (`--su2020_genome`) | `benchmarks/bulk/` (primary diploid genome-wide truth: 1,041 loci × 1,787 IMR90 cells, homologs resolved, lamina distances) |
@@ -50,22 +59,23 @@ auto-downloaded by the tutorials on first run into this directory.
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
 | `H1Esc-HFF.R1.tar.gz`                 | 128 MB  | no              | UW Noble lab  | `higashi_embedding` tutorial (sci-Hi-C H1Esc+HFF mix)                   |
 | `H1Esc-HFF.R1.labeled`                | 92 KB   | no              | UW Noble lab  | `higashi_embedding` tutorial (cell-type labels)                         |
-| `with_loops.h5cd`                     | 24 MB   | no              | generated     | output of `loop_calling.ipynb` (intermediate cache, safe to delete)     |
+| `with_loops.chromdata.zarr`           | 24 MB   | no              | generated     | output of `loop_calling.ipynb` (intermediate cache, safe to delete)     |
 | `fofct_core.csv`                      | ~6 MB   | no              | generated     | synthetic offline fallback for tutorials 4/5/6/7                        |
 | `GSE63525_GM12878_insitu_primary+replicate_combined_30.hic` | ~40 GB | no | **manual** (too large) | `benchmark.ipynb` |
 | `schicar_mop/raw/GSE305439/` RNA + metadata | 61 MB | no | GEO GSE305439 | scHiCAR tutorials (upstream input) |
 | `schicar_mop/raw/GSE305439/` pairs | 1.47 GB | no | GEO GSE305439 (opt-in, `--schicar_dna`) | `build_schicar_mop.py` contact maps, scHiCAR tutorials |
 | `schicar_mop/raw/GSE305439/` ATAC fragments + `schicar_mop/raw/mm10.refGene.gtf.gz` | 1.35 GB + 13 MB | no | GEO GSE305439 + UCSC (opt-in, `--schicar_atac`) | `build_schicar_mop.py` ATAC embedding + gene activity |
 | `schicar_mop/raw/merfish_mop/` | 332 MB | no | Brain Image Library g.21 | `schicar_to_merfish_mapping.ipynb` (upstream input) |
-| `benchmarks/fig6/_data/takei2025_fov0_x{1,3,10,30}.h5cd` | 28 MB – 0.9 GB | no | **derived**: `benchmarks/fig6/make_scaled.py` tiles copies of the real FOV 0 cells (geometry only); labelled *replicated* wherever reported | Fig 6c browser benchmarks |
+| `benchmarks/fig6/_data/takei2025_fov0_x{1,3,10,30}.chromdata.zarr` | 28 MB – 0.9 GB | no | **derived**: `benchmarks/fig6/make_scaled.py` tiles copies of the real FOV 0 cells (geometry only); labelled *replicated* wherever reported | Fig 6c browser benchmarks |
 | `schicar_mop/data/…`, `schicar_mop/organized_u_chrom_framework/…` | — | no | **derived — recipe pending** | scHiCAR tutorials (see below) |
 
 `*.csv`, `*.h5cd`, `*.chromdata.zarr`, `*.cdz` (except
-`sim_cell1/sim_cell1.cdz`) and the DNAseqFISH+ zip/folder are ignored by
-git; they're either generated or downloaded on demand.  The builders write
-the format 2.0 `.chromdata.zarr` store (`--format h5cd` still writes the
-deprecated HDF5 file); older `.h5cd` builds keep working (they are read,
-and `python -m uchrom.io.upgrade` converts them).
+`sim_cell1/sim_cell1.cdz` and the `mESC_Sox2_5cells_*.chromdata.zarr`
+stores) and the DNAseqFISH+ zip/folder are ignored by git; they're either
+generated or downloaded on demand.  The builders write the
+`.chromdata.zarr` store (`--format cdz`: one zip file).  `.h5cd` files of
+older builds are no longer read: convert them once with
+`python -m uchrom.io.upgrade old.h5cd`, or rebuild.
 
 ## Small, in-repo datasets
 
@@ -144,7 +154,7 @@ and `python -m uchrom.io.upgrade` converts them).
   [7693825](https://zenodo.org/records/7693825).  Locus annotation +
   clustering CSVs: CaiGroup/dna-seqfish-plus-multi-omics GitHub repo.
 - **Used by**: `seqfish_multiomics_cerebellum.ipynb` (loader walk-through
-  + `.h5cd` round-trip).
+  + store round trip).
 - **Real-data run**: the full distribution (rep 1 + rep 2 tarballs,
   ~8 GB compressed; tens of GB uncompressed; tens of millions of spots)
   is *not* auto-fetched.  Manual download:
@@ -552,7 +562,7 @@ public data alone** and are shipped with their recorded outputs.
   as a browser / benchmark demo, not as a valid Cell 1 structure.  The mcool is
   built directly from `cell1.pairs` and is not affected.
 - **Rebuild** (native engine): `pip install ./native/nucdyn`, then
-  `python example-data/build_sim_cell1.py [--device auto|cpu|gpu] [--n-models 4] [--seed 1] [--format cdz|zarr|h5cd]`
+  `python example-data/build_sim_cell1.py [--device auto|cpu|gpu] [--n-models 4] [--seed 1] [--format cdz|zarr]`
   (then regenerate the Fig. 6 agent-benchmark answers).
 - **Check**: bins in contact in the input are ~2× closer in the model
   (median 3D distance of contacted / non-contacted 1 Mb pairs = 0.44–0.59
@@ -606,6 +616,258 @@ public data alone** and are shipped with their recorded outputs.
 - **Used by**: web browser (matrix, embedding and field views for data
   without 3-D).
 
+### `spatial_hic_chen2026/` — Spatial Hi-C, mouse embryo and brain sections, no 3-D (Chen, Guo et al. 2026)
+
+- **Source**: Chen, Guo et al. 2026, *Nature Methods*, "Spatially resolved chromatin architectures
+  in mammalian brain tissues" (doi:10.1038/s41592-026-03218-3).  Processed data: Zenodo
+  [17961135](https://zenodo.org/records/17961135) (CC-BY-4.0; 13 files, 15.9 GB: 12 Seurat `.qs`
+  objects and one per-read cis BEDPE).  Code: Zenodo [22144954](https://zenodo.org/records/22144954)
+  (MIT; its `test_data/stat_cropped.csv` holds the barcode table).  Raw reads (GSA CRA016676) are
+  **not** used.
+- **Download**: `python example-data/download_data.py --spatial_hic_chen2026` (opt-in; md5-checked)
+  → `spatial_hic_chen2026/raw/zenodo17961135/`, `raw/code/`.
+- **Build** (~5 min, peak ~14 GB RAM for the BEDPE step):
+  1. `python example-data/build_spatial_hic_chen2026.py --export` runs
+     `spatial_hic_chen2026_export.R` on every `.qs`; it needs R with Seurat ≥ 5 and qs 0.27.3
+     (CRAN archive; install stringfish 0.16.0 and RApiSerialize first).  It writes
+     `export/<object>/<section>/`: metadata, factor columns, embeddings, and each assay as a sparse
+     matrix.  It uses the `counts` layer, or `data` where `counts` is empty (the scAB assays).
+     Derived assays (SCT, spARC_*, *_scale, BANKSY_*) are skipped.
+  2. The same script, without `--export`, assembles the stores.  `--no-contacts` skips the BEDPE
+     step.  Existing `.scool` / `.mcool` files are reused unless you pass `--redo-contacts`.
+- **Content**: one store per tissue.
+
+  | Store | Spots (Hi-C / RNA) | Sections | Bins |
+  |---|---|---|---|
+  | `e13_embryo_50um` | 6,069 / 4,043 | 3 Hi-C + 2 RNA | 500 kb |
+  | `cerebellum_adult_20um` | 12,091 / 11,931 | 2 + 2 | 500 kb |
+  | `brain_embryo_20um` | 13,689 / 15,080 | E14.5, E16.5, E18.5 | 500 kb |
+  | `brain_embryo_10um` | 17,204 / 23,264 | E14.5, E16.5, E18.5 | 500 + 250 kb |
+  | `cortex_adult_10um` | 8,184 / 8,802 | 1 + 1 | 500 + 250 kb |
+  | `hippocampus_adult_10um` | 8,601 / 9,216 | 1 + 1 | 500 kb |
+
+  Each store is a `ChromData` **without spots**:
+  - **`cells`**: one row per spot, with id `<section>:<col>x<row>`.  Columns: section, assay (hic /
+    rna), grid column and row, Seurat image coordinates, and the Seurat metadata (QC, clusters,
+    annotations, label-transfer and pseudotime scores).  R factors are stored as categories.
+  - **Cell positions**: `cell_positions()` gives the grid column and row (unit "spot", one frame per
+    section, `spot_size_um` recorded).  `cell_positions("image")` gives the pixels of the section
+    image.  VisiumV1 objects store `imagecol` / `imagerow`, VisiumV2 ones `x` (= row) / `y` (=
+    column).  The orientation was checked against the images: spots sit on darker tissue.
+  - **`bins`**: the ssA/B bins, with a `resolution` column.
+  - **`cellm`**: the published PCA / UMAP / BANKSY embeddings, keyed
+    `<assay>_<reduction>.<Seurat object>`.
+  - **Linked files** (paths relative to the store):
+    - `<tissue>_ssab.h5ad` (`uns['linked_bin_matrices']['ssAB']`): single-spot A/B scores, Hi-C
+      spots × bins (`var.bin_id` = row of `bins`).  They are not in `cellm` because `cellm` is read
+      on open.
+    - `<tissue>_images/<section>.png` (`uns['linked_images']`): the 1080 × 1080 image of each
+      section, taken from the Seurat object.  It is a grayscale bright-field image, **not** an H&E
+      stain.  Its pixels are the units of `cell_positions("image")`.
+    - `<tissue>_rna.h5ad` (`uns['linked_anndata']`): spatial RNA counts.
+  - **E13.5 section 1 only**: the per-read BEDPE becomes `e13_embryo_50um_spots_1Mb.scool` (one
+    cis map per spot, cells named by cell id) and `e13_embryo_50um_bulk.mcool` (25 kb – 1 Mb).
+    - Read names end in `<barcode B>_<barcode A>`; spot = `(51 − iA)x iB`.
+    - One-mismatch barcodes are corrected when unambiguous.
+    - Of the 86.5 M cis pairs: 79.5 M kept, 1.3 M with no barcode, 5.7 M off-tissue.
+- **Validation** (`python benchmarks/spatial_hic_chen2026_validation.py`):
+  - Per-spot contacts against the authors' `stat_cropped.csv`: all 1,999 spots matched, Pearson
+    r (log) = 0.998.  Our totals are 0.77× theirs: the published BEDPE holds 86.5 M pairs against
+    their 103.2 M `cis_contact`, which is probably counted before deduplication.
+  - Compartment E1 of our 500-kb bulk map against the section's mean published ssA/B, per
+    chromosome: median |r| = 0.956 (min 0.923, chr3).
+  - Every store: links resolve, all spots have positions, the ssA/B and RNA AnnData are aligned with
+    the Hi-C / RNA spots.
+- **Contacts of the other sections from the raw reads** (`spatial_hic_chen2026/sherlock/`):
+  - Source: GSA CRA016676 (2.31 TB, 15 spatial Hi-C runs).  `runs.tsv` maps runs to sections, from
+    the GSA metadata (`raw/CRA016676.xlsx`); the mapping agrees with the barcode pixels.
+  - Pipeline: read-1 barcodes → bwa mem -5SP → pairtools parse / sort / merge → exact
+    deduplication within each spot → cis pairs ≥ 1 kb → per-barcode-pair `.scool` + `.mcool`.
+  - Pilot CRR1161506 (= E13_HiC_R1) against the authors:
+    - cis > 10 kb: 81.60 M vs 81.65 M; trans: 43.07 M vs 42.87 M.
+    - Per-spot counts: Pearson r (log) 0.999.
+    - Bulk 500-kb E1 against E1 from the authors' BEDPE: median |r| 0.999.
+    - Pairs shorter than 1 kb are almost all inward-facing (+-), i.e. unligated fragments, and are
+      dropped as HiCUP does.
+  - Validation script: `benchmarks/spatial_hic_chen2026_reprocess_validation.py`.
+  - Output on Oak (`$OAK/uchrom/spatial_hic_chen2026/<run>/`): dedup pairs, per-spot 1-Mb
+    `.scool`, bulk `.mcool` (25 kb – 1 Mb), per-barcode statistics.  Not public: copy each run's
+    `pixels_1Mb.scool`, `bulk.mcool`, `barcode_stats.tsv` and `log.json` into
+    `spatial_hic_chen2026/contacts/` over the DTN (4.6 GB for the 7 runs below).
+- **Reprocessed contacts linked into the stores**:
+  `python example-data/link_spatial_hic_chen2026_contacts.py [RUN …]` (seconds per run).
+  - Which barcode pair is which spot is decided on the data.  Every candidate pairing is scored:
+    each spot's contact-partner compartment profile (minus the mean over spots) against the
+    authors' ssA/B of the spot it would be (minus their mean), median Pearson r over 1,500 spots.
+    The right pairing scores ~0.3, every other ~0.  A run is linked only when the best beats the
+    runner-up by 0.05.
+  - Candidates: the 8 orientations of the grid (swap the barcodes, flip either index) with our
+    barcode order and with the authors' (`sherlock/barcodes_96_authors_index.tsv`, read off the
+    `pixel` / spot names of brain_embryo_20um: position 2 complete, position 1 91 of 96), and
+    `cells.pixel` (both orders) where a store has it.
+  - Per section: `per_spot.<section>` (`<store>_<section>.<run>.reprocessed_1Mb.scool`, cells
+    renamed to the store's ids) and `bulk.<section>` (`contacts/<run>.bulk.mcool`); `.reprocessed`
+    is appended when the section already has maps from the authors' BEDPE (E13_HiC_R1).
+    `uns['contacts_stats']['reprocessed'][<run>]` holds the counts, every candidate's score and
+    the choice.
+
+  | run | section (store) | pairing | score (runner-up) | spots linked |
+  |---|---|---|---|---|
+  | CRR1161506 | E13_HiC_R1 (e13_embryo_50um) | grid, swap, flip 2 — as the pilot | 0.316 (0.014) | 1,999 / 1,999 |
+  | CRR1161507 | E13_HiC_R2 (e13_embryo_50um) | grid, swap, no flip | 0.304 (0.011) | 2,011 / 2,011 |
+  | CRR1829212 | E14_5_HiC (brain_embryo_20um) | `pixel` as b1_b2 | 0.292 (0.002) | 3,533 / 3,533 |
+  | CRR1829214 | E16_5_HiC (brain_embryo_20um) | `pixel` as b1_b2 | 0.266 (0.002) | 4,479 / 4,479 |
+  | CRR1829213 | E14_5_HiC (brain_embryo_10um) | `pixel` as b1_b2 | 0.300 (0.001) | 5,426 / 5,426 |
+  | CRR1829215 | E16_5_HiC (brain_embryo_10um) | `pixel` as b1_b2 (= authors' order) | 0.272 (0.004) | 5,470 / 5,470 |
+  | CRR1829216 | E18_5_HiC (brain_embryo_20um) | `pixel` as b1_b2 | 0.334 (0.007) | 5,677 / 5,677 |
+  | CRR1829217 | E18_5_HiC (brain_embryo_10um) | `pixel` as b1_b2, swap | 0.307 (0.007) | 6,308 / 6,308 |
+  | CRR1829219 | Adult16_HiC (cortex_adult_10um) | authors' order, both flipped | 0.292 (0.003) | 7,795 / 8,184 |
+  | CRR1829220 | Adult22_HiC (hippocampus_adult_10um) | authors' order, flip 2 | 0.254 (0.002) | 8,185 / 8,601 |
+  | CRR1831973 | E13_HiC_R3 (e13_embryo_50um) | **not linked** (grid only; no orientation stands out) | 0.011 (0.007) | — |
+  | CRR1161509 | Cere_HiC_R1 (cerebellum_adult_20um) | **not linked** | 0.003 (0.001) | — |
+  | CRR1161510 | Cere_HiC_R2 (cerebellum_adult_20um) | **not linked** | 0.000 | — |
+
+  - Checks that do not use the linking criterion (`benchmarks/spatial_hic_chen2026_reprocessed.py`, all 10 linked sections):
+    per-spot contact totals laid out on the grid form a tissue image, Moran's I 0.07–0.44 (shuffled spots -0.005–0.010; lowest
+    brain_embryo_10um E16_5 0.072 and cortex 0.119); bulk compartment E1 (500 kb) against the authors' mean A/B of the
+    section, median |r| over the 19 autosomes + X 0.92–0.96 (worst chromosome 0.45 in E16_5 20 µm, 0.47 in E16_5 10 µm).
+  - E13_HiC_R1 has both: ours against the maps from the authors' BEDPE, chr2 at 1 Mb — per spot
+    median pixel r 0.947 (200 spots; IQR 0.941–0.953), all spots summed r 0.988 (log 0.9997);
+    ours hold 1.17× their contacts.
+  - The cerebellum sections need the authors' barcode order (laid out in it, our counts form a
+    coherent tissue image: Moran's I 0.85 / 0.76 against 0.26 / 0.40 in ours), but no orientation
+    of it matches the published spots.  Their chip's position-1 order differs from the embryo
+    chips' (E14.5 alone already swaps two pairs against E16.5 / E18.5); without the authors'
+    barcode table for that chip the pairing is left open rather than fitted.
+- **Used by**: web browser — the Spatial view (sections over their images), the Genome view
+  (ssA/B tracks per spot / group; E13.5 per-spot and pseudo-bulk contact maps), embeddings;
+  `benchmarks/spatial_hic_chen2026_validation.py`.
+
+### `spatial_atac_hic/` — Spatial ATAC-Hi-C, mouse brain, no 3-D (Wang P. et al. 2026)
+
+- **Source**: Wang P. et al., "Spatial chromatin architecture and accessibility co-profiling of
+  mammalian tissues", *Nature Methods* 2026 (doi:10.1038/s41592-026-03217-4).
+  - Data: GEO [GSE307620](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE307620).
+  - Code: GitHub `wangjuan001/Spatial-ATAC-Hi-C` (MIT), used for the read layout.
+  - Two coronal sections: MouseBrainR6 (GSM9228169) and MouseBrainR8 (GSM9228170), each a 50 × 50
+    grid.  The same spot barcodes carry both the ATAC and the Hi-C reads.
+- **Processed files** (`download_data.py --spatial_atac_hic`, 9.5 GB):
+  - cellranger-atac fragments of the ATAC library and of the Hi-C library.  **The Hi-C "fragments" are
+    single fragments: the contact pairing is not in them.**
+  - Visium-style tissue positions, scale factors and hires / lowres images (grayscale bright-field).
+- **Build**: `python example-data/build_spatial_atac_hic.py` (~10 min, 9 GB RAM) writes
+  `mouse_brain.chromdata.zarr`.  It is a ChromData without spots with:
+  - 4,290 in-tissue spots (R6 1,966, R8 2,324), with ATAC and Hi-C fragment counts per spot.
+  - Grid and image-pixel positions, and the linked hires images.
+  - `atac_cpm.<section>` bulk tracks on 500-kb bins.
+  - `linked_bin_matrices["ATAC"]`: spots × 500-kb log1p CPM, shown as genome tracks per spot / group.
+  - ATAC LSI / t-SNE / UMAP from the 50,000 5-kb bins with the most fragments.
+  - `atac_cluster` (k-means, k = 12).
+- **Embedding choice**:
+  - 100-kb / 500-kb bins carried little tissue structure: the grid distance of each spot's 10
+    embedding neighbours was 18–20 against 24 for random.
+  - The top 5-kb bins give 14–16, and LSI components 1–5 are spatially smooth (neighbour r 0.6–0.9).
+  - The clusters follow the anatomy (striatum, white matter, cortical layers).
+- **Contacts from the raw reads** (SRA, 4 runs, 177 GB; `spatial_atac_hic/sherlock/`):
+  - All four runs show the same layout and about 10 % ligation junctions (`GATCGATC`): each section's
+    two runs are two sequencing rounds of one ATAC-Hi-C library, and they are merged.
+  - Read 2 carries the barcodes: read2[22:30] + read2[60:68] = the 16-base spot barcode.  Both linkers
+    are required (the authors' `bcsplit.py` / `00.filter-linker.sh`).
+  - Mapping, per-spot deduplication and the 1-kb cis cut reuse the Chen 2026 pipeline (below).
+  - Output on Oak (`$OAK/uchrom/spatial_atac_hic/<section>/`, 3.3 GB): dedup pairs, per-spot 1-Mb
+    `.scool`, bulk `.mcool` (25 kb – 1 Mb), per-barcode statistics.  Not public: copy the four files
+    each section needs into `spatial_atac_hic/contacts/` over the DTN (recipe in the script below;
+    655 MB for both sections).
+
+  | section | read pairs | kept contacts | spots with a map (in store) |
+  |---|---|---|---|
+  | MouseBrainR6 | 829.7 M | 90.6 M | 1,946 of 1,966 |
+  | MouseBrainR8 | 895.1 M | 108.7 M | 2,313 of 2,324 |
+
+  Removed: MAPQ < 30 (34 %), duplicates (11 %), cis pairs closer than 1 kb (39 %), barcodes off the
+  whitelist (3 %).
+- **Contacts linked into the store**: `python example-data/link_spatial_atac_hic_contacts.py`
+  (seconds; reads `contacts/`).  Per section:
+  - `per_spot.<section>`: `mouse_brain_<section>.spots_1Mb.scool`, the pipeline's `.scool` with each
+    cell renamed from its 16-base barcode to the store's id `<section>:<barcode>`.
+  - `bulk.<section>`: `contacts/<section>.bulk.mcool`.
+  - `uns['contacts_stats'][<section>]`: the counts above and the checks below.
+- **Validation against the authors** (`cells.n_fragments_hic`, their per-spot Hi-C fragment counts):
+  - Per-spot depth agrees: Pearson r of log counts 0.999 (R6) / 0.998 (R8); Spearman 0.998 / 0.997.
+  - Barcode order: with barcode B before A the correlation drops to 0.20 / −0.05, so A + B (read
+    order) is the store's barcode.
+  - Totals: ours are 0.32 × theirs.  Theirs (R6: 263 M) lie between our kept pairs (91 M) and kept +
+    the < 1 kb cis pairs (417 M); their filter is not documented closely enough to reproduce it.
+  - The sum of a section's spot maps equals its bulk map pixel for pixel (r = 1.000 on chr1 at 1 Mb;
+    0.92 of the bulk total — the bulk also has the spots outside the store and those under 100 pairs).
+  - Compartments: PC1 of the R6 bulk O/E correlation on chr1 (1 Mb) follows the ATAC signal,
+    |r| = 0.86.
+
+### `spatial_hicrna/` — Spatial Hi-C-RNA, mouse brain / embryo, human melanoma (Guo et al. 2026)
+
+- **Source**: Guo et al. 2026, *Cell* (doi:10.1016/j.cell.2026.07.039); GEO
+  [GSE311199](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE311199).
+  - Seven samples: mouse brain r1 / r2, mouse embryo E11.5 / E13.5 r1 / r2, human melanoma r1 / r2.
+  - Hi-C and RNA come from the **same spots**.  Checked on mouse_brain_r1: the 10,000 RNA barcodes are
+    the Hi-C grid barcodes, and all 6,275 in-tissue spots have both RNA (median 3,351 UMI) and contacts.
+- **Processed on Sherlock** (`spatial_hicrna/sherlock/`, `process.sbatch`):
+  - Input: the published `.nodups.pairs.gz`.
+  - Output on Oak (`$OAK/uchrom/spatial_3dgenome/<sample>/`, 21 GB): per-spot 1-Mb `.scool`, bulk
+    `.mcool` (25 kb – 1 Mb) and per-spot statistics.
+  - Kept: 31–47 × 10⁸ pairs per sample (1.2 × 10⁸ for E13.5 r2).
+  - In the two E13.5 embryos 37–44 % of the pairs fall on spots outside the published tissue positions
+    (about 1 % elsewhere); not yet explained.
+- **Stores** (`hicrna_mouse_brain`, `hicrna_mouse_embryo`, `hicrna_human_melanoma`; the prefix keeps them apart
+  from the ATAC-Hi-C `mouse_brain`):
+  ```bash
+  python example-data/download_data.py --spatial_hicrna          # GEO files, 2.3 GB
+  python example-data/build_spatial_hicrna.py                    # ~2 min: RNA, images, positions, published labels / latents
+  # contact maps: copy $OAK/uchrom/spatial_3dgenome/<sample>/ (17.8 GB) to example-data/spatial_hicrna/contacts/ (via the DTN)
+  python example-data/link_spatial_hicrna_contacts.py            # links per-spot .scool + bulk .mcool, mouse-brain ssAB
+  python benchmarks/spatial_hicrna_validation.py                 # ~35 s -> benchmarks/results/spatial_hicrna_validation.json
+  ```
+  Cells are spots (`<section>:<barcode>`); only in-tissue spots are kept (brain 6,275 / 6,199; E11.5 32,799;
+  E13.5 17,278 / 14,784; melanoma 6,268 / 6,381), every one with RNA and a linked contact map.
+- **Single-spot A/B (ssAB)**: the authors' `X_abcompartment` is linked for mouse brain r1 only
+  (`hicrna_mouse_brain_ssab.h5ad`, 6,275 x 4,816 bins).  The bin layout is not given; it is chr1–19 in
+  500-kb bins from 3 Mb, dropping the last bin of a chromosome if < 100 kb.  Check: against the bulk E1
+  shifted by 0 / ±1 / ±2 bins the median |r| is 0.959 / 0.897, 0.848 / 0.789, 0.724 (best at shift 0).
+  The human ssAB (5,359 columns) is **not linked**.  `example-data/probe_human_ssab_layout.py` shows what the data say:
+  500-kb bins from the start of each of chr1–22 (no 3 Mb offset as in the mouse), centromere models and the
+  `heterochromatin` / `short_arm` gaps of the UCSC hg38 tables (`ref_hg38/`) removed — chr1 columns match bulk E1
+  bin for bin (|r| 0.83–0.98) up to column ~240 and then again with an offset of exactly 43 bins (the 21.5 Mb of
+  centromere + heterochromatin), and every chromosome start located from the first 40 retained bins has |r| 0.74–0.98
+  (next-best position 0.5–0.86).  That rule gives 5,378 columns; the file has 5,359, and per chromosome the
+  column counts differ from the rule by −5..+2, so the exact bins dropped near the centromeres are not the
+  annotation's and the columns cannot be placed bin by bin without the authors' table.
+- **Validation** (real data, `benchmarks/spatial_hicrna_validation.py`):
+  - Spearman of per-spot RNA UMI against Hi-C contacts: 0.66 – 0.91 over the 7 samples (lowest in E13.5).
+  - Bulk compartment E1 (500 kb), replicate vs replicate, median |r| over chromosomes: brain 0.999,
+    E13.5 0.992 (min 0.84), melanoma 0.999.
+  - Single-spot A/B, mouse_brain_r1: the compartment profile of a spot's own cis contacts (contact-weighted
+    bulk E1 of the partner bins, 1 Mb) against its published ssAB: median r **0.043** (IQR 0.025–0.061,
+    95 % of spots > 0) against -0.001 (49 % > 0) with the spots shuffled.  Significant but small —
+    single spots hold few contacts, so this is weak evidence rather than a reproduction of ssAB.
+  - Hi-C profile PCA, 15 nearest neighbours sharing the published label: cell type (23) 0.22 (shuffled
+    0.11); CellCharter clusters (12) 0.42 (0.12); FH clusters (5) 0.58 (0.22).
+- **Embedding for an atlas** (`uchrom.core.embedded`, `benchmarks/embedded_contacts.py`): `python -m uchrom.core.embedded
+  <store>` copies the linked maps and h5ad files into the store (`embedded/…`, Zarr, sharded, partitioned by chromosome).
+  Mouse brain (2 bulk, 2 per-spot, ssAB, RNA): bulk 0.31–0.37x of the `.mcool`, per-spot 0.73–0.78x of the `.scool`,
+  ssAB 0.99x, RNA 0.79x; matrices from the embedded store equal the linked ones exactly (8 queries + ssAB chr1);
+  requests a cold reader makes: one spot on one chromosome 6 data GETs (0.06 MB), 500-spot pseudo-bulk of a
+  chromosome 8 GETs (2.1 MB), bulk 10 Mb region at 25 kb 6 GETs (1.7 MB), one metadata GET to open a map
+  (counted on the store layer, local disk, not measured on S3).
+- **Embedded copies of all stores** (self-contained, each opens alone in the browser; sizes of the whole store):
+  hicrna_mouse_brain 2.1 GB, hicrna_human_melanoma 2.5 GB, hicrna_mouse_embryo 4.3 GB, Chen brain_embryo_10um 1.2 GB /
+  brain_embryo_20um 0.99 GB / e13_embryo_50um 0.68 GB, spatial_atac_hic mouse_brain 0.37 GB (maps, ssAB / ATAC, RNA h5ad,
+  section images).  Checked by moving each store alone into an empty directory: every map, image and bin track served.
+  Chen cortex_adult_10um (0.63 GB) and hippocampus_adult_10um (0.29 GB) now have maps and are embedded too (brain_embryo_10um
+  1.8 GB, brain_embryo_20um 1.4 GB after the new runs); cerebellum_adult_20um has none (barcode table missing).  Re-run
+  `python -m uchrom.core.embedded <store>` after linking more runs (already-embedded keys are skipped); the link script's
+  final `cd.write` keeps the embedded copies.  CRR1829221 / CRR1829222 (Adult_H / Adult_Z, small runs) belong to no store.
+- **Open**: the E13.5 spots outside the published mask have no image / map in the stores; human ssAB layout;
+  the pairs outside the mask (37–44 %) are unexplained.
+
 ### `takei2025_cerebellum/` — Takei 2025 cerebellum, replicate 1, all FOVs (Fig. 2 benchmarks)
 
 - **Source**: Takei et al. 2025, *Nature* (doi:10.1038/s41586-025-08838-x);
@@ -627,10 +889,10 @@ public data alone** and are shipped with their recorded outputs.
   its own subprocess with `read_seqfish_multiomics` (default
   `dbscan_ldp_nbr_allele` traces, DBSCAN noise dropped, 62 spot tracks) →
   `fov/takei2025_cerebellum_rep1_pos<N>.chromdata.zarr`, then concatenated into
-  `takei2025_cerebellum_rep1.chromdata.zarr` (the format 2.0 default;
-  `--format h5cd` writes the deprecated HDF5 container); stats in
-  `build_summary.json`.  Per-FOV files from older builds (`fov/*.h5cd`,
-  1.x) are reused as they are.
+  `takei2025_cerebellum_rep1.chromdata.zarr` (`--format cdz`: one zip
+  file); stats in `build_summary.json`.  Per-FOV `.h5cd` files of older
+  builds are no longer read (convert them with `python -m uchrom.io.upgrade`
+  or rebuild).
 
   | | spots | traces | cells | h5cd 1.x | loader peak RSS |
   |---|---|---|---|---|---|
@@ -677,7 +939,7 @@ public data alone** and are shipped with their recorded outputs.
   (`4DNFIGJT3AN3` 572 MB, `4DNFIZ4TAGXZ` 248 MB).
 - **Content** (`python example-data/build_liu2025_mop.py` →
   `liu2025_mop.chromdata.zarr` 294 MB + `build_summary.json`;
-  `--format h5cd` → 1.57 GB as h5cd 1.x): **9,582,069 spots,
+  1.57 GB as the former h5cd 1.x): **9,582,069 spots,
   188,891 traces, 11,045 cells**, 20 chromosomes, median 50 spots per trace,
   µm, GRCm38.  The cell table has 14,733 rows (3,695 cells without traces;
   7 traced cells without a row), with 240 RNA counts and cell-type labels.
@@ -685,6 +947,45 @@ public data alone** and are shipped with their recorded outputs.
 - **Used by**: `build_liu2025_mop.py` (dataset-scale entry for Fig. 2);
   `benchmarks/fofct_roundtrip_validation.py`
   (FOF-CT writer); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`).
+
+### Single-cell Hi-C / multi-omics of the atlas (`hires2023/`, `dschic2025/`, `gageseq2024/`, `droplet_hic2024/`, `stevens2017_mesc/`, `unic2025/`)
+
+The single-cell studies cited by Guo et al. 2026 (Cell; refs. 15-22) that have usable public data.  Each build
+streams the deposited pairs once (`sc_hic_common.py`: `gzip -dc | grep -v '^#'` into pyarrow, contacts binned into
+on-disk buckets) into a per-cell 1 Mb `.scool` and an all-cells bulk `.mcool` (50 kb - 1 Mb, ICE), writes the RNA
+as a linked `.h5ad`, computes RNA PCA / UMAP and a scHiCluster Hi-C embedding, and writes a `.chromdata.zarr`;
+`python -m uchrom.core.embedded STORE --upgrade` then embeds the links for the atlas.
+
+- **HiRES** (Liu et al. 2023, *Science*, doi:10.1126/science.adg3797; GEO GSE223917): 7,469 embryo cells
+  (E7.0 - E9.5) + 399 adult brain cells; per cell `.pairs.gz` and the authors' diploid 20 kb hickit structure
+  (`*.20k.0.clean.3dg`, brain `*.20k.3dg`), coarse-grained to 200 kb (mean of each bin's particles per copy);
+  RNA = the deposited UMI table.  Download: the series tar (one connection; per-file requests got HTTP 403 / 503
+  from NCBI after ~150 files).  Checked on 100 cells: per-cell map totals equal the pairs line counts
+  (135,083 = 135,083), 200 kb coordinates equal the mean of the 20 kb particles (max |diff| 2e-6).
+- **dscHi-C** (Wu et al. 2025, *Cell Discov.*, doi:10.1038/s41421-025-00770-8; GEO GSE285812): mouse cortex at
+  3 / 12 / 23 months, 32,777 annotated cells (`main_celltype`, `sub_celltype`), 3.24e9 pairs read, 2.60e9 on
+  annotated cells.  Not used: the dscHi-C-multiome deposit (GSE285233): its contact barcodes match none of the RNA
+  cells (no correlation of counts; neither a 10x ARC nor ATAC whitelist), so the modalities cannot be paired.
+- **GAGE-seq** (Zhou et al. 2024, *Nat. Genet.*, doi:10.1038/s41588-024-01745-3; GEO GSE238001): mouse cortex
+  (3 libraries, 3,296 annotated cells) and human bone marrow CD34+ (3 libraries, 1,445 cells); cell types from
+  the authors' GitHub (`meta_info/cell_type_annotation`, MIT, pinned commit); RNA = one line per UMI, gene
+  symbols from Ensembl 98.
+- **Droplet Hi-C / Paired Hi-C** (Chang et al. 2024, *Nat. Biotechnol.*, doi:10.1038/s41587-024-02447-1; GEO
+  GSE253407): mouse cortex, Droplet Hi-C 6,235 cells (LC462, LC716), Paired Hi-C 24,284 cells (Hi-C LC464 /
+  LC465 / LC608 with RNA LC466 / LC467 / LC613, barcodes paired by the metadata).  The pairs keep every read pair;
+  cis pairs < 1 kb are dropped.
+- **Stevens 2017** (`stevens2017_mesc/`, see above): the atlas store has the 8 cells' contacts and the 10 published
+  100 kb models (model 1 = coords, 2-10 = layers).
+- **Uni-C** (Gao et al. 2025, *Nat. Commun.*, doi:10.1038/s41467-025-62215-w; GEO GSE267873): deeply sequenced
+  single cells, one `.pairs.gz` each (pairtools, deduplicated, MAPQ >= 40; GRCh37 / GRCm38, Ensembl chromosome
+  names): GM12878 (10), COLO320-DM (6), circulating tumour cells of the PDX mouse PanT24 (7) and of the KPC mice
+  KPC0402 / KPC0403 (6 + 6), MC38 (8); bulk GM12878, COLO320-DM, PanT24 tumour, MC38 (2).  About 90 % of the
+  pairs are cis pairs < 1 kb (read-through fragments, the uniform coverage the variants come from) and are
+  dropped.  `build_unic2025.py` (worker processes, one file each) writes per-cell 100 kb and 1 Mb `.scool`, per
+  sample the merged cells and the bulk library as `.mcool` (ICE from 100 kb), cell statistics incl. the
+  fractions of cis contacts at 25 kb - 2 Mb and 2 - 12 Mb, and a scHiCluster PCA.  The per-cell VCFs are not used.
+- Not fetched: ChAIR (Nat. Methods 2025; CNCB OMIX009588 / 9589, 120 GB from China), Nagano 2013 (10 Th1 cells),
+  Ramani 2017 sciHi-C (cell lines, hg19 / mm10 mix).
 
 ## Figure 3 datasets — bridges between contacts and geometry
 
@@ -1045,7 +1346,7 @@ laptop plumbing run: 4DN IMR90 chr21 + chr22, range-read 10 kb level → 20 kb �
 
 ## Generated outputs
 
-- `with_loops.chromdata.zarr` (older runs: `with_loops.h5cd`) — created at the end of `loop_calling.ipynb` as a
+- `with_loops.chromdata.zarr` — created at the end of `loop_calling.ipynb` as a
   round-trip demonstration.  Safe to delete; the tutorial will
   regenerate it on next run.
 - `fofct_core.csv` — a small synthetic FOF-CT that tutorials 4–7

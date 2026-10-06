@@ -1,5 +1,6 @@
 import { chromColor } from '../colors'
 import { activeView, useStore } from '../store'
+import { effectiveStyle } from '../workspace'
 
 /**
  * Chromosome legend = visibility filter.  Swatches match the rainbow colour
@@ -10,13 +11,22 @@ export function ChromLegend() {
   const view = useStore(activeView)
   const toggle = useStore((s) => s.toggleChrom)
   const setHidden = useStore((s) => s.setHiddenChroms)
-  const hasCells = useStore((s) => ((s.activeDatasetId && s.cells[s.activeDatasetId]) || []).length > 1)
-  const layerMode = useStore((s) => s.layers.find((l) => l.id === s.selectedLayerId)?.style.colorMode)
+  // the colouring the active 3-D view draws its cells in full with: a pinned cell (or the
+  // focused one) → the layer style there; all cells / a group → the overview colouring
+  const drawnMode = useStore((s) => {
+    const pane = s.workspace.panes.find((p) => p.id === s.workspace.activePane)
+    const l = s.layers.find((x) => x.id === s.selectedLayerId) ?? s.layers.find((x) => x.datasetId === s.activeDatasetId && x.parentId === null)
+    const layerMode = l ? effectiveStyle(l, pane).colorMode : undefined
+    const many = ((s.activeDatasetId && s.cells[s.activeDatasetId]) || []).length > 1
+    if (!many || (l && l.parentId !== null)) return layerMode // subsets keep their own colouring
+    const scope = pane?.scope
+    const oneCell = scope?.kind === 'cell' || (scope?.kind !== 'all' && scope?.kind !== 'group' && activeView(s).focusCell !== null)
+    return oneCell ? layerMode : activeView(s).overviewColor
+  })
   if (!ds || ds.chroms.length < 2) return null
   const hidden = new Set(view.hiddenChroms)
   // swatches are only meaningful when the view is coloured by chromosome
-  const effective = hasCells && view.focusCell === null ? view.overviewColor : layerMode
-  const showSwatch = effective === 'rainbow' 
+  const showSwatch = drawnMode === 'rainbow' 
   const names = ds.chroms.map((c) => c.name)
   return (
     <section className="legend">

@@ -11,15 +11,19 @@ never touched), builds 1.x files from the FOF-CT CSVs with the old
 ``from_fofct``, reads each with the 1.x reader and saves ``to_dataframe()``,
 ``coords`` and the spot-aligned ``tracks`` (+ read / write timings).
 
-``new`` upgrades each copy with ``upgrade_h5cd`` and checks that
+``new`` upgrades each copy with ``upgrade_h5cd`` (to ``.chromdata.zarr``;
+``.h5cd`` is no longer a ChromData format) and checks that
 ``to_dataframe()``, ``coords`` and ``tracks_spot_view()`` equal the 1.x
-values — for the in-memory upgrade (reading the 1.x file) and for the
-2.0 file on disk — and reports n_bins, n_spots, file sizes and times.
+values — for the in-memory upgrade (``uchrom.io._h5cd_legacy.read_h5cd`` of
+the 1.x file) and for the store on disk (read in its original order) — and
+reports n_bins, n_spots, file sizes and times.
 It also checks that ``from_fofct`` gives the same table in both versions.
 
 Data (see ``example-data/README.md``; set ``UCHROM_EXAMPLE_DATA``):
 ``sim_cell1/sim_cell1.h5cd``, ``takei2025_fov0/takei2025_fov0.h5cd``,
-``schicar_mop/schicar_mop.h5cd``, ``mESC_Sox2_5cells_*.h5cd`` and the
+``schicar_mop/schicar_mop.h5cd``, ``mESC_Sox2_5cells_*.h5cd`` (1.1 files,
+replaced in the repo by ``.chromdata.zarr`` stores; take them from git
+history) and the
 Takei 2021 FOF-CT core table ``4DNFIHF3JCBY.csv`` with its in-repo cell
 (``4DNFIFINA2U9.csv``) and RNA (``4DNFIJ52NVDV.csv``) tables.
 """
@@ -122,6 +126,7 @@ def same(a, b):
 def run_new():
     from uchrom import ChromData
     from uchrom.io import upgrade_h5cd
+    from uchrom.io._h5cd_legacy import read_h5cd
 
     meta = json.loads((WORK / "old_meta.json").read_text())
     rows = []
@@ -130,11 +135,11 @@ def run_new():
         if not v1.exists():
             continue
         old = pickle.loads((WORK / f"{name}.old.pkl").read_bytes())
-        v2 = WORK / f"{name}.v2.h5cd"
+        v2 = WORK / f"{name}.v2.chromdata.zarr"
         info, t_up = timed(lambda: upgrade_h5cd(v1, v2, overwrite=True))
-        mem, t_read_v1 = timed(lambda: ChromData.read(v1))      # in-memory upgrade
-        disk, t_read_v2 = timed(lambda: ChromData.read(v2))
-        _, t_write_v2 = timed(lambda: disk.write(WORK / f"{name}.v2rewrite.h5cd"))
+        mem, t_read_v1 = timed(lambda: read_h5cd(v1))      # in-memory upgrade
+        disk, t_read_v2 = timed(lambda: ChromData.read(v2, original_order=True))
+        _, t_write_v2 = timed(lambda: disk.write(WORK / f"{name}.v2rewrite.chromdata.zarr"))
         ok = {}
         for label, cd in (("mem", mem), ("disk", disk)):
             snap = snapshot(cd, cd.tracks_spot_view())
@@ -151,7 +156,7 @@ def run_new():
         rows.append({
             "dataset": name, "n_spots": disk.n_spots, "n_bins": disk.n_bins,
             "n_bin_tracks": len(names["bin"]), "n_spot_tracks": len(names["spot"]),
-            "size_v1_MB": v1.stat().st_size / 1e6, "size_v2_MB": v2.stat().st_size / 1e6,
+            "size_v1_MB": v1.stat().st_size / 1e6, "size_v2_MB": sum(f.stat().st_size for f in v2.rglob("*") if f.is_file()) / 1e6,
             "t_read_v1_old": meta[name]["t_read_v1"], "t_read_v1_new": t_read_v1,
             "t_read_v2": t_read_v2, "t_write_v1_old": meta[name]["t_write_v1"],
             "t_write_v2": t_write_v2, "t_upgrade": t_up,

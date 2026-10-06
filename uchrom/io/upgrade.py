@@ -1,8 +1,8 @@
-"""Convert ChromData files to the format 2.0 container (``.chromdata.zarr``).
+"""Convert ChromData files to the current container (``.chromdata.zarr``).
 
-``ChromData.read`` reads every older file (``.h5cd`` 1.x and 2.0) in
-memory; this rewrites them once, so later reads are fast and can be
-*backed* (``ChromData.read(path, backed=True)``)::
+``ChromData.read`` no longer reads the HDF5 ``.h5cd`` container (format 1.x
+and 2.0); this converts such a file once, after which it reads fast and can
+be *backed* (``ChromData.read(path, backed=True)``)::
 
     python -m uchrom.io.upgrade old.h5cd new.chromdata.zarr
     python -m uchrom.io.upgrade data/*.h5cd --out-dir converted/        # <stem>.chromdata.zarr
@@ -19,8 +19,9 @@ What changes (see ``docs/source/guide/chromdata_2_0_design.md``):
   with an ``index/`` of row offsets (``index/source_row`` keeps the
   original order).
 
-The target format follows the destination suffix (``.chromdata.zarr``,
-``.cdz``, or — deprecated — ``.h5cd``).  The source is never modified.
+The target format follows the destination suffix (``.chromdata.zarr`` or
+``.cdz``).  The source is never modified.  Older zarr / cdz stores are
+rewritten in the current layout too.
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ from typing import Optional, Union
 
 PathLike = Union[str, Path]
 
-_SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz", "h5cd": ".h5cd"}
+_SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz"}
 
 
 def file_format_version(path: PathLike) -> str:
@@ -60,7 +61,7 @@ def file_format_version(path: PathLike) -> str:
 
 
 def default_target(src: PathLike, fmt: str = "zarr", out_dir: Optional[PathLike] = None) -> Path:
-    """``<dir>/<stem>.chromdata.zarr`` (or ``.cdz`` / ``.h5cd``) for ``src``."""
+    """``<dir>/<stem>.chromdata.zarr`` (or ``.cdz``) for ``src``."""
     src = Path(src)
     name = src.name
     for suf in (".chromdata.zarr", ".zarr", ".cdz", ".h5cd"):
@@ -73,46 +74,42 @@ def default_target(src: PathLike, fmt: str = "zarr", out_dir: Optional[PathLike]
 
 
 def upgrade_h5cd(src: PathLike, dst: Optional[PathLike] = None, *, overwrite: bool = False,
-                 coord_dtype: str = "float64", compression: Optional[str] = "gzip",
-                 compression_opts: Optional[int] = 4, compress_floats: bool = False) -> dict:
+                 coord_dtype: str = "float64") -> dict:
     """Read ``src`` (``.h5cd`` 1.x / 2.0, or any ChromData store) and write
-    it to ``dst`` in the current format (``.chromdata.zarr`` 2.2, ``.h5cd`` 2.0);
+    it to ``dst`` in the current format (``.chromdata.zarr`` / ``.cdz``);
     a zarr / cdz source is read in its original row order.
 
     ``dst`` defaults to ``<src stem>.chromdata.zarr`` next to ``src``; its
-    suffix picks the container (``.chromdata.zarr``, ``.cdz``, or the
-    deprecated ``.h5cd``).  ``coord_dtype`` applies to the zarr container;
-    ``compression`` / ``compression_opts`` / ``compress_floats`` to
-    ``.h5cd`` targets (see :meth:`ChromData.write`).
+    suffix picks the container.  ``coord_dtype`` is the storage dtype of
+    ``coords`` / ``layers`` (see :meth:`ChromData.write`).
 
     Returns a summary: source / target versions and containers, ``n_spots``,
     ``n_bins`` and which tracks are bin- vs spot-level.  ``src`` is never
     modified; ``dst`` must differ from it.
     """
-    import warnings
-
-    from uchrom.core.cdata import FORMAT_VERSION, ChromData
+    from uchrom.core.cdata import ChromData
     from uchrom.core.zarrcd import container_kind
+
+    from ._h5cd_legacy import read_h5cd
 
     src = Path(src)
     dst = Path(dst) if dst is not None else default_target(src)
     if src.resolve() == dst.resolve():
         raise ValueError("upgrade_h5cd: dst must differ from src (the source is never modified)")
+    kind = container_kind(dst)
+    if kind not in ("zarr", "cdz"):
+        raise ValueError(f"{dst}: the target must be a .chromdata.zarr or .cdz path")
     if dst.exists() and not overwrite:
         raise FileExistsError(f"{dst} exists; pass overwrite=True")
     before = file_format_version(src)
     src_kind = container_kind(src) or "h5cd"
-    # a zarr / cdz source: the rows of the object originally written (its
-    # index/source_row), so the new store's original order is that one too
-    cd = ChromData.read(src, original_order=src_kind in ("zarr", "cdz"))
-    kind = container_kind(dst) or "h5cd"
-    if kind == "h5cd":
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            cd.write(dst, format="h5cd", compression=compression,
-                     compression_opts=compression_opts, compress_floats=compress_floats)
+    if src_kind == "h5cd":
+        cd = read_h5cd(src)
     else:
-        cd.write(dst, coord_dtype=coord_dtype)
+        # the rows of the object originally written (its index/source_row),
+        # so the new store's original order is that one too
+        cd = ChromData.read(src, original_order=True)
+    cd.write(dst, coord_dtype=coord_dtype)
     names = cd.track_names()
     return {
         "src": str(src), "dst": str(dst),
@@ -130,21 +127,16 @@ convert = upgrade_h5cd
 def main(argv: Optional[list] = None) -> int:
     ap = argparse.ArgumentParser(
         prog="python -m uchrom.io.upgrade",
-        description="Rewrite ChromData files (.h5cd 1.x / 2.0) as format 2.0 "
-                    "(.chromdata.zarr by default).",
+        description="Convert ChromData files (.h5cd 1.x / 2.0, older stores) to the "
+                    "current .chromdata.zarr (or .cdz).",
     )
     ap.add_argument("paths", nargs="+", help="SRC DST, or one or more SRC with --out-dir")
     ap.add_argument("--out-dir", help="write each SRC to OUT_DIR/<stem>.chromdata.zarr (see --format)")
-    ap.add_argument("--format", default="zarr", choices=["zarr", "cdz", "h5cd"],
+    ap.add_argument("--format", default="zarr", choices=["zarr", "cdz"],
                     help="target container with --out-dir or a single SRC (default zarr)")
     ap.add_argument("--overwrite", action="store_true", help="replace existing outputs")
     ap.add_argument("--coord-dtype", default="float64", choices=["float64", "float32"],
                     help="storage dtype of coords / layers in the zarr container")
-    ap.add_argument("--compression", default="gzip", choices=["gzip", "lzf", "none"],
-                    help=".h5cd targets only: dataset filter (default gzip)")
-    ap.add_argument("--level", type=int, default=4, help=".h5cd targets only: gzip level")
-    ap.add_argument("--compress-floats", action="store_true",
-                    help=".h5cd targets only: also compress coords / float tracks")
     args = ap.parse_args(argv)
 
     if args.out_dir:
@@ -158,10 +150,7 @@ def main(argv: Optional[list] = None) -> int:
     else:
         ap.error("give SRC DST, one SRC, or several SRC with --out-dir")
     for src, dst in pairs:
-        comp = None if args.compression == "none" else args.compression
-        info = upgrade_h5cd(src, dst, overwrite=args.overwrite, coord_dtype=args.coord_dtype,
-                            compression=comp, compression_opts=args.level,
-                            compress_floats=args.compress_floats)
+        info = upgrade_h5cd(src, dst, overwrite=args.overwrite, coord_dtype=args.coord_dtype)
         print(f"{src} ({info['from_version']}, {info['from_container']}) -> {dst} "
               f"({info['to_version']}, {info['to_container']}): "
               f"{info['n_spots']} spots, {info['n_bins']} bins, "

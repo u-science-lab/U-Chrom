@@ -1,19 +1,42 @@
 import fire
 
 
+_BOOL = ('true', 'false', '1', '0', 'yes', 'no')
+
+
+def _is_path(v):
+    return isinstance(v, str) and v.lower() not in _BOOL
+
+
 def read_and_show(*paths, style='qdarkgraystyle', web=False, host='127.0.0.1',
-                  port=8765, open_browser=True):
+                  port=8765, open_browser=True, atlas=None, hosted=False, **flags):
     """Open structure files in the browser.
 
     Desktop (PyVista + Qt) by default; ``--web`` serves the web browser on
-    ``host:port`` instead (``--noopen_browser`` to skip opening a tab).
+    ``host:port`` instead (``--noopen_browser`` to skip opening a tab).  ``--atlas URL`` is the atlas
+    the Open dialog lists (default: the public U-Chrom atlas; ``--atlas=`` for none).  ``--hosted`` is the mode of a public
+    server (one session per visitor, only atlas datasets, no folder listing; see ``web/hosted.py``).
     """
-    # fire reads `--web out.h5cd` as web='out.h5cd': that value is a path too
-    if isinstance(web, str) and web.lower() not in ('true', 'false', '1', '0', 'yes', 'no'):
+    # fire hands the token after a boolean flag to the flag: `--web out.cdz` is web='out.cdz',
+    # `--open_browser out.cdz` is open_browser='out.cdz', `--noopen_browser out.cdz` is
+    # noopen_browser='out.cdz' (and open_browser stays True): in every case the value is a path
+    if _is_path(web):
         paths, web = (web, *paths), True
+    if _is_path(open_browser):
+        paths, open_browser = (open_browser, *paths), True
+    if _is_path(hosted):
+        paths, hosted = (hosted, *paths), True
+    for name in ('noopen_browser', 'no_open_browser'):
+        if name in flags:
+            v = flags.pop(name)
+            if _is_path(v):
+                paths = (v, *paths)
+            open_browser = False
+    if flags:
+        raise SystemExit(f"unknown option(s): {', '.join('--' + k for k in flags)}")
     if web:
         from .web import serve
-        serve(paths, host=host, port=port, open_browser=open_browser)
+        serve(paths, host=host, port=port, open_browser=open_browser, atlas=atlas, hosted=bool(hosted))
         return
 
     from PyQt5.QtCore import QTimer

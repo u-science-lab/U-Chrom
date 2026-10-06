@@ -20,11 +20,10 @@ The builder
    :func:`uchrom.io.seqfish_multiomics.read_seqfish_multiomics` (default
    ``dbscan_ldp_nbr_allele`` traces, noise spots dropped) and writes
    ``fov/takei2025_cerebellum_rep1_pos<N>.chromdata.zarr`` — peak RSS stays
-   at one FOV's worth (per-FOV files from older builds, ``.h5cd``, are
-   reused as they are);
+   at one FOV's worth;
 3. concatenates the per-FOV files into
    ``takei2025_cerebellum_rep1.chromdata.zarr`` (``--no-combined`` skips it;
-   ``--format h5cd`` writes the deprecated HDF5 container instead);
+   ``--format cdz`` writes the one-file store instead);
 4. writes ``build_summary.json``: per-FOV and combined n_spots / n_traces /
    n_cells, file sizes, wall time and peak RSS.
 
@@ -39,7 +38,7 @@ written to ``takei2025_cerebellum_rep1.stream.chromdata.zarr``.
 Usage::
 
     python example-data/build_takei2025_cerebellum.py [--data-dir DIR] [--fovs 0,1] [--no-combined]
-                                                     [--format zarr|cdz|h5cd]
+                                                     [--format zarr|cdz]
 
 ``--data-dir`` defaults to ``$UCHROM_EXAMPLE_DATA/takei2025_cerebellum`` or
 ``example-data/takei2025_cerebellum``.
@@ -64,7 +63,7 @@ TARBALL = "cerebellum_rep1.tar.gz"
 LOCI = "LC1-100k-09022022-mm10-25kb-meta.csv"
 CLUSTERS = "cerebellum_mRNA_cluster_nuc_vol_filtered.csv"
 PREFIX = "takei2025_cerebellum_rep1"
-SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz", "h5cd": ".h5cd"}
+SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz"}
 
 
 def default_data_dir() -> Path:
@@ -132,13 +131,8 @@ def existing(stem: Path):
 
 def save(cd, out: Path) -> None:
     """Write ``cd`` to ``out``, replacing it atomically (the zarr / cdz
-    writer is atomic itself; HDF5 goes through a temp file)."""
-    if out.suffix == ".h5cd":
-        tmp = out.with_suffix(".tmp.h5cd")
-        cd.write(tmp)
-        tmp.replace(out)
-    else:
-        cd.write(out)
+    writer is atomic itself)."""
+    cd.write(out)
 
 
 def build_one(csv: Path, out: Path, data_dir: Path) -> dict:

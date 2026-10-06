@@ -3,9 +3,10 @@ import * as THREE from 'three'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { buildLayerObject, pointIndexOfHit, type BuiltLayer } from '../render/objects'
 import { splitForView } from '../render/bonds'
-import { displayParts, subsetGeometry, type FocusSet } from '../render/partition'
+import { displayParts, subsetGeometry, thinGeometry, type FocusSet } from '../render/partition'
 import { buildPointMarkers, splitPoints, type BuiltPoints } from '../render/points'
-import { bboxDiagonal, findSegment } from '../render/segments'
+import { raycastChunks } from '../render/raypick'
+import { autoTubeRadius, bboxDiagonal, findSegment } from '../render/segments'
 import { DEFAULT_STYLE } from '../layers'
 import { mark } from '../perf'
 import { activeView, useStore } from '../store'
@@ -15,6 +16,7 @@ import type { ScopeSpec } from '../groups'
 import { isPointPick, type ColorMode, type Geometry, type LayerStyle, type PointSet, type SegmentInfo } from '../types'
 import { registerRenderHook } from '../capture'
 import { palette } from '../theme'
+import { effectiveStyle, layerShownIn } from '../workspace'
 import { useTheme } from '../useTheme'
 import { PickLabel } from './PickLabel'
 
@@ -24,11 +26,13 @@ interface Part {
   role: Role
   built: BuiltLayer
   geometry: Geometry
+  /** large parts: a thinned copy drawn while the camera moves */
+  lod?: { built: BuiltLayer; geometry: Geometry }
 }
 
 interface Entry {
   /** inputs the parts were built from; rebuilt when any changes */
-  key: { geometry: Geometry; style: LayerStyle; focus: FocusSet; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null; theme: string }
+  key: { geometry: Geometry; style: string; focus: FocusSet; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null; theme: string; trace: string | null }
   parts: Part[]
 }
 
@@ -52,9 +56,78 @@ interface Three {
   /** point-set markers: one main and one faint (context) object per set */
   points: Map<string, { set: PointSet; key: string; parts: { role: Role; built: BuiltPoints }[] }>
   fly: Fly | null
+  /** the scene changed: draw it on the next frame (frames are drawn on demand) */
+  dirty: boolean
+  /** last camera motion (ms): the thinned copies are shown until it has been still for LOD_IDLE_MS */
+  lastMotion: number
+  /** thinned copies and pixel ratio 1 in use */
+  moving: boolean
+  /** the axis key's SVG (bottom-left), redrawn with each frame */
+  axisKey: SVGSVGElement | null
 }
 
 const FLY_MS = 450
+/** Points of the thinned copy of a large part (drawn while the camera moves). */
+const LOD_POINTS = 300_000
+/** Stillness (ms) after which the full geometry is drawn again. */
+const LOD_IDLE_MS = 220
+
+/** Show the thinned copies (and draw at pixel ratio 1) while moving; the full scene when still. */
+function setMoving(t: Three, moving: boolean) {
+  if (t.moving === moving) return
+  t.moving = moving
+  let any = false
+  for (const e of t.entries.values())
+    for (const p of e.parts) {
+      if (!p.lod) continue
+      any = true
+      p.built.object.visible = !moving
+      p.lod.built.object.visible = moving
+    }
+  const ratio = moving && any ? 1 : window.devicePixelRatio
+  if (t.renderer.getPixelRatio() !== ratio) t.renderer.setPixelRatio(ratio)
+  t.dirty = true
+}
+
+/** Draw after the other layers and win depth ties with coincident geometry (subset layers). */
+function highlightOnTop(o: THREE.Object3D) {
+  o.renderOrder = 1
+  o.traverse((x) => {
+    const m = (x as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined
+    for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
+      mat.polygonOffset = true
+      mat.polygonOffsetFactor = -2
+      mat.polygonOffsetUnits = -2
+      mat.depthFunc = THREE.LessEqualDepth
+    }
+  })
+}
+
+/** World axes as seen from the camera: arrows from one origin, named at their tips. */
+function drawAxisKey(t: Three) {
+  const svg = t.axisKey
+  if (!svg) return
+  const inv = t.camera.quaternion.clone().invert()
+  const L = 22
+  const c = 30
+  const axes = (['x', 'y', 'z'] as const).map((name, i) => {
+    const v = new THREE.Vector3(i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0).applyQuaternion(inv)
+    return { name, x: c + v.x * L, y: c - v.y * L, depth: v.z }
+  })
+  // farther axes first (drawn under, fainter)
+  axes.sort((a, b) => a.depth - b.depth)
+  svg.innerHTML = axes
+    .map((a) => {
+      const op = a.depth < -0.2 ? 0.45 : 1
+      const dx = a.x - c
+      const dy = a.y - c
+      const len = Math.hypot(dx, dy) || 1
+      const lx = c + (dx / len) * (Math.hypot(dx, dy) + 8)
+      const ly = c + (dy / len) * (Math.hypot(dx, dy) + 8)
+      return `<g opacity="${op}"><line x1="${c}" y1="${c}" x2="${a.x.toFixed(1)}" y2="${a.y.toFixed(1)}" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="${a.x.toFixed(1)}" cy="${a.y.toFixed(1)}" r="1.6" fill="currentColor"/><text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" dominant-baseline="central">${a.name}</text></g>`
+    })
+    .join('')
+}
 
 function unionBox(geoms: (Geometry | null)[]): THREE.Box3 | null {
   const box = new THREE.Box3()
@@ -137,6 +210,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
   const paneRef = useRef(paneId)
   paneRef.current = paneId
   const tipRef = useRef<HTMLDivElement>(null)
+  const axisKeyRef = useRef<SVGSVGElement>(null)
   const threeRef = useRef<Three | null>(null)
   const fittedRef = useRef(false)
   const layers = useStore((s) => s.layers)
@@ -150,6 +224,12 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
   const pointSets = useStore((s) => (s.activeDatasetId ? s.pointSets[s.activeDatasetId] : undefined))
   const setPick = useStore((s) => s.setPick)
   const setStatus = useStore((s) => s.setStatus)
+  // this view's own style changes (each 3-D view is styled on its own)
+  const paneStyles = useStore((s) => s.workspace.panes.find((p) => p.id === paneId)?.layerStyles)
+  // layers drawn here: shared ones and this view's subsets, minus what this view hides
+  const paneHidden = useStore((s) => s.workspace.panes.find((p) => p.id === paneId)?.hiddenLayers)
+  // a trace view: only this trace
+  const paneTrace = useStore((s) => s.workspace.panes.find((p) => p.id === paneId)?.trace ?? null)
   // drawn in full here: the pane's group, its pinned cell, else the global
   // focus (a cell or a group)
   const scope = usePaneScope({ scope: spec })
@@ -179,10 +259,23 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1e6)
     camera.position.set(0, 0, 10)
     scene.add(camera)
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55))
-    const key = new THREE.DirectionalLight(0xffffff, 1.6)
-    key.position.set(1, 1.5, 2)
-    camera.add(key) // headlight: lighting follows the view
+    // Lighting that follows the view, so no side of a tube stays dark: a soft sky/ground fill
+    // from everywhere, a key light from just above-right of the camera and a weaker fill from
+    // below-left — both aimed along the view (their targets ride with the camera too; a
+    // target left at the world origin made the light swing as the camera orbited).
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa0a8, 1.1))
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35))
+    const aim = new THREE.Object3D()
+    aim.position.set(0, 0, -1)
+    camera.add(aim)
+    const key = new THREE.DirectionalLight(0xffffff, 1.3)
+    key.position.set(0.45, 0.6, 1)
+    key.target = aim
+    camera.add(key)
+    const fill = new THREE.DirectionalLight(0xffffff, 0.55)
+    fill.position.set(-0.7, -0.5, 0.6)
+    fill.target = aim
+    camera.add(fill)
     const group = new THREE.Group()
     scene.add(group)
     const highlight = new THREE.Mesh(
@@ -203,8 +296,16 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     controls.panSpeed = 0.8
     controls.staticMoving = true
 
-    const t: Three = { renderer, scene, camera, controls, group, entries: new Map(), highlight, hoverBox, hover: null, points: new Map(), fly: null }
+    const t: Three = {
+      renderer, scene, camera, controls, group, entries: new Map(), highlight, hoverBox, hover: null, points: new Map(), fly: null,
+      dirty: true, lastMotion: 0, moving: false, axisKey: axisKeyRef.current,
+    }
     threeRef.current = t
+    // camera moved (drag, wheel, programmatic): draw, thinned until it has been still
+    controls.addEventListener('change', () => {
+      t.lastMotion = performance.now()
+      t.dirty = true
+    })
 
     const resize = () => {
       const w = host.clientWidth
@@ -214,15 +315,21 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       camera.aspect = w / h
       camera.updateProjectionMatrix()
       controls.handleResize()
-      for (const e of t.entries.values()) for (const p of e.parts) p.built.setResolution(w, h)
+      for (const e of t.entries.values()) for (const p of e.parts) (p.built.setResolution(w, h), p.lod?.built.setResolution(w, h))
+      t.dirty = true
     }
     const ro = new ResizeObserver(resize)
     ro.observe(host)
     resize()
 
+    // Frames on demand: the loop keeps the controls going but draws only when something
+    // changed (several 3-D panes of millions of points would otherwise redraw every frame).
     let raf = 0
     const loop = () => {
+      const now = performance.now()
       if (t.fly) {
+        t.lastMotion = now
+        t.dirty = true
         const u = Math.min(1, (performance.now() - t.fly.t0) / FLY_MS)
         const e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2 // easeInOutCubic
         camera.position.lerpVectors(t.fly.from.pos, t.fly.to.pos, e)
@@ -233,7 +340,12 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         }
       }
       controls.update()
-      renderer.render(scene, camera)
+      setMoving(t, now - t.lastMotion < LOD_IDLE_MS)
+      if (t.dirty) {
+        t.dirty = false
+        renderer.render(scene, camera)
+        drawAxisKey(t)
+      }
       raf = requestAnimationFrame(loop)
     }
     loop()
@@ -258,12 +370,15 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     let hoverRaf = 0
     const hideHover = () => {
       setHoverCell(t, null)
+      if (hoverBox.visible) t.dirty = true
       hoverBox.visible = false
       tip.style.display = 'none'
       renderer.domElement.style.cursor = ''
     }
     const onMove = (e: PointerEvent) => {
       if (e.buttons) return hideHover()
+      // no hit-testing while the camera moves (wheel, fly)
+      if (t.moving) return
       hoverEvt = e
       if (!hoverRaf)
         hoverRaf = requestAnimationFrame(() => {
@@ -280,6 +395,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     registerRenderHook(paneRef.current, () => {
       controls.update()
       renderer.render(scene, camera)
+      t.dirty = true
     })
 
     return () => {
@@ -291,7 +407,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       renderer.domElement.removeEventListener('pointermove', onMove)
       renderer.domElement.removeEventListener('pointerleave', hideHover)
       cancelAnimationFrame(hoverRaf)
-      for (const e of t.entries.values()) for (const p of e.parts) p.built.dispose()
+      for (const e of t.entries.values()) for (const p of e.parts) (p.built.dispose(), p.lod?.built.dispose())
       for (const e of t.points.values()) for (const p of e.parts) p.built.dispose()
       controls.dispose()
       renderer.dispose()
@@ -307,6 +423,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     t.renderer.setClearColor(new THREE.Color(pal.viewportBg))
     ;(t.highlight.material as THREE.MeshBasicMaterial).color.set(pal.strong)
     ;(t.hoverBox.material as THREE.LineBasicMaterial).color.set(pal.accent)
+    t.dirty = true
   }, [pal])
 
   // A new pin / group → fit the camera to it once it is drawn.
@@ -318,12 +435,16 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
   useEffect(() => {
     const t = threeRef.current
     if (!t) return
-    const shown = layers.filter((l) => l.datasetId === activeDatasetId && l.visible && l.geometry)
+    const shown = layers.filter((l) => l.datasetId === activeDatasetId && l.geometry && layerShownIn(l, { id: paneId, hiddenLayers: paneHidden }))
     const keep = new Set(shown.map((l) => l.id))
     const drop = (id: string, e: Entry) => {
       for (const p of e.parts) {
         t.group.remove(p.built.object)
         p.built.dispose()
+        if (p.lod) {
+          t.group.remove(p.lod.built.object)
+          p.lod.built.dispose()
+        }
       }
       t.entries.delete(id)
     }
@@ -337,9 +458,10 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     const h = t.renderer.domElement.clientHeight
     const newGeometry: number[] = []
     for (const l of shown) {
+      let style = effectiveStyle(l, { layerStyles: paneStyles })
       const key = {
         geometry: l.geometry!,
-        style: l.style,
+        style: JSON.stringify(style),
         focus,
         hidden: hiddenKey(view.hiddenChroms),
         ctx: ctxOpacity,
@@ -348,6 +470,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         values: view.overviewColor === 'field' ? fieldColors : null,
         maxBond: view.maxBond,
         theme: pal.name,
+        trace: paneTrace,
       }
       const prev = t.entries.get(l.id)
       if (
@@ -361,7 +484,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         prev.key.nCells === key.nCells &&
         prev.key.values === key.values &&
         prev.key.maxBond === key.maxBond &&
-        prev.key.theme === key.theme
+        prev.key.theme === key.theme &&
+        prev.key.trace === key.trace
       ) {
         for (const p of prev.parts) if (p.built.warning) warnings.push(`${l.name}: ${p.built.warning}`)
         continue
@@ -369,8 +493,17 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       if (prev) drop(l.id, prev)
       if (!prev || prev.key.geometry !== key.geometry) newGeometry.push(l.geometry!.header.n_points)
       // cut over-long bonds (unassigned spots, duplicate loci) before drawing
-      const base = splitForView(l.geometry!, view.maxBond).geometry
+      const cut = splitForView(l.geometry!, view.maxBond).geometry
+      const base = paneTrace ? subsetGeometry(cut, (s) => s.trace_id === paneTrace) : cut
       const { main, context } = displayParts(base, hidden, focus)
+      // a subset layer (a region / traces) is a highlight: its own style everywhere, and no
+      // faint context of its own (its parent draws that)
+      const isSubset = l.parentId !== null
+      // …and its tubes a little thicker than the parent's, so they show around them
+      if (isSubset && style.mode === 'tube' && style.tubeRadius === null) {
+        const parentGeom = layers.find((x) => x.id === l.parentId)?.geometry
+        if (parentGeom) style = { ...style, tubeRadius: autoTubeRadius(parentGeom) * 1.2 }
+      }
       // colour by chromosome whenever the layer itself has several, so hiding
       // chromosomes never switches the colour scheme away from the legend
       const colorOpts = {
@@ -382,25 +515,43 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       }
       // Multi-cell data: the overview (and the faint context around a
       // focused cell) uses the overview colouring — per cell by default.
-      const overviewStyle: LayerStyle = cellIndex.size > 1 ? { ...l.style, colorMode: view.overviewColor } : l.style
+      // (a trace view shows one cell's trace: its own style, not the overview colouring)
+      const overviewStyle: LayerStyle = cellIndex.size > 1 && !isSubset && !paneTrace ? { ...style, colorMode: view.overviewColor } : style
       // one cell: the layer style (tubes); a group reads like a small overview
-      const mainStyle = typeof focus === 'string' ? l.style : overviewStyle
+      const mainStyle = typeof focus === 'string' ? style : overviewStyle
       const parts: Part[] = []
-      if (main) parts.push({ role: 'main', geometry: main, built: buildLayerObject(main, mainStyle, colorOpts) })
-      if (context && ctxOpacity > 0) {
+      // large line / point parts also get a thinned copy (tubes are built for one cell)
+      const withLod = (geometry: Geometry, style: LayerStyle): Part['lod'] => {
+        if (style.mode === 'tube') return undefined
+        const thin = thinGeometry(geometry, LOD_POINTS)
+        return thin ? { built: buildLayerObject(thin.geometry, style, colorOpts), geometry: thin.geometry } : undefined
+      }
+      if (main) parts.push({ role: 'main', geometry: main, built: buildLayerObject(main, mainStyle, colorOpts), lod: withLod(main, mainStyle) })
+      if (context && ctxOpacity > 0 && !isSubset) {
         // around a group, members share colours with the rest: grey context keeps them apart
         // (thousands of overlapping faint lines saturate otherwise)
         const groupCtx = focus !== null && typeof focus !== 'string'
         const ctxStyle: LayerStyle = groupCtx
           ? { ...overviewStyle, mode: 'line', lineWidth: 1, opacity: ctxOpacity, colorMode: 'custom', color: pal.context }
           : { ...overviewStyle, mode: 'line', lineWidth: 1, opacity: ctxOpacity }
-        parts.push({ role: 'context', geometry: context, built: buildLayerObject(context, ctxStyle, colorOpts) })
+        parts.push({ role: 'context', geometry: context, built: buildLayerObject(context, ctxStyle, colorOpts), lod: withLod(context, ctxStyle) })
       }
       for (const p of parts) {
         p.built.object.userData = { layerId: l.id, role: p.role }
         p.built.setResolution(w, h)
         if (p.role === 'context') p.built.object.renderOrder = -1
+        // a subset lies exactly on its parent: draw it last and let it win the depth ties
+        if (isSubset) for (const o of [p.built.object, p.lod?.built.object]) if (o) highlightOnTop(o)
         t.group.add(p.built.object)
+        if (p.lod) {
+          const o = p.lod.built.object
+          o.userData = { layerId: l.id, role: p.role }
+          p.lod.built.setResolution(w, h)
+          if (p.role === 'context') o.renderOrder = -1
+          o.visible = t.moving
+          p.built.object.visible = !t.moving
+          t.group.add(o)
+        }
         if (p.role === 'main' && p.built.warning) warnings.push(`${l.name}: ${p.built.warning}`)
       }
       t.entries.set(l.id, { key, parts })
@@ -418,7 +569,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     }
     const pick = useStore.getState().pick
     if (pick && !isPointPick(pick) && !keep.has(pick.layerId)) setPick(null)
-  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed, pal])
+    t.dirty = true
+  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed, pal, paneStyles, paneTrace, paneHidden])
 
   // Point sets (e.g. RNA spots): focused cell's points full, others faint.
   useEffect(() => {
@@ -462,6 +614,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       }
       t.points.set(ps.name, { set: ps, key, parts })
     }
+    t.dirty = true
   }, [pointSets, view, focus, ctxOpacity])
 
   // Explicit reset / dataset switch → refit on everything drawn.
@@ -474,6 +627,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       jumpTo(t, box)
       fittedRef.current = true
     }
+    t.dirty = true
   }, [resetViewToken, activeDatasetId, resetKey])
 
   // Global focus changes don't move a pinned / group-scoped view.
@@ -496,6 +650,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
   useEffect(() => {
     const t = threeRef.current
     if (!t) return
+    t.dirty = true
     t.highlight.visible = false
     if (!pick || (pick.paneId && pick.paneId !== paneId)) return
     if (isPointPick(pick)) {
@@ -518,6 +673,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       {noCoords && <div className="muted pane-empty">No 3-D coordinates in this dataset — use Matrix / Tracks / Embedding views</div>}
       <PickLabel paneId={paneId} />
       <div className="hover-tip" ref={tipRef} />
+      {!noCoords && <svg ref={axisKeyRef} className="axis-key-3d" width={60} height={60} viewBox="0 0 60 60" aria-hidden />}
     </div>
   )
 }
@@ -560,20 +716,43 @@ function hitAt(t: Three, clientX: number, clientY: number): Hit | null {
   ray.setFromCamera(ndc, t.camera)
   let best: Hit | null = null
   let bestScore = Infinity
+  const consider = (hit: Hit, score: number) => {
+    if (score < bestScore) {
+      bestScore = score
+      best = hit
+    }
+  }
+  // Line parts (up to millions of points): chunked boxes → only the bonds near the ray
+  // (render/raypick; same answer as three's raycast, milliseconds instead of ~150 ms).
+  // Tubes and point markers: three.js.
+  const targets: THREE.Object3D[] = []
+  for (const [layerId, e] of t.entries)
+    for (const part of e.parts) {
+      const kind = part.built.pick.kind
+      if (kind !== 'indexed' && kind !== 'pair') {
+        targets.push(part.built.object)
+        continue
+      }
+      for (const h of raycastChunks(part.geometry, ray.ray, threshold, 1)) {
+        const segment = part.geometry.header.segments[h.segment]
+        const score = h.distanceToRay / Math.max(h.distance, 1e-9) + (part.role === 'context' ? 1 : 0)
+        consider({ kind: 'trace', layerId, role: part.role, part, pointIndex: h.pointIndex, segment, cell: segment.cell_id }, score)
+      }
+    }
+  for (const e of t.points.values()) for (const p of e.parts) targets.push(p.built.object)
   // recursive: line layers carry a Points child for one-spot segments
-  for (const h of ray.intersectObjects(t.group.children, true)) {
+  for (const h of ray.intersectObjects(targets, true)) {
     const owner = h.object.userData.singletons && h.object.parent ? h.object.parent : h.object
     const ud = owner.userData as { kind?: string; layerId?: string; set?: string; role: Role }
     const off = (h as { distanceToRay?: number }).distanceToRay ?? ray.ray.distanceToPoint(h.point)
-    let score = off / Math.max(h.distance, 1e-9) + (ud.role === 'context' ? 1 : 0)
-    let hit: Hit | null = null
+    const score = off / Math.max(h.distance, 1e-9) + (ud.role === 'context' ? 1 : 0)
     if (ud.kind === 'points') {
       const e = t.points.get(ud.set!)
       const part = e?.parts.find((p) => p.role === ud.role)
       if (!e || !part || h.index === undefined || h.index === null) continue
       const index = part.built.indices[h.index]
-      hit = { kind: 'point', set: e.set, role: ud.role, index, cell: e.set.cellIds[index] }
-      score -= 1e-4 // markers sit on the chromatin: prefer them on ties
+      // markers sit on the chromatin: prefer them on ties
+      consider({ kind: 'point', set: e.set, role: ud.role, index, cell: e.set.cellIds[index] }, score - 1e-4)
     } else {
       const part = t.entries.get(ud.layerId!)?.parts.find((p) => p.role === ud.role)
       if (!part) continue
@@ -582,11 +761,7 @@ function hitAt(t: Three, clientX: number, clientY: number): Hit | null {
       const si = findSegment(part.geometry.offsets, pi)
       if (si < 0) continue
       const segment = part.geometry.header.segments[si]
-      hit = { kind: 'trace', layerId: ud.layerId!, role: ud.role, part, pointIndex: pi, segment, cell: segment.cell_id }
-    }
-    if (score < bestScore) {
-      bestScore = score
-      best = hit
+      consider({ kind: 'trace', layerId: ud.layerId!, role: ud.role, part, pointIndex: pi, segment, cell: segment.cell_id }, score)
     }
   }
   return best
@@ -676,6 +851,7 @@ function hoverAt(t: Three, e: PointerEvent, tip: HTMLDivElement, focus: string |
   }
   const clear = () => {
     setHoverCell(t, null)
+    if (t.hoverBox.visible) t.dirty = true
     t.hoverBox.visible = false
     tip.style.display = 'none'
     t.renderer.domElement.style.cursor = ''
@@ -696,6 +872,7 @@ function hoverAt(t: Three, e: PointerEvent, tip: HTMLDivElement, focus: string |
   if (box) {
     t.hoverBox.box.copy(box)
     t.hoverBox.visible = true
+    t.dirty = true
   }
   const info = (store.activeDatasetId ? store.cells[store.activeDatasetId] : undefined)?.find((c) => c.cell_id === cell)
   showTip(`${pointText ? `${pointText} — ` : `cell ${cell}${info ? ` · ${info.n_traces} traces` : ''} — `}click to focus`)
@@ -705,6 +882,7 @@ function hoverAt(t: Three, e: PointerEvent, tip: HTMLDivElement, focus: string |
 /** Swap the hover overlay to `cell` (built once per hovered cell). */
 function setHoverCell(t: Three, cell: string | null, layerGeom?: Geometry, hidden?: ReadonlySet<string>) {
   if (t.hover && t.hover.cell === cell && t.hover.geometry === layerGeom) return
+  t.dirty = true
   if (t.hover) {
     t.scene.remove(t.hover.built.object)
     t.hover.built.dispose()

@@ -236,8 +236,8 @@ cd.results.set("my_table", df, function="my.fn", params={"k": 3})
 
 A value that cannot be written to disk raises `TypeError` **when it
 is assigned**.  Values and provenance round-trip through
-`.chromdata.zarr` and `.h5cd` (format 1.4 and later).  Files from older versions read unchanged, with records
-that carry no provenance.
+`.chromdata.zarr` / `.cdz`.  Results of converted `.h5cd` files older than
+format 1.4 come with records that carry no provenance.
 
 Analysis functions share one calling convention (`cd` first; then
 keyword-only `chrom=None`, `trace_ids`, `cells`, `params`, `device`,
@@ -268,13 +268,13 @@ D = cd.compute_distances(trace_id=0)  # (n_spots_in_trace, n_spots_in_trace)
 |-------|--------|
 | Reconstruction CSV (chrom, start, end, x, y, z) | `ChromData.from_dataframe` |
 | 4DN FOF-CT core table (+ cell / RNA tables) | `ChromData.from_fofct`; write with `cd.to_fofct` |
-| `.chromdata.zarr` / `.cdz` / `.h5cd` | `ChromData.read` |
+| `.chromdata.zarr` / `.cdz` | `ChromData.read` |
+| legacy `.h5cd` (HDF5, format 1.x / 2.0) | convert once: `python -m uchrom.io.upgrade old.h5cd` |
 
 ```python
 cd.write("data.chromdata.zarr")        # format 2.3: Zarr + Parquet (a directory)
 cd.write("data.cdz")                   # the same store as one zip file
 cd2 = ChromData.read("data.chromdata.zarr")
-cd3 = ChromData.read("old.h5cd")       # HDF5 2.0, or 1.x upgraded in memory
 ```
 
 ### Storage: `.chromdata.zarr`
@@ -330,8 +330,9 @@ for chunk in big.iter_traces("auto", chrom="chr7", columns="coords"):   # bounde
 - **Format 2.0 / 2.1 stores** stay readable, in memory and backed; rewrite
   them with `python -m uchrom.io.upgrade old.chromdata.zarr
   new.chromdata.zarr`.  Older readers cannot read newer stores.
-- **`.h5cd`** stays readable; writing it still works in this release but
-  warns (`DeprecationWarning`).
+- **`.h5cd`** (the HDF5 container of format 1.x / 2.0) is no longer read or
+  written: `ChromData.read` / `write` raise a `ValueError` that names the
+  converter below.
 
 ### Larger than memory: streaming import and analysis
 
@@ -368,12 +369,12 @@ loops = uchrom.strc.loop.call_loops_axiswise_f(cd, chrom="chr7")   # streams on 
   (`streaming=True`, default on backed data): exact medians and outlier
   masks, variances equal up to floating-point rounding.
 
-### Migrating 1.x files (format 2.0)
+### Converting `.h5cd` files
 
-`ChromData.read` reads 1.x files transparently: `bins` become the unique
-spot loci, and the spot-aligned 1.x `tracks` table is split into
-`bin_tracks` (columns constant within every bin) and `spot_tracks` (the
-rest).  To rewrite files once as `.chromdata.zarr`:
+`upgrade_h5cd` reads an `.h5cd` (format 1.x or 2.0) and writes it as a
+`.chromdata.zarr` / `.cdz`.  For 1.x files `bins` become the unique spot
+loci, and the spot-aligned 1.x `tracks` table is split into `bin_tracks`
+(columns constant within every bin) and `spot_tracks` (the rest):
 
 ```python
 from uchrom.io import upgrade_h5cd
@@ -383,7 +384,7 @@ upgrade_h5cd("old.h5cd", "old.cdz")    # the target suffix picks the container
 
 ```bash
 python -m uchrom.io.upgrade old.h5cd                 # → old.chromdata.zarr
-python -m uchrom.io.upgrade data/*.h5cd --out-dir converted/ [--format cdz|h5cd]
+python -m uchrom.io.upgrade data/*.h5cd --out-dir converted/ [--format cdz]
 ```
 
 Code changes, if any:

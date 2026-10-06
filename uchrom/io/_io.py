@@ -27,8 +27,9 @@ def read_pairs(path):
 def read_particles(path):
     """Read reconstruction output. Auto-detects format by extension.
 
-    - ``.chromdata.zarr`` / ``.cdz`` / ``.h5cd`` → ChromData, returned as a
-      flat DataFrame in the row order it was saved in
+    - ``.chromdata.zarr`` / ``.cdz`` → ChromData, returned as a flat
+      DataFrame in the row order it was saved in (a ``.h5cd`` raises: convert
+      it with ``python -m uchrom.io.upgrade``)
     - ``.csv`` or other   → CSV
     """
     from uchrom.core.zarrcd import container_kind
@@ -36,7 +37,7 @@ def read_particles(path):
     kind = container_kind(path)
     if kind is not None:
         from uchrom.core import ChromData
-        cd = ChromData.read(path, original_order=kind != "h5cd")
+        cd = ChromData.read(path, original_order=True)
         df = cd.to_dataframe()
         df['chrom'] = df['chrom'].astype(str)
         return df
@@ -51,8 +52,7 @@ def save_particles(df, path, cell_id=None):
     Format inferred from file extension:
 
     - ``.csv``                        → CSV via ``df.to_csv``
-    - ``.chromdata.zarr`` / ``.cdz``  → ChromData format 2.0 (recommended)
-    - ``.h5cd`` or other              → ChromData HDF5 (deprecated)
+    - ``.chromdata.zarr`` / ``.cdz``  → ChromData store (other suffixes raise)
 
     ``cell_id`` is only propagated into the ChromData branch (CSV has no
     dedicated cell column); it is passed through to

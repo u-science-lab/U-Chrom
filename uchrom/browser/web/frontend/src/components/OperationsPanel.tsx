@@ -3,6 +3,8 @@ import { listTraces } from '../api'
 import { chromsOf, composeFilter, describeFilter, fmtBp, parseRegion, parseTraceSelection } from '../filters'
 import { useStore } from '../store'
 import type { DatasetSummary, Layer, LayerFilter, LayerStyle, TraceInfo } from '../types'
+import { Select } from './Select'
+import { layerInPane } from '../workspace'
 
 type Tab = 'region' | 'trace'
 
@@ -13,9 +15,11 @@ export function OperationsPanel() {
   const activeId = useStore((s) => s.activeDatasetId)
   const layers = useStore((s) => s.layers)
   const selectedId = useStore((s) => s.selectedLayerId)
+  // subsets belong to the active 3-D view
+  const paneId = useStore((s) => s.workspace.activePane)
   const ds = datasets.find((d) => d.id === activeId)
   const parent =
-    layers.find((l) => l.id === selectedId && l.datasetId === activeId) ??
+    layers.find((l) => l.id === selectedId && l.datasetId === activeId && layerInPane(l, { id: paneId })) ??
     layers.find((l) => l.datasetId === activeId && l.parentId === null)
 
   const tabs = useMemo(() => {
@@ -31,10 +35,11 @@ export function OperationsPanel() {
   return (
     <details className="panel subset">
       <summary>
-        <h2>Subset layer</h2>
+        <h2>Highlight a region / traces</h2>
       </summary>
       <div className="muted small">
-        new layer from <b>{parent.name}</b> — for comparing or exporting a region / set of traces
+        a new layer from <b>{parent.name}</b>, styled on its own — e.g. the whole cell as grey lines (select{' '}
+        <b>{parent.name}</b>, Style → Custom) with one region as coloured tubes (this layer, Style)
       </div>
       <div className="tabs">
         {tabs.map((t) => (
@@ -43,13 +48,13 @@ export function OperationsPanel() {
           </button>
         ))}
       </div>
-      {current === 'region' && <RegionTab ds={ds} parent={parent} />}
-      {current === 'trace' && <TraceTab ds={ds} parent={parent} />}
+      {current === 'region' && <RegionTab ds={ds} parent={parent} paneId={paneId} />}
+      {current === 'trace' && <TraceTab ds={ds} parent={parent} paneId={paneId} />}
     </details>
   )
 }
 
-function useCreateSubset(ds: DatasetSummary, parent: Layer) {
+function useCreateSubset(ds: DatasetSummary, parent: Layer, paneId: string) {
   const addLayer = useStore((s) => s.addLayer)
   const [error, setError] = useState<string | null>(null)
   const create = (own: LayerFilter, name?: string, style?: Partial<LayerStyle>) => {
@@ -59,24 +64,26 @@ function useCreateSubset(ds: DatasetSummary, parent: Layer) {
       return
     }
     setError(null)
-    addLayer({ datasetId: ds.id, parentId: parent.id, name: name ?? describeFilter(own), filter, style: { ...parent.style, ...style } })
+    // a subset reads as a highlight: coloured tubes over its parent (restyle it in Style)
+    addLayer({ datasetId: ds.id, parentId: parent.id, name: name ?? describeFilter(own), filter, style: { ...parent.style, mode: 'tube', colorMode: 'rainbow', opacity: 1, ...style }, paneId })
   }
   return { create, error, setError }
 }
 
 
-function RegionTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
+function RegionTab({ ds, parent, paneId }: { ds: DatasetSummary; parent: Layer; paneId: string }) {
   const chroms = chromsOf(parent.filter, ds.chroms)
   const [chrom, setChrom] = useState(chroms[0]?.name ?? '')
   const [text, setText] = useState('')
-  const { create, error, setError } = useCreateSubset(ds, parent)
+  const { create, error, setError } = useCreateSubset(ds, parent, paneId)
   const info = chroms.find((c) => c.name === chrom) ?? chroms[0]
   if (!info) return null
   const lo = parent.filter.region?.chrom === info.name ? Math.max(info.start, parent.filter.region.start) : info.start
   const hi = parent.filter.region?.chrom === info.name ? Math.min(info.end, parent.filter.region.end) : info.end
   const submit = () => {
     try {
-      create({ region: parseRegion({ ...info, start: lo, end: hi }, text) })
+      // empty: the whole chromosome (within the parent)
+      create({ region: text.trim() ? parseRegion({ ...info, start: lo, end: hi }, text) : { chrom: info.name, start: lo, end: hi } })
     } catch (e) {
       setError((e as Error).message)
     }
@@ -89,16 +96,16 @@ function RegionTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
         submit()
       }}
     >
-      <select value={info.name} onChange={(e) => setChrom(e.target.value)}>
+      <Select value={info.name} onChange={(e) => setChrom(e.target.value)}>
         {chroms.map((c) => (
           <option key={c.name}>{c.name}</option>
         ))}
-      </select>
-      <input placeholder="start-end, e.g. 10M-20M" value={text} onChange={(e) => setText(e.target.value)} />
+      </Select>
+      <input placeholder="start-end, e.g. 10M-20M (empty: whole chromosome)" value={text} onChange={(e) => setText(e.target.value)} />
       <div className="muted small">
         valid: {fmtBp(lo)}-{fmtBp(hi)}
       </div>
-      <button type="submit" disabled={!text.trim()}>
+      <button type="submit">
         Create subset
       </button>
       {error && <div className="error">{error}</div>}
@@ -108,14 +115,14 @@ function RegionTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
 
 const PAGE = 500
 
-function TraceTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
+function TraceTab({ ds, parent, paneId }: { ds: DatasetSummary; parent: Layer; paneId: string }) {
   const chroms = chromsOf(parent.filter, ds.chroms)
   const [chrom, setChrom] = useState<string>(chroms.length === 1 ? chroms[0].name : '')
   const [traces, setTraces] = useState<TraceInfo[]>([])
   const [total, setTotal] = useState(0)
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
-  const { create, error, setError } = useCreateSubset(ds, parent)
+  const { create, error, setError } = useCreateSubset(ds, parent, paneId)
 
   const load = async (offset: number) => {
     setLoading(true)
@@ -154,12 +161,12 @@ function TraceTab({ ds, parent }: { ds: DatasetSummary; parent: Layer }) {
         submit()
       }}
     >
-      <select value={chrom} onChange={(e) => setChrom(e.target.value)}>
+      <Select value={chrom} onChange={(e) => setChrom(e.target.value)}>
         {chroms.length > 1 && <option value="">all chromosomes</option>}
         {chroms.map((c) => (
           <option key={c.name}>{c.name}</option>
         ))}
-      </select>
+      </Select>
       <ul className="trace-list">
         {visible.map((t, i) => (
           <li key={t.trace_id} onClick={() => setText(t.trace_id)} title={`${t.chrom}:${fmtBp(t.start)}-${fmtBp(t.end)}`}>

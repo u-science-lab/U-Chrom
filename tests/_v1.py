@@ -11,7 +11,7 @@ import h5py
 import numpy as np
 import pandas as pd
 
-from uchrom.core.cdata import _write_results, _write_uns
+from uchrom.io._h5cd_legacy import _write_results, _write_uns
 from uchrom.core.results import ResultsStore
 
 

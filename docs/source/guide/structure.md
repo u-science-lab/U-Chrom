@@ -102,7 +102,7 @@ See [`call_loops_axiswise_f`](../api/strc_loop) for all parameters.
 
 ```bash
 python -m uchrom.strc.loop \
-    --input=data.h5cd \
+    --input=data.chromdata.zarr \
     --output=loops.bedpe \
     --chrom=chr17 \
     --device=auto
@@ -224,6 +224,6 @@ rec.inputs          # {"chrom": [...], "n_traces": ..., "n_spots": ...}
 rec.uchrom_version, rec.created_utc
 ```
 
-Values and provenance round-trip through `.h5cd` (format ≥ 1.4), so a
+Values and provenance round-trip through `.chromdata.zarr`, so a
 single file carries tracing coordinates, calls, how they were made, and
 cell metadata.

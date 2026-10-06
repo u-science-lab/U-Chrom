@@ -10,18 +10,22 @@ import {
   handleWorkspaceKey,
   LAYOUTS,
   moveSplitter,
+  gridShape,
+  gridSizes,
+  gridSpan,
+  moveGridSplitter,
   normalizeSizes,
   PANE_LABEL,
-  PANE_TYPES,
   removePane,
   retypePane,
   setLayout,
+  supportedPaneTypes,
+  type DataKind,
   type Pane,
   type PaneType,
   type WsLayout,
 } from '../workspace'
 import { EmbeddingView } from './EmbeddingView'
-import { FocusBar } from './FocusBar'
 import { GenomeView } from './GenomeView'
 import { LocusBar } from './LocusBar'
 import { MatrixView } from './MatrixView'
@@ -30,23 +34,184 @@ import { cellTitle, useCellTypes } from './PaneCell'
 import { useGroupInfo } from '../useGroups'
 import { savePanePng } from '../capture'
 import { StatsView } from './StatsView'
+import { RegionPicker, SpatialView } from './SpatialView'
 import { Viewport } from './Viewport'
 
 const TYPE_LABEL = PANE_LABEL
-const MENU_LABEL: Record<PaneType, string> = {
-  '3d': '3D view',
-  embedding: 'Embedding view',
-  genome: 'Genome (Hi-C / distance / tracks)',
-  matrix: 'Matrix (Hi-C / distance)',
-  stats: 'Statistics',
+/** What each view shows (menu descriptions). */
+const MENU_HINT: Record<PaneType, string> = {
+  '3d': '3-D chromatin structures',
+  spatial: 'cells in the tissue, over its image',
+  embedding: 'UMAP / t-SNE / PCA of the cells',
+  genome: 'contact maps, distances and tracks along a locus',
+  matrix: 'contact or distance matrix of a locus',
+  stats: 'distributions and per-cell statistics',
 }
-/** Views that follow the shared genomic locus. */
-const GENOME_PANES = new Set<PaneType>(['genome', 'matrix', 'stats'])
+const MENU_ICON: Record<PaneType, string> = { '3d': '◈', spatial: '▦', embedding: '⁘', genome: '≋', matrix: '▤', stats: '▥' }
+
+/** What the active dataset offers, for the default views and the view menus. */
+function useDataKind(): DataKind {
+  const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
+  return {
+    hasEmbeddings: (ds?.embeddings?.length ?? 0) > 0,
+    hasCoords: !!ds && ds.has_coords !== false && ds.n_spots > 0,
+    hasTracks: (ds?.tracks?.length ?? 0) > 0,
+    hasContactMaps: (ds?.contact_maps?.length ?? 0) > 0,
+    hasSpatial: (ds?.spatial?.length ?? 0) > 0,
+    manyCells: (ds?.n_cells ?? 0) > 1,
+  }
+}
+
+/**
+ * Menu of view types (the + View menu and each pane's type switch): only
+ * the views this dataset can fill, each with what it shows; the current
+ * type is checked (and kept listed, marked, if the data lacks it).
+ */
+function ViewMenu({ current, onPick }: { current?: PaneType; onPick(t: PaneType): void }) {
+  const supported = supportedPaneTypes(useDataKind())
+  const types = current && !supported.includes(current) ? [...supported, current] : supported
+  return (
+    <ul className="view-menu" role="menu">
+      {types.map((t) => (
+        <li
+          key={t}
+          role="menuitemradio"
+          aria-checked={t === current}
+          className={`${t === current ? 'current' : ''}${supported.includes(t) ? '' : ' unsupported'}`}
+          onClick={() => onPick(t)}
+        >
+          <span className="vm-icon" aria-hidden>
+            {MENU_ICON[t]}
+          </span>
+          <span className="vm-text">
+            <span className="vm-name">{PANE_LABEL[t]}</span>
+            <span className="vm-hint">{supported.includes(t) ? MENU_HINT[t] : 'not available for this dataset'}</span>
+          </span>
+          <span className="vm-check" aria-hidden>
+            {t === current ? '✓' : ''}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** A pane's type switch: the view name with a caret, opening the view menu. */
+function PaneTypeSwitch({ pane }: { pane: Pane }) {
+  const setWorkspace = useStore((s) => s.setWorkspace)
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLButtonElement>(null)
+  const close = useCallback(() => setOpen(false), [])
+  return (
+    <>
+      <button ref={ref} className={`pane-type${open ? ' open' : ''}`} onClick={() => setOpen(!open)} title="View type" aria-haspopup="menu">
+        <span className="vm-icon" aria-hidden>
+          {MENU_ICON[pane.type]}
+        </span>
+        <span className="pane-type-label">{TYPE_LABEL[pane.type]}</span>
+        <span className="caret" aria-hidden>
+          ▾
+        </span>
+      </button>
+      <Popover anchor={ref} open={open} onClose={close} className="menu-popup">
+        <ViewMenu
+          current={pane.type}
+          onPick={(t) => {
+            setWorkspace((w) => retypePane(w, pane.id, t))
+            setOpen(false)
+          }}
+        />
+      </Popover>
+    </>
+  )
+}
+/** Whether a pane shows the shared genomic locus (Stats only when it looks at the locus chromosome). */
+const usesLocus = (p: Pane) => p.type === 'genome' || p.type === 'matrix' || (p.type === 'stats' && p.chromScope === 'locus')
 const LAYOUT_LABEL: Record<WsLayout, [string, string]> = {
-  tabs: ['Tabs', 'One view at a time, switch with tabs'],
-  columns: ['Columns', 'Views side by side'],
-  rows: ['Rows', 'Views stacked'],
-  grid: ['Grid', 'Views in a 2-column grid'],
+  tabs: ['Tabs', 'one view at a time, switch with tabs'],
+  columns: ['Columns', 'views side by side'],
+  rows: ['Rows', 'views stacked'],
+  grid: ['Grid', 'views in a 2-column grid'],
+}
+
+/** Small drawing of a layout (menu and button). */
+function LayoutIcon({ layout }: { layout: WsLayout }) {
+  const r = (x: number, y: number, w: number, h: number) => <rect x={x} y={y} width={w} height={h} rx="1" />
+  return (
+    <svg className="layout-icon" viewBox="0 0 16 12" width="16" height="12" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.2">
+      {layout === 'tabs' && (
+        <>
+          {r(1, 3, 14, 8)}
+          <path d="M1.5 3V1.5h5V3" />
+        </>
+      )}
+      {layout === 'columns' && (
+        <>
+          {r(1, 1, 6.2, 10)}
+          {r(8.8, 1, 6.2, 10)}
+        </>
+      )}
+      {layout === 'rows' && (
+        <>
+          {r(1, 1, 14, 4.2)}
+          {r(1, 6.8, 14, 4.2)}
+        </>
+      )}
+      {layout === 'grid' && (
+        <>
+          {r(1, 1, 6.2, 4.2)}
+          {r(8.8, 1, 6.2, 4.2)}
+          {r(1, 6.8, 6.2, 4.2)}
+          {r(8.8, 6.8, 6.2, 4.2)}
+        </>
+      )}
+    </svg>
+  )
+}
+
+/** The layout switch: the current layout as a button (like + View), the four layouts in a menu. */
+function LayoutMenu({ layout, onPick }: { layout: WsLayout; onPick(l: WsLayout): void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLButtonElement>(null)
+  const close = useCallback(() => setOpen(false), [])
+  return (
+    <div className="ws-add">
+      <button ref={ref} className={`ws-layout-btn${open ? ' open' : ''}`} onClick={() => setOpen(!open)} title="Layout of the views" aria-haspopup="menu">
+        <LayoutIcon layout={layout} />
+        {LAYOUT_LABEL[layout][0]}
+        <span className="caret" aria-hidden>
+          ▾
+        </span>
+      </button>
+      <Popover anchor={ref} open={open} onClose={close} className="menu-popup">
+        <ul className="view-menu" role="menu">
+          {LAYOUTS.map((l) => (
+            <li
+              key={l}
+              role="menuitemradio"
+              aria-checked={l === layout}
+              className={l === layout ? 'current' : ''}
+              onClick={() => {
+                onPick(l)
+                setOpen(false)
+              }}
+            >
+              <span className="vm-icon" aria-hidden>
+                <LayoutIcon layout={l} />
+              </span>
+              <span className="vm-text">
+                <span className="vm-name">{LAYOUT_LABEL[l][0]}</span>
+                <span className="vm-hint">{LAYOUT_LABEL[l][1]}</span>
+              </span>
+              <span className="vm-check" aria-hidden>
+                {l === layout ? '✓' : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Popover>
+    </div>
+  )
 }
 
 /**
@@ -63,27 +228,37 @@ export function Workspace() {
   const ensureDefault = useStore((s) => s.ensureDefaultWorkspace)
   const datasetId = useStore((s) => s.activeDatasetId)
   const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
-  const hasEmbeddings = (ds?.embeddings?.length ?? 0) > 0
-  const hasCoords = !!ds && ds.has_coords !== false && ds.n_spots > 0
-  const hasTracks = (ds?.tracks?.length ?? 0) > 0
-  const hasContactMaps = (ds?.contact_maps?.length ?? 0) > 0
+  const { hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells } = useDataKind()
   const [resetKeys, setResetKeys] = useState<Record<string, number>>({})
   const [menu, setMenu] = useState(false)
   const addRef = useRef<HTMLButtonElement>(null)
   const closeMenu = useCallback(() => setMenu(false), [])
   const panesRef = useRef<HTMLDivElement>(null)
 
-  // Until the user arranges views, the default follows the data.
+  // Each dataset has its own layout: switching restores the one arranged for it, else the
+  // default for its data (which follows the data until the user arranges views).
+  const owner = ds?.name ?? null
   useEffect(() => {
-    if (datasetId) ensureDefault({ hasEmbeddings, hasCoords, hasTracks, hasContactMaps })
-  }, [datasetId, hasEmbeddings, hasCoords, hasTracks, hasContactMaps, ensureDefault])
+    if (datasetId && owner) ensureDefault({ hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells }, owner)
+  }, [datasetId, owner, hasEmbeddings, hasCoords, hasTracks, hasContactMaps, hasSpatial, manyCells, ensureDefault])
 
   // Pins to cells the active dataset doesn't have (e.g. after switching) are dropped.
   const cellList = useStore((s) => (s.activeDatasetId ? s.cells[s.activeDatasetId] : undefined))
   useEffect(() => {
-    if (!cellList) return
+    // [] = requested, still loading: every pin would look unknown
+    if (!cellList?.length) return
     setWorkspace((w) => dropUnknownPins(w, new Set(cellList.map((c) => c.cell_id))))
   }, [cellList, setWorkspace])
+
+  // A closed 3-D view takes its subsets with it (only once this layout is the active
+  // dataset's — while switching, pane ids of another dataset's layout would not match).
+  const wsOwner = useStore((s) => s.workspaceOwner)
+  const layers = useStore((s) => s.layers)
+  useEffect(() => {
+    if (!ds || wsOwner !== ds.name) return
+    const ids = new Set(ws.panes.map((p) => p.id))
+    for (const l of layers) if (l.datasetId === ds.id && l.paneId && !ids.has(l.paneId)) useStore.getState().removeLayer(l.id)
+  }, [ws.panes, layers, ds, wsOwner])
 
   // Group scopes the active dataset doesn't know (another dataset's lasso group) are dropped.
   const fields = ds?.cell_fields
@@ -138,6 +313,30 @@ export function Workspace() {
     window.addEventListener('pointerup', up)
   }
 
+  // grid: boundaries between columns / rows are dragged like the splitters
+  const grid = ws.layout === 'grid' && !ws.maximized && ws.panes.length > 1
+  const shape = gridShape(ws.panes.length)
+  const g = gridSizes(ws)
+  const onGridStart = (axis: 'cols' | 'rows', index: number) => (e: React.PointerEvent) => {
+    e.preventDefault()
+    const box = panesRef.current?.getBoundingClientRect()
+    if (!box) return
+    const n = axis === 'cols' ? shape.cols : shape.rows
+    const move = (ev: PointerEvent) => {
+      const [pos, len] = axis === 'cols' ? [ev.clientX - box.left, box.width] : [ev.clientY - box.top, box.height]
+      const frac = (pos - GRID_PAD - index * GRID_GAP - GRID_GAP / 2) / (len - 2 * GRID_PAD - (n - 1) * GRID_GAP)
+      setWorkspace((w) => moveGridSplitter(w, axis, index, frac))
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      document.body.classList.remove('resizing', 'resizing-rows')
+    }
+    document.body.classList.add(axis === 'cols' ? 'resizing' : 'resizing-rows')
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
   const add = (type: PaneType) => {
     setWorkspace((w) => addPane(w, type))
     setMenu(false)
@@ -146,30 +345,16 @@ export function Workspace() {
   return (
     <div className="workspace">
       <div className="ws-bar">
-        <FocusBar />
-        {ws.panes.some((p) => GENOME_PANES.has(p.type)) && <LocusBar />}
         <span className="spacer" />
         <div className="ws-add">
           <button ref={addRef} onClick={() => setMenu(!menu)} title="Add a view">
             + View
           </button>
           <Popover anchor={addRef} open={menu} onClose={closeMenu} className="menu-popup">
-            <ul className="ws-menu">
-              {PANE_TYPES.map((t) => (
-                <li key={t} onClick={() => add(t)}>
-                  {MENU_LABEL[t]}
-                </li>
-              ))}
-            </ul>
+            <ViewMenu onPick={add} />
           </Popover>
         </div>
-        <div className="seg ws-layouts" role="group" aria-label="Layout">
-          {LAYOUTS.map((l) => (
-            <button key={l} className={ws.layout === l ? 'active' : ''} title={LAYOUT_LABEL[l][1]} onClick={() => setWorkspace((w) => setLayout(w, l))}>
-              {LAYOUT_LABEL[l][0]}
-            </button>
-          ))}
-        </div>
+        <LayoutMenu layout={ws.layout} onPick={(l) => setWorkspace((w) => setLayout(w, l))} />
       </div>
       {ws.layout === 'tabs' && !ws.maximized && (
         <div className="ws-tabs">
@@ -183,7 +368,11 @@ export function Workspace() {
       <div
         ref={panesRef}
         className={`ws-panes layout-${ws.layout}${ws.maximized ? ' maximized' : ''}`}
-        style={ws.layout === 'grid' && !ws.maximized ? { gridTemplateColumns: ws.panes.length > 1 ? '1fr 1fr' : '1fr' } : undefined}
+        style={
+          grid
+            ? { gridTemplateColumns: g.cols.map((f) => `${f}fr`).join(' '), gridTemplateRows: g.rows.map((f) => `${f}fr`).join(' ') }
+            : undefined
+        }
       >
         {ws.panes.map((p, i) => (
           <Fragment key={p.id}>
@@ -191,7 +380,7 @@ export function Workspace() {
               pane={p}
               active={p.id === ws.activePane && ws.panes.length > 1}
               hidden={!visible(p)}
-              style={split ? { flex: `${sizes[i]} 1 0` } : undefined}
+              style={split ? { flex: `${sizes[i]} 1 0` } : grid && gridSpan(i, ws.panes.length) > 1 ? { gridColumn: `span ${gridSpan(i, ws.panes.length)}` } : undefined}
               canClose={ws.panes.length > 1}
               maximized={ws.maximized === p.id}
               resetKey={resetKeys[p.id] ?? 0}
@@ -202,8 +391,47 @@ export function Workspace() {
             )}
           </Fragment>
         ))}
+        {grid && <GridSplitters cols={g.cols} rows={g.rows} n={ws.panes.length} onStart={onGridStart} />}
       </div>
     </div>
+  )
+}
+
+/** Padding and gap of the grid layout (px; as in index.css `.layout-grid`). */
+const GRID_PAD = 4
+const GRID_GAP = 4
+
+/** Offset of the boundary after track `k` of `fracs` inside a grid box (CSS length). */
+const gridEdge = (fracs: number[], k: number) => {
+  const cum = fracs.slice(0, k + 1).reduce((a, b) => a + b, 0)
+  return `calc(${GRID_PAD}px + (100% - ${2 * GRID_PAD + (fracs.length - 1) * GRID_GAP}px) * ${cum} + ${k * GRID_GAP + GRID_GAP / 2}px)`
+}
+
+/**
+ * Drag handles on the boundaries of the grid: one per inner column edge (over the
+ * rows where that edge exists — not across a pane spanning the last row) and one
+ * per inner row edge.
+ */
+function GridSplitters({ cols, rows, n, onStart }: { cols: number[]; rows: number[]; n: number; onStart(axis: 'cols' | 'rows', k: number): (e: React.PointerEvent) => void }) {
+  const inLast = n - cols.length * (rows.length - 1) // panes in the last row
+  return (
+    <>
+      {cols.slice(0, -1).map((_, k) => {
+        const full = k < inLast - 1 || inLast === cols.length
+        return (
+          <div
+            key={`c${k}`}
+            className="ws-grid-splitter cols"
+            style={{ left: gridEdge(cols, k), top: GRID_PAD, ...(full ? { bottom: GRID_PAD } : { height: `calc(${gridEdge(rows, rows.length - 2)} - ${GRID_PAD + GRID_GAP / 2}px)` }) }}
+            onPointerDown={onStart('cols', k)}
+            title="Drag to resize"
+          />
+        )
+      })}
+      {rows.slice(0, -1).map((_, k) => (
+        <div key={`r${k}`} className="ws-grid-splitter rows" style={{ top: gridEdge(rows, k), left: GRID_PAD, right: GRID_PAD }} onPointerDown={onStart('rows', k)} title="Drag to resize" />
+      ))}
+    </>
   )
 }
 
@@ -248,17 +476,19 @@ function PaneBox({
       onFocusCapture={activate}
     >
       <header className="pane-head">
-        <select value={pane.type} onChange={(e) => setWorkspace((w) => retypePane(w, pane.id, e.target.value as PaneType))} title="View type">
-          {PANE_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {TYPE_LABEL[t]}
-            </option>
-          ))}
-        </select>
+        <PaneTypeSwitch pane={pane} />
+        {pane.type === 'spatial' && <RegionPicker pane={pane} />}
+        {usesLocus(pane) && <LocusBar />}
         {cellPin && (
           <button className="pin-badge" onClick={() => activate()} title="Pinned to this cell — change it in the inspector (right, “cells”)">
             📌 {cellTitle(cellPin, types)}
           </button>
+        )}
+        {pane.type === '3d' && pane.trace && (
+          <span className="pin-badge" title={`This view shows only trace ${pane.trace}`}>
+            {/* the pin badge names the cell: drop it from the trace id */}
+            trace {cellPin && pane.trace.startsWith(`${cellPin}_`) ? pane.trace.slice(cellPin.length + 1) : pane.trace}
+          </span>
         )}
         {pane.scope?.kind === 'all' && (
           <button className="pin-badge" onClick={() => activate()} title="Always all cells — change it in the inspector (right, “cells”)">
@@ -296,6 +526,7 @@ function PaneBox({
       </header>
       <div className="pane-body" ref={bodyRef} data-pane={pane.id}>
         {pane.type === '3d' && <Viewport paneId={pane.id} resetKey={resetKey} scope={pane.scope} />}
+        {pane.type === 'spatial' && <SpatialView pane={pane} />}
         {pane.type === 'embedding' && <EmbeddingView pane={pane} />}
         {pane.type === 'genome' && <GenomeView pane={pane} />}
         {pane.type === 'matrix' && <MatrixView pane={pane} />}

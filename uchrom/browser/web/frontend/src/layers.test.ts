@@ -42,7 +42,7 @@ describe('layer tree helpers', () => {
 const ds: DatasetSummary = {
   id: 'd1',
   name: 'cell1',
-  path: '/tmp/cell1.h5cd',
+  path: '/tmp/cell1.chromdata.zarr',
   n_spots: 10,
   n_traces: 2,
   n_cells: 1,
@@ -74,7 +74,7 @@ describe('store', () => {
     const grand = st.addLayer({ datasetId: 'd1', parentId: child, name: 'chr1', filter: { chroms: ['chr1'] } })
     let s = useStore.getState()
     expect(s.layers.find((l) => l.id === grand)!.name).toBe('chr1 (2)')
-    expect(s.layers.find((l) => l.id === root)!.visible).toBe(false) // parent hidden by subset
+    expect(s.layers.find((l) => l.id === root)!.visible).toBe(true) // the subset is drawn over its parent
     expect(s.selectedLayerId).toBe(grand)
 
     st.renameLayer(child, '  first  ')

@@ -91,3 +91,29 @@ export function binAt(starts: readonly number[], ends: readonly number[], pos: n
   }
   return pos < ends[lo] ? lo : -1
 }
+
+/**
+ * The Matrix pane's view (HiGlass square mode): the heatmap fills a w × h pane at one bp per
+ * px on both axes — x is the shared locus, y is centred on the locus centre plus `yOff` (the
+ * pane's own vertical pan).
+ */
+export function matrixViewport(locus: { start: number; end: number }, w: number, h: number, yOff = 0) {
+  const bpPerPx = (locus.end - locus.start) / Math.max(1, w)
+  const yCenter = (locus.start + locus.end) / 2 + yOff
+  return { xStart: locus.start, xEnd: locus.end, yStart: yCenter - (h / 2) * bpPerPx, yEnd: yCenter + (h / 2) * bpPerPx, bpPerPx }
+}
+
+/**
+ * Zoom the square view by `factor` (< 1 zooms in) keeping the locus under pane point (mx, my)
+ * in place: the new x window (for `setLocus`, before clamping) and the new vertical offset.
+ */
+export function zoomMatrixView(locus: { start: number; end: number }, w: number, h: number, yOff: number, factor: number, mx: number, my: number) {
+  const v = matrixViewport(locus, w, h, yOff)
+  const bx = v.xStart + mx * v.bpPerPx
+  const by = v.yStart + my * v.bpPerPx
+  const bpp = v.bpPerPx * factor
+  const start = bx - mx * bpp
+  const end = start + w * bpp
+  const yCenter = by - my * bpp + (h / 2) * bpp
+  return { start, end, yOff: yCenter - (start + end) / 2 }
+}

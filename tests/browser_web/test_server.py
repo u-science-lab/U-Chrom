@@ -16,7 +16,7 @@ from uchrom.browser.web import create_app, decode_geometry  # noqa: E402
 from uchrom.browser.web.data import DatasetStore  # noqa: E402
 
 
-@pytest.fixture(params=[".h5cd", ".chromdata.zarr"])     # in memory / backed
+@pytest.fixture(params=["memory", "backed"])
 def client(tmp_path, request):
     spots = pd.DataFrame({
         "chrom": ["chr1"] * 4 + ["chr2"] * 2,
@@ -25,10 +25,13 @@ def client(tmp_path, request):
         "trace_id": ["a"] * 4 + ["b"] * 2,
     })
     cd = ChromData(np.arange(18, dtype=float).reshape(6, 3), spots)
-    path = tmp_path / f"toy{request.param}"
+    path = tmp_path / "toy.chromdata.zarr"
     cd.write(path)
     store = DatasetStore()
-    store.load(path)
+    if request.param == "memory":            # an in-memory ChromData (as a loaded .csv is)
+        store.add(ChromData.read(path), name="toy", path=str(path.resolve()))
+    else:
+        store.load(path)
     return TestClient(create_app(store)), path
 
 
@@ -48,10 +51,14 @@ def test_load_and_delete(client, tmp_path):
     c, path = client
     r = c.post("/api/datasets", json={"path": str(path)})
     assert r.status_code == 200 and r.json()["id"] == "d2"
-    assert c.post("/api/datasets", json={"path": str(tmp_path / "missing.h5cd")}).status_code == 400
-    bad = tmp_path / "bad.h5cd"
-    bad.write_text("not hdf5")
+    assert c.post("/api/datasets", json={"path": str(tmp_path / "missing.chromdata.zarr")}).status_code == 400
+    bad = tmp_path / "bad.cdz"
+    bad.write_text("not a zip")
     assert c.post("/api/datasets", json={"path": str(bad)}).status_code == 400
+    old = tmp_path / "old.h5cd"                  # the legacy HDF5 container: refused, naming the converter
+    old.write_bytes(b"\x89HDF\r\n\x1a\n")
+    r = c.post("/api/datasets", json={"path": str(old)})
+    assert r.status_code == 400 and "uchrom.io.upgrade" in r.json()["detail"]
     assert c.delete("/api/datasets/d2").status_code == 204
     assert c.delete("/api/datasets/d2").status_code == 404
     assert [d["id"] for d in c.get("/api/datasets").json()] == ["d1"]
@@ -100,7 +107,7 @@ def test_cli_serves_over_http(tmp_path):
     import urllib.request
 
     pytest.importorskip("uvicorn")
-    path = tmp_path / "cli.h5cd"
+    path = tmp_path / "cli.chromdata.zarr"
     spots = pd.DataFrame({"chrom": ["chr1"] * 3, "start": [0, 10, 20],
                           "end": [10, 20, 30], "trace_id": ["a"] * 3})
     ChromData(np.zeros((3, 3)), spots).write(path)
@@ -134,7 +141,7 @@ def test_cli_serves_over_http(tmp_path):
 def test_cells_endpoint_and_cell_filter(tmp_path):
     spots = pd.DataFrame({"chrom": ["chr1"] * 4, "start": [0, 10, 0, 10], "end": [10, 20, 10, 20],
                           "trace_id": ["a", "a", "b", "b"], "cell_id": ["c10", "c10", "c2", "c2"]})
-    path = tmp_path / "cells.h5cd"
+    path = tmp_path / "cells.chromdata.zarr"
     ChromData(np.arange(12, dtype=float).reshape(4, 3), spots).write(path)
     store = DatasetStore()
     store.load(path)
@@ -154,7 +161,7 @@ def test_cell_fields_and_points_endpoints(tmp_path):
     rna = pd.DataFrame({"x": [0.1, 0.2, 0.3], "y": [0.0, 0.0, 0.0], "z": [1.0, 1.0, 1.0],
                         "gene": ["Nanog", "Sox2", "Nanog"], "cell_id": ["c1", "c2", "c2"],
                         "spot_id": [1, 2, 3], "peak_intensity": [100, 200, np.nan]})
-    path = tmp_path / "multi.h5cd"
+    path = tmp_path / "multi.chromdata.zarr"
     ChromData(np.arange(12, dtype=float).reshape(4, 3), spots, cells=cells, points={"rna": rna}).write(path)
     store = DatasetStore()
     store.load(path)
@@ -192,7 +199,7 @@ def test_embedding_endpoint(tmp_path):
     cellm = {"rna_pca": np.array([[0.5, 1.5, 2.5], [-1.0, np.nan, 0.0]]),
              "rna_umap": np.array([[1.0, 2.0], [3.0, 4.0]]), "scalar": np.array([1.0, 2.0])}
     uns = {"embeddings": {"rna_pca": {"method": "pca", "source": "rna", "label": "RNA PCA", "axis_prefix": "PC"}}}
-    path = tmp_path / "emb.h5cd"
+    path = tmp_path / "emb.chromdata.zarr"
     ChromData(np.zeros((2, 3)), spots, cells=cells, cellm=cellm, uns=uns).write(path)
     store = DatasetStore()
     store.load(path)
@@ -228,7 +235,7 @@ def test_embedding_modalities(tmp_path):
     embed_cells(cd, source="rna", methods=("pca",))
     embed_cells(cd, source="if", methods=("pca",))
     embed_cells(cd, source="atac", matrix=rng.poisson(1, size=(n, 40)), methods=("pca",), drop_depth_r=None)
-    path = tmp_path / "mod.h5cd"
+    path = tmp_path / "mod.chromdata.zarr"
     cd.write(path)
     store = DatasetStore()
     store.load(path)
@@ -248,7 +255,7 @@ def test_categorical_cell_fields(tmp_path):
     spots = pd.DataFrame({"chrom": "chr1", "start": 0, "end": 1, "trace_id": ids, "cell_id": ids})
     cells = pd.DataFrame({"cell_type": ["L5IT", "Astro", "L5IT", "Astro", "L23IT", "L5IT"],
                           "barcode": [f"b{i}" for i in range(n)]}, index=pd.Index(ids, name="cell_id"))
-    path = tmp_path / "cat.h5cd"
+    path = tmp_path / "cat.chromdata.zarr"
     ChromData(np.zeros((n, 3)), spots, cells=cells).write(path)
     store = DatasetStore()
     store.load(path)
@@ -261,3 +268,30 @@ def test_categorical_cell_fields(tmp_path):
                                        {"value": "L23IT", "count": 1}]
     v = c.get("/api/datasets/d1/cell_values", params={"field": "cell_type"}).json()
     assert v["kind"] == "category" and v["values"][:2] == ["L5IT", "Astro"]
+
+
+def test_free_port_skips_live_listeners_only():
+    """_free_port moves past a port with a live listener, and binds as uvicorn does (SO_REUSEADDR)."""
+    import socket
+
+    from uchrom.browser.web import _free_port
+
+    with socket.socket() as live:
+        live.bind(("127.0.0.1", 0))
+        live.listen()
+        port = live.getsockname()[1]
+        assert _free_port("127.0.0.1", port) != port
+    with socket.socket() as probe:              # a free port is returned as is
+        probe.bind(("127.0.0.1", 0))
+        free = probe.getsockname()[1]
+    assert _free_port("127.0.0.1", free) == free
+
+
+def test_store_structure(client):
+    c, path = client
+    t = c.get("/api/datasets/d1/store").json()
+    assert t["kind"] == "group" and t["container"] == "zarr" and t["name"] == path.name
+    names = {n["name"] for n in t["children"]}
+    assert {"tables", "index"} <= names and t["meta"]["format_version"]
+    # the rest of the API still answers (a route named like a server variable once shadowed it)
+    assert c.get("/api/datasets").status_code == 200

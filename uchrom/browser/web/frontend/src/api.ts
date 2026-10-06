@@ -1,22 +1,52 @@
+import { WAKE_HINT, useActivity } from './activity'
 import { decodeMatrix, type MatrixData } from './matrix'
-import type { IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, TracePage } from './types'
+import type { AtlasResponse, FileListing, FilePlace, IntervalTable, RgStats, ScalingStats, TrackData, CellDetails, CellPage, CellValues, DatasetSummary, Embedding, Geometry, GeometryHeader, LayerFilter, PointSet, PointSetPayload, SpatialPoints, StoreNode, TracePage } from './types'
 
-async function request(url: string, init?: RequestInit): Promise<Response> {
-  const res = await fetch(url, init)
-  if (!res.ok) {
-    let detail = `${res.status} ${res.statusText}`
-    try {
-      const body = await res.json()
-      if (body && body.detail) detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
-    } catch {
-      /* non-JSON error body */
+async function fetchChecked(url: string, init?: RequestInit): Promise<Response> {
+  const act = useActivity.getState()
+  act.begin()
+  try {
+    let res = await fetch(url, init)
+    // a hosted server that is waking up answers 503 + Retry-After: say so, wait and ask again (idempotent GETs only)
+    const idempotent = !init || (init.method ?? 'GET') === 'GET'
+    for (let i = 0; i < 12 && res.status === 503 && res.headers.has('Retry-After') && idempotent; i++) {
+      const wait = Math.min(15, Math.max(1, Number(res.headers.get('Retry-After')) || 5))
+      act.startPhase('wake', `Waking up the server… (attempt ${i + 2})`, WAKE_HINT)
+      await new Promise((r) => setTimeout(r, wait * 1000))
+      res = await fetch(url, init)
     }
-    throw new Error(detail)
+    act.endPhase('wake')
+    if (!res.ok) {
+      let detail = `${res.status} ${res.statusText}`
+      try {
+        const body = await res.json()
+        if (body && body.detail) detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+      } catch {
+        /* non-JSON error body */
+      }
+      throw new Error(detail)
+    }
+    return res
+  } finally {
+    act.end()
   }
-  return res
 }
 
-export async function fetchHealth(): Promise<{ status: string; version: string; bundle?: string | null }> {
+/** GETs in flight, by URL: panes asking for the same thing at once (e.g. the same cell field) share one request. */
+const inflight = new Map<string, Promise<Response>>()
+
+async function request(url: string, init?: RequestInit): Promise<Response> {
+  const isGet = !init || ((init.method ?? 'GET') === 'GET' && !init.signal)
+  if (!isGet) return fetchChecked(url, init)
+  let p = inflight.get(url)
+  if (!p) {
+    p = fetchChecked(url, init).finally(() => inflight.delete(url))
+    inflight.set(url, p)
+  }
+  return (await p).clone() // each caller reads its own copy of the body
+}
+
+export async function fetchHealth(): Promise<{ status: string; version: string; bundle?: string | null; hosted?: boolean }> {
   return (await request('api/health')).json()
 }
 
@@ -31,6 +61,23 @@ export async function openDataset(path: string): Promise<DatasetSummary> {
     body: JSON.stringify({ path }),
   })
   return res.json()
+}
+
+/** A server directory for the Open dataset dialog (null: the server's working directory). */
+export async function listFiles(path: string | null, hidden = false): Promise<FileListing> {
+  const q = new URLSearchParams()
+  if (path) q.set('path', path)
+  if (hidden) q.set('hidden', 'true')
+  return (await request(`api/files?${q}`)).json()
+}
+
+export async function filePlaces(): Promise<FilePlace[]> {
+  return (await request('api/files/places')).json()
+}
+
+/** The atlas catalog the server is configured with (`root: null` when none). */
+export async function fetchAtlas(refresh = false): Promise<AtlasResponse> {
+  return (await request(`api/atlas${refresh ? '?refresh=true' : ''}`)).json()
 }
 
 export async function closeDataset(id: string): Promise<void> {
@@ -67,6 +114,14 @@ export async function fetchEmbedding(id: string, key: string, dims: [number, num
   const q = new URLSearchParams({ dims: `${dims[0]},${dims[1]}` })
   return (await request(`api/datasets/${encodeURIComponent(id)}/embedding/${encodeURIComponent(key)}?${q}`)).json()
 }
+
+export async function fetchSpatial(id: string, key: string, region: string | null): Promise<SpatialPoints> {
+  const q = region !== null ? `?${new URLSearchParams({ region })}` : ''
+  return (await request(`api/datasets/${encodeURIComponent(id)}/spatial/${encodeURIComponent(key)}${q}`)).json()
+}
+
+/** URL of a linked image (a region's tissue image). */
+export const imageUrl = (id: string, name: string) => `api/datasets/${encodeURIComponent(id)}/images/${encodeURIComponent(name)}`
 
 export async function fetchPointSet(id: string, name: string): Promise<PointSet> {
   const res = await request(`api/datasets/${encodeURIComponent(id)}/points/${encodeURIComponent(name)}`, {
@@ -194,9 +249,16 @@ export function resetGroupRegistrations() {
 }
 
 /** Build a query string, dropping null / undefined / '' values. */
+/** Genomic coordinates the server takes as integers (bp). */
+const BP_PARAMS = new Set(['start', 'end'])
+
 function query(params: Record<string, string | number | boolean | null | undefined>): string {
   const q = new URLSearchParams()
-  for (const [k, v] of Object.entries(params)) if (v !== null && v !== undefined && v !== '') q.set(k, String(v))
+  for (const [k, v] of Object.entries(params)) {
+    if (v === null || v === undefined || v === '') continue
+    // a window moved by the wheel / a drag can be fractional: the server wants whole bp
+    q.set(k, BP_PARAMS.has(k) && typeof v === 'number' ? String(Math.round(v)) : String(v))
+  }
   const s = q.toString()
   return s ? `?${s}` : ''
 }
@@ -205,6 +267,11 @@ export interface RegionQuery {
   chrom: string
   start?: number
   end?: number
+}
+
+/** The store's on-disk structure (groups, arrays, Parquet tables, sizes). */
+export async function fetchStore(id: string): Promise<StoreNode> {
+  return (await request(`${ds(id)}/store`)).json()
 }
 
 export async function fetchTracks(

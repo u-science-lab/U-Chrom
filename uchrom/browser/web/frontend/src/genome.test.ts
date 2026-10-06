@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clampLocus, datasetChroms, defaultLocus, fmtLocus, logTicks, niceTicks, panLocus, parseLocus, zoomLocus } from './genome'
+import { clampLocus, datasetChroms, defaultLocus, fmtLocus, fmtPos, fmtSpan, GENOME, genomeExtent, genomeToChrom, logTicks, niceTicks, panLocus, parseLocus, queryRegion, regionKey, zoomLocus } from './genome'
 
 const chroms = [
   { name: 'chr7', start: 0, end: 150_000_000 },
@@ -64,5 +64,70 @@ describe('ticks', () => {
     expect(niceTicks(1, 1)).toEqual([])
     expect(logTicks(3e4, 2e6)).toEqual([1e5, 1e6])
     expect(logTicks(0, 10)).toEqual([])
+  })
+})
+
+describe('locus stays in whole bp', () => {
+  it('zoom / pan without a chromosome extent round the window', () => {
+    const l = { chrom: 'chr4', start: 14_000_000, end: 15_000_000 }
+    const z = zoomLocus(l, 0.37, undefined, 14_326_200.86)
+    expect(Number.isInteger(z.start) && Number.isInteger(z.end)).toBe(true)
+    const p = panLocus(l, 1234.56)
+    expect(p).toEqual({ chrom: 'chr4', start: 14_001_235, end: 15_001_235 })
+  })
+})
+
+describe('whole genome', () => {
+  const layout = [
+    { name: 'chr1', offset: 0, length: 100 },
+    { name: 'chr2', offset: 100, length: 50 },
+    { name: 'chrX', offset: 150, length: 30 },
+  ]
+  const ds = {
+    chroms: [
+      { name: 'chr1', start: 0, end: 100, n_spots: 0, n_traces: 0 },
+      { name: 'chr2', start: 0, end: 50, n_spots: 0, n_traces: 0 },
+    ],
+    contact_maps: [],
+    genome: layout,
+  } as unknown as Parameters<typeof datasetChroms>[0]
+  it('offers All first; the default stays the first chromosome', () => {
+    const chroms = datasetChroms(ds)
+    expect(chroms[0]).toMatchObject({ name: GENOME, start: 0, end: 180 })
+    expect(defaultLocus(chroms)).toEqual({ chrom: 'chr1', start: 0, end: 100 })
+    expect(genomeExtent(layout.slice(0, 1))).toBeNull() // one chromosome: no genome view
+  })
+  it('maps genome coordinates to chromosomes', () => {
+    expect(genomeToChrom(layout, 0)).toEqual({ chrom: 'chr1', pos: 0 })
+    expect(genomeToChrom(layout, 120)).toEqual({ chrom: 'chr2', pos: 20 })
+    expect(genomeToChrom(layout, 180)).toEqual({ chrom: 'chrX', pos: 30 })
+    expect(genomeToChrom(layout, 181)).toBeNull()
+    expect(fmtPos(GENOME, 120_000_000, [{ name: 'chr1', offset: 0, length: 100_000_000 }, { name: 'chr2', offset: 100_000_000, length: 90_000_000 }])).toBe('chr2:20M')
+    expect(fmtPos('chr7', 1500)).toBe('chr7:1.5k')
+    expect(fmtSpan(GENOME, 110, 120, layout)).toBe('chr2:10-20')
+  })
+  it('parses and formats genome windows', () => {
+    const M = 1_000_000
+    const big = {
+      chroms: [
+        { name: 'chr1', start: 0, end: 100 * M, n_spots: 0, n_traces: 0 },
+        { name: 'chr2', start: 0, end: 50 * M, n_spots: 0, n_traces: 0 },
+      ],
+      contact_maps: [],
+      genome: [
+        { name: 'chr1', offset: 0, length: 100 * M },
+        { name: 'chr2', offset: 100 * M, length: 50 * M },
+      ],
+    } as unknown as Parameters<typeof datasetChroms>[0]
+    const chroms = datasetChroms(big)
+    expect(parseLocus('All', chroms)).toEqual({ chrom: GENOME, start: 0, end: 150 * M })
+    expect(parseLocus('genome', chroms).chrom).toBe(GENOME)
+    const w = parseLocus('chr1:50M-chr2:20M', chroms)
+    expect(w).toEqual({ chrom: GENOME, start: 50 * M, end: 120 * M })
+    expect(fmtLocus({ chrom: GENOME, start: 0, end: 150 * M }, chroms)).toBe('All')
+    expect(fmtLocus(w, chroms)).toBe('chr1:50M-chr2:20M')
+    expect(parseLocus('chr2:10M-20M', chroms)).toEqual({ chrom: 'chr2', start: 10 * M, end: 20 * M })
+    expect(queryRegion({ chrom: GENOME, start: 5, end: 9 })).toEqual({ chrom: GENOME })
+    expect(regionKey({ chrom: GENOME, start: 5, end: 9 })).toBe(regionKey({ chrom: GENOME, start: 0, end: 180 }))
   })
 })

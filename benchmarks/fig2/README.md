@@ -13,12 +13,12 @@ format-version comparison (supplementary `figS_formats.pdf`).
 | `b_storage.py` | b | Takei 2025 cerebellum rep 1, all FOVs (whole-cell subsets) | file size, write time, full-read time, peak RSS vs n_spots for FOF-CT/CSV, Parquet, AnnData (spots as obs), h5cd N.x |
 | `c_access.py` | c | same subsets | `get_trace` / `get_cell` / `get_chrom` latency (median, IQR of 20 random ids) and open / load time vs n_spots; backed chromdata.zarr vs the in-memory baseline (Parquet / AnnData: load the flat table, subset with a pandas boolean mask) |
 | `d_streaming.py` | d | same subsets + the 1e8 replicated store | exact median distance map of one chromosome (`uchrom.fea.distance_map`): peak RSS and time, "load all" (`ChromData.read` + in-memory) vs streaming (`backed=True`, `iter_traces` under a 2 GB budget); bitwise identity of the two results + a scatter |
-| `e_contacts_query.py` | e + supplement | scHiCAR MOp `.h5cd` + 1 Mb `.scool` + published `contacts_<type>.cool` | group pseudo-bulk through the index (`Dataset.contacts(group=)` → `_pseudobulk`) vs the published per-type maps for all 22 cell types and all chromosomes (max \|Δ\|); an Oligo thumbnail; link vs copy import time and sizes (→ `make_figS_contacts.py`) |
-| `e_contacts.py` | e (right) | scHiCAR MOp `.h5cd` + 1 Mb `.scool` | web-browser pseudo-bulk time vs cells aggregated (first query vs cached); first on-disk size comparison (HDF5) |
+| `e_contacts_query.py` | e + supplement | scHiCAR MOp `.chromdata.zarr` + 1 Mb `.scool` + published `contacts_<type>.cool` | group pseudo-bulk through the index (`Dataset.contacts(group=)` → `_pseudobulk`) vs the published per-type maps for all 22 cell types and all chromosomes (max \|Δ\|); an Oligo thumbnail; link vs copy import time and sizes (→ `make_figS_contacts.py`) |
+| `e_contacts.py` | e (right) | scHiCAR MOp store written as `.h5cd` (legacy writer) + 1 Mb `.scool` | web-browser pseudo-bulk time vs cells aggregated (first query vs cached); first on-disk size comparison (HDF5) |
 | `rowgroup_sweep.py` | format 2.1 | Takei 1e7 subset | row-group size (8k / 16k / 32k / 65k): size, full read, get_cell / get_trace / get_chrom (± `columns="coords"`) |
 | `spot_tracks_encoding.py` | format 2.1 | Takei 1e7 subset | why 2.1 is larger on Takei: size per table, 2.0 vs 2.1 row order, Parquet options (row groups, zstd level, dictionary, byte_stream_split) |
 | `replicate_store.py` | c, d | Takei 2.1 store | the 1e8-spot store (whole copies with renamed cells / traces, streamed per partition) |
-| `f_crossmodal.py` | Supp. Fig. S2 (was f) | scHiCAR MOp `.h5cd` + linked 1 Mb `.scool` | Leiden clusters of the RNA PCA (`uchrom.emb.cluster_cells`), marker genes, the chosen clusters' pseudo-bulk maps via `Dataset.contacts(group=)`, P(s) and slopes |
+| `f_crossmodal.py` | Supp. Fig. S2 (was f) | scHiCAR MOp `.chromdata.zarr` + linked 1 Mb `.scool` | Leiden clusters of the RNA PCA (`uchrom.emb.cluster_cells`), marker genes, the chosen clusters' pseudo-bulk maps via `Dataset.contacts(group=)`, P(s) and slopes |
 | `f_roundtrip.py` | Supp. Fig. S1e (was b) | Takei 2025 FOV0, sim_cell1, scHiCAR | field-by-field round trips (`.chromdata.zarr`, FOF-CT via `uchrom.io.write_fofct`, AnnData, .cool/.scool, PDB, .3dg) → preserved / partial / lost / NA matrix |
 | `allele_qc.py` | supplement | Takei 2025 raw spot CSVs | diagnostic of the published homolog calls (loci per trace, duplicate loci, genomic–spatial Spearman) |
 
@@ -119,9 +119,11 @@ python benchmarks/cd21_streaming_validation.py --data example-data --work /tmp/c
 
 ## Adding h5cd 2.x
 
-* b: the h5cd format's label comes from `uchrom.core.cdata.FORMAT_VERSION`, so
-  running `b_storage.py --formats h5cd` on a 2.x checkout adds an "h5cd 2.x"
-  series; results are merged by label into the existing JSON.
+* b: the h5cd format's label comes from `FORMAT_VERSION` of
+  `uchrom.io._h5cd_legacy` (`.h5cd` is no longer a ChromData format; the
+  legacy module keeps its reader / writer for these baselines), so running
+  `b_storage.py --formats h5cd` on this checkout adds an "h5cd 2.x" series;
+  results are merged by label into the existing JSON.
 * c: add a backend class (`open`, `ids`, `get`) to `c_access.BACKENDS`, e.g. an
   indexed in-memory and a backed variant; name it `h5cd 2.x …` (a label
   containing "backed" feeds the resident-memory plot).

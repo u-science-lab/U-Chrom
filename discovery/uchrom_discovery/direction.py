@@ -294,7 +294,7 @@ def _coverage_gap_directions(
             ),
             rationale=(
                 f"The graph has little or no tested coverage for these {label}s "
-                "despite their presence in the h5cd-backed schema."
+                "despite their presence in the dataset schema."
             ),
             target_facets=target,
             novelty_notes=[
@@ -341,7 +341,7 @@ def _cross_modal_directions(
             "or rank-based hypothesis test."
         ),
         rationale=(
-            "The h5cd has linked RNA observations, so the next iteration should "
+            "The dataset has linked RNA observations, so the next iteration should "
             "not only test IF-marker geometry; it should also ask whether cell-level "
             "expression predicts spatial chromatin features."
         ),
@@ -386,7 +386,7 @@ def _cell_spatial_context_directions(
         if cell_spatial_fields
         else (
             "No explicit tissue XY or cell-centroid field is visible in the "
-            "schema summary; the agent must first inspect the h5cd schema and "
+            "schema summary; the agent must first inspect the dataset schema and "
             "then use only schema-valid proxies if direct cell spatial context "
             "is absent."
         )
@@ -520,7 +520,7 @@ def _knowledge_context_directions(
         title="Expand from dataset references and user annotations",
         prompt=(
             "Generate ideas grounded in the dataset's associated literature and "
-            "user annotations stored in the h5cd schema.  Cite the relevant "
+            "user annotations stored in the dataset schema.  Cite the relevant "
             "reference_id or annotation_id in idea.metadata.source_claim_ids "
             "or idea.metadata.user_annotation_ids when possible."
         ),
@@ -611,7 +611,7 @@ def _default_modalities_for_gap(schema_key: str, schema_facets: Mapping[str, Any
 
 def _standard_constraints() -> list[str]:
     return [
-        "The final idea must be schema-valid against the h5cd-backed discovery schema.",
+        "The final idea must be schema-valid against the dataset's discovery schema.",
         "The notebook agent must run code in a notebook, include a statistical test, and report p-value/effect size.",
         "The analysis should include a control, permutation, bootstrap, or matched comparison when feasible.",
     ]

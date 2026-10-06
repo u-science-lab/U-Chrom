@@ -164,7 +164,7 @@ export function GroupPanel() {
       </ul>
       <div className="muted small">
         {nothing ? 'No groups yet. ' : ''}
-        {hasEmbeddings ? 'Lasso cells in an Embedding view (shift-drag, or the ◌ tool) to make a group.' : 'Groups come from categorical cell fields.'}
+        {hasEmbeddings ? 'Lasso cells in an Embedding view (shift-drag, or the lasso tool) to make a group.' : 'Groups come from categorical cell fields.'}
       </div>
     </section>
   )

@@ -912,7 +912,7 @@ First use the notebook content tool to inspect this scaffold notebook:
 - notebook path: {notebook_tool_path}
 
 Data paths:
-- h5cd: {h5cd_path}
+- data: {h5cd_path}
 - run output directory: {output_dir}
 - Python executable for the U-Chrom runtime: {python_path}
 - Recommended kernel name: {kernel_name}

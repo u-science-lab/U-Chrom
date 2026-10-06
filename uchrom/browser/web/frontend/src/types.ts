@@ -18,6 +18,8 @@ export interface DatasetSummary {
   xyz_unit: string | null
   trace_mode: boolean
   chroms: ChromInfo[]
+  /** chromosomes end to end for the whole-genome view (absent from older servers) */
+  genome?: GenomeChrom[]
   /** numeric columns of cd.cells (absent from older servers) */
   cell_fields?: CellField[]
   /** non-genomic 3D point sets (cd.points), e.g. nascent RNA spots */
@@ -32,10 +34,60 @@ export interface DatasetSummary {
   contact_maps?: ContactMapInfo[]
   /** interval tables in cd.results (TADs, loops, peaks) */
   intervals?: IntervalInfo[]
+  /** cell-position sets (cd.cell_positions) with their regions and images */
+  spatial?: SpatialInfo[]
 }
 
 export interface TrackInfo {
   name: string
+  /** "bin" / "spot" (cd.bin_tracks / spot_tracks) or "cell_bin" (a linked cell × bin matrix) */
+  level?: string
+  /** the bins a track is reported on: tracks of one grid are requested together */
+  grid?: string
+  label?: string
+}
+
+/** One section / FOV of a cell-position set. */
+export interface SpatialRegion {
+  name: string
+  n_cells: number
+  /** name of its image (GET images/<name>), or null */
+  image: string | null
+}
+
+export interface SpatialInfo {
+  key: string
+  unit: string | null
+  frame: string | null
+  /** "down": y grows downwards (image pixels, grid rows) */
+  y_axis: 'up' | 'down'
+  status: string | null
+  source: string | null
+  regions: SpatialRegion[]
+  n_images: number
+}
+
+/** Cell positions of one region, with the region's image (extent [x0, x1, y0, y1] in position units). */
+export interface SpatialPoints {
+  key: string
+  region: string | null
+  unit: string | null
+  y_axis: 'up' | 'down'
+  cell_ids: string[]
+  x: number[]
+  y: number[]
+  image: SpatialImage | null
+  /** without a region: the region of each cell (null without a region column) */
+  regions?: (string | null)[] | null
+  /** without a region: the image of each region that has one */
+  images?: Record<string, SpatialImage>
+}
+
+export interface SpatialImage {
+  name: string
+  /** [x0, x1, y0, y1] in position units, the image's first row at y0 */
+  extent: [number, number, number, number]
+  kind: string | null
 }
 
 export interface ContactMapInfo {
@@ -225,6 +277,8 @@ export interface GeometryHeader {
   /** null when the selection has no points (API.md) */
   bbox: { min: [number, number, number]; max: [number, number, number] } | null
   chrom_extent: Record<string, [number, number]>
+  /** a large store's overview: whole cells taken in a fixed random order (API.md, geometry) */
+  sample?: { cells: number; of_cells: number } | null
 }
 
 export interface Geometry {
@@ -238,6 +292,7 @@ export interface Geometry {
 }
 
 export type RenderMode = 'line' | 'tube' | 'points'
+export type PointShape = 'sphere' | 'disc' | 'square'
 export type ColorMode = 'rainbow' | 'custom' | 'trace' | 'cell' | 'field'
 
 export interface LayerStyle {
@@ -249,6 +304,10 @@ export interface LayerStyle {
   /** null = auto (0.3% of the bbox diagonal) */
   tubeRadius: number | null
   pointSize: number
+  /** points: shaded sphere (default), flat disc or square */
+  pointShape?: PointShape
+  /** points: grow with the zoom (a size in data units) instead of a fixed size on screen */
+  pointScale?: boolean
   highQuality: boolean
 }
 
@@ -257,6 +316,8 @@ export interface Layer {
   name: string
   datasetId: string
   parentId: string | null
+  /** the 3-D view (pane id) a subset was made in: listed and drawn only there (absent: every view) */
+  paneId?: string | null
   /** own filter composed with all ancestors' filters */
   filter: LayerFilter
   visible: boolean
@@ -295,3 +356,88 @@ export type PickInfo = TracePick | PointPick
 
 export const isPointPick = (p: PickInfo | null | undefined): p is PointPick => !!p && p.kind === 'point'
 
+
+/** One entry of a server directory (Open dataset dialog). */
+export interface FileEntry {
+  name: string
+  path: string
+  /** "dataset": something the browser opens (a *.chromdata.zarr directory is one) */
+  kind: 'dir' | 'dataset' | 'file'
+  format: string | null
+  size: number | null
+  mtime: number
+}
+
+export interface FileListing {
+  path: string
+  parent: string | null
+  sep: string
+  entries: FileEntry[]
+  truncated: boolean
+}
+
+export interface FilePlace {
+  label: string
+  path: string
+}
+
+/** One dataset of an atlas catalog (`catalog.json`, written by `python -m uchrom.core.atlas build`). */
+export interface AtlasDataset {
+  id: string
+  url: string
+  title: string
+  description?: string
+  paper?: string
+  doi?: string
+  source_url?: string
+  license?: string
+  organism?: string
+  assembly?: string
+  tissue?: string
+  n_cells: number
+  sections?: string[]
+  modalities?: string[]
+  contact_maps?: number
+  images?: number
+  size_mb?: number
+}
+
+export interface AtlasResponse {
+  root: string | null
+  catalog: { title: string; description?: string; updated?: string; datasets: AtlasDataset[] } | null
+}
+
+/** A chromosome in the whole-genome layout: bp before it (offset) and its length. */
+export interface GenomeChrom {
+  name: string
+  offset: number
+  length: number
+}
+
+/** One node of a store's on-disk structure (GET /store; API.md). */
+export interface StoreNode {
+  name: string
+  /** relative path in the store ('' = root) */
+  path: string
+  kind: 'group' | 'dir' | 'array' | 'table' | 'file'
+  bytes: number
+  /** Zarr attributes: key → JSON preview (shortened) */
+  attrs?: Record<string, string>
+  children?: StoreNode[]
+  /** children not listed */
+  more?: number
+  /** array */
+  shape?: number[]
+  dtype?: string
+  chunk_shape?: number[] | null
+  n_chunks?: number
+  /** Parquet table */
+  rows?: number
+  columns?: string[]
+  row_groups?: number
+  error?: string
+  /** root: 'zarr' (directory) or 'cdz' (one zip) */
+  container?: string
+  /** root: the store header (attrs.uchrom: format_version, n_spots, …) in full */
+  meta?: Record<string, string | number | boolean | null>
+}

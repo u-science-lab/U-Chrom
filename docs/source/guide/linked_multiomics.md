@@ -9,10 +9,10 @@ forced into `coords` / `spots`.
 
 ```text
 UChromProject
-├── ChromData (.h5cd)       measured or reconstructed 3D structure
-├── MuData (.h5mu)          multi-modal single-cell matrices
-├── scool (.scool)          raw single-cell Hi-C contact matrices
-└── provenance / links      mapping matrices and coordinate semantics
+├── ChromData (.chromdata.zarr)   measured or reconstructed 3D structure
+├── MuData (.h5mu)               multi-modal single-cell matrices
+├── scool (.scool)               raw single-cell Hi-C contact matrices
+└── provenance / links           mapping matrices and coordinate semantics
 ```
 
 ## Link MuData
@@ -20,7 +20,7 @@ UChromProject
 ```python
 from uchrom import ChromData
 
-cd = ChromData.read("data.h5cd")
+cd = ChromData.read("data.chromdata.zarr")
 cd.link_mudata(
     "schicar_mop.h5mu",
     key="schicar_mop",
@@ -34,7 +34,7 @@ cd.link_mudata(
         "semantics": "projection weights from scHiCAR cells to MERFISH cells",
     },
 )
-cd.write("data.linked.h5cd")
+cd.write("data.linked.chromdata.zarr")
 ```
 
 The MuData file remains external.  U-Chrom records only link metadata under
@@ -159,7 +159,7 @@ For workflows with several linked files, use `UChromProject`:
 ```python
 from uchrom import UChromProject
 
-project = UChromProject.from_chromdata("data.linked.h5cd")
+project = UChromProject.from_chromdata("data.linked.chromdata.zarr")
 project.link_mudata("schicar_mop.h5mu", key="schicar_mop")
 project.link_scool("GSE305439_DNA_1Mb.scool", key="schicar_contacts")
 project.validate()

@@ -50,6 +50,8 @@ def _resolve_contacts(cd, contacts) -> Tuple[str, dict]:
     records = _linked_records(cd.uns.get("linked_cool")) if cd is not None else {}
     if isinstance(contacts, str) and contacts in records:
         record = records[contacts]
+        if not cd.resolve_link_path(record["path"]).exists():   # file gone: the copy embedded in the store
+            return cd.linked_cool_path(contacts), {"key": contacts, **record}
         return str(cd.resolve_link_path(record["path"])), {"key": contacts, **record}
     path = Path(str(contacts)).expanduser()
     if path.exists():

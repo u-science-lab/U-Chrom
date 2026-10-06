@@ -13,7 +13,7 @@ The old `uchrom.auto_discovery` import path and the
 for one release but emit `DeprecationWarning`.
 ```
 
-U-Chrom can expose an agent-readable schema directly from a `.h5cd` file.
+U-Chrom can expose an agent-readable schema directly from a ChromData store.
 The schema is stored in `cdata.uns["auto_discovery_schema"]`, so discovery
 agents can reason from the same object that downstream analyses load.
 
@@ -23,7 +23,7 @@ agents can reason from the same object that downstream analyses load.
 from uchrom import ChromData
 from uchrom_discovery import build_discovery_schema, describe_for_agent
 
-cdata = ChromData.read("takei2025_cerebellum_rep1.h5cd")
+cdata = ChromData.read("takei2025_cerebellum_rep1.chromdata.zarr")
 cdata.add_reference(
     role="primary_dataset_paper",
     title="Primary paper or dataset manuscript",
@@ -38,7 +38,7 @@ cdata.add_user_annotation(
 )
 schema = build_discovery_schema(cdata, store=True)
 print(describe_for_agent(cdata))
-cdata.write("takei2025_cerebellum_rep1.h5cd")
+cdata.write("takei2025_cerebellum_rep1.chromdata.zarr")
 ```
 
 The schema records:
@@ -60,14 +60,14 @@ discovery agents. They do not replace notebook-based validation.
 The local runner performs:
 
 ```text
-h5cd schema -> idea generation -> schema review -> notebook creation
+dataset schema -> idea generation -> schema review -> notebook creation
 -> notebook execution -> verification -> report
 ```
 
 Run the default PantheonOS-agent backend:
 
 ```bash
-MPLBACKEND=Agg python -m uchrom_discovery run data.h5cd runs/pantheon \
+MPLBACKEND=Agg python -m uchrom_discovery run data.chromdata.zarr runs/pantheon \
   --model openai/gpt-5.5 \
   --idea-agent-count 3 \
   --notebook-agent-concurrency 3 \
@@ -75,7 +75,7 @@ MPLBACKEND=Agg python -m uchrom_discovery run data.h5cd runs/pantheon \
 ```
 
 The PantheonOS backend creates two agent stages. Idea agents receive only
-file access to the serialized h5cd discovery schema. Accepted ideas are
+file access to the serialized dataset discovery schema. Accepted ideas are
 converted into scaffold notebooks, then notebook agents receive file access
 plus live notebook tools. They can read the notebook, insert Markdown notes,
 insert or update code cells, execute cells, inspect outputs, and refine the
@@ -116,7 +116,7 @@ adapters call those prompt builders but do not own provider-specific prompt
 rules or the notebook lifecycle.
 
 ```bash
-python -m uchrom_discovery run data.h5cd runs/claude \
+python -m uchrom_discovery run data.chromdata.zarr runs/claude \
   --idea-source claude \
   --code-source claude \
   --reasoning-effort low \
@@ -151,7 +151,7 @@ python -m uchrom_discovery graph runs/pantheon
 
 ## Verified Notebook Exports
 
-The Takei 2025 tutorial build includes standalone HTML exports from a completed 20-idea Pantheon notebook-agent batch. The batch generated 20 ideas, accepted 20 after h5cd schema review, executed 20 notebooks, and U-Chrom re-executed/verified all 20 with explicit hypothesis tests and saved statistical figures.
+The Takei 2025 tutorial build includes standalone HTML exports from a completed 20-idea Pantheon notebook-agent batch. The batch generated 20 ideas, accepted 20 after dataset schema review, executed 20 notebooks, and U-Chrom re-executed/verified all 20 with explicit hypothesis tests and saved statistical figures.
 
 The exported notebooks intentionally separate quantitative verification from schematic generation. Main exploration notebooks include statistical matplotlib figures; generated graphical abstracts are added by a separate post-processing pass with strict coverage checking before the docs snapshot is published.
 

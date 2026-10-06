@@ -110,7 +110,7 @@ def test_link_anndata_rejects_duplicate_ann_data_ids():
         cd.link_anndata(adata)
 
 
-def test_anndata_link_roundtrips_h5cd_cell_axis(tmp_path):
+def test_anndata_link_roundtrips_store_cell_axis(tmp_path):
     from uchrom import ChromData
 
     cd = _make_cd_with_takei_like_cells()

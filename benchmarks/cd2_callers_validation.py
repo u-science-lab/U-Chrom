@@ -12,7 +12,7 @@ branch under test) can be compared::
 
 "old" calls the 1.x per-chromosome API (``store=False``, ``call_*_multi``);
 "new" calls ``chrom=None`` once per caller and also checks that every
-result and its provenance survive an ``.h5cd`` round trip.
+result and its provenance survive a ``.chromdata.zarr`` round trip.
 
 Data (see ``example-data/README.md``): Bintu 2018 IMR90 chr21
 (``IMR90_chr21-18-20Mb.csv`` → ``IMR90_chr21_pyhim.ecsv`` via
@@ -59,7 +59,7 @@ def compare(old_path, new_path):
           np.array_equal(old["bintu.fishnet.mask"], new["bintu.fishnet.mask"]))
     print("DI domains identical:", old["di"] == new["di"], f"({len(old['di'])} domains)")
     for ds in ("bintu", "takei"):
-        print(f"{ds}: provenance survives .h5cd:", all(new[f"{ds}.roundtrip"].values()))
+        print(f"{ds}: provenance survives the store:", all(new[f"{ds}.roundtrip"].values()))
 
 
 if MODE == "compare":
@@ -121,7 +121,7 @@ else:
     res["bintu.fishnet"] = timed("fishnet", lambda: call_domains_fishnet(bintu, params=FN_PARAMS, max_traces=40))
     res["bintu.fishnet.mask"] = bintu.results["tads.fishnet.ensemble"]["chr21"]["mask"]
     # write / read the results and check they come back identical
-    p = SCRATCH / "bintu_results.h5cd"
+    p = SCRATCH / "bintu_results.chromdata.zarr"
     bintu.write(p)
     back = ChromData.read(p).results
     res["bintu.roundtrip"] = {k: (back.record(k).provenance == bintu.results.record(k).provenance)
@@ -146,7 +146,7 @@ else:
     res["takei.comp"] = timed("comp", lambda: call_compartments_axes_pc(takei, device=DEV))
     res["takei.fishnet"] = timed("fishnet", lambda: call_domains_fishnet(
         takei, chrom=["chr1", "chr2"], params=FN_PARAMS, max_traces=10))
-    p = SCRATCH / "takei_results.h5cd"
+    p = SCRATCH / "takei_results.chromdata.zarr"
     takei.write(p)
     back = ChromData.read(p).results
     res["takei.roundtrip"] = {k: (back.record(k).provenance == takei.results.record(k).provenance)

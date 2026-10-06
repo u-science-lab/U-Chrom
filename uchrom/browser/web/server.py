@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -57,12 +57,62 @@ class GeometryRequest(BaseModel):
     max_points: int = DEFAULT_MAX_POINTS
 
 
-def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
-    """Build the app around ``store`` (a fresh empty one by default)."""
+def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None, hosted: Optional[Any] = None) -> FastAPI:
+    """Build the app around ``store`` (a fresh empty one by default).  ``atlas``: root of the atlas the
+    Open dialog lists (URL or folder; default ``UCHROM_ATLAS`` or :data:`uchrom.core.atlas.DEFAULT_ATLAS`;
+    an empty string turns it off)."""
+    import os
+
+    from ...core.atlas import DEFAULT_ATLAS
+
+    atlas = atlas if atlas is not None else os.environ.get("UCHROM_ATLAS", DEFAULT_ATLAS)
+    if hosted is not None:     # the server of a public atlas: sessions, only atlas datasets, no folder listing
+        from . import data as _data
+        from .hosted import COOKIE, SessionStores, new_session_id, reset_session, set_session
+
+        if not hosted.allowed_prefixes and atlas:
+            hosted.allowed_prefixes = [atlas]
+        _data.PSEUDOBULK_MAX_CELLS = min(_data.PSEUDOBULK_MAX_CELLS, int(hosted.max_pseudobulk_cells))
+        _data.STATS_MAX_SPOTS = min(_data.STATS_MAX_SPOTS, int(hosted.stats_max_spots))
+        store = SessionStores(hosted)
     store = store if store is not None else DatasetStore()
     app = FastAPI(title="U-Chrom browser", docs_url="/api/docs",
                   openapi_url="/api/openapi.json")
     app.state.store = store
+
+    @app.exception_handler(Exception)
+    async def _unhandled(request, exc):
+        """An uncaught error: always logged (stderr: a container's log); the type and message go to the client only
+        with UCHROM_DEBUG set (a public server does not volunteer internals)."""
+        import logging
+        import traceback
+
+        from fastapi.responses import JSONResponse
+
+        logging.getLogger("uvicorn.error").error("%s %s\n%s", request.method, request.url.path, "".join(
+            traceback.format_exception(type(exc), exc, exc.__traceback__)))
+        detail = "Internal Server Error"
+        if os.environ.get("UCHROM_DEBUG"):
+            detail = f"{type(exc).__name__}: {exc}\n" + "".join(
+                traceback.format_exception(type(exc), exc, exc.__traceback__))[-2500:]
+        return JSONResponse({"detail": detail}, status_code=500)
+
+    if hosted is not None:
+        @app.middleware("http")
+        async def _session(request, call_next):
+            sid = request.cookies.get(COOKIE) or ""
+            fresh = not sid
+            if fresh:
+                sid = new_session_id()
+            token = set_session(sid)
+            try:
+                response = await call_next(request)
+            finally:
+                reset_session(token)
+            if fresh:
+                response.set_cookie(COOKIE, sid, httponly=True, samesite="lax", secure=request.url.scheme == "https",
+                                    max_age=int(hosted.ttl))
+            return response
     bundle = _bundle_id()
 
     def _dataset(dataset_id: str):
@@ -74,7 +124,7 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
     @app.get("/api/health")
     def health() -> Dict[str, Any]:
         from uchrom import __version__
-        return {"status": "ok", "version": __version__, "bundle": bundle}
+        return {"status": "ok", "version": __version__, "bundle": bundle, "hosted": hosted is not None}
 
     @app.get("/api/datasets")
     def list_datasets() -> List[Dict[str, Any]]:
@@ -84,10 +134,51 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
     def load_dataset(req: LoadRequest) -> Dict[str, Any]:
         try:
             return store.load(req.path).summary()
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc)) from None
         except FileNotFoundError as exc:
             raise HTTPException(400, str(exc)) from None
         except Exception as exc:  # unreadable / wrong format
             raise HTTPException(400, f"cannot load {req.path}: {exc}") from None
+
+    @app.get("/api/files")
+    def files(path: Optional[str] = None, hidden: bool = False) -> Dict[str, Any]:
+        if hosted is not None:
+            raise HTTPException(403, "the server's folders cannot be listed on a hosted server")
+        from .files import list_dir
+        try:
+            return list_dir(path, show_hidden=hidden)
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            raise HTTPException(404, str(exc)) from None
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc)) from None
+
+    _atlas_cache: Dict[str, Any] = {}
+
+    @app.get("/api/atlas")
+    def atlas_catalog(refresh: bool = False) -> Dict[str, Any]:
+        """The atlas catalog (fetched here, so the page needs no CORS; cached 5 min): ``{"root", "catalog"}``,
+        every dataset with its ``url``; ``{"root": null}`` when no atlas is configured."""
+        import time
+
+        from ...core.atlas import fetch_catalog
+
+        if not atlas:
+            return {"root": None, "catalog": None}
+        hit = _atlas_cache.get("c")
+        if hit is None or refresh or time.time() - hit[0] > 300:
+            try:
+                _atlas_cache["c"] = hit = (time.time(), fetch_catalog(atlas))
+            except Exception as exc:
+                raise HTTPException(502, f"cannot read the atlas catalog at {atlas}: {type(exc).__name__}: {exc}") from None
+        return {"root": atlas, "catalog": hit[1]}
+
+    @app.get("/api/files/places")
+    def file_places() -> List[Dict[str, str]]:
+        if hosted is not None:
+            return []
+        from .files import places
+        return places(ds.path for ds in store.list())
 
     @app.delete("/api/datasets/{dataset_id}", status_code=204)
     def delete_dataset(dataset_id: str) -> Response:
@@ -146,6 +237,10 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
     def group_cells(dataset_id: str, group: str) -> Dict[str, Any]:
         return _call(_dataset(dataset_id).group_info, group)
 
+    @app.get("/api/datasets/{dataset_id}/store")
+    def store_structure(dataset_id: str) -> Dict[str, Any]:
+        return _call(_dataset(dataset_id).store_tree)
+
     @app.get("/api/datasets/{dataset_id}/tracks")
     def tracks(dataset_id: str, names: str, chrom: str, start: Optional[int] = None,
                end: Optional[int] = None, cell_id: Optional[str] = None, agg: str = "mean",
@@ -194,6 +289,26 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
 
+    @app.get("/api/datasets/{dataset_id}/spatial/{key}")
+    def spatial(dataset_id: str, key: str, region: Optional[str] = None) -> Dict[str, Any]:
+        try:
+            return _dataset(dataset_id).spatial_points(key, region)
+        except KeyError:
+            raise HTTPException(404, f"unknown cell positions / region: {key} {region or ''}".strip()) from None
+
+    @app.get("/api/datasets/{dataset_id}/images/{name}")
+    def image(dataset_id: str, name: str) -> FileResponse:
+        try:
+            ds = _dataset(dataset_id)
+            if ds._images().get(name) is None:
+                raise KeyError(name)
+            emb = ds.image_bytes(name)          # embedded in the store: no file needed
+            if emb is not None:
+                return Response(emb[0], media_type=emb[1])
+            return FileResponse(ds.image_path(name))
+        except KeyError:
+            raise HTTPException(404, f"unknown image: {name}") from None
+
     @app.post("/api/datasets/{dataset_id}/points/{name}")
     def points(dataset_id: str, name: str, req: Optional[PointsRequest] = None) -> Dict[str, Any]:
         req = req or PointsRequest()
@@ -211,7 +326,7 @@ def create_app(store: Optional[DatasetStore] = None) -> FastAPI:
                 region=None if req.region is None else req.region.model_dump(),
                 trace_ids=req.trace_ids,
                 cell_ids=req.cell_ids,
-                max_points=req.max_points,
+                max_points=req.max_points if hosted is None else min(req.max_points, int(hosted.max_points)),
             )
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None

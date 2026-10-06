@@ -13,9 +13,10 @@ import json
 import re
 import struct
 import threading
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -23,8 +24,21 @@ import pandas as pd
 from uchrom.core import ChromData
 
 DEFAULT_MAX_POINTS = 5_000_000
+#: a backed store with more spots than this is never read whole by the browser: summaries come from its index,
+#: geometry / statistics / distance maps from a sample of its cells or traces (format 2.2 stores)
+LARGE_SPOTS = 2_000_000
+#: spots read for a statistic (radius of gyration, P(s)) of a large store
+STATS_MAX_SPOTS = 2_000_000
 #: reserved group reference: every cell (e.g. the all-cell pseudo-bulk of a per-cell map)
 ALL_CELLS = "all"
+
+
+def _fmt_bp(n: int) -> str:
+    """A bin size as "500 kb", "1 Mb", "50 bp"."""
+    for unit, f in (("Mb", 1_000_000), ("kb", 1_000)):
+        if n >= f and n % f == 0:
+            return f"{n // f} {unit}"
+    return f"{n} bp"
 
 
 def natural_chrom_key(name: str):
@@ -76,18 +90,59 @@ def load_chromdata(path: Path) -> ChromData:
 
     ``.chromdata.zarr`` / ``.cdz`` stores open **backed**: only the small
     tables and the ``index/`` offsets are read, and the spots of a cell /
-    trace / chromosome are read when a view needs them.  ``.h5cd`` files
-    are loaded into memory.
+    trace / chromosome are read when a view needs them.  A legacy ``.h5cd``
+    raises a ``ValueError`` that names the conversion command.
     """
     from uchrom.core.zarrcd import container_kind
 
     kind = container_kind(path)
-    if kind in ("zarr", "cdz"):
+    if kind is not None:  # zarr / cdz; "h5cd" raises (convert with python -m uchrom.io.upgrade)
         return ChromData.read(path, backed=True)
-    if kind == "h5cd":
-        return ChromData.read(path)
     df = pd.read_csv(path, index_col=0)
     return ChromData.from_dataframe(df)
+
+
+class _LazyNames:
+    """Cell names of an embedded cell x bin matrix: read (one request) when first needed; ``len`` is known."""
+
+    def __init__(self, load, n: int):
+        self._load, self._n, self._v = load, n, None
+
+    def __len__(self) -> int:
+        return self._n
+
+    def values(self):
+        if self._v is None:
+            self._v = self._load()
+        return self._v
+
+
+class _LazyRows(dict):
+    """``{cell id: row}`` of a :class:`_LazyNames`, built on first lookup; ``len`` without reading anything."""
+
+    def __init__(self, names: _LazyNames):
+        super().__init__()
+        self._names, self._built = names, False
+
+    def _build(self) -> None:
+        if not self._built:
+            self.update({str(c): i for i, c in enumerate(self._names.values())})
+            self._built = True
+
+    def __len__(self) -> int:
+        return len(self._names)
+
+    def __getitem__(self, k):
+        self._build()
+        return super().__getitem__(k)
+
+    def __contains__(self, k) -> bool:
+        self._build()
+        return super().__contains__(k)
+
+    def get(self, k, default=None):
+        self._build()
+        return super().get(k, default)
 
 
 @dataclass
@@ -177,6 +232,24 @@ class Dataset:
         stored spots — from ``index/`` plus the ``bin_id`` column, with no
         per-spot strings.  Columns: ``trace``, ``cell`` (str / None),
         ``chrom``, ``n_spots``, ``start`` (min), ``end`` (max)."""
+        if "segments" not in self._cache and self._index_segments():
+            # from the coordinate index alone (one run per chromosome copy): the per-spot bin ids of a large
+            # store are never read; start / end are the chromosome's extent on the locus axis
+            r = self._runs()
+            ext = self._chrom_extent()
+            names = np.asarray(self.cd.bins["chrom"].cat.categories.astype(str))
+            chrom = names[r["chrom"].to_numpy()]
+            trace_cats = np.asarray(self.cd._categories("trace_id")).astype(str)
+            df = pd.DataFrame({"trace": trace_cats[r["trace"].to_numpy()], "chrom": chrom,
+                               "n_spots": (r["hi"] - r["lo"]).to_numpy(np.int64),
+                               "start": ext.loc[chrom, "start"].to_numpy(np.int64),
+                               "end": ext.loc[chrom, "end"].to_numpy(np.int64)})
+            if self.cd._has_cell_id():
+                cell_cats = np.asarray(self.cd._categories("cell_id")).astype(str)
+                df["cell"] = cell_cats[r["cell"].to_numpy()]
+            else:
+                df["cell"] = None
+            self._cache["segments"] = df
         if "segments" not in self._cache:
             cd = self.cd
             idx = cd._index
@@ -242,10 +315,117 @@ class Dataset:
         return None
 
     # ------------------------------------------------------------------
+    # Large backed stores: read a sample, never the whole store
+    # ------------------------------------------------------------------
+
+    def _large(self) -> bool:
+        """Decided once per dataset (so its paths stay consistent)."""
+        if "large" not in self._cache:
+            cd = self.cd
+            self._cache["large"] = bool(self.backed and getattr(cd, "_v22", False) and int(cd.n_spots) > LARGE_SPOTS
+                                        and (np.asarray(cd._cidx["chrom_trace"]) >= 0).all())
+        return self._cache["large"]
+
+    def _index_segments(self) -> bool:
+        """Summaries from the coordinate index alone: a large store, or any store read over HTTP (where reading
+        every spot's bin id costs seconds); every run must be one chromosome copy."""
+        if "index_segments" not in self._cache:
+            from ...core.remote import is_url
+
+            cd = self.cd
+            self._cache["index_segments"] = bool(
+                self.backed and getattr(cd, "_v22", False) and (self._large() or (self.path and is_url(self.path)))
+                and (np.asarray(cd._cidx["chrom_trace"]) >= 0).all())
+        return self._cache["index_segments"]
+
+    def _runs(self) -> pd.DataFrame:
+        """The coordinate table's runs (chromosome > cell > trace; one per chromosome copy): row range and the
+        chromosome / cell / trace codes (cached)."""
+        if "runs" not in self._cache:
+            c = self.cd._cidx
+            off = np.asarray(c["trace_offsets"], dtype=np.int64)
+            self._cache["runs"] = pd.DataFrame({
+                "lo": off[:-1], "hi": off[1:], "chrom": np.asarray(c["chrom_trace"], dtype=np.int64),
+                "cell": np.asarray(c["trace_cells"], dtype=np.int64), "trace": np.asarray(c["trace_codes"], dtype=np.int64)})
+        return self._cache["runs"]
+
+    def _chrom_extent(self) -> pd.DataFrame:
+        b = self.cd.bins
+        return b.assign(chrom=b["chrom"].astype(str)).groupby("chrom").agg(start=("start", "min"), end=("end", "max"))
+
+    def _run_mask(self, chroms=None, cell_ids=None, trace_ids=None) -> np.ndarray:
+        r, cd = self._runs(), self.cd
+        mask = np.ones(len(r), dtype=bool)
+        if chroms:
+            names = np.asarray(cd.bins["chrom"].cat.categories.astype(str))
+            mask &= np.isin(r["chrom"].to_numpy(), np.flatnonzero(np.isin(names, [str(c) for c in chroms])))
+        if cell_ids is not None:
+            cats = pd.Index(np.asarray(cd._categories("cell_id")).astype(str)) if cd._has_cell_id() else pd.Index([])
+            codes = cats.get_indexer([str(c) for c in cell_ids])
+            mask &= np.isin(r["cell"].to_numpy(), codes[codes >= 0])
+        if trace_ids is not None:
+            cats = pd.Index(np.asarray(cd._categories("trace_id")).astype(str))
+            codes = cats.get_indexer([str(t) for t in trace_ids])
+            mask &= np.isin(r["trace"].to_numpy(), codes[codes >= 0])
+        return mask
+
+    def _sample(self, mask: np.ndarray, max_spots: int, *, unit: str = "cell", max_units: Optional[int] = None,
+                block: int = 8):
+        """Runs of ``mask`` for a sample: whole cells (or single traces, ``unit="trace"``) in a fixed random order
+        until ``max_spots`` (or ``max_units``) is reached.  The order shuffles blocks of ``block`` neighbouring
+        units: neighbours share row groups, so a sample is a few reads per partition, not one per unit (over
+        HTTP, ten times fewer requests).  Returns ``(row ranges, units used, units matching, spots used, spots
+        matching)``."""
+        r = self._runs()[mask]
+        n_all = int((r["hi"] - r["lo"]).sum())
+        if not self.cd._has_cell_id():
+            unit = "trace"
+        key = r["cell"].to_numpy() if unit == "cell" else np.arange(len(r))
+        units = np.unique(key)
+        nb = -(-len(units) // block) if len(units) else 0
+        blocks = np.random.default_rng(0).permutation(nb)
+        order = np.concatenate([units[b * block:(b + 1) * block] for b in blocks]) if nb else units
+        size = pd.Series((r["hi"] - r["lo"]).to_numpy(), index=key).groupby(level=0).sum().reindex(order).to_numpy()
+        n = int(np.searchsorted(np.cumsum(size), max_spots, side="right"))
+        n = max(1, n) if len(order) else 0
+        if max_units is not None:
+            n = min(n, int(max_units))
+        keep = np.isin(key, order[:n])
+        sel = r[keep].sort_values("lo")
+        lo, hi = sel["lo"].to_numpy(), sel["hi"].to_numpy()
+        brk = np.r_[True, lo[1:] != hi[:-1]] if len(lo) else np.zeros(0, dtype=bool)
+        ranges = list(zip(lo[brk].tolist(), hi[np.r_[brk[1:], True]].tolist())) if len(lo) else []
+        return ranges, n, len(units), int((sel["hi"] - sel["lo"]).sum()), n_all
+
+    def _part(self, ranges) -> "Dataset":
+        """An in-memory Dataset of coordinate-table row ranges (coordinates + keys only)."""
+        sub = self.cd._build22(crd=ranges, columns="coords")
+        return Dataset(id=self.id, name=self.name, path=self.path, cd=sub)
+
+    def _scope_cells(self, cell_id=None, group=None) -> Optional[List[str]]:
+        _one_scope(cell_id, group)
+        if cell_id is not None:
+            return [str(cell_id)]
+        if group is not None:
+            return [str(c) for c in self.group_cells(group)]
+        return None
+
+    # ------------------------------------------------------------------
     # Summaries
     # ------------------------------------------------------------------
 
     def chrom_table(self) -> List[Dict[str, Any]]:
+        if "chroms" not in self._cache and self.cd.n_spots == 0:
+            # no spots (spatial Hi-C, scHi-C): the locus axis still names the chromosomes, for the
+            # genome views of contact maps and cell x bin matrices
+            b = self.cd.bins
+            table = (b.assign(chrom=b["chrom"].astype(str)).groupby("chrom").agg(start=("start", "min"), end=("end", "max"))
+                     if len(b) else pd.DataFrame(columns=["start", "end"]))
+            self._cache["chroms"] = [
+                {"name": c, "start": int(table.at[c, "start"]), "end": int(table.at[c, "end"]),
+                 "n_spots": 0, "n_traces": 0}
+                for c in sorted(table.index, key=natural_chrom_key)
+            ]
         if "chroms" not in self._cache and self.backed:
             seg = self._segments()
             g = seg.groupby("chrom", sort=False)
@@ -288,6 +468,7 @@ class Dataset:
             "xyz_unit": None if unit is None else str(unit),
             "trace_mode": bool(self.cd.n_traces > len(chroms)),
             "chroms": chroms,
+            "genome": self.genome_layout(),
             "has_coords": bool(self.cd.n_spots > 0),
             "tracks": self.track_names(),
             "contact_maps": self.contact_maps(),
@@ -295,6 +476,7 @@ class Dataset:
             "cell_fields": self.cell_fields(),
             "embeddings": self.embeddings(),
             "point_sets": self.point_sets(),
+            "spatial": self.spatial(),
         }
 
     def traces(self, chrom: Optional[str] = None, offset: int = 0,
@@ -570,6 +752,99 @@ class Dataset:
                 "x": fin(arr[:, a]), "y": fin(arr[:, b]),
                 "axis_labels": [f"{prefix}{a + 1}", f"{prefix}{b + 1}"]}
 
+    # ---- cell positions (uns['cell_spatial']) and section images (uns['linked_images']) ----
+
+    def _images(self) -> Dict[str, Dict[str, Any]]:
+        recs = self.cd.uns.get("linked_images") if isinstance(self.cd.uns, dict) else None
+        embedded = self._embedded_images()
+        return {str(k): v for k, v in (recs or {}).items()
+                if isinstance(v, dict) and v.get("path") and (str(k) in embedded or self.resolve(v["path"]).exists())}
+
+    def _embedded_images(self) -> Dict[str, str]:
+        """``{image key: group name}`` of the images embedded in the store."""
+        if "embedded_images" not in self._cache:
+            from ...core.embedded import list_embedded_images
+
+            loc = self._store_location()
+            self._cache["embedded_images"] = list_embedded_images(loc) if loc else {}
+        return self._cache["embedded_images"]
+
+    def image_bytes(self, name: str) -> Optional[Tuple[bytes, str]]:
+        """(bytes, media type) of an image embedded in the store, else None (a file: :meth:`image_path`)."""
+        group = self._embedded_images().get(name)
+        if group is None:
+            return None
+        from ...core.embedded import read_embedded_image
+
+        return read_embedded_image(self._store_location(), group)
+
+    def spatial(self) -> List[Dict[str, Any]]:
+        """Cell-position sets: key, unit, y direction, regions (sections / FOVs) with cell counts
+        and the image of each region, if any.  Sets with images first."""
+        if "spatial" in self._cache:
+            return self._cache["spatial"]
+        recs = self.cd.uns.get("cell_spatial") if isinstance(self.cd.uns, dict) else None
+        images = self._images()
+        out = []
+        for key, rec in (recs or {}).items():
+            if not isinstance(rec, dict):
+                continue
+            try:
+                pos = self.cd.cell_positions(str(key))
+            except Exception:  # noqa: BLE001 - a malformed record is skipped, not fatal
+                continue
+            ok = pos[["x", "y"]].notna().all(axis=1)
+            reg = pos["region"].astype(str) if "region" in pos else pd.Series("all", index=pos.index)
+            counts = reg[ok].value_counts()
+            imgs = {r["region"]: name for name, r in images.items() if r.get("positions") == key and "region" in r}
+            regions = [{"name": r, "n_cells": int(counts[r]), "image": imgs.get(r)}
+                       for r in sorted(counts.index, key=natural_chrom_key)]
+            unit = rec.get("unit")
+            y_axis = rec.get("y_axis") or ("down" if unit in ("px", "pixel", "spot") else "up")
+            out.append({"key": str(key), "unit": unit, "frame": rec.get("frame"), "y_axis": y_axis,
+                        "status": rec.get("status"), "source": rec.get("source"),
+                        "regions": regions, "n_images": sum(1 for r in regions if r["image"])})
+        out.sort(key=lambda d: -d["n_images"])
+        self._cache["spatial"] = out
+        return out
+
+    def spatial_points(self, key: str, region: Optional[str] = None) -> Dict[str, Any]:
+        info = next((s for s in self.spatial() if s["key"] == key), None)
+        if info is None:
+            raise KeyError(key)
+        pos = self.cd.cell_positions(key)
+        ok = pos[["x", "y"]].notna().all(axis=1).to_numpy().copy()
+        if region is not None:
+            if "region" not in pos:
+                raise KeyError(region)
+            ok &= (pos["region"].astype(str) == str(region)).to_numpy()
+        sub = pos[ok]
+
+        def image_of(r: Optional[dict]) -> Optional[dict]:
+            if not r or not r["image"]:
+                return None
+            rec = self._images()[r["image"]]
+            return {"name": r["image"], "extent": [float(v) for v in rec.get("extent", [])], "kind": rec.get("kind")}
+
+        out = {"key": key, "region": region, "unit": info["unit"], "y_axis": info["y_axis"],
+               "cell_ids": [str(c) for c in sub.index],
+               "x": sub["x"].astype(float).tolist(), "y": sub["y"].astype(float).tolist()}
+        if region is not None:
+            out["image"] = image_of(next((x for x in info["regions"] if x["name"] == region), None))
+        else:
+            # every region at once: the region of each cell and the image of each region, so a client can
+            # switch sections (e.g. to follow the focused cell) without another request
+            out["image"] = None
+            out["regions"] = sub["region"].astype(str).tolist() if "region" in sub else None
+            out["images"] = {x["name"]: image_of(x) for x in info["regions"] if x["image"]}
+        return out
+
+    def image_path(self, name: str) -> Path:
+        rec = self._images().get(name)
+        if rec is None:
+            raise KeyError(name)
+        return self.resolve(rec["path"])
+
     def point_sets(self) -> List[Dict[str, Any]]:
         if "point_sets" not in self._cache:
             out = []
@@ -617,23 +892,138 @@ class Dataset:
     # Genome-coordinate views: tracks, intervals, contacts, distances, stats
     # ------------------------------------------------------------------
 
+    def _store_location(self) -> Optional[str]:
+        """The store as a URL, a local directory or a ``.cdz`` file (what the embedded readers open), else None
+        (CSV, PDB ...)."""
+        from ...core.remote import is_url
+
+        if not self.path:
+            return None
+        if is_url(self.path):
+            return str(self.path)
+        p = Path(self.path)
+        return str(p) if p.is_dir() or (p.is_file() and p.name.lower().endswith(".cdz")) else None
+
     def resolve(self, path: str) -> Path:
         """Linked file path; relative paths are relative to the dataset's
-        directory (where the .chromdata.zarr / .cdz / .h5cd lives)."""
+        directory (where the .chromdata.zarr / .cdz lives)."""
+        from ...core.remote import is_url
+
         p = Path(path).expanduser()
-        if not p.is_absolute() and self.path:
+        if not p.is_absolute() and self.path and not is_url(self.path):
             p = Path(self.path).parent / p
         return p
 
     def track_names(self) -> List[Dict[str, Any]]:
         """Numeric tracks: ``level`` is ``"bin"`` (``cd.bin_tracks``, one
-        value per locus) or ``"spot"`` (``cd.spot_tracks``, per spot)."""
+        value per locus), ``"spot"`` (``cd.spot_tracks``, per spot) or
+        ``"cell_bin"`` (a linked cell x bin matrix, one track per resolution,
+        averaged over the cells in scope).  ``grid`` names the bins a track
+        is reported on: tracks of one grid can be requested together."""
         out = []
         for level, table in (("bin", self.cd.bin_tracks), ("spot", self.cd.spot_tracks)):
             dtypes = table.dtypes      # (a backed table reads no data for this)
-            out += [{"name": str(c), "level": level} for c in table.columns
+            out += [{"name": str(c), "level": level, "grid": "spots"} for c in table.columns
                     if pd.api.types.is_numeric_dtype(dtypes[c])]
+        for name, t in self._cell_bin_tracks().items():
+            out.append({"name": name, "level": "cell_bin", "grid": name, "label": t["label"],
+                        "resolution": t["resolution"], "n_cells": t["n_cells"]})
         return out
+
+    # ---- cell x bin matrices (uns['linked_bin_matrices']: linked AnnData, var bin_id -> bins) ----
+
+    def _cell_bin_tracks(self) -> Dict[str, Dict[str, Any]]:
+        """``<key>@<res>kb`` -> {key, resolution, label, n_cells}; the files are opened lazily."""
+        if "cell_bin" in self._cache:
+            return self._cache["cell_bin"]
+        recs = self.cd.uns.get("linked_bin_matrices") if isinstance(self.cd.uns, dict) else None
+        out: Dict[str, Dict[str, Any]] = {}
+        embedded = self._embedded_bin_matrices()
+        items = {str(k): v for k, v in (recs or {}).items() if isinstance(v, dict) and k not in embedded}
+        items.update({k: {"label": a["label"], "path": None} for k, (_, a) in embedded.items()})
+        for key, rec in items.items():
+            if rec.get("path") is None:
+                if key not in embedded:
+                    continue
+            elif not self.resolve(rec["path"]).exists():
+                continue
+            m = self._bin_matrix(str(key))
+            label = str(rec.get("label") or key)
+            for res in sorted(m["var"]["resolution"].unique(), reverse=True):
+                size = _fmt_bp(int(res))
+                name = f"{key}@{size.replace(' ', '')}" if res else str(key)
+                out[name] = {"key": str(key), "resolution": int(res), "n_cells": len(m["rows"]),
+                             "label": f"{label} {size}" if res else label}
+        self._cache["cell_bin"] = out
+        return out
+
+    def _embedded_bin_matrices(self) -> Dict[str, Any]:
+        """``{key: (zarr group, attrs)}`` of the cell x bin matrices embedded in the store (one request)."""
+        if "embedded_bin" not in self._cache:
+            from ...core.embedded import open_anndata_groups
+
+            loc = self._store_location()
+            self._cache["embedded_bin"] = open_anndata_groups(loc, "linked_bin_matrices") if loc else {}
+        return self._cache["embedded_bin"]
+
+    def _bin_matrix(self, key: str) -> Dict[str, Any]:
+        cache = self._cache.setdefault("bin_matrix", {})
+        if key not in cache:
+            import anndata as ad
+
+            emb = self._embedded_bin_matrices().get(key)
+            if emb is not None:      # embedded copy: X is read straight from the Zarr array
+                from types import SimpleNamespace
+
+                from ...core.embedded import bin_matrix_var
+
+                grp = emb[0]
+                adata = SimpleNamespace(X=grp["X"], var=bin_matrix_var(grp), obs_names=_LazyNames(
+                    lambda: ad.io.read_elem(grp["obs"]).index, int(emb[1]["n_obs"])))
+            else:
+                rec = self.cd.uns["linked_bin_matrices"][key]
+                adata = ad.read_h5ad(self.resolve(rec["path"]), backed="r")
+            var = adata.var
+            bins = self.cd.bins
+            ids = var["bin_id"].to_numpy(np.int64)
+            v = pd.DataFrame({"col": np.arange(len(ids)), "chrom": bins["chrom"].astype(str).to_numpy()[ids],
+                              "start": bins["start"].to_numpy()[ids], "end": bins["end"].to_numpy()[ids],
+                              "resolution": (var["resolution"].to_numpy(np.int64) if "resolution" in var
+                                             else np.zeros(len(ids), np.int64))})
+            cache[key] = {"adata": adata, "var": v, "blocks": {},
+                          "rows": _LazyRows(adata.obs_names) if isinstance(adata.obs_names, _LazyNames)
+                          else {str(c): i for i, c in enumerate(adata.obs_names)}}
+        return cache[key]
+
+    def _cell_bin_values(self, name: str, chrom: str, start, end, cell_id, group, agg: str):
+        t = self._cell_bin_tracks()[name]
+        m = self._bin_matrix(t["key"])
+        v = m["var"]
+        sel = v[(v["chrom"] == str(chrom)) & (v["resolution"] == t["resolution"])].sort_values("start")
+        if start is not None:
+            sel = sel[sel["end"] > int(start)]
+        if end is not None:
+            sel = sel[sel["start"] < int(end)]
+        bk = (name, str(chrom))
+        if bk not in m["blocks"]:                      # one chromosome of all cells: read once
+            allc = v[(v["chrom"] == str(chrom)) & (v["resolution"] == t["resolution"])]["col"].to_numpy()
+            lo, hi = (int(allc.min()), int(allc.max()) + 1) if len(allc) else (0, 0)
+            m["blocks"][bk] = (lo, np.asarray(m["adata"].X[:, lo:hi], dtype=np.float32))
+        lo, block = m["blocks"][bk]
+        rows = m["rows"]
+        if cell_id is not None:
+            r = [rows[str(cell_id)]] if str(cell_id) in rows else []
+        elif group is not None:
+            r = sorted(rows[c] for c in self.group_cells(group) if c in rows)
+        else:
+            r = None
+        x = block[:, sel["col"].to_numpy() - lo] if r is None else block[np.asarray(r, dtype=np.int64)][:, sel["col"].to_numpy() - lo]
+        n = np.isfinite(x).sum(axis=0)
+        with warnings.catch_warnings():                # all-NaN bins: NaN, quietly
+            warnings.simplefilter("ignore", RuntimeWarning)
+            f = {"mean": np.nanmean, "median": np.nanmedian, "max": np.nanmax}[agg]
+            val = f(x, axis=0) if x.shape[0] else np.full(len(sel), np.nan)
+        return sel, val, n
 
     def _track_values(self, name: str) -> np.ndarray:
         """Spot-aligned float values of one track (bin tracks broadcast)."""
@@ -661,12 +1051,33 @@ class Dataset:
 
     def tracks(self, names: List[str], chrom: str, start=None, end=None,
                cell_id=None, agg: str = "mean", group=None) -> Dict[str, Any]:
-        known = {t["name"] for t in self.track_names()}
+        known = {t["name"]: t for t in self.track_names()}
         unknown = [n for n in names if n not in known]
         if unknown:
             raise KeyError(unknown[0])
         if agg not in ("mean", "median", "max"):
             raise ValueError("agg must be mean, median or max")
+        if str(chrom) == GENOME:
+            return self._genome_tracks(names, cell_id, agg, group)
+        grids = {known[n]["grid"] for n in names}
+        if len(grids) > 1:
+            raise ValueError(f"tracks on different bins cannot be requested together: {sorted(grids)}")
+        if names and known[names[0]]["level"] == "cell_bin":
+            _one_scope(cell_id, group)
+            out_vals, sel, n = {}, None, None
+            for name in names:
+                sel, val, n = self._cell_bin_values(name, chrom, start, end, cell_id, group, agg)
+                out_vals[name] = [None if not np.isfinite(x) else float(x) for x in val]
+            return {"chrom": str(chrom), "group": group,
+                    "bin_starts": [int(x) for x in sel["start"]], "bin_ends": [int(x) for x in sel["end"]],
+                    "n_spots": [int(x) for x in n], "values": out_vals}
+        if self._index_segments():          # spot tracks of a sample of the matching cells
+            mask = self._run_mask([chrom], self._scope_cells(cell_id, group))
+            ranges, n_used, n_cells, used, total = self._sample(mask, STATS_MAX_SPOTS)
+            sub = Dataset(id=self.id, name=self.name, path=self.path, cd=self.cd._build22(crd=ranges))
+            out = sub.tracks(names, chrom, start, end, agg=agg)
+            out.update(group=group, note=f"{n_used:,} of {n_cells:,} cells (random sample)" if used < total else None)
+            return out
         a = self._arrays()
         idx = self._select(chrom, start, end, cell_id, group=group)
         df = pd.DataFrame({"start": a["start"][idx], "end": a["end"][idx]})
@@ -704,11 +1115,88 @@ class Dataset:
                 seen.add(key)
         return out
 
+    def store_tree(self) -> Dict[str, Any]:
+        """The store's on-disk structure (``.chromdata.zarr`` / ``.cdz``; see store_tree.py); cached."""
+        from uchrom.core.zarrcd import container_kind
+
+        from .store_tree import store_tree
+
+        if "store_tree" not in self._cache:
+            p = Path(self.path) if self.path else None
+            if p is None or not p.exists() or container_kind(p) not in ("zarr", "cdz"):
+                raise LookupError("this dataset is not a .chromdata.zarr / .cdz store (nothing to list)")
+            self._cache["store_tree"] = store_tree(p)
+        return self._cache["store_tree"]
+
+    def genome_layout(self) -> List[Dict[str, Any]]:
+        """The chromosomes end to end, for the whole-genome view (``chrom="*"``): name, offset
+        (bp before it) and length — the largest extent of its bins / spots and of any contact
+        map, in natural order."""
+        if "genome" not in self._cache:
+            length: Dict[str, int] = {}
+            for c in self.chrom_table():
+                length[c["name"]] = max(length.get(c["name"], 0), int(c["end"]))
+            for m in self.contact_maps():
+                for c in m.get("chroms") or []:
+                    length[c["name"]] = max(length.get(c["name"], 0), int(c["length"]))
+            out, off = [], 0
+            for name in sorted(length, key=natural_chrom_key):
+                out.append({"name": name, "offset": off, "length": length[name]})
+                off += length[name]
+            self._cache["genome"] = out
+        return self._cache["genome"]
+
+    def _genome_offsets(self) -> Dict[str, int]:
+        return {c["name"]: c["offset"] for c in self.genome_layout()}
+
+    def _genome_tracks(self, names: List[str], cell_id, agg: str, group) -> Dict[str, Any]:
+        """Tracks over the whole genome: each chromosome's bins in genome coordinates; beyond
+        MAX_GENOME_TRACK_BINS bins, k consecutive bins of a chromosome are pooled (``agg``)."""
+        layout = self.genome_layout()
+        parts = []
+        for c in layout:
+            d = self.tracks(names, c["name"], None, None, cell_id, agg, group)
+            if not d["bin_starts"]:
+                continue
+            f = pd.DataFrame({"chrom": c["name"], "off": c["offset"], "start": d["bin_starts"],
+                              "end": d["bin_ends"], "n": d["n_spots"]})
+            for n in names:
+                f[n] = np.array([np.nan if v is None else v for v in d["values"][n]], dtype=np.float64)
+            parts.append(f)
+        if not parts:
+            return {"chrom": GENOME, "group": group, "bin_starts": [], "bin_ends": [], "n_spots": [],
+                    "values": {n: [] for n in names}}
+        df = pd.concat(parts, ignore_index=True)
+        if len(df) > MAX_GENOME_TRACK_BINS:          # k consecutive bins of a chromosome pooled
+            k = int(np.ceil(len(df) / MAX_GENOME_TRACK_BINS))
+            df["win"] = df.groupby("off", sort=False).cumcount() // k
+            g = df.groupby(["off", "win"], sort=True)
+            with warnings_ignored():
+                vals = g[names].agg({"mean": "mean", "median": "median", "max": "max"}[agg]) if names else None
+            first = g.agg(chrom=("chrom", "first"), start=("start", "min"), end=("end", "max"), n=("n", "sum"))
+            df = first.reset_index().join(vals.reset_index(drop=True)) if names else first.reset_index()
+        return {
+            "chrom": GENOME, "group": group,
+            "bin_starts": [int(v) for v in df["off"] + df["start"]],
+            "bin_ends": [int(v) for v in df["off"] + df["end"]],
+            "n_spots": [int(v) for v in df["n"]],
+            "values": {n: [None if not np.isfinite(v) else float(v) for v in df[n].to_numpy()] for n in names},
+        }
+
     def intervals(self, key: str, chrom: str, start=None, end=None) -> Dict[str, Any]:
         df = self._interval_table(key)
         if df is None:
             raise KeyError(key)
-        m = df["chrom"].astype(str) == str(chrom)
+        if str(chrom) == GENOME:  # whole genome: every row, in genome coordinates
+            off = df["chrom"].astype(str).map(self._genome_offsets())
+            df = df[off.notna()].copy()
+            off = off[off.notna()].astype(np.int64)
+            df["start"] = df["start"].astype(np.int64) + off
+            df["end"] = df["end"].astype(np.int64) + off
+            start = end = None
+            m = np.ones(len(df), dtype=bool)
+        else:
+            m = df["chrom"].astype(str) == str(chrom)
         if start is not None:
             m &= df["end"] > int(start)
         if end is not None:
@@ -738,8 +1226,18 @@ class Dataset:
     def contact_maps(self) -> List[Dict[str, Any]]:
         if "contact_maps" not in self._cache:
             out = []
+            embedded = self._embedded_maps()
+            for key, e in embedded.items():
+                per = e.kind == "per_cell"
+                out.append({"key": key, "kind": "scool" if per else ("mcool" if len(e.resolutions) > 1 else "cool"),
+                            "label": e.label, "resolutions": list(e.resolutions),
+                            "chroms": [{"name": c, "length": n} for c, n in e.chromsizes().items()],
+                            "per_cell": per, "n_cells": int(e.meta.get("n_cells") or 0) if per else 0,
+                            "balanced": bool(e.meta.get("has_weights")), "embedded": True})
             for family in ("linked_cool", "linked_scool"):
                 for key, rec in self._link_records(family).items():
+                    if key in embedded:      # the embedded copy wins: it needs no external file
+                        continue
                     path = self.resolve(str(rec["path"]))
                     if not path.is_file():
                         continue
@@ -755,18 +1253,23 @@ class Dataset:
     def _describe_contacts(self, key: str, rec: dict, path: Path, family: str) -> Dict[str, Any]:
         import cooler
 
-        uris = cooler.fileops.list_coolers(str(path))
-        kind = "scool" if family == "linked_scool" else ("mcool" if any("/resolutions/" in u for u in uris) else "cool")
         cells = []
-        if kind == "scool":
-            cells = cooler.fileops.list_scool_cells(str(path))
+        if family == "linked_scool":
+            kind, uris = "scool", []
+            import h5py
+
+            with h5py.File(path, "r") as f:  # cooler's tree walk costs minutes on a 30k-cell file
+                cells = [f"/cells/{name}" for name in f["cells"]]
             self._cache[("scool_cells", str(path))] = set(cells)  # listing is slow
             first = f"{path}::{cells[0]}" if cells else str(path)
             resolutions = [int(cooler.Cooler(first).binsize or 0)]
-        elif kind == "mcool":
+        else:
+            uris = cooler.fileops.list_coolers(str(path))
+            kind = "mcool" if any("/resolutions/" in u for u in uris) else "cool"
+        if kind == "mcool":
             resolutions = sorted(int(u.rsplit("/", 1)[-1]) for u in uris if "/resolutions/" in u)
             first = f"{path}::/resolutions/{resolutions[0]}"
-        else:
+        elif kind == "cool":
             first = str(path)
             resolutions = [int(cooler.Cooler(first).binsize or 0)]
         clr = cooler.Cooler(first)
@@ -778,15 +1281,20 @@ class Dataset:
 
     def contacts(self, key: str, chrom: str, start=None, end=None, resolution=None,
                  balance: bool = False, cell: Optional[str] = None, group: Optional[str] = None) -> bytes:
-        import cooler
-
         _one_scope(cell, group)
 
         info = next((m for m in self.contact_maps() if m["key"] == key and m["kind"] != "error"), None)
         if info is None:
             raise KeyError(key)
+        if info.get("embedded"):
+            # no cooler here: importing it creates multiprocessing semaphores, which a sandboxed container (Cloudflare
+            # Containers) does not have; embedded maps are read straight from Zarr
+            return self._embedded_contacts(key, info, chrom, start, end, resolution, balance, cell, group)
+        import cooler
         family = "linked_scool" if info["kind"] == "scool" else "linked_cool"
         path = self.resolve(str(self._link_records(family)[key]["path"]))
+        if str(chrom) == GENOME:
+            return self._genome_contacts(key, info, path, resolution, balance, cell, group)
         length = next((c["length"] for c in info["chroms"] if c["name"] == chrom), None)
         if length is None:
             raise ValueError(f"unknown chromosome {chrom!r} in contact map {key!r}")
@@ -809,7 +1317,7 @@ class Dataset:
                 raise LookupError("per-cell contact map: pass cell=<cell id> or group=<group>")
             name = f"/cells/{cell}"
             if name not in self._scool_cells(path):
-                raise KeyError(f"cell {cell!r} not in {key!r}")
+                raise KeyError(f"cell {cell!r} has no map in {key!r} ({self._scool_coverage(path)})")
             uri = f"{path}::{name}"
         else:
             uri = str(path)
@@ -825,14 +1333,250 @@ class Dataset:
                   "cell": cell, "group": None, "note": note}
         return encode_matrix(mat, starts, ends, header)
 
+    def _genome_contacts(self, key: str, info: dict, path: Path, resolution, balance: bool,
+                         cell: Optional[str], group: Optional[str]) -> bytes:
+        """The whole genome (chromosomes in :meth:`genome_layout` order) at most MAX_MATRIX_BINS
+        bins: an .mcool at its finest resolution that fits, else bins pooled k × k within each
+        chromosome.  Pixels are read straight from HDF5 (per cell for a group of a .scool) and
+        summed into the output bins; balanced values use the bins' weights.  Cached (LRU)."""
+        import cooler
+        import h5py
+
+        cache = self._cache.setdefault("genome_contacts", {})
+        ck = (key, resolution, bool(balance), cell, group)
+        if ck in cache:
+            cache[ck] = cache.pop(ck)
+            return cache[ck]
+        total = sum(c["length"] for c in self.genome_layout())
+        notes, n_cells = ["whole genome"], None
+        if info["kind"] == "mcool":
+            res = int(resolution) if resolution else next(
+                (r for r in info["resolutions"] if total / r <= MAX_MATRIX_BINS), info["resolutions"][-1])
+            if res not in info["resolutions"]:
+                raise ValueError(f"resolution must be one of {info['resolutions']}")
+            groups = [f"resolutions/{res}"]
+        elif info["kind"] == "scool":
+            available = self._scool_cells(path)
+            if group is not None:
+                names = [c for c in self.group_cells(group) if f"/cells/{c}" in available]
+                if not names:
+                    raise LookupError(f"no cell of group {group!r} has a map in {key!r} ({self._scool_coverage(path)})")
+                if len(names) > PSEUDOBULK_MAX_CELLS:
+                    rng = np.random.default_rng(0)
+                    names = sorted(rng.choice(names, PSEUDOBULK_MAX_CELLS, replace=False).tolist(), key=natural_key)
+                    notes.append(f"sum over {PSEUDOBULK_MAX_CELLS} random cells of the group")
+                n_cells = len(names)
+            elif cell is not None:
+                if f"/cells/{cell}" not in available:
+                    raise KeyError(f"cell {cell!r} has no map in {key!r} ({self._scool_coverage(path)})")
+                names = [str(cell)]
+            else:
+                raise LookupError("per-cell contact map: pass cell=<cell id> or group=<group>")
+            groups = [f"cells/{c}" for c in names]
+        else:
+            groups = [""]
+        clr = cooler.Cooler(f"{path}::/{groups[0]}")
+
+        def blocks(weight):
+            step = 5_000_000
+            with h5py.File(path, "r") as f:
+                for g in groups:
+                    grp = f[g] if g else f
+                    n_pix = grp["pixels/bin1_id"].shape[0]
+                    for s0 in range(0, n_pix, step):
+                        yield (grp["pixels/bin1_id"][s0: s0 + step], grp["pixels/bin2_id"][s0: s0 + step],
+                               grp["pixels/count"][s0: s0 + step].astype(np.float64))
+
+        buf = self._genome_matrix(key, clr.bins()[:], int(clr.binsize or 0), blocks, balance, cell, group, notes, n_cells)
+        cache[ck] = buf
+        while len(cache) > PSEUDOBULK_CACHE:
+            cache.pop(next(iter(cache)))
+        return buf
+
+    def _genome_matrix(self, key: str, bins: pd.DataFrame, binsize: int, blocks, balance: bool,
+                       cell: Optional[str], group: Optional[str], notes: List[str], n_cells: Optional[int]) -> bytes:
+        """Sum the pixel blocks ``blocks(weight)`` -> (bin1, bin2, count) into the whole-genome grid."""
+        layout = self.genome_layout()
+        offsets = {c["name"]: c["offset"] for c in layout}
+        rank = {c["name"]: i for i, c in enumerate(layout)}
+        total = sum(c["length"] for c in layout)
+        chrom = bins["chrom"].astype(str).to_numpy()
+        starts = bins["start"].to_numpy(np.int64)
+        ends = bins["end"].to_numpy(np.int64)
+        kept = [c for c in sorted(set(chrom) & set(offsets), key=rank.get)]
+        n_kept = int(np.isin(chrom, kept).sum())
+        if not n_kept:
+            raise LookupError(f"contact map {key!r} has no chromosome of this dataset")
+        k = max(1, int(np.ceil(n_kept / MAX_MATRIX_BINS)))
+        out_idx = np.full(len(bins), -1, dtype=np.int64)
+        o_starts, o_ends, n_out = [], [], 0
+        for c in kept:
+            ix = np.flatnonzero(chrom == c)                     # bins of a chromosome are contiguous
+            m = int(np.ceil(len(ix) / k))
+            out_idx[ix] = n_out + np.arange(len(ix)) // k
+            o_starts += [offsets[c] + int(starts[ix[i * k]]) for i in range(m)]
+            o_ends += [offsets[c] + int(ends[ix[min(len(ix), (i + 1) * k) - 1]]) for i in range(m)]
+            n_out += m
+        if k > 1:
+            notes.append(f"{k}x{k} bins pooled")
+        balanced = bool(balance) and "weight" in bins.columns
+        weight = bins["weight"].to_numpy(np.float64) if balanced else None
+        acc = np.zeros(n_out * n_out, dtype=np.float64)
+        diag = np.zeros(n_out, dtype=np.float64)
+        n_contacts = 0.0
+        for b1, b2, v in blocks(weight):
+            v = np.asarray(v, dtype=np.float64)
+            n_contacts += float(v.sum())
+            if weight is not None:
+                v = v * weight[b1] * weight[b2]
+            o1, o2 = out_idx[b1], out_idx[b2]
+            ok = (o1 >= 0) & (o2 >= 0) & np.isfinite(v)
+            o1, o2, v, same = o1[ok], o2[ok], v[ok], (b1 == b2)[ok]
+            acc += np.bincount(o1 * n_out + o2, weights=v, minlength=n_out * n_out)
+            diag += np.bincount(o1[same], weights=v[same], minlength=n_out)
+        up = acc.reshape(n_out, n_out)
+        mat = (up + up.T - np.diag(diag)).astype(np.float32)   # cool stores one triangle
+        if weight is not None:                                 # bins without a weight: no value
+            dead = np.ones(n_out, dtype=bool)
+            live = out_idx[np.isfinite(weight) & (out_idx >= 0)]
+            dead[live] = False
+            mat[dead, :] = np.nan
+            mat[:, dead] = np.nan
+        header = {"chrom": GENOME, "start": 0, "end": total, "resolution": int(binsize) * k,
+                  "value": "balanced" if balanced else "count", "unit": None,
+                  "cell": cell if group is None else None, "group": group, "note": "; ".join(notes)}
+        if n_cells is not None:
+            header.update(n_cells=n_cells, n_contacts=n_contacts)
+        return encode_matrix(mat, np.asarray(o_starts, np.int64), np.asarray(o_ends, np.int64), header)
+
+    def _embedded_maps(self) -> Dict[str, Any]:
+        """Contact maps embedded in the store (``embedded/contacts``), by key (one request opens them all)."""
+        if "embedded_maps" not in self._cache:
+            from ...core.embedded import open_all
+
+            loc = self._store_location()
+            self._cache["embedded_maps"] = open_all(loc) if loc is not None else {}
+        return self._cache["embedded_maps"]
+
+    def _embedded_contacts(self, key: str, info: dict, chrom: str, start, end, resolution, balance: bool,
+                           cell: Optional[str], group: Optional[str]) -> bytes:
+        """The embedded counterpart of the .cool / .scool paths of :meth:`contacts`: a region of one
+        cell, of a group (pseudo-bulk) or of a bulk map, or the whole genome."""
+        e = self._embedded_maps()[key]
+        per = info["kind"] == "scool"
+        token = Path(f"embedded:{key}")
+        notes: List[str] = []
+        idx, n_cells, use_sum = None, None, False
+        if per:
+            index = self._cache.setdefault(("emb_cell_index", key), {c: i for i, c in enumerate(e.cells)})
+            if group is not None:
+                names = [c for c in self.group_cells(group) if c in index]
+                if not names:
+                    raise LookupError(f"no cell of group {group!r} has a map in {key!r} ({self._scool_coverage(token)})")
+                # every cell of the map: the precomputed sums answer at once (no cell is read, nothing is subsampled)
+                use_sum = len(names) == len(index) and e.has_sum()
+                if not use_sum and len(names) > PSEUDOBULK_MAX_CELLS:
+                    rng = np.random.default_rng(0)
+                    names = sorted(rng.choice(names, PSEUDOBULK_MAX_CELLS, replace=False).tolist(), key=natural_key)
+                    notes.append(f"sum over {PSEUDOBULK_MAX_CELLS} random cells of the group")
+                n_cells, idx = len(names), (None if use_sum else [index[c] for c in names])
+            elif cell is not None:
+                if str(cell) not in index:
+                    raise KeyError(f"cell {cell!r} has no map in {key!r} ({self._scool_coverage(token)})")
+                idx = [index[str(cell)]]
+            else:
+                raise LookupError("per-cell contact map: pass cell=<cell id> or group=<group>")
+        elif group is not None:
+            raise ValueError(f"contact map {key!r} is not per-cell: a group needs a per-cell (.scool) map")
+        chroms = {c["name"]: c["length"] for c in info["chroms"]}
+        if str(chrom) == GENOME:
+            cache = self._cache.setdefault("genome_contacts", {})
+            ck = (key, resolution, bool(balance), cell, group)
+            if ck in cache:
+                cache[ck] = cache.pop(ck)
+                return cache[ck]
+            total = sum(c["length"] for c in self.genome_layout())
+            res = int(resolution) if resolution else next(
+                (r for r in info["resolutions"] if total / r <= MAX_MATRIX_BINS), info["resolutions"][-1])
+            if res not in info["resolutions"]:
+                raise ValueError(f"resolution must be one of {info['resolutions']}")
+            buf = self._genome_matrix(key, e.bins(res), res,
+                                      (lambda weight: e.iter_sum_pixels(res)) if use_sum else (lambda weight: e.iter_pixels(res, idx)),
+                                      balance, cell, group, ["whole genome"] + notes, n_cells)
+            cache[ck] = buf
+            while len(cache) > PSEUDOBULK_CACHE:
+                cache.pop(next(iter(cache)))
+            return buf
+        length = chroms.get(chrom)
+        if length is None:
+            raise ValueError(f"unknown chromosome {chrom!r} in contact map {key!r}")
+        lo = max(0, int(start or 0))
+        hi = min(length, int(end or length))
+        if hi <= lo:
+            raise ValueError("empty region")
+        res = int(resolution) if resolution else next(
+            (r for r in info["resolutions"] if (hi - lo) / r <= MAX_MATRIX_BINS), info["resolutions"][-1])
+        if res not in info["resolutions"]:
+            raise ValueError(f"resolution must be one of {info['resolutions']}")
+        ck = (key, group, chrom, lo, hi, res, bool(balance))
+        cache = self._cache.setdefault("pseudobulk", {})
+        if group is not None and ck in cache:
+            cache[ck] = cache.pop(ck)
+            return cache[ck]
+        b0, b1 = lo // res, min(-(-length // res), -(-hi // res))
+        n = b1 - b0
+        acc = np.zeros(n * n, dtype=np.float64)
+        if use_sum:
+            blocks = [e.sum_pixels(f"cis/{chrom}", res)]
+        else:
+            blocks = [e.region_pixels(chrom, b0, b1, res)] if not per else e.cell_pixel_blocks(f"cis/{chrom}", idx, res)
+        for d in blocks:                       # blocks of a few million pixels: memory does not grow with the group
+            d = d[(d[:, 0] >= b0) & (d[:, 1] < b1)]
+            acc += np.bincount((d[:, 0] - b0) * n + (d[:, 1] - b0), weights=d[:, 2], minlength=n * n)
+        up = acc.reshape(n, n)
+        mat = up + up.T - np.diag(np.diag(up))
+        bins = e.bins(res)
+        f0 = e.first_bin(chrom, res)
+        rows = bins.iloc[f0 + b0: f0 + b1]
+        balanced = bool(balance) and "weight" in bins.columns and not per
+        if balanced:
+            w = rows["weight"].to_numpy(np.float64)
+            mat = mat * w[:, None] * w[None, :]
+        mat = mat.astype(np.float32)
+        starts, ends = rows["start"].to_numpy(np.int64), rows["end"].to_numpy(np.int64)
+        mat, starts, ends, note = _pool_square(mat, starts, ends, np.nansum)
+        if note:
+            notes.append(note)
+        header = {"chrom": chrom, "start": lo, "end": hi, "resolution": int(res),
+                  "value": "balanced" if balanced else "count", "unit": None,
+                  "cell": cell if group is None else None, "group": group, "note": "; ".join(notes) or None}
+        if group is not None:
+            header.update(n_cells=n_cells, n_contacts=float(np.triu(up).sum()))
+        buf = encode_matrix(mat, starts, ends, header)
+        if group is not None:
+            cache[ck] = buf
+            while len(cache) > PSEUDOBULK_CACHE:
+                cache.pop(next(iter(cache)))
+        return buf
+
     def _scool_cells(self, path: Path) -> set:
         """``/cells/<name>`` URIs of a .scool (listing is slow: cached)."""
-        import cooler
-
         cells = self._cache.get(("scool_cells", str(path)))
+        if cells is None and str(path).startswith("embedded:"):    # an embedded map: read its cell list when needed
+            e = self._embedded_maps()[str(path)[len("embedded:"):]]
+            cells = self._cache[("scool_cells", str(path))] = {f"/cells/{c}" for c in e.cells}
         if cells is None:
+            import cooler      # only for a linked file (cooler cannot be imported in a sandboxed container)
+
             cells = self._cache[("scool_cells", str(path))] = set(cooler.fileops.list_scool_cells(str(path)))
         return cells
+
+    def _scool_coverage(self, path: Path) -> str:
+        """Which cells a .scool covers, for error messages (e.g. only one section of the data)."""
+        names = sorted(c.rsplit("/", 1)[-1] for c in self._scool_cells(path))
+        if not names:
+            return "it has no cells"
+        return f"it covers {len(names):,} of {len(self._cells_table()):,} cells, e.g. {names[0]!r}"
 
     def _pseudobulk(self, key: str, path: Path, group: str, chrom: str, lo: int, hi: int) -> bytes:
         """Sum of a group's per-cell maps over a region (raw counts).
@@ -853,7 +1597,7 @@ class Dataset:
         available = self._scool_cells(path)
         names = [c for c in self.group_cells(group) if f"/cells/{c}" in available]
         if not names:
-            raise LookupError(f"no cell of group {group!r} has a map in {key!r}")
+            raise LookupError(f"no cell of group {group!r} has a map in {key!r} ({self._scool_coverage(path)})")
         notes = []
         if len(names) > PSEUDOBULK_MAX_CELLS:
             rng = np.random.default_rng(0)
@@ -915,9 +1659,32 @@ class Dataset:
         return traces, bins, ends, P
 
     def distance(self, chrom: str, start=None, end=None, cell_id=None, trace_id=None,
-                 stat: str = "median", threshold: Optional[float] = None, group=None) -> bytes:
+                 stat: str = "median", threshold: Optional[float] = None, group=None,
+                 _header: Optional[Dict[str, Any]] = None) -> bytes:
         if stat not in ("median", "mean", "contact"):
             raise ValueError("stat must be median, mean or contact")
+        if str(chrom) == GENOME:
+            raise ValueError("distance matrices are per chromosome: pick a chromosome")
+        if self._index_segments():
+            # a random subset of the matching traces, as many as the (traces x bins x bins) budget holds, is read
+            cells = self._scope_cells(cell_id, group)
+            mask = self._run_mask([chrom], cells, [trace_id] if trace_id is not None else None)
+            b = self.cd.bins
+            on = (b["chrom"].astype(str).to_numpy() == str(chrom))
+            if start is not None:
+                on &= b["end"].to_numpy() > int(start)
+            if end is not None:
+                on &= b["start"].to_numpy() < int(end)
+            n_bins = max(1, min(int(on.sum()), MAX_MATRIX_BINS))
+            keep = max(1, 60_000_000 // (n_bins * n_bins))
+            ranges, n, n_traces, used, total = self._sample(mask, int(self.cd.n_spots), unit="trace", max_units=keep)
+            if not ranges:
+                raise LookupError("no spots with coordinates in this selection")
+            n_cell = len(np.unique(self._runs()[mask]["cell"]))
+            note = f"statistic over {n} of {n_traces} traces (random subset)" if n < n_traces else None
+            return self._part(ranges).distance(chrom, start, end, stat=stat, threshold=threshold, _header={
+                "trace_id": trace_id, "cell_id": cell_id, "group": group, "n_cells_matching": n_cell,
+                "note_prefix": note})
         idx = self._select(chrom, start, end, cell_id, trace_id, group=group)
         if len(idx) == 0:
             raise LookupError("no spots with coordinates in this selection")
@@ -962,6 +1729,12 @@ class Dataset:
                   "n_traces": int(len(traces)), "trace_id": trace_id, "cell_id": cell_id,
                   "group": group, "n_cells": self._n_cells_of(idx),
                   "note": "; ".join(notes) or None}
+        if _header:      # a sample of a large store: the request's scope, and how the sample was drawn
+            extra = dict(_header)
+            prefix = extra.pop("note_prefix", None)
+            header.update({k: v for k, v in extra.items() if k != "n_cells_matching"})
+            if prefix:
+                header["note"] = "; ".join([prefix] + notes)
         return encode_matrix(mat.astype(np.float32), bins, ends, header)
 
     # -- statistics -------------------------------------------------------
@@ -982,7 +1755,20 @@ class Dataset:
         a = self._arrays()
         return None if a["cell"] is None else int(len(pd.unique(a["cell"][idx])))
 
+    def _stats_sample(self, chrom, cell_id, group):
+        """Large stores: (in-memory Dataset of a random sample of the matching cells, note or None)."""
+        cells = self._scope_cells(cell_id, group)
+        mask = self._run_mask([chrom] if chrom else None, cells)
+        ranges, n, n_cells, used, total = self._sample(mask, STATS_MAX_SPOTS)
+        note = f"{n:,} of {n_cells:,} cells (random sample)" if used < total else None
+        return self._part(ranges), note
+
     def stats_rg(self, chrom=None, cell_id=None, group=None) -> Dict[str, Any]:
+        if self._index_segments():
+            part, note = self._stats_sample(chrom, cell_id, group)
+            out = part.stats_rg(chrom)
+            out.update(group=group, note=note)
+            return out
         a = self._arrays()
         idx = self._stats_spots(chrom, cell_id, group)
         df = pd.DataFrame(self._coords()[idx], columns=["x", "y", "z"])
@@ -1002,6 +1788,11 @@ class Dataset:
                 "unit": None if unit is None else str(unit)}
 
     def stats_scaling(self, chrom=None, cell_id=None, n_bins: int = 24, group=None) -> Dict[str, Any]:
+        if self._index_segments():
+            part, note = self._stats_sample(chrom, cell_id, group)
+            out = part.stats_scaling(chrom, n_bins=n_bins)
+            out.update(group=group, note=note)
+            return out
         a = self._arrays()
         idx = self._stats_spots(chrom, cell_id, group)
         n_cells = self._n_cells_of(idx)
@@ -1089,6 +1880,15 @@ class Dataset:
         return self._cache["draw_order"]
 
     def geometry(self, flt: GeometryFilter) -> bytes:
+        if self._index_segments():
+            # the matching runs of a sample of whole cells, about max_points spots: the view is a random set of
+            # cells, never the whole store (the header keeps the matching total, truncated when sampled)
+            chroms = list(flt.chroms or []) + ([flt.region["chrom"]] if flt.region is not None else [])
+            mask = self._run_mask(chroms or None, flt.cell_ids, flt.trace_ids)
+            ranges, n, n_cells, used, total = self._sample(mask, flt.max_points)
+            part = self._part(ranges)
+            return encode_geometry(part, part.select(flt), flt.max_points, chrom_extent=self.chrom_table(),
+                                   total_points=total, sample={"cells": n, "of_cells": n_cells} if used < total else None)
         if self.backed:
             sub = self._subset(flt)
             if sub is not None:
@@ -1101,6 +1901,10 @@ class Dataset:
 
 
 MAX_MATRIX_BINS = 1000
+#: the whole-genome view: ``chrom="*"`` (tracks, contact maps, intervals in genome coordinates)
+GENOME = "*"
+#: whole-genome tracks: bins pooled into at most this many windows
+MAX_GENOME_TRACK_BINS = 4000
 #: pseudo-bulk of a group over a per-cell (.scool) map: cells summed at most
 PSEUDOBULK_MAX_CELLS = 20_000
 #: pseudo-bulk matrices kept per dataset (LRU)
@@ -1216,15 +2020,18 @@ def _segment_bounds(dataset: Dataset, idx: np.ndarray):
 
 def encode_geometry(dataset: Dataset, idx: np.ndarray,
                     max_points: int = DEFAULT_MAX_POINTS,
-                    chrom_extent: Optional[List[Dict[str, Any]]] = None) -> bytes:
+                    chrom_extent: Optional[List[Dict[str, Any]]] = None,
+                    total_points: Optional[int] = None, sample: Optional[Dict[str, int]] = None) -> bytes:
     """Encode the selected spots in the binary layout documented in API.md.
 
     ``chrom_extent`` (a :meth:`Dataset.chrom_table`) overrides the
-    dataset's own, for a subset of a larger dataset."""
+    dataset's own, for a subset of a larger dataset; ``total_points`` /
+    ``sample`` describe the whole selection when ``dataset`` is a sample
+    of a large store."""
     a = dataset._arrays()
     kept, offsets = _segment_bounds(dataset, idx)
     total = len(kept)
-    truncated = total > max_points
+    truncated = total > max_points or sample is not None
     if truncated:
         n_fit = int(np.searchsorted(offsets[1:], max_points, side="right"))
         if n_fit == 0:  # first segment alone exceeds the cap: cut it
@@ -1257,8 +2064,9 @@ def encode_geometry(dataset: Dataset, idx: np.ndarray,
     header = {
         "n_points": int(len(kept)),
         "n_segments": len(segments),
-        "total_points": int(total),
+        "total_points": int(total if total_points is None else max(total, total_points)),
         "truncated": bool(truncated),
+        "sample": sample,
         "segments": segments,
         "bbox": bbox,
         "chrom_extent": {c["name"]: [c["start"], c["end"]]
@@ -1307,12 +2115,37 @@ class DatasetStore:
         return ds
 
     def load(self, path) -> Dataset:
+        from ...core.remote import is_url
+
+        if is_url(path):      # s3:// https:// ...: opened backed over fsspec
+            p = str(path).rstrip("/")
+            base = p.rsplit("/", 1)[-1]
+            name = base[: -len(".chromdata.zarr")] if base.endswith(".chromdata.zarr") else base
+            # the embedded sections' metadata (three independent requests) is read while the store itself is read
+            from concurrent.futures import ThreadPoolExecutor
+
+            from ...core.embedded import list_embedded_images, open_all, open_anndata_groups
+
+            with ThreadPoolExecutor(max_workers=3) as pool:
+                warm = {"embedded_maps": pool.submit(open_all, p),
+                        "embedded_bin": pool.submit(open_anndata_groups, p, "linked_bin_matrices"),
+                        "embedded_images": pool.submit(list_embedded_images, p)}
+                cd = load_chromdata(p)
+            ds = self.add(cd, name=name, path=p)
+            for k, f in warm.items():
+                try:
+                    ds._cache[k] = f.result()
+                except Exception:      # not readable: found again (and reported) when first used
+                    pass
+            # no pre-sort here: over HTTP it reads every spot's keys; the first geometry request sorts (once)
+            return ds
         p = Path(path).expanduser().resolve()
         if not p.exists():
             raise FileNotFoundError(f"no such file: {p}")
         name = p.name[: -len(".chromdata.zarr")] if p.name.endswith(".chromdata.zarr") else p.stem
         ds = self.add(load_chromdata(p), name=name, path=str(p))
-        ds._draw_order()  # sort once at open, so the first overview request does not pay for it
+        if not ds._large():
+            ds._draw_order()  # sort once at open, so the first overview request does not pay for it
         return ds
 
     def get(self, dataset_id: str) -> Dataset:

@@ -9,8 +9,8 @@ the cell's own contact map, so the browser can show structure, contacts and
   sim_cell1/sim_cell1.cdz         20 chromosomes, ~25.7k particles at 100 kb, an
                                   ensemble of ``--n-models`` structures (coords =
                                   model 0, layers model_<k>); one-file ChromData
-                                  store, checked in (``--format`` zarr / h5cd for
-                                  the other containers)
+                                  store, checked in (``--format zarr`` for the
+                                  directory store)
   sim_cell1/cell1_contacts.mcool  the same cell's contacts, 100 kb … 1 Mb
 
 Usage::
@@ -59,12 +59,12 @@ def main() -> None:
     ap.add_argument("--device", default="auto", help="NucDynamics engine device: auto / cpu / gpu")
     ap.add_argument("--n-models", type=int, default=4, help="structures in the ensemble")
     ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--format", default="cdz", choices=["cdz", "zarr", "h5cd"],
+    ap.add_argument("--format", default="cdz", choices=["cdz", "zarr"],
                     help="output container (default cdz: one file, checked in)")
     args = ap.parse_args()
     OUT.mkdir(exist_ok=True)
     pairs = HERE / "cell1.pairs"
-    structure = OUT / ("sim_cell1" + {"cdz": ".cdz", "zarr": ".chromdata.zarr", "h5cd": ".h5cd"}[args.format])
+    structure = OUT / ("sim_cell1" + {"cdz": ".cdz", "zarr": ".chromdata.zarr"}[args.format])
     if not structure.exists():
         from uchrom.recon.sc.nucdyn import reconstruct_nucdyn
 

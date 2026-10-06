@@ -88,8 +88,15 @@ export function CellPanel() {
     <section className="panel cells">
       <h2>
         Cells <span className="muted">{all.length.toLocaleString('en-US')}</span>
+      </h2>
+      <div className="cell-search-row">
+        <input
+          placeholder={typeField || colors.categories ? 'Search cell id or type…' : 'Search cell id…'}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
         {byField && (
-          <span className="cell-sort">
+          <span className="cell-sort" role="group" aria-label="Order of the cells">
             <button className={view.cellSort === 'id' ? 'active' : ''} onClick={() => setSort('id')} title="Natural id order">
               id
             </button>
@@ -102,12 +109,7 @@ export function CellPanel() {
             </button>
           </span>
         )}
-      </h2>
-      <input
-        placeholder={typeField || colors.categories ? 'Search cell id or type…' : 'Search cell id…'}
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
+      </div>
       <ul className="cell-list" ref={listRef} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
         <li className={view.focusCell === null ? 'selected' : ''} onClick={() => focus(null)}>
           <span className="idx" />

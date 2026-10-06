@@ -25,8 +25,8 @@ Notes
   (``LC1-100k-09022022-mm10-25kb-meta.csv``) and the per-cell clustering
   CSV come from the CaiGroup/dna-seqfish-plus-multi-omics GitHub repo.
 * One source column — ``KAT3B/p300`` — contains a forward slash, which
-  HDF5 interprets as a path separator.  To preserve a clean ``.h5cd``
-  round-trip, the loader renames it to ``KAT3B_p300``.
+  storage layers treat as a path separator.  To keep a clean store
+  round trip, the loader renames it to ``KAT3B_p300``.
 """
 
 from __future__ import annotations
@@ -468,8 +468,9 @@ def load_seqfish_multiomics_linked(
     transcriptome_chunksize: int = 500_000,
     download_transcriptome: bool = False,
     data_dir: PathLike = "example-data",
-    h5cd_path: Optional[PathLike] = None,
+    cd_path: Optional[PathLike] = None,
     h5ad_path: Optional[PathLike] = None,
+    h5cd_path: Optional[PathLike] = None,
     **kwargs,
 ):
     """Build linked Takei 2025 ChromData and AnnData artifacts.
@@ -480,10 +481,14 @@ def load_seqfish_multiomics_linked(
     ids, and the ChromData receives ``adata.obs``/``adata.obsm`` via
     :meth:`ChromData.link_anndata`.
 
-    ``h5cd_path`` (despite its name) is where the ChromData is written, in
-    the format its suffix selects — ``.chromdata.zarr`` is recommended,
-    ``.h5cd`` is deprecated.
+    ``cd_path`` is where the ChromData is written (``.chromdata.zarr`` or
+    ``.cdz``).  ``h5cd_path`` is its deprecated former name.
     """
+    if h5cd_path is not None:
+        warnings.warn("h5cd_path= is deprecated; use cd_path= (a .chromdata.zarr / .cdz path)",
+                      DeprecationWarning, stacklevel=2)
+        if cd_path is None:
+            cd_path = h5cd_path
     cd = read_seqfish_multiomics(
         spot_glob,
         locus_annotation=locus_annotation,
@@ -517,10 +522,10 @@ def load_seqfish_multiomics_linked(
         h5ad_path.parent.mkdir(parents=True, exist_ok=True)
         adata.write_h5ad(h5ad_path)
         cd.uns["linked_anndata"]["path"] = str(h5ad_path)
-    if h5cd_path is not None:
-        h5cd_path = Path(h5cd_path)
-        h5cd_path.parent.mkdir(parents=True, exist_ok=True)
-        cd.write(h5cd_path)
+    if cd_path is not None:
+        cd_path = Path(cd_path)
+        cd_path.parent.mkdir(parents=True, exist_ok=True)
+        cd.write(cd_path)
     return cd
 
 
@@ -537,8 +542,7 @@ def load_takei2025_cerebellum(
 
     This convenience loader returns a ``ChromData``.  The aggregated RNA
     expression matrix is available as ``cd.linked_adata``.  If paired
-    ``.chromdata.zarr`` (or, from older builds, ``.h5cd``) / ``.h5ad``
-    artifacts already exist under ``data_dir``, they are reused.  Otherwise, when ``download=True``, the required
+    ``.chromdata.zarr`` / ``.h5ad`` artifacts already exist under ``data_dir``, they are reused.  Otherwise, when ``download=True``, the required
     DNA seqFISH+ archive and transcriptome zip are downloaded from
     Zenodo record 7693825, annotation/clustering tables are downloaded
     from the CaiGroup GitHub repository, and linked artifacts are built.
@@ -568,9 +572,13 @@ def load_takei2025_cerebellum(
     cd_path = data_dir / f"takei2025_cerebellum_rep{replicate}.chromdata.zarr"
     legacy = data_dir / f"takei2025_cerebellum_rep{replicate}.h5cd"
     h5ad_path = data_dir / f"takei2025_cerebellum_rep{replicate}.h5ad"
-    existing = cd_path if cd_path.exists() else legacy if legacy.exists() else None
-    if existing is not None and not rebuild:
-        cd = ChromData.read(existing)
+    if not cd_path.exists() and legacy.exists() and not rebuild:
+        # an older build: convert it once to the current store
+        from .upgrade import upgrade_h5cd
+
+        upgrade_h5cd(legacy, cd_path)
+    if cd_path.exists() and not rebuild:
+        cd = ChromData.read(cd_path)
         if h5ad_path.exists():
             cd.uns.setdefault("linked_anndata", {})["path"] = str(h5ad_path)
         return cd
@@ -608,7 +616,7 @@ def load_takei2025_cerebellum(
         transcriptomic_data=transcriptome_zip,
         transcriptome_replicate=replicate,
         transcriptome_chunksize=transcriptome_chunksize,
-        h5cd_path=cd_path,
+        cd_path=cd_path,
         h5ad_path=h5ad_path,
         **kwargs,
     )

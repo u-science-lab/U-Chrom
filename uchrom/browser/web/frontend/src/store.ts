@@ -1,11 +1,13 @@
 import { create } from 'zustand'
+import { mergeGeometry } from './geometry'
 import { setGroupResolver } from './api'
 import { groupColor, nextGroupName, parseSavedGroups, removeGroup, renameGroup, upsertGroup, type GroupRef, type SavedGroup, type Selection } from './groups'
 import { DEFAULT_STYLE, removeCascade, uniqueName } from './layers'
+import { loadSidebars, saveSidebars, type Side, type Sidebars } from './sidebars'
 import { applyTheme, loadThemeChoice, resolveTheme, saveThemeChoice, systemPrefersDark, type Palette, type ThemeChoice } from './theme'
 import { isPointPick } from './types'
 import type { Locus } from './genome'
-import { addPinnedPane, defaultWorkspace, dropGroupScope, paneSignature, parseWorkspace, type DataKind, type WorkspaceState } from './workspace'
+import { addPinnedPane, addTracePane, defaultWorkspace, dropGroupScope, paneSignature, parseWorkspaces, type DataKind, type WorkspaceState } from './workspace'
 import type { CellField, CellInfo, CellValue, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo, PointSet } from './types'
 
 let nextId = 1
@@ -86,7 +88,8 @@ export function initialView(ds: DatasetSummary): DatasetView {
 /** Key of a cached cell-field vector. */
 export const fieldKey = (datasetId: string, field: string) => `${datasetId}\u0000${field}`
 
-const WS_KEY = 'uchrom.browser.workspace'
+const WS_KEY = 'uchrom.browser.workspaces'
+const LEGACY_WS_KEY = 'uchrom.browser.workspace' // one layout for every dataset (before per-dataset layouts)
 const GROUPS_KEY = 'uchrom.browser.groups'
 
 /** Saved cell groups per dataset name (per viewer; storage may be unavailable). */
@@ -107,22 +110,23 @@ function persistGroups(groups: Record<string, SavedGroup[]>) {
   }
 }
 
-/** Saved workspace (per viewer; storage may be unavailable or hold junk). */
-export function loadWorkspace(): WorkspaceState | null {
+/** Saved layouts per dataset name (per viewer; storage may be unavailable or hold junk). */
+export function loadWorkspaces(): Record<string, WorkspaceState> {
   try {
     localStorage.removeItem('uchrom.browser.ui') // pre-workspace float/tab/split prefs
+    localStorage.removeItem(LEGACY_WS_KEY)
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(WS_KEY) : null
-    return raw ? parseWorkspace(JSON.parse(raw)) : null
+    return raw ? parseWorkspaces(JSON.parse(raw)) : {}
   } catch {
-    return null
+    return {}
   }
 }
 
-function saveWorkspace(ws: WorkspaceState) {
+function saveWorkspaces(all: Record<string, WorkspaceState>) {
   try {
-    localStorage.setItem(WS_KEY, JSON.stringify(ws))
+    localStorage.setItem(WS_KEY, JSON.stringify(all))
   } catch {
-    /* private mode / blocked storage: layout just doesn't persist */
+    /* private mode / blocked storage: layouts just don't persist */
   }
 }
 
@@ -150,30 +154,38 @@ export interface AppState {
   addDataset(ds: DatasetSummary): void
   removeDataset(id: string): void
   setActiveDataset(id: string | null): void
-  addLayer(opts: { datasetId: string; parentId: string | null; name: string; filter: LayerFilter; style?: Partial<LayerStyle> }): string
+  addLayer(opts: { datasetId: string; parentId: string | null; name: string; filter: LayerFilter; style?: Partial<LayerStyle>; paneId?: string | null }): string
   removeLayer(id: string): void
   renameLayer(id: string, name: string): void
   setVisible(id: string, visible: boolean): void
   setStyle(id: string, style: Partial<LayerStyle>): void
   setLoading(id: string): void
   setGeometry(id: string, geometry: Geometry): void
+  /** merge cells fetched on their own into a layer's (sampled) geometry; `fly` re-aims at the focus */
+  extendGeometry(id: string, extra: Geometry, fly: boolean): void
   setLayerError(id: string, error: string): void
   selectLayer(id: string | null): void
   setPick(pick: PickInfo | null): void
   setStatus(msg: string | null): void
   setError(msg: string | null): void
   resetView(): void
-  /** views laid out as equal panes */
+  /** views laid out as equal panes (the layout of the active dataset) */
   workspace: WorkspaceState
-  /** false until the user changes the layout (or one was saved): until then
-   *  the default follows the data (with / without embeddings) */
+  /** name of the dataset `workspace` belongs to */
+  workspaceOwner: string | null
+  /** layouts the user arranged, per dataset name (persisted) */
+  savedWorkspaces: Record<string, WorkspaceState>
+  /** false until the user changes the owner's layout (or one was saved): until
+   *  then the default follows the data (embeddings, coordinates, spatial, ...) */
   workspaceTouched: boolean
-  /** apply the data-dependent default unless the user has a layout */
-  ensureDefaultWorkspace(kind: boolean | DataKind): void
-  /** replace the workspace (used by the pane actions); persists it */
+  /** show dataset `owner`'s layout: its saved one, else the default for its data */
+  ensureDefaultWorkspace(kind: boolean | DataKind, owner?: string | null): void
+  /** replace the workspace (used by the pane actions); saves it for its dataset */
   setWorkspace(update: (ws: WorkspaceState) => WorkspaceState): void
   /** open `cell` in a new view pinned to it (3-D, or Genome without coordinates) */
   openCellView(cell: string): void
+  /** open one trace (of `cell`) in a new 3-D view */
+  openTraceView(cell: string | null, trace: string): void
   setCells(datasetId: string, cells: CellInfo[]): void
   focusCell(cellId: string | null): void
   stepCell(delta: number): void
@@ -204,6 +216,9 @@ export interface AppState {
   saveSelection(name?: string): void
   renameSavedGroup(id: string, name: string): void
   deleteSavedGroup(id: string): void
+  /** which side bars are open (persisted per viewer) */
+  sidebars: Sidebars
+  toggleSidebar(side: Side): void
   /** interface theme: the choice (persisted) and the applied palette */
   themeChoice: ThemeChoice
   palette: Palette
@@ -259,7 +274,6 @@ export function activeView(s: Pick<AppState, 'views' | 'activeDatasetId'>): Data
 const patchLayer = (layers: Layer[], id: string, patch: Partial<Layer>) =>
   layers.map((l) => (l.id === id ? { ...l, ...patch } : l))
 
-const savedWorkspace = loadWorkspace()
 const savedGroups = loadSavedGroups()
 const savedTheme = loadThemeChoice()
 const initialPalette = applyTheme(resolveTheme(savedTheme, systemPrefersDark()))
@@ -330,7 +344,7 @@ export const useStore = create<AppState>((set, get) => {
     set({ activeDatasetId: id, selectedLayerId: root?.id ?? null, pick: null })
   },
 
-  addLayer({ datasetId, parentId, name, filter, style }) {
+  addLayer({ datasetId, parentId, name, filter, style, paneId }) {
     const id = newId()
     const layers = get().layers
     const layer: Layer = {
@@ -338,6 +352,7 @@ export const useStore = create<AppState>((set, get) => {
       name: uniqueName(layers.filter((l) => l.datasetId === datasetId), name),
       datasetId,
       parentId,
+      ...(paneId ? { paneId } : {}),
       filter,
       visible: true,
       style: { ...DEFAULT_STYLE, ...style },
@@ -345,9 +360,9 @@ export const useStore = create<AppState>((set, get) => {
       loading: false,
       error: null,
     }
-    // A new subset hides its parent, like the desktop browser.
-    const next = parentId ? patchLayer(layers, parentId, { visible: false }) : layers
-    set({ layers: [...next, layer], selectedLayerId: id })
+    // A subset is drawn over its parent (a highlight: e.g. grey lines + a coloured region);
+    // hide the parent with its eye to see the subset alone.
+    set({ layers: [...layers, layer], selectedLayerId: id })
     return id
   },
 
@@ -392,6 +407,15 @@ export const useStore = create<AppState>((set, get) => {
     })
   },
 
+  extendGeometry(id, extra, fly) {
+    const s = get()
+    const layer = s.layers.find((l) => l.id === id)
+    if (!layer?.geometry) return
+    const geometry = mergeGeometry(layer.geometry, extra)
+    if (geometry === layer.geometry) return
+    set({ layers: patchLayer(s.layers, id, { geometry }), ...(fly ? { flyToken: s.flyToken + 1 } : {}) })
+  },
+
   setLayerError(id, error) {
     set({ layers: patchLayer(get().layers, id, { loading: false, error }) })
   },
@@ -408,23 +432,39 @@ export const useStore = create<AppState>((set, get) => {
   setError(error) {
     set({ error })
   },
-  workspace: savedWorkspace ?? defaultWorkspace(false),
-  workspaceTouched: savedWorkspace !== null,
-  ensureDefaultWorkspace(kind) {
+  workspace: defaultWorkspace(false),
+  workspaceOwner: null,
+  savedWorkspaces: loadWorkspaces(),
+  workspaceTouched: false,
+  ensureDefaultWorkspace(kind, owner = get().workspaceOwner) {
     const s = get()
+    if (owner !== s.workspaceOwner) {
+      const saved = owner ? s.savedWorkspaces[owner] : undefined
+      set({ workspaceOwner: owner, workspace: saved ?? defaultWorkspace(kind), workspaceTouched: !!saved })
+      return
+    }
     if (s.workspaceTouched) return
     const ws = defaultWorkspace(kind)
     if (paneSignature(ws) !== paneSignature(s.workspace)) set({ workspace: ws })
   },
   setWorkspace(update) {
-    const workspace = update(get().workspace)
-    if (workspace === get().workspace) return
-    set({ workspace, workspaceTouched: true })
-    saveWorkspace(workspace)
+    const s = get()
+    const workspace = update(s.workspace)
+    if (workspace === s.workspace) return
+    if (!s.workspaceOwner) {
+      set({ workspace, workspaceTouched: true })
+      return
+    }
+    const savedWorkspaces = { ...s.savedWorkspaces, [s.workspaceOwner]: workspace }
+    set({ workspace, workspaceTouched: true, savedWorkspaces })
+    saveWorkspaces(savedWorkspaces)
   },
   openCellView(cell) {
     const ds = get().datasets.find((d) => d.id === get().activeDatasetId)
     get().setWorkspace((ws) => addPinnedPane(ws, hasCoords(ds) ? '3d' : 'genome', cell))
+  },
+  openTraceView(cell, trace) {
+    get().setWorkspace((ws) => addTracePane(ws, cell, trace))
   },
   resetView() {
     set({ resetViewToken: get().resetViewToken + 1 })
@@ -440,6 +480,12 @@ export const useStore = create<AppState>((set, get) => {
     patchView({ focusCell: cellId, focusGroup: null }, { pick: null, flyToken: s.flyToken + 1 })
   },
   savedGroups,
+  sidebars: loadSidebars(),
+  toggleSidebar(side) {
+    const sidebars = { ...get().sidebars, [side]: !get().sidebars[side] }
+    saveSidebars(sidebars)
+    set({ sidebars })
+  },
   themeChoice: savedTheme,
   palette: initialPalette,
   setThemeChoice(choice) {

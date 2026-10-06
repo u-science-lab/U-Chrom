@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { extent, fmtAxis, histogram, linear, logScale, trackRange } from './stats'
 import { binIndexAt, defaultTrackSelection, resolveTracks } from './tracks'
-import { defaultWorkspace, paneSignature, parseWorkspace, addPane } from './workspace'
+import { defaultWorkspace, paneSignature, parseWorkspace, addPane, workspaceOf } from './workspace'
 import { resolveSource } from './components/MatrixView'
 import { resolveKind } from './components/StatsView'
 
@@ -47,16 +47,15 @@ describe('tracks', () => {
 describe('default views per kind of data', () => {
   const sig = (k: Parameters<typeof defaultWorkspace>[0]) => paneSignature(defaultWorkspace(k))
   it('follows coords / embeddings / tracks', () => {
-    expect(sig({ hasCoords: true, hasEmbeddings: true, hasTracks: true })).toBe('3d,embedding')
-    expect(sig({ hasCoords: true, hasEmbeddings: false, hasTracks: true })).toBe('3d,genome')
-    expect(sig({ hasCoords: true, hasEmbeddings: false, hasTracks: false })).toBe('3d,matrix')
-    expect(sig({ hasCoords: false, hasEmbeddings: true, hasTracks: false })).toBe('matrix,embedding')
+    expect(sig({ hasCoords: true, hasEmbeddings: true, hasTracks: true })).toBe('3d,embedding,genome,stats')
+    expect(sig({ hasCoords: true, hasEmbeddings: false, hasTracks: false })).toBe('3d,genome,stats')
+    expect(sig({ hasCoords: false, hasEmbeddings: true, hasTracks: false })).toBe('embedding')
+    expect(sig({ hasCoords: false, hasEmbeddings: false, hasTracks: true, manyCells: true })).toBe('genome,stats')
     expect(sig({ hasCoords: false, hasEmbeddings: false, hasTracks: false })).toBe('matrix')
-    expect(sig(true)).toBe('3d,embedding')
-    expect(sig(false)).toBe('3d,matrix')
+    expect(sig(true)).toBe('3d,embedding,genome,stats')
   })
   it('persists pane options and drops malformed ones', () => {
-    const ws = addPane(defaultWorkspace(false), 'matrix')
+    const ws = addPane(workspaceOf(['3d', 'matrix'], [0.55, 0.45]), 'matrix')
     ws.panes[1] = { ...ws.panes[1], source: 'distance', stat: 'contact', threshold: 0.3, tracks: ['H3K27ac'] }
     expect(parseWorkspace(JSON.parse(JSON.stringify(ws)))).toEqual(ws)
     const bad = parseWorkspace({ layout: 'tabs', panes: [{ id: 'a', type: 'stats', statsKind: 'pie', threshold: -1, tracks: [1] }] })

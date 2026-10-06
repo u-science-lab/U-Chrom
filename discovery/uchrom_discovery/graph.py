@@ -65,7 +65,7 @@ class IdeaGraph:
         }
 
     def summary(self) -> dict[str, Any]:
-        """Return lightweight counts useful for planning and h5cd pointers."""
+        """Return lightweight counts useful for planning and dataset pointers."""
         kinds = Counter(node.get("kind") for node in self.nodes.values())
         relations = Counter(edge.get("relation") for edge in self.edges)
         evidence = Counter(

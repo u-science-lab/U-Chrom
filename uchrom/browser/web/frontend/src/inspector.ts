@@ -26,6 +26,7 @@ export type InspectorSection =
   | 'genomeRows'
   | 'matrix'
   | 'embedding'
+  | 'spatial'
   | 'stats'
 
 /** Left side bar: the same for every pane (it never looks at the workspace). */
@@ -53,6 +54,8 @@ export function inspectorSections(pane: Pick<Pane, 'type'> | undefined, ds: Data
       return [...out, 'matrix']
     case 'embedding':
       return [...out, 'embedding']
+    case 'spatial':
+      return [...out, 'spatial']
     case 'stats':
       return [...out, 'stats']
   }

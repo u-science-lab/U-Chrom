@@ -12,6 +12,8 @@ Inputs are 1.x ``.h5cd`` files (copied into WORKDIR first; the
 originals are never touched).  Variants: 1.x (old tree), 2.0 without
 compression, 2.0 + lzf, 2.0 + gzip level 4 on integer / string data (the
 default) and 2.0 + gzip level 4 on floats too (``compress_floats=True``).
+On this tree the 2.0 variants go through ``uchrom.io._h5cd_legacy`` (``.h5cd``
+is no longer a ChromData format).
 """
 import argparse
 import json
@@ -30,10 +32,15 @@ VARIANTS = {"2.0 none": (None, None, False), "2.0 lzf": ("lzf", None, False),
 CHILD = r"""
 import json, resource, sys, time, warnings
 warnings.simplefilter("ignore")
-from uchrom import ChromData
+try:        # this tree: .h5cd is no longer a ChromData format, only the legacy module reads / writes it
+    from uchrom.io._h5cd_legacy import read_h5cd as read, write_h5cd
+    write = lambda cd, dst, **kw: write_h5cd(cd, dst, **kw)
+except ImportError:  # the 1.x tree (--old-tree)
+    from uchrom import ChromData
+    read, write = ChromData.read, lambda cd, dst, **kw: cd.write(dst, **kw)
 op, src, dst, comp, level, floats = sys.argv[1:7]
 t0 = time.perf_counter()
-cd = ChromData.read(src)
+cd = read(src)
 t_read = time.perf_counter() - t0
 t_write = None
 if op == "write":
@@ -41,7 +48,7 @@ if op == "write":
                                   "compression_opts": None if level == "none" else int(level),
                                   "compress_floats": floats == "1"}
     t0 = time.perf_counter()
-    cd.write(dst, **kw)
+    write(cd, dst, **kw)
     t_write = time.perf_counter() - t0
 rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 rss = rss if sys.platform == "darwin" else rss * 1024

@@ -3,7 +3,7 @@ import { fetchCellValues, fetchRg, fetchScaling } from '../api'
 import { cellRgb } from '../colors'
 import { useFieldColors } from '../useFieldColors'
 import { fmtBp } from '../filters'
-import { logTicks, niceTicks } from '../genome'
+import { GENOME, logTicks, niceTicks } from '../genome'
 import { nearestPoint } from '../render/embedding'
 import { scopeLabel, type GroupInfo } from '../groups'
 import { activeView, fieldKey, useStore } from '../store'
@@ -16,6 +16,7 @@ import { updatePane, type Pane, type StatsKind } from '../workspace'
 import { CHART, drawAxes, rgb, type Box } from './chart'
 import { colourableFields, fieldLabel } from './format'
 import { prepareCanvas, useSize } from './useSize'
+import { Select } from './Select'
 
 const M = { left: 62, top: 14, right: 16, bottom: 44 }
 const KIND_LABEL: Record<StatsKind, string> = {
@@ -37,7 +38,7 @@ function FieldSelect({ fields, value, onChange, title }: { fields: CellField[]; 
   const groups = new Map<string, CellField[]>()
   for (const f of fields) groups.set(f.group, [...(groups.get(f.group) ?? []), f])
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} title={title}>
+    <Select value={value} onChange={(e) => onChange(e.target.value)} title={title}>
       {[...groups].map(([g, fs]) => (
         <optgroup key={g} label={g === 'rna' ? 'Gene' : g === 'cell' ? 'Property' : g}>
           {[...fs]
@@ -49,7 +50,7 @@ function FieldSelect({ fields, value, onChange, title }: { fields: CellField[]; 
             ))}
         </optgroup>
       ))}
-    </select>
+    </Select>
   )
 }
 
@@ -74,18 +75,18 @@ export function StatsControls({ pane }: { pane: Pane }) {
   if (!kind) return null
   return (
     <>
-      <select value={kind} onChange={(e) => upd({ statsKind: e.target.value as StatsKind })} title="Chart">
+      <Select value={kind} onChange={(e) => upd({ statsKind: e.target.value as StatsKind })} title="Chart">
         {kinds.map((k) => (
           <option key={k} value={k}>
             {KIND_LABEL[k]}
           </option>
         ))}
-      </select>
+      </Select>
       {(kind === 'rg' || kind === 'scaling') && (
-        <select value={pane.chromScope ?? 'all'} onChange={(e) => upd({ chromScope: e.target.value as 'all' | 'locus' })} title="Chromosomes">
+        <Select value={pane.chromScope ?? 'all'} onChange={(e) => upd({ chromScope: e.target.value as 'all' | 'locus' })} title="Chromosomes">
           <option value="all">all chromosomes</option>
           <option value="locus">locus chromosome</option>
-        </select>
+        </Select>
       )}
       {(kind === 'hist' || kind === 'scatter') && fx && <FieldSelect fields={fields} value={fx} onChange={(v) => upd({ fieldX: v })} title="x field" />}
       {kind === 'scatter' && fy && (
@@ -175,7 +176,8 @@ export function StatsView({ pane }: { pane: Pane }) {
   const boxRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const size = useSize(boxRef)
-  const chrom = (pane.chromScope ?? 'all') === 'locus' ? (locus?.chrom ?? null) : null
+  // the whole-genome window: every chromosome
+  const chrom = (pane.chromScope ?? 'all') === 'locus' && locus?.chrom !== GENOME ? (locus?.chrom ?? null) : null
   const [rg, setRg] = useState<RgStats | null>(null)
   const [scaling, setScaling] = useState<{ pop: ScalingStats; cell: ScalingStats | null } | null>(null)
   // overlaid groups: ref → stats of the current kind

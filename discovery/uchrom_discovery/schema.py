@@ -1,7 +1,7 @@
 """Agent-readable discovery schema for :class:`uchrom.core.ChromData`.
 
 The schema is intentionally stored inside ``cd.uns`` as a JSON payload so
-it round-trips through ``.h5cd`` without requiring a new HDF5 layout.
+it round-trips through a ChromData store without a new storage layout.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def build_discovery_schema(
 
     The returned dict is JSON-serializable.  With ``store=True`` it is also
     packed (:func:`pack_schema`) into ``cd.uns['auto_discovery_schema']`` so
-    it round-trips with ``.h5cd``.
+    it round-trips with the store.
     """
     schema = _build_discovery_schema(
         cdata,

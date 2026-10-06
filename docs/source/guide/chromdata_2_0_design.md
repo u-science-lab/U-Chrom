@@ -763,11 +763,12 @@ The authoritative layout is `uchrom/core/spec.md`; the code is
     that clash case-insensitively (macOS), are stored as `_<i>`; the attrs
     map them back.  `uns` values keep their Python types (tuples, numpy
     arrays, NaN) through a small JSON tagging scheme.
-13. **Dispatch by path**: `*.zarr` → zarr, `*.cdz` → zip, `*.h5cd` →
-    HDF5; other existing paths are sniffed.  `write()` to `.h5cd` (and to
-    unknown suffixes, as before) still writes HDF5 2.0 in this release,
-    with a `DeprecationWarning`.  `python -m uchrom.io.upgrade old.h5cd`
-    converts to `old.chromdata.zarr`.
+13. **Dispatch by path**: `*.zarr` → zarr, `*.cdz` → zip; other existing
+    paths are sniffed.  *(Updated)* `.h5cd` is no longer read or written
+    (`read` / `write` raise, naming the converter); it was first kept
+    readable with a deprecated writer.  `python -m uchrom.io.upgrade
+    old.h5cd` converts to `old.chromdata.zarr`; the HDF5 reader is kept in
+    `uchrom/io/_h5cd_legacy.py` for that and for the format benchmarks.
 14. **The web browser opens stores backed.**  Summaries, trace and cell
     lists come from `index/` plus the `bin_id` column; geometry requests
     that name cells, traces or chromosomes read only those rows and reuse

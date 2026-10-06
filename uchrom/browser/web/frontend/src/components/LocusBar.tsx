@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react'
-import { fmtLocus, parseLocus, zoomLocus } from '../genome'
+import { fmtLocus, GENOME, GENOME_LABEL, parseLocus, zoomLocus } from '../genome'
 import { useLocus } from '../useLocus'
+import { Select } from './Select'
 
-/** Shared genomic window for the tracks / matrix / stats panes. */
+/**
+ * The genomic window, in the header of each view that shows it (Genome, Matrix, Stats on the locus
+ * chromosome).  One window is shared: moving it in one view moves the others.
+ */
 export function LocusBar() {
   const { locus, chroms, ext, setLocus } = useLocus()
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    if (locus) setText(fmtLocus(locus))
+    if (locus) setText(fmtLocus(locus, chroms))
     setError(null)
   }, [locus?.chrom, locus?.start, locus?.end]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!locus || !chroms.length) return null
@@ -21,8 +25,8 @@ export function LocusBar() {
     }
   }
   return (
-    <div className="locus-bar" title={error ?? 'Genomic window shared by the Tracks / Matrix / Stats views'}>
-      <select
+    <div className="locus-bar" title={error ?? 'Genomic window, shared by the Genome / Matrix / Stats views'}>
+      <Select
         value={locus.chrom}
         onChange={(e) => {
           const c = chroms.find((x) => x.name === e.target.value)
@@ -30,24 +34,26 @@ export function LocusBar() {
         }}
       >
         {chroms.map((c) => (
-          <option key={c.name}>{c.name}</option>
+          <option key={c.name} value={c.name}>
+            {c.name === GENOME ? GENOME_LABEL : c.name}
+          </option>
         ))}
-      </select>
+      </Select>
       <input
-        className={error ? 'bad' : ''}
+        className={`locus-input${error ? ' bad' : ''}`}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && go()}
-        onBlur={() => locus && setText(fmtLocus(locus))}
+        onBlur={() => locus && setText(fmtLocus(locus, chroms))}
         spellCheck={false}
       />
-      <button onClick={() => setLocus(zoomLocus(locus, 0.5, ext))} title="Zoom in">
+      <button className="locus-zoom" onClick={() => setLocus(zoomLocus(locus, 0.5, ext))} title="Zoom in">
         +
       </button>
-      <button onClick={() => setLocus(zoomLocus(locus, 2, ext))} title="Zoom out">
+      <button className="locus-zoom" onClick={() => setLocus(zoomLocus(locus, 2, ext))} title="Zoom out">
         −
       </button>
-      <button onClick={() => ext && setLocus({ chrom: ext.name, start: ext.start, end: ext.end })} title="Whole chromosome">
+      <button className="locus-zoom" onClick={() => ext && setLocus({ chrom: ext.name, start: ext.start, end: ext.end })} title={locus.chrom === GENOME ? 'Whole genome' : 'Whole chromosome'}>
         full
       </button>
     </div>

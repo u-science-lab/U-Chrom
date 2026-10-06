@@ -14,6 +14,15 @@ import type { DistanceStat, TrackAgg } from './workspace'
 
 export type GenomeRowKind = 'matrix' | 'track' | 'intervals'
 
+/**
+ * How a matrix row draws its map: `triangle` — the upper triangle of the window
+ * rotated 45° (HiGlass); `window` — the same rotation filling the whole row with
+ * contacts of loci beyond the window's edges (CoolBox "window"); `square` — the
+ * window × window matrix unrotated, stretched to the row.
+ */
+export type MatrixShape = 'triangle' | 'window' | 'square'
+export const MATRIX_SHAPES: MatrixShape[] = ['triangle', 'window', 'square']
+
 export interface GenomeRow {
   id: string
   kind: GenomeRowKind
@@ -29,6 +38,8 @@ export interface GenomeRow {
   maxDist?: number | null
   /** matrix: diagonal at the top of the row (triangle pointing down) */
   flip?: boolean
+  /** matrix: how the map is drawn (absent = triangle) */
+  shape?: MatrixShape
   /** track: track name */
   track?: string | null
   /** intervals: results key */
@@ -103,7 +114,7 @@ export function resizeRow(rows: GenomeRow[], id: string, height: number): Genome
 }
 
 /** Settings of a row edited in the inspector. */
-export type RowSetting = 'source' | 'resolution' | 'balance' | 'stat' | 'threshold' | 'maxDist' | 'flip' | 'track' | 'key' | 'height' | 'agg'
+export type RowSetting = 'source' | 'resolution' | 'balance' | 'stat' | 'threshold' | 'maxDist' | 'flip' | 'shape' | 'track' | 'key' | 'height' | 'agg'
 
 /**
  * Row patch for one edited setting (text inputs arrive as strings, check
@@ -123,6 +134,8 @@ export function rowPatch(setting: RowSetting, value: string | boolean): Partial<
     case 'track':
     case 'key':
       return text ? { [setting]: text } : null
+    case 'shape':
+      return MATRIX_SHAPES.includes(text as MatrixShape) ? { shape: text as MatrixShape } : null
     case 'agg':
       return text === 'mean' || text === 'median' || text === 'max' ? { agg: text } : null
     case 'stat':
@@ -201,6 +214,7 @@ export function parseRows(raw: unknown): GenomeRow[] | null {
     if (typeof x.threshold === 'number' && x.threshold > 0) row.threshold = x.threshold
     if (typeof x.maxDist === 'number' && x.maxDist > 0) row.maxDist = x.maxDist
     if (typeof x.flip === 'boolean') row.flip = x.flip
+    if (x.shape && MATRIX_SHAPES.includes(x.shape)) row.shape = x.shape
     if (typeof x.track === 'string') row.track = x.track
     if (typeof x.key === 'string') row.key = x.key
     const scope = parseScopeSpec(x.scope, true)
@@ -325,23 +339,26 @@ export function rasterTriangle(
   starts: readonly number[],
   ends: readonly number[],
   colors: Uint8ClampedArray,
+  window = false,
 ): Uint8ClampedArray {
   const n = starts.length
   const out = new Uint8ClampedArray(4 * width * height)
-  // bin at every 1/LUT_SUB px along the axis (positions outside the locus: −1)
-  const lut = new Int32Array(width * LUT_SUB + 1)
-  for (let q = 0; q < lut.length; q++) lut[q] = binAt(starts, ends, g.start + ((q + 0.5) / LUT_SUB) * g.bpPerPx)
+  // window: loci up to the deepest half-separation beyond either edge
+  const margin = window ? Math.ceil(height * g.k) + 1 : 0
+  // bin at every 1/LUT_SUB px along the axis, from −margin (positions without a bin: −1)
+  const lut = new Int32Array((width + 2 * margin) * LUT_SUB + 1)
+  for (let q = 0; q < lut.length; q++) lut[q] = binAt(starts, ends, g.start + ((q + 0.5) / LUT_SUB - margin) * g.bpPerPx)
   for (let py = 0; py < height; py++) {
     const yc = py + 0.5
     const t = g.flip ? yc : height - yc
     const half = t * g.k
     if (g.maxDist !== null && 2 * half * g.bpPerPx > g.maxDist * (1 + 1e-9)) continue
     const row = 4 * width * py
-    // columns whose two loci both fall inside [0, width)
-    const x0 = Math.max(0, Math.ceil(half - 0.5))
-    const x1 = Math.min(width, Math.floor(width - half - 0.5) + 1)
+    // triangle: columns whose two loci both fall inside [0, width); window: every column
+    const x0 = window ? 0 : Math.max(0, Math.ceil(half - 0.5))
+    const x1 = window ? width : Math.min(width, Math.floor(width - half - 0.5) + 1)
     for (let px = x0; px < x1; px++) {
-      const xc = px + 0.5
+      const xc = px + 0.5 + margin
       const qa = Math.floor((xc - half) * LUT_SUB)
       const qb = Math.floor((xc + half) * LUT_SUB)
       if (qa < 0 || qb >= lut.length) continue
@@ -357,4 +374,66 @@ export function rasterTriangle(
     }
   }
   return out
+}
+
+/** Genomic span a window-shaped row needs beyond each edge of the axis (bp): the deepest
+ *  half-separation it draws. */
+export function windowMargin(g: TriangleGeom): number {
+  const deepest = 2 * g.height * g.k * g.bpPerPx
+  return (g.maxDist !== null ? Math.min(deepest, g.maxDist) : deepest) / 2
+}
+
+/**
+ * RGBA pixels of an unrotated matrix view: column x shows the locus xStart + (x + ½)·xBpPerPx,
+ * row y the locus yStart + (y + ½)·yBpPerPx.  Pixels without a bin stay transparent.
+ */
+export function rasterMatrix(
+  width: number,
+  height: number,
+  v: { xStart: number; yStart: number; xBpPerPx: number; yBpPerPx: number },
+  starts: readonly number[],
+  ends: readonly number[],
+  colors: Uint8ClampedArray,
+): Uint8ClampedArray {
+  const n = starts.length
+  const out = new Uint8ClampedArray(4 * width * height)
+  const col = new Int32Array(width)
+  for (let x = 0; x < width; x++) col[x] = binAt(starts, ends, v.xStart + (x + 0.5) * v.xBpPerPx)
+  for (let y = 0; y < height; y++) {
+    const j = binAt(starts, ends, v.yStart + (y + 0.5) * v.yBpPerPx)
+    if (j < 0) continue
+    const row = 4 * width * y
+    for (let x = 0; x < width; x++) {
+      const i = col[x]
+      if (i < 0) continue
+      const src = 4 * (j * n + i)
+      const dst = row + 4 * x
+      out[dst] = colors[src]
+      out[dst + 1] = colors[src + 1]
+      out[dst + 2] = colors[src + 2]
+      out[dst + 3] = 255
+    }
+  }
+  return out
+}
+
+/** The `square` row shape: the window × window matrix (top = window start) stretched to the row. */
+export function rasterSquare(
+  width: number,
+  height: number,
+  start: number,
+  bpPerPx: number,
+  starts: readonly number[],
+  ends: readonly number[],
+  colors: Uint8ClampedArray,
+): Uint8ClampedArray {
+  return rasterMatrix(width, height, { xStart: start, yStart: start, xBpPerPx: bpPerPx, yBpPerPx: (width * bpPerPx) / height }, starts, ends, colors)
+}
+
+/** Bins (row j, column i) of the square shape at row point (x, y), or null outside the map. */
+export function squareBins(x: number, y: number, width: number, height: number, start: number, bpPerPx: number, starts: readonly number[], ends: readonly number[]): [number, number] | null {
+  if (x < 0 || y < 0 || x >= width || y >= height) return null
+  const i = binAt(starts, ends, start + x * bpPerPx)
+  const j = binAt(starts, ends, start + (y / height) * width * bpPerPx)
+  return i < 0 || j < 0 ? null : [j, i]
 }

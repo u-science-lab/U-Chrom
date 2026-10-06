@@ -32,7 +32,7 @@ def test_summary_lists_genome_views():
     assert s["has_coords"] is True
     assert s["n_bins"] == 3
     # non-numeric columns are not tracks
-    assert s["tracks"] == [{"name": "ATAC", "level": "bin"}, {"name": "H3K27ac", "level": "spot"}]
+    assert s["tracks"] == [{"name": "ATAC", "level": "bin", "grid": "spots"}, {"name": "H3K27ac", "level": "spot", "grid": "spots"}]
     assert s["intervals"] == [{"key": "tads", "n": 3, "kind": None}]
     assert s["contact_maps"] == []
 
@@ -190,3 +190,64 @@ def test_simulated_structure_agrees_with_its_contacts():
     ok = np.isfinite(d)
     ratio = np.median(d[ok & (c > 0)]) / np.median(d[ok & (c == 0)])
     assert ratio < 0.7  # observed 0.51 on chr2
+
+
+def test_whole_genome_view(tmp_path, monkeypatch):
+    """chrom="*": chromosomes end to end (natural order), maps / tracks / intervals in genome
+    coordinates."""
+    cooler = pytest.importorskip("cooler")
+    import uchrom.browser.web.data as data
+
+    res = 100
+    # the cooler lists chr2 before chr1: the genome view reorders to chr1, chr2
+    bins = pd.DataFrame({"chrom": ["chr2"] * 3 + ["chr1"] * 4,
+                         "start": [0, 100, 200, 0, 100, 200, 300], "end": [100, 200, 300, 100, 200, 300, 400]})
+    i, j = np.triu_indices(len(bins))
+    pix = pd.DataFrame({"bin1_id": i, "bin2_id": j, "count": 1 + i + 2 * j})
+    cooler.create_cooler(str(tmp_path / "bulk.cool"), bins, pix, ordered=True)
+    cooler.create_scool(str(tmp_path / "cells.scool"), bins,
+                        {"c1": pix, "c2": pix.assign(count=2)}, ordered=True)
+
+    ds = _two_cell_dataset()
+    ds.cd.link_cool(str(tmp_path / "bulk.cool"), key="bulk")
+    ds.cd.link_scool(str(tmp_path / "cells.scool"), key="cells")
+    lay = ds.summary()["genome"]
+    assert [(c["name"], c["offset"], c["length"]) for c in lay] == [("chr1", 0, 400), ("chr2", 400, 300)]
+
+    # the dense map, rows / columns in genome order (chr1 bins, then chr2)
+    dense = cooler.Cooler(str(tmp_path / "bulk.cool")).matrix(balance=False)[:]
+    order = [3, 4, 5, 6, 0, 1, 2]
+    want = dense[np.ix_(order, order)]
+    m = decode_matrix(ds.contacts("bulk", "*"))
+    assert m["header"]["chrom"] == "*" and m["header"]["resolution"] == res
+    assert m["header"]["bin_starts"] == [0, 100, 200, 300, 400, 500, 600]
+    np.testing.assert_array_equal(m["matrix"], want)
+
+    # a group of a per-cell map: the sum of its cells' maps
+    ref = ds.register_group(["c1", "c2"], "both")["id"]
+    g = decode_matrix(ds.contacts("cells", "*", group=ref))
+    c2 = np.where(dense > 0, 2, 0)
+    np.testing.assert_array_equal(g["matrix"], want + c2[np.ix_(order, order)])
+    assert g["header"]["n_cells"] == 2
+    c1 = decode_matrix(ds.contacts("cells", "*", cell="c1"))
+    np.testing.assert_array_equal(c1["matrix"], want)
+    with pytest.raises(LookupError):
+        ds.contacts("cells", "*")
+
+    # pooled within each chromosome (never across a boundary); the total is kept
+    monkeypatch.setattr(data, "MAX_MATRIX_BINS", 4)
+    ds._cache.pop("genome_contacts", None)
+    p = decode_matrix(ds.contacts("bulk", "*"))
+    assert p["header"]["resolution"] == 2 * res and "2x2 bins pooled" in p["header"]["note"]
+    assert p["header"]["bin_starts"] == [0, 200, 400, 600] and p["header"]["bin_ends"] == [200, 400, 600, 700]
+    assert p["matrix"].sum() == pytest.approx(want.sum())
+
+    # tracks and intervals in genome coordinates
+    t = ds.tracks(["ATAC"], "*")
+    assert t["chrom"] == "*" and t["bin_starts"] == [0, 100, 200] and t["values"]["ATAC"] == [0.5, 1.5, 2.5]
+    iv = ds.intervals("tads", "*")
+    cols = iv["columns"]
+    rows = {(r[cols.index("chrom")], r[cols.index("start")], r[cols.index("end")]) for r in iv["rows"]}
+    assert ("chr2", 400, 410) in rows and ("chr1", 150, 300) in rows
+    with pytest.raises(ValueError, match="per chromosome"):
+        ds.distance("*")
