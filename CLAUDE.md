@@ -26,8 +26,8 @@ From the structure table, downstream modules perform:
 
 ## Package Structure
 
-A monorepo: the analysis library `u-chrom` (import `uchrom`) at the root, the packages it is built
-with or that build on it in `packages/`, deployments in `apps/`.
+A monorepo: every package in `packages/` (each with its own pyproject, README and `tests/`),
+deployments in `apps/`; the root holds the repository (docs, benchmarks, tutorials, example-data, skills).
 
 ```
 packages/
@@ -42,18 +42,21 @@ packages/
 │                      auto-discovery — ChromData schema → ideas → notebooks → verification →
 │                      evidence; iterative idea graph, pre-discovery enrichment, Pantheon /
 │                      Claude / Codex CLI backends, graph UI.
-└── uchrom-recon/     `uchrom-recon` (import uchrom_recon): Rust + PyO3 (maturin, abi3)
-                       NucDynamics engine — contact preprocessing, hierarchical annealing, CPU
-                       (f64, rayon) and GPU (wgpu/WGSL, f32, feature `gpu`) backends, protocols
-                       nuc_dynamics_2017 (default) / release_1.3 / robust (= EMber, alias "ember":
-                       noise-aware method, src/robust.rs; PREREG in benchmarks/screcon) / igm.
-                       `cargo test` in packages/uchrom-recon; `pip install ./packages/uchrom-recon`
-                       (= extra `u-chrom[recon]`).  LGPL-3.0 (re-implementation of tjs23/nuc_dynamics).
+├── uchrom-recon/      `uchrom-recon` (import uchrom_recon; formerly u-chrom-nucdyn / uchrom_nucdyn):
+│                      the native 3-D reconstruction engine, Rust + PyO3 (maturin, abi3) —
+│                      contact preprocessing, hierarchical annealing, CPU (f64, rayon) and GPU
+│                      (wgpu/WGSL, f32, feature `gpu`) backends, protocols nuc_dynamics_2017
+│                      (default) / release_1.3 / robust (= EMber, alias "ember": noise-aware
+│                      method, src/robust.rs; PREREG in benchmarks/screcon) / igm.  `cargo test`
+│                      in packages/uchrom-recon; `pip install ./packages/uchrom-recon` (= extra
+│                      `u-chrom[recon]`).  LGPL-3.0 (re-implementation of tjs23/nuc_dynamics).
+└── uchrom/            `u-chrom` (import uchrom) — the analysis library (depends on chromdata);
+                       the tree below is packages/uchrom/uchrom/
 apps/
-├── atlas/             the atlas: datasets.json, site + thumbnails (build.py), publishing (deploy/)
+├── atlas/             the atlas: datasets.json, site + thumbnails (build.py, tests/), publishing (deploy/)
 └── hosted-browser/    the public web browser: Cloudflare Worker + container (chromdata + uchrom-browser)
 
-uchrom/                `u-chrom` — the analysis library (depends on chromdata)
+uchrom/                (packages/uchrom/uchrom)
 ├── core/            deprecated alias of chromdata (`from chromdata import ChromData`)
 ├── convention.py    the calling convention of analysis functions
 ├── io/              Data I/O (.pairs, .cool, .hic, .3dg, .csv, .pdb, seqFISH multi-omics)
@@ -89,9 +92,9 @@ uchrom/                `u-chrom` — the analysis library (depends on chromdata)
 └── op.py            Misc operations (mark empty particles)
 ```
 
-- **Development install** (the packages are not on PyPI): `uv pip install -e ".[web]"` (the
+- **Development install** (the packages are not on PyPI): `uv pip install -e "packages/uchrom[web]"` (the
   `[tool.uv.sources]` of each pyproject take the sibling packages from their folders), or with pip
-  `pip install -e packages/chromdata -e packages/uchrom-browser -e ".[web]"`;
+  `pip install -e packages/chromdata -e packages/uchrom-browser -e "packages/uchrom[web]"`;
   discovery: `pip install -e packages/uchrom-discovery`; the native engine: `pip install ./packages/uchrom-recon`
   (needs Rust).
 - **Package dependencies**: chromdata ← uchrom-browser; chromdata ← uchrom ← uchrom-discovery;
@@ -109,9 +112,16 @@ uchrom/                `u-chrom` — the analysis library (depends on chromdata)
   `manuscripts/full/figures/<fig>/results/*.json` there (`benchmarks/_paper.py`, `$UCHROM_PAPER`); library
   changes a figure needs are made here first.  Never re-create `paper/` in this repository; a
   symlink `paper -> ../u-chrom-paper` (ignored) may show the paper checkout next to the code.
-- Run the test suites separately (each has a `tests` package):
-  `pytest tests` from the root, `cd packages/uchrom-discovery && pytest tests`,
-  `cd packages/chromdata && pytest tests`, `cd packages/uchrom-browser && pytest tests`.
+- **Tests live in each package** (`packages/<pkg>/tests`, `apps/atlas/tests`); every suite is a
+  `tests` package, so run each from its folder: `cd packages/uchrom && pytest tests` (likewise
+  chromdata, uchrom-browser, uchrom-discovery; `cd apps/atlas && pytest tests`; `cargo test` in
+  uchrom-recon).  A test goes to the package whose code it tests: chromdata's and uchrom-browser's
+  suites run without uchrom installed; tests of the legacy `.h5cd` container / the upgrade are
+  uchrom's (`uchrom.io`); integration tests (uchrom + the browser) are uchrom's and skip without
+  uchrom-browser.  Shared fixtures (an object with every attribute, a store with linked / embedded
+  maps, a folder atlas, an HTTP server with range requests, store comparisons) are
+  `chromdata.testing`; each suite's `tests/__init__.py` has `REPO` (the repository root, for
+  example-data/).
 - `uchrom` stays pure Python: it imports `uchrom_recon` lazily (tests skip
   when it is not installed); the native crate never imports `uchrom`.
 

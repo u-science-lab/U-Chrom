@@ -57,15 +57,16 @@ $ pip install -e packages/uchrom-browser -e "packages/uchrom[web]"   # + the web
 
 ## Repository layout
 
-The repository holds several packages that are developed together:
+The repository holds several packages that are developed together, each with its own tests
+(`cd packages/<package> && pytest tests`):
 
 | Folder | Package (import) | What it is |
 |--------|------------------|------------|
-| `uchrom/` | `u-chrom` (`uchrom`) | the analysis library: I/O, reconstruction, structures, features, embeddings, plots |
+| `packages/uchrom/` | `u-chrom` (`uchrom`) | the analysis library: I/O, reconstruction, structures, features, embeddings, plots |
 | `packages/chromdata/` | `chromdata` | the data model: `ChromData` and its `.chromdata.zarr` store (numpy / pandas / zarr / pyarrow only) |
 | `packages/uchrom-browser/` | `uchrom-browser` (`uchrom_browser`) | the web browser (needs `chromdata`, not `uchrom`) |
 | `packages/uchrom-discovery/` | `uchrom-discovery` (`uchrom_discovery`) | LLM-driven auto-discovery on top of `uchrom` |
-| `packages/uchrom-recon/` | `uchrom-recon` (`uchrom_recon`) | the native NucDynamics / EMber engine (Rust) |
+| `packages/uchrom-recon/` | `uchrom-recon` (`uchrom_recon`) | the native reconstruction engine: NucDynamics, EMber, IGM population modelling (Rust) |
 | `apps/` | — | the data atlas and the hosted web browser (deployments) |
 
 ## Usage
@@ -73,7 +74,7 @@ The repository holds several packages that are developed together:
 ### Single-cell 3D reconstruction
 
 ```bash
-$ pip install ./packages/uchrom-recon   # native NucDynamics engine (Rust; CPU + GPU)
+$ pip install ./packages/uchrom-recon   # native reconstruction engine (NucDynamics, EMber; Rust; CPU + GPU)
 $ python -m uchrom.recon.sc.nucdyn example-data/cell1.pairs ./cell1.chromdata.zarr --n_models=10 --device=auto
 ```
 
