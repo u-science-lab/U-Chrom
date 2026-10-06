@@ -277,6 +277,8 @@ export interface GeometryHeader {
   /** null when the selection has no points (API.md) */
   bbox: { min: [number, number, number]; max: [number, number, number] } | null
   chrom_extent: Record<string, [number, number]>
+  /** a large store's overview: whole cells taken in a fixed random order (API.md, geometry) */
+  sample?: { cells: number; of_cells: number } | null
 }
 
 export interface Geometry {

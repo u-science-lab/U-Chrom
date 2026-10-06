@@ -18,6 +18,6 @@
 		"UChromBrowser": { "type": "durable-object", "storage": "sqlite" }
 	},
 	"observability": { "enabled": true },
-	"vars": { "INSTANCES": "2", "RELEASE": "r13" },
+	"vars": { "INSTANCES": "2", "RELEASE": "r14" },
 	"routes": [{ "pattern": "uchrom-browser.u-science.org", "custom_domain": true }]
 }

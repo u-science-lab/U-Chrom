@@ -19,6 +19,7 @@ import { useStore } from './store'
 import { startControl } from './control'
 import { useCellLoader } from './useCellLoader'
 import { useGeometryLoader } from './useGeometryLoader'
+import { useFocusGeometry } from './useFocusGeometry'
 import { useOmicsLoader } from './useOmicsLoader'
 import { registerWebMcpTools } from './webmcp'
 import { sidebarKey } from './sidebars'
@@ -28,6 +29,7 @@ export function App() {
   const setError = useStore((s) => s.setError)
   const addDataset = useStore((s) => s.addDataset)
   useGeometryLoader()
+  useFocusGeometry()
   useCellLoader()
   useOmicsLoader()
   useSystemTheme()

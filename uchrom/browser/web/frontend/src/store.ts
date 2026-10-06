@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { mergeGeometry } from './geometry'
 import { setGroupResolver } from './api'
 import { groupColor, nextGroupName, parseSavedGroups, removeGroup, renameGroup, upsertGroup, type GroupRef, type SavedGroup, type Selection } from './groups'
 import { DEFAULT_STYLE, removeCascade, uniqueName } from './layers'
@@ -160,6 +161,8 @@ export interface AppState {
   setStyle(id: string, style: Partial<LayerStyle>): void
   setLoading(id: string): void
   setGeometry(id: string, geometry: Geometry): void
+  /** merge cells fetched on their own into a layer's (sampled) geometry; `fly` re-aims at the focus */
+  extendGeometry(id: string, extra: Geometry, fly: boolean): void
   setLayerError(id: string, error: string): void
   selectLayer(id: string | null): void
   setPick(pick: PickInfo | null): void
@@ -402,6 +405,15 @@ export const useStore = create<AppState>((set, get) => {
       layers: patchLayer(s.layers, id, { geometry, loading: false, error: null }),
       ...(refit ? { resetViewToken: s.resetViewToken + 1 } : {}),
     })
+  },
+
+  extendGeometry(id, extra, fly) {
+    const s = get()
+    const layer = s.layers.find((l) => l.id === id)
+    if (!layer?.geometry) return
+    const geometry = mergeGeometry(layer.geometry, extra)
+    if (geometry === layer.geometry) return
+    set({ layers: patchLayer(s.layers, id, { geometry }), ...(fly ? { flyToken: s.flyToken + 1 } : {}) })
   },
 
   setLayerError(id, error) {
