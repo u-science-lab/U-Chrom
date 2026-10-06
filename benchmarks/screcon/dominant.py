@@ -719,6 +719,23 @@ def youden(pos, neg, direction):
             "flag_if": ">=" if direction > 0 else "<="}
 
 
+def logistic_fit_predict(X, y, Xnew, l2=1.0) -> np.ndarray:
+    """L2-regularised logistic regression (intercept unpenalised); probabilities for ``Xnew``."""
+    from scipy.optimize import minimize
+    A = np.column_stack([np.ones(len(X)), X])
+
+    def f(w):
+        z = A @ w
+        ll = np.sum(np.logaddexp(0, z) - y * z) + 0.5 * l2 * np.sum(w[1:] ** 2)
+        p = 1 / (1 + np.exp(-z))
+        g = A.T @ (p - y)
+        g[1:] += l2 * w[1:]
+        return ll, g
+
+    w = minimize(f, np.zeros(A.shape[1]), jac=True, method="L-BFGS-B").x
+    return 1 / (1 + np.exp(-(np.column_stack([np.ones(len(Xnew)), Xnew]) @ w)))
+
+
 def cmd_aggregate(args) -> None:
     import pandas as pd
     df = pd.concat([pd.read_csv(f, sep="\t") for f in args.scores], ignore_index=True)
@@ -822,6 +839,30 @@ def cmd_aggregate(args) -> None:
         if v:
             means[q] = float(np.mean(v))
     out["QC_mean_auc"] = means
+    best = max(means, key=lambda q: means[q]) if means else None
+    out["QC_best"] = best
+    # secondary: logistic combination of Q1-Q7 + log N, leave-one-dominant-out within dataset
+    out["QC_logistic_lodo"] = {}
+    for ds, g in df.groupby("dataset"):
+        units = pd.concat([g[g.kind == "pure"].drop_duplicates(["dominant", "N", "level"]), g[g.kind == "mix"]])
+        units = units[~np.isclose(units.f, 0.7)].assign(single=lambda u: u.f >= 0.8 - 1e-9)
+        feats = [q for q in QC_DIR if q in units]
+        X = np.column_stack([units[q].to_numpy(float) for q in feats] + [np.log(units.N.to_numpy(float))])
+        ok = np.isfinite(X).all(1)
+        units, X = units[ok], X[ok]
+        y = (~units.single).to_numpy(float)                     # 1 = mixed
+        pred = np.full(len(y), np.nan)
+        for dom in units.dominant.unique():
+            tr = (units.dominant != dom).to_numpy()
+            mu, sd = X[tr].mean(0), X[tr].std(0) + 1e-12
+            pred[~tr] = logistic_fit_predict((X[tr] - mu) / sd, y[tr], (X[~tr] - mu) / sd)
+        res = {}
+        for lv in levels:
+            s = (units.level == lv).to_numpy()
+            if s.any() and 0 < y[s].sum() < s.sum():
+                from metrics import roc_auc
+                res[lv] = roc_auc(pred[s & (y == 1)], pred[s & (y == 0)])
+        out["QC_logistic_lodo"][ds] = {"levels": res, "auc_mean": float(np.mean(list(res.values()))) if res else np.nan}
     Path(args.out).mkdir(parents=True, exist_ok=True)
     (Path(args.out) / "dominant_dev.json").write_text(json.dumps(out, indent=1, default=float))
     # markdown
@@ -851,6 +892,21 @@ def cmd_aggregate(args) -> None:
             lines.append(f"| {q} | " + " | ".join(cells) + f" | {x['auc_mean']:.3f} |")
         lines.append("")
     lines.append("Mean AUC over datasets: " + ", ".join(f"{q} {v:.3f}" for q, v in sorted(means.items(), key=lambda t: -t[1])))
+    lines.append("")
+    lines.append("Logistic combination (Q1-Q7 + log N), leave-one-dominant-out AUC: " + "; ".join(
+        f"{ds} " + ", ".join(f"{lv} {v:.2f}" for lv, v in r["levels"].items()) + f" (mean {r['auc_mean']:.3f})"
+        for ds, r in out["QC_logistic_lodo"].items()))
+    for rank, best in enumerate(sorted(means, key=lambda q: -means[q])[:2]):
+        lines.append("")
+        lines.append(f"### QC threshold {'proposal' if rank == 0 else 'runner-up'}: {best} (mean AUC {means[best]:.3f}), "
+                     "Youden's J per dataset and level (development)\n")
+        lines.append("| dataset | level | flag as mixed if | threshold | sensitivity (mixed flagged) | specificity (single kept) | Spearman vs E1 |")
+        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+        for ds, rec in qc.items():
+            for lv, v in rec[best]["levels"].items():
+                y = v["youden"]
+                lines.append(f"| {ds} | {lv} | {best} {y['flag_if']} | {y['threshold']:.4g} | {y['sens']:.2f} | {y['spec']:.2f} | "
+                             f"{v['spearman_vs_e1']:+.2f} |")
     (Path(args.out) / "dominant_dev.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
 

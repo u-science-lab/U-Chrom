@@ -24,6 +24,7 @@ it runs in the Sherlock `venv-main`, which has no U-Chrom install.  Reusable par
 | `diploid*.py`, `run_diploid.py` | diploid (homolog-resolved) benchmarks: copy-chain convention and phased I/O, imaging-truth simulation with phasing, held-out on copy chains, Dip-C GM12878 references / phase hold-back, aggregation and the pre-registered test (`diploid_devlog.md`, `DIPLOID_TEST_RESULTS.md`) |
 | `matched_data.py` | matched-modality inputs: structure sets on the 2,460 Takei 1 Mb loci (`data/takei2021_1mb_loci.csv`), Takei 2021 mESC / brain imaging (homolog copies), Nagano 2017 fend pairs → mm10 tables, models / Dip-C `.3dg` → sets |
 | `matched.py` | matched-modality comparison: scHi-C structures vs imaging of the same cell type as distributions over cells (§6) |
+| `dominant.py` | a spot reconstructed as one cell (PREREG §13): nested mixtures of real cells with a dominant share f, EMber / NucDynamics runs, dominant-cell recovery (E1 / E2) and spot QC metrics (E3); jobs `sherlock/dom_*.sbatch`, record `dominant_devlog.md` |
 | `sherlock/*.sbatch` | the jobs (`_env.sh` holds the paths) |
 | `tests/` | `pytest benchmarks/screcon/tests` (~2 s; synthetic toys only check the scorers and I/O) |
 

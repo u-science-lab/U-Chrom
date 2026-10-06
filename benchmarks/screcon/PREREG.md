@@ -612,3 +612,15 @@ units only.  Code: `dominant.py` (cells, designs, tables, runs, scoring, aggrega
     phase labels are kept as given (the mixture's copy labels of the dominant are its own).
 * **Expected cost** (development): ~4,100 runs (Nagano ~1,900, Stevens ~1,000, Tan ~1,200), haploid
   ~10-20 s per run, diploid 10 s - 5 min; ~20 GPU hours.
+
+### 13.1 Development results (2026-10-06; development units only, `dominant_devlog.md`)
+
+Nothing of the held-back sets has been built or run.  E1: the dominant's structure stays within 0.05 of the
+pure control only at f = 0.9 (f_drop = 0.8 for most dataset × level cells, 0.9 for Stevens 30 k and Tan
+30 k / full); at f = 0.5 the per-copy r falls by 0.12-0.47 and the structure agrees as much with the minor
+cell as with the dominant.  E2: EMber − NucDynamics +0.004 to +0.020 on haploid mixtures; diploid (EMber
+deep) −0.010 / −0.012 at 10 k / 30 k and +0.015 / +0.025 at 100 k / full.  E3: mean AUC Q3 violation rate
+0.91, Q7 partner conflict 0.89, Q2 0.87, Q5 / Q6 0.75, Q4 0.71, Q1 ε 0.51 (ε at its lower bound).
+**Proposed QC rule (registered selection rule; not frozen until the user approves the held-back test)**:
+Q3 with the per-dataset, per-level Youden thresholds of `dominant_devlog.md` §4; Q7 reported alongside.
+The thresholds are protocol-specific and are not to be applied to other datasets without calibration.
