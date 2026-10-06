@@ -435,8 +435,7 @@ def recover_3d_coor_single_chr(raw, lnr, fla_mat, trf):
             x,
             args=(raw, mats),
             method="L-BFGS-B",
-            jac=jac_pdist,
-            options={"disp": False},
+            jac=jac_pdist,  # (upstream's options={"disp": False}: unknown to SciPy >= 1.15, warned per call)
         ).x
         # set bins with no available target dists to NaN
         target_nan = np.sum(np.isnan(mats[0]), axis=1)

@@ -271,8 +271,9 @@ def _default_factory(which: str) -> Callable[..., Any]:
             from fasthigashi.FastHigashi_Wrapper import FastHigashi as _W
         except ImportError as e:
             raise ImportError(
-                "fasthigashi is not installed.  Install with "
-                "`pip install u-chrom[emb]` or pass wrapper_factory=..."
+                "fasthigashi is not installed.  Install it with "
+                "`pip install 'fast-higashi @ git+https://github.com/ma-compbio/Fast-Higashi' 'numpy<2'` "
+                "(u-chrom[emb]) or pass wrapper_factory=..."
             ) from e
         return _W
     if which == "full":

@@ -11,10 +11,16 @@ from ._snapfish.impute import (
     to_dist_df,
     normalize_pdist_by1d,
     impute_pdist_one_iter,
-    inverse_trf,
     recover_3d_coor_single_chr,
     count_na_in_pdist,
 )
+
+
+def _recover_one(*task):
+    """One haploid's recovery; its NaN / zero distances divide by zero by design (silenced, as in the
+    imputation loop — also in joblib workers, which do not inherit the caller's errstate)."""
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        return recover_3d_coor_single_chr(*task)
 
 
 def _recover_all(tasks, n_jobs=1, verbose=False):
@@ -29,13 +35,13 @@ def _recover_all(tasks, n_jobs=1, verbose=False):
     n_jobs=1 runs serially and is bit-for-bit identical to the original.
     """
     if n_jobs == 1 or len(tasks) < 2:
-        return [recover_3d_coor_single_chr(*t) for t in tasks]
+        return [_recover_one(*t) for t in tasks]
 
     from joblib import Parallel, delayed, parallel_config
 
     with parallel_config(backend="loky", inner_max_num_threads=1):
         return Parallel(n_jobs=n_jobs)(
-            delayed(recover_3d_coor_single_chr)(*t) for t in tasks
+            delayed(_recover_one)(*t) for t in tasks
         )
 
 
@@ -111,7 +117,8 @@ def impute_snapfish(cd, max_iter=50, ann=None, n_jobs=1, verbose=True):
     if verbose:
         print("Step 2/4: Computing pairwise distance matrices...")
     dist_df = to_dist_df(coor_df, ann_df)
-    norm_df = normalize_pdist_by1d(dist_df)
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):   # a bin pair seen once: no variance, NaN by design
+        norm_df = normalize_pdist_by1d(dist_df)
 
     # Step 4: Iterative imputation (single-process version)
     if verbose:
@@ -150,7 +157,12 @@ def impute_snapfish(cd, max_iter=50, ann=None, n_jobs=1, verbose=True):
         if verbose:
             print("Step 4/4: Recovering 3D coordinates...")
 
-        target_df = inverse_trf(norm_df)
+        # The recovery loss (loss_pdist) Box-Cox transforms and standardises
+        # the candidate distances itself, so its target is the imputed
+        # *normalised* distance, as in upstream's parallel_single_recover —
+        # not inverse_trf(norm_df), which is in nm and drove the imputed
+        # loci ~1e7 nm away.
+        target_df = norm_df
 
         # Collect one recovery task per haploid (KEYED by mask so results are
         # written back by identity, never by implicit row order).

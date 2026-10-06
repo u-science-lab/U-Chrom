@@ -138,6 +138,17 @@ def test_impute_snapfish():
     for k, v in before.items():
         np.testing.assert_allclose(after[k], v, rtol=1e-3, atol=1e-3)
 
+    # Imputed loci stay on the chain: within ~1 um of the linear interpolation
+    # (adjacent 5-kb loci are ~230 nm apart).  Recovering against the
+    # back-transformed (nm) instead of the normalised target distances put
+    # them ~1e7-1e8 nm away.
+    from uchrom.im.impute import impute_linear
+
+    lin = _coord_by_key(impute_linear(cd))
+    imputed = _coord_by_key(cd_imputed)
+    gaps = [np.linalg.norm(imputed[k] - lin[k]) for k in imputed if k not in before]
+    assert gaps and np.median(gaps) < 1_000
+
 
 def test_impute_coordinates_api(sample_chromdata):
     """Test the main impute_coordinates API."""
