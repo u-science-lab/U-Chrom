@@ -25,6 +25,7 @@ ds.list_datasets()                                # every source U-Chrom knows
 ```bash
 python -m uchrom.datasets list
 python -m uchrom.datasets fetch takei stevens2017
+python -m uchrom.datasets fetch --default        # everything the tutorials fetch (~0.9 GB)
 python -m uchrom.datasets path takei
 ```
 

@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **A monorepo, and no data in it.**  The packages live in `packages/`
+  (`chromdata`, `u-chrom`, `uchrom-browser`, `uchrom-discovery` and the
+  native engine `uchrom-recon`, formerly `u-chrom-nucdyn` / `uchrom_nucdyn`),
+  the deployments in `apps/` (the atlas, the hosted web browser).  The Qt
+  desktop browser, the Taichi NucDynamics port and GEM are removed (the web
+  browser and the native engine replace them; PyVista tubes are the `plot3d`
+  extra).  `example-data/` is gone: `uchrom.datasets.atlas(id)` opens a store
+  of the public atlas over HTTP; `uchrom.datasets.fetch(name)` /
+  `python -m uchrom.datasets fetch` downloads an original file from its
+  source (4DN, GEO, Zenodo, GitHub, UCSC; md5-checked) into `$UCHROM_DATA`,
+  else `~/.cache/uchrom` — some are built on first fetch (Rao 2014 Hi-C
+  slices read from the GEO `.hic` over HTTP, the first cells of a Takei 2025
+  field of view streamed from Zenodo); the recipes that build the atlas
+  stores are in `apps/atlas/recipes/`; unit tests read small fixtures in
+  `packages/*/tests/fixtures/`.  The tutorials read the atlas or fetch.
+- **`chromdata.embedded.export_scool` reads each chromosome once for all the
+  cells** (was cell by cell; 2,000 scHiCAR cells from the atlas over HTTP:
+  21 s, identical pixels) and takes `trans=False` (intra-chromosomal
+  contacts only).
 - **`.h5cd` is no longer a ChromData format.**  `ChromData.read` / `write`
   (and every loader, CLI and the browser built on them) refuse the HDF5
   `.h5cd` container of format 1.x / 2.0 with a `ValueError` that names the

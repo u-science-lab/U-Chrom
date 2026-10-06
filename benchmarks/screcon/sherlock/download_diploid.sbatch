@@ -1,6 +1,6 @@
 #!/bin/bash
-# Dip-C GM12878 (Tan et al. 2018, GSE117876; 17 cells, ~0.7 GB) into $DATA/tan2018_gm12878 (download_data.py
-# --tan2018_gm12878), then each hickit tarball unpacked to cells/gm12878_<k>/ (pairs.gz: hickit's imputed
+# Dip-C GM12878 (Tan et al. 2018, GSE117876; 17 cells, ~0.7 GB) into $DATA/tan2018_gm12878 (python -m
+# uchrom.datasets fetch tan2018_gm12878), then each hickit tarball unpacked to cells/gm12878_<k>/ (pairs.gz: hickit's imputed
 # phased pairs, phase0 / phase1 = raw SNP phases, phase_prob00..11 = hickit -u; 3dg.gz: hickit's structure).
 #
 #   sbatch benchmarks/screcon/sherlock/download_diploid.sbatch

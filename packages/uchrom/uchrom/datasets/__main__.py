@@ -15,7 +15,7 @@ def main(argv=None) -> None:
     sub.add_parser("atlas", help="datasets of the public atlas")
     f = sub.add_parser("fetch", help="download datasets from their sources")
     f.add_argument("names", nargs="*")
-    f.add_argument("--default", action="store_true", help="every dataset marked default")
+    f.add_argument("--default", action="store_true", help="the inputs of the tutorials")
     f.add_argument("--fig3", action="store_true", help="every input of the paper's Fig. 3")
     f.add_argument("--no-extract", action="store_true", help="skip members streamed out of archives")
     f.add_argument("--root", type=Path, default=None, help=f"data directory (default: {data_dir()})")
@@ -31,7 +31,7 @@ def main(argv=None) -> None:
     else:
         names = list(args.names)
         if args.default:
-            names += [k for k, v in _sources.DATASETS.items() if v.get("default", True) and k not in names]
+            names += [k for k, v in _sources.DATASETS.items() if v.get("default", False) and k not in names]
         if args.fig3:
             names += [k for k, v in _sources.DATASETS.items() if (v.get("fig3") or k == "bintu_imr90") and k not in names]
         if not names:

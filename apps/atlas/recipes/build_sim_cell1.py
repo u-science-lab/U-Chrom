@@ -9,9 +9,11 @@ the cell's own contact map, so the browser can show structure, contacts and
   sim_cell1/sim_cell1.cdz         20 chromosomes, ~25.7k particles at 100 kb, an
                                   ensemble of ``--n-models`` structures (coords =
                                   model 0, layers model_<k>); one-file ChromData
-                                  store, checked in (``--format zarr`` for the
-                                  directory store)
+                                  store (``--format zarr`` for the directory store)
   sim_cell1/cell1_contacts.mcool  the same cell's contacts, 100 kb … 1 Mb
+
+in the data directory (``$UCHROM_DATA``, else ``~/.cache/uchrom``).  The copy the browser's tests read is
+``packages/uchrom-browser/tests/fixtures/sim_cell1/`` (copy a rebuild there by hand).
 
 Usage::
 
@@ -62,7 +64,7 @@ def main() -> None:
     ap.add_argument("--n-models", type=int, default=4, help="structures in the ensemble")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--format", default="cdz", choices=["cdz", "zarr"],
-                    help="output container (default cdz: one file, checked in)")
+                    help="output container (default cdz: one file)")
     args = ap.parse_args()
     OUT.mkdir(exist_ok=True)
     pairs = HERE.parents[2] / "packages" / "uchrom" / "tests" / "fixtures" / "cell1.pairs.gz"

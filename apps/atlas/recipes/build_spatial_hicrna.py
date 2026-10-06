@@ -11,7 +11,7 @@ Hi-C and RNA are read from the **same spots** (one barcode grid per chip: 100 x 
 (the ``hicrna_`` prefix keeps the dataset names apart from the ATAC-Hi-C ``mouse_brain`` in the browser, which
 saves layouts per dataset name)
 
-Input (``download_data.py --spatial_hicrna``, ``spatial_hicrna/raw/GSE311199/``, 2.0 GB): per sample the
+Input (``python -m uchrom.datasets fetch spatial_hicrna``, ``spatial_hicrna/raw/GSE311199/``, 2.0 GB): per sample the
 10x RNA matrix of every barcode of the grid, the Visium-style positions (``tissue_positions_list.csv``:
 barcode, in_tissue, array_row, array_col, pxl_row, pxl_col), the tissue image, and for three samples
 the authors' processed Hi-C + RNA AnnData (cell types, clusters, latent spaces, single-spot A/B).

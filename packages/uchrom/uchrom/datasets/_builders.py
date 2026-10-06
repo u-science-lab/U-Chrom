@@ -5,6 +5,11 @@ files are 9-51 GB; ``hicstraw`` reads one over HTTP range requests, so only the 
 blocks needed are fetched (observed, raw counts; the MAPQ > 0 "combined" maps, as used by Bintu et al.
 2018).  Coordinates stay in hg19 with a ``chr`` prefix; nothing is normalised (``cooler balance`` if a
 method needs it).  Needs ``hic-straw`` (u-chrom[hic]) and ``cooler``.
+
+``seqfish_fov_head``: the first cells of one field of view of Takei et al. 2025 (DNA seqFISH+ multi-omics,
+Zenodo 7693825).  A field of view is one ~2 GB CSV inside a ~2.8 GB tarball; the tarball is streamed and
+closed after the first rows, the last (possibly cut) cell is dropped, and the locus map and the cell
+clustering (GitHub) are downloaded next to it.
 """
 
 from __future__ import annotations
@@ -68,3 +73,37 @@ def slice_hic(cell: str, chroms: list[str], res: int, out: Path) -> Path:
     print(f"wrote {out} ({out.stat().st_size / 1e6:.1f} MB, {px['count'].sum():,} contacts, "
           f"{time.time() - t0:.0f} s)")
     return out
+
+
+def seqfish_fov_head(tarball: str, member: str, rows: int, sidecars: list, out: Path) -> Path:
+    import tarfile
+    import urllib.request
+
+    from ._fetch import download
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    for name, url in sidecars:
+        download(url, out.parent / name, name)
+    if out.exists():
+        return out
+    print(f"[pull] first {rows:,} rows of {member} streamed out of {tarball}", flush=True)
+    with urllib.request.urlopen(tarball) as resp, tarfile.open(fileobj=resp, mode="r|gz") as tar:
+        for m in tar:
+            if m.name != member:
+                continue
+            fh = tar.extractfile(m)
+            buf, n_lines = bytearray(), 0
+            while n_lines <= rows:
+                chunk = fh.read(1 << 20)
+                if not chunk:
+                    break
+                buf += chunk
+                n_lines += chunk.count(b"\n")
+            df = pd.read_csv(__import__("io").BytesIO(b"\n".join(bytes(buf).split(b"\n")[: rows + 1])))
+            df = df[df["cellID"] != df["cellID"].iloc[-1]]       # the last cell may be cut off
+            tmp = out.with_suffix(out.suffix + ".part")
+            df.to_csv(tmp, index=False)
+            tmp.rename(out)
+            print(f"wrote {out} ({len(df):,} spots, {df['cellID'].nunique()} cells)")
+            return out
+    raise FileNotFoundError(f"{member} not found in {tarball}")

@@ -69,11 +69,13 @@ def fetch(name: str, *, root: Optional[Path] = None, extract: bool = True, verbo
     if "build" in entry:                 # built from its source (e.g. a .hic read over HTTP), not downloaded
         from . import _builders
 
-        out = root / items[0][0]
-        if not out.exists():
+        if not all((root / rel).exists() for rel, _ in items):
             func, kw = entry["build"]
-            getattr(_builders, func)(out=out, **kw)
-        return out
+            getattr(_builders, func)(out=root / items[0][0], **kw)
+        for rel, want in entry.get("md5", {}).items():
+            if md5(root / rel) != want:
+                raise IOError(f"md5 mismatch for {root / rel} (expected {want}); delete it and fetch again")
+        return path(name, root=root)
 
     def one(item):
         rel, url = item
@@ -107,12 +109,12 @@ def fetch(name: str, *, root: Optional[Path] = None, extract: bool = True, verbo
 
 
 def list_datasets():
-    """The datasets :func:`fetch` knows: name, size (MB), whether ``fetch --default`` includes it, description."""
+    """The datasets :func:`fetch` knows: name, size (MB), whether ``fetch --default`` (the tutorials' inputs) includes it, description."""
     import pandas as pd
 
     from ._sources import DATASETS
 
-    return pd.DataFrame([{"name": k, "size_mb": v.get("size_mb"), "default": v.get("default", True),
+    return pd.DataFrame([{"name": k, "size_mb": v.get("size_mb"), "default": v.get("default", False),
                           "description": v.get("description", "")} for k, v in DATASETS.items()]).set_index("name")
 
 

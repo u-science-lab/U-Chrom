@@ -42,7 +42,7 @@ PITFALLS (each is handled explicitly below; see the comments marked PITFALL):
      hippocampal types, so analyses are restricted to the cortex strip (RNA-only mask).
 
 Usage:
-    python benchmarks/spatial_composition/spatial_composition.py [--data EXAMPLE_DATA] [--out CACHE] [--figdata DIR]
+    python benchmarks/spatial_composition/spatial_composition.py [--data DATA_DIR] [--out CACHE] [--figdata DIR]
                                                                 [--stages e1,scores,geometry,composition,analysis]
 """
 from __future__ import annotations

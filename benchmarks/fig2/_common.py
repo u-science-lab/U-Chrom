@@ -48,7 +48,7 @@ RESULTS = results_dir("fig2")          # u-chrom-paper: manuscripts/full/figures
 WORK = Path(os.environ.get("UCHROM_FIG2_WORK", DATA / "fig2_work"))
 
 TAKEI_DIR = DATA / "takei2025_cerebellum"
-TAKEI_COMBINED = TAKEI_DIR / "takei2025_cerebellum_rep1.h5cd"
+TAKEI_COMBINED = TAKEI_DIR / "takei2025_cerebellum_rep1.chromdata.zarr"   # build_takei2025_cerebellum.py
 
 
 # ----------------------------------------------------------------------------- measurement

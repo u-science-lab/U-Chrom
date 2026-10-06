@@ -101,3 +101,6 @@ tutorials/_out/
 # the packages' test fixtures and the recipes' pipeline tables
 !packages/*/tests/fixtures/**
 !apps/atlas/recipes/**
+# ... but never byte code
+__pycache__/
+*.pyc

@@ -83,7 +83,7 @@ def bintu_ecsv() -> Path:
     out = DATA / "IMR90_chr21_pyhim.ecsv"
     if not out.exists():
         out = SCRATCH / "IMR90_chr21_pyhim.ecsv"
-        spec = importlib.util.spec_from_file_location("b2p", WT / "example-data" / "bintu_to_pyhim_ecsv.py")
+        spec = importlib.util.spec_from_file_location("b2p", WT / "apps" / "atlas" / "recipes" / "bintu_to_pyhim_ecsv.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         mod.CSV_PATH = DATA / "IMR90_chr21-18-20Mb.csv"
@@ -155,7 +155,7 @@ else:
     res["takei.roundtrip_values"] = {k: back[k] for k in takei.results}
 
 # ---------------------------------------------------------------- K562 Hi-C (DI TADs)
-cool = WT / "example-data" / "K562_chr21_30kb.cool"
+cool = WT / "packages" / "uchrom" / "tests" / "fixtures" / "K562_chr21_30kb.cool"
 if MODE == "old":
     import cooler
     import torch

@@ -34,9 +34,7 @@ from __future__ import annotations
 import gc
 import glob as _glob
 import re
-import shutil
 import tarfile
-import urllib.request
 import warnings
 import zipfile
 from dataclasses import dataclass
@@ -54,20 +52,7 @@ PathLike = Union[str, Path]
 
 
 ZENODO_RECORD = "7693825"
-ZENODO_BASE_URL = f"https://zenodo.org/api/records/{ZENODO_RECORD}/files"
 TRANSCRIPTOMIC_ZIP_NAME = "transcriptomic-data.zip"
-TRANSCRIPTOMIC_ZIP_URL = f"{ZENODO_BASE_URL}/{TRANSCRIPTOMIC_ZIP_NAME}/content"
-GITHUB_MEDIA_BASE_URL = (
-    "https://media.githubusercontent.com/media/"
-    "CaiGroup/dna-seqfish-plus-multi-omics/main"
-)
-CEREBELLUM_LOCUS_25KB_PATH = (
-    "data/annotation/LC1-100k-09022022-mm10-25kb-meta.csv"
-)
-CEREBELLUM_CLUSTERING_PATH = (
-    "data/cerebellum/clustering/"
-    "100k-002-001-cerebellum_mRNA_cluster_nuc_vol_filtered.csv"
-)
 
 
 DEFAULT_CEREBELLUM_LEIDEN_MAP: Dict[int, str] = {
@@ -545,18 +530,19 @@ def load_takei2025_cerebellum(
 
     This convenience loader returns a ``ChromData``.  The aggregated RNA
     expression matrix is available as ``cd.linked_adata``.  If paired
-    ``.chromdata.zarr`` / ``.h5ad`` artifacts already exist under ``data_dir``, they are reused.  Otherwise, when ``download=True``, the required
-    DNA seqFISH+ archive and transcriptome zip are downloaded from
-    Zenodo record 7693825, annotation/clustering tables are downloaded
-    from the CaiGroup GitHub repository, and linked artifacts are built.
+    ``.chromdata.zarr`` / ``.h5ad`` artifacts already exist under ``data_dir``, they are reused.  Otherwise, when
+    ``download=True``, the DNA seqFISH+ archive, the transcriptome zip (Zenodo record 7693825) and the
+    annotation / clustering tables (CaiGroup GitHub) are fetched with :mod:`uchrom.datasets`
+    (``takei2025_cerebellum`` or ``takei2025_cerebellum_rep2``, ``takei2025_rna``; md5-checked, into the data
+    directory) and the linked artifacts are built.
 
     Parameters
     ----------
     replicate
         Cerebellum replicate to load.  Currently ``1`` or ``2``.
     data_dir
-        Cache/build directory for downloaded raw files and linked
-        artifacts (default: ``<uchrom.datasets.data_dir()>/takei2025_cerebellum``).
+        Build directory of the extracted archive and the linked artifacts
+        (default: ``<uchrom.datasets.data_dir()>/takei2025_cerebellum``).
     download
         If False, missing raw/build artifacts raise ``FileNotFoundError``.
     rebuild
@@ -595,26 +581,14 @@ def load_takei2025_cerebellum(
             f"{cd_path} does not exist. Pass download=True to build it."
         )
 
-    archive_name = f"cerebellum_rep{replicate}.tar.gz"
-    archive = _download_file(
-        f"{ZENODO_BASE_URL}/{archive_name}/content",
-        data_dir / "downloads" / archive_name,
-    )
+    from uchrom import datasets
+
+    name = "takei2025_cerebellum" if replicate == 1 else f"takei2025_cerebellum_rep{replicate}"
+    datasets.fetch(name)                        # md5-checked, into the data directory
+    archive, locus, clustering = datasets.files(name)
     extract_dir = data_dir / f"cerebellum_rep{replicate}"
     _extract_tar_once(archive, extract_dir)
-
-    locus = _download_file(
-        f"{GITHUB_MEDIA_BASE_URL}/{CEREBELLUM_LOCUS_25KB_PATH}",
-        data_dir / "annotation" / Path(CEREBELLUM_LOCUS_25KB_PATH).name,
-    )
-    clustering = _download_file(
-        f"{GITHUB_MEDIA_BASE_URL}/{CEREBELLUM_CLUSTERING_PATH}",
-        data_dir / "clustering" / Path(CEREBELLUM_CLUSTERING_PATH).name,
-    )
-    transcriptome_zip = _download_file(
-        TRANSCRIPTOMIC_ZIP_URL,
-        data_dir / "downloads" / TRANSCRIPTOMIC_ZIP_NAME,
-    )
+    transcriptome_zip = datasets.fetch("takei2025_rna")
 
     return load_seqfish_multiomics_linked(
         str(extract_dir / "**" / f"cerebellum_rep{replicate}*.csv"),
@@ -639,19 +613,6 @@ class _TranscriptomeSource:
     name: str
     path: Path
     member: Optional[str] = None
-
-
-def _download_file(url: str, dest: Path) -> Path:
-    dest = Path(dest)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.exists() and dest.stat().st_size > 0:
-        return dest
-
-    tmp = dest.with_suffix(dest.suffix + ".tmp")
-    with urllib.request.urlopen(url) as r, open(tmp, "wb") as fh:
-        shutil.copyfileobj(r, fh)
-    tmp.replace(dest)
-    return dest
 
 
 def _extract_tar_once(archive: Path, dest: Path) -> Path:
@@ -715,20 +676,12 @@ def _resolve_transcriptome_paths(
 
 
 def _download_transcriptomic_zip(data_dir: Optional[PathLike]) -> Path:
-    if data_dir is None:
-        from uchrom.datasets import data_dir as _root
+    """The transcriptome zip: a copy in ``data_dir`` if there is one, else ``uchrom.datasets.fetch("takei2025_rna")``."""
+    if data_dir is not None and (Path(data_dir) / TRANSCRIPTOMIC_ZIP_NAME).exists():
+        return Path(data_dir) / TRANSCRIPTOMIC_ZIP_NAME
+    from uchrom import datasets
 
-        data_dir = _root() / "takei2025_cerebellum"
-    data_dir = Path(data_dir)
-    data_dir.mkdir(parents=True, exist_ok=True)
-    out = data_dir / TRANSCRIPTOMIC_ZIP_NAME
-    if out.exists() and out.stat().st_size > 0:
-        return out
-    tmp = out.with_suffix(out.suffix + ".tmp")
-    with urllib.request.urlopen(TRANSCRIPTOMIC_ZIP_URL) as r, open(tmp, "wb") as fh:
-        shutil.copyfileobj(r, fh)
-    tmp.replace(out)
-    return out
+    return datasets.fetch("takei2025_rna")
 
 
 def _transcriptome_file_matches(

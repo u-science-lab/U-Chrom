@@ -4,8 +4,9 @@ Paths are relative to the data directory (:func:`uchrom.datasets.data_dir`).  An
 ``filename`` + ``url`` (one file) or ``files``: ``(relative path, url)`` pairs (or a function returning
 them); optional ``md5`` (relative path -> md5), ``extract`` ((destination, archive URL, member suffix):
 one member streamed out of a .tar.gz), ``extract_many`` ((destination dir, archive URL, member regex)),
-``parallel`` (concurrent downloads), ``size_mb``, ``description``, ``default`` (fetched by
-``python -m uchrom.datasets fetch --default``), ``fig3`` (an input of the paper's Fig. 3).
+``parallel`` (concurrent downloads), ``size_mb``, ``description``, ``default`` (an input of the tutorials:
+fetched by ``python -m uchrom.datasets fetch --default``; False unless set), ``fig3`` (an input of the paper's
+Fig. 3), ``build`` (made by a function of ``_builders`` instead of downloaded).
 """
 
 from __future__ import annotations
@@ -145,7 +146,8 @@ _BIL_MERFISH_MOP = (
 _SCHIC2 = "https://schic2.s3.eu-west-1.amazonaws.com"
 _GSE94489 = "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE94nnn/GSE94489/suppl"
 # Tan et al. 2021 (Cell 184:741) Dip-C, adult cortex (P56 / P309 / P347, >= 100 k contacts): 510 cells
-# listed in benchmarks/screcon/data/tan2021_adult_cortex_cells.tsv; per-GSM files of GSE146397.
+# listed in tan2021_adult_cortex_cells.tsv next to this module (a copy of benchmarks/screcon/data/...);
+# per-GSM files of GSE146397.
 _TAN_CELLS = Path(__file__).resolve().parent / "tan2021_adult_cortex_cells.tsv"
 _TAN_SUFFIXES = ("contacts.pairs", "impute.pairs", "20k.1.clean.3dg", "20k.2.clean.3dg", "20k.3.clean.3dg",
                  "20k.4.clean.3dg", "20k.5.clean.3dg")
@@ -209,6 +211,9 @@ DATASETS = {
             "fourfront-webprod/wfoutput/"
             "e699334e-fb34-4a0e-8ef6-670b2099831a/4DNFIHF3JCBY.csv"
         ),
+        "md5": {
+                "4DNFIHF3JCBY.csv": "c2f5a8db66bfc5ba9cbe6870b415aaa1"},
+        "default": True,
         "size_mb": 22,
         "description": "Takei 2021 mESC FOF-CT chromatin tracing",
     },
@@ -233,6 +238,9 @@ DATASETS = {
             "https://zenodo.org/records/3735329/files/"
             "DNAseqFISH%2B.zip?download=1"
         ),
+        "md5": {
+                "DNAseqFISH+.zip": "c4e7b23df669bbc7ef9b1436712b4a2c"},
+        "default": True,
         "size_mb": 144,
         "description": "Takei 2021 raw seqFISH+ spot detections",
     },
@@ -242,6 +250,9 @@ DATASETS = {
             "https://raw.githubusercontent.com/BogdanBintu/"
             "ChromatinImaging/master/Data/IMR90_chr21-18-20Mb.csv"
         ),
+        "md5": {
+                "IMR90_chr21-18-20Mb.csv": "9ccf988c6e0c90967d152b88741b0598"},
+        "default": True,
         "size_mb": 2,
         "description": "Bintu 2018 IMR90 chr21 chromatin tracing",
     },
@@ -303,6 +314,35 @@ DATASETS = {
         "default": False,
         "description": "Takei 2025 cerebellum DNA seqFISH+ rep 1, all FOVs (Zenodo 7693825)",
     },
+    "takei2025_cerebellum_rep2": {
+        "files": [
+            ("takei2025_cerebellum/cerebellum_rep2.tar.gz",
+             "https://zenodo.org/records/7693825/files/cerebellum_rep2.tar.gz"),
+            ("takei2025_cerebellum/LC1-100k-09022022-mm10-25kb-meta.csv",
+             "https://media.githubusercontent.com/media/CaiGroup/"
+             "dna-seqfish-plus-multi-omics/main/data/annotation/"
+             "LC1-100k-09022022-mm10-25kb-meta.csv"),
+            ("takei2025_cerebellum/cerebellum_mRNA_cluster_nuc_vol_filtered.csv",
+             "https://media.githubusercontent.com/media/CaiGroup/"
+             "dna-seqfish-plus-multi-omics/main/data/cerebellum/clustering/"
+             "100k-002-001-cerebellum_mRNA_cluster_nuc_vol_filtered.csv"),
+        ],
+        "md5": {"takei2025_cerebellum/cerebellum_rep2.tar.gz":
+                "411edf7e4ebcfaf6e6619c5c8d30c415"},
+        "size_mb": 5290,
+        "default": False,
+        "description": "Takei 2025 cerebellum DNA seqFISH+ rep 2, all FOVs (Zenodo 7693825)",
+    },
+    # the RNA seqFISH spot tables of every Takei 2025 sample (aggregated into the linked AnnData of
+    # uchrom.io.load_takei2025_cerebellum)
+    "takei2025_rna": {
+        "files": [("takei2025_cerebellum/transcriptomic-data.zip",
+                   "https://zenodo.org/records/7693825/files/transcriptomic-data.zip")],
+        "md5": {"takei2025_cerebellum/transcriptomic-data.zip": "c29594d9ed0f4dfea67c0140c56050a1"},
+        "size_mb": 462,
+        "default": False,
+        "description": "Takei 2025 RNA seqFISH spot tables, all samples (Zenodo 7693825)",
+    },
     # Liu et al. 2025 (Sci Adv) DNA-MERFISH of 2,000 loci in mouse MOp, WT,
     # 4DN experiment 4DNEXBUVZYLI (set 4DNESMTNNB3N): the largest released
     # wild-type FOF-CT core table on the 4DN portal + its cell table.
@@ -332,8 +372,25 @@ DATASETS = {
             for n, gsm in _STEVENS
             for kind in ("contact_pairs.txt.gz", "genome_structure_model.pdb.gz")
         ],
+        "md5": {
+                "stevens2017_mesc/GSM2219497_Cell_1_contact_pairs.txt.gz": "5d8bbde8f8d89f4d3e88fdb627f1d451",
+                "stevens2017_mesc/GSM2219497_Cell_1_genome_structure_model.pdb.gz": "b12b1a0073be5658087125907926ff7d",
+                "stevens2017_mesc/GSM2219498_Cell_2_contact_pairs.txt.gz": "de5abfd3c4f63bcf7fd764ac316548c4",
+                "stevens2017_mesc/GSM2219498_Cell_2_genome_structure_model.pdb.gz": "61dd368a724ed12ff9857ae440c38e5e",
+                "stevens2017_mesc/GSM2219499_Cell_3_contact_pairs.txt.gz": "46f6719d5bcbe116eda7ad3d2bdd13b5",
+                "stevens2017_mesc/GSM2219499_Cell_3_genome_structure_model.pdb.gz": "e8dc8a5c34e251fda4e1257556a851ec",
+                "stevens2017_mesc/GSM2219500_Cell_4_contact_pairs.txt.gz": "65833188550102409dc38c938ac508de",
+                "stevens2017_mesc/GSM2219500_Cell_4_genome_structure_model.pdb.gz": "06532a28bbb9f7b6ec37e283e9be8528",
+                "stevens2017_mesc/GSM2219501_Cell_5_contact_pairs.txt.gz": "43f156069bebda79b50c453de8421814",
+                "stevens2017_mesc/GSM2219501_Cell_5_genome_structure_model.pdb.gz": "872fa2034be918a7e222755b9386dcd0",
+                "stevens2017_mesc/GSM2219502_Cell_6_contact_pairs.txt.gz": "524f40396e5a36801e0ad79592e2afb8",
+                "stevens2017_mesc/GSM2219502_Cell_6_genome_structure_model.pdb.gz": "eb0fe6c6f9ef75609c4a28a9e051fac3",
+                "stevens2017_mesc/GSM2219503_Cell_7_contact_pairs.txt.gz": "87043180bb03d79b8534378a0be57689",
+                "stevens2017_mesc/GSM2219503_Cell_7_genome_structure_model.pdb.gz": "bdfea7c0f62c9a16e4d952aaaa8a63eb",
+                "stevens2017_mesc/GSM2219504_Cell_8_contact_pairs.txt.gz": "8c7aa644db31f89f2c8c753be451d949",
+                "stevens2017_mesc/GSM2219504_Cell_8_genome_structure_model.pdb.gz": "64ef4fa840883265f0fe2d7267507a36"},
         "size_mb": 43,
-        "default": False,
+        "default": True,
         "fig3": True,
         "description": "Stevens 2017 mESC scHi-C contacts + published structures, 8 cells (GEO GSE80280)",
     },
@@ -362,7 +419,7 @@ DATASETS = {
                 "su2020_imr90/Hi-C_contacts_chromosome21.tsv": "7842ef3149e139fe08c6de7df13b3084",
                 "su2020_imr90/README_August_2020.txt": "a93629f38fcc11acdb46ced5fc74bee1"},
         "size_mb": 262,
-        "default": False,
+        "default": True,
         "fig3": True,
         "description": "Su 2020 IMR90 chr21 chromatin tracing + binned Hi-C (Zenodo 3928890)",
     },
@@ -582,6 +639,10 @@ DATASETS.update({
     "takei_tables": {
         "files": [("4DNFIFINA2U9.csv", f"{_TAKEI_4DN}/c5bafa92-d08b-4e20-84de-6e75103c016d/4DNFIFINA2U9.csv"),
                   ("4DNFIJ52NVDV.csv", f"{_TAKEI_4DN}/4b66ffc5-50e0-4832-99c2-0020c934ff24/4DNFIJ52NVDV.csv")],
+        "md5": {
+                "4DNFIFINA2U9.csv": "799c25d9bf53ab0104911b47946d9920",
+                "4DNFIJ52NVDV.csv": "ef8022344853a82c93b1f59e0129e2e4"},
+        "default": True,
         "size_mb": 1,
         "description": "Takei 2021 mESC FOF-CT cell table + RNA spot table (4DN 4DNFIFINA2U9, 4DNFIJ52NVDV)",
     },
@@ -591,8 +652,11 @@ DATASETS.update({
                    "https://noble.gs.washington.edu/proj/schic-topic-model/data/matrix_files/H1Esc-HFF.R1.tar.gz"),
                   ("kim2020_scihic/H1Esc-HFF.R1.labeled",
                    "https://noble.gs.washington.edu/proj/schic-topic-model/data/matrix_labels/H1Esc-HFF.R1.labeled")],
+        "md5": {
+                "kim2020_scihic/H1Esc-HFF.R1.tar.gz": "42afd5847a05fc9d00105f3dbdeabdf3",
+                "kim2020_scihic/H1Esc-HFF.R1.labeled": "fa4e17e0edb1a8d892b46338217a1c5f"},
         "size_mb": 128,
-        "default": False,
+        "default": True,
         "description": "Kim 2020 sci-Hi-C, H1 ES + HFF (Noble lab)",
     },
     # Huang et al. 2021 (Nat Genet) mESC Sox2 locus ORCA-style tracing at 5 kb with missing loci, as shipped
@@ -603,6 +667,7 @@ DATASETS.update({
                   for n in ("mESC_Sox2_coor_wnan.txt", "mESC_Sox2_ann.txt")],
         "md5": {"huang2021_sox2/mESC_Sox2_coor_wnan.txt": "ab391637b75e412eec39d4082e6e3f8d",
                 "huang2021_sox2/mESC_Sox2_ann.txt": "c28b7b7e0f590a424f255388997f54bc"},
+        "default": True,
         "size_mb": 7,
         "description": "Huang 2021 mESC Sox2 tracing with missing loci (SnapFISH-IMPUTE data, GitHub)",
     },
@@ -611,27 +676,55 @@ DATASETS.update({
         "files": [("genomes/mm10/chr19.fa.gz", "https://hgdownload.soe.ucsc.edu/goldenPath/mm10/chromosomes/chr19.fa.gz")],
         "md5": {"genomes/mm10/chr19.fa.gz": "4394207eabb880eeff44535321d6dd33"},
         "size_mb": 19,
-        "default": False,
+        "default": True,
         "description": "UCSC mm10 chromosome 19 sequence",
     },
     "mm10_refgene": {
         "files": [("genomes/mm10/mm10.refGene.gtf.gz",
                    "https://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/genes/mm10.refGene.gtf.gz")],
+        "md5": {
+                "genomes/mm10/mm10.refGene.gtf.gz": "954bb1999f12d10ba61917ecfa430068"},
         "size_mb": 13,
-        "default": False,
+        "default": True,
         "description": "UCSC mm10 refGene gene annotation (GTF)",
     },
 })
 
 # ---- built from their sources (hicstraw over HTTP; see _builders.slice_hic) ----
 DATASETS.update({
+    # Takei et al. 2025 (Nature) cerebellum rep 1, field of view 0: the first 400,000 rows (47 whole cells)
+    # streamed out of the Zenodo tarball, + the locus map and the cell clustering (import tutorial)
+    "takei2025_fov0": {
+        "build": ("seqfish_fov_head", {
+            "tarball": "https://zenodo.org/records/7693825/files/cerebellum_rep1.tar.gz",
+            "member": "cerebellum_rep1/cerebellum_rep1_pos0.csv", "rows": 400_000,
+            "sidecars": [
+                ("LC1-100k-09022022-mm10-25kb-meta.csv",
+                 "https://media.githubusercontent.com/media/CaiGroup/dna-seqfish-plus-multi-omics/main/"
+                 "data/annotation/LC1-100k-09022022-mm10-25kb-meta.csv"),
+                ("cerebellum_mRNA_cluster_nuc_vol_filtered.csv",
+                 "https://media.githubusercontent.com/media/CaiGroup/dna-seqfish-plus-multi-omics/main/"
+                 "data/cerebellum/clustering/100k-002-001-cerebellum_mRNA_cluster_nuc_vol_filtered.csv")]}),
+        "files": [("takei2025_fov0/cerebellum_rep1_pos0_cells.csv",
+                   "https://zenodo.org/records/7693825/files/cerebellum_rep1.tar.gz"),
+                  ("takei2025_fov0/LC1-100k-09022022-mm10-25kb-meta.csv",
+                   "https://media.githubusercontent.com/media/CaiGroup/dna-seqfish-plus-multi-omics/main/"
+                   "data/annotation/LC1-100k-09022022-mm10-25kb-meta.csv"),
+                  ("takei2025_fov0/cerebellum_mRNA_cluster_nuc_vol_filtered.csv",
+                   "https://media.githubusercontent.com/media/CaiGroup/dna-seqfish-plus-multi-omics/main/"
+                   "data/cerebellum/clustering/100k-002-001-cerebellum_mRNA_cluster_nuc_vol_filtered.csv")],
+        "md5": {"takei2025_fov0/cerebellum_rep1_pos0_cells.csv": "def6f22123b6fa7461320f819765770b"},
+        "size_mb": 280,
+        "default": True,
+        "description": "Takei 2025 cerebellum rep 1, FOV 0: first 47 cells streamed from Zenodo 7693825 (built)",
+    },
     # Rao et al. 2014 (Cell 159:1665) IMR90 in situ Hi-C, chr21 at 5 kb, hg19 (GEO GSE63525, combined map):
     # GEM-FISH and bulk reconstruction tutorials, Fig. 3
     "rao2014_imr90_chr21": {
         "build": ("slice_hic", {"cell": "IMR90", "chroms": ["21"], "res": 5000}),
         "files": [("rao2014_imr90/IMR90_chr21_5kb_hg19.cool", "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE63nnn/GSE63525/suppl/GSE63525_IMR90_combined.hic")],
         "size_mb": 4,
-        "default": False,
+        "default": True,
         "fig3": True,
         "description": "Rao 2014 IMR90 Hi-C chr21 at 5 kb, sliced over HTTP from the GEO .hic (built)",
     },
