@@ -85,7 +85,14 @@ def load_cell(path: str, dataset: str):
         c = c.subset(keep)
         c.lines = None
         return c
-    from contacts import read_contacts
+    from contacts import Contacts, read_contacts
+    if dataset == "tanu" and ".pairs" in str(path):
+        # unphased calibration (PREREG §13.3): the Tan cells' phased pairs with the phases dropped
+        from diploid import read_phased
+        p = read_phased(path)
+        keep = np.isin(p.chrom_a, TAN_CHROMS) & np.isin(p.chrom_b, TAN_CHROMS)
+        p = p.subset(keep)
+        return Contacts(p.chrom_a.astype(str), p.pos_a, p.chrom_b.astype(str), p.pos_b)
     c = read_contacts(path)
     c.chrom_a = c.chrom_a.astype(str)
     c.chrom_b = c.chrom_b.astype(str)
@@ -203,6 +210,17 @@ def choose_designs(cells, dataset: str, set_name: str) -> dict:
     for q, de in enumerate(designs):
         de["design"] = q
     return {"dataset": dataset, "set": set_name, "dominants": doms, "designs": designs}
+
+
+def cmd_unphased(args) -> None:
+    """``tanu`` (PREREG §13.3): the cells and designs of a Tan set, reconstructed with the phases dropped."""
+    src, out = Path(args.src), Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    for f in ("cells.tsv", "designs.json"):
+        (out / f).write_text((src / f).read_text())
+    meta = json.loads((src / "set.json").read_text())
+    assert meta["dataset"] == "tan", meta
+    (out / "set.json").write_text(json.dumps({**meta, "dataset": "tanu", "from": str(src)}))
 
 
 def cmd_designs(args) -> None:
@@ -1012,6 +1030,10 @@ def main(argv=None) -> None:
     s = sub.add_parser("designs")
     s.add_argument("--dir", required=True)
     s.set_defaults(fn=cmd_designs)
+    s = sub.add_parser("unphased")
+    s.add_argument("--src", required=True)
+    s.add_argument("--out", required=True)
+    s.set_defaults(fn=cmd_unphased)
     s = sub.add_parser("build")
     s.add_argument("--dir", required=True)
     s.add_argument("--only", nargs="*")

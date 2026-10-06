@@ -176,3 +176,29 @@ def test_violation_rate_diploid_uses_phased_copy():
     # haploid reading of the same chain ignores phases
     hap = Phased(["chr1"], [150_000], [-1], ["chr1"], [1_850_000], [-1])
     assert dm.violation_rate(hap, np.array(["chr1"] * 10), pos, X0[None], diploid=False) == 1.0
+
+
+def test_unphased_tan_has_the_same_rows(tmp_path):
+    from diploid import read_phased, write_phased
+    d = tmp_path / "tan"
+    d.mkdir()
+    rows = []
+    for k in (0, 1):
+        f = tmp_path / f"c{k}.pairs.gz"
+        p = _phased(9_000, k)
+        write_phased(f, p)
+        rows.append({"cell": f"c{k}", "table": str(f), "type": "P:GSM1", "n_rows": 9_000,
+                     "n_cis": int(dm.cis_mask(p).sum()), "n_other": 0})
+    pd.DataFrame(rows).to_csv(d / "cells.tsv", sep="\t", index=False)
+    (d / "set.json").write_text(json.dumps({"dataset": "tan", "set": "dev"}))
+    (d / "designs.json").write_text(json.dumps({"dataset": "tan", "set": "dev", "dominants": ["c0"],
+                                                "designs": [{"dominant": "c0", "m": 1, "minors": ["c1"], "design": 0}]}))
+    dm.main(["build", "--dir", str(d)])
+    dm.main(["unphased", "--src", str(d), "--out", str(tmp_path / "tanu")])
+    dm.main(["build", "--dir", str(tmp_path / "tanu")])
+    man = pd.read_csv(d / "c0" / "manifest.tsv", sep="\t")
+    for name in man.name:
+        a = read_phased(d / "c0" / "tables" / f"{name}.pairs.gz")
+        b = read_contacts(tmp_path / "tanu" / "c0" / "tables" / f"{name}.txt.gz")
+        assert list(zip(a.chrom_a, a.pos_a, a.chrom_b, a.pos_b)) == list(zip(b.chrom_a, b.pos_a, b.chrom_b, b.pos_b))
+    assert dm.run_list(tmp_path / "tanu" / "c0", "tanu")[0][0].name == "c0.txt.gz"

@@ -21,6 +21,7 @@ for ds in ${DATASETS:-nagano stevens tan}; do
               $PY $SC/dominant.py cells --dataset nagano --set $SET --manifest "$M" --out "$D" | tail -1 ;;
       stevens) $PY $SC/dominant.py cells --dataset stevens --set $SET --tables $GEO/*_contact_pairs.txt.gz --out "$D" | tail -1 ;;
       tan) $PY $SC/dominant.py cells --dataset tan --set $SET --data "$DATA" --out "$D" | tail -1 ;;
+      tanu) $PY $SC/dominant.py unphased --src "$DM/tan/$SET" --out "$D" ;;   # PREREG §13.3: Tan, phases dropped
     esac
   fi
   [ -f "$D/designs.json" ] || $PY $SC/dominant.py designs --dir "$D"
