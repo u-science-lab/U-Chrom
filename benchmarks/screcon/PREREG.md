@@ -497,3 +497,107 @@ development pools below are run until a freeze is approved.
   **V2** M2 E − naive > 0; **V3** M2 and M1 E − IGM > 0; **V4** M2 E − prior-split >= −0.01; decision as
   §12.1 (V1-V3 CIs above 0, V4 lower bound above −0.01, no composition worse than naive in M2 by > 0.01).
   The separation of the two same-donor cells (GGP, GGPP) is reported in full.
+
+## 13. A spot reconstructed as one cell: dominant-cell recovery and spot QC — registered 2026-10-05, before any run of it
+
+**Why.**  §12 found that few-cell pools are not deconvolved without an external cue.  A spatial Hi-C
+spot (10-50 µm; a few cells or partial nuclei) is often dominated by one cell.  This section asks the
+simpler question behind the "single-spot 3-D structure" claims of the 2026 spatial Hi-C papers
+(`paper/plans/spatial_hic_deconvolution.md`): if a spot is reconstructed **as if it were one cell**, how
+much of the **dominant** cell's structure comes back, as a function of the dominant cell's share f of
+the contacts, and can spot-intrinsic metrics tell single-cell-like spots from mixed ones?
+**Nothing is tuned**: the methods are the frozen ones; only a QC threshold is chosen, on development
+units only.  Code: `dominant.py` (cells, designs, tables, runs, scoring, aggregation), jobs
+`sherlock/dom_*.sbatch`; development record `dominant_devlog.md`.
+
+* **Questions.**  **Q1** E1(f): agreement of the mixture's EMber structure with the dominant cell's own
+  structure; at which f does it fall below the pure-cell control by more than 0.05?  **Q2** Does EMber's
+  noise model help here (EMber − NucDynamics)?  **Q3** Spot QC: do spot-intrinsic metrics classify
+  f >= 0.8 vs f <= 0.6, and at which threshold?
+* **Data and split (fixed now).**
+  * **Nagano 2017 serum haploid mESC**: development = the development half of §6 (201 cells,
+    `robust_matched_split.py`); held back = the held-back half (202 cells).  Cell tables =
+    `matched/nagano/serum` (mm10).
+  * **Stevens 2017 haploid mESC**: development = cells 1-4, held back = cells 5-8 (GEO tables).
+  * **Tan 2021 adult cortex Dip-C (diploid, phased hickit contacts)**: development = the §12.1
+    development pool cells (role `dev` of `mix_type.split_table()`: P 40, O 18, A 7, M 9 = 74 cells);
+    held back = the §12.1 held-back pool cells (role `test`, 77).  §12.1 reference cells are not used.
+    Chromosomes chr1-19, X, Y; phases as given; ploidy `male` (Tan 2021 mice are males: X and Y one copy).
+  * cis = same chromosome with separation >= 1 kb; n_cis(cell) = its number of cis contacts.
+* **Dominants (fixed rule; the lists are materialised by `dominant.py designs` before any run and
+  appended below).**  Nagano: development cells with n_cis >= 100,000, sorted by name, permuted with
+  `numpy.random.default_rng(20261013)`, first 12.  Stevens: cells 1, 2, 3, 4.  Tan: per type in the order
+  P, O, A, M (type index t = 0..3), the development cells of that type sorted by GSM, permuted with
+  `default_rng(20261013 + t)`, first 2 (8 dominants).  Held back: the same rules on the held-back cells
+  with base seed 20261014 (Stevens: cells 5-8).
+* **Designs (minor cells).**  m = number of minor cells, 1 or 2.  Nagano: per dominant (index i) and m,
+  m minors drawn without replacement (`default_rng(130_000 + 10 i + m)`; held back + 500,000) from the
+  other cells of the same set with n_cis >= n_cis(D) / (2 m) (f = 0.5 feasible at full depth; if no such
+  cell, from all).  Stevens: m = 1: each of the 3 other cells of the set; m = 2: each of the 3 pairs of
+  other cells (6 designs per dominant).  Tan: m = 1: one cell of a different type; m = 2: one cell of
+  the same type + one of a different type (`default_rng(131_000 + 10 i + m)`, held back + 500,000; same
+  depth rule, falling back to all candidates).
+* **Mixtures.**  f ∈ {1.0, 0.9, 0.8, 0.7, 0.6, 0.5} = the dominant's share of the mixture's cis
+  contacts.  Depth levels N (cis contacts of the mixture) ∈ {10,000; 30,000; 100,000; full = n_cis(D)}
+  (2026 spatial Hi-C spots: Chen et al. 10 µm cortex median ~9 k pairs per spot, p90 ~30 k; Guo et al.
+  20 µm ~136 k cis); a level is used for a dominant only when
+  n_cis(D) >= N.  Cell j contributes t_j cis contacts — t_D = round(f N), every minor round((1 − f) N / m)
+  — and its other rows (trans, cis < 1 kb) at the same rate (each cell keeps its own trans / cis ratio).
+  Sampling is nested: each cell's cis rows and other rows are permuted once (dominant
+  `default_rng(140_000 + i)`; a minor `default_rng(150_000 + 100 design + rank)`) and the first rows are
+  taken, so the dominant's rows at f are a subset of its rows at any larger f.  If a minor has too few
+  contacts, N of that design is lowered to the largest feasible value for every f (recorded; its f = 1.0
+  control is made at that N).  Rows of a mixture are shuffled (`default_rng(7)`); the cell of origin is
+  stored next to the table.  Haploid tables: GEO 4 columns; Tan: hickit phased pairs.
+* **Controls.**  **pure** (f = 1.0): the dominant alone at N (separates mixing from depth); shared by
+  the designs of a dominant at that N.  **D-only**: exactly the dominant rows of an f < 1 mixture, without
+  the minors (separates the minors' effect from the dominant's depth loss).
+* **Methods (frozen).**  Nagano / Stevens: EMber haploid (protocol `robust`, `run_robust.ROBUST_DEFAULTS`
+  = tag `robust-frozen`).  Tan: EMber deep diploid (tag `ember-deep-frozen`: `ROBUST_DEFAULTS` +
+  `robust_dip_commit` 0.75, `robust_dip_commit_drop`, `robust_dip_readmit_stage` 4; at 200 kb stage 4 is
+  the 200 kb stage and the structure commitment happens at the refinement stage).  Baseline:
+  NucDynamics, protocol `nuc_dynamics_2017` (no noise model; diploid: ambiguous restraints).
+  200 kb (schedule 8, 4, 2, 0.4, 0.2 Mb), 2 models per run, GPU, the engine build of this branch (its
+  regression hashes of the frozen protocols checked in the setup job).  Seeds: references 1; mixture and
+  pure runs: EMber 2 and 3, NucDynamics 2; D-only: EMber 2.
+* **References.**  Every cell used (dominants and minors): EMber on its full table, seed 1.  Dominants
+  also NucDynamics on the full table, seed 1 (secondary reference of E2).
+* **Scoring** (`dominant.py score`).  Structures compared on the particles both have, matched by
+  (chain, position) at 200 kb; a run's distances = mean over its 2 models; chains = chromosomes
+  (haploid) or copy chains (diploid).
+  * **E1 (primary)**: per-copy r — Pearson r of all within-chain particle distances, mixture EMber run
+    (seed 2) vs the dominant's EMber reference, median over chains with >= 50 matched particles.
+    Secondary: whole-genome r (Pearson; 200,000 random particle pairs, trans included, seed 0), Spearman
+    per-copy, per separation band (< 2, 2-20, > 20 Mb), and the per-copy r vs each minor's reference.
+    Summary per dataset × level × m × f: ΔE1 = E1(mixture) − E1(pure control of the same dominant and N),
+    mean with a 95 % percentile bootstrap over dominants (2,000 resamples, seed 0); **f_drop** = the
+    largest f < 1 whose mean ΔE1 < −0.05 (else "none down to 0.5"); decomposition: depth effect
+    E1(D-only) − E1(pure), mixing effect E1(mixture) − E1(D-only).
+  * **E2**: E1(EMber) − E1(NucDynamics) per mixture (both vs the dominant's EMber reference), per
+    dataset × level × f and over f < 1, bootstrap over dominants.  Secondary (removes the reference's
+    method): NucDynamics vs the dominant's NucDynamics reference, EMber vs its EMber reference.
+  * **E3 QC** — spot-intrinsic metrics (the mixture table and its own EMber runs only), each with its
+    direction fixed now (+: larger = more mixed): **Q1** ε of EMber's last EM update (+); **Q2** fraction
+    of the input contacts with EMber weight P(true) < 0.5, filtered contacts counted (+); **Q3** restraint
+    violation rate: input contacts >= 400 kb apart (or trans) whose model-mean distance exceeds 2 bead
+    units (diploid: closest copy pair consistent with the phased ends) (+); **Q4** seed-to-seed per-copy
+    r, EMber seed 2 vs 3 (−); **Q5** long-range transitivity: graph of 1 Mb bins joined by >= 1 contact
+    with cis separation >= 2 Mb or trans, closed fraction of wedges (−); **Q6** trans-triangle closure:
+    wedges of two trans edges at a bin whose partners lie on two other, different chromosomes, closed
+    fraction (−); **Q7** partner conflict: pairs of long-range contacts (cis >= 2 Mb or trans) with an
+    end within 10 kb of each other whose other ends are on different chromosomes or > 5 Mb apart,
+    fraction (+).  Classes: single-cell-like = f ∈ {1.0, 0.9, 0.8}, mixed = f ∈ {0.6, 0.5}; f = 0.7
+    excluded.  ROC-AUC with the registered direction per dataset × level (a spot's depth is known) and
+    per dataset (mean over levels), 95 % bootstrap over dominants.  Secondary: Spearman of each metric
+    with E1; a logistic combination of Q1-Q7 + log N, leave-one-dominant-out within dataset.
+  * **QC threshold (development only)**: the metric with the highest per-dataset AUC averaged over the
+    three datasets (ties: fewer runs needed, i.e. Q5-Q7 before Q1-Q3 before Q4); threshold per level =
+    Youden's J on the development units; its sensitivity / specificity are reported.
+* **Held back (not run until the user approves).**  The same pipeline on the held-back dominants with
+  the QC metric and thresholds frozen.  Statements: "EMber recovers the dominant's structure within
+  0.05 of the pure control down to f = X" (f_drop per dataset × level); "EMber is better than
+  NucDynamics on dominant-cell mixtures" only if the E2 95 % CI over all f < 1 mixtures is above 0;
+  "the spot QC works" only if the held-back AUC (per dataset, mean over levels) has a 95 % CI lower
+  bound above 0.75 and the specificity at the frozen thresholds is >= 0.8.  Otherwise reported as it is.
+* **Expected cost** (development): ~4,100 runs (Nagano ~1,900, Stevens ~1,000, Tan ~1,200), haploid
+  ~10-20 s per run, diploid 10 s - 5 min; ~20 GPU hours.
