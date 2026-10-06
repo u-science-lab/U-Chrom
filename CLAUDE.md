@@ -65,8 +65,7 @@ uchrom/                (packages/uchrom/uchrom)
 │   │   ├── ember.py EMber: reconstruct_ember (noise-aware; native engine protocol
 │   │   │            "robust", alias "ember"; PREREG / TEST_RESULTS in benchmarks/screcon)
 │   │   ├── nucdyn/  NucDynamics: reconstruct_nucdyn / CLI on the native engine
-│   │   │            (packages/uchrom-recon; required)
-│   │   └── gem/     GEM (energy minimization, Taichi autodiff; extra `gem`)
+│   │                (packages/uchrom-recon; required)
 │   ├── bulk/        Bulk reconstruction
 │   │   ├── mds/     MDS/SMACOF (PyTorch GPU; partitioned + inter-chrom)
 │   │   └── deconv/  Population deconvolution of bulk Hi-C: deconvolve(..., method=)
@@ -247,22 +246,20 @@ All datasets consumed by tutorials and benchmarks live in
 
 ## Technical Notes
 
-- **GPU frameworks**: native Rust/wgpu, Taichi and PyTorch coexist but don't interact.
+- **GPU frameworks**: native Rust/wgpu and PyTorch coexist but don't interact (Taichi was removed).
   - **NucDynamics → native Rust engine** (`packages/uchrom-recon`, `uchrom_recon`):
     CPU in f64 with rayon (models in parallel, force loops split when there
     are fewer models than cores; per-particle gather → results independent
     of the thread count) and GPU through wgpu (WGSL compute shaders: Metal on
     macOS, Vulkan on Linux/NVIDIA; f32; all models of an ensemble batched in
     one dispatch).  `recon.sc.nucdyn` needs it (the Taichi port was removed).
-  - **Taichi** is an optional extra (`u-chrom[gem]`) used only by `recon.sc.gem`
-    (legacy); new engines of this kind follow the native pattern.
+  - **MD-style tight loops with many cheap iterations → the native pattern** (Rust, rayon,
+    wgpu) like `packages/uchrom-recon`.
   - **Gradient-descent optimisation on a structured multi-term loss →
     PyTorch** (e.g. `recon.bulk.mds`, `recon.fish.gem_fish` — hundreds to
     thousands of iterations, each one doing dense matrix-level work; the
     autodiff graph, standard optimisers (Adam / L-BFGS), and easy batch
-    dim for ensemble models outweigh Taichi's per-iter speed).
-  - Legacy: `recon.sc.gem` is Taichi-based.  If it ever needs ensembles
-    or more complex loss terms, consider migrating to PyTorch.
+    dim for ensemble models outweigh a hand-written kernel's per-iter speed).
   - Native engine changes: `cargo test --release [--features gpu]` in
     `packages/uchrom-recon`, rebuild with `maturin develop --release`; WGSL lives in
     `src/gpu/nucdyn.wgsl` (included at compile time).

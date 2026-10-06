@@ -45,10 +45,6 @@ web = [
 recon = [
     "uchrom-recon>=0.1",
 ]
-# GEM single-cell reconstruction (uchrom.recon.sc.gem, Taichi autodiff); nothing else needs Taichi.
-gem = [
-    "taichi>=1.7.0",
-]
 # Reading .hic files (uchrom.io load_hic / benchmark tutorial).
 hic = [
     "hic-straw",

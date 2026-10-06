@@ -46,7 +46,6 @@ autodoc_default_options = {
 }
 autodoc_mock_imports = [
     "torch",
-    "taichi",
     "pyvista",
     "pyvistaqt",
     "PyQt5",

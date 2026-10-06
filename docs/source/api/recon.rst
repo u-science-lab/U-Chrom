@@ -8,10 +8,7 @@ Single-cell reconstruction
    :members: reconstruct_ember
 
 .. automodule:: uchrom.recon.sc.nucdyn
-   :members: main, run_once, Simulation, default_params, reconstruct_nucdyn
-
-.. automodule:: uchrom.recon.sc.gem
-   :members: main, Simulation, default_prams
+   :members: main, reconstruct_nucdyn, native_available, engine_info, load_contacts
 
 Bulk reconstruction (MDS)
 -------------------------

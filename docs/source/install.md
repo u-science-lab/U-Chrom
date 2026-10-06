@@ -31,7 +31,6 @@ Some workflows need heavier dependencies that are published as extras:
 | `browser` | PyVista, pyvistaqt, VTK, PyQt5, qdarkgraystyle | `python -m uchrom.browser` |
 | `web` | uchrom-browser (FastAPI, uvicorn) | `python -m uchrom.browser --web` (browser in a web page) |
 | `recon` | uchrom-recon (Rust; from `packages/uchrom-recon` until wheels are published) | NucDynamics, EMber, IGM (`uchrom.recon.sc.nucdyn` / `.ember`, `uchrom.recon.bulk.deconv`) |
-| `gem` | Taichi | GEM (`uchrom.recon.sc.gem`) |
 | `hic` | hic-straw | reading `.hic` files |
 | `anndata` | anndata | `ChromData.link_anndata` / `to_anndata`, seqFISH RNA |
 | `multiome` | mudata | `ChromData.load_linked_mudata` |

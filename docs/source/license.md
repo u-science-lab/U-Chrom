@@ -15,5 +15,3 @@ the repo for the full text.
   re-implementation of NucDynamics (Stevens *et al.* 2017, *Nature*
   544:59; tjs23/nuc_dynamics, LGPL-3.0) and is itself distributed under
   the LGPL-3.0-or-later as a separate package; `uchrom` only imports it.
-- `uchrom.recon.sc.gem` is a Taichi reimplementation of the GEM
-  algorithm published by the original authors.

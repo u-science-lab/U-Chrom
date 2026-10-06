@@ -14,7 +14,7 @@ Summary of terms
   frequencies and row-normalised inverse reconstructed distances.  This
   is the paper's Hi-C structural consistency term (Eqn. 3).
 - ``C_2`` — polymer conformation energy (bond + angle + excluded
-  volume).  The paper cites prior GEM / uchrom.recon.sc.gem for the
+  volume).  The paper cites prior GEM work for the
   functional form; implemented here as a sum of three standard
   harmonic / hinge terms.
 - ``C_3`` — sum of squared errors between reconstructed pairwise
@@ -122,8 +122,7 @@ def polymer_energy(
       bond vectors.
     - Exclude: ``Σ_{i<j} max(0, r - ||s_i - s_j||)²`` (hinge).
 
-    Matches the functional form used in the existing
-    ``uchrom.recon.sc.gem`` Taichi kernels.
+    The functional form of single-cell GEM's polymer terms.
     """
     N = coords.shape[-2]
     if N < 2:
