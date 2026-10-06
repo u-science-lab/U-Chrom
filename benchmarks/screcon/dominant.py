@@ -911,6 +911,93 @@ def cmd_aggregate(args) -> None:
     print("\n".join(lines))
 
 
+def frozen_threshold(frozen: dict, ds: str, level: str, key: str = "thresholds"):
+    """Frozen threshold of a dataset and level; a level without a development threshold takes the
+    dataset's ``full`` threshold (PREREG §13, freeze)."""
+    t = frozen[key].get(ds, {})
+    return t.get(level, t.get("full"))
+
+
+def qc_units(g):
+    import pandas as pd
+    units = pd.concat([g[g.kind == "pure"].drop_duplicates(["dominant", "N", "level"]), g[g.kind == "mix"]])
+    units = units[~np.isclose(units.f, 0.7)]
+    return units.assign(single=units.f >= 0.8 - 1e-9)
+
+
+def cmd_test(args) -> None:
+    """Registered held-back statements (PREREG §13): f_drop per dataset x level (from ``aggregate``), E2 over
+    all f < 1 mixtures, held-back AUC of the frozen metric (mean over levels, bootstrap over dominants) and
+    sensitivity / specificity at the frozen thresholds."""
+    import pandas as pd
+    frozen = json.loads(Path(args.frozen).read_text())
+    q, q2 = frozen["metric"], frozen["runner_up"]
+    df = pd.concat([pd.read_csv(f, sep="\t") for f in args.scores], ignore_index=True)
+    if "missing" in df:
+        df = df[df["missing"].fillna(0) != 1]
+    out = {"frozen": frozen, "datasets": {}}
+    rng0 = 0
+    e2_all = {}
+    for ds, g in df.groupby("dataset"):
+        rec = {}
+        mix = g[g.kind == "mix"]
+        e2 = {}
+        for _, r in mix.iterrows():
+            if np.isfinite(r.get("nd_e1_per_copy_r", np.nan)):
+                e2.setdefault(r.dominant, []).append(r.e1_per_copy_r - r.nd_e1_per_copy_r)
+                e2_all.setdefault(f"{ds}:{r.dominant}", []).append(r.e1_per_copy_r - r.nd_e1_per_copy_r)
+        rec["E2_all_f"] = boot_mean(e2)
+        units = qc_units(g)
+        levels = [lv for lv in ("10k", "30k", "100k", "full") if (units.level == lv).any()]
+        for metric, key in ((q, "thresholds"), (q2, "q7_thresholds")):
+            dirn = QC_DIR[metric]
+
+            def auc_mean(u):
+                v = []
+                for lv in levels:
+                    ul = u[u.level == lv]
+                    if ul.single.any() and (~ul.single).any():
+                        v.append(auc_dir(ul[ul.single][metric], ul[~ul.single][metric], dirn))
+                return float(np.mean(v)) if v else np.nan
+            est = auc_mean(units)
+            doms = units.dominant.unique()
+            rng = np.random.default_rng(rng0)
+            bs = [auc_mean(pd.concat([units[units.dominant == x] for x in rng.choice(doms, len(doms))]))
+                  for _ in range(2000)]
+            bs = [b for b in bs if np.isfinite(b)]
+            thr = units.level.map(lambda lv: frozen_threshold(frozen, ds, lv, key)).astype(float)
+            flagged = units[metric] >= thr
+            per = {}
+            for lv in levels:
+                s = (units.level == lv).to_numpy()
+                u, fl = units[s], flagged[s]
+                per[lv] = {"threshold": frozen_threshold(frozen, ds, lv, key),
+                           "sens": float(fl[~u.single].mean()) if (~u.single).any() else np.nan,
+                           "spec": float((~fl[u.single]).mean()) if u.single.any() else np.nan,
+                           "n_single": int(u.single.sum()), "n_mixed": int((~u.single).sum()),
+                           "auc": auc_dir(u[u.single][metric], u[~u.single][metric], dirn)}
+            rec[metric] = {"auc_mean": est, "auc_ci": [float(np.percentile(bs, 2.5)), float(np.percentile(bs, 97.5))],
+                           "sens": float(flagged[~units.single].mean()), "spec": float((~flagged[units.single]).mean()),
+                           "levels": per}
+        rec["qc_works"] = bool(rec[q]["auc_ci"][0] > 0.75 and rec[q]["spec"] >= 0.8)
+        out["datasets"][ds] = rec
+    out["E2_all"] = boot_mean(e2_all)
+    out["E2_better"] = bool(out["E2_all"][1] > 0)
+    Path(args.out).write_text(json.dumps(out, indent=1, default=float))
+    lines = [f"E2 over all f < 1 mixtures (all datasets): {out['E2_all'][0]:+.4f} [{out['E2_all'][1]:+.4f}, {out['E2_all'][2]:+.4f}]"]
+    for ds, rec in out["datasets"].items():
+        e = rec["E2_all_f"]
+        lines.append(f"{ds}: E2 {e[0]:+.4f} [{e[1]:+.4f}, {e[2]:+.4f}]")
+        for metric in (q, q2):
+            r = rec[metric]
+            lines.append(f"  {metric}: AUC mean {r['auc_mean']:.3f} [{r['auc_ci'][0]:.3f}, {r['auc_ci'][1]:.3f}], frozen thresholds: "
+                         f"sens {r['sens']:.2f} spec {r['spec']:.2f}; " + "; ".join(
+                             f"{lv} AUC {v['auc']:.2f} thr {v['threshold']:.3f} sens {v['sens']:.2f} spec {v['spec']:.2f}"
+                             for lv, v in r["levels"].items()))
+        lines.append(f"  QC works (AUC CI lower > 0.75 and spec >= 0.8): {rec['qc_works']}")
+    print("\n".join(lines))
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -945,6 +1032,11 @@ def main(argv=None) -> None:
     s.add_argument("--scores", nargs="+", required=True)
     s.add_argument("--out", required=True)
     s.set_defaults(fn=cmd_aggregate)
+    s = sub.add_parser("test")
+    s.add_argument("--scores", nargs="+", required=True)
+    s.add_argument("--frozen", required=True)
+    s.add_argument("--out", required=True)
+    s.set_defaults(fn=cmd_test)
     args = ap.parse_args(argv)
     args.fn(args)
 

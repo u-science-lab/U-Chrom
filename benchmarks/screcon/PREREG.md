@@ -624,3 +624,72 @@ deep) −0.010 / −0.012 at 10 k / 30 k and +0.015 / +0.025 at 100 k / full.  E
 **Proposed QC rule (registered selection rule; not frozen until the user approves the held-back test)**:
 Q3 with the per-dataset, per-level Youden thresholds of `dominant_devlog.md` §4; Q7 reported alongside.
 The thresholds are protocol-specific and are not to be applied to other datasets without calibration.
+
+### 13.2 Freeze of the spot QC rule and the held-back test — 2026-10-06, before any held-back table is built or run
+
+User approval received 2026-10-06.  **Frozen QC rule** (`data/spotqc_frozen.json`, tag `ember-spotqc-frozen`):
+flag a spot as mixed when its **Q3** (fraction of the input contacts >= 400 kb apart or trans whose
+model-mean distance in its EMber run, seed 2, exceeds 2 bead units) is >= the development Youden threshold of
+its dataset and depth level:
+
+| dataset | 10 k | 30 k | 100 k | full |
+| --- | --- | --- | --- | --- |
+| Nagano | 0.3638 | 0.3783 | 0.4240 | 0.4227 |
+| Stevens | 0.2947 | 0.2685 | (full's) | 0.2528 |
+| Tan (phased, EMber deep) | 0.5319 | 0.4109 | 0.3880 | 0.3752 |
+
+A level without a development threshold (Stevens 100 k) takes the dataset's `full` threshold.  Q7 (partner
+conflict) is reported alongside with its own development thresholds (same file), not part of the rule.
+Already known on development (`dominant.py test` on the development scores, before the held-back run):
+Nagano Q3 specificity at these thresholds is 0.70 (< 0.8), Stevens 0.88, Tan 0.85.
+
+**Held-back test** (run once with the registered §13 pipeline, engine `dom-4181d07` = the build of the
+development runs, methods frozen as before): `dom_prepare.sbatch SET=test APPROVED=1` (Nagano held-back half,
+dominants by seed 20261014; Stevens cells 5-8; Tan §12.1 held-back pool cells, seeds 20261014 + t), then
+`dom_run.sbatch` per dominant.  Scoring: `dominant.py aggregate` (E1 / E2 / E3 tables, f_drop) and
+`dominant.py test --frozen data/spotqc_frozen.json` (the statements of §13: f_drop per dataset × level; E2 over
+all f < 1 mixtures with a 95 % CI over dominants, per dataset and pooled; held-back AUC of Q3 per dataset =
+mean over levels with a 95 % bootstrap CI over dominants; sensitivity / specificity at the frozen thresholds
+pooled over the dataset's levels; "the spot QC works" for a dataset only if the AUC CI lower bound > 0.75 and
+the pooled specificity >= 0.8).  Results go to `DOMINANT_TEST_RESULTS.md` and §13.4; nothing is changed after
+they are seen.
+
+### 13.3 Addition 2026-10-06 — unphased diploid calibration and the Chen et al. 2026 application (registered before any run of either)
+
+**Why.**  Spatial Hi-C of inbred mouse brain cannot be phased; §13 tested phased diploid cells only.
+
+* **Handling (fixed now): pseudo-haploid.**  Unphased diploid input is reconstructed with haploid EMber
+  (tag `robust-frozen`; both homologs on one chain per chromosome), as §12.1 did.  Not diploid-unphased: with
+  no phased ends every contact has four candidate copy pairs, the frozen deep configuration commits only
+  prior-phased contacts (none) and drops the rest until the 200 kb stage, and at 2-30 k contacts per spot the
+  copy assignment is not identifiable.
+* **Calibration (development only; Tan §13 development designs, unchanged)**: dataset `tanu` = the same Tan
+  development cells, designs, levels, f and sampled rows as `tan`, phases dropped (GEO tables), every run
+  pseudo-haploid (EMber haploid seeds 2 / 3, NucDynamics haploid seed 2, D-only EMber seed 2; references =
+  each cell's own phase-dropped table, EMber haploid seed 1, NucDynamics seed 1).  Scored with
+  `dominant.py score` / `aggregate` (E1 per chromosome chain, E2, Q1-Q7).  Q3 and Q7 thresholds for unphased
+  diploid input = Youden on these units per level (the §13 rule applied to `tanu`); reported as `tanu` in
+  `dominant_devlog.md` §6.  No held-back `tanu` run (the Tan held-back cells are used by §13.2).
+* **Chen et al. 2026 application** (`chen_spots.py`): sections cortex adult 10 µm (GSA run CRR1829219,
+  Adult16_HiC) and hippocampus adult 10 µm (CRR1829220, Adult22_HiC); per-spot deduplicated pairs read-only
+  from `$OAK/uchrom/spatial_hic_chen2026/<run>/<run>.dedup.pairs.gz` (reprocessed from CRA016676, see the
+  catalog); spots = barcode pairs linked to the published spots (`data/chen2026_*_spots.tsv.gz`, 7,795 /
+  8,185).
+  * Depth: n_cis = cis pairs (>= 1 kb) of the spot.  Spots with n_cis < 10,000 are **not assessable** (below
+    the calibrated range; counted, not reconstructed).  Level of a spot: 10 k for 10-30 k, 30 k for 30-100 k,
+    100 k for >= 100 k cis.
+  * Per assessable spot: EMber haploid (`robust-frozen`), 200 kb, 2 models, seed 2 (GEO table of the spot's
+    pairs); Q2, Q3, Q7.  **Pass** = Q3 < the `tanu` Q3 threshold of its level (the frozen rule, unphased
+    calibration); Q7 with the `tanu` Q7 threshold reported alongside.
+  * Reported: per section and level the number and fraction of spots that pass (also over all linked spots,
+    not-assessable counted as not passing); spatial maps (grid) of n_cis, assessable / pass / fail, Q3, Q7;
+    pass fraction per published region / cluster; for passing spots simple structural features — genome
+    radius of gyration and median chromosome radius of gyration (bead units), intermingling (fraction of
+    particles with a particle of another chromosome within 2 bead units), contact trans fraction — and their
+    maps and per-region medians.
+  * Secondary, descriptive (no threshold): per section 200 in-silico 50:50 mixtures of two random assessable
+    spots and 200 single assessable spots, all subsampled to 10,000 cis (`default_rng(20261015)`), same
+    EMber run and Q3 / Q7 — where real spots sit between "one spot" and "two spots" of the same protocol.
+  * Caveats stated up front: the thresholds come from Dip-C cells, not from this protocol (§13 showed they do
+    not transfer exactly); a 10 µm spot that passes is "not detectably mixed at the level f <= 0.6", not shown
+    to be one cell; there is no reference structure for a spot, so no E1.
