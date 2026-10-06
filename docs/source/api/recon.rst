@@ -4,8 +4,11 @@ uchrom.recon
 Single-cell reconstruction
 --------------------------
 
+.. automodule:: uchrom.recon.sc.ember
+   :members: reconstruct_ember
+
 .. automodule:: uchrom.recon.sc.nucdyn
-   :members: main, run_once, Simulation, default_params
+   :members: main, run_once, Simulation, default_params, reconstruct_nucdyn
 
 .. automodule:: uchrom.recon.sc.gem
    :members: main, Simulation, default_prams

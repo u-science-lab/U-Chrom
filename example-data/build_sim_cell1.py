@@ -1,24 +1,26 @@
 """Single-cell 3-D genome structure from the in-repo cell1.pairs.
 
-Runs NucDynamics (``uchrom.recon.sc.nucdyn``) on ``cell1.pairs`` (Stevens et
-al. 2017, mESC G1 cell, mm10) and links the cell's own contact map, so the
-browser can show structure, contacts and 3-D distances side by side:
+Runs NucDynamics (``uchrom.recon.sc.nucdyn.reconstruct_nucdyn``, native
+engine ``uchrom_nucdyn``, protocol of the 2017 code, default schedule 8 → 0.1
+Mb) on ``cell1.pairs`` (Stevens et al. 2017, mESC G1 cell, mm10) and links
+the cell's own contact map, so the browser can show structure, contacts and
+3-D distances side by side:
 
-  sim_cell1/sim_cell1.cdz         20 chromosomes, ~25.6k particles at 100 kb
-                                  (one-file ChromData store, checked in; ``--format
-                                  zarr`` for the directory store)
+  sim_cell1/sim_cell1.cdz         20 chromosomes, ~25.7k particles at 100 kb, an
+                                  ensemble of ``--n-models`` structures (coords =
+                                  model 0, layers model_<k>); one-file ChromData
+                                  store, checked in (``--format zarr`` for the
+                                  directory store)
   sim_cell1/cell1_contacts.mcool  the same cell's contacts, 100 kb … 1 Mb
 
 Usage::
 
-    python example-data/build_sim_cell1.py [--arch cpu]
+    python example-data/build_sim_cell1.py [--device auto|cpu|gpu] [--n-models 4] [--seed 1]
 """
 
 from __future__ import annotations
 
 import argparse
-import subprocess
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -54,7 +56,9 @@ def contacts_mcool(pairs: Path, out: Path) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--arch", default="cpu", help="taichi arch for NucDynamics (cpu / gpu / cuda / metal)")
+    ap.add_argument("--device", default="auto", help="NucDynamics engine device: auto / cpu / gpu")
+    ap.add_argument("--n-models", type=int, default=4, help="structures in the ensemble")
+    ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--format", default="cdz", choices=["cdz", "zarr"],
                     help="output container (default cdz: one file, checked in)")
     args = ap.parse_args()
@@ -62,8 +66,11 @@ def main() -> None:
     pairs = HERE / "cell1.pairs"
     structure = OUT / ("sim_cell1" + {"cdz": ".cdz", "zarr": ".chromdata.zarr"}[args.format])
     if not structure.exists():
-        subprocess.run([sys.executable, "-m", "uchrom.recon.sc.nucdyn", str(pairs), str(structure),
-                        f"--arch={args.arch}"], check=True)
+        from uchrom.recon.sc.nucdyn import reconstruct_nucdyn
+
+        nd = reconstruct_nucdyn(str(pairs), n_models=args.n_models, device=args.device, seed=args.seed,
+                                cell_id="sim_cell1", verbose=True)
+        nd.write(structure)
     mcool = OUT / "cell1_contacts.mcool"
     if not mcool.exists():
         contacts_mcool(pairs, mcool)
@@ -72,8 +79,9 @@ def main() -> None:
 
     cd = ChromData.read(structure)
     cd.uns.setdefault("genome_assembly", "mm10")
-    cd.uns["xyz_unit"] = "model units (NucDynamics)"
-    cd.uns["source"] = "NucDynamics on example-data/cell1.pairs (Stevens et al. 2017)"
+    cd.uns["xyz_unit"] = "particle radii (NucDynamics)"
+    cd.uns["source"] = ("NucDynamics (native engine uchrom_nucdyn, protocol nuc_dynamics_2017) on "
+                        "example-data/cell1.pairs (Stevens et al. 2017)")
     # relative to the dataset's folder, so the folder can be moved or shipped
     cd.link_cool(mcool.name, key="cell1_contacts", label="cell1 contacts (input to the model)")
     cd.write(structure)

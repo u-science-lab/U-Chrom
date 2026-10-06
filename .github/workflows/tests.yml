@@ -122,3 +122,63 @@ jobs:
       - name: Run tests
         working-directory: discovery
         run: python -m pytest tests -ra
+
+  nucdyn-native:
+    # Native NucDynamics engine (native/nucdyn, Rust + PyO3): Rust unit tests,
+    # a CPU-only wheel (no GPU feature), the default wheel (with the wgpu
+    # backend) and the Python tests against it.  GPU tests skip themselves
+    # when the runner has no usable adapter.
+    name: nucdyn native engine (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/nucdyn/target
+          key: nucdyn-${{ runner.os }}-${{ hashFiles('native/nucdyn/Cargo.lock') }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            pyproject.toml
+            native/nucdyn/pyproject.toml
+
+      - name: Rust tests
+        working-directory: native/nucdyn
+        run: |
+          cargo test --release
+          cargo test --release --features gpu
+
+      - name: Build wheels (CPU-only, and default with GPU)
+        working-directory: native/nucdyn
+        run: |
+          python -m pip install --upgrade pip maturin
+          # --features on the command line replaces the pyproject list: CPU only
+          maturin build --release --features python -o dist-cpu
+          maturin build --release -o dist
+
+      - name: Install uchrom and the engine
+        run: |
+          pip install -e . pytest
+          pip install native/nucdyn/dist/*.whl
+          python -c "import uchrom_nucdyn as u; print(u.__version__, u.HAS_GPU, u.gpu_info())"
+
+      - name: Python tests
+        run: python -m pytest tests/recon/test_nucdyn_native.py -m "not slow" -ra

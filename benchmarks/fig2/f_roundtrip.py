@@ -36,7 +36,7 @@ tracks, cell table + cellm) for the chromdata.zarr, FOF-CT and AnnData rows;
 
     python benchmarks/fig2/f_roundtrip.py
 
-Writes ``paper/fig2/results/f_roundtrip.json``.
+Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/f_roundtrip.json``.
 """
 
 from __future__ import annotations

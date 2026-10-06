@@ -29,7 +29,7 @@ min/max.  The OS page cache is warm (not flushed).
 
     python benchmarks/fig2/e_contacts.py [--cells 50,100,500,1000,all] [--repeats 3]
 
-Writes ``paper/fig2/results/e_contacts.json``.
+Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/e_contacts.json``.
 """
 
 from __future__ import annotations

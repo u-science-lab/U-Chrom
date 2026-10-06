@@ -33,7 +33,7 @@ embeddings in ``cellm``) and its linked per-cell 1 Mb contact maps
 
     python benchmarks/fig2/f_crossmodal.py [--resolution 1.0] [--window chr2:40-90Mb]
 
-Writes ``paper/fig2/results/f_crossmodal.json``.
+Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/f_crossmodal.json``.
 """
 
 from __future__ import annotations

@@ -1,0 +1,6 @@
+# PREREG §11 round 1, native candidates (engine dev-d2ae722)
+engine:n75drop:{"robust_dip_commit":0.75}
+engine:n75keep:{"robust_dip_commit":0.75,"robust_dip_commit_drop":false}
+engine:s3n75keep:{"robust_dip_commit":0.75,"robust_dip_commit_stage":3,"robust_dip_commit_drop":false}
+engine:s3n75drop:{"robust_dip_commit":0.75,"robust_dip_commit_stage":3}
+engine:iso5:{"dip_isolation_nei":5}

@@ -1,7 +1,7 @@
 """[Fig. 3a feasibility; copied from the data-check scratch dir.  Run from a working
 directory holding a clone of github.com/seqcode/miniMDS (commit 9915d21) and a venv
 `venv_minimds` with numpy 1.26 / scikit-learn 1.5 (miniMDS --partitioned fails under
-NumPy 2); inputs come from remote_slice.py.  Results: paper/fig3/feasibility/a_mds_vs_minimds_*.json]
+NumPy 2); inputs come from remote_slice.py.  Results: u-chrom-paper/manuscripts/full/figures/fig3/feasibility/a_mds_vs_minimds_*.json]
 
 miniMDS vs uchrom on genuine Rao 2014 IMR90 in situ Hi-C chr21 (4DN 4DNFIR1JDZH7,
 GRCh38), sliced remotely by remote_slice.py at 100 kb and 25 kb, ICE-balanced (4DN weights).

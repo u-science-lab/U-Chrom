@@ -11,6 +11,7 @@ same calling convention (``chrom=None``, ``params=``, ``key_added=``,
     uc.tl.call_tads(cd, method="arcfish")        # strc.tad.call_tads_by_pval
     uc.tl.call_loops(cd)                         # strc.loop.call_loops_axiswise_f
     uc.tl.call_compartments(cd)                  # strc.comp.call_compartments_axes_pc
+    uc.tl.reconstruct_sc("cell.pairs")           # recon.sc.reconstruct_ember (EMber)
 """
 
 from __future__ import annotations
@@ -63,4 +64,14 @@ def call_compartments(cd, *, method: str = "axes_pc", **kwargs):
     return _dispatch("compartment", {"axes_pc": call_compartments_axes_pc}, method)(cd, **kwargs)
 
 
-__all__ = ["call_compartments", "call_loops", "call_tads"]
+def reconstruct_sc(contacts, *, method: str = "ember", **kwargs):
+    """Single-cell Hi-C 3-D reconstruction -> new ``ChromData``.  ``method``:
+    ``"ember"`` -> :func:`uchrom.recon.sc.reconstruct_ember`; ``"nucdyn"`` ->
+    :func:`uchrom.recon.sc.reconstruct_nucdyn`."""
+    from uchrom.recon.sc import reconstruct_ember, reconstruct_nucdyn
+
+    return _dispatch("single-cell reconstruction", {"ember": reconstruct_ember, "nucdyn": reconstruct_nucdyn}, method)(
+        contacts, **kwargs)
+
+
+__all__ = ["call_compartments", "call_loops", "call_tads", "reconstruct_sc"]

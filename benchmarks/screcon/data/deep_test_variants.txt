@@ -1,0 +1,3 @@
+# PREREG §11 deep test (tag ember-deep-frozen)
+engine:deep:{"robust_dip_commit":0.75,"robust_dip_readmit_stage":4}
+nucdyn
