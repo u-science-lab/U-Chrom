@@ -44,7 +44,7 @@ jobs:
           cache: "pip"
           cache-dependency-path: |
             docs/requirements.txt
-            pyproject.toml
+            packages/uchrom/pyproject.toml
 
       - name: Install docs dependencies
         run: |

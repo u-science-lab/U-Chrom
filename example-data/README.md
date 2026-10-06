@@ -62,12 +62,12 @@ auto-downloaded by the tutorials on first run into this directory.
 | `with_loops.chromdata.zarr`           | 24 MB   | no              | generated     | output of `loop_calling.ipynb` (intermediate cache, safe to delete)     |
 | `fofct_core.csv`                      | ~6 MB   | no              | generated     | synthetic offline fallback for tutorials 4/5/6/7                        |
 | `GSE63525_GM12878_insitu_primary+replicate_combined_30.hic` | ~40 GB | no | **manual** (too large) | `benchmark.ipynb` |
-| `schicar_mop/raw/GSE305439/` RNA + metadata | 61 MB | no | GEO GSE305439 | scHiCAR tutorials (upstream input) |
-| `schicar_mop/raw/GSE305439/` pairs | 1.47 GB | no | GEO GSE305439 (opt-in, `--schicar_dna`) | `build_schicar_mop.py` contact maps, scHiCAR tutorials |
+| `schicar_mop/raw/GSE305439/` RNA + metadata | 61 MB | no | GEO GSE305439 | `build_schicar_mop.py`; the scHiCAR → MERFISH mapping analysis (upstream input) |
+| `schicar_mop/raw/GSE305439/` pairs | 1.47 GB | no | GEO GSE305439 (opt-in, `--schicar_dna`) | `build_schicar_mop.py` contact maps |
 | `schicar_mop/raw/GSE305439/` ATAC fragments + `schicar_mop/raw/mm10.refGene.gtf.gz` | 1.35 GB + 13 MB | no | GEO GSE305439 + UCSC (opt-in, `--schicar_atac`) | `build_schicar_mop.py` ATAC embedding + gene activity |
-| `schicar_mop/raw/merfish_mop/` | 332 MB | no | Brain Image Library g.21 | `schicar_to_merfish_mapping.ipynb` (upstream input) |
+| `schicar_mop/raw/merfish_mop/` | 332 MB | no | Brain Image Library g.21 | `benchmarks/schicar_merfish/schicar_to_merfish_mapping.ipynb` (upstream input) |
 | `benchmarks/fig6/_data/takei2025_fov0_x{1,3,10,30}.chromdata.zarr` | 28 MB – 0.9 GB | no | **derived**: `benchmarks/fig6/make_scaled.py` tiles copies of the real FOV 0 cells (geometry only); labelled *replicated* wherever reported | Fig 6c browser benchmarks |
-| `schicar_mop/data/…`, `schicar_mop/organized_u_chrom_framework/…` | — | no | **derived — recipe pending** | scHiCAR tutorials (see below) |
+| `schicar_mop/data/…` | — | no | **derived — recipe pending** | the scHiCAR → MERFISH mapping analysis (see below) |
 
 `*.csv`, `*.h5cd`, `*.chromdata.zarr`, `*.cdz` (except
 `sim_cell1/sim_cell1.cdz` and the `mESC_Sox2_5cells_*.chromdata.zarr`
@@ -456,11 +456,9 @@ using.
 
 ### scHiCAR mouse brain + MERFISH MOp (`schicar_mop/`)
 
-Used by `schicar_to_merfish_mapping.ipynb`,
-`schicar_merfish_uchrom_framework_walkthrough.ipynb` and (paths only,
-no data needed) `schicar_linked_multiomics_framework.ipynb`.  The
-notebooks read `$UCHROM_SCHICAR_ROOT`, defaulting to
-`example-data/schicar_mop/`.
+The scHiCAR → MERFISH mapping analysis
+(`benchmarks/schicar_merfish/schicar_to_merfish_mapping.ipynb`, Tangram) reads
+`$UCHROM_SCHICAR_ROOT`, defaulting to `example-data/schicar_mop/`.
 
 **Upstream sources (public, auto-downloadable):**
 
@@ -504,7 +502,7 @@ notebooks read `$UCHROM_SCHICAR_ROOT`, defaulting to
   class_label, subclass, label`).  The tutorials use experiment
   `mouse2_sample1`.  Fetch with `--merfish_mop`.
 
-**Derived inputs — recipe pending.**  The notebooks do not read the raw
+**Derived inputs — recipe pending.**  The mapping analysis does not read the raw
 files directly; they read intermediates that were produced outside this
 repository and whose build scripts are not yet checked in:
 
@@ -515,11 +513,9 @@ repository and whose build scripts are not yet checked in:
 | `data/schicar/atac_features.npz` | GSE305439 ATAC → per-cell 1 Mb bins |
 | `data/schicar/paper_loops_5kb.csv`, `paper_loop_density_5kb.npz` | scHiCAR paper 5 kb loop calls |
 | `data/merfish_mop/merfish_mouse2sample1.h5ad` | BIL `counts.h5ad` + `cell_labels.csv`, `mouse2_sample1` |
-| `organized_u_chrom_framework/GSE305439_scHiCAR1_MOp_MERFISH_linked_framework.{h5cd,h5mu}` + `_summary.json`, 1 Mb `.scool` | all of the above + Tangram mapping |
 
-Until the build scripts land (tracked as an open item; see the
-tutorials' first cell), these two notebooks are **not reproducible from
-public data alone** and are shipped with their recorded outputs.
+Until the build scripts land, the mapping analysis is **not reproducible from
+public data alone** and is kept with its recorded outputs.
 
 ### `sim_cell1/` — NucDynamics single-cell structure + its contacts (3.2 MB, in repo)
 

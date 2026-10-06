@@ -1,97 +1,88 @@
+<p align="center"><img src="docs/source/_static/logo.svg" alt="U-Chrom" width="120"></p>
+
 # U-Chrom
 
-**U**niversal **Chrom**atin structure data analysis toolkit.
+**Universal Chromatin** — one toolkit for 3-D genome data from sequencing and imaging.
 
-U-Chrom provides a unified framework for chromatin 3D structure analysis. The core data structure is a **structure table** — genomic bins mapped to 3D coordinates (x, y, z). This table can be obtained from:
+Single-cell Hi-C, spatial Hi-C, bulk Hi-C, chromatin tracing and DNA seqFISH+ all describe where loci
+sit relative to each other, cell by cell, but each comes with its own formats and tools.  U-Chrom
+puts them in one data model and builds the analyses on it:
 
-- **Sequencing-based data** (Hi-C, Dip-C, etc.) via 3D reconstruction algorithms
-- **Imaging-based data** (DNA FISH, chromatin tracing, etc.) via image processing and chromatin tracing
-
-Based on this core data structure, U-Chrom supports a range of downstream analyses:
-
-- Reconstruct distance matrices from 3D coordinates
-- Identify chromatin structures (A/B compartments, TADs, loops)
-- Embed single-cell structures for population-level analysis
-- Compute geometric features
-- Interactive 3D visualization
-
-## Modules
-
-| Module | Description |
-|--------|-------------|
-| `uchrom.io` | Read/write standard formats (.pairs, .cool, .hic, .3dg, .csv, .pdb) |
-| `uchrom.recon.sc` | Single-cell 3D reconstruction (Nuc Dynamics, GEM) |
-| `uchrom.recon.bulk` | Bulk Hi-C 3D reconstruction (MDS/SMACOF) |
-| `uchrom.recon.fish` | Reconstruction combining sequencing and imaging data |
-| `uchrom.im` | Image processing for chromatin tracing data |
-| `uchrom.strc` | Structure identification (TAD, loop, compartment) |
-| `uchrom.fea` | Geometric feature computation |
-| `uchrom.emb` | Single-cell structure embedding |
-| `uchrom.pl` | Plotting utilities |
-| `uchrom.browser` | Interactive 3D structure browser |
-
-LLM-driven multi-omics auto-discovery lives in the separate
-[`uchrom-discovery`](packages/uchrom-discovery/README.md) package (`pip install -e packages/uchrom-discovery/`).
+- **`ChromData` and the `.chromdata.zarr` store** — cells › traces › spots on a shared locus axis,
+  with contact maps, RNA, chromatin marks, cell positions and outlines linked per cell; a store
+  opens *backed*, from disk or over HTTP, and is read one cell or chromosome at a time.
+- **Import** — 4DN FOF-CT, PyHiM, seqFISH+ multi-omics, `.pairs` / `.cool` / `.scool` / `.hic`.
+- **Imaging** — spot-to-trace alignment and coordinate imputation.
+- **3-D reconstruction** — NucDynamics and EMber (single cell), MDS and IGM population models
+  (bulk), GEM-FISH (Hi-C + imaging), on a native engine (Rust; multi-core CPU and GPU).
+- **Structures** — loops, TADs, per-allele domains and A/B compartments called from 3-D distances.
+- **Features and embeddings** — distance maps, variance features, peaks; embeddings and clusters of
+  cells from RNA, chromatin marks, accessibility and contact maps.
+- **The web browser** — cells in their tissue, structures in 3-D, contact maps, tracks and
+  embeddings, linked through the cells you select; scriptable from Python and by agents.
+- **The data atlas** — public datasets as stores you open without downloading:
+  [uchrom-atlas.u-science.org](https://uchrom-atlas.u-science.org), in the browser at
+  [uchrom-browser.u-science.org](https://uchrom-browser.u-science.org).
+- **Auto-discovery** — LLM agents that propose, run and check analyses on a dataset.
 
 ## Install
 
-```bash
-$ pip install u-chrom
-```
-
-Optional extras:
-```bash
-$ pip install "u-chrom[browser]"   # interactive 3D browser (PyVista + PyQt5)
-$ pip install "u-chrom[hic]"       # read .hic files
-$ pip install "u-chrom[anndata]"   # link ChromData with AnnData
-```
-
-Install from source:
+Python ≥ 3.11.  The packages are installed from this repository (not on PyPI yet):
 
 ```bash
-$ git clone https://github.com/Nanguage/U-Chrom.git
-$ cd U-Chrom
-$ pip install -e packages/chromdata -e packages/uchrom                # or: uv pip install -e packages/uchrom
-$ pip install -e packages/uchrom-browser -e "packages/uchrom[web]"   # + the web browser
+git clone https://github.com/Nanguage/U-Chrom.git && cd U-Chrom
+pip install -e packages/chromdata -e packages/uchrom      # data model + analysis library
+pip install -e packages/uchrom-browser                     # web browser
+pip install ./packages/uchrom-recon                         # native reconstruction engine (needs Rust)
 ```
+
+or, with [uv](https://docs.astral.sh/uv/): `uv pip install -e "packages/uchrom[web,recon]"`.
+
+## Quick start
+
+```python
+import uchrom as uc
+from chromdata import ChromData
+
+# a dataset of the atlas, read over HTTP: ~2 s to open 1,799 cells, then one cell on demand
+cd = ChromData.read("https://uchrom-atlas-r2.u-science.org/takei2025_cerebellum.chromdata.zarr", backed=True)
+cell = cd.get_cell(cd.cells.index[0])
+
+# chromatin tracing (Takei 2021, 4DN FOF-CT): TADs from 3-D distances
+cd = ChromData.from_fofct("example-data/4DNFIHF3JCBY.csv")
+tads = uc.tl.call_tads(cd, chrom="chr3")
+cd.write("takei2021.chromdata.zarr")
+
+# single-cell Hi-C -> an ensemble of 3-D structures (EMber, native engine)
+s = uc.tl.reconstruct_sc("example-data/cell1.pairs", n_models=4)
+```
+
+```bash
+python -m uchrom_browser takei2021.chromdata.zarr        # look at it
+```
+
+## Documentation
+
+The documentation is organised by function — data model & storage, import, imaging, 3-D
+reconstruction, structure calling, features, cells & embeddings, visualisation, auto-discovery — each
+chapter with tutorials on real data (`docs/`, notebooks in `tutorials/`, datasets in
+[`example-data/README.md`](example-data/README.md)).
 
 ## Repository layout
 
-The repository holds several packages that are developed together, each with its own tests
-(`cd packages/<package> && pytest tests`):
-
 | Folder | Package (import) | What it is |
 |--------|------------------|------------|
-| `packages/uchrom/` | `u-chrom` (`uchrom`) | the analysis library: I/O, reconstruction, structures, features, embeddings, plots |
-| `packages/chromdata/` | `chromdata` | the data model: `ChromData` and its `.chromdata.zarr` store (numpy / pandas / zarr / pyarrow only) |
+| `packages/chromdata/` | `chromdata` | the data model: `ChromData` and the `.chromdata.zarr` store (numpy / pandas / zarr / pyarrow only); format spec in `spec.md` |
+| `packages/uchrom/` | `u-chrom` (`uchrom`) | the analysis library: I/O, imaging, reconstruction, structures, features, embeddings, plots |
 | `packages/uchrom-browser/` | `uchrom-browser` (`uchrom_browser`) | the web browser (needs `chromdata`, not `uchrom`) |
+| `packages/uchrom-recon/` | `uchrom-recon` (`uchrom_recon`) | the native reconstruction engine: NucDynamics, EMber, IGM (Rust; LGPL-3.0) |
 | `packages/uchrom-discovery/` | `uchrom-discovery` (`uchrom_discovery`) | LLM-driven auto-discovery on top of `uchrom` |
-| `packages/uchrom-recon/` | `uchrom-recon` (`uchrom_recon`) | the native reconstruction engine: NucDynamics, EMber, IGM population modelling (Rust) |
-| `apps/` | — | the data atlas and the hosted web browser (deployments) |
+| `apps/` | — | the atlas page and the hosted web browser (deployments) |
+| `benchmarks/`, `tutorials/`, `example-data/`, `docs/` | — | figure benchmarks, tutorials, dataset catalog and builders, documentation |
 
-## Usage
+Each package has its own tests (`cd packages/<package> && pytest tests`); see
+`docs/source/reference/development.md`.
 
-### Single-cell 3D reconstruction
+## License
 
-```bash
-$ pip install ./packages/uchrom-recon   # native reconstruction engine (NucDynamics, EMber; Rust; CPU + GPU)
-$ python -m uchrom.recon.sc.nucdyn example-data/cell1.pairs ./cell1.chromdata.zarr --n_models=10 --device=auto
-```
-
-### Bulk Hi-C 3D reconstruction
-
-```bash
-$ python -m uchrom.recon.bulk.mds ./data.mcool ./out.csv --resolution=100000 --chrom=chr1
-```
-
-### Visualize the reconstructed structure
-
-```bash
-$ python -m uchrom.browser ./out1.csv
-```
-
-### Convert to PDB format (for PyMol / VMD)
-
-```bash
-$ python -m uchrom.io particles_to_pdb ./out1.csv ./out1.pdb --split-by-chrom=True
-```
+See [`docs/source/reference/license.md`](docs/source/reference/license.md) (including third-party code).

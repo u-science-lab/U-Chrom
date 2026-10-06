@@ -22,7 +22,7 @@ From the structure table, downstream modules perform:
 - Structure identification: A/B compartments (`uchrom.strc.comp`), TADs (`uchrom.strc.tad`), loops (`uchrom.strc.loop`)
 - Single-cell embedding (`uchrom.emb`) — population-level analysis of single-cell structures
 - Geometric feature computation (`uchrom.fea`)
-- Visualization (`uchrom.browser`, `uchrom.pl`)
+- Visualization (the web browser `uchrom-browser`, `uchrom.pl`)
 
 ## Package Structure
 
@@ -57,7 +57,6 @@ apps/
 └── hosted-browser/    the public web browser: Cloudflare Worker + container (chromdata + uchrom-browser)
 
 uchrom/                (packages/uchrom/uchrom)
-├── core/            deprecated alias of chromdata (`from chromdata import ChromData`)
 ├── convention.py    the calling convention of analysis functions
 ├── io/              Data I/O (.pairs, .cool, .hic, .3dg, .csv, .pdb, seqFISH multi-omics)
 ├── recon/           3D reconstruction
@@ -75,7 +74,7 @@ uchrom/                (packages/uchrom/uchrom)
 │   └── fish/        GEM-FISH: Hi-C + FISH combined (PyTorch; TAD-level + intra-TAD)
 ├── im/              Imaging-side processing
 │   ├── trace/       Chromatin tracing / spot-to-trace alignment (Jie aligner)
-│   └── impute/      FISH coordinate imputation (linear, grid, SnapFISH-IMPUTE)
+│   └── impute/      FISH coordinate imputation (linear, grid, SnapFISH-IMPUTE, vendored: only what is used)
 ├── strc/            Structure identification
 │   ├── tad/         TAD detection (directionality index, ArcFISH arc p-value, FISHnet)
 │   ├── loop/        Loop detection (axis-wise F-test)
@@ -84,10 +83,8 @@ uchrom/                (packages/uchrom/uchrom)
 ├── fea/             Per-bin features (distance, arc, sequence, GTF annotation,
 │                    MACS-style peaks, structure projection) + feature registry
 ├── emb/             Single-cell embedding (Higashi / FastHigashi wrapper)
-├── pl/              Plotting (3D structure, trace statistics)
-├── utils/           Shared statistics helpers (LOWESS, etc.)
-├── browser/         Desktop 3D browser (PyVista + PyQt5); `--web` starts uchrom-browser
-└── op.py            Misc operations (mark empty particles)
+├── pl/              Plotting (matplotlib; 3-D tubes with PyVista, extra plot3d)
+└── utils/           Shared statistics helpers (LOWESS, etc.)
 ```
 
 - **Development install** (the packages are not on PyPI): `uv pip install -e "packages/uchrom[web]"` (the
@@ -100,8 +97,8 @@ uchrom/                (packages/uchrom/uchrom)
   check it); new data-model code goes into chromdata, new analysis into uchrom.
 - **Dependency direction is one-way**: `uchrom_discovery` may import the
   public `uchrom` API; `uchrom` must never import `uchrom_discovery`
-  (except the deprecated `uchrom.auto_discovery` shim and the deprecated
-  `ChromData.*discovery*` delegators, both slated for removal).  Reusable
+  (the former `uchrom.auto_discovery` shim and `ChromData.*discovery*`
+  delegators were removed).  Reusable
   feature computation belongs in `uchrom.fea` / `uchrom.strc`, not in
   discovery.
 - **The paper lives elsewhere**: manuscripts, figure scripts and figure results are in
@@ -110,6 +107,11 @@ uchrom/                (packages/uchrom/uchrom)
   `manuscripts/full/figures/<fig>/results/*.json` there (`benchmarks/_paper.py`, `$UCHROM_PAPER`); library
   changes a figure needs are made here first.  Never re-create `paper/` in this repository; a
   symlink `paper -> ../u-chrom-paper` (ignored) may show the paper checkout next to the code.
+- **Docs and tutorials**: `docs/source` is organised by chapter (start, data, io, imaging, recon,
+  structures, features, cells, viz, discovery, reference); every chapter shows its modules through
+  tutorials (`tutorials/*.ipynb`, linked from `docs/source/tutorials/`), committed **executed on real
+  data** — the docs build does not run them (`nb_execution_mode = "off"`); re-execute a changed tutorial
+  with `jupyter nbconvert --execute --inplace`.
 - **Tests live in each package** (`packages/<pkg>/tests`, `apps/atlas/tests`); every suite is a
   `tests` package, so run each from its folder: `cd packages/uchrom && pytest tests` (likewise
   chromdata, uchrom-browser, uchrom-discovery; `cd apps/atlas && pytest tests`; `cargo test` in
@@ -266,6 +268,6 @@ All datasets consumed by tutorials and benchmarks live in
 - **Python package name**: `uchrom` (import name), `u-chrom` (pip name)
 - **Python ≥ 3.11** (zarr ≥ 3, needed by the `.chromdata.zarr` container, has no 3.10 wheels); `zarr` and `pyarrow` are core dependencies.
 - **`uchrom/io/` naming**: The internal file is `_io.py` to avoid shadowing Python's stdlib `io` module. Use `gzip.open(path, mode + "t")` instead of `io.TextIOWrapper`.
-- **CLI entry points**: All via `python -m` (e.g., `python -m uchrom.recon.sc.nucdyn`, `python -m uchrom.browser`)
-- **Browser backend**: PyVista only (VisPy backend was removed)
-- **Web browser**: the `uchrom-browser` package (`packages/uchrom-browser/uchrom_browser`: FastAPI server + React/Three.js SPA in `frontend/`, built into `static/` and committed; API in `API.md`).  It depends on `chromdata` only and must never import `uchrom`.  `python -m uchrom_browser` / `uchrom-browser`, or `python -m uchrom.browser --web` with u-chrom (`uchrom.browser.web` / `uchrom.browser.client` are deprecated aliases).  `uchrom/browser/__init__.py` imports Qt lazily so the web path works without PyQt5.  Frontend changes need `npm run build` in `packages/uchrom-browser/uchrom_browser/frontend` and the rebuilt `static/` committed.  Keep `API.md` in sync with `server.py` / `data.py`.
+- **CLI entry points**: All via `python -m` (e.g., `python -m uchrom.recon.sc.nucdyn`, `python -m uchrom_browser`, `python -m uchrom.io particles_to_pdb`)
+- **No desktop browser**: the PyQt5 / PyVista desktop browser was removed; the web browser is the only one (`uchrom.pl.plot_structure_3d` keeps PyVista as the `plot3d` extra).
+- **Web browser**: the `uchrom-browser` package (`packages/uchrom-browser/uchrom_browser`: FastAPI server + React/Three.js SPA in `frontend/`, built into `static/` and committed; API in `API.md`).  It depends on `chromdata` only and must never import `uchrom`.  `python -m uchrom_browser` / `uchrom-browser`.  Frontend changes need `npm run build` in `packages/uchrom-browser/uchrom_browser/frontend` and the rebuilt `static/` committed.  Keep `API.md` in sync with `server.py` / `data.py`.

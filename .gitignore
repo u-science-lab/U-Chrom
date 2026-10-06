@@ -158,3 +158,7 @@ packages/uchrom-recon/python/uchrom_recon/*.pyd
 # monorepo packages: build output of non-editable installs
 packages/*/build/
 packages/*/*.egg-info/
+
+# tutorial outputs (the notebooks write under tutorials/_out/)
+tutorials/_out/
+example-data/ref_mm10/
