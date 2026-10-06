@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { genomeRows, parseCells, TOOLS, ACTIONS } from './actions'
+import { PANE_TYPES } from './workspace'
 
 const cells = new Set(['c1', 'c2'])
 const groups = new Set(['g0123456789ab'])
@@ -7,6 +8,10 @@ const groups = new Set(['g0123456789ab'])
 describe('actions', () => {
   it('every tool in ui_tools.json has an implementation and vice versa', () => {
     expect(TOOLS.map((t) => t.name).sort()).toEqual(Object.keys(ACTIONS).sort())
+  })
+  it('open_view can open every kind of view the workspace has', () => {
+    const open = TOOLS.find((t) => t.name === 'open_view') as unknown as { inputSchema: { properties: { type: { enum: string[] } } } }
+    expect([...open.inputSchema.properties.type.enum].sort()).toEqual([...PANE_TYPES].sort())
   })
   it('parses cells specs into view scopes', () => {
     expect(parseCells(undefined, cells, groups)).toEqual({ kind: 'focus' })

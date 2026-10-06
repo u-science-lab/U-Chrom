@@ -171,7 +171,7 @@ export const ACTIONS: Record<string, Action> = {
   async open_view(args) {
     const { s, ds } = ctx()
     const type = str(args.type, 'type') as PaneType
-    if (!['3d', 'embedding', 'genome', 'matrix', 'stats'].includes(type)) throw new Error(`unknown view type: ${type}`)
+    if (!['3d', 'spatial', 'embedding', 'genome', 'matrix', 'stats'].includes(type)) throw new Error(`unknown view type: ${type}`)
     const cellIds = new Set((s.cells[ds.id] ?? []).map((c) => c.cell_id))
     const groupIds = new Set((s.savedGroups[ds.name] ?? []).map((g) => g.id))
     const opts: Partial<Omit<Pane, 'id' | 'type'>> = {}
@@ -190,6 +190,11 @@ export const ACTIONS: Record<string, Action> = {
     }
     if (type === 'embedding' && optStr(args.embedding)) opts.embeddingKey = optStr(args.embedding)
     if (type === 'matrix' && optStr(args.source)) opts.source = optStr(args.source)
+    if (type === 'spatial') {
+      if (optStr(args.spatial)) opts.spatialKey = optStr(args.spatial)
+      if (optStr(args.region)) opts.region = optStr(args.region)
+      if (typeof args.image_opacity === 'number') opts.imageOpacity = Math.max(0, Math.min(1, args.image_opacity))
+    }
     let id = ''
     s.setWorkspace((ws) => {
       const next = addPane(ws, type, opts)
