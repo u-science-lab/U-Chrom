@@ -89,8 +89,6 @@ $ python -m uchrom.recon.bulk.mds ./data.mcool ./out.csv --resolution=100000 --c
 $ python -m uchrom.browser ./out1.csv
 ```
 
-![demo](./demo1.png)
-
 ### Convert to PDB format (for PyMol / VMD)
 
 ```bash
