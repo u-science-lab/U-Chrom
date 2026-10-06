@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -160,7 +161,7 @@ def main(argv=None) -> None:
                   "mix_cells": args.k}
         prior = None
         if args.oracle_prior is not None:
-            base = args.contacts[:-7] if args.contacts.endswith(".txt.gz") else args.contacts
+            base = re.sub(r"\.(txt|pairs)\.gz$", "", args.contacts)      # pseudo-haploid / phased pool tables
             cell = np.load(base + ".origin.npz")["cell"].astype(np.int64)
             rng = np.random.default_rng(args.seed)
             flip = rng.random(len(cell)) < args.oracle_prior
