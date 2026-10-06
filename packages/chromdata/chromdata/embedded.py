@@ -851,16 +851,45 @@ def export_mcool(store, key: str, out: PathLike) -> Path:
     return Path(out)
 
 
-def export_scool(store, key: str, out: PathLike, *, cells: Optional[Sequence[str]] = None) -> Path:
-    """Write a per-cell map (all cells or ``cells``) as a ``.scool``; the cells are built in memory."""
+def export_scool(store, key: str, out: PathLike, *, cells: Optional[Sequence[str]] = None,
+                 trans: bool = True) -> Path:
+    """Write a per-cell map (all cells or ``cells``) as a ``.scool``; the cells are built in memory.
+    Each partition is read once for all the cells (few large reads, also over HTTP); ``trans=False`` leaves
+    out the contacts between chromosomes."""
     import cooler
+    import pandas as pd
 
     e = _open(store, key)
     if e.kind != "per_cell":
         raise ValueError(f"{key!r} is a bulk map: use export_cool / export_mcool")
     r = e.resolutions[0]
-    names = list(cells) if cells is not None else e.cells
-    maps = {c: _pixel_frame(e, r, [e.cells.index(c)]) for c in names}
+    names = [str(c) for c in cells] if cells is not None else list(e.cells)
+    pos = {c: i for i, c in enumerate(e.cells)}
+    missing = [c for c in names if c not in pos]
+    if missing:
+        raise KeyError(f"cells not in {key!r}: {missing[:5]}")
+    order = np.unique([pos[c] for c in names]).astype(np.int64)
+    got: Dict[int, list] = {int(i): [] for i in order}
+    parts = [(f"cis/{c}", e.first_bin(c, r)) for c in e.chroms if f"cis/{c}" in e.g[f"r{r}"]]
+    if trans and "trans" in e.g[f"r{r}"]:
+        parts.append(("trans", 0))
+    for part, f0 in parts:
+        off = e._offsets(r, part, "cell_offset")
+        n = off[order + 1] - off[order]
+        cell_of, n = order[n > 0], n[n > 0]
+        k = 0
+        for d in e.cell_pixel_blocks(part, order, r):     # whole cells, in cell order
+            s = 0
+            while s < len(d):
+                got[int(cell_of[k])].append(d[s:s + n[k]] + (f0, f0, 0))
+                s += int(n[k])
+                k += 1
+    maps = {}
+    for c in names:
+        blocks = got[pos[c]]
+        d = np.concatenate(blocks) if blocks else np.zeros((0, 3), np.int64)
+        d = d[np.lexsort((d[:, 1], d[:, 0]))]
+        maps[c] = pd.DataFrame({"bin1_id": d[:, 0], "bin2_id": d[:, 1], "count": d[:, 2]})
     cooler.create_scool(str(out), _bins_frame(e, r), maps, ordered=True)
     return Path(out)
 

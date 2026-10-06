@@ -106,6 +106,20 @@ def test_export_roundtrip(stores):
         a = cooler.Cooler(f"{out}::/cells/{c}").pixels()[:]
         b = cooler.Cooler(f"{tmp_path / 'cells.scool'}::/cells/{c}").pixels()[:]
         assert sorted(zip(a.bin1_id, a.bin2_id, a["count"])) == sorted(zip(b.bin1_id, b.bin2_id, b["count"]))
+    # a subset of the cells, in the order given; cis contacts only
+    sub = embedded.export_scool(str(emb), "cells", tmp_path / "sub.scool", cells=["c2", "c0"], trans=False)
+    for c in ("c2", "c0"):
+        a = cooler.Cooler(f"{sub}::/cells/{c}")
+        b = cooler.Cooler(f"{tmp_path / 'cells.scool'}::/cells/{c}")
+        chrom = b.bins()[:]["chrom"].to_numpy()
+        px = b.pixels()[:]
+        cis = px[chrom[px.bin1_id] == chrom[px.bin2_id]]
+        assert len(cis) < len(px)                       # the fixture has trans contacts
+        assert sorted(zip(a.pixels()[:].bin1_id, a.pixels()[:].bin2_id, a.pixels()[:]["count"])) == \
+            sorted(zip(cis.bin1_id, cis.bin2_id, cis["count"]))
+    assert sorted(cooler.fileops.list_scool_cells(str(sub))) == ["/cells/c0", "/cells/c2"]
+    with pytest.raises(KeyError):
+        embedded.export_scool(str(emb), "cells", tmp_path / "x.scool", cells=["nope"])
     one = embedded.export_cool(str(emb), "bulk", tmp_path / "r.cool", resolution=2 * RES)
     assert cooler.Cooler(str(one)).binsize == 2 * RES
     with pytest.raises(ValueError):
