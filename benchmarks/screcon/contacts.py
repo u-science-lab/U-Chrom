@@ -100,7 +100,8 @@ def read_contacts(path) -> Contacts:
                 continue
             r = line.split()
             if fmt is None:
-                fmt = "geo" if (re.fullmatch(r"-?\d+", r[1]) and not re.fullmatch(r"-?\d+", r[2])) else "pairs"
+                # 4 columns = GEO (also with numeric chromosome names such as hs37d5's "1"); .pairs has >= 7
+                fmt = "geo" if (len(r) == 4 or (re.fullmatch(r"-?\d+", r[1]) and not re.fullmatch(r"-?\d+", r[2]))) else "pairs"
             if fmt == "geo":
                 c1, p1, c2, p2 = r[0], r[1], r[2], r[3]
             else:
