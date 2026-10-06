@@ -194,7 +194,7 @@ def main():
         kind, *rest = args.child
         return {"identity": child_identity, "import": child_import}[kind](*rest)
     if not SCHICAR.exists():
-        raise SystemExit(f"{SCHICAR} missing — run example-data/build_schicar_mop.py")
+        raise SystemExit(f"{SCHICAR} missing — run apps/atlas/recipes/build_schicar_mop.py")
     ident = C.run_child(SCRIPT, ["--child", "identity", args.window])
     work = C.WORK / "e_query"
     work.mkdir(parents=True, exist_ok=True)

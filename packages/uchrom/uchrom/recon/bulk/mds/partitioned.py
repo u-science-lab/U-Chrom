@@ -10,9 +10,8 @@ def partitioned_mds(contact_mat, tad_regions=None, device='auto',
                     weight=0.05, n_iter=1000, verbose=False,
                     n_workers=1):
     """Partitioned MDS for high-resolution Hi-C data."""
-    from .core import contact_to_distance, fill_missing_distances, normalize_distances
-    from .torch_mds import torch_mds, run_mds
-    from .transforms import align_substructure_to_scaffold, downsample_coords
+    from .torch_mds import run_mds
+    from .transforms import downsample_coords
     from uchrom.strc.tad import get_domains
 
     n = contact_mat.shape[0]

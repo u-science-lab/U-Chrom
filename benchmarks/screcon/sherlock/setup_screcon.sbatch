@@ -21,6 +21,6 @@ fi
 find "$SIC" -name '*.o' -exec chmod +x {} +
 ls -la "$SIC/contact/1kb_prepare/gettargetcontact.o" "$SIC/MD_simulation/replica/bk/doall.sh"
 for f in "$GEO/GSM2219497_Cell_1_contact_pairs.txt.gz" "$DATA/su2020_imr90/chromosome21.tsv" "$DATA/4DNFIFLJGGNR.csv"; do
-  if [ -f "$f" ]; then echo "ok $f"; else echo "MISSING $f (rsync from the laptop's example-data/)"; fi
+  if [ -f "$f" ]; then echo "ok $f"; else echo "MISSING $f (rsync from the laptop's data directory, $UCHROM_DATA)"; fi
 done
 cd "$REPO" && $PY -m pytest -q benchmarks/screcon/tests -p no:cacheprovider

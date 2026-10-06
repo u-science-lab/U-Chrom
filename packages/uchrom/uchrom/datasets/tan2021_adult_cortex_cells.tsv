@@ -1,0 +1,511 @@
+gsm	name	age	cross	cell_type
+GSM4382869	cortex-p056-cb_001	p056	cb	Mature Oligodendrocyte
+GSM4382870	cortex-p056-cb_002	p056	cb	Mature Oligodendrocyte
+GSM4382871	cortex-p056-cb_003	p056	cb	Mature Oligodendrocyte
+GSM4382872	cortex-p056-cb_004	p056	cb	Mature Oligodendrocyte
+GSM4382873	cortex-p056-cb_005	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382874	cortex-p056-cb_006	p056	cb	Microglia Etc.
+GSM4382875	cortex-p056-cb_007	p056	cb	Microglia Etc.
+GSM4382876	cortex-p056-cb_008	p056	cb	Oligodendrocyte Progenitor
+GSM4382877	cortex-p056-cb_009	p056	cb	Cortical L6 Pyramidal Cell
+GSM4382878	cortex-p056-cb_010	p056	cb	Interneuron
+GSM4382879	cortex-p056-cb_011	p056	cb	Cortical L6 Pyramidal Cell
+GSM4382880	cortex-p056-cb_012	p056	cb	Adult Astrocyte
+GSM4382881	cortex-p056-cb_013	p056	cb	Microglia Etc.
+GSM4382882	cortex-p056-cb_014	p056	cb	Microglia Etc.
+GSM4382883	cortex-p056-cb_015	p056	cb	Mature Oligodendrocyte
+GSM4382884	cortex-p056-cb_016	p056	cb	Mature Oligodendrocyte
+GSM4382886	cortex-p056-cb_018	p056	cb	Oligodendrocyte Progenitor
+GSM4382887	cortex-p056-cb_019	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382888	cortex-p056-cb_020	p056	cb	Mature Oligodendrocyte
+GSM4382890	cortex-p056-cb_022	p056	cb	Mature Oligodendrocyte
+GSM4382891	cortex-p056-cb_023	p056	cb	Interneuron
+GSM4382892	cortex-p056-cb_024	p056	cb	Adult Astrocyte
+GSM4382893	cortex-p056-cb_025	p056	cb	Interneuron
+GSM4382894	cortex-p056-cb_026	p056	cb	Neonatal Neuron 1
+GSM4382895	cortex-p056-cb_027	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382896	cortex-p056-cb_028	p056	cb	Hippocampal Pyramidal Cell
+GSM4382897	cortex-p056-cb_029	p056	cb	Oligodendrocyte Progenitor
+GSM4382898	cortex-p056-cb_030	p056	cb	Cortical L6 Pyramidal Cell
+GSM4382899	cortex-p056-cb_031	p056	cb	Adult Astrocyte
+GSM4382900	cortex-p056-cb_032	p056	cb	Mature Oligodendrocyte
+GSM4382901	cortex-p056-cb_033	p056	cb	Oligodendrocyte Progenitor
+GSM4382902	cortex-p056-cb_034	p056	cb	Mature Oligodendrocyte
+GSM4382903	cortex-p056-cb_035	p056	cb	Adult Astrocyte
+GSM4382904	cortex-p056-cb_036	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382905	cortex-p056-cb_037	p056	cb	Mature Oligodendrocyte
+GSM4382906	cortex-p056-cb_038	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382907	cortex-p056-cb_039	p056	cb	Microglia Etc.
+GSM4382908	cortex-p056-cb_040	p056	cb	Microglia Etc.
+GSM4382909	cortex-p056-cb_041	p056	cb	Adult Astrocyte
+GSM4382910	cortex-p056-cb_042	p056	cb	Hippocampal Pyramidal Cell
+GSM4382911	cortex-p056-cb_043	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382912	cortex-p056-cb_044	p056	cb	Mature Oligodendrocyte
+GSM4382913	cortex-p056-cb_045	p056	cb	Interneuron
+GSM4382914	cortex-p056-cb_046	p056	cb	Interneuron
+GSM4382915	cortex-p056-cb_047	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382916	cortex-p056-cb_048	p056	cb	Adult Astrocyte
+GSM4382917	cortex-p056-cb_049	p056	cb	Oligodendrocyte Progenitor
+GSM4382918	cortex-p056-cb_050	p056	cb	Mature Oligodendrocyte
+GSM4382919	cortex-p056-cb_051	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382920	cortex-p056-cb_052	p056	cb	Interneuron
+GSM4382921	cortex-p056-cb_053	p056	cb	Hippocampal Pyramidal Cell
+GSM4382922	cortex-p056-cb_054	p056	cb	Mature Oligodendrocyte
+GSM4382923	cortex-p056-cb_055	p056	cb	Mature Oligodendrocyte
+GSM4382924	cortex-p056-cb_056	p056	cb	Mature Oligodendrocyte
+GSM4382925	cortex-p056-cb_057	p056	cb	Mature Oligodendrocyte
+GSM4382926	cortex-p056-cb_058	p056	cb	Mature Oligodendrocyte
+GSM4382928	cortex-p056-cb_060	p056	cb	Mature Oligodendrocyte
+GSM4382929	cortex-p056-cb_061	p056	cb	Microglia Etc.
+GSM4382930	cortex-p056-cb_062	p056	cb	Microglia Etc.
+GSM4382931	cortex-p056-cb_063	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382932	cortex-p056-cb_064	p056	cb	Interneuron
+GSM4382933	cortex-p056-cb_065	p056	cb	Mature Oligodendrocyte
+GSM4382934	cortex-p056-cb_066	p056	cb	Hippocampal Pyramidal Cell
+GSM4382935	cortex-p056-cb_067	p056	cb	Adult Astrocyte
+GSM4382936	cortex-p056-cb_068	p056	cb	Interneuron
+GSM4382937	cortex-p056-cb_069	p056	cb	Cortical L6 Pyramidal Cell
+GSM4382939	cortex-p056-cb_071	p056	cb	Mature Oligodendrocyte
+GSM4382940	cortex-p056-cb_072	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382941	cortex-p056-cb_073	p056	cb	Oligodendrocyte Progenitor
+GSM4382942	cortex-p056-cb_074	p056	cb	Oligodendrocyte Progenitor
+GSM4382944	cortex-p056-cb_076	p056	cb	Microglia Etc.
+GSM4382945	cortex-p056-cb_077	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382946	cortex-p056-cb_078	p056	cb	Hippocampal Pyramidal Cell
+GSM4382947	cortex-p056-cb_079	p056	cb	Mature Oligodendrocyte
+GSM4382948	cortex-p056-cb_080	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382949	cortex-p056-cb_081	p056	cb	Mature Oligodendrocyte
+GSM4382950	cortex-p056-cb_082	p056	cb	Interneuron
+GSM4382951	cortex-p056-cb_083	p056	cb	Mature Oligodendrocyte
+GSM4382952	cortex-p056-cb_084	p056	cb	Hippocampal Pyramidal Cell
+GSM4382953	cortex-p056-cb_085	p056	cb	Interneuron
+GSM4382954	cortex-p056-cb_086	p056	cb	Mature Oligodendrocyte
+GSM4382958	cortex-p056-cb_090	p056	cb	Unknown
+GSM4382960	cortex-p056-cb_092	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382961	cortex-p056-cb_093	p056	cb	Oligodendrocyte Progenitor
+GSM4382962	cortex-p056-cb_094	p056	cb	Interneuron
+GSM4382963	cortex-p056-cb_095	p056	cb	Mature Oligodendrocyte
+GSM4382964	cortex-p056-cb_096	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382965	cortex-p056-cb_097	p056	cb	Interneuron
+GSM4382966	cortex-p056-cb_098	p056	cb	Adult Astrocyte
+GSM4382968	cortex-p056-cb_100	p056	cb	Microglia Etc.
+GSM4382969	cortex-p056-cb_101	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382970	cortex-p056-cb_102	p056	cb	Mature Oligodendrocyte
+GSM4382971	cortex-p056-cb_103	p056	cb	Cortical L6 Pyramidal Cell
+GSM4382972	cortex-p056-cb_104	p056	cb	Mature Oligodendrocyte
+GSM4382973	cortex-p056-cb_105	p056	cb	Microglia Etc.
+GSM4382975	cortex-p056-cb_107	p056	cb	Neonatal Neuron 1
+GSM4382976	cortex-p056-cb_108	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382977	cortex-p056-cb_109	p056	cb	Mature Oligodendrocyte
+GSM4382978	cortex-p056-cb_110	p056	cb	Mature Oligodendrocyte
+GSM4382979	cortex-p056-cb_111	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382980	cortex-p056-cb_112	p056	cb	Mature Oligodendrocyte
+GSM4382981	cortex-p056-cb_113	p056	cb	Cortical L6 Pyramidal Cell
+GSM4382983	cortex-p056-cb_115	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382984	cortex-p056-cb_116	p056	cb	Microglia Etc.
+GSM4382985	cortex-p056-cb_117	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382986	cortex-p056-cb_118	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4382987	cortex-p056-cb_119	p056	cb	Oligodendrocyte Progenitor
+GSM4382988	cortex-p056-cb_120	p056	cb	Adult Astrocyte
+GSM4382989	cortex-p056-cb_121	p056	cb	Interneuron
+GSM4382990	cortex-p056-cb_122	p056	cb	Mature Oligodendrocyte
+GSM4382991	cortex-p056-cb_123	p056	cb	Mature Oligodendrocyte
+GSM4382992	cortex-p056-cb_124	p056	cb	Hippocampal Pyramidal Cell
+GSM4382993	cortex-p056-cb_125	p056	cb	Mature Oligodendrocyte
+GSM4382996	cortex-p056-cb_128	p056	cb	Mature Oligodendrocyte
+GSM4382997	cortex-p056-cb_129	p056	cb	Adult Astrocyte
+GSM4382998	cortex-p056-cb_130	p056	cb	Adult Astrocyte
+GSM4382999	cortex-p056-cb_131	p056	cb	Medium Spiny Neuron
+GSM4383000	cortex-p056-cb_132	p056	cb	Medium Spiny Neuron
+GSM4383001	cortex-p056-cb_133	p056	cb	Microglia Etc.
+GSM4383002	cortex-p056-cb_134	p056	cb	Microglia Etc.
+GSM4383003	cortex-p056-cb_135	p056	cb	Microglia Etc.
+GSM4383004	cortex-p056-cb_136	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383005	cortex-p056-cb_137	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383006	cortex-p056-cb_138	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383007	cortex-p056-cb_139	p056	cb	Neonatal Astrocyte
+GSM4383008	cortex-p056-cb_140	p056	cb	Interneuron
+GSM4383009	cortex-p056-cb_141	p056	cb	Mature Oligodendrocyte
+GSM4383010	cortex-p056-cb_142	p056	cb	Mature Oligodendrocyte
+GSM4383011	cortex-p056-cb_143	p056	cb	Mature Oligodendrocyte
+GSM4383012	cortex-p056-cb_144	p056	cb	Cortical L6 Pyramidal Cell
+GSM4383013	cortex-p056-cb_145	p056	cb	Mature Oligodendrocyte
+GSM4383014	cortex-p056-cb_146	p056	cb	Interneuron
+GSM4383015	cortex-p056-cb_147	p056	cb	Mature Oligodendrocyte
+GSM4383016	cortex-p056-cb_148	p056	cb	Cortical L6 Pyramidal Cell
+GSM4383017	cortex-p056-cb_149	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383018	cortex-p056-cb_150	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383019	cortex-p056-cb_151	p056	cb	Mature Oligodendrocyte
+GSM4383020	cortex-p056-cb_152	p056	cb	Interneuron
+GSM4383021	cortex-p056-cb_153	p056	cb	Oligodendrocyte Progenitor
+GSM4383022	cortex-p056-cb_154	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383024	cortex-p056-cb_156	p056	cb	Oligodendrocyte Progenitor
+GSM4383025	cortex-p056-cb_157	p056	cb	Cortical L6 Pyramidal Cell
+GSM4383026	cortex-p056-cb_158	p056	cb	Microglia Etc.
+GSM4383027	cortex-p056-cb_159	p056	cb	Interneuron
+GSM4383028	cortex-p056-cb_160	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383029	cortex-p056-cb_161	p056	cb	Adult Astrocyte
+GSM4383030	cortex-p056-cb_162	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383031	cortex-p056-cb_163	p056	cb	Medium Spiny Neuron
+GSM4383032	cortex-p056-cb_164	p056	cb	Oligodendrocyte Progenitor
+GSM4383033	cortex-p056-cb_165	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383034	cortex-p056-cb_166	p056	cb	Adult Astrocyte
+GSM4383035	cortex-p056-cb_167	p056	cb	Microglia Etc.
+GSM4383036	cortex-p056-cb_168	p056	cb	Adult Astrocyte
+GSM4383038	cortex-p056-cb_170	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383039	cortex-p056-cb_171	p056	cb	Interneuron
+GSM4383041	cortex-p056-cb_173	p056	cb	Mature Oligodendrocyte
+GSM4383042	cortex-p056-cb_174	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383043	cortex-p056-cb_175	p056	cb	Microglia Etc.
+GSM4383044	cortex-p056-cb_176	p056	cb	Mature Oligodendrocyte
+GSM4383045	cortex-p056-cb_177	p056	cb	Interneuron
+GSM4383046	cortex-p056-cb_178	p056	cb	Mature Oligodendrocyte
+GSM4383047	cortex-p056-cb_179	p056	cb	Microglia Etc.
+GSM4383048	cortex-p056-cb_180	p056	cb	Mature Oligodendrocyte
+GSM4383052	cortex-p056-cb_184	p056	cb	Interneuron
+GSM4383053	cortex-p056-cb_185	p056	cb	Unknown
+GSM4383054	cortex-p056-cb_186	p056	cb	Microglia Etc.
+GSM4383055	cortex-p056-cb_187	p056	cb	Interneuron
+GSM4383056	cortex-p056-cb_188	p056	cb	Mature Oligodendrocyte
+GSM4383057	cortex-p056-cb_189	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383058	cortex-p056-cb_190	p056	cb	Microglia Etc.
+GSM4383059	cortex-p056-cb_191	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383060	cortex-p056-cb_192	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383061	cortex-p056-cb_193	p056	cb	Oligodendrocyte Progenitor
+GSM4383062	cortex-p056-cb_194	p056	cb	Hippocampal Pyramidal Cell
+GSM4383063	cortex-p056-cb_195	p056	cb	Interneuron
+GSM4383064	cortex-p056-cb_196	p056	cb	Mature Oligodendrocyte
+GSM4383068	cortex-p056-cb_200	p056	cb	Mature Oligodendrocyte
+GSM4383069	cortex-p056-cb_201	p056	cb	Medium Spiny Neuron
+GSM4383070	cortex-p056-cb_202	p056	cb	Unknown
+GSM4383071	cortex-p056-cb_203	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383072	cortex-p056-cb_204	p056	cb	Microglia Etc.
+GSM4383073	cortex-p056-cb_205	p056	cb	Cortical L6 Pyramidal Cell
+GSM4383074	cortex-p056-cb_206	p056	cb	Mature Oligodendrocyte
+GSM4383075	cortex-p056-cb_207	p056	cb	Oligodendrocyte Progenitor
+GSM4383076	cortex-p056-cb_208	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383077	cortex-p056-cb_209	p056	cb	Mature Oligodendrocyte
+GSM4383078	cortex-p056-cb_210	p056	cb	Unknown
+GSM4383079	cortex-p056-cb_211	p056	cb	Neonatal Neuron 1
+GSM4383080	cortex-p056-cb_212	p056	cb	Mature Oligodendrocyte
+GSM4383081	cortex-p056-cb_213	p056	cb	Hippocampal Pyramidal Cell
+GSM4383082	cortex-p056-cb_214	p056	cb	Mature Oligodendrocyte
+GSM4383084	cortex-p056-cb_216	p056	cb	Microglia Etc.
+GSM4383085	cortex-p056-cb_217	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383086	cortex-p056-cb_218	p056	cb	Microglia Etc.
+GSM4383087	cortex-p056-cb_219	p056	cb	Interneuron
+GSM4383088	cortex-p056-cb_220	p056	cb	Hippocampal Pyramidal Cell
+GSM4383089	cortex-p056-cb_221	p056	cb	Microglia Etc.
+GSM4383090	cortex-p056-cb_222	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383091	cortex-p056-cb_223	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383092	cortex-p056-cb_224	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383093	cortex-p056-cb_225	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383094	cortex-p056-cb_226	p056	cb	Microglia Etc.
+GSM4383095	cortex-p056-cb_227	p056	cb	Microglia Etc.
+GSM4383096	cortex-p056-cb_228	p056	cb	Medium Spiny Neuron
+GSM4383097	cortex-p056-cb_229	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383098	cortex-p056-cb_230	p056	cb	Cortical L6 Pyramidal Cell
+GSM4383099	cortex-p056-cb_231	p056	cb	Mature Oligodendrocyte
+GSM4383100	cortex-p056-cb_232	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383101	cortex-p056-cb_233	p056	cb	Mature Oligodendrocyte
+GSM4383102	cortex-p056-cb_234	p056	cb	Mature Oligodendrocyte
+GSM4383103	cortex-p056-cb_235	p056	cb	Microglia Etc.
+GSM4383105	cortex-p056-cb_237	p056	cb	Mature Oligodendrocyte
+GSM4383106	cortex-p056-cb_238	p056	cb	Interneuron
+GSM4383107	cortex-p056-cb_239	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383108	cortex-p056-cb_240	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383109	cortex-p056-cb_241	p056	cb	Mature Oligodendrocyte
+GSM4383110	cortex-p056-cb_242	p056	cb	Mature Oligodendrocyte
+GSM4383112	cortex-p056-cb_244	p056	cb	Interneuron
+GSM4383113	cortex-p056-cb_245	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383114	cortex-p056-cb_246	p056	cb	Oligodendrocyte Progenitor
+GSM4383115	cortex-p056-cb_247	p056	cb	Microglia Etc.
+GSM4383116	cortex-p056-cb_248	p056	cb	Mature Oligodendrocyte
+GSM4383118	cortex-p056-cb_250	p056	cb	Mature Oligodendrocyte
+GSM4383119	cortex-p056-cb_251	p056	cb	Oligodendrocyte Progenitor
+GSM4383120	cortex-p056-cb_252	p056	cb	Oligodendrocyte Progenitor
+GSM4383121	cortex-p056-cb_253	p056	cb	Mature Oligodendrocyte
+GSM4383122	cortex-p056-cb_254	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383123	cortex-p056-cb_255	p056	cb	Mature Oligodendrocyte
+GSM4383124	cortex-p056-cb_256	p056	cb	Microglia Etc.
+GSM4383125	cortex-p056-cb_257	p056	cb	Cortical L2–5 Pyramidal Cell
+GSM4383126	cortex-p056-cb_258	p056	cb	Unknown
+GSM4383127	cortex-p056-cb_259	p056	cb	Microglia Etc.
+GSM4383128	cortex-p056-cb_260	p056	cb	Hippocampal Granule Cell
+GSM4383129	cortex-p056-cb_261	p056	cb	Cortical L6 Pyramidal Cell
+GSM4383130	cortex-p056-cb_262	p056	cb	Adult Astrocyte
+GSM4383131	cortex-p056-cb_263	p056	cb	Medium Spiny Neuron
+GSM4383132	cortex-p056-cb_264	p056	cb	Oligodendrocyte Progenitor
+GSM4383134	cortex-p056-cb_266	p056	cb	Microglia Etc.
+GSM4383135	cortex-p056-cb_267	p056	cb	Microglia Etc.
+GSM4383136	cortex-p056-cb_268	p056	cb	Hippocampal Pyramidal Cell
+GSM4383137	cortex-p056-cb_269	p056	cb	Mature Oligodendrocyte
+GSM4383138	cortex-p056-cb_270	p056	cb	Medium Spiny Neuron
+GSM4383139	cortex-p056-cb_271	p056	cb	Medium Spiny Neuron
+GSM4383140	cortex-p056-cb_272	p056	cb	Mature Oligodendrocyte
+GSM4383142	cortex-p056-cb_274	p056	cb	Oligodendrocyte Progenitor
+GSM4383143	cortex-p056-cb_275	p056	cb	Mature Oligodendrocyte
+GSM4383144	cortex-p056-cb_276	p056	cb	Cortical L6 Pyramidal Cell
+GSM4383152	cortex-p056-cb_284	p056	cb	Adult Astrocyte
+GSM4383153	cortex-p056-cb_285	p056	cb	Unknown
+GSM4383155	cortex-p056-cb_287	p056	cb	Cortical L6 Pyramidal Cell
+GSM4383156	cortex-p056-cb_288	p056	cb	Hippocampal Pyramidal Cell
+GSM4383157	cortex-p309-bc_001	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383158	cortex-p309-bc_002	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383159	cortex-p309-bc_003	p309	bc	Interneuron
+GSM4383160	cortex-p309-bc_004	p309	bc	Interneuron
+GSM4383161	cortex-p309-bc_005	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383162	cortex-p309-bc_006	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383163	cortex-p309-bc_007	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383164	cortex-p309-bc_008	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383165	cortex-p309-bc_009	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383166	cortex-p309-bc_010	p309	bc	Hippocampal Pyramidal Cell
+GSM4383167	cortex-p309-bc_011	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383169	cortex-p309-bc_013	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383170	cortex-p309-bc_014	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383171	cortex-p309-bc_015	p309	bc	Unknown
+GSM4383172	cortex-p309-bc_016	p309	bc	Microglia Etc.
+GSM4383173	cortex-p309-bc_017	p309	bc	Interneuron
+GSM4383174	cortex-p309-bc_018	p309	bc	Interneuron
+GSM4383175	cortex-p309-bc_019	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383176	cortex-p309-bc_020	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383177	cortex-p309-bc_021	p309	bc	Mature Oligodendrocyte
+GSM4383178	cortex-p309-bc_022	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383179	cortex-p309-bc_023	p309	bc	Adult Astrocyte
+GSM4383180	cortex-p309-bc_024	p309	bc	Interneuron
+GSM4383182	cortex-p309-bc_026	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383184	cortex-p309-bc_028	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383185	cortex-p309-bc_029	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383186	cortex-p309-bc_030	p309	bc	Adult Astrocyte
+GSM4383187	cortex-p309-bc_031	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383188	cortex-p309-bc_032	p309	bc	Oligodendrocyte Progenitor
+GSM4383189	cortex-p309-bc_033	p309	bc	Interneuron
+GSM4383190	cortex-p309-bc_034	p309	bc	Mature Oligodendrocyte
+GSM4383191	cortex-p309-bc_035	p309	bc	Adult Astrocyte
+GSM4383192	cortex-p309-bc_036	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383193	cortex-p309-bc_037	p309	bc	Hippocampal Pyramidal Cell
+GSM4383194	cortex-p309-bc_038	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383195	cortex-p309-bc_039	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383196	cortex-p309-bc_040	p309	bc	Medium Spiny Neuron
+GSM4383197	cortex-p309-bc_041	p309	bc	Medium Spiny Neuron
+GSM4383200	cortex-p309-bc_044	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383201	cortex-p309-bc_045	p309	bc	Interneuron
+GSM4383202	cortex-p309-bc_046	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383203	cortex-p309-bc_047	p309	bc	Medium Spiny Neuron
+GSM4383204	cortex-p309-bc_048	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383206	cortex-p309-bc_050	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383207	cortex-p309-bc_051	p309	bc	Hippocampal Pyramidal Cell
+GSM4383208	cortex-p309-bc_052	p309	bc	Medium Spiny Neuron
+GSM4383210	cortex-p309-bc_054	p309	bc	Interneuron
+GSM4383211	cortex-p309-bc_055	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383212	cortex-p309-bc_056	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383214	cortex-p309-bc_058	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383218	cortex-p309-bc_062	p309	bc	Oligodendrocyte Progenitor
+GSM4383219	cortex-p309-bc_063	p309	bc	Microglia Etc.
+GSM4383220	cortex-p309-bc_064	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383222	cortex-p309-bc_066	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383223	cortex-p309-bc_067	p309	bc	Hippocampal Pyramidal Cell
+GSM4383224	cortex-p309-bc_068	p309	bc	Hippocampal Pyramidal Cell
+GSM4383226	cortex-p309-bc_070	p309	bc	Hippocampal Granule Cell
+GSM4383228	cortex-p309-bc_072	p309	bc	Interneuron
+GSM4383235	cortex-p309-bc_079	p309	bc	Interneuron
+GSM4383236	cortex-p309-bc_080	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383238	cortex-p309-bc_082	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383239	cortex-p309-bc_083	p309	bc	Interneuron
+GSM4383249	cortex-p309-bc_093	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383252	cortex-p309-bc_096	p309	bc	Interneuron
+GSM4383253	cortex-p309-bc_097	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383254	cortex-p309-bc_098	p309	bc	Interneuron
+GSM4383255	cortex-p309-bc_099	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383256	cortex-p309-bc_100	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383257	cortex-p309-bc_101	p309	bc	Interneuron
+GSM4383258	cortex-p309-bc_102	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383259	cortex-p309-bc_103	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383260	cortex-p309-bc_104	p309	bc	Adult Astrocyte
+GSM4383261	cortex-p309-bc_105	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383262	cortex-p309-bc_106	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383263	cortex-p309-bc_107	p309	bc	Medium Spiny Neuron
+GSM4383264	cortex-p309-bc_108	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383265	cortex-p309-bc_109	p309	bc	Adult Astrocyte
+GSM4383267	cortex-p309-bc_111	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383268	cortex-p309-bc_112	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383269	cortex-p309-bc_113	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383270	cortex-p309-bc_114	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383272	cortex-p309-bc_116	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383273	cortex-p309-bc_117	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383274	cortex-p309-bc_118	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383275	cortex-p309-bc_119	p309	bc	Interneuron
+GSM4383276	cortex-p309-bc_120	p309	bc	Interneuron
+GSM4383277	cortex-p309-bc_121	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383278	cortex-p309-bc_122	p309	bc	Adult Astrocyte
+GSM4383280	cortex-p309-bc_124	p309	bc	Hippocampal Pyramidal Cell
+GSM4383283	cortex-p309-bc_127	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383284	cortex-p309-bc_128	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383285	cortex-p309-bc_129	p309	bc	Oligodendrocyte Progenitor
+GSM4383286	cortex-p309-bc_130	p309	bc	Medium Spiny Neuron
+GSM4383287	cortex-p309-bc_131	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383289	cortex-p309-bc_133	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383290	cortex-p309-bc_134	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383291	cortex-p309-bc_135	p309	bc	Hippocampal Pyramidal Cell
+GSM4383292	cortex-p309-bc_136	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383294	cortex-p309-bc_138	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383295	cortex-p309-bc_139	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383296	cortex-p309-bc_140	p309	bc	Interneuron
+GSM4383297	cortex-p309-bc_141	p309	bc	Medium Spiny Neuron
+GSM4383298	cortex-p309-bc_142	p309	bc	Medium Spiny Neuron
+GSM4383299	cortex-p309-bc_143	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383300	cortex-p309-bc_144	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383302	cortex-p309-bc_146	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383304	cortex-p309-bc_148	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383305	cortex-p309-bc_149	p309	bc	Neonatal Neuron 1
+GSM4383306	cortex-p309-bc_150	p309	bc	Interneuron
+GSM4383307	cortex-p309-bc_151	p309	bc	Microglia Etc.
+GSM4383308	cortex-p309-bc_152	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383309	cortex-p309-bc_153	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383310	cortex-p309-bc_154	p309	bc	Medium Spiny Neuron
+GSM4383311	cortex-p309-bc_155	p309	bc	Hippocampal Pyramidal Cell
+GSM4383312	cortex-p309-bc_156	p309	bc	Microglia Etc.
+GSM4383314	cortex-p309-bc_158	p309	bc	Cortical L6 Pyramidal Cell
+GSM4383315	cortex-p309-bc_159	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383316	cortex-p309-bc_160	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383317	cortex-p309-bc_161	p309	bc	Adult Astrocyte
+GSM4383321	cortex-p309-bc_165	p309	bc	Mature Oligodendrocyte
+GSM4383322	cortex-p309-bc_166	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383323	cortex-p309-bc_167	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383324	cortex-p309-bc_168	p309	bc	Interneuron
+GSM4383330	cortex-p309-bc_174	p309	bc	Interneuron
+GSM4383331	cortex-p309-bc_175	p309	bc	Interneuron
+GSM4383334	cortex-p309-bc_178	p309	bc	Unknown
+GSM4383335	cortex-p309-bc_179	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383336	cortex-p309-bc_180	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383345	cortex-p309-bc_189	p309	bc	Interneuron
+GSM4383347	cortex-p309-bc_191	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383348	cortex-p309-bc_192	p309	bc	Cortical L2–5 Pyramidal Cell
+GSM4383349	cortex-p347-cb_001	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383350	cortex-p347-cb_002	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383352	cortex-p347-cb_004	p347	cb	Interneuron
+GSM4383353	cortex-p347-cb_005	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383354	cortex-p347-cb_006	p347	cb	Medium Spiny Neuron
+GSM4383355	cortex-p347-cb_007	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383357	cortex-p347-cb_009	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383358	cortex-p347-cb_010	p347	cb	Medium Spiny Neuron
+GSM4383359	cortex-p347-cb_011	p347	cb	Medium Spiny Neuron
+GSM4383360	cortex-p347-cb_012	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383361	cortex-p347-cb_013	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383364	cortex-p347-cb_016	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383365	cortex-p347-cb_017	p347	cb	Interneuron
+GSM4383366	cortex-p347-cb_018	p347	cb	Medium Spiny Neuron
+GSM4383368	cortex-p347-cb_020	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383370	cortex-p347-cb_022	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383371	cortex-p347-cb_023	p347	cb	Oligodendrocyte Progenitor
+GSM4383372	cortex-p347-cb_024	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383373	cortex-p347-cb_025	p347	cb	Adult Astrocyte
+GSM4383374	cortex-p347-cb_026	p347	cb	Mature Oligodendrocyte
+GSM4383375	cortex-p347-cb_027	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383376	cortex-p347-cb_028	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383377	cortex-p347-cb_029	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383379	cortex-p347-cb_031	p347	cb	Hippocampal Pyramidal Cell
+GSM4383380	cortex-p347-cb_032	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383381	cortex-p347-cb_033	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383382	cortex-p347-cb_034	p347	cb	Adult Astrocyte
+GSM4383383	cortex-p347-cb_035	p347	cb	Interneuron
+GSM4383384	cortex-p347-cb_036	p347	cb	Hippocampal Pyramidal Cell
+GSM4383386	cortex-p347-cb_038	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383388	cortex-p347-cb_040	p347	cb	Hippocampal Pyramidal Cell
+GSM4383389	cortex-p347-cb_041	p347	cb	Hippocampal Pyramidal Cell
+GSM4383390	cortex-p347-cb_042	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383392	cortex-p347-cb_044	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383393	cortex-p347-cb_045	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383394	cortex-p347-cb_046	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383395	cortex-p347-cb_047	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383398	cortex-p347-cb_050	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383399	cortex-p347-cb_051	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383401	cortex-p347-cb_053	p347	cb	Interneuron
+GSM4383402	cortex-p347-cb_054	p347	cb	Mature Oligodendrocyte
+GSM4383403	cortex-p347-cb_055	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383404	cortex-p347-cb_056	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383405	cortex-p347-cb_057	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383406	cortex-p347-cb_058	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383407	cortex-p347-cb_059	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383408	cortex-p347-cb_060	p347	cb	Medium Spiny Neuron
+GSM4383409	cortex-p347-cb_061	p347	cb	Medium Spiny Neuron
+GSM4383414	cortex-p347-cb_066	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383415	cortex-p347-cb_067	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383416	cortex-p347-cb_068	p347	cb	Interneuron
+GSM4383417	cortex-p347-cb_069	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383418	cortex-p347-cb_070	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383420	cortex-p347-cb_072	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383427	cortex-p347-cb_079	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383428	cortex-p347-cb_080	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383429	cortex-p347-cb_081	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383430	cortex-p347-cb_082	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383431	cortex-p347-cb_083	p347	cb	Hippocampal Pyramidal Cell
+GSM4383432	cortex-p347-cb_084	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383433	cortex-p347-cb_085	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383437	cortex-p347-cb_089	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383438	cortex-p347-cb_090	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383440	cortex-p347-cb_092	p347	cb	Adult Astrocyte
+GSM4383441	cortex-p347-cb_093	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383443	cortex-p347-cb_095	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383444	cortex-p347-cb_096	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383445	cortex-p347-cb_097	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383446	cortex-p347-cb_098	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383447	cortex-p347-cb_099	p347	cb	Adult Astrocyte
+GSM4383450	cortex-p347-cb_102	p347	cb	Interneuron
+GSM4383451	cortex-p347-cb_103	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383452	cortex-p347-cb_104	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383453	cortex-p347-cb_105	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383454	cortex-p347-cb_106	p347	cb	Medium Spiny Neuron
+GSM4383455	cortex-p347-cb_107	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383456	cortex-p347-cb_108	p347	cb	Adult Astrocyte
+GSM4383457	cortex-p347-cb_109	p347	cb	Hippocampal Pyramidal Cell
+GSM4383458	cortex-p347-cb_110	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383459	cortex-p347-cb_111	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383460	cortex-p347-cb_112	p347	cb	Medium Spiny Neuron
+GSM4383461	cortex-p347-cb_113	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383462	cortex-p347-cb_114	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383464	cortex-p347-cb_116	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383465	cortex-p347-cb_117	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383466	cortex-p347-cb_118	p347	cb	Medium Spiny Neuron
+GSM4383467	cortex-p347-cb_119	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383468	cortex-p347-cb_120	p347	cb	Adult Astrocyte
+GSM4383469	cortex-p347-cb_121	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383470	cortex-p347-cb_122	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383471	cortex-p347-cb_123	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383472	cortex-p347-cb_124	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383473	cortex-p347-cb_125	p347	cb	Medium Spiny Neuron
+GSM4383474	cortex-p347-cb_126	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383476	cortex-p347-cb_128	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383477	cortex-p347-cb_129	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383478	cortex-p347-cb_130	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383479	cortex-p347-cb_131	p347	cb	Medium Spiny Neuron
+GSM4383480	cortex-p347-cb_132	p347	cb	Hippocampal Pyramidal Cell
+GSM4383482	cortex-p347-cb_134	p347	cb	Mature Oligodendrocyte
+GSM4383485	cortex-p347-cb_137	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383486	cortex-p347-cb_138	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383487	cortex-p347-cb_139	p347	cb	Oligodendrocyte Progenitor
+GSM4383488	cortex-p347-cb_140	p347	cb	Hippocampal Pyramidal Cell
+GSM4383489	cortex-p347-cb_141	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383490	cortex-p347-cb_142	p347	cb	Interneuron
+GSM4383491	cortex-p347-cb_143	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383494	cortex-p347-cb_146	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383497	cortex-p347-cb_149	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383498	cortex-p347-cb_150	p347	cb	Mature Oligodendrocyte
+GSM4383499	cortex-p347-cb_151	p347	cb	Hippocampal Pyramidal Cell
+GSM4383500	cortex-p347-cb_152	p347	cb	Mature Oligodendrocyte
+GSM4383501	cortex-p347-cb_153	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383502	cortex-p347-cb_154	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383503	cortex-p347-cb_155	p347	cb	Interneuron
+GSM4383504	cortex-p347-cb_156	p347	cb	Cortical L6 Pyramidal Cell
+GSM4383505	cortex-p347-cb_157	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383510	cortex-p347-cb_162	p347	cb	Hippocampal Pyramidal Cell
+GSM4383513	cortex-p347-cb_165	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383514	cortex-p347-cb_166	p347	cb	Mature Oligodendrocyte
+GSM4383515	cortex-p347-cb_167	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383525	cortex-p347-cb_177	p347	cb	Adult Astrocyte
+GSM4383526	cortex-p347-cb_178	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383528	cortex-p347-cb_180	p347	cb	Medium Spiny Neuron
+GSM4383535	cortex-p347-cb_187	p347	cb	Interneuron
+GSM4383536	cortex-p347-cb_188	p347	cb	Cortical L2–5 Pyramidal Cell
+GSM4383539	cortex-p347-cb_191	p347	cb	Hippocampal Pyramidal Cell
+GSM4383540	cortex-p347-cb_192	p347	cb	Cortical L2–5 Pyramidal Cell

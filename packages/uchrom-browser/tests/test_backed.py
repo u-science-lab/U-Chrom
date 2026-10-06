@@ -10,10 +10,10 @@ import pytest
 
 from chromdata import ChromData
 from uchrom_browser.data import DatasetStore, GeometryFilter, decode_geometry
-from tests import REPO
+from tests import DATA_DIR
 
-_FOV0 = REPO / "example-data" / "takei2025_fov0"
-# built by example-data/build_takei2025_fov0.py
+_FOV0 = DATA_DIR / "takei2025_fov0"
+# built by apps/atlas/recipes/build_takei2025_fov0.py into the data directory
 TAKEI = _FOV0 / "takei2025_fov0.chromdata.zarr"
 
 
@@ -85,7 +85,7 @@ def test_backed_views_match_memory(tmp_path):
 
 def test_backed_views_match_memory_on_real_data(tmp_path):
     if not TAKEI.exists():
-        pytest.skip("example-data/takei2025_fov0 not built")
+        pytest.skip("takei2025_fov0 not built (apps/atlas/recipes/build_takei2025_fov0.py)")
     cd = ChromData.read(TAKEI)
     cells = list(cd.spots["cell_id"].cat.categories[:3])
     cd = cd[cd.spots["cell_id"].isin(cells).to_numpy()]

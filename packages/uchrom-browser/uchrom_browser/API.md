@@ -529,7 +529,7 @@ to the active page over Server-Sent Events; the page runs it with the same funct
 (`frontend/src/actions.ts`) and posts the result back.  Actions are defined once in
 `ui_tools.json` (name, description, JSON-schema input), which the page also registers as WebMCP
 tools (`frontend/src/webmcp.ts`, feature-detected, experimental).  Python:
-`uchrom_browser.connect()` (`uchrom_browser/client.py`; `uchrom.browser.connect()` with u-chrom).
+`uchrom_browser.connect()` (`uchrom_browser/client.py`).
 
 ### `GET /api/control/tools`
 
@@ -555,5 +555,5 @@ Body `{"ok": true, "result": …}` or `{"ok": false, "error": "…"}` → `{"acc
 
 The page marks itself active on window focus; `pages` lists connected pages, active first.
 
-`python -m uchrom_browser` (or `python -m uchrom.browser --web`) records its URL in `~/.cache/uchrom/browser.json` (removed on
+`python -m uchrom_browser` records its URL in `~/.cache/uchrom/browser.json` (removed on
 exit) so that `connect()` finds a server that moved to another port.

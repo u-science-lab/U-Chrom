@@ -66,7 +66,6 @@ import struct
 import tempfile
 import threading
 import uuid
-import warnings
 import zipfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -826,7 +825,7 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
                 float_encoding=DEFAULT_FLOAT_ENCODING,
                 coords_row_group_rows: int = DEFAULT_COORDS_ROW_GROUP_ROWS, normalize: bool = True,
                 codec="zstd", float_dictionary: bool = DEFAULT_FLOAT_DICTIONARY) -> None:
-    import pyarrow as pa
+    pass
 
     zarr = _zarr()
     cd._check_bin_ids()
@@ -2078,54 +2077,6 @@ def _io_pool():
     return pool()
 
 
-class _ColumnFill:
-    """One output column of known length filled piece by piece.
-
-    Integer / float columns go into one buffer allocated from Arrow's pool
-    up front (float nulls become NaN, as pandas would make them); other
-    types — and an integer column that turns out to hold nulls — keep their
-    chunks and are combined at the end."""
-
-    def __init__(self, typ, n: int):
-        import pyarrow as pa
-        import pyarrow.types as pat
-
-        self.typ = typ
-        self.n = int(n)
-        self.pos = 0
-        self.chunks: Optional[List[Any]] = None
-        self.is_float = pat.is_floating(typ)
-        if pat.is_integer(typ) or self.is_float:
-            self.dt = np.dtype(typ.to_pandas_dtype())
-            self.buf = pa.allocate_buffer(max(1, self.n * self.dt.itemsize))
-            self.arr = np.frombuffer(self.buf, dtype=self.dt, count=self.n)
-        else:
-            self.buf = None
-            self.chunks = []
-
-    def add(self, column) -> None:
-        import pyarrow as pa
-
-        for piece in column.chunks:
-            m = len(piece)
-            if self.chunks is None and piece.null_count and not self.is_float:
-                # integers with nulls: keep Arrow semantics (chunks)
-                self.chunks = [pa.array(self.arr[:self.pos], type=self.typ)] if self.pos else []
-                self.buf = self.arr = None
-            if self.chunks is not None:
-                self.chunks.append(piece)
-            elif m:
-                self.arr[self.pos:self.pos + m] = piece.to_numpy(zero_copy_only=False)
-            self.pos += m
-
-    def finish(self):
-        import pyarrow as pa
-
-        if self.chunks is not None:
-            return pa.chunked_array(self.chunks, type=self.typ).combine_chunks()
-        return pa.Array.from_buffers(self.typ, self.n, [None, self.buf])
-
-
 def combine_tables(tables: Sequence[Any], threads: int = 8):
     """Concatenate Arrow tables of one schema into a table whose columns are
     **single chunks** (``pyarrow.concat_tables`` keeps one chunk per input).
@@ -2704,7 +2655,6 @@ class SpotRows:
     # -- conversion --------------------------------------------------------
     def to_frame(self, name: str, table) -> pd.DataFrame:
         """Arrow table of a spot-aligned file → DataFrame (codes → categoricals)."""
-        import pyarrow as pa
 
         cats = self.cats.get(name, {})
         names = list(table.column_names)
@@ -2733,11 +2683,6 @@ class SpotRows:
         for j, c in enumerate(columns):
             out[:, j] = table.column(c).to_numpy()
         return out
-
-
-def _is_numeric(t) -> bool:
-    import pyarrow.types as pat
-    return pat.is_integer(t) or pat.is_floating(t) or pat.is_boolean(t)
 
 
 try:

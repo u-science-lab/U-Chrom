@@ -41,29 +41,17 @@ jobs:
           cache: "pip"
           cache-dependency-path: packages/uchrom/pyproject.toml
 
-      # Qt (xcb) + VTK/OpenGL runtime libs for the headless browser smoke
-      # test, which runs under xvfb.
-      - name: Install system libraries
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            xvfb libgl1 libegl1 libglu1-mesa libfontconfig1 libdbus-1-3 \
-            libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
-            libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 \
-            libxcb-xfixes0 libxcb-shape0 libxcb-cursor0
-
       - name: Install package
         run: |
           python -m pip install --upgrade pip
           # the monorepo's packages (packages/) first: they are not on PyPI yet
           pip install -e "packages/chromdata[all]" -e "packages/uchrom-browser[test]" \
-            -e "packages/uchrom[browser,web,anndata,im,snapfish,spatial]" pytest httpx
+            -e "packages/uchrom[web,anndata,im,spatial]" pytest httpx
 
       # each package's own suite (a `tests` package each: run from its folder)
       - name: Run tests
         run: |
-          (cd packages/uchrom && xvfb-run -a -s "-screen 0 1280x1024x24" \
-            python -m pytest tests -m "not slow and not gpu" -ra)
+          (cd packages/uchrom && python -m pytest tests -m "not slow and not gpu" -ra)
           (cd packages/chromdata && python -m pytest tests -ra)
           (cd packages/uchrom-browser && python -m pytest tests -ra)
           (cd apps/atlas && python -m pytest tests -ra)

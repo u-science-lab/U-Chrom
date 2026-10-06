@@ -42,11 +42,12 @@ PITFALLS (each is handled explicitly below; see the comments marked PITFALL):
      hippocampal types, so analyses are restricted to the cortex strip (RNA-only mask).
 
 Usage:
-    python benchmarks/spatial_composition/spatial_composition.py [--data EXAMPLE_DATA] [--out CACHE] [--figdata DIR]
+    python benchmarks/spatial_composition/spatial_composition.py [--data DATA_DIR] [--out CACHE] [--figdata DIR]
                                                                 [--stages e1,scores,geometry,composition,analysis]
 """
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import os
@@ -99,7 +100,7 @@ CLASSMAP = {
 
 @dataclass
 class Inputs:
-    """Input locations, all relative to the example-data root (catalog: example-data/README.md)."""
+    """Input locations, all relative to the data directory (uchrom.datasets.data_dir(); sources: apps/atlas/recipes/README.md)."""
     data: Path
 
     @property
@@ -1185,9 +1186,9 @@ def default_figdata(out: Path) -> Path:
 
 def main(argv=None):
     here = Path(__file__).resolve().parent
-    default_data = os.environ.get('UCHROM_EXAMPLE_DATA', str(here.parents[1] / 'example-data'))
+    default_data = str(data_dir())
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0], formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--data', default=default_data, help='example-data root (default: $UCHROM_EXAMPLE_DATA or <repo>/example-data)')
+    ap.add_argument('--data', default=default_data, help='data directory (default: $UCHROM_DATA, else ~/.cache/uchrom)')
     ap.add_argument('--out', default=None,
                     help='cache directory for intermediate arrays (~2 GB; default <data>/spatial_composition_cache)')
     ap.add_argument('--figdata', default=None,

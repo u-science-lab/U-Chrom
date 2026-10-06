@@ -31,7 +31,7 @@ the API does not export it by design), ``untested``.
 
 Data: Takei 2025 FOV0 (``takei2025_fov0/takei2025_fov0.chromdata.zarr``: 383,674 spots, 1,500 traces, 47 cells, 62
 tracks, cell table + cellm) for the chromdata.zarr, FOF-CT and AnnData rows;
-``sim_cell1`` (in repo, ``sim_cell1.cdz``) for PDB / .3dg / .cool;
+``sim_cell1`` (a uchrom-browser test fixture, ``sim_cell1.cdz``) for PDB / .3dg / .cool;
 ``schicar_mop`` for .scool.
 
     python benchmarks/fig2/f_roundtrip.py
@@ -41,6 +41,7 @@ Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/f_roundtrip.json``.
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import hashlib
 import sys
 import tempfile
@@ -65,7 +66,7 @@ def existing(stem: Path) -> Path:
 
 
 TAKEI_FOV0 = existing(C.DATA / "takei2025_fov0" / "takei2025_fov0")
-SIM = existing(C.ROOT / "example-data" / "sim_cell1" / "sim_cell1")
+SIM = existing(C.ROOT / "packages" / "uchrom-browser" / "tests" / "fixtures" / "sim_cell1" / "sim_cell1")
 SCHICAR = existing(C.DATA / "schicar_mop" / "schicar_mop")
 COLS = ["coords", "cell › trace", "tracks", "cell table", "contacts"]
 

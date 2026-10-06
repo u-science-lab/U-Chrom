@@ -35,7 +35,6 @@ import scipy.sparse as sp
 from scipy.sparse.csgraph import dijkstra
 
 from ._polymer import (
-    expected_distance_sq,
     mahalanobis_cost,
     PERSISTENCE_LENGTH_BP_DEFAULT,
 )

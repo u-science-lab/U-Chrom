@@ -31,6 +31,7 @@ Usage::
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import os
@@ -43,8 +44,8 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-GEO = ROOT / "example-data" / "stevens2017_mesc" / "GSM2219497_Cell_1_contact_pairs.txt.gz"
-PAIRS = ROOT / "example-data" / "cell1.pairs"
+GEO = data_dir() / "stevens2017_mesc" / "GSM2219497_Cell_1_contact_pairs.txt.gz"
+PAIRS = ROOT / "packages" / "uchrom" / "tests" / "fixtures" / "cell1.pairs.gz"   # the NucDynamics example cell
 
 
 def worker(cfg: dict) -> dict:

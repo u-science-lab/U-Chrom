@@ -7,12 +7,11 @@ import pandas as pd
 import pytest
 
 from uchrom import ChromData
-from tests import REPO
+from tests import DATA_DIR, FIXTURES
 
-DATA = REPO / "example-data"
-CORE = DATA / "4DNFIHF3JCBY.csv"
-CELLS = DATA / "4DNFIFINA2U9.csv"
-RNA = DATA / "4DNFIJ52NVDV.csv"
+CORE = DATA_DIR / "4DNFIHF3JCBY.csv"            # python -m uchrom.datasets fetch takei
+CELLS = FIXTURES / "4DNFIFINA2U9.csv"
+RNA = FIXTURES / "4DNFIJ52NVDV.csv"
 
 
 def _cd():
@@ -97,7 +96,7 @@ def test_options_and_errors(tmp_path):
         plain.to_fofct(tmp_path / "q.csv", cell_table=tmp_path / "r.csv")
 
 
-@pytest.mark.skipif(not CORE.exists(), reason="example-data/4DNFIHF3JCBY.csv not downloaded")
+@pytest.mark.skipif(not CORE.exists(), reason="Takei 2021 core table not downloaded (python -m uchrom.datasets fetch takei)")
 def test_takei2021_real_round_trip(tmp_path):
     cd = ChromData.from_fofct(CORE, cell_table=CELLS, rna_table=RNA)
     cd.to_fofct(tmp_path / "core.csv", cell_table=tmp_path / "cell.csv", rna_table=tmp_path / "rna.csv")

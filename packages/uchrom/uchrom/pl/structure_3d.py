@@ -2,7 +2,7 @@
 
 Draws a :class:`~chromdata.ChromData` (or raw coordinate arrays) as
 smooth tubes along the genomic chain — matching the look of the
-interactive `uchrom.browser` without requiring Qt.
+interactive web browser (`uchrom-browser`).
 
 Works in notebooks (inline screenshot or interactive if ``pythreejs`` /
 `trame` backends are installed) and in scripts (save to PNG, or show
@@ -71,10 +71,6 @@ def _coords_and_groups(
         order_cols = [c for c in ("chrom", "trace_id", "start")
                        if c in spots.columns]
         if order_cols:
-            order = np.argsort(spots[order_cols].apply(
-                lambda r: tuple(r), axis=1).tolist())
-            # np.argsort on tuples is fussy — fall back to a DataFrame sort
-            import pandas as pd
             spots = spots.assign(_o=np.arange(len(spots)))
             spots = spots.sort_values(order_cols, kind="mergesort")
             coords = coords[spots["_o"].to_numpy()]
@@ -350,7 +346,6 @@ def plot_structure_3d(
         if per_vertex:
             # Map colours onto the tube by bin index along the spline.
             n_out_pts = tube.points.shape[0]
-            t = np.linspace(0, 1, n_out_pts)
             scalar_idx = np.linspace(0, segment_coords.shape[0] - 1, n_out_pts)
             scalar_idx = np.clip(scalar_idx.astype(int), 0,
                                  segment_coords.shape[0] - 1)
@@ -358,7 +353,6 @@ def plot_structure_3d(
             if col_arr.ndim == 2 and col_arr.shape[0] == segment_coords.shape[0]:
                 tube["rgb"] = (col_arr[scalar_idx] * 255).astype(np.uint8)
                 plotter.add_mesh(tube, scalars="rgb", rgb=True, **kw)
-                any_scalar = True
             else:
                 plotter.add_mesh(tube, color=tuple(col), **kw)
         else:

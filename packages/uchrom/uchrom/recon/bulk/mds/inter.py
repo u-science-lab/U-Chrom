@@ -69,7 +69,7 @@ def inter_mds(input_path, resolution_inter=1000000, resolution_intra=100000,
 
     # ── Step 2: Global low-resolution MDS (scaffold) ──────────────────
     if verbose:
-        print(f"\n[2/4] Global MDS (scaffold)...")
+        print("\n[2/4] Global MDS (scaffold)...")
     t0 = time.time()
     genome_tensor = torch.from_numpy(genome_mat.astype(np.float64))
     scaffold_coords, scaffold_mask = run_mds(
@@ -126,7 +126,7 @@ def inter_mds(input_path, resolution_inter=1000000, resolution_intra=100000,
 
     # ── Step 4: Align high-res structures to scaffold ─────────────────
     if verbose:
-        print(f"\n[4/4] Aligning to scaffold...")
+        print("\n[4/4] Aligning to scaffold...")
 
     aligned_results = {}
 

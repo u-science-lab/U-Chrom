@@ -5,7 +5,6 @@ from __future__ import annotations
 import fire
 
 from uchrom import ChromData
-from uchrom.io import save_particles
 
 from .axiswise_f import call_loops_axiswise_f, LoopCallerParams
 

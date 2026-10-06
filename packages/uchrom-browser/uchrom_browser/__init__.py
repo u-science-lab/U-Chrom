@@ -3,7 +3,7 @@
 A local FastAPI server exposes loaded stores (``.chromdata.zarr`` / ``.cdz``, on disk or over HTTP) over a small HTTP
 API (``API.md``); a React + Three.js single-page app (``frontend/``, built into ``static/``) renders it.
 
-    python -m uchrom_browser data.chromdata.zarr        # or: python -m uchrom.browser --web ... (with u-chrom)
+    python -m uchrom_browser data.chromdata.zarr        # or: uchrom-browser data.chromdata.zarr
 
 ``connect()`` drives an open browser from Python or an agent (the page's actions, ``ui_tools.json``).  The browser
 needs only the data model, ``chromdata``; the analysis library (``u-chrom``) is not required.

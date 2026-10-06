@@ -15,6 +15,7 @@ the nucleus of one cell with its 3-D genome.  A diagram, in line art:
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import json
 from pathlib import Path
 
@@ -22,8 +23,8 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]                                   # the repository
-CHEN = ROOT / "example-data" / "spatial_hic_chen2026" / "cerebellum_adult_20um.chromdata.zarr"
-HIRES = ROOT / "example-data" / "hires2023" / "hires_brain.chromdata.zarr"
+CHEN = data_dir() / "spatial_hic_chen2026" / "cerebellum_adult_20um.chromdata.zarr"
+HIRES = data_dir() / "hires2023" / "hires_brain.chromdata.zarr"
 OUT = HERE / "site" / "hero.json"
 SECTION = "Cere_HiC_R1"
 UP = 8                    # contour upsampling of the spot grid

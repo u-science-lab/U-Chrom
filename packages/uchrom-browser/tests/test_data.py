@@ -13,9 +13,9 @@ from uchrom_browser.data import (
     decode_geometry,
     natural_chrom_key,
 )
-from tests import REPO
+from tests import FIXTURES
 
-SOX2 = REPO / "example-data" / "mESC_Sox2_5cells_wnan.chromdata.zarr"
+SOX2 = FIXTURES / "mESC_Sox2_5cells_wnan.chromdata.zarr"
 
 
 def _toy():

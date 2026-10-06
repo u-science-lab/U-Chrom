@@ -1,6 +1,6 @@
 """Figure 2f — groups from one modality, structure from another (scHiCAR MOp).
 
-Everything is real data (``example-data/schicar_mop/``): the scHiCAR mouse
+Everything is real data (``$UCHROM_DATA/schicar_mop/``): the scHiCAR mouse
 brain store (``schicar_mop.chromdata.zarr``: 5,313 cells, RNA / ATAC / Hi-C
 embeddings in ``cellm``) and its linked per-cell 1 Mb contact maps
 (``contacts_cells_1Mb.scool``).

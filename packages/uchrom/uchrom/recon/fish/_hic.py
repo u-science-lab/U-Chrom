@@ -146,7 +146,6 @@ def contact_to_distance(
         Symmetric, non-negative.  Diagonal is 0.
     """
     f = np.asarray(contacts, dtype=np.float64)
-    n = f.shape[0]
     d = np.zeros_like(f)
     mask_pos = f > 0
     with np.errstate(invalid="ignore", divide="ignore"):

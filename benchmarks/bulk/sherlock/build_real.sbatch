@@ -27,7 +27,7 @@ case $CELL in
   imr90) KEY=rao2014_imr90_4dn; MC=$DATA/rao2014_imr90/4DNFIR1JDZH7.mcool; TRUTHS="su2020_genome:centered:3000000:su_3mb su2020_genome:centered:1000000:su_1mb" ;;
   bonev) KEY=bonev2017_mesc_4dn; MC=$DATA/bonev2017_mesc/4DNFIC21MG3U.mcool; TRUTHS="takei2021_1mb:centered:1000000:takei_1mb" ;;
 esac
-$PY "$REPO/example-data/download_data.py" --dest "$DATA" --$KEY
+$PY -m uchrom.datasets fetch "$KEY" --root "$DATA"
 OUT=$REAL/$CELL
 mkdir -p "$OUT"
 FINE=$OUT/fine_20kb.npz

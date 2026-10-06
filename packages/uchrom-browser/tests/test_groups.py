@@ -8,10 +8,10 @@ import pytest
 
 from chromdata import ChromData
 from uchrom_browser.data import DatasetStore, decode_matrix
-from tests import REPO
+from tests import DATA_DIR
 
-_FOV0 = REPO / "example-data" / "takei2025_fov0"
-# built by example-data/build_takei2025_fov0.py
+_FOV0 = DATA_DIR / "takei2025_fov0"
+# built by apps/atlas/recipes/build_takei2025_fov0.py into the data directory
 TAKEI = _FOV0 / "takei2025_fov0.chromdata.zarr"
 
 
@@ -146,7 +146,7 @@ def test_group_routes(tmp_path):
     assert c.post(f"{base}/groups", json={"cells": ["nope"]}).status_code == 422
 
 
-@pytest.mark.skipif(not TAKEI.exists(), reason="takei2025_fov0 example missing (example-data/build_takei2025_fov0.py)")
+@pytest.mark.skipif(not TAKEI.exists(), reason="takei2025_fov0 not built (apps/atlas/recipes/build_takei2025_fov0.py)")
 def test_takei_cell_types_differ():
     """Real data: per-cell-type aggregation on Takei 2025 cerebellum FOV 0.
     Every cell type must yield statistics over exactly its own cells."""

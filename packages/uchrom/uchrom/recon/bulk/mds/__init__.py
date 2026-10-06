@@ -2,7 +2,6 @@
 # GPU-accelerated implementation using PyTorch
 
 from .core import (
-    contacts_to_matrix,
     contact_to_distance,
     fill_missing_distances,
     normalize_distances,
@@ -18,7 +17,6 @@ from .transforms import (
 )
 
 __all__ = [
-    'contacts_to_matrix',
     'contact_to_distance',
     'fill_missing_distances',
     'normalize_distances',

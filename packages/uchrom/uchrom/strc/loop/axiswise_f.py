@@ -30,8 +30,8 @@ Result columns
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -103,17 +103,6 @@ def _bh_fdr(pvals: np.ndarray) -> np.ndarray:
     out_finite[order] = q
     out[finite] = out_finite
     return out
-
-
-def _ring_mask(B: int, inner_bins: int, outer_bins: int):
-    """Boolean ``(B, B, B, B)`` ring mask for per-pair backgrounds.
-
-    ``mask[i, j, a, b]`` is True if ``(a, b)`` lies in the 1D-distance
-    ring of ``(i, j)`` excluding row ``i``, column ``j``, and
-    ``(a, b) == (i, j)``.  This can be huge — we instead compute the
-    background mean on the fly rather than materialising a 4D mask.
-    """
-    raise NotImplementedError("Handled inline in _background_mean_axis.")
 
 
 def _background_ring(
@@ -340,7 +329,6 @@ def _call_loops_chrom(cd, chrom: str, params: LoopCallerParams,
             return _pseudo_contact_frequency(cd, chrom, bin_ids, device=device)
 
     bin_ids = cube["bin_ids"]
-    B = len(bin_ids)
     norm_var = cube["norm_var"]                     # (3, B, B)
     count = cube["count"]                           # (3, B, B)
     d1d = cube["genomic_distance"]                  # (B, B)

@@ -7,12 +7,11 @@ import pandas as pd
 import pytest
 
 from chromdata import ChromData
-from tests import REPO
+from tests import DATA_DIR, FIXTURES
 
-DATA = REPO / "example-data"
-CELL_TABLE = DATA / "4DNFIFINA2U9.csv"   # Takei 2021 cell data (in repo)
-RNA_TABLE = DATA / "4DNFIJ52NVDV.csv"    # Takei 2021 nascent RNA spots (in repo)
-CORE = DATA / "4DNFIHF3JCBY.csv"         # Takei 2021 25-kb core table (downloaded)
+CELL_TABLE = FIXTURES / "4DNFIFINA2U9.csv"   # Takei 2021 cell data
+RNA_TABLE = FIXTURES / "4DNFIJ52NVDV.csv"    # Takei 2021 nascent RNA spots
+CORE = DATA_DIR / "4DNFIHF3JCBY.csv"         # Takei 2021 25-kb core table (python -m uchrom.datasets fetch takei)
 
 
 def _write_core(path, cell_ids):

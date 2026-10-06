@@ -21,8 +21,8 @@ The display text (title, paper, licence ...) comes from a hand-written JSON file
 everything countable is read from the stores, so the catalog cannot drift from the data.  The thumbnails of the
 atlas page are drawn from the stores too, by the atlas app (``apps/atlas/build.py``, with the static page).
 
-    python -m chromdata.catalog build apps/atlas/datasets.json --root example-data --out catalog.json
-    python -m chromdata.catalog pack example-data/x.chromdata.zarr          # -> x.cdz, the download
+    python -m chromdata.catalog build apps/atlas/datasets.json --root $UCHROM_DATA --out catalog.json
+    python -m chromdata.catalog pack $UCHROM_DATA/x.chromdata.zarr          # -> x.cdz, the download
     python -m chromdata.catalog show https://uchrom-atlas-r2.u-science.org
 """
 

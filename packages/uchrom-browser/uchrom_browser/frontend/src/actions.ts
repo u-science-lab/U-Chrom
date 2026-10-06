@@ -1,6 +1,6 @@
 /**
  * Browser actions — the one implementation behind every non-GUI caller: the control channel
- * (`control.ts`, used by `uchrom.browser.connect()`), WebMCP tools (`webmcp.ts`) and tests.
+ * (`control.ts`, used by `uchrom_browser.connect()`), WebMCP tools (`webmcp.ts`) and tests.
  * They call the same store functions as the GUI, so anything done here is something a researcher
  * could click.  Names and arguments are defined in `uchrom_browser/ui_tools.json`.
  */

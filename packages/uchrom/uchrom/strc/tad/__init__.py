@@ -7,7 +7,6 @@ from .di import (
 )
 from .utils import (
     load_tad_from_bed,
-    substructures_from_tads,
 )
 from .arc_pval import (
     call_tads_by_pval,
@@ -28,7 +27,6 @@ __all__ = [
     "detect_tad_boundaries",
     "get_domains",
     "load_tad_from_bed",
-    "substructures_from_tads",
     "call_tads_by_pval",
     "call_tads_di",
     "DICallerParams",

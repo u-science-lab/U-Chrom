@@ -183,8 +183,7 @@ def run_mds(contact_mat, alpha=4.0, device='auto', weight=0.05, **kwargs):
 
     Returns:
         coords: np.ndarray of shape (n_nonzero, 3)
-        nonzero_mask: np.ndarray boolean mask of shape (n_total,)
-            indicating which bins were kept
+        nonzero_mask: np.ndarray boolean mask of shape (n_total,), indicating which bins were kept
     """
     from .core import (
         contact_to_distance,

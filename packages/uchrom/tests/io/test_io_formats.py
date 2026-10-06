@@ -4,9 +4,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from tests import REPO
+from tests import FIXTURES
 
-DATA = REPO / "example-data"
+DATA = FIXTURES
 
 
 def _particles(n=12):
@@ -23,7 +23,7 @@ def _particles(n=12):
 def test_read_pairs_cell1():
     from uchrom.io import read_pairs
 
-    path = DATA / "cell1.pairs"
+    path = DATA / "cell1.pairs.gz"
     if not path.exists():
         pytest.skip("cell1.pairs missing")
     df = read_pairs(str(path))

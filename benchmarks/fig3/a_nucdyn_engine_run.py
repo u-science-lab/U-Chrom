@@ -1,7 +1,7 @@
 """Run the native NucDynamics engine on the Stevens et al. 2017 cells.
 
 For every requested cell the GEO contact table (GSE80280,
-``example-data/stevens2017_mesc/<GSM>_Cell_<n>_contact_pairs.txt.gz``) is run
+``$UCHROM_DATA/stevens2017_mesc/<GSM>_Cell_<n>_contact_pairs.txt.gz``) is run
 through ``uchrom_recon.calc_genome_structure`` with the original schedule
 (8, 4, 2, 0.4, 0.2, 0.1 Mb; 500 x 100 steps per stage) and the models are
 written as ``<out>/cell<n>.npz`` with the keys the validation harness reads
@@ -17,6 +17,7 @@ Usage::
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import os
@@ -29,7 +30,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-GEO_DIR = ROOT / "example-data" / "stevens2017_mesc"
+GEO_DIR = data_dir() / "stevens2017_mesc"
 GSM = {1: "GSM2219497", 2: "GSM2219498", 3: "GSM2219499", 4: "GSM2219500",
        5: "GSM2219501", 6: "GSM2219502", 7: "GSM2219503", 8: "GSM2219504"}
 

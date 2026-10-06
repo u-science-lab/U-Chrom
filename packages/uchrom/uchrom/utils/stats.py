@@ -12,7 +12,6 @@ non-parallel kernel smoother on ~n_bins² points (small).
 from __future__ import annotations
 
 import math
-from typing import Optional, Tuple, Union
 
 import numpy as np
 

@@ -35,7 +35,7 @@ Oligopaints imaging data.  *Nature Methods* 22, 1255–1264.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -85,7 +85,6 @@ def _linear_impute(dist: np.ndarray) -> np.ndarray:
     linear blend of the nearest finite bins on each side.
     """
     d = dist.copy()
-    n = d.shape[0]
     present = np.any(np.isfinite(d), axis=1)
     if present.all() or not present.any():
         return d
@@ -335,13 +334,12 @@ def call_domains_fishnet_trace(
 
     Returns
     -------
-    dict with keys
-        ``domains`` : list of (start, end_exclusive) bin indices per plateau
-        ``boundaries`` : sorted list of canonical boundary bin indices
-        ``domain_mask`` : (n_bins, n_bins) int — count of plateaus in which
-            bins i and j fall in the same domain (0 if never).
-        ``n_plateaus`` : number of plateaus detected
-        ``coverage`` : fraction of bins with ≥1 non-NaN distance
+    dict
+        ``domains``: list of (start, end_exclusive) bin indices per plateau;
+        ``boundaries``: sorted list of canonical boundary bin indices;
+        ``domain_mask``: (n_bins, n_bins) int — count of plateaus in which bins i and j fall in the
+        same domain (0 if never); ``n_plateaus``: number of plateaus detected; ``coverage``: fraction of
+        bins with ≥1 non-NaN distance.
     """
     params = params or FISHnetParams()
     dist = np.asarray(dist, dtype=np.float64)

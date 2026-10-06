@@ -12,8 +12,10 @@ Algorithm (per chromosome)
 3. Spectral decomposition per axis: the **second-largest eigenvector**
    carries the compartment-level structure (the first is the overall
    distance trend).  Call it ``V_c``.
-4. Weight each axis by the ArcFISH ``axis_weight`` and stack:
-   ``features[i, :] = [w_x V_x[i], w_y V_y[i], w_z V_z[i]]``.
+4. Align the eigenvector signs with the highest-weight axis, weight each
+   axis by the ArcFISH ``axis_weight`` and stack:
+   ``features[i, :] = [w_x V_x[i], w_y V_y[i], w_z V_z[i]]``.  The
+   ``pc2`` output column is the row sum, oriented so that ``A`` > 0.
 5. Run ``KMeans(n_clusters=2)`` on the features to get A/B labels.
 6. Filter tiny compartments below ``min_bins``: merge into the neighbour.
 7. Assign labels ``'A'`` / ``'B'`` by the mean pairwise distance within
@@ -228,6 +230,14 @@ def _call_compartments_chrom(cd, chrom: str, params: CompartmentCallerParams,
         except np.linalg.LinAlgError:
             per_axis_pc2[ax] = 0.0
 
+    # Eigenvector signs are arbitrary: align every axis with the highest-weight
+    # axis so the summed track below does not cancel (KMeans is unaffected —
+    # flipping a feature's sign keeps all Euclidean distances).
+    ref = per_axis_pc2[int(np.argmax(w))]
+    for ax in range(3):
+        if float(per_axis_pc2[ax] @ ref) < 0:
+            per_axis_pc2[ax] = -per_axis_pc2[ax]
+
     # Weighted stack → (B, 3) feature matrix
     features = (per_axis_pc2.T * w[None, :])
 
@@ -263,6 +273,10 @@ def _call_compartments_chrom(cd, chrom: str, params: CompartmentCallerParams,
         a_cluster = int(unique_labels[np.nanargmin(intra_var)])
 
     compartment = np.where(labels == a_cluster, "A", "B")
+    # orient the track: positive = the "A" cluster
+    is_a = labels == a_cluster
+    if is_a.any() and (~is_a).any() and track[is_a].mean() < track[~is_a].mean():
+        track = -track
 
     rows = []
     for i in range(B):

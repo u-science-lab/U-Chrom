@@ -593,13 +593,6 @@ class BackedChromData(ChromData):
     # Row access → in-memory ChromData
     # ------------------------------------------------------------------
 
-    def _coords_only(self, columns=None, tracks=None) -> bool:
-        """Whether a selection is served by the coordinate projection
-        (coordinates + key columns, no spot tracks, extra columns or layers)."""
-        spot_cols, track_cols, layer_keys = self._selection(columns, tracks)
-        keys = {BIN_ID, "trace_id", "cell_id", *LOCI}
-        return not track_cols and not layer_keys and all(c in keys for c in spot_cols)
-
     def _build(self, *, ranges: Optional[Sequence[Tuple[int, int]]] = None,
                rows: Optional[np.ndarray] = None, subset: bool = True,
                columns=None, tracks=None) -> ChromData:
@@ -703,20 +696,6 @@ class BackedChromData(ChromData):
         """Coordinate-table row of every primary row."""
         k = np.searchsorted(self._poff, rows, side="right") - 1
         return self._coff[self._crun[k]] + (rows - self._poff[k])
-
-    def _coords_scatter(self):
-        """``(a, b)`` → the primary rows of coordinate-table rows ``a:b`` (a
-        full read scatters the coordinate partitions into primary order with
-        it, block by block in the reading threads)."""
-        coff = self._coff
-        shift = self._poff[self._prun] - coff[:-1]
-
-        def rows(a: int, b: int) -> np.ndarray:
-            k0 = int(np.searchsorted(coff, a, side="right")) - 1
-            k1 = int(np.searchsorted(coff, b, side="left"))
-            lens = np.minimum(coff[k0 + 1:k1 + 1], b) - np.maximum(coff[k0:k1], a)
-            return np.repeat(shift[k0:k1], lens) + np.arange(a, b, dtype=np.int64)
-        return rows
 
     def _full_coords(self, with_bins: bool = False, with_xyz: bool = True):
         """All coordinates (and / or ``bin_id``) in primary order: the

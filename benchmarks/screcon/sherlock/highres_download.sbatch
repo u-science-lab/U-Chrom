@@ -1,5 +1,5 @@
 #!/bin/bash
-# scMicro-C GM12878 (Wu et al. 2025, GEO GSE192759; download_data.py --wu2025_scmicroc): the hickit phased
+# scMicro-C GM12878 (Wu et al. 2025, GEO GSE192759; python -m uchrom.datasets fetch wu2025_scmicroc): the hickit phased
 # pairs of the 12 cells with the largest files (per GSM, ~0.4 GB) and, streamed once out of the 102 GB
 # series tarball, their 5 / 10 / 20 kb hickit structures; then contacts per cell (highres.py count).
 #
@@ -11,9 +11,9 @@
 #SBATCH --mem=16G
 #SBATCH --output=%x-%j.out
 source "$SCRATCH/uchrom-nd/repo-highres/benchmarks/screcon/sherlock/_env_highres.sh"
-fetch() {   # extra args of download_data.py
+fetch() {   # extra args of python -m uchrom.datasets fetch
   for try in 1 2 3; do
-    $PY $REPO/example-data/download_data.py --wu2025_scmicroc --dest "$DATA" "$@" && return 0
+    $PY -m uchrom.datasets fetch wu2025_scmicroc --root "$DATA" "$@" && return 0
     echo "download attempt $try failed"; sleep 120
   done
   return 1

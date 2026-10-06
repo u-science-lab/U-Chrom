@@ -11,7 +11,6 @@ dense ``(haploid x locus-panel)`` grid first -- this mirrors SnapFISH-IMPUTE's
 where a locus was not observed for that haploid.
 """
 
-import numpy as np
 import pandas as pd
 
 

@@ -20,7 +20,7 @@ kept in the repository: put an R2 API token (Object Read & Write, this bucket on
 3. **Describe it** in `apps/atlas/datasets.json` (its `study` — one entry of `studies` with the citation, doi, source,
    licence —, `name`, title, organism, tissue; counts are read from the store), then build and upload the catalog:
 
-       python -m chromdata.catalog build apps/atlas/datasets.json --root example-data --out catalog.json
+       python -m chromdata.catalog build apps/atlas/datasets.json --root $UCHROM_DATA --out catalog.json
        aws s3 cp catalog.json s3://u-chrom-atlas/catalog.json --endpoint-url $R2_ENDPOINT --content-type application/json
 
 4. **Verify** over the public domain:
@@ -31,7 +31,7 @@ kept in the repository: put an R2 API token (Object Read & Write, this bucket on
    cluster + a 40-Mb window of its bulk contact map; `"figure"` in `datasets.json` pins the section / colour column /
    region, `"hero"` lists the datasets of the page's top figure) and commit `apps/atlas/site/figures/`:
 
-       python apps/atlas/build.py figures apps/atlas/datasets.json --root example-data      # -> apps/atlas/site/figures
+       python apps/atlas/build.py figures apps/atlas/datasets.json --root $UCHROM_DATA      # -> apps/atlas/site/figures
 
    The hero animation's data (`apps/atlas/site/hero.json`: a section drawn after a spatial Hi-C cerebellum section and
    three HiRES brain cells' 3-D genomes) is written by `python apps/atlas/hero_data.py`; commit it too.

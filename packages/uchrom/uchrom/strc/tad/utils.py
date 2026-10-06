@@ -1,7 +1,5 @@
 # TAD utilities: BED file I/O and substructure operations
 
-import numpy as np
-import pandas as pd
 
 
 def load_tad_from_bed(bed_path):
@@ -38,31 +36,3 @@ def tad_regions_to_bin_indices(regions, bins_df, chrom=None):
             end_idx = matching_bins.index[-1]
             bin_indices.append((start_idx, end_idx))
     return bin_indices
-
-
-def substructures_from_tads(tad_indices, structure_coords):
-    """Extract substructures based on TAD boundaries."""
-    substructures = []
-    for start_idx, end_idx in tad_indices:
-        subcoords = structure_coords[start_idx:end_idx+1].copy()
-        substructures.append(subcoords)
-    return substructures
-
-
-def merge_substructures(substructures, tad_indices, total_bins):
-    """Merge TAD substructures back into full structure."""
-    full_coords = np.zeros((total_bins, 3))
-    for (start_idx, end_idx), subcoords in zip(tad_indices, substructures):
-        full_coords[start_idx:end_idx+1] = subcoords
-    return full_coords
-
-
-def save_tads_to_bed(tad_indices, bins_df, output_path):
-    """Save detected TAD regions to BED file."""
-    with open(output_path, 'w') as f:
-        for start_idx, end_idx in tad_indices:
-            chrom = bins_df.iloc[start_idx]['chrom']
-            start = bins_df.iloc[start_idx]['start']
-            end = bins_df.iloc[end_idx]['end']
-            f.write(f"{chrom}\t{start}\t{end}\n")
-    print(f"TADs saved to {output_path}")

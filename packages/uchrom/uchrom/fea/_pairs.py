@@ -24,7 +24,7 @@ Conventions (the same as the dense ``_coord_cube_for_chrom`` /
 
 from __future__ import annotations
 
-from typing import Iterator, List, Optional, Sequence, Tuple
+from typing import Iterator, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd

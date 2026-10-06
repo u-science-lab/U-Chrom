@@ -22,4 +22,4 @@ export function isStaleServer(page: string | null, server: string | null | undef
 
 export const STALE_SERVER_MESSAGE =
   'The server was started before this page was rebuilt and may lack newer features — ' +
-  'restart `python -m uchrom.browser --web …` and reload.'
+  'restart `python -m uchrom_browser …` and reload.'

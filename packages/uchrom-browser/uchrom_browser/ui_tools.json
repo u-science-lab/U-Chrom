@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Actions of the U-Chrom web browser. One definition for every caller: the GUI's action layer (frontend/src/actions.ts), WebMCP tools registered by the page, and the Python client (uchrom.browser.connect()). Cells are referred to by cell_id; groups by a group reference: 'field:<column>=<value>' (e.g. field:cell_type=Bergmann), a registered id 'g…', or 'all'.",
+  "description": "Actions of the U-Chrom web browser. One definition for every caller: the GUI's action layer (frontend/src/actions.ts), WebMCP tools registered by the page, and the Python client (uchrom_browser.connect()). Cells are referred to by cell_id; groups by a group reference: 'field:<column>=<value>' (e.g. field:cell_type=Bergmann), a registered id 'g…', or 'all'.",
   "tools": [
     {
       "name": "describe_workspace",

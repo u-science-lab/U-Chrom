@@ -14,11 +14,12 @@ traces (``uchrom.fea.distance``) vs Hi-C, all windows pooled.
 
 Usage::
 
-    python benchmarks/fig3/b_takei_bonev.py [--data example-data] [--out x.json]
+    python benchmarks/fig3/b_takei_bonev.py [--data $UCHROM_DATA] [--out x.json]
 """
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 from pathlib import Path
@@ -33,7 +34,7 @@ BONEV = ("https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutp
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=ROOT / "example-data")
+    ap.add_argument("--data", type=Path, default=data_dir())
     ap.add_argument("--mcool", default=BONEV)
     ap.add_argument("--res", type=int, default=25_000)
     ap.add_argument("--radii", type=float, nargs="+", default=[0.15, 0.2, 0.3, 0.5])

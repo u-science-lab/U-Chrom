@@ -123,7 +123,7 @@ Copy the repo to `$SCRATCH/uchrom-nd/repo` and the data to `$SCRATCH/uchrom-nd/d
 
 ```bash
 rsync -a --exclude .git ./ sherlock:$SCRATCH/uchrom-nd/repo/
-rsync -a example-data/stevens2017_mesc example-data/su2020_imr90 example-data/4DNFIFLJGGNR.csv \
+rsync -a $UCHROM_DATA/stevens2017_mesc $UCHROM_DATA/su2020_imr90 $UCHROM_DATA/4DNFIFLJGGNR.csv \
     sherlock:$SCRATCH/uchrom-nd/data/
 ```
 
@@ -154,7 +154,7 @@ real_score (aggregation).  Everything writes under `$SCRATCH/uchrom-nd/runs/scre
 
 Real scHi-C structures against chromatin tracing of the **same cell type**, compared as
 distributions over cells (no cell is measured both ways) — replaces "simulated Hi-C from
-imaged cells".  Datasets and their verified / unverified facts: `example-data/README.md`,
+imaged cells".  Datasets and their verified / unverified facts: `apps/atlas/recipes/README.md`,
 "Matched-modality datasets".
 
 * **Common locus axis**: the 2,460 Takei 2021 ~1 Mb loci (`data/takei2021_1mb_loci.csv`,

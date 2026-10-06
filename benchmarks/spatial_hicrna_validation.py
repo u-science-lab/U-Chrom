@@ -1,6 +1,6 @@
 """Spatial Hi-C-RNA (GSE311199): the reprocessed contacts against the published data.
 
-Run after ``example-data/build_spatial_hicrna.py`` and ``example-data/link_spatial_hicrna_contacts.py``::
+Run after ``apps/atlas/recipes/build_spatial_hicrna.py`` and ``apps/atlas/recipes/link_spatial_hicrna_contacts.py``::
 
     python benchmarks/spatial_hicrna_validation.py        # ~5 min; writes benchmarks/results/spatial_hicrna_validation.json
 
@@ -20,6 +20,7 @@ Run after ``example-data/build_spatial_hicrna.py`` and ``example-data/link_spati
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import json
 import sys
 import warnings
@@ -31,11 +32,11 @@ import pandas as pd
 from scipy.stats import spearmanr
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "example-data"))
+sys.path.insert(0, str(data_dir()))
 from link_spatial_hicrna_contacts import CONTACTS, bulk_e1, mouse_ssab_layout  # noqa: E402
 from uchrom import ChromData  # noqa: E402
 
-DATA = ROOT / "example-data" / "spatial_hicrna"
+DATA = data_dir() / "spatial_hicrna"
 OUT = ROOT / "benchmarks" / "results" / "spatial_hicrna_validation.json"
 warnings.filterwarnings("ignore")
 

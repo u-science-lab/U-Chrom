@@ -47,15 +47,12 @@ autodoc_default_options = {
 autodoc_mock_imports = [
     "torch",
     "pyvista",
-    "pyvistaqt",
-    "PyQt5",
     "vtk",
     "vtkmodules",
     "fire",
     "cooler",
     "h5py",
     "hicstraw",
-    "qdarkgraystyle",
     "scooby",
     "matplotlib",
     "matplotlib.cm",
@@ -84,6 +81,12 @@ autodoc_mock_imports = [
 
 napoleon_numpy_docstring = True
 napoleon_google_docstring = True
+napoleon_use_ivar = True          # "Attributes" sections as fields (dataclass members are documented by autodoc)
+# numpy-style type descriptions ("ndarray, shape (n, 3)", "ChromData, in memory or backed") are parsed into
+# cross-references; words that match several attributes (shape, backed, ...) are not ambiguous references
+suppress_warnings = ["ref.python"]
+
+myst_heading_anchors = 3   # links to sections: page.md#a-heading
 
 myst_enable_extensions = [
     "colon_fence",
@@ -99,9 +102,8 @@ intersphinx_mapping = {
     "anndata": ("https://anndata.readthedocs.io/en/stable", None),
 }
 
-# Execute notebooks during the Sphinx build and cache results so
-# re-builds are fast.  The cache lives in docs/source/.jupyter_cache/.
-nb_execution_mode = "cache"
+# The tutorials are committed executed (with outputs, run on real data): the build does not run them.
+nb_execution_mode = "off"
 nb_execution_timeout = 600
 nb_execution_raise_on_error = True
 

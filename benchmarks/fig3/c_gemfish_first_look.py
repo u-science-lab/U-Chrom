@@ -7,7 +7,7 @@ whole chromosomes with Wang et al. 2016 TAD-level FISH; see
 * Hi-C: Rao et al. 2014 IMR90, raw 5 kb counts summed into the 65 × 30 kb
   segments of Bintu et al. 2018 chr21:18.6-20.6 Mb (hg19
   chr21:20,000,032-21,950,032) — ``rao2014_imr90/IMR90_chr21_5kb_hg19.cool``
-  from ``example-data/build_rao2014_slices.py``;
+  from ``apps/atlas/recipes/build_rao2014_slices.py``;
 * FISH: Bintu 2018 traces of the same region, split by trace into a
   training half (fed to GEM-FISH as TAD-centre distances + TAD Rg²) and a
   held-out half (median distance matrix, never seen by the model);
@@ -21,11 +21,12 @@ coincide exactly.
 
 Usage::
 
-    python benchmarks/fig3/c_gemfish_first_look.py [--data example-data] [--seeds 0 1 2]
+    python benchmarks/fig3/c_gemfish_first_look.py [--data $UCHROM_DATA] [--seeds 0 1 2]
 """
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import tempfile
@@ -77,7 +78,7 @@ def to_cd(df):
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=ROOT / "example-data")
+    ap.add_argument("--data", type=Path, default=data_dir())
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()

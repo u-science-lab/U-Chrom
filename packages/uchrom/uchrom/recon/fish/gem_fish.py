@@ -23,8 +23,8 @@ Three-stage pipeline
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -32,7 +32,7 @@ import pandas as pd
 from ._hic import aggregate_over_tads, load_contact_matrix, contact_to_distance
 from ._tad_level import Stage1Params, reconstruct_tad_level
 from ._intra_tad import Stage2Params, reconstruct_intra_tad
-from ._assembly import AssemblyParams, assemble
+from ._assembly import assemble
 
 
 @dataclass

@@ -163,7 +163,7 @@ def main():
     if args.child:
         return child_query(args.child[0])
     if not STORE.exists():
-        raise SystemExit(f"{STORE} missing — run example-data/build_schicar_mop.py")
+        raise SystemExit(f"{STORE} missing — run apps/atlas/recipes/build_schicar_mop.py")
     ensure_h5cd()
 
     work = C.WORK / "e_contacts"

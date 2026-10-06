@@ -10,12 +10,12 @@ across workers.
 import os
 import numpy as np
 import pytest
-from tests import REPO
+from tests import FIXTURES
 
 
 def _real_cd():
     from chromdata import ChromData
-    data = str(REPO / "example-data" / "mESC_Sox2_5cells_wnan.chromdata.zarr")
+    data = str(FIXTURES / "mESC_Sox2_5cells_wnan.chromdata.zarr")
     if not os.path.exists(data):
         pytest.skip(f"real test data not found: {data}")
     return ChromData.read(data)
@@ -23,7 +23,6 @@ def _real_cd():
 
 def test_snapfish_n_jobs_matches_serial():
     """n_jobs=2 must give identical coordinates to n_jobs=1."""
-    pytest.importorskip("skimage")
     from uchrom.im.impute import impute_snapfish
 
     cd = _real_cd()
@@ -40,7 +39,6 @@ def test_snapfish_n_jobs_matches_serial():
 
 def test_impute_coordinates_passes_n_jobs():
     """The public API forwards n_jobs to the snapfish backend."""
-    pytest.importorskip("skimage")
     from uchrom.im.impute import impute_coordinates
 
     cd = _real_cd()
@@ -50,7 +48,6 @@ def test_impute_coordinates_passes_n_jobs():
 
 def test_snapfish_n_jobs_default_is_serial():
     """Default call (no n_jobs) still works and matches n_jobs=1."""
-    pytest.importorskip("skimage")
     from uchrom.im.impute import impute_snapfish
 
     cd = _real_cd()

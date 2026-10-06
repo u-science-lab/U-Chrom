@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import glob
 import io
 import warnings
@@ -24,7 +25,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1] / "example-data"
+ROOT = data_dir()
 sys.path.insert(0, str(ROOT))
 import build_spatial_hic_chen2026 as build  # noqa: E402
 

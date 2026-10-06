@@ -1,6 +1,5 @@
 import gzip
 import pandas as pd
-import fire
 import h5py
 
 from cooler import Cooler
@@ -218,7 +217,6 @@ def load_hic_genome(path, resolution, chroms=None, norm='KR'):
         offsets: dict mapping chrom name -> start index in the matrix
         chrom_sizes: dict mapping chrom name -> number of bins
     """
-    import numpy as np
 
     if path.endswith(('.mcool', '.cool')):
         return _load_genome_mcool(path, resolution, chroms)
@@ -396,10 +394,8 @@ def export_pdb_coords(file_path, particles, scale=1.0, extended=True):
     
     if extended:
         pdb_format = '%-6.6s%5.1d %4.4s%s%3.3s %s%4.1d%s   %8.3f%8.3f%8.3f%6.2f%6.2f          %2.2s  %10d\n'
-        ter_format = '%-6.6s%5.1d      %s %s%4.1d%s                                                     %10d\n'
     else:
         pdb_format = '%-6.6s%5.1d %4.4s%s%3.3s %s%4.1d%s   %8.3f%8.3f%8.3f%6.2f%6.2f          %2.2s  \n'
-        ter_format = '%-6.6s%5.1d      %s %s%4.1d%s                                                     \n'
 
     file_obj = open(file_path, 'w')
     write = file_obj.write
@@ -589,12 +585,6 @@ def particles_to_pdb(path_particles, path_pdb, split_by_chrom=False):
             path = f"{prefix}.{chr}{suffix}"
             sdf = df[df['chrom'] == chr]
             export_pdb_coords(path, sdf)
-
-
-if __name__ == "__main__":
-    fire.Fire({
-        "particles_to_pdb": particles_to_pdb
-    })
 
 
 def write_fofct(cd, path, *, cell_table=None, rna_table=None, **kwargs):

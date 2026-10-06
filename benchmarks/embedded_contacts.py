@@ -2,7 +2,7 @@
 
 Prepare (once)::
 
-    python -m chromdata.embedded example-data/spatial_hicrna/hicrna_mouse_brain.chromdata.zarr      # ~3 min
+    python -m chromdata.embedded $UCHROM_DATA/spatial_hicrna/hicrna_mouse_brain.chromdata.zarr      # ~3 min
     python benchmarks/embedded_contacts.py                                                              # ~1 min
 
 (the linked reference is a temporary copy of the store without ``embedded/``)
@@ -19,6 +19,7 @@ Reports (``benchmarks/results/embedded_contacts.json``):
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import json
 import time
 import warnings
@@ -31,7 +32,7 @@ from chromdata.embedded import EmbeddedContacts, list_embedded
 
 warnings.filterwarnings("ignore")
 ROOT = Path(__file__).resolve().parents[1]
-D = ROOT / "example-data" / "spatial_hicrna"
+D = data_dir() / "spatial_hicrna"
 EMB = D / "hicrna_mouse_brain.chromdata.zarr"
 LINKED = D / "_linked_reference.chromdata.zarr"      # the same store without embedded/ (links only)
 OUT = ROOT / "benchmarks" / "results" / "embedded_contacts.json"

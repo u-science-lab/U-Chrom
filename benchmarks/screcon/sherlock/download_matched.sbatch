@@ -1,6 +1,6 @@
 #!/bin/bash
 # Downloads for the matched-modality comparison (benchmarks/screcon/matched.py), catalogued in
-# example-data/README.md ("matched imaging" section).  Idempotent: existing complete files are kept.
+# apps/atlas/recipes/README.md ("matched imaging" section).  Idempotent: existing complete files are kept.
 #
 #   PART=mesc   Nagano 2017 haploid contacts (schic2 S3; 2i 502 MB + serum ~0.84 GB), the mm9 GATC
 #               fend table streamed out of schic2_mm9_db.tar.gz (5.0 GB read, ~0.1 GB kept), the UCSC

@@ -19,13 +19,14 @@ Usage::
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-HERE = Path(__file__).resolve().parents[1] / "example-data"
+HERE = data_dir()
 
 
 def knn_purity(x: np.ndarray, y: np.ndarray, k: int) -> float:

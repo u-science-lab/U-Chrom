@@ -1,6 +1,6 @@
 """Reference answers for the Fig 6e agent benchmark (questions.yaml), computed with scripted uchrom analyses.
 
-    python benchmarks/fig6/agent_bench/ground_truth.py --data-root <example-data dir> [--only A1,C1,…]
+    python benchmarks/fig6/agent_bench/ground_truth.py --data-root <data directory> [--only A1,C1,…]
 
 Writes ``answers.json``: question id → {"values": {...}, "notes": "..."}.  Each function below is named in
 questions.yaml (`truth:`).  Statistics follow the benchmark's conventions: the cell is the unit for

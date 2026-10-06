@@ -8,6 +8,7 @@ loaded from its file path instead of ``import uchrom``; the screcon helpers are 
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import importlib.util
 import json
 import os
@@ -37,9 +38,7 @@ def load_preprocess():
 
 
 def example_data() -> Path:
-    if os.environ.get("UCHROM_EXAMPLE_DATA"):
-        return Path(os.environ["UCHROM_EXAMPLE_DATA"])
-    return ROOT / "example-data"
+    return data_dir()                       # $UCHROM_DATA, else ~/.cache/uchrom
 
 
 def jdump(obj) -> str:
@@ -56,7 +55,7 @@ def jdump(obj) -> str:
     return json.dumps(obj, indent=1, default=default)
 
 
-# 4DN / GEO sources of the real-data inputs (catalogued in example-data/README.md)
+# 4DN / GEO sources of the real-data inputs (catalogued in apps/atlas/recipes/README.md)
 RAO_IMR90_4DN = ("https://4dn-open-data-public.s3.amazonaws.com/fourfront-webprod/wfoutput/"
                  "d10655ab-5bdf-4449-ab5a-82188af29868/4DNFIR1JDZH7.mcool")        # GRCh38, 4,639,622,711 B
 RAO_IMR90_GEO = "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE63nnn/GSE63525/suppl/GSE63525_IMR90_combined.hic"  # hg19

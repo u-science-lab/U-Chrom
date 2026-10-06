@@ -1,7 +1,7 @@
 """NucDynamics on the native engine (``uchrom_recon``).
 
 Skipped when the native package is not installed.  Uses chr19 of
-``example-data/cell1.pairs`` (Stevens et al. 2017, Cell 1) at 1 Mb / 0.5 Mb
+``tests/fixtures/cell1.pairs.gz`` (Stevens et al. 2017, Cell 1) at 1 Mb / 0.5 Mb
 with a short annealing schedule, so each run takes about a second.  These
 are smoke and consistency checks; the real-data validation (all 8 Stevens
 cells at 100 kb vs the published models) is in
@@ -13,18 +13,18 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from tests import REPO
+from tests import FIXTURES
 
 un = pytest.importorskip("uchrom_recon")
 
-PAIRS = REPO / "example-data" / "cell1.pairs"
+PAIRS = FIXTURES / "cell1.pairs.gz"
 QUICK = dict(genome_ranges=["chr19"], particle_sizes=[1e6, 5e5], temp_steps=[60], dynamics_steps=[50])
 
 
 @pytest.fixture(autouse=True)
 def _need_data():
     if not PAIRS.exists():
-        pytest.skip("example-data/cell1.pairs missing")
+        pytest.skip("fixture cell1.pairs.gz missing")
 
 
 def _backbone_ratio(X):

@@ -13,11 +13,11 @@ python benchmarks/spatial_composition/spatial_composition.py --stages analysis
 ```
 
 - **Time:** about 100 s end to end with `--workers 12` (Apple silicon, local disk).
-- **Disk:** the cache (`--out`, default `example-data/spatial_composition_cache/`, git-ignored) is about 2 GB
+- **Disk:** the cache (`--out`, default `$UCHROM_DATA/spatial_composition_cache/`, git-ignored) is about 2 GB
   (per-spot banded arrays of the two Guo sections). The figure data are about 0.5 MB.
 - **Inputs:** read through the stores' linked files (`ChromData.read(..., backed=True)`,
   `load_linked_scool(key=...)['path']`, `linked_cool_path(...)`, `resolve_link_path(...)`). Every dataset is in
-  `example-data/README.md`:
+  `apps/atlas/recipes/README.md`:
   - `spatial_hicrna/hicrna_mouse_brain.chromdata.zarr`: per-spot 1-Mb `.scool` for r1 / r2, bulk `.mcool`, spot RNA
     h5ad, and ssA/B (used only to orient E1).
   - `gageseq2024/gageseq_mouse_cortex.chromdata.zarr`, `droplet_hic2024/paired_hic_mouse_cortex.chromdata.zarr`,

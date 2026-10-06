@@ -152,11 +152,12 @@ def distance_map(cd, chrom, stat: str = "median", *, streaming=None, batch="auto
     cd : ChromData, in memory or backed
     chrom : chromosome name
     stat : ``"median"`` or ``"mean"``
-    streaming : read the traces in batches (``iter_traces(chrom=...,
-        columns="coords")``) and band the median; default ``True`` for a
-        backed object.  ``False`` gathers every observation at once (the
-        in-memory baseline).
-    batch : traces per batch, or ``"auto"`` (from the memory budget)
+    streaming : bool, optional
+        Read the traces in batches (``iter_traces(chrom=..., columns="coords")``) and band the
+        median; default ``True`` for a backed object.  ``False`` gathers every observation at once
+        (the in-memory baseline).
+    batch : int or "auto"
+        Traces per batch, or ``"auto"`` (from the memory budget).
     memory_budget : default :data:`uchrom.settings.memory_budget`
     observed : rows / columns = the chromosome's observed bins sorted by
         start (the :func:`mean_distance_matrix` convention), or every bin of
