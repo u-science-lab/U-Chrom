@@ -1,6 +1,6 @@
 """The new single-cell method (``robust``, PREREG.md §7, milestone M2) on an arbitrary contact table.
 
-Native engine (``uchrom_nucdyn``), protocol ``robust``: the NucDynamics 2017 protocol with a
+Native engine (``uchrom_recon``), protocol ``robust``: the NucDynamics 2017 protocol with a
 noise-aware observation model (contact restraints re-weighted by their posterior probability of
 being true, false-contact rate and contact-kernel width learned by EM).  Same particle schedule,
 call and output as ``run_nucdyn.py`` (``.npz``: ``chrom``, ``pos`` [2017 convention], ``coords``
@@ -63,7 +63,7 @@ def main(argv=None) -> None:
                     "likelihood ratio 0 (upper bound of re-weighting)")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
-    import uchrom_nucdyn as un
+    import uchrom_recon as un
 
     # $ROBUST_PARAMS (JSON) sits between the defaults and --params (for harnesses that cannot pass --params)
     params = {**ROBUST_DEFAULTS, **json.loads(os.environ.get("ROBUST_PARAMS", "{}")), **json.loads(args.params)}

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Native engine (uchrom_nucdyn, CPU, f64) on one Stevens et al. 2017 cell: 10 models, the
+# Native engine (uchrom_recon, CPU, f64) on one Stevens et al. 2017 cell: 10 models, the
 # original's full schedule, same seed convention as orig_ensembles.sbatch.
 #
 #   sbatch --array=1-8 benchmarks/fig3/sherlock/native_ensembles.sbatch

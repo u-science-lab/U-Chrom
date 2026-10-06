@@ -2534,7 +2534,7 @@ class ChromData:
         except ImportError as e:
             raise ImportError(
                 "astropy is required to read PyHiM ECSV trace tables. "
-                "Install with `pip install u-chrom[im]` or `pip install astropy`."
+                "Install with `pip install chromdata[im]` (or u-chrom[im], or astropy)."
             ) from e
 
         path = Path(ecsv_path)

@@ -11,13 +11,13 @@ pip install u-chrom
 ```bash
 git clone https://github.com/Nanguage/U-Chrom.git
 cd U-Chrom
-pip install -e packages/chromdata -e .                # or: uv pip install -e .
+pip install -e packages/chromdata -e packages/uchrom         # or: uv pip install -e packages/uchrom
 ```
 
 The repository is a monorepo: the data model (`chromdata`), the web browser
 (`uchrom-browser`), auto-discovery (`uchrom-discovery`) and the native engine
-(`u-chrom-nucdyn`) are packages of their own under `packages/`.  pip installs
-them from their folders (`pip install -e packages/uchrom-browser -e ".[web]"`);
+(`uchrom-recon`) are packages of their own under `packages/`.  pip installs
+them from their folders (`pip install -e packages/uchrom-browser -e "packages/uchrom[web]"`);
 `uv pip install` finds them through `[tool.uv.sources]`.  `chromdata` alone
 (`pip install -e packages/chromdata`) reads and writes `.chromdata.zarr`
 stores without the analysis library.
@@ -30,6 +30,7 @@ Some workflows need heavier dependencies that are published as extras:
 |-------|----------|------------|
 | `browser` | PyVista, pyvistaqt, VTK, PyQt5, qdarkgraystyle | `python -m uchrom.browser` |
 | `web` | uchrom-browser (FastAPI, uvicorn) | `python -m uchrom.browser --web` (browser in a web page) |
+| `recon` | uchrom-recon (Rust; from `packages/uchrom-recon` until wheels are published) | NucDynamics, EMber, IGM (`uchrom.recon.sc.nucdyn` / `.ember`, `uchrom.recon.bulk.deconv`) |
 | `hic` | hic-straw | reading `.hic` files |
 | `anndata` | anndata | `ChromData.link_anndata` / `to_anndata`, seqFISH RNA |
 | `multiome` | mudata | `ChromData.load_linked_mudata` |

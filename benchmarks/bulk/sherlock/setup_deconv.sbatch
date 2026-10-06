@@ -23,14 +23,14 @@ $P install -q --upgrade pip maturin
 $P install -q --only-binary=:all: "numpy<2.3" "pandas<2.3" "scipy<1.15" psutil "zarr>=3" "pyarrow<18" fire networkx statsmodels matplotlib
 $P install -q -e "$REPO" --no-deps
 $P install -q --only-binary=:all: "h5py<3.13"
-(cd "$REPO/packages/uchrom-nucdyn" && "$VENV/bin/maturin" build --release -o "$L_SCRATCH/wheels")
-$P install -q --force-reinstall --no-deps "$L_SCRATCH"/wheels/u_chrom_nucdyn-*.whl
+(cd "$REPO/packages/uchrom-recon" && "$VENV/bin/maturin" build --release -o "$L_SCRATCH/wheels")
+$P install -q --force-reinstall --no-deps "$L_SCRATCH"/wheels/uchrom_recon-*.whl
 $PY - <<'EOF'
 import sys
 sys.path.insert(0, "benchmarks/bulk")
-import uchrom_nucdyn as un, h5py, numpy
+import uchrom_recon as un, h5py, numpy
 import _igm_bench as B
-print("uchrom_nucdyn", un.__version__, "gpu build:", un.HAS_GPU, "igm:", hasattr(un, "calc_population"),
+print("uchrom_recon", un.__version__, "gpu build:", un.HAS_GPU, "igm:", hasattr(un, "calc_population"),
       "h5py", h5py.__version__, "numpy", numpy.__version__)
 p = B.fetch_igm_demo()
 print("IGM demo input:", p, B.md5(p))

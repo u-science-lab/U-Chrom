@@ -1,0 +1,115 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "u-chrom"
+version = "0.2.0"
+readme = "README.md"
+description = "Chromatin structure analysis toolkit."
+authors = [
+    {name = "Weize Xu", email = "vet.xwz@gmail.com" },
+]
+requires-python = ">= 3.11"
+dependencies = [
+    # the data model and its store (.chromdata.zarr): packages/chromdata
+    "chromdata>=0.1.0",
+    "fire>=0.6.0",
+    "pandas>=2.0.3",
+    "h5py>=3.10.0",
+    "pyarrow>=14",
+    "cooler>=0.9.3",
+    "scikit-learn>=1.3.2",
+    "matplotlib>=3.7.5",
+    "torch>=2.0",
+    "networkx>=3.0",
+    "scipy>=1.10",
+    "statsmodels>=0.13",
+]
+
+[project.optional-dependencies]
+# Interactive 3D browser (python -m uchrom.browser).
+browser = [
+    "vtk>=9.2,<9.4",
+    "pyvista>=0.43,<0.45",
+    "pyvistaqt>=0.11,<0.12",
+    "PyQt5>=5.15.2",
+    "qdarkgraystyle>=1.0.2",
+]
+# Web browser (python -m uchrom.browser --web; the uchrom-browser package, packages/uchrom-browser); no Qt needed.
+web = [
+    "uchrom-browser>=0.1.0",
+]
+# Native reconstruction engine (Rust; multi-core CPU + wgpu GPU) used by uchrom.recon.sc.nucdyn,
+# uchrom.recon.sc.ember and uchrom.recon.bulk.deconv.  Built from packages/uchrom-recon
+# (pip install ./packages/uchrom-recon from the repository root) until wheels are published.
+recon = [
+    "uchrom-recon>=0.1",
+]
+# Reading .hic files (uchrom.io load_hic / benchmark tutorial).
+hic = [
+    "hic-straw",
+]
+# Linking ChromData with AnnData (link_anndata / to_anndata, seqFISH RNA).
+anndata = [
+    "chromdata[anndata]",
+]
+# UMAP cell embeddings (uchrom.emb.embed_cells); PCA / t-SNE need only scikit-learn.
+umap = [
+    "umap-learn>=0.5",
+]
+# The data model's own extras (the features are chromdata's): cell outlines as geometry objects
+# (cell_shapes_geodataframe), SpatialData links, MuData links.
+spatial = [
+    "chromdata[spatial]",
+]
+spatialdata = [
+    "chromdata[spatialdata]",
+]
+multiome = [
+    "chromdata[multiome]",
+]
+docs = [
+    "sphinx>=7.0",
+    "furo>=2024.1",
+    "myst-nb>=1.0",
+    "sphinx-copybutton>=0.5",
+]
+# FastHigashi for uchrom.emb.higashi.
+# The legacy `higashi` package hard-pins scipy==1.7.3 / pandas==1.3.4 and is
+# painful to install via pip; prefer `emb` (FastHigashi) and install the full
+# Higashi from the ruochiz conda channel when its co-assay features are needed.
+emb = [
+    "fasthigashi",
+]
+emb-full = [
+    "u-chrom[emb]",
+    "higashi",
+]
+# Image-side integrations: the PyHiM ECSV reader (ChromData.from_pyhim_trace, chromdata's).
+# The full PyHiM CLI is a much heavier dep (TensorFlow + StarDist) — install separately
+# in its own environment when you need the imaging pipeline itself.
+im = [
+    "chromdata[im]",
+]
+# SnapFISH-IMPUTE coordinate imputation (uchrom.im.impute method='snapfish').
+# scipy and scikit-learn are already core deps; scikit-image is the only extra.
+snapfish = [
+    "scikit-image>=0.20",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"uchrom.browser" = ["*.svg", "icons/*.svg"]
+"uchrom.im.impute._snapfish" = ["LICENSE"]
+
+[tool.setuptools.packages.find]
+include = ["uchrom*"]
+exclude = ["example-data*", "tests*"]
+
+# Monorepo: the sibling packages are installed from their folders when developing (uv pip install -e packages/uchrom)
+[tool.uv.sources]
+chromdata = { path = "../chromdata", editable = true }
+uchrom-browser = { path = "../uchrom-browser", editable = true }
+uchrom-recon = { path = "../uchrom-recon" }

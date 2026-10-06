@@ -8,7 +8,7 @@ is one model, seed 1, in a fresh process, through the screcon runners
 =============  ===========================================================================
 method         run
 =============  ===========================================================================
-nucdyn_cpu     U-Chrom native NucDynamics (``uchrom_nucdyn``), CPU f64, 1 and 16 threads
+nucdyn_cpu     U-Chrom native NucDynamics (``uchrom_recon``), CPU f64, 1 and 16 threads
 nucdyn_gpu     U-Chrom native NucDynamics, GPU f32 (wgpu / Vulkan), one H100
 orig           original NucDynamics (tjs23/nuc_dynamics master 778697a, Cython), one process
 hickit         hickit 0.1.1 release binary (Dip-C schedule, haploid ``-P1``), one process

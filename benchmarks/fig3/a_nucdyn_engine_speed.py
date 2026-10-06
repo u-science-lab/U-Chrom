@@ -1,4 +1,4 @@
-"""Speed of the native NucDynamics engine (and of the old Taichi port).
+"""Speed of the native NucDynamics engine (and of the old Taichi port, from an older checkout).
 
 Every configuration runs in its own subprocess (so peak memory is its own)
 on the same input, Stevens et al. 2017 Cell 1 (GEO contact table), and
@@ -19,7 +19,9 @@ Suites (``--suite``):
   shortened schedule), GPU and CPU.
 * ``taichi``    : the old Taichi port (``uchrom.recon.sc.nucdyn.nucdyn``,
   default settings, 500 steps per stage), CPU and GPU (Metal/CUDA), one
-  model per run.
+  model per run.  The port was removed from u-chrom after commit 0063b92:
+  run this suite in a checkout of that commit (``git worktree add``) with
+  taichi installed; the recorded numbers stay in the results JSON.
 
 Usage::
 
@@ -49,7 +51,7 @@ def worker(cfg: dict) -> dict:
     """Run one configuration in this process and return its measurements."""
     t0, c0 = time.perf_counter(), time.process_time()
     if cfg["engine"] == "native":
-        import uchrom_nucdyn as un
+        import uchrom_recon as un
 
         c = un.read_contact_pairs(str(GEO))
         kw = dict(n_models=cfg["n_models"], device=cfg["device"], n_threads=cfg.get("n_threads", 0), seed=1,
@@ -106,7 +108,7 @@ def main() -> None:
     if args.worker:
         print(json.dumps(worker(json.loads(args.worker))))
         return
-    import uchrom_nucdyn as un
+    import uchrom_recon as un
 
     report = {"machine": platform.platform(), "processor": platform.processor(), "cpu_count": os.cpu_count(),
               "gpu": un.gpu_info(), "engine_version": un.__version__, "input": GEO.name, "runs": {}}

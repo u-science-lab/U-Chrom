@@ -1,7 +1,7 @@
 # Settings of the `robust` (new method) jobs: the screcon settings (_env.sh: paths of the existing
 # baseline runs, which are only read) with the robust repo copy, venv and output tree.
 #
-#   $GROUP_HOME/$USER/uchrom-nd/venv-robust     numpy / scipy / pandas + uchrom_nucdyn (robust_setup.sbatch)
+#   $GROUP_HOME/$USER/uchrom-nd/venv-robust     numpy / scipy / pandas + uchrom_recon (robust_setup.sbatch)
 #   $SCRATCH/uchrom-nd/repo-robust              repo copy (branch Nanguage/sc-robust, rsync from the laptop)
 #   $SCRATCH/uchrom-nd/runs/robust              outputs
 source "$SCRATCH/uchrom-nd/repo/benchmarks/screcon/sherlock/_env.sh"

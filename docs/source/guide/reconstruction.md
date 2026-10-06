@@ -7,24 +7,21 @@ writing the same `.chromdata.zarr` output format.
 |---------|--------|----------|-------|
 | EMber | `uchrom.recon.sc.ember` | Single-cell Hi-C / Dip-C, noisy contacts | Native engine (protocol `"robust"`); noise-aware, sampled ensembles, fast |
 | NucDynamics | `uchrom.recon.sc.nucdyn` | Single-cell Hi-C / Dip-C | Native engine (Rust; multi-core CPU, wgpu GPU: Metal / Vulkan); ensembles |
-| GEM | `uchrom.recon.sc.gem` | Single-cell, energy minimisation | Taichi autodiff |
 | SMACOF MDS | `uchrom.recon.bulk.mds` | Bulk Hi-C, contact matrices | PyTorch GPU, inter-chromosomal support |
 
 ## NucDynamics (single-cell)
 
 A re-implementation of NucDynamics (Stevens et al. 2017, *Nature* 544:59,
 doi:10.1038/nature21429; original code tjs23/nuc_dynamics, LGPL-3.0) in the
-separate native package `u-chrom-nucdyn` (`packages/uchrom-nucdyn`, Rust + PyO3):
+separate native package `uchrom-recon` (`packages/uchrom-recon`, Rust + PyO3):
 
 ```bash
-pip install u-chrom[nucdyn]        # or: pip install ./packages/uchrom-nucdyn
+pip install u-chrom[recon]        # or: pip install ./packages/uchrom-recon
 ```
 
 It computes an ensemble of structures at once — models in parallel on the
 CPU (f64), all models batched on the GPU (f32, wgpu: Metal on macOS, Vulkan
-on Linux/NVIDIA).  Without the native package the deprecated Taichi port
-runs instead (with a `DeprecationWarning`); it is not faithful to the
-original and will be removed.
+on Linux/NVIDIA).
 
 Input: `.pairs` / `.pairs.gz`, NCC (`.ncc`), a `chr_A pos_A chr_B pos_B`
 table (the Stevens 2017 GEO files) or a DataFrame.  Output: a ChromData
@@ -79,17 +76,6 @@ cd.results["ember.contact_weights"]    # posterior weight of every input contact
 # also: uchrom.tl.reconstruct_sc(contacts, method="ember")
 #       reconstruct_nucdyn(contacts, protocol="ember")  (same coordinates for the same seed)
 ```
-
-## GEM (single-cell, energy minimisation)
-
-Same CLI pattern:
-
-```bash
-python -m uchrom.recon.sc.gem cell1.pairs out.chromdata.zarr --arch=cuda
-```
-
-Writes four energy terms each step (stretch / bend / exclude / contact)
-with Taichi's `ti.Tape` for autodiff gradient descent.
 
 ## Bulk MDS (PyTorch, whole-genome)
 

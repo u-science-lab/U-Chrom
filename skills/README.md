@@ -15,5 +15,5 @@ browser (`uchrom.browser.connect()` / WebMCP).
 | `show-in-browser` | read the researcher's selection; open, arrange and capture views | — |
 
 Scripts print one JSON object whose `checks` list what a report must mention; tests are in
-`tests/skills/`. Use with Claude Code: copy or symlink a skill folder into `.claude/skills/` (project) or
+`packages/uchrom/tests/skills/`. Use with Claude Code: copy or symlink a skill folder into `.claude/skills/` (project) or
 `~/.claude/skills/` (user).

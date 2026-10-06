@@ -172,7 +172,8 @@ def read_npz(path: str) -> ModelSet:
 
 
 def read_chromdata(path: str) -> ModelSet:
-    sys.path.insert(0, str(ROOT))
+    for _pkg in ("uchrom", "chromdata"):   # this checkout's packages
+        sys.path.insert(0, str(ROOT / "packages" / _pkg))
     from uchrom import ChromData
 
     cd = ChromData.read(path)

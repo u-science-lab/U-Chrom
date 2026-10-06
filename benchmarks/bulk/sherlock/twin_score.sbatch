@@ -25,7 +25,7 @@ for d in su2020_genome su2020_chr21; do
       R1=$RUNS/models/$d/step_inf/$m; R2=$RUNS/models/$d/twin_${tw}_step_inf/$m
       case $m in *.npz) R1=$RUNS/base/$d/step_inf/$m; R2=$RUNS/base/$d/twin_${tw}_step_inf/$m ;; esac
       [ -e "$R1" ] && [ -e "$R2" ] || { echo "skip $d $tw $m"; continue; }
-      PYTHONPATH=$REPO $EPY $BK/score.py twin --t1 "$SIM/$d/truth.npz" --t2 "$T2" --r1 "$R1" --r2 "$R2" --rc-nm $RC \
+      PYTHONPATH=$REPO/packages/uchrom:$REPO/packages/chromdata $EPY $BK/score.py twin --t1 "$SIM/$d/truth.npz" --t2 "$T2" --r1 "$R1" --r2 "$R2" --rc-nm $RC \
         --out "$RUNS/twin/${d}_${tw}_${m%%.*}.json"
     done
   done

@@ -1,0 +1,407 @@
+"""The ``.chromdata.zarr`` / ``.cdz`` container (format 2.0): round trips,
+row order, backed mode and dispatch by path (conversion from ``.h5cd``: uchrom's tests/io/test_h5cd_convert.py).
+
+Row order: the zarr writer stores spots sorted by (cell, trace, bin), so a
+round trip returns the same spots in another order.  Tests compare
+``to_dataframe()`` after sorting by a stable key (``spot_id``), or read with
+``original_order=True``, which must be exactly equal.
+"""
+import json
+import shutil
+import warnings
+import zipfile
+
+import numpy as np
+import pandas as pd
+import pyarrow.parquet as pq
+import pytest
+
+from chromdata import ChromData
+from chromdata.backed import BackedArray, BackedChromData, BackedFrame
+from chromdata.zarrcd import container_kind, write_zarr
+from chromdata.testing import (assert_same_small as _assert_same_small, assert_uns_equal as _assert_uns_equal,
+                               example_chromdata as _cd, sorted_frame as _sorted_df, sorted_tracks as _sorted_tracks)
+
+FORMATS = ["x.chromdata.zarr", "x.cdz"]
+
+
+# ----------------------------------------------------------------- round trip
+
+@pytest.mark.parametrize("name", FORMATS)
+def test_round_trip_every_attribute(tmp_path, name):
+    cd = _cd()
+    path = tmp_path / name
+    cd.write(path)
+    back = ChromData.read(path)
+    assert type(back) is ChromData and back.n_spots == cd.n_spots
+    # same spots, sorted on disk: compare by spot identity
+    pd.testing.assert_frame_equal(_sorted_df(back), _sorted_df(cd))
+    pd.testing.assert_frame_equal(_sorted_tracks(back), _sorted_tracks(cd))
+    assert back.spot_tracks["grp"].dtype == "category"
+    assert list(back.spots.columns) == list(cd.spots.columns)
+    _assert_same_small(cd, back)
+    _assert_uns_equal(cd.uns, back.uns)
+    assert back.results["tads"] is back.intervals["tads"]
+    assert back.linked_adata is None and back.uns["linked_anndata"]["path"] == "rna.h5ad"
+    for k in cd.layers:
+        order = np.argsort(back.spots["spot_id"].to_numpy())
+        ref = np.argsort(cd.spots["spot_id"].to_numpy())
+        np.testing.assert_array_equal(back.layers[k][order], cd.layers[k][ref])
+
+    # the object as written, row for row
+    orig = ChromData.read(path, original_order=True)
+    pd.testing.assert_frame_equal(orig.to_dataframe(), cd.to_dataframe())
+    pd.testing.assert_frame_equal(orig.spot_tracks, cd.spot_tracks)
+    np.testing.assert_array_equal(orig.coords, cd.coords)
+    for k in cd.layers:
+        np.testing.assert_array_equal(orig.layers[k], cd.layers[k])
+
+
+def test_disk_order_and_index(tmp_path):
+    cd = _cd()
+    path = tmp_path / "x.chromdata.zarr"
+    write_zarr(cd, path, row_group_rows=10, _layout="2.1")      # the 2.1 layout (2.2: test_zarr_v22.py)
+    back = ChromData.read(path)
+    s = back.spots
+    chrom = back.bins["chrom"].cat.codes.to_numpy()[s["bin_id"].to_numpy()]
+    key = pd.DataFrame({"ch": chrom, "c": s["cell_id"].cat.codes, "t": s["trace_id"].cat.codes,
+                        "b": s["bin_id"]})
+    assert key.equals(key.sort_values(["ch", "c", "t", "b"], kind="stable"))
+    meta = json.loads((path / "zarr.json").read_text())["attributes"]["uchrom"]
+    assert meta["format_version"] == "2.1" and meta["spot_order"] == "chrom,cell,trace,bin"
+    assert meta["layout"] == "partitioned" and meta["n_partitions"] == 3
+    assert meta["has_source_row"] and meta["n_cells"] == 4 and meta["n_traces"] == 12
+    # one directory per chromosome, in chromosome category order
+    import zarr
+    root = zarr.open_group(str(path), mode="r")
+    assert sorted(p.name for p in (path / "tables" / "spots").iterdir()) == \
+        ["chrom=chr1", "chrom=chr2", "chrom=chrX"]
+    poff = root["index/partition_offsets"][:]
+    pgrp = root["index/partition_groups"][:]
+    pch = root["index/partition_chrom"][:]
+    names = list(back.bins["chrom"].cat.categories)
+    assert [names[c] for c in pch] == ["chr1", "chr2", "chrX"]
+    np.testing.assert_array_equal(np.diff(poff), [24, 24, 24])
+    # row groups hold whole cells of one partition, and every spot-aligned
+    # table shares them
+    rg = root["index/row_groups"][:]
+    cell_off = root["index/cell_offsets"][:]
+    assert set(rg) <= set(cell_off) and set(poff) <= set(rg)
+    assert len(cell_off) - 1 == 12 and len(root["index/cell_codes"][:]) == 12      # (chrom, cell) runs
+    np.testing.assert_array_equal(root["index/cell_partition"][:], np.repeat([0, 1, 2], 4))
+    tmeta = root["tables"].attrs["tables"]
+    for p, part in enumerate(tmeta["partitions"]):
+        for f in ("spots", "spot_tracks", "layers/raw"):
+            md = pq.ParquetFile(path / "tables" / part["files"][f]).metadata
+            assert [md.row_group(i).num_rows for i in range(md.num_row_groups)] == \
+                list(np.diff(rg[pgrp[p]:pgrp[p + 1] + 1]))
+    spots0 = path / "tables" / tmeta["partitions"][0]["files"]["spots"]
+    assert pq.ParquetFile(spots0).metadata.row_group(0).column(0).compression == "ZSTD"
+    # writing an already sorted object keeps the order and stores no permutation
+    write_zarr(back, tmp_path / "y.chromdata.zarr", _layout="2.1")
+    meta2 = json.loads((tmp_path / "y.chromdata.zarr" / "zarr.json").read_text())["attributes"]["uchrom"]
+    assert not meta2["has_source_row"]
+    again = ChromData.read(tmp_path / "y.chromdata.zarr")
+    pd.testing.assert_frame_equal(again.to_dataframe(), back.to_dataframe())
+
+
+def test_format_2_0_stores_stay_readable(tmp_path):
+    """The unpartitioned 2.0 layout (one file per table, cell › trace › bin)."""
+    cd = _cd(n_cells=6)
+    old = tmp_path / "old.chromdata.zarr"
+    write_zarr(cd, old, row_group_rows=40, _layout="2.0")
+    meta = json.loads((old / "zarr.json").read_text())["attributes"]["uchrom"]
+    assert meta["format_version"] == "2.0" and meta["spot_order"] == "cell,trace,bin"
+    assert (old / "tables" / "spots.parquet").exists()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        mem = ChromData.read(old)
+        bk = ChromData.read(old, backed=True)
+    assert bk.format_version == "2.0" and not bk.partitioned
+    s = mem.spots
+    key = pd.DataFrame({"c": s["cell_id"].cat.codes, "t": s["trace_id"].cat.codes, "b": s["bin_id"]})
+    assert key.equals(key.sort_values(["c", "t", "b"], kind="stable"))
+    pd.testing.assert_frame_equal(_sorted_df(mem), _sorted_df(cd))
+    pd.testing.assert_frame_equal(_sorted_tracks(mem), _sorted_tracks(cd))
+    new = tmp_path / "new.chromdata.zarr"
+    cd.write(new)
+    pd.testing.assert_frame_equal(_sorted_df(ChromData.read(new)), _sorted_df(mem))
+    for c in mem.spots["cell_id"].cat.categories:
+        pd.testing.assert_frame_equal(bk.get_cell(c).to_dataframe(), mem.get_cell(c).to_dataframe())
+    for ch in ("chr1", "chr2", "chrX"):
+        pd.testing.assert_frame_equal(bk.get_chrom(ch).to_dataframe(), mem.get_chrom(ch).to_dataframe())
+        sel = bk.get_chrom(ch, columns="coords")
+        assert list(sel.spots.columns) == ["chrom", "start", "end", "trace_id", "cell_id", "bin_id"]
+        assert sel.spot_tracks.shape[1] == 0 and not sel.layers
+        pd.testing.assert_frame_equal(sel.to_dataframe(), mem.get_chrom(ch, columns="coords").to_dataframe())
+    for t in mem.spots["trace_id"].cat.categories[:5]:
+        pd.testing.assert_frame_equal(bk.get_trace(t).to_dataframe(), mem.get_trace(t).to_dataframe())
+    # streaming over a 2.0 store: every spot once, whole traces
+    got = pd.concat([c.to_dataframe() for c in bk.iter_traces(5)], ignore_index=True)
+    pd.testing.assert_frame_equal(got, mem.to_dataframe())
+    got = pd.concat([c.to_dataframe() for c in bk.iter_traces(3, chrom="chr2")], ignore_index=True)
+    pd.testing.assert_frame_equal(got, mem.get_chrom("chr2").to_dataframe())
+    assert sum(c.n_spots for c in bk.iter_cells(4)) == mem.n_spots
+    # original order and an upgrade to the current format by rewriting
+    ref = ChromData.read(old, original_order=True)
+    pd.testing.assert_frame_equal(ref.to_dataframe(), cd.to_dataframe())
+    bk.write(tmp_path / "up.chromdata.zarr")
+    assert json.loads((tmp_path / "up.chromdata.zarr" / "zarr.json").read_text())["attributes"]["uchrom"][
+        "format_version"] == "2.3"
+    pd.testing.assert_frame_equal(_sorted_df(ChromData.read(tmp_path / "up.chromdata.zarr")), _sorted_df(cd))
+
+
+def test_float32_coords_and_options(tmp_path):
+    cd = _cd()
+    cd.write(tmp_path / "f.chromdata.zarr", coord_dtype="float32", compression_level=1,
+             keep_source_order=False)
+    back = ChromData.read(tmp_path / "f.chromdata.zarr")
+    assert back.coords.dtype == np.float64
+    order = np.argsort(back.spots["spot_id"].to_numpy())
+    ref = np.argsort(cd.spots["spot_id"].to_numpy())
+    np.testing.assert_array_equal(back.coords[order], cd.coords[ref].astype(np.float32).astype(np.float64))
+    with pytest.raises(ValueError, match="original_order"):
+        ChromData.read(tmp_path / "f.chromdata.zarr", backed=True, original_order=True)
+    with pytest.raises(ValueError, match="coord_dtype"):
+        cd.write(tmp_path / "g.chromdata.zarr", coord_dtype="int32")
+
+
+def test_edge_cases(tmp_path):
+    # no cell_id, int trace ids, a trace spanning two chromosomes, one spot
+    spots = pd.DataFrame({"chrom": ["chr1", "chr2", "chr1", "chr1"], "start": [0, 0, 10, 0],
+                          "end": [10, 10, 20, 10], "trace_id": [7, 7, 3, 3]})
+    cd = ChromData(np.arange(12.0).reshape(4, 3), spots)
+    cd.write(tmp_path / "a.chromdata.zarr")
+    back = ChromData.read(tmp_path / "a.chromdata.zarr")
+    assert list(back.spots["trace_id"].cat.categories) == [3, 7]
+    bk = ChromData.read(tmp_path / "a.chromdata.zarr", backed=True)
+    for ch in ("chr1", "chr2", "chrZ"):
+        pd.testing.assert_frame_equal(bk.get_chrom(ch).to_dataframe(), back.get_chrom(ch).to_dataframe())
+    with pytest.raises(KeyError):
+        bk.get_cell("x")
+    with pytest.raises(KeyError):
+        next(bk.iter_cells())
+    assert bk.get_trace(99).n_spots == 0 and bk.get_trace(7).n_spots == 2
+    # no spots at all (e.g. sc-Hi-C cells only)
+    empty = ChromData(np.zeros((0, 3)), pd.DataFrame({"chrom": [], "start": [], "end": [], "trace_id": []}),
+                      cells=pd.DataFrame({"n": [1, 2]}, index=pd.Index(["a", "b"], name="cell_id")))
+    empty.write(tmp_path / "e.cdz")
+    e = ChromData.read(tmp_path / "e.cdz")
+    assert e.n_spots == 0 and list(e.cells.index) == ["a", "b"]
+    assert ChromData.read(tmp_path / "e.cdz", backed=True).n_spots == 0
+    # trace ids reused across cells (e.g. one trace per chromosome per cell)
+    df = pd.DataFrame({"chrom": ["chr1"] * 4, "start": [0, 10, 0, 10], "end": [10, 20, 10, 20],
+                       "x": 1.0, "y": 2.0, "z": [1.0, 2, 3, 4], "cell_id": ["a", "a", "b", "b"]})
+    shared = ChromData.from_dataframe(df)
+    shared.write(tmp_path / "s.chromdata.zarr")
+    sb = ChromData.read(tmp_path / "s.chromdata.zarr", backed=True)
+    assert sb.get_trace(0).n_spots == 4 and sb.n_traces == 1 and sb.n_cells == 2
+    assert [c.n_spots for c in sb.iter_traces(1)] == [2, 2]      # one chunk per (cell, trace)
+
+
+# ----------------------------------------------------------------- backed mode
+
+def test_backed_matches_in_memory(tmp_path):
+    cd = _cd(n_cells=6)
+    path = tmp_path / "x.chromdata.zarr"
+    cd.write(path, row_group_rows=50)
+    mem = ChromData.read(path)
+    bk = ChromData.read(path, backed=True)
+    assert isinstance(bk, BackedChromData) and bk.backed and not mem.backed
+    assert (bk.n_spots, bk.n_traces, bk.n_cells, bk.n_bins) == (mem.n_spots, mem.n_traces, mem.n_cells, mem.n_bins)
+    _assert_same_small(mem, bk)
+
+    def same(x, y):
+        assert type(y) is ChromData
+        pd.testing.assert_frame_equal(x.to_dataframe(), y.to_dataframe())
+        pd.testing.assert_frame_equal(x.spot_tracks, y.spot_tracks)
+        pd.testing.assert_frame_equal(x.cells, y.cells)
+        pd.testing.assert_frame_equal(x.traces, y.traces)
+        for k in x.cellm:
+            np.testing.assert_array_equal(x.cellm[k], y.cellm[k])
+        for k in x.layers:
+            np.testing.assert_array_equal(x.layers[k], y.layers[k])
+        for k in x.points:
+            pd.testing.assert_frame_equal(x.points[k], y.points[k])
+
+    for c in list(mem.spots["cell_id"].cat.categories) + ["nope"]:
+        same(mem.get_cell(c), bk.get_cell(c))
+    for t in mem.spots["trace_id"].cat.categories:
+        same(mem.get_trace(t), bk.get_trace(t))
+    for ch in ("chr1", "chr2", "chrX", "chrM"):
+        same(mem.get_chrom(ch), bk.get_chrom(ch))
+    rows = np.array([5, 0, 17, 3, 3])
+    same(mem[rows], bk[rows])
+    mask = mem.spots["label"].eq("a").to_numpy()
+    same(mem[mask], bk[mask])
+    same(mem[10:40], bk[10:40])
+    # streaming: identical chunks in memory (any order) and backed
+    for batch in (1, 4, 100):
+        for x, y, z in zip(mem.iter_traces(batch), bk.iter_traces(batch), cd.iter_traces(batch)):
+            same(x, y)
+            same(x, z)
+        assert sum(c.n_spots for c in bk.iter_traces(batch)) == mem.n_spots
+    for x, y, z in zip(mem.iter_cells(2), bk.iter_cells(2), cd.iter_cells(2)):
+        same(x, y)
+        same(x, z)
+    assert len(list(bk.iter_cells(4))) == 2
+    # full load
+    same(mem, bk.to_memory())
+    same(mem, bk.copy())
+    pd.testing.assert_frame_equal(bk.to_dataframe(), mem.to_dataframe())
+    pd.testing.assert_frame_equal(bk.tracks_spot_view(), mem.tracks_spot_view())
+    pd.testing.assert_frame_equal(bk.tracks_spot_view(["IF", "atac"]), mem.tracks_spot_view(["IF", "atac"]))
+    t0 = mem.spots["trace_id"].cat.categories[0]
+    np.testing.assert_allclose(bk.compute_distances(trace_id=t0), mem.compute_distances(trace_id=t0))
+
+
+def test_backed_proxies(tmp_path):
+    cd = _cd()
+    path = tmp_path / "x.cdz"
+    cd.write(path, row_group_rows=30)
+    mem = ChromData.read(path)
+    bk = ChromData.read(path, backed=True)
+    assert isinstance(bk.coords, BackedArray) and isinstance(bk.spots, BackedFrame)
+    assert bk.coords.shape == mem.coords.shape and len(bk.coords) == mem.n_spots
+    np.testing.assert_array_equal(np.asarray(bk.coords), mem.coords)
+    np.testing.assert_array_equal(bk.coords[5:60], mem.coords[5:60])
+    np.testing.assert_array_equal(bk.coords[::7], mem.coords[::7])
+    np.testing.assert_array_equal(bk.coords[[9, 1, 40]], mem.coords[[9, 1, 40]])
+    np.testing.assert_array_equal(bk.coords[3], mem.coords[3])
+    np.testing.assert_array_equal(bk.coords[-1], mem.coords[-1])
+    np.testing.assert_array_equal(bk.coords[:, 2], mem.coords[:, 2])
+    np.testing.assert_array_equal(bk.layers["Raw"][2:9], mem.layers["Raw"][2:9])
+    assert list(bk.spots.columns) == list(mem.spots.columns) and len(bk.spots) == mem.n_spots
+    for col in ("chrom", "start", "bin_id", "trace_id", "label"):
+        pd.testing.assert_series_equal(bk.spots[col], mem.spots[col])
+    pd.testing.assert_frame_equal(bk.spots[["cell_id", "end"]], mem.spots[["cell_id", "end"]])
+    pd.testing.assert_frame_equal(bk.spots.iloc[3:11], mem.spots.iloc[3:11].reset_index(drop=True))
+    pd.testing.assert_frame_equal(bk.spots.iloc[[4, 2]], mem.spots.iloc[[4, 2]].reset_index(drop=True))
+    pd.testing.assert_frame_equal(bk.spots.to_pandas(), mem.spots)
+    pd.testing.assert_series_equal(bk.spot_tracks["IF"], mem.spot_tracks["IF"])
+    assert bk.track_names() == mem.track_names()
+    assert "backed" in repr(bk)
+    for attempt in (lambda: setattr(bk, "coords", mem.coords), lambda: setattr(bk, "spots", mem.spots),
+                    lambda: setattr(bk, "spot_tracks", mem.spot_tracks), bk.rebuild_bins):
+        with pytest.raises(AttributeError, match="read-only"):
+            attempt()
+    # small tables are editable and saved by write() (which loads the data)
+    bk.results["note"] = "edited"
+    bk.write(tmp_path / "y.chromdata.zarr")
+    assert ChromData.read(tmp_path / "y.chromdata.zarr").results["note"] == "edited"
+    with pytest.raises(ValueError, match="own source"):
+        write_zarr(bk, path)
+
+
+# ----------------------------------------------------------------- dispatch
+
+def test_dispatch_by_path(tmp_path):
+    cd = _cd()
+    assert container_kind("a.chromdata.zarr") == "zarr" and container_kind("a.zarr") == "zarr"
+    assert container_kind("a.cdz") == "cdz" and container_kind("a.h5cd") == "h5cd"
+    assert container_kind(tmp_path / "unknown") is None
+    cd.write(tmp_path / "a.cdz")
+    assert zipfile.is_zipfile(tmp_path / "a.cdz")
+    with zipfile.ZipFile(tmp_path / "a.cdz") as zf:
+        assert zf.namelist()[0] == "zarr.json"
+        assert all(i.compress_type == zipfile.ZIP_STORED for i in zf.infolist())
+    shutil.copy(tmp_path / "a.cdz", tmp_path / "noext")
+    assert container_kind(tmp_path / "noext") == "cdz"
+    assert ChromData.read(tmp_path / "noext").n_spots == cd.n_spots
+    # .h5cd (the legacy HDF5 container): neither written nor read; the error names the converter
+    with pytest.raises(ValueError, match="no longer supported"):
+        cd.write(tmp_path / "a.h5cd")
+    assert not (tmp_path / "a.h5cd").exists()
+    h5py = pytest.importorskip("h5py")
+    with h5py.File(tmp_path / "a.h5cd", "w") as f:     # what uchrom.io._h5cd_legacy writes, as far as read can tell
+        f.attrs["uchrom_format_version"] = "2.0"
+    for backed in (False, True):
+        with pytest.raises(ValueError, match="uchrom.io.upgrade"):
+            ChromData.read(tmp_path / "a.h5cd", backed=backed)
+    shutil.copy(tmp_path / "a.h5cd", tmp_path / "hdf5_noext")       # sniffed as HDF5: refused too
+    with pytest.raises(ValueError, match="uchrom.io.upgrade"):
+        ChromData.read(tmp_path / "hdf5_noext")
+    with pytest.raises(ValueError, match="cdz"):
+        cd.write(tmp_path / "b.hdf5")                               # other suffixes no longer write HDF5
+    # format= overrides the suffix, but the path must fit the container
+    with pytest.raises(ValueError, match="chromdata.zarr"):
+        cd.write(tmp_path / "b.h5cd", format="zarr")
+    with pytest.raises(ValueError, match="format"):
+        cd.write(tmp_path / "b.chromdata.zarr", format="parquet")
+    # overwriting a store is fine; overwriting some other directory is not
+    cd.write(tmp_path / "c.chromdata.zarr")
+    cd.write(tmp_path / "c.chromdata.zarr")
+    other = tmp_path / "d.zarr"
+    other.mkdir()
+    (other / "keep.txt").write_text("x")
+    with pytest.raises(FileExistsError):
+        cd.write(other)
+    assert (other / "keep.txt").exists()
+    assert not [p for p in tmp_path.iterdir() if p.name.startswith(".")]      # no temp leftovers
+    with pytest.raises(FileNotFoundError):
+        ChromData.read(tmp_path / "missing.chromdata.zarr")
+
+
+def test_version_checks(tmp_path):
+    cd = _cd()
+    path = tmp_path / "v.chromdata.zarr"
+    cd.write(path)
+    meta_path = path / "zarr.json"
+    meta = json.loads(meta_path.read_text())
+    meta["attributes"]["uchrom"]["format_version"] = "2.9"
+    meta_path.write_text(json.dumps(meta))
+    with pytest.warns(UserWarning, match="2.9"):
+        ChromData.read(path)
+    meta["attributes"]["uchrom"]["format_version"] = "3.0"
+    meta_path.write_text(json.dumps(meta))
+    with pytest.raises(ValueError, match="MAJOR"):
+        ChromData.read(path)
+    (tmp_path / "plain.zarr").mkdir()
+    (tmp_path / "plain.zarr" / "zarr.json").write_text(json.dumps({"zarr_format": 3, "node_type": "group",
+                                                                  "attributes": {}}))
+    with pytest.raises(ValueError, match="not a ChromData store"):
+        ChromData.read(tmp_path / "plain.zarr")
+
+
+def test_links_follow_a_moved_folder(tmp_path):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "bulk.mcool").write_bytes(b"x")
+    cd = _cd()
+    cd.link_cool(proj / "bulk.mcool", key="abs")            # absolute path
+    cd.write(proj / "d.chromdata.zarr")
+    moved = tmp_path / "moved"
+    shutil.move(str(proj), str(moved))
+    back = ChromData.read(moved / "d.chromdata.zarr")
+    assert back.uns["linked_cool"]["abs"]["path"] == str((moved / "bulk.mcool").resolve())
+    assert back.uns["linked_cool"]["bulk"]["path"] == "bulk.mcool"     # relative: kept verbatim
+    assert back.resolve_link_path("bulk.mcool") == moved / "bulk.mcool"
+    import zarr
+    root = zarr.open_group(str(moved / "d.chromdata.zarr"), mode="r")
+    assert "linked_cool" in root["contacts"].attrs["records"]
+    assert "linked_anndata" in root["links"].attrs["records"]
+
+
+def test_linked_anndata_resolves_next_to_the_store(tmp_path, monkeypatch):
+    ad = pytest.importorskip("anndata")
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    ad.AnnData(X=np.ones((2, 3), dtype=np.float32)).write_h5ad(proj / "rna.h5ad")
+    cd = _cd()
+    cd.uns["linked_anndata"] = {"path": "rna.h5ad"}
+    cd.write(proj / "d.chromdata.zarr")
+    monkeypatch.chdir(tmp_path)                             # the relative path is not under the cwd
+    back = ChromData.read(proj / "d.chromdata.zarr")
+    assert back.linked_adata.shape == (2, 3)
+    assert ChromData.read(proj / "d.chromdata.zarr").load_linked_anndata().shape == (2, 3)
+
+
+def test_invalid_values_raise(tmp_path):
+    cd = _cd()
+    cd.cellm["bad"] = np.array([{"a": 1}] * 4, dtype=object)
+    with pytest.raises(TypeError, match="object"):
+        cd.write(tmp_path / "x.chromdata.zarr")
+    assert not (tmp_path / "x.chromdata.zarr").exists()
+
+
+# ----------------------------------------------------------------- conversion

@@ -55,7 +55,7 @@ docs/
     ├── changelog.md
     ├── license.md
     ├── _static/
-    │   └── logo.svg      # symlinked from uchrom/browser/uc.svg
+    │   └── logo.svg      # a copy of packages/uchrom/uchrom/browser/uc.svg
     ├── _extra/           # static publish-only files copied to HTML root
     ├── api/              # .rst files, one per top-level module
     ├── guide/            # long-form user guide chapters

@@ -39,7 +39,7 @@ def main(argv=None):
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
 
-    import uchrom_nucdyn as un
+    import uchrom_recon as un
 
     hcs = a.hcs or B.fetch_igm_demo()
     d = B.read_hcs(hcs)

@@ -1,7 +1,7 @@
 # U-Chrom tutorials
 
 Jupyter notebooks walking through the main analysis pipelines.  All
-notebooks assume you have installed `uchrom` (`pip install -e .` from
+notebooks assume you have installed `uchrom` (`pip install -e packages/chromdata -e packages/uchrom` from
 the repo root) and are running from the repo root so relative paths
 work.
 

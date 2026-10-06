@@ -498,8 +498,7 @@ U-Chrom provides several 3D reconstruction algorithms:
 
 | Module | Best for | Notes |
 |--------|---------|-------|
-| `uchrom.recon.sc.nucdyn` | Single-cell Hi-C / Dip-C | Molecular-dynamics, Taichi GPU |
-| `uchrom.recon.sc.gem` | Single-cell, energy minimisation | Taichi autodiff |
+| `uchrom.recon.sc.nucdyn` | Single-cell Hi-C / Dip-C | Molecular-dynamics, native engine (Rust; CPU + GPU) |
 | `uchrom.recon.bulk.mds` | Bulk Hi-C | SMACOF MDS, PyTorch GPU |
 
 This notebook walks through a short single-cell reconstruction using Nuc
@@ -566,14 +565,11 @@ fig.colorbar(im, ax=ax, label='distance')"""),
     md("""\
 ## Using other reconstruction backends
 
-`python -m uchrom.recon.sc.gem <in> <out.chromdata.zarr>` — energy-minimisation
-variant (smoother, slower).
-
 `python -m uchrom.recon.bulk.mds <contact.mcool> <out.chromdata.zarr> --resolution=100000`
 — PyTorch SMACOF MDS on bulk Hi-C data.  Inter-chromosomal whole-genome
 reconstruction via `--inter` with the additional `--resolution_inter` flag.
 
-All three write the same ChromData schema so downstream tools don't care
+Both write the same ChromData schema so downstream tools don't care
 which reconstructor was used."""),
 ]
 

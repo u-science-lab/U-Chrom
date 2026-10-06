@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "httpx"]
+test = ["pytest", "httpx", "requests", "pillow"]
 
 [project.scripts]
 uchrom-browser = "uchrom_browser.__main__:_cli"
