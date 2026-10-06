@@ -81,6 +81,10 @@ autodoc_mock_imports = [
 
 napoleon_numpy_docstring = True
 napoleon_google_docstring = True
+napoleon_use_ivar = True          # "Attributes" sections as fields (dataclass members are documented by autodoc)
+# numpy-style type descriptions ("ndarray, shape (n, 3)", "ChromData, in memory or backed") are parsed into
+# cross-references; words that match several attributes (shape, backed, ...) are not ambiguous references
+suppress_warnings = ["ref.python"]
 
 myst_heading_anchors = 3   # links to sections: page.md#a-heading
 

@@ -155,10 +155,9 @@ def run(
         Default to ``contacts_dir`` (lets ``write_higashi_inputs`` and
         FastHigashi share one directory tree).
     wrapper_factory : callable, optional
-        For tests / alt backends.  Called as
-        ``factory(config_path, path2input_cache, path2result_dir,
-                  off_diag, filter, do_conv, do_rwr, do_col, no_col)``
-        — the real FastHigashi constructor takes positional args.
+        For tests / alt backends.  Called as ``factory(config_path, path2input_cache, path2result_dir,
+        off_diag, filter, do_conv, do_rwr, do_col, no_col)`` — the real FastHigashi constructor takes
+        positional args.
     wrapper_kwargs : dict, optional
         Override the FastHigashi ``__init__`` defaults
         (``off_diag``, ``filter``, ``do_conv`` etc.).

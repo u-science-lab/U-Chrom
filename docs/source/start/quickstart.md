@@ -65,14 +65,18 @@ import uchrom.datasets as ds
 
 # Stevens et al. 2017 (Nature), haploid mouse ES cell 1 (GEO GSE80280, fetched once)
 pairs = ds.fetch("stevens2017") / "GSM2219497_Cell_1_contact_pairs.txt.gz"
-s = uc.tl.reconstruct_sc(pairs, n_models=4)                  # EMber, native engine; ~15 s on a laptop
+s = uc.tl.reconstruct_sc(pairs, n_models=4)                  # EMber, native engine; ~5 s on a laptop GPU
 s
 ```
 ```text
-ChromData: n_spots=25681, n_traces=21, n_bins=25681
+ChromData: n_spots=25724, n_traces=20, n_bins=25724
+  spots:   ['chrom', 'start', 'end', 'trace_id', 'bin_id']
   layers:  ['model_0', 'model_1', 'model_2', 'model_3']
   results: ['ember.stages', 'ember.em', 'ember.contact_weights']
+  uns:     ['xyz_unit', 'ember']
 ```
+
+Four models of the cell's 20 chromosomes at 100 kb, one per layer.
 
 This needs the native engine (`pip install ./packages/uchrom-recon`).
 

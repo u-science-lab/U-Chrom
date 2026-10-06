@@ -303,14 +303,11 @@ class ChromData:
         construction (coords shape, spots required columns, tracks /
         layers alignment).
 
-    Attributes
-    ----------
-    n_spots, n_traces, n_cells, chroms : derived accessors
-
-    Key methods
-    -----------
-    from_dataframe, from_fofct, read, write, to_dataframe,
-    get_cell, get_trace, get_chrom, compute_distances
+    Notes
+    -----
+    Derived accessors: ``n_spots``, ``n_traces``, ``n_cells``, ``chroms``.  Key methods:
+    ``from_dataframe``, ``from_fofct``, ``read``, ``write``, ``to_dataframe``, ``get_cell``,
+    ``get_trace``, ``get_chrom``, ``compute_distances``.
 
     On-disk format — ``.chromdata.zarr`` / ``.cdz``
     -----------------------------------------------

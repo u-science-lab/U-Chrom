@@ -334,13 +334,12 @@ def call_domains_fishnet_trace(
 
     Returns
     -------
-    dict with keys
-        ``domains`` : list of (start, end_exclusive) bin indices per plateau
-        ``boundaries`` : sorted list of canonical boundary bin indices
-        ``domain_mask`` : (n_bins, n_bins) int — count of plateaus in which
-            bins i and j fall in the same domain (0 if never).
-        ``n_plateaus`` : number of plateaus detected
-        ``coverage`` : fraction of bins with ≥1 non-NaN distance
+    dict
+        ``domains``: list of (start, end_exclusive) bin indices per plateau;
+        ``boundaries``: sorted list of canonical boundary bin indices;
+        ``domain_mask``: (n_bins, n_bins) int — count of plateaus in which bins i and j fall in the
+        same domain (0 if never); ``n_plateaus``: number of plateaus detected; ``coverage``: fraction of
+        bins with ≥1 non-NaN distance.
     """
     params = params or FISHnetParams()
     dist = np.asarray(dist, dtype=np.float64)

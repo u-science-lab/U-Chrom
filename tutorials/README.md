@@ -2,8 +2,9 @@
 
 Jupyter notebooks that show each part of U-Chrom at work on real data.  They are committed
 **executed** (the documentation renders them as they are) and grouped like the documentation's
-chapters.  Every dataset they use is listed in [`example-data/README.md`](../example-data/README.md);
-outputs go to `tutorials/_out/` (ignored by git).
+chapters.  Their data come from the public atlas (`uchrom.datasets.atlas`) or from the original
+sources (`uchrom.datasets.fetch`, cached in `$UCHROM_DATA`, else `~/.cache/uchrom`); outputs go to
+`tutorials/_out/` (ignored by git).
 
 | Chapter | Notebook | Shows |
 |---------|----------|-------|
@@ -24,7 +25,7 @@ outputs go to `tutorials/_out/` (ignored by git).
 | Visualisation | `plotting_and_browser.ipynb` | `uchrom.pl` plots; the web browser from Python |
 | Auto-discovery | `takei2025_auto_discovery.ipynb`, `takei2025_iterative_auto_discovery.ipynb` | agents exploring a dataset |
 
-Run a notebook from the repository root (it finds `example-data/` itself):
+Run a notebook from the repository root:
 
 ```bash
 jupyter nbconvert --to notebook --execute --inplace tutorials/<name>.ipynb

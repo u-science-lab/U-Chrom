@@ -29,15 +29,18 @@ with one spot per particle and one trace per chromosome; `coords` = model 0
 and `layers["model_<k>"]` = every model (units: particle radii).
 
 ```python
+import uchrom.datasets as ds
 from uchrom.recon.sc.nucdyn import reconstruct_nucdyn
-cd = reconstruct_nucdyn("cell1.pairs", n_models=10, device="auto", seed=1)
+
+pairs = ds.fetch("stevens2017") / "GSM2219497_Cell_1_contact_pairs.txt.gz"   # Stevens 2017 Cell 1 (GEO)
+cd = reconstruct_nucdyn(pairs, n_models=10, device="auto", seed=1)
 cd.write("cell1.chromdata.zarr")
 ```
 
 CLI:
 
 ```bash
-python -m uchrom.recon.sc.nucdyn cell1.pairs out.chromdata.zarr \
+python -m uchrom.recon.sc.nucdyn contacts.pairs.gz out.chromdata.zarr \
     --n_models=10 --device=gpu --seed=1
 ```
 
@@ -71,7 +74,7 @@ endpoints, ~5x faster on one GPU; its real-data ensembles are less tight.
 
 ```python
 from uchrom.recon.sc import reconstruct_ember
-cd = reconstruct_ember("cell1.pairs", n_models=10, device="auto", seed=1)
+cd = reconstruct_ember(pairs, n_models=10, device="auto", seed=1)
 cd.results["ember.contact_weights"]    # posterior weight of every input contact
 # also: uchrom.tl.reconstruct_sc(contacts, method="ember")
 #       reconstruct_nucdyn(contacts, protocol="ember")  (same coordinates for the same seed)
@@ -112,7 +115,7 @@ Additional flags:
 
 ```python
 from uchrom.recon.sc.nucdyn import reconstruct_nucdyn
-cd = reconstruct_nucdyn("cell1.pairs", n_models=10)   # ChromData ensemble
+cd = reconstruct_nucdyn("contacts.pairs.gz", n_models=10)   # ChromData ensemble
 cd.write("out.chromdata.zarr")
 
 from uchrom import ChromData

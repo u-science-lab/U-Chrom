@@ -16,10 +16,12 @@ Pipeline (per chromosome)
    difference for each axis; aggregation is NaN-aware.
 2. ``filter_normalize``
    Two-pass LOWESS stratification on log(1D genomic distance):
-     - first pass: flag entries whose per-pair squared deviation is more
-       than ``k_sigma`` × stratified std as outliers and NaN them;
-     - second pass: refit LOWESS on the cleaned variances to give each
-       entry a genome-distance-matched expectation, then normalise.
+
+   - first pass: flag entries whose per-pair squared deviation is more
+     than ``k_sigma`` × stratified std as outliers and NaN them;
+   - second pass: refit LOWESS on the cleaned variances to give each
+     entry a genome-distance-matched expectation, then normalise.
+
 3. ``axis_weight``
    Returns a 3-vector of weights (sum 1) inversely proportional to the
    per-axis trace-variance median — the exact weighting used by the
