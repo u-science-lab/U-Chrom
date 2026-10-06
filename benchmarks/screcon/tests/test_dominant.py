@@ -69,6 +69,9 @@ def test_build_haploid_mixtures(tmp_path):
     key = lambda c: sorted(zip(c.chrom_a, c.pos_a, c.chrom_b, c.pos_b))  # noqa: E731
     dom_rows = t.subset(org["cell"] == 0)
     assert key(don) == key(dom_rows)
+    # run outputs of different f are distinct files
+    outs = [dm.run_path(t, m, s) for t, m, s in dm.run_list(d / "c0", "stevens")]
+    assert len(set(outs)) == len(outs)
     # run list: 4 references (dominant EMber + NucDynamics, 2 minors) + 11 tables x 3 + 5 D-only
     assert len(dm.run_list(d / "c0", "stevens")) == 4 + 11 * 3 + 5
 

@@ -390,7 +390,10 @@ def run_list(od: Path, ds: str) -> list[tuple[Path, str, int]]:
 
 
 def run_path(table: Path, method: str, seed: int) -> Path:
-    stem = table.name.split(".")[0]
+    stem = table.name
+    for ext in (".txt.gz", ".pairs.gz"):
+        if stem.endswith(ext):
+            stem = stem[: -len(ext)]        # table names carry f with a dot (f0.9)
     return table.parent.parent / "runs" / f"{table.parent.name}.{stem}.{method}.s{seed}.npz"
 
 
@@ -405,7 +408,13 @@ def cmd_run(args) -> None:
         out = run_path(table, method, seed)
         if out.exists() and not args.force:
             continue
-        meta = reconstruct(table, out, method, seed, ds, args.device)
+        try:
+            meta = reconstruct(table, out, method, seed, ds, args.device)
+        except RuntimeError as e:
+            if "GPU adapter" in str(e):          # node without a usable Vulkan GPU: stop, resubmit elsewhere
+                print(f"NO_GPU_ADAPTER: {e}", flush=True)
+                sys.exit(3)
+            raise
         done += 1
         print(f"{out.name}\t{meta['n_rows']}\t{meta['wall_seconds']:.1f}", flush=True)
     print(f"{args.dominant}: {done} runs of {len(jobs)} in {time.time() - t0:.0f} s", flush=True)
