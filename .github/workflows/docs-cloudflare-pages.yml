@@ -8,8 +8,7 @@ on:
       - ".github/workflows/docs-cloudflare-pages.yml"
       - "docs/**"
       - "tutorials/**"
-      - "uchrom/**"
-      - "pyproject.toml"
+      - "packages/**"
   pull_request:
     branches:
       - main
@@ -17,8 +16,7 @@ on:
       - ".github/workflows/docs-cloudflare-pages.yml"
       - "docs/**"
       - "tutorials/**"
-      - "uchrom/**"
-      - "pyproject.toml"
+      - "packages/**"
   workflow_dispatch:
 
 env:
