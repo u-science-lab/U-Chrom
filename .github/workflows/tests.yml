@@ -119,20 +119,20 @@ jobs:
           cache: "pip"
           cache-dependency-path: |
             pyproject.toml
-            discovery/pyproject.toml
+            packages/uchrom-discovery/pyproject.toml
 
       - name: Install packages
         run: |
           python -m pip install --upgrade pip
-          pip install -e packages/chromdata -e ".[anndata]" -e ./discovery pytest
+          pip install -e packages/chromdata -e ".[anndata]" -e ./packages/uchrom-discovery pytest
 
-      # Run from discovery/ — both suites define a top-level ``tests`` package.
+      # Run from packages/uchrom-discovery/ — both suites define a top-level ``tests`` package.
       - name: Run tests
-        working-directory: discovery
+        working-directory: packages/uchrom-discovery
         run: python -m pytest tests -ra
 
   nucdyn-native:
-    # Native NucDynamics engine (native/nucdyn, Rust + PyO3): Rust unit tests,
+    # Native NucDynamics engine (packages/uchrom-nucdyn, Rust + PyO3): Rust unit tests,
     # a CPU-only wheel (no GPU feature), the default wheel (with the wgpu
     # backend) and the Python tests against it.  GPU tests skip themselves
     # when the runner has no usable adapter.
@@ -156,8 +156,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            native/nucdyn/target
-          key: nucdyn-${{ runner.os }}-${{ hashFiles('native/nucdyn/Cargo.lock') }}
+            packages/uchrom-nucdyn/target
+          key: nucdyn-${{ runner.os }}-${{ hashFiles('packages/uchrom-nucdyn/Cargo.lock') }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -166,16 +166,16 @@ jobs:
           cache: "pip"
           cache-dependency-path: |
             pyproject.toml
-            native/nucdyn/pyproject.toml
+            packages/uchrom-nucdyn/pyproject.toml
 
       - name: Rust tests
-        working-directory: native/nucdyn
+        working-directory: packages/uchrom-nucdyn
         run: |
           cargo test --release
           cargo test --release --features gpu
 
       - name: Build wheels (CPU-only, and default with GPU)
-        working-directory: native/nucdyn
+        working-directory: packages/uchrom-nucdyn
         run: |
           python -m pip install --upgrade pip maturin
           # --features on the command line replaces the pyproject list: CPU only
@@ -185,7 +185,7 @@ jobs:
       - name: Install uchrom and the engine
         run: |
           pip install -e packages/chromdata -e . pytest
-          pip install native/nucdyn/dist/*.whl
+          pip install packages/uchrom-nucdyn/dist/*.whl
           python -c "import uchrom_nucdyn as u; print(u.__version__, u.HAS_GPU, u.gpu_info())"
 
       - name: Python tests

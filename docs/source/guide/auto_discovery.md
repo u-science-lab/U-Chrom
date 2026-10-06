@@ -2,11 +2,11 @@
 
 ```{note}
 Auto-discovery ships as the separate **`uchrom-discovery`** package
-(`discovery/` in this repository) so the core `u-chrom` toolkit does not
+(`packages/uchrom-discovery` in this repository) so the core `u-chrom` toolkit does not
 depend on LLM backends.  Install it next to `u-chrom`:
 
     pip install -e .            # u-chrom
-    pip install -e discovery/   # uchrom-discovery  (import uchrom_discovery)
+    pip install -e packages/uchrom-discovery/   # uchrom-discovery  (import uchrom_discovery)
 
 The old `uchrom.auto_discovery` import path and the
 `ChromData.build_discovery_schema` / `describe_for_agent` methods still work

@@ -31,7 +31,7 @@ def _engine():
     import uchrom_nucdyn
 
     if not hasattr(uchrom_nucdyn, "calc_population"):
-        raise ImportError("the installed uchrom_nucdyn has no 'igm' protocol; rebuild native/nucdyn")
+        raise ImportError("the installed uchrom_nucdyn has no 'igm' protocol; rebuild packages/uchrom-nucdyn")
     return uchrom_nucdyn
 
 

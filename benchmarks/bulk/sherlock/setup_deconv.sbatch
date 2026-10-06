@@ -23,7 +23,7 @@ $P install -q --upgrade pip maturin
 $P install -q --only-binary=:all: "numpy<2.3" "pandas<2.3" "scipy<1.15" psutil "zarr>=3" "pyarrow<18" fire networkx statsmodels matplotlib
 $P install -q -e "$REPO" --no-deps
 $P install -q --only-binary=:all: "h5py<3.13"
-(cd "$REPO/native/nucdyn" && "$VENV/bin/maturin" build --release -o "$L_SCRATCH/wheels")
+(cd "$REPO/packages/uchrom-nucdyn" && "$VENV/bin/maturin" build --release -o "$L_SCRATCH/wheels")
 $P install -q --force-reinstall --no-deps "$L_SCRATCH"/wheels/u_chrom_nucdyn-*.whl
 $PY - <<'EOF'
 import sys

@@ -10,7 +10,7 @@ the repo for the full text.
   implement algorithms described in Yu *et al.* 2025 (*ArcFISH*,
   bioRxiv 2025.11.26.690837).  The implementation is independent of
   the upstream ArcFISH source (GPL-3.0).
-- The native NucDynamics engine (`native/nucdyn`, package
+- The native NucDynamics engine (`packages/uchrom-nucdyn`, package
   `u-chrom-nucdyn`, used by `uchrom.recon.sc.nucdyn`) is a clean Rust
   re-implementation of NucDynamics (Stevens *et al.* 2017, *Nature*
   544:59; tjs23/nuc_dynamics, LGPL-3.0) and is itself distributed under

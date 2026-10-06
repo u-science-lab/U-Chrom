@@ -2761,7 +2761,7 @@ def _discovery(func_name: str, method_name: str):
     except ImportError as exc:
         raise ImportError(
             f"ChromData.{method_name} needs the separate 'uchrom-discovery' "
-            f"package (`pip install -e discovery/` from the U-Chrom repository)."
+            f"package (`pip install -e packages/uchrom-discovery/` from the U-Chrom repository)."
         ) from exc
     return getattr(uchrom_discovery, func_name)
 

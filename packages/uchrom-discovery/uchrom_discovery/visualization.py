@@ -59,6 +59,6 @@ def _load_ui_bundle() -> tuple[str, str]:
     if not _UI_JS.exists() or not _UI_CSS.exists():
         raise FileNotFoundError(
             "The auto-discovery graph UI bundle is missing. "
-            "Run `npm install && npm run build` in discovery/uchrom_discovery/ui."
+            "Run `npm install && npm run build` in packages/uchrom-discovery/uchrom_discovery/ui."
         )
     return _UI_CSS.read_text(encoding="utf-8"), _UI_JS.read_text(encoding="utf-8")

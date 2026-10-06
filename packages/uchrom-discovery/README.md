@@ -15,9 +15,9 @@ does not depend on it.
 ## Install
 
 ```bash
-pip install -e .              # from the repo root: u-chrom
-pip install -e discovery/     # this package (import uchrom_discovery)
-pip install -e "discovery/[pantheon]"   # optional Pantheon backend
+pip install -e packages/chromdata -e .   # from the repo root: chromdata + u-chrom
+pip install -e packages/uchrom-discovery/     # this package (import uchrom_discovery)
+pip install -e "packages/uchrom-discovery/[pantheon]"   # optional Pantheon backend
 ```
 
 ## Usage
@@ -42,13 +42,13 @@ Guides: `docs/source/guide/auto_discovery.md`,
 ## Layout
 
 ```
-discovery/
+packages/uchrom-discovery/
 ├── pyproject.toml
 ├── uchrom_discovery/   schema, ideas, llm prompts, backends, runner,
 │                       notebooks, evidence, graph, directions, claims,
 │                       enrichment, iterative loop, visualization
 │   └── ui/             Vue idea-graph viewer (npm run build -> ui/dist)
-└── tests/              run with `cd discovery && pytest tests`
+└── tests/              run with `cd packages/uchrom-discovery && pytest tests`
 ```
 
 ## Migrating from `uchrom.auto_discovery`

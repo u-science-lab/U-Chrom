@@ -8,10 +8,10 @@ tests
 docs
 paper
 tutorials
-discovery
+packages/uchrom-discovery
 apps/atlas
 uchrom
-native
+packages/uchrom-nucdyn
 *.zarr
 *.h5ad
 *.scool

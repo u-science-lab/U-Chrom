@@ -43,7 +43,7 @@ web = [
     "uchrom-browser>=0.1.0",
 ]
 # Native NucDynamics engine (Rust; multi-core CPU + wgpu GPU) used by
-# uchrom.recon.sc.nucdyn.  Built from native/nucdyn (pip install ./native/nucdyn)
+# uchrom.recon.sc.nucdyn.  Built from packages/uchrom-nucdyn (pip install ./packages/uchrom-nucdyn)
 # until wheels are published.
 nucdyn = [
     "u-chrom-nucdyn>=0.1",
@@ -117,3 +117,4 @@ exclude = ["example-data*", "tests*"]
 [tool.uv.sources]
 chromdata = { path = "packages/chromdata", editable = true }
 uchrom-browser = { path = "packages/uchrom-browser", editable = true }
+u-chrom-nucdyn = { path = "packages/uchrom-nucdyn" }

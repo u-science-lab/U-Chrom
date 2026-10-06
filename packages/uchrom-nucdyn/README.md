@@ -20,8 +20,8 @@ Import name `uchrom_nucdyn`, pip name `u-chrom-nucdyn`.  U-Chrom uses it from
 `uchrom.recon.sc.nucdyn` whenever it is installed.
 
 ```bash
-pip install ./native/nucdyn                  # CPU + GPU backend (default)
-cd native/nucdyn && maturin build --release --features python   # CPU-only wheel
+pip install ./packages/uchrom-nucdyn                  # CPU + GPU backend (default)
+cd packages/uchrom-nucdyn && maturin build --release --features python   # CPU-only wheel
 cargo test --release [--features gpu]        # Rust tests
 ```
 

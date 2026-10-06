@@ -20,7 +20,7 @@
 //! the CPU, see `regression_tests`): user bead radius and occupancy
 //! reference (`genome`), no iterative correction and GP pooling (`astep`),
 //! pinned initial loci + noise and the per-kind violation report (`driver`);
-//! table in `native/nucdyn/README.md`.
+//! table in `packages/uchrom-nucdyn/README.md`.
 
 pub mod astep;
 pub mod driver;

@@ -31,3 +31,7 @@ packages = ["uchrom_browser"]
 [tool.setuptools.package-data]
 # the built single-page app (frontend/ is its source, built with npm into static/)
 uchrom_browser = ["static/**/*", "API.md", "ui_tools.json"]
+
+# Monorepo: chromdata from its folder when developing (uv pip install -e packages/uchrom-browser)
+[tool.uv.sources]
+chromdata = { path = "../chromdata", editable = true }

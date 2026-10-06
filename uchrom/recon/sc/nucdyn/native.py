@@ -1,7 +1,7 @@
 """NucDynamics on the native engine (``uchrom_nucdyn``, Rust; CPU and GPU).
 
 The engine is a separate package (``pip install u-chrom[nucdyn]`` or
-``pip install ./native/nucdyn``); this module turns contacts into a
+``pip install ./packages/uchrom-nucdyn``); this module turns contacts into a
 :class:`~chromdata.ChromData` ensemble.
 """
 

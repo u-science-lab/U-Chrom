@@ -50,7 +50,7 @@ $P install -q --upgrade pip maturin
 # the system assembler cannot build them.  The Fig. 3a benchmark scripts need only
 # numpy, pandas and psutil (plus uchrom_nucdyn), so U-Chrom itself is not installed here.
 $P install -q --only-binary=:all: "numpy<2.3" "pandas<2.3" psutil
-(cd "$REPO/native/nucdyn" && "$BASE/venv-main/bin/maturin" build --release -o "$L_SCRATCH/wheels")
+(cd "$REPO/packages/uchrom-nucdyn" && "$BASE/venv-main/bin/maturin" build --release -o "$L_SCRATCH/wheels")
 $P install -q --force-reinstall --no-deps "$L_SCRATCH"/wheels/u_chrom_nucdyn-*.whl
 
 "$BASE/venv-main/bin/python" - <<'EOF'

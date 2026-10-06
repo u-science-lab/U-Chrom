@@ -18,7 +18,7 @@ ENGINE=${ENGINE:-main-3658fdb}
 export PIP_CACHE_DIR=$SCRATCH/.cache/pip XDG_CACHE_HOME=$SCRATCH/.cache CARGO_HOME=$SCRATCH/.cache/cargo
 export CARGO_TARGET_DIR=$SCRATCH/uchrom-nd/cargo-target-highres
 echo "host=$(hostname) job=$SLURM_JOB_ID $(rustc --version) engine=$ENGINE"
-cd "$REPO/native/nucdyn"
+cd "$REPO/packages/uchrom-nucdyn"
 "$BASE/venv-diploid/bin/maturin" build --release -o "$SCRATCH/uchrom-nd/wheels-highres"
 WHL=$(ls -t "$SCRATCH"/uchrom-nd/wheels-highres/u_chrom_nucdyn-*.whl | head -1)
 rm -rf "$SCRATCH/uchrom-nd/engine-highres/$ENGINE"

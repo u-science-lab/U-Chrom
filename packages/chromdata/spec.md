@@ -394,7 +394,7 @@ data.chromdata.zarr/
   stores them per spot.
 - **Floats.**  Parquet dictionary pages for the float columns of the primary
   tables (`float_dictionary=True`); the lossless decimal encoding of
-  `uchrom.core.floatcodec` is available with `float_encoding=True` (or a
+  `chromdata.floatcodec` is available with `float_encoding=True` (or a
   set of tables, e.g. `{"coords"}`): bitwise identical, smaller, slower to
   read.
 - Partition directories are `chrom=<name>` (hive style: DuckDB / Polars /
@@ -428,7 +428,7 @@ data.chromdata.zarr/
 
 Linked `.cool` / `.mcool` / `.scool` / `.h5ad` files stay outside the store.  For an atlas, or any
 store that must live alone on object storage, they can be *embedded* with
-`python -m uchrom.core.embedded STORE` (`uchrom.core.embed_links`).  The link records stay in place;
+`python -m chromdata.embedded STORE` (`chromdata.embedded.embed_links`).  The link records stay in place;
 a reader that finds an embedded copy uses it, otherwise it follows the link.  Stores without these
 groups, and readers that do not know them, are unaffected (so this is not a format version bump).
 `.cdz` archives do not carry the groups.  `cd.write(path)` onto the store the object was read from keeps
@@ -463,13 +463,13 @@ embedded/images/<name>/data       the bytes of a linked section image (uint8 arr
   `(1024, 256)`.  Bins must be uniform and start at 0 on every chromosome (checked when embedding).
 - Round trip: the embedded pixels are exactly those of the cooler file (tested), and the web browser
   returns byte-identical matrices from either source.
-- Back to cooler: `export_cool` / `export_mcool` / `export_scool` (`uchrom.core.embedded`) rebuild cooler
+- Back to cooler: `export_cool` / `export_mcool` / `export_scool` (`chromdata.embedded`) rebuild cooler
   files from the embedded pixels (a bulk map embedded without trans at a fine resolution exports cis only);
   `cd.linked_cool_path(key)` and `cd.load_linked_scool(key=, cell=)` use them when the linked file is gone,
   and `cd.validate_links()` does not flag a missing file whose map is embedded.
 - Remote reading: `embedded/contacts` and `embedded/anndata` carry consolidated metadata (the listing of
   their children without listing the bucket), so a store served by plain HTTP or S3 needs no directory
-  listing.  See `uchrom/core/remote.py`.
+  listing.  See `chromdata/remote.py`.
 
 ### Legacy HDF5 container (`.h5cd`)
 

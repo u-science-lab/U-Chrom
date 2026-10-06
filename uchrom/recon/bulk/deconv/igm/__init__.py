@@ -13,7 +13,7 @@ The computation runs in the native engine (``uchrom_nucdyn``, protocol
 ``igm``, Rust; multi-core CPU f64 or wgpu GPU f32), a clean
 re-implementation from ``benchmarks/bulk/pgs_spec.md`` (the original
 GPL-licensed IGM / alabtools / lammpgen code was not copied); where it
-deviates from the original is listed in ``native/nucdyn/README.md``.
+deviates from the original is listed in ``packages/uchrom-nucdyn/README.md``.
 Please cite the papers above when using it.
 """
 

@@ -31,7 +31,7 @@ Based on this core data structure, U-Chrom supports a range of downstream analys
 | `uchrom.browser` | Interactive 3D structure browser |
 
 LLM-driven multi-omics auto-discovery lives in the separate
-[`uchrom-discovery`](discovery/README.md) package (`pip install -e discovery/`).
+[`uchrom-discovery`](packages/uchrom-discovery/README.md) package (`pip install -e packages/uchrom-discovery/`).
 
 ## Install
 
@@ -51,15 +51,29 @@ Install from source:
 ```bash
 $ git clone https://github.com/Nanguage/U-Chrom.git
 $ cd U-Chrom
-$ pip install -e .
+$ pip install -e packages/chromdata -e .                    # or: uv pip install -e .
+$ pip install -e packages/uchrom-browser -e ".[web]"        # + the web browser
 ```
+
+## Repository layout
+
+The repository holds several packages that are developed together:
+
+| Folder | Package (import) | What it is |
+|--------|------------------|------------|
+| `uchrom/` | `u-chrom` (`uchrom`) | the analysis library: I/O, reconstruction, structures, features, embeddings, plots |
+| `packages/chromdata/` | `chromdata` | the data model: `ChromData` and its `.chromdata.zarr` store (numpy / pandas / zarr / pyarrow only) |
+| `packages/uchrom-browser/` | `uchrom-browser` (`uchrom_browser`) | the web browser (needs `chromdata`, not `uchrom`) |
+| `packages/uchrom-discovery/` | `uchrom-discovery` (`uchrom_discovery`) | LLM-driven auto-discovery on top of `uchrom` |
+| `packages/uchrom-nucdyn/` | `u-chrom-nucdyn` (`uchrom_nucdyn`) | the native NucDynamics / EMber engine (Rust) |
+| `apps/` | — | the data atlas and the hosted web browser (deployments) |
 
 ## Usage
 
 ### Single-cell 3D reconstruction
 
 ```bash
-$ pip install ./native/nucdyn   # native NucDynamics engine (Rust; CPU + GPU)
+$ pip install ./packages/uchrom-nucdyn   # native NucDynamics engine (Rust; CPU + GPU)
 $ python -m uchrom.recon.sc.nucdyn example-data/cell1.pairs ./cell1.chromdata.zarr --n_models=10 --device=auto
 ```
 

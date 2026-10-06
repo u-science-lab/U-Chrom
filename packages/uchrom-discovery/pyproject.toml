@@ -40,3 +40,8 @@ include-package-data = true
 [tool.setuptools.packages.find]
 include = ["uchrom_discovery*"]
 exclude = ["tests*"]
+
+# Monorepo: u-chrom (and its chromdata) from their folders when developing (uv pip install -e packages/uchrom-discovery)
+[tool.uv.sources]
+u-chrom = { path = "../..", editable = true }
+chromdata = { path = "../chromdata", editable = true }

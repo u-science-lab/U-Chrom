@@ -1,7 +1,7 @@
 uchrom_discovery
 ================
 
-Separate package (``pip install -e discovery/``); formerly ``uchrom.auto_discovery``.
+Separate package (``pip install -e packages/uchrom-discovery/``); formerly ``uchrom.auto_discovery``.
 
 .. automodule:: uchrom_discovery
 
