@@ -1,4 +1,4 @@
-"""Single-cell reconstruction (Taichi, CPU) on a slice of real scHi-C.
+"""GEM single-cell reconstruction (Taichi, CPU; the optional ``gem`` extra) on a slice of real scHi-C.
 
 Uses chr19 of ``example-data/cell1.pairs`` (Stevens 2017) at 1 Mb so each
 run takes ~1 s.  Checks the output is a valid ChromData and that the
@@ -28,20 +28,6 @@ def _backbone_ratio(X):
 def _need_data():
     if not PAIRS.exists():
         pytest.skip("example-data/cell1.pairs missing")
-
-
-def test_nucdyn_chr19_cpu(tmp_path):
-    from uchrom import ChromData
-    from uchrom.recon.sc.nucdyn.nucdyn import main
-
-    out = tmp_path / "nd.chromdata.zarr"
-    main(str(PAIRS), str(out), arch="cpu", genome_ranges=["chr19"],
-         size_steps=[1, 0.5], dyns=100)
-    cd = ChromData.read(out)
-    assert cd.n_spots > 50
-    assert set(cd.spots["chrom"]) == {"chr19"}
-    assert np.isfinite(cd.coords).all()
-    assert _backbone_ratio(cd.coords) < 0.8
 
 
 def test_gem_chr19_cpu(tmp_path):

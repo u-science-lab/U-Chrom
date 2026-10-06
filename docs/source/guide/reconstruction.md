@@ -7,7 +7,7 @@ writing the same `.chromdata.zarr` output format.
 |---------|--------|----------|-------|
 | EMber | `uchrom.recon.sc.ember` | Single-cell Hi-C / Dip-C, noisy contacts | Native engine (protocol `"robust"`); noise-aware, sampled ensembles, fast |
 | NucDynamics | `uchrom.recon.sc.nucdyn` | Single-cell Hi-C / Dip-C | Native engine (Rust; multi-core CPU, wgpu GPU: Metal / Vulkan); ensembles |
-| GEM | `uchrom.recon.sc.gem` | Single-cell, energy minimisation | Taichi autodiff |
+| GEM | `uchrom.recon.sc.gem` | Single-cell, energy minimisation | Taichi autodiff (extra `gem`) |
 | SMACOF MDS | `uchrom.recon.bulk.mds` | Bulk Hi-C, contact matrices | PyTorch GPU, inter-chromosomal support |
 
 ## NucDynamics (single-cell)
@@ -22,9 +22,8 @@ pip install u-chrom[recon]        # or: pip install ./packages/uchrom-recon
 
 It computes an ensemble of structures at once — models in parallel on the
 CPU (f64), all models batched on the GPU (f32, wgpu: Metal on macOS, Vulkan
-on Linux/NVIDIA).  Without the native package the deprecated Taichi port
-runs instead (with a `DeprecationWarning`); it is not faithful to the
-original and will be removed.
+on Linux/NVIDIA).  The former Taichi port was removed; the native package
+is required.
 
 Input: `.pairs` / `.pairs.gz`, NCC (`.ncc`), a `chr_A pos_A chr_B pos_B`
 table (the Stevens 2017 GEO files) or a DataFrame.  Output: a ChromData
@@ -85,6 +84,7 @@ cd.results["ember.contact_weights"]    # posterior weight of every input contact
 Same CLI pattern:
 
 ```bash
+pip install "u-chrom[gem]"           # Taichi: GEM's only dependency beyond u-chrom
 python -m uchrom.recon.sc.gem cell1.pairs out.chromdata.zarr --arch=cuda
 ```
 

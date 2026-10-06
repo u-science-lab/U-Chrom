@@ -13,12 +13,9 @@ requires-python = ">= 3.11"
 dependencies = [
     # the data model and its store (.chromdata.zarr): packages/chromdata
     "chromdata>=0.1.0",
-    "taichi>=1.7.0",
     "fire>=0.6.0",
     "pandas>=2.0.3",
     "h5py>=3.10.0",
-    # ChromData format 2.0 container (.chromdata.zarr / .cdz): Zarr v3 + Parquet
-    "zarr>=3.0",
     "pyarrow>=14",
     "cooler>=0.9.3",
     "scikit-learn>=1.3.2",
@@ -48,9 +45,9 @@ web = [
 recon = [
     "uchrom-recon>=0.1",
 ]
-# former name of the recon extra
-nucdyn = [
-    "uchrom-recon>=0.1",
+# GEM single-cell reconstruction (uchrom.recon.sc.gem, Taichi autodiff); nothing else needs Taichi.
+gem = [
+    "taichi>=1.7.0",
 ]
 # Reading .hic files (uchrom.io load_hic / benchmark tutorial).
 hic = [
@@ -58,27 +55,22 @@ hic = [
 ]
 # Linking ChromData with AnnData (link_anndata / to_anndata, seqFISH RNA).
 anndata = [
-    "anndata>=0.9",
+    "chromdata[anndata]",
 ]
 # UMAP cell embeddings (uchrom.emb.embed_cells); PCA / t-SNE need only scikit-learn.
 umap = [
     "umap-learn>=0.5",
 ]
-# Cell outlines as geometry objects (ChromData.cell_shapes_geodataframe);
-# storing them (WKB / GeoParquet) needs neither.
+# The data model's own extras (the features are chromdata's): cell outlines as geometry objects
+# (cell_shapes_geodataframe), SpatialData links, MuData links.
 spatial = [
-    "shapely>=2.0",
-    "geopandas>=0.14",
+    "chromdata[spatial]",
 ]
-# Linked / exported SpatialData stores (ChromData.link_spatialdata validation,
-# load_linked_spatialdata, to_spatialdata).
 spatialdata = [
-    "u-chrom[spatial]",
-    "spatialdata>=0.2",
+    "chromdata[spatialdata]",
 ]
-# Linked MuData files (ChromData.link_mudata / load_linked_mudata).
 multiome = [
-    "mudata>=0.2.0",
+    "chromdata[multiome]",
 ]
 docs = [
     "sphinx>=7.0",
@@ -97,12 +89,11 @@ emb-full = [
     "u-chrom[emb]",
     "higashi",
 ]
-# Image-side integrations (PyHiM ECSV reader and friends).
-# astropy alone is enough for from_pyhim_trace().  The full PyHiM CLI
-# is a much heavier dep (TensorFlow + StarDist) — install separately
+# Image-side integrations: the PyHiM ECSV reader (ChromData.from_pyhim_trace, chromdata's).
+# The full PyHiM CLI is a much heavier dep (TensorFlow + StarDist) — install separately
 # in its own environment when you need the imaging pipeline itself.
 im = [
-    "astropy>=5.0",
+    "chromdata[im]",
 ]
 # SnapFISH-IMPUTE coordinate imputation (uchrom.im.impute method='snapfish').
 # scipy and scikit-learn are already core deps; scikit-image is the only extra.

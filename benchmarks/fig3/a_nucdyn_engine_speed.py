@@ -1,4 +1,4 @@
-"""Speed of the native NucDynamics engine (and of the old Taichi port).
+"""Speed of the native NucDynamics engine (and of the old Taichi port, from an older checkout).
 
 Every configuration runs in its own subprocess (so peak memory is its own)
 on the same input, Stevens et al. 2017 Cell 1 (GEO contact table), and
@@ -19,7 +19,9 @@ Suites (``--suite``):
   shortened schedule), GPU and CPU.
 * ``taichi``    : the old Taichi port (``uchrom.recon.sc.nucdyn.nucdyn``,
   default settings, 500 steps per stage), CPU and GPU (Metal/CUDA), one
-  model per run.
+  model per run.  The port was removed from u-chrom after commit 0063b92:
+  run this suite in a checkout of that commit (``git worktree add``) with
+  taichi installed; the recorded numbers stay in the results JSON.
 
 Usage::
 

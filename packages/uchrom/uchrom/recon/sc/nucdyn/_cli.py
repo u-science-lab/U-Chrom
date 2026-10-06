@@ -7,7 +7,7 @@ import warnings
 
 from .native import DEFAULT_PARTICLE_SIZES, native_available, reconstruct_nucdyn
 
-# keyword arguments of the Taichi port and their native equivalents
+# keyword arguments of the former Taichi port and their native equivalents
 _LEGACY_MAP = {
     "random_seed": "seed",
     "hot": "temp_start",
@@ -21,7 +21,7 @@ _LEGACY_MAP = {
     "max_radius": "random_radius",
     "violated_threshold": "violated_threshold_2017",
 }
-# Taichi-port-only knobs that have no meaning for the native engine
+# knobs of the former Taichi port that have no meaning for the native engine
 _LEGACY_IGNORED = {"repulsive_lim", "use_grid", "grid_range_scale", "cell_capacity",
                    "shift_freq", "min_skip", "scale"}
 _GPU_ARCHS = {"gpu", "cuda", "metal", "vulkan", "opengl", "dx11", "dx12"}
@@ -32,38 +32,26 @@ def main(in_file, out_file, arch="gpu", device_memory_fraction=0.9, cell_id=None
          protocol="nuc_dynamics_2017", size_steps=None, genome_ranges=None, **kwargs):
     """Calculate a single-cell genome structure from contacts and write it.
 
-    ``in_file``: contacts (``.pairs[.gz]``, ``.ncc``, GEO contact table; the
-    Taichi port also reads ``.cool``).  ``out_file``: ``.chromdata.zarr`` /
+    ``in_file``: contacts (``.pairs[.gz]``, ``.ncc``, GEO contact table).  ``out_file``: ``.chromdata.zarr`` /
     ``.cdz`` / ``.h5cd`` (the whole ensemble: ``coords`` = model 0,
     ``layers['model_<k>']`` = every model) or ``.csv`` (model 0 only).
 
-    ``engine``: ``"auto"`` uses the native engine (``uchrom_recon``) when it
-    is installed, otherwise the deprecated Taichi port; ``"native"`` /
-    ``"taichi"`` force one.  ``device`` (``auto`` / ``cpu`` / ``gpu``)
+    ``engine``: the native engine (``uchrom_recon``; ``"auto"`` / ``"native"``).
+    The Taichi port (``"taichi"``) was removed: it needs u-chrom 0.2 from
+    before the monorepo (commit 0063b92).  ``device`` (``auto`` / ``cpu`` / ``gpu``)
     defaults from ``arch`` (``cpu`` -> cpu; ``gpu`` / ``cuda`` / ``metal`` ->
     gpu).  ``size_steps``: particle sizes in Mb (default 8 4 2 0.4 0.2 0.1).
-    Other keyword arguments: native engine parameters, or the Taichi port's
-    (``dyns``, ``hot``, ``cold``, ``random_seed``, ... are mapped to the
-    native ones).
+    Other keyword arguments: native engine parameters, or those of the former
+    Taichi port (``dyns``, ``hot``, ``cold``, ``random_seed``, ... are mapped to
+    the native ones).
     """
-    use_native = engine == "native" or (engine == "auto" and native_available())
-    if engine not in ("auto", "native", "taichi"):
-        raise ValueError(f"engine must be 'auto', 'native' or 'taichi', got {engine!r}")
-    if engine == "native" and not native_available():
+    if engine == "taichi":
+        raise ValueError("the Taichi port of NucDynamics was removed; the native engine replaces it "
+                         "(pip install u-chrom[recon])")
+    if engine not in ("auto", "native"):
+        raise ValueError(f"engine must be 'auto' or 'native', got {engine!r}")
+    if not native_available():
         raise ImportError("the native engine (uchrom-recon) is not installed (pip install u-chrom[recon])")
-    if not use_native:
-        # the Taichi port warns (DeprecationWarning) itself
-        from .nucdyn import main as taichi_main
-
-        legacy = dict(kwargs)
-        if size_steps is not None:
-            legacy["size_steps"] = list(size_steps)
-        if genome_ranges is not None:
-            legacy["genome_ranges"] = genome_ranges
-        if seed is not None:
-            legacy.setdefault("random_seed", seed)
-        return taichi_main(in_file, out_file, arch=arch, device_memory_fraction=device_memory_fraction,
-                           cell_id=cell_id, **legacy)
 
     params = {}
     for k, v in kwargs.items():

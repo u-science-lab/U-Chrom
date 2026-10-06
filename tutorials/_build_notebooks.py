@@ -498,8 +498,8 @@ U-Chrom provides several 3D reconstruction algorithms:
 
 | Module | Best for | Notes |
 |--------|---------|-------|
-| `uchrom.recon.sc.nucdyn` | Single-cell Hi-C / Dip-C | Molecular-dynamics, Taichi GPU |
-| `uchrom.recon.sc.gem` | Single-cell, energy minimisation | Taichi autodiff |
+| `uchrom.recon.sc.nucdyn` | Single-cell Hi-C / Dip-C | Molecular-dynamics, native engine (Rust; CPU + GPU) |
+| `uchrom.recon.sc.gem` | Single-cell, energy minimisation | Taichi autodiff (extra `gem`) |
 | `uchrom.recon.bulk.mds` | Bulk Hi-C | SMACOF MDS, PyTorch GPU |
 
 This notebook walks through a short single-cell reconstruction using Nuc

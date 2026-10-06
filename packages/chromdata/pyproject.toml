@@ -32,7 +32,9 @@ spatial = ["shapely>=2.0", "geopandas>=0.14"]
 spatialdata = ["chromdata[spatial]", "spatialdata>=0.2"]
 # the memory budget's default from the available RAM
 psutil = ["psutil"]
-all = ["chromdata[contacts,anndata,multiome,remote,spatial,psutil]"]
+# PyHiM ECSV traces (ChromData.from_pyhim_trace)
+im = ["astropy>=5.0"]
+all = ["chromdata[contacts,anndata,multiome,remote,spatial,psutil,im]"]
 test = ["pytest"]
 
 [tool.setuptools]

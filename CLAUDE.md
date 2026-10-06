@@ -61,13 +61,12 @@ uchrom/                (packages/uchrom/uchrom)
 ├── convention.py    the calling convention of analysis functions
 ├── io/              Data I/O (.pairs, .cool, .hic, .3dg, .csv, .pdb, seqFISH multi-omics)
 ├── recon/           3D reconstruction
-│   ├── _base.py     Shared simulation base (Taichi)
 │   ├── sc/          Single-cell reconstruction
 │   │   ├── ember.py EMber: reconstruct_ember (noise-aware; native engine protocol
 │   │   │            "robust", alias "ember"; PREREG / TEST_RESULTS in benchmarks/screcon)
 │   │   ├── nucdyn/  NucDynamics: reconstruct_nucdyn / CLI on the native engine
-│   │   │            (packages/uchrom-recon); deprecated Taichi port kept as fallback
-│   │   └── gem/     GEM (energy minimization, Taichi autodiff)
+│   │   │            (packages/uchrom-recon; required)
+│   │   └── gem/     GEM (energy minimization, Taichi autodiff; extra `gem`)
 │   ├── bulk/        Bulk reconstruction
 │   │   ├── mds/     MDS/SMACOF (PyTorch GPU; partitioned + inter-chrom)
 │   │   └── deconv/  Population deconvolution of bulk Hi-C: deconvolve(..., method=)
@@ -115,7 +114,7 @@ uchrom/                (packages/uchrom/uchrom)
 - **Tests live in each package** (`packages/<pkg>/tests`, `apps/atlas/tests`); every suite is a
   `tests` package, so run each from its folder: `cd packages/uchrom && pytest tests` (likewise
   chromdata, uchrom-browser, uchrom-discovery; `cd apps/atlas && pytest tests`; `cargo test` in
-  uchrom-recon).  A test goes to the package whose code it tests: chromdata's and uchrom-browser's
+  uchrom-recon; benchmark helpers: `pytest benchmarks/<name>/tests`).  A test goes to the package whose code it tests: chromdata's and uchrom-browser's
   suites run without uchrom installed; tests of the legacy `.h5cd` container / the upgrade are
   uchrom's (`uchrom.io`); integration tests (uchrom + the browser) are uchrom's and skip without
   uchrom-browser.  Shared fixtures (an object with every attribute, a store with linked / embedded
@@ -254,10 +253,9 @@ All datasets consumed by tutorials and benchmarks live in
     are fewer models than cores; per-particle gather → results independent
     of the thread count) and GPU through wgpu (WGSL compute shaders: Metal on
     macOS, Vulkan on Linux/NVIDIA; f32; all models of an ensemble batched in
-    one dispatch).  `recon.sc.nucdyn` uses it when installed and falls back
-    to the deprecated Taichi port with a `DeprecationWarning`.
-  - **Other MD-style tight loops with many cheap iterations → Taichi**
-    (legacy; new engines of this kind should follow the native pattern).
+    one dispatch).  `recon.sc.nucdyn` needs it (the Taichi port was removed).
+  - **Taichi** is an optional extra (`u-chrom[gem]`) used only by `recon.sc.gem`
+    (legacy); new engines of this kind follow the native pattern.
   - **Gradient-descent optimisation on a structured multi-term loss →
     PyTorch** (e.g. `recon.bulk.mds`, `recon.fish.gem_fish` — hundreds to
     thousands of iterations, each one doing dense matrix-level work; the

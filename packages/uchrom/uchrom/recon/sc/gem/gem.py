@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import taichi as ti
 
-from uchrom.recon._base import SimulationBase, deal_input
+from ._base import SimulationBase, deal_input
 from uchrom.io import save_particles
 
 
