@@ -340,5 +340,41 @@
   "resolution": 250000,
   "fill": 0.958,
   "map": "schicar_mouse_cortex.map.webp"
+ },
+ "unic_human": {
+  "section": null,
+  "color_by": "sample",
+  "layout": "embedding",
+  "layout_key": "hic_pca",
+  "n": 23,
+  "categories": 3,
+  "grid": false,
+  "space": "unic_human.space.webp",
+  "map_key": "bulk_GM12878",
+  "map_label": "GM12878 bulk",
+  "chrom": "chr2",
+  "start": 36400000,
+  "end": 76500000,
+  "resolution": 100000,
+  "fill": 0.785,
+  "map": "unic_human.map.webp"
+ },
+ "unic_mouse": {
+  "section": null,
+  "color_by": "sample",
+  "layout": "embedding",
+  "layout_key": "hic_pca",
+  "n": 20,
+  "categories": 3,
+  "grid": false,
+  "space": "unic_mouse.space.webp",
+  "map_key": "bulk_MC38",
+  "map_label": "MC38 bulk",
+  "chrom": "chr2",
+  "start": 27300000,
+  "end": 67400000,
+  "resolution": 100000,
+  "fill": 0.39,
+  "map": "unic_mouse.map.webp"
  }
 }

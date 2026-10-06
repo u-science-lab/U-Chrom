@@ -414,6 +414,16 @@ DATASETS = {
         "parallel": 2,
         "description": "GAGE-seq mouse cortex + human bone marrow CD34+: contacts + RNA (GSE238001)",
     },
+    "unic2025": {
+        # Uni-C (Gao et al. 2025, Nat. Commun., doi:10.1038/s41467-025-62215-w), GEO GSE267873: deeply sequenced
+        # single cells (GM12878, COLO320DM, PDX and KPC circulating tumour cells, MC38) and bulk libraries,
+        # deduplicated contact pairs (GRCh37 / GRCm38); the per-cell VCFs are not fetched
+        "files": lambda: [(f"unic2025/raw/GSE267873/{n}", _gsm(n)) for n in _geo_filelist("GSE267873", r"\.pairs\.gz$")],
+        "size_mb": 110000,
+        "default": False,
+        "parallel": 3,
+        "description": "Uni-C single-cell and bulk contact pairs, human and mouse (GSE267873)",
+    },
     "droplet_hic2024_meta": {
         "files": [(f"droplet_hic2024/raw/GSE253407/{n}", _gse("GSE253407", n)) for n in _DROPLET_META],
         "size_mb": 4,

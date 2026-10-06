@@ -35,6 +35,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `dschic2025/raw/GSE285812/` (3 × `.contacts.pairs.gz` + metadata) | 44 GB | no | GEO GSE285812 (`--dschic2025_aging`) | Atlas: dscHi-C mouse cortex at 3 / 12 / 23 months (`build_dschic2025.py`) |
 | `gageseq2024/raw/` (6 × contacts / RNA, annotations, Ensembl 98 GTFs) | 38 GB | no | GEO GSE238001 + GitHub ma-compbio/GAGE-seq + Ensembl (`--gageseq2024`) | Atlas: GAGE-seq mouse cortex / human bone marrow CD34+ (`build_gageseq2024.py`) |
 | `droplet_hic2024/raw/GSE253407/` (5 × `.sc.pairs.gz`, 3 × 10x RNA `.h5`, metadata) | 72 GB | no | GEO GSE253407 (`--droplet_hic2024_meta`, `--droplet_hic2024`) | Atlas: Droplet Hi-C / Paired Hi-C mouse cortex (`build_droplet_hic2024.py`) |
+| `unic2025/raw/GSE267873/` (48 × `.pairs.gz`: 43 single cells + 5 bulk libraries) | 110 GB | no | GEO GSE267873 (`--unic2025`) | Atlas: Uni-C human and mouse single cells and CTCs (`build_unic2025.py`) |
 | `bintu2018/{IMR90,K562}_chr21-28-30Mb.csv` | 7.8 MB + 20 MB | no | GitHub raw (`--bintu2018`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
 | `su2020_imr90/chromosome21.tsv` + `Hi-C_contacts_chromosome21.tsv` | 261 MB + 1 MB | no | Zenodo 3928890 (`--su2020_chr21`) | Fig. 3b (`benchmarks/fig3/b_first_look.py`) |
 | `abbas2019_gemfish/*.zip` (Wang 2016 FISH, TADs, Hi-C, GEM-FISH final models) | 40 MB | no | GitHub, pinned commit (`--abbas2019_gemfish`) | Fig. 3a / 3c (`benchmarks/fig3/c_gemfish_wang2016.py`) |
@@ -895,7 +896,7 @@ public data alone** and are shipped with their recorded outputs.
   `benchmarks/fofct_roundtrip_validation.py`
   (FOF-CT writer); `benchmarks/cd2_zarr_validation.py` (→ `.chromdata.zarr`).
 
-### Single-cell Hi-C / multi-omics of the atlas (`hires2023/`, `dschic2025/`, `gageseq2024/`, `droplet_hic2024/`, `stevens2017_mesc/`)
+### Single-cell Hi-C / multi-omics of the atlas (`hires2023/`, `dschic2025/`, `gageseq2024/`, `droplet_hic2024/`, `stevens2017_mesc/`, `unic2025/`)
 
 The single-cell studies cited by Guo et al. 2026 (Cell; refs. 15-22) that have usable public data.  Each build
 streams the deposited pairs once (`sc_hic_common.py`: `gzip -dc | grep -v '^#'` into pyarrow, contacts binned into
@@ -923,6 +924,14 @@ as a linked `.h5ad`, computes RNA PCA / UMAP and a scHiCluster Hi-C embedding, a
   cis pairs < 1 kb are dropped.
 - **Stevens 2017** (`stevens2017_mesc/`, see above): the atlas store has the 8 cells' contacts and the 10 published
   100 kb models (model 1 = coords, 2-10 = layers).
+- **Uni-C** (Gao et al. 2025, *Nat. Commun.*, doi:10.1038/s41467-025-62215-w; GEO GSE267873): deeply sequenced
+  single cells, one `.pairs.gz` each (pairtools, deduplicated, MAPQ >= 40; GRCh37 / GRCm38, Ensembl chromosome
+  names): GM12878 (10), COLO320-DM (6), circulating tumour cells of the PDX mouse PanT24 (7) and of the KPC mice
+  KPC0402 / KPC0403 (6 + 6), MC38 (8); bulk GM12878, COLO320-DM, PanT24 tumour, MC38 (2).  About 90 % of the
+  pairs are cis pairs < 1 kb (read-through fragments, the uniform coverage the variants come from) and are
+  dropped.  `build_unic2025.py` (worker processes, one file each) writes per-cell 100 kb and 1 Mb `.scool`, per
+  sample the merged cells and the bulk library as `.mcool` (ICE from 100 kb), cell statistics incl. the
+  fractions of cis contacts at 25 kb - 2 Mb and 2 - 12 Mb, and a scHiCluster PCA.  The per-cell VCFs are not used.
 - Not fetched: ChAIR (Nat. Methods 2025; CNCB OMIX009588 / 9589, 120 GB from China), Nagano 2013 (10 Th1 cells),
   Ramani 2017 sciHi-C (cell lines, hg19 / mm10 mix).
 
