@@ -1,9 +1,9 @@
-"""Panels of the U-Chrom paper figures for the atlas' U-Chrom page (atlas/site/uchrom.html).
+"""Panels of the U-Chrom paper figures for the atlas' U-Chrom page (apps/atlas/site/uchrom.html).
 
 Renders manuscripts/full/figures/fig1/fig1_final.pdf and .../fig2/fig2.pdf of the u-chrom-paper repository at 600 dpi (pdftoppm), crops the panels below and
-writes them as WebP to atlas/site/paper/.  Rerun after a figure changes:
+writes them as WebP to apps/atlas/site/paper/.  Rerun after a figure changes:
 
-    python atlas/paper_figures.py
+    python apps/atlas/paper_figures.py
 """
 
 from __future__ import annotations
@@ -15,8 +15,9 @@ from pathlib import Path
 
 from PIL import Image
 
-ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "atlas" / "site" / "paper"
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]                                   # the repository
+OUT = HERE / "site" / "paper"
 sys.path.insert(0, str(ROOT / "benchmarks"))
 from _paper import paper_root  # noqa: E402  (u-chrom-paper: $UCHROM_PAPER or next to the main checkout)
 

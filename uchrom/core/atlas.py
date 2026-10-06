@@ -17,15 +17,15 @@ Layout of an atlas root (an ``s3://`` / ``https://`` URL or a directory)::
         "contact_maps": n, "images": n, "size_mb", "files", "format_version", "download" (the .cdz next to the
         store, unless the config says ``"download": false``), "download_mb"}]}
 
-The display text (title, paper, licence ...) comes from a hand-written JSON file (``atlas/datasets.json``);
+The display text (title, paper, licence ...) comes from a hand-written JSON file (``apps/atlas/datasets.json``);
 everything countable is read from the stores, so the catalog cannot drift from the data.  The thumbnails of the
-atlas page are drawn from the stores too (``render_figures``; committed under ``atlas/site/figures``).
+atlas page are drawn from the stores too (``render_figures``; committed under ``apps/atlas/site/figures``).
 
-    python -m uchrom.core.atlas build atlas/datasets.json --root example-data --out catalog.json
-    python -m uchrom.core.atlas figures atlas/datasets.json --root example-data      # -> atlas/site/figures
+    python -m uchrom.core.atlas build apps/atlas/datasets.json --root example-data --out catalog.json
+    python -m uchrom.core.atlas figures apps/atlas/datasets.json --root example-data      # -> apps/atlas/site/figures
     python -m uchrom.core.atlas pack example-data/x.chromdata.zarr          # -> x.cdz, the download
     python -m uchrom.core.atlas show https://uchrom-atlas-r2.u-science.org
-    python -m uchrom.core.atlas site dist/site --catalog catalog.json    # the static page (atlas/site) to deploy
+    python -m uchrom.core.atlas site dist/site --catalog catalog.json    # the static page (apps/atlas/site) to deploy
 """
 
 from __future__ import annotations
@@ -448,11 +448,11 @@ def build_site(out: PathLike, catalog: PathLike, *, data_root: str = DEFAULT_ATL
                template: Optional[PathLike] = None, repo: str = "https://github.com/Nanguage/U-Chrom",
                install: str = 'pip install "u-chrom[web]"', hosted: str = "") -> Path:
     """Write the static atlas page to ``out`` (deploy the folder on any static host, e.g. Cloudflare Pages):
-    the template (``atlas/site``), ``catalog.json``, ``config.js`` (data root, install line, repo) and ``_headers``."""
+    the template (``apps/atlas/site``), ``catalog.json``, ``config.js`` (data root, install line, repo) and ``_headers``."""
     import shutil
 
     out = Path(out)
-    tpl = Path(template) if template else Path(__file__).resolve().parents[2] / "atlas" / "site"
+    tpl = Path(template) if template else Path(__file__).resolve().parents[2] / "apps" / "atlas" / "site"
     if not (tpl / "index.html").is_file():
         raise FileNotFoundError(f"no site template at {tpl}")
     if out.exists():
@@ -491,7 +491,7 @@ if __name__ == "__main__":
     f = sub.add_parser("figures", help="draw the dataset thumbnails of the atlas page from the stores")
     f.add_argument("config")
     f.add_argument("--root", required=True)
-    f.add_argument("--out", default="atlas/site/figures")
+    f.add_argument("--out", default="apps/atlas/site/figures")
     f.add_argument("--only", nargs="*")
     w = sub.add_parser("site", help="write the static atlas page")
     w.add_argument("out")

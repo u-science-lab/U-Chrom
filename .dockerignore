@@ -9,8 +9,7 @@ docs
 paper
 tutorials
 discovery
-atlas
-deploy/atlas-site
+apps/atlas
 *.zarr
 *.h5ad
 *.scool

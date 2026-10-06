@@ -1,4 +1,4 @@
-// The atlas page's hero, a diagram in line art (hero.json, written by atlas/hero_data.py): a tissue section on a
+// The atlas page's hero, a diagram in line art (hero.json, written by apps/atlas/hero_data.py): a tissue section on a
 // slide seen at an angle and, lifted from one of its cells, that cell's nucleus with its 3-D genome (real
 // single-cell Hi-C structures; three chromosome copies in colour).  The lifted cell moves from cell to cell; each
 // one draws its own genome, which turns about the vertical axis.

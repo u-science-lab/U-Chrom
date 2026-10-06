@@ -1,6 +1,6 @@
 """Checks of the atlas datasets, recomputed from the stores, for the paper (Brief Communication Fig. 2c, Supp. Fig. 6).
 
-For every dataset of ``atlas/datasets.json`` (stores under ``example-data/``):
+For every dataset of ``apps/atlas/datasets.json`` (stores under ``example-data/``):
 
 * **size**: kind of data, species, cells or spots, contacts per cell / spot (median: the ``cells`` column of the
   build, else the ``sum`` of every cell's map in the linked per-cell ``.scool``), traced or modelled loci per cell;
@@ -15,7 +15,7 @@ For every dataset of ``atlas/datasets.json`` (stores under ``example-data/``):
 
 Writes ``<u-chrom-paper>/manuscripts/nmeth-bc/figures/results/atlas.json`` (``benchmarks/_paper.py``).
 
-    python benchmarks/atlas/validate.py [--only ID ...]
+    python apps/atlas/benchmarks/validate.py [--only ID ...]
 """
 
 from __future__ import annotations
@@ -31,13 +31,13 @@ import numpy as np
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[1]
+ROOT = HERE.parents[2]                                   # the repository
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "benchmarks"))
 from _paper import paper_root  # noqa: E402
 
 DATA = ROOT / "example-data"
-CONFIG = ROOT / "atlas" / "datasets.json"
+CONFIG = HERE.parent / "datasets.json"
 CONTACT_COLUMNS = ("n_contacts", "n_contacts_hic")
 PUBLISHED = {            # dataset -> (reprocessed column, published columns summed)
     "hires_brain": ("n_contacts", ["n_contacts_published"]),
@@ -220,7 +220,7 @@ def main() -> None:
         git = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
     except OSError:
         git = ""
-    payload = {"generated": time.strftime("%Y-%m-%d %H:%M"), "uchrom_git": git, "script": "benchmarks/atlas/validate.py",
+    payload = {"generated": time.strftime("%Y-%m-%d %H:%M"), "uchrom_git": git, "script": "apps/atlas/benchmarks/validate.py",
                "datasets": [rows[i] for i in order if i in rows], "spatial_checks": spatial}
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=1))

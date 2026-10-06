@@ -16,7 +16,7 @@ the first one is the store's first open in the session.  The dataset is closed a
 
 Writes ``<u-chrom-paper>/manuscripts/nmeth-bc/figures/results/hosted.json``.
 
-    python benchmarks/atlas/hosted.py [--reps 2] [--only ID ...]
+    python apps/atlas/benchmarks/hosted.py [--reps 2] [--only ID ...]
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from pathlib import Path
 import requests
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
+sys.path.insert(0, str(HERE.parents[2] / "benchmarks"))   # _paper.py
 from _paper import paper_root  # noqa: E402
 
 HOSTED = "https://uchrom-browser.u-science.org"

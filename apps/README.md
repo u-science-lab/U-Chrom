@@ -4,10 +4,10 @@ Two Workers in one account (`u-science.org` is a zone of it); neither needs a se
 
 | | what | where | needs |
 |---|---|---|---|
-| `atlas-site/` | the static atlas page (`atlas/site`) | `uchrom-atlas.u-science.org` | Workers Free |
-| `browser/` | a Worker + a container running `python -m uchrom.browser --web --hosted` | `uchrom-browser.u-science.org` | **Workers Paid** (Containers), Docker running locally |
+| `atlas/deploy/` | the static atlas page (`atlas/site`) | `uchrom-atlas.u-science.org` | Workers Free |
+| `hosted-browser/` | a Worker + a container running `python -m uchrom.browser --web --hosted` | `uchrom-browser.u-science.org` | **Workers Paid** (Containers), Docker running locally |
 
-The data (`u-chrom-atlas` R2 bucket at `uchrom-atlas-r2.u-science.org`) is separate: `atlas/PUBLISH.md`.
+The data (`u-chrom-atlas` R2 bucket at `uchrom-atlas-r2.u-science.org`) is separate: `atlas/PUBLISH.md` (dataset by dataset: build, verify, upload, draw the thumbnails).
 
 ## Log in once
 
@@ -15,13 +15,13 @@ The data (`u-chrom-atlas` R2 bucket at `uchrom-atlas-r2.u-science.org`) is separ
 
 ## The page
 
-    python -m uchrom.core.atlas figures atlas/datasets.json --root example-data      # only when a dataset changed
-    python -m uchrom.core.atlas site deploy/atlas-site/dist --catalog catalog.json --hosted https://uchrom-browser.u-science.org
-    cd deploy/atlas-site && npx wrangler deploy
+    python -m uchrom.core.atlas figures apps/atlas/datasets.json --root example-data      # only when a dataset changed
+    python -m uchrom.core.atlas site apps/atlas/deploy/dist --catalog catalog.json --hosted https://uchrom-browser.u-science.org
+    cd apps/atlas/deploy && npx wrangler deploy
 
 ## The browser
 
-    cd deploy/browser && npm install && npx wrangler deploy      # builds the image (Docker), pushes it, creates the Worker
+    cd apps/hosted-browser && npm install && npx wrangler deploy      # builds the image (Docker), pushes it, creates the Worker
 
 **Bump `RELEASE` in `wrangler.jsonc` on every deploy**: instances are named after it, so a deploy starts fresh containers on the new image (a running
 container was not replaced reliably by the rolling update; the old ones sleep and stop by themselves; visitors' open datasets are lost).

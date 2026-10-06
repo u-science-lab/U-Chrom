@@ -1,4 +1,4 @@
-"""Data of the atlas page's hero animation (atlas/site/hero.js): a tissue section on a slide and, lifted from it,
+"""Data of the atlas page's hero animation (apps/atlas/site/hero.js): a tissue section on a slide and, lifted from it,
 the nucleus of one cell with its 3-D genome.  A diagram, in line art:
 
 * tissue: drawn after an adult mouse cerebellum section by spatial Hi-C (Chen, Guo et al. 2026; atlas store
@@ -10,7 +10,7 @@ the nucleus of one cell with its 3-D genome.  A diagram, in line art:
   astrocyte and oligodendrocyte, coarse-grained to 2 Mb, every chromosome copy as one line; three neighbouring
   copies of three chromosomes are drawn in colour.  The cells are placed on the section for the diagram only.
 
-    python atlas/hero_data.py        # -> atlas/site/hero.json
+    python apps/atlas/hero_data.py        # -> apps/atlas/site/hero.json
 """
 
 from __future__ import annotations
@@ -20,10 +20,11 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[1]
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]                                   # the repository
 CHEN = ROOT / "example-data" / "spatial_hic_chen2026" / "cerebellum_adult_20um.chromdata.zarr"
 HIRES = ROOT / "example-data" / "hires2023" / "hires_brain.chromdata.zarr"
-OUT = ROOT / "atlas" / "site" / "hero.json"
+OUT = HERE / "site" / "hero.json"
 SECTION = "Cere_HiC_R1"
 UP = 8                    # contour upsampling of the spot grid
 COARSE = 10               # 200 kb particles averaged into one drawn point (2 Mb)

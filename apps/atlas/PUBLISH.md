@@ -17,26 +17,26 @@ kept in the repository: put an R2 API token (Object Read & Write, this bucket on
        aws s3 sync STORE.chromdata.zarr s3://u-chrom-atlas/NAME.chromdata.zarr/ --endpoint-url $R2_ENDPOINT \
            --cache-control "public, max-age=3600"
 
-3. **Describe it** in `atlas/datasets.json` (its `study` — one entry of `studies` with the citation, doi, source,
+3. **Describe it** in `apps/atlas/datasets.json` (its `study` — one entry of `studies` with the citation, doi, source,
    licence —, `name`, title, organism, tissue; counts are read from the store), then build and upload the catalog:
 
-       python -m uchrom.core.atlas build atlas/datasets.json --root example-data --out catalog.json
+       python -m uchrom.core.atlas build apps/atlas/datasets.json --root example-data --out catalog.json
        aws s3 cp catalog.json s3://u-chrom-atlas/catalog.json --endpoint-url $R2_ENDPOINT --content-type application/json
 
 4. **Verify** over the public domain:
 
-       python atlas/verify.py
+       python apps/atlas/verify.py
 
-5. **The static page** (`atlas/site`).  Draw the dataset thumbnails from the stores (a section's spots coloured by
+5. **The static page** (`apps/atlas/site`).  Draw the dataset thumbnails from the stores (a section's spots coloured by
    cluster + a 40-Mb window of its bulk contact map; `"figure"` in `datasets.json` pins the section / colour column /
-   region, `"hero"` lists the datasets of the page's top figure) and commit `atlas/site/figures/`:
+   region, `"hero"` lists the datasets of the page's top figure) and commit `apps/atlas/site/figures/`:
 
-       python -m uchrom.core.atlas figures atlas/datasets.json --root example-data      # -> atlas/site/figures
+       python -m uchrom.core.atlas figures apps/atlas/datasets.json --root example-data      # -> apps/atlas/site/figures
 
-   The hero animation's data (`atlas/site/hero.json`: a section drawn after a spatial Hi-C cerebellum section and
-   three HiRES brain cells' 3-D genomes) is written by `python atlas/hero_data.py`; commit it too.
+   The hero animation's data (`apps/atlas/site/hero.json`: a section drawn after a spatial Hi-C cerebellum section and
+   three HiRES brain cells' 3-D genomes) is written by `python apps/atlas/hero_data.py`; commit it too.
    then `python -m uchrom.core.atlas site dist/site --catalog catalog.json --hosted URL` and deploy `dist/site`
-   (`deploy/README.md`).
+   (`apps/README.md`).
 
 Notes learned the hard way: Cloudflare rejects Python's default `urllib` user agent on the public domain (aiohttp /
 fsspec and `uchrom.core.atlas.fetch_catalog` are fine); the first open of a store reads ~17 small objects, so

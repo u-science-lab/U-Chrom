@@ -1,7 +1,7 @@
 """Check an atlas end to end over HTTP: every dataset of its catalog opens, its contact maps (a region and the whole
 genome, per spot and bulk), section images and cell x bin tracks are readable and agree with the catalog.
 
-    python atlas/verify.py [ATLAS_URL]        # default: the public atlas; ~1 min
+    python apps/atlas/verify.py [ATLAS_URL]        # default: the public atlas; ~1 min
 """
 import json, time, warnings, sys
 warnings.filterwarnings("ignore")

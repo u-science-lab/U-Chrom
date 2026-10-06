@@ -102,7 +102,7 @@ def test_figures_from_positions_and_a_bulk_map(atlas_dir, tmp_path):
     assert Image.open(out / info["map"]).size == (6, 6)          # one pixel per bin
     # the site gets the figures and the study list
     template = tmp_path / "tpl"
-    shutil.copytree(Path(atlas.__file__).resolve().parents[2] / "atlas" / "site", template,
+    shutil.copytree(Path(atlas.__file__).resolve().parents[2] / "apps" / "atlas" / "site", template,
                     ignore=shutil.ignore_patterns("figures"))
     shutil.copytree(out, template / "figures")
     atlas.build_catalog(cfg, atlas_dir, tmp_path / "catalog.json")
