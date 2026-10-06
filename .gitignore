@@ -131,3 +131,6 @@ example-data/dschic2025/
 example-data/gageseq2024/
 example-data/droplet_hic2024/
 example-data/unic2025/
+
+# benchmarks/spatial_composition cache (~2 GB)
+example-data/spatial_composition_cache/
