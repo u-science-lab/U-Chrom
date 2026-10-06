@@ -9,10 +9,9 @@ from datetime import datetime
 # ---------------------------------------------------------------------
 # Project path
 # ---------------------------------------------------------------------
-# Allow ``import uchrom`` when running Sphinx locally without a pip install.
-sys.path.insert(0, os.path.abspath("../.."))
-# the monorepo's packages (packages/): chromdata, uchrom_browser, uchrom_discovery
-for _pkg in ("chromdata", "uchrom-browser", "uchrom-discovery"):
+# Allow ``import uchrom`` when running Sphinx locally without a pip install:
+# the monorepo's packages (packages/): uchrom, chromdata, uchrom_browser, uchrom_discovery
+for _pkg in ("uchrom", "chromdata", "uchrom-browser", "uchrom-discovery"):
     sys.path.insert(0, os.path.abspath(f"../../packages/{_pkg}"))
 
 import uchrom  # noqa: E402

@@ -15,7 +15,7 @@
 #   $SCRATCH/uchrom-nd/runs/bulk/                 outputs ({sim,real,base,models,scores,twin,tables}, engine runs)
 #
 # The benchmark scripts need no U-Chrom install (benchmarks/bulk/_common.py loads
-# uchrom/recon/bulk/deconv/preprocess.py from its file path); the deconvolution itself needs
+# packages/uchrom/uchrom/recon/bulk/deconv/preprocess.py from its file path); the deconvolution itself needs
 # U-Chrom + the native engine (installed editable into venv-deconv by setup_deconv.sbatch).
 set -euo pipefail
 ml purge

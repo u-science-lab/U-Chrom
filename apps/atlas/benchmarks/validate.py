@@ -32,7 +32,8 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]                                   # the repository
-sys.path.insert(0, str(ROOT))
+for _pkg in ("uchrom", "chromdata", "uchrom-browser"):   # this checkout's packages, not installed copies
+    sys.path.insert(0, str(ROOT / "packages" / _pkg))
 sys.path.insert(0, str(ROOT / "benchmarks"))
 from _paper import paper_root  # noqa: E402
 

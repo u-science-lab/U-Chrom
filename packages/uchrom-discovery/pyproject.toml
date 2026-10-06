@@ -43,5 +43,5 @@ exclude = ["tests*"]
 
 # Monorepo: u-chrom (and its chromdata) from their folders when developing (uv pip install -e packages/uchrom-discovery)
 [tool.uv.sources]
-u-chrom = { path = "../..", editable = true }
+u-chrom = { path = "../uchrom", editable = true }
 chromdata = { path = "../chromdata", editable = true }

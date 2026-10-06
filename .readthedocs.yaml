@@ -20,7 +20,7 @@ python:
     - method: pip
       path: packages/uchrom-browser
     - method: pip
-      path: .
+      path: packages/uchrom
       extra_requirements:
         - docs
     - requirements: docs/requirements.txt

@@ -51,8 +51,8 @@ Install from source:
 ```bash
 $ git clone https://github.com/Nanguage/U-Chrom.git
 $ cd U-Chrom
-$ pip install -e packages/chromdata -e .                    # or: uv pip install -e .
-$ pip install -e packages/uchrom-browser -e ".[web]"        # + the web browser
+$ pip install -e packages/chromdata -e packages/uchrom                # or: uv pip install -e packages/uchrom
+$ pip install -e packages/uchrom-browser -e "packages/uchrom[web]"   # + the web browser
 ```
 
 ## Repository layout

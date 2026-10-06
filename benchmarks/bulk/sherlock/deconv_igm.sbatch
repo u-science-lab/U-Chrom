@@ -35,6 +35,6 @@ for S in $SIZES; do
   for seed in $SEEDS; do
     out=$MODELDIR/igm_S${S}_seed${seed}.chromdata.zarr
     [ -e "$out" ] && continue
-    PYTHONPATH=$REPO $EPY $BK/run_deconv.py --input "$INPUT" --method igm --n-structures $S --seed $seed $KW --out "$out"
+    PYTHONPATH=$REPO/packages/uchrom:$REPO/packages/chromdata $EPY $BK/run_deconv.py --input "$INPUT" --method igm --n-structures $S --seed $seed $KW --out "$out"
   done
 done

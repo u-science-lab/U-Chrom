@@ -28,7 +28,8 @@ import warnings
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+for _pkg in ("uchrom", "chromdata", "uchrom-browser"):   # this checkout's packages, not installed copies
+    sys.path.insert(0, str(ROOT / "packages" / _pkg))
 
 DATASETS = {
     "takei2021": ("4DNFIHF3JCBY.csv", "4DNFIFINA2U9.csv", "4DNFIJ52NVDV.csv"),

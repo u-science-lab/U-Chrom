@@ -4,13 +4,12 @@
 **/__pycache__
 example-data
 benchmarks
-tests
 docs
 paper
 tutorials
 packages/uchrom-discovery
 apps/atlas
-uchrom
+packages/uchrom
 packages/uchrom-recon
 *.zarr
 *.h5ad

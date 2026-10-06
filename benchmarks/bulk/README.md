@@ -9,12 +9,12 @@ Datasets: `example-data/README.md`, section "Bulk Hi-C deconvolution benchmark".
 Everything here is standalone numpy / scipy / pandas (+ cooler / h5py / fsspec for real Hi-C,
 scikit-learn optional for the classifier test) so it runs in the Sherlock `venv-main`, which
 has no U-Chrom install: `_common.load_preprocess()` loads the one library module it needs,
-`uchrom/recon/bulk/deconv/preprocess.py`, from its file path.  Only `run_deconv.py` (the
+`packages/uchrom/uchrom/recon/bulk/deconv/preprocess.py`, from its file path.  Only `run_deconv.py` (the
 deconvolution) and reading ChromData outputs need U-Chrom.
 
 | file | what |
 | --- | --- |
-| `uchrom/recon/bulk/deconv/preprocess.py` | **library**: Hi-C → haploid contact probabilities, IGM SI section 6 protocol (below); `ProbabilityMatrix` (symmetric CSR + bins + provenance, `.npz`) |
+| `packages/uchrom/uchrom/recon/bulk/deconv/preprocess.py` | **library**: Hi-C → haploid contact probabilities, IGM SI section 6 protocol (below); `ProbabilityMatrix` (symmetric CSR + bins + provenance, `.npz`) |
 | `population.py` | population container `(S structures, P copies, L loci, 3)` + lamina; converters from the engine's arrays and from a ChromData population (cells = structures, traces = copies) |
 | `truths.py` | imaging truth populations: Su 2020 genome-scale (primary), Su 2020 chr21, Takei 2021 1 Mb |
 | `forward.py` | `truth`; `bulk`: population Hi-C = sum of per-cell contacts (infinite depth = exact IGM-pooled probabilities; finite depth = reads + bias + noise → raw fine matrix → preprocessing) |

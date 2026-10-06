@@ -11,13 +11,13 @@ pip install u-chrom
 ```bash
 git clone https://github.com/Nanguage/U-Chrom.git
 cd U-Chrom
-pip install -e packages/chromdata -e .                # or: uv pip install -e .
+pip install -e packages/chromdata -e packages/uchrom         # or: uv pip install -e packages/uchrom
 ```
 
 The repository is a monorepo: the data model (`chromdata`), the web browser
 (`uchrom-browser`), auto-discovery (`uchrom-discovery`) and the native engine
 (`uchrom-recon`) are packages of their own under `packages/`.  pip installs
-them from their folders (`pip install -e packages/uchrom-browser -e ".[web]"`);
+them from their folders (`pip install -e packages/uchrom-browser -e "packages/uchrom[web]"`);
 `uv pip install` finds them through `[tool.uv.sources]`.  `chromdata` alone
 (`pip install -e packages/chromdata`) reads and writes `.chromdata.zarr`
 stores without the analysis library.

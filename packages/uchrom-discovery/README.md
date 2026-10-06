@@ -15,7 +15,7 @@ does not depend on it.
 ## Install
 
 ```bash
-pip install -e packages/chromdata -e .   # from the repo root: chromdata + u-chrom
+pip install -e packages/chromdata -e packages/uchrom   # from the repo root: chromdata + u-chrom
 pip install -e packages/uchrom-discovery/     # this package (import uchrom_discovery)
 pip install -e "packages/uchrom-discovery/[pantheon]"   # optional Pantheon backend
 ```

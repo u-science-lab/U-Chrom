@@ -27,7 +27,8 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+for _pkg in ("uchrom", "chromdata", "uchrom-browser"):   # this checkout's packages, not installed copies
+    sys.path.insert(0, str(ROOT / "packages" / _pkg))
 DATA = Path(os.environ.get("UCHROM_EXAMPLE_DATA", ROOT / "example-data"))
 STORES = {
     "takei": DATA / "takei2025_cerebellum" / "takei2025_cerebellum_rep1.v21.chromdata.zarr",

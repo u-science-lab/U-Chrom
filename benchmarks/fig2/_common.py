@@ -36,7 +36,8 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-sys.path.insert(0, str(ROOT))  # this checkout's uchrom, not an installed copy
+for _pkg in ("uchrom", "chromdata", "uchrom-browser"):   # this checkout's packages, not installed copies
+    sys.path.insert(0, str(ROOT / "packages" / _pkg))
 
 DATA = Path(os.environ.get("UCHROM_EXAMPLE_DATA", ROOT / "example-data"))
 sys.path.insert(0, str(ROOT / "benchmarks"))

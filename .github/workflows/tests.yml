@@ -39,7 +39,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: packages/uchrom/pyproject.toml
 
       # Qt (xcb) + VTK/OpenGL runtime libs for the headless browser smoke
       # test, which runs under xvfb.
@@ -57,16 +57,13 @@ jobs:
           python -m pip install --upgrade pip
           # the monorepo's packages (packages/) first: they are not on PyPI yet
           pip install -e packages/chromdata -e packages/uchrom-browser \
-            -e ".[browser,web,anndata,im,snapfish,spatial]" pytest httpx
-
-      - name: Run tests
-        run: |
-          xvfb-run -a -s "-screen 0 1280x1024x24" \
-            python -m pytest tests -m "not slow and not gpu" -ra
+            -e "packages/uchrom[browser,web,anndata,im,snapfish,spatial]" pytest httpx
 
       # each package's own suite (a `tests` package each: run from its folder)
-      - name: Run package tests
+      - name: Run tests
         run: |
+          (cd packages/uchrom && xvfb-run -a -s "-screen 0 1280x1024x24" \
+            python -m pytest tests -m "not slow and not gpu" -ra)
           (cd packages/chromdata && python -m pytest tests -ra)
           (cd packages/uchrom-browser && python -m pytest tests -ra)
 
@@ -118,15 +115,15 @@ jobs:
           python-version: "3.11"
           cache: "pip"
           cache-dependency-path: |
-            pyproject.toml
+            packages/uchrom/pyproject.toml
             packages/uchrom-discovery/pyproject.toml
 
       - name: Install packages
         run: |
           python -m pip install --upgrade pip
-          pip install -e packages/chromdata -e ".[anndata]" -e ./packages/uchrom-discovery pytest
+          pip install -e packages/chromdata -e "packages/uchrom[anndata]" -e ./packages/uchrom-discovery pytest
 
-      # Run from packages/uchrom-discovery/ — both suites define a top-level ``tests`` package.
+      # Run from packages/uchrom-discovery/ — every package's suite is a top-level ``tests`` package.
       - name: Run tests
         working-directory: packages/uchrom-discovery
         run: python -m pytest tests -ra
@@ -165,7 +162,7 @@ jobs:
           python-version: "3.11"
           cache: "pip"
           cache-dependency-path: |
-            pyproject.toml
+            packages/uchrom/pyproject.toml
             packages/uchrom-recon/pyproject.toml
 
       - name: Rust tests
@@ -184,9 +181,10 @@ jobs:
 
       - name: Install uchrom and the engine
         run: |
-          pip install -e packages/chromdata -e . pytest
+          pip install -e packages/chromdata -e packages/uchrom pytest
           pip install packages/uchrom-recon/dist/*.whl
           python -c "import uchrom_recon as u; print(u.__version__, u.HAS_GPU, u.gpu_info())"
 
       - name: Python tests
-        run: python -m pytest tests/recon/test_nucdyn_native.py -m "not slow" -ra
+        working-directory: packages/uchrom
+        run: python -m pytest tests/recon -m "not slow" -ra
