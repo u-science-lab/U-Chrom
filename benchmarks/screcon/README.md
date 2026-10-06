@@ -5,7 +5,7 @@ here scores a method by its own objective: the held-out test and the imaging-tru
 simulation use pairs / loci fixed before any model exists, and every length is either in
 the truth's units or in the model's own bead unit (median consecutive-particle distance).
 
-The code is standalone (numpy / scipy / pandas; `uchrom_nucdyn` for the native engine) so
+The code is standalone (numpy / scipy / pandas; `uchrom_recon` for the native engine) so
 it runs in the Sherlock `venv-main`, which has no U-Chrom install.  Reusable parts move to
 `uchrom.recon.eval` later.
 

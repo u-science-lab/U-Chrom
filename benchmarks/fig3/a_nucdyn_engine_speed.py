@@ -49,7 +49,7 @@ def worker(cfg: dict) -> dict:
     """Run one configuration in this process and return its measurements."""
     t0, c0 = time.perf_counter(), time.process_time()
     if cfg["engine"] == "native":
-        import uchrom_nucdyn as un
+        import uchrom_recon as un
 
         c = un.read_contact_pairs(str(GEO))
         kw = dict(n_models=cfg["n_models"], device=cfg["device"], n_threads=cfg.get("n_threads", 0), seed=1,
@@ -106,7 +106,7 @@ def main() -> None:
     if args.worker:
         print(json.dumps(worker(json.loads(args.worker))))
         return
-    import uchrom_nucdyn as un
+    import uchrom_recon as un
 
     report = {"machine": platform.platform(), "processor": platform.processor(), "cpu_count": os.cpu_count(),
               "gpu": un.gpu_info(), "engine_version": un.__version__, "input": GEO.name, "runs": {}}

@@ -28,11 +28,12 @@ _WRITE_CHUNK_SPOTS = 2_000_000
 
 
 def _engine():
-    import uchrom_nucdyn
+    from uchrom.recon.sc.nucdyn.native import _engine as _native
 
-    if not hasattr(uchrom_nucdyn, "calc_population"):
-        raise ImportError("the installed uchrom_nucdyn has no 'igm' protocol; rebuild packages/uchrom-nucdyn")
-    return uchrom_nucdyn
+    uchrom_recon = _native()
+    if not hasattr(uchrom_recon, "calc_population"):
+        raise ImportError("the installed uchrom_recon has no 'igm' protocol; rebuild packages/uchrom-recon")
+    return uchrom_recon
 
 
 def native_available() -> bool:
@@ -402,7 +403,7 @@ def deconvolve_igm(
                                       "n_structures": int(len(np.unique(pins["structure"])))}
         uns = {"deconv": {
             "method": "igm",
-            "protocol": "igm (native uchrom_nucdyn)",
+            "protocol": "igm (native uchrom_recon)",
             "engine": res["engine"],
             "engine_version": un.__version__,
             "params": prov,

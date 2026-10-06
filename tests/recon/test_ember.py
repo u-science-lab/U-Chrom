@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-un = pytest.importorskip("uchrom_nucdyn")
+un = pytest.importorskip("uchrom_recon")
 
 PAIRS = Path(__file__).resolve().parents[2] / "example-data" / "cell1.pairs"
 QUICK = dict(particle_sizes=[2e6, 4e5, 2e5], n_models=2, seed=5, device="cpu")

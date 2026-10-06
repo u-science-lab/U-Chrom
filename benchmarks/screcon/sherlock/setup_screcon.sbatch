@@ -13,7 +13,7 @@
 source "$SCRATCH/uchrom-nd/repo/benchmarks/screcon/sherlock/_env.sh"
 $PY -c "import scipy" 2>/dev/null || $BASE/venv-main/bin/pip install -q --only-binary=:all: "scipy<1.15"
 $PY -c "import pytest" 2>/dev/null || $BASE/venv-main/bin/pip install -q --only-binary=:all: pytest
-$PY -c "import numpy, scipy, pandas, uchrom_nucdyn; print('venv-main', numpy.__version__, scipy.__version__, pandas.__version__, uchrom_nucdyn.__version__)"
+$PY -c "import numpy, scipy, pandas, uchrom_recon; print('venv-main', numpy.__version__, scipy.__version__, pandas.__version__, uchrom_recon.__version__)"
 if [ ! -x "$HICKIT" ]; then
   (cd "$BASE" && curl -sL https://github.com/lh3/hickit/releases/download/v0.1.1/hickit-0.1.1_x64-linux.tar.bz2 | tar -jxf -)
 fi

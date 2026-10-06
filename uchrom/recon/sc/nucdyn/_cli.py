@@ -37,7 +37,7 @@ def main(in_file, out_file, arch="gpu", device_memory_fraction=0.9, cell_id=None
     ``.cdz`` / ``.h5cd`` (the whole ensemble: ``coords`` = model 0,
     ``layers['model_<k>']`` = every model) or ``.csv`` (model 0 only).
 
-    ``engine``: ``"auto"`` uses the native engine (``uchrom_nucdyn``) when it
+    ``engine``: ``"auto"`` uses the native engine (``uchrom_recon``) when it
     is installed, otherwise the deprecated Taichi port; ``"native"`` /
     ``"taichi"`` force one.  ``device`` (``auto`` / ``cpu`` / ``gpu``)
     defaults from ``arch`` (``cpu`` -> cpu; ``gpu`` / ``cuda`` / ``metal`` ->
@@ -50,7 +50,7 @@ def main(in_file, out_file, arch="gpu", device_memory_fraction=0.9, cell_id=None
     if engine not in ("auto", "native", "taichi"):
         raise ValueError(f"engine must be 'auto', 'native' or 'taichi', got {engine!r}")
     if engine == "native" and not native_available():
-        raise ImportError("the native NucDynamics engine is not installed (pip install u-chrom[nucdyn])")
+        raise ImportError("the native engine (uchrom-recon) is not installed (pip install u-chrom[recon])")
     if not use_native:
         # the Taichi port warns (DeprecationWarning) itself
         from .nucdyn import main as taichi_main

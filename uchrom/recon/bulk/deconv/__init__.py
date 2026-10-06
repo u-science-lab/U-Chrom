@@ -5,7 +5,7 @@
 * ``method="igm"`` — :mod:`uchrom.recon.bulk.deconv.igm`, the A/M
   population modelling of IGM (Boninsegna et al. 2022, *Nat Methods*
   19:938; predecessor PGS, Tjong et al. 2016 *PNAS* 113:E1663, Hua et al.
-  2018 *Nat Protoc* 13:915) on the native engine (``uchrom_nucdyn``,
+  2018 *Nat Protoc* 13:915) on the native engine (``uchrom_recon``,
   protocol ``igm``; multi-core CPU or GPU).
 
 A later ``method="pgs"`` will live next to it.  The shared Hi-C →

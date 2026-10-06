@@ -9,11 +9,11 @@ IGM (Boninsegna et al. 2022, *Nat Methods* 19:938,
 doi:10.1038/s41592-022-01527-x; its predecessor PGS: Tjong et al. 2016
 *PNAS* 113:E1663, Hua et al. 2018 *Nat Protoc* 13:915).
 
-The computation runs in the native engine (``uchrom_nucdyn``, protocol
+The computation runs in the native engine (``uchrom_recon``, protocol
 ``igm``, Rust; multi-core CPU f64 or wgpu GPU f32), a clean
 re-implementation from ``benchmarks/bulk/pgs_spec.md`` (the original
 GPL-licensed IGM / alabtools / lammpgen code was not copied); where it
-deviates from the original is listed in ``packages/uchrom-nucdyn/README.md``.
+deviates from the original is listed in ``packages/uchrom-recon/README.md``.
 Please cite the papers above when using it.
 """
 

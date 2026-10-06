@@ -1,4 +1,4 @@
-//! Python bindings (`uchrom_nucdyn._engine`).
+//! Python bindings (`uchrom_recon._engine`).
 
 use crate::dynamics::{run_dynamics as rd, DynParams, Model, System, V3};
 use crate::params::Params;
@@ -21,7 +21,7 @@ fn make_engine(p: &Params) -> PyResult<Box<dyn StageEngine + Send>> {
             }
             #[cfg(not(feature = "gpu"))]
             {
-                Err(PyRuntimeError::new_err("uchrom_nucdyn was built without the `gpu` feature"))
+                Err(PyRuntimeError::new_err("uchrom_recon was built without the `gpu` feature"))
             }
         }
         d => Err(PyValueError::new_err(format!("unknown device {d:?}"))),

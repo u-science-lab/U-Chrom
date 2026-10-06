@@ -65,7 +65,7 @@ The repository holds several packages that are developed together:
 | `packages/chromdata/` | `chromdata` | the data model: `ChromData` and its `.chromdata.zarr` store (numpy / pandas / zarr / pyarrow only) |
 | `packages/uchrom-browser/` | `uchrom-browser` (`uchrom_browser`) | the web browser (needs `chromdata`, not `uchrom`) |
 | `packages/uchrom-discovery/` | `uchrom-discovery` (`uchrom_discovery`) | LLM-driven auto-discovery on top of `uchrom` |
-| `packages/uchrom-nucdyn/` | `u-chrom-nucdyn` (`uchrom_nucdyn`) | the native NucDynamics / EMber engine (Rust) |
+| `packages/uchrom-recon/` | `uchrom-recon` (`uchrom_recon`) | the native NucDynamics / EMber engine (Rust) |
 | `apps/` | — | the data atlas and the hosted web browser (deployments) |
 
 ## Usage
@@ -73,7 +73,7 @@ The repository holds several packages that are developed together:
 ### Single-cell 3D reconstruction
 
 ```bash
-$ pip install ./packages/uchrom-nucdyn   # native NucDynamics engine (Rust; CPU + GPU)
+$ pip install ./packages/uchrom-recon   # native NucDynamics engine (Rust; CPU + GPU)
 $ python -m uchrom.recon.sc.nucdyn example-data/cell1.pairs ./cell1.chromdata.zarr --n_models=10 --device=auto
 ```
 

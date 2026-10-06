@@ -1,4 +1,4 @@
-"""Native NucDynamics engine for U-Chrom.
+"""Native 3-D reconstruction engine for U-Chrom (NucDynamics, EMber, IGM).
 
 A Rust re-implementation of NucDynamics (Stevens et al. 2017, *Nature*
 544:59, doi:10.1038/nature21429; original code github.com/tjs23/nuc_dynamics,
@@ -7,10 +7,12 @@ annealing of a particle model, on a multi-core CPU (f64) or on a GPU via
 wgpu (f32; Metal / Vulkan / DX12), with every model of an ensemble computed
 in one batched run.
 
-Most users call it through ``uchrom.recon.sc.nucdyn``; this module is the
-array-level interface::
+EMber (protocol ``"robust"``) and IGM population modelling (protocol ``"igm"``)
+run on the same engine.  Formerly ``uchrom_nucdyn``.  Most users call it through
+``uchrom.recon.sc.nucdyn`` / ``uchrom.recon.sc.ember`` / ``uchrom.recon.bulk.deconv``;
+this module is the array-level interface::
 
-    from uchrom_nucdyn import calc_genome_structure
+    from uchrom_recon import calc_genome_structure
     res = calc_genome_structure(chr_a, pos_a, chr_b, pos_b, n_models=10, device="cpu")
     res["coords"]      # (n_models, n_particles, 3), particle radii
     res["particles"]   # DataFrame-like dict: chrom, start per particle

@@ -330,7 +330,7 @@ def main(in_file, out_file,
     warnings.warn(
         "uchrom.recon.sc.nucdyn.nucdyn (Taichi port) is deprecated and not faithful to the "
         "original NucDynamics; use uchrom.recon.sc.nucdyn.reconstruct_nucdyn / main with the "
-        "native engine (pip install u-chrom[nucdyn]).",
+        "native engine (pip install u-chrom[recon]).",
         DeprecationWarning, stacklevel=2)
     prams = copy(default_params)
     prams.update(kwargs)

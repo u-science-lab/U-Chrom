@@ -603,7 +603,7 @@ pub fn run_population_with(
             }
             #[cfg(not(feature = "gpu"))]
             {
-                return Err("uchrom_nucdyn was built without the `gpu` feature".into());
+                return Err("uchrom_recon was built without the `gpu` feature".into());
             }
         }
         d => return Err(format!("unknown device {d:?}")),

@@ -1,8 +1,8 @@
 """NucDynamics: single-cell Hi-C genome structure calculation.
 
 ``reconstruct_nucdyn(contacts, ...)`` returns a ChromData ensemble computed
-by the native engine (``uchrom_nucdyn``: Rust, multi-core CPU and wgpu GPU;
-``pip install u-chrom[nucdyn]``).  ``main`` (also ``python -m
+by the native engine (``uchrom_recon``: Rust, multi-core CPU and wgpu GPU;
+``pip install u-chrom[recon]``).  ``main`` (also ``python -m
 uchrom.recon.sc.nucdyn``) is the file-level entry point; it falls back to the
 deprecated Taichi port when the native engine is not installed.
 """

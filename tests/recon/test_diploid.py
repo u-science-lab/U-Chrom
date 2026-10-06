@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-un = pytest.importorskip("uchrom_nucdyn")
+un = pytest.importorskip("uchrom_recon")
 
 QUICK = dict(particle_sizes=[4e6, 1e6, 4e5], n_models=2, seed=3, device="cpu", n_threads=2,
              temp_steps=[60], dynamics_steps=[50], robust_temp_steps=[60], robust_dynamics_steps=[50])

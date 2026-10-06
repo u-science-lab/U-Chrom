@@ -278,7 +278,7 @@ pub fn start_coords(st: &Structure, num_models: usize, prev: Option<&Structure>,
 
 fn log(p: &Params, msg: &str) {
     if p.verbose {
-        eprintln!("[uchrom_nucdyn] {msg}");
+        eprintln!("[uchrom_recon] {msg}");
     }
 }
 

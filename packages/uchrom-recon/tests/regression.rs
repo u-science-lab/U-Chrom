@@ -8,9 +8,9 @@
 //! `UCHROM_NUCDYN_PRINT_GOLDEN=1 cargo test --release --test regression -- --nocapture`
 //! prints the hashes of the current build.
 
-use uchrom_nucdyn::params::Params;
-use uchrom_nucdyn::pipeline::{calc_genome_structure, CpuEngine, Input};
-use uchrom_nucdyn::rng::Rng;
+use uchrom_recon::params::Params;
+use uchrom_recon::pipeline::{calc_genome_structure, CpuEngine, Input};
+use uchrom_recon::rng::Rng;
 
 /// Contacts sampled from random-walk chromosomes (3 chromosomes x 30 Mb):
 /// pairs closer than a cutoff, plus a few random trans pairs.

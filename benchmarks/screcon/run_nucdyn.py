@@ -1,4 +1,4 @@
-"""U-Chrom native NucDynamics engine (``uchrom_nucdyn``) on an arbitrary contact table.
+"""U-Chrom native NucDynamics engine (``uchrom_recon``) on an arbitrary contact table.
 
 Same calls as ``benchmarks/fig3/a_nucdyn_engine_run.py``, but for any GEO / .pairs table
 (held-out training tables, simulated tables) and any final resolution.  The particle
@@ -56,7 +56,7 @@ def main(argv=None) -> None:
     ap.add_argument("--extra", default="{}", help="JSON of further engine parameters")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
-    import uchrom_nucdyn as un
+    import uchrom_recon as un
 
     sizes = [float(x) * 1e6 for x in args.sizes.split(",")] if args.sizes else schedule(args.res)
     tr = time.time()

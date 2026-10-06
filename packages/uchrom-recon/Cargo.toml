@@ -1,15 +1,15 @@
 [package]
-name = "uchrom-nucdyn"
+name = "uchrom-recon"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.80"
-description = "Native NucDynamics engine for U-Chrom: single-cell Hi-C genome structure calculation (multi-core CPU, wgpu GPU)"
+description = "Native 3-D reconstruction engine for U-Chrom: NucDynamics, EMber and IGM population modelling (multi-core CPU, wgpu GPU)"
 license = "LGPL-3.0-or-later"
 readme = "README.md"
 publish = false
 
 [lib]
-name = "uchrom_nucdyn"
+name = "uchrom_recon"
 crate-type = ["cdylib", "rlib"]
 
 [features]

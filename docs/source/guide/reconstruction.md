@@ -14,10 +14,10 @@ writing the same `.chromdata.zarr` output format.
 
 A re-implementation of NucDynamics (Stevens et al. 2017, *Nature* 544:59,
 doi:10.1038/nature21429; original code tjs23/nuc_dynamics, LGPL-3.0) in the
-separate native package `u-chrom-nucdyn` (`packages/uchrom-nucdyn`, Rust + PyO3):
+separate native package `uchrom-recon` (`packages/uchrom-recon`, Rust + PyO3):
 
 ```bash
-pip install u-chrom[nucdyn]        # or: pip install ./packages/uchrom-nucdyn
+pip install u-chrom[recon]        # or: pip install ./packages/uchrom-recon
 ```
 
 It computes an ensemble of structures at once — models in parallel on the

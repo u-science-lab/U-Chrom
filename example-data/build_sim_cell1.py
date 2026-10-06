@@ -1,7 +1,7 @@
 """Single-cell 3-D genome structure from the in-repo cell1.pairs.
 
 Runs NucDynamics (``uchrom.recon.sc.nucdyn.reconstruct_nucdyn``, native
-engine ``uchrom_nucdyn``, protocol of the 2017 code, default schedule 8 → 0.1
+engine ``uchrom_recon``, protocol of the 2017 code, default schedule 8 → 0.1
 Mb) on ``cell1.pairs`` (Stevens et al. 2017, mESC G1 cell, mm10) and links
 the cell's own contact map, so the browser can show structure, contacts and
 3-D distances side by side:
@@ -80,7 +80,7 @@ def main() -> None:
     cd = ChromData.read(structure)
     cd.uns.setdefault("genome_assembly", "mm10")
     cd.uns["xyz_unit"] = "particle radii (NucDynamics)"
-    cd.uns["source"] = ("NucDynamics (native engine uchrom_nucdyn, protocol nuc_dynamics_2017) on "
+    cd.uns["source"] = ("NucDynamics (native engine uchrom_recon, protocol nuc_dynamics_2017) on "
                         "example-data/cell1.pairs (Stevens et al. 2017)")
     # relative to the dataset's folder, so the folder can be moved or shipped
     cd.link_cool(mcool.name, key="cell1_contacts", label="cell1 contacts (input to the model)")

@@ -79,7 +79,7 @@ def environment() -> dict:
     except ImportError:
         pass
     try:
-        import uchrom_nucdyn as un
+        import uchrom_recon as un
 
         env["uchrom_nucdyn"] = un.__version__
         env["uchrom_nucdyn_gpu_build"] = bool(un.HAS_GPU)

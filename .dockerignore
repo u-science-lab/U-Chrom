@@ -11,7 +11,7 @@ tutorials
 packages/uchrom-discovery
 apps/atlas
 uchrom
-packages/uchrom-nucdyn
+packages/uchrom-recon
 *.zarr
 *.h5ad
 *.scool

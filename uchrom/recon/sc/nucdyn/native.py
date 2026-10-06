@@ -1,7 +1,7 @@
-"""NucDynamics on the native engine (``uchrom_nucdyn``, Rust; CPU and GPU).
+"""NucDynamics on the native engine (``uchrom_recon``, Rust; CPU and GPU).
 
-The engine is a separate package (``pip install u-chrom[nucdyn]`` or
-``pip install ./packages/uchrom-nucdyn``); this module turns contacts into a
+The engine is a separate package (``pip install u-chrom[recon]`` or
+``pip install ./packages/uchrom-recon``); this module turns contacts into a
 :class:`~chromdata.ChromData` ensemble.
 """
 
@@ -25,13 +25,18 @@ PROTOCOL_ALIASES = {"ember": "robust"}
 
 
 def _engine():
-    import uchrom_nucdyn
-
-    return uchrom_nucdyn
+    try:
+        import uchrom_recon
+    except ImportError:
+        try:                                # a build from before the rename (u-chrom-nucdyn)
+            import uchrom_nucdyn as uchrom_recon
+        except ImportError:
+            raise ImportError("the native engine is not installed: pip install ./packages/uchrom-recon") from None
+    return uchrom_recon
 
 
 def native_available() -> bool:
-    """True when the native engine (``uchrom_nucdyn``) can be imported."""
+    """True when the native engine (``uchrom_recon``) can be imported."""
     try:
         _engine()
     except ImportError:
@@ -249,7 +254,7 @@ def reconstruct_nucdyn(
         Key of the provenance record in ``cd.results`` (per-stage log) and
         of ``cd.uns[key_added]``; ``None`` stores neither.
     params
-        Further engine parameters (see ``uchrom_nucdyn.default_params()``:
+        Further engine parameters (see ``uchrom_recon.default_params()``:
         ``temp_steps``, ``dynamics_steps``, ``temp_start``, ``temp_end``,
         ``time_step``, ``contact_dist_lower``, ...); keyword arguments are
         merged into it.
@@ -338,7 +343,7 @@ def reconstruct_nucdyn(
         stages = pd.DataFrame([{k: v for k, v in s.items() if k not in ("removed_models", "robust")}
                                for s in res["stages"]])
         info = {
-            "method": _method, "engine": "uchrom_nucdyn", "engine_version": un.__version__, "device": dev,
+            "method": _method, "engine": "uchrom_recon", "engine_version": un.__version__, "device": dev,
             "gpu": un.gpu_info() if dev == "gpu" else None, "protocol": protocol,
             "n_models": int(len(coords)), "seed": int(seed), "particle_size": size,
             "particle_position": res["position_convention"],

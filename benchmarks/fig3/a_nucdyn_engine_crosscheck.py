@@ -10,9 +10,9 @@ Two interpreters are involved, because the original needs ``cython<3`` /
    the original ``run_dynamics`` / ``runDynamics`` for a few temperature steps
    with a fixed numpy seed, and saves inputs, velocity draws and outputs.
 2. ``native`` (run with the U-Chrom env): rebuilds the same stage with
-   ``uchrom_nucdyn`` and compares the restraint set exactly, then feeds the
+   ``uchrom_recon`` and compares the restraint set exactly, then feeds the
    original's restraints, start coordinates and velocity draws to
-   ``uchrom_nucdyn.run_dynamics`` and reports coordinate differences after
+   ``uchrom_recon.run_dynamics`` and reports coordinate differences after
    the same number of steps (with the original's neighbour-list schedule and
    with the engine's exact cell grid), plus the growth of a 1e-12
    perturbation (the intrinsic chaos of the dynamics) as a yardstick.
@@ -137,7 +137,7 @@ def cmd_orig(args):
 
 
 def cmd_native(args):
-    import uchrom_nucdyn as un
+    import uchrom_recon as un
 
     z = np.load(args.npz)
     branch = str(z["branch"])

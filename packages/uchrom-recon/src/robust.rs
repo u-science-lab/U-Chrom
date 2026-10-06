@@ -602,7 +602,7 @@ fn restraint_odds(d: &ContactDict, st: &Structure, lr: &[f64]) -> (Vec<u32>, Vec
 
 fn log(p: &Params, msg: &str) {
     if p.verbose {
-        eprintln!("[uchrom_nucdyn] {msg}");
+        eprintln!("[uchrom_recon] {msg}");
     }
 }
 

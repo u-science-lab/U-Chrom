@@ -1,4 +1,4 @@
-"""NucDynamics on the native engine (``uchrom_nucdyn``).
+"""NucDynamics on the native engine (``uchrom_recon``).
 
 Skipped when the native package is not installed.  Uses chr19 of
 ``example-data/cell1.pairs`` (Stevens et al. 2017, Cell 1) at 1 Mb / 0.5 Mb
@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-un = pytest.importorskip("uchrom_nucdyn")
+un = pytest.importorskip("uchrom_recon")
 
 PAIRS = Path(__file__).resolve().parents[2] / "example-data" / "cell1.pairs"
 QUICK = dict(genome_ranges=["chr19"], particle_sizes=[1e6, 5e5], temp_steps=[60], dynamics_steps=[50])

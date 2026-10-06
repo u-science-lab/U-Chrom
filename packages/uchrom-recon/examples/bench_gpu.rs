@@ -2,10 +2,10 @@
 //! 100 kb mouse genome structure).  `cargo run --release --features gpu --example bench_gpu [n]`
 
 use std::time::Instant;
-use uchrom_nucdyn::dynamics::{RestraintForm, System, V3};
-use uchrom_nucdyn::gpu::GpuEngine;
-use uchrom_nucdyn::restraints::{ambiguity_offsets, bin_restraints, Restraint, RestraintSet};
-use uchrom_nucdyn::rng::Rng;
+use uchrom_recon::dynamics::{RestraintForm, System, V3};
+use uchrom_recon::gpu::GpuEngine;
+use uchrom_recon::restraints::{ambiguity_offsets, bin_restraints, Restraint, RestraintSet};
+use uchrom_recon::rng::Rng;
 
 fn main() {
     let n: usize = std::env::args().nth(1).map(|s| s.parse().unwrap()).unwrap_or(25_000);

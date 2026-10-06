@@ -4,7 +4,7 @@
 * :func:`reconstruct_nucdyn` — NucDynamics (native engine; protocols ``"nuc_dynamics_2017"``,
   ``"release_1.3"``, ``"robust"`` / ``"ember"``).
 
-Both import the native engine (``uchrom_nucdyn``) only when called.
+Both import the native engine (``uchrom_recon``) only when called.
 """
 
 

@@ -2,9 +2,9 @@
 //! `cargo run --release --example bench_forces [n]`
 
 use std::time::Instant;
-use uchrom_nucdyn::dynamics::{compute_forces_mode, Model, System};
-use uchrom_nucdyn::restraints::{ambiguity_offsets, Restraint, RestraintSet};
-use uchrom_nucdyn::rng::Rng;
+use uchrom_recon::dynamics::{compute_forces_mode, Model, System};
+use uchrom_recon::restraints::{ambiguity_offsets, Restraint, RestraintSet};
+use uchrom_recon::rng::Rng;
 
 fn main() {
     let n: usize = std::env::args().nth(1).map(|s| s.parse().unwrap()).unwrap_or(25_000);
@@ -32,7 +32,7 @@ fn main() {
         let j = (rng.uniform() * n as f64) as u32;
         rest.push(Restraint { i: i.min(j), j: i.max(j), lo: 0.8, hi: 1.2, ambig: 0, weight: 1.0 });
     }
-    let rest = uchrom_nucdyn::restraints::bin_restraints(rest);
+    let rest = uchrom_recon::restraints::bin_restraints(rest);
     let groups = ambiguity_offsets(&rest);
     let rs = RestraintSet { rest, groups, n_contacts: 0 };
     let sys = System::new(n, vec![1.0; n], vec![1.0; n], &rs);

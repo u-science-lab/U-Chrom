@@ -36,7 +36,7 @@ class IgmParams:
     ``{chrom: copies}``.
 
     Opt-in options (IGM-Plus / IGM_2.0; every default is the IGM 1.0
-    behaviour, see ``packages/uchrom-nucdyn/README.md``):
+    behaviour, see ``packages/uchrom-recon/README.md``):
 
     ``occupancy`` / ``bead_radius``
         Bead radii from the genome-to-nucleus volume occupancy (default 0.2
@@ -149,7 +149,7 @@ class IgmParams:
         return dataclasses.replace(self, **kw)
 
     def to_native(self) -> Dict[str, Any]:
-        """Fields understood by ``uchrom_nucdyn.calc_population`` (without ploidy
+        """Fields understood by ``uchrom_recon.calc_population`` (without ploidy
         and ``occupancy_scope``, which the caller resolves to
         ``occupancy_total_bp``)."""
         d = dataclasses.asdict(self)

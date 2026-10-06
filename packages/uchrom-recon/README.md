@@ -1,10 +1,13 @@
-# u-chrom-nucdyn
+# uchrom-recon
 
-Native NucDynamics engine for [U-Chrom](../../README.md): single-cell Hi-C
-genome structure calculation by simulated annealing of a particle model,
-written in Rust with PyO3 bindings.  It also runs protocol **"igm"**: population
-modelling of bulk Hi-C (the A/M deconvolution of IGM / PGS; see
-[Protocol "igm"](#protocol-igm-population-modelling-of-bulk-hi-c)).
+The native 3-D reconstruction engine of [U-Chrom](../../README.md), written in Rust
+with PyO3 bindings: genome structure calculation by simulated annealing of a particle
+model.  Its protocols are NucDynamics (single-cell Hi-C, the 2017 code and release 1.3),
+**EMber** (protocol "robust": noise-aware single-cell reconstruction, also for phased
+diploid contacts) and **"igm"**: population modelling of bulk Hi-C (the A/M
+deconvolution of IGM / PGS; see
+[Protocol "igm"](#protocol-igm-population-modelling-of-bulk-hi-c)).  Formerly
+`u-chrom-nucdyn` (`uchrom_nucdyn`).
 
 * **CPU**: f64, multi-core with rayon.  The models of an ensemble run in
   parallel; when there are fewer models than cores, the force loops of each
@@ -16,12 +19,12 @@ modelling of bulk Hi-C (the A/M deconvolution of IGM / PGS; see
   together in one set of buffers and every kernel is dispatched over
   (particles, models); nothing is read back until the end of a stage.
 
-Import name `uchrom_nucdyn`, pip name `u-chrom-nucdyn`.  U-Chrom uses it from
-`uchrom.recon.sc.nucdyn` whenever it is installed.
+Import name `uchrom_recon`, pip name `uchrom-recon`.  U-Chrom uses it from
+`uchrom.recon.sc.nucdyn`, `uchrom.recon.sc.ember` and `uchrom.recon.bulk.deconv` whenever it is installed.
 
 ```bash
-pip install ./packages/uchrom-nucdyn                  # CPU + GPU backend (default)
-cd packages/uchrom-nucdyn && maturin build --release --features python   # CPU-only wheel
+pip install ./packages/uchrom-recon                  # CPU + GPU backend (default)
+cd packages/uchrom-recon && maturin build --release --features python   # CPU-only wheel
 cargo test --release [--features gpu]        # Rust tests
 ```
 
@@ -30,8 +33,8 @@ from uchrom.recon.sc.nucdyn import reconstruct_nucdyn
 cd = reconstruct_nucdyn("cell1.pairs", n_models=10, device="auto", seed=1)
 cd.coords                     # model 0 (particle radii); cd.layers["model_<k>"]: every model
 
-import uchrom_nucdyn          # array-level API
-res = uchrom_nucdyn.calc_genome_structure(chr_a, pos_a, chr_b, pos_b, n_models=10, device="gpu")
+import uchrom_recon          # array-level API
+res = uchrom_recon.calc_genome_structure(chr_a, pos_a, chr_b, pos_b, n_models=10, device="gpu")
 ```
 
 ## Attribution
@@ -127,7 +130,7 @@ or two copies (`ploidy="auto"`: male — X and Y single — when a Y chromosome 
 
 | Original (`master`) | What it does | Here |
 |---|---|---|
-| `load_ncc_file` | contact position = fragment start on +, end on −; `chr_a > chr_b` (string order) → swap ends; cis order kept | `uchrom_nucdyn.read_ncc` (Python), `contacts::build_contact_dict` |
+| `load_ncc_file` | contact position = fragment start on +, end on −; `chr_a > chr_b` (string order) → swap ends; cis order kept | `uchrom_recon.read_ncc` (Python), `contacts::build_contact_dict` |
 | `remove_isolated_contacts` + `getSupportedPairs` | once, before stage 1: keep a contact if another contact of the same chromosome pair lies within (100 bp, 2 Mb) at both ends (either orientation) | `protocol2017::remove_isolated_contacts`, `contacts::supported_contacts` (sorted windows, same result as the O(n²) scan; tested against brute force) |
 | `calc_restraints` (binning) | particles at `floor(min/s)·s … s·ceil(float32(max)/s)` inclusive; a contact end at p → first particle with position ≥ p; chromosome without contacts → one particle at 0 | `protocol2017::calc_particles`, `contact_restraints` (float32 `ceil` reproduced) |
 | `calc_restraints` (restraints) | one restraint per non-empty (i, j) cell of each chromosome pair incl. i = j and \|i − j\| = 1; target `N^-0.33` (float32 `powf`), bounds 0.8 / 1.2 × target (float32 constants) | `protocol2017::contact_restraints` |
@@ -190,7 +193,7 @@ K = 215 N / n_contacts, output ÷ bead and superposed).
 
 ## Protocol "igm": population modelling of bulk Hi-C
 
-`uchrom_nucdyn.calc_population(...)` (U-Chrom: `uchrom.recon.bulk.deconv.deconvolve(..., method="igm")`)
+`uchrom_recon.calc_population(...)` (U-Chrom: `uchrom.recon.bulk.deconv.deconvolve(..., method="igm")`)
 fits a population of S diploid genome structures to one haploid contact-probability
 matrix by alternating the A-step (activation distances computed over the population
 decide which structure carries which contact restraint) and the M-step (every structure
@@ -220,7 +223,7 @@ citations to its functions) and stays LGPL-3.0-or-later.  Please cite the papers
 when you use populations computed with this protocol.
 
 ```python
-import uchrom_nucdyn as un
+import uchrom_recon as un
 res = un.calc_population(chrom, start, end, prob_i, prob_j, prob_v, ploidy="diploid",
                          n_structures=1000, device="gpu", seed=1)
 res["coords"]          # (S, N_beads, 3) float32, nm; res["bead_bin"], res["bead_copy"], res["radii"]
@@ -231,7 +234,7 @@ res["rounds"]          # per A/M round: sigma, iteration, restrained pairs, bond
 
 | Original | What it does | Here |
 |---|---|---|
-| `_preprocess.py:PrepareGenomeIndex`, alabtools `make_diploid` / `make_multiploid` | bead layout: haploid index for copy 0, then copy 1 (`male`: X, Y single); `copy_index` | `igm/genome.rs:Genome::new`; ploidy strings in `uchrom_nucdyn.resolve_copies` |
+| `_preprocess.py:PrepareGenomeIndex`, alabtools `make_diploid` / `make_multiploid` | bead layout: haploid index for copy 0, then copy 1 (`male`: X, Y single); `copy_index` | `igm/genome.rs:Genome::new`; ploidy strings in `uchrom_recon.resolve_copies` |
 | `_preprocess.py:Preprocess` | radii `r = (ρ · size / (4π/3))^{1/3}`, `ρ = occupancy · V_nuc / Σ sizes` (sphere or ellipsoid) | `Genome::new` |
 | `ActivationDistanceStep.get_actdist` (`rcutsq`, `contact_range`) | contact: centre distance ≤ 2 (r_i + r_j) | `igm/astep.rs`, `forces.rs:hic_d0` |
 | LAMMPS `pair soft` + `PairIJ Coeffs` (`create_lammps_data`), `special_bonds 1 1 1`, `fix adapt … scale yes` | `U = A(1 + cos(π d/r_c))`, `A = evfactor · stage_ev · ((r_i + r_j)/π)²`, `r_c = r_i + r_j`, all pairs incl. bonded neighbours and homologs | `igm/forces.rs:soft_pair`; GPU `igm.wgsl:total_force` (cell grid rebuilt every step, stencil over `2 r_max`) |

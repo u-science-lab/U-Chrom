@@ -257,7 +257,7 @@ pub fn setup_stage(
 
 fn log(p: &Params, msg: &str) {
     if p.verbose {
-        eprintln!("[uchrom_nucdyn] {msg}");
+        eprintln!("[uchrom_recon] {msg}");
     }
 }
 

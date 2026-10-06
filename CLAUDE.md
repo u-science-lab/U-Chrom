@@ -42,13 +42,13 @@ packages/
 │                      auto-discovery — ChromData schema → ideas → notebooks → verification →
 │                      evidence; iterative idea graph, pre-discovery enrichment, Pantheon /
 │                      Claude / Codex CLI backends, graph UI.
-└── uchrom-nucdyn/     `u-chrom-nucdyn` (import uchrom_nucdyn): Rust + PyO3 (maturin, abi3)
+└── uchrom-recon/     `uchrom-recon` (import uchrom_recon): Rust + PyO3 (maturin, abi3)
                        NucDynamics engine — contact preprocessing, hierarchical annealing, CPU
                        (f64, rayon) and GPU (wgpu/WGSL, f32, feature `gpu`) backends, protocols
                        nuc_dynamics_2017 (default) / release_1.3 / robust (= EMber, alias "ember":
                        noise-aware method, src/robust.rs; PREREG in benchmarks/screcon) / igm.
-                       `cargo test` in packages/uchrom-nucdyn; `pip install ./packages/uchrom-nucdyn`
-                       (= extra `u-chrom[nucdyn]`).  LGPL-3.0 (re-implementation of tjs23/nuc_dynamics).
+                       `cargo test` in packages/uchrom-recon; `pip install ./packages/uchrom-recon`
+                       (= extra `u-chrom[recon]`).  LGPL-3.0 (re-implementation of tjs23/nuc_dynamics).
 apps/
 ├── atlas/             the atlas: datasets.json, site + thumbnails (build.py), publishing (deploy/)
 └── hosted-browser/    the public web browser: Cloudflare Worker + container (chromdata + uchrom-browser)
@@ -63,7 +63,7 @@ uchrom/                `u-chrom` — the analysis library (depends on chromdata)
 │   │   ├── ember.py EMber: reconstruct_ember (noise-aware; native engine protocol
 │   │   │            "robust", alias "ember"; PREREG / TEST_RESULTS in benchmarks/screcon)
 │   │   ├── nucdyn/  NucDynamics: reconstruct_nucdyn / CLI on the native engine
-│   │   │            (packages/uchrom-nucdyn); deprecated Taichi port kept as fallback
+│   │   │            (packages/uchrom-recon); deprecated Taichi port kept as fallback
 │   │   └── gem/     GEM (energy minimization, Taichi autodiff)
 │   ├── bulk/        Bulk reconstruction
 │   │   ├── mds/     MDS/SMACOF (PyTorch GPU; partitioned + inter-chrom)
@@ -92,7 +92,7 @@ uchrom/                `u-chrom` — the analysis library (depends on chromdata)
 - **Development install** (the packages are not on PyPI): `uv pip install -e ".[web]"` (the
   `[tool.uv.sources]` of each pyproject take the sibling packages from their folders), or with pip
   `pip install -e packages/chromdata -e packages/uchrom-browser -e ".[web]"`;
-  discovery: `pip install -e packages/uchrom-discovery`; the native engine: `pip install ./packages/uchrom-nucdyn`
+  discovery: `pip install -e packages/uchrom-discovery`; the native engine: `pip install ./packages/uchrom-recon`
   (needs Rust).
 - **Package dependencies**: chromdata ← uchrom-browser; chromdata ← uchrom ← uchrom-discovery;
   apps use them all.  chromdata and uchrom-browser never import uchrom (their `tests/test_standalone.py`
@@ -112,7 +112,7 @@ uchrom/                `u-chrom` — the analysis library (depends on chromdata)
 - Run the test suites separately (each has a `tests` package):
   `pytest tests` from the root, `cd packages/uchrom-discovery && pytest tests`,
   `cd packages/chromdata && pytest tests`, `cd packages/uchrom-browser && pytest tests`.
-- `uchrom` stays pure Python: it imports `uchrom_nucdyn` lazily (tests skip
+- `uchrom` stays pure Python: it imports `uchrom_recon` lazily (tests skip
   when it is not installed); the native crate never imports `uchrom`.
 
 ## ChromData — Core Data Container
@@ -239,7 +239,7 @@ All datasets consumed by tutorials and benchmarks live in
 ## Technical Notes
 
 - **GPU frameworks**: native Rust/wgpu, Taichi and PyTorch coexist but don't interact.
-  - **NucDynamics → native Rust engine** (`packages/uchrom-nucdyn`, `uchrom_nucdyn`):
+  - **NucDynamics → native Rust engine** (`packages/uchrom-recon`, `uchrom_recon`):
     CPU in f64 with rayon (models in parallel, force loops split when there
     are fewer models than cores; per-particle gather → results independent
     of the thread count) and GPU through wgpu (WGSL compute shaders: Metal on
@@ -256,7 +256,7 @@ All datasets consumed by tutorials and benchmarks live in
   - Legacy: `recon.sc.gem` is Taichi-based.  If it ever needs ensembles
     or more complex loss terms, consider migrating to PyTorch.
   - Native engine changes: `cargo test --release [--features gpu]` in
-    `packages/uchrom-nucdyn`, rebuild with `maturin develop --release`; WGSL lives in
+    `packages/uchrom-recon`, rebuild with `maturin develop --release`; WGSL lives in
     `src/gpu/nucdyn.wgsl` (included at compile time).
 - **Python package name**: `uchrom` (import name), `u-chrom` (pip name)
 - **Python ≥ 3.11** (zarr ≥ 3, needed by the `.chromdata.zarr` container, has no 3.10 wheels); `zarr` and `pyarrow` are core dependencies.

@@ -1,7 +1,7 @@
 """EMber: noise-aware single-cell Hi-C 3-D genome reconstruction.
 
 EMber (EM + annealing / sampling) is the native engine's protocol ``"robust"``
-(``uchrom_nucdyn``; ``packages/uchrom-nucdyn/src/robust.rs``): the NucDynamics 2017
+(``uchrom_recon``; ``packages/uchrom-recon/src/robust.rs``): the NucDynamics 2017
 hierarchical annealing with a mixture observation model — every contact is a
 true proximity or a false contact (rate ε), contact restraints are re-weighted
 by their posterior probability of being true (EM; ε and the contact-kernel
@@ -81,7 +81,7 @@ def reconstruct_ember(
         Models (structures) in the ensemble.
     params
         Engine parameters overriding the frozen defaults (see
-        ``uchrom_nucdyn.default_params()``; the ``robust_*`` fields are EMber's);
+        ``uchrom_recon.default_params()``; the ``robust_*`` fields are EMber's);
         keyword arguments are merged into it.
     device
         ``"auto"`` (GPU when available), ``"cpu"`` (f64, multi-core) or

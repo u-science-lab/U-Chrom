@@ -554,14 +554,14 @@ public data alone** and are shipped with their recorded outputs.
 - **Known issue**: the structure was computed before the
   `uchrom.io.count_contacts` axis fix (`u-chrom-paper/manuscripts/full/figures/fig3/PLAN.md`, finding 5),
   so its restraints joined scrambled particle pairs.  The native engine
-  (`packages/uchrom-nucdyn`, validated against the original on the 8 Stevens cells)
+  (`packages/uchrom-recon`, validated against the original on the 8 Stevens cells)
   can rebuild it (`build_sim_cell1.py`, now using that engine), but the
   rebuild is deferred: the Fig. 6 agent benchmark's ground truth
   (`benchmarks/fig6/agent_bench/`, questions on bond length and
   contacts vs distance) was computed on this file.  Until then treat it
   as a browser / benchmark demo, not as a valid Cell 1 structure.  The mcool is
   built directly from `cell1.pairs` and is not affected.
-- **Rebuild** (native engine): `pip install ./packages/uchrom-nucdyn`, then
+- **Rebuild** (native engine): `pip install ./packages/uchrom-recon`, then
   `python example-data/build_sim_cell1.py [--device auto|cpu|gpu] [--n-models 4] [--seed 1] [--format cdz|zarr]`
   (then regenerate the Fig. 6 agent-benchmark answers).
 - **Check**: bins in contact in the input are ~2× closer in the model

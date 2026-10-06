@@ -805,7 +805,7 @@ fn candidate_mean_dist(c: &DipContact, st: &Structure) -> Vec<f64> {
 
 fn log(p: &Params, msg: &str) {
     if p.verbose {
-        eprintln!("[uchrom_nucdyn] {msg}");
+        eprintln!("[uchrom_recon] {msg}");
     }
 }
 

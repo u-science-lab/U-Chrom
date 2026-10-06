@@ -15,7 +15,7 @@ import scipy.sparse as sp  # noqa: E402
 from uchrom.recon.bulk.deconv import IgmParams, deconvolve  # noqa: E402
 from uchrom.recon.bulk.deconv.igm import contact_probabilities, native_available  # noqa: E402
 
-pytestmark = pytest.mark.skipif(not native_available(), reason="uchrom_nucdyn with the igm protocol not installed")
+pytestmark = pytest.mark.skipif(not native_available(), reason="uchrom_recon with the igm protocol not installed")
 
 N_PER = 50
 
@@ -126,9 +126,9 @@ def test_synthetic_end_to_end_reproduces_input():
 
 
 def test_python_defaults_match_native():
-    import uchrom_nucdyn
+    import uchrom_recon
 
-    native = uchrom_nucdyn.default_igm_params()
+    native = uchrom_recon.default_igm_params()
     ours = IgmParams().to_native()
     for k, v in native.items():
         if k in ("seed", "device"):

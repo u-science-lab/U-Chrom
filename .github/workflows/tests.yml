@@ -131,12 +131,12 @@ jobs:
         working-directory: packages/uchrom-discovery
         run: python -m pytest tests -ra
 
-  nucdyn-native:
-    # Native NucDynamics engine (packages/uchrom-nucdyn, Rust + PyO3): Rust unit tests,
+  recon-native:
+    # Native reconstruction engine (packages/uchrom-recon, Rust + PyO3): Rust unit tests,
     # a CPU-only wheel (no GPU feature), the default wheel (with the wgpu
     # backend) and the Python tests against it.  GPU tests skip themselves
     # when the runner has no usable adapter.
-    name: nucdyn native engine (${{ matrix.os }})
+    name: uchrom-recon native engine (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -156,8 +156,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            packages/uchrom-nucdyn/target
-          key: nucdyn-${{ runner.os }}-${{ hashFiles('packages/uchrom-nucdyn/Cargo.lock') }}
+            packages/uchrom-recon/target
+          key: recon-${{ runner.os }}-${{ hashFiles('packages/uchrom-recon/Cargo.lock') }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -166,16 +166,16 @@ jobs:
           cache: "pip"
           cache-dependency-path: |
             pyproject.toml
-            packages/uchrom-nucdyn/pyproject.toml
+            packages/uchrom-recon/pyproject.toml
 
       - name: Rust tests
-        working-directory: packages/uchrom-nucdyn
+        working-directory: packages/uchrom-recon
         run: |
           cargo test --release
           cargo test --release --features gpu
 
       - name: Build wheels (CPU-only, and default with GPU)
-        working-directory: packages/uchrom-nucdyn
+        working-directory: packages/uchrom-recon
         run: |
           python -m pip install --upgrade pip maturin
           # --features on the command line replaces the pyproject list: CPU only
@@ -185,8 +185,8 @@ jobs:
       - name: Install uchrom and the engine
         run: |
           pip install -e packages/chromdata -e . pytest
-          pip install packages/uchrom-nucdyn/dist/*.whl
-          python -c "import uchrom_nucdyn as u; print(u.__version__, u.HAS_GPU, u.gpu_info())"
+          pip install packages/uchrom-recon/dist/*.whl
+          python -c "import uchrom_recon as u; print(u.__version__, u.HAS_GPU, u.gpu_info())"
 
       - name: Python tests
         run: python -m pytest tests/recon/test_nucdyn_native.py -m "not slow" -ra

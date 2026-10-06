@@ -102,7 +102,7 @@ pub(crate) fn open_device() -> Result<Ctx, String> {
         ));
     }
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-        label: Some("uchrom_nucdyn"),
+        label: Some("uchrom_recon"),
         required_features: wgpu::Features::empty(),
         required_limits: lim.clone(),
         memory_hints: wgpu::MemoryHints::Performance,

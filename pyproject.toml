@@ -42,11 +42,15 @@ browser = [
 web = [
     "uchrom-browser>=0.1.0",
 ]
-# Native NucDynamics engine (Rust; multi-core CPU + wgpu GPU) used by
-# uchrom.recon.sc.nucdyn.  Built from packages/uchrom-nucdyn (pip install ./packages/uchrom-nucdyn)
-# until wheels are published.
+# Native reconstruction engine (Rust; multi-core CPU + wgpu GPU) used by uchrom.recon.sc.nucdyn,
+# uchrom.recon.sc.ember and uchrom.recon.bulk.deconv.  Built from packages/uchrom-recon
+# (pip install ./packages/uchrom-recon) until wheels are published.
+recon = [
+    "uchrom-recon>=0.1",
+]
+# former name of the recon extra
 nucdyn = [
-    "u-chrom-nucdyn>=0.1",
+    "uchrom-recon>=0.1",
 ]
 # Reading .hic files (uchrom.io load_hic / benchmark tutorial).
 hic = [
@@ -117,4 +121,4 @@ exclude = ["example-data*", "tests*"]
 [tool.uv.sources]
 chromdata = { path = "packages/chromdata", editable = true }
 uchrom-browser = { path = "packages/uchrom-browser", editable = true }
-u-chrom-nucdyn = { path = "packages/uchrom-nucdyn" }
+uchrom-recon = { path = "packages/uchrom-recon" }
