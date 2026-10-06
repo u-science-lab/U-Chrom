@@ -40,7 +40,7 @@ tqdm, cooler — are all in the U-Chrom environment).
 Usage::
 
     python benchmarks/fig3/c_hipps_wang2016.py --hipps-dimes ../HIPPS-DIMES \
-        [--chrom 20 21 22] [--splits 3] [--out paper/fig3/results/c_hipps_wang2016.json]
+        [--chrom 20 21 22] [--splits 3] [--out u-chrom-paper/manuscripts/full/figures/fig3/results/c_hipps_wang2016.json]
 """
 
 from __future__ import annotations

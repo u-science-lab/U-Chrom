@@ -46,7 +46,7 @@ Subcommands::
     python speed_one_model.py run --task-file tasks.tsv --task 3 --out-dir RUNS/speed_one_model
     python speed_one_model.py run --method nucdyn_gpu --res all --out-dir RUNS/speed_one_model
     python speed_one_model.py aggregate --records RUNS/speed_one_model/records \\
-        --out paper/fig3/results/speed_one_model.json
+        --out u-chrom-paper/manuscripts/full/figures/fig3/results/speed_one_model.json
 
 The robust method (``robust_cpu``, ``robust_gpu``) runs ``benchmarks/screcon/run_robust.py``
 of ``--robust-repo`` (default: this repo) if it exists, else ``run_nucdyn.py --protocol

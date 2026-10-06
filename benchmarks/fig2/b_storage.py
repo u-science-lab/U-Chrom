@@ -24,7 +24,7 @@ flushed (no root), so reads are warm-cache reads of a just-written file.
 
     python benchmarks/fig2/b_storage.py [--sizes 1e4,1e5,1e6,1e7,1e8] [--repeats 3] [--formats fofct,parquet,anndata,h5cd]
 
-Writes ``paper/fig2/results/b_storage.json`` (series merged by format label).
+Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/b_storage.json`` (series merged by format label).
 """
 
 from __future__ import annotations

@@ -2,13 +2,14 @@
 
 Usage::
 
-    python benchmarks/fig3/a_nucdyn_engine_tables.py [--results paper/fig3/results]
+    python benchmarks/fig3/a_nucdyn_engine_tables.py [--results u-chrom-paper/manuscripts/full/figures/fig3/results]
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -86,7 +87,9 @@ def scaling_tables(sp: dict) -> str:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--results", type=Path, default=ROOT / "paper" / "fig3" / "results")
+    sys.path.insert(0, str(ROOT / "benchmarks"))
+    from _paper import results_dir
+    ap.add_argument("--results", type=Path, default=results_dir("fig3"))
     ap.add_argument("--validation", default="a_nucdyn_engine_validation.json")
     args = ap.parse_args()
     vp = args.results / args.validation

@@ -81,7 +81,6 @@ example-data/spatial_hicrna/*
 # Fig 6e agent benchmark: answer key, figure data and grades are tracked; raw agent
 # transcripts (~40 MB per run) stay local (archive with the paper's data).
 !benchmarks/fig6/agent_bench/answers.json
-!paper/fig6/results/*.json
 benchmarks/fig6/agent_bench/runs/**
 !benchmarks/fig6/agent_bench/runs/**/
 !benchmarks/fig6/agent_bench/runs/**/grades.json
@@ -90,12 +89,8 @@ benchmarks/fig6/agent_bench/runs/**
 example-data/takei2025_cerebellum/
 example-data/liu2025_mop/
 example-data/fig2_work/
-!paper/fig2/results/*.json
 # real-data validation results (benchmarks/*_validation.py --out)
 !benchmarks/results/*.json
-
-# Fig. 2 build cache (rasterised logos, previews)
-paper/fig2/_cache/
 
 # Figure 3 inputs (example-data/download_data.py --fig3, build_rao2014_slices.py); feasibility JSONs are committed
 example-data/stevens2017_mesc/
@@ -123,9 +118,6 @@ example-data/geno_ref/
 example-data/wu2025_scmicroc/
 # bulk deconvolution benchmark inputs (download_data.py --bonev2017_mesc_4dn; IMR90 4DN mcool lives in rao2014_imr90/)
 example-data/bonev2017_mesc/
-!paper/fig3/feasibility/*.json
-!paper/fig3/results/*.json
-!paper/fig3/results/highres/*.json
 
 # Native NucDynamics engine (native/nucdyn): cargo build output, built extension
 native/nucdyn/target/
@@ -133,8 +125,8 @@ native/nucdyn/python/uchrom_nucdyn/*.so
 native/nucdyn/python/uchrom_nucdyn/*.pyd
 
 # Fig. 3 renders: rebuildable inputs and raw pane captures (the cropped PNGs used in the figures are tracked)
-paper/fig3/renders/*.chromdata.zarr/
-paper/fig3/renders/hires/*.npz
-paper/fig3/renders/**/*.png
-!paper/fig3/renders/**/*_crop.png
-!paper/fig3/renders/hires/overview_100kb_10kb_1kb.png
+
+# The manuscripts and figures live in u-science-lab/u-chrom-paper (moved out of paper/ on 2026-10-05);
+# a leftover paper/ folder in an old worktree must not come back; a symlink paper -> ../u-chrom-paper
+# (to browse the paper next to the code) is ignored too.
+/paper

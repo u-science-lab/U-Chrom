@@ -7,7 +7,7 @@ the resource timing of the geometry request.  Frame rate is the requestAnimation
 seconds with the overview drawn (the render loop redraws every frame).
 
     .venv/bin/python benchmarks/fig6/bench_frontend.py benchmarks/fig6/_data/takei2025_fov0_x*.chromdata.zarr \
-        --out paper/fig6/results/frontend.json
+        --out u-chrom-paper/manuscripts/full/figures/fig6/results/frontend.json
 """
 from __future__ import annotations
 
@@ -20,6 +20,9 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # benchmarks/: _paper
+from _paper import results_dir  # noqa: E402
 
 
 def store_mb(path: Path) -> float:
@@ -136,7 +139,7 @@ def main():
     ap.add_argument("files", nargs="+", type=Path)
     ap.add_argument("--reps", type=int, default=5)
     ap.add_argument("--fps-ms", type=int, default=3000)
-    ap.add_argument("--out", type=Path, default=Path("paper/fig6/results/frontend.json"))
+    ap.add_argument("--out", type=Path, default=results_dir("fig6") / "frontend.json")
     a = ap.parse_args()
     load = check_quiet(a.max_load, a.force, a.wait)
     out = {"machine": {"platform": platform.platform(), "processor": platform.processor(),

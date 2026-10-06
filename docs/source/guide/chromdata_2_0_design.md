@@ -797,7 +797,7 @@ takes 45 s at 25 GB peak (the 1.x reader dominates); the store is 2.07 GB
 reads are ~20 % slower than a flat Parquet file: two zstd files instead of
 one snappy file, and building a `ChromData` (loci from `bins`,
 categoricals) instead of returning a flat DataFrame — but at half the peak
-memory.  Full numbers: PR #66 and `paper/fig2/results/`.
+memory.  Full numbers: PR #66 and `u-chrom-paper/manuscripts/full/figures/fig2/results/`.
 
 ### Format 2.1: chromosome partitions
 
@@ -938,7 +938,7 @@ bin) into Python strings.
   the `index/` arrays are fetched concurrently with the small tables.
 
 **Measured** (`benchmarks/fig2/cd22_variants.py` →
-`paper/fig2/results/cd22_v2_variants.json`; Takei 2025 rep 1 whole-cell
+`u-chrom-paper/manuscripts/full/figures/fig2/results/cd22_v2_variants.json`; Takei 2025 rep 1 whole-cell
 subsets with 62 spot tracks, Liu 2025 MOp 9.58 M spots; 3 fresh processes,
 median, warm cache; 20 random ids × 3 per query level; streaming = exact
 chr11 median map under a 2 GB budget; Apple M5 Pro, 64 GB):
@@ -976,7 +976,7 @@ rewrites a store and keeps its original row order.  The streaming writer
 writes 2.2 (identical to the in-memory writer, derived columns included:
 one extra pass over the spill runs).  The real stores were converted
 (`benchmarks/cd22_convert_validate.py` →
-`paper/fig2/results/cd22_convert_validation.json`): Takei rep 1
+`u-chrom-paper/manuscripts/full/figures/fig2/results/cd22_convert_validation.json`): Takei rep 1
 2.94 → 2.05 GB, Liu 285 → 267 MB, both bitwise identical in original
 order, backed subsets equal to in-memory ones.
 

@@ -85,6 +85,12 @@ native/nucdyn/       Separate package `u-chrom-nucdyn` (import uchrom_nucdyn): R
   `ChromData.*discovery*` delegators, both slated for removal).  Reusable
   feature computation belongs in `uchrom.fea` / `uchrom.strc`, not in
   discovery.
+- **The paper lives elsewhere**: manuscripts, figure scripts and figure results are in
+  `u-science-lab/u-chrom-paper` (private; check it out next to this repository as
+  `../u-chrom-paper`).  Benchmarks that feed a figure stay here and write
+  `manuscripts/full/figures/<fig>/results/*.json` there (`benchmarks/_paper.py`, `$UCHROM_PAPER`); library
+  changes a figure needs are made here first.  Never re-create `paper/` in this repository; a
+  symlink `paper -> ../u-chrom-paper` (ignored) may show the paper checkout next to the code.
 - Run the two test suites separately (both have a `tests` package):
   `pytest tests` from the root, `cd discovery && pytest tests`.
 - `uchrom` stays pure Python: it imports `uchrom_nucdyn` lazily (tests skip

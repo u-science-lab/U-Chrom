@@ -30,7 +30,7 @@ Metrics: Pearson of log10 contact frequency vs log10 Hi-C over off-diagonal
 pairs ("log-log r"), the same after dividing every diagonal by its mean
 ("O/E r"), Spearman, (median distance vs Hi-C), P(s) slope.  Every metric is
 computed twice: on each method's own non-zero pairs (the ``b_first_look``
-rule, so the U-Chrom numbers reproduce ``paper/fig3/feasibility``) and on the
+rule, so the U-Chrom numbers reproduce ``u-chrom-paper/manuscripts/full/figures/fig3/feasibility``) and on the
 pairs where both methods and Hi-C are non-zero (``common``).
 
 DIMES also returns the analytic contact probability of its Gaussian model
@@ -45,7 +45,7 @@ HIPPS-DIMES is not vendored; clone it (MIT) and pass ``--hipps-dimes``::
 Usage::
 
     python benchmarks/fig3/b_dimes.py --hipps-dimes ../HIPPS-DIMES [--takei] \
-        [--out paper/fig3/results/b_dimes.json]
+        [--out u-chrom-paper/manuscripts/full/figures/fig3/results/b_dimes.json]
 """
 
 from __future__ import annotations

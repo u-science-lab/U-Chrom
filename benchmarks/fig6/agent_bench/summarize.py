@@ -1,4 +1,4 @@
-"""Summarise graded Fig 6e runs into paper/fig6/results/agent_bench.json.
+"""Summarise graded Fig 6e runs into u-chrom-paper/manuscripts/full/figures/fig6/results/agent_bench.json.
 
     python benchmarks/fig6/agent_bench/summarize.py --run main2
 
@@ -11,13 +11,17 @@ from __future__ import annotations
 import argparse
 import json
 import statistics as st
+import sys
 from pathlib import Path
 
 import yaml
 from scipy.stats import wilcoxon
 
 HERE = Path(__file__).resolve().parent
-OUT = HERE.parents[2] / "paper/fig6/results/agent_bench.json"
+sys.path.insert(0, str(HERE.parents[1]))
+from _paper import results_dir  # noqa: E402
+
+OUT = results_dir("fig6") / "agent_bench.json"
 
 
 def main():

@@ -28,7 +28,7 @@ RSS).  Warm OS cache (reads follow the write; not flushed).
     python benchmarks/fig2/cd22_variants.py --data takei --sizes 1e5,1e6,1e7 --variants parquet,zarr21,A,AB
     python benchmarks/fig2/cd22_variants.py --data liu --variants parquet,parquet_tuned,zarr20,zarr21,A,AB
 
-Writes ``paper/fig2/results/cd22_variants.json`` (merged by (data, size, variant, tag)).
+Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/cd22_variants.json`` (merged by (data, size, variant, tag)).
 """
 
 from __future__ import annotations
@@ -279,7 +279,7 @@ def main():
     ap.add_argument("--budget", default="2GB")
     ap.add_argument("--tag", default="", help="suffix of the variant key (e.g. 'C' after the read-path work)")
     ap.add_argument("--keep", action="store_true", help="keep the written stores")
-    ap.add_argument("--out", default="cd22_variants.json", help="results file under paper/fig2/results")
+    ap.add_argument("--out", default="cd22_variants.json", help="results file under u-chrom-paper/manuscripts/full/figures/fig2/results")
     ap.add_argument("--child", nargs="+", help=argparse.SUPPRESS)
     args = ap.parse_args()
     if args.child:

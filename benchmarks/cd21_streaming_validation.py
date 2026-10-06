@@ -21,7 +21,7 @@ Steps (each measured in fresh processes; big ones run one at a time):
     python benchmarks/cd21_streaming_validation.py --data example-data --work /tmp/cd21 \\
         [--steps convert,fofct,seqfish,stats] [--only takei2025_cerebellum,liu2025_mop]
 
-Writes ``paper/fig2/results/streaming_validation.json`` (merged per step).
+Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/streaming_validation.json`` (merged per step).
 """
 
 from __future__ import annotations
@@ -38,7 +38,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(ROOT))
-OUT = ROOT / "paper" / "fig2" / "results" / "streaming_validation.json"
+sys.path.insert(0, str(HERE))
+from _paper import results_dir  # noqa: E402
+
+OUT = results_dir("fig2") / "streaming_validation.json"
 
 STORES = {
     "takei2025_cerebellum": "takei2025_cerebellum/takei2025_cerebellum_rep1.chromdata.zarr",
