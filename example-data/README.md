@@ -49,6 +49,7 @@ auto-downloaded by the tutorials on first run into this directory.
 | `geno_ref/` (hs37d5 + GIAB HG001 v3.3.2 GRCh37 high-confidence VCF / regions) | ~1 GB (+3 GB bwa index) | no | 1000 Genomes FTP / GIAB FTP (opt-in, `--genotype_refs`) | genotype cue: donor-distinguishing sites (`mix_geno.py sites`, `sherlock/geno_*.sbatch`) |
 | Tan 2018 Dip-C raw reads (SRA SRP149125; runs per cell in `benchmarks/screcon/data/tan2018_dipc_sra.tsv`) | 5-28 GB per cell | no | SRA (`prefetch`, inside `sherlock/geno_align.sbatch`; deleted after alignment) | genotype cue: re-alignment → donor labels per contact (PREREG §12.2) |
 | `wu2025_scmicroc/` (Wu 2025 scMicro-C GM12878, 12 deepest cells: hickit phased pairs + the authors' 5 / 10 / 20 kb hickit 3dg) | 3.1 GB (0.3 GB pairs + 2.8 GB 3dg; 102 GB streamed) | no | GEO GSE192759 per-GSM + series tarball (opt-in, `--wu2025_scmicroc`) | Fig. 3a / Fig. S8: EMber deep development (cells 035, 024, 320) and one-shot test (047, 028, 017, 049, 032, 027, 014), PREREG §11 (`benchmarks/screcon/deep_diploid.py`, `highres.py`, `sherlock/deep_dev.sbatch`, `highres_*.sbatch`; `paper/fig3/build_render_scmicroc.py`) |
+| `spatial_hic_chen2026/` reprocessed per-spot pairs of CRR1829219 (adult cortex 10 µm) and CRR1829220 (adult hippocampus 10 µm) (+ in repo: `benchmarks/screcon/data/chen2026_*_spots.tsv.gz`, barcode pair → published spot, 263 KB) | 1.6 + 0.75 GB pairs | maps only | **not public**: reprocessed from GSA CRA016676 (see the section below); Sherlock `$OAK/uchrom/spatial_hic_chen2026/<run>/` (read-only) | per-spot EMber + spot QC, PREREG §13.3 (`benchmarks/screcon/chen_spots.py`, `sherlock/chen_*.sbatch`) |
 | `su2020_imr90/genomic-scale.tsv`, `4DNFIFLJGGNR.csv` (catalogued above) | — | no | — | also the diploid imaging-truth simulation (`benchmarks/screcon/diploid_sim.py`: both homologs) |
 | `DNAseqFISH+/*.csv` (extracted)       | ~35 MB each | no          | from the zip  | `jie_aligner` tutorial                                                  |
 | `H1Esc-HFF.R1.tar.gz`                 | 128 MB  | no              | UW Noble lab  | `higashi_embedding` tutorial (sci-Hi-C H1Esc+HFF mix)                   |
@@ -1045,6 +1046,28 @@ centred on the Takei loci), `su_crosscheck.json`.
 **Checked in**: `benchmarks/bulk/results/kr_check.json` (KR check, range reads) and
 `benchmarks/bulk/results/plumbing_imr90_chr21_22_igm200kb.json` (provenance of the
 laptop plumbing run: 4DN IMR90 chr21 + chr22, range-read 10 kb level → 20 kb → 200 kb).
+
+## Chen et al. 2026 spatial Hi-C — per-spot contacts for the spot QC test (`benchmarks/screcon/chen_spots.py`)
+
+- **Source**: Chen, Guo et al. 2026, *Nature Methods*, "Spatially resolved chromatin architectures in
+  mammalian brain tissues" (doi:10.1038/s41592-026-03218-3); raw reads GSA CRA016676 (2.31 TB, 15 runs).
+- **Used here**: two adult 10 µm sections — CRR1829219 (cortex, section Adult16_HiC) and CRR1829220
+  (hippocampus, Adult22_HiC).  Input = `<run>.dedup.pairs.gz` (readID = corrected barcode pair `<bcB>_<bcA>`,
+  mapq >= 30, chr1-19 / X, exact duplicates removed within each spot, cis pairs >= 1 kb + trans; 122.8 M /
+  55.6 M rows), reprocessed from the FASTQ by the pipeline of `spatial_hic_chen2026/sherlock/` (branch
+  `Nanguage/spatial-hic-chen2026`, `fig6` workspace: `barcodes.py` → `bwa mem -5SP -T0` → `pairtools parse`
+  → per-spot dedup; pilot CRR1161506 vs the authors: per-spot counts r(log) 0.999).  Stored on Sherlock at
+  `$OAK/uchrom/spatial_hic_chen2026/<run>/` (not public; read-only use).  To rebuild: run that pipeline on the
+  GSA run (`runs.tsv` of that branch: CRR1829219 239 GB FASTQ, CRR1829220 114 GB).
+- **In repo**: `benchmarks/screcon/data/chen2026_cortex_adult_10um_CRR1829219_spots.tsv.gz` (7,795 spots) and
+  `..._hippocampus_adult_10um_CRR1829220_spots.tsv.gz` (8,185): barcode pair → published spot id, grid
+  column / row, image centroid, published clusters / regions.  The pairing is the one chosen on the data by
+  that branch's `link_spatial_hic_chen2026_contacts.py` (authors' barcode order; cortex both indices
+  flipped, score 0.292 vs runner-up 0.003; hippocampus index 2 flipped, 0.254 vs 0.002), re-derived with its
+  `candidates()` and exported by a one-off script (store `cells` + `uns['contacts_stats']`).
+- **Derived** (Sherlock `$SCRATCH/uchrom-nd/runs/chen2026/<run>/`, `chen_spots.py split`): per-spot GEO tables
+  of the spots with >= 10,000 cis pairs (cortex 3,327, hippocampus 1,174) and 200 + 200 in-silico spot
+  mixtures / singles per section.
 
 ## Generated outputs
 
