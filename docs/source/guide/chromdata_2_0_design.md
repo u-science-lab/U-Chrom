@@ -218,8 +218,8 @@ directory, so a project folder can be moved as a unit.
 
 ## 2. `bins` — a locus axis separate from `spots`
 
-**Status:** implemented (roadmap step 3, format 2.0): `uchrom.core.bins`,
-`uchrom.core.intervals`, `uchrom.io.upgrade_h5cd`.  Differences from the
+**Status:** implemented (roadmap step 3, format 2.0): `chromdata.bins`,
+`chromdata.intervals`, `uchrom.io.upgrade_h5cd`.  Differences from the
 text below, as built:
 
 - The bin-level table is `cd.bin_tracks` during 2.x, because `cd.tracks`
@@ -349,8 +349,8 @@ back to the result record that produced it (section 3).
 ## 3. Unified analysis API
 
 **Status:** implemented for the `strc` callers (roadmap step 2, format
-1.4).  `uchrom.core.results` holds `ResultsStore` / `ResultRecord`,
-`uchrom.core.convention` the shared helpers, `uchrom.tl` / `uchrom.pp`
+1.4).  `chromdata.results` holds `ResultsStore` / `ResultRecord`,
+`uchrom.convention` the shared helpers, `uchrom.tl` / `uchrom.pp`
 the aliases.  Differences from the text below, as built:
 
 - On disk the value stays where 1.2/1.3 put it (`results/<key>`) and the
@@ -687,9 +687,9 @@ x.chromdata.zarr/
 └── links/                     attrs: linked .h5ad / .h5mu records
 ```
 
-The authoritative layout is `uchrom/core/spec.md`; the code is
-`uchrom/core/zarrcd.py` (container, writer, readers) and
-`uchrom/core/backed.py` (`BackedChromData`).
+The authoritative layout is `packages/chromdata/spec.md`; the code is
+`packages/chromdata/chromdata/zarrcd.py` (container, writer, readers) and
+`packages/chromdata/chromdata/backed.py` (`BackedChromData`).
 
 **Decisions**
 
@@ -908,7 +908,7 @@ costs: Arrow decode ~0.25 s, copies ~0.2 s, the float codec ~0.2 s, and
 ~0.22 s turning the 10 M per-spot probe names (`"chr10-1393"`, one per
 bin) into Python strings.
 
-**Layout** (`uchrom/core/spec.md`):
+**Layout** (`packages/chromdata/spec.md`):
 
 - Coordinates + keys (`bin_id`, trace / cell codes, x, y, z) are stored
   **once**, partitioned by chromosome (`tables/coords/chrom=<c>/`, sorted
@@ -988,7 +988,7 @@ order, backed subsets equal to in-memory ones.
   from it.  macOS / glibc keep freed pages resident, so the band loops call
   `uchrom.utils.memory.release_memory()`.
 - **Writer**: `ChromData.writer(path)` →
-  `uchrom.core.stream.ChromDataWriter`.  `append` spills each chunk, split
+  `chromdata.stream.ChromDataWriter`.  `append` spills each chunk, split
   by chromosome and sorted by the range key (cell id, or trace id), to a
   Parquet run; loci get provisional ids; trace / cell ids are collected.
   `finish` fixes the bins (given, or `bins_from_loci` of the loci seen),
@@ -1078,7 +1078,7 @@ data.h5cd
 ### Read dispatch
 
 *As built:* `ChromData.read(path, backed=False, original_order=False)`
-dispatches on the path first (`uchrom.core.zarrcd.container_kind`):
+dispatches on the path first (`chromdata.zarrcd.container_kind`):
 `.chromdata.zarr` / `.cdz` → `BackedChromData`, loaded with `to_memory()`
 unless `backed=True`, after the same MAJOR / MINOR check
 (`_check_zarr_version`); `.h5cd` → the HDF5 readers below, and

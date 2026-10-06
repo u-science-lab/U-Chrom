@@ -251,7 +251,7 @@ def main():
     ap.add_argument("--equalize", type=int, default=None, help="recompute rg/span on k random loci per trace")
     ap.add_argument("--scan", default=None, help="compare every cells column with this prefix ('' = all), BH-FDR")
     a = ap.parse_args()
-    from uchrom.core import ChromData
+    from chromdata import ChromData
     cd = ChromData.read(a.data)
     out = (scan(cd, a.a, a.b, a.scan) if a.scan is not None
            else compare(cd, a.a, a.b, a.stat, a.confounder, a.equalize))

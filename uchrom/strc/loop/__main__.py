@@ -43,7 +43,7 @@ def main(
     chrom : chromosome to process (required).
     device : ``'auto' | 'cpu' | 'cuda' | 'mps'``
     """
-    from uchrom.core.zarrcd import container_kind
+    from chromdata.zarrcd import container_kind
 
     input = str(input)
     if container_kind(input) is not None:

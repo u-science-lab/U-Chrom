@@ -36,7 +36,7 @@ class IgmParams:
     ``{chrom: copies}``.
 
     Opt-in options (IGM-Plus / IGM_2.0; every default is the IGM 1.0
-    behaviour, see ``native/nucdyn/README.md``):
+    behaviour, see ``packages/uchrom-nucdyn/README.md``):
 
     ``occupancy`` / ``bead_radius``
         Bead radii from the genome-to-nucleus volume occupancy (default 0.2

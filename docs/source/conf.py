@@ -11,7 +11,9 @@ from datetime import datetime
 # ---------------------------------------------------------------------
 # Allow ``import uchrom`` when running Sphinx locally without a pip install.
 sys.path.insert(0, os.path.abspath("../.."))
-sys.path.insert(0, os.path.abspath("../../discovery"))  # uchrom_discovery
+# the monorepo's packages (packages/): chromdata, uchrom_browser, uchrom_discovery
+for _pkg in ("chromdata", "uchrom-browser", "uchrom-discovery"):
+    sys.path.insert(0, os.path.abspath(f"../../packages/{_pkg}"))
 
 import uchrom  # noqa: E402
 

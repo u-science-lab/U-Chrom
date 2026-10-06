@@ -1,6 +1,6 @@
 """PyVista-based 3-D rendering of reconstructed chromatin structures.
 
-Draws a :class:`~uchrom.core.ChromData` (or raw coordinate arrays) as
+Draws a :class:`~chromdata.ChromData` (or raw coordinate arrays) as
 smooth tubes along the genomic chain — matching the look of the
 interactive `uchrom.browser` without requiring Qt.
 
@@ -50,7 +50,7 @@ def _coords_and_groups(
     connecting edges).
     """
     try:
-        from uchrom.core import ChromData  # local import
+        from chromdata import ChromData  # local import
     except Exception:
         ChromData = None  # type: ignore
 

@@ -108,7 +108,7 @@ def grid_to_chromdata(grid, has_cell, template_cd):
     Per-spot containers (tracks, layers) are dropped because the row set
     changed; cell/trace-level metadata and uns are preserved.
     """
-    from uchrom.core import ChromData
+    from chromdata import ChromData
 
     cols = ["chrom", "start", "end", "trace_id"] + (["cell_id"] if has_cell else [])
     out_spots = grid[cols].reset_index(drop=True)
@@ -126,7 +126,7 @@ def grid_to_chromdata(grid, has_cell, template_cd):
     # new loci (``ann=``) gets fresh bins.
     bins = getattr(template_cd, "bins", None)
     if bins is not None:
-        from uchrom.core.bins import map_loci_to_bins
+        from chromdata.bins import map_loci_to_bins
 
         if not (map_loci_to_bins(out_spots, bins) < 0).any():
             out = ChromData(out_coords, out_spots, bins=bins, binm=template_cd.binm,

@@ -13,7 +13,7 @@ from uchrom.browser import __main__ as cli
     (["a.zarr", "--web"], ("a.zarr",), True),
 ])
 def test_paths_next_to_boolean_flags(monkeypatch, argv, paths, opened):
-    import uchrom.browser.web as web
+    import uchrom_browser as web
 
     got = {}
     monkeypatch.setattr(web, "serve", lambda p, host, port, open_browser, atlas=None, hosted=False: got.update(paths=p, open=open_browser, atlas=atlas))
@@ -27,7 +27,7 @@ def test_unknown_option_is_an_error():
 
 
 def test_atlas_option(monkeypatch):
-    import uchrom.browser.web as web
+    import uchrom_browser as web
 
     got = {}
     monkeypatch.setattr(web, "serve", lambda p, host, port, open_browser, atlas=None, hosted=False: got.update(paths=p, atlas=atlas, hosted=hosted))
@@ -38,7 +38,7 @@ def test_atlas_option(monkeypatch):
 
 
 def test_hosted_flag(monkeypatch):
-    import uchrom.browser.web as web
+    import uchrom_browser as web
 
     got = {}
     monkeypatch.setattr(web, "serve", lambda p, host, port, open_browser, atlas=None, hosted=False: got.update(

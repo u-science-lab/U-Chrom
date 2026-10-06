@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uchrom-browser"
+version = "0.1.0"
+readme = "README.md"
+description = "The U-Chrom web browser: views of single-cell Hi-C, spatial Hi-C and chromatin tracing linked through the selected cells."
+authors = [
+    {name = "Weize Xu", email = "vet.xwz@gmail.com" },
+]
+requires-python = ">= 3.11"
+dependencies = [
+    # the data model; linked / embedded contact maps, AnnData (RNA, embeddings), stores over HTTP
+    "chromdata[contacts,anndata,remote]>=0.1.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "fire>=0.6.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "httpx"]
+
+[project.scripts]
+uchrom-browser = "uchrom_browser.__main__:_cli"
+
+[tool.setuptools]
+packages = ["uchrom_browser"]
+
+[tool.setuptools.package-data]
+# the built single-page app (frontend/ is its source, built with npm into static/)
+uchrom_browser = ["static/**/*", "API.md", "ui_tools.json"]
+
+# Monorepo: chromdata from its folder when developing (uv pip install -e packages/uchrom-browser)
+[tool.uv.sources]
+chromdata = { path = "../chromdata", editable = true }

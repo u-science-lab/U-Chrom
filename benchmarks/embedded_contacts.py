@@ -2,7 +2,7 @@
 
 Prepare (once)::
 
-    python -m uchrom.core.embedded example-data/spatial_hicrna/hicrna_mouse_brain.chromdata.zarr      # ~3 min
+    python -m chromdata.embedded example-data/spatial_hicrna/hicrna_mouse_brain.chromdata.zarr      # ~3 min
     python benchmarks/embedded_contacts.py                                                              # ~1 min
 
 (the linked reference is a temporary copy of the store without ``embedded/``)
@@ -26,8 +26,8 @@ from pathlib import Path
 
 import numpy as np
 
-from uchrom.browser.web.data import GENOME, DatasetStore, decode_matrix
-from uchrom.core.embedded import EmbeddedContacts, list_embedded
+from uchrom_browser.data import GENOME, DatasetStore, decode_matrix
+from chromdata.embedded import EmbeddedContacts, list_embedded
 
 warnings.filterwarnings("ignore")
 ROOT = Path(__file__).resolve().parents[1]

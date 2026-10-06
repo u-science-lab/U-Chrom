@@ -8,11 +8,12 @@ tests
 docs
 paper
 tutorials
-discovery
-atlas
-deploy/atlas-site
+packages/uchrom-discovery
+apps/atlas
+uchrom
+packages/uchrom-nucdyn
 *.zarr
 *.h5ad
 *.scool
 *.mcool
-uchrom/browser/web/frontend/src
+packages/uchrom-browser/uchrom_browser/frontend/src

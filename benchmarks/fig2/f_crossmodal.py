@@ -72,7 +72,7 @@ def main():
     import pandas as pd
 
     from uchrom import ChromData
-    from uchrom.browser.web.data import Dataset, decode_matrix
+    from uchrom_browser.data import Dataset, decode_matrix
     from uchrom.emb import cluster_cells, marker_features
 
     cd = ChromData.read(SCHICAR)
@@ -167,7 +167,7 @@ def main():
                            "astrocyte": f"highest mean log1p of {', '.join(ASTRO)} (other clusters)",
                            "neuronal": "largest remaining cluster with a glial / vascular marker score at or "
                                        "below the median"},
-        "pseudobulk_function": "uchrom.browser.web.data.Dataset.contacts(key, chrom, group=...) -> "
+        "pseudobulk_function": "uchrom_browser.data.Dataset.contacts(key, chrom, group=...) -> "
                                "Dataset._pseudobulk (per-cell pixels summed from the .scool)",
         "chroms": chroms,
         "ps_method": f"sum over chromosomes of diagonal d / pairs at d, normalised over d = 1..{D_MAX} Mb; "

@@ -360,7 +360,7 @@ class H5cd2(Format):
 
 def _zarr_version() -> str:
     try:
-        from uchrom.core.zarrcd import ZARR_FORMAT_VERSION
+        from chromdata.zarrcd import ZARR_FORMAT_VERSION
     except ImportError:  # pragma: no cover - older checkout
         return "2.0"
     return ZARR_FORMAT_VERSION

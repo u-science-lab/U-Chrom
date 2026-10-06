@@ -1,4 +1,4 @@
-"""Contact maps / AnnData embedded in a .chromdata.zarr (uchrom.core.embedded)."""
+"""Contact maps / AnnData embedded in a .chromdata.zarr (chromdata.embedded)."""
 
 import shutil
 
@@ -10,8 +10,8 @@ cooler = pytest.importorskip("cooler")
 anndata = pytest.importorskip("anndata")
 
 from uchrom import ChromData  # noqa: E402
-from uchrom.browser.web.data import GENOME, DatasetStore, decode_matrix  # noqa: E402
-from uchrom.core import embedded  # noqa: E402
+from uchrom_browser.data import GENOME, DatasetStore, decode_matrix  # noqa: E402
+from chromdata import embedded  # noqa: E402
 
 RES = 100
 N = 6   # bins per chromosome
@@ -200,7 +200,7 @@ def test_http_routes_without_the_files(stores):
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
-    from uchrom.browser.web.server import create_app
+    from uchrom_browser.server import create_app
 
     tmp_path, _, emb = stores
     for f in ("bulk.mcool", "bulk.cool", "cells.scool", "ssab.h5ad", "sec.png"):
@@ -322,7 +322,7 @@ def test_all_cells_sums(stores):
 
 def test_a_cdz_of_the_store_carries_the_embedded_copies(stores):
     """The atlas download: the embedded store zipped as one .cdz reads like the directory, without the files."""
-    from uchrom.core.zarrcd import _zip_tree
+    from chromdata.zarrcd import _zip_tree
 
     tmp_path, _, emb = stores
     cdz = tmp_path / "emb.cdz"

@@ -1,8 +1,8 @@
-"""Directory listing of the "Open dataset" dialog (uchrom.browser.web.files, GET /api/files)."""
+"""Directory listing of the "Open dataset" dialog (uchrom_browser.files, GET /api/files)."""
 
 import pytest
 
-from uchrom.browser.web.files import dataset_format, list_dir, places
+from uchrom_browser.files import dataset_format, list_dir, places
 
 
 def test_dataset_formats():
@@ -47,7 +47,7 @@ def test_places_dedup(tmp_path):
 def test_files_endpoint(tmp_path):
     from fastapi.testclient import TestClient
 
-    from uchrom.browser.web import DatasetStore, create_app
+    from uchrom_browser import DatasetStore, create_app
 
     (tmp_path / "a.cdz").write_bytes(b"x")
     c = TestClient(create_app(DatasetStore()))

@@ -135,7 +135,7 @@ def main(n_per_type: int = 75, rank: int = 64) -> None:
     from uchrom.io.contacts import (
         write_label_info, make_higashi_config, _materialise_chromsizes,
     )
-    from uchrom.core import ChromData
+    from chromdata import ChromData
     from uchrom.emb.higashi import run as higashi_run
 
     matrices_dir, labels_path = find_kim2020()

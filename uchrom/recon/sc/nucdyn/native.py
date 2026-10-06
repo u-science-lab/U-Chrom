@@ -1,8 +1,8 @@
 """NucDynamics on the native engine (``uchrom_nucdyn``, Rust; CPU and GPU).
 
 The engine is a separate package (``pip install u-chrom[nucdyn]`` or
-``pip install ./native/nucdyn``); this module turns contacts into a
-:class:`~uchrom.core.ChromData` ensemble.
+``pip install ./packages/uchrom-nucdyn``); this module turns contacts into a
+:class:`~chromdata.ChromData` ensemble.
 """
 
 from __future__ import annotations
@@ -208,7 +208,7 @@ def reconstruct_nucdyn(
 
     Runs the hierarchical simulated-annealing protocol of NucDynamics
     (Stevens et al. 2017, *Nature* 544:59) on the native engine and returns
-    the ensemble as a new :class:`~uchrom.core.ChromData`.
+    the ensemble as a new :class:`~chromdata.ChromData`.
 
     Parameters
     ----------
@@ -284,7 +284,7 @@ def reconstruct_nucdyn(
         ``bins.end = p``); in release_1.3 ``[p, p + size)``.  ``uns[key_added]``
         records the engine, protocol, parameters and per-stage log.
     """
-    from uchrom.core import ChromData
+    from chromdata import ChromData
 
     un = _engine()
     protocol = PROTOCOL_ALIASES.get(protocol, protocol)

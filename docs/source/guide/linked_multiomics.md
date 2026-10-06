@@ -93,7 +93,7 @@ cd.uns["spot_semantics"] = "cell_by_genomic_bin_feature_rows"
 Tangram maps cells to tissue-space positions.  Those positions describe
 cells, not genomic bins, so store them in `cells` (columns
 `<key>_centroid_x` / `_y`) with a record under `uns["cell_spatial"]`
-(schema in `uchrom/core/spec.md`):
+(schema in `packages/chromdata/spec.md`):
 
 ```python
 cd.set_cell_positions(

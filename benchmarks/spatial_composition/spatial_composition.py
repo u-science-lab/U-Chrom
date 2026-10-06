@@ -126,7 +126,7 @@ def log(*a):
 
 
 def read_store(path):
-    from uchrom.core import ChromData
+    from chromdata import ChromData
     return ChromData.read(path, backed=True)
 
 

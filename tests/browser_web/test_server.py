@@ -12,8 +12,8 @@ pytest.importorskip("httpx")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from uchrom import ChromData  # noqa: E402
-from uchrom.browser.web import create_app, decode_geometry  # noqa: E402
-from uchrom.browser.web.data import DatasetStore  # noqa: E402
+from uchrom_browser import create_app, decode_geometry  # noqa: E402
+from uchrom_browser.data import DatasetStore  # noqa: E402
 
 
 @pytest.fixture(params=["memory", "backed"])
@@ -40,7 +40,7 @@ def test_health_and_list(client):
     health = c.get("/api/health").json()
     assert health["status"] == "ok"
     # the committed bundle, so the page can tell a server older than itself
-    html = (Path(__file__).resolve().parents[2] / "uchrom/browser/web/static/index.html").read_text()
+    html = (Path(__file__).resolve().parents[2] / "packages/uchrom-browser/uchrom_browser/static/index.html").read_text()
     assert health["bundle"] and f"assets/{health['bundle']}" in html
     ds = c.get("/api/datasets").json()
     assert len(ds) == 1 and ds[0]["id"] == "d1" and ds[0]["path"] == str(path.resolve())
@@ -274,7 +274,7 @@ def test_free_port_skips_live_listeners_only():
     """_free_port moves past a port with a live listener, and binds as uvicorn does (SO_REUSEADDR)."""
     import socket
 
-    from uchrom.browser.web import _free_port
+    from uchrom_browser import _free_port
 
     with socket.socket() as live:
         live.bind(("127.0.0.1", 0))

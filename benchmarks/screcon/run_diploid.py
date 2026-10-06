@@ -3,7 +3,7 @@
 Methods (``--method``):
 
 * ``ember``: EMber (protocol ``robust``) with its frozen haploid parameters (``run_robust.ROBUST_DEFAULTS``
-  = engine defaults) and the diploid extension (``native/nucdyn/src/diploid.rs``); diploid-only
+  = engine defaults) and the diploid extension (``packages/uchrom-nucdyn/src/diploid.rs``); diploid-only
   parameters via ``--params`` (e.g. ``{"robust_dip_split": false}``).
 * ``nucdyn``: the NucDynamics 2017 protocol with diploid ambiguous restraints (combined
   distance of the candidate copy pairs).

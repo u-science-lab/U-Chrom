@@ -98,7 +98,7 @@ Read semantics:
 - Missing attribute → assume legacy 1.0 with a warning
 
 New MAJOR versions add a `_read_vN(cls, f)` function in
-`uchrom/core/cdata.py` (HDF5) or a reader in `uchrom/core/zarrcd.py`
+`packages/chromdata/chromdata/cdata.py` (HDF5) or a reader in `packages/chromdata/chromdata/zarrcd.py`
 (zarr) plus any migration helper needed; the dispatch in
 `ChromData.read` is the single place that maps path and version to
 reader.

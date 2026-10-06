@@ -2878,7 +2878,7 @@ analysis you'd already have a populated `ChromData` from
 reconstruction or tracing."""),
 
     code("""\
-from uchrom.core import ChromData
+from chromdata import ChromData
 
 cd = ChromData(
     coords=np.zeros((len(sub), 3)),

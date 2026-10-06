@@ -195,7 +195,7 @@ def read_seqfish_multiomics(
     out
         **Streaming import**: write the result to this ``.chromdata.zarr``
         store, one CSV (FOV) at a time, with
-        :class:`~uchrom.core.stream.ChromDataWriter`, and return it opened
+        :class:`~chromdata.stream.ChromDataWriter`, and return it opened
         backed.  Peak memory is one FOV's parse (the raw CSV frame) — not
         the sum of the FOVs — plus the writer's merge pieces (bounded by
         ``memory_budget``).  The store equals
@@ -282,7 +282,7 @@ def read_seqfish_multiomics(
     )
     uns = _build_uns(leiden_map, allele_col, keep_unclustered, cells=cells_kept)
 
-    from uchrom.core import ChromData
+    from chromdata import ChromData
     return ChromData(
         coords=coords,
         spots=spots,
@@ -298,9 +298,9 @@ def read_seqfish_multiomics(
 def _read_seqfish_streaming(paths, locus_df, *, out: Path, cell_clustering, leiden_map,
                             allele_col, keep_unclustered, memory_budget):
     """:func:`read_seqfish_multiomics` with ``out=``: FOV by FOV into a
-    :class:`~uchrom.core.stream.ChromDataWriter`."""
-    from uchrom.core import ChromData
-    from uchrom.core.stream import ChromDataWriter
+    :class:`~chromdata.stream.ChromDataWriter`."""
+    from chromdata import ChromData
+    from chromdata.stream import ChromDataWriter
 
     w = ChromDataWriter(out, memory_budget=memory_budget)
     try:
@@ -333,7 +333,7 @@ def _panel_bins(locus_df: pd.DataFrame, spots: pd.DataFrame) -> Optional[pd.Data
     ``name``), restricted to the chromosomes that have spots.  ``None`` —
     bins then come from the spot loci — if the panel has duplicate loci or
     misses a spot locus (e.g. a spot whose source chrom disagrees)."""
-    from uchrom.core.bins import map_loci_to_bins, normalise_bins
+    from chromdata.bins import map_loci_to_bins, normalise_bins
 
     chroms = set(spots["chrom"].astype(str))
     panel = locus_df[locus_df["chrom"].astype(str).isin(chroms)]
@@ -566,7 +566,7 @@ def load_takei2025_cerebellum(
     if replicate not in (1, 2):
         raise ValueError("replicate must be 1 or 2 for the cerebellum dataset")
 
-    from uchrom.core import ChromData
+    from chromdata import ChromData
 
     data_dir = Path(data_dir)
     cd_path = data_dir / f"takei2025_cerebellum_rep{replicate}.chromdata.zarr"
@@ -1055,7 +1055,7 @@ VOXEL_SIZE_UM = (0.103, 0.103, 0.25)
 
 def _cell_spatial_record() -> dict:
     """``uns['cell_spatial']['default']`` for the clustering CSV centroids."""
-    from uchrom.core.cellspatial import position_record
+    from chromdata.cellspatial import position_record
 
     return position_record(
         ("centroid_x", "centroid_y", "centroid_z"), unit="voxel", voxel_size=VOXEL_SIZE_UM,

@@ -18,7 +18,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from uchrom.core.convention import merge_tables, resolve_chroms, store_and_return
+from uchrom.convention import merge_tables, resolve_chroms, store_and_return
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,7 @@ def _empty_di() -> pd.DataFrame:
 
 def _resolve_contacts(cd, contacts) -> Tuple[str, dict]:
     """``contacts`` → ``(path, record)``: a ``linked_cool`` key or a path."""
-    from uchrom.core.cdata import _linked_records
+    from chromdata.cdata import _linked_records
 
     records = _linked_records(cd.uns.get("linked_cool")) if cd is not None else {}
     if isinstance(contacts, str) and contacts in records:

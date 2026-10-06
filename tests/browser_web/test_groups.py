@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from uchrom import ChromData
-from uchrom.browser.web.data import DatasetStore, decode_matrix
+from uchrom_browser.data import DatasetStore, decode_matrix
 
 _FOV0 = Path(__file__).resolve().parents[2] / "example-data" / "takei2025_fov0"
 # built by example-data/build_takei2025_fov0.py
@@ -122,7 +122,7 @@ def test_group_routes(tmp_path):
     pytest.importorskip("httpx")
     from fastapi.testclient import TestClient
 
-    from uchrom.browser.web import create_app
+    from uchrom_browser import create_app
 
     store = DatasetStore()
     ds = _three_cells()

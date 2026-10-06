@@ -27,7 +27,7 @@ MM10 = {
 
 def main() -> None:
     from uchrom.io import write_higashi_inputs
-    from uchrom.core import ChromData
+    from chromdata import ChromData
     from uchrom.emb.higashi import run as higashi_run
 
     repo = Path(__file__).resolve().parent.parent.parent

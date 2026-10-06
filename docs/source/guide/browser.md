@@ -11,19 +11,24 @@ python -m uchrom.browser                 # no args — shows welcome page
 
 ## Web version
 
-The same browser also runs in a web page — no Qt required:
+The same browser also runs in a web page — no Qt required.  The web browser is
+its own package, `uchrom-browser` (it needs only the data model, `chromdata`,
+not the analysis library); the `web` extra of `u-chrom` installs it:
 
 ```bash
 pip install "u-chrom[web]"
 python -m uchrom.browser --web out.chromdata.zarr  # opens http://127.0.0.1:8765/
 python -m uchrom.browser --web a.chromdata.zarr b.csv --port=9000 --noopen_browser
+
+pip install uchrom-browser                         # the web browser alone
+uchrom-browser out.chromdata.zarr                  # = python -m uchrom_browser out.chromdata.zarr
 ```
 
 A local FastAPI server loads the files and streams coordinates to a
 Three.js viewer in binary, one layer at a time, so only what is on screen
 is transferred.  More files can be opened from the page (paths on the
 machine running the server).  The HTTP API is documented in
-`uchrom/browser/web/API.md`.
+`packages/uchrom-browser/uchrom_browser/API.md`.
 
 Navigating imaging data with many cells:
 
@@ -194,10 +199,10 @@ ws.capture(path="rg.png")
 
 `ws.tools()` lists the actions (`describe_workspace`, `get_selection`, `select_cells`,
 `list_groups`, `focus`, `set_locus`, `open_view`, `show_view`, `close_view`, `arrange`, `color_by`,
-`capture_view`); they are defined in `uchrom/browser/web/ui_tools.json`.  Coding agents use the
+`capture_view`); they are defined in `packages/uchrom-browser/uchrom_browser/ui_tools.json`.  Coding agents use the
 same client.  In browsers that support WebMCP (a W3C Community Group draft; Chrome behind a flag),
 the page also registers these actions as tools (`uchrom_open_view`, …) for agents running in the
-browser.  The HTTP side is documented under *Control* in `uchrom/browser/web/API.md`.
+browser.  The HTTP side is documented under *Control* in `packages/uchrom-browser/uchrom_browser/API.md`.
 
 ### Themes
 

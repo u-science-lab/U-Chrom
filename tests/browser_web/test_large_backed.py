@@ -10,8 +10,8 @@ import pandas as pd
 import pytest
 
 from uchrom import ChromData
-from uchrom.browser.web import data as wd
-from uchrom.browser.web.data import DatasetStore, GeometryFilter, decode_matrix
+from uchrom_browser import data as wd
+from uchrom_browser.data import DatasetStore, GeometryFilter, decode_matrix
 
 
 @pytest.fixture

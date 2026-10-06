@@ -23,7 +23,7 @@ echo "host=$(hostname) job=$SLURM_JOB_ID $(python3 --version) $(rustc --version)
 [ -d "$VENV" ] || python3 -m venv "$VENV"
 "$VENV/bin/pip" install -q --upgrade pip maturin
 "$VENV/bin/pip" install -q --only-binary=:all: --prefer-binary "numpy<2.3" "pandas<2.3" "scipy<1.15" psutil pytest
-cd "$REPO/native/nucdyn"
+cd "$REPO/packages/uchrom-nucdyn"
 UCHROM_NUCDYN_PRINT_GOLDEN=1 cargo test --release ${CARGO_FEATURES:-} -- --nocapture 2>&1 | grep -E "golden|test result|FAILED|panicked" || true
 "$VENV/bin/maturin" build --release -o "$SCRATCH/uchrom-nd/wheels-robust"
 "$VENV/bin/pip" install -q --force-reinstall --no-deps "$(ls -t "$SCRATCH"/uchrom-nd/wheels-robust/u_chrom_nucdyn-*.whl | head -1)"

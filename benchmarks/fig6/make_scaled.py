@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from uchrom.core import ChromData
+from chromdata import ChromData
 
 
 def replicate(cd: ChromData, k: int) -> ChromData:

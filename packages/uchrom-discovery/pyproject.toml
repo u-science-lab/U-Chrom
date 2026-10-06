@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "uchrom-discovery"
+version = "0.1.0"
+readme = "README.md"
+description = "LLM-driven multi-omics auto-discovery on top of U-Chrom ChromData."
+authors = [
+    {name = "Weize Xu", email = "vet.xwz@gmail.com" },
+]
+requires-python = ">= 3.10"
+dependencies = [
+    "u-chrom>=0.2.0",
+    "numpy",
+    "pandas>=2.0.3",
+    "matplotlib>=3.7.5",
+    "tomli>=1.1; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+# Default idea / notebook agent backend.  Claude Code and Codex CLI backends
+# need only their CLIs on PATH.
+pantheon = [
+    "pantheon-agents",
+]
+test = [
+    "pytest",
+]
+
+[project.scripts]
+uchrom-discovery = "uchrom_discovery.__main__:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"uchrom_discovery" = ["ui/dist/*"]
+
+[tool.setuptools.packages.find]
+include = ["uchrom_discovery*"]
+exclude = ["tests*"]
+
+# Monorepo: u-chrom (and its chromdata) from their folders when developing (uv pip install -e packages/uchrom-discovery)
+[tool.uv.sources]
+u-chrom = { path = "../..", editable = true }
+chromdata = { path = "../chromdata", editable = true }

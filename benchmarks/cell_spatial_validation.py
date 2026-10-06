@@ -112,7 +112,7 @@ def fofct(name: str, data: Path, work: Path) -> dict:
     import pandas as pd
 
     from uchrom import ChromData
-    from uchrom.core.cdata import _read_fofct_table
+    from chromdata.cdata import _read_fofct_table
 
     core, cell, xs, ys, stream = {
         "takei2021": ("4DNFIHF3JCBY.csv", "4DNFIFINA2U9.csv", "cent_ROI_x", "cent_ROI_y", False),

@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from uchrom import ChromData
-from uchrom.browser.web.data import MAX_MATRIX_BINS, DatasetStore, decode_matrix
+from uchrom_browser.data import MAX_MATRIX_BINS, DatasetStore, decode_matrix
 
 SIM = Path(__file__).resolve().parents[2] / "example-data" / "sim_cell1" / "sim_cell1.cdz"
 
@@ -196,7 +196,7 @@ def test_whole_genome_view(tmp_path, monkeypatch):
     """chrom="*": chromosomes end to end (natural order), maps / tracks / intervals in genome
     coordinates."""
     cooler = pytest.importorskip("cooler")
-    import uchrom.browser.web.data as data
+    import uchrom_browser.data as data
 
     res = 100
     # the cooler lists chr2 before chr1: the genome view reorders to chr1, chr2

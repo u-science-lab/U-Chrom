@@ -26,7 +26,7 @@ def _make_panel_chromdata(seed=0, drop_frac=0.3, as_absent_rows=True):
     True the dropped entries become ABSENT rows; otherwise they stay as NaN rows.
     Each trace is guaranteed to keep >= 2 present loci.
     """
-    from uchrom.core import ChromData
+    from chromdata import ChromData
 
     rng = np.random.RandomState(seed)
     rows = []
@@ -107,7 +107,7 @@ def test_snapfish_handles_absent_rows():
 def test_snapfish_preserves_nonmissing_under_shuffle():
     """Non-missing coords must stay correct regardless of input row order."""
     pytest.importorskip("skimage")
-    from uchrom.core import ChromData
+    from chromdata import ChromData
     from uchrom.im.impute import impute_snapfish
 
     cd = _make_panel_chromdata(as_absent_rows=True)
@@ -176,7 +176,7 @@ def test_ann_restores_locus_absent_from_all_traces():
     # Drop one panel locus from every trace entirely.
     dropped_start = int(PANEL_STARTS[3])
     keep = cd.spots["start"].to_numpy() != dropped_start
-    from uchrom.core import ChromData
+    from chromdata import ChromData
     cd = ChromData(coords=cd.coords[keep],
                    spots=cd.spots[keep].reset_index(drop=True))
     assert (cd.spots["start"] == dropped_start).sum() == 0

@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from uchrom import ChromData
-from uchrom.browser.web.data import (
+from uchrom_browser.data import (
     DatasetStore,
     GeometryFilter,
     decode_geometry,
@@ -162,7 +162,7 @@ def test_cells_table_and_filter():
 
 
 def test_cells_natural_order_and_missing_column():
-    from uchrom.browser.web.data import natural_key
+    from uchrom_browser.data import natural_key
     assert sorted(["c10", "c2", "c1", "b"], key=natural_key) == ["b", "c1", "c2", "c10"]
     store = DatasetStore()
     spots = pd.DataFrame({"chrom": ["chr1"] * 2, "start": [0, 10], "end": [10, 20],

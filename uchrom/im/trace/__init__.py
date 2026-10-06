@@ -3,7 +3,7 @@
 Takes detected-and-decoded spots with ambiguous trace assignments
 (multiple candidate spots per genomic locus per cell) and decides which
 spots belong to the same chromatin fiber.  Output is a
-:class:`uchrom.core.ChromData` with a populated ``trace_id`` column.
+:class:`chromdata.ChromData` with a populated ``trace_id`` column.
 
 The first backend, :mod:`uchrom.im.trace.jie`, is an independent
 reimplementation of Jia & Ren 2022 (*Nature Biotechnology*,

@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from uchrom import ChromData
-from uchrom.browser.web.data import DatasetStore
+from uchrom_browser.data import DatasetStore
 
 ad = pytest.importorskip("anndata")
 

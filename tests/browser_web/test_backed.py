@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from uchrom import ChromData
-from uchrom.browser.web.data import DatasetStore, GeometryFilter, decode_geometry
+from uchrom_browser.data import DatasetStore, GeometryFilter, decode_geometry
 
 _FOV0 = Path(__file__).resolve().parents[2] / "example-data" / "takei2025_fov0"
 # built by example-data/build_takei2025_fov0.py

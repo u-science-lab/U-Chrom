@@ -40,7 +40,7 @@ _SUFFIX = {"zarr": ".chromdata.zarr", "cdz": ".cdz"}
 def file_format_version(path: PathLike) -> str:
     """The ``uchrom_format_version`` of a ChromData file (``"1.0"`` for an
     unversioned ``.h5cd``)."""
-    from uchrom.core.zarrcd import container_kind
+    from chromdata.zarrcd import container_kind
 
     path = Path(path)
     kind = container_kind(path)
@@ -87,8 +87,8 @@ def upgrade_h5cd(src: PathLike, dst: Optional[PathLike] = None, *, overwrite: bo
     ``n_bins`` and which tracks are bin- vs spot-level.  ``src`` is never
     modified; ``dst`` must differ from it.
     """
-    from uchrom.core.cdata import ChromData
-    from uchrom.core.zarrcd import container_kind
+    from chromdata.cdata import ChromData
+    from chromdata.zarrcd import container_kind
 
     from ._h5cd_legacy import read_h5cd
 

@@ -7,7 +7,7 @@ import pytest
 
 from tests._v1 import write_v1
 from uchrom import ChromData
-from uchrom.core.intervals import IntervalTable
+from chromdata.intervals import IntervalTable
 from uchrom.io._h5cd_legacy import read_h5cd, write_h5cd
 
 

@@ -16,7 +16,7 @@ def sample_chromdata():
     10 shared loci = 50 spots, ~30% NaN, with a smooth per-trace curve so
     interpolation and similarity-based imputation have signal.
     """
-    from uchrom.core import ChromData
+    from chromdata import ChromData
 
     rng = np.random.RandomState(0)
     # Many traces (cells) sharing the panel keeps the SnapFISH box-cox /
@@ -114,7 +114,7 @@ def test_impute_snapfish():
     pytest.importorskip("sklearn")
     pytest.importorskip("skimage")
 
-    from uchrom.core import ChromData
+    from chromdata import ChromData
     from uchrom.im.impute import impute_snapfish
 
     data = os.path.join("example-data", "mESC_Sox2_5cells_wnan.chromdata.zarr")
