@@ -5,7 +5,7 @@ ids suffixed ``_r<k>``.  Only geometry is kept (spots, coords, cells.cell_type):
 would not fit in memory at 10^7 spots and are not used by the geometry benchmarks.  The replicated files
 are **labelled as replicated** wherever they are reported.
 
-    python benchmarks/fig6/make_scaled.py --src example-data/takei2025_fov0/takei2025_fov0.chromdata.zarr \
+    python benchmarks/fig6/make_scaled.py --src $UCHROM_DATA/takei2025_fov0/takei2025_fov0.chromdata.zarr \
         --out benchmarks/fig6/_data --factors 1 3 10 30
 """
 from __future__ import annotations

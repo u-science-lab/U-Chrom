@@ -1,14 +1,14 @@
 """Shared helpers for the Fig. 3a NucDynamics benchmark scripts (cluster-ready).
 
 * ``data_dir()``: the Stevens et al. 2017 GEO files (``<GSM>_Cell_<n>_*.gz``):
-  ``$NUCDYN_GEO_DIR``, else ``$UCHROM_EXAMPLE_DATA/stevens2017_mesc``, else
-  ``<repo>/example-data/stevens2017_mesc``.
+  ``$NUCDYN_GEO_DIR``, else ``<data directory>/stevens2017_mesc`` (``python -m uchrom.datasets fetch stevens2017``).
 * ``environment()``: host, CPU, GPU, library versions, Slurm job and load
   average, printed by every script and stored in its JSON output.
 """
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir as _data_root
 import os
 import platform
 import socket
@@ -24,9 +24,7 @@ GSM = {1: "GSM2219497", 2: "GSM2219498", 3: "GSM2219499", 4: "GSM2219500",
 def data_dir() -> Path:
     if os.environ.get("NUCDYN_GEO_DIR"):
         return Path(os.environ["NUCDYN_GEO_DIR"])
-    if os.environ.get("UCHROM_EXAMPLE_DATA"):
-        return Path(os.environ["UCHROM_EXAMPLE_DATA"]) / "stevens2017_mesc"
-    return ROOT / "example-data" / "stevens2017_mesc"
+    return _data_root() / "stevens2017_mesc"
 
 
 def geo_pairs(cell: int, geo_dir: Path | None = None) -> Path:

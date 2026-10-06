@@ -1,6 +1,6 @@
 """Real-data validation of the ``.chromdata.zarr`` container (format 2.0).
 
-For every example dataset (all catalogued in ``example-data/README.md``):
+For every example dataset (all catalogued in ``apps/atlas/recipes/README.md``):
 
 1. **convert** — ``uchrom.io.upgrade_h5cd`` from the 1.x ``.h5cd`` (or
    ``ChromData.from_fofct`` for the Takei 2021 FOF-CT) to
@@ -24,12 +24,13 @@ The sources are never modified (outputs go to ``--work``).  Run the big
 datasets one at a time (the 1.x reader of the 10.9 M-spot Takei file peaks
 at ~22 GB).
 
-    python benchmarks/cd2_zarr_validation.py --data /path/to/example-data --work /tmp/cd2z \\
+    python benchmarks/cd2_zarr_validation.py --data $UCHROM_DATA --work /tmp/cd2z \\
         [--only takei2025_cerebellum,liu2025_mop,...]
 """
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import resource
@@ -215,7 +216,7 @@ def run_child(args, timeout=3600):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=ROOT / "example-data")
+    ap.add_argument("--data", type=Path, default=data_dir())
     ap.add_argument("--work", type=Path, required=False)
     ap.add_argument("--only")
     ap.add_argument("--out", type=Path, help="write the results as JSON")

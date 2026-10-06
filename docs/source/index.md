@@ -49,7 +49,7 @@ New here?  Start with [installation](start/install), the [quick start](start/qui
 start/install
 start/quickstart
 start/concepts
-start/example_data
+start/datasets
 ```
 
 ```{toctree}
@@ -75,6 +75,7 @@ discovery/index
 
 reference/api/index
 reference/format_spec
+reference/data_sources
 reference/design_2_0
 reference/development
 reference/changelog

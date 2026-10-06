@@ -510,7 +510,7 @@ def main() -> None:
     r.add_argument("--res", default="all", help="bp, comma separated, or 'all'")
     r.add_argument("--threads", type=int)
     r.add_argument("--out-dir", required=True)
-    r.add_argument("--contacts", default=os.environ.get("CONTACTS", str(ROOT / "example-data/stevens2017_mesc" / GEO_NAME)))
+    r.add_argument("--contacts", default=os.environ.get("CONTACTS", str(ROOT / "$UCHROM_DATA/stevens2017_mesc" / GEO_NAME)))
     r.add_argument("--python", default=os.environ.get("PY", sys.executable))
     r.add_argument("--orig-python", default=os.environ.get("ORIG_PY", sys.executable))
     r.add_argument("--nd-dir", default=os.environ.get("ND"))

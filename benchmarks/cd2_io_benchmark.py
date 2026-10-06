@@ -6,7 +6,7 @@ one read or write); the median of ``--repeat`` runs is reported.  The
 
     git archive origin/main uchrom | tar -x -C /tmp/old_main
     python benchmarks/cd2_io_benchmark.py WORKDIR --old-tree /tmp/old_main \\
-        --files example-data/takei2025_fov0/takei2025_fov0.h5cd ...
+        --files $UCHROM_DATA/takei2025_fov0/takei2025_fov0.h5cd ...
 
 Inputs are 1.x ``.h5cd`` files (copied into WORKDIR first; the
 originals are never touched).  Variants: 1.x (old tree), 2.0 without

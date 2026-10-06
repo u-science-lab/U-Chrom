@@ -9,10 +9,9 @@ The [data atlas](../viz/atlas) is a public collection of `.chromdata.zarr` store
 *backed* over HTTP: only the small tables are fetched, and a cell is read when you ask for it.
 
 ```python
-from chromdata import ChromData
+import uchrom.datasets as ds
 
-url = "https://uchrom-atlas-r2.u-science.org/takei2025_cerebellum.chromdata.zarr"
-cd = ChromData.read(url, backed=True)            # ~2 s: cells, bins, the index
+cd = ds.atlas("takei2025_cerebellum")            # ~2 s: cells, bins, the index (backed, over HTTP)
 cd
 ```
 ```text
@@ -36,9 +35,10 @@ with 62 chromatin marks per spot in 1,799 cells.
 import uchrom as uc
 from chromdata import ChromData
 
-# Takei et al. 2021 (Nature), mouse ES cells, 4DN FOF-CT core table 4DNFIHF3JCBY
-# (example-data/download_data.py fetches it)
-cd = ChromData.from_fofct("example-data/4DNFIHF3JCBY.csv")    # 201 cells, 8,285 traces
+import uchrom.datasets as ds
+
+# Takei et al. 2021 (Nature), mouse ES cells, 4DN FOF-CT core table 4DNFIHF3JCBY (fetched from 4DN once)
+cd = ChromData.from_fofct(ds.fetch("takei"))                # 201 cells, 8,285 traces
 tads = uc.tl.call_tads(cd, chrom="chr3")                    # ArcFISH: TADs from 3-D distances
 tads.head(3)
 ```
@@ -61,8 +61,11 @@ cd.write("takei2021.chromdata.zarr")
 ```python
 import uchrom as uc
 
-# Stevens et al. 2017 (Nature), haploid mouse ES cell 1 (example-data/cell1.pairs)
-s = uc.tl.reconstruct_sc("example-data/cell1.pairs", n_models=4)   # EMber, native engine; ~15 s on a laptop
+import uchrom.datasets as ds
+
+# Stevens et al. 2017 (Nature), haploid mouse ES cell 1 (GEO GSE80280, fetched once)
+pairs = ds.fetch("stevens2017") / "GSM2219497_Cell_1_contact_pairs.txt.gz"
+s = uc.tl.reconstruct_sc(pairs, n_models=4)                  # EMber, native engine; ~15 s on a laptop
 s
 ```
 ```text

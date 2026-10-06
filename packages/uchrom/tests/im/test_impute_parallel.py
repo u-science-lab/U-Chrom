@@ -10,12 +10,12 @@ across workers.
 import os
 import numpy as np
 import pytest
-from tests import REPO
+from tests import FIXTURES
 
 
 def _real_cd():
     from chromdata import ChromData
-    data = str(REPO / "example-data" / "mESC_Sox2_5cells_wnan.chromdata.zarr")
+    data = str(FIXTURES / "mESC_Sox2_5cells_wnan.chromdata.zarr")
     if not os.path.exists(data):
         pytest.skip(f"real test data not found: {data}")
     return ChromData.read(data)

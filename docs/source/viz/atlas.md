@@ -25,13 +25,13 @@ cd = ChromData.read(cat["datasets"][0]["url"], backed=True)
 
 ## How a dataset gets into the atlas
 
-The datasets are built by the scripts in `example-data/` (one `build_*.py` per study, documented in
-the [example-data catalog](../start/example_data)), then
+The datasets are built by the recipes in `apps/atlas/recipes/` (one `build_*.py` per study, from the
+original files `uchrom.datasets` fetches; documented in [data sources](../reference/data_sources)), then
 
 1. `python -m chromdata.embedded STORE.chromdata.zarr` copies the linked contact maps (`.cool`,
    `.mcool`, `.scool`), AnnData and images into the store (chunked and sharded for range requests);
 2. the store is uploaded to the bucket;
-3. `python -m chromdata.catalog build apps/atlas/datasets.json` writes `catalog.json` — the
+3. `python -m chromdata.catalog build apps/atlas/datasets.json --root $UCHROM_DATA` writes `catalog.json` — the
    descriptions come from `apps/atlas/datasets.json`, the counts and modalities from the stores;
 4. `python apps/atlas/build.py figures|site` draws the thumbnails and the static page.
 

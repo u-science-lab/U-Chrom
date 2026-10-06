@@ -467,7 +467,7 @@ corr = aggregate_tracks(cd, IF_COLUMNS, stat="corr", write=False)  # if.H3K27ac~
 embed_cells(cd, source="if", matrix=corr.to_numpy(), normalization="zscore")
 ```
 
-On Takei 2025 cerebellum (47 cells, `example-data/takei2025_fov0/`) the
+On Takei 2025 cerebellum (47 cells of FOV 0) the
 per-spot IF z-scores are already close to per-cell normalised (the spread
 of per-cell means is ~0.1 of the within-cell SD), so per-cell means carry
 little cell-type signal.  The within-cell mark–mark correlations (how marks
@@ -488,7 +488,7 @@ feats, cols, n_contacts = scool_cell_features("cells_1Mb.scool", cd.cells.index)
 embed_cells(cd, source="hic", matrix=feats, normalization="none", n_pcs=20)
 ```
 
-`example-data/build_schicar_mop.py` builds the scHiCAR dataset this way:
+`apps/atlas/recipes/build_schicar_mop.py` builds the scHiCAR dataset this way:
 RNA (`rna_*`), ATAC (100 kb bins → LSI, `atac_*`; gene activity of the RNA
 HVGs as `atac.<gene>`), Hi-C (`hic_*`) and the paper's UMAP.
 

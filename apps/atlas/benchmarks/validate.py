@@ -1,6 +1,6 @@
 """Checks of the atlas datasets, recomputed from the stores, for the paper (Brief Communication Fig. 2c, Supp. Fig. 6).
 
-For every dataset of ``apps/atlas/datasets.json`` (stores under ``example-data/``):
+For every dataset of ``apps/atlas/datasets.json`` (stores under ``$UCHROM_DATA/``):
 
 * **size**: kind of data, species, cells or spots, contacts per cell / spot (median: the ``cells`` column of the
   build, else the ``sum`` of every cell's map in the linked per-cell ``.scool``), traced or modelled loci per cell;
@@ -20,6 +20,7 @@ Writes ``<u-chrom-paper>/manuscripts/nmeth-bc/figures/results/atlas.json`` (``be
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import subprocess
@@ -37,7 +38,7 @@ for _pkg in ("uchrom", "chromdata", "uchrom-browser"):   # this checkout's packa
 sys.path.insert(0, str(ROOT / "benchmarks"))
 from _paper import paper_root  # noqa: E402
 
-DATA = ROOT / "example-data"
+DATA = data_dir()
 CONFIG = HERE.parent / "datasets.json"
 CONTACT_COLUMNS = ("n_contacts", "n_contacts_hic")
 PUBLISHED = {            # dataset -> (reprocessed column, published columns summed)

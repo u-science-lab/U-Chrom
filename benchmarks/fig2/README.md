@@ -25,15 +25,15 @@ format-version comparison (supplementary `figS_formats.pdf`).
 ## Setup
 
 ```bash
-python example-data/download_data.py --takei2025_cerebellum   # 2.85 GB (Zenodo 7693825)
-python example-data/build_takei2025_cerebellum.py              # per-FOV + combined .chromdata.zarr
-python example-data/download_data.py --schicar_rna --schicar_dna && python example-data/build_schicar_mop.py   # panel e
-python example-data/build_takei2025_fov0.py                    # panel f
+python -m uchrom.datasets fetch takei2025_cerebellum   # 2.85 GB (Zenodo 7693825)
+python apps/atlas/recipes/build_takei2025_cerebellum.py              # per-FOV + combined .chromdata.zarr
+python -m uchrom.datasets fetch schicar_rna schicar_dna && python apps/atlas/recipes/build_schicar_mop.py   # panel e
+python apps/atlas/recipes/build_takei2025_fov0.py                    # panel f
 ```
 
-Environment variables: `UCHROM_EXAMPLE_DATA` (where the datasets live;
-default `example-data/`), `UCHROM_FIG2_WORK` (scratch for staged subsets and
-temporary files; default `example-data/fig2_work/`, tens of GB at 1e7 spots).
+Environment variables: `UCHROM_DATA` (where the datasets live;
+default `$UCHROM_DATA`, else `~/.cache/uchrom`), `UCHROM_FIG2_WORK` (scratch for staged subsets and
+temporary files; default `$UCHROM_DATA/fig2_work/`, tens of GB at 1e7 spots).
 The scripts put this checkout first on `sys.path`, so they measure the
 checkout's `uchrom`, not an installed copy.
 
@@ -104,7 +104,7 @@ python benchmarks/fig2/b_storage.py --sizes 1e4,1e5,1e6,1e7,1e8 --formats zarr,f
 python benchmarks/fig2/d_streaming.py --sizes 1e4,1e5,1e6,1e7 --prebuilt 1e8=takei_1e8.v21.chromdata.zarr --repeats 3
 python benchmarks/fig2/e_contacts_query.py --repeats 3
 python benchmarks/fig2/spot_tracks_encoding.py OLD_2_0.chromdata.zarr NEW_2_1.chromdata.zarr
-python benchmarks/cd21_streaming_validation.py --data example-data --work /tmp/cd21   # conversion, streaming imports, identity
+python benchmarks/cd21_streaming_validation.py --data $UCHROM_DATA --work /tmp/cd21   # conversion, streaming imports, identity
 ```
 
 * Series are labelled with the container version ("chromdata.zarr 2.1");

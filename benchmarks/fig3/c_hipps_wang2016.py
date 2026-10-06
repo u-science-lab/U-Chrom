@@ -45,6 +45,7 @@ Usage::
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import shutil
@@ -145,7 +146,7 @@ def block_mean(D: np.ndarray, groups: list[np.ndarray]) -> np.ndarray:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=ROOT / "example-data")
+    ap.add_argument("--data", type=Path, default=data_dir())
     ap.add_argument("--hipps-dimes", type=Path, default=None, help="path to the HIPPS-DIMES clone")
     ap.add_argument("--chrom", nargs="+", default=["20", "21", "22"])
     ap.add_argument("--splits", type=int, default=3)

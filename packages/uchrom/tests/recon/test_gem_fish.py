@@ -3,9 +3,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from tests import REPO
+from tests import FIXTURES
 
-COOL = REPO / "example-data" / "K562_chr21_30kb.cool"
+COOL = FIXTURES / "K562_chr21_30kb.cool"
 pytest.importorskip("cooler")
 
 
@@ -21,7 +21,7 @@ def _params(**kw):
 @pytest.fixture(autouse=True)
 def _need_data():
     if not COOL.exists():
-        pytest.skip("example-data/K562_chr21_30kb.cool missing")
+        pytest.skip("fixture K562_chr21_30kb.cool missing")
 
 
 def test_gem_fish_hic_only():

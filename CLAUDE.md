@@ -27,7 +27,8 @@ From the structure table, downstream modules perform:
 ## Package Structure
 
 A monorepo: every package in `packages/` (each with its own pyproject, README and `tests/`),
-deployments in `apps/`; the root holds the repository (docs, benchmarks, tutorials, example-data, skills).
+deployments in `apps/`; the root holds the repository (docs, benchmarks, tutorials, skills).  Data live
+outside it (see *Data*).
 
 ```
 packages/
@@ -120,8 +121,8 @@ uchrom/                (packages/uchrom/uchrom)
   uchrom's (`uchrom.io`); integration tests (uchrom + the browser) are uchrom's and skip without
   uchrom-browser.  Shared fixtures (an object with every attribute, a store with linked / embedded
   maps, a folder atlas, an HTTP server with range requests, store comparisons) are
-  `chromdata.testing`; each suite's `tests/__init__.py` has `REPO` (the repository root, for
-  example-data/).
+  `chromdata.testing`; each suite's `tests/__init__.py` has `FIXTURES` (its `tests/fixtures/`: small real
+  data, offline), `DATA_DIR` (the data directory; tests that need large data skip without it) and `REPO`.
 - `uchrom` stays pure Python: it imports `uchrom_recon` lazily (tests skip
   when it is not installed); the native crate never imports `uchrom`.
 
@@ -166,7 +167,7 @@ ChromData (format 2.0)
 - **Typed results with provenance**: `cd.results` is a `ResultsStore` (dict-like; `cd.results[key]` → value, `cd.results.record(key)` → `ResultRecord(kind, value, params, function, uchrom_version, inputs, created_utc)`).  Unwritable values raise `TypeError` at assignment.  Analysis functions store via `cd.results.set(key, value, kind=, function=, params=, inputs=)`.
 - **Calling convention** (`uchrom/convention.py`): `fn(cd, *, chrom=None, trace_ids=None, cells=None, params=<*Params>, device="auto", key_added="<what>.<method>", copy=False)`.  `chrom=None` runs every chromosome and merges into one table under one key; `copy=False` returns the table, `copy=True` a new ChromData.  Deprecated 1.x forms (positional `chrom`, `store=`, `result_key=`) must keep working with a `DeprecationWarning` and the 1.x key.  `uchrom.tl` / `uchrom.pp` are flat aliases; implementations stay in the domain modules.
 - **Persistence — `.chromdata.zarr` (format 2.3 = the 2.2 layout + optional `tables/cell_shapes/`)**: `cd.write(path)` / `ChromData.read(path)` pick the container from the path.  `*.chromdata.zarr` = Zarr v3 group with Parquet tables (`chromdata/zarrcd.py`; layout in `packages/chromdata/spec.md`); every spot-aligned value is stored **once**: coordinates + keys **partitioned by chromosome** — `tables/coords/chrom=<name>/part-0.parquet` (bin_id, trace_id / cell_id as integer codes, x, y, z), sorted by (cell, trace, bin), 16,384-row groups on cell boundaries; every other spot-aligned column (extra spot columns, `spot_tracks`, `layers`) in **cell-sorted primary tables** `tables/primary/*.parquet` (order cell › trace › chromosome › bin, no key columns, 65,536-row groups on cell boundaries, float columns dictionary-encoded); spot columns that are a function of the bin / cell / trace (probe names, sample ids) once per key in `tables/derived/`.  `index/` holds the primary runs and `index/coords/` the coordinate runs; `index/coords/primary_run` maps (cell, trace, chromosome) runs one to one.  A full read is in primary order; `get_trace` / `get_cell` read one primary slice + their coordinate runs, `get_chrom(columns="coords")` one partition (`get_chrom` with tracks adds a slice of every primary row group).  `get_*` / `iter_*` / `to_memory` / `read` take `columns=` / `tracks=` (`columns="coords"` = xyz + keys).  `iter_traces` / `iter_cells` stream in chromosome › cell › trace order.  Formats 2.0 / 2.1 are still read; older readers cannot read newer stores.  Lossless decimal float encoding (`chromdata.floatcodec`) is opt-in (`float_encoding=`).  Streaming (roadmap step 7): `ChromData.writer(path)` (writes the store the in-memory writer writes), `from_fofct(..., out=)`, `read_seqfish_multiomics(..., out=)`, exact `uchrom.fea.distance_map`, ArcFISH loop / TAD callers with `streaming=True` (default on backed data); `uchrom.settings.memory_budget` bounds their working memory.  Other tables: small tables as Parquet, `cellm` / `binm` / `index/` / result arrays as Zarr arrays, provenance / `uns` / linked records as JSON attrs.  `*.cdz` = the same tree in one uncompressed zip.  **Row order changes on a round trip** (sorted); compare after sorting by a stable key, or read with `original_order=True` (uses `index/source_row`).  `.h5cd` (the HDF5 container of format 1.x / 2.0) is **no longer read or written**: `read` / `write` raise a `ValueError` naming the converter (`python -m uchrom.io.upgrade old.h5cd`); its reader / writer live only in the private `uchrom/io/_h5cd_legacy.py`, used by `upgrade_h5cd` and the format benchmarks (`benchmarks/fig2`) — nothing else may import it.  Writers are atomic (temp dir + rename).
-- **Atlas**: a bucket / folder of `.chromdata.zarr` stores (embedded, self-contained) plus `catalog.json` (`chromdata/catalog.py`: `python -m chromdata.catalog build apps/atlas/datasets.json --root example-data`, display text in `apps/atlas/datasets.json` — datasets grouped by `studies` —, counts / modalities read from the stores; the static page `apps/atlas/site` with thumbnails drawn from the stores by `python apps/atlas/build.py figures`, committed in `apps/atlas/site/figures/`).  The web browser lists it in the Open dialog (`--atlas URL`, `UCHROM_ATLAS`, default the public U-Chrom atlas data on Cloudflare R2, `https://uchrom-atlas-r2.u-science.org` — bucket `u-chrom-atlas`; `uchrom-atlas.u-science.org` is kept free for the atlas web page) and opens a card by URL.  Publishing: `aws s3 sync` to the R2 bucket (credentials stay in the user's environment, never in the repo).
+- **Atlas**: a bucket / folder of `.chromdata.zarr` stores (embedded, self-contained) plus `catalog.json` (`chromdata/catalog.py`: `python -m chromdata.catalog build apps/atlas/datasets.json --root $UCHROM_DATA`, display text in `apps/atlas/datasets.json` — datasets grouped by `studies` —, counts / modalities read from the stores; the static page `apps/atlas/site` with thumbnails drawn from the stores by `python apps/atlas/build.py figures`, committed in `apps/atlas/site/figures/`).  The web browser lists it in the Open dialog (`--atlas URL`, `UCHROM_ATLAS`, default the public U-Chrom atlas data on Cloudflare R2, `https://uchrom-atlas-r2.u-science.org` — bucket `u-chrom-atlas`; `uchrom-atlas.u-science.org` is kept free for the atlas web page) and opens a card by URL.  Publishing: `aws s3 sync` to the R2 bucket (credentials stay in the user's environment, never in the repo).
 - **Backed mode**: `ChromData.read(path, backed=True)` on a zarr / cdz store → `BackedChromData` (`chromdata/backed.py`): small tables eager; `coords` / `layers` (`BackedArray`) and `spots` / `spot_tracks` (`BackedFrame`) read on access; `get_cell` / `get_trace` / `get_chrom` / `cd[rows]` / `iter_traces(batch)` / `iter_cells(batch)` read only the needed row ranges and return in-memory `ChromData`; `to_memory()` loads all.  Spot-aligned data are read-only on a backed object.  `iter_traces` / `iter_cells` exist on in-memory objects too and yield identical chunks.  The web browser opens stores backed.
 - **Format versioning**: `uchrom_format_version` (MAJOR.MINOR) and `uchrom_version` as root attrs (zarr.json attributes); zarr stores are checked by `_check_zarr_version`. Same MAJOR + higher MINOR warns but reads; unknown MAJOR raises. The zarr container's version is `ZARR_FORMAT_VERSION` in `zarrcd.py` (2.3; `ZARR_LAYOUT_VERSION` 2.2 is the spot layout it writes; `ZARR_LAYOUTS` maps MINOR → layout). Legacy `.h5cd` files (format 1.x / 2.0, `FORMAT_VERSION` in `uchrom/io/_h5cd_legacy.py`) are converted by `uchrom.io.upgrade_h5cd(src[, dst])` / `python -m uchrom.io.upgrade SRC [DST]` (default target `<stem>.chromdata.zarr`; 1.x: bins from spot loci, spot-aligned tracks split into bin/spot tracks). To bump format: update the relevant constant, add a reader for the new MAJOR (a new MINOR layout: read it next to the old ones, as 2.2 reads 2.1 and 2.0).
 - **Validation on construction**: Checks coords shape, spots required columns, tracks alignment, layers shape.
@@ -220,31 +221,28 @@ re-implementation of a paper):
   report the real-data metric (distance-matrix correlation,
   trace purity, ploidy recall, etc.) in the commit message / PR
   body.  If the number is disappointing, say so.
-- The example-data catalog rule above is the mechanism — every
-  dataset used for validation MUST be documented in
-  `example-data/README.md` in the same PR.
+- The data rules below are the mechanism — every dataset used for
+  validation MUST be registered and documented in the same PR.
 
-## Example data
+## Data
 
-All datasets consumed by tutorials and benchmarks live in
-`example-data/`.  Rules:
+No data live in the repository (the former `example-data/` is gone).  Rules:
 
-- **Catalog is authoritative**: `example-data/README.md` lists every
-  dataset with size, source / citation, download URL, format, and
-  which tutorial consumes it.  A symlink surfaces the same catalog
-  in the Sphinx docs at `docs/source/example_data.md`.
-- **< 10 MB → check into the repo**.  Add a row to the "Small,
-  in-repo datasets" table of `example-data/README.md`.
-- **≥ 10 MB → document + auto-download**.  Add a row to "Large
-  datasets", an entry to `example-data/download_data.py`, and follow
-  the existing `find_*()` pattern inside the tutorial that needs it
-  (see e.g. `find_fofct()` in `tutorials/_build_notebooks.py`).  Add
-  the filename(s) to `.gitignore`.
-- **Whenever a tutorial or benchmark pulls in a new dataset, the
-  catalog must be updated in the same PR** — this is a hard rule.
-  Do not add silent downloads.
-- Tutorial-produced outputs (e.g. `with_loops.chromdata.zarr`, synthetic
-  `fofct_core.csv` fallbacks) are gitignored, not committed.
+- **The atlas first**: analyses and tutorials read the public atlas stores over HTTP
+  (`uchrom.datasets.atlas(name)`; backed, only what is used is fetched).
+- **Original files from their sources**: `uchrom.datasets.fetch(name)` /
+  `python -m uchrom.datasets fetch NAME` downloads into the data directory (`$UCHROM_DATA`, else
+  `~/.cache/uchrom`; `uchrom.datasets.data_dir()`) with md5 checks.  The registry is
+  `packages/uchrom/uchrom/datasets/_sources.py`; built datasets (e.g. a Hi-C slice read over HTTP) are
+  `_builders.py`.  Never re-host someone else's raw data.
+- **Recipes**: `apps/atlas/recipes/` builds the atlas stores and the benchmark inputs from those sources
+  (reading / writing the data directory); `apps/atlas/recipes/README.md` documents every dataset (size,
+  source / citation, URL, licence, format, users) — it is authoritative.
+- **Test fixtures**: the small real files unit tests read offline sit in the package's
+  `tests/fixtures/` (with a README of sources); tests needing large data use `DATA_DIR` and skip.
+- **Whenever a tutorial, test or benchmark pulls in a new dataset, register it and document it in the
+  same PR** — a hard rule.  Do not add silent downloads.
+- Tutorial outputs go to `tutorials/_out/` (gitignored).
 
 ## Technical Notes
 

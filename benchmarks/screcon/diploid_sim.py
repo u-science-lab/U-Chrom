@@ -290,7 +290,7 @@ def main(argv=None) -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("truth")
     s.add_argument("--dataset", required=True, choices=["su2020_genome", "takei2021_1mb"])
-    s.add_argument("--data", help="input file (default: example-data catalog)")
+    s.add_argument("--data", help="input file (default: from the data directory, uchrom.datasets)")
     s.add_argument("--n", type=int, default=5)
     s.add_argument("--seed", type=int, default=1)
     s.add_argument("--out", required=True)

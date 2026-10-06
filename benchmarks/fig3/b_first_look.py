@@ -12,7 +12,7 @@ chromatin-tracing dataset with bulk Hi-C of the same cell type:
   log10(imaging) vs log10(Hi-C), plus the median-distance vs Hi-C
   correlation, and the P(s) log-log slopes of both.
 
-Inputs (``example-data/``; see its README):
+Inputs (``$UCHROM_DATA/``; see its README):
   IMR90_chr21-18-20Mb.csv, bintu2018/{IMR90,K562}_chr21-28-30Mb.csv  (Bintu 2018)
   rao2014_imr90/IMR90_chr21_5kb_hg19.cool, rao2014_k562/K562_chr21_5kb_hg19.cool
       (``build_rao2014_slices.py``)
@@ -20,11 +20,12 @@ Inputs (``example-data/``; see its README):
 
 Usage::
 
-    python benchmarks/fig3/b_first_look.py [--data example-data] [--out results.json]
+    python benchmarks/fig3/b_first_look.py [--data $UCHROM_DATA] [--out results.json]
 """
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import time
@@ -168,7 +169,7 @@ def su2020(data: Path, radii) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=ROOT / "example-data")
+    ap.add_argument("--data", type=Path, default=data_dir())
     ap.add_argument("--radii", type=float, nargs="+", default=[100, 150, 200, 300, 500])
     ap.add_argument("--out", type=Path, default=None)
     args = ap.parse_args()

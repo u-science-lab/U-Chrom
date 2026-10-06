@@ -23,5 +23,5 @@ $PIP install -q --prefer-binary -c "$CONS" "cooler>=0.9.3" h5py fsspec requests 
 $PIP install -q --only-binary=:all: -c "$CONS" hic-straw || echo "hic-straw: no binary wheel - .hic inputs unavailable"
 $PY -c "import cooler, h5py, fsspec, sklearn, numpy, scipy, pandas; print('venv-main', cooler.__version__, h5py.__version__, sklearn.__version__, numpy.__version__, scipy.__version__, pandas.__version__)"
 $PY -c "import hicstraw; print('hicstraw ok')" || true
-$PY "$REPO/example-data/download_data.py" --dest "$DATA" --su2020_genome --su2020_chr21 --takei2021_1mb
+$PY -m uchrom.datasets fetch su2020_genome su2020_chr21 takei2021_1mb --root "$DATA"
 cd "$REPO" && $PY -m pytest -q benchmarks/bulk/tests benchmarks/screcon/tests -p no:cacheprovider

@@ -15,6 +15,7 @@ Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/cd22_convert_valida
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import os
@@ -29,7 +30,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 for _pkg in ("uchrom", "chromdata", "uchrom-browser"):   # this checkout's packages, not installed copies
     sys.path.insert(0, str(ROOT / "packages" / _pkg))
-DATA = Path(os.environ.get("UCHROM_EXAMPLE_DATA", ROOT / "example-data"))
+DATA = data_dir()
 STORES = {
     "takei": DATA / "takei2025_cerebellum" / "takei2025_cerebellum_rep1.v21.chromdata.zarr",
     "liu": DATA / "liu2025_mop" / "liu2025_mop.v21.chromdata.zarr",

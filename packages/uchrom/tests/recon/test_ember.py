@@ -5,18 +5,18 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from tests import REPO
+from tests import FIXTURES
 
 un = pytest.importorskip("uchrom_recon")
 
-PAIRS = REPO / "example-data" / "cell1.pairs"
+PAIRS = FIXTURES / "cell1.pairs.gz"
 QUICK = dict(particle_sizes=[2e6, 4e5, 2e5], n_models=2, seed=5, device="cpu")
 
 
 @pytest.fixture(autouse=True)
 def _need_data():
     if not PAIRS.exists():
-        pytest.skip("example-data/cell1.pairs missing")
+        pytest.skip("fixture cell1.pairs.gz missing")
 
 
 def test_ember_equals_protocol_robust_and_records_provenance():

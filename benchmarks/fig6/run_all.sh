@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Fig 6c benchmarks.  Run on an idle machine: each script waits (up to 30 min) for load < 2.0, then refuses;
 # close browsers, games, VMs.
-#   bash benchmarks/fig6/run_all.sh <example-data dir>
+#   bash benchmarks/fig6/run_all.sh <data directory>
 # Results go to the u-chrom-paper repository (manuscripts/full/figures/fig6/results; $UCHROM_PAPER, see benchmarks/_paper.py).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-DATA=${1:-example-data}
+DATA=${1:-${UCHROM_DATA:-$HOME/.cache/uchrom}}
 PY=${PY:-.venv/bin/python}
 EXTRA=${EXTRA:-}   # e.g. EXTRA=--force to skip the idle-machine check (the load is still recorded)
 D=benchmarks/fig6/_data

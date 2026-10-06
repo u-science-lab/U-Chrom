@@ -8,9 +8,9 @@ import pytest
 
 from tests._synth import chain_traces, domain_traces
 from uchrom import ChromData
-from tests import REPO
+from tests import FIXTURES
 
-COOL = REPO / "example-data" / "K562_chr21_30kb.cool"
+COOL = FIXTURES / "K562_chr21_30kb.cool"
 
 
 def _two_chroms(make, **kw):

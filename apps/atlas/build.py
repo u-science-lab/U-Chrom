@@ -1,7 +1,7 @@
 """The atlas page: thumbnails drawn from the stores and the static site (the catalog itself is
 :mod:`chromdata.catalog`).
 
-    python apps/atlas/build.py figures apps/atlas/datasets.json --root example-data    # -> apps/atlas/site/figures
+    python apps/atlas/build.py figures apps/atlas/datasets.json --root $UCHROM_DATA    # -> apps/atlas/site/figures
     python apps/atlas/build.py site apps/atlas/deploy/dist --catalog catalog.json \
         --hosted https://uchrom-browser.u-science.org                                   # the page to deploy
 

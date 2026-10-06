@@ -93,10 +93,11 @@ include-package-data = true
 
 [tool.setuptools.package-data]
 "uchrom.im.impute._snapfish" = ["LICENSE"]
+"uchrom.datasets" = ["*.tsv"]
 
 [tool.setuptools.packages.find]
 include = ["uchrom*"]
-exclude = ["example-data*", "tests*"]
+exclude = ["tests*"]
 
 # Monorepo: the sibling packages are installed from their folders when developing (uv pip install -e packages/uchrom)
 [tool.uv.sources]

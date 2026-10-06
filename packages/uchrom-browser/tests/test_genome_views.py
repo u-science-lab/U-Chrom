@@ -8,9 +8,9 @@ import pytest
 
 from chromdata import ChromData
 from uchrom_browser.data import MAX_MATRIX_BINS, DatasetStore, decode_matrix
-from tests import REPO
+from tests import FIXTURES
 
-SIM = REPO / "example-data" / "sim_cell1" / "sim_cell1.cdz"
+SIM = FIXTURES / "sim_cell1" / "sim_cell1.cdz"
 
 
 def _two_cell_dataset():

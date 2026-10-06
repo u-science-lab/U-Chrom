@@ -23,7 +23,7 @@ shared); the original runs in one process, single-threaded.
 Run with the original's environment (Python 3.11, numpy<2, cython<3)::
 
     $ORIG_PY benchmarks/fig3/a_nucdyn_engine_original_timing.py --nd-dir ND_MASTER \\
-        --pairs example-data/stevens2017_mesc/GSM2219497_Cell_1_contact_pairs.txt.gz \\
+        --pairs $UCHROM_DATA/stevens2017_mesc/GSM2219497_Cell_1_contact_pairs.txt.gz \\
         --ref RUN_DIR/cell1.npz --out u-chrom-paper/manuscripts/full/figures/fig3/results/a_nucdyn_engine_original_timing_cell1.json
 """
 

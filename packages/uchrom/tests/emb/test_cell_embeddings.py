@@ -9,9 +9,9 @@ import pytest
 
 from uchrom import ChromData
 from uchrom.emb import aggregate_tracks, embed_cells, normalize_counts, schicluster_features, tfidf_lsi
-from tests import REPO
+from tests import FIXTURES
 
-DATA = REPO / "example-data"
+DATA = FIXTURES
 
 
 def _cd_with_counts(counts: np.ndarray):

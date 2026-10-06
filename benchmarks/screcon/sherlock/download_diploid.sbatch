@@ -11,7 +11,7 @@
 #SBATCH --mem=8G
 #SBATCH --output=%x-%j.out
 source "$SCRATCH/uchrom-nd/repo-diploid/benchmarks/screcon/sherlock/_env_diploid.sh"
-$PY $REPO/example-data/download_data.py --tan2018_gm12878 --dest "$DATA" || echo "some downloads failed (see above)"
+$PY -m uchrom.datasets fetch tan2018_gm12878 --root "$DATA" || echo "some downloads failed (see above)"
 mkdir -p "$TAN18/cells"
 for k in $(seq -w 1 17); do
   t=$(ls "$TAN18"/GSM*_gm12878_$k.tar.gz 2>/dev/null | head -1 || true)

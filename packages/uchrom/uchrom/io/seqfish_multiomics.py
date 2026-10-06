@@ -359,7 +359,7 @@ def read_seqfish_transcriptome(
     replicate: Optional[int] = None,
     observed_cell_ids: Optional[Iterable[str]] = None,
     download: bool = False,
-    data_dir: PathLike = "example-data",
+    data_dir: Optional[PathLike] = None,
     chunksize: int = 500_000,
 ):
     """Read Takei 2025 RNA seqFISH spot CSVs into a cell × gene AnnData.
@@ -470,7 +470,7 @@ def load_seqfish_multiomics_linked(
     transcriptome_replicate: Optional[int] = None,
     transcriptome_chunksize: int = 500_000,
     download_transcriptome: bool = False,
-    data_dir: PathLike = "example-data",
+    data_dir: Optional[PathLike] = None,
     cd_path: Optional[PathLike] = None,
     h5ad_path: Optional[PathLike] = None,
     h5cd_path: Optional[PathLike] = None,
@@ -535,7 +535,7 @@ def load_seqfish_multiomics_linked(
 def load_takei2025_cerebellum(
     *,
     replicate: int = 1,
-    data_dir: PathLike = "example-data/takei2025_cerebellum",
+    data_dir: Optional[PathLike] = None,
     download: bool = True,
     rebuild: bool = False,
     transcriptome_chunksize: int = 500_000,
@@ -556,7 +556,7 @@ def load_takei2025_cerebellum(
         Cerebellum replicate to load.  Currently ``1`` or ``2``.
     data_dir
         Cache/build directory for downloaded raw files and linked
-        artifacts.
+        artifacts (default: ``<uchrom.datasets.data_dir()>/takei2025_cerebellum``).
     download
         If False, missing raw/build artifacts raise ``FileNotFoundError``.
     rebuild
@@ -571,6 +571,10 @@ def load_takei2025_cerebellum(
 
     from chromdata import ChromData
 
+    if data_dir is None:
+        from uchrom.datasets import data_dir as _root
+
+        data_dir = _root() / "takei2025_cerebellum"
     data_dir = Path(data_dir)
     cd_path = data_dir / f"takei2025_cerebellum_rep{replicate}.chromdata.zarr"
     legacy = data_dir / f"takei2025_cerebellum_rep{replicate}.h5cd"
@@ -710,7 +714,11 @@ def _resolve_transcriptome_paths(
     return [Path(p) for p in transcriptomic_data]
 
 
-def _download_transcriptomic_zip(data_dir: PathLike) -> Path:
+def _download_transcriptomic_zip(data_dir: Optional[PathLike]) -> Path:
+    if data_dir is None:
+        from uchrom.datasets import data_dir as _root
+
+        data_dir = _root() / "takei2025_cerebellum"
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
     out = data_dir / TRANSCRIPTOMIC_ZIP_NAME

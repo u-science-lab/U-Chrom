@@ -13,6 +13,7 @@ For a run whose authors' per-read contacts are public (CRR1161506 = E13.5 sectio
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import io
 import json
 import sys
@@ -23,7 +24,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1] / "example-data" / "spatial_hic_chen2026"
+ROOT = data_dir() / "spatial_hic_chen2026"
 CHROMS = [f"chr{i}" for i in range(1, 20)] + ["chrX"]
 
 

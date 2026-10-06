@@ -257,6 +257,6 @@ categorical ones such as `cell_type`, with a legend.
 
 | Data | Example | Opens as |
 |------|---------|----------|
-| Imaging traces, many cells | Takei 2021 / 2025 (`example-data/takei2025_fov0/`) | 3D \| Embedding or 3D \| Genome |
-| One simulated / reconstructed cell | `example-data/sim_cell1/` (NucDynamics + its contacts) | 3D \| Genome — its contacts above its 3-D distances |
-| Single-cell multi-omics without 3-D | scHiCAR (`example-data/schicar_mop/`) | Matrix \| Embedding; the 3D pane says there are no coordinates |
+| Imaging traces, many cells | Takei 2021 / 2025 (atlas `takei2025_cerebellum`) | 3D \| Embedding or 3D \| Genome |
+| One simulated / reconstructed cell | atlas `stevens2017_mesc` (structures + their contacts) | 3D \| Genome — its contacts above its 3-D distances |
+| Single-cell multi-omics without 3-D | atlas `schicar_mouse_cortex` | Matrix \| Embedding; the 3D pane says there are no coordinates |

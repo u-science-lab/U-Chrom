@@ -13,7 +13,7 @@
 source "$SCRATCH/uchrom-nd/repo-highres/benchmarks/screcon/sherlock/_env_highres.sh"
 fetch() {   # extra args of download_data.py
   for try in 1 2 3; do
-    $PY $REPO/example-data/download_data.py --wu2025_scmicroc --dest "$DATA" "$@" && return 0
+    $PY -m uchrom.datasets fetch wu2025_scmicroc --root "$DATA" "$@" && return 0
     echo "download attempt $try failed"; sleep 120
   done
   return 1

@@ -1,7 +1,7 @@
 """Checks of the reprocessed Chen 2026 per-spot maps that do not use the linking criterion.
 
 The linker picks each run's spot pairing by correlating a spot's compartment profile with the authors'
-single-spot A/B (``example-data/link_spatial_hic_chen2026_contacts.py``).  Two checks independent of it:
+single-spot A/B (``apps/atlas/recipes/link_spatial_hic_chen2026_contacts.py``).  Two checks independent of it:
 
 1. **Tissue image.** The per-spot contact totals of the linked maps, laid out on the section's grid, form
    a coherent picture: Moran's I of log total contacts over the 8-neighbour grid, against the same with the
@@ -15,6 +15,7 @@ single-spot A/B (``example-data/link_spatial_hic_chen2026_contacts.py``).  Two c
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import json
 import warnings
 from pathlib import Path
@@ -29,7 +30,7 @@ from uchrom import ChromData
 
 warnings.filterwarnings("ignore")
 ROOT = Path(__file__).resolve().parents[1]
-D = ROOT / "example-data" / "spatial_hic_chen2026"
+D = data_dir() / "spatial_hic_chen2026"
 OUT = ROOT / "benchmarks" / "results" / "spatial_hic_chen2026_reprocessed.json"
 STORES = ["e13_embryo_50um", "brain_embryo_20um", "brain_embryo_10um", "cortex_adult_10um", "hippocampus_adult_10um"]
 

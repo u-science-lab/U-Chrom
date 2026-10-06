@@ -4,7 +4,7 @@ Data side and evaluation of the population deconvolution
 `uchrom.recon.bulk.deconv.deconvolve(method="igm")` (the IGM A/M protocol on the native engine,
 `uchrom.recon.bulk.deconv.igm`, built on the engine branch).  Specification of the original
 algorithm: `pgs_spec.md`; design and the validation plan (a)–(d): `design.md` section 7.
-Datasets: `example-data/README.md`, section "Bulk Hi-C deconvolution benchmark".
+Datasets: `apps/atlas/recipes/README.md`, section "Bulk Hi-C deconvolution benchmark".
 
 Everything here is standalone numpy / scipy / pandas (+ cooler / h5py / fsspec for real Hi-C,
 scikit-learn optional for the classifier test) so it runs in the Sherlock `venv-main`, which

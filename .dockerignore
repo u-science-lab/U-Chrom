@@ -2,7 +2,6 @@
 .venv
 **/node_modules
 **/__pycache__
-example-data
 benchmarks
 docs
 paper

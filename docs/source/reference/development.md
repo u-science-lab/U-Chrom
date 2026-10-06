@@ -10,11 +10,10 @@ packages/
 ├── uchrom-recon/       the native reconstruction engine (Rust: src/, tests/; Python: python/uchrom_recon)
 └── uchrom-discovery/   auto-discovery (uchrom_discovery/, tests/)
 apps/
-├── atlas/              the atlas page, its thumbnails and publishing (build.py, tests/)
+├── atlas/              the atlas page, thumbnails, publishing; recipes/ builds every dataset from its sources
 └── hosted-browser/     the public web browser (Cloudflare Worker + container)
 benchmarks/             the measurements behind the paper's figures (+ benchmarks/<name>/tests)
 tutorials/              the tutorial notebooks (executed; docs/source/tutorials links to them)
-example-data/           build / download scripts and the catalog of every dataset (README.md)
 docs/                   this documentation (Sphinx + MyST)
 ```
 
@@ -67,7 +66,7 @@ Keep `uchrom_browser/API.md` in sync with `server.py` / `data.py`.
 ## Tutorials and docs
 
 Tutorials are Jupyter notebooks in `tutorials/`, committed **executed**: they run end to end on real
-data (datasets from the [example-data catalog](../start/example_data)), and the docs build only
+data (from the atlas or fetched with `uchrom.datasets`; see [datasets](../start/datasets)), and the docs build only
 renders them.  After changing a tutorial, re-run it from the repository root:
 
 ```bash
@@ -84,7 +83,9 @@ sphinx-build -b html docs/source docs/build/html
 
 ## Data and validation
 
-Every dataset a tutorial, test or benchmark uses is listed in `example-data/README.md` (size, source,
-licence, download, users); data ≥ 10 MB are downloaded by `example-data/download_data.py`, never
-committed.  A new method is validated on the real datasets its paper used, and the real-data numbers
-go into the commit message.
+Every dataset a tutorial, test or benchmark uses is registered in `uchrom.datasets`
+(`packages/uchrom/uchrom/datasets/_sources.py`: source URL, md5) or built by a recipe in
+`apps/atlas/recipes/`, and documented in `apps/atlas/recipes/README.md` (size, source, licence,
+users); data are never committed, except the small fixtures of the unit tests
+(`packages/*/tests/fixtures/`).  A new method is validated on the real datasets its paper used, and the
+real-data numbers go into the commit message.

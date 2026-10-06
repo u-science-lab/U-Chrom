@@ -1,6 +1,6 @@
 """Shared helpers for the Figure 2 benchmarks (``benchmarks/fig2/*.py``).
 
-* paths: repo root, example-data (``$UCHROM_EXAMPLE_DATA`` overrides), results
+* paths: repo root, the data directory (``uchrom.datasets.data_dir()``: ``$UCHROM_DATA``), results
   (``<u-chrom-paper>/manuscripts/full/figures/fig2/results``, see ``benchmarks/_paper.py``) and a scratch work dir (``$UCHROM_FIG2_WORK``);
 * ``machine_info()`` — CPU / RAM / disk / OS / library versions for the JSON;
 * ``run_child()`` — run one measurement in a fresh interpreter and collect its
@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import json
 import os
 import pickle
@@ -39,7 +40,7 @@ ROOT = HERE.parents[1]
 for _pkg in ("uchrom", "chromdata", "uchrom-browser"):   # this checkout's packages, not installed copies
     sys.path.insert(0, str(ROOT / "packages" / _pkg))
 
-DATA = Path(os.environ.get("UCHROM_EXAMPLE_DATA", ROOT / "example-data"))
+DATA = data_dir()
 sys.path.insert(0, str(ROOT / "benchmarks"))
 from _paper import results_dir  # noqa: E402
 
@@ -404,7 +405,7 @@ FORMATS: Dict[str, Format] = {k: f for k, f in (("fofct", FofctCSV()), ("parquet
 def load_takei_all():
     from uchrom import ChromData
     if not TAKEI_COMBINED.exists():
-        raise SystemExit(f"{TAKEI_COMBINED} missing — run example-data/build_takei2025_cerebellum.py")
+        raise SystemExit(f"{TAKEI_COMBINED} missing — run apps/atlas/recipes/build_takei2025_cerebellum.py")
     return ChromData.read(TAKEI_COMBINED)
 
 

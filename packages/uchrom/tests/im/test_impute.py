@@ -5,7 +5,7 @@ Tests for FISH coordinate imputation.
 import pytest
 import numpy as np
 import pandas as pd
-from tests import REPO
+from tests import FIXTURES
 
 
 @pytest.fixture
@@ -117,7 +117,7 @@ def test_impute_snapfish():
     from chromdata import ChromData
     from uchrom.im.impute import impute_snapfish
 
-    data = str(REPO / "example-data" / "mESC_Sox2_5cells_wnan.chromdata.zarr")
+    data = str(FIXTURES / "mESC_Sox2_5cells_wnan.chromdata.zarr")
     if not os.path.exists(data):
         pytest.skip(f"real test data not found: {data}")
 

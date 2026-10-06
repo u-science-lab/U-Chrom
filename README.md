@@ -42,19 +42,20 @@ or, with [uv](https://docs.astral.sh/uv/): `uv pip install -e "packages/uchrom[w
 
 ```python
 import uchrom as uc
+import uchrom.datasets as ds
 from chromdata import ChromData
 
 # a dataset of the atlas, read over HTTP: ~2 s to open 1,799 cells, then one cell on demand
-cd = ChromData.read("https://uchrom-atlas-r2.u-science.org/takei2025_cerebellum.chromdata.zarr", backed=True)
+cd = ds.atlas("takei2025_cerebellum")
 cell = cd.get_cell(cd.cells.index[0])
 
 # chromatin tracing (Takei 2021, 4DN FOF-CT): TADs from 3-D distances
-cd = ChromData.from_fofct("example-data/4DNFIHF3JCBY.csv")
+cd = ChromData.from_fofct(ds.fetch("takei"))                 # fetched from 4DN once
 tads = uc.tl.call_tads(cd, chrom="chr3")
 cd.write("takei2021.chromdata.zarr")
 
 # single-cell Hi-C -> an ensemble of 3-D structures (EMber, native engine)
-s = uc.tl.reconstruct_sc("example-data/cell1.pairs", n_models=4)
+s = uc.tl.reconstruct_sc(ds.fetch("stevens2017") / "GSM2219497_Cell_1_contact_pairs.txt.gz", n_models=4)
 ```
 
 ```bash
@@ -65,8 +66,9 @@ python -m uchrom_browser takei2021.chromdata.zarr        # look at it
 
 The documentation is organised by function — data model & storage, import, imaging, 3-D
 reconstruction, structure calling, features, cells & embeddings, visualisation, auto-discovery — each
-chapter with tutorials on real data (`docs/`, notebooks in `tutorials/`, datasets in
-[`example-data/README.md`](example-data/README.md)).
+chapter with tutorials on real data (`docs/`, notebooks in `tutorials/`).  Data come from the atlas or
+from their original sources (`python -m uchrom.datasets`), never from the repository; where each
+dataset comes from: [`apps/atlas/recipes/README.md`](apps/atlas/recipes/README.md).
 
 ## Repository layout
 
@@ -77,8 +79,8 @@ chapter with tutorials on real data (`docs/`, notebooks in `tutorials/`, dataset
 | `packages/uchrom-browser/` | `uchrom-browser` (`uchrom_browser`) | the web browser (needs `chromdata`, not `uchrom`) |
 | `packages/uchrom-recon/` | `uchrom-recon` (`uchrom_recon`) | the native reconstruction engine: NucDynamics, EMber, IGM (Rust; LGPL-3.0) |
 | `packages/uchrom-discovery/` | `uchrom-discovery` (`uchrom_discovery`) | LLM-driven auto-discovery on top of `uchrom` |
-| `apps/` | — | the atlas page and the hosted web browser (deployments) |
-| `benchmarks/`, `tutorials/`, `example-data/`, `docs/` | — | figure benchmarks, tutorials, dataset catalog and builders, documentation |
+| `apps/` | — | the atlas (page, publishing, `recipes/` that build every dataset) and the hosted web browser |
+| `benchmarks/`, `tutorials/`, `docs/` | — | figure benchmarks, tutorials, documentation |
 
 Each package has its own tests (`cd packages/<package> && pytest tests`); see
 `docs/source/reference/development.md`.

@@ -19,7 +19,7 @@ the 1.x file) and for the store on disk (read in its original order) — and
 reports n_bins, n_spots, file sizes and times.
 It also checks that ``from_fofct`` gives the same table in both versions.
 
-Data (see ``example-data/README.md``; set ``UCHROM_EXAMPLE_DATA``):
+Data (see ``apps/atlas/recipes/README.md``; set ``UCHROM_DATA``):
 ``sim_cell1/sim_cell1.h5cd``, ``takei2025_fov0/takei2025_fov0.h5cd``,
 ``schicar_mop/schicar_mop.h5cd``, ``mESC_Sox2_5cells_*.h5cd`` (1.1 files,
 replaced in the repo by ``.chromdata.zarr`` stores; take them from git
@@ -27,6 +27,7 @@ history) and the
 Takei 2021 FOF-CT core table ``4DNFIHF3JCBY.csv`` with its in-repo cell
 (``4DNFIFINA2U9.csv``) and RNA (``4DNFIJ52NVDV.csv``) tables.
 """
+from uchrom.datasets import data_dir
 import json
 import os
 import pickle
@@ -40,7 +41,7 @@ import numpy as np
 import pandas as pd
 
 REPO = Path(__file__).resolve().parents[1]
-DATA = Path(os.environ.get("UCHROM_EXAMPLE_DATA", REPO / "example-data"))
+DATA = data_dir()
 MODE, WORK = sys.argv[1], Path(sys.argv[2])
 WORK.mkdir(parents=True, exist_ok=True)
 warnings.simplefilter("ignore")
