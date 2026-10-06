@@ -362,11 +362,14 @@ def reconstruct(table: Path, out: Path, method: str, seed: int, ds: str, device:
     if res.get("contact_weights") is not None:
         extra["contact_weights"] = np.asarray(res["contact_weights"], np.float32)
     out.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(out, chrom=chrom, pos=pos, coords=np.asarray(res["coords"], np.float32), **extra)
+    tmp = out.with_name(out.name + ".tmp.npz")          # atomic: a preempted job leaves no partial .npz
+    np.savez_compressed(tmp, chrom=chrom, pos=pos, coords=np.asarray(res["coords"], np.float32), **extra)
+    os.replace(tmp, out)
     meta = {"table": str(table), "method": method, "protocol": proto, "seed": seed, "n_rows": n_rows,
             "particle_sizes": sizes, "n_models": N_MODELS, "wall_seconds": wall, "stages": res["stages"],
             "engine_version": un.__version__, "slurm_job_id": os.environ.get("SLURM_JOB_ID")}
-    Path(str(out) + ".json").write_text(json.dumps(meta, default=str))
+    Path(str(out) + ".json.tmp").write_text(json.dumps(meta, default=str))
+    os.replace(str(out) + ".json.tmp", str(out) + ".json")   # the .json marks a complete run
     return meta
 
 
@@ -406,7 +409,7 @@ def cmd_run(args) -> None:
     done = 0
     for table, method, seed in jobs:
         out = run_path(table, method, seed)
-        if out.exists() and not args.force:
+        if out.exists() and Path(str(out) + ".json").exists() and not args.force:
             continue
         if done >= args.restart_every:
             # the GPU adapter is lost after ~25-30 engine calls in one process: start a fresh process
