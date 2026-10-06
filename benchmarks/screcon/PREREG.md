@@ -599,5 +599,16 @@ units only.  Code: `dominant.py` (cells, designs, tables, runs, scoring, aggrega
   NucDynamics on dominant-cell mixtures" only if the E2 95 % CI over all f < 1 mixtures is above 0;
   "the spot QC works" only if the held-back AUC (per dataset, mean over levels) has a 95 % CI lower
   bound above 0.75 and the specificity at the frozen thresholds is >= 0.8.  Otherwise reported as it is.
+* **Materialised development designs** (`dominant.py designs`, 2026-10-06, before any reconstruction;
+  n_cis in parentheses; full lists in `runs/dominant/<dataset>/dev/designs.json`):
+  * Nagano dominants: NST_637 (103,371), NST_755 (168,397), NST_304 (112,519), NST_274 (126,094),
+    NST_674 (109,021), NST_763 (174,763), NST_344 (202,214), NST_333 (180,994), NST_722 (110,073),
+    NST_844 (110,791), NST_982 (208,039), NST_395 (111,446); 24 designs (one m = 1, one m = 2 per dominant).
+  * Stevens dominants: cells 1 (98,028), 2 (72,204), 3 (24,739), 4 (81,946); 24 designs.  No Stevens cell
+    reaches 100 k cis (levels 10 k, 30 k, full; cell 3: 10 k and full).
+  * Tan dominants: cortex-p056-cb_043 (P), cortex-p309-bc_103 (P), cortex-p309-bc_165 (O),
+    cortex-p056-cb_112 (O), cortex-p056-cb_129 (A), cortex-p056-cb_284 (A), cortex-p056-cb_134 (M),
+    cortex-p056-cb_100 (M) (173-858 k cis); 16 designs.  The cells come from reciprocal crosses (cb / bc);
+    phase labels are kept as given (the mixture's copy labels of the dominant are its own).
 * **Expected cost** (development): ~4,100 runs (Nagano ~1,900, Stevens ~1,000, Tan ~1,200), haploid
   ~10-20 s per run, diploid 10 s - 5 min; ~20 GPU hours.
