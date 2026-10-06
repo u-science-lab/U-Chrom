@@ -4,7 +4,7 @@
 ``contacts_cells_1Mb.scool`` (5,313 cells) and holds the cell table with
 ``cell_type`` (22 types).  For every cell type the group pseudo-bulk is
 computed through the library path the web browser uses —
-``uchrom.browser.web.data.Dataset.register_group`` (the cells of the type)
+``uchrom_browser.data.Dataset.register_group`` (the cells of the type)
 then ``Dataset.contacts(key, chrom, group=...)`` → ``Dataset._pseudobulk``
 (per-cell pixels summed straight from the ``.scool``) — for the cis map of
 every chromosome, and compared with the published per-type map
@@ -54,7 +54,7 @@ import _common as C  # noqa: E402
 
 SCRIPT = Path(__file__).resolve()
 SCHICAR = C.DATA / "schicar_mop" / "schicar_mop.chromdata.zarr"
-FUNCTION = "uchrom.browser.web.data.Dataset.contacts(key, chrom, group=...) -> Dataset._pseudobulk"
+FUNCTION = "uchrom_browser.data.Dataset.contacts(key, chrom, group=...) -> Dataset._pseudobulk"
 
 
 def _coarsen(mat: np.ndarray, starts: np.ndarray, target_starts: np.ndarray) -> np.ndarray:
@@ -71,7 +71,7 @@ def child_identity(window):
     import cooler
 
     from uchrom import ChromData
-    from uchrom.browser.web.data import Dataset, decode_matrix
+    from uchrom_browser.data import Dataset, decode_matrix
 
     cd = ChromData.read(SCHICAR)
     ds = Dataset(id="schicar", name="schicar", path=str(SCHICAR), cd=cd)

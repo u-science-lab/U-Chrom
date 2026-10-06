@@ -15,7 +15,7 @@ def read_and_show(*paths, style='qdarkgraystyle', web=False, host='127.0.0.1',
     Desktop (PyVista + Qt) by default; ``--web`` serves the web browser on
     ``host:port`` instead (``--noopen_browser`` to skip opening a tab).  ``--atlas URL`` is the atlas
     the Open dialog lists (default: the public U-Chrom atlas; ``--atlas=`` for none).  ``--hosted`` is the mode of a public
-    server (one session per visitor, only atlas datasets, no folder listing; see ``web/hosted.py``).
+    server (one session per visitor, only atlas datasets, no folder listing; see ``uchrom_browser/hosted.py``).
     """
     # fire hands the token after a boolean flag to the flag: `--web out.cdz` is web='out.cdz',
     # `--open_browser out.cdz` is open_browser='out.cdz', `--noopen_browser out.cdz` is
@@ -34,8 +34,11 @@ def read_and_show(*paths, style='qdarkgraystyle', web=False, host='127.0.0.1',
             open_browser = False
     if flags:
         raise SystemExit(f"unknown option(s): {', '.join('--' + k for k in flags)}")
-    if web:
-        from .web import serve
+    if web:                                 # the web browser: the uchrom-browser package
+        try:
+            from uchrom_browser import serve
+        except ModuleNotFoundError as exc:
+            raise SystemExit('the web browser is the uchrom-browser package: pip install "u-chrom[web]"') from exc
         serve(paths, host=host, port=port, open_browser=open_browser, atlas=atlas, hosted=bool(hosted))
         return
 

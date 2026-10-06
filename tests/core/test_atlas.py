@@ -16,8 +16,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from tests.core.test_embedded import RES, _store  # noqa: E402
 from tests.core.test_remote import _RangeHandler  # noqa: E402
-from uchrom.browser.web.data import DatasetStore  # noqa: E402
-from uchrom.browser.web.server import create_app  # noqa: E402
+from uchrom_browser.data import DatasetStore  # noqa: E402
+from uchrom_browser.server import create_app  # noqa: E402
 from chromdata import catalog as atlas, embedded  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]

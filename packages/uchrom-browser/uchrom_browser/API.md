@@ -1,10 +1,10 @@
 # U-Chrom web browser — HTTP API
 
-Contract between the Python server (`uchrom.browser.web.server`) and the
-React/Three.js frontend (`uchrom/browser/web/frontend`).  All endpoints are
+Contract between the Python server (`uchrom_browser.server`) and the
+React/Three.js frontend (`packages/uchrom-browser/uchrom_browser/frontend`).  All endpoints are
 under `/api`; the built frontend is served from `/`.
 
-The server is a *local* tool (`python -m uchrom.browser --web data.chromdata.zarr`):
+The server is a *local* tool (`python -m uchrom_browser data.chromdata.zarr`):
 paths are local filesystem paths on the machine running the server.
 
 `.chromdata.zarr` / `.cdz` stores are opened **backed**: loading reads only
@@ -529,7 +529,7 @@ to the active page over Server-Sent Events; the page runs it with the same funct
 (`frontend/src/actions.ts`) and posts the result back.  Actions are defined once in
 `ui_tools.json` (name, description, JSON-schema input), which the page also registers as WebMCP
 tools (`frontend/src/webmcp.ts`, feature-detected, experimental).  Python:
-`uchrom.browser.connect()` (`uchrom/browser/client.py`).
+`uchrom_browser.connect()` (`uchrom_browser/client.py`; `uchrom.browser.connect()` with u-chrom).
 
 ### `GET /api/control/tools`
 
@@ -555,5 +555,5 @@ Body `{"ok": true, "result": …}` or `{"ok": false, "error": "…"}` → `{"acc
 
 The page marks itself active on window focus; `pages` lists connected pages, active first.
 
-`python -m uchrom.browser --web` records its URL in `~/.cache/uchrom/browser.json` (removed on
+`python -m uchrom_browser` (or `python -m uchrom.browser --web`) records its URL in `~/.cache/uchrom/browser.json` (removed on
 exit) so that `connect()` finds a server that moved to another port.

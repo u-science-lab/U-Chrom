@@ -1,4 +1,4 @@
-// The hosted U-Chrom web browser: a Worker in front of a container running `python -m uchrom.browser --web --hosted`.
+// The hosted U-Chrom web browser: a Worker in front of a container running `python -m uchrom_browser --hosted`.
 //
 // The server keeps each visitor's datasets in memory (a session per cookie), so a visitor must always reach the same
 // instance: the Worker gives every new visitor a session id (cookie), and picks the instance by a hash of it.

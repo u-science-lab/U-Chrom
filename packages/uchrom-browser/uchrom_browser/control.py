@@ -1,6 +1,6 @@
 """Control channel: let code and agents drive the open browser page (see ``API.md`` → *Control*).
 
-The page stays the owner of what is on screen.  A caller (``uchrom.browser.connect()``, a test, a
+The page stays the owner of what is on screen.  A caller (``uchrom_browser.connect()``, a test, a
 script) posts an action; the server forwards it to the active page over Server-Sent Events; the page
 runs it with the same functions as its GUI (``frontend/src/actions.ts``) and posts the result back,
 which the server returns to the caller.  The actions are defined once in ``ui_tools.json``, which is
@@ -83,7 +83,7 @@ class ActionBroker:
         else:
             page = max(self._pages.values(), key=lambda p: p.active_at, default=None)
         if page is None:
-            raise NoPage("no browser page is connected; open the browser (python -m uchrom.browser --web …)")
+            raise NoPage("no browser page is connected; open the browser (python -m uchrom_browser …)")
         action_id = f"a{next(self._ids)}"
         fut = asyncio.get_running_loop().create_future()
         self._pending[action_id] = fut

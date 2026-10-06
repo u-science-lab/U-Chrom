@@ -12,8 +12,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from tests.core.test_embedded import RES, _store  # noqa: E402
 from tests.core.test_remote import _RangeHandler  # noqa: E402
-from uchrom.browser.web.hosted import COOKIE, HostedConfig, SessionStores  # noqa: E402
-from uchrom.browser.web.server import create_app  # noqa: E402
+from uchrom_browser.hosted import COOKIE, HostedConfig, SessionStores  # noqa: E402
+from uchrom_browser.server import create_app  # noqa: E402
 from chromdata import catalog as atlas, embedded  # noqa: E402
 
 
@@ -80,7 +80,7 @@ def test_memory_is_bounded(served):
 def test_sessions_expire_and_are_capped():
     now = [0.0]
     st = SessionStores(HostedConfig(allowed_prefixes=["https://a"], max_sessions=2, ttl=10), clock=lambda: now[0])
-    from uchrom.browser.web.hosted import reset_session, set_session
+    from uchrom_browser.hosted import reset_session, set_session
     tokens = []
     for sid in ("s1", "s2", "s3"):
         tokens.append(set_session(sid)); st.list(); reset_session(tokens[-1])
@@ -105,8 +105,8 @@ def test_hosted_geometry_is_capped(tmp_path):
     from fastapi.testclient import TestClient
 
     from uchrom import ChromData
-    from uchrom.browser.web.hosted import HostedConfig
-    from uchrom.browser.web.server import create_app
+    from uchrom_browser.hosted import HostedConfig
+    from uchrom_browser.server import create_app
 
     spots = pd.DataFrame({"chrom": "chr1", "start": np.arange(300) * 100, "end": np.arange(300) * 100 + 100,
                           "trace_id": np.repeat(["t0", "t1", "t2"], 100)})

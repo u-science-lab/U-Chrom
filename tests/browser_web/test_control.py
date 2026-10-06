@@ -16,8 +16,8 @@ uvicorn = pytest.importorskip("uvicorn")
 requests = pytest.importorskip("requests")
 
 from uchrom.browser import client as ubc  # noqa: E402
-from uchrom.browser.web import create_app  # noqa: E402
-from uchrom.browser.web.control import load_tools  # noqa: E402
+from uchrom_browser import create_app  # noqa: E402
+from uchrom_browser.control import load_tools  # noqa: E402
 
 
 def _free_port():

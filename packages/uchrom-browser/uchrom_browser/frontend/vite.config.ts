@@ -3,7 +3,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // Built assets are committed under ../static and served by the Python server
-// (uchrom.browser.web.server), so the app must use relative URLs.
+// (uchrom_browser.server), so the app must use relative URLs.
 export default defineConfig({
   base: './',
   plugins: [react()],

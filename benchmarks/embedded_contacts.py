@@ -26,7 +26,7 @@ from pathlib import Path
 
 import numpy as np
 
-from uchrom.browser.web.data import GENOME, DatasetStore, decode_matrix
+from uchrom_browser.data import GENOME, DatasetStore, decode_matrix
 from chromdata.embedded import EmbeddedContacts, list_embedded
 
 warnings.filterwarnings("ignore")

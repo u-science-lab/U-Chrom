@@ -10,8 +10,10 @@ paper
 tutorials
 discovery
 apps/atlas
+uchrom
+native
 *.zarr
 *.h5ad
 *.scool
 *.mcool
-uchrom/browser/web/frontend/src
+packages/uchrom-browser/uchrom_browser/frontend/src

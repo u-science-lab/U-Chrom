@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from uchrom import ChromData
-from uchrom.browser.web.data import DatasetStore
+from uchrom_browser.data import DatasetStore
 
 
 def _cd():

@@ -59,9 +59,8 @@ uchrom/
 ├── emb/             Single-cell embedding (Higashi / FastHigashi wrapper)
 ├── pl/              Plotting (3D structure, trace statistics)
 ├── utils/           Shared statistics helpers (LOWESS, etc.)
-├── browser/         Interactive 3D browser: desktop (PyVista + PyQt5) and
-│   └── web/         web (FastAPI server + React/Three.js SPA in frontend/,
-│                    built into static/ and committed; API in API.md)
+├── browser/         Desktop 3D browser (PyVista + PyQt5); `--web` starts the web
+│                    browser, the uchrom-browser package (packages/uchrom-browser)
 └── op.py            Misc operations (mark empty particles)
 
 discovery/           Separate package `uchrom-discovery` (import uchrom_discovery):
@@ -91,8 +90,9 @@ native/nucdyn/       Separate package `u-chrom-nucdyn` (import uchrom_nucdyn): R
   `manuscripts/full/figures/<fig>/results/*.json` there (`benchmarks/_paper.py`, `$UCHROM_PAPER`); library
   changes a figure needs are made here first.  Never re-create `paper/` in this repository; a
   symlink `paper -> ../u-chrom-paper` (ignored) may show the paper checkout next to the code.
-- Run the two test suites separately (both have a `tests` package):
-  `pytest tests` from the root, `cd discovery && pytest tests`.
+- Run the test suites separately (each has a `tests` package):
+  `pytest tests` from the root, `cd discovery && pytest tests`,
+  `cd packages/chromdata && pytest tests`, `cd packages/uchrom-browser && pytest tests`.
 - `uchrom` stays pure Python: it imports `uchrom_nucdyn` lazily (tests skip
   when it is not installed); the native crate never imports `uchrom`.
 
@@ -244,4 +244,4 @@ All datasets consumed by tutorials and benchmarks live in
 - **`uchrom/io/` naming**: The internal file is `_io.py` to avoid shadowing Python's stdlib `io` module. Use `gzip.open(path, mode + "t")` instead of `io.TextIOWrapper`.
 - **CLI entry points**: All via `python -m` (e.g., `python -m uchrom.recon.sc.nucdyn`, `python -m uchrom.browser`)
 - **Browser backend**: PyVista only (VisPy backend was removed)
-- **Web browser**: `python -m uchrom.browser --web`.  `uchrom/browser/__init__.py` imports Qt lazily so the web path works without PyQt5.  Frontend changes need `npm run build` in `uchrom/browser/web/frontend` and the rebuilt `static/` committed.  Keep `API.md` in sync with `server.py` / `data.py`.
+- **Web browser**: the `uchrom-browser` package (`packages/uchrom-browser/uchrom_browser`: FastAPI server + React/Three.js SPA in `frontend/`, built into `static/` and committed; API in `API.md`).  It depends on `chromdata` only and must never import `uchrom`.  `python -m uchrom_browser` / `uchrom-browser`, or `python -m uchrom.browser --web` with u-chrom (`uchrom.browser.web` / `uchrom.browser.client` are deprecated aliases).  `uchrom/browser/__init__.py` imports Qt lazily so the web path works without PyQt5.  Frontend changes need `npm run build` in `packages/uchrom-browser/uchrom_browser/frontend` and the rebuilt `static/` committed.  Keep `API.md` in sync with `server.py` / `data.py`.

@@ -2,7 +2,7 @@
 
 Framework-free: everything here works on :class:`~chromdata.ChromData`
 and plain numpy, so it is testable without FastAPI.  The HTTP layer in
-:mod:`uchrom.browser.web.server` is a thin wrapper.  See ``API.md`` for the
+:mod:`uchrom_browser.server` is a thin wrapper.  See ``API.md`` for the
 wire format.
 """
 
@@ -72,7 +72,7 @@ def _modality(key: str, meta: Dict[str, Any]) -> str:
     "Published", …): the recorded one, else from its source / key prefix."""
     if meta.get("modality"):
         return str(meta["modality"])
-    from uchrom.emb.cells import MODALITY_LABELS
+    from chromdata.conventions import MODALITY_LABELS
 
     source = str(meta.get("source") or "")
     if source in MODALITY_LABELS:

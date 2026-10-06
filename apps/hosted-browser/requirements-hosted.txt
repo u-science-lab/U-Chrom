@@ -1,5 +1,5 @@
-# What the hosted web browser needs (python -m uchrom.browser --web --hosted): no torch / taichi / sklearn.
-# Versions the server was tested with (2026-10); u-chrom itself is installed with --no-deps.
+# What the hosted web browser needs (python -m uchrom_browser --hosted): no torch / taichi / sklearn.
+# Versions the server was tested with (2026-10); chromdata and uchrom-browser are installed with --no-deps.
 numpy==2.5.3
 pandas==3.0.6
 pyarrow==25.0.1

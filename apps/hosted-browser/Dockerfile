@@ -6,19 +6,18 @@ WORKDIR /app
 
 COPY apps/hosted-browser/requirements-hosted.txt /tmp/requirements.txt
 COPY packages/chromdata /src/chromdata
-COPY pyproject.toml README.md /src/
-COPY uchrom /src/uchrom
+COPY packages/uchrom-browser /src/uchrom-browser
 
 # One layer, so that what is deleted here is really gone from the image:
-# the dependencies the web server needs, the data model (chromdata) and the package without their (training-time)
-# dependencies, then
+# the dependencies the web server needs, then the data model (chromdata) and the web browser (uchrom-browser) without
+# dependencies of their own (the analysis library u-chrom is not needed), then
 # - the test suites the packages ship (tens of MB),
 # - everything byte-compiled now (a cold start would otherwise compile the dependencies' modules: seconds).
 RUN pip install -r /tmp/requirements.txt \
- && pip install --no-deps /src/chromdata /src \
+ && pip install --no-deps /src/chromdata /src/uchrom-browser \
  && rm -rf /src /tmp/requirements.txt \
  && find /usr/local/lib/python3.12/site-packages -type d \( -name tests -o -name test \) -prune -exec rm -rf {} + \
  && python -m compileall -q /usr/local/lib/python3.12/site-packages
 
 EXPOSE 8000
-CMD ["python", "-m", "uchrom.browser", "--web", "--hosted", "--host=0.0.0.0", "--port=8000", "--open_browser=False"]
+CMD ["python", "-m", "uchrom_browser", "--hosted", "--host=0.0.0.0", "--port=8000", "--open_browser=False"]

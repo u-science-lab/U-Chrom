@@ -10,7 +10,7 @@ cooler = pytest.importorskip("cooler")
 anndata = pytest.importorskip("anndata")
 
 from uchrom import ChromData  # noqa: E402
-from uchrom.browser.web.data import GENOME, DatasetStore, decode_matrix  # noqa: E402
+from uchrom_browser.data import GENOME, DatasetStore, decode_matrix  # noqa: E402
 from chromdata import embedded  # noqa: E402
 
 RES = 100
@@ -200,7 +200,7 @@ def test_http_routes_without_the_files(stores):
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
-    from uchrom.browser.web.server import create_app
+    from uchrom_browser.server import create_app
 
     tmp_path, _, emb = stores
     for f in ("bulk.mcool", "bulk.cool", "cells.scool", "ssab.h5ad", "sec.png"):

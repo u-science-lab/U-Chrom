@@ -6,7 +6,7 @@ genome, per spot and bulk), section images and cell x bin tracks are readable an
 import json, time, warnings, sys
 warnings.filterwarnings("ignore")
 from chromdata.catalog import fetch_catalog
-from uchrom.browser.web.data import DatasetStore, GENOME, decode_matrix
+from uchrom_browser.data import DatasetStore, GENOME, decode_matrix
 import sys
 from chromdata.catalog import DEFAULT_ATLAS
 cat = fetch_catalog(sys.argv[1] if len(sys.argv) > 1 else DEFAULT_ATLAS)

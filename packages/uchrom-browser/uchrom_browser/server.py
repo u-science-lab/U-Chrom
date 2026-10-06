@@ -123,8 +123,11 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
 
     @app.get("/api/health")
     def health() -> Dict[str, Any]:
-        from uchrom import __version__
-        return {"status": "ok", "version": __version__, "bundle": bundle, "hosted": hosted is not None}
+        import chromdata
+
+        from . import __version__
+        return {"status": "ok", "version": __version__, "chromdata": chromdata.__version__, "bundle": bundle,
+                "hosted": hosted is not None}
 
     @app.get("/api/datasets")
     def list_datasets() -> List[Dict[str, Any]]:
@@ -344,7 +347,7 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
             return (
                 "<h1>U-Chrom browser</h1><p>The frontend has not been built. "
                 "Run <code>npm install &amp;&amp; npm run build</code> in "
-                "<code>uchrom/browser/web/frontend</code>.</p>"
+                "<code>packages/uchrom-browser/uchrom_browser/frontend</code>.</p>"
             )
 
     return app

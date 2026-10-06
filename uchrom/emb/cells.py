@@ -37,9 +37,8 @@ __all__ = ["embed_cells", "cluster_cells", "marker_features", "normalize_counts"
 _METHODS = ("pca", "tsne", "umap")
 _NORMS = ("auto", "counts", "zscore", "tfidf", "none")
 
-#: display name of each feature prefix (the browser groups embeddings by it)
-MODALITY_LABELS = {"rna": "RNA", "if": "Histone/IF", "protein": "Protein", "ab": "Protein",
-                   "atac": "ATAC", "hic": "Hi-C", "higashi": "Hi-C"}
+#: display name of each feature prefix (the browser groups embeddings by it): chromdata's naming convention
+from chromdata.conventions import MODALITY_LABELS  # noqa: E402
 
 
 def _auto_norm(source: str) -> str:
