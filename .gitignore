@@ -124,5 +124,6 @@ native/nucdyn/python/uchrom_nucdyn/*.pyd
 # Fig. 3 renders: rebuildable inputs and raw pane captures (the cropped PNGs used in the figures are tracked)
 
 # The manuscripts and figures live in u-science-lab/u-chrom-paper (moved out of paper/ on 2026-10-05);
-# a leftover paper/ folder in an old worktree must not come back.
-/paper/
+# a leftover paper/ folder in an old worktree must not come back; a symlink paper -> ../u-chrom-paper
+# (to browse the paper next to the code) is ignored too.
+/paper
