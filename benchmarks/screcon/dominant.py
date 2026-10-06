@@ -408,12 +408,19 @@ def cmd_run(args) -> None:
         out = run_path(table, method, seed)
         if out.exists() and not args.force:
             continue
+        if done >= args.restart_every:
+            # the GPU adapter is lost after ~25-30 engine calls in one process: start a fresh process
+            # (outputs on disk are skipped)
+            print(f"restart after {done} runs", flush=True)
+            os.execv(sys.executable, [sys.executable] + sys.argv)
         try:
             meta = reconstruct(table, out, method, seed, ds, args.device)
         except RuntimeError as e:
-            if "GPU adapter" in str(e):          # node without a usable Vulkan GPU: stop, resubmit elsewhere
-                print(f"NO_GPU_ADAPTER: {e}", flush=True)
-                sys.exit(3)
+            if "GPU adapter" in str(e):
+                print(f"NO_GPU_ADAPTER after {done} runs: {e}", flush=True)
+                if done > 0:
+                    os.execv(sys.executable, [sys.executable] + sys.argv)
+                sys.exit(3)                      # a fresh process without an adapter: node problem
             raise
         done += 1
         print(f"{out.name}\t{meta['n_rows']}\t{meta['wall_seconds']:.1f}", flush=True)
@@ -869,6 +876,7 @@ def main(argv=None) -> None:
     s.add_argument("--dominant", required=True)
     s.add_argument("--device", default="gpu", choices=["cpu", "gpu"])
     s.add_argument("--force", action="store_true")
+    s.add_argument("--restart-every", type=int, default=15, help="engine calls per process")
     s.set_defaults(fn=cmd_run)
     s = sub.add_parser("score")
     s.add_argument("--dir", required=True)
