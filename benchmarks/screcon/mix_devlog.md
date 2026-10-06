@@ -188,3 +188,38 @@ on the pool (M2 −0.04) in every composition.  The density cap hurts (−0.06 m
 rule this would fail U1 and U2.  No further tuning (the §12.1 knobs left — reference resolution, smoothing,
 γ — move the per-contact AUC by < 0.01 on the development pools).  The diploid (cells × copies) runs are
 on Sherlock (§6 below when done).
+
+## 6. Cue 1, diploid (cells × copies), development (2026-10-06, Sherlock jobs 46646505 + 46722984, engine `dev-ace6f8e`)
+
+Same 28 development pools, phased (the authors' hickit pairs, both homologs), diploid mix engine
+(`src/mixdip.rs`), oracle = frozen EMber diploid per cell; the same type prior as §5 (1 Mb pseudo-bulks,
+phases ignored in the reference), on the diploid rows.  Variants `mix_variants/type_r1.json`.  Rows:
+`data/mix_type_dev_d1.tsv`.  (The first batch failed at the `diag_seed75` step of 7 pools — the
+oracle-prior path did not handle `.pairs.gz` pools; fixed in `run_mix.py` and those pools re-run with
+the cached method runs.)
+
+Mean M2 by composition (4 pools each):
+
+| composition | naive | IGM S=k | prior-split | E (prior fixed) | E (posterior) | E + density cap | diag: 75 % seed |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| PO | 0.420 | 0.176 | 0.381 | 0.417 | 0.419 | 0.399 | 0.714 |
+| PA | 0.432 | 0.161 | 0.408 | 0.456 | 0.438 | 0.412 | 0.785 |
+| PM | 0.371 | 0.165 | 0.324 | 0.360 | 0.346 | 0.317 | 0.719 |
+| OM | 0.379 | 0.172 | 0.390 | 0.381 | 0.376 | 0.371 | 0.697 |
+| PAM | 0.298 | 0.204 | 0.258 | 0.305 | 0.284 | 0.283 | 0.641 |
+| PP (same type) | 0.453 | 0.153 | 0.456 | 0.444 | 0.457 | 0.466 | 0.734 |
+| PPO | 0.317 | 0.193 | 0.307 | 0.302 | 0.311 | 0.285 | 0.643 |
+
+Mean M1 (k = 2 / 3): E (prior fixed) 0.51 / 0.32, E (posterior) 0.50 / 0.37, prior-only (argmax of the
+prior, same-type ties at random) 0.58 / 0.39, prior-split 0.59 / 0.35, IGM 0.48 / 0.34, closest of the
+true cells' structures 0.74 / 0.60.  Paired over all 28 pools (95 % bootstrap): E (prior fixed) − naive
+M2 −0.000 [−0.018, +0.017]; E − prior-split M2 +0.020 [+0.000, +0.041], M1 −0.070 [−0.121, −0.022];
+E − IGM M2 +0.206 [+0.173, +0.241], M1 +0.011 [−0.028, +0.052]; density cap − naive M2 −0.019
+[−0.038, −0.000].
+
+**Reading.**  Diploid modelling does not rescue cue 1.  The engine does better in the diploid setting —
+a 75 %-correct seed reaches M2 0.64-0.79 (pseudo-haploid 0.53-0.62) — but the type prior is not a 75 %
+labelling (prior-only M1 0.58 at k = 2, close to the depth share), and EM on top of it ties naive EMber in
+M2 and loses 0.07 of M1 against prior-split.  §12.1 U1 (M1 E − prior-only > 0) and U2 (M2 E − naive > 0)
+would fail in both ploidies.  **Cue 1 is closed as negative**; no further §12.1 knob was tried.  The
+held-back cue-1 pools are not run.
