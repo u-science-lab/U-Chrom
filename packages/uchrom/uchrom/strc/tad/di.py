@@ -2,7 +2,6 @@
 # Reference: Dixon et al. (2012) Nature
 
 import torch
-import numpy as np
 
 
 def get_device(device='auto'):
@@ -111,30 +110,3 @@ def get_domains(contact_mat, smoothing_param=0.1, min_size_frac=0.05,
     di_smoothed = smooth_with_moving_average(di, smoothing_window)
     domains = detect_tad_boundaries(di_smoothed, min_size_frac)
     return domains
-
-
-def calc_di_batch(contact_mat, window=50, device='auto'):
-    """Batch-optimized DI calculation using matrix operations."""
-    dev = get_device(device)
-    dtype = get_dtype(dev)
-    mat = contact_mat.to(dtype=dtype, device=dev)
-    n = mat.shape[0]
-
-    di = torch.zeros(n, dtype=dtype, device=dev)
-
-    for i in range(window, n - window):
-        upstream = mat[i, i-window:i]
-        downstream = mat[i, i+1:i+window+1]
-
-        a = upstream.sum()
-        b = downstream.sum()
-
-        avg_a = a / window
-        avg_b = b / window
-
-        if avg_a + avg_b > 0 and avg_a != avg_b:
-            e = (avg_a + avg_b) / 2
-            sign = torch.sign(avg_b - avg_a)
-            di[i] = sign * ((avg_a - e)**2 / e + (avg_b - e)**2 / e)
-
-    return di

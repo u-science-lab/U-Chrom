@@ -35,7 +35,7 @@ Oligopaints imaging data.  *Nature Methods* 22, 1255–1264.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -85,7 +85,6 @@ def _linear_impute(dist: np.ndarray) -> np.ndarray:
     linear blend of the nearest finite bins on each side.
     """
     d = dist.copy()
-    n = d.shape[0]
     present = np.any(np.isfinite(d), axis=1)
     if present.all() or not present.any():
         return d

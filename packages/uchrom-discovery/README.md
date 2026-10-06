@@ -51,7 +51,7 @@ packages/uchrom-discovery/
 └── tests/              run with `cd packages/uchrom-discovery && pytest tests`
 ```
 
-## Migrating from `uchrom.auto_discovery`
+## Migrating from `uchrom.auto_discovery` (removed)
 
 | Before | After |
 |---|---|

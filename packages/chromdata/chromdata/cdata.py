@@ -13,7 +13,7 @@ data.  It unifies the two kinds of input U-Chrom consumes —
 — into a single flat "structure table" (*genomic bins → 3-D coordinates*)
 plus hierarchical metadata for cells, traces, and population-level
 aggregate results.  Every downstream analysis module (``uchrom.strc``,
-``uchrom.fea``, ``uchrom.emb``, ``uchrom.pl``, ``uchrom.browser``)
+``uchrom.fea``, ``uchrom.emb``, ``uchrom.pl``, the ``uchrom-browser`` web browser)
 consumes or produces ``ChromData`` — the format is the contract that
 decouples tools along the pipeline.
 
@@ -1486,49 +1486,6 @@ class ChromData:
         return records
 
     # ------------------------------------------------------------------
-    # Deprecated auto-discovery hooks — moved to ``uchrom_discovery``
-    # ------------------------------------------------------------------
-
-    @property
-    def discovery_schema(self) -> dict:
-        """Deprecated: use ``uchrom_discovery.get_discovery_schema(cd)``."""
-        return _discovery("get_discovery_schema", "discovery_schema")(self)
-
-    @property
-    def auto_discovery_schema(self) -> dict:
-        """Deprecated: use ``uchrom_discovery.get_discovery_schema(cd)``."""
-        return _discovery("get_discovery_schema", "auto_discovery_schema")(self)
-
-    def build_discovery_schema(self, *, store: bool = True, **kwargs) -> dict:
-        """Deprecated: use ``uchrom_discovery.build_discovery_schema(cd, ...)``."""
-        return _discovery("build_discovery_schema", "build_discovery_schema")(
-            self, store=store, **kwargs
-        )
-
-    def update_discovery_schema(self, schema: Optional[dict] = None, **kwargs) -> dict:
-        """Deprecated: use ``uchrom_discovery.store_discovery_schema(cd, ...)``."""
-        return _discovery("store_discovery_schema", "update_discovery_schema")(
-            self, schema, **kwargs
-        )
-
-    def validate_discovery_schema(
-        self,
-        schema: Optional[dict] = None,
-        *,
-        raise_on_error: bool = False,
-    ) -> List[str]:
-        """Deprecated: use ``uchrom_discovery.validate_discovery_schema(...)``."""
-        return _discovery("validate_discovery_schema", "validate_discovery_schema")(
-            schema, self, raise_on_error=raise_on_error
-        )
-
-    def describe_for_agent(self, *, max_items: int = 40) -> str:
-        """Deprecated: use ``uchrom_discovery.describe_for_agent(cd)``."""
-        return _discovery("describe_for_agent", "describe_for_agent")(
-            self, max_items=max_items
-        )
-
-    # ------------------------------------------------------------------
     # Validation
     # ------------------------------------------------------------------
 
@@ -2745,26 +2702,6 @@ class ChromData:
 # ======================================================================
 # Utilities
 # ======================================================================
-
-def _discovery(func_name: str, method_name: str):
-    """Resolve a ``uchrom_discovery`` function for a deprecated ChromData hook."""
-    import warnings
-
-    warnings.warn(
-        f"ChromData.{method_name} is deprecated; use "
-        f"uchrom_discovery.{func_name}(cd, ...) instead.",
-        DeprecationWarning,
-        stacklevel=3,
-    )
-    try:
-        import uchrom_discovery
-    except ImportError as exc:
-        raise ImportError(
-            f"ChromData.{method_name} needs the separate 'uchrom-discovery' "
-            f"package (`pip install -e packages/uchrom-discovery/` from the U-Chrom repository)."
-        ) from exc
-    return getattr(uchrom_discovery, func_name)
-
 
 def _clean_metadata_record(record: Any) -> dict:
     """Return a JSON-friendly metadata record with empty values removed."""

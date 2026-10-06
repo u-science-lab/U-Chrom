@@ -36,7 +36,6 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
-import pandas as pd
 
 from uchrom.utils import get_device, lowess_log_log
 from uchrom.utils.stats import default_float_dtype
@@ -52,6 +51,8 @@ def _coord_cube_for_chrom(cd, chrom):
     ``coords_cube[t, i, :]`` is the (x, y, z) of trace ``t`` at bin ``i``,
     NaN if the trace missed that bin.  Bins are sorted by ``start``.
     """
+    if getattr(cd, "backed", False):   # read only this chromosome's rows
+        cd = cd.get_chrom(str(chrom), columns="coords")
     df = cd.spots.copy()
     df["x"] = cd.coords[:, 0]
     df["y"] = cd.coords[:, 1]
@@ -343,6 +344,9 @@ def axis_weight(
     """
     import torch
 
+    if getattr(cd, "backed", False):   # read only the rows needed
+        cd = (cd.get_chrom(str(chrom), columns="coords") if chrom is not None
+              else cd.to_memory(columns="coords"))
     df = cd.spots.copy()
     df["x"] = cd.coords[:, 0]
     df["y"] = cd.coords[:, 1]

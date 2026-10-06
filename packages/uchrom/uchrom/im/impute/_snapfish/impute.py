@@ -10,6 +10,7 @@ Modifications:
 - Removed MPI parallel functions (scatter_row_idxs, simil_mat_parallel, to_target_parallel)
 - Kept single-process versions (to_simil_mat, impute_pdist_one_iter)
 - This provides the complete non-MPI functionality
+- Kept only what uchrom.im.impute uses (resizing and file I/O removed: no scikit-image)
 """
 
 from itertools import combinations
@@ -20,10 +21,9 @@ from scipy import stats, interpolate
 from scipy.spatial.distance import pdist
 from scipy.optimize import minimize
 
-from skimage import transform
 from sklearn.metrics.pairwise import nan_euclidean_distances
 
-from .preprocess import to_dist_mat, read_data
+from .preprocess import to_dist_mat
 
 
 class DistDataFrame(pd.DataFrame):
@@ -128,85 +128,6 @@ def to_dist_df(coor_data, ann_df):
     return dist_df
 
 
-def to_triu_indices(n, k):
-    """find the upper triangle indices of an array of square matrices.
-
-    Args:
-        n (int): length in the first dimension.
-        k (int): length in the second and the third dimension.
-
-    Returns:
-        tuple: (idx1, idx2, idx3)
-    """
-    chr_idxs = np.arange(n, dtype="int")
-    tri_idxs1, tri_idxs2 = np.triu_indices(k, 1)
-    return (
-        np.repeat(chr_idxs, tri_idxs1.shape[0]),
-        np.tile(tri_idxs1, chr_idxs.shape[0]),
-        np.tile(tri_idxs2, chr_idxs.shape[0]),
-    )
-
-
-def to_mats_single_reg(vec_arr):
-    """convert flattened 1D distance vectors to 2D matrices. The reverse
-    operation of to_vecs_single_reg.
-
-    Args:
-        vec_arr (np.ndarray): of shape (n, C^k_2), pairwise distances/
-        dissimilarities of a single imaging region.
-
-    Returns:
-        np.ndarray: of shape (n, k, k)
-    """
-    n = vec_arr.shape[0]
-    k = int((1 + (1 + 8 * vec_arr.shape[1]) ** 0.5) / 2)
-    # diagonal and lower left triangle are filled by np.nan
-    mat_arr = np.ones((n, k, k)) * np.nan
-
-    idxs = to_triu_indices(n, k)
-    mat_arr[idxs] = vec_arr.ravel()
-
-    return mat_arr
-
-
-def to_vecs_single_reg(mat_arr):
-    """roll out the upper triangle of pairwise distances. The reverse operation
-    of to_mats_single_reg.
-
-    Args:
-        mat_arr (np.ndarray): of shape (n, k, k)
-
-    Returns:
-        np.ndarray: of shape (n, C^k_2)
-    """
-    n, k = mat_arr.shape[:2]
-    idxs = to_triu_indices(n, k)
-    return mat_arr[idxs].reshape((n, -1))
-
-
-def conv_resize(mat, rsize):
-    """smooth and resize a square matrix.
-
-    Args:
-        mat (np.ndarray): k*k matrix.
-        rsize (int, optional): resized factor.
-
-    Returns:
-        np.ndarray: smoothed and resized matrix.
-    """
-    nan_pos = np.isnan(mat)
-    no_nanval = np.where(nan_pos, 0, mat)
-    nan_mat = np.where(nan_pos, 1, 0)
-    v = np.array([no_nanval, nan_mat])
-
-    rlv = transform.downscale_local_mean(v, (1, rsize, rsize))
-    rlv[0] = np.where(rlv[1] != 1, rlv[0], np.nan)
-    r = rlv[0] / (1 - rlv[1])
-
-    np.fill_diagonal(r, np.nan)
-    return r
-
-
 def interpolate_coors_scipy(ann_df, coor_df, kind):
     """impute missing 3D coordinates by scipy's interp1d. The independent
     variable is the starting 1D genomic location of each locus.
@@ -240,24 +161,6 @@ def interpolate_coors_scipy(ann_df, coor_df, kind):
     interp_coor_df[["x", "y", "z"]] = interp_vals
 
     return interp_coor_df
-
-
-def generate_interpolation(ann_path, coor_path, kind, save_path):
-    """generate the interpolated 3D coordinates file.
-
-    Args:
-        ann_path (str): path to the 1D genomic location annotation file.
-        coor_path (str): path to the 3D coordinates file. Contains
-            chr, cell_id, pos, x, y, and z as columns.
-            Missing values are filled by NaN.
-        kind (str): interpolation method, argument passed to scipy's interp1d.
-        save_path (str): the path to save the imputation result.
-    """
-    ann_df = read_data(ann_path)
-    coor_df = read_data(coor_path)
-
-    interp_df = interpolate_coors_scipy(ann_df, coor_df, kind)
-    interp_df.to_csv(save_path, sep="\t", index=False)
 
 
 def boxcox_by1d(by1d_arr):
@@ -343,30 +246,6 @@ def inverse_trf(chr_norm_df):
     target_df = chr_norm_df.copy()
     target_df[target_df.vcol()] = target_mat_trf
     return target_df
-
-
-def to_simil_mat_row(pdist_arr, i):
-    """calculate the ith row of the dissimilarity matrix.
-
-    Args:
-        pdist_arr (np.ndarray): N*M normalized pairwise distances.
-        i (int): which row to calculate.
-
-    Returns:
-        np.ndarray: 2*N, dissimil_raw, count_ratio
-    """
-    num_chrs = pdist_arr.shape[0]
-    tiled_dist = np.tile(pdist_arr[i, None].T, num_chrs).T
-    diff = tiled_dist - pdist_arr
-    eucl_dist = np.sqrt(np.nansum(np.square(diff), axis=1))
-    share_count = np.sum(~np.isnan(diff), axis=1)
-    dissimil_raw = eucl_dist / np.sqrt(share_count)
-
-    by_chr_count = np.sum(~np.isnan(pdist_arr), axis=1)
-    min1 = by_chr_count[i]
-    min_count = np.where(min1 > by_chr_count, by_chr_count, min1)
-    count_ratio = share_count / min_count
-    return np.stack([dissimil_raw, count_ratio])
 
 
 def filter_by_prop(count_ratio, simil_mat, ratio):
@@ -475,34 +354,6 @@ def count_na_in_pdist(pdist_arr):
     """
     avail_idx = np.sum(~np.isnan(pdist_arr), axis=1) != 0
     return np.sum(np.isnan(pdist_arr[avail_idx]))
-
-
-def generate_single_reg_target(reg_norm_df, save_path):
-    """generate the target matrices for a single imaging region.
-
-    Args:
-        reg_norm_df (DistDataFrame): normalized pairwise distances of a region,
-            column names: chr, bin1, x1, bin2, y1, lmbda, mu, var, *chr_ids
-            row names: combination of bin pairs
-        save_path (str): the path of the generated file.
-    """
-    reg_id = reg_norm_df["region"].iloc[0]
-    reg_pred_df = reg_norm_df.copy()
-    pdist_arr = reg_pred_df.to_darr().T
-
-    np.seterr(divide="ignore", invalid="ignore")
-    prev_na, curr_na = None, count_na_in_pdist(pdist_arr)
-    print(f"Region {reg_id} initial: {curr_na} NaN values")
-    while prev_na != curr_na and curr_na != 0:
-        P = impute_pdist_one_iter(pdist_arr)
-        pdist_arr = np.where(np.isnan(pdist_arr), P, pdist_arr)
-        prev_na = curr_na
-        curr_na = count_na_in_pdist(pdist_arr)
-        print(f"Region {reg_id}: {curr_na} NaN values")
-    np.seterr(divide="warn", invalid="warn")
-
-    reg_pred_df[reg_pred_df.vcol()] = pdist_arr.T
-    reg_pred_df.round(6).to_csv(save_path, sep="\t", index=False)
 
 
 def loss_pdist(x, raw_coors, mats):

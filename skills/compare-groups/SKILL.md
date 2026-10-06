@@ -14,7 +14,7 @@ and compare there; for correlations use *associate-modalities*.
 ## Steps
 1. **Get the groups.** Cell ids (`a,b,c`), `field:<cells column>=<value>` (e.g. `field:cell_type=<TYPE>`),
    `field:<col>!=<value>`, or `rest` for b (= every other cell). From an open browser:
-   `ws = uchrom.browser.connect(); cells = ws.selected_cells()` (*show-in-browser*). Make the groups
+   `ws = uchrom_browser.connect(); cells = ws.selected_cells()` (*show-in-browser*). Make the groups
    disjoint; "vs all other cells" means `rest`, not a single other type.
 2. **One statistic** — run `scripts/compare_groups.py` (CLI) or import `compare()`:
    ```bash

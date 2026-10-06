@@ -41,7 +41,10 @@ import warnings
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
+
+if TYPE_CHECKING:
+    from chromdata import ChromData
 
 import numpy as np
 import pandas as pd

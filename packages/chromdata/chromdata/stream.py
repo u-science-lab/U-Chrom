@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -485,7 +485,6 @@ class ChromDataWriter:
     def _write(self, root_path: Path, bins: pd.DataFrame, pmap: np.ndarray, cats: Dict[str, pd.Index],
                **small) -> None:
         import pyarrow as pa
-        import pyarrow.parquet as pq
 
         zarr = _zarr()
         comp = _compressor(self.level)
@@ -909,7 +908,6 @@ class ChromDataWriter:
         enc_meta: Dict[str, Dict[str, Any]] = {name: {} for name in names + ["coords"]}
 
         def encoded(tables):
-            nonlocal plans
             res = {}
             for name, t in tables.items():
                 kind = "layers" if name.startswith("layers/") else name

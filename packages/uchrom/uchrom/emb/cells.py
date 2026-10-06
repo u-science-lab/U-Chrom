@@ -412,13 +412,6 @@ def embed_cells(
     return out
 
 
-def embedding_keys(cd) -> List[str]:
-    """cellm keys usable as 2-D embeddings (≥ 2 columns, one row per cell)."""
-    n = len(cd.cells)
-    return [k for k, v in cd.cellm.items()
-            if np.ndim(v) == 2 and np.shape(v)[1] >= 2 and (n == 0 or np.shape(v)[0] == n)]
-
-
 def cluster_cells(cd, *, use: str = "rna_pca", n_neighbors: int = 15, resolution: float = 1.0,
                   n_components: Optional[int] = None, random_state: int = 0,
                   key_added: Optional[str] = None) -> pd.Series:

@@ -62,7 +62,7 @@ def main(input, output, resolution=100000, chrom=None,
 
     if inter:
         from .inter import inter_mds
-        genome_df = inter_mds(
+        inter_mds(
             input, resolution_inter=resolution_inter,
             resolution_intra=resolution, alpha=alpha,
             weight=weight, n_iter=n_iter, device=device,

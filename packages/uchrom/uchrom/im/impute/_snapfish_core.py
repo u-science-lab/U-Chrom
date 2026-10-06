@@ -5,7 +5,6 @@ This module adapts the SnapFISH-IMPUTE algorithm to work with uchrom's ChromData
 """
 
 import numpy as np
-import pandas as pd
 
 from ._snapfish.impute import (
     interpolate_coors_scipy,
@@ -128,12 +127,12 @@ def impute_snapfish(cd, max_iter=50, ann=None, n_jobs=1, verbose=True):
         for i in range(max_iter):
             if curr_na == 0:
                 if verbose:
-                    print(f"  Converged: all values imputed")
+                    print("  Converged: all values imputed")
                 break
 
             if curr_na == prev_na:
                 if verbose:
-                    print(f"  Converged: no further improvement")
+                    print("  Converged: no further improvement")
                 break
 
             P = impute_pdist_one_iter(pdist_arr)

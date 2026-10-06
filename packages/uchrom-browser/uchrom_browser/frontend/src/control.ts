@@ -1,5 +1,5 @@
 /**
- * Control channel: receive actions from the server (sent by `uchrom.browser.connect()` and other
+ * Control channel: receive actions from the server (sent by `uchrom_browser.connect()` and other
  * callers of POST /api/control/actions), run them with `actions.ts` and post the result back.
  */
 

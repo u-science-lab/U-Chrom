@@ -1,38 +1,6 @@
 # Core functions for MDS-based 3D structure reconstruction
 
-import numpy as np
 import torch
-
-
-def contacts_to_matrix(bin1, bin2, counts, n, dtype=torch.float64):
-    """Build symmetric contact matrix from sparse contact data."""
-    mat = torch.zeros((n, n), dtype=dtype)
-
-    bin1 = np.asarray(bin1)
-    bin2 = np.asarray(bin2)
-    counts = np.asarray(counts)
-
-    valid = (bin1 >= 0) & (bin1 < n) & (bin2 >= 0) & (bin2 < n)
-    bin1_v = bin1[valid]
-    bin2_v = bin2[valid]
-    counts_v = counts[valid]
-
-    indices = torch.tensor([bin1_v, bin2_v], dtype=torch.long)
-    values = torch.tensor(counts_v, dtype=dtype)
-    mat.index_put_(tuple(indices), values, accumulate=True)
-
-    indices_sym = torch.tensor([bin2_v, bin1_v], dtype=torch.long)
-    mat.index_put_(tuple(indices_sym), values, accumulate=True)
-
-    # diagonal was added twice, fix it
-    diag_mask = bin1_v == bin2_v
-    if diag_mask.any():
-        diag_idx = bin1_v[diag_mask]
-        diag_vals = counts_v[diag_mask]
-        for idx, val in zip(diag_idx, diag_vals):
-            mat[idx, idx] = val
-
-    return mat
 
 
 def contact_to_distance(contact_mat, alpha=4.0):

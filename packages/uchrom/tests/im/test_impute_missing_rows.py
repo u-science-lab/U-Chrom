@@ -90,7 +90,6 @@ def test_linear_fills_absent_rows():
 
 def test_snapfish_handles_absent_rows():
     """SnapFISH must not crash on absent rows and must reduce missingness."""
-    pytest.importorskip("skimage")
     from uchrom.im.impute import impute_snapfish
 
     cd = _make_panel_chromdata(as_absent_rows=True)
@@ -106,7 +105,6 @@ def test_snapfish_handles_absent_rows():
 
 def test_snapfish_preserves_nonmissing_under_shuffle():
     """Non-missing coords must stay correct regardless of input row order."""
-    pytest.importorskip("skimage")
     from chromdata import ChromData
     from uchrom.im.impute import impute_snapfish
 
@@ -150,20 +148,6 @@ def test_linear_dense_nan_rows_preserved():
         np.testing.assert_allclose(out_keys[k], v, rtol=1e-9)
 
 
-def test_missing_snapfish_deps_reports_specific_module():
-    """Availability check must name the actually-missing module(s)."""
-    from uchrom.im.impute import _missing_snapfish_deps
-
-    # every import succeeds -> nothing missing (independent of what this environment has)
-    assert _missing_snapfish_deps(_import=lambda name: None) == []
-    # with an injected importer, the missing one is named precisely
-    def fake_import(name):
-        if name == "skimage":
-            raise ImportError("no skimage")
-        return None
-    assert _missing_snapfish_deps(_import=fake_import) == ["scikit-image"]
-
-
 def test_ann_restores_locus_absent_from_all_traces():
     """A locus missing from EVERY trace is restored when an ann panel is given.
 
@@ -194,4 +178,3 @@ def test_ann_restores_locus_absent_from_all_traces():
     out_ann = impute_linear(cd, ann=ann)
     assert (out_ann.spots["start"] == dropped_start).sum() == N_TRACES
     assert np.isnan(out_ann.coords).sum() == 0
-

@@ -113,7 +113,6 @@ def test_impute_snapfish():
     import os
     pytest.importorskip("scipy")
     pytest.importorskip("sklearn")
-    pytest.importorskip("skimage")
 
     from chromdata import ChromData
     from uchrom.im.impute import impute_snapfish

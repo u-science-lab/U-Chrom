@@ -18,7 +18,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator, Mapping, Protocol, Sequence
+from typing import Any, Iterator, Mapping, Protocol
 
 try:
     import tomllib

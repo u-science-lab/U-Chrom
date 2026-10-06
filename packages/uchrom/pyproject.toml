@@ -27,15 +27,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Interactive 3D browser (python -m uchrom.browser).
-browser = [
-    "vtk>=9.2,<9.4",
-    "pyvista>=0.43,<0.45",
-    "pyvistaqt>=0.11,<0.12",
-    "PyQt5>=5.15.2",
-    "qdarkgraystyle>=1.0.2",
-]
-# Web browser (python -m uchrom.browser --web; the uchrom-browser package, packages/uchrom-browser); no Qt needed.
+# The web browser (the uchrom-browser package, packages/uchrom-browser: python -m uchrom_browser).
 web = [
     "uchrom-browser>=0.1.0",
 ]
@@ -91,17 +83,15 @@ emb-full = [
 im = [
     "chromdata[im]",
 ]
-# SnapFISH-IMPUTE coordinate imputation (uchrom.im.impute method='snapfish').
-# scipy and scikit-learn are already core deps; scikit-image is the only extra.
-snapfish = [
-    "scikit-image>=0.20",
+# 3-D tube renderings of structures (uchrom.pl.plot_structure_3d).
+plot3d = [
+    "pyvista>=0.43",
 ]
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.package-data]
-"uchrom.browser" = ["*.svg", "icons/*.svg"]
 "uchrom.im.impute._snapfish" = ["LICENSE"]
 
 [tool.setuptools.packages.find]

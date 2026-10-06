@@ -39,8 +39,11 @@ row per fiber with ``cell_id, chrom, mean_edge, sister_group``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    from chromdata import ChromData
 
 import numpy as np
 import pandas as pd

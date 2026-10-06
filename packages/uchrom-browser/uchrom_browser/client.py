@@ -4,7 +4,7 @@ The same actions the page's GUI uses (``web/ui_tools.json``) — read the resear
 and arrange views, capture a view — sent over the server's control channel to the page the researcher
 last used.  Analysis stays in Python: ``ws.dataset()`` returns the ChromData the browser has open.
 
-    import uchrom_browser as ub               # (or: import uchrom.browser as ub, with u-chrom)
+    import uchrom_browser as ub
     ws = ub.connect()                         # the running `python -m uchrom_browser …`
     cells = ws.get_selection()["cells"]       # what the researcher lassoed
     cd = ws.dataset()

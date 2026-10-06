@@ -76,10 +76,6 @@ def _zip_store(path: str, mtime_ns: int):
     return zarr.storage.ZipStore(path, mode="r")
 
 
-def _uint(maxval: int):
-    return np.uint8 if maxval < 2**8 else np.uint16 if maxval < 2**16 else np.uint32
-
-
 def _pix_array(group, name: str, arr: np.ndarray, dtype) -> None:
     """Pixels as a ``(3, n)`` array (bin1, bin2, count rows), chunked ``(3, CHUNK)`` and sharded: each
     column is contiguous inside a chunk, which compresses ~40 % better than interleaved ``(n, 3)``."""

@@ -23,12 +23,6 @@ from .direction import (
     write_direction_artifacts,
 )
 from .enrichment import DiscoveryEnrichmentConfig, enrich_for_discovery
-from .frontier import (
-    DiscoveryFrontier,
-    frontiers_to_agent_context,
-    plan_discovery_frontiers,
-    write_frontier_artifacts,
-)
 from .graph import (
     IdeaGraph,
     build_idea_graph_from_run,
@@ -91,7 +85,6 @@ __all__ = [
     "ClaimRefreshResult",
     "DiscoveryDirection",
     "DiscoveryEnrichmentConfig",
-    "DiscoveryFrontier",
     "DiscoveryIdea",
     "EvidenceConclusion",
     "IdeaGraph",
@@ -122,7 +115,6 @@ __all__ = [
     "directions_to_agent_context",
     "enrich_for_discovery",
     "execute_notebook_python",
-    "frontiers_to_agent_context",
     "generate_pantheon_ideas",
     "get_backend",
     "graph_summary_markdown",
@@ -135,7 +127,6 @@ __all__ = [
     "load_idea_graph",
     "pack_schema",
     "plan_discovery_directions",
-    "plan_discovery_frontiers",
     "review_idea_against_schema",
     "refresh_literature_claims_for_iteration",
     "register_backend",
@@ -149,7 +140,6 @@ __all__ = [
     "upsert_structured_conclusion",
     "validate_discovery_schema",
     "write_direction_artifacts",
-    "write_frontier_artifacts",
     "write_idea_graph_html",
     "write_idea_graph_artifacts",
     "unregister_backend",

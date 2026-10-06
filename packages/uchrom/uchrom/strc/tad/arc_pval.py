@@ -37,7 +37,7 @@ at ``cd.results[key_added]`` (default ``"tads.arcfish"``).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
