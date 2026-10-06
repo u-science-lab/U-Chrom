@@ -55,7 +55,7 @@ def child_read(path):
     import pyarrow.parquet  # noqa: F401
     import zarr  # noqa: F401
     from uchrom import ChromData
-    import uchrom.core.backed  # noqa: F401
+    import chromdata.backed  # noqa: F401
     base = C.current_rss_mb()
     t0 = time.perf_counter()
     cd = ChromData.read(path)

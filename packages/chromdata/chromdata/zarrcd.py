@@ -51,7 +51,7 @@ etc., sorted by (cell, trace, bin)) stay readable.
 archive, so every member can be read in place (Parquet through a byte
 range of the archive, Zarr through :class:`zarr.storage.ZipStore`).
 
-The full specification is in ``uchrom/core/spec.md``; the design
+The full specification is in ``packages/chromdata/spec.md``; the design
 rationale in ``docs/source/guide/chromdata_2_0_design.md`` (section 4).
 """
 
@@ -462,7 +462,7 @@ def encode_float_columns(cols: List[Tuple[str, Any]], enc_meta: Dict[str, Any], 
                          plan_rows: Optional[np.ndarray] = None) -> List[Tuple[str, Any]]:
     """Replace the float64 columns of ``cols`` that pay for it by their
     lossless decimal encoding (``<c>`` packed int64, ``<c>#exc``; see
-    :mod:`uchrom.core.floatcodec`).  ``plans`` fixes the plan of each column
+    :mod:`chromdata.floatcodec`).  ``plans`` fixes the plan of each column
     (the streaming writer reuses the plans of its first piece); otherwise a
     plan is chosen per column from the rows ``plan_rows`` (default: the
     first :data:`PLAN_ROWS` rows) and recorded in ``enc_meta``."""
@@ -746,7 +746,7 @@ def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float
             _consolidate_root(tmp)       # one request for every array's metadata when the store is read over HTTP
             if path.exists():
                 # re-writing the store this object was read from keeps its embedded copies
-                # (uchrom.core.embedded): they belong to the same data; any other object does not inherit them
+                # (chromdata.embedded): they belong to the same data; any other object does not inherit them
                 origin = getattr(cd, "_source_path", None)
                 if (isinstance(origin, Path) and (path / "embedded").is_dir() and origin.resolve() == path.resolve()):
                     os.replace(path / "embedded", tmp / "embedded")
@@ -802,11 +802,8 @@ def _zip_tree(tree: Path, zpath: Path) -> None:
 
 
 def _uchrom_version() -> str:
-    try:
-        from uchrom import __version__ as v
-    except Exception:  # pragma: no cover
-        v = "unknown"
-    return str(v)
+    from ._version import producer_version
+    return producer_version()
 
 
 def _zarr_array(group, name, data, comp) -> None:
@@ -922,7 +919,9 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
 def _write_root_meta(root, meta: Dict[str, Any], *, layout: str = ZARR_LAYOUT_VERSION) -> None:
     # the current layout is written as the current version (2.3 = layout 2.2 + cell shapes)
     version = ZARR_FORMAT_VERSION if layout == ZARR_LAYOUT_VERSION else layout
+    from ._version import __version__ as chromdata_version
     full = {"format": CONTAINER, "format_version": version, "uchrom_version": _uchrom_version(),
+            "chromdata_version": chromdata_version,
             "spot_order": {"2.1": "chrom,cell,trace,bin", "2.2": "cell,trace,chrom,bin"}.get(layout, "cell,trace,bin"),
             "layout": ZARR_LAYOUTS[layout], **meta}
     if layout == "2.2":

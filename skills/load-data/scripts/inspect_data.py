@@ -235,7 +235,7 @@ def main():
     ap.add_argument("data")
     ap.add_argument("--group", default="cell_type", help="cells column to break spots per trace down by")
     a = ap.parse_args()
-    from uchrom.core import ChromData
+    from chromdata import ChromData
     cd = ChromData.read(a.data)
     json.dump(_jsonable(summarize(cd, a.data, a.group)), sys.stdout, indent=1, default=str)
     print()

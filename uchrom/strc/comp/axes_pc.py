@@ -38,7 +38,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from uchrom.core.convention import (
+from uchrom.convention import (
     UNSET,
     merge_tables,
     parse_legacy_call,

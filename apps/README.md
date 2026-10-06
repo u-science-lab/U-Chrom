@@ -15,8 +15,8 @@ The data (`u-chrom-atlas` R2 bucket at `uchrom-atlas-r2.u-science.org`) is separ
 
 ## The page
 
-    python -m uchrom.core.atlas figures apps/atlas/datasets.json --root example-data      # only when a dataset changed
-    python -m uchrom.core.atlas site apps/atlas/deploy/dist --catalog catalog.json --hosted https://uchrom-browser.u-science.org
+    python apps/atlas/build.py figures apps/atlas/datasets.json --root example-data      # only when a dataset changed
+    python apps/atlas/build.py site apps/atlas/deploy/dist --catalog catalog.json --hosted https://uchrom-browser.u-science.org
     cd apps/atlas/deploy && npx wrangler deploy
 
 ## The browser

@@ -46,10 +46,10 @@ from typing import Any, Dict, Mapping, Optional, Union
 import numpy as np
 import pandas as pd
 
-from uchrom.core.cdata import (BIN_ID, LOCI, ChromData, _SERIES_COLUMN, _UNS_JSON_PREFIX,
+from chromdata.cdata import (BIN_ID, LOCI, ChromData, _SERIES_COLUMN, _UNS_JSON_PREFIX,
                                _metadata_jsonable, _nonempty, _parse_version)
-from uchrom.core.intervals import IntervalTable
-from uchrom.core.results import ResultRecord, ResultsStore, jsonable as _results_jsonable
+from chromdata.intervals import IntervalTable
+from chromdata.results import ResultRecord, ResultsStore, jsonable as _results_jsonable
 
 PathLike = Union[str, Path]
 
@@ -72,7 +72,7 @@ PathLike = Union[str, Path]
 #      points (x, y, z + columns such as cell_id, gene) in the coords frame,
 #      e.g. nascent RNA spots.  Older readers ignore the group.
 # 1.4: ``results`` entries carry provenance (``cd.results`` is a
-#      :class:`~uchrom.core.results.ResultsStore`).  Each top-level item of
+#      :class:`~chromdata.results.ResultsStore`).  Each top-level item of
 #      ``results/`` gains attrs ``_kind``, ``_function``, ``_params`` (JSON),
 #      ``_inputs`` (JSON), ``_uchrom_version`` and ``_created_utc``.  The
 #      value itself is stored in place exactly as in 1.2/1.3, so older

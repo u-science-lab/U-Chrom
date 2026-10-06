@@ -287,7 +287,7 @@ pop = reconstruct_population(
 This mirrors `uchrom.recon.sc.nucdyn.reconstruct_nucdyn` (input is a contact file, output a new
 ChromData) rather than the `fn(cd, *, …)` form, because the input is a Hi-C matrix, not a
 ChromData; the keyword-only arguments, `params=<*Params>`, `device="auto"` and `key_added`
-follow `uchrom/core/convention.py`. A flat alias `uchrom.tl.reconstruct_population` is added.
+follow `uchrom/convention.py`. A flat alias `uchrom.tl.reconstruct_population` is added.
 
 ### 5.3 ChromData layout of a population — structures as **cells**
 

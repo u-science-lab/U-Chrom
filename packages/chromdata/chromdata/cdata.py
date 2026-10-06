@@ -124,7 +124,7 @@ path:
                             spots sorted by (cell, trace, bin) plus an
                             ``index/`` of row offsets; readable *backed*
                             (``read(path, backed=True)``).  See
-                            :mod:`uchrom.core.zarrcd` and ``spec.md``.
+                            :mod:`chromdata.zarrcd` and ``spec.md``.
     <name>.cdz              the same store in one uncompressed zip file.
 
 The older HDF5 container (``.h5cd``, format 1.x / 2.0) is no longer read or
@@ -141,10 +141,10 @@ Semantics:
     * **Same MAJOR**  — readable.  Higher MINOR triggers a warning but
       unknown fields are ignored (forward-compatible additive changes).
     * **Different MAJOR** — :exc:`ValueError` on read, with guidance to
-      upgrade uchrom or convert the file.
+      upgrade chromdata or convert the file.
 
 New MINOR layouts are read next to the old ones (as 2.2 reads 2.1 and 2.0);
-see ``_check_zarr_version`` and :mod:`uchrom.core.zarrcd`.
+see ``_check_zarr_version`` and :mod:`chromdata.zarrcd`.
 
 Design decisions (why this shape)
 ---------------------------------
@@ -170,7 +170,7 @@ Design decisions (why this shape)
   downstream tools can refuse unknown MAJOR versions rather than
   silently deserialise wrong data.
 
-See also :mod:`uchrom.core.spec` for a short human-oriented description
+See also the format specification (``packages/chromdata/spec.md``) for a short human-oriented description
 of the format, and ``docs/source/guide/chromdata.md`` for tutorial-style
 material.
 """
@@ -203,6 +203,19 @@ PathLike = Union[str, Path]
 
 _SPOTS_REQUIRED_COLUMNS = ("bin_id", "trace_id")
 _CATEGORICAL_COLUMNS = ("chrom", "trace_id", "cell_id")
+def _uchrom_io(module: str, name: str):
+    """A reader of the analysis library ``uchrom`` (``uchrom.io.<module>.<name>``), which ``chromdata`` does not
+    depend on: these loaders of specific datasets live there."""
+    import importlib
+
+    try:
+        return getattr(importlib.import_module(f"uchrom.io.{module}"), name)
+    except ModuleNotFoundError as exc:
+        if exc.name and exc.name.split(".")[0] == "uchrom":
+            raise ImportError(f"{name} is part of the analysis library: pip install u-chrom") from exc
+        raise
+
+
 _UNS_JSON_PREFIX = "__uchrom_json__:"
 _SERIES_COLUMN = "_value"
 
@@ -211,7 +224,7 @@ _SERIES_COLUMN = "_value"
 class ChromData:
     """Chromatin Data — the core container for U-Chrom.
 
-    See the module docstring of :mod:`uchrom.core.cdata` for the full
+    See the module docstring of :mod:`chromdata.cdata` for the full
     purpose, hierarchy, FOF-CT mapping, and on-disk format contract.
     Summary:
 
@@ -259,7 +272,7 @@ class ChromData:
     binm : dict[str, ndarray], optional
         Per-locus multi-dimensional arrays, first axis ``n_bins``.
     intervals : dict[str, DataFrame], optional
-        Typed interval tables (see :mod:`uchrom.core.intervals`).
+        Typed interval tables (see :mod:`chromdata.intervals`).
     traces : DataFrame, optional
         Per-trace metadata indexed by trace_id.
     layers : dict[str, ndarray], optional
@@ -274,7 +287,7 @@ class ChromData:
         Cell outlines: ``cell_id`` + ``geometry`` (WKB bytes), one row per
         cell (see :meth:`set_cell_shapes`); subset with the cells.
     results : dict or ResultsStore, optional
-        Analysis outputs, stored as a :class:`~uchrom.core.results.ResultsStore`
+        Analysis outputs, stored as a :class:`~chromdata.results.ResultsStore`
         (``cd.results[key]`` returns the value, ``cd.results.record(key)``
         the value plus provenance).  Keys follow ``"<what>.<method>"``:
         ``'tads.arcfish'``, ``'loops.axiswise_f'``,
@@ -301,7 +314,7 @@ class ChromData:
 
     On-disk format — ``.chromdata.zarr`` / ``.cdz``
     -----------------------------------------------
-    Versioned Zarr v3 + Parquet.  See :mod:`uchrom.core.cdata` module docstring for
+    Versioned Zarr v3 + Parquet.  See :mod:`chromdata.cdata` module docstring for
     the full layout and the :meth:`read` / :meth:`write` round-trip
     contract.
 
@@ -388,7 +401,7 @@ class ChromData:
 
     @property
     def results(self) -> ResultsStore:
-        """Analysis outputs — a :class:`~uchrom.core.results.ResultsStore`.
+        """Analysis outputs — a :class:`~chromdata.results.ResultsStore`.
 
         Behaves like a ``dict`` of values; assigning a plain ``dict``
         converts it.  Values that cannot be written to a store raise
@@ -569,7 +582,7 @@ class ChromData:
     @property
     def intervals(self) -> IntervalStore:
         """Typed interval tables (TADs, loops, peaks, segments) — see
-        :mod:`uchrom.core.intervals`."""
+        :mod:`chromdata.intervals`."""
         return self._intervals
 
     @intervals.setter
@@ -801,7 +814,7 @@ class ChromData:
         return record
 
     def embedded_links(self) -> Dict[str, Dict[str, str]]:
-        """Copies embedded in the store (:mod:`uchrom.core.embedded`): ``{"contacts": {key: group},
+        """Copies embedded in the store (:mod:`chromdata.embedded`): ``{"contacts": {key: group},
         "anndata": {...}, "images": {...}}`` (empty for a store without them or a non-directory store)."""
         src = getattr(self, "_source_path", None)
         if src is None or not (isinstance(src, str) or Path(src).is_dir() or str(src).lower().endswith(".cdz")):
@@ -934,7 +947,7 @@ class ChromData:
         ``cells`` columns — ``centroid_x``, ``centroid_y`` [, ``centroid_z``]
         for ``key="default"``, ``<key>_centroid_x`` … otherwise — described
         by the record ``uns['cell_spatial'][key]`` (schema in
-        ``uchrom/core/spec.md``).  Read them back with
+        ``packages/chromdata/spec.md``).  Read them back with
         :meth:`cell_positions`.
 
         Parameters
@@ -1746,7 +1759,7 @@ class ChromData:
 
     @property
     def backed(self) -> bool:
-        """``True`` for a :class:`~uchrom.core.backed.BackedChromData`."""
+        """``True`` for a :class:`~chromdata.backed.BackedChromData`."""
         return False
 
     def to_memory(self, *, columns=None, tracks=None) -> "ChromData":
@@ -1795,7 +1808,7 @@ class ChromData:
         ----------
         batch : int or ``"auto"``
             Traces per chunk; ``"auto"`` sizes chunks from
-            :data:`uchrom.settings.memory_budget`.
+            :data:`chromdata.settings.memory_budget`.
         chrom : str, optional
             Only the traces of this chromosome.
         columns, tracks
@@ -2070,7 +2083,7 @@ class ChromData:
 
         * ``<name>.chromdata.zarr`` (any ``*.zarr``) — **the format 2.0
           container** (format 2.1): a Zarr v3 directory whose large tables
-          are Parquet (see :mod:`uchrom.core.zarrcd` and ``spec.md``).  The
+          are Parquet (see :mod:`chromdata.zarrcd` and ``spec.md``).  The
           spot-aligned tables are partitioned by chromosome and sorted by
           (cell, trace, bin) within a partition, with ``index/`` offsets,
           so :meth:`read` can open the store backed.
@@ -2129,7 +2142,7 @@ class ChromData:
         """Read a ChromData file; the format follows the path.
 
         * ``.chromdata.zarr`` / ``.cdz`` (format 2.x container) — with
-          ``backed=True`` returns a :class:`~uchrom.core.backed.BackedChromData`:
+          ``backed=True`` returns a :class:`~chromdata.backed.BackedChromData`:
           small tables are loaded, ``coords`` / ``spots`` / ``spot_tracks``
           / ``layers`` stay on disk, and ``get_cell`` / ``get_trace`` /
           ``get_chrom`` / ``iter_traces`` / ``iter_cells`` read only the
@@ -2282,7 +2295,7 @@ class ChromData:
         out : path, optional
             **Streaming import**: read the core table in chunks of
             ``chunksize`` rows and write them to this ``.chromdata.zarr``
-            store with :class:`~uchrom.core.stream.ChromDataWriter`; returns
+            store with :class:`~chromdata.stream.ChromDataWriter`; returns
             the store opened backed.  Peak memory is one chunk plus the
             writer's merge pieces (bounded by ``memory_budget``), not the
             table.  The store equals ``from_fofct(core_path, ...).write(out)``
@@ -2293,7 +2306,7 @@ class ChromData:
             Rows per chunk of a streaming import (``"auto"``: from the
             memory budget).
         memory_budget : int or str, optional
-            Defaults to :data:`uchrom.settings.memory_budget`.
+            Defaults to :data:`chromdata.settings.memory_budget`.
         **kwargs
             Additional keyword arguments passed to ChromData constructor
             (e.g. cells, tracks, uns).  A streaming import accepts
@@ -2305,7 +2318,7 @@ class ChromData:
                                          rna_table=rna_table, mapping_table=mapping_table,
                                          cell_value_prefix=cell_value_prefix,
                                          chunksize=chunksize, memory_budget=memory_budget, **kwargs)
-        from uchrom.settings import format_bytes, settings
+        from .settings import format_bytes, settings
 
         budget = settings.resolve_budget(memory_budget)
         if path.exists() and path.stat().st_size * 5 > budget:
@@ -2329,7 +2342,7 @@ class ChromData:
 
     @classmethod
     def writer(cls, path: PathLike, **kwargs):
-        """A streaming :class:`~uchrom.core.stream.ChromDataWriter` for a
+        """A streaming :class:`~chromdata.stream.ChromDataWriter` for a
         ``.chromdata.zarr`` store larger than memory::
 
             with ChromData.writer("big.chromdata.zarr", memory_budget="4GB") as w:
@@ -2603,7 +2616,7 @@ class ChromData:
         Thin shim around :func:`uchrom.io.seqfish_multiomics.read_seqfish_multiomics`.
         See that function for the full parameter list.
         """
-        from uchrom.io.seqfish_multiomics import read_seqfish_multiomics
+        read_seqfish_multiomics = _uchrom_io("seqfish_multiomics", "read_seqfish_multiomics")
         return read_seqfish_multiomics(spot_glob, **kwargs)
 
     @classmethod
@@ -2616,7 +2629,7 @@ class ChromData:
         ``cd.linked_adata`` and can write a paired ``.chromdata.zarr`` /
         ``.h5ad``.
         """
-        from uchrom.io.seqfish_multiomics import load_seqfish_multiomics_linked
+        load_seqfish_multiomics_linked = _uchrom_io("seqfish_multiomics", "load_seqfish_multiomics_linked")
         return load_seqfish_multiomics_linked(spot_glob, **kwargs)
 
     @classmethod
@@ -2628,7 +2641,7 @@ class ChromData:
         Returns a ``ChromData`` with RNA expression available at
         ``cd.linked_adata``.
         """
-        from uchrom.io.seqfish_multiomics import load_takei2025_cerebellum
+        load_takei2025_cerebellum = _uchrom_io("seqfish_multiomics", "load_takei2025_cerebellum")
         return load_takei2025_cerebellum(**kwargs)
 
     def to_dataframe(self, include_bin_id: bool = False) -> pd.DataFrame:
@@ -2846,8 +2859,8 @@ def resolve_batch(batch, units_mean: float, bytes_per_spot: float,
                   memory_budget=None, fraction: float = 0.25) -> int:
     """Units (traces / cells) per batch: an int as given, or ``"auto"`` —
     as many as fit ``fraction`` of the memory budget
-    (:data:`uchrom.settings.memory_budget`)."""
-    from uchrom.settings import settings
+    (:data:`chromdata.settings.memory_budget`)."""
+    from .settings import settings
 
     if batch is None:
         batch = settings.default_batch
@@ -2915,7 +2928,7 @@ def _apply_pyhim_barcode_dict(
 
 def _check_zarr_version(path, version_str: str) -> None:
     """MAJOR / MINOR rules of the zarr container (whose
-    own version, :data:`uchrom.core.zarrcd.ZARR_FORMAT_VERSION`, is 2.2:
+    own version, :data:`chromdata.zarrcd.ZARR_FORMAT_VERSION`, is 2.2:
     2.0 stores are read as one unpartitioned table)."""
     import warnings
 
@@ -2926,7 +2939,7 @@ def _check_zarr_version(path, version_str: str) -> None:
     if major != cur_major:
         raise ValueError(
             f"{path}: format version {version_str} has incompatible MAJOR with this "
-            f"uchrom (supports {cur_major}.x). Upgrade uchrom or convert the file."
+            f"uchrom (supports {cur_major}.x). Upgrade chromdata or convert the file."
         )
     if minor > cur_minor:
         warnings.warn(
@@ -3247,7 +3260,7 @@ def _scan_fofct_header(path: Path):
 def _from_fofct_streaming(cls, path: Path, *, out: Path, cell_table, rna_table, cell_value_prefix,
                           chunksize, memory_budget, mapping_table=None, **kwargs):
     """``ChromData.from_fofct(..., out=)``: chunked read → streaming writer."""
-    from uchrom.settings import settings
+    from .settings import settings
 
     from .stream import ChromDataWriter
 

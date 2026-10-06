@@ -82,7 +82,7 @@ uchrom.fea
 uchrom.strc
   structural callers and structural feature projection
 
-uchrom.core
+chromdata
   ChromData storage conventions and provenance metadata
 
 uchrom_discovery

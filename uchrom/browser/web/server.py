@@ -59,11 +59,11 @@ class GeometryRequest(BaseModel):
 
 def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None, hosted: Optional[Any] = None) -> FastAPI:
     """Build the app around ``store`` (a fresh empty one by default).  ``atlas``: root of the atlas the
-    Open dialog lists (URL or folder; default ``UCHROM_ATLAS`` or :data:`uchrom.core.atlas.DEFAULT_ATLAS`;
+    Open dialog lists (URL or folder; default ``UCHROM_ATLAS`` or :data:`chromdata.catalog.DEFAULT_ATLAS`;
     an empty string turns it off)."""
     import os
 
-    from ...core.atlas import DEFAULT_ATLAS
+    from chromdata.catalog import DEFAULT_ATLAS
 
     atlas = atlas if atlas is not None else os.environ.get("UCHROM_ATLAS", DEFAULT_ATLAS)
     if hosted is not None:     # the server of a public atlas: sessions, only atlas datasets, no folder listing
@@ -161,7 +161,7 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
         every dataset with its ``url``; ``{"root": null}`` when no atlas is configured."""
         import time
 
-        from ...core.atlas import fetch_catalog
+        from chromdata.catalog import fetch_catalog
 
         if not atlas:
             return {"root": None, "catalog": None}

@@ -326,8 +326,8 @@ def deconvolve_igm(
     ``hic_inter_imposed`` / ``hic_inter_violated`` (the inter-chromosomal
     subset of ``hic_*``).
     """
-    from uchrom.core import ChromData
-    from uchrom.core.results import ResultsStore
+    from chromdata import ChromData
+    from chromdata.results import ResultsStore
 
     un = _engine()
     p = params if params is not None else IgmParams()

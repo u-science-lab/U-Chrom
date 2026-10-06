@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chromdata"
+version = "0.1.0"
+readme = "README.md"
+description = "ChromData: one data model and store (.chromdata.zarr) for single-cell Hi-C, spatial Hi-C and chromatin tracing."
+authors = [
+    {name = "Weize Xu", email = "vet.xwz@gmail.com" },
+]
+requires-python = ">= 3.11"
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0.3",
+    # the store: Zarr v3 groups with Parquet tables
+    "zarr>=3.0",
+    "pyarrow>=14",
+]
+
+[project.optional-dependencies]
+# linked / embedded contact maps (.cool / .mcool / .scool) and their HDF5 trees
+contacts = ["cooler>=0.9.3", "h5py>=3.10.0"]
+# linked AnnData / MuData (RNA, ATAC, ...)
+anndata = ["anndata>=0.9"]
+multiome = ["mudata>=0.2.0"]
+# stores over HTTP / S3 / GCS
+remote = ["fsspec>=2023.1", "aiohttp", "s3fs"]
+# cell outlines (GeoParquet) and SpatialData links
+spatial = ["shapely>=2.0", "geopandas>=0.14"]
+spatialdata = ["chromdata[spatial]", "spatialdata>=0.2"]
+# the memory budget's default from the available RAM
+psutil = ["psutil"]
+all = ["chromdata[contacts,anndata,multiome,remote,spatial,psutil]"]
+test = ["pytest"]
+
+[tool.setuptools]
+packages = ["chromdata"]

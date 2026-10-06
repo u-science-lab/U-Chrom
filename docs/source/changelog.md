@@ -48,7 +48,7 @@
   spot columns that are a function of the bin / cell / trace (probe names,
   sample ids) once per key (`tables/derived/`; exact round trip).  Float
   columns use Parquet dictionary pages; the lossless decimal codec
-  (`uchrom.core.floatcodec`) is opt-in (`float_encoding=`).  Parallel full
+  (`chromdata.floatcodec`) is opt-in (`float_encoding=`).  Parallel full
   reads.  Takei 2025 (1e7 spots, 62 tracks): 1.81 GB (2.1: 2.58 GB; flat
   Parquet: 2.11 GB), full read 0.57 s (2.1: 0.81 s; Parquet 0.76 s),
   `get_cell` 8.5 ms (2.1: 25 ms), `get_chrom(columns="coords")` 15 ms;
@@ -84,7 +84,7 @@
   only); the web browser reads geometry with `columns="coords"`.
   `iter_traces(chrom=...)`; `batch="auto"`.
 - **Streaming (roadmap step 7)**: `uchrom.settings.memory_budget`;
-  `ChromData.writer(path)` (`uchrom.core.stream.ChromDataWriter`: append
+  `ChromData.writer(path)` (`chromdata.stream.ChromDataWriter`: append
   chunks, spill per chromosome, merge each partition in pieces within the
   budget — the store equals the in-memory writer's);
   `ChromData.from_fofct(..., out=...)` (chunked) and

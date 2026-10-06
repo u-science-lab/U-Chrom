@@ -207,7 +207,7 @@ def store_and_return(
 
 def _set_bin_track(cd, name: str, frame: pd.DataFrame) -> None:
     """Write ``frame["value"]`` onto ``cd.bin_tracks[name]`` by exact locus."""
-    from uchrom.core.bins import map_loci_to_bins
+    from chromdata.bins import map_loci_to_bins
 
     ids = map_loci_to_bins(frame, cd.bins)
     values = np.full(cd.n_bins, np.nan)

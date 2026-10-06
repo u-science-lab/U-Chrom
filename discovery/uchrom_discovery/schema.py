@@ -1,4 +1,4 @@
-"""Agent-readable discovery schema for :class:`uchrom.core.ChromData`.
+"""Agent-readable discovery schema for :class:`chromdata.ChromData`.
 
 The schema is intentionally stored inside ``cd.uns`` as a JSON payload so
 it round-trips through a ChromData store without a new storage layout.

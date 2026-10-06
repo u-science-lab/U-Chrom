@@ -328,7 +328,7 @@ def main():
     ap.add_argument("--smin", type=float)
     ap.add_argument("--smax", type=float)
     a = ap.parse_args()
-    from uchrom.core import ChromData
+    from chromdata import ChromData
     if a.cmd == "ps":
         is_cd = a.data.rstrip("/").endswith((".chromdata.zarr", ".cdz", ".zarr", ".h5cd"))
         cd = ChromData.read(a.data) if is_cd else None

@@ -1,6 +1,6 @@
 """Dataset registry and geometry encoding for the web browser.
 
-Framework-free: everything here works on :class:`~uchrom.core.ChromData`
+Framework-free: everything here works on :class:`~chromdata.ChromData`
 and plain numpy, so it is testable without FastAPI.  The HTTP layer in
 :mod:`uchrom.browser.web.server` is a thin wrapper.  See ``API.md`` for the
 wire format.
@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
-from uchrom.core import ChromData
+from chromdata import ChromData
 
 DEFAULT_MAX_POINTS = 5_000_000
 #: a backed store with more spots than this is never read whole by the browser: summaries come from its index,
@@ -93,7 +93,7 @@ def load_chromdata(path: Path) -> ChromData:
     trace / chromosome are read when a view needs them.  A legacy ``.h5cd``
     raises a ``ValueError`` that names the conversion command.
     """
-    from uchrom.core.zarrcd import container_kind
+    from chromdata.zarrcd import container_kind
 
     kind = container_kind(path)
     if kind is not None:  # zarr / cdz; "h5cd" raises (convert with python -m uchrom.io.upgrade)
@@ -330,7 +330,7 @@ class Dataset:
         """Summaries from the coordinate index alone: a large store, or any store read over HTTP (where reading
         every spot's bin id costs seconds); every run must be one chromosome copy."""
         if "index_segments" not in self._cache:
-            from ...core.remote import is_url
+            from chromdata.remote import is_url
 
             cd = self.cd
             self._cache["index_segments"] = bool(
@@ -763,7 +763,7 @@ class Dataset:
     def _embedded_images(self) -> Dict[str, str]:
         """``{image key: group name}`` of the images embedded in the store."""
         if "embedded_images" not in self._cache:
-            from ...core.embedded import list_embedded_images
+            from chromdata.embedded import list_embedded_images
 
             loc = self._store_location()
             self._cache["embedded_images"] = list_embedded_images(loc) if loc else {}
@@ -774,7 +774,7 @@ class Dataset:
         group = self._embedded_images().get(name)
         if group is None:
             return None
-        from ...core.embedded import read_embedded_image
+        from chromdata.embedded import read_embedded_image
 
         return read_embedded_image(self._store_location(), group)
 
@@ -895,7 +895,7 @@ class Dataset:
     def _store_location(self) -> Optional[str]:
         """The store as a URL, a local directory or a ``.cdz`` file (what the embedded readers open), else None
         (CSV, PDB ...)."""
-        from ...core.remote import is_url
+        from chromdata.remote import is_url
 
         if not self.path:
             return None
@@ -907,7 +907,7 @@ class Dataset:
     def resolve(self, path: str) -> Path:
         """Linked file path; relative paths are relative to the dataset's
         directory (where the .chromdata.zarr / .cdz lives)."""
-        from ...core.remote import is_url
+        from chromdata.remote import is_url
 
         p = Path(path).expanduser()
         if not p.is_absolute() and self.path and not is_url(self.path):
@@ -960,7 +960,7 @@ class Dataset:
     def _embedded_bin_matrices(self) -> Dict[str, Any]:
         """``{key: (zarr group, attrs)}`` of the cell x bin matrices embedded in the store (one request)."""
         if "embedded_bin" not in self._cache:
-            from ...core.embedded import open_anndata_groups
+            from chromdata.embedded import open_anndata_groups
 
             loc = self._store_location()
             self._cache["embedded_bin"] = open_anndata_groups(loc, "linked_bin_matrices") if loc else {}
@@ -975,7 +975,7 @@ class Dataset:
             if emb is not None:      # embedded copy: X is read straight from the Zarr array
                 from types import SimpleNamespace
 
-                from ...core.embedded import bin_matrix_var
+                from chromdata.embedded import bin_matrix_var
 
                 grp = emb[0]
                 adata = SimpleNamespace(X=grp["X"], var=bin_matrix_var(grp), obs_names=_LazyNames(
@@ -1117,7 +1117,7 @@ class Dataset:
 
     def store_tree(self) -> Dict[str, Any]:
         """The store's on-disk structure (``.chromdata.zarr`` / ``.cdz``; see store_tree.py); cached."""
-        from uchrom.core.zarrcd import container_kind
+        from chromdata.zarrcd import container_kind
 
         from .store_tree import store_tree
 
@@ -1452,7 +1452,7 @@ class Dataset:
     def _embedded_maps(self) -> Dict[str, Any]:
         """Contact maps embedded in the store (``embedded/contacts``), by key (one request opens them all)."""
         if "embedded_maps" not in self._cache:
-            from ...core.embedded import open_all
+            from chromdata.embedded import open_all
 
             loc = self._store_location()
             self._cache["embedded_maps"] = open_all(loc) if loc is not None else {}
@@ -2115,7 +2115,7 @@ class DatasetStore:
         return ds
 
     def load(self, path) -> Dataset:
-        from ...core.remote import is_url
+        from chromdata.remote import is_url
 
         if is_url(path):      # s3:// https:// ...: opened backed over fsspec
             p = str(path).rstrip("/")
@@ -2124,7 +2124,7 @@ class DatasetStore:
             # the embedded sections' metadata (three independent requests) is read while the store itself is read
             from concurrent.futures import ThreadPoolExecutor
 
-            from ...core.embedded import list_embedded_images, open_all, open_anndata_groups
+            from chromdata.embedded import list_embedded_images, open_all, open_anndata_groups
 
             with ThreadPoolExecutor(max_workers=3) as pool:
                 warm = {"embedded_maps": pool.submit(open_all, p),

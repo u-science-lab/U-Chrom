@@ -2,7 +2,7 @@
 
 ::
 
-    from uchrom import ChromData
+    from chromdata import ChromData
 
     with ChromData.writer("big.chromdata.zarr", memory_budget="4GB") as w:
         for chunk in chunks:                  # ChromData objects, or arrays
@@ -23,7 +23,7 @@ How it works
    store partition by partition: a chromosome's runs are merged in *pieces* of
    whole cells that fit the memory budget (each run is sorted by cell id, so a
    piece is one slice per run), sorted by (cell, trace, bin, input row) and
-   handed to :class:`~uchrom.core.zarrcd.SpotPartitionWriter`.  The result is
+   handed to :class:`~chromdata.zarrcd.SpotPartitionWriter`.  The result is
    the store ``ChromData(...).write(path)`` writes for the concatenated input
    — same rows, order, index and row groups.
 
@@ -86,7 +86,7 @@ class ChromDataWriter:
         Store layout (format version) to write.
     memory_budget : int or str, optional
         Working-memory target of :meth:`finish` (default
-        :data:`uchrom.settings.memory_budget`).
+        :data:`chromdata.settings.memory_budget`).
     """
 
     def __init__(self, path: PathLike, *, bins: Optional[pd.DataFrame] = None,
@@ -97,7 +97,7 @@ class ChromDataWriter:
                  coords_row_group_rows: int = DEFAULT_COORDS_ROW_GROUP_ROWS,
                  normalize_spot_columns: bool = True, compression="zstd",
                  layout: str = ZARR_LAYOUT_VERSION):
-        from uchrom.settings import settings
+        from .settings import settings
 
         if layout == ZARR_FORMAT_VERSION:
             layout = ZARR_LAYOUT_VERSION
@@ -606,7 +606,7 @@ class ChromDataWriter:
             "n_row_groups": int(len(index["row_groups"]) - 1),
             "has_source_row": bool(not sorted_already and self.keep_source_order),
             "has_cell_id": has_cells, "n_partitions": len(w.partitions),
-            "written_by": "uchrom.core.stream.ChromDataWriter",
+            "written_by": "chromdata.stream.ChromDataWriter",
         }
         _write_root_meta(root, meta, layout="2.1")
 
@@ -705,7 +705,7 @@ class ChromDataWriter:
 
     def _detect_derived(self, pmap, cats, extra_cats, schema, bins) -> Dict[str, Dict[str, Any]]:
         """The spot columns that are a function of the bin / cell / trace
-        (as :func:`~uchrom.core.zarrcd.derive_spot_columns` decides for the
+        (as :func:`~chromdata.zarrcd.derive_spot_columns` decides for the
         concatenated input), from one pass over the spill runs."""
         import pyarrow.types as pat
 
@@ -1014,7 +1014,7 @@ class ChromDataWriter:
             "has_cell_id": has_cells, "n_partitions": len(cw.partitions),
             "row_group_rows": int(self.row_group_rows),
             "coords_row_group_rows": int(self.coords_row_group_rows),
-            "written_by": "uchrom.core.stream.ChromDataWriter",
+            "written_by": "chromdata.stream.ChromDataWriter",
         }
         _write_root_meta(root, meta, layout="2.2")
 

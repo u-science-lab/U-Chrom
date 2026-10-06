@@ -2,6 +2,7 @@
 
 import functools
 import http.server
+import importlib.util
 import json
 import shutil
 import threading
@@ -17,7 +18,12 @@ from tests.core.test_embedded import RES, _store  # noqa: E402
 from tests.core.test_remote import _RangeHandler  # noqa: E402
 from uchrom.browser.web.data import DatasetStore  # noqa: E402
 from uchrom.browser.web.server import create_app  # noqa: E402
-from uchrom.core import atlas, embedded  # noqa: E402
+from chromdata import catalog as atlas, embedded  # noqa: E402
+
+REPO = Path(__file__).resolve().parents[2]
+_spec = importlib.util.spec_from_file_location("atlas_build", REPO / "apps" / "atlas" / "build.py")
+build = importlib.util.module_from_spec(_spec)      # the atlas app: thumbnails and the static page
+_spec.loader.exec_module(build)
 
 
 @pytest.fixture
@@ -95,18 +101,18 @@ def test_figures_from_positions_and_a_bulk_map(atlas_dir, tmp_path):
     cd.write(store)                                   # same store: the embedded maps stay
     cfg = _figure_config(tmp_path, atlas_dir, caption="three spots")
     out = tmp_path / "site_figures"
-    info = atlas.render_figures(cfg, atlas_dir, out, size=64, hero_size=96)["toy"]
+    info = build.render_figures(cfg, atlas_dir, out, size=64, hero_size=96)["toy"]
     assert info["layout"] == "space" and info["color_by"] == "cell_type" and info["caption"] == "three spots"
     assert info["map_key"] == "bulk" and info["chrom"] == "chr2" and (info["start"], info["end"]) == (0, 600)
     assert Image.open(out / info["space"]).size == (64, 64) and Image.open(out / info["hero.space"]).size == (96, 96)
     assert Image.open(out / info["map"]).size == (6, 6)          # one pixel per bin
     # the site gets the figures and the study list
     template = tmp_path / "tpl"
-    shutil.copytree(Path(atlas.__file__).resolve().parents[2] / "apps" / "atlas" / "site", template,
+    shutil.copytree(REPO / "apps" / "atlas" / "site", template,
                     ignore=shutil.ignore_patterns("figures"))
     shutil.copytree(out, template / "figures")
     atlas.build_catalog(cfg, atlas_dir, tmp_path / "catalog.json")
-    site = atlas.build_site(tmp_path / "site", tmp_path / "catalog.json", template=template, hosted="https://x.test")
+    site = build.build_site(tmp_path / "site", tmp_path / "catalog.json", template=template, hosted="https://x.test")
     cat = json.loads((site / "catalog.json").read_text())
     assert cat["studies"][0]["id"] == "s1" and cat["hero"] == ["toy"]
     assert cat["datasets"][0]["figures"]["space"] == info["space"] and (site / "figures" / info["map"]).is_file()
@@ -122,10 +128,10 @@ def test_figures_fall_back_to_an_embedding_and_cell_sums(atlas_dir, tmp_path):
     cd = ChromData.read(store)
     cd.cellm["rna_umap"] = np.array([[0.0, 0.0], [1.0, 2.0], [2.0, 1.0]])
     cd.write(store)
-    info = atlas.render_figures(_figure_config(tmp_path, atlas_dir), atlas_dir, tmp_path / "f", size=32)["toy"]
+    info = build.render_figures(_figure_config(tmp_path, atlas_dir), atlas_dir, tmp_path / "f", size=32)["toy"]
     assert info["layout"] == "embedding" and info["layout_key"] == "rna_umap" and "space" in info
     cells = embedded.EmbeddedContacts(str(store), embedded.list_embedded(str(store))["cells"])
-    got = atlas._map_png(cells, "chr1", tmp_path / "sum.webp")
+    got = build._map_png(cells, "chr1", tmp_path / "sum.webp")
     assert got["resolution"] == RES and (got["start"], got["end"]) == (0, 600) and (tmp_path / "sum.webp").is_file()
 
 
@@ -145,7 +151,7 @@ def test_figures_draw_a_cell_structure(tmp_path):
     cd.write(tmp_path / "xyz.chromdata.zarr")
     cfg = tmp_path / "cfg.json"
     cfg.write_text(json.dumps({"datasets": [{"id": "xyz", "store": "xyz.chromdata.zarr", "path": "xyz", "title": "x"}]}))
-    info = atlas.render_figures(cfg, tmp_path, tmp_path / "f", size=48)["xyz"]
+    info = build.render_figures(cfg, tmp_path, tmp_path / "f", size=48)["xyz"]
     assert info["layout"] == "structure" and info["layout_key"] == "b"      # the lowest RMSD
     assert info["color_by"] == "chromosome" and info["n"] == 20 and "map" not in info
     assert Image.open(tmp_path / "f" / info["space"]).size == (48, 48)

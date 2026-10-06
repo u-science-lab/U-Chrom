@@ -23,7 +23,7 @@ import pytest
 
 def _make_cd(cell_names):
     """Minimal ChromData: 1 spot per cell, with cells.cell_name."""
-    from uchrom.core.cdata import ChromData
+    from chromdata.cdata import ChromData
 
     n = len(cell_names)
     coords = np.zeros((n, 3), dtype=float)
@@ -86,7 +86,7 @@ def test_align_embedding_extra_emb_rows_raises():
 # ---------------------------------------------------------------------------
 
 def test_run_requires_cell_name_column(tmp_path):
-    from uchrom.core.cdata import ChromData
+    from chromdata.cdata import ChromData
     from uchrom.emb.higashi import run
 
     coords = np.zeros((2, 3))

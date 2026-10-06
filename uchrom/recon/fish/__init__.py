@@ -7,8 +7,8 @@ doi:10.1038/s41467-019-10005-6), GEM-FISH.
 Unlike the Hi-C-only reconstructors in :mod:`uchrom.recon.sc` and
 :mod:`uchrom.recon.bulk`, this module consumes both a Hi-C matrix and
 a FISH-derived pairwise-distance / Rg measurement (e.g. from a
-:class:`~uchrom.core.ChromData` loaded via
-:func:`~uchrom.core.ChromData.from_fofct`) and solves a joint
+:class:`~chromdata.ChromData` loaded via
+:func:`~chromdata.ChromData.from_fofct`) and solves a joint
 optimisation over the 3-D coordinates.
 """
 

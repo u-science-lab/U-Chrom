@@ -134,7 +134,7 @@ Every dataset carries `url` (what `POST /api/datasets` opens: a `.chromdata.zarr
 `title`, `paper`, `doi`, `source_url`, `license`, `organism`, `assembly`, `tissue`, `n_cells`, `sections`,
 `modalities`, `contact_maps`, `images`, `size_mb`.  Fetched by the server (the page needs no CORS) and cached 5
 minutes (`refresh=true` re-reads).  `{"root": null, "catalog": null}` when no atlas is configured; `502` when the
-catalog cannot be read.  Format and builder: `uchrom/core/atlas.py` (`python -m uchrom.core.atlas build`).
+catalog cannot be read.  Format and builder: `packages/chromdata/chromdata/catalog.py` (`python -m chromdata.catalog build`).
 
 ### `DELETE /api/datasets/{id}`
 

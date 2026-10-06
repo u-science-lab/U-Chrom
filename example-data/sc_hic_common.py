@@ -9,7 +9,7 @@
   of the RNA embedding.
 
 The builds then put cells, embeddings and the links into a ``.chromdata.zarr`` and embed the linked files
-(``python -m uchrom.core.embedded STORE``) before the store goes to the atlas.
+(``python -m chromdata.embedded STORE``) before the store goes to the atlas.
 """
 
 from __future__ import annotations

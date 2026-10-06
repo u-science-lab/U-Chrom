@@ -11,7 +11,7 @@
 Subsetting — ``get_cell`` / ``get_trace`` / ``get_chrom`` / ``cd[rows]`` /
 ``iter_traces`` / ``iter_cells`` — reads only the row ranges it needs (the
 spots are sorted by cell, trace, bin; ``index/`` holds the offsets) and
-returns an ordinary in-memory :class:`~uchrom.core.ChromData`.
+returns an ordinary in-memory :class:`~chromdata.ChromData`.
 :meth:`BackedChromData.to_memory` loads everything.
 
 The backed object is read-only for the spot-aligned data (``coords``,

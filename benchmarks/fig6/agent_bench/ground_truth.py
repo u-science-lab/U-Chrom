@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats as st
 
-from uchrom.core import ChromData
+from chromdata import ChromData
 from uchrom.fea.distance import radius_of_gyration
 
 HERE = Path(__file__).resolve().parent

@@ -32,7 +32,7 @@ It is kept apart from the chromatin ``coords`` (one row per spot):
   ``region`` / ``instance_key`` ↔ ``cell_id``), like ``link_scool``.
 
 This module holds the helpers; the public API is on
-:class:`~uchrom.core.cdata.ChromData` (``set_cell_positions``,
+:class:`~chromdata.cdata.ChromData` (``set_cell_positions``,
 ``cell_positions``, ``set_cell_shapes``, ``cell_shapes_geodataframe``,
 ``link_spatialdata``, ``load_linked_spatialdata``, ``to_spatialdata``).
 """

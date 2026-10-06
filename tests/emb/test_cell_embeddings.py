@@ -53,7 +53,7 @@ def test_normalize_counts_and_errors():
 
 @pytest.mark.skipif(not (DATA / "4DNFIFINA2U9.csv").exists(), reason="Takei cell table missing")
 def test_takei_rna_pc2_is_naive_vs_primed_axis(tmp_path):
-    from uchrom.core.cdata import _fofct_cell_table
+    from chromdata.cdata import _fofct_cell_table
 
     cells, _ = _fofct_cell_table(DATA / "4DNFIFINA2U9.csv", "rna.")
     n = len(cells)

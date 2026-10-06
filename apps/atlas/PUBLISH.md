@@ -8,8 +8,8 @@ kept in the repository: put an R2 API token (Object Read & Write, this bucket on
 
 1. **Embed** every linked file so the store is self-contained, and make it cheap to open over HTTP:
 
-       python -m uchrom.core.embedded STORE.chromdata.zarr          # embeds, skips what is embedded
-       python -m uchrom.core.embedded STORE.chromdata.zarr --upgrade # consolidated metadata, chromsizes, var attrs
+       python -m chromdata.embedded STORE.chromdata.zarr          # embeds, skips what is embedded
+       python -m chromdata.embedded STORE.chromdata.zarr --upgrade # consolidated metadata, chromsizes, var attrs
 
 2. **Upload** (the S3 API of R2 needs a region of `auto`, and the newer AWS CLI checksums off):
 
@@ -20,7 +20,7 @@ kept in the repository: put an R2 API token (Object Read & Write, this bucket on
 3. **Describe it** in `apps/atlas/datasets.json` (its `study` — one entry of `studies` with the citation, doi, source,
    licence —, `name`, title, organism, tissue; counts are read from the store), then build and upload the catalog:
 
-       python -m uchrom.core.atlas build apps/atlas/datasets.json --root example-data --out catalog.json
+       python -m chromdata.catalog build apps/atlas/datasets.json --root example-data --out catalog.json
        aws s3 cp catalog.json s3://u-chrom-atlas/catalog.json --endpoint-url $R2_ENDPOINT --content-type application/json
 
 4. **Verify** over the public domain:
@@ -31,13 +31,13 @@ kept in the repository: put an R2 API token (Object Read & Write, this bucket on
    cluster + a 40-Mb window of its bulk contact map; `"figure"` in `datasets.json` pins the section / colour column /
    region, `"hero"` lists the datasets of the page's top figure) and commit `apps/atlas/site/figures/`:
 
-       python -m uchrom.core.atlas figures apps/atlas/datasets.json --root example-data      # -> apps/atlas/site/figures
+       python apps/atlas/build.py figures apps/atlas/datasets.json --root example-data      # -> apps/atlas/site/figures
 
    The hero animation's data (`apps/atlas/site/hero.json`: a section drawn after a spatial Hi-C cerebellum section and
    three HiRES brain cells' 3-D genomes) is written by `python apps/atlas/hero_data.py`; commit it too.
-   then `python -m uchrom.core.atlas site dist/site --catalog catalog.json --hosted URL` and deploy `dist/site`
+   then `python apps/atlas/build.py site dist/site --catalog catalog.json --hosted URL` and deploy `dist/site`
    (`apps/README.md`).
 
 Notes learned the hard way: Cloudflare rejects Python's default `urllib` user agent on the public domain (aiohttp /
-fsspec and `uchrom.core.atlas.fetch_catalog` are fine); the first open of a store reads ~17 small objects, so
+fsspec and `chromdata.catalog.fetch_catalog` are fine); the first open of a store reads ~17 small objects, so
 re-uploading a store after `--upgrade` only changes its `zarr.json` files.

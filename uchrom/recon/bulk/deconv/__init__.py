@@ -42,7 +42,7 @@ def deconvolve(data: Any = None, *, method: str = "igm", **kwargs: Any):
     ----------
     data
         A haploid contact-probability matrix (``scipy.sparse`` or dense,
-        bins × bins; pass ``bins=``), or a :class:`~uchrom.core.ChromData`
+        bins × bins; pass ``bins=``), or a :class:`~chromdata.ChromData`
         whose ``bins`` define the loci (pass the matrix as
         ``probabilities=``).
     method

@@ -66,7 +66,7 @@ def child_read(fmt_key, path):
     from uchrom import ChromData  # noqa: F401
     try:
         import zarr  # noqa: F401
-        import uchrom.core.backed  # noqa: F401
+        import chromdata.backed  # noqa: F401
     except ImportError:  # 1.x checkout
         pass
     if fmt_key == "spatialdata":

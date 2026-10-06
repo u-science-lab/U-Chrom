@@ -233,7 +233,7 @@ def main():
     ap.add_argument("--label", default="cell_type")
     ap.add_argument("--k", type=int, default=15)
     a = ap.parse_args()
-    from uchrom.core import ChromData
+    from chromdata import ChromData
     cd = ChromData.read(a.data)
     if a.cmd == "cell":
         covs = [c for c in a.covar.split(",") if c and (c in ("rg", "n_spots", "span", "rg_norm")

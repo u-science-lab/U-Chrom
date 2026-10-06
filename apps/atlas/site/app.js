@@ -1,5 +1,5 @@
 // The atlas page: reads catalog.json (deployed next to this page, with the figure index merged in by
-// `python -m uchrom.core.atlas site`) and lists the datasets by study. No framework, no build step.
+// `python apps/atlas/build.py site`) and lists the datasets by study. No framework, no build step.
 (function () {
   'use strict';
   var CFG = window.ATLAS_CONFIG || {};

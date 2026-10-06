@@ -1,7 +1,7 @@
 """Write ``.h5cd`` files in the format-1.x layout (the writer that 2.0 dropped).
 
 Used to test that 1.x files are read / upgraded transparently.  The layout
-follows ``uchrom.core.cdata`` as of format 1.4: spots store
+follows ``chromdata.cdata`` as of format 1.4: spots store
 ``chrom/start/end`` (categoricals as byte strings), ``tracks/`` is
 spot-aligned, results are typed entries with provenance attrs.
 """
@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from uchrom.io._h5cd_legacy import _write_results, _write_uns
-from uchrom.core.results import ResultsStore
+from chromdata.results import ResultsStore
 
 
 def _write_df_v1(f, name, df):

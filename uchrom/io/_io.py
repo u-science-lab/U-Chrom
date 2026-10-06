@@ -32,11 +32,11 @@ def read_particles(path):
       it with ``python -m uchrom.io.upgrade``)
     - ``.csv`` or other   → CSV
     """
-    from uchrom.core.zarrcd import container_kind
+    from chromdata.zarrcd import container_kind
 
     kind = container_kind(path)
     if kind is not None:
-        from uchrom.core import ChromData
+        from chromdata import ChromData
         cd = ChromData.read(path, original_order=True)
         df = cd.to_dataframe()
         df['chrom'] = df['chrom'].astype(str)
@@ -62,7 +62,7 @@ def save_particles(df, path, cell_id=None):
     if path_str.endswith(".csv"):
         df.to_csv(path)
         return
-    from uchrom.core import ChromData
+    from chromdata import ChromData
     cd = ChromData.from_dataframe(df, cell_id=cell_id)
     cd.write(path)
 
@@ -548,7 +548,7 @@ def read_bintu_tracing(
     """
     import pandas as pd
     import numpy as np
-    from uchrom.core import ChromData
+    from chromdata import ChromData
 
     raw = pd.read_csv(path, skiprows=1 if skip_header_line else 0)
     raw = raw.dropna(subset=['X', 'Y', 'Z'])

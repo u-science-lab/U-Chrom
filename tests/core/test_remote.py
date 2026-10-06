@@ -14,7 +14,7 @@ pytest.importorskip("cooler")
 from tests.core.test_embedded import RES, _store  # noqa: E402
 from uchrom import ChromData  # noqa: E402
 from uchrom.browser.web.data import GENOME, DatasetStore, decode_matrix  # noqa: E402
-from uchrom.core import embedded  # noqa: E402
+from chromdata import embedded  # noqa: E402
 
 
 class _RangeHandler(http.server.SimpleHTTPRequestHandler):

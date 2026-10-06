@@ -14,7 +14,7 @@ passing the producing function, its parameters and its inputs.
 
 Serialisation contract
 ----------------------
-Every record kind has a writer and a reader in :mod:`uchrom.core.cdata`.
+Every record kind has a writer and a reader in :mod:`chromdata.cdata`.
 Assigning a value that cannot be written raises :class:`TypeError`
 **at assignment time** (not later, in ``write()``):
 
@@ -46,11 +46,8 @@ RESULT_KINDS = ("table", "intervals", "array", "mapping", "scalar")
 
 
 def _uchrom_version() -> str:
-    try:
-        from uchrom import __version__
-        return str(__version__)
-    except Exception:  # pragma: no cover - import cycle during bootstrap
-        return "unknown"
+    from ._version import producer_version
+    return producer_version()
 
 
 def _utc_now() -> str:

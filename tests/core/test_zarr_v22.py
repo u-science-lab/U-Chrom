@@ -13,7 +13,7 @@ import pytest
 
 from tests.core.test_zarr_format import _assert_same_small, _assert_uns_equal, _cd, _sorted_df, _sorted_tracks
 from uchrom import ChromData
-from uchrom.core.zarrcd import derive_spot_columns, write_zarr
+from chromdata.zarrcd import derive_spot_columns, write_zarr
 
 
 def _decimal_cd(n_cells=6, seed=0):

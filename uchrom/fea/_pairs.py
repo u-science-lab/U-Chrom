@@ -29,7 +29,7 @@ from typing import Iterator, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
-from uchrom.core.bins import BIN_ID
+from chromdata.bins import BIN_ID
 
 #: bytes of working memory per pair observation held in a band (value and
 #: pair index, 12 bytes, plus the group-by temporaries of pandas; measured

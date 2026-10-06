@@ -5,10 +5,10 @@ genome, per spot and bulk), section images and cell x bin tracks are readable an
 """
 import json, time, warnings, sys
 warnings.filterwarnings("ignore")
-from uchrom.core.atlas import fetch_catalog
+from chromdata.catalog import fetch_catalog
 from uchrom.browser.web.data import DatasetStore, GENOME, decode_matrix
 import sys
-from uchrom.core.atlas import DEFAULT_ATLAS
+from chromdata.catalog import DEFAULT_ATLAS
 cat = fetch_catalog(sys.argv[1] if len(sys.argv) > 1 else DEFAULT_ATLAS)
 bad = 0
 print(f"{'dataset':34s} {'open':>6s} {'maps':>5s} {'img':>4s} {'tracks':>7s}  checks")

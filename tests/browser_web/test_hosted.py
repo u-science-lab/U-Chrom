@@ -14,7 +14,7 @@ from tests.core.test_embedded import RES, _store  # noqa: E402
 from tests.core.test_remote import _RangeHandler  # noqa: E402
 from uchrom.browser.web.hosted import COOKIE, HostedConfig, SessionStores  # noqa: E402
 from uchrom.browser.web.server import create_app  # noqa: E402
-from uchrom.core import atlas, embedded  # noqa: E402
+from chromdata import catalog as atlas, embedded  # noqa: E402
 
 
 @pytest.fixture

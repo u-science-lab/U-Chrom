@@ -18,9 +18,9 @@ import pytest
 
 from tests._v1 import write_v1
 from uchrom import ChromData
-from uchrom.core.zarrcd import write_zarr
-from uchrom.core.backed import BackedArray, BackedChromData, BackedFrame
-from uchrom.core.zarrcd import container_kind, write_zarr
+from chromdata.zarrcd import write_zarr
+from chromdata.backed import BackedArray, BackedChromData, BackedFrame
+from chromdata.zarrcd import container_kind, write_zarr
 from uchrom.io._h5cd_legacy import read_h5cd, write_h5cd
 
 FORMATS = ["x.chromdata.zarr", "x.cdz"]

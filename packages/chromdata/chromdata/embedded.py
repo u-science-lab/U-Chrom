@@ -57,7 +57,7 @@ def _zarr():
 
 
 def as_store(store):
-    """A URL becomes a read-only fsspec store (see :mod:`uchrom.core.remote`), a ``.cdz`` file a read-only zip
+    """A URL becomes a read-only fsspec store (see :mod:`chromdata.remote`), a ``.cdz`` file a read-only zip
     store (the same tree in one zip); anything else is kept."""
     from .remote import is_url, zarr_store
 
@@ -923,7 +923,7 @@ def embed_links(store_path: PathLike, *, overwrite: bool = False, keys: Optional
     return done
 
 
-if __name__ == "__main__":     # python -m uchrom.core.embedded STORE [--overwrite] [--keys a b ...] [--reconsolidate]
+if __name__ == "__main__":     # python -m chromdata.embedded STORE [--overwrite] [--keys a b ...] [--reconsolidate]
     import argparse
 
     ap = argparse.ArgumentParser(description="Embed the linked contact maps / h5ad files into a .chromdata.zarr store")

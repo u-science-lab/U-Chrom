@@ -194,7 +194,7 @@ def main() -> None:
         c = json.loads(args.catalog.read_text())
         cat = {d["id"]: {**d, "category": studies.get(d.get("study"), {}).get("category")} for d in c["datasets"]}
     else:
-        from uchrom.core.atlas import describe_store
+        from chromdata.catalog import describe_store
         for d in cfg["datasets"]:
             if not args.only or d["id"] in args.only:
                 cat[d["id"]] = {**describe_store(DATA / d["store"]), "category": studies.get(d.get("study"), {}).get("category")}

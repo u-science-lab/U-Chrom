@@ -291,7 +291,7 @@ bin, cell or trace (a probe name, a sample id) once per key
 `bin_tracks`, `cells`, `traces`, `intervals/`, `points/`) are single
 Parquet files; `cellm`, `binm`, result arrays and the `index/` offsets are
 Zarr arrays; `results` provenance, `uns` and linked-file records are JSON
-attributes.  The full layout is in `uchrom/core/spec.md`.
+attributes.  The full layout is in `packages/chromdata/spec.md`.
 
 - **Row order.**  Reading returns spots in the primary order, cell ›
   trace › chromosome › bin; every spot keeps its values.  A cell or a trace

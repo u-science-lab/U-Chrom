@@ -11,6 +11,8 @@ authors = [
 ]
 requires-python = ">= 3.11"
 dependencies = [
+    # the data model and its store (.chromdata.zarr): packages/chromdata
+    "chromdata>=0.1.0",
     "taichi>=1.7.0",
     "fire>=0.6.0",
     "pandas>=2.0.3",
@@ -114,3 +116,7 @@ include-package-data = true
 [tool.setuptools.packages.find]
 include = ["uchrom*"]
 exclude = ["example-data*", "tests*"]
+
+# Monorepo: the packages of packages/ are installed from their folders when developing (uv sync / uv pip install -e .)
+[tool.uv.sources]
+chromdata = { path = "packages/chromdata", editable = true }

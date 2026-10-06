@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from uchrom import ChromData
-from uchrom.core import cellspatial as cs
+from chromdata import cellspatial as cs
 
 
 def _cd(n_cells=3):
@@ -224,7 +224,7 @@ def test_streaming_writer_keeps_shapes(tmp_path):
 
 def test_store_without_cell_spatial_parts_reads(tmp_path):
     """Older stores (no cell_shapes table, no records) read with empty parts."""
-    from uchrom.core.zarrcd import write_zarr
+    from chromdata.zarrcd import write_zarr
 
     cd = _cd()
     write_zarr(cd, tmp_path / "old.chromdata.zarr", _layout="2.1")

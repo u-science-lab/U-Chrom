@@ -72,7 +72,7 @@ def main() -> None:
     from uchrom.io.contacts import (
         write_label_info, make_higashi_config, _materialise_chromsizes,
     )
-    from uchrom.core import ChromData
+    from chromdata import ChromData
     from uchrom.emb.higashi import run as higashi_run
 
     # 1. Locate inputs (downloaded by the user beforehand).

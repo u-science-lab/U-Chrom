@@ -1,7 +1,10 @@
-uchrom.core
-===========
+chromdata (the data model)
+==========================
 
-.. automodule:: uchrom.core
+The data model and its store are the ``chromdata`` package (``packages/chromdata``; ``uchrom.core`` is its former,
+deprecated name).
+
+.. automodule:: chromdata
    :members:
    :undoc-members:
    :exclude-members: ChromData, ResultRecord, ResultsStore, IntervalTable, IntervalStore
@@ -9,7 +12,7 @@ uchrom.core
 ChromData
 ---------
 
-.. autoclass:: uchrom.core.ChromData
+.. autoclass:: chromdata.ChromData
    :members:
    :undoc-members:
    :show-inheritance:
@@ -17,7 +20,7 @@ ChromData
 UChromProject
 -------------
 
-.. autoclass:: uchrom.core.UChromProject
+.. autoclass:: chromdata.UChromProject
    :members:
    :undoc-members:
    :show-inheritance:
@@ -25,35 +28,35 @@ UChromProject
 Results store
 -------------
 
-.. automodule:: uchrom.core.results
+.. automodule:: chromdata.results
    :members: ResultRecord, ResultsStore
 
 Calling convention helpers
 --------------------------
 
-.. automodule:: uchrom.core.convention
+.. automodule:: uchrom.convention
    :members:
 
 Locus axis (bins)
 -----------------
 
-.. automodule:: uchrom.core.bins
+.. automodule:: chromdata.bins
    :members:
 
 Interval tables
 ---------------
 
-.. automodule:: uchrom.core.intervals
+.. automodule:: chromdata.intervals
    :members: IntervalTable, IntervalStore, INTERVAL_KINDS
 
 Storage: .chromdata.zarr
 ------------------------
 
-.. automodule:: uchrom.core.zarrcd
+.. automodule:: chromdata.zarrcd
    :members: write_zarr, container_kind, Container, SpotRows, sort_order
 
 Backed mode
 -----------
 
-.. automodule:: uchrom.core.backed
+.. automodule:: chromdata.backed
    :members: BackedChromData, BackedArray, BackedFrame

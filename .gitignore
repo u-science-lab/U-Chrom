@@ -154,3 +154,7 @@ native/nucdyn/python/uchrom_nucdyn/*.pyd
 # a leftover paper/ folder in an old worktree must not come back; a symlink paper -> ../u-chrom-paper
 # (to browse the paper next to the code) is ignored too.
 /paper
+
+# monorepo packages: build output of non-editable installs
+packages/*/build/
+packages/*/*.egg-info/

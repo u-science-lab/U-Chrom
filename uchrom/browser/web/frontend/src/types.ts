@@ -381,7 +381,7 @@ export interface FilePlace {
   path: string
 }
 
-/** One dataset of an atlas catalog (`catalog.json`, written by `python -m uchrom.core.atlas build`). */
+/** One dataset of an atlas catalog (`catalog.json`, written by `python -m chromdata.catalog build`). */
 export interface AtlasDataset {
   id: string
   url: string

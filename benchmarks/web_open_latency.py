@@ -36,7 +36,7 @@ def child(path: str) -> None:
 
     import h5py, pyarrow.parquet, zarr  # noqa: F401,E401  (imports out of the timing)
     from uchrom.browser.web.data import DatasetStore, GeometryFilter, decode_geometry
-    import uchrom.core.backed  # noqa: F401
+    import chromdata.backed  # noqa: F401
 
     out = {"path": path}
     t0 = time.perf_counter()

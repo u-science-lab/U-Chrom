@@ -30,7 +30,7 @@ Unlike a FOF-CT table, ``spots_df`` may have **multiple rows per
 
 Output
 ------
-A :class:`~uchrom.core.ChromData` whose ``spots`` table contains the
+A :class:`~chromdata.ChromData` whose ``spots`` table contains the
 kept detections with a populated ``trace_id``.  ``cd.traces`` has one
 row per fiber with ``cell_id, chrom, mean_edge, sister_group``.
 ``cd.results['ploidy']`` summarises the per-(cell, chrom) fiber count.
@@ -230,7 +230,7 @@ def align_spots(
 
     See module docstring for the input-DataFrame contract.
     """
-    from uchrom.core import ChromData
+    from chromdata import ChromData
 
     params = params or SpotAlignerParams()
 

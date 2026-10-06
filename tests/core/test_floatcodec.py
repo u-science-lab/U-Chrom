@@ -6,7 +6,7 @@ import io
 import numpy as np
 import pytest
 
-from uchrom.core import floatcodec as fc
+from chromdata import floatcodec as fc
 
 
 def _bits(a):

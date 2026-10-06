@@ -1,7 +1,7 @@
 """Cell embeddings from per-cell features of any modality.
 
 :func:`embed_cells` turns a group of numeric ``cd.cells`` columns — the
-``rna.<gene>`` counts written by :meth:`~uchrom.core.ChromData.from_fofct`,
+``rna.<gene>`` counts written by :meth:`~chromdata.ChromData.from_fofct`,
 ``if.<mark>`` immunofluorescence summaries from :func:`aggregate_tracks`,
 ``atac.<gene>`` accessibility, … — or an explicit cells × features matrix
 into PCA (or LSI) / t-SNE / UMAP coordinates stored in ``cd.cellm`` (rows

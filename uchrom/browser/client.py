@@ -115,7 +115,7 @@ class Workspace:
 
     def dataset(self):
         """The ChromData the browser has open (read from the same file, in this process)."""
-        from uchrom.core import ChromData
+        from chromdata import ChromData
         path = self.describe()["dataset"]["path"]
         if not path:
             raise BrowserError("the open dataset has no file path")

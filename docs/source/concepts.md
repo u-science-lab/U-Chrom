@@ -120,5 +120,5 @@ Format version follows `MAJOR.MINOR`:
 - different MAJOR → reader raises, with a clear upgrade path;
 - missing attribute → reader warns and assumes legacy 1.0 layout.
 
-See [`uchrom/core/spec.md`](https://github.com/Nanguage/U-Chrom/blob/main/uchrom/core/spec.md)
+See [`packages/chromdata/spec.md`](https://github.com/Nanguage/U-Chrom/blob/main/packages/chromdata/spec.md)
 for the complete on-disk spec.

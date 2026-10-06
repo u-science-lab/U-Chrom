@@ -89,7 +89,7 @@ class H5cd2Memory(H5cd1xMemory):
 
 def _zarr_version() -> str:
     try:
-        from uchrom.core.zarrcd import ZARR_FORMAT_VERSION
+        from chromdata.zarrcd import ZARR_FORMAT_VERSION
     except ImportError:  # pragma: no cover - older checkout
         return "2.0"
     return ZARR_FORMAT_VERSION
@@ -239,7 +239,7 @@ def child(backend_key, path, n_queries):
         import spatialdata  # noqa: F401
     try:
         import pyarrow.parquet, zarr, anndata  # noqa: F401,E401
-        import uchrom.core.backed  # noqa: F401
+        import chromdata.backed  # noqa: F401
     except ImportError:  # 1.x checkout
         pass
     base = C.current_rss_mb()
