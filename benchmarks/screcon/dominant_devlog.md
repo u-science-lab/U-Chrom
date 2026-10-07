@@ -5,7 +5,7 @@ reconstruction.  Development units only; nothing of the held-back sets has been 
 frozen (EMber haploid = tag `robust-frozen`; EMber deep diploid = tag `ember-deep-frozen`; NucDynamics
 2017 protocol), engine build `dom-4181d07` of this branch (cargo regression tests of the frozen protocols
 pass on Sherlock and on the laptop, CPU and `--features gpu`).  Full tables: `results/dominant_dev.md`,
-numbers `results/dominant_dev.json`, every scored table `data/dominant_dev_scores.tsv.gz` (1,694 rows:
+numbers `results/dominant_dev.json`, every scored table `results/dominant_dev_scores.tsv.gz` (1,694 rows:
 1,130 mixtures, pure controls, D-only controls).
 
 ## 1. What was run
