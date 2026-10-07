@@ -1,131 +1,98 @@
 # U-Chrom
 
-**U**niversal **Chrom**atin structure data analysis toolkit.
+**U**niversal **Chrom**atin: one toolkit for 3-D genome data from sequencing and imaging.
 
-U-Chrom provides a unified framework for 3D chromatin structure analysis.
-The core data structure is a **structure table** — genomic bins mapped to
-3D coordinates `(chrom, start, end, x, y, z)` — which can be obtained from
-either sequencing-based data (Hi-C, Dip-C) via 3D reconstruction, or
-imaging-based data (ORCA, MERFISH, DNA seqFISH+) via chromatin tracing.
-
-On top of this common interface, U-Chrom implements:
-
-- **Reconstruction** from sparse Hi-C contacts (Nuc Dynamics, GEM, MDS/SMACOF)
-- **Structure identification** — loops (ArcFISH-style per-axis F-test),
-  TADs (directionality index), compartments (placeholder)
-- **Geometric features** — distance matrices, contact frequency, radius
-  of gyration
-- **Interactive 3D browser** built on PyVista + PyQt5
-- **Population-level aggregation plots** (median distance matrix, contact
-  map, Rg histogram)
-
-## Quick start
-
-```bash
-pip install u-chrom
-```
+Single-cell Hi-C, spatial Hi-C, bulk Hi-C, chromatin tracing and DNA seqFISH+ all describe the
+same thing — where loci sit relative to each other, cell by cell — yet each comes with its own
+formats and tools.  U-Chrom puts them in one data model, `ChromData` (cells › traces › spots on a
+shared locus axis, with contact maps, RNA, chromatin marks and cell positions linked per cell), and
+builds the analyses on it: import, 3-D reconstruction, structure calling, per-locus features,
+single-cell embeddings, an interactive web browser and an open data atlas.
 
 ```python
-from uchrom import ChromData
+import uchrom as uc
+import uchrom.datasets as ds
+from chromdata import ChromData
 
-# Import FOF-CT imaging data
-cd = ChromData.from_fofct("example-data/core.csv")
-
-# ArcFISH-style loop calling (GPU-accelerated)
-from uchrom.strc.loop import call_loops_axiswise_f
-loops = call_loops_axiswise_f(cd, chrom="chr17", device="auto")
-
-# Persist
-cd.write("data.chromdata.zarr")
+cd = ChromData.from_fofct(ds.fetch("takei"))           # chromatin tracing (4DN FOF-CT), fetched once
+tads = uc.tl.call_tads(cd, chrom="chr3")                # TADs from 3-D distances
+cd.write("takei2021.chromdata.zarr")                    # one store, read in parts later
 ```
-
-Launch the interactive 3D browser:
 
 ```bash
-python -m uchrom.browser --web data.chromdata.zarr
+python -m uchrom_browser takei2021.chromdata.zarr       # look at it in the web browser
 ```
+
+New here?  Start with [installation](start/install), the [quick start](start/quickstart) and the
+[concepts](start/concepts) behind the data model.
+
+## By data type
+
+Each chapter takes one kind of data from its files to a `ChromData` and through what is specific to
+it, with tutorials on real data.
+
+| Data | What the chapter covers |
+|------|-------------------------|
+| [Chromatin tracing](tracing/index) | FOF-CT, PyHiM and other tables; raw detections into traces; filling missing loci |
+| [Imaging multi-omics: DNA seqFISH+](seqfish/index) | DNA positions with chromatin marks, RNA and cell positions in the same cells |
+| [Single-cell and spatial Hi-C](schic/index) | contacts per cell, linked contact maps, 3-D structures of single cells (NucDynamics, EMber), embeddings from contacts |
+| [Bulk Hi-C](bulk/index) | contact maps to 3-D: one consensus structure (MDS), a population of structures (IGM), Hi-C with tracing (GEM-FISH) |
+
+## Common to all data
+
+| Chapter | What it covers | Package / module |
+|---------|----------------|------------------|
+| [Data model & storage](data/index) | `ChromData`, the `.chromdata.zarr` store, backed and remote reads, linked and embedded modalities | `chromdata` |
+| [Structure calling](structures/index) | loops, TADs, domains per allele, A/B compartments from 3-D distances | `uchrom.strc` |
+| [Per-locus features](features/index) | distance maps, variance features, signals and peaks along the genome | `uchrom.fea` |
+| [Cells & embeddings](cells/index) | embeddings and clusters of cells from RNA, chromatin marks, accessibility and contacts | `uchrom.emb` |
+| [Visualisation](viz/index) | the web browser, the data atlas, plots | `uchrom-browser`, `uchrom.pl` |
 
 ```{toctree}
 :caption: Getting started
 :maxdepth: 1
+:hidden:
 
-install
-concepts
-example_data
+start/install
+start/quickstart
+start/concepts
+start/datasets
 ```
 
 ```{toctree}
-:caption: Tutorials — Core & I/O
-:maxdepth: 1
-
-tutorials/chromdata_basics
-tutorials/import_fofct
-tutorials/import_pyhim_ecsv
-tutorials/takei2025_walkthrough
-tutorials/takei2025_auto_discovery
-tutorials/takei2025_iterative_auto_discovery
-```
-
-```{toctree}
-:caption: Tutorials — Reconstruction (recon)
-:maxdepth: 1
-
-tutorials/reconstruction
-tutorials/gem_fish_reconstruction
-```
-
-```{toctree}
-:caption: Tutorials — Imaging & tracing (im)
-:maxdepth: 1
-
-tutorials/jie_aligner
-```
-
-```{toctree}
-:caption: Tutorials — Structure identification (strc)
-:maxdepth: 1
-
-tutorials/loop_calling
-tutorials/tad_calling
-tutorials/fishnet_domains
-tutorials/compartment
-```
-
-```{toctree}
-:caption: Tutorials — Embedding (emb)
-:maxdepth: 1
-
-tutorials/higashi_embedding
-```
-
-```{toctree}
-:caption: User guide
+:caption: By data type
 :maxdepth: 2
+:hidden:
 
-guide/chromdata
-guide/io
-guide/tracing
-guide/reconstruction
-guide/structure
-guide/auto_discovery
-guide/iterative_auto_discovery
-guide/data_enrichment_for_discovery
-guide/linked_multiomics
-guide/chromdata_2_0_design
-guide/browser
+tracing/index
+seqfish/index
+schic/index
+bulk/index
 ```
 
 ```{toctree}
-:caption: API reference
-:maxdepth: 1
+:caption: Common to all data
+:maxdepth: 2
+:hidden:
 
-api/index
+data/index
+structures/index
+features/index
+cells/index
+viz/index
 ```
 
 ```{toctree}
-:caption: Project
+:caption: Reference
 :maxdepth: 1
+:hidden:
 
-changelog
-license
+reference/api/index
+reference/formats
+reference/format_spec
+reference/data_sources
+reference/design_2_0
+reference/development
+reference/changelog
+reference/license
 ```

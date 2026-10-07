@@ -123,7 +123,7 @@ def main():
     args = ap.parse_args()
     raw = sorted((C.TAKEI_DIR / "raw").glob("cerebellum_rep1_pos*.csv"))
     if not raw:
-        raise SystemExit("no raw CSVs — run example-data/build_takei2025_cerebellum.py (without --drop-raw)")
+        raise SystemExit("no raw CSVs — run apps/atlas/recipes/build_takei2025_cerebellum.py (without --drop-raw)")
     loci = pd.read_csv(C.TAKEI_DIR / "LC1-100k-09022022-mm10-25kb-meta.csv", usecols=["name", "chrom", "start"])
     loci_per_chrom = loci.groupby("chrom").size()
     traces = {c: [] for c in ALLELES}

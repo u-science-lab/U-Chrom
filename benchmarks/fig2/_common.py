@@ -1,22 +1,24 @@
 """Shared helpers for the Figure 2 benchmarks (``benchmarks/fig2/*.py``).
 
-* paths: repo root, example-data (``$UCHROM_EXAMPLE_DATA`` overrides), results
+* paths: repo root, the data directory (``uchrom.datasets.data_dir()``: ``$UCHROM_DATA``), results
   (``<u-chrom-paper>/manuscripts/full/figures/fig2/results``, see ``benchmarks/_paper.py``) and a scratch work dir (``$UCHROM_FIG2_WORK``);
 * ``machine_info()`` — CPU / RAM / disk / OS / library versions for the JSON;
 * ``run_child()`` — run one measurement in a fresh interpreter and collect its
   JSON (timings + peak RSS), so every trial starts with a cold Python heap;
 * ``FORMATS`` — the storage formats compared in panel b.  Each is a small
-  class with ``write(cd, path)`` / ``read(path)``.  The ``h5cd`` entry is
-  labelled from ``uchrom.core.cdata.FORMAT_VERSION`` (the "h5cd 1.x" series
-  was measured on a 1.x checkout); ``h5cd2`` ("h5cd 2.0", the HDF5 writer of
-  format 2.0) and ``zarr`` ("chromdata.zarr 2.0", the Zarr + Parquet
-  container) need a 2.0 checkout.  Series are merged by label into the JSON;
+  class with ``write(cd, path)`` / ``read(path)``.  The HDF5 ``.h5cd``
+  entries go through the private legacy module ``uchrom.io._h5cd_legacy``
+  (``ChromData`` no longer reads or writes ``.h5cd``): ``h5cd`` is labelled
+  from its ``FORMAT_VERSION`` (the "h5cd 1.x" series was measured on a 1.x
+  checkout; on this checkout it writes 2.0, the same as ``h5cd2``);
+  ``h5cd2`` is "h5cd 2.0", ``zarr`` the Zarr + Parquet container.  Series are merged by label into the JSON;
 * ``size_bytes()`` — file or directory (a ``.chromdata.zarr`` store) size;
 * Takei 2025 whole-cell subsets for the scaling series (``stage_subset``).
 """
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import json
 import os
 import pickle
@@ -35,9 +37,10 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-sys.path.insert(0, str(ROOT))  # this checkout's uchrom, not an installed copy
+for _pkg in ("uchrom", "chromdata", "uchrom-browser"):   # this checkout's packages, not installed copies
+    sys.path.insert(0, str(ROOT / "packages" / _pkg))
 
-DATA = Path(os.environ.get("UCHROM_EXAMPLE_DATA", ROOT / "example-data"))
+DATA = data_dir()
 sys.path.insert(0, str(ROOT / "benchmarks"))
 from _paper import results_dir  # noqa: E402
 
@@ -45,7 +48,7 @@ RESULTS = results_dir("fig2")          # u-chrom-paper: manuscripts/full/figures
 WORK = Path(os.environ.get("UCHROM_FIG2_WORK", DATA / "fig2_work"))
 
 TAKEI_DIR = DATA / "takei2025_cerebellum"
-TAKEI_COMBINED = TAKEI_DIR / "takei2025_cerebellum_rep1.h5cd"
+TAKEI_COMBINED = TAKEI_DIR / "takei2025_cerebellum_rep1.chromdata.zarr"   # build_takei2025_cerebellum.py
 
 
 # ----------------------------------------------------------------------------- measurement
@@ -126,7 +129,7 @@ def machine_info() -> Dict[str, Any]:
             vers[mod] = version(mod)
         except PackageNotFoundError:
             vers[mod] = None
-    from uchrom.core.cdata import FORMAT_VERSION
+    from uchrom.io._h5cd_legacy import FORMAT_VERSION
     vers["uchrom_h5cd_format"] = FORMAT_VERSION
     vers["uchrom_zarr_format"] = _zarr_version()
     try:
@@ -327,40 +330,39 @@ class SpatialDataZarr(Format):
 
 
 class H5cd(Format):
-    """``cd.write`` / ``ChromData.read`` of whatever format this checkout writes."""
+    """The HDF5 ``.h5cd`` of the legacy module's ``FORMAT_VERSION`` (1.x series: a 1.x checkout)."""
     ext = ".h5cd"
 
     @property
     def label(self):
-        from uchrom.core.cdata import FORMAT_VERSION
+        from uchrom.io._h5cd_legacy import FORMAT_VERSION
         return f"h5cd {FORMAT_VERSION.split('.')[0]}.x"
 
     def write(self, cd, path):
-        cd.write(path)
+        from uchrom.io._h5cd_legacy import write_h5cd
+        write_h5cd(cd, path)
 
     def read(self, path):
-        from uchrom import ChromData
-        return ChromData.read(path)
+        from uchrom.io._h5cd_legacy import read_h5cd
+        return read_h5cd(path)
 
 
 class H5cd2(Format):
-    """HDF5 ``.h5cd`` written by format 2.0 (#65; deprecated for writing)."""
+    """HDF5 ``.h5cd`` format 2.0 (#65) — a baseline; no longer a ChromData format."""
     label, ext = "h5cd 2.0", ".h5cd"
 
     def write(self, cd, path):
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            cd.write(path, format="h5cd")
+        from uchrom.io._h5cd_legacy import write_h5cd
+        write_h5cd(cd, path)
 
     def read(self, path):
-        from uchrom import ChromData
-        return ChromData.read(path)
+        from uchrom.io._h5cd_legacy import read_h5cd
+        return read_h5cd(path)
 
 
 def _zarr_version() -> str:
     try:
-        from uchrom.core.zarrcd import ZARR_FORMAT_VERSION
+        from chromdata.zarrcd import ZARR_FORMAT_VERSION
     except ImportError:  # pragma: no cover - older checkout
         return "2.0"
     return ZARR_FORMAT_VERSION
@@ -403,7 +405,7 @@ FORMATS: Dict[str, Format] = {k: f for k, f in (("fofct", FofctCSV()), ("parquet
 def load_takei_all():
     from uchrom import ChromData
     if not TAKEI_COMBINED.exists():
-        raise SystemExit(f"{TAKEI_COMBINED} missing — run example-data/build_takei2025_cerebellum.py")
+        raise SystemExit(f"{TAKEI_COMBINED} missing — run apps/atlas/recipes/build_takei2025_cerebellum.py")
     return ChromData.read(TAKEI_COMBINED)
 
 

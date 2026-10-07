@@ -1,10 +1,10 @@
 """Figure 2e — linked contacts, queried through the shared index (scHiCAR MOp).
 
-**Correctness.**  ``schicar_mop.h5cd`` links the per-cell 1 Mb map
+**Correctness.**  ``schicar_mop.chromdata.zarr`` links the per-cell 1 Mb map
 ``contacts_cells_1Mb.scool`` (5,313 cells) and holds the cell table with
 ``cell_type`` (22 types).  For every cell type the group pseudo-bulk is
 computed through the library path the web browser uses —
-``uchrom.browser.web.data.Dataset.register_group`` (the cells of the type)
+``uchrom_browser.data.Dataset.register_group`` (the cells of the type)
 then ``Dataset.contacts(key, chrom, group=...)`` → ``Dataset._pseudobulk``
 (per-cell pixels summed straight from the ``.scool``) — for the cis map of
 every chromosome, and compared with the published per-type map
@@ -53,8 +53,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _common as C  # noqa: E402
 
 SCRIPT = Path(__file__).resolve()
-SCHICAR = C.DATA / "schicar_mop" / "schicar_mop.h5cd"
-FUNCTION = "uchrom.browser.web.data.Dataset.contacts(key, chrom, group=...) -> Dataset._pseudobulk"
+SCHICAR = C.DATA / "schicar_mop" / "schicar_mop.chromdata.zarr"
+FUNCTION = "uchrom_browser.data.Dataset.contacts(key, chrom, group=...) -> Dataset._pseudobulk"
 
 
 def _coarsen(mat: np.ndarray, starts: np.ndarray, target_starts: np.ndarray) -> np.ndarray:
@@ -71,7 +71,7 @@ def child_identity(window):
     import cooler
 
     from uchrom import ChromData
-    from uchrom.browser.web.data import Dataset, decode_matrix
+    from uchrom_browser.data import Dataset, decode_matrix
 
     cd = ChromData.read(SCHICAR)
     ds = Dataset(id="schicar", name="schicar", path=str(SCHICAR), cd=cd)
@@ -194,7 +194,7 @@ def main():
         kind, *rest = args.child
         return {"identity": child_identity, "import": child_import}[kind](*rest)
     if not SCHICAR.exists():
-        raise SystemExit(f"{SCHICAR} missing — run example-data/build_schicar_mop.py")
+        raise SystemExit(f"{SCHICAR} missing — run apps/atlas/recipes/build_schicar_mop.py")
     ident = C.run_child(SCRIPT, ["--child", "identity", args.window])
     work = C.WORK / "e_query"
     work.mkdir(parents=True, exist_ok=True)
@@ -210,7 +210,7 @@ def main():
     n_ok = sum(p["identical"] for p in ident["per_type"])
     C.write_json("e_query", {
         "panel": "e", "machine": C.machine_info(),
-        "dataset": {"name": "scHiCAR mouse brain (GSE305439)", "store": "schicar_mop/schicar_mop.h5cd",
+        "dataset": {"name": "scHiCAR mouse brain (GSE305439)", "store": "schicar_mop/schicar_mop.chromdata.zarr",
                     "scool": "schicar_mop/contacts_cells_1Mb.scool (5,313 cells, 1 Mb)",
                     "published_per_type": "schicar_mop/contacts_<type>.cool (500 kb)"},
         "function": FUNCTION,

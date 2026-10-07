@@ -5,7 +5,7 @@
 #   $GROUP_HOME/$USER/uchrom-nd/venv-diploid      numpy / scipy / pandas (diploid_setup.sbatch); the engine is
 #                                                 NOT taken from this venv but from the pinned copy below
 #   $SCRATCH/uchrom-nd/repo-highres               repo copy (branch Nanguage/fig3-highres, rsync from the laptop)
-#   $SCRATCH/uchrom-nd/engine-highres/$ENGINE     uchrom_nucdyn built from repo-highres (highres_setup.sbatch)
+#   $SCRATCH/uchrom-nd/engine-highres/$ENGINE     uchrom_recon built from repo-highres (highres_setup.sbatch)
 #   $SCRATCH/uchrom-nd/data/wu2025_scmicroc       scMicro-C pairs + the authors' 3dg (highres_download.sbatch)
 #   $SCRATCH/uchrom-nd/runs/highres               outputs
 source "$SCRATCH/uchrom-nd/repo-highres/benchmarks/screcon/sherlock/_env.sh"

@@ -23,17 +23,17 @@ export PIP_CACHE_DIR=$SCRATCH/.cache/pip XDG_CACHE_HOME=$SCRATCH/.cache CARGO_HO
 export CARGO_TARGET_DIR=$SCRATCH/uchrom-nd/cargo-target-mix
 echo "host=$(hostname) job=$SLURM_JOB_ID $(python3 --version) $(rustc --version) engine=$ENGINE_TAG"
 if [ -n "${BASELINE_REPO:-}" ]; then
-  (cd "$BASELINE_REPO/native/nucdyn" && CARGO_TARGET_DIR=$SCRATCH/uchrom-nd/cargo-target-mix-base \
+  (cd "$BASELINE_REPO/packages/uchrom-recon" && CARGO_TARGET_DIR=$SCRATCH/uchrom-nd/cargo-target-mix-base \
     UCHROM_NUCDYN_PRINT_GOLDEN=1 cargo test --release --test regression -- --nocapture 2>&1 | grep -E "golden|test result|panicked" | sed 's/^/baseline: /') || true
 fi
-cd "$REPO/native/nucdyn"
+cd "$REPO/packages/uchrom-recon"
 UCHROM_NUCDYN_PRINT_GOLDEN=1 cargo test --release -- --nocapture 2>&1 | grep -E "golden|test result|FAILED|panicked" || true
 WH=$SCRATCH/uchrom-nd/wheels-mix/$ENGINE_TAG
 rm -rf "$WH"
 "$VENV/bin/maturin" build --release -o "$WH"
-WHL=$(ls -t "$WH"/u_chrom_nucdyn-*.whl | head -1)
+WHL=$(ls -t "$WH"/uchrom_recon-*.whl | head -1)
 rm -rf "$SCRATCH/uchrom-nd/engine-mix/$ENGINE_TAG"
 "$VENV/bin/pip" install -q --no-deps --target "$SCRATCH/uchrom-nd/engine-mix/$ENGINE_TAG" "$WHL"
 export PYTHONPATH=$SCRATCH/uchrom-nd/engine-mix/$ENGINE_TAG
-"$VENV/bin/python" -c "import uchrom_nucdyn as un, numpy, scipy, pandas; print('uchrom_nucdyn', un.__version__, un.__file__, 'gpu build', un.HAS_GPU)"
+"$VENV/bin/python" -c "import uchrom_recon as un, numpy, scipy, pandas; print('uchrom_recon', un.__version__, un.__file__, 'gpu build', un.HAS_GPU)"
 cd "$REPO" && "$VENV/bin/python" -m pytest -q benchmarks/screcon/tests -p no:cacheprovider 2>&1 | tail -3

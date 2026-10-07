@@ -189,7 +189,7 @@ def run(fn, tmp):
 def t_chromdata(tmp):
     import cooler
 
-    from uchrom.core import ChromData
+    from chromdata import ChromData
 
     d = toy()
     spots = d["spots"][["bin_id", "trace_id", "cell_id"]]
@@ -217,7 +217,7 @@ def t_chromdata(tmp):
     c1 = r.load_linked_scool(cell="c1")
     pos = r.cell_positions()
     shp = r.cell_shapes["cell"].set_index("cell_id")
-    from uchrom.core.cellspatial import polygon_rings
+    from chromdata.cellspatial import polygon_rings
     loops = r.intervals["loops"]
     return {
         "coords": T(np.allclose(r.coords, cd.coords), DED, "coords (n_spots, 3)"),
@@ -562,8 +562,8 @@ SD_DOC = "https://spatialdata.scverse.org/en/stable/design_doc.html"
 MU_DOC = "https://mudata.readthedocs.io/stable/io/mudata.html"
 CO_DOC = "https://cooler.readthedocs.io/en/latest/schema.html"
 FOF = "https://fish-omics-format.readthedocs.io/en/latest/"
-CD_SPEC = "uchrom/core/spec.md"
-CD_CODE = "uchrom/core/cdata.py"
+CD_SPEC = "packages/chromdata/spec.md"
+CD_CODE = "packages/chromdata/chromdata/cdata.py"
 FAVOURABLE = ("Rated in the most favourable orientation; one AnnData has a single obs axis, so spots, cells "
               "and loci cannot all be first-class in the same object (see the hierarchy column).")
 JUDGEMENT = "Judgement call: "
@@ -583,7 +583,7 @@ MARKS = {
                                "cell_shapes, GeoParquet WKB polygons (tables/cell_shapes/<key>.parquet, the "
                                "SpatialData shapes representation); set_cell_positions / cell_positions / "
                                "set_cell_shapes; loaders fill it (seqFISH+, FOF-CT cell and mapping tables)",
-                     [CD_SPEC, "tests/core/test_cell_spatial.py", "uchrom/core/cellspatial.py"], "convention",
+                     [CD_SPEC, "packages/chromdata/tests/test_cell_spatial.py", "packages/chromdata/chromdata/cellspatial.py"], "convention",
                      "cell positions became a schema element (centroid columns + record, GeoParquet outlines; "
                      "format 2.3, PR #77); before: two ad-hoc 2-D cells columns, no outline"),
         "contacts": ("linked", "linked, not copied: uns['linked_scool' / 'linked_cool'] records path, bin size "
@@ -596,7 +596,7 @@ MARKS = {
         "provenance": ("native", "results: ResultsStore of ResultRecord(kind, params, function, version, inputs, "
                                  "created_utc)", [CD_SPEC]),
         "partial": ("native", "read(backed=True): get_cell / get_trace / get_chrom read only the needed row "
-                              "ranges (index/ runs; Fig. 2d)", [CD_SPEC, "uchrom/core/backed.py"]),
+                              "ranges (index/ runs; Fig. 2d)", [CD_SPEC, "packages/chromdata/chromdata/backed.py"]),
     },
     "FOF-CT (4DN)": {
         "coords": ("native", "core table X, Y, Z (required) + ##XYZ_Unit", [FOF + "core.html"]),

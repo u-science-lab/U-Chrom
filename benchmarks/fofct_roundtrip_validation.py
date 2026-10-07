@@ -1,7 +1,7 @@
 """Real-data check of the FOF-CT writer: ``from_fofct`` → ``to_fofct`` →
 ``from_fofct`` must give the same ChromData.
 
-Datasets (catalogued in ``example-data/README.md``):
+Datasets (catalogued in ``apps/atlas/recipes/README.md``):
 
 * Takei 2021 mESC DNA seqFISH+ (4DN ``4DNFIHF3JCBY`` core + ``4DNFIFINA2U9``
   cell + ``4DNFIJ52NVDV`` RNA tables);
@@ -13,11 +13,12 @@ tables, read time of the written tables, and the checks (``to_dataframe()``
 with dtypes, cells, RNA points, headers).  Each dataset runs in its own
 process (peak RSS reported).
 
-    python benchmarks/fofct_roundtrip_validation.py --data example-data --work /tmp/fofct
+    python benchmarks/fofct_roundtrip_validation.py --data $UCHROM_DATA --work /tmp/fofct
 """
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import resource
@@ -28,7 +29,8 @@ import warnings
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+for _pkg in ("uchrom", "chromdata", "uchrom-browser"):   # this checkout's packages, not installed copies
+    sys.path.insert(0, str(ROOT / "packages" / _pkg))
 
 DATASETS = {
     "takei2021": ("4DNFIHF3JCBY.csv", "4DNFIFINA2U9.csv", "4DNFIJ52NVDV.csv"),
@@ -84,7 +86,7 @@ def child(name, data, work):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=ROOT / "example-data")
+    ap.add_argument("--data", type=Path, default=data_dir())
     ap.add_argument("--work", type=Path, default=Path("/tmp/fofct_roundtrip"))
     ap.add_argument("--only")
     ap.add_argument("--child", nargs=3, help=argparse.SUPPRESS)

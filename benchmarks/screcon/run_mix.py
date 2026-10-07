@@ -49,7 +49,7 @@ def _pos_end(res) -> np.ndarray:
 def run_ember(c, sizes, n_models, seed, device, params, n_threads=0, mix_prior=None):
     """EMber / EMber-mix on contacts ``c``; phased contacts (``diploid.Phased``) run diploid (every
     chromosome two copies)."""
-    import uchrom_nucdyn as un
+    import uchrom_recon as un
     kw = {} if mix_prior is None else {"mix_prior": mix_prior}
     if hasattr(c, "hap_a"):
         kw.update(hap_a=c.hap_a, hap_b=c.hap_b, ploidy="diploid")
@@ -77,7 +77,7 @@ def load_table(path, diploid: bool):
 def run_igm(c, k: int, res_bp: int, seed: int, device: str, params: dict, ploidy: str = "haploid"):
     """IGM (S = k; haploid, or diploid with every chromosome two copies) on the pooled contacts binned at
     ``res_bp`` (phases not used: IGM's probabilities are haploid)."""
-    import uchrom_nucdyn as un
+    import uchrom_recon as un
     from contacts import sort_chroms
     chroms = sort_chroms(np.concatenate([c.chrom_a, c.chrom_b]))
     rows = []
@@ -148,7 +148,7 @@ def main(argv=None) -> None:
     ap.add_argument("--label")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
-    import uchrom_nucdyn as un
+    import uchrom_recon as un
     sizes = schedule(args.res)
     c = load_table(args.contacts, args.diploid)
     t0 = time.time()

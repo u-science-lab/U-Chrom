@@ -17,5 +17,5 @@ source "$SCRATCH/uchrom-nd/repo-deconv/benchmarks/bulk/sherlock/_env.sh"
 task ${SLURM_ARRAY_TASK_ID:-1}
 EPY=${ENGINE_PY:-$PY}
 mkdir -p "$SCORES/$DATASET"
-PYTHONPATH=$REPO $EPY $BK/score.py score --truth "$TRUTH" --input "$INPUT" "${RCARG[@]}" \
+PYTHONPATH=$REPO/packages/uchrom:$REPO/packages/chromdata $EPY $BK/score.py score --truth "$TRUTH" --input "$INPUT" "${RCARG[@]}" \
   --pop-dir "$BASEDIR" --pop-dir "$MODELDIR" --out "$SCORES/$DATASET/$NAME.json"

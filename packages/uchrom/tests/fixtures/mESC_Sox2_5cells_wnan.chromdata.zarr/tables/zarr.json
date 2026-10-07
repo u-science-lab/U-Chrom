@@ -1,0 +1,72 @@
+{
+  "attributes": {
+    "tables": {
+      "spots": {
+        "n_rows": 205,
+        "categorical": {
+          "trace_id": {
+            "file": "categories/spots.trace_id.parquet",
+            "ordered": false
+          }
+        },
+        "coords": [
+          "x",
+          "y",
+          "z"
+        ],
+        "coord_dtype": "float64",
+        "column_order": [
+          "chrom",
+          "start",
+          "end",
+          "trace_id",
+          "bin_id"
+        ],
+        "layout": "primary+coords",
+        "columns": [],
+        "derived": {},
+        "encoding": {}
+      },
+      "layer_encoding": {},
+      "coords": {
+        "n_rows": 205,
+        "columns": [
+          "bin_id",
+          "trace_id",
+          "x",
+          "y",
+          "z"
+        ],
+        "encoding": {},
+        "row_group_rows": 16384,
+        "partitions": [
+          {
+            "chrom": "129",
+            "code": 0,
+            "dir": "chrom=129",
+            "n_rows": 205,
+            "files": {
+              "coords": "coords/chrom=129/part-0.parquet"
+            }
+          }
+        ],
+        "compression": "zstd"
+      },
+      "primary": {
+        "row_group_rows": 65536,
+        "files": {},
+        "float_dictionary": true,
+        "compression": "zstd"
+      },
+      "layers": {},
+      "bins": {
+        "file": "bins.parquet",
+        "n_rows": 41
+      },
+      "intervals": {},
+      "points": {}
+    }
+  },
+  "zarr_format": 3,
+  "node_type": "group"
+}

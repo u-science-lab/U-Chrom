@@ -345,7 +345,7 @@ def cmd_build(args) -> None:
 
 def reconstruct(table: Path, out: Path, method: str, seed: int, ds: str, device: str) -> dict:
     """One reconstruction (2 models, 200 kb) -> ``out`` (.npz) and ``out.json``."""
-    import uchrom_nucdyn as un
+    import uchrom_recon as un
     from run_nucdyn import schedule
     from run_robust import ROBUST_DEFAULTS
     sizes = schedule(RES)

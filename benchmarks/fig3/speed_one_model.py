@@ -8,7 +8,7 @@ is one model, seed 1, in a fresh process, through the screcon runners
 =============  ===========================================================================
 method         run
 =============  ===========================================================================
-nucdyn_cpu     U-Chrom native NucDynamics (``uchrom_nucdyn``), CPU f64, 1 and 16 threads
+nucdyn_cpu     U-Chrom native NucDynamics (``uchrom_recon``), CPU f64, 1 and 16 threads
 nucdyn_gpu     U-Chrom native NucDynamics, GPU f32 (wgpu / Vulkan), one H100
 orig           original NucDynamics (tjs23/nuc_dynamics master 778697a, Cython), one process
 hickit         hickit 0.1.1 release binary (Dip-C schedule, haploid ``-P1``), one process
@@ -510,7 +510,7 @@ def main() -> None:
     r.add_argument("--res", default="all", help="bp, comma separated, or 'all'")
     r.add_argument("--threads", type=int)
     r.add_argument("--out-dir", required=True)
-    r.add_argument("--contacts", default=os.environ.get("CONTACTS", str(ROOT / "example-data/stevens2017_mesc" / GEO_NAME)))
+    r.add_argument("--contacts", default=os.environ.get("CONTACTS", str(ROOT / "$UCHROM_DATA/stevens2017_mesc" / GEO_NAME)))
     r.add_argument("--python", default=os.environ.get("PY", sys.executable))
     r.add_argument("--orig-python", default=os.environ.get("ORIG_PY", sys.executable))
     r.add_argument("--nd-dir", default=os.environ.get("ND"))

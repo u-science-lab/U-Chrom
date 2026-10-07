@@ -49,7 +49,7 @@ def child(mode, path, chrom, budget, out_npy):
 
     from uchrom import ChromData
     from uchrom.fea import distance_map
-    import uchrom.core.backed  # noqa: F401
+    import chromdata.backed  # noqa: F401
 
     base = C.current_rss_mb()
     t0 = time.perf_counter()

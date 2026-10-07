@@ -18,7 +18,7 @@ Steps (each measured in fresh processes; big ones run one at a time):
              the dense ``mean_distance_matrix``); ArcFISH loop F-test and TAD
              caller, streaming vs torch, on Takei 2021 mESC (FOF-CT).
 
-    python benchmarks/cd21_streaming_validation.py --data example-data --work /tmp/cd21 \\
+    python benchmarks/cd21_streaming_validation.py --data $UCHROM_DATA --work /tmp/cd21 \\
         [--steps convert,fofct,seqfish,stats] [--only takei2025_cerebellum,liu2025_mop]
 
 Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/streaming_validation.json`` (merged per step).
@@ -26,6 +26,7 @@ Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/streaming_validatio
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import resource
@@ -37,7 +38,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-sys.path.insert(0, str(ROOT))
+for _pkg in ("uchrom", "chromdata", "uchrom-browser"):   # this checkout's packages, not installed copies
+    sys.path.insert(0, str(ROOT / "packages" / _pkg))
 sys.path.insert(0, str(HERE))
 from _paper import results_dir  # noqa: E402
 
@@ -308,7 +310,7 @@ def _machine():
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=ROOT / "example-data")
+    ap.add_argument("--data", type=Path, default=data_dir())
     ap.add_argument("--work", type=Path, default=Path("/tmp/cd21"))
     ap.add_argument("--steps", default="convert,fofct,seqfish,stats")
     ap.add_argument("--only", default=",".join(STORES))

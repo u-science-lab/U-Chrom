@@ -22,8 +22,8 @@ VK=$BASE/vulkan-loader
 [ -d "$VK" ] || ~/miniconda3/bin/mamba create -q -y -p "$VK" -c conda-forge --override-channels libvulkan-loader
 export LD_LIBRARY_PATH=$VK/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 ls "$VK/lib" | grep -i vulkan
-"$BASE/venv-main/bin/python" -c "import uchrom_nucdyn as un; print('gpu_info:', un.gpu_info())"
-if "$BASE/venv-main/bin/python" -c "import uchrom_nucdyn as un, sys; sys.exit('unavailable' in str(un.gpu_info()))"; then
+"$BASE/venv-main/bin/python" -c "import uchrom_recon as un; print('gpu_info:', un.gpu_info())"
+if "$BASE/venv-main/bin/python" -c "import uchrom_recon as un, sys; sys.exit('unavailable' in str(un.gpu_info()))"; then
   cd "$W/repo" && "$BASE/venv-main/bin/python" benchmarks/fig3/a_nucdyn_engine_run.py --cells 1 --device gpu \
     --n-models 10 --temp-steps 500 --dyn-steps 100 --seed 1 --out "$W/runs/native_gpu_full"
 fi

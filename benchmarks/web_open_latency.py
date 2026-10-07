@@ -1,6 +1,6 @@
 """Web browser: time to open a dataset and to get the first cell's geometry.
 
-Runs the web backend's data layer (``uchrom.browser.web.data``, what
+Runs the web backend's data layer (``uchrom_browser.data``, what
 ``POST /api/datasets`` and ``POST /api/datasets/{id}/geometry`` call) in a
 fresh process per file:
 
@@ -10,8 +10,8 @@ fresh process per file:
   then 5 more random cells: median);
 * peak RSS of the process.
 
-A ``.chromdata.zarr`` store is opened backed; an ``.h5cd`` is loaded into
-memory (the 1.x / HDF5 path).  The OS page cache is not flushed.
+A ``.chromdata.zarr`` / ``.cdz`` store is opened backed (the browser no
+longer opens ``.h5cd``).  The OS page cache is not flushed.
 
     python benchmarks/web_open_latency.py PATH [PATH ...]
 """
@@ -26,7 +26,8 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+for _pkg in ("uchrom", "chromdata", "uchrom-browser"):   # this checkout's packages, not installed copies
+    sys.path.insert(0, str(ROOT / "packages" / _pkg))
 
 
 def child(path: str) -> None:
@@ -35,8 +36,8 @@ def child(path: str) -> None:
     import numpy as np
 
     import h5py, pyarrow.parquet, zarr  # noqa: F401,E401  (imports out of the timing)
-    from uchrom.browser.web.data import DatasetStore, GeometryFilter, decode_geometry
-    import uchrom.core.backed  # noqa: F401
+    from uchrom_browser.data import DatasetStore, GeometryFilter, decode_geometry
+    import chromdata.backed  # noqa: F401
 
     out = {"path": path}
     t0 = time.perf_counter()

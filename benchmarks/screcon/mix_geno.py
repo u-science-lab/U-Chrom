@@ -306,7 +306,7 @@ def _write_pairs(path, df) -> None:
 def genotype_prior(pool: str, params: dict) -> np.ndarray:
     """Donor labels -> per-contact prior over the pool's cells, spread to unlabelled contacts by 2-D
     neighbours (hickit-style imputation)."""
-    import uchrom_nucdyn as un
+    import uchrom_recon as un
     from contacts import read_contacts
     meta = json.loads(Path(pool[:-7] + ".json").read_text())
     donors = np.array(meta["donors"])

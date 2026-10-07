@@ -35,6 +35,7 @@ Usage::
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import gzip
 import itertools
@@ -44,7 +45,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-GEO_DIR = ROOT / "example-data" / "stevens2017_mesc"
+GEO_DIR = data_dir() / "stevens2017_mesc"
 GSM = {1: "GSM2219497", 2: "GSM2219498", 3: "GSM2219499", 4: "GSM2219500",
        5: "GSM2219501", 6: "GSM2219502", 7: "GSM2219503", 8: "GSM2219504"}
 CHAINS = {chr(ord("a") + i): f"chr{i + 1}" for i in range(19)} | {"t": "chrX"}

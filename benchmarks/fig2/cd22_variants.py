@@ -6,7 +6,7 @@ Variants (``VARIANTS``):
   pyarrow **defaults** (``df.to_parquet``: snappy, dictionary), read with
   ``pd.read_parquet`` defaults: the headline baseline (what users do);
 * ``parquet_tuned``  — the same table, zstd-3 and the same lossless decimal
-  float encoding as 2.2 (``uchrom.core.floatcodec``), read with
+  float encoding as 2.2 (``chromdata.floatcodec``), read with
   ``pq.read_table`` + decode + ``to_pandas(split_blocks, self_destruct)``
   (transparency row);
 * ``zarr20`` / ``zarr21`` — ``.chromdata.zarr`` 2.0 (one cell-sorted file per
@@ -66,7 +66,7 @@ def write_parquet_tuned(cd, path):
     import pyarrow.parquet as pq
     import pyarrow.types as pat
 
-    from uchrom.core.zarrcd import encode_float_columns
+    from chromdata.zarrcd import encode_float_columns
 
     t = pa.Table.from_pandas(_flat(cd), preserve_index=False)
     enc = {}
@@ -86,7 +86,7 @@ def read_parquet_tuned(path):
     from concurrent.futures import ThreadPoolExecutor
 
     import numpy as np
-    from uchrom.core import floatcodec
+    from chromdata import floatcodec
 
     t = pq.read_table(path)
     enc = json.loads(t.schema.metadata[b"uchrom_float_encoding"])
@@ -114,7 +114,7 @@ def read_parquet_tuned(path):
 
 def _zarr_writer(**kw):
     def write(cd, path):
-        from uchrom.core.zarrcd import write_zarr
+        from chromdata.zarrcd import write_zarr
         write_zarr(cd, path, **kw)
     return write
 
@@ -242,8 +242,8 @@ def child_read(key, path):
     import zarr  # noqa: F401
     import h5py  # noqa: F401
     from uchrom import ChromData  # noqa: F401
-    import uchrom.core.backed  # noqa: F401
-    from uchrom.core import floatcodec  # noqa: F401
+    import chromdata.backed  # noqa: F401
+    from chromdata import floatcodec  # noqa: F401
     base = C.current_rss_mb()
     t0 = time.perf_counter()
     obj = VARIANTS[key]["read"](Path(path))

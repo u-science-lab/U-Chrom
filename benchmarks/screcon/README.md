@@ -5,7 +5,7 @@ here scores a method by its own objective: the held-out test and the imaging-tru
 simulation use pairs / loci fixed before any model exists, and every length is either in
 the truth's units or in the model's own bead unit (median consecutive-particle distance).
 
-The code is standalone (numpy / scipy / pandas; `uchrom_nucdyn` for the native engine) so
+The code is standalone (numpy / scipy / pandas; `uchrom_recon` for the native engine) so
 it runs in the Sherlock `venv-main`, which has no U-Chrom install.  Reusable parts move to
 `uchrom.recon.eval` later.
 
@@ -25,6 +25,7 @@ it runs in the Sherlock `venv-main`, which has no U-Chrom install.  Reusable par
 | `matched_data.py` | matched-modality inputs: structure sets on the 2,460 Takei 1 Mb loci (`data/takei2021_1mb_loci.csv`), Takei 2021 mESC / brain imaging (homolog copies), Nagano 2017 fend pairs → mm10 tables, models / Dip-C `.3dg` → sets |
 | `matched.py` | matched-modality comparison: scHi-C structures vs imaging of the same cell type as distributions over cells (§6) |
 | `dominant.py` | a spot reconstructed as one cell (PREREG §13): nested mixtures of real cells with a dominant share f, EMber / NucDynamics runs, dominant-cell recovery (E1 / E2) and spot QC metrics (E3); jobs `sherlock/dom_*.sbatch`, record `dominant_devlog.md` |
+| `chen_spots.py` | per-spot EMber + the frozen spot QC on Chen et al. 2026 spatial Hi-C (PREREG §13.3): per-spot tables from the reprocessed pairs, secondary spot mixtures, QC and structural features, report and maps; jobs `sherlock/chen_*.sbatch` |
 | `sherlock/*.sbatch` | the jobs (`_env.sh` holds the paths) |
 | `tests/` | `pytest benchmarks/screcon/tests` (~2 s; synthetic toys only check the scorers and I/O) |
 
@@ -124,7 +125,7 @@ Copy the repo to `$SCRATCH/uchrom-nd/repo` and the data to `$SCRATCH/uchrom-nd/d
 
 ```bash
 rsync -a --exclude .git ./ sherlock:$SCRATCH/uchrom-nd/repo/
-rsync -a example-data/stevens2017_mesc example-data/su2020_imr90 example-data/4DNFIFLJGGNR.csv \
+rsync -a $UCHROM_DATA/stevens2017_mesc $UCHROM_DATA/su2020_imr90 $UCHROM_DATA/4DNFIFLJGGNR.csv \
     sherlock:$SCRATCH/uchrom-nd/data/
 ```
 
@@ -155,7 +156,7 @@ real_score (aggregation).  Everything writes under `$SCRATCH/uchrom-nd/runs/scre
 
 Real scHi-C structures against chromatin tracing of the **same cell type**, compared as
 distributions over cells (no cell is measured both ways) — replaces "simulated Hi-C from
-imaged cells".  Datasets and their verified / unverified facts: `example-data/README.md`,
+imaged cells".  Datasets and their verified / unverified facts: `apps/atlas/recipes/README.md`,
 "Matched-modality datasets".
 
 * **Common locus axis**: the 2,460 Takei 2021 ~1 Mb loci (`data/takei2021_1mb_loci.csv`,

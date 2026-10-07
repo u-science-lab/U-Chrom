@@ -15,5 +15,5 @@
 source "$SLURM_SUBMIT_DIR/benchmarks/bulk/sherlock/_env.sh"
 ml rust/1.97.1
 export CARGO_HOME=$SCRATCH/.cache/cargo CARGO_TARGET_DIR=$L_SCRATCH/cargo-target
-cd "$REPO/native/nucdyn"
+cd "$REPO/packages/uchrom-recon"
 cargo test --release --features gpu -- --nocapture --test-threads=1 2>&1 | grep -E "GPU|CPU|A-step|assignment|test result|panicked|FAILED|skipped"

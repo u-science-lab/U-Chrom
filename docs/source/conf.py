@@ -9,9 +9,10 @@ from datetime import datetime
 # ---------------------------------------------------------------------
 # Project path
 # ---------------------------------------------------------------------
-# Allow ``import uchrom`` when running Sphinx locally without a pip install.
-sys.path.insert(0, os.path.abspath("../.."))
-sys.path.insert(0, os.path.abspath("../../discovery"))  # uchrom_discovery
+# Allow ``import uchrom`` when running Sphinx locally without a pip install:
+# the monorepo's packages (packages/): uchrom, chromdata, uchrom_browser, uchrom_discovery
+for _pkg in ("uchrom", "chromdata", "uchrom-browser", "uchrom-discovery"):
+    sys.path.insert(0, os.path.abspath(f"../../packages/{_pkg}"))
 
 import uchrom  # noqa: E402
 
@@ -45,17 +46,13 @@ autodoc_default_options = {
 }
 autodoc_mock_imports = [
     "torch",
-    "taichi",
     "pyvista",
-    "pyvistaqt",
-    "PyQt5",
     "vtk",
     "vtkmodules",
     "fire",
     "cooler",
     "h5py",
     "hicstraw",
-    "qdarkgraystyle",
     "scooby",
     "matplotlib",
     "matplotlib.cm",
@@ -84,6 +81,12 @@ autodoc_mock_imports = [
 
 napoleon_numpy_docstring = True
 napoleon_google_docstring = True
+napoleon_use_ivar = True          # "Attributes" sections as fields (dataclass members are documented by autodoc)
+# numpy-style type descriptions ("ndarray, shape (n, 3)", "ChromData, in memory or backed") are parsed into
+# cross-references; words that match several attributes (shape, backed, ...) are not ambiguous references
+suppress_warnings = ["ref.python"]
+
+myst_heading_anchors = 3   # links to sections: page.md#a-heading
 
 myst_enable_extensions = [
     "colon_fence",
@@ -99,9 +102,8 @@ intersphinx_mapping = {
     "anndata": ("https://anndata.readthedocs.io/en/stable", None),
 }
 
-# Execute notebooks during the Sphinx build and cache results so
-# re-builds are fast.  The cache lives in docs/source/.jupyter_cache/.
-nb_execution_mode = "cache"
+# The tutorials are committed executed (with outputs, run on real data): the build does not run them.
+nb_execution_mode = "off"
 nb_execution_timeout = 600
 nb_execution_raise_on_error = True
 
@@ -109,12 +111,20 @@ nb_execution_raise_on_error = True
 # HTML output
 # ---------------------------------------------------------------------
 templates_path = ["_templates"]
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**/.ipynb_checkpoints"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**/.ipynb_checkpoints",
+                    # auto-discovery (uchrom-discovery) is left out of the docs until it settles; to bring it
+                    # back, drop these three patterns, add discovery/index to index.md and
+                    # html_extra_path = ["_extra"] (the exported agent notebooks)
+                    "discovery/**", "tutorials/takei2025_*auto_discovery.ipynb", "reference/api/auto_discovery.rst"]
 
 html_theme = "furo"
 html_static_path = ["_static"]
-html_extra_path = ["_extra"]
-html_title = f"{project} {version}"
+html_css_files = ["custom.css"]
+html_extra_path = []          # ["_extra"]: the auto-discovery exports (see exclude_patterns)
+# the sidebar: "U-Chrom 0.3" ("(dev)" for a development version)
+_short = ".".join(release.split(".")[:2])
+html_title = f"{project} {_short}" + (" (dev)" if "dev" in release else "")
+html_favicon = "_static/favicon.png"
 html_theme_options = {
     "sidebar_hide_name": False,
     "light_logo": "logo.svg",

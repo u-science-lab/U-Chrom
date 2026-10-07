@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build the Fig. 3a NucDynamics benchmark environments on Sherlock (run once).
 #
-#   $GROUP_HOME/$USER/uchrom-nd/venv-main   Python 3.12 module + U-Chrom (CPU torch) + uchrom_nucdyn (maturin, GPU feature)
+#   $GROUP_HOME/$USER/uchrom-nd/venv-main   Python 3.12 module + U-Chrom (CPU torch) + uchrom_recon (maturin, GPU feature)
 #   $GROUP_HOME/$USER/uchrom-nd/venv-orig   Python 3.12 module + numpy<2 + cython<3 for the original code
 #   $GROUP_HOME/$USER/uchrom-nd/nd/{master,release_1.3}   tjs23/nuc_dynamics, built in place
 #
@@ -48,14 +48,14 @@ P=$BASE/venv-main/bin/pip
 $P install -q --upgrade pip maturin
 # CentOS 7 (glibc 2.17): recent numpy / pandas / taichi have no compatible wheels and
 # the system assembler cannot build them.  The Fig. 3a benchmark scripts need only
-# numpy, pandas and psutil (plus uchrom_nucdyn), so U-Chrom itself is not installed here.
+# numpy, pandas and psutil (plus uchrom_recon), so U-Chrom itself is not installed here.
 $P install -q --only-binary=:all: "numpy<2.3" "pandas<2.3" psutil
-(cd "$REPO/native/nucdyn" && "$BASE/venv-main/bin/maturin" build --release -o "$L_SCRATCH/wheels")
-$P install -q --force-reinstall --no-deps "$L_SCRATCH"/wheels/u_chrom_nucdyn-*.whl
+(cd "$REPO/packages/uchrom-recon" && "$BASE/venv-main/bin/maturin" build --release -o "$L_SCRATCH/wheels")
+$P install -q --force-reinstall --no-deps "$L_SCRATCH"/wheels/uchrom_recon-*.whl
 
 "$BASE/venv-main/bin/python" - <<'EOF'
-import uchrom_nucdyn as un, numpy
-print("uchrom_nucdyn", un.__version__, "gpu build:", un.HAS_GPU, "numpy", numpy.__version__)
+import uchrom_recon as un, numpy
+print("uchrom_recon", un.__version__, "gpu build:", un.HAS_GPU, "numpy", numpy.__version__)
 try:
     print("gpu_info:", un.gpu_info())
 except Exception as e:

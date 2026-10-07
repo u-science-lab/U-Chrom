@@ -4,7 +4,7 @@ Conditions (the only difference is the skills folder):
   docs    ./docs = U-Chrom documentation (README, concepts, guides)
   skills  ./docs + ./.claude/skills/<every skill in skills/>
 
-    python benchmarks/fig6/agent_bench/run_bench.py --data-root <example-data> --ids A1,C1 \
+    python benchmarks/fig6/agent_bench/run_bench.py --data-root <data directory> --ids A1,C1 \
         --conditions docs,skills --reps 1 --jobs 4 --run pilot1
 
 Writes runs/<run>/<id>__<condition>__r<k>/{transcript.jsonl, answer.md, meta.json}.

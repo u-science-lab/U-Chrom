@@ -4,17 +4,17 @@ Data side and evaluation of the population deconvolution
 `uchrom.recon.bulk.deconv.deconvolve(method="igm")` (the IGM A/M protocol on the native engine,
 `uchrom.recon.bulk.deconv.igm`, built on the engine branch).  Specification of the original
 algorithm: `pgs_spec.md`; design and the validation plan (a)–(d): `design.md` section 7.
-Datasets: `example-data/README.md`, section "Bulk Hi-C deconvolution benchmark".
+Datasets: `apps/atlas/recipes/README.md`, section "Bulk Hi-C deconvolution benchmark".
 
 Everything here is standalone numpy / scipy / pandas (+ cooler / h5py / fsspec for real Hi-C,
 scikit-learn optional for the classifier test) so it runs in the Sherlock `venv-main`, which
 has no U-Chrom install: `_common.load_preprocess()` loads the one library module it needs,
-`uchrom/recon/bulk/deconv/preprocess.py`, from its file path.  Only `run_deconv.py` (the
+`packages/uchrom/uchrom/recon/bulk/deconv/preprocess.py`, from its file path.  Only `run_deconv.py` (the
 deconvolution) and reading ChromData outputs need U-Chrom.
 
 | file | what |
 | --- | --- |
-| `uchrom/recon/bulk/deconv/preprocess.py` | **library**: Hi-C → haploid contact probabilities, IGM SI section 6 protocol (below); `ProbabilityMatrix` (symmetric CSR + bins + provenance, `.npz`) |
+| `packages/uchrom/uchrom/recon/bulk/deconv/preprocess.py` | **library**: Hi-C → haploid contact probabilities, IGM SI section 6 protocol (below); `ProbabilityMatrix` (symmetric CSR + bins + provenance, `.npz`) |
 | `population.py` | population container `(S structures, P copies, L loci, 3)` + lamina; converters from the engine's arrays and from a ChromData population (cells = structures, traces = copies) |
 | `truths.py` | imaging truth populations: Su 2020 genome-scale (primary), Su 2020 chr21, Takei 2021 1 Mb |
 | `forward.py` | `truth`; `bulk`: population Hi-C = sum of per-cell contacts (infinite depth = exact IGM-pooled probabilities; finite depth = reads + bias + noise → raw fine matrix → preprocessing) |
@@ -28,7 +28,7 @@ deconvolution) and reading ChromData outputs need U-Chrom.
 | `run_deconv.py` | driver: input `.npz` → `deconvolve(method="igm")` → ChromData |
 | `sherlock/*.sbatch` | jobs (`_env.sh` holds the paths) |
 | `results/` | small checked-in results (KR check, laptop plumbing provenance) |
-| `tests/` | `pytest benchmarks/bulk/tests` (~10 s, synthetic toys; library tests: `pytest tests/recon/test_deconv_preprocess.py`) |
+| `tests/` | `pytest benchmarks/bulk/tests` (~10 s, synthetic toys; library tests: `cd packages/uchrom && pytest tests/recon/test_deconv_preprocess.py`) |
 
 ## 1. Hi-C → contact probabilities (`uchrom.recon.bulk.deconv.preprocess`)
 
@@ -165,7 +165,7 @@ pairwise-only baselines on the two inputs are the negative control.
 Laptop (tests, plumbing; < 2 min each):
 
 ```bash
-pytest tests/recon/test_deconv_preprocess.py benchmarks/bulk/tests
+(cd packages/uchrom && pytest tests/recon/test_deconv_preprocess.py); pytest benchmarks/bulk/tests
 python benchmarks/bulk/kr_check.py --out kr.json                     # range reads, ~2 min
 python benchmarks/bulk/real_inputs.py preprocess --source <4DNFIR1JDZH7 URL> --chroms chr21 chr22 \
     --fine 20000 --coarse 200000 --target 24 --out imr90_chr21_22.npz

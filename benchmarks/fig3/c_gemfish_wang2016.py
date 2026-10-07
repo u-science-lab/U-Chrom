@@ -22,12 +22,11 @@ inputs and scores it the same way:
 * reference: the paper's own final chr21 model
   (``chr21_high_res_str.txt``, nm) scored with the same code.
 
-Inputs come from ``example-data/abbas2019_gemfish/`` (``download_data.py
---abbas2019_gemfish``) and ``build_rao2014_slices.py``.
+Inputs come from ``$UCHROM_DATA/abbas2019_gemfish/`` (``python -m uchrom.datasets fetch abbas2019_gemfish``) and ``build_rao2014_slices.py``.
 
 Usage::
 
-    python benchmarks/fig3/c_gemfish_wang2016.py [--data example-data] [--splits 3] [--chrom 21]
+    python benchmarks/fig3/c_gemfish_wang2016.py [--data $UCHROM_DATA] [--splits 3] [--chrom 21]
 
 ``--chrom 20`` / ``22`` use the Wang 2016 chr20 / chr22 tables shipped with
 GEM-FISH and ``build_rao2014_slices.py --cell IMR90 --chroms 20`` (``22``).
@@ -35,6 +34,7 @@ GEM-FISH and ``build_rao2014_slices.py --cell IMR90 --chroms 20`` (``22``).
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import shutil
@@ -103,7 +103,7 @@ def fish_cd(P: np.ndarray, tads: pd.DataFrame, chrom: str = "chr21"):
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=ROOT / "example-data")
+    ap.add_argument("--data", type=Path, default=data_dir())
     ap.add_argument("--splits", type=int, default=3)
     ap.add_argument("--chrom", default="21", help="20, 21 or 22 (Wang 2016 autosomes shipped with GEM-FISH)")
     ap.add_argument("--out", type=Path)

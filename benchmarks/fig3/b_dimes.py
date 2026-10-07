@@ -50,6 +50,7 @@ Usage::
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import sys
@@ -297,7 +298,7 @@ def takei_bonev(HD, args, radii_um) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=ROOT / "example-data")
+    ap.add_argument("--data", type=Path, default=data_dir())
     ap.add_argument("--hipps-dimes", type=Path, default=None, help="path to the HIPPS-DIMES clone")
     ap.add_argument("--radii", type=float, nargs="+", default=[150, 200, 300], help="nm (Bintu, Su)")
     ap.add_argument("--radii-um", type=float, nargs="+", default=[0.15, 0.2, 0.3], help="um (Takei)")

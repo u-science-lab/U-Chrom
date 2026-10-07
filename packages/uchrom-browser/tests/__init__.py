@@ -1,0 +1,12 @@
+"""Tests of uchrom-browser (from packages/uchrom-browser: ``pytest tests``); they never import uchrom."""
+
+import os
+from pathlib import Path
+
+#: the repository root
+REPO = Path(__file__).resolve().parents[3]
+
+#: test fixtures (small real data; their sources in fixtures/README.md)
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+#: downloaded / built datasets (``python -m uchrom.datasets``): ``$UCHROM_DATA``, else ``~/.cache/uchrom``
+DATA_DIR = Path(os.environ["UCHROM_DATA"]).expanduser() if os.environ.get("UCHROM_DATA") else Path.home() / ".cache" / "uchrom"

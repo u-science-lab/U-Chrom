@@ -12,16 +12,17 @@ branch under test) can be compared::
 
 "old" calls the 1.x per-chromosome API (``store=False``, ``call_*_multi``);
 "new" calls ``chrom=None`` once per caller and also checks that every
-result and its provenance survive an ``.h5cd`` round trip.
+result and its provenance survive a ``.chromdata.zarr`` round trip.
 
-Data (see ``example-data/README.md``): Bintu 2018 IMR90 chr21
+Data (see ``apps/atlas/recipes/README.md``): Bintu 2018 IMR90 chr21
 (``IMR90_chr21-18-20Mb.csv`` → ``IMR90_chr21_pyhim.ecsv`` via
 ``bintu_to_pyhim_ecsv.py``; needs astropy), Takei 2021 mESC FOF-CT
 (``4DNFIHF3JCBY.csv``) and the in-repo ``K562_chr21_30kb.cool`` (K562 Hi-C,
 Ray et al. 2019; only used to run the DI caller on a Hi-C matrix, not
 paired with the IMR90 imaging).
-Set ``UCHROM_EXAMPLE_DATA`` if the large files live elsewhere.  CPU only.
+Set ``UCHROM_DATA`` if the large files live elsewhere.  CPU only.
 """
+from uchrom.datasets import data_dir
 import importlib.util
 import os
 import pickle
@@ -35,7 +36,7 @@ import numpy as np
 import pandas as pd
 
 REPO = Path(__file__).resolve().parents[1]
-DATA = Path(os.environ.get("UCHROM_EXAMPLE_DATA", REPO / "example-data"))
+DATA = data_dir()
 DEV = "cpu"
 MODE = sys.argv[1]
 
@@ -59,7 +60,7 @@ def compare(old_path, new_path):
           np.array_equal(old["bintu.fishnet.mask"], new["bintu.fishnet.mask"]))
     print("DI domains identical:", old["di"] == new["di"], f"({len(old['di'])} domains)")
     for ds in ("bintu", "takei"):
-        print(f"{ds}: provenance survives .h5cd:", all(new[f"{ds}.roundtrip"].values()))
+        print(f"{ds}: provenance survives the store:", all(new[f"{ds}.roundtrip"].values()))
 
 
 if MODE == "compare":
@@ -82,7 +83,7 @@ def bintu_ecsv() -> Path:
     out = DATA / "IMR90_chr21_pyhim.ecsv"
     if not out.exists():
         out = SCRATCH / "IMR90_chr21_pyhim.ecsv"
-        spec = importlib.util.spec_from_file_location("b2p", WT / "example-data" / "bintu_to_pyhim_ecsv.py")
+        spec = importlib.util.spec_from_file_location("b2p", WT / "apps" / "atlas" / "recipes" / "bintu_to_pyhim_ecsv.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         mod.CSV_PATH = DATA / "IMR90_chr21-18-20Mb.csv"
@@ -121,7 +122,7 @@ else:
     res["bintu.fishnet"] = timed("fishnet", lambda: call_domains_fishnet(bintu, params=FN_PARAMS, max_traces=40))
     res["bintu.fishnet.mask"] = bintu.results["tads.fishnet.ensemble"]["chr21"]["mask"]
     # write / read the results and check they come back identical
-    p = SCRATCH / "bintu_results.h5cd"
+    p = SCRATCH / "bintu_results.chromdata.zarr"
     bintu.write(p)
     back = ChromData.read(p).results
     res["bintu.roundtrip"] = {k: (back.record(k).provenance == bintu.results.record(k).provenance)
@@ -146,7 +147,7 @@ else:
     res["takei.comp"] = timed("comp", lambda: call_compartments_axes_pc(takei, device=DEV))
     res["takei.fishnet"] = timed("fishnet", lambda: call_domains_fishnet(
         takei, chrom=["chr1", "chr2"], params=FN_PARAMS, max_traces=10))
-    p = SCRATCH / "takei_results.h5cd"
+    p = SCRATCH / "takei_results.chromdata.zarr"
     takei.write(p)
     back = ChromData.read(p).results
     res["takei.roundtrip"] = {k: (back.record(k).provenance == takei.results.record(k).provenance)
@@ -154,7 +155,7 @@ else:
     res["takei.roundtrip_values"] = {k: back[k] for k in takei.results}
 
 # ---------------------------------------------------------------- K562 Hi-C (DI TADs)
-cool = WT / "example-data" / "K562_chr21_30kb.cool"
+cool = WT / "packages" / "uchrom" / "tests" / "fixtures" / "K562_chr21_30kb.cool"
 if MODE == "old":
     import cooler
     import torch

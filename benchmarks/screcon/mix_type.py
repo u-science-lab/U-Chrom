@@ -285,7 +285,7 @@ def type_prior(pool: str, ref, params: dict) -> np.ndarray:
     if grad > 0:
         # must-link groups (2-D single linkage of the long-range contacts, mostly of one cell): every
         # member gets the group's summed log-likelihood, tempered by gamma_group
-        import uchrom_nucdyn as un
+        import uchrom_recon as un
         grp = un.mix_groups(c.chrom_a.astype(str), c.pos_a, c.chrom_b.astype(str), c.pos_b, radius=grad,
                             min_sep=int(params.get("group_min_sep", 2_000_000)), tri_min=int(params.get("group_tri_min", 0)))
         inn = (grp >= 0) & ok

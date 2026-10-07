@@ -45,7 +45,7 @@ def replicate_v22(args, c, parts) -> None:
     import pyarrow.parquet as pq
     import zarr
 
-    from uchrom.core.zarrcd import _code_dtype, _compressor, _write_frame, _write_root_meta
+    from chromdata.zarrcd import _code_dtype, _compressor, _write_frame, _write_root_meta
 
     t0 = time.perf_counter()
     meta = dict(c.meta)
@@ -305,7 +305,7 @@ def main():
     import pyarrow.parquet as pq
     import zarr
 
-    from uchrom.core.zarrcd import (Container, _compressor, _write_frame, _write_root_meta,
+    from chromdata.zarrcd import (Container, _compressor, _write_frame, _write_root_meta,
                                     read_small_parts)
 
     t0 = time.perf_counter()

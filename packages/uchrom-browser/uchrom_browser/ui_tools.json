@@ -1,0 +1,255 @@
+{
+  "version": 1,
+  "description": "Actions of the U-Chrom web browser. One definition for every caller: the GUI's action layer (frontend/src/actions.ts), WebMCP tools registered by the page, and the Python client (uchrom_browser.connect()). Cells are referred to by cell_id; groups by a group reference: 'field:<column>=<value>' (e.g. field:cell_type=Bergmann), a registered id 'g…', or 'all'.",
+  "tools": [
+    {
+      "name": "describe_workspace",
+      "description": "What the browser shows now: the active dataset (path, cells, cell fields, embeddings, tracks, contact maps), open views, the focused cell or group, the lasso selection and saved groups.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get_selection",
+      "description": "The cells the researcher selected: the current lasso selection, else the focused group, else the focused cell. Returns {cells, group, name, source} (cells empty when nothing is selected).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "select_cells",
+      "description": "Select cells (like a lasso) and focus them in every view that follows the focus. With `name`, also save the selection as a named group. Returns the group reference.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "cells"
+        ],
+        "properties": {
+          "cells": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "cell ids"
+          },
+          "name": {
+            "type": "string",
+            "description": "save under this name"
+          }
+        }
+      }
+    },
+    {
+      "name": "list_groups",
+      "description": "Groups available as view scopes: automatic groups (one per value of each categorical cell field) and saved groups, with their references and sizes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "focus",
+      "description": "Focus one cell or one group in every view that follows the focus (the 3-D view flies there, others fade). Neither → release the focus (all cells).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cell": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string",
+            "description": "group reference"
+          }
+        }
+      }
+    },
+    {
+      "name": "set_locus",
+      "description": "Set the genomic window shared by the Genome, Matrix and Stats views.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "chrom"
+        ],
+        "properties": {
+          "chrom": {
+            "type": "string"
+          },
+          "start": {
+            "type": "integer"
+          },
+          "end": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    {
+      "name": "open_view",
+      "description": "Open a new view (pane) and make it active. `cells`: 'focus' (default: follow the focus), 'all', a cell id or a group reference. Genome views take `rows` (top to bottom): {kind:'track', track, cells?} or {kind:'distance', cells?, stat?} or {kind:'contacts', source, cells?} or {kind:'intervals', key}. Stats views take `stats` (rg | scaling | hist | scatter), `compare_groups` (group references overlaid), `field_x` / `field_y` (cell fields for hist / scatter). Embedding views take `embedding` (a cellm key). Spatial views (cells in the tissue, over its image) take `spatial` (a cell-position set), `region` and `image_opacity`. Returns {pane}.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "3d",
+              "spatial",
+              "embedding",
+              "genome",
+              "matrix",
+              "stats"
+            ]
+          },
+          "cells": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "stats": {
+            "type": "string",
+            "enum": [
+              "rg",
+              "scaling",
+              "hist",
+              "scatter"
+            ]
+          },
+          "compare_groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "field_x": {
+            "type": "string"
+          },
+          "field_y": {
+            "type": "string"
+          },
+          "embedding": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "description": "matrix view: a contact-map key or 'distance'"
+          },
+          "spatial": {
+            "type": "string",
+            "description": "spatial view: a cell-position set key (default: the first, sets with images first)"
+          },
+          "region": {
+            "type": "string",
+            "description": "spatial view: the region (section / FOV) shown (default: the first)"
+          },
+          "image_opacity": {
+            "type": "number",
+            "description": "spatial view: opacity of the region's image, 0-1 (0 hides it)"
+          }
+        }
+      }
+    },
+    {
+      "name": "show_view",
+      "description": "Make a view the active one (in the tabs layout, the one shown).",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "pane"
+        ],
+        "properties": {
+          "pane": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "close_view",
+      "description": "Close a view by its pane id.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "pane"
+        ],
+        "properties": {
+          "pane": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "arrange",
+      "description": "Lay the views out as tabs, columns, rows or a grid.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "layout"
+        ],
+        "properties": {
+          "layout": {
+            "type": "string",
+            "enum": [
+              "tabs",
+              "columns",
+              "rows",
+              "grid"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "color_by",
+      "description": "Colour all cells by a cell field (e.g. cell_type, rna.Nanog, if.H3K9me3).",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "field"
+        ],
+        "properties": {
+          "field": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "capture_view",
+      "description": "Render one view (default: the active one) as PNG; returns {png_base64, width, height, filename}.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "pane": {
+            "type": "string"
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    }
+  ]
+}

@@ -14,8 +14,13 @@ sphinx:
 
 python:
   install:
+    # the monorepo's packages first (not on PyPI): u-chrom depends on chromdata, its web extra on uchrom-browser
     - method: pip
-      path: .
+      path: packages/chromdata
+    - method: pip
+      path: packages/uchrom-browser
+    - method: pip
+      path: packages/uchrom
       extra_requirements:
         - docs
     - requirements: docs/requirements.txt

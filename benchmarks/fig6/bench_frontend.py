@@ -65,7 +65,7 @@ def free_port() -> int:
 
 
 def start_server(port: int) -> subprocess.Popen:
-    proc = subprocess.Popen([sys.executable, "-m", "uchrom.browser", "--web", "--port", str(port),
+    proc = subprocess.Popen([sys.executable, "-m", "uchrom_browser", "--port", str(port),
                              "--noopen_browser"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(200):
         try:

@@ -6,7 +6,7 @@ table with any of:
 
 * ``--downsample N``     N random rows (``--seed``)
 * ``--min-cis-sep BP``   drop cis contacts closer than BP
-* ``--commit TAU``       hard phasing with EMber's 2-D neighbourhood prior (``uchrom_nucdyn.neighbour_phase_prior``,
+* ``--commit TAU``       hard phasing with EMber's 2-D neighbourhood prior (``uchrom_recon.neighbour_phase_prior``,
                          same-homolog rule within 10 Mb): a contact with an unphased end whose most probable
                          copy pair has probability >= TAU gets those haplotypes; ``--rest drop`` removes the
                          other ambiguous contacts (hickit ``-S``), ``--rest keep`` keeps them unphased
@@ -66,7 +66,7 @@ def cmd_derive(args) -> None:
         c = c.subset(m)
         stats["after_isolation"] = len(c)
     if args.commit:
-        import uchrom_nucdyn as un
+        import uchrom_recon as un
         pr = un.neighbour_phase_prior(c.chrom_a, c.pos_a, c.chrom_b, c.pos_b, c.hap_a, c.hap_b, ploidy="auto")
         amb = (c.hap_a < 0) | (c.hap_b < 0)
         best = pr.argmax(1)

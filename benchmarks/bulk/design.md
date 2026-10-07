@@ -1,6 +1,6 @@
 # Population modelling of bulk Hi-C on the native engine — implementation and validation design
 
-Goal: a new protocol of the native NucDynamics engine (`native/nucdyn`, Rust + wgpu) that
+Goal: a new protocol of the native NucDynamics engine (`packages/uchrom-recon`, Rust + wgpu) that
 runs **population-based genome structure modelling** (PGS / IGM, Alber lab) — thousands of
 diploid structures fitted jointly to one bulk contact-probability matrix by alternating
 assignment (A-step) and per-structure annealing (M-step) — with all structures of a population
@@ -27,11 +27,11 @@ departs from this design and why; the rest of the document is the design as agre
 | population resident bead-major `X[bead][s]` for the A-step | one structure-major buffer used by both A- and M-step; M-step batches index into it | no copies between steps; the A-step is not the bottleneck |
 | A-step: histogram (2,048 bins of log d) + exact select in the bin | count kernel → host computes p, o in f64 (bit-identical to the CPU rule) → radix select (4 × 8-bit passes on the f32 bit pattern) per pair | exact, simple, one workgroup per pair; the rank formula shares code with the CPU path |
 | per-structure CSR built by the A-step | built at the start of each M-step batch from the A-step rows (pre-pass of per-structure totals → batch plan → count / scan / fill) | batches are planned from the actual bond counts, so the CSR of a batch always fits one binding |
-| batched CG "Polak–Ribière with backtracking" | as designed: one state machine per structure; LAMMPS `backtrack` line search (IGM uses `quadratic`) | documented in `native/nucdyn/README.md` |
+| batched CG "Polak–Ribière with backtracking" | as designed: one state machine per structure; LAMMPS `backtrack` line search (IGM uses `quadratic`) | documented in `packages/uchrom-recon/README.md` |
 | `.hss` import / export, resume from a snapshot | not implemented; the benchmark scripts read `.hss` with h5py | not needed for the engine; later |
 | `keep_intermediate="last_per_sigma" | "all" | None` | `keep_intermediate=False/True` (all rounds as `layers["round_<k>"]`) | user decision: intermediate rounds not kept by default, option to keep |
-| `inter_pooling="pgs"` sensitivity option | not implemented; instead the IGM_2.0 rule of G. Polles is available as `assignment_pooling="gp"` (all copy combinations pooled, `n_possible = min(copies)` smallest per structure, intra and inter; `native/nucdyn/README.md`) | IGM-only for now; GP is the pooling sensitivity run of §9 |
-| IGM 1.0 only | opt-in IGM-Plus (v2.0.2) implementation options, defaults unchanged (fixed-seed CPU run bit-identical, regression tests in `igm/regression_tests.rs` and `tests/test_deconv_igm.py`): chromosome-subset models (`chrom=` + `occupancy_scope`), `bead_radius` (exclusive with `occupancy`), `iterative_correction=False` (`iter_corr_knob = 0`), `init_positions` + `init_noise` (pinned loci, same-chain interpolation), violation report after the initial relaxation and per restraint kind (Hi-C intra / inter, polymer, envelope) with the most violating structure | user decision (IGM-Plus review); table with the IGM-Plus source locations in `native/nucdyn/README.md` |
+| `inter_pooling="pgs"` sensitivity option | not implemented; instead the IGM_2.0 rule of G. Polles is available as `assignment_pooling="gp"` (all copy combinations pooled, `n_possible = min(copies)` smallest per structure, intra and inter; `packages/uchrom-recon/README.md`) | IGM-only for now; GP is the pooling sensitivity run of §9 |
+| IGM 1.0 only | opt-in IGM-Plus (v2.0.2) implementation options, defaults unchanged (fixed-seed CPU run bit-identical, regression tests in `igm/regression_tests.rs` and `tests/test_deconv_igm.py`): chromosome-subset models (`chrom=` + `occupancy_scope`), `bead_radius` (exclusive with `occupancy`), `iterative_correction=False` (`iter_corr_knob = 0`), `init_positions` + `init_noise` (pinned loci, same-chain interpolation), violation report after the initial relaxation and per restraint kind (Hi-C intra / inter, polymer, envelope) with the most violating structure | user decision (IGM-Plus review); table with the IGM-Plus source locations in `packages/uchrom-recon/README.md` |
 | imaging restraints | not implemented; designed in §11 (stage 2) | would consume the imaging needed for validation unless split (§11.6) |
 | population memory | `S · N · 16 B` must fit one storage binding (4 GiB on NVIDIA Vulkan): 1 Mb × 10,000 and 200 kb × 1,000 fit; 200 kb × 10,000 does not | a host-resident population with per-batch upload is future work |
 
@@ -50,7 +50,7 @@ Protocol name: `protocol="igm2022"` (default of the new entry point) and `protoc
 
 ## 2. Mapping onto the existing engine
 
-### 2.1 What the engine already has (read from `native/nucdyn/src`)
+### 2.1 What the engine already has (read from `packages/uchrom-recon/src`)
 
 | piece | where | reuse for IGM |
 |---|---|---|
@@ -248,10 +248,10 @@ question and FISH restraints would leak the validation data).
 
 ## 5. API and outputs
 
-### 5.1 Native (array level; `uchrom_nucdyn`)
+### 5.1 Native (array level; `uchrom_recon`)
 
 ```python
-res = uchrom_nucdyn.calc_population_structures(
+res = uchrom_recon.calc_population_structures(
     chrom, start, end,                 # haploid bins (arrays, genome order)
     prob_i, prob_j, prob_v,            # upper-triangular probability matrix (COO, haploid indices)
     ploidy="diploid",                  # "haploid" | "diploid" | "male" | {chrom: copies}
@@ -287,7 +287,7 @@ pop = reconstruct_population(
 This mirrors `uchrom.recon.sc.nucdyn.reconstruct_nucdyn` (input is a contact file, output a new
 ChromData) rather than the `fn(cd, *, …)` form, because the input is a Hi-C matrix, not a
 ChromData; the keyword-only arguments, `params=<*Params>`, `device="auto"` and `key_added`
-follow `uchrom/core/convention.py`. A flat alias `uchrom.tl.reconstruct_population` is added.
+follow `uchrom/convention.py`. A flat alias `uchrom.tl.reconstruct_population` is added.
 
 ### 5.3 ChromData layout of a population — structures as **cells**
 

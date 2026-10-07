@@ -8,8 +8,7 @@ on:
       - ".github/workflows/docs-cloudflare-pages.yml"
       - "docs/**"
       - "tutorials/**"
-      - "uchrom/**"
-      - "pyproject.toml"
+      - "packages/**"
   pull_request:
     branches:
       - main
@@ -17,8 +16,7 @@ on:
       - ".github/workflows/docs-cloudflare-pages.yml"
       - "docs/**"
       - "tutorials/**"
-      - "uchrom/**"
-      - "pyproject.toml"
+      - "packages/**"
   workflow_dispatch:
 
 env:
@@ -44,7 +42,7 @@ jobs:
           cache: "pip"
           cache-dependency-path: |
             docs/requirements.txt
-            pyproject.toml
+            packages/uchrom/pyproject.toml
 
       - name: Install docs dependencies
         run: |
@@ -54,17 +52,6 @@ jobs:
       - name: Build Sphinx HTML
         run: |
           sphinx-build -b html -D nb_execution_mode=off docs/source docs/build/html
-
-      - name: Verify exported auto-discovery notebooks are present
-        run: |
-          test -f docs/build/html/_auto_discovery_notebooks/purkinje-specific-h3k27ac-decompaction-along-tra-8f00bdb00f.html
-          python - <<'PY'
-          from pathlib import Path
-          count = len(list(Path("docs/build/html/_auto_discovery_notebooks").glob("*.html")))
-          if count < 20:
-              raise SystemExit(f"expected at least 20 auto-discovery notebook exports, found {count}")
-          print(f"auto-discovery notebook exports: {count}")
-          PY
 
       - name: Upload built docs artifact
         uses: actions/upload-artifact@v4

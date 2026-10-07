@@ -3,7 +3,7 @@
 Methods (``--method``):
 
 * ``ember``: EMber (protocol ``robust``) with its frozen haploid parameters (``run_robust.ROBUST_DEFAULTS``
-  = engine defaults) and the diploid extension (``native/nucdyn/src/diploid.rs``); diploid-only
+  = engine defaults) and the diploid extension (``packages/uchrom-recon/src/diploid.rs``); diploid-only
   parameters via ``--params`` (e.g. ``{"robust_dip_split": false}``).
 * ``nucdyn``: the NucDynamics 2017 protocol with diploid ambiguous restraints (combined
   distance of the candidate copy pairs).
@@ -56,7 +56,7 @@ def main(argv=None) -> None:
     ap.add_argument("--label", default=None)
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
-    import uchrom_nucdyn as un
+    import uchrom_recon as un
 
     proto = "robust" if args.method == "ember" else "nuc_dynamics_2017"
     params = {**(ROBUST_DEFAULTS if proto == "robust" else {}), **json.loads(args.params)}

@@ -1,4 +1,4 @@
-"""Helpers of the IGM engine benchmarks (numpy + h5py + uchrom_nucdyn only, so they
+"""Helpers of the IGM engine benchmarks (numpy + h5py + uchrom_recon only, so they
 run in the Sherlock ``venv-main`` that has no U-Chrom install).
 
 * :func:`fetch_igm_demo` — the IGM demo input ``WTC11_HiC_2Mb.hcs`` (GPL-3 repository

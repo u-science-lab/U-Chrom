@@ -1,0 +1,26 @@
+{
+  "attributes": {
+    "uchrom": {
+      "format": "chromdata.zarr",
+      "format_version": "2.3",
+      "uchrom_version": "0.2.0",
+      "spot_order": "cell,trace,chrom,bin",
+      "layout": "primary+coords",
+      "n_spots": 205,
+      "n_bins": 41,
+      "n_traces": 5,
+      "n_cells": 0,
+      "n_row_groups": 1,
+      "has_source_row": false,
+      "has_cell_id": false,
+      "n_partitions": 1,
+      "row_group_rows": 65536,
+      "coords_row_group_rows": 16384,
+      "coords_order": "chrom,cell,trace,bin"
+    },
+    "uchrom_format_version": "2.3",
+    "uchrom_version": "0.2.0"
+  },
+  "zarr_format": 3,
+  "node_type": "group"
+}

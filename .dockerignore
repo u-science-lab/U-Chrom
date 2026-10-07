@@ -1,0 +1,17 @@
+.git
+.venv
+**/node_modules
+**/__pycache__
+benchmarks
+docs
+paper
+tutorials
+packages/uchrom-discovery
+apps/atlas
+packages/uchrom
+packages/uchrom-recon
+*.zarr
+*.h5ad
+*.scool
+*.mcool
+packages/uchrom-browser/uchrom_browser/frontend/src

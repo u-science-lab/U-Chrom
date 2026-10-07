@@ -1,12 +1,15 @@
 """Real-data validation of the ``.chromdata.zarr`` container (format 2.0).
 
-For every example dataset (all catalogued in ``example-data/README.md``):
+For every example dataset (all catalogued in ``apps/atlas/recipes/README.md``):
 
 1. **convert** — ``uchrom.io.upgrade_h5cd`` from the 1.x ``.h5cd`` (or
    ``ChromData.from_fofct`` for the Takei 2021 FOF-CT) to
    ``.chromdata.zarr`` in a fresh process: wall time and peak RSS.  The same
-   source is also written as HDF5 2.0 (``.h5cd``, the #65 format) and as a
-   zarr store with float32 coords, for the size comparison.
+   source is also written as HDF5 2.0 (``.h5cd``, the #65 format, with the
+   legacy writer ``uchrom.io._h5cd_legacy.write_h5cd`` — ``.h5cd`` is no longer
+   a ChromData format) and as a zarr store with float32 coords, for the size
+   comparison.  The 1.x ``mESC_Sox2_5cells_wnan.h5cd`` source is in git
+   history (the repo now has the converted store).
 2. **verify** — a fresh process reads the source and the zarr store with
    ``original_order=True`` (the spots are stored sorted by cell / trace /
    bin; ``index/source_row`` restores the written order) and checks value
@@ -21,12 +24,13 @@ The sources are never modified (outputs go to ``--work``).  Run the big
 datasets one at a time (the 1.x reader of the 10.9 M-spot Takei file peaks
 at ~22 GB).
 
-    python benchmarks/cd2_zarr_validation.py --data /path/to/example-data --work /tmp/cd2z \\
+    python benchmarks/cd2_zarr_validation.py --data $UCHROM_DATA --work /tmp/cd2z \\
         [--only takei2025_cerebellum,liu2025_mop,...]
 """
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import resource
@@ -38,7 +42,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-sys.path.insert(0, str(ROOT))
+for _pkg in ("uchrom", "chromdata", "uchrom-browser"):   # this checkout's packages, not installed copies
+    sys.path.insert(0, str(ROOT / "packages" / _pkg))
 
 DATASETS = {
     # name: (source relative to --data, kind)
@@ -75,6 +80,9 @@ def load_source(src: Path, kind: str):
         data = src.parent
         return ChromData.from_fofct(src, cell_table=data / "4DNFIFINA2U9.csv",
                                     rna_table=data / "4DNFIJ52NVDV.csv")
+    if kind == "h5cd":
+        from uchrom.io._h5cd_legacy import read_h5cd
+        return read_h5cd(src)
     return ChromData.read(src)
 
 
@@ -91,7 +99,11 @@ def child_convert(src, kind, dst, opts):
     else:
         cd = load_source(Path(src), kind)
         t_read = time.perf_counter() - t0
-        cd.write(dst, **opts)
+        if opts.pop("format", None) == "h5cd":
+            from uchrom.io._h5cd_legacy import write_h5cd
+            write_h5cd(cd, dst, **opts)
+        else:
+            cd.write(dst, **opts)
     emit({"seconds": time.perf_counter() - t0, "read_s": t_read, "peak_rss_gb": peak_rss_gb(),
           "bytes": size_bytes(Path(dst))})
 
@@ -204,7 +216,7 @@ def run_child(args, timeout=3600):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=ROOT / "example-data")
+    ap.add_argument("--data", type=Path, default=data_dir())
     ap.add_argument("--work", type=Path, required=False)
     ap.add_argument("--only")
     ap.add_argument("--out", type=Path, help="write the results as JSON")

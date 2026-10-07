@@ -20,14 +20,14 @@ VENV=$BASE/venv-diploid
 export PIP_CACHE_DIR=$SCRATCH/.cache/pip XDG_CACHE_HOME=$SCRATCH/.cache CARGO_HOME=$SCRATCH/.cache/cargo
 export CARGO_TARGET_DIR=$SCRATCH/uchrom-nd/cargo-target-dominant
 echo "host=$(hostname) job=$SLURM_JOB_ID $(python3 --version) $(rustc --version) engine=$ENGINE_TAG"
-cd "$REPO/native/nucdyn"
+cd "$REPO/packages/uchrom-recon"
 cargo test --release 2>&1 | grep -E "test result|FAILED|panicked" || true
 WH=$SCRATCH/uchrom-nd/wheels-dominant/$ENGINE_TAG
 rm -rf "$WH"
 "$VENV/bin/maturin" build --release -o "$WH"
-WHL=$(ls -t "$WH"/u_chrom_nucdyn-*.whl | head -1)
+WHL=$(ls -t "$WH"/uchrom_recon-*.whl | head -1)
 rm -rf "$SCRATCH/uchrom-nd/engine-dominant/$ENGINE_TAG"
 "$VENV/bin/pip" install -q --no-deps --target "$SCRATCH/uchrom-nd/engine-dominant/$ENGINE_TAG" "$WHL"
 export PYTHONPATH=$SCRATCH/uchrom-nd/engine-dominant/$ENGINE_TAG
-"$VENV/bin/python" -c "import uchrom_nucdyn as un, numpy, scipy, pandas; print('uchrom_nucdyn', un.__version__, un.__file__, 'gpu build', un.HAS_GPU)"
+"$VENV/bin/python" -c "import uchrom_recon as un, numpy, scipy, pandas; print('uchrom_recon', un.__version__, un.__file__, 'gpu build', un.HAS_GPU)"
 cd "$REPO" && "$VENV/bin/python" -m pytest -q benchmarks/screcon/tests -p no:cacheprovider 2>&1 | tail -3

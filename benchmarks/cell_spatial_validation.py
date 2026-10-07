@@ -2,7 +2,7 @@
 ``cd.cell_positions()``): the loaders populate it from the source tables and
 the values survive the ``.chromdata.zarr`` round trip.
 
-Datasets (catalogued in ``example-data/README.md``):
+Datasets (catalogued in ``apps/atlas/recipes/README.md``):
 
 * Takei 2025 cerebellum rep 1 (3 FOVs, ``takei2025_cerebellum/raw/*.csv`` +
   the clustering CSV): ``read_seqfish_multiomics(..., out=)`` (streaming);
@@ -20,11 +20,12 @@ runs in its own process (peak RSS reported).  None of these data sets ships
 cell outlines (segmentation polygons / masks), so outlines are not validated
 on real data.
 
-    python benchmarks/cell_spatial_validation.py --data example-data --work /tmp/cellpos
+    python benchmarks/cell_spatial_validation.py --data $UCHROM_DATA --work /tmp/cellpos
 """
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import json
 import resource
@@ -35,7 +36,8 @@ import warnings
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+for _pkg in ("uchrom", "chromdata", "uchrom-browser"):   # this checkout's packages, not installed copies
+    sys.path.insert(0, str(ROOT / "packages" / _pkg))
 
 
 def _rss_mb() -> float:
@@ -112,7 +114,7 @@ def fofct(name: str, data: Path, work: Path) -> dict:
     import pandas as pd
 
     from uchrom import ChromData
-    from uchrom.core.cdata import _read_fofct_table
+    from chromdata.cdata import _read_fofct_table
 
     core, cell, xs, ys, stream = {
         "takei2021": ("4DNFIHF3JCBY.csv", "4DNFIFINA2U9.csv", "cent_ROI_x", "cent_ROI_y", False),
@@ -163,7 +165,7 @@ def child(name: str, data: str, work: str) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default=str(ROOT / "example-data"))
+    ap.add_argument("--data", default=str(data_dir()))
     ap.add_argument("--work", default="/tmp/uchrom_cellpos")
     ap.add_argument("--only", nargs="*", default=["takei2025", "takei2021", "liu2025_mop"])
     ap.add_argument("--out", default=str(ROOT / "benchmarks" / "results" / "cell_spatial_validation.json"))

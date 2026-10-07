@@ -1,7 +1,11 @@
 """Figure 2e — contacts linked, not copied (scHiCAR MOp, 5,313 cells, 1 Mb ``.scool``).
 
-**Size.**  ``schicar_mop.h5cd`` records the per-cell map
-``contacts_cells_1Mb.scool`` in ``uns['linked_scool']`` (a path + metadata).
+**Size.**  The HDF5 ``.h5cd`` baseline of the scHiCAR store records the
+per-cell map ``contacts_cells_1Mb.scool`` in ``uns['linked_scool']`` (a path +
+metadata).  ``.h5cd`` is no longer a ChromData format: the file is written
+once from ``schicar_mop.chromdata.zarr`` with the legacy writer
+(``uchrom.io._h5cd_legacy.write_h5cd``, no compression, as 1.x wrote) into the
+work directory.
 
 * *linked* = the h5cd as built (the scool stays where it is; the link adds
   only a small uns record — its cost is measured by writing the same object
@@ -11,11 +15,11 @@
   (``bin1_id``, ``bin2_id`` int64 and ``count`` int32, exactly cooler's
   dtypes) and a ``cell_offset`` (n_cells + 1) index, i.e. the most compact
   CSR-style copy.  Written twice: with h5cd 1.x's settings (no compression —
-  ``cd.write`` uses none) and with cooler's own settings (gzip 6 + shuffle),
+  1.x ``cd.write`` used none) and with cooler's own settings (gzip 6 + shuffle),
   so the comparison is not only about compression.
 
 **Pseudo-bulk.**  The web browser's group pseudo-bulk
-(``uchrom.browser.web.data.Dataset.contacts(key, chrom, group=…)`` →
+(``uchrom_browser.data.Dataset.contacts(key, chrom, group=…)`` →
 ``_pseudobulk``: per-cell bin1-offset slices read straight from HDF5 and summed
 with ``np.bincount``, LRU-cached).  Region: all of chr1.  For each group size
 (random cells, seed 0) a fresh interpreter opens the dataset, lists the map
@@ -41,7 +45,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _common as C  # noqa: E402
 
 SCRIPT = Path(__file__).resolve()
-SCHICAR = C.DATA / "schicar_mop" / "schicar_mop.h5cd"
+STORE = C.DATA / "schicar_mop" / "schicar_mop.chromdata.zarr"
+SCHICAR = C.WORK / "e_contacts" / "schicar_mop.h5cd"   # the HDF5 baseline, written from STORE
+
+
+def ensure_h5cd() -> None:
+    """Write the ``.h5cd`` baseline of ``STORE`` (legacy writer, uncompressed) once."""
+    if SCHICAR.exists():
+        return
+    from uchrom import ChromData
+    from uchrom.io._h5cd_legacy import write_h5cd
+
+    cd = ChromData.read(STORE)
+    for rec in (cd.uns.get("linked_scool") or {}).values():   # links relative to the data folder
+        if isinstance(rec, dict) and "path" in rec:
+            rec["path"] = str(cd.resolve_link_path(rec["path"]))
+    SCHICAR.parent.mkdir(parents=True, exist_ok=True)
+    write_h5cd(cd, SCHICAR, compression=None)
 CHROM = "chr1"
 
 
@@ -54,11 +74,11 @@ def scool_key(cd):
 
 
 def child_query(n_cells):
-    from uchrom import ChromData
-    from uchrom.browser.web.data import Dataset
+    from uchrom_browser.data import Dataset
+    from uchrom.io._h5cd_legacy import read_h5cd
 
     t0 = time.perf_counter()
-    cd = ChromData.read(SCHICAR)
+    cd = read_h5cd(SCHICAR)
     ds = Dataset(id="schicar", name="schicar", path=str(SCHICAR), cd=cd)
     maps = ds.contact_maps()
     setup_s = time.perf_counter() - t0
@@ -74,7 +94,7 @@ def child_query(n_cells):
     buf2 = ds.contacts(key, CHROM, group=gid)
     cached = time.perf_counter() - t0
     assert buf == buf2
-    from uchrom.browser.web.data import decode_matrix
+    from uchrom_browser.data import decode_matrix
     hdr = decode_matrix(buf)
     hdr = hdr.get("header", hdr)
     C.emit({"n_cells": n, "setup_s": setup_s, "cold_s": cold, "cached_s": cached,
@@ -86,19 +106,19 @@ def copied_sizes(work: Path):
     import cooler
     import h5py
 
-    from uchrom import ChromData
+    from uchrom.io._h5cd_legacy import read_h5cd, write_h5cd
 
-    cd = ChromData.read(SCHICAR)
+    cd = read_h5cd(SCHICAR)
     key, rec = scool_key(cd)
     scool = cd.resolve_link_path(rec["path"])
     out = {"h5cd_linked_bytes": SCHICAR.stat().st_size, "scool_bytes": scool.stat().st_size,
            "scool_key": key, "scool_path": str(rec["path"])}
 
     nolink = work / "schicar_nolinks.h5cd"
-    cd2 = ChromData.read(SCHICAR)
+    cd2 = read_h5cd(SCHICAR)
     for fam in ("linked_scool", "linked_cool"):
         cd2.uns.pop(fam, None)
-    cd2.write(nolink)
+    write_h5cd(cd2, nolink, compression=None)
     out["h5cd_without_link_records_bytes"] = nolink.stat().st_size
     nolink.unlink()
 
@@ -142,8 +162,9 @@ def main():
     args = ap.parse_args()
     if args.child:
         return child_query(args.child[0])
-    if not SCHICAR.exists():
-        raise SystemExit(f"{SCHICAR} missing — run example-data/build_schicar_mop.py")
+    if not STORE.exists():
+        raise SystemExit(f"{STORE} missing — run apps/atlas/recipes/build_schicar_mop.py")
+    ensure_h5cd()
 
     work = C.WORK / "e_contacts"
     work.mkdir(parents=True, exist_ok=True)
@@ -162,13 +183,13 @@ def main():
     C.write_json("e_contacts", {
         "panel": "e", "machine": C.machine_info(),
         "dataset": {"name": "scHiCAR mouse brain (GSE305439), per-cell 1 Mb .scool",
-                    "h5cd": "schicar_mop/schicar_mop.h5cd", "scool": "schicar_mop/contacts_cells_1Mb.scool"},
+                    "h5cd": "schicar_mop/schicar_mop.chromdata.zarr written as .h5cd (legacy writer, uncompressed)", "scool": "schicar_mop/contacts_cells_1Mb.scool"},
         "size": sizes,
         "size_method": ("copied = h5cd + all per-cell pixels materialised in one contacts/ group "
                         "(concatenated bin1_id/bin2_id int64, count int32, cell_offset CSR index); "
-                        "written uncompressed (h5cd 1.x cd.write uses no compression) and with gzip-6+shuffle "
+                        "written uncompressed (as h5cd 1.x's cd.write did) and with gzip-6+shuffle "
                         "(cooler's defaults)"),
-        "aggregation": {"implementation": "uchrom.browser.web.data.Dataset._pseudobulk (via Dataset.contacts, group=)",
+        "aggregation": {"implementation": "uchrom_browser.data.Dataset._pseudobulk (via Dataset.contacts, group=)",
                         "region": f"{CHROM} (whole chromosome)", "repeats": args.repeats,
                         "cold": "first query in a fresh process (map listing done beforehand, reported as setup_s); "
                                 "OS page cache warm",

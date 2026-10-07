@@ -57,6 +57,7 @@ Subcommands
 
 from __future__ import annotations
 
+from uchrom.datasets import data_dir
 import argparse
 import itertools
 import json
@@ -80,10 +81,7 @@ DATASETS = {
 
 
 def example_data() -> Path:
-    import os
-    if os.environ.get("UCHROM_EXAMPLE_DATA"):
-        return Path(os.environ["UCHROM_EXAMPLE_DATA"])
-    return Path(__file__).resolve().parents[2] / "example-data"
+    return data_dir()                       # $UCHROM_DATA, else ~/.cache/uchrom
 
 
 # --------------------------------------------------------------------------- population summary
@@ -402,7 +400,7 @@ def main(argv=None) -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("truth")
     s.add_argument("--dataset", required=True, choices=sorted(DATASETS))
-    s.add_argument("--data", help="input file (default: from the example-data catalog)")
+    s.add_argument("--data", help="input file (default: from the data directory, uchrom.datasets)")
     s.add_argument("--n", type=int, default=5)
     s.add_argument("--seed", type=int, default=1)
     s.add_argument("--min-detect", type=float)

@@ -10,7 +10,7 @@ the Python client (or, for an agent inside the browser, the same actions as WebM
 `uchrom_*`):
 
 ```python
-import uchrom.browser as ub
+import uchrom_browser as ub
 ws = ub.connect()                    # finds the running server; ub.connect("http://127.0.0.1:8765")
 ws.describe()                        # dataset (path, cell fields, tracks, maps), views, focus, selection
 cells = ws.selected_cells()          # what the researcher lassoed / focused ([] if nothing)
