@@ -15,10 +15,12 @@ sources (`uchrom.datasets.fetch`, cached in `$UCHROM_DATA`, else `~/.cache/uchro
 | Chromatin tracing › imputation | `fish_imputation.ipynb` | filling missing loci: linear, cubic, SnapFISH-IMPUTE |
 | Chromatin tracing › structures | `loop_calling.ipynb`, `tad_calling.ipynb`, `fishnet_domains.ipynb`, `compartment.ipynb` | loops, TADs, per-allele domains, compartments from 3-D distances |
 | DNA seqFISH+ › reading | `import_seqfish_multiomics.ipynb` | DNA seqFISH+ with chromatin marks and RNA (Takei 2025 cerebellum) |
+| Single-cell Hi-C › pseudo-bulk | `pseudobulk.ipynb` | cell-type maps summed from an atlas store over HTTP (dscHi-C); compartments and their strength at matched depth |
 | Single-cell Hi-C › 3-D structures | `reconstruction.ipynb` | single-cell NucDynamics and EMber on the native engine |
 | Single-cell Hi-C › embeddings | `higashi_embedding.ipynb` | FastHigashi on single-cell Hi-C |
 | | `cell_embeddings.ipynb` | scHiCAR cells by RNA / ATAC / contacts; imaging cells by chromatin marks |
-| Bulk Hi-C › structures | `bulk_reconstruction.ipynb` | MDS and IGM population models |
+| Bulk Hi-C › calling structures | `hic_structures.ipynb` | compartments, insulation domains, HiCCUPS / Mustache loops and APA on Rao 2014 IMR90, against the published calls; what depth does to them |
+| Bulk Hi-C › 3-D structures | `bulk_reconstruction.ipynb` | MDS and IGM population models |
 | Bulk Hi-C › with imaging | `gem_fish_reconstruction.ipynb` | Hi-C + FISH (GEM-FISH) |
 | *Common to all data* | | |
 | Data model & storage | `chromdata_basics.ipynb` | `ChromData`: bins, spots, tracks, intervals, results, subsetting |

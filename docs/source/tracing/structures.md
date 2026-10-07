@@ -5,7 +5,9 @@ many traces, not from a contact map: loops (a per-axis F-test, ArcFISH), TADs (A
 domains per allele (FISHnet) and A/B compartments.  The callers work on any population of traces — chromatin
 tracing, DNA seqFISH+, an ensemble of models — and run on PyTorch (`device="auto"`: CUDA, Apple MPS or
 CPU); on a backed store they stream.  TADs can also be called from a Hi-C map linked to the data (the
-directionality index), to compare the two.
+directionality index), to compare the two; the callers made for contact maps — compartments by the cis
+eigenvector, insulation domains, HiCCUPS and Mustache loops — are in the bulk Hi-C chapter
+([calling structures from a map](../bulk/structures)).
 
 | Structure | API |
 |-----------|-----|
