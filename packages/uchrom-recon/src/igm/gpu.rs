@@ -15,7 +15,7 @@ use crate::rng::hash_keys;
 use bytemuck::{Pod, Zeroable};
 
 const WG: u32 = 256;
-const MS: usize = 8; // mstate vec4 per structure
+const MS: usize = 12; // mstate vec4 per structure
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable, Default, Debug)]
@@ -69,8 +69,12 @@ struct Params {
     soft_wmin: f32,
     rg_cap: f32,
     k_rg: f32,
-    _pad0: u32,
-    _pad1: u32,
+    rg_two: u32,
+    gyr_on: u32,
+    gyr1: f32,
+    gyr2: f32,
+    gyr3: f32,
+    k_gyr: f32,
 }
 
 #[repr(C)]
@@ -361,8 +365,12 @@ impl GpuPopEngine {
             soft_wmin: self.soft.map_or(0.0, |s| s.min_weight as f32),
             rg_cap: p.rg_cap as f32,
             k_rg: p.rg_kspring as f32,
-            _pad0: 0,
-            _pad1: 0,
+            rg_two: p.rg_two_sided as u32,
+            gyr_on: (p.gyration_prior[0] > 0.0) as u32,
+            gyr1: p.gyration_prior[0] as f32,
+            gyr2: p.gyration_prior[1] as f32,
+            gyr3: p.gyration_prior[2] as f32,
+            k_gyr: p.gyration_kspring as f32,
         }
     }
 
@@ -403,7 +411,7 @@ impl GpuPopEngine {
             hic: buf_zero(d, "hic", hic_cap.max(1) * 4, st),
             partial: buf_zero(d, "partial", b * self.nb as u64 * 16, st),
             mstate: buf_zero(d, "mstate", b * MS as u64 * 16, st),
-            bpart: buf_zero(d, "bpart", b * self.nb as u64 * 48, st),
+            bpart: buf_zero(d, "bpart", b * self.nb as u64 * 80, st),
             cgv: buf_zero(d, "cgv", b * n * 48, st),
             rows: buf_zero(d, "rows", rows_cap.max(1) * 16, st),
             stats: buf_zero(d, "stats", b * 32, st),

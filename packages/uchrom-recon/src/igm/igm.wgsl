@@ -61,8 +61,12 @@ struct Params {
     soft_wmin: f32,
     rg_cap: f32,     // radius-of-gyration cap (EMber-pop; 0 = off)
     k_rg: f32,
-    _pad0: u32,
-    _pad1: u32,
+    rg_two: u32,     // two-sided radius-of-gyration prior
+    gyr_on: u32,     // gyration-shape prior (EMber-pop)
+    gyr1: f32,
+    gyr2: f32,
+    gyr3: f32,
+    k_gyr: f32,
 };
 
 @group(0) @binding(0) var<uniform> P: Params;
@@ -96,7 +100,7 @@ struct Params {
 const WG: u32 = 256u;
 const BIG: f32 = 3.0e38;
 const PI: f32 = 3.141592653589793;
-const MS: u32 = 8u;
+const MS: u32 = 12u;
 // Hi-C CSR entries: partner bead | (inter-chromosomal flag << 31); with soft
 // assignment partner (22 bits) | (weight x 511, 9 bits) << 22 | flag << 31
 const HIC_PARTNER: u32 = 0x7fffffffu;
@@ -117,7 +121,9 @@ fn hic_weight(hq: u32) -> f32 {
 }
 // mstate slots: 0 (kin, factor, step, inv_cell) 1 (origin, _) 2 (dims bits, ncell)
 // 3 (e0, alpha, fdoth, gg) 4 (beta, status bits, neval bits, niter bits)
-// 5 (e_start, _, _, op bits) 6 (mean v xyz, _) 7 (hic base bits, _, _, _)
+// 5 (e_start, _, _, op bits) 6 (mean v xyz, Rg) 7 (hic base bits, centroid xyz)
+// 8-10 (principal axis k, force factor t_k) 11 (gyration energy share, _, _, _)
+// bpart per particle workgroup: min, max, (Σx, Σ|x|²), (Σxx, Σyy, Σzz, Σxy), (Σxz, Σyz, _, _)
 const ST_ACTIVE: u32 = 0u;
 const ST_DONE: u32 = 1u;
 const OP_NONE: u32 = 0u;
@@ -190,12 +196,25 @@ fn model_reduce(m: u32, lid: u32, nsum: u32) -> vec4<f32> {
 }
 
 fn bbox_partials(x: vec3<f32>, valid: bool, lid: u32, wgx: u32, m: u32) {
-    if (P.rg_cap > 0.0) {
-        // centroid and second moment for the radius-of-gyration cap (EMber-pop)
+    if (P.rg_cap > 0.0 || P.gyr_on != 0u) {
+        // centroid and second moments for the radius-of-gyration cap / gyration prior (EMber-pop)
         let xs = select(vec3<f32>(0.0), x, valid);
         let r = wg_reduce(vec4<f32>(xs, dot(xs, xs)), lid, 4u);
         if (lid == 0u) {
-            bpart[3u * (m * P.nb + wgx) + 2u] = r;
+            bpart[5u * (m * P.nb + wgx) + 2u] = r;
+        }
+        workgroupBarrier();
+        if (P.gyr_on != 0u) {
+            let r2 = wg_reduce(vec4<f32>(xs.x * xs.x, xs.y * xs.y, xs.z * xs.z, xs.x * xs.y), lid, 4u);
+            if (lid == 0u) {
+                bpart[5u * (m * P.nb + wgx) + 3u] = r2;
+            }
+            workgroupBarrier();
+            let r3 = wg_reduce(vec4<f32>(xs.x * xs.z, xs.y * xs.z, 0.0, 0.0), lid, 4u);
+            if (lid == 0u) {
+                bpart[5u * (m * P.nb + wgx) + 4u] = r3;
+            }
+            workgroupBarrier();
         }
     }
     smin[lid] = select(vec3<f32>(BIG), x, valid);
@@ -210,8 +229,8 @@ fn bbox_partials(x: vec3<f32>, valid: bool, lid: u32, wgx: u32, m: u32) {
     }
     if (lid == 0u) {
         let k = m * P.nb + wgx;
-        bpart[3u * k] = vec4<f32>(smin[0], 0.0);
-        bpart[3u * k + 1u] = vec4<f32>(smax[0], 0.0);
+        bpart[5u * k] = vec4<f32>(smin[0], 0.0);
+        bpart[5u * k + 1u] = vec4<f32>(smax[0], 0.0);
     }
 }
 
@@ -255,24 +274,39 @@ fn grid_setup(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id
     var hi = vec3<f32>(-BIG);
     for (var k = lid; k < P.nb; k = k + WG) {
         let q = m * P.nb + k;
-        lo = min(lo, bpart[3u * q].xyz);
-        hi = max(hi, bpart[3u * q + 1u].xyz);
+        lo = min(lo, bpart[5u * q].xyz);
+        hi = max(hi, bpart[5u * q + 1u].xyz);
     }
-    if (P.rg_cap > 0.0) {
+    if (P.rg_cap > 0.0 || P.gyr_on != 0u) {
         // reduce the moments: centroid -> mstate[7].yzw, Rg -> mstate[6].w
         var acc = vec4<f32>(0.0);
         for (var k = lid; k < P.nb; k = k + WG) {
-            acc = acc + bpart[3u * (m * P.nb + k) + 2u];
+            acc = acc + bpart[5u * (m * P.nb + k) + 2u];
         }
         let r = wg_reduce(acc, lid, 4u);
+        let c = r.xyz / f32(P.n);
         if (lid == 0u) {
-            let c = r.xyz / f32(P.n);
             let rg = sqrt(max(r.w / f32(P.n) - dot(c, c), 0.0));
             let b = MS * m;
             mstate[b + 6u].w = rg;
             mstate[b + 7u] = vec4<f32>(mstate[b + 7u].x, c);
         }
         workgroupBarrier();
+        if (P.gyr_on != 0u) {
+            var a2 = vec4<f32>(0.0);
+            var a3 = vec4<f32>(0.0);
+            for (var k = lid; k < P.nb; k = k + WG) {
+                a2 = a2 + bpart[5u * (m * P.nb + k) + 3u];
+                a3 = a3 + bpart[5u * (m * P.nb + k) + 4u];
+            }
+            let r2 = wg_reduce(a2, lid, 4u);
+            workgroupBarrier();
+            let r3 = wg_reduce(a3, lid, 4u);
+            if (lid == 0u) {
+                gyration_setup(m, c, r2 / f32(P.n), r3 / f32(P.n));
+            }
+            workgroupBarrier();
+        }
     }
     smin[lid] = lo;
     smax[lid] = hi;
@@ -301,6 +335,84 @@ fn grid_setup(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id
         mstate[b + 1u] = vec4<f32>(o, 0.0);
         mstate[b + 2u] = vec4<f32>(bitcast<f32>(d.x), bitcast<f32>(d.y), bitcast<f32>(d.z), bitcast<f32>(d.x * d.y * d.z));
     }
+}
+
+// Gyration tensor (second moments minus the centroid), Jacobi eigen-decomposition,
+// principal axes sorted by decreasing variance, per-axis force factors (EMber-pop).
+fn gyration_setup(m: u32, c: vec3<f32>, m2: vec4<f32>, m3: vec4<f32>) {
+    var a = array<array<f32, 3>, 3>();
+    a[0][0] = m2.x - c.x * c.x;
+    a[1][1] = m2.y - c.y * c.y;
+    a[2][2] = m2.z - c.z * c.z;
+    a[0][1] = m2.w - c.x * c.y;
+    a[1][0] = a[0][1];
+    a[0][2] = m3.x - c.x * c.z;
+    a[2][0] = a[0][2];
+    a[1][2] = m3.y - c.y * c.z;
+    a[2][1] = a[1][2];
+    var v = array<array<f32, 3>, 3>();
+    v[0][0] = 1.0;
+    v[1][1] = 1.0;
+    v[2][2] = 1.0;
+    for (var sweep = 0u; sweep < 12u; sweep = sweep + 1u) {
+        for (var pq = 0u; pq < 3u; pq = pq + 1u) {
+            var p = 0u;
+            var q = 1u;
+            if (pq == 1u) { p = 0u; q = 2u; }
+            if (pq == 2u) { p = 1u; q = 2u; }
+            let apq = a[p][q];
+            if (abs(apq) <= 1e-12 * (abs(a[p][p]) + abs(a[q][q]))) {
+                continue;
+            }
+            let theta = 0.5 * (a[q][q] - a[p][p]) / apq;
+            let t = select(-1.0, 1.0, theta >= 0.0) / (abs(theta) + sqrt(theta * theta + 1.0));
+            let cs = 1.0 / sqrt(t * t + 1.0);
+            let sn = t * cs;
+            for (var k = 0u; k < 3u; k = k + 1u) {
+                let akp = a[k][p];
+                let akq = a[k][q];
+                a[k][p] = cs * akp - sn * akq;
+                a[k][q] = sn * akp + cs * akq;
+            }
+            for (var k = 0u; k < 3u; k = k + 1u) {
+                let apk = a[p][k];
+                let aqk = a[q][k];
+                a[p][k] = cs * apk - sn * aqk;
+                a[q][k] = sn * apk + cs * aqk;
+            }
+            for (var k = 0u; k < 3u; k = k + 1u) {
+                let vkp = v[k][p];
+                let vkq = v[k][q];
+                v[k][p] = cs * vkp - sn * vkq;
+                v[k][q] = sn * vkp + cs * vkq;
+            }
+        }
+    }
+    // sort the eigenvalues (diagonal) descending
+    var ord = array<u32, 3>(0u, 1u, 2u);
+    for (var i = 0u; i < 2u; i = i + 1u) {
+        for (var j = 0u; j < 2u - i; j = j + 1u) {
+            if (a[ord[j]][ord[j]] < a[ord[j + 1u]][ord[j + 1u]]) {
+                let tmp = ord[j];
+                ord[j] = ord[j + 1u];
+                ord[j + 1u] = tmp;
+            }
+        }
+    }
+    let sig = vec3<f32>(P.gyr1, P.gyr2, P.gyr3);
+    var e = 0.0;
+    let b = MS * m;
+    for (var r = 0u; r < 3u; r = r + 1u) {
+        let q = ord[r];
+        let s = sqrt(max(a[q][q], 0.0));
+        var t = 0.0;
+        if (s > 0.0) {
+            t = P.k_gyr * (s - sig[r]) / s;
+            e = e + 0.5 * P.k_gyr * (s - sig[r]) * (s - sig[r]);
+        }
+        mstate[b + 8u + r] = vec4<f32>(v[0][q], v[1][q], v[2][q], t);
+    }
+    mstate[b + 11u] = vec4<f32>(e, 0.0, 0.0, 0.0);
 }
 
 fn grid_dims(m: u32) -> vec3<u32> {
@@ -529,12 +641,22 @@ fn total_force(i: u32, m: u32, p: vec3<f32>) -> vec4<f32> {
     // radius-of-gyration cap (EMber-pop)
     if (P.rg_cap > 0.0) {
         let rg = mstate[MS * m + 6u].w;
-        if (rg > P.rg_cap) {
+        if ((rg > P.rg_cap || P.rg_two != 0u) && rg > 0.0) {
             let c = mstate[MS * m + 7u].yzw;
             let ex = rg - P.rg_cap;
             f = f - (p - c) * (P.k_rg * ex / rg);
             e = e + 0.5 * P.k_rg * ex * ex;
         }
+    }
+    // gyration-shape prior (EMber-pop)
+    if (P.gyr_on != 0u) {
+        let b = MS * m;
+        let d = p - mstate[b + 7u].yzw;
+        for (var r = 0u; r < 3u; r = r + 1u) {
+            let vt = mstate[b + 8u + r];
+            f = f - vt.xyz * (vt.w * dot(vt.xyz, d));
+        }
+        e = e + mstate[b + 11u].x;
     }
     // ellipsoidal envelope
     let s = vec3<f32>(P.ax, P.ay, P.az) * P.env_scale - vec3<f32>(ri);

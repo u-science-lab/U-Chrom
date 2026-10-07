@@ -170,6 +170,13 @@ pub struct IgmParams {
     /// that Rg is allowed).
     pub rg_cap: f64,
     pub rg_kspring: f64,
+    /// Radius-of-gyration prior instead of a cap: `U = ½ k N (Rg − rg_cap)²` on both sides.
+    pub rg_two_sided: bool,
+    /// Gyration-shape prior (orientation-free, no wall): target standard
+    /// deviations σ1 ≥ σ2 ≥ σ3 (nm) along each structure's own principal axes,
+    /// `U = ½ k N Σ_k (sqrt(λ_k) − σ_k)²`.  All 0 = off.
+    pub gyration_prior: [f64; 3],
+    pub gyration_kspring: f64,
 }
 
 pub fn demo_stages() -> Vec<Stage> {
@@ -240,6 +247,9 @@ impl Default for IgmParams {
             soft_min_weight: 0.02,
             rg_cap: 0.0,
             rg_kspring: 1.0,
+            rg_two_sided: false,
+            gyration_prior: [0.0; 3],
+            gyration_kspring: 1.0,
         }
     }
 }
@@ -344,6 +354,10 @@ impl IgmParams {
                 }
             }
             s => return Err(format!("unknown assignment {s:?} (\"igm\" or \"soft\")")),
+        }
+        let gp = self.gyration_prior;
+        if gp.iter().any(|&x| x < 0.0) || (gp.iter().any(|&x| x > 0.0) && !(gp[0] >= gp[1] && gp[1] >= gp[2] && gp[2] > 0.0)) {
+            return Err("gyration_prior must be all 0 (off) or σ1 >= σ2 >= σ3 > 0".into());
         }
         if self.rg_cap < 0.0 || self.rg_kspring < 0.0 {
             return Err("rg_cap and rg_kspring must be >= 0".into());

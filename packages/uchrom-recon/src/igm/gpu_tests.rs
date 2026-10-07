@@ -402,7 +402,8 @@ fn gpu_soft_assignment_matches_cpu() {
 #[test]
 fn gpu_rg_cap_matches_cpu() {
     let (g, ff0, p0, pop) = setup(150, 3, 9);
-    let p = IgmParams { nucleus_shape: "none".into(), rg_cap: 300.0, rg_kspring: 0.2, ..p0 };
+    for two in [false, true] {
+    let p = IgmParams { nucleus_shape: "none".into(), rg_cap: if two { 3000.0 } else { 300.0 }, rg_kspring: 0.2, rg_two_sided: two, ..p0.clone() };
     let poly = g.polymer_bonds(&p, &|_| 1.0);
     let mut ff = ForceField::new(g.radii.clone(), &poly, p.semiaxes(), &p);
     ff.bead_chrom = ff0.bead_chrom.clone();
@@ -443,6 +444,56 @@ fn gpu_rg_cap_matches_cpu() {
             max_d = max_d.max(d);
         }
     }
-    eprintln!("rg-cap MD GPU vs CPU: max diff {max_d:.3e} nm");
+    eprintln!("rg-cap (two-sided {two}) MD GPU vs CPU: max diff {max_d:.3e} nm");
+    assert!(max_d < 1e-2, "max diff {max_d} nm");
+    }
+}
+
+/// EMber-pop gyration-shape prior (no envelope): GPU vs CPU energies and MD.
+#[test]
+fn gpu_gyration_prior_matches_cpu() {
+    let (g, ff0, p0, pop) = setup(150, 3, 10);
+    let p = IgmParams { nucleus_shape: "none".into(), gyration_prior: [900.0, 500.0, 150.0], gyration_kspring: 0.2, ..p0 };
+    let poly = g.polymer_bonds(&p, &|_| 1.0);
+    let mut ff = ForceField::new(g.radii.clone(), &poly, p.semiaxes(), &p);
+    ff.bead_chrom = ff0.bead_chrom.clone();
+    let Ok(mut eng) = GpuPopEngine::new(&ff, &p) else {
+        eprintln!("no GPU adapter: skipped");
+        return;
+    };
+    let rows = random_rows(&g, 300, 21);
+    let mut q = p.clone();
+    q.cg_max_eval = 1;
+    eng.p = q;
+    let (_, stats) = eng.debug_cg(&pop, &rows, 1.0, 1.0).unwrap();
+    for s in 0..pop.len() {
+        let hic = HicBonds::from_pairs(ff.n, &astep::assign(&rows, &pop[s]));
+        let mut f = vec![[0.0; 3]; ff.n];
+        let e = compute(&ff, &hic, &pop[s], Scale { ev: 1.0, env: 1.0 }, &mut Grid::default(), &mut f);
+        eprintln!("gyration structure {s}: energy CPU {:.6e} (prior {:.3e}) GPU {:.6e}", e.total(), e.env, stats[s].energy);
+        assert!(e.env > 0.0);
+        assert!(((stats[s].energy - e.total()) / e.total()).abs() < 1e-4);
+    }
+    eng.p = p.clone();
+    let mut rng = Rng::new(15);
+    let vel: Vec<Vec<V3>> = pop
+        .iter()
+        .map(|st| st.iter().map(|_| [(rng.normal() * 30.0) as f32 as f64, (rng.normal() * 30.0) as f32 as f64, (rng.normal() * 30.0) as f32 as f64]).collect())
+        .collect();
+    let (steps, t0, t1) = (20, 500.0, 300.0);
+    let gpu = eng.debug_md(&pop, &vel, &rows, steps, t0, t1, 1000.0, 1.0, 1.0).unwrap();
+    let mut max_d = 0.0f64;
+    for s in 0..pop.len() {
+        let hic = HicBonds::from_pairs(ff.n, &astep::assign(&rows, &pop[s]));
+        let mut st = State::new(pop[s].clone());
+        st.vel = vel[s].clone();
+        let rp = RunParams { n_steps: steps, t0, t1, dt: p.timestep, xlimit: 1000.0, window: p.rescale_window, fraction: 1.0, scale: Scale { ev: 1.0, env: 1.0 } };
+        run(&ff, &hic, &mut st, &rp);
+        for i in 0..ff.n {
+            let d: f64 = (0..3).map(|k| (gpu[s][i][k] - st.pos[i][k]).powi(2)).sum::<f64>().sqrt();
+            max_d = max_d.max(d);
+        }
+    }
+    eprintln!("gyration-prior MD GPU vs CPU: max diff {max_d:.3e} nm");
     assert!(max_d < 1e-2, "max diff {max_d} nm");
 }

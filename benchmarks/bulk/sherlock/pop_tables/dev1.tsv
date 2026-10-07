@@ -1,0 +1,7 @@
+su_dev	igm_sphere_S200x025	igm_sphere	{}	200	0.25	C1	1
+su_dev	igm_sphere_S200x025	igm_sphere	{}	200	0.25	C2	1
+su_dev	igm_sphere_S200x025	igm_sphere	{}	200	0.25	C3	1
+su_dev	igm_ellipsoid_S200x025	igm_ellipsoid	{}	200	0.25	C1	1
+su_dev	igm_ellipsoid_S200x025	igm_ellipsoid	{}	200	0.25	C2	1
+su_dev	igm_ellipsoid_S200x025	igm_ellipsoid	{}	200	0.25	C3	1
+su_dev	igm_sphere_S200x1	igm_sphere	{}	200	1.0	C1	1

@@ -89,6 +89,8 @@ def main(argv=None) -> None:
     if isinstance(rg, str):                 # "imaging[*f]": f x the bulk cells' median Rg
         f = float(rg.split("*")[1]) if "*" in rg else 1.0
         params["rg_cap"] = f * float(cells.meta["nuclear_radius_nm"]) * np.sqrt(3.0 / 5.0)
+    if params.get("gyration_prior") == "imaging":  # the bulk cells' median gyration standard deviations
+        params["gyration_prior"] = [float(x) / np.sqrt(5.0) for x in cells.meta["gyration_semiaxes_nm"]]
     if a.steps_scale != 1.0:
         d = un.default_igm_params()
         stages = params.get("stages") or d["stages"]

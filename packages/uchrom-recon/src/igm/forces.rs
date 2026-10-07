@@ -50,6 +50,10 @@ pub struct ForceField {
     /// radius-of-gyration cap (nm, 0 = off) and its spring (EMber-pop)
     pub rg_cap: f64,
     pub k_rg: f64,
+    pub rg_two_sided: bool,
+    /// gyration-shape prior σ1 ≥ σ2 ≥ σ3 (nm; 0 = off) and its spring
+    pub gyr: [f64; 3],
+    pub k_gyr: f64,
 }
 
 /// Per-stage scaling (`fix adapt` excluded-volume prefactor, envelope factor).
@@ -164,6 +168,9 @@ impl ForceField {
             nc_range: p.nc_range(),
             rg_cap: p.rg_cap,
             k_rg: p.rg_kspring,
+            rg_two_sided: p.rg_two_sided,
+            gyr: p.gyration_prior,
+            k_gyr: p.gyration_kspring,
         }
     }
 
@@ -222,8 +229,9 @@ pub fn lower_bond(p: &V3, q: &V3, d0: f64, k: f64, sign: f64, f: &mut V3) -> f64
 }
 
 /// Radius-of-gyration cap of one structure: `U = ½ k N (Rg − R0)²` for
-/// Rg > R0, force `−k (Rg − R0) (x_i − c) / Rg`; added to `out`, returns U.
-pub fn rg_cap_forces(pos: &[V3], r0: f64, k: f64, out: &mut [V3]) -> f64 {
+/// Rg > R0 (both sides with `two_sided`), force `−k (Rg − R0) (x_i − c) / Rg`;
+/// added to `out`, returns U.
+pub fn rg_cap_forces(pos: &[V3], r0: f64, k: f64, two_sided: bool, out: &mut [V3]) -> f64 {
     let n = pos.len() as f64;
     let mut c = [0.0; 3];
     for p in pos {
@@ -236,7 +244,7 @@ pub fn rg_cap_forces(pos: &[V3], r0: f64, k: f64, out: &mut [V3]) -> f64 {
     }
     let rg2: f64 = pos.iter().map(|p| (p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2) + (p[2] - c[2]).powi(2)).sum::<f64>() / n;
     let rg = rg2.sqrt();
-    if rg <= r0 {
+    if (rg <= r0 && !two_sided) || rg == 0.0 {
         return 0.0;
     }
     let t = k * (rg - r0) / rg;
@@ -246,6 +254,55 @@ pub fn rg_cap_forces(pos: &[V3], r0: f64, k: f64, out: &mut [V3]) -> f64 {
         }
     }
     0.5 * k * n * (rg - r0) * (rg - r0)
+}
+
+/// Gyration-shape prior of one structure: eigenpairs (λ_k, v_k) of the
+/// gyration tensor (descending), `U = ½ k N Σ_k (s_k − σ_k)²` with s_k = sqrt(λ_k),
+/// force `−k Σ_k (s_k − σ_k) / s_k (v_k · (x_i − c)) v_k`; added to `out`, returns U.
+pub fn gyration_forces(pos: &[V3], sigma: &[f64; 3], k: f64, out: &mut [V3]) -> f64 {
+    let n = pos.len() as f64;
+    let mut c = [0.0; 3];
+    for p in pos {
+        for a in 0..3 {
+            c[a] += p[a];
+        }
+    }
+    for a in 0..3 {
+        c[a] /= n;
+    }
+    let mut g = nalgebra::Matrix3::<f64>::zeros();
+    for p in pos {
+        let d = nalgebra::Vector3::new(p[0] - c[0], p[1] - c[1], p[2] - c[2]);
+        g += d * d.transpose();
+    }
+    g /= n;
+    let eig = nalgebra::SymmetricEigen::new(g);
+    let mut idx = [0usize, 1, 2];
+    idx.sort_by(|&a, &b| eig.eigenvalues[b].total_cmp(&eig.eigenvalues[a]));
+    let mut u = 0.0;
+    let mut t = [0.0; 3];
+    let mut v = [[0.0; 3]; 3];
+    for (r, &q) in idx.iter().enumerate() {
+        let s = eig.eigenvalues[q].max(0.0).sqrt();
+        if s <= 0.0 {
+            continue;
+        }
+        t[r] = k * (s - sigma[r]) / s;
+        for a in 0..3 {
+            v[r][a] = eig.eigenvectors[(a, q)];
+        }
+        u += 0.5 * k * n * (s - sigma[r]) * (s - sigma[r]);
+    }
+    for (p, f) in pos.iter().zip(out.iter_mut()) {
+        let d = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
+        for r in 0..3 {
+            let proj = v[r][0] * d[0] + v[r][1] * d[1] + v[r][2] * d[2];
+            for a in 0..3 {
+                f[a] -= t[r] * proj * v[r][a];
+            }
+        }
+    }
+    u
 }
 
 /// Soft-cosine repulsion on particle i from j: adds the force on i, returns U (full pair energy).
@@ -421,7 +478,10 @@ pub fn compute(ff: &ForceField, hic: &HicBonds, pos: &[V3], sc: Scale, grid: &mu
         out[i] = f;
     }
     if ff.rg_cap > 0.0 {
-        e.env += rg_cap_forces(pos, ff.rg_cap, ff.k_rg, out);
+        e.env += rg_cap_forces(pos, ff.rg_cap, ff.k_rg, ff.rg_two_sided, out);
+    }
+    if ff.gyr[0] > 0.0 {
+        e.env += gyration_forces(pos, &ff.gyr, ff.k_gyr, out);
     }
     e
 }
@@ -467,7 +527,10 @@ fn compute_nc(ff: &ForceField, hic: &HicBonds, pos: &[V3], sc: Scale, grid: &mut
         out[i] = f;
     }
     if ff.rg_cap > 0.0 {
-        e.env += rg_cap_forces(pos, ff.rg_cap, ff.k_rg, out);
+        e.env += rg_cap_forces(pos, ff.rg_cap, ff.k_rg, ff.rg_two_sided, out);
+    }
+    if ff.gyr[0] > 0.0 {
+        e.env += gyration_forces(pos, &ff.gyr, ff.k_gyr, out);
     }
     e
 }
@@ -742,13 +805,13 @@ mod tests {
         let (_, _, pos) = toy(80, 21, true);
         let r0 = 0.5 * {
             let mut z = vec![[0.0; 3]; pos.len()];
-            let _ = rg_cap_forces(&pos, 0.0, 1.0, &mut z);
+            let _ = rg_cap_forces(&pos, 0.0, 1.0, false, &mut z);
             let n = pos.len() as f64;
             let c: Vec<f64> = (0..3).map(|a| pos.iter().map(|p| p[a]).sum::<f64>() / n).collect();
             (pos.iter().map(|p| (0..3).map(|a| (p[a] - c[a]).powi(2)).sum::<f64>()).sum::<f64>() / n).sqrt()
         };
         let mut f = vec![[0.0; 3]; pos.len()];
-        let u0 = rg_cap_forces(&pos, r0, 0.3, &mut f);
+        let u0 = rg_cap_forces(&pos, r0, 0.3, false, &mut f);
         assert!(u0 > 0.0);
         let h = 1e-4;
         let mut max_err = 0.0f64;
@@ -760,14 +823,61 @@ mod tests {
                 let mut p2 = pos.clone();
                 p2[i][d] -= h;
                 let mut z = vec![[0.0; 3]; pos.len()];
-                let num = -(rg_cap_forces(&p1, r0, 0.3, &mut z) - rg_cap_forces(&p2, r0, 0.3, &mut z)) / (2.0 * h);
+                let num = -(rg_cap_forces(&p1, r0, 0.3, false, &mut z) - rg_cap_forces(&p2, r0, 0.3, false, &mut z)) / (2.0 * h);
                 max_err = max_err.max((num - f[i][d]).abs());
                 max_f = max_f.max(num.abs());
             }
         }
         assert!(max_err / max_f < 1e-6, "{max_err} {max_f}");
         let mut z = vec![[0.0; 3]; pos.len()];
-        assert_eq!(rg_cap_forces(&pos, 1e9, 0.3, &mut z), 0.0);
+        assert_eq!(rg_cap_forces(&pos, 1e9, 0.3, false, &mut z), 0.0);
+        // two-sided prior: pushes outwards below R0, finite differences again
+        let r1 = 4.0 * r0;
+        let mut f = vec![[0.0; 3]; pos.len()];
+        let u1 = rg_cap_forces(&pos, r1, 0.3, true, &mut f);
+        assert!(u1 > 0.0);
+        let mut max_err = 0.0f64;
+        let mut max_f = 0.0f64;
+        for i in 0..pos.len() {
+            for d in 0..3 {
+                let mut p1 = pos.clone();
+                p1[i][d] += h;
+                let mut p2 = pos.clone();
+                p2[i][d] -= h;
+                let num = -(rg_cap_forces(&p1, r1, 0.3, true, &mut z) - rg_cap_forces(&p2, r1, 0.3, true, &mut z)) / (2.0 * h);
+                max_err = max_err.max((num - f[i][d]).abs());
+                max_f = max_f.max(num.abs());
+            }
+        }
+        assert!(max_err / max_f < 1e-6, "two-sided: {max_err} {max_f}");
+    }
+
+    #[test]
+    fn gyration_prior_matches_finite_differences() {
+        let (_, _, pos) = toy(90, 23, true);
+        let sigma = [900.0, 500.0, 200.0];
+        let mut f = vec![[0.0; 3]; pos.len()];
+        let u0 = gyration_forces(&pos, &sigma, 0.2, &mut f);
+        assert!(u0 > 0.0);
+        let h = 1e-4;
+        let mut max_err = 0.0f64;
+        let mut max_f = 0.0f64;
+        let mut z = vec![[0.0; 3]; pos.len()];
+        for i in 0..pos.len() {
+            for d in 0..3 {
+                let mut p1 = pos.clone();
+                p1[i][d] += h;
+                let mut p2 = pos.clone();
+                p2[i][d] -= h;
+                let num = -(gyration_forces(&p1, &sigma, 0.2, &mut z) - gyration_forces(&p2, &sigma, 0.2, &mut z)) / (2.0 * h);
+                max_err = max_err.max((num - f[i][d]).abs());
+                max_f = max_f.max(num.abs());
+            }
+        }
+        assert!(max_err / max_f < 1e-5, "{max_err} {max_f}");
+        // forces sum to zero (no net drift)
+        let tot: f64 = (0..3).map(|a| f.iter().map(|x| x[a]).sum::<f64>().abs()).sum();
+        assert!(tot < 1e-6 * max_f * pos.len() as f64);
     }
 
     #[test]

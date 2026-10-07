@@ -36,6 +36,7 @@ def main(argv=None):
     ap.add_argument("--max-iterations", type=int, default=None)
     ap.add_argument("--sigmas", type=float, nargs="*", default=None, help="override both sigma lists")
     ap.add_argument("--chroms", nargs="*", default=None, help="restrict to these chromosomes")
+    ap.add_argument("--params", default=None, help="JSON object of extra / overriding engine fields (EMber-pop)")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
 
@@ -57,6 +58,11 @@ def main(argv=None):
         params["relax"] = dict(params["relax"], mdsteps=max(1, int(params["relax"]["mdsteps"] * a.steps_scale)))
     if a.max_iterations:
         params["max_iterations"] = a.max_iterations
+    if a.params:
+        extra = json.loads(a.params)
+        if extra.get("rg_cap") == "nucleus":       # Rg of the uniform demo sphere
+            extra["rg_cap"] = params["nucleus_radius"] * (3.0 / 5.0) ** 0.5
+        params.update(extra)
     if a.sigmas:
         params["intra_sigma_list"] = list(a.sigmas)
         params["inter_sigma_list"] = list(a.sigmas)

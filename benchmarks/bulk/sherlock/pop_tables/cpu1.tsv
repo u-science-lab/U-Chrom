@@ -1,0 +1,10 @@
+su_dev	igm_sphere	igm_sphere	{}	100	0.1	C2	1
+su_dev	igm_ellipsoid	igm_ellipsoid	{}	100	0.1	C2	1
+su_dev	rg_only	igm_sphere	{"nucleus_shape":"none","rg_cap":"imaging"}	100	0.1	C2	1
+su_dev	rg_ic_nclast_k1	igm_sphere	{"nucleus_shape":"none","advance_on_max_iterations":true,"rg_cap":"imaging","noncontact_kspring":1.0,"noncontact_from_sigma":5}	100	0.1	C2	1
+su_dev	gyr_ic_nclast_k1	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","advance_on_max_iterations":true,"noncontact_kspring":1.0,"noncontact_from_sigma":5}	100	0.1	C2	1
+su_dev	igm_sphere	igm_sphere	{}	100	0.1	C3	1
+su_dev	igm_ellipsoid	igm_ellipsoid	{}	100	0.1	C3	1
+su_dev	rg_only	igm_sphere	{"nucleus_shape":"none","rg_cap":"imaging"}	100	0.1	C3	1
+su_dev	rg_ic_nclast_k1	igm_sphere	{"nucleus_shape":"none","advance_on_max_iterations":true,"rg_cap":"imaging","noncontact_kspring":1.0,"noncontact_from_sigma":5}	100	0.1	C3	1
+su_dev	gyr_ic_nclast_k1	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","advance_on_max_iterations":true,"noncontact_kspring":1.0,"noncontact_from_sigma":5}	100	0.1	C3	1

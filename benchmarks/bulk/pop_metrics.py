@@ -170,14 +170,16 @@ def bootstrap_mean(blocks: list, kind: list, C: int, n_boot: int = 2000, seed: i
 
     ``blocks[u]`` = (sums, counts) of unit u (locus: (C,), pair: (C, C)); ``kind[u]`` in
     {"locus", "pair"}."""
+    iu = np.triu_indices(C)
+
     def stat(m):
         vals = []
         for (s, n), k in zip(blocks, kind):
             if k == "locus":
                 vals.append((m * s).sum() / (m * n).sum())
-            else:
-                w = np.outer(m, m)
-                vals.append((w * s).sum() / (w * n).sum())
+            else:                           # symmetric block sums: each chromosome pair once
+                w = np.outer(m, m)[iu]
+                vals.append((w * s[iu]).sum() / (w * n[iu]).sum())
         return float(np.mean(vals))
 
     est = stat(np.ones(C))

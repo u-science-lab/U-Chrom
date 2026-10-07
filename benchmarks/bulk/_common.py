@@ -8,7 +8,6 @@ loaded from its file path instead of ``import uchrom``; the screcon helpers are 
 
 from __future__ import annotations
 
-from uchrom.datasets import data_dir
 import importlib.util
 import json
 import os
@@ -38,7 +37,10 @@ def load_preprocess():
 
 
 def example_data() -> Path:
-    return data_dir()                       # $UCHROM_DATA, else ~/.cache/uchrom
+    """``uchrom.datasets.data_dir()``: ``$UCHROM_DATA``, else ``~/.cache/uchrom`` (no U-Chrom import,
+    so the benchmark runs in a venv without U-Chrom's dependencies)."""
+    env = os.environ.get("UCHROM_DATA")
+    return Path(env).expanduser() if env else Path.home() / ".cache" / "uchrom"
 
 
 def jdump(obj) -> str:
