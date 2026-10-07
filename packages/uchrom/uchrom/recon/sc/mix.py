@@ -78,7 +78,7 @@ def deconvolve_cells(
     (cell, chromosome) (``mix0:chr1``), one spot per particle; ``coords`` = model 0 of every
     cell, ``layers['model_<r>']`` = replicate r of every cell; units particle radii.
     """
-    from uchrom.core import ChromData
+    from chromdata import ChromData
 
     del copy
     if int(n_cells) < 2:
