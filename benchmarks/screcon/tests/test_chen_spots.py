@@ -23,15 +23,19 @@ def _pairs(path, spots, rng):
         fh.write("UNLINKED_X\tchr1\t5\tchr1\t50000\t+\t-\t60\t60\n")  # dropped (barcode)
 
 
-def test_split_mixtures_score_report(tmp_path):
+def test_split_mixtures_score_report(tmp_path, monkeypatch):
     rng = np.random.default_rng(0)
     spots = [("AAA_CCC", 14_000), ("AAA_GGG", 13_000), ("TTT_CCC", 3_000)]
-    _pairs(tmp_path / "p.pairs.gz", spots, rng)
+    _pairs(tmp_path / "R1.dedup.pairs.gz", spots, rng)
     pd.DataFrame({"run": "R1", "barcode_pair": [s for s, _ in spots], "spot": ["S:1x1", "S:1x2", "S:2x1"], "section": "S",
                   "grid_col": [1, 1, 2], "grid_row": [1, 2, 1], "Region": ["L1", "L1", "L2"]}
                  ).to_csv(tmp_path / "spots.tsv.gz", sep="\t", index=False)
+    # the spot map is read from the data directory (apps/atlas/recipes/build_chen2026_spot_maps.py)
+    monkeypatch.setenv("UCHROM_DATA", str(tmp_path / "data"))
+    (tmp_path / "data" / "spatial_hic_chen2026" / "spot_maps").mkdir(parents=True)
+    (tmp_path / "spots.tsv.gz").rename(tmp_path / "data" / "spatial_hic_chen2026" / "spot_maps" / "chen2026_x_R1_spots.tsv.gz")
     d = tmp_path / "R1"
-    cs.main(["split", "--pairs", str(tmp_path / "p.pairs.gz"), "--spots", str(tmp_path / "spots.tsv.gz"), "--out", str(d)])
+    cs.main(["split", "--pairs", str(tmp_path / "R1.dedup.pairs.gz"), "--out", str(d)])
     st = pd.read_csv(d / "spots.tsv", sep="\t")
     assert list(st.level) == ["10k", "10k", "na"]
     assert (st.n_cis + st.n_trans + st.n_short).tolist() == [n for _, n in spots]

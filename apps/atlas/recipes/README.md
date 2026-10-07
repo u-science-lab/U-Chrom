@@ -72,7 +72,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `takei2025_cerebellum/`: Takei 2025 cerebellum DNA seqFISH+, rep 1, all FOVs | 2.85 GB download; combined store 2.05 GB | fetch `takei2025_cerebellum`; recipe `build_takei2025_cerebellum.py`; atlas `takei2025_cerebellum` | tutorials `features`, `cell_embeddings`, `import_seqfish_multiomics` (atlas); the two `takei2025_*auto_discovery` tutorials (local build); Fig. 2, format and cell-position benchmarks |
 | `schicar_mop/`: scHiCAR mouse frontal cortex, RNA + ATAC + contacts, no 3-D | 61 MB + 1.47 GB + 1.37 GB download; store + maps ~0.4 GB | fetch `schicar_rna`, `schicar_dna`, `schicar_atac`; recipe `build_schicar_mop.py`; atlas `schicar_mouse_cortex` | tutorial `cell_embeddings` (atlas); Fig. 2e / 2f, Fig. 6, omics-embedding, spatial-composition and format benchmarks |
 | `schicar_mop/raw/merfish_mop/`: MERFISH mouse MOp atlas | 332 MB | fetch `merfish_mop` | scHiCAR to MERFISH mapping (`benchmarks/schicar_merfish/`) |
-| `spatial_hic_chen2026/`: Spatial Hi-C, mouse embryo / brain (Chen, Guo 2026) | 15.9 GB download; stores 0.7–16 MB + linked files | fetch `spatial_hic_chen2026`; recipes `build_spatial_hic_chen2026.py` (needs R), `link_spatial_hic_chen2026_contacts.py`; atlas `chen2026_*` | validation benchmarks; `benchmarks/spatial_composition/`; the atlas page's hero animation |
+| `spatial_hic_chen2026/`: Spatial Hi-C, mouse embryo / brain (Chen, Guo 2026) | 15.9 GB download; stores 0.7–16 MB + linked files | fetch `spatial_hic_chen2026`; recipes `build_spatial_hic_chen2026.py` (needs R), `link_spatial_hic_chen2026_contacts.py`, `build_chen2026_spot_maps.py` (spot maps of the PREREG §13.3 test); atlas `chen2026_*` | validation benchmarks; `benchmarks/spatial_composition/`; the atlas page's hero animation |
 | `spatial_atac_hic/`: Spatial ATAC-Hi-C, mouse brain (Wang P. 2026) | 9.5 GB download; store + links ~0.3 GB | fetch `spatial_atac_hic`; recipes `build_spatial_atac_hic.py`, `link_spatial_atac_hic_contacts.py`; atlas `atac_hic_mouse_brain` | atlas |
 | `spatial_hicrna/`: Spatial Hi-C-RNA, mouse brain / embryo, human melanoma (Guo 2026) | 2.3 GB download; contacts from 7 `.pairs.gz` of 7–160 GB on Sherlock | fetch `spatial_hicrna`; recipes `build_spatial_hicrna.py`, `link_spatial_hicrna_contacts.py`; atlas `hicrna_*` | `benchmarks/spatial_hicrna_validation.py`, `embedded_contacts.py`, `spatial_composition/` |
 | `hires2023/`: HiRES mouse embryo / brain, contacts + RNA + 3-D | 70 MB + 76 GB | fetch `hires2023_meta`, `hires2023`; recipe `build_hires2023.py`; atlas `hires_embryo`, `hires_brain` | atlas; the atlas page's hero animation |
@@ -758,11 +758,14 @@ is kept with its recorded outputs.
   Adult16_HiC; 122.8 M rows, 1.6 GB) and CRR1829220 (hippocampus adult 10 µm, Adult22_HiC; 55.6 M rows,
   0.75 GB) read-only from `$OAK/uchrom/spatial_hic_chen2026/<run>/<run>.dedup.pairs.gz`; per-spot tables of the
   spots with >= 10,000 cis pairs (3,327 / 1,174) are written to `$SCRATCH`.  Barcode pair → published spot:
-  `benchmarks/screcon/data/chen2026_cortex_adult_10um_CRR1829219_spots.tsv.gz` (7,795 spots) and
-  `..._hippocampus_adult_10um_CRR1829220_spots.tsv.gz` (8,185; 263 KB together; spot id, grid column / row,
-  image centroid, published clusters / regions), exported once from the `cortex_adult_10um` /
-  `hippocampus_adult_10um` stores with the pairing `link_spatial_hic_chen2026_contacts.py` chose (cortex:
-  authors' order, both indices flipped; hippocampus: authors' order, index 2 flipped).
+  recipe `python apps/atlas/recipes/build_chen2026_spot_maps.py [--local]` reads the atlas stores
+  `chen2026_cortex_adult_10um` / `chen2026_hippocampus_adult_10um` (`uchrom.datasets.atlas`; `--local`: the stores
+  under the data directory), applies the pairing `link_spatial_hic_chen2026_contacts.py` chose and recorded in
+  `uns['contacts_stats']['reprocessed'][<run>]` (cortex: authors' order, both indices flipped; hippocampus:
+  authors' order, index 2 flipped) to every barcode pair of the 96 × 96 chip, and writes
+  `<data dir>/spatial_hic_chen2026/spot_maps/chen2026_<tissue>_<run>_spots.tsv.gz` (7,795 / 8,185 spots, ~130 KB
+  each: spot id, grid column / row, image centroid, published clusters / regions); `chen_spots.py split` reads it
+  from there (`$UCHROM_DATA`).
 
 ### `spatial_atac_hic/`: Spatial ATAC-Hi-C, mouse brain, no 3-D (Wang P. et al. 2026)
 

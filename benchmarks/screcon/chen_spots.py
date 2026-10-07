@@ -6,7 +6,11 @@ Subcommands
               with >= 10,000 cis contacts (``tables/``), ``spots.tsv`` with every linked spot's counts::
 
                   python benchmarks/screcon/chen_spots.py split --pairs OAK/RUN/RUN.dedup.pairs.gz \\
-                      --spots data/chen2026_<store>_<run>_spots.tsv.gz --out CHEN/<run>
+                      [--spots MAP.tsv.gz] --out CHEN/<run>
+
+              The barcode pair -> spot map is built by ``apps/atlas/recipes/build_chen2026_spot_maps.py`` into the
+              data directory; without ``--spots`` it is taken from
+              ``$UCHROM_DATA/spatial_hic_chen2026/spot_maps/chen2026_*_<run>_spots.tsv.gz``.
 
 ``mixtures``  secondary, descriptive: 200 single assessable spots and 200 50:50 mixtures of two random
               assessable spots, all at 10,000 cis (``default_rng(20261015)``) -> ``tables/single_*`` / ``mix_*``::
@@ -56,6 +60,22 @@ def level_of(n_cis: int) -> str:
     return "10k" if n_cis < 30_000 else ("30k" if n_cis < 100_000 else "100k")
 
 
+def data_dir() -> Path:
+    """The data directory (as ``uchrom.datasets.data_dir``: ``$UCHROM_DATA``, else ``~/.cache/uchrom``)."""
+    env = os.environ.get("UCHROM_DATA")
+    return Path(env).expanduser() if env else Path.home() / ".cache" / "uchrom"
+
+
+def spot_map_path(pairs: str) -> Path:
+    """The recipe's spot map of the run named in the pairs file (``<run>.dedup.pairs.gz``)."""
+    run = Path(pairs).name.split(".")[0]
+    hits = sorted((data_dir() / "spatial_hic_chen2026" / "spot_maps").glob(f"chen2026_*_{run}_spots.tsv.gz"))
+    if len(hits) != 1:
+        raise SystemExit(f"no spot map for {run} under {data_dir()}/spatial_hic_chen2026/spot_maps "
+                         "(build it: python apps/atlas/recipes/build_chen2026_spot_maps.py)")
+    return hits[0]
+
+
 def write_geo(path: Path, ca, pa, cb, pb) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with gzip.open(path, "wt", compresslevel=3) as fh:
@@ -64,7 +84,7 @@ def write_geo(path: Path, ca, pa, cb, pb) -> None:
 
 
 def cmd_split(args) -> None:
-    spots = pd.read_csv(args.spots, sep="\t", low_memory=False)
+    spots = pd.read_csv(args.spots or spot_map_path(args.pairs), sep="\t", low_memory=False)
     code = {b: i for i, b in enumerate(spots.barcode_pair)}
     cidx = {c: i for i, c in enumerate(CHROMS)}
     parts = []
@@ -313,7 +333,7 @@ def main(argv=None) -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("split")
     s.add_argument("--pairs", required=True)
-    s.add_argument("--spots", required=True)
+    s.add_argument("--spots", help="barcode pair -> spot map (default: the data directory)")
     s.add_argument("--out", required=True)
     s.set_defaults(fn=cmd_split)
     s = sub.add_parser("mixtures")

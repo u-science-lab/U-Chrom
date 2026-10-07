@@ -15,8 +15,8 @@ SRC=$OAK/uchrom/spatial_hic_chen2026
 for pair in cortex_adult_10um:CRR1829219 hippocampus_adult_10um:CRR1829220; do
   store=${pair%%:*}; run=${pair##*:}
   if [ ! -f "$CH/$run/spots.tsv" ]; then
-    $PY $SC/chen_spots.py split --pairs "$SRC/$run/$run.dedup.pairs.gz" \
-      --spots "$SC/data/chen2026_${store}_${run}_spots.tsv.gz" --out "$CH/$run" | tail -2
+    # spot maps: apps/atlas/recipes/build_chen2026_spot_maps.py, run once with UCHROM_DATA=$DATA
+    UCHROM_DATA=$DATA $PY $SC/chen_spots.py split --pairs "$SRC/$run/$run.dedup.pairs.gz" --out "$CH/$run" | tail -2
   fi
   grep -q mix2 "$CH/$run/manifest.tsv" || $PY $SC/chen_spots.py mixtures --dir "$CH/$run"
 done
