@@ -469,3 +469,18 @@ compositions ~0.01 / 0.02; oracle 0.253 / 0.535 and 0.255 / 0.540.  TD-ps0.2 −
 every noise level and both resolutions.  S1 (spatially varying profiles) is uninformative: the origin-pooled P − L6
 difference itself correlates only 0.05 with the truth.  **Not frozen**: the freeze and the held-back test wait for
 the user's approval.
+
+### 14.10 Freeze and held-back protocol — 2026-10-07, before any held-back tissue is built or run
+
+User approval received 2026-10-07.  **Frozen method** (tag `typedecon-frozen`): `typedecon.fit_td` with
+`TDParams(shrink=0.2, prior_mean="pooled_ps")` and every other parameter at its default (n_iter 300, tol 1e-8,
+composition fixed, no learned yield) = `benchmarks/spatial/variants_frozen.json` ("TD*" of §14.6).  No parameter or
+code change to the method, the tissues or the scoring after this line.
+
+**Held-back protocol** (as §14.6): `td_prepare.sbatch SET=test APPROVED=1` builds the 16 held-back tissues (POOL-test
+cells; reps 0-7 x low / high, seeds 150,000 + 100 rep + regime); `td_fit.sbatch --array=1-16 SET=test
+VARIANTS=variants_frozen.json` runs, per tissue, every resolution x noise level with TD*, dominant pooling, NNLS, the
+shuffled-composition control (TD* on permuted compositions) and the oracle; `run_typedecon.py aggregate`.  Primary
+condition 1 Mb, `moderate`, both regimes (16 units); H1-H3 and the stratum check as §14.6, 95 % percentile bootstrap
+over tissues (2,000 resamples, seed 0).  Results go to `benchmarks/spatial/TYPEDECON_TEST_RESULTS.md` and §14.11,
+whatever they are.

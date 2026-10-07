@@ -1,0 +1,9 @@
+{
+  "TD": {},
+  "TD-s0.05": {"shrink": 0.05},
+  "TD-s0.2": {"shrink": 0.2},
+  "TD-s1": {"shrink": 1.0},
+  "TD-ps0.2": {"shrink": 0.2, "prior_mean": "pooled_ps"},
+  "TD-y": {"learn_yield": true},
+  "TD-r20": {"refine": 20.0}
+}
