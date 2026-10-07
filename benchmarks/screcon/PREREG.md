@@ -458,3 +458,14 @@ sections only) is secondary.
 
 **Note 2026-10-07 (at registration)**: Sherlock access was denied (`ssh sherlock`: needs a new password /
 Duo login), so no development run has been made; nothing above has been run on data.
+
+### 14.9 Development results (2026-10-07; development tissues only, `benchmarks/spatial/typedecon_devlog.md`)
+
+Nothing of the held-back set has been built or run.  Truth-halves ceiling at 1 Mb: P1 0.223, P2 0.486.  By the
+§14.5 rule the selected variant is **TD-ps0.2** (shrink 0.2, P(s)-rescaled pooled prior mean; development mean
+0.367 vs plain TD 0.355, no stratum worse).  At 1 Mb with moderate noise (low / high regime): TD-ps0.2 0.241 / 0.529
+and 0.223 / 0.495; dominant pooling 0.224 / 0.500 and 0.176 / 0.402; NNLS 0.229 / 0.491 and 0.208 / 0.440; shuffled
+compositions ~0.01 / 0.02; oracle 0.253 / 0.535 and 0.255 / 0.540.  TD-ps0.2 − dominant and − NNLS have CIs above 0 at
+every noise level and both resolutions.  S1 (spatially varying profiles) is uninformative: the origin-pooled P − L6
+difference itself correlates only 0.05 with the truth.  **Not frozen**: the freeze and the held-back test wait for
+the user's approval.
