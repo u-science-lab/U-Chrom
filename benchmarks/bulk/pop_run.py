@@ -13,7 +13,9 @@ development only):
 * ``igm_sphere`` - protocol ``igm`` defaults, ``nucleus_radius`` = R_rg, occupancy 0.2;
 * ``igm_ellipsoid`` - semi-axes = the bulk cells' gyration semi-axes, radii identical to
   ``igm_sphere`` (occupancy scaled by V_sphere / V_ellipsoid, so occupancy x V is unchanged);
-* ``ember_pop`` - the EMber-pop options (``EMBER_POP`` below) on the same genome / radii.
+* ``ember_pop`` - the EMber-pop options (``EMBER_POP`` below) on the same genome / radii: no envelope,
+  the bulk cells' gyration-shape prior, non-contact restraints at the last sigma, at most 5 iterations
+  per sigma.
 
 Writes ``<out>/population.npz`` (engine arrays + haploid bins: ``population.load_any`` reads it),
 ``<out>/fit.npz`` (input pairs with f >= 0.01 and the population's contact probability at the
@@ -35,8 +37,17 @@ import _igm_bench as B  # noqa: E402
 from _common import jdump, load_preprocess  # noqa: E402
 from population import Population  # noqa: E402
 
-#: EMber-pop engine options (development candidate; frozen at tag ember-pop-frozen)
-EMBER_POP: dict = {}
+#: EMber-pop engine options (development candidate "B5" of POP_DEVLOG.md; frozen at tag ember-pop-frozen).
+#: The gyration prior is the bulk cells' median gyration standard deviations ("imaging").
+EMBER_POP: dict = {
+    "nucleus_shape": "none",
+    "gyration_prior": "imaging",
+    "gyration_kspring": 0.1,
+    "noncontact_kspring": 1.0,
+    "noncontact_from_sigma": 5,
+    "advance_on_max_iterations": True,
+    "max_iterations": 5,
+}
 
 
 def cell_gyration_sds(cells: Population) -> np.ndarray:
@@ -51,7 +62,7 @@ def cell_gyration_sds(cells: Population) -> np.ndarray:
     return np.array(out)
 
 
-def method_params(method: str, cells_meta: dict, prov: dict) -> dict:
+def method_params(method: str, cells_meta: dict, prov: dict, bins=None, copies=None) -> dict:
     R = float(cells_meta["nuclear_radius_nm"])
     occ = 0.2
     base = dict(occupancy=occ, nucleus_shape="sphere", nucleus_radius=R)
@@ -60,12 +71,26 @@ def method_params(method: str, cells_meta: dict, prov: dict) -> dict:
     if method == "igm_ellipsoid":
         ax = [float(x) for x in cells_meta["gyration_semiaxes_nm"]]
         scale = R ** 3 / (ax[0] * ax[1] * ax[2])
-        if occ * scale >= 1.0:
-            raise SystemExit(f"ellipsoid occupancy {occ * scale:.3f} >= 1: radii cannot match the sphere arm")
-        return dict(base, nucleus_shape="ellipsoid", nucleus_semiaxes=ax, occupancy=occ * scale)
+        if occ * scale < 1.0:
+            return dict(base, nucleus_shape="ellipsoid", nucleus_semiaxes=ax, occupancy=occ * scale)
+        # the sphere arm's beads do not fit at an occupancy < 1: one radius for every bead, the median
+        # radius of the sphere arm (bead_radius; occupancy off)
+        if bins is None:
+            raise SystemExit(f"ellipsoid occupancy {occ * scale:.3f} >= 1 and no bins for the bead_radius fallback")
+        size = (bins["end"] - bins["start"]).to_numpy(float)
+        total = float(sum(size[bins["chrom"].astype(str).to_numpy() == c].sum() * k for c, k in copies.items()))
+        rho = occ * 4.0 / 3.0 * np.pi * R ** 3 / total
+        r_med = float(np.median((rho * size / (4.0 * np.pi / 3.0)) ** (1.0 / 3.0)))
+        return dict(base, nucleus_shape="ellipsoid", nucleus_semiaxes=ax, occupancy=0.0, bead_radius=r_med)
     if method.startswith("ember_pop"):
         return dict(base, **EMBER_POP)
     raise SystemExit(f"unknown method {method}")
+
+
+def _copies(bins, ploidy):
+    import uchrom_recon as un
+    names = list(dict.fromkeys(bins["chrom"].astype(str).tolist()))
+    return names, un.resolve_copies(names, ploidy)
 
 
 def main(argv=None) -> None:
@@ -94,7 +119,8 @@ def main(argv=None) -> None:
     i, j, v = P.row[keep].astype(np.int64), P.col[keep].astype(np.int64), np.asarray(P.data[keep], float)
     nz = np.isfinite(v) & (v > 0)
     i, j, v = i[nz], j[nz], v[nz]
-    params = method_params(a.method, cells.meta, prov)
+    copies = dict(zip(*_copies(bins, a.ploidy)))
+    params = method_params(a.method, cells.meta, prov, bins, copies)
     if a.params:
         params.update(json.loads(a.params))
     rg = params.get("rg_cap")

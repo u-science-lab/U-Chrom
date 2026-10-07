@@ -67,6 +67,10 @@ struct Params {
     gyr2: f32,
     gyr3: f32,
     k_gyr: f32,
+    gyr_wall: f32,   // principal-frame wall scale (EMber-pop; 0 = off)
+    k_env_wall: f32,
+    _pw1: u32,
+    _pw2: u32,
 };
 
 @group(0) @binding(0) var<uniform> P: Params;
@@ -660,6 +664,29 @@ fn total_force(i: u32, m: u32, p: vec3<f32>) -> vec4<f32> {
             f = f - vt.xyz * (vt.w * dot(vt.xyz, d));
         }
         e = e + mstate[b + 11u].x;
+        if (P.gyr_wall > 0.0) {
+            var sg = vec3<f32>(P.gyr1, P.gyr2, P.gyr3);
+            if (P.gyr_on == 2u) {
+                sg = mstate[b + 11u].yzw;
+            }
+            let v1 = mstate[b + 8u].xyz;
+            let v2 = mstate[b + 9u].xyz;
+            let v3 = mstate[b + 10u].xyz;
+            let q = vec3<f32>(dot(v1, d), dot(v2, d), dot(v3, d));
+            let sw = sg * (P.gyr_wall * 2.2360679775) - vec3<f32>(ri);
+            let sw2 = sw * sw;
+            let kq = dot(q * q, 1.0 / sw2);
+            if (kq > 1.0) {
+                let t = (1.0 - 1.0 / sqrt(kq)) * length(q);
+                let gq = q / sw2;
+                let gn = length(gq);
+                if (gn > 0.0) {
+                    let fq = gq * (-P.k_env_wall * t / gn);
+                    f = f + v1 * fq.x + v2 * fq.y + v3 * fq.z;
+                }
+                e = e + 0.5 * P.k_env_wall * t * t;
+            }
+        }
     }
     // ellipsoidal envelope
     let s = vec3<f32>(P.ax, P.ay, P.az) * P.env_scale - vec3<f32>(ri);

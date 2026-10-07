@@ -43,8 +43,14 @@ def cmd_score(a) -> None:
     T = Population.load(a.truth)
     pm = load_preprocess().ProbabilityMatrix.load(a.input)
     prov = pm.provenance.get("simulation", pm.provenance)
-    rc = float(a.rc_nm or prov.get("rc_nm_median"))
     p = Path(a.pop)
+    rc = a.rc_nm or prov.get("rc_nm_median")
+    if rc is None and p.is_dir() and (p / "population.npz").exists():
+        # real input: the model's own contact distance 2 (r_i + r_j) at the median bead radius
+        rc = 4.0 * float(np.median(np.load(p / "population.npz")["radii"]))
+    if rc is None:
+        raise SystemExit("contact distance unknown: pass --rc-nm")
+    rc = float(rc)
     if p.is_dir():
         R = load_any(p / "population.npz", _loci(T))
         summ_run = json.loads((p / "summary.json").read_text()) if (p / "summary.json").exists() else {}

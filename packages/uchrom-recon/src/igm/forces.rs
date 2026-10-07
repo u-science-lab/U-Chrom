@@ -54,6 +54,9 @@ pub struct ForceField {
     /// gyration-shape prior σ1 ≥ σ2 ≥ σ3 (nm; 0 = off) and its spring
     pub gyr: [f64; 3],
     pub k_gyr: f64,
+    /// principal-frame wall scale (0 = off) and spring
+    pub gyr_wall: f64,
+    pub k_wall: f64,
 }
 
 /// Per-stage scaling (`fix adapt` excluded-volume prefactor, envelope factor).
@@ -171,6 +174,8 @@ impl ForceField {
             rg_two_sided: p.rg_two_sided,
             gyr: p.gyration_prior,
             k_gyr: p.gyration_kspring,
+            gyr_wall: p.gyration_wall,
+            k_wall: p.nucleus_kspring,
         }
     }
 
@@ -260,6 +265,13 @@ pub fn rg_cap_forces(pos: &[V3], r0: f64, k: f64, two_sided: bool, out: &mut [V3
 /// gyration tensor (descending), `U = ½ k N Σ_k (s_k − σ_k)²` with s_k = sqrt(λ_k),
 /// force `−k Σ_k (s_k − σ_k) / s_k (v_k · (x_i − c)) v_k`; added to `out`, returns U.
 pub fn gyration_forces(pos: &[V3], sigma: &[f64; 3], k: f64, out: &mut [V3]) -> f64 {
+    gyration_forces_wall(pos, sigma, k, 0.0, 0.0, &[], out)
+}
+
+/// [`gyration_forces`] plus the principal-frame wall (`wall` > 0): every bead outside the
+/// ellipsoid of semi-axes `wall` sqrt(5) σ_k − r_i along the structure's principal axes gets
+/// IGM's envelope force (`envelope`, in that frame).
+pub fn gyration_forces_wall(pos: &[V3], sigma: &[f64; 3], k: f64, wall: f64, k_wall: f64, radii: &[f64], out: &mut [V3]) -> f64 {
     let n = pos.len() as f64;
     let mut c = [0.0; 3];
     for p in pos {
@@ -299,6 +311,21 @@ pub fn gyration_forces(pos: &[V3], sigma: &[f64; 3], k: f64, out: &mut [V3]) -> 
             let proj = v[r][0] * d[0] + v[r][1] * d[1] + v[r][2] * d[2];
             for a in 0..3 {
                 f[a] -= t[r] * proj * v[r][a];
+            }
+        }
+    }
+    if wall > 0.0 {
+        let s5 = 5.0f64.sqrt();
+        for (i, (p, f)) in pos.iter().zip(out.iter_mut()).enumerate() {
+            let d = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
+            let q: V3 = [0, 1, 2].map(|r| v[r][0] * d[0] + v[r][1] * d[1] + v[r][2] * d[2]);
+            let ax = [0, 1, 2].map(|r| wall * s5 * sigma[r]);
+            let mut fq = [0.0; 3];
+            u += envelope(&q, radii[i], &ax, k_wall, &mut fq);
+            for r in 0..3 {
+                for a in 0..3 {
+                    f[a] += fq[r] * v[r][a];
+                }
             }
         }
     }
@@ -481,7 +508,7 @@ pub fn compute(ff: &ForceField, hic: &HicBonds, pos: &[V3], sc: Scale, grid: &mu
         e.env += rg_cap_forces(pos, ff.rg_cap, ff.k_rg, ff.rg_two_sided, out);
     }
     if ff.gyr[0] > 0.0 {
-        e.env += gyration_forces(pos, &ff.gyr, ff.k_gyr, out);
+        e.env += gyration_forces_wall(pos, &ff.gyr, ff.k_gyr, ff.gyr_wall, ff.k_wall, &ff.radii, out);
     }
     e
 }
@@ -530,7 +557,7 @@ fn compute_nc(ff: &ForceField, hic: &HicBonds, pos: &[V3], sc: Scale, grid: &mut
         e.env += rg_cap_forces(pos, ff.rg_cap, ff.k_rg, ff.rg_two_sided, out);
     }
     if ff.gyr[0] > 0.0 {
-        e.env += gyration_forces(pos, &ff.gyr, ff.k_gyr, out);
+        e.env += gyration_forces_wall(pos, &ff.gyr, ff.k_gyr, ff.gyr_wall, ff.k_wall, &ff.radii, out);
     }
     e
 }
@@ -878,6 +905,31 @@ mod tests {
         // forces sum to zero (no net drift)
         let tot: f64 = (0..3).map(|a| f.iter().map(|x| x[a]).sum::<f64>().abs()).sum();
         assert!(tot < 1e-6 * max_f * pos.len() as f64);
+    }
+
+    /// The principal-frame wall is IGM's envelope in the structure's own frame: a structure
+    /// rotated rigidly gets the rotated forces and the same energy.
+    #[test]
+    fn gyration_wall_rotates_with_the_structure() {
+        let (ff, _, pos) = toy(120, 31, true);
+        let sigma = [400.0, 250.0, 120.0];
+        let mut f1 = vec![[0.0; 3]; pos.len()];
+        let u1 = gyration_forces_wall(&pos, &sigma, 0.1, 1.0, 1.0, &ff.radii, &mut f1);
+        let mut f0 = vec![[0.0; 3]; pos.len()];
+        let u0 = gyration_forces(&pos, &sigma, 0.1, &mut f0);
+        assert!(u1 > u0, "wall adds energy: {u1} vs {u0}");
+        let (cz, sz) = (0.6f64.cos(), 0.6f64.sin());
+        let rot = |x: &V3| [cz * x[0] - sz * x[1], sz * x[0] + cz * x[1], x[2]];
+        let pr: Vec<V3> = pos.iter().map(|x| rot(x)).collect();
+        let mut f2 = vec![[0.0; 3]; pos.len()];
+        let u2 = gyration_forces_wall(&pr, &sigma, 0.1, 1.0, 1.0, &ff.radii, &mut f2);
+        assert!((u2 - u1).abs() < 1e-6 * u1.abs());
+        for i in 0..pos.len() {
+            let fr = rot(&f1[i]);
+            for a in 0..3 {
+                assert!((fr[a] - f2[i][a]).abs() < 1e-6 * (1.0 + f1[i].iter().map(|x| x.abs()).sum::<f64>()));
+            }
+        }
     }
 
     #[test]

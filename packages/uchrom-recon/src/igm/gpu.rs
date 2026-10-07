@@ -75,6 +75,10 @@ struct Params {
     gyr2: f32,
     gyr3: f32,
     k_gyr: f32,
+    gyr_wall: f32,
+    k_env_wall: f32,
+    _pw1: u32,
+    _pw2: u32,
 }
 
 #[repr(C)]
@@ -371,6 +375,10 @@ impl GpuPopEngine {
             gyr2: p.gyration_prior[1] as f32,
             gyr3: p.gyration_prior[2] as f32,
             k_gyr: p.gyration_kspring as f32,
+            gyr_wall: p.gyration_wall as f32,
+            k_env_wall: p.nucleus_kspring as f32,
+            _pw1: 0,
+            _pw2: 0,
         }
     }
 

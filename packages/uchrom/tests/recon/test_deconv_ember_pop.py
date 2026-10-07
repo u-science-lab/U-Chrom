@@ -68,9 +68,11 @@ def test_gyration_sds_and_params():
     p = ember_pop_params(nuc, n_structures=10, seed=3)
     assert p.nucleus_shape == "none" and p.noncontact_kspring > 0
     assert p.noncontact_from_sigma == len(p.intra_sigma_list) - 1
-    assert len(p.gyration_targets) == 10 and all(t in sd.tolist() for t in p.gyration_targets)
+    assert p.gyration_targets == [] and p.max_iterations == 5
+    pc = ember_pop_params(nuc, n_structures=10, seed=3, per_cell=True)
+    assert len(pc.gyration_targets) == 10 and all(t in sd.tolist() for t in pc.gyration_targets)
     assert np.allclose(p.gyration_prior, np.median(sd, axis=0))
-    assert ember_pop_params(nuc, 10, seed=3).gyration_targets == p.gyration_targets
+    assert ember_pop_params(nuc, 10, seed=3, per_cell=True).gyration_targets == pc.gyration_targets
     with pytest.raises(ValueError):
         gyration_sds([[1.0, 2.0]])
 
@@ -83,7 +85,7 @@ def test_ember_pop_runs_without_envelope():
                     params=_short(IgmParams(n_threads=2)), seed=1)
     d = cd.uns["deconv"]
     assert d["method"] == "ember_pop" and d["params"]["nucleus_shape"] == "none"
-    assert len(d["params"]["gyration_targets"]) == 6
+    assert d["params"]["gyration_targets"] == [] and d["params"]["gyration_kspring"] == 0.1
     assert cd.cells.shape[0] == 6 and int(cd.cells["env_imposed"].sum()) == 0
     X = np.asarray(cd.coords).reshape(6, -1, 3)
     assert np.isfinite(X).all()

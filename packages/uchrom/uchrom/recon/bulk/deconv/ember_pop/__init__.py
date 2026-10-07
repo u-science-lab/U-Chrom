@@ -5,9 +5,8 @@ EMber-pop options of ``benchmarks/bulk/PREREG_POP.md``:
 
 * **no envelope**: no sphere / ellipsoid wall;
 * **gyration-shape prior**: each structure is held, softly and in its own orientation, to the
-  standard deviations σ1 ≥ σ2 ≥ σ3 of an imaged nucleus along its principal axes (one imaged cell per
-  structure when the imaging is given cell by cell, so the population keeps the cells' size and shape
-  variation);
+  median standard deviations σ1 ≥ σ2 ≥ σ3 of imaged nuclei along its principal axes (optionally one
+  imaged cell per structure, ``per_cell=True``);
 * **two-sided assignment** at the last σ: bead pairs within the contact distance that carry no
   assigned contact are pushed apart, so over-represented contacts are corrected as well as missing
   ones.
@@ -26,12 +25,13 @@ from ..igm import IgmParams, deconvolve_igm
 
 __all__ = ["EMBER_POP_OPTIONS", "ember_pop_params", "gyration_sds", "deconvolve_ember_pop"]
 
-#: Engine options of EMber-pop on top of IGM's (development candidate)
+#: Engine options of EMber-pop on top of IGM's (development candidate "B5", POP_DEVLOG.md)
 EMBER_POP_OPTIONS = dict(
     nucleus_shape="none",
-    gyration_kspring=1.0,
+    gyration_kspring=0.1,
     noncontact_kspring=1.0,
     advance_on_max_iterations=True,
+    max_iterations=5,
 )
 
 
@@ -62,12 +62,13 @@ def gyration_sds(nucleus: Any) -> np.ndarray:
 
 
 def ember_pop_params(nucleus: Any, n_structures: int, seed: int = 0, params: Optional[IgmParams] = None,
-                     per_cell: bool = True) -> IgmParams:
+                     per_cell: bool = False) -> IgmParams:
     """IgmParams with the EMber-pop options and the imaging calibration.
 
     The bead volumes follow IGM (occupancy of the sphere of radius sqrt(5/3) Rg, Rg the median
     imaged radius of gyration); the gyration prior is the median shape, and with ``per_cell`` every
-    structure gets the shape of one imaged cell (drawn with ``seed``)."""
+    structure gets the shape of one imaged cell (drawn with ``seed``; worse than the median shape on
+    the development data, POP_DEVLOG.md, so off by default)."""
     sd = gyration_sds(nucleus)
     med = np.median(sd, axis=0)
     rg = float(np.median(np.sqrt((sd ** 2).sum(1))))
@@ -82,7 +83,7 @@ def ember_pop_params(nucleus: Any, n_structures: int, seed: int = 0, params: Opt
 
 
 def deconvolve_ember_pop(data: Any = None, *, nucleus: Any, params: Optional[IgmParams] = None,
-                         n_structures: Optional[int] = None, seed: int = 0, per_cell: bool = True,
+                         n_structures: Optional[int] = None, seed: int = 0, per_cell: bool = False,
                          key_added: Optional[str] = "deconv.ember_pop", **kwargs: Any):
     """EMber-pop on a contact-probability matrix (same input / output as
     :func:`uchrom.recon.bulk.deconv.igm.deconvolve_igm`; ``uns["deconv"]["method"] = "ember_pop"``).

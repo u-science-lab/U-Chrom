@@ -1,0 +1,4 @@
+su_test	C1	200	1.0	1	diploid	ember_pop_S200	ember_pop	{}	igm_sphere_S200	igm_sphere	{}
+su_test	C1	500	1.0	1	diploid	ember_pop_S500	ember_pop	{}	igm_sphere_S500	igm_sphere	{}
+su_test	C1	1000	1.0	1	diploid	ember_pop_S1000	ember_pop	{}	igm_sphere_S1000	igm_sphere	{}
+su_test	C1	2000	1.0	1	diploid	ember_pop_S2000	ember_pop	{}	igm_sphere_S2000	igm_sphere	{}

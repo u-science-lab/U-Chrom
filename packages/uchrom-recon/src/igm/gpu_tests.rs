@@ -453,9 +453,9 @@ fn gpu_rg_cap_matches_cpu() {
 #[test]
 fn gpu_gyration_prior_matches_cpu() {
     let (g, ff0, p0, pop) = setup(150, 3, 10);
-    for per in [false, true] {
+    for (per, wall) in [(false, 0.0), (true, 0.0), (false, 0.8), (true, 0.8)] {
     let targets = if per { vec![[700.0, 400.0, 200.0], [1100.0, 300.0, 100.0], [900.0, 900.0, 300.0]] } else { vec![] };
-    let p = IgmParams { nucleus_shape: "none".into(), gyration_prior: [900.0, 500.0, 150.0], gyration_kspring: 0.2, gyration_targets: targets, ..p0.clone() };
+    let p = IgmParams { nucleus_shape: "none".into(), gyration_prior: [900.0, 500.0, 150.0], gyration_kspring: 0.2, gyration_targets: targets, gyration_wall: wall, ..p0.clone() };
     let poly = g.polymer_bonds(&p, &|_| 1.0);
     let mut ff = ForceField::new(g.radii.clone(), &poly, p.semiaxes(), &p);
     ff.bead_chrom = ff0.bead_chrom.clone();

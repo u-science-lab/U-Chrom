@@ -145,6 +145,7 @@ class IgmParams:
     gyration_prior: List[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
     gyration_kspring: float = 1.0
     gyration_targets: List[List[float]] = field(default_factory=list)
+    gyration_wall: float = 0.0
 
     def __post_init__(self) -> None:
         if self.bead_radius is not None and self.occupancy is not None:

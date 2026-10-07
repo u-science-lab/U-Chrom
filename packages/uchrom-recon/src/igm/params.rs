@@ -181,6 +181,10 @@ pub struct IgmParams {
     /// shapes of imaged cells, so the population keeps the cells' size and shape
     /// variation).  Empty = `gyration_prior` for every structure.
     pub gyration_targets: Vec<[f64; 3]>,
+    /// Soft wall in each structure's own principal frame (with the gyration
+    /// prior): the uniform ellipsoid of semi-axes `gyration_wall` × sqrt(5) σ_k
+    /// (minus the bead radius), IGM's envelope form with `nucleus_kspring`.  0 = off.
+    pub gyration_wall: f64,
 }
 
 pub fn demo_stages() -> Vec<Stage> {
@@ -255,6 +259,7 @@ impl Default for IgmParams {
             gyration_prior: [0.0; 3],
             gyration_kspring: 1.0,
             gyration_targets: vec![],
+            gyration_wall: 0.0,
         }
     }
 }
@@ -380,6 +385,9 @@ impl IgmParams {
             if self.gyration_targets.iter().any(|t| !(t[0] >= t[1] && t[1] >= t[2] && t[2] > 0.0)) {
                 return Err("every gyration target must have σ1 >= σ2 >= σ3 > 0".into());
             }
+        }
+        if self.gyration_wall < 0.0 || (self.gyration_wall > 0.0 && gp[0] <= 0.0) {
+            return Err("gyration_wall must be >= 0 and needs gyration_prior".into());
         }
         if self.rg_cap < 0.0 || self.rg_kspring < 0.0 {
             return Err("rg_cap and rg_kspring must be >= 0".into());
