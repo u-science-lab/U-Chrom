@@ -3,6 +3,7 @@
 The web browser on embedded copies: uchrom-browser's tests/test_embedded_maps.py."""
 
 import shutil
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -77,6 +78,15 @@ def test_store_still_reads_and_older_layout_unaffected(stores):
     assert embedded.list_embedded(str(linked)) == {}
 
 
+def test_linked_scool_path_is_the_file_while_it_exists(stores):
+    tmp_path, linked, _ = stores
+    cd = ChromData.read(str(linked))
+    assert Path(cd.linked_scool_path("cells")).resolve() == (tmp_path / "cells.scool").resolve()
+    with pytest.raises(FileNotFoundError):
+        (tmp_path / "cells.scool").unlink()
+        cd.linked_scool_path("cells")                    # gone, and this store embeds nothing
+
+
 def test_python_api_without_the_files(stores):
     tmp_path, _, emb = stores
     ref = {r: cooler.Cooler(f"{tmp_path / 'bulk.mcool'}::/resolutions/{r}").pixels()[:] for r in (RES, 2 * RES)}
@@ -91,10 +101,25 @@ def test_python_api_without_the_files(stores):
     for r, px in ref.items():
         got = cooler.Cooler(f"{path}::/resolutions/{r}").pixels()[:]
         assert sorted(zip(got.bin1_id, got.bin2_id, got["count"])) == sorted(zip(px.bin1_id, px.bin2_id, px["count"]))
+    # the map as a cooler: finest resolution by default, another on request
+    assert cd.load_linked_cool("bulk").binsize == RES
+    assert cd.load_linked_cool("bulk", resolution=2 * RES).binsize == 2 * RES
+    with pytest.raises(ValueError):
+        cd.load_linked_cool("bulk", resolution=7)
     # one cell of a per-cell map, and the cell list
     assert cd.load_linked_scool(key="cells")["cells"] == ["/cells/c0", "/cells/c1", "/cells/c2"]
     got = cd.load_linked_scool(key="cells", cell="c1").pixels()[:]
     assert sorted(zip(got.bin1_id, got.bin2_id, got["count"])) == sorted(zip(ref_cell.bin1_id, ref_cell.bin2_id, ref_cell["count"]))
+    # the per-cell map as a file: some cells exported from the embedded copy, same pixels
+    path = cd.linked_scool_path("cells", cells=["c1"])
+    assert cooler.fileops.list_scool_cells(path) == ["/cells/c1"]
+    got = cooler.Cooler(f"{path}::/cells/c1").pixels()[:]
+    assert sorted(zip(got.bin1_id, got.bin2_id, got["count"])) == sorted(zip(ref_cell.bin1_id, ref_cell.bin2_id, ref_cell["count"]))
+    assert cd.linked_scool_path("cells", cells=["c1"]) == path            # exported once
+    # a subset or a copy reads its parent's links and embedded copies
+    assert cd[:2].linked_scool_path("cells", cells=["c1"]) == path
+    assert cd.to_memory()[:2].linked_scool_path("cells", cells=["c1"]) == path
+    assert cd.to_memory().copy().linked_cool_path("bulk") == cd.linked_cool_path("bulk")
     # linked_adata falls back to the embedded AnnData
     assert cd.linked_adata is not None and cd.linked_adata.shape == (3, 2 * N)
 
@@ -232,3 +257,27 @@ def test_a_cdz_of_the_store_carries_the_embedded_copies(stores):
     assert set(cd.embedded_links()["contacts"]) == {"bulk", "cells"}
     assert set(embedded.list_embedded_images(str(cdz))) == {"secA"}
 
+
+
+def test_write_embed_carries_what_the_object_reaches(stores):
+    """A subset of an embedded (atlas-like) store written elsewhere keeps its maps and AnnData."""
+    tmp_path, _, emb = stores
+    ref_c1 = cooler.Cooler(f"{tmp_path / 'cells.scool'}::/cells/c1").pixels()[:]
+    for f in ("bulk.mcool", "bulk.cool", "cells.scool", "ssab.h5ad"):
+        (tmp_path / f).unlink(missing_ok=True)
+    cd = ChromData.read(str(emb)).copy()
+    cd.cells = cd.cells.loc[["c1"]]                      # one cell of three
+    out = tmp_path / "elsewhere" / "sub.chromdata.zarr"
+    out.parent.mkdir()
+    cd.write(out, embed=True)
+    back = ChromData.read(out, backed=True)
+    assert set(back.embedded_links()["contacts"]) == {"bulk", "cells"}
+    e = embedded.EmbeddedContacts(str(out), embedded.list_embedded(str(out))["cells"])
+    assert e.cells == ["c1"]
+    got = back.load_linked_scool(key="cells", cell="c1").pixels()[:]
+    assert sorted(zip(got.bin1_id, got.bin2_id, got["count"])) == sorted(zip(ref_c1.bin1_id, ref_c1.bin2_id, ref_c1["count"]))
+    assert back.load_linked_cool("bulk").binsize == RES
+    assert back.linked_adata is not None and list(back.linked_adata.obs_names) == ["c1"]
+    assert [m for m in back.validate_links() if "does not exist" in m and "secA" not in m] == []
+    with pytest.raises(ValueError):
+        cd.write(tmp_path / "x.cdz", embed=True)

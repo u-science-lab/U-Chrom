@@ -43,3 +43,20 @@ class GenomeRange(object):
 
     def __lt__(self, other):
         return (self.start < other.start) and (self.end < other.end)
+
+
+def chrom_sort_key(name) -> tuple:
+    """Natural sort key of a chromosome name: ``chr1 < chr2 < ... < chr10 < ... < chrX < chrY < chrM``
+    (with or without the ``chr`` prefix; numbered chromosomes first, then the others by name, the
+    mitochondrial ``M`` / ``MT`` last)."""
+    s = str(name)
+    s = s[3:] if s.lower().startswith("chr") else s
+    if s.isdigit():
+        return (0, int(s), "")
+    return (2 if s.upper() in ("M", "MT") else 1, 0, s)
+
+
+def sort_chroms(names) -> list:
+    """The distinct chromosome names of ``names`` (any iterable, e.g. ``cd.bins["chrom"]``) in natural order
+    (:func:`chrom_sort_key`): ``["chr1", "chr2", ..., "chr10", ..., "chrX"]``."""
+    return sorted({str(n) for n in names}, key=chrom_sort_key)

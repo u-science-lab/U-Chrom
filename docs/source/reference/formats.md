@@ -7,7 +7,7 @@ What U-Chrom reads and writes, in one table; the chapters show each in use.
 | Data | Read | Write |
 |------|------|-------|
 | `.chromdata.zarr` / `.cdz` (ChromData; spec: [format specification](format_spec)) | `ChromData.read(path, backed=, columns=, original_order=)`, also over HTTP / S3 | `cd.write(path)`, `ChromData.writer(path)` (streaming) |
-| 4DN FISH Omics Format, chromatin tracing (FOF-CT) + cell and RNA tables | `ChromData.from_fofct(core, cell_table=, rna_table=, out=)` ([guide](../tracing/fofct)) | `cd.to_fofct`, `uchrom.io.write_fofct` |
+| 4DN FISH Omics Format, chromatin tracing (FOF-CT) + cell and RNA tables | `ChromData.from_fofct(core, cell_table=, rna_table=, out=)` ([guide](../tracing/reading)) | `cd.to_fofct`, `uchrom.io.write_fofct` |
 | PyHiM ECSV traces | `ChromData.from_pyhim_trace` | — |
 | Bintu et al. 2018 tracing CSV | `uchrom.io.read_bintu_tracing` | — |
 | DNA seqFISH+ multi-omics (Takei et al. 2025) | `uchrom.io.read_seqfish_multiomics`, `load_takei2025_cerebellum`, `load_seqfish_multiomics_linked` | — |

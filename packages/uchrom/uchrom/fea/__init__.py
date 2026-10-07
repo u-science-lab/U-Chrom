@@ -4,6 +4,11 @@ from .distance import (
     mean_distance_matrix,
     contact_frequency,
     radius_of_gyration,
+    trace_distance_matrix,
+)
+from .positions import (
+    radial_position,
+    spot_centroids,
 )
 from .arc import (
     axis_variance_cube,
@@ -13,6 +18,7 @@ from .arc import (
 from .annotation import (
     add_annotation_features,
     compute_annotation_features,
+    gene_bodies,
     read_gtf,
 )
 from .peaks import (
@@ -34,6 +40,27 @@ from .project import (
     unique_spot_intervals,
 )
 from .registry import append_feature_registry_entry
+from .maps import (
+    contact_matrix,
+    map_path,
+    observed_over_expected,
+    open_map,
+    rebin_map,
+)
+from .compare import (
+    Comparison,
+    bin_index,
+    compare_distances,
+    compare_structures,
+    contact_agreement,
+    contact_distances,
+    distance_correlation,
+    ensemble_agreement,
+    ensemble_models,
+    kabsch_rmsd,
+    match_spots,
+    rebin_coords,
+)
 from .sequence import (
     add_sequence_features,
     compute_sequence_features,
@@ -45,11 +72,15 @@ __all__ = [
     "mean_distance_matrix",
     "contact_frequency",
     "radius_of_gyration",
+    "trace_distance_matrix",
+    "radial_position",
+    "spot_centroids",
     "axis_variance_cube",
     "filter_normalize",
     "axis_weight",
     "add_annotation_features",
     "compute_annotation_features",
+    "gene_bodies",
     "read_gtf",
     "add_peak_features",
     "aggregate_track_by_interval",
@@ -66,6 +97,23 @@ __all__ = [
     "project_interval_features_to_spots",
     "unique_spot_intervals",
     "append_feature_registry_entry",
+    "contact_matrix",
+    "map_path",
+    "observed_over_expected",
+    "open_map",
+    "rebin_map",
+    "Comparison",
+    "bin_index",
+    "compare_distances",
+    "compare_structures",
+    "contact_agreement",
+    "contact_distances",
+    "distance_correlation",
+    "ensemble_agreement",
+    "ensemble_models",
+    "kabsch_rmsd",
+    "match_spots",
+    "rebin_coords",
     "add_sequence_features",
     "compute_sequence_features",
 ]

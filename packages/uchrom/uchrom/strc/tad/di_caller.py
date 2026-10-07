@@ -4,18 +4,16 @@ Wraps the matrix-level kernel :func:`uchrom.strc.tad.di.get_domains`
 (Dixon et al. 2012) in the ChromData calling convention.  The contact
 matrix comes from a ``.cool`` / ``.mcool`` linked with
 :meth:`ChromData.link_cool` (``cd.uns['linked_cool'][contacts]``) or
-from a path.  Once ``cd.contacts`` exists (roadmap step 4) the
-``contacts=`` argument will resolve through it instead.
+from a path, read with :func:`uchrom.fea.open_map` /
+:func:`uchrom.fea.contact_matrix`.
 """
 
 from __future__ import annotations
 
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
-import numpy as np
 import pandas as pd
 
 from uchrom.convention import merge_tables, resolve_chroms, store_and_return
@@ -43,50 +41,9 @@ def _empty_di() -> pd.DataFrame:
     })
 
 
-def _resolve_contacts(cd, contacts) -> Tuple[str, dict]:
-    """``contacts`` → ``(path, record)``: a ``linked_cool`` key or a path."""
-    from chromdata.cdata import _linked_records
-
-    records = _linked_records(cd.uns.get("linked_cool")) if cd is not None else {}
-    if isinstance(contacts, str) and contacts in records:
-        record = records[contacts]
-        if not cd.resolve_link_path(record["path"]).exists():   # file gone: the copy embedded in the store
-            return cd.linked_cool_path(contacts), {"key": contacts, **record}
-        return str(cd.resolve_link_path(record["path"])), {"key": contacts, **record}
-    path = Path(str(contacts)).expanduser()
-    if path.exists():
-        return str(path), {"path": str(path)}
-    raise KeyError(
-        f"contacts={contacts!r} is neither a key of cd.uns['linked_cool'] "
-        f"({sorted(records)}) nor an existing .cool/.mcool path"
-    )
-
-
-def _open_cooler(path: str, resolution: Optional[int]):
-    import cooler
-
-    if path.endswith(".mcool") or ("::" not in path and cooler.fileops.is_multires_file(path)):
-        available = [int(r.rsplit("/", 1)[-1]) for r in cooler.fileops.list_coolers(path)]
-        if resolution is None:
-            raise ValueError(f"{path} is multi-resolution; pass resolution= (one of {available})")
-        if int(resolution) not in available:
-            raise ValueError(f"resolution {resolution} not in {path}: {available}")
-        return cooler.Cooler(f"{path}::/resolutions/{int(resolution)}")
-    clr = cooler.Cooler(path)
-    if resolution is not None and clr.binsize is not None and int(resolution) != int(clr.binsize):
-        raise ValueError(f"{path} has resolution {clr.binsize}, not {resolution}")
-    return clr
-
-
-def _contact_matrix(clr, chrom: str, balance: bool) -> Tuple[np.ndarray, pd.DataFrame]:
-    bins = clr.bins().fetch(chrom)
-    use_balance = bool(balance)
-    if use_balance and "weight" not in bins.columns:
-        warnings.warn(f"{clr.uri}: no 'weight' column; using raw counts", stacklevel=3)
-        use_balance = False
-    mat = np.asarray(clr.matrix(balance=use_balance).fetch(chrom), dtype=np.float64)
-    mat[~np.isfinite(mat)] = 0.0
-    return mat, bins[["chrom", "start", "end"]].reset_index(drop=True)
+def _contacts_label(contacts, path: str) -> str:
+    """Provenance of ``contacts=``: the key of a linked map, or the path of a map given as a path."""
+    return path if path == str(Path(str(contacts)).expanduser()) else str(contacts)
 
 
 def call_tads_di(
@@ -136,13 +93,15 @@ def call_tads_di(
     """
     import torch
 
+    from uchrom.fea.maps import contact_matrix, map_path, open_map
+
     from .di import get_domains
 
     if copy and key_added is None:
         raise ValueError("call_tads_di(): copy=True needs a key_added")
     params = params or DICallerParams()
-    path, record = _resolve_contacts(cd, contacts)
-    clr = _open_cooler(path, resolution)
+    path = map_path(cd, contacts)
+    clr = open_map(path, resolution=resolution)
 
     if chrom is None:
         wanted = resolve_chroms(cd, None) if len(cd.spots) else []
@@ -152,7 +111,7 @@ def call_tads_di(
 
     frames: List[pd.DataFrame] = []
     for c in chroms:
-        mat, bins = _contact_matrix(clr, c, balance)
+        bins, mat = contact_matrix(clr, chrom=c, balance=balance)
         domains = get_domains(
             torch.as_tensor(mat, dtype=torch.float64),
             smoothing_param=params.smoothing_param,
@@ -175,7 +134,7 @@ def call_tads_di(
         frames.append(pd.DataFrame(rows, columns=list(_DI_COLUMNS)))
     table = merge_tables(frames, _empty_di())
     inputs = {
-        "contacts": record.get("key", str(path)),
+        "contacts": _contacts_label(contacts, path),
         "contacts_path": str(path),
         "resolution": int(clr.binsize) if clr.binsize else None,
         "balance": bool(balance),

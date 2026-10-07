@@ -101,3 +101,50 @@ def test_add_annotation_features_updates_tracks_results_and_registry(tmp_path):
     assert "gtf.nearest_tss_distance" in out.tracks_spot_view()
     assert "bin_features" in out.results
     assert out.uns["feature_registry"][0]["created_by"] == "uchrom.fea.annotation"
+
+
+def _write_refgene_like(path):
+    """Transcripts and exons but no gene rows (as UCSC refGene): g1 has two overlapping transcripts and a
+    second copy further on; g2 one transcript on the minus strand."""
+    path.write_text(
+        'chr1\tr\ttranscript\t3\t10\t.\t+\t.\tgene_id "g1"; transcript_id "t1";\n'
+        'chr1\tr\texon\t3\t5\t.\t+\t.\tgene_id "g1"; transcript_id "t1";\n'
+        'chr1\tr\ttranscript\t6\t12\t.\t+\t.\tgene_id "g1"; transcript_id "t2";\n'
+        'chr1\tr\ttranscript\t21\t30\t.\t-\t.\tgene_id "g2"; transcript_id "t3";\n'
+        'chr1\tr\texon\t25\t30\t.\t-\t.\tgene_id "g2"; transcript_id "t3";\n'
+        'chr1\tr\ttranscript\t41\t45\t.\t+\t.\tgene_id "g1"; transcript_id "t4";\n'
+    )
+
+
+def test_read_gtf_derives_gene_bodies_from_transcripts(tmp_path):
+    from uchrom.fea.annotation import gene_bodies, read_gtf
+
+    gtf = tmp_path / "refgene.gtf"
+    _write_refgene_like(gtf)
+    table = read_gtf(gtf)
+    genes = table[table["feature"] == "gene"].reset_index(drop=True)
+    assert list(zip(genes["gene_id"], genes["start"], genes["end"], genes["strand"])) == [
+        ("g1", 2, 12, "+"), ("g1", 40, 45, "+"), ("g2", 20, 30, "-")]
+    assert set(genes["source"]) == {"r:derived"}
+    assert len(table) == 6 + 3 and list(table.columns) == list(read_gtf(gtf, derive_genes=False).columns)
+    assert not (read_gtf(gtf, derive_genes=False)["feature"] == "gene").any()
+    pd.testing.assert_frame_equal(gene_bodies(read_gtf(gtf, derive_genes=False)), genes)
+    # a GTF with gene rows is left alone
+    plain = tmp_path / "genes.gtf"
+    _write_gtf(plain)
+    assert list(read_gtf(plain)["feature"]) == ["gene", "exon", "gene", "exon"]
+
+
+def test_annotation_features_from_a_gtf_without_gene_rows(tmp_path):
+    from uchrom.fea.annotation import compute_annotation_features, read_gtf
+
+    gtf = tmp_path / "refgene.gtf"
+    _write_refgene_like(gtf)
+    intervals = pd.DataFrame({"chrom": ["chr1", "chr1", "chr1"], "start": [0, 12, 38], "end": [10, 20, 48]})
+    from_path = compute_annotation_features(intervals, gtf, promoter_window=(-2, 2))
+    no_genes = read_gtf(gtf, derive_genes=False)                 # a table without gene rows: derived too
+    pd.testing.assert_frame_equal(compute_annotation_features(intervals, no_genes, promoter_window=(-2, 2)),
+                                  from_path)
+    assert from_path.loc[0, "gene_body_overlap_bp"] == 8 and from_path.loc[0, "gene_count"] == 1
+    assert from_path.loc[2, "gene_body_overlap_bp"] == 5 and from_path.loc[2, "nearest_tss_distance"] == 0
+    assert from_path.loc[1, "nearest_tss_distance"] == 10        # the minus-strand TSS at 30

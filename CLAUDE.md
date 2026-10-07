@@ -59,7 +59,9 @@ apps/
 
 uchrom/                (packages/uchrom/uchrom)
 ├── convention.py    the calling convention of analysis functions
-├── io/              Data I/O (.pairs, .cool, .hic, .3dg, .csv, .pdb, seqFISH multi-omics)
+├── datasets/        load(name) -> ChromData (atlas stores, loaders _load_*.py), fetch(name) -> original files
+├── io/              Data I/O (.pairs, .cool, .hic, .3dg, .csv, .pdb, FOF-CT, PyHiM, SnapFISH, Bintu,
+│                    seqFISH+ multi-omics and raw detections)
 ├── recon/           3D reconstruction
 │   ├── sc/          Single-cell reconstruction
 │   │   ├── ember.py EMber: reconstruct_ember (noise-aware; native engine protocol
@@ -82,8 +84,10 @@ uchrom/                (packages/uchrom/uchrom)
 │   ├── comp/        Compartment detection (axes PC)
 │   └── enrichment.py  Run structure callers and project results onto spots
 ├── fea/             Per-bin features (distance, arc, sequence, GTF annotation,
-│                    MACS-style peaks, structure projection) + feature registry
-├── emb/             Single-cell embedding (Higashi / FastHigashi wrapper)
+│                    MACS-style peaks, structure projection) + feature registry; linked contact maps
+│                    (maps.py: contact_matrix, rebin_map) and structure comparisons (compare.py)
+├── emb/             Cell embeddings: FastHigashi / scHiCluster on linked maps (embed_higashi,
+│                    embed_contacts), RNA / ATAC / marks (embed_cells), clusters, metrics, plots
 ├── pl/              Plotting (matplotlib; 3-D tubes with PyVista, extra plot3d)
 └── utils/           Shared statistics helpers (LOWESS, etc.)
 ```
@@ -108,8 +112,10 @@ uchrom/                (packages/uchrom/uchrom)
   `manuscripts/full/figures/<fig>/results/*.json` there (`benchmarks/_paper.py`, `$UCHROM_PAPER`); library
   changes a figure needs are made here first.  Never re-create `paper/` in this repository; a
   symlink `paper -> ../u-chrom-paper` (ignored) may show the paper checkout next to the code.
-- **Docs and tutorials**: `docs/source` has chapters by data type (tracing, seqfish, schic, bulk) and
-  common to all data (data, structures, features, cells, viz), plus start and reference (auto-discovery,
+- **Docs and tutorials**: `docs/source` has chapters by data type (tracing, seqfish, schic, bulk), each a
+  group of pages by analysis step (e.g. tracing/{reading,traces,imputation,structures}) holding the step's
+  tutorials, chapters common to all data (data, features, viz), plus start and reference; every tutorial
+  sits in one place (auto-discovery,
   `discovery/`, is excluded from the build for now: `exclude_patterns` in `conf.py`); every chapter shows its modules through
   tutorials (`tutorials/*.ipynb`, linked from `docs/source/tutorials/`), committed **executed on real
   data** — the docs build does not run them (`nb_execution_mode = "off"`); re-execute a changed tutorial
@@ -229,8 +235,17 @@ re-implementation of a paper):
 
 No data live in the repository (the former `example-data/` is gone).  Rules:
 
-- **The atlas first**: analyses and tutorials read the public atlas stores over HTTP
-  (`uchrom.datasets.atlas(name)`; backed, only what is used is fetched).
+- **One call to a `ChromData`**: analyses and tutorials start from `uchrom.datasets.load(name)` — a store
+  of the public atlas (over HTTP, backed; only what is used is fetched) or a dataset built once from its
+  original files by a registered loader (`datasets/_loaders.py` + `_load_<area>.py`: `build(root, out)`
+  fetches, writes linked maps next to the store under relative paths, returns the `ChromData`; `load`
+  caches it in the data directory and rebuilds on a loader `version` bump).  `fetch` is for raw-format
+  demos and reference files (FASTA, GTF), not for analyses.
+- **Methods take the `ChromData`**: an analysis reads the maps linked to it (`cd.linked_scool_path`,
+  `cd.linked_cool_path`; embedded atlas copies are exported once) rather than file paths, writes any
+  inputs a wrapped tool needs itself (e.g. `uchrom.emb.embed_higashi`), and stores results on the object
+  (calling convention).  Metrics and comparisons live in the library (`uchrom.emb.metrics`, ...), not in
+  notebooks.
 - **Original files from their sources**: `uchrom.datasets.fetch(name)` /
   `python -m uchrom.datasets fetch NAME` downloads into the data directory (`$UCHROM_DATA`, else
   `~/.cache/uchrom`; `uchrom.datasets.data_dir()`) with md5 checks.  The registry is

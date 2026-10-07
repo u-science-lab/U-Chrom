@@ -93,3 +93,30 @@ def test_mds_seed_nan_diagonal_partial():
     X = _mds_seed(D, np.ones((8, 8)))
     assert np.isfinite(X).all()
     assert np.corrcoef(pdist(X), pdist(P))[0, 1] > 0.9
+
+
+def test_gem_fish_from_a_chromdata_with_a_linked_map():
+    """The ChromData form (linked map + key, fish=) gives the path form's model and stores its TADs."""
+    import pandas as pd
+    from chromdata import ChromData
+
+    from uchrom.recon.fish import reconstruct_gem_fish
+
+    hic = ChromData(np.zeros((0, 3)), pd.DataFrame({"chrom": pd.Series(dtype=str), "start": pd.Series(dtype=np.int64),
+                                                    "end": pd.Series(dtype=np.int64),
+                                                    "trace_id": pd.Series(dtype=str)}),
+                    uns={"genome_assembly": "hg19"})
+    hic.link_cool(str(COOL), key="bulk")
+    tads = pd.DataFrame({"start": [18_000_000, 18_300_000], "end": [18_300_000, 18_900_000]})
+    new = reconstruct_gem_fish(hic, contacts="bulk", tads=tads, params=_params())   # one chromosome: chrom inferred
+    old = reconstruct_gem_fish(hic_path=str(COOL), chrom="chr21", tads=tads, params=_params())
+    assert np.array_equal(new.coords, old.coords)
+    assert new.uns["genome_assembly"] == "hg19" and new.uns["gem_fish"]["contacts"] == "bulk"
+    assert new.uns["gem_fish"]["fish"] is False and new.uns["gem_fish"]["chrom"] == "chr21"
+    t = new.results["gem_fish.tads"]
+    assert t[["start", "end"]].values.tolist() == [[18_000_000, 18_300_000], [18_300_000, 18_900_000]]
+    assert (t["end_bin"] - t["start_bin"]).tolist() == [10, 20]
+    quiet = reconstruct_gem_fish(hic, tads=tads, params=_params(), key_added=None)
+    assert "gem_fish" not in quiet.uns and "gem_fish.tads" not in quiet.results
+    with pytest.raises(TypeError, match="not both"):
+        reconstruct_gem_fish(hic, fish=hic, fish_cd=hic, params=_params())

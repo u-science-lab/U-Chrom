@@ -22,7 +22,9 @@ Algorithm (per chromosome)
    each cluster — the cluster with the smaller mean intra-distance is
    treated as the more compacted one.  Without a tissue-specific gene
    annotation this is a convention, not ground truth.  (Caller can
-   override via the ``a_cluster`` argument.)
+   override via ``CompartmentCallerParams(a_cluster=...)``, or name A
+   with an annotation through ``a_track=``: the cluster with the higher
+   mean of that ``cd.bin_tracks`` column.)
 
 Output
 ------
@@ -54,12 +56,21 @@ from uchrom.fea.arc import axis_variance_cube, filter_normalize, axis_weight
 
 @dataclass
 class CompartmentCallerParams:
+    """Knobs of :func:`call_compartments_axes_pc`.
+
+    Which cluster is named ``"A"``: ``a_cluster`` (a cluster label) if given; else, with ``a_track``
+    (the name of a ``cd.bin_tracks`` column such as gene density or an active mark), the cluster whose
+    loci have the higher mean of that track; else the more compact cluster (smaller mean normalised
+    variance) — a convention that can name the compartments the wrong way round.
+    """
+
     n_clusters: int = 2             # 2 for A/B; can be extended
     min_bins: int = 2               # minimum compartment size
     k_sigma: float = 4.0
     frac: float = 0.1
     random_state: int = 0
     a_cluster: Optional[int] = None   # if set, that cluster label is "A"
+    a_track: Optional[str] = None     # else: "A" = the cluster with the higher mean of cd.bin_tracks[a_track]
 
 
 def _pseudo_contact_matrix(norm_var: np.ndarray) -> np.ndarray:
@@ -175,12 +186,12 @@ def call_compartments_axes_pc(
     )
 
 
-def compartment_segments(table: pd.DataFrame) -> pd.DataFrame:
+def compartment_segments(table: pd.DataFrame, score: str = "pc2") -> pd.DataFrame:
     """Per-bin compartment calls → runs of equal label per chromosome.
 
-    Columns ``chrom, start, end, label, n_bins, pc2`` (mean ``pc2`` of the
-    run's bins).  Stored as the ``segment`` interval table
-    ``cd.intervals[key_added]``.
+    Columns ``chrom, start, end, label, n_bins`` and ``score`` (default
+    ``pc2``: its mean over the run's bins).  Stored as the ``segment``
+    interval table ``cd.intervals[key_added]``.
     """
     rows = []
     for chrom, sub in table.groupby("chrom", sort=False, observed=True):
@@ -194,13 +205,13 @@ def compartment_segments(table: pd.DataFrame) -> pd.DataFrame:
                 "end": int(g["end"].iloc[-1]),
                 "label": str(g["compartment"].iloc[0]),
                 "n_bins": int(len(g)),
-                "pc2": float(g["pc2"].mean()),
+                score: float(g[score].mean()),
             })
-    cols = ["chrom", "start", "end", "label", "n_bins", "pc2"]
+    cols = ["chrom", "start", "end", "label", "n_bins", score]
     if not rows:
         return pd.DataFrame({"chrom": pd.Series(dtype=str), "start": pd.Series(dtype="int64"),
                              "end": pd.Series(dtype="int64"), "label": pd.Series(dtype=str),
-                             "n_bins": pd.Series(dtype="int64"), "pc2": pd.Series(dtype=float)})
+                             "n_bins": pd.Series(dtype="int64"), score: pd.Series(dtype=float)})
     return pd.DataFrame(rows, columns=cols)
 
 
@@ -261,6 +272,12 @@ def _call_compartments_chrom(cd, chrom: str, params: CompartmentCallerParams,
     n_clusters = len(np.unique(labels))
     if params.a_cluster is not None:
         a_cluster = int(params.a_cluster)
+    elif params.a_track is not None:
+        values = _bin_track_values(cd, chrom, bin_ids, params.a_track)
+        unique_labels = np.unique(labels)
+        means = [float(np.nanmean(values[labels == lab])) if np.isfinite(values[labels == lab]).any()
+                 else -np.inf for lab in unique_labels]
+        a_cluster = int(unique_labels[int(np.argmax(means))])
     else:
         intra_var = np.full(n_clusters, np.inf)
         unique_labels = np.unique(labels)
@@ -291,6 +308,20 @@ def _call_compartments_chrom(cd, chrom: str, params: CompartmentCallerParams,
             "pc2": float(track[i]),
         })
     return pd.DataFrame(rows)
+
+
+def _bin_track_values(cd, chrom: str, bin_ids, track: str) -> np.ndarray:
+    """``cd.bin_tracks[track]`` at the loci ``bin_ids`` (``(start, end)``) of ``chrom`` (NaN if absent)."""
+    if track not in cd.bin_tracks.columns:
+        raise KeyError(f"a_track={track!r} is not a column of cd.bin_tracks ({list(cd.bin_tracks.columns)})")
+    bins = cd.bins
+    on = bins["chrom"].astype(str) == str(chrom)
+    values = pd.Series(cd.bin_tracks.loc[bins.index[on], track].to_numpy(dtype=float),
+                       index=pd.MultiIndex.from_arrays([bins.loc[on, "start"].astype(np.int64),
+                                                        bins.loc[on, "end"].astype(np.int64)]))
+    values = values[~values.index.duplicated()]
+    want = pd.MultiIndex.from_tuples([(int(s), int(e)) for s, e in bin_ids])
+    return values.reindex(want).to_numpy(dtype=float)
 
 
 def _empty_compartments() -> pd.DataFrame:

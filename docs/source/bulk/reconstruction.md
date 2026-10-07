@@ -1,6 +1,28 @@
-# Bulk Hi-C: methods
+# Structures from a bulk map: MDS and IGM
+
+A bulk map is an average over millions of nuclei.  MDS turns it into one consensus structure; IGM into a
+population of structures whose contacts together reproduce it.  Both return a `ChromData` (IGM: one cell
+per structure, one trace per chromosome copy), measured and compared with imaging like any traced data.
+
+## Tutorial
+
+```{toctree}
+:maxdepth: 1
+
+/tutorials/bulk_reconstruction
+```
 
 ## MDS: one consensus structure
+
+```python
+import uchrom as uc
+from uchrom.fea import rebin_map
+
+rebin_map(hic, "bulk", resolution=100_000)                   # a 100 kb copy of the map, linked as "bulk_100kb"
+model = uc.tl.reconstruct_bulk(hic, contacts="bulk_100kb")   # = uchrom.recon.bulk.mds.reconstruct_mds
+```
+
+The command line does the same from a file:
 
 Input: `.hic` / `.mcool` / `.cool`.
 Output: `.chromdata.zarr` (or per-chromosome for inter mode).
@@ -41,30 +63,15 @@ probability thresholds.  U-Chrom runs the modelling on the native engine (protoc
 defaults follow the IGM 1.0 protocol, with options from IGM-Plus / IGM 2.0 as fields of `IgmParams`.
 
 ```python
+import uchrom.datasets as ds
 from uchrom.recon.bulk.deconv import deconvolve
 from uchrom.recon.bulk.deconv.preprocess import preprocess_hic
 
-prob = preprocess_hic("map.mcool", chroms=["chr21"])          # Hi-C -> contact probabilities
-pop = deconvolve(prob.probabilities, bins=prob.bins, method="igm", n_structures=50, seed=1)
+hic = ds.load("rao2014_imr90_chr21")                         # IMR90 chr21, 5 kb; the map linked as "bulk"
+prob = preprocess_hic(hic, contacts="bulk")                  # Hi-C -> contact probabilities
+pop = deconvolve(prob, method="igm", n_structures=50, seed=1)
 ```
 
 The result is one cell per structure and one trace per chromosome copy; `out="pop.chromdata.zarr"`
 streams a large population to disk.  The [tutorial](../tutorials/bulk_reconstruction) checks it against
 the input map and against chromatin tracing of the same cell line.
-
-## GEM-FISH: Hi-C and chromatin tracing together
-
-GEM-FISH (Abbas et al. 2019, *Nat Commun* 10:2049) builds one model of a chromosome from its Hi-C map and
-the distances measured by chromatin tracing in the same cell type: first the TADs as beads, placed by
-Hi-C contacts and the FISH distances between TAD centres, then each TAD at bin resolution with its FISH
-radius of gyration.  U-Chrom's re-implementation runs on PyTorch.
-
-```python
-from uchrom.recon.fish import reconstruct_gem_fish, GEMFISHParams
-
-model = reconstruct_gem_fish("map.mcool", "chr21", resolution=30_000, fish_cd=tracing)
-```
-
-Without `fish_cd` the FISH terms are dropped and the result is a Hi-C-only model — the comparison the
-[tutorial](../tutorials/gem_fish_reconstruction) makes.  Hi-C and imaging must come from the same cell
-type (and the same genome assembly).

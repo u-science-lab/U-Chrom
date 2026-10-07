@@ -1,10 +1,32 @@
-# The 4DN FISH Omics Format (FOF-CT)
+# Reading tracing data
+
+| Data | Reader |
+|------|--------|
+| 4DN FISH Omics Format, chromatin tracing (FOF-CT), with its cell and RNA tables | `ChromData.from_fofct(core, cell_table=, rna_table=, out=)`; back with `cd.to_fofct` |
+| PyHiM ECSV traces | `ChromData.from_pyhim_trace`; write one with `uchrom.io.write_pyhim_trace` |
+| the tables of Bintu et al. 2018 | `uchrom.io.read_bintu_tracing` |
+| the tables of Su et al. 2020 (chromosome- and genome-scale DNA-MERFISH), with the authors' binned Hi-C | `uchrom.io.read_su2020_tracing`, `read_su2020_hic`; a locus × locus map as a `.cool`: `write_locus_cool` |
+| SnapFISH / SnapFISH-IMPUTE coordinate + annotation tables | `uchrom.io.read_snapfish(coor, ann)` |
+| raw DNA seqFISH+ detections (not yet traced) | `uchrom.io.read_seqfish_detections` → [from detections to traces](traces) |
+| several spots of one trace on one locus | `uchrom.im.merge_duplicate_spots` (`uc.pp.merge_duplicate_spots`) |
+| published datasets, ready as `ChromData` | `uchrom.datasets.load("takei2021_mesc")`, `load("bintu_imr90")`, ... ([datasets](../start/datasets)) |
+
+## Tutorials
+
+```{toctree}
+:maxdepth: 1
+
+/tutorials/import_fofct
+/tutorials/import_pyhim_ecsv
+```
+
+## The 4DN FISH Omics Format (FOF-CT)
 
 FOF-CT is the 4DN Nucleome format for chromatin tracing: a core table of spots (`Spot_ID`, `Trace_ID`,
 `X`, `Y`, `Z`, `Chrom`, `Chrom_Start`, `Chrom_End`, optional `Cell_ID` and extra columns) under `##`
 header lines, with optional companion tables of cells and of RNA spots.
 
-## Reading: `ChromData.from_fofct`
+### Reading: `ChromData.from_fofct`
 
 ```python
 from chromdata import ChromData
@@ -30,7 +52,7 @@ a large table into a store chunk by chunk instead of building it in memory.
 FOF-CT files are usually in µm; to use other units, scale `cd.coords` and set `uns["xyz_unit"]` so
 that plots are labelled correctly.
 
-## Writing: `cd.to_fofct`
+### Writing: `cd.to_fofct`
 
 `cd.to_fofct(path, cell_table=None, rna_table=None)` (or `uchrom.io.write_fofct(cd, path, …)`) is the
 inverse of `from_fofct`:

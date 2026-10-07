@@ -149,16 +149,15 @@ Fig. 1c of the U-Chrom paper (logos are trademarks of their owners, used for ide
 
 | Your data | Chapter |
 |-----------|---------|
-| chromatin tracing (FOF-CT, PyHiM, raw detections) | [Chromatin tracing](../tracing/index) |
+| chromatin tracing (FOF-CT, PyHiM, raw detections) | [Chromatin tracing](../tracing/index): reading, traces, imputation, structures |
 | DNA seqFISH+ with chromatin marks and RNA | [Imaging multi-omics](../seqfish/index) |
-| single-cell Hi-C, its multi-omics variants, spatial Hi-C | [Single-cell and spatial Hi-C](../schic/index) |
-| bulk Hi-C (alone, or with tracing of the same cells) | [Bulk Hi-C](../bulk/index) |
+| single-cell Hi-C, its multi-omics variants, spatial Hi-C | [Single-cell and spatial Hi-C](../schic/index): contact maps, 3-D structures, cell embeddings |
+| bulk Hi-C (alone, or with tracing of the same cells) | [Bulk Hi-C](../bulk/index): MDS, IGM, GEM-FISH |
 
 | You want to — for any data | Chapter |
 |----------------------------|---------|
 | hold, subset, save, share, link | [Data model & storage](../data/index) (`chromdata`) |
-| call loops, TADs, domains, compartments | [Structure calling](../structures/index) (`uchrom.strc`) |
 | compute per-locus features | [Per-locus features](../features/index) (`uchrom.fea`) |
-| compare cells | [Cells & embeddings](../cells/index) (`uchrom.emb`) |
 | look at it | [Visualisation](../viz/index) (`uchrom-browser`, `uchrom.pl`) |
+| get a dataset | [Datasets](datasets.md) (`uchrom.datasets`) |
 | read or write a file format | [File formats](../reference/formats) (`uchrom.io`) |

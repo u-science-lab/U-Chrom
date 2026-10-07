@@ -9,11 +9,15 @@ directory*: `$UCHROM_DATA`, else `~/.cache/uchrom` (`uchrom.datasets.data_dir()`
 without a prefix are relative to it.  Its layout is the one the former `example-data/` folder had, so
 an old folder works as `UCHROM_DATA`.
 
-**Four ways to a dataset** (the *How to get it* column of the tables):
+**Ways to a dataset** (the *How to get it* column of the tables):
 
+- **load `NAME`** — the usual one: the dataset as a `ChromData`, `uchrom.datasets.load("NAME")`.  For an
+  atlas id it opens the atlas store; for a dataset with a *loader* (below) it builds the `ChromData` once from
+  the fetched original files, writes it to the data directory with its contact maps linked next to it, and
+  reads it from there afterwards (`python -m uchrom.datasets load NAME` builds it ahead).
 - **atlas `ID`**: a `.chromdata.zarr` store of the public atlas (https://uchrom-atlas-r2.u-science.org),
-  opened over HTTP without downloading it: `uchrom.datasets.atlas("ID")` (backed: only what is used
-  is fetched).  `python -m uchrom.datasets atlas` lists the ids.
+  opened over HTTP without downloading it: `uchrom.datasets.load("ID")` / `atlas("ID")` (backed: only what is
+  used is fetched).  `python -m uchrom.datasets atlas` lists the ids.
 - **fetch `NAME`**: the original files, downloaded once from their source (4DN, GEO, Zenodo, GitHub,
   UCSC, ...) into the data directory and md5-checked where the registry has a checksum:
   `python -m uchrom.datasets fetch NAME` or `uchrom.datasets.fetch("NAME")`;
@@ -27,6 +31,19 @@ an old folder works as `UCHROM_DATA`.
   link contact maps made from the raw reads on Sherlock (`*/sherlock/`); those are not public.
 - **fixture**: a small real file in a package's `tests/fixtures/` (each folder has a README listing
   the sources), read offline by the unit tests.
+
+**Datasets with a loader** (`packages/uchrom/uchrom/datasets/_load_*.py`; built once into the data directory,
+rebuilt when the loader's version changes; each checked to give what the tutorials built by hand before):
+
+| `load` name | Store (data directory) | From (`fetch`) | What it is | Used by |
+|-------------|------------------------|----------------|------------|---------|
+| `takei2021_mesc` | `takei2021_mesc/takei2021_mesc.chromdata.zarr` | `takei`, `takei_tables` | Takei 2021 mESC DNA seqFISH+ as 4DN FOF-CT: 201 cells, 1,200 loci at 25 kb (8,285 traces), the cell table (`rna.<gene>`) and nascent-RNA spots | tutorials `chromdata_basics`, `plotting_and_browser`, `features`, `loop_calling`, `tad_calling`, `fishnet_domains`, `compartment`, `jie_aligner` |
+| `takei2021_mesc_detections` | `takei2021_mesc/takei2021_mesc_detections.chromdata.zarr` | `seqfish`, `takei` | the raw DNA seqFISH+ detections of the same cells (replicate 1, 25 kb loci): 316,995 untraced spots, the authors' homolog call as `label` | tutorial `jie_aligner` |
+| `bintu_imr90`, `bintu_imr90_hg19` | `bintu_imr90/*.chromdata.zarr` | `bintu_imr90` | Bintu 2018 IMR90 chr21 tracing, 1,277 chromosomes × 65 segments of 30 kb, on hg38 (18.6–20.6 Mb) / on hg19 (20.0–21.95 Mb, to pair with Rao 2014) | tutorials `fish_imputation`, `bulk_reconstruction`, `gem_fish_reconstruction` |
+| `su2020_chr21` | `su2020_chr21/su2020_chr21.chromdata.zarr` + `.cool` | `su2020_chr21` | Su 2020 IMR90 chr21 tracing: 7,591 chromosome copies × 651 loci of 50 kb (hg38), genes per locus; the authors' Rao 2014 Hi-C in the same loci, linked (`rao2014`) | tutorials `tad_calling`, `compartment` |
+| `huang2021_sox2` | `huang2021_sox2/huang2021_sox2.chromdata.zarr` | `huang2021_sox2` | Huang 2021 mESC Sox2 tracing (SnapFISH-IMPUTE tables, `uchrom.io.read_snapfish`): 1,416 cells × 2 alleles × 41 loci of 5 kb, undetected loci as NaN | tutorial `fish_imputation` |
+| `rao2014_imr90_chr21` | `rao2014_imr90/rao2014_imr90_chr21.chromdata.zarr` | `rao2014_imr90_chr21` (built from GEO) | Rao 2014 IMR90 Hi-C chr21 at 5 kb (hg19, raw counts), the map linked as `bulk` | tutorials `bulk_reconstruction`, `gem_fish_reconstruction` |
+| `kim2020_scihic` | `kim2020_scihic/kim2020_scihic.chromdata.zarr` + `.scool` | `kim2020_scihic` | Kim 2020 sci-Hi-C, H1 ES + HFF: 1,931 cells with cell types, 500 kb maps per cell (linked `.scool`, key `per_cell`; the hg19 bin numbering checked) | tutorial `higashi_embedding` |
 
 Tutorials are named without `tutorials/` and `.ipynb` (the list is `tutorials/README.md`).  The paper's
 figure scripts (`u-chrom-paper`, a separate repository) are named where they read these data.
@@ -402,7 +419,7 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
   `matrix_filename<TAB>cell_type` with values in `{H1Esc, HFF}`.
 - **Content**: 1 931 cells (750 H1Esc + 1 181 HFF), pooled from a combinatorial-indexing sci-Hi-C
   library at 500 kb.  Used as a benchmark in Kim et al.'s topic-model paper.
-- **Source**: Kim et al. 2020, *Nature Communications* 11:6386, "Capturing cell type-specific chromatin
+- **Source**: Kim et al. 2020, *PLOS Computational Biology* 16:e1008173 (doi:10.1371/journal.pcbi.1008173), "Capturing cell type-specific chromatin
   compartment patterns by applying topic modeling to single-cell Hi-C data" — accompanying website at
   [noble.gs.washington.edu/proj/schic-topic-model](https://noble.gs.washington.edu/proj/schic-topic-model/):
   ```

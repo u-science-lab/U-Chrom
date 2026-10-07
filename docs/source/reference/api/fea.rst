@@ -12,6 +12,28 @@ Distance-based aggregates
 .. automodule:: uchrom.fea.distance
    :members:
 
+Contact maps
+------------
+
+Maps linked to a ``ChromData`` as matrices, rebinned, observed / expected.
+
+.. automodule:: uchrom.fea.maps
+   :members:
+
+Comparing structures
+--------------------
+
+Model ensembles, models against imaging, models against their contacts.
+
+.. automodule:: uchrom.fea.compare
+   :members:
+
+Positions in the nucleus
+------------------------
+
+.. automodule:: uchrom.fea.positions
+   :members:
+
 Axis-wise preprocessing
 -----------------------
 

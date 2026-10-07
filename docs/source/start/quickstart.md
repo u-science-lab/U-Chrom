@@ -11,7 +11,7 @@ The [data atlas](../viz/atlas) is a public collection of `.chromdata.zarr` store
 ```python
 import uchrom.datasets as ds
 
-cd = ds.atlas("takei2025_cerebellum")            # ~2 s: cells, bins, the index (backed, over HTTP)
+cd = ds.load("takei2025_cerebellum")             # ~2 s: cells, bins, the index (backed, over HTTP)
 cd
 ```
 ```text
@@ -33,12 +33,10 @@ with 62 chromatin marks per spot in 1,799 cells.
 
 ```python
 import uchrom as uc
-from chromdata import ChromData
-
 import uchrom.datasets as ds
 
-# Takei et al. 2021 (Nature), mouse ES cells, 4DN FOF-CT core table 4DNFIHF3JCBY (fetched from 4DN once)
-cd = ChromData.from_fofct(ds.fetch("takei"))                # 201 cells, 8,285 traces
+# Takei et al. 2021 (Nature), mouse ES cells, 4DN FOF-CT 4DNFIHF3JCBY (built once from the 4DN files)
+cd = ds.load("takei2021_mesc")                              # 201 cells, 8,285 traces
 tads = uc.tl.call_tads(cd, chrom="chr3")                    # ArcFISH: TADs from 3-D distances
 tads.head(3)
 ```
@@ -46,7 +44,7 @@ tads.head(3)
   chrom    start      end  level     score      pval       fdr
 0  chr3  7675000  8550000      1  2.782985  0.001648  0.028020
 1  chr3  8550000  8925000      1  2.782985  0.001648  0.028020
-2  chr3  8925000  9050000      1  1.809958  0.015490  0.097476
+2  chr3  8925000  9050000      1  1.809957  0.015490  0.097476
 ```
 
 The call is stored with its parameters: `cd.intervals["tads.arcfish"]`,

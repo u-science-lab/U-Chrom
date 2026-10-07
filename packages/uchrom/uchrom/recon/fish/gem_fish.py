@@ -267,54 +267,105 @@ def _tad_rg_targets(
 # ----------------------------------------------------------------------
 
 def reconstruct_gem_fish(
-    hic_path: str,
-    chrom: str,
+    cd: Any = None,
+    chrom: Optional[str] = None,
     resolution: Optional[int] = None,
     fish_cd: Any = None,
     tads: Optional[pd.DataFrame] = None,
     params: Optional[GEMFISHParams] = None,
     return_intermediate: bool = False,
+    *,
+    contacts: Optional[str] = None,
+    fish: Any = None,
+    hic_path: Optional[str] = None,
+    key_added: Optional[str] = "gem_fish",
 ) -> Any:
-    """End-to-end GEM-FISH reconstruction for a single chromosome.
+    """End-to-end GEM-FISH reconstruction of one chromosome from a Hi-C map and (optionally) chromatin
+    tracing.
+
+    ::
+
+        hic = ds.load("rao2014_imr90_chr21")                 # the map linked to a ChromData
+        fish = ds.load("bintu_imr90_hg19")                   # chromatin tracing, same cell line and assembly
+        rebin_map(hic, "bulk", resolution=30_000, anchor=fish.bins["start"].min())   # -> "bulk_30kb"
+        model = reconstruct_gem_fish(hic, contacts="bulk_30kb", chrom="chr21", fish=fish)
+
+    The path form ``reconstruct_gem_fish("map.cool", "chr21", fish_cd=fish)`` (or ``hic_path=``) still
+    works.
 
     Parameters
     ----------
-    hic_path : str
-        ``.cool`` or ``.mcool`` file.
-    chrom : str
-        Chromosome name as stored in the cooler.
+    cd : ChromData or str
+        A ``ChromData`` with the Hi-C map linked (``cd.link_cool``; key ``contacts``), or the path of a
+        ``.cool`` / ``.mcool``.  The balanced matrix of the map (its ``weight`` column) is used, at the
+        map's resolution.
+    chrom : str, optional
+        Chromosome as named in the map (may be left out when the map has one chromosome).
     resolution : int, optional
         Required for ``.mcool``; ignored for ``.cool``.
     fish_cd : ChromData, optional
-        FISH data, e.g. from ``ChromData.from_fofct(...)``.  Supplies
-        the C_3 (TAD-centre distances) and C_4 (per-TAD Rg²) targets.
-        If ``None``, both FISH terms are dropped and the result
-        degenerates to a Hi-C-only reconstruction.
+        Older name of ``fish``.
     tads : DataFrame, optional
         Override the TAD partition.  Must have columns ``start`` and
         ``end`` (bp) and be sorted.  If omitted, the Dixon DI caller
         (:func:`uchrom.strc.tad.get_domains`) is run on the Hi-C matrix.
+        Only the bins inside these windows are modelled.
     params : GEMFISHParams
     return_intermediate : bool
         If True, return a dict with every intermediate artifact
         (Stage-1 coords, per-TAD coords, loss histories).
+    contacts : str, optional
+        Key of the linked map (``None``: the only one).
+    fish : ChromData, optional
+        Chromatin tracing of the same chromosome, same genome assembly as the map (distances in its
+        ``coords`` units, e.g. nm).  Supplies the C_3 (TAD-centre distances) and C_4 (per-TAD Rg²)
+        targets.  If ``None``, both FISH terms are dropped and the result is a Hi-C-only reconstruction.
+    hic_path : str, optional
+        Older name of a path ``cd``.
+    key_added : str or None
+        ``uns`` key of the run's summary and prefix of the stored TAD partition
+        (``results["<key_added>.tads"]``); ``None`` stores neither.
 
     Returns
     -------
     ChromData
         Reconstructed 3-D model with bin-resolution coordinates.  Each
-        Hi-C bin becomes a spot; ``trace_id = 0`` for the whole chain
-        (single consensus model).  Per-stage info is stored in
-        ``cd.uns['gem_fish']``.  If ``return_intermediate=True``,
-        returns ``(cd, dict)`` with the full artefact bundle.
+        Hi-C bin of the modelled windows becomes a spot; ``trace_id = 0``
+        for the whole chain (single consensus model).  The run summary is
+        in ``cd.uns['gem_fish']`` and the TAD partition (``chrom``,
+        ``start``, ``end``, ``start_bin``, ``end_bin``; bins of the map,
+        end exclusive) in ``cd.results['gem_fish.tads']``.  If
+        ``return_intermediate=True``, returns ``(cd, dict)`` with the full
+        artefact bundle.
     """
     from uchrom import ChromData
 
+    from uchrom.fea.maps import _is_chromdata, _map_record, map_path
+
     params = params or GEMFISHParams()
+    if hic_path is not None:
+        if cd is not None:
+            raise TypeError("reconstruct_gem_fish(): pass the map once (cd or hic_path=)")
+        cd = hic_path
+    if cd is None:
+        raise TypeError("reconstruct_gem_fish() needs a ChromData with a linked map, or a path")
+    if fish is not None and fish_cd is not None:
+        raise TypeError("reconstruct_gem_fish(): pass fish= (or its older name fish_cd=), not both")
+    fish_cd = fish if fish is not None else fish_cd
+    path = map_path(cd, contacts)
+    record = _map_record(cd, contacts)
+    if chrom is None:
+        import cooler
+
+        names = cooler.Cooler(path if "::" in path or resolution is None else
+                              f"{path}::/resolutions/{int(resolution)}").chromnames
+        if len(names) != 1:
+            raise ValueError(f"the map has {len(names)} chromosomes; pass chrom=")
+        chrom = names[0]
     if params.verbose:
         print(f"[gem_fish] loading Hi-C for {chrom} …")
     hic_mat, bin_df = load_contact_matrix(
-        hic_path, chrom, resolution=resolution, normalize=True,
+        path, chrom, resolution=resolution, normalize=True,
     )
     if params.verbose:
         print(f"[gem_fish]   Hi-C matrix: {hic_mat.shape}  "
@@ -418,22 +469,43 @@ def reconstruct_gem_fish(
         "end": model_bins["end"].astype(int).values,
         "trace_id": 0,
     })
+    assembly = record.get("genome_assembly") or (cd.uns.get("genome_assembly") if _is_chromdata(cd) else None)
     uns = {
-        "gem_fish": {
-            "n_tads": len(tad_windows),
-            "stage1_final_loss": float(s1_info["final_loss"].min()),
-            "stage1_best_ensemble": int(s1_info["best_ensemble_idx"]),
-        },
         "xyz_unit": "reduced",   # arbitrary reconstruction units
-        "genome_assembly": None,
+        "genome_assembly": assembly,
     }
-    cd = ChromData(
+    summary = {
+        "n_tads": len(tad_windows),
+        "stage1_final_loss": float(s1_info["final_loss"].min()),
+        "stage1_best_ensemble": int(s1_info["best_ensemble_idx"]),
+        "chrom": str(chrom),
+        "contacts": record.get("key", str(path)),
+        "fish": fish_cd is not None,
+    }
+    if key_added is not None:
+        uns[key_added] = summary
+    model = ChromData(
         coords=final_coords,
         spots=spots,
         uns=uns,
     )
+    if key_added is not None:
+        tad_table = pd.DataFrame({
+            "chrom": str(chrom),
+            "start": [int(bin_df["start"].iloc[s]) for s, _ in tad_windows],
+            "end": [int(bin_df["end"].iloc[e - 1]) for _, e in tad_windows],
+            "start_bin": [int(s) for s, _ in tad_windows],
+            "end_bin": [int(e) for _, e in tad_windows],
+        })
+        model.results.set(
+            f"{key_added}.tads", tad_table, kind="table",
+            function="uchrom.recon.fish.reconstruct_gem_fish",
+            params={k: v for k, v in params.__dict__.items() if k != "verbose"},
+            inputs={"contacts": summary["contacts"], "chrom": str(chrom), "fish": summary["fish"],
+                    "tads": "given" if tads is not None else "DI caller"},
+        )
     if return_intermediate:
-        return cd, {
+        return model, {
             "tad_windows": tad_windows,
             "tad_centres": tad_centres,
             "intra_coords": intra_coords,
@@ -444,7 +516,7 @@ def reconstruct_gem_fish(
             "stage1_info": s1_info,
             "stage2_info": s2_info,
         }
-    return cd
+    return model
 
 
 __all__ = ["GEMFISHParams", "reconstruct_gem_fish"]

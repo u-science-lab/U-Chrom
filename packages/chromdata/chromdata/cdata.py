@@ -221,6 +221,10 @@ _SERIES_COLUMN = "_value"
 
 
 
+#: scratch directories of maps exported from the embedded copies of a store (by store location)
+_EXPORT_DIRS: Dict[str, Path] = {}
+
+
 class ChromData:
     """Chromatin Data — the core container for U-Chrom.
 
@@ -675,7 +679,7 @@ class ChromData:
                     import anndata as ad
                     self._linked_adata = ad.read_h5ad(path)
             if self._linked_adata is None:   # no file: an AnnData embedded in the store (embed_links)
-                src = getattr(self, "_source_path", None)
+                src = self._links_from()
                 if src is not None and (isinstance(src, str) or Path(src).is_dir()):
                     from .embedded import list_embedded_anndata, read_embedded_anndata
                     found = list_embedded_anndata(str(src), "linked_anndata")
@@ -774,12 +778,18 @@ class ChromData:
         _set_linked_record(self.uns, "linked_scool", key, record)
         return record
 
+    def _links_from(self):
+        """The store whose linked files and embedded copies this object reads: the store it was read from,
+        or — for a subset or a copy — its parent's (``_link_origin``)."""
+        src = getattr(self, "_source_path", None)
+        return src if src is not None else getattr(self, "_link_origin", None)
+
     def resolve_link_path(self, path: PathLike) -> Path:
         """Linked-file path; relative paths resolve against the directory of
         the store this object was read from (else the working directory),
         so a dataset folder can be moved or shipped as a whole."""
         p = Path(path).expanduser()
-        src = getattr(self, "_source_path", None)
+        src = self._links_from()
         if isinstance(src, str):      # remote store (URL): links do not resolve against it
             return p
         if not p.is_absolute() and src is not None:
@@ -813,7 +823,7 @@ class ChromData:
     def embedded_links(self) -> Dict[str, Dict[str, str]]:
         """Copies embedded in the store (:mod:`chromdata.embedded`): ``{"contacts": {key: group},
         "anndata": {...}, "images": {...}}`` (empty for a store without them or a non-directory store)."""
-        src = getattr(self, "_source_path", None)
+        src = self._links_from()
         if src is None or not (isinstance(src, str) or Path(src).is_dir() or str(src).lower().endswith(".cdz")):
             return {"contacts": {}, "anndata": {}, "images": {}}
         from .embedded import list_embedded, list_embedded_anndata, list_embedded_images
@@ -822,8 +832,10 @@ class ChromData:
         return {"contacts": list_embedded(loc), "anndata": list_embedded_anndata(loc), "images": list_embedded_images(loc)}
 
     def _embedded_export_dir(self) -> Path:
-        """Scratch directory (removed at exit) for cooler files exported from embedded maps."""
-        d = getattr(self, "_export_dir", None)
+        """Scratch directory (removed at exit) for cooler files exported from embedded maps — one per store,
+        shared by the objects that read it (subsets and copies included), so a map is exported once."""
+        key = str(self._links_from())
+        d = _EXPORT_DIRS.get(key)
         if d is None:
             import atexit
             import shutil
@@ -831,7 +843,7 @@ class ChromData:
 
             d = Path(tempfile.mkdtemp(prefix="uchrom-embedded-"))
             atexit.register(shutil.rmtree, d, True)
-            self._export_dir = d
+            _EXPORT_DIRS[key] = d
         return d
 
     def linked_cool_path(self, key: str = "default") -> str:
@@ -846,9 +858,49 @@ class ChromData:
 
             out = self._embedded_export_dir() / f"{key}.mcool".replace("/", "_")
             if not out.exists():
-                export_mcool(str(self._source_path), key, out)
+                export_mcool(str(self._links_from()), key, out)
             return str(out)
         raise FileNotFoundError(f"linked_cool {key!r}: {path!r} does not exist and the map is not embedded in the store")
+
+    def load_linked_cool(self, key: str = "default", *, resolution: Optional[int] = None):
+        """The linked bulk / pseudo-bulk map ``key`` as a ``cooler.Cooler`` (one resolution of an ``.mcool``:
+        ``resolution=``, default the finest); from the embedded copy when the file is gone
+        (:meth:`linked_cool_path`)."""
+        import cooler
+
+        path = self.linked_cool_path(key)
+        uris = cooler.fileops.list_coolers(path)
+        if "/" not in uris:                              # several resolutions (/resolutions/<r>)
+            res = sorted(int(u.rsplit("/", 1)[-1]) for u in uris)
+            r = int(resolution) if resolution is not None else res[0]
+            if r not in res:
+                raise ValueError(f"linked_cool {key!r}: no resolution {r} (have {res})")
+            return cooler.Cooler(f"{path}::/resolutions/{r}")
+        return cooler.Cooler(path)
+
+    def linked_scool_path(self, key: str = "default", *, cells: Optional[Sequence[str]] = None,
+                          trans: bool = True) -> str:
+        """Path of the linked per-cell ``.scool`` ``key`` (the file itself when it exists: all its cells).
+        When the file is gone but the map is embedded in the store (an atlas store), the cells — all, or
+        ``cells`` — are exported once to a scratch ``.scool`` (:func:`chromdata.embedded.export_scool`, one
+        read per chromosome; ``trans=False`` leaves out the contacts between chromosomes) and that path is
+        returned."""
+        record = _linked_record(self.uns.get("linked_scool"), key)
+        path = record.get("path")
+        if path and self.resolve_link_path(path).exists():
+            return str(self.resolve_link_path(path))
+        if key in self.embedded_links()["contacts"]:
+            import hashlib
+
+            from .embedded import export_scool
+
+            tag = "all" if cells is None else hashlib.md5("\n".join(map(str, cells)).encode()).hexdigest()[:12]
+            out = self._embedded_export_dir() / f"{key}.{tag}{'' if trans else '.cis'}.scool".replace("/", "_")
+            if not out.exists():
+                export_scool(str(self._links_from()), key, out,
+                             cells=None if cells is None else [str(c) for c in cells], trans=trans)
+            return str(out)
+        raise FileNotFoundError(f"linked_scool {key!r}: {path!r} does not exist and the map is not embedded in the store")
 
     def load_linked_scool(self, *, key: str = "default", cell: Optional[str] = None):
         """Load metadata or one cell cooler from a linked scool file.
@@ -869,7 +921,7 @@ class ChromData:
         if not self.resolve_link_path(path).exists() and key in self.embedded_links()["contacts"]:
             from .embedded import EmbeddedContacts, export_cool
 
-            loc = str(self._source_path)
+            loc = str(self._links_from())
             if cell is None:
                 cells = EmbeddedContacts(loc, self.embedded_links()["contacts"][key]).cells
                 return {"path": None, "cells": [f"/cells/{c}" for c in cells], "record": record, "embedded": True}
@@ -1593,6 +1645,7 @@ class ChromData:
         )
         out._bin_tracks = self._bin_tracks
         out._spot_tracks = new_spot_tracks
+        out._link_origin = self._links_from()
         if self._spot_view_order and len(track_cols) != len(self._spot_tracks.columns):
             keep = set(self._bin_tracks.columns) | set(track_cols)
             out._spot_view_order = [c for c in self._spot_view_order if c in keep] or None
@@ -1683,7 +1736,7 @@ class ChromData:
         if "cell_id" not in self.spots.columns:
             raise KeyError("spots has no 'cell_id' column")
         mask = self.spots["cell_id"] == cell_id
-        return self._take(mask.values, columns, tracks)
+        return self._keep_requested_cells(self._take(mask.values, columns, tracks), [cell_id])
 
     def get_cells(self, cell_ids, *, columns=None, tracks=None) -> "ChromData":
         """The spots of several cells (ids compared as strings; unknown ids are
@@ -1692,7 +1745,21 @@ class ChromData:
             raise KeyError("spots has no 'cell_id' column")
         keep = {str(c) for c in cell_ids}
         mask = self.spots["cell_id"].astype(str).isin(keep)
-        return self._take(mask.values, columns, tracks)
+        return self._keep_requested_cells(self._take(mask.values, columns, tracks), keep)
+
+    def _keep_requested_cells(self, out: "ChromData", ids) -> "ChromData":
+        """Cells asked for by id stay in ``cells`` / ``cellm`` of a subset even without spots (sequencing
+        data: cells with contact maps or RNA but no coordinates)."""
+        axis = self._cells_axis_ids()
+        if axis is None:
+            return out
+        have = out._cells_axis_ids() if len(out.cells) else None
+        mask = axis.isin({str(i) for i in ids}) | axis.isin(set(have) if have is not None else set())
+        if int(mask.sum()) == len(out.cells):
+            return out
+        out.cells = self.cells[np.asarray(mask)]
+        out.cellm = {k: np.asarray(v)[np.asarray(mask)] for k, v in self.cellm.items()}
+        return out
 
     def get_trace(self, trace_id, *, columns=None, tracks=None) -> "ChromData":
         """The spots of one trace (see :meth:`get_cell` for ``columns`` /
@@ -2032,6 +2099,7 @@ class ChromData:
         row_group_rows: Optional[int] = None,
         compression_level: Optional[int] = None,
         keep_source_order: bool = True,
+        embed: bool = False,
     ) -> None:
         """Write to disk; the format follows the path.
 
@@ -2068,6 +2136,11 @@ class ChromData:
             zstd level for Parquet and Zarr (default 3).
         keep_source_order : bool
             Store ``index/source_row`` when the writer had to sort.
+        embed : bool
+            Also embed the linked contact maps and AnnData this object can reach — its linked files, or the
+            embedded copies of the store it was read from — limited to its cells
+            (:func:`chromdata.embedded.embed_reachable`): a subset of an atlas store written to a new path keeps
+            its maps.  Directory stores (``.chromdata.zarr``) only.
 
         """
         from .zarrcd import DEFAULT_ZSTD_LEVEL, container_kind, write_zarr
@@ -2084,11 +2157,17 @@ class ChromData:
             raise ValueError("a .cdz store needs a path ending in .cdz")
         if kind == "zarr" and not path.name.lower().endswith(".zarr"):
             raise ValueError("a zarr store needs a path ending in .chromdata.zarr (or .zarr)")
+        if embed and kind != "zarr":
+            raise ValueError("embed=True needs a directory store (.chromdata.zarr)")
         write_zarr(self, path, coord_dtype=coord_dtype,
                    row_group_rows=row_group_rows,
                    compression_level=(DEFAULT_ZSTD_LEVEL if compression_level is None
                                       else compression_level),
                    keep_source_order=keep_source_order)
+        if embed:
+            from .embedded import embed_reachable
+
+            embed_reachable(self, path)
 
     @classmethod
     def read(cls, path: PathLike, *, backed: bool = False,
@@ -2641,6 +2720,7 @@ class ChromData:
         memo: dict = {}
         out._intervals = deepcopy(self._intervals, memo)
         out.results = deepcopy(self.results, memo)
+        out._link_origin = self._links_from()
         return out
 
     # ------------------------------------------------------------------

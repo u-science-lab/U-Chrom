@@ -35,6 +35,7 @@ Oligopaints imaging data.  *Nature Methods* 22, 1255–1264.
 
 from __future__ import annotations
 
+import zlib
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -316,21 +317,39 @@ def _domains_from_boundaries(
 # Per-trace FISHnet
 # ----------------------------------------------------------------------
 
+def trace_seed(trace_id) -> int:
+    """Base seed of the Louvain runs of one trace: the CRC-32 of its id, so that an allele's domains do not
+    depend on the row order of the data or on which other alleles are called with it."""
+    return zlib.crc32(str(trace_id).encode("utf-8"))
+
+
 def call_domains_fishnet_trace(
-    dist: np.ndarray,
+    dist,
     params: Optional[FISHnetParams] = None,
-    seed_base: int = 0,
+    seed_base: Optional[int] = None,
+    *,
+    trace_id=None,
+    chrom: Optional[str] = None,
 ) -> dict:
-    """Run FISHnet on a single-allele pairwise distance matrix.
+    """Run FISHnet on one allele: a pairwise distance matrix, or a trace of a ``ChromData``.
 
     Parameters
     ----------
-    dist : ndarray (n_bins, n_bins)
-        Symmetric pairwise distance matrix, NaN for missing spots, in nm.
+    dist : ndarray (n_bins, n_bins) or ChromData
+        Symmetric pairwise distance matrix, NaN for missing spots; or a ``ChromData`` together with
+        ``trace_id``: the matrix is then built over every locus of the trace's chromosome (``cd.bins``;
+        NaN for loci the trace did not detect, a locus seen twice keeps its last spot).
     params : FISHnetParams, optional
         Hyperparameters.  Use defaults if ``None``.
-    seed_base : int
-        Base seed for the 20 Louvain runs (reproducibility).
+    seed_base : int, optional
+        Base seed of the Louvain runs (reproducibility).  Default: 0 for a matrix;
+        :func:`trace_seed` of the trace for a ``ChromData`` — the seed :func:`call_domains_fishnet` uses,
+        so the result equals that trace's rows there (when every locus of the chromosome was detected in
+        the traces called there).
+    trace_id : optional
+        The trace (with a ``ChromData``).
+    chrom : str, optional
+        Its chromosome, when the trace spans several.
 
     Returns
     -------
@@ -339,8 +358,23 @@ def call_domains_fishnet_trace(
         ``boundaries``: sorted list of canonical boundary bin indices;
         ``domain_mask``: (n_bins, n_bins) int — count of plateaus in which bins i and j fall in the
         same domain (0 if never); ``n_plateaus``: number of plateaus detected; ``coverage``: fraction of
-        bins with ≥1 non-NaN distance.
+        bins with ≥1 non-NaN distance.  With a ``ChromData`` also ``distances`` (the matrix), ``loci``
+        (``bin_id, chrom, start, end`` of its rows) and ``trace_id``.
     """
+    if hasattr(dist, "spots") and hasattr(dist, "bins"):
+        from uchrom.fea import trace_distance_matrix
+
+        if trace_id is None:
+            raise TypeError("call_domains_fishnet_trace(cd, ...) needs trace_id=")
+        matrix, loci = trace_distance_matrix(dist, trace_id, chrom=chrom)
+        seed = trace_seed(trace_id) if seed_base is None else int(seed_base)
+        res = _fishnet_on_matrix(matrix, params, seed)
+        return {**res, "distances": matrix, "loci": loci, "trace_id": trace_id}
+    return _fishnet_on_matrix(dist, params, 0 if seed_base is None else int(seed_base))
+
+
+def _fishnet_on_matrix(dist: np.ndarray, params: Optional[FISHnetParams], seed_base: int) -> dict:
+    """FISHnet on one allele's distance matrix (see :func:`call_domains_fishnet_trace`)."""
     params = params or FISHnetParams()
     dist = np.asarray(dist, dtype=np.float64)
     n_bins = dist.shape[0]
@@ -494,6 +528,12 @@ def call_domains_fishnet(
         Cap on the number of traces processed **per chromosome** (useful
         for previews — FISHnet is O(n_bins² · n_thresholds) per trace).
 
+    Notes
+    -----
+    Each trace's Louvain runs are seeded by :func:`trace_seed` (its id), so
+    its domains do not depend on the row order or on the other traces
+    selected.
+
     Returns
     -------
     DataFrame (``copy=False``) or ChromData (``copy=True``)
@@ -573,9 +613,7 @@ def _call_domains_fishnet_chrom(cd, chrom: str, params: FISHnetParams,
     ensemble_mask = np.zeros((n_bins, n_bins), dtype=np.int64)
     skipped = 0
     for ti in range(n_traces):
-        res = call_domains_fishnet_trace(
-            dists[ti], params=params, seed_base=ti,
-        )
+        res = _fishnet_on_matrix(dists[ti], params, trace_seed(trace_ids[ti]))
         ensemble_mask += res["domain_mask"]
         if not res["domains"]:
             skipped += 1
@@ -619,4 +657,5 @@ __all__ = [
     "FISHnetParams",
     "call_domains_fishnet_trace",
     "call_domains_fishnet",
+    "trace_seed",
 ]

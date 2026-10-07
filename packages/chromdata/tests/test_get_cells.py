@@ -27,3 +27,20 @@ def test_get_cells_empty_and_missing_column():
     cd.spots = cd.spots.drop(columns="cell_id")
     with pytest.raises(KeyError):
         cd.get_cells(["c1"])
+
+
+def test_cells_without_spots_are_kept_when_asked_for(tmp_path):
+    """Sequencing data: cells with contact maps or RNA but no coordinates."""
+    from chromdata import ChromData
+
+    no_spots = pd.DataFrame({c: pd.Series(dtype=t) for c, t in
+                             [("chrom", str), ("start", np.int64), ("end", np.int64), ("trace_id", str), ("cell_id", str)]})
+    cells = pd.DataFrame({"cell_type": list("abc")}, index=pd.Index(["c0", "c1", "c2"], name="cell_id"))
+    cd = ChromData(np.zeros((0, 3)), no_spots, cells=cells, cellm={"e": np.arange(6.0).reshape(3, 2)})
+    sub = cd.get_cells(["c2", "c0", "nope"])
+    assert list(sub.cells.index) == ["c0", "c2"] and sub.cellm["e"].tolist() == [[0, 1], [4, 5]]
+    assert cd.get_cell("c1").cells["cell_type"].tolist() == ["b"]
+    cd.write(tmp_path / "x.chromdata.zarr")
+    backed = ChromData.read(tmp_path / "x.chromdata.zarr", backed=True)
+    assert list(backed.get_cells(["c1", "c2"]).cells.index) == ["c1", "c2"]
+    assert backed.get_cell("c0").n_cells == 1

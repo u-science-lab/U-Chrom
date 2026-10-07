@@ -43,16 +43,19 @@ or, with [uv](https://docs.astral.sh/uv/): `uv pip install -e "packages/uchrom[w
 ```python
 import uchrom as uc
 import uchrom.datasets as ds
-from chromdata import ChromData
 
 # a dataset of the atlas, read over HTTP: ~2 s to open 1,799 cells, then one cell on demand
-cd = ds.atlas("takei2025_cerebellum")
+cd = ds.load("takei2025_cerebellum")
 cell = cd.get_cell(cd.cells.index[0])
 
-# chromatin tracing (Takei 2021, 4DN FOF-CT): TADs from 3-D distances
-cd = ChromData.from_fofct(ds.fetch("takei"))                 # fetched from 4DN once
+# chromatin tracing (Takei 2021): TADs from 3-D distances
+cd = ds.load("takei2021_mesc")                              # built once from the 4DN files
 tads = uc.tl.call_tads(cd, chrom="chr3")
 cd.write("takei2021.chromdata.zarr")
+
+# single-cell Hi-C: embed cells by their contact maps (FastHigashi)
+cd = ds.load("kim2020_scihic")                              # 1,931 cells, per-cell maps linked
+uc.tl.embed_higashi(cd)                                     # -> cd.cellm["higashi"] (extra u-chrom[emb])
 
 # single-cell Hi-C -> an ensemble of 3-D structures (EMber, native engine)
 s = uc.tl.reconstruct_sc(ds.fetch("stevens2017") / "GSM2219497_Cell_1_contact_pairs.txt.gz", n_models=4)
@@ -64,10 +67,11 @@ python -m uchrom_browser takei2021.chromdata.zarr        # look at it
 
 ## Documentation
 
-The documentation has a chapter per kind of data — chromatin tracing, imaging multi-omics (DNA seqFISH+),
-single-cell and spatial Hi-C, bulk Hi-C — and chapters common to all data — data model & storage, structure
-calling, per-locus features, cells & embeddings, visualisation — each with tutorials on real data
-(`docs/`, notebooks in `tutorials/`); online at [u-chrom-docs.pages.dev](https://u-chrom-docs.pages.dev).
+The documentation has a chapter per kind of data — chromatin tracing (reading, traces, imputation, structure
+calling), imaging multi-omics (DNA seqFISH+), single-cell and spatial Hi-C (contact maps, 3-D structures, cell
+embeddings), bulk Hi-C (MDS, IGM, GEM-FISH) — and chapters common to all data — data model & storage,
+per-locus features, visualisation — each with tutorials on real data
+(`docs/`, notebooks in `tutorials/`); online at [u-chrom-docs.u-science.org](https://u-chrom-docs.u-science.org).
 Data come from the atlas or from their original sources (`python -m uchrom.datasets`), never from the
 repository; where each dataset comes from: [`apps/atlas/recipes/README.md`](apps/atlas/recipes/README.md).
 

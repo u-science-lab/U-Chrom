@@ -1,8 +1,25 @@
-# From detections to traces: the *jie* aligner
+# From detections to traces
 
 `uchrom.im.trace.align_spots` links decoded DNA FISH detections into chromatin fibres (traces) — a
 re-implementation of the *jie* method (Jia et al.) for data where each locus of a cell may have several
 candidate spots and the number of fibres per chromosome is not known in advance.
+
+## Tutorial
+
+```{toctree}
+:maxdepth: 1
+
+/tutorials/jie_aligner
+```
+
+```python
+import uchrom.datasets as ds
+from uchrom.im.trace import align_spots, score_alignment
+
+detections = ds.load("takei2021_mesc_detections")      # raw DNA seqFISH+ detections, not yet traced
+traced = align_spots(detections, chrom="chr19")         # also: uc.pp.align_spots; a spot table works too
+score_alignment(traced, detections, label="label")      # against the authors' homolog call: purity, ARI
+```
 
 ## When to use `uchrom.im.trace.align_spots`
 
@@ -10,7 +27,7 @@ Use it when your input is **raw, decoded FISH detections** with
 multiple candidate spots per genomic locus per cell.  If you instead
 already have a 4DN FOF-CT file (every spot carries a `trace_id`), you
 can skip tracing entirely and go straight to
-`ChromData.from_fofct` ([FOF-CT](fofct)).
+`ChromData.from_fofct` ([reading tracing data](reading)).
 
 ## The jie algorithm in one paragraph
 

@@ -25,11 +25,27 @@ DEFAULT_ANNOTATION_FEATURES = (
 )
 
 
-def read_gtf(path: str | Path) -> pd.DataFrame:
+def read_gtf(path: str | Path, *, derive_genes: bool = True) -> pd.DataFrame:
     """Read a GTF/GFF-like file into a normalized annotation table.
 
     Coordinates are converted from 1-based inclusive GTF convention to
     0-based half-open intervals.
+
+    Parameters
+    ----------
+    path : str or Path
+        GTF / GFF file (gzipped when it ends in ``.gz``).
+    derive_genes : bool
+        When the file has ``transcript`` rows but no ``gene`` rows (UCSC ``refGene`` / ``ncbiRefSeq``
+        GTFs), add one ``gene`` row per gene locus — the span of the overlapping transcripts of a
+        ``gene_id`` on one strand (:func:`gene_bodies`; a gene id found at several places gives several
+        rows) — so that :func:`compute_annotation_features` finds gene bodies, TSSs and promoters.
+
+    Returns
+    -------
+    DataFrame
+        ``chrom, source, feature, start, end, score, strand, frame, attribute, gene_id, gene_name,
+        gene_biotype``; derived gene rows (``source`` = ``"<source>:derived"``) come after the file's rows.
     """
     rows = []
     with _open_text(path) as handle:
@@ -58,7 +74,59 @@ def read_gtf(path: str | Path) -> pd.DataFrame:
                     or attrs.get("transcript_biotype")
                 ),
             })
-    return pd.DataFrame(rows)
+    table = pd.DataFrame(rows)
+    if derive_genes and len(table) and not (table["feature"] == "gene").any() \
+            and (table["feature"] == "transcript").any():
+        table = pd.concat([table, gene_bodies(table)], ignore_index=True)
+    return table
+
+
+def gene_bodies(annotations: pd.DataFrame, *, transcript_feature: str = "transcript") -> pd.DataFrame:
+    """Gene rows from transcript rows: one per gene locus, the span of a gene's overlapping transcripts.
+
+    The transcripts of a ``gene_id`` on one strand are sorted by start and merged while they overlap (or
+    touch); a gene id found at several places (paralogous copies, ``_alt`` / ``_fix`` contigs) gives one
+    row per place.
+
+    Parameters
+    ----------
+    annotations : DataFrame
+        An annotation table (:func:`read_gtf`) with ``chrom, feature, start, end, strand, gene_id``.
+    transcript_feature : str
+        The ``feature`` of the transcript rows.
+
+    Returns
+    -------
+    DataFrame
+        The columns of ``annotations`` with ``feature = "gene"`` (``source`` = ``"<source>:derived"`` when
+        there is a ``source`` column), sorted by ``gene_id``, strand and start.
+    """
+    missing = [c for c in ("chrom", "feature", "start", "end", "strand", "gene_id") if c not in annotations.columns]
+    if missing:
+        raise ValueError(f"annotation table missing columns: {missing}")
+    tx = annotations[(annotations["feature"].astype(str) == str(transcript_feature))
+                     & annotations["gene_id"].notna()]
+    if tx.empty:
+        return annotations.iloc[:0].assign(feature=pd.Series(dtype=object))
+    tx = tx.sort_values(["gene_id", "strand", "chrom", "start"], kind="mergesort")
+    key = tx["gene_id"].astype(str) + "\t" + tx["strand"].astype(str) + "\t" + tx["chrom"].astype(str)
+    reach = tx.groupby(key, sort=False)["end"].cummax().shift()
+    locus = ((key != key.shift()) | (tx["start"] > reach)).cumsum().to_numpy()
+    agg = {"chrom": ("chrom", "first"), "start": ("start", "min"), "end": ("end", "max"),
+           "strand": ("strand", "first"), "gene_id": ("gene_id", "first")}
+    for col in ("source", "gene_name", "gene_biotype"):
+        if col in tx.columns:
+            agg[col] = (col, "first")
+    genes = tx.groupby(locus, sort=True).agg(**agg).reset_index(drop=True)
+    genes["feature"] = "gene"
+    if "source" in genes.columns:
+        genes["source"] = genes["source"].astype(str) + ":derived"
+    for col, value in (("score", "."), ("frame", ".")):
+        if col in annotations.columns:
+            genes[col] = value
+    if "attribute" in annotations.columns:
+        genes["attribute"] = 'gene_id "' + genes["gene_id"].astype(str) + '"; derived_from "transcript";'
+    return genes[[c for c in annotations.columns if c in genes.columns]]
 
 
 def compute_annotation_features(
@@ -73,12 +141,20 @@ def compute_annotation_features(
     """Compute GTF-derived features for genomic intervals.
 
     The returned table preserves the input interval order and uses 0-based
-    half-open coordinates.
+    half-open coordinates.  Gene bodies, TSSs and promoters come from the
+    ``gene_feature`` rows; an annotation without them but with
+    ``transcript`` rows (UCSC ``refGene``) gets them from the transcripts
+    (:func:`gene_bodies`), as :func:`read_gtf` does.
     """
     requested = _validate_features(features)
     interval_table = _normalise_intervals(intervals)
     annotations = read_gtf(gtf) if not isinstance(gtf, pd.DataFrame) else gtf.copy()
     annotations = _normalise_annotations(annotations)
+    annotations = annotations[annotations["chrom"].isin(set(interval_table["chrom"]))]
+    if (not (annotations["feature"] == str(gene_feature)).any()
+            and (annotations["feature"] == "transcript").any() and "gene_id" in annotations.columns):
+        annotations = pd.concat([annotations, gene_bodies(annotations).assign(feature=str(gene_feature))],
+                                ignore_index=True)
 
     out = interval_table.copy()
     for feature in requested:
@@ -130,7 +206,16 @@ def add_annotation_features(
     promoter_window: tuple[int, int] = (-2000, 500),
     hash_source: bool = False,
 ) -> pd.DataFrame:
-    """Compute annotation features for a ``ChromData`` object."""
+    """Compute annotation features for the loci of a ``ChromData`` and write them to ``cd.bin_tracks``.
+
+    ``gtf`` is a GTF / GFF path or a table from :func:`read_gtf`; a UCSC ``refGene`` GTF, which has
+    transcripts but no ``gene`` rows, works as is (gene bodies are derived from the transcripts,
+    :func:`gene_bodies`).  The features (``gene_body_overlap_bp`` / ``_fraction``, ``gene_count``,
+    ``exon_overlap_*``, ``promoter_overlap_*`` with the promoter ``promoter_window`` around the TSS,
+    ``nearest_tss_distance``) go to ``cd.bin_tracks`` as ``<prefix>.<feature>`` (``project=True``) and to
+    ``cd.results[result_key]`` (``store=True``), with an entry in ``cd.uns["feature_registry"]``; the
+    per-locus table is returned.
+    """
     requested = _validate_features(features)
     intervals = unique_spot_intervals(cdata)
     table = compute_annotation_features(
@@ -369,5 +454,6 @@ __all__ = [
     "DEFAULT_ANNOTATION_FEATURES",
     "add_annotation_features",
     "compute_annotation_features",
+    "gene_bodies",
     "read_gtf",
 ]

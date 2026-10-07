@@ -12,6 +12,11 @@ same calling convention (``chrom=None``, ``params=``, ``key_added=``,
     uc.tl.call_loops(cd)                         # strc.loop.call_loops_axiswise_f
     uc.tl.call_compartments(cd)                  # strc.comp.call_compartments_axes_pc
     uc.tl.reconstruct_sc("cell.pairs")           # recon.sc.reconstruct_ember (EMber)
+    uc.tl.reconstruct_bulk(cd, contacts="bulk")  # recon.bulk.mds.reconstruct_mds (a linked bulk map)
+    uc.tl.embed_cells(cd, source="rna")          # emb.embed_cells
+    uc.tl.embed_higashi(cd)                      # emb.embed_higashi (FastHigashi on linked contact maps)
+    uc.tl.embed_contacts(cd)                     # emb.embed_contacts (scHiCluster on linked contact maps)
+    uc.tl.cluster_cells(cd, use="rna_pca")       # emb.cluster_cells
 """
 
 from __future__ import annotations
@@ -57,11 +62,13 @@ def call_loops(cd, *, method: str = "axiswise_f", **kwargs):
 
 
 def call_compartments(cd, *, method: str = "axes_pc", **kwargs):
-    """Call A/B compartments.  ``method``: ``"axes_pc"`` →
-    :func:`uchrom.strc.comp.call_compartments_axes_pc`."""
-    from uchrom.strc.comp import call_compartments_axes_pc
+    """Call A/B compartments.  ``method``: ``"axes_pc"`` (3-D distances) →
+    :func:`uchrom.strc.comp.call_compartments_axes_pc`; ``"hic_pc1"`` (a linked Hi-C map) →
+    :func:`uchrom.strc.comp.call_compartments_hic`."""
+    from uchrom.strc.comp import call_compartments_axes_pc, call_compartments_hic
 
-    return _dispatch("compartment", {"axes_pc": call_compartments_axes_pc}, method)(cd, **kwargs)
+    return _dispatch("compartment", {"axes_pc": call_compartments_axes_pc, "hic_pc1": call_compartments_hic},
+                     method)(cd, **kwargs)
 
 
 def reconstruct_sc(contacts, *, method: str = "ember", **kwargs):
@@ -74,4 +81,45 @@ def reconstruct_sc(contacts, *, method: str = "ember", **kwargs):
         contacts, **kwargs)
 
 
-__all__ = ["call_compartments", "call_loops", "call_tads", "reconstruct_sc"]
+def reconstruct_bulk(cd, *, method: str = "mds", **kwargs):
+    """3-D structure of a bulk Hi-C map linked to ``cd`` (``contacts=<key>``) -> new ``ChromData``.
+    ``method``: ``"mds"`` -> :func:`uchrom.recon.bulk.mds.reconstruct_mds`; ``"gem_fish"`` (with
+    ``fish=<tracing ChromData>``, ``chrom=``) -> :func:`uchrom.recon.fish.reconstruct_gem_fish`.  A population of
+    structures (IGM): :func:`uchrom.recon.bulk.deconv.deconvolve`."""
+    from uchrom.recon.bulk.mds import reconstruct_mds
+    from uchrom.recon.fish import reconstruct_gem_fish
+
+    return _dispatch("bulk reconstruction", {"mds": reconstruct_mds, "gem_fish": reconstruct_gem_fish}, method)(
+        cd, **kwargs)
+
+
+def embed_cells(cd, **kwargs):
+    """Embed cells from a per-cell matrix (RNA, IF, ATAC, ...) -> :func:`uchrom.emb.embed_cells`."""
+    from uchrom.emb import embed_cells as _f
+
+    return _f(cd, **kwargs)
+
+
+def embed_higashi(cd, **kwargs):
+    """Embed cells by their linked single-cell Hi-C maps with FastHigashi -> :func:`uchrom.emb.embed_higashi`."""
+    from uchrom.emb import embed_higashi as _f
+
+    return _f(cd, **kwargs)
+
+
+def embed_contacts(cd, **kwargs):
+    """Embed cells by their linked single-cell Hi-C maps (scHiCluster) -> :func:`uchrom.emb.embed_contacts`."""
+    from uchrom.emb import embed_contacts as _f
+
+    return _f(cd, **kwargs)
+
+
+def cluster_cells(cd, **kwargs):
+    """Leiden clusters of an embedding -> :func:`uchrom.emb.cluster_cells`."""
+    from uchrom.emb import cluster_cells as _f
+
+    return _f(cd, **kwargs)
+
+
+__all__ = ["call_compartments", "call_loops", "call_tads", "reconstruct_sc", "reconstruct_bulk", "embed_cells", "embed_higashi",
+           "embed_contacts", "cluster_cells"]

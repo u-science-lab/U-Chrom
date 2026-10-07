@@ -242,7 +242,7 @@ format 1.4 come with records that carry no provenance.
 Analysis functions share one calling convention (`cd` first; then
 keyword-only `chrom=None`, `trace_ids`, `cells`, `params`, `device`,
 `key_added="<what>.<method>"`, `copy=False`) — see
-[Structure identification](../structures/methods.md#calling-convention).  The
+[Structure identification](../tracing/structures.md#calling-convention).  The
 `uc.tl` / `uc.pp` namespaces are flat aliases:
 
 ```python

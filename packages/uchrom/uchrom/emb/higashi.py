@@ -285,3 +285,214 @@ def _default_factory(which: str) -> Callable[..., Any]:
             ) from e
         return _W
     raise ValueError(f"which must be 'fast' or 'full', got {which!r}")
+
+
+# ----------------------------------------------------------------------------- ChromData in, embedding out
+
+#: chromosomes left out by default (FastHigashi works on autosomes + X)
+_SKIP_CHROMS = {"chrY", "Y", "chrM", "M", "chrMT", "MT"}
+
+
+@contextlib.contextmanager
+def _output_to(path: Path | None) -> Iterator[None]:
+    """Route Python-level and subprocess output (fd 1 / 2) to ``path`` (``None``: leave it alone)."""
+    if path is None:
+        yield
+        return
+    import os
+    import sys
+
+    sys.stdout.flush()
+    sys.stderr.flush()
+    with open(path, "w") as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+        saved = os.dup(1), os.dup(2)
+        os.dup2(log.fileno(), 1)
+        os.dup2(log.fileno(), 2)
+        try:
+            yield
+        finally:
+            log.flush()
+            os.dup2(saved[0], 1)
+            os.dup2(saved[1], 2)
+            os.close(saved[0])
+            os.close(saved[1])
+
+
+def _write_inputs(scool: str, cells: list[str], chroms: list[str] | None, out: Path, genome: str) -> dict:
+    """Higashi v2 inputs for ``cells`` of a ``.scool``: per-cell contact tables, filelist, label info,
+    chromosome sizes, ``config.JSON``.  Returns the chromosomes, the resolution and the contacts per cell."""
+    import json
+
+    import cooler
+
+    from uchrom.io.contacts import make_higashi_config, write_label_info
+
+    first = cooler.Cooler(f"{scool}::/cells/{cells[0]}")
+    res = int(first.binsize)
+    if chroms is None:
+        chroms = [c for c in first.chromnames if c not in _SKIP_CHROMS]
+    chromsizes = first.chromsizes[chroms]
+    data = out / "data"
+    data.mkdir(parents=True, exist_ok=True)
+    files, totals = [], []
+    for cell in cells:
+        px = cooler.Cooler(f"{scool}::/cells/{cell}").pixels(join=True)[:]
+        px = px[px["chrom1"].isin(chroms) & px["chrom2"].isin(chroms)]
+        table = pd.DataFrame({"chrom1": px["chrom1"].astype(str), "pos1": px["start1"],
+                              "chrom2": px["chrom2"].astype(str), "pos2": px["start2"], "count": px["count"]})
+        path = data / f"{cell}.txt"
+        table.to_csv(path, sep="\t", index=False, header=False)
+        files.append(str(path.resolve()))
+        totals.append(int(table["count"].sum()))
+    (out / "filelist.txt").write_text("\n".join(files) + "\n")
+    write_label_info(pd.DataFrame({"cell_name": cells, "n_contacts": totals}), out / "label_info.pickle")
+    chromsizes.to_csv(out / "chromsizes.tsv", sep="\t", header=False)
+    config = make_higashi_config(data_dir=str(out.resolve()), genome_reference=genome, resolution=res,
+                                 chrom_list=list(chroms),
+                                 overrides={"genome_reference_path": str((out / "chromsizes.tsv").resolve())})
+    (out / "config.JSON").write_text(json.dumps(config, indent=2))
+    return {"chroms": list(chroms), "resolution": res, "n_contacts": totals}
+
+
+def embed_higashi(
+    cd,
+    *,
+    contacts: str = "per_cell",
+    cells=None,
+    chroms: list[str] | None = None,
+    rank: int = 64,
+    variant: str = "embed_l2_norm_correct_coverage_fh",
+    which: Literal["fast", "full"] = "fast",
+    conv: bool = True,
+    rwr: bool = True,
+    col: bool = True,
+    off_diag: int = 100,
+    filter: bool = False,
+    seed: int = 0,
+    keep_variants: bool = False,
+    work_dir: str | Path | None = None,
+    log: bool = True,
+    key_added: str = "higashi",
+    copy: bool = False,
+    wrapper_factory: Callable[..., Any] | None = None,
+    run_model_kwargs: dict[str, Any] | None = None,
+):
+    """Embed cells by their single-cell Hi-C contact maps with FastHigashi (Zhang et al. 2022) — from the
+    per-cell maps linked to ``cd`` (``cd.link_scool``, key ``contacts``; or embedded in an atlas store).
+
+    The Higashi inputs (one contact table per cell, label info, chromosome sizes, ``config.JSON``) are
+    written from the ``.scool`` under ``work_dir``, FastHigashi runs there (its output goes to
+    ``work_dir/fasthigashi.log`` with ``log=True``), and the embedding comes back on the cells axis.
+
+    Parameters
+    ----------
+    contacts
+        Key of the linked per-cell contact maps (``cd.uns["linked_scool"]``).
+    cells
+        Cell ids to embed (default: every cell of ``cd``); other cells get NaN rows.
+    chroms
+        Chromosomes to use (default: those of the maps without Y and M).
+    rank, conv, rwr, col, off_diag, filter
+        FastHigashi's tensor rank and preprocessing: 3x3 convolution, random walk with restart,
+        column normalisation, the band of diagonals kept, its cell filter.
+    variant
+        The embedding FastHigashi computes that is stored (default: L2-normalised, with the coverage
+        regressed out); ``keep_variants=True`` also stores every other ``embed_*`` variant as
+        ``cd.cellm["<key_added>.<variant>"]``.
+    seed
+        Seeds torch / numpy / random first (FastHigashi's initialisation and final SVD are random).
+    work_dir
+        Where the inputs, FastHigashi's cache and results go (default: a new temporary directory, kept;
+        its path is in ``cd.uns[key_added]["work_dir"]``).  Started clean on every call.
+
+    Returns
+    -------
+    The embedding, ``(n_cells, rank)`` on the cells axis (``copy=False``; also stored in
+    ``cd.cellm[key_added]``, FastHigashi's QC in ``cd.cells[key_added + "_qc"]``, the settings in
+    ``cd.uns[key_added]`` and ``cd.uns["embeddings"]``, the call in ``cd.results``) — or a new ``ChromData``
+    holding them (``copy=True``).
+    """
+    import random
+    import shutil
+    import tempfile
+
+    if copy:
+        cd = cd.copy()
+    all_ids = [str(c) for c in cd.cells.index]
+    ids = all_ids if cells is None else [str(c) for c in cells]
+    unknown = sorted(set(ids) - set(all_ids))
+    if unknown:
+        raise KeyError(f"cells not in cd.cells: {unknown[:5]}")
+    record = (cd.uns.get("linked_scool") or {}).get(contacts) or {}
+    scool = cd.linked_scool_path(contacts, cells=ids, trans=True)
+
+    work = Path(work_dir) if work_dir is not None else Path(tempfile.mkdtemp(prefix="uchrom-higashi-"))
+    for sub in ("input", "cache", "result"):          # FastHigashi caches per input set: start clean
+        shutil.rmtree(work / sub, ignore_errors=True)
+    inputs = _write_inputs(scool, ids, chroms, work / "input",
+                           genome=str(record.get("genome_assembly") or cd.uns.get("genome_assembly") or "unknown"))
+    (work / "cache").mkdir(parents=True)
+    (work / "result").mkdir(parents=True)
+
+    random.seed(seed)
+    np.random.seed(seed)
+    try:
+        import torch
+
+        torch.manual_seed(seed)
+    except ImportError:
+        pass
+    factory = wrapper_factory or _default_factory(which)
+    init = dict(_FAST_HIGASHI_INIT_DEFAULTS, off_diag=off_diag, filter=filter, do_conv=conv, do_rwr=rwr, do_col=col)
+    log_path = work / "fasthigashi.log" if log else None
+    here = work.resolve()
+    # FastHigashi writes scratch files (./tmp1, ./tmp2) into the working directory: run it in work_dir
+    with _output_to(log_path and log_path.resolve()), _no_pin_memory_without_cuda(), contextlib.chdir(here):
+        wrapper = factory(str(here / "input" / "config.JSON"), str(here / "cache"), str(here / "result"),
+                          init["off_diag"], init["filter"], init["do_conv"], init["do_rwr"], init["do_col"],
+                          init["no_col"])
+        wrapper.fast_process_data()
+        wrapper.prep_dataset()
+        wrapper.run_model(**{"rank": rank, **(run_model_kwargs or {})})
+        fetched = wrapper.fetch_cell_embedding(final_dim=rank, restore_order=True)
+
+    pos = {c: i for i, c in enumerate(all_ids)}
+    rows = np.array([pos[c] for c in ids])
+
+    def on_cells(x) -> np.ndarray:                     # rows in label-info order (= ids) -> the cells axis
+        x = np.asarray(x, dtype=np.float64)
+        full = np.full((len(all_ids), x.shape[1]), np.nan)
+        full[rows] = x
+        return full
+
+    emb = on_cells(_select_variant(fetched, variant))
+    cd.cellm[key_added] = emb
+    variants = sorted(k for k, v in (fetched.items() if isinstance(fetched, dict) else [])
+                      if k.startswith("embed_") and np.ndim(v) == 2)
+    if keep_variants:
+        for k in variants:
+            if k != variant:
+                cd.cellm[f"{key_added}.{k}"] = on_cells(fetched[k])
+    qc_path = work / "cache" / "qc.npy"
+    n_pass = None
+    if qc_path.exists():
+        qc = np.load(qc_path) > 0
+        col_qc = pd.Series(pd.NA, index=cd.cells.index, dtype="object")
+        col_qc.iloc[rows] = np.where(qc, "pass", "fail")
+        cd.cells[f"{key_added}_qc"] = pd.Categorical(col_qc, categories=["pass", "fail"])
+        n_pass = int(qc.sum())
+    settings = {"method": "fasthigashi" if which == "fast" else "higashi", "contacts": contacts,
+                "rank": int(rank), "variant": variant, "variants": variants, "conv": conv, "rwr": rwr, "col": col,
+                "off_diag": int(off_diag), "filter": bool(filter), "seed": int(seed), "chroms": inputs["chroms"],
+                "resolution": inputs["resolution"], "n_cells": len(ids), "n_pass_qc": n_pass,
+                "work_dir": str(work), "log": str(log_path) if log_path else None}
+    cd.uns[key_added] = settings
+    registry = dict(cd.uns.get("embeddings") or {})
+    registry[key_added] = {"source": "hic", "modality": "Hi-C", "method": settings["method"],
+                           "label": "Hi-C FastHigashi" if which == "fast" else "Hi-C Higashi",
+                           "axis_prefix": "Higashi", "features": f"{settings['method']} rank {rank}, {variant}"}
+    cd.uns["embeddings"] = registry
+    cd.results.set(key_added, emb, kind="array", function="uchrom.emb.embed_higashi",
+                   params={k: v for k, v in settings.items() if k not in ("work_dir", "log", "variants")},
+                   inputs={"contacts": contacts, "n_cells": len(ids), "chroms": inputs["chroms"]})
+    return cd if copy else emb

@@ -54,11 +54,36 @@ def main(input, output, resolution=100000, chrom=None,
          n_iter=1000, lr=0.01, res_ratio=10,
          partitioned=False, tad_bed=None, n_workers=1,
          norm='KR', verbose=False,
-         inter=False, resolution_inter=1000000):
-    """Reconstruct 3D chromatin structure from Hi-C data using MDS."""
+         inter=False, resolution_inter=1000000, contacts=None):
+    """Reconstruct 3D chromatin structure from Hi-C data using MDS.
+
+    ``input``: a ``.hic`` / ``.mcool`` / ``.cool`` file, or a ``.chromdata.zarr`` / ``.cdz`` store with the map
+    linked (``--contacts=KEY``; default: its only linked map) — the store form runs
+    :func:`uchrom.recon.bulk.mds.reconstruct_mds` (``--resolution`` then selects an ``.mcool`` level; a
+    ``.cool`` is used at its own resolution)."""
     import torch
     from .torch_mds import run_mds, get_device
     from .partitioned import partitioned_mds
+
+    if str(input).endswith((".chromdata.zarr", ".cdz")):
+        from chromdata import ChromData
+        from uchrom.fea.maps import _open, map_path
+        from .reconstruct import reconstruct_mds
+
+        cd = ChromData.read(input)
+        path = map_path(cd, contacts)
+        level = resolution if (path.endswith(".mcool") and "::" not in path) else None
+        mode = "inter" if inter else ("partitioned" if partitioned else "intra")
+        kw = {"resolution_inter": resolution_inter} if inter else (
+            {"res_ratio": res_ratio, "alpha2": alpha2, "n_workers": n_workers} if partitioned else {})
+        print(f"Reconstructing from {input} (contacts: {contacts or 'the linked map'}, "
+              f"{_open(path, level).binsize} bp)...")
+        out = reconstruct_mds(cd, contacts=contacts, chrom=chrom, resolution=level, mode=mode, alpha=alpha,
+                              weight=weight, n_iter=n_iter, lr=lr, device=device, verbose=verbose, **kw)
+        out.write(output)
+        print(f"Structure saved to {output}")
+        print("Done!")
+        return
 
     if inter:
         from .inter import inter_mds

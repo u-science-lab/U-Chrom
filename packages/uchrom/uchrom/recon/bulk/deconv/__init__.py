@@ -13,8 +13,9 @@ contact-probability preprocessing is :mod:`uchrom.recon.bulk.deconv.preprocess`.
 
 ::
 
-    from uchrom.recon.bulk.deconv import deconvolve
-    pop = deconvolve(P, bins=bins, method="igm", n_structures=1000, out="pop.chromdata.zarr")
+    from uchrom.recon.bulk.deconv import deconvolve, preprocess_hic
+    prob = preprocess_hic(cd, contacts="bulk", chroms=["chr21"])     # a ChromData with a linked Hi-C map
+    pop = deconvolve(prob, method="igm", n_structures=1000, out="pop.chromdata.zarr")
     pop.get_cell("s00000")          # one structure: one trace per chromosome copy
 """
 
@@ -41,10 +42,11 @@ def deconvolve(data: Any = None, *, method: str = "igm", **kwargs: Any):
     Parameters
     ----------
     data
-        A haploid contact-probability matrix (``scipy.sparse`` or dense,
-        bins × bins; pass ``bins=``), or a :class:`~chromdata.ChromData`
-        whose ``bins`` define the loci (pass the matrix as
-        ``probabilities=``).
+        The :class:`~uchrom.recon.bulk.deconv.preprocess.ProbabilityMatrix`
+        of :func:`preprocess_hic` (matrix and bins), a haploid
+        contact-probability matrix (``scipy.sparse`` or dense, bins × bins;
+        pass ``bins=``), or a :class:`~chromdata.ChromData` whose ``bins``
+        define the loci (pass the matrix as ``probabilities=``).
     method
         ``"igm"`` (default).  The remaining keywords go to the method
         (:func:`uchrom.recon.bulk.deconv.igm.deconvolve_igm`).

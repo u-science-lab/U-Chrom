@@ -5,6 +5,7 @@ import hashlib
 import io
 import tarfile
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -73,3 +74,37 @@ def test_fetch_builds_the_head_of_a_field_of_view(monkeypatch, tmp_path):
     cells = pd.read_csv(root / "fov" / "cells.csv")
     assert cells["cellID"].tolist() == [1, 1]              # 4 rows read; cell 2 may be cut off: dropped
     assert (root / "fov" / "loci.csv").read_text() == "locus\n"
+
+
+def test_load_builds_once_caches_and_rebuilds_on_a_new_loader_version(monkeypatch, tmp_path):
+    from chromdata import ChromData
+    from uchrom.datasets import _loaders
+
+    calls = []
+
+    def build(root, out):
+        calls.append(out)
+        spots = pd.DataFrame({"chrom": ["chr1", "chr1"], "start": [0, 100], "end": [100, 200], "trace_id": ["t", "t"]})
+        return ChromData(np.arange(6, dtype=float).reshape(2, 3), spots, uns={"genome_assembly": "toy"})
+
+    loader = _loaders.Loader(name="toy_cd", build=build, store="toy/toy.chromdata.zarr", description="toy")
+    monkeypatch.setitem(_loaders.LOADERS, "toy_cd", loader)
+    cd = ds.load("toy_cd", root=tmp_path)
+    assert cd.n_spots == 2 and (tmp_path / "toy" / "toy.chromdata.zarr").exists()
+    assert cd.uns["dataset"] == {"name": "toy_cd", "loader_version": 1, "sources": []}
+    ds.load("toy_cd", root=tmp_path)
+    assert len(calls) == 1                                      # read from the cache
+    assert ds.load("toy_cd", root=tmp_path, backed=True).backed
+    monkeypatch.setitem(_loaders.LOADERS, "toy_cd", _loaders.Loader(**{**loader.__dict__, "version": 2}))
+    ds.load("toy_cd", root=tmp_path)
+    assert len(calls) == 2                                      # a new loader version rebuilds
+    assert ds.list_datasets().loc["toy_cd", "load"]
+
+
+def test_load_names_what_it_knows(monkeypatch):
+    def no_atlas(name, **kw):
+        raise KeyError(name)
+
+    monkeypatch.setattr(ds, "atlas", no_atlas)
+    with pytest.raises(KeyError, match="kim2020_scihic"):
+        ds.load("no_such_dataset")

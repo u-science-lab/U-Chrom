@@ -10,8 +10,10 @@ reimplementation of Jia & Ren 2022 (*Nature Biotechnology*,
 doi:10.1038/s41587-022-01568-9) — a spatial genome aligner that uses
 a Gaussian-chain polymer model to score candidate spot-to-fiber
 assignments, then picks fibers via iterative shortest-path.
+:func:`score_alignment` compares the fibres with a reference assignment.
 """
 
 from .jie import align_spots, SpotAlignerParams
+from .score import score_alignment
 
-__all__ = ["align_spots", "SpotAlignerParams"]
+__all__ = ["align_spots", "SpotAlignerParams", "score_alignment"]

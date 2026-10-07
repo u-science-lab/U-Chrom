@@ -25,3 +25,12 @@ Bulk reconstruction (MDS)
 
 .. automodule:: uchrom.recon.bulk.mds.transforms
    :members:
+
+Bulk reconstruction (IGM population models)
+-------------------------------------------
+
+.. automodule:: uchrom.recon.bulk.deconv
+   :members: deconvolve, deconvolve_igm, IgmParams
+
+.. automodule:: uchrom.recon.bulk.deconv.preprocess
+   :members: preprocess_hic

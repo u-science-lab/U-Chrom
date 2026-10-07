@@ -48,8 +48,9 @@ def build_dense_grid(cd, ann=None):
     -------
     grid : pd.DataFrame
         Columns: chrom, start, end, trace_id, [cell_id], haploid, region, pos,
-        x, y, z.  One row per (haploid, locus), sorted by (region, haploid, pos).
-        Coordinates are NaN where the locus was not observed for that haploid.
+        x, y, z, imputed.  One row per (haploid, locus), sorted by (region,
+        haploid, pos).  Coordinates are NaN (and ``imputed`` True) where the
+        locus was not observed for that haploid.
     panel : pd.DataFrame
         Columns: chrom, start, end, pos (1-based per chrom).
     has_cell : bool
@@ -95,6 +96,8 @@ def build_dense_grid(cd, ann=None):
         ["haploid", "chrom", "start"]
     )
     grid = full.merge(obs, on=["haploid", "chrom", "start"], how="left")
+    # the loci without a coordinate in the input: what the methods impute
+    grid["imputed"] = grid[["x", "y", "z"]].isna().any(axis=1)
     grid["region"] = grid["chrom"].astype(str)
     grid = grid.sort_values(["region", "haploid", "pos"]).reset_index(drop=True)
 
@@ -105,11 +108,13 @@ def grid_to_chromdata(grid, has_cell, template_cd):
     """Build a ChromData from a densified grid.
 
     Per-spot containers (tracks, layers) are dropped because the row set
-    changed; cell/trace-level metadata and uns are preserved.
+    changed; cell/trace-level metadata and uns are preserved.  The spot
+    column ``imputed`` marks the rows that had no coordinate in the input.
     """
     from chromdata import ChromData
 
-    cols = ["chrom", "start", "end", "trace_id"] + (["cell_id"] if has_cell else [])
+    cols = (["chrom", "start", "end", "trace_id"] + (["cell_id"] if has_cell else [])
+            + (["imputed"] if "imputed" in grid.columns else []))
     out_spots = grid[cols].reset_index(drop=True)
     out_coords = grid[["x", "y", "z"]].to_numpy(dtype=float)
 

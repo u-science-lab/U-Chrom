@@ -12,9 +12,8 @@ single-cell embeddings, an interactive web browser and an open data atlas.
 ```python
 import uchrom as uc
 import uchrom.datasets as ds
-from chromdata import ChromData
 
-cd = ChromData.from_fofct(ds.fetch("takei"))           # chromatin tracing (4DN FOF-CT), fetched once
+cd = ds.load("takei2021_mesc")                          # chromatin tracing (4DN FOF-CT), built once
 tads = uc.tl.call_tads(cd, chrom="chr3")                # TADs from 3-D distances
 cd.write("takei2021.chromdata.zarr")                    # one store, read in parts later
 ```
@@ -28,24 +27,22 @@ New here?  Start with [installation](start/install), the [quick start](start/qui
 
 ## By data type
 
-Each chapter takes one kind of data from its files to a `ChromData` and through what is specific to
-it, with tutorials on real data.
+Each chapter takes one kind of data from its files to a `ChromData` and through the analyses made for it,
+step by step, with tutorials on real data.
 
-| Data | What the chapter covers |
-|------|-------------------------|
-| [Chromatin tracing](tracing/index) | FOF-CT, PyHiM and other tables; raw detections into traces; filling missing loci |
-| [Imaging multi-omics: DNA seqFISH+](seqfish/index) | DNA positions with chromatin marks, RNA and cell positions in the same cells |
-| [Single-cell and spatial Hi-C](schic/index) | contacts per cell, linked contact maps, 3-D structures of single cells (NucDynamics, EMber), embeddings from contacts |
-| [Bulk Hi-C](bulk/index) | contact maps to 3-D: one consensus structure (MDS), a population of structures (IGM), Hi-C with tracing (GEM-FISH) |
+| Data | Steps |
+|------|-------|
+| [Chromatin tracing](tracing/index) | [reading tracing data](tracing/reading) · [from detections to traces](tracing/traces) · [filling missing loci](tracing/imputation) · [calling structures](tracing/structures): loops, TADs, domains, compartments |
+| [Imaging multi-omics: DNA seqFISH+](seqfish/index) | [reading the data](seqfish/reading) · [marks, cells and tissue](seqfish/marks) |
+| [Single-cell and spatial Hi-C](schic/index) | [contact maps per cell](schic/contacts) · [3-D structures of single cells](schic/reconstruction) · [cell embeddings](schic/embeddings) |
+| [Bulk Hi-C](bulk/index) | [structures from a bulk map](bulk/reconstruction): MDS, IGM · [Hi-C with imaging](bulk/gem_fish): GEM-FISH |
 
 ## Common to all data
 
 | Chapter | What it covers | Package / module |
 |---------|----------------|------------------|
 | [Data model & storage](data/index) | `ChromData`, the `.chromdata.zarr` store, backed and remote reads, linked and embedded modalities | `chromdata` |
-| [Structure calling](structures/index) | loops, TADs, domains per allele, A/B compartments from 3-D distances | `uchrom.strc` |
-| [Per-locus features](features/index) | distance maps, variance features, signals and peaks along the genome | `uchrom.fea` |
-| [Cells & embeddings](cells/index) | embeddings and clusters of cells from RNA, chromatin marks, accessibility and contacts | `uchrom.emb` |
+| [Per-locus features](features/index) | distance maps, variance features, signals and peaks along the genome, annotation | `uchrom.fea` |
 | [Visualisation](viz/index) | the web browser, the data atlas, plots | `uchrom-browser`, `uchrom.pl` |
 
 ```{toctree}
@@ -76,9 +73,7 @@ bulk/index
 :hidden:
 
 data/index
-structures/index
 features/index
-cells/index
 viz/index
 ```
 

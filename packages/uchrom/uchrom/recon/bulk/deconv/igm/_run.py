@@ -94,6 +94,10 @@ def _normalise_bins(bins: pd.DataFrame) -> pd.DataFrame:
 
 def _inputs(data: Any, probabilities: Any, bins: Optional[pd.DataFrame]):
     """(bins DataFrame, probability matrix) from the accepted call forms."""
+    if hasattr(data, "probabilities") and hasattr(data, "bins") and not _is_chromdata(data):
+        if probabilities is not None:                     # a ProbabilityMatrix (preprocess_hic / _igm)
+            raise ValueError("pass a ProbabilityMatrix or probabilities=, not both")
+        return _normalise_bins(data.bins if bins is None else bins), data.probabilities
     if _is_chromdata(data):
         if bins is None:
             bins = data.bins[["chrom", "start", "end"]]
@@ -274,8 +278,10 @@ def deconvolve_igm(
         The haploid contact-probability matrix (``scipy.sparse`` or dense,
         entries = probability that the two loci are in contact, neighbours 1)
         and its bins (``chrom``, ``start``, ``end``; each chromosome
-        contiguous): ``deconvolve_igm(P, bins=bins)``, or
-        ``deconvolve_igm(cd, probabilities=P)`` with the bins of ``cd``.
+        contiguous): ``deconvolve_igm(P, bins=bins)``, the
+        :class:`~uchrom.recon.bulk.deconv.preprocess.ProbabilityMatrix` of
+        ``preprocess_hic`` (``deconvolve_igm(prob)``: its matrix and bins),
+        or ``deconvolve_igm(cd, probabilities=P)`` with the bins of ``cd``.
     chrom
         Restrict the model to these chromosomes (default: all bins), e.g.
         one chromosome: its copies follow ``ploidy`` (``"haploid"``,

@@ -182,3 +182,33 @@ def test_coarse_bins_dataframe_and_aggregate():
     assert (f2c[mid < 100_000] == -1).all()
     m, b = aggregate_bins(C, bins, 4)
     assert len(b) == 10 and np.isclose(m.sum(), canonical_upper(C).sum())
+
+
+def test_preprocess_hic_from_a_chromdata_with_a_linked_map(tmp_path):
+    cooler = pytest.importorskip("cooler")
+    from chromdata import ChromData
+
+    from uchrom.recon.bulk.deconv import preprocess_hic
+
+    C, bins = toy_hic(n_per_chrom=(60, 40), res=20_000)
+    u = canonical_upper(C).tocoo()
+    path = tmp_path / "toy.cool"
+    cooler.create_cooler(str(path), bins, pd.DataFrame({"bin1_id": u.row, "bin2_id": u.col,
+                                                        "count": u.data.astype(int)}), ordered=True)
+    cd = ChromData(np.zeros((0, 3)), pd.DataFrame({"chrom": pd.Series(dtype=str), "start": pd.Series(dtype=np.int64),
+                                                   "end": pd.Series(dtype=np.int64), "trace_id": pd.Series(dtype=str)}))
+    cd.link_cool(str(path), key="bulk")
+    params = IGMPreprocessParams(fine_resolution=20_000, coarse_resolution=100_000)
+    a = preprocess_hic(cd, contacts="bulk", chroms=["chr1"], params=params)
+    b = preprocess_hic(str(path), chroms=["chr1"], params=params)
+    c = preprocess_hic(path=str(path), chroms=["chr1"], params=params)
+    assert (a.probabilities != b.probabilities).nnz == 0 and (b.probabilities != c.probabilities).nnz == 0
+    assert a.provenance["input"]["contacts"] == "bulk" and "contacts" not in b.provenance["input"]
+    assert preprocess_hic(cd, params=params).bins["chrom"].nunique() == 2      # the only map, every chromosome
+
+    from uchrom.recon.bulk.deconv.igm._run import _inputs
+
+    bins_in, P = _inputs(a, None, None)                      # deconvolve(prob): its matrix and bins
+    assert P is a.probabilities and len(bins_in) == len(a.bins)
+    with pytest.raises(ValueError, match="not both"):
+        _inputs(a, a.probabilities, None)
