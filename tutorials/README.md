@@ -31,6 +31,10 @@ sources (`uchrom.datasets.fetch`, cached in `$UCHROM_DATA`, else `~/.cache/uchro
 `takei2025_auto_discovery.ipynb` and `takei2025_iterative_auto_discovery.ipynb` (agents exploring a
 dataset, `uchrom-discovery`) are kept here but left out of the documentation for now.
 
+Every tutorial of the documentation also has a card in the gallery (`docs/source/gallery.md`: the notebook,
+one line on what it shows, which of its figures is the thumbnail); the thumbnail is cut from the executed
+notebook when the docs are built.
+
 Run a notebook from the repository root:
 
 ```bash

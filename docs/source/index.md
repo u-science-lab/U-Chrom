@@ -23,7 +23,7 @@ python -m uchrom_browser takei2021.chromdata.zarr       # look at it in the web 
 ```
 
 New here?  Start with [installation](start/install), the [quick start](start/quickstart) and the
-[concepts](start/concepts) behind the data model.
+[concepts](start/concepts) behind the data model — or browse every tutorial in the [gallery](gallery).
 
 ## By data type
 
@@ -52,6 +52,7 @@ step by step, with tutorials on real data.
 
 start/install
 start/quickstart
+gallery
 start/concepts
 start/datasets
 ```
