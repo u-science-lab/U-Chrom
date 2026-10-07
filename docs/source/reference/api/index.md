@@ -16,6 +16,7 @@ core
 :maxdepth: 1
 
 tl_pp
+datasets
 io
 im
 recon

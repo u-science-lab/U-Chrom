@@ -1,12 +1,35 @@
-# Structure identification
+# Calling structures
 
-`uchrom.strc` groups algorithms that detect 3D chromatin features.
+`uchrom.strc` calls chromatin structures from the 3-D data itself — from the distances between loci in
+many traces, not from a contact map: loops (a per-axis F-test, ArcFISH), TADs (ArcFISH p-values),
+domains per allele (FISHnet) and A/B compartments.  The callers work on any population of traces — chromatin
+tracing, DNA seqFISH+, an ensemble of models — and run on PyTorch (`device="auto"`: CUDA, Apple MPS or
+CPU); on a backed store they stream.  TADs can also be called from a Hi-C map linked to the data (the
+directionality index), to compare the two.
 
-| Submodule | Status | Method |
-|-----------|--------|--------|
-| `uchrom.strc.loop` | available | ArcFISH-style axis-wise F-test |
-| `uchrom.strc.tad` | available | Directionality index, ArcFISH-style F-test (hierarchical), FISHnet per-allele |
-| `uchrom.strc.comp` | available | ArcFISH-style per-axis PC2 + KMeans |
+| Structure | API |
+|-----------|-----|
+| loops | `uchrom.strc.loop.call_loops_axiswise_f`, `uc.tl.call_loops` |
+| TADs | `uchrom.strc.tad.call_tads_by_pval`, `call_tads_di` (Hi-C), `uc.tl.call_tads` |
+| domains per trace / allele | `uchrom.strc.tad.call_domains_fishnet` |
+| A/B compartments | `uchrom.strc.comp.call_compartments_axes_pc`, `uc.tl.call_compartments`; from a linked Hi-C map: `call_compartments_hic` (`method="hic_pc1"`) |
+| all of them, projected onto bins / spots | `uchrom.strc.call_structures_multi`, `add_structural_features` |
+| compare calls with a reference | `match_loops`, `score_loops` (anchor vs background distances), `tad_boundaries`, `compare_boundaries`, `boundary_frequency`, `compare_compartments` |
+| draw them | `uchrom.pl.draw_domains`, `draw_loops`, `plot_compartments` |
+
+## Tutorials
+
+```{toctree}
+:maxdepth: 1
+
+/tutorials/loop_calling
+/tutorials/tad_calling
+/tutorials/fishnet_domains
+/tutorials/compartment
+```
+
+API: [loops](../reference/api/strc_loop), [TADs](../reference/api/strc_tad),
+[compartments](../reference/api/strc_comp), [enrichment](../reference/api/strc_enrichment).
 
 ## Calling convention
 

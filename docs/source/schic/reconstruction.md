@@ -1,4 +1,4 @@
-# Single-cell reconstruction: methods and parameters
+# 3-D structures of single cells
 
 Two methods compute 3-D structures of one cell from its contacts, both on the native engine
 `uchrom-recon` (Rust; multi-core CPU in f64, GPU in f32 through wgpu: Metal on macOS, Vulkan on Linux),
@@ -8,6 +8,22 @@ both returning an ensemble of models as one `ChromData`.
 |--------|--------|----------|-------|
 | EMber | `uchrom.recon.sc.ember` | single-cell Hi-C / Dip-C, noisy contacts, phased diploid | protocol `"robust"`; noise-aware, sampled ensembles, fast |
 | NucDynamics | `uchrom.recon.sc.nucdyn` | single-cell Hi-C / Dip-C | the 2017 method of Stevens et al.; annealed ensembles |
+
+```python
+import uchrom as uc
+import uchrom.datasets as ds
+
+pairs = ds.fetch("stevens2017") / "GSM2219497_Cell_1_contact_pairs.txt.gz"    # one cell's contacts (GEO)
+models = uc.tl.reconstruct_sc(pairs, n_models=4)                              # EMber; method="nucdyn"
+```
+
+## Tutorial
+
+```{toctree}
+:maxdepth: 1
+
+/tutorials/reconstruction
+```
 
 ## NucDynamics (single-cell)
 
