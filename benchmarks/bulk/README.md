@@ -30,6 +30,13 @@ deconvolution) and reading ChromData outputs need U-Chrom.
 | `results/` | small checked-in results (KR check, laptop plumbing provenance) |
 | `tests/` | `pytest benchmarks/bulk/tests` (~10 s, synthetic toys; library tests: `cd packages/uchrom && pytest tests/recon/test_deconv_preprocess.py`) |
 
+**EMber-pop** (population deconvolution without IGM's envelope, in development): pre-registration
+`PREREG_POP.md`, development log `POP_DEVLOG.md`, cell split `data/pop_split.tsv` (`pop_split.py`),
+metrics `pop_metrics.py` (elliptical radial position, per-pair W1, territory neighbourhoods, shape,
+chromosome-block bootstrap), runs `pop_run.py` (`igm_sphere`, `igm_ellipsoid`, `ember_pop`), scores
+`pop_score.py`, endpoints / decision `pop_test.py`, Sherlock jobs `sherlock/pop_*.sbatch` (`_env_pop.sh`,
+tables in `sherlock/pop_tables/`, held-back test tables by `sherlock/pop_test_tables.py`).
+
 ## 1. Hi-C → contact probabilities (`uchrom.recon.bulk.deconv.preprocess`)
 
 The IGM paper's own protocol (Boninsegna et al. 2022 SI section 6; `pgs_spec.md` 1.2), resolutions

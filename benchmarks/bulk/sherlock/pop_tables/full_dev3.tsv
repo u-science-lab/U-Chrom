@@ -1,0 +1,6 @@
+su_dev	C1	200	1.0	1	diploid	popB6_S200full	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1,"gyration_wall":1.15,"advance_on_max_iterations":true,"noncontact_from_sigma":5,"noncontact_kspring":1.0,"max_iterations":5}
+su_dev	C1	200	1.0	3	diploid	popB6_S200full	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1,"gyration_wall":1.15,"advance_on_max_iterations":true,"noncontact_from_sigma":5,"noncontact_kspring":1.0,"max_iterations":5}
+su_dev	C2	200	1.0	1	diploid	popB6_S200full	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1,"gyration_wall":1.15,"advance_on_max_iterations":true,"noncontact_from_sigma":5,"noncontact_kspring":1.0,"max_iterations":5}
+su_dev	C3	200	1.0	1	diploid	popB6_S200full	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1,"gyration_wall":1.15,"advance_on_max_iterations":true,"noncontact_from_sigma":5,"noncontact_kspring":1.0,"max_iterations":5}
+su_dev	C2	200	1.0	1	diploid	igm_ellipsoid_S200full	igm_ellipsoid	{}
+su_dev	C3	200	1.0	1	diploid	igm_sphere_S200full	igm_sphere	{}

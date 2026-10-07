@@ -158,4 +158,54 @@ outcome.
 
 ## 10. Changes and additions
 
-(none)
+No held-back unit has been run with any method (the real IMR90 input was built, 2026-10-07, no method
+run on it).
+
+### 2026-10-07 — DRAFT of the freeze proposal (not approved, not frozen, no tag; development not finished)
+
+Development record: `POP_DEVLOG.md` (§9: what is still needed).  The candidate below is B5; the leading
+alternative is **B6 = B5 + `gyration_wall` 1.15** (a soft wall in each structure's own principal frame), the
+only candidate better than IGM-sphere on P1 at the full schedule in one development seed; the choice between
+B5 and B6 is made on the replicated development runs before the proposal is submitted.  If approved, the
+commit that adds the approval date here is tagged `ember-pop-frozen` and the test below is run once.
+
+* **Method ("EMber-pop", development candidate B5; B6 adds `gyration_wall` 1.15).**  Protocol `igm` of `packages/uchrom-recon`
+  at the tagged commit, IGM 1.0 defaults (σ lists 1 → 0.01, demo annealing schedule, occupancy 0.2,
+  bead radii from `nucleus_radius` = R_rg, iterative correction, contact range 2) plus:
+  `nucleus_shape = "none"` (no envelope; the sphere of R_rg only sets the bead volumes);
+  `gyration_prior` = the bulk cells' median gyration standard deviations σ1 ≥ σ2 ≥ σ3 (the imaging
+  calibration of IGM-ellipsoid, whose semi-axes are sqrt(5) σ_k), `gyration_kspring` 0.1;
+  `noncontact_kspring` 1.0 from the last σ (`noncontact_from_sigma` 5), range = the contact range;
+  `max_iterations` 5 with `advance_on_max_iterations`.  = `pop_run.py --method ember_pop` (`EMBER_POP`),
+  `deconvolve(method="ember_pop", nucleus=...)` with its defaults.  Not adopted (development evidence in
+  `POP_DEVLOG.md`): the soft assignment (β 4-8: radial order lost), a noise floor (the C3 distortion is
+  multiplicative — cis × 0.33, trans × 1.5 after the preprocessing — not a floor), the density cap (the
+  non-contact restraints at rc already set the local density from the data), per-structure shapes of
+  single imaged cells (worse than the median shape), a two-sided Rg prior (cigar-like structures).
+* **Deviation from §9 / §1 (stated, not hidden): the method is not shape-free.**  On the development data
+  the contacts did not determine the nuclear shape (every shape-free variant gave round or cigar-like
+  structures); the large gains come from the imaging-calibrated, orientation-free, wall-free gyration
+  prior.  It uses three imaging numbers (σ1-σ3) where IGM-sphere uses one (R_rg).
+* **Comparators (addition):** IGM-ellipsoid uses the same three numbers and becomes a **co-primary**
+  comparator: items 1-4 of §7 are evaluated against IGM-sphere and against IGM-ellipsoid, and EMber-pop is
+  called better than IGM only if both pass; item 5 (wall time ≤ 3×) against IGM-sphere as registered (the
+  ellipsoid wall time is reported).  Ablations replace those of §4: EMber-pop without the non-contact
+  restraints; with IGM's sphere instead of the gyration prior; with the radius-of-gyration cap (one imaging
+  scalar, the information of IGM-sphere) instead of the gyration prior; with gyration spring 1.
+* **Implementation details fixed now:** IGM-ellipsoid radii equal to IGM-sphere's through the occupancy
+  scaled by V_sphere / V_ellipsoid (the engine refuses `occupancy_total_bp` below the modelled genome); if
+  that occupancy would reach 1, one bead radius for all beads = the median IGM-sphere radius
+  (`pop_run.method_params`).  Ploidy: Su and IMR90 `diploid`, Takei `male` (chrX, chrY one copy).
+  Real IMR90: calibration (R_rg, σ1-σ3, scale target 32.885) from the 894 Su development cells
+  (`forward.py truth --split-set dev_bulk dev_truth`), truth = the 893 test-half cells, the model's own
+  contact distance for scoring.  The bootstrap counts a cis pair once per resampled chromosome
+  (`pop_test.py`).
+* **Test protocol:** build of the tag (`pop_setup.sbatch`); inputs `pop_prepare.sbatch` (su_test:
+  `su2020_genome`, test_bulk / test_truth, `centered:3000000`; takei_test: `takei2021_1mb`, test_bulk /
+  test_truth, `centered:1000000`); real_imr90: `input_3mb.npz` → `real.npz`, `bulk_cells.npz` = the Su
+  development cells, `truth.npz` = the test-half cells; runs `pop_pair.sbatch` with the tables of
+  `pop_test_tables.py` (`test_main`: 18 lines × 3 methods, S = 1,000, seeds 1-3, full schedule, the three
+  methods back to back on one GPU; `test_real`; `test_sweep`; `test_ablation`); scoring in the same job
+  (`pop_score.py score`); endpoints and decision `pop_test.py --units su_test takei_test --b ember_pop
+  --a igm_sphere igm_ellipsoid --real real_imr90 --runtime-unit su_test/C1`.  Results are reported
+  whatever they are; no change to the method after the test.

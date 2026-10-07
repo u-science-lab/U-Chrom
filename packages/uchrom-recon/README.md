@@ -278,6 +278,23 @@ imaged laminas, tracing / single-cell FISH restraints; design in
 `benchmarks/bulk/design.md`, "Stage 2"), the `polymer/violations` switch (polymer bonds
 are always monitored, as in IGM 1.0), `polymer_bonds_style = "none"`.
 
+### EMber-pop options (in development; defaults = IGM)
+
+New options of the `igm` protocol used by EMber-pop (`uchrom.recon.bulk.deconv.deconvolve(...,
+method="ember_pop")`; pre-registration `benchmarks/bulk/PREREG_POP.md`, development log
+`benchmarks/bulk/POP_DEVLOG.md`).  All default to off; the default IGM run is bit-identical
+(`igm/regression_tests.rs`), every option has CPU finite-difference and GPU-vs-CPU tests.
+
+| option | what | where |
+| --- | --- | --- |
+| `nucleus_shape = "none"` | no envelope (`nucleus_radius` still sets the bead volumes); no envelope restraints counted | `forces.rs:ForceField::new` (`k_env` 0, `envelope`), `igm.wgsl` (`env_on`) |
+| `noncontact_kspring`, `noncontact_range`, `noncontact_from_sigma` | two-sided assignment: every bead pair within `range (r_i + r_j)` that is neither polymer-bonded nor assigned a Hi-C contact in the structure is pushed apart, `U = k (d0 − d)²`; the push is applied to all neighbour pairs and taken back on the bonded pairs (no membership test); polymer pairs are dropped from the A-step rows; from a σ index on | `forces.rs:compute_nc`, `lower_bond`; `driver.rs:run_igm_with`; `igm.wgsl:total_force` (grid cut-off `grid_cut`) |
+| `assignment = "soft"`, `soft_*` | contact weight `π = 1 / (1 + (d / d_act)²^{β/2})` around IGM's activation distance, β schedule, commitment, minimum weight; contact bond × π, non-contact × (1 − π); 9-bit weights in the GPU CSR | `params.rs:SoftAssign`, `astep.rs:assign_soft`, `igm.wgsl:row_w` |
+| `rg_cap`, `rg_kspring`, `rg_two_sided` | radius-of-gyration cap (or two-sided prior) `½ k N (Rg − R0)²` | `forces.rs:rg_cap_forces`; GPU moments reduced with the bounding box |
+| `gyration_prior`, `gyration_kspring`, `gyration_targets` | orientation-free, wall-free shape prior on the standard deviations along each structure's own principal axes `½ k N Σ (sqrt λ_k − σ_k)²` (optionally one target per structure) | `forces.rs:gyration_forces`; GPU 3 × 3 Jacobi in `grid_setup` (`mstate` slots 8-11) |
+| `gyration_wall` | IGM's envelope in each structure's own principal frame, semi-axes `wall × sqrt(5) σ_k` | `forces.rs:gyration_forces_wall`, `igm.wgsl:total_force` |
+| `advance_on_max_iterations` | go on with the next σ at `max_iterations` (IGM stops the run) | `driver.rs:run_igm_with` |
+
 ### Deviations from the original, and why
 
 * **Line search of the final minimisation**: LAMMPS' `backtrack` (Armijo slope 0.4,

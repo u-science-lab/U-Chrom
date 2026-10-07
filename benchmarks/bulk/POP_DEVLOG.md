@@ -79,3 +79,133 @@ gains need the imaging shape statistics (three scalars, as IGM-ellipsoid) in the
 going forward is "IGM A/M + no envelope + gyration-shape prior (+ non-contact restraints at the last σ)";
 since it uses the same imaging information as IGM-ellipsoid, the freeze proposal adds IGM-ellipsoid as a
 co-primary comparator (PREREG §10, before any test run).
+
+## 3. Tuning the gyration-prior method (C1, S = 100, schedule × 0.1, laptop GPU)
+
+Seed-to-seed spread at this size is small (sd over 3-4 seeds: P1 ≤ 0.001, P2 ≤ 0.013, P3 < 0.0001), so
+differences ≥ 0.005 in P1 and ≥ 0.03 in P2 are above the noise; "(n)" = seeds.
+
+| variant | P1 | P2 | cis | trans | P3 | ρSp | terrSp | cvR | s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| IGM sphere (4) | 0.055 | 1.043 | 0.581 | 1.067 | 0.0060 | 0.88 | −0.05 | 0.68 | 76 |
+| IGM ellipsoid (3) | 0.067 | 0.439 | 0.289 | 0.447 | 0.0112 | 0.26 | 0.13 | 0.96 | 31 |
+| gyration k 1 (3) | 0.054 | 0.347 | 0.206 | 0.354 | 0.0073 | 0.93 | 0.62 | 0.97 | 93 |
+| gyration k 10 | 0.055 | 0.346 | 0.202 | 0.353 | 0.0073 | 0.94 | 0.64 | 0.97 | 95 |
+| gyration k 0.1 (2) | **0.050** | 0.342 | 0.217 | 0.348 | 0.0071 | 0.93 | 0.56 | 0.97 | 97 |
+| gyration k 0.03 | **0.048** | 0.341 | 0.226 | 0.347 | 0.0070 | 0.93 | 0.59 | 0.97 | 94 |
+| gyration k 0.01 | 0.053 | 0.348 | 0.267 | 0.352 | 0.0055 | 0.91 | 0.55 | 0.98 | 111 |
+| gyration k 1, one imaged cell per structure | 0.066 | 0.385 | 0.186 | 0.395 | 0.0055 | 0.90 | 0.64 | 1.05 | 157 |
+| gyration k 1 + nc last σ (3) | 0.053 | 0.350 | 0.188 | 0.359 | 0.0057 | 0.91 | 0.62 | 0.96 | 176 |
+| gyration k 1 + nc last σ, p = f | 0.077 | 0.324 | 0.236 | 0.329 | 0.0058 | 0.89 | 0.41 | 1.01 | 204 |
+| gyration k 1 + soft (β 8 → 32) + nc | 0.080 | 0.348 | 0.300 | 0.350 | 0.0059 | 0.89 | 0.47 | 1.02 | 167 |
+| gyration k 0.1 + nc last σ k 1 (2) | 0.050 | 0.345 | 0.205 | 0.353 | 0.0057 | 0.90 | 0.57 | 0.96 | 192 |
+| gyration k 0.1 + nc k 0.3 | 0.054 | 0.327 | 0.201 | 0.334 | 0.0055 | 0.91 | 0.56 | 0.98 | 211 |
+| gyration k 0.1 + nc k 1, range 1.5 (2) | 0.055 | 0.333 | 0.193 | 0.340 | 0.0053 | 0.91 | 0.55 | 0.99 | 218 |
+| gyration k 0.1 + nc k 1, range 1.25 | 0.058 | 0.326 | 0.193 | 0.333 | 0.0053 | 0.91 | 0.56 | 0.99 | 223 |
+| **B5** = gyration k 0.1 + nc k 1 last σ + ≤ 5 iterations / σ (3) | **0.051** | 0.345 | 0.207 | 0.355 | 0.0060 | 0.90 | 0.59 | 0.96 | **95-108** |
+| B5 with nc k 0.3 | 0.054 | 0.337 | 0.204 | 0.344 | 0.0057 | 0.89 | 0.57 | 0.97 | 108 |
+| B5 with nc range 1.5 | 0.054 | 0.330 | 0.196 | 0.337 | 0.0053 | 0.90 | 0.56 | 0.98 | 103 |
+| B5 with gyration k 1 | 0.052 | 0.349 | 0.195 | 0.357 | 0.0060 | 0.89 | 0.63 | 0.96 | 110 |
+
+* A weaker gyration spring (0.03-0.1) gives the best radial positions; the gyration prior alone fits the
+  input slightly worse than IGM (P3 0.0071 vs 0.0060, at the edge of the registered 20 % margin).
+* The non-contact restraints at the last σ bring P3 back to IGM's level (0.0057-0.0060) and improve the cis
+  distances; with IGM's iteration rule they keep the violation score above 1 % and use all 10 iterations of
+  the last σ (2.5-2.9 × IGM's wall time); **≤ 5 iterations per σ** (`max_iterations` 5 + advance) keeps P1 /
+  P2 / P3 and cuts the wall time to 1.3-1.4 × IGM.
+* Not adopted: soft assignment (P1 0.080), p = f (P1 0.077), per-structure shapes of single imaged cells
+  (P1 0.066: a structure forced into an arbitrary cell's size and shape fits its contacts worse; the cell
+  variability is reproduced anyway, cvR 0.96-0.97 with the median shape), shorter non-contact range.
+* **Candidate B5** = no envelope + gyration prior k 0.1 (imaging median σ1-σ3) + non-contact restraints k 1
+  at the last σ (IGM A-step with iterative correction) + ≤ 5 iterations per σ.
+
+Dev preview of the decision rule (`pop_test.py`, su_dev C1 only, 1,000 bootstrap replicates; this is one
+development unit, not the test):
+
+| B5 vs | P1 diff [95 % CI] | P2 diff | P3 diff | wall time |
+| --- | --- | --- | --- | --- |
+| IGM sphere | +0.0043 [+0.0019, +0.0064] | +0.70 [+0.59, +0.79] | −0.0001 [−0.0003, +0.0003] | 1.65 × |
+| IGM ellipsoid | +0.0167 [+0.0112, +0.0224] | +0.097 [+0.056, +0.139] | +0.0052 [+0.0049, +0.0058] | 3.6 × |
+
+## 4. Other conditions (S = 100, schedule × 0.1, seed 1)
+
+| | C2 (Gaussian kernel) P1 / P2 / cis / P3 | C3 (finite depth + noise) P1 / P2 / cis / P3 |
+| --- | --- | --- |
+| IGM sphere | 0.058 / 1.035 / 0.669 / 0.0066 | 0.077 / 1.020 / 1.065 / 0.018 |
+| IGM ellipsoid | 0.067 / 0.444 / 0.290 / 0.0104 | **0.068** / 0.446 / **0.288** / 0.026 |
+| gyration k 0.1 (no nc) | **0.053** / **0.311** / 0.242 / 0.0071 | 0.086 / 0.420 / 0.514 / 0.015 |
+| **B5** | 0.054 / 0.326 / 0.267 / **0.0060** | 0.072 / **0.382** / 0.831 / **0.013** |
+
+**C3 is the weak spot.**  The IGM preprocessing of the noisy finite-depth matrix compresses the cis
+probabilities 3× and inflates trans 1.5× (§1); every contact-driven model then puts cis loci too far apart
+and loses part of the radial order (IGM sphere: ρ Spearman 0.46, lamina 0.23; B5: 0.76 / 0.57).  The IGM
+ellipsoid is insensitive (its flat wall at occupancy 0.9 packs the loci whatever the contacts say) and is
+better than B5 on C3 for P1 (0.068 vs 0.072) and for the cis distances (0.29 vs 0.83).  The non-contact
+restraints help B5's radial order on C3 (P1 0.072 vs 0.086 without) but cost cis distances (they enforce
+the compressed cis frequencies).  No noise model was adopted: the distortion is multiplicative and
+class-dependent, not a floor, and nothing in the development data identifies the scale without the truth.
+
+## 5. Full annealing schedule (S = 200; the test runs the full schedule)
+
+The screening used the schedule × 0.1.  With the full IGM schedule IGM-sphere's radial positions improve
+markedly (P1 0.055 → 0.047; the radial slope of the per-locus means R vs T 0.57 → 0.72), and further with S
+(S = 500: 0.046, S = 1,000: 0.045; Sherlock, TITAN Xp), while B5's do not (0.051 → 0.049): **at the test's
+scale B5 is not better than IGM-sphere on P1**.  Its P2 advantage stays large (0.44 vs 1.04).  Adding a soft
+wall in each structure's own principal frame (B6) recovers P1 (0.043).
+
+| run (C1, S = 200, full schedule) | P1 | P2 | cis | trans | P3 | ρSp | terrSp | cvR | wall s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| IGM sphere (laptop M5 Pro, seed 2) | 0.047 | 1.035 | 0.523 | 1.061 | 0.005 | 0.93 | 0.32 | 0.67 | 1,057 |
+| IGM sphere (Sherlock TITAN Xp, seed 1; S = 500 / 1,000) | 0.047 (0.046 / 0.045) | 1.036 (1.033 / 1.031) | 0.52 | 1.06 | 0.005 | 0.93 | 0.30 | 0.67 | 1,291 (2,447 / 4,580) |
+| B5 (laptop, seed 2) | 0.049 | 0.444 | 0.204 | 0.457 | 0.005 | 0.91 | 0.57 | 0.94 | 2,345 |
+| B5 with 10 iterations / σ (Sherlock, seed 1) | 0.049 | 0.425 | 0.199 | 0.437 | 0.005 | 0.91 | 0.63 | 0.94 | 4,040 |
+| **B6** = B5 + principal-frame wall 1.15 (laptop, seed 2) | **0.043** | **0.436** | 0.201 | 0.448 | 0.005 | 0.91 | 0.65 | 0.94 | 2,172 |
+
+Principal-frame wall (`gyration_wall`: IGM's envelope in each structure's own principal frame, semi-axes
+1.15 × sqrt(5) σ_k; screening at S = 100, × 0.1): C1 P1 0.047 / P2 0.338 (B5 0.051 / 0.351); C3 P1 **0.064**
+/ P2 0.352 / cis 0.73 (B5 0.072 / 0.382 / 0.83; IGM ellipsoid 0.068 / 0.446 / 0.29); wall 1.0 is too tight
+(territory Spearman −0.10, P2 0.52).  At the full schedule B6 is the only candidate better than IGM-sphere
+on P1 (0.043 vs 0.047, one seed each; not yet replicated — the Sherlock replicates were cut off, below).
+
+## 6. IGM demo (WTC11 2 Mb, no truth): fit and runtime
+
+Native IGM on the demo input, S = 1,000, Sherlock TITAN Xp: wall time 6,121 s, Pearson of the population's
+contact probabilities vs the input on the restrained pairs 0.933 (the H100 runs of `design.md`: 0.933 in 782 s).
+The EMber-pop runs on the demo had not finished when Sherlock access was lost (below): **no demo comparison
+yet**.
+
+## 7. Runtime
+
+Same device, same S, full schedule: B5 / B6 take 2.0-2.2 × IGM-sphere's wall time (laptop GPU, S = 200:
+2,172-2,345 s vs 1,057 s) — inside the registered 3 × bound, mostly the non-contact restraints (wider
+neighbour grid) and more iterations at the last σ.  At S = 100 × 0.1 the ratio was 1.3-1.65 ×.  IGM-sphere's
+wall time scales linearly in S (1,291 / 2,447 / 4,580 s at S = 200 / 500 / 1,000 on a TITAN Xp).
+
+## 8. What was not done or not adopted, and why
+
+* **Shape-free confinement** (the original design intent): every variant without an imaging shape —
+  no envelope, the non-contact restraints alone, an Rg cap, a two-sided Rg prior — left the structures round
+  or cigar-like; Hi-C contacts at this resolution do not identify the flat nuclear shape (§2).  The shape
+  must come from imaging (three numbers: the gyration standard deviations).
+* **Shape-free soft density cap (EMber-mix port)**: not ported.  With the non-contact restraints the
+  local density within the contact distance is set by the assigned contacts (data-driven), which is what the
+  cap was meant to bound; without them the gyration prior bounds the volume.
+* **EMber observation model, soft responsibilities with staged commitment**: implemented (contact weight π
+  = 1 / (1 + (d / d_act)^β), β schedule, commitment, 9-bit weights on the GPU) and tested; it over-compacts
+  at low β and loses the radial order (P1 0.080-0.140); not adopted.
+* **Bulk noise mixture**: not implemented.  The development noise condition (C3) is dominated by the IGM
+  preprocessing's class-dependent rescaling (cis × 0.33, trans × 1.5), not by an additive ligation floor;
+  nothing on the development data identifies that rescaling without the truth.  C3 remains the weak spot
+  (§4).
+* **Per-structure shapes of single imaged cells**: implemented (`gyration_targets`), worse than the median
+  shape (P1 0.066).
+* Held back, not run: Su 2020 test half, Takei 2021, real IMR90 (its input is built).
+
+## 9. State at the stop (2026-10-07) and what is still needed before a freeze
+
+* Sherlock access was refused (`Permission denied`) during the full-schedule replicates; the queued / running
+  development jobs (B6 at S = 200 on C1 seeds 1 and 3, C2, C3; IGM baselines on C2 / C3 at the full schedule;
+  the size sweep with B5; the demo comparison) were not collected.  Laptop runs were interrupted too.
+* Before a freeze: replicate B6 vs IGM-sphere vs IGM-ellipsoid at the full schedule on C1-C3 (≥ 2 seeds), the
+  WTC11 demo fit / runtime with B6, then fix B5 or B6 in `PREREG_POP.md` §10 (the draft there names B6 as the
+  leading candidate) and wait for the user's approval.  No held-back unit has been run.

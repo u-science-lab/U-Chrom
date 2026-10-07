@@ -1346,6 +1346,15 @@ Used for the IGM protocol of the native engine vs the original IGM
 centred on the Su loci), `takei_1mb.npz` (mESC onto 1 Mb bins centred on the Takei loci),
 `su_crosscheck.json`.  Probabilities for `uchrom.recon.bulk.deconv.deconvolve(method="igm")`.
 
+**EMber-pop benchmark** (`benchmarks/bulk/PREREG_POP.md`): derived from the Su 2020 genome-scale and Takei
+2021 1 Mb truths (fetch `su2020_genome`, `takei2021_1mb`) and the 4DN Rao 2014 IMR90 mcool (fetch
+`rao2014_imr90_4dn`), not stored: per unit (Sherlock `$SCRATCH/uchrom-nd/runs/pop/<unit>/`) `bulk_cells.npz` /
+`truth.npz` (cells of `benchmarks/bulk/data/pop_split.tsv`, checked in, 1,988 rows, seed 20261007) and the
+simulated inputs `C1.npz` (step kernel, exact), `C2.npz` (Gaussian kernel, exact), `C3.npz` (200 reads per locus
+pair, ε 0.1, IGM preprocessing) from `forward.py`; `real_imr90/input_3mb.npz` (IGM preprocessing of the 4DN mcool
+onto 3 Mb bins centred on the Su loci, target 32.885 = the Su development cells' exact row sum;
+`sherlock/pop_build_real.sbatch`).  The IGM demo input (`WTC11_HiC_2Mb.hcs`, above) for fit / runtime.
+
 **Checked in**: `benchmarks/bulk/results/kr_check.json` (KR check, range reads) and
 `benchmarks/bulk/results/plumbing_imr90_chr21_22_igm200kb.json` (provenance of the laptop plumbing run:
 4DN IMR90 chr21 + chr22, range-read 10 kb level → 20 kb → 200 kb).
