@@ -16,6 +16,8 @@ for _pkg in ("uchrom", "chromdata", "uchrom-browser", "uchrom-discovery"):
 
 import uchrom  # noqa: E402
 
+sys.path.insert(0, os.path.abspath("_ext"))      # local extensions (the tutorial gallery)
+
 # ---------------------------------------------------------------------
 # Project information
 # ---------------------------------------------------------------------
@@ -36,6 +38,7 @@ extensions = [
     "sphinx.ext.mathjax",
     "myst_nb",  # superset of myst_parser, also renders .ipynb (no pandoc)
     "sphinx_copybutton",
+    "tutorial_gallery",  # _ext/tutorial_gallery.py: the cards of gallery.md
 ]
 
 autosummary_generate = True

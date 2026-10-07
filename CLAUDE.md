@@ -129,7 +129,9 @@ uchrom/                (packages/uchrom/uchrom)
   `discovery/`, is excluded from the build for now: `exclude_patterns` in `conf.py`); every chapter shows its modules through
   tutorials (`tutorials/*.ipynb`, linked from `docs/source/tutorials/`), committed **executed on real
   data** — the docs build does not run them (`nb_execution_mode = "off"`); re-execute a changed tutorial
-  with `jupyter nbconvert --execute --inplace`.
+  with `jupyter nbconvert --execute --inplace`.  Every tutorial has a card in the gallery
+  (`docs/source/gallery.md`, directive `tutorial-gallery` of `docs/source/_ext/tutorial_gallery.py`:
+  thumbnails cut from the notebook's figures at build time).
 - **Tests live in each package** (`packages/<pkg>/tests`, `apps/atlas/tests`); every suite is a
   `tests` package, so run each from its folder: `cd packages/uchrom && pytest tests` (likewise
   chromdata, uchrom-browser, uchrom-discovery; `cd apps/atlas && pytest tests`; `cargo test` in
