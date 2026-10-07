@@ -5,8 +5,8 @@ edition = "2021"
 rust-version = "1.80"
 description = "Native kernels of U-Chrom's Hi-C map callers: HiCCUPS scoring and the Mustache scale-space scan (multi-core CPU)"
 readme = "README.md"
+license = "MIT"
 publish = false
-# No licence field yet: the u-chrom package has none; the maintainer decides (see README).
 
 [lib]
 name = "uchrom_maps"

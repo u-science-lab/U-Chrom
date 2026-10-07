@@ -53,7 +53,6 @@ at 5 kb) and measures time and memory.
 
 ## Licence
 
-No licence has been chosen yet: the `u-chrom` package declares none, and the decision is left to the
-maintainer.  The kernels are re-implementations of U-Chrom's own numpy code (HiCCUPS: Rao et al. 2014,
+MIT, like the rest of U-Chrom (`LICENSE` at the repository root).  The kernels are re-implementations of U-Chrom's own numpy code (HiCCUPS: Rao et al. 2014,
 *Cell* 159:1665, in the formulation of cooltools `dots`; Mustache: Roayaei Ardakany et al. 2020, *Genome
 Biology* 21:256); no third-party code was copied.

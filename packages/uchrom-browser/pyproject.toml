@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,6 +7,7 @@ name = "uchrom-browser"
 version = "0.1.0"
 readme = "README.md"
 description = "The U-Chrom web browser: views of single-cell Hi-C, spatial Hi-C and chromatin tracing linked through the selected cells."
+license = "MIT"
 authors = [
     {name = "Weize Xu", email = "vet.xwz@gmail.com" },
 ]

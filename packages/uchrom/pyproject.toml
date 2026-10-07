@@ -1,11 +1,12 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 
 [project]
 name = "u-chrom"
 version = "0.3.0.dev0"
 readme = "README.md"
 description = "Chromatin structure analysis toolkit."
+license = "MIT"
 authors = [
     {name = "Weize Xu", email = "vet.xwz@gmail.com" },
 ]
