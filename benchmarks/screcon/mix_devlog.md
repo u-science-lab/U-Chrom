@@ -223,3 +223,68 @@ labelling (prior-only M1 0.58 at k = 2, close to the depth share), and EM on top
 M2 and loses 0.07 of M1 against prior-split.  §12.1 U1 (M1 E − prior-only > 0) and U2 (M2 E − naive > 0)
 would fail in both ploidies.  **Cue 1 is closed as negative**; no further §12.1 knob was tried.  The
 held-back cue-1 pools are not run.
+
+## 7. Cue 2 — genotype labels (PREREG §12.2), development (2026-10-06, Sherlock)
+
+**Pipeline** (jobs `geno_ref` → `geno_align` (18 cells: 6 PBMC genotyping, 6 GM12878 + 6 PBMC
+development) → `geno_call` → `geno_label` → `geno_dev`).  Three pipeline bugs were found and fixed
+before any development number was looked at: (1) `bcftools mpileup` skips anomalous pairs by default and
+`bwa mem -5SP` writes no proper pairs → the first call found 0 sites (now `-A`); (2) `hickit.js sam2seg
+-v` reads hickit's TSV (chr, pos, hap0 allele, hap1 allele), not a VCF (now `vcf2tsv` first); (3)
+`contacts.read_contacts` took the 4-column GEO pool tables with numeric chromosome names (hs37d5) for
+`.pairs` (now: 4 columns = GEO).  Engine `dev-cbd703b`; variants `mix_variants/geno_r1.json`.
+
+**Donor-distinguishing sites**: 516,776 (GM12878 hom-ALT / PBMC hom-REF 231,952; GM12878 hom-REF / PBMC
+hom-ALT 284,824).  **Re-alignment** reproduces 76 % of the authors' contacts exactly (gm12878_01: 1.19 M
+re-aligned vs 1.05 M authors' rows; same with strands ignored) — the authors' table had extra filtering
+(PAR / isolated contacts), so a quarter of the contacts cannot be labelled at all.
+
+**Labels per development cell** (`data/mix_geno_labels_dev.tsv`; autosomal contacts = what is pooled):
+
+| cell | contacts (autosomal) | labelled | label accuracy |
+| --- | --- | --- | --- |
+| gm12878_01 / 05 / 09 / 11 / 13 / 14 | 0.98-1.95 M | 1.7-3.0 % (mean 2.6 %) | 0.9965-0.9975 |
+| pbmc_07 / 09 / 11 / 13 / 14 / 15 | 1.23-1.76 M | 2.4-3.2 % (mean 2.7 %) | 0.908-0.914 |
+
+GM12878 labels are essentially exact; PBMC labels are 9 % wrong — PBMC het sites called hom from 6 sparse,
+WGA-amplified genotyping cells (allelic dropout), so PBMC reads carry the GM12878 allele.  On chrX (not
+pooled) labels are wrong for GM12878 cells (accuracy over all contacts 0.39-0.43): the PBMC donor is
+hemizygous on X and the X sites are not usable — irrelevant here (autosomes only, as registered).
+Only ~2.7 % of contacts carry a label.  After the registered 2-D spreading (δ 0.02, radius 10 Mb,
+50 neighbours, pseudo 0.4, 20 iterations) the donor of a pooled contact is right for 0.65-0.71 (GP),
+0.67-0.78 (GGP), 0.65-0.66 (GGPP) of the rows.
+
+**Development pools** (6 per composition, 200 kb, diploid).  Mean M2 (matched whole-genome Spearman r vs
+each cell's own frozen EMber diploid reconstruction; oracle = 1) and M1:
+
+| composition | naive | IGM S=k | prior-only M1 | prior-split M2 / M1 | E (prior fixed) M2 / M1 | E (posterior) M2 / M1 | diag: 75 % true seed M2 / M1 | oracle M1 (closest) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GP (k = 2) | 0.303 | 0.171 / 0.488 | 0.681 | **0.739** / 0.681 | 0.358 / 0.572 | 0.342 / 0.603 | 0.418 / 0.626 | 0.762 |
+| GGP (k = 3) | 0.235 | 0.160 / 0.332 | 0.390 | **0.320** / 0.389 | 0.263 / 0.378 | 0.244 / 0.360 | 0.328 / 0.457 | 0.630 |
+| GGPP (k = 4) | 0.209 | 0.144 / 0.250 | 0.328 | **0.300** / 0.328 | 0.218 / 0.264 | 0.204 / 0.257 | 0.261 / 0.381 | 0.567 |
+
+Per donor (mean matched r): GP prior-split GM 0.67 / PBMC 0.81 (naive 0.27 / 0.34); GGP prior-split
+GM 0.30 / PBMC 0.36; GGPP 0.30 / 0.30.  Paired over the 18 pools (95 % bootstrap): E (prior fixed) − naive
+M2 +0.031 [+0.017, +0.047]; E − IGM M2 +0.122 [+0.094, +0.151], M1 +0.048 [+0.027, +0.068]; **E −
+prior-split M2 −0.173 [−0.246, −0.102], M1 −0.062 [−0.087, −0.038]**; prior-split − naive M2 +0.204
+[+0.124, +0.286].  Rows: `data/mix_geno_dev_g1.tsv`.
+
+**Reading.**  (1) The genotype cue works where it can: on one-cell-per-donor pools (GP) splitting the
+contacts by the spread genotype prior (68 % correct) and running frozen EMber diploid on each part
+recovers both cells well (M2 0.74, 5 of 6 pools 0.67-0.85, vs naive 0.30) — EMber's false-contact
+mixture absorbs the ~32 % wrong rows.  (2) The EMber-mix engine does *not* add to it; it loses 0.17 M2 and
+0.06 M1 against the plain split, and even a 75 %-correct true seed reaches only M2 0.42 on these pools
+(cortex diploid: 0.64-0.79) — on deep human cells soft responsibilities let both structures share the
+ambiguous rows and drift to the consensus.  (3) Two cells of one donor are not separated by anything
+(GGP / GGPP: prior-split 0.30-0.32, E 0.22-0.26, naive 0.21-0.24); in addition the registered prior
+splits a donor's probability equally over its cells, so prior-split / argmax hands most unlabelled rows to
+the single-donor cell (GGP PBMC cell 0.36 vs 0.81 in GP).  Under §12.2: V1 (M1 E − prior-only > 0) fails
+(−0.11 on GP), V4 (M2 E − prior-split ≥ −0.01) fails; V2 / V3 pass.  The registered method E would fail
+the test.
+
+**Recommendation: do not freeze EMber-mix with the genotype prior.**  What works is not the mix engine but
+"genotype prior → hard split → frozen EMber diploid per part", and only for cells of distinct donors.  If
+that is to be claimed it needs its own registered addition (method = prior-split with donor-level argmax,
+ties among same-donor cells reported separately) before any held-back pool is run; see the summary for
+the proposed test.
+
