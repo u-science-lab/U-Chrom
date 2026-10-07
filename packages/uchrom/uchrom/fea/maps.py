@@ -395,7 +395,7 @@ def thin_map(cd, contacts: Optional[str] = None, *, fraction: Optional[float] = 
 
     if (fraction is None) == (n_contacts is None):
         raise ValueError("thin_map needs exactly one of fraction= and n_contacts=")
-    path = map_path(cd, contacts)
+    path = map_path(cd, contacts, resolution=resolution)
     clr = _open(path, resolution)
     total = clr.info.get("sum")
     if total is None or n_contacts is not None:

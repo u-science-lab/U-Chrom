@@ -131,7 +131,7 @@ def call_compartments_hic(
     if copy and key_added is None:
         raise ValueError("call_compartments_hic(): copy=True needs a key_added")
     params = params or HiCCompartmentParams()
-    path = map_path(cd, contacts)
+    path = map_path(cd, contacts, resolution=resolution)
     clr = open_map(path, resolution=resolution)
     if chrom is None:
         wanted = resolve_chroms(cd, None) if len(cd.spots) else []

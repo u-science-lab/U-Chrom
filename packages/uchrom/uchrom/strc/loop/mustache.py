@@ -51,6 +51,14 @@ Deviations from the reference code (deliberate)
   clipped at the chromosome edges.
 * For short chromosomes the reference leaves the last diagonal un-normalised; here every diagonal is.
 * ``fdr`` defaults to 0.1, the default documented in the reference README (its command line uses 0.2).
+
+Native kernels
+--------------
+When the ``uchrom-maps`` package is installed (``pip install ./packages/uchrom-maps``, extra
+``u-chrom[maps]``), the scale-space scan (:func:`_scan`, steps 3-5) runs in Rust, multi-threaded, on the
+same tiles with scipy's Gaussian arithmetic and numpy's summation order — the numpy / scipy code here
+stays the reference, and both give identical results.  ``BACKEND`` (module attribute: ``"auto"``,
+``"native"`` or ``"numpy"``) forces either path.
 """
 
 from __future__ import annotations
@@ -74,6 +82,10 @@ _FILL = 2.0
 _EPS = 1e-3
 #: candidates within this Chebyshev distance (pixels) are one loop: touching 3 x 3 neighbourhoods
 _LINK = 3
+
+#: kernels of :func:`_scan`: ``"auto"`` (the native ``uchrom_maps`` when installed, else numpy / scipy),
+#: ``"native"`` (an ImportError without it) or ``"numpy"`` (the reference implementation)
+BACKEND = "auto"
 
 
 @dataclass(frozen=True)
@@ -212,9 +224,68 @@ def _max3(a: np.ndarray) -> np.ndarray:
     return np.maximum(np.maximum(h[:-2], h[1:-1]), h[2:])
 
 
-def _scan(x, y, z, ex, ey, n: int, D: int, p: MustacheParams, tile: int):
+def _gaussian_weights(sigma: float, truncate: float) -> np.ndarray:
+    """The correlation weights ``scipy.ndimage.gaussian_filter1d`` uses for ``sigma`` / ``truncate``."""
+    radius = int(truncate * float(sigma) + 0.5)
+    try:
+        from scipy.ndimage._filters import _gaussian_kernel1d
+    except ImportError:                                 # pragma: no cover - other scipy layouts
+        x = np.arange(-radius, radius + 1)
+        phi = np.exp(-0.5 / (sigma * sigma) * x ** 2)
+        return np.ascontiguousarray((phi / phi.sum())[::-1])
+    return np.ascontiguousarray(_gaussian_kernel1d(sigma, 0, radius)[::-1])
+
+
+def _scan_native(mod, x, y, z, ex, ey, n: int, D: int, p: MustacheParams, tile: int, arith: dict):
+    """:func:`_scan` on the native kernels (``uchrom_maps.mustache_scan``); ``arith``: scipy's accumulation
+    scheme (``uchrom_maps.scipy_arithmetic()``)."""
+    pyr = _pyramid(p)
+    weights = [[_gaussian_weights(s, t).tolist() for s, t in zip(sig, trunc)] for sig, trunc in pyr]
+    halo = max((len(k) - 1) // 2 for ks in weights for k in ks) + 2
+    best, layer, st_sum, st_cnt, st_min = mod.mustache_scan(
+        np.ascontiguousarray(x, dtype=np.int64), np.ascontiguousarray(y, dtype=np.int64),
+        np.ascontiguousarray(z, dtype=np.float64), np.ascontiguousarray(ex, dtype=np.int64),
+        np.ascontiguousarray(ey, dtype=np.int64), int(n), int(D), int(p.min_diag), float(_FILL), weights,
+        int(halo), int(tile), bool(arith["fma"]), int(arith["block"]), int(arith["min_terms"]))
+    scales = np.array([sig[k + 1] for sig, _ in pyr for k in range(1, p.scales)])
+    return best, layer, (st_sum, st_cnt, st_min), scales
+
+
+_WARNED = []
+
+
+def _warn_numpy_fallback():
+    if not _WARNED:
+        _WARNED.append(True)
+        import warnings
+
+        warnings.warn("uchrom_maps is installed but cannot reproduce this scipy build's Gaussian arithmetic "
+                      "(uchrom_maps.scipy_arithmetic); the Mustache scan runs on the numpy / scipy path "
+                      "(BACKEND='native' forces the native one and raises instead)", RuntimeWarning, stacklevel=3)
+
+
+def _scan(x, y, z, ex, ey, n: int, D: int, p: MustacheParams, tile: int, backend: Optional[str] = None):
     """Steps 3-5 over row tiles: per eligible pixel (``ex, ey``) its best DoG response and detection layer,
-    plus the per-layer ``|L|`` statistics (sum, count, min) for the exponential fits."""
+    plus the per-layer ``|L|`` statistics (sum, count, min) for the exponential fits.
+
+    ``backend``: ``"auto"`` / ``"native"`` / ``"numpy"`` (default: the module's :data:`BACKEND`); the
+    native kernels (``uchrom_maps``) give the same result as the numpy / scipy code below.
+    """
+    from .hiccups import _maps_kernels
+
+    backend = BACKEND if backend is None else backend
+    mod = _maps_kernels(backend)
+    if mod is not None:
+        try:
+            arith = mod.scipy_arithmetic()      # copy scipy's arithmetic (fused multiply-adds or not)
+        except RuntimeError:
+            if backend == "native":
+                raise
+            _warn_numpy_fallback()
+            mod = None                          # scipy's Gaussians cannot be reproduced exactly: numpy
+    if mod is not None:
+        return _scan_native(mod, x, y, z, ex, ey, n, D, p, tile, arith)
+
     from scipy.ndimage import gaussian_filter
 
     pyr = _pyramid(p)
@@ -463,7 +534,7 @@ def call_loops_mustache(
     if _is_cooler(cd):
         clr, path = cd, str(cd.uri)
     else:
-        path = map_path(cd, contacts)
+        path = map_path(cd, contacts, resolution=resolution)
         clr = open_map(path, resolution=resolution)
     binsize = int(clr.binsize)
     max_dist = params.max_dist if params.max_dist is not None else default_max_dist(binsize)

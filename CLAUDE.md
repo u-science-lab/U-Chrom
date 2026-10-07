@@ -51,6 +51,12 @@ packages/
 │                      method, src/robust.rs; PREREG in benchmarks/screcon) / igm.  `cargo test`
 │                      in packages/uchrom-recon; `pip install ./packages/uchrom-recon` (= extra
 │                      `u-chrom[recon]`).  LGPL-3.0 (re-implementation of tjs23/nuc_dynamics).
+├── uchrom-maps/       `uchrom-maps` (import uchrom_maps): native kernels of the Hi-C map callers, Rust +
+│                      PyO3 (maturin, abi3) + rayon — HiCCUPS scoring and the Mustache scale-space scan
+│                      (scipy's Gaussian arithmetic copied, so results equal the numpy code bit for bit).
+│                      Optional (= extra `u-chrom[maps]`): uchrom imports it lazily and falls back to numpy;
+│                      `BACKEND = "auto" | "native" | "numpy"` in `strc/loop/{hiccups,mustache}.py`.
+│                      `cargo test --release` in the crate; `pip install ./packages/uchrom-maps`.
 └── uchrom/            `u-chrom` (import uchrom) — the analysis library (depends on chromdata);
                        the tree below is packages/uchrom/uchrom/
 apps/
@@ -134,8 +140,8 @@ uchrom/                (packages/uchrom/uchrom)
   maps, a folder atlas, an HTTP server with range requests, store comparisons) are
   `chromdata.testing`; each suite's `tests/__init__.py` has `FIXTURES` (its `tests/fixtures/`: small real
   data, offline), `DATA_DIR` (the data directory; tests that need large data skip without it) and `REPO`.
-- `uchrom` stays pure Python: it imports `uchrom_recon` lazily (tests skip
-  when it is not installed); the native crate never imports `uchrom`.
+- `uchrom` stays pure Python: it imports `uchrom_recon` / `uchrom_maps` lazily (tests skip
+  when they are not installed); the native crates never import `uchrom`.
 
 ## ChromData — Core Data Container
 
@@ -274,7 +280,8 @@ No data live in the repository (the former `example-data/` is gone).  Rules:
     macOS, Vulkan on Linux/NVIDIA; f32; all models of an ensemble batched in
     one dispatch).  `recon.sc.nucdyn` needs it (the Taichi port was removed).
   - **MD-style tight loops with many cheap iterations → the native pattern** (Rust, rayon,
-    wgpu) like `packages/uchrom-recon`.
+    wgpu) like `packages/uchrom-recon`; per-pixel kernels of the Hi-C map callers → `packages/uchrom-maps`
+    (the numpy code stays as the reference and fallback; the two are tested for identical results).
   - **Gradient-descent optimisation on a structured multi-term loss →
     PyTorch** (e.g. `recon.bulk.mds`, `recon.fish.gem_fish` — hundreds to
     thousands of iterations, each one doing dense matrix-level work; the

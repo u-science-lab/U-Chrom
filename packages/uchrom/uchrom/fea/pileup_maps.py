@@ -181,7 +181,7 @@ def pileup(
         raise ValueError("pileup(copy=True) needs a ChromData and a key_added")
     if aggregate not in ("mean", "sum"):
         raise ValueError(f"aggregate={aggregate!r}: 'mean' or 'sum'")
-    clr = cd if _is_cooler(cd) else open_map(map_path(cd, contacts) if _is_chromdata(cd) else cd,
+    clr = cd if _is_cooler(cd) else open_map(map_path(cd, contacts, resolution=resolution) if _is_chromdata(cd) else cd,
                                              resolution=resolution)
     binsize = int(clr.binsize) if clr.binsize else None          # None: bins of uneven size (e.g. imaged loci)
     if binsize is None:

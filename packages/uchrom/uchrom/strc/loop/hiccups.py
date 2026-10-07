@@ -32,6 +32,12 @@ kernels' footprint is masked, on an ignored diagonal, below the diagonal or beyo
 histograms of all chromosomes of a call are pooled (genome-wide FDR, as HiCCUPS and cooltools do), so the
 result for one chromosome depends on which chromosomes are called together.
 
+Native kernels.  When the ``uchrom-maps`` package is installed (``pip install ./packages/uchrom-maps``,
+extra ``u-chrom[maps]``), the scoring of a chromosome (:func:`_score_chrom`: kernel sums, λ-chunks,
+histograms, candidates) runs in Rust, multi-threaded, on the same tiles and in the same floating-point
+order — the numpy code here stays the reference, and both give identical results.  ``BACKEND`` (module
+attribute: ``"auto"``, ``"native"`` or ``"numpy"``) forces either path.
+
 Deviations from cooltools ``dots`` (deliberate): the default p-value is HiCCUPS' ``P(X ≥ obs)``
 (cooltools: ``P(X > obs)``, one count more lenient; ``params.pvalue="cooltools"`` reproduces it); the
 clustering is HiCCUPS' greedy one (cooltools uses sklearn's Birch); λ-chunks are added as needed instead of
@@ -61,6 +67,27 @@ KERNELS = ("donut", "vertical", "horizontal", "lowleft")
 
 #: cells (rows x columns) of one dense tile; sets the working memory (~13 arrays of this size)
 TILE_CELLS = 2_000_000
+
+#: kernels of :func:`_score_chrom`: ``"auto"`` (the native ``uchrom_maps`` when installed, else numpy),
+#: ``"native"`` (an ImportError without it) or ``"numpy"`` (the reference implementation)
+BACKEND = "auto"
+
+
+def _maps_kernels(backend: str):
+    """The ``uchrom_maps`` module for ``backend`` (``"auto"`` / ``"native"`` / ``"numpy"``), or ``None``
+    for the numpy path.  Imported lazily: ``uchrom`` works without the native package."""
+    if backend == "numpy":
+        return None
+    if backend not in ("auto", "native"):
+        raise ValueError(f"backend must be 'auto', 'native' or 'numpy', got {backend!r}")
+    try:
+        import uchrom_maps
+    except ImportError:
+        if backend == "native":
+            raise ImportError("the native kernels are not installed: pip install ./packages/uchrom-maps "
+                              "(u-chrom[maps])") from None
+        return None
+    return uchrom_maps
 
 
 @dataclass(frozen=True)
@@ -206,6 +233,18 @@ class _Hist:
         flat = np.bincount(lbin * C + count, minlength=L * C).reshape(L, C)
         h[:L, :C] += flat
 
+    def add_table(self, k: str, table: np.ndarray):
+        """Add a ready (λ-chunk x count) histogram (the native kernels')."""
+        L, C = table.shape
+        if not L or not C:
+            return
+        h = self.h[k]
+        if L > h.shape[0] or C > h.shape[1]:
+            g = np.zeros((max(L, h.shape[0]), max(C, h.shape[1])), np.int64)
+            g[: h.shape[0], : h.shape[1]] = h
+            self.h[k] = h = g
+        h[:L, :C] += table
+
 
 def _rectsum(S: np.ndarray, rect, y0: int, y1: int, x0: int, x1: int) -> np.ndarray:
     """Sum of the rectangle ``rect`` of offsets around every pixel ``(y, x)``, ``y0 <= y < y1``,
@@ -252,9 +291,31 @@ def _expected_vector(band, ignore_diags: int, n_diag: int) -> np.ndarray:
     return e
 
 
+def _tile_rows(D: int, w: int) -> int:
+    """Rows of a scoring tile: ``T x (T + D + 4w)`` cells ≈ :data:`TILE_CELLS`."""
+    return max(32, int((-(D + 4 * w) + math.sqrt((D + 4 * w) ** 2 + 4 * TILE_CELLS)) / 2))
+
+
+def _sorted_band(band):
+    bi, bj, bc = band.i, band.j, band.count
+    if len(bi) > 1 and not (np.diff(bi) >= 0).all():                 # cooler pixels come sorted by row
+        order = np.argsort(bi, kind="stable")
+        bi, bj, bc = bi[order], bj[order], bc[order]
+    return bi, bj, bc
+
+
 def _score_chrom(band, p: int, w: int, D: int, params: HiccupsParams, hist: _Hist, edges: np.ndarray,
-                 cmin: np.ndarray, timing: Optional[dict] = None) -> dict:
-    """Score every testable pixel of one chromosome: add them to ``hist``, return the candidates."""
+                 cmin: np.ndarray, timing: Optional[dict] = None, backend: Optional[str] = None) -> dict:
+    """Score every testable pixel of one chromosome: add them to ``hist``, return the candidates.
+
+    ``backend``: ``"auto"`` / ``"native"`` / ``"numpy"`` (default: the module's :data:`BACKEND`); the
+    native kernels (``uchrom_maps``) give the same result as the numpy code below.
+    """
+    mod = _maps_kernels(BACKEND if backend is None else backend)
+    if timing is not None:
+        timing["backend"] = "numpy" if mod is None else "native"
+    if mod is not None:
+        return _score_chrom_native(mod, band, p, w, D, params, hist, edges, cmin, timing)
     steps = {"tile_dense_s": 0.0, "sat_s": 0.0, "mask_s": 0.0, "kernel_sums_s": 0.0, "histogram_s": 0.0}
     clock = [time.perf_counter()]
 
@@ -268,11 +329,8 @@ def _score_chrom(band, p: int, w: int, D: int, params: HiccupsParams, hist: _His
     rects = kernel_rects(p, w)
     union = [(-w, w, -w, w, 1), (-p, p, -p, p, -1)]               # the union of the four footprints
     e = _expected_vector(band, params.ignore_diags, D + 2 * w + 2)
-    bi, bj, bc = band.i, band.j, band.count
-    if len(bi) > 1 and not (np.diff(bi) >= 0).all():                 # cooler pixels come sorted by row
-        order = np.argsort(bi, kind="stable")
-        bi, bj, bc = bi[order], bj[order], bc[order]
-    T = max(32, int((-(D + 4 * w) + math.sqrt((D + 4 * w) ** 2 + 4 * TILE_CELLS)) / 2))
+    bi, bj, bc = _sorted_band(band)
+    T = _tile_rows(D, w)
     keep = {"i": [], "j": [], "count": [], **{k: [] for k in KERNELS}}
     n_tested = 0
     for r0 in range(0, n, T):
@@ -354,6 +412,34 @@ def _score_chrom(band, p: int, w: int, D: int, params: HiccupsParams, hist: _His
         timing["n_candidates"] = timing.get("n_candidates", 0) + int(sum(len(v) for v in keep["i"]))
     out = {c: (np.concatenate(v) if v else np.zeros(0)) for c, v in keep.items()}
     out["n_tested"] = n_tested
+    return out
+
+
+def _score_chrom_native(mod, band, p: int, w: int, D: int, params: HiccupsParams, hist: _Hist,
+                        edges: np.ndarray, cmin: np.ndarray, timing: Optional[dict] = None) -> dict:
+    """:func:`_score_chrom` on the native kernels (``uchrom_maps.hiccups_score``): the same tiles, sums,
+    histograms and candidates, in the same order."""
+    t0 = time.perf_counter()
+    e = _expected_vector(band, params.ignore_diags, D + 2 * w + 2)
+    bi, bj, bc = _sorted_band(band)
+    T = _tile_rows(D, w)
+    t1 = time.perf_counter()
+    res = mod.hiccups_score(int(band.n), np.ascontiguousarray(bi, dtype=np.int64),
+                            np.ascontiguousarray(bj, dtype=np.int64), np.ascontiguousarray(bc, dtype=np.float64),
+                            np.ascontiguousarray(band.weight, dtype=np.float64), np.ascontiguousarray(e),
+                            int(p), int(w), int(D), int(T), np.ascontiguousarray(edges, dtype=np.float64),
+                            np.ascontiguousarray(cmin, dtype=np.int64))
+    for k, h in zip(KERNELS, res["hist"]):
+        hist.add_table(k, h)
+    out = {"i": res["i"], "j": res["j"], "count": res["count"], **dict(zip(KERNELS, res["lam"]))}
+    out["n_tested"] = int(res["n_tested"])
+    if timing is not None:
+        t2 = time.perf_counter()
+        timing["expected_s"] = timing.get("expected_s", 0.0) + t1 - t0
+        timing["native_score_s"] = timing.get("native_score_s", 0.0) + t2 - t1
+        timing["tile_rows"] = T
+        timing["n_tested"] = timing.get("n_tested", 0) + out["n_tested"]
+        timing["n_candidates"] = timing.get("n_candidates", 0) + int(len(out["i"]))
     return out
 
 
@@ -551,7 +637,8 @@ def hiccups_pixels(clr, chroms: Sequence[str], params: Optional[HiccupsParams] =
         Chromosomes scored together (one genome-wide FDR over all of them).
     params : HiccupsParams, optional
     timing : dict, optional
-        Filled with seconds per step (``read_s``, ``kernel_sums_s``, ``histogram_s``, ``thresholds_s``).
+        Filled with seconds per step (``read_s``, ``kernel_sums_s``, ``histogram_s``, ``thresholds_s``; with
+        the native kernels ``expected_s`` and ``native_score_s``) and the ``backend`` used.
 
     Returns
     -------
@@ -674,7 +761,7 @@ def _maps(cd, contacts, resolution) -> List[Tuple[object, str]]:
         if _is_cooler(c):
             out.append((c, str(c.uri)))
             continue
-        path = map_path(cd, c)
+        path = map_path(cd, c, resolution=r)
         out.append((open_map(path, resolution=r), str(c) if c is not None else path))
     return out
 

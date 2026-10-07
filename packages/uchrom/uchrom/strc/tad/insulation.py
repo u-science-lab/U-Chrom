@@ -362,7 +362,7 @@ def _resolve(cd, contacts, resolution):
 
     if _is_cooler(cd):
         return cd, str(cd.uri), str(cd.uri)
-    path = map_path(cd, contacts)
+    path = map_path(cd, contacts, resolution=resolution)
     clr = open_map(path, resolution=resolution)
     label = _map_record(cd, contacts).get("key") or path if hasattr(cd, "uns") else path
     return clr, path, str(label)

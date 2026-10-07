@@ -90,5 +90,23 @@ scMicro-C, ~1 % of Rao's chr21 depth): SCC with Rao GM12878 0.55 at 100 kb, belo
 | Mustache | 16–19 s | 1.5 GB | mustache-hic 184 s |
 | ICE (`rebin_map` to 10 kb) | 2.9 s | | `cooler balance` 70 s |
 
-The remaining hot loops are the kernel sums of HiCCUPS (`hiccups._score_chrom`, 45 % of its time) and the
-Gaussian scale space of Mustache (`mustache._scan`, 7–8 s): the candidates for a native implementation.
+The two hot loops — the kernel sums of HiCCUPS (`hiccups._score_chrom`) and the Gaussian scale space of
+Mustache (`mustache._scan`) — run natively when `packages/uchrom-maps` is installed (Rust, rayon;
+`u-chrom[maps]`).  `native_speed.py` checks the two paths against each other and times them:
+
+- **identical results**: on IMR90 / GM12878 chr21 at 5 / 10 / 25 kb and IMR90 chr1 at 5 kb, native and
+  numpy give the same HiCCUPS scores, histograms, enriched pixels and calls (chr1 10 Mb: 64.8 M tested
+  pixels, 1.14 M candidates) and the same Mustache scans and calls, bit for bit.  The Mustache scan copies
+  scipy's Gaussian arithmetic, which depends on the scipy build: `uchrom_maps.scipy_arithmetic()` finds
+  it (macOS arm64: fused multiply-adds with an unfused vector block; Linux x86-64 and arm64 wheels of
+  scipy 1.18: every product and sum rounded — checked in Docker); no match → numpy, with a warning.
+- **speed** (chr1 5 kb, best of 3 on a loaded 18-core laptop):
+
+  | case | numpy: whole call / ported part | native, 1 thread | 4 threads | 18 threads |
+  | --- | --- | --- | --- | --- |
+  | HiCCUPS, loops ≤ 2 Mb | 8.4 / 5.7 s | 3.7 / 1.2 s | 3.9 / 0.5 s | 2.6 / 0.4 s |
+  | HiCCUPS, loops ≤ 10 Mb | 26.3 / 23.5 s | 6.7 / 4.4 s | 5.5 / 2.1 s | 4.1 / 1.1 s |
+  | Mustache | 22.8 / 16.6 s | 7.7 / 3.7 s | 7.6 / 1.8 s | 6.3 / 1.1 s |
+
+  The ported parts are 15–21× faster on all cores; whole calls are now bound by what stays in Python
+  (`read_band` ~1 s, the expected, clustering, Mustache's normalisation) and peak memory by the band read.

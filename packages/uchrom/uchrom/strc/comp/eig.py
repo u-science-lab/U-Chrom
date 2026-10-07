@@ -491,7 +491,8 @@ def _open(cd, contacts, resolution):
 
     if _is_cooler(cd):
         return cd, str(cd.uri)
-    return open_map(cd, contacts, resolution=resolution), map_path(cd, contacts)
+    path = map_path(cd, contacts, resolution=resolution)      # an embedded map: only this level exported
+    return open_map(path, resolution=resolution), path
 
 
 # ------------------------------------------------------------------ the caller

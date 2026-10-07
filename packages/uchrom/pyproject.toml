@@ -37,6 +37,12 @@ web = [
 recon = [
     "uchrom-recon>=0.1",
 ]
+# Native kernels of the Hi-C map callers (Rust, multi-core): HiCCUPS scoring and the Mustache scan in
+# uchrom.strc.loop, identical results to the numpy code they replace.  Built from packages/uchrom-maps
+# (pip install ./packages/uchrom-maps from the repository root) until wheels are published.
+maps = [
+    "uchrom-maps>=0.1",
+]
 # Reading .hic files (uchrom.io load_hic / benchmark tutorial).
 hic = [
     "hic-straw",
@@ -104,3 +110,4 @@ exclude = ["tests*"]
 chromdata = { path = "../chromdata", editable = true }
 uchrom-browser = { path = "../uchrom-browser", editable = true }
 uchrom-recon = { path = "../uchrom-recon" }
+uchrom-maps = { path = "../uchrom-maps" }
