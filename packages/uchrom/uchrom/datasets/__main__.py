@@ -1,4 +1,4 @@
-"""``python -m uchrom.datasets list | atlas | fetch NAME ... [--default] [--fig3] [--root DIR] | path NAME``."""
+"""``python -m uchrom.datasets list | atlas | load NAME ... [--rebuild] | fetch NAME ... [--default] [--fig3] [--root DIR] | path NAME``."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def main(argv=None) -> None:
-    from . import _sources, data_dir, fetch, list_atlas, list_datasets, path
+    from . import _sources, data_dir, fetch, list_atlas, list_datasets, load, path
 
     ap = argparse.ArgumentParser(prog="python -m uchrom.datasets", description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -19,6 +19,10 @@ def main(argv=None) -> None:
     f.add_argument("--fig3", action="store_true", help="every input of the paper's Fig. 3")
     f.add_argument("--no-extract", action="store_true", help="skip members streamed out of archives")
     f.add_argument("--root", type=Path, default=None, help=f"data directory (default: {data_dir()})")
+    ld = sub.add_parser("load", help="build datasets as ChromData stores in the data directory (cached)")
+    ld.add_argument("names", nargs="+")
+    ld.add_argument("--rebuild", action="store_true", help="build again even when cached")
+    ld.add_argument("--root", type=Path, default=None, help=f"data directory (default: {data_dir()})")
     p = sub.add_parser("path", help="where a dataset is")
     p.add_argument("name")
     args = ap.parse_args(argv)
@@ -28,6 +32,9 @@ def main(argv=None) -> None:
         print(list_atlas()[["title", "n_cells", "size_mb"]].to_string())
     elif args.cmd == "path":
         print(path(args.name))
+    elif args.cmd == "load":
+        for name in args.names:
+            print(f"{name}: {load(name, root=args.root, rebuild=args.rebuild, backed=True)}")
     else:
         names = list(args.names)
         if args.default:

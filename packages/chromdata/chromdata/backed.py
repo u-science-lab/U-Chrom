@@ -678,6 +678,7 @@ class BackedChromData(ChromData):
         want = [c for c in order if c in out.spots.columns] + [c for c in out.spots.columns if c not in order]
         if want != list(out.spots.columns):
             out.spots = out.spots[want]
+        out._link_origin = self._links_from()
         return out
 
     # ------------------------------------------------------------------
@@ -906,8 +907,9 @@ class BackedChromData(ChromData):
         code = self._code_of(self._categories("cell_id"), cell_id)
         codes = np.asarray(self._index["cell_codes"])
         mask = codes == code if code is not None else np.zeros(len(codes), dtype=bool)
-        return self._build(ranges=self._segment_ranges(mask, self._index["cell_offsets"]),
-                           columns=columns, tracks=tracks)
+        out = self._build(ranges=self._segment_ranges(mask, self._index["cell_offsets"]),
+                          columns=columns, tracks=tracks)
+        return self._keep_requested_cells(out, [cell_id])
 
     def _chrom_codes(self, chrom) -> np.ndarray:
         names = self._bins["chrom"].cat.categories.astype(str)

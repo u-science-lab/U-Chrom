@@ -1,18 +1,21 @@
-"""Datasets: the public U-Chrom atlas, and original data files fetched from their sources.
+"""Datasets: every dataset U-Chrom knows, as a ``ChromData`` — or as its original files.
 
-Stores of the atlas open over HTTP, backed (only what a view or an analysis reads is fetched)::
+``load`` gives a ``ChromData``: a store of the public atlas (opened over HTTP, backed: only what a view or
+an analysis reads is fetched), or a dataset built once from its original files by a registered loader and
+cached in the data directory::
 
     import uchrom.datasets as ds
-    cd = ds.atlas("takei2025_cerebellum")            # https://uchrom-atlas-r2.u-science.org/...
+    cd = ds.load("takei2025_cerebellum")             # the atlas store, https://uchrom-atlas-r2.u-science.org/...
+    cd = ds.load("kim2020_scihic")                   # 1,931 cells, cell types, per-cell contact maps (linked)
 
-Original files (4DN, GEO, Zenodo, GitHub, UCSC) — the inputs of the import tutorials and of the
-benchmarks — are downloaded once into the data directory (``$UCHROM_DATA``, else ``~/.cache/uchrom``)
+Original files (4DN, GEO, Zenodo, GitHub, UCSC) — what the readers of ``uchrom.io`` read, the inputs of
+the benchmarks — are downloaded once into the data directory (``$UCHROM_DATA``, else ``~/.cache/uchrom``)
 and checked::
 
     path = ds.fetch("takei")                          # .../4DNFIHF3JCBY.csv (Takei 2021 FOF-CT)
     ds.list_datasets()                                # what there is, sizes, descriptions
 
-Command line: ``python -m uchrom.datasets list | fetch NAME ... | path NAME``.
+Command line: ``python -m uchrom.datasets list | atlas | load NAME | fetch NAME ... | path NAME``.
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ from typing import List, Optional
 
 from ._paths import ENV, data_dir
 
-__all__ = ["data_dir", "fetch", "files", "path", "atlas", "list_datasets", "list_atlas", "ENV"]
+__all__ = ["data_dir", "load", "fetch", "files", "path", "atlas", "list_datasets", "list_atlas", "ENV"]
 
 
 def _entry(name: str) -> dict:
@@ -109,13 +112,55 @@ def fetch(name: str, *, root: Optional[Path] = None, extract: bool = True, verbo
 
 
 def list_datasets():
-    """The datasets :func:`fetch` knows: name, size (MB), whether ``fetch --default`` (the tutorials' inputs) includes it, description."""
+    """The datasets :func:`fetch` knows: name, size (MB), whether :func:`load` gives it as a ``ChromData``,
+    whether ``fetch --default`` (the tutorials' inputs) includes it, description."""
     import pandas as pd
 
+    from ._loaders import loaders
     from ._sources import DATASETS
 
-    return pd.DataFrame([{"name": k, "size_mb": v.get("size_mb"), "default": v.get("default", False),
-                          "description": v.get("description", "")} for k, v in DATASETS.items()]).set_index("name")
+    known = loaders()
+    rows = [{"name": k, "size_mb": v.get("size_mb"), "load": k in known, "default": v.get("default", False),
+             "description": v.get("description", "")} for k, v in DATASETS.items()]
+    rows += [{"name": k, "size_mb": None, "load": True, "default": False, "description": v.description}
+             for k, v in known.items() if k not in DATASETS]
+    return pd.DataFrame(rows).set_index("name")
+
+
+def load(name: str, *, root: Optional[Path] = None, backed: Optional[bool] = None, rebuild: bool = False,
+         **read_kw):
+    """A dataset as a ``ChromData``.
+
+    - A dataset with a loader (``list_datasets()``, column ``load``): built once from its original files
+      (fetched with :func:`fetch`) into ``<data directory>/<dataset>/<dataset>.chromdata.zarr`` with its
+      linked files next to it, then read from there (in memory unless ``backed=True``).  ``rebuild=True``
+      builds it again.
+    - Otherwise a store of the atlas (``list_atlas()``): opened over HTTP, backed unless ``backed=False``.
+
+    ``read_kw`` go to :meth:`chromdata.ChromData.read` (``columns=``, ``tracks=``, ...).
+    """
+    from chromdata import ChromData
+
+    from ._loaders import loaders
+
+    known = loaders()
+    if name in known:
+        loader = known[name]
+        root = Path(root) if root is not None else data_dir()
+        out = root / loader.store
+        if out.exists() and not rebuild:
+            meta = ChromData.read(out, backed=True).uns.get("dataset") or {}
+            rebuild = meta.get("loader_version") != loader.version
+        if rebuild or not out.exists():
+            cd = loader.build(root, out)
+            cd.uns["dataset"] = {"name": name, "loader_version": loader.version, "sources": list(loader.sources)}
+            cd.write(out)                          # atomic: replaces an older build
+        return ChromData.read(out, backed=bool(backed), **read_kw)
+    try:
+        return atlas(name, backed=True if backed is None else backed, **read_kw)
+    except KeyError:
+        raise KeyError(f"no dataset {name!r}: neither a loader ({', '.join(sorted(known))}) nor an atlas "
+                       f"store (list_atlas())") from None
 
 
 def list_atlas(root: Optional[str] = None):

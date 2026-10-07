@@ -3,6 +3,7 @@
 The web browser on embedded copies: uchrom-browser's tests/test_embedded_maps.py."""
 
 import shutil
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -77,6 +78,15 @@ def test_store_still_reads_and_older_layout_unaffected(stores):
     assert embedded.list_embedded(str(linked)) == {}
 
 
+def test_linked_scool_path_is_the_file_while_it_exists(stores):
+    tmp_path, linked, _ = stores
+    cd = ChromData.read(str(linked))
+    assert Path(cd.linked_scool_path("cells")).resolve() == (tmp_path / "cells.scool").resolve()
+    with pytest.raises(FileNotFoundError):
+        (tmp_path / "cells.scool").unlink()
+        cd.linked_scool_path("cells")                    # gone, and this store embeds nothing
+
+
 def test_python_api_without_the_files(stores):
     tmp_path, _, emb = stores
     ref = {r: cooler.Cooler(f"{tmp_path / 'bulk.mcool'}::/resolutions/{r}").pixels()[:] for r in (RES, 2 * RES)}
@@ -95,6 +105,16 @@ def test_python_api_without_the_files(stores):
     assert cd.load_linked_scool(key="cells")["cells"] == ["/cells/c0", "/cells/c1", "/cells/c2"]
     got = cd.load_linked_scool(key="cells", cell="c1").pixels()[:]
     assert sorted(zip(got.bin1_id, got.bin2_id, got["count"])) == sorted(zip(ref_cell.bin1_id, ref_cell.bin2_id, ref_cell["count"]))
+    # the per-cell map as a file: some cells exported from the embedded copy, same pixels
+    path = cd.linked_scool_path("cells", cells=["c1"])
+    assert cooler.fileops.list_scool_cells(path) == ["/cells/c1"]
+    got = cooler.Cooler(f"{path}::/cells/c1").pixels()[:]
+    assert sorted(zip(got.bin1_id, got.bin2_id, got["count"])) == sorted(zip(ref_cell.bin1_id, ref_cell.bin2_id, ref_cell["count"]))
+    assert cd.linked_scool_path("cells", cells=["c1"]) == path            # exported once
+    # a subset or a copy reads its parent's links and embedded copies
+    assert cd[:2].linked_scool_path("cells", cells=["c1"]) == path
+    assert cd.to_memory()[:2].linked_scool_path("cells", cells=["c1"]) == path
+    assert cd.to_memory().copy().linked_cool_path("bulk") == cd.linked_cool_path("bulk")
     # linked_adata falls back to the embedded AnnData
     assert cd.linked_adata is not None and cd.linked_adata.shape == (3, 2 * N)
 

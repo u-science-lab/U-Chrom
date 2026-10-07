@@ -402,7 +402,7 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
   `matrix_filename<TAB>cell_type` with values in `{H1Esc, HFF}`.
 - **Content**: 1 931 cells (750 H1Esc + 1 181 HFF), pooled from a combinatorial-indexing sci-Hi-C
   library at 500 kb.  Used as a benchmark in Kim et al.'s topic-model paper.
-- **Source**: Kim et al. 2020, *Nature Communications* 11:6386, "Capturing cell type-specific chromatin
+- **Source**: Kim et al. 2020, *PLOS Computational Biology* 16:e1008173 (doi:10.1371/journal.pcbi.1008173), "Capturing cell type-specific chromatin
   compartment patterns by applying topic modeling to single-cell Hi-C data" — accompanying website at
   [noble.gs.washington.edu/proj/schic-topic-model](https://noble.gs.washington.edu/proj/schic-topic-model/):
   ```

@@ -12,6 +12,9 @@ same calling convention (``chrom=None``, ``params=``, ``key_added=``,
     uc.tl.call_loops(cd)                         # strc.loop.call_loops_axiswise_f
     uc.tl.call_compartments(cd)                  # strc.comp.call_compartments_axes_pc
     uc.tl.reconstruct_sc("cell.pairs")           # recon.sc.reconstruct_ember (EMber)
+    uc.tl.embed_cells(cd, source="rna")          # emb.embed_cells
+    uc.tl.embed_higashi(cd)                      # emb.embed_higashi (FastHigashi on linked contact maps)
+    uc.tl.cluster_cells(cd, use="rna_pca")       # emb.cluster_cells
 """
 
 from __future__ import annotations
@@ -74,4 +77,26 @@ def reconstruct_sc(contacts, *, method: str = "ember", **kwargs):
         contacts, **kwargs)
 
 
-__all__ = ["call_compartments", "call_loops", "call_tads", "reconstruct_sc"]
+def embed_cells(cd, **kwargs):
+    """Embed cells from a per-cell matrix (RNA, IF, ATAC, ...) -> :func:`uchrom.emb.embed_cells`."""
+    from uchrom.emb import embed_cells as _f
+
+    return _f(cd, **kwargs)
+
+
+def embed_higashi(cd, **kwargs):
+    """Embed cells by their linked single-cell Hi-C maps with FastHigashi -> :func:`uchrom.emb.embed_higashi`."""
+    from uchrom.emb import embed_higashi as _f
+
+    return _f(cd, **kwargs)
+
+
+def cluster_cells(cd, **kwargs):
+    """Leiden clusters of an embedding -> :func:`uchrom.emb.cluster_cells`."""
+    from uchrom.emb import cluster_cells as _f
+
+    return _f(cd, **kwargs)
+
+
+__all__ = ["call_compartments", "call_loops", "call_tads", "reconstruct_sc", "embed_cells", "embed_higashi",
+           "cluster_cells"]

@@ -256,3 +256,96 @@ def test_run_rejects_missing_config(tmp_path):
     cd = _make_cd(["c1"])
     with pytest.raises(FileNotFoundError, match="config.JSON"):
         run(cd, contacts_dir=tmp_path, wrapper_factory=lambda **_: None)
+
+
+# ---------------------------------------------------------------------------
+# embed_higashi: from the per-cell maps linked to a ChromData
+# ---------------------------------------------------------------------------
+
+def _cd_with_scool(tmp_path, names=("c1", "c2", "c3", "c4")):
+    """Cells without spots and a small linked .scool (2 chromosomes + chrY, 1 Mb bins)."""
+    import cooler
+    from chromdata import ChromData
+
+    sizes = {"chr1": 4_000_000, "chr2": 3_000_000, "chrY": 2_000_000}
+    bins = pd.concat([pd.DataFrame({"chrom": c, "start": np.arange(0, s, 1_000_000),
+                                    "end": np.minimum(np.arange(0, s, 1_000_000) + 1_000_000, s)})
+                      for c, s in sizes.items()], ignore_index=True)
+    rng = np.random.default_rng(0)
+    maps = {}
+    for n in names:
+        i, j = np.triu_indices(len(bins))
+        keep = rng.random(len(i)) < 0.5
+        maps[n] = pd.DataFrame({"bin1_id": i[keep], "bin2_id": j[keep], "count": rng.integers(1, 5, keep.sum())})
+    cooler.create_scool(str(tmp_path / "cells.scool"), bins, maps, ordered=True)
+    no_spots = pd.DataFrame({c: pd.Series(dtype=t) for c, t in
+                             [("chrom", str), ("start", np.int64), ("end", np.int64), ("trace_id", str), ("cell_id", str)]})
+    cd = ChromData(np.zeros((0, 3)), no_spots, cells=pd.DataFrame({"cell_type": list("abab")}, index=pd.Index(names, name="cell_id")),
+                   uns={"genome_assembly": "toy"})
+    cd.link_scool(str(tmp_path / "cells.scool"), key="per_cell", genome_assembly="toy", bin_size=1_000_000)
+    return cd, maps, bins
+
+
+class _FakeWithQC(_FakeFastHigashi):
+    """Reads the label info it was given, writes a QC vector, returns variants in that order."""
+
+    def prep_dataset(self, meta_only=False, batch_norm=True):
+        import pickle
+
+        cfg = Path(self.init_args["config_path"])
+        with open(cfg.parent / "label_info.pickle", "rb") as f:
+            self.names = [str(x) for x in pickle.load(f)["cell_name"]]
+        qc = np.array([i % 2 == 0 for i in range(len(self.names))])
+        np.save(Path(self.init_args["path2input_cache"]) / "qc.npy", qc)
+        super().prep_dataset(meta_only, batch_norm)
+
+    def fetch_cell_embedding(self, final_dim=None, restore_order=False):
+        x = np.array([[float(n[1:]), 10 * float(n[1:])] for n in self.names])     # c3 -> [3, 30]
+        return {"embed_raw": x, "embed_l2_norm": x / 2, "embed_l2_norm_correct_coverage_fh": x / 3,
+                "restore_order": restore_order}
+
+
+def test_embed_higashi_writes_inputs_and_returns_the_embedding_on_the_cells_axis(tmp_path):
+    from uchrom.emb import embed_higashi
+
+    cd, maps, bins = _cd_with_scool(tmp_path)
+    work = tmp_path / "work"
+    emb = embed_higashi(cd, cells=["c3", "c1"], rank=2, work_dir=work, wrapper_factory=_FakeWithQC,
+                        keep_variants=True, log=False)
+    # inputs: one table per cell (chrY left out), in the order asked for
+    files = (work / "input" / "filelist.txt").read_text().split()
+    assert [Path(f).stem for f in files] == ["c3", "c1"]
+    t = pd.read_csv(files[0], sep="\t", header=None, names=["chrom1", "pos1", "chrom2", "pos2", "count"])
+    assert set(t["chrom1"]) | set(t["chrom2"]) <= {"chr1", "chr2"}
+    keep = (bins["chrom"] != "chrY").to_numpy()
+    px = maps["c3"]
+    assert t["count"].sum() == px[keep[px.bin1_id] & keep[px.bin2_id]]["count"].sum()
+    # the embedding on the cells axis: c1, c3 filled, c2 / c4 NaN
+    assert emb.shape == (4, 2) and np.isnan(emb[[1, 3]]).all()
+    np.testing.assert_allclose(emb[0], [1 / 3, 10 / 3])
+    np.testing.assert_allclose(emb[2], [3 / 3, 30 / 3])
+    np.testing.assert_allclose(cd.cellm["higashi"], emb, equal_nan=True)
+    np.testing.assert_allclose(cd.cellm["higashi.embed_raw"][2], [3, 30])
+    # QC from FastHigashi's cache (label-info order: c3 pass, c1 fail)
+    qc = cd.cells["higashi_qc"]
+    assert list(qc.iloc[[0, 2]]) == ["fail", "pass"] and qc.iloc[[1, 3]].isna().all()
+    assert cd.uns["higashi"]["chroms"] == ["chr1", "chr2"] and cd.uns["higashi"]["n_pass_qc"] == 1
+    assert cd.uns["embeddings"]["higashi"]["modality"] == "Hi-C"
+    assert cd.results.record("higashi").function == "uchrom.emb.embed_higashi"
+
+
+def test_embed_higashi_copy_leaves_cd_alone(tmp_path):
+    from uchrom.emb import embed_higashi
+
+    cd, _, _ = _cd_with_scool(tmp_path)
+    new = embed_higashi(cd, rank=2, work_dir=tmp_path / "w", wrapper_factory=_FakeWithQC, log=False, copy=True)
+    assert "higashi" in new.cellm and "higashi" not in cd.cellm
+    assert np.isfinite(new.cellm["higashi"]).all()
+
+
+def test_embed_higashi_rejects_unknown_cells(tmp_path):
+    from uchrom.emb import embed_higashi
+
+    cd, _, _ = _cd_with_scool(tmp_path)
+    with pytest.raises(KeyError):
+        embed_higashi(cd, cells=["nope"], work_dir=tmp_path / "w", wrapper_factory=_FakeWithQC)
