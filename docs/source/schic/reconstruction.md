@@ -1,13 +1,13 @@
-# 3D reconstruction
+# Single-cell reconstruction: methods and parameters
 
-U-Chrom ships three reconstruction backends under `uchrom.recon`, all
-writing the same `.chromdata.zarr` output format.
+Two methods compute 3-D structures of one cell from its contacts, both on the native engine
+`uchrom-recon` (Rust; multi-core CPU in f64, GPU in f32 through wgpu: Metal on macOS, Vulkan on Linux),
+both returning an ensemble of models as one `ChromData`.
 
-| Backend | Module | Best for | Notes |
-|---------|--------|----------|-------|
-| EMber | `uchrom.recon.sc.ember` | Single-cell Hi-C / Dip-C, noisy contacts | Native engine (protocol `"robust"`); noise-aware, sampled ensembles, fast |
-| NucDynamics | `uchrom.recon.sc.nucdyn` | Single-cell Hi-C / Dip-C | Native engine (Rust; multi-core CPU, wgpu GPU: Metal / Vulkan); ensembles |
-| SMACOF MDS | `uchrom.recon.bulk.mds` | Bulk Hi-C, contact matrices | PyTorch GPU, inter-chromosomal support |
+| Method | Module | Best for | Notes |
+|--------|--------|----------|-------|
+| EMber | `uchrom.recon.sc.ember` | single-cell Hi-C / Dip-C, noisy contacts, phased diploid | protocol `"robust"`; noise-aware, sampled ensembles, fast |
+| NucDynamics | `uchrom.recon.sc.nucdyn` | single-cell Hi-C / Dip-C | the 2017 method of Stevens et al.; annealed ensembles |
 
 ## NucDynamics (single-cell)
 
@@ -80,37 +80,6 @@ cd.results["ember.contact_weights"]    # posterior weight of every input contact
 #       reconstruct_nucdyn(contacts, protocol="ember")  (same coordinates for the same seed)
 ```
 
-## Bulk MDS (PyTorch, whole-genome)
-
-Input: `.hic` / `.mcool` / `.cool`.
-Output: `.chromdata.zarr` (or per-chromosome for inter mode).
-
-```bash
-# Single chromosome
-python -m uchrom.recon.bulk.mds data.mcool out.chromdata.zarr \
-    --resolution=100000 --chrom=chr1 --device=auto
-
-# Whole genome with inter-chromosomal contacts
-python -m uchrom.recon.bulk.mds data.mcool ./outdir/ \
-    --resolution=100000 --resolution-inter=1000000 \
-    --inter=True --device=auto
-```
-
-The solver is **SMACOF** with CMDS initialisation, implemented in
-PyTorch so it runs on CUDA / MPS / CPU.  Inter-chromosomal mode runs a
-low-resolution whole-genome scaffold MDS then Procrustes-aligns each
-chromosome's high-resolution structure to its scaffold position.
-
-Additional flags:
-
-| Flag | Default | Meaning |
-|------|---------|---------|
-| `--alpha` | 4.0 | Contact → distance exponent |
-| `--weight` | 0.05 | Distance-decay prior weight |
-| `--n_iter` | 1000 | SMACOF iterations |
-| `--partitioned` | False | Split by TAD for better parallelism |
-| `--tad_bed` | None | TAD regions BED when `--partitioned` |
-
 ## Programmatic API
 
 ```python
@@ -122,6 +91,5 @@ from uchrom import ChromData
 cd = ChromData.read("out.chromdata.zarr")
 ```
 
-All three backends write `.chromdata.zarr` with one trace per chromosome (single
-cell) or one chromosome structure (bulk).  Downstream tools don't care
-which reconstructor you used.
+Both write a `ChromData` with one trace per chromosome (`coords` = model 0, `layers["model_<k>"]` = every
+model); downstream tools do not care which method made it.  Bulk Hi-C: [bulk Hi-C](../bulk/index).

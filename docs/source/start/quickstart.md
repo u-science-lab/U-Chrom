@@ -93,4 +93,6 @@ online at [uchrom-browser.u-science.org](https://uchrom-browser.u-science.org).
 ## Next
 
 - [Concepts](concepts): the data model in one page.
-- The chapters, from [data model & storage](../data/index) to [auto-discovery](../discovery/index).
+- The chapters by data type — [chromatin tracing](../tracing/index), [DNA seqFISH+](../seqfish/index),
+  [single-cell and spatial Hi-C](../schic/index), [bulk Hi-C](../bulk/index) — and those common to all data,
+  from [data model & storage](../data/index) to [visualisation](../viz/index).

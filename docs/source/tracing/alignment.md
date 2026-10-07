@@ -1,17 +1,8 @@
-# Imaging & tracing (`uchrom.im`)
+# From detections to traces: the *jie* aligner
 
-`uchrom.im` covers the imaging-side entry points into the
-`ChromData` container.  The two placeholder submodules are:
-
-| Submodule        | Status      | Purpose                                             |
-|------------------|-------------|-----------------------------------------------------|
-| `uchrom.im.detect` | placeholder | Raw image → spot detection (drift, deconvolution, Gaussian fitting, barcode decoding) |
-| `uchrom.im.trace`  | **available** | Spot table → trace-assigned `ChromData`             |
-
-For sequencing-based inputs (Hi-C, Dip-C, …) see
-[`uchrom.recon`](../recon/methods.md).  A future
-`uchrom.recon.fish` submodule is reserved for algorithms that
-**jointly** exploit FISH + Hi-C for a single reconstruction.
+`uchrom.im.trace.align_spots` links decoded DNA FISH detections into chromatin fibres (traces) — a
+re-implementation of the *jie* method (Jia et al.) for data where each locus of a cell may have several
+candidate spots and the number of fibres per chromosome is not known in advance.
 
 ## When to use `uchrom.im.trace.align_spots`
 
@@ -19,8 +10,7 @@ Use it when your input is **raw, decoded FISH detections** with
 multiple candidate spots per genomic locus per cell.  If you instead
 already have a 4DN FOF-CT file (every spot carries a `trace_id`), you
 can skip tracing entirely and go straight to
-`ChromData.from_fofct` — this is what tutorials 2, 4, 5, 6, and 7
-do.
+`ChromData.from_fofct` ([FOF-CT](fofct)).
 
 ## The jie algorithm in one paragraph
 
@@ -66,10 +56,9 @@ Output is a normal `ChromData`:
   fiber.
 - **τ auto-fit** is sensitive to decoy contamination; pass
   `tau_by_chrom={chrom: value}` explicitly for noisy data.
-- **Embedded GPL-3 upstream**: the reference implementation at
-  github.com/b2jia/jie is GPL-3.0.  This port is independent,
-  rewritten from the paper's method section, and ships under
-  U-Chrom's own licence.
+- **GPL-3 upstream**: the reference implementation at github.com/b2jia/jie is GPL-3.0.  This port is
+  independent, rewritten from the paper's method section.
 
-See tutorial 8 for a worked example on Takei 2021 seqFISH+ data
-(4DN `4DNFIHF3JCBY` / Zenodo 3735329).
+The tutorial [spot-to-trace alignment](../tutorials/jie_aligner) runs it on the raw DNA seqFISH+
+detections of Takei et al. 2021 (Zenodo 3735329) and scores it against their published traces
+(4DN `4DNFIHF3JCBY`).

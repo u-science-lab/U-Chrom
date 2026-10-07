@@ -1,17 +1,52 @@
 # Concepts
 
-## One table of positions
+## Three kinds of 3-D genome data
 
-Every 3-D genome measurement ends in the same table: a genomic locus and where it is.
+```{figure} ../_static/paper/fig1a.jpg
+:alt: Contacts, geometry and molecular state as three walls around a nucleus
+:width: 85%
+
+Each assay captures one facet of 3-D genome organisation: **contacts** (Hi-C, single-cell Hi-C:
+which loci touch), **geometry** (chromatin tracing: where loci are) and **molecular state** (ChIP, ATAC,
+RNA, immunofluorescence: what loci carry).  The contact map is scHiCAR of the mouse motor cortex, the
+tracks are chromatin marks of one cerebellar cell measured by DNA seqFISH+.  From Fig. 1a of the U-Chrom
+paper; the illustration is AI-generated and edited by the authors and, apart from the contact map and
+the signal tracks, conceptual.
+```
+
+Sequencing and imaging measure different things, at different resolutions, in different numbers of
+cells — and each field has its own formats and tools.  What they share is the genome: every
+measurement is about loci.
+
+## One shared index, not a joint model
+
+```{figure} ../_static/paper/fig1b.png
+:alt: Geometry, contacts and molecular features as layers over the same genomic bins
+:width: 70%
+
+`ChromData` keeps each modality as its own layer — geometry (`x, y, z`), contacts (bin × bin maps,
+linked when large), molecular features — and indexes all of them by the same genomic bins (dashed
+lines).  Left, any layer can be held per population, per cell or per trace › spot; aggregation moves
+data up a level.  Right, operations within and between layers: imputation, reconstruction of 3-D
+from contacts, conversion of distances into contact frequencies; molecular features are projected
+onto structures through a shared spot, cell or cell type.  From Fig. 1b of the U-Chrom paper.
+```
+
+Nothing is forced into one matrix: a chromatin-tracing experiment fills the geometry layer, a
+single-cell Hi-C experiment the contact layer (and, after [reconstruction](../schic/index), geometry
+too), a seqFISH+ multi-omics experiment geometry and molecular features in the same cells.  The shared
+bins are what lets one analysis read another's output.
+
+The central table is the one every 3-D measurement ends in — a locus and where it is:
 
 | chrom | start | end | x | y | z |
 |-------|-------|-----|---|---|---|
 | chr3 | 34,600,000 | 34,625,000 | 1.82 | 0.44 | −0.91 |
 | chr3 | 34,625,000 | 34,650,000 | 1.79 | 0.47 | −0.88 |
 
-Chromatin tracing and DNA seqFISH+ measure the positions directly; Hi-C measures contacts, from
-which [3-D reconstruction](../recon/index) computes them.  Everything downstream — distances,
-structures, features, embeddings, the browser — works on this table, whatever produced it.
+Chromatin tracing and DNA seqFISH+ measure the positions directly; Hi-C measures contacts, from which
+reconstruction computes them.  Everything downstream — distances, structures, features, the browser —
+works on this table, whatever produced it.
 
 ## Cells, traces, spots — and bins
 
@@ -44,6 +79,17 @@ ChromData
 ├── points       non-genomic 3-D points: RNA spots, IF puncta
 ├── results      analysis outputs, each with its provenance (function, parameters, version, time)
 └── uns          metadata: genome assembly, units, linked files, ...
+```
+
+```{figure} ../_static/paper/fig2a.png
+:alt: The tables of a ChromData joined by keys, and the layout of a .chromdata.zarr store
+:width: 100%
+
+The tables of a `ChromData` and how they are joined: spots (one row per observation) point at the
+shared locus axis (bins) and at traces and cells through keys; coordinates and per-spot tracks are
+row-aligned with the spots; contact maps are linked, not copied.  Right, the layout of a
+`.chromdata.zarr` store (Parquet tables, Zarr arrays, JSON attributes).  From Fig. 2a of the U-Chrom
+paper.
 ```
 
 All spots of all cells are stored flat; `cd.get_cell(id)`, `cd.get_trace(id)` and
@@ -86,16 +132,33 @@ its parameters and the U-Chrom version, so a store remembers how its results wer
 `uchrom.tl` and `uchrom.pp` give short names: `uc.tl.call_tads(cd)`, `uc.tl.call_loops(cd)`,
 `uc.tl.call_compartments(cd)`, `uc.tl.reconstruct_sc(contacts)`, `uc.pp.impute(cd)`.
 
+## The ecosystem
+
+```{figure} ../_static/paper/fig1c.png
+:alt: Interfaces, analysis modules, ChromData and the formats it reads and links
+:width: 100%
+
+Community formats are read, or linked without copying (dashed boxes); a `ChromData` is stored as a
+`.chromdata.zarr` store (`.cdz`: the same store in one zip file); structures are exported as PDB.  The
+analysis modules — reconstruction, imaging-side processing, structure calling, geometric features, cell
+embeddings — share one API, reached from Python, the command line, the web browser and agents.  From
+Fig. 1c of the U-Chrom paper (logos are trademarks of their owners, used for identification only).
+```
+
 ## Where things live
 
-| You want to | Look in |
-|-------------|---------|
-| hold, subset, save or share data | [`chromdata`](../data/index) |
-| read a file format | [`uchrom.io`](../io/index) |
-| turn spots into traces, fill gaps | [`uchrom.im`](../imaging/index) |
-| compute structures from Hi-C | [`uchrom.recon`](../recon/index) |
-| call loops, TADs, compartments | [`uchrom.strc`](../structures/index) |
-| compute per-locus features | [`uchrom.fea`](../features/index) |
-| compare cells | [`uchrom.emb`](../cells/index) |
-| look at it | [`uchrom-browser`, `uchrom.pl`](../viz/index) |
-| let agents explore it | [`uchrom-discovery`](../discovery/index) |
+| Your data | Chapter |
+|-----------|---------|
+| chromatin tracing (FOF-CT, PyHiM, raw detections) | [Chromatin tracing](../tracing/index) |
+| DNA seqFISH+ with chromatin marks and RNA | [Imaging multi-omics](../seqfish/index) |
+| single-cell Hi-C, its multi-omics variants, spatial Hi-C | [Single-cell and spatial Hi-C](../schic/index) |
+| bulk Hi-C (alone, or with tracing of the same cells) | [Bulk Hi-C](../bulk/index) |
+
+| You want to — for any data | Chapter |
+|----------------------------|---------|
+| hold, subset, save, share, link | [Data model & storage](../data/index) (`chromdata`) |
+| call loops, TADs, domains, compartments | [Structure calling](../structures/index) (`uchrom.strc`) |
+| compute per-locus features | [Per-locus features](../features/index) (`uchrom.fea`) |
+| compare cells | [Cells & embeddings](../cells/index) (`uchrom.emb`) |
+| look at it | [Visualisation](../viz/index) (`uchrom-browser`, `uchrom.pl`) |
+| read or write a file format | [File formats](../reference/formats) (`uchrom.io`) |

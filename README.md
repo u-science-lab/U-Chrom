@@ -64,11 +64,12 @@ python -m uchrom_browser takei2021.chromdata.zarr        # look at it
 
 ## Documentation
 
-The documentation is organised by function — data model & storage, import, imaging, 3-D
-reconstruction, structure calling, features, cells & embeddings, visualisation, auto-discovery — each
-chapter with tutorials on real data (`docs/`, notebooks in `tutorials/`).  Data come from the atlas or
-from their original sources (`python -m uchrom.datasets`), never from the repository; where each
-dataset comes from: [`apps/atlas/recipes/README.md`](apps/atlas/recipes/README.md).
+The documentation has a chapter per kind of data — chromatin tracing, imaging multi-omics (DNA seqFISH+),
+single-cell and spatial Hi-C, bulk Hi-C — and chapters common to all data — data model & storage, structure
+calling, per-locus features, cells & embeddings, visualisation — each with tutorials on real data
+(`docs/`, notebooks in `tutorials/`); online at [u-chrom-docs.pages.dev](https://u-chrom-docs.pages.dev).
+Data come from the atlas or from their original sources (`python -m uchrom.datasets`), never from the
+repository; where each dataset comes from: [`apps/atlas/recipes/README.md`](apps/atlas/recipes/README.md).
 
 ## Repository layout
 
