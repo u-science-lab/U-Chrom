@@ -1,0 +1,3 @@
+target/
+python/uchrom_maps/*.so
+python/uchrom_maps/*.pyd

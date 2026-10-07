@@ -77,6 +77,10 @@ apps/**/.wrangler/
 packages/uchrom-recon/target/
 packages/uchrom-recon/python/uchrom_recon/*.so
 packages/uchrom-recon/python/uchrom_recon/*.pyd
+# Native kernels of the Hi-C map callers (packages/uchrom-maps)
+packages/uchrom-maps/target/
+packages/uchrom-maps/python/uchrom_maps/*.so
+packages/uchrom-maps/python/uchrom_maps/*.pyd
 
 # Fig. 3 renders: rebuildable inputs and raw pane captures (the cropped PNGs used in the figures are tracked)
 

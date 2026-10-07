@@ -15,7 +15,8 @@ def chrom_loci(cd, chrom: str) -> pd.DataFrame:
     bins = cd.bins
     loci = bins[bins["chrom"].astype(str) == str(chrom)].sort_values("start", kind="mergesort")
     if loci.empty:
-        raise KeyError(f"no loci on {chrom!r} in cd.bins")
+        raise KeyError(f"no loci on {chrom!r} in cd.bins (for a ChromData holding a Hi-C map, give contacts=<its key>"
+                       f" where the function takes it)")
     out = loci[["chrom", "start", "end"]].astype({"chrom": str}).reset_index(names="bin_id")
     return out.astype({"start": np.int64, "end": np.int64})
 

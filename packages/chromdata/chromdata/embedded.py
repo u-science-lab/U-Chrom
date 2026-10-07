@@ -837,18 +837,30 @@ def export_cool(store, key: str, out: PathLike, *, resolution: Optional[int] = N
     return Path(out)
 
 
-def export_mcool(store, key: str, out: PathLike) -> Path:
-    """Write a bulk map as a ``.mcool`` (every embedded resolution)."""
+def export_mcool(store, key: str, out: PathLike, *, resolutions: Optional[Sequence[int]] = None) -> Path:
+    """Write a bulk map as a ``.mcool``: every embedded resolution, or only ``resolutions`` (the fine levels of
+    a genome-wide map are by far the largest).  Written to a temporary file and renamed, so an interrupted
+    export leaves no partial file."""
     import cooler
 
     e = _open(store, key)
     if e.kind != "bulk":
         raise ValueError(f"{key!r} is a per-cell map: use export_scool")
-    Path(out).unlink(missing_ok=True)
-    for r in e.resolutions:
-        cooler.create_cooler(f"{out}::/resolutions/{r}", _bins_frame(e, r), _pixel_frame(e, r), ordered=True,
-                             columns=["count"], dtypes={"count": "int32"}, mode="a")
-    return Path(out)
+    levels = list(e.resolutions) if resolutions is None else [int(r) for r in resolutions]
+    missing = [r for r in levels if r not in e.resolutions]
+    if missing:
+        raise ValueError(f"{key!r} has no embedded level at {missing} bp ({list(e.resolutions)})")
+    out = Path(out)
+    tmp = out.with_name(f".{out.name}.{os.getpid()}.part")
+    tmp.unlink(missing_ok=True)
+    try:
+        for r in levels:
+            cooler.create_cooler(f"{tmp}::/resolutions/{r}", _bins_frame(e, r), _pixel_frame(e, r), ordered=True,
+                                 columns=["count"], dtypes={"count": "int32"}, mode="a")
+        os.replace(tmp, out)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return out
 
 
 def export_scool(store, key: str, out: PathLike, *, cells: Optional[Sequence[str]] = None,

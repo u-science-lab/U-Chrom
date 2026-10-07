@@ -2,9 +2,9 @@
 
 A cell's contacts become a contact map — a sparse matrix of contact counts between genomic bins.  The maps of
 all cells are kept in one `.scool` (one cooler per cell), *linked* to the `ChromData` of the cells, not
-copied into it; a pseudo-bulk map (all cells, or one cell type) is a linked `.cool` / `.mcool`.  The
-`ChromData` then has cells (with their metadata and embeddings) and, until a structure is computed, no
-spots.
+copied into it; a pseudo-bulk map (all cells, or one cell type: [pseudo-bulk maps](pseudobulk.md)) is a linked
+`.cool` / `.mcool`.  The `ChromData` then has cells (with their metadata and embeddings) and, until a
+structure is computed, no spots.
 
 ```python
 import uchrom.datasets as ds

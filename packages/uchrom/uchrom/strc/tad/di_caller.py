@@ -100,7 +100,7 @@ def call_tads_di(
     if copy and key_added is None:
         raise ValueError("call_tads_di(): copy=True needs a key_added")
     params = params or DICallerParams()
-    path = map_path(cd, contacts)
+    path = map_path(cd, contacts, resolution=resolution)
     clr = open_map(path, resolution=resolution)
 
     if chrom is None:

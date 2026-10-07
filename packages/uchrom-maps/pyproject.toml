@@ -1,0 +1,24 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "uchrom-maps"
+version = "0.1.0"
+description = "Native kernels of U-Chrom's Hi-C map callers: HiCCUPS scoring and the Mustache scale-space scan (Rust, multi-core CPU)"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Weize Xu", email = "vet.xwz@gmail.com" }]
+dependencies = ["numpy>=1.24"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "scipy>=1.10"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "uchrom_maps._kernels"
+features = ["python"]

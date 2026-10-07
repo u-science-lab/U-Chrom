@@ -281,3 +281,24 @@ def test_write_embed_carries_what_the_object_reaches(stores):
     assert [m for m in back.validate_links() if "does not exist" in m and "secA" not in m] == []
     with pytest.raises(ValueError):
         cd.write(tmp_path / "x.cdz", embed=True)
+
+
+def test_export_one_level_of_an_embedded_map(stores):
+    tmp_path, _, emb = stores
+    ref = cooler.Cooler(f"{tmp_path / 'bulk.mcool'}::/resolutions/{2 * RES}").pixels()[:]
+    (tmp_path / "bulk.mcool").unlink()
+    (tmp_path / "bulk.cool").unlink()
+    cd = ChromData.read(str(emb), backed=True)
+    # one level asked for: only that level is exported (and once)
+    clr = cd.load_linked_cool("bulk", resolution=2 * RES)
+    path = cd.linked_cool_path("bulk", resolution=2 * RES)
+    assert clr.binsize == 2 * RES and cooler.fileops.list_coolers(path) == [f"/resolutions/{2 * RES}"]
+    got = clr.pixels()[:]
+    assert sorted(zip(got.bin1_id, got.bin2_id, got["count"])) == sorted(zip(ref.bin1_id, ref.bin2_id, ref["count"]))
+    with pytest.raises(ValueError, match="no embedded level"):
+        cd.linked_cool_path("bulk", resolution=7)
+    assert not list(Path(path).parent.glob("*.part"))                   # no partial file left behind
+    # every level once the whole map is asked for; afterwards every request reads it
+    full = cd.linked_cool_path("bulk")
+    assert sorted(cooler.fileops.list_coolers(full)) == sorted([f"/resolutions/{RES}", f"/resolutions/{2 * RES}"])
+    assert cd.linked_cool_path("bulk", resolution=2 * RES) == full

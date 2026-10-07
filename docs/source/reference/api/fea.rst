@@ -20,6 +20,31 @@ Maps linked to a ``ChromData`` as matrices, rebinned, observed / expected.
 .. automodule:: uchrom.fea.maps
    :members:
 
+Banded reads of large maps
+--------------------------
+
+One chromosome's pixels near the diagonal as a sparse band, and the expected contact per separation: what the
+Hi-C structure callers share.
+
+.. automodule:: uchrom.fea.band
+   :members:
+
+Pseudo-bulk maps
+----------------
+
+Per-cell maps summed per group of cells into ICE-balanced maps linked to the cells.
+
+.. automodule:: uchrom.fea.pseudobulk_maps
+   :members:
+
+Pileups (APA)
+-------------
+
+A linked map aggregated around known loops or boundaries.
+
+.. automodule:: uchrom.fea.pileup_maps
+   :members:
+
 Comparing structures
 --------------------
 

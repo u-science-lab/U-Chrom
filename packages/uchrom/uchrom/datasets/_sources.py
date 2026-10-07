@@ -679,6 +679,30 @@ DATASETS.update({
         "default": True,
         "description": "UCSC mm10 chromosome 19 sequence",
     },
+    # UCSC hg19 chromosome sequences: GC content to orient Hi-C compartments (A = GC-rich)
+    "hg19_chr21": {
+        "files": [("genomes/hg19/chr21.fa.gz", "https://hgdownload.soe.ucsc.edu/goldenPath/hg19/chromosomes/chr21.fa.gz")],
+        "md5": {"genomes/hg19/chr21.fa.gz": "26cdd5a3a539b63930752604feb2912b"},
+        "size_mb": 12,
+        "default": False,
+        "description": "UCSC hg19 chromosome 21 sequence",
+    },
+    "hg19_chr1": {
+        "files": [("genomes/hg19/chr1.fa.gz", "https://hgdownload.soe.ucsc.edu/goldenPath/hg19/chromosomes/chr1.fa.gz")],
+        "md5": {"genomes/hg19/chr1.fa.gz": "e103808b81f7d0a52353dee92d2ff164"},
+        "size_mb": 74,
+        "default": False,
+        "description": "UCSC hg19 chromosome 1 sequence",
+    },
+    # UCSC liftOver chain hg38 -> hg19: hg38 single-cell maps next to the hg19 Rao 2014 maps
+    "hg38_to_hg19_chain": {
+        "files": [("genomes/liftover/hg38ToHg19.over.chain.gz",
+                   "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/hg38ToHg19.over.chain.gz")],
+        "md5": {"genomes/liftover/hg38ToHg19.over.chain.gz": "ff3031d93792f4cbb86af44055efd903"},
+        "size_mb": 1.2,
+        "default": False,
+        "description": "UCSC liftOver chain hg38 -> hg19",
+    },
     "mm10_refgene": {
         "files": [("genomes/mm10/mm10.refGene.gtf.gz",
                    "https://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/genes/mm10.refGene.gtf.gz")],
@@ -727,6 +751,38 @@ DATASETS.update({
         "default": True,
         "fig3": True,
         "description": "Rao 2014 IMR90 Hi-C chr21 at 5 kb, sliced over HTTP from the GEO .hic (built)",
+    },
+    "rao2014_imr90_chr1": {
+        "build": ("slice_hic", {"cell": "IMR90", "chroms": ["1"], "res": 5000}),
+        "files": [("rao2014_imr90/IMR90_chr1_5kb_hg19.cool", "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE63nnn/GSE63525/suppl/GSE63525_IMR90_combined.hic")],
+        "size_mb": 40,
+        "default": False,
+        "description": "Rao 2014 IMR90 Hi-C chr1 at 5 kb (the largest chromosome: performance checks), sliced over HTTP (built)",
+    },
+    "rao2014_gm12878_chr21": {
+        "build": ("slice_hic", {"cell": "GM12878", "chroms": ["21"], "res": 5000}),
+        "files": [("rao2014_gm12878/GM12878_chr21_5kb_hg19.cool",
+                   "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE63nnn/GSE63525/suppl/GSE63525_GM12878_insitu_primary+replicate_combined.hic")],
+        "size_mb": 6,
+        "default": False,
+        "description": "Rao 2014 GM12878 Hi-C chr21 at 5 kb, sliced over HTTP from the GEO .hic (built)",
+    },
+    # the authors' loop (HiCCUPS) and domain (Arrowhead) calls of Rao et al. 2014, the reference the Hi-C
+    # structure callers are validated against
+    "rao2014_annotations": {
+        "files": [(f"rao2014_annotations/{n}", f"https://ftp.ncbi.nlm.nih.gov/geo/series/GSE63nnn/GSE63525/suppl/{n}") for n in (
+            "GSE63525_IMR90_HiCCUPS_looplist.txt.gz", "GSE63525_IMR90_Arrowhead_domainlist.txt.gz",
+            "GSE63525_GM12878_primary+replicate_HiCCUPS_looplist.txt.gz",
+            "GSE63525_GM12878_primary+replicate_Arrowhead_domainlist.txt.gz")],
+        "md5": {"rao2014_annotations/GSE63525_IMR90_HiCCUPS_looplist.txt.gz": "326c6dbafcb860ad1e726c544f71a5a6",
+                "rao2014_annotations/GSE63525_IMR90_Arrowhead_domainlist.txt.gz": "6129d35df3b6726ddab38056170e3482",
+                "rao2014_annotations/GSE63525_GM12878_primary+replicate_HiCCUPS_looplist.txt.gz":
+                    "2195f24061059dca3cb190b73af3bd6e",
+                "rao2014_annotations/GSE63525_GM12878_primary+replicate_Arrowhead_domainlist.txt.gz":
+                    "42a23da326be4379b042ae9658ed6a0b"},
+        "size_mb": 2,
+        "default": False,
+        "description": "Rao 2014 HiCCUPS loop and Arrowhead domain lists, IMR90 and GM12878 (GEO GSE63525)",
     },
     "rao2014_k562_chr21": {
         "build": ("slice_hic", {"cell": "K562", "chroms": ["21"], "res": 5000}),

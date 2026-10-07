@@ -11,6 +11,12 @@ same calling convention (``chrom=None``, ``params=``, ``key_added=``,
     uc.tl.call_tads(cd, method="arcfish")        # strc.tad.call_tads_by_pval
     uc.tl.call_loops(cd)                         # strc.loop.call_loops_axiswise_f
     uc.tl.call_compartments(cd)                  # strc.comp.call_compartments_axes_pc
+    uc.tl.call_compartments(cd, method="eig", contacts="bulk")   # a linked Hi-C map: cis eigenvector
+    uc.tl.call_tads(cd, method="insulation", contacts="bulk")    # insulation-score boundaries
+    uc.tl.call_loops(cd, method="hiccups", contacts="bulk")      # local-enrichment loops (HiCCUPS)
+    uc.tl.call_loops(cd, method="mustache", contacts="bulk")     # scale-space loops
+    uc.tl.pileup(cd, "loops.hiccups", contacts="bulk")           # APA of known loops (too shallow to call)
+    uc.tl.pseudobulk(cd, "cell_type")            # fea.pseudobulk: per-cell maps summed per group, linked
     uc.tl.reconstruct_sc("cell.pairs")           # recon.sc.reconstruct_ember (EMber)
     uc.tl.reconstruct_bulk(cd, contacts="bulk")  # recon.bulk.mds.reconstruct_mds (a linked bulk map)
     uc.tl.embed_cells(cd, source="rna")          # emb.embed_cells
@@ -25,13 +31,14 @@ from typing import Callable, Dict
 
 
 def _tad_methods() -> Dict[str, Callable]:
-    from uchrom.strc.tad import call_domains_fishnet, call_tads_by_pval, call_tads_di
+    from uchrom.strc.tad import call_domains_fishnet, call_tads_by_pval, call_tads_di, call_tads_insulation
 
     return {
         "arcfish": call_tads_by_pval,
         "pval": call_tads_by_pval,
         "fishnet": call_domains_fishnet,
         "di": call_tads_di,
+        "insulation": call_tads_insulation,
     }
 
 
@@ -47,28 +54,57 @@ def call_tads(cd, *, method: str = "arcfish", **kwargs):
 
     ``method``: ``"arcfish"`` (alias ``"pval"``) →
     :func:`uchrom.strc.tad.call_tads_by_pval`; ``"fishnet"`` →
-    :func:`uchrom.strc.tad.call_domains_fishnet`; ``"di"`` →
-    :func:`uchrom.strc.tad.call_tads_di` (linked Hi-C contacts).
+    :func:`uchrom.strc.tad.call_domains_fishnet`; on linked Hi-C maps ``"insulation"`` →
+    :func:`uchrom.strc.tad.call_tads_insulation` and ``"di"`` → :func:`uchrom.strc.tad.call_tads_di`.
     """
     return _dispatch("TAD", _tad_methods(), method)(cd, **kwargs)
 
 
-def call_loops(cd, *, method: str = "axiswise_f", **kwargs):
-    """Call loops.  ``method``: ``"axiswise_f"`` →
-    :func:`uchrom.strc.loop.call_loops_axiswise_f`."""
-    from uchrom.strc.loop import call_loops_axiswise_f
+def _loop_methods() -> Dict[str, Callable]:
+    from uchrom.strc.loop import call_loops_axiswise_f, call_loops_hiccups, call_loops_mustache
 
-    return _dispatch("loop", {"axiswise_f": call_loops_axiswise_f}, method)(cd, **kwargs)
+    return {"axiswise_f": call_loops_axiswise_f, "hiccups": call_loops_hiccups, "mustache": call_loops_mustache}
+
+
+def call_loops(cd, *, method: str = "axiswise_f", **kwargs):
+    """Call loops.  ``method``: ``"axiswise_f"`` (3-D distances) →
+    :func:`uchrom.strc.loop.call_loops_axiswise_f`; on a linked Hi-C map ``"hiccups"`` (local enrichment) →
+    :func:`uchrom.strc.loop.call_loops_hiccups` and ``"mustache"`` (scale space) →
+    :func:`uchrom.strc.loop.call_loops_mustache`."""
+    return _dispatch("loop", _loop_methods(), method)(cd, **kwargs)
 
 
 def call_compartments(cd, *, method: str = "axes_pc", **kwargs):
     """Call A/B compartments.  ``method``: ``"axes_pc"`` (3-D distances) →
-    :func:`uchrom.strc.comp.call_compartments_axes_pc`; ``"hic_pc1"`` (a linked Hi-C map) →
-    :func:`uchrom.strc.comp.call_compartments_hic`."""
-    from uchrom.strc.comp import call_compartments_axes_pc, call_compartments_hic
+    :func:`uchrom.strc.comp.call_compartments_axes_pc`; on a linked Hi-C map ``"eig"`` (the cis
+    eigenvector) → :func:`uchrom.strc.comp.call_compartments_eig` and ``"hic_pc1"`` (PC1 of the O/E
+    correlation on uneven loci) → :func:`uchrom.strc.comp.call_compartments_hic`."""
+    from uchrom.strc.comp import call_compartments_axes_pc, call_compartments_eig, call_compartments_hic
 
-    return _dispatch("compartment", {"axes_pc": call_compartments_axes_pc, "hic_pc1": call_compartments_hic},
-                     method)(cd, **kwargs)
+    return _dispatch("compartment", {"axes_pc": call_compartments_axes_pc, "eig": call_compartments_eig,
+                                     "hic_pc1": call_compartments_hic}, method)(cd, **kwargs)
+
+
+def compartment_strength(cd, **kwargs):
+    """Compartment strength from a saddle plot of a linked Hi-C map -> :func:`uchrom.strc.comp.compartment_strength`."""
+    from uchrom.strc.comp import compartment_strength as _f
+
+    return _f(cd, **kwargs)
+
+
+def pseudobulk(cd, groupby=None, **kwargs):
+    """Sum the linked per-cell contact maps per cell group into linked pseudo-bulk maps ->
+    :func:`uchrom.fea.pseudobulk`."""
+    from uchrom.fea import pseudobulk as _f
+
+    return _f(cd, groupby, **kwargs)
+
+
+def pileup(cd, features, **kwargs):
+    """Aggregate a linked Hi-C map around known loops / boundaries (APA) -> :func:`uchrom.fea.pileup`."""
+    from uchrom.fea import pileup as _f
+
+    return _f(cd, features, **kwargs)
 
 
 def reconstruct_sc(contacts, *, method: str = "ember", **kwargs):
@@ -121,5 +157,5 @@ def cluster_cells(cd, **kwargs):
     return _f(cd, **kwargs)
 
 
-__all__ = ["call_compartments", "call_loops", "call_tads", "reconstruct_sc", "reconstruct_bulk", "embed_cells", "embed_higashi",
+__all__ = ["call_compartments", "compartment_strength", "call_loops", "call_tads", "pileup", "pseudobulk", "reconstruct_sc", "reconstruct_bulk", "embed_cells", "embed_higashi",
            "embed_contacts", "cluster_cells"]

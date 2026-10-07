@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 import urllib.error
@@ -11,12 +12,12 @@ from pathlib import Path
 
 def download(url: str, dest: Path, description: str = "", size_mb: float = 0, tries: int = 7,
              verbose: bool = True) -> Path:
-    """Fetch ``url`` to ``dest`` (via ``dest.part``; skipped when ``dest`` exists).  A refused / throttled
+    """Fetch ``url`` to ``dest`` (via a per-process ``dest.part<pid>``, replaced atomically; skipped when ``dest`` exists).  A refused / throttled
     request (NCBI answers 403 / 429 / 503 when hit too often) is retried after 30 s, 60 s, 120 s, ..."""
     if dest.exists():
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_suffix(dest.suffix + ".part")
+    tmp = dest.with_suffix(dest.suffix + f".part{os.getpid()}")
     if verbose:
         print(f"[pull] {description or dest.name} (~{size_mb:g} MB) -> {dest}", flush=True)
     for k in range(tries):
@@ -25,7 +26,7 @@ def download(url: str, dest: Path, description: str = "", size_mb: float = 0, tr
             with urllib.request.urlopen(req, timeout=300) as r, open(tmp, "wb") as out:
                 while chunk := r.read(1 << 22):
                     out.write(chunk)
-            tmp.rename(dest)
+            os.replace(tmp, dest)
             return dest
         except Exception as exc:
             if tmp.exists():
@@ -54,10 +55,10 @@ def extract_member(url: str, member_suffix: str, dest: Path, verbose: bool = Tru
     with urllib.request.urlopen(url) as resp, tarfile.open(fileobj=resp, mode="r|gz") as tf:
         for m in tf:
             if m.isfile() and m.name.endswith(member_suffix):
-                tmp = dest.with_suffix(dest.suffix + ".part")
+                tmp = dest.with_suffix(dest.suffix + f".part{os.getpid()}")
                 with tf.extractfile(m) as src, open(tmp, "wb") as out:
                     shutil.copyfileobj(src, out)
-                tmp.rename(dest)
+                os.replace(tmp, dest)
                 return dest
     raise FileNotFoundError(f"{member_suffix} not found in {url}")
 
@@ -82,13 +83,13 @@ def extract_many(url: str, pattern: str, dest_dir: Path, verbose: bool = True) -
             names.append(f"{m.size}\t{m.name}")
             if m.isfile() and rx.search(m.name):
                 dest = dest_dir / Path(m.name).name
-                tmp = dest.with_suffix(dest.suffix + ".part")
+                tmp = dest.with_suffix(dest.suffix + f".part{os.getpid()}")
                 with tf.extractfile(m) as src, open(tmp, "wb") as out:
                     shutil.copyfileobj(src, out)
-                tmp.rename(dest)
-    tmp = listing.with_suffix(".part")
+                os.replace(tmp, dest)
+    tmp = listing.with_suffix(f".part{os.getpid()}")
     tmp.write_text("\n".join(names) + "\n")
-    tmp.rename(listing)
+    os.replace(tmp, listing)
     return dest_dir
 
 
