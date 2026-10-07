@@ -62,6 +62,26 @@ class IgmParams:
         Gaussian noise (nm, standard deviation) added to every initial
         coordinate (IGM-Plus ``model/init_noise``; with
         ``deconvolve(..., init_positions=)``).
+
+    EMber-pop options (``method="ember_pop"`` sets them; every default here
+    is IGM; ``benchmarks/bulk/PREREG_POP.md``):
+
+    ``nucleus_shape="none"``
+        No envelope (``nucleus_radius`` still sets the bead volumes).
+    ``gyration_prior`` / ``gyration_targets`` / ``gyration_kspring``
+        Orientation-free, wall-free shape prior: the standard deviations
+        σ1 ≥ σ2 ≥ σ3 (nm) along each structure's own principal axes
+        (``gyration_targets``: one triple per structure, e.g. the imaged
+        cells' shapes).
+    ``noncontact_kspring`` / ``noncontact_range`` / ``noncontact_from_sigma``
+        Two-sided assignment: bead pairs closer than ``noncontact_range``
+        × (r_i + r_j) without an assigned contact are pushed apart (from that
+        σ index on).
+    ``assignment="soft"`` (+ ``soft_*``), ``rg_cap`` / ``rg_kspring`` /
+    ``rg_two_sided``, ``advance_on_max_iterations``
+        Soft contact weights around the activation distance; a
+        radius-of-gyration cap or prior; go on with the next σ when an
+        iteration limit is reached.
     """
 
     n_structures: int = 10_000
@@ -108,6 +128,23 @@ class IgmParams:
     iterative_correction: bool = True
     assignment_pooling: str = "igm"
     init_noise: float = 0.0
+    # ---- EMber-pop (defaults = IGM) ----
+    noncontact_kspring: float = 0.0
+    noncontact_range: float = 0.0
+    noncontact_from_sigma: int = 0
+    advance_on_max_iterations: bool = False
+    assignment: str = "igm"
+    soft_beta0: float = 4.0
+    soft_beta_growth: float = 1.0
+    soft_beta_max: float = 64.0
+    soft_commit: float = 1.0
+    soft_min_weight: float = 0.02
+    rg_cap: float = 0.0
+    rg_kspring: float = 1.0
+    rg_two_sided: bool = False
+    gyration_prior: List[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    gyration_kspring: float = 1.0
+    gyration_targets: List[List[float]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.bead_radius is not None and self.occupancy is not None:
@@ -163,4 +200,6 @@ class IgmParams:
         d["occupancy_total_bp"] = float(sc) if not isinstance(sc, str) and self.bead_radius is None else 0.0
         d["stages"] = [dict(s) for s in self.stages]
         d["nucleus_semiaxes"] = [float(x) for x in self.nucleus_semiaxes]
+        d["gyration_prior"] = [float(x) for x in self.gyration_prior]
+        d["gyration_targets"] = [[float(x) for x in t] for t in self.gyration_targets]
         return d

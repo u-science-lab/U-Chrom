@@ -252,6 +252,7 @@ def deconvolve_igm(
     key_added: Optional[str] = "deconv.igm",
     progress: Optional[Any] = None,
     init_positions: Optional[pd.DataFrame] = None,
+    _method: str = "igm",
     **overrides: Any,
 ):
     """IGM population modelling of a contact-probability matrix.
@@ -402,7 +403,7 @@ def deconvolve_igm(
             prov["init_positions"] = {"n_loci": int(len(pins["structure"])),
                                       "n_structures": int(len(np.unique(pins["structure"])))}
         uns = {"deconv": {
-            "method": "igm",
+            "method": _method,
             "protocol": "igm (native uchrom_recon)",
             "engine": res["engine"],
             "engine_version": un.__version__,
@@ -421,7 +422,7 @@ def deconvolve_igm(
         }, "xyz_unit": "nm"}
         results = ResultsStore()
         if key_added is not None:
-            results.set(key_added, act, kind="table", function="uchrom.recon.bulk.deconv.igm.deconvolve_igm",
+            results.set(key_added, act, kind="table", function=f"uchrom.recon.bulk.deconv.{_method}.deconvolve_{_method}",
                         params=prov, inputs={"n_bins": int(len(bins_df)), "n_pairs": int(len(vv))})
         coords = res["coords"]
 

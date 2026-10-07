@@ -177,6 +177,10 @@ pub struct IgmParams {
     /// `U = ½ k N Σ_k (sqrt(λ_k) − σ_k)²`.  All 0 = off.
     pub gyration_prior: [f64; 3],
     pub gyration_kspring: f64,
+    /// Per-structure gyration targets (structure s uses entry s mod len; e.g. the
+    /// shapes of imaged cells, so the population keeps the cells' size and shape
+    /// variation).  Empty = `gyration_prior` for every structure.
+    pub gyration_targets: Vec<[f64; 3]>,
 }
 
 pub fn demo_stages() -> Vec<Stage> {
@@ -250,6 +254,7 @@ impl Default for IgmParams {
             rg_two_sided: false,
             gyration_prior: [0.0; 3],
             gyration_kspring: 1.0,
+            gyration_targets: vec![],
         }
     }
 }
@@ -296,6 +301,15 @@ impl IgmParams {
         }
         let beta = (self.soft_beta0 * self.soft_beta_growth.powi(round.saturating_sub(1) as i32)).min(self.soft_beta_max);
         Some(SoftAssign { beta, commit: self.soft_commit, min_weight: self.soft_min_weight })
+    }
+
+    /// Gyration target of structure `s`.
+    pub fn gyration_target(&self, s: usize) -> [f64; 3] {
+        if self.gyration_targets.is_empty() {
+            self.gyration_prior
+        } else {
+            self.gyration_targets[s % self.gyration_targets.len()]
+        }
     }
 
     /// A-step pooling of G. Polles (`assignment_pooling = "gp"`).
@@ -358,6 +372,14 @@ impl IgmParams {
         let gp = self.gyration_prior;
         if gp.iter().any(|&x| x < 0.0) || (gp.iter().any(|&x| x > 0.0) && !(gp[0] >= gp[1] && gp[1] >= gp[2] && gp[2] > 0.0)) {
             return Err("gyration_prior must be all 0 (off) or σ1 >= σ2 >= σ3 > 0".into());
+        }
+        if !self.gyration_targets.is_empty() {
+            if gp[0] <= 0.0 {
+                return Err("gyration_targets need gyration_prior (> 0) to switch the prior on".into());
+            }
+            if self.gyration_targets.iter().any(|t| !(t[0] >= t[1] && t[1] >= t[2] && t[2] > 0.0)) {
+                return Err("every gyration target must have σ1 >= σ2 >= σ3 > 0".into());
+            }
         }
         if self.rg_cap < 0.0 || self.rg_kspring < 0.0 {
             return Err("rg_cap and rg_kspring must be >= 0".into());

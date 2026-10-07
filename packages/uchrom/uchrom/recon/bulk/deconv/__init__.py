@@ -7,6 +7,10 @@
   19:938; predecessor PGS, Tjong et al. 2016 *PNAS* 113:E1663, Hua et al.
   2018 *Nat Protoc* 13:915) on the native engine (``uchrom_recon``,
   protocol ``igm``; multi-core CPU or GPU).
+* ``method="ember_pop"`` — :mod:`uchrom.recon.bulk.deconv.ember_pop` (in
+  development, ``benchmarks/bulk/PREREG_POP.md``): IGM's A/M without a
+  nuclear envelope, an imaging-calibrated gyration-shape prior and
+  two-sided assignment; needs ``nucleus=`` (imaged nuclei of the cell type).
 
 A later ``method="pgs"`` will live next to it.  The shared Hi-C →
 contact-probability preprocessing is :mod:`uchrom.recon.bulk.deconv.preprocess`.
@@ -28,11 +32,12 @@ except ImportError:  # pragma: no cover - module not merged yet
     pass
 
 from .igm import IgmParams, deconvolve_igm  # noqa: F401
+from .ember_pop import deconvolve_ember_pop  # noqa: F401
 
-__all__ = ["deconvolve", "deconvolve_igm", "IgmParams", "METHODS"]
+__all__ = ["deconvolve", "deconvolve_igm", "deconvolve_ember_pop", "IgmParams", "METHODS"]
 
 #: Available methods.
-METHODS = ("igm",)
+METHODS = ("igm", "ember_pop")
 
 
 def deconvolve(data: Any = None, *, method: str = "igm", **kwargs: Any):
@@ -46,8 +51,9 @@ def deconvolve(data: Any = None, *, method: str = "igm", **kwargs: Any):
         whose ``bins`` define the loci (pass the matrix as
         ``probabilities=``).
     method
-        ``"igm"`` (default).  The remaining keywords go to the method
-        (:func:`uchrom.recon.bulk.deconv.igm.deconvolve_igm`).
+        ``"igm"`` (default) or ``"ember_pop"``.  The remaining keywords go to
+        the method (:func:`uchrom.recon.bulk.deconv.igm.deconvolve_igm`,
+        :func:`uchrom.recon.bulk.deconv.ember_pop.deconvolve_ember_pop`).
 
     Returns
     -------
@@ -56,4 +62,6 @@ def deconvolve(data: Any = None, *, method: str = "igm", **kwargs: Any):
     """
     if method == "igm":
         return deconvolve_igm(data, **kwargs)
+    if method == "ember_pop":
+        return deconvolve_ember_pop(data, **kwargs)
     raise ValueError(f"unknown deconvolution method {method!r}; available: {', '.join(METHODS)}")

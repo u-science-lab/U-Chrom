@@ -453,7 +453,9 @@ fn gpu_rg_cap_matches_cpu() {
 #[test]
 fn gpu_gyration_prior_matches_cpu() {
     let (g, ff0, p0, pop) = setup(150, 3, 10);
-    let p = IgmParams { nucleus_shape: "none".into(), gyration_prior: [900.0, 500.0, 150.0], gyration_kspring: 0.2, ..p0 };
+    for per in [false, true] {
+    let targets = if per { vec![[700.0, 400.0, 200.0], [1100.0, 300.0, 100.0], [900.0, 900.0, 300.0]] } else { vec![] };
+    let p = IgmParams { nucleus_shape: "none".into(), gyration_prior: [900.0, 500.0, 150.0], gyration_kspring: 0.2, gyration_targets: targets, ..p0.clone() };
     let poly = g.polymer_bonds(&p, &|_| 1.0);
     let mut ff = ForceField::new(g.radii.clone(), &poly, p.semiaxes(), &p);
     ff.bead_chrom = ff0.bead_chrom.clone();
@@ -469,8 +471,10 @@ fn gpu_gyration_prior_matches_cpu() {
     for s in 0..pop.len() {
         let hic = HicBonds::from_pairs(ff.n, &astep::assign(&rows, &pop[s]));
         let mut f = vec![[0.0; 3]; ff.n];
-        let e = compute(&ff, &hic, &pop[s], Scale { ev: 1.0, env: 1.0 }, &mut Grid::default(), &mut f);
-        eprintln!("gyration structure {s}: energy CPU {:.6e} (prior {:.3e}) GPU {:.6e}", e.total(), e.env, stats[s].energy);
+        let mut ffs = ff.clone();
+        ffs.gyr = p.gyration_target(s);
+        let e = compute(&ffs, &hic, &pop[s], Scale { ev: 1.0, env: 1.0 }, &mut Grid::default(), &mut f);
+        eprintln!("gyration (per-structure {per}) structure {s}: energy CPU {:.6e} (prior {:.3e}) GPU {:.6e}", e.total(), e.env, stats[s].energy);
         assert!(e.env > 0.0);
         assert!(((stats[s].energy - e.total()) / e.total()).abs() < 1e-4);
     }
@@ -488,12 +492,15 @@ fn gpu_gyration_prior_matches_cpu() {
         let mut st = State::new(pop[s].clone());
         st.vel = vel[s].clone();
         let rp = RunParams { n_steps: steps, t0, t1, dt: p.timestep, xlimit: 1000.0, window: p.rescale_window, fraction: 1.0, scale: Scale { ev: 1.0, env: 1.0 } };
-        run(&ff, &hic, &mut st, &rp);
+        let mut ffs = ff.clone();
+        ffs.gyr = p.gyration_target(s);
+        run(&ffs, &hic, &mut st, &rp);
         for i in 0..ff.n {
             let d: f64 = (0..3).map(|k| (gpu[s][i][k] - st.pos[i][k]).powi(2)).sum::<f64>().sqrt();
             max_d = max_d.max(d);
         }
     }
-    eprintln!("gyration-prior MD GPU vs CPU: max diff {max_d:.3e} nm");
+    eprintln!("gyration-prior (per-structure {per}) MD GPU vs CPU: max diff {max_d:.3e} nm");
     assert!(max_d < 1e-2, "max diff {max_d} nm");
+    }
 }

@@ -70,7 +70,7 @@ struct Params {
     rg_cap: f32,
     k_rg: f32,
     rg_two: u32,
-    gyr_on: u32,
+    gyr_on: u32,     // 1: global targets gyr1-3, 2: per-structure targets in mstate[11].yzw
     gyr1: f32,
     gyr2: f32,
     gyr3: f32,
@@ -366,7 +366,7 @@ impl GpuPopEngine {
             rg_cap: p.rg_cap as f32,
             k_rg: p.rg_kspring as f32,
             rg_two: p.rg_two_sided as u32,
-            gyr_on: (p.gyration_prior[0] > 0.0) as u32,
+            gyr_on: if p.gyration_prior[0] > 0.0 { if p.gyration_targets.is_empty() { 1 } else { 2 } } else { 0 },
             gyr1: p.gyration_prior[0] as f32,
             gyr2: p.gyration_prior[1] as f32,
             gyr3: p.gyration_prior[2] as f32,
@@ -638,6 +638,10 @@ impl GpuPopEngine {
             for m in 0..bm as usize {
                 ms[m * MS + 7][0] = base;
                 base += totals[s0 + m];
+                if !self.p.gyration_targets.is_empty() {
+                    let t = self.p.gyration_target(s0 + m);
+                    ms[m * MS + 11] = [0, (t[0] as f32).to_bits(), (t[1] as f32).to_bits(), (t[2] as f32).to_bits()];
+                }
             }
             let sc = self.scratch.as_ref().unwrap();
             self.ctx.queue.write_buffer(&sc.mstate, 0, bytemuck::cast_slice(&ms));

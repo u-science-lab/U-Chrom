@@ -39,6 +39,18 @@ from population import Population  # noqa: E402
 EMBER_POP: dict = {}
 
 
+def cell_gyration_sds(cells: Population) -> np.ndarray:
+    """(n_cells, 3) gyration standard deviations sigma1 >= sigma2 >= sigma3 of every imaged cell (nm)."""
+    out = []
+    for X in cells.coords:
+        Y = X.reshape(-1, 3)
+        Y = Y[np.isfinite(Y).all(1)].astype(np.float64)
+        if len(Y) > 3:
+            lam = np.sort(np.linalg.eigvalsh(np.cov((Y - Y.mean(0)).T, bias=True)))[::-1]
+            out.append(np.sqrt(np.maximum(lam, 1.0)))
+    return np.array(out)
+
+
 def method_params(method: str, cells_meta: dict, prov: dict) -> dict:
     R = float(cells_meta["nuclear_radius_nm"])
     occ = 0.2
@@ -91,6 +103,13 @@ def main(argv=None) -> None:
         params["rg_cap"] = f * float(cells.meta["nuclear_radius_nm"]) * np.sqrt(3.0 / 5.0)
     if params.get("gyration_prior") == "imaging":  # the bulk cells' median gyration standard deviations
         params["gyration_prior"] = [float(x) / np.sqrt(5.0) for x in cells.meta["gyration_semiaxes_nm"]]
+    elif params.get("gyration_prior") == "imaging_cells":
+        # every structure gets the gyration standard deviations of one bulk cell (drawn with the run's
+        # seed), so the population keeps the imaged cells' size and shape variation
+        sd = cell_gyration_sds(cells)
+        pick = np.random.default_rng([a.seed, 0x6779]).choice(len(sd), a.n_structures, replace=len(sd) < a.n_structures)
+        params["gyration_targets"] = sd[pick].tolist()
+        params["gyration_prior"] = np.median(sd, axis=0).tolist()
     if a.steps_scale != 1.0:
         d = un.default_igm_params()
         stages = params.get("stages") or d["stages"]

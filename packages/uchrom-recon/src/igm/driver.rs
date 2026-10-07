@@ -94,6 +94,15 @@ impl PopEngine for CpuPopEngine {
                         }
                     };
                     let mut st = State::new(pos.clone());
+                    let own;
+                    let ff = if p.gyration_targets.is_empty() {
+                        ff
+                    } else {
+                        let mut f = ff.clone();
+                        f.gyr = p.gyration_target(s);
+                        own = f;
+                        &own
+                    };
                     let (cs, e): (CgStats, _) = md::mstep(ff, &hic, &mut st, p, [p.seed, round, s as u64]);
                     let v = violations(ff, &hic, &st.pos, p.violation_tolerance);
                     let ss = StructStats { viol: v, n_hic: hic.n_bonds() as u64, energy: e.total(), cg_iterations: cs.iterations as u32, cg_evaluations: cs.evaluations as u32 };

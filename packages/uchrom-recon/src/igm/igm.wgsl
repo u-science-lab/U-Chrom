@@ -399,9 +399,12 @@ fn gyration_setup(m: u32, c: vec3<f32>, m2: vec4<f32>, m3: vec4<f32>) {
             }
         }
     }
-    let sig = vec3<f32>(P.gyr1, P.gyr2, P.gyr3);
-    var e = 0.0;
     let b = MS * m;
+    var sig = vec3<f32>(P.gyr1, P.gyr2, P.gyr3);
+    if (P.gyr_on == 2u) {
+        sig = mstate[b + 11u].yzw;
+    }
+    var e = 0.0;
     for (var r = 0u; r < 3u; r = r + 1u) {
         let q = ord[r];
         let s = sqrt(max(a[q][q], 0.0));
@@ -412,7 +415,7 @@ fn gyration_setup(m: u32, c: vec3<f32>, m2: vec4<f32>, m3: vec4<f32>) {
         }
         mstate[b + 8u + r] = vec4<f32>(v[0][q], v[1][q], v[2][q], t);
     }
-    mstate[b + 11u] = vec4<f32>(e, 0.0, 0.0, 0.0);
+    mstate[b + 11u] = vec4<f32>(e, mstate[b + 11u].yzw);
 }
 
 fn grid_dims(m: u32) -> vec3<u32> {
