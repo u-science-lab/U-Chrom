@@ -16,7 +16,9 @@ Conventions (the same as the dense ``_coord_cube_for_chrom`` /
 * a trace is a (cell, trace) run of the stored order — traces are visited in
   that order (chromosome › cell › trace), spots in bin order;
 * a trace that observes a bin more than once keeps its **last** spot there
-  (a dense cube keeps the last write);
+  (a dense cube keeps the last write) — or, with ``duplicates=``, the first,
+  the mean or the median of those spots (exactly what
+  :func:`uchrom.im.merge_duplicate_spots` computes for ``how=``);
 * the bins of a matrix are the chromosome's *observed* bins, sorted by
   start (``observed=True``, the dense convention) or all bins of the
   chromosome in ``cd.bins`` (``observed=False``).
@@ -37,6 +39,34 @@ from chromdata.bins import BIN_ID
 BYTES_PER_OBS = 80
 #: pairs generated at a time (their transient arrays take ~100 bytes each)
 MAX_BLOCK_PAIRS = 1 << 21
+#: how the spots of a trace that share a bin are combined (``duplicates=``)
+DUPLICATES = ("last", "first", "mean", "median")
+
+
+def check_duplicates(duplicates: str) -> str:
+    if duplicates not in DUPLICATES:
+        raise ValueError(f"duplicates must be one of {DUPLICATES}, got {duplicates!r}")
+    return duplicates
+
+
+def reduce_duplicates(bid: np.ndarray, coords: np.ndarray, new_run: np.ndarray, how: str):
+    """One row per (run, bin) of rows sorted by run, then bin: ``(bid, coords, new_run)`` with the rows of
+    a group combined by ``how`` (``"last"``, ``"first"``, NaN-skipping ``"mean"`` / ``"median"`` — the
+    reductions of :func:`uchrom.im.merge_duplicate_spots`)."""
+    n = len(bid)
+    if n == 0:
+        return bid, coords, new_run
+    start = np.r_[True, (bid[1:] != bid[:-1]) | new_run[1:]]          # first row of a (run, bin) group
+    if start.all():
+        return bid, coords, new_run
+    if how in ("last", "first"):
+        keep = np.r_[start[1:], True] if how == "last" else start
+        return bid[keep], coords[keep], _first_of_runs(new_run, keep)
+    from uchrom.im.spots import _group_reduce
+
+    group = np.cumsum(start) - 1
+    merged = _group_reduce(coords, group, int(group[-1]) + 1, how)
+    return bid[start], merged, _first_of_runs(new_run, start)
 
 
 class ChromPairs:
@@ -52,14 +82,17 @@ class ChromPairs:
     observed : matrix bins = observed bins (dense convention) or all bins
         of the chromosome
     memory_budget : bytes / string; default :data:`uchrom.settings.memory_budget`
+    duplicates : ``"last"`` (default), ``"first"``, ``"mean"`` or ``"median"``
+        the spot a trace keeps at a bin it observed more than once
     """
 
     def __init__(self, cd, chrom: str, *, streaming: Optional[bool] = None, batch="auto",
-                 observed: bool = True, memory_budget=None):
+                 observed: bool = True, memory_budget=None, duplicates: str = "last"):
         from uchrom.settings import settings
 
         self.cd = cd
         self.chrom = str(chrom)
+        self.duplicates = check_duplicates(duplicates)
         self.streaming = bool(getattr(cd, "backed", False)) if streaming is None else bool(streaming)
         self.batch = batch
         self.memory_budget = settings.resolve_budget(memory_budget)
@@ -105,7 +138,8 @@ class ChromPairs:
 
     def chunks(self) -> Iterator[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
         """``(bin index, coords, run offsets)`` per chunk: rows in stored
-        order with duplicates (same trace, same bin) reduced to the last."""
+        order with duplicates (same trace, same bin) reduced to one row
+        (the last, or as ``duplicates`` says)."""
         cd = self.cd
         if self.streaming:
             batch = self.batch
@@ -131,11 +165,8 @@ class ChromPairs:
         cell = (np.asarray(s["cell_id"].cat.codes, dtype=np.int64) if "cell_id" in s.columns
                 else np.zeros(n, dtype=np.int64))
         new_run = np.r_[True, (trace[1:] != trace[:-1]) | (cell[1:] != cell[:-1])]
-        # last spot of a (run, bin): the next row is another run or another bin
-        last = np.r_[(bid[1:] != bid[:-1]) | new_run[1:], True]
         coords = np.asarray(chunk.coords, dtype=np.float64)
-        if not last.all():
-            bid, coords, new_run = bid[last], coords[last], _first_of_runs(new_run, last)
+        bid, coords, new_run = reduce_duplicates(bid, coords, new_run, self.duplicates)
         runs = np.r_[np.flatnonzero(new_run), len(bid)].astype(np.int64)
         return bid, coords, runs
 
@@ -326,4 +357,5 @@ def pair_distance(ci: np.ndarray, cj: np.ndarray) -> np.ndarray:
     return np.sqrt((d[:, 0] + d[:, 1]) + d[:, 2])
 
 
-__all__ = ["BYTES_PER_OBS", "ChromPairs", "grouped_order_stats", "pair_distance", "sort_within_groups"]
+__all__ = ["BYTES_PER_OBS", "DUPLICATES", "ChromPairs", "check_duplicates", "grouped_order_stats", "pair_distance",
+           "reduce_duplicates", "sort_within_groups"]

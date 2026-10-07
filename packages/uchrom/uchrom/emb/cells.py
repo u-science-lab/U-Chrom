@@ -125,11 +125,21 @@ def tfidf_lsi(x, n_components: int = 30, *, depth: Optional[np.ndarray] = None,
     return comps[:, kept], info
 
 
+_STATS = ("mean", "median", "std", "corr")
+
+
 def aggregate_tracks(cd, fields: Optional[Sequence[str]] = None, *, prefix: str = "if",
-                     stat: str = "mean", by: Union[None, str, int] = None,
-                     min_spots: int = 1, write: bool = True) -> pd.DataFrame:
+                     stat: Union[str, Sequence[str]] = "mean", by: Union[None, str, int] = None,
+                     min_spots: int = 1, write: bool = True, batch: int = 64):
     """Summarise tracks (``cd.spot_tracks`` + ``cd.bin_tracks`` seen per
     spot) into per-cell features.
+
+    On a backed ``ChromData`` (``ChromData.read(..., backed=True)``, an atlas
+    store from ``uchrom.datasets.load``) the spots are streamed in batches of
+    ``batch`` cells (:meth:`~chromdata.ChromData.iter_cells`), reading only
+    the coordinates' keys and the ``fields`` tracks, so the whole table is
+    never in memory; give several statistics in ``stat`` to compute them in
+    the same pass.
 
     Parameters
     ----------
@@ -139,7 +149,7 @@ def aggregate_tracks(cd, fields: Optional[Sequence[str]] = None, *, prefix: str 
         Track columns to use (default: every numeric track).
     prefix : str
         Output columns are named ``f"{prefix}.{field}"``.
-    stat : ``"mean"``, ``"median"``, ``"std"`` or ``"corr"``
+    stat : ``"mean"``, ``"median"``, ``"std"``, ``"corr"``, or a list of them
         Per-cell statistic.  ``"corr"`` gives the within-cell Pearson
         correlation of every pair of fields (``f"{prefix}.{a}~{b}"``) — how
         marks co-occur on the same loci, which is insensitive to per-cell
@@ -151,72 +161,111 @@ def aggregate_tracks(cd, fields: Optional[Sequence[str]] = None, *, prefix: str 
         Groups with fewer spots become NaN.
     write : bool
         Add the columns to ``cd.cells`` (replacing ones of the same name).
+    batch : int
+        Cells per chunk when ``cd`` is backed.
 
     Returns
     -------
-    DataFrame indexed like ``cd.cells`` (cells without spots are NaN).
+    DataFrame indexed like ``cd.cells`` (cells without spots are NaN) — or,
+    when ``stat`` is a list, a dict ``{stat: DataFrame}``.
     """
-    if stat not in ("mean", "median", "std", "corr"):
-        raise ValueError("stat must be 'mean', 'median', 'std' or 'corr'")
+    stats = [stat] if isinstance(stat, str) else [str(s) for s in stat]
+    if not stats or any(s not in _STATS for s in stats):
+        raise ValueError("stat must be 'mean', 'median', 'std' or 'corr' (or a list of them)")
+    if "corr" in stats and by is not None:
+        raise ValueError("by= is not supported with stat='corr'")
+    if not (by is None or by == "chrom" or (isinstance(by, (int, np.integer)) and not isinstance(by, bool))):
+        raise ValueError("by must be None, 'chrom' or a bin size in bp")
     if "cell_id" not in cd.spots.columns:
         raise ValueError("cd.spots has no cell_id column")
-    tracks = cd.tracks_spot_view()
-    if fields is None:
-        fields = [c for c in tracks.columns if pd.api.types.is_numeric_dtype(tracks[c])]
-    fields = [str(f) for f in fields]
-    missing = [f for f in fields if f not in tracks.columns]
-    if missing:
-        raise KeyError(f"unknown track(s): {missing[:5]}")
-    cells_index = cd.cells.index.astype(str) if len(cd.cells) else None
-    cell = cd.spots["cell_id"].astype(str).to_numpy()
-    vals = tracks[fields].to_numpy(dtype=np.float64)
-
-    if stat == "corr":
-        if by is not None:
-            raise ValueError("by= is not supported with stat='corr'")
-        iu = np.triu_indices(len(fields), 1)
-        names = [f"{prefix}.{fields[a]}~{fields[b]}" for a, b in zip(*iu)]
-        order = np.argsort(cell, kind="stable")
-        uniq, starts = np.unique(cell[order], return_index=True)
-        bounds = np.r_[starts, len(order)]
-        rows = np.full((len(uniq), len(names)), np.nan)
-        for i in range(len(uniq)):
-            block = vals[order[bounds[i]:bounds[i + 1]]]
-            block = block[np.isfinite(block).all(axis=1)]
-            if len(block) >= max(3, min_spots):
-                with np.errstate(invalid="ignore", divide="ignore"):
-                    rows[i] = np.corrcoef(block.T)[iu]
-        out = pd.DataFrame(rows, index=pd.Index(uniq, name="cell_id"), columns=names)
+    fields = _track_fields(cd, fields)
+    if getattr(cd, "backed", False):
+        parts: Dict[str, List[pd.DataFrame]] = {s: [] for s in stats}
+        spot_fields = [f for f in fields if f in set(map(str, cd.spot_tracks.columns))]   # bin tracks come with bins
+        for chunk in cd.iter_cells(batch=batch, columns="coords", tracks=spot_fields):
+            got = _aggregate(chunk, fields, prefix, stats, by, min_spots)
+            for s in stats:
+                parts[s].append(got[s])
+        found = {s: pd.concat(parts[s]) if parts[s] else pd.DataFrame(index=pd.Index([], name="cell_id"))
+                 for s in stats}
+        if by is not None:                              # chunks see different groups
+            found = {s: f[sorted(f.columns, key=_natural)] for s, f in found.items()}
     else:
-        df = pd.DataFrame(vals, columns=fields)
-        keys = [pd.Series(cell, name="cell_id")]
-        if by == "chrom":
-            keys.append(pd.Series("@" + cd.spots["chrom"].astype(str).to_numpy(), name="grp"))
-        elif isinstance(by, (int, np.integer)) and not isinstance(by, bool):
-            b = cd.spots["start"].to_numpy() // int(by)
-            keys.append(pd.Series("@" + cd.spots["chrom"].astype(str).to_numpy() + ":" + b.astype(str),
-                                  name="grp"))
-        elif by is not None:
-            raise ValueError("by must be None, 'chrom' or a bin size in bp")
-        grouped = df.groupby(keys, observed=True, sort=False)
-        out = getattr(grouped, stat)()
-        n = grouped.size()
-        out[n.to_numpy() < min_spots] = np.nan
-        if by is None:
-            out.columns = [f"{prefix}.{f}" for f in fields]
-        else:
-            out = out.unstack("grp")
-            out.columns = [f"{prefix}.{f}{g}" for f, g in out.columns]
-            out = out[sorted(out.columns, key=_natural)]
-        out.index.name = "cell_id"
-    if cells_index is not None:
-        out = out.reindex(cells_index)
-        out.index = cd.cells.index
+        found = _aggregate(cd, fields, prefix, stats, by, min_spots)
+    out = {}
+    for s, frame in found.items():
+        if len(cd.cells):
+            frame = frame.reindex(cd.cells.index.astype(str))
+            frame.index = cd.cells.index
+        out[s] = frame
     if write:
         if len(cd.cells) == 0:
             raise ValueError("cd.cells is empty — create it before writing features")
-        keep = [c for c in cd.cells.columns if c not in out.columns]
-        cd.cells = pd.concat([cd.cells[keep], out], axis=1)
+        new = [c for f in out.values() for c in f.columns]
+        if len(set(new)) < len(new):
+            raise ValueError(f"the statistics {stats} give columns of the same name; write them one at a time "
+                             "or pass write=False")
+        keep = [c for c in cd.cells.columns if c not in set(new)]
+        cd.cells = pd.concat([cd.cells[keep], *out.values()], axis=1)
+    return out[stats[0]] if isinstance(stat, str) else out
+
+
+def _track_fields(cd, fields) -> List[str]:
+    """The track columns to aggregate (default: every numeric bin or spot track), checked."""
+    dtypes = {**{str(c): t for c, t in cd.bin_tracks.dtypes.items()},
+              **{str(c): t for c, t in cd.spot_tracks.dtypes.items()}}
+    if fields is None:
+        order = list(dtypes) if getattr(cd, "backed", False) else [str(c) for c in cd.tracks_spot_view().columns]
+        return [c for c in order if pd.api.types.is_numeric_dtype(dtypes[c])]
+    fields = [str(f) for f in fields]
+    missing = [f for f in fields if f not in dtypes]
+    if missing:
+        raise KeyError(f"unknown track(s): {missing[:5]}")
+    return fields
+
+
+def _aggregate(cd, fields: List[str], prefix: str, stats: List[str], by, min_spots: int) -> Dict[str, pd.DataFrame]:
+    """Per-cell statistics of the in-memory ``cd``, indexed by cell id (as strings)."""
+    tracks = cd.tracks_spot_view(fields)
+    cell = cd.spots["cell_id"].astype(str).to_numpy()
+    vals = tracks[fields].to_numpy(dtype=np.float64)
+    out: Dict[str, pd.DataFrame] = {}
+    for stat in stats:
+        if stat == "corr":
+            iu = np.triu_indices(len(fields), 1)
+            names = [f"{prefix}.{fields[a]}~{fields[b]}" for a, b in zip(*iu)]
+            order = np.argsort(cell, kind="stable")
+            uniq, starts = np.unique(cell[order], return_index=True)
+            bounds = np.r_[starts, len(order)]
+            rows = np.full((len(uniq), len(names)), np.nan)
+            for i in range(len(uniq)):
+                block = vals[order[bounds[i]:bounds[i + 1]]]
+                block = block[np.isfinite(block).all(axis=1)]
+                if len(block) >= max(3, min_spots):
+                    with np.errstate(invalid="ignore", divide="ignore"):
+                        rows[i] = np.corrcoef(block.T)[iu]
+            frame = pd.DataFrame(rows, index=pd.Index(uniq, name="cell_id"), columns=names)
+        else:
+            df = pd.DataFrame(vals, columns=fields)
+            keys = [pd.Series(cell, name="cell_id")]
+            if by == "chrom":
+                keys.append(pd.Series("@" + cd.spots["chrom"].astype(str).to_numpy(), name="grp"))
+            elif by is not None:
+                b = cd.spots["start"].to_numpy() // int(by)
+                keys.append(pd.Series("@" + cd.spots["chrom"].astype(str).to_numpy() + ":" + b.astype(str),
+                                      name="grp"))
+            grouped = df.groupby(keys, observed=True, sort=False)
+            frame = getattr(grouped, stat)()
+            n = grouped.size()
+            frame[n.to_numpy() < min_spots] = np.nan
+            if by is None:
+                frame.columns = [f"{prefix}.{f}" for f in fields]
+            else:
+                frame = frame.unstack("grp")
+                frame.columns = [f"{prefix}.{f}{g}" for f, g in frame.columns]
+                frame = frame[sorted(frame.columns, key=_natural)]
+            frame.index.name = "cell_id"
+        out[stat] = frame
     return out
 
 
@@ -245,7 +294,9 @@ def embed_cells(
     library_size: bool = False,
     modality: Optional[str] = None,
     features: Optional[str] = None,
-) -> Dict[str, np.ndarray]:
+    cells=None,
+    copy: bool = False,
+):
     """Compute cell embeddings and store them in ``cd.cellm``.
 
     Parameters
@@ -260,8 +311,9 @@ def embed_cells(
         Explicit ``cd.cells`` columns to use instead of the prefix.
     matrix : array or scipy.sparse matrix, optional
         cells × features input instead of ``cd.cells`` columns (rows in
-        ``cd.cells`` order) — e.g. a genome-wide ATAC bin matrix too large
-        to keep as cell columns.  Describe it with ``features=``.
+        ``cd.cells`` order, or in the order of ``cells``) — e.g. a genome-wide
+        ATAC bin matrix too large to keep as cell columns.  Describe it with
+        ``features=``.
     normalization : ``"auto"``, ``"counts"``, ``"zscore"``, ``"tfidf"``, ``"none"``
         See the module docstring.  ``"auto"``: ``atac`` → tfidf, ``if`` /
         ``protein`` → zscore, ``hic`` → none, anything else → counts.
@@ -287,10 +339,17 @@ def embed_cells(
         ``"ATAC"``); the browser groups embeddings by it.
     features : str, optional
         Free-text description of the features, recorded in the metadata.
+    cells : sequence of cell ids or boolean mask, optional
+        Embed only these cells (default: all); the other rows of the
+        embeddings are NaN.  With ``matrix``, its rows follow ``cells``.
+    copy : bool
+        Return a new ``ChromData`` holding the embeddings instead of
+        modifying ``cd``.
 
     Returns
     -------
-    dict mapping cellm key → array (also written to ``cd.cellm``).
+    dict mapping cellm key → array (also written to ``cd.cellm``) — or, with
+    ``copy=True``, the new ``ChromData``.
     """
     unknown = set(methods) - set(_METHODS)
     if unknown:
@@ -298,9 +357,13 @@ def embed_cells(
     if normalization not in _NORMS:
         raise ValueError(f"unknown normalization {normalization!r}; choose from {_NORMS}")
     norm_kind = _auto_norm(source) if normalization == "auto" else normalization
-    cells: pd.DataFrame = cd.cells
-    if len(cells) == 0:
+    if copy:
+        cd = cd.copy()
+    cells_all: pd.DataFrame = cd.cells
+    if len(cells_all) == 0:
         raise ValueError("cd.cells is empty — nothing to embed")
+    rows = _cell_rows(cells_all, cells)                 # None: every cell, in order
+    cells_df = cells_all if rows is None else cells_all.iloc[rows]
 
     import scipy.sparse as sp
 
@@ -308,19 +371,20 @@ def embed_cells(
         if fields is not None:
             raise ValueError("pass either fields= or matrix=, not both")
         x = matrix if sp.issparse(matrix) else np.asarray(matrix, dtype=np.float64)
-        if x.ndim != 2 or x.shape[0] != len(cells):
-            raise ValueError(f"matrix must be (n_cells={len(cells)}, n_features), got {x.shape}")
+        if x.ndim != 2 or x.shape[0] != len(cells_df):
+            what = "n_cells" if rows is None else "len(cells)"
+            raise ValueError(f"matrix must be ({what}={len(cells_df)}, n_features), got {x.shape}")
         field_list: Optional[List[str]] = None
         n_features = int(x.shape[1])
     else:
         if fields is None:
-            fields = [c for c in cells.columns
-                      if str(c).startswith(f"{source}.") and pd.api.types.is_numeric_dtype(cells[c])]
+            fields = [c for c in cells_all.columns
+                      if str(c).startswith(f"{source}.") and pd.api.types.is_numeric_dtype(cells_all[c])]
         field_list = [str(f) for f in fields]
         if len(field_list) < 2:
             raise ValueError(f"need at least 2 numeric '{source}.*' columns in cd.cells, "
                              f"found {len(field_list)}")
-        x = cells[field_list].to_numpy(dtype=np.float64)
+        x = cells_df[field_list].to_numpy(dtype=np.float64)
         n_features = len(field_list)
     if n_features < 2:
         raise ValueError("need at least 2 features")
@@ -373,13 +437,20 @@ def embed_cells(
         meta_base["fields"] = field_list
     if features:
         meta_base["features"] = str(features)
+    if rows is not None:
+        meta_base["n_cells"] = int(len(rows))
 
     out: Dict[str, np.ndarray] = {}
     registry = dict(cd.uns.get("embeddings") or {})
 
     def store(method: str, arr: np.ndarray, pretty: str, axis: str, **extra) -> None:
         key = f"{source}_{method}"
-        cd.cellm[key] = np.asarray(arr, dtype=np.float64)
+        arr = np.asarray(arr, dtype=np.float64)
+        if rows is not None:                            # back onto the cells axis
+            full = np.full((len(cells_all), arr.shape[1]), np.nan)
+            full[rows] = arr
+            arr = full
+        cd.cellm[key] = arr
         registry[key] = {**meta_base, "method": method, "label": f"{mod} {pretty}",
                          "axis_prefix": axis, **extra}
         out[key] = cd.cellm[key]
@@ -409,7 +480,29 @@ def embed_cells(
                   min_dist=float(umap_min_dist), input=lin_method)
 
     cd.uns["embeddings"] = registry
-    return out
+    return cd if copy else out
+
+
+def _cell_rows(cells: pd.DataFrame, which) -> Optional[np.ndarray]:
+    """Positions in ``cells`` of the cells asked for (ids compared as strings, in the order given; or a
+    boolean mask); ``None`` for every cell in order."""
+    if which is None:
+        return None
+    arr = np.asarray(which)
+    if arr.dtype == bool:
+        if len(arr) != len(cells):
+            raise ValueError(f"a boolean mask of {len(arr)} for {len(cells)} cells")
+        rows = np.flatnonzero(arr)
+    else:
+        index = pd.Index([str(c) for c in cells.index])
+        rows = index.get_indexer([str(c) for c in arr.ravel()])
+        if (rows < 0).any():
+            raise KeyError(f"cells not in cd.cells: {[str(c) for c, r in zip(arr.ravel(), rows) if r < 0][:5]}")
+    if len(rows) == 0:
+        raise ValueError("no cells selected")
+    if len(rows) == len(cells) and (rows == np.arange(len(cells))).all():
+        return None
+    return rows
 
 
 def cluster_cells(cd, *, use: str = "rna_pca", n_neighbors: int = 15, resolution: float = 1.0,
@@ -423,8 +516,9 @@ def cluster_cells(cd, *, use: str = "rna_pca", n_neighbors: int = 15, resolution
     ``resolution``, seeded).  Clusters are numbered ``"0", "1", …`` by
     decreasing size and stored as a categorical column
     ``cd.cells[key_added]`` (default ``f"leiden_{use}"``); the parameters go
-    to ``cd.uns["clusters"][key_added]``.  Needs ``leidenalg`` and
-    ``python-igraph`` (``pip install leidenalg``).
+    to ``cd.uns["clusters"][key_added]``.  Cells whose embedding row is
+    missing (NaN: not embedded, see ``embed_cells(cells=)``) get no label.
+    Needs ``leidenalg`` and ``python-igraph`` (``pip install leidenalg``).
 
     Returns the cluster labels (a Series indexed like ``cd.cells``).
     """
@@ -441,9 +535,13 @@ def cluster_cells(cd, *, use: str = "rna_pca", n_neighbors: int = 15, resolution
     x = np.asarray(cd.cellm[use], dtype=np.float64)
     if n_components is not None:
         x = x[:, :int(n_components)]
+    if len(x) != len(cd.cells):
+        raise ValueError(f"cellm[{use!r}] has {len(x)} rows, cells {len(cd.cells)}")
+    ok = np.isfinite(x).all(axis=1)
+    if ok.sum() < 2:
+        raise ValueError(f"cellm[{use!r}] has fewer than 2 complete rows")
+    x = x[ok]
     n = len(x)
-    if n != len(cd.cells):
-        raise ValueError(f"cellm[{use!r}] has {n} rows, cells {len(cd.cells)}")
     k = int(min(n_neighbors, n - 1))
     nn = NearestNeighbors(n_neighbors=k + 1).fit(x)
     idx = nn.kneighbors(x, return_distance=False)[:, 1:]
@@ -458,7 +556,8 @@ def cluster_cells(cd, *, use: str = "rna_pca", n_neighbors: int = 15, resolution
     sizes = np.bincount(memb)
     rank = np.empty_like(sizes)
     rank[np.argsort(-sizes, kind="stable")] = np.arange(len(sizes))
-    labels = rank[memb].astype(str)
+    labels = np.full(len(ok), None, dtype=object)
+    labels[ok] = rank[memb].astype(str)
     key = key_added or f"leiden_{use}"
     cats = [str(i) for i in range(len(sizes))]
     s = pd.Series(pd.Categorical(labels, categories=cats), index=cd.cells.index, name=key)
@@ -468,6 +567,8 @@ def cluster_cells(cd, *, use: str = "rna_pca", n_neighbors: int = 15, resolution
                 "n_components": None if n_components is None else int(n_components),
                 "random_state": int(random_state), "n_clusters": int(len(sizes)),
                 "function": "uchrom.emb.cluster_cells"}
+    if not ok.all():
+        reg[key]["n_cells"] = int(n)
     cd.uns["clusters"] = reg
     return s
 

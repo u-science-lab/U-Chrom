@@ -862,6 +862,22 @@ class ChromData:
             return str(out)
         raise FileNotFoundError(f"linked_cool {key!r}: {path!r} does not exist and the map is not embedded in the store")
 
+    def load_linked_cool(self, key: str = "default", *, resolution: Optional[int] = None):
+        """The linked bulk / pseudo-bulk map ``key`` as a ``cooler.Cooler`` (one resolution of an ``.mcool``:
+        ``resolution=``, default the finest); from the embedded copy when the file is gone
+        (:meth:`linked_cool_path`)."""
+        import cooler
+
+        path = self.linked_cool_path(key)
+        uris = cooler.fileops.list_coolers(path)
+        if "/" not in uris:                              # several resolutions (/resolutions/<r>)
+            res = sorted(int(u.rsplit("/", 1)[-1]) for u in uris)
+            r = int(resolution) if resolution is not None else res[0]
+            if r not in res:
+                raise ValueError(f"linked_cool {key!r}: no resolution {r} (have {res})")
+            return cooler.Cooler(f"{path}::/resolutions/{r}")
+        return cooler.Cooler(path)
+
     def linked_scool_path(self, key: str = "default", *, cells: Optional[Sequence[str]] = None,
                           trans: bool = True) -> str:
         """Path of the linked per-cell ``.scool`` ``key`` (the file itself when it exists: all its cells).
@@ -2083,6 +2099,7 @@ class ChromData:
         row_group_rows: Optional[int] = None,
         compression_level: Optional[int] = None,
         keep_source_order: bool = True,
+        embed: bool = False,
     ) -> None:
         """Write to disk; the format follows the path.
 
@@ -2119,6 +2136,11 @@ class ChromData:
             zstd level for Parquet and Zarr (default 3).
         keep_source_order : bool
             Store ``index/source_row`` when the writer had to sort.
+        embed : bool
+            Also embed the linked contact maps and AnnData this object can reach — its linked files, or the
+            embedded copies of the store it was read from — limited to its cells
+            (:func:`chromdata.embedded.embed_reachable`): a subset of an atlas store written to a new path keeps
+            its maps.  Directory stores (``.chromdata.zarr``) only.
 
         """
         from .zarrcd import DEFAULT_ZSTD_LEVEL, container_kind, write_zarr
@@ -2135,11 +2157,17 @@ class ChromData:
             raise ValueError("a .cdz store needs a path ending in .cdz")
         if kind == "zarr" and not path.name.lower().endswith(".zarr"):
             raise ValueError("a zarr store needs a path ending in .chromdata.zarr (or .zarr)")
+        if embed and kind != "zarr":
+            raise ValueError("embed=True needs a directory store (.chromdata.zarr)")
         write_zarr(self, path, coord_dtype=coord_dtype,
                    row_group_rows=row_group_rows,
                    compression_level=(DEFAULT_ZSTD_LEVEL if compression_level is None
                                       else compression_level),
                    keep_source_order=keep_source_order)
+        if embed:
+            from .embedded import embed_reachable
+
+            embed_reachable(self, path)
 
     @classmethod
     def read(cls, path: PathLike, *, backed: bool = False,

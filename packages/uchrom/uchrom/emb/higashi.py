@@ -445,8 +445,10 @@ def embed_higashi(
     factory = wrapper_factory or _default_factory(which)
     init = dict(_FAST_HIGASHI_INIT_DEFAULTS, off_diag=off_diag, filter=filter, do_conv=conv, do_rwr=rwr, do_col=col)
     log_path = work / "fasthigashi.log" if log else None
-    with _output_to(log_path), _no_pin_memory_without_cuda():
-        wrapper = factory(str(work / "input" / "config.JSON"), str(work / "cache"), str(work / "result"),
+    here = work.resolve()
+    # FastHigashi writes scratch files (./tmp1, ./tmp2) into the working directory: run it in work_dir
+    with _output_to(log_path and log_path.resolve()), _no_pin_memory_without_cuda(), contextlib.chdir(here):
+        wrapper = factory(str(here / "input" / "config.JSON"), str(here / "cache"), str(here / "result"),
                           init["off_diag"], init["filter"], init["do_conv"], init["do_rwr"], init["do_col"],
                           init["no_col"])
         wrapper.fast_process_data()

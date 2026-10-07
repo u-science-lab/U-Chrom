@@ -948,6 +948,63 @@ def embed_links(store_path: PathLike, *, overwrite: bool = False, keys: Optional
     return done
 
 
+def embed_reachable(cd, store_path: PathLike, *, verbose: bool = False) -> Dict[str, Any]:
+    """Embed into ``store_path`` (a store just written from ``cd``) the linked contact maps and AnnData that
+    ``cd`` can reach — its linked files, or the embedded copies of the store it was read from (an atlas
+    store, also for a subset or a copy of it) — limited to ``cd``'s cells where the data are per cell.
+    ``ChromData.write(path, embed=True)`` calls it.  Returns ``{key: summary}``; a link that cannot be
+    reached is left as it is (with a warning)."""
+    import tempfile
+
+    ids = [str(c) for c in cd.cells.index] if len(cd.cells) else None
+    origin = cd._links_from()
+    done: Dict[str, Any] = {}
+    for key, rec in _records(cd.uns, "linked_scool").items():
+        try:
+            path = cd.linked_scool_path(key, cells=ids)
+        except FileNotFoundError as exc:
+            warnings.warn(f"embed: {exc}", stacklevel=3)
+            continue
+        import cooler
+
+        have = {c.rsplit("/", 1)[-1] for c in cooler.fileops.list_scool_cells(path)}
+        keep = [c for c in ids if c in have] if ids is not None else None
+        done[key] = embed_scool(store_path, key, path, label=rec.get("label"), overwrite=True, cells=keep)
+    for key, rec in _records(cd.uns, "linked_cool").items():
+        try:
+            path = cd.linked_cool_path(key)
+        except FileNotFoundError as exc:
+            warnings.warn(f"embed: {exc}", stacklevel=3)
+            continue
+        done[key] = embed_cool(store_path, key, path, label=rec.get("label"), overwrite=True)
+    for fam in ("linked_anndata", "linked_bin_matrices"):
+        for key, rec in _records(cd.uns, fam).items():
+            path = cd.resolve_link_path(rec["path"]) if rec.get("path") else None
+            if path is not None and path.exists():
+                import anndata as ad
+
+                adata = ad.read_h5ad(path)
+            else:
+                found = list_embedded_anndata(str(origin), fam) if origin is not None else {}
+                if key not in found:
+                    warnings.warn(f"embed: {fam} {key!r} is neither a file nor embedded in the origin store",
+                                  stacklevel=3)
+                    continue
+                adata = read_embedded_anndata(str(origin), found[key])
+            if fam == "linked_anndata" and ids is not None and set(ids) <= set(map(str, adata.obs_names)):
+                adata = adata[ids].copy()                     # this object's cells, in its order
+            with tempfile.TemporaryDirectory() as tmp:
+                h5ad = Path(tmp) / f"{safe_name(key)}.h5ad"
+                adata.write_h5ad(h5ad)
+                done[f"{fam}/{key}"] = embed_anndata(store_path, key, h5ad, family=fam, label=rec.get("label"),
+                                                     overwrite=True)
+    if done:
+        consolidate_sections(store_path)
+    if verbose:
+        print("[embed]", ", ".join(done) or "nothing to embed")
+    return done
+
+
 if __name__ == "__main__":     # python -m chromdata.embedded STORE [--overwrite] [--keys a b ...] [--reconsolidate]
     import argparse
 

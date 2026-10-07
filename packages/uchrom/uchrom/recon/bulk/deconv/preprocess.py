@@ -796,12 +796,42 @@ def _load_hic(path: str, resolution: int, chroms):
     return m, b, None
 
 
-def preprocess_hic(path, *, chroms: Optional[Sequence[str]] = None, params: Optional[IGMPreprocessParams] = None,
-                   coarse_bins: Optional[pd.DataFrame] = None, verbose: bool = False) -> ProbabilityMatrix:
-    """:func:`load_contacts` at ``params.fine_resolution`` + :func:`preprocess_igm`."""
+def preprocess_hic(data=None, *, contacts: Optional[str] = None, chroms: Optional[Sequence[str]] = None,
+                   params: Optional[IGMPreprocessParams] = None, coarse_bins: Optional[pd.DataFrame] = None,
+                   verbose: bool = False, path=None) -> ProbabilityMatrix:
+    """Hi-C map -> haploid contact probabilities (:func:`load_contacts` at ``params.fine_resolution`` +
+    :func:`preprocess_igm`).
+
+    Parameters
+    ----------
+    data
+        A ``ChromData`` with the map linked (``cd.link_cool``; key ``contacts``, ``None``: the only one), or
+        the path of a ``.cool`` / ``.mcool`` / ``.hic`` (also as ``path=``).  Raw counts are read.
+    contacts
+        Key of the linked map.
+    chroms
+        Chromosomes (default: all of the map).
+    params, coarse_bins, verbose
+        See :func:`preprocess_igm`.
+
+    Returns
+    -------
+    ProbabilityMatrix (``provenance["input"]`` records the map: key and path).
+    """
+    from uchrom.fea.maps import _is_chromdata, _map_record, map_path
+
+    if path is not None:
+        if data is not None:
+            raise TypeError("preprocess_hic(): pass the map once (data or path=)")
+        data = path
+    if data is None:
+        raise TypeError("preprocess_hic() needs a ChromData with a linked map, or a path")
+    src = map_path(data, contacts) if _is_chromdata(data) else str(data)
     P = params or IGMPreprocessParams()
-    m, b, w = load_contacts(path, P.fine_resolution, chroms,
+    m, b, w = load_contacts(src, P.fine_resolution, chroms,
                             balance_column="KR" if P.balance == "weights" else None)
     out = preprocess_igm(m, b, params=P, coarse_bins=coarse_bins, weights=w, verbose=verbose)
-    out.provenance["input"] = {"path": str(path), "chroms": list(chroms) if chroms else None}
+    out.provenance["input"] = {"path": str(src), "chroms": list(chroms) if chroms else None}
+    if _is_chromdata(data):
+        out.provenance["input"]["contacts"] = _map_record(data, contacts)["key"]
     return out

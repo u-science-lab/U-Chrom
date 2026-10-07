@@ -20,9 +20,19 @@ from .fishnet import (
     call_domains_fishnet,
     call_domains_fishnet_trace,
     FISHnetParams,
+    trace_seed,
+)
+from .compare import (
+    boundary_frequency,
+    compare_boundaries,
+    tad_boundaries,
 )
 
 __all__ = [
+    "boundary_frequency",
+    "compare_boundaries",
+    "tad_boundaries",
+    "trace_seed",
     "calc_directionality_index",
     "detect_tad_boundaries",
     "get_domains",

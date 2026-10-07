@@ -512,6 +512,7 @@ def read_bintu_tracing(
     skip_header_line: bool = True,
     cell_id_per_trace: bool = True,
     genome_assembly: str = "hg38",
+    keep_missing: bool = False,
 ):
     """Read a Bintu 2018-style chromatin-tracing CSV into a ChromData.
 
@@ -541,6 +542,9 @@ def read_bintu_tracing(
     genome_assembly : str
         The assembly of ``start_bp`` (recorded in ``uns``); e.g. ``"hg19"``
         with ``start_bp=20_000_032`` for the same IMR90 region.
+    keep_missing : bool
+        Keep the undetected segments (rows with empty coordinates) as
+        NaN rows; by default they are dropped (absent rows).
 
     Returns
     -------
@@ -551,7 +555,8 @@ def read_bintu_tracing(
     from chromdata import ChromData
 
     raw = pd.read_csv(path, skiprows=1 if skip_header_line else 0)
-    raw = raw.dropna(subset=['X', 'Y', 'Z'])
+    if not keep_missing:
+        raw = raw.dropna(subset=['X', 'Y', 'Z'])
     raw = raw.rename(columns={
         'Chromosome index': 'trace_id',
         'Segment index': 'segment',

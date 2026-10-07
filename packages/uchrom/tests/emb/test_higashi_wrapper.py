@@ -299,6 +299,12 @@ class _FakeWithQC(_FakeFastHigashi):
         np.save(Path(self.init_args["path2input_cache"]) / "qc.npy", qc)
         super().prep_dataset(meta_only, batch_norm)
 
+    def fast_process_data(self):
+        import os
+
+        self.cwd = os.getcwd()                          # FastHigashi writes ./tmp1, ./tmp2 here
+        super().fast_process_data()
+
     def fetch_cell_embedding(self, final_dim=None, restore_order=False):
         x = np.array([[float(n[1:]), 10 * float(n[1:])] for n in self.names])     # c3 -> [3, 30]
         return {"embed_raw": x, "embed_l2_norm": x / 2, "embed_l2_norm_correct_coverage_fh": x / 3,
@@ -310,8 +316,15 @@ def test_embed_higashi_writes_inputs_and_returns_the_embedding_on_the_cells_axis
 
     cd, maps, bins = _cd_with_scool(tmp_path)
     work = tmp_path / "work"
-    emb = embed_higashi(cd, cells=["c3", "c1"], rank=2, work_dir=work, wrapper_factory=_FakeWithQC,
+    made = []
+
+    def factory(*args):
+        made.append(_FakeWithQC(*args))
+        return made[-1]
+
+    emb = embed_higashi(cd, cells=["c3", "c1"], rank=2, work_dir=work, wrapper_factory=factory,
                         keep_variants=True, log=False)
+    assert Path(made[0].cwd).resolve() == work.resolve()     # run inside work_dir
     # inputs: one table per cell (chrY left out), in the order asked for
     files = (work / "input" / "filelist.txt").read_text().split()
     assert [Path(f).stem for f in files] == ["c3", "c1"]

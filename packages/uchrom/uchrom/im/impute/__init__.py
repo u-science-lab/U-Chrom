@@ -2,17 +2,21 @@
 FISH data imputation module for uchrom.
 
 This module provides coordinate imputation methods for multiplexed DNA FISH data,
-including linear interpolation and the SnapFISH-IMPUTE algorithm.
+including linear interpolation and the SnapFISH-IMPUTE algorithm, and a hold-out
+test of their accuracy on real traces (:func:`evaluate_imputation`).
 """
 
 from ._simple import impute_linear, impute_cubic
 from ._snapfish_core import impute_snapfish
+from ._holdout import ImputationHoldout, evaluate_imputation
 
 __all__ = [
     'impute_coordinates',
     'impute_linear',
     'impute_cubic',
     'impute_snapfish',
+    'evaluate_imputation',
+    'ImputationHoldout',
 ]
 
 
@@ -35,7 +39,9 @@ def impute_coordinates(cd, method='linear', **kwargs):
     Returns
     -------
     ChromData
-        ChromData with imputed coordinates.
+        ChromData with imputed coordinates, on the dense (trace x locus) grid of
+        each chromosome; the spot column ``imputed`` marks the loci that had no
+        coordinate in the input (still NaN where a method could not fill them).
 
     Raises
     ------

@@ -42,6 +42,31 @@ def build_bintu_imr90_hg19(root: Path, out: Path):
     return _bintu(root, 20_000_032, "hg19")
 
 
+def build_su2020_chr21(root: Path, out: Path):
+    """Su et al. 2020 sequential chromatin tracing of chromosome 21 in IMR90 cells (hg38): 651 loci of 50 kb
+    over 10.4-46.7 Mb, one trace per imaged chromosome copy (7,591; ``trace_id`` = the authors' copy number),
+    coordinates in µm (undetected loci left out).  ``bin_tracks["n_genes"]``: the genes the authors list for
+    each locus (those whose nascent transcription they imaged).  The authors' Rao et al. 2014 IMR90 Hi-C
+    summed into the same loci is linked as a ``.cool`` under the key ``rao2014`` (raw counts + ICE weights;
+    cooler bins tile chr21, so each bin runs from one locus to the next, after an empty leading bin)."""
+    from uchrom.io import read_su2020_hic, read_su2020_tracing, write_locus_cool
+
+    from . import fetch
+
+    folder = fetch("su2020_chr21", root=root)
+    cd = read_su2020_tracing(folder / "chromosome21.tsv", extras=["n_genes"])
+    cd.uns["source"] = ("Su et al. 2020, Cell 182:1641: IMR90 chr21, 651 loci of 50 kb, 7,591 imaged "
+                        "chromosome copies (one trace each); chromosome21.tsv, Zenodo 3928890")
+    loci, counts = read_su2020_hic(folder / "Hi-C_contacts_chromosome21.tsv")
+    imaged = cd.bins[["chrom", "start", "end"]].astype({"chrom": str}).reset_index(drop=True)
+    if not loci.astype({"chrom": str}).equals(imaged):
+        raise ValueError("Su 2020: the Hi-C loci are not the imaged loci")
+    cool = write_locus_cool(loci, counts, out.parent / "su2020_chr21_rao2014.cool", assembly="hg38")
+    cd.link_cool(Path(cool).name, key="rao2014", label="Rao 2014 IMR90 Hi-C summed into the Su 2020 loci",
+                 genome_assembly="hg38")
+    return cd
+
+
 register(Loader(
     name="takei2021_mesc", build=build_takei2021_mesc, store="takei2021_mesc/takei2021_mesc.chromdata.zarr",
     sources=("takei", "takei_tables"),
@@ -54,3 +79,8 @@ register(Loader(
     name="bintu_imr90_hg19", build=build_bintu_imr90_hg19, store="bintu_imr90/bintu_imr90_hg19.chromdata.zarr",
     sources=("bintu_imr90",),
     description="Bintu 2018 IMR90 chr21 tracing on hg19 (20.0-21.95 Mb), to pair with Rao 2014 Hi-C"))
+register(Loader(
+    name="su2020_chr21", build=build_su2020_chr21, store="su2020_chr21/su2020_chr21.chromdata.zarr",
+    sources=("su2020_chr21",),
+    description="Su 2020 IMR90 chr21 tracing: 7,591 chromosome copies x 651 loci of 50 kb (hg38), genes per "
+                "locus; Rao 2014 Hi-C in the same loci (linked .cool, key rao2014)"))

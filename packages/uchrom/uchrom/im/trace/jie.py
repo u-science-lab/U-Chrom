@@ -7,12 +7,14 @@ Independent reimplementation of Jia & Ren 2022 (*Nature Biotechnology*
 Usage
 -----
 >>> from uchrom.im.trace import align_spots, SpotAlignerParams
->>> cd = align_spots(spots_df, params=SpotAlignerParams())
+>>> traced = align_spots(detections, params=SpotAlignerParams())   # a ChromData
+>>> cd = align_spots(spots_df, params=SpotAlignerParams())          # or a table
 
 Input contract
 --------------
-``spots_df`` is a long-format ``pandas.DataFrame``, one row per FISH
-detection.  Required columns:
+The detections are a ``ChromData`` (e.g. :func:`uchrom.io.read_seqfish_detections`;
+its traces are ignored, ``cell_id`` is required) or a long-format
+``pandas.DataFrame``, one row per FISH detection.  Required columns:
 
 - ``cell_id``   — grouping key for per-cell tracing
 - ``chrom``     — decoded chromosome
@@ -224,18 +226,82 @@ def _trace_one(
 # Main entry point
 # ----------------------------------------------------------------------
 
+_TO_NM = {"nm": 1.0, "nanometer": 1.0, "um": 1000.0, "micron": 1000.0, "µm": 1000.0,
+          "micrometer": 1000.0}
+
+
+def _detections_table(cd, chrom, cells):
+    """A ChromData of detections -> ``(table, subset)``: the aligner's table (coordinates in nm,
+    ``cell_id`` / ``chrom`` as str, a ``_row`` column into ``subset``) and the selected detections."""
+    from uchrom.convention import select_spots
+
+    unit = str(cd.uns.get("xyz_unit", "nm")).strip().lower()
+    if unit not in _TO_NM:
+        raise ValueError(f"align_spots: cannot convert xyz_unit {unit!r} to nm")
+    sub = select_spots(cd, cells=cells)
+    if chrom is not None:
+        keep = {str(c) for c in ([chrom] if isinstance(chrom, str) else chrom)}
+        sub = sub[sub.spots["chrom"].astype(str).isin(keep).to_numpy()]
+    if "cell_id" not in sub.spots.columns:
+        raise ValueError("align_spots: the detections need a cell_id column")
+    df = sub.to_dataframe()
+    # what the aligner reads; the other spot columns come back through _row (see _carry)
+    df = df[[c for c in ("spot_id", "cell_id", "chrom", "start", "end", "x", "y", "z",
+                         "sigma_x", "sigma_y", "sigma_z") if c in df.columns]].copy()
+    df["cell_id"] = df["cell_id"].astype(str)
+    df["chrom"] = df["chrom"].astype(str)
+    df["_row"] = np.arange(len(df))
+    factor = _TO_NM[unit]
+    if factor != 1.0:
+        df[["x", "y", "z"]] = df[["x", "y", "z"]].to_numpy() * factor
+    return df, sub
+
+
 def align_spots(
-    spots_df: pd.DataFrame,
+    spots_df,
     params: Optional[SpotAlignerParams] = None,
     tau_by_chrom: Optional[Dict[str, float]] = None,
+    *,
+    chrom=None,
+    cells=None,
 ) -> "ChromData":
     """Assign detected FISH spots to chromatin fibers.
 
-    See module docstring for the input-DataFrame contract.
+    Parameters
+    ----------
+    spots_df : ChromData or DataFrame
+        The detections (see the module docstring): a ``ChromData`` whose spots carry ``cell_id`` (its
+        ``trace_id`` is ignored — e.g. one candidate set per cell and chromosome, as
+        :func:`uchrom.io.read_seqfish_detections` gives), or a table with ``cell_id, chrom, start, end,
+        x, y, z`` in nm.
+    params : SpotAlignerParams, optional
+    tau_by_chrom : dict, optional
+        τ (nm per bp) per chromosome; fitted from the data when omitted.
+    chrom : str or list, optional
+        Align these chromosomes only.
+    cells : list, optional
+        Align these cells only.
+
+    Returns
+    -------
+    ChromData
+        The detections placed on a fibre, ``trace_id`` = the fibre; ``traces`` (one row per fibre),
+        ``results['ploidy']``, ``uns['jie_polymer']`` / ``uns['jie_params']``.  From a ``ChromData`` the
+        result keeps its locus axis (``bins``), ``cells``, ``uns``, coordinate unit, the other spot columns
+        (``spot_id``, ``label``, …) and ``spot_tracks``; from a table, coordinates are in nm.
     """
     from chromdata import ChromData
 
     params = params or SpotAlignerParams()
+    source = None
+    if isinstance(spots_df, pd.DataFrame):
+        if cells is not None:
+            spots_df = spots_df[spots_df["cell_id"].astype(str).isin({str(c) for c in cells})]
+        if chrom is not None:
+            keep = {str(c) for c in ([chrom] if isinstance(chrom, str) else chrom)}
+            spots_df = spots_df[spots_df["chrom"].astype(str).isin(keep)]
+    else:
+        spots_df, source = _detections_table(spots_df, chrom, cells)
 
     required = {"cell_id", "chrom", "start", "end", "x", "y", "z"}
     missing = required - set(spots_df.columns)
@@ -290,7 +356,7 @@ def align_spots(
     next_global_tid = 0
     next_global_sg = 0
 
-    total_groups = len(list(spots_df.groupby(["cell_id", "chrom"])))
+    total_groups = spots_df.groupby(["cell_id", "chrom"], observed=True).ngroups
     for gi, ((cell_id, chrom), sub_df) in enumerate(
         spots_df.groupby(["cell_id", "chrom"], observed=True)
     ):
@@ -321,6 +387,8 @@ def align_spots(
                 }
                 if "spot_id" in sub_df.columns:
                     spot_entry["spot_id"] = row["spot_id"]
+                if source is not None:
+                    spot_entry["_row"] = int(row["_row"])
                 spots_out.append(spot_entry)
                 coords_out.append(np.asarray([
                     row["x"], row["y"], row["z"],
@@ -366,17 +434,40 @@ def align_spots(
             "min_spots_per_fiber": params.min_spots_per_fiber,
         },
     }
-    cd = ChromData(
-        coords=coords,
-        spots=spots,
-        traces=traces,
-        uns=uns,
-        results={"ploidy": ploidy},
-    )
+    if source is not None:
+        cd = _carry(source, spots, traces, ploidy, uns)
+    else:
+        cd = ChromData(
+            coords=coords,
+            spots=spots,
+            traces=traces,
+            uns=uns,
+            results={"ploidy": ploidy},
+        )
     if params.verbose:
         print(f"[jie] → {len(traces)} fibers across "
               f"{spots_df['cell_id'].nunique()} cells")
     return cd
+
+
+def _carry(source, spots, traces, ploidy, uns):
+    """The aligned spots as a ChromData that keeps the input's coordinates (and unit), locus axis, cells,
+    uns, spot columns and spot tracks (rows of ``source`` picked by ``spots['_row']``)."""
+    from chromdata import ChromData
+
+    rows = spots["_row"].to_numpy(dtype=np.int64)
+    coords = np.asarray(source.coords, dtype=np.float64)[rows]
+    src = source.spots
+    out = spots.drop(columns=["_row"])
+    for c in src.columns:
+        if c not in out.columns and c not in ("trace_id", "bin_id", "chrom", "start", "end"):
+            out[c] = src[c].to_numpy()[rows]
+    out = out.drop(columns=["chrom", "start", "end"])
+    out["bin_id"] = src["bin_id"].to_numpy()[rows]
+    tracks = source.spot_tracks.iloc[rows].reset_index(drop=True) if len(source.spot_tracks.columns) else None
+    cells = source.cells if len(source.cells) else None
+    return ChromData(coords, out, bins=source.bins, cells=cells, traces=traces, spot_tracks=tracks,
+                     uns={**source.uns, **uns}, results={"ploidy": ploidy})
 
 
 __all__ = [
