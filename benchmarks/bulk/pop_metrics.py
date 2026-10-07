@@ -178,7 +178,9 @@ def bootstrap_mean(blocks: list, kind: list, C: int, n_boot: int = 2000, seed: i
             if k == "locus":
                 vals.append((m * s).sum() / (m * n).sum())
             else:                           # symmetric block sums: each chromosome pair once
-                w = np.outer(m, m)[iu]
+                w = np.outer(m, m)
+                np.fill_diagonal(w, m)          # a cis pair belongs to one chromosome block
+                w = w[iu]
                 vals.append((w * s[iu]).sum() / (w * n[iu]).sum())
         return float(np.mean(vals))
 

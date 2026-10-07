@@ -1,0 +1,16 @@
+su_dev	gyr_k01	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1}	100	0.1	C2	1
+su_dev	gyr_k01_ic_nclast_k1	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1,"advance_on_max_iterations":true,"noncontact_from_sigma":5,"noncontact_kspring":1.0}	100	0.1	C2	1
+su_dev	gyr_k01	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1}	100	0.1	C3	1
+su_dev	gyr_k01_ic_nclast_k1	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1,"advance_on_max_iterations":true,"noncontact_from_sigma":5,"noncontact_kspring":1.0}	100	0.1	C3	1
+su_dev	gyr_k01_S200x025	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1}	200	0.25	C1	1
+su_dev	gyr_k01_ic_nclast_k1_S200x025	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1,"advance_on_max_iterations":true,"noncontact_from_sigma":5,"noncontact_kspring":1.0}	200	0.25	C1	1
+su_dev	gyr_k01_S200x025	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1}	200	0.25	C2	1
+su_dev	gyr_k01_ic_nclast_k1_S200x025	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1,"advance_on_max_iterations":true,"noncontact_from_sigma":5,"noncontact_kspring":1.0}	200	0.25	C2	1
+su_dev	gyr_k01_S200x025	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1}	200	0.25	C3	1
+su_dev	gyr_k01_ic_nclast_k1_S200x025	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1,"advance_on_max_iterations":true,"noncontact_from_sigma":5,"noncontact_kspring":1.0}	200	0.25	C3	1
+su_dev	gyr_k01_S200x025	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1}	200	0.25	C1	2
+su_dev	gyr_k01_ic_nclast_k1_S200x025	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1,"advance_on_max_iterations":true,"noncontact_from_sigma":5,"noncontact_kspring":1.0}	200	0.25	C1	2
+su_dev	gyr_k01_S200x025	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1}	200	0.25	C2	2
+su_dev	gyr_k01_ic_nclast_k1_S200x025	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1,"advance_on_max_iterations":true,"noncontact_from_sigma":5,"noncontact_kspring":1.0}	200	0.25	C2	2
+su_dev	gyr_k01_S200x025	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1}	200	0.25	C3	2
+su_dev	gyr_k01_ic_nclast_k1_S200x025	igm_sphere	{"nucleus_shape":"none","gyration_prior":"imaging","gyration_kspring":0.1,"advance_on_max_iterations":true,"noncontact_from_sigma":5,"noncontact_kspring":1.0}	200	0.25	C3	2

@@ -8,13 +8,13 @@
 #SBATCH --partition=xiaojie,owners,gpu
 #SBATCH -G 1
 #SBATCH --time=04:00:00
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=48G
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=24G
 #SBATCH --requeue
 #SBATCH --output=%x-%A_%a.out
 
 source "$SLURM_SUBMIT_DIR/benchmarks/bulk/sherlock/_env_pop.sh"
-export UCHROM_IGM_GPU_BUDGET_GB=${UCHROM_IGM_GPU_BUDGET_GB:-30}
+export UCHROM_IGM_GPU_BUDGET_GB=${UCHROM_IGM_GPU_BUDGET_GB:-8}
 line=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$TABLE")
 IFS=$'\t' read -r UNIT NAME METHOD PARAMS S STEPS COND SEED <<< "$line"
 D=$POP/$UNIT
