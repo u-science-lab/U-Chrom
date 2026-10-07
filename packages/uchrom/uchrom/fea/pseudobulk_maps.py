@@ -27,6 +27,13 @@ linked by a path relative to the store's folder, so the folder moves as a whole)
 the data directory (``<data dir>/pseudobulk/<store name>/``, ``uchrom.datasets.data_dir()``: kept across
 sessions); for a ``ChromData`` not read from a store a scratch directory removed at exit.  A map already
 there with the same cells, source and parameters (recorded in the file) is reused unless ``overwrite=True``.
+
+Depth matters when pseudo-bulks are compared (e.g. the compartment strength rises in shallow maps):
+:func:`sample_cells_by_depth` draws disjoint random sets of cells with the same number of contacts per group,
+the groups of a matched-depth comparison::
+
+    sets = sample_cells_by_depth(cd, ["cell_type", "age"], n_contacts=5e6, replicates=3)
+    pseudobulk(cd, sets["set"])                                 # one map per set: "Astrocytes | 3mo | 1", ...
 """
 
 from __future__ import annotations
@@ -43,7 +50,7 @@ from typing import Dict, Iterator, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import pandas as pd
 
-__all__ = ["pseudobulk", "ice"]
+__all__ = ["pseudobulk", "ice", "sample_cells_by_depth"]
 
 #: accumulators with at most this many (group, bin1, bin2) entries are dense int64 arrays (512 MB), larger
 #: ones sparse (e.g. the trans contacts of 7 cell types at 1 Mb on mm10: 52 M entries, dense)
@@ -695,6 +702,89 @@ def _resolution_label(res: int) -> str:
     from .maps import _resolution_label as label
 
     return label(res)
+
+
+def _depth_label(n: float) -> str:
+    n = float(n)
+    return f"{n / 1e9:g}G" if n >= 1e9 else f"{n / 1e6:g}M" if n >= 1e6 else f"{n / 1e3:g}k" if n >= 1e3 else f"{n:g}"
+
+
+def sample_cells_by_depth(cd, groupby: Union[None, str, Sequence[str], pd.Series, Mapping] = None, *,
+                          n_contacts: Union[float, Sequence[float]], replicates: int = 1,
+                          contacts: Union[str, pd.Series] = "n_contacts", cells: Optional[Sequence] = None,
+                          seed: int = 0) -> pd.DataFrame:
+    """Disjoint random sets of cells holding the same number of contacts, per group: the cells of pseudo-bulk
+    maps compared at matched depth.
+
+    Each group's cells are shuffled and taken in turn until their contacts reach ``n_contacts`` (the set
+    holds at least that many, by less than one cell's contacts more); the next set starts from the cells
+    left, so no cell is in two sets.  A group too small for a set gets fewer sets (a warning names it).
+
+    Parameters
+    ----------
+    cd : ChromData or DataFrame
+        Its ``cells`` table (or the table itself).
+    groupby
+        A column of ``cells``, several columns (the group is their values joined by ``" | "``), a Series /
+        mapping cell → group, or ``None`` (all cells one group).
+    n_contacts
+        Contacts per set; a sequence draws one set per amount (a depth series) from each group.
+    replicates
+        Sets per group and amount.
+    contacts
+        The contacts per cell: a column of ``cells`` (default ``"n_contacts"``) or a Series — e.g. the cis
+        contacts, ``cells["n_contacts"] * (1 - cells["frac_trans"])``, for maps of cis contacts only.
+    cells
+        Only these cells (e.g. the cells not drawn by an earlier call).
+    seed
+        Seed of the shuffles.
+
+    Returns
+    -------
+    DataFrame
+        Index = the drawn cells; ``group``, ``n_contacts`` (the set's target), ``replicate`` (1, 2, ...) and
+        ``set`` (``"<group> | <amount> | <replicate>"``, the parts that vary): pass ``sets["set"]`` as the
+        ``groupby`` of :func:`pseudobulk`.
+    """
+    table = cd.cells if hasattr(cd, "cells") else pd.DataFrame(cd)
+    w = table[contacts] if isinstance(contacts, str) else pd.Series(contacts)
+    w = pd.to_numeric(w.reindex(table.index), errors="coerce").fillna(0.0)
+    if groupby is None:
+        g = pd.Series("all", index=table.index)
+    elif isinstance(groupby, str):
+        g = table[groupby].astype(object)
+    elif isinstance(groupby, (pd.Series, Mapping)):
+        g = pd.Series(groupby).reindex(table.index)
+    else:
+        g = table[list(groupby)].astype(str).agg(" | ".join, axis=1)
+    if cells is not None:
+        g = g[g.index.isin(pd.Index(cells))]
+    g = g.dropna()
+    amounts = [float(n_contacts)] if np.isscalar(n_contacts) else [float(a) for a in n_contacts]
+    rng = np.random.default_rng(seed)
+    parts, short = [], []
+    for name in pd.unique(g.to_numpy()):
+        pool = rng.permutation(g.index[g.to_numpy() == name].to_numpy())
+        for amount in amounts:
+            for k in range(int(replicates)):
+                n = int(np.searchsorted(np.cumsum(w.loc[pool].to_numpy()), amount)) + 1
+                if n > len(pool):
+                    short.append(f"{name} ({_depth_label(amount)}: {k} of {replicates})")
+                    break
+                parts.append(pd.DataFrame({"group": name, "n_contacts": amount, "replicate": k + 1},
+                                          index=pd.Index(pool[:n], name=table.index.name)))
+                pool = pool[n:]
+    if short:
+        warnings.warn("too few contacts for every set: " + ", ".join(short), stacklevel=2)
+    if not parts:
+        return pd.DataFrame(columns=["group", "n_contacts", "replicate", "set"])
+    out = pd.concat(parts)
+    label = out["group"].astype(str)
+    if len(amounts) > 1:
+        label = label + " | " + out["n_contacts"].map(_depth_label)
+    if replicates > 1:
+        label = label + " | " + out["replicate"].astype(str)
+    return out.assign(set=label)
 
 
 def pseudobulk(cd, groupby: Union[None, str, pd.Series, Mapping] = None, *, contacts: str = "per_cell",

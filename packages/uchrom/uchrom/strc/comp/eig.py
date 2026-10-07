@@ -385,11 +385,20 @@ def _phasing_values(cd, phasing, bins: pd.DataFrame) -> Tuple[Optional[np.ndarra
         missing = [c for c in ("chrom", "start", "end") if c not in phasing.columns]
         if missing:
             raise KeyError(f"a phasing DataFrame needs chrom, start, end and a value column (missing {missing})")
-        col = "value" if "value" in phasing.columns else (phasing.columns[3] if phasing.shape[1] > 3 else None)
+        others = [c for c in phasing.columns if c not in ("chrom", "start", "end")]
+        col = "value" if "value" in phasing.columns else (others[0] if len(others) == 1 else None)
         if col is None:
-            raise KeyError("a phasing DataFrame needs a value column ('value', else its 4th column)")
+            raise KeyError(f"a phasing DataFrame needs chrom, start, end and one value column (named 'value' when "
+                           f"there are several; got {others})")
         return _track_on_bins(phasing[["chrom", "start", "end"]], phasing[col].to_numpy(dtype=float), bins), \
             f"DataFrame[{col}]"
+    if isinstance(phasing, str) and _is_chromdata(cd) and phasing in cd.results:
+        table = cd.results[phasing]
+        if not (isinstance(table, pd.DataFrame) and {"chrom", "start", "end", "E1"} <= set(table.columns)):
+            raise KeyError(f"phasing={phasing!r}: cd.results[{phasing!r}] is not a compartment table (chrom, start, "
+                           f"end, E1)")
+        return _track_on_bins(table[["chrom", "start", "end"]], table["E1"].to_numpy(dtype=float), bins), \
+            f"results[{phasing}].E1"
     if isinstance(phasing, str) and _is_chromdata(cd) and phasing in cd.bin_tracks.columns:
         loci = cd.bins[["chrom", "start", "end"]]
         return _track_on_bins(loci, cd.bin_tracks[phasing].to_numpy(dtype=float), bins), f"bin_tracks[{phasing}]"
@@ -400,7 +409,8 @@ def _phasing_values(cd, phasing, bins: pd.DataFrame) -> Tuple[Optional[np.ndarra
                                        features=["gc_fraction"], missing="ignore")
         return gc["gc_fraction"].to_numpy(dtype=float), f"GC content of {Path(phasing).expanduser()}"
     columns = list(cd.bin_tracks.columns) if _is_chromdata(cd) else []
-    raise KeyError(f"phasing={phasing!r}: not a cd.bin_tracks column ({columns}), a FASTA file or a DataFrame")
+    raise KeyError(f"phasing={phasing!r}: not a cd.bin_tracks column ({columns}), a compartment table in cd.results, "
+                   f"a FASTA file or a DataFrame")
 
 
 def _centromere_of(centromeres, chrom: str) -> Optional[int]:
@@ -527,9 +537,11 @@ def call_compartments_eig(
     phasing : str, path or DataFrame, optional
         The track the eigenvectors are oriented by (higher in A): the path of a FASTA (the GC content of
         every map bin, :func:`uchrom.fea.compute_sequence_features`), the name of a ``cd.bin_tracks``
-        column (gene density, an active mark), or a DataFrame with ``chrom, start, end`` and ``value`` (else
-        its 4th column) — each map bin takes the mean of the loci whose midpoint it holds (or the locus
-        holding its midpoint).  Without it the signs, and so which label is A, are arbitrary.
+        column (gene density, an active mark), the key of a compartment table in ``cd.results`` (its
+        ``E1``: e.g. cell-type maps oriented like the all-cells map), or a DataFrame with ``chrom, start,
+        end`` and one value column (``value`` when it has several) — each map bin takes the mean of the loci
+        whose midpoint it holds (or the locus holding its midpoint).  Without it the signs, and so which
+        label is A, are arbitrary.
     centromeres : mapping or DataFrame, optional
         Centromere position per chromosome (``{chrom: bp}``, or a table with ``chrom`` and ``mid`` / ``pos``
         / ``start, end``): each arm is decomposed on its own (a bin belongs to the arm holding its start),

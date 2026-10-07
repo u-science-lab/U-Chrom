@@ -61,7 +61,8 @@ uchrom/                (packages/uchrom/uchrom)
 ├── convention.py    the calling convention of analysis functions
 ├── datasets/        load(name) -> ChromData (atlas stores, loaders _load_*.py), fetch(name) -> original files
 ├── io/              Data I/O (.pairs, .cool, .hic, .3dg, .csv, .pdb, FOF-CT, PyHiM, SnapFISH, Bintu,
-│                    seqFISH+ multi-omics and raw detections)
+│                    seqFISH+ multi-omics and raw detections, pairs -> per-cell .scool, Juicer loop /
+│                    domain lists)
 ├── recon/           3D reconstruction
 │   ├── sc/          Single-cell reconstruction
 │   │   ├── ember.py EMber: reconstruct_ember (noise-aware; native engine protocol
@@ -85,8 +86,9 @@ uchrom/                (packages/uchrom/uchrom)
 │   └── enrichment.py  Run structure callers and project results onto spots
 ├── fea/             Per-bin features (distance, arc, sequence, GTF annotation,
 │                    MACS-style peaks, structure projection) + feature registry; linked contact maps
-│                    (maps.py: contact_matrix, rebin_map; band.py: banded sparse reads, cis expected;
-│                    pseudobulk_maps.py: per-cell maps summed per group, ICE; pileup_maps.py: APA)
+│                    (maps.py: contact_matrix, rebin_map, thin_map; band.py: banded sparse reads, cis
+│                    expected; pseudobulk_maps.py: per-cell maps summed per group, ICE, cells sampled at
+│                    matched depth; pileup_maps.py: APA)
 │                    and structure comparisons (compare.py)
 ├── emb/             Cell embeddings: FastHigashi / scHiCluster on linked maps (embed_higashi,
 │                    embed_contacts), RNA / ATAC / marks (embed_cells), clusters, metrics, plots

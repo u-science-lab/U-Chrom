@@ -349,3 +349,19 @@ def test_compartment_strength_errors(tmp_path):
         compartment_strength(cd)
     with pytest.raises(ValueError, match="qrange"):
         compartment_strength(cd, compartments=bins.assign(E1=0.0), params=SaddleParams(qrange=None))
+
+
+def test_phasing_by_a_compartment_table_and_ambiguous_tables(tmp_path):
+    from uchrom.strc.comp.eig import call_compartments_eig
+
+    bins, pix, truth = _planted(120)
+    cd = _chromdata(_cool(tmp_path, bins, pix))
+    ref = call_compartments_eig(cd, contacts="hic", phasing=bins.assign(value=truth.astype(float)),
+                                key_added="compartments.ref")
+    # another call oriented by the first one's E1 (a key of cd.results)
+    again = call_compartments_eig(cd, contacts="hic", phasing="compartments.ref", key_added=None)
+    np.testing.assert_allclose(again["E1"], ref["E1"])
+    # a table with one value column is read; several without a "value" column are refused
+    call_compartments_eig(cd, contacts="hic", phasing=bins.assign(gc=truth.astype(float)), key_added=None)
+    with pytest.raises(KeyError, match="one value column"):
+        call_compartments_eig(cd, contacts="hic", phasing=ref, key_added=None)

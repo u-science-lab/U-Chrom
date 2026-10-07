@@ -288,3 +288,23 @@ def test_real_map_matches_cooltools():
     assert np.isfinite(s).sum() == 1088 and np.nansum(s) == pytest.approx(33.00108063181879, abs=1e-9)
     assert np.nansum(tab["boundary_strength_300000"]) == pytest.approx(39.890946154254095, abs=1e-9)
     assert tab.loc[tab["is_boundary_300000"], "start"].tolist() == ref
+
+
+def test_boundaries_on_the_bins_of_a_map(tmp_path):
+    """A ChromData holding only the Hi-C map: boundaries placed on the map's bins (contacts=)."""
+    from uchrom import ChromData
+    from uchrom.strc.tad import compare_boundaries, tad_boundaries
+    from uchrom.strc.tad.insulation import InsulationParams, call_tads_insulation
+
+    bins, pix = _planted()
+    hic = ChromData(np.zeros((0, 3)), pd.DataFrame({"chrom": pd.Series(dtype=str), "start": pd.Series(dtype=np.int64),
+                                                    "end": pd.Series(dtype=np.int64), "trace_id": pd.Series(dtype=str)}))
+    hic.link_cool(str(_cool(tmp_path, bins, pix)), key="hic")
+    call_tads_insulation(hic, params=InsulationParams(window_bp=50_000))
+    with pytest.raises(KeyError, match="contacts="):
+        tad_boundaries(hic, "tads.insulation")
+    b = tad_boundaries(hic, "tads.insulation", contacts="hic")
+    assert b["bin_index"].tolist() == sorted(hic.results["tads.insulation.boundaries"]["bin_index"])
+    truth = pd.DataFrame({"chrom": "chr1", "start": np.array(BOUNDS[:-1]) * RES, "end": np.array(BOUNDS[1:]) * RES})
+    out = compare_boundaries(hic, "tads.insulation", truth, tol=1, contacts="hic")
+    assert out["n_query"] == 3 and out["fraction_near"] == 1.0 and out["chance"] < 0.5

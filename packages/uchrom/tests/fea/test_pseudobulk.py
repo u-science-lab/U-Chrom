@@ -261,3 +261,33 @@ def test_ice_matches_cooler_balance(tmp_path, trans):
         with clr.open("r") as h5:
             attrs = dict(h5["bins/weight"].attrs)
         assert set(attrs) == set(stats) and np.allclose(attrs["scale"], stats["scale"], equal_nan=True)
+
+
+def test_sample_cells_by_depth():
+    import warnings
+
+    from uchrom.fea import sample_cells_by_depth
+
+    rng = np.random.default_rng(0)
+    cells = pd.DataFrame({"cell_type": np.repeat(["a", "b", "c"], [60, 40, 2]),
+                          "age": np.tile(["young", "old"], 51),
+                          "n_contacts": rng.integers(100_000, 1_000_000, 102)},
+                         index=pd.Index([f"cell{i}" for i in range(102)], name="cell_id"))
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        sets = sample_cells_by_depth(cells, "cell_type", n_contacts=2_000_000, replicates=3, seed=1)
+    assert any("c (2M: 0 of 3)" in str(x.message) for x in w)              # 2 cells: too few contacts
+    assert sets.index.is_unique and set(sets["group"]) == {"a", "b"}
+    assert sorted(sets["set"].unique()) == ["a | 1", "a | 2", "a | 3", "b | 1", "b | 2", "b | 3"]
+    tot = cells.loc[sets.index, "n_contacts"].groupby(sets["set"]).sum()
+    last = cells.loc[sets.index, "n_contacts"].groupby(sets["set"]).last()
+    assert (tot >= 2_000_000).all() and (tot - last < 2_000_000).all()      # stops at the first cell past it
+    # deterministic; several columns; a depth series from given cells and contacts
+    again = sample_cells_by_depth(cells, "cell_type", n_contacts=2_000_000, replicates=3, seed=1)
+    assert again.equals(sets)
+    two = sample_cells_by_depth(cells, ["cell_type", "age"], n_contacts=1_000_000)
+    assert "a | young" in set(two["set"])
+    rest = cells.index[(cells["cell_type"] == "a") & ~cells.index.isin(sets.index)]
+    series = sample_cells_by_depth(cells, None, n_contacts=[500_000, 1_000_000], cells=rest,
+                                   contacts=cells["n_contacts"] / 2)
+    assert set(series["set"]) == {"all | 500k", "all | 1M"} and series.index.isin(rest).all()

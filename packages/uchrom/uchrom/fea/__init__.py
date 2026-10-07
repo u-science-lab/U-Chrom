@@ -46,6 +46,7 @@ from .maps import (
     observed_over_expected,
     open_map,
     rebin_map,
+    thin_map,
 )
 from .band import (
     Band,
@@ -53,7 +54,7 @@ from .band import (
     expected_cis,
     read_band,
 )
-from .pseudobulk_maps import ice, pseudobulk
+from .pseudobulk_maps import ice, pseudobulk, sample_cells_by_depth
 from .pileup_maps import pileup, pileup_scores
 from .compare import (
     Comparison,
@@ -116,6 +117,8 @@ __all__ = [
     "read_band",
     "ice",
     "pseudobulk",
+    "sample_cells_by_depth",
+    "thin_map",
     "pileup",
     "pileup_scores",
     "Comparison",

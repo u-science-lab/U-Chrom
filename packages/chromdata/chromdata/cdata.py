@@ -765,7 +765,7 @@ class ChromData:
     ) -> dict:
         """Record a linked scool contact store in ``uns['linked_scool']``."""
         record = {
-            "path": str(path),
+            "path": str(self._link_target(path)),
             "format": "scool",
             "cell_name": cell_name,
             "barcode_source": barcode_source,
@@ -796,6 +796,16 @@ class ChromData:
             p = Path(src).parent / p
         return p
 
+    def _link_target(self, path: PathLike) -> Path:
+        """The path to record for a new link: as given, except a relative path that names a file under the
+        working directory but not under the store this object was read from — the file the caller means —
+        which is made absolute (relative links otherwise resolve against the store, :meth:`resolve_link_path`)."""
+        p = Path(path).expanduser()
+        if not p.is_absolute() and self._links_from() is not None and not self.resolve_link_path(p).exists() \
+                and p.exists():
+            return p.resolve()
+        return p
+
     def link_cool(
         self,
         path: PathLike,
@@ -807,8 +817,10 @@ class ChromData:
     ) -> dict:
         """Record a linked bulk / pseudo-bulk ``.cool`` or ``.mcool`` in
         ``uns['linked_cool']`` (the counterpart of :meth:`link_scool` for
-        one matrix per file).  The file stays external."""
-        path = Path(path)
+        one matrix per file).  The file stays external.  A relative path resolves against the store the
+        object was read from (else the working directory); one that only exists under the working directory
+        is recorded as an absolute path."""
+        path = self._link_target(path)
         record = {
             "path": str(path),
             "format": "mcool" if path.suffix == ".mcool" else "cool",
@@ -846,9 +858,11 @@ class ChromData:
             _EXPORT_DIRS[key] = d
         return d
 
-    def linked_cool_path(self, key: str = "default") -> str:
+    def linked_cool_path(self, key: str = "default", *, resolution: Optional[int] = None) -> str:
         """Path of the linked ``.cool`` / ``.mcool`` ``key``; when the file is gone but the map is embedded
-        in the store, it is exported once to a scratch ``.mcool`` and that path is returned."""
+        in the store, it is exported once to a scratch ``.mcool`` and that path is returned — with
+        ``resolution``, a ``.mcool`` of that level only (much faster for a coarse level of a genome-wide
+        map)."""
         record = _linked_record(self.uns.get("linked_cool"), key)
         path = record.get("path")
         if path and self.resolve_link_path(path).exists():
@@ -856,9 +870,16 @@ class ChromData:
         if key in self.embedded_links()["contacts"]:
             from .embedded import export_mcool
 
-            out = self._embedded_export_dir() / f"{key}.mcool".replace("/", "_")
-            if not out.exists():
-                export_mcool(str(self._links_from()), key, out)
+            d = self._embedded_export_dir()
+            out = d / f"{key}.mcool".replace("/", "_")
+            if out.exists():
+                return str(out)
+            if resolution is not None:
+                out = d / f"{key}@{int(resolution)}.mcool".replace("/", "_")
+                if not out.exists():
+                    export_mcool(str(self._links_from()), key, out, resolutions=[int(resolution)])
+                return str(out)
+            export_mcool(str(self._links_from()), key, out)
             return str(out)
         raise FileNotFoundError(f"linked_cool {key!r}: {path!r} does not exist and the map is not embedded in the store")
 
@@ -868,7 +889,7 @@ class ChromData:
         (:meth:`linked_cool_path`)."""
         import cooler
 
-        path = self.linked_cool_path(key)
+        path = self.linked_cool_path(key, resolution=resolution)
         uris = cooler.fileops.list_coolers(path)
         if "/" not in uris:                              # several resolutions (/resolutions/<r>)
             res = sorted(int(u.rsplit("/", 1)[-1]) for u in uris)

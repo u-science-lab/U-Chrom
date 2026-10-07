@@ -139,3 +139,19 @@ def test_sparse_map_and_options(tmp_path):
         pileup(cd, pd.DataFrame({"x": [1]}), key_added=None)
     with pytest.raises(KeyError, match="neither"):
         pileup(cd, "no_such_key", key_added=None)
+
+
+def test_shifted_controls(tmp_path):
+    cd = _cd(_map(tmp_path / "m.cool", domains=False))
+    out = pileup(cd, _pairs(LOOPS), flank=50_000, shifts=(-150_000, 150_000), key_added="apa")
+    assert out["apa"] > 3 and 0.6 < out["control"] < 1.5
+    assert set(out["controls"]) == {-150_000, 150_000}
+    assert out["control"] == pytest.approx(np.mean(list(out["controls"].values())))
+    assert cd.results.record("apa").params["shifts"] == [-150_000, 150_000]
+    cd.write(tmp_path / "x.chromdata.zarr")
+    assert ChromData.read(tmp_path / "x.chromdata.zarr").results["apa"]["control"] == pytest.approx(out["control"])
+    # points: domain boundaries moved to the domain centres
+    cd2 = _cd(_map(tmp_path / "d.cool", loops=[]))
+    pts = pd.DataFrame({"chrom": "chr1", "start": np.array(BOUNDS) * RES, "end": np.array(BOUNDS) * RES + 1})
+    b = pileup(cd2, pts, flank=100_000, shifts=(500_000,), key_added=None)
+    assert b["score"] > 1.4 and b["control"] < 1.15

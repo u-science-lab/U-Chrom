@@ -466,7 +466,8 @@ embedded/images/<name>/data       the bytes of a linked section image (uint8 arr
   returns byte-identical matrices from either source.
 - Back to cooler: `export_cool` / `export_mcool` / `export_scool` (`chromdata.embedded`) rebuild cooler
   files from the embedded pixels (a bulk map embedded without trans at a fine resolution exports cis only);
-  `cd.linked_cool_path(key)` and `cd.load_linked_scool(key=, cell=)` use them when the linked file is gone,
+  `cd.linked_cool_path(key[, resolution=])` (only that level when given) and `cd.load_linked_scool(key=, cell=)`
+  use them when the linked file is gone,
   and `cd.validate_links()` does not flag a missing file whose map is embedded.
 - Remote reading: `embedded/contacts` and `embedded/anndata` carry consolidated metadata (the listing of
   their children without listing the bucket), so a store served by plain HTTP or S3 needs no directory

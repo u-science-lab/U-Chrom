@@ -1,6 +1,7 @@
 """uchrom.fea.maps: contact maps linked to a ChromData (read, rebin, observed / expected) on small coolers."""
 
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -167,3 +168,29 @@ def test_open_map_and_a_path_as_contacts(tmp_path):
     with pytest.raises(KeyError, match="not a linked map"):
         map_path(cd, str(tmp_path / "missing.cool"))
     assert rebin_map(cd, str(other), resolution=5000, key_added=None).endswith("other.cool")
+
+
+def test_thin_map(tmp_path):
+    from uchrom.fea import thin_map
+
+    cd, path = _linked(tmp_path)
+    full = cooler.Cooler(str(path)).pixels()[:]
+    out = thin_map(cd, "bulk", fraction=0.3, seed=1)
+    rec = cd.uns["linked_cool"]["bulk_30pct"]
+    assert rec["path"] == str(Path(out).resolve()) and rec["fraction"] == 0.3 and rec["thinned_from"] == "bulk" and rec["balanced"]
+    clr = cooler.Cooler(out)
+    assert clr.bins()[:][["chrom", "start", "end"]].equals(cooler.Cooler(str(path)).bins()[:][["chrom", "start", "end"]])
+    thin = clr.pixels()[:].merge(full, on=["bin1_id", "bin2_id"], suffixes=("", "_full"))
+    assert len(thin) == clr.info["nnz"] and (thin["count"] <= thin["count_full"]).all()   # a subset of the contacts
+    assert clr.info["sum"] == pytest.approx(0.3 * full["count"].sum(), rel=0.05)
+    assert "weight" in clr.bins().columns
+    # the same seed gives the same map; n_contacts= sets the fraction; a raw thinned map
+    again = thin_map(str(path), fraction=0.3, seed=1, out=tmp_path / "again.cool", key_added=None)
+    assert cooler.Cooler(again).pixels()[:].equals(clr.pixels()[:])
+    raw = thin_map(cd, "bulk", n_contacts=int(full["count"].sum()) // 10, balance=False, key_added="tenth")
+    assert "weight" not in cooler.Cooler(raw).bins().columns
+    assert cd.uns["linked_cool"]["tenth"]["fraction"] == pytest.approx(0.1, rel=1e-3)
+    with pytest.raises(ValueError, match="exactly one"):
+        thin_map(cd, "bulk")
+    with pytest.raises(ValueError, match="not in"):
+        thin_map(cd, "bulk", fraction=1.5)

@@ -36,6 +36,8 @@ _EXPORTS = {
     "bin_pairs": (".pairs_maps", "bin_pairs"),
     "pairs_to_scool": (".pairs_maps", "pairs_to_scool"),
     "pairs_chromsizes": (".pairs_maps", "pairs_chromsizes"),
+    "read_juicer_loops": (".juicer_lists", "read_juicer_loops"),
+    "read_juicer_domains": (".juicer_lists", "read_juicer_domains"),
     "make_higashi_config": (".contacts", "make_higashi_config"),
     "write_label_info": (".contacts", "write_label_info"),
     "write_higashi_inputs": (".contacts", "write_higashi_inputs"),
@@ -45,6 +47,10 @@ _EXPORTS = {
 }
 
 __all__ = sorted(_EXPORTS)
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_EXPORTS))
 
 
 def __getattr__(name):

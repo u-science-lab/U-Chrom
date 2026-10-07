@@ -10,7 +10,7 @@ Each line is one contact and is counted once: phase columns (haplotypes of the l
 probabilities) are ignored, so a map of a diploid cell is the sum over its two homologs.  Positions are
 1-based (as in the pairs and SAM formats); a contact falls into the bin ``(pos - 1) // resolution`` of its
 chromosome.  Chromosome names match with or without a ``chr`` prefix; contacts on chromosomes outside the
-given sizes (chrY, chrM, unplaced contigs) or beyond a chromosome's end are dropped and counted.
+given sizes (chrY, chrM, unplaced contigs) or beyond a chromosome's end are dropped and counted::
 
     sizes = {"chr1": 248956422, ...}
     stats = pairs_to_scool({"cell_035": "cell_035.impute.pairs.gz", ...}, "cells_5kb.scool",

@@ -26,7 +26,7 @@ data. *Bioinformatics* 36:2980-2985.
 
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
@@ -106,6 +106,7 @@ def pileup(
     corner: Optional[int] = None,
     ignore_diags: int = 2,
     aggregate: str = "sum",
+    shifts: Optional[Sequence[int]] = None,
     key_added: Optional[str] = "pileup",
     copy: bool = False,
 ):
@@ -147,6 +148,11 @@ def pileup(
         Poisson maximum-likelihood enrichment of the set; features weigh by their expected, so a few far-apart
         pairs (tiny expected, huge O/E) cannot dominate, and it is steadier in sparse maps.  ``"mean"``: the
         mean of the features' observed / expected windows (every feature weighs the same).
+    shifts : sequence of int, optional
+        Controls: the same features moved along the chromosome by each shift (bp; e.g. ``(-1_000_000,
+        -500_000, 500_000, 1_000_000)``), piled up the same way.  Their score (pairs: ``apa``; points:
+        ``score``) is what the set gives without the features' own enrichment — a pair keeps its separation, so
+        the distance decay is the same.
     key_added : str or None
         ``cd.results`` key (default ``"pileup"``); ``None`` does not store.
     copy : bool
@@ -159,7 +165,8 @@ def pileup(
         ``n_pixels`` (features contributing to each pixel), ``n`` (features used), ``n_dropped``, ``kind``,
         ``resolution``, ``flank_bins``, the scores of :func:`pileup_scores` (pairs: ``apa``, ``p2m``,
         ``zscore_ll``; points: ``score``), and ``features``: the feature table with ``used``, ``center``
-        (their centre pixel), ``lower_left`` (mean of their lower-left square) for pairs.
+        (their centre pixel), ``lower_left`` (mean of their lower-left square) for pairs.  With ``shifts``:
+        ``control`` (the mean score of the shifted sets) and ``controls`` (``{shift: score}``).
 
     Examples
     --------
@@ -306,12 +313,25 @@ def pileup(
               "kind": kind, "resolution": binsize, "flank_bins": int(f), "corner": int(cw),
               "expected": bool(expected is not False), **{k: v for k, v in scores.items()},
               "features": feats}
+    if shifts:
+        name = "apa" if kind == "pair" else "score"
+        cols = ["start1", "end1", "start2", "end2"] if kind == "pair" else ["start", "end"]
+        controls = {}
+        for d in shifts:
+            moved = t.assign(**{c: t[c] + int(d) for c in cols})
+            moved = moved[(moved[cols] >= 0).all(axis=1)]
+            controls[int(d)] = pileup(clr, moved, chrom=chrom, flank=flank, expected=expected, balance=balance,
+                                      min_separation=min_separation, max_separation=max_separation, corner=corner,
+                                      ignore_diags=ignore_diags, aggregate=aggregate, key_added=None)[name]
+        result["controls"] = controls
+        result["control"] = float(np.nanmean(list(controls.values())))
     if key_added is None or not _is_chromdata(cd):
         return result
     target = cd.copy() if copy else cd
     params = {"flank": flank, "expected": "table" if isinstance(expected, pd.DataFrame) else bool(expected),
               "balance": balance, "min_separation": min_separation, "max_separation": max_separation,
-              "corner": corner, "ignore_diags": ignore_diags, "aggregate": aggregate}
+              "corner": corner, "ignore_diags": ignore_diags, "aggregate": aggregate,
+              "shifts": [int(d) for d in shifts] if shifts else None}
     target.results.set(key_added, result, kind="mapping", function="uchrom.fea.pileup", params=params,
                        inputs={"contacts": str(contacts) if contacts is not None else None, "resolution": binsize,
                                "features": features if isinstance(features, str) else f"{len(t)} features",

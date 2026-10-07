@@ -7,6 +7,7 @@ map, or the path of a ``.cool`` / ``.mcool``), or a path::
 
     hic = ds.load("rao2014_imr90_chr21")                  # the 5 kb map, linked as "bulk"
     rebin_map(hic, "bulk", resolution=100_000)             # -> linked as "bulk_100kb" (ICE-balanced)
+    thin_map(hic, "bulk", fraction=0.05)                   # -> "bulk_5pct": the map at 5 % of its depth
     bins, M = contact_matrix(hic, "bulk_100kb", chrom="chr21")
     oe = observed_over_expected(M)
 """
@@ -22,7 +23,7 @@ from typing import Optional, Sequence, Tuple, Union
 import numpy as np
 import pandas as pd
 
-__all__ = ["map_path", "open_map", "contact_matrix", "rebin_map", "observed_over_expected"]
+__all__ = ["map_path", "open_map", "contact_matrix", "rebin_map", "thin_map", "observed_over_expected"]
 
 #: default of ``rebin_map(key_added=...)``: ``"<contacts>_<resolution>"`` (e.g. ``"bulk_100kb"``)
 AUTO = "auto"
@@ -81,11 +82,11 @@ def _is_linked(cd, contacts) -> bool:
     return contacts is None or str(contacts) in _linked_records(cd.uns.get("linked_cool"))
 
 
-def map_path(cd, contacts: Optional[str] = None) -> str:
+def map_path(cd, contacts: Optional[str] = None, *, resolution: Optional[int] = None) -> str:
     """Path of a contact map: the file linked to ``cd`` under ``contacts`` (``None``: the only linked map;
-    an embedded copy is exported once, see :meth:`chromdata.ChromData.linked_cool_path`), or ``contacts``
-    itself when it is not a linked key but the path of a ``.cool`` / ``.mcool`` — or ``cd`` itself when it is
-    such a path."""
+    an embedded copy is exported once — only the level ``resolution`` when given —, see
+    :meth:`chromdata.ChromData.linked_cool_path`), or ``contacts`` itself when it is not a linked key but the
+    path of a ``.cool`` / ``.mcool`` — or ``cd`` itself when it is such a path."""
     if not _is_chromdata(cd):
         path = _given_path(cd)
         if path is None:
@@ -95,7 +96,7 @@ def map_path(cd, contacts: Optional[str] = None) -> str:
         path = _given_path(contacts)
         if path is not None:
             return path
-    return cd.linked_cool_path(_map_key(cd, contacts))
+    return cd.linked_cool_path(_map_key(cd, contacts), resolution=resolution)
 
 
 def open_map(cd, contacts: Optional[str] = None, *, resolution: Optional[int] = None):
@@ -114,7 +115,7 @@ def open_map(cd, contacts: Optional[str] = None, *, resolution: Optional[int] = 
     -------
     cooler.Cooler
     """
-    return _open(map_path(cd, contacts), resolution)
+    return _open(map_path(cd, contacts, resolution=resolution), resolution)
 
 
 def _map_record(cd, contacts: Optional[str]) -> dict:
@@ -346,6 +347,105 @@ def rebin_map(cd, contacts: Optional[str] = None, *, resolution: int, anchor: in
                      genome_assembly=record.get("genome_assembly") or clr.info.get("genome-assembly"),
                      bin_size=resolution, anchor=int(anchor), rebinned_from=key, balanced=bool(balance))
     return target if copy else str(out)
+
+
+#: pixels thinned per chunk by :func:`thin_map`
+THIN_CHUNK = 5_000_000
+
+
+def thin_map(cd, contacts: Optional[str] = None, *, fraction: Optional[float] = None,
+             n_contacts: Optional[int] = None, seed: int = 0, resolution: Optional[int] = None,
+             balance: bool = True, out: Union[None, str, os.PathLike] = None,
+             key_added: Optional[str] = AUTO, copy: bool = False):
+    """A linked contact map at a lower sequencing depth: every contact of the raw counts kept with probability
+    ``fraction`` (binomial thinning), written as a ``.cool`` and linked to ``cd``.
+
+    Cell-type pseudo-bulks often hold 1-20 % of the contacts of a bulk map; thinning the bulk map to their
+    depth shows what a caller still finds there (e.g. loops are no longer called below ~5 %, while the pileup
+    of known loops still scores them).  Thinning keeps the bins and the counting statistics of a shallower
+    experiment of the same library (Poisson counts stay Poisson).
+
+    Parameters
+    ----------
+    cd
+        ``ChromData`` with the map linked, or a path (then nothing is linked and the path is returned).
+    contacts
+        Key of the linked map (``None``: the only one).
+    fraction, n_contacts
+        The share of the contacts to keep, or their expected number (one of the two).
+    seed
+        Seed of the random draws (the same seed gives the same map).
+    resolution
+        The level of an ``.mcool`` (required when it has several).
+    balance
+        ICE-balance the thinned map (``weight`` column; ``cooler balance`` defaults).
+    out
+        Where to write it (default: a scratch directory removed at exit).
+    key_added
+        Key under which the new map is linked (default ``"<contacts>_<percent>pct"``, e.g. ``"bulk_5pct"``;
+        ``None``: not linked).
+    copy
+        ``True``: link it to a copy of ``cd`` and return that.
+
+    Returns
+    -------
+    The path of the new map (``copy=False``), or the copy of ``cd`` with the map linked.
+    """
+    import cooler
+
+    if (fraction is None) == (n_contacts is None):
+        raise ValueError("thin_map needs exactly one of fraction= and n_contacts=")
+    path = map_path(cd, contacts)
+    clr = _open(path, resolution)
+    total = clr.info.get("sum")
+    if total is None or n_contacts is not None:
+        total = sum(int(c.sum()) for c in _pixel_chunks(clr, "count"))
+    p = float(n_contacts) / total if n_contacts is not None else float(fraction)
+    if not 0 < p <= 1:
+        raise ValueError(f"fraction {p:g} is not in (0, 1] (the map has {total:,} contacts)")
+    key = _map_record(cd, contacts).get("key") or Path(path.split("::", 1)[0]).stem
+    label = f"{100 * p:.3g}pct"
+    if key_added == AUTO:
+        key_added = f"{key}_{label}"
+    if copy and (key_added is None or not _is_chromdata(cd)):
+        raise ValueError("thin_map(copy=True) links the new map to a copy of a ChromData: pass one and a key_added")
+    out = Path(out) if out is not None else _scratch_dir() / f"{key_added or f'{key}_{label}'}.cool"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    rng = np.random.default_rng(seed)
+
+    def chunks():
+        for s in range(0, int(clr.info["nnz"]), THIN_CHUNK):
+            px = clr.pixels()[s: s + THIN_CHUNK]
+            kept = rng.binomial(px["count"].to_numpy(np.int64), p)
+            yield px.assign(count=kept)[kept > 0]
+
+    tmp = out.with_name(f".{out.name}.{os.getpid()}.part")
+    meta = {"thinned_from": str(clr.uri), "fraction": p, "seed": int(seed),
+            "balance": "ICE (cooler balance defaults)" if balance else "none"}
+    try:
+        cooler.create_cooler(str(tmp), clr.bins()[:][["chrom", "start", "end"]], chunks(), ordered=True,
+                             assembly=clr.info.get("genome-assembly"), metadata=meta)
+        if balance:
+            _balance_cool(tmp)
+        os.replace(tmp, out)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+    if not _is_chromdata(cd) or key_added is None:
+        return str(out)
+    target = cd.copy() if copy else cd
+    record = _map_record(cd, contacts)
+    target.link_cool(str(out.resolve()), key=key_added,
+                     label=f"{record.get('label') or key}, thinned to {100 * p:.3g} %"
+                           + (" (ICE-balanced)" if balance else " (raw)"),
+                     genome_assembly=record.get("genome_assembly") or clr.info.get("genome-assembly"),
+                     bin_size=clr.binsize, thinned_from=key, fraction=p, seed=int(seed), balanced=bool(balance))
+    return target if copy else str(out)
+
+
+def _pixel_chunks(clr, column: str):
+    for s in range(0, int(clr.info["nnz"]), THIN_CHUNK):
+        yield clr.pixels()[s: s + THIN_CHUNK][column].to_numpy()
 
 
 def observed_over_expected(matrix, *, positions=None) -> np.ndarray:

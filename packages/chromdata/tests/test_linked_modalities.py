@@ -140,3 +140,22 @@ def test_link_cool_records_and_validates(tmp_path):
     assert cd.validate_links(check_files=True) == []
     cd.uns["linked_cool"]["bulk"]["format"] = "hic"
     assert any("format='hic'" in i for i in cd.validate_links(check_files=False))
+
+
+def test_link_paths_relative_to_the_store_or_the_working_directory(tmp_path, monkeypatch):
+    from chromdata import ChromData
+
+    (tmp_path / "data").mkdir()
+    _make_cd().write(tmp_path / "data" / "x.chromdata.zarr")
+    cd = ChromData.read(tmp_path / "data" / "x.chromdata.zarr")
+    (tmp_path / "data" / "next.cool").write_bytes(b"")
+    (tmp_path / "work").mkdir()
+    (tmp_path / "work" / "here.cool").write_bytes(b"")
+    monkeypatch.chdir(tmp_path / "work")
+    # next to the store: kept relative (the folder can move); only under the working directory: made absolute
+    assert cd.link_cool("next.cool", key="store")["path"] == "next.cool"
+    assert cd.link_cool("here.cool", key="cwd")["path"] == str((tmp_path / "work" / "here.cool").resolve())
+    assert cd.link_scool("here.cool", key="cells")["path"] == str((tmp_path / "work" / "here.cool").resolve())
+    assert cd.link_cool("missing.cool", key="none")["path"] == "missing.cool"
+    assert cd.linked_cool_path("store") == str(tmp_path / "data" / "next.cool")
+    assert cd.linked_cool_path("cwd") == str((tmp_path / "work" / "here.cool").resolve())
