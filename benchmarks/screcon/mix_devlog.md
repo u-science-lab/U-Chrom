@@ -1,5 +1,16 @@
 # EMber-mix (few-cell deconvolution) — development log
 
+> **Summary (2026-10-07).**  Exploratory only: the held-back tests of PREREG §12 / §12.1 / §12.2 were
+> not run (decision of 2026-10-07, PREREG §12.3); no method was frozen.
+> * **Worked (cue 2, genotype labels, §7):** genotype prior (2.6 % of contacts labelled from donor SNPs,
+>   spread to neighbours) → hard split → frozen EMber diploid per part.  On the development pools of one
+>   GM12878 + one PBMC cell: M2 0.74 (5 of 6 pools 0.67-0.85) vs naive EMber 0.30.
+> * **Did not work:** the EMber-mix engine itself — unassisted it deconvolves only Stevens 2-cell pools
+>   (§2-§4), and with the genotype prior it loses M2 0.17 against the plain split; two cells of the same
+>   donor (GGP, GGPP) are not separated by any method (M2 0.30-0.32, naive 0.21-0.24).
+> * **Cue 1 (cell-type prior, Tan 2021 cortex, §5-§6): negative** in both ploidies — the prior is too weak
+>   per contact (AUC 0.55-0.62) and EM on top of it ties or loses to naive EMber.
+
 PREREG §12 (registered 2026-10-05 before any benchmark run).  Development units only: Takei 2021
 1 Mb and Su 2020 genome-scale development truth cells, Stevens 2017 cells 1-4, the development half
 of the Nagano 2017 serum cells.  No test pool has been generated or run.

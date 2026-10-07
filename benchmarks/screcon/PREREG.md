@@ -497,3 +497,15 @@ development pools below are run until a freeze is approved.
   **V2** M2 E − naive > 0; **V3** M2 and M1 E − IGM > 0; **V4** M2 E − prior-split >= −0.01; decision as
   §12.1 (V1-V3 CIs above 0, V4 lower bound above −0.01, no composition worse than naive in M2 by > 0.01).
   The separation of the two same-donor cells (GGP, GGPP) is reported in full.
+
+### 12.3 Note 2026-10-07 — outcome of §12, §12.1 and §12.2
+
+**Held-back test not run by decision of 2026-10-07; development results reported as exploratory, no
+claim of a frozen method.**  This applies to §12 (no freeze; `mix_devlog.md` §1-§4), §12.1 (cue 1,
+cell-type prior: negative on the development pools in both ploidies, devlog §5-§6) and §12.2 (cue 2,
+genotype labels, devlog §7).  No tag `ember-mix-frozen` exists; no held-back pool of §12, §12.1 or §12.2
+was generated, aligned or run.  Exploratory finding of §12.2: splitting a pool by the genotype prior and
+running frozen EMber diploid on each part recovered cells of distinct donors on the development GP pools
+(M2 0.74 vs naive EMber 0.30), while the EMber-mix engine added nothing (M2 −0.17 vs that split) and two
+cells of one donor (GGP, GGPP) were not separated.  The split was a registered baseline, not the method
+under test, and it is not tested here.
