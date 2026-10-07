@@ -8,7 +8,6 @@ cd U-Chrom
 pip install -e packages/chromdata -e packages/uchrom            # the data model + the analysis library
 pip install -e packages/uchrom-browser                           # + the web browser
 pip install ./packages/uchrom-recon                               # + the native reconstruction engine (needs Rust)
-pip install -e packages/uchrom-discovery                         # + auto-discovery
 ```
 
 With [uv](https://docs.astral.sh/uv/), `uv pip install -e "packages/uchrom[web,recon]"` resolves the
@@ -22,7 +21,6 @@ sibling packages from their folders by itself.
 | `u-chrom` (`uchrom`) | `packages/uchrom` | the analysis library | chromdata, PyTorch, scipy, scikit-learn, cooler, ... |
 | `uchrom-browser` (`uchrom_browser`) | `packages/uchrom-browser` | the web browser | chromdata, FastAPI, uvicorn |
 | `uchrom-recon` (`uchrom_recon`) | `packages/uchrom-recon` | native engine: NucDynamics, EMber, IGM (Rust; CPU and GPU) | numpy (Rust to build) |
-| `uchrom-discovery` (`uchrom_discovery`) | `packages/uchrom-discovery` | LLM-driven auto-discovery | u-chrom |
 
 `chromdata` alone reads and writes stores (local or over HTTP) without the analysis library; the web
 browser needs only `chromdata`.

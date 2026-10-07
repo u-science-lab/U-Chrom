@@ -1,7 +1,7 @@
 # Structure calling
 
 `uchrom.strc` calls chromatin structures from the 3-D data itself — from the distances between
-loci in many traces, not from a contact map: loops (a per-axis F-test, ArcFISH), TADs (ArcFISH
+loci in many traces (chromatin tracing, DNA seqFISH+, a population of models), not from a contact map: loops (a per-axis F-test, ArcFISH), TADs (ArcFISH
 p-values, the directionality index), domains per allele (FISHnet) and A/B compartments.  Every
 caller follows one calling convention: `fn(cd, *, chrom=None, params=..., device="auto",
 key_added=..., copy=False)`; `chrom=None` runs every chromosome, results go to `cd.intervals` /

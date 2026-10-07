@@ -32,7 +32,7 @@ python -m uchrom.datasets path takei
 The data directory is `$UCHROM_DATA`, else `~/.cache/uchrom` (`ds.data_dir()`); set `UCHROM_DATA` to put
 large data elsewhere, or to reuse a folder of earlier downloads.
 
-**Your own data** — imported with [`uchrom.io`](../io/index) and saved as a store
+**Your own data** — read with the readers of [`uchrom.io`](../reference/formats) and saved as a store
 ([data model & storage](../data/index)).
 
 Where every dataset comes from — the study, accession, licence, how it is fetched or built (the

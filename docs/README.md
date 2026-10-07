@@ -36,10 +36,9 @@ the deploy job:
 Use a scoped Cloudflare API token that can edit/deploy the `u-chrom-docs`
 Pages project.
 
-The auto-discovery tutorial links to exported exploration notebooks.  CI
-does not regenerate those agent outputs; the published snapshot lives in
-`docs/source/_extra/_auto_discovery_notebooks/` and is copied to
-`docs/build/html/_auto_discovery_notebooks/` by `html_extra_path`.
+Auto-discovery is left out of the published docs for now (`exclude_patterns` in `conf.py`).  Its pages
+(`docs/source/discovery/`), tutorials and the exported agent notebooks (`docs/source/_extra/`, published by
+`html_extra_path`) stay in the repository; `conf.py` says how to bring them back.
 
 ## Deploying by hand
 

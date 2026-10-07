@@ -111,12 +111,20 @@ nb_execution_raise_on_error = True
 # HTML output
 # ---------------------------------------------------------------------
 templates_path = ["_templates"]
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**/.ipynb_checkpoints"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**/.ipynb_checkpoints",
+                    # auto-discovery (uchrom-discovery) is left out of the docs until it settles; to bring it
+                    # back, drop these three patterns, add discovery/index to index.md and
+                    # html_extra_path = ["_extra"] (the exported agent notebooks)
+                    "discovery/**", "tutorials/takei2025_*auto_discovery.ipynb", "reference/api/auto_discovery.rst"]
 
 html_theme = "furo"
 html_static_path = ["_static"]
-html_extra_path = ["_extra"]
-html_title = f"{project} {version}"
+html_css_files = ["custom.css"]
+html_extra_path = []          # ["_extra"]: the auto-discovery exports (see exclude_patterns)
+# the sidebar: "U-Chrom 0.3" ("(dev)" for a development version)
+_short = ".".join(release.split(".")[:2])
+html_title = f"{project} {_short}" + (" (dev)" if "dev" in release else "")
+html_favicon = "_static/favicon.png"
 html_theme_options = {
     "sidebar_hide_name": False,
     "light_logo": "logo.svg",

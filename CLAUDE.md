@@ -108,8 +108,9 @@ uchrom/                (packages/uchrom/uchrom)
   `manuscripts/full/figures/<fig>/results/*.json` there (`benchmarks/_paper.py`, `$UCHROM_PAPER`); library
   changes a figure needs are made here first.  Never re-create `paper/` in this repository; a
   symlink `paper -> ../u-chrom-paper` (ignored) may show the paper checkout next to the code.
-- **Docs and tutorials**: `docs/source` is organised by chapter (start, data, io, imaging, recon,
-  structures, features, cells, viz, discovery, reference); every chapter shows its modules through
+- **Docs and tutorials**: `docs/source` has chapters by data type (tracing, seqfish, schic, bulk) and
+  common to all data (data, structures, features, cells, viz), plus start and reference (auto-discovery,
+  `discovery/`, is excluded from the build for now: `exclude_patterns` in `conf.py`); every chapter shows its modules through
   tutorials (`tutorials/*.ipynb`, linked from `docs/source/tutorials/`), committed **executed on real
   data** — the docs build does not run them (`nb_execution_mode = "off"`); re-execute a changed tutorial
   with `jupyter nbconvert --execute --inplace`.

@@ -1,0 +1,15 @@
+/* the bead logo is tall: keep it a mark above the title, not a banner */
+.sidebar-logo {
+  max-height: 6.5rem;
+  width: auto;
+}
+/* figures from the paper: a light card in dark mode too (they are drawn on white) */
+figure img[src*="fig1"], figure img[src*="fig2"] {
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px;
+}
+/* long captions read better left-aligned */
+figure figcaption p {
+  text-align: left;
+}

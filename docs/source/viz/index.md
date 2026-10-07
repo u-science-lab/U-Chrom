@@ -9,11 +9,10 @@ standard figures with matplotlib.
 
 | Task | API |
 |------|-----|
-| open the web browser on stores | `python -m uchrom_browser x.chromdata.zarr` (or `uchrom-browser`, `python -m uchrom.browser --web`) |
+| open the web browser on stores | `python -m uchrom_browser x.chromdata.zarr` (or `uchrom-browser`) |
 | drive it from Python | `uchrom_browser.connect()` → `Workspace` (`selected_cells`, `open_view`, `capture`, ...) |
 | browse the atlas | the Open dialog; `https://uchrom-browser.u-science.org` (hosted) |
 | plots | `uchrom.pl.plot_distance_matrix`, `plot_contact_map`, `plot_rg_histogram`, `plot_structure_3d` |
-| desktop browser (PyVista + Qt) | `python -m uchrom.browser x.chromdata.zarr` (extra `browser`) |
 
 ## Tutorials
 

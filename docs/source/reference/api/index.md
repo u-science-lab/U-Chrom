@@ -38,10 +38,3 @@ utils
 browser
 ```
 
-**uchrom-discovery** — auto-discovery
-
-```{toctree}
-:maxdepth: 1
-
-auto_discovery
-```
