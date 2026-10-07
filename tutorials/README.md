@@ -23,6 +23,7 @@ sources (`uchrom.datasets.fetch`, cached in `$UCHROM_DATA`, else `~/.cache/uchro
 | Bulk Hi-C › 3-D structures | `bulk_reconstruction.ipynb` | MDS and IGM population models |
 | Bulk Hi-C › with imaging | `gem_fish_reconstruction.ipynb` | Hi-C + FISH (GEM-FISH) |
 | *Common to all data* | | |
+| Datasets & the atlas | `datasets_atlas.ipynb` | browsing the atlas, loading a store over HTTP, fetching it for offline work; loader datasets and original files |
 | Data model & storage | `chromdata_basics.ipynb` | `ChromData`: bins, spots, tracks, intervals, results, subsetting |
 | | `chromdata_stores.ipynb` | the `.chromdata.zarr` store: backed and remote reads, streaming, linked and embedded modalities |
 | Per-locus features | `features.ipynb` | distance maps, variance features, peaks, interval projections |

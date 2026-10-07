@@ -102,9 +102,39 @@ def test_load_builds_once_caches_and_rebuilds_on_a_new_loader_version(monkeypatc
 
 
 def test_load_names_what_it_knows(monkeypatch):
-    def no_atlas(name, **kw):
-        raise KeyError(name)
-
-    monkeypatch.setattr(ds, "atlas", no_atlas)
-    with pytest.raises(KeyError, match="kim2020_scihic"):
+    monkeypatch.setattr(ds, "_catalog", lambda root: {"datasets": []})      # an empty atlas, offline
+    with pytest.raises(KeyError, match="kim2020_scihic") as err:            # the loaders ...
         ds.load("no_such_dataset")
+    assert "takei" in str(err.value)                                        # ... and the registry
+    with pytest.raises(KeyError, match="no_such_dataset"):
+        ds.fetch("no_such_dataset")
+
+
+def test_atlas_list_download_and_local_copy(monkeypatch, tmp_path):
+    """An atlas over HTTP (a toy store and its .cdz): list_atlas, fetch -> <data>/atlas/<id>.cdz, load reads it."""
+    from chromdata import catalog, testing
+
+    root = testing.example_atlas(tmp_path)
+    catalog.pack(root / "toy.chromdata.zarr", root / "toy.cdz")
+    data = tmp_path / "data"
+    monkeypatch.setenv("UCHROM_DATA", str(data))
+    with testing.serve_directory(root) as url:
+        monkeypatch.setattr(catalog, "DEFAULT_ATLAS", url)
+        table = ds.list_atlas()
+        assert list(table.index) == ["toy"] and table.loc["toy", "title"] == "A toy dataset"
+        assert {"organism", "n_cells", "size_mb", "download_mb", "downloaded", "url"} <= set(table.columns)
+        assert not table.loc["toy", "downloaded"] and table.loc["toy", "url"] == f"{url}/toy.chromdata.zarr"
+        remote = ds.load("toy")                                    # over HTTP, backed
+        assert ds.path("toy") == data / "atlas" / "toy.cdz"
+        got = ds.fetch("toy", verbose=False)
+        assert got == data / "atlas" / "toy.cdz" and got.stat().st_size == (root / "toy.cdz").stat().st_size
+        assert ds.list_atlas().loc["toy", "downloaded"]
+        local = ds.load("toy")                                     # the local copy from now on
+        assert str(local._source_path).endswith("toy.cdz")
+        assert local.n_cells == remote.n_cells and local.cells.index.tolist() == remote.cells.index.tolist()
+        assert str(ds.atlas("toy", local=False)._source_path).startswith("http")
+        with pytest.raises(KeyError, match="toy"):
+            ds.load("no_such_dataset")
+    (data / "atlas" / "toy.cdz").unlink()
+    with pytest.raises(FileNotFoundError, match="fetch"):
+        ds.atlas("toy", local=True)

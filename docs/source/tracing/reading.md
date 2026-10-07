@@ -9,7 +9,7 @@
 | SnapFISH / SnapFISH-IMPUTE coordinate + annotation tables | `uchrom.io.read_snapfish(coor, ann)` |
 | raw DNA seqFISH+ detections (not yet traced) | `uchrom.io.read_seqfish_detections` → [from detections to traces](traces) |
 | several spots of one trace on one locus | `uchrom.im.merge_duplicate_spots` (`uc.pp.merge_duplicate_spots`) |
-| published datasets, ready as `ChromData` | `uchrom.datasets.load("takei2021_mesc")`, `load("bintu_imr90")`, ... ([datasets](../start/datasets)) |
+| published datasets, ready as `ChromData` | `uchrom.datasets.load("takei2021_mesc")`, `load("bintu_imr90")`, ... ([datasets](../datasets/index)) |
 
 ## Tutorials
 

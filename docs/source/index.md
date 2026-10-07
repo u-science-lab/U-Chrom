@@ -41,6 +41,7 @@ step by step, with tutorials on real data.
 
 | Chapter | What it covers | Package / module |
 |---------|----------------|------------------|
+| [Datasets & the atlas](datasets/index) | browsing the public atlas, loading a dataset as a `ChromData` (over HTTP or built from its sources), fetching files for offline work | `uchrom.datasets` |
 | [Data model & storage](data/index) | `ChromData`, the `.chromdata.zarr` store, backed and remote reads, linked and embedded modalities | `chromdata` |
 | [Per-locus features](features/index) | distance maps, variance features, signals and peaks along the genome, annotation | `uchrom.fea` |
 | [Visualisation](viz/index) | the web browser, the data atlas, plots | `uchrom-browser`, `uchrom.pl` |
@@ -54,7 +55,6 @@ start/install
 start/quickstart
 gallery
 start/concepts
-start/datasets
 ```
 
 ```{toctree}
@@ -73,6 +73,7 @@ bulk/index
 :maxdepth: 2
 :hidden:
 
+datasets/index
 data/index
 features/index
 viz/index

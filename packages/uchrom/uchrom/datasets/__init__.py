@@ -15,6 +15,12 @@ and checked::
     path = ds.fetch("takei")                          # .../4DNFIHF3JCBY.csv (Takei 2021 FOF-CT)
     ds.list_datasets()                                # what there is, sizes, descriptions
 
+A store of the atlas can be downloaded too, as its one-file copy (``.cdz``), for offline work; ``load`` then
+reads the local copy::
+
+    ds.list_atlas()                                   # id, title, study, organism, cells, modalities, sizes
+    ds.fetch("stevens2017_mesc")                      # .../atlas/stevens2017_mesc.cdz (26 MB)
+
 Command line: ``python -m uchrom.datasets list | atlas | load NAME | fetch NAME ... | path NAME``.
 """
 
@@ -25,7 +31,11 @@ from typing import List, Optional
 
 from ._paths import ENV, data_dir
 
-__all__ = ["data_dir", "load", "fetch", "files", "path", "atlas", "list_datasets", "list_atlas", "ENV"]
+__all__ = ["data_dir", "load", "fetch", "files", "path", "atlas", "atlas_path", "list_datasets", "list_atlas",
+           "ENV"]
+
+#: where downloaded atlas stores go: ``<data directory>/atlas/<id>.cdz``
+ATLAS_DIR = "atlas"
 
 
 def _entry(name: str) -> dict:
@@ -52,7 +62,13 @@ def files(name: str, *, root: Optional[Path] = None) -> List[Path]:
 
 
 def path(name: str, *, root: Optional[Path] = None) -> Path:
-    """Where a dataset is: its file if it has one, else the folder its files share."""
+    """Where a dataset is: its file if it has one, else the folder its files share; for a store of the atlas,
+    where :func:`fetch` puts its one-file copy."""
+    from ._sources import DATASETS
+
+    if name not in DATASETS:
+        _atlas_entry(name)                                  # a KeyError naming what there is
+        return atlas_path(name, root=root)
     paths = files(name, root=root)
     if len(paths) == 1:
         return paths[0]
@@ -62,11 +78,18 @@ def path(name: str, *, root: Optional[Path] = None) -> Path:
 
 
 def fetch(name: str, *, root: Optional[Path] = None, extract: bool = True, verbose: bool = True) -> Path:
-    """Download a dataset from its original source into the data directory (files already there are
-    kept) and check its md5 sums; returns :func:`path`."""
+    """Download a dataset into the data directory (files already there are kept) and return :func:`path`.
+
+    A dataset of the registry (``list_datasets()``) comes from its original source and its md5 sums are
+    checked; an id of the atlas (``list_atlas()``) gives the store's one-file copy, ``<data
+    directory>/atlas/<id>.cdz``, which :func:`load` then reads instead of the remote store.
+    """
     from ._fetch import download, extract_many, extract_member, md5
+    from ._sources import DATASETS
 
     root = Path(root) if root is not None else data_dir()
+    if name not in DATASETS:
+        return _fetch_atlas(name, root=root, verbose=verbose)
     entry = _entry(name)
     items = _files(entry)
     if "build" in entry:                 # built from its source (e.g. a .hic read over HTTP), not downloaded
@@ -135,7 +158,8 @@ def load(name: str, *, root: Optional[Path] = None, backed: Optional[bool] = Non
       (fetched with :func:`fetch`) into ``<data directory>/<dataset>/<dataset>.chromdata.zarr`` with its
       linked files next to it, then read from there (in memory unless ``backed=True``).  ``rebuild=True``
       builds it again.
-    - Otherwise a store of the atlas (``list_atlas()``): opened over HTTP, backed unless ``backed=False``.
+    - Otherwise a store of the atlas (``list_atlas()``): its local copy when :func:`fetch` downloaded it, else
+      opened over HTTP; backed unless ``backed=False``.
 
     ``read_kw`` go to :meth:`chromdata.ChromData.read` (``columns=``, ``tracks=``, ...).
     """
@@ -156,30 +180,80 @@ def load(name: str, *, root: Optional[Path] = None, backed: Optional[bool] = Non
             cd.uns["dataset"] = {"name": name, "loader_version": loader.version, "sources": list(loader.sources)}
             cd.write(out)                          # atomic: replaces an older build
         return ChromData.read(out, backed=bool(backed), **read_kw)
-    try:
-        return atlas(name, backed=True if backed is None else backed, **read_kw)
-    except KeyError:
-        raise KeyError(f"no dataset {name!r}: neither a loader ({', '.join(sorted(known))}) nor an atlas "
-                       f"store (list_atlas())") from None
+    return atlas(name, backed=True if backed is None else backed, **read_kw)
 
 
-def list_atlas(root: Optional[str] = None):
-    """The datasets of the atlas (``chromdata.catalog.DEFAULT_ATLAS`` unless ``root``) as a table."""
-    import pandas as pd
+def _catalog(root: Optional[str]) -> dict:
     from chromdata import catalog
 
-    cat = catalog.fetch_catalog(root or catalog.DEFAULT_ATLAS)
-    cols = ("id", "title", "n_cells", "modalities", "size_mb", "url")
-    return pd.DataFrame([{c: d.get(c) for c in cols} for d in cat["datasets"]]).set_index("id")
+    return catalog.fetch_catalog(root or catalog.DEFAULT_ATLAS)
 
 
-def atlas(name: str, *, root: Optional[str] = None, backed: bool = True, **read_kw):
-    """Open a dataset of the atlas by its id (``list_atlas()``), backed over HTTP by default."""
-    from chromdata import ChromData, catalog
+def _atlas_entry(name: str, root: Optional[str] = None) -> dict:
+    from chromdata import catalog
 
-    root = root or catalog.DEFAULT_ATLAS
-    cat = catalog.fetch_catalog(root)
-    urls = {d["id"]: d["url"] for d in cat["datasets"]}
-    if name not in urls:
-        raise KeyError(f"{name!r} is not in the atlas at {root}; it has: {', '.join(sorted(urls))}")
-    return ChromData.read(urls[name], backed=backed, **read_kw)
+    entries = {d["id"]: d for d in _catalog(root)["datasets"]}
+    if name not in entries:
+        from ._loaders import loaders
+        from ._sources import DATASETS
+
+        raise KeyError(f"no dataset {name!r}: not in the registry (list_datasets(): {', '.join(sorted(DATASETS))}; "
+                       f"loaders: {', '.join(sorted(loaders()))}) nor in the atlas at "
+                       f"{root or catalog.DEFAULT_ATLAS} ({', '.join(sorted(entries))})")
+    return entries[name]
+
+
+def atlas_path(name: str, *, root: Optional[Path] = None) -> Path:
+    """Where :func:`fetch` puts the one-file copy of the atlas store ``name``: ``<data directory>/atlas/<name>.cdz``
+    (whether it is there or not)."""
+    return (Path(root) if root is not None else data_dir()) / ATLAS_DIR / f"{name}.cdz"
+
+
+def _fetch_atlas(name: str, *, root: Path, atlas_root: Optional[str] = None, verbose: bool = True) -> Path:
+    """Download the ``.cdz`` of an atlas store into ``root``/atlas/ (kept when already there)."""
+    from ._fetch import download
+
+    entry = _atlas_entry(name, atlas_root)
+    url = entry.get("download_url")
+    if not url:
+        raise KeyError(f"the atlas offers no download of {name!r}: open it over HTTP (load / atlas)")
+    dest = atlas_path(name, root=root)
+    if dest.exists():
+        return dest
+    want = float(entry.get("download_mb") or 0)
+    download(url, dest, f"atlas store {name} ({entry.get('title', '')})", want, verbose=verbose)
+    got = dest.stat().st_size / 1e6
+    if want and abs(got - want) > 0.02 * want + 0.2:       # catalog sizes are the store's, to 0.1 MB
+        dest.unlink()
+        raise IOError(f"{name}: downloaded {got:.1f} MB, the catalog says {want:.1f} MB; fetch again")
+    return dest
+
+
+def list_atlas(root: Optional[str] = None, *, data: Optional[Path] = None):
+    """The datasets of the atlas (``chromdata.catalog.DEFAULT_ATLAS`` unless ``root``) as a table, one row per
+    store: ``title, study, organism, tissue, assembly, n_cells, modalities, size_mb, download_mb``,
+    ``downloaded`` (its ``.cdz`` is in the data directory — ``data`` or :func:`data_dir` — :func:`fetch`) and
+    ``url`` (what :func:`load` opens over HTTP)."""
+    import pandas as pd
+
+    cols = ("id", "title", "study", "organism", "tissue", "assembly", "n_cells", "modalities", "size_mb",
+            "download_mb", "url")
+    rows = [{c: d.get(c) for c in cols} for d in _catalog(root)["datasets"]]
+    table = pd.DataFrame(rows, columns=list(cols)).set_index("id")
+    table.insert(len(cols) - 2, "downloaded", [atlas_path(i, root=data).exists() for i in table.index])
+    return table
+
+
+def atlas(name: str, *, root: Optional[str] = None, backed: bool = True, local: Optional[bool] = None,
+          **read_kw):
+    """Open a dataset of the atlas by its id (``list_atlas()``), backed by default: the one-file copy
+    :func:`fetch` downloaded when it is there (``local=None``; ``True`` requires it, ``False`` ignores it),
+    else the store over HTTP."""
+    from chromdata import ChromData
+
+    copy = atlas_path(name)
+    if local or (local is None and root is None and copy.exists()):    # a copy of the default atlas
+        if not copy.exists():
+            raise FileNotFoundError(f"{copy} is not there: ds.fetch({name!r}) downloads it")
+        return ChromData.read(copy, backed=backed, **read_kw)
+    return ChromData.read(_atlas_entry(name, root)["url"], backed=backed, **read_kw)

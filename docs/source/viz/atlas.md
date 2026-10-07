@@ -10,18 +10,9 @@ and section images embedded) and served from object storage.
   [uchrom-browser.u-science.org](https://uchrom-browser.u-science.org), or in your own
   (`python -m uchrom_browser`, *Open* dialog → *Atlas*).  Nothing is downloaded up front; views read
   the parts they show.
-- **Analyse**: read a store from Python, backed, without downloading it:
-
-```python
-from chromdata import ChromData, catalog
-
-cat = catalog.fetch_catalog(catalog.DEFAULT_ATLAS)      # https://uchrom-atlas-r2.u-science.org
-[(d["id"], d["n_cells"], d["modalities"]) for d in cat["datasets"]][:3]
-
-cd = ChromData.read(cat["datasets"][0]["url"], backed=True)
-```
-
-  Each dataset also has a one-file download (`.cdz`) for offline work.
+- **Analyse**: `uchrom.datasets.load(id)` opens a store from Python, backed, without downloading it;
+  `uchrom.datasets.fetch(id)` downloads its one-file copy (`.cdz`) for offline work — see
+  [datasets & the atlas](../datasets/index).
 
 ## How a dataset gets into the atlas
 
