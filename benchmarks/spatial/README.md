@@ -34,7 +34,7 @@ non-zeros.  Cost: 1 Mb, ~10 M contacts in 150-600 spots, 6 types: ~0.2 s per ite
 ```bash
 rsync -a --exclude .git ./ sherlock:$SCRATCH/uchrom-nd/repo-spatial/
 sbatch benchmarks/spatial/sherlock/td_prepare.sbatch                 # split, cells, truth, dev tissues
-sbatch --array=1-48 benchmarks/spatial/sherlock/td_fit.sbatch        # dev: 4 reps x 2 regimes x 2 res x 3 noise
+sbatch --array=1-8 benchmarks/spatial/sherlock/td_fit.sbatch         # dev: one task per tissue (4 reps x 2 regimes), all res x noise
 sbatch benchmarks/spatial/sherlock/td_aggregate.sbatch               # -> runs/spatial/typedecon/tables/dev/
 ```
 

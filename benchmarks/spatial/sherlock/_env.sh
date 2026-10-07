@@ -23,14 +23,12 @@ RESS=(1000000 250000)
 NREP_DEV=4
 NREP_TEST=8
 
-# array task 1..N -> SET REGIME REP RES NOISE (order: rep, regime, res, noise)
-td_task() {
+# array task 1..N -> REGIME REP (order: rep, regime)
+td_tissue() {
   local t=$(( $1 - 1 )) set=$2 nrep
   nrep=$([ "$set" = dev ] && echo $NREP_DEV || echo $NREP_TEST)
-  NOISE=${NOISES[$(( t % 3 ))]}; t=$(( t / 3 ))
-  RES=${RESS[$(( t % 2 ))]};     t=$(( t / 2 ))
-  REGIME=${REGIMES[$(( t % 2 ))]}; t=$(( t / 2 ))
-  REP=$t
+  REGIME=${REGIMES[$(( t % 2 ))]}
+  REP=$(( t / 2 ))
   [ "$REP" -lt "$nrep" ] || { echo "task $1 out of range"; exit 1; }
 }
 

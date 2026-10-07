@@ -4,7 +4,7 @@
 #   sbatch benchmarks/spatial/sherlock/td_prepare.sbatch                      (SET=dev, the default)
 #   sbatch --export=ALL,SET=test,APPROVED=1 benchmarks/spatial/sherlock/td_prepare.sbatch   (after the freeze)
 #SBATCH --job-name=td-prep
-#SBATCH --partition=xiaojie,normal
+#SBATCH --partition=xiaojie,normal,owners
 #SBATCH --time=02:00:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G

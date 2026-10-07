@@ -3,7 +3,7 @@
 #
 #   sbatch benchmarks/spatial/sherlock/td_aggregate.sbatch            (SET=dev)
 #SBATCH --job-name=td-agg
-#SBATCH --partition=xiaojie,normal
+#SBATCH --partition=xiaojie,normal,owners
 #SBATCH --time=00:30:00
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=8G
