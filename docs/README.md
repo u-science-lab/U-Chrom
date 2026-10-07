@@ -27,7 +27,8 @@ pull requests to `main`, and builds plus deploys on pushes to `main` or
 manual `workflow_dispatch` runs.
 
 The workflow publishes `docs/build/html` to the Cloudflare Pages project
-`u-chrom-docs`.  Configure these GitHub repository secrets before using
+`u-chrom-docs`, served at https://u-chrom-docs.u-science.org (custom domain; also
+https://u-chrom-docs.pages.dev).  Configure these GitHub repository secrets before using
 the deploy job:
 
 - `CLOUDFLARE_ACCOUNT_ID`

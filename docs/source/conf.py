@@ -123,6 +123,7 @@ html_css_files = ["custom.css"]
 html_extra_path = []          # ["_extra"]: the auto-discovery exports (see exclude_patterns)
 # the sidebar: "U-Chrom 0.3" ("(dev)" for a development version)
 _short = ".".join(release.split(".")[:2])
+html_baseurl = "https://u-chrom-docs.u-science.org/"   # canonical links point at the custom domain
 html_title = f"{project} {_short}" + (" (dev)" if "dev" in release else "")
 html_favicon = "_static/favicon.png"
 html_theme_options = {
