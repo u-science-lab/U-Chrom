@@ -14,7 +14,7 @@ source "$SCRATCH/uchrom-nd/repo-dominant/benchmarks/screcon/sherlock/_env_domina
 : "${RUN:?}" "${ENGINE:?}" "${NTASKS:?}"
 D=$W/runs/chen2026/$RUN
 T=${SLURM_ARRAY_TASK_ID:-1}
-nvidia-smi --query-gpu=name --format=csv,noheader || true
-$PY $SC/chen_spots.py run --dir "$D" --task $T --ntasks $NTASKS --device gpu
+if [ "${DEVICE:-gpu}" = gpu ]; then nvidia-smi --query-gpu=name --format=csv,noheader || true; fi
+$PY $SC/chen_spots.py run --dir "$D" --task $T --ntasks $NTASKS --device ${DEVICE:-gpu}
 $PY $SC/chen_spots.py score --dir "$D" --task $T --ntasks $NTASKS
 echo done

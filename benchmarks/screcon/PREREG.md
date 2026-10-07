@@ -693,3 +693,12 @@ they are seen.
   * Caveats stated up front: the thresholds come from Dip-C cells, not from this protocol (§13 showed they do
     not transfer exactly); a 10 µm spot that passes is "not detectably mixed at the level f <= 0.6", not shown
     to be one cell; there is no reference structure for a spot, so no E1.
+
+**Note 2026-10-06 (user-approved, before any held-back result has been seen; no held-back reconstruction had
+started):** because no GPUs were being scheduled, the held-back runs of §13.2, the unphased Tan calibration
+of §13.3 and the remaining Chen cortex tasks run on the **CPU (f64) path of the same frozen engine build**
+(`dom-4181d07`, `device="cpu"`) instead of the GPU (f32) path used for the development runs.  The method,
+its parameters, seeds, inputs and scoring are unchanged; the CPU and GPU paths implement the same protocol
+(the engine's GPU tests check them against each other), but individual runs are not bit-identical across
+devices.  Chen hippocampus (all tasks) and cortex tasks 1, 2 and 4 (and part of task 3) already ran on GPU;
+their outputs are kept and only the missing runs are made on CPU.
