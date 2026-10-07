@@ -48,7 +48,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `fixture_barcode_only.ecsv`, `fixture_with_chrom.ecsv`: PyHiM ECSV traces | 1 KB each | fixture, `packages/uchrom/tests/fixtures/` | `packages/uchrom/tests/im/test_from_pyhim_trace.py` |
 | `macs3/`: MACS3's own regression results (BSD 3-Clause) | 1.2 MB | fixture, `packages/uchrom/tests/fixtures/` | `packages/uchrom/tests/fea/test_peak_features.py` |
 | `apps/atlas/recipes/ref_hg38/`: UCSC hg38 `gap` and `centromeres` tables | 12 KB + 1.5 KB | in this folder | `probe_human_ssab_layout.py` |
-| `benchmarks/screcon/data/takei2021_1mb_loci.csv` (derived), `tan2021_adult_cortex_cells.tsv` | 78 KB + 31 KB | in the repository | `benchmarks/screcon/matched_data.py`; the cell list of fetch `tan2021_cortex` |
+| `benchmarks/screcon/data/takei2021_1mb_loci.csv` (derived), `tan2021_adult_cortex_cells.tsv` | 78 KB + 31 KB | in the repository | `benchmarks/screcon/matched_data.py`; the cell list of fetch `tan2021_cortex`; the split of `benchmarks/spatial/` (PREREG §14) |
 
 **Original files the tutorials fetch**
 
@@ -1208,7 +1208,8 @@ GSM by the GEO sample records (`!Sample_description`).  An identical copy,
   2 × 2,460); DBSCAN gives two homolog clusters for 30 % of (cell, chromosome).
 - **Download**: `python -m uchrom.datasets fetch takei2021_brain` (or
   `sherlock/download_matched.sbatch PART=brain`).
-- **Used by**: `benchmarks/screcon/matched.py` brain imaging reference (step 2; `matched_data.py`).
+- **Used by**: `benchmarks/screcon/matched.py` brain imaging reference (step 2; `matched_data.py`);
+  planned: per-type 3-D check of `benchmarks/spatial/` (PREREG §14.7).
 
 ### `tan2021_cortex/`: Tan 2021 Dip-C, adult mouse cortex (510 cells, 13 GB; fetch `tan2021_cortex`)
 
@@ -1233,7 +1234,9 @@ GSM by the GEO sample records (`!Sample_description`).  An identical copy,
   own clustering of these exact structures (the metadata file calls them "structure types").
 - **Download**: `python -m uchrom.datasets fetch tan2021_cortex` (or
   `sherlock/download_matched.sbatch PART=brain`).
-- **Used by**: `benchmarks/screcon/matched.py` brain Dip-C baseline (step 2; `matched_data.py`).
+- **Used by**: `benchmarks/screcon/matched.py` brain Dip-C baseline (step 2; `matched_data.py`);
+  `benchmarks/spatial/` cell-type deconvolution in-silico tissues (`contacts.pairs` of the six cortical types,
+  PREREG §14; read on Sherlock from `$SCRATCH/uchrom-nd/data/tan2021_cortex`).
 
 ### Liu 2025 DNA-MERFISH, mouse cortex (4DN) — catalogued, not downloaded
 

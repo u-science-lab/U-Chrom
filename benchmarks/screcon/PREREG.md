@@ -309,3 +309,152 @@ they are.
   28-50 strict positives per cell).  Accepted costs as registered: 36-45 % of the input contacts carry
   a copy pair and are used; cis < 2 Mb same-homolog held-out AUC lower than NucDynamics in 6 of 7 cells
   (mean −0.016, secondary).  No change to the method after the test.
+
+## 14. Cell-type deconvolution of spatial Hi-C contact maps, "TD" (working name) — registered 2026-10-07, before any run of it on data
+
+(Numbered after §12-§13, which sit on the unmerged branches `Nanguage/ember-mix` / `Nanguage/ember-dominant`.)
+
+**Why.**  §12 found that a few-cell pool is not split into its cells without an external cue (per-contact
+cell identity is too weak), and §13 that a spot reconstructed as one cell recovers the dominant cell only
+when it holds >= 80-90 % of the contacts.  `benchmarks/spatial_composition` showed that a spot's
+compartment score is the composition-weighted mixture of cell-class scores.  This section tests the
+expression-deconvolution analogue (RCTD / cell2location) for whole contact maps: each spot's contacts are a
+mixture of **cell-type contact profiles** with weights from RNA; the profiles are estimated jointly over
+all spots.  Code: `benchmarks/spatial/` (`typedecon.py` method + baselines, `tissue.py` in-silico tissue,
+`scoring.py`, `run_typedecon.py`, jobs `sherlock/td_*.sbatch`, tests); development record
+`benchmarks/spatial/typedecon_devlog.md`.
+
+* **Already seen before this entry**: synthetic toys only (`benchmarks/spatial/tests`: three toy types with
+  flipped compartments; the code recovers them; not evidence on data).  Composition-noise levels were
+  calibrated on the composition generator alone (no contact data; numbers below).  No Tan 2021 cell has
+  been binned, pooled or scored for this analysis.  The Tan 2021 cells were used before by `matched.py`
+  (published structures) and §12.1 / §13 (other roles, other branches); none of those results bears on
+  the endpoints below.
+
+### 14.1 Method under development ("TD", `typedecon.fit_td`)
+
+Spot s, N_s cis contacts on the bin pairs p of one resolution (chr1-19, both homologs on one chain):
+y_s ~ Multinomial(N_s, π_s), π_sp = Σ_t a_st P_tp with Σ_p P_tp = 1; a_s = the spot's contact share per
+type (the given composition, optionally x a learned per-type contact yield c_t and renormalised, optionally
+refined per spot under a Dirichlet prior centred on the given composition); P_t = type t's contact
+profile (distance decay included).  EM (monotone): responsibilities a_st P_tp / π_sp; P_t ∝ expected type
+counts + κ_t m_t (Dirichlet shrinkage towards the pooled profile, or the pooled profile rescaled to the
+type's own P(s)); κ_t = shrink x the type's expected contacts.  Spatially varying profiles (secondary S1):
+after the global fit each spot group refits its profiles with the global ones as prior mean.  The
+registered starting point is the plain maximum-likelihood fit (shrink 0, composition fixed, no yield).
+
+### 14.2 Data and split (fixed now)
+
+* **Cells**: Tan et al. 2021 Dip-C adult mouse cortex (GEO GSE146397; `tan2021_adult_cortex_cells.tsv`,
+  fetch `tan2021_cortex`), per-cell `contacts.pairs.txt.gz`; cis contacts with separation >= 1 kb on
+  chr1-19 (chrX / Y excluded: male cells), phases dropped; stored as 50 kb bin pairs.
+* **Types** (the authors' "structure types"; 6 of 10, the cortical ones with >= 30 cells):
+  P = Cortical L2-5 Pyramidal (160), L6 = Cortical L6 Pyramidal (54), I = Interneuron (56),
+  O = Mature Oligodendrocyte (74), A = Adult Astrocyte (30), M = Microglia Etc. (37).  Caveat stated up
+  front: these labels come from clustering the cells' own chromatin structure, so the types differ in
+  contacts by construction; the in-silico test measures recovery of those differences.
+* **Roles** (`tissue.split_cells`): per type (index k in the order above), cells sorted by GSM, permuted with
+  `numpy.random.default_rng(20261007 + k)`; first floor(n / 2) = **TRUTH** (never pooled; define the truth
+  profiles), next floor((n − truth) / 2) = **POOL-dev**, the rest = **POOL-test** (held back):
+  P 80 / 40 / 40, L6 27 / 13 / 14, I 28 / 14 / 14, O 37 / 18 / 19, A 15 / 7 / 8, M 18 / 9 / 10.
+
+### 14.3 In-silico tissues (`tissue.build_tissue`, fixed now)
+
+* Grid of spots, x in [0, 1] = cortical depth (0 = pia).  Type probabilities per layer:
+  L1 (x <= 0.10) P .10, L6 0, I .30, O .10, A .30, M .20; L2-5 (<= 0.55) P .60, L6 .03, I .15, O .07, A .08,
+  M .07; L6 (<= 0.80) P .10, L6 .50, I .10, O .15, A .08, M .07; white matter P .02, L6 .05, I .03, O .70,
+  A .10, M .10.
+* **Regimes**: `low` (10 µm-like) 600 spots, cis contacts per spot log-uniform 5,000-30,000, 1 + Binom(2, ½)
+  cells; `high` (20 µm-like) 150 spots, 30,000-150,000, 2 + Binom(3, ½) cells.  Each cell of a spot gets a
+  partial-nucleus fraction φ ~ U(0.3, 1); the spot's contacts are split over its cells multinomially by φ.
+  The type of each cell is drawn from its spot's layer; the cell = a random POOL cell of that type, distinct
+  within the spot; every cell's contacts are permuted once per tissue and consumed in order (contacts are
+  disjoint between spots); a cell that has run out is replaced by another of its type; when none of the
+  type has enough left, the type's cells are re-permuted and reused (counted, reported).
+* **Seeds**: tissue = 140,000 (dev) / 150,000 (test) + 100 rep + regime (0 low, 1 high); **replicates**:
+  dev 4 per regime, test 8 per regime.  Across replicates the same POOL cells are re-drawn (replicates are
+  not independent in cells; the CIs below are over tissues and do not cover cell sampling — stated).
+* **Compositions given to the method** (seed = tissue seed + 1 + level): `exact` = the realised contact
+  share of every type; RNA-like = true share x a per-type RNA-content factor exp(N(0, sd)), renormalised,
+  then Dirichlet(conc x ((1 − bg) share + bg / 6)): `moderate` sd 0.3, conc 10, bg 0.1; `heavy` sd 0.6,
+  conc 3, bg 0.2.  Calibration (composition generator only, 5 seeds): moderate MAE 0.046 / 0.059 and
+  Pearson r 0.96 / 0.92 (low / high), dominant type agreeing 0.82 / 0.75; heavy MAE 0.084 / 0.105,
+  r 0.85 / 0.76, dominant agreement 0.74 / 0.62 (cf. published spot-deconvolution benchmarks, r ~0.7-0.9).
+  **Random-composition control**: the given (moderate / heavy / exact) composition with its rows permuted
+  across spots (seed = tissue seed + 7).
+
+### 14.4 Truth and scoring (`scoring.py`, fixed now)
+
+* **Truth profile** of type t = the summed contacts of its TRUTH cells (pseudo-bulk); **reference E1** =
+  first eigenvector of the O/E correlation of the all-type TRUTH pseudo-bulk, per chromosome.  **Truth
+  reliability**: the same metrics between two seeded halves of the TRUTH cells (`default_rng(20261008 + k)`),
+  reported as the noise ceiling.  **Oracle** = pooling the tissue's contacts by their true type of origin.
+* Features, computed identically for every method, the oracle and the truth, at **1 Mb (primary)**:
+  per chromosome the symmetric map box-smoothed over 3 x 3 bins, O/E per diagonal, log2((O + 0.1 E) / 1.1 E),
+  pairs 2-50 Mb apart; **type contrast** = a type's feature minus the mean over the six types.
+  **Compartment score** per bin = Σ_j C_ij (v_j − v_(2i−j)) / 2 / Σ_j C_ij over |i − j| >= 2 bins with a valid
+  mirror bin (v = reference E1; distance-centred as `spatial_composition`), contrast over types.
+* **P1** `contrast_r`: Pearson r between the method's and the truth's type contrast, mean over the six
+  types (a type a method does not recover counts 0).  **P2** `comp_r`: the same for the compartment-score
+  contrasts.  **Secondary**: per type; `oe_r` (no contrast); type identification (accuracy of argmax_u
+  r(contrast_t, truth contrast_u) = t, and the margin); P(s) contrast r; at **250 kb** (band 1-10 Mb) P1 /
+  P2 and the insulation-score contrast r (1 Mb windows); every regime x noise stratum; the oracle fraction
+  P1(TD) / P1(oracle); wall time.  **S1** (spatially varying profiles): P and L6 given as one type E, E fitted
+  per depth group (x < 0.55 / >= 0.55), r(log O/E of E_upper − E_lower, truth P − L6); comparators:
+  E-dominant spots pooled per group; origin-pooled P vs L6 (oracle).
+
+### 14.5 Methods and development (development units only: POOL-dev tissues, all regimes / noise / resolutions)
+
+* **Methods**: TD variants; **dominant** (each spot to its dominant given type, pooled = cluster
+  pseudo-bulk); **NNLS** (least squares y_s ≈ N_s a_s P, P >= 0, no spatial term); **random** (TD with
+  permuted compositions); **oracle**.
+* **Development knobs** (`variants_dev.json`): shrink 0 / 0.05 / 0.2 / 1 (pooled prior mean), shrink 0.2
+  with the P(s)-rescaled prior mean, learned yield, composition refinement ρ = 20; S1 group shrink
+  0 / 0.1 / 1.  Further knobs (e.g. negative-binomial overdispersion, distance-stratified weights, 2-D
+  smoothing inside the EM) are added here, dated, before they are run.
+* **Selection rule**: the variant with the highest mean of (P1 + P2) / 2 over all development units at 1 Mb,
+  provided no (regime, noise, resolution) stratum is worse than the plain TD in P1 or P2 by more than 0.01;
+  ties within 0.005 go to fewer settings (plain TD first).  Every number goes to the devlog.
+
+### 14.6 Freeze and held-back test (run only after the user approves the freeze)
+
+* The chosen variant ("TD*") is frozen with a tag (`typedecon-frozen`) and recorded here; then the 16
+  held-back tissues (8 reps x 2 regimes, POOL-test cells) are built (`td_prepare.sbatch SET=test APPROVED=1`)
+  and every method is run once (`td_fit.sbatch SET=test`).
+* **Primary condition**: 1 Mb, `moderate` composition noise, both regimes (16 tissue units).  Paired
+  differences, 95 % percentile bootstrap over tissues (2,000 resamples, seed 0):
+  **H1** TD* − dominant > 0 in P1 and in P2; **H2** TD* − NNLS > 0 in P1 and in P2; **H3** TD* − random > 0 in
+  P1 and in P2.
+* **Decision**: "composition-weighted deconvolution recovers type-specific contact profiles better than
+  cluster pseudo-bulk and NNLS" only if H1-H3 hold (CIs above 0) and no (regime, noise) stratum at 1 Mb has
+  TD* worse than dominant by more than 0.01 in P1 or P2 with a CI excluding 0.  Otherwise reported as it is.
+  Reported without threshold: every stratum, 250 kb, the oracle fraction, robustness (exact − heavy), S1,
+  per type, the truth-halves ceiling.
+
+### 14.7 Per-type 3-D structures vs imaging (validation 2; registered in outline, parameters in a dated addition before any run)
+
+Per-type structure populations from the 1 Mb profiles of the held-back `moderate` tissues (TD*, dominant,
+all-type pooled = no deconvolution, truth pseudo-bulk = ceiling), all with the same population method
+(IGM, `uchrom.recon.bulk.deconv.deconvolve(method="igm")`, native engine protocol `igm`; the number of
+structures and IGM parameters fixed before any run), compared with Takei et al. 2021 *Science* cortex
+seqFISH+ (fetch `takei2021_brain`) by `benchmarks/screcon/matched.py` on the 2,460 1 Mb loci (detrended
+pair medians, KS, radial position per locus): **matched-type minus mismatched-type agreement** for
+Excitatory (P + L6 vs imaging cluster 9) and Oligodendrocyte (vs cluster 8) — the only per-type
+comparison whose imaging ceiling is above noise in `matched.py` (screcon README §6); the other types are
+reported descriptively.  Statement: TD* separates the types in 3-D if its matched − mismatched difference
+is > 0 for both types and at least that of the dominant baseline.
+
+### 14.8 Real data (validation 3; only after the development results are reported and the user approves)
+
+Spatial Hi-C-RNA (Guo et al. 2026 *Cell*, GEO GSE311199; catalogued as `spatial_hicrna`): mouse brain
+r1 / r2, Hi-C and RNA from the same 20 µm spots (per-spot 1 Mb `.scool` on Oak, RNA h5ad).  Compositions
+from the spot RNA by the `spatial_composition` NNLS (14 classes, mapped to the six types; Hippocampal types
+handled as extra types or the analysis restricted to the cortex strip, decided before the run); TD* run
+on the cortex spots; reported: type-resolved maps, agreement of each recovered type profile with
+independent single-cell Hi-C pseudo-bulks of the same type (Tan 2021 TRUTH cells, GAGE-seq, Paired Hi-C,
+dscHi-C cortex) vs mismatched types, held-out-contact likelihood of the spots (10 % of contacts held out)
+under TD* vs the pooled profile, and S1-style depth variation.  Chen et al. 2026 (RNA from adjacent
+sections only) is secondary.
+
+**Note 2026-10-07 (at registration)**: Sherlock access was denied (`ssh sherlock`: needs a new password /
+Duo login), so no development run has been made; nothing above has been run on data.
