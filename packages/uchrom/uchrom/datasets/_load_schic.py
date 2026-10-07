@@ -92,3 +92,128 @@ register(Loader(
     name="kim2020_scihic", build=build_kim2020, store="kim2020_scihic/kim2020_scihic.chromdata.zarr",
     sources=("kim2020_scihic",),
     description="Kim 2020 sci-Hi-C, H1 ES + HFF: 1,931 cells, cell types, 500 kb maps per cell (linked .scool)"))
+
+
+# ----------------------------------------------------------------------------------------------------------
+# GM12878 single cells with contact pairs: per-cell maps at 5 kb (pseudo-bulk maps fine enough for loops)
+# ----------------------------------------------------------------------------------------------------------
+
+#: bin size of the per-cell maps built from contact pairs: fine enough for loops in a pseudo-bulk (Rao et al.
+#: 2014 call loops at 5-10 kb); coarser maps are summed from it (``pseudobulk(resolution=)``, ``rebin_map``)
+PAIRS_RESOLUTION = 5000
+
+
+def _no_spots():
+    return pd.DataFrame({c: pd.Series(dtype=t) for c, t in
+                         [("chrom", str), ("start", np.int64), ("end", np.int64), ("trace_id", str),
+                          ("cell_id", str)]})
+
+
+def _check_sizes(declared: dict, sizes: dict, label: str) -> None:
+    """The chromosome sizes a pairs file declares must be the genome's (names with or without ``chr``)."""
+    strip = (lambda c: c[3:] if c.lower().startswith("chr") else c)  # noqa: E731
+    got = {strip(c): n for c, n in declared.items()}
+    bad = [c for c, n in sizes.items() if got.get(strip(c)) not in (None, n)]
+    if bad:
+        raise ValueError(f"{label}: chromosome sizes differ from the genome's for {bad[:5]}")
+
+
+def _pairs_cells(sources: dict, out: Path, name: str, sizes: dict, assembly: str, cells: pd.DataFrame,
+                 uns: dict):
+    """Bin every cell's pairs into ``<name>_5kb.scool`` next to ``out`` and give the ChromData (cells + the
+    per-cell maps linked as ``per_cell``)."""
+    from chromdata import ChromData
+
+    from ..io.pairs_maps import pairs_to_scool
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    scool = out.parent / f"{name}_{PAIRS_RESOLUTION // 1000}kb.scool"
+    stats = pairs_to_scool(sources, scool, chromsizes=sizes, resolution=PAIRS_RESOLUTION, assembly=assembly,
+                           metadata={"source": uns["source"]}, verbose=True)
+    cells = cells.join(stats.rename(columns={"n_pixels": "n_pixels_5kb"}))
+    cells["frac_cis"] = cells["n_cis"] / cells["n_contacts"]
+    cd = ChromData(np.zeros((0, 3)), _no_spots(), cells=cells, uns={"genome_assembly": assembly, **uns})
+    cd.link_scool(scool.name, key="per_cell", cell_name="cell_id", genome_assembly=assembly,
+                  bin_size=PAIRS_RESOLUTION, label="Per cell (5 kb, homologs summed)")
+    return cd
+
+
+def build_tan2018_gm12878(root: Path, out: Path):
+    """Tan et al. 2018 Dip-C of GM12878 (Science 361:924; GEO GSE117876): the 14 cells with hickit's
+    re-processed contact pairs on GEO (cells 4, 8 and 16 have none), binned at 5 kb (hg19) into one ``.scool``
+    linked as ``per_cell``.  Every contact counted once: the legs' haplotypes (``phase0`` / ``phase1``, the
+    imputed ``phase_prob*``) are ignored, so a cell's map sums its two homologs."""
+    import re
+
+    from . import fetch
+    from ..io.pairs_maps import pairs_chromsizes, tar_member
+
+    folder = fetch("tan2018_gm12878", root=root)
+    sources, rows = {}, []
+    for tar in sorted(folder.glob("GSM*_gm12878_*.tar.gz")):
+        cell = re.search(r"(gm12878_\d\d)", tar.name).group(1)
+        sources[cell] = (tar_member(tar, f"{cell}.pairs.gz"), f"{cell}.pairs.gz")
+        rows.append({"cell_id": cell, "gsm": tar.name.split("_", 1)[0], "cell_type": "GM12878",
+                     "dataset": "Tan 2018 Dip-C"})
+    if len(sources) != 14:
+        raise ValueError(f"expected the hickit pairs of 14 cells in {folder}, found {len(sources)}")
+    _check_sizes(pairs_chromsizes(next(iter(sources.values()))[0]), HG19, "tan2018_gm12878")
+    cells = pd.DataFrame(rows).set_index("cell_id")
+    uns = {"source": "Tan et al. 2018, Science 361:924 (Dip-C, GM12878; GEO GSE117876); hickit pairs of the 14 "
+                     "cells re-processed on GEO, binned at 5 kb, both homologs counted",
+           "haplotypes": "ignored: each contact counted once (the per-cell map sums both homologs)"}
+    return _pairs_cells(sources, out, "tan2018_gm12878", HG19, "hg19", cells, uns)
+
+
+#: cells with fewer cis contacts than this are flagged (``qc_pass``): Wu 2025 cells 026 / 051 (33 % / 12 %
+#: cis) look like damaged nuclei or doublets
+MIN_FRAC_CIS = 0.5
+
+
+def build_wu2025_scmicroc(root: Path, out: Path):
+    """Wu et al. 2025 scMicro-C of GM12878 (Nat Genet 57:1777; GEO GSE192759, hg38): the 12 deepest cells'
+    hickit contact pairs, binned at 5 kb into one ``.scool`` linked as ``per_cell``; ``qc_pass`` flags the two
+    cells with under 50 % cis contacts.  Each contact counted once (haplotypes ignored)."""
+    import re
+
+    from . import fetch
+    from ..io.pairs_maps import pairs_chromsizes
+
+    folder = fetch("wu2025_scmicroc", root=root, extract=False)     # the pairs only (no 102 GB 3dg tarball)
+    files = sorted(folder.glob("GSM*_cell_*.impute.pairs.gz"))
+    if len(files) != 12:
+        raise ValueError(f"expected the pairs of 12 cells in {folder}, found {len(files)}")
+    sizes = pairs_chromsizes(files[0])
+    for f in files[1:]:
+        if pairs_chromsizes(f) != sizes:
+            raise ValueError(f"{f.name}: chromosome sizes differ from {files[0].name}'s")
+    _check_sizes(sizes, HG38, "wu2025_scmicroc")
+    sources = {re.search(r"(cell_\d{3})", f.name).group(1): f for f in files}
+    cells = pd.DataFrame({"cell_id": list(sources), "gsm": [f.name.split("_", 1)[0] for f in files],
+                          "cell_type": "GM12878", "dataset": "Wu 2025 scMicro-C"}).set_index("cell_id")
+    uns = {"source": "Wu et al. 2025, Nat Genet 57:1777 (scMicro-C, GM12878; GEO GSE192759); hickit pairs of the "
+                     "12 deepest cells, binned at 5 kb, both homologs counted",
+           "haplotypes": "ignored: each contact counted once (the per-cell map sums both homologs)"}
+    cd = _pairs_cells(sources, out, "wu2025_scmicroc", sizes, "hg38", cells, uns)
+    cells = cd.cells.copy()
+    cells["qc_pass"] = cells["frac_cis"] >= MIN_FRAC_CIS
+    cd.cells = cells
+    return cd
+
+
+#: hg38 chromosome sizes (UCSC), chr1-22 and chrX (the GM12878 maps: a female line)
+HG38 = {"chr1": 248956422, "chr2": 242193529, "chr3": 198295559, "chr4": 190214555, "chr5": 181538259,
+        "chr6": 170805979, "chr7": 159345973, "chr8": 145138636, "chr9": 138394717, "chr10": 133797422,
+        "chr11": 135086622, "chr12": 133275309, "chr13": 114364328, "chr14": 107043718, "chr15": 101991189,
+        "chr16": 90338345, "chr17": 83257441, "chr18": 80373285, "chr19": 58617616, "chr20": 64444167,
+        "chr21": 46709983, "chr22": 50818468, "chrX": 156040895}
+
+register(Loader(
+    name="tan2018_gm12878", build=build_tan2018_gm12878,
+    store="tan2018_gm12878/tan2018_gm12878.chromdata.zarr", sources=("tan2018_gm12878",),
+    description="Tan 2018 Dip-C GM12878: 14 cells with hickit pairs, 5 kb maps per cell (linked .scool), hg19"))
+
+register(Loader(
+    name="wu2025_scmicroc", build=build_wu2025_scmicroc,
+    store="wu2025_scmicroc/wu2025_scmicroc.chromdata.zarr", sources=("wu2025_scmicroc",),
+    description="Wu 2025 scMicro-C GM12878: 12 deep cells, 5 kb maps per cell (linked .scool), hg38"))

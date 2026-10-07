@@ -14,6 +14,7 @@ clustering (GitHub) are downloaded next to it.
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 
@@ -101,9 +102,9 @@ def seqfish_fov_head(tarball: str, member: str, rows: int, sidecars: list, out: 
                 n_lines += chunk.count(b"\n")
             df = pd.read_csv(__import__("io").BytesIO(b"\n".join(bytes(buf).split(b"\n")[: rows + 1])))
             df = df[df["cellID"] != df["cellID"].iloc[-1]]       # the last cell may be cut off
-            tmp = out.with_suffix(out.suffix + ".part")
+            tmp = out.with_suffix(out.suffix + f".part{os.getpid()}")
             df.to_csv(tmp, index=False)
-            tmp.rename(out)
+            os.replace(tmp, out)
             print(f"wrote {out} ({len(df):,} spots, {df['cellID'].nunique()} cells)")
             return out
     raise FileNotFoundError(f"{member} not found in {tarball}")

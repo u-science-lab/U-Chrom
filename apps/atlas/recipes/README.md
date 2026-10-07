@@ -44,6 +44,14 @@ rebuilt when the loader's version changes; each checked to give what the tutoria
 | `huang2021_sox2` | `huang2021_sox2/huang2021_sox2.chromdata.zarr` | `huang2021_sox2` | Huang 2021 mESC Sox2 tracing (SnapFISH-IMPUTE tables, `uchrom.io.read_snapfish`): 1,416 cells × 2 alleles × 41 loci of 5 kb, undetected loci as NaN | tutorial `fish_imputation` |
 | `rao2014_imr90_chr21` | `rao2014_imr90/rao2014_imr90_chr21.chromdata.zarr` | `rao2014_imr90_chr21` (built from GEO) | Rao 2014 IMR90 Hi-C chr21 at 5 kb (hg19, raw counts), the map linked as `bulk` | tutorials `bulk_reconstruction`, `gem_fish_reconstruction` |
 | `kim2020_scihic` | `kim2020_scihic/kim2020_scihic.chromdata.zarr` + `.scool` | `kim2020_scihic` | Kim 2020 sci-Hi-C, H1 ES + HFF: 1,931 cells with cell types, 500 kb maps per cell (linked `.scool`, key `per_cell`; the hg19 bin numbering checked) | tutorial `higashi_embedding` |
+| `tan2018_gm12878` | `tan2018_gm12878/tan2018_gm12878.chromdata.zarr` + `tan2018_gm12878_5kb.scool` (44 MB) | `tan2018_gm12878` | Tan 2018 Dip-C GM12878: the 14 cells with hickit pairs, 5 kb maps per cell (hg19, homologs summed; key `per_cell`), contacts / cis fraction per cell | `benchmarks/hic_structures/pseudobulk_gm12878.py` |
+| `wu2025_scmicroc` | `wu2025_scmicroc/wu2025_scmicroc.chromdata.zarr` + `wu2025_scmicroc_5kb.scool` (57 MB) | `wu2025_scmicroc` (pairs only, the 3dg tarball is not streamed) | Wu 2025 scMicro-C GM12878: 12 deep cells, 5 kb maps per cell (hg38, homologs summed; key `per_cell`), `qc_pass` (cis fraction ≥ 0.5: false for cells 026, 051) | `benchmarks/hic_structures/pseudobulk_gm12878.py` |
+
+**Pseudo-bulk maps** (`uchrom.fea.pseudobulk`: per-cell maps summed per cell group, ICE-balanced, one `.cool`
+per group linked as `pseudobulk.<group>`) are written next to a local store
+(`<store dir>/<store name>_pseudobulk/`, linked by relative path), for an atlas store into the data
+directory (`pseudobulk/<store name>/`), and reused while the cell list, source and parameters recorded in the
+file are the same.  They are derived files: delete them freely.
 
 Tutorials are named without `tutorials/` and `.ipynb` (the list is `tutorials/README.md`).  The paper's
 figure scripts (`u-chrom-paper`, a separate repository) are named where they read these data.
@@ -109,6 +117,10 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `abbas2019_gemfish/`: GEM-FISH repository data (Wang 2016 FISH, TADs, Hi-C, final models) | 40 MB | fetch `abbas2019_gemfish` | Fig. 3a / 3c |
 | `rao2014_imr90/IMR90_chr21_5kb_hg19.cool`, `rao2014_k562/K562_chr21_5kb_hg19.cool`: Rao 2014 Hi-C slices | 3.8 MB each | fetch `rao2014_imr90_chr21`, `rao2014_k562_chr21` (built over HTTP) | IMR90: tutorials `bulk_reconstruction`, `gem_fish_reconstruction`; both: Fig. 3b / 3c |
 | `rao2014_imr90/IMR90_chr{20,22}_5kb_hg19.cool` | 7.8 MB + 3.3 MB | recipe `build_rao2014_slices.py --cell IMR90 --chroms 20` (then `22`) | Fig. 3c chr20 / chr22 |
+| `rao2014_imr90/IMR90_chr1_5kb_hg19.cool`, `rao2014_gm12878/GM12878_chr21_5kb_hg19.cool`: Rao 2014 Hi-C slices | 39 MB + 9.8 MB | fetch `rao2014_imr90_chr1`, `rao2014_gm12878_chr21` (built over HTTP) | Hi-C structure callers: validation, chr1 performance (`benchmarks/hic_structures/`) |
+| `rao2014_annotations/`: Rao 2014 HiCCUPS loop and Arrowhead domain lists, IMR90 + GM12878 | 1.6 MB | fetch `rao2014_annotations` | `benchmarks/hic_structures/` (reference calls) |
+| `genomes/hg19/chr{21,1}.fa.gz`: UCSC hg19 sequences | 12 MB + 74 MB | fetch `hg19_chr21`, `hg19_chr1` | `benchmarks/hic_structures/` (GC phasing of compartments) |
+| `genomes/liftover/hg38ToHg19.over.chain.gz`: UCSC liftOver chain | 1.2 MB | fetch `hg38_to_hg19_chain` | `benchmarks/hic_structures/pseudobulk_gm12878.py` (scMicro-C hg38 → Rao 2014 hg19) |
 | `ray2019_k562/4DNFI4QQPDMR.mcool`: K562 in situ Hi-C | 849 MB | fetch `ray2019_k562` | provenance of `K562_chr21_30kb.cool` |
 | `4DNFIFLJGGNR.csv`: Takei 2021 mESC FOF-CT, 1 Mb genome-wide loci | 47 MB | fetch `takei2021_1mb` | `benchmarks/screcon/` (simulation truth, locus map, diploid simulation); `benchmarks/bulk/` (mESC truth) |
 | `nagano2017_hap/`: Nagano 2017 haploid mESC scHi-C fend pairs + mm9 fends + chain | 1.39 GB (+5 GB streamed, 253 MB kept) | fetch `nagano2017_hap` | `benchmarks/screcon/matched.py` (step 1) |
@@ -1291,6 +1303,10 @@ EMber / NucDynamics benchmarks of `benchmarks/screcon/` (PREREG §6 diploid addi
   `sherlock/download_diploid.sbatch` (also unpacks the tarballs to `cells/gm12878_<k>/`).
 - **Used by**: diploid EMber / NucDynamics validation (`benchmarks/screcon/diploid_real.py`,
   `diploid_heldout.py`, `sherlock/dip_real.sbatch`, `deep_dipc.sbatch`; PREREG §6 diploid addition).
+  The loader `tan2018_gm12878` (`load`) bins the 14 cells' pairs at 5 kb into
+  `tan2018_gm12878/tan2018_gm12878_5kb.scool` (44 MB; ~26 s): the GM12878 pseudo-bulk of
+  `benchmarks/hic_structures/pseudobulk_gm12878.py`.  The `.con` files are not used there: they hold the
+  contacts kept after Dip-C's filters (cell 1: 430 k vs 1,048,961 pairs), not comparable with the pairs.
 
 ### `wu2025_scmicroc/`: Wu 2025 scMicro-C, GM12878 (12 deepest cells, ~0.4 GB + 3dg; fetch `wu2025_scmicroc`)
 
@@ -1323,7 +1339,64 @@ EMber / NucDynamics benchmarks of `benchmarks/screcon/` (PREREG §6 diploid addi
   017, 049, 032, 027, 014; `DEEP_TEST_RESULTS.md`) and Fig. 3a / S8: `benchmarks/screcon/highres.py`,
   `deep_diploid.py`, `sherlock/deep_dev.sbatch`, `highres_run.sbatch`, `highres_score.sbatch`;
   `u-chrom-paper/manuscripts/full/figures/fig3/build_render_scmicroc.py`, `capture_highres.py`,
-  `make_figS_fig3_highres.py`.
+  `make_figS_fig3_highres.py`.  The loader `wu2025_scmicroc` (`load`; fetches the pairs only) bins the
+  12 cells at 5 kb into `wu2025_scmicroc/wu2025_scmicroc_5kb.scool` (57 MB; ~26 s), `qc_pass` false for
+  026 and 051: the scMicro-C half of the GM12878 pseudo-bulk (`benchmarks/hic_structures/pseudobulk_gm12878.py`).
+
+## Hi-C structure calling on maps (`benchmarks/hic_structures/`)
+
+Validation of the callers on bulk / pseudo-bulk contact maps (`uchrom.strc.comp.call_compartments_eig` /
+`compartment_strength`, `uchrom.strc.tad.call_tads_insulation`, `uchrom.strc.loop.call_loops_hiccups` /
+`call_loops_mustache`, `uchrom.fea.pileup`): agreement with the published Rao 2014 calls, depth thinning,
+and run time / memory on the largest chromosome.  The slices are built like the Fig. 3 ones (see
+`rao2014_imr90/` above: `uchrom.datasets._builders.slice_hic`, raw observed counts over HTTP range
+requests, no md5 because the cooler records its creation date).
+
+### `rao2014_imr90/IMR90_chr1_5kb_hg19.cool`, `rao2014_gm12878/GM12878_chr21_5kb_hg19.cool` (built; fetch `rao2014_imr90_chr1`, `rao2014_gm12878_chr21`)
+
+- **Source**: Rao 2014 (citation above), GEO GSE63525: `GSE63525_IMR90_combined.hic` and
+  `GSE63525_GM12878_insitu_primary+replicate_combined.hic` (hg19, MAPQ > 0).
+- **Files**: IMR90 chr1 at 5 kb — 49,851 bins, 26,494,735 pixels, 80,327,352 contacts, 39 MB (the largest
+  chromosome: the performance checks of every caller run on it); GM12878 chr21 at 5 kb — 9,626 bins,
+  7,258,708 pixels, 38,007,885 contacts, 9.8 MB (a second cell line, 3.7× the IMR90 chr21 depth).
+- **Used by**: `benchmarks/hic_structures/` (each caller's validation and profiling script).
+
+### `rao2014_annotations/`: Rao 2014 HiCCUPS loops and Arrowhead domains (1.6 MB; fetch `rao2014_annotations`)
+
+- **Source**: Rao 2014 (citation above), GEO GSE63525 supplementary files
+  `GSE63525_IMR90_HiCCUPS_looplist.txt.gz` (md5 `326c6dbafcb860ad1e726c544f71a5a6`),
+  `GSE63525_IMR90_Arrowhead_domainlist.txt.gz` (`6129d35df3b6726ddab38056170e3482`),
+  `GSE63525_GM12878_primary+replicate_HiCCUPS_looplist.txt.gz` (`2195f24061059dca3cb190b73af3bd6e`),
+  `GSE63525_GM12878_primary+replicate_Arrowhead_domainlist.txt.gz` (`42a23da326be4379b042ae9658ed6a0b`).
+  Tab-separated, hg19, chromosome names without `chr`; GEO data, open.
+- **Used by**: `benchmarks/hic_structures/` — the reference loops (recall / precision of the loop callers,
+  the anchors of the pileups) and domains (Arrowhead edges vs insulation boundaries).  IMR90 chr21 has 92
+  HiCCUPS loops and 86 Arrowhead domains.
+
+### `genomes/hg19/`: UCSC hg19 chr21 and chr1 sequences (fetch `hg19_chr21`, `hg19_chr1`)
+
+- **Files**: `genomes/hg19/chr21.fa.gz` (12 MB, md5 `26cdd5a3a539b63930752604feb2912b`) and
+  `genomes/hg19/chr1.fa.gz` (74 MB, md5 `e103808b81f7d0a52353dee92d2ff164`) from
+  `https://hgdownload.soe.ucsc.edu/goldenPath/hg19/chromosomes/`.
+- **Source**: UCSC Genome Browser, hg19 (GRCh37).
+- **Used by**: `benchmarks/hic_structures/` — the GC content per bin that orients the compartment
+  eigenvector (A = GC-rich) of the Rao 2014 slices.
+
+### `genomes/liftover/hg38ToHg19.over.chain.gz`: UCSC liftOver chain (1.2 MB; fetch `hg38_to_hg19_chain`)
+
+- **File**: md5 `ff3031d93792f4cbb86af44055efd903`, from
+  `https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/hg38ToHg19.over.chain.gz` (UCSC Genome Browser;
+  free for academic, non-profit and personal use).
+- **Used by**: `benchmarks/hic_structures/pseudobulk_gm12878.py` — lifts the scMicro-C (hg38) chr21 map to
+  hg19 (bin midpoints; 99.6 % of the contacts lifted) to add it to the Dip-C pseudo-bulk and compare with
+  Rao 2014 GM12878.
+
+### Pseudo-bulk inputs: single cells of known type
+
+- GM12878: `tan2018_gm12878` + `wu2025_scmicroc` (loaders above; 24 cells, ~1 % of Rao's chr21 depth).
+- Cell types of the atlas (per-cell maps embedded at 1 Mb, read over HTTP): `dschic_aging_cortex` (32,777
+  cells; the 7 cell-type maps sum to the store's all-cells map exactly), `droplet_hic_mouse_cortex`,
+  `hires_brain`, `schicar_mouse_cortex` — `benchmarks/hic_structures/pseudobulk_dschic.py`.
 
 ## Bulk Hi-C deconvolution benchmark (`benchmarks/bulk/`)
 

@@ -679,6 +679,30 @@ DATASETS.update({
         "default": True,
         "description": "UCSC mm10 chromosome 19 sequence",
     },
+    # UCSC hg19 chromosome sequences: GC content to orient Hi-C compartments (A = GC-rich)
+    "hg19_chr21": {
+        "files": [("genomes/hg19/chr21.fa.gz", "https://hgdownload.soe.ucsc.edu/goldenPath/hg19/chromosomes/chr21.fa.gz")],
+        "md5": {"genomes/hg19/chr21.fa.gz": "26cdd5a3a539b63930752604feb2912b"},
+        "size_mb": 12,
+        "default": False,
+        "description": "UCSC hg19 chromosome 21 sequence",
+    },
+    "hg19_chr1": {
+        "files": [("genomes/hg19/chr1.fa.gz", "https://hgdownload.soe.ucsc.edu/goldenPath/hg19/chromosomes/chr1.fa.gz")],
+        "md5": {"genomes/hg19/chr1.fa.gz": "e103808b81f7d0a52353dee92d2ff164"},
+        "size_mb": 74,
+        "default": False,
+        "description": "UCSC hg19 chromosome 1 sequence",
+    },
+    # UCSC liftOver chain hg38 -> hg19: hg38 single-cell maps next to the hg19 Rao 2014 maps
+    "hg38_to_hg19_chain": {
+        "files": [("genomes/liftover/hg38ToHg19.over.chain.gz",
+                   "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/hg38ToHg19.over.chain.gz")],
+        "md5": {"genomes/liftover/hg38ToHg19.over.chain.gz": "ff3031d93792f4cbb86af44055efd903"},
+        "size_mb": 1.2,
+        "default": False,
+        "description": "UCSC liftOver chain hg38 -> hg19",
+    },
     "mm10_refgene": {
         "files": [("genomes/mm10/mm10.refGene.gtf.gz",
                    "https://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/genes/mm10.refGene.gtf.gz")],

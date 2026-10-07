@@ -21,8 +21,8 @@ import pandas as pd
 
 __all__ = ["Band", "read_band", "expected_cis", "band_observed_over_expected"]
 
-#: pixels read per chunk of the cooler's pixel table
-CHUNK = 10_000_000
+#: pixels read per chunk of the cooler's pixel table (larger chunks are no faster and cost ~170 B per pixel)
+CHUNK = 2_000_000
 
 
 @dataclass
@@ -93,11 +93,15 @@ def read_band(cd, contacts: Optional[str] = None, *, chrom: str, resolution: Opt
     clr = _cooler(cd, contacts, resolution)
     if chrom not in clr.chromnames:
         raise ValueError(f"{chrom!r} is not in the map ({list(clr.chromnames)[:10]})")
-    binsize = int(clr.binsize)
     lo, hi = clr.extent(chrom)
     n = hi - lo
-    max_diag = n if max_dist is None else int(np.ceil(max_dist / binsize))
     bins = clr.bins()[lo:hi]
+    if clr.binsize:
+        binsize = int(clr.binsize)
+    else:                     # anchored map (rebin_map(anchor=)): regular bins between shorter end bins
+        sizes, counts = np.unique((bins["end"] - bins["start"]).to_numpy(dtype=np.int64), return_counts=True)
+        binsize = int(sizes[counts.argmax()]) if len(sizes) else 1
+    max_diag = n if max_dist is None else int(np.ceil(max_dist / binsize))
     weight = None
     if balance:
         if "weight" in bins.columns:
@@ -105,13 +109,18 @@ def read_band(cd, contacts: Optional[str] = None, *, chrom: str, resolution: Opt
         else:
             warnings.warn(f"{clr.uri}: not balanced (no 'weight' column); using raw counts", stacklevel=2)
     with clr.open("r") as h5:
-        offsets = h5["indexes"]["bin1_offset"]
-        p0, p1 = int(offsets[lo]), int(offsets[hi])
+        # the pixel table is sorted by bin1: its row bins follow from the index, which saves decompressing the
+        # bin1_id column (a third of the read)
+        offsets = h5["indexes"]["bin1_offset"][lo: hi + 1].astype(np.int64)
+        p0, p1 = int(offsets[0]), int(offsets[-1])
         pix = h5["pixels"]
         ii, jj, cc = [], [], []
         for s in range(p0, p1, chunk):
             e = min(s + chunk, p1)
-            bin1 = pix["bin1_id"][s:e].astype(np.int64)
+            r0 = int(np.searchsorted(offsets, s, side="right")) - 1
+            r1 = int(np.searchsorted(offsets, e, side="left"))
+            per_row = np.minimum(offsets[r0 + 1: r1 + 1], e) - np.maximum(offsets[r0: r1], s)
+            bin1 = np.repeat(np.arange(lo + r0, lo + r1, dtype=np.int64), per_row)
             bin2 = pix["bin2_id"][s:e].astype(np.int64)
             keep = (bin2 < hi) & (bin2 - bin1 <= max_diag)
             ii.append(bin1[keep] - lo)

@@ -2,6 +2,10 @@
 correlation matrix of the observed / expected map (Lieberman-Aiden et al. 2009), on any bins — also on
 loci of uneven size and spacing, such as the imaged loci of a tracing experiment with the Hi-C summed
 into them.  The reference for compartments called from imaging (:func:`compare_compartments`).
+
+On a map of regular bins, :func:`uchrom.strc.comp.eig.call_compartments_eig` is the standard (cooltools
+``eigs_cis``) formulation and scales to high resolution; both share the eigen core of
+:mod:`uchrom.strc.comp.eig` (leading eigenpairs, orientation by a track, loci onto map bins).
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ import pandas as pd
 from uchrom.convention import merge_tables, resolve_chroms, store_and_return
 
 from .axes_pc import compartment_segments
+from .eig import _loci_midpoints, _orient, _rows_at, _top_eigs  # noqa: F401  (shared; _rows_at used by pl)
 
 
 @dataclass(frozen=True)
@@ -69,36 +74,10 @@ def hic_compartment_pc1(counts: np.ndarray, positions, *, marker=None,
     logoe = np.where(oe > 0, np.log2(np.where(oe > 0, oe, 1.0)), 0.0)
     with np.errstate(invalid="ignore", divide="ignore"):
         corr = np.nan_to_num(np.corrcoef(logoe))
-    pc1 = np.linalg.eigh(corr)[1][:, -1]
+    pc1 = _top_eigs(corr, 1, dense_max=len(corr))[1][0]       # the correlation matrix is PSD: top |λ| = top λ
     if marker is not None:
-        marker = np.asarray(marker, dtype=np.float64)
-        ok = np.isfinite(marker)
-        if ok.sum() > 1 and np.corrcoef(pc1[ok], marker[ok])[0, 1] < 0:
-            pc1 = -pc1
+        pc1, _ = _orient(pc1, np.asarray(marker, dtype=np.float64), "pearson")
     return pc1
-
-
-def _rows_at(table: pd.DataFrame, chrom: np.ndarray, pos: np.ndarray) -> np.ndarray:
-    """For each ``(chrom, pos)``: the row (position in ``table``) whose ``[start, end)`` holds ``pos`` on
-    that chromosome; -1 for none."""
-    out = np.full(len(pos), -1, dtype=np.int64)
-    tchrom = table["chrom"].astype(str).to_numpy()
-    for c in np.unique(chrom):
-        rows = np.flatnonzero(tchrom == c)
-        if not len(rows):
-            continue
-        order = rows[np.argsort(table["start"].to_numpy()[rows], kind="mergesort")]
-        starts = table["start"].to_numpy(np.int64)[order]
-        ends = table["end"].to_numpy(np.int64)[order]
-        want = np.flatnonzero(chrom == c)
-        k = np.searchsorted(starts, pos[want], side="right") - 1
-        ok = (k >= 0) & (pos[want] < ends[np.clip(k, 0, None)])
-        out[want[ok]] = order[k[ok]]
-    return out
-
-
-def _loci_midpoints(bins: pd.DataFrame):
-    return bins["chrom"].astype(str).to_numpy(), (bins["start"].to_numpy(np.int64) + bins["end"].to_numpy(np.int64)) // 2
 
 
 def call_compartments_hic(
@@ -113,6 +92,10 @@ def call_compartments_hic(
     copy: bool = False,
 ):
     """A/B compartments of a Hi-C map linked to ``cd``: PC1 of the observed / expected correlation matrix.
+
+    Works on bins of any size and spacing (dense matrices: small maps).  For a map of regular bins, the
+    cooltools-style cis eigenvector :func:`uchrom.strc.comp.eig.call_compartments_eig` is the standard and
+    scales to high resolution.
 
     Parameters
     ----------
@@ -197,7 +180,7 @@ def call_compartments_hic(
     return out
 
 
-_SCORES = ("pc2", "pc1", "score")
+_SCORES = ("pc2", "pc1", "E1", "score")
 
 
 def _per_locus(cd, call: Union[str, pd.DataFrame]):
@@ -225,8 +208,9 @@ def compare_compartments(cd, query: Union[str, pd.DataFrame], reference: Union[s
         holds its midpoint.
     query, reference : str or DataFrame
         Keys of ``cd.results`` or per-bin tables with ``chrom, start, end``, ``compartment`` (or ``label``)
-        and a score column (``pc2``, ``pc1`` or ``score``), e.g. :func:`call_compartments_axes_pc` on the
-        imaging and :func:`call_compartments_hic` on Hi-C of the same loci.
+        and a score column (``pc2``, ``pc1``, ``E1`` or ``score``), e.g. :func:`call_compartments_axes_pc` on
+        the imaging and :func:`call_compartments_hic` / :func:`call_compartments_eig` on Hi-C of the same
+        loci.
     chrom : str or sequence of str, optional
         Compare only these chromosomes.
 

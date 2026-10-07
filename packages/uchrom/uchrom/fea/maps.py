@@ -200,6 +200,29 @@ def _scratch_dir() -> Path:
     return d
 
 
+#: maps with at most this many pixels are balanced in memory (:func:`uchrom.fea.ice`, ~60 B per pixel); larger
+#: ones by cooler's out-of-core balancing (the same weights, but the file is re-read every iteration)
+ICE_IN_MEMORY_MAX = 50_000_000
+
+
+def _balance_cool(path: Path) -> None:
+    """ICE-balance a ``.cool`` in place with ``cooler balance`` defaults (the ``weight`` column + its stats)."""
+    import cooler
+    import h5py
+
+    clr = cooler.Cooler(str(path))
+    if int(clr.info["nnz"]) > ICE_IN_MEMORY_MAX:
+        cooler.balance_cooler(clr, store=True)
+        return
+    from .pseudobulk_maps import ice
+
+    with h5py.File(path, "r+") as h5:
+        px = h5["pixels"]
+        weight, stats = ice(px["bin1_id"][:], px["bin2_id"][:], px["count"][:], h5["indexes/chrom_offset"][:])
+        h5["bins"].create_dataset("weight", data=weight, compression="gzip", compression_opts=6)
+        h5["bins/weight"].attrs.update(stats)
+
+
 def _rebin_cool(clr, out: Path, resolution: int, anchor: int, chroms: Sequence[str], balance: bool) -> Path:
     """Sum the pixels of ``clr`` into bins of ``resolution`` whose edges fall on ``anchor`` (snapped down
     to the map's own grid) + k * ``resolution`` (and the chromosome ends); ICE-balance (``cooler balance``
@@ -244,7 +267,7 @@ def _rebin_cool(clr, out: Path, resolution: int, anchor: int, chroms: Sequence[s
     cooler.create_cooler(str(tmp), bins, chunks(), ordered=True, assembly=clr.info.get("genome-assembly"),
                          metadata=meta)
     if balance:
-        cooler.balance_cooler(cooler.Cooler(str(tmp)), store=True)
+        _balance_cool(tmp)
     os.replace(tmp, out)
     return out
 

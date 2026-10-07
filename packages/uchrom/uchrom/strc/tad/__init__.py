@@ -22,6 +22,11 @@ from .fishnet import (
     FISHnetParams,
     trace_seed,
 )
+from .insulation import (
+    InsulationParams,
+    call_tads_insulation,
+    insulation_score,
+)
 from .compare import (
     boundary_frequency,
     compare_boundaries,
@@ -39,7 +44,10 @@ __all__ = [
     "load_tad_from_bed",
     "call_tads_by_pval",
     "call_tads_di",
+    "call_tads_insulation",
     "DICallerParams",
+    "InsulationParams",
+    "insulation_score",
     "TADCallerParams",
     "call_domains_fishnet",
     "call_domains_fishnet_trace",

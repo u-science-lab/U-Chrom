@@ -79,13 +79,15 @@ uchrom/                (packages/uchrom/uchrom)
 │   ├── trace/       Chromatin tracing / spot-to-trace alignment (Jie aligner)
 │   └── impute/      FISH coordinate imputation (linear, grid, SnapFISH-IMPUTE, vendored: only what is used)
 ├── strc/            Structure identification
-│   ├── tad/         TAD detection (directionality index, ArcFISH arc p-value, FISHnet)
-│   ├── loop/        Loop detection (axis-wise F-test)
-│   ├── comp/        Compartment detection (axes PC)
+│   ├── tad/         TAD detection (ArcFISH arc p-value, FISHnet; on Hi-C maps: insulation score, DI)
+│   ├── loop/        Loop detection (axis-wise F-test; on Hi-C maps: HiCCUPS, Mustache)
+│   ├── comp/        Compartment detection (axes PC; on Hi-C maps: cis eigenvector + saddle strength)
 │   └── enrichment.py  Run structure callers and project results onto spots
 ├── fea/             Per-bin features (distance, arc, sequence, GTF annotation,
 │                    MACS-style peaks, structure projection) + feature registry; linked contact maps
-│                    (maps.py: contact_matrix, rebin_map) and structure comparisons (compare.py)
+│                    (maps.py: contact_matrix, rebin_map; band.py: banded sparse reads, cis expected;
+│                    pseudobulk_maps.py: per-cell maps summed per group, ICE; pileup_maps.py: APA)
+│                    and structure comparisons (compare.py)
 ├── emb/             Cell embeddings: FastHigashi / scHiCluster on linked maps (embed_higashi,
 │                    embed_contacts), RNA / ATAC / marks (embed_cells), clusters, metrics, plots
 ├── pl/              Plotting (matplotlib; 3-D tubes with PyVista, extra plot3d)
