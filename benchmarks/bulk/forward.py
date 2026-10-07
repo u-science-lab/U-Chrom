@@ -74,6 +74,19 @@ def nuclear_radius(pop: Population, max_cells: int = 500) -> float:
     return float(np.median(r))
 
 
+def gyration_semiaxes(pop: Population, max_cells: int = 2000) -> list:
+    """sqrt(5) x the median (over structures) gyration standard deviations sigma1 >= sigma2 >= sigma3
+    of all positions: the semi-axes of the uniform ellipsoid with the median gyration tensor."""
+    sd = []
+    for X in pop.coords[:max_cells]:
+        Y = X.reshape(-1, 3)
+        Y = Y[np.isfinite(Y).all(1)].astype(np.float64)
+        if len(Y) > 3:
+            lam = np.sort(np.linalg.eigvalsh(np.cov((Y - Y.mean(0)).T, bias=True)))[::-1]
+            sd.append(np.sqrt(np.maximum(lam, 0.0)))
+    return (np.sqrt(5.0) * np.median(np.array(sd), axis=0)).tolist()
+
+
 def ploidy_per_chrom(pop: Population) -> dict:
     out = {}
     for c in np.unique(pop.chrom):
@@ -195,8 +208,17 @@ def cmd_truth(args) -> None:
     if args.min_detect is not None:
         kw["min_detect"] = args.min_detect
     pop = load_dataset(args.dataset, args.data, **kw)
+    if args.split_set:                      # EMber-pop benchmark: one set of data/pop_split.tsv
+        from pop_split import cells_of
+        keep = set(cells_of(args.dataset, args.split_set, args.split_file))
+        ids = [str(c) for c in pop.meta["cell_ids"]]
+        idx = [k for k, c in enumerate(ids) if c in keep]
+        assert len(idx) == len(keep), (len(idx), len(keep))
+        pop = pop.subset(idx)
+        pop.meta.update(cell_ids=[ids[k] for k in idx], split_set=list(args.split_set), n_cells=len(idx))
     pop.meta["median_consecutive_nm"] = median_consecutive(pop)
     pop.meta["nuclear_radius_nm"] = nuclear_radius(pop)
+    pop.meta["gyration_semiaxes_nm"] = gyration_semiaxes(pop)
     pop.save(args.out)
     print(jdump({k: v for k, v in pop.meta.items() if k != "cell_ids"}), flush=True)
 
@@ -271,6 +293,8 @@ def main(argv=None) -> None:
     t.add_argument("--dataset", required=True, choices=["su2020_genome", "su2020_chr21", "takei2021_1mb"])
     t.add_argument("--data")
     t.add_argument("--min-detect", type=float)
+    t.add_argument("--split-set", nargs="*", help="keep only these sets of the EMber-pop cell split (pop_split.py)")
+    t.add_argument("--split-file", help="default: data/pop_split.tsv")
     t.add_argument("--out", required=True)
     t.set_defaults(fn=cmd_truth)
     b = sub.add_parser("bulk")

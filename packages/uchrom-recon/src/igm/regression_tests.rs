@@ -107,6 +107,15 @@ fn options_run_and_change_results() {
         ("no iterative correction", IgmParams { iterative_correction: false, ..base.clone() }),
         ("gp pooling", IgmParams { assignment_pooling: "gp".into(), ..base.clone() }),
         ("init_noise", IgmParams { init_noise: 5.0, ..base.clone() }),
+        ("no envelope (EMber-pop)", IgmParams { nucleus_shape: "none".into(), ..base.clone() }),
+        (
+            "non-contact restraints (EMber-pop)",
+            IgmParams { nucleus_shape: "none".into(), iterative_correction: false, noncontact_kspring: 0.5, noncontact_range: 2.0, advance_on_max_iterations: true, ..base.clone() },
+        ),
+        (
+            "soft assignment (EMber-pop)",
+            IgmParams { nucleus_shape: "none".into(), iterative_correction: false, noncontact_kspring: 0.5, assignment: "soft".into(), soft_commit: 0.9, advance_on_max_iterations: true, ..base.clone() },
+        ),
     ];
     for (name, p) in &variants {
         let got = run_small(p);

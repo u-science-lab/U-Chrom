@@ -5,6 +5,30 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Soft assignment of one round (EMber-pop).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SoftAssign {
+    pub beta: f64,
+    pub commit: f64,
+    pub min_weight: f64,
+}
+
+impl SoftAssign {
+    /// Weight π of a contact at squared distance `d2` with squared activation distance `d2_act`.
+    #[inline]
+    pub fn weight(&self, d2: f64, d2_act: f64) -> f64 {
+        let t = (0.5 * self.beta * (d2.max(1e-300).ln() - d2_act.max(1e-300).ln())).clamp(-60.0, 60.0);
+        let w = 1.0 / (1.0 + t.exp());
+        if w >= self.commit {
+            1.0
+        } else if w <= 1.0 - self.commit {
+            0.0
+        } else {
+            w
+        }
+    }
+}
+
 /// One stage of `custom_annealing_protocol` (spec §6.2).
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Stage {
@@ -112,6 +136,40 @@ pub struct IgmParams {
     /// coordinate (after pinned loci and interpolation; IGM-Plus
     /// `model/init_noise`).  0 = off.
     pub init_noise: f64,
+    // ---- EMber-pop options (benchmarks/bulk/PREREG_POP.md); defaults = IGM ----
+    /// Non-contact restraints (two-sided assignment): every bead pair closer
+    /// than `noncontact_range (r_i + r_j)` that is neither polymer-bonded nor
+    /// assigned a Hi-C contact in the structure is pushed apart,
+    /// `U = k (d0 − d)²` for `d < d0`.  0 = off (IGM).
+    pub noncontact_kspring: f64,
+    /// Range factor of the non-contact restraint (0 = `contact_range`).
+    pub noncontact_range: f64,
+    /// First σ index (0-based) of `intra_sigma_list` at which the
+    /// non-contact restraints act (earlier rounds and the initial relaxation
+    /// run without them).
+    pub noncontact_from_sigma: usize,
+    /// At `max_iterations` without an accepted iteration, go on with the next
+    /// σ instead of stopping the run (IGM stops; EMber-pop advances).
+    pub advance_on_max_iterations: bool,
+    /// Assignment rule: "igm" (hard: a structure gets the contact iff
+    /// d <= d_act) or "soft" (EMber-pop: posterior weight
+    /// π = 1 / (1 + (d / d_act)^β) of the contact, the latent-contact
+    /// posterior under a population-count constraint, IGM's rule as β → ∞;
+    /// the contact restraint is weighted by π, the non-contact restraint by 1 − π).
+    pub assignment: String,
+    /// β of round r (1-based): min(soft_beta_max, soft_beta0 · soft_beta_growth^(r − 1)).
+    pub soft_beta0: f64,
+    pub soft_beta_growth: f64,
+    pub soft_beta_max: f64,
+    /// Staged commitment: π ≥ τ → 1, π ≤ 1 − τ → 0 (τ ≥ 1: off).
+    pub soft_commit: f64,
+    /// Contacts with π below this weight are not restrained (full non-contact).
+    pub soft_min_weight: f64,
+    /// Shape-free compaction (EMber-pop): radius-of-gyration upper bound (nm,
+    /// 0 = off), `U = ½ k N (Rg − rg_cap)²` for Rg > rg_cap (any shape with
+    /// that Rg is allowed).
+    pub rg_cap: f64,
+    pub rg_kspring: f64,
 }
 
 pub fn demo_stages() -> Vec<Stage> {
@@ -170,14 +228,27 @@ impl Default for IgmParams {
             iterative_correction: true,
             assignment_pooling: "igm".into(),
             init_noise: 0.0,
+            noncontact_kspring: 0.0,
+            noncontact_range: 0.0,
+            noncontact_from_sigma: 0,
+            advance_on_max_iterations: false,
+            assignment: "igm".into(),
+            soft_beta0: 4.0,
+            soft_beta_growth: 1.0,
+            soft_beta_max: 64.0,
+            soft_commit: 1.0,
+            soft_min_weight: 0.02,
+            rg_cap: 0.0,
+            rg_kspring: 1.0,
         }
     }
 }
 
 impl IgmParams {
-    /// Semi-axes of the nucleus (nm).
+    /// Semi-axes of the nucleus (nm); with `nucleus_shape = "none"` the
+    /// sphere of `nucleus_radius` (bead volumes, initial territories), no envelope.
     pub fn semiaxes(&self) -> [f64; 3] {
-        if self.nucleus_shape == "sphere" {
+        if self.nucleus_shape == "sphere" || self.nucleus_shape == "none" {
             [self.nucleus_radius; 3]
         } else {
             self.nucleus_semiaxes
@@ -187,6 +258,34 @@ impl IgmParams {
     pub fn nucleus_volume(&self) -> f64 {
         let a = self.semiaxes();
         4.0 / 3.0 * std::f64::consts::PI * a[0] * a[1] * a[2]
+    }
+
+    /// No nuclear envelope (EMber-pop): `nucleus_shape = "none"`.
+    pub fn no_envelope(&self) -> bool {
+        self.nucleus_shape == "none"
+    }
+
+    /// Range factor of the non-contact restraints.
+    pub fn nc_range(&self) -> f64 {
+        if self.noncontact_range > 0.0 {
+            self.noncontact_range
+        } else {
+            self.contact_range
+        }
+    }
+
+    /// Whether the non-contact restraints act at σ index `si` (`None`: the initial relaxation).
+    pub fn noncontact_active(&self, si: Option<usize>) -> bool {
+        self.noncontact_kspring > 0.0 && si.is_some_and(|k| k >= self.noncontact_from_sigma)
+    }
+
+    /// Soft assignment (EMber-pop): β, commitment τ and minimum weight of round `round` (1-based).
+    pub fn soft(&self, round: u64) -> Option<SoftAssign> {
+        if self.assignment != "soft" {
+            return None;
+        }
+        let beta = (self.soft_beta0 * self.soft_beta_growth.powi(round.saturating_sub(1) as i32)).min(self.soft_beta_max);
+        Some(SoftAssign { beta, commit: self.soft_commit, min_weight: self.soft_min_weight })
     }
 
     /// A-step pooling of G. Polles (`assignment_pooling = "gp"`).
@@ -208,7 +307,7 @@ impl IgmParams {
             return Err("n_structures must be >= 1".into());
         }
         match self.nucleus_shape.as_str() {
-            "sphere" | "ellipsoid" => {}
+            "sphere" | "ellipsoid" | "none" => {}
             s => return Err(format!("unknown nucleus_shape {s:?}")),
         }
         if self.semiaxes().iter().any(|&x| x <= 0.0) {
@@ -230,6 +329,27 @@ impl IgmParams {
         match self.assignment_pooling.as_str() {
             "igm" | "gp" => {}
             s => return Err(format!("unknown assignment_pooling {s:?} (\"igm\" or \"gp\")")),
+        }
+        match self.assignment.as_str() {
+            "igm" => {}
+            "soft" => {
+                if !(self.soft_beta0 > 0.0 && self.soft_beta_max > 0.0 && self.soft_beta_growth > 0.0) {
+                    return Err("soft_beta0, soft_beta_growth and soft_beta_max must be > 0".into());
+                }
+                if !(self.soft_commit > 0.5) {
+                    return Err("soft_commit must be > 0.5 (>= 1: no commitment)".into());
+                }
+                if !(0.0..1.0).contains(&self.soft_min_weight) {
+                    return Err("soft_min_weight must be in [0, 1)".into());
+                }
+            }
+            s => return Err(format!("unknown assignment {s:?} (\"igm\" or \"soft\")")),
+        }
+        if self.rg_cap < 0.0 || self.rg_kspring < 0.0 {
+            return Err("rg_cap and rg_kspring must be >= 0".into());
+        }
+        if self.noncontact_kspring < 0.0 || self.noncontact_range < 0.0 {
+            return Err("noncontact_kspring and noncontact_range must be >= 0".into());
         }
         if self.init_noise < 0.0 {
             return Err("init_noise must be >= 0".into());

@@ -104,6 +104,12 @@ impl Genome {
         Ok(g)
     }
 
+    /// Consecutive beads of one chain (polymer-bonded).
+    pub fn polymer_neighbours(&self, a: u32, b: u32) -> bool {
+        let (a, b) = (a.min(b) as usize, a.max(b) as usize);
+        b == a + 1 && self.bead_chain[a] == self.bead_chain[b]
+    }
+
     pub fn n_beads(&self) -> usize {
         self.bead_hap.len()
     }

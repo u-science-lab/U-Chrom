@@ -41,6 +41,15 @@ pub struct ForceField {
     /// chromosome of every bead (classifies Hi-C bonds as intra / inter in the
     /// violation report; empty = all counted as intra)
     pub bead_chrom: Vec<u32>,
+    /// nuclear envelope present (false: `nucleus_shape = "none"`, EMber-pop)
+    pub envelope: bool,
+    /// non-contact restraint strength of the current round (0 = off) and its
+    /// range factor (EMber-pop two-sided assignment)
+    pub k_nc: f64,
+    pub nc_range: f64,
+    /// radius-of-gyration cap (nm, 0 = off) and its spring (EMber-pop)
+    pub rg_cap: f64,
+    pub k_rg: f64,
 }
 
 /// Per-stage scaling (`fix adapt` excluded-volume prefactor, envelope factor).
@@ -56,11 +65,17 @@ pub struct Energies {
     pub poly: f64,
     pub hic: f64,
     pub env: f64,
+    /// non-contact restraints (EMber-pop; 0 when off)
+    pub nc: f64,
 }
 
 impl Energies {
     pub fn total(&self) -> f64 {
-        self.ev + self.poly + self.hic + self.env
+        if self.nc != 0.0 {
+            self.ev + self.poly + self.hic + self.env + self.nc
+        } else {
+            self.ev + self.poly + self.hic + self.env
+        }
     }
 }
 
@@ -94,16 +109,32 @@ pub fn csr_both_ends(n: usize, bonds: &[(u32, u32, f64)]) -> (Vec<u32>, Vec<(u32
 pub struct HicBonds {
     pub off: Vec<u32>,
     pub partner: Vec<u32>,
+    /// per entry weight (soft assignment, EMber-pop); empty = 1
+    pub w: Vec<f64>,
 }
 
 impl HicBonds {
     pub fn from_pairs(n: usize, pairs: &[[u32; 2]]) -> HicBonds {
         let tmp: Vec<(u32, u32, f64)> = pairs.iter().map(|p| (p[0], p[1], 0.0)).collect();
         let (off, e) = csr_both_ends(n, &tmp);
-        HicBonds { off, partner: e.into_iter().map(|x| x.0).collect() }
+        HicBonds { off, partner: e.into_iter().map(|x| x.0).collect(), w: vec![] }
+    }
+    /// Weighted bonds (soft assignment).
+    pub fn from_weighted(n: usize, pairs: &[[u32; 2]], w: &[f64]) -> HicBonds {
+        let tmp: Vec<(u32, u32, f64)> = pairs.iter().zip(w).map(|(p, &x)| (p[0], p[1], x)).collect();
+        let (off, e) = csr_both_ends(n, &tmp);
+        HicBonds { off, partner: e.iter().map(|x| x.0).collect(), w: e.iter().map(|x| x.1).collect() }
     }
     pub fn empty(n: usize) -> HicBonds {
-        HicBonds { off: vec![0; n + 1], partner: vec![] }
+        HicBonds { off: vec![0; n + 1], partner: vec![], w: vec![] }
+    }
+    #[inline]
+    pub fn weight(&self, q: usize) -> f64 {
+        if self.w.is_empty() {
+            1.0
+        } else {
+            self.w[q]
+        }
     }
     pub fn n_bonds(&self) -> usize {
         self.partner.len() / 2
@@ -120,7 +151,7 @@ impl ForceField {
             radii,
             r_max,
             axes,
-            k_env: p.nucleus_kspring,
+            k_env: if p.no_envelope() { 0.0 } else { p.nucleus_kspring },
             evfactor: p.evfactor,
             k_poly: p.polymer_kspring,
             k_hic: p.contact_kspring,
@@ -128,7 +159,18 @@ impl ForceField {
             poly_off,
             poly,
             bead_chrom: vec![],
+            envelope: !p.no_envelope(),
+            k_nc: 0.0,
+            nc_range: p.nc_range(),
+            rg_cap: p.rg_cap,
+            k_rg: p.rg_kspring,
         }
+    }
+
+    /// Range of the non-contact restraint of pair (i, j).
+    #[inline]
+    pub fn nc_d0(&self, i: usize, j: usize) -> f64 {
+        self.nc_range * (self.radii[i] + self.radii[j])
     }
 
     /// Whether the Hi-C bond (i, j) joins two chromosomes.
@@ -157,6 +199,53 @@ pub fn upper_bond(p: &V3, q: &V3, d0: f64, k: f64, f: &mut V3) -> f64 {
         f[a] += t * d[a];
     }
     k * x * x
+}
+
+/// Lower-bound (non-contact) restraint on particle i from j, `U = k (d0 − d)²`
+/// for `d < d0`: adds `sign` × the force on i, returns U.
+#[inline]
+pub fn lower_bond(p: &V3, q: &V3, d0: f64, k: f64, sign: f64, f: &mut V3) -> f64 {
+    let d = [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
+    let r2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+    if r2 >= d0 * d0 {
+        return 0.0;
+    }
+    let r = r2.sqrt();
+    let x = d0 - r;
+    if r > 0.0 {
+        let t = sign * 2.0 * k * x / r;
+        for a in 0..3 {
+            f[a] += t * d[a];
+        }
+    }
+    k * x * x
+}
+
+/// Radius-of-gyration cap of one structure: `U = ½ k N (Rg − R0)²` for
+/// Rg > R0, force `−k (Rg − R0) (x_i − c) / Rg`; added to `out`, returns U.
+pub fn rg_cap_forces(pos: &[V3], r0: f64, k: f64, out: &mut [V3]) -> f64 {
+    let n = pos.len() as f64;
+    let mut c = [0.0; 3];
+    for p in pos {
+        for a in 0..3 {
+            c[a] += p[a];
+        }
+    }
+    for a in 0..3 {
+        c[a] /= n;
+    }
+    let rg2: f64 = pos.iter().map(|p| (p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2) + (p[2] - c[2]).powi(2)).sum::<f64>() / n;
+    let rg = rg2.sqrt();
+    if rg <= r0 {
+        return 0.0;
+    }
+    let t = k * (rg - r0) / rg;
+    for (p, f) in pos.iter().zip(out.iter_mut()) {
+        for a in 0..3 {
+            f[a] -= t * (p[a] - c[a]);
+        }
+    }
+    0.5 * k * n * (rg - r0) * (rg - r0)
 }
 
 /// Soft-cosine repulsion on particle i from j: adds the force on i, returns U (full pair energy).
@@ -295,6 +384,9 @@ impl Grid {
 
 /// Forces (into `out`) and energies of one structure.
 pub fn compute(ff: &ForceField, hic: &HicBonds, pos: &[V3], sc: Scale, grid: &mut Grid, out: &mut [V3]) -> Energies {
+    if ff.k_nc > 0.0 {
+        return compute_nc(ff, hic, pos, sc, grid, out);
+    }
     let n = ff.n;
     grid.build(pos, 2.0 * ff.r_max);
     let ev = ff.evfactor * sc.ev;
@@ -314,12 +406,68 @@ pub fn compute(ff: &ForceField, hic: &HicBonds, pos: &[V3], sc: Scale, grid: &mu
         for &(j, d0) in &ff.poly[ff.poly_off[i] as usize..ff.poly_off[i + 1] as usize] {
             e.poly += 0.5 * upper_bond(&p, &pos[j as usize], d0, ff.k_poly, &mut f);
         }
-        for &j in &hic.partner[hic.off[i] as usize..hic.off[i + 1] as usize] {
-            let d0 = ff.hic_d0(i, j as usize);
-            e.hic += 0.5 * upper_bond(&p, &pos[j as usize], d0, ff.k_hic, &mut f);
+        if hic.w.is_empty() {
+            for &j in &hic.partner[hic.off[i] as usize..hic.off[i + 1] as usize] {
+                let d0 = ff.hic_d0(i, j as usize);
+                e.hic += 0.5 * upper_bond(&p, &pos[j as usize], d0, ff.k_hic, &mut f);
+            }
+        } else {
+            for q in hic.off[i] as usize..hic.off[i + 1] as usize {
+                let j = hic.partner[q] as usize;
+                e.hic += 0.5 * upper_bond(&p, &pos[j], ff.hic_d0(i, j), ff.k_hic * hic.w[q], &mut f);
+            }
         }
         e.env += envelope(&p, ri, &axes, ff.k_env, &mut f);
         out[i] = f;
+    }
+    if ff.rg_cap > 0.0 {
+        e.env += rg_cap_forces(pos, ff.rg_cap, ff.k_rg, out);
+    }
+    e
+}
+
+/// [`compute`] with the non-contact restraints (EMber-pop): every neighbour
+/// pair within `nc_range (r_i + r_j)` is pushed apart, and the push is taken
+/// back for the polymer and Hi-C bonded pairs of the structure (so those are
+/// exempt without a membership test; the A-step rows never repeat a polymer pair).
+fn compute_nc(ff: &ForceField, hic: &HicBonds, pos: &[V3], sc: Scale, grid: &mut Grid, out: &mut [V3]) -> Energies {
+    let n = ff.n;
+    let cut = (2.0 * ff.r_max).max(2.0 * ff.nc_range * ff.r_max);
+    grid.build(pos, cut);
+    let ev = ff.evfactor * sc.ev;
+    let axes = [ff.axes[0] * sc.env, ff.axes[1] * sc.env, ff.axes[2] * sc.env];
+    let k = ff.k_nc;
+    let mut e = Energies::default();
+    for i in 0..n {
+        let p = pos[i];
+        let ri = ff.radii[i];
+        let mut f = [0.0; 3];
+        let (mut u, mut unc) = (0.0, 0.0);
+        grid.for_neighbours(pos, i, |j| {
+            if ev != 0.0 {
+                u += soft_pair(&p, &pos[j], ri, ff.radii[j], ev, &mut f);
+            }
+            unc += lower_bond(&p, &pos[j], ff.nc_d0(i, j), k, 1.0, &mut f);
+        });
+        e.ev += 0.5 * u;
+        for &(j, d0) in &ff.poly[ff.poly_off[i] as usize..ff.poly_off[i + 1] as usize] {
+            let j = j as usize;
+            e.poly += 0.5 * upper_bond(&p, &pos[j], d0, ff.k_poly, &mut f);
+            unc -= lower_bond(&p, &pos[j], ff.nc_d0(i, j), k, -1.0, &mut f);
+        }
+        for q in hic.off[i] as usize..hic.off[i + 1] as usize {
+            let j = hic.partner[q] as usize;
+            let w = hic.weight(q);
+            let d0 = ff.hic_d0(i, j);
+            e.hic += 0.5 * upper_bond(&p, &pos[j], d0, ff.k_hic * w, &mut f);
+            unc -= lower_bond(&p, &pos[j], ff.nc_d0(i, j), k * w, -1.0, &mut f);
+        }
+        e.nc += 0.5 * unc;
+        e.env += envelope(&p, ri, &axes, ff.k_env, &mut f);
+        out[i] = f;
+    }
+    if ff.rg_cap > 0.0 {
+        e.env += rg_cap_forces(pos, ff.rg_cap, ff.k_rg, out);
     }
     e
 }
@@ -376,8 +524,9 @@ pub fn violations(ff: &ForceField, hic: &HicBonds, pos: &[V3], tol: f64) -> Viol
                 }
             }
         }
-        for &j in &hic.partner[hic.off[i] as usize..hic.off[i + 1] as usize] {
-            if (j as usize) > i {
+        for q in hic.off[i] as usize..hic.off[i + 1] as usize {
+            let j = hic.partner[q];
+            if (j as usize) > i && hic.weight(q) >= 0.5 {
                 let inter = ff.is_inter(i, j as usize);
                 v.hic_imposed += 1;
                 v.hic_inter_imposed += inter as u64;
@@ -387,6 +536,9 @@ pub fn violations(ff: &ForceField, hic: &HicBonds, pos: &[V3], tol: f64) -> Viol
                     v.hic_inter_violated += inter as u64;
                 }
             }
+        }
+        if !ff.envelope {
+            continue;
         }
         v.env_imposed += 1;
         let mut f = [0.0; 3];
@@ -511,6 +663,111 @@ mod tests {
             assert!(max_f > 1.0, "term {term}: no force");
             assert!(max_err / max_f < 1e-6, "term {term}: max_err {max_err} max_f {max_f}");
         }
+    }
+
+    /// EMber-pop non-contact restraints: forces match finite differences, and the
+    /// polymer / Hi-C bonded pairs are exempt (their push is taken back exactly).
+    #[test]
+    fn noncontact_forces_and_exemption() {
+        let (mut ff, hic0, pos) = toy(150, 11, true);
+        // unique Hi-C pairs that are not polymer bonds (as the driver guarantees)
+        let mut seen = std::collections::HashSet::new();
+        for i in 0..ff.n {
+            for &(j, _) in &ff.poly[ff.poly_off[i] as usize..ff.poly_off[i + 1] as usize] {
+                seen.insert((i.min(j as usize), i.max(j as usize)));
+            }
+        }
+        let mut pairs = vec![];
+        for i in 0..ff.n {
+            for &j in &hic0.partner[hic0.off[i] as usize..hic0.off[i + 1] as usize] {
+                let key = (i.min(j as usize), i.max(j as usize));
+                if seen.insert(key) {
+                    pairs.push([key.0 as u32, key.1 as u32]);
+                }
+            }
+        }
+        let hic = HicBonds::from_pairs(ff.n, &pairs);
+        ff.k_nc = 0.7;
+        ff.nc_range = 2.0;
+        let sc = Scale { ev: 1.0, env: 1.0 };
+        let mut g = Grid::default();
+        let mut f = vec![[0.0; 3]; pos.len()];
+        let e0 = compute(&ff, &hic, &pos, sc, &mut g, &mut f);
+        assert!(e0.nc > 0.0, "{e0:?}");
+        let h = 1e-5;
+        let (mut max_err, mut max_f) = (0.0f64, 0.0f64);
+        for i in 0..pos.len() {
+            for d in 0..3 {
+                let mut p1 = pos.clone();
+                p1[i][d] += h;
+                let mut p2 = pos.clone();
+                p2[i][d] -= h;
+                let num = -(energy(&ff, &hic, &p1, sc).total() - energy(&ff, &hic, &p2, sc).total()) / (2.0 * h);
+                max_err = max_err.max((num - f[i][d]).abs());
+                max_f = max_f.max(num.abs());
+            }
+        }
+        assert!(max_err / max_f < 1e-5, "max_err {max_err} max_f {max_f}");
+        // brute force: nc energy = sum over unbonded pairs within range
+        let mut bonded = std::collections::HashSet::new();
+        for i in 0..ff.n {
+            for &(j, _) in &ff.poly[ff.poly_off[i] as usize..ff.poly_off[i + 1] as usize] {
+                bonded.insert((i.min(j as usize), i.max(j as usize)));
+            }
+            for &j in &hic.partner[hic.off[i] as usize..hic.off[i + 1] as usize] {
+                bonded.insert((i.min(j as usize), i.max(j as usize)));
+            }
+        }
+        let mut want = 0.0;
+        for i in 0..ff.n {
+            for j in i + 1..ff.n {
+                if bonded.contains(&(i, j)) {
+                    continue;
+                }
+                let mut tmp = [0.0; 3];
+                want += lower_bond(&pos[i], &pos[j], ff.nc_d0(i, j), ff.k_nc, 1.0, &mut tmp);
+            }
+        }
+        assert!((e0.nc - want).abs() < 1e-6 * want.max(1.0), "nc {} vs brute {want}", e0.nc);
+        // off: identical to the IGM forces
+        ff.k_nc = 0.0;
+        let mut f2 = vec![[0.0; 3]; pos.len()];
+        let e2 = compute(&ff, &hic, &pos, sc, &mut g, &mut f2);
+        assert_eq!(e2.nc, 0.0);
+        assert!((e2.total() - (e0.total() - e0.nc)).abs() < 1e-6 * e2.total().abs());
+    }
+
+    #[test]
+    fn rg_cap_matches_finite_differences() {
+        let (_, _, pos) = toy(80, 21, true);
+        let r0 = 0.5 * {
+            let mut z = vec![[0.0; 3]; pos.len()];
+            let _ = rg_cap_forces(&pos, 0.0, 1.0, &mut z);
+            let n = pos.len() as f64;
+            let c: Vec<f64> = (0..3).map(|a| pos.iter().map(|p| p[a]).sum::<f64>() / n).collect();
+            (pos.iter().map(|p| (0..3).map(|a| (p[a] - c[a]).powi(2)).sum::<f64>()).sum::<f64>() / n).sqrt()
+        };
+        let mut f = vec![[0.0; 3]; pos.len()];
+        let u0 = rg_cap_forces(&pos, r0, 0.3, &mut f);
+        assert!(u0 > 0.0);
+        let h = 1e-4;
+        let mut max_err = 0.0f64;
+        let mut max_f = 0.0f64;
+        for i in 0..pos.len() {
+            for d in 0..3 {
+                let mut p1 = pos.clone();
+                p1[i][d] += h;
+                let mut p2 = pos.clone();
+                p2[i][d] -= h;
+                let mut z = vec![[0.0; 3]; pos.len()];
+                let num = -(rg_cap_forces(&p1, r0, 0.3, &mut z) - rg_cap_forces(&p2, r0, 0.3, &mut z)) / (2.0 * h);
+                max_err = max_err.max((num - f[i][d]).abs());
+                max_f = max_f.max(num.abs());
+            }
+        }
+        assert!(max_err / max_f < 1e-6, "{max_err} {max_f}");
+        let mut z = vec![[0.0; 3]; pos.len()];
+        assert_eq!(rg_cap_forces(&pos, 1e9, 0.3, &mut z), 0.0);
     }
 
     #[test]

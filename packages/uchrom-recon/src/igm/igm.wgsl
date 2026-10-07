@@ -51,7 +51,18 @@ struct Params {
     max_eval: u32,
     t_create: f32,   // velocity-creation temperature
     rows_stride: u32,
-    _pad: u32,
+    k_nc: f32,       // non-contact restraint strength (EMber-pop; 0 = off)
+    nc_range: f32,   // its range factor
+    grid_cut: f32,   // neighbour cut-off covered by the stencil (2 rmax for IGM)
+    env_on: u32,     // nuclear envelope present
+    soft_on: u32,    // soft assignment (EMber-pop): Hi-C entries carry a 9-bit weight
+    soft_beta: f32,
+    soft_commit: f32,
+    soft_wmin: f32,
+    rg_cap: f32,     // radius-of-gyration cap (EMber-pop; 0 = off)
+    k_rg: f32,
+    _pad0: u32,
+    _pad1: u32,
 };
 
 @group(0) @binding(0) var<uniform> P: Params;
@@ -86,8 +97,24 @@ const WG: u32 = 256u;
 const BIG: f32 = 3.0e38;
 const PI: f32 = 3.141592653589793;
 const MS: u32 = 8u;
-// Hi-C CSR entries: partner bead | (inter-chromosomal flag << 31)
+// Hi-C CSR entries: partner bead | (inter-chromosomal flag << 31); with soft
+// assignment partner (22 bits) | (weight x 511, 9 bits) << 22 | flag << 31
 const HIC_PARTNER: u32 = 0x7fffffffu;
+const SOFT_PARTNER: u32 = 0x3fffffu;
+
+fn hic_partner(hq: u32) -> u32 {
+    if (P.soft_on != 0u) {
+        return hq & SOFT_PARTNER;
+    }
+    return hq & HIC_PARTNER;
+}
+
+fn hic_weight(hq: u32) -> f32 {
+    if (P.soft_on != 0u) {
+        return f32((hq >> 22u) & 511u) / 511.0;
+    }
+    return 1.0;
+}
 // mstate slots: 0 (kin, factor, step, inv_cell) 1 (origin, _) 2 (dims bits, ncell)
 // 3 (e0, alpha, fdoth, gg) 4 (beta, status bits, neval bits, niter bits)
 // 5 (e_start, _, _, op bits) 6 (mean v xyz, _) 7 (hic base bits, _, _, _)
@@ -163,6 +190,14 @@ fn model_reduce(m: u32, lid: u32, nsum: u32) -> vec4<f32> {
 }
 
 fn bbox_partials(x: vec3<f32>, valid: bool, lid: u32, wgx: u32, m: u32) {
+    if (P.rg_cap > 0.0) {
+        // centroid and second moment for the radius-of-gyration cap (EMber-pop)
+        let xs = select(vec3<f32>(0.0), x, valid);
+        let r = wg_reduce(vec4<f32>(xs, dot(xs, xs)), lid, 4u);
+        if (lid == 0u) {
+            bpart[3u * (m * P.nb + wgx) + 2u] = r;
+        }
+    }
     smin[lid] = select(vec3<f32>(BIG), x, valid);
     smax[lid] = select(vec3<f32>(-BIG), x, valid);
     workgroupBarrier();
@@ -175,8 +210,8 @@ fn bbox_partials(x: vec3<f32>, valid: bool, lid: u32, wgx: u32, m: u32) {
     }
     if (lid == 0u) {
         let k = m * P.nb + wgx;
-        bpart[2u * k] = vec4<f32>(smin[0], 0.0);
-        bpart[2u * k + 1u] = vec4<f32>(smax[0], 0.0);
+        bpart[3u * k] = vec4<f32>(smin[0], 0.0);
+        bpart[3u * k + 1u] = vec4<f32>(smax[0], 0.0);
     }
 }
 
@@ -220,8 +255,24 @@ fn grid_setup(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id
     var hi = vec3<f32>(-BIG);
     for (var k = lid; k < P.nb; k = k + WG) {
         let q = m * P.nb + k;
-        lo = min(lo, bpart[2u * q].xyz);
-        hi = max(hi, bpart[2u * q + 1u].xyz);
+        lo = min(lo, bpart[3u * q].xyz);
+        hi = max(hi, bpart[3u * q + 1u].xyz);
+    }
+    if (P.rg_cap > 0.0) {
+        // reduce the moments: centroid -> mstate[7].yzw, Rg -> mstate[6].w
+        var acc = vec4<f32>(0.0);
+        for (var k = lid; k < P.nb; k = k + WG) {
+            acc = acc + bpart[3u * (m * P.nb + k) + 2u];
+        }
+        let r = wg_reduce(acc, lid, 4u);
+        if (lid == 0u) {
+            let c = r.xyz / f32(P.n);
+            let rg = sqrt(max(r.w / f32(P.n) - dot(c, c), 0.0));
+            let b = MS * m;
+            mstate[b + 6u].w = rg;
+            mstate[b + 7u] = vec4<f32>(mstate[b + 7u].x, c);
+        }
+        workgroupBarrier();
     }
     smin[lid] = lo;
     smax[lid] = hi;
@@ -236,7 +287,7 @@ fn grid_setup(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id
     if (lid == 0u) {
         let o = smin[0];
         let ext = max(smax[0] - o, vec3<f32>(0.0));
-        var cs = 2.0 * P.rmax / f32(P.stencil);
+        var cs = P.grid_cut / f32(P.stencil);
         var d = vec3<u32>(floor(ext / cs)) + vec3<u32>(1u);
         for (var it = 0u; it < 64u; it = it + 1u) {
             if (f32(d.x) * f32(d.y) * f32(d.z) <= f32(P.hc)) {
@@ -366,12 +417,27 @@ fn upper_bond(dv: vec3<f32>, d0: f32, k: f32) -> vec4<f32> {
     return vec4<f32>(dv * (-2.0 * k * x / r), k * x * x);
 }
 
+fn lower_bond(dv: vec3<f32>, d0: f32, k: f32) -> vec4<f32> {
+    // dv = p_i - p_j; U = k (d0 - r)^2 for r < d0; returns (force on i, energy)
+    let r2 = dot(dv, dv);
+    if (r2 >= d0 * d0) {
+        return vec4<f32>(0.0);
+    }
+    let r = sqrt(r2);
+    let x = d0 - r;
+    if (r > 0.0) {
+        return vec4<f32>(dv * (2.0 * k * x / r), k * x * x);
+    }
+    return vec4<f32>(0.0, 0.0, 0.0, k * x * x);
+}
+
 // Force on bead i (xyz) and its energy share (w).
 fn total_force(i: u32, m: u32, p: vec3<f32>) -> vec4<f32> {
     var f = vec3<f32>(0.0);
     var e = 0.0;
     let ri = rad[i];
-    if (P.ev != 0.0) {
+    let nc = P.k_nc != 0.0;
+    if (P.ev != 0.0 || nc) {
         let d = grid_dims(m);
         let c = vec3<i32>(cell_coord(m, p, d));
         let di = vec3<i32>(d);
@@ -390,6 +456,25 @@ fn total_force(i: u32, m: u32, p: vec3<f32>) -> vec4<f32> {
                     let dv = p - q4.xyz;
                     let d2 = dot(dv, dv);
                     let rc = ri + rad[j];
+                    if (nc) {
+                        if (j == i) {
+                            continue;
+                        }
+                        let r = sqrt(d2);
+                        let rn = P.nc_range * rc;
+                        if (P.ev != 0.0 && d2 < rc * rc) {
+                            let a = P.ev * (rc / PI) * (rc / PI);
+                            let arg = PI * r / rc;
+                            if (r > 0.0) {
+                                f = f + dv * (a * sin(arg) * PI / rc / r);
+                            }
+                            e = e + 0.5 * a * (1.0 + cos(arg));
+                        }
+                        let lb = lower_bond(dv, rn, P.k_nc);
+                        f = f + lb.xyz;
+                        e = e + 0.5 * lb.w;
+                        continue;
+                    }
                     if (j == i || d2 >= rc * rc) {
                         continue;
                     }
@@ -412,20 +497,44 @@ fn total_force(i: u32, m: u32, p: vec3<f32>) -> vec4<f32> {
         let k = P.n + 1u + 2u * q;
         let j = poly[k];
         let d0 = bitcast<f32>(poly[k + 1u]);
-        let r = upper_bond(p - pos[gb + j].xyz, d0, P.k_poly);
+        let dvp = p - pos[gb + j].xyz;
+        let r = upper_bond(dvp, d0, P.k_poly);
         f = f + r.xyz;
         e = e + 0.5 * r.w;
+        if (nc) {
+            let lb = lower_bond(dvp, P.nc_range * (ri + rad[j]), P.k_nc);
+            f = f - lb.xyz;
+            e = e - 0.5 * lb.w;
+        }
     }
     // Hi-C bonds of this structure
     let hb = m * (P.n + 1u);
     let h0 = atomicLoad(&hic_off[hb + i]);
     let h1 = atomicLoad(&hic_off[hb + i + 1u]);
     for (var q = h0; q < h1; q = q + 1u) {
-        let j = hic[q] & HIC_PARTNER;
+        let hq = hic[q];
+        let j = hic_partner(hq);
+        let wq = hic_weight(hq);
         let d0 = P.contact_range * (ri + rad[j]);
-        let r = upper_bond(p - pos[gb + j].xyz, d0, P.k_hic);
+        let dvh = p - pos[gb + j].xyz;
+        let r = upper_bond(dvh, d0, P.k_hic * wq);
         f = f + r.xyz;
         e = e + 0.5 * r.w;
+        if (nc) {
+            let lb = lower_bond(dvh, P.nc_range * (ri + rad[j]), P.k_nc * wq);
+            f = f - lb.xyz;
+            e = e - 0.5 * lb.w;
+        }
+    }
+    // radius-of-gyration cap (EMber-pop)
+    if (P.rg_cap > 0.0) {
+        let rg = mstate[MS * m + 6u].w;
+        if (rg > P.rg_cap) {
+            let c = mstate[MS * m + 7u].yzw;
+            let ex = rg - P.rg_cap;
+            f = f - (p - c) * (P.k_rg * ex / rg);
+            e = e + 0.5 * P.k_rg * ex * ex;
+        }
     }
     // ellipsoidal envelope
     let s = vec3<f32>(P.ax, P.ay, P.az) * P.env_scale - vec3<f32>(ri);
@@ -807,7 +916,28 @@ fn cg_dir(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id) l:
 
 // ---------------------------------------------------------------- A-step assignment
 
+// soft weight of a row in structure m (EMber-pop), committed; 0 = not restrained
+fn row_w(m: u32, r: vec4<u32>) -> f32 {
+    let gb = (P.m_off + m) * P.n;
+    let dv = pos[gb + r.x].xyz - pos[gb + r.y].xyz;
+    let d2 = max(dot(dv, dv), 1e-30);
+    let t = clamp(0.5 * P.soft_beta * (log(d2) - log(max(bitcast<f32>(r.z), 1e-30))), -60.0, 60.0);
+    var x = 1.0 / (1.0 + exp(t));
+    if (x >= P.soft_commit) {
+        x = 1.0;
+    } else if (x <= 1.0 - P.soft_commit) {
+        x = 0.0;
+    }
+    if (x <= 0.0 || x < P.soft_wmin) {
+        return 0.0;
+    }
+    return x;
+}
+
 fn row_in(m: u32, r: vec4<u32>) -> bool {
+    if (P.soft_on != 0u) {
+        return row_w(m, r) > 0.0;
+    }
     let gb = (P.m_off + m) * P.n;
     let dv = pos[gb + r.x].xyz - pos[gb + r.y].xyz;
     return dot(dv, dv) <= bitcast<f32>(r.z);
@@ -893,7 +1023,11 @@ fn assign_fill(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_i
     for (var q = wg.x * WG + l.x; q < P.n_rows; q = q + nw.x * WG) {
         let r = rows[q];
         if (row_in(m, r)) {
-            let flag = (r.w & 1u) << 31u;
+            var flag = (r.w & 1u) << 31u;
+            if (P.soft_on != 0u) {
+                let q9 = u32(round(clamp(row_w(m, r), 0.0, 1.0) * 511.0));
+                flag = flag | (q9 << 22u);
+            }
             let sa = atomicAdd(&cell_count[m * P.hc + r.x], 1u);
             hic[sa] = r.y | flag;
             let sb = atomicAdd(&cell_count[m * P.hc + r.y], 1u);
@@ -943,9 +1077,9 @@ fn violations_k(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_
     let h1 = atomicLoad(&hic_off[hb + i + 1u]);
     for (var q = h0; q < h1; q = q + 1u) {
         let hq = hic[q];
-        let j = hq & HIC_PARTNER;
+        let j = hic_partner(hq);
         let inter = hq >> 31u;
-        if (j > i) {
+        if (j > i && hic_weight(hq) >= 0.5) {
             let d0 = P.contact_range * (ri + rad[j]);
             c[0] = c[0] + 1u;
             c[6] = c[6] + inter;
@@ -955,10 +1089,10 @@ fn violations_k(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_
             }
         }
     }
-    c[4] = 1u;
+    c[4] = P.env_on;
     let s = vec3<f32>(P.ax, P.ay, P.az) - vec3<f32>(ri);
     let k2 = dot(p * p, 1.0 / (s * s));
-    if (k2 > 1.0) {
+    if (k2 > 1.0 && P.env_on != 0u) {
         let t = (1.0 - 1.0 / sqrt(k2)) * length(p);
         if (t / (P.k_env * 0.1 * P.rbar) > P.tol) {
             c[5] = 1u;

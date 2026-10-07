@@ -59,7 +59,18 @@ struct Params {
     max_eval: u32,
     t_create: f32,
     rows_stride: u32,
-    _pad: u32,
+    k_nc: f32,
+    nc_range: f32,
+    grid_cut: f32,
+    env_on: u32,
+    soft_on: u32,
+    soft_beta: f32,
+    soft_commit: f32,
+    soft_wmin: f32,
+    rg_cap: f32,
+    k_rg: f32,
+    _pad0: u32,
+    _pad1: u32,
 }
 
 #[repr(C)]
@@ -143,6 +154,11 @@ pub struct GpuPopEngine {
     stencil: u32,
     rmax: f32,
     axes: [f64; 3],
+    /// non-contact restraint strength of the current round (EMber-pop) and range factor
+    k_nc: f64,
+    nc_range: f64,
+    envelope: bool,
+    soft: Option<crate::igm::params::SoftAssign>,
     /// chromosome per bead (flags inter-chromosomal Hi-C rows for the violation report)
     bead_chrom: Vec<u32>,
     b_pos: Option<wgpu::Buffer>,
@@ -241,6 +257,10 @@ impl GpuPopEngine {
             stencil,
             rmax: ff.r_max as f32,
             axes: ff.axes,
+            k_nc: ff.k_nc,
+            nc_range: ff.nc_range,
+            envelope: ff.envelope,
+            soft: None,
             bead_chrom: ff.bead_chrom.clone(),
             b_pos: None,
             b_rad,
@@ -310,7 +330,7 @@ impl GpuPopEngine {
             nsteps: 1.0,
             ev: p.evfactor as f32,
             env_scale: 1.0,
-            k_env: p.nucleus_kspring as f32,
+            k_env: if self.envelope { p.nucleus_kspring as f32 } else { 0.0 },
             k_poly: p.polymer_kspring as f32,
             k_hic: p.contact_kspring as f32,
             contact_range: p.contact_range as f32,
@@ -331,7 +351,18 @@ impl GpuPopEngine {
             max_eval: p.cg_max_eval as u32,
             t_create: 0.0,
             rows_stride: 0,
-            _pad: 0,
+            k_nc: self.k_nc as f32,
+            nc_range: self.nc_range as f32,
+            grid_cut: if self.k_nc > 0.0 { (2.0 * self.rmax as f64 * self.nc_range.max(1.0)) as f32 } else { 2.0 * self.rmax },
+            env_on: self.envelope as u32,
+            soft_on: self.soft.is_some() as u32,
+            soft_beta: self.soft.map_or(0.0, |s| s.beta as f32),
+            soft_commit: self.soft.map_or(1.0, |s| s.commit as f32),
+            soft_wmin: self.soft.map_or(0.0, |s| s.min_weight as f32),
+            rg_cap: p.rg_cap as f32,
+            k_rg: p.rg_kspring as f32,
+            _pad0: 0,
+            _pad1: 0,
         }
     }
 
@@ -372,7 +403,7 @@ impl GpuPopEngine {
             hic: buf_zero(d, "hic", hic_cap.max(1) * 4, st),
             partial: buf_zero(d, "partial", b * self.nb as u64 * 16, st),
             mstate: buf_zero(d, "mstate", b * MS as u64 * 16, st),
-            bpart: buf_zero(d, "bpart", b * self.nb as u64 * 32, st),
+            bpart: buf_zero(d, "bpart", b * self.nb as u64 * 48, st),
             cgv: buf_zero(d, "cgv", b * n * 48, st),
             rows: buf_zero(d, "rows", rows_cap.max(1) * 16, st),
             stats: buf_zero(d, "stats", b * 32, st),
@@ -854,6 +885,19 @@ impl PopEngine for GpuPopEngine {
             res[q].d2_act = f32::from_bits(b) as f64;
         }
         Ok(res)
+    }
+
+    fn set_noncontact(&mut self, k: f64) -> Result<(), String> {
+        self.k_nc = k;
+        Ok(())
+    }
+
+    fn set_soft(&mut self, sa: Option<crate::igm::params::SoftAssign>) -> Result<(), String> {
+        if sa.is_some() && self.n >= (1 << 22) {
+            return Err("soft assignment on the GPU supports fewer than 4,194,304 beads".into());
+        }
+        self.soft = sa;
+        Ok(())
     }
 
     fn mstep(&mut self, rows: &[(u32, u32, f64)], round: u64) -> Result<Vec<StructStats>, String> {

@@ -5,7 +5,7 @@ use crate::igm::astep::{self, AStepOpts, Candidates, PairResult};
 use crate::igm::forces::{violations, ForceField, HicBonds, Violations, V3};
 use crate::igm::genome::Genome;
 use crate::igm::md::{self, CgStats, State};
-use crate::igm::params::IgmParams;
+use crate::igm::params::{IgmParams, SoftAssign};
 use crate::rng::{Rng, STREAM_COORDS};
 use rayon::prelude::*;
 use serde::Serialize;
@@ -30,6 +30,10 @@ pub trait PopEngine {
     fn actdist(&mut self, g: &Genome, cand: &Candidates, sel: &[u32]) -> Result<Vec<PairResult>, String>;
     /// Assignment + M-step of every structure.  `round` keys the random streams.
     fn mstep(&mut self, rows: &[(u32, u32, f64)], round: u64) -> Result<Vec<StructStats>, String>;
+    /// Strength of the non-contact restraints of the next M-steps (0 = off; EMber-pop).
+    fn set_noncontact(&mut self, k: f64) -> Result<(), String>;
+    /// Soft assignment of the next M-steps (None = IGM's hard rule; EMber-pop).
+    fn set_soft(&mut self, sa: Option<SoftAssign>) -> Result<(), String>;
 }
 
 /// Multi-core CPU engine (f64 reference); structures run in parallel.
@@ -38,13 +42,14 @@ pub struct CpuPopEngine {
     pub p: IgmParams,
     pub pop: Vec<Vec<V3>>,
     pool: rayon::ThreadPool,
+    soft: Option<SoftAssign>,
 }
 
 impl CpuPopEngine {
     pub fn new(ff: ForceField, p: &IgmParams) -> Result<CpuPopEngine, String> {
         let n = if p.n_threads == 0 { std::thread::available_parallelism().map(|x| x.get()).unwrap_or(1) } else { p.n_threads };
         let pool = rayon::ThreadPoolBuilder::new().num_threads(n).build().map_err(|e| e.to_string())?;
-        Ok(CpuPopEngine { ff, p: p.clone(), pop: vec![], pool })
+        Ok(CpuPopEngine { ff, p: p.clone(), pop: vec![], pool, soft: None })
     }
 }
 
@@ -65,15 +70,29 @@ impl PopEngine for CpuPopEngine {
         let opts = AStepOpts::from_params(&self.p);
         Ok(self.pool.install(|| astep::actdist_opt(g, cand, sel, pop, cr, opts)))
     }
+    fn set_noncontact(&mut self, k: f64) -> Result<(), String> {
+        self.ff.k_nc = k;
+        Ok(())
+    }
+    fn set_soft(&mut self, sa: Option<SoftAssign>) -> Result<(), String> {
+        self.soft = sa;
+        Ok(())
+    }
     fn mstep(&mut self, rows: &[(u32, u32, f64)], round: u64) -> Result<Vec<StructStats>, String> {
-        let (ff, p) = (&self.ff, &self.p);
+        let (ff, p, soft) = (&self.ff, &self.p, self.soft);
         let n = ff.n;
         let out: Vec<(Vec<V3>, StructStats)> = self.pool.install(|| {
             self.pop
                 .par_iter()
                 .enumerate()
                 .map(|(s, pos)| {
-                    let hic = HicBonds::from_pairs(n, &astep::assign(rows, pos));
+                    let hic = match &soft {
+                        None => HicBonds::from_pairs(n, &astep::assign(rows, pos)),
+                        Some(sa) => {
+                            let (pairs, w) = astep::assign_soft(rows, pos, sa);
+                            HicBonds::from_weighted(n, &pairs, &w)
+                        }
+                    };
                     let mut st = State::new(pos.clone());
                     let (cs, e): (CgStats, _) = md::mstep(ff, &hic, &mut st, p, [p.seed, round, s as u64]);
                     let v = violations(ff, &hic, &st.pos, p.violation_tolerance);
@@ -384,8 +403,12 @@ pub fn run_igm_with(
     drop(pop);
     let mut final_stats = vec![];
     let mut relax_log = None;
+    let nc_any = p.noncontact_kspring > 0.0;
     if !p.skip_relax_init {
         let tm = Instant::now();
+        if nc_any {
+            engine.set_noncontact(0.0)?;
+        }
         let stats = engine.mstep(&[], 0)?;
         let (v, sc) = score(&stats);
         let log = RoundLog {
@@ -436,7 +459,19 @@ pub fn run_igm_with(
             for (&k, r) in sel.iter().zip(&res) {
                 cand.p_last[k as usize] = r.p;
             }
-            let rows = astep::rows(g, cand, &sel, &res);
+            let mut rows = astep::rows(g, cand, &sel, &res);
+            let soft = p.soft(round);
+            if soft.is_some() {
+                engine.set_soft(soft)?;
+            }
+            if nc_any {
+                let on = p.noncontact_active(Some(si));
+                engine.set_noncontact(if on { p.noncontact_kspring } else { 0.0 })?;
+                if on {
+                    // polymer-bonded pairs are exempt from the non-contact term already
+                    rows.retain(|r| !g.polymer_neighbours(r.0, r.1));
+                }
+            }
             let seconds_astep = ta.elapsed().as_secs_f64();
             let tm = Instant::now();
             let stats = engine.mstep(&rows, round)?;
@@ -485,6 +520,9 @@ pub fn run_igm_with(
             if it >= p.max_iterations {
                 if p.verbose {
                     eprintln!("[igm] Maximum number of iterations reached");
+                }
+                if p.advance_on_max_iterations {
+                    break;
                 }
                 stopped = true;
                 break 'outer;

@@ -242,6 +242,21 @@ pub fn rows(g: &Genome, cand: &Candidates, sel: &[u32], res: &[PairResult]) -> V
     out
 }
 
+/// Soft per-structure assignment (EMber-pop): the bonds of structure `pos`
+/// with their weights π >= `min_weight`.
+pub fn assign_soft(rows: &[(u32, u32, f64)], pos: &[V3], sa: &crate::igm::params::SoftAssign) -> (Vec<[u32; 2]>, Vec<f64>) {
+    let mut pairs = vec![];
+    let mut w = vec![];
+    for r in rows {
+        let x = sa.weight(d2(&pos[r.0 as usize], &pos[r.1 as usize]), r.2);
+        if x > 0.0 && x >= sa.min_weight {
+            pairs.push([r.0, r.1]);
+            w.push(x);
+        }
+    }
+    (pairs, w)
+}
+
 /// Per-structure assignment: the bonds of structure `pos`.
 pub fn assign(rows: &[(u32, u32, f64)], pos: &[V3]) -> Vec<[u32; 2]> {
     rows.iter().filter(|r| d2(&pos[r.0 as usize], &pos[r.1 as usize]) <= r.2).map(|r| [r.0, r.1]).collect()
@@ -368,6 +383,30 @@ mod tests {
         assert_eq!(pool_combos(&g, 0, 2, false, false).1, 4);
         assert_eq!(pool_combos(&g, 0, 1, true, false).1, 2);
         assert_eq!(pool_combos(&g, 0, 1, true, true).0.len(), 4);
+    }
+
+    /// Soft weights: logistic in log distance around d_act, commitment, minimum weight.
+    #[test]
+    fn soft_weights() {
+        use crate::igm::params::SoftAssign;
+        let sa = SoftAssign { beta: 4.0, commit: 1.0, min_weight: 0.0 };
+        assert!((sa.weight(100.0, 100.0) - 0.5).abs() < 1e-12);
+        // d = 2 d_act -> 1 / (1 + 2^4)
+        assert!((sa.weight(400.0, 100.0) - 1.0 / 17.0).abs() < 1e-12);
+        assert!((sa.weight(25.0, 100.0) - 16.0 / 17.0).abs() < 1e-12);
+        let c = SoftAssign { commit: 0.9, ..sa };
+        assert_eq!(c.weight(25.0, 100.0), 1.0);
+        assert_eq!(c.weight(400.0, 100.0), 0.0);
+        assert!((c.weight(110.0, 100.0) - sa.weight(110.0, 100.0)).abs() < 1e-15);
+        // very sharp: IGM's hard rule
+        let h = SoftAssign { beta: 1e4, commit: 0.99, min_weight: 0.0 };
+        assert_eq!(h.weight(99.0, 100.0), 1.0);
+        assert_eq!(h.weight(101.0, 100.0), 0.0);
+        let pos = vec![[0.0, 0.0, 0.0], [5.0, 0.0, 0.0], [20.0, 0.0, 0.0]];
+        let rows = vec![(0u32, 1u32, 100.0), (0, 2, 100.0)];
+        let (pairs, w) = assign_soft(&rows, &pos, &SoftAssign { min_weight: 0.1, ..sa });
+        assert_eq!(pairs, vec![[0, 1]]);
+        assert!((w[0] - 16.0 / 17.0).abs() < 1e-12);
     }
 
     #[test]
