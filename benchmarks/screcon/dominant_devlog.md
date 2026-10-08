@@ -139,3 +139,61 @@ Mean ROC-AUC over levels (per level with CIs in `results/dominant_dev.md`):
 
 Not done, waiting for approval: the held-back test (Nagano held-back half, Stevens cells 5-8, Tan held-back
 pool cells) with the Q3 rule frozen as above.
+
+## 6. Unphased diploid calibration (`tanu`, PREREG §13.3; Tan development designs, phases dropped)
+
+Same 8 dominants, 16 designs and sampled rows as `tan`; pseudo-haploid EMber / NucDynamics (CPU path, see the
+PREREG §13 note); references = each cell's own phase-dropped table.  Tables `results/tanu/dominant_dev.md`.
+
+| level | pure E1 | f 0.9 | 0.8 | 0.7 | 0.6 | 0.5 | f_drop | E2 over f < 1 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 10 k | 0.400 | 0.381 | 0.364 | 0.328 | 0.297 | 0.265 | 0.7 | +0.005 to +0.008 (CIs include 0) |
+| 30 k | 0.614 | 0.582 | 0.543 | 0.504 | 0.454 | 0.399 | 0.8 | −0.007 to +0.004 |
+| 100 k | 0.791 | 0.729 | 0.676 | 0.616 | 0.553 | 0.492 | 0.9 | −0.015 to +0.011 |
+| full | 0.917 | 0.797 | 0.707 | 0.641 | 0.571 | 0.508 | 0.9 | +0.009 to +0.041 |
+
+* Without phases a cell's own structure is much less recoverable at spot depths (pure 10 k 0.40, 30 k 0.61, vs
+  0.43 / 0.78 phased with EMber deep): the two homologs on one chain blur the structure.  Mixing costs as in the
+  phased case (f = 0.8 loses 0.04-0.21).
+* QC (mean AUC over levels): Q3 0.84, Q7 0.81, Q2 0.79, Q6 0.78, Q5 0.71, Q4 0.65, Q1 0.50; logistic 0.84.  Q3
+  stays the best metric.  **Unphased thresholds** (Youden, `results/spotqc_unphased.json`): Q3 0.4853 / 0.5048 /
+  0.5251 / 0.5362 (10 k / 30 k / 100 k / full; development sensitivity 0.94-1.00, specificity 0.62-0.82); Q7
+  0.857 / 0.872 / 0.872 / 0.870 (identical to the phased Tan values: Q7 uses the table only).
+
+## 7. Chen et al. 2026 per-spot application (PREREG §13.3; results `results/chen2026/`)
+
+Pseudo-haploid EMber (seed 2, 200 kb) on every linked spot with >= 10 k cis pairs; pass = Q3 below the unphased
+threshold of the spot's level.  Hippocampus and part of the cortex ran on GPU, the rest on CPU (PREREG note).
+
+| section | linked spots | not assessable (< 10 k cis) | 10-30 k: n / pass | 30-100 k: n / pass | pass among assessable | pass among all linked |
+| --- | --- | --- | --- | --- | --- | --- |
+| cortex adult 10 µm (Adult16_HiC) | 7,795 | 4,468 | 2,889 / 2,750 (0.95) | 438 / 423 (0.97) | 0.954 | 0.407 |
+| hippocampus adult 10 µm (Adult22_HiC) | 8,185 | 7,011 | 1,166 / 698 (0.60) | 8 / 8 | 0.601 | 0.086 |
+
+No spot reaches 100 k cis.  Q7 with its unphased thresholds passes every assessable spot in both sections.
+
+**The calibrated rule does not discriminate in this protocol.**  The secondary in-silico check (200 single spots
+and 200 50:50 mixtures of two random spots of the same section, all at 10 k cis) shows that the cortex rule passes
+90 % of two-spot mixtures (singles 96 %); in hippocampus 29 % of the mixtures and 67 % of the singles.  The metrics
+themselves do separate one spot from two spots of the same protocol — AUC mixture vs single: Q7 0.90 / 0.90, Q5
+0.87 / 0.83, Q3 0.81 / 0.75, Q2 0.79 / 0.73, Q6 0.77 / 0.74 (cortex / hippocampus) — but the absolute levels differ
+from Dip-C (cortex single spots: Q3 median 0.39, Q7 0.61; Tan single cells at 10 k: Q3 ~0.45, Q7 ~0.80), so the
+Dip-C thresholds sit above both.  Real assessable spots have the Q3 / Q7 of the single-spot references (cortex Q3
+median 0.398 vs singles 0.393 and mixtures 0.446), which only says that a real spot is not more mixed than a typical
+spot — not that a spot is one cell (a 10 µm spot of adult cortex holds parts of several nuclei).
+
+Where the rule fails spots: cortex fails cluster along a curved band through the section (corpus callosum: 80 % pass
+vs 94-99 % in the layers and the caudate putamen) and have more trans contacts (0.178 vs 0.152); hippocampus fails
+are concentrated in published clusters C8 (15 % pass), C14 (28 %), C17 (38 %), C9 / C11 (45-46 %), vs C16 / C4 /
+C12 at 67-98 %.  Structural features of passing spots are nearly uniform across regions (genome Rg 13.6-14.5 bead
+units, median chromosome Rg 6.6-7.4, intermingling 0.55-0.60; maps `results/chen2026/<run>_maps.png`, per-region
+tables `<run>_by_Region.tsv` / `_by_anno.tsv`).  At these depths the per-spot structures carry little regional
+signal beyond depth and trans fraction.
+
+**Reading for the "single-spot 3-D structure" claim.**  (1) 57 % (cortex) and 86 % (hippocampus) of the linked
+spots are below 10 k cis, where even a pure, phased single cell reconstructs to per-copy r 0.43 (0.40 unphased)
+against its own full structure.  (2) For the deeper spots, the spot-QC metrics detect added mixing within the
+protocol, but no absolute calibration of "one cell" exists for this protocol: the Dip-C-calibrated rule passes most
+two-spot mixtures.  (3) A per-spot structure of a 10 µm adult-brain spot is therefore at best a coarse,
+low-confidence average over the nuclei in the spot; these data do not support reading it as a single cell's 3-D
+structure.

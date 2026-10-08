@@ -1,0 +1,37 @@
+{
+ "dataset": "tanu",
+ "rule": "PREREG \u00a713.3: Q3 < threshold of the level = pass (unphased diploid, pseudo-haploid EMber)",
+ "metric": "q3_viol",
+ "runner_up": "q7_conflict",
+ "thresholds": {
+  "10k": 0.485281,
+  "30k": 0.50479,
+  "100k": 0.525068,
+  "full": 0.536155
+ },
+ "q7_thresholds": {
+  "10k": 0.857143,
+  "30k": 0.872219,
+  "100k": 0.872138,
+  "full": 0.869972
+ },
+ "dev_sens_spec": {
+  "10k": [
+   0.969,
+   0.625
+  ],
+  "30k": [
+   0.969,
+   0.8
+  ],
+  "100k": [
+   1.0,
+   0.825
+  ],
+  "full": [
+   0.938,
+   0.675
+  ]
+ },
+ "source": "results/tanu/dominant_dev.json (Youden J on the Tan development units, phases dropped)"
+}
