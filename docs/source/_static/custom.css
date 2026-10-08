@@ -72,3 +72,41 @@ figure figcaption p {
   .uc-card { transition: none; }
   .uc-card:hover { transform: none; }
 }
+
+/* notebook outputs (myst-nb): pandas tables scroll inside the text column instead of running under the page's
+   table of contents, compact and unwrapped (numbers on one line, aligned) */
+div.output.text_html {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0.4rem 0 1rem;
+}
+div.output.text_html table.dataframe {
+  border: none;
+  border-collapse: collapse;
+  width: auto;
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+div.output.text_html table.dataframe th,
+div.output.text_html table.dataframe td {
+  border: none;
+  border-bottom: 1px solid var(--color-background-border);
+  padding: 0.25rem 0.6rem;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+div.output.text_html table.dataframe thead th {
+  border-bottom: 1px solid var(--color-foreground-border);
+  font-weight: 600;
+}
+div.output.text_html table.dataframe tbody th {
+  font-weight: 600;
+}
+div.output.text_html table.dataframe tbody tr:nth-child(even) {
+  background: var(--color-background-secondary);
+}
+div.output.text_html table.dataframe tbody tr:hover {
+  background: var(--color-background-hover);
+}
