@@ -197,3 +197,12 @@ protocol, but no absolute calibration of "one cell" exists for this protocol: th
 two-spot mixtures.  (3) A per-spot structure of a 10 µm adult-brain spot is therefore at best a coarse,
 low-confidence average over the nuclei in the spot; these data do not support reading it as a single cell's 3-D
 structure.
+
+## 8. Held-back test (PREREG §13.2 / §13.4)
+
+Run once with the frozen rule; full tables in `DOMINANT_TEST_RESULTS.md`.  E1 reproduces the development picture
+(f_drop 0.8 in 7 of 11 cells; at >= 100 k f = 0.5 loses 0.24-0.46).  E2 +0.0053 [+0.0027, +0.0077] pooled (Tan CI
+includes 0; Tan 10 k / 30 k negative).  E3: the metrics rank as well as on development (Q3 AUC 0.83 / 0.98 / 0.98),
+but the frozen thresholds fail the registered specificity criterion on Nagano (0.51) and catch only half of the
+mixed Stevens units (sensitivity 0.47, specificity 1.00): a threshold fitted on 4-12 cells does not carry over to
+other cells of the same protocol reliably, and (§7) not at all to another protocol.

@@ -702,3 +702,17 @@ its parameters, seeds, inputs and scoring are unchanged; the CPU and GPU paths i
 (the engine's GPU tests check them against each other), but individual runs are not bit-identical across
 devices.  Chen hippocampus (all tasks) and cortex tasks 1, 2 and 4 (and part of task 3) already ran on GPU;
 their outputs are kept and only the missing runs are made on CPU.
+
+### 13.4 Held-back test results (2026-10-08; run once, `DOMINANT_TEST_RESULTS.md`)
+
+Frozen methods and QC rule (tag `ember-spotqc-frozen`), CPU path (note above); 1,712 held-back tables, all scored;
+nothing changed after the results were seen.
+* **E1**: the dominant's structure stays within 0.05 of the pure control only at f = 0.9 in 7 of 11 dataset × level
+  cells, down to f = 0.8 in 2 (Nagano 10 k / 30 k) and not even at f = 0.9 in 2 (Nagano full, Stevens 30 k); at
+  >= 100 k cis f = 0.5 loses 0.24-0.46 per-copy r, mostly to mixing.
+* **E2**: EMber − NucDynamics over all f < 1 mixtures +0.0053 [+0.0027, +0.0077] (Nagano +0.0047, Stevens +0.0055,
+  Tan +0.0059 [−0.0007, +0.0122]): "EMber is better than NucDynamics on dominant-cell mixtures" by the registered
+  criterion, by a margin ~50x smaller than the mixing loss; worse on sparse diploid (Tan 10 k −0.009, 30 k −0.006).
+* **E3**: Q3 AUC (mean over levels) Nagano 0.825 [0.764, 0.915], Stevens 0.980 [0.973, 0.994], Tan 0.979 [0.964,
+  0.998]; at the frozen thresholds sensitivity / specificity 0.91 / 0.51, 0.47 / 1.00, 0.90 / 0.96.  **The spot QC
+  works for Stevens and Tan and does not for Nagano** (specificity 0.51 < 0.8).  Q7 alongside: AUC 0.90 / 0.97 / 0.91.
