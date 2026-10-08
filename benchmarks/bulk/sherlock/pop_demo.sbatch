@@ -22,7 +22,7 @@ OUT=$POP/igm_demo
 R=5500
 SIG=$(python3 -c "print($R / 5 ** 0.5)")
 MAXIT=${MAXIT:-10}
-EP="{\"nucleus_shape\":\"none\",\"gyration_prior\":[$SIG,$SIG,$SIG],\"gyration_kspring\":0.1,\"advance_on_max_iterations\":true,\"noncontact_from_sigma\":5,\"noncontact_kspring\":1.0,\"max_iterations\":$MAXIT}"
+EP="{\"nucleus_shape\":\"none\",\"gyration_prior\":[$SIG,$SIG,$SIG],\"gyration_kspring\":0.1,\"advance_on_max_iterations\":true,\"noncontact_from_sigma\":5,\"noncontact_kspring\":1.0,\"max_iterations\":$MAXIT,\"gyration_wall\":${WALL:-0}}"
 if [ "${SKIP_IGM:-0}" != 1 ]; then
   $PY "$BK/igm_demo_run.py" --device gpu --n-structures "$S" --seed "$SEED" --steps-scale "$STEPS" \
     --out "$OUT/igm_S${S}_x${STEPS}_s$SEED"

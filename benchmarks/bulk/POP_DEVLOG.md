@@ -209,3 +209,71 @@ wall time scales linearly in S (1,291 / 2,447 / 4,580 s at S = 200 / 500 / 1,000
 * Before a freeze: replicate B6 vs IGM-sphere vs IGM-ellipsoid at the full schedule on C1-C3 (≥ 2 seeds), the
   WTC11 demo fit / runtime with B6, then fix B5 or B6 in `PREREG_POP.md` §10 (the draft there names B6 as the
   leading candidate) and wait for the user's approval.  No held-back unit has been run.
+
+## 10. Replicates at the full schedule (Sherlock reconnected; 2026-10-07/08)
+
+Su dev split, S = 200, full IGM annealing schedule, seeds 1-3, C1-C3: 36 runs (B5, B6, IGM sphere, IGM
+ellipsoid × 9).  Sherlock GPUs (TITAN Xp / V, RTX 2080 Ti / 3090, A40; the four methods of one (condition,
+seed) mostly back to back on one GPU, `pop_tables/rep_dev.tsv`); three runs from the laptop (C2 ellipsoid s2,
+C3 sphere / ellipsoid s2).  Seed-to-seed sd ≤ 0.001 (P1), ≤ 0.02 (P2).
+
+Mean over seeds:
+
+| | C1 P1 / P2 / P3 | C2 P1 / P2 / P3 | C3 P1 / P2 / P3 | cis W1 (C1) | ρ Spearman (C1) | territory Sp. (C1) |
+| --- | --- | --- | --- | --- | --- | --- |
+| IGM sphere | 0.047 / 1.035 / 0.0054 | 0.051 / 1.026 / 0.0063 | 0.077 / 1.017 / 0.0165 | 0.52 | 0.93 | 0.30 |
+| IGM ellipsoid | 0.064 / **0.410** / 0.0124 | 0.064 / **0.409** / 0.0111 | **0.064** / **0.411** / 0.0234 | 0.71 | 0.36 | 0.05 |
+| B5 | 0.048 / 0.438 / 0.0054 | 0.050 / 0.422 / 0.0053 | 0.071 / 0.463 / 0.0127 | 0.20 | 0.91 | 0.60 |
+| **B6** | **0.043** / 0.435 / **0.0054** | **0.046** / 0.425 / **0.0052** | 0.068 / 0.447 / **0.0126** | **0.20** | 0.91 | **0.66** |
+
+Note the change against the S = 100 × 0.1 screening: with the full schedule IGM-ellipsoid's P2 improves from
+0.44 to 0.41 and B5's worsens from 0.35 to 0.44, so the P2 advantage over the ellipsoid seen in the screening
+does not hold.
+
+Decision-rule preview (`pop_test.py`, pooled over C1-C3, 2,000 chromosome-block bootstrap replicates; Δ =
+comparator − B, positive = B better; development data, not the test):
+
+| B vs A | Δ P1 [95 % CI] | Δ P2 | Δ P3 | worse strata | rule |
+| --- | --- | --- | --- | --- | --- |
+| B6 vs IGM sphere | +0.0063 [−0.0005, +0.0118] | +0.59 [+0.38, +0.75] | +0.0017 [+0.0015, +0.0023] | none | fails item 1 (P1 CI touches 0) |
+| B6 vs IGM ellipsoid | +0.0119 [+0.0055, +0.0178] | −0.026 [−0.157, +0.071] | +0.0079 [+0.0075, +0.0088] | P2 cis 10-20 Mb (0.39 vs 0.33) | fails items 1 and 4 |
+| B5 vs IGM sphere | +0.0021 [−0.0056, +0.0085] | +0.59 [+0.39, +0.73] | +0.0016 | none | fails item 1 |
+| B5 vs IGM ellipsoid | +0.0078 [+0.0002, +0.0144] | −0.031 [−0.148, +0.062] | +0.0078 | P1 C3, P2 cis 10-20 Mb | fails items 1 and 4 |
+| B6 vs B5 | +0.0041 [+0.0026, +0.0061] | +0.006 [−0.010, +0.017] | +0.0001 | none | — |
+
+Per unit, B6 vs IGM sphere: P1 +0.0040 (C1), +0.0048 (C2), +0.0100 (C3, CI excludes 0); P2 +0.57-0.60 in every
+unit and every separation band (1-2 Mb +0.037, CI touching 0).  B6 vs IGM ellipsoid: P1 +0.021 (C1), +0.018
+(C2), −0.003 (C3, n.s.); P2 −0.016 to −0.036 (n.s.); the ellipsoid is better at 10-20 Mb and on trans pairs
+(n.s.), B6 much better at 1-5 Mb and > 20 Mb; B6 fits the input twice as well (P3).
+
+Runtime, same GPU, B6 / IGM sphere: 1.60, 2.16, 1.98 (C1 seeds 1-3), 2.21, 2.13, 2.13 (C2), 1.36 (C3 s3); median
+2.1 × (registered bound 3 ×).  IGM ellipsoid is 0.4-0.6 × IGM sphere (its flat nucleus packs fast).
+
+### WTC11 IGM demo (2 Mb, S = 1,000, male, demo configuration, no truth)
+
+EMber-pop without imaging: isotropic gyration prior σ = R / sqrt(5) of the demo nucleus (R = 5,500 nm),
+otherwise B5 / B6.
+
+| run | GPU | wall s | Pearson restrained (all / intra / inter) | MAE restrained | Pearson / MAE unrestrained |
+| --- | --- | --- | --- | --- | --- |
+| IGM seed 1 | TITAN Xp | 5,500 | 0.933 / 0.939 / 0.818 | 0.0054 | 0.198 / 0.0020 |
+| IGM seed 2 | TITAN Xp | 6,356 | 0.933 / 0.939 / 0.818 | 0.0054 | 0.199 / 0.0020 |
+| B5 seed 2 (same job as IGM seed 2) | TITAN Xp | 6,888 (1.08 ×) | 0.936 / 0.933 / 0.775 | 0.0058 | 0.252 / 0.0050 |
+| B6 seed 1 | TITAN V | 2,692 (other GPU) | 0.938 / 0.934 / 0.776 | 0.0058 | 0.245 / 0.0050 |
+
+On the demo the fit is equal overall (Pearson 0.936-0.938 vs 0.933), slightly worse on the inter-chromosomal
+restrained pairs (0.776 vs 0.818) and on the unrestrained pairs (MAE 0.005 vs 0.002: without a wall the sparse
+low-probability inter pairs come out too frequent).  Same-GPU runtime 1.08 × IGM at S = 1,000.
+
+### Recommendation
+
+**B6 over B5**: better P1 in every unit (+0.004, CI excludes 0), equal P2 / P3 / runtime.  But on the development
+data **neither candidate passes the registered decision rule** against IGM sphere *and* IGM ellipsoid: against
+IGM sphere the P2 gain is large and robust (−57 %) while the P1 gain is small (CI touches 0); against IGM
+ellipsoid (same imaging information) P1 and the fit are better but the pair-distance distributions are not
+(−0.026, n.s.; worse at 10-20 Mb).  If the test is run as registered (co-primary IGM ellipsoid, PREREG §10
+draft), the expected outcome is "better than IGM sphere on P2 and fit, not on P1; better than IGM ellipsoid on
+P1 and fit, not on P2".  Options for the user: (a) freeze B6 and test as registered, reporting the mixed
+result; (b) another development round targeting the 10-20 Mb / trans distances (e.g. a stronger gyration
+spring or a tighter principal-frame wall only in the early σ stages); (c) keep IGM sphere as the sole primary
+comparator (the original §4/§7) — not recommended, since the gyration prior uses the ellipsoid's information.
