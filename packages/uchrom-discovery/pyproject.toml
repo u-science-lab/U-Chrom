@@ -1,11 +1,12 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 
 [project]
 name = "uchrom-discovery"
 version = "0.1.0"
 readme = "README.md"
 description = "LLM-driven multi-omics auto-discovery on top of U-Chrom ChromData."
+license = "MIT"
 authors = [
     {name = "Weize Xu", email = "vet.xwz@gmail.com" },
 ]
