@@ -166,7 +166,10 @@ run on it).
 Development record: `POP_DEVLOG.md` (§9: what is still needed).  The candidate below is B5; the leading
 alternative is **B6 = B5 + `gyration_wall` 1.15** (a soft wall in each structure's own principal frame), the
 only candidate better than IGM-sphere on P1 at the full schedule in one development seed; the choice between
-B5 and B6 is made on the replicated development runs before the proposal is submitted.  If approved, the
+B5 and B6 is made on the replicated development runs before the proposal is submitted.  *Update 2026-10-08
+(replicates, `POP_DEVLOG.md` §10): B6 is recommended over B5; on the development data neither passes the
+registered rule against both IGM sphere and IGM ellipsoid — the user decides between freezing B6 as is and
+another development round.*  If approved, the
 commit that adds the approval date here is tagged `ember-pop-frozen` and the test below is run once.
 
 * **Method ("EMber-pop", development candidate B5; B6 adds `gyration_wall` 1.15).**  Protocol `igm` of `packages/uchrom-recon`
