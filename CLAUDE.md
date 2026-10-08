@@ -252,7 +252,9 @@ No data live in the repository (the former `example-data/` is gone).  Rules:
   original files by a registered loader (`datasets/_loaders.py` + `_load_<area>.py`: `build(root, out)`
   fetches, writes linked maps next to the store under relative paths, returns the `ChromData`; `load`
   caches it in the data directory and rebuilds on a loader `version` bump).  `fetch` is for raw-format
-  demos and reference files (FASTA, GTF), not for analyses.
+  demos and reference files (FASTA, GTF), not for analyses — or, given an atlas id, downloads the store's
+  `.cdz` into `<data dir>/atlas/` for offline work (`load` then reads the local copy).  The docs chapter
+  `docs/source/datasets/` (browse / load / fetch, tutorial `datasets_atlas`) is the user guide.
 - **Methods take the `ChromData`**: an analysis reads the maps linked to it (`cd.linked_scool_path`,
   `cd.linked_cool_path`; embedded atlas copies are exported once) rather than file paths, writes any
   inputs a wrapped tool needs itself (e.g. `uchrom.emb.embed_higashi`), and stores results on the object

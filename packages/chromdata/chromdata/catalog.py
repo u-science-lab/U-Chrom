@@ -142,7 +142,8 @@ def catalog_url(root: str) -> str:
 
 def fetch_catalog(root: str, timeout: float = 20.0) -> Dict[str, Any]:
     """Read the catalog of an atlas root (URL or directory); every dataset gets ``url``, the address that
-    ``ChromData.read(..., backed=True)`` and the web browser open."""
+    ``ChromData.read(..., backed=True)`` and the web browser open, and ``download_url``, the one-file
+    ``.cdz`` copy (when the atlas offers one)."""
     if is_url(root):
         import urllib.request
 
@@ -158,6 +159,8 @@ def fetch_catalog(root: str, timeout: float = 20.0) -> Dict[str, Any]:
         base = str(p.parent)
     for d in cat.get("datasets", []):
         d["url"] = base.rstrip("/") + "/" + str(d["path"]).lstrip("/")
+        if d.get("download"):
+            d["download_url"] = base.rstrip("/") + "/" + str(d["download"]).lstrip("/")
     return cat
 
 

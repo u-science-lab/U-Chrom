@@ -11,7 +11,7 @@ standard figures with matplotlib.
 |------|-----|
 | open the web browser on stores | `python -m uchrom_browser x.chromdata.zarr` (or `uchrom-browser`) |
 | drive it from Python | `uchrom_browser.connect()` → `Workspace` (`selected_cells`, `open_view`, `capture`, ...) |
-| browse the atlas | the Open dialog; `https://uchrom-browser.u-science.org` (hosted) |
+| browse the atlas | the Open dialog; `https://uchrom-browser.u-science.org` (hosted); [datasets & the atlas](../datasets/browse) |
 | plots | `uchrom.pl.plot_distance_matrix`, `plot_contact_map`, `plot_rg_histogram`, `plot_structure_3d` |
 
 ## Tutorials

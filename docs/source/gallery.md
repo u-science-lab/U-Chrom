@@ -72,6 +72,8 @@ a card to open the tutorial; the chapters ({doc}`tracing <tracing/index>`, {doc}
 ## Common to all data
 
 ```{tutorial-gallery}
+- tutorial: datasets_atlas
+  text: Browse the public atlas, load a store over HTTP, fetch it for offline work; loaders and original files
 - tutorial: chromdata_basics
   text: "`ChromData`: bins, spots, tracks, intervals, results, subsetting"
 - tutorial: chromdata_stores

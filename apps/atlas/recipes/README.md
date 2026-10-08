@@ -17,7 +17,9 @@ an old folder works as `UCHROM_DATA`.
   reads it from there afterwards (`python -m uchrom.datasets load NAME` builds it ahead).
 - **atlas `ID`**: a `.chromdata.zarr` store of the public atlas (https://uchrom-atlas-r2.u-science.org),
   opened over HTTP without downloading it: `uchrom.datasets.load("ID")` / `atlas("ID")` (backed: only what is
-  used is fetched).  `python -m uchrom.datasets atlas` lists the ids.
+  used is fetched).  `python -m uchrom.datasets atlas` lists the ids; `uchrom.datasets.fetch("ID")` downloads
+  the store's one-file copy (`.cdz`) into `atlas/ID.cdz` of the data directory, which `load` then reads
+  instead (offline work).
 - **fetch `NAME`**: the original files, downloaded once from their source (4DN, GEO, Zenodo, GitHub,
   UCSC, ...) into the data directory and md5-checked where the registry has a checksum:
   `python -m uchrom.datasets fetch NAME` or `uchrom.datasets.fetch("NAME")`;
@@ -37,7 +39,7 @@ rebuilt when the loader's version changes; each checked to give what the tutoria
 
 | `load` name | Store (data directory) | From (`fetch`) | What it is | Used by |
 |-------------|------------------------|----------------|------------|---------|
-| `takei2021_mesc` | `takei2021_mesc/takei2021_mesc.chromdata.zarr` | `takei`, `takei_tables` | Takei 2021 mESC DNA seqFISH+ as 4DN FOF-CT: 201 cells, 1,200 loci at 25 kb (8,285 traces), the cell table (`rna.<gene>`) and nascent-RNA spots | tutorials `chromdata_basics`, `plotting_and_browser`, `features`, `loop_calling`, `tad_calling`, `fishnet_domains`, `compartment`, `jie_aligner` |
+| `takei2021_mesc` | `takei2021_mesc/takei2021_mesc.chromdata.zarr` | `takei`, `takei_tables` | Takei 2021 mESC DNA seqFISH+ as 4DN FOF-CT: 201 cells, 1,200 loci at 25 kb (8,285 traces), the cell table (`rna.<gene>`) and nascent-RNA spots | tutorials `chromdata_basics`, `plotting_and_browser`, `features`, `loop_calling`, `tad_calling`, `fishnet_domains`, `compartment`, `jie_aligner`, `datasets_atlas` |
 | `takei2021_mesc_detections` | `takei2021_mesc/takei2021_mesc_detections.chromdata.zarr` | `seqfish`, `takei` | the raw DNA seqFISH+ detections of the same cells (replicate 1, 25 kb loci): 316,995 untraced spots, the authors' homolog call as `label` | tutorial `jie_aligner` |
 | `bintu_imr90`, `bintu_imr90_hg19` | `bintu_imr90/*.chromdata.zarr` | `bintu_imr90` | Bintu 2018 IMR90 chr21 tracing, 1,277 chromosomes × 65 segments of 30 kb, on hg38 (18.6–20.6 Mb) / on hg19 (20.0–21.95 Mb, to pair with Rao 2014) | tutorials `fish_imputation`, `bulk_reconstruction`, `gem_fish_reconstruction` |
 | `su2020_chr21` | `su2020_chr21/su2020_chr21.chromdata.zarr` + `.cool` | `su2020_chr21` | Su 2020 IMR90 chr21 tracing: 7,591 chromosome copies × 651 loci of 50 kb (hg38), genes per locus; the authors' Rao 2014 Hi-C in the same loci, linked (`rao2014`) | tutorials `tad_calling`, `compartment` |
@@ -110,7 +112,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 
 | Dataset / location | Size | How to get it | Used by |
 | --- | --- | --- | --- |
-| `stevens2017_mesc/`: Stevens 2017 mESC scHi-C, 8 cells, contacts + published structures | 43 MB | fetch `stevens2017`; recipe `build_stevens2017.py`; atlas `stevens2017_mesc` | tutorial `reconstruction` (Cell 1 contacts; atlas store); tutorial `chromdata_stores` (atlas); Fig. 3a and the native-engine validation |
+| `stevens2017_mesc/`: Stevens 2017 mESC scHi-C, 8 cells, contacts + published structures | 43 MB | fetch `stevens2017`; recipe `build_stevens2017.py`; atlas `stevens2017_mesc` | tutorial `reconstruction` (Cell 1 contacts; atlas store); tutorials `chromdata_stores`, `datasets_atlas` (atlas, its `.cdz`); Fig. 3a and the native-engine validation |
 | `bintu2018/`: Bintu 2018 chr21:28–30 Mb tracing, IMR90 + K562 | 7.8 MB + 20 MB | fetch `bintu2018` | Fig. 3b |
 | `su2020_imr90/chromosome21.tsv` + `Hi-C_contacts_chromosome21.tsv`: Su 2020 IMR90 chr21 tracing + binned Hi-C | 261 MB + 1 MB | fetch `su2020_chr21` | tutorials `tad_calling`, `compartment`; Fig. 3b; `benchmarks/screcon/` and `benchmarks/bulk/` truths |
 | `su2020_imr90/genomic-scale.tsv` + `Hi-C_contacts_genome-scale.tsv`: Su 2020 genome-scale DNA-MERFISH | 200 MB + 2.8 MB | fetch `su2020_genome` | `benchmarks/bulk/` (primary diploid truth); `benchmarks/screcon/diploid_sim.py` |

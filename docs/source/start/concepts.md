@@ -159,5 +159,5 @@ Fig. 1c of the U-Chrom paper (logos are trademarks of their owners, used for ide
 | hold, subset, save, share, link | [Data model & storage](../data/index) (`chromdata`) |
 | compute per-locus features | [Per-locus features](../features/index) (`uchrom.fea`) |
 | look at it | [Visualisation](../viz/index) (`uchrom-browser`, `uchrom.pl`) |
-| get a dataset | [Datasets](datasets.md) (`uchrom.datasets`) |
+| get a dataset | [Datasets & the atlas](../datasets/index) (`uchrom.datasets`) |
 | read or write a file format | [File formats](../reference/formats) (`uchrom.io`) |

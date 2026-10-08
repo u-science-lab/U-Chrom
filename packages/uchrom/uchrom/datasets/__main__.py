@@ -12,7 +12,7 @@ def main(argv=None) -> None:
     ap = argparse.ArgumentParser(prog="python -m uchrom.datasets", description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list", help="datasets fetch() knows")
-    sub.add_parser("atlas", help="datasets of the public atlas")
+    sub.add_parser("atlas", help="datasets of the public atlas (fetch ID downloads one for offline work)")
     f = sub.add_parser("fetch", help="download datasets from their sources")
     f.add_argument("names", nargs="*")
     f.add_argument("--default", action="store_true", help="the inputs of the tutorials")
@@ -29,7 +29,7 @@ def main(argv=None) -> None:
     if args.cmd == "list":
         print(list_datasets().to_string())
     elif args.cmd == "atlas":
-        print(list_atlas()[["title", "n_cells", "size_mb"]].to_string())
+        print(list_atlas()[["title", "organism", "n_cells", "size_mb", "downloaded"]].to_string())
     elif args.cmd == "path":
         print(path(args.name))
     elif args.cmd == "load":

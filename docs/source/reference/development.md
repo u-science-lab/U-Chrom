@@ -66,7 +66,7 @@ Keep `uchrom_browser/API.md` in sync with `server.py` / `data.py`.
 ## Tutorials and docs
 
 Tutorials are Jupyter notebooks in `tutorials/`, committed **executed**: they run end to end on real
-data (from the atlas or fetched with `uchrom.datasets`; see [datasets](../start/datasets)), and the docs build only
+data (from the atlas or fetched with `uchrom.datasets`; see [datasets](../datasets/index)), and the docs build only
 renders them.  After changing a tutorial, re-run it from the repository root:
 
 ```bash

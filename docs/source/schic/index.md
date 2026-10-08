@@ -15,7 +15,7 @@ cells by them, and computes 3-D structures from them.
 
 The atlas holds single-cell and spatial Hi-C datasets ready to open — HiRES, dscHi-C, GAGE-seq, Droplet and
 Paired Hi-C, scHiCAR, Uni-C, Stevens 2017 with its published structures, spatial Hi-C, spatial ATAC-Hi-C and
-Hi-C-RNA sections ([datasets](../start/datasets)); the [web browser](../viz/index) shows each cell's
+Hi-C-RNA sections ([datasets](../datasets/index)); the [web browser](../viz/index) shows each cell's
 contact map, its models in 3-D and the cells in their tissue.
 
 ```{toctree}
