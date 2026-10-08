@@ -21,7 +21,12 @@ DEFAULT_SEQUENCE_FEATURES = (
     "g4_motif_count",
     "g4_motif_density",
 )
+#: features computed on request only (not by default): ``cpg_frequency`` is the CpG dinucleotide frequency of
+#: Dip-C (``scripts/cpg.sh``; Tan et al. 2018, Science 361:924), CG dinucleotides over the dinucleotides whose
+#: two bases are A/C/G/T (soft-masked bases counted), the reference of single-cell compartment values
+OPTIONAL_SEQUENCE_FEATURES = ("cpg_frequency",)
 DEFAULT_G4_PATTERN = r"G{3,}[ACGTN]{1,7}G{3,}[ACGTN]{1,7}G{3,}[ACGTN]{1,7}G{3,}"
+_ACGT_RUN = re.compile(r"[ACGT]+")
 
 
 def compute_sequence_features(
@@ -41,7 +46,8 @@ def compute_sequence_features(
     fasta
         FASTA file path. Plain text and ``.gz`` files are supported.
     features
-        Sequence feature names. Defaults to ``DEFAULT_SEQUENCE_FEATURES``.
+        Sequence feature names. Defaults to ``DEFAULT_SEQUENCE_FEATURES``; ``OPTIONAL_SEQUENCE_FEATURES``
+        (``cpg_frequency``: CG over the A/C/G/T dinucleotides that lie in the interval) on request.
     g4_pattern
         Regular expression used for G-quadruplex motif counting.
     missing
@@ -160,7 +166,7 @@ def add_sequence_features(
 
 def _validate_features(features: Sequence[str] | None) -> list[str]:
     requested = list(DEFAULT_SEQUENCE_FEATURES if features is None else features)
-    supported = set(DEFAULT_SEQUENCE_FEATURES)
+    supported = set(DEFAULT_SEQUENCE_FEATURES) | set(OPTIONAL_SEQUENCE_FEATURES)
     unknown = [f for f in requested if f not in supported]
     if unknown:
         raise ValueError(f"unsupported sequence features: {unknown}")
@@ -202,6 +208,10 @@ def _compute_one_sequence(seq: str, features: Iterable[str], g4_regex: re.Patter
             )
         elif feature == "cpg_density":
             values[feature] = _count_overlapping_literal(seq, "CG") / length
+        elif feature == "cpg_frequency":
+            # a run of L A/C/G/T bases holds L - 1 valid dinucleotides; "CG" cannot overlap itself
+            pairs = valid_acgt - len(_ACGT_RUN.findall(seq))
+            values[feature] = seq.count("CG") / pairs if pairs > 0 else np.nan
         elif feature == "n_fraction":
             values[feature] = bases["N"] / length
         elif feature == "g4_motif_count":
@@ -293,6 +303,7 @@ def _prefixed_name(name: str, prefix: str | None) -> str:
 __all__ = [
     "DEFAULT_G4_PATTERN",
     "DEFAULT_SEQUENCE_FEATURES",
+    "OPTIONAL_SEQUENCE_FEATURES",
     "add_sequence_features",
     "compute_sequence_features",
 ]

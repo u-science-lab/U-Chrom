@@ -39,6 +39,8 @@ def _domains(cd, domains: Domains, level: Optional[int]) -> pd.DataFrame:
     if missing:
         raise KeyError(f"a domain table needs the column(s) {sorted(missing)}")
     if "level" in table.columns:
+        if table.empty:
+            return table
         lvl = int(table["level"].min()) if level is None else int(level)
         table = table[table["level"] == lvl]
     elif level is not None:

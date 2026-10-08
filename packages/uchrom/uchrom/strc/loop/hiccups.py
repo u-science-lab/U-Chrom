@@ -823,8 +823,10 @@ def call_loops_hiccups(
     >>> rebin_map(hic, "bulk", resolution=10_000)                             # doctest: +SKIP
     >>> loops = call_loops_hiccups(hic, contacts="bulk_10kb")                  # doctest: +SKIP
     """
-    if copy and key_added is None:
-        raise ValueError("call_loops_hiccups(): copy=True needs a key_added")
+    from uchrom.fea.maps import _is_chromdata
+
+    if copy and (key_added is None or not _is_chromdata(cd)):
+        raise ValueError("call_loops_hiccups(): copy=True needs a ChromData and a key_added")
     params = params or HiccupsParams()
     maps = _maps(cd, contacts, resolution)
     has_spots = hasattr(cd, "spots") and len(cd.spots) > 0
@@ -849,6 +851,8 @@ def call_loops_hiccups(
     inputs = {"contacts": [infos[r]["contacts"] for r in infos], "resolution": sorted(infos),
               "chrom": sorted({c for i in infos.values() for c in i["chrom"]}),
               **{f"n_{s}_{r}": infos[r][f"n_{s}"] for r in infos for s in ("tested", "enriched", "clusters", "loops")}}
+    if not _is_chromdata(cd):                       # a path or a cooler: nothing to store on
+        return table
     return store_and_return(cd, table, key_added=key_added, copy=copy, kind="intervals", interval_kind="pair",
                             function="uchrom.strc.loop.call_loops_hiccups", params=params, inputs=inputs)
 

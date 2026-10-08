@@ -183,7 +183,8 @@ def _mustache_pixels(path):
 @native
 @pytest.mark.parametrize("tile", [7, 64, 256, 10_000])
 def test_mustache_scan_is_the_reference(tmp_path, tile):
-    """Best responses, layers and the per-layer |L| statistics, bit for bit, for any tile size."""
+    """Best responses and layers bit for bit, for any tile size; the per-layer |L| statistics too, except the sums:
+    numpy sums in an order that depends on the CPU's SIMD (x86-64 differs from arm64 in the last bit)."""
     x, y, z, ex, ey, n, D = _mustache_pixels(_mustache_map(tmp_path / "m.cool", {"chrA": (640, M_LOOPS)}, seed=3))
     a = M._scan(x, y, z, ex, ey, n, D, M_PARAMS, tile, backend="numpy")
     b = M._scan(x, y, z, ex, ey, n, D, M_PARAMS, tile, backend="native")
@@ -191,8 +192,9 @@ def test_mustache_scan_is_the_reference(tmp_path, tile):
     np.testing.assert_array_equal(a[0], b[0])
     np.testing.assert_array_equal(a[1], b[1])
     assert a[1].dtype == b[1].dtype
-    for u, v in zip(a[2], b[2]):
-        np.testing.assert_array_equal(u, v)
+    np.testing.assert_allclose(a[2][0], b[2][0], rtol=1e-12)          # sums
+    np.testing.assert_array_equal(a[2][1], b[2][1])                    # counts
+    np.testing.assert_array_equal(a[2][2], b[2][2])                    # minima
     np.testing.assert_array_equal(a[3], b[3])
 
 
@@ -206,8 +208,10 @@ def test_mustache_calls_are_the_reference(tmp_path, backend):
         backend(name)
         got[name] = (M.call_loops_mustache(cool, params=M_PARAMS), M.call_loops_mustache(cool, params=other))
     assert len(got["numpy"][0]) >= len(M_LOOPS)
-    for a, b in zip(got["numpy"], got["native"]):
-        pd.testing.assert_frame_equal(a, b, check_exact=True)
+    for a, b in zip(got["numpy"], got["native"]):                      # the same loops; scores to the last bits
+        pd.testing.assert_frame_equal(a, b, check_exact=False, rtol=1e-12)
+        pd.testing.assert_frame_equal(a.select_dtypes(exclude="float"), b.select_dtypes(exclude="float"),
+                                      check_exact=True)
 
 
 # ----------------------------------------------------------------------------------------------------- building blocks
@@ -231,7 +235,15 @@ def test_gaussian_filter_is_scipy_s():
 
 @native
 def test_pairwise_sum_is_numpy_s():
+    """numpy's pairwise summation (exactly so where numpy runs it without SIMD reordering, e.g. arm64; on x86-64
+    numpy's vector loops add in another order, so only to the last bits)."""
+    import platform
+
+    exact = platform.machine().lower() in ("arm64",)
     rng = np.random.default_rng(5)
     for n in [0, 1, 7, 8, 9, 64, 127, 128, 129, 255, 1000, 8192, 8193, 100_003]:
         a = np.abs(rng.normal(size=n)) * 10.0 ** rng.uniform(-6, 6, size=n)
-        assert uchrom_maps.pairwise_sum(a) == a.sum(), n
+        if exact:
+            assert uchrom_maps.pairwise_sum(a) == a.sum(), n
+        else:
+            assert uchrom_maps.pairwise_sum(a) == pytest.approx(a.sum(), rel=1e-13), n

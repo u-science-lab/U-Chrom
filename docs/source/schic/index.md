@@ -8,10 +8,11 @@ cells by them, and computes 3-D structures from them.
 
 | Step | Page | API |
 |------|------|-----|
-| contacts per cell: read them, link per-cell maps and pseudo-bulk maps to the cells, open the atlas datasets | [Contact maps per cell](contacts) | `uchrom.datasets.load`, `uchrom.io.read_pairs`, `cd.link_scool`, `cd.linked_scool_path` |
+| contacts per cell: read them, link per-cell maps and pseudo-bulk maps to the cells, open the atlas datasets | [Contact maps per cell](contacts.md) | `uchrom.datasets.load`, `uchrom.io.read_pairs`, `cd.link_scool`, `cd.linked_scool_path` |
 | maps of cell groups: per-cell maps summed per cell type, cluster or any partition of the cells; compartments and their strength compared at matched depth | [Pseudo-bulk maps](pseudobulk.md) | `uc.tl.pseudobulk`, `uchrom.fea.pseudobulk`; then `uc.tl.call_compartments(cd, method="eig")`, `uc.tl.compartment_strength`, `uc.tl.pileup` |
-| 3-D structures of one cell: an ensemble of models (NucDynamics, EMber; CPU or GPU) | [3-D structures of single cells](reconstruction) | `uc.tl.reconstruct_sc`, `uchrom.recon.sc` |
-| which cells are alike: embeddings from contact maps (FastHigashi, scHiCluster) and from the RNA / accessibility measured with them | [Cell embeddings](embeddings) | `uc.tl.embed_higashi`, `uchrom.emb`, `uc.tl.embed_cells` |
+| structures from single cells: loops and domain boundaries called across cells (SnapHiC, imputed maps), compartment values of every cell (scA/B), the tracing callers on reconstructed structures | [Calling structures from single cells](structures.md) | `uc.tl.call_loops(cd, method="snaphic")`, `uc.tl.single_cell_boundaries`, `uc.tl.single_cell_compartments` |
+| 3-D structures of one cell: an ensemble of models (NucDynamics, EMber; CPU or GPU) | [3-D structures of single cells](reconstruction.md) | `uc.tl.reconstruct_sc`, `uchrom.recon.sc` |
+| which cells are alike: embeddings from contact maps (FastHigashi, scHiCluster) and from the RNA / accessibility measured with them | [Cell embeddings](embeddings.md) | `uc.tl.embed_higashi`, `uchrom.emb`, `uc.tl.embed_cells` |
 
 The atlas holds single-cell and spatial Hi-C datasets ready to open — HiRES, dscHi-C, GAGE-seq, Droplet and
 Paired Hi-C, scHiCAR, Uni-C, Stevens 2017 with its published structures, spatial Hi-C, spatial ATAC-Hi-C and
@@ -24,6 +25,7 @@ contact map, its models in 3-D and the cells in their tissue.
 
 contacts
 pseudobulk
+structures
 reconstruction
 embeddings
 ```

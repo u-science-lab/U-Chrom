@@ -33,6 +33,17 @@ Loops of a linked contact map by scale-space blob detection (Roayaei Ardakany et
 
 .. autofunction:: uchrom.strc.loop.mustache.call_loops_mustache
 
+SnapHiC (single cells)
+----------------------
+
+Loops called across single cells without pooling them: each cell's map imputed by a random walk with restart,
+then a paired test of every candidate pixel against its local background over the cells (Yu et al. 2021).
+
+.. autoclass:: uchrom.strc.loop.snaphic.SnapHiCParams
+   :members:
+
+.. autofunction:: uchrom.strc.loop.snaphic.call_loops_snaphic
+
 Comparing loop calls
 --------------------
 

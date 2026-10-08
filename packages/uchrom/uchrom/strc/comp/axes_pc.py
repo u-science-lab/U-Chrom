@@ -134,6 +134,7 @@ def call_compartments_axes_pc(
     key_added: Optional[str] = UNSET,
     copy: bool = False,
     verbose: bool = False,
+    centromeres=None,
     store=UNSET,
     result_key=UNSET,
 ):
@@ -153,12 +154,21 @@ def call_compartments_axes_pc(
         does not store.
     copy : bool
         ``True`` → return a new ChromData holding the result.
+    centromeres : mapping or DataFrame, optional
+        Centromere position per chromosome (``{chrom: bp}``, or a table with ``chrom`` and ``mid`` / ``pos``
+        / ``start, end``; as :func:`uchrom.strc.comp.call_compartments_eig`): each arm is called on its own
+        (a locus belongs to the arm holding its start; an arm with fewer than 4 loci is left out).  For whole
+        chromosomes of reconstructed single-cell structures, whose two arms often lie apart, the second
+        eigenvector of a metacentric chromosome otherwise separates the arms rather than the compartments
+        (Tan et al. 2018 Dip-C GM12878 at 250 kb: per-chromosome r with the E1 of the same cells' contacts
+        -0.36-0.21 on chr2, 3, 4, 5, 8, 10 whole, 0.31-0.78 per arm; benchmarks/sc_structures).
 
     Returns
     -------
     DataFrame (``copy=False``) or ChromData (``copy=True``)
         One row per bin: ``chrom, start, end, bin_index, cluster,
-        compartment, pc2`` (``bin_index`` counts within the chromosome).
+        compartment, pc2`` (``bin_index`` counts within the chromosome); with ``centromeres`` also
+        ``region`` (``<chrom>_p`` / ``<chrom>_q``, or the chromosome when it has no centromere given).
 
     Notes
     -----
@@ -174,13 +184,22 @@ def call_compartments_axes_pc(
     params = params or CompartmentCallerParams()
     work = select_spots(cd, trace_ids=trace_ids, cells=cells)
     chroms = resolve_chroms(work, chrom)
-    frames = [_call_compartments_chrom(work, c, params, device, verbose) for c in chroms]
+    if centromeres is None:
+        frames = [_call_compartments_chrom(work, c, params, device, verbose) for c in chroms]
+    else:
+        frames = [_call_compartments_arms(work, c, params, device, verbose, centromeres) for c in chroms]
     table = merge_tables(frames, _empty_compartments())
     track = table[["chrom", "start", "end"]].assign(value=table["pc2"].to_numpy(dtype=float))
+    inputs = selection_inputs(work, chroms, trace_ids, cells)
+    if centromeres is not None:
+        from .eig import _centromere_of
+
+        inputs["centromeres"] = {c: _centromere_of(centromeres, c) for c in chroms
+                                 if _centromere_of(centromeres, c) is not None}
     return store_and_return(
         cd, table, key_added=key_added, copy=copy, kind="table",
         function="uchrom.strc.comp.call_compartments_axes_pc", params=params,
-        inputs=selection_inputs(work, chroms, trace_ids, cells),
+        inputs=inputs,
         intervals=[(key_added, compartment_segments(table), "segment")] if key_added else (),
         bin_tracks={f"{key_added}.pc2": track} if key_added else None,
     )
@@ -308,6 +327,31 @@ def _call_compartments_chrom(cd, chrom: str, params: CompartmentCallerParams,
             "pc2": float(track[i]),
         })
     return pd.DataFrame(rows)
+
+
+def _call_compartments_arms(cd, chrom: str, params: CompartmentCallerParams, device: str, verbose: bool,
+                            centromeres) -> pd.DataFrame:
+    """:func:`_call_compartments_chrom` on each arm of ``chrom`` (the whole chromosome without a centromere
+    in ``centromeres``), ``bin_index`` counted over the chromosome, the arm in ``region``."""
+    from .eig import _centromere_of
+
+    cen = _centromere_of(centromeres, chrom)
+    if cen is None:
+        return _call_compartments_chrom(cd, chrom, params, device, verbose).assign(region=chrom)
+    sub = cd.get_chrom(str(chrom)) if hasattr(cd, "get_chrom") else cd
+    if getattr(sub, "backed", False):
+        sub = sub.to_memory()
+    loci = sub.spots_with_loci()
+    on = (loci["chrom"].astype(str) == str(chrom)).to_numpy()
+    start = loci["start"].to_numpy(np.int64)
+    frames, offset = [], 0
+    for arm, mask in (("p", on & (start < cen)), ("q", on & (start >= cen))):
+        if len(np.unique(start[mask])) < 4:
+            continue
+        t = _call_compartments_chrom(sub[mask], chrom, params, device, verbose)
+        frames.append(t.assign(bin_index=t["bin_index"].to_numpy() + offset, region=f"{chrom}_{arm}"))
+        offset += len(t)
+    return pd.concat(frames, ignore_index=True) if frames else _empty_compartments()
 
 
 def _bin_track_values(cd, chrom: str, bin_ids, track: str) -> np.ndarray:

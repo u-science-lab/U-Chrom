@@ -60,7 +60,7 @@ bins and balances it (`cooler balance` defaults).
   `EigCompartmentParams(sort_by_phasing=True)`.
 - **Speed.**  Everything runs on a laptop: a 5 kb map of chr1 (50,000 bins) takes seconds per caller.  With
   the native kernels installed (`pip install ./packages/uchrom-maps`, the extra `u-chrom[maps]`; Rust,
-  multi-core) HiCCUPS and Mustache run 3–6× faster on such a map, with identical results; without them the
+  multi-core) HiCCUPS and Mustache run 3–6× faster on such a map, with the same calls; without them the
   numpy code runs.
 
 ## Validation, in brief

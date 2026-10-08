@@ -57,7 +57,8 @@ Native kernels
 When the ``uchrom-maps`` package is installed (``pip install ./packages/uchrom-maps``, extra
 ``u-chrom[maps]``), the scale-space scan (:func:`_scan`, steps 3-5) runs in Rust, multi-threaded, on the
 same tiles with scipy's Gaussian arithmetic and numpy's summation order — the numpy / scipy code here
-stays the reference, and both give identical results.  ``BACKEND`` (module attribute: ``"auto"``,
+stays the reference, and both give the same calls (bit-identical values on arm64; on x86-64 numpy's SIMD
+summation order makes the per-layer |L| sums, and the scores from them, agree to ~1e-16 relative).  ``BACKEND`` (module attribute: ``"auto"``,
 ``"native"`` or ``"numpy"``) forces either path.
 """
 

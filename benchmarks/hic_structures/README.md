@@ -96,7 +96,9 @@ Mustache (`mustache._scan`) — run natively when `packages/uchrom-maps` is inst
 
 - **identical results**: on IMR90 / GM12878 chr21 at 5 / 10 / 25 kb and IMR90 chr1 at 5 kb, native and
   numpy give the same HiCCUPS scores, histograms, enriched pixels and calls (chr1 10 Mb: 64.8 M tested
-  pixels, 1.14 M candidates) and the same Mustache scans and calls, bit for bit.  The Mustache scan copies
+  pixels, 1.14 M candidates) and the same Mustache scans and calls, bit for bit on macOS arm64 (on x86-64 the
+  per-layer |L| sums of the scan, and the scores computed from them, agree to ~1e-16 relative: numpy sums its
+  vector loops in another order there; the calls are the same — checked on Sherlock).  The Mustache scan copies
   scipy's Gaussian arithmetic, which depends on the scipy build: `uchrom_maps.scipy_arithmetic()` finds
   it (macOS arm64: fused multiply-adds with an unfused vector block; Linux x86-64 and arm64 wheels of
   scipy 1.18: every product and sum rounded — checked in Docker); no match → numpy, with a warning.

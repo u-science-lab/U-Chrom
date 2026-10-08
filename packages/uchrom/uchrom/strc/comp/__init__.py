@@ -2,6 +2,7 @@
 saddle strength)."""
 
 from .axes_pc import call_compartments_axes_pc, compartment_segments, CompartmentCallerParams
+from .single_cell import ScABParams, normalize_scab, scab_sums, single_cell_compartments
 from .eig import (
     EigCompartmentParams,
     SaddleParams,
@@ -26,9 +27,13 @@ __all__ = [
     "compartment_segments",
     "compartment_strength",
     "saddle_strength",
+    "single_cell_compartments",
+    "scab_sums",
+    "normalize_scab",
     "CompartmentCallerParams",
     "EigCompartmentParams",
     "HiCCompartmentParams",
     "SaddleParams",
+    "ScABParams",
     "hic_compartment_pc1",
 ]

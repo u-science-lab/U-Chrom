@@ -46,8 +46,9 @@ rebuilt when the loader's version changes; each checked to give what the tutoria
 | `huang2021_sox2` | `huang2021_sox2/huang2021_sox2.chromdata.zarr` | `huang2021_sox2` | Huang 2021 mESC Sox2 tracing (SnapFISH-IMPUTE tables, `uchrom.io.read_snapfish`): 1,416 cells × 2 alleles × 41 loci of 5 kb, undetected loci as NaN | tutorial `fish_imputation` |
 | `rao2014_imr90_chr21` | `rao2014_imr90/rao2014_imr90_chr21.chromdata.zarr` | `rao2014_imr90_chr21` (built from GEO) | Rao 2014 IMR90 Hi-C chr21 at 5 kb (hg19, raw counts), the map linked as `bulk` | tutorials `bulk_reconstruction`, `gem_fish_reconstruction`, `hic_structures` |
 | `kim2020_scihic` | `kim2020_scihic/kim2020_scihic.chromdata.zarr` + `.scool` | `kim2020_scihic` | Kim 2020 sci-Hi-C, H1 ES + HFF: 1,931 cells with cell types, 500 kb maps per cell (linked `.scool`, key `per_cell`; the hg19 bin numbering checked) | tutorial `higashi_embedding` |
-| `tan2018_gm12878` | `tan2018_gm12878/tan2018_gm12878.chromdata.zarr` + `tan2018_gm12878_5kb.scool` (44 MB) | `tan2018_gm12878` | Tan 2018 Dip-C GM12878: the 14 cells with hickit pairs, 5 kb maps per cell (hg19, homologs summed; key `per_cell`), contacts / cis fraction per cell | `benchmarks/hic_structures/pseudobulk_gm12878.py` |
+| `tan2018_gm12878` | `tan2018_gm12878/tan2018_gm12878.chromdata.zarr` + `tan2018_gm12878_5kb.scool` (44 MB) | `tan2018_gm12878` | Tan 2018 Dip-C GM12878: the 14 cells with hickit pairs, 5 kb maps per cell (hg19, homologs summed; key `per_cell`), contacts / cis fraction per cell; the authors' Dip-C structures (20 kb particles, one trace per cell × chromosome × homolog, 3.83 M particles; the replicate runs `rep1` / `rep2` as layers, replicate RMSD per cell and per particle; store ~320 MB) | `benchmarks/hic_structures/pseudobulk_gm12878.py` |
 | `wu2025_scmicroc` | `wu2025_scmicroc/wu2025_scmicroc.chromdata.zarr` + `wu2025_scmicroc_5kb.scool` (57 MB) | `wu2025_scmicroc` (pairs only, the 3dg tarball is not streamed) | Wu 2025 scMicro-C GM12878: 12 deep cells, 5 kb maps per cell (hg38, homologs summed; key `per_cell`), `qc_pass` (cis fraction ≥ 0.5: false for cells 026, 051) | `benchmarks/hic_structures/pseudobulk_gm12878.py` |
+| `nagano2017_dip_serum` | `nagano2017_dip_serum/nagano2017_dip_serum.chromdata.zarr` + `.scool` (709 MB) | `nagano2017_dip_serum` | Nagano 2017 diploid serum mESC (the cells of SnapHiC, Yu 2021): 1,175 cells, 10 kb maps per cell (fend pairs placed on mm9 GATC fends, lifted to mm10; homologs summed; key `per_cell`), GEO feature table, contacts per cell, `snaphic_top742` (the 742 deepest cells) | `benchmarks/sc_structures/snaphic_*.py`; docs page schic/structures |
 
 **Pseudo-bulk maps** (`uchrom.fea.pseudobulk`: per-cell maps summed per cell group, ICE-balanced, one `.cool`
 per group linked as `pseudobulk.<group>`) are written next to a local store
@@ -122,9 +123,13 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `rao2014_imr90/IMR90_chr1_5kb_hg19.cool`, `rao2014_gm12878/GM12878_chr21_5kb_hg19.cool`: Rao 2014 Hi-C slices | 39 MB + 9.8 MB | fetch `rao2014_imr90_chr1`, `rao2014_gm12878_chr21` (built over HTTP) | Hi-C structure callers: validation, chr1 performance (`benchmarks/hic_structures/`) |
 | `rao2014_annotations/`: Rao 2014 HiCCUPS loop and Arrowhead domain lists, IMR90 + GM12878 | 1.6 MB | fetch `rao2014_annotations` | tutorial `hic_structures`; `benchmarks/hic_structures/` (reference calls) |
 | `genomes/hg19/chr{21,1}.fa.gz`: UCSC hg19 sequences | 12 MB + 74 MB | fetch `hg19_chr21`, `hg19_chr1` | tutorial `hic_structures` (chr21); `benchmarks/hic_structures/` (GC phasing of compartments) |
+| `genomes/{mm10,hg19,hg38}/<g>.fa.gz`: UCSC whole-genome sequences | 830 + 905 + 938 MB | fetch `mm10_genome`, `hg19_genome`, `hg38_genome` | CpG frequency per bin for `uchrom.strc.comp.single_cell_compartments`; `benchmarks/sc_structures/scab_*.py` |
 | `genomes/liftover/hg38ToHg19.over.chain.gz`: UCSC liftOver chain | 1.2 MB | fetch `hg38_to_hg19_chain` | `benchmarks/hic_structures/pseudobulk_gm12878.py` (scMicro-C hg38 → Rao 2014 hg19) |
 | `ray2019_k562/4DNFI4QQPDMR.mcool`: K562 in situ Hi-C | 849 MB | fetch `ray2019_k562` | provenance of `K562_chr21_30kb.cool` |
 | `4DNFIFLJGGNR.csv`: Takei 2021 mESC FOF-CT, 1 Mb genome-wide loci | 47 MB | fetch `takei2021_1mb` | `benchmarks/screcon/` (simulation truth, locus map, diploid simulation); `benchmarks/bulk/` (mESC truth) |
+| `nagano2017_dip/`: Nagano 2017 diploid serum mESC fend pairs (+ the `nagano2017_hap/` fends and chain) | 1.96 GB | fetch `nagano2017_dip_serum`; loader `nagano2017_dip_serum` | `benchmarks/sc_structures/snaphic_*.py` (SnapHiC's data) |
+| `yu2021_snaphic/`: SnapHiC paper source data (loops by number of cells; mESC reference loops) | 34 MB | fetch `yu2021_snaphic` | `benchmarks/sc_structures/snaphic_mesc.py` |
+| `snaphic/{mm10,hg19}_filter_regions.txt`: SnapHiC's excluded bins | 3.8 MB | fetch `snaphic_filter_regions` | `call_loops_snaphic(exclude=)`; `benchmarks/sc_structures/snaphic_*.py` |
 | `nagano2017_hap/`: Nagano 2017 haploid mESC scHi-C fend pairs + mm9 fends + chain | 1.39 GB (+5 GB streamed, 253 MB kept) | fetch `nagano2017_hap` | `benchmarks/screcon/matched.py` (step 1) |
 | `takei2021_brain/`: Takei 2021 Science mouse cortex seqFISH+ tables | 597 MB | fetch `takei2021_brain` | `benchmarks/screcon/matched.py` (brain imaging reference) |
 | `tan2021_cortex/`: Tan 2021 Dip-C adult cortex, 510 cells | 13 GB | fetch `tan2021_cortex` | `benchmarks/screcon/matched.py` (brain Dip-C baseline) |
@@ -1267,7 +1272,9 @@ GSM by the GEO sample records (`!Sample_description`).  An identical copy,
   own clustering of these exact structures (the metadata file calls them "structure types").
 - **Download**: `python -m uchrom.datasets fetch tan2021_cortex` (or
   `sherlock/download_matched.sbatch PART=brain`).
-- **Used by**: `benchmarks/screcon/matched.py` brain Dip-C baseline (step 2; `matched_data.py`).
+- **Used by**: `benchmarks/screcon/matched.py` brain Dip-C baseline (step 2; `matched_data.py`);
+  `benchmarks/sc_structures/scab_tan2021.py`, `scab_dipc_reference.py` (contacts only: scA/B against Dip-C and
+  the paper's structure types).
 
 ### Liu 2025 DNA-MERFISH, mouse cortex (4DN) — catalogued, not downloaded
 
@@ -1310,7 +1317,11 @@ EMber / NucDynamics benchmarks of `benchmarks/screcon/` (PREREG §6 diploid addi
   `diploid_heldout.py`, `sherlock/dip_real.sbatch`, `deep_dipc.sbatch`; PREREG §6 diploid addition).
   The loader `tan2018_gm12878` (`load`) bins the 14 cells' pairs at 5 kb into
   `tan2018_gm12878/tan2018_gm12878_5kb.scool` (44 MB; ~26 s): the GM12878 pseudo-bulk of
-  `benchmarks/hic_structures/pseudobulk_gm12878.py`.  The `.con` files are not used there: they hold the
+  `benchmarks/hic_structures/pseudobulk_gm12878.py`.  Since loader version 2 the store also holds the authors'
+  structures (`*impute3.round4.clean.3dg.txt.gz` read with `uchrom.io.read_3dg_cells`: Dip-C particle at `p`
+  holds `(p − 20 kb, p]`, phase 0 = `(pat)`, checked against each cell's contacts; cells 4 and 16 have
+  structures but no pairs and are left out); used by `benchmarks/sc_structures/structures_*.py` (the tracing
+  callers on reconstructed structures).  The `.con` files are not used there: they hold the
   contacts kept after Dip-C's filters (cell 1: 430 k vs 1,048,961 pairs), not comparable with the pairs.
 
 ### `wu2025_scmicroc/`: Wu 2025 scMicro-C, GM12878 (12 deepest cells, ~0.4 GB + 3dg; fetch `wu2025_scmicroc`)
@@ -1388,6 +1399,16 @@ requests, no md5 because the cooler records its creation date).
 - **Used by**: tutorial `hic_structures` (chr21) and `benchmarks/hic_structures/` — the GC content per bin
   that orients the compartment eigenvector (A = GC-rich) of the Rao 2014 slices.
 
+### `genomes/{mm10,hg19,hg38}/`: UCSC whole-genome sequences (830 + 905 + 938 MB; fetch `mm10_genome`, `hg19_genome`, `hg38_genome`)
+
+- **Files**: `genomes/mm10/mm10.fa.gz` (md5 `db005b65828db31735f384e4c5787be5`),
+  `genomes/hg19/hg19.fa.gz` (`806c02398f5ac5da8ffd6da2d1d5d1a9`), `genomes/hg38/hg38.fa.gz`
+  (`1c9dcaddfa41027f17cd8f7a82c7293b`) from `https://hgdownload.soe.ucsc.edu/goldenPath/<g>/bigZips/`; the md5
+  sums are those of each folder's `md5sum.txt`.  Gzipped FASTA, soft-masked.
+- **Source**: UCSC Genome Browser — GRCm38 / GRCh37 / GRCh38.
+- **Used by**: `uchrom.strc.comp.single_cell_compartments` (CpG frequency per bin, the track of scA/B; Dip-C
+  `cpg.sh` definition); `benchmarks/sc_structures/scab_*.py` (Tan 2021 cortex, dscHi-C, GM12878, Kim 2020).
+
 ### `genomes/liftover/hg38ToHg19.over.chain.gz`: UCSC liftOver chain (1.2 MB; fetch `hg38_to_hg19_chain`)
 
 - **File**: md5 `ff3031d93792f4cbb86af44055efd903`, from
@@ -1403,6 +1424,52 @@ requests, no md5 because the cooler records its creation date).
 - Cell types of the atlas (per-cell maps embedded at 1 Mb, read over HTTP): `dschic_aging_cortex` (32,777
   cells; the 7 cell-type maps sum to the store's all-cells map exactly), `droplet_hic_mouse_cortex`,
   `hires_brain`, `schicar_mouse_cortex` — `benchmarks/hic_structures/pseudobulk_dschic.py`.
+
+## Single-cell structure calling (`benchmarks/sc_structures/`)
+
+Inputs of the single-cell callers' validation (SnapHiC loops, single-cell boundaries, scA/B, the tracing callers
+on reconstructed structures; results in `benchmarks/sc_structures/README.md`, run on Sherlock).  Also used there:
+`tan2018_gm12878` (with the authors' structures), `wu2025_scmicroc`, `tan2021_cortex`, `kim2020_scihic`, the whole
+genomes `mm10_genome` / `hg19_genome` / `hg38_genome`, Rao 2014 GM12878 slices and annotations, Bonev 2017 mESC
+(4DN mcool), Su 2020 / Takei 2021 tracing, the atlas stores `stevens2017_mesc` and `dschic_aging_cortex`.
+
+### `nagano2017_dip/`: Nagano 2017 diploid serum mES cells (1.96 GB; fetch / loader `nagano2017_dip_serum`)
+
+- **Source**: Nagano T *et al.* "Cell-cycle dynamics of chromosomal organization at single-cell resolution."
+  *Nature* 547:61-67 (2017), doi:10.1038/nature23001; GEO GSE94489; the Tanay lab's schic2 bucket.  The cells
+  SnapHiC called loops from (Yu *et al.* 2021).
+- **Files**: `schic_hyb_1CDS1_adj_files.tar.gz` (870,949,456 B, md5 `fa1f498f25c3ee19788583b4bc2975ea`) and
+  `schic_hyb_1CDS2_adj_files.tar.gz` (1,093,157,219 B, md5 `fa594c9750f16da95e13d97edf6b6c15`) from
+  `https://schic2.s3.eu-west-1.amazonaws.com/`; `GSE94489_serum_diploids_features_table.txt.gz` (md5
+  `f0b506709c078f5ce5252ae4ed17a27a`, GEO); the mm9 `GATC.fends` (streamed out of `schic2_mm9_db.tar.gz`) and the
+  mm9 → mm10 chain go to `nagano2017_hap/`, shared with that entry.
+- **Loader** `nagano2017_dip_serum` (`_load_snaphic.py`): each cell's fend pairs placed on mm9 fends, lifted to
+  mm10, binned at 10 kb into one `.scool` (709 MB; built in ~42 min — on Sherlock), linked as `per_cell`; the
+  feature table and contacts per cell in `cells`; `snaphic_top742` marks the 742 cells with the most contacts
+  (SnapHiC's selection; the paper's own read counts are not public — ours pick the same cells as the Tanay lab's
+  counts).
+- **Used by**: `benchmarks/sc_structures/snaphic_*.py`, `impute_*.py`; the docs page *Calling structures from
+  single cells*.
+
+### `yu2021_snaphic/`: SnapHiC source data (34 MB; fetch `yu2021_snaphic`)
+
+- **Source**: Yu M *et al.* "SnapHiC: a computational pipeline to identify chromatin loops from single-cell Hi-C
+  data." *Nat Methods* 18:1056-1059 (2021), doi:10.1038/s41592-021-01231-2; Springer supplementary data.
+- **Files**: `41592_2021_1231_MOESM4_ESM.xlsx` (12.4 MB, md5 `9e7359602088134e7dc72b17b865ec03`: SnapHiC's loops
+  from N = 10 ... 742 mES cells, six random subsets per N) and `41592_2021_1231_MOESM6_ESM.xlsx` (21.4 MB, md5
+  `bf83659f56dda7c78be08c8a634bea50`: the mESC reference lists — HiCCUPS on Bonev 2017, MAPS on H3K4me3 PLAC-seq,
+  cohesin and H3K27ac HiChIP) from
+  `https://static-content.springer.com/esm/art%3A10.1038%2Fs41592-021-01231-2/MediaObjects/`.  Reading xlsx needs
+  `openpyxl` (not a dependency): the benchmarks read TSVs written once from the sheets (`yu2021_snaphic/tsv/`).
+- **Used by**: `benchmarks/sc_structures/snaphic_mesc.py` (precision / recall as in the paper, loops by N).
+
+### `snaphic/`: SnapHiC's excluded bins (3.8 MB; fetch `snaphic_filter_regions`)
+
+- **Files**: `mm10_filter_regions.txt` (md5 `2a951b44284a6edcfaee9d44e0e1d3a7`) and `hg19_filter_regions.txt`
+  (`af7bec820c35f8fb773175ca255a1ada`) from `https://raw.githubusercontent.com/HuMingLab/SnapHiC/782dc2bc7e5a9e3c376bac4a61666a1a02d061b8/ext/`
+  — 10-kb bins of low mappability (≤ 0.8) or in the ENCODE blacklist.  SnapHiC is GPL-3.0: the files are fetched
+  from the authors' repository, not copied.
+- **Used by**: `uchrom.strc.loop.call_loops_snaphic(exclude=...)`; `benchmarks/sc_structures/snaphic_*.py`.
 
 ## Bulk Hi-C deconvolution benchmark (`benchmarks/bulk/`)
 

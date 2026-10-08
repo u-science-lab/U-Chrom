@@ -118,15 +118,28 @@ def _boxcar_nanmean(mat: np.ndarray, window: int) -> np.ndarray:
     """
     if window <= 0:
         return mat.astype(np.float64, copy=True)
+    # window sums and counts of the finite entries from 2-D cumulative sums (the
+    # block of (i, j) is rows [i - w, i + w) x columns [j - w, j + w), clipped);
+    # an all-NaN block gives 0, as nan_to_num(nanmean) did
+    mat = np.asarray(mat, dtype=np.float64)
     n = mat.shape[0]
-    out = np.zeros_like(mat, dtype=np.float64)
-    for i in range(n):
-        lf, uf = max(0, i - window), min(n, i + window)
-        for j in range(n):
-            ls, us = max(0, j - window), min(n, j + window)
-            block = mat[lf:uf, ls:us]
-            with np.errstate(invalid="ignore"):
-                out[i, j] = np.nan if block.size == 0 else np.nanmean(block)
+    finite = np.isfinite(mat)
+
+    def integral(a):
+        s = np.zeros((n + 1, n + 1))
+        s[1:, 1:] = a.cumsum(0).cumsum(1)
+        return s
+
+    S, C = integral(np.where(finite, mat, 0.0)), integral(finite.astype(np.float64))
+    lo = np.maximum(np.arange(n) - window, 0)
+    hi = np.minimum(np.arange(n) + window, n)
+
+    def block(s):
+        return s[hi][:, hi] - s[lo][:, hi] - s[hi][:, lo] + s[lo][:, lo]
+
+    total, count = block(S), block(C)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        out = np.where(count > 0, total / np.maximum(count, 1), 0.0)
     return np.nan_to_num(out, nan=0.0)
 
 
@@ -596,10 +609,12 @@ def _call_domains_fishnet_chrom(cd, chrom: str, params: FISHnetParams,
     """Per-chromosome kernel: ``(domain table, ensemble dict)``."""
     from uchrom.fea.distance import _bin_coord_cube, _pairwise_distance_per_trace
 
-    df = cd.to_dataframe()
+    # only this chromosome's spots, and one trace's distance matrix at a time
+    # (the (n_traces, n_bins, n_bins) tensor of a whole chromosome does not fit)
+    sub = cd.get_chrom(str(chrom)) if hasattr(cd, "get_chrom") else cd
+    df = sub.to_dataframe()
     cube, bin_ids, trace_ids = _bin_coord_cube(df, chrom=chrom)
-    dists = _pairwise_distance_per_trace(cube)  # (n_traces, n_bins, n_bins)
-    n_traces, n_bins, _ = dists.shape
+    n_traces, n_bins, _ = cube.shape
 
     if max_traces is not None:
         n_traces = min(n_traces, max_traces)
@@ -613,7 +628,8 @@ def _call_domains_fishnet_chrom(cd, chrom: str, params: FISHnetParams,
     ensemble_mask = np.zeros((n_bins, n_bins), dtype=np.int64)
     skipped = 0
     for ti in range(n_traces):
-        res = _fishnet_on_matrix(dists[ti], params, trace_seed(trace_ids[ti]))
+        dist = _pairwise_distance_per_trace(cube[ti:ti + 1])[0]
+        res = _fishnet_on_matrix(dist, params, trace_seed(trace_ids[ti]))
         ensemble_mask += res["domain_mask"]
         if not res["domains"]:
             skipped += 1
