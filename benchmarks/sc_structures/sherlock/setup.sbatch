@@ -31,4 +31,6 @@ print("numpy", numpy.__version__, "scipy", scipy.__version__, "pandas", pandas._
 print("uchrom", uchrom.__file__); print("uchrom_maps", uchrom_maps.__file__, uchrom_maps.default_threads())
 print("uchrom_recon", uchrom_recon.__version__)
 PYEOF
-cd "$REPO/packages/uchrom" && "$PY" -m pytest tests -q -p no:cacheprovider -x 2>&1 | tail -15
+cd "$REPO/packages/uchrom" && "$PY" -m pytest tests -q -p no:cacheprovider 2>&1 | tail -15
+cd "$REPO/packages/chromdata" && "$PY" -m pytest tests -q -p no:cacheprovider 2>&1 | tail -3
+cd "$REPO/packages/uchrom-maps" && cargo test --release 2>&1 | grep -E "^test result|FAILED|panicked" | head -10
