@@ -19,7 +19,7 @@ if [ ! -x "$PY" ]; then python3 -m venv "$BASE/venv-sc"; fi
 # newest release that has a wheel for this system
 BIN=numpy,scipy,pandas,pyarrow,h5py,scikit-learn,statsmodels,torch,matplotlib,zarr,numcodecs,cooler,pillow,contourpy,kiwisolver
 "$PY" -m pip install -q --only-binary="$BIN" -e "$REPO/packages/chromdata[contacts,anndata,remote]" \
-    -e "$REPO/packages/uchrom" pytest maturin
+    -e "$REPO/packages/uchrom" pytest maturin nbconvert ipykernel openpyxl
 rm -rf "$W/engine-sc/$ENGINE" "$W/wheels-sc/$ENGINE"
 for pkg in uchrom-maps uchrom-recon; do
   (cd "$REPO/packages/$pkg" && "$BASE/venv-sc/bin/maturin" build --release --features python -o "$W/wheels-sc/$ENGINE")

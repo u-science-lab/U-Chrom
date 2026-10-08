@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- **Structure calling from single cells.**  `uc.tl.call_loops(cd, method="snaphic")`
+  (`uchrom.strc.loop.call_loops_snaphic`, Yu et al. 2021): loops across cells, each cell's map imputed by a
+  random walk with restart (`uchrom.fea.impute_rwr`); `uc.tl.single_cell_boundaries` (insulation of each
+  imputed map, consensus); `uc.tl.single_cell_compartments` (scA/B, Tan et al. 2021); the tracing callers on
+  reconstructed structures (`uchrom.io.read_3dg_cells`; `ds.load("tan2018_gm12878")` holds the Dip-C
+  structures; `call_compartments_axes_pc(centromeres=)`).  New loader `nagano2017_dip_serum`.  On the paper's
+  742 mES cells SnapHiC recalls 0.60 of the bulk loops (paper 0.60) at precision 0.60 (0.66); on the same
+  cells and contacts it gives the authors' 479 loops.  Docs: [calling structures from single
+  cells](../schic/structures.md), tutorial `sc_structures`.
+- **Structure calling on Hi-C maps, implemented in U-Chrom** (no cooltools / Mustache dependency):
+  compartments by the cis eigenvector + saddle strength (`method="eig"`), insulation domains
+  (`method="insulation"`), HiCCUPS and Mustache loops, pileups (APA), pseudo-bulk maps of cell groups
+  (`uc.tl.pseudobulk`, `sample_cells_by_depth`), banded reads of large maps (`uchrom.fea.band`), `thin_map`,
+  Juicer list readers.  Identical to cooltools where it is the reference (eigenvectors to 1e-14, insulation
+  boundaries, HiCCUPS enriched pixels).  Docs: [calling structures from a map](../bulk/structures.md).
+- **`uchrom-maps`: native kernels** (Rust, rayon; extra `u-chrom[maps]`) for HiCCUPS scoring, the Mustache
+  scan and the single-cell imputation; `uchrom` imports it lazily and keeps the numpy code as reference and
+  fallback (`BACKEND = "auto" | "native" | "numpy"`).
+- **Data**: `uchrom.datasets.fetch(<atlas id>)` downloads an atlas store's one-file copy (`.cdz`) for offline
+  work, which `load` then reads; `list_atlas()` gives study, organism, tissue, assembly and sizes.  A docs
+  chapter on [datasets and the atlas](../datasets/index.md) and a [tutorial gallery](../gallery.md).
+- **Licence**: MIT (`LICENSE`; `uchrom-recon` stays LGPL-3.0-or-later).
+
 - **A monorepo, and no data in it.**  The packages live in `packages/`
   (`chromdata`, `u-chrom`, `uchrom-browser`, `uchrom-discovery` and the
   native engine `uchrom-recon`, formerly `u-chrom-nucdyn` / `uchrom_nucdyn`),

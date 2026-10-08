@@ -22,6 +22,14 @@ bounds = uc.tl.single_cell_boundaries(cd, cells=top)               # boundaries 
 scab = uc.tl.single_cell_compartments(cd, track=ds.fetch("mm10_genome"))   # cells x bins
 ```
 
+## Tutorial
+
+```{toctree}
+:maxdepth: 1
+
+/tutorials/sc_structures
+```
+
 ## Loops across cells: SnapHiC
 
 Each cell's map is imputed by a random walk with restart on its binary contact graph (whole chromosomes; or

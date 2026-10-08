@@ -3,7 +3,10 @@
 #   $GROUP_HOME/$USER/uchrom-nd/venv-sc          Python env: chromdata + u-chrom (editable, repo-sc) and their
 #                                                dependencies, pytest (setup.sbatch)
 #   $SCRATCH/uchrom-nd/repo-sc[-<part>]           repo copies, synced from the laptop (tracked + new files only:
-#                                                `git ls-files -z --cached --others --exclude-standard | rsync ...`);
+#                                                `git describe --always --dirty=+dirty --abbrev=12 > REVISION;
+#                                                (git ls-files -z --cached --others --exclude-standard; printf 'REVISION\0')
+#                                                | rsync -a --from0 --files-from=- ./ sherlock-dtn:...`; REVISION is
+#                                                what benchmarks/_record.py records as the code revision);
 #                                                REPO= picks one (default repo-sc)
 #   $SCRATCH/uchrom-nd/engine-sc/<tag>           uchrom_maps + uchrom_recon built from a repo copy (setup.sbatch)
 #   $SCRATCH/uchrom-nd/data                      UCHROM_DATA (shared with the other uchrom-nd jobs)

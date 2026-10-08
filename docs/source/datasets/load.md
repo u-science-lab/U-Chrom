@@ -54,6 +54,7 @@ python -m uchrom.datasets load kim2020_scihic takei2021_mesc     # build ahead o
 | `takei2021_mesc`, `takei2021_mesc_detections` | DNA seqFISH+ mESC tracing with its cell and RNA tables; the raw detections |
 | `bintu_imr90`, `bintu_imr90_hg19`, `su2020_chr21`, `huang2021_sox2` | chromatin tracing (IMR90 chr21, mESC Sox2) |
 | `rao2014_imr90_chr21` | bulk Hi-C, IMR90 chr21 at 5 kb, linked |
-| `kim2020_scihic`, `tan2018_gm12878`, `wu2025_scmicroc` | single-cell Hi-C with per-cell maps linked |
+| `kim2020_scihic`, `tan2018_gm12878` (with the authors' Dip-C structures), `wu2025_scmicroc` | single-cell Hi-C with per-cell maps linked |
+| `nagano2017_dip_serum` | 1,175 diploid mES cells, 10 kb maps per cell (SnapHiC's data) |
 
 The full list, with sizes and sources, is `ds.list_datasets()` and [data sources](../reference/data_sources).

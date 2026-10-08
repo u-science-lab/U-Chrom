@@ -84,3 +84,12 @@ published structures.  Stevens 2017 (8 haploid cells): too shallow (r 0.24, as t
 **Run time** (native kernels, per cell): chr1 RWR band 0.033 s on 16 threads (numpy 2.0 s); SnapHiC 742 cells
 genome-wide: windows 4 min / 3.4 GB, whole chromosomes 98 min / 6.0 GB (32 threads); single-cell boundaries 742
 cells 6 min.  Native vs numpy: bands within 9e-15, sums within 2e-15, identical calls.
+
+## Where the numbers are kept
+
+The result files of the runs above are committed in `results/` (see `results/MANIFEST.md`: script, machine,
+code revision per file); their large outputs are archived on Sherlock's Oak, `$OAK/uchrom/results/sc_structures/2026-10-08_ad141a7/`.  New
+runs write their numbers with `benchmarks/_record.py` (`save`: results + provenance — revision, host, CPU,
+threads, versions, datasets, parameters) and are compared with the committed ones
+(`python benchmarks/_record.py results/x.json new/x.json --rtol 0.02`; timings left out).
+

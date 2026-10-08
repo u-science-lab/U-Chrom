@@ -54,6 +54,9 @@ def compute_sequence_features(
         ``"raise"`` to reject intervals whose chromosomes are absent from the
         FASTA, or ``"ignore"`` to leave their feature values as NaN.
 
+    An interval that runs past the end of its sequence (the last fixed-size bin of a chromosome) is clipped to
+    it: its features describe the sequence that exists; one that starts past the end is an error.
+
     Returns
     -------
     DataFrame
@@ -80,10 +83,11 @@ def compute_sequence_features(
         for i in indices:
             start = int(interval_table.at[i, "start"])
             end = int(interval_table.at[i, "end"])
-            if end > len(seq):
+            if start >= len(seq):
                 raise ValueError(
-                    f"interval {chrom}:{start}-{end} extends past FASTA sequence length {len(seq)}"
+                    f"interval {chrom}:{start}-{end} starts past FASTA sequence length {len(seq)}"
                 )
+            end = min(end, len(seq))      # the last bin of a chromosome often runs past its end: clip it
             values = _compute_one_sequence(seq[start:end], requested, g4_regex)
             for feature, value in values.items():
                 out.at[i, feature] = value

@@ -108,3 +108,6 @@ tutorials/_out/
 # ... but never byte code
 __pycache__/
 *.pyc
+
+# code revision of a repo copy synced to a cluster (benchmarks/_record.py)
+/REVISION

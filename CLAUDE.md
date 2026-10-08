@@ -249,6 +249,15 @@ re-implementation of a paper):
   body.  If the number is disappointing, say so.
 - The data rules below are the mechanism — every dataset used for
   validation MUST be registered and documented in the same PR.
+- **Keep the numbers.**  Scores and speeds measured during development are results too: a benchmark
+  writes them with `benchmarks/_record.py` (`save`: results + provenance — revision, host, CPU, threads,
+  package versions, datasets, parameters) and the headline files are committed in
+  `benchmarks/<name>/results/` (small JSON, `results/MANIFEST.md`); `python benchmarks/_record.py OLD NEW
+  --rtol x` compares a new run with them.  Large outputs (call tables, maps, models) are archived on
+  Sherlock's Oak, `$OAK/uchrom/results/<name>/<date>_<revision>/` (tar per part:
+  `benchmarks/sc_structures/sherlock/archive.sbatch`) — never only on `$SCRATCH` (purged after 90 days)
+  or in a session scratchpad.  Heavy runs go to Sherlock (`benchmarks/sc_structures/sherlock/`), not the
+  laptop.
 
 ## Data
 

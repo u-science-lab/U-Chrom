@@ -160,3 +160,15 @@ def test_add_sequence_features_updates_tracks_results_and_registry(tmp_path):
     assert "seq.gc_fraction" in out.tracks_spot_view()
     assert "bin_features" in out.results
     assert out.uns["feature_registry"][0]["created_by"] == "uchrom.fea.sequence"
+
+
+def test_a_last_bin_past_the_sequence_end_is_clipped(tmp_path):
+    from uchrom.fea.sequence import compute_sequence_features
+
+    fasta = tmp_path / "genome.fa"
+    fasta.write_text(">chrT\nGGGGCCCCAATT\n")                         # 12 bp
+    bins = pd.DataFrame({"chrom": ["chrT", "chrT"], "start": [0, 8], "end": [8, 16]})   # the last bin runs past
+    out = compute_sequence_features(bins, fasta, features=["gc_fraction"])
+    assert out["gc_fraction"].tolist() == [1.0, 0.0]                    # bases 8-12 only: AATT
+    with pytest.raises(ValueError, match="starts past"):
+        compute_sequence_features(pd.DataFrame({"chrom": ["chrT"], "start": [12], "end": [20]}), fasta)

@@ -112,3 +112,12 @@ Mustache (`mustache._scan`) — run natively when `packages/uchrom-maps` is inst
 
   The ported parts are 15–21× faster on all cores; whole calls are now bound by what stays in Python
   (`read_band` ~1 s, the expected, clustering, Mustache's normalisation) and peak memory by the band read.
+
+## Where the numbers are kept
+
+The result files of the runs above are committed in `results/` (see `results/MANIFEST.md`: script, machine,
+code revision per file); their large outputs are archived on Sherlock's Oak, `$OAK/uchrom/results/hic_structures/2026-10-07_1ca8197/`.  New
+runs write their numbers with `benchmarks/_record.py` (`save`: results + provenance — revision, host, CPU,
+threads, versions, datasets, parameters) and are compared with the committed ones
+(`python benchmarks/_record.py results/x.json new/x.json --rtol 0.02`; timings left out).
+
