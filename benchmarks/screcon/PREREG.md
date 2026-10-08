@@ -484,3 +484,15 @@ shuffled-composition control (TD* on permuted compositions) and the oracle; `run
 condition 1 Mb, `moderate`, both regimes (16 units); H1-H3 and the stratum check as §14.6, 95 % percentile bootstrap
 over tissues (2,000 resamples, seed 0).  Results go to `benchmarks/spatial/TYPEDECON_TEST_RESULTS.md` and §14.11,
 whatever they are.
+
+### 14.11 Held-back test results (2026-10-07; run once with tag `typedecon-frozen`; `benchmarks/spatial/TYPEDECON_TEST_RESULTS.md`)
+
+Primary condition (1 Mb, moderate composition noise, 16 tissues), paired 95 % bootstrap: **H1** TD* − dominant
+P1 +0.031 [+0.024, +0.038], P2 +0.058 [+0.045, +0.073]; **H2** TD* − NNLS P1 +0.014 [+0.012, +0.017], P2 +0.043
+[+0.038, +0.048]; **H3** TD* − shuffled compositions P1 +0.233 [+0.221, +0.244], P2 +0.509 [+0.475, +0.541].  Stratum
+check: TD* − dominant is positive with a CI above 0 in all six (regime, noise) strata at 1 Mb (P1 +0.017 to +0.043).
+By the §14.6 rule: **composition-weighted deconvolution recovers type-specific contact profiles better than cluster
+pseudo-bulk and NNLS** (in-silico, Tan 2021 cells).  Reported without threshold: TD* reaches 0.93 / 0.91 / 0.82 of
+the oracle P1 (exact / moderate / heavy); exact − heavy costs P1 0.027, P2 0.048; same ordering at 250 kb
+(insulation contrast r 0.40-0.53 vs dominant 0.34-0.50); truth half-vs-half ceiling P1 0.223, P2 0.486; S1 remains
+uninformative (oracle r 0.05).  No change to the method after the test.
