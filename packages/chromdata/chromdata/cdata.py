@@ -2064,7 +2064,10 @@ class ChromData:
         is left empty (zeros) because ChromData has no cell-by-feature
         expression matrix.  Spot-level RNA-FISH / IF / epigenomic
         signals, such as Takei 2025 tracks, remain in ``self.tracks`` and
-        are not flattened into AnnData.X.
+        are not flattened into AnnData.X.  Cell positions (the ``default``
+        set of :meth:`cell_positions`, x / y in its units) become
+        ``obsm["spatial"]``, the key scanpy / squidpy read, unless
+        ``cellm`` already has one.
 
         Returns
         -------
@@ -2099,6 +2102,13 @@ class ChromData:
                     f"cellm['{key}'] rows ({arr.shape[0]}) != exported cells ({len(obs)})"
                 )
             obsm[key] = arr.copy()
+        if "spatial" not in obsm and len(self.cells) > 0:
+            try:
+                pos = self.cell_positions("default")
+            except KeyError:
+                pos = None
+            if pos is not None:
+                obsm["spatial"] = pos.reindex(obs.index.astype(str))[["x", "y"]].to_numpy(float)
 
         adata = ad.AnnData(
             X=np.zeros((len(obs), 0)),
