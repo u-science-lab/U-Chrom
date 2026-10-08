@@ -217,3 +217,18 @@ def test_merge_resolutions_rao2014_rules():
     assert len(merge_resolutions({10_000: ten})) == 2
     with pytest.raises(ValueError):
         merge_resolutions({})
+
+
+
+def test_a_path_is_called_without_storing(tmp_path):
+    """A map given as a path (no ChromData): the default key_added stores nothing, the table comes back."""
+    from uchrom.strc.loop.hiccups import HiccupsParams, call_loops_hiccups
+
+    path = _synthetic(tmp_path / "m.cool")
+    p = HiccupsParams(max_dist=2_000_000)
+    got = call_loops_hiccups(path, params=p)
+    cd = _cd()
+    cd.link_cool(path, key="hic")
+    pd.testing.assert_frame_equal(got, call_loops_hiccups(cd, params=p, key_added=None))
+    with pytest.raises(ValueError, match="ChromData"):
+        call_loops_hiccups(path, params=p, copy=True)

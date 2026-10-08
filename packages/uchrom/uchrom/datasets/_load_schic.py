@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tarfile
 from pathlib import Path
 
@@ -138,13 +139,60 @@ def _pairs_cells(sources: dict, out: Path, name: str, sizes: dict, assembly: str
     return cd
 
 
+#: the authors' Dip-C structures of a Tan 2018 cell: the main run and two replicate runs (20 kb particles)
+_TAN18_3DG = re.compile(r"^GSM\d+_(?:(?P<run>rep[12])_)?(?P<cell>gm12878_\d\d)\.impute3\.round4\.clean\.3dg\.txt\.gz$")
+
+
+def _tan2018_structures(folder: Path, maps):
+    """The Dip-C structures of the cells of ``maps`` (cells + linked per-cell maps) as a ``ChromData`` that
+    keeps the cells and the link: the main run in ``coords``, the replicate runs ``rep1`` / ``rep2`` as layers
+    on the main run's particles, their deviation after superposition per cell and per particle."""
+    from chromdata import ChromData
+
+    from ..io.dipc_3dg import read_3dg_cells, replicate_deviation
+
+    runs = {"main": {}, "rep1": {}, "rep2": {}}
+    for f in sorted(folder.glob("GSM*_gm12878_*.impute3.round4.clean.3dg.txt.gz")):
+        m = _TAN18_3DG.match(f.name)
+        if m and m["cell"] in maps.cells.index:
+            runs[m["run"] or "main"][m["cell"]] = f
+    for run, files in runs.items():
+        if set(files) != set(maps.cells.index):
+            raise ValueError(f"tan2018_gm12878: {run} structures missing for "
+                             f"{sorted(set(maps.cells.index) - set(files))} in {folder}")
+    order = list(maps.cells.index)
+    cd = read_3dg_cells({c: runs["main"][c] for c in order},
+                        layers={r: {c: runs[r][c] for c in order} for r in ("rep1", "rep2")},
+                        cells=maps.cells)
+    per_cell, per_spot = replicate_deviation(cd, ("rep1", "rep2"), reflection=True)
+    cells = cd.cells.join(per_cell[[c for c in per_cell.columns if not c.startswith("mirrored_")]])
+    uns = dict(maps.uns)
+    uns["source"] = ("Tan et al. 2018, Science 361:924 (Dip-C, GM12878; GEO GSE117876): the authors' Dip-C "
+                     "structures (impute3.round4.clean.3dg, 20 kb particles, homologs as traces; main run in coords, "
+                     "replicate runs rep1 / rep2 as layers) and hickit pairs of the 14 cells re-processed on GEO, "
+                     "binned at 5 kb, both homologs counted")
+    uns["haplotypes"] = ("structures: one trace per homolog (pat / mat); per-cell maps: ignored, each contact counted "
+                         "once (the map sums both homologs)")
+    uns["structures"] = {**cd.uns["structures"],
+                         "runs": "coords: the main run; layers rep1 / rep2: the replicate runs on the main run's "
+                                 "particles, each in its own frame (NaN where a run lacks the particle)",
+                         "rep_deviation": "spot_tracks['rep_deviation']: RMS over rep1 / rep2 of a particle's "
+                                          "distance to the main run after superposing each run on the main run, cell "
+                                          "by cell (rotation + translation, mirror allowed); cells: rmsd_rep*, "
+                                          "median_dev_rep*"}
+    uns["xyz_unit"] = cd.uns["xyz_unit"]
+    out = ChromData(cd.coords, cd.spots, bins=cd.bins, cells=cells, traces=cd.traces, layers=cd.layers,
+                    spot_tracks=pd.DataFrame({"rep_deviation": per_spot}), uns=uns)
+    return out
+
+
 def build_tan2018_gm12878(root: Path, out: Path):
     """Tan et al. 2018 Dip-C of GM12878 (Science 361:924; GEO GSE117876): the 14 cells with hickit's
     re-processed contact pairs on GEO (cells 4, 8 and 16 have none), binned at 5 kb (hg19) into one ``.scool``
-    linked as ``per_cell``.  Every contact counted once: the legs' haplotypes (``phase0`` / ``phase1``, the
-    imputed ``phase_prob*``) are ignored, so a cell's map sums its two homologs."""
-    import re
-
+    linked as ``per_cell``, and the authors' Dip-C structures of the same cells (20 kb particles; a trace per
+    cell, chromosome and homolog; replicate runs as layers).  Every contact of the maps counted once: the
+    legs' haplotypes (``phase0`` / ``phase1``, the imputed ``phase_prob*``) are ignored, so a cell's map sums
+    its two homologs."""
     from . import fetch
     from ..io.pairs_maps import pairs_chromsizes, tar_member
 
@@ -162,7 +210,8 @@ def build_tan2018_gm12878(root: Path, out: Path):
     uns = {"source": "Tan et al. 2018, Science 361:924 (Dip-C, GM12878; GEO GSE117876); hickit pairs of the 14 "
                      "cells re-processed on GEO, binned at 5 kb, both homologs counted",
            "haplotypes": "ignored: each contact counted once (the per-cell map sums both homologs)"}
-    return _pairs_cells(sources, out, "tan2018_gm12878", HG19, "hg19", cells, uns)
+    maps = _pairs_cells(sources, out, "tan2018_gm12878", HG19, "hg19", cells, uns)
+    return _tan2018_structures(folder, maps)
 
 
 #: cells with fewer cis contacts than this are flagged (``qc_pass``): Wu 2025 cells 026 / 051 (33 % / 12 %
@@ -210,8 +259,9 @@ HG38 = {"chr1": 248956422, "chr2": 242193529, "chr3": 198295559, "chr4": 1902145
 
 register(Loader(
     name="tan2018_gm12878", build=build_tan2018_gm12878,
-    store="tan2018_gm12878/tan2018_gm12878.chromdata.zarr", sources=("tan2018_gm12878",),
-    description="Tan 2018 Dip-C GM12878: 14 cells with hickit pairs, 5 kb maps per cell (linked .scool), hg19"))
+    store="tan2018_gm12878/tan2018_gm12878.chromdata.zarr", sources=("tan2018_gm12878",), version=2,
+    description="Tan 2018 Dip-C GM12878: 14 cells, 5 kb maps per cell (linked .scool) and the authors' 20 kb "
+                "structures (a trace per homolog; replicate runs as layers), hg19"))
 
 register(Loader(
     name="wu2025_scmicroc", build=build_wu2025_scmicroc,

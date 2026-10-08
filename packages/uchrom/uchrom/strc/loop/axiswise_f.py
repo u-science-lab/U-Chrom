@@ -132,14 +132,16 @@ def _background_ring(
 
     # Build a boolean mask of kept entries then sum (avoids the sum-of-
     # rectangles book-keeping and matches ArcFISH's `ij_background` logic).
-    mask = np.zeros((B, B), dtype=bool)
-    mask[lo_i:hi_i, lo_j:hi_j] = True
-    mask[in_lo_i:in_hi_i, in_lo_j:in_hi_j] = False
-    mask[i, :] = False
-    mask[:, j] = False
+    # The mask covers the outer square only (row i and column j lie inside
+    # it): the same entries in the same order as a (B, B) mask, at
+    # O(outer²) instead of O(B²) per candidate.
+    mask = np.ones((hi_i - lo_i, hi_j - lo_j), dtype=bool)
+    mask[in_lo_i - lo_i:in_hi_i - lo_i, in_lo_j - lo_j:in_hi_j - lo_j] = False
+    mask[i - lo_i, :] = False
+    mask[:, j - lo_j] = False
 
-    vals = var_axis[mask]
-    cnts = count_axis[mask]
+    vals = var_axis[lo_i:hi_i, lo_j:hi_j][mask]
+    cnts = count_axis[lo_i:hi_i, lo_j:hi_j][mask]
     finite = np.isfinite(vals) & (cnts > 0)
     if not finite.any():
         return np.nan, 0

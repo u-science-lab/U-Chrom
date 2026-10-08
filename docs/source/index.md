@@ -34,7 +34,7 @@ step by step, with tutorials on real data.
 |------|-------|
 | [Chromatin tracing](tracing/index) | [reading tracing data](tracing/reading) · [from detections to traces](tracing/traces) · [filling missing loci](tracing/imputation) · [calling structures](tracing/structures): loops, TADs, domains, compartments |
 | [Imaging multi-omics: DNA seqFISH+](seqfish/index) | [reading the data](seqfish/reading) · [marks, cells and tissue](seqfish/marks) |
-| [Single-cell and spatial Hi-C](schic/index) | [contact maps per cell](schic/contacts) · [pseudo-bulk maps](schic/pseudobulk) · [3-D structures of single cells](schic/reconstruction) · [cell embeddings](schic/embeddings) |
+| [Single-cell and spatial Hi-C](schic/index) | [contact maps per cell](schic/contacts) · [pseudo-bulk maps](schic/pseudobulk) · [structures from single cells](schic/structures) · [3-D structures of single cells](schic/reconstruction) · [cell embeddings](schic/embeddings) |
 | [Bulk Hi-C](bulk/index) | [calling structures from a map](bulk/structures): compartments, domains, loops, pileups · [structures from a bulk map](bulk/reconstruction): MDS, IGM · [Hi-C with imaging](bulk/gem_fish): GEM-FISH |
 
 ## Common to all data

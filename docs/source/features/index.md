@@ -12,7 +12,10 @@ is recorded in `cd.uns["feature_registry"]`.
 | axis-wise variance (the callers' statistic) | `axis_variance_cube`, `axis_weight`, `filter_normalize` |
 | signals over intervals; intervals onto bins | `aggregate_tracks_by_interval`, `project_interval_features_to_bins` |
 | peaks of a signal (MACS-style) | `call_peaks_from_track`, `call_macs_bdgpeaks_from_signal`, `add_peak_features` |
-| annotation (GTF) and sequence (FASTA) features | `add_annotation_features`, `add_sequence_features` |
+| annotation (GTF) and sequence (FASTA) features, CpG frequency | `add_annotation_features`, `add_sequence_features` (`features=["cpg_frequency"]`) |
+| contact maps linked to the data: matrices, coarser bins, banded reads of large maps, the cis expected, thinning | `contact_matrix`, `rebin_map`, `read_band`, `expected_cis`, `thin_map` ([bulk Hi-C](../bulk/structures.md)) |
+| maps of cell groups, cells drawn at matched depth, pileups of known features | `pseudobulk`, `sample_cells_by_depth`, `pileup` ([pseudo-bulk maps](../schic/pseudobulk.md)) |
+| single-cell maps imputed by a random walk with restart (scHiCluster / SnapHiC; native kernels in `uchrom-maps`) | `impute_maps`, `rwr_band`, `zscore_band`, `ImputeParams` ([single cells](../schic/structures.md)) |
 
 ## Tutorials
 

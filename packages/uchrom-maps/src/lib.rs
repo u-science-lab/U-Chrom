@@ -4,15 +4,21 @@
 //!   locally adjusted expecteds of the four kernels, λ-chunks, histograms, candidates.
 //! * [`mustache`]: the Mustache scale-space scan (`uchrom.strc.loop.mustache._scan`): Gaussian scale
 //!   space, differences of Gaussians, 3 x 3 maxima, best response per pixel, per-layer statistics.
+//! * [`rwr`]: random walk with restart on single-cell maps (SnapHiC / scHiCluster imputation, sliding
+//!   windows) and SnapHiC's per-diagonal z-scores, local backgrounds and sums over cells
+//!   (`uchrom.fea.impute_rwr`, `uchrom.strc.loop.snaphic`).
 //! * [`gauss`], [`pairwise`]: `scipy.ndimage.gaussian_filter` and `np.sum` in their exact arithmetic.
 //!
-//! Both kernels reproduce the numpy reference bit for bit (same tiles, same order of floating-point
-//! operations) and run tiles in parallel with rayon.
+//! The HiCCUPS and Mustache kernels reproduce the numpy reference bit for bit (same tiles, same order of
+//! floating-point operations) and run tiles in parallel with rayon.  The RWR solves the same linear systems
+//! as the numpy reference by another factorisation (profile Cholesky + selected inversion instead of a dense
+//! inverse): equal to rounding (relative differences ~1e-13), not bit for bit.
 
 pub mod gauss;
 pub mod hiccups;
 pub mod mustache;
 pub mod pairwise;
+pub mod rwr;
 
 #[cfg(feature = "python")]
 mod python;

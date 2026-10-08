@@ -52,10 +52,13 @@ packages/
 │                      in packages/uchrom-recon; `pip install ./packages/uchrom-recon` (= extra
 │                      `u-chrom[recon]`).  LGPL-3.0 (re-implementation of tjs23/nuc_dynamics).
 ├── uchrom-maps/       `uchrom-maps` (import uchrom_maps): native kernels of the Hi-C map callers, Rust +
-│                      PyO3 (maturin, abi3) + rayon — HiCCUPS scoring and the Mustache scale-space scan
-│                      (scipy's Gaussian arithmetic copied, so results equal the numpy code bit for bit).
+│                      PyO3 (maturin, abi3) + rayon — HiCCUPS scoring and the Mustache scale-space scan;
+│                      single-cell imputation (random walk with restart, z-scores) and SnapHiC's sums
+│                      (scipy's Gaussian arithmetic copied: HiCCUPS equals the numpy code bit for bit, Mustache
+│                      gives the same calls, its |L| sums equal to the last bits — numpy's SIMD sum order).
 │                      Optional (= extra `u-chrom[maps]`): uchrom imports it lazily and falls back to numpy;
-│                      `BACKEND = "auto" | "native" | "numpy"` in `strc/loop/{hiccups,mustache}.py`.
+│                      `BACKEND = "auto" | "native" | "numpy"` in `strc/loop/{hiccups,mustache,snaphic}.py`,
+│                      `fea/impute_rwr.py`.
 │                      `cargo test --release` in the crate; `pip install ./packages/uchrom-maps`.
 └── uchrom/            `u-chrom` (import uchrom) — the analysis library (depends on chromdata);
                        the tree below is packages/uchrom/uchrom/
@@ -68,7 +71,7 @@ uchrom/                (packages/uchrom/uchrom)
 ├── datasets/        load(name) -> ChromData (atlas stores, loaders _load_*.py), fetch(name) -> original files
 ├── io/              Data I/O (.pairs, .cool, .hic, .3dg, .csv, .pdb, FOF-CT, PyHiM, SnapFISH, Bintu,
 │                    seqFISH+ multi-omics and raw detections, pairs -> per-cell .scool, Juicer loop /
-│                    domain lists)
+│                    domain lists, Dip-C / hickit .3dg structures as a ChromData)
 ├── recon/           3D reconstruction
 │   ├── sc/          Single-cell reconstruction
 │   │   ├── ember.py EMber: reconstruct_ember (noise-aware; native engine protocol
@@ -86,15 +89,19 @@ uchrom/                (packages/uchrom/uchrom)
 │   ├── trace/       Chromatin tracing / spot-to-trace alignment (Jie aligner)
 │   └── impute/      FISH coordinate imputation (linear, grid, SnapFISH-IMPUTE, vendored: only what is used)
 ├── strc/            Structure identification
-│   ├── tad/         TAD detection (ArcFISH arc p-value, FISHnet; on Hi-C maps: insulation score, DI)
-│   ├── loop/        Loop detection (axis-wise F-test; on Hi-C maps: HiCCUPS, Mustache)
-│   ├── comp/        Compartment detection (axes PC; on Hi-C maps: cis eigenvector + saddle strength)
+│   ├── tad/         TAD detection (ArcFISH arc p-value, FISHnet; on Hi-C maps: insulation score, DI;
+│   │                single cells: boundaries of imputed maps + consensus)
+│   ├── loop/        Loop detection (axis-wise F-test; on Hi-C maps: HiCCUPS, Mustache; across single
+│   │                cells: SnapHiC)
+│   ├── comp/        Compartment detection (axes PC; on Hi-C maps: cis eigenvector + saddle strength;
+│   │                single cells: scA/B)
 │   └── enrichment.py  Run structure callers and project results onto spots
 ├── fea/             Per-bin features (distance, arc, sequence, GTF annotation,
 │                    MACS-style peaks, structure projection) + feature registry; linked contact maps
 │                    (maps.py: contact_matrix, rebin_map, thin_map; band.py: banded sparse reads, cis
 │                    expected; pseudobulk_maps.py: per-cell maps summed per group, ICE, cells sampled at
-│                    matched depth; pileup_maps.py: APA)
+│                    matched depth; pileup_maps.py: APA; impute_rwr.py: single-cell maps imputed by a
+│                    random walk with restart)
 │                    and structure comparisons (compare.py)
 ├── emb/             Cell embeddings: FastHigashi / scHiCluster on linked maps (embed_higashi,
 │                    embed_contacts), RNA / ATAC / marks (embed_cells), clusters, metrics, plots
@@ -242,6 +249,15 @@ re-implementation of a paper):
   body.  If the number is disappointing, say so.
 - The data rules below are the mechanism — every dataset used for
   validation MUST be registered and documented in the same PR.
+- **Keep the numbers.**  Scores and speeds measured during development are results too: a benchmark
+  writes them with `benchmarks/_record.py` (`save`: results + provenance — revision, host, CPU, threads,
+  package versions, datasets, parameters) and the headline files are committed in
+  `benchmarks/<name>/results/` (small JSON, `results/MANIFEST.md`); `python benchmarks/_record.py OLD NEW
+  --rtol x` compares a new run with them.  Large outputs (call tables, maps, models) are archived on
+  Sherlock's Oak, `$OAK/uchrom/results/<name>/<date>_<revision>/` (tar per part:
+  `benchmarks/sc_structures/sherlock/archive.sbatch`) — never only on `$SCRATCH` (purged after 90 days)
+  or in a session scratchpad.  Heavy runs go to Sherlock (`benchmarks/sc_structures/sherlock/`), not the
+  laptop.
 
 ## Data
 

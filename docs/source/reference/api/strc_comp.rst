@@ -29,4 +29,19 @@ Low-level kernels:
 
 .. autofunction:: uchrom.strc.comp.eig.cis_eigs
 
+Single cells: scA/B
+-------------------
+
+Each cell's compartment value per bin: the mean CpG frequency of the bin's contact partners in that cell
+(Tan et al. 2021, Dip-C; scHiCluster's compartment score as an option).
+
+.. autoclass:: uchrom.strc.comp.single_cell.ScABParams
+   :members:
+
+.. autofunction:: uchrom.strc.comp.single_cell.single_cell_compartments
+
+.. autofunction:: uchrom.strc.comp.single_cell.scab_sums
+
+.. autofunction:: uchrom.strc.comp.single_cell.normalize_scab
+
 .. autofunction:: uchrom.strc.comp.eig.saddle_strength

@@ -46,3 +46,16 @@ def test_bedpe_layout(tmp_path):
     loops = read_juicer_loops(p)
     assert len(loops) == 1 and loops.loc[0, "chrom1"] == "chr1" and loops.loc[0, "end2"] == 51_000
     assert isinstance(loops, pd.DataFrame)
+
+
+def test_a_sheet_of_a_workbook(tmp_path):
+    pytest = __import__("pytest")
+    pytest.importorskip("openpyxl")
+    t = pd.read_csv(__import__("io").StringIO(LOOPS), sep="\t", dtype={"chr1": str, "chr2": str})
+    book = tmp_path / "source_data.xlsx"
+    with pd.ExcelWriter(book) as w:
+        t.to_excel(w, sheet_name="Bulk_HiC_filter", index=False)
+    loops = read_juicer_loops(book, sheet="Bulk_HiC_filter", chrom="21")
+    assert loops["chrom1"].tolist() == ["chr21", "chr21"] and loops["start1"].tolist() == [20_000_000, 30_000_000]
+    with pytest.raises(ValueError, match="sheet"):
+        read_juicer_loops(book)

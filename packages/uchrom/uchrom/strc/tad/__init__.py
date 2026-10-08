@@ -27,6 +27,7 @@ from .insulation import (
     call_tads_insulation,
     insulation_score,
 )
+from .single_cell import SingleCellBoundaryParams, single_cell_boundaries
 from .compare import (
     boundary_frequency,
     compare_boundaries,
@@ -45,6 +46,8 @@ __all__ = [
     "call_tads_by_pval",
     "call_tads_di",
     "call_tads_insulation",
+    "single_cell_boundaries",
+    "SingleCellBoundaryParams",
     "DICallerParams",
     "InsulationParams",
     "insulation_score",

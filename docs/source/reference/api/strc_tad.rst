@@ -49,6 +49,17 @@ Low-level kernels:
 
 .. autofunction:: uchrom.strc.tad.insulation.threshold_otsu
 
+Single cells: boundaries of imputed maps
+----------------------------------------
+
+The insulation score of each cell's imputed map (random walk with restart), its boundaries and the
+consensus over the cells.
+
+.. autoclass:: uchrom.strc.tad.single_cell.SingleCellBoundaryParams
+   :members:
+
+.. autofunction:: uchrom.strc.tad.single_cell.single_cell_boundaries
+
 Directionality index
 --------------------
 

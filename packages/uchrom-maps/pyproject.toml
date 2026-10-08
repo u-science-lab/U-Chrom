@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "uchrom-maps"
 version = "0.1.0"
-description = "Native kernels of U-Chrom's Hi-C map callers: HiCCUPS scoring and the Mustache scale-space scan (Rust, multi-core CPU)"
+description = "Native kernels of U-Chrom's Hi-C map callers: HiCCUPS scoring, the Mustache scale-space scan, random walk with restart on single-cell maps (Rust, multi-core CPU)"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

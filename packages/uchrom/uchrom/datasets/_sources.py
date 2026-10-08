@@ -507,6 +507,47 @@ DATASETS = {
         "default": False,
         "description": "Spatial ATAC-Hi-C mouse brain, 2 sections: ATAC + Hi-C fragments, spots, images (GSE307620)",
     },
+    # Nagano 2017 diploid serum mESC: the single cells SnapHiC called loops from (Yu et al. 2021); the GATC fends
+    # and the mm9 -> mm10 chain go where nagano2017_hap puts them (shared, fetched once)
+    "nagano2017_dip_serum": {
+        "files": [
+            ("nagano2017_dip/schic_hyb_1CDS1_adj_files.tar.gz", f"{_SCHIC2}/schic_hyb_1CDS1_adj_files.tar.gz"),
+            ("nagano2017_dip/schic_hyb_1CDS2_adj_files.tar.gz", f"{_SCHIC2}/schic_hyb_1CDS2_adj_files.tar.gz"),
+            ("nagano2017_dip/GSE94489_serum_diploids_features_table.txt.gz",
+             f"{_GSE94489}/GSE94489_serum_diploids_features_table.txt.gz"),
+            ("nagano2017_hap/mm9ToMm10.over.chain.gz",
+             "https://hgdownload.soe.ucsc.edu/goldenPath/mm9/liftOver/mm9ToMm10.over.chain.gz"),
+        ],
+        "md5": {"nagano2017_dip/schic_hyb_1CDS1_adj_files.tar.gz": "fa1f498f25c3ee19788583b4bc2975ea",
+                "nagano2017_dip/schic_hyb_1CDS2_adj_files.tar.gz": "fa594c9750f16da95e13d97edf6b6c15",
+                "nagano2017_dip/GSE94489_serum_diploids_features_table.txt.gz": "f0b506709c078f5ce5252ae4ed17a27a"},
+        "extract": [("nagano2017_hap/GATC.fends", f"{_SCHIC2}/schic2_mm9_db.tar.gz", "seq/redb/GATC.fends")],
+        "size_mb": 1965,
+        "default": False,
+        "description": "Nagano 2017 diploid serum mESC scHi-C fend pairs (SnapHiC's cells) + mm9 GATC fends + mm9->mm10 chain",
+    },
+    # SnapHiC (Yu et al. 2021, Nat Methods 18:1056): the paper's source data — its loops by number of cells
+    # (MOESM4) and the mESC reference loop lists (MOESM6) — and the regions SnapHiC excludes (GitHub, GPL-3.0)
+    "yu2021_snaphic": {
+        "files": [(f"yu2021_snaphic/41592_2021_1231_MOESM{k}_ESM.xlsx",
+                   "https://static-content.springer.com/esm/art%3A10.1038%2Fs41592-021-01231-2/MediaObjects/"
+                   f"41592_2021_1231_MOESM{k}_ESM.xlsx") for k in (4, 6)],
+        "md5": {"yu2021_snaphic/41592_2021_1231_MOESM4_ESM.xlsx": "9e7359602088134e7dc72b17b865ec03",
+                "yu2021_snaphic/41592_2021_1231_MOESM6_ESM.xlsx": "bf83659f56dda7c78be08c8a634bea50"},
+        "size_mb": 34,
+        "default": False,
+        "description": "SnapHiC paper source data: loops from 10-742 mES cells, mESC reference loop lists (xlsx)",
+    },
+    "snaphic_filter_regions": {
+        "files": [(f"snaphic/{g}_filter_regions.txt",
+                   "https://raw.githubusercontent.com/HuMingLab/SnapHiC/782dc2bc7e5a9e3c376bac4a61666a1a02d061b8/"
+                   f"ext/{g}_filter_regions.txt") for g in ("mm10", "hg19")],
+        "md5": {"snaphic/mm10_filter_regions.txt": "2a951b44284a6edcfaee9d44e0e1d3a7",
+                "snaphic/hg19_filter_regions.txt": "af7bec820c35f8fb773175ca255a1ada"},
+        "size_mb": 4,
+        "default": False,
+        "description": "SnapHiC's excluded 10-kb bins (low mappability, blacklist), mm10 + hg19",
+    },
     "nagano2017_hap": {
         "files": [
             ("nagano2017_hap/schic_hap_serum_adj_files.tar.gz", f"{_SCHIC2}/schic_hap_serum_adj_files.tar.gz"),
@@ -693,6 +734,29 @@ DATASETS.update({
         "size_mb": 74,
         "default": False,
         "description": "UCSC hg19 chromosome 1 sequence",
+    },
+    # UCSC whole-genome sequences (bigZips, soft-masked; md5 from the folder's md5sum.txt): the CpG frequency of
+    # every bin, the reference of single-cell compartment values (uchrom.strc.comp.single_cell_compartments)
+    "mm10_genome": {
+        "files": [("genomes/mm10/mm10.fa.gz", "https://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/mm10.fa.gz")],
+        "md5": {"genomes/mm10/mm10.fa.gz": "db005b65828db31735f384e4c5787be5"},
+        "size_mb": 830,
+        "default": False,
+        "description": "UCSC mm10 whole-genome sequence (bigZips mm10.fa.gz)",
+    },
+    "hg19_genome": {
+        "files": [("genomes/hg19/hg19.fa.gz", "https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz")],
+        "md5": {"genomes/hg19/hg19.fa.gz": "806c02398f5ac5da8ffd6da2d1d5d1a9"},
+        "size_mb": 905,
+        "default": False,
+        "description": "UCSC hg19 whole-genome sequence (bigZips hg19.fa.gz)",
+    },
+    "hg38_genome": {
+        "files": [("genomes/hg38/hg38.fa.gz", "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz")],
+        "md5": {"genomes/hg38/hg38.fa.gz": "1c9dcaddfa41027f17cd8f7a82c7293b"},
+        "size_mb": 938,
+        "default": False,
+        "description": "UCSC hg38 whole-genome sequence (bigZips hg38.fa.gz)",
     },
     # UCSC liftOver chain hg38 -> hg19: hg38 single-cell maps next to the hg19 Rao 2014 maps
     "hg38_to_hg19_chain": {

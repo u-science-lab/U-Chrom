@@ -25,6 +25,12 @@ models = uc.tl.reconstruct_sc(pairs, n_models=4)                              # 
 /tutorials/reconstruction
 ```
 
+## Structures on the models
+
+The models are a `ChromData` with coordinates, so the tracing callers run on them as on imaging — useful for
+compartments (EMber on 14 GM12878 cells: r 0.71 with Rao 2014 E1, 0.93 with the published Dip-C structures),
+not for TADs or loops at tens of cells; see [calling structures from single cells](structures.md).
+
 ## NucDynamics (single-cell)
 
 A re-implementation of NucDynamics (Stevens et al. 2017, *Nature* 544:59,

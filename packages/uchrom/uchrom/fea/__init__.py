@@ -56,6 +56,7 @@ from .band import (
 )
 from .pseudobulk_maps import ice, pseudobulk, sample_cells_by_depth
 from .pileup_maps import pileup, pileup_scores
+from .impute_rwr import ImputeParams, impute_maps, rwr_band, zscore_band
 from .compare import (
     Comparison,
     bin_index,
@@ -121,6 +122,10 @@ __all__ = [
     "thin_map",
     "pileup",
     "pileup_scores",
+    "ImputeParams",
+    "impute_maps",
+    "rwr_band",
+    "zscore_band",
     "Comparison",
     "bin_index",
     "compare_distances",

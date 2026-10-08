@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Tuple
 
 #: modules that register loaders (imported lazily)
-_MODULES = ("_load_schic", "_load_tracing", "_load_imaging", "_load_bulk", "_load_cells")
+_MODULES = ("_load_schic", "_load_tracing", "_load_imaging", "_load_bulk", "_load_cells", "_load_snaphic")
 
 
 @dataclass(frozen=True)

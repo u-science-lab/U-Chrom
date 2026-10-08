@@ -32,32 +32,20 @@ __all__ = ["schicluster_impute", "schicluster_features", "scool_cell_features", 
 def schicluster_impute(mats: np.ndarray, *, pad: int = 1, rp: float = 0.5,
                        tol: float = 1e-6, max_iter: int = 100) -> np.ndarray:
     """Convolution + random-walk-with-restart imputation of a batch of
-    symmetric contact matrices, shape ``(n_cells, n, n)`` (or ``(n, n)``)."""
+    symmetric contact matrices, shape ``(n_cells, n, n)`` (or ``(n, n)``).
+
+    The kernel shared with SnapHiC's imputation lives in :mod:`uchrom.fea.impute_rwr`
+    (:func:`~uchrom.fea.impute_rwr.convolve_maps`, then :func:`~uchrom.fea.impute_rwr.rwr_dense` with
+    self-loops, iterated from ``Q = I`` until the largest change is below ``tol``)."""
+    from uchrom.fea.impute_rwr import convolve_maps, rwr_dense
+
     a = np.asarray(mats, dtype=np.float64)
     single = a.ndim == 2
     if single:
         a = a[None]
-    n = a.shape[-1]
-    if pad > 0:
-        p = np.pad(a, ((0, 0), (pad, pad), (pad, pad)))
-        c = np.zeros_like(a)
-        for di in range(2 * pad + 1):
-            for dj in range(2 * pad + 1):
-                c += p[:, di:di + n, dj:dj + n]
-        a = c / (2 * pad + 1) ** 2
     # self-loops keep rows of empty bins stochastic (as in scHiCluster)
-    a = a + np.eye(n)[None]
-    P = a / a.sum(axis=2, keepdims=True)
-    eye = np.broadcast_to(np.eye(n), a.shape)
-    Q = eye.copy()
-    for _ in range(max_iter):
-        Q_new = (1 - rp) * (Q @ P) + rp * eye
-        delta = np.abs(Q_new - Q).max()
-        Q = Q_new
-        if delta < tol:
-            break
-    Q = (Q + np.swapaxes(Q, 1, 2)) / 2
-    return Q[0] if single else Q
+    q = rwr_dense(convolve_maps(a, pad), rp=rp, tol=tol, max_iter=max_iter, self_loops=True)
+    return q[0] if single else q
 
 
 def schicluster_features(per_chrom, *, pad: int = 1, rp: float = 0.5,

@@ -10,6 +10,12 @@ them, Gaussians in the arithmetic of ``scipy.ndimage.correlate1d``, sums in nump
   expecteds of the four kernels, the λ-chunk histograms and the candidates;
 - :func:`mustache_scan` — the Mustache scale-space scan (``mustache._scan``): best difference-of-Gaussians
   response and layer per pixel, per-layer ``|L|`` statistics;
+- :func:`rwr_band` — the random walk with restart of one cell's chromosome (``uchrom.fea.impute_rwr``;
+  SnapHiC / scHiCluster imputation): profile Cholesky + selected inversion per sliding window, the band of
+  the imputed map; :func:`zscore_band`, :func:`local_background` — SnapHiC's per-diagonal z-scores and local
+  backgrounds; :func:`snaphic_chrom` — SnapHiC's sums over the cells of one chromosome
+  (``uchrom.strc.loop.snaphic``).  These solve the reference's linear systems by another factorisation:
+  equal to rounding, not bit for bit;
 - :func:`gaussian_filter`, :func:`pairwise_sum` — ``scipy.ndimage.gaussian_filter(mode="reflect")`` and
   ``np.sum`` in their exact arithmetic (used by the kernels; exposed for tests);
 - :func:`scipy_arithmetic` — how the installed scipy accumulates its correlations (fused multiply-adds or
@@ -29,12 +35,17 @@ from ._kernels import (  # noqa: F401
     default_threads,
     gaussian_filter,
     hiccups_score,
+    local_background,
     mustache_scan,
     pairwise_sum,
+    rwr_band,
+    snaphic_chrom,
+    zscore_band,
 )
 
 __all__ = ["hiccups_score", "mustache_scan", "gaussian_filter", "pairwise_sum", "scipy_arithmetic",
-           "scipy_uses_fma", "default_threads", "__version__"]
+           "scipy_uses_fma", "default_threads", "rwr_band", "zscore_band", "local_background", "snaphic_chrom",
+           "__version__"]
 
 
 #: accumulation schemes tried by :func:`scipy_arithmetic`, most likely first: rounded products (expected for

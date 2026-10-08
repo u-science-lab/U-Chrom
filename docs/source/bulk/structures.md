@@ -47,8 +47,11 @@ bins and balances it (`cooler balance` defaults).
 - **Calling needs depth.**  Loops are the first to go: on the IMR90 chr21 map thinned (`thin_map`) to a
   fifth of its 10.3 M contacts HiCCUPS finds a third of the published loops, at 5 % one, at 2 % none.  The
   pileup of the same loops stays at APA 3.8–4.7 down to 2 % (the loops shifted by ±0.5–1 Mb: at or below 1).  On a shallow map — a cell-type pseudo-bulk, a few
-  deep single cells — **score known loops by pileup instead of calling them**.  Domains and compartments
-  need fewer contacts (88 % of the insulation boundaries are still found at 2 %).
+  deep single cells — **score known loops by pileup instead of calling them**, or, with ~100 cells or more
+  of a type, **call them across the cells without pooling** (SnapHiC: 0.60 of the published mES loops from
+  742 cells, where HiCCUPS on their pooled map finds 0.06; [calling structures from single
+  cells](../schic/structures.md)).  Domains and compartments need fewer contacts (88 % of the insulation
+  boundaries are still found at 2 %).
 - **Compare strengths at matched depth.**  The saddle strength of a shallow map is inflated (+16 % at 2 %
   of this map), so groups with different numbers of contacts are compared on random subsets of equal depth
   (`uc.tl.pseudobulk(cd, groupby=<Series>)`; the [pseudo-bulk tutorial](../tutorials/pseudobulk)).
@@ -60,7 +63,7 @@ bins and balances it (`cooler balance` defaults).
   `EigCompartmentParams(sort_by_phasing=True)`.
 - **Speed.**  Everything runs on a laptop: a 5 kb map of chr1 (50,000 bins) takes seconds per caller.  With
   the native kernels installed (`pip install ./packages/uchrom-maps`, the extra `u-chrom[maps]`; Rust,
-  multi-core) HiCCUPS and Mustache run 3–6× faster on such a map, with identical results; without them the
+  multi-core) HiCCUPS and Mustache run 3–6× faster on such a map, with the same calls; without them the
   numpy code runs.
 
 ## Validation, in brief

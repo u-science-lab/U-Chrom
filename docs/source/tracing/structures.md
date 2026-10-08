@@ -7,7 +7,10 @@ tracing, DNA seqFISH+, an ensemble of models — and run on PyTorch (`device="au
 CPU); on a backed store they stream.  TADs can also be called from a Hi-C map linked to the data (the
 directionality index), to compare the two; the callers made for contact maps — compartments by the cis
 eigenvector, insulation domains, HiCCUPS and Mustache loops — are in the bulk Hi-C chapter
-([calling structures from a map](../bulk/structures)).
+([calling structures from a map](../bulk/structures)).  The same callers run on 3-D structures
+reconstructed from single-cell Hi-C (a reconstruction is a `ChromData` with coordinates): compartments
+come out as from imaging with the same number of traces, TADs and loops do not at tens of cells
+([calling structures from single cells](../schic/structures.md)).
 
 | Structure | API |
 |-----------|-----|
@@ -16,6 +19,7 @@ eigenvector, insulation domains, HiCCUPS and Mustache loops — are in the bulk 
 | domains per trace / allele | `uchrom.strc.tad.call_domains_fishnet` |
 | A/B compartments | `uchrom.strc.comp.call_compartments_axes_pc`, `uc.tl.call_compartments`; from a linked Hi-C map: `call_compartments_hic` (`method="hic_pc1"`) |
 | all of them, projected onto bins / spots | `uchrom.strc.call_structures_multi`, `add_structural_features` |
+| the same, on reconstructed single-cell structures (Dip-C / hickit `.3dg`, EMber models) | `uchrom.io.read_3dg_cells`, `ds.load("tan2018_gm12878")`; `call_compartments_axes_pc(centromeres=)` per chromosome arm |
 | compare calls with a reference | `match_loops`, `score_loops` (anchor vs background distances), `tad_boundaries`, `compare_boundaries`, `boundary_frequency`, `compare_compartments` |
 | draw them | `uchrom.pl.draw_domains`, `draw_loops`, `plot_compartments` |
 

@@ -118,6 +118,17 @@ def _boundary_pvals(
     w_var = np.where(np.isfinite(norm_var), norm_var * count, 0.0)
     w_cnt = np.where(np.isfinite(norm_var), count, 0.0)
 
+    def pair_sums(m, li, ri):
+        # pairs (i, j), i < j: both in L or both in R (intra); i in L, j in R (inter).  Only the
+        # window's rows / columns are touched, so a call costs O(window²), not O(B²) (whole chromosomes
+        # of reconstructed structures have thousands of bins)
+        intra = 0.0
+        for idx in (li, ri):
+            sub = m[np.ix_(idx, idx)]
+            intra += sub[idx[:, None] < idx[None, :]].sum()
+        cross = m[np.ix_(li, ri)]
+        return intra, cross[li[:, None] < ri[None, :]].sum()
+
     for b in range(B):
         left_mask = (bin_midpoints >= bin_midpoints[b] - half_w) & \
                     (bin_midpoints < bin_midpoints[b])
@@ -129,31 +140,12 @@ def _boundary_pvals(
         li = np.where(left_mask)[0]
         ri = np.where(right_mask)[0]
 
-        # Pairs (i, j) where i < j and (both in L) or (both in R) → intra
-        # Pairs (i, j) where i in L and j in R → inter
-        intra_mask = np.zeros((B, B), dtype=bool)
-        inter_mask = np.zeros((B, B), dtype=bool)
-        for i in li:
-            for j in li:
-                if i < j:
-                    intra_mask[i, j] = True
-        for i in ri:
-            for j in ri:
-                if i < j:
-                    intra_mask[i, j] = True
-        for i in li:
-            for j in ri:
-                if i < j:
-                    inter_mask[i, j] = True
-
         combined_logp = np.zeros(3)
         combined_F = np.zeros(3)
         ok = True
         for ax in range(3):
-            wv_intra = w_var[ax][intra_mask].sum()
-            wc_intra = w_cnt[ax][intra_mask].sum()
-            wv_inter = w_var[ax][inter_mask].sum()
-            wc_inter = w_cnt[ax][inter_mask].sum()
+            wv_intra, wv_inter = pair_sums(w_var[ax], li, ri)
+            wc_intra, wc_inter = pair_sums(w_cnt[ax], li, ri)
             if wc_intra <= 0 or wc_inter <= 0:
                 ok = False
                 break

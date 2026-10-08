@@ -17,6 +17,9 @@ same calling convention (``chrom=None``, ``params=``, ``key_added=``,
     uc.tl.call_loops(cd, method="mustache", contacts="bulk")     # scale-space loops
     uc.tl.pileup(cd, "loops.hiccups", contacts="bulk")           # APA of known loops (too shallow to call)
     uc.tl.pseudobulk(cd, "cell_type")            # fea.pseudobulk: per-cell maps summed per group, linked
+    uc.tl.single_cell_compartments(cd, track=fasta)  # scA/B per cell (Tan 2021), from the per-cell maps
+    uc.tl.call_loops(cd, method="snaphic")       # loops across single cells (SnapHiC), imputed per cell
+    uc.tl.single_cell_boundaries(cd)             # boundaries per cell + consensus, imputed per cell
     uc.tl.reconstruct_sc("cell.pairs")           # recon.sc.reconstruct_ember (EMber)
     uc.tl.reconstruct_bulk(cd, contacts="bulk")  # recon.bulk.mds.reconstruct_mds (a linked bulk map)
     uc.tl.embed_cells(cd, source="rna")          # emb.embed_cells
@@ -61,16 +64,18 @@ def call_tads(cd, *, method: str = "arcfish", **kwargs):
 
 
 def _loop_methods() -> Dict[str, Callable]:
-    from uchrom.strc.loop import call_loops_axiswise_f, call_loops_hiccups, call_loops_mustache
+    from uchrom.strc.loop import call_loops_axiswise_f, call_loops_hiccups, call_loops_mustache, call_loops_snaphic
 
-    return {"axiswise_f": call_loops_axiswise_f, "hiccups": call_loops_hiccups, "mustache": call_loops_mustache}
+    return {"axiswise_f": call_loops_axiswise_f, "hiccups": call_loops_hiccups, "mustache": call_loops_mustache,
+            "snaphic": call_loops_snaphic}
 
 
 def call_loops(cd, *, method: str = "axiswise_f", **kwargs):
     """Call loops.  ``method``: ``"axiswise_f"`` (3-D distances) →
     :func:`uchrom.strc.loop.call_loops_axiswise_f`; on a linked Hi-C map ``"hiccups"`` (local enrichment) →
     :func:`uchrom.strc.loop.call_loops_hiccups` and ``"mustache"`` (scale space) →
-    :func:`uchrom.strc.loop.call_loops_mustache`."""
+    :func:`uchrom.strc.loop.call_loops_mustache`; from linked per-cell maps, across cells ``"snaphic"`` →
+    :func:`uchrom.strc.loop.call_loops_snaphic`."""
     return _dispatch("loop", _loop_methods(), method)(cd, **kwargs)
 
 
@@ -83,6 +88,22 @@ def call_compartments(cd, *, method: str = "axes_pc", **kwargs):
 
     return _dispatch("compartment", {"axes_pc": call_compartments_axes_pc, "eig": call_compartments_eig,
                                      "hic_pc1": call_compartments_hic}, method)(cd, **kwargs)
+
+
+def single_cell_boundaries(cd, **kwargs):
+    """Domain boundaries of single cells (insulation of each cell's imputed map) and their consensus ->
+    :func:`uchrom.strc.tad.single_cell_boundaries`."""
+    from uchrom.strc.tad import single_cell_boundaries as _f
+
+    return _f(cd, **kwargs)
+
+
+def single_cell_compartments(cd, **kwargs):
+    """Per-cell compartment values (scA/B: the mean CpG of each bin's contact partners) from the linked per-cell
+    maps -> :func:`uchrom.strc.comp.single_cell_compartments`."""
+    from uchrom.strc.comp import single_cell_compartments as _f
+
+    return _f(cd, **kwargs)
 
 
 def compartment_strength(cd, **kwargs):
@@ -157,5 +178,5 @@ def cluster_cells(cd, **kwargs):
     return _f(cd, **kwargs)
 
 
-__all__ = ["call_compartments", "compartment_strength", "call_loops", "call_tads", "pileup", "pseudobulk", "reconstruct_sc", "reconstruct_bulk", "embed_cells", "embed_higashi",
+__all__ = ["call_compartments", "single_cell_compartments", "single_cell_boundaries", "compartment_strength", "call_loops", "call_tads", "pileup", "pseudobulk", "reconstruct_sc", "reconstruct_bulk", "embed_cells", "embed_higashi",
            "embed_contacts", "cluster_cells"]

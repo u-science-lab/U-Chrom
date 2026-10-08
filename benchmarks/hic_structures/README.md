@@ -96,7 +96,9 @@ Mustache (`mustache._scan`) — run natively when `packages/uchrom-maps` is inst
 
 - **identical results**: on IMR90 / GM12878 chr21 at 5 / 10 / 25 kb and IMR90 chr1 at 5 kb, native and
   numpy give the same HiCCUPS scores, histograms, enriched pixels and calls (chr1 10 Mb: 64.8 M tested
-  pixels, 1.14 M candidates) and the same Mustache scans and calls, bit for bit.  The Mustache scan copies
+  pixels, 1.14 M candidates) and the same Mustache scans and calls, bit for bit on macOS arm64 (on x86-64 the
+  per-layer |L| sums of the scan, and the scores computed from them, agree to ~1e-16 relative: numpy sums its
+  vector loops in another order there; the calls are the same — checked on Sherlock).  The Mustache scan copies
   scipy's Gaussian arithmetic, which depends on the scipy build: `uchrom_maps.scipy_arithmetic()` finds
   it (macOS arm64: fused multiply-adds with an unfused vector block; Linux x86-64 and arm64 wheels of
   scipy 1.18: every product and sum rounded — checked in Docker); no match → numpy, with a warning.
@@ -110,3 +112,12 @@ Mustache (`mustache._scan`) — run natively when `packages/uchrom-maps` is inst
 
   The ported parts are 15–21× faster on all cores; whole calls are now bound by what stays in Python
   (`read_band` ~1 s, the expected, clustering, Mustache's normalisation) and peak memory by the band read.
+
+## Where the numbers are kept
+
+The result files of the runs above are committed in `results/` (see `results/MANIFEST.md`: script, machine,
+code revision per file); their large outputs are archived on Sherlock's Oak, `$OAK/uchrom/results/hic_structures/2026-10-07_1ca8197/`.  New
+runs write their numbers with `benchmarks/_record.py` (`save`: results + provenance — revision, host, CPU,
+threads, versions, datasets, parameters) and are compared with the committed ones
+(`python benchmarks/_record.py results/x.json new/x.json --rtol 0.02`; timings left out).
+

@@ -43,6 +43,8 @@ a card to open the tutorial; the chapters ({doc}`tracing <tracing/index>`, {doc}
 ```{tutorial-gallery}
 - tutorial: pseudobulk
   text: Cell-type maps summed from an atlas store over HTTP; compartment strength at matched depth
+- tutorial: sc_structures
+  text: Loops across cells (SnapHiC), single-cell boundaries, scA/B per cell, the tracing callers on structures
 - tutorial: reconstruction
   text: Single-cell 3-D structures with NucDynamics and EMber on the native engine
   image: 4

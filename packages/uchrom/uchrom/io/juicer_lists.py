@@ -26,12 +26,18 @@ __all__ = ["read_juicer_loops", "read_juicer_domains"]
 PathLike = Union[str, os.PathLike]
 
 
-def _read(path: PathLike) -> pd.DataFrame:
-    opener = gzip.open if str(path).endswith(".gz") else open
-    with opener(path, "rt") as fh:
-        header = fh.readline().rstrip("\n").lstrip("#").split("\t")
-        table = pd.read_csv(fh, sep="\t", header=None, names=header, comment="#",
-                            dtype={header[0]: str, header[3]: str})
+def _read(path: PathLike, sheet: Optional[str] = None) -> pd.DataFrame:
+    if str(path).lower().endswith((".xlsx", ".xls")):           # a sheet of a workbook (supplementary data)
+        if sheet is None:
+            raise ValueError(f"{path}: a workbook — give sheet=")
+        table = pd.read_excel(path, sheet_name=sheet, dtype={"chr1": str, "chr2": str})   # needs openpyxl
+        table.columns = [str(c).lstrip("#") for c in table.columns]
+    else:
+        opener = gzip.open if str(path).endswith(".gz") else open
+        with opener(path, "rt") as fh:
+            header = fh.readline().rstrip("\n").lstrip("#").split("\t")
+            table = pd.read_csv(fh, sep="\t", header=None, names=header, comment="#",
+                                dtype={header[0]: str, header[3]: str})
     missing = {"chr1", "x1", "x2", "chr2", "y1", "y2"} - set(table.columns)
     if missing:
         raise ValueError(f"{path}: not a Juicer list (no column(s) {sorted(missing)})")
@@ -54,13 +60,14 @@ def _keep(table: pd.DataFrame, column: str, chrom, prefix: Optional[str]) -> pd.
 
 
 def read_juicer_loops(path: PathLike, *, chrom: Union[None, str, Sequence[str]] = None,
-                      chrom_prefix: Optional[str] = "chr") -> pd.DataFrame:
+                      chrom_prefix: Optional[str] = "chr", sheet: Optional[str] = None) -> pd.DataFrame:
     """A Juicer loop list (HiCCUPS; e.g. GEO GSE63525 ``*_HiCCUPS_looplist.txt.gz``) as a pair table.
 
     Parameters
     ----------
     path
-        The list (``.txt`` / ``.bedpe``, optionally gzipped).
+        The list (``.txt`` / ``.bedpe``, optionally gzipped), or a workbook (``.xlsx``, e.g. a paper's
+        supplementary data; needs ``openpyxl``) with ``sheet``.
     chrom
         Only the loops on these chromosomes (names with or without the prefix).
     chrom_prefix
@@ -74,7 +81,7 @@ def read_juicer_loops(path: PathLike, *, chrom: Union[None, str, Sequence[str]] 
         columns as they are (HiCCUPS: ``color, o`` — observed —, the four local expecteds ``e_bl, e_donut,
         e_h, e_v`` and their FDRs, ``num_collapsed``, ``centroid1, centroid2, radius``), sorted by position.
     """
-    t = _read(path)
+    t = _read(path, sheet)
     t = t.rename(columns={"chr1": "chrom1", "x1": "start1", "x2": "end1", "chr2": "chrom2", "y1": "start2",
                           "y2": "end2"})
     t["chrom1"] = _chrom_names(t["chrom1"], chrom_prefix)
@@ -85,14 +92,14 @@ def read_juicer_loops(path: PathLike, *, chrom: Union[None, str, Sequence[str]] 
 
 
 def read_juicer_domains(path: PathLike, *, chrom: Union[None, str, Sequence[str]] = None,
-                        chrom_prefix: Optional[str] = "chr") -> pd.DataFrame:
+                        chrom_prefix: Optional[str] = "chr", sheet: Optional[str] = None) -> pd.DataFrame:
     """A Juicer domain list (Arrowhead; e.g. GEO GSE63525 ``*_Arrowhead_domainlist.txt.gz``) as a domain
     table.
 
     Parameters
     ----------
     path
-        The list (optionally gzipped).
+        The list (optionally gzipped), or a workbook (``.xlsx``) with ``sheet``.
     chrom
         Only the domains on these chromosomes (names with or without the prefix).
     chrom_prefix
@@ -104,7 +111,7 @@ def read_juicer_domains(path: PathLike, *, chrom: Union[None, str, Sequence[str]
         ``chrom, start, end`` followed by the list's other columns as they are (Arrowhead: ``color`` and the
         scores ``f1`` … ``f5``), sorted by position; domains may nest.
     """
-    t = _read(path)
+    t = _read(path, sheet)
     t = t.rename(columns={"chr1": "chrom", "x1": "start", "x2": "end"}).drop(columns=["chr2", "y1", "y2"])
     t["chrom"] = _chrom_names(t["chrom"], chrom_prefix)
     t = _keep(t, "chrom", chrom, chrom_prefix)

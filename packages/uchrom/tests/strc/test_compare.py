@@ -190,3 +190,14 @@ def test_call_compartments_hic_recovers_a_checkerboard(tmp_path):
     assert "c.copy.pc1" in new.bin_tracks.columns
     with pytest.raises(KeyError, match="orient_by"):
         call_compartments_hic(cd, contacts="hic", orient_by="nope")
+
+
+
+def test_compare_boundaries_with_an_empty_leveled_table():
+    """An empty hierarchical domain table (a caller that found nothing) gives no boundaries, not an error."""
+    from uchrom.strc.tad import tad_boundaries
+
+    cd = _gapped_cd()
+    empty = pd.DataFrame({"chrom": pd.Series(dtype=str), "start": pd.Series(dtype=np.int64),
+                          "end": pd.Series(dtype=np.int64), "level": pd.Series(dtype=np.int64)})
+    assert tad_boundaries(cd, empty).empty

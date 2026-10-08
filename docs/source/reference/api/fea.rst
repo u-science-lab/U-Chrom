@@ -37,6 +37,15 @@ Per-cell maps summed per group of cells into ICE-balanced maps linked to the cel
 .. automodule:: uchrom.fea.pseudobulk_maps
    :members:
 
+Imputing single-cell maps
+-------------------------
+
+Random walk with restart on each cell's contact graph (scHiCluster, SnapHiC), whole chromosomes or sliding
+windows, and SnapHiC's per-diagonal z-scores; native kernels in ``uchrom-maps``.
+
+.. automodule:: uchrom.fea.impute_rwr
+   :members: ImputeParams, impute_maps, rwr_band, zscore_band, auto_window, plan_windows, convolve_maps, rwr_dense
+
 Pileups (APA)
 -------------
 
