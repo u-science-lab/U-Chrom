@@ -90,3 +90,32 @@ def test_genome_wide_histograms_give_the_same_features(pairs):
     pd.testing.assert_frame_equal(a, b, check_dtype=False)
     with pytest.raises(ValueError):
         contact_features(cd, key="gw", params=ContactFeatureParams(chroms=["chr1"]), key_added=None)
+
+
+def test_per_chromosome_features_ignore_chromosome_gains(pairs):
+    """A cell with an extra copy of chr19 (its chr19 contacts doubled) shifts the pooled features, not the
+    per-chromosome ones: the same folding on every chromosome."""
+    names = list(MM10)
+    code = {c: i for i, c in enumerate(names)}
+    cis = pairs[(pairs["chrom1"] == pairs["chrom2"]) & pairs["chrom1"].isin(names)]
+    gain = pd.concat([cis, cis[cis["chrom1"] == "chr19"]], ignore_index=True)
+    st = ContactStats(["cell1", "gain"], names, distance_edges(MM10))
+    for row, p in enumerate((cis, gain)):
+        c = p["chrom1"].map(code).astype(int)
+        st.add(np.full(len(p), row), c, p["pos1"], c, p["pos2"], p["strand1"], p["strand2"])
+    cd = ChromData(coords=np.zeros((0, 3)), spots=pd.DataFrame({"chrom": pd.Series([], dtype=str), "start": [],
+                                                                "end": [], "trace_id": []}),
+                   cells=pd.DataFrame({"cell_id": ["cell1", "gain"]}))
+    st.write(cd, key="contacts")
+    cols = ["frac_short", "frac_long", "short_long_ratio", "frac_2M_12M", "ps_slope_1M_10M"]
+    pooled = contact_features(cd, params=ContactFeatureParams.guo2026(), key_added=None)
+    assert not np.allclose(pooled.loc["cell1", cols].to_numpy(float), pooled.loc["gain", cols].to_numpy(float))
+    per = contact_features(cd, params=ContactFeatureParams.guo2026(per_chromosome=True), key_added=None)
+    np.testing.assert_allclose(per.loc["cell1", cols].to_numpy(float), per.loc["gain", cols].to_numpy(float),
+                               rtol=1e-12)
+    dropped = [c for c in names if c not in per.attrs["chroms"]]    # too short for 20-50 Mb contacts to count
+    assert "chr1" in per.attrs["chroms"] and dropped and all(MM10[c] < MM10["chr1"] / 2 for c in dropped)
+    one = contact_features(cd, params=ContactFeatureParams.guo2026(chroms=["chr2"], per_chromosome=True),
+                           key_added=None)
+    sub = contact_features(cd, params=ContactFeatureParams.guo2026(chroms=["chr2"]), key_added=None)
+    np.testing.assert_allclose(one[cols].to_numpy(float), sub[cols].to_numpy(float))

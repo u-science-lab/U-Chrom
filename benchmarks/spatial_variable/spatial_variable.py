@@ -106,11 +106,15 @@ def stage_features(stats_root: Path, out: Path):
             st.cells = np.asarray([f"{sec}:{b}" for b in st.cells], dtype=object)
             merged = st if merged is None else _concat(merged, st)
         merged.write(work, key="contacts", source=f"{stats_root}/<section>/<section>.contact_stats_{filt}.npz")
-        for name, params in (("guo", ContactFeatureParams.guo2026()), ("bycentre", ContactFeatureParams())):
+        for name, params in (("guo", ContactFeatureParams.guo2026()), ("bycentre", ContactFeatureParams()),
+                             ("chrom", ContactFeatureParams.guo2026(per_chromosome=True))):
             f = contact_features(work, params=params, key_added=None)
-            f.columns = [f"{c}" if name == "guo" else f"{c}@centre" for c in f.columns]
-            f = f[[c for c in f.columns if name == "guo" or c.startswith(("frac_short", "frac_long",
-                                                                            "short_long"))]]
+            if name == "chrom":                   # per chromosome, equal weights: blind to whole-chromosome gains
+                log(f"features {filt} per chromosome over {f.attrs['chroms']}")
+                f = f[[c for c in FEATURES if not c.endswith("@chrom")]]
+            elif name == "bycentre":
+                f = f[[c for c in f.columns if c.startswith(("frac_short", "frac_long", "short_long"))]]
+            f.columns = [c if name == "guo" else f"{c}@{name}" for c in f.columns]
             f.columns = [f"{filt}.{c}" for c in f.columns]
             frames.append(f)
         # orientation QC: inward / outward share of the contacts below 2.5 kb (histogram column 0) and
@@ -259,6 +263,9 @@ def stage_regions(out: Path):
 # ------------------------------------------------------------------------------------------------------------
 FEATURES = ["short_long_ratio", "frac_short", "frac_long", "frac_2M_12M", "ps_slope_100k_1M", "ps_slope_1M_10M",
             "cis_fraction"]
+# the same computed per chromosome and averaged with equal weights (uchrom.fea.ContactFeatureParams
+# per_chromosome): a tumour's gains and losses of whole chromosomes change the pooled ones, not these
+FEATURES += [f"{x}@chrom" for x in FEATURES]
 CONTROLS = ["log_contacts"]              # depth: expected to vary (tissue density), a control, not a finding
 
 

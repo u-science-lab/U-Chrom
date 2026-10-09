@@ -7,6 +7,14 @@ The short / long-range ratio is that of Guo et al. 2026 by default: contacts clo
 short = 200 kb - 2 Mb and long = 20 - 50 Mb as fractions of the remaining cis contacts (scHiCluster's bins
 51-76 and 103-114, :meth:`ContactFeatureParams.guo2026`).  A bin counts in a range when its centre (geometric
 mean of its edges) lies inside; ``guo2026()`` gives the exact bins of the paper.
+
+Pooled over the chromosomes (the default, as the papers compute them), the features also depend on which
+chromosomes the contacts come from: long-range contacts exist only on long chromosomes, and the cis fraction on
+how many chromosomes there are.  In an aneuploid tissue (a tumour's clones) a gain of small chromosomes raises a
+cell's short / long ratio without any change of folding.  ``per_chromosome=True`` computes every feature on each
+chromosome's own histogram and averages them over a fixed set of chromosomes with equal weights, so a gain or loss
+of whole chromosomes leaves them unchanged (a gain of part of a chromosome still shifts that chromosome's
+distances).
 """
 
 from __future__ import annotations
@@ -39,7 +47,13 @@ class ContactFeatureParams:
     slopes
         Ranges over which the slope of log10 P(s) on log10 s is fitted (contacts per bp of distance).
     chroms
-        The chromosomes counted (default: all of the histograms).
+        The chromosomes counted (default: all of the histograms; with ``per_chromosome``, those whose pooled
+        histogram over all cells has at least half the genome-wide share of long-range contacts -- the
+        chromosomes long enough for the long range).
+    per_chromosome
+        Each feature computed per chromosome and averaged over ``chroms`` with equal weights (needs the
+        histograms per chromosome, ``ContactStats.write(per_chromosome=True)``); ``n_cis`` / ``n_trans`` /
+        ``n_used`` stay totals and ``trans_share.<chrom>`` per chromosome.
     """
 
     min_distance: float = 5_000.0
@@ -50,6 +64,7 @@ class ContactFeatureParams:
     bands: Sequence[Tuple[float, float]] = ((2.0e6, 1.2e7),)
     slopes: Sequence[Tuple[float, float]] = ((1.0e5, 1.0e6), (1.0e6, 1.0e7))
     chroms: Optional[Sequence[str]] = None
+    per_chromosome: bool = False
 
     @classmethod
     def guo2026(cls, **kw) -> "ContactFeatureParams":
@@ -105,55 +120,53 @@ def contact_features(cd, *, key: str = "contacts", cells=None, params: Optional[
         rows = ids.get_indexer([str(c) for c in cells])
         if (rows < 0).any():
             raise KeyError("cells not in cd.cells")
-    use = np.arange(len(chroms)) if p.chroms is None else np.array([chroms.index(c) for c in p.chroms])
-    if dist.ndim == 2:                                            # stored summed over the chromosomes
-        if p.chroms is not None:
-            raise ValueError(f"the histograms {key!r} are summed over the chromosomes: params.chroms is not available")
-        h = dist[rows].astype(float)
-    else:
-        h = dist[rows][:, use].sum(axis=1).astype(float)         # cells x (n_edges + 1)
-    # real bins 1..m: [edges[k-1], edges[k]); centre = geometric mean
+    if dist.ndim == 2 and (p.chroms is not None or p.per_chromosome):  # stored summed over the chromosomes
+        raise ValueError(f"the histograms {key!r} are summed over the chromosomes: params.chroms / per_chromosome "
+                         "need them per chromosome (ContactStats.write(per_chromosome=True))")
     lo_e, hi_e = edges[:-1], edges[1:]
-    centre = np.sqrt(lo_e * hi_e)
-    real = h[:, 1:-1]
+    centre = np.sqrt(lo_e * hi_e)                                 # real bins 1..m: [edges[k-1], edges[k])
     keep = lo_e >= p.min_distance
-    n_used = real[:, keep].sum(axis=1)
-
-    def frac(lo, hi, bins=None):
-        if bins is not None:
-            sel = np.zeros(len(centre), bool)
-            sel[bins[0]:bins[1]] = True
-        else:
-            sel = (centre >= lo) & (centre < hi)
-        sel &= keep
-        with np.errstate(divide="ignore", invalid="ignore"):
-            return real[:, sel].sum(axis=1) / n_used
-
-    out = pd.DataFrame(index=ids[rows])
-    n_cis = h.sum(axis=1)
-    out["n_cis"] = n_cis
-    out["n_trans"] = trans[rows].sum(axis=1) // 2
-    with np.errstate(divide="ignore", invalid="ignore"):
-        out["cis_fraction"] = n_cis / (n_cis + out["n_trans"].to_numpy())
-    out["n_used"] = n_used
-    out["frac_short"] = frac(*p.short, bins=p.short_bins)
-    out["frac_long"] = frac(*p.long, bins=p.long_bins)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        out["short_long_ratio"] = out["frac_short"] / out["frac_long"]
-    for lo, hi in p.bands:
-        out[f"frac_{_label(lo, hi)}"] = frac(lo, hi)
-    width = hi_e - lo_e
-    for lo, hi in p.slopes:
-        sel = (centre >= lo) & (centre < hi) & keep
-        x = np.log10(centre[sel])
-        with np.errstate(divide="ignore", invalid="ignore"):
-            yv = np.log10(real[:, sel] / width[sel])
-        out[f"ps_slope_{_label(lo, hi)}"] = _slopes(x, yv)
+    trans_rows = trans[rows]
     cis_per = (np.asarray(cd.cellm[f"{key}.cis"])[rows] if f"{key}.cis" in cd.cellm
                else dist[rows].sum(axis=2))
+    out = pd.DataFrame(index=ids[rows])
+    if dist.ndim == 2:
+        h = dist[rows].astype(float)
+        feats = _features(h, centre, lo_e, hi_e, keep, p)
+    else:
+        if p.chroms is not None:
+            use = [chroms.index(c) for c in p.chroms]
+        elif p.per_chromosome:
+            use = _long_enough(dist[rows], centre, keep, p)
+        else:
+            use = list(range(len(chroms)))
+        h = dist[rows][:, use].sum(axis=1).astype(float)          # cells x (n_edges + 1)
+        feats = _features(h, centre, lo_e, hi_e, keep, p)
+        if p.per_chromosome:
+            per = [_features(dist[rows][:, i].astype(float), centre, lo_e, hi_e, keep, p) for i in use]
+            for k in feats:
+                if k in ("n_used",):
+                    continue
+                with np.errstate(invalid="ignore"):
+                    feats[k] = np.nanmean(np.column_stack([f[k] for f in per]), axis=1)
+            legs = 2 * cis_per[:, use]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                cf = legs / (legs + trans_rows[:, use])           # each chromosome's legs that are cis
+            out_cis = np.nanmean(cf, axis=1)
+    n_cis = h.sum(axis=1)
+    out["n_cis"] = n_cis
+    out["n_trans"] = trans_rows.sum(axis=1) // 2
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out["cis_fraction"] = n_cis / (n_cis + out["n_trans"].to_numpy())
+    if p.per_chromosome:
+        out["cis_fraction"] = out_cis
+    for k, v in feats.items():
+        out[k] = v
+    if p.per_chromosome:
+        out.attrs["chroms"] = [chroms[i] for i in use]
     legs_cis = 2 * cis_per                                        # each cis contact: two legs on its chromosome
     with np.errstate(divide="ignore", invalid="ignore"):
-        share = trans[rows] / (trans[rows] + legs_cis)
+        share = trans_rows / (trans_rows + legs_cis)
     for i, c in enumerate(chroms):
         out[f"trans_share.{c}"] = share[:, i]
     if key_added is UNSET:
@@ -173,6 +186,55 @@ def contact_features(cd, *, key: str = "contacts", cells=None, params: Optional[
                      inputs={"contact_stats": key, "n_cells": int(len(out)), "source": rec.get("source"),
                              "filter": rec.get("filter")})
     return target if copy else out
+
+
+def _features(h: np.ndarray, centre, lo_e, hi_e, keep, p: ContactFeatureParams) -> dict:
+    """The distance features of histograms h (cells x (n_edges + 1)): n_used, the fractions, the ratio, the bands,
+    the slopes."""
+    real = h[:, 1:-1]
+    n_used = real[:, keep].sum(axis=1)
+
+    def frac(lo, hi, bins=None):
+        if bins is not None:
+            sel = np.zeros(len(centre), bool)
+            sel[bins[0]:bins[1]] = True
+        else:
+            sel = (centre >= lo) & (centre < hi)
+        sel &= keep
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return real[:, sel].sum(axis=1) / n_used
+
+    out = {"n_used": n_used, "frac_short": frac(*p.short, bins=p.short_bins),
+           "frac_long": frac(*p.long, bins=p.long_bins)}
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out["short_long_ratio"] = out["frac_short"] / out["frac_long"]
+    for lo, hi in p.bands:
+        out[f"frac_{_label(lo, hi)}"] = frac(lo, hi)
+    width = hi_e - lo_e
+    for lo, hi in p.slopes:
+        sel = (centre >= lo) & (centre < hi) & keep
+        x = np.log10(centre[sel])
+        with np.errstate(divide="ignore", invalid="ignore"):
+            yv = np.log10(real[:, sel] / width[sel])
+        out[f"ps_slope_{_label(lo, hi)}"] = _slopes(x, yv)
+    return out
+
+
+def _long_enough(dist: np.ndarray, centre, keep, p: ContactFeatureParams) -> list:
+    """The chromosomes whose histogram summed over all cells has at least half the genome-wide share of
+    long-range contacts (the long range fits on them)."""
+    pooled = dist.sum(axis=0)[:, 1:-1].astype(float)              # chroms x bins
+    if p.long_bins is not None:
+        sel = np.zeros(len(centre), bool)
+        sel[p.long_bins[0]:p.long_bins[1]] = True
+    else:
+        sel = (centre >= p.long[0]) & (centre < p.long[1])
+    sel &= keep
+    used = pooled[:, keep].sum(axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        share = pooled[:, sel].sum(axis=1) / used
+    genome = pooled[:, sel].sum() / max(pooled[:, keep].sum(), 1)
+    return [i for i in range(len(share)) if np.isfinite(share[i]) and share[i] >= 0.5 * genome]
 
 
 def _slopes(x: np.ndarray, Y: np.ndarray) -> np.ndarray:
