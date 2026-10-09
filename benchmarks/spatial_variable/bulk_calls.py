@@ -1,6 +1,6 @@
 """Structures of each spatial Hi-C section's pooled map (all its spots), the reference set the per-spot local scores
 are measured on: insulation boundaries (250-kb window) and HiCCUPS loops at 25 kb, cis-eigenvector compartments at
-100 kb; and the windows of those boundaries and loops (``uchrom.io.boundary_windows`` / ``loop_windows``) that the
+100 kb; and the windows of those boundaries, of domain interiors (controls) and of the loops (``uchrom.io.boundary_windows`` / ``loop_windows``) that the
 second pass over the pairs counts per spot (``spatial_pairs_windows.py`` of the recipe).
 
     python benchmarks/spatial_variable/bulk_calls.py --stats $OAK/uchrom/spatial_3dgenome --out $OUT/bulk_calls \
@@ -76,15 +76,27 @@ def call_sample(sample: str, stats_root: Path, out: Path, workers: int) -> dict:
     comp = call_compartments_eig(cd, contacts="bulk_100kb")
     log(f"{sample}: compartments in {time.time() - t:.0f} s")
     b = pd.DataFrame({"chrom": bounds["chrom"].astype(str), "pos": bounds["start"].astype(np.int64)})
+    # controls: the midpoints of the domains at least two windows long (no boundary within a window), the same
+    # three windows -- a spot's own cross / within ratio without a boundary (its contact-decay shape)
+    mid = []
+    for chrom, g in b.sort_values(["chrom", "pos"]).groupby("chrom", sort=False):
+        p = g["pos"].to_numpy()
+        gap = np.diff(p)
+        ok = gap >= 2 * BOUNDARY_WINDOW + 2 * RES
+        mid.append(pd.DataFrame({"chrom": chrom, "pos": (p[:-1][ok] + gap[ok] // 2) // RES * RES}))
+    interior = pd.concat(mid, ignore_index=True) if mid else b.iloc[:0]
     lp = pd.DataFrame({"chrom1": loops["chrom1"].astype(str), "start1": loops["start1"].astype(np.int64),
                        "start2": loops["start2"].astype(np.int64)})
     w = pd.concat([boundary_windows(b, window=BOUNDARY_WINDOW, resolution=RES).assign(kind="boundary"),
+                   boundary_windows(interior, window=BOUNDARY_WINDOW, resolution=RES).assign(kind="interior"),
                    loop_windows(lp, resolution=RES).assign(kind="loop")], ignore_index=True)
+    interior.to_parquet(out / f"{sample}.interior.parquet")
     bounds.to_parquet(out / f"{sample}.boundaries.parquet")
     loops.to_parquet(out / f"{sample}.loops.parquet")
     pd.DataFrame(comp).to_parquet(out / f"{sample}.compartments.parquet")
     w.to_parquet(out / f"{sample}.windows.parquet")
-    return {"n_boundaries": int(len(bounds)), "n_loops": int(len(loops)), "n_windows": int(len(w)),
+    return {"n_boundaries": int(len(bounds)), "n_interior": int(len(interior)), "n_loops": int(len(loops)),
+            "n_windows": int(len(w)),
             "assembly": asm}
 
 
