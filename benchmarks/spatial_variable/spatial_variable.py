@@ -162,16 +162,24 @@ def _concat(a, b):
     return out
 
 
+HOT = 2.5            # a barcode row / column whose median contacts exceed this multiple of the section's: an
+                     # array-edge channel (Guo 2026 brain: the first and last rows 2-10x, the last column 3.6-10x)
+
+
 def _qc(f: pd.DataFrame) -> np.ndarray:
-    """Spots kept: >= 50k contacts, not on the first / last barcode row, not in a dead barcode column."""
+    """Spots kept: >= 50k contacts, not on the first / last barcode row, not in a dead barcode column (median
+    contacts < 5 % of the section's) nor a hot row / column (> ``HOT`` x the section's)."""
     keep = np.zeros(len(f), bool)
-    for sec, g in f.groupby("section"):
+    for sec, g in f.groupby("section", observed=True):
         idx = f.index.get_indexer(g.index)
         y, x, hc = g.centroid_y.to_numpy(), g.centroid_x.to_numpy(), g.hic_contacts.to_numpy()
+        med = np.median(hc)
         edge = (y == y.min()) | (y == y.max())
         colmed = pd.Series(hc).groupby(x).median()
-        dead = np.isin(x, colmed.index[colmed < 0.05 * np.median(hc)].to_numpy())
-        keep[idx] = (hc >= MIN_CONTACTS) & ~edge & ~dead
+        rowmed = pd.Series(hc).groupby(y).median()
+        dead = np.isin(x, colmed.index[colmed < 0.05 * med].to_numpy())
+        hot = np.isin(x, colmed.index[colmed > HOT * med].to_numpy()) | np.isin(y, rowmed.index[rowmed > HOT * med].to_numpy())
+        keep[idx] = (hc >= MIN_CONTACTS) & ~edge & ~dead & ~hot
     return keep
 
 
@@ -267,19 +275,24 @@ def _grid_graph(g):
 
 
 def _residuals(V: pd.DataFrame, X) -> pd.DataFrame:
-    """Least-squares residuals of each column on X (+ intercept), where the column has a value."""
+    """Least-squares residuals of each column on X (+ intercept), where the column has a value (columns with
+    the same missing spots fitted together)."""
     if X is None:
         return V
     Xi = np.c_[np.ones(len(V)), X]
-    out = V.copy()
-    for c in V.columns:
-        y = V[c].to_numpy(float)
-        m = np.isfinite(y)
-        b, *_ = np.linalg.lstsq(Xi[m], y[m], rcond=None)
-        r = np.full(len(y), np.nan)
-        r[m] = y[m] - Xi[m] @ b
-        out[c] = r
-    return out
+    A = V.to_numpy(float)
+    out = np.full_like(A, np.nan)
+    fin = np.isfinite(A)
+    groups: dict = {}
+    for j in range(A.shape[1]):
+        groups.setdefault(fin[:, j].tobytes(), []).append(j)
+    for _, js in groups.items():
+        m = fin[:, js[0]]
+        if m.sum() <= Xi.shape[1]:
+            continue
+        b, *_ = np.linalg.lstsq(Xi[m], A[np.ix_(m, js)], rcond=None)
+        out[np.ix_(m, js)] = A[np.ix_(m, js)] - Xi[m] @ b
+    return pd.DataFrame(out, index=V.index, columns=V.columns)
 
 
 def _smooth_var(V: pd.DataFrame, xy) -> np.ndarray:
@@ -446,33 +459,58 @@ def stage_cnv(stats_root: Path, out: Path, n_cnv: int = 5):
 # ------------------------------------------------------------------------------------------------------------
 # stage local: per-spot boundary insulation and loop strength (window counts of the pooled-map structures)
 # ------------------------------------------------------------------------------------------------------------
-def _adjusted_tests(g: pd.DataFrame, V: pd.DataFrame, pcs: pd.DataFrame, *, with_moran: bool = True):
-    """SPARK-X (and Moran's I) of the columns of V on the spots g: destriped, + depth, + depth and RNA (30 PCs)."""
-    from uchrom.spatial import destripe, spatial_autocorr, sparkx
+def _cnv_pcs(out: Path, g: pd.DataFrame, n: int = 5):
+    """The first ``n`` principal components of the spots' chromosome-share profiles (stage cnv), or None."""
+    p = out / "cnv_profiles.parquet"
+    if not p.exists():
+        return None
+    L = pd.read_parquet(p).drop(columns="section").reindex(g.index)
+    Z = (L - L.mean()) / L.std()
+    u, sv_, _ = np.linalg.svd(Z.fillna(0).to_numpy(), full_matrices=False)
+    return u[:, :n] * sv_[:n]
+
+
+def _adjusted_tests(g: pd.DataFrame, V: pd.DataFrame, pcs: pd.DataFrame, cnv=None, *, with_moran: bool = True,
+                    n_null: int = 0, seed: int = 0):
+    """Per column of V on the spots g, destriped: the smooth share of the variance after depth, + RNA (30 PCs)
+    [, + copy-number PCs], SPARK-X p-values, Moran's I (optional) and the smooth share of the same values with the
+    spots shuffled (``n_null`` times; the noise level of the measure)."""
+    from uchrom.spatial import destripe, smooth_share, spatial_autocorr, sparkx
 
     xy = g[["centroid_x", "centroid_y"]].to_numpy(float)
     ds = destripe(V, g.centroid_y.to_numpy(int), g.centroid_x.to_numpy(int))
     dep = np.log10(g[["hic_contacts"]].to_numpy(float))
     P = pcs.loc[g.index].to_numpy(float)
+    steps = [("depth", dep), ("depth_rna30", np.c_[dep, P])]
+    if cnv is not None:
+        steps.append(("depth_rna30_cnv", np.c_[dep, P, cnv]))
     t = pd.DataFrame(index=pd.Index(V.columns, name="feature"))
     graph = _grid_graph(g) if with_moran else None
-    for name, cov in (("destriped", None), ("depth", dep), ("depth_rna30", np.c_[dep, P])):
+    rng = np.random.default_rng(seed)
+    base = None
+    for name, cov in steps:
+        r = _residuals(ds, cov)
+        sm = smooth_share(r, xy)
+        t[f"{name}.smooth_share"] = sm
+        var = np.nanvar(r.to_numpy(float), axis=0)
+        if base is None:
+            base = sm * var
+        t[f"{name}.smooth_left"] = sm * var / base
+        if n_null:
+            nulls = [smooth_share(r.iloc[rng.permutation(len(r))].set_axis(r.index), xy) for _ in range(n_null)]
+            t[f"{name}.smooth_share_null"] = np.mean(nulls, axis=0)
         sx = sparkx(ds, xy, covariates=cov)
-        t[f"{name}.sparkx_p"] = sx["pval"]
         t[f"{name}.sparkx_padj"] = sx["padj"]
         if with_moran:
-            r = _residuals(ds, cov)
             t[f"{name}.moran_I"] = spatial_autocorr(values=r, graph=graph)["I"]
-            t[f"{name}.smooth_left"] = _smooth_var(r, xy) / _smooth_var(ds, xy)
     return t
 
 
-def stage_local(stats_root: Path, out: Path, min_counts: float = 2.0):
-    """Per section: window_scores of the spots; the per-spot boundary strength and loop strength tested like the
-    global features; every boundary / loop with >= ``min_counts`` contacts per spot in its windows (on average)
-    tested on its own; the structures significant in both sections against the overlap expected by chance."""
-    from scipy import stats as ss
-
+def stage_local(stats_root: Path, out: Path, min_counts: float = 2.0, seed: int = 0):
+    """Per section: window_scores of the spots.  The per-spot boundary strength and loop strength are tested like
+    the global features; every boundary / loop with >= ``min_counts`` contacts per spot in its windows (on
+    average) on its own: its smooth share after depth / + RNA / + copy number, against shuffled spots, and how
+    the structures' smooth shares agree between the two sections."""
     from uchrom.fea import window_scores
     from uchrom.io import WindowCounts
 
@@ -484,10 +522,11 @@ def stage_local(stats_root: Path, out: Path, min_counts: float = 2.0):
         wc.cells = np.asarray([f"{sec}:{b}" for b in wc.cells], dtype=object)
         sc = window_scores(wc)
         g = f[(f.section == sec) & f.qc]
+        cnv = _cnv_pcs(out, g)
         cells = sc["cells"].reindex(g.index)
         cells.to_parquet(out / f"window_cells_{sec}.parquet")
         cols = [c for c in ("boundary_strength", "boundary_ratio", "interior_ratio", "loop_strength") if c in cells]
-        t = _adjusted_tests(g, cells[cols], pcs)
+        t = _adjusted_tests(g, cells[cols], pcs, cnv, n_null=5, seed=seed)
         t.insert(0, "section", sec)
         glob.append(t.reset_index())
         for kind, counts_key, score_key in (("boundary", "boundary_counts", "insulation"), ("loop", "loop_counts", "loops")):
@@ -498,11 +537,14 @@ def stage_local(stats_root: Path, out: Path, min_counts: float = 2.0):
             keep = n_per_spot.index[n_per_spot >= min_counts]
             S = sc[score_key].reindex(g.index)[keep]
             S.columns = [str(c) for c in S.columns]
-            tt = _adjusted_tests(g, S, pcs, with_moran=False)
+            tt = _adjusted_tests(g, S, pcs, cnv, with_moran=False, n_null=2, seed=seed)
             tt["counts_per_spot"] = n_per_spot[keep].to_numpy()
             per[(sec, kind)] = tt
-            log(f"local {sec} {kind}: {len(keep)} of {len(n_per_spot)} with >= {min_counts} "
-                f"contacts per spot; significant after RNA {(tt['depth_rna30.sparkx_padj'] < 0.05).sum()}")
+            last = [c for c in tt.columns if c.endswith(".smooth_share")][-1]
+            null = last + "_null"
+            log(f"local {sec} {kind}: {len(keep)} of {len(n_per_spot)} with >= {min_counts} contacts per spot; "
+                f"{last} median {tt[last].median():.3f} (shuffled {tt[null].median():.3f}), "
+                f"> 3x shuffled: {(tt[last] > 3 * tt[null]).sum()}")
     pd.concat(glob, ignore_index=True).to_parquet(out / "local_global.parquet")
     rep = {}
     for kind in ("boundary", "loop"):
@@ -510,16 +552,15 @@ def stage_local(stats_root: Path, out: Path, min_counts: float = 2.0):
             continue
         a, b = per[(SECTIONS[0], kind)], per[(SECTIONS[1], kind)]
         common = a.index.intersection(b.index)
-        for step in ("destriped", "depth", "depth_rna30"):
-            sa = a.loc[common, f"{step}.sparkx_padj"] < 0.05
-            sb = b.loc[common, f"{step}.sparkx_padj"] < 0.05
-            k, n1, n2, N = int((sa & sb).sum()), int(sa.sum()), int(sb.sum()), len(common)
-            rep[f"{kind}/{step}"] = {"n_tested_both": N, "n_sig_r1": n1, "n_sig_r2": n2, "n_sig_both": k,
-                                     "expected_both": n1 * n2 / N if N else None,
-                                     "hypergeom_p": float(ss.hypergeom.sf(k - 1, N, n1, n2)) if N else None,
-                                     "spearman_neglog10p": float(pd.Series(-np.log10(a.loc[common, f"{step}.sparkx_p"]))
-                                                                 .corr(pd.Series(-np.log10(b.loc[common, f"{step}.sparkx_p"])),
-                                                                       method="spearman")) if N else None}
+        for col in [c for c in a.columns if c.endswith(".smooth_share")]:
+            ea = a.loc[common, col] - a.loc[common, col + "_null"]
+            eb = b.loc[common, col] - b.loc[common, col + "_null"]
+            top_a, top_b = ea >= ea.quantile(0.9), eb >= eb.quantile(0.9)
+            rep[f"{kind}/{col}"] = {
+                "n_both": int(len(common)),
+                "median_excess_r1": float(ea.median()), "median_excess_r2": float(eb.median()),
+                "spearman_excess_between_sections": float(ea.corr(eb, method="spearman")),
+                "top_decile_overlap": int((top_a & top_b).sum()), "top_decile_expected": float(top_a.sum() * top_b.mean())}
         pd.concat({s: per[(s, kind)] for s in SECTIONS}, names=["section"]).reset_index().to_parquet(
             out / f"local_{kind}s.parquet")
     with open(out / "local_replication.json", "w") as fh:

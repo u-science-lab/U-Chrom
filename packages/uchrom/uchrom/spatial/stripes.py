@@ -75,6 +75,7 @@ def destripe(values, rows, cols, xy: Optional[np.ndarray] = None, *, spacing: fl
     pos = np.c_[cols, rows].astype(float) if xy is None else np.asarray(xy, float)
     reg = np.zeros(len(V), int) if regions is None else pd.factorize(np.asarray(regions))[0]
     out = V.copy()
+    finite = np.isfinite(V)
     for r in np.unique(reg):
         m = reg == r
         S = smooth_basis(pos[m], spacing)
@@ -86,16 +87,16 @@ def destripe(values, rows, cols, xy: Optional[np.ndarray] = None, *, spacing: fl
         D = D - S @ _lstsq(S, D)
         X = np.c_[S, D]                                        # the B-splines sum to 1: no intercept
         k = S.shape[1]
+        groups: dict = {}
         for j in range(V.shape[1]):
-            y = V[m, j]
-            ok = np.isfinite(y)
+            groups.setdefault(finite[m, j].tobytes(), []).append(j)
+        rows_m = np.flatnonzero(m)
+        for _, js in groups.items():                           # columns with the same missing spots together
+            ok = finite[m, js[0]]
             if ok.sum() <= X.shape[1]:
                 continue
-            b = _lstsq(X[ok], y[ok])
-            stripes = X[:, k:] @ b[k:]
-            col = out[m, j]
-            col[ok] = y[ok] - stripes[ok]
-            out[m, j] = col
+            b = _lstsq(X[ok], V[np.ix_(rows_m[ok], js)])
+            out[np.ix_(rows_m[ok], js)] = V[np.ix_(rows_m[ok], js)] - X[ok][:, k:] @ b[k:]
     out = out[:, 0] if one else out
     if is_df:
         return pd.DataFrame(out, index=values.index, columns=values.columns)
@@ -104,16 +105,23 @@ def destripe(values, rows, cols, xy: Optional[np.ndarray] = None, *, spacing: fl
 
 def smooth_share(values, xy: np.ndarray, *, spacing: float = 6.0) -> np.ndarray:
     """The share of each column's variance that a smooth surface (:func:`smooth_basis`) carries (R^2 of the
-    least-squares fit on the spots with a value)."""
+    least-squares fit on the spots with a value; columns with the same missing spots are fitted together).  For
+    values with no spatial pattern it is about (number of basis functions) / (number of spots)."""
     V = values.to_numpy(float) if isinstance(values, pd.DataFrame) else np.asarray(values, float)
     V = V[:, None] if V.ndim == 1 else V
     S = smooth_basis(xy, spacing)
     out = np.full(V.shape[1], np.nan)
+    finite = np.isfinite(V)
+    groups: dict = {}
     for j in range(V.shape[1]):
-        y = V[:, j]
-        ok = np.isfinite(y)
-        if ok.sum() <= S.shape[1] or np.var(y[ok]) == 0:
+        groups.setdefault(finite[:, j].tobytes(), []).append(j)
+    for _, js in groups.items():
+        ok = finite[:, js[0]]
+        if ok.sum() <= S.shape[1]:
             continue
-        b = _lstsq(S[ok], y[ok])
-        out[j] = 1 - np.var(y[ok] - S[ok] @ b) / np.var(y[ok])
+        Y = V[np.ix_(ok, js)]
+        b = _lstsq(S[ok], Y)
+        var = Y.var(axis=0)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            out[js] = np.where(var > 0, 1 - (Y - S[ok] @ b).var(axis=0) / var, np.nan)
     return out
