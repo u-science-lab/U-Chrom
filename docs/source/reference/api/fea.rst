@@ -54,6 +54,25 @@ A linked map aggregated around known loops or boundaries.
 .. automodule:: uchrom.fea.pileup_maps
    :members:
 
+Contact features per cell
+-------------------------
+
+From the contact-distance histograms of every cell or spatial Hi-C spot (``uchrom.io.ContactStats``): the short /
+long-range ratio (Guo et al. 2026's bins), distance bands, contact-decay slopes, cis fraction, trans share per
+chromosome.
+
+.. automodule:: uchrom.fea.contact_stats
+   :members:
+
+Known structures scored per cell
+--------------------------------
+
+Boundaries and loops called on a pooled map, scored in every cell from the contacts counted in their windows
+(``uchrom.io.WindowCounts``): insulation against domain interiors, peak over donut.
+
+.. automodule:: uchrom.fea.window_scores
+   :members:
+
 Comparing structures
 --------------------
 

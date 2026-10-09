@@ -1,7 +1,8 @@
 uchrom.io
 =========
 
-Readers and writers of the file formats: contact pairs and maps (including pairs → per-cell ``.scool``),
+Readers and writers of the file formats: contact pairs and maps (including pairs → per-cell ``.scool``, per-cell
+contact-distance histograms ``ContactStats`` and contacts in windows of the map ``WindowCounts``),
 Juicer loop / domain lists (``read_juicer_loops``, ``read_juicer_domains``), tracing and seqFISH tables.
 
 .. automodule:: uchrom.io

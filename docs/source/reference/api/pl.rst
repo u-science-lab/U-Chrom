@@ -12,3 +12,9 @@ uchrom.pl
 
 .. automodule:: uchrom.pl.structure_3d
    :members:
+
+Cells in tissue
+---------------
+
+.. automodule:: uchrom.pl.spatial
+   :members:
