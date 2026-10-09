@@ -1280,8 +1280,11 @@ class Dataset:
                 "balanced": "weight" in clr.bins().columns}
 
     def contacts(self, key: str, chrom: str, start=None, end=None, resolution=None,
-                 balance: bool = False, cell: Optional[str] = None, group: Optional[str] = None) -> bytes:
+                 balance: bool = False, cell: Optional[str] = None, group: Optional[str] = None,
+                 ratio_to: Optional[str] = None, smooth: int = 1) -> bytes:
         _one_scope(cell, group)
+        if ratio_to is not None:
+            return self._contacts_ratio(key, chrom, start, end, resolution, balance, cell, group, ratio_to, smooth)
 
         info = next((m for m in self.contact_maps() if m["key"] == key and m["kind"] != "error"), None)
         if info is None:
@@ -1332,6 +1335,39 @@ class Dataset:
                   "value": "balanced" if balanced else "count", "unit": None,
                   "cell": cell, "group": None, "note": note}
         return encode_matrix(mat, starts, ends, header)
+
+    def _contacts_ratio(self, key: str, chrom: str, start, end, resolution, balance: bool, cell: Optional[str],
+                        group: Optional[str], ratio_to: str, smooth: int) -> bytes:
+        """log2 of the map of ``cell`` / ``group`` over the map of the group ``ratio_to`` (``"all"``: every cell),
+        each divided by its total in the window: where the two differ beyond their depths (e.g. a group with more
+        short-range and fewer long-range contacts: red near the diagonal, blue away from it).  Both maps are summed
+        over ``smooth`` x ``smooth`` pixels first (odd); pixels where the reference has fewer than
+        ``RATIO_MIN_COUNT`` contacts after that are NaN; half a contact is added to both."""
+        if cell is None and group is None:
+            raise LookupError("a ratio needs cell=<cell id> or group=<group> for its numerator")
+        k = int(smooth or 1)
+        if k < 1 or k % 2 == 0:
+            raise ValueError("smooth must be an odd number >= 1")
+        a = decode_matrix(self.contacts(key, chrom, start, end, resolution, balance, cell, group))
+        b = decode_matrix(self.contacts(key, chrom, start, end, resolution, balance, None, ratio_to))
+        A = np.nan_to_num(np.asarray(a["matrix"], np.float64))
+        B = np.nan_to_num(np.asarray(b["matrix"], np.float64))
+        if A.shape != B.shape:
+            raise ValueError("the two maps have different bins")
+        ta, tb = A.sum(), B.sum()
+        if ta <= 0 or tb <= 0:
+            raise LookupError("no contacts in the window")
+        A, B = _box_sum(A, k), _box_sum(B, k)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratio = np.log2(((A + 0.5) / ta) / ((B + 0.5) / tb))
+        ratio[B < RATIO_MIN_COUNT] = np.nan
+        h = a["header"]
+        ref = "all cells" if ratio_to == ALL_CELLS else ratio_to
+        note = "; ".join(x for x in (h.get("note"), f"log2 over {ref}, each over its total in the window"
+                                     + (f", {k} x {k} pixels summed" if k > 1 else "")) if x)
+        header = {k_: v for k_, v in h.items() if k_ not in ("n_rows", "n_cols", "bin_starts", "bin_ends")}
+        header.update(value="log2_ratio", unit=None, ratio_to=ratio_to, smooth=k, note=note)
+        return encode_matrix(ratio.astype(np.float32), h["bin_starts"], h["bin_ends"], header)
 
     def _genome_contacts(self, key: str, info: dict, path: Path, resolution, balance: bool,
                          cell: Optional[str], group: Optional[str]) -> bytes:
@@ -1909,6 +1945,19 @@ MAX_GENOME_TRACK_BINS = 4000
 PSEUDOBULK_MAX_CELLS = 20_000
 #: pseudo-bulk matrices kept per dataset (LRU)
 PSEUDOBULK_CACHE = 16
+#: a ratio of two maps (``contacts(..., ratio_to=)``): pixels with fewer reference contacts (after smoothing) are NaN
+RATIO_MIN_COUNT = 10
+
+
+def _box_sum(m: np.ndarray, k: int) -> np.ndarray:
+    """Sum of each pixel's k x k neighbourhood (k odd; zeros beyond the edges)."""
+    if k <= 1:
+        return m
+    r = k // 2
+    p = np.pad(m, r)
+    c = np.pad(p.cumsum(0).cumsum(1), ((1, 0), (1, 0)))
+    n0, n1 = m.shape
+    return c[k:k + n0, k:k + n1] - c[:n0, k:k + n1] - c[k:k + n0, :n1] + c[:n0, :n1]
 
 
 def _one_scope(cell_id, group) -> None:

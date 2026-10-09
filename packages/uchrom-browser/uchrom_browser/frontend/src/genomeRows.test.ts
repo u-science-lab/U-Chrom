@@ -205,3 +205,13 @@ describe('matrix row shapes', () => {
     expect(squareBins(25, 15, 40, 20, 0, 1, starts, ends)).toEqual([3, 2])
   })
 })
+
+describe('ratio rows', () => {
+  it('the check box sets / clears the reference, saved rows keep it', () => {
+    expect(rowPatch('ratioTo', true)).toEqual({ ratioTo: 'all' })
+    expect(rowPatch('ratioTo', false)).toEqual({ ratioTo: null })
+    const rows = parseRows([{ id: 'r1', kind: 'matrix', source: 'cells', ratioTo: 'all', smooth: 5 }, { id: 'r2', kind: 'matrix', source: 'cells', smooth: 2 }])
+    expect(rows?.[0]).toMatchObject({ ratioTo: 'all', smooth: 5 })
+    expect(rows?.[1].smooth).toBeUndefined() // even: not a valid neighbourhood
+  })
+})

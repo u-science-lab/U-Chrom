@@ -724,6 +724,11 @@ function MatrixTools({ row, ds, set, multi }: { row: GenomeRow; ds: DatasetSumma
           <input type="checkbox" checked={row.balance ?? false} onChange={(e) => set('balance', e.target.checked)} /> balanced
         </label>
       )}
+      {map?.per_cell && (
+        <label className="check small" title="log2 of this row's map over the map of all cells, each over its total in the window (3 x 3 pixels summed): where the cells differ beyond their depth">
+          <input type="checkbox" checked={!!row.ratioTo} onChange={(e) => set('ratioTo', e.target.checked)} /> vs all cells (log2)
+        </label>
+      )}
       {row.source === 'distance' && (
         <DistanceValueControls
           stat={row.stat ?? 'median'}
@@ -850,12 +855,13 @@ function MatrixRow({
       setError(null)
       return
     }
-    const key = [ds.id, row.source, regionKey(locus), margin, row.resolution ?? '', row.balance ? 1 : 0, cell ?? '', groupRef ?? '', stat, row.threshold ?? ''].join('|')
+    const ratioTo = needsCell ? (row.ratioTo ?? null) : null
+    const key = [ds.id, row.source, regionKey(locus), margin, row.resolution ?? '', row.balance ? 1 : 0, cell ?? '', groupRef ?? '', stat, row.threshold ?? '', ratioTo ?? '', row.smooth ?? ''].join('|')
     let live = true
     const load = () =>
       isDist
         ? fetchDistance(ds.id, region, { cellId: cell, group: groupRef, stat, threshold: row.threshold ?? null })
-        : fetchContacts(ds.id, row.source!, region, { resolution: row.resolution ?? null, balance: row.balance ?? false, cell, group: groupRef })
+        : fetchContacts(ds.id, row.source!, region, { resolution: row.resolution ?? null, balance: row.balance ?? false, cell, group: groupRef, ratioTo, smooth: row.smooth ?? null })
     // cached → at once; else debounced (pan / zoom move the locus continuously)
     const t = setTimeout(
       () => {
@@ -872,7 +878,7 @@ function MatrixRow({
       clearTimeout(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ds.id, row.source, regionKey(locus), margin, row.resolution, row.balance, cell, groupRef, stat, row.threshold, valid, waiting])
+  }, [ds.id, row.source, regionKey(locus), margin, row.resolution, row.balance, cell, groupRef, stat, row.threshold, row.ratioTo, row.smooth, valid, waiting])
 
   // a stale matrix of another chromosome must not be drawn on this axis
   const shown = mat && mat.header.chrom === locus.chrom && !waiting && valid ? mat : null
@@ -888,6 +894,7 @@ function MatrixRow({
     shown?.header.resolution ? `${fmtBp(shown.header.resolution)} bins` : null,
     shown?.header.n_traces ? `${shown.header.n_traces} traces` : null,
     needsCell && groupRef && shown?.header.n_contacts ? `${fmtAxis(shown.header.n_contacts)} contacts (pseudo-bulk)` : null,
+    shown?.header.value === 'log2_ratio' ? `log2 vs ${shown.header.ratio_to === ALL_CELLS_REF ? 'all cells' : 'group'}` : null,
   ]
     .filter(Boolean)
     .join(' · ')

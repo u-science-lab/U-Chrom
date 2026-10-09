@@ -82,3 +82,13 @@ describe('colour settings persist with rows and panes', () => {
     expect('color' in setRowColor(rows, 'r1', undefined)[0]).toBe(false) // reset
   })
 })
+
+describe('log2 ratio maps', () => {
+  it('default to a diverging map with a range symmetric around 0', () => {
+    expect(defaultColorScale('ratio')).toMatchObject({ cmap: 'rdbu_r', log: false })
+    const data = Float32Array.from([-0.3, -0.1, 0, 0.05, 0.1, 0.2, NaN])
+    const [lo, hi] = autoRange(data, 'ratio', true)
+    expect(lo).toBeCloseTo(-hi)
+    expect(hi).toBeGreaterThan(0)
+  })
+})

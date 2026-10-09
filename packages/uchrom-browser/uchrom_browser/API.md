@@ -447,7 +447,7 @@ loops `chrom2, start2, end2`) plus any score columns.  In the Genome view a
 `label` (else `name`) column is drawn as each interval's name (gene tracks);
 only `domain` tables (TADs) draw their boundaries across the map rows.
 
-### `GET /api/datasets/{id}/contacts/{key}?chrom=chr21&start=&end=&resolution=&balance=false&cell=&group=`
+### `GET /api/datasets/{id}/contacts/{key}?chrom=chr21&start=&end=&resolution=&balance=false&cell=&group=&ratio_to=&smooth=`
 
 Contact matrix from a linked cool / mcool / scool.  `resolution` picks an
 mcool level (default: the finest that fits 1,000 bins); `cell` selects a
@@ -460,6 +460,15 @@ that is noted).  Header adds `"group"`, `"n_cells"` (maps summed) and
 `"n_contacts"` (upper-triangle total in the region); `value` is `count`
 (no balancing).  The last 16 results are cached.  `group` on a cool /
 mcool (not per-cell) → `422`; `cell` and `group` together → `422`.
+
+`ratio_to=<group>` (`all`: every cell) with `cell` or `group` → the **log2
+ratio** of the two maps, each divided by its total in the window
+(`value: "log2_ratio"`, header `ratio_to`, `smooth`): where a group differs
+from another beyond its depth (more short-range and fewer long-range contacts:
+positive near the diagonal, negative away from it).  `smooth` (odd, default 1)
+sums both maps over `smooth × smooth` pixels first; pixels where the reference
+has fewer than 10 contacts after that are NaN.  No numerator → `422`; an even
+`smooth` → `422`.
 
 ### `GET /api/datasets/{id}/distance?chrom=&start=&end=&cell_id=&trace_id=&stat=median&threshold=&group=`
 

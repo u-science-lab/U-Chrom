@@ -258,8 +258,10 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
     @app.get("/api/datasets/{dataset_id}/contacts/{key}")
     def contacts(dataset_id: str, key: str, chrom: str, start: Optional[int] = None,
                  end: Optional[int] = None, resolution: Optional[int] = None,
-                 balance: bool = False, cell: Optional[str] = None, group: Optional[str] = None) -> Response:
-        buf = _call(_dataset(dataset_id).contacts, key, chrom, start, end, resolution, balance, cell, group)
+                 balance: bool = False, cell: Optional[str] = None, group: Optional[str] = None,
+                 ratio_to: Optional[str] = None, smooth: int = 1) -> Response:
+        buf = _call(_dataset(dataset_id).contacts, key, chrom, start, end, resolution, balance, cell, group,
+                    ratio_to, smooth)
         return Response(buf, media_type="application/octet-stream")
 
     @app.get("/api/datasets/{dataset_id}/distance")

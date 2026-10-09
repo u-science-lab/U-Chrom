@@ -293,10 +293,11 @@ export async function fetchContacts(
   id: string,
   key: string,
   r: RegionQuery,
-  opts: { resolution?: number | null; balance?: boolean; cell?: string | null; group?: string | null } = {},
+  opts: { resolution?: number | null; balance?: boolean; cell?: string | null; group?: string | null; ratioTo?: string | null; smooth?: number | null } = {},
 ): Promise<MatrixData> {
   const group = await groupParam(id, opts.group)
-  const q = query({ chrom: r.chrom, start: r.start, end: r.end, resolution: opts.resolution, balance: opts.balance ? 'true' : 'false', cell: opts.cell, group })
+  const ratio_to = opts.ratioTo ? await groupParam(id, opts.ratioTo) : null
+  const q = query({ chrom: r.chrom, start: r.start, end: r.end, resolution: opts.resolution, balance: opts.balance ? 'true' : 'false', cell: opts.cell, group, ratio_to, smooth: ratio_to ? (opts.smooth ?? 3) : null })
   return decodeMatrix(await (await request(`${ds(id)}/contacts/${encodeURIComponent(key)}${q}`)).arrayBuffer())
 }
 

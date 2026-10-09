@@ -91,7 +91,7 @@ export function cmapGradient(name: ColormapName, reverse = false, n = 9): string
 }
 
 /** What a matrix holds (decides the defaults). */
-export type MatrixKind = 'contacts' | 'distance' | 'frequency'
+export type MatrixKind = 'contacts' | 'distance' | 'frequency' | 'ratio'
 
 /** A colour scale; `min` / `max` null = auto (percentile clip). */
 export interface ColorScale {
@@ -113,6 +113,7 @@ export type ColorScaleSetting = Partial<ColorScale>
 export function defaultColorScale(kind: MatrixKind): ColorScale {
   if (kind === 'contacts') return { cmap: 'fall', reverse: false, log: true, min: null, max: null }
   if (kind === 'distance') return { cmap: 'viridis', reverse: true, log: false, min: null, max: null }
+  if (kind === 'ratio') return { cmap: 'rdbu_r', reverse: false, log: false, min: null, max: null }
   return { cmap: 'viridis', reverse: false, log: false, min: null, max: null }
 }
 
@@ -154,7 +155,7 @@ function quantileOf(data: ArrayLike<number>, q: number, keep: (v: number) => boo
 
 /**
  * Automatic range in data units: contacts [0, p99 of the positive counts];
- * distances [p1, p99]; frequencies [0, max].  A diverging map over data of
+ * distances [p1, p99]; frequencies [0, max]; log2 ratios [p2, p98].  A diverging map over data of
  * both signs gets a range symmetric around 0.
  */
 export function autoRange(data: ArrayLike<number>, kind: MatrixKind, diverging = false): [number, number] {
@@ -166,6 +167,9 @@ export function autoRange(data: ArrayLike<number>, kind: MatrixKind, diverging =
   } else if (kind === 'frequency') {
     lo = 0
     hi = quantileOf(data, 1)
+  } else if (kind === 'ratio') {
+    lo = quantileOf(data, 0.02)
+    hi = quantileOf(data, 0.98)
   } else {
     lo = quantileOf(data, 0.01)
     hi = quantileOf(data, 0.99)

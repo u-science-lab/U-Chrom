@@ -15,13 +15,16 @@ export interface MatrixHeader {
   bin_starts: number[]
   bin_ends: number[]
   resolution?: number | null
-  value: 'count' | 'balanced' | 'distance' | 'contact_frequency' | string
+  value: 'count' | 'balanced' | 'distance' | 'contact_frequency' | 'log2_ratio' | string
   unit?: string | null
   n_traces?: number | null
   /** group-scoped matrices: the group, its cells used, contacts summed (pseudo-bulk) */
   group?: string | null
   n_cells?: number | null
   n_contacts?: number | null
+  /** log2 ratio maps (value 'log2_ratio'): the reference group and the smoothing */
+  ratio_to?: string | null
+  smooth?: number | null
   note?: string | null
 }
 
@@ -50,6 +53,7 @@ export type MatrixScale = MatrixKind
 export function scaleFor(value: string): MatrixScale {
   if (value === 'distance') return 'distance'
   if (value === 'contact_frequency') return 'frequency'
+  if (value === 'log2_ratio') return 'ratio'
   return 'contacts'
 }
 

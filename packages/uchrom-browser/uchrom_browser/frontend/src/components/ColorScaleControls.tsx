@@ -130,6 +130,12 @@ export function useMatrixScale(mat: MatrixData | null, setting: ColorScaleSettin
   const unit = mat?.header.unit ? ` (${mat.header.unit})` : ''
   const log = cs?.log ? ' (log)' : ''
   const title =
-    kind === 'contacts' ? `${mat?.header.value === 'balanced' ? 'balanced' : 'contacts'}${log}` : kind === 'distance' ? `distance${unit}${log}` : `contact frequency${log}`
+    kind === 'contacts'
+      ? `${mat?.header.value === 'balanced' ? 'balanced' : 'contacts'}${log}`
+      : kind === 'distance'
+        ? `distance${unit}${log}`
+        : kind === 'ratio'
+          ? 'log2 ratio'
+          : `contact frequency${log}`
   return { kind, cs, auto, range, pixels, ramp, lo, hi, title }
 }

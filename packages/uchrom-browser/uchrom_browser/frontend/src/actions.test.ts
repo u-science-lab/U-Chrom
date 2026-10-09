@@ -36,3 +36,11 @@ describe('actions', () => {
     expect(() => genomeRows([{ kind: 'x' }], cells, groups)).toThrow(/kind/)
   })
 })
+
+describe('open_view contact rows against a group', () => {
+  it('ratio_to and an odd smooth pass through', () => {
+    const rows = genomeRows([{ kind: 'contacts', source: 'per_spot', ratio_to: 'all', smooth: 3 }, { kind: 'contacts', source: 'per_spot' }], new Set(), new Set())
+    expect(rows[0]).toMatchObject({ kind: 'matrix', source: 'per_spot', ratioTo: 'all', smooth: 3 })
+    expect(rows[1]).not.toHaveProperty('ratioTo')
+  })
+})

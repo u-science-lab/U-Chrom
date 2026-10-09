@@ -64,8 +64,11 @@ export function genomeRows(rows: unknown, cellIds: ReadonlySet<string>, groupIds
         return { kind: 'track', track: str(o.track, `rows[${i}].track`), ...base }
       case 'distance':
         return { kind: 'matrix', source: 'distance', stat: (optStr(o.stat) ?? 'median') as GenomeRow['stat'], ...base }
-      case 'contacts':
-        return { kind: 'matrix', source: str(o.source, `rows[${i}].source`), ...base }
+      case 'contacts': {
+        const ratio = optStr(o.ratio_to)
+        const smooth = typeof o.smooth === 'number' && o.smooth >= 1 && o.smooth % 2 === 1 ? o.smooth : undefined
+        return { kind: 'matrix', source: str(o.source, `rows[${i}].source`), ...base, ...(ratio ? { ratioTo: ratio } : {}), ...(smooth ? { smooth } : {}) }
+      }
       case 'intervals':
         return { kind: 'intervals', key: str(o.key, `rows[${i}].key`) }
       default:
