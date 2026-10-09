@@ -222,42 +222,143 @@ FEATURES = ["short_long_ratio", "frac_short", "frac_long", "frac_2M_12M", "ps_sl
 CONTROLS = ["log_contacts"]              # depth: expected to vary (tissue density), a control, not a finding
 
 
-def stage_sv(out: Path, n_perms: int, seed: int):
+def _grid_graph(g):
     from chromdata import ChromData
-    from uchrom.spatial import spatial_autocorr, spatial_neighbors, sparkx
+    from uchrom.spatial import spatial_neighbors
+
+    cdq = ChromData(coords=np.zeros((0, 3)), spots=pd.DataFrame({"chrom": pd.Series([], dtype=str), "start": [],
+                                                                 "end": [], "trace_id": []}),
+                    cells=pd.DataFrame({"cell_id": g.index}))
+    cdq.set_cell_positions(g[["centroid_x", "centroid_y"]].to_numpy(float), cell_ids=list(g.index), unit="spot",
+                           frame="tissue")
+    return spatial_neighbors(cdq, method="radius", radius=1.5)
+
+
+def _residuals(V: pd.DataFrame, X) -> pd.DataFrame:
+    """Least-squares residuals of each column on X (+ intercept), where the column has a value."""
+    if X is None:
+        return V
+    Xi = np.c_[np.ones(len(V)), X]
+    out = V.copy()
+    for c in V.columns:
+        y = V[c].to_numpy(float)
+        m = np.isfinite(y)
+        b, *_ = np.linalg.lstsq(Xi[m], y[m], rcond=None)
+        r = np.full(len(y), np.nan)
+        r[m] = y[m] - Xi[m] @ b
+        out[c] = r
+    return out
+
+
+def _smooth_var(V: pd.DataFrame, xy) -> np.ndarray:
+    """The variance each column's smooth surface carries (smooth share x variance)."""
+    from uchrom.spatial import smooth_share
+
+    return smooth_share(V, xy) * np.nanvar(V.to_numpy(float), axis=0)
+
+
+TECHNICAL = ["frac_lt2k5", "inward_lt2k5", "outward_lt2k5"]     # undigested / self-ligated share: QC, not biology
+
+
+def stage_sv(out: Path, n_perms: int, seed: int):
+    """Per section and feature: Moran's I, the smooth share of the variance and SPARK-X, on the raw values, after
+    the barcode stripes are removed (destripe), + depth, + the spot's RNA (30 PCs); the smooth variance left at
+    each step relative to the destriped values."""
+    from uchrom.spatial import destripe, spatial_autocorr, sparkx
 
     f = pd.read_parquet(out / "features.parquet")
     pcs = pd.read_parquet(out / "rna_pca.parquet")
     f["log_contacts"] = np.log10(f["hic_contacts"])
     trans_cols = [c for c in f.columns if c.startswith("q30.trans_share.")]
     feats = [f"{filt}.{x}" for filt in FILTERS for x in FEATURES] + trans_cols + \
-        [c for c in f.columns if c.endswith(("lt2k5", "2k5_5k"))] + CONTROLS
+        [f"q30.{x}" for x in TECHNICAL] + CONTROLS
     tables = []
     for sec in SECTIONS:
         g = f[(f.section == sec) & f.qc]
-        cells = pd.DataFrame({"cell_id": g.index, "section": sec})
-        cdq = ChromData(coords=np.zeros((0, 3)), spots=pd.DataFrame({"chrom": pd.Series([], dtype=str), "start": [],
-                                                                     "end": [], "trace_id": []}), cells=cells)
-        cdq.set_cell_positions(g[["centroid_x", "centroid_y"]].to_numpy(float), cell_ids=list(g.index), unit="spot",
-                               frame="tissue", region_col="section")
-        graph = spatial_neighbors(cdq, method="radius", radius=1.5)
-        vals = g[feats]
-        mi = spatial_autocorr(values=vals, graph=graph, n_perms=n_perms, seed=seed)
+        graph = _grid_graph(g)
         xy = g[["centroid_x", "centroid_y"]].to_numpy(float)
+        rows, cols = g.centroid_y.to_numpy(int), g.centroid_x.to_numpy(int)
+        raw = g[feats]
+        ds = destripe(raw, rows, cols)
         depth = g[["log_contacts"]].to_numpy(float)
-        p10 = pcs.loc[g.index, [f"PC{i}" for i in range(1, 11)]].to_numpy(float)
-        p30 = pcs.loc[g.index].to_numpy(float)
-        runs = {"raw": None, "depth": depth, "depth_rna10": np.c_[depth, p10], "depth_rna30": np.c_[depth, p30]}
-        t = mi[["n", "I", "z_rand", "pval", "padj"]].add_prefix("moran.")
-        for name, cov in runs.items():
-            v = vals.drop(columns=["log_contacts"]) if cov is not None else vals
-            s = sparkx(v, xy, covariates=cov)
-            t = t.join(s[["pval", "padj"]].add_prefix(f"sparkx_{name}."))
+        P = pcs.loc[g.index].to_numpy(float)
+        steps = {"raw": (raw, None), "destriped": (ds, None), "depth": (_residuals(ds.drop(columns=CONTROLS), depth), depth),
+                 "depth_rna30": (_residuals(ds.drop(columns=CONTROLS), np.c_[depth, P]), np.c_[depth, P])}
+        base = _smooth_var(ds, xy)
+        t = pd.DataFrame(index=pd.Index(feats, name="feature"))
+        for name, (V, cov) in steps.items():
+            mi = spatial_autocorr(values=V, graph=graph, n_perms=n_perms if name in ("raw", "depth_rna30") else 0,
+                                  seed=seed)
+            t[f"{name}.moran_I"] = mi["I"]
+            t[f"{name}.moran_padj"] = mi["padj"]
+            sv_ = _smooth_var(V, xy)
+            t[f"{name}.smooth_share"] = pd.Series(sv_ / np.nanvar(V.to_numpy(float), axis=0), index=V.columns)
+            t[f"{name}.smooth_left"] = pd.Series(sv_ / base[[feats.index(c) for c in V.columns]], index=V.columns)
+            # SPARK-X on the destriped values with the step's covariates (raw: the values as measured)
+            sx = sparkx(raw if name == "raw" else ds[V.columns], xy, covariates=cov)
+            t[f"{name}.sparkx_padj"] = sx["padj"]
         t.insert(0, "section", sec)
         tables.append(t.reset_index())
         log(f"sv {sec}: {len(g)} spots, {graph.adjacency.nnz // 2} edges")
     sv = pd.concat(tables, ignore_index=True)
     sv.to_parquet(out / "sv.parquet")
+
+
+# ------------------------------------------------------------------------------------------------------------
+# stage calibrate: how much smooth spatial variance the same RNA adjustment leaves in held-out genes
+# ------------------------------------------------------------------------------------------------------------
+def stage_calibrate(out: Path, seed: int, n_pcs: int = 30, min_detect: float = 0.10):
+    """Per section: genes detected in >= 10 % of the spots split at random in two halves; 30 PCs of half A
+    (log1p CP10k, z-scored); the genes of half B — held out of the PCs — and the Hi-C features, destriped, are
+    regressed on (log depth, PCs of A); the smooth variance left (relative to before the PCs) is compared."""
+    import scipy.sparse as sps
+
+    from uchrom.spatial import destripe
+
+    cd = load_store()
+    ids = pd.Index([str(i) for i in cd._cell_ids_axis()])
+    adata = cd.linked_adata
+    f = pd.read_parquet(out / "features.parquet")
+    f["log_contacts"] = np.log10(f["hic_contacts"])
+    feats = [f"q30.{x}" for x in FEATURES] + [f"q30.{x}" for x in TECHNICAL]
+    rng = np.random.default_rng(seed)
+    rows_out, res = [], {}
+    for sec in SECTIONS:
+        g = f[(f.section == sec) & f.qc]
+        X = sps.csr_matrix(adata[list(g.index)].X).astype(np.float64)
+        tot = np.asarray(X.sum(1)).ravel()
+        det = np.asarray((X > 0).mean(0)).ravel()
+        keep = np.flatnonzero(det >= min_detect)
+        L = np.log1p(X[:, keep].toarray() / np.maximum(tot, 1)[:, None] * 1e4)
+        names = np.asarray(adata.var_names)[keep]
+        perm = rng.permutation(len(keep))
+        A, B = perm[: len(keep) // 2], perm[len(keep) // 2:]
+        Z = (L[:, A] - L[:, A].mean(0)) / np.maximum(L[:, A].std(0), 1e-12)
+        u, sv_, _ = np.linalg.svd(Z - Z.mean(0), full_matrices=False)
+        PCs = u[:, :n_pcs] * sv_[:n_pcs]
+        xy = g[["centroid_x", "centroid_y"]].to_numpy(float)
+        rows, cols = g.centroid_y.to_numpy(int), g.centroid_x.to_numpy(int)
+        genes = destripe(pd.DataFrame(L[:, B], index=g.index, columns=names[B]), rows, cols)
+        hic = destripe(g[feats], rows, cols)
+        lumi = np.log10(tot + 1)[:, None]
+        dep = g[["log_contacts"]].to_numpy(float)
+        left_g = _smooth_var(_residuals(genes, np.c_[lumi, PCs]), xy) / _smooth_var(_residuals(genes, lumi), xy)
+        left_h = _smooth_var(_residuals(hic, np.c_[dep, PCs]), xy) / _smooth_var(_residuals(hic, dep), xy)
+        share_g = _smooth_var(_residuals(genes, lumi), xy) / np.nanvar(_residuals(genes, lumi).to_numpy(), 0)
+        q = np.nanquantile(left_g, [0.1, 0.25, 0.5, 0.75, 0.9])
+        res[sec] = {"n_genes_pcs": int(len(A)), "n_genes_held_out": int(len(B)), "n_spots": int(len(g)),
+                    "held_out_genes_smooth_left_quantiles_10_25_50_75_90": [float(v) for v in q],
+                    "held_out_genes_spatial_only": {"n": int((share_g > 0.2).sum()),
+                                                    "median_smooth_left": float(np.nanmedian(left_g[share_g > 0.2]))},
+                    "hic_smooth_left": {k: float(v) for k, v in zip(feats, left_h)},
+                    "hic_percentile_among_genes": {k: float((left_g < v).mean()) for k, v in zip(feats, left_h)}}
+        log(f"calibrate {sec}:", json.dumps(res[sec], indent=1))
+        rows_out.append(pd.DataFrame({"section": sec, "feature": list(names[B]) + feats,
+                                      "kind": ["gene"] * len(B) + ["hic"] * len(feats),
+                                      "smooth_left": np.r_[left_g, left_h]}))
+    pd.concat(rows_out, ignore_index=True).to_parquet(out / "calibrate.parquet")
+    with open(out / "calibrate.json", "w") as fh:
+        json.dump(res, fh, indent=1)
 
 
 # ------------------------------------------------------------------------------------------------------------
@@ -341,20 +442,42 @@ def stage_summary(out: Path, results: Path, figdir: Path):
                 "n_high": int(len(hi)), "n_low": int(len(lo)), "mannwhitney_p": float(u.pvalue),
                 "auc": float(u.statistic / (len(hi) * len(lo)))}
     res["region_short_long"] = region_means
-    # 2. spatial variation per feature and section, and replication
-    piv = {}
-    for col in [c for c in sv.columns if c.endswith(".padj")]:
-        p = sv.pivot(index="feature", columns="section", values=col)
-        piv[col] = {"n_sig_r1": int((p[SECTIONS[0]] < 0.05).sum()), "n_sig_r2": int((p[SECTIONS[1]] < 0.05).sum()),
-                    "n_sig_both": int(((p[SECTIONS[0]] < 0.05) & (p[SECTIONS[1]] < 0.05)).sum()),
-                    "n_features": int(len(p))}
-    res["sv_counts"] = piv
-    keep = ["moran.I", "moran.padj", "sparkx_raw.padj", "sparkx_depth.padj", "sparkx_depth_rna10.padj",
-            "sparkx_depth_rna30.padj"]
-    res["sv_table"] = {f"{r.section}/{r.feature}": {k: (None if pd.isna(getattr(r, k.replace('.', '_'), np.nan))
-                                                         else float(getattr(r, k.replace('.', '_'))))
-                                                     for k in keep}
-                       for r in sv.rename(columns=lambda c: c.replace(".", "_")).itertuples()}
+    # 2. spatial variation per feature and section: effect sizes at each adjustment step, both sections
+    steps = ["raw", "destriped", "depth", "depth_rna30"]
+    table = {}
+    for r in sv.itertuples(index=False):
+        d = r._asdict()
+        table[f"{d['section']}/{d['feature']}"] = {
+            k: (None if pd.isna(v) else float(v)) for k, v in d.items() if k not in ("section", "feature")}
+    res["sv_table"] = table
+    res["sv_columns"] = [c for c in sv.columns if c not in ("section", "feature")]
+    # 3. replication: region means of the destriped, depth- and RNA-adjusted values (sd units), correlated
+    # between the sections over the regions
+    from uchrom.spatial import destripe
+
+    pcs = pd.read_parquet(out / "rna_pca.parquet")
+    feats = [f"q30.{x}" for x in FEATURES]
+    means = {}
+    for sec in SECTIONS:
+        g = q[q.section == sec]
+        ds = destripe(g[feats], g.centroid_y.to_numpy(int), g.centroid_x.to_numpy(int))
+        dep = np.log10(g[["hic_contacts"]].to_numpy(float))
+        for step, X in (("depth", dep), ("depth_rna30", np.c_[dep, pcs.loc[g.index].to_numpy(float)])):
+            r = _residuals(ds, X)
+            r = (r - r.mean()) / r.std()
+            means[(sec, step)] = r.join(g["region"]).groupby("region")[feats].mean().drop(index="other",
+                                                                                          errors="ignore")
+    rep = {}
+    for step in ("depth", "depth_rna30"):
+        a, b = means[(SECTIONS[0], step)], means[(SECTIONS[1], step)]
+        common = a.index.intersection(b.index)
+        rep[step] = {c: {"r_between_sections": float(np.corrcoef(a.loc[common, c], b.loc[common, c])[0, 1]),
+                         SECTIONS[0]: a.loc[common, c].round(3).to_dict(), SECTIONS[1]: b.loc[common, c].round(3).to_dict()}
+                     for c in feats}
+    res["region_replication"] = rep
+    cal = out / "calibrate.json"
+    if cal.exists():
+        res["calibration"] = json.loads(cal.read_text())
     results.mkdir(parents=True, exist_ok=True)
     save(results / "global_features.json", res, script=__file__, datasets=[DATASET, "spatial_hicrna"],
          params={"min_contacts": MIN_CONTACTS, "region_markers": REGION_MARKERS, "features": FEATURES})
@@ -386,7 +509,7 @@ def main(argv=None):
     ap.add_argument("--results", default=str(HERE / "results"))
     ap.add_argument("--figdata", default=None)
     ap.add_argument("--stages", default="features,regions,sv,summary",
-                    help="comma-separated: check, features, regions, sv, compartments, compartments_sv, summary (all: "
+                    help="comma-separated: check, features, regions, sv, calibrate, compartments, compartments_sv, summary (all: "
                          "every stage)")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--perms", type=int, default=999)
@@ -395,7 +518,8 @@ def main(argv=None):
     out = Path(a.out) if a.out else data_dir() / "spatial_variable_cache"
     out.mkdir(parents=True, exist_ok=True)
     figdir = Path(a.figdata) if a.figdata else default_figdata(out)
-    stages = (["features", "regions", "sv", "compartments", "compartments_sv", "summary"] if a.stages == "all"
+    stages = (["check", "features", "regions", "sv", "calibrate", "compartments", "compartments_sv", "summary"]
+              if a.stages == "all"
               else a.stages.split(","))
     for st in stages:
         t = time.time()
@@ -412,6 +536,8 @@ def main(argv=None):
             stage_compartments(out, a.workers)
         elif st == "compartments_sv":
             stage_compartments_sv(out)
+        elif st == "calibrate":
+            stage_calibrate(out, a.seed)
         elif st == "summary":
             stage_summary(out, Path(a.results), figdir)
         else:

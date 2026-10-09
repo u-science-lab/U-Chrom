@@ -10,6 +10,7 @@ spots or traced cells — with covariates such as cell-type composition.
 from .autocorr import bh_adjust, cell_values, spatial_autocorr
 from .graph import SpatialGraph, cell_positions_table, spatial_neighbors
 from .sparkx import KERNELS, acat, by_adjust, coordinate_kernels, sparkx
+from .stripes import destripe, smooth_basis, smooth_share
 from .variable import covariate_matrix, spatially_variable
 
 __all__ = [
@@ -22,6 +23,9 @@ __all__ = [
     "cell_values",
     "coordinate_kernels",
     "covariate_matrix",
+    "destripe",
+    "smooth_basis",
+    "smooth_share",
     "sparkx",
     "spatial_autocorr",
     "spatial_neighbors",

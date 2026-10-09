@@ -194,3 +194,31 @@ def test_spatially_variable_per_region_and_covariates():
     m = spatially_variable(cd, ["gradient"], method="moran", graph_kwargs={"method": "radius", "radius": 1.5},
                            key_added=None)
     assert (m["pval"] < 1e-6).all() and "spatially_variable.moran" not in cd.results
+
+
+def test_destripe_removes_channel_offsets_keeps_anatomy():
+    from uchrom.spatial import destripe, smooth_basis, smooth_share
+
+    rng = np.random.default_rng(2)
+    nx, ny = 60, 50
+    x, y = np.meshgrid(np.arange(nx), np.arange(ny), indexing="ij")
+    x, y = x.ravel(), y.ravel()
+    anatomy = np.sin(x / 8.0) + 0.5 * (y / ny) ** 2 + np.exp(-((x - 20) ** 2 + (y - 30) ** 2) / 50)
+    row_off, col_off = rng.normal(0, 0.3, ny), rng.normal(0, 0.3, nx)
+    v = anatomy + row_off[y] + col_off[x] + rng.normal(0, 0.05, len(x))
+    d = destripe(v, rows=y, cols=x)
+    S = smooth_basis(np.c_[x, y])
+
+    def rough(u):                       # what a smooth surface does not carry: stripes and noise
+        b, *_ = np.linalg.lstsq(S, u, rcond=None)
+        return u - S @ b
+
+    assert np.std(rough(v - anatomy)) > 0.3                   # stripes before
+    assert np.std(rough(d - anatomy)) < 0.06                  # noise after
+    assert np.corrcoef(d, anatomy)[0, 1] > max(0.9, np.corrcoef(v, anatomy)[0, 1])   # slow drift stays
+    assert smooth_share(d, np.c_[x, y])[0] > smooth_share(v, np.c_[x, y])[0]
+    # a DataFrame with a missing value, two arrays; an unstriped feature is left as it is
+    df = pd.DataFrame({"a": v, "b": anatomy})
+    df.iloc[5, 0] = np.nan
+    out = destripe(df, rows=y, cols=x, regions=np.where(np.arange(len(x)) < 1500, "s1", "s2"))
+    assert np.isnan(out.iloc[5, 0]) and np.abs(out["b"] - anatomy).max() < 0.02
