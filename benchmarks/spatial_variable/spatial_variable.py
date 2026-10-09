@@ -12,10 +12,15 @@ above white matter and choroid plexus).
 
     python benchmarks/spatial_variable/spatial_variable.py --stats $OAK/uchrom/spatial_3dgenome --stages all
 
-Inputs: the atlas store ``hicrna_mouse_brain`` (``uchrom.datasets.load``: cells, positions, the linked spot RNA)
-and ``<stats>/<sample>/<sample>.contact_stats_{q30,all}.npz``.  Outputs: the cache (``--out``), the headline
-numbers ``benchmarks/spatial_variable/results/global_features.json`` (``benchmarks/_record.py``) and the figure
-data ``spatial_variable.{json,npz}`` in the paper repository.
+Local level (stage ``local``): every spot's insulation of the boundaries and strength of the loops called on its
+tissue's pooled map (``bulk_calls.py``), from the contacts the second pass counts in their windows
+(``spatial_pairs_windows.py``), tested the same way, structure by structure, and replicated between sections.
+
+Tissues (``--tissue``): ``brain`` (atlas ``hicrna_mouse_brain``) and ``melanoma`` (``hicrna_human_melanoma``).
+Inputs: the atlas store (``uchrom.datasets.load``: cells, positions, the linked spot RNA) and
+``<stats>/<sample>/<sample>.contact_stats_{q30,all}.npz`` / ``.window_counts.npz``.  Outputs: the cache
+(``--out``/<tissue>), the headline numbers ``benchmarks/spatial_variable/results/*_<tissue>.json``
+(``benchmarks/_record.py``) and the figure data ``spatial_variable_<tissue>.{json,npz}`` in the paper repository.
 """
 
 from __future__ import annotations
@@ -32,22 +37,46 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
-DATASET = "hicrna_mouse_brain"
-SECTIONS = ["mouse_brain_r1", "mouse_brain_r2"]
 MIN_CONTACTS = 50_000                      # spot QC of benchmarks/spatial_composition (pitfall 3)
 FILTERS = ["q30", "all"]
 
-# Region marker sets (spot RNA, log1p CP10k, mean over the set): the anatomical regions of a coronal section
-# through the dorsal hippocampus that Guo et al. 2026 compare.
-REGION_MARKERS = {
-    "white_matter": ["Mbp", "Plp1", "Mobp", "Mog", "Cldn11", "Mal", "Trf"],
-    "choroid_plexus": ["Ttr", "Kl", "Folr1", "Clic6"],
-    "DG": ["Prox1", "C1ql2", "Dsp", "Pdzd2"],
-    "CA": ["Wfs1", "Fibcd1", "Pou3f1", "Spink8", "Nov"],
-    "cortex": ["Satb2", "Stx1a", "Cux2", "Rorb", "Fezf2", "Tbr1"],
-    "thalamus": ["Tcf7l2", "Prkcd", "Slc17a6", "Plekhg1"],
+# Per tissue: the atlas store, its sections, the genome (scA/B), region marker sets (spot RNA, log1p CP10k, mean
+# over the set) and the regions Guo et al. 2026 contrast for the short / long ratio.
+TISSUES = {
+    "brain": {
+        "dataset": "hicrna_mouse_brain", "sections": ["mouse_brain_r1", "mouse_brain_r2"], "genome": "mm10_genome",
+        # a coronal section through the dorsal hippocampus
+        "markers": {"white_matter": ["Mbp", "Plp1", "Mobp", "Mog", "Cldn11", "Mal", "Trf"],
+                    "choroid_plexus": ["Ttr", "Kl", "Folr1", "Clic6"],
+                    "DG": ["Prox1", "C1ql2", "Dsp", "Pdzd2"],
+                    "CA": ["Wfs1", "Fibcd1", "Pou3f1", "Spink8", "Nov"],
+                    "cortex": ["Satb2", "Stx1a", "Cux2", "Rorb", "Fezf2", "Tbr1"],
+                    "thalamus": ["Tcf7l2", "Prkcd", "Slc17a6", "Plekhg1"]},
+        "contrast": {"high": ["cortex", "CA", "DG"], "low": ["white_matter", "choroid_plexus"]},
+    },
+    "melanoma": {
+        "dataset": "hicrna_human_melanoma", "sections": ["human_melanoma_r1", "human_melanoma_r2"],
+        "genome": "hg38_genome",
+        "markers": {"tumour": ["MLANA", "PMEL", "TYR", "SOX10", "MITF", "DCT"],
+                    "immune": ["PTPRC", "CD3E", "CD2", "MS4A1", "CD79A", "LYZ", "CD74"],
+                    "stroma": ["COL1A1", "COL1A2", "COL3A1", "DCN", "LUM"],
+                    "endothelial": ["PECAM1", "VWF", "CDH5", "PLVAP"]},
+        "contrast": {"high": ["tumour"], "low": ["immune", "stroma"]},
+    },
 }
-GUO_ORDER = {"high": ["cortex", "CA", "DG"], "low": ["white_matter", "choroid_plexus"]}
+TISSUE = "brain"
+DATASET = TISSUES[TISSUE]["dataset"]
+SECTIONS = TISSUES[TISSUE]["sections"]
+REGION_MARKERS = TISSUES[TISSUE]["markers"]
+GUO_ORDER = TISSUES[TISSUE]["contrast"]
+
+
+def configure(tissue: str) -> None:
+    """Point the stages at one tissue (module-level settings)."""
+    global TISSUE, DATASET, SECTIONS, REGION_MARKERS, GUO_ORDER
+    cfg = TISSUES[tissue]
+    TISSUE, DATASET, SECTIONS = tissue, cfg["dataset"], cfg["sections"]
+    REGION_MARKERS, GUO_ORDER = cfg["markers"], cfg["contrast"]
 
 
 def log(*a):
@@ -166,7 +195,7 @@ def stage_check(stats_root: Path, results: Path):
                     "total_cis": int(mine.cis.sum()), "total_trans": int(mine.trans.sum())}
         log("check", sec, res[sec])
     results.mkdir(parents=True, exist_ok=True)
-    save(results / "contact_stats_check.json", res, script=__file__, datasets=["spatial_hicrna"],
+    save(results / f"contact_stats_check_{TISSUE}.json", res, script=__file__, datasets=["spatial_hicrna"],
          params={"compared": "<sample>.contact_stats_q30.npz vs <sample>.spot_stats.tsv (spatial_pairs_to_cool.py)"})
 
 
@@ -190,6 +219,8 @@ def stage_regions(out: Path):
     for reg, genes in REGION_MARKERS.items():
         g = [x for x in genes if x in gi]
         used[reg] = g
+        if not g:
+            continue
         sub = X[:, [gi[x] for x in g]].toarray()
         cp10k = np.log1p(sub / np.maximum(tot, 1)[:, None] * 1e4)
         scores[reg] = cp10k.mean(1)
@@ -203,14 +234,15 @@ def stage_regions(out: Path):
         Sm = S.loc[m].to_numpy()
         sm = np.array([Sm[n].mean(0) for n in nb])
         z = (sm - sm.mean(0)) / sm.std(0)
-        best = np.array(list(REGION_MARKERS))[z.argmax(1)]
+        best = np.array(list(S.columns))[z.argmax(1)]
         best = np.where(z.max(1) > 0.5, best, "other")
-        rows.append(pd.DataFrame(z, index=S.index[m], columns=[f"z.{r}" for r in REGION_MARKERS])
+        rows.append(pd.DataFrame(z, index=S.index[m], columns=[f"z.{r}" for r in S.columns])
                     .assign(region=best, section=sec))
     reg = pd.concat(rows)
     reg.to_parquet(out / "regions.parquet")
     log("regions:", reg.groupby("section").region.value_counts().to_dict(), "markers used:", used)
-    pcs = pd.DataFrame(np.asarray(cd.cellm["rna_pca"]), index=ids, columns=[f"PC{i + 1}" for i in range(30)])
+    pca = np.asarray(cd.cellm["rna_pca"])
+    pcs = pd.DataFrame(pca, index=ids, columns=[f"PC{i + 1}" for i in range(pca.shape[1])])
     pcs.to_parquet(out / "rna_pca.parquet")
 
 
@@ -362,6 +394,90 @@ def stage_calibrate(out: Path, seed: int, n_pcs: int = 30, min_detect: float = 0
 
 
 # ------------------------------------------------------------------------------------------------------------
+# stage local: per-spot boundary insulation and loop strength (window counts of the pooled-map structures)
+# ------------------------------------------------------------------------------------------------------------
+def _adjusted_tests(g: pd.DataFrame, V: pd.DataFrame, pcs: pd.DataFrame, *, with_moran: bool = True):
+    """SPARK-X (and Moran's I) of the columns of V on the spots g: destriped, + depth, + depth and RNA (30 PCs)."""
+    from uchrom.spatial import destripe, spatial_autocorr, sparkx
+
+    xy = g[["centroid_x", "centroid_y"]].to_numpy(float)
+    ds = destripe(V, g.centroid_y.to_numpy(int), g.centroid_x.to_numpy(int))
+    dep = np.log10(g[["hic_contacts"]].to_numpy(float))
+    P = pcs.loc[g.index].to_numpy(float)
+    t = pd.DataFrame(index=pd.Index(V.columns, name="feature"))
+    graph = _grid_graph(g) if with_moran else None
+    for name, cov in (("destriped", None), ("depth", dep), ("depth_rna30", np.c_[dep, P])):
+        sx = sparkx(ds, xy, covariates=cov)
+        t[f"{name}.sparkx_p"] = sx["pval"]
+        t[f"{name}.sparkx_padj"] = sx["padj"]
+        if with_moran:
+            r = _residuals(ds, cov)
+            t[f"{name}.moran_I"] = spatial_autocorr(values=r, graph=graph)["I"]
+            t[f"{name}.smooth_left"] = _smooth_var(r, xy) / _smooth_var(ds, xy)
+    return t
+
+
+def stage_local(stats_root: Path, out: Path, min_counts: float = 2.0):
+    """Per section: window_scores of the spots; the per-spot boundary strength and loop strength tested like the
+    global features; every boundary / loop with >= ``min_counts`` contacts per spot in its windows (on average)
+    tested on its own; the structures significant in both sections against the overlap expected by chance."""
+    from scipy import stats as ss
+
+    from uchrom.fea import window_scores
+    from uchrom.io import WindowCounts
+
+    f = pd.read_parquet(out / "features.parquet")
+    pcs = pd.read_parquet(out / "rna_pca.parquet")
+    glob, per = [], {}
+    for sec in SECTIONS:
+        wc = WindowCounts.load(stats_root / sec / f"{sec}.window_counts.npz")
+        wc.cells = np.asarray([f"{sec}:{b}" for b in wc.cells], dtype=object)
+        sc = window_scores(wc)
+        g = f[(f.section == sec) & f.qc]
+        cells = sc["cells"].reindex(g.index)
+        cells.to_parquet(out / f"window_cells_{sec}.parquet")
+        cols = [c for c in ("boundary_strength", "boundary_ratio", "interior_ratio", "loop_strength") if c in cells]
+        t = _adjusted_tests(g, cells[cols], pcs)
+        t.insert(0, "section", sec)
+        glob.append(t.reset_index())
+        for kind, counts_key, score_key in (("boundary", "boundary_counts", "insulation"), ("loop", "loop_counts", "loops")):
+            if score_key not in sc:
+                continue
+            cnt = sum(v for v in sc[counts_key].values())
+            n_per_spot = pd.DataFrame(cnt, index=sc["cells"].index).reindex(g.index).mean()
+            keep = n_per_spot.index[n_per_spot >= min_counts]
+            S = sc[score_key].reindex(g.index)[keep]
+            S.columns = [str(c) for c in S.columns]
+            tt = _adjusted_tests(g, S, pcs, with_moran=False)
+            tt["counts_per_spot"] = n_per_spot[keep].to_numpy()
+            per[(sec, kind)] = tt
+            log(f"local {sec} {kind}: {len(keep)} of {len(n_per_spot)} with >= {min_counts} "
+                f"contacts per spot; significant after RNA {(tt['depth_rna30.sparkx_padj'] < 0.05).sum()}")
+    pd.concat(glob, ignore_index=True).to_parquet(out / "local_global.parquet")
+    rep = {}
+    for kind in ("boundary", "loop"):
+        if (SECTIONS[0], kind) not in per:
+            continue
+        a, b = per[(SECTIONS[0], kind)], per[(SECTIONS[1], kind)]
+        common = a.index.intersection(b.index)
+        for step in ("destriped", "depth", "depth_rna30"):
+            sa = a.loc[common, f"{step}.sparkx_padj"] < 0.05
+            sb = b.loc[common, f"{step}.sparkx_padj"] < 0.05
+            k, n1, n2, N = int((sa & sb).sum()), int(sa.sum()), int(sb.sum()), len(common)
+            rep[f"{kind}/{step}"] = {"n_tested_both": N, "n_sig_r1": n1, "n_sig_r2": n2, "n_sig_both": k,
+                                     "expected_both": n1 * n2 / N if N else None,
+                                     "hypergeom_p": float(ss.hypergeom.sf(k - 1, N, n1, n2)) if N else None,
+                                     "spearman_neglog10p": float(pd.Series(-np.log10(a.loc[common, f"{step}.sparkx_p"]))
+                                                                 .corr(pd.Series(-np.log10(b.loc[common, f"{step}.sparkx_p"])),
+                                                                       method="spearman")) if N else None}
+        pd.concat({s: per[(s, kind)] for s in SECTIONS}, names=["section"]).reset_index().to_parquet(
+            out / f"local_{kind}s.parquet")
+    with open(out / "local_replication.json", "w") as fh:
+        json.dump(rep, fh, indent=1)
+    log("local replication:", json.dumps(rep, indent=1))
+
+
+# ------------------------------------------------------------------------------------------------------------
 # stage compartments: scA/B of every spot from its 1-Mb map (CpG of the contact partners), per section
 # ------------------------------------------------------------------------------------------------------------
 def stage_compartments(out: Path, workers: int):
@@ -371,7 +487,7 @@ def stage_compartments(out: Path, workers: int):
     cd = load_store()
     ids = pd.Index([str(i) for i in cd._cell_ids_axis()])
     sec_of = pd.Series(cd.cells["section"].to_numpy(), index=ids)
-    track = ds.fetch("mm10_genome", verbose=False)
+    track = ds.fetch(TISSUES[TISSUE]["genome"], verbose=False)
     for sec in SECTIONS:
         t = time.time()
         m = single_cell_compartments(cd, contacts=f"per_spot.{sec}", track=track, cells=list(ids[sec_of == sec]),
@@ -478,17 +594,24 @@ def stage_summary(out: Path, results: Path, figdir: Path):
     cal = out / "calibrate.json"
     if cal.exists():
         res["calibration"] = json.loads(cal.read_text())
+    loc = out / "local_replication.json"
+    if loc.exists():
+        res["local_replication"] = json.loads(loc.read_text())
+        lg = pd.read_parquet(out / "local_global.parquet")
+        res["local_per_spot"] = {f"{r['section']}/{r['feature']}": {k: (None if pd.isna(v) else float(v))
+                                                                    for k, v in r.items() if k not in ("section", "feature")}
+                                 for r in lg.to_dict(orient="records")}
     results.mkdir(parents=True, exist_ok=True)
-    save(results / "global_features.json", res, script=__file__, datasets=[DATASET, "spatial_hicrna"],
+    save(results / f"global_features_{TISSUE}.json", res, script=__file__, datasets=[DATASET, "spatial_hicrna"],
          params={"min_contacts": MIN_CONTACTS, "region_markers": REGION_MARKERS, "features": FEATURES})
     figdir.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(figdir / "spatial_variable.npz",
+    np.savez_compressed(figdir / f"spatial_variable_{TISSUE}.npz",
                         cell_id=f.index.to_numpy(str), section=f.section.to_numpy(str),
                         x=f.centroid_x.to_numpy(float), y=f.centroid_y.to_numpy(float), qc=f.qc.to_numpy(bool),
                         region=f.region.fillna("other").to_numpy(str),
                         **{c.replace(".", "_"): f[c].to_numpy(float) for c in f.columns
                            if c.startswith(("q30.", "all.")) and not c.startswith(("q30.trans_share", "all.trans_share"))})
-    with open(figdir / "spatial_variable.json", "w") as fh:
+    with open(figdir / f"spatial_variable_{TISSUE}.json", "w") as fh:
         json.dump(res, fh, indent=1, default=float)
     log("summary:", json.dumps({k: v for k, v in res.items() if k.startswith("guo_")}, indent=1))
 
@@ -504,18 +627,20 @@ def main(argv=None):
     from uchrom.datasets import data_dir
 
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--tissue", default="brain", choices=sorted(TISSUES))
     ap.add_argument("--stats", required=False, help="folder of <sample>/<sample>.contact_stats_*.npz")
     ap.add_argument("--out", default=None, help="cache (default <data>/spatial_variable_cache)")
     ap.add_argument("--results", default=str(HERE / "results"))
     ap.add_argument("--figdata", default=None)
     ap.add_argument("--stages", default="features,regions,sv,summary",
-                    help="comma-separated: check, features, regions, sv, calibrate, compartments, compartments_sv, summary (all: "
+                    help="comma-separated: check, features, regions, sv, calibrate, local, compartments, compartments_sv, summary (all: "
                          "every stage)")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--perms", type=int, default=999)
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args(argv)
-    out = Path(a.out) if a.out else data_dir() / "spatial_variable_cache"
+    configure(a.tissue)
+    out = (Path(a.out) if a.out else data_dir() / "spatial_variable_cache") / a.tissue
     out.mkdir(parents=True, exist_ok=True)
     figdir = Path(a.figdata) if a.figdata else default_figdata(out)
     stages = (["check", "features", "regions", "sv", "calibrate", "compartments", "compartments_sv", "summary"]
@@ -536,6 +661,8 @@ def main(argv=None):
             stage_compartments(out, a.workers)
         elif st == "compartments_sv":
             stage_compartments_sv(out)
+        elif st == "local":
+            stage_local(Path(a.stats), out)
         elif st == "calibrate":
             stage_calibrate(out, a.seed)
         elif st == "summary":
