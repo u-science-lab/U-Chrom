@@ -394,6 +394,56 @@ def stage_calibrate(out: Path, seed: int, n_pcs: int = 30, min_detect: float = 0
 
 
 # ------------------------------------------------------------------------------------------------------------
+# stage cnv: copy-number-like profiles of the spots (each chromosome's share of the contact legs) as covariates
+# ------------------------------------------------------------------------------------------------------------
+def stage_cnv(stats_root: Path, out: Path, n_cnv: int = 5):
+    """Per spot and chromosome, log2 of the chromosome's share of the contact legs (2 x cis + trans) over the
+    section's median share — the coverage profile that gains and losses of a tumour clone shift; its first
+    ``n_cnv`` principal components added to depth + RNA as covariates: how much of the contact features' smooth
+    spatial variance is left (``smooth_left``) with and without them, next to the same for held-out genes is in
+    stage calibrate.  A tissue without copy-number changes is the control."""
+    from uchrom.io import ContactStats
+    from uchrom.spatial import destripe
+
+    f = pd.read_parquet(out / "features.parquet")
+    pcs = pd.read_parquet(out / "rna_pca.parquet")
+    feats = [f"q30.{x}" for x in FEATURES] + [f"q30.{x}" for x in TECHNICAL]
+    res, profiles = {}, []
+    for sec in SECTIONS:
+        st = ContactStats.load(stats_root / sec / f"{sec}.contact_stats_q30.npz")
+        ids = pd.Index([f"{sec}:{b}" for b in st.cells])
+        legs = 2 * st.distance.sum(axis=2) + st.trans                      # spots x chromosomes
+        auto = [i for i, c in enumerate(st.chroms) if c not in ("chrY",)]
+        share = legs[:, auto] / np.maximum(legs[:, auto].sum(axis=1, keepdims=True), 1)
+        g = f[(f.section == sec) & f.qc]
+        S = pd.DataFrame(share, index=ids, columns=[st.chroms[i] for i in auto]).reindex(g.index)
+        L = np.log2(S / S.median())
+        L = destripe(L, g.centroid_y.to_numpy(int), g.centroid_x.to_numpy(int))
+        Z = (L - L.mean()) / L.std()
+        u, sv_, vt = np.linalg.svd(Z.to_numpy(), full_matrices=False)
+        C = u[:, :n_cnv] * sv_[:n_cnv]
+        profiles.append(L.assign(section=sec))
+        xy = g[["centroid_x", "centroid_y"]].to_numpy(float)
+        D = destripe(g[feats], g.centroid_y.to_numpy(int), g.centroid_x.to_numpy(int))
+        dep = np.log10(g[["hic_contacts"]].to_numpy(float))
+        P = pcs.loc[g.index].to_numpy(float)
+        base = _smooth_var(_residuals(D, dep), xy)
+        left = {}
+        for name, X in (("rna30", np.c_[dep, P]), ("cnv", np.c_[dep, C]), ("rna30+cnv", np.c_[dep, P, C])):
+            left[name] = dict(zip(feats, (_smooth_var(_residuals(D, X), xy) / base).round(4).tolist()))
+        cnv_var = (sv_ ** 2 / (sv_ ** 2).sum())[:n_cnv]
+        # how much of the chromosome-share variation is spatially smooth (a clone is a patch)
+        sm = _smooth_var(L, xy) / np.nanvar(L.to_numpy(), axis=0)
+        res[sec] = {"smooth_left": left, "cnv_pc_variance": cnv_var.round(4).tolist(),
+                    "chrom_share_smooth_share": dict(zip(L.columns, np.round(sm, 3).tolist())),
+                    "chrom_share_sd": dict(zip(L.columns, L.std().round(4).tolist()))}
+        log(f"cnv {sec}:", json.dumps(res[sec]["smooth_left"], indent=1))
+    pd.concat(profiles).to_parquet(out / "cnv_profiles.parquet")
+    with open(out / "cnv.json", "w") as fh:
+        json.dump(res, fh, indent=1)
+
+
+# ------------------------------------------------------------------------------------------------------------
 # stage local: per-spot boundary insulation and loop strength (window counts of the pooled-map structures)
 # ------------------------------------------------------------------------------------------------------------
 def _adjusted_tests(g: pd.DataFrame, V: pd.DataFrame, pcs: pd.DataFrame, *, with_moran: bool = True):
@@ -594,6 +644,9 @@ def stage_summary(out: Path, results: Path, figdir: Path):
     cal = out / "calibrate.json"
     if cal.exists():
         res["calibration"] = json.loads(cal.read_text())
+    cnv = out / "cnv.json"
+    if cnv.exists():
+        res["cnv"] = json.loads(cnv.read_text())
     loc = out / "local_replication.json"
     if loc.exists():
         res["local_replication"] = json.loads(loc.read_text())
@@ -633,7 +686,7 @@ def main(argv=None):
     ap.add_argument("--results", default=str(HERE / "results"))
     ap.add_argument("--figdata", default=None)
     ap.add_argument("--stages", default="features,regions,sv,summary",
-                    help="comma-separated: check, features, regions, sv, calibrate, local, compartments, compartments_sv, summary (all: "
+                    help="comma-separated: check, features, regions, sv, calibrate, cnv, local, compartments, compartments_sv, summary (all: "
                          "every stage)")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--perms", type=int, default=999)
@@ -661,6 +714,8 @@ def main(argv=None):
             stage_compartments(out, a.workers)
         elif st == "compartments_sv":
             stage_compartments_sv(out)
+        elif st == "cnv":
+            stage_cnv(Path(a.stats), out)
         elif st == "local":
             stage_local(Path(a.stats), out)
         elif st == "calibrate":
