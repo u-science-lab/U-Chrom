@@ -4,10 +4,11 @@ are measured on: insulation boundaries (250-kb window) and HiCCUPS loops at 25 k
 second pass over the pairs counts per spot (``spatial_pairs_windows.py`` of the recipe).
 
     python benchmarks/spatial_variable/bulk_calls.py --stats $OAK/uchrom/spatial_3dgenome --out $OUT/bulk_calls \
-        --samples mouse_brain_r1 mouse_brain_r2
+        --samples mouse_brain_r1 mouse_brain_r2 --name mouse_brain
 
-The pooled maps are the samples' ``<sample>.bulk.mcool`` (MAPQ >= 30, in-tissue spots; no balancing weights): the
-25-kb level is ICE-balanced into the output folder first (``uchrom.fea.rebin_map``).
+The pooled map is the sum of the samples' ``<sample>.bulk.mcool`` 25-kb levels (MAPQ >= 30, in-tissue spots; no
+balancing weights) — both sections of a tissue, so that each structure is scored in both — ICE-balanced into the
+output folder first (``uchrom.fea.rebin_map``).
 """
 
 from __future__ import annotations
@@ -42,24 +43,33 @@ def _empty_cd(assembly):
     return cd
 
 
-def call_sample(sample: str, stats_root: Path, out: Path, workers: int) -> dict:
+def call_sample(samples, sample: str, stats_root: Path, out: Path, workers: int) -> dict:
+    """Calls on the pooled map of ``samples`` (their 25-kb levels summed when several: one reference set of
+    structures for all of them, so that a structure can be compared between sections), files named ``sample``."""
+    import cooler
+
     from uchrom.fea import rebin_map
     from uchrom.io import boundary_windows, loop_windows
     from uchrom.strc.comp import call_compartments_eig
     from uchrom.strc.loop import call_loops_hiccups
     from uchrom.strc.tad import InsulationParams, call_tads_insulation
 
-    mcool = stats_root / sample / f"{sample}.bulk.mcool"
     out.mkdir(parents=True, exist_ok=True)
     t = time.time()
+    levels = [f"{stats_root / s / f'{s}.bulk.mcool'}::/resolutions/{RES}" for s in samples]
+    if len(levels) == 1:
+        source = levels[0]
+    else:
+        source = str(out / f"{sample}.merged_25kb.cool")
+        if not Path(source).exists():
+            cooler.merge_coolers(source, levels, mergebuf=20_000_000)
     c25 = out / f"{sample}.bulk_25kb.balanced.cool"
     c100 = out / f"{sample}.bulk_100kb.balanced.cool"
     if not c25.exists():
-        rebin_map(str(mcool), resolution=RES, out=c25)
+        rebin_map(source, resolution=RES, out=c25)
     if not c100.exists():
-        rebin_map(str(mcool), resolution=COMP_RES, out=c100)
-    log(f"{sample}: balanced maps in {time.time() - t:.0f} s")
-    import cooler
+        rebin_map(source, resolution=COMP_RES, out=c100)
+    log(f"{sample}: pooled {samples}, balanced maps in {time.time() - t:.0f} s")
 
     asm = cooler.Cooler(str(c25)).info.get("genome-assembly")
     cd = _empty_cd(asm)
@@ -104,14 +114,17 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--stats", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--samples", nargs="+", required=True)
+    ap.add_argument("--samples", nargs="+", required=True, help="pooled into one map")
+    ap.add_argument("--name", default=None, help="name of the pooled map (default: the sample when one)")
     ap.add_argument("--workers", type=int, default=8)
     a = ap.parse_args(argv)
-    summary = {}
-    for s in a.samples:
-        summary[s] = call_sample(s, Path(a.stats), Path(a.out), a.workers)
-        log(s, summary[s])
-    with open(Path(a.out) / "bulk_calls.json", "w") as fh:
+    name = a.name or (a.samples[0] if len(a.samples) == 1 else None)
+    if name is None:
+        sys.exit("several samples: give --name")
+    summary = call_sample(a.samples, name, Path(a.stats), Path(a.out), a.workers)
+    summary["samples"] = list(a.samples)
+    log(name, summary)
+    with open(Path(a.out) / f"{name}.bulk_calls.json", "w") as fh:
         json.dump(summary, fh, indent=1)
 
 
