@@ -235,6 +235,56 @@ def stage_sv(out: Path, n_perms: int, seed: int):
 
 
 # ------------------------------------------------------------------------------------------------------------
+# stage compartments: scA/B of every spot from its 1-Mb map (CpG of the contact partners), per section
+# ------------------------------------------------------------------------------------------------------------
+def stage_compartments(out: Path, workers: int):
+    import uchrom.datasets as ds
+    from uchrom.strc.comp import single_cell_compartments
+
+    cd = load_store()
+    ids = pd.Index([str(i) for i in cd._cell_ids_axis()])
+    sec_of = pd.Series(cd.cells["section"].to_numpy(), index=ids)
+    track = ds.fetch("mm10_genome", verbose=False)
+    for sec in SECTIONS:
+        t = time.time()
+        m = single_cell_compartments(cd, contacts=f"per_spot.{sec}", track=track, cells=list(ids[sec_of == sec]),
+                                     key_added=None, workers=workers)
+        m.columns = m.columns.astype(str)
+        m.astype(np.float32).to_parquet(out / f"scab_{sec}.parquet")
+        log(f"compartments {sec}: {m.shape}, {np.isfinite(m.to_numpy()).mean():.2f} of the values set, "
+            f"{time.time() - t:.0f} s")
+
+
+def stage_compartments_sv(out: Path, min_cells: float = 0.8):
+    """SPARK-X per 1-Mb bin of the scA/B values, raw / depth / depth + RNA, bins set in >= 80 % of the spots."""
+    from uchrom.spatial import sparkx
+
+    f = pd.read_parquet(out / "features.parquet")
+    pcs = pd.read_parquet(out / "rna_pca.parquet")
+    tables = []
+    for sec in SECTIONS:
+        m = pd.read_parquet(out / f"scab_{sec}.parquet")
+        g = f[(f.section == sec) & f.qc]
+        m = m.reindex(g.index)
+        keep = np.isfinite(m.to_numpy()).mean(0) >= min_cells
+        m = m.loc[:, keep]
+        xy = g[["centroid_x", "centroid_y"]].to_numpy(float)
+        depth = np.log10(g[["hic_contacts"]].to_numpy(float))
+        p10 = pcs.loc[g.index, [f"PC{i}" for i in range(1, 11)]].to_numpy(float)
+        t = pd.DataFrame(index=m.columns)
+        for name, cov in {"raw": None, "depth": depth, "depth_rna10": np.c_[depth, p10]}.items():
+            r = sparkx(m, xy, covariates=cov)
+            t[f"sparkx_{name}.pval"] = r["pval"]
+            t[f"sparkx_{name}.padj"] = r["padj"]
+        t["mean"] = m.mean().to_numpy()
+        t.insert(0, "section", sec)
+        tables.append(t.rename_axis("bin").reset_index())
+        log(f"compartments sv {sec}: {m.shape[1]} bins, raw significant {(t['sparkx_raw.padj'] < 0.05).sum()}, "
+            f"after RNA {(t['sparkx_depth_rna10.padj'] < 0.05).sum()}")
+    pd.concat(tables, ignore_index=True).to_parquet(out / "compartments_sv.parquet")
+
+
+# ------------------------------------------------------------------------------------------------------------
 # stage summary: region means (Guo's statement), replication between sections, headline numbers
 # ------------------------------------------------------------------------------------------------------------
 def stage_summary(out: Path, results: Path, figdir: Path):
@@ -309,14 +359,18 @@ def main(argv=None):
     ap.add_argument("--out", default=None, help="cache (default <data>/spatial_variable_cache)")
     ap.add_argument("--results", default=str(HERE / "results"))
     ap.add_argument("--figdata", default=None)
-    ap.add_argument("--stages", default="features,regions,sv,summary")
+    ap.add_argument("--stages", default="features,regions,sv,summary",
+                    help="comma-separated: features, regions, sv, compartments, compartments_sv, summary (all: "
+                         "every stage)")
+    ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--perms", type=int, default=999)
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args(argv)
     out = Path(a.out) if a.out else data_dir() / "spatial_variable_cache"
     out.mkdir(parents=True, exist_ok=True)
     figdir = Path(a.figdata) if a.figdata else default_figdata(out)
-    stages = ["features", "regions", "sv", "summary"] if a.stages == "all" else a.stages.split(",")
+    stages = (["features", "regions", "sv", "compartments", "compartments_sv", "summary"] if a.stages == "all"
+              else a.stages.split(","))
     for st in stages:
         t = time.time()
         log(f"--- stage {st}")
@@ -326,6 +380,10 @@ def main(argv=None):
             stage_regions(out)
         elif st == "sv":
             stage_sv(out, a.perms, a.seed)
+        elif st == "compartments":
+            stage_compartments(out, a.workers)
+        elif st == "compartments_sv":
+            stage_compartments_sv(out)
         elif st == "summary":
             stage_summary(out, Path(a.results), figdir)
         else:
