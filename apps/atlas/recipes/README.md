@@ -877,10 +877,25 @@ is kept with its recorded outputs.
   python apps/atlas/recipes/build_spatial_hicrna.py               # ~2 min: RNA, images, positions, published labels / latents
   # contact maps: copy $OAK/uchrom/spatial_3dgenome/<sample>/ (17.8 GB) to spatial_hicrna/contacts/ (via the DTN)
   python apps/atlas/recipes/link_spatial_hicrna_contacts.py       # links per-spot .scool + bulk .mcool, mouse-brain ssAB
+  # per-spot contact statistics: sbatch spatial_hicrna/sherlock/contact_stats.sbatch <sample> (one pass over the
+  # .pairs, 2-4.5 h per sample), copy <sample>.contact_stats_q30.npz from Oak to spatial_hicrna/contacts/
+  python apps/atlas/recipes/link_spatial_hicrna_contact_stats.py  # cellm contacts.*, cells contacts.n_cis / n_trans
   python benchmarks/spatial_hicrna_validation.py                  # -> benchmarks/results/spatial_hicrna_validation.json
   ```
   Cells are spots (`<section>:<barcode>`); only in-tissue spots are kept (brain 6,275 / 6,199; E11.5
   32,799; E13.5 17,278 / 14,784; melanoma 6,268 / 6,381), every one with RNA and a linked contact map.
+- **Per-spot contact statistics** (added 2026-10-09; `uchrom.io.ContactStats`, `spatial_pairs_stats.py`):
+  per spot the cis contact-distance histogram in scHiCluster's log2 bins (2.5 kb × 2^(k/8), Guo et al.'s
+  short / long-range ratio), per read orientation, and cis / trans contacts per chromosome; MAPQ >= 30, the
+  contacts of the per-spot maps.  In the stores: `cellm["contacts.distance"]` (spots × 132 / 134 bins, summed
+  over chromosomes, int32), `contacts.orientation`, `contacts.cis`, `contacts.trans`, `cells` columns
+  `contacts.n_cis` / `n_trans`, `uns["contact_stats"]["contacts"]` (+12–53 MB per store).
+  `uchrom.fea.contact_features(cd)` gives the short / long ratio, bands, decay slopes and cis fraction.
+  - Checks: for every spot of the 7 samples (89,984 spots, 2.28 × 10¹⁰ contacts) cis + trans equal the
+    per-spot maps' counts (`hic_contacts`); a second filter (`contact_stats_all.npz`, every pair, as the
+    paper's contact lists) stays on Oak.
+  - Oak: `$OAK/uchrom/spatial_3dgenome/<sample>/<sample>.contact_stats_{q30,all}.npz` (21–103 MB each) and
+    `.contact_stats.json` (pair counts, pair types, filters, timings).
 - **Single-spot A/B (ssAB)**: the authors' `X_abcompartment` is linked for mouse brain r1 only
   (`hicrna_mouse_brain_ssab.h5ad`, 6,275 x 4,816 bins).  The bin layout is not given; it is chr1–19 in
   500-kb bins from 3 Mb, dropping the last bin of a chromosome if < 100 kb.  Check: against the bulk E1

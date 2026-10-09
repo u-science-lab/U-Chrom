@@ -106,7 +106,12 @@ def contact_features(cd, *, key: str = "contacts", cells=None, params: Optional[
         if (rows < 0).any():
             raise KeyError("cells not in cd.cells")
     use = np.arange(len(chroms)) if p.chroms is None else np.array([chroms.index(c) for c in p.chroms])
-    h = dist[rows][:, use].sum(axis=1).astype(float)             # cells x (n_edges + 1)
+    if dist.ndim == 2:                                            # stored summed over the chromosomes
+        if p.chroms is not None:
+            raise ValueError(f"the histograms {key!r} are summed over the chromosomes: params.chroms is not available")
+        h = dist[rows].astype(float)
+    else:
+        h = dist[rows][:, use].sum(axis=1).astype(float)         # cells x (n_edges + 1)
     # real bins 1..m: [edges[k-1], edges[k]); centre = geometric mean
     lo_e, hi_e = edges[:-1], edges[1:]
     centre = np.sqrt(lo_e * hi_e)
@@ -144,7 +149,9 @@ def contact_features(cd, *, key: str = "contacts", cells=None, params: Optional[
         with np.errstate(divide="ignore", invalid="ignore"):
             yv = np.log10(real[:, sel] / width[sel])
         out[f"ps_slope_{_label(lo, hi)}"] = _slopes(x, yv)
-    legs_cis = 2 * dist[rows].sum(axis=2)                        # each cis contact: two legs on its chromosome
+    cis_per = (np.asarray(cd.cellm[f"{key}.cis"])[rows] if f"{key}.cis" in cd.cellm
+               else dist[rows].sum(axis=2))
+    legs_cis = 2 * cis_per                                        # each cis contact: two legs on its chromosome
     with np.errstate(divide="ignore", invalid="ignore"):
         share = trans[rows] / (trans[rows] + legs_cis)
     for i, c in enumerate(chroms):

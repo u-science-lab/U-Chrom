@@ -176,31 +176,38 @@ class ContactStats:
             out.meta = json.loads(str(z["meta"])) if "meta" in z.files else {}
         return out
 
-    def write(self, cd, *, key: str = "contacts", source: Optional[str] = None) -> None:
-        """Store the histograms on ``cd``, aligned to ``cd.cells`` by cell id (cells without counts get
-        zeros): ``cd.cellm["<key>.distance"]`` (n_cells, n_chroms, n_bins), ``["<key>.orientation"]``,
-        ``["<key>.trans"]`` (n_cells, n_chroms), the columns ``<key>.n_cis`` / ``<key>.n_trans`` of
-        ``cd.cells`` and the record ``cd.uns["contact_stats"][key]`` (edges, chromosomes, orientations)."""
+    def write(self, cd, *, key: str = "contacts", source: Optional[str] = None, per_chromosome: bool = True,
+              dtype=np.int64) -> None:
+        """Store the histograms on ``cd``, aligned to ``cd.cells`` by cell id (cells without counts get zeros).
+
+        ``cd.cellm["<key>.distance"]``: (n_cells, n_chroms, n_bins), or (n_cells, n_bins) summed over the
+        chromosomes with ``per_chromosome=False`` (an atlas store: 21-24x smaller); ``["<key>.orientation"]``
+        (n_cells, 4, n_bins); ``["<key>.cis"]`` and ``["<key>.trans"]`` (n_cells, n_chroms; trans: legs on each
+        chromosome); the columns ``<key>.n_cis`` / ``<key>.n_trans`` of ``cd.cells``; the record
+        ``cd.uns["contact_stats"][key]`` (edges, chromosomes, orientations, columns).  ``dtype``: of the arrays
+        (int32 holds any spot's counts)."""
         ids = np.asarray([str(c) for c in _cell_ids(cd)], dtype=object)
         row = {c: i for i, c in enumerate(self.cells)}
         take = np.array([row.get(c, -1) for c in ids], np.int64)
 
         def aligned(arr):
-            out = np.zeros((len(ids),) + arr.shape[1:], arr.dtype)
+            out = np.zeros((len(ids),) + arr.shape[1:], dtype)
             out[take >= 0] = arr[take[take >= 0]]
             return out
 
-        dist = aligned(self.distance)
+        dist = aligned(self.distance if per_chromosome else self.distance.sum(axis=1))
         cd.cellm[f"{key}.distance"] = dist
+        cd.cellm[f"{key}.cis"] = aligned(self.distance.sum(axis=2))
         cd.cellm[f"{key}.trans"] = aligned(self.trans)
         if self.orientation is not None:
             cd.cellm[f"{key}.orientation"] = aligned(self.orientation)
         cells = cd.cells.copy()
-        cells[f"{key}.n_cis"] = dist.sum(axis=(1, 2))
-        cells[f"{key}.n_trans"] = cd.cellm[f"{key}.trans"].sum(axis=1) // 2
+        cells[f"{key}.n_cis"] = cd.cellm[f"{key}.cis"].sum(axis=1).astype(np.int64)
+        cells[f"{key}.n_trans"] = cd.cellm[f"{key}.trans"].sum(axis=1).astype(np.int64) // 2
         cd.cells = cells
         rec = dict(cd.uns.get("contact_stats", {}))
         rec[key] = {"edges": [float(e) for e in self.edges], "chroms": list(self.chroms),
+                    "per_chromosome": bool(per_chromosome),
                     "orientations": list(ORIENTATIONS) if self.orientation is not None else None,
                     "columns": "column 0: d < edges[0]; column k: edges[k-1] <= d < edges[k]; last: d > edges[-1]",
                     "n_cells_counted": int((take >= 0).sum()), "source": source,

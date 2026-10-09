@@ -73,3 +73,20 @@ def test_default_ranges_bands_slopes_trans(pairs):
     assert f.loc["cell1", "trans_share.chr7"] == pytest.approx(legs / (legs + 2 * cis7))
     with pytest.raises(KeyError):
         contact_features(cd, key="other")
+
+
+def test_genome_wide_histograms_give_the_same_features(pairs):
+    cd = _cd(pairs)
+    a = contact_features(cd, key_added=None)
+    names = list(MM10)
+    code = {c: i for i, c in enumerate(names)}
+    st = ContactStats(["cell1", "empty"], names, distance_edges(MM10))
+    c1 = pairs["chrom1"].map(code).fillna(-1).astype(int)
+    c2 = pairs["chrom2"].map(code).fillna(-1).astype(int)
+    st.add(np.zeros(len(pairs), int), c1, pairs["pos1"], c2, pairs["pos2"], pairs["strand1"], pairs["strand2"])
+    st.write(cd, key="gw", per_chromosome=False, dtype=np.int32)
+    assert cd.cellm["gw.distance"].shape == (2, len(st.edges) + 1) and cd.cellm["gw.distance"].dtype == np.int32
+    b = contact_features(cd, key="gw", key_added=None)
+    pd.testing.assert_frame_equal(a, b, check_dtype=False)
+    with pytest.raises(ValueError):
+        contact_features(cd, key="gw", params=ContactFeatureParams(chroms=["chr1"]), key_added=None)
