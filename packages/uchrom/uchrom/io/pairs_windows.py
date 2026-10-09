@@ -96,6 +96,7 @@ class WindowCounts:
         code = {c: i for i, c in enumerate(self.chroms)}
         w = self.windows
         keys, wins = [], []
+        self.pixels = np.zeros(len(w), np.int64)          # pixels (bin pairs, upper triangle) of each window
         span = int(np.ceil(max(int(w["end1"].max()) if len(w) else 1, int(w["end2"].max()) if len(w) else 1) / r)) + 2
         self._nb = span
         for k, row in enumerate(w.itertuples(index=False)):
@@ -105,6 +106,7 @@ class WindowCounts:
             b = np.arange(int(row.start2) // r, -(-int(row.end2) // r))
             ii, jj = np.meshgrid(a, b, indexing="ij")
             ok = ii <= jj
+            self.pixels[k] = int(ok.sum())
             kk = (code[row.chrom] * span + ii[ok]) * span + jj[ok]
             keys.append(kk.astype(np.int64))
             wins.append(np.full(kk.size, k, np.int64))
@@ -174,16 +176,23 @@ class WindowCounts:
             out.chroms = list(z["chroms"])
             out.counts = z["counts"].astype(np.int64)
             out.meta = json.loads(str(z["meta"]))
+        out._index()
         return out
 
-    def by_part(self) -> dict:
-        """Counts summed per (feature, part): ``{part: ndarray (n_cells, n_features)}`` (features in order)."""
-        w = self.windows
-        out = {}
+    def by_part(self, kind: Optional[str] = None):
+        """Counts and pixels summed per (feature, part) of the windows of one ``kind`` (column ``kind``; all
+        windows when None): ``({part: ndarray (n_cells, n_features)}, {part: ndarray (n_features,)})``, features
+        0 … max(feature) in order."""
+        w = self.windows if kind is None else self.windows[self.windows["kind"] == kind]
+        counts, pixels = {}, {}
         nf = int(w["feature"].max()) + 1 if len(w) else 0
         for part, g in w.groupby("part", sort=False):
             m = np.zeros((len(self.cells), nf), np.int64)
+            px = np.zeros(nf, np.int64)
             for f, gg in g.groupby("feature"):
-                m[:, int(f)] = self.counts[:, gg.index.to_numpy()].sum(axis=1)
-            out[str(part)] = m
-        return out
+                idx = gg.index.to_numpy()
+                m[:, int(f)] = self.counts[:, idx].sum(axis=1)
+                px[int(f)] = self.pixels[idx].sum()
+            counts[str(part)] = m
+            pixels[str(part)] = px
+        return counts, pixels

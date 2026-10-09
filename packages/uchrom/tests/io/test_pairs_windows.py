@@ -64,8 +64,12 @@ def test_windows_match_direct_count(pairs):
                 assert (i, j) not in pix
                 pix.add((i, j))
     assert len(pix) == 11 * 11 - 3 * 3 + 9
-    parts = wc.by_part()
+    parts, px = wc.by_part()
     assert set(parts) == {"left", "right", "cross", "peak", "donut"}
+    pk = lw[lw["part"] == "peak"].iloc[0]
+    upper = sum(1 for i in range(pk.start1 // res, pk.end1 // res) for j in range(pk.start2 // res, pk.end2 // res)
+                if i <= j)
+    assert px["peak"][1000] == upper and px["cross"][0] == 100 and px["left"][0] == 55
     assert parts["cross"].shape == (2, 1040)
     assert parts["cross"][0, :40].sum() == ref[w["part"].eq("cross").to_numpy()].sum()
 
@@ -76,3 +80,4 @@ def test_save_load(tmp_path, pairs):
     wc.save(tmp_path / "w.npz", sample="x")
     back = WindowCounts.load(tmp_path / "w.npz")
     assert back.windows.equals(wc.windows) and back.meta == {"sample": "x"} and back.resolution == 50_000
+    assert np.array_equal(back.pixels, wc.pixels)
