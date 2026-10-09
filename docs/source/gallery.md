@@ -45,6 +45,8 @@ a card to open the tutorial; the chapters ({doc}`tracing <tracing/index>`, {doc}
   text: Cell-type maps summed from an atlas store over HTTP; compartment strength at matched depth
 - tutorial: sc_structures
   text: Loops across cells (SnapHiC), single-cell boundaries, scA/B per cell, the tracing callers on structures
+- tutorial: spatial_variable
+  text: Contact features of spatial Hi-C spots across a brain section; barcode stripes; spatial tests adjusted for RNA
 - tutorial: reconstruction
   text: Single-cell 3-D structures with NucDynamics and EMber on the native engine
   image: 4

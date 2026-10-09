@@ -17,6 +17,14 @@ strength of a known loop.
 | tests of spatial variation, adjusted for covariates (depth, the spot's transcriptome, cell-type composition) | `uchrom.spatial.sparkx`, `spatially_variable` |
 | cells in tissue coloured by a value; export with positions for scanpy / squidpy | `uchrom.pl.plot_spatial`; `cd.to_anndata()` (`obsm["spatial"]`) |
 
+## Tutorial
+
+```{toctree}
+:maxdepth: 1
+
+/tutorials/spatial_variable
+```
+
 ## The tests
 
 `spatially_variable(cd, features, covariates=...)` tests every feature section by section.  Its default test is
