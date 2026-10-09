@@ -12,11 +12,16 @@
 #SBATCH --output=%x-%j.out
 source "$SCRATCH/uchrom-nd/repo-sv/benchmarks/spatial_variable/sherlock/_env.sh"
 mkdir -p "$R_LIBS_USER"
-Rscript -e 'install.packages(c("Rcpp", "RcppArmadillo", "foreach", "doParallel", "CompQuadForm", "matlab", "pracma"),
-                             repos = "https://cloud.r-project.org", lib = Sys.getenv("R_LIBS_USER"), Ncpus = 4)'
+Rscript -e 'want <- c("Rcpp", "RcppArmadillo", "foreach", "doParallel", "CompQuadForm", "matlab", "pracma");
+             need <- setdiff(want, rownames(installed.packages(lib.loc = Sys.getenv("R_LIBS_USER"))));
+             if (length(need)) install.packages(need, repos = "https://cloud.r-project.org",
+                                                lib = Sys.getenv("R_LIBS_USER"), Ncpus = 4)'
 SHA=a8b4bf27b804604dfda53da42992f100b8e4e727
 curl -sSL -o "$L_SCRATCH/SPARK.tar.gz" "https://github.com/xzhoulab/SPARK/archive/$SHA.tar.gz"
-R CMD INSTALL -l "$R_LIBS_USER" "$L_SCRATCH/SPARK.tar.gz"
+tar -xzf "$L_SCRATCH/SPARK.tar.gz" -C "$L_SCRATCH"
+# the repository ships object files built elsewhere (SPARK.so linked to a system liblapack): build from source
+rm -f "$L_SCRATCH/SPARK-$SHA"/src/*.o "$L_SCRATCH/SPARK-$SHA"/src/*.so
+R CMD INSTALL -l "$R_LIBS_USER" "$L_SCRATCH/SPARK-$SHA"
 Rscript -e 'library(SPARK); cat("SPARK", as.character(packageVersion("SPARK")), "\n")'
 $PY -m pip freeze | grep -iE "^(numpy|pandas|scipy|scikit-learn)==" > "$L_SCRATCH/pins.txt"
 cat "$L_SCRATCH/pins.txt"
