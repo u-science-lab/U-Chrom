@@ -590,6 +590,114 @@ def stage_cellcycle(out: Path):
 
 
 # ------------------------------------------------------------------------------------------------------------
+# stage patch: the copy-number patch of a section, chromosome by chromosome
+# ------------------------------------------------------------------------------------------------------------
+def _smoothed_grid(x, y, v, sigma: float = 2.0) -> np.ndarray:
+    """Gaussian smoothing of per-spot values over the spot grid, skipping missing spots."""
+    from scipy.ndimage import gaussian_filter
+
+    img = np.full((y.max() + 1, x.max() + 1), np.nan)
+    img[y, x] = v
+    ok = np.isfinite(img)
+    num = gaussian_filter(np.where(ok, img, 0.0), sigma)
+    den = gaussian_filter(ok.astype(float), sigma)
+    return (num / np.maximum(den, 1e-12))[y, x]
+
+
+def stage_patch(stats_root: Path, out: Path, pc: int = 2, frac: float = 0.2):
+    """Per section: the copy-number patch -- the QC spots in the top ``frac`` of copy-number principal component
+    ``pc`` (stage cnv's profiles: chromosome shares of the contact legs; smoothed over the spot grid, Gaussian
+    sigma 2 spots).  PC1 separates tumour from the rest of the tissue, which the RNA follows; PC2 is the copy-number
+    axis along which what the RNA leaves of the contact features varies (the sign, arbitrary, is set so that the
+    patch is the end with the higher pooled short / long ratio).  The patch is defined by copy number alone, not by
+    any contact distance.  Then per chromosome: its copy-number change (log2 of its share of the legs, patch vs
+    rest) and the change of its own short / long ratio (median of the spots' log2 ratios, patch minus rest;
+    Mann-Whitney): if the ratio rises also on chromosomes whose copy number does not change, the patch folds
+    differently genome-wide, not through its gains and losses.  Also the genome-wide contact-decay curves (contacts
+    per bp of distance, normalised per group) of the patch and the rest, and the patch at 10 % / 30 %."""
+    from scipy import stats as ss
+
+    from uchrom.io import ContactStats
+
+    f = pd.read_parquet(out / "features.parquet")
+    prof = pd.read_parquet(out / "cnv_profiles.parquet")
+    res, member = {}, []
+    for sec in SECTIONS:
+        g = f[(f.section == sec) & f.qc]
+        st = ContactStats.load(stats_root / sec / f"{sec}.contact_stats_q30.npz")
+        row = {f"{sec}:{b}": i for i, b in enumerate(st.cells)}
+        idx = np.array([row[c] for c in g.index])
+        D, Tr = st.distance[idx].astype(float), st.trans[idx].astype(float)
+        L = prof.drop(columns="section").reindex(g.index)
+        Z = ((L - L.mean()) / L.std()).fillna(0).to_numpy()
+        u, sv_, _ = np.linalg.svd(Z, full_matrices=False)
+        comp = u[:, pc - 1] * sv_[pc - 1]
+        x, y = g.centroid_x.to_numpy(int), g.centroid_y.to_numpy(int)
+        sm = _smoothed_grid(x, y, comp)
+        ratio = g["q30.short_long_ratio"].to_numpy(float)
+        hi_end = sm >= np.quantile(sm, 1 - frac)
+        sign = 1.0 if np.nanmedian(ratio[hi_end]) >= np.nanmedian(ratio[sm <= np.quantile(sm, frac)]) else -1.0
+        sm = sign * sm
+        legs = 2 * D.sum(axis=2) + Tr
+        share = legs / legs.sum(axis=1, keepdims=True)
+        SB, LB = slice(51, 77), slice(103, 115)              # Guo et al.'s short / long bins
+
+        def per_chrom(patch):
+            rows = []
+            for i, c in enumerate(st.chroms):
+                if c == "chrY":
+                    continue
+                sl = np.log2((D[:, i, SB].sum(1) + 0.5) / (D[:, i, LB].sum(1) + 0.5))
+                cn = np.log2(share[patch, i].sum() / share[patch].sum() / (share[~patch, i].sum() / share[~patch].sum()))
+                rows.append({"chrom": c, "cn_log2": float(cn),
+                             "short_long_log2_change": float(np.median(sl[patch]) - np.median(sl[~patch])),
+                             "mannwhitney_p": float(ss.mannwhitneyu(sl[patch], sl[~patch]).pvalue),
+                             "median_long_contacts": float(np.median(D[:, i, LB].sum(1)))})
+            return pd.DataFrame(rows)
+
+        out_sec = {}
+        for q in (0.1, frac, 0.3):
+            patch = sm >= np.quantile(sm, 1 - q)
+            t = per_chrom(patch)
+            neutral = t[t.cn_log2.abs() < 0.02]
+            pooled = ss.mannwhitneyu(ratio[patch], ratio[~patch])
+            out_sec[f"top_{int(q * 100)}"] = {
+                "n_patch": int(patch.sum()), "n_spots": int(len(patch)),
+                "pooled_short_long": {"median_patch": float(np.median(ratio[patch])),
+                                      "median_rest": float(np.median(ratio[~patch])), "mannwhitney_p": float(pooled.pvalue),
+                                      "auc": float(pooled.statistic / (patch.sum() * (~patch).sum()))},
+                "chromosomes": t.round(6).to_dict(orient="records"),
+                "cn_neutral": {"chroms": list(neutral.chrom), "median_change": float(neutral.short_long_log2_change.median()),
+                               "n_up": int((neutral.short_long_log2_change > 0).sum())},
+                "n_chroms_up": int((t.short_long_log2_change > 0).sum()), "n_chroms": int(len(t)),
+                "max_p": float(t.mannwhitney_p.max()),
+                "spearman_cn_vs_change": float(ss.spearmanr(t.cn_log2, t.short_long_log2_change)[0])}
+            if q == frac:
+                edges = np.asarray(st.edges, float)
+                width = np.diff(edges)
+                curves = {}
+                for name, m in (("patch", patch), ("rest", ~patch)):
+                    h = D[m].sum(axis=(0, 1))[1:-1]
+                    curves[name] = (h / width / h.sum()).tolist()
+                out_sec["decay"] = {"distance_lo": edges[:-1].tolist(), "distance_hi": edges[1:].tolist(), **curves}
+                c10 = list(st.chroms).index("chr10")
+                s10 = np.log2(share[:, c10] / np.median(share[:, c10]))
+                out_sec["chr10_share"] = {"median_patch": float(np.median(s10[patch])), "median_rest": float(np.median(s10[~patch])),
+                                          "mannwhitney_p": float(ss.mannwhitneyu(s10[patch], s10[~patch]).pvalue)}
+                member.append(pd.DataFrame({"in_patch": patch, "cnv_pc_patch": sm}, index=g.index))
+        out_sec.update({"pc": pc, "sign": sign, "frac": frac})
+        res[sec] = out_sec
+        m = out_sec[f"top_{int(frac * 100)}"]
+        log(f"patch {sec}: {m['n_patch']} spots; pooled short/long {m['pooled_short_long']['median_patch']:.3f} vs "
+            f"{m['pooled_short_long']['median_rest']:.3f}; chromosomes up {m['n_chroms_up']}/{m['n_chroms']}, "
+            f"CN-neutral {m['cn_neutral']['chroms']} median change {m['cn_neutral']['median_change']:.4f}, "
+            f"Spearman CN vs change {m['spearman_cn_vs_change']:.2f}")
+    pd.concat(member).to_parquet(out / "patch_spots.parquet")
+    with open(out / "patch.json", "w") as fh:
+        json.dump(res, fh, indent=1)
+
+
+# ------------------------------------------------------------------------------------------------------------
 # stage local: per-spot boundary insulation and loop strength (window counts of the pooled-map structures)
 # ------------------------------------------------------------------------------------------------------------
 def _cnv_pcs(out: Path, g: pd.DataFrame, n: int = 5):
@@ -867,6 +975,9 @@ def stage_summary(out: Path, results: Path, figdir: Path):
     cc = out / "cellcycle.json"
     if cc.exists():
         res["cellcycle"] = json.loads(cc.read_text())
+    pj = out / "patch.json"
+    if pj.exists():
+        res["patch"] = json.loads(pj.read_text())
     loc = out / "local_replication.json"
     if loc.exists():
         res["local_replication"] = json.loads(loc.read_text())
@@ -907,6 +1018,8 @@ def _figdata_tables(out: Path, figdir: Path, f: pd.DataFrame, q: pd.DataFrame, p
         dep = np.log10(g[["hic_contacts"]].to_numpy(float))
         P = pcs.loc[g.index].to_numpy(float)
         t = pd.DataFrame({"section": sec, "x": g.centroid_x, "y": g.centroid_y}, index=g.index)
+        t["log_contacts"] = dep[:, 0]
+        t["destriped.log_contacts"] = destripe(pd.DataFrame({"v": dep[:, 0]}, index=g.index), rows, cols)["v"]
         t = t.join(ds.add_prefix("destriped."))
         t = t.join(_residuals(ds, np.c_[dep, P]).add_prefix("rna30."))
         C = _cnv_pcs(out, g)
@@ -924,8 +1037,17 @@ def _figdata_tables(out: Path, figdir: Path, f: pd.DataFrame, q: pd.DataFrame, p
             w = pd.read_parquet(wcells).reindex(g.index)
             keep = [c for c in w.columns if c.endswith(("_oe", "strength"))]
             t = t.join(destripe(w[keep], rows, cols).add_prefix("window."))
+        pp = out / "patch_spots.parquet"
+        if pp.exists():
+            t = t.join(pd.read_parquet(pp))
         parts.append(t.join(reg[[c for c in reg.columns if c.startswith("z.")] + ["region"]]))
-    pd.concat(parts).rename_axis("cell_id").to_parquet(figdir / f"spatial_variable_{TISSUE}_spots.parquet")
+    spots = pd.concat(parts).rename_axis("cell_id")
+    cd = load_store()                                      # the authors' cell types, where they gave them
+    cells = cd.cells.copy()
+    cells.index = pd.Index([str(i) for i in cd._cell_ids_axis()])
+    if "cell_type" in cells:
+        spots = spots.join(cells[["cell_type"]].astype(str).replace({"nan": None, "None": None}))
+    spots.to_parquet(figdir / f"spatial_variable_{TISSUE}_spots.parquet")
     cal = out / "calibrate.parquet"
     if cal.exists():
         pd.read_parquet(cal).to_parquet(figdir / f"spatial_variable_{TISSUE}_calibration.parquet")
@@ -952,7 +1074,7 @@ def main(argv=None):
     ap.add_argument("--results", default=str(HERE / "results"))
     ap.add_argument("--figdata", default=None)
     ap.add_argument("--stages", default="features,regions,sv,summary",
-                    help="comma-separated: check, features, regions, sv, calibrate, cnv, cellcycle, local, compartments, compartments_sv, summary (all: "
+                    help="comma-separated: check, features, regions, sv, calibrate, cnv, cellcycle, patch, local, compartments, compartments_sv, summary (all: "
                          "every stage)")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--perms", type=int, default=999)
@@ -988,6 +1110,8 @@ def main(argv=None):
             stage_calibrate(out, a.seed)
         elif st == "cellcycle":
             stage_cellcycle(out)
+        elif st == "patch":
+            stage_patch(Path(a.stats), out)
         elif st == "summary":
             stage_summary(out, Path(a.results), figdir)
         else:
