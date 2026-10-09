@@ -12,7 +12,8 @@ and :func:`compare` tells how a new run differs from a committed one::
 
 The revision is the git commit of the code that ran (``+dirty`` with uncommitted changes); a repo copy synced to
 a cluster has no ``.git``, so the sync writes it into ``REVISION`` at the copy's root
-(``git describe --always --dirty --abbrev=12 > REVISION`` before the rsync).
+(``git describe --always --dirty --abbrev=12 > REVISION`` before the rsync), and a job exports it as
+``UCHROM_REVISION`` when it starts.
 """
 
 from __future__ import annotations
@@ -33,7 +34,11 @@ PACKAGES = ("numpy", "scipy", "pandas", "cooler", "zarr", "torch", "uchrom", "ch
 
 
 def revision(repo: Path = REPO) -> str:
-    """The git revision of ``repo`` (``+dirty`` when it has uncommitted changes), else its ``REVISION`` file."""
+    """The code revision: ``$UCHROM_REVISION`` when set (a job fixes it at its start, so that a repo copy synced
+    while the job runs does not change what it records), else the git revision of ``repo`` (``+dirty`` when it has
+    uncommitted changes), else its ``REVISION`` file."""
+    if os.environ.get("UCHROM_REVISION"):
+        return os.environ["UCHROM_REVISION"]
     try:
         out = subprocess.run(["git", "-C", str(repo), "describe", "--always", "--dirty=+dirty", "--abbrev=12"],
                              capture_output=True, text=True, timeout=20)

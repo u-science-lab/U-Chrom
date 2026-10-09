@@ -18,6 +18,8 @@ export UCHROM_DATA=$W/data
 export PIP_CACHE_DIR=$SCRATCH/.cache/pip XDG_CACHE_HOME=$SCRATCH/.cache MPLBACKEND=Agg
 export PYTHONPATH=$REPO/packages/uchrom:$REPO/packages/chromdata:$W/engine-sc/${ENGINE:-final}${PYTHONPATH:+:$PYTHONPATH}
 STATS=$OAK/uchrom/spatial_3dgenome
+# the code revision as the job starts (benchmarks/_record.py records it; a later sync does not change it)
+export UCHROM_REVISION=$(cat "$REPO/REVISION" 2>/dev/null || echo unknown)
 OUT=$W/runs/sv
 mkdir -p "$OUT"
 echo "host=$(hostname) job=${SLURM_JOB_ID:-none} repo=$REPO revision=$(cat "$REPO/REVISION" 2>/dev/null || echo ?)"

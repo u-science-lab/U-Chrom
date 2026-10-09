@@ -23,6 +23,8 @@ export UCHROM_DATA=$W/data
 export PIP_CACHE_DIR=$SCRATCH/.cache/pip XDG_CACHE_HOME=$SCRATCH/.cache MPLBACKEND=Agg
 # the repo copy's packages first, then its native kernels
 export PYTHONPATH=$REPO/packages/uchrom:$REPO/packages/chromdata:$W/engine-sc/$ENGINE${PYTHONPATH:+:$PYTHONPATH}
+# the code revision as the job starts (benchmarks/_record.py records it; a later sync does not change it)
+export UCHROM_REVISION=$(cat "$REPO/REVISION" 2>/dev/null || echo unknown)
 OUT=$W/runs/sc
 mkdir -p "$OUT"
 echo "host=$(hostname) job=${SLURM_JOB_ID:-none} repo=$REPO engine=$ENGINE $($PY -c 'import sys; print(sys.version.split()[0])')"
