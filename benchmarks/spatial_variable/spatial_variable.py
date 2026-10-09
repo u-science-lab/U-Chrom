@@ -352,6 +352,35 @@ def stage_sv(out: Path, n_perms: int, seed: int):
 # ------------------------------------------------------------------------------------------------------------
 # stage calibrate: how much smooth spatial variance the same RNA adjustment leaves in held-out genes
 # ------------------------------------------------------------------------------------------------------------
+def _gene_modules(genes: pd.DataFrame, xy, lumi, PCs, n_clusters: int = 40, min_genes: int = 5):
+    """Modules of held-out genes that share a spatial pattern (average-linkage clusters of the correlation of their
+    smooth surfaces), each scored per spot as the mean of its genes z-scored; the modules' smooth variance left
+    after the RNA PCs (as the genes') and smooth share after the RNA depth.  A module averages many genes as a
+    contact feature averages many contacts: the yardstick at a comparable noise level."""
+    from scipy.cluster.hierarchy import fcluster, linkage
+    from scipy.spatial.distance import squareform
+
+    from uchrom.spatial import smooth_basis
+
+    G = genes.to_numpy(float)
+    G = np.where(np.isfinite(G), G, np.nanmean(G, axis=0))
+    Z = (G - G.mean(0)) / np.maximum(G.std(0), 1e-12)
+    S = smooth_basis(xy)
+    sm = S @ np.linalg.lstsq(S, Z, rcond=None)[0]                 # each gene's smooth surface
+    sm = (sm - sm.mean(0)) / np.maximum(sm.std(0), 1e-12)
+    D = np.clip(1 - (sm.T @ sm) / len(sm), 0, 2)
+    np.fill_diagonal(D, 0)
+    lab = fcluster(linkage(squareform(D, checks=False), "average"), n_clusters, criterion="maxclust")
+    mods = [np.flatnonzero(lab == k) for k in np.unique(lab) if (lab == k).sum() >= min_genes]
+    if not mods:
+        return [], np.zeros(0), np.zeros(0)
+    M = pd.DataFrame(np.column_stack([Z[:, m].mean(1) for m in mods]), index=genes.index)
+    left = _smooth_var(_residuals(M, np.c_[lumi, PCs]), xy) / _smooth_var(_residuals(M, lumi), xy)
+    r = _residuals(M, lumi)
+    share = _smooth_var(r, xy) / np.nanvar(r.to_numpy(), 0)
+    return mods, left, share
+
+
 def stage_calibrate(out: Path, seed: int, n_pcs: int = 30, min_detect: float = 0.10):
     """Per section: genes detected in >= 10 % of the spots split at random in two halves; 30 PCs of half A
     (log1p CP10k, z-scored); the genes of half B — held out of the PCs — and the Hi-C features, destriped, are
@@ -390,19 +419,27 @@ def stage_calibrate(out: Path, seed: int, n_pcs: int = 30, min_detect: float = 0
         left_g = _smooth_var(_residuals(genes, np.c_[lumi, PCs]), xy) / _smooth_var(_residuals(genes, lumi), xy)
         left_h = _smooth_var(_residuals(hic, np.c_[dep, PCs]), xy) / _smooth_var(_residuals(hic, dep), xy)
         share_g = _smooth_var(_residuals(genes, lumi), xy) / np.nanvar(_residuals(genes, lumi).to_numpy(), 0)
+        mods, left_m, share_m = _gene_modules(genes, xy, lumi, PCs)
         q = np.nanquantile(left_g, [0.1, 0.25, 0.5, 0.75, 0.9])
         res[sec] = {"n_genes_pcs": int(len(A)), "n_genes_held_out": int(len(B)), "n_spots": int(len(g)),
                     "held_out_genes_smooth_left_quantiles_10_25_50_75_90": [float(v) for v in q],
                     "held_out_genes_spatial_only": {"n": int((share_g > 0.2).sum()),
                                                     "median_smooth_left": float(np.nanmedian(left_g[share_g > 0.2]))},
+                    "held_out_modules": {
+                        "n": int(len(mods)), "n_spatial": int((share_m > 0.2).sum()),
+                        "median_smooth_left_spatial": float(np.nanmedian(left_m[share_m > 0.2]))
+                        if (share_m > 0.2).any() else None,
+                        "genes_per_module": [int(len(m)) for m in mods]},
                     "hic_smooth_left": {k: float(v) for k, v in zip(feats, left_h)},
                     "hic_percentile_among_genes": {k: float((left_g < v).mean()) for k, v in zip(feats, left_h)}}
         log(f"calibrate {sec}:", json.dumps(res[sec], indent=1))
         share_h = _smooth_var(_residuals(hic, dep), xy) / np.nanvar(_residuals(hic, dep).to_numpy(), 0)
-        rows_out.append(pd.DataFrame({"section": sec, "feature": list(names[B]) + feats,
-                                      "kind": ["gene"] * len(B) + ["hic"] * len(feats),
-                                      "smooth_left": np.r_[left_g, left_h],
-                                      "smooth_share_depth": np.r_[share_g, share_h]}))
+        rows_out.append(pd.DataFrame({"section": sec,
+                                      "feature": list(names[B]) + feats + [f"module{i}" for i in range(len(mods))],
+                                      "kind": ["gene"] * len(B) + ["hic"] * len(feats) + ["module"] * len(mods),
+                                      "smooth_left": np.r_[left_g, left_h, left_m],
+                                      "smooth_share_depth": np.r_[share_g, share_h, share_m],
+                                      "n_genes": [1] * len(B) + [0] * len(feats) + [len(m) for m in mods]}))
     pd.concat(rows_out, ignore_index=True).to_parquet(out / "calibrate.parquet")
     with open(out / "calibrate.json", "w") as fh:
         json.dump(res, fh, indent=1)
@@ -455,6 +492,93 @@ def stage_cnv(stats_root: Path, out: Path, n_cnv: int = 5):
         log(f"cnv {sec}:", json.dumps(res[sec]["smooth_left"], indent=1))
     pd.concat(profiles).to_parquet(out / "cnv_profiles.parquet")
     with open(out / "cnv.json", "w") as fh:
+        json.dump(res, fh, indent=1)
+
+
+# ------------------------------------------------------------------------------------------------------------
+# stage cellcycle: S and G2/M scores of the spots' RNA (Tirosh et al. 2016 genes) as covariates
+# ------------------------------------------------------------------------------------------------------------
+def _cell_cycle_genes() -> dict:
+    """{"S": [...], "G2M": [...]}: Seurat's cc.genes.updated.2019 (registered dataset seurat_cc_genes_2019), read
+    with R; mouse symbols are the human ones in title case."""
+    import subprocess
+
+    import uchrom.datasets as ds
+
+    f = Path(ds.fetch("seurat_cc_genes_2019", verbose=False))
+    f = next(f.rglob("*.rda")) if f.is_dir() else f
+    code = (f'load("{f}"); x <- cc.genes.updated.2019; '
+            'writeLines(c(paste0("S\\t", x$s.genes), paste0("G2M\\t", x$g2m.genes)))')
+    txt = subprocess.run(["Rscript", "-e", code], check=True, capture_output=True, text=True).stdout
+    out: dict = {"S": [], "G2M": []}
+    for line in txt.splitlines():
+        phase, gene = line.split("\t")
+        out[phase].append(gene)
+    if TISSUES[TISSUE]["genome"].startswith("mm"):
+        out = {k: [g[:1].upper() + g[1:].lower() for g in v] for k, v in out.items()}
+    return out
+
+
+def stage_cellcycle(out: Path):
+    """Per section: S and G2/M scores of every spot (mean of the phase's genes, log1p CP10k z-scored), how much of
+    them the 30 RNA PCs carry, their smooth share, and the contact features' smooth variance left after depth + RNA
+    + copy number with and without the two scores (relative to depth alone, as stage cnv)."""
+    import scipy.sparse as sps
+
+    from uchrom.spatial import destripe
+
+    genes = _cell_cycle_genes()
+    cd = load_store()
+    ids = [str(i) for i in cd._cell_ids_axis()]
+    adata = cd.linked_adata[ids]
+    gi = {g: i for i, g in enumerate(adata.var_names)}
+    f = pd.read_parquet(out / "features.parquet")
+    pcs = pd.read_parquet(out / "rna_pca.parquet")
+    feats = [f"q30.{x}" for x in FEATURES]
+    res, scores = {}, []
+    for sec in SECTIONS:
+        g = f[(f.section == sec) & f.qc]
+        X = sps.csr_matrix(adata[list(g.index)].X).astype(np.float64)
+        tot = np.maximum(np.asarray(X.sum(1)).ravel(), 1)
+        sc = {}
+        used = {}
+        for phase, names in genes.items():
+            idx = [gi[x] for x in names if x in gi]
+            used[phase] = len(idx)
+            L = np.log1p(X[:, idx].toarray() / tot[:, None] * 1e4)
+            sd = L.std(0)
+            L = (L[:, sd > 0] - L[:, sd > 0].mean(0)) / sd[sd > 0]
+            sc[phase] = L.mean(1)
+        C = pd.DataFrame(sc, index=g.index)
+        rows, cols = g.centroid_y.to_numpy(int), g.centroid_x.to_numpy(int)
+        xy = g[["centroid_x", "centroid_y"]].to_numpy(float)
+        Cd = destripe(C, rows, cols)
+        P = pcs.loc[g.index].to_numpy(float)
+        dep = np.log10(g[["hic_contacts"]].to_numpy(float))
+        lumi = np.log10(tot + 1)[:, None]
+        r2_pcs = {k: float(1 - _residuals(Cd[[k]], np.c_[lumi, P]).var().iloc[0] / _residuals(Cd[[k]], lumi).var().iloc[0])
+                  for k in C.columns}
+        share_cc = (_smooth_var(_residuals(Cd, lumi), xy) / np.nanvar(_residuals(Cd, lumi).to_numpy(), 0)).round(4)
+        cnv = _cnv_pcs(out, g)
+        D = destripe(g[feats], rows, cols)
+        base = _smooth_var(_residuals(D, dep), xy)
+        left = {}
+        steps = [("rna30", np.c_[dep, P]), ("rna30+cc", np.c_[dep, P, Cd.to_numpy()])]
+        if cnv is not None:
+            steps += [("rna30+cnv", np.c_[dep, P, cnv]), ("rna30+cnv+cc", np.c_[dep, P, cnv, Cd.to_numpy()])]
+        for name, cov in steps:
+            left[name] = dict(zip(feats, (_smooth_var(_residuals(D, cov), xy) / base).round(4).tolist()))
+        last = "rna30+cnv" if cnv is not None else "rna30"
+        rem = _residuals(D, steps[[n for n, _ in steps].index(last)][1])
+        corr = {k: {ft: float(rem[ft].corr(Cd[k], method="spearman")) for ft in feats} for k in C.columns}
+        res[sec] = {"genes_found": used, "r2_of_scores_by_rna_pcs": r2_pcs,
+                    "scores_smooth_share": dict(zip(C.columns, share_cc.tolist())),
+                    "smooth_left": left, f"spearman_scores_vs_features_after_{last}": corr}
+        scores.append(Cd.add_prefix("cc.").assign(section=sec))
+        log(f"cellcycle {sec}:", json.dumps({k: v for k, v in res[sec].items() if k != "smooth_left"}, indent=1),
+            json.dumps(left, indent=1))
+    pd.concat(scores).to_parquet(out / "cellcycle_scores.parquet")
+    with open(out / "cellcycle.json", "w") as fh:
         json.dump(res, fh, indent=1)
 
 
@@ -698,8 +822,7 @@ def stage_summary(out: Path, results: Path, figdir: Path):
     # 2. spatial variation per feature and section: effect sizes at each adjustment step, both sections
     steps = ["raw", "destriped", "depth", "depth_rna30"]
     table = {}
-    for r in sv.itertuples(index=False):
-        d = r._asdict()
+    for d in sv.to_dict(orient="records"):          # column names with dots: not itertuples (renames them)
         table[f"{d['section']}/{d['feature']}"] = {
             k: (None if pd.isna(v) else float(v)) for k, v in d.items() if k not in ("section", "feature")}
     res["sv_table"] = table
@@ -734,6 +857,9 @@ def stage_summary(out: Path, results: Path, figdir: Path):
     cnv = out / "cnv.json"
     if cnv.exists():
         res["cnv"] = json.loads(cnv.read_text())
+    cc = out / "cellcycle.json"
+    if cc.exists():
+        res["cellcycle"] = json.loads(cc.read_text())
     loc = out / "local_replication.json"
     if loc.exists():
         res["local_replication"] = json.loads(loc.read_text())
@@ -781,6 +907,11 @@ def _figdata_tables(out: Path, figdir: Path, f: pd.DataFrame, q: pd.DataFrame, p
             t = t.join(_residuals(ds, np.c_[dep, P, C]).add_prefix("rna30_cnv."))
             for i in range(min(3, C.shape[1])):
                 t[f"cnv_pc{i + 1}"] = C[:, i]
+        ccp = out / "cellcycle_scores.parquet"
+        if ccp.exists() and C is not None:
+            cc = pd.read_parquet(ccp).reindex(g.index)[["cc.S", "cc.G2M"]]
+            t = t.join(cc)
+            t = t.join(_residuals(ds, np.c_[dep, P, C, cc.to_numpy(float)]).add_prefix("rna30_cnv_cc."))
         wcells = out / f"window_cells_{sec}.parquet"
         if wcells.exists():
             w = pd.read_parquet(wcells).reindex(g.index)
@@ -814,7 +945,7 @@ def main(argv=None):
     ap.add_argument("--results", default=str(HERE / "results"))
     ap.add_argument("--figdata", default=None)
     ap.add_argument("--stages", default="features,regions,sv,summary",
-                    help="comma-separated: check, features, regions, sv, calibrate, cnv, local, compartments, compartments_sv, summary (all: "
+                    help="comma-separated: check, features, regions, sv, calibrate, cnv, cellcycle, local, compartments, compartments_sv, summary (all: "
                          "every stage)")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--perms", type=int, default=999)
@@ -848,6 +979,8 @@ def main(argv=None):
             stage_local(Path(a.stats), out)
         elif st == "calibrate":
             stage_calibrate(out, a.seed)
+        elif st == "cellcycle":
+            stage_cellcycle(out)
         elif st == "summary":
             stage_summary(out, Path(a.results), figdir)
         else:

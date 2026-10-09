@@ -125,6 +125,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `genomes/hg19/chr{21,1}.fa.gz`: UCSC hg19 sequences | 12 MB + 74 MB | fetch `hg19_chr21`, `hg19_chr1` | tutorials `hic_structures`, `sc_structures` (chr21); `benchmarks/hic_structures/` (GC phasing of compartments) |
 | `genomes/{mm10,hg19,hg38}/<g>.fa.gz`: UCSC whole-genome sequences | 830 + 905 + 938 MB | fetch `mm10_genome`, `hg19_genome`, `hg38_genome` | CpG frequency per bin for `uchrom.strc.comp.single_cell_compartments`; tutorial `sc_structures` (mm10); `benchmarks/sc_structures/scab_*.py` |
 | `genomes/liftover/hg38ToHg19.over.chain.gz`: UCSC liftOver chain | 1.2 MB | fetch `hg38_to_hg19_chain` | `benchmarks/hic_structures/pseudobulk_gm12878.py` (scMicro-C hg38 → Rao 2014 hg19) |
+| `reference/seurat/cc.genes.updated.2019.rda`: Tirosh et al. 2016 cell-cycle genes (S, G2/M), 2019 symbols, as Seurat ships them | 0.5 kB | fetch `seurat_cc_genes_2019` | `benchmarks/spatial_variable` (stage cellcycle: S / G2M scores of the spots' RNA as covariates) |
 | `ray2019_k562/4DNFI4QQPDMR.mcool`: K562 in situ Hi-C | 849 MB | fetch `ray2019_k562` | provenance of `K562_chr21_30kb.cool` |
 | `4DNFIFLJGGNR.csv`: Takei 2021 mESC FOF-CT, 1 Mb genome-wide loci | 47 MB | fetch `takei2021_1mb` | `benchmarks/screcon/` (simulation truth, locus map, diploid simulation); `benchmarks/bulk/` (mESC truth) |
 | `nagano2017_dip/`: Nagano 2017 diploid serum mESC fend pairs (+ the `nagano2017_hap/` fends and chain) | 1.96 GB | fetch `nagano2017_dip_serum`; loader `nagano2017_dip_serum` | `benchmarks/sc_structures/snaphic_*.py` (SnapHiC's data) |
@@ -462,6 +463,18 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
 - **Used by**: tutorial `features` (per-bin GTF-annotation and sequence features on chromosome 19);
   tutorial `pseudobulk` (refGene: gene density per 1 Mb bin, the orientation of the compartment
   eigenvectors of the dscHi-C maps).  The same refGene file is fetched by `schicar_atac` into `schicar_mop/raw/` for `build_schicar_mop.py`.
+
+### `reference/seurat/`: cell-cycle genes (fetch `seurat_cc_genes_2019`)
+
+- **Files**: `reference/seurat/cc.genes.updated.2019.rda` (538 bytes, md5 `55d7e35793436d5e91646d774d9f86c4`) from
+  `https://raw.githubusercontent.com/satijalab/seurat/d28233a843ede385acdee1cae7e9fb9d70e76078/data/cc.genes.updated.2019.rda`
+  (a fixed commit of the Seurat repository).
+- **Content**: an R list (`cc.genes.updated.2019`) of two character vectors, `s.genes` (43) and `g2m.genes` (54):
+  the cell-cycle genes of Tirosh *et al.* 2016 (*Science* 352:189–196) with their 2019 HGNC symbols.  Read with R
+  (`load()`); mouse symbols are the human ones in title case.
+- **Licence**: Seurat's data (MIT, Seurat's `LICENSE`); the gene lists are the published ones.
+- **Used by**: `benchmarks/spatial_variable` (stage `cellcycle`: S and G2/M scores of each spot's RNA, as
+  covariates of the contact features next to the RNA and copy-number principal components).
 
 ### `takei2025_fov0/`: Takei 2025 cerebellum, rep 1 FOV 0, first 47 cells (raw 280 MB; store 73 MB)
 

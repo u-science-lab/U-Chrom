@@ -776,6 +776,18 @@ DATASETS.update({
         "default": True,
         "description": "UCSC mm10 refGene gene annotation (GTF)",
     },
+    # Cell-cycle genes of Tirosh et al. 2016 (Science 352:189), S phase (43) and G2/M (54), with the 2019 HGNC
+    # symbols, as Seurat ships them (satijalab/seurat, data/cc.genes.updated.2019.rda, at a fixed commit; an R
+    # list of two character vectors): benchmarks/spatial_variable (stage cellcycle)
+    "seurat_cc_genes_2019": {
+        "files": [("reference/seurat/cc.genes.updated.2019.rda",
+                   "https://raw.githubusercontent.com/satijalab/seurat/d28233a843ede385acdee1cae7e9fb9d70e76078/"
+                   "data/cc.genes.updated.2019.rda")],
+        "md5": {"reference/seurat/cc.genes.updated.2019.rda": "55d7e35793436d5e91646d774d9f86c4"},
+        "size_mb": 0.001,
+        "default": False,
+        "description": "Tirosh et al. 2016 cell-cycle genes (S, G2/M), 2019 symbols, from Seurat (.rda)",
+    },
 })
 
 # ---- built from their sources (hicstraw over HTTP; see _builders.slice_hic) ----
