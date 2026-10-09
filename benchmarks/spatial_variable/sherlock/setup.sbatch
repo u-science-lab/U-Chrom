@@ -21,6 +21,8 @@ curl -sSL -o "$L_SCRATCH/SPARK.tar.gz" "https://github.com/xzhoulab/SPARK/archiv
 tar -xzf "$L_SCRATCH/SPARK.tar.gz" -C "$L_SCRATCH"
 # the repository ships object files built elsewhere (SPARK.so linked to a system liblapack): build from source
 rm -f "$L_SCRATCH/SPARK-$SHA"/src/*.o "$L_SCRATCH/SPARK-$SHA"/src/*.so
+# its Makevars asks for C++11; RcppArmadillo 15 needs C++14 or later: use R's default standard
+sed -i '/^CXX_STD/d' "$L_SCRATCH/SPARK-$SHA"/src/Makevars
 R CMD INSTALL -l "$R_LIBS_USER" "$L_SCRATCH/SPARK-$SHA"
 Rscript -e 'library(SPARK); cat("SPARK", as.character(packageVersion("SPARK")), "\n")'
 $PY -m pip freeze | grep -iE "^(numpy|pandas|scipy|scikit-learn)==" > "$L_SCRATCH/pins.txt"
