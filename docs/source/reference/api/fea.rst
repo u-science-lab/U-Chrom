@@ -68,7 +68,8 @@ Known structures scored per cell
 --------------------------------
 
 Boundaries and loops called on a pooled map, scored in every cell from the contacts counted in their windows
-(``uchrom.io.WindowCounts``): insulation against domain interiors, peak over donut.
+(``uchrom.io.WindowCounts``): insulation against domain interiors, peak over donut, and both against the cell's
+own expected from its contact-distance histograms (``window_expected``).
 
 .. automodule:: uchrom.fea.window_scores
    :members:

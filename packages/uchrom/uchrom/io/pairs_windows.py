@@ -179,19 +179,23 @@ class WindowCounts:
         out._index()
         return out
 
-    def by_part(self, kind: Optional[str] = None):
+    def by_part(self, kind: Optional[str] = None, values: Optional[np.ndarray] = None):
         """Counts and pixels summed per (feature, part) of the windows of one ``kind`` (column ``kind``; all
         windows when None): ``({part: ndarray (n_cells, n_features)}, {part: ndarray (n_features,)})``, features
-        0 … max(feature) in order."""
+        0 … max(feature) in order.  ``values``: an (n_cells, n_windows) array summed instead of the counts
+        (e.g. :func:`uchrom.fea.window_expected`)."""
+        vals = self.counts if values is None else np.asarray(values)
+        if vals.shape != self.counts.shape:
+            raise ValueError(f"values: shape {vals.shape}, expected {self.counts.shape}")
         w = self.windows if kind is None else self.windows[self.windows["kind"] == kind]
         counts, pixels = {}, {}
         nf = int(w["feature"].max()) + 1 if len(w) else 0
         for part, g in w.groupby("part", sort=False):
-            m = np.zeros((len(self.cells), nf), np.int64)
+            m = np.zeros((len(self.cells), nf), vals.dtype)
             px = np.zeros(nf, np.int64)
             for f, gg in g.groupby("feature"):
                 idx = gg.index.to_numpy()
-                m[:, int(f)] = self.counts[:, idx].sum(axis=1)
+                m[:, int(f)] = vals[:, idx].sum(axis=1)
                 px[int(f)] = self.pixels[idx].sum()
             counts[str(part)] = m
             pixels[str(part)] = px

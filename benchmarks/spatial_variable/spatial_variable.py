@@ -471,10 +471,10 @@ def _cnv_pcs(out: Path, g: pd.DataFrame, n: int = 5):
 
 
 def _adjusted_tests(g: pd.DataFrame, V: pd.DataFrame, pcs: pd.DataFrame, cnv=None, *, with_moran: bool = True,
-                    n_null: int = 0, seed: int = 0):
+                    with_sparkx: bool = True, n_null: int = 0, seed: int = 0):
     """Per column of V on the spots g, destriped: the smooth share of the variance after depth, + RNA (30 PCs)
-    [, + copy-number PCs], SPARK-X p-values, Moran's I (optional) and the smooth share of the same values with the
-    spots shuffled (``n_null`` times; the noise level of the measure)."""
+    [, + copy-number PCs], SPARK-X p-values (optional), Moran's I (optional) and the smooth share of the same
+    values with the spots shuffled (``n_null`` times; the noise level of the measure)."""
     from uchrom.spatial import destripe, smooth_share, spatial_autocorr, sparkx
 
     xy = g[["centroid_x", "centroid_y"]].to_numpy(float)
@@ -499,73 +499,117 @@ def _adjusted_tests(g: pd.DataFrame, V: pd.DataFrame, pcs: pd.DataFrame, cnv=Non
         if n_null:
             nulls = [smooth_share(r.iloc[rng.permutation(len(r))].set_axis(r.index), xy) for _ in range(n_null)]
             t[f"{name}.smooth_share_null"] = np.mean(nulls, axis=0)
-        sx = sparkx(ds, xy, covariates=cov)
-        t[f"{name}.sparkx_padj"] = sx["padj"]
+        if with_sparkx:
+            t[f"{name}.sparkx_padj"] = sparkx(ds, xy, covariates=cov)["padj"]
         if with_moran:
             t[f"{name}.moran_I"] = spatial_autocorr(values=r, graph=graph)["I"]
     return t
 
 
+SCORES = {"boundary": {"logratio": "insulation", "oe": "insulation_oe"}, "loop": {"logratio": "loops", "oe": "loops_oe"}}
+
+
+def _structures(wc, kind: str) -> pd.DataFrame:
+    """Chromosome and span (bp, outermost window edges) of each structure of one kind."""
+    w = wc.windows[wc.windows["kind"] == kind]
+    t = w.groupby("feature").agg(chrom=("chrom", "first"), lo=("start1", "min"), hi=("end2", "max"))
+    t.index = t.index.astype(str)
+    t["span"] = t["hi"] - t["lo"]
+    return t
+
+
+def _replication(a: pd.DataFrame, b: pd.DataFrame, col: str, info: pd.DataFrame) -> dict:
+    """How the structures' smooth shares above the shuffled ones (the excess) agree between two sections, and
+    what else orders them: their contacts, their chromosome (X: haploid in a male tissue), their span."""
+    from scipy import stats as ss
+
+    common = a.index.intersection(b.index)
+    ea = a.loc[common, col] - a.loc[common, col + "_null"]
+    eb = b.loc[common, col] - b.loc[common, col + "_null"]
+    top_a, top_b = ea >= ea.quantile(0.9), eb >= eb.quantile(0.9)
+    lc = np.log(a.loc[common, "counts_per_spot"] * b.loc[common, "counts_per_spot"])
+    ranks = [pd.Series(ss.rankdata(x), index=common) for x in (ea, eb, lc)]
+
+    def resid(y):
+        return y - np.polyval(np.polyfit(ranks[2], y, 1), ranks[2])
+
+    both = np.minimum(ea, eb)
+    top = both >= both.quantile(0.9)
+    is_x = info.loc[common, "chrom"].isin(["chrX", "X"])
+    return {"n_both": int(len(common)),
+            "median_excess_r1": float(ea.median()), "median_excess_r2": float(eb.median()),
+            "spearman_excess_between_sections": float(ea.corr(eb, method="spearman")),
+            "partial_spearman_given_counts": float(np.corrcoef(resid(ranks[0]), resid(ranks[1]))[0, 1]),
+            "spearman_excess_counts": [float(ss.spearmanr(ea, a.loc[common, "counts_per_spot"])[0]),
+                                       float(ss.spearmanr(eb, b.loc[common, "counts_per_spot"])[0])],
+            "spearman_excess_span": float(ss.spearmanr(both, info.loc[common, "span"])[0]),
+            "chrX_share_all": float(is_x.mean()), "chrX_share_top_decile": float(is_x[top].mean()),
+            "top_decile_overlap": int((top_a & top_b).sum()), "top_decile_expected": float(top_a.sum() * top_b.mean()),
+            "n_excess_over_0.02_both": int(((ea > 0.02) & (eb > 0.02)).sum())}
+
+
 def stage_local(stats_root: Path, out: Path, min_counts: float = 2.0, seed: int = 0):
-    """Per section: window_scores of the spots.  The per-spot boundary strength and loop strength are tested like
-    the global features; every boundary / loop with >= ``min_counts`` contacts per spot in its windows (on
-    average) on its own: its smooth share after depth / + RNA / + copy number, against shuffled spots, and how
-    the structures' smooth shares agree between the two sections."""
-    from uchrom.fea import window_scores
-    from uchrom.io import WindowCounts
+    """Per section: window_scores of the spots, against each spot's own expected (its contact-distance histogram
+    per chromosome, ``uchrom.fea.window_expected``) and as plain log ratios.  The pooled per-spot boundary and loop
+    strengths are tested like the global features; every boundary / loop with >= ``min_counts`` contacts per spot
+    in its windows (on average) on its own, in both versions: its smooth share after depth / + RNA / + copy number
+    against shuffled spots, and how the structures' smooth shares agree between the two sections."""
+    import cooler
+
+    from uchrom.fea import window_expected, window_scores
+    from uchrom.io import ContactStats, WindowCounts
 
     f = pd.read_parquet(out / "features.parquet")
     pcs = pd.read_parquet(out / "rna_pca.parquet")
-    glob, per = [], {}
+    glob, per, info = [], {}, {}
     for sec in SECTIONS:
         wc = WindowCounts.load(stats_root / sec / f"{sec}.window_counts.npz")
         wc.cells = np.asarray([f"{sec}:{b}" for b in wc.cells], dtype=object)
-        sc = window_scores(wc)
+        st = ContactStats.load(stats_root / sec / f"{sec}.contact_stats_q30.npz")
+        st.cells = np.asarray([f"{sec}:{b}" for b in st.cells], dtype=object)
+        sizes = cooler.Cooler(str(stats_root / sec / f"{sec}.bulk_25000.cool")).chromsizes.to_dict()
+        sc = window_scores(wc, expected=window_expected(wc, st, chromsizes=sizes))
         g = f[(f.section == sec) & f.qc]
         cnv = _cnv_pcs(out, g)
         cells = sc["cells"].reindex(g.index)
         cells.to_parquet(out / f"window_cells_{sec}.parquet")
-        cols = [c for c in ("boundary_strength", "boundary_ratio", "interior_ratio", "loop_strength") if c in cells]
+        cols = [c for c in ("boundary_strength", "boundary_ratio", "interior_ratio", "loop_strength",
+                            "boundary_strength_oe", "interior_oe", "loop_strength_oe") if c in cells]
         t = _adjusted_tests(g, cells[cols], pcs, cnv, n_null=5, seed=seed)
         t.insert(0, "section", sec)
         glob.append(t.reset_index())
-        for kind, counts_key, score_key in (("boundary", "boundary_counts", "insulation"), ("loop", "loop_counts", "loops")):
-            if score_key not in sc:
+        for kind, counts_key in (("boundary", "boundary_counts"), ("loop", "loop_counts")):
+            if SCORES[kind]["oe"] not in sc:
                 continue
+            info[kind] = _structures(wc, kind)
             cnt = sum(v for v in sc[counts_key].values())
             n_per_spot = pd.DataFrame(cnt, index=sc["cells"].index).reindex(g.index).mean()
             keep = n_per_spot.index[n_per_spot >= min_counts]
-            S = sc[score_key].reindex(g.index)[keep]
-            S.columns = [str(c) for c in S.columns]
-            tt = _adjusted_tests(g, S, pcs, cnv, with_moran=False, n_null=2, seed=seed)
-            tt["counts_per_spot"] = n_per_spot[keep].to_numpy()
-            per[(sec, kind)] = tt
-            last = [c for c in tt.columns if c.endswith(".smooth_share")][-1]
-            null = last + "_null"
-            log(f"local {sec} {kind}: {len(keep)} of {len(n_per_spot)} with >= {min_counts} contacts per spot; "
-                f"{last} median {tt[last].median():.3f} (shuffled {tt[null].median():.3f}), "
-                f"> 3x shuffled: {(tt[last] > 3 * tt[null]).sum()}")
+            for version, score_key in SCORES[kind].items():
+                S = sc[score_key].reindex(g.index)[keep]
+                S.columns = [str(c) for c in S.columns]
+                tt = _adjusted_tests(g, S, pcs, cnv, with_moran=False, with_sparkx=False, n_null=2, seed=seed)
+                tt["counts_per_spot"] = n_per_spot[keep].to_numpy()
+                per[(sec, kind, version)] = tt
+                last = [c for c in tt.columns if c.endswith(".smooth_share")][-1]
+                null = last + "_null"
+                log(f"local {sec} {kind} {version}: {len(keep)} of {len(n_per_spot)} with >= {min_counts} contacts "
+                    f"per spot; {last} median {tt[last].median():.3f} (shuffled {tt[null].median():.3f}), "
+                    f"> 3x shuffled: {(tt[last] > 3 * tt[null]).sum()}")
     pd.concat(glob, ignore_index=True).to_parquet(out / "local_global.parquet")
     rep = {}
     for kind in ("boundary", "loop"):
-        if (SECTIONS[0], kind) not in per:
-            continue
-        a, b = per[(SECTIONS[0], kind)], per[(SECTIONS[1], kind)]
-        common = a.index.intersection(b.index)
-        for col in [c for c in a.columns if c.endswith(".smooth_share")]:
-            ea = a.loc[common, col] - a.loc[common, col + "_null"]
-            eb = b.loc[common, col] - b.loc[common, col + "_null"]
-            top_a, top_b = ea >= ea.quantile(0.9), eb >= eb.quantile(0.9)
-            rep[f"{kind}/{col}"] = {
-                "n_both": int(len(common)),
-                "median_excess_r1": float(ea.median()), "median_excess_r2": float(eb.median()),
-                "spearman_excess_between_sections": float(ea.corr(eb, method="spearman")),
-                "top_decile_overlap": int((top_a & top_b).sum()), "top_decile_expected": float(top_a.sum() * top_b.mean())}
-        pd.concat({s: per[(s, kind)] for s in SECTIONS}, names=["section"]).reset_index().to_parquet(
-            out / f"local_{kind}s.parquet")
+        for version in SCORES[kind]:
+            if (SECTIONS[0], kind, version) not in per:
+                continue
+            a, b = per[(SECTIONS[0], kind, version)], per[(SECTIONS[1], kind, version)]
+            for col in [c for c in a.columns if c.endswith(".smooth_share")]:
+                rep[f"{kind}/{version}/{col}"] = _replication(a, b, col, info[kind])
+            tab = pd.concat({s: per[(s, kind, version)] for s in SECTIONS}, names=["section"]).reset_index()
+            tab.join(info[kind], on="feature").to_parquet(out / f"local_{kind}s_{version}.parquet")
     with open(out / "local_replication.json", "w") as fh:
         json.dump(rep, fh, indent=1)
-    log("local replication:", json.dumps(rep, indent=1))
+    log("local replication:", json.dumps({k: v for k, v in rep.items() if "depth_rna30_cnv" in k}, indent=1))
 
 
 # ------------------------------------------------------------------------------------------------------------
