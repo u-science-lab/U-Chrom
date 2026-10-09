@@ -125,6 +125,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `genomes/hg19/chr{21,1}.fa.gz`: UCSC hg19 sequences | 12 MB + 74 MB | fetch `hg19_chr21`, `hg19_chr1` | tutorials `hic_structures`, `sc_structures` (chr21); `benchmarks/hic_structures/` (GC phasing of compartments) |
 | `genomes/{mm10,hg19,hg38}/<g>.fa.gz`: UCSC whole-genome sequences | 830 + 905 + 938 MB | fetch `mm10_genome`, `hg19_genome`, `hg38_genome` | CpG frequency per bin for `uchrom.strc.comp.single_cell_compartments`; tutorial `sc_structures` (mm10); `benchmarks/sc_structures/scab_*.py` |
 | `genomes/liftover/hg38ToHg19.over.chain.gz`: UCSC liftOver chain | 1.2 MB | fetch `hg38_to_hg19_chain` | `benchmarks/hic_structures/pseudobulk_gm12878.py` (scMicro-C hg38 → Rao 2014 hg19) |
+| `genomes/hg38/hg38.refGene.gtf.gz`: UCSC hg38 refGene annotation (GTF) | 24 MB | fetch `hg38_refgene` | nmeth-bc Fig. 2 (`capture_fig2_spatial.py` in the paper repository: genes of the browser's genome view) |
 | `reference/seurat/cc.genes.updated.2019.rda`: Tirosh et al. 2016 cell-cycle genes (S, G2/M), 2019 symbols, as Seurat ships them | 0.5 kB | fetch `seurat_cc_genes_2019` | `benchmarks/spatial_variable` (stage cellcycle: S / G2M scores of the spots' RNA as covariates) |
 | `ray2019_k562/4DNFI4QQPDMR.mcool`: K562 in situ Hi-C | 849 MB | fetch `ray2019_k562` | provenance of `K562_chr21_30kb.cool` |
 | `4DNFIFLJGGNR.csv`: Takei 2021 mESC FOF-CT, 1 Mb genome-wide loci | 47 MB | fetch `takei2021_1mb` | `benchmarks/screcon/` (simulation truth, locus map, diploid simulation); `benchmarks/bulk/` (mESC truth) |
@@ -463,6 +464,17 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
 - **Used by**: tutorial `features` (per-bin GTF-annotation and sequence features on chromosome 19);
   tutorial `pseudobulk` (refGene: gene density per 1 Mb bin, the orientation of the compartment
   eigenvectors of the dscHi-C maps).  The same refGene file is fetched by `schicar_atac` into `schicar_mop/raw/` for `build_schicar_mop.py`.
+
+### `genomes/hg38/hg38.refGene.gtf.gz`: UCSC hg38 refGene annotation (fetch `hg38_refgene`)
+
+- **File**: `genomes/hg38/hg38.refGene.gtf.gz` (24 MB, GTF, md5 `a35c6a276a5cf1d9f200266a82176897`) from
+  `https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/hg38.refGene.gtf.gz` (downloaded 2026-10-09; UCSC
+  updates the file, so a later download may differ and fail the md5 check: update the md5 with the date).
+- **Source**: UCSC Genome Browser, hg38; refGene = NCBI RefSeq genes on hg38 (Navarro Gonzalez et al. 2021,
+  *Nucleic Acids Res* 49:D1046).  Fetched from UCSC's public download server, not re-hosted (UCSC's conditions
+  of use apply).
+- **Used by**: the gene track of the browser's genome view in nmeth-bc Fig. 2 (`capture_fig2_spatial.py`, paper
+  repository: gene spans, the union of each gene's RefSeq transcripts).
 
 ### `reference/seurat/`: cell-cycle genes (fetch `seurat_cc_genes_2019`)
 

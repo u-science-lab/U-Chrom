@@ -103,6 +103,8 @@ export interface ContactMapInfo {
 export interface IntervalInfo {
   key: string
   n: number
+  /** domain | segment | peak | pair (cd.intervals), null for other result tables */
+  kind?: string | null
 }
 
 /** GET tracks: per-genomic-bin aggregates of spot tracks. */

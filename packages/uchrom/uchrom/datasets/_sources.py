@@ -776,6 +776,14 @@ DATASETS.update({
         "default": True,
         "description": "UCSC mm10 refGene gene annotation (GTF)",
     },
+    "hg38_refgene": {
+        "files": [("genomes/hg38/hg38.refGene.gtf.gz",
+                   "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/hg38.refGene.gtf.gz")],
+        "md5": {"genomes/hg38/hg38.refGene.gtf.gz": "a35c6a276a5cf1d9f200266a82176897"},
+        "size_mb": 24,
+        "default": False,
+        "description": "UCSC hg38 refGene gene annotation (GTF)",
+    },
     # Cell-cycle genes of Tirosh et al. 2016 (Science 352:189), S phase (43) and G2/M (54), with the 2019 HGNC
     # symbols, as Seurat ships them (satijalab/seurat, data/cc.genes.updated.2019.rda, at a fixed commit; an R
     # list of two character vectors): benchmarks/spatial_variable (stage cellcycle)

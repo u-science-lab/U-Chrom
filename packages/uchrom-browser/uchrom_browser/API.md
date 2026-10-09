@@ -443,7 +443,9 @@ separately: mixing them is a `422`.
 Rows of an interval table (TADs, loops, peaks; `cd.intervals[key]`, else
 `cd.results[key]`):
 `{"columns": [...], "rows": [[…], …]}` with `chrom, start, end` (and for
-loops `chrom2, start2, end2`) plus any score columns.
+loops `chrom2, start2, end2`) plus any score columns.  In the Genome view a
+`label` (else `name`) column is drawn as each interval's name (gene tracks);
+only `domain` tables (TADs) draw their boundaries across the map rows.
 
 ### `GET /api/datasets/{id}/contacts/{key}?chrom=chr21&start=&end=&resolution=&balance=false&cell=&group=`
 
