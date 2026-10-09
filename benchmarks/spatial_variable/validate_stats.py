@@ -127,6 +127,7 @@ def main(argv=None):
     Y = np.log1p(Xg[:, top].toarray() / tot[keep_spots][:, None] * 1e4)
     gnames = names[top]
     w = libpysal.weights.DistanceBand(xy, threshold=1.5, binary=True, silence_warnings=True)
+    esda_edges = int(sum(w.cardinalities.values()) // 2)          # before esda row-standardises w in place
     # our graph from the same neighbours (positions as the store's), for a like-for-like comparison
     from uchrom.spatial import spatial_neighbors
     from chromdata import ChromData
@@ -157,7 +158,7 @@ def main(argv=None):
     def rel(a_, b_):
         return float(np.nanmax(np.abs(a_ - b_) / np.maximum(np.abs(b_), 1e-300)))
 
-    mo = {"n_genes": int(Y.shape[1]), "n_edges": int(g.adjacency.nnz // 2), "esda_edges": int(w.s0 // 2),
+    mo = {"n_genes": int(Y.shape[1]), "n_edges": int(g.adjacency.nnz // 2), "esda_edges": esda_edges,
           "seconds_esda": t_esda,
           "I_max_rel_diff": rel(mi["I"].to_numpy(), ref["I"]),
           "VI_norm_max_rel_diff": rel(mi["var_norm"].to_numpy(), ref["VI_norm"]),

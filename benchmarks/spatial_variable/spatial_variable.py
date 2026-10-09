@@ -147,6 +147,30 @@ def _qc(f: pd.DataFrame) -> np.ndarray:
 
 
 # ------------------------------------------------------------------------------------------------------------
+# stage check: the per-spot counts of this pass equal those of the map build (same filters, same pairs)
+# ------------------------------------------------------------------------------------------------------------
+def stage_check(stats_root: Path, results: Path):
+    from uchrom.io import ContactStats
+    from _record import save
+
+    res = {}
+    for sec in SECTIONS:
+        st = ContactStats.load(stats_root / sec / f"{sec}.contact_stats_q30.npz")
+        old = pd.read_csv(stats_root / sec / f"{sec}.spot_stats.tsv", sep="\t").set_index("barcode")
+        mine = pd.DataFrame({"cis": st.n_cis, "trans": st.n_trans}, index=pd.Index(st.cells.astype(str)))
+        old = old.reindex(mine.index)
+        res[sec] = {"n_spots": int(len(mine)), "cis_equal": int((mine.cis == old.cis).sum()),
+                    "trans_equal": int((mine.trans == old.trans).sum()),
+                    "cis_max_abs_diff": int((mine.cis - old.cis).abs().max()),
+                    "trans_max_abs_diff": int((mine.trans - old.trans).abs().max()),
+                    "total_cis": int(mine.cis.sum()), "total_trans": int(mine.trans.sum())}
+        log("check", sec, res[sec])
+    results.mkdir(parents=True, exist_ok=True)
+    save(results / "contact_stats_check.json", res, script=__file__, datasets=["spatial_hicrna"],
+         params={"compared": "<sample>.contact_stats_q30.npz vs <sample>.spot_stats.tsv (spatial_pairs_to_cool.py)"})
+
+
+# ------------------------------------------------------------------------------------------------------------
 # stage regions: anatomical regions from the spot RNA (marker sets), both sections
 # ------------------------------------------------------------------------------------------------------------
 def stage_regions(out: Path):
@@ -362,7 +386,7 @@ def main(argv=None):
     ap.add_argument("--results", default=str(HERE / "results"))
     ap.add_argument("--figdata", default=None)
     ap.add_argument("--stages", default="features,regions,sv,summary",
-                    help="comma-separated: features, regions, sv, compartments, compartments_sv, summary (all: "
+                    help="comma-separated: check, features, regions, sv, compartments, compartments_sv, summary (all: "
                          "every stage)")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--perms", type=int, default=999)
@@ -376,7 +400,9 @@ def main(argv=None):
     for st in stages:
         t = time.time()
         log(f"--- stage {st}")
-        if st == "features":
+        if st == "check":
+            stage_check(Path(a.stats), Path(a.results))
+        elif st == "features":
             stage_features(Path(a.stats), out)
         elif st == "regions":
             stage_regions(out)
