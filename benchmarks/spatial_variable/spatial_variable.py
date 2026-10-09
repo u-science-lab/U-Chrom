@@ -614,7 +614,8 @@ def stage_patch(stats_root: Path, out: Path, pc: int = 2, frac: float = 0.2):
     rest) and the change of its own short / long ratio (median of the spots' log2 ratios, patch minus rest;
     Mann-Whitney): if the ratio rises also on chromosomes whose copy number does not change, the patch folds
     differently genome-wide, not through its gains and losses.  Also the genome-wide contact-decay curves (contacts
-    per bp of distance, normalised per group) of the patch and the rest, and the patch at 10 % / 30 %."""
+    per bp of distance, normalised per group) of the patch and the rest, the patch at 10 % / 30 %, and (with stage
+    compartments' table) how the patch's mean scA/B profile compares with the rest's."""
     from scipy import stats as ss
 
     from uchrom.io import ContactStats
@@ -685,6 +686,16 @@ def stage_patch(stats_root: Path, out: Path, pc: int = 2, frac: float = 0.2):
                 out_sec["chr10_share"] = {"median_patch": float(np.median(s10[patch])), "median_rest": float(np.median(s10[~patch])),
                                           "mannwhitney_p": float(ss.mannwhitneyu(s10[patch], s10[~patch]).pvalue)}
                 member.append(pd.DataFrame({"in_patch": patch, "cnv_pc_patch": sm}, index=g.index))
+                scab = out / f"scab_{sec}.parquet"                 # stage compartments: are the compartments the same?
+                if scab.exists():
+                    ab = pd.read_parquet(scab)
+                    ab = ab.set_index("cell_id") if "cell_id" in ab.columns else ab
+                    mp = ab.reindex(g.index[patch]).mean() - 0.5
+                    mr = ab.reindex(g.index[~patch]).mean() - 0.5
+                    ok = mp.notna() & mr.notna()
+                    out_sec["scab_patch_vs_rest"] = {
+                        "n_bins": int(ok.sum()), "pearson": float(np.corrcoef(mp[ok], mr[ok])[0, 1]),
+                        "same_sign": float((np.sign(mp[ok]) == np.sign(mr[ok])).mean())}
         out_sec.update({"pc": pc, "sign": sign, "frac": frac})
         res[sec] = out_sec
         m = out_sec[f"top_{int(frac * 100)}"]
