@@ -398,9 +398,11 @@ def stage_calibrate(out: Path, seed: int, n_pcs: int = 30, min_detect: float = 0
                     "hic_smooth_left": {k: float(v) for k, v in zip(feats, left_h)},
                     "hic_percentile_among_genes": {k: float((left_g < v).mean()) for k, v in zip(feats, left_h)}}
         log(f"calibrate {sec}:", json.dumps(res[sec], indent=1))
+        share_h = _smooth_var(_residuals(hic, dep), xy) / np.nanvar(_residuals(hic, dep).to_numpy(), 0)
         rows_out.append(pd.DataFrame({"section": sec, "feature": list(names[B]) + feats,
                                       "kind": ["gene"] * len(B) + ["hic"] * len(feats),
-                                      "smooth_left": np.r_[left_g, left_h]}))
+                                      "smooth_left": np.r_[left_g, left_h],
+                                      "smooth_share_depth": np.r_[share_g, share_h]}))
     pd.concat(rows_out, ignore_index=True).to_parquet(out / "calibrate.parquet")
     with open(out / "calibrate.json", "w") as fh:
         json.dump(res, fh, indent=1)
@@ -751,7 +753,48 @@ def stage_summary(out: Path, results: Path, figdir: Path):
                            if c.startswith(("q30.", "all.")) and not c.startswith(("q30.trans_share", "all.trans_share"))})
     with open(figdir / f"spatial_variable_{TISSUE}.json", "w") as fh:
         json.dump(res, fh, indent=1, default=float)
+    _figdata_tables(out, figdir, f, q, pcs)
     log("summary:", json.dumps({k: v for k, v in res.items() if k.startswith("guo_")}, indent=1))
+
+
+def _figdata_tables(out: Path, figdir: Path, f: pd.DataFrame, q: pd.DataFrame, pcs: pd.DataFrame) -> None:
+    """Figure data beyond the per-spot features: ``spatial_variable_<tissue>_spots.parquet`` (QC spots: the
+    features destriped, their residuals after depth + RNA and + copy number, the copy-number PCs, the region
+    scores, the pooled window scores), ``_calibration.parquet`` (stage calibrate) and ``_local.parquet`` (every
+    structure's smooth shares in both sections and both score versions)."""
+    from uchrom.spatial import destripe
+
+    reg = pd.read_parquet(out / "regions.parquet")
+    feats = [f"q30.{x}" for x in FEATURES]
+    parts = []
+    for sec in SECTIONS:
+        g = q[q.section == sec]
+        rows, cols = g.centroid_y.to_numpy(int), g.centroid_x.to_numpy(int)
+        ds = destripe(g[feats], rows, cols)
+        dep = np.log10(g[["hic_contacts"]].to_numpy(float))
+        P = pcs.loc[g.index].to_numpy(float)
+        t = pd.DataFrame({"section": sec, "x": g.centroid_x, "y": g.centroid_y}, index=g.index)
+        t = t.join(ds.add_prefix("destriped."))
+        t = t.join(_residuals(ds, np.c_[dep, P]).add_prefix("rna30."))
+        C = _cnv_pcs(out, g)
+        if C is not None:
+            t = t.join(_residuals(ds, np.c_[dep, P, C]).add_prefix("rna30_cnv."))
+            for i in range(min(3, C.shape[1])):
+                t[f"cnv_pc{i + 1}"] = C[:, i]
+        wcells = out / f"window_cells_{sec}.parquet"
+        if wcells.exists():
+            w = pd.read_parquet(wcells).reindex(g.index)
+            keep = [c for c in w.columns if c.endswith(("_oe", "strength"))]
+            t = t.join(destripe(w[keep], rows, cols).add_prefix("window."))
+        parts.append(t.join(reg[[c for c in reg.columns if c.startswith("z.")] + ["region"]]))
+    pd.concat(parts).rename_axis("cell_id").to_parquet(figdir / f"spatial_variable_{TISSUE}_spots.parquet")
+    cal = out / "calibrate.parquet"
+    if cal.exists():
+        pd.read_parquet(cal).to_parquet(figdir / f"spatial_variable_{TISSUE}_calibration.parquet")
+    loc = [pd.read_parquet(p).assign(kind=p.stem.split("_")[1][:-1], version=p.stem.split("_")[2])
+           for p in sorted(out.glob("local_*s_*.parquet"))]
+    if loc:
+        pd.concat(loc, ignore_index=True).to_parquet(figdir / f"spatial_variable_{TISSUE}_local.parquet")
 
 
 def default_figdata(out: Path) -> Path:

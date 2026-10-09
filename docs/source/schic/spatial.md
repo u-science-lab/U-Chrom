@@ -10,7 +10,7 @@ strength of a known loop.
 |------|-----|
 | global features of every spot: the contact-distance histogram (scHiCluster's bins) and trans contacts per chromosome, one pass over the library's pairs | `uchrom.io.ContactStats` → `cd.cellm["contacts.distance"]` |
 | short / long-range ratio (Guo et al. 2026's definition), distance bands, contact-decay slopes, cis fraction, trans share per chromosome | `uchrom.fea.contact_features` |
-| known boundaries and loops scored in every spot: contacts in their windows (flanks / crossing square, peak / donut), insulation against domain interiors | `uchrom.io.WindowCounts`, `boundary_windows`, `loop_windows`, `uchrom.fea.window_scores` |
+| known boundaries and loops scored in every spot: contacts in their windows (flanks / crossing square, peak / donut), insulation against domain interiors, and against the spot's own expected from its contact-distance histograms | `uchrom.io.WindowCounts`, `boundary_windows`, `loop_windows`, `uchrom.fea.window_expected`, `window_scores` |
 | compartment values of every spot | `uc.tl.single_cell_compartments` ([structures from single cells](structures.md)) |
 | barcode stripes of microfluidic arrays (DBiT-type: one channel per array row and column) removed, the smooth pattern kept | `uchrom.spatial.destripe`, `smooth_share` |
 | neighbours in tissue (per section / field of view), spatial autocorrelation (Moran's I, Geary's C; normality, randomisation, permutations) | `uchrom.spatial.spatial_neighbors`, `spatial_autocorr` |
@@ -40,6 +40,14 @@ with what the same adjustment leaves of genes held out of it.
 `benchmarks/spatial_variable` (stage `calibrate`) measures this as the share of the smooth spatial variance that
 remains.
 
+A single boundary or loop has a few contacts per spot.  Score it against the spot's own expected
+(`window_scores(counts, expected=window_expected(counts, stats, chromsizes=...))`), not by a log ratio of its
+windows alone.  The log ratio also follows the spot's contact decay and, at a few contacts, its coverage of the
+chromosome.  Both vary across a tissue, alike for every structure of a chromosome or every loop of a size, so the
+log ratios of many structures vary together and their spatial patterns replicate between sections.  In the Guo et
+al. 2026 sections this put chromosome X boundaries (X is haploid in these male tissues) and short loops at the top
+of the list.
+
 ## Checks
 
 - **Against the reference implementations, on real data.**  The data are the spot RNA of Guo et al. 2026, mouse
@@ -54,6 +62,26 @@ remains.
 - **The short / long-range ratio.**  It reproduces the paper's regional pattern in both sections: cortex, CA and
   DG lie above white matter and the choroid plexus.  The medians are 3.17 vs 2.48 (r1) and 3.13 vs 2.56 (r2),
   with an AUC of 0.89 and 0.86.
+
+## On the reference sections
+
+The share of a feature's smooth spatial variance left after depth and the spot's RNA (30 principal components),
+destriped, in the two sections of each tissue:
+
+- **Mouse brain.**  The contact features keep 7-15 % (the 100 kb-1 Mb decay slope 43 and 55 %).  Held-out genes with a spatial pattern keep 25-28 %
+  through the same adjustment.  The features vary across the section as its cells do.
+- **Human melanoma.**  The features keep 62-82 % (the cis fraction 29 and 35 %).  The spot RNA is shallower here, and few held-out genes have
+  a spatial pattern (1 and 4 genes with more than 20 % of their variance smooth); those keep 41-42 %.  The spots' shares
+  of contacts per chromosome, a copy-number profile, form patches in the tissue: 71-89 % of their variance is
+  smooth for chromosomes 22, 9, 15, 7, 17 and 11.  With five principal components of those profiles as
+  covariates, the short / long ratio keeps 36 % and 43 % instead of 69 % and 66 %.  So the 3-D variation that the
+  transcriptome does not explain largely follows the tumour's clones.  The same covariates change nothing in the
+  brain.
+- **Single boundaries and loops.**  Scored against each spot's expected, no boundary or loop in either tissue
+  varies beyond shuffled spots in a way that repeats in the other section.  The Spearman correlation of their
+  excess smooth shares between the sections is -0.01 to 0.03 (as log ratios 0.04-0.74, ordered by chromosome X
+  and loop span).  Pooled over all boundaries or loops, a spot's insulation and loop strength do vary: after RNA
+  and copy number, 8-16 % of their variance is smooth, against 4-5 % with the spots shuffled.
 
 The analysis and its numbers are kept with their provenance in `benchmarks/spatial_variable/results/`.
 
