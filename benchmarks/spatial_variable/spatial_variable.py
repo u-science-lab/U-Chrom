@@ -84,17 +84,19 @@ def stage_features(stats_root: Path, out: Path):
                                                                             "short_long"))]]
             f.columns = [f"{filt}.{c}" for c in f.columns]
             frames.append(f)
-        # orientation QC: inward / outward share of the contacts below 1 kb and between 1 and 5 kb
+        # orientation QC: inward / outward share of the contacts below 2.5 kb (histogram column 0) and
+        # between 2.5 and 5 kb, and the share of all cis contacts below 2.5 kb
         o = work.cellm["contacts.orientation"].astype(float)
         edges = np.asarray(work.uns["contact_stats"]["contacts"]["edges"])
         hi = np.r_[edges, np.inf]                                # upper edge of each histogram column
-        short = hi <= 1_000
-        mid = (hi > 1_000) & (hi <= 5_000)
+        short = np.arange(len(hi)) == 0
+        mid = ~short & (hi <= 5_000)
         tot_s, tot_m = o[:, :, short].sum((1, 2)), o[:, :, mid].sum((1, 2))
         with np.errstate(divide="ignore", invalid="ignore"):
-            frames.append(pd.DataFrame({f"{filt}.inward_lt1k": o[:, 1, short].sum(1) / tot_s,
-                                        f"{filt}.outward_lt1k": o[:, 2, short].sum(1) / tot_s,
-                                        f"{filt}.inward_1k_5k": o[:, 1, mid].sum(1) / tot_m},
+            frames.append(pd.DataFrame({f"{filt}.inward_lt2k5": o[:, 1, short].sum(1) / tot_s,
+                                        f"{filt}.outward_lt2k5": o[:, 2, short].sum(1) / tot_s,
+                                        f"{filt}.inward_2k5_5k": o[:, 1, mid].sum(1) / tot_m,
+                                        f"{filt}.frac_lt2k5": tot_s / o.sum((1, 2))},
                                        index=pd.Index([str(c) for c in work._cell_ids_axis()])))
     feats = pd.concat(frames, axis=1)
     c = cd.cells.copy()
@@ -205,7 +207,7 @@ def stage_sv(out: Path, n_perms: int, seed: int):
     f["log_contacts"] = np.log10(f["hic_contacts"])
     trans_cols = [c for c in f.columns if c.startswith("q30.trans_share.")]
     feats = [f"{filt}.{x}" for filt in FILTERS for x in FEATURES] + trans_cols + \
-        [c for c in f.columns if c.endswith(("lt1k", "1k_5k"))] + CONTROLS
+        [c for c in f.columns if c.endswith(("lt2k5", "2k5_5k"))] + CONTROLS
     tables = []
     for sec in SECTIONS:
         g = f[(f.section == sec) & f.qc]
