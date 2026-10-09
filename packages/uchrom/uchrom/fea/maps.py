@@ -201,9 +201,11 @@ def _scratch_dir() -> Path:
     return d
 
 
-#: maps with at most this many pixels are balanced in memory (:func:`uchrom.fea.ice`, ~60 B per pixel); larger
-#: ones by cooler's out-of-core balancing (the same weights, but the file is re-read every iteration)
+#: maps with at most this many pixels are balanced in memory (:func:`uchrom.fea.ice`, ~60 B per pixel), larger
+#: ones too when ``uchrom.settings.memory_budget`` holds them; otherwise by cooler's out-of-core balancing (the
+#: same weights, but the file is re-read every iteration: hours for a genome-wide 25-kb map)
 ICE_IN_MEMORY_MAX = 50_000_000
+ICE_BYTES_PER_PIXEL = 60
 
 
 def _balance_cool(path: Path) -> None:
@@ -212,9 +214,13 @@ def _balance_cool(path: Path) -> None:
     import h5py
 
     clr = cooler.Cooler(str(path))
-    if int(clr.info["nnz"]) > ICE_IN_MEMORY_MAX:
-        cooler.balance_cooler(clr, store=True)
-        return
+    nnz = int(clr.info["nnz"])
+    if nnz > ICE_IN_MEMORY_MAX:
+        from chromdata.settings import settings
+
+        if nnz * ICE_BYTES_PER_PIXEL > settings.memory_budget:
+            cooler.balance_cooler(clr, store=True)
+            return
     from .pseudobulk_maps import ice
 
     with h5py.File(path, "r+") as h5:
