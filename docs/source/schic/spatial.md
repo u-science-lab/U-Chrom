@@ -77,6 +77,13 @@ destriped, in the two sections of each tissue:
   covariates, the short / long ratio keeps 36 % and 43 % instead of 69 % and 66 %.  So the 3-D variation that the
   transcriptome does not explain largely follows the tumour's clones.  The same covariates change nothing in the
   brain.
+- **The melanoma's copy-number patch.**  Where the spots' copy-number profile changes (the top fifth of its
+  second component, 1,208 of 6,036 spots of section r1), the short / long ratio is higher (median 2.01 vs 1.93) --
+  on every one of the 23 chromosomes computed on its own, also on the 10 whose copy number does not change (median
+  +0.055 log2), unrelated to each chromosome's gain or loss (Spearman -0.05); section r2: 20 of 23.  Its
+  compartments are those of the rest (mean scA/B, Pearson r = 0.998).  The patch folds differently genome-wide;
+  its copy number marks it.  `uchrom.fea.ContactFeatureParams(per_chromosome=True)` gives features that gains and
+  losses of whole chromosomes leave unchanged; the web browser draws a group's map as its log2 ratio to all cells.
 - **Single boundaries and loops.**  Scored against each spot's expected, no boundary or loop in either tissue
   varies beyond shuffled spots in a way that repeats in the other section.  The Spearman correlation of their
   excess smooth shares between the sections is -0.01 to 0.03 (as log ratios 0.04-0.74, ordered by chromosome X
