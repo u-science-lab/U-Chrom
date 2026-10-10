@@ -1,0 +1,51 @@
+{
+ "results": {
+  "mouse_brain_r1": {
+   "n_spots": 6275,
+   "cis_equal": 6275,
+   "trans_equal": 6275,
+   "cis_max_abs_diff": 0,
+   "trans_max_abs_diff": 0,
+   "total_cis": 4362856015,
+   "total_trans": 303027655
+  },
+  "mouse_brain_r2": {
+   "n_spots": 6199,
+   "cis_equal": 6199,
+   "trans_equal": 6199,
+   "cis_max_abs_diff": 0,
+   "trans_max_abs_diff": 0,
+   "total_cis": 2930678382,
+   "total_trans": 188101769
+  }
+ },
+ "provenance": {
+  "revision": "ember-deep-frozen-184-gba50047949cf",
+  "date": "2026-10-09T08:19:22+00:00",
+  "host": "sh04-05n13.int",
+  "cpu": "AMD EPYC 9754 128-Core Processor",
+  "cpus": 16,
+  "slurm_job": "47089493",
+  "load_avg_1min": 73.28,
+  "versions": {
+   "python": "3.12.1",
+   "numpy": "2.2.6",
+   "scipy": "1.16.3",
+   "pandas": "2.3.2",
+   "cooler": "0.10.4",
+   "zarr": "3.4.0",
+   "torch": "2.6.0+cu124",
+   "uchrom": "0.3.0.dev0",
+   "chromdata": "0.1.0",
+   "uchrom_maps": "0.1.0",
+   "uchrom_recon": "0.1.0"
+  },
+  "script": "benchmarks/spatial_variable/spatial_variable.py",
+  "datasets": [
+   "spatial_hicrna"
+  ],
+  "params": {
+   "compared": "<sample>.contact_stats_q30.npz vs <sample>.spot_stats.tsv (spatial_pairs_to_cool.py)"
+  }
+ }
+}

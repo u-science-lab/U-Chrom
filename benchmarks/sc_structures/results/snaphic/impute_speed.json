@@ -1,0 +1,368 @@
+{
+ "rows": [
+  {
+   "what": "band",
+   "chrom": "chr19",
+   "backend": "numpy",
+   "threads": 0,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 6144,
+   "n_contacts": 7181,
+   "seconds": 0.6553790429898072,
+   "times": [
+    17.87311376199068,
+    0.6553790429898072,
+    0.6759978240006603
+   ],
+   "zscore_s": 0.06732269898930099,
+   "local_background_s": 0.20331031900423113,
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "band",
+   "chrom": "chr19",
+   "backend": "native",
+   "threads": 1,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 6144,
+   "n_contacts": 7181,
+   "seconds": 0.08193336200201884,
+   "times": [
+    0.08537603500008117,
+    0.08206325300852768,
+    0.08193336200201884
+   ],
+   "zscore_s": 0.0069488879962591454,
+   "local_background_s": 0.03458727900579106,
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "band",
+   "chrom": "chr19",
+   "backend": "native",
+   "threads": 4,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 6144,
+   "n_contacts": 7181,
+   "seconds": 0.0439973309985362,
+   "times": [
+    0.0439973309985362,
+    0.08494354099093471,
+    0.08285183999396395
+   ],
+   "zscore_s": 0.006024508998962119,
+   "local_background_s": 0.012786414998117834,
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "band",
+   "chrom": "chr19",
+   "backend": "native",
+   "threads": 16,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 6144,
+   "n_contacts": 7181,
+   "seconds": 0.01686400499602314,
+   "times": [
+    0.01686400499602314,
+    0.09013480201247148,
+    0.05439118199865334
+   ],
+   "zscore_s": 0.007691784994676709,
+   "local_background_s": 0.010072039003716782,
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "band",
+   "chrom": "chr19",
+   "backend": "native",
+   "threads": 32,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 6144,
+   "n_contacts": 7181,
+   "seconds": 0.01648419100092724,
+   "times": [
+    0.01648419100092724,
+    0.022294307011179626,
+    0.023225588010973297
+   ],
+   "zscore_s": 0.005491233998327516,
+   "local_background_s": 0.01196398700994905,
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "band",
+   "chrom": "chr1",
+   "backend": "numpy",
+   "threads": 0,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 19548,
+   "n_contacts": 23526,
+   "seconds": 2.0247376979968976,
+   "times": [
+    18.159036087003187,
+    2.109124230002635,
+    2.0247376979968976
+   ],
+   "zscore_s": 0.10311683198960964,
+   "local_background_s": 0.6670158769993577,
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "band",
+   "chrom": "chr1",
+   "backend": "native",
+   "threads": 1,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 19548,
+   "n_contacts": 23526,
+   "seconds": 0.2719161639979575,
+   "times": [
+    0.2748525890056044,
+    0.2732977809937438,
+    0.2719161639979575
+   ],
+   "zscore_s": 0.02230035499087535,
+   "local_background_s": 0.11115288200380746,
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "band",
+   "chrom": "chr1",
+   "backend": "native",
+   "threads": 4,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 19548,
+   "n_contacts": 23526,
+   "seconds": 0.07783909598947503,
+   "times": [
+    0.08045681699877605,
+    0.07783909598947503,
+    0.2789293579990044
+   ],
+   "zscore_s": 0.02769611999974586,
+   "local_background_s": 0.06903508999675978,
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "band",
+   "chrom": "chr1",
+   "backend": "native",
+   "threads": 16,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 19548,
+   "n_contacts": 23526,
+   "seconds": 0.03266538899333682,
+   "times": [
+    0.04052919099922292,
+    0.038717899995390326,
+    0.03266538899333682
+   ],
+   "zscore_s": 0.00888580598984845,
+   "local_background_s": 0.01939282000239473,
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "band",
+   "chrom": "chr1",
+   "backend": "native",
+   "threads": 32,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 19548,
+   "n_contacts": 23526,
+   "seconds": 0.17901012900983915,
+   "times": [
+    0.3127715500013437,
+    0.2840279579977505,
+    0.17901012900983915
+   ],
+   "zscore_s": 0.029608482000185177,
+   "local_background_s": 0.022345645003952086,
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "sums",
+   "chrom": "chr19",
+   "backend": "numpy",
+   "threads": 0,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 6144,
+   "n_cells": 16,
+   "seconds": 8.120790733009926,
+   "times": [
+    41.67593142601254,
+    9.243999815997086,
+    8.120790733009926
+   ],
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "sums",
+   "chrom": "chr19",
+   "backend": "native",
+   "threads": 1,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 6144,
+   "n_cells": 16,
+   "seconds": 1.8709363320085686,
+   "times": [
+    1.992230534000555,
+    1.8723666260048049,
+    1.8709363320085686
+   ],
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "sums",
+   "chrom": "chr19",
+   "backend": "native",
+   "threads": 4,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 6144,
+   "n_cells": 16,
+   "seconds": 0.4899326050071977,
+   "times": [
+    0.6234896489913808,
+    0.4938263539952459,
+    0.4899326050071977
+   ],
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "sums",
+   "chrom": "chr19",
+   "backend": "native",
+   "threads": 16,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 6144,
+   "n_cells": 16,
+   "seconds": 0.19380994100356475,
+   "times": [
+    0.22438667400274426,
+    0.19380994100356475,
+    0.2249941900081467
+   ],
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "sums",
+   "chrom": "chr19",
+   "backend": "native",
+   "threads": 32,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 6144,
+   "n_cells": 16,
+   "seconds": 0.16373005299828947,
+   "times": [
+    0.2932071060058661,
+    0.25990051600092556,
+    0.16373005299828947
+   ],
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "sums",
+   "chrom": "chr19",
+   "backend": "native",
+   "threads": 1,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 6144,
+   "n_cells": 64,
+   "seconds": 7.426557658996899,
+   "times": [
+    7.450366036006017,
+    7.426557658996899,
+    7.453783810997265
+   ],
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "sums",
+   "chrom": "chr19",
+   "backend": "native",
+   "threads": 4,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 6144,
+   "n_cells": 64,
+   "seconds": 1.9762571860046592,
+   "times": [
+    1.979842611006461,
+    1.9762571860046592,
+    7.424447088997113
+   ],
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "sums",
+   "chrom": "chr19",
+   "backend": "native",
+   "threads": 16,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 6144,
+   "n_cells": 64,
+   "seconds": 0.5601926539966371,
+   "times": [
+    0.5601926539966371,
+    0.6906030399986776,
+    0.6547995199944125
+   ],
+   "peak_rss_gb": 2.805522918701172
+  },
+  {
+   "what": "sums",
+   "chrom": "chr19",
+   "backend": "native",
+   "threads": 32,
+   "window_bins": 1000,
+   "cpu": "AMD EPYC 9754 128-Core Processor",
+   "n_bins": 6144,
+   "n_cells": 64,
+   "seconds": 0.4445147619990166,
+   "times": [
+    0.6053518060070928,
+    0.4445147619990166,
+    0.49574051301169675
+   ],
+   "peak_rss_gb": 2.805522918701172
+  }
+ ],
+ "agreement": {
+  "band_chr19": {
+   "max_rel": 8.906448529345322e-15,
+   "same_nan": true,
+   "z_max_abs": 4.973799150320701e-14
+  },
+  "band_chr1": {
+   "max_rel": 6.363690956670218e-15,
+   "same_nan": true,
+   "z_max_abs": 8.526512829121202e-14
+  },
+  "sums_chr19_16": {
+   "sum_z": 1.2705461049950276e-15,
+   "sum_l": 2.1387879208460294e-15,
+   "sum_d": 1.0069091900693773e-15,
+   "sum_dd": 1.7716164683453911e-15,
+   "n_out_equal": true
+  }
+ },
+ "window_bins": 1000,
+ "load": "89.6 108.1 118.3"
+}

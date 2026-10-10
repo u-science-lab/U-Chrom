@@ -1,0 +1,12 @@
+{
+ "n_cells": 1175,
+ "n_top742": 742,
+ "min_contacts_top742": 93377,
+ "median_contacts_top742": 313288.0,
+ "median_cis_top742": 292200.0,
+ "n_tanay_over_150k": 644,
+ "overlap_top742_with_top742_by_tanay_total": 742,
+ "download_s": 88.96319270133972,
+ "build_s": 2436.3883049488068,
+ "peak_rss_gb": 1.5237274169921875
+}

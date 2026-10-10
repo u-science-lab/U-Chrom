@@ -24,6 +24,8 @@ imgui.ini
 !packages/uchrom-browser/uchrom_browser/frontend/tsconfig.json
 # browser action schema shared by WebMCP and the Python client (control.py / client.py)
 !packages/uchrom-browser/uchrom_browser/ui_tools.json
+# benchmark results (headline numbers with their provenance, committed: CLAUDE.md, "Keep the numbers")
+!benchmarks/*/results/**/*.json
 node_modules/
 packages/uchrom-discovery/uchrom_discovery/ui/node_modules/
 

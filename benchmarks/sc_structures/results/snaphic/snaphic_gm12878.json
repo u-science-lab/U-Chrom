@@ -1,0 +1,62 @@
+{
+ "n_cells": 24,
+ "n_rao_loops_chr21": 101,
+ "n_rao_loops_100k_1M": 78,
+ "build_s": 0.270611047744751,
+ "snaphic_s": 3.0859358310699463,
+ "snaphic_timing": {
+  "backend": "native",
+  "setup_s": 0.00363182500586845,
+  "read_s": 0.04015934499329887,
+  "impute_test_s": 1.7720760270021856,
+  "candidates_s": 0.6742421509989072,
+  "n_cells": 24
+ },
+ "snaphic": {
+  "n_calls": 33,
+  "n_reference": 78,
+  "precision": 0.5151515151515151,
+  "recall": 0.1794871794871795,
+  "f1": 0.2662192393736018,
+  "apa_rao": 3.0191367964439704,
+  "apa_control": 0.9150244639859856
+ },
+ "snaphic_windows": {
+  "n_calls": 58,
+  "n_reference": 78,
+  "precision": 0.3448275862068966,
+  "recall": 0.21794871794871795,
+  "f1": 0.2670856245090338,
+  "apa_rao": 2.6553732335323184,
+  "apa_control": 1.011956306801782
+ },
+ "hiccups_pseudobulk_default": {
+  "n_calls": 19,
+  "n_reference": 78,
+  "precision": 0.2631578947368421,
+  "recall": 0.0641025641025641,
+  "f1": 0.10309278350515462,
+  "apa_rao": 2.7695231075137725,
+  "apa_control": 1.1176979822936515
+ },
+ "hiccups_pseudobulk_sparse": {
+  "n_calls": 23,
+  "n_reference": 78,
+  "precision": 0.30434782608695654,
+  "recall": 0.07692307692307693,
+  "f1": 0.12280701754385966,
+  "apa_rao": 1.80137139223534,
+  "apa_control": 1.0435587485334028
+ },
+ "apa_rao_loops_on_rao_map": 4.672072184101366,
+ "boundaries_s": 0.5307447910308838,
+ "boundaries": {
+  "n_consensus": 98,
+  "n_arrowhead_edges": 167,
+  "consensus_near_edge": 0.4897959183673469,
+  "chance": 0.14232287554539788,
+  "edges_with_consensus_within_2_bins": 0.4251497005988024,
+  "frequency_near_edges": 0.05328467153284672,
+  "frequency_elsewhere": 0.02338703165374677
+ }
+}
