@@ -129,3 +129,12 @@ def test_anndata_link_roundtrips_store_cell_axis(tmp_path):
     assert list(out.cells["rna_cluster"]) == ["A", "B"]
     np.testing.assert_allclose(out.cellm["umap"], [[1.0, 1.1], [2.0, 2.2]])
     np.testing.assert_allclose(out.cellm["X_pca"], [[10.0, 11.0], [20.0, 21.0]])
+
+
+def test_to_anndata_writes_cell_positions_as_obsm_spatial():
+    cd = _make_cd_with_takei_like_cells()
+    out = cd.to_anndata()
+    assert "spatial" not in out.obsm                       # no positions, no key
+    cd.set_cell_positions(np.array([[5.0, 6.0], [1.0, 2.0]]), cell_ids=["c2", "c1"], unit="um", frame="fov")
+    out = cd.to_anndata()
+    np.testing.assert_allclose(out.obsm["spatial"], [[1.0, 2.0], [5.0, 6.0]])

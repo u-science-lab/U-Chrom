@@ -20,7 +20,8 @@
 * the streaming population callers (:mod:`uchrom.fea.distance`,
   :mod:`uchrom.strc.stream`) size their row bands from it.
 
-The default is 50 % of the RAM that is available when the budget is first
+The default is 50 % of the RAM that is available (bounded by the job's memory limit under Slurm or in a
+cgroup) when the budget is first
 read (``psutil``; without it, 50 % of the physical RAM).  The budget is a
 target for the large arrays of those paths, not a hard cap on the process:
 Python, the small tables, and per-chromosome ``n_bins²`` outputs come on
@@ -60,15 +61,65 @@ def format_bytes(n: int) -> str:
     return f"{n} B"
 
 
+def _job_memory_limit() -> Optional[int]:
+    """The memory limit of this process's job, if any: Slurm's ``SLURM_MEM_PER_NODE`` (MB) or
+    ``SLURM_MEM_PER_CPU`` x ``SLURM_CPUS_ON_NODE``, and the cgroup limit (v2 ``memory.max``, v1
+    ``memory.limit_in_bytes``) minus what the cgroup already uses — the smallest of those found."""
+    found = []
+    env = os.environ
+    try:
+        if env.get("SLURM_MEM_PER_NODE"):
+            found.append(int(env["SLURM_MEM_PER_NODE"]) << 20)
+        elif env.get("SLURM_MEM_PER_CPU") and env.get("SLURM_CPUS_ON_NODE"):
+            found.append(int(env["SLURM_MEM_PER_CPU"]) * int(env["SLURM_CPUS_ON_NODE"]) << 20)
+    except ValueError:
+        pass
+    try:
+        with open("/proc/self/cgroup") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        parts = line.split(":", 2)
+        if len(parts) != 3:
+            continue
+        ctrl, path = parts[1], parts[2]
+        if ctrl == "":                                              # cgroup v2
+            base = f"/sys/fs/cgroup{path}"
+            limit, usage = f"{base}/memory.max", f"{base}/memory.current"
+        elif "memory" in ctrl.split(","):                           # cgroup v1
+            base = f"/sys/fs/cgroup/memory{path}"
+            limit, usage = f"{base}/memory.limit_in_bytes", f"{base}/memory.usage_in_bytes"
+        else:
+            continue
+        try:
+            with open(limit) as fh:
+                raw = fh.read().strip()
+            if raw and raw != "max" and int(raw) < (1 << 60):
+                used = 0
+                try:
+                    with open(usage) as fh:
+                        used = int(fh.read().strip())
+                except (OSError, ValueError):
+                    pass
+                found.append(max(int(raw) - used, 0))
+        except (OSError, ValueError):
+            pass
+    return min(found) if found else None
+
+
 def _available_ram() -> int:
+    """Free memory: the system's (psutil), bounded by the job's limit when running under Slurm / in a cgroup."""
     try:
         import psutil
-        return int(psutil.virtual_memory().available)
+        free = int(psutil.virtual_memory().available)
     except ImportError:  # pragma: no cover - psutil is optional
         try:
-            return int(os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE"))
+            free = int(os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE"))
         except (ValueError, OSError, AttributeError):
-            return 8 << 30
+            free = 8 << 30
+    job = _job_memory_limit()
+    return min(free, job) if job is not None else free
 
 
 class Settings:

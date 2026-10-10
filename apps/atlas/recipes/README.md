@@ -125,6 +125,8 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `genomes/hg19/chr{21,1}.fa.gz`: UCSC hg19 sequences | 12 MB + 74 MB | fetch `hg19_chr21`, `hg19_chr1` | tutorials `hic_structures`, `sc_structures` (chr21); `benchmarks/hic_structures/` (GC phasing of compartments) |
 | `genomes/{mm10,hg19,hg38}/<g>.fa.gz`: UCSC whole-genome sequences | 830 + 905 + 938 MB | fetch `mm10_genome`, `hg19_genome`, `hg38_genome` | CpG frequency per bin for `uchrom.strc.comp.single_cell_compartments`; tutorial `sc_structures` (mm10); `benchmarks/sc_structures/scab_*.py` |
 | `genomes/liftover/hg38ToHg19.over.chain.gz`: UCSC liftOver chain | 1.2 MB | fetch `hg38_to_hg19_chain` | `benchmarks/hic_structures/pseudobulk_gm12878.py` (scMicro-C hg38 → Rao 2014 hg19) |
+| `genomes/hg38/hg38.refGene.gtf.gz`: UCSC hg38 refGene annotation (GTF) | 24 MB | fetch `hg38_refgene` | nmeth-bc Fig. 2 (`capture_fig2_spatial.py` in the paper repository: genes of the browser's genome view) |
+| `reference/seurat/cc.genes.updated.2019.rda`: Tirosh et al. 2016 cell-cycle genes (S, G2/M), 2019 symbols, as Seurat ships them | 0.5 kB | fetch `seurat_cc_genes_2019` | `benchmarks/spatial_variable` (stage cellcycle: S / G2M scores of the spots' RNA as covariates) |
 | `ray2019_k562/4DNFI4QQPDMR.mcool`: K562 in situ Hi-C | 849 MB | fetch `ray2019_k562` | provenance of `K562_chr21_30kb.cool` |
 | `4DNFIFLJGGNR.csv`: Takei 2021 mESC FOF-CT, 1 Mb genome-wide loci | 47 MB | fetch `takei2021_1mb` | `benchmarks/screcon/` (simulation truth, locus map, diploid simulation); `benchmarks/bulk/` (mESC truth) |
 | `nagano2017_dip/`: Nagano 2017 diploid serum mESC fend pairs (+ the `nagano2017_hap/` fends and chain) | 1.96 GB | fetch `nagano2017_dip_serum`; loader `nagano2017_dip_serum` | `benchmarks/sc_structures/snaphic_*.py` (SnapHiC's data) |
@@ -462,6 +464,29 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
 - **Used by**: tutorial `features` (per-bin GTF-annotation and sequence features on chromosome 19);
   tutorial `pseudobulk` (refGene: gene density per 1 Mb bin, the orientation of the compartment
   eigenvectors of the dscHi-C maps).  The same refGene file is fetched by `schicar_atac` into `schicar_mop/raw/` for `build_schicar_mop.py`.
+
+### `genomes/hg38/hg38.refGene.gtf.gz`: UCSC hg38 refGene annotation (fetch `hg38_refgene`)
+
+- **File**: `genomes/hg38/hg38.refGene.gtf.gz` (24 MB, GTF, md5 `a35c6a276a5cf1d9f200266a82176897`) from
+  `https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/hg38.refGene.gtf.gz` (downloaded 2026-10-09; UCSC
+  updates the file, so a later download may differ and fail the md5 check: update the md5 with the date).
+- **Source**: UCSC Genome Browser, hg38; refGene = NCBI RefSeq genes on hg38 (Navarro Gonzalez et al. 2021,
+  *Nucleic Acids Res* 49:D1046).  Fetched from UCSC's public download server, not re-hosted (UCSC's conditions
+  of use apply).
+- **Used by**: the gene track of the browser's genome view in nmeth-bc Fig. 2 (`capture_fig2_spatial.py`, paper
+  repository: gene spans, the union of each gene's RefSeq transcripts).
+
+### `reference/seurat/`: cell-cycle genes (fetch `seurat_cc_genes_2019`)
+
+- **Files**: `reference/seurat/cc.genes.updated.2019.rda` (538 bytes, md5 `55d7e35793436d5e91646d774d9f86c4`) from
+  `https://raw.githubusercontent.com/satijalab/seurat/d28233a843ede385acdee1cae7e9fb9d70e76078/data/cc.genes.updated.2019.rda`
+  (a fixed commit of the Seurat repository).
+- **Content**: an R list (`cc.genes.updated.2019`) of two character vectors, `s.genes` (43) and `g2m.genes` (54):
+  the cell-cycle genes of Tirosh *et al.* 2016 (*Science* 352:189–196) with their 2019 HGNC symbols.  Read with R
+  (`load()`); mouse symbols are the human ones in title case.
+- **Licence**: Seurat's data (MIT, Seurat's `LICENSE`); the gene lists are the published ones.
+- **Used by**: `benchmarks/spatial_variable` (stage `cellcycle`: S and G2/M scores of each spot's RNA, as
+  covariates of the contact features next to the RNA and copy-number principal components).
 
 ### `takei2025_fov0/`: Takei 2025 cerebellum, rep 1 FOV 0, first 47 cells (raw 280 MB; store 73 MB)
 
@@ -877,10 +902,25 @@ is kept with its recorded outputs.
   python apps/atlas/recipes/build_spatial_hicrna.py               # ~2 min: RNA, images, positions, published labels / latents
   # contact maps: copy $OAK/uchrom/spatial_3dgenome/<sample>/ (17.8 GB) to spatial_hicrna/contacts/ (via the DTN)
   python apps/atlas/recipes/link_spatial_hicrna_contacts.py       # links per-spot .scool + bulk .mcool, mouse-brain ssAB
+  # per-spot contact statistics: sbatch spatial_hicrna/sherlock/contact_stats.sbatch <sample> (one pass over the
+  # .pairs, 2-4.5 h per sample), copy <sample>.contact_stats_q30.npz from Oak to spatial_hicrna/contacts/
+  python apps/atlas/recipes/link_spatial_hicrna_contact_stats.py  # cellm contacts.*, cells contacts.n_cis / n_trans
   python benchmarks/spatial_hicrna_validation.py                  # -> benchmarks/results/spatial_hicrna_validation.json
   ```
   Cells are spots (`<section>:<barcode>`); only in-tissue spots are kept (brain 6,275 / 6,199; E11.5
   32,799; E13.5 17,278 / 14,784; melanoma 6,268 / 6,381), every one with RNA and a linked contact map.
+- **Per-spot contact statistics** (added 2026-10-09; `uchrom.io.ContactStats`, `spatial_pairs_stats.py`):
+  per spot the cis contact-distance histogram in scHiCluster's log2 bins (2.5 kb × 2^(k/8), Guo et al.'s
+  short / long-range ratio), per read orientation, and cis / trans contacts per chromosome; MAPQ >= 30, the
+  contacts of the per-spot maps.  In the stores: `cellm["contacts.distance"]` (spots × 132 / 134 bins, summed
+  over chromosomes, int32), `contacts.orientation`, `contacts.cis`, `contacts.trans`, `cells` columns
+  `contacts.n_cis` / `n_trans`, `uns["contact_stats"]["contacts"]` (+12–53 MB per store).
+  `uchrom.fea.contact_features(cd)` gives the short / long ratio, bands, decay slopes and cis fraction.
+  - Checks: for every spot of the 7 samples (89,984 spots, 2.28 × 10¹⁰ contacts) cis + trans equal the
+    per-spot maps' counts (`hic_contacts`); a second filter (`contact_stats_all.npz`, every pair, as the
+    paper's contact lists) stays on Oak.
+  - Oak: `$OAK/uchrom/spatial_3dgenome/<sample>/<sample>.contact_stats_{q30,all}.npz` (21–103 MB each) and
+    `.contact_stats.json` (pair counts, pair types, filters, timings).
 - **Single-spot A/B (ssAB)**: the authors' `X_abcompartment` is linked for mouse brain r1 only
   (`hicrna_mouse_brain_ssab.h5ad`, 6,275 x 4,816 bins).  The bin layout is not given; it is chr1–19 in
   500-kb bins from 3 Mb, dropping the last bin of a chromosome if < 100 kb.  Check: against the bulk E1

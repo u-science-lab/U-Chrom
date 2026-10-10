@@ -13,6 +13,7 @@ cells by them, and computes 3-D structures from them.
 | structures from single cells: loops and domain boundaries called across cells (SnapHiC, imputed maps), compartment values of every cell (scA/B), the tracing callers on reconstructed structures | [Calling structures from single cells](structures.md) | `uc.tl.call_loops(cd, method="snaphic")`, `uc.tl.single_cell_boundaries`, `uc.tl.single_cell_compartments` |
 | 3-D structures of one cell: an ensemble of models (NucDynamics, EMber; CPU or GPU) | [3-D structures of single cells](reconstruction.md) | `uc.tl.reconstruct_sc`, `uchrom.recon.sc` |
 | which cells are alike: embeddings from contact maps (FastHigashi, scHiCluster) and from the RNA / accessibility measured with them | [Cell embeddings](embeddings.md) | `uc.tl.embed_higashi`, `uchrom.emb`, `uc.tl.embed_cells` |
+| what varies across a tissue: global contact features and known structures scored per spot, barcode stripes removed, spatial tests adjusted for the spots' transcriptomes | [Spatial variation across a tissue](spatial.md) | `uchrom.spatial`, `uchrom.fea.contact_features`, `uchrom.fea.window_scores` |
 
 The atlas holds single-cell and spatial Hi-C datasets ready to open — HiRES, dscHi-C, GAGE-seq, Droplet and
 Paired Hi-C, scHiCAR, Uni-C, Stevens 2017 with its published structures, spatial Hi-C, spatial ATAC-Hi-C and
@@ -28,4 +29,5 @@ pseudobulk
 structures
 reconstruction
 embeddings
+spatial
 ```

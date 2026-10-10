@@ -4,6 +4,9 @@
 # benchmarks/<name>/results/; this keeps what they were computed from (call tables, maps, models, logs).
 #
 #   sbatch --export=ALL,RUN=sc,DEST=sc_structures/2026-10-08_ad141a7 benchmarks/sc_structures/sherlock/archive.sbatch
+#
+# EXCLUDE: one more tar --exclude pattern (files the archive keeps another copy of, e.g. an unbalanced map next
+# to its balanced copy).
 #SBATCH --job-name=archive
 #SBATCH --partition=xiaojie,normal
 #SBATCH --time=02:00:00
@@ -20,7 +23,7 @@ for part in */; do
   # SnapHiC's own run (the reference implementation): its final loops and log, not its 19 GB of per-cell files
   tar -cf "$OUT/$part.tar" --exclude="reference/*/input" --exclude="reference/*/snaphic_out/binned" \
       --exclude="reference/*/snaphic_out/hic" --exclude="reference/*/snaphic_out/interactions" \
-      --exclude="reference/*/snaphic_out/rwr" "$part"
+      --exclude="reference/*/snaphic_out/rwr" ${EXCLUDE:+--exclude="$EXCLUDE"} "$part"
 done
 {
   echo "# $DEST — archived $(date -u +%FT%TZ) from \$SCRATCH/uchrom-nd/runs/$RUN (job $SLURM_JOB_ID)"

@@ -27,6 +27,7 @@ strc_comp
 strc_enrichment
 fea
 emb
+spatial
 pl
 utils
 ```

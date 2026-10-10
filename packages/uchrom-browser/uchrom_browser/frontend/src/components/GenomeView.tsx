@@ -400,7 +400,7 @@ export function GenomeView({ pane }: { pane: Pane }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ds?.id, trackSig, regionKey(locus)])
 
-  // interval tables shown as rows (their boundaries also guide the matrix rows)
+  // interval tables shown as rows (the boundaries of domains also guide the matrix rows)
   const ivKeys = [...new Set(rows.filter((r) => r.kind === 'intervals' && r.key).map((r) => r.key!))]
   const ivKey = ivKeys.join(',')
   const [intervals, setIntervals] = useState<Record<string, IntervalTable>>({})
@@ -425,9 +425,13 @@ export function GenomeView({ pane }: { pane: Pane }) {
     // whole genome: the chromosome boundaries
     if (layout) return layout.map((c) => c.offset).filter((v) => v > locus.start && v < locus.end)
     const out = new Set<number>()
+    // only domains (TADs) guide the maps; segments (compartment runs, genes) and peaks would only clutter them
+    const kindOf = new Map((ds?.intervals ?? []).map((i) => [i.key, i.kind]))
     for (const k of ivKeys) {
       const tab = intervals[k]
       if (!tab) continue
+      const kind = kindOf.get(k)
+      if (kind && kind !== 'domain') continue
       const c = (n: string) => tab.columns.indexOf(n)
       const [cs, ce, cc, cs2] = [c('start'), c('end'), c('chrom'), c('start2')]
       for (const row of tab.rows) {
@@ -720,6 +724,11 @@ function MatrixTools({ row, ds, set, multi }: { row: GenomeRow; ds: DatasetSumma
           <input type="checkbox" checked={row.balance ?? false} onChange={(e) => set('balance', e.target.checked)} /> balanced
         </label>
       )}
+      {map?.per_cell && (
+        <label className="check small" title="log2 of this row's map over the map of all cells, each over its total in the window (3 x 3 pixels summed): where the cells differ beyond their depth">
+          <input type="checkbox" checked={!!row.ratioTo} onChange={(e) => set('ratioTo', e.target.checked)} /> vs all cells (log2)
+        </label>
+      )}
       {row.source === 'distance' && (
         <DistanceValueControls
           stat={row.stat ?? 'median'}
@@ -846,12 +855,13 @@ function MatrixRow({
       setError(null)
       return
     }
-    const key = [ds.id, row.source, regionKey(locus), margin, row.resolution ?? '', row.balance ? 1 : 0, cell ?? '', groupRef ?? '', stat, row.threshold ?? ''].join('|')
+    const ratioTo = needsCell ? (row.ratioTo ?? null) : null
+    const key = [ds.id, row.source, regionKey(locus), margin, row.resolution ?? '', row.balance ? 1 : 0, cell ?? '', groupRef ?? '', stat, row.threshold ?? '', ratioTo ?? '', row.smooth ?? ''].join('|')
     let live = true
     const load = () =>
       isDist
         ? fetchDistance(ds.id, region, { cellId: cell, group: groupRef, stat, threshold: row.threshold ?? null })
-        : fetchContacts(ds.id, row.source!, region, { resolution: row.resolution ?? null, balance: row.balance ?? false, cell, group: groupRef })
+        : fetchContacts(ds.id, row.source!, region, { resolution: row.resolution ?? null, balance: row.balance ?? false, cell, group: groupRef, ratioTo, smooth: row.smooth ?? null })
     // cached → at once; else debounced (pan / zoom move the locus continuously)
     const t = setTimeout(
       () => {
@@ -868,7 +878,7 @@ function MatrixRow({
       clearTimeout(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ds.id, row.source, regionKey(locus), margin, row.resolution, row.balance, cell, groupRef, stat, row.threshold, valid, waiting])
+  }, [ds.id, row.source, regionKey(locus), margin, row.resolution, row.balance, cell, groupRef, stat, row.threshold, row.ratioTo, row.smooth, valid, waiting])
 
   // a stale matrix of another chromosome must not be drawn on this axis
   const shown = mat && mat.header.chrom === locus.chrom && !waiting && valid ? mat : null
@@ -884,6 +894,7 @@ function MatrixRow({
     shown?.header.resolution ? `${fmtBp(shown.header.resolution)} bins` : null,
     shown?.header.n_traces ? `${shown.header.n_traces} traces` : null,
     needsCell && groupRef && shown?.header.n_contacts ? `${fmtAxis(shown.header.n_contacts)} contacts (pseudo-bulk)` : null,
+    shown?.header.value === 'log2_ratio' ? `log2 vs ${shown.header.ratio_to === ALL_CELLS_REF ? 'all cells' : 'group'}` : null,
   ]
     .filter(Boolean)
     .join(' · ')
@@ -1128,6 +1139,7 @@ function IntervalRow({
     if (!table) return []
     const c = (n: string) => table.columns.indexOf(n)
     const [cs, ce, cc, cs2, ce2] = [c('start'), c('end'), c('chrom'), c('start2'), c('end2')]
+    const cn = c('label') >= 0 ? c('label') : c('name') // a label column (e.g. gene names): drawn next to the box
     return table.rows
       .filter((r) => cc < 0 || locus.chrom === GENOME || r[cc] === locus.chrom) // whole genome: all, in genome coordinates
       .map((r) => ({
@@ -1135,6 +1147,7 @@ function IntervalRow({
         e: Number(r[ce]),
         s2: cs2 >= 0 && r[cs2] !== null ? Number(r[cs2]) : null,
         e2: ce2 >= 0 && r[ce2] !== null ? Number(r[ce2]) : null,
+        name: cn >= 0 && r[cn] !== null && r[cn] !== '' ? String(r[cn]) : null,
       }))
   }, [table, locus.chrom])
   useEffect(() => {
@@ -1143,6 +1156,7 @@ function IntervalRow({
     const g = prepareCanvas(cv, width, height)
     if (!g) return
     const X = (bp: number) => ((bp - locus.start) / (locus.end - locus.start)) * width
+    const labelled = items.some((it) => it.name)
     for (const it of items) {
       if (it.s2 !== null && it.e2 !== null) {
         const a = X((it.s + it.e) / 2)
@@ -1157,8 +1171,24 @@ function IntervalRow({
         const w = Math.max(1, X(it.e) - x0)
         g.fillStyle = pal.intervalFill
         g.strokeStyle = pal.intervalStroke
-        g.fillRect(x0, 3, w, height - 6)
-        g.strokeRect(x0 + 0.5, 3.5, w - 1, height - 7)
+        // with labels the boxes take the lower half of the row, the names the upper half
+        const top = labelled ? height / 2 : 3
+        g.fillRect(x0, top, w, height - top - 3)
+        g.strokeRect(x0 + 0.5, top + 0.5, w - 1, height - top - 4)
+      }
+    }
+    if (labelled) {
+      g.font = CHART.font
+      g.fillStyle = pal.text
+      g.textAlign = 'center'
+      g.textBaseline = 'bottom'
+      let last = -Infinity                        // skip a name that would overlap the previous one
+      for (const it of [...items].filter((x) => x.name && x.s2 === null).sort((a, b) => a.s - b.s)) {
+        const x = (X(it.s) + X(it.e)) / 2
+        const w = g.measureText(it.name!).width
+        if (x - w / 2 < last + 4) continue
+        g.fillText(it.name!, x, height / 2 - 1)
+        last = x + w / 2
       }
     }
     g.font = CHART.font
@@ -1170,7 +1200,7 @@ function IntervalRow({
   useRegister(register, row.id, (x) => {
     const bp = locus.start + (x / width) * (locus.end - locus.start)
     const hit = items.find((it) => it.s2 === null && bp >= it.s && bp < it.e)
-    return hit ? `${row.key} · ${fmtSpan(locus.chrom, hit.s, hit.e, layout)}` : null
+    return hit ? `${row.key} · ${hit.name ? `${hit.name} · ` : ''}${fmtSpan(locus.chrom, hit.s, hit.e, layout)}` : null
   })
   return <canvas ref={ref} style={style} />
 }

@@ -1,0 +1,634 @@
+{
+ "load_start": "65.4 / 57.7 / 51.5 (1 / 5 / 15 min, 256 CPUs)",
+ "runtime": {
+  "runs": [
+   {
+    "wall_s": 76.35654758199234,
+    "peak_rss_gb": 2.42089984,
+    "rss_increase_gb": 2.236100608,
+    "stages_s": {
+     "track": 0.01,
+     "read": 16.181,
+     "bin": 0.988,
+     "sum": 54.888,
+     "normalize": 12.383,
+     "total": 76.044
+    },
+    "load": "63.5 / 58.7 / 52.4 (1 / 5 / 15 min, 256 CPUs)"
+   },
+   {
+    "wall_s": 70.53927336999914,
+    "peak_rss_gb": 2.771828736,
+    "rss_increase_gb": 1.879830528,
+    "stages_s": {
+     "track": 0.009,
+     "read": 9.632,
+     "bin": 0.88,
+     "sum": 56.221,
+     "normalize": 12.491,
+     "total": 70.482
+    },
+    "load": "52.4 / 56.4 / 52.0 (1 / 5 / 15 min, 256 CPUs)"
+   },
+   {
+    "wall_s": 69.94129257899476,
+    "peak_rss_gb": 2.721398784,
+    "rss_increase_gb": 1.803231232,
+    "stages_s": {
+     "track": 0.009,
+     "read": 11.553,
+     "bin": 0.761,
+     "sum": 53.916,
+     "normalize": 12.132,
+     "total": 69.902
+    },
+    "load": "47.3 / 54.2 / 51.6 (1 / 5 / 15 min, 256 CPUs)"
+   }
+  ],
+  "best_wall_s": 69.94129257899476,
+  "transferred_gb_all": 2.059905491,
+  "transferred_gb_cis": 0.825388181,
+  "mb_per_s_best": 29.451921962601027,
+  "cis_only": {
+   "wall_s": 40.976195231007296,
+   "rss_increase_gb": 1.839120384,
+   "stages_s": {
+    "track": 0.009,
+    "read": 5.509,
+    "bin": 0.774,
+    "sum": 31.906,
+    "normalize": 12.135,
+    "total": 40.933
+   }
+  },
+  "result_matrix_mb": 324.230084
+ },
+ "vs_pseudobulk": {
+  "per_type": [
+   {
+    "type": "Excitatory neurons",
+    "n_cells": 16915,
+    "contacts_median": 63754.0,
+    "r_scab_E1": 0.7242554221416948,
+    "rho_scab_E1": 0.7186562477255278,
+    "r_cpg_E1": 0.7229796009748429,
+    "r_scab_cpg": 0.8418525577457509,
+    "partial_r_scab_E1_given_cpg": 0.3079708563058676
+   },
+   {
+    "type": "Oligodendrocytes",
+    "n_cells": 4759,
+    "contacts_median": 64809.0,
+    "r_scab_E1": 0.8383564644996402,
+    "rho_scab_E1": 0.8406577248828638,
+    "r_cpg_E1": 0.8049659652311545,
+    "r_scab_cpg": 0.8693083179179294,
+    "partial_r_scab_E1_given_cpg": 0.4687335072766809
+   },
+   {
+    "type": "Astrocytes",
+    "n_cells": 4578,
+    "contacts_median": 70926.5,
+    "r_scab_E1": 0.8057043201676549,
+    "rho_scab_E1": 0.7993921066268113,
+    "r_cpg_E1": 0.7716805378069727,
+    "r_scab_cpg": 0.8579987741715907,
+    "partial_r_scab_E1_given_cpg": 0.43771825359604255
+   },
+   {
+    "type": "Inhibitory interneurons",
+    "n_cells": 3026,
+    "contacts_median": 72139.0,
+    "r_scab_E1": 0.716978914740233,
+    "rho_scab_E1": 0.7267672177728366,
+    "r_cpg_E1": 0.7181017223024754,
+    "r_scab_cpg": 0.852298649656419,
+    "partial_r_scab_E1_given_cpg": 0.2864363294803786
+   },
+   {
+    "type": "Microglial cells",
+    "n_cells": 1589,
+    "contacts_median": 61102.0,
+    "r_scab_E1": 0.858477853200858,
+    "rho_scab_E1": 0.8555405344645097,
+    "r_cpg_E1": 0.8305600667901858,
+    "r_scab_cpg": 0.8801931367234161,
+    "partial_r_scab_E1_given_cpg": 0.47574125076151397
+   },
+   {
+    "type": "Vascular leptomeningeal cells",
+    "n_cells": 1021,
+    "contacts_median": 78238.0,
+    "r_scab_E1": 0.8323966629796133,
+    "rho_scab_E1": 0.8357263960956476,
+    "r_cpg_E1": 0.8286134327185254,
+    "r_scab_cpg": 0.8853850726716651,
+    "partial_r_scab_E1_given_cpg": 0.3732022183380741
+   },
+   {
+    "type": "Oligodendrocyte precursor cells",
+    "n_cells": 889,
+    "contacts_median": 66423.0,
+    "r_scab_E1": 0.7918564308120097,
+    "rho_scab_E1": 0.8012509721478319,
+    "r_cpg_E1": 0.7368968412690916,
+    "r_scab_cpg": 0.8644098105869071,
+    "partial_r_scab_E1_given_cpg": 0.4553085573466289
+   }
+  ],
+  "cross": {
+   "Excitatory neurons": {
+    "Excitatory neurons": 0.7242554221416948,
+    "Oligodendrocytes": 0.7438498029050211,
+    "Astrocytes": 0.742476025514493,
+    "Inhibitory interneurons": 0.7230784280938275,
+    "Microglial cells": 0.7368682671636424,
+    "Vascular leptomeningeal cells": 0.7374939092975301,
+    "Oligodendrocyte precursor cells": 0.75600347723929
+   },
+   "Oligodendrocytes": {
+    "Excitatory neurons": 0.7733057253746874,
+    "Oligodendrocytes": 0.8383564644996402,
+    "Astrocytes": 0.8053316861707122,
+    "Inhibitory interneurons": 0.7823227304569995,
+    "Microglial cells": 0.8209426059297441,
+    "Vascular leptomeningeal cells": 0.8206278526488604,
+    "Oligodendrocyte precursor cells": 0.8226989771513961
+   },
+   "Astrocytes": {
+    "Excitatory neurons": 0.7578299164228942,
+    "Oligodendrocytes": 0.7947432040764147,
+    "Astrocytes": 0.8057043201676549,
+    "Inhibitory interneurons": 0.7631643653763052,
+    "Microglial cells": 0.788582790746066,
+    "Vascular leptomeningeal cells": 0.7962474400024258,
+    "Oligodendrocyte precursor cells": 0.8079252516347303
+   },
+   "Inhibitory interneurons": {
+    "Excitatory neurons": 0.7115266747339951,
+    "Oligodendrocytes": 0.7356468501445355,
+    "Astrocytes": 0.7327860958024129,
+    "Inhibitory interneurons": 0.716978914740233,
+    "Microglial cells": 0.7305357231799501,
+    "Vascular leptomeningeal cells": 0.7315700435607567,
+    "Oligodendrocyte precursor cells": 0.748789738663649
+   },
+   "Microglial cells": {
+    "Excitatory neurons": 0.7770910362849469,
+    "Oligodendrocytes": 0.8245546174543638,
+    "Astrocytes": 0.8057338668326686,
+    "Inhibitory interneurons": 0.7870058488375536,
+    "Microglial cells": 0.858477853200858,
+    "Vascular leptomeningeal cells": 0.8361577712081535,
+    "Oligodendrocyte precursor cells": 0.8127179771373599
+   },
+   "Vascular leptomeningeal cells": {
+    "Excitatory neurons": 0.7561621640048564,
+    "Oligodendrocytes": 0.8007332028694473,
+    "Astrocytes": 0.7880535300045378,
+    "Inhibitory interneurons": 0.7669026191369915,
+    "Microglial cells": 0.8143955205035454,
+    "Vascular leptomeningeal cells": 0.8323966629796133,
+    "Oligodendrocyte precursor cells": 0.7990942717352517
+   },
+   "Oligodendrocyte precursor cells": {
+    "Excitatory neurons": 0.7294217412633706,
+    "Oligodendrocytes": 0.7614873903026352,
+    "Astrocytes": 0.75694925663443,
+    "Inhibitory interneurons": 0.7352259358120147,
+    "Microglial cells": 0.7455630051808705,
+    "Vascular leptomeningeal cells": 0.7539758323870401,
+    "Oligodendrocyte precursor cells": 0.7918564308120097
+   }
+  },
+  "pairs": [
+   {
+    "a": "Excitatory neurons",
+    "b": "Oligodendrocytes",
+    "r_diff_scab_diff_E1": 0.5267397267486286,
+    "rho_diff": 0.5318221136691597
+   },
+   {
+    "a": "Excitatory neurons",
+    "b": "Astrocytes",
+    "r_diff_scab_diff_E1": 0.5724653173136468,
+    "rho_diff": 0.533322079982032
+   },
+   {
+    "a": "Excitatory neurons",
+    "b": "Inhibitory interneurons",
+    "r_diff_scab_diff_E1": 0.42346737179042737,
+    "rho_diff": 0.44510857117439406
+   },
+   {
+    "a": "Excitatory neurons",
+    "b": "Microglial cells",
+    "r_diff_scab_diff_E1": 0.59398941877731,
+    "rho_diff": 0.5997363514600613
+   },
+   {
+    "a": "Excitatory neurons",
+    "b": "Vascular leptomeningeal cells",
+    "r_diff_scab_diff_E1": 0.5667867974299655,
+    "rho_diff": 0.5735114129034917
+   },
+   {
+    "a": "Excitatory neurons",
+    "b": "Oligodendrocyte precursor cells",
+    "r_diff_scab_diff_E1": 0.5656007367292004,
+    "rho_diff": 0.5555286482074104
+   },
+   {
+    "a": "Oligodendrocytes",
+    "b": "Astrocytes",
+    "r_diff_scab_diff_E1": 0.7738767969474172,
+    "rho_diff": 0.7743049699370712
+   },
+   {
+    "a": "Oligodendrocytes",
+    "b": "Inhibitory interneurons",
+    "r_diff_scab_diff_E1": 0.4488599277195878,
+    "rho_diff": 0.46937946098144223
+   },
+   {
+    "a": "Oligodendrocytes",
+    "b": "Microglial cells",
+    "r_diff_scab_diff_E1": 0.8604154035834074,
+    "rho_diff": 0.826716479689069
+   },
+   {
+    "a": "Oligodendrocytes",
+    "b": "Vascular leptomeningeal cells",
+    "r_diff_scab_diff_E1": 0.8480807434896027,
+    "rho_diff": 0.8421937011210401
+   },
+   {
+    "a": "Oligodendrocytes",
+    "b": "Oligodendrocyte precursor cells",
+    "r_diff_scab_diff_E1": 0.6597726759446458,
+    "rho_diff": 0.6632609795952538
+   },
+   {
+    "a": "Astrocytes",
+    "b": "Inhibitory interneurons",
+    "r_diff_scab_diff_E1": 0.5057029220593258,
+    "rho_diff": 0.49468235138136424
+   },
+   {
+    "a": "Astrocytes",
+    "b": "Microglial cells",
+    "r_diff_scab_diff_E1": 0.7883107599365118,
+    "rho_diff": 0.7896828297806111
+   },
+   {
+    "a": "Astrocytes",
+    "b": "Vascular leptomeningeal cells",
+    "r_diff_scab_diff_E1": 0.7879884454666435,
+    "rho_diff": 0.7778270470200425
+   },
+   {
+    "a": "Astrocytes",
+    "b": "Oligodendrocyte precursor cells",
+    "r_diff_scab_diff_E1": 0.6776105404904608,
+    "rho_diff": 0.6806212956987934
+   },
+   {
+    "a": "Inhibitory interneurons",
+    "b": "Microglial cells",
+    "r_diff_scab_diff_E1": 0.5251280322682507,
+    "rho_diff": 0.5555680418841628
+   },
+   {
+    "a": "Inhibitory interneurons",
+    "b": "Vascular leptomeningeal cells",
+    "r_diff_scab_diff_E1": 0.49076976131729916,
+    "rho_diff": 0.5198121490764986
+   },
+   {
+    "a": "Inhibitory interneurons",
+    "b": "Oligodendrocyte precursor cells",
+    "r_diff_scab_diff_E1": 0.5279694482369196,
+    "rho_diff": 0.5318477295176365
+   },
+   {
+    "a": "Microglial cells",
+    "b": "Vascular leptomeningeal cells",
+    "r_diff_scab_diff_E1": 0.7870098882299695,
+    "rho_diff": 0.7475168747188995
+   },
+   {
+    "a": "Microglial cells",
+    "b": "Oligodendrocyte precursor cells",
+    "r_diff_scab_diff_E1": 0.7462535559955196,
+    "rho_diff": 0.7399462048643637
+   },
+   {
+    "a": "Vascular leptomeningeal cells",
+    "b": "Oligodendrocyte precursor cells",
+    "r_diff_scab_diff_E1": 0.7153304613598475,
+    "rho_diff": 0.6976530070638677
+   }
+  ],
+  "per_cell_r_median": 0.636432010303362,
+  "by_depth": [
+   {
+    "decile": 0,
+    "contacts_median": 32290.0,
+    "r_cell_vs_type_E1_median": 0.6150939798839952
+   },
+   {
+    "decile": 1,
+    "contacts_median": 42477.5,
+    "r_cell_vs_type_E1_median": 0.5908504720911474
+   },
+   {
+    "decile": 2,
+    "contacts_median": 49266.0,
+    "r_cell_vs_type_E1_median": 0.5940753544834121
+   },
+   {
+    "decile": 3,
+    "contacts_median": 55436.0,
+    "r_cell_vs_type_E1_median": 0.5996161587154302
+   },
+   {
+    "decile": 4,
+    "contacts_median": 61775.0,
+    "r_cell_vs_type_E1_median": 0.608243893427246
+   },
+   {
+    "decile": 5,
+    "contacts_median": 70610.0,
+    "r_cell_vs_type_E1_median": 0.6206623806192073
+   },
+   {
+    "decile": 6,
+    "contacts_median": 82718.0,
+    "r_cell_vs_type_E1_median": 0.63365621735364
+   },
+   {
+    "decile": 7,
+    "contacts_median": 95661.0,
+    "r_cell_vs_type_E1_median": 0.6429516458726222
+   },
+   {
+    "decile": 8,
+    "contacts_median": 119271.0,
+    "r_cell_vs_type_E1_median": 0.6754688429530263
+   },
+   {
+    "decile": 9,
+    "contacts_median": 170443.5,
+    "r_cell_vs_type_E1_median": 0.7244917073100461
+   }
+  ],
+  "pseudobulk": [
+   {
+    "group": "Astrocytes",
+    "n_cells": 4578,
+    "n_contacts": 397417441,
+    "n_cis": 289378575,
+    "n_pixels": 3301366,
+    "key": "pseudobulk.Astrocytes",
+    "balanced": true,
+    "reused": false
+   },
+   {
+    "group": "Excitatory neurons",
+    "n_cells": 16915,
+    "n_contacts": 1267226592,
+    "n_cis": 954212209,
+    "n_pixels": 3318793,
+    "key": "pseudobulk.Excitatory neurons",
+    "balanced": true,
+    "reused": false
+   },
+   {
+    "group": "Inhibitory interneurons",
+    "n_cells": 3026,
+    "n_contacts": 249309436,
+    "n_cis": 182864591,
+    "n_pixels": 3282615,
+    "key": "pseudobulk.Inhibitory interneurons",
+    "balanced": true,
+    "reused": false
+   },
+   {
+    "group": "Microglial cells",
+    "n_cells": 1589,
+    "n_contacts": 124067255,
+    "n_cis": 89950271,
+    "n_pixels": 3263782,
+    "key": "pseudobulk.Microglial cells",
+    "balanced": true,
+    "reused": false
+   },
+   {
+    "group": "Oligodendrocyte precursor cells",
+    "n_cells": 889,
+    "n_contacts": 70396436,
+    "n_cis": 51019480,
+    "n_pixels": 3193131,
+    "key": "pseudobulk.Oligodendrocyte precursor cells",
+    "balanced": true,
+    "reused": false
+   },
+   {
+    "group": "Oligodendrocytes",
+    "n_cells": 4759,
+    "n_contacts": 399097272,
+    "n_cis": 284498470,
+    "n_pixels": 3303164,
+    "key": "pseudobulk.Oligodendrocytes",
+    "balanced": true,
+    "reused": false
+   },
+   {
+    "group": "Vascular leptomeningeal cells",
+    "n_cells": 1021,
+    "n_contacts": 97334065,
+    "n_cis": 69431914,
+    "n_pixels": 3253675,
+    "key": "pseudobulk.Vascular leptomeningeal cells",
+    "balanced": true,
+    "reused": false
+   }
+  ]
+ },
+ "separation": [
+  {
+   "n_cells": 32777,
+   "n_types": 7,
+   "knn_accuracy": 0.9108826311,
+   "knn_balanced_accuracy": 0.843377722,
+   "knn_purity": 0.8673246484,
+   "kmeans_ARI": 0.3240205222,
+   "kmeans_NMI": 0.4724395979,
+   "features": "scA/B (all, rank) PCA 20",
+   "cells": "all",
+   "ward_ARI": null,
+   "ward_NMI": null
+  },
+  {
+   "n_cells": 8195,
+   "n_types": 7,
+   "knn_accuracy": 0.9420378279,
+   "knn_balanced_accuracy": 0.8660551219,
+   "knn_purity": 0.919023795,
+   "kmeans_ARI": 0.5785788141,
+   "kmeans_NMI": 0.7346300145,
+   "features": "scA/B (all, rank) PCA 20",
+   "cells": "contacts Q1 (19,649-49,266)",
+   "ward_ARI": 0.6211666923,
+   "ward_NMI": 0.7872586523
+  },
+  {
+   "n_cells": 8196,
+   "n_types": 7,
+   "knn_accuracy": 0.9305758907,
+   "knn_balanced_accuracy": 0.8840776353,
+   "knn_purity": 0.9036969253,
+   "kmeans_ARI": 0.4630638899,
+   "kmeans_NMI": 0.6410822108,
+   "features": "scA/B (all, rank) PCA 20",
+   "cells": "contacts Q2 (49,266-65,720)",
+   "ward_ARI": 0.5889431896,
+   "ward_NMI": 0.6811166676
+  },
+  {
+   "n_cells": 8195,
+   "n_types": 7,
+   "knn_accuracy": 0.9131177547,
+   "knn_balanced_accuracy": 0.8501033017,
+   "knn_purity": 0.8687004271,
+   "kmeans_ARI": 0.356281575,
+   "kmeans_NMI": 0.5293798062,
+   "features": "scA/B (all, rank) PCA 20",
+   "cells": "contacts Q3 (65,720-95,661)",
+   "ward_ARI": 0.4447304252,
+   "ward_NMI": 0.5700210105
+  },
+  {
+   "n_cells": 8195,
+   "n_types": 7,
+   "knn_accuracy": 0.8405125076,
+   "knn_balanced_accuracy": 0.7420172222,
+   "knn_purity": 0.7615131178,
+   "kmeans_ARI": 0.4161890976,
+   "kmeans_NMI": 0.4431652482,
+   "features": "scA/B (all, rank) PCA 20",
+   "cells": "contacts Q4 (95,661-461,609)",
+   "ward_ARI": 0.4782616481,
+   "ward_NMI": 0.4482720744
+  },
+  {
+   "n_cells": 32777,
+   "n_types": 7,
+   "knn_accuracy": 0.8685358636,
+   "knn_balanced_accuracy": 0.755742106,
+   "knn_purity": 0.8035970345,
+   "kmeans_ARI": 0.3269784292,
+   "kmeans_NMI": 0.4423372279,
+   "features": "scHiCluster hic_pca 20 (store)",
+   "cells": "all",
+   "ward_ARI": null,
+   "ward_NMI": null
+  },
+  {
+   "n_cells": 8195,
+   "n_types": 7,
+   "knn_accuracy": 0.9261744966,
+   "knn_balanced_accuracy": 0.8185421828,
+   "knn_purity": 0.8851860891,
+   "kmeans_ARI": 0.5495533911,
+   "kmeans_NMI": 0.6928621528,
+   "features": "scHiCluster hic_pca 20 (store)",
+   "cells": "contacts Q1 (19,649-49,266)",
+   "ward_ARI": 0.5325230084,
+   "ward_NMI": 0.6751363117
+  },
+  {
+   "n_cells": 8196,
+   "n_types": 7,
+   "knn_accuracy": 0.8909224012,
+   "knn_balanced_accuracy": 0.8027801438,
+   "knn_purity": 0.8357735481,
+   "kmeans_ARI": 0.2949320934,
+   "kmeans_NMI": 0.5387584065,
+   "features": "scHiCluster hic_pca 20 (store)",
+   "cells": "contacts Q2 (49,266-65,720)",
+   "ward_ARI": 0.4543181243,
+   "ward_NMI": 0.6160120866
+  },
+  {
+   "n_cells": 8195,
+   "n_types": 7,
+   "knn_accuracy": 0.8599145821,
+   "knn_balanced_accuracy": 0.7482997607,
+   "knn_purity": 0.7867358145,
+   "kmeans_ARI": 0.2817757855,
+   "kmeans_NMI": 0.4742911205,
+   "features": "scHiCluster hic_pca 20 (store)",
+   "cells": "contacts Q3 (65,720-95,661)",
+   "ward_ARI": 0.3989598123,
+   "ward_NMI": 0.5399419403
+  },
+  {
+   "n_cells": 8195,
+   "n_types": 7,
+   "knn_accuracy": 0.7906040268,
+   "knn_balanced_accuracy": 0.657678558,
+   "knn_purity": 0.6977059182,
+   "kmeans_ARI": 0.3645674773,
+   "kmeans_NMI": 0.4261132653,
+   "features": "scHiCluster hic_pca 20 (store)",
+   "cells": "contacts Q4 (95,661-461,609)",
+   "ward_ARI": 0.3598294325,
+   "ward_NMI": 0.4189441197
+  },
+  {
+   "n_cells": 32777,
+   "n_types": 7,
+   "knn_accuracy": 0.8901973945,
+   "knn_balanced_accuracy": 0.7939996677,
+   "knn_purity": 0.8360130579,
+   "kmeans_ARI": 0.3028868668,
+   "kmeans_NMI": 0.4429465286,
+   "features": "scA/B (cis, rank) PCA 20",
+   "cells": "all",
+   "ward_ARI": null,
+   "ward_NMI": null
+  },
+  {
+   "n_cells": 3500,
+   "n_types": 7,
+   "knn_accuracy": 0.9037142857,
+   "knn_balanced_accuracy": 0.9037142857,
+   "knn_purity": 0.8312,
+   "kmeans_ARI": 0.3953829833,
+   "kmeans_NMI": 0.5853967365,
+   "features": "scA/B (all, rank) PCA 20",
+   "cells": "stratified 3500",
+   "ward_ARI": 0.3843999977,
+   "ward_NMI": 0.5894228662
+  },
+  {
+   "n_cells": 3500,
+   "n_types": 7,
+   "knn_accuracy": 0.8405714286,
+   "knn_balanced_accuracy": 0.8405714286,
+   "knn_purity": 0.7726571429,
+   "kmeans_ARI": 0.3537664619,
+   "kmeans_NMI": 0.5221070292,
+   "features": "scHiCluster embed_contacts PCA 20",
+   "cells": "stratified 3500",
+   "ward_ARI": 0.3660340561,
+   "ward_NMI": 0.5402287341
+  }
+ ],
+ "seconds": {
+  "pca_scab": 3.750549903998035,
+  "embed_contacts_subsample": 1282.2151601850055
+ },
+ "load_end": "70.5 / 69.6 / 61.8 (1 / 5 / 15 min, 256 CPUs)"
+}

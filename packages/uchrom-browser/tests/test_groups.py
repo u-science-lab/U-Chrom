@@ -157,3 +157,36 @@ def test_takei_cell_types_differ():
         rg = ds.stats_rg("chr1", group=g)
         assert rg["n_cells"] == cat["count"]
         assert set(rg["cell_ids"]) <= set(ds.group_cells(g))
+
+
+def test_scool_ratio_to_a_group(tmp_path):
+    """contacts(..., ratio_to=): log2 of one group's map over another's, each over its total."""
+    cooler = pytest.importorskip("cooler")
+    bins = pd.DataFrame({"chrom": "chr1", "start": np.arange(6) * 100, "end": np.arange(6) * 100 + 100})
+    i, j = np.triu_indices(6)
+    near = (j - i) <= 1
+    flat = pd.DataFrame({"bin1_id": i, "bin2_id": j, "count": np.full(len(i), 40)})
+    # c3: twice the near-diagonal contacts of c1 / c2 (more short-range), same far ones
+    short = flat.assign(count=np.where(near, 80, 40))
+    cooler.create_scool(str(tmp_path / "cells.scool"), bins, {"c1": flat, "c2": flat, "c3": short}, ordered=True)
+    spots = pd.DataFrame({c: pd.Series(dtype=t) for c, t in
+                          [("chrom", str), ("start", np.int64), ("end", np.int64), ("trace_id", str), ("cell_id", str)]})
+    cells = pd.DataFrame({"cell_type": ["A", "A", "B"]}, index=pd.Index(["c1", "c2", "c3"], name="cell_id"))
+    cd = ChromData(np.zeros((0, 3)), spots, cells=cells)
+    cd.link_scool("cells.scool", key="cells")
+    cd.write(tmp_path / "d.chromdata.zarr")
+    ds = DatasetStore().load(tmp_path / "d.chromdata.zarr")
+
+    same = decode_matrix(ds.contacts("cells", "chr1", group="field:cell_type=A", ratio_to="field:cell_type=A"))
+    assert same["header"]["value"] == "log2_ratio" and np.allclose(same["matrix"], 0)
+    r = decode_matrix(ds.contacts("cells", "chr1", group="field:cell_type=B", ratio_to="field:cell_type=A"))["matrix"]
+    iu = np.triu_indices(6)
+    d = (iu[1] - iu[0])
+    assert np.all(r[iu][d <= 1] > 0) and np.all(r[iu][d >= 2] < 0)      # short-range up, long-range down
+    whole = decode_matrix(ds.contacts("cells", "chr1", group="field:cell_type=B", ratio_to="all", smooth=3))
+    assert whole["header"]["smooth"] == 3 and whole["header"]["ratio_to"] == "all"
+    assert np.isfinite(whole["matrix"]).all()
+    with pytest.raises(ValueError):
+        ds.contacts("cells", "chr1", group="field:cell_type=B", ratio_to="all", smooth=2)
+    with pytest.raises(LookupError):
+        ds.contacts("cells", "chr1", ratio_to="all")

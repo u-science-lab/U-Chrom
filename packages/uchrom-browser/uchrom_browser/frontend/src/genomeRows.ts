@@ -4,6 +4,7 @@
  * per dataset and the rotated-triangle (45°) matrix geometry.
  */
 
+import { ALL_CELLS_REF } from './groups'
 import { parseGenomicNumber } from './filters'
 import { binAt } from './matrix'
 import { defaultTrackSelection } from './tracks'
@@ -40,6 +41,10 @@ export interface GenomeRow {
   flip?: boolean
   /** matrix: how the map is drawn (absent = triangle) */
   shape?: MatrixShape
+  /** per-cell matrix: drawn as log2 of the row's map over this group's ('all': every cell), each over its total */
+  ratioTo?: string | null
+  /** ratio rows: both maps summed over smooth x smooth pixels first (odd; absent = 3) */
+  smooth?: number | null
   /** track: track name */
   track?: string | null
   /** intervals: results key */
@@ -114,7 +119,7 @@ export function resizeRow(rows: GenomeRow[], id: string, height: number): Genome
 }
 
 /** Settings of a row edited in the inspector. */
-export type RowSetting = 'source' | 'resolution' | 'balance' | 'stat' | 'threshold' | 'maxDist' | 'flip' | 'shape' | 'track' | 'key' | 'height' | 'agg'
+export type RowSetting = 'source' | 'resolution' | 'balance' | 'stat' | 'threshold' | 'maxDist' | 'flip' | 'shape' | 'track' | 'key' | 'height' | 'agg' | 'ratioTo'
 
 /**
  * Row patch for one edited setting (text inputs arrive as strings, check
@@ -124,6 +129,7 @@ export type RowSetting = 'source' | 'resolution' | 'balance' | 'stat' | 'thresho
  */
 export function rowPatch(setting: RowSetting, value: string | boolean): Partial<Omit<GenomeRow, 'id'>> | null {
   if (typeof value === 'boolean') {
+    if (setting === 'ratioTo') return { ratioTo: value ? ALL_CELLS_REF : null } // the check box: vs all cells
     return setting === 'balance' || setting === 'flip' ? { [setting]: value } : null
   }
   const text = value.trim()
@@ -215,6 +221,8 @@ export function parseRows(raw: unknown): GenomeRow[] | null {
     if (typeof x.maxDist === 'number' && x.maxDist > 0) row.maxDist = x.maxDist
     if (typeof x.flip === 'boolean') row.flip = x.flip
     if (x.shape && MATRIX_SHAPES.includes(x.shape)) row.shape = x.shape
+    if (typeof x.ratioTo === 'string' && x.ratioTo) row.ratioTo = x.ratioTo
+    if (typeof x.smooth === 'number' && x.smooth >= 1 && x.smooth % 2 === 1) row.smooth = x.smooth
     if (typeof x.track === 'string') row.track = x.track
     if (typeof x.key === 'string') row.key = x.key
     const scope = parseScopeSpec(x.scope, true)

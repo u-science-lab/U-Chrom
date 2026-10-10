@@ -97,7 +97,7 @@
     },
     {
       "name": "open_view",
-      "description": "Open a new view (pane) and make it active. `cells`: 'focus' (default: follow the focus), 'all', a cell id or a group reference. Genome views take `rows` (top to bottom): {kind:'track', track, cells?} or {kind:'distance', cells?, stat?} or {kind:'contacts', source, cells?} or {kind:'intervals', key}. Stats views take `stats` (rg | scaling | hist | scatter), `compare_groups` (group references overlaid), `field_x` / `field_y` (cell fields for hist / scatter). Embedding views take `embedding` (a cellm key). Spatial views (cells in the tissue, over its image) take `spatial` (a cell-position set), `region` and `image_opacity`. Returns {pane}.",
+      "description": "Open a new view (pane) and make it active. `cells`: 'focus' (default: follow the focus), 'all', a cell id or a group reference. Genome views take `rows` (top to bottom): {kind:'track', track, cells?} or {kind:'distance', cells?, stat?} or {kind:'contacts', source, cells?, ratio_to?, smooth?} (ratio_to: a group or 'all' -> log2 of this map over that group's, each over its total; smooth: odd pixels summed, default 3) or {kind:'intervals', key}. Stats views take `stats` (rg | scaling | hist | scatter), `compare_groups` (group references overlaid), `field_x` / `field_y` (cell fields for hist / scatter). Embedding views take `embedding` (a cellm key). Spatial views (cells in the tissue, over its image) take `spatial` (a cell-position set), `region` and `image_opacity`. Returns {pane}.",
       "inputSchema": {
         "type": "object",
         "required": [
