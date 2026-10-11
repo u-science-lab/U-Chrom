@@ -53,6 +53,17 @@ TISSUES = {
                     "cortex": ["Satb2", "Stx1a", "Cux2", "Rorb", "Fezf2", "Tbr1"],
                     "thalamus": ["Tcf7l2", "Prkcd", "Slc17a6", "Plekhg1"]},
         "contrast": {"high": ["cortex", "CA", "DG"], "low": ["white_matter", "choroid_plexus"]},
+        # the authors' spatial domains (CellCharter on the RNA's scVI latent; published for section r1 only),
+        # named from their marker genes (log fold change against the other domains): cortex L2-4 Cux2 / Rorb /
+        # Satb2, L5-6 Bcl11b / Tshz2, striatum Pde10a / Gpr88 / Penk, habenula Pou4f1 / Tac2 / Gpr151, CA3 Grik4,
+        # CA1 Bcl11b / Wfs1 / Fibcd1, DG Prox1, thalamus Tcf7l2 / Slc17a6 / Ntng1, white matter Plp1 / Mbp,
+        # choroid plexus Ttr, neuropil (cortical layer 1, hippocampal strata) Ddn / Slc1a2
+        "domains": {"column": "cluster_cellcharter",
+                    "names": {"0": "cortex L5-6", "1": "striatum", "2": "cortex L2-4", "3": "habenula", "4": "CA3",
+                              "5": "choroid plexus", "6": "thalamus 1", "7": "white matter", "8": "thalamus 2",
+                              "9": "neuropil", "10": "DG", "11": "CA1"},
+                    "contrast": {"high": ["cortex L2-4", "cortex L5-6", "CA1", "CA3", "DG"],
+                                 "low": ["white matter", "choroid plexus"]}},
     },
     "melanoma": {
         "dataset": "hicrna_human_melanoma", "sections": ["human_melanoma_r1", "human_melanoma_r2"],
@@ -89,23 +100,29 @@ def load_store():
     return ds.load(DATASET)
 
 
+def _published_domains() -> pd.DataFrame | None:
+    """The authors' spatial domains of the spots, named (``TISSUES[...]["domains"]``), column ``domain``; spots
+    without one (sections the authors did not publish) are missing.  None when the tissue has none configured."""
+    cfg = TISSUES[TISSUE].get("domains")
+    if cfg is None:
+        return None
+    cd = load_store()
+    cells = cd.cells.copy()
+    cells.index = pd.Index([str(i) for i in cd._cell_ids_axis()])
+    lab = cells[cfg["column"]].dropna().astype(str)
+    return pd.DataFrame({"domain": lab.map(cfg["names"])}, index=lab.index)
+
+
 # ------------------------------------------------------------------------------------------------------------
 # stage features: per-spot contact features of every section, both filters
 # ------------------------------------------------------------------------------------------------------------
 def stage_features(stats_root: Path, out: Path):
     from uchrom.fea import ContactFeatureParams, contact_features
-    from uchrom.io import ContactStats
 
     cd = load_store()
     frames = []
     for filt in FILTERS:
-        work = _cells_only(cd)
-        merged = None
-        for sec in SECTIONS:
-            st = ContactStats.load(stats_root / sec / f"{sec}.contact_stats_{filt}.npz")
-            st.cells = np.asarray([f"{sec}:{b}" for b in st.cells], dtype=object)
-            merged = st if merged is None else _concat(merged, st)
-        merged.write(work, key="contacts", source=f"{stats_root}/<section>/<section>.contact_stats_{filt}.npz")
+        work = _with_stats(cd, stats_root, filt)
         for name, params in (("guo", ContactFeatureParams.guo2026()), ("bycentre", ContactFeatureParams()),
                              ("chrom", ContactFeatureParams.guo2026(per_chromosome=True))):
             f = contact_features(work, params=params, key_added=None)
@@ -149,6 +166,21 @@ def _cells_only(cd):
                                                                  "end": [], "trace_id": []}), cells=cells)
     out.uns["cell_spatial"] = cd.uns["cell_spatial"]
     return out
+
+
+def _with_stats(cd, stats_root: Path, filt: str):
+    """The store's cells (:func:`_cells_only`) with the contact statistics of every section (filter ``filt``) under
+    the key ``contacts``."""
+    from uchrom.io import ContactStats
+
+    work = _cells_only(cd)
+    merged = None
+    for sec in SECTIONS:
+        st = ContactStats.load(stats_root / sec / f"{sec}.contact_stats_{filt}.npz")
+        st.cells = np.asarray([f"{sec}:{b}" for b in st.cells], dtype=object)
+        merged = st if merged is None else _concat(merged, st)
+    merged.write(work, key="contacts", source=f"{stats_root}/<section>/<section>.contact_stats_{filt}.npz")
+    return work
 
 
 def _concat(a, b):
@@ -457,26 +489,22 @@ def stage_calibrate(out: Path, seed: int, n_pcs: int = 30, min_detect: float = 0
 # ------------------------------------------------------------------------------------------------------------
 def stage_cnv(stats_root: Path, out: Path, n_cnv: int = 5):
     """Per spot and chromosome, log2 of the chromosome's share of the contact legs (2 x cis + trans) over the
-    section's median share — the coverage profile that gains and losses of a tumour clone shift; its first
-    ``n_cnv`` principal components added to depth + RNA as covariates: how much of the contact features' smooth
-    spatial variance is left (``smooth_left``) with and without them, next to the same for held-out genes is in
-    stage calibrate.  A tissue without copy-number changes is the control."""
-    from uchrom.io import ContactStats
+    section's median share (``uchrom.fea.chromosome_dosage``, chrY left out) — the coverage profile that gains and
+    losses of a tumour clone shift; destriped, its first ``n_cnv`` principal components added to depth + RNA as
+    covariates: how much of the contact features' smooth spatial variance is left (``smooth_left``) with and
+    without them, next to the same for held-out genes is in stage calibrate.  A tissue without copy-number changes
+    is the control."""
+    from uchrom.fea import chromosome_dosage
     from uchrom.spatial import destripe
 
     f = pd.read_parquet(out / "features.parquet")
     pcs = pd.read_parquet(out / "rna_pca.parquet")
     feats = [f"q30.{x}" for x in FEATURES] + [f"q30.{x}" for x in TECHNICAL]
+    work = _with_stats(load_store(), stats_root, "q30")
     res, profiles = {}, []
     for sec in SECTIONS:
-        st = ContactStats.load(stats_root / sec / f"{sec}.contact_stats_q30.npz")
-        ids = pd.Index([f"{sec}:{b}" for b in st.cells])
-        legs = 2 * st.distance.sum(axis=2) + st.trans                      # spots x chromosomes
-        auto = [i for i, c in enumerate(st.chroms) if c not in ("chrY",)]
-        share = legs[:, auto] / np.maximum(legs[:, auto].sum(axis=1, keepdims=True), 1)
         g = f[(f.section == sec) & f.qc]
-        S = pd.DataFrame(share, index=ids, columns=[st.chroms[i] for i in auto]).reindex(g.index)
-        L = np.log2(S / S.median())
+        L = chromosome_dosage(work, cells=g.index, key_added=None)          # QC spots: the median over them
         L = destripe(L, g.centroid_y.to_numpy(int), g.centroid_x.to_numpy(int))
         Z = (L - L.mean()) / L.std()
         u, sv_, vt = np.linalg.svd(Z.to_numpy(), full_matrices=False)
@@ -945,6 +973,27 @@ def stage_summary(out: Path, results: Path, figdir: Path):
                 "n_high": int(len(hi)), "n_low": int(len(lo)), "mannwhitney_p": float(u.pvalue),
                 "auc": float(u.statistic / (len(hi) * len(lo)))}
     res["region_short_long"] = region_means
+    # 1b. the same contrast on the authors' spatial domains, where they were published
+    dom = _published_domains()
+    if dom is not None:
+        cfg = TISSUES[TISSUE]["domains"]
+        qd = q.join(dom)
+        dom_means = {}
+        for sec in SECTIONS:
+            g = qd[(qd.section == sec) & qd.domain.notna()]
+            if g.empty:
+                continue
+            col = "q30.short_long_ratio"
+            dom_means[f"q30/{sec}"] = g.groupby("domain")[col].agg(["median", "mean", "count"]).round(4) \
+                .to_dict(orient="index")
+            hi = g[g.domain.isin(cfg["contrast"]["high"])][col]
+            lo = g[g.domain.isin(cfg["contrast"]["low"])][col]
+            u = ss.mannwhitneyu(hi, lo, alternative="two-sided")
+            res[f"domain_high_vs_low/q30/{sec}"] = {
+                "median_high": float(hi.median()), "median_low": float(lo.median()),
+                "n_high": int(len(hi)), "n_low": int(len(lo)), "mannwhitney_p_two_sided": float(u.pvalue),
+                "auc": float(u.statistic / (len(hi) * len(lo)))}
+        res["domain_short_long"] = dom_means
     # 2. spatial variation per feature and section: effect sizes at each adjustment step, both sections
     steps = ["raw", "destriped", "depth", "depth_rna30"]
     table = {}
@@ -998,7 +1047,8 @@ def stage_summary(out: Path, results: Path, figdir: Path):
                                  for r in lg.to_dict(orient="records")}
     results.mkdir(parents=True, exist_ok=True)
     save(results / f"global_features_{TISSUE}.json", res, script=__file__, datasets=[DATASET, "spatial_hicrna"],
-         params={"min_contacts": MIN_CONTACTS, "region_markers": REGION_MARKERS, "features": FEATURES})
+         params={"min_contacts": MIN_CONTACTS, "region_markers": REGION_MARKERS, "features": FEATURES,
+                 "domains": TISSUES[TISSUE].get("domains")})
     figdir.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(figdir / f"spatial_variable_{TISSUE}.npz",
                         cell_id=f.index.to_numpy(str), section=f.section.to_numpy(str),
@@ -1058,6 +1108,9 @@ def _figdata_tables(out: Path, figdir: Path, f: pd.DataFrame, q: pd.DataFrame, p
     cells.index = pd.Index([str(i) for i in cd._cell_ids_axis()])
     if "cell_type" in cells:
         spots = spots.join(cells[["cell_type"]].astype(str).replace({"nan": None, "None": None}))
+    dom = _published_domains()
+    if dom is not None:
+        spots = spots.join(dom)
     spots.to_parquet(figdir / f"spatial_variable_{TISSUE}_spots.parquet")
     cal = out / "calibrate.parquet"
     if cal.exists():

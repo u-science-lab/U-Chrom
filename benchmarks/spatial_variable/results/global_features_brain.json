@@ -190,6 +190,78 @@
     }
    }
   },
+  "domain_high_vs_low/q30/mouse_brain_r1": {
+   "median_high": 3.2166641890887466,
+   "median_low": 2.4190497635667647,
+   "n_high": 2503,
+   "n_low": 1215,
+   "mannwhitney_p_two_sided": 0.0,
+   "auc": 0.9614178212482469
+  },
+  "domain_short_long": {
+   "q30/mouse_brain_r1": {
+    "CA1": {
+     "median": 3.3894,
+     "mean": 3.3614,
+     "count": 215
+    },
+    "CA3": {
+     "median": 3.2949,
+     "mean": 3.2508,
+     "count": 173
+    },
+    "DG": {
+     "median": 3.132,
+     "mean": 3.0923,
+     "count": 207
+    },
+    "choroid plexus": {
+     "median": 2.3393,
+     "mean": 2.3063,
+     "count": 134
+    },
+    "cortex L2-4": {
+     "median": 3.314,
+     "mean": 3.3028,
+     "count": 764
+    },
+    "cortex L5-6": {
+     "median": 3.1575,
+     "mean": 3.164,
+     "count": 1144
+    },
+    "habenula": {
+     "median": 2.8344,
+     "mean": 2.8546,
+     "count": 114
+    },
+    "neuropil": {
+     "median": 2.5951,
+     "mean": 2.6073,
+     "count": 1100
+    },
+    "striatum": {
+     "median": 3.128,
+     "mean": 3.0761,
+     "count": 255
+    },
+    "thalamus 1": {
+     "median": 2.7872,
+     "mean": 2.7936,
+     "count": 515
+    },
+    "thalamus 2": {
+     "median": 2.9913,
+     "mean": 2.9565,
+     "count": 348
+    },
+    "white matter": {
+     "median": 2.4269,
+     "mean": 2.4557,
+     "count": 1081
+    }
+   }
+  },
   "sv_table": {
    "mouse_brain_r1/q30.short_long_ratio": {
     "raw.moran_I": 0.6229504512586366,
@@ -4129,13 +4201,13 @@
   }
  },
  "provenance": {
-  "revision": "ember-deep-frozen-195-gfb9e86d015b1",
-  "date": "2026-10-10T00:04:17+00:00",
+  "revision": "ember-deep-frozen-199-g39bc1911d489",
+  "date": "2026-10-11T02:07:08+00:00",
   "host": "Weizes-MacBook-Pro.local",
   "cpu": "Apple M5 Pro",
   "cpus": 18,
   "slurm_job": null,
-  "load_avg_1min": 3.01806640625,
+  "load_avg_1min": 3.4189453125,
   "versions": {
    "python": "3.12.13",
    "numpy": "2.5.3",
@@ -4215,7 +4287,37 @@
     "ps_slope_100k_1M@chrom",
     "ps_slope_1M_10M@chrom",
     "cis_fraction@chrom"
-   ]
+   ],
+   "domains": {
+    "column": "cluster_cellcharter",
+    "names": {
+     "0": "cortex L5-6",
+     "1": "striatum",
+     "2": "cortex L2-4",
+     "3": "habenula",
+     "4": "CA3",
+     "5": "choroid plexus",
+     "6": "thalamus 1",
+     "7": "white matter",
+     "8": "thalamus 2",
+     "9": "neuropil",
+     "10": "DG",
+     "11": "CA1"
+    },
+    "contrast": {
+     "high": [
+      "cortex L2-4",
+      "cortex L5-6",
+      "CA1",
+      "CA3",
+      "DG"
+     ],
+     "low": [
+      "white matter",
+      "choroid plexus"
+     ]
+    }
+   }
   }
  }
 }

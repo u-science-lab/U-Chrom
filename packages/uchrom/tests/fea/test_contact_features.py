@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from uchrom import ChromData
-from uchrom.fea import ContactFeatureParams, contact_features
+from uchrom.fea import ContactFeatureParams, chromosome_dosage, contact_features
 from uchrom.io.pairs_stats import ContactStats, distance_edges
 
 from .. import FIXTURES
@@ -119,3 +119,72 @@ def test_per_chromosome_features_ignore_chromosome_gains(pairs):
                            key_added=None)
     sub = contact_features(cd, params=ContactFeatureParams.guo2026(chroms=["chr2"]), key_added=None)
     np.testing.assert_allclose(one[cols].to_numpy(float), sub[cols].to_numpy(float))
+
+
+def _thinned_cells(pairs, n: int = 8, gains=(0, 1), seed: int = 0):
+    """``n`` cells, each 60 % of the real cell's contacts drawn at random; the cells in ``gains`` with their chr19
+    contacts (cis and trans) counted twice: an extra copy of chr19."""
+    names = list(MM10)
+    code = {c: i for i, c in enumerate(names)}
+    known = pairs[pairs["chrom1"].isin(names) & pairs["chrom2"].isin(names)]
+    rng = np.random.default_rng(seed)
+    st = ContactStats([f"c{i}" for i in range(n)] + ["empty"], names, distance_edges(MM10))
+    for i in range(n):
+        p = known[rng.random(len(known)) < 0.6]
+        if i in gains:
+            p = pd.concat([p, p[(p["chrom1"] == "chr19") | (p["chrom2"] == "chr19")]], ignore_index=True)
+        st.add(np.full(len(p), i), p["chrom1"].map(code), p["pos1"], p["chrom2"].map(code), p["pos2"],
+               p["strand1"], p["strand2"])
+    cd = ChromData(coords=np.zeros((0, 3)), spots=pd.DataFrame({"chrom": pd.Series([], dtype=str), "start": [],
+                                                                "end": [], "trace_id": []}),
+                   cells=pd.DataFrame({"cell_id": list(st.cells), "section": ["a"] * (n // 2) + ["b"] * (n - n // 2)
+                                       + [None]}))
+    st.write(cd, key="contacts")
+    return cd, st
+
+
+def test_chromosome_dosage_is_the_log2_share_of_the_legs(pairs):
+    cd, st = _thinned_cells(pairs)
+    ids = [f"c{i}" for i in range(8)]
+    t = chromosome_dosage(cd, cells=ids, key_added=None)
+    assert list(t.index) == ids and list(t.columns) == list(MM10)
+    legs = (2 * st.distance.sum(axis=2) + st.trans)[:8].astype(float)
+    share = legs / legs.sum(axis=1, keepdims=True)
+    np.testing.assert_allclose(t.to_numpy(), np.log2(share / np.median(share, axis=0)), rtol=0, atol=1e-12)
+    # the extra chr19: about +log2(2) on chr19 in the two cells (its trans contacts with a partner leg elsewhere
+    # count once more, not twice), the other chromosomes a little lower, nothing in the rest
+    gain, rest = t.loc[["c0", "c1"]], t.loc[ids[2:]]
+    assert (gain["chr19"] > 0.75).all() and (rest["chr19"].abs() < 0.1).all()
+    assert (gain.drop(columns="chr19").median(axis=1) < -0.02).all()
+    # the empty cell, the excluded chromosome, the median per group
+    assert t.shape[0] == 8 and chromosome_dosage(cd, key_added=None).loc["empty"].isna().all()
+    noX = chromosome_dosage(cd, cells=ids, exclude=("chrX",), key_added=None)
+    assert "chrX" not in noX.columns and np.isfinite(noX.to_numpy()).all()
+    by = chromosome_dosage(cd, groupby="section", key_added=None)
+    for sec, rows in (("a", ids[:4]), ("b", ids[4:])):
+        s = share[[ids.index(c) for c in rows]]
+        np.testing.assert_allclose(by.loc[rows].to_numpy(), np.log2(s / np.median(s, axis=0)), atol=1e-12)
+    assert by.loc["empty"].isna().all()                         # no group
+    with pytest.raises(KeyError):
+        chromosome_dosage(cd, key="other")
+
+
+def test_chromosome_dosage_components_find_the_gain(pairs):
+    cd, _ = _thinned_cells(pairs)
+    ids = [f"c{i}" for i in range(8)]
+    t = chromosome_dosage(cd, cells=ids, n_pcs=3)
+    prof = t[list(MM10)].to_numpy()
+    Z = (prof - prof.mean(0)) / prof.std(0, ddof=1)
+    u, sv, _ = np.linalg.svd(Z, full_matrices=False)
+    np.testing.assert_allclose(np.abs(t[["PC1", "PC2", "PC3"]].to_numpy()), np.abs(u[:, :3] * sv[:3]), atol=1e-9)
+    assert t.attrs["pc_variance"][0] == pytest.approx(sv[0] ** 2 / (sv ** 2).sum())
+    pc1 = t["PC1"].to_numpy()                                   # the two cells with the gain at one end
+    assert set(np.argsort(pc1 * np.sign(pc1[0]))[-2:]) == {0, 1}
+    # stored: the profile and components on the cells (NaN for the cell left out), the table as a result
+    assert cd.cellm["contacts.dosage"].shape == (9, len(MM10)) and np.isnan(cd.cellm["contacts.dosage"][8]).all()
+    np.testing.assert_allclose(cd.cellm["contacts.dosage.pcs"][:8], t[["PC1", "PC2", "PC3"]].to_numpy())
+    assert cd.results.record("contacts.dosage").params["n_pcs"] == 3
+    from uchrom.spatial import covariate_matrix
+
+    cov = covariate_matrix(cd, ["contacts.dosage.pcs"], ids)
+    assert cov.shape == (8, 3)

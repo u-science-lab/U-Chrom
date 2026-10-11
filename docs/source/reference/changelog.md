@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Copy number from contacts.**  `uchrom.fea.chromosome_dosage`: per cell or spatial Hi-C spot, log2 of each
+  chromosome's share of the contact legs over the median cell's (per section with `groupby=`), and optionally the
+  profiles' principal components (`cd.cellm["contacts.dosage.pcs"]`), covariates for
+  `uchrom.spatial.spatially_variable`.  The melanoma benchmark's copy-number profiles are unchanged with it
+  (`benchmarks/spatial_variable`, stage cnv: largest difference 6e-15).
 - **Structure calling from single cells.**  `uc.tl.call_loops(cd, method="snaphic")`
   (`uchrom.strc.loop.call_loops_snaphic`, Yu et al. 2021): loops across cells, each cell's map imputed by a
   random walk with restart (`uchrom.fea.impute_rwr`); `uc.tl.single_cell_boundaries` (insulation of each
