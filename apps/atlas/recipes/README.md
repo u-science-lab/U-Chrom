@@ -1013,7 +1013,7 @@ Figure 3 datasets.
     `gageseq2024/gageseq_mouse_cortex.chromdata.zarr`, `gageseq2024/gageseq_human_bm_cd34.chromdata.zarr`
     (atlas `gageseq_mouse_cortex`, `gageseq_human_bm_cd34`).
   - Also: `benchmarks/spatial_composition/` (mouse cortex).
-- **Droplet Hi-C / Paired Hi-C** (Chang et al. 2024, *Nat. Biotechnol.*,
+- **Droplet Hi-C / Paired Hi-C** (Chang et al. 2025, *Nat. Biotechnol.*,
   doi:10.1038/s41587-024-02447-1; GEO GSE253407): mouse cortex, Droplet Hi-C 6,235 cells (LC462,
   LC716), Paired Hi-C 24,284 cells (Hi-C LC464 / LC465 / LC608 with RNA LC466 / LC467 / LC613, barcodes
   paired by the metadata).  The pairs keep every read pair; cis pairs < 1 kb are dropped.
