@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Proximity by genomic separation, from contacts or coordinates.**  `uchrom.fea.separation_profile`: per cell,
+  the contacts at short (1-2 Mb) over long (19-54 Mb) separations of the linked per-cell maps, or the median 3-D
+  distance of locus pairs at long over short separations of the traces, separations midpoint to midpoint in both
+  (`log2_short_long`, higher when the short range is relatively closer); `SeparationParams(edges=...)` stores the
+  whole profile per cell (`cd.cellm["separation.profile"]`).  On seven atlas stores (84,778 cells and spots) it
+  gives the cross-assay pilot's counts for every cell, and on the Takei 2021 and Tan 2021 structure sets its pair
+  counts and medians to float32 precision (`benchmarks/cross_assay`, which adds Liu et al. 2025's DNA-MERFISH).
 - **Copy number from contacts.**  `uchrom.fea.chromosome_dosage`: per cell or spatial Hi-C spot, log2 of each
   chromosome's share of the contact legs over the median cell's (per section with `groupby=`), and optionally the
   profiles' principal components (`cd.cellm["contacts.dosage.pcs"]`), covariates for
