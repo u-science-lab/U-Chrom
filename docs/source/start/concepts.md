@@ -87,7 +87,7 @@ ChromData
 
 The tables of a `ChromData` and how they are joined: spots (one row per observation) point at the
 shared locus axis (bins) and at traces and cells through keys; coordinates and per-spot tracks are
-row-aligned with the spots; contact maps are linked, not copied.  Right, the layout of a
+row-aligned with the spots; contact maps are embedded in the store or linked to their files.  Right, the layout of a
 `.chromdata.zarr` store (Parquet tables, Zarr arrays, JSON attributes).  From Fig. 2a of the U-Chrom
 paper.
 ```
