@@ -59,7 +59,7 @@ Contact features per cell
 
 From the contact-distance histograms of every cell or spatial Hi-C spot (``uchrom.io.ContactStats``): the short /
 long-range ratio (Guo et al. 2026's bins), distance bands, contact-decay slopes, cis fraction, trans share per
-chromosome.
+chromosome; and a copy-number profile, each chromosome's share of the contact legs (``chromosome_dosage``).
 
 .. automodule:: uchrom.fea.contact_stats
    :members:

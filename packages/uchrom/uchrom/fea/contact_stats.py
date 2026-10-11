@@ -15,6 +15,9 @@ cell's short / long ratio without any change of folding.  ``per_chromosome=True`
 chromosome's own histogram and averages them over a fixed set of chromosomes with equal weights, so a gain or loss
 of whole chromosomes leaves them unchanged (a gain of part of a chromosome still shifts that chromosome's
 distances).
+
+:func:`chromosome_dosage` reads the same statistics as a copy-number profile: each chromosome's share of a cell's
+contact legs, relative to the cells' median share.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ import pandas as pd
 
 from ..convention import UNSET
 
-__all__ = ["ContactFeatureParams", "contact_features"]
+__all__ = ["ContactFeatureParams", "chromosome_dosage", "contact_features"]
 
 
 @dataclass
@@ -185,6 +188,113 @@ def contact_features(cd, *, key: str = "contacts", cells=None, params: Optional[
                      function="uchrom.fea.contact_features", params=asdict(p),
                      inputs={"contact_stats": key, "n_cells": int(len(out)), "source": rec.get("source"),
                              "filter": rec.get("filter")})
+    return target if copy else out
+
+
+def chromosome_dosage(cd, *, key: str = "contacts", cells=None, groupby: Optional[str] = None,
+                      exclude: Sequence[str] = ("chrY",), n_pcs: int = 0, key_added=UNSET, copy: bool = False):
+    """Per-cell copy-number profile from the contacts: log2 of each chromosome's share of the cell's contact legs
+    over the cells' median share.
+
+    A cis contact puts two legs on its chromosome, a trans contact one on each of its two.  A chromosome present in
+    three copies instead of two carries about 1.5 times the legs, so the log2 share over the median is about the
+    log2 of its copies over the typical cell's: a coverage profile at the resolution of whole chromosomes, as a
+    copy-number caller reads from sequencing depth.  It is a proxy.  It is relative to the median cell, so a gain
+    that every cell carries does not show.  The shares sum to one, so a gain lowers the other chromosomes a little.
+    And anything else that changes how many contacts a chromosome gives shifts it too.
+
+    Parameters
+    ----------
+    cd
+        A ``ChromData`` with ``ContactStats.write(cd, key=key)``.
+    key
+        The contact statistics' key.
+    cells
+        Only these cells (default all); the median is taken over them.
+    groupby
+        A ``cd.cells`` column (section, sample): the median of each group is its cells' reference.
+    exclude
+        Chromosomes left out of the shares (default chrY: a few contacts or none).
+    n_pcs
+        Also the first ``n_pcs`` principal components of the profiles (each chromosome z-scored over the cells,
+        missing values at 0; signs arbitrary): the axes along which the cells' profiles differ most.  A tumour clone
+        changes several chromosomes at once, so one component can carry its whole pattern; as covariates they
+        stand for copy number in a spatial test (:func:`uchrom.spatial.spatially_variable`).
+    key_added
+        Where to store (default ``"<key>.dosage"``; None: nothing stored): ``cd.cellm[key_added]`` (n_cells,
+        n_chroms; NaN for cells left out), ``cd.cellm["<key_added>.pcs"]`` and the table
+        ``cd.results[key_added]``.
+
+    Returns
+    -------
+    DataFrame
+        Indexed by cell id (in the order of ``cells``): one column per chromosome, then ``PC1`` ... with
+        ``n_pcs``.  A cell without contacts, or a chromosome without legs in a cell, is NaN.
+        ``attrs["pc_variance"]``: the share of the z-scored profiles' variance of each component.
+    """
+    from ..convention import store_and_return
+
+    rec = cd.uns.get("contact_stats", {}).get(key)
+    if rec is None or f"{key}.trans" not in cd.cellm:
+        raise KeyError(f"no contact statistics {key!r}: run ContactStats.write(cd, key={key!r}) first")
+    chroms = list(rec["chroms"])
+    ids = pd.Index([str(c) for c in cd._cell_ids_axis()], name="cell_id")
+    rows = np.arange(len(ids))
+    if cells is not None:
+        rows = ids.get_indexer([str(c) for c in cells])
+        if (rows < 0).any():
+            raise KeyError("cells not in cd.cells")
+    if f"{key}.cis" in cd.cellm:
+        cis = np.asarray(cd.cellm[f"{key}.cis"])[rows]
+    else:
+        dist = np.asarray(cd.cellm[f"{key}.distance"])
+        if dist.ndim != 3:
+            raise ValueError(f"the statistics {key!r} have no cis counts per chromosome")
+        cis = dist[rows].sum(axis=2)
+    use = [i for i, c in enumerate(chroms) if c not in set(exclude)]
+    legs = (2 * cis + np.asarray(cd.cellm[f"{key}.trans"])[rows])[:, use].astype(float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        share = legs / legs.sum(axis=1, keepdims=True)           # NaN for a cell without legs
+    groups = (np.zeros(len(rows), int) if groupby is None
+              else pd.factorize(cd.cells[groupby].to_numpy()[rows])[0])
+    prof = np.full_like(share, np.nan)
+    for gi in np.unique(groups[groups >= 0]):                    # a cell without a group stays NaN
+        m = groups == gi
+        if np.isfinite(share[m]).any():
+            with np.errstate(divide="ignore", invalid="ignore"):
+                prof[m] = np.log2(share[m] / np.nanmedian(share[m], axis=0))
+    prof[~np.isfinite(prof)] = np.nan
+    out = pd.DataFrame(prof, index=ids[rows], columns=[chroms[i] for i in use])
+    pc_var = []
+    if n_pcs:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            Z = (prof - np.nanmean(prof, axis=0)) / np.nanstd(prof, axis=0, ddof=1)
+        Z[~np.isfinite(Z)] = 0.0
+        u, sv, _ = np.linalg.svd(Z, full_matrices=False)
+        k = min(n_pcs, len(sv))
+        for j in range(k):
+            out[f"PC{j + 1}"] = u[:, j] * sv[j]
+        pc_var = (sv ** 2 / max((sv ** 2).sum(), 1e-300))[:k].tolist()
+    out.attrs["pc_variance"] = pc_var
+    if key_added is UNSET:
+        key_added = f"{key}.dosage"
+    if key_added is None:
+        return out
+    target = cd.copy() if copy else cd
+
+    def on_cells(values: np.ndarray) -> np.ndarray:
+        arr = np.full((len(ids), values.shape[1]), np.nan)
+        arr[rows] = values
+        return arr
+
+    target.cellm[key_added] = on_cells(prof)
+    if n_pcs:
+        target.cellm[f"{key_added}.pcs"] = on_cells(out[[f"PC{j + 1}" for j in range(len(pc_var))]].to_numpy())
+    store_and_return(target, out.reset_index(), key_added=key_added, copy=False, kind="table",
+                     function="uchrom.fea.chromosome_dosage",
+                     params={"exclude": list(exclude), "groupby": groupby, "n_pcs": int(n_pcs)},
+                     inputs={"contact_stats": key, "chroms": list(out.columns[:len(use)]), "n_cells": int(len(out)),
+                             "pc_variance": pc_var, "source": rec.get("source"), "filter": rec.get("filter")})
     return target if copy else out
 
 

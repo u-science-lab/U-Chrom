@@ -10,6 +10,7 @@ strength of a known loop.
 |------|-----|
 | global features of every spot: the contact-distance histogram (scHiCluster's bins) and trans contacts per chromosome, one pass over the library's pairs | `uchrom.io.ContactStats` → `cd.cellm["contacts.distance"]` |
 | short / long-range ratio (Guo et al. 2026's definition), distance bands, contact-decay slopes, cis fraction, trans share per chromosome | `uchrom.fea.contact_features` |
+| copy-number profile of every spot: each chromosome's share of the contact legs, log2 over the median spot; its principal components as covariates | `uchrom.fea.chromosome_dosage` |
 | known boundaries and loops scored in every spot: contacts in their windows (flanks / crossing square, peak / donut), insulation against domain interiors, and against the spot's own expected from its contact-distance histograms | `uchrom.io.WindowCounts`, `boundary_windows`, `loop_windows`, `uchrom.fea.window_expected`, `window_scores` |
 | compartment values of every spot | `uc.tl.single_cell_compartments` ([structures from single cells](structures.md)) |
 | barcode stripes of microfluidic arrays (DBiT-type: one channel per array row and column) removed, the smooth pattern kept | `uchrom.spatial.destripe`, `smooth_share` |
@@ -59,9 +60,11 @@ of the list.
     variances agree within 1e-13.
 - **Per-spot contact statistics.**  On both mouse brain sections (12,474 spots, 7.3 × 10⁹ cis contacts), the
   cis and trans counts equal those of the per-spot maps of the atlas spot for spot.
-- **The short / long-range ratio.**  It reproduces the paper's regional pattern in both sections: cortex, CA and
-  DG lie above white matter and the choroid plexus.  The medians are 3.17 vs 2.48 (r1) and 3.13 vs 2.56 (r2),
-  with an AUC of 0.89 and 0.86.
+- **The short / long-range ratio.**  The paper compared cell subclasses, which are not public.  Over the
+  authors' spatial domains of section r1 (CellCharter, published for r1 only; named here from their marker
+  genes), cortex, CA and DG lie above white matter and the choroid plexus: medians 3.22 vs 2.42, AUC 0.96.  Over
+  regions drawn from marker genes the same holds in both sections: 3.17 vs 2.48 (r1) and 3.13 vs 2.56 (r2), AUC
+  0.89 and 0.86.
 
 ## On the reference sections
 
@@ -69,10 +72,12 @@ The share of a feature's smooth spatial variance left after depth and the spot's
 destriped, in the two sections of each tissue:
 
 - **Mouse brain.**  The contact features keep 7-15 % (the 100 kb-1 Mb decay slope 43 and 55 %).  Held-out genes with a spatial pattern keep 25-28 %
-  through the same adjustment.  The features vary across the section as its cells do.
+  through the same adjustment, but single genes are noisier than the features.  The module of held-out genes
+  with the strongest pattern (112 and 35 genes; 47-49 % of its variance smooth, the short / long ratio's
+  52-58 %) keeps 10-11 %, as the features do.  The features vary across the section as its cells do.
 - **Human melanoma.**  The features keep 62-82 % (the cis fraction 29 and 35 %).  The spot RNA is shallower here, and few held-out genes have
   a spatial pattern (1 and 4 genes with more than 20 % of their variance smooth); those keep 41-42 %.  The spots' shares
-  of contacts per chromosome, a copy-number profile, form patches in the tissue: 71-89 % of their variance is
+  of contacts per chromosome, a copy-number profile (`chromosome_dosage`), form patches in the tissue: 71-89 % of their variance is
   smooth for chromosomes 22, 9, 15, 7, 17 and 11.  With five principal components of those profiles as
   covariates, the short / long ratio keeps 36 % and 43 % instead of 69 % and 66 %.  So the 3-D variation that the
   transcriptome does not explain largely follows the tumour's clones.  The same covariates change nothing in the
