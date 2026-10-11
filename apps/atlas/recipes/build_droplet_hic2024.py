@@ -1,4 +1,4 @@
-"""Build the Droplet Hi-C stores of the atlas (Chang et al. 2024, Nat. Biotechnol., doi:10.1038/s41587-024-02447-1;
+"""Build the Droplet Hi-C stores of the atlas (Chang et al. 2025, Nat. Biotechnol., doi:10.1038/s41587-024-02447-1;
 GEO GSE253407).
 
 Droplet Hi-C runs single-cell Hi-C in 10x droplets; Paired Hi-C adds the RNA of the same nuclei (10x Multiome).
@@ -45,7 +45,7 @@ HERE = Path(__file__).resolve().parent
 DATA = data_dir()                       # $UCHROM_DATA, else ~/.cache/uchrom
 OUT = DATA / "droplet_hic2024"
 RAW = OUT / "raw" / "GSE253407"
-SOURCE = "Chang et al. 2024, Nat. Biotechnol. (doi:10.1038/s41587-024-02447-1); GEO GSE253407"
+SOURCE = "Chang et al. 2025, Nat. Biotechnol. (doi:10.1038/s41587-024-02447-1); GEO GSE253407"
 PAIRS = {"LC462": "GSM8020244_LC462_mm10.sc.pairs.gz", "LC716": "GSM8020245_LC716_mm10.sc.pairs.gz",
          "LC464": "GSM8020251_LC464_merged_mm10.sc.pairs.gz", "LC465": "GSM8020253_LC465_mm10.sc.pairs.gz",
          "LC608": "GSM8020255_LC608_mm10.sc.pairs.gz"}

@@ -6,7 +6,9 @@ evidence:
 * ``native``      — first-class, with its own structure (a slot / table /
   element whose semantics match the data element);
 * ``linked``      — kept in an external community-standard file (not copied)
-  and queried through the shared index (bins + cell map);
+  and queried through the shared index (bins + cell map) (no cell since the
+  audit of 2026-10-10: chromdata.zarr embeds its contact maps, linking stays
+  an option);
 * ``convention``  — can be stored and read back through the library's public
   API, but only in a general-purpose slot (``uns``, ``obsm``, ``varp``,
   ``attrs``, extra columns, optional columns), so the structure is lost or
@@ -105,8 +107,13 @@ COL_DEFS = {
                   "produced them.",
     "partial": "reading one cell's or one chromosome's rows from disk without reading the rest of the data.",
 }
-AUDIT_DATE = "2026-09-27"
-#: the changes of the previous audit (2026-09-26, PR #76), kept in Table S1
+AUDIT_DATE = "2026-10-10"
+FOFCT_CHECKED = "2026-09-27"         # FOF-CT is a specification: its pages were read in that audit
+#: the audit whose changes the 5-element MARKS entries record (before, reason); a 6th element names another
+PREV_AUDIT_DATE = "2026-09-27"
+PREV_AUDIT_NOTE = ("Column renamed: *3-D coordinates* → *spot coordinates (x, y, z)* (per-spot, and distinct from "
+                   "the cell spatial position).")
+#: the changes of the audit before (2026-09-26, PR #76), kept in Table S1
 PRIOR_AUDIT = {
     "date": "2026-09-26",
     "changes": [
@@ -205,11 +212,13 @@ def t_chromdata(tmp):
     cd.intervals.add("loops", pd.DataFrame({"chrom1": ["chr1"], "start1": [0], "end1": [100],
                                             "chrom2": ["chr1"], "start2": [300], "end2": [400]}), kind="pair")
     cd.results.set("tads.di", d["tads"], function="uchrom.strc.tad.di", params={"window": 5})
-    # a real .scool, linked (not copied): per-cell maps stay in the external file
+    # a real .scool, linked and embedded into the store on writing (write(embed=True)); the external file is
+    # then deleted, so the maps read back below come from the store itself
     cooler.create_scool(str(tmp / "cells.scool"), d["bins"], {c: d["contacts"] for c in d["cells"].index})
     cd.link_scool(tmp / "cells.scool", bin_size=100)
     path = tmp / "x.chromdata.zarr"
-    cd.write(path)
+    cd.write(path, embed=True)
+    (tmp / "cells.scool").unlink()
     r = ChromData.read(path, original_order=True)
     b = ChromData.read(path, backed=True)
     one = b.get_cell("c1")
@@ -235,9 +244,10 @@ def t_chromdata(tmp):
                       "status); set_cell_shapes: outlines as GeoParquet tables/cell_shapes/cell.parquet "
                       "(spec.md 'Cell spatial position', format 2.3)"),
         "contacts": T(np.allclose(c1.matrix(balance=False)[:], sym(d["contacts"]))
-                      and r.uns["linked_scool"]["default"]["bin_size"] == 100, EXT,
-                      "link_scool → uns['linked_scool'] record; load_linked_scool(cell='c1') reads the "
-                      "external .scool after the round trip"),
+                      and not (tmp / "cells.scool").exists()
+                      and set(r.embedded_links()["contacts"]) == {"default"}, DED,
+                      "link_scool, write(embed=True) → embedded/contacts in the store; the external .scool "
+                      "deleted; load_linked_scool(cell='c1') reads the store's copy after the round trip"),
         "intervals": T(r.intervals["tads"].kind == "domain" and loops.kind == "pair"
                        and r.intervals["tads"][["start", "end"]].to_numpy().tolist() == [[0, 200], [200, 500]],
                        DED, "intervals: IntervalTable kind='domain' (TADs) and kind='pair' (loops)"),
@@ -586,10 +596,15 @@ MARKS = {
                      [CD_SPEC, "packages/chromdata/tests/test_cell_spatial.py", "packages/chromdata/chromdata/cellspatial.py"], "convention",
                      "cell positions became a schema element (centroid columns + record, GeoParquet outlines; "
                      "format 2.3, PR #77); before: two ad-hoc 2-D cells columns, no outline"),
-        "contacts": ("linked", "linked, not copied: uns['linked_scool' / 'linked_cool'] records path, bin size "
-                               "and cell map; load_linked_scool / Dataset.contacts(group=) read them (test: a real "
-                               ".scool read back after the round trip). Our own call: the pixels stay in the "
-                               "external .scool / .cool by design.", [CD_SPEC, CD_CODE]),
+        "contacts": ("native", "embedded in the store: per-cell or bulk maps, one group per resolution, pixels "
+                               "partitioned by chromosome and chunked for range reads; written from a .scool / "
+                               ".cool by write(embed=True) or chromdata.embedded; read through the shared index (bins "
+                               "+ cell map) by load_linked_scool / load_linked_cool and the group pseudo-bulk query, "
+                               "also over HTTP. Linking the community file instead (path, bin size and cell map in "
+                               "uns['linked_scool' / 'linked_cool']) stays an option.",
+                     [CD_SPEC, CD_CODE, "packages/chromdata/chromdata/embedded.py"], "linked",
+                     "contact maps embedded in the store and read back without the external file (test); linking "
+                     "stays an option", AUDIT_DATE),
         "intervals": ("native", "intervals: typed IntervalTable (domain / pair / peak / segment); TADs as domain, "
                                 "loops as pair", [CD_SPEC]),
         "points": ("native", "points: non-genomic 3-D points in the coords frame", [CD_SPEC]),
@@ -772,8 +787,8 @@ def main() -> None:
             versions[mod] = importlib.import_module(mod).__version__
         except Exception:  # pragma: no cover
             versions[mod] = None
-    versions["FOF-CT"] = f"v1.0 (specification pages checked {AUDIT_DATE})"
-    cells, failures, changes, extra_tests = {}, [], [], {}
+    versions["FOF-CT"] = f"v1.0 (specification pages checked {FOFCT_CHECKED})"
+    cells, failures, changes, prev_changes, extra_tests = {}, [], [], [], {}
     with tempfile.TemporaryDirectory() as td:
         for row in ROWS:
             test = {}
@@ -795,8 +810,10 @@ def main() -> None:
                 entry = {"value": mark, "note": note, "evidence": urls,
                          "version": versions["FOF-CT"] if row.startswith("FOF") else versions[LIB[row]]}
                 if chg:
-                    entry["audit"] = {"date": AUDIT_DATE, "before": chg[0], "reason": chg[1]}
-                    changes.append({"row": row, "col": col, "before": chg[0], "after": mark, "reason": chg[1]})
+                    date = chg[2] if len(chg) > 2 else PREV_AUDIT_DATE
+                    entry["audit"] = {"date": date, "before": chg[0], "reason": chg[1]}
+                    ch = {"row": row, "col": col, "before": chg[0], "after": mark, "reason": chg[1]}
+                    (changes if date == AUDIT_DATE else prev_changes).append(ch)
                 t = test.get(col)
                 if t is not None:
                     entry["test"] = {"script": "benchmarks/fig2/b_capabilities.py", **t}
@@ -832,11 +849,11 @@ def main() -> None:
                   "as one metadata key per dimension) is rated not supported, with the test still reported"],
         "rows": ROWS, "cols": [c for c, _ in COLS], "col_labels": dict(COLS), "col_defs": COL_DEFS,
         "cells": cells, "versions": versions, "audit_date": AUDIT_DATE, "audit_changes": changes,
-        "label_changes": [{"col": "coords", "before": "3-D coordinates", "after": dict(COLS)["coords"],
-                           "reason": "per-spot, and distinct from the cell spatial position"}],
-        "prior_audit": {"date": PRIOR_AUDIT["date"], "note": PRIOR_AUDIT["note"],
-                        "changes": [{"row": r, "col": c, "before": b, "after": a, "reason": why}
-                                    for r, c, b, a, why in PRIOR_AUDIT["changes"]]},
+        "prior_audits": [
+            {"date": PREV_AUDIT_DATE, "note": PREV_AUDIT_NOTE, "changes": prev_changes},
+            {"date": PRIOR_AUDIT["date"], "note": PRIOR_AUDIT["note"],
+             "changes": [{"row": r, "col": c, "before": b, "after": a, "reason": why}
+                         for r, c, b, a, why in PRIOR_AUDIT["changes"]]}],
         "uncounted_tests": extra_tests,
         "mismatches": [list(map(str, f)) for f in failures],
     }
@@ -855,7 +872,8 @@ def write_table(payload) -> Path:
     rows, cols, lab = payload["rows"], payload["cols"], payload["col_labels"]
     v = payload["versions"]
     out = [
-        "# Supplementary Table S1 — What each format can represent (evidence for Fig. 2b)",
+        "# Supplementary Table S1 — What each format can represent (evidence for Fig. 2b; Extended Data Fig. 1b of "
+        "the Brief Communication)",
         "",
         "Generated by `benchmarks/fig2/b_capabilities.py` from `u-chrom-paper/manuscripts/full/figures/fig2/results/b_capabilities.json`; "
         "do not edit by hand.",
@@ -866,8 +884,7 @@ def write_table(payload) -> Path:
     out += [f"- *{lab[c]}*: {payload['col_defs'][c]}" for c in cols]
     out += [
         "",
-        "**Marks.** ● *native*: first-class, with its own structure. ◎ *linked*: kept in an external "
-        "community-standard file (not copied) and queried through the shared index. ○ *by convention*: stored "
+        "**Marks.** ● *native*: first-class, with its own structure. ○ *by convention*: stored "
         "and read back through the library's public API, but only in a general-purpose slot (`uns`, `obsm`, "
         "`varp`, `attrs`, metadata attributes, extra or optional columns), so the structure is lost or ad hoc. "
         "– *not supported*: no place for it in the format or its API.",
@@ -878,7 +895,8 @@ def write_table(payload) -> Path:
         "other in one object (one AnnData, one MuData modality; a MuData can hold one modality per orientation, "
         "linked only by `obs` columns). The hierarchy column is where that shows; the same holds for a "
         "SpatialData table, which is an AnnData. (3) A test that needed a general-purpose slot can back at most "
-        "*by convention*, one that needed an external file *linked*; the script fails on any inconsistency. "
+        "*by convention*, one that needed an external file *linked* (kept in an external community file, queried "
+        "through the shared index; no cell since the audit of 2026-10-10); the script fails on any inconsistency. "
         "(4) A data table serialised to JSON text inside a descriptive metadata attribute (cooler's `metadata`) "
         "does not count; such tests are still run and reported as *not counted*. Parameters / software records "
         "(provenance) there do count, and so do scalar key-values that describe the object carrying the "
@@ -915,10 +933,7 @@ def write_table(payload) -> Path:
         for ch in payload["audit_changes"]:
             out.append(f"| {ch['row']} | {lab[ch['col']]} | {SYMBOL[ch['before']]} | {SYMBOL[ch['after']]} | "
                        f"{ch['reason']} |")
-    for lc in payload.get("label_changes", []):
-        out += ["", f"Column renamed: *{lc['before']}* → *{lc['after']}* ({lc['reason']})."]
-    prior = payload.get("prior_audit")
-    if prior:
+    for prior in payload.get("prior_audits", []):
         out += ["", f"## Changes after the audit of {prior['date']}", "",
                 "| Container | Element | Before | After | Reason |", "|---|---|---|---|---|"]
         for ch in prior["changes"]:

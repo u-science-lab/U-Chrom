@@ -73,7 +73,7 @@ _GAGESEQ = [f"{gsm}_{kind}_{lib}" for gsm, kind, lib in (
     ("GSM7657703", "RNA", "CD-RNA-0722-1.tsv.gz"), ("GSM7657704", "contact", "CD-HiC-0722-1.pairs.gz"),
     ("GSM7657705", "RNA", "CD-RNA-0722-2.tsv.gz"), ("GSM7657706", "contact", "CD-HiC-0722-2.pairs.gz"),
     ("GSM7657707", "RNA", "CD-RNA-0722-4.tsv.gz"), ("GSM7657708", "contact", "CD-HiC-0722-4.pairs.gz"))]
-# Droplet Hi-C (Chang et al. 2024, Nat. Biotechnol., doi:10.1038/s41587-024-02447-1), GEO GSE253407: mouse cortex
+# Droplet Hi-C (Chang et al. 2025, Nat. Biotechnol., doi:10.1038/s41587-024-02447-1), GEO GSE253407: mouse cortex
 # Droplet Hi-C (LC462, LC716) and Paired Hi-C (Hi-C LC464 / LC465 / LC608 + RNA LC466 / LC467 / LC613).
 _DROPLET_META = ["GSE253407_Droplet_Hi-C_mouse_ctx_metadata.xls.gz", "GSE253407_Paired_Hi-C_mouse_ctx_metadata.xls.gz"]
 _DROPLET = [f"{gsm}_{name}" for gsm, name in (
