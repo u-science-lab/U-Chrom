@@ -1585,7 +1585,10 @@ centred on the Su loci), `takei_1mb.npz` (mESC onto 1 Mb bins centred on the Tak
   (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1, streaming
   `from_fofct(out=)` vs in memory, streaming distance maps vs the dense reference);
   `benchmarks/cd22_convert_validate.py` and `benchmarks/fig2/cd22_variants.py` (format 2.2);
-  `benchmarks/cell_spatial_validation.py` (cell positions).
+  `benchmarks/cell_spatial_validation.py` (cell positions); `benchmarks/cross_assay/cross_assay.py` (per-cell
+  distances at short / long separations by cell class, `cluster_class` / `cluster_subclass`; on Sherlock fetched
+  and built by `benchmarks/cross_assay/sherlock/liu2025.sbatch` into `$SCRATCH/uchrom-nd/data/liu2025_mop/`,
+  2026-10-11, the same 9,582,069 spots / 188,891 traces / 11,045 cells, `from_fofct` 40 s at 12.0 GB).
 
 ### `benchmarks/fig6/_data/`: scaled copies of Takei 2025 FOV 0 (derived)
 
