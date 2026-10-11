@@ -737,6 +737,179 @@ def stage_patch(stats_root: Path, out: Path, pc: int = 2, frac: float = 0.2):
 
 
 # ------------------------------------------------------------------------------------------------------------
+# stage patch_null: is the copy-number patch special, once the choices made with the contacts are taken out?
+# ------------------------------------------------------------------------------------------------------------
+def _grid_compactness(x, y, mask) -> float:
+    """Mean share of a patch spot's grid neighbours (8-neighbourhood, among the spots present) that are in the
+    patch: 1 for a solid blob, about ``mask.mean()`` for scattered spots."""
+    from scipy.ndimage import convolve
+
+    present = np.zeros((y.max() + 1, x.max() + 1))
+    inside = np.zeros_like(present)
+    present[y, x] = 1.0
+    inside[y[mask], x[mask]] = 1.0
+    k = np.ones((3, 3))
+    k[1, 1] = 0.0
+    n_present = convolve(present, k, mode="constant")[y, x]
+    n_inside = convolve(inside, k, mode="constant")[y, x]
+    ok = mask & (n_present > 0)
+    return float(np.mean(n_inside[ok] / n_present[ok]))
+
+
+def stage_patch_null(stats_root: Path, out: Path, results: Path, n_random: int = 1000, seed: int = 0,
+                     frac: float = 0.2, n_cnv: int = 5, discovery: str | None = None):
+    """Stage ``patch`` chose the copy-number component (PC2, the one along which the contact features left after RNA
+    vary) and its sign (the end with the higher short / long ratio) with the contacts.  Three checks without
+    those choices, per section (same profiles, smoothing, patch size and statistics as stage ``patch``):
+
+    * every one of the first ``n_cnv`` copy-number components, both ends: the ratio change of the patch (pooled;
+      after depth and RNA) and the chromosomes whose own ratio moves the same way;
+    * random patches of the same size and compactness (white noise smoothed over the spot grid with the width that
+      matches the copy-number patch's compactness, top ``frac``): how often a random patch moves the ratio as much,
+      and how often a random patch that does moves every chromosome the same way;
+    * the discovery section's component carried to the other section by its chromosome loadings (the component
+      whose loadings correlate best, oriented by that correlation): no use of the second section's contacts.
+
+    Writes ``results/patch_null_<tissue>.json``."""
+    from scipy import stats as ss
+
+    from _record import save
+    from uchrom.io import ContactStats
+    from uchrom.spatial import destripe
+
+    rng = np.random.default_rng(seed)
+    f = pd.read_parquet(out / "features.parquet")
+    prof = pd.read_parquet(out / "cnv_profiles.parquet")
+    rna = pd.read_parquet(out / "rna_pca.parquet")
+    discovery = discovery or SECTIONS[0]
+    SB, LB = slice(51, 77), slice(103, 115)                  # Guo et al.'s short / long bins (stage patch)
+    sections, loadings = {}, {}
+    for sec in SECTIONS:                                     # per-section arrays
+        g = f[(f.section == sec) & f.qc]
+        st = ContactStats.load(stats_root / sec / f"{sec}.contact_stats_q30.npz")
+        row = {f"{sec}:{b}": i for i, b in enumerate(st.cells)}
+        idx = np.array([row[c] for c in g.index])
+        D, Tr = st.distance[idx].astype(float), st.trans[idx].astype(float)
+        keep = np.array([c != "chrY" for c in st.chroms])
+        chroms = [c for c in st.chroms if c != "chrY"]
+        SL = np.log2((D[:, keep, SB].sum(2) + 0.5) / (D[:, keep, LB].sum(2) + 0.5))    # spot x chromosome
+        legs = (2 * D.sum(axis=2) + Tr)[:, keep]
+        share = legs / legs.sum(axis=1, keepdims=True)
+        x, y = g.centroid_x.to_numpy(int), g.centroid_y.to_numpy(int)
+        ratio = g["q30.short_long_ratio"].to_numpy(float)
+        dr = destripe(g[["q30.short_long_ratio"]], y, x)
+        X = np.c_[np.log10(g[["hic_contacts"]].to_numpy(float)), rna.loc[g.index].to_numpy(float)]
+        resid = _residuals(dr, X).iloc[:, 0].to_numpy(float)
+        L = prof.drop(columns="section").reindex(g.index)
+        Z = ((L - L.mean()) / L.std()).fillna(0)
+        u, sv_, vt = np.linalg.svd(Z.to_numpy(), full_matrices=False)
+        sections[sec] = dict(g=g, x=x, y=y, SL=SL, share=share, chroms=chroms, ratio=ratio, resid=resid,
+                             comps=u[:, :n_cnv] * sv_[:n_cnv], var=(sv_ ** 2 / (sv_ ** 2).sum())[:n_cnv])
+        loadings[sec] = pd.DataFrame(vt[:n_cnv].T, index=Z.columns, columns=[f"pc{k + 1}" for k in range(n_cnv)])
+
+    def evaluate(s, patch) -> dict:
+        rest = ~patch
+        ch = np.median(s["SL"][patch], axis=0) - np.median(s["SL"][rest], axis=0)
+        cn = np.log2((s["share"][patch].sum(0) / s["share"][patch].sum()) / (s["share"][rest].sum(0) / s["share"][rest].sum()))
+        pooled = float(np.median(s["ratio"][patch]) - np.median(s["ratio"][rest]))
+        sign = np.sign(pooled) if pooled != 0 else 1.0
+        neutral = np.abs(cn) < 0.02
+        return {"n_patch": int(patch.sum()), "pooled_change": pooled,
+                "resid_change": float(np.nanmedian(s["resid"][patch]) - np.nanmedian(s["resid"][rest])),
+                "n_chroms_same_way": int((np.sign(ch) == sign).sum()), "n_chroms": int(len(ch)),
+                "n_cn_neutral": int(neutral.sum()),
+                "cn_neutral_median_change": float(np.median(ch[neutral])) if neutral.any() else None,
+                "spearman_cn_vs_change": float(ss.spearmanr(cn, ch)[0]),
+                "compactness": _grid_compactness(s["x"], s["y"], patch)}
+
+    def ends(s, comp) -> dict:
+        sm = _smoothed_grid(s["x"], s["y"], comp)
+        return {"top": sm >= np.quantile(sm, 1 - frac), "bottom": sm <= np.quantile(sm, frac)}
+
+    def _random_field(s, width):
+        """White noise over the section's spots, smoothed over the grid (``width`` spots); ``ends`` then smooths it
+        with stage patch's 2 spots as it does a copy-number component."""
+        return _smoothed_grid(s["x"], s["y"], rng.standard_normal(len(s["ratio"])), width)
+
+    res = {"params": {"frac": frac, "n_random": n_random, "seed": seed, "n_cnv": n_cnv, "discovery": discovery,
+                      "short_bins": [SB.start, SB.stop], "long_bins": [LB.start, LB.stop]}, "sections": {}}
+    for sec, s in sections.items():
+        log(f"patch_null {sec}: {len(s['ratio'])} spots")
+        comps = {}
+        for k in range(n_cnv):                               # every component, both ends: no choice made
+            for end, patch in ends(s, s["comps"][:, k]).items():
+                comps[f"pc{k + 1}_{end}"] = evaluate(s, patch)
+        # the patch as stage patch defines it (PC2, the end with the higher pooled ratio) and its compactness
+        e2 = ends(s, s["comps"][:, 1])
+        obs_end = "top" if np.median(s["ratio"][e2["top"]]) >= np.median(s["ratio"][e2["bottom"]]) else "bottom"
+        observed = comps[f"pc2_{obs_end}"]
+        target = observed["compactness"]
+        # random patches: white noise smoothed with the width whose patches match that compactness
+        widths = [2, 3, 4, 6, 8, 12, 16]
+        calib = {}
+        for w in widths:
+            cs = [_grid_compactness(s["x"], s["y"], ends(s, _random_field(s, w))["top"]) for _ in range(20)]
+            calib[w] = float(np.mean(cs))
+        width = min(widths, key=lambda w: abs(calib[w] - target))
+        null = []
+        for _ in range(n_random):
+            null.append(evaluate(s, ends(s, _random_field(s, width))["top"]))
+        nd = pd.DataFrame(null)
+        big = nd[nd.pooled_change.abs() >= abs(observed["pooled_change"])]
+
+        def p_two(col):
+            return float((1 + (nd[col].abs() >= abs(observed[col])).sum()) / (len(nd) + 1))
+
+        res["sections"][sec] = {
+            "n_spots": int(len(s["ratio"])), "cnv_pc_variance": s["var"].round(4).tolist(),
+            "components": comps, "observed": {"component": "pc2", "end": obs_end, **observed},
+            "null": {"width": width, "compactness_by_width": calib, "target_compactness": target,
+                     "compactness_median": float(nd.compactness.median()),
+                     "pooled_change_quantiles": nd.pooled_change.quantile([0.025, 0.5, 0.975]).round(4).tolist(),
+                     "resid_change_quantiles": nd.resid_change.quantile([0.025, 0.5, 0.975]).round(4).tolist(),
+                     "p_pooled": p_two("pooled_change"), "p_resid": p_two("resid_change"),
+                     "n_as_large": int(len(big)),
+                     "share_all_chroms_same_way_given_as_large":
+                         float((big.n_chroms_same_way == big.n_chroms).mean()) if len(big) else None,
+                     "share_all_chroms_same_way": float((nd.n_chroms_same_way == nd.n_chroms).mean()),
+                     "components_p_pooled": {k: float((1 + (nd.pooled_change.abs() >= abs(v["pooled_change"])).sum())
+                                                      / (len(nd) + 1)) for k, v in comps.items()},
+                     "components_p_resid": {k: float((1 + (nd.resid_change.abs() >= abs(v["resid_change"])).sum())
+                                                     / (len(nd) + 1)) for k, v in comps.items()}}}
+        log(f"  observed {obs_end}: pooled {observed['pooled_change']:+.4f}, resid {observed['resid_change']:+.4f}, "
+            f"chromosomes {observed['n_chroms_same_way']}/{observed['n_chroms']}; null width {width}: "
+            f"p_pooled {res['sections'][sec]['null']['p_pooled']:.3f}, p_resid {res['sections'][sec]['null']['p_resid']:.3f}, "
+            f"all chromosomes given as large {res['sections'][sec]['null']['share_all_chroms_same_way_given_as_large']}")
+    # the discovery section's component, carried to the others by its loadings
+    d = res["sections"][discovery]["observed"]
+    ref = loadings[discovery]["pc2"] * (1.0 if d["end"] == "top" else -1.0)
+    res["carried"] = {}
+    for sec, s in sections.items():
+        if sec == discovery:
+            continue
+        lo = loadings[sec].reindex(ref.index)
+        r = lo.apply(lambda c: float(np.corrcoef(c, ref)[0, 1]))
+        k = int(np.argmax(np.abs(r.to_numpy())))
+        comp = s["comps"][:, k] * np.sign(r.iloc[k])            # oriented like the discovery patch
+        ev = evaluate(s, ends(s, comp)["top"])
+        null = res["sections"][sec]["null"]
+        res["carried"][sec] = {"component": f"pc{k + 1}", "loading_correlation": float(r.iloc[k]),
+                               "all_loading_correlations": r.round(3).to_dict(), **ev,
+                               "p_pooled_vs_null": None, "p_resid_vs_null": None}
+        log(f"  carried to {sec}: pc{k + 1} (loading r {r.iloc[k]:+.2f}): pooled {ev['pooled_change']:+.4f}, "
+            f"resid {ev['resid_change']:+.4f}, chromosomes {ev['n_chroms_same_way']}/{ev['n_chroms']}")
+    # p values of the carried patches against their section's random patches (re-drawn, same width)
+    for sec, c in res["carried"].items():
+        s = sections[sec]
+        width = res["sections"][sec]["null"]["width"]
+        nd = pd.DataFrame([evaluate(s, ends(s, _random_field(s, width))["top"]) for _ in range(n_random)])
+        c["p_pooled_vs_null"] = float((1 + (nd.pooled_change.abs() >= abs(c["pooled_change"])).sum()) / (len(nd) + 1))
+        c["p_resid_vs_null"] = float((1 + (nd.resid_change.abs() >= abs(c["resid_change"])).sum()) / (len(nd) + 1))
+    save(results / f"patch_null_{TISSUE}.json", res, script=__file__, datasets=[DATASET, "spatial_hicrna"],
+         params=res["params"])
+
+
+# ------------------------------------------------------------------------------------------------------------
 # stage local: per-spot boundary insulation and loop strength (window counts of the pooled-map structures)
 # ------------------------------------------------------------------------------------------------------------
 def _cnv_pcs(out: Path, g: pd.DataFrame, n: int = 5):
@@ -1138,10 +1311,12 @@ def main(argv=None):
     ap.add_argument("--results", default=str(HERE / "results"))
     ap.add_argument("--figdata", default=None)
     ap.add_argument("--stages", default="features,regions,sv,summary",
-                    help="comma-separated: check, features, regions, sv, calibrate, cnv, cellcycle, patch, local, compartments, compartments_sv, summary (all: "
+                    help="comma-separated: check, features, regions, sv, calibrate, cnv, cellcycle, patch, patch_null, local, compartments, "
+                         "compartments_sv, summary (all: "
                          "every stage)")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--perms", type=int, default=999)
+    ap.add_argument("--random", type=int, default=1000, help="random patches of stage patch_null")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args(argv)
     configure(a.tissue)
@@ -1176,6 +1351,8 @@ def main(argv=None):
             stage_cellcycle(out)
         elif st == "patch":
             stage_patch(Path(a.stats), out)
+        elif st == "patch_null":
+            stage_patch_null(Path(a.stats), out, Path(a.results), n_random=a.random, seed=a.seed)
         elif st == "summary":
             stage_summary(out, Path(a.results), figdir)
         else:
