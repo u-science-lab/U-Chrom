@@ -64,6 +64,17 @@ chromosome; and a copy-number profile, each chromosome's share of the contact le
 .. automodule:: uchrom.fea.contact_stats
    :members:
 
+Proximity by genomic separation
+-------------------------------
+
+One per-cell summary from contacts or from traced coordinates: the contacts at short over long separations of the
+per-cell maps (``.scool`` or embedded), or the 3-D distances of locus pairs at long over short separations of the
+traces, separations measured midpoint to midpoint in both; optionally the whole profile per cell (contact decay or
+distance scaling).
+
+.. automodule:: uchrom.fea.separation
+   :members:
+
 Known structures scored per cell
 --------------------------------
 

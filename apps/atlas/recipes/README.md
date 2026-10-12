@@ -985,6 +985,9 @@ Figure 3 datasets.
   (E7.0 - E9.5) + 399 adult brain cells; per cell `.pairs.gz` and the authors' diploid 20 kb hickit
   structure (`*.20k.0.clean.3dg`, brain `*.20k.3dg`), coarse-grained to 200 kb (mean of each bin's
   particles per copy); RNA = the deposited UMI table.
+  - Brain only: fetch `hires2023_brain` (4.5 GB: the 426 brain cells' pairs and 20 kb structures on GEO, names
+    `ValaB8w*` / `ValbB8w*`, the 399 of the brain metadata among them; same paths as `hires2023`).  Used by
+    `benchmarks/cross_assay` (EMber reconstructions of the brain cells, on Sherlock).
   - Get it: fetch `hires2023_meta` (70 MB: cell metadata + RNA UMI counts) and `hires2023` (75 GB:
     per-cell pairs + 20 kb structures, 7,895 cells, two connections at a time); then
     `python apps/atlas/recipes/build_hires2023.py embryo [--workers 8]` and `... brain` →
@@ -1585,7 +1588,10 @@ centred on the Su loci), `takei_1mb.npz` (mESC onto 1 Mb bins centred on the Tak
   (→ `.chromdata.zarr`); `benchmarks/cd21_streaming_validation.py` (2.0 → 2.1, streaming
   `from_fofct(out=)` vs in memory, streaming distance maps vs the dense reference);
   `benchmarks/cd22_convert_validate.py` and `benchmarks/fig2/cd22_variants.py` (format 2.2);
-  `benchmarks/cell_spatial_validation.py` (cell positions).
+  `benchmarks/cell_spatial_validation.py` (cell positions); `benchmarks/cross_assay/cross_assay.py` (per-cell
+  distances at short / long separations by cell class, `cluster_class` / `cluster_subclass`; on Sherlock fetched
+  and built by `benchmarks/cross_assay/sherlock/liu2025.sbatch` into `$SCRATCH/uchrom-nd/data/liu2025_mop/`,
+  2026-10-11, the same 9,582,069 spots / 188,891 traces / 11,045 cells, `from_fofct` 40 s at 12.0 GB).
 
 ### `benchmarks/fig6/_data/`: scaled copies of Takei 2025 FOV 0 (derived)
 
