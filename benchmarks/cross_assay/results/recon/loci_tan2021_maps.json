@@ -1,0 +1,215 @@
+{
+ "results": {
+  "contrast": "ExN - Oligo",
+  "panels": {
+   "liu2025": 1917,
+   "takei2021": 2340
+  },
+  "imaging_cells": {
+   "liu2025": {
+    "ExN": 5097,
+    "Oligo": 1963
+   },
+   "takei2021": {
+    "ExN": 1895,
+    "Oligo": 78
+   }
+  },
+  "ceiling": {
+   "liu2025": {
+    "diff": {
+     "n_pairs": 101879,
+     "spearman": 0.7940132741767036
+    },
+    "resid": {
+     "n_pairs": 101879,
+     "spearman": 0.7396731701761787
+    },
+    "chromband": {
+     "n_pairs": 101879,
+     "spearman": 0.7124774111920797
+    },
+    "pair": {
+     "n_pairs": 101879,
+     "spearman": 0.5845668689944997
+    }
+   },
+   "takei2021": {
+    "diff": {
+     "n_pairs": 94997,
+     "spearman": 0.04962276083899591
+    },
+    "resid": {
+     "n_pairs": 94997,
+     "spearman": 0.04189035522993867
+    },
+    "chromband": {
+     "n_pairs": 94997,
+     "spearman": 0.02966141564776021
+    },
+    "pair": {
+     "n_pairs": 94997,
+     "spearman": 0.029653096756711624
+    }
+   },
+   "liu2025_hap": {
+    "diff": {
+     "n_pairs": 101291,
+     "spearman": 0.6232107221934358
+    },
+    "resid": {
+     "n_pairs": 101291,
+     "spearman": 0.5494351303647474
+    },
+    "chromband": {
+     "n_pairs": 101291,
+     "spearman": 0.5202679709837115
+    },
+    "pair": {
+     "n_pairs": 101291,
+     "spearman": 0.44334354952119387
+    }
+   },
+   "takei2021_hap": {
+    "diff": {
+     "n_pairs": 151847,
+     "spearman": 0.6374953858730001
+    },
+    "resid": {
+     "n_pairs": 151847,
+     "spearman": 0.562395159767161
+    },
+    "chromband": {
+     "n_pairs": 151847,
+     "spearman": 0.5379286536791494
+    },
+    "pair": {
+     "n_pairs": 151847,
+     "spearman": 0.45190311863971505
+    }
+   }
+  },
+  "variants": {
+   "hap": {
+    "cells": {
+     "ExN": 214,
+     "Oligo": 74
+    },
+    "liu2025": {
+     "diff": {
+      "n_pairs": 101291,
+      "spearman": 0.6293063630421019
+     },
+     "resid": {
+      "n_pairs": 101291,
+      "spearman": 0.5753395371829457
+     },
+     "chromband": {
+      "n_pairs": 101291,
+      "spearman": 0.5830628379318734
+     },
+     "pair": {
+      "n_pairs": 101291,
+      "spearman": 0.5478078539892278
+     }
+    },
+    "takei2021": {
+     "diff": {
+      "n_pairs": 142458,
+      "spearman": 0.08404038105691967
+     },
+     "resid": {
+      "n_pairs": 142458,
+      "spearman": 0.0724454372064094
+     },
+     "chromband": {
+      "n_pairs": 142458,
+      "spearman": 0.07628014909498915
+     },
+     "pair": {
+      "n_pairs": 142458,
+      "spearman": 0.08146917929294396
+     }
+    },
+    "shuffled_labels": {
+     "liu2025": {
+      "diff": {
+       "n_pairs": 101291,
+       "spearman": -0.07226095992846428
+      },
+      "resid": {
+       "n_pairs": 101291,
+       "spearman": -0.06309003066619812
+      },
+      "chromband": {
+       "n_pairs": 101291,
+       "spearman": -0.054322818404242225
+      },
+      "pair": {
+       "n_pairs": 101291,
+       "spearman": -0.023383106891378878
+      }
+     },
+     "takei2021": {
+      "diff": {
+       "n_pairs": 142458,
+       "spearman": 0.007731954201283576
+      },
+      "resid": {
+       "n_pairs": 142458,
+       "spearman": 0.009611971982763614
+      },
+      "chromband": {
+       "n_pairs": 142458,
+       "spearman": 0.012638609841598604
+      },
+      "pair": {
+       "n_pairs": 142458,
+       "spearman": 0.005926669403107875
+      }
+     }
+    }
+   }
+  }
+ },
+ "provenance": {
+  "revision": "ad8aa0f+uncommitted:recon.py-3511152cross_assay.py-b399354d-dipfrozen-cpu",
+  "date": "2026-10-12T00:24:12+00:00",
+  "host": "sh03-01n61.int",
+  "cpu": "AMD EPYC 7502 32-Core Processor",
+  "cpus": 8,
+  "slurm_job": "47431134",
+  "load_avg_1min": 21.96,
+  "versions": {
+   "python": "3.12.1",
+   "numpy": "2.2.6",
+   "scipy": "1.14.1",
+   "pandas": "2.2.3",
+   "cooler": "0.10.4",
+   "zarr": "3.4.0",
+   "torch": "2.5.1+cu124",
+   "uchrom": "0.3.0.dev0",
+   "chromdata": "0.1.0"
+  },
+  "script": "benchmarks/cross_assay/recon.py",
+  "datasets": [
+   "tan2021_cortex",
+   "liu2025_mop",
+   "takei2021_brain"
+  ],
+  "params": {
+   "dataset": "tan2021_maps",
+   "contrast": [
+    "ExN",
+    "Oligo"
+   ],
+   "sep_bands_bp": [
+    1000000.0,
+    200000000.0,
+    25
+   ],
+   "seed": 0,
+   "stat": "median (distance_map)"
+  }
+ }
+}

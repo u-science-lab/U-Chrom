@@ -6,6 +6,9 @@
 | `pilot.md` | The summary table of `pilot.json` | same |
 | `cross_assay.json` | Steps 1-2 (`cross_assay.py`): the same statistics with every per-cell value from `uchrom.fea.separation_profile`, Liu 2025 added, Astro - Oligo per dataset; Kendall's W with Liu.  `{"results", "provenance"}`; `results.stage_logs.check` = the library against the pilot's tables | 2026-10-11, Sherlock job 47403340 (see below) |
 | `cross_assay.md` | The summary tables of `cross_assay.json` | same |
+| `recon/recon_<dataset>.json` | EMber reconstructions (`recon.py`, stage analyze): per variant the ExN - Oligo difference of the log2 long / short distance ratio (bootstrap CI, Cliff's delta), class ranking, scaling exponents 2-50 Mb, agreement with `dip`; the imaging datasets alongside | 2026-10-11, see "Distance space" below |
+| `recon/loci_<dataset>.json` | Stage loci: the ExN - Oligo difference of the median distance of every cis pair of the Liu 2025 / Takei 2021 loci, imaging against each reconstruction (Spearman: detrended by separation `resid`, per chromosome and separation `chromband`, pair-specific `pair`), split-half ceilings, shuffled labels | same |
+| `recon_summary.{json,md}` | `recon_summary.py`: one table of all datasets, with Spearman-Brown disattenuated agreement | same |
 
 ## Run 2026-10-11
 
@@ -65,3 +68,54 @@ The archive of job 47390689 in `..._pilot_47390689/` is superseded.
   differs only by the later `figure` stage (the functions `_cliff`, `_cliff_ci`, `_per_cell`, `_figdata`,
   `stage_figure`, the option `--figdata`); `fea/separation.py` (`9782acd1`) and `pilot.py` (`bd31a485`) are committed
   as run.
+
+## Run 2026-10-11, distance space (`recon.py`, EMber)
+
+- **Engine**: the frozen EMber build `dipfrozen` (tag ember-diploid-frozen; wheel `u_chrom_nucdyn-0.1.0`, sha256
+  `93a2b33d…`), imported as `uchrom_recon` through `sherlock/engine_shim` (the build predates the rename; the screcon
+  runners differ from its own only by the import name).  Every run on **CPU** (f64; `recon_cpu.sbatch`, 16 cores,
+  `xiaojie,normal`), each reconstruction in its own process.  1 Mb, 2 models (model 0 analysed), seed 1.
+- **GPU attempts, not used**: job 47414760 (GPU array) stopped finding a wgpu adapter after ~26 runs within one process
+  ("no GPU adapter"); its ~6 cells per variant are kept aside in `$SCRATCH/uchrom-nd/runs/xassay/recon_tan_gpu_partial`.
+  Device check (smoke cells cortex-p056-cb_001/002, GPU job 47414123 vs CPU job 47416684): per-cell log2 ratios differ
+  by 0.005-0.04, as model 0 and model 1 of one device do.
+- **Data**: Tan 2021 pairs (`tan2021_cortex`, phased); HiRES brain pairs fetched by job 47412636
+  (`sherlock/hires_brain.sbatch`, registry `hires2023_brain`: 852 files, 4.3 GB, md5 list `cells_brain_md5.txt`
+  next to them; GEO gives none); the atlas per-cell 1-Mb maps (stage maps: cells with >= 15,000 cis contacts, <= 300
+  per class, ends drawn uniformly in their bin -- checked locally on HiRES: re-binned pixels equal the map's, 93,281
+  pixels / 525,974 contacts).
+- **Jobs**: Tan 2021 pairs: array 47417352 (24 x ~40 min) + collect/analyze/loci 47417353 (loci rerun with the
+  stricter detrending by 47431131); HiRES: array 47424140 + 47431130; 1-Mb maps (maps / run array / collect):
+  Tan 47431132 / 47431133 / 47431134, GAGE-seq 47431135 / 47431136 / 47431137, dscHi-C 47431138 / 47431139 / 47431140,
+  Droplet Hi-C 47431141 / 47431142 / 47431143, scHiCAR 47431144 / 47431145 / 47431146.  Cells reconstructed: Tan 435,
+  HiRES 399, GAGE-seq 1,235, dscHi-C 1,800, Droplet 1,470, scHiCAR 916.
+- **Code**: `recon.py` md5 `3511152c` for every result file except `recon_tan2021.json` (`4b378a2f`: before the maps
+  stage, the stricter detrending and the subprocess runs, analysis identical); `cross_assay.py` `b399354d`,
+  `fea/separation.py` `9782acd1`.  The `provenance.revision` strings lost parts on submission (zsh parameter modifiers
+  `$M1:c…` / `$M2:s…` in the submitting shell): `…recon.py-3511152cross_assay.py-b399354d-dipfrozen-cpu` stands for
+  `ad8aa0f+uncommitted:recon.py-3511152c:cross_assay.py-b399354d:separation.py-9782acd1:engine-dipfrozen-cpu`.
+- **Archives**: `$OAK/uchrom/results/cross_assay/2026-10-11_recon_<dataset>_<job>/recon_<dataset>.tar.gz` (models,
+  logs, per-cell tables, locus tables) for tan2021 (47417353), hires_brain (47431130), tan2021_maps (47431134),
+  gageseq_mouse_cortex (47431137), dschic_aging_cortex (47431140), droplet_hic_mouse_cortex (47431143),
+  schicar_mouse_cortex (47431146); the ChromData stores stay in `$SCRATCH/uchrom-nd/runs/xassay/recon_*`.
+
+## Run 2026-10-11/12, single cells, all class pairs, explanations, figure inputs
+
+| File | What | Run |
+|---|---|---|
+| `transfer.json` | `transfer.py`: locus signatures (ExN - Oligo difference maps) scored on single cells of another source; AUROC with bootstrap CI | Sherlock job 47464126 (smoke 47463000), `transfer.py` md5 as synced (see below) |
+| `recon/loci_all_<dataset>.json` | `recon.py` stage loci_all: every pair of the six classes, imaging against the dataset's reference reconstruction, imaging split-half | jobs 47463055, 47463059, 47463060, 47463061, 47463063, 47463065 (`recon.py` `3b690fc8`) |
+| `biology.json` | `biology.py`: per-locus effects against the expression difference of genes within 500 kb (RNA of GAGE-seq, HiRES, scHiCAR; UCSC mm10 refGene) -- no relation | run locally (light: the locus tables and the panel copied through the DTN; `anndata` is not in the Sherlock venvs) |
+| `compartments.json` | `compartments.py`: matched-depth pseudo-bulk maps of ExN and Oligo (dscHi-C, GAGE-seq), eigenvectors oriented by GC, saddle strengths; A/B explains 4 % (imaging) / 9-12 % (consensus) of the pair differences | job 47469287 (`compartments.py` `18408f74`) |
+
+- Figure inputs: `figdata.py` (local) -> u-chrom-paper `manuscripts/nmeth-bc/figures/results/cross_assay_ed_*`, read
+  by `figures/make_ed_cross_assay.py` (Extended Data Figs. 3 and 4).
+- The locus panel of the local runs is `$SCRATCH/uchrom-nd/runs/xassay/liu2025_panel.parquet` (the Liu 2025 store's
+  bins); the per-cell scores `$SCRATCH/uchrom-nd/runs/xassay/transfer/scores_*.parquet`.
+- Example structures (Extended Data Fig. 3d): `structures.py`, job 47525959 (the first try, 47525588, required 80 %
+  of chromosome 2's loci in an imaged copy and found none: detection is about half per copy) ->
+  `$SCRATCH/uchrom-nd/runs/xassay/structures/cross_assay_ed_structures.parquet`, copied through the DTN to the
+  paper's `figures/results/`.  Cells: imaging ExN 103 / Oligo 99 of 148 loci; Dip-C cortex-p309-bc_153 /
+  cortex-p056-cb_054; scHiCAR CCCTACATCGATGGAAGA / CCCTACTTCTCCAACAGA; each at its class median score.
+- The locus panel of the figure (`figures/results/cross_assay_ed_panel.parquet`: the Liu 2025 store's bins, chrom /
+  start / end) is a copy of `$SCRATCH/uchrom-nd/runs/xassay/liu2025_panel.parquet`.

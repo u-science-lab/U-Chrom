@@ -985,6 +985,9 @@ Figure 3 datasets.
   (E7.0 - E9.5) + 399 adult brain cells; per cell `.pairs.gz` and the authors' diploid 20 kb hickit
   structure (`*.20k.0.clean.3dg`, brain `*.20k.3dg`), coarse-grained to 200 kb (mean of each bin's
   particles per copy); RNA = the deposited UMI table.
+  - Brain only: fetch `hires2023_brain` (4.5 GB: the 426 brain cells' pairs and 20 kb structures on GEO, names
+    `ValaB8w*` / `ValbB8w*`, the 399 of the brain metadata among them; same paths as `hires2023`).  Used by
+    `benchmarks/cross_assay` (EMber reconstructions of the brain cells, on Sherlock).
   - Get it: fetch `hires2023_meta` (70 MB: cell metadata + RNA UMI counts) and `hires2023` (75 GB:
     per-cell pairs + 20 kb structures, 7,895 cells, two connections at a time); then
     `python apps/atlas/recipes/build_hires2023.py embryo [--workers 8]` and `... brain` →

@@ -91,6 +91,24 @@ It adds Astro - Oligo per dataset (Takei 2021 put Oligo above Astro, the reverse
 analyze`; the code from a repository copy synced through the DTN, the pilot's sets and tables as inputs), archived
 to `$OAK/uchrom/results/cross_assay/<date>_full_<job>/`; results `results/cross_assay.json` / `.md`.
 
+## Distance space: EMber reconstructions (`recon.py`)
+
+Single-cell Hi-C reconstructed with the frozen EMber (1 Mb, CPU), stored as ChromData and summarised by the same
+`separation_profile` call as the imaging data; then, per cis pair of the Liu 2025 imaging loci, the ExN - Oligo
+difference of the median distance (`uchrom.fea.distance_map`) in imaging and in each reconstruction.
+
+- Diploid where the contacts are phased (Tan 2021 Dip-C, HiRES), and as a calibration haploid on the same contacts,
+  down-sampled to 150k / 45k / 20k cis contacts, and from Tan's 1-Mb maps; haploid from the atlas 1-Mb maps for the
+  inbred datasets (GAGE-seq, dscHi-C, Droplet Hi-C, scHiCAR).  The authors' structures (Dip-C, hickit) on the same
+  grid as a reference.
+- Results (`results/recon_summary.md`): every reconstruction ranks the classes as imaging does (Droplet swaps ExN
+  and InN); ExN - Oligo +0.19 to +0.30 (imaging +0.27); the locus-level difference maps agree with imaging,
+  Spearman 0.54-0.69 after detrending by separation (0.50-0.63 pair-specific; shuffled labels -0.08), which is
+  0.69-0.87 of the agreement their split-half reliabilities allow (Spearman-Brown).  Haploid reconstructions keep the
+  ranking and most of the locus pattern but their effect size drifts with depth (0.20 -> 0.35 from all contacts to
+  20k): compare directions, rankings and patterns across datasets, not sizes.  Takei 2021 is too noisy at the locus
+  level (split-half 0.04).
+
 ## Datasets
 
 All datasets are registered:
@@ -98,4 +116,6 @@ All datasets are registered:
 - the atlas stores `hires_brain`, `gageseq_mouse_cortex`, `droplet_hic_mouse_cortex`, `paired_hic_mouse_cortex`, `dschic_aging_cortex`, `schicar_mouse_cortex` and `hicrna_mouse_brain`, read over HTTP;
 - `tan2021_cortex` (GEO GSE146397);
 - `takei2021_brain` (Zenodo 4708112, Table S7);
-- `liu2025_mop` (4DN `4DNFID46OABK` + `4DNFICX8IVEK`, fetched with md5 checks; `apps/atlas/recipes/README.md`).
+- `liu2025_mop` (4DN `4DNFID46OABK` + `4DNFICX8IVEK`, fetched with md5 checks; `apps/atlas/recipes/README.md`);
+- `hires2023_brain` (the 426 HiRES brain cells' pairs and structures, GEO GSE223917; cells of the authors' metadata in
+  `data/hires_brain_cells.tsv`, from the atlas store `hires_brain`).

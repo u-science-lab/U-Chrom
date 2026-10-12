@@ -1,0 +1,187 @@
+{
+ "results": {
+  "datasets": {
+   "dschic_aging_cortex": {
+    "depth_cis": 258776451.75,
+    "n_cells": {
+     "ExN": 4795,
+     "Oligo": 4519
+    },
+    "saddle_strength": {
+     "ExN": 3.3267670334473336,
+     "Oligo": 4.152770638915592
+    },
+    "E1_ExN_vs_Oligo_spearman": 0.9124180129179338,
+    "E1_ExN_vs_Oligo_per_chrom": {
+     "chr1": 0.8924851888588049,
+     "chr2": 0.9355922665702,
+     "chr3": 0.7979370268118764,
+     "chr4": 0.94652445483435,
+     "chr5": 0.9624408581243113,
+     "chr6": 0.9616545343330861,
+     "chr7": 0.934046998806035,
+     "chr8": 0.9235837241138264,
+     "chr9": 0.9323485165537446,
+     "chr10": 0.9068091814371948,
+     "chr11": 0.970328263739808,
+     "chr12": 0.9026820930844072,
+     "chr13": 0.8690460589708999,
+     "chr14": 0.9243461064885639,
+     "chr15": 0.9600598793154004,
+     "chr16": 0.8979550891272473,
+     "chr17": 0.8826512277899778,
+     "chr18": 0.6485758198766443,
+     "chr19": 0.9674309442137571
+    },
+    "n_pairs": 97935,
+    "imaging": {
+     "spearman_minus_P_ExN": -0.0545532249066898,
+     "spearman_minus_P_Oligo": -0.1514463739513444,
+     "spearman_minus_dP": 0.1853823479161627,
+     "r2_linear_P_ExN_P_Oligo": 0.0433371281509366,
+     "coef_P_ExN_P_Oligo": [
+      -0.07652734808720486,
+      0.10883646276463488
+     ],
+     "mean_by_type": {
+      "AA": 0.018848415176676184,
+      "AB": -0.0018609137544209362,
+      "BB": -0.021362373621077596
+     },
+     "n_by_type": {
+      "AA": 30599,
+      "AB": 47286,
+      "BB": 20050
+     }
+    },
+    "consensus": {
+     "spearman_minus_P_ExN": -0.116522412469232,
+     "spearman_minus_P_Oligo": -0.2484834548641053,
+     "spearman_minus_dP": 0.26590177075017796,
+     "r2_linear_P_ExN_P_Oligo": 0.0916407193543124,
+     "coef_P_ExN_P_Oligo": [
+      -0.9963508416311946,
+      1.3836027763423768
+     ],
+     "mean_by_type": {
+      "AA": 0.07123883256618306,
+      "AB": -0.06931488896628095,
+      "BB": 0.07519607475399763
+     },
+     "n_by_type": {
+      "AA": 30599,
+      "AB": 47286,
+      "BB": 20050
+     }
+    }
+   },
+   "gageseq_mouse_cortex": {
+    "depth_cis": 21670170.7,
+    "n_cells": {
+     "Oligo": 171,
+     "ExN": 116
+    },
+    "saddle_strength": {
+     "ExN": 4.806238617462961,
+     "Oligo": 6.9367608490458625
+    },
+    "E1_ExN_vs_Oligo_spearman": 0.8047434339440954,
+    "E1_ExN_vs_Oligo_per_chrom": {
+     "chr1": 0.652499914562045,
+     "chr2": 0.8206302690012395,
+     "chr3": 0.7890618383834961,
+     "chr4": 0.8897117111013249,
+     "chr5": 0.8677773068992412,
+     "chr6": 0.9208137372853548,
+     "chr7": 0.8206338868989471,
+     "chr8": 0.7626744290730126,
+     "chr9": 0.8390209141603232,
+     "chr10": 0.8151793609904264,
+     "chr11": 0.8769993650409699,
+     "chr12": 0.6843023917635304,
+     "chr13": 0.738816727693197,
+     "chr14": 0.843238711915361,
+     "chr15": 0.8192649089354987,
+     "chr16": 0.7466628717802761,
+     "chr17": 0.791205176006141,
+     "chr18": 0.4835026647238468,
+     "chr19": 0.6787867846181621
+    },
+    "n_pairs": 99222,
+    "imaging": {
+     "spearman_minus_P_ExN": -0.045512676145569385,
+     "spearman_minus_P_Oligo": -0.17913292488613802,
+     "spearman_minus_dP": 0.15560711785702896,
+     "r2_linear_P_ExN_P_Oligo": 0.03937731963591329,
+     "coef_P_ExN_P_Oligo": [
+      -0.025895050501034918,
+      0.05866191410108401
+     ],
+     "mean_by_type": {
+      "AA": 0.013947100913206289,
+      "AB": -0.0007009746920713081,
+      "BB": -0.018438924062640406
+     },
+     "n_by_type": {
+      "AA": 34342,
+      "AB": 47815,
+      "BB": 17065
+     }
+    },
+    "consensus": {
+     "spearman_minus_P_ExN": -0.08200772195823783,
+     "spearman_minus_P_Oligo": -0.30878481503235533,
+     "spearman_minus_dP": 0.2806295200091238,
+     "r2_linear_P_ExN_P_Oligo": 0.11569260156294481,
+     "coef_P_ExN_P_Oligo": [
+      -0.4569081186381634,
+      0.8886315749340404
+     ],
+     "mean_by_type": {
+      "AA": 0.041898945886447936,
+      "AB": -0.036675925424759295,
+      "BB": 0.07171034720509586
+     },
+     "n_by_type": {
+      "AA": 34342,
+      "AB": 47815,
+      "BB": 17065
+     }
+    }
+   }
+  }
+ },
+ "provenance": {
+  "revision": "ad8aa0f+uncommitted:compartments.py-18408f74",
+  "date": "2026-10-12T06:50:52+00:00",
+  "host": "sh04-05n13.int",
+  "cpu": "AMD EPYC 9754 128-Core Processor",
+  "cpus": 8,
+  "slurm_job": "47469287",
+  "load_avg_1min": 52.08,
+  "versions": {
+   "python": "3.12.1",
+   "numpy": "2.2.6",
+   "scipy": "1.14.1",
+   "pandas": "2.2.3",
+   "cooler": "0.10.4",
+   "zarr": "3.4.0",
+   "torch": "2.5.1+cu124",
+   "uchrom": "0.3.0.dev0",
+   "chromdata": "0.1.0"
+  },
+  "script": "benchmarks/cross_assay/compartments.py",
+  "datasets": [
+   "dschic_aging_cortex",
+   "gageseq_mouse_cortex",
+   "liu2025_mop"
+  ],
+  "params": {
+   "resolution": 1000000,
+   "phasing": "GC content (mm10 FASTA)",
+   "depth": "matched cis contacts",
+   "seed": 0,
+   "targets": "recon.py loci resid: imaging; z-mean of the reference reconstructions"
+  }
+ }
+}

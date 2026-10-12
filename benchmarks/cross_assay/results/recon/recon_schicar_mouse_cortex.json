@@ -1,0 +1,315 @@
+{
+ "results": {
+  "variants": {
+   "hap": {
+    "n_cells": 916,
+    "dist_ratio": {
+     "n_by_class": {
+      "Astro": 125,
+      "ExN": 300,
+      "InN": 291,
+      "Micro": 55,
+      "OPC": 51,
+      "Oligo": 94
+     },
+     "median_by_class": {
+      "ExN": 1.840717731370657,
+      "InN": 1.8711878294839188,
+      "Astro": 1.6429631123942365,
+      "Oligo": 1.5964157035543787,
+      "OPC": 1.765445333867051,
+      "Micro": 1.5596773988591468
+     },
+     "ranking_high_to_low": [
+      "InN",
+      "ExN",
+      "OPC",
+      "Astro",
+      "Oligo",
+      "Micro"
+     ],
+     "contrast": {
+      "a": "ExN",
+      "b": "Oligo",
+      "n_a": 300,
+      "n_b": 94,
+      "median_a": 1.840717731370657,
+      "median_b": 1.5964157035543787,
+      "diff": 0.2443020278162784,
+      "ci95": [
+       0.21315085915340848,
+       0.2732371967938441
+      ],
+      "cliffs_delta": 0.7078014184397163,
+      "mannwhitney_p": 3.8488830389827473e-25
+     }
+    },
+    "exn_minus_oligo_cliff": {
+     "cliffs_delta": 0.7078014184397163,
+     "ci95": [
+      0.6108882978723403,
+      0.7918528368794325
+     ],
+     "n_a": 300,
+     "n_b": 94
+    },
+    "astro_minus_oligo_cliff": {
+     "cliffs_delta": 0.1392340425531915,
+     "ci95": [
+      -0.003914893617021242,
+      0.29536595744680844
+     ],
+     "n_a": 125,
+     "n_b": 94
+    },
+    "exponent_2_50mb": {
+     "ExN": 0.21425098897747097,
+     "InN": 0.22139251690963296,
+     "Astro": 0.18798060642389147,
+     "Oligo": 0.19495562062741792,
+     "OPC": 0.20091674196743994,
+     "Micro": 0.1662532210112677
+    }
+   }
+  },
+  "imaging": {
+   "liu2025_mop": {
+    "dist_ratio": {
+     "n_by_class": {
+      "Astro": 1148,
+      "ExN": 5034,
+      "InN": 750,
+      "Micro": 390,
+      "OPC": 310,
+      "Oligo": 1930
+     },
+     "median_by_class": {
+      "ExN": 1.1640182223708435,
+      "InN": 1.2618206568208543,
+      "Astro": 0.9600945298587253,
+      "Oligo": 0.8983766820006259,
+      "OPC": 1.0689213953956154,
+      "Micro": 0.8112988303128349
+     },
+     "ranking_high_to_low": [
+      "InN",
+      "ExN",
+      "OPC",
+      "Astro",
+      "Oligo",
+      "Micro"
+     ],
+     "contrast": {
+      "a": "ExN",
+      "b": "Oligo",
+      "n_a": 5034,
+      "n_b": 1930,
+      "median_a": 1.1640182223708435,
+      "median_b": 0.8983766820006259,
+      "diff": 0.2656415403702176,
+      "ci95": [
+       0.2592842999492363,
+       0.2741563220205885
+      ],
+      "cliffs_delta": 0.7892241565643778,
+      "mannwhitney_p": 0.0
+     },
+     "contrast_depth_adjusted": {
+      "diff": 0.2551445894166292,
+      "ci95": [
+       0.2472782264591304,
+       0.2631655303187796
+      ],
+      "depth_slope": 0.02026035119905023,
+      "classes_in_model": [
+       "Astro",
+       "ExN",
+       "InN",
+       "Micro",
+       "OPC",
+       "Oligo"
+      ]
+     }
+    },
+    "exponent_2_50mb": {
+     "ExN": 0.2156733967547323,
+     "InN": 0.24652822051733106,
+     "Astro": 0.1902408413269008,
+     "Oligo": 0.18503137963485458,
+     "OPC": 0.21293055784137047,
+     "Micro": 0.1589025801278395
+    }
+   },
+   "takei2021_brain_labels": {
+    "dist_ratio": {
+     "n_by_class": {
+      "Astro": 122,
+      "ExN": 1662,
+      "InN": 264,
+      "Micro": 73,
+      "Oligo": 60
+     },
+     "median_by_class": {
+      "ExN": 1.305365857333185,
+      "InN": 1.3391218247276244,
+      "Astro": 0.9513402418806778,
+      "Oligo": 1.1131004094207126,
+      "Micro": 0.6962576514545264
+     },
+     "ranking_high_to_low": [
+      "InN",
+      "ExN",
+      "Oligo",
+      "Astro",
+      "Micro"
+     ],
+     "contrast": {
+      "a": "ExN",
+      "b": "Oligo",
+      "n_a": 1662,
+      "n_b": 60,
+      "median_a": 1.305365857333185,
+      "median_b": 1.1131004094207126,
+      "diff": 0.19226544791247235,
+      "ci95": [
+       0.08481948293850482,
+       0.31692792198381037
+      ],
+      "cliffs_delta": 0.5715202567188127,
+      "mannwhitney_p": 5.048387709942378e-14
+     },
+     "contrast_depth_adjusted": {
+      "diff": 0.19624256493488512,
+      "ci95": [
+       0.12584914585164542,
+       0.2604082476273617
+      ],
+      "depth_slope": 0.07406822768332866,
+      "classes_in_model": [
+       "Astro",
+       "ExN",
+       "InN",
+       "Micro",
+       "Oligo"
+      ]
+     }
+    },
+    "exponent_2_50mb": {
+     "ExN": 0.208431448663376,
+     "InN": 0.21659035110728714,
+     "Astro": 0.1432068287729889,
+     "Oligo": 0.17854601121162508,
+     "Micro": 0.11479053110763379
+    }
+   },
+   "tan2021_dipc_rep1": {
+    "dist_ratio": {
+     "n_by_class": {
+      "Astro": 30,
+      "ExN": 214,
+      "InN": 56,
+      "Micro": 37,
+      "OPC": 24,
+      "Oligo": 74
+     },
+     "median_by_class": {
+      "ExN": 1.292709290114943,
+      "InN": 1.4052058012861273,
+      "Astro": 1.0937023502353642,
+      "Oligo": 1.0486268778212473,
+      "OPC": 1.2846637690341978,
+      "Micro": 0.914163126535561
+     },
+     "ranking_high_to_low": [
+      "InN",
+      "ExN",
+      "OPC",
+      "Astro",
+      "Oligo",
+      "Micro"
+     ],
+     "contrast": {
+      "a": "ExN",
+      "b": "Oligo",
+      "n_a": 214,
+      "n_b": 74,
+      "median_a": 1.292709290114943,
+      "median_b": 1.0486268778212473,
+      "diff": 0.24408241229369576,
+      "ci95": [
+       0.22803431006538338,
+       0.26375352183954076
+      ],
+      "cliffs_delta": 0.9974741096236424,
+      "mannwhitney_p": 1.909029600956594e-37
+     },
+     "contrast_depth_adjusted": {
+      "diff": 0.2476965230544541,
+      "ci95": [
+       0.23361627092197873,
+       0.2616535868939728
+      ],
+      "depth_slope": -29.89788057950894,
+      "classes_in_model": [
+       "Astro",
+       "ExN",
+       "InN",
+       "Micro",
+       "OPC",
+       "Oligo"
+      ]
+     }
+    },
+    "exponent_2_50mb": {
+     "ExN": 0.2133378123684728,
+     "InN": 0.23717557376468615,
+     "Astro": 0.18097775650068396,
+     "Oligo": 0.1853198829487131,
+     "OPC": 0.21292461177267671,
+     "Micro": 0.15249269019785416
+    }
+   }
+  }
+ },
+ "provenance": {
+  "revision": "ad8aa0f+uncommitted:recon.py-3511152cross_assay.py-b399354d-dipfrozen-cpu",
+  "date": "2026-10-11T23:54:33+00:00",
+  "host": "sh03-08n27.int",
+  "cpu": "AMD EPYC 7543 32-Core Processor",
+  "cpus": 8,
+  "slurm_job": "47431146",
+  "load_avg_1min": 7.21,
+  "versions": {
+   "python": "3.12.1",
+   "numpy": "2.2.6",
+   "scipy": "1.14.1",
+   "pandas": "2.2.3",
+   "cooler": "0.10.4",
+   "zarr": "3.4.0",
+   "torch": "2.5.1+cu124",
+   "uchrom": "0.3.0.dev0",
+   "chromdata": "0.1.0"
+  },
+  "script": "benchmarks/cross_assay/recon.py",
+  "datasets": [
+   "schicar_mouse_cortex",
+   "liu2025_mop",
+   "takei2021_brain"
+  ],
+  "params": {
+   "dataset": "schicar_mouse_cortex",
+   "res": 1000000,
+   "n_models": 2,
+   "seed": 1,
+   "depths_cis": [
+    150000,
+    45000,
+    20000
+   ],
+   "variants": [
+    "hap"
+   ],
+   "engine": "dipfrozen (EMber frozen, ember-diploid-frozen)"
+  }
+ }
+}

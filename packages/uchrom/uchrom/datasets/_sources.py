@@ -625,6 +625,16 @@ DATASETS = {
         "parallel": 2,
         "description": "HiRES per-cell contact pairs + 20 kb structures, 7,895 cells (GSE223917)",
     },
+    # the adult brain cells of hires2023 only (names ValaB8w* / ValbB8w*: 426 cells on GEO, of which the 399 of
+    # GSE223917_HiRES_brain_metadata passed the authors' QC), at the same paths
+    "hires2023_brain": {
+        "files": lambda: [(f"hires2023/raw/GSE223917/cells/{n}", _gsm(n))
+                          for n in _geo_filelist("GSE223917", r"^GSM\d+_Val[ab]B8w\d+\.(pairs\.gz|20k\.3dg\.txt\.gz)$")],
+        "size_mb": 4500,
+        "default": False,
+        "parallel": 2,
+        "description": "HiRES adult brain: per-cell contact pairs + 20 kb diploid structures, 426 cells (GSE223917)",
+    },
     "dschic2025_aging": {
         "files": [(f"dschic2025/raw/GSE285812/{n}", _gsm(n)) for n in _DSCHIC_AGING],
         "size_mb": 44000,

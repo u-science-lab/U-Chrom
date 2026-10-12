@@ -1,0 +1,696 @@
+{
+ "results": {
+  "variant": "hap",
+  "cells": {
+   "Astro": [
+    1176,
+    113
+   ],
+   "ExN": [
+    5097,
+    300
+   ],
+   "InN": [
+    759,
+    300
+   ],
+   "Micro": [
+    396,
+    216
+   ],
+   "OPC": [
+    311,
+    300
+   ],
+   "Oligo": [
+    1963,
+    241
+   ]
+  },
+  "pairs": {
+   "InN-ExN": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101284,
+      "spearman": 0.2333369023316524
+     },
+     "resid": {
+      "n_pairs": 101284,
+      "spearman": 0.22554931048322036
+     },
+     "chromband": {
+      "n_pairs": 101284,
+      "spearman": 0.1630654733522052
+     },
+     "pair": {
+      "n_pairs": 101284,
+      "spearman": 0.12821164064145113
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101805,
+      "spearman": 0.2771928727687718
+     },
+     "resid": {
+      "n_pairs": 101805,
+      "spearman": 0.23040333085242773
+     },
+     "chromband": {
+      "n_pairs": 101805,
+      "spearman": 0.17469156981304088
+     },
+     "pair": {
+      "n_pairs": 101805,
+      "spearman": 0.11823427105603891
+     }
+    }
+   },
+   "ExN-OPC": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101282,
+      "spearman": 0.3381654001964903
+     },
+     "resid": {
+      "n_pairs": 101282,
+      "spearman": 0.2874876320233324
+     },
+     "chromband": {
+      "n_pairs": 101282,
+      "spearman": 0.27171969228428894
+     },
+     "pair": {
+      "n_pairs": 101282,
+      "spearman": 0.24091644127308956
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101805,
+      "spearman": 0.19482709307194782
+     },
+     "resid": {
+      "n_pairs": 101805,
+      "spearman": 0.16868893723568668
+     },
+     "chromband": {
+      "n_pairs": 101805,
+      "spearman": 0.14561797955939584
+     },
+     "pair": {
+      "n_pairs": 101805,
+      "spearman": 0.09948484150627443
+     }
+    }
+   },
+   "ExN-Astro": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101291,
+      "spearman": 0.5104094011907826
+     },
+     "resid": {
+      "n_pairs": 101291,
+      "spearman": 0.3813826393782122
+     },
+     "chromband": {
+      "n_pairs": 101291,
+      "spearman": 0.425383474760203
+     },
+     "pair": {
+      "n_pairs": 101291,
+      "spearman": 0.40467785189781047
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101879,
+      "spearman": 0.5201229537225796
+     },
+     "resid": {
+      "n_pairs": 101879,
+      "spearman": 0.4268115694034808
+     },
+     "chromband": {
+      "n_pairs": 101879,
+      "spearman": 0.3875047859585639
+     },
+     "pair": {
+      "n_pairs": 101879,
+      "spearman": 0.30874342327766685
+     }
+    }
+   },
+   "ExN-Oligo": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101291,
+      "spearman": 0.6152606760693965
+     },
+     "resid": {
+      "n_pairs": 101291,
+      "spearman": 0.5407392755320524
+     },
+     "chromband": {
+      "n_pairs": 101291,
+      "spearman": 0.5278417270953416
+     },
+     "pair": {
+      "n_pairs": 101291,
+      "spearman": 0.5002383454883699
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101879,
+      "spearman": 0.7930608421167492
+     },
+     "resid": {
+      "n_pairs": 101879,
+      "spearman": 0.7397097228804391
+     },
+     "chromband": {
+      "n_pairs": 101879,
+      "spearman": 0.7136814582446344
+     },
+     "pair": {
+      "n_pairs": 101879,
+      "spearman": 0.5838528089570302
+     }
+    }
+   },
+   "ExN-Micro": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101290,
+      "spearman": 0.5274777364090506
+     },
+     "resid": {
+      "n_pairs": 101290,
+      "spearman": 0.5157377902012659
+     },
+     "chromband": {
+      "n_pairs": 101290,
+      "spearman": 0.5066371847338036
+     },
+     "pair": {
+      "n_pairs": 101290,
+      "spearman": 0.48324826931025133
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101842,
+      "spearman": 0.5225099137379668
+     },
+     "resid": {
+      "n_pairs": 101842,
+      "spearman": 0.4763210607914094
+     },
+     "chromband": {
+      "n_pairs": 101842,
+      "spearman": 0.45120935001674506
+     },
+     "pair": {
+      "n_pairs": 101842,
+      "spearman": 0.3176257427500313
+     }
+    }
+   },
+   "InN-OPC": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101276,
+      "spearman": 0.3922600615875289
+     },
+     "resid": {
+      "n_pairs": 101276,
+      "spearman": 0.3477191962778889
+     },
+     "chromband": {
+      "n_pairs": 101276,
+      "spearman": 0.31026063716272995
+     },
+     "pair": {
+      "n_pairs": 101276,
+      "spearman": 0.2828245481231404
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101768,
+      "spearman": 0.2055187336654017
+     },
+     "resid": {
+      "n_pairs": 101768,
+      "spearman": 0.16436025417549793
+     },
+     "chromband": {
+      "n_pairs": 101768,
+      "spearman": 0.12699838883702438
+     },
+     "pair": {
+      "n_pairs": 101768,
+      "spearman": 0.09351065163459965
+     }
+    }
+   },
+   "InN-Astro": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101284,
+      "spearman": 0.49103791401209435
+     },
+     "resid": {
+      "n_pairs": 101284,
+      "spearman": 0.39275097069526554
+     },
+     "chromband": {
+      "n_pairs": 101284,
+      "spearman": 0.38216997150675996
+     },
+     "pair": {
+      "n_pairs": 101284,
+      "spearman": 0.3771475933918007
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101805,
+      "spearman": 0.47379430517958043
+     },
+     "resid": {
+      "n_pairs": 101805,
+      "spearman": 0.36555984879350045
+     },
+     "chromband": {
+      "n_pairs": 101805,
+      "spearman": 0.29872330595369967
+     },
+     "pair": {
+      "n_pairs": 101805,
+      "spearman": 0.24426170942474112
+     }
+    }
+   },
+   "InN-Oligo": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101284,
+      "spearman": 0.5901704874312534
+     },
+     "resid": {
+      "n_pairs": 101284,
+      "spearman": 0.5421475443994391
+     },
+     "chromband": {
+      "n_pairs": 101284,
+      "spearman": 0.5100138352466983
+     },
+     "pair": {
+      "n_pairs": 101284,
+      "spearman": 0.48440565020679155
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101805,
+      "spearman": 0.6163024768894491
+     },
+     "resid": {
+      "n_pairs": 101805,
+      "spearman": 0.523006717509116
+     },
+     "chromband": {
+      "n_pairs": 101805,
+      "spearman": 0.4913508480983362
+     },
+     "pair": {
+      "n_pairs": 101805,
+      "spearman": 0.37827873882318896
+     }
+    }
+   },
+   "InN-Micro": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101284,
+      "spearman": 0.5196552903553215
+     },
+     "resid": {
+      "n_pairs": 101284,
+      "spearman": 0.5104860368780022
+     },
+     "chromband": {
+      "n_pairs": 101284,
+      "spearman": 0.49800834715305303
+     },
+     "pair": {
+      "n_pairs": 101284,
+      "spearman": 0.47597891726363856
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101789,
+      "spearman": 0.4939418016451222
+     },
+     "resid": {
+      "n_pairs": 101789,
+      "spearman": 0.4156214344568106
+     },
+     "chromband": {
+      "n_pairs": 101789,
+      "spearman": 0.39092179532130644
+     },
+     "pair": {
+      "n_pairs": 101789,
+      "spearman": 0.2790676742713525
+     }
+    }
+   },
+   "OPC-Astro": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101282,
+      "spearman": 0.16397844284322194
+     },
+     "resid": {
+      "n_pairs": 101282,
+      "spearman": 0.14042701818056974
+     },
+     "chromband": {
+      "n_pairs": 101282,
+      "spearman": 0.1329989918102521
+     },
+     "pair": {
+      "n_pairs": 101282,
+      "spearman": 0.15185597866080472
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101805,
+      "spearman": 0.11516603861394895
+     },
+     "resid": {
+      "n_pairs": 101805,
+      "spearman": 0.09922410474025452
+     },
+     "chromband": {
+      "n_pairs": 101805,
+      "spearman": 0.08073405523923181
+     },
+     "pair": {
+      "n_pairs": 101805,
+      "spearman": 0.06254899251315238
+     }
+    }
+   },
+   "OPC-Oligo": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101282,
+      "spearman": 0.28035515091948077
+     },
+     "resid": {
+      "n_pairs": 101282,
+      "spearman": 0.2700584114015738
+     },
+     "chromband": {
+      "n_pairs": 101282,
+      "spearman": 0.2531135552081695
+     },
+     "pair": {
+      "n_pairs": 101282,
+      "spearman": 0.25002902557781936
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101805,
+      "spearman": 0.23302667506024635
+     },
+     "resid": {
+      "n_pairs": 101805,
+      "spearman": 0.20086808340850498
+     },
+     "chromband": {
+      "n_pairs": 101805,
+      "spearman": 0.18700519673568697
+     },
+     "pair": {
+      "n_pairs": 101805,
+      "spearman": 0.11422001632233848
+     }
+    }
+   },
+   "OPC-Micro": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101281,
+      "spearman": 0.4177674087618759
+     },
+     "resid": {
+      "n_pairs": 101281,
+      "spearman": 0.4128040640964214
+     },
+     "chromband": {
+      "n_pairs": 101281,
+      "spearman": 0.4003558619293669
+     },
+     "pair": {
+      "n_pairs": 101281,
+      "spearman": 0.3794186135927291
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101787,
+      "spearman": 0.2930205361298601
+     },
+     "resid": {
+      "n_pairs": 101787,
+      "spearman": 0.24658728788451154
+     },
+     "chromband": {
+      "n_pairs": 101787,
+      "spearman": 0.23959796833782657
+     },
+     "pair": {
+      "n_pairs": 101787,
+      "spearman": 0.15886981234900988
+     }
+    }
+   },
+   "Astro-Oligo": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101291,
+      "spearman": 0.24060512657978794
+     },
+     "resid": {
+      "n_pairs": 101291,
+      "spearman": 0.2480695757630435
+     },
+     "chromband": {
+      "n_pairs": 101291,
+      "spearman": 0.273603770073999
+     },
+     "pair": {
+      "n_pairs": 101291,
+      "spearman": 0.27078149187617534
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101879,
+      "spearman": 0.40787799967810034
+     },
+     "resid": {
+      "n_pairs": 101879,
+      "spearman": 0.40068985223644193
+     },
+     "chromband": {
+      "n_pairs": 101879,
+      "spearman": 0.3721551797703495
+     },
+     "pair": {
+      "n_pairs": 101879,
+      "spearman": 0.24384771534613053
+     }
+    }
+   },
+   "Astro-Micro": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101290,
+      "spearman": 0.42578430055851413
+     },
+     "resid": {
+      "n_pairs": 101290,
+      "spearman": 0.40896290306690675
+     },
+     "chromband": {
+      "n_pairs": 101290,
+      "spearman": 0.3999153843075026
+     },
+     "pair": {
+      "n_pairs": 101290,
+      "spearman": 0.3810220679248235
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101842,
+      "spearman": 0.3862007033378379
+     },
+     "resid": {
+      "n_pairs": 101842,
+      "spearman": 0.342102354275074
+     },
+     "chromband": {
+      "n_pairs": 101842,
+      "spearman": 0.3195265924585679
+     },
+     "pair": {
+      "n_pairs": 101842,
+      "spearman": 0.21954833556529474
+     }
+    }
+   },
+   "Oligo-Micro": {
+    "recon_vs_imaging": {
+     "diff": {
+      "n_pairs": 101290,
+      "spearman": 0.3767424612756867
+     },
+     "resid": {
+      "n_pairs": 101290,
+      "spearman": 0.35699167793423264
+     },
+     "chromband": {
+      "n_pairs": 101290,
+      "spearman": 0.3470979601391827
+     },
+     "pair": {
+      "n_pairs": 101290,
+      "spearman": 0.38642044914828283
+     }
+    },
+    "imaging_split_half": {
+     "diff": {
+      "n_pairs": 101842,
+      "spearman": 0.3680375292743765
+     },
+     "resid": {
+      "n_pairs": 101842,
+      "spearman": 0.3192357207417307
+     },
+     "chromband": {
+      "n_pairs": 101842,
+      "spearman": 0.3039544222492647
+     },
+     "pair": {
+      "n_pairs": 101842,
+      "spearman": 0.22592673664879376
+     }
+    }
+   }
+  },
+  "seconds": 228.2
+ },
+ "provenance": {
+  "revision": "ad8aa0f+uncommitted:recon.py-3b690fc8:cross_assay.py-b399354d:separation.py-9782acd1:engine-dipfrozen-cpu",
+  "date": "2026-10-12T05:52:19+00:00",
+  "host": "sh04-05n13.int",
+  "cpu": "AMD EPYC 9754 128-Core Processor",
+  "cpus": 8,
+  "slurm_job": "47463063",
+  "load_avg_1min": 40.73,
+  "versions": {
+   "python": "3.12.1",
+   "numpy": "2.2.6",
+   "scipy": "1.14.1",
+   "pandas": "2.2.3",
+   "cooler": "0.10.4",
+   "zarr": "3.4.0",
+   "torch": "2.5.1+cu124",
+   "uchrom": "0.3.0.dev0",
+   "chromdata": "0.1.0"
+  },
+  "script": "benchmarks/cross_assay/recon.py",
+  "datasets": [
+   "droplet_hic_mouse_cortex",
+   "liu2025_mop"
+  ],
+  "params": {
+   "dataset": "droplet_hic_mouse_cortex",
+   "variant": "hap",
+   "seed": 0,
+   "pairs": [
+    [
+     "InN",
+     "ExN"
+    ],
+    [
+     "ExN",
+     "OPC"
+    ],
+    [
+     "ExN",
+     "Astro"
+    ],
+    [
+     "ExN",
+     "Oligo"
+    ],
+    [
+     "ExN",
+     "Micro"
+    ],
+    [
+     "InN",
+     "OPC"
+    ],
+    [
+     "InN",
+     "Astro"
+    ],
+    [
+     "InN",
+     "Oligo"
+    ],
+    [
+     "InN",
+     "Micro"
+    ],
+    [
+     "OPC",
+     "Astro"
+    ],
+    [
+     "OPC",
+     "Oligo"
+    ],
+    [
+     "OPC",
+     "Micro"
+    ],
+    [
+     "Astro",
+     "Oligo"
+    ],
+    [
+     "Astro",
+     "Micro"
+    ],
+    [
+     "Oligo",
+     "Micro"
+    ]
+   ]
+  }
+ }
+}
