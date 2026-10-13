@@ -33,7 +33,8 @@ import numpy as np
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parents[1]))
+for _pkg in ("uchrom", "chromdata"):                   # this checkout's packages (monorepo), not installed copies
+    sys.path.insert(0, str(HERE.parents[1] / "packages" / _pkg))
 
 
 def replicate_v22(args, c, parts) -> None:
