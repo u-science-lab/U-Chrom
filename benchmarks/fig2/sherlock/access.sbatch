@@ -1,6 +1,6 @@
 #!/bin/bash
 # Panel c on one cluster node: the single-cell read of chromdata.zarr (backed) against AnnData read whole
-# (read_h5ad), AnnData read lazily (anndata.experimental.read_lazy, on Zarr and on the .h5ad) and SpatialData (lazy
+# (read_h5ad), AnnData read lazily (anndata.experimental.read_lazy on AnnData Zarr) and SpatialData (lazy
 # points + filter), on the Takei 2025 cerebellum subsets of 1e6 and 1e7 spots, files on node-local disk.  A
 # separate results file (--out-json): another machine than the laptop series of c_access.json.  The data are
 # fetched and built here when missing (Zenodo 7693825; apps/atlas/recipes/build_takei2025_cerebellum.py).
@@ -19,7 +19,8 @@ if [ ! -f "$TK/takei2025_cerebellum_rep1.chromdata.zarr/zarr.json" ]; then
     /usr/bin/time -v $PY apps/atlas/recipes/build_takei2025_cerebellum.py --drop-raw 2>&1 | tail -40
 fi
 mkdir -p "$UCHROM_FIG2_WORK"
-BACKENDS=${BACKENDS:-zarr-backed,anndata-memory,anndata-lazy,anndata-lazy-h5ad,spatialdata-lazy}
+# (anndata-lazy-h5ad left out: read_lazy fails on that .h5ad with AnnData 0.12.11, see c_access.py)
+BACKENDS=${BACKENDS:-zarr-backed,anndata-memory,anndata-lazy,spatialdata-lazy}
 RES=$OUT/c_access_sherlock_${SLURM_JOB_ID:-local}.json
 $PY -u benchmarks/fig2/c_access.py --sizes "${SIZES:-1e6,1e7}" --queries 20 --repeats 3 --backends "$BACKENDS" \
     --out-json "$RES"

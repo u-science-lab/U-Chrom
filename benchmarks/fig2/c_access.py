@@ -29,7 +29,9 @@ Backends:
   rates native): the same spots as obs written as AnnData Zarr; open = ``read_lazy`` (obs a lazy xarray Dataset,
   obsm / X dask arrays); a query = the boolean mask of the lazy id column (that column read), the subset,
   ``.to_memory()`` (only the chunks holding the selected rows).  ``anndata-lazy-h5ad`` does the same on the
-  ``.h5ad`` of ``anndata-memory``.  Each query's time is also split into the mask and the ``to_memory`` (``diag``).
+  ``.h5ad`` of ``anndata-memory`` -- with AnnData 0.12.11 ``read_lazy`` fails on that file (its X, n_spots x 0,
+  is an unchunked HDF5 dataset: dask rejects the empty chunk tuple), so the lazy series is the Zarr one.  Each
+  query's time is also split into the mask and the ``to_memory`` (``diag``).
 * ``fofct-memory`` — the FOF-CT core table loaded with
   ``ChromData.from_fofct``, then the in-memory ``get_*``.
 * ``spatialdata-lazy`` — SpatialData: ``read_zarr`` (lazy dask points), then

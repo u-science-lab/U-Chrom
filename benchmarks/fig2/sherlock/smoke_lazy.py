@@ -23,7 +23,13 @@ for cls in (m.AnnDataLazy, m.AnnDataLazyH5ad):
     p = tmp / f"toy{cls.ext}"
     cls.write(cd, p)
     be = cls()
-    be.open(p)
+    try:
+        be.open(p)
+    except Exception as exc:                 # read_lazy on an .h5ad with an empty (n x 0) X: anndata 0.12.11 fails
+        if cls is m.AnnDataLazy:
+            raise
+        print(cls.__name__, "fails:", type(exc).__name__, str(exc).splitlines()[0])
+        continue
     ids = be.ids()
     for lv, col in (("trace", "trace_id"), ("cell", "cell_id"), ("chrom", "chrom")):
         sub = be.get(lv, ids[lv][1])
