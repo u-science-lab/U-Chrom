@@ -1,7 +1,7 @@
 # Shared settings of the Figure 2 benchmark jobs on Sherlock (sourced by the *.sbatch here).
 #
-#   $GROUP_HOME/$USER/uchrom-nd/venv-fig2   Python env (setup.sbatch): the laptop series' library versions where
-#                                           pinned (numpy, pandas, pyarrow, zarr, anndata, spatialdata, h5py)
+#   $GROUP_HOME/$USER/uchrom-nd/venv-fig2   Python env (setup.sbatch): zarr / AnnData / SpatialData at the laptop
+#                                           series' versions, the compiled libraries as wheels for glibc 2.17
 #   $SCRATCH/uchrom-nd/repo-fig2lazy        repo copy synced from the laptop (tracked files + REVISION)
 #   $SCRATCH/uchrom-nd/data                 UCHROM_DATA: takei2025_cerebellum (fetched and built by access.sbatch)
 #   $L_SCRATCH/fig2_work                    UCHROM_FIG2_WORK: staged subsets and the files read (node-local)
