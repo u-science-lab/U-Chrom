@@ -2955,6 +2955,10 @@ button.side-close:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.store-note {
+  margin-top: 2px;
+  line-height: 1.35;
+}
 .store-facts {
   display: flex;
   flex-wrap: wrap;

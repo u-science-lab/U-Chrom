@@ -394,12 +394,12 @@ Matrices are capped at 1,000 × 1,000 bins: larger requests are sum-pooled
 
 ### `GET /api/datasets/{id}/store`
 
-The on-disk structure of a `.chromdata.zarr` / `.cdz` store, for the Store tab
-(`422` for in-memory / CSV datasets).  A nested node:
+The on-disk structure of a `.chromdata.zarr` / `.cdz` store, local or at a URL, for the Store
+tab (`422` for in-memory / CSV datasets, or a URL without a Zarr store).  A nested node:
 
 ```json
 {"name": "x.chromdata.zarr", "path": "", "kind": "group", "bytes": 2935369563,
- "container": "zarr",                          // root only: zarr (directory) | cdz (zip)
+ "container": "zarr",                          // root only: zarr (directory) | cdz (zip) | remote (URL)
  "attrs": {"uchrom": "{\"format_version\":\"2.3\",…}"},   // key → JSON preview (≤160 chars)
  "children": [
    {"name": "umap", "path": "cellm/umap", "kind": "array", "bytes": 27827,
@@ -412,6 +412,14 @@ The on-disk structure of a `.chromdata.zarr` / `.cdz` store, for the Store tab
 `kind`: `group` (Zarr group), `dir` (a plain folder, e.g. `chrom=chr1`),
 `array` (its chunk files are folded in: `n_chunks`), `table` (Parquet),
 `file`.  At most 400 children per node (`more` counts the rest).
+
+A store at a URL (opened with `POST /api/datasets {"path": "https://…"}`, e.g. from the atlas) is
+walked like a directory when the object store lists its keys (`s3://`, `gs://`).  HTTP lists no
+files, so there the tree is rebuilt from the store's metadata — the consolidated Zarr metadata of
+the root `zarr.json` and the Parquet files the groups' attributes name — and the root carries a
+`note` saying so.  Tables are as above (each costs a size request and a footer read); an array
+has `"bytes": null`, no `n_chunks` and `nbytes`, its uncompressed size (`null` for
+variable-length types); a group holding an array has `"bytes": null`.
 
 ### `GET /api/datasets/{id}/tracks?names=H3K27ac,H3K9me3&chrom=chr7&start=&end=&cell_id=&agg=mean&group=`
 
