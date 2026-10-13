@@ -107,7 +107,9 @@ def replicate_v22(args, c, parts) -> None:
     pfiles = dict(pmeta.get("files") or {})
     prg = pidx["row_groups"]
     pcel, pseg = pidx["cell_offsets"], pidx["trace_offsets"]
-    prefix = int(pcel[k_cells]) if rest else 0
+    # the primary runs are sorted by cell code, and codes have gaps where a category has no spots (a cell of the cell
+    # table outside the subset): the last copy ends at the first run whose code reaches k_cells
+    prefix = int(pcel[np.searchsorted(pidx["cell_codes"], k_cells)]) if rest else 0
     copies = [(r, n_src) for r in range(k_full)] + ([(k_full, prefix)] if rest else [])
     states = {name: {} for name in pfiles}
     new_rg = [0]
