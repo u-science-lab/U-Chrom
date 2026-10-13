@@ -12,6 +12,10 @@ above white matter and choroid plexus).
 
     python benchmarks/spatial_variable/spatial_variable.py --stats $OAK/uchrom/spatial_3dgenome --stages all
 
+Nulls: stage ``patch_null`` (the copy-number patch against random patches of its size and compactness) and stage
+``cnv_null`` (the share of what the RNA leaves that copy number explains against random covariates with the same
+spatial autocorrelation, Moran spectral randomisation; ``sherlock/nulls.sbatch``).
+
 Local level (stage ``local``): every spot's insulation of the boundaries and strength of the loops called on its
 tissue's pooled map (``bulk_calls.py``), from the contacts the second pass counts in their windows
 (``spatial_pairs_windows.py``), tested the same way, structure by structure, and replicated between sections.
@@ -910,6 +914,170 @@ def stage_patch_null(stats_root: Path, out: Path, results: Path, n_random: int =
 
 
 # ------------------------------------------------------------------------------------------------------------
+# stage cnv_null: the copy-number share against random covariates of the same spatial autocorrelation
+# ------------------------------------------------------------------------------------------------------------
+#: the window score of Fig. 2f (stage local) next to the contact features
+WINDOW = "boundary_strength_oe"
+
+
+def _msr_basis(g):
+    """(eigenvectors, eigenvalues, binary weights) of the doubly centred binary weights of the spot graph
+    (``_grid_graph``: the 8 adjacent spots), the constant left out, eigenvalues ascending: the basis of Moran spectral
+    randomisation (Wagner & Dray 2015, Methods Ecol. Evol. 6, 1169).  The constant is pushed to a separate
+    eigenvalue, so that every vector kept is orthogonal to it."""
+    graph = _grid_graph(g)
+    if list(map(str, graph.cell_ids)) != list(map(str, g.index)):
+        raise ValueError("the spot graph is not in the order of the spots")
+    A = graph.weights("b").toarray()
+    n = len(A)
+    r = A.sum(axis=1)
+    big = 10.0 * max(1.0, float(r.max()))
+    M = A - (r[:, None] + r[None, :]) / n + r.sum() / n ** 2      # H A H, H = I - 11'/n
+    M -= big / n                                                # the constant: eigenvalue -big, alone
+    lam, V = np.linalg.eigh(M)
+    del M
+    keep = np.ones(n, bool)
+    keep[int(np.argmin(lam))] = False
+    return V[:, keep], lam[keep], A
+
+
+def msr(x: np.ndarray, V: np.ndarray, rng, band: int = 0) -> np.ndarray:
+    """Moran spectral randomisation of the columns of x (centred) on the eigenvectors V (eigenvalues ascending).
+    ``band=0``: each coefficient keeps its size and gets a random sign -- the variance and x' A x (Moran's I with
+    binary weights) kept exactly, but a smooth map that a few eigenvectors carry comes back nearly itself (or its
+    negative, the same covariate in a regression).  ``band=k``: the coefficients of every k consecutive eigenvectors
+    turned to a random direction of the same length -- the variance kept exactly, Moran's I up to the spread of
+    the eigenvalues within a band, the place on the spots lost."""
+    x = np.asarray(x, float)
+    x = x - x.mean(axis=0)
+    a = V.T @ x
+    if band <= 0:
+        return V @ (a * rng.choice([-1.0, 1.0], size=a.shape))
+    b = np.empty_like(a)
+    for lo in range(0, len(a), band):
+        blk = a[lo:lo + band]
+        z = rng.standard_normal(blk.shape)
+        b[lo:lo + band] = z * (np.linalg.norm(blk, axis=0) / np.linalg.norm(z, axis=0))
+    return V @ b
+
+
+#: the randomisations of stage cnv_null: name -> band (0: random signs, exact; k: random directions within k
+#: consecutive eigenvectors)
+NULLS = {"bands": 20, "signs": 0}
+
+
+def stage_cnv_null(out: Path, results: Path, n_random: int = 1000, seed: int = 0, n_cnv: int = 5):
+    """Is the share of what the RNA leaves that copy number explains (stage cnv; Fig. 2f) more than any spatially
+    smooth covariate explains?  Per section: the copy-number components (as stage cnv: destriped chromosome
+    shares, z-scored, the first ``n_cnv`` principal components) are replaced by ``n_random`` sets of random
+    covariates with the same spatial autocorrelation (Moran spectral randomisation of each component on the spot
+    graph, ``msr``; both versions of ``NULLS``), and the share is recomputed the same way:
+    (left[depth + RNA] - left[depth + RNA + covariates]) / left[depth + RNA], ``left`` the smooth variance over its
+    value after depth.  Features: the contact features (pooled and per chromosome) and the TAD insulation of
+    stage local (``window_cells_<section>.parquet``).  Per feature: the null median and 95th percentile and
+    P = (1 + #null >= observed) / (n + 1); over the features of Fig. 2f (pooled features + insulation, both
+    sections) the median share against the same median of each random draw.  Diagnostics of each null: Moran's I
+    of the random covariates over the components', and how much of the components the random set spans (mean R^2
+    of each component on the set).  Writes ``results/cnv_null_<tissue>.json``."""
+    from _record import save
+    from uchrom.spatial import destripe
+
+    f = pd.read_parquet(out / "features.parquet")
+    pcs = pd.read_parquet(out / "rna_pca.parquet")
+    prof = pd.read_parquet(out / "cnv_profiles.parquet")
+    feats = [f"q30.{x}" for x in FEATURES] + [f"q30.{x}" for x in TECHNICAL]    # as stage cnv destripes them
+    shown = [f"q30.{x}" for x in FEATURES]
+    res = {"params": {"n_random": n_random, "seed": seed, "n_cnv": n_cnv, "graph": "8 adjacent spots (radius 1.5)",
+                      "randomisations": {k: ("random signs (exact Moran's I, binary weights)" if b == 0 else
+                                             f"random directions within bands of {b} eigenvectors")
+                                         for k, b in NULLS.items()},
+                      "window_score": WINDOW}, "observed": {}, "nulls": {k: {"sections": {}} for k in NULLS}}
+    draws = {k: {} for k in NULLS}                           # null -> (section, feature) -> shares
+    for sec in SECTIONS:
+        g = f[(f.section == sec) & f.qc]
+        x, y = g.centroid_x.to_numpy(int), g.centroid_y.to_numpy(int)
+        xy = g[["centroid_x", "centroid_y"]].to_numpy(float)
+        L = prof[prof.section == sec].drop(columns="section").reindex(g.index)
+        Z = (L - L.mean()) / L.std()
+        u, sv_, _ = np.linalg.svd(Z.to_numpy(), full_matrices=False)
+        C = u[:, :n_cnv] * sv_[:n_cnv]
+        dep = np.log10(g[["hic_contacts"]].to_numpy(float))
+        P = pcs.loc[g.index].to_numpy(float)
+        D = destripe(g[feats], y, x)[shown]
+        wfile = out / f"window_cells_{sec}.parquet"
+        if wfile.exists():                                    # stage local: the window scores (destriped together)
+            W = pd.read_parquet(wfile).reindex(g.index)
+            cols = [c for c in ("boundary_strength", "boundary_ratio", "interior_ratio", "loop_strength",
+                                "boundary_strength_oe", "interior_oe", "loop_strength_oe") if c in W]
+            D[f"window:{WINDOW}"] = destripe(W[cols], y, x)[WINDOW].to_numpy()
+        base = _smooth_var(_residuals(D, dep), xy)
+        left_rna = _smooth_var(_residuals(D, np.c_[dep, P]), xy) / base
+
+        def share(cov):
+            left_both = _smooth_var(_residuals(D, np.c_[dep, P, cov]), xy) / base
+            return (left_rna - left_both) / left_rna
+
+        observed = share(C)
+        res["observed"][sec] = {"n_spots": int(len(g)), "share": dict(zip(D.columns, observed.round(5).tolist())),
+                                "left_rna30": dict(zip(D.columns, left_rna.round(5).tolist()))}
+        log(f"cnv_null {sec}: {len(g)} spots; observed median {np.median(observed):.3f}; eigenvectors ...")
+        V, lam, A = _msr_basis(g)
+        c0 = C - C.mean(axis=0)
+        r0 = msr(C, V, np.random.default_rng(seed))        # random signs keep the variance and x' A x exactly
+        assert np.allclose((r0 * (A @ r0)).sum(0), (c0 * (A @ c0)).sum(0), rtol=1e-8, atol=1e-6), "MSR: x'Ax"
+        assert np.allclose((r0 ** 2).sum(0), (c0 ** 2).sum(0), rtol=1e-8), "MSR: variance"
+        moran0 = len(c0) / A.sum() * (c0 * (A @ c0)).sum(0) / (c0 ** 2).sum(0)
+        Ci = np.c_[np.ones(len(c0)), c0]
+        for name, band in NULLS.items():
+            rng = np.random.default_rng([seed, band])
+            null, mor, span = [], [], []
+            for _ in range(n_random):
+                r = msr(C, V, rng, band=band)
+                null.append(share(r))
+                mor.append(len(r) / A.sum() * (r * (A @ r)).sum(0) / (r ** 2).sum(0) / moran0)
+                Ri = np.c_[np.ones(len(r)), r]                # R^2 of each component on the random set
+                fit = Ri @ np.linalg.lstsq(Ri, c0, rcond=None)[0]
+                span.append(1 - ((c0 - fit) ** 2).sum(0) / (c0 ** 2).sum(0))
+            null, mor, span = np.array(null), np.array(mor), np.array(span)
+            rows = {}
+            for j, feat in enumerate(D.columns):
+                nj = null[:, j]
+                rows[feat] = {"observed": float(observed[j]), "null_median": float(np.median(nj)),
+                              "null_q95": float(np.quantile(nj, 0.95)), "null_mean": float(nj.mean()),
+                              "p": float((1 + (nj >= observed[j]).sum()) / (n_random + 1))}
+                draws[name][(sec, feat)] = nj
+            res["nulls"][name]["sections"][sec] = {
+                "features": rows, "n_p_below_0.05": int(sum(r_["p"] < 0.05 for r_ in rows.values())),
+                "n_features": len(rows), "component_moran_I": moran0.round(4).tolist(),
+                "random_moran_over_component": {"median": np.median(mor, axis=0).round(4).tolist(),
+                                                "q05": np.quantile(mor, 0.05, axis=0).round(4).tolist(),
+                                                "q95": np.quantile(mor, 0.95, axis=0).round(4).tolist()},
+                "component_r2_on_random_set": {"median": np.median(span, axis=0).round(4).tolist(),
+                                               "q95": np.quantile(span, 0.95, axis=0).round(4).tolist()}}
+            log(f"  {name}: null median {np.median(null):.3f}; P < 0.05 for "
+                f"{res['nulls'][name]['sections'][sec]['n_p_below_0.05']} of {len(rows)}; Moran ratio "
+                f"{np.median(mor):.3f}; component R2 on the random set {np.median(span):.3f}")
+
+    def summary(name, names) -> dict:
+        keys = [(s, n) for s in SECTIONS for n in names if (s, n) in draws[name]]
+        vals = [res["observed"][s]["share"][n] for s, n in keys]
+        obs = float(np.median(vals))
+        med = np.median(np.array([draws[name][k] for k in keys]), axis=0)  # the same median, per random draw
+        return {"n_values": len(keys), "observed_median": obs, "observed_range": [float(min(vals)), float(max(vals))],
+                "null_median": float(np.median(med)), "null_q95": float(np.quantile(med, 0.95)),
+                "null_max": float(med.max()), "p": float((1 + (med >= obs).sum()) / (len(med) + 1))}
+
+    pooled = [f"q30.{x}" for x in FEATURES if "@" not in x]
+    for name in NULLS:
+        res["nulls"][name]["summary"] = {"fig2f": summary(name, pooled + [f"window:{WINDOW}"]),
+                                         "pooled": summary(name, pooled),
+                                         "per_chromosome": summary(name, [f"q30.{x}" for x in FEATURES if "@" in x])}
+        log(f"cnv_null {name} summary:", json.dumps(res["nulls"][name]["summary"], indent=1))
+    save(results / f"cnv_null_{TISSUE}.json", res, script=__file__, datasets=[DATASET, "spatial_hicrna"],
+         params=res["params"])
+
+
+# ------------------------------------------------------------------------------------------------------------
 # stage local: per-spot boundary insulation and loop strength (window counts of the pooled-map structures)
 # ------------------------------------------------------------------------------------------------------------
 def _cnv_pcs(out: Path, g: pd.DataFrame, n: int = 5):
@@ -1311,12 +1479,14 @@ def main(argv=None):
     ap.add_argument("--results", default=str(HERE / "results"))
     ap.add_argument("--figdata", default=None)
     ap.add_argument("--stages", default="features,regions,sv,summary",
-                    help="comma-separated: check, features, regions, sv, calibrate, cnv, cellcycle, patch, patch_null, local, compartments, "
+                    help="comma-separated: check, features, regions, sv, calibrate, cnv, cellcycle, patch, patch_null, cnv_null, local, "
+                         "compartments, "
                          "compartments_sv, summary (all: "
                          "every stage)")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--perms", type=int, default=999)
-    ap.add_argument("--random", type=int, default=1000, help="random patches of stage patch_null")
+    ap.add_argument("--random", type=int, default=1000, help="random patches of stage patch_null, random covariate "
+                                                              "sets of stage cnv_null")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args(argv)
     configure(a.tissue)
@@ -1353,6 +1523,8 @@ def main(argv=None):
             stage_patch(Path(a.stats), out)
         elif st == "patch_null":
             stage_patch_null(Path(a.stats), out, Path(a.results), n_random=a.random, seed=a.seed)
+        elif st == "cnv_null":
+            stage_cnv_null(out, Path(a.results), n_random=a.random, seed=a.seed)
         elif st == "summary":
             stage_summary(out, Path(a.results), figdir)
         else:
