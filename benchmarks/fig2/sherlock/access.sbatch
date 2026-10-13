@@ -15,6 +15,13 @@ source "$SCRATCH/uchrom-nd/repo-fig2lazy/benchmarks/fig2/sherlock/_env.sh"
 cd "$REPO"
 TK=$UCHROM_DATA/takei2025_cerebellum
 if [ ! -f "$TK/takei2025_cerebellum_rep1.chromdata.zarr/zarr.json" ]; then
+    # Zenodo is slow from the cluster and drops long transfers: resume the tarball (the fetch below checks its md5)
+    mkdir -p "$TK"
+    for k in 1 2 3 4 5; do
+        curl -fsSL --retry 5 --retry-delay 30 -C - -o "$TK/cerebellum_rep1.tar.gz" \
+            "https://zenodo.org/records/7693825/files/cerebellum_rep1.tar.gz" && break || sleep 60
+    done
+    ls -la "$TK"
     $PY -m uchrom.datasets fetch takei2025_cerebellum
     /usr/bin/time -v $PY apps/atlas/recipes/build_takei2025_cerebellum.py --drop-raw 2>&1 | tail -40
 fi
