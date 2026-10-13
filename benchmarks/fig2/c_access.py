@@ -131,8 +131,12 @@ class ZarrBacked(ZarrMemory):
         self.cd = ChromData.read(path, backed=True)
 
     def ids(self):
+        # the ids that have spots, as the other backends draw them: the categories also hold the cells of the
+        # cell table outside a subset (at 1e6 spots 1,633 of 1,799 cell ids have no spots; at 1e7, 143)
         cd = self.cd
-        return {"trace": list(cd._categories("trace_id")), "cell": list(cd._categories("cell_id")),
+        tc = np.unique(np.asarray(cd._index["trace_codes"]))
+        traces = np.asarray(cd._categories("trace_id"))[tc[tc >= 0]]
+        return {"trace": [str(x) for x in traces], "cell": list(cd._spot_cell_ids()),
                 "chrom": list(cd.bins["chrom"].cat.categories)}
 
     def get(self, level, key):

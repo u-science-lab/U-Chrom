@@ -54,7 +54,15 @@ TAKEI_COMBINED = TAKEI_DIR / "takei2025_cerebellum_rep1.chromdata.zarr"   # buil
 # ----------------------------------------------------------------------------- measurement
 
 def peak_rss_mb() -> float:
-    """Peak resident set size of this process (MB)."""
+    """Peak resident set size of this process (MB).  On Linux the high-water mark of this process's memory
+    (``VmHWM``): ``ru_maxrss`` survives ``exec`` there and reports the parent's peak in a child started from a
+    large parent (the staging process)."""
+    if sys.platform.startswith("linux"):
+        try:
+            with open("/proc/self/status") as fh:
+                return next(int(l.split()[1]) for l in fh if l.startswith("VmHWM:")) / 1024
+        except (OSError, StopIteration):
+            pass
     r = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return r / 2**20 if sys.platform == "darwin" else r / 1024
 
