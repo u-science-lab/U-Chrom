@@ -114,7 +114,16 @@ def machine_info() -> Dict[str, Any]:
                                  for l in disk.splitlines() if l.split(":", 1)[0].strip() in keep)
     else:
         info["cpu"] = platform.processor()
+        try:                                                    # Linux: the model name, not just the arch
+            info["cpu"] = next(l.split(":", 1)[1].strip() for l in open("/proc/cpuinfo")
+                               if l.startswith("model name"))
+        except (OSError, StopIteration):
+            pass
         info["n_cpu"] = os.cpu_count()
+        if os.environ.get("SLURM_JOB_ID"):                      # a cluster job: what it was given, and where
+            info["slurm"] = {k: os.environ.get(v) for k, v in (("job", "SLURM_JOB_ID"), ("node", "SLURMD_NODENAME"),
+                             ("partition", "SLURM_JOB_PARTITION"), ("cpus", "SLURM_CPUS_PER_TASK"),
+                             ("mem_per_node_mb", "SLURM_MEM_PER_NODE"))}
         try:
             import psutil
             info["ram_gb"] = round(psutil.virtual_memory().total / 2**30, 1)
@@ -124,7 +133,8 @@ def machine_info() -> Dict[str, Any]:
     info["work_dir_free_gb"] = round(usage.free / 1e9, 1)
     vers = {}
     from importlib.metadata import PackageNotFoundError, version
-    for mod in ("numpy", "pandas", "h5py", "pyarrow", "zarr", "anndata", "cooler", "psutil", "scipy"):
+    for mod in ("numpy", "pandas", "h5py", "pyarrow", "zarr", "anndata", "cooler", "psutil", "scipy", "spatialdata",
+                "xarray", "dask"):
         try:
             vers[mod] = version(mod)
         except PackageNotFoundError:
