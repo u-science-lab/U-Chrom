@@ -184,6 +184,17 @@ def test_settings_memory_budget():
         settings._memory_budget = old
 
 
+def test_memory_budget_from_the_environment(monkeypatch):
+    """``UCHROM_MEMORY_BUDGET`` sets the default (a container that hides the job's limit)."""
+    from chromdata.settings import Settings
+
+    monkeypatch.setenv("UCHROM_MEMORY_BUDGET", "12GB")
+    s = Settings()
+    assert s.memory_budget == 12 << 30
+    s.memory_budget = "1GB"
+    assert s.memory_budget == 1 << 30
+
+
 def test_columns_selection_and_iterators(tmp_path):
     cd = _cd(n_cells=6)
     path = tmp_path / "x.chromdata.zarr"

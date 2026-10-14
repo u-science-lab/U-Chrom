@@ -265,3 +265,21 @@ def test_copy_and_errors(tmp_path):
         frame = single_cell_compartments(cd, track=track, key_added="s")
     assert any("no per-cell map" in str(x.message) for x in w)
     assert "ghost" not in frame.index and np.isnan(cd.cellm["s"][-1]).all()
+
+
+def test_empty_bins_take_their_own_track_value_in_schiclusters_form():
+    """scHiCluster adds 1 on the diagonal of a bin without contacts, so its score is the bin's own CpG ratio;
+    Dip-C leaves it undefined (``empty="nan"``, the default)."""
+    track = np.array([0.2, 0.5, np.nan, 0.9, 0.4])
+    chrom = np.array(["chrA"] * 5)
+    rows, b1, b2, cnt = np.array([0, 0]), np.array([0, 1]), np.array([1, 3]), np.array([2, 1])
+    nan = scab_sums(rows, b1, b2, cnt, track, n_rows=1, chrom_of_bin=chrom,
+                    params=ScABParams(contacts="cis", normalize="none"))[0][0]
+    own = scab_sums(rows, b1, b2, cnt, track, n_rows=1, chrom_of_bin=chrom,
+                    params=ScABParams(contacts="cis", normalize="none", empty="own"))[0][0]
+    assert np.isnan(nan[[2, 4]]).all()
+    np.testing.assert_allclose(own[4], 0.4)                      # no contacts: its own value
+    assert np.isnan(own[2])                                      # no contacts and no value of its own
+    np.testing.assert_allclose(own[[0, 1, 3]], nan[[0, 1, 3]])   # bins with contacts: unchanged
+    with pytest.raises(ValueError, match="empty"):
+        ScABParams(empty="zero").check()

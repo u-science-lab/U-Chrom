@@ -478,8 +478,9 @@ chance ≈ 0.28 — and are what `build_takei2025_fov0.py` uses for
 colouring).  With 47 cells these numbers are indicative only.
 
 Single-cell contact maps (`.scool`) give a Hi-C embedding with the
-scHiCluster recipe (convolution → random walk with restart → top-20 %
-binarisation → per-chromosome PCA):
+scHiCluster recipe as the authors' code computes it (log2 → 3 × 3 mean
+filter → random walk with restart → top-20 % binarisation → per-chromosome
+PCA):
 
 ```python
 from uchrom.emb import scool_cell_features
