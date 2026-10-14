@@ -20,8 +20,9 @@
 * the streaming population callers (:mod:`uchrom.fea.distance`,
   :mod:`uchrom.strc.stream`) size their row bands from it.
 
-The default is 50 % of the RAM that is available (bounded by the job's memory limit under Slurm or in a
-cgroup) when the budget is first
+The default is the environment variable ``UCHROM_MEMORY_BUDGET`` when set (e.g. ``"12GB"``: for a container
+that hides the job's limit, as ``apptainer exec --cleanenv`` hides Slurm's variables), else 50 % of the RAM that is
+available (bounded by the job's memory limit under Slurm or in a cgroup) when the budget is first
 read (``psutil``; without it, 50 % of the physical RAM).  The budget is a
 target for the large arrays of those paths, not a hard cap on the process:
 Python, the small tables, and per-chromosome ``n_bins²`` outputs come on
@@ -136,7 +137,8 @@ class Settings:
         if self._memory_budget is not None:
             return self._memory_budget
         if self._default is None:
-            self._default = max(256 << 20, _available_ram() // 2)
+            env = os.environ.get("UCHROM_MEMORY_BUDGET")
+            self._default = parse_bytes(env) if env else max(256 << 20, _available_ram() // 2)
         return self._default
 
     @memory_budget.setter

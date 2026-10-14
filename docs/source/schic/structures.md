@@ -56,7 +56,7 @@ the bulk ones (frequency 0.058 vs 0.040 elsewhere) — domains vary from cell to
 ## Compartments of single cells: scA/B
 
 Per cell and bin, the mean CpG frequency of the bin's contact partners (Tan et al. 2021, Dip-C; ranked per
-cell; `ScABParams(contacts="cis", normalize="none")` gives scHiCluster's score).  Identical to Dip-C's and
+cell; `ScABParams(contacts="cis", normalize="none", empty="own")` gives scHiCluster's score: a bin without contacts takes its own CpG ratio).  Identical to Dip-C's and
 scHiCluster's own code on the same contacts; 32,777 dscHi-C cells in 70 s.  It separates cell types — Tan 2021
 cortex structure types kNN 0.875 (scHiCluster embedding 0.68), dscHi-C cell types 0.91 — and follows bulk E1
 (GM12878 cells vs Rao 2014: r 0.82 per cell).  **Much of it is the CpG track itself** (its mean correlates

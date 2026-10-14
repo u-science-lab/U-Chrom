@@ -34,7 +34,8 @@ Functions
 :func:`zscore_band` — SnapHiC's per-diagonal z-scores of a band.
 :func:`impute_maps` — every cell of a ``ChromData`` (maps linked as ``.scool`` or embedded): yields
 ``(cell, chrom, band)``.
-:func:`convolve_maps`, :func:`rwr_dense` — scHiCluster's dense batch imputation (``uchrom.emb``).
+:func:`convolve_maps`, :func:`rwr_dense` — a dense batch imputation in scHiCluster's style (row-normalised,
+with self-loops, symmetrised); ``uchrom.emb.hic`` follows the authors' code instead.
 
 Deliberate deviations from SnapHiC's code (``github.com/HuMingLab/SnapHiC`` v0.2.x, read for the method):
 the windows here own every pixel — SnapHiC's sliding windows leave the anti-diagonals ``i + j = (2k + 1) *
@@ -339,7 +340,7 @@ def zscore_band(band: np.ndarray, *, edge: int = 5, trim: float = 0.01, min_sd: 
 
 
 # ----------------------------------------------------------------------------------------------------------
-# scHiCluster's dense batch imputation (shared with uchrom.emb)
+# dense batch imputation in scHiCluster's style (uchrom.emb.hic follows the authors' code exactly)
 # ----------------------------------------------------------------------------------------------------------
 
 def convolve_maps(mats: np.ndarray, pad: int = 1) -> np.ndarray:
@@ -358,7 +359,8 @@ def convolve_maps(mats: np.ndarray, pad: int = 1) -> np.ndarray:
 
 def rwr_dense(mats: np.ndarray, *, rp: float = 0.5, tol: float = 1e-6, max_iter: int = 100,
               self_loops: bool = True, method: str = "iterative") -> np.ndarray:
-    """Random walk with restart on a batch of dense symmetric maps ``(k, n, n)`` (scHiCluster's imputation).
+    """Random walk with restart on a batch of dense symmetric maps ``(k, n, n)`` (in scHiCluster's style; the
+    authors' exact ``random_walk_cpu`` is ``uchrom.emb.hic.schicluster_impute``).
 
     ``P`` is the row-normalised map (with ``self_loops``: plus the identity, which keeps the rows of empty
     bins stochastic).  ``method="iterative"``: ``Q <- (1 - rp) Q P + rp I`` from ``Q = I`` until the largest

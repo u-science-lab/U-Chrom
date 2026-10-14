@@ -19,24 +19,24 @@ def _no_spots():
                          [("chrom", str), ("start", np.int64), ("end", np.int64), ("trace_id", str), ("cell_id", str)]})
 
 
-def _cd_with_scool(tmp_path, n=12):
-    """Cells without spots and a linked .scool: two domain patterns on chr1 / chr2 (6 bins each) + chrY."""
+def _cd_with_scool(tmp_path, n=12, size=6):
+    """Cells without spots and a linked .scool: two domain patterns on chr1 / chr2 (``size`` bins each) + chrY."""
     cooler = pytest.importorskip("cooler")
-    sizes = {"chr1": 6, "chr2": 6, "chrY": 3}
+    sizes = {"chr1": size, "chr2": size, "chrY": 3}
     bins = pd.concat([pd.DataFrame({"chrom": c, "start": np.arange(k) * 100, "end": np.arange(k) * 100 + 100})
                       for c, k in sizes.items()], ignore_index=True)
     rng = np.random.default_rng(0)
     maps, names = {}, [f"c{i}" for i in range(n)]
     for i, name in enumerate(names):
-        blocks = [(0, 3), (3, 6)] if i % 2 == 0 else [(0, 6)]
+        blocks = [(0, size // 2), (size // 2, size)] if i % 2 == 0 else [(0, size)]
         rows = []
-        for off in (0, 6):                                   # chr1, chr2
+        for off in (0, size):                                # chr1, chr2
             for lo, hi in blocks:
                 a, b = np.triu_indices(hi - lo)
                 keep = rng.random(len(a)) < 0.7
                 rows.append(pd.DataFrame({"bin1_id": a[keep] + lo + off, "bin2_id": b[keep] + lo + off,
                                           "count": rng.integers(1, 6, keep.sum())}))
-        rows.append(pd.DataFrame({"bin1_id": [0], "bin2_id": [7], "count": [3]}))   # a trans contact
+        rows.append(pd.DataFrame({"bin1_id": [0], "bin2_id": [size + 1], "count": [3]}))   # a trans contact
         maps[name] = pd.concat(rows).groupby(["bin1_id", "bin2_id"], as_index=False)["count"].sum()
     cooler.create_scool(str(tmp_path / "cells.scool"), bins, maps, ordered=True)
     cells = pd.DataFrame({"pattern": ["split" if i % 2 == 0 else "one" for i in range(n)]},
@@ -50,7 +50,7 @@ def _cd_with_scool(tmp_path, n=12):
 def test_embed_contacts_is_schicluster_on_the_linked_maps(tmp_path):
     from uchrom.emb import embed_cells, embed_contacts, scool_cell_features
 
-    cd, maps = _cd_with_scool(tmp_path)
+    cd, maps = _cd_with_scool(tmp_path, size=12)    # 12 bins: the top 20 % reaches beyond the diagonal
     out = embed_contacts(cd, n_per_chrom=3, n_pcs=4, methods=("pca", "tsne"))
     assert sorted(out) == ["hic_pca", "hic_tsne"] and out["hic_pca"].shape == (12, 4)
     # the same as the three steps it replaces (chrY left out by default)
@@ -62,7 +62,7 @@ def test_embed_contacts_is_schicluster_on_the_linked_maps(tmp_path):
     np.testing.assert_allclose(cd.cellm["hic_tsne"], ref.cellm["hic_tsne"])
     np.testing.assert_allclose(cd.results["hic"], feats.astype(np.float32))
     # intra-chromosomal contacts of chr1 / chr2 per cell (no trans, no chrY)
-    want = [int(m.loc[(m["bin1_id"] // 6 == m["bin2_id"] // 6) & (m["bin2_id"] < 12), "count"].sum())
+    want = [int(m.loc[(m["bin1_id"] // 12 == m["bin2_id"] // 12) & (m["bin2_id"] < 24), "count"].sum())
             for m in maps.values()]
     assert cd.cells["hic_n_cis_contacts"].tolist() == want
     assert (depth == np.array(want) + 3).all()            # scool_cell_features: every pixel (+ the trans one)
@@ -70,9 +70,9 @@ def test_embed_contacts_is_schicluster_on_the_linked_maps(tmp_path):
     assert meta["modality"] == "Hi-C" and meta["normalization_kind"] == "none" and "scHiCluster" in meta["features"]
     assert cd.uns["hic"]["chroms"] == ["chr1", "chr2"] and cd.uns["hic"]["resolution"] == 100
     assert cd.results.record("hic").function == "uchrom.emb.embed_contacts"
-    # PC1 follows the domain pattern (6 bins per chromosome: a coarse toy, a few cells cross)
-    pc1 = pd.Series(cd.cellm["hic_pca"][:, 0], index=cd.cells.index).groupby(cd.cells["pattern"]).mean()
-    assert np.sign(pc1["split"]) != np.sign(pc1["one"]) and abs(pc1["split"] - pc1["one"]) > 1
+    # PC1 separates the two domain patterns completely
+    pc1 = pd.Series(cd.cellm["hic_pca"][:, 0], index=cd.cells.index).groupby(cd.cells["pattern"]).agg(["min", "max"])
+    assert pc1.loc["one", "max"] < pc1.loc["split", "min"] or pc1.loc["split", "max"] < pc1.loc["one", "min"]
 
 
 def test_embed_contacts_subset_copy_and_errors(tmp_path):

@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **scHiCluster features as the authors compute them** (behaviour change).  `uchrom.emb.hic`
+  (`schicluster_impute`, `schicluster_features`, `scool_cell_features`, `embed_contacts`) now follows
+  `impute_cpu` / `hicluster_cpu` of the authors' `schicluster` 1.3.2 (github.com/zhoujt1994/scHiCluster): `log2(counts
+  + 1)` with the diagonal counted twice, the mean filter rounded as their code, the random walk on the column-normalised
+  map without self-loops (the diagonal set to 1 only in empty columns), `Q ← (1 − rp) I + rp Q P` until the Frobenius
+  change is below 1e-6 (at most 30 steps), all `n²` entries of `Q` binarised per cell, and per chromosome the authors'
+  `int(0.2 · min(cells, bins²)) − 1` PCs (`n_per_chrom=None`, formerly 20).  The former code added self-loops,
+  row-normalised, skipped the log, symmetrised `Q` and used the upper triangle only.  Checked against the authors'
+  code on the 5,313 scHiCAR cortex cells (`benchmarks/schicluster_parity/`): the binarised features of every cell
+  and chromosome are identical and the imputed maps equal bit for bit; the kNN purity of the cell types in the
+  embedding is the authors' to all digits (0.2402; 0.2433 before).  The maps are imputed one per thread with
+  single-threaded BLAS (`n_threads`, default every CPU the process may use), as the authors' process pool runs them:
+  the 5,313 cells with 20 PCs per chromosome take 325 s on 16 threads (the authors' code 289-304 s on 8 processes;
+  the former code 827-864 s).  With the authors' number of PCs the per-chromosome PCA dominates.
+- **scA/B: scHiCluster's empty bins.**  `ScABParams(empty="own")`: a bin without contacts takes its own CpG ratio, as
+  scHiCluster's compartment score (default `"nan"`, as before).
+- **`UCHROM_MEMORY_BUDGET`** sets `chromdata.settings.memory_budget` from the environment (e.g. inside a container
+  that hides the scheduler's variables).
+
 - **The ArcFISH callers now give the authors' results** (behaviour change).  `call_tads_by_pval`,
   `call_loops_axiswise_f`, `call_compartments_axes_pc` and their preprocessing (`uchrom.fea.arc`, `arc_stream`) were
   re-implemented from the published algorithm and checked against the authors' package (github.com/hyuyu104/ArcFISH

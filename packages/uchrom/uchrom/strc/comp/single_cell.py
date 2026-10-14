@@ -19,8 +19,9 @@ published forms differ in which contacts count and in the normalisation per cell
 * **scHiCluster** ``comp-cpg-cell`` / ``hicluster compartment`` (Zhou et al. 2019, *PNAS* 116:14011;
   github.com/zhoujt1994/scHiCluster, "adopted from Tan, Xing et al. 2018"; the compartment scores of the
   snm3C-seq studies): each chromosome on its own (cis contacts), the diagonal removed, the row-normalised map
-  times the CpG ratio of the bins, no normalisation across bins.  ``ScABParams(contacts="cis",
-  normalize="none")``.
+  times the CpG ratio of the bins (GitHub v1.3.4; PyPI 1.3.2 multiplies the unnormalised map), no
+  normalisation across bins; a bin without contacts takes its own CpG ratio (the authors add 1 on the diagonal of
+  an empty row).  ``ScABParams(contacts="cis", normalize="none", empty="own")``.
 
 The CpG frequency is Dip-C's (``scripts/cpg.sh``): CG dinucleotides over the dinucleotides whose two bases are
 A/C/G/T, from a genome FASTA (:func:`uchrom.fea.compute_sequence_features`, ``cpg_frequency``); any other track
@@ -63,7 +64,9 @@ class ScABParams:
     scaled to 0-1: Dip-C ``color_to_rank.py``), ``"zscore"`` or ``"none"`` (the mean CpG frequency of the
     partners: scHiCluster).  ``min_contacts``: a bin gets a value in a cell when it has at least this many
     contacts with partners that have a track value (NaN otherwise).  ``sequence_feature``: the track computed
-    when ``track`` is a FASTA (``"cpg_frequency"``: Dip-C; ``"cpg_density"``, ``"gc_fraction"``).
+    when ``track`` is a FASTA (``"cpg_frequency"``: Dip-C; ``"cpg_density"``, ``"gc_fraction"``).  ``empty``:
+    the value of a bin below ``min_contacts`` — ``"nan"`` (Dip-C) or ``"own"``, its own track value
+    (scHiCluster).
     """
 
     contacts: str = "all"
@@ -71,6 +74,7 @@ class ScABParams:
     normalize: str = "rank"
     min_contacts: int = 1
     sequence_feature: str = "cpg_frequency"
+    empty: str = "nan"
 
     def check(self) -> None:
         if self.contacts not in _CONTACTS:
@@ -81,6 +85,8 @@ class ScABParams:
             raise ValueError("ScABParams.min_separation must be at least 1 (contacts within a bin never count)")
         if int(self.min_contacts) < 1:
             raise ValueError("ScABParams.min_contacts must be at least 1")
+        if self.empty not in ("nan", "own"):
+            raise ValueError(f"ScABParams.empty={self.empty!r}: 'nan' or 'own'")
 
 
 # ------------------------------------------------------------------ the kernel
@@ -93,6 +99,7 @@ class _Sums:
 
     def __init__(self, n_rows: int, track: np.ndarray, chrom_of_bin: np.ndarray, params: ScABParams):
         self.n, self.nb = int(n_rows), len(track)
+        self.track = np.asarray(track, dtype=np.float64)
         ok = np.isfinite(track)
         self.ok = ok.astype(np.float64)
         self.t = np.where(ok, track, 0.0).astype(np.float64)          # 0 where undefined: adds nothing
@@ -142,8 +149,9 @@ class _Sums:
 
     def values(self, columns: Optional[np.ndarray] = None) -> np.ndarray:
         num, den = (self.num, self.den) if columns is None else (self.num[:, columns], self.den[:, columns])
+        own = (self.track if columns is None else self.track[columns])[None, :]
         with np.errstate(invalid="ignore", divide="ignore"):
-            return np.where(den >= self.p.min_contacts, num / den, np.nan)
+            return np.where(den >= self.p.min_contacts, num / den, own if self.p.empty == "own" else np.nan)
 
 
 def scab_sums(rows, bin1, bin2, count, track, *, n_rows: Optional[int] = None,
@@ -370,7 +378,7 @@ def single_cell_compartments(
     The definition of Tan et al. 2018 (*Science* 361:924) and 2021 (*Cell* 184:741; Dip-C ``color2`` +
     ``color_to_rank.py``): every contact of a cell between bins ``i != j`` adds the track value (CpG frequency)
     of ``j`` to ``i`` and that of ``i`` to ``j``; the value of a bin is the mean over its contacts; each cell's
-    values are then replaced by their ranks scaled to 0-1.  ``ScABParams(contacts="cis", normalize="none")``
+    values are then replaced by their ranks scaled to 0-1.  ``ScABParams(contacts="cis", normalize="none", empty="own")``
     gives the compartment score of scHiCluster ``comp-cpg-cell`` (Zhou et al. 2019, *PNAS* 116:14011): cis
     contacts only, no normalisation.  A bin's value is high (A-like) when it contacts CpG-rich regions.  The
     cells × bins matrix separates cell types (PCA → t-SNE: Tan et al. 2021's "structure typing") and, averaged
