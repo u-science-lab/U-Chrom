@@ -1,31 +1,30 @@
-"""ArcFISH-style axis-wise F-test loop caller (``AxisWiseF`` + ``LoopCaller``).
+"""ArcFISH's loop caller for chromatin tracing: the axis-wise F test of every locus pair against its local
+background (``LoopCaller`` with ``AxisWiseF``).
 
-Independent implementation of the algorithm described in Yu et al. 2025
-(ArcFISH); not derived from the GPL-3.0 ArcFISH source.
+Reference: Yu H. *et al.* ArcFISH: accurate and robust 3D genome feature discovery from chromatin tracing data.
+bioRxiv 2025.11.26.690837 (github.com/hyuyu104/ArcFISH).  U-Chrom's own implementation of the published algorithm;
+``benchmarks/arcfish_parity/`` checks it against the authors' package (commit a21d889): the same test matrices and
+the same loops.
 
-Pipeline
---------
-1. Per-axis variance + counts → :func:`uchrom.fea.arc.axis_variance_cube`.
-2. LOWESS-normalised variance → :func:`uchrom.fea.arc.filter_normalize`.
-3. Axis weights for ACAT → :func:`uchrom.fea.arc.axis_weight`.
-4. For each candidate bin pair ``(i, j)`` within ``[cut_lo, cut_up]`` 1D
-   genomic distance:
-     a. Compute a local background mean of normalised variance over a
-        ring ``[inner_cut, outer_cut]`` around ``(i, j)``, *excluding* its
-        own row/column.
-     b. Per-axis F-statistic ``F_c = var_c[i,j] / denom_c``; left-tailed
-        F-CDF gives ``p_c`` (loops have below-average variance).
-     c. ACAT combine per-axis p-values with axis weights → per-pair p.
-5. BH-FDR adjust; accept candidates with ``fdr < fdr_cutoff``.
-6. Cluster accepted candidates within ``gap`` 1D distance; pick the
-   lowest-p entry in each cluster as the "summit".
-7. Optionally filter summits by raw ``pval_cutoff`` and minimum cluster
-   size.
-
-Result columns
---------------
-``chrom1, start1, end1, chrom2, start2, end2, score (-log10 p), pval, fdr,
- summit_i, summit_j, cluster_size``
+Algorithm (per chromosome; loci and genomic distances as :mod:`uchrom.fea.arc`)
+------------------------------------------------------------------------------
+1. Normalised variances ``norm_var`` and counts ``count`` (:func:`uchrom.fea.arc.filter_normalize`) and the axis
+   weights ``w``.
+2. Every pair ``i < j`` whose distance ``start_j - start_i`` lies in ``[cut_lo, cut_up]`` is tested against its
+   local background: the pairs ``(k, l)``, ``k < l``, with ``|start_k - start_i| <= outer_cut`` and
+   ``|start_l - start_j| <= outer_cut``, except those with both distances ``<= inner_cut`` and those in row ``i``
+   or column ``j``.  A pair with at most 3 background pairs is not tested.  Per axis
+   ``F = norm_var[i, j] / (count-weighted mean of the background's norm_var)`` (a background pair whose variance
+   is missing counts in the weights but adds nothing) and ``p = F.cdf(F; count[i, j], Σ background counts)``.
+3. ``stat = Σ w tan((0.5 − p) π)`` over the axes, ``pval = 1 − Cauchy.cdf(stat)``; Benjamini–Hochberg over the
+   tested pairs; candidates have ``fdr < fdr_cutoff``.
+4. Candidates are grouped into clusters: two candidates are linked when both their loci are within ``gap`` of each
+   other's (in bp).  The summit of a cluster is its candidate with the smallest ``pval``; it is kept when the
+   fraction of traces whose two spots are closer than the contact cutoff exceeds 1/2 for a cluster of two pairs
+   and 1/3 otherwise (the authors' rule as implemented: their "singleton" test counts a symmetric pair twice) —
+   the contact cutoff is the mean 3-D distance of the locus pairs exactly ``contact_sep`` apart (25 kb; with no
+   such pair the test is off).
+5. A loop is a summit with ``pval < pval_cutoff``.
 """
 
 from __future__ import annotations
@@ -45,9 +44,8 @@ from uchrom.convention import (
     selection_inputs,
     store_and_return,
 )
-from uchrom.fea.arc import axis_variance_cube, filter_normalize, axis_weight
-from uchrom.fea.arc import _coord_tensor, _diff_rows, _row_blocks
-from uchrom.utils.stats import cauchy_combination
+from uchrom.fea.arc import axis_variance_cube, bh_fdr, filter_normalize
+from uchrom.fea.arc import _bin_starts, _coord_tensor, _diff_rows, _row_blocks
 
 
 # ----------------------------------------------------------------------
@@ -56,20 +54,27 @@ from uchrom.utils.stats import cauchy_combination
 
 @dataclass
 class LoopCallerParams:
-    """Runtime parameters for :func:`call_loops_axiswise_f`.
+    """Runtime parameters for :func:`call_loops_axiswise_f` (ArcFISH's ``LoopCaller`` defaults; distances in bp).
 
-    Defaults mirror ArcFISH's ``LoopCaller``.
+    ``inner_cut`` and ``contact_sep`` are fixed at 25 kb in the authors' code; ``min_cluster_size`` (U-Chrom,
+    default 1 = off) drops clusters with fewer candidate pairs.  ``k_sigma`` / ``frac``: the outlier filter and
+    LOWESS span of :func:`uchrom.fea.arc.filter_normalize`.
+
+    Before U-Chrom 0.3 (2026-10) the background ring was rounded to bins, untestable axes entered the combination
+    with ``p = 1``, summits were chosen by a weighted log-p and the contact cutoff used pairs one median bin apart;
+    results differ from the authors' (``docs/source/reference/changelog.md``).
     """
 
-    cut_lo: float = 1e5            # min 1D size of a candidate loop
-    cut_up: float = 1e6            # max 1D size of a candidate loop
-    inner_cut: float = 2.5e4       # inner ring radius for local background
-    outer_cut: float = 5e4         # outer ring radius for local background
+    cut_lo: float = 1e5
+    cut_up: float = 1e6
+    inner_cut: float = 2.5e4
+    outer_cut: float = 5e4
     fdr_cutoff: float = 0.1
     pval_cutoff: float = 1e-5
-    gap: float = 5e4               # 1D gap for clustering summit neighbours
-    k_sigma: float = 4.0           # outlier k for LOWESS-based filter
-    frac: float = 0.1              # LOWESS span
+    gap: float = 5e4
+    contact_sep: float = 2.5e4
+    k_sigma: float = 4.0
+    frac: float = 0.1
     min_cluster_size: int = 1
 
     def __post_init__(self):
@@ -78,141 +83,121 @@ class LoopCallerParams:
 
 
 # ----------------------------------------------------------------------
-# Helpers
+# The test (module docstring, steps 2-5)
 # ----------------------------------------------------------------------
 
-def _bh_fdr(pvals: np.ndarray) -> np.ndarray:
-    """Benjamini–Hochberg FDR on a flat array of p-values.
+def loop_tests(norm_var: np.ndarray, count: np.ndarray, starts: np.ndarray, weights: np.ndarray,
+               params: LoopCallerParams) -> dict:
+    """``(B, B)`` symmetric matrices ``stat``, ``pval`` and ``(3, B, B)`` ``axis_stat``, ``axis_pval`` of the
+    pairs tested (NaN elsewhere)."""
+    from scipy import stats
 
-    NaNs pass through as NaNs.  Returns q-values the same shape as input.
-    """
-    p = np.asarray(pvals, dtype=np.float64)
-    out = np.full_like(p, np.nan)
-    finite = np.isfinite(p)
-    if not finite.any():
-        return out
-    pf = p[finite]
-    n = pf.size
-    order = np.argsort(pf)
-    ranked = pf[order]
-    q = ranked * n / (np.arange(n) + 1.0)
-    # Enforce monotonicity (reverse cumulative min)
-    q = np.minimum.accumulate(q[::-1])[::-1]
-    q = np.clip(q, 0.0, 1.0)
-    out_finite = np.empty_like(pf)
-    out_finite[order] = q
-    out[finite] = out_finite
-    return out
-
-
-def _background_ring(
-    var_axis: np.ndarray,
-    count_axis: np.ndarray,
-    i: int,
-    j: int,
-    inner_bins: int,
-    outer_bins: int,
-):
-    """Return ``(denom, total_count)`` for the ring around ``(i, j)``.
-
-    ``denom`` is the count-weighted mean of ``var_axis`` over the ring
-    ``[inner_bins, outer_bins]`` around ``(i, j)``, excluding row ``i``
-    and column ``j``.  ``total_count`` is the sum of counts in the same
-    ring — used as the ``df2`` for the F-test.  NaN-safe.
-    """
-    B = var_axis.shape[0]
-    lo_i = max(0, i - outer_bins)
-    hi_i = min(B, i + outer_bins + 1)
-    in_lo_i = max(0, i - inner_bins)
-    in_hi_i = min(B, i + inner_bins + 1)
-    lo_j = max(0, j - outer_bins)
-    hi_j = min(B, j + outer_bins + 1)
-    in_lo_j = max(0, j - inner_bins)
-    in_hi_j = min(B, j + inner_bins + 1)
-
-    # Build a boolean mask of kept entries then sum (avoids the sum-of-
-    # rectangles book-keeping and matches ArcFISH's `ij_background` logic).
-    # The mask covers the outer square only (row i and column j lie inside
-    # it): the same entries in the same order as a (B, B) mask, at
-    # O(outer²) instead of O(B²) per candidate.
-    mask = np.ones((hi_i - lo_i, hi_j - lo_j), dtype=bool)
-    mask[in_lo_i - lo_i:in_hi_i - lo_i, in_lo_j - lo_j:in_hi_j - lo_j] = False
-    mask[i - lo_i, :] = False
-    mask[:, j - lo_j] = False
-
-    vals = var_axis[lo_i:hi_i, lo_j:hi_j][mask]
-    cnts = count_axis[lo_i:hi_i, lo_j:hi_j][mask]
-    finite = np.isfinite(vals) & (cnts > 0)
-    if not finite.any():
-        return np.nan, 0
-
-    v = vals[finite]
-    c = cnts[finite].astype(np.float64)
-    total = c.sum()
-    denom = float((c * v).sum() / total)
-    return denom, float(total)
-
-
-def _cluster_summits(
-    triu_hits: np.ndarray,
-    pvals: np.ndarray,
-    d1d: np.ndarray,
-    gap: float,
-):
-    """Cluster accepted candidates by 1D proximity; pick lowest-p summits.
-
-    Parameters
-    ----------
-    triu_hits : bool array (n_hit,)
-        Already filtered upper-triangle candidates.
-    pvals : float array (n_hit,)
-        Raw p-values for those candidates.
-    d1d : float array (n_hit, n_hit)
-        Pairwise 1D genomic distance between candidate centres in bp,
-        computed upstream.
-    gap : float
-        Max separation for two candidates to be in the same cluster.
-
-    Returns
-    -------
-    clusters : list[list[int]]
-        Index lists per cluster (into the ``triu_hits`` / ``pvals`` arrays).
-    summits : list[int]
-        Index into ``pvals`` of the lowest-p entry per cluster.
-    """
-    n = pvals.size
-    if n == 0:
-        return [], []
-
-    # Union-Find via simple BFS on adjacency where nodes ≤ gap apart
-    adj = [set() for _ in range(n)]
-    for i in range(n):
-        for j in range(i + 1, n):
-            if d1d[i, j] <= gap:
-                adj[i].add(j)
-                adj[j].add(i)
-
-    seen = [False] * n
-    clusters = []
-    for i in range(n):
-        if seen[i]:
+    B = len(starts)
+    d = np.asarray(starts, dtype=np.float64)
+    axis_stat = np.full((3, B, B), np.nan)
+    axis_pval = np.full((3, B, B), np.nan)
+    sep = d[None, :] - d[:, None]
+    for i, j in zip(*np.nonzero((sep >= params.cut_lo) & (sep <= params.cut_up))):
+        K = np.flatnonzero(np.abs(d - d[i]) <= params.outer_cut)
+        L = np.flatnonzero(np.abs(d - d[j]) <= params.outer_cut)
+        bk = np.ones((len(K), len(L)), dtype=bool)
+        bk &= ~((np.abs(d[K] - d[i]) <= params.inner_cut)[:, None] & (np.abs(d[L] - d[j]) <= params.inner_cut)[None, :])
+        bk &= (K != i)[:, None] & (L != j)[None, :]
+        bk &= K[:, None] < L[None, :]
+        if bk.sum() <= 3:
             continue
-        stack = [i]
-        comp = []
-        while stack:
-            k = stack.pop()
-            if seen[k]:
-                continue
-            seen[k] = True
-            comp.append(k)
-            stack.extend(adj[k])
-        clusters.append(comp)
+        kk, ll = np.nonzero(bk)
+        kk, ll = K[kk], L[ll]
+        c = count[:, kk, ll].astype(np.float64)
+        n_bg = c.sum(axis=1)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            den = np.nansum((c / n_bg[:, None]) * norm_var[:, kk, ll], axis=1)
+            f = norm_var[:, i, j] / den
+        p = stats.f.cdf(f, count[:, i, j], n_bg)
+        axis_stat[:, i, j] = axis_stat[:, j, i] = f
+        axis_pval[:, i, j] = axis_pval[:, j, i] = p
+    w = np.asarray(weights, dtype=np.float64)[:, None, None]
+    stat = np.sum(w * np.tan((0.5 - axis_pval) * np.pi), axis=0)
+    return {"axis_stat": axis_stat, "axis_pval": axis_pval, "stat": stat, "pval": 1 - stats.cauchy.cdf(stat)}
 
-    summits = []
-    for comp in clusters:
-        best = comp[int(np.argmin(pvals[comp]))]
-        summits.append(best)
-    return clusters, summits
+
+def _clusters(cand: np.ndarray, starts: np.ndarray, gap: float) -> np.ndarray:
+    """``(B, B)`` labels (1, 2, …; NaN elsewhere) of the candidates' clusters: candidates linked when both loci are
+    within ``gap`` (bp), a pair and its mirror sharing a label.  Labels are numbered by the first upper-triangle
+    entry of each cluster in row-major order."""
+    d = np.asarray(starts, dtype=np.float64)
+    ii, jj = np.nonzero(cand)
+    n = len(ii)
+    parent = np.arange(n)
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    pos = {(int(a), int(b)): k for k, (a, b) in enumerate(zip(ii, jj))}
+    for k, (a, b) in enumerate(zip(ii, jj)):
+        m = pos.get((int(b), int(a)))
+        if m is not None:
+            parent[find(k)] = find(m)
+    for k0 in range(0, n, 2048):
+        a = slice(k0, min(n, k0 + 2048))
+        near = (np.abs(d[ii[a]][:, None] - d[ii][None, :]) <= gap) & (np.abs(d[jj[a]][:, None] - d[jj][None, :]) <= gap)
+        for r, c in zip(*np.nonzero(near)):
+            ra, rb = find(k0 + r), find(c)
+            if ra != rb:
+                parent[ra] = rb
+    roots = np.array([find(k) for k in range(n)])
+    label = np.full(cand.shape, np.nan)
+    upper = ii < jj
+    order = np.lexsort((jj, ii))
+    num = {}
+    for k in order:
+        if upper[k] and roots[k] not in num:
+            num[roots[k]] = len(num) + 1
+    for k in order:
+        if roots[k] not in num:
+            num[roots[k]] = len(num) + 1
+    label[ii, jj] = [num[r] for r in roots]
+    return label
+
+
+def _summits(label: np.ndarray, pval: np.ndarray, freq: np.ndarray) -> np.ndarray:
+    """Boolean ``(B, B)`` summits (module docstring, step 4)."""
+    summit = np.zeros(label.shape, dtype=bool)
+    upper = np.triu(np.nan_to_num(label, nan=0.0))
+    for lab in np.unique(label[~np.isnan(label)]):
+        idx = np.nonzero(upper == lab)
+        if not len(idx[0]):
+            continue
+        k = int(np.argmin(pval[idx]))
+        i1, i2 = idx[0][k], idx[1][k]
+        need = 0.5 if len(idx[0]) == 2 else 1.0 / 3.0
+        if freq[i1, i2] > need:
+            summit[i1, i2] = summit[i2, i1] = True
+    return summit
+
+
+def loop_matrices(cube: dict, freq: np.ndarray, params: LoopCallerParams) -> dict:
+    """All test matrices of one chromosome: ``axis_stat``, ``axis_pval``, ``stat``, ``pval``, ``fdr``,
+    ``candidate``, ``label``, ``summit``, ``final`` (as the authors' ``LoopCaller.call_loops``) and ``freq``."""
+    starts = _bin_starts(cube["bin_ids"])
+    res = loop_tests(cube["norm_var"], cube["count"], starts, cube["axis_weight"], params)
+    pval = res["pval"]
+    iu = np.triu_indices_from(pval, 1)
+    q = bh_fdr(pval[iu])
+    fdr = np.full_like(pval, np.nan)
+    fdr[iu] = q
+    fdr.T[iu] = q
+    with np.errstate(invalid="ignore"):
+        cand = fdr < params.fdr_cutoff
+    label = _clusters(cand, starts, params.gap)
+    summit = _summits(label, pval, freq)
+    with np.errstate(invalid="ignore"):
+        final = summit & (pval < params.pval_cutoff)
+    res.update({"fdr": fdr, "candidate": cand, "label": label, "summit": summit, "final": final, "freq": freq})
+    return res
 
 
 # ----------------------------------------------------------------------
@@ -236,7 +221,7 @@ def call_loops_axiswise_f(
     store=UNSET,
     result_key=UNSET,
 ):
-    """ArcFISH-style axis-wise F-test loop caller (chromatin tracing).
+    """ArcFISH's axis-wise F-test loop caller (chromatin tracing; module docstring).
 
     Parameters
     ----------
@@ -271,9 +256,10 @@ def call_loops_axiswise_f(
     Returns
     -------
     DataFrame (``copy=False``) or ChromData (``copy=True``)
-        One row per called loop summit (BEDPE-style ``chrom1 … end2`` plus
-        ``score, pval, fdr, cluster_size, contact_freq, summit_i,
-        summit_j``; the summit indices are per-chromosome bin indices).
+        One row per called loop (a summit with ``pval < pval_cutoff``): BEDPE-style ``chrom1 … end2`` plus
+        ``stat, pval, fdr, score`` (``-log10 pval``), ``cluster_size`` (candidate pairs of its cluster),
+        ``contact_freq`` and ``summit_i, summit_j`` (per-chromosome locus indices).  The test matrices are
+        :func:`arcfish_loop_matrices`.
 
     Notes
     -----
@@ -300,206 +286,82 @@ def call_loops_axiswise_f(
     )
 
 
-def _call_loops_chrom(cd, chrom: str, params: LoopCallerParams,
-                      device: str, verbose: bool, *, streaming: bool = False, batch="auto",
-                      memory_budget=None) -> pd.DataFrame:
-    """Per-chromosome kernel of :func:`call_loops_axiswise_f` (no storing)."""
-    from scipy.stats import f as _f_dist
-
-    # Step 1 + 2: variances + LOWESS normalisation
+def _cube_and_freq(cd, chrom: str, params: LoopCallerParams, device: str, verbose: bool, *, streaming: bool,
+                   batch, memory_budget):
+    """The normalised variance cube (with its axis weights) and the contact-frequency matrix of one chromosome."""
     if verbose:
-        print(f"[loop/{chrom}] computing axis variance cube"
-              f"{' (streaming)' if streaming else ''}...")
+        print(f"[loop/{chrom}] variance cube{' (streaming)' if streaming else ''}...")
     if streaming:
         from uchrom.fea.arc_stream import axis_cube_streaming, pseudo_contact_frequency_streaming
 
         cube = axis_cube_streaming(cd, chrom, k_sigma=params.k_sigma, frac=params.frac,
                                    streaming=True, batch=batch, memory_budget=memory_budget)
-        w = cube["axis_weight"]
+        return cube, pseudo_contact_frequency_streaming(cube["pairs"], params.contact_sep)
+    cube = axis_variance_cube(cd, chrom=chrom, device=device)
+    freq = _pseudo_contact_frequency(cd, chrom, cube["bin_ids"], params.contact_sep, device=device)
+    return filter_normalize(cube, k_sigma=params.k_sigma, frac=params.frac), freq
 
-        def freq_of(bin_ids):
-            return pseudo_contact_frequency_streaming(cube["pairs"])
-    else:
-        cube = axis_variance_cube(cd, chrom=chrom, device=device)
-        if verbose:
-            print(f"[loop/{chrom}] {cube['n_traces']} traces, "
-                  f"{len(cube['bin_ids'])} bins; normalising...")
-        cube = filter_normalize(cube, k_sigma=params.k_sigma, frac=params.frac)
-        w = axis_weight(cd, chrom=chrom, device=device)
 
-        def freq_of(bin_ids):
-            return _pseudo_contact_frequency(cd, chrom, bin_ids, device=device)
+def arcfish_loop_matrices(cd, *, chrom: str, trace_ids=None, cells=None, params: Optional[LoopCallerParams] = None,
+                          device: str = "auto", streaming: Optional[bool] = None, batch="auto",
+                          memory_budget=None) -> dict:
+    """The ``(B, B)`` test matrices of one chromosome (:func:`loop_matrices`) and its loci (``bin_ids``) — the
+    authors' ``LoopCaller.call_loops`` dict, for inspection; not stored."""
+    params = params or LoopCallerParams()
+    work = select_spots(cd, trace_ids=trace_ids, cells=cells)
+    streaming = bool(getattr(work, "backed", False)) if streaming is None else bool(streaming)
+    cube, freq = _cube_and_freq(work, chrom, params, device, False, streaming=streaming, batch=batch,
+                                memory_budget=memory_budget)
+    out = loop_matrices(cube, freq, params)
+    out["bin_ids"] = cube["bin_ids"]
+    out["axis_weight"] = cube["axis_weight"]
+    return out
 
+
+def _call_loops_chrom(cd, chrom: str, params: LoopCallerParams,
+                      device: str, verbose: bool, *, streaming: bool = False, batch="auto",
+                      memory_budget=None) -> pd.DataFrame:
+    """Per-chromosome kernel of :func:`call_loops_axiswise_f` (no storing)."""
+    cube, freq = _cube_and_freq(cd, chrom, params, device, verbose, streaming=streaming, batch=batch,
+                                memory_budget=memory_budget)
+    m = loop_matrices(cube, freq, params)
+    if verbose:
+        tested = int(np.isfinite(m["pval"][np.triu_indices_from(m["pval"], 1)]).sum())
+        print(f"[loop/{chrom}] {tested} pairs tested, "
+              f"{int(np.triu(m['candidate'], 1).sum())} candidates, {int(np.triu(m['final'], 1).sum())} loops")
     bin_ids = cube["bin_ids"]
-    norm_var = cube["norm_var"]                     # (3, B, B)
-    count = cube["count"]                           # (3, B, B)
-    d1d = cube["genomic_distance"]                  # (B, B)
-
-    # Step 3: axis weights (computed with the cube)
-    if verbose:
-        print(f"[loop/{chrom}] axis weights x={w[0]:.3f}, y={w[1]:.3f}, z={w[2]:.3f}")
-
-    # Figure out integer bin widths for the background ring
-    med_bin_size = float(np.median([e - s for s, e in bin_ids]))
-    inner_bins = max(1, int(round(params.inner_cut / med_bin_size)))
-    outer_bins = max(inner_bins + 1, int(round(params.outer_cut / med_bin_size)))
-    if verbose:
-        print(f"[loop/{chrom}] median bin size {med_bin_size:.0f} bp, "
-              f"ring bins [{inner_bins}, {outer_bins}]")
-
-    # Candidate mask: upper triangle with 1D distance in [cut_lo, cut_up]
-    cand = (d1d >= params.cut_lo) & (d1d <= params.cut_up)
-    cand = np.triu(cand, k=1)
-    cand_idx = np.argwhere(cand)
-    if cand_idx.size == 0:
-        if verbose:
-            print(f"[loop/{chrom}] no candidates in [{params.cut_lo}, {params.cut_up}]")
-        return _empty_result()
-
-    # Step 4: per-axis F-test
-    if verbose:
-        print(f"[loop/{chrom}] {len(cand_idx)} candidates; running F-test...")
-
-    # Work in log-p space to avoid floor-clipping ties at the minimum p.
-    # scipy's F.logcdf handles extreme F values without underflow, so a
-    # loop with F ≈ 1e-4 and a non-loop pair with F ≈ 0.2 stay
-    # distinguishable after ACAT combination, which matters for summit
-    # tie-breaking later.
-    per_axis_logp = np.full((3, len(cand_idx)), 0.0, dtype=np.float64)
-    per_axis_F = np.full((3, len(cand_idx)), np.nan, dtype=np.float64)
-    for k, (i, j) in enumerate(cand_idx):
-        for ax in range(3):
-            vij = norm_var[ax, i, j]
-            cij = count[ax, i, j]
-            if not np.isfinite(vij) or cij <= 0:
-                continue
-            denom, bg_count = _background_ring(
-                norm_var[ax], count[ax], int(i), int(j),
-                inner_bins, outer_bins,
-            )
-            if not np.isfinite(denom) or denom <= 0 or bg_count <= 3:
-                continue
-            F = vij / denom
-            logp = _f_dist.logcdf(F, dfn=max(int(cij), 1), dfd=max(bg_count, 1))
-            per_axis_F[ax, k] = F
-            per_axis_logp[ax, k] = logp
-
-    # Convert log-p back to p for ACAT (clip only here; ACAT needs raw p).
-    # A small floor (1e-300) still limits the dynamic range but that is
-    # enough precision for ACAT — the F-based ``score`` below breaks any
-    # remaining ties when picking the summit of a cluster.
-    per_axis_logp = np.where(np.isfinite(per_axis_logp), per_axis_logp, 0.0)
-    per_axis_p = np.clip(np.exp(per_axis_logp), 1e-300, 1 - 1e-15)
-
-    # Step 4c: ACAT combine
-    combined = cauchy_combination(per_axis_p.T, weights=w, axis=1)
-    # cauchy_combination returns upper tail (1 - CDF); for this left-tail
-    # setup that's our raw p-value.
-    pvals = np.clip(np.asarray(combined), 1e-300, 1.0)
-
-    # Step 5: BH-FDR
-    fdr = _bh_fdr(pvals)
-    accept = (fdr < params.fdr_cutoff)
-
-    if not accept.any():
-        if verbose:
-            print(f"[loop/{chrom}] no candidates pass FDR < {params.fdr_cutoff}")
-        return _empty_result()
-
-    # Step 6: cluster accepted hits by 1D distance between midpoints.
-    # We order candidates inside a cluster by a full-precision log-p
-    # "score" (weighted sum of per-axis log-p) so that p-value ties at
-    # the numerical floor are broken by the actual F-statistic strength.
-    hits_idx = cand_idx[accept]
-    hit_pvals = pvals[accept]
-    w_arr = np.asarray(w).reshape(3, 1)
-    hit_score = (per_axis_logp * w_arr).sum(axis=0)[accept]   # smaller = better
-    mids_i = np.array([(bin_ids[i][0] + bin_ids[i][1]) * 0.5 for i in hits_idx[:, 0]])
-    mids_j = np.array([(bin_ids[j][0] + bin_ids[j][1]) * 0.5 for j in hits_idx[:, 1]])
-    di = np.abs(mids_i[:, None] - mids_i[None, :])
-    dj = np.abs(mids_j[:, None] - mids_j[None, :])
-    d1d_hits = np.maximum(di, dj)
-    clusters, summits = _cluster_summits(accept, hit_score, d1d_hits, params.gap)
-
-    # Step 7: pseudo-contact frequency filter
-    # Build the (n_traces, n_bins, n_bins) 3D pdist matrix.  Uses the same
-    # coord cube as filter_normalize — compute once, store on CPU.
-    freq_mat = freq_of(bin_ids)
-
-    # Step 8: final filter — p-value + pseudo-contact frequency
     rows = []
-    accept_idx_in_cand = np.where(accept)[0]
-    for comp, summit in zip(clusters, summits):
-        if len(comp) < params.min_cluster_size:
+    upper_label = np.triu(np.nan_to_num(m["label"], nan=0.0))
+    for i, j in zip(*np.nonzero(np.triu(m["final"], 1))):
+        size = int((upper_label == m["label"][i, j]).sum())
+        if size < params.min_cluster_size:
             continue
-        i_b, j_b = hits_idx[summit]
-        p_summit = hit_pvals[summit]
-        if p_summit >= params.pval_cutoff:
-            continue
-        # Pseudo-contact frequency rule (ArcFISH "summit"):
-        #   singleton cluster (== 1 triu entry) → freq > 1/2
-        #   larger cluster                     → freq > 1/3
-        is_singleton = len(comp) == 1
-        freq_thresh = 0.5 if is_singleton else (1.0 / 3.0)
-        f = freq_mat[int(i_b), int(j_b)]
-        if not (np.isfinite(f) and f > freq_thresh):
-            continue
-
-        s1, e1 = bin_ids[i_b]
-        s2, e2 = bin_ids[j_b]
+        (s1, e1), (s2, e2) = bin_ids[i], bin_ids[j]
+        p = float(m["pval"][i, j])
         rows.append({
-            "chrom1": chrom,
-            "start1": int(s1),
-            "end1": int(e1),
-            "chrom2": chrom,
-            "start2": int(s2),
-            "end2": int(e2),
-            "score": float(-np.log10(max(p_summit, 1e-300))),
-            "pval": float(p_summit),
-            "fdr": float(fdr[accept_idx_in_cand[summit]]),
-            "cluster_size": int(len(comp)),
-            "contact_freq": float(f),
-            "summit_i": int(i_b),
-            "summit_j": int(j_b),
+            "chrom1": chrom, "start1": int(s1), "end1": int(e1),
+            "chrom2": chrom, "start2": int(s2), "end2": int(e2),
+            "stat": float(m["stat"][i, j]), "pval": p, "fdr": float(m["fdr"][i, j]),
+            "score": float(-np.log10(max(p, 1e-300))),
+            "cluster_size": size, "contact_freq": float(freq[i, j]),
+            "summit_i": int(i), "summit_j": int(j),
         })
-
-    df_out = pd.DataFrame(rows)
-    if df_out.empty:
-        df_out = _empty_result()
-    return df_out
+    return pd.DataFrame(rows) if rows else _empty_result()
 
 
-def _pseudo_contact_frequency(cd, chrom, bin_ids, device="auto"):
-    """Fraction of traces whose 3D pairwise distance falls under a
-    data-driven "contact" cutoff.
-
-    Replicates ArcFISH's ``AxisWiseF.append_summit`` frequency rule:
-    the cutoff is the NaN-mean pairwise distance at 1D separation
-    equal to one bin width; ``freq_mat[i, j]`` is the fraction of
-    traces where the (i, j) 3D distance is below that cutoff,
-    conditional on both endpoints being observed.
-    """
+def _pseudo_contact_frequency(cd, chrom, bin_ids, contact_sep: float = 2.5e4, device="auto"):
+    """Fraction of traces whose two spots are closer than the contact cutoff, per locus pair (module docstring,
+    step 4): the cutoff is the mean 3-D distance of the pairs exactly ``contact_sep`` apart (all traces, both
+    triangles); with no such pair the matrix is all ones.  NaN where no trace observed both loci."""
     import torch
 
     c, _, _ = _coord_tensor(cd, chrom, device)
     B = len(bin_ids)
-    if c.shape[1] != B:
-        return np.ones((B, B))  # defensive
-
-    # 1D distance between bins in bp
-    mids = np.array([(s + e) * 0.5 for (s, e) in bin_ids])
-    d1d = np.abs(mids[:, None] - mids[None, :])
-    med_bin_size = float(np.median([e - s for s, e in bin_ids]))
-    # ArcFISH uses |d1d[i] - d1d[j]| == 25e3 (one bin).  Generalise to
-    # a small tolerance around the median bin size.
-    tol = max(1.0, 0.1 * med_bin_size)
-    d1sel = np.abs(d1d - med_bin_size) <= tol
-
-    if d1sel.sum() == 0:
+    st = _bin_starts(bin_ids)
+    d1sel = np.abs(st[:, None] - st[None, :]) == contact_sep
+    if c.shape[1] != B or not d1sel.any():
         return np.ones((B, B))
 
-    # (T, B, B) 3D pdist, one block of rows at a time: the cutoff (NaN-mean
-    # over the one-bin pairs) first, then the per-pair contact fraction.
     def pdist_rows(i0, i1):
         diff = _diff_rows(c, i0, i1)                            # (3, T, b, B)
         return torch.sqrt((diff ** 2).sum(dim=0)).detach().cpu().numpy().astype(np.float64)
@@ -510,16 +372,11 @@ def _pseudo_contact_frequency(cd, chrom, bin_ids, device="auto"):
         total += float(np.nansum(vals))
         n_obs += int(np.sum(~np.isnan(vals)))
     cutoff = total / n_obs if n_obs else float("nan")
-    if not np.isfinite(cutoff) or cutoff <= 0:
-        return np.ones((B, B))
-
     freq = np.empty((B, B), dtype=np.float64)
     for i0, i1 in _row_blocks(c):
         pd_rows = pdist_rows(i0, i1)
-        with np.errstate(invalid="ignore"):
-            n_contact = np.nansum(pd_rows < cutoff, axis=0)
-            n_valid = np.sum(~np.isnan(pd_rows), axis=0)
-            freq[i0:i1] = np.where(n_valid > 0, n_contact / n_valid, 0.0)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            freq[i0:i1] = np.sum(pd_rows < cutoff, axis=0) / np.sum(~np.isnan(pd_rows), axis=0)
     return freq
 
 
@@ -531,10 +388,12 @@ def _empty_result() -> pd.DataFrame:
         "chrom2": pd.Series(dtype=str),
         "start2": pd.Series(dtype="int64"),
         "end2":   pd.Series(dtype="int64"),
-        "score":  pd.Series(dtype="float64"),
+        "stat":   pd.Series(dtype="float64"),
         "pval":   pd.Series(dtype="float64"),
         "fdr":    pd.Series(dtype="float64"),
+        "score":  pd.Series(dtype="float64"),
         "cluster_size": pd.Series(dtype="int64"),
+        "contact_freq": pd.Series(dtype="float64"),
         "summit_i": pd.Series(dtype="int64"),
         "summit_j": pd.Series(dtype="int64"),
     })
@@ -543,4 +402,7 @@ def _empty_result() -> pd.DataFrame:
 __all__ = [
     "LoopCallerParams",
     "call_loops_axiswise_f",
+    "arcfish_loop_matrices",
+    "loop_matrices",
+    "loop_tests",
 ]

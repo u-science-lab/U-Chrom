@@ -30,22 +30,23 @@ says "from the contact map", use the map.
 ## Tracing: resolution first
 Callers read the spot loci as bins. With sparse traces (each trace detects a few % of the loci, as in
 genome-wide DNA seqFISH+) the native-resolution map is mostly empty and the caller's default window
-(ArcFISH `window_bp = 1e5` ≈ 4 × 25 kb bins, made for dense tracing) calls noise. So:
+(ArcFISH `window_bp = 1e5` = 4 × 25 kb bins on each side of a locus, made for dense tracing) calls noise. So:
 1. `structures.py coverage data.chromdata.zarr --chrom chrN` → per bin size: median fraction of bins a trace
    observes, expected traces per bin pair.
 2. Use the finest bin size where the median trace observes ≥ 50 % of bins (`--bin-size auto`; dense
    tracing data stays at native resolution). `bin_traces()` averages a trace's spots per bin (this also
    merges duplicate loci).
-3. Keep the window in *bins*: `--window-bins 4` → `window_bp = 4 × bin size`. "Default settings" of a
+3. Keep the window in *bins*: `--window-bins 4` → `window_bp = 4 × bin size` on each side. "Default settings" of a
    caller means its default parameters *at the data's usable resolution* — say what you used.
-4. Report n traces (< 20 → exploratory), bin size, window, FDR, the number of level-1 domains (level 1
-   = all boundaries; higher levels drop the weakest boundary), and a sensitivity check at the
+4. Report n traces (< 20 → exploratory), bin size, window, FDR, the number of finest domains (level 0
+   = all boundaries; each higher level merges two domains by dropping the weakest boundary), and a
+   sensitivity check at the
    neighbouring bin size if the count matters.
 
 ```python
 import sys; sys.path.insert(0, "<skill dir>/scripts")
 from structures import call_tads, coverage, distance_at_separation
-res = call_tads(cd, "<CHROM>", bin_size="auto", window_bins=4)   # res["n_domains_level1"], res["checks"]
+res = call_tads(cd, "<CHROM>", bin_size="auto", window_bins=4)   # res["n_domains_finest"], res["checks"]
 ```
 
 ## Distances and Rg

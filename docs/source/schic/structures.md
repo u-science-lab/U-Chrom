@@ -70,12 +70,14 @@ GM12878 cells (28 chr21 homologs, 20 kb) against Rao 2014:
 
 | Structure | Structures (tracing callers) | Same cells pooled (map callers) |
 |-----------|------------------------------|----------------------------------|
-| compartments | r 0.77 with E1, agreement 0.86 | r 0.93, agreement 0.95 |
-| domain boundaries | ArcFISH at chance; FISHnet frequency peaks 0.34 (chance 0.12) | insulation: precision 0.38, recall 0.70 |
+| compartments | r 0.78 with E1, agreement 0.87 | r 0.94, agreement 0.95 |
+| domain boundaries | ArcFISH: 244 boundaries, 21 % within one particle of a Hi-C boundary (random loci 12 %); FISHnet frequency peaks 0.34 (chance 0.12) | insulation: precision 0.38, recall 0.70 |
 | loops | none called (axis-wise F), although published loop anchors sit at 0.69× the background distance | HiCCUPS: 4 |
 
 Compartments are limited by the number of cells (the same as imaging at equal numbers of traces); domains and
 loops by the structures — a reconstruction is smoother than an imaged trace and the tracing callers' tests
 treat it as data.  For domains and loops pool the cells or call across them (above).
 
-The numbers, datasets and Sherlock jobs are in `benchmarks/sc_structures/README.md`.
+The structure-caller numbers are those of the tutorial `sc_structures` (re-executed 2026-10-13 with the ArcFISH
+callers that give the authors' results; `benchmarks/arcfish_parity`); the rest, with datasets and Sherlock jobs,
+are in `benchmarks/sc_structures/README.md` (run with the former callers: ArcFISH boundaries at chance there).

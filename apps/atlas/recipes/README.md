@@ -142,6 +142,8 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `WTC11_HiC_2Mb.hcs`: the IGM demo input (GPL-3) | 3.9 MB | downloaded on demand by `benchmarks/bulk/_igm_bench.py` into `$UCHROM_IGM_CACHE` | IGM protocol of the native engine vs the original IGM |
 | bulk IGM inputs (`fine_20kb.npz`, `igm_200kb.npz`, `su_3mb.npz`, `su_1mb.npz`, `takei_1mb.npz`) | 0.1–10 GB | **derived** on Sherlock (`benchmarks/bulk/real_inputs.py`, `sherlock/build_real.sbatch`) | `benchmarks/bulk/` |
 | `liu2025_mop/`: Liu 2025 mouse MOp DNA-MERFISH, 4DN FOF-CT core + cell table | 1.68 GB + 17 MB; store 294 MB | fetch `liu2025_mop`; recipe `build_liu2025_mop.py` | Fig. 2 dataset scale; FOF-CT writer, format, streaming and cell-position benchmarks |
+| `4DNFIQXONUUH.csv`: Takei 2021 mESC FOF-CT, replicate 2 | 34 MB | fetch `takei_rep2` | `benchmarks/arcfish_parity` (ArcFISH's loop / domain tutorial data); tutorials `tad_calling`, `loop_calling` (both replicates, as the ArcFISH paper) |
+| `su2020_imr90/chromosome2_p-arm_replicate.tsv`: Su 2020 chr2 p-arm tracing | 78 MB | fetch `su2020_chr2_parm` | `benchmarks/arcfish_parity` (ArcFISH's compartment tutorial data) |
 | `benchmarks/fig6/_data/takei2025_fov0_x{1,3,10,30}.chromdata.zarr` | 8–70 MB | **derived**: `benchmarks/fig6/make_scaled.py` (replicated FOV 0 cells, geometry only) | Fig. 6c browser benchmarks |
 | `schicar_mop/data/...` (inputs of the scHiCAR to MERFISH mapping) | — | **derived, recipe pending** | `benchmarks/schicar_merfish/schicar_to_merfish_mapping.ipynb` |
 
@@ -1592,6 +1594,22 @@ centred on the Su loci), `takei_1mb.npz` (mESC onto 1 Mb bins centred on the Tak
   distances at short / long separations by cell class, `cluster_class` / `cluster_subclass`; on Sherlock fetched
   and built by `benchmarks/cross_assay/sherlock/liu2025.sbatch` into `$SCRATCH/uchrom-nd/data/liu2025_mop/`,
   2026-10-11, the same 9,582,069 spots / 188,891 traces / 11,045 cells, `from_fofct` 40 s at 12.0 GB).
+
+### `benchmarks/arcfish_parity/`: the inputs of the ArcFISH parity check
+
+The parity check (`benchmarks/arcfish_parity`, `results/MANIFEST.md`) runs U-Chrom's ArcFISH callers and the authors'
+package on the same FOF-CT tables, written by `inputs.py` from:
+
+- `takei` (4DN 4DNFIHF3JCBY, replicate 1) and **`takei_rep2`** (4DN
+  [4DNFIQXONUUH](https://data.4dnucleome.org/4DNFIQXONUUH/), 34 MB, md5 `659a89aa…bedd5a2765`, replicate 2 of the
+  same experiment set; open 4DN data): read together, chr6 — the data of the authors' loop / domain tutorial (the
+  tutorials `tad_calling` and `loop_calling` read both replicates, all 20 regions, to compare with the ArcFISH paper);
+- **`su2020_chr2_parm`** (Su et al. 2020, Zenodo 3928890 `chromosome2_p-arm_replicate.tsv`, 78 MB, md5
+  `ead30c67…a20540`, CC-BY-4.0): IMR90 chromosome 2 p-arm, the first 100 traces — the data of the authors'
+  compartment tutorial;
+- `takei2025_fov0` (chr15 averaged into 1-Mb bins per trace), `bintu_imr90`, `su2020_chr21` (first 1,000 traces).
+
+The FOF-CT tables are written to `$SCRATCH/uchrom-nd/arcfish_parity/inputs/` (not kept in the repository).
 
 ### `benchmarks/fig6/_data/`: scaled copies of Takei 2025 FOV 0 (derived)
 

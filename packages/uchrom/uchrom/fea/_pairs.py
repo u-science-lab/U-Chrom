@@ -84,10 +84,13 @@ class ChromPairs:
     memory_budget : bytes / string; default :data:`uchrom.settings.memory_budget`
     duplicates : ``"last"`` (default), ``"first"``, ``"mean"`` or ``"median"``
         the spot a trace keeps at a bin it observed more than once
+    observed_finite : with ``observed``, a bin counts as observed only with a finite coordinate (ArcFISH's
+        convention, :mod:`uchrom.fea.arc`)
     """
 
     def __init__(self, cd, chrom: str, *, streaming: Optional[bool] = None, batch="auto",
-                 observed: bool = True, memory_budget=None, duplicates: str = "last"):
+                 observed: bool = True, memory_budget=None, duplicates: str = "last",
+                 observed_finite: bool = False):
         from uchrom.settings import settings
 
         self.cd = cd
@@ -102,6 +105,7 @@ class ChromPairs:
         if not len(chrom_ids):
             raise ValueError(f"No spots found for chromosome {chrom}")
         self.observed = observed
+        self.observed_finite = observed_finite
         self._chrom_ids = chrom_ids
         self._lookup: Optional[np.ndarray] = None
         self.bin_ids: Optional[np.ndarray] = None          # global bin ids of the matrix rows
@@ -182,7 +186,7 @@ class ChromPairs:
         diag = np.zeros(n_all, dtype=np.int64)
         n_traces = 0
         for bid, coords, runs in self.chunks():
-            seen[bid] = True
+            seen[bid[np.isfinite(coords).any(axis=1)] if self.observed_finite else bid] = True
             n_traces += len(runs) - 1
             ok = np.isfinite(coords).all(axis=1)
             b2, runs2 = _drop_rows(bid, runs, ok)
