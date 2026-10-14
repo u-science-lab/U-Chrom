@@ -431,7 +431,7 @@ def _figdata() -> Path:
 
 
 def stage_figure(work: Path, results: Path, figdata: Path, seed: int, n_boot: int) -> dict:
-    """Inputs of the Extended Data figure (u-chrom-paper manuscripts/nmeth-bc/figures/make_ed_cross_assay.py):
+    """Inputs of the nmeth-bc Fig. 2 (u-chrom-paper manuscripts/nmeth-bc/figures/make_fig2.py):
     ``cross_assay_figure.json`` (per dataset: class medians, n, ExN - Oligo and Astro - Oligo with Cliff's delta and
     its bootstrap CI), ``cross_assay_cells.parquet`` (per-cell values of GAGE-seq, Liu 2025, Takei 2021) and
     ``cross_assay_profiles.parquet`` (class medians of the per-cell profiles, GAGE-seq and Liu 2025)."""

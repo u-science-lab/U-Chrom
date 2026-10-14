@@ -1,0 +1,299 @@
+{
+ "results": {
+  "contrast": "ExN - Oligo",
+  "panels": {
+   "liu2025": 1917,
+   "takei2021": 2340
+  },
+  "imaging_cells": {
+   "liu2025": {
+    "ExN": 5097,
+    "Oligo": 1963
+   },
+   "takei2021": {
+    "ExN": 1895,
+    "Oligo": 78
+   }
+  },
+  "ceiling": {
+   "liu2025": {
+    "diff": {
+     "n_pairs": 101879,
+     "spearman": 0.7940132741767036
+    },
+    "resid": {
+     "n_pairs": 101879,
+     "spearman": 0.7396731701761787
+    },
+    "chromband": {
+     "n_pairs": 101879,
+     "spearman": 0.7124774111920797
+    },
+    "pair": {
+     "n_pairs": 101879,
+     "spearman": 0.5845668689944997
+    }
+   },
+   "takei2021": {
+    "diff": {
+     "n_pairs": 94997,
+     "spearman": 0.04962276083899591
+    },
+    "resid": {
+     "n_pairs": 94997,
+     "spearman": 0.04189035522993867
+    },
+    "chromband": {
+     "n_pairs": 94997,
+     "spearman": 0.02966141564776021
+    },
+    "pair": {
+     "n_pairs": 94997,
+     "spearman": 0.029653096756711624
+    }
+   },
+   "liu2025_dip": {
+    "diff": {
+     "n_pairs": 101291,
+     "spearman": 0.733264142573338
+    },
+    "resid": {
+     "n_pairs": 101291,
+     "spearman": 0.6480520004036081
+    },
+    "chromband": {
+     "n_pairs": 101291,
+     "spearman": 0.6361145104448537
+    },
+    "pair": {
+     "n_pairs": 101291,
+     "spearman": 0.5583901171722615
+    }
+   },
+   "takei2021_dip": {
+    "diff": {
+     "n_pairs": 151847,
+     "spearman": 0.7434725166403447
+    },
+    "resid": {
+     "n_pairs": 151847,
+     "spearman": 0.6617449017505187
+    },
+    "chromband": {
+     "n_pairs": 151847,
+     "spearman": 0.652853802106848
+    },
+    "pair": {
+     "n_pairs": 151847,
+     "spearman": 0.5614908620711097
+    }
+   }
+  },
+  "variants": {
+   "dip": {
+    "cells": {
+     "ExN": 214,
+     "Oligo": 74
+    },
+    "liu2025": {
+     "diff": {
+      "n_pairs": 101291,
+      "spearman": 0.7311530903869613
+     },
+     "resid": {
+      "n_pairs": 101291,
+      "spearman": 0.6789091789078745
+     },
+     "chromband": {
+      "n_pairs": 101291,
+      "spearman": 0.6667475375513134
+     },
+     "pair": {
+      "n_pairs": 101291,
+      "spearman": 0.6263441406609636
+     }
+    },
+    "takei2021": {
+     "diff": {
+      "n_pairs": 142458,
+      "spearman": 0.10413477138582913
+     },
+     "resid": {
+      "n_pairs": 142458,
+      "spearman": 0.0884368241982085
+     },
+     "chromband": {
+      "n_pairs": 142458,
+      "spearman": 0.08891894011865034
+     },
+     "pair": {
+      "n_pairs": 142458,
+      "spearman": 0.09155419824864014
+     }
+    },
+    "shuffled_labels": {
+     "liu2025": {
+      "diff": {
+       "n_pairs": 101291,
+       "spearman": -0.08515351412519485
+      },
+      "resid": {
+       "n_pairs": 101291,
+       "spearman": -0.0827139199175482
+      },
+      "chromband": {
+       "n_pairs": 101291,
+       "spearman": -0.08845889127053252
+      },
+      "pair": {
+       "n_pairs": 101291,
+       "spearman": -0.0411590536193175
+      }
+     },
+     "takei2021": {
+      "diff": {
+       "n_pairs": 142458,
+       "spearman": 0.010582973644501545
+      },
+      "resid": {
+       "n_pairs": 142458,
+       "spearman": 0.012334677100273356
+      },
+      "chromband": {
+       "n_pairs": 142458,
+       "spearman": 0.013061853012713035
+      },
+      "pair": {
+       "n_pairs": 142458,
+       "spearman": 0.012797294454368972
+      }
+     }
+    }
+   },
+   "hap": {
+    "cells": {
+     "ExN": 214,
+     "Oligo": 74
+    },
+    "liu2025": {
+     "diff": {
+      "n_pairs": 101291,
+      "spearman": 0.6144900586307727
+     },
+     "resid": {
+      "n_pairs": 101291,
+      "spearman": 0.5888300438497049
+     },
+     "chromband": {
+      "n_pairs": 101291,
+      "spearman": 0.5984892420176423
+     },
+     "pair": {
+      "n_pairs": 101291,
+      "spearman": 0.5405829343071205
+     }
+    },
+    "takei2021": {
+     "diff": {
+      "n_pairs": 142458,
+      "spearman": 0.07978631427958957
+     },
+     "resid": {
+      "n_pairs": 142458,
+      "spearman": 0.07468004547603342
+     },
+     "chromband": {
+      "n_pairs": 142458,
+      "spearman": 0.07849526693826649
+     },
+     "pair": {
+      "n_pairs": 142458,
+      "spearman": 0.07850648095339095
+     }
+    }
+   },
+   "dipc": {
+    "cells": {
+     "ExN": 214,
+     "Oligo": 74
+    },
+    "liu2025": {
+     "diff": {
+      "n_pairs": 101291,
+      "spearman": 0.7526232936959534
+     },
+     "resid": {
+      "n_pairs": 101291,
+      "spearman": 0.6948144306067576
+     },
+     "chromband": {
+      "n_pairs": 101291,
+      "spearman": 0.6863881176540905
+     },
+     "pair": {
+      "n_pairs": 101291,
+      "spearman": 0.6309805526556156
+     }
+    },
+    "takei2021": {
+     "diff": {
+      "n_pairs": 142458,
+      "spearman": 0.11412562346691023
+     },
+     "resid": {
+      "n_pairs": 142458,
+      "spearman": 0.09669037335920799
+     },
+     "chromband": {
+      "n_pairs": 142458,
+      "spearman": 0.09585895888388699
+     },
+     "pair": {
+      "n_pairs": 142458,
+      "spearman": 0.09286831940635497
+     }
+    }
+   }
+  }
+ },
+ "provenance": {
+  "revision": "78e7994+nucdyn-contacts-uncommitted",
+  "date": "2026-10-13T10:02:52+00:00",
+  "host": "sh04-05n13.int",
+  "cpu": "AMD EPYC 9754 128-Core Processor",
+  "cpus": 8,
+  "slurm_job": "47634791",
+  "load_avg_1min": 6.7,
+  "versions": {
+   "python": "3.12.1",
+   "numpy": "2.2.6",
+   "scipy": "1.14.1",
+   "pandas": "2.2.3",
+   "cooler": "0.10.4",
+   "zarr": "3.4.0",
+   "torch": "2.5.1+cu124",
+   "uchrom": "0.3.0.dev0",
+   "chromdata": "0.1.0"
+  },
+  "script": "benchmarks/cross_assay/recon.py",
+  "datasets": [
+   "tan2021_cortex",
+   "liu2025_mop",
+   "takei2021_brain"
+  ],
+  "params": {
+   "dataset": "tan2021",
+   "contrast": [
+    "ExN",
+    "Oligo"
+   ],
+   "sep_bands_bp": [
+    1000000.0,
+    200000000.0,
+    25
+   ],
+   "seed": 0,
+   "stat": "median (distance_map)"
+  }
+ }
+}

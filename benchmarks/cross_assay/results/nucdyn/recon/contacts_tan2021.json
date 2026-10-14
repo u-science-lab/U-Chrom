@@ -1,0 +1,363 @@
+{
+ "results": {
+  "contrast": "ExN - Oligo",
+  "cells": {
+   "ExN": 214,
+   "Oligo": 74
+  },
+  "seconds_reading": 225.2,
+  "panels": {
+   "liu2025": {
+    "contacts_vs_imaging": {
+     "diff": {
+      "n_pairs": 99074,
+      "spearman": 0.44292404714682143
+     },
+     "resid": {
+      "n_pairs": 99074,
+      "spearman": 0.3785580577066408
+     },
+     "chromband": {
+      "n_pairs": 99074,
+      "spearman": 0.3750413299306495
+     },
+     "pair": {
+      "n_pairs": 99074,
+      "spearman": 0.33886464694686635
+     }
+    },
+    "contacts_split_half": {
+     "diff": {
+      "n_pairs": 88133,
+      "spearman": 0.3163490822648564
+     },
+     "resid": {
+      "n_pairs": 88133,
+      "spearman": 0.28260684125781693
+     },
+     "chromband": {
+      "n_pairs": 88133,
+      "spearman": 0.2756272752872073
+     },
+     "pair": {
+      "n_pairs": 88133,
+      "spearman": 0.2209160377774306
+     }
+    },
+    "same_pairs": {
+     "dip": {
+      "n_pairs": 99074,
+      "contacts": {
+       "diff": {
+        "n_pairs": 99074,
+        "spearman": 0.44292404714682143
+       },
+       "resid": {
+        "n_pairs": 99074,
+        "spearman": 0.3785580577066408
+       },
+       "chromband": {
+        "n_pairs": 99074,
+        "spearman": 0.3750413299306495
+       },
+       "pair": {
+        "n_pairs": 99074,
+        "spearman": 0.33886464694686635
+       }
+      },
+      "recon": {
+       "diff": {
+        "n_pairs": 99074,
+        "spearman": 0.7300941384901047
+       },
+       "resid": {
+        "n_pairs": 99074,
+        "spearman": 0.6788363266487081
+       },
+       "chromband": {
+        "n_pairs": 99074,
+        "spearman": 0.6660775596983051
+       },
+       "pair": {
+        "n_pairs": 99074,
+        "spearman": 0.6268820765403073
+       }
+      }
+     },
+     "hap": {
+      "n_pairs": 99074,
+      "contacts": {
+       "diff": {
+        "n_pairs": 99074,
+        "spearman": 0.44292404714682143
+       },
+       "resid": {
+        "n_pairs": 99074,
+        "spearman": 0.3785580577066408
+       },
+       "chromband": {
+        "n_pairs": 99074,
+        "spearman": 0.3750413299306495
+       },
+       "pair": {
+        "n_pairs": 99074,
+        "spearman": 0.33886464694686635
+       }
+      },
+      "recon": {
+       "diff": {
+        "n_pairs": 99074,
+        "spearman": 0.6117452247507102
+       },
+       "resid": {
+        "n_pairs": 99074,
+        "spearman": 0.5886264243816024
+       },
+       "chromband": {
+        "n_pairs": 99074,
+        "spearman": 0.5981688965348252
+       },
+       "pair": {
+        "n_pairs": 99074,
+        "spearman": 0.5415591159673444
+       }
+      }
+     },
+     "dipc": {
+      "n_pairs": 99074,
+      "contacts": {
+       "diff": {
+        "n_pairs": 99074,
+        "spearman": 0.44292404714682143
+       },
+       "resid": {
+        "n_pairs": 99074,
+        "spearman": 0.3785580577066408
+       },
+       "chromband": {
+        "n_pairs": 99074,
+        "spearman": 0.3750413299306495
+       },
+       "pair": {
+        "n_pairs": 99074,
+        "spearman": 0.33886464694686635
+       }
+      },
+      "recon": {
+       "diff": {
+        "n_pairs": 99074,
+        "spearman": 0.7519141069337123
+       },
+       "resid": {
+        "n_pairs": 99074,
+        "spearman": 0.6949725314135389
+       },
+       "chromband": {
+        "n_pairs": 99074,
+        "spearman": 0.6858915064248118
+       },
+       "pair": {
+        "n_pairs": 99074,
+        "spearman": 0.6316838608348844
+       }
+      }
+     }
+    }
+   },
+   "takei2021": {
+    "contacts_vs_imaging": {
+     "diff": {
+      "n_pairs": 138956,
+      "spearman": 0.06621050812066095
+     },
+     "resid": {
+      "n_pairs": 138956,
+      "spearman": 0.05042927355274766
+     },
+     "chromband": {
+      "n_pairs": 138956,
+      "spearman": 0.0506835365739013
+     },
+     "pair": {
+      "n_pairs": 138956,
+      "spearman": 0.04854941821214986
+     }
+    },
+    "contacts_split_half": {
+     "diff": {
+      "n_pairs": 131407,
+      "spearman": 0.3132248849522705
+     },
+     "resid": {
+      "n_pairs": 131407,
+      "spearman": 0.2810297429565221
+     },
+     "chromband": {
+      "n_pairs": 131407,
+      "spearman": 0.2722436907832676
+     },
+     "pair": {
+      "n_pairs": 131407,
+      "spearman": 0.21096597074862972
+     }
+    },
+    "same_pairs": {
+     "dip": {
+      "n_pairs": 138956,
+      "contacts": {
+       "diff": {
+        "n_pairs": 138956,
+        "spearman": 0.06621050812066095
+       },
+       "resid": {
+        "n_pairs": 138956,
+        "spearman": 0.05042927355274766
+       },
+       "chromband": {
+        "n_pairs": 138956,
+        "spearman": 0.0506835365739013
+       },
+       "pair": {
+        "n_pairs": 138956,
+        "spearman": 0.04854941821214986
+       }
+      },
+      "recon": {
+       "diff": {
+        "n_pairs": 138956,
+        "spearman": 0.10450754559584993
+       },
+       "resid": {
+        "n_pairs": 138956,
+        "spearman": 0.08830863650869007
+       },
+       "chromband": {
+        "n_pairs": 138956,
+        "spearman": 0.08917688454729455
+       },
+       "pair": {
+        "n_pairs": 138956,
+        "spearman": 0.09205005744556076
+       }
+      }
+     },
+     "hap": {
+      "n_pairs": 138956,
+      "contacts": {
+       "diff": {
+        "n_pairs": 138956,
+        "spearman": 0.06621050812066095
+       },
+       "resid": {
+        "n_pairs": 138956,
+        "spearman": 0.05042927355274766
+       },
+       "chromband": {
+        "n_pairs": 138956,
+        "spearman": 0.0506835365739013
+       },
+       "pair": {
+        "n_pairs": 138956,
+        "spearman": 0.04854941821214986
+       }
+      },
+      "recon": {
+       "diff": {
+        "n_pairs": 138956,
+        "spearman": 0.07918090166446315
+       },
+       "resid": {
+        "n_pairs": 138956,
+        "spearman": 0.07372307031844307
+       },
+       "chromband": {
+        "n_pairs": 138956,
+        "spearman": 0.07847341793911312
+       },
+       "pair": {
+        "n_pairs": 138956,
+        "spearman": 0.07904106231589222
+       }
+      }
+     },
+     "dipc": {
+      "n_pairs": 138956,
+      "contacts": {
+       "diff": {
+        "n_pairs": 138956,
+        "spearman": 0.06621050812066095
+       },
+       "resid": {
+        "n_pairs": 138956,
+        "spearman": 0.05042927355274766
+       },
+       "chromband": {
+        "n_pairs": 138956,
+        "spearman": 0.0506835365739013
+       },
+       "pair": {
+        "n_pairs": 138956,
+        "spearman": 0.04854941821214986
+       }
+      },
+      "recon": {
+       "diff": {
+        "n_pairs": 138956,
+        "spearman": 0.11439517671163205
+       },
+       "resid": {
+        "n_pairs": 138956,
+        "spearman": 0.09637665970522775
+       },
+       "chromband": {
+        "n_pairs": 138956,
+        "spearman": 0.0959602993182506
+       },
+       "pair": {
+        "n_pairs": 138956,
+        "spearman": 0.09326990159170075
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "provenance": {
+  "revision": "78e7994+nucdyn-contacts-uncommitted",
+  "date": "2026-10-13T10:10:08+00:00",
+  "host": "sh04-05n13.int",
+  "cpu": "AMD EPYC 9754 128-Core Processor",
+  "cpus": 8,
+  "slurm_job": "47634791",
+  "load_avg_1min": 3.39,
+  "versions": {
+   "python": "3.12.1",
+   "numpy": "2.2.6",
+   "scipy": "1.14.1",
+   "pandas": "2.2.3",
+   "cooler": "0.10.4",
+   "zarr": "3.4.0",
+   "torch": "2.5.1+cu124",
+   "uchrom": "0.3.0.dev0",
+   "chromdata": "0.1.0"
+  },
+  "script": "benchmarks/cross_assay/recon.py",
+  "datasets": [
+   "tan2021_cortex",
+   "liu2025_mop",
+   "takei2021_brain"
+  ],
+  "params": {
+   "dataset": "tan2021",
+   "contrast": [
+    "ExN",
+    "Oligo"
+   ],
+   "resolution_bp": 1000000,
+   "seed": 0,
+   "stat": "mean per-cell contact frequency (cis contacts between bins over the cell's total)",
+   "sign": "log(1 / frequency), as a distance"
+  }
+ }
+}

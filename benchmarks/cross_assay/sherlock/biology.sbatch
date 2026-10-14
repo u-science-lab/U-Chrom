@@ -20,5 +20,5 @@ export PYTHONPATH=$REPO/packages/uchrom:$REPO/packages/chromdata${PYTHONPATH:+:$
 OUT=${OUT:-$W/runs/xassay/biology}
 mkdir -p "$OUT/results" "$OUT/figdata"
 echo "host=$(hostname) job=${SLURM_JOB_ID:-none} repo=$REPO revision=${UCHROM_REVISION:-unset}"
-"$PY" -u "$REPO/benchmarks/cross_assay/biology.py" --recon-root "$W/runs/xassay" \
+"$PY" -u "$REPO/benchmarks/cross_assay/biology.py" --recon-root "${RECON_ROOT:-$W/runs/xassay}" \
   --liu "$W/data/liu2025_mop/liu2025_mop.chromdata.zarr" --out "$OUT" --figdata "$OUT/figdata" --results "$OUT/results"

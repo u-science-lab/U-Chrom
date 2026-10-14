@@ -21,5 +21,5 @@ OUT=${OUT:-$W/runs/xassay/transfer${LIMIT:+_smoke}}
 mkdir -p "$OUT/results"
 echo "host=$(hostname) job=${SLURM_JOB_ID:-none} repo=$REPO revision=${UCHROM_REVISION:-unset} out=$OUT"
 "$PY" -u "$REPO/benchmarks/cross_assay/transfer.py" --liu "$W/data/liu2025_mop/liu2025_mop.chromdata.zarr" \
-  --recon-root "$W/runs/xassay" --xa-work "$W/runs/xassay/full/work" --out "$OUT" --results "$OUT/results" \
+  --recon-root "${RECON_ROOT:-$W/runs/xassay}" --xa-work "$W/runs/xassay/full/work" --out "$OUT" --results "$OUT/results" \
   ${LIMIT:+--limit-cells $LIMIT}

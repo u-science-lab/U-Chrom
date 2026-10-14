@@ -1,4 +1,4 @@
-"""One table of the EMber reconstructions of every dataset (``recon.py``): per dataset and variant, the ExN - Oligo
+"""One table of the reconstructions of every dataset (``recon.py``; EMber or NucDynamics): per dataset and variant, the ExN - Oligo
 difference of the log2 long / short distance ratio (bootstrap CI, Cliff's delta), the class ranking, and how the
 ExN - Oligo difference of every cis pair of the Liu 2025 imaging loci agrees with imaging (Spearman: detrended by
 separation; per chromosome and separation; the pair-specific part), next to the split-half ceilings.  A split half
@@ -7,9 +7,10 @@ imaging over the square root of the two reliabilities (``disattenuated``) is the
 reconstruction recovers (approximate for Spearman correlations).
 
 Inputs: ``<dir>/recon_<dataset>.json`` and ``<dir>/loci_<dataset>.json`` (the ``results`` folders of the Sherlock
-runs, copied through the DTN); output ``results/recon_summary.{json,md}``.
+runs, copied through the DTN); output ``--out``/recon_summary.{json,md} (default ``results``; the NucDynamics
+run: ``results/nucdyn``).
 
-    python benchmarks/cross_assay/recon_summary.py DIR [DIR ...]
+    python benchmarks/cross_assay/recon_summary.py [--out DIR] DIR [DIR ...]
 """
 
 from __future__ import annotations
@@ -37,7 +38,14 @@ def load(dirs):
 
 
 def main(argv=None):
-    dirs = (argv or sys.argv[1:]) or [str(HERE / "results")]
+    args = list(argv or sys.argv[1:])
+    dest = HERE / "results"
+    if "--out" in args:
+        i = args.index("--out")
+        dest = Path(args[i + 1])
+        del args[i:i + 2]
+    dest.mkdir(parents=True, exist_ok=True)
+    dirs = args or [str(HERE / "results")]
     rec, loci = load(dirs)
     rows, imaging = [], {}
     for ds in sorted(set(rec) | set(loci), key=lambda k: ORDER.index(k) if k in ORDER else 99):
@@ -71,7 +79,7 @@ def main(argv=None):
                                          "exponent": v.get("exponent_2_50mb")} for k, v in imaging.items()},
            "sources": {k: {"recon": rec.get(k, {}).get("provenance", {}).get("revision"),
                            "loci": loci.get(k, {}).get("provenance", {}).get("revision")} for k in set(rec) | set(loci)}}
-    (HERE / "results" / "recon_summary.json").write_text(json.dumps(out, indent=1) + "\n")
+    (dest / "recon_summary.json").write_text(json.dumps(out, indent=1) + "\n")
     f = lambda x, d=3: "" if x is None else f"{x:+.{d}f}"  # noqa: E731
     g = lambda d, k: "" if not d or d.get(k) is None else f"{d[k]:.2f}"  # noqa: E731
     md = ["| data | variant | cells | ExN - Oligo [95% CI] | Cliff | ranking | loci vs Liu: resid / chrom x sep / pair "
@@ -88,7 +96,7 @@ def main(argv=None):
         md.append(f"- imaging {k}: ExN - Oligo {f(v['exn_minus_oligo'])}, ranking {' > '.join(v['ranking'])}")
     c = rows[0]["ceiling_liu"] if rows else {}
     md.append(f"- Liu 2025 split-half (resid / chrom x sep / pair): {g(c, 'resid')} / {g(c, 'chromband')} / {g(c, 'pair')}")
-    (HERE / "results" / "recon_summary.md").write_text("\n".join(md) + "\n")
+    (dest / "recon_summary.md").write_text("\n".join(md) + "\n")
     print("\n".join(md))
 
 
