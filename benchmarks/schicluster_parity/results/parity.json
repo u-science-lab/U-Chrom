@@ -157,16 +157,17 @@
   },
   "time_authors_s": 378.01737027894706,
   "time_uchrom_s": 1120.1541502800537,
-  "authors_workers": 8
+  "authors_workers": 8,
+  "time_note": "both times include reading each cell's chromosome with cooler: the authors' in an 8-process pool, U-Chrom's one cell after the other in this script"
  },
  "provenance": {
-  "revision": "unknown",
-  "date": "2026-10-14T08:33:01+00:00",
+  "revision": "ember-deep-frozen-210-g56dcf1f3fc4f",
+  "date": "2026-10-14T09:41:49+00:00",
   "host": "sh04-05n13.int",
   "cpu": "AMD EPYC 9754 128-Core Processor",
   "cpus": 256,
-  "slurm_job": null,
-  "load_avg_1min": 23.49755859375,
+  "slurm_job": "47753795",
+  "load_avg_1min": 36.47802734375,
   "versions": {
    "python": "3.12.15",
    "numpy": "2.5.4",
