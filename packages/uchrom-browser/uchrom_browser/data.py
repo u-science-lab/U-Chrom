@@ -1116,11 +1116,15 @@ class Dataset:
         return out
 
     def store_tree(self) -> Dict[str, Any]:
-        """The store's on-disk structure (``.chromdata.zarr`` / ``.cdz``; see store_tree.py); cached."""
+        """The store's on-disk structure (``.chromdata.zarr`` / ``.cdz``, local or at a URL; see
+        store_tree.py); cached."""
+        from chromdata.remote import is_url
         from chromdata.zarrcd import container_kind
 
-        from .store_tree import store_tree
+        from .store_tree import remote_store_tree, store_tree
 
+        if "store_tree" not in self._cache and self.path and is_url(self.path):
+            self._cache["store_tree"] = remote_store_tree(str(self.path))
         if "store_tree" not in self._cache:
             p = Path(self.path) if self.path else None
             if p is None or not p.exists() or container_kind(p) not in ("zarr", "cdz"):

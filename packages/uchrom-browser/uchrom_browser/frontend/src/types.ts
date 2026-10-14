@@ -13,6 +13,8 @@ export interface DatasetSummary {
   name: string
   path: string
   n_spots: number
+  /** loci (absent from older servers) */
+  n_bins?: number
   n_traces: number
   n_cells: number
   xyz_unit: string | null
@@ -422,7 +424,8 @@ export interface StoreNode {
   /** relative path in the store ('' = root) */
   path: string
   kind: 'group' | 'dir' | 'array' | 'table' | 'file'
-  bytes: number
+  /** size on disk; null when unknown (an array of a store read over HTTP, a group holding one) */
+  bytes: number | null
   /** Zarr attributes: key → JSON preview (shortened) */
   attrs?: Record<string, string>
   children?: StoreNode[]
@@ -433,13 +436,17 @@ export interface StoreNode {
   dtype?: string
   chunk_shape?: number[] | null
   n_chunks?: number
+  /** array of a store read over HTTP: its uncompressed size (null for variable-length types) */
+  nbytes?: number | null
   /** Parquet table */
   rows?: number
   columns?: string[]
   row_groups?: number
   error?: string
-  /** root: 'zarr' (directory) or 'cdz' (one zip) */
+  /** root: 'zarr' (directory), 'cdz' (one zip) or 'remote' (a directory store at a URL) */
   container?: string
+  /** root: how the listing was made, when it is not a full walk (a store read over HTTP) */
+  note?: string
   /** root: the store header (attrs.uchrom: format_version, n_spots, …) in full */
   meta?: Record<string, string | number | boolean | null>
 }

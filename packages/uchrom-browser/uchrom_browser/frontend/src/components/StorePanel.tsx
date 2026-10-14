@@ -7,7 +7,8 @@ import type { StoreNode } from '../types'
 /**
  * Left side bar, "Store" tab: the on-disk structure of the active dataset's store —
  * Zarr groups and arrays (shape, dtype, chunks), Parquet tables (rows, columns), sizes and
- * attributes.  Groups open with a click; arrays and tables show their details.
+ * attributes.  Groups open with a click; arrays and tables show their details.  A store read
+ * over HTTP is rebuilt from its metadata (the server's note says so; arrays without a size).
  */
 export function StorePanel() {
   const ds = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
@@ -36,20 +37,22 @@ export function StorePanel() {
           {tree.name}
         </div>
         <div className="muted small">
-          {tree.container === 'cdz' ? 'one zip file (.cdz)' : 'Zarr v3 directory'} · {fmtSize(tree.bytes)}
-          {meta?.format_version ? ` · format ${meta.format_version}` : ''}
+          {[CONTAINER[tree.container ?? 'zarr'] ?? 'Zarr v3 directory', fmtSize(tree.bytes), meta?.format_version ? `format ${meta.format_version}` : '']
+            .filter(Boolean)
+            .join(' · ')}
         </div>
-        {meta && (
-          <div className="store-facts small">
-            {(['n_spots', 'n_bins', 'n_traces', 'n_cells'] as const).map((k) =>
-              typeof meta[k] === 'number' ? (
-                <span key={k}>
-                  <b>{(meta[k] as number).toLocaleString('en-US')}</b> {k.slice(2)}
-                </span>
-              ) : null,
-            )}
-          </div>
-        )}
+        {tree.note && <div className="muted small store-note">{tree.note}</div>}
+        <div className="store-facts small">
+          {(['n_spots', 'n_bins', 'n_traces', 'n_cells'] as const).map((k) => {
+            // the open dataset's counts (the header's n_cells counts only cells with spots)
+            const n = typeof ds[k] === 'number' ? ds[k] : meta?.[k]
+            return typeof n === 'number' ? (
+              <span key={k}>
+                <b>{n.toLocaleString('en-US')}</b> {k.slice(2)}
+              </span>
+            ) : null
+          })}
+        </div>
       </div>
       <ul className="store-tree" role="tree">
         {(tree.children ?? []).map((c) => (
@@ -129,12 +132,21 @@ function Attrs({ attrs }: { attrs: Record<string, string> }) {
 
 const ICON: Record<StoreNode['kind'], string> = { group: '▣', dir: '▢', array: '▦', table: '▤', file: '·' }
 
+const CONTAINER: Record<string, string> = { zarr: 'Zarr v3 directory', cdz: 'one zip file (.cdz)', remote: 'Zarr v3 store at a URL' }
+
 /** One line under a node: what it holds. */
 export function summary(n: StoreNode): string {
   const f = (x: number) => x.toLocaleString('en-US')
   switch (n.kind) {
     case 'array':
-      return [n.shape ? n.shape.map(f).join(' × ') || 'scalar' : null, n.dtype, n.n_chunks !== undefined ? `${n.n_chunks} chunk${n.n_chunks === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')
+      return [
+        n.shape ? n.shape.map(f).join(' × ') || 'scalar' : null,
+        n.dtype,
+        n.n_chunks !== undefined ? `${n.n_chunks} chunk${n.n_chunks === 1 ? '' : 's'}` : null,
+        n.bytes == null && n.nbytes ? `${fmtSize(n.nbytes)} uncompressed` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
     case 'table':
       return n.error ?? `${f(n.rows ?? 0)} rows · ${n.columns?.length ?? 0} columns · ${n.row_groups ?? 0} row group${n.row_groups === 1 ? '' : 's'}`
     case 'group':
