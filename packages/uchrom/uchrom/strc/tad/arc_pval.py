@@ -1,43 +1,47 @@
-"""ArcFISH-style TAD caller based on intra/inter-domain variance F-test.
+"""ArcFISH's TAD caller for chromatin tracing: the arc p-value test of every locus as a domain boundary.
 
-Independent implementation of Yu et al. 2025 (*ArcFISH*,
-bioRxiv 2025.11.26.690837v1) ``TADCaller.by_pval``.  Not derived from
-the GPL-3.0 upstream source.
+Reference: Yu H. *et al.* ArcFISH: accurate and robust 3D genome feature discovery from chromatin tracing data.
+bioRxiv 2025.11.26.690837 (``TADCaller(method="pval")`` of github.com/hyuyu104/ArcFISH).  U-Chrom's own
+implementation of the published algorithm; ``benchmarks/arcfish_parity/`` checks it against the authors' package
+(commit a21d889): the same per-locus statistics and the same domains.
 
 Algorithm (per chromosome)
 --------------------------
-1. Build the per-axis normalised variance ``norm_var[c, i, j]`` via
-   :func:`uchrom.fea.arc.filter_normalize` (same preprocessing as the
-   loop caller).
-2. For each candidate boundary position ``b`` with a window of size
-   ``window_bp`` (bp), split the window into a left segment
-   ``L = [b - w/2, b)`` and a right segment ``R = (b, b + w/2]``.  The
-   intra-domain set is the pairs within ``L`` or within ``R``; the
-   inter-domain set is the pairs that cross ``b``.
-3. Per-axis F-test on the count-weighted intra-/inter-mean variance:
-   ``F_c = intra_mean_c / inter_mean_c``.  If ``b`` is a true TAD
-   boundary, intra-domain distances are tighter than inter-domain →
-   ``F`` is small → left-tail F-CDF gives small p.
-4. ACAT Cauchy combine across axes with the ArcFISH axis weights.
-5. Run ``scipy.signal.find_peaks`` on the combined statistic to pick
-   local minima in p-value (peaks in ``-log10 p``).
-6. BH-FDR adjust the per-peak p-values.  Boundaries are peaks with
-   ``fdr < fdr_cutoff``.
-7. (Optional) **Hierarchical TADs** — repeatedly drop the weakest
-   boundary and emit the regions that the remaining boundaries define,
-   producing nested levels.
+1. Per-axis normalised variances ``norm_var`` and counts ``count`` of every locus pair
+   (:func:`uchrom.fea.arc.filter_normalize`) and the axis weights ``w`` (:func:`uchrom.fea.arc.axis_weight`).
+2. For every locus ``i`` at least ``window_bp / 2`` from both ends of the chromosome's loci: the loci within
+   ``window_bp`` of it on each side, ``L`` (left of ``i``) and ``R`` (right of ``i``); per axis the count-weighted
+   mean normalised variance of the pairs within ``L`` or within ``R`` (intra) and of the pairs across
+   (inter) — a pair whose variance is missing counts in the weights but adds nothing —, ``F = intra / inter``, and
+   ``p = F.cdf(F; Σ intra counts, Σ inter counts)`` (small at a boundary: tight domains, loose across).
+3. The Cauchy combination over the axes, ``stat = Σ w tan((0.5 − p) π)``, its p-value ``1 − Cauchy.cdf(stat)``,
+   and the same with ``F.cdf(F; 1, 1)`` (``stat_prox``).
+4. Benjamini–Hochberg over every tested locus; a boundary is a local maximum of ``stat_prox``
+   (``scipy.signal.find_peaks``) with ``fdr < fdr_cutoff``.
+5. Domains: the first and the last locus count as boundaries; level 0 holds the domain between every two
+   consecutive boundaries (the finest partition); when ``hierarchical``, the interior boundaries are removed one at
+   a time, weakest ``stat`` first, and each removal adds the merged domain at the next level (1, 2, …).  Domains
+   with ``start2 - start1 <= min_tad_size`` are dropped.
+
+``method="insulation"`` (the authors' ``TADCaller(method="insulation")``, Su et al. 2020): the median 3-D distance of
+every locus pair over the traces; per locus (same window and edge rule) the normalised insulation score
+``(inter − intra) / (inter + intra)`` of the medians of the pairs across and within the two segments (0 where either
+set is empty); boundaries are its local maxima (``find_peaks`` with ``prominence`` / ``distance``); domains as in step
+5, ranked by the score.
 
 Output
 ------
-A DataFrame with columns ``chrom, start, end, level, score, pval, fdr``,
-one merged table over all requested chromosomes, stored with provenance
-at ``cd.results[key_added]`` (default ``"tads.arcfish"``).
+One row per domain: ``chrom, start, end, level`` (``start`` = start of the left boundary locus, ``end`` = start of
+the right boundary locus, so that the domains of a level tile the chromosome's loci and a boundary is the start of
+the next domain) and the boundary loci ``start1, end1, start2, end2`` with their ``stat1, stat2``;
+stored with provenance at ``cd.results[key_added]`` (default ``"tads.arcfish"``).  The per-locus statistics are
+:func:`arcfish_boundary_stats`.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -51,23 +55,34 @@ from uchrom.convention import (
     selection_inputs,
     store_and_return,
 )
-from uchrom.fea.arc import axis_variance_cube, filter_normalize, axis_weight
-from uchrom.utils.stats import cauchy_combination
+from uchrom.fea.arc import axis_variance_cube, bh_fdr, filter_normalize
 
 
 @dataclass
 class TADCallerParams:
-    """Runtime parameters for :func:`call_tads_by_pval`.
+    """Runtime parameters for :func:`call_tads_by_pval` (ArcFISH's ``TADCaller(method="pval")`` defaults).
 
-    Defaults follow ArcFISH's ``TADCaller(method='pval')``.
+    ``method``: ``"pval"`` (the arc p-value test) or ``"insulation"`` (Su et al. 2020; module docstring).
+    ``window_bp`` (ArcFISH ``window``): the loci within this distance on each side of a locus form its left and
+    right segments; loci closer than ``window_bp / 2`` to either end of the chromosome are not tested.
+    ``hierarchical`` (ArcFISH ``tree``), ``min_tad_size`` in bp.  ``max_levels`` (U-Chrom): keep levels
+    ``0 .. max_levels - 1`` only (``None``: all).  ``prominence`` / ``distance``: passed to ``find_peaks`` (the
+    authors' parameters of the insulation method; also applied to ``"pval"``, where the authors use none).  ``k_sigma`` / ``frac``: the outlier filter and LOWESS span of
+    :func:`uchrom.fea.arc.filter_normalize`.
+
+    Before U-Chrom 0.3 (2026-10) ``window_bp`` was the *whole* window (half on each side), level 1 was the finest
+    partition with up to ``max_levels=4`` partitions, boundaries were peaks of the combined p-value and the FDR was
+    computed over the peaks only; results differ from the authors' (``docs/source/reference/changelog.md``).
     """
 
-    window_bp: float = 1e5          # boundary window size
+    window_bp: float = 1e5
     fdr_cutoff: float = 0.1
-    hierarchical: bool = True       # emit nested hierarchy levels
-    max_levels: int = 4             # cap the hierarchy depth
-    prominence: float = 0.0         # pass-through to find_peaks
-    distance: int = 1               # pass-through to find_peaks
+    method: str = "pval"
+    hierarchical: bool = True
+    min_tad_size: float = 0.0
+    max_levels: Optional[int] = None
+    prominence: Optional[float] = None
+    distance: Optional[int] = None
     k_sigma: float = 4.0
     frac: float = 0.1
 
@@ -76,143 +91,174 @@ class TADCallerParams:
 # Helpers
 # ----------------------------------------------------------------------
 
-def _bh_fdr(pvals: np.ndarray) -> np.ndarray:
-    p = np.asarray(pvals, dtype=np.float64)
-    out = np.full_like(p, np.nan)
-    finite = np.isfinite(p)
-    if not finite.any():
-        return out
-    pf = p[finite]
-    n = pf.size
-    order = np.argsort(pf)
-    ranked = pf[order]
-    q = ranked * n / (np.arange(n) + 1.0)
-    q = np.minimum.accumulate(q[::-1])[::-1]
-    q = np.clip(q, 0.0, 1.0)
-    o = np.empty_like(pf)
-    o[order] = q
-    out[finite] = o
+def boundary_statistics(norm_var: np.ndarray, count: np.ndarray, starts: np.ndarray, weights: np.ndarray,
+                        window_bp: float) -> dict:
+    """Per-locus arc statistics (module docstring, steps 2-3) from ``(3, B, B)`` normalised variances / counts,
+    the loci's ``starts`` (sorted) and the axis weights.  Returns arrays of length ``B``: ``stat_x/y/z`` (F),
+    ``pval_x/y/z``, ``stat``, ``stat_prox``, ``pval`` (NaN where not tested)."""
+    from scipy import stats
+
+    B = len(starts)
+    d = np.asarray(starts, dtype=np.float64)
+    w = np.asarray(weights, dtype=np.float64)
+    out = {k: np.full(B, np.nan) for k in ("stat_x", "stat_y", "stat_z", "pval_x", "pval_y", "pval_z",
+                                           "stat", "stat_prox", "pval")}
+    with np.errstate(invalid="ignore", divide="ignore"):
+        for i in range(B):
+            if d[i] - d[0] < window_bp / 2 or d[-1] - d[i] < window_bp / 2:
+                continue
+            near = np.flatnonzero(np.abs(d - d[i]) <= window_bp)
+            left, right = near[0], near[-1]
+            iu_l = np.triu_indices(i - left, 1)
+            iu_r = np.triu_indices(right - i, 1)
+            ls, rs = slice(left, i), slice(i + 1, right + 1)
+            lcount = count[:, ls, ls][:, iu_l[0], iu_l[1]].astype(np.float64)
+            rcount = count[:, rs, rs][:, iu_r[0], iu_r[1]].astype(np.float64)
+            intra = np.hstack([lcount, rcount]).sum(axis=1)
+            lvar = norm_var[:, ls, ls][:, iu_l[0], iu_l[1]]
+            rvar = norm_var[:, rs, rs][:, iu_r[0], iu_r[1]]
+            num = np.nansum(np.hstack([lvar * (lcount / intra[:, None]), rvar * (rcount / intra[:, None])]), axis=1)
+            cross = count[:, ls, rs].astype(np.float64)
+            inter = cross.sum(axis=(1, 2))
+            den = np.nansum(norm_var[:, ls, rs] * (cross / inter[:, None, None]), axis=(1, 2))
+            f = num / den
+            p = stats.f.cdf(f, intra, inter)
+            stat = np.sum(w * np.tan((0.5 - p) * np.pi))
+            stat_prox = np.sum(w * np.tan((0.5 - stats.f.cdf(f, 1, 1)) * np.pi))
+            for a, c in enumerate("xyz"):
+                out[f"stat_{c}"][i] = f[a]
+                out[f"pval_{c}"][i] = p[a]
+            out["stat"][i] = stat
+            out["stat_prox"][i] = stat_prox
+            out["pval"][i] = 1 - stats.cauchy.cdf(stat)
     return out
 
 
-def _boundary_pvals(
-    norm_var: np.ndarray,
-    count: np.ndarray,
-    bin_midpoints: np.ndarray,
-    axis_weights: np.ndarray,
-    window_bp: float,
-):
-    """Per-bin ACAT p-value for intra-vs-inter domain variance ratio.
+def median_distance_matrix(cd, chrom: str, device: str = "auto"):
+    """``(B, B)`` median over the traces of the 3-D distance of every locus pair (a pair with a missing coordinate in
+    a trace is left out for that trace) and the loci ``bin_ids`` (conventions of :mod:`uchrom.fea.arc`)."""
+    import torch
 
-    Returns ``(pvals (B,), per_axis_logp (3, B))``.  Bins whose window
-    does not have at least one intra and one inter pair get NaN.
-    """
-    from scipy.stats import f as _f_dist
+    from uchrom.fea.arc import _coord_tensor, _diff_rows, _nanmedian_along_dim, _row_blocks
 
-    B = len(bin_midpoints)
-    pvals = np.full(B, np.nan, dtype=np.float64)
-    per_axis_logp = np.full((3, B), 0.0, dtype=np.float64)
-    half_w = 0.5 * window_bp
+    c, bin_ids, _ = _coord_tensor(cd, chrom, device)
+    B = c.shape[1]
+    med = np.empty((B, B))
+    for i0, i1 in _row_blocks(c):
+        d = torch.sqrt((_diff_rows(c, i0, i1) ** 2).sum(dim=0))        # (T, b, B), NaN if an axis is missing
+        med[i0:i1] = _nanmedian_along_dim(d, 0).detach().cpu().numpy().astype(np.float64)
+    return med, bin_ids
 
-    # Count-weighted var and weights per axis — precompute once
-    w_var = np.where(np.isfinite(norm_var), norm_var * count, 0.0)
-    w_cnt = np.where(np.isfinite(norm_var), count, 0.0)
 
-    def pair_sums(m, li, ri):
-        # pairs (i, j), i < j: both in L or both in R (intra); i in L, j in R (inter).  Only the
-        # window's rows / columns are touched, so a call costs O(window²), not O(B²) (whole chromosomes
-        # of reconstructed structures have thousands of bins)
-        intra = 0.0
-        for idx in (li, ri):
-            sub = m[np.ix_(idx, idx)]
-            intra += sub[idx[:, None] < idx[None, :]].sum()
-        cross = m[np.ix_(li, ri)]
-        return intra, cross[li[:, None] < ri[None, :]].sum()
-
-    for b in range(B):
-        left_mask = (bin_midpoints >= bin_midpoints[b] - half_w) & \
-                    (bin_midpoints < bin_midpoints[b])
-        right_mask = (bin_midpoints > bin_midpoints[b]) & \
-                     (bin_midpoints <= bin_midpoints[b] + half_w)
-        if left_mask.sum() < 1 or right_mask.sum() < 1:
+def insulation_scores(med: np.ndarray, starts: np.ndarray, window_bp: float) -> np.ndarray:
+    """The normalised insulation score of every locus (module docstring, ``method="insulation"``)."""
+    d = np.asarray(starts, dtype=np.float64)
+    B = len(d)
+    out = np.zeros(B)
+    for i in range(B):
+        if d[i] - d[0] < window_bp / 2 or d[-1] - d[i] < window_bp / 2:
             continue
-
-        li = np.where(left_mask)[0]
-        ri = np.where(right_mask)[0]
-
-        combined_logp = np.zeros(3)
-        combined_F = np.zeros(3)
-        ok = True
-        for ax in range(3):
-            wv_intra, wv_inter = pair_sums(w_var[ax], li, ri)
-            wc_intra, wc_inter = pair_sums(w_cnt[ax], li, ri)
-            if wc_intra <= 0 or wc_inter <= 0:
-                ok = False
-                break
-            intra_mean = wv_intra / wc_intra
-            inter_mean = wv_inter / wc_inter
-            if intra_mean <= 0 or inter_mean <= 0:
-                ok = False
-                break
-            F = intra_mean / inter_mean
-            combined_F[ax] = F
-            combined_logp[ax] = _f_dist.logcdf(
-                F, dfn=max(wc_intra, 1.0), dfd=max(wc_inter, 1.0)
-            )
-        if not ok:
+        near = np.flatnonzero(np.abs(d - d[i]) <= window_bp)
+        left, right = near[0], near[-1]
+        ls, rs = slice(left, i), slice(i + 1, right + 1)
+        intra = np.concatenate([med[ls, ls][np.triu_indices(i - left, 1)], med[rs, rs][np.triu_indices(right - i, 1)]])
+        inter = med[ls, rs].ravel()
+        if np.all(np.isnan(intra)) or np.all(np.isnan(inter)):
             continue
-
-        per_axis_logp[:, b] = combined_logp
-        # ACAT combine on p-scale
-        p = np.clip(np.exp(combined_logp), 1e-300, 1 - 1e-15)
-        pvals[b] = float(cauchy_combination(p[None, :], weights=axis_weights, axis=1)[0])
-
-    return pvals, per_axis_logp
+        a, b = np.nanmedian(intra), np.nanmedian(inter)
+        out[i] = (b - a) / (b + a)
+    return out
 
 
-def _emit_tads(
-    boundaries: List[int],
-    bin_ids,
-    chrom: str,
-    level: int,
-    pvals: np.ndarray,
-    fdr: np.ndarray,
-) -> List[dict]:
-    """Given sorted boundary bin indices, emit (start, end) TADs."""
-    if not boundaries:
-        return []
-    B = len(bin_ids)
-    pts = [0] + sorted(boundaries) + [B]
-    rows = []
-    for a, b in zip(pts[:-1], pts[1:]):
-        if b - a < 2:
-            continue
-        s = bin_ids[a][0]
-        e = bin_ids[b - 1][1]
-        # Score: min fdr of the enclosing boundaries (worst confidence)
-        adj = []
-        if a > 0:
-            adj.append(a)
-        if b < B:
-            adj.append(b)
-        if not adj:
-            score, p, q = np.nan, np.nan, np.nan
-        else:
-            qs = [fdr[k] for k in adj if np.isfinite(fdr[k])]
-            ps = [pvals[k] for k in adj if np.isfinite(pvals[k])]
-            q = float(min(qs)) if qs else np.nan
-            p = float(min(ps)) if ps else np.nan
-            score = -np.log10(max(p, 1e-300)) if np.isfinite(p) else np.nan
-        rows.append({
-            "chrom": chrom,
-            "start": int(s),
-            "end": int(e),
-            "level": int(level),
-            "score": score,
-            "pval": p,
-            "fdr": q,
-        })
-    return rows
+def _domains(chrom: str, starts: np.ndarray, ends: np.ndarray, stat: np.ndarray, peak: np.ndarray,
+             params: TADCallerParams) -> pd.DataFrame:
+    """Domains of one chromosome from its boundary loci (module docstring, step 5)."""
+    bnd = peak.copy()
+    bnd[0] = bnd[-1] = True
+    idx = list(np.flatnonzero(bnd))
+    rows = [(a, b, 0) for a, b in zip(idx[:-1], idx[1:])]
+    if params.hierarchical and len(idx) > 2:
+        interior = sorted(idx[1:-1], key=lambda k: (stat[k], idx.index(k)))   # ascending, stable
+        kept = list(idx)
+        level = 0
+        for k in interior:
+            pos = kept.index(k)
+            kept.pop(pos)
+            level += 1
+            rows.append((kept[pos - 1], kept[pos], level))
+    df = pd.DataFrame({
+        "chrom": chrom,
+        "start": [int(starts[a]) for a, _, _ in rows],
+        "end": [int(starts[b]) for _, b, _ in rows],
+        "level": [lv for _, _, lv in rows],
+        "start1": [int(starts[a]) for a, _, _ in rows], "end1": [int(ends[a]) for a, _, _ in rows],
+        "start2": [int(starts[b]) for _, b, _ in rows], "end2": [int(ends[b]) for _, b, _ in rows],
+        "stat1": [float(stat[a]) for a, _, _ in rows], "stat2": [float(stat[b]) for _, b, _ in rows],
+    })
+    df = df[(df["start2"] - df["start1"]) > params.min_tad_size]
+    if params.max_levels is not None:
+        df = df[df["level"] < params.max_levels]
+    return df.reset_index(drop=True).astype({"start": "int64", "end": "int64", "level": "int64"})
+
+
+def _preprocess(cd, chrom: str, params: TADCallerParams, device: str, verbose: bool, *, streaming: bool,
+                batch, memory_budget) -> dict:
+    """The normalised variance cube of one chromosome and its axis weights."""
+    if params.method == "insulation":
+        med, bin_ids = median_distance_matrix(cd, chrom, device)
+        return {"median_distance": med, "bin_ids": bin_ids, "axis_weight": np.full(3, np.nan)}
+    if verbose:
+        print(f"[tad/{chrom}] variance cube{' (streaming)' if streaming else ''}...")
+    if streaming:
+        from uchrom.fea.arc_stream import axis_cube_streaming
+
+        return axis_cube_streaming(cd, chrom, k_sigma=params.k_sigma, frac=params.frac, streaming=True,
+                                   batch=batch, memory_budget=memory_budget)
+    cube = axis_variance_cube(cd, chrom=chrom, device=device)
+    return filter_normalize(cube, k_sigma=params.k_sigma, frac=params.frac)
+
+
+def _stats_table(cube: dict, chrom: str, params: TADCallerParams) -> pd.DataFrame:
+    """Per-locus statistics, FDR and boundary calls of one chromosome (``method="insulation"``: the insulation
+    score and its peaks; ``cube`` then holds ``median_distance`` and ``bin_ids``)."""
+    from scipy.signal import find_peaks
+
+    bin_ids = cube["bin_ids"]
+    if params.method == "insulation":
+        starts = np.array([s for s, _ in bin_ids], dtype=np.int64)
+        score = insulation_scores(cube["median_distance"], starts, params.window_bp)
+        peak = np.zeros(len(starts), dtype=bool)
+        peak[find_peaks(score, prominence=params.prominence, distance=params.distance)[0]] = True
+        return pd.DataFrame({"chrom": chrom, "start": starts, "end": [e for _, e in bin_ids], "insulation": score,
+                             "stat": score, "peak": peak})
+    if params.method != "pval":
+        raise ValueError(f"TADCallerParams.method must be 'pval' or 'insulation', got {params.method!r}")
+    starts = np.array([s for s, _ in bin_ids], dtype=np.int64)
+    ends = np.array([e for _, e in bin_ids], dtype=np.int64)
+    st = boundary_statistics(cube["norm_var"], cube["count"], starts, cube["axis_weight"], params.window_bp)
+    fdr = bh_fdr(st["pval"])
+    raw_peak = np.zeros(len(starts), dtype=bool)
+    raw_peak[find_peaks(st["stat_prox"], prominence=params.prominence, distance=params.distance)[0]] = True
+    with np.errstate(invalid="ignore"):
+        fdr_peak = fdr < params.fdr_cutoff
+    return pd.DataFrame({"chrom": chrom, "start": starts, "end": ends, **st, "fdr": fdr,
+                         "fdr_peak": fdr_peak, "raw_peak": raw_peak, "peak": raw_peak & fdr_peak})
+
+
+def arcfish_boundary_stats(cd, *, chrom=None, trace_ids=None, cells=None, params: Optional[TADCallerParams] = None,
+                           device: str = "auto", streaming: Optional[bool] = None, batch="auto",
+                           memory_budget=None) -> pd.DataFrame:
+    """The per-locus table of :func:`call_tads_by_pval` (not stored): ``chrom, start, end``, the per-axis F
+    statistics ``stat_x/y/z`` and p-values ``pval_x/y/z``, ``stat``, ``stat_prox``, ``pval``, ``fdr`` and the
+    boundary calls ``raw_peak`` (local maximum of ``stat_prox``), ``fdr_peak``, ``peak`` (both) — ArcFISH's
+    ``TADCaller.by_pval`` table."""
+    params = params or TADCallerParams()
+    work = select_spots(cd, trace_ids=trace_ids, cells=cells)
+    streaming = bool(getattr(work, "backed", False)) if streaming is None else bool(streaming)
+    frames = [_stats_table(_preprocess(work, c, params, device, False, streaming=streaming, batch=batch,
+                                       memory_budget=memory_budget), c, params)
+              for c in resolve_chroms(work, chrom)]
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
 # ----------------------------------------------------------------------
@@ -236,7 +282,7 @@ def call_tads_by_pval(
     store=UNSET,
     result_key=UNSET,
 ):
-    """ArcFISH-style TAD caller (chromatin tracing).
+    """ArcFISH's TAD caller (chromatin tracing; module docstring).
 
     Parameters
     ----------
@@ -268,9 +314,9 @@ def call_tads_by_pval(
     Returns
     -------
     DataFrame (``copy=False``) or ChromData (``copy=True``)
-        Columns ``chrom, start, end, level, score, pval, fdr``.  Level 1
-        is the finest partition (all boundaries); each further level
-        drops the weakest boundary when ``params.hierarchical=True``.
+        One row per domain (module docstring): ``chrom, start, end, level, start1, end1, start2, end2, stat1,
+        stat2``.  Level 0 is the finest partition (every boundary); with ``params.hierarchical`` each further
+        level is the domain merged by removing the next weakest boundary.
 
     Notes
     -----
@@ -302,91 +348,17 @@ def _call_tads_by_pval_chrom(cd, chrom: str, params: TADCallerParams,
                              device: str, verbose: bool, *, streaming: bool = False,
                              batch="auto", memory_budget=None) -> pd.DataFrame:
     """Per-chromosome kernel of :func:`call_tads_by_pval` (no storing)."""
-    from scipy.signal import find_peaks
-
+    cube = _preprocess(cd, chrom, params, device, verbose, streaming=streaming, batch=batch,
+                       memory_budget=memory_budget)
     if verbose:
-        print(f"[tad/{chrom}] variance cube{' (streaming)' if streaming else ''}...")
-    if streaming:
-        from uchrom.fea.arc_stream import axis_cube_streaming
-
-        cube = axis_cube_streaming(cd, chrom, k_sigma=params.k_sigma, frac=params.frac,
-                                   streaming=True, batch=batch, memory_budget=memory_budget)
-        w = cube["axis_weight"]
-    else:
-        cube = axis_variance_cube(cd, chrom=chrom, device=device)
-        if verbose:
-            print(f"[tad/{chrom}] filter + normalise...")
-        cube = filter_normalize(cube, k_sigma=params.k_sigma, frac=params.frac)
-        w = axis_weight(cd, chrom=chrom, device=device)
-
-    norm_var = cube["norm_var"]
-    count = cube["count"]
-    bin_ids = cube["bin_ids"]
-    B = len(bin_ids)
-    midpoints = np.array([(s + e) * 0.5 for (s, e) in bin_ids])
-
+        print(f"[tad/{chrom}] axis weights: {np.round(cube['axis_weight'], 3)}")
+    t = _stats_table(cube, chrom, params)
     if verbose:
-        print(f"[tad/{chrom}] axis weights: {np.round(w, 3)}")
-
-    pvals, per_axis_logp = _boundary_pvals(
-        norm_var, count, midpoints, w, params.window_bp
-    )
-
-    # Peak-picking on -log10 p
-    neg_log_p = np.where(
-        np.isfinite(pvals) & (pvals > 0),
-        -np.log10(np.clip(pvals, 1e-300, 1.0)),
-        0.0,
-    )
-    peak_idx, _ = find_peaks(
-        neg_log_p,
-        prominence=params.prominence if params.prominence > 0 else None,
-        distance=params.distance if params.distance >= 1 else None,
-    )
-
-    if len(peak_idx) == 0:
-        if verbose:
-            print(f"[tad/{chrom}] no peaks found")
+        print(f"[tad/{chrom}] {int(t['peak'].sum())} boundaries (fdr < {params.fdr_cutoff})")
+    if len(t) < 2:
         return _empty_tads()
-
-    peak_pvals = pvals[peak_idx]
-    peak_fdr = _bh_fdr(peak_pvals)
-    accept = np.where((peak_fdr < params.fdr_cutoff) & np.isfinite(peak_fdr))[0]
-    if len(accept) == 0:
-        if verbose:
-            print(f"[tad/{chrom}] no boundary passes fdr<{params.fdr_cutoff}")
-        return _empty_tads()
-
-    # Full per-bin fdr array (NaN for non-peaks)
-    fdr_full = np.full(B, np.nan, dtype=np.float64)
-    fdr_full[peak_idx] = peak_fdr
-
-    accepted_bins = list(peak_idx[accept])
-    # Sort boundaries by descending strength: strongest first.
-    sorted_by_strength = sorted(accepted_bins, key=lambda i: float(fdr_full[i]))
-    n_bdry = len(sorted_by_strength)
-
-    # Hierarchy convention: **level 1 = all boundaries** (finest TAD
-    # partition — the natural "full" result).  Each subsequent level
-    # drops the weakest remaining boundary, producing progressively
-    # coarser nested TADs.
-    rows = []
-    if not params.hierarchical:
-        rows.extend(_emit_tads(sorted_by_strength, bin_ids, chrom, 1, pvals, fdr_full))
-    else:
-        levels = min(params.max_levels, max(1, n_bdry))
-        for level in range(1, levels + 1):
-            # level 1: keep all n boundaries
-            # level 2: drop the 1 weakest
-            # level k: drop (k-1) weakest
-            n_keep = max(1, n_bdry - (level - 1))
-            kept = sorted_by_strength[:n_keep]
-            rows.extend(_emit_tads(kept, bin_ids, chrom, level, pvals, fdr_full))
-
-    df_out = pd.DataFrame(rows)
-    if df_out.empty:
-        df_out = _empty_tads()
-    return df_out
+    return _domains(chrom, t["start"].to_numpy(), t["end"].to_numpy(), t["stat"].to_numpy(),
+                    t["peak"].to_numpy(), params)
 
 
 def _empty_tads() -> pd.DataFrame:
@@ -395,13 +367,17 @@ def _empty_tads() -> pd.DataFrame:
         "start": pd.Series(dtype="int64"),
         "end":   pd.Series(dtype="int64"),
         "level": pd.Series(dtype="int64"),
-        "score": pd.Series(dtype="float64"),
-        "pval":  pd.Series(dtype="float64"),
-        "fdr":   pd.Series(dtype="float64"),
+        "start1": pd.Series(dtype="int64"), "end1": pd.Series(dtype="int64"),
+        "start2": pd.Series(dtype="int64"), "end2": pd.Series(dtype="int64"),
+        "stat1": pd.Series(dtype="float64"), "stat2": pd.Series(dtype="float64"),
     })
 
 
 __all__ = [
     "TADCallerParams",
     "call_tads_by_pval",
+    "arcfish_boundary_stats",
+    "boundary_statistics",
+    "insulation_scores",
+    "median_distance_matrix",
 ]

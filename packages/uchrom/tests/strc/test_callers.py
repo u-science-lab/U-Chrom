@@ -23,17 +23,24 @@ def test_directionality_index_recovers_block_boundaries():
 
 def test_call_tads_by_pval_recovers_planted_boundaries():
     from uchrom.strc.tad import TADCallerParams, call_tads_by_pval
+    from uchrom.strc.tad.arc_pval import arcfish_boundary_stats
 
     cd = domain_traces(n_traces=150, bounds=(0, 15, 30, 45))
-    tads = call_tads_by_pval(
-        cd, "chr1", params=TADCallerParams(window_bp=1.5e5), device="cpu"
-    )
+    params = TADCallerParams(window_bp=1.5e5)
+    tads = call_tads_by_pval(cd, "chr1", params=params, device="cpu")
     assert cd.results["tads"] is tads
-    assert {"chrom", "start", "end", "level", "fdr"} <= set(tads.columns)
-    top = tads[tads["level"] == tads["level"].min()]
+    assert {"chrom", "start", "end", "level", "start1", "end1", "start2", "end2", "stat1", "stat2"} <= set(tads.columns)
+    top = tads[tads["level"] == 0]                               # the finest partition
     boundary_bins = sorted(set(top["start"] // RES) - {0})
     assert _near(boundary_bins, [15, 30], tol=1), top
-    assert (top["fdr"] < 0.1).all()
+    assert (top["end"].to_numpy()[:-1] == top["start"].to_numpy()[1:]).all()      # level 0 tiles the loci
+    st = arcfish_boundary_stats(cd, chrom="chr1", params=params, device="cpu")
+    assert sorted(st.loc[st["peak"], "start"] // RES) == boundary_bins
+    assert (st.loc[st["peak"], "fdr"] < 0.1).all()
+    # hierarchy: removing the interior boundaries one at a time adds one merged domain each, up to the whole region
+    assert len(tads) == 2 * len(top) - 1
+    last = tads[tads["level"] == tads["level"].max()].iloc[0]
+    assert (last["start"], last["end"]) == (top["start"].min(), top["end"].max())
 
 
 def test_call_tads_by_pval_store_false_leaves_results_untouched():
@@ -66,14 +73,19 @@ def test_fishnet_recovers_per_trace_domains():
 
 def test_axiswise_f_recovers_planted_loop():
     from uchrom.strc.loop import call_loops_axiswise_f
+    from uchrom.strc.loop.axiswise_f import arcfish_loop_matrices
 
     cd = chain_traces(n_traces=200, n_bins=40, loop=(8, 30))
     loops = call_loops_axiswise_f(cd, "chr1", device="cpu")
     assert cd.results["loops"] is loops
     assert len(loops) >= 1
-    best = loops.sort_values("fdr").iloc[0]
-    assert abs(best["start1"] // RES - 8) <= 1
-    assert abs(best["start2"] // RES - 30) <= 1
+    # the planted pair's neighbourhood belongs to a called loop's cluster (the summit is the cluster's smallest p;
+    # with p-values saturated at 0, the first in row-major order, as the authors' code picks it)
+    m = arcfish_loop_matrices(cd, chrom="chr1", device="cpu")
+    called = {m["label"][i, j] for i, j in zip(loops["summit_i"], loops["summit_j"])}
+    near = m["label"][7:10, 29:32]
+    assert any(v in called for v in near[np.isfinite(near)])
+    assert all(abs(i - 8) <= 4 and abs(j - 30) <= 4 for i, j in zip(loops["summit_i"], loops["summit_j"]))
 
 
 def test_axiswise_f_no_loop_on_plain_chain():

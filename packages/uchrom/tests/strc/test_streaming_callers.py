@@ -28,8 +28,8 @@ def _messy(cd, seed=0):
 
 
 def _sorted(cd):
-    """The stored order, which the in-memory reference must see: the dense
-    cube keeps the last duplicate of that order."""
+    """The stored order, which the in-memory reference must see: both paths
+    keep the first spot of a repeated (trace, locus) in that order."""
     return next(cd.iter_traces(10 ** 9))
 
 
@@ -83,5 +83,7 @@ def test_streaming_callers_match_in_memory(tmp_path):
     ref = call_tads_by_pval(mem, chrom="chr1", params=p, device="cpu", key_added=None)
     got = call_tads_by_pval(bk, chrom="chr1", params=p, key_added=None, memory_budget="64KB")
     assert len(ref) > 0
-    pd.testing.assert_frame_equal(got[["chrom", "start", "end", "level"]], ref[["chrom", "start", "end", "level"]])
-    np.testing.assert_allclose(got["pval"], ref["pval"], rtol=1e-6)
+    pd.testing.assert_frame_equal(got[["chrom", "start", "end", "level", "start1", "start2"]],
+                                  ref[["chrom", "start", "end", "level", "start1", "start2"]])
+    np.testing.assert_allclose(got[["stat1", "stat2"]].to_numpy(float), ref[["stat1", "stat2"]].to_numpy(float),
+                               rtol=1e-6, equal_nan=True)

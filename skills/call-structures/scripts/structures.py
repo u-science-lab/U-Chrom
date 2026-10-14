@@ -195,18 +195,21 @@ def _prepare(cd, chrom, bin_size):
 
 
 def call_tads(cd, chrom: str, bin_size="auto", window_bins: float = 4, fdr: float = 0.1, device: str = "auto") -> dict:
-    """ArcFISH F-test TADs (``uchrom.strc.tad.call_tads_by_pval``) with window = window_bins × bin size."""
+    """ArcFISH arc p-value TADs (``uchrom.strc.tad.call_tads_by_pval``): the loci within window_bins × bin size on
+    each side of a locus form its segments (ArcFISH's default 100 kb = 4 bins of 25 kb).  Level 0 is the finest
+    partition."""
     from uchrom.strc.tad import TADCallerParams, call_tads_by_pval
     sub, nat, bs, cov = _prepare(cd, chrom, bin_size)
     params = TADCallerParams(window_bp=float(window_bins * bs), fdr_cutoff=fdr)
     tads = call_tads_by_pval(sub, chrom=chrom, params=params, device=device, key_added=None)
-    lvl1 = tads[tads["level"] == 1] if len(tads) else tads
+    finest = tads[tads["level"] == 0] if len(tads) else tads
     res = {"chrom": chrom, "caller": "uchrom.strc.tad.call_tads_by_pval", "native_bin_bp": nat, "bin_size_bp": bs,
            "window_bp": params.window_bp, "fdr_cutoff": fdr, "n_traces": int(sub.n_traces),
-           "coverage": cov, "n_domains_level1": int(len(lvl1)),
+           "coverage": cov, "n_domains_finest": int(len(finest)),
+           "n_boundaries": max(int(len(finest)) - 1, 0),
            "n_domains_per_level": tads.groupby("level").size().astype(int).to_dict() if len(tads) else {},
-           "median_domain_bp": float((lvl1["end"] - lvl1["start"]).median()) if len(lvl1) else None,
-           "domains_level1": lvl1[["start", "end", "fdr"]].to_dict("records"), "checks": []}
+           "median_domain_bp": float((finest["end"] - finest["start"]).median()) if len(finest) else None,
+           "domains_finest": finest[["start", "end"]].to_dict("records"), "checks": []}
     _caller_checks(res, sub, nat, bs, cov)
     return res
 
@@ -222,8 +225,9 @@ def call_compartments(cd, chrom: str, bin_size="auto", device: str = "auto") -> 
            "bin_size_bp": bs, "n_traces": int(sub.n_traces), "coverage": cov,
            "n_bins": int(len(comp)), "frac_A": float((lab == "A").mean()) if len(lab) else None, "n_segments": n_seg,
            "compartments": comp[["start", "end", "compartment", "pc2"]].to_dict("records"),
-           "checks": ["A/B orientation is a convention (compact cluster = A); check against gene density or an "
-                      "active histone-mark track before calling a bin 'active'"]}
+           "checks": ["A/B orientation follows ArcFISH's rule without a reference genome (the less compact "
+                      "cluster = A); check it against gene density or an active histone-mark track "
+                      "(CompartmentCallerParams(a_track=...)) before calling a bin 'active'"]}
     _caller_checks(res, sub, nat, bs, cov)
     return res
 

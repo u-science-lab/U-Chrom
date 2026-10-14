@@ -232,6 +232,20 @@ DATASETS = {
         "default": False,
         "description": "Takei 2021 mESC FOF-CT 1 Mb genome-wide tracing (4DN 4DNFIFLJGGNR)",
     },
+    # Takei 2021 mESC DNA seqFISH+ (1,200 loci at 25 kb in 20 regions), replicate 2: with "takei" (replicate 1)
+    # the input of ArcFISH's loop / domain tutorial (benchmarks/arcfish_parity).
+    "takei_rep2": {
+        "filename": "4DNFIQXONUUH.csv",
+        "url": (
+            "https://4dn-open-data-public.s3.amazonaws.com/"
+            "fourfront-webprod/wfoutput/"
+            "780f3c41-a267-4f30-949a-ef653b29ef90/4DNFIQXONUUH.csv"
+        ),
+        "md5": {"4DNFIQXONUUH.csv": "659a89aa5b20397a029722bedd5a2765"},
+        "default": False,
+        "size_mb": 34,
+        "description": "Takei 2021 mESC FOF-CT chromatin tracing, replicate 2 (4DN 4DNFIQXONUUH)",
+    },
     "seqfish": {
         "filename": "DNAseqFISH+.zip",
         "url": (
@@ -422,6 +436,18 @@ DATASETS = {
         "default": True,
         "fig3": True,
         "description": "Su 2020 IMR90 chr21 chromatin tracing + binned Hi-C (Zenodo 3928890)",
+    },
+    # Su et al. 2020 IMR90 chromosome 2 p-arm tracing, replicate (Zenodo 3928890): the input of ArcFISH's
+    # compartment tutorial (benchmarks/arcfish_parity).
+    "su2020_chr2_parm": {
+        "files": [
+            ("su2020_imr90/chromosome2_p-arm_replicate.tsv",
+             f"{_SU2020}/chromosome2_p-arm_replicate.tsv?download=1"),
+        ],
+        "md5": {"su2020_imr90/chromosome2_p-arm_replicate.tsv": "ead30c6797b86db559bcb1cd60b20540"},
+        "size_mb": 78,
+        "default": False,
+        "description": "Su 2020 IMR90 chromosome 2 p-arm chromatin tracing, replicate (Zenodo 3928890)",
     },
     # Su et al. 2020 genome-scale DNA-MERFISH (Zenodo 3928890, CC-BY-4.0): 1,041 loci x 1,787 IMR90
     # cells, both homologs resolved, distance to lamina; + the authors' Rao 2014 Hi-C summed into

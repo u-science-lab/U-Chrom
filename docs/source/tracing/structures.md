@@ -90,36 +90,33 @@ loops = call_loops_axiswise_f(
 
 ### Algorithm
 
-For each chromosome separately:
+The three tracing callers implement ArcFISH (Yu et al. 2025; github.com/hyuyu104/ArcFISH) and give the authors'
+results: `benchmarks/arcfish_parity/` runs both on the authors' tutorial data and four more datasets and compares the
+per-locus statistics, test matrices and calls (`results/parity.json`).  For each chromosome separately:
 
-1. **Per-axis pairwise difference tensor** `(3, n_traces, n_bins, n_bins)`
-2. **Filter + normalise**
-   - Compute per-pair `raw_var` = NaN-median over traces of squared
-     deviation from the trace-wise median.
-   - LOWESS fit `log(raw_var) ~ log(1D genomic distance)` for the
-     stratified expected variance; convert to `strata_std`.
-   - Flag per-trace observations where `|diff − median(diff)| > 4σ` as
-     outliers (NaN in the 4-D tensor).
-   - Recompute per-pair variance and count from the cleaned tensor;
-     LOWESS again for the expected variance; normalise.
-3. **Axis weights** — `w_c = 1 / median_trace(trace_variance_c)`,
-   normalised to sum 1.
-4. **Per-axis F-test** on each candidate `(i, j)` with `d1d ∈ [cut_lo, cut_up]`:
-   - Local ring background `[inner_cut, outer_cut]` excluding row *i*
-     and column *j*.
-   - `F_c = norm_var[i,j] / count-weighted-mean(norm_var[ring])`.
-   - Left-tail F-CDF → per-axis p-value.
-5. **ACAT Cauchy combination** of per-axis p-values using axis weights.
-6. **Benjamini–Hochberg FDR** → candidate mask.
-7. **Cluster** accepted candidates by 1D proximity (`gap`); the lowest-p
-   entry per cluster is the "summit".
-8. **Pseudo-contact-frequency filter** — only keep summits where the
-   fraction of traces with 3D pdist below the adjacent-bin cutoff
-   exceeds 1/2 (singleton cluster) or 1/3 (larger cluster).
-9. **Final p-value threshold** → output.
+1. **Loci and coordinates** — the chromosome's starts with a finite coordinate; a trace that observed a locus more
+   than once keeps its first spot; genomic distances `|start_i − start_j|`.
+2. **Filter + normalise** (`uchrom.fea.arc.filter_normalize`), per axis and locus pair over the traces:
+   - `raw_var` = the median squared deviation of the differences from their median (medians: the mean of the two
+     middle values for an even count);
+   - LOWESS of `log raw_var` on `log` genomic distance (`frac` 0.1) → the stratified s.d.; a difference more than
+     4 s.d. from the pair's median is an outlier and is removed;
+   - the remaining count and variance; LOWESS again for the expected variance; `norm_var = var / expected`.
+3. **Axis weights** — per axis, each trace centred at its mean over the loci, the mean square of each locus over the
+   traces, `w = 1 / median over loci`, normalised to sum 1.
+4. **Per-axis F-test** of each pair `i < j` with `start_j − start_i ∈ [cut_lo, cut_up]`: the background pairs
+   `(k, l)`, `k < l`, within `outer_cut` of `i` and of `j`, except those within `inner_cut` of both and those in row
+   `i` or column `j` (at least 4); `F = norm_var[i, j] / count-weighted mean(norm_var[background])`;
+   `p = F.cdf(F; count[i, j], background count)`.
+5. **Cauchy combination** of the axes with the weights; **Benjamini–Hochberg** over the tested pairs → candidates.
+6. **Clusters** of candidates within `gap` of each other in both loci; the summit is the cluster's smallest p.
+7. **Contact frequency** — a summit is kept when the fraction of traces whose two spots are closer than the mean
+   3-D distance of the pairs exactly `contact_sep` (25 kb) apart exceeds 1/2 (a cluster of two pairs) or 1/3
+   (otherwise; no such pairs → no filter).
+8. **Final p-value threshold** (`pval_cutoff`) → loops.
 
-Output columns: `chrom1, start1, end1, chrom2, start2, end2, score,
-pval, fdr, cluster_size, contact_freq, summit_i, summit_j`.
+Output columns: `chrom1, start1, end1, chrom2, start2, end2, stat, pval, fdr, score, cluster_size, contact_freq,
+summit_i, summit_j`; the test matrices: `uchrom.strc.loop.axiswise_f.arcfish_loop_matrices`.
 
 ### GPU acceleration
 
@@ -147,24 +144,23 @@ Output formats are inferred from the extension: `.bedpe` (BEDPE TSV),
 
 ### 1. F-test caller (`call_tads_by_pval`)
 
-For each candidate boundary position the caller runs a per-axis F-test
-on the count-weighted intra-domain vs inter-domain variance inside a
-window of size `window_bp`.  The three axes are combined with the
-standard ACAT Cauchy test, peaks are picked in `-log10 p`, BH-FDR
-adjusted, and (optionally) emitted as a hierarchy of nested TADs.
+For every locus at least `window_bp / 2` from both ends, the loci within `window_bp` on each side form a left
+and a right segment; per axis an F-test compares the count-weighted variance of the pairs within the segments with
+that of the pairs across, and the axes are combined with the Cauchy test (`stat`).  Boundaries are the local maxima
+of the same statistic with F(1, 1) p-values (`stat_prox`) whose Benjamini–Hochberg FDR over all tested loci is below
+`fdr_cutoff`.  Level 0 holds the domains between consecutive boundaries (the first and the last locus count as
+boundaries); removing the weakest boundary at a time adds the merged domain at levels 1, 2, ….
 
 ```python
 from uchrom.strc.tad import call_tads_by_pval, TADCallerParams
 
 tads = call_tads_by_pval(
     cd,                   # chrom=None → every chromosome
-    params=TADCallerParams(
-        window_bp=1e5, fdr_cutoff=0.1,
-        hierarchical=True, max_levels=3,
-    ),
+    params=TADCallerParams(window_bp=1e5, fdr_cutoff=0.1, hierarchical=True),
     device="auto",
 )
-# tads: DataFrame (chrom, start, end, level, score, pval, fdr)
+# tads: DataFrame (chrom, start, end, level, start1, end1, start2, end2, stat1, stat2); level 0 = finest
+# per-locus statistics and boundary calls: uchrom.strc.tad.arc_pval.arcfish_boundary_stats(cd, chrom=...)
 ```
 
 ### 2. FISHnet per-allele caller (`call_domains_fishnet`)
@@ -214,26 +210,26 @@ domains = get_domains(contact_mat, smoothing_param=0.1, min_size_frac=0.05)
 
 ## A/B compartment calling
 
-`uchrom.strc.comp.call_compartments_axes_pc` is an ArcFISH-style
-caller.  For each axis it builds a pseudo-contact matrix
-`K_c = exp(-norm_var_c)`, takes the second-largest eigenvector (PC2)
-which encodes the compartment-scale alternation, stacks the three
-weighted PC2's as features, and runs KMeans(2) to label bins A / B.
+`uchrom.strc.comp.call_compartments_axes_pc` is ArcFISH's caller.  For each axis it takes the eigenvector of the
+second-largest eigenvalue of `exp(-norm_var)` (a missing entry counts as 1), weights the three by the axis weights
+and splits the loci with k-means (`n_clusters=2, random_state=0, n_init=1`); runs shorter than
+`min_compartment_bp` are flipped, the shortest first.
 
 ```python
 from uchrom.strc.comp import call_compartments_axes_pc, CompartmentCallerParams
 
 comps = call_compartments_axes_pc(
     cd, chrom="chr1",     # or None for every chromosome
-    params=CompartmentCallerParams(min_bins=2),
+    params=CompartmentCallerParams(min_compartment_bp=0),
     device="auto",
 )
-# comps: DataFrame (chrom, start, end, bin_index, cluster, compartment, pc2)
+# comps: DataFrame (chrom, start, end, bin_index, cluster, compartment, pc2, eig_x, eig_y, eig_z)
 ```
 
-A/B labels default to the convention that the more compact (smaller
-mean intra-distance) cluster is A.  Override with the `a_cluster`
-parameter if you have gene-density ground truth.
+Without other information A is the **less compact** cluster (the authors' rule: per axis the median normalised
+variance of each cluster's pairs, majority over the axes; B compartments are the more compacted).  Name A by an
+annotation with `CompartmentCallerParams(a_track="<bin_tracks column>")` (gene density, an active mark) or
+`a_cluster=`.
 
 ## Where results live
 

@@ -1,46 +1,56 @@
-"""ArcFISH-style axis-wise preprocessing for chromatin tracing data.
+"""ArcFISH preprocessing of chromatin tracing data: per-axis pairwise variances, their outlier filter and
+normalisation by genomic distance, and the axis weights.
 
-References
-----------
-Yu H. *et al.* *Accurate and robust 3D genome feature discovery from
-multiplexed DNA FISH*, bioRxiv 2025.11.26.690837v1.
+Reference
+---------
+Yu H. *et al.* ArcFISH: accurate and robust 3D genome feature discovery from chromatin tracing data.  bioRxiv
+2025.11.26.690837 (software: github.com/hyuyu104/ArcFISH).  U-Chrom's own implementation of the published
+algorithm; its output is checked against the authors' package (commit a21d889) by ``benchmarks/arcfish_parity/``
+(per-position statistics and calls on the datasets of the authors' tutorials and others).
 
-Independent implementation in :mod:`uchrom` — not derived from the GPL-3.0
-ArcFISH source.
+Conventions (the authors', so that the results agree)
+-----------------------------------------------------
+* The loci of a chromosome are its bins with at least one finite coordinate, keyed and sorted by ``start``; the
+  genomic distance of two loci is ``|start_i - start_j|``.
+* A trace that observed a locus more than once keeps its first spot (spot order).
+* Medians are the usual medians: the mean of the two middle values for an even count.
+* A variance within ``1e-8`` of zero (``numpy.isclose``) is left out of a LOWESS fit.
 
 Pipeline (per chromosome)
 -------------------------
-1. ``axis_variance_cube``
-   Builds ``(3, n_bins, n_bins)`` per-axis pairwise variance + count cubes
-   from ``ChromData`` spots.  Each trace contributes a rank-1 outer
-   difference for each axis; aggregation is NaN-aware.
-2. ``filter_normalize``
-   Two-pass LOWESS stratification on log(1D genomic distance):
+1. :func:`axis_variance_cube`: the coordinates as a ``(traces, loci, 3)`` cube, the per-axis pairwise variance /
+   count / mean (unfiltered) and the axis weights.
+2. :func:`filter_normalize`, per axis and locus pair, over the traces observing both loci:
 
-   - first pass: flag entries whose per-pair squared deviation is more
-     than ``k_sigma`` × stratified std as outliers and NaN them;
-   - second pass: refit LOWESS on the cleaned variances to give each
-     entry a genome-distance-matched expectation, then normalise.
+   - pass 1: the raw variance is the median squared deviation of the differences from their median; LOWESS of
+     ``log raw variance`` on ``log genomic distance`` (``frac`` 0.1, upper triangle) gives a stratified variance,
+     its square root the stratified s.d.; a difference farther than ``k_sigma`` (4) s.d. from the pair's median is
+     an outlier and is removed;
+   - pass 2: ``count`` = the remaining traces, ``var`` = the mean squared deviation from their mean; LOWESS of
+     ``log var`` on ``log genomic distance`` gives the expected variance and ``norm_var = var / expected``
+     (diagonal 0).
 
-3. ``axis_weight``
-   Returns a 3-vector of weights (sum 1) inversely proportional to the
-   per-axis trace-variance median — the exact weighting used by the
-   ACAT combination step in the loop / tad / comp callers.
+3. :func:`axis_weight`: per axis, each trace centred at its mean over loci; per locus the mean square over the
+   traces; the weight is ``1 / median over loci``, normalised to sum 1.
 
-All tensor-heavy computation runs on a user-selected torch device
-(``'auto' | 'cpu' | 'cuda' | 'mps'``).  LOWESS stays on CPU via
-``statsmodels`` because it's a non-vectorised kernel smoother whose
-input size is ``O(n_bins²)`` (typically ≤ 10 k).
+The pairwise differences run on a torch device (``'auto' | 'cpu' | 'cuda' | 'mps'``) in row blocks; the LOWESS fits
+use ``statsmodels`` on the CPU.  ``uchrom.fea.arc_stream`` computes the same without the
+``(3, traces, loci, loci)`` tensor.
 """
 
 from __future__ import annotations
 
+import warnings
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 
 from uchrom.utils import get_device, lowess_log_log
 from uchrom.utils.stats import default_float_dtype
+
+#: variances within this of zero are left out of the LOWESS fits (``numpy.isclose(v, 0)``)
+ZERO_VAR_ATOL = 1e-8
 
 
 # ----------------------------------------------------------------------
@@ -50,51 +60,49 @@ from uchrom.utils.stats import default_float_dtype
 def _coord_cube_for_chrom(cd, chrom):
     """Return ``(coords_cube, bin_ids, trace_ids)`` for one chromosome.
 
-    ``coords_cube[t, i, :]`` is the (x, y, z) of trace ``t`` at bin ``i``,
-    NaN if the trace missed that bin.  Bins are sorted by ``start``.
+    ``coords_cube[t, i, :]`` is the (x, y, z) of trace ``t`` at locus ``i`` (NaN if the trace missed it).  Loci are
+    the chromosome's starts with a finite coordinate, sorted; ``bin_ids`` are their ``(start, end)`` (the end of the
+    first spot at that start); traces in order of first appearance; a repeated (trace, start) keeps its first spot.
     """
     if getattr(cd, "backed", False):   # read only this chromosome's rows
         cd = cd.get_chrom(str(chrom), columns="coords")
-    df = cd.spots.copy()
-    df["x"] = cd.coords[:, 0]
-    df["y"] = cd.coords[:, 1]
-    df["z"] = cd.coords[:, 2]
-    df = df[df["chrom"].astype(str) == str(chrom)]
-    if df.empty:
+    sp = cd.spots
+    on = (sp["chrom"].astype(str) == str(chrom)).to_numpy()
+    if not on.any():
         raise ValueError(f"No spots found for chromosome {chrom}")
+    df = pd.DataFrame({
+        "trace_id": sp["trace_id"].to_numpy()[on],
+        "start": sp["start"].to_numpy()[on].astype(np.int64),
+        "end": sp["end"].to_numpy()[on].astype(np.int64),
+    })
+    xyz = np.asarray(cd.coords, dtype=np.float64)[on]
+    first = ~df.duplicated(["trace_id", "start"], keep="first").to_numpy()
+    df, xyz = df[first].reset_index(drop=True), xyz[first]
+    finite = np.isfinite(xyz).any(axis=1)
+    observed = np.unique(df["start"].to_numpy()[finite])
+    keep = np.isin(df["start"].to_numpy(), observed)
+    df, xyz = df[keep].reset_index(drop=True), xyz[keep]
 
-    # Coerce start/end to int to avoid float-keyed lookups
-    df = df.assign(
-        start=df["start"].astype(np.int64),
-        end=df["end"].astype(np.int64),
-    )
+    starts = observed
+    ends = df.groupby("start", sort=True)["end"].first().reindex(starts).to_numpy()
+    bin_keys = [(int(s), int(e)) for s, e in zip(starts, ends)]
+    ti, trace_ids = pd.factorize(df["trace_id"], sort=False)
+    bi = np.searchsorted(starts, df["start"].to_numpy())
+    cube = np.full((len(trace_ids), len(starts), 3), np.nan, dtype=np.float64)
+    cube[ti, bi] = xyz
+    return cube, bin_keys, list(trace_ids)
 
-    bins = (
-        df[["start", "end"]]
-        .drop_duplicates()
-        .sort_values("start", kind="mergesort")
-        .reset_index(drop=True)
-    )
-    bin_keys = [(int(s), int(e)) for s, e in zip(bins["start"], bins["end"])]
-    bin_to_idx = {k: i for i, k in enumerate(bin_keys)}
-    n_bins = len(bin_keys)
 
-    trace_ids = list(df["trace_id"].unique())
-    tid_to_idx = {t: i for i, t in enumerate(trace_ids)}
-    n_traces = len(trace_ids)
-
-    cube = np.full((n_traces, n_bins, 3), np.nan, dtype=np.float64)
-    ti = np.asarray(
-        [tid_to_idx[t] for t in df["trace_id"]], dtype=np.int64
-    )
-    bi = np.asarray(
-        [bin_to_idx[(int(s), int(e))] for s, e in zip(df["start"], df["end"])],
-        dtype=np.int64,
-    )
-    cube[ti, bi, 0] = df["x"].to_numpy()
-    cube[ti, bi, 1] = df["y"].to_numpy()
-    cube[ti, bi, 2] = df["z"].to_numpy()
-    return cube, bin_keys, trace_ids
+def _axis_weight_cube(cube: np.ndarray) -> np.ndarray:
+    """Axis weights of a ``(traces, loci, 3)`` coordinate cube (see the module docstring)."""
+    w = np.empty(3)
+    with warnings.catch_warnings(), np.errstate(invalid="ignore", divide="ignore"):
+        warnings.simplefilter("ignore", RuntimeWarning)
+        for a in range(3):
+            x = cube[:, :, a]
+            x0 = x - np.nanmean(x, axis=1)[:, None]
+            w[a] = 1.0 / np.nanmedian(np.nanmean(x0 * x0, axis=0))
+    return w / w.sum()
 
 
 # ----------------------------------------------------------------------
@@ -108,14 +116,15 @@ def _coord_cube_for_chrom(cd, chrom):
 _BLOCK_BYTES = 256 * 2**20
 
 
-def _coord_tensor(cd, chrom: str, device: str = "auto"):
-    """``(coords, bin_ids, trace_ids)`` with ``coords`` a ``(T, B, 3)`` tensor on ``device``."""
+def _coord_tensor(cd, chrom: str, device: str = "auto", *, with_cube: bool = False):
+    """``(coords, bin_ids, trace_ids)`` with ``coords`` a ``(T, B, 3)`` tensor on ``device`` (and the numpy cube
+    when ``with_cube``)."""
     import torch
 
     cube, bin_ids, trace_ids = _coord_cube_for_chrom(cd, chrom)
     dev = get_device(device)
     c = torch.as_tensor(cube, dtype=default_float_dtype(dev), device=dev)
-    return c, bin_ids, trace_ids
+    return (c, bin_ids, trace_ids, cube) if with_cube else (c, bin_ids, trace_ids)
 
 
 def _row_blocks(c):
@@ -137,17 +146,16 @@ def axis_variance_cube(
     chrom: str,
     device: str = "auto",
 ) -> dict:
-    """Compute per-axis pairwise variance + sample-count cubes.
+    """Per-axis pairwise variance and count cubes of one chromosome, before filtering.
 
-    Returns a dict with ``var``, ``count``, ``mean`` (all ``(3, B, B)``)
-    plus ``bin_ids``, ``n_traces``, ``chrom``, and — for downstream
-    :func:`filter_normalize` — the ``(T, B, 3)`` coordinate tensor on the
-    torch device under key ``"coords"``.  Pairwise differences are formed
-    block by block, so memory stays near ``_BLOCK_BYTES`` whatever ``B``.
+    Returns a dict with ``var``, ``count``, ``mean`` (all ``(3, B, B)``), ``bin_ids``, ``n_traces``, ``chrom``,
+    ``axis_weight`` (:func:`axis_weight` of the same cube) and, for :func:`filter_normalize`, the ``(T, B, 3)``
+    coordinate tensor on the torch device under ``"coords"``.  Pairwise differences are formed block by block, so
+    memory stays near ``_BLOCK_BYTES`` whatever ``B``.
     """
     import torch
 
-    c, bin_ids, trace_ids = _coord_tensor(cd, chrom, device)
+    c, bin_ids, trace_ids, cube = _coord_tensor(cd, chrom, device, with_cube=True)
     B = c.shape[1]
     var = torch.empty((3, B, B), dtype=c.dtype, device=c.device)
     mean = torch.empty_like(var)
@@ -178,6 +186,7 @@ def axis_variance_cube(
         "bin_ids": bin_ids,
         "n_traces": len(trace_ids),
         "chrom": chrom,
+        "axis_weight": _axis_weight_cube(cube),
     }
 
 
@@ -190,10 +199,30 @@ def _bin_midpoints(bin_ids):
     return np.array([(s + e) * 0.5 for (s, e) in bin_ids], dtype=np.float64)
 
 
+def _bin_starts(bin_ids):
+    """Return 1D array of the loci's starts."""
+    return np.array([s for (s, _) in bin_ids], dtype=np.float64)
+
+
 def _genomic_distance_matrix(bin_ids):
-    """``(n_bins, n_bins)`` matrix of |midpoint_i - midpoint_j|."""
-    mids = _bin_midpoints(bin_ids)
-    return np.abs(mids[:, None] - mids[None, :])
+    """``(n_bins, n_bins)`` matrix of genomic distances ``|start_i - start_j|``."""
+    st = _bin_starts(bin_ids)
+    return np.abs(st[:, None] - st[None, :])
+
+
+def _not_zero(v: np.ndarray) -> np.ndarray:
+    """``v`` with the values within :data:`ZERO_VAR_ATOL` of zero set to NaN (left out of a LOWESS fit)."""
+    return np.where(np.abs(v) <= ZERO_VAR_ATOL, np.nan, v)
+
+
+def _lowess_symmetric(values_upper: np.ndarray, d_flat: np.ndarray, iu, B: int, frac: float) -> np.ndarray:
+    """LOWESS of ``log values`` on ``log d`` over the upper triangle, back-transformed, as a symmetric ``(B, B)``
+    matrix with a NaN diagonal; pairs left out of the fit are NaN."""
+    fit = lowess_log_log(d_flat, _not_zero(values_upper), frac=frac)
+    m = np.full((B, B), np.nan)
+    m[iu] = fit
+    m.T[iu] = fit
+    return m
 
 
 def filter_normalize(
@@ -201,22 +230,12 @@ def filter_normalize(
     k_sigma: float = 4.0,
     frac: float = 0.1,
 ) -> dict:
-    """ArcFISH-style per-trace LOWESS filter + normalise.
+    """ArcFISH's outlier filter and normalisation by genomic distance (module docstring, step 2).
 
-    Rebuilds the ``(3, n_traces, n_bins, n_bins)`` pairwise differences
-    block by block from ``cube['coords']``.  Two passes:
-
-    1. Per-pair ``raw_var = nanmedian(trace_diff²)`` → LOWESS over
-       ``log(genomic_distance)`` → ``strata_std``.  Individual trace
-       observations where ``|diff - median(diff)| > k_sigma × strata_std``
-       are dropped.
-    2. After filtering, per-pair ``filtered_var = nanmean((diff - mean)²)``
-       and per-pair ``count = n_valid`` recomputed.  LOWESS again over
-       log(d1d) → expected; normalised variance = filtered / expected.
-
-    Output (numpy, on CPU): ``var``, ``count`` (refreshed after filter),
-    ``norm_var``, ``expected``, ``raw_var``, ``genomic_distance``.  The
-    device tensor under ``"coords"`` is dropped from the output.
+    Rebuilds the ``(3, n_traces, n_bins, n_bins)`` pairwise differences block by block from ``cube['coords']``.
+    Output (numpy, on CPU): ``var`` (filtered variance), ``count`` (traces left per pair), ``norm_var``,
+    ``expected``, ``raw_var``, ``genomic_distance``, plus the input's other keys; the device tensor under
+    ``"coords"`` is dropped.
     """
     import torch
 
@@ -228,9 +247,7 @@ def filter_normalize(
     iu = np.triu_indices(B, k=1)
     d_flat = d1d[iu]
 
-    # -------- Pass 1: raw_var via nanmedian, LOWESS, outlier mask --------
-    # med[c, i, j] = nanmedian_n diff[c, n, i, j]
-    # raw_var[c, i, j] = nanmedian_n((diff - med)²)
+    # -------- Pass 1: median difference, raw variance (median squared deviation), stratified s.d. --------
     med = torch.empty((n_axes, B, B), dtype=c.dtype, device=c.device)
     raw_var = torch.empty_like(med)
     for i0, i1 in _row_blocks(c):
@@ -238,31 +255,16 @@ def filter_normalize(
         m = _nanmedian_along_dim(diff, 1, keepdim=True)          # (3, 1, b, B)
         med[:, i0:i1] = m[:, 0]
         raw_var[:, i0:i1] = _nanmedian_along_dim((diff - m) ** 2, 1, keepdim=False)
+        del diff, m
 
-    # Replace near-zero → NaN
-    raw_var = torch.where(raw_var < 1e-30,
-                          torch.full_like(raw_var, float("nan")),
-                          raw_var)
-
-    # LOWESS log(raw_var) ~ log(d1d)
     raw_var_np = raw_var.detach().cpu().numpy().astype(np.float64)
-    strata_std = np.full_like(raw_var_np, np.nan)
     for a in range(n_axes):
-        v_flat = raw_var_np[a][iu]
-        fit = lowess_log_log(d_flat, v_flat, frac=frac)
-        std_flat = np.sqrt(np.clip(fit, 1e-30, None))
-        axm = np.full((B, B), np.nan)
-        axm[iu] = std_flat
-        axm.T[iu] = std_flat
-        strata_std[a] = axm
+        np.fill_diagonal(raw_var_np[a], np.nan)
+    strata_std = np.stack([np.sqrt(_lowess_symmetric(raw_var_np[a][iu], d_flat, iu, B, frac))
+                           for a in range(n_axes)])
+    threshold = k_sigma * torch.as_tensor(strata_std, dtype=c.dtype, device=c.device)   # (3, B, B)
 
-    # Per-trace outlier mask: |diff - median_t(diff)| > k_sigma * strata_std
-    strata_std_t = torch.as_tensor(
-        strata_std, dtype=c.dtype, device=c.device
-    )  # (3, B, B)
-    threshold = k_sigma * strata_std_t
-
-    # -------- Pass 2: filtered_var via nanmean squared deviation --------
+    # -------- Pass 2: outliers removed; count, variance (mean squared deviation from the mean) --------
     filtered_var = torch.empty_like(med)
     count = torch.empty((n_axes, B, B), dtype=torch.int64, device=c.device)
     for i0, i1 in _row_blocks(c):
@@ -280,52 +282,44 @@ def filter_normalize(
         v = dev_sq.sum(dim=1) / safe_count
         filtered_var[:, i0:i1] = torch.where(n == 0, torch.full_like(v, float("nan")), v)
         count[:, i0:i1] = n
+        del diff, outlier, valid, safe, dev_sq
 
     fvar_np = filtered_var.detach().cpu().numpy().astype(np.float64)
     count_np = count.detach().cpu().numpy().astype(np.int64)
+    return _normalise(cube, fvar_np, count_np, raw_var_np, d1d, iu, frac)
 
-    expected = np.full_like(fvar_np, np.nan)
-    norm_var = np.full_like(fvar_np, np.nan)
-    for a in range(n_axes):
-        v_flat = fvar_np[a][iu]
-        v_flat_ok = np.where(v_flat > 1e-30, v_flat, np.nan)
-        fit = lowess_log_log(d_flat, v_flat_ok, frac=frac)
-        exp_axis = np.full((B, B), np.nan)
-        exp_axis[iu] = fit
-        exp_axis.T[iu] = fit
-        expected[a] = exp_axis
-        with np.errstate(invalid="ignore", divide="ignore"):
-            norm_axis = np.where(exp_axis > 0, fvar_np[a] / exp_axis, np.nan)
-        norm_var[a] = norm_axis
-        # Zero the diagonal for cleanliness
+
+def _normalise(cube: dict, fvar: np.ndarray, count: np.ndarray, raw_var: np.ndarray, d1d: np.ndarray, iu,
+               frac: float) -> dict:
+    """The second LOWESS (expected variance by genomic distance) and the output dict of :func:`filter_normalize`
+    (shared with the streaming path)."""
+    B = d1d.shape[0]
+    expected = np.stack([_lowess_symmetric(fvar[a][iu], d1d[iu], iu, B, frac) for a in range(3)])
+    with np.errstate(invalid="ignore", divide="ignore"):
+        norm_var = fvar / expected
+    for a in range(3):
         np.fill_diagonal(norm_var[a], 0.0)
-
     out = dict(cube)
-    out["var"] = fvar_np
-    out["count"] = count_np
-    out["raw_var"] = raw_var_np
+    out["var"] = fvar
+    out["count"] = count
+    out["raw_var"] = raw_var
     out["expected"] = expected
     out["norm_var"] = norm_var
     out["genomic_distance"] = d1d
-    # Drop the device tensor — no longer needed downstream
-    out.pop("coords", None)
+    out.pop("coords", None)       # the device tensor is not needed downstream
     return out
 
 
 def _nanmedian_along_dim(t, dim: int, keepdim: bool = False):
-    """NaN-aware median along a single dim for a torch tensor.
-
-    Uses ``torch.nanmedian`` (available) but falls back to numpy if on
-    MPS where nanmedian kernels are spotty.
-    """
+    """NaN-aware median along ``dim`` of a torch tensor: the middle value, or the mean of the two middle values for
+    an even count (as ``numpy.nanmedian``); NaN where all are NaN.  ``torch.nanmedian`` returns the lower of the two
+    middle values, and of ``-t`` minus the upper one, so the median is their mean — the same order statistics as a
+    sort, at the cost of two selections."""
     import torch
 
-    try:
-        return torch.nanmedian(t, dim=dim, keepdim=keepdim).values
-    except Exception:
-        arr = t.detach().cpu().numpy()
-        med = np.nanmedian(arr, axis=dim, keepdims=keepdim)
-        return torch.as_tensor(med, dtype=t.dtype, device=t.device)
+    lo = torch.nanmedian(t, dim=dim, keepdim=keepdim).values
+    hi = -torch.nanmedian(-t, dim=dim, keepdim=keepdim).values
+    return (lo + hi) / 2
 
 
 # ----------------------------------------------------------------------
@@ -337,63 +331,40 @@ def axis_weight(
     chrom: Optional[str] = None,
     device: str = "auto",
 ) -> np.ndarray:
-    """Compute per-axis weights ``w ∝ 1 / median(trace_variance)``.
+    """ArcFISH's axis weights of a chromosome (module docstring, step 3): per axis, each trace centred at its mean
+    over the loci, the mean square of each locus over the traces, ``1 / median`` over the loci, normalised to sum 1.
 
-    For each axis we centre every trace at its own mean (bins with NaN
-    excluded) and take the median across traces of each trace's variance.
-    The inverse of that median is the axis weight, normalised to sum 1.
-    Consistent with ArcFISH's ``axis_weight`` routine.
+    ``chrom=None`` averages the weights of every chromosome.  ``device`` is accepted for compatibility (numpy).
     """
-    import torch
+    if chrom is None:
+        if getattr(cd, "backed", False):
+            chroms = [str(c) for c in cd.bins["chrom"].astype(str).unique()]
+        else:
+            chroms = [str(c) for c in pd.unique(cd.spots["chrom"].astype(str))]
+        return np.mean(np.stack([axis_weight(cd, chrom=c) for c in chroms]), axis=0)
+    cube, _, _ = _coord_cube_for_chrom(cd, chrom)
+    return _axis_weight_cube(cube)
 
-    if getattr(cd, "backed", False):   # read only the rows needed
-        cd = (cd.get_chrom(str(chrom), columns="coords") if chrom is not None
-              else cd.to_memory(columns="coords"))
-    df = cd.spots.copy()
-    df["x"] = cd.coords[:, 0]
-    df["y"] = cd.coords[:, 1]
-    df["z"] = cd.coords[:, 2]
-    if chrom is not None:
-        df = df[df["chrom"].astype(str) == str(chrom)]
-    if df.empty:
-        raise ValueError("No spots found for the given chromosome filter.")
 
-    # Build (n_traces, n_bins, 3) cube — reuse the coord cube path
-    if chrom is not None:
-        cube, _, _ = _coord_cube_for_chrom(cd, chrom)
-    else:
-        # All spots; fabricate a dummy chrom to reuse the helper
-        chroms = df["chrom"].unique()
-        all_cubes = []
-        for c in chroms:
-            sub_cube, _, _ = _coord_cube_for_chrom(cd, c)
-            # Transform to axis-first: (3, T, B)
-            all_cubes.append(sub_cube.transpose(2, 0, 1))
-        # Stack per-axis, concatenating traces across chromosomes is wrong
-        # (traces are per-chromosome).  Compute per-axis median-of-variances
-        # per chrom then average.  Simplest approach: operate per-chrom.
-        weights_accum = []
-        for c in chroms:
-            w_c = axis_weight(cd, chrom=str(c), device=device)
-            weights_accum.append(w_c)
-        return np.mean(np.stack(weights_accum, axis=0), axis=0)
-
-    dev = get_device(device)
-    dtype = default_float_dtype(dev)
-    c = torch.as_tensor(cube, dtype=dtype, device=dev)       # (T, B, 3)
-    valid = ~torch.isnan(c)
-    count = valid.sum(dim=1, keepdim=True).clamp(min=1).to(dtype)   # (T, 1, 3)
-    safe = torch.where(valid, c, torch.zeros_like(c))
-    mean = safe.sum(dim=1, keepdim=True) / count            # (T, 1, 3)
-    centred = torch.where(valid, c - mean, torch.zeros_like(c))
-    # Variance per trace per axis: mean over valid bins
-    trace_var = (centred ** 2).sum(dim=1) / count.squeeze(1)  # (T, 3)
-
-    # Median across traces
-    per_axis_median = trace_var.nanmedian(dim=0).values       # (3,)
-    w = 1.0 / per_axis_median.clamp(min=1e-30)
-    w = w / w.sum()
-    return w.detach().cpu().numpy().astype(np.float64)
+def bh_fdr(pvals: np.ndarray) -> np.ndarray:
+    """Benjamini–Hochberg adjusted p-values of the finite entries (NaN elsewhere), computed as
+    ``statsmodels.stats.multitest.multipletests(method="fdr_bh")`` does, so that results agree to the last bit."""
+    p = np.asarray(pvals, dtype=np.float64)
+    out = np.full_like(p, np.nan)
+    finite = np.isfinite(p)
+    if not finite.any():
+        return out
+    pf = p[finite]
+    order = np.argsort(pf)
+    ranked = pf[order]
+    n = ranked.size
+    ecdf = np.arange(1, n + 1) / float(n)
+    q = np.minimum.accumulate((ranked / ecdf)[::-1])[::-1]
+    q[q > 1] = 1
+    o = np.empty_like(pf)
+    o[order] = q
+    out[finite] = o
+    return out
 
 
 __all__ = [

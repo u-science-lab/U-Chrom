@@ -60,7 +60,8 @@ def tad_boundaries(cd, domains: Domains = "tads.arcfish", *, level: Optional[int
         A key of ``cd.results`` (default ``"tads.arcfish"``) or a table with ``chrom, start, end``; with a
         ``trace_id`` column (FISHnet), boundaries per trace.
     level : int, optional
-        For hierarchical tables (a ``level`` column): the level to use; default the finest (level 1).
+        For hierarchical tables (a ``level`` column): the level to use; default the lowest (the finest:
+        level 0 of :func:`uchrom.strc.tad.call_tads_by_pval`).
     contacts, resolution : optional
         Key of a contact map linked to ``cd`` (and the level of an ``.mcool``): its bins are the loci — for a
         ``ChromData`` that holds only Hi-C maps (``bin_id`` is then the map's bin index).

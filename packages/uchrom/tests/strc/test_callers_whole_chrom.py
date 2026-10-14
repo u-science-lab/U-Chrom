@@ -1,6 +1,6 @@
-"""The tracing callers' kernels after the changes that let them run on whole chromosomes of reconstructed
-structures (thousands of bins): every changed kernel gives what the former (B x B mask / Python loop)
-implementation gave, kept here as the reference."""
+"""The tracing callers' kernels against plain reference implementations: the ArcFISH boundary and loop tests
+against a pair-by-pair (B x B mask) reading of the published definitions, FISHnet's box-car mean against its former
+Python loop, and the per-arm compartment call."""
 
 import numpy as np
 import pandas as pd
@@ -11,64 +11,41 @@ from tests._synth import RES, domain_traces
 
 # ---------------------------------------------------------------- former implementations (references)
 
-def _boundary_pvals_former(norm_var, count, mids, axis_weights, window_bp):
-    from scipy.stats import f as f_dist
+def _boundary_stats_reference(norm_var, count, starts, w, window):
+    """ArcFISH's boundary test read pair by pair (``uchrom.strc.tad.arc_pval`` module docstring)."""
+    from scipy import stats
 
-    from uchrom.utils.stats import cauchy_combination
-
-    B = len(mids)
-    pvals = np.full(B, np.nan)
-    per_axis = np.zeros((3, B))
-    half = 0.5 * window_bp
-    w_var = np.where(np.isfinite(norm_var), norm_var * count, 0.0)
-    w_cnt = np.where(np.isfinite(norm_var), count, 0.0)
-    for b in range(B):
-        lm = (mids >= mids[b] - half) & (mids < mids[b])
-        rm = (mids > mids[b]) & (mids <= mids[b] + half)
-        if lm.sum() < 1 or rm.sum() < 1:
+    B = len(starts)
+    stat, pval = np.full(B, np.nan), np.full(B, np.nan)
+    for i in range(B):
+        if starts[i] - starts[0] < window / 2 or starts[-1] - starts[i] < window / 2:
             continue
-        li, ri = np.where(lm)[0], np.where(rm)[0]
-        intra = np.zeros((B, B), bool)
-        inter = np.zeros((B, B), bool)
-        for group in (li, ri):
-            for i in group:
-                for j in group:
-                    if i < j:
-                        intra[i, j] = True
-        for i in li:
-            for j in ri:
-                if i < j:
-                    inter[i, j] = True
-        logp = np.zeros(3)
-        ok = True
-        for ax in range(3):
-            vi, ci = w_var[ax][intra].sum(), w_cnt[ax][intra].sum()
-            vo, co = w_var[ax][inter].sum(), w_cnt[ax][inter].sum()
-            if ci <= 0 or co <= 0 or vi / ci <= 0 or vo / co <= 0:
-                ok = False
-                break
-            logp[ax] = f_dist.logcdf((vi / ci) / (vo / co), dfn=max(ci, 1.0), dfd=max(co, 1.0))
-        if not ok:
-            continue
-        per_axis[:, b] = logp
-        p = np.clip(np.exp(logp), 1e-300, 1 - 1e-15)
-        pvals[b] = float(cauchy_combination(p[None, :], weights=axis_weights, axis=1)[0])
-    return pvals, per_axis
+        L = [k for k in range(i) if abs(starts[k] - starts[i]) <= window]
+        R = [k for k in range(i + 1, B) if abs(starts[k] - starts[i]) <= window]
+        intra = [(k, l) for grp in (L, R) for k in grp for l in grp if k < l]
+        inter = [(k, l) for k in L for l in R]
+        p = np.empty(3)
+        for a in range(3):
+            ci = sum(count[a, k, l] for k, l in intra)
+            co = sum(count[a, k, l] for k, l in inter)
+            vi = sum(count[a, k, l] * norm_var[a, k, l] for k, l in intra if np.isfinite(norm_var[a, k, l]))
+            vo = sum(count[a, k, l] * norm_var[a, k, l] for k, l in inter if np.isfinite(norm_var[a, k, l]))
+            with np.errstate(invalid="ignore", divide="ignore"):
+                p[a] = stats.f.cdf((vi / ci) / (vo / co), ci, co)
+        stat[i] = np.sum(w * np.tan((0.5 - p) * np.pi))
+        pval[i] = 1 - stats.cauchy.cdf(stat[i])
+    return stat, pval
 
 
-def _ring_former(v, c, i, j, inner, outer):
-    B = v.shape[0]
-    mask = np.zeros((B, B), bool)
-    mask[max(0, i - outer):min(B, i + outer + 1), max(0, j - outer):min(B, j + outer + 1)] = True
-    mask[max(0, i - inner):min(B, i + inner + 1), max(0, j - inner):min(B, j + inner + 1)] = False
-    mask[i, :] = False
-    mask[:, j] = False
-    vals, cnts = v[mask], c[mask]
-    fin = np.isfinite(vals) & (cnts > 0)
-    if not fin.any():
-        return np.nan, 0
-    w = cnts[fin].astype(np.float64)
-    return float((w * vals[fin]).sum() / w.sum()), float(w.sum())
+def _loop_background_reference(starts, i, j, inner, outer):
+    """ArcFISH's local background of the pair (i, j), as a B x B mask."""
+    B = len(starts)
+    m = np.zeros((B, B), bool)
+    for k in range(B):
+        for l in range(B):
+            dk, dl = abs(starts[k] - starts[i]), abs(starts[l] - starts[j])
+            m[k, l] = dk <= outer and dl <= outer and not (dk <= inner and dl <= inner) and k != i and l != j and k < l
+    return m
 
 
 def _boxcar_former(mat, window):
@@ -95,33 +72,53 @@ def _cube(rng, B):
 # ---------------------------------------------------------------- tests
 
 @pytest.mark.parametrize("window_bp", [6e4, 1.5e5, 3e5])
-def test_boundary_pvals_equal_former(window_bp):
-    from uchrom.fea.arc import axis_weight  # noqa: F401  (the module the caller imports)
-    from uchrom.strc.tad.arc_pval import _boundary_pvals
+def test_boundary_statistics_equal_reference(window_bp):
+    from uchrom.strc.tad.arc_pval import boundary_statistics
 
     rng = np.random.default_rng(1)
     B = 40
     v, c = _cube(rng, B)
-    mids = (np.arange(B) + 0.5) * RES
-    mids[25:] += RES                                    # a gap: uneven loci
+    starts = np.arange(B) * RES
+    starts[25:] += RES                                  # a gap: uneven loci
     w = np.array([0.4, 0.35, 0.25])
-    p_new, lp_new = _boundary_pvals(v, c, mids, w, window_bp)
-    p_old, lp_old = _boundary_pvals_former(v, c, mids, w, window_bp)
-    assert np.array_equal(np.isnan(p_new), np.isnan(p_old))
-    np.testing.assert_allclose(p_new, p_old, rtol=1e-10, atol=0, equal_nan=True)
-    np.testing.assert_allclose(lp_new, lp_old, rtol=1e-10, atol=1e-300)
+    got = boundary_statistics(v, c, starts, w, window_bp)
+    stat, pval = _boundary_stats_reference(v, c, starts, w, window_bp)
+    assert np.isfinite(got["stat"]).sum() > 10
+    np.testing.assert_allclose(got["stat"], stat, rtol=1e-10, atol=0, equal_nan=True)
+    np.testing.assert_allclose(got["pval"], pval, rtol=1e-10, atol=0, equal_nan=True)
 
 
-def test_background_ring_equal_former():
-    from uchrom.strc.loop.axiswise_f import _background_ring
+def test_loop_tests_equal_reference():
+    from scipy import stats
+
+    from uchrom.strc.loop.axiswise_f import LoopCallerParams, loop_tests
 
     rng = np.random.default_rng(2)
     B = 30
     v, c = _cube(rng, B)
+    starts = np.arange(B) * 25_000
+    starts[18:] += 25_000
+    w = np.array([0.4, 0.35, 0.25])
+    p = LoopCallerParams()
+    got = loop_tests(v, c, starts, w, p)
+    n_tested = 0
     for i in range(B):
         for j in range(i + 1, B):
-            for inner, outer in ((1, 2), (1, 3), (2, 4)):
-                assert _background_ring(v[0], c[0], i, j, inner, outer) == _ring_former(v[0], c[0], i, j, inner, outer)
+            if not (p.cut_lo <= starts[j] - starts[i] <= p.cut_up):
+                assert np.isnan(got["pval"][i, j])
+                continue
+            m = _loop_background_reference(starts, i, j, p.inner_cut, p.outer_cut)
+            if m.sum() <= 3:
+                assert np.isnan(got["axis_pval"][:, i, j]).all()
+                continue
+            n_tested += 1
+            for a in range(3):
+                n_bg = c[a][m].sum()
+                den = np.nansum(c[a][m] / n_bg * v[a][m])
+                ref = stats.f.cdf(v[a, i, j] / den, c[a, i, j], n_bg)
+                np.testing.assert_allclose(got["axis_pval"][a, i, j], ref, rtol=1e-12, equal_nan=True)
+                assert got["axis_pval"][a, j, i] == got["axis_pval"][a, i, j] or np.isnan(ref)
+    assert n_tested > 50
 
 
 @pytest.mark.parametrize("window", [1, 2, 3])
@@ -160,12 +157,14 @@ def test_fishnet_chromosome_of_a_larger_object():
 
 
 
-def test_axes_pc_per_arm_equals_each_arm_alone():
-    """``centromeres=``: each arm is called as if it were its own chromosome (the q arm's ``bin_index``
-    continues the p arm's)."""
+def test_axes_pc_per_arm_uses_the_whole_chromosome_normalisation():
+    """``centromeres=`` follows the authors' per-arm call: the normalised variances of the whole chromosome, the
+    p arm the loci ending at or before the centromere, each arm's eigenvectors from its block of that matrix and its
+    own axis weights."""
     from chromdata import ChromData
 
     from tests._synth import chain_traces
+    from uchrom.fea.arc import _axis_weight_cube, _coord_cube_for_chrom, axis_variance_cube, filter_normalize
     from uchrom.strc.comp import call_compartments_axes_pc
 
     n, cen = 40, 20
@@ -181,8 +180,22 @@ def test_axes_pc_per_arm_equals_each_arm_alone():
                                      centromeres={"chr1": cen * RES})
     assert list(arms["region"].unique()) == ["chr1_p", "chr1_q"]
     assert list(arms["bin_index"]) == list(range(n))
-    for region, mask in (("chr1_p", ~q), ("chr1_q", q)):
-        alone = call_compartments_axes_pc(cd[mask], chrom="chr1", device="cpu", key_added=None)
+    assert (arms.loc[arms["region"] == "chr1_p", "end"] <= cen * RES).all()
+    assert (arms.loc[arms["region"] == "chr1_q", "end"] > cen * RES).all()
+
+    nv = filter_normalize(axis_variance_cube(cd, "chr1", device="cpu"))["norm_var"]
+    nv = np.where(np.isnan(nv), 1.0, nv)
+    coords, bin_ids, _ = _coord_cube_for_chrom(cd, "chr1")
+    ends = np.array([e for _, e in bin_ids])
+    for region, idx in (("chr1_p", np.flatnonzero(ends <= cen * RES)), ("chr1_q", np.flatnonzero(ends > cen * RES))):
+        V = np.linalg.eigh(np.exp(-nv[:, idx][:, :, idx]))[1][:, :, -2]
         got = arms[arms["region"] == region]
-        np.testing.assert_allclose(got["pc2"].to_numpy(), alone["pc2"].to_numpy())
-        assert list(got["compartment"]) == list(alone["compartment"])
+        for a, c in enumerate("xyz"):
+            r = np.corrcoef(got[f"eig_{c}"].to_numpy(), V[a])[0, 1]
+            assert abs(abs(r) - 1) < 1e-10, (region, c, r)
+        assert np.isfinite(_axis_weight_cube(coords[:, idx])).all()
+    # an arm of fewer than 2 loci: the whole chromosome, with a warning
+    with pytest.warns(UserWarning, match="centromere"):
+        whole = call_compartments_axes_pc(cd, chrom="chr1", device="cpu", key_added=None,
+                                          centromeres={"chr1": int(ends[0])})
+    assert set(whole["region"]) == {"chr1"}

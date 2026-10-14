@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- **The ArcFISH callers now give the authors' results** (behaviour change).  `call_tads_by_pval`,
+  `call_loops_axiswise_f`, `call_compartments_axes_pc` and their preprocessing (`uchrom.fea.arc`, `arc_stream`) were
+  re-implemented from the published algorithm and checked against the authors' package (github.com/hyuyu104/ArcFISH
+  at a21d889) on their tutorial data (Takei 2021 mESC chr6, Su 2020 chr2 p-arm) and on Takei 2025, Bintu 2018 and
+  Su 2020 chr21: the same per-locus statistics, test matrices and calls (`benchmarks/arcfish_parity/`).  The former
+  implementation differed in ways that changed the calls: half windows on each side, boundaries at the peaks of the
+  combined p-value with the FDR over the peaks only (about twice the authors' boundaries), a background ring rounded
+  to bins, axis weights from per-trace variances, the lower median, the last of a repeated spot, and **A named as the
+  more compact compartment** (the opposite of the authors' rule).  What changes for callers:
+  - `TADCallerParams.window_bp` is the distance on **each side** of a locus (the authors' `window`); the domain table
+    is `chrom, start, end, level, start1, end1, start2, end2, stat1, stat2` with **level 0 the finest** partition and
+    one merged domain per higher level (formerly level 1 the finest, up to `max_levels=4` partitions; `max_levels`
+    now defaults to all levels); new `min_tad_size`, `arcfish_boundary_stats` (the per-locus table).
+  - `LoopCallerParams`: the background in bp (`inner_cut` 25 kb as the authors), `contact_sep` (25 kb) for the
+    contact-frequency filter; loop rows add `stat`; `arcfish_loop_matrices` returns the test matrices.
+  - `CompartmentCallerParams`: `min_compartment_bp` (bp, default 0) replaces `min_bins` (deprecated), `n_init=1`;
+    A = the less compact cluster unless `a_track` / `a_cluster` say otherwise; per-arm calls (`centromeres=`) use the
+    whole chromosome's normalised variances and put a locus on the p arm when it ends at or before the centromere;
+    new columns `eig_x/y/z`.
+  Results recorded with the former callers (benchmarks `cd2_callers_validation`, `hic_structures` ArcFISH sections,
+  `sc_structures` tracing callers) are kept as they were run.
+
 - **Proximity by genomic separation, from contacts or coordinates.**  `uchrom.fea.separation_profile`: per cell,
   the contacts at short (1-2 Mb) over long (19-54 Mb) separations of the linked per-cell maps, or the median 3-D
   distance of locus pairs at long over short separations of the traces, separations midpoint to midpoint in both
