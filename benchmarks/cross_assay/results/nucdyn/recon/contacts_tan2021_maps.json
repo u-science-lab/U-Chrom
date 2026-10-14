@@ -1,0 +1,207 @@
+{
+ "results": {
+  "contrast": "ExN - Oligo",
+  "cells": {
+   "ExN": 214,
+   "Oligo": 74
+  },
+  "seconds_reading": 215.8,
+  "panels": {
+   "liu2025": {
+    "contacts_vs_imaging": {
+     "diff": {
+      "n_pairs": 99074,
+      "spearman": 0.44292404714682143
+     },
+     "resid": {
+      "n_pairs": 99074,
+      "spearman": 0.3785580577066408
+     },
+     "chromband": {
+      "n_pairs": 99074,
+      "spearman": 0.3750413299306495
+     },
+     "pair": {
+      "n_pairs": 99074,
+      "spearman": 0.33886464694686635
+     }
+    },
+    "contacts_split_half": {
+     "diff": {
+      "n_pairs": 88133,
+      "spearman": 0.3163490822648564
+     },
+     "resid": {
+      "n_pairs": 88133,
+      "spearman": 0.28260684125781693
+     },
+     "chromband": {
+      "n_pairs": 88133,
+      "spearman": 0.2756272752872073
+     },
+     "pair": {
+      "n_pairs": 88133,
+      "spearman": 0.2209160377774306
+     }
+    },
+    "same_pairs": {
+     "hap": {
+      "n_pairs": 99074,
+      "contacts": {
+       "diff": {
+        "n_pairs": 99074,
+        "spearman": 0.44292404714682143
+       },
+       "resid": {
+        "n_pairs": 99074,
+        "spearman": 0.3785580577066408
+       },
+       "chromband": {
+        "n_pairs": 99074,
+        "spearman": 0.3750413299306495
+       },
+       "pair": {
+        "n_pairs": 99074,
+        "spearman": 0.33886464694686635
+       }
+      },
+      "recon": {
+       "diff": {
+        "n_pairs": 99074,
+        "spearman": 0.5877619146599083
+       },
+       "resid": {
+        "n_pairs": 99074,
+        "spearman": 0.579001630309261
+       },
+       "chromband": {
+        "n_pairs": 99074,
+        "spearman": 0.5840273518020029
+       },
+       "pair": {
+        "n_pairs": 99074,
+        "spearman": 0.5101379707318626
+       }
+      }
+     }
+    }
+   },
+   "takei2021": {
+    "contacts_vs_imaging": {
+     "diff": {
+      "n_pairs": 138956,
+      "spearman": 0.06621050812066095
+     },
+     "resid": {
+      "n_pairs": 138956,
+      "spearman": 0.05042927355274766
+     },
+     "chromband": {
+      "n_pairs": 138956,
+      "spearman": 0.0506835365739013
+     },
+     "pair": {
+      "n_pairs": 138956,
+      "spearman": 0.04854941821214986
+     }
+    },
+    "contacts_split_half": {
+     "diff": {
+      "n_pairs": 131407,
+      "spearman": 0.3132248849522705
+     },
+     "resid": {
+      "n_pairs": 131407,
+      "spearman": 0.2810297429565221
+     },
+     "chromband": {
+      "n_pairs": 131407,
+      "spearman": 0.2722436907832676
+     },
+     "pair": {
+      "n_pairs": 131407,
+      "spearman": 0.21096597074862972
+     }
+    },
+    "same_pairs": {
+     "hap": {
+      "n_pairs": 138956,
+      "contacts": {
+       "diff": {
+        "n_pairs": 138956,
+        "spearman": 0.06621050812066095
+       },
+       "resid": {
+        "n_pairs": 138956,
+        "spearman": 0.05042927355274766
+       },
+       "chromband": {
+        "n_pairs": 138956,
+        "spearman": 0.0506835365739013
+       },
+       "pair": {
+        "n_pairs": 138956,
+        "spearman": 0.04854941821214986
+       }
+      },
+      "recon": {
+       "diff": {
+        "n_pairs": 138956,
+        "spearman": 0.08131468492250331
+       },
+       "resid": {
+        "n_pairs": 138956,
+        "spearman": 0.08227065316470299
+       },
+       "chromband": {
+        "n_pairs": 138956,
+        "spearman": 0.07923926819559995
+       },
+       "pair": {
+        "n_pairs": 138956,
+        "spearman": 0.07496065303049793
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "provenance": {
+  "revision": "78e7994+nucdyn-contacts-uncommitted",
+  "date": "2026-10-13T10:03:29+00:00",
+  "host": "sh04-05n13.int",
+  "cpu": "AMD EPYC 9754 128-Core Processor",
+  "cpus": 8,
+  "slurm_job": "47634801",
+  "load_avg_1min": 6.09,
+  "versions": {
+   "python": "3.12.1",
+   "numpy": "2.2.6",
+   "scipy": "1.14.1",
+   "pandas": "2.2.3",
+   "cooler": "0.10.4",
+   "zarr": "3.4.0",
+   "torch": "2.5.1+cu124",
+   "uchrom": "0.3.0.dev0",
+   "chromdata": "0.1.0"
+  },
+  "script": "benchmarks/cross_assay/recon.py",
+  "datasets": [
+   "tan2021_maps",
+   "liu2025_mop",
+   "takei2021_brain"
+  ],
+  "params": {
+   "dataset": "tan2021_maps",
+   "contrast": [
+    "ExN",
+    "Oligo"
+   ],
+   "resolution_bp": 1000000,
+   "seed": 0,
+   "stat": "mean per-cell contact frequency (cis contacts between bins over the cell's total)",
+   "sign": "log(1 / frequency), as a distance"
+  }
+ }
+}

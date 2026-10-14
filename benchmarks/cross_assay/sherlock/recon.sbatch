@@ -21,14 +21,17 @@ PY=$BASE/venv-diploid/bin/python
 export LD_LIBRARY_PATH=$BASE/vulkan-loader/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 export PYTHONPATH=$REPO/benchmarks/cross_assay/sherlock/engine_shim:$W/engine-diploid/dipfrozen
 DATASET=${DATASET:-tan2021}
+METHOD=${METHOD:-ember}                     # ember (the run of 2026-10-11) or nucdyn (NucDynamics 2017, 2026-10-12)
+ROOT=$W/runs/xassay; [ "$METHOD" = ember ] || ROOT=$W/runs/xassay/$METHOD
 case $DATASET in
-  tan2021) DATA_DIR=${DATA_DIR:-$W/data/tan2021_cortex/cells}; OUT=${OUT:-$W/runs/xassay/recon_tan} ;;
-  hires_brain) DATA_DIR=${DATA_DIR:-$W/data/hires2023/raw/GSE223917/cells}; OUT=${OUT:-$W/runs/xassay/recon_hires_brain} ;;
-  *) OUT=${OUT:-$W/runs/xassay/recon_$DATASET}; DATA_DIR=${DATA_DIR:-$OUT} ;;    # from per-cell 1-Mb maps (stage maps)
+  tan2021) DATA_DIR=${DATA_DIR:-$W/data/tan2021_cortex/cells}; OUT=${OUT:-$ROOT/recon_tan} ;;
+  hires_brain) DATA_DIR=${DATA_DIR:-$W/data/hires2023/raw/GSE223917/cells}; OUT=${OUT:-$ROOT/recon_hires_brain} ;;
+  *) OUT=${OUT:-$ROOT/recon_$DATASET}; DATA_DIR=${DATA_DIR:-$W/runs/xassay/recon_$DATASET} ;;  # pairs of stage maps
 esac
 N_TASKS=${N_TASKS:-${SLURM_ARRAY_TASK_COUNT:-1}}
-echo "host=$(hostname) job=${SLURM_JOB_ID:-none} task=${SLURM_ARRAY_TASK_ID:-0}/$N_TASKS repo=$REPO out=$OUT"
+echo "host=$(hostname) job=${SLURM_JOB_ID:-none} task=${SLURM_ARRAY_TASK_ID:-0}/$N_TASKS repo=$REPO method=$METHOD out=$OUT"
 nvidia-smi --query-gpu=name --format=csv,noheader || true
 "$PY" -c 'import uchrom_recon as un; print("uchrom_recon", un.__version__, un.__file__)'
 "$PY" -u "$REPO/benchmarks/cross_assay/recon.py" --out "$OUT" --stages run --task "${SLURM_ARRAY_TASK_ID:-0}" \
-  --n-tasks "$N_TASKS" --dataset "$DATASET" --data-dir "$DATA_DIR" ${LIMIT:+--limit $LIMIT} ${VARIANTS:+--variants $VARIANTS}
+  --n-tasks "$N_TASKS" --dataset "$DATASET" --data-dir "$DATA_DIR" --method "$METHOD" ${LIMIT:+--limit $LIMIT} \
+  ${VARIANTS:+--variants $VARIANTS}

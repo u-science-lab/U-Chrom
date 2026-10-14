@@ -109,7 +109,7 @@ The archive of job 47390689 in `..._pilot_47390689/` is superseded.
 | `compartments.json` | `compartments.py`: matched-depth pseudo-bulk maps of ExN and Oligo (dscHi-C, GAGE-seq), eigenvectors oriented by GC, saddle strengths; A/B explains 4 % (imaging) / 9-12 % (consensus) of the pair differences | job 47469287 (`compartments.py` `18408f74`) |
 
 - Figure inputs: `figdata.py` (local) -> u-chrom-paper `manuscripts/nmeth-bc/figures/results/cross_assay_ed_*`, read
-  by `figures/make_ed_cross_assay.py` (Extended Data Figs. 3 and 4).
+  by `figures/make_fig2.py` (the nmeth-bc Fig. 2; Extended Data Figs. 3 and 4 before 2026-10-13).
 - The locus panel of the local runs is `$SCRATCH/uchrom-nd/runs/xassay/liu2025_panel.parquet` (the Liu 2025 store's
   bins); the per-cell scores `$SCRATCH/uchrom-nd/runs/xassay/transfer/scores_*.parquet`.
 - Example structures (Extended Data Fig. 3d): `structures.py`, job 47525959 (the first try, 47525588, required 80 %
@@ -119,3 +119,32 @@ The archive of job 47390689 in `..._pilot_47390689/` is superseded.
   cortex-p056-cb_054; scHiCAR CCCTACATCGATGGAAGA / CCCTACTTCTCCAACAGA; each at its class median score.
 - The locus panel of the figure (`figures/results/cross_assay_ed_panel.parquet`: the Liu 2025 store's bins, chrom /
   start / end) is a copy of `$SCRATCH/uchrom-nd/runs/xassay/liu2025_panel.parquet`.
+
+## Run 2026-10-13, the contact baseline (`recon.py` stage contacts, EMber run)
+
+| File | What | Run |
+|---|---|---|
+| `recon/contacts_<dataset>.json` | The baseline without a 3D model: each class's mean per-cell contact frequency at 1 Mb, on the imaging loci with the sign of a distance (log of 1 / frequency) and detrended as stage loci; Spearman with the imaging differences, split-half ceilings, and the same pairs scored by the reconstruction | jobs 47622363 (tan2021), 47622365 (hires_brain), 47622367 (tan2021_maps), 47622369 (gageseq), 47622370 (dschic), 47622371 (droplet), 47622372 (schicar); `recon.py` at 78e7994 + the stage (uncommitted then, committed here) |
+
+## Run 2026-10-12/13, NucDynamics reconstructions (`results/nucdyn/`; the paper's Fig. 2)
+
+The same analysis as "Distance space" above with the reconstructions of the NucDynamics 2017 protocol of the same
+engine build (`--method nucdyn`: phased contacts as one chain per chromosome copy, contacts with an unphased end as
+ambiguous restraints) instead of EMber.  The nmeth-bc Fig. 2 uses this run (`figdata.py --method nucdyn`, the
+default); EMber is not used in the paper.
+
+| File | What | Run |
+|---|---|---|
+| `nucdyn/recon/recon_<dataset>.json`, `loci_<dataset>.json`, `loci_all_<dataset>.json`, `contacts_<dataset>.json` | Stages analyze, loci, loci_all, contacts as above | reconstructions: GPU arrays 47565733 (tan2021), 47565734 (hires_brain), 47565747 (tan2021_maps), 47565752 (gageseq), 47565754 (dschic), 47565755 (droplet), 47565756 (schicar), 40 tasks each (`recon.sbatch`, `METHOD=nucdyn`); collect + stages: jobs 47634791, 47634797, 47634801, 47634803, 47634804, 47634806, 47634808 (`recon_collect.sbatch`) |
+| `nucdyn/recon_summary.{json,md}` | `recon_summary.py` over `nucdyn/recon/` | local |
+| `nucdyn/transfer.json` | `transfer.py` with the NucDynamics signatures | job 47634836 |
+| `nucdyn/compartments.json` | `compartments.py` against the NucDynamics consensus | job 47634837 |
+| `nucdyn/biology.json` | `biology.py` on the NucDynamics locus tables | local |
+
+- Code: `recon.py` etc. at 78e7994 with the `--method` and contacts changes uncommitted at run time (provenance
+  `78e7994+nucdyn-contacts-uncommitted`), committed here unchanged: md5 of the run's repo copy (`repo-xa`) and of
+  the commit agree (`recon.py` `94d2b9de`, `transfer.py` `a1a0dde0`, `compartments.py` `18408f74`, `biology.py`
+  `25e43716`).  The GPU arrays ran on H100 nodes (one GPU, 4 CPUs per task).
+- Archives: `$OAK/uchrom/results/cross_assay/2026-10-13_recon_nucdyn_<dataset>_<job>/recon_<dataset>.tar.gz`
+  (76-222 MB each: models, logs, results, cell and locus tables).
+- An earlier CPU attempt for Droplet Hi-C (array 47558438, 14 tasks) is superseded by the GPU arrays.

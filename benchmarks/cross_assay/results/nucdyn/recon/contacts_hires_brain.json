@@ -1,0 +1,363 @@
+{
+ "results": {
+  "contrast": "ExN - Oligo",
+  "cells": {
+   "ExN": 260,
+   "Oligo": 20
+  },
+  "seconds_reading": 171.4,
+  "panels": {
+   "liu2025": {
+    "contacts_vs_imaging": {
+     "diff": {
+      "n_pairs": 94895,
+      "spearman": 0.3914784489704477
+     },
+     "resid": {
+      "n_pairs": 94895,
+      "spearman": 0.34553605910463503
+     },
+     "chromband": {
+      "n_pairs": 94895,
+      "spearman": 0.3406638978569219
+     },
+     "pair": {
+      "n_pairs": 94895,
+      "spearman": 0.29684139243790525
+     }
+    },
+    "contacts_split_half": {
+     "diff": {
+      "n_pairs": 72322,
+      "spearman": 0.2231759836706679
+     },
+     "resid": {
+      "n_pairs": 72322,
+      "spearman": 0.20498765969944469
+     },
+     "chromband": {
+      "n_pairs": 72322,
+      "spearman": 0.1969309083587979
+     },
+     "pair": {
+      "n_pairs": 72322,
+      "spearman": 0.1570289705197001
+     }
+    },
+    "same_pairs": {
+     "dip": {
+      "n_pairs": 94895,
+      "contacts": {
+       "diff": {
+        "n_pairs": 94895,
+        "spearman": 0.3914784489704477
+       },
+       "resid": {
+        "n_pairs": 94895,
+        "spearman": 0.34553605910463503
+       },
+       "chromband": {
+        "n_pairs": 94895,
+        "spearman": 0.3406638978569219
+       },
+       "pair": {
+        "n_pairs": 94895,
+        "spearman": 0.29684139243790525
+       }
+      },
+      "recon": {
+       "diff": {
+        "n_pairs": 94895,
+        "spearman": 0.626273620691104
+       },
+       "resid": {
+        "n_pairs": 94895,
+        "spearman": 0.5651674242445979
+       },
+       "chromband": {
+        "n_pairs": 94895,
+        "spearman": 0.5598063187161084
+       },
+       "pair": {
+        "n_pairs": 94895,
+        "spearman": 0.5293840715402254
+       }
+      }
+     },
+     "hap": {
+      "n_pairs": 94895,
+      "contacts": {
+       "diff": {
+        "n_pairs": 94895,
+        "spearman": 0.3914784489704477
+       },
+       "resid": {
+        "n_pairs": 94895,
+        "spearman": 0.34553605910463503
+       },
+       "chromband": {
+        "n_pairs": 94895,
+        "spearman": 0.3406638978569219
+       },
+       "pair": {
+        "n_pairs": 94895,
+        "spearman": 0.29684139243790525
+       }
+      },
+      "recon": {
+       "diff": {
+        "n_pairs": 94895,
+        "spearman": 0.5190340677112236
+       },
+       "resid": {
+        "n_pairs": 94895,
+        "spearman": 0.4731669617556019
+       },
+       "chromband": {
+        "n_pairs": 94895,
+        "spearman": 0.486370974695908
+       },
+       "pair": {
+        "n_pairs": 94895,
+        "spearman": 0.4479423041933024
+       }
+      }
+     },
+     "dipc": {
+      "n_pairs": 94895,
+      "contacts": {
+       "diff": {
+        "n_pairs": 94895,
+        "spearman": 0.3914784489704477
+       },
+       "resid": {
+        "n_pairs": 94895,
+        "spearman": 0.34553605910463503
+       },
+       "chromband": {
+        "n_pairs": 94895,
+        "spearman": 0.3406638978569219
+       },
+       "pair": {
+        "n_pairs": 94895,
+        "spearman": 0.29684139243790525
+       }
+      },
+      "recon": {
+       "diff": {
+        "n_pairs": 94895,
+        "spearman": 0.6456433726291672
+       },
+       "resid": {
+        "n_pairs": 94895,
+        "spearman": 0.5848555096843869
+       },
+       "chromband": {
+        "n_pairs": 94895,
+        "spearman": 0.5702346272636885
+       },
+       "pair": {
+        "n_pairs": 94895,
+        "spearman": 0.5267580797239162
+       }
+      }
+     }
+    }
+   },
+   "takei2021": {
+    "contacts_vs_imaging": {
+     "diff": {
+      "n_pairs": 132741,
+      "spearman": 0.05800335441084416
+     },
+     "resid": {
+      "n_pairs": 132741,
+      "spearman": 0.044917889249947066
+     },
+     "chromband": {
+      "n_pairs": 132741,
+      "spearman": 0.045035114323335255
+     },
+     "pair": {
+      "n_pairs": 132741,
+      "spearman": 0.04404550072362803
+     }
+    },
+    "contacts_split_half": {
+     "diff": {
+      "n_pairs": 107546,
+      "spearman": 0.24310895078531142
+     },
+     "resid": {
+      "n_pairs": 107546,
+      "spearman": 0.22615618519812353
+     },
+     "chromband": {
+      "n_pairs": 107546,
+      "spearman": 0.22025913299902075
+     },
+     "pair": {
+      "n_pairs": 107546,
+      "spearman": 0.17797923381662617
+     }
+    },
+    "same_pairs": {
+     "dip": {
+      "n_pairs": 132741,
+      "contacts": {
+       "diff": {
+        "n_pairs": 132741,
+        "spearman": 0.05800335441084416
+       },
+       "resid": {
+        "n_pairs": 132741,
+        "spearman": 0.044917889249947066
+       },
+       "chromband": {
+        "n_pairs": 132741,
+        "spearman": 0.045035114323335255
+       },
+       "pair": {
+        "n_pairs": 132741,
+        "spearman": 0.04404550072362803
+       }
+      },
+      "recon": {
+       "diff": {
+        "n_pairs": 132741,
+        "spearman": 0.09611044183313075
+       },
+       "resid": {
+        "n_pairs": 132741,
+        "spearman": 0.0786001827063119
+       },
+       "chromband": {
+        "n_pairs": 132741,
+        "spearman": 0.0843539887986131
+       },
+       "pair": {
+        "n_pairs": 132741,
+        "spearman": 0.07917440139513804
+       }
+      }
+     },
+     "hap": {
+      "n_pairs": 132741,
+      "contacts": {
+       "diff": {
+        "n_pairs": 132741,
+        "spearman": 0.05800335441084416
+       },
+       "resid": {
+        "n_pairs": 132741,
+        "spearman": 0.044917889249947066
+       },
+       "chromband": {
+        "n_pairs": 132741,
+        "spearman": 0.045035114323335255
+       },
+       "pair": {
+        "n_pairs": 132741,
+        "spearman": 0.04404550072362803
+       }
+      },
+      "recon": {
+       "diff": {
+        "n_pairs": 132741,
+        "spearman": 0.08463572288829956
+       },
+       "resid": {
+        "n_pairs": 132741,
+        "spearman": 0.07213049741160368
+       },
+       "chromband": {
+        "n_pairs": 132741,
+        "spearman": 0.07541152118814864
+       },
+       "pair": {
+        "n_pairs": 132741,
+        "spearman": 0.06990097294756109
+       }
+      }
+     },
+     "dipc": {
+      "n_pairs": 132741,
+      "contacts": {
+       "diff": {
+        "n_pairs": 132741,
+        "spearman": 0.05800335441084416
+       },
+       "resid": {
+        "n_pairs": 132741,
+        "spearman": 0.044917889249947066
+       },
+       "chromband": {
+        "n_pairs": 132741,
+        "spearman": 0.045035114323335255
+       },
+       "pair": {
+        "n_pairs": 132741,
+        "spearman": 0.04404550072362803
+       }
+      },
+      "recon": {
+       "diff": {
+        "n_pairs": 132741,
+        "spearman": 0.10104798458413294
+       },
+       "resid": {
+        "n_pairs": 132741,
+        "spearman": 0.08257032738519658
+       },
+       "chromband": {
+        "n_pairs": 132741,
+        "spearman": 0.08696450878688639
+       },
+       "pair": {
+        "n_pairs": 132741,
+        "spearman": 0.08059568048945163
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "provenance": {
+  "revision": "78e7994+nucdyn-contacts-uncommitted",
+  "date": "2026-10-13T10:08:25+00:00",
+  "host": "sh04-05n13.int",
+  "cpu": "AMD EPYC 9754 128-Core Processor",
+  "cpus": 8,
+  "slurm_job": "47634797",
+  "load_avg_1min": 3.27,
+  "versions": {
+   "python": "3.12.1",
+   "numpy": "2.2.6",
+   "scipy": "1.14.1",
+   "pandas": "2.2.3",
+   "cooler": "0.10.4",
+   "zarr": "3.4.0",
+   "torch": "2.5.1+cu124",
+   "uchrom": "0.3.0.dev0",
+   "chromdata": "0.1.0"
+  },
+  "script": "benchmarks/cross_assay/recon.py",
+  "datasets": [
+   "hires2023_brain",
+   "liu2025_mop",
+   "takei2021_brain"
+  ],
+  "params": {
+   "dataset": "hires_brain",
+   "contrast": [
+    "ExN",
+    "Oligo"
+   ],
+   "resolution_bp": 1000000,
+   "seed": 0,
+   "stat": "mean per-cell contact frequency (cis contacts between bins over the cell's total)",
+   "sign": "log(1 / frequency), as a distance"
+  }
+ }
+}

@@ -29,10 +29,11 @@ sys.path.insert(0, str(HERE))
 AUTOS = [f"chr{k}" for k in range(1, 20)]
 WINDOW = 500_000
 #: (folder under --recon-root, variant, label) of the structural sources (reference reconstruction per dataset)
-SOURCES = [("recon_tan", "imaging", "imaging (Liu 2025)"), ("recon_tan", "dip", "Dip-C (Tan), EMber diploid"),
-           ("recon_hires_brain", "dip", "HiRES, EMber diploid"), ("recon_gageseq_mouse_cortex", "hap", "GAGE-seq, EMber"),
-           ("recon_dschic_aging_cortex", "hap", "dscHi-C, EMber"), ("recon_droplet_hic_mouse_cortex", "hap", "Droplet Hi-C, EMber"),
-           ("recon_schicar_mouse_cortex", "hap", "scHiCAR, EMber")]
+SOURCES = [("recon_tan", "imaging", "imaging (Liu 2025)"), ("recon_tan", "dip", "Dip-C (Tan), diploid"),
+           ("recon_hires_brain", "dip", "HiRES, diploid"), ("recon_gageseq_mouse_cortex", "hap", "GAGE-seq, haploid"),
+           ("recon_dschic_aging_cortex", "hap", "dscHi-C, haploid"),
+           ("recon_droplet_hic_mouse_cortex", "hap", "Droplet Hi-C, haploid"),
+           ("recon_schicar_mouse_cortex", "hap", "scHiCAR, haploid")]
 RNA = ["gageseq_mouse_cortex", "hires_brain", "schicar_mouse_cortex"]
 MAP_CHROM = "chr2"                                     # the chromosome of the difference-map panel
 

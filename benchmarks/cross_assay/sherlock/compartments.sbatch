@@ -20,6 +20,6 @@ export PYTHONPATH=$REPO/packages/uchrom:$REPO/packages/chromdata${PYTHONPATH:+:$
 OUT=${OUT:-$W/runs/xassay/compartments}
 mkdir -p "$OUT/results"
 echo "host=$(hostname) job=${SLURM_JOB_ID:-none} repo=$REPO revision=${UCHROM_REVISION:-unset}"
-"$PY" -u "$REPO/benchmarks/cross_assay/compartments.py" --recon-root "$W/runs/xassay" \
+"$PY" -u "$REPO/benchmarks/cross_assay/compartments.py" --recon-root "${RECON_ROOT:-$W/runs/xassay}" \
   --panel "$W/runs/xassay/liu2025_panel.parquet" --fasta "$UCHROM_DATA/genomes/mm10/mm10.fa.gz" \
   --xa-work "$W/runs/xassay/full/work" --out "$OUT" --results "$OUT/results"

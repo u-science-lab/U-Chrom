@@ -1,0 +1,468 @@
+{
+ "results": {
+  "variants": {
+   "dip": {
+    "n_cells": 435,
+    "dist_ratio": {
+     "n_by_class": {
+      "Astro": 30,
+      "ExN": 214,
+      "InN": 56,
+      "Micro": 37,
+      "OPC": 24,
+      "Oligo": 74
+     },
+     "median_by_class": {
+      "ExN": 1.9151170815469782,
+      "InN": 2.041198340660638,
+      "Astro": 1.7350485406215617,
+      "Oligo": 1.6633491452184814,
+      "OPC": 1.9220206754459084,
+      "Micro": 1.4890710452159268
+     },
+     "ranking_high_to_low": [
+      "InN",
+      "OPC",
+      "ExN",
+      "Astro",
+      "Oligo",
+      "Micro"
+     ],
+     "contrast": {
+      "a": "ExN",
+      "b": "Oligo",
+      "n_a": 214,
+      "n_b": 74,
+      "median_a": 1.9151170815469782,
+      "median_b": 1.6633491452184814,
+      "diff": 0.2517679363284968,
+      "ci95": [
+       0.21434201903784555,
+       0.27756568675867
+      ],
+      "cliffs_delta": 0.9688052538519829,
+      "mannwhitney_p": 2.0203664564914482e-35
+     }
+    },
+    "exn_minus_oligo_cliff": {
+     "cliffs_delta": 0.9688052538519829,
+     "ci95": [
+      0.9456838848193988,
+      0.9862338974488507
+     ],
+     "n_a": 214,
+     "n_b": 74
+    },
+    "astro_minus_oligo_cliff": {
+     "cliffs_delta": 0.4990990990990991,
+     "ci95": [
+      0.2882432432432432,
+      0.6910135135135136
+     ],
+     "n_a": 30,
+     "n_b": 74
+    },
+    "exponent_2_50mb": {
+     "ExN": 0.2356202360946647,
+     "InN": 0.2555158880569812,
+     "Astro": 0.20855800546799017,
+     "Oligo": 0.21653271579392183,
+     "OPC": 0.24291199950406547,
+     "Micro": 0.179717776705896
+    }
+   },
+   "hap": {
+    "n_cells": 435,
+    "dist_ratio": {
+     "n_by_class": {
+      "Astro": 30,
+      "ExN": 214,
+      "InN": 56,
+      "Micro": 37,
+      "OPC": 24,
+      "Oligo": 74
+     },
+     "median_by_class": {
+      "ExN": 1.7832586591120814,
+      "InN": 1.8626569747052473,
+      "Astro": 1.5918618244547242,
+      "Oligo": 1.5317784429228238,
+      "OPC": 1.6990235932497004,
+      "Micro": 1.3844612797318026
+     },
+     "ranking_high_to_low": [
+      "InN",
+      "ExN",
+      "OPC",
+      "Astro",
+      "Oligo",
+      "Micro"
+     ],
+     "contrast": {
+      "a": "ExN",
+      "b": "Oligo",
+      "n_a": 214,
+      "n_b": 74,
+      "median_a": 1.7832586591120814,
+      "median_b": 1.5317784429228238,
+      "diff": 0.25148021618925753,
+      "ci95": [
+       0.21997718775708358,
+       0.2730922531287294
+      ],
+      "cliffs_delta": 0.972972972972973,
+      "mannwhitney_p": 1.0344876583757354e-35
+     }
+    },
+    "exn_minus_oligo_cliff": {
+     "cliffs_delta": 0.972972972972973,
+     "ci95": [
+      0.9504704470825966,
+      0.991285678201566
+     ],
+     "n_a": 214,
+     "n_b": 74
+    },
+    "astro_minus_oligo_cliff": {
+     "cliffs_delta": 0.4774774774774775,
+     "ci95": [
+      0.2747072072072073,
+      0.6576576576576576
+     ],
+     "n_a": 30,
+     "n_b": 74
+    },
+    "exponent_2_50mb": {
+     "ExN": 0.1567914640149771,
+     "InN": 0.1988669054754751,
+     "Astro": 0.17884976030806843,
+     "Oligo": 0.19374446694131064,
+     "OPC": 0.18746177026153618,
+     "Micro": 0.16286329145440967
+    },
+    "vs_dip": {
+     "n": 435,
+     "spearman": 0.8785715014644202,
+     "median_diff": -0.14192338953648198
+    }
+   },
+   "dipc": {
+    "n_cells": 435,
+    "dist_ratio": {
+     "n_by_class": {
+      "Astro": 30,
+      "ExN": 214,
+      "InN": 56,
+      "Micro": 37,
+      "OPC": 24,
+      "Oligo": 74
+     },
+     "median_by_class": {
+      "ExN": 1.9329892435014666,
+      "InN": 2.0464374037173956,
+      "Astro": 1.6982618600857418,
+      "Oligo": 1.6341667762939127,
+      "OPC": 1.9113476026667757,
+      "Micro": 1.4626790842601292
+     },
+     "ranking_high_to_low": [
+      "InN",
+      "ExN",
+      "OPC",
+      "Astro",
+      "Oligo",
+      "Micro"
+     ],
+     "contrast": {
+      "a": "ExN",
+      "b": "Oligo",
+      "n_a": 214,
+      "n_b": 74,
+      "median_a": 1.9329892435014666,
+      "median_b": 1.6341667762939127,
+      "diff": 0.2988224672075539,
+      "ci95": [
+       0.27927355490808126,
+       0.311578676428527
+      ],
+      "cliffs_delta": 0.997979287698914,
+      "mannwhitney_p": 1.7563604564965492e-37
+     }
+    },
+    "exn_minus_oligo_cliff": {
+     "cliffs_delta": 0.997979287698914,
+     "ci95": [
+      0.9929275069461985,
+      1.0
+     ],
+     "n_a": 214,
+     "n_b": 74
+    },
+    "astro_minus_oligo_cliff": {
+     "cliffs_delta": 0.6342342342342342,
+     "ci95": [
+      0.470945945945946,
+      0.8018243243243244
+     ],
+     "n_a": 30,
+     "n_b": 74
+    },
+    "exponent_2_50mb": {
+     "ExN": 0.2422513857282572,
+     "InN": 0.2655578202786383,
+     "Astro": 0.20673748167660258,
+     "Oligo": 0.21195498582997654,
+     "OPC": 0.23837993465766907,
+     "Micro": 0.17792382250823582
+    },
+    "vs_dip": {
+     "n": 435,
+     "spearman": 0.891755948432582,
+     "median_diff": -0.0024330435940216333
+    }
+   }
+  },
+  "imaging": {
+   "liu2025_mop": {
+    "dist_ratio": {
+     "n_by_class": {
+      "Astro": 1148,
+      "ExN": 5034,
+      "InN": 750,
+      "Micro": 390,
+      "OPC": 310,
+      "Oligo": 1930
+     },
+     "median_by_class": {
+      "ExN": 1.1640182223708435,
+      "InN": 1.2618206568208543,
+      "Astro": 0.9600945298587253,
+      "Oligo": 0.8983766820006259,
+      "OPC": 1.0689213953956154,
+      "Micro": 0.8112988303128349
+     },
+     "ranking_high_to_low": [
+      "InN",
+      "ExN",
+      "OPC",
+      "Astro",
+      "Oligo",
+      "Micro"
+     ],
+     "contrast": {
+      "a": "ExN",
+      "b": "Oligo",
+      "n_a": 5034,
+      "n_b": 1930,
+      "median_a": 1.1640182223708435,
+      "median_b": 0.8983766820006259,
+      "diff": 0.2656415403702176,
+      "ci95": [
+       0.2592842999492363,
+       0.2741563220205885
+      ],
+      "cliffs_delta": 0.7892241565643778,
+      "mannwhitney_p": 0.0
+     },
+     "contrast_depth_adjusted": {
+      "diff": 0.2551445894166292,
+      "ci95": [
+       0.2472782264591304,
+       0.2631655303187796
+      ],
+      "depth_slope": 0.02026035119905023,
+      "classes_in_model": [
+       "Astro",
+       "ExN",
+       "InN",
+       "Micro",
+       "OPC",
+       "Oligo"
+      ]
+     }
+    },
+    "exponent_2_50mb": {
+     "ExN": 0.2156733967547323,
+     "InN": 0.24652822051733106,
+     "Astro": 0.1902408413269008,
+     "Oligo": 0.18503137963485458,
+     "OPC": 0.21293055784137047,
+     "Micro": 0.1589025801278395
+    }
+   },
+   "takei2021_brain_labels": {
+    "dist_ratio": {
+     "n_by_class": {
+      "Astro": 122,
+      "ExN": 1662,
+      "InN": 264,
+      "Micro": 73,
+      "Oligo": 60
+     },
+     "median_by_class": {
+      "ExN": 1.305365857333185,
+      "InN": 1.3391218247276244,
+      "Astro": 0.9513402418806778,
+      "Oligo": 1.1131004094207126,
+      "Micro": 0.6962576514545264
+     },
+     "ranking_high_to_low": [
+      "InN",
+      "ExN",
+      "Oligo",
+      "Astro",
+      "Micro"
+     ],
+     "contrast": {
+      "a": "ExN",
+      "b": "Oligo",
+      "n_a": 1662,
+      "n_b": 60,
+      "median_a": 1.305365857333185,
+      "median_b": 1.1131004094207126,
+      "diff": 0.19226544791247235,
+      "ci95": [
+       0.08481948293850482,
+       0.31692792198381037
+      ],
+      "cliffs_delta": 0.5715202567188127,
+      "mannwhitney_p": 5.048387709942378e-14
+     },
+     "contrast_depth_adjusted": {
+      "diff": 0.19624256493488512,
+      "ci95": [
+       0.12584914585164542,
+       0.2604082476273617
+      ],
+      "depth_slope": 0.07406822768332866,
+      "classes_in_model": [
+       "Astro",
+       "ExN",
+       "InN",
+       "Micro",
+       "Oligo"
+      ]
+     }
+    },
+    "exponent_2_50mb": {
+     "ExN": 0.208431448663376,
+     "InN": 0.21659035110728714,
+     "Astro": 0.1432068287729889,
+     "Oligo": 0.17854601121162508,
+     "Micro": 0.11479053110763379
+    }
+   },
+   "tan2021_dipc_rep1": {
+    "dist_ratio": {
+     "n_by_class": {
+      "Astro": 30,
+      "ExN": 214,
+      "InN": 56,
+      "Micro": 37,
+      "OPC": 24,
+      "Oligo": 74
+     },
+     "median_by_class": {
+      "ExN": 1.292709290114943,
+      "InN": 1.4052058012861273,
+      "Astro": 1.0937023502353642,
+      "Oligo": 1.0486268778212473,
+      "OPC": 1.2846637690341978,
+      "Micro": 0.914163126535561
+     },
+     "ranking_high_to_low": [
+      "InN",
+      "ExN",
+      "OPC",
+      "Astro",
+      "Oligo",
+      "Micro"
+     ],
+     "contrast": {
+      "a": "ExN",
+      "b": "Oligo",
+      "n_a": 214,
+      "n_b": 74,
+      "median_a": 1.292709290114943,
+      "median_b": 1.0486268778212473,
+      "diff": 0.24408241229369576,
+      "ci95": [
+       0.22803431006538338,
+       0.26375352183954076
+      ],
+      "cliffs_delta": 0.9974741096236424,
+      "mannwhitney_p": 1.909029600956594e-37
+     },
+     "contrast_depth_adjusted": {
+      "diff": 0.2476965230544541,
+      "ci95": [
+       0.23361627092197873,
+       0.2616535868939728
+      ],
+      "depth_slope": -29.89788057950894,
+      "classes_in_model": [
+       "Astro",
+       "ExN",
+       "InN",
+       "Micro",
+       "OPC",
+       "Oligo"
+      ]
+     }
+    },
+    "exponent_2_50mb": {
+     "ExN": 0.2133378123684728,
+     "InN": 0.23717557376468615,
+     "Astro": 0.18097775650068396,
+     "Oligo": 0.1853198829487131,
+     "OPC": 0.21292461177267671,
+     "Micro": 0.15249269019785416
+    }
+   }
+  }
+ },
+ "provenance": {
+  "revision": "78e7994+nucdyn-contacts-uncommitted",
+  "date": "2026-10-13T09:59:28+00:00",
+  "host": "sh04-05n13.int",
+  "cpu": "AMD EPYC 9754 128-Core Processor",
+  "cpus": 8,
+  "slurm_job": "47634791",
+  "load_avg_1min": 8.04,
+  "versions": {
+   "python": "3.12.1",
+   "numpy": "2.2.6",
+   "scipy": "1.14.1",
+   "pandas": "2.2.3",
+   "cooler": "0.10.4",
+   "zarr": "3.4.0",
+   "torch": "2.5.1+cu124",
+   "uchrom": "0.3.0.dev0",
+   "chromdata": "0.1.0"
+  },
+  "script": "benchmarks/cross_assay/recon.py",
+  "datasets": [
+   "tan2021_cortex",
+   "liu2025_mop",
+   "takei2021_brain"
+  ],
+  "params": {
+   "dataset": "tan2021",
+   "res": 1000000,
+   "n_models": 2,
+   "seed": 1,
+   "depths_cis": [
+    150000,
+    45000,
+    20000
+   ],
+   "variants": [
+    "dip",
+    "hap",
+    "dipc"
+   ],
+   "method": "nucdyn",
+   "engine": "NucDynamics 2017 protocol, diploid by ambiguous restraints (engine build dipfrozen)"
+  }
+ }
+}

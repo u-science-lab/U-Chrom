@@ -1,13 +1,16 @@
-"""Cross-assay comparison in distance space: single-cell Hi-C reconstructed with EMber (frozen; diploid where the
-contacts are phased, haploid otherwise), stored as ChromData and summarised by the same call as the imaging data,
-``uchrom.fea.separation_profile``.
+"""Cross-assay comparison in distance space: single-cell Hi-C reconstructed (diploid where the contacts are phased,
+haploid otherwise), stored as ChromData and summarised by the same call as the imaging data,
+``uchrom.fea.separation_profile``.  The reconstruction method (``--method``): ``ember`` (EMber, frozen; the run of
+2026-10-11) or ``nucdyn`` (the NucDynamics 2017 protocol of the same engine, phased contacts as one chain per
+chromosome copy and the contacts with an unphased end as ambiguous restraints; the run of 2026-10-12, used by the
+paper).  Both through ``benchmarks/screcon/run_diploid.py``.
 
 Datasets (``--dataset``): ``tan2021`` (Dip-C of the adult cortex, Tan et al. 2021: phased CAST x B6 contacts,
 the calibration) and ``hires_brain`` (HiRES adult brain, Liu et al. 2023: 63 % of the contact ends phased; cells
 of ``data/hires_brain_cells.tsv``, the authors' 399 from the atlas store).  Variants:
 
-* ``dip``        EMber diploid on all contacts (the reference reconstruction);
-* ``hap``        EMber haploid on the same contacts (``ploidy="haploid"``: the two homologs one chain), the only
+* ``dip``        diploid on all contacts (the reference reconstruction);
+* ``hap``        haploid on the same contacts (``ploidy="haploid"``: the two homologs one chain), the only
                  option for the inbred datasets (GAGE-seq, Droplet / Paired Hi-C, scHiCAR, dscHi-C);
 * ``hap_c<N>``   haploid on a random subset of the contacts with about N cis contacts (150k ~ GAGE-seq,
                  45k ~ dscHi-C, 20k ~ Droplet Hi-C), the depth at which the haploid structures stop agreeing;
@@ -27,6 +30,9 @@ Stages (``--stages``):
                shuffled labels -> ``--results``/loci_<dataset>.json;
 * ``loci_all`` every pair of the six classes, imaging against the dataset's first variant, imaging split-half
                ceilings -> ``--results``/loci_all_<dataset>.json;
+* ``contacts`` the baseline without a 3D model: the same cells' contacts (each class's mean per-cell contact
+               frequency at 1 Mb) on the imaging loci, against imaging and against each reconstruction on the
+               same pairs, split-half ceilings -> ``--results``/contacts_<dataset>.json (after stage loci);
 * ``analyze``  ``separation_profile`` on every variant -> per-cell tables, the class contrasts, scaling exponents,
                the agreement with ``dip``, next to the imaging datasets of ``cross_assay.py`` (``--xa-work``,
                ``--xa-results``) -> ``--results``/recon_<dataset>.json.
@@ -57,6 +63,9 @@ RES = 1_000_000
 N_MODELS, SEED = 2, 1
 DEPTHS = (150_000, 45_000, 20_000)                     # cis contacts: ~GAGE-seq, ~dscHi-C, ~Droplet Hi-C
 VARIANTS = ["dip", "hap"] + [f"hap_c{d // 1000}k" for d in DEPTHS]
+METHOD = "ember"                                       # set by --method
+METHODS = {"ember": "EMber, frozen (engine build dipfrozen, tag ember-diploid-frozen)",
+           "nucdyn": "NucDynamics 2017 protocol, diploid by ambiguous restraints (engine build dipfrozen)"}
 TAN_CELLS = HERE.parent / "screcon" / "data" / "tan2021_adult_cortex_cells.tsv"
 HIRES_CELLS = HERE / "data" / "hires_brain_cells.tsv"
 
@@ -119,13 +128,15 @@ def _subsample(src: str, dst: Path, target_cis: int, cell: str) -> dict:
             "fraction": p}
 
 
-def stage_run(out: Path, cells: pd.DataFrame, task: int, n_tasks: int, variants, device: str) -> dict:
+def stage_run(out: Path, cells: pd.DataFrame, task: int, n_tasks: int, variants, device: str,
+              method: str = "ember") -> dict:
     """Each reconstruction in its own process (``run_diploid.py``, as the pre-registered runs): within one process
     the GPU engine stops finding an adapter after about 26 runs (wgpu: "no GPU adapter", job 47414760)."""
     import subprocess
 
     mine = cells.iloc[task::n_tasks]
-    log = {"task": task, "n_tasks": n_tasks, "cells": len(mine), "runs": 0, "seconds": 0.0, "failed": []}
+    log = {"task": task, "n_tasks": n_tasks, "method": method, "cells": len(mine), "runs": 0, "seconds": 0.0,
+           "failed": []}
     t_all = time.perf_counter()
     for cell, r in mine.iterrows():
         for v in variants:
@@ -139,8 +150,8 @@ def stage_run(out: Path, cells: pd.DataFrame, task: int, n_tasks: int, variants,
                     info = _subsample(src, tab, int(v[5:-1]) * 1000, cell)
                     (out / "tables" / f"{cell}.{v}.json").write_text(json.dumps(info))
                 src = str(tab)
-            argv = ["--method", "ember", "--contacts", src, "--res", str(RES), "--device", device,
-                    "--n-models", str(N_MODELS), "--seed", str(SEED), "--label", f"ember_{v}", "--out", str(dest)]
+            argv = ["--method", method, "--contacts", src, "--res", str(RES), "--device", device,
+                    "--n-models", str(N_MODELS), "--seed", str(SEED), "--label", f"{method}_{v}", "--out", str(dest)]
             if v != "dip":
                 argv += ["--ploidy", "haploid"]
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -402,7 +413,7 @@ def stage_analyze(out: Path, results: Path, xa_work: Path, xa_results: Path, var
                 datasets=[{"tan2021": "tan2021_cortex", "hires_brain": "hires2023_brain", "tan2021_maps": "tan2021_cortex"}.get(dataset, dataset), "liu2025_mop",
                           "takei2021_brain"],
                 params={"dataset": dataset, "res": RES, "n_models": N_MODELS, "seed": SEED, "depths_cis": list(DEPTHS),
-                        "variants": list(tabs), "engine": "dipfrozen (EMber frozen, ember-diploid-frozen)"})
+                        "variants": list(tabs), "method": METHOD, "engine": METHODS[METHOD]})
     print(json.dumps({v: {"exn_oligo": r["dist_ratio"].get("contrast", {}).get("diff"),
                           "vs_dip": r.get("vs_dip")} for v, r in res["variants"].items()}, indent=1), flush=True)
     return {"results": str(path)}
@@ -554,6 +565,136 @@ def stage_loci(out: Path, results: Path, xa_sets: Path, liu_path: Path, variants
     return {"results": str(path)}
 
 
+N_BINS = 260                                           # 1-Mb bins per chromosome (mm10 chr1: 196)
+
+
+def _cis_counts(path: str, chroms) -> dict:
+    """{chrom: (bin1, bin2) of every cis contact between two 1-Mb bins}: bins (k Mb, k + 1 Mb], the particles'
+    grid; contacts within one bin dropped.  Columns from the ``#columns:`` line (HiRES has no space after the
+    colon); a chromosome name loses any ``(mat)`` / ``(pat)`` suffix."""
+    import gzip
+    import re
+
+    cols = None
+    with gzip.open(path, "rt") as fh:
+        for line in fh:
+            if not line.startswith("#"):
+                break
+            m = re.match(r"^#columns:\s*(.*)$", line.rstrip("\n"))
+            if m:
+                cols = m.group(1).split()
+    cols = cols or ["readID", "chr1", "pos1", "chr2", "pos2", "strand1", "strand2"]
+    use = [cols.index(c) for c in ("chr1", "pos1", "chr2", "pos2")]
+    t = pd.read_csv(path, sep=r"\s+", comment="#", header=None, usecols=use, dtype={use[0]: str, use[2]: str})
+    t.columns = ["c1", "p1", "c2", "p2"]
+    c1, c2 = t["c1"].str.replace(r"\(.*$", "", regex=True), t["c2"].str.replace(r"\(.*$", "", regex=True)
+    t = t[(c1 == c2) & c1.isin(chroms)].assign(c=c1)
+    b1, b2 = (t["p1"].to_numpy(np.int64) - 1) // RES, (t["p2"].to_numpy(np.int64) - 1) // RES
+    lo, hi, ch = np.minimum(b1, b2), np.maximum(b1, b2), t["c"].to_numpy()
+    keep = (lo != hi) & (hi < N_BINS)
+    return {c: (lo[keep & (ch == c)], hi[keep & (ch == c)]) for c in chroms}
+
+
+def stage_contacts(out: Path, results: Path, cells: pd.DataFrame, variants, dataset: str, seed: int,
+                   liu_path: Path, xa_sets: Path, a: str = "ExN", b: str = "Oligo") -> dict:
+    """The baseline without a 3D model: the same cells' contacts, as each class's mean per-cell contact frequency
+    at 1 Mb (a cell's cis contacts between two bins over its cis contacts between bins: every cell weighs the
+    same, as in a median over cells), put on the imaging loci like the reconstructions (stage loci) with the
+    sign of a distance (log of 1 / frequency: more contacts in ExN = closer in ExN) and detrended the same way.
+    Against imaging (Spearman over pairs), next to each reconstruction on the same pairs (``loci_<panel>_<v>``
+    of stage loci, run first), and split-half ceilings (cells halved per class) -> ``--results``/contacts_<dataset>.json."""
+    from types import SimpleNamespace
+
+    from _record import save
+
+    rng = np.random.default_rng(seed)
+    autos = [f"chr{k}" for k in range(1, 20)]
+    sub = cells[cells["cls"].isin([a, b])]
+    half = {}
+    for c, g in sub.groupby("cls"):
+        h0, _ = _halves(g.index, rng)
+        half.update({n: 0 if n in set(h0) else 1 for n in g.index})
+    acc = {(c, h): {ch: np.zeros((N_BINS, N_BINS)) for ch in autos} for c in (a, b) for h in (0, 1)}
+    n_cells = {(c, h): 0 for c in (a, b) for h in (0, 1)}
+    t0 = time.perf_counter()
+    for k, (name, row) in enumerate(sub.iterrows()):
+        cc = _cis_counts(row["pairs"], autos)
+        total = sum(len(lo) for lo, _ in cc.values())
+        if not total:
+            continue
+        key = (row["cls"], half[name])
+        for ch, (lo, hi) in cc.items():
+            np.add.at(acc[key][ch], (lo, hi), 1.0 / total)
+        n_cells[key] += 1
+        if k % 100 == 0:
+            print(f"[contacts] {k}/{len(sub)} cells, {time.perf_counter() - t0:.0f} s", flush=True)
+    bins = pd.DataFrame({"start": np.arange(N_BINS) * RES, "end": (np.arange(N_BINS) + 1) * RES})
+
+    def maps(groups):
+        """{class: {chrom: namespace(bins, matrix = 1 / mean frequency)}} over the given (class, half) groups."""
+        res = {}
+        for c in (a, b):
+            ks = [(c, h) for h in groups]
+            n = sum(n_cells[k] for k in ks)
+            res[c] = {}
+            for ch in autos:
+                m = sum(acc[k][ch] for k in ks) / max(n, 1)
+                m = m + m.T
+                with np.errstate(divide="ignore"):
+                    res[c][ch] = SimpleNamespace(bins=bins, matrix=1.0 / m)
+        return res
+
+    full, A, B = maps((0, 1)), maps((0,)), maps((1,))
+    panels = _imaging_panels(liu_path, xa_sets)
+    res = {"contrast": f"{a} - {b}", "cells": {f"{c}": n_cells[(c, 0)] + n_cells[(c, 1)] for c in (a, b)},
+           "seconds_reading": round(time.perf_counter() - t0, 1), "panels": {}}
+    for name in ("liu2025", "takei2021"):
+        p = out / f"loci_{name}_imaging.parquet"
+        if not p.exists():
+            continue
+        ref = pd.read_parquet(p)
+        loci = panels[name]
+        t = _panel_values(full, loci, a, b)
+        t.to_parquet(out / f"loci_{name}_contacts.parquet")
+        r = {"contacts_vs_imaging": _corrs(t, ref),
+             "contacts_split_half": _corrs(_panel_values(A, loci, a, b), _panel_values(B, loci, a, b)),
+             "same_pairs": {}}
+        for v in list(variants) + ["dipc"]:
+            q = out / f"loci_{name}_{v}.parquet"
+            if not q.exists():
+                continue
+            R = pd.read_parquet(q)
+            j = t.index.intersection(R.index).intersection(ref.index)
+            r["same_pairs"][v] = {"n_pairs": int(len(j)), "contacts": _corrs(t.loc[j], ref.loc[j]),
+                                  "recon": _corrs(R.loc[j], ref.loc[j])}
+        res["panels"][name] = r
+        print(f"[contacts] {name}: contacts vs imaging "
+              + json.dumps({k: round(x["spearman"], 3) for k, x in r["contacts_vs_imaging"].items()})
+              + "; same pairs: " + json.dumps({v: {s: round(x[s]["resid"]["spearman"], 3) for s in ("contacts", "recon")}
+                                               for v, x in r["same_pairs"].items()}), flush=True)
+    path = save(results / f"contacts_{dataset}.json", res, script="benchmarks/cross_assay/recon.py",
+                datasets=[{"tan2021": "tan2021_cortex", "hires_brain": "hires2023_brain"}.get(dataset, dataset),
+                          "liu2025_mop", "takei2021_brain"],
+                params={"dataset": dataset, "contrast": [a, b], "resolution_bp": RES, "seed": seed,
+                        "stat": "mean per-cell contact frequency (cis contacts between bins over the cell's total)",
+                        "sign": "log(1 / frequency), as a distance"})
+    return {"results": str(path)}
+
+
+def _imaging_panels(liu_path: Path, xa_sets: Path) -> dict:
+    """The imaging loci on the autosomes as stage loci takes them: the bins of the Liu 2025 store and of the
+    Takei 2021 set (chrom, start, end; indexed by bin id)."""
+    import cross_assay as X
+    from chromdata import ChromData
+    from matched_data import load_set
+
+    autos = [f"chr{k}" for k in range(1, 20)]
+    sets = {"liu2025": ChromData.read(str(liu_path), backed=True),
+            "takei2021": X.set_to_chromdata(load_set(xa_sets / "takei2021_brain_labels.npz"))}
+    return {k: cd.bins[cd.bins["chrom"].astype(str).isin(autos)][["chrom", "start", "end"]].astype({"chrom": str})
+            for k, cd in sets.items()}
+
+
 CLASS_PAIRS = [("InN", "ExN"), ("ExN", "OPC"), ("ExN", "Astro"), ("ExN", "Oligo"), ("ExN", "Micro"), ("InN", "OPC"),
                ("InN", "Astro"), ("InN", "Oligo"), ("InN", "Micro"), ("OPC", "Astro"), ("OPC", "Oligo"),
                ("OPC", "Micro"), ("Astro", "Oligo"), ("Astro", "Micro"), ("Oligo", "Micro")]
@@ -617,6 +758,8 @@ def main():
     ap.add_argument("--task", type=int, default=0)
     ap.add_argument("--n-tasks", type=int, default=1)
     ap.add_argument("--device", default="gpu", choices=["cpu", "gpu"])
+    ap.add_argument("--method", default="ember", choices=sorted(METHODS),
+                    help="the reconstruction method of stage run, recorded by stage analyze")
     ap.add_argument("--limit", type=int, help="first N cells only (smoke test)")
     ap.add_argument("--xa-work", type=Path)
     ap.add_argument("--xa-results", type=Path, default=HERE / "results")
@@ -626,6 +769,8 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--boot", type=int, default=2000)
     a = ap.parse_args()
+    global METHOD
+    METHOD = a.method
     a.out.mkdir(parents=True, exist_ok=True)
     if "maps" in a.stages:
         stage_maps(a.out, a.dataset, a.xa_work, a.seed)
@@ -637,7 +782,7 @@ def main():
         cells = cells.head(a.limit)
     for st in a.stages:
         if st == "run":
-            stage_run(a.out, cells, a.task, a.n_tasks, a.variants, a.device)
+            stage_run(a.out, cells, a.task, a.n_tasks, a.variants, a.device, a.method)
         elif st == "collect":
             log = stage_collect(a.out, cells, a.variants)
             (a.out / "logs").mkdir(exist_ok=True)
@@ -648,6 +793,8 @@ def main():
             stage_loci(a.out, a.results, a.xa_sets, a.liu, a.variants, a.dataset, a.seed)
         elif st == "loci_all":
             stage_loci_all(a.out, a.results, a.liu, a.variants[0], a.dataset, a.seed)
+        elif st == "contacts":
+            stage_contacts(a.out, a.results, cells, a.variants, a.dataset, a.seed, a.liu, a.xa_sets)
 
 
 if __name__ == "__main__":

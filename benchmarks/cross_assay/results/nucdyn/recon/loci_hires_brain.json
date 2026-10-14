@@ -1,0 +1,299 @@
+{
+ "results": {
+  "contrast": "ExN - Oligo",
+  "panels": {
+   "liu2025": 1917,
+   "takei2021": 2340
+  },
+  "imaging_cells": {
+   "liu2025": {
+    "ExN": 5097,
+    "Oligo": 1963
+   },
+   "takei2021": {
+    "ExN": 1895,
+    "Oligo": 78
+   }
+  },
+  "ceiling": {
+   "liu2025": {
+    "diff": {
+     "n_pairs": 101879,
+     "spearman": 0.7940132741767036
+    },
+    "resid": {
+     "n_pairs": 101879,
+     "spearman": 0.7396731701761787
+    },
+    "chromband": {
+     "n_pairs": 101879,
+     "spearman": 0.7124774111920797
+    },
+    "pair": {
+     "n_pairs": 101879,
+     "spearman": 0.5845668689944997
+    }
+   },
+   "takei2021": {
+    "diff": {
+     "n_pairs": 94997,
+     "spearman": 0.04962276083899591
+    },
+    "resid": {
+     "n_pairs": 94997,
+     "spearman": 0.04189035522993867
+    },
+    "chromband": {
+     "n_pairs": 94997,
+     "spearman": 0.02966141564776021
+    },
+    "pair": {
+     "n_pairs": 94997,
+     "spearman": 0.029653096756711624
+    }
+   },
+   "liu2025_dip": {
+    "diff": {
+     "n_pairs": 101291,
+     "spearman": 0.5232371513987977
+    },
+    "resid": {
+     "n_pairs": 101291,
+     "spearman": 0.4667319090224591
+    },
+    "chromband": {
+     "n_pairs": 101291,
+     "spearman": 0.4583429997035451
+    },
+    "pair": {
+     "n_pairs": 101291,
+     "spearman": 0.37096179048435085
+    }
+   },
+   "takei2021_dip": {
+    "diff": {
+     "n_pairs": 151847,
+     "spearman": 0.5461271828483689
+    },
+    "resid": {
+     "n_pairs": 151847,
+     "spearman": 0.48439904414819546
+    },
+    "chromband": {
+     "n_pairs": 151847,
+     "spearman": 0.4782932439691451
+    },
+    "pair": {
+     "n_pairs": 151847,
+     "spearman": 0.38426781020012146
+    }
+   }
+  },
+  "variants": {
+   "dip": {
+    "cells": {
+     "ExN": 260,
+     "Oligo": 20
+    },
+    "liu2025": {
+     "diff": {
+      "n_pairs": 101291,
+      "spearman": 0.6362331954935064
+     },
+     "resid": {
+      "n_pairs": 101291,
+      "spearman": 0.568749883074948
+     },
+     "chromband": {
+      "n_pairs": 101291,
+      "spearman": 0.5625581009600148
+     },
+     "pair": {
+      "n_pairs": 101291,
+      "spearman": 0.52772763849176
+     }
+    },
+    "takei2021": {
+     "diff": {
+      "n_pairs": 142458,
+      "spearman": 0.09710385608937397
+     },
+     "resid": {
+      "n_pairs": 142458,
+      "spearman": 0.0780017647043442
+     },
+     "chromband": {
+      "n_pairs": 142458,
+      "spearman": 0.08330886625528089
+     },
+     "pair": {
+      "n_pairs": 142458,
+      "spearman": 0.07835131815510797
+     }
+    },
+    "shuffled_labels": {
+     "liu2025": {
+      "diff": {
+       "n_pairs": 101291,
+       "spearman": -0.02602462813021457
+      },
+      "resid": {
+       "n_pairs": 101291,
+       "spearman": -0.0481518232860159
+      },
+      "chromband": {
+       "n_pairs": 101291,
+       "spearman": -0.03636501088768669
+      },
+      "pair": {
+       "n_pairs": 101291,
+       "spearman": -0.017869827554584806
+      }
+     },
+     "takei2021": {
+      "diff": {
+       "n_pairs": 142458,
+       "spearman": -0.004420574828844982
+      },
+      "resid": {
+       "n_pairs": 142458,
+       "spearman": -0.008149308545541375
+      },
+      "chromband": {
+       "n_pairs": 142458,
+       "spearman": 0.0046378298281619795
+      },
+      "pair": {
+       "n_pairs": 142458,
+       "spearman": 0.011578328748316475
+      }
+     }
+    }
+   },
+   "hap": {
+    "cells": {
+     "ExN": 260,
+     "Oligo": 20
+    },
+    "liu2025": {
+     "diff": {
+      "n_pairs": 101291,
+      "spearman": 0.5309083995224696
+     },
+     "resid": {
+      "n_pairs": 101291,
+      "spearman": 0.47744604396062773
+     },
+     "chromband": {
+      "n_pairs": 101291,
+      "spearman": 0.49009568220608685
+     },
+     "pair": {
+      "n_pairs": 101291,
+      "spearman": 0.4468366901117162
+     }
+    },
+    "takei2021": {
+     "diff": {
+      "n_pairs": 142458,
+      "spearman": 0.08645933501772372
+     },
+     "resid": {
+      "n_pairs": 142458,
+      "spearman": 0.07249679066616734
+     },
+     "chromband": {
+      "n_pairs": 142458,
+      "spearman": 0.07461460534993283
+     },
+     "pair": {
+      "n_pairs": 142458,
+      "spearman": 0.06862025250570215
+     }
+    }
+   },
+   "dipc": {
+    "cells": {
+     "ExN": 260,
+     "Oligo": 20
+    },
+    "liu2025": {
+     "diff": {
+      "n_pairs": 101291,
+      "spearman": 0.6551158991667176
+     },
+     "resid": {
+      "n_pairs": 101291,
+      "spearman": 0.5883231249532461
+     },
+     "chromband": {
+      "n_pairs": 101291,
+      "spearman": 0.5728820228397682
+     },
+     "pair": {
+      "n_pairs": 101291,
+      "spearman": 0.5257368958260003
+     }
+    },
+    "takei2021": {
+     "diff": {
+      "n_pairs": 142458,
+      "spearman": 0.10041856875926723
+     },
+     "resid": {
+      "n_pairs": 142458,
+      "spearman": 0.08036083683195276
+     },
+     "chromband": {
+      "n_pairs": 142458,
+      "spearman": 0.08510123658826045
+     },
+     "pair": {
+      "n_pairs": 142458,
+      "spearman": 0.07906643280613508
+     }
+    }
+   }
+  }
+ },
+ "provenance": {
+  "revision": "78e7994+nucdyn-contacts-uncommitted",
+  "date": "2026-10-13T10:02:47+00:00",
+  "host": "sh04-05n13.int",
+  "cpu": "AMD EPYC 9754 128-Core Processor",
+  "cpus": 8,
+  "slurm_job": "47634797",
+  "load_avg_1min": 6.85,
+  "versions": {
+   "python": "3.12.1",
+   "numpy": "2.2.6",
+   "scipy": "1.14.1",
+   "pandas": "2.2.3",
+   "cooler": "0.10.4",
+   "zarr": "3.4.0",
+   "torch": "2.5.1+cu124",
+   "uchrom": "0.3.0.dev0",
+   "chromdata": "0.1.0"
+  },
+  "script": "benchmarks/cross_assay/recon.py",
+  "datasets": [
+   "hires2023_brain",
+   "liu2025_mop",
+   "takei2021_brain"
+  ],
+  "params": {
+   "dataset": "hires_brain",
+   "contrast": [
+    "ExN",
+    "Oligo"
+   ],
+   "sep_bands_bp": [
+    1000000.0,
+    200000000.0,
+    25
+   ],
+   "seed": 0,
+   "stat": "median (distance_map)"
+  }
+ }
+}

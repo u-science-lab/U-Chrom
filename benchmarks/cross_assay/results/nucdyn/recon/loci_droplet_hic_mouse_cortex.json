@@ -1,0 +1,215 @@
+{
+ "results": {
+  "contrast": "ExN - Oligo",
+  "panels": {
+   "liu2025": 1917,
+   "takei2021": 2340
+  },
+  "imaging_cells": {
+   "liu2025": {
+    "ExN": 5097,
+    "Oligo": 1963
+   },
+   "takei2021": {
+    "ExN": 1895,
+    "Oligo": 78
+   }
+  },
+  "ceiling": {
+   "liu2025": {
+    "diff": {
+     "n_pairs": 101879,
+     "spearman": 0.7940132741767036
+    },
+    "resid": {
+     "n_pairs": 101879,
+     "spearman": 0.7396731701761787
+    },
+    "chromband": {
+     "n_pairs": 101879,
+     "spearman": 0.7124774111920797
+    },
+    "pair": {
+     "n_pairs": 101879,
+     "spearman": 0.5845668689944997
+    }
+   },
+   "takei2021": {
+    "diff": {
+     "n_pairs": 94997,
+     "spearman": 0.04962276083899591
+    },
+    "resid": {
+     "n_pairs": 94997,
+     "spearman": 0.04189035522993867
+    },
+    "chromband": {
+     "n_pairs": 94997,
+     "spearman": 0.02966141564776021
+    },
+    "pair": {
+     "n_pairs": 94997,
+     "spearman": 0.029653096756711624
+    }
+   },
+   "liu2025_hap": {
+    "diff": {
+     "n_pairs": 101291,
+     "spearman": 0.6050797670942605
+    },
+    "resid": {
+     "n_pairs": 101291,
+     "spearman": 0.5324555632529485
+    },
+    "chromband": {
+     "n_pairs": 101291,
+     "spearman": 0.5513210588516613
+    },
+    "pair": {
+     "n_pairs": 101291,
+     "spearman": 0.47360416633900887
+    }
+   },
+   "takei2021_hap": {
+    "diff": {
+     "n_pairs": 151847,
+     "spearman": 0.5931523720186698
+    },
+    "resid": {
+     "n_pairs": 151847,
+     "spearman": 0.5229742970381208
+    },
+    "chromband": {
+     "n_pairs": 151847,
+     "spearman": 0.5457220182573503
+    },
+    "pair": {
+     "n_pairs": 151847,
+     "spearman": 0.47629989117049787
+    }
+   }
+  },
+  "variants": {
+   "hap": {
+    "cells": {
+     "ExN": 300,
+     "Oligo": 241
+    },
+    "liu2025": {
+     "diff": {
+      "n_pairs": 101291,
+      "spearman": 0.6139558725669524
+     },
+     "resid": {
+      "n_pairs": 101291,
+      "spearman": 0.5362778032220012
+     },
+     "chromband": {
+      "n_pairs": 101291,
+      "spearman": 0.5238944442369486
+     },
+     "pair": {
+      "n_pairs": 101291,
+      "spearman": 0.50364132210016
+     }
+    },
+    "takei2021": {
+     "diff": {
+      "n_pairs": 142458,
+      "spearman": 0.12870129850384382
+     },
+     "resid": {
+      "n_pairs": 142458,
+      "spearman": 0.11486027420560228
+     },
+     "chromband": {
+      "n_pairs": 142458,
+      "spearman": 0.09565078957120503
+     },
+     "pair": {
+      "n_pairs": 142458,
+      "spearman": 0.08036529647245626
+     }
+    },
+    "shuffled_labels": {
+     "liu2025": {
+      "diff": {
+       "n_pairs": 101291,
+       "spearman": 0.002983975187513542
+      },
+      "resid": {
+       "n_pairs": 101291,
+       "spearman": 0.008488398235736425
+      },
+      "chromband": {
+       "n_pairs": 101291,
+       "spearman": 0.007957852919774662
+      },
+      "pair": {
+       "n_pairs": 101291,
+       "spearman": -0.019206716772957513
+      }
+     },
+     "takei2021": {
+      "diff": {
+       "n_pairs": 142458,
+       "spearman": 0.02401121046200405
+      },
+      "resid": {
+       "n_pairs": 142458,
+       "spearman": 0.024277603660759768
+      },
+      "chromband": {
+       "n_pairs": 142458,
+       "spearman": -0.0019438486046936426
+      },
+      "pair": {
+       "n_pairs": 142458,
+       "spearman": -0.0034094390344117055
+      }
+     }
+    }
+   }
+  }
+ },
+ "provenance": {
+  "revision": "78e7994+nucdyn-contacts-uncommitted",
+  "date": "2026-10-13T09:57:56+00:00",
+  "host": "sh04-05n13.int",
+  "cpu": "AMD EPYC 9754 128-Core Processor",
+  "cpus": 8,
+  "slurm_job": "47634806",
+  "load_avg_1min": 8.56,
+  "versions": {
+   "python": "3.12.1",
+   "numpy": "2.2.6",
+   "scipy": "1.14.1",
+   "pandas": "2.2.3",
+   "cooler": "0.10.4",
+   "zarr": "3.4.0",
+   "torch": "2.5.1+cu124",
+   "uchrom": "0.3.0.dev0",
+   "chromdata": "0.1.0"
+  },
+  "script": "benchmarks/cross_assay/recon.py",
+  "datasets": [
+   "droplet_hic_mouse_cortex",
+   "liu2025_mop",
+   "takei2021_brain"
+  ],
+  "params": {
+   "dataset": "droplet_hic_mouse_cortex",
+   "contrast": [
+    "ExN",
+    "Oligo"
+   ],
+   "sep_bands_bp": [
+    1000000.0,
+    200000000.0,
+    25
+   ],
+   "seed": 0,
+   "stat": "median (distance_map)"
+  }
+ }
+}

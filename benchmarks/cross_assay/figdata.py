@@ -1,5 +1,5 @@
-"""Inputs of the Extended Data figures on the cross-assay analysis (u-chrom-paper manuscripts/nmeth-bc/figures/
-make_ed_cross_assay.py), gathered from this benchmark's results:
+"""Inputs of the nmeth-bc Fig. 2, the cross-assay analysis (u-chrom-paper manuscripts/nmeth-bc/figures/
+make_fig2.py; Extended Data until 2026-10-13), gathered from this benchmark's results:
 
 * ``results/cross_assay.json``, ``results/recon/recon_<dataset>.json``, ``results/recon/loci_<dataset>.json``,
   ``results/recon/loci_all_<dataset>.json``, ``results/recon_summary.json``, ``results/transfer.json``;
@@ -41,7 +41,11 @@ IMAGING = [("liu2025_mop", "DNA-MERFISH (Liu 2025)"), ("takei2021_brain_labels",
 TRANSFER = ["Dip-C (Tan), diploid", "HiRES, diploid", "GAGE-seq, haploid", "dscHi-C, haploid", "Droplet Hi-C, haploid",
             "scHiCAR, haploid"]
 DEPTH = [("hap", "all"), ("hap_c150k", "150k"), ("hap_c45k", "45k"), ("hap_c20k", "20k")]
-MAP_SOURCES = ["imaging (Liu 2025)", "Dip-C (Tan), EMber diploid", "scHiCAR, EMber"]
+MAP_SOURCES = ["imaging (Liu 2025)", "Dip-C (Tan), diploid", "scHiCAR, haploid"]
+#: labels of the EMber run's biology outputs -> the method-neutral ones
+OLD_LABELS = {"Dip-C (Tan), EMber diploid": "Dip-C (Tan), diploid", "HiRES, EMber diploid": "HiRES, diploid",
+              "GAGE-seq, EMber": "GAGE-seq, haploid", "dscHi-C, EMber": "dscHi-C, haploid",
+              "Droplet Hi-C, EMber": "Droplet Hi-C, haploid", "scHiCAR, EMber": "scHiCAR, haploid"}
 
 
 def load(p: Path) -> dict:
@@ -59,7 +63,10 @@ def main():
     ap.add_argument("--biology", type=Path, required=True, help="biology.py --out folder (+ figdata/ inside or next)")
     ap.add_argument("--scores", type=Path, required=True, help="transfer.py --out folder (scores_*.parquet)")
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--method", default="nucdyn", choices=["ember", "nucdyn"],
+                    help="whose reconstructions: results/ (EMber, 2026-10-11) or results/nucdyn/ (NucDynamics, the paper)")
     a = ap.parse_args()
+    RR = RES if a.method == "ember" else RES / "nucdyn"     # the reconstructions' results; RES: contacts, imaging
     import pilot as P
     from _paper import paper_root
     from _record import save
@@ -77,7 +84,7 @@ def main():
                      "ranks": ranks(med[name]), "cliff": cliff_prev.get(name) or {},
                      "pooled_only": name == "paired_hic_mouse_cortex"})
     for ds, v, label, mode in RECON:
-        variants = load(RES / "recon" / f"recon_{ds}.json")["variants"]
+        variants = load(RR / "recon" / f"recon_{ds}.json")["variants"]
         r = variants[v]
         m = r["dist_ratio"]["median_by_class"]
         rows.append({"group": "reconstructions", "dataset": ds, "label": f"{label} ({mode})", "medians": m,
@@ -97,25 +104,36 @@ def main():
     classes = {"rows": rows, "kendall_w": W, "classes": CLASSES}
 
     # ---- loci: agreement with imaging per reconstruction, ceilings, null; all class pairs
-    summ = load(RES / "recon_summary.json")["rows"]
+    summ = load(RR / "recon_summary.json")["rows"]
     agree = []
     for ds, v, label, mode in RECON:
         r = next(x for x in summ if x["dataset"] == ds and x["variant"] == v)
+        ct = RR / "recon" / f"contacts_{ds}.json"           # the same cells' contacts, no 3D model (stage contacts)
+        ct = load(ct)["panels"]["liu2025"] if ct.exists() else None
         agree.append({"dataset": ds, "label": f"{label} ({mode})", "loci_liu": r["loci_liu"],
                       "ceiling_recon": r["ceiling_recon"], "ceiling_liu": r["ceiling_liu"],
                       "disattenuated_resid": r.get("disattenuated_resid"), "disattenuated_pair": r.get("disattenuated_pair"),
-                      "n_by_class": r["n_by_class"]})
-    shuffled = load(RES / "recon" / "loci_tan2021.json")["variants"]["dip"].get("shuffled_labels", {}).get("liu2025", {})
+                      "n_by_class": r["n_by_class"],
+                      "contacts": None if ct is None else {
+                          "loci_liu": {k: x["spearman"] for k, x in ct["contacts_vs_imaging"].items()},
+                          "n_pairs": ct["contacts_vs_imaging"]["resid"]["n_pairs"],
+                          "split_half": {k: x["spearman"] for k, x in ct["contacts_split_half"].items()},
+                          "same_pairs": {"n_pairs": ct["same_pairs"][v]["n_pairs"],
+                                         "contacts": ct["same_pairs"][v]["contacts"]["resid"]["spearman"],
+                                         "recon": ct["same_pairs"][v]["recon"]["resid"]["spearman"]}
+                          if v in ct["same_pairs"] else None}})
+    shuffled = load(RR / "recon" / "loci_tan2021.json")["variants"]["dip"].get("shuffled_labels", {}).get("liu2025", {})
     pairs = {}
     for ds, v, label, mode in RECON:
-        p = RES / "recon" / f"loci_all_{ds}.json"
+        p = RR / "recon" / f"loci_all_{ds}.json"
         if p.exists():
             d = load(p)["pairs"]
             pairs[f"{label} ({mode})"] = {k: x["recon_vs_imaging"]["resid"]["spearman"] for k, x in d.items()}
             pairs["imaging split-half"] = {**pairs.get("imaging split-half", {}),
                                            **{k: x["imaging_split_half"]["resid"]["spearman"] for k, x in d.items()}}
     eff = pd.read_parquet(a.biology / "locus_effects.parquet")
-    rec_cols = [c for c in eff.columns if "EMber" in c]
+    eff = eff.rename(columns=OLD_LABELS)
+    rec_cols = [c for c in TRANSFER if c in eff.columns]
     z = (eff[rec_cols] - eff[rec_cols].mean()) / eff[rec_cols].std()
     eff["consensus of reconstructions"] = z.mean(axis=1)
     from scipy.stats import spearmanr
@@ -129,14 +147,17 @@ def main():
     eff[keep].reset_index().rename(columns={"index": "locus"}).to_parquet(Path(out) / "cross_assay_ed_tracks.parquet")
     mp = next(p for p in (a.biology / "figdata", a.biology.parent / "figdata") if (p / "cross_assay_loci_maps.parquet").exists())
     maps = pd.read_parquet(mp / "cross_assay_loci_maps.parquet")
+    maps["source"] = maps["source"].replace(OLD_LABELS)
     maps[maps["source"].isin(MAP_SOURCES)].to_parquet(Path(out) / "cross_assay_ed_maps.parquet")
 
     # ---- cells: AUROC in both directions, depth series, per-cell scores
-    T = load(RES / "transfer.json")
-    tan = load(RES / "recon" / "recon_tan2021.json")["variants"]
-    tl = load(RES / "recon" / "loci_tan2021.json")["variants"]
+    T = load(RR / "transfer.json")
+    tan = load(RR / "recon" / "recon_tan2021.json")["variants"]
+    tl = load(RR / "recon" / "loci_tan2021.json")["variants"]
     depth = []
     for v, lab in DEPTH:
+        if v not in tan:                               # the NucDynamics run has no subsampled variants
+            continue
         key = {"hap": "Dip-C (Tan), haploid"}.get(v, f"Dip-C (Tan), haploid {lab}")
         cis = xa["stage_logs"]["tan"]["cis_contacts_median"] if v == "hap" else float(lab[:-1]) * 1000
         depth.append({"variant": v, "label": lab, "median_cis": cis,
@@ -158,7 +179,7 @@ def main():
     pd.concat(sc, ignore_index=True).to_parquet(Path(out) / "cross_assay_ed_scores.parquet")
     for name, obj in (("classes", classes), ("loci", loci), ("cells", cells)):
         save(Path(out) / f"cross_assay_ed_{name}.json", obj, script="benchmarks/cross_assay/figdata.py",
-             datasets=["see benchmarks/cross_assay/results/MANIFEST.md"], params={})
+             datasets=["see benchmarks/cross_assay/results/MANIFEST.md"], params={"method": a.method})
     print(json.dumps({"kendall_w": {k: round(v.get("W", float("nan")), 3) for k, v in W.items()},
                       "locus_effect_vs_imaging": {k: round(v, 3) for k, v in locus_rho.items()}}, indent=1))
 
