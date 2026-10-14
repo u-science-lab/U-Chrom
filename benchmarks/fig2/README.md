@@ -165,3 +165,30 @@ python u-chrom-paper/manuscripts/full/figures/fig2/make_fig2.py && python u-chro
 ```
 
 `replicate_store.py` now also takes a 2.2 source (primary row groups copied; coordinate codes shifted).
+
+## AnnData's lazy read, on a cluster node (2026-10-13)
+
+Supplementary Table 1 rates AnnData's partial reads native (`anndata.experimental.read_lazy`), while panel c
+compared chromdata.zarr with AnnData read whole.  `c_access.py --backends anndata-lazy` adds the lazy read: the
+spots as obs written as AnnData Zarr; open = `read_lazy`; a query = the mask of the lazy id column (the whole
+column is read), the subset, `.to_memory()` (the chunks holding the selected rows, of every obs column and of
+obsm).  `anndata-lazy-h5ad` (the same on the `.h5ad`) fails with AnnData 0.12.11: the file's X (n_spots x 0) is an
+unchunked HDF5 dataset and dask rejects its empty chunk tuple.
+
+The laptop's work files are gone and benchmarks no longer run on it, so the lazy read was measured on Sherlock
+next to the backends it is compared with, on one node and node-local disk (`sherlock/access.sbatch`;
+`results/c_access_sherlock.json`, `results/MANIFEST.md`).  Different machine from the laptop series: compare
+within a run, not across.  Two fixes came with it: the chromdata.zarr backends now query only cells and traces
+with spots (they drew from the id categories, which hold every cell of the cell table: in the laptop series 1,633
+of the 1,799 queried cell ids had no spots at 1e6 and 143 at 1e7), and on Linux the peak RSS is the process's
+`VmHWM` (`ru_maxrss` survives `exec` and reported the staging parent's peak).
+
+```bash
+sbatch benchmarks/fig2/sherlock/setup.sbatch            # env (once), fig2 tests, smoke test of the lazy backends
+sbatch benchmarks/fig2/sherlock/access.sbatch           # Takei 2025 fetched + built when missing; 1e6 / 1e7
+```
+
+At 1e7 spots (job 47636698, AMD EPYC 7502): one cell from a file not yet open (open + median query) takes 0.11 s
+from chromdata.zarr (0.08 s + 27 ms), 20.9 s from AnnData read whole (20.9 s + 37 ms), 10.6 s from AnnData read
+lazily (9.7 s + 0.93 s: 0.37 s for the id column's mask, 0.54 s for `to_memory`) and 3.2 s from SpatialData
+(0.12 s + 3.1 s).

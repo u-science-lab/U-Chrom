@@ -70,6 +70,7 @@ def test_subset_by_cells_keeps_cells_whole(common):
 def test_replicate_store_partitioned(common, tmp_path):
     """replicate_store.py on a 2.1 store = whole relabelled copies + the
     lowest-code cells, read back value-identical, index consistent."""
+    import os
     import subprocess
     import sys
 
@@ -82,7 +83,9 @@ def test_replicate_store_partitioned(common, tmp_path):
     dst = tmp_path / "big.chromdata.zarr"
     subprocess.run([sys.executable, str(ROOT / "benchmarks" / "fig2" / "replicate_store.py"), str(src),
                     str(dst), "--n", str(n_target)], check=True, capture_output=True,
-                   env={"PYTHONPATH": str(ROOT), "PATH": "/usr/bin:/bin"})
+                   env={"PYTHONPATH": str(ROOT), "PATH": "/usr/bin:/bin",
+                        # an interpreter from an environment module (a cluster) finds libpython through it
+                        **{k: os.environ[k] for k in ("LD_LIBRARY_PATH",) if k in os.environ}})
     big = ChromData.read(dst, backed=True)
     assert (big.partitioned or big.has_coords_table) and big.n_spots >= n_target
     mem = ChromData.read(src)

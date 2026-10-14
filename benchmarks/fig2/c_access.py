@@ -25,6 +25,13 @@ Backends:
   subset it with a pandas boolean mask (``df[df.trace_id == id]``).
 * ``anndata-memory`` — the same with spots as obs in an ``.h5ad``
   (``ad.read_h5ad``, then ``adata[mask].copy()``).
+* ``anndata-lazy`` — AnnData's partial read (``anndata.experimental.read_lazy``, the read Supplementary Table 1
+  rates native): the same spots as obs written as AnnData Zarr; open = ``read_lazy`` (obs a lazy xarray Dataset,
+  obsm / X dask arrays); a query = the boolean mask of the lazy id column (that column read), the subset,
+  ``.to_memory()`` (only the chunks holding the selected rows).  ``anndata-lazy-h5ad`` does the same on the
+  ``.h5ad`` of ``anndata-memory`` -- with AnnData 0.12.11 ``read_lazy`` fails on that file (its X, n_spots x 0,
+  is an unchunked HDF5 dataset: dask rejects the empty chunk tuple), so the lazy series is the Zarr one.  Each
+  query's time is also split into the mask and the ``to_memory`` (``diag``).
 * ``fofct-memory`` — the FOF-CT core table loaded with
   ``ChromData.from_fofct``, then the in-memory ``get_*``.
 * ``spatialdata-lazy`` — SpatialData: ``read_zarr`` (lazy dask points), then
@@ -35,8 +42,11 @@ every child records its RSS after open, after the trace and cell queries
 (before the chromosome scans) and its peak.
 
     python benchmarks/fig2/c_access.py [--sizes 1e4,1e5,1e6,1e7] [--queries 20] [--backends h5cd-1x-memory]
+        [--out-json PATH]
 
-Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/c_access.json``.
+Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/c_access.json`` (series merged by label), or, with
+``--out-json``, a separate file with ``benchmarks/_record.py`` provenance (a run on another machine, e.g. a
+cluster node, must not merge into the laptop's series).
 """
 
 from __future__ import annotations
@@ -48,6 +58,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _common as C  # noqa: E402
@@ -120,8 +131,12 @@ class ZarrBacked(ZarrMemory):
         self.cd = ChromData.read(path, backed=True)
 
     def ids(self):
+        # the ids that have spots, as the other backends draw them: the categories also hold the cells of the
+        # cell table outside a subset (at 1e6 spots 1,633 of 1,799 cell ids have no spots; at 1e7, 143)
         cd = self.cd
-        return {"trace": list(cd._categories("trace_id")), "cell": list(cd._categories("cell_id")),
+        tc = np.unique(np.asarray(cd._index["trace_codes"]))
+        traces = np.asarray(cd._categories("trace_id"))[tc[tc >= 0]]
+        return {"trace": [str(x) for x in traces], "cell": list(cd._spot_cell_ids()),
                 "chrom": list(cd.bins["chrom"].cat.categories)}
 
     def get(self, level, key):
@@ -179,6 +194,58 @@ class AnnDataMemory(ParquetMemory):
         return self.adata[(self.adata.obs[col] == key).to_numpy()].copy()
 
 
+class AnnDataLazy(ParquetMemory):
+    """AnnData's partial read: ``anndata.experimental.read_lazy`` on an AnnData Zarr store (spots as obs), the
+    mask from the lazy id column, the subset, ``.to_memory()``."""
+
+    label = "AnnData (read_lazy + subset)"
+    ext = ".anndata.zarr"
+    key = "anndata"
+
+    def __init__(self):
+        self.diag = {"mask_s": [], "to_memory_s": []}
+
+    @staticmethod
+    def write(cd, path):
+        C.to_spot_anndata(cd).write_zarr(path)
+
+    def open(self, path):
+        from anndata.experimental import read_lazy
+        self.adata = read_lazy(str(path))
+
+    def ids(self):                                            # not timed
+        obs = self.adata.obs
+        return {lv: list(pd.unique(np.asarray(obs[col].to_numpy()).astype(str)))
+                for lv, col in (("trace", "trace_id"), ("cell", "cell_id"), ("chrom", "chrom"))}
+
+    def get(self, level, key):
+        col = {"trace": "trace_id", "cell": "cell_id", "chrom": "chrom"}[level]
+        t0 = time.perf_counter()
+        mask = (self.adata.obs[col] == key).to_numpy()
+        t1 = time.perf_counter()
+        sub = self.adata[mask].to_memory()
+        self.diag["mask_s"].append(t1 - t0)
+        self.diag["to_memory_s"].append(time.perf_counter() - t1)
+        return sub
+
+
+class AnnDataLazyH5ad(AnnDataLazy):
+    """The same lazy read on the ``.h5ad`` file of ``anndata-memory`` (``read_lazy`` on an h5py file)."""
+
+    label = "AnnData (read_lazy on .h5ad + subset)"
+    ext = ".h5ad"
+
+    @staticmethod
+    def write(cd, path):
+        C.FORMATS["anndata"].write(cd, path)
+
+    def open(self, path):
+        import h5py
+        from anndata.experimental import read_lazy
+        self.file = h5py.File(path, "r")
+        self.adata = read_lazy(self.file)
+
+
 class FofctMemory(H5cd1xMemory):
     """Baseline: load the FOF-CT core table (``ChromData.from_fofct``; file
     written by the official ``uchrom.io.write_fofct``), then the in-memory
@@ -227,8 +294,8 @@ class SpatialDataLazy:
 
 BACKENDS = {"h5cd-1x-memory": H5cd1xMemory, "h5cd-2-memory": H5cd2Memory,
             "zarr-backed": ZarrBacked, "zarr-memory": ZarrMemory,
-            "parquet-memory": ParquetMemory, "anndata-memory": AnnDataMemory,
-            "fofct-memory": FofctMemory, "spatialdata-lazy": SpatialDataLazy}
+            "parquet-memory": ParquetMemory, "anndata-memory": AnnDataMemory, "anndata-lazy": AnnDataLazy,
+            "anndata-lazy-h5ad": AnnDataLazyH5ad, "fofct-memory": FofctMemory, "spatialdata-lazy": SpatialDataLazy}
 
 
 def child(backend_key, path, n_queries):
@@ -237,6 +304,8 @@ def child(backend_key, path, n_queries):
     from uchrom import ChromData  # noqa: F401
     if backend_key == "spatialdata-lazy":
         import spatialdata  # noqa: F401
+    if backend_key.startswith("anndata-lazy"):
+        import anndata.experimental, dask.array, xarray  # noqa: F401,E401
     try:
         import pyarrow.parquet, zarr, anndata  # noqa: F401,E401
         import chromdata.backed  # noqa: F401
@@ -269,6 +338,10 @@ def child(backend_key, path, n_queries):
             sizes.append(int(sub.n_spots) if hasattr(sub, "n_spots") else len(sub))
         out[level] = {"latency_s": C.iqr(times), "times_s": times, "result_spots_median": float(np.median(sizes)),
                       "n_ids": len(pool)}
+        if getattr(be, "diag", None):                       # per-query parts (timed queries only)
+            out[level]["diag"] = {k: C.iqr(v[-len(picks):]) for k, v in be.diag.items() if v}
+            for v in be.diag.values():
+                v.clear()
     out["peak_rss_mb"] = C.peak_rss_mb()
     C.emit(out)
 
@@ -310,6 +383,9 @@ def main():
     ap.add_argument("--prebuilt", action="append", default=[], metavar="N=PATH",
                     help="zarr backends: use this store for size N instead of staging + writing "
                          "one (e.g. a 1e8-spot store from replicate_store.py); repeatable")
+    ap.add_argument("--out-json", type=Path, default=None,
+                    help="write the series to this file (with benchmarks/_record.py provenance) instead of merging "
+                         "them into the paper's c_access.json")
     ap.add_argument("--child", nargs="+", help=argparse.SUPPRESS)
     args = ap.parse_args()
     if args.child:
@@ -339,8 +415,8 @@ def main():
                 info = C.stage_info(stage)
                 tag = ("h5cd2" if key == "h5cd-2-memory"
                        else f"zarr{_zarr_version().replace('.', '')}" if key.startswith("zarr")
-                       else key.split("-")[0] if key in ("parquet-memory", "anndata-memory", "fofct-memory",
-                                                         "spatialdata-lazy")
+                       else key.split("-")[0] if key in ("parquet-memory", "anndata-memory", "anndata-lazy",
+                                                         "anndata-lazy-h5ad", "fofct-memory", "spatialdata-lazy")
                        else f"v{FORMAT_VERSION}")
                 h5 = work / f"n{n}_{tag}{be.ext}"
                 if not h5.exists():
@@ -357,10 +433,16 @@ def main():
         series[be.label] = {"backend": key, "points": points, "repeats": args.repeats,
                             "format_version": _zarr_version() if key.startswith("zarr") else FORMAT_VERSION,
                             "page_cache": "warm (fresh process; OS cache not flushed)"}
-        C.write_json("c_access", {"panel": "c", "machine": C.machine_info(), "queries_per_level": args.queries,
-                                  "dataset": "Takei 2025 cerebellum rep 1 whole-cell subsets (see b_storage.json)",
-                                  "series": series}, merge_key="series")
-    print(C.RESULTS / "c_access.json")
+        doc = {"panel": "c", "machine": C.machine_info(), "queries_per_level": args.queries,
+               "dataset": "Takei 2025 cerebellum rep 1 whole-cell subsets (see b_storage.json)", "series": series}
+        if args.out_json is None:
+            C.write_json("c_access", doc, merge_key="series")
+        else:
+            from _record import save
+            save(args.out_json, doc, script="benchmarks/fig2/c_access.py", datasets=["takei2025_cerebellum"],
+                 params={"sizes": sizes, "queries": args.queries, "repeats": args.repeats,
+                         "backends": args.backends.split(","), "work": str(work)})
+    print(args.out_json or C.RESULTS / "c_access.json")
 
 
 if __name__ == "__main__":
