@@ -55,9 +55,10 @@ rna_table=…)`, see the ChromData guide):
   *Hi-C · UMAP*, *Published · UMAP* — from `uns["embeddings"][key]["modality"]`
   (or the key prefix).  Each pane's header picks its view type; its settings are in the
   inspector (right); **+ View** adds panes (e.g. two 3-D cameras, or UMAP next to
-  PCA) and the workspace bar switches the layout: **Tabs**, **Columns**,
-  **Rows** or **Grid** (drag the dividers; the arrangement is remembered
-  in the browser).  Datasets with embeddings open as 3D | Embedding.
+  PCA) and the workspace bar switches the layout: **Tabs** (one view at a
+  time) or **Grid** (all views; drag the dividers between its columns and
+  rows; the arrangement is remembered in the browser — layouts saved with
+  the former Columns / Rows open as a grid).  Datasets with embeddings open as 3D | Embedding.
   Selection is shared: clicking a dot or a nucleus focuses that cell in
   every pane, and the focus bar (◀ cell ▶, *others* opacity) and colour
   scale are shared (focus bar, left sidebar), not in any one view.
@@ -79,7 +80,7 @@ The two sidebars have fixed roles:
 - **Left = shared by every open view** — the cell list (search, ↗),
   the focused cell's info (or the dataset summary) and *Colour · all
   cells* with its legend / colour bar.  Changing anything here affects
-  all panes, in every layout (tabs, columns, rows, grid).
+  all panes, in both layouts (tabs, grid).
 - **Right = inspector of the active pane** — click a pane to make it
   active (accent border); the inspector is titled after it
   (e.g. *Genome · pane 3*) and holds only that pane's settings:

@@ -55,7 +55,7 @@ describe('default views per kind of data', () => {
     expect(sig(true)).toBe('3d,embedding,genome,stats')
   })
   it('persists pane options and drops malformed ones', () => {
-    const ws = addPane(workspaceOf(['3d', 'matrix'], [0.55, 0.45]), 'matrix')
+    const ws = addPane(workspaceOf(['3d', 'matrix']), 'matrix')
     ws.panes[1] = { ...ws.panes[1], source: 'distance', stat: 'contact', threshold: 0.3, tracks: ['H3K27ac'] }
     expect(parseWorkspace(JSON.parse(JSON.stringify(ws)))).toEqual(ws)
     const bad = parseWorkspace({ layout: 'tabs', panes: [{ id: 'a', type: 'stats', statsKind: 'pie', threshold: -1, tracks: [1] }] })

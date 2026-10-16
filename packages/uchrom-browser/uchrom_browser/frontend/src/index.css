@@ -984,9 +984,6 @@ button.link {
   display: flex;
   gap: 0;
 }
-.ws-panes.layout-rows {
-  flex-direction: column;
-}
 .ws-panes.layout-grid:not(.maximized) {
   display: grid;
   grid-auto-rows: 1fr;
@@ -1060,19 +1057,6 @@ body.resizing-rows .ws-grid-splitter.rows:active {
 }
 .pane-body > .viewport {
   flex: 1;
-}
-.ws-splitter {
-  flex: 0 0 5px;
-  background: var(--border);
-}
-.ws-splitter.columns {
-  cursor: col-resize;
-}
-.ws-splitter.rows {
-  cursor: row-resize;
-}
-.ws-splitter:hover {
-  background: var(--accent);
 }
 body.resizing {
   cursor: col-resize;
