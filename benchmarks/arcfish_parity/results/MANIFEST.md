@@ -3,6 +3,7 @@
 | File | What | Run |
 |---|---|---|
 | `parity.json` | U-Chrom's ArcFISH callers against the authors' package (github.com/hyuyu104/ArcFISH at a21d889) on five datasets (`compare.py`): loci, trace counts, axis weights, normalised variances and counts (in memory and streaming), the TAD per-locus statistics, FDR, boundary calls and domains (all levels), the insulation method (scores, boundaries, domains), the loop test matrices, candidates, clusters, summits and loops, the compartment eigenvectors and A/B calls; per dataset the run times of both. `{"results", "provenance"}` | 2026-10-13, Sherlock jobs 47732259, 47738660 (node sh04-05n13, 8 CPUs) |
+| `streaming.json` | The ArcFISH part of the streaming validation (`benchmarks/cd21_streaming_validation.py`, `child_callers`) re-run with these callers (`streaming_check.py`): Takei 2021 mESC (4DN FOF-CT 4DNFIHF3JCBY, all 20 chromosomes), loop F-test and TAD caller in memory (`device="cpu"`) against `streaming=True` (`memory_budget="256MB"`); every column compared, floats by their largest difference. `{"results", "provenance"}` | 2026-10-15, Sherlock job 47904579 (sh04-05n13, 4 CPUs; uchrom b6d8873) |
 
 ## Result
 
@@ -33,3 +34,11 @@ The authors' loop caller holds every trace's pairwise differences at once: on al
 it needed more than 64 GB and was killed (U-Chrom works in row blocks, or streams).  With the defaults, loci 250 kb
 or 1 Mb apart leave nothing to test and the authors' code stops in the FDR step (zero tests), so `inputs.py`
 scales the TAD window and the loop background to those datasets.
+
+## Streaming (`streaming.json`)
+
+Streamed and in-memory calls are identical: 10 loops and 190 domains (125 boundaries) with the same positions, levels
+and summits; the statistics differ by at most 3.7e-14 (loops; P values, FDR, scores and contact frequencies exactly
+equal) and 3.8e-11 relative (domains).  With the callers before the parity re-implementation (2026-10-05, uchrom
+1df6e89) the same check had given 5 loops and 223 domains.  Run times, in memory / streamed: loops 12.5 / 12.7 s,
+domains 7.1 / 9.8 s.

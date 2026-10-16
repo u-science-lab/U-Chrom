@@ -1,0 +1,195 @@
+{
+ "results": {
+  "arcfish_takei2021": {
+   "n_spots": 316995,
+   "n_traces": 8285,
+   "chroms": [
+    "chr1",
+    "chr10",
+    "chr11",
+    "chr12",
+    "chr13",
+    "chr14",
+    "chr15",
+    "chr16",
+    "chr17",
+    "chr18",
+    "chr19",
+    "chr2",
+    "chr3",
+    "chr4",
+    "chr5",
+    "chr6",
+    "chr7",
+    "chr8",
+    "chr9",
+    "chrX"
+   ],
+   "read_s": 0.7064810750307515,
+   "loops": {
+    "n_in_memory": 10,
+    "n_streaming": 10,
+    "columns": [
+     "chrom1",
+     "start1",
+     "end1",
+     "chrom2",
+     "start2",
+     "end2",
+     "stat",
+     "pval",
+     "fdr",
+     "score",
+     "cluster_size",
+     "contact_freq",
+     "summit_i",
+     "summit_j"
+    ],
+    "same_columns": true,
+    "same_calls": false,
+    "identical": false,
+    "nonfloat_columns": [
+     "chrom1",
+     "start1",
+     "end1",
+     "chrom2",
+     "start2",
+     "end2",
+     "cluster_size",
+     "summit_i",
+     "summit_j"
+    ],
+    "same_nonfloat": true,
+    "float_columns": {
+     "stat": {
+      "max_abs_diff": 8.754432201385498e-08,
+      "max_rel_diff": 3.721879865581054e-14,
+      "nan_mismatch": 0
+     },
+     "pval": {
+      "max_abs_diff": 0.0,
+      "max_rel_diff": 0.0,
+      "nan_mismatch": 0
+     },
+     "fdr": {
+      "max_abs_diff": 0.0,
+      "max_rel_diff": 0.0,
+      "nan_mismatch": 0
+     },
+     "score": {
+      "max_abs_diff": 0.0,
+      "max_rel_diff": 0.0,
+      "nan_mismatch": 0
+     },
+     "contact_freq": {
+      "max_abs_diff": 0.0,
+      "max_rel_diff": 0.0,
+      "nan_mismatch": 0
+     }
+    },
+    "max_rel_pval_diff": 0.0,
+    "in_memory_s": 12.533953682053834,
+    "streaming_s": 12.684531406965107
+   },
+   "tads": {
+    "n_in_memory": 190,
+    "n_streaming": 190,
+    "columns": [
+     "chrom",
+     "start",
+     "end",
+     "level",
+     "start1",
+     "end1",
+     "start2",
+     "end2",
+     "stat1",
+     "stat2"
+    ],
+    "same_columns": true,
+    "same_calls": false,
+    "identical": false,
+    "nonfloat_columns": [
+     "chrom",
+     "start",
+     "end",
+     "level",
+     "start1",
+     "end1",
+     "start2",
+     "end2"
+    ],
+    "same_nonfloat": true,
+    "float_columns": {
+     "stat1": {
+      "max_abs_diff": 34.0,
+      "max_rel_diff": 3.76858322666925e-11,
+      "nan_mismatch": 0
+     },
+     "stat2": {
+      "max_abs_diff": 34.0,
+      "max_rel_diff": 3.76858322666925e-11,
+      "nan_mismatch": 0
+     }
+    },
+    "in_memory_s": 7.074903567903675,
+    "streaming_s": 9.790524011012167,
+    "n_boundaries_in_memory": 125,
+    "per_chrom_in_memory": {
+     "chr1": 11,
+     "chr10": 9,
+     "chr11": 13,
+     "chr12": 3,
+     "chr13": 11,
+     "chr14": 13,
+     "chr15": 5,
+     "chr16": 9,
+     "chr17": 11,
+     "chr18": 15,
+     "chr19": 9,
+     "chr2": 9,
+     "chr3": 7,
+     "chr4": 11,
+     "chr5": 11,
+     "chr6": 11,
+     "chr7": 7,
+     "chr8": 5,
+     "chr9": 11,
+     "chrX": 9
+    }
+   }
+  }
+ },
+ "provenance": {
+  "script": "arcfish_stream_check.py (copy of benchmarks/cd21_streaming_validation.py child_callers, stricter comparison)",
+  "uchrom_revision": "b6d8873",
+  "versions": {
+   "uchrom": "0.3.0.dev0",
+   "chromdata": "0.1.0",
+   "numpy": "2.5.4",
+   "pandas": "3.0.6",
+   "scipy": "1.18.1",
+   "torch": "2.14.1+cpu",
+   "zarr": "3.4.1",
+   "pyarrow": "26.0.0"
+  },
+  "host": "sh04-05n13.int",
+  "slurm_job_id": null,
+  "cpus": null,
+  "python": "3.12.15",
+  "platform": "Linux-3.10.0-1160.156.1.el7.tuxcare.els4.x86_64-x86_64-with-glibc2.36",
+  "input": "/scratch/users/wzxu/uchrom-nd/data/4DNFIHF3JCBY.csv",
+  "input_bytes": 21858579,
+  "parameters": {
+   "in_memory": {
+    "device": "cpu"
+   },
+   "streaming": {
+    "streaming": true,
+    "memory_budget": "256MB"
+   },
+   "params": "defaults (LoopCallerParams, TADCallerParams)"
+  },
+  "time_utc": "2026-10-15T07:28:54Z"
+ }
+}
