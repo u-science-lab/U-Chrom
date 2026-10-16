@@ -216,6 +216,26 @@ colour scale in the inspector:
 
 The colour bar on the canvas, and the PNG export, follow these settings.
 
+## Separating chromosomes
+
+**Separate chromosomes** in the inspector's *Style* section (3-D views) pulls
+the chromosomes of each cell apart, as in the exploded views of Tan et al.
+2018 (Dip-C): every chromosome copy is moved away from its cell's centre
+along the line from that centre to its own centroid, by the slider value
+(0–3) times that distance.  Each copy moves rigidly, so its shape and its
+direction from the centre — where it lies in the nucleus — are kept; at 0
+(**merge**) the structure is drawn as it is.
+
+- The setting belongs to the view: a second 3-D view can show the same cell
+  merged next to it.  It is saved with the layout.
+- Cells move independently (each around its own centre); subset layers move
+  with their parent, and hiding chromosomes does not move the others.
+- Picking, hover and the SVG / PDF export follow the separated positions.
+- Point sets (e.g. RNA spots) have no chromosome to move with: they are
+  hidden while chromosomes are separated.
+- The camera refits once the slider rests; set the *others* opacity to 0 to
+  look at one cell alone.
+
 ## Saving a view as an image
 
 The camera button in every pane header saves that pane's content as

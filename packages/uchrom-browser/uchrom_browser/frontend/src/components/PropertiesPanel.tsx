@@ -1,5 +1,6 @@
 import { describeFilter } from '../filters'
 import { AUTO_BOND_FACTOR, splitForView } from '../render/bonds'
+import { MAX_EXPLODE } from '../render/explode'
 import { autoTubeRadius, tubeAllowed } from '../render/segments'
 import { activeView, hasCoords, useStore } from '../store'
 import { CategoryLegend } from './CategoryLegend'
@@ -7,7 +8,7 @@ import { ColorBar } from './ColorBar'
 import { colourableFields, fieldLabel } from './format'
 import { FieldPicker, groupTitle } from './FieldPicker'
 import type { ColorMode, Layer, PointShape, RenderMode } from '../types'
-import { effectiveStyle, setPaneLayerStyle } from '../workspace'
+import { effectiveStyle, setPaneLayerStyle, updatePane } from '../workspace'
 
 /** Button group of the categorical cell fields (cell type, cluster, …). */
 const CATEGORY_GROUP = '\u0000category'
@@ -133,6 +134,7 @@ export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCel
   const pane = useStore((s) => s.workspace.panes.find((p) => p.id === paneId))
   const view = useStore(activeView)
   const setMaxBond = useStore((s) => s.setMaxBond)
+  const hasPointSets = useStore((s) => Object.keys((s.activeDatasetId && s.pointSets[s.activeDatasetId]) || {}).length > 0)
   const unit = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId)?.xyz_unit ?? '')
   const st = effectiveStyle(layer, pane)
   // the cell this view draws in full: its pinned cell, else the focused one (all / group: none)
@@ -262,6 +264,14 @@ export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCel
 
       {layer.geometry && st.mode !== 'points' && <MaxBond setting={view.maxBond} split={splitForView(layer.geometry, view.maxBond)} unit={unit} onChange={setMaxBond} />}
 
+      {layer.geometry && (
+        <SeparateChromosomes
+          value={pane?.explode ?? 0}
+          hasPointSets={hasPointSets}
+          onChange={(v) => setWorkspace((w) => updatePane(w, paneId, { explode: v > 0 ? v : undefined }))}
+        />
+      )}
+
       {header && (
         <dl className="stats">
           <dt>{viewCell ? `cell ${viewCell}` : 'shown'} points</dt>
@@ -281,6 +291,27 @@ export function StyleSection({ layer, hasCells, paneId }: { layer: Layer; hasCel
         </div>
       )}
       {layer.error && <div className="error">{layer.error}</div>}
+    </>
+  )
+}
+
+/**
+ * "Separate chromosomes" (exploded view, Tan et al. 2018): each chromosome copy moves away from
+ * its cell's centre, keeping its shape and its direction from the centre.  This view only.
+ */
+function SeparateChromosomes({ value, hasPointSets, onChange }: { value: number; hasPointSets: boolean; onChange: (v: number) => void }) {
+  return (
+    <>
+      <label title="Move every chromosome copy away from its cell's centre (exploded view, as in Tan et al. 2018): shapes and directions are kept. This view only.">
+        Separate chromosomes <span className="val">{value > 0 ? `${value.toFixed(1)}×` : 'off'}</span>
+      </label>
+      <div className="row">
+        <input type="range" min={0} max={MAX_EXPLODE} step={0.1} value={value} onChange={(e) => onChange(+e.target.value)} aria-label="Separate chromosomes" />
+        <button onClick={() => onChange(0)} disabled={value === 0} title="Back to the structure as it is">
+          merge
+        </button>
+      </div>
+      {value > 0 && hasPointSets && <div className="muted small">Point sets (e.g. RNA spots) are hidden while chromosomes are separated.</div>}
     </>
   )
 }

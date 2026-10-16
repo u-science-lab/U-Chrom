@@ -292,3 +292,18 @@ describe('layers per 3-D view', () => {
     expect(layerShownIn(root, p1)).toBe(true)
   })
 })
+
+describe('separated chromosomes in a saved layout', () => {
+  it('keeps a 3-D view’s separation; drops values out of range', () => {
+    const ws = workspaceOf(['3d', '3d'])
+    const sep = updatePane(ws, ws.panes[1].id, { explode: 1.5 })
+    const back = parseWorkspace(JSON.parse(JSON.stringify(sep)))!
+    expect(back.panes[1].explode).toBe(1.5)
+    expect(back.panes[0].explode).toBeUndefined()
+    for (const bad of [-1, 0, 99, 'x']) {
+      const raw = JSON.parse(JSON.stringify(sep))
+      raw.panes[1].explode = bad
+      expect(parseWorkspace(raw)!.panes[1].explode).toBeUndefined()
+    }
+  })
+})
