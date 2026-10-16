@@ -238,12 +238,20 @@
     },
     {
       "name": "capture_view",
-      "description": "Render one view (default: the active one) as PNG; returns {png_base64, width, height, filename}.",
+      "description": "Render one view (default: the active one) as PNG (default), SVG or PDF (editable vectors: lines, points and text); returns {data_base64, mime, format, width, height, filename, notes} (PNG also as png_base64).",
       "inputSchema": {
         "type": "object",
         "properties": {
           "pane": {
             "type": "string"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "png",
+              "svg",
+              "pdf"
+            ]
           }
         }
       },

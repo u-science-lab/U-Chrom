@@ -32,7 +32,7 @@ import { MatrixView } from './MatrixView'
 import { Popover } from './Popover'
 import { cellTitle, useCellTypes } from './PaneCell'
 import { useGroupInfo } from '../useGroups'
-import { savePanePng } from '../capture'
+import { savePane, type CaptureFormat } from '../capture'
 import { StatsView } from './StatsView'
 import { RegionPicker, SpatialView } from './SpatialView'
 import { Viewport } from './Viewport'
@@ -97,6 +97,46 @@ function ViewMenu({ current, onPick }: { current?: PaneType; onPick(t: PaneType)
 }
 
 /** A pane's type switch: the view name with a caret, opening the view menu. */
+const SAVE_FORMATS: [CaptureFormat, string, string][] = [
+  ['png', 'PNG image', 'pixels, as on screen'],
+  ['svg', 'SVG (editable vectors)', 'lines, points and text you can edit in Illustrator / Inkscape'],
+  ['pdf', 'PDF (editable vectors)', 'the SVG as a PDF, text kept as text'],
+]
+
+/** The camera button of a pane: save the view as PNG, SVG or PDF. */
+function SaveImageMenu({ saving, onSave }: { saving: boolean; onSave(format: CaptureFormat): void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLButtonElement>(null)
+  const close = useCallback(() => setOpen(false), [])
+  return (
+    <>
+      <button ref={ref} className="pane-shot" onClick={() => setOpen(!open)} disabled={saving} title="Save image (PNG, SVG, PDF)" aria-label="Save image" aria-haspopup="menu">
+        <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden>
+          <path d="M2 5h2.6l1.2-1.8h4.4L11.4 5H14v8H2z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+          <circle cx="8" cy="9" r="2.3" fill="none" stroke="currentColor" strokeWidth="1.3" />
+        </svg>
+      </button>
+      <Popover anchor={ref} open={open} onClose={close} className="menu-popup">
+        <ul role="menu">
+          {SAVE_FORMATS.map(([format, label, hint]) => (
+            <li
+              key={format}
+              role="menuitem"
+              title={hint}
+              onClick={() => {
+                setOpen(false)
+                onSave(format)
+              }}
+            >
+              {label}
+            </li>
+          ))}
+        </ul>
+      </Popover>
+    </>
+  )
+}
+
 function PaneTypeSwitch({ pane }: { pane: Pane }) {
   const setWorkspace = useStore((s) => s.setWorkspace)
   const [open, setOpen] = useState(false)
@@ -461,10 +501,18 @@ function PaneBox({
   const cellPin = pinnedCell(pane)
   const bodyRef = useRef<HTMLDivElement>(null)
   const [saving, setSaving] = useState(false)
-  const saveImage = () => {
+  const saveImage = (format: CaptureFormat) => {
     if (!bodyRef.current || saving) return
     setSaving(true)
-    savePanePng(bodyRef.current, pane)
+    savePane(bodyRef.current, pane, format)
+      .then(({ filename, notes }) => {
+        if (!notes.length) return
+        // what the vector file approximates: shown for a while in the status bar
+        const msg = `Saved ${filename}: ${notes.join(' ')}`
+        const st = useStore.getState()
+        st.setStatus(msg)
+        setTimeout(() => useStore.getState().status === msg && useStore.getState().setStatus(null), 10_000)
+      })
       .catch((e: Error) => useStore.getState().setError(`Cannot save the image: ${e.message}`))
       .finally(() => setSaving(false))
   }
@@ -503,12 +551,7 @@ function PaneBox({
           </button>
         )}
         <span className="spacer" />
-        <button className="pane-shot" onClick={saveImage} disabled={saving} title="Save image (PNG)" aria-label="Save image (PNG)">
-          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden>
-            <path d="M2 5h2.6l1.2-1.8h4.4L11.4 5H14v8H2z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-            <circle cx="8" cy="9" r="2.3" fill="none" stroke="currentColor" strokeWidth="1.3" />
-          </svg>
-        </button>
+        <SaveImageMenu saving={saving} onSave={saveImage} />
         {pane.type === '3d' && (
           <button onClick={onReset} title="Reset view: fit everything drawn in this view">
             ⟲

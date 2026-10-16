@@ -121,20 +121,39 @@ class Workspace:
             raise BrowserError("the open dataset has no file path")
         return ChromData.read(path)
 
-    def capture(self, pane: Optional[str] = None, path: Optional[str] = None) -> Dict[str, Any]:
-        """Save a PNG of a view (default: the active one) to ``path`` (default: a temporary file).
+    def capture(self, pane: Optional[str] = None, path: Optional[str] = None, format: Optional[str] = None) -> Dict[str, Any]:
+        """Save a view (default: the active one) to ``path`` (default: a temporary file).
 
-        Returns ``{"path", "pane", "width", "height", "bytes"}`` — not the image itself."""
-        r = self.call("capture_view", pane=pane)
-        png = base64.b64decode(r["png_base64"])
+        ``format`` is ``"png"`` (pixels, as on screen), ``"svg"`` or ``"pdf"`` (editable vectors for
+        Illustrator / Inkscape); by default it follows the suffix of ``path``, else PNG.  Returns
+        ``{"path", "pane", "format", "width", "height", "bytes", "notes"}`` — not the image itself;
+        ``notes`` lists what the vector file approximates (e.g. 3-D tubes as strokes)."""
+        fmt = _capture_format(format, path)
+        r = self.call("capture_view", pane=pane, format=fmt)
+        data = base64.b64decode(r.get("data_base64") or r["png_base64"])
         if not path:
             import tempfile
-            path = tempfile.NamedTemporaryFile(prefix="uchrom_view_", suffix=".png", delete=False).name
-        Path(path).write_bytes(png)
-        return {"path": str(path), "pane": pane, "width": r["width"], "height": r["height"], "bytes": len(png)}
+            path = tempfile.NamedTemporaryFile(prefix="uchrom_view_", suffix=f".{fmt}", delete=False).name
+        Path(path).write_bytes(data)
+        return {"path": str(path), "pane": pane, "format": fmt, "width": r["width"], "height": r["height"],
+                "bytes": len(data), "notes": list(r.get("notes") or [])}
 
     def __repr__(self) -> str:
         return f"Workspace({self.url!r})"
+
+
+CAPTURE_FORMATS = ("png", "svg", "pdf")
+
+
+def _capture_format(format: Optional[str], path: Optional[str]) -> str:
+    """The file format of a capture: ``format`` if given, else the suffix of ``path``, else PNG."""
+    if format is None:
+        suffix = Path(path).suffix.lower().lstrip(".") if path else ""
+        format = suffix if suffix in CAPTURE_FORMATS else "png"
+    format = format.lower()
+    if format not in CAPTURE_FORMATS:
+        raise ValueError(f"format must be one of {CAPTURE_FORMATS}, not {format!r}")
+    return format
 
 
 def connect(url: Optional[str] = None, timeout: float = 30.0) -> Workspace:

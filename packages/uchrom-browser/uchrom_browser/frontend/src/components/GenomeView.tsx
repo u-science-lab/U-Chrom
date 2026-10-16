@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCaptureEpoch } from '../vectorcapture'
 import { fetchContacts, fetchDistance, fetchIntervals, fetchTracks } from '../api'
 import { fmtBp } from '../filters'
 import { fmtPos, fmtSpan, genomeToChrom, isGenome, niceTicks, panLocus, queryRegion, regionKey, zoomLocus, GENOME, type Locus } from '../genome'
@@ -574,6 +575,7 @@ export function GenomeView({ pane }: { pane: Pane }) {
 function AxisRuler({ width, locus, layout, onPickChrom }: { width: number; locus: Locus; layout?: GenomeChrom[]; onPickChrom(name: string): void }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const pal = useTheme()
+  const epoch = useCaptureEpoch((s) => s.epoch)
   useEffect(() => {
     const cv = ref.current
     if (!cv) return
@@ -627,7 +629,7 @@ function AxisRuler({ width, locus, layout, onPickChrom }: { width: number; locus
     g.moveTo(0, AXIS_H - 0.5)
     g.lineTo(width, AXIS_H - 0.5)
     g.stroke()
-  }, [width, locus, layout, pal])
+  }, [width, locus, layout, pal, epoch])
   // whole genome: double-click a chromosome to go to it
   const onDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!layout) return
@@ -899,6 +901,7 @@ function MatrixRow({
     .filter(Boolean)
     .join(' · ')
 
+  const epoch = useCaptureEpoch((s) => s.epoch)
   useEffect(() => {
     const cv = ref.current
     if (!cv) return
@@ -1004,7 +1007,7 @@ function MatrixRow({
       g.fillText('loading…', width / 2, height / 2)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown, colors, width, height, locus, k, row.flip, maxDist, shape, guides, title, note, error, waiting, valid, loading, group, groupRef, pal, cscale.lo, cscale.hi, cscale.cs])
+  }, [shown, colors, width, height, locus, k, row.flip, maxDist, shape, guides, title, note, error, waiting, valid, loading, group, groupRef, pal, cscale.lo, cscale.hi, cscale.cs, epoch])
 
   useRegister(register, row.id, (x, y) => {
     if (!shown) return null
@@ -1054,6 +1057,7 @@ function TrackRow({
   const pal = useTheme()
   const name = row.track ?? ''
   const vals = data?.chrom === locus.chrom ? data.values[name] : undefined
+  const epoch = useCaptureEpoch((s) => s.epoch)
   useEffect(() => {
     const cv = ref.current
     if (!cv) return
@@ -1103,7 +1107,7 @@ function TrackRow({
     }
     g.fillStyle = CHART.muted
     g.fillText(label, x, 2)
-  }, [vals, data, width, height, locus, name, label, color, pal]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vals, data, width, height, locus, name, label, color, pal, epoch]) // eslint-disable-line react-hooks/exhaustive-deps
   useRegister(register, row.id, (x) => {
     if (!vals || !data) return null
     const bp = locus.start + (x / width) * (locus.end - locus.start)
@@ -1150,6 +1154,7 @@ function IntervalRow({
         name: cn >= 0 && r[cn] !== null && r[cn] !== '' ? String(r[cn]) : null,
       }))
   }, [table, locus.chrom])
+  const epoch = useCaptureEpoch((s) => s.epoch)
   useEffect(() => {
     const cv = ref.current
     if (!cv) return
@@ -1196,7 +1201,7 @@ function IntervalRow({
     g.textAlign = 'left'
     g.textBaseline = 'top'
     g.fillText(row.key ?? '', 6, Math.max(0, height / 2 - 7))
-  }, [items, width, height, locus, row.key, pal]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [items, width, height, locus, row.key, pal, epoch]) // eslint-disable-line react-hooks/exhaustive-deps
   useRegister(register, row.id, (x) => {
     const bp = locus.start + (x / width) * (locus.end - locus.start)
     const hit = items.find((it) => it.s2 === null && bp >= it.s && bp < it.e)

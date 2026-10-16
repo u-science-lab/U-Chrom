@@ -6,7 +6,7 @@
  */
 
 import { fetchGroupCells, registerGroup } from './api'
-import { capturePane } from './capture'
+import { CAPTURE_MIME, capturePane } from './capture'
 import { FIELD_PREFIX, fieldGroupRef, SAME_AS_VIEW, type RowScopeSpec, type ScopeSpec } from './groups'
 import type { GenomeRow } from './genomeRows'
 import { activeView, useStore } from './store'
@@ -248,8 +248,11 @@ export const ACTIONS: Record<string, Action> = {
     if (!pane || !body) throw new Error(`no view ${id}`)
     // let a just-opened view draw first
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
-    const { blob, filename, width, height } = await capturePane(body, pane)
-    return { png_base64: await toBase64(blob), width, height, filename }
+    const format = optStr(args.format) ?? 'png'
+    if (format !== 'png' && format !== 'svg' && format !== 'pdf') throw new Error(`format must be png, svg or pdf, not ${format}`)
+    const { blob, filename, width, height, notes } = await capturePane(body, pane, format)
+    const data = await toBase64(blob)
+    return { data_base64: data, ...(format === 'png' ? { png_base64: data } : {}), mime: CAPTURE_MIME[format], format, width, height, filename, notes }
   },
 }
 

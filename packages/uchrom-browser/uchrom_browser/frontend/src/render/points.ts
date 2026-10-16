@@ -89,6 +89,7 @@ export function buildPointMarkers(ps: PointSet, indices: Uint32Array, sizePx: nu
   })
   const object = new THREE.Points(g, mat)
   object.renderOrder = 1 // after chromatin
+  object.userData.vectorRim = true // the disc sprite's dark rim, in the vector export
   return {
     object,
     indices,
