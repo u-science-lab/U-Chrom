@@ -1,6 +1,4 @@
-<p align="center"><img src="docs/source/_static/logo.svg" alt="U-Chrom" width="110"></p>
-
-<h1 align="center">U-Chrom</h1>
+<p align="center"><img alt="U-Chrom — the 3-D genome, cell by cell: a tissue section and, lifted from it, three brain cells with their 3-D genomes" src="docs/source/_static/banner.svg" width="100%"></p>
 
 <p align="center"><b>Universal Chromatin</b> — one toolkit for 3-D genome data from sequencing and imaging.</p>
 
@@ -11,9 +9,6 @@
   <a href="tutorials/">Tutorials</a> ·
   <a href="LICENSE">MIT license</a>
 </p>
-
-![The U-Chrom web browser on the DNA seqFISH+ mouse cerebellum (Takei et al. 2025): one Purkinje cell selected — its chromosomes in 3-D among its neighbours, its place in the UMAP, chromatin-mark tracks along chr1, and the radius-of-gyration distribution](docs/source/_static/browser.webp)
-<p align="center"><sub>The web browser on DNA seqFISH+ data of the mouse cerebellum (Takei et al. 2025, from the atlas): one selected Purkinje cell, shown in every view at once.</sub></p>
 
 ## What is U-Chrom?
 
@@ -85,6 +80,12 @@ cd.write("takei2021.chromdata.zarr")
 ```bash
 uchrom-browser takei2021.chromdata.zarr
 ```
+
+Every view follows the cells you select. Here, DNA seqFISH+ of the mouse cerebellum (Takei et al. 2025, from
+the atlas) with one Purkinje cell selected: its chromosomes in 3-D among its neighbours, its place in the UMAP,
+chromatin marks along chr1 and the radius-of-gyration distribution:
+
+![The U-Chrom web browser on DNA seqFISH+ data of the mouse cerebellum, one Purkinje cell selected in the 3-D, embedding, genome and stats views](docs/source/_static/browser.webp)
 
 Next: single-cell Hi-C → 3-D structures (`uc.tl.reconstruct_sc`, extra `recon`) in the
 [reconstruction tutorial](tutorials/reconstruction.ipynb); cell embeddings from contact maps
