@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { recordable, useCaptureEpoch } from '../vectorcapture'
 import { fetchEmbedding, registerGroup } from '../api'
 import { cmapGradient, COLORMAPS, type ColormapName } from '../colormaps'
 import { cellRgb, rgbCss } from '../colors'
@@ -551,14 +552,16 @@ export function EmbeddingView({ pane, source }: { pane: Pane; source?: ScatterSo
   const outline = st.outline === 'off' ? null : st.outline === 'on' ? (pal.dotRing !== 'transparent' ? pal.dotRing : 'rgba(0, 0, 0, 0.6)') : pal.dotRing !== 'transparent' ? pal.dotRing : null
 
   // draw
+  const epoch = useCaptureEpoch((s) => s.epoch)
   useEffect(() => {
     const cv = canvasRef.current
     if (!cv || !px || !emb || !dots) return
     const dpr = window.devicePixelRatio || 1
     cv.width = Math.round(size.w * dpr)
     cv.height = Math.round(plotH * dpr)
-    const g = cv.getContext('2d')
-    if (!g) return
+    const g0 = cv.getContext('2d')
+    if (!g0) return
+    const g = recordable(cv, g0)
     g.setTransform(dpr, 0, 0, dpr, 0, 0)
     g.clearRect(0, 0, size.w, plotH)
     const im = source?.image
@@ -659,7 +662,7 @@ export function EmbeddingView({ pane, source }: { pane: Pane; source?: ScatterSo
       g.fillText(`${groupInfo.name} · ${groupSet.size} cells`, size.w - 8, 8)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [px, dots, order, emb, size.w, plotH, view.focusCell, hover, pane.scope, groupSet, groupInfo, pal, st.size, st.opacity, st.shape, outline, img, plot, zoom, source?.image?.opacity, spacing])
+  }, [px, dots, order, emb, size.w, plotH, view.focusCell, hover, pane.scope, groupSet, groupInfo, pal, st.size, st.opacity, st.shape, outline, img, plot, zoom, source?.image?.opacity, spacing, epoch])
 
   // ---- lasso ----------------------------------------------------------------
   const drawLasso = () => {

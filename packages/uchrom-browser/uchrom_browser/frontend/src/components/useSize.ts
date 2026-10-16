@@ -1,4 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react'
+import { recordable } from '../vectorcapture'
 
 /** Content size of an element, updated on resize. */
 export function useSize(ref: RefObject<HTMLElement | null>): { w: number; h: number } {
@@ -26,5 +27,6 @@ export function prepareCanvas(cv: HTMLCanvasElement, w: number, h: number): Canv
   if (!g) return null
   g.setTransform(dpr, 0, 0, dpr, 0, 0)
   g.clearRect(0, 0, w, h)
-  return g
+  // during a vector export the frame is also recorded as SVG
+  return recordable(cv, g)
 }

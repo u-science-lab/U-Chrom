@@ -14,7 +14,8 @@ import { useFieldColors, type FieldColors } from '../useFieldColors'
 import { usePaneScope, useScopeCells } from '../useGroups'
 import type { ScopeSpec } from '../groups'
 import { isPointPick, type ColorMode, type Geometry, type LayerStyle, type PointSet, type SegmentInfo } from '../types'
-import { registerRenderHook } from '../capture'
+import { registerRenderHook, registerVectorHook } from '../capture'
+import { sceneToSvg } from '../render/vector3d'
 import { palette } from '../theme'
 import { effectiveStyle, layerShownIn } from '../workspace'
 import { useTheme } from '../useTheme'
@@ -284,6 +285,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     )
     highlight.visible = false
     highlight.renderOrder = 999
+    highlight.userData.vector = { kind: 'sphere' }
     scene.add(highlight)
 
     const hoverBox = new THREE.Box3Helper(new THREE.Box3(), new THREE.Color(palette().accent))
@@ -397,9 +399,19 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       renderer.render(scene, camera)
       t.dirty = true
     })
+    // "Save image" as SVG / PDF: the scene projected with this camera (full geometry, not the thinned copies)
+    registerVectorHook(paneRef.current, {
+      canvas: renderer.domElement,
+      build: (w, h) => {
+        controls.update()
+        setMoving(t, false)
+        return sceneToSvg(scene, camera, w, h)
+      },
+    })
 
     return () => {
       registerRenderHook(paneRef.current, null)
+      registerVectorHook(paneRef.current, null)
       cancelAnimationFrame(raf)
       ro.disconnect()
       renderer.domElement.removeEventListener('pointerdown', onDown)
@@ -537,7 +549,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         parts.push({ role: 'context', geometry: context, built: buildLayerObject(context, ctxStyle, colorOpts), lod: withLod(context, ctxStyle) })
       }
       for (const p of parts) {
-        p.built.object.userData = { layerId: l.id, role: p.role }
+        // merged: the builders keep vector-export data there (render/vector3d.ts)
+        Object.assign(p.built.object.userData, { layerId: l.id, role: p.role })
         p.built.setResolution(w, h)
         if (p.role === 'context') p.built.object.renderOrder = -1
         // a subset lies exactly on its parent: draw it last and let it win the depth ties
@@ -545,7 +558,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         t.group.add(p.built.object)
         if (p.lod) {
           const o = p.lod.built.object
-          o.userData = { layerId: l.id, role: p.role }
+          Object.assign(o.userData, { layerId: l.id, role: p.role })
           p.lod.built.setResolution(w, h)
           if (p.role === 'context') o.renderOrder = -1
           o.visible = t.moving
@@ -609,7 +622,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       if (split.context.length && ctxOpacity > 0)
         parts.push({ role: 'context', built: buildPointMarkers(ps, split.context, Math.max(2, view.pointSize * 0.6), ctxOpacity) })
       for (const p of parts) {
-        p.built.object.userData = { kind: 'points', set: ps.name, role: p.role }
+        Object.assign(p.built.object.userData, { kind: 'points', set: ps.name, role: p.role })
         t.group.add(p.built.object)
       }
       t.points.set(ps.name, { set: ps, key, parts })

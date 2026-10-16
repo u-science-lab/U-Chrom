@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useCaptureEpoch } from '../vectorcapture'
 import { fetchContacts, fetchDistance } from '../api'
 import { fmtBp } from '../filters'
 import { clampLocus, fmtPos, isGenome, niceTicks, panLocus, queryRegion } from '../genome'
@@ -167,6 +168,7 @@ export function MatrixView({ pane }: { pane: Pane }) {
   // a stale map of another chromosome is not drawn on these axes
   const shown = mat && locus && mat.header.chrom === locus.chrom ? mat : null
 
+  const epoch = useCaptureEpoch((s) => s.epoch)
   useEffect(() => {
     const cv = canvasRef.current
     if (!cv || !W || !H) return
@@ -230,7 +232,7 @@ export function MatrixView({ pane }: { pane: Pane }) {
       g.fillText(text.length > 7 ? text.slice(0, 7) : text, AXIS_W - 4, y)
       last = y
     }
-  }, [shown, cscale.pixels, W, H, vp?.xStart, vp?.yStart, vp?.bpPerPx, layout, pal]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [shown, cscale.pixels, W, H, vp?.xStart, vp?.yStart, vp?.bpPerPx, layout, pal, epoch]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // pan (drag) and zoom (wheel) — both axes at one bp per px
   const cur = useRef({ locus, yOff, ext, W, H })
@@ -342,12 +344,13 @@ const AXIS_W = 56
 function MatrixLegend({ cscale }: { cscale: ReturnType<typeof useMatrixScale> }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const pal = useTheme()
+  const epoch = useCaptureEpoch((s) => s.epoch)
   useEffect(() => {
     const cv = ref.current
     if (!cv) return
     const g = prepareCanvas(cv, 180, 36)
     if (!g) return
     drawColorRamp(g, { x: 1, y: 14, w: 176, h: 8 }, (t) => cscale.ramp(t), cscale.lo, cscale.hi, cscale.title)
-  }, [cscale.lo, cscale.hi, cscale.title, cscale.cs, pal]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cscale.lo, cscale.hi, cscale.title, cscale.cs, pal, epoch]) // eslint-disable-line react-hooks/exhaustive-deps
   return <canvas ref={ref} style={{ width: 180, height: 36, display: 'block' }} />
 }

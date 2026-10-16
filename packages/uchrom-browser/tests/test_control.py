@@ -130,3 +130,42 @@ def test_connect_finds_the_last_server(tmp_path, monkeypatch, server):
     assert ubc.connect().url == server
     ubc.clear_state(server)
     assert not (tmp_path / "browser.json").exists()
+
+
+def test_capture_formats_through_a_page(server, tmp_path):
+    import base64
+
+    files = {"png": b"\x89PNG\r\n", "svg": b"<svg xmlns='http://www.w3.org/2000/svg'/>", "pdf": b"%PDF-1.3"}
+
+    def handler(name, args):
+        assert name == "capture_view"
+        fmt = args.get("format") or "png"
+        data = base64.b64encode(files[fmt]).decode()
+        out = {"data_base64": data, "format": fmt, "width": 10, "height": 8, "filename": f"v.{fmt}",
+               "notes": ["tubes as strokes"] if fmt != "png" else []}
+        if fmt == "png":
+            out["png_base64"] = data
+        return out
+
+    page = FakePage(server, handler)
+    page.start()
+    assert page.ready.wait(5)
+    ws = ubc.connect(server, timeout=5)
+    # the format follows the suffix of the path
+    r = ws.capture(path=str(tmp_path / "fig.svg"))
+    assert page.seen[-1]["args"]["format"] == "svg"
+    assert r["format"] == "svg" and r["notes"] == ["tubes as strokes"]
+    assert (tmp_path / "fig.svg").read_bytes() == files["svg"]
+    # an explicit format wins; no path → a temporary file with that suffix
+    r = ws.capture(format="pdf")
+    assert r["path"].endswith(".pdf") and open(r["path"], "rb").read() == files["pdf"]
+    # default: PNG
+    r = ws.capture(path=str(tmp_path / "fig"))
+    assert page.seen[-1]["args"]["format"] == "png" and r["bytes"] == len(files["png"])
+    with pytest.raises(ValueError, match="format must be one of"):
+        ws.capture(format="tiff")
+
+
+def test_capture_tool_declares_formats():
+    tool = next(t for t in load_tools()["tools"] if t["name"] == "capture_view")
+    assert tool["inputSchema"]["properties"]["format"]["enum"] == ["png", "svg", "pdf"]

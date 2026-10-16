@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCaptureEpoch } from '../vectorcapture'
 import { fetchCellValues, fetchRg, fetchScaling } from '../api'
 import { cellRgb } from '../colors'
 import { useFieldColors } from '../useFieldColors'
@@ -255,6 +256,7 @@ export function StatsView({ pane }: { pane: Pane }) {
     return { px, x0, x1, y0, y1, sx, sy }
   }, [scatter, plot.x, plot.y, plot.w, plot.h])
 
+  const epoch = useCaptureEpoch((s) => s.epoch)
   useEffect(() => {
     const cv = canvasRef.current
     if (!cv || !size.w || !size.h || !ds) return
@@ -500,7 +502,7 @@ export function StatsView({ pane }: { pane: Pane }) {
         { ticks: niceTicks(scatterPx.y0, scatterPx.y1, 4), pos: scatterPx.sy, fmt: fmtAxis, label: fieldLabel(fy) },
       )
     }
-  }, [kind, rg, scaling, xs, fx, fy, scatter, scatterPx, size.w, size.h, focus, cells, fieldColors, view.overviewColor, custom, ds, groupRg, groupScaling, baseInfo, compareInfos, pal]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [kind, rg, scaling, xs, fx, fy, scatter, scatterPx, size.w, size.h, focus, cells, fieldColors, view.overviewColor, custom, ds, groupRg, groupScaling, baseInfo, compareInfos, pal, epoch]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const hit = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!scatter || !scatterPx) return -1

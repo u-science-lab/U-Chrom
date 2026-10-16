@@ -26,7 +26,7 @@ cd = ws.dataset()                    # the same ChromData, for analysis
 | `open_view(type, cells=…, rows=[…], stats=…, compare_groups=[…], field_x, field_y, embedding)` | new view; returns `{"pane": id}` |
 | `arrange(layout="grid")`, `show_view(pane)`, `close_view(pane)` | layout |
 | `color_by(field)` | colour cells by a field |
-| `capture(pane, path)` | save a PNG of a view; returns `{"path", "width", "height", "bytes"}` (never print image bytes) |
+| `capture(pane, path, format=None)` | save a view as PNG, SVG or PDF (format from the suffix of `path`, else `format`, else PNG; SVG / PDF are editable vectors); returns `{"path", "format", "width", "height", "bytes", "notes"}` (never print image bytes) |
 
 Group references: the `group` returned by `select_cells`, `field:<column>=<value>`, or `all`.
 Genome rows: `{"kind": "track", "track": "H3K27ac", "cells": ref}`, `{"kind": "distance", "cells": ref}`,

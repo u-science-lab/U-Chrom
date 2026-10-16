@@ -180,7 +180,7 @@ ws.open_view("genome", cells=g, rows=[{"kind": "track", "track": "H3K27ac"},
                                       {"kind": "distance", "cells": g},
                                       {"kind": "distance", "cells": "field:cell_type=Granule"}])
 ws.open_view("stats", stats="rg", compare_groups=[g, "field:cell_type=Granule"])
-ws.capture(path="rg.png")
+ws.capture(path="rg.png")              # or rg.svg / rg.pdf: editable vectors (format= to override)
 ```
 
 `ws.tools()` lists the actions (`describe_workspace`, `get_selection`, `select_cells`,
@@ -218,9 +218,26 @@ The colour bar on the canvas, and the PNG export, follow these settings.
 
 ## Saving a view as an image
 
-The camera button in every pane header saves that pane's content as a PNG.
-The file is `uchrom_<dataset>_<view>_<scope or locus>_<time>.png`, and the
+The camera button in every pane header saves that pane's content as
+**PNG** (pixels, as on screen), **SVG** or **PDF**.  The file is
+`uchrom_<dataset>_<view>_<scope or locus>_<time>.<png|svg|pdf>`, and the
 header and hover tips are left out.
+
+SVG and PDF are editable vector graphics for Illustrator / Inkscape: the
+2-D views (Matrix, Genome rows, Stats, Embedding, Spatial) are written by
+the same drawing code as the screen, so axes, ticks, bars, track bars and
+dots are shapes and all labels stay text.  Recurring styles are grouped
+(e.g. one `<g>` per colour of a scatter plot) so a whole category can be
+selected and restyled at once.  What stays as pixels: contact / distance
+heat maps and section images (embedded PNGs, as heat maps usually are in
+figures).  The 3-D view is projected with its camera: lines and points
+become paths and circles, painted far to near; **tubes are approximated**
+by round-capped strokes as wide as the tube on screen — without lighting,
+and with straight bonds instead of the smoothed curve.  The PDF is the SVG
+converted in the page (96 px = 72 pt); its text uses Helvetica, and
+characters outside Latin-1 (e.g. 📌) are left out of it (`≥`, `…` are
+spelled `>=`, `...`).  What an export approximates is shown in the status
+bar and written in the SVG's `<desc>`.
 
 ## Genome-coordinate views
 

@@ -6,6 +6,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
 import { srgbToLinear, vertexColors, type ColorOptions } from '../colors'
 import type { Geometry, LayerStyle } from '../types'
 import { autoTubeRadius, buildLineIndex, tubeAllowed } from './segments'
+import type { TubeVectorData } from './vector3d'
 
 /**
  * How to map a raycast hit back to a point index of the layer geometry.
@@ -271,8 +272,11 @@ function buildTubes(geom: Geometry, colors: Float32Array, style: LayerStyle, war
   merged.computeBoundingSphere()
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.05 })
   applyOpacity(mat, style.opacity)
+  const mesh = new THREE.Mesh(merged, mat)
+  // the spot polyline, for the vector export (render/vector3d.ts)
+  mesh.userData.vector = { kind: 'tube', positions, offsets, colors, radius } satisfies TubeVectorData
   return {
-    object: new THREE.Mesh(merged, mat),
+    object: mesh,
     pick: { kind: 'tube', pointOfVertex: Uint32Array.from(vertexPoint) },
     warning,
     dispose: () => {
