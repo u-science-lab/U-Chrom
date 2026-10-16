@@ -3,9 +3,9 @@
 U-Chrom needs Python ≥ 3.11.  The packages are not on PyPI yet; install them from the repository:
 
 ```bash
-git clone https://github.com/Nanguage/U-Chrom.git
+git clone https://github.com/u-science-lab/U-Chrom.git
 cd U-Chrom
-pip install -e packages/chromdata -e packages/uchrom            # the data model + the analysis library
+pip install -e "packages/chromdata[remote]" -e packages/uchrom   # the data model (+ reading stores over HTTP) + the analysis library
 pip install -e packages/uchrom-browser                           # + the web browser
 pip install ./packages/uchrom-recon                               # + the native reconstruction engine (needs Rust)
 ```
