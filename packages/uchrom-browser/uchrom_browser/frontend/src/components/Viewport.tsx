@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { buildLayerObject, pointIndexOfHit, type BuiltLayer } from '../render/objects'
 import { splitForView } from '../render/bonds'
+import { explodeGeometry, explodeOffsets } from '../render/explode'
 import { displayParts, subsetGeometry, thinGeometry, type FocusSet } from '../render/partition'
 import { buildPointMarkers, splitPoints, type BuiltPoints } from '../render/points'
 import { raycastChunks } from '../render/raypick'
@@ -13,7 +14,7 @@ import { activeView, useStore } from '../store'
 import { useFieldColors, type FieldColors } from '../useFieldColors'
 import { usePaneScope, useScopeCells } from '../useGroups'
 import type { ScopeSpec } from '../groups'
-import { isPointPick, type ColorMode, type Geometry, type LayerStyle, type PointSet, type SegmentInfo } from '../types'
+import { isPointPick, type ColorMode, type Geometry, type Layer, type LayerStyle, type PointSet, type SegmentInfo } from '../types'
 import { registerRenderHook, registerVectorHook } from '../capture'
 import { sceneToSvg } from '../render/vector3d'
 import { palette } from '../theme'
@@ -33,8 +34,10 @@ interface Part {
 
 interface Entry {
   /** inputs the parts were built from; rebuilt when any changes */
-  key: { geometry: Geometry; style: string; focus: FocusSet; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null; theme: string; trace: string | null }
+  key: { geometry: Geometry; style: string; focus: FocusSet; hidden: string; ctx: number; overview: ColorMode; nCells: number; values: FieldColors | null; maxBond: 'auto' | number | null; theme: string; trace: string | null; explode: number; root: Geometry | null }
   parts: Part[]
+  /** the layer's geometry as drawn: long bonds cut, chromosomes separated (all cells and chromosomes) */
+  placed: Geometry
 }
 
 interface Fly {
@@ -184,6 +187,13 @@ function flyTo(t: Three, box: THREE.Box3) {
 
 const hiddenKey = (h: string[]) => [...h].sort().join('\u0000')
 
+/** The geometry of a layer's root (the dataset layer its subsets were cut from). */
+function rootGeometry(layers: Layer[], l: Layer): Geometry | null {
+  let cur: Layer | undefined = l
+  for (let k = 0; cur && cur.parentId !== null && k < 64; k++) cur = layers.find((x) => x.id === cur!.parentId)
+  return cur?.geometry ?? l.geometry ?? null
+}
+
 /** Geometry of the fully drawn (focused / pinned) parts. */
 function mainGeometries(t: Three): Geometry[] {
   const out: Geometry[] = []
@@ -231,6 +241,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
   const paneHidden = useStore((s) => s.workspace.panes.find((p) => p.id === paneId)?.hiddenLayers)
   // a trace view: only this trace
   const paneTrace = useStore((s) => s.workspace.panes.find((p) => p.id === paneId)?.trace ?? null)
+  // separated chromosomes (0 = the structure as it is)
+  const paneExplode = useStore((s) => s.workspace.panes.find((p) => p.id === paneId)?.explode ?? 0)
   // drawn in full here: the pane's group, its pinned cell, else the global
   // focus (a cell or a group)
   const scope = usePaneScope({ scope: spec })
@@ -483,6 +495,9 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         maxBond: view.maxBond,
         theme: pal.name,
         trace: paneTrace,
+        explode: paneExplode,
+        // separation directions come from the dataset's whole geometry (a subset moves with it)
+        root: paneExplode > 0 ? rootGeometry(layers, l) : null,
       }
       const prev = t.entries.get(l.id)
       if (
@@ -497,7 +512,9 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         prev.key.values === key.values &&
         prev.key.maxBond === key.maxBond &&
         prev.key.theme === key.theme &&
-        prev.key.trace === key.trace
+        prev.key.trace === key.trace &&
+        prev.key.explode === key.explode &&
+        prev.key.root === key.root
       ) {
         for (const p of prev.parts) if (p.built.warning) warnings.push(`${l.name}: ${p.built.warning}`)
         continue
@@ -506,7 +523,8 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       if (!prev || prev.key.geometry !== key.geometry) newGeometry.push(l.geometry!.header.n_points)
       // cut over-long bonds (unassigned spots, duplicate loci) before drawing
       const cut = splitForView(l.geometry!, view.maxBond).geometry
-      const base = paneTrace ? subsetGeometry(cut, (s) => s.trace_id === paneTrace) : cut
+      const placed = key.root ? explodeGeometry(cut, explodeOffsets(key.root), paneExplode) : cut
+      const base = paneTrace ? subsetGeometry(placed, (s) => s.trace_id === paneTrace) : placed
       const { main, context } = displayParts(base, hidden, focus)
       // a subset layer (a region / traces) is a highlight: its own style everywhere, and no
       // faint context of its own (its parent draws that)
@@ -567,7 +585,7 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
         }
         if (p.role === 'main' && p.built.warning) warnings.push(`${l.name}: ${p.built.warning}`)
       }
-      t.entries.set(l.id, { key, parts })
+      t.entries.set(l.id, { key, parts, placed })
     }
     setStatus(warnings.length ? warnings.join(' · ') : null)
     // the render loop's callback for this frame was queued first, so this runs after the frame is drawn
@@ -583,13 +601,14 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
     const pick = useStore.getState().pick
     if (pick && !isPointPick(pick) && !keep.has(pick.layerId)) setPick(null)
     t.dirty = true
-  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed, pal, paneStyles, paneTrace, paneHidden])
+  }, [layers, activeDatasetId, view, cells, fieldColors, setPick, setStatus, focus, ctxOpacity, fixed, pal, paneStyles, paneTrace, paneHidden, paneExplode])
 
   // Point sets (e.g. RNA spots): focused cell's points full, others faint.
   useEffect(() => {
     const t = threeRef.current
     if (!t) return
-    const sets = pointSets ?? {}
+    // point sets have no chromosome to move with: hidden while chromosomes are separated
+    const sets = paneExplode > 0 ? {} : (pointSets ?? {})
     const hiddenSets = new Set(view.hiddenPointSets)
     for (const [name, e] of t.points) {
       if (sets[name] && !hiddenSets.has(name)) continue
@@ -628,7 +647,21 @@ export function Viewport({ paneId = 'P1', resetKey = 0, scope: spec }: { paneId?
       t.points.set(ps.name, { set: ps, key, parts })
     }
     t.dirty = true
-  }, [pointSets, view, focus, ctxOpacity])
+  }, [pointSets, view, focus, ctxOpacity, paneExplode])
+
+  // Separation changed → once the slider rests, fly to what is drawn (it grows / shrinks).
+  const explodeRef = useRef(paneExplode)
+  useEffect(() => {
+    if (explodeRef.current === paneExplode) return
+    explodeRef.current = paneExplode
+    const timer = setTimeout(() => {
+      const t = threeRef.current
+      if (!t) return
+      const box = unionBox(hasFocusRef.current ? mainGeometries(t) : drawnGeometries(t))
+      if (box) flyTo(t, box)
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [paneExplode])
 
   // Explicit reset / dataset switch → refit on everything drawn.
   useEffect(() => {
@@ -878,9 +911,10 @@ function hoverAt(t: Three, e: PointerEvent, tip: HTMLDivElement, focus: string |
     return
   }
   // anything of another cell: outline that cell and say a click focuses it
-  const layerGeom = store.layers.find((l) => l.datasetId === store.activeDatasetId && l.visible && l.geometry)?.geometry
-  const traceGeom = hit.kind === 'trace' ? store.layers.find((l) => l.id === hit.layerId)?.geometry : layerGeom
-  if (traceGeom) setHoverCell(t, cell!, splitForView(traceGeom, view.maxBond).geometry, new Set(view.hiddenChroms))
+  // the geometry as drawn in this view (bonds cut, chromosomes separated)
+  const layerId = hit.kind === 'trace' ? hit.layerId : store.layers.find((l) => l.datasetId === store.activeDatasetId && l.visible && l.geometry)?.id
+  const traceGeom = layerId ? t.entries.get(layerId)?.placed : undefined
+  if (traceGeom) setHoverCell(t, cell!, traceGeom, new Set(view.hiddenChroms))
   const box = traceGeom ? cellBoxes(traceGeom).get(cell!) : undefined
   if (box) {
     t.hoverBox.box.copy(box)

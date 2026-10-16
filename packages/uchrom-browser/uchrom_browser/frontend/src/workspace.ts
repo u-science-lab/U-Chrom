@@ -4,6 +4,7 @@
  */
 
 import { migrateRows, parseRows, type GenomeRow } from './genomeRows'
+import { MAX_EXPLODE } from './render/explode'
 import { parseColorScale, type ColorScaleSetting } from './colormaps'
 import { parseEmbStyle, type EmbStyleSetting } from './embeddingStyle'
 import { FOCUS, parseScopeSpec, type ScopeSpec } from './groups'
@@ -22,6 +23,9 @@ export interface PaneOptions {
   hiddenLayers?: string[]
   /** 3d: only this trace of the pinned cell (a trace view) */
   trace?: string
+  /** 3d: chromosomes separated (render/explode.ts): each copy moved away from its cell's centre by
+   *  this × its centroid's distance from it; absent / 0 = the structure as it is */
+  explode?: number
   /** 3d: this view's style changes per layer name (render mode, colour, …) over the layer's own
    *  style — each 3-D view is styled on its own */
   layerStyles?: Record<string, Partial<LayerStyle>>
@@ -422,6 +426,7 @@ function parseOptions(p: Partial<Pane> & LegacyPane): PaneOptions & { scope?: Sc
   if (typeof p.fieldX === 'string') o.fieldX = p.fieldX
   if (typeof p.fieldY === 'string') o.fieldY = p.fieldY
   if (p.chromScope === 'all' || p.chromScope === 'locus') o.chromScope = p.chromScope
+  if (typeof p.explode === 'number' && p.explode > 0 && p.explode <= MAX_EXPLODE) o.explode = p.explode
   const color = parseColorScale(p.color)
   if (color) o.color = color
   const embStyle = parseEmbStyle(p.embStyle)

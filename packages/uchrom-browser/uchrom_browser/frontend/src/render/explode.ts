@@ -1,0 +1,99 @@
+/**
+ * Separated chromosomes ("exploded view", as in Tan et al. 2018, Dip-C):
+ * every chromosome copy is moved away from its cell's centre along the line
+ * from that centre to its own centroid, by `factor` times that distance.
+ * A rigid translation per copy — the shape of each chromosome is kept, and
+ * so is where it lies in the nucleus.  factor 0 is the original structure.
+ *
+ * The directions come from a dataset's whole (root) geometry, so subset
+ * layers (a region, some traces) move with their parent, and hiding
+ * chromosomes does not move the others.
+ */
+
+import type { Geometry, SegmentInfo } from '../types'
+
+/** Largest separation offered in the view (× each centroid's distance from the cell centre). */
+export const MAX_EXPLODE = 3
+
+/** One chromosome copy: its cell, trace and chromosome. */
+export function copyKey(s: Pick<SegmentInfo, 'cell_id' | 'trace_id' | 'chrom'>): string {
+  return `${s.cell_id ?? ''}\u0000${s.trace_id}\u0000${s.chrom}`
+}
+
+/** centroid of each copy − centroid of its cell (spots weighted equally; non-finite spots skipped). */
+export type ExplodeOffsets = Map<string, [number, number, number]>
+
+const cache = new WeakMap<Geometry, ExplodeOffsets>()
+
+/** The separation direction (unscaled) of every chromosome copy in `geom` (cached per geometry). */
+export function explodeOffsets(geom: Geometry): ExplodeOffsets {
+  const hit = cache.get(geom)
+  if (hit) return hit
+  const { header, positions: P, offsets } = geom
+  // sums per copy and per cell: x, y, z, n
+  const copies = new Map<string, { cell: string; s: [number, number, number, number] }>()
+  const cells = new Map<string, [number, number, number, number]>()
+  header.segments.forEach((seg, i) => {
+    const key = copyKey(seg)
+    const cell = seg.cell_id ?? ''
+    let c = copies.get(key)
+    if (!c) copies.set(key, (c = { cell, s: [0, 0, 0, 0] }))
+    let cs = cells.get(cell)
+    if (!cs) cells.set(cell, (cs = [0, 0, 0, 0]))
+    for (let p = offsets[i]; p < offsets[i + 1]; p++) {
+      const x = P[3 * p]
+      const y = P[3 * p + 1]
+      const z = P[3 * p + 2]
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue
+      c.s[0] += x
+      c.s[1] += y
+      c.s[2] += z
+      c.s[3]++
+      cs[0] += x
+      cs[1] += y
+      cs[2] += z
+      cs[3]++
+    }
+  })
+  const out: ExplodeOffsets = new Map()
+  for (const [key, { cell, s }] of copies) {
+    const cs = cells.get(cell)!
+    if (!s[3] || !cs[3]) continue
+    out.set(key, [s[0] / s[3] - cs[0] / cs[3], s[1] / s[3] - cs[1] / cs[3], s[2] / s[3] - cs[2] / cs[3]])
+  }
+  cache.set(geom, out)
+  return out
+}
+
+/**
+ * `geom` with each segment moved by `factor` × its copy's offset (copies
+ * missing from `offsets` stay put).  factor 0 returns `geom` itself.
+ */
+export function explodeGeometry(geom: Geometry, offsets: ExplodeOffsets, factor: number): Geometry {
+  if (!(factor > 0)) return geom
+  const { header, positions: P, offsets: off } = geom
+  const pos = new Float32Array(P.length)
+  const min: [number, number, number] = [Infinity, Infinity, Infinity]
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
+  header.segments.forEach((seg, i) => {
+    const o = offsets.get(copyKey(seg))
+    const dx = o ? o[0] * factor : 0
+    const dy = o ? o[1] * factor : 0
+    const dz = o ? o[2] * factor : 0
+    for (let p = off[i]; p < off[i + 1]; p++) {
+      const x = (pos[3 * p] = P[3 * p] + dx)
+      const y = (pos[3 * p + 1] = P[3 * p + 1] + dy)
+      const z = (pos[3 * p + 2] = P[3 * p + 2] + dz)
+      if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
+        if (x < min[0]) min[0] = x
+        if (y < min[1]) min[1] = y
+        if (z < min[2]) min[2] = z
+        if (x > max[0]) max[0] = x
+        if (y > max[1]) max[1] = y
+        if (z > max[2]) max[2] = z
+      }
+    }
+  })
+  const bbox = Number.isFinite(min[0]) ? { min, max } : header.bbox
+  return { ...geom, header: { ...header, bbox }, positions: pos }
+}
