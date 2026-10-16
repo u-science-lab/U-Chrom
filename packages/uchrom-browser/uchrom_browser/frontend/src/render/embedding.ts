@@ -8,38 +8,10 @@ export interface Plot {
 }
 
 /**
- * Fit data into a `w × h` pixel box with `pad` px margins; each axis is
- * scaled independently (embeddings have no meaningful aspect).  y grows up.
- */
-export function fitPlot(xs: (number | null)[], ys: (number | null)[], w: number, h: number, pad: number): Plot {
-  let x0 = Infinity
-  let x1 = -Infinity
-  let y0 = Infinity
-  let y1 = -Infinity
-  for (let i = 0; i < xs.length; i++) {
-    const x = xs[i]
-    const y = ys[i]
-    if (x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) continue
-    x0 = Math.min(x0, x)
-    x1 = Math.max(x1, x)
-    y0 = Math.min(y0, y)
-    y1 = Math.max(y1, y)
-  }
-  if (!Number.isFinite(x0)) [x0, x1, y0, y1] = [0, 1, 0, 1]
-  if (x1 === x0) [x0, x1] = [x0 - 0.5, x1 + 0.5]
-  if (y1 === y0) [y0, y1] = [y0 - 0.5, y1 + 0.5]
-  const iw = Math.max(1, w - 2 * pad)
-  const ih = Math.max(1, h - 2 * pad)
-  return {
-    sx: (x) => pad + ((x - x0) / (x1 - x0)) * iw,
-    sy: (y) => pad + (1 - (y - y0) / (y1 - y0)) * ih,
-    bounds: { x0, x1, y0, y1 },
-  }
-}
-
-/**
  * Fit positions into a `w × h` box keeping their aspect (one scale for both
- * axes, centred) — for cell positions in a tissue.  `extent` [x0, x1, y0, y1]
+ * axes, centred) — for cell positions in a tissue, and for embeddings (UMAP,
+ * t-SNE and PCA coordinates are on one scale: stretching an axis to fill a
+ * tall or wide view would distort the clusters).  `extent` [x0, x1, y0, y1]
  * (an image) is fitted when given, else the points' bounds; `yDown`: y grows
  * downwards (image pixels).
  */

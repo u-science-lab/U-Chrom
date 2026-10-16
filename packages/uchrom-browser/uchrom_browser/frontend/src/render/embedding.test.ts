@@ -1,23 +1,29 @@
 import { describe, expect, it } from 'vitest'
 import { NEUTRAL_RGB, cellColor, cellRgb, fieldColor, fieldRange, hexToRgb } from '../colors'
-import { IDENTITY_VIEW, MAX_ZOOM, applyView, fitPlot, fitPlotEqual, gridSpacing, isIdentity, nearestPoint, panBy, project, zoomAt } from './embedding'
+import { IDENTITY_VIEW, MAX_ZOOM, applyView, fitPlotEqual, gridSpacing, isIdentity, nearestPoint, panBy, project, zoomAt } from './embedding'
 
 describe('embedding scatter helpers', () => {
-  it('fits each axis independently into the padded box, y up', () => {
-    const p = fitPlot([0, 10, null], [100, 300, 5], 120, 220, 10)
-    expect(p.sx(0)).toBe(10)
-    expect(p.sx(10)).toBe(110)
-    expect(p.sy(100)).toBe(210) // min y at the bottom
-    expect(p.sy(300)).toBe(10)
-    expect(p.bounds).toEqual({ x0: 0, x1: 10, y0: 100, y1: 300 }) // null row ignored
+  it('embeddings keep their aspect in a tall or a wide view (one scale, centred, y up)', () => {
+    // data 10 × 200 units in a 120 × 220 box with 10 px margins: the y range sets the scale
+    const tall = fitPlotEqual([0, 10, null], [100, 300, 5], 120, 220, 10)
+    expect(tall.sy(100)).toBe(210) // min y at the bottom
+    expect(tall.sy(300)).toBe(10)
+    expect(tall.sx(10) - tall.sx(0)).toBeCloseTo(10, 6) // 1 px per unit on both axes
+    expect((tall.sx(0) + tall.sx(10)) / 2).toBeCloseTo(60, 6) // centred
+    expect(tall.bounds).toEqual({ x0: 0, x1: 10, y0: 100, y1: 300 }) // null row ignored
+    // a square cloud stays square in a wide and in a tall view
+    for (const [w, h] of [[800, 200], [200, 800]]) {
+      const p = fitPlotEqual([0, 1], [0, 1], w, h, 0)
+      expect(Math.abs(p.sx(1) - p.sx(0))).toBeCloseTo(Math.abs(p.sy(1) - p.sy(0)), 6)
+    }
   })
   it('handles degenerate and empty data', () => {
-    const p = fitPlot([2, 2], [3, 3], 100, 100, 0)
+    const p = fitPlotEqual([2, 2], [3, 3], 100, 100, 0)
     expect(p.sx(2)).toBe(50)
-    expect(fitPlot([], [], 10, 10, 0).bounds).toEqual({ x0: 0, x1: 1, y0: 0, y1: 1 })
+    expect(fitPlotEqual([], [], 10, 10, 0).bounds).toEqual({ x0: 0, x1: 1, y0: 0, y1: 1 })
   })
   it('projects and hit-tests within a radius', () => {
-    const px = project([0, 10, null], [0, 10, 1], fitPlot([0, 10], [0, 10], 100, 100, 0))
+    const px = project([0, 10, null], [0, 10, 1], fitPlotEqual([0, 10], [0, 10], 100, 100, 0))
     expect(Array.from(px.slice(0, 4))).toEqual([0, 100, 100, 0])
     expect(Number.isNaN(px[4])).toBe(true)
     expect(nearestPoint(px, 3, 97, 8)).toBe(0)
