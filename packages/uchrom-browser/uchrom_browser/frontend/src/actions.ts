@@ -10,7 +10,7 @@ import { CAPTURE_MIME, capturePane } from './capture'
 import { FIELD_PREFIX, fieldGroupRef, SAME_AS_VIEW, type RowScopeSpec, type ScopeSpec } from './groups'
 import type { GenomeRow } from './genomeRows'
 import { activeView, useStore } from './store'
-import { addPane, removePane, setLayout, type Pane, type PaneType, type StatsKind, type WsLayout } from './workspace'
+import { LAYOUTS, addPane, removePane, setLayout, type Pane, type PaneType, type StatsKind, type WsLayout } from './workspace'
 import toolDefs from '../../ui_tools.json'
 
 export type ActionArgs = Record<string, unknown>
@@ -226,7 +226,7 @@ export const ACTIONS: Record<string, Action> = {
   async arrange(args) {
     const { s } = ctx()
     const layout = str(args.layout, 'layout') as WsLayout
-    if (!['tabs', 'columns', 'rows', 'grid'].includes(layout)) throw new Error(`unknown layout: ${layout}`)
+    if (!LAYOUTS.includes(layout)) throw new Error(`unknown layout: ${layout} (tabs or grid)`)
     s.setWorkspace((ws) => setLayout(ws, layout))
     return { layout }
   },

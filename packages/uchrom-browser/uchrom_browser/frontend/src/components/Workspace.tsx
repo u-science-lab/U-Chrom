@@ -9,12 +9,10 @@ import {
   pinnedGroup,
   handleWorkspaceKey,
   LAYOUTS,
-  moveSplitter,
   gridShape,
   gridSizes,
   gridSpan,
   moveGridSplitter,
-  normalizeSizes,
   PANE_LABEL,
   removePane,
   retypePane,
@@ -169,9 +167,7 @@ function PaneTypeSwitch({ pane }: { pane: Pane }) {
 const usesLocus = (p: Pane) => p.type === 'genome' || p.type === 'matrix' || (p.type === 'stats' && p.chromScope === 'locus')
 const LAYOUT_LABEL: Record<WsLayout, [string, string]> = {
   tabs: ['Tabs', 'one view at a time, switch with tabs'],
-  columns: ['Columns', 'views side by side'],
-  rows: ['Rows', 'views stacked'],
-  grid: ['Grid', 'views in a 2-column grid'],
+  grid: ['Grid', 'all views at once, in a grid'],
 }
 
 /** Small drawing of a layout (menu and button). */
@@ -183,18 +179,6 @@ function LayoutIcon({ layout }: { layout: WsLayout }) {
         <>
           {r(1, 3, 14, 8)}
           <path d="M1.5 3V1.5h5V3" />
-        </>
-      )}
-      {layout === 'columns' && (
-        <>
-          {r(1, 1, 6.2, 10)}
-          {r(8.8, 1, 6.2, 10)}
-        </>
-      )}
-      {layout === 'rows' && (
-        <>
-          {r(1, 1, 14, 4.2)}
-          {r(1, 6.8, 14, 4.2)}
         </>
       )}
       {layout === 'grid' && (
@@ -209,7 +193,7 @@ function LayoutIcon({ layout }: { layout: WsLayout }) {
   )
 }
 
-/** The layout switch: the current layout as a button (like + View), the four layouts in a menu. */
+/** The layout switch: the current layout as a button (like + View), the layouts in a menu. */
 function LayoutMenu({ layout, onPick }: { layout: WsLayout; onPick(l: WsLayout): void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLButtonElement>(null)
@@ -255,8 +239,8 @@ function LayoutMenu({ layout, onPick }: { layout: WsLayout; onPick(l: WsLayout):
 }
 
 /**
- * Centre area: views (3-D, embedding, …) as equal panes in a tabs / columns /
- * rows / grid layout, plus a bar with the controls that belong to no single
+ * Centre area: views (3-D, embedding, …) as equal panes in a tabs or grid
+ * layout, plus a bar with the controls that belong to no single
  * view (cell focus, colour scale, layout, + View).
  *
  * Panes are keyed children of one container, so changing the layout moves
@@ -329,31 +313,10 @@ export function Workspace() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const sizes = normalizeSizes(ws.sizes, ws.panes.length)
-  const split = (ws.layout === 'columns' || ws.layout === 'rows') && !ws.maximized
   const visible = (p: Pane) =>
     ws.maximized ? p.id === ws.maximized : ws.layout === 'tabs' ? p.id === ws.activePane : true
 
-  const onSplitStart = (index: number) => (e: React.PointerEvent) => {
-    e.preventDefault()
-    const box = panesRef.current?.getBoundingClientRect()
-    if (!box) return
-    const cols = ws.layout === 'columns'
-    const move = (ev: PointerEvent) => {
-      const frac = cols ? (ev.clientX - box.left) / box.width : (ev.clientY - box.top) / box.height
-      setWorkspace((w) => moveSplitter(w, index, frac))
-    }
-    const up = () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-      document.body.classList.remove('resizing', 'resizing-rows')
-    }
-    document.body.classList.add(cols ? 'resizing' : 'resizing-rows')
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-  }
-
-  // grid: boundaries between columns / rows are dragged like the splitters
+  // grid: the boundaries between its columns / rows can be dragged
   const grid = ws.layout === 'grid' && !ws.maximized && ws.panes.length > 1
   const shape = gridShape(ws.panes.length)
   const g = gridSizes(ws)
@@ -420,15 +383,12 @@ export function Workspace() {
               pane={p}
               active={p.id === ws.activePane && ws.panes.length > 1}
               hidden={!visible(p)}
-              style={split ? { flex: `${sizes[i]} 1 0` } : grid && gridSpan(i, ws.panes.length) > 1 ? { gridColumn: `span ${gridSpan(i, ws.panes.length)}` } : undefined}
+              style={grid && gridSpan(i, ws.panes.length) > 1 ? { gridColumn: `span ${gridSpan(i, ws.panes.length)}` } : undefined}
               canClose={ws.panes.length > 1}
               maximized={ws.maximized === p.id}
               resetKey={resetKeys[p.id] ?? 0}
               onReset={() => setResetKeys((k) => ({ ...k, [p.id]: (k[p.id] ?? 0) + 1 }))}
             />
-            {split && i < ws.panes.length - 1 && (
-              <div className={`ws-splitter ${ws.layout}`} onPointerDown={onSplitStart(i)} title="Drag to resize" />
-            )}
           </Fragment>
         ))}
         {grid && <GridSplitters cols={g.cols} rows={g.rows} n={ws.panes.length} onStart={onGridStart} />}

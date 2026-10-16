@@ -29,6 +29,25 @@ export interface Box {
   h: number
 }
 
+/**
+ * The plot area of a `w × h` chart with margins `m`: the space inside the margins, but no wider than
+ * `maxRatio` × its height and no taller than its width / `minRatio` — centred, so a chart keeps a
+ * readable shape in a very wide or very tall view instead of stretching with it.
+ */
+export function plotArea(
+  w: number,
+  h: number,
+  m: { left: number; top: number; right: number; bottom: number },
+  minRatio = 1,
+  maxRatio = 2,
+): Box {
+  const aw = Math.max(10, w - m.left - m.right)
+  const ah = Math.max(10, h - m.top - m.bottom)
+  const pw = Math.min(aw, ah * maxRatio)
+  const ph = Math.min(ah, pw / minRatio)
+  return { x: m.left + (aw - pw) / 2, y: m.top + (ah - ph) / 2, w: pw, h: ph }
+}
+
 /** Axes with ticks, tick labels, grid lines and axis titles around `box`. */
 export function drawAxes(
   g: CanvasRenderingContext2D,
