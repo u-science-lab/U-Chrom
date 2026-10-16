@@ -1,0 +1,609 @@
+{
+ "description": "Atlas Hi-C embedding agreements (validate.py knn_agreement) recomputed with the fixed scHiCluster (U-Chrom origin/main b6d8873, PR #130, = schicluster 1.3.2); old = the stores' hic_* (atlas.json 2026-10-05, aafe5e6). Machine: tag-308, 24 cores (taskset), CPU only.",
+ "provenance": {
+  "small": {
+   "revision": "b6d8873",
+   "date": "2026-10-15T08:37:26+00:00",
+   "host": "tag-308",
+   "cpu": "Intel(R) Xeon(R) Platinum 8280 CPU @ 2.60GHz",
+   "cpus": 56,
+   "slurm_job": null,
+   "load_avg_1min": 13.6689453125,
+   "versions": {
+    "python": "3.12.2",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "pandas": "3.0.6",
+    "cooler": "0.10.4",
+    "zarr": "3.4.1",
+    "torch": "2.14.1+cu130",
+    "uchrom": "0.3.0.dev0",
+    "chromdata": "0.1.0"
+   },
+   "script": "atlas_hic_embeddings.py (scratch; U-Chrom apps/atlas recipes + validate.py)",
+   "datasets": [
+    "unic_human",
+    "unic_mouse",
+    "hires_brain",
+    "gageseq_human_bm_cd34",
+    "gageseq_mouse_cortex",
+    "droplet_hic_mouse_cortex",
+    "schicar_mouse_cortex"
+   ],
+   "params": {
+    "k": 15,
+    "labels": [
+     "cell_type",
+     "sample"
+    ],
+    "sets": {
+     "unic_human": [
+      "unic2025/unic_human.chromdata.zarr",
+      "unic2025/unic_human_cells_1Mb.scool"
+     ],
+     "unic_mouse": [
+      "unic2025/unic_mouse.chromdata.zarr",
+      "unic2025/unic_mouse_cells_1Mb.scool"
+     ],
+     "hires_brain": [
+      "hires2023/hires_brain.chromdata.zarr",
+      "hires2023/hires_brain_cells_1Mb.scool"
+     ],
+     "gageseq_human_bm_cd34": [
+      "gageseq2024/gageseq_human_bm_cd34.chromdata.zarr",
+      "gageseq2024/gageseq_human_bm_cd34_cells_1Mb.scool"
+     ],
+     "gageseq_mouse_cortex": [
+      "gageseq2024/gageseq_mouse_cortex.chromdata.zarr",
+      "gageseq2024/gageseq_mouse_cortex_cells_1Mb.scool"
+     ],
+     "droplet_hic_mouse_cortex": [
+      "droplet_hic2024/droplet_hic_mouse_cortex.chromdata.zarr",
+      "droplet_hic2024/droplet_hic_mouse_cortex_cells_1Mb.scool"
+     ],
+     "schicar_mouse_cortex": [
+      "schicar_mop/schicar_mop.chromdata.zarr",
+      "schicar_mop/contacts_cells_1Mb.scool"
+     ]
+    }
+   }
+  },
+  "large": {
+   "revision": "b6d8873",
+   "date": "2026-10-15T11:19:15+00:00",
+   "host": "tag-308",
+   "cpu": "Intel(R) Xeon(R) Platinum 8280 CPU @ 2.60GHz",
+   "cpus": 56,
+   "slurm_job": null,
+   "load_avg_1min": 13.611328125,
+   "versions": {
+    "python": "3.12.2",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "pandas": "3.0.6",
+    "cooler": "0.10.4",
+    "zarr": "3.4.1",
+    "torch": "2.14.1+cu130",
+    "uchrom": "0.3.0.dev0",
+    "chromdata": "0.1.0"
+   },
+   "script": "atlas_hic_embeddings.py (scratch; U-Chrom apps/atlas recipes + validate.py)",
+   "datasets": [
+    "paired_hic_mouse_cortex",
+    "hires_embryo",
+    "dschic_aging_cortex"
+   ],
+   "params": {
+    "k": 15,
+    "labels": [
+     "cell_type",
+     "sample"
+    ],
+    "sets": {
+     "paired_hic_mouse_cortex": [
+      "droplet_hic2024/paired_hic_mouse_cortex.chromdata.zarr",
+      "droplet_hic2024/paired_hic_mouse_cortex_cells_1Mb.scool"
+     ],
+     "hires_embryo": [
+      "hires2023/hires_embryo.chromdata.zarr",
+      "hires2023/hires_embryo_cells_1Mb.scool"
+     ],
+     "dschic_aging_cortex": [
+      "dschic2025/dschic_aging_cortex.chromdata.zarr",
+      "dschic2025/dschic_aging_cortex_cells_1Mb.scool"
+     ]
+    }
+   }
+  }
+ },
+ "results": {
+  "hires_brain": {
+   "label": "cell_type",
+   "k": 15,
+   "n": 399,
+   "n_cells": 399,
+   "chroms": [
+    "chr1",
+    "chr2",
+    "chr3",
+    "chr4",
+    "chr5",
+    "chr6",
+    "chr7",
+    "chr8",
+    "chr9",
+    "chr10",
+    "chr11",
+    "chr12",
+    "chr13",
+    "chr14",
+    "chr15",
+    "chr16",
+    "chr17",
+    "chr18",
+    "chr19",
+    "chrX"
+   ],
+   "n_features": 1560,
+   "n_cells_without_contacts": 0,
+   "embed_cells": {
+    "methods": [
+     "pca",
+     "umap"
+    ],
+    "n_pcs": 30
+   },
+   "agreement_old": {
+    "hic_pca": 0.5208,
+    "hic_umap": 0.4909
+   },
+   "agreement_new": {
+    "hic_pca": 0.5547,
+    "hic_umap": 0.5733
+   },
+   "seconds": {
+    "features": 58.9,
+    "embedding": 22.9
+   }
+  },
+  "hires_embryo": {
+   "label": "cell_type",
+   "k": 15,
+   "n": 7469,
+   "n_cells": 7469,
+   "chroms": [
+    "chr1",
+    "chr2",
+    "chr3",
+    "chr4",
+    "chr5",
+    "chr6",
+    "chr7",
+    "chr8",
+    "chr9",
+    "chr10",
+    "chr11",
+    "chr12",
+    "chr13",
+    "chr14",
+    "chr15",
+    "chr16",
+    "chr17",
+    "chr18",
+    "chr19",
+    "chrX"
+   ],
+   "n_features": 29115,
+   "n_cells_without_contacts": 0,
+   "embed_cells": {
+    "methods": [
+     "pca",
+     "umap"
+    ],
+    "n_pcs": 30
+   },
+   "agreement_old": {
+    "hic_pca": 0.2574,
+    "hic_umap": 0.227
+   },
+   "agreement_new": {
+    "hic_pca": 0.3147,
+    "hic_umap": 0.2674
+   },
+   "seconds": {
+    "features": 974.2,
+    "embedding": 18.8
+   }
+  },
+  "dschic_aging_cortex": {
+   "label": "cell_type",
+   "k": 15,
+   "n": 32777,
+   "n_cells": 32777,
+   "chroms": [
+    "chr1",
+    "chr2",
+    "chr3",
+    "chr4",
+    "chr5",
+    "chr6",
+    "chr7",
+    "chr8",
+    "chr9",
+    "chr10",
+    "chr11",
+    "chr12",
+    "chr13",
+    "chr14",
+    "chr15",
+    "chr16",
+    "chr17",
+    "chr18",
+    "chr19",
+    "chrX"
+   ],
+   "n_features": 72839,
+   "n_cells_without_contacts": 0,
+   "embed_cells": {
+    "methods": [
+     "pca",
+     "umap"
+    ],
+    "n_pcs": 30
+   },
+   "agreement_old": {
+    "hic_pca": 0.794,
+    "hic_umap": 0.7503
+   },
+   "agreement_new": {
+    "hic_pca": 0.8719,
+    "hic_umap": 0.8593
+   },
+   "seconds": {
+    "features": 5374.8,
+    "embedding": 72.1
+   }
+  },
+  "gageseq_mouse_cortex": {
+   "label": "cell_type",
+   "k": 15,
+   "n": 3296,
+   "n_cells": 3296,
+   "chroms": [
+    "chr1",
+    "chr2",
+    "chr3",
+    "chr4",
+    "chr5",
+    "chr6",
+    "chr7",
+    "chr8",
+    "chr9",
+    "chr10",
+    "chr11",
+    "chr12",
+    "chr13",
+    "chr14",
+    "chr15",
+    "chr16",
+    "chr17",
+    "chr18",
+    "chr19",
+    "chrX"
+   ],
+   "n_features": 13160,
+   "n_cells_without_contacts": 0,
+   "embed_cells": {
+    "methods": [
+     "pca",
+     "umap"
+    ],
+    "n_pcs": 30
+   },
+   "agreement_old": {
+    "hic_pca": 0.2907,
+    "hic_umap": 0.2932
+   },
+   "agreement_new": {
+    "hic_pca": 0.3269,
+    "hic_umap": 0.338
+   },
+   "seconds": {
+    "features": 332.1,
+    "embedding": 16.1
+   }
+  },
+  "gageseq_human_bm_cd34": {
+   "label": "cell_type",
+   "k": 15,
+   "n": 1445,
+   "n_cells": 1445,
+   "chroms": [
+    "chr1",
+    "chr2",
+    "chr3",
+    "chr4",
+    "chr5",
+    "chr6",
+    "chr7",
+    "chr8",
+    "chr9",
+    "chr10",
+    "chr11",
+    "chr12",
+    "chr13",
+    "chr14",
+    "chr15",
+    "chr16",
+    "chr17",
+    "chr18",
+    "chr19",
+    "chr20",
+    "chr21",
+    "chr22",
+    "chrX"
+   ],
+   "n_features": 6624,
+   "n_cells_without_contacts": 0,
+   "embed_cells": {
+    "methods": [
+     "pca",
+     "umap"
+    ],
+    "n_pcs": 30
+   },
+   "agreement_old": {
+    "hic_pca": 0.279,
+    "hic_umap": 0.2835
+   },
+   "agreement_new": {
+    "hic_pca": 0.2916,
+    "hic_umap": 0.2988
+   },
+   "seconds": {
+    "features": 195.0,
+    "embedding": 4.7
+   }
+  },
+  "droplet_hic_mouse_cortex": {
+   "label": "cell_type",
+   "k": 15,
+   "n": 6235,
+   "n_cells": 6235,
+   "chroms": [
+    "chr1",
+    "chr2",
+    "chr3",
+    "chr4",
+    "chr5",
+    "chr6",
+    "chr7",
+    "chr8",
+    "chr9",
+    "chr10",
+    "chr11",
+    "chr12",
+    "chr13",
+    "chr14",
+    "chr15",
+    "chr16",
+    "chr17",
+    "chr18",
+    "chr19",
+    "chrX"
+   ],
+   "n_features": 24441,
+   "n_cells_without_contacts": 0,
+   "embed_cells": {
+    "methods": [
+     "pca",
+     "umap"
+    ],
+    "n_pcs": 30
+   },
+   "agreement_old": {
+    "hic_pca": 0.2189,
+    "hic_umap": 0.2087
+   },
+   "agreement_new": {
+    "hic_pca": 0.2579,
+    "hic_umap": 0.2425
+   },
+   "seconds": {
+    "features": 551.7,
+    "embedding": 30.1
+   }
+  },
+  "paired_hic_mouse_cortex": {
+   "label": "cell_type",
+   "k": 15,
+   "n": 24284,
+   "n_cells": 24284,
+   "chroms": [
+    "chr1",
+    "chr2",
+    "chr3",
+    "chr4",
+    "chr5",
+    "chr6",
+    "chr7",
+    "chr8",
+    "chr9",
+    "chr10",
+    "chr11",
+    "chr12",
+    "chr13",
+    "chr14",
+    "chr15",
+    "chr16",
+    "chr17",
+    "chr18",
+    "chr19",
+    "chrX"
+   ],
+   "n_features": 67980,
+   "n_cells_without_contacts": 0,
+   "embed_cells": {
+    "methods": [
+     "pca",
+     "umap"
+    ],
+    "n_pcs": 30
+   },
+   "agreement_old": {
+    "hic_pca": 0.1638,
+    "hic_umap": 0.1391
+   },
+   "agreement_new": {
+    "hic_pca": 0.1817,
+    "hic_umap": 0.1465
+   },
+   "seconds": {
+    "features": 3046.6,
+    "embedding": 78.9
+   }
+  },
+  "schicar_mouse_cortex": {
+   "label": "cell_type",
+   "k": 15,
+   "n": 5313,
+   "n_cells": 5313,
+   "chroms": [
+    "chr1",
+    "chr2",
+    "chr3",
+    "chr4",
+    "chr5",
+    "chr6",
+    "chr7",
+    "chr8",
+    "chr9",
+    "chr10",
+    "chr11",
+    "chr12",
+    "chr13",
+    "chr14",
+    "chr15",
+    "chr16",
+    "chr17",
+    "chr18",
+    "chr19",
+    "chrX"
+   ],
+   "n_features": 20926,
+   "n_cells_without_contacts": 0,
+   "embed_cells": {
+    "n_pcs": 20
+   },
+   "agreement_old": {
+    "hic_pca": 0.2485,
+    "hic_tsne": 0.258,
+    "hic_umap": 0.2498
+   },
+   "agreement_new": {
+    "hic_pca": 0.2953,
+    "hic_tsne": 0.307,
+    "hic_umap": 0.2919
+   },
+   "seconds": {
+    "features": 441.9,
+    "embedding": 18.3
+   }
+  },
+  "unic_human": {
+   "label": "sample",
+   "k": 3,
+   "n": 23,
+   "n_cells": 23,
+   "chroms": [
+    "chr1",
+    "chr2",
+    "chr3",
+    "chr4",
+    "chr5",
+    "chr6",
+    "chr7",
+    "chr8",
+    "chr9",
+    "chr10",
+    "chr11",
+    "chr12",
+    "chr13",
+    "chr14",
+    "chr15",
+    "chr16",
+    "chr17",
+    "chr18",
+    "chr19",
+    "chr20",
+    "chr21",
+    "chr22",
+    "chrX"
+   ],
+   "n_features": 69,
+   "n_cells_without_contacts": 0,
+   "embed_cells": {
+    "methods": [
+     "pca"
+    ],
+    "n_pcs": 10
+   },
+   "agreement_old": {
+    "hic_pca": 0.6957
+   },
+   "agreement_new": {
+    "hic_pca": 0.9565
+   },
+   "seconds": {
+    "features": 20.1,
+    "embedding": 0.0
+   }
+  },
+  "unic_mouse": {
+   "label": "sample",
+   "k": 3,
+   "n": 20,
+   "n_cells": 20,
+   "chroms": [
+    "chr1",
+    "chr2",
+    "chr3",
+    "chr4",
+    "chr5",
+    "chr6",
+    "chr7",
+    "chr8",
+    "chr9",
+    "chr10",
+    "chr11",
+    "chr12",
+    "chr13",
+    "chr14",
+    "chr15",
+    "chr16",
+    "chr17",
+    "chr18",
+    "chr19",
+    "chrX"
+   ],
+   "n_features": 60,
+   "n_cells_without_contacts": 0,
+   "embed_cells": {
+    "methods": [
+     "pca"
+    ],
+    "n_pcs": 10
+   },
+   "agreement_old": {
+    "hic_pca": 0.65
+   },
+   "agreement_new": {
+    "hic_pca": 0.8667
+   },
+   "seconds": {
+    "features": 13.2,
+    "embedding": 0.0
+   }
+  }
+ }
+}
