@@ -28,7 +28,7 @@ import { useFieldColors } from '../useFieldColors'
 import { loadFieldValues } from '../useOmicsLoader'
 import { useTheme } from '../useTheme'
 import { useGroupInfo, usePaneScope, useScopeCells } from '../useGroups'
-import { IDENTITY_VIEW, applyView, fitPlot, fitPlotEqual, gridSpacing, isIdentity, nearestPoint, panBy, project, zoomAt, type View2D } from '../render/embedding'
+import { IDENTITY_VIEW, applyView, fitPlotEqual, gridSpacing, isIdentity, nearestPoint, panBy, project, zoomAt, type View2D } from '../render/embedding'
 import { activeView, defaultCategoryField, fieldKey, useStore } from '../store'
 import type { CellField, CellValue, Embedding, EmbeddingInfo } from '../types'
 import { defaultEmbeddingKey, pinnedCell, updatePane, type Pane } from '../workspace'
@@ -480,7 +480,8 @@ export function EmbeddingView({ pane, source }: { pane: Pane; source?: ScatterSo
   const extentKey = source?.extent?.join(',') ?? ''
   const plot = useMemo(() => {
     if (!emb) return null
-    return source ? fitPlotEqual(emb.x, emb.y, size.w, plotH, PAD, { yDown, extent: source.extent }) : fitPlot(emb.x, emb.y, size.w, plotH, PAD)
+    // one scale for both axes (a tissue, an embedding): the pane's shape never stretches the plot
+    return fitPlotEqual(emb.x, emb.y, size.w, plotH, PAD, source ? { yDown, extent: source.extent } : {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emb, size.w, plotH, !!source, yDown, extentKey])
   const basePx = useMemo(() => (emb && plot ? project(emb.x, emb.y, plot) : null), [emb, plot])
