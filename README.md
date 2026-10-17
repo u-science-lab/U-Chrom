@@ -85,7 +85,7 @@ repository; where each dataset comes from: [`apps/atlas/recipes/README.md`](apps
 | `packages/uchrom-recon/` | `uchrom-recon` (`uchrom_recon`) | the native reconstruction engine: NucDynamics, EMber, IGM (Rust; LGPL-3.0) |
 | `packages/uchrom-discovery/` | `uchrom-discovery` (`uchrom_discovery`) | LLM-driven auto-discovery on top of `uchrom` |
 | `apps/` | — | the atlas (page, publishing, `recipes/` that build every dataset) and the hosted web browser |
-| `benchmarks/`, `tutorials/`, `docs/` | — | figure benchmarks, tutorials, documentation |
+| `tutorials/`, `docs/` | — | tutorials, documentation |
 
 Each package has its own tests (`cd packages/<package> && pytest tests`); see
 `docs/source/reference/development.md`.

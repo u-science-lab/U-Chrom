@@ -4,7 +4,7 @@
 //! 113:E1663 and Hua et al. 2018 Nat Protoc 13:915).
 //!
 //! A clean re-implementation from the algorithm specification in
-//! `benchmarks/bulk/pgs_spec.md` (no code of the GPL-licensed IGM / PGS /
+//! an unpublished design note (no code of the GPL-licensed IGM / PGS /
 //! alabtools / lammpgen was copied or translated).
 //!
 //! * `params`: parameters (IGM schema + demo annealing protocol);

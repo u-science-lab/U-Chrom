@@ -1,5 +1,5 @@
 //! Protocol `robust`: the 2017 NucDynamics protocol with a noise-aware
-//! observation model (new single-cell method, `benchmarks/screcon/PREREG.md`
+//! observation model (new single-cell method, an unpublished design note
 //! §7, milestone M2: optimisation / annealing, no sampling yet).
 //!
 //! Observation model.  Every observed contact is either *true* (probability

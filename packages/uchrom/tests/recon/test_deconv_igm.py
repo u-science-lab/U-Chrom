@@ -1,7 +1,7 @@
 """uchrom.recon.bulk.deconv (method "igm") on the native engine.
 
 Synthetic data only (correctness of the pipeline); real-data validation is
-in benchmarks/bulk/.  Skipped when the native engine with the igm protocol
+in an unpublished benchmark.  Skipped when the native engine with the igm protocol
 is not installed.
 """
 

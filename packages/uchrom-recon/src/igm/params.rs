@@ -1,7 +1,7 @@
 //! Parameters of the IGM protocol.  Defaults: the IGM configuration schema
 //! (`core/defaults/config_schema.json` at alberlab/igm `edbb331`) with the
 //! annealing protocol of the IGM demo (`demo/config_file.json`), as listed in
-//! `benchmarks/bulk/pgs_spec.md` §2.2, §3.2, §4.3, §5, §6.2.
+//! an unpublished design note §2.2, §3.2, §4.3, §5, §6.2.
 
 use serde::{Deserialize, Serialize};
 

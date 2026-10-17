@@ -139,14 +139,14 @@ _BIL_MERFISH_MOP = (
     "https://download.brainimagelibrary.org/cf/1c/cf1c1a431ef8d021/processed_data"
 )
 
-# ---- matched-modality comparison (benchmarks/screcon/matched.py) ----
+# ---- matched-modality comparison (an unpublished benchmark) ----
 # Nagano et al. 2017 (Nature 547:61) haploid mESC single-cell Hi-C: the authors' per-cell fend-pair
 # tables (schic2 S3 bucket, linked from github.com/tanaylab/schic2); fend coordinates (mm9) only ship
 # inside the 5 GB misha database archive, so GATC.fends is streamed out of it (nothing else is kept).
 _SCHIC2 = "https://schic2.s3.eu-west-1.amazonaws.com"
 _GSE94489 = "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE94nnn/GSE94489/suppl"
 # Tan et al. 2021 (Cell 184:741) Dip-C, adult cortex (P56 / P309 / P347, >= 100 k contacts): 510 cells
-# listed in tan2021_adult_cortex_cells.tsv next to this module (a copy of benchmarks/screcon/data/...);
+# listed in tan2021_adult_cortex_cells.tsv next to this module (a copy of an unpublished benchmark...);
 # per-GSM files of GSE146397.
 _TAN_CELLS = Path(__file__).resolve().parent / "tan2021_adult_cortex_cells.tsv"
 _TAN_SUFFIXES = ("contacts.pairs", "impute.pairs", "20k.1.clean.3dg", "20k.2.clean.3dg", "20k.3.clean.3dg",
@@ -219,7 +219,7 @@ DATASETS = {
     },
     # Takei 2021 mESC DNA seqFISH+ at 1 Mb (2,460 loci genome-wide), replicate 1;
     # both homologs per (cell, chromosome) trace.  Single-cell Hi-C simulation truth
-    # (benchmarks/screcon).
+    # (an unpublished benchmark).
     "takei2021_1mb": {
         "filename": "4DNFIFLJGGNR.csv",
         "url": (
@@ -233,7 +233,7 @@ DATASETS = {
         "description": "Takei 2021 mESC FOF-CT 1 Mb genome-wide tracing (4DN 4DNFIFLJGGNR)",
     },
     # Takei 2021 mESC DNA seqFISH+ (1,200 loci at 25 kb in 20 regions), replicate 2: with "takei" (replicate 1)
-    # the input of ArcFISH's loop / domain tutorial (benchmarks/arcfish_parity).
+    # the input of ArcFISH's loop / domain tutorial (uchrom-reproducibility/benchmarks/toolkit_parity/arcfish_parity).
     "takei_rep2": {
         "filename": "4DNFIQXONUUH.csv",
         "url": (
@@ -307,7 +307,7 @@ DATASETS = {
     },
     # Takei et al. 2025 (Nature) cerebellum DNA seqFISH+, rep 1, all FOVs
     # (Zenodo 7693825, CC-BY-4.0).  Consumed by build_takei2025_cerebellum.py
-    # and uchrom-reproducibility/benchmarks/fig2/.  The locus map + clustering CSVs come from the
+    # and uchrom-reproducibility/benchmarks/store.  The locus map + clustering CSVs come from the
     # CaiGroup GitHub repo (same URLs as build_takei2025_fov0.py).
     "takei2025_cerebellum": {
         "files": [
@@ -438,7 +438,7 @@ DATASETS = {
         "description": "Su 2020 IMR90 chr21 chromatin tracing + binned Hi-C (Zenodo 3928890)",
     },
     # Su et al. 2020 IMR90 chromosome 2 p-arm tracing, replicate (Zenodo 3928890): the input of ArcFISH's
-    # compartment tutorial (benchmarks/arcfish_parity).
+    # compartment tutorial (uchrom-reproducibility/benchmarks/toolkit_parity/arcfish_parity).
     "su2020_chr2_parm": {
         "files": [
             ("su2020_imr90/chromosome2_p-arm_replicate.tsv",

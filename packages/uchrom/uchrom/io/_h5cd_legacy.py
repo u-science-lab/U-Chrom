@@ -3,7 +3,7 @@
 ``.h5cd`` is no longer a ChromData format: ``ChromData.read`` / ``write`` refuse it.  This
 module keeps the reader so old files can be converted once
 (:func:`uchrom.io.upgrade_h5cd`, ``python -m uchrom.io.upgrade old.h5cd``) and the writer
-for the format benchmarks that measure it as a baseline (uchrom-reproducibility ``benchmarks/fig2``).  It is
+for the format benchmarks that measure it as a baseline (uchrom-reproducibility ``benchmarks/store``).  It is
 private: nothing else in ``uchrom`` uses it.
 
 HDF5 layout (format 2.0)::

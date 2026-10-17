@@ -27,7 +27,7 @@ From the structure table, downstream modules perform:
 ## Package Structure
 
 A monorepo: every package in `packages/` (each with its own pyproject, README and `tests/`),
-deployments in `apps/`; the root holds the repository (docs, benchmarks, tutorials, skills).  Data live
+deployments in `apps/`; the root holds the repository (docs, tutorials, skills).  Data live
 outside it (see *Data*).
 
 ```
@@ -48,7 +48,7 @@ packages/
 │                      contact preprocessing, hierarchical annealing, CPU (f64, rayon) and GPU
 │                      (wgpu/WGSL, f32, feature `gpu`) backends, protocols nuc_dynamics_2017
 │                      (default) / release_1.3 / robust (= EMber, alias "ember": noise-aware
-│                      method, src/robust.rs; PREREG in benchmarks/screcon) / igm.  `cargo test`
+│                      method, src/robust.rs; its pre-registered test is kept with the unpublished analyses) / igm.  `cargo test`
 │                      in packages/uchrom-recon; `pip install ./packages/uchrom-recon` (= extra
 │                      `u-chrom[recon]`).  LGPL-3.0 (re-implementation of tjs23/nuc_dynamics).
 ├── uchrom-maps/       `uchrom-maps` (import uchrom_maps): native kernels of the Hi-C map callers, Rust +
@@ -75,7 +75,7 @@ uchrom/                (packages/uchrom/uchrom)
 ├── recon/           3D reconstruction
 │   ├── sc/          Single-cell reconstruction
 │   │   ├── ember.py EMber: reconstruct_ember (noise-aware; native engine protocol
-│   │   │            "robust", alias "ember"; PREREG / TEST_RESULTS in benchmarks/screcon)
+│   │   │            "robust", alias "ember"; pre-registered, its test outside the repository)
 │   │   ├── nucdyn/  NucDynamics: reconstruct_nucdyn / CLI on the native engine
 │   │                (packages/uchrom-recon; required)
 │   ├── bulk/        Bulk reconstruction
@@ -124,14 +124,12 @@ uchrom/                (packages/uchrom/uchrom)
   feature computation belongs in `uchrom.fea` / `uchrom.strc`, not in
   discovery.
 - **The paper lives elsewhere**: the manuscripts (text and rendered figures) are in `u-science-lab/u-chrom-paper`;
-  the benchmarks that make the papers' numbers, their results and the figure scripts are in
-  `u-science-lab/uchrom-reproducibility` (both private; check them out next to this repository as
-  `../u-chrom-paper` and `../uchrom-reproducibility`; split out on 2026-10-17).  Benchmarks that validate the
-  library stay here (`benchmarks/`: `fig3` (the NucDynamics engine), `screcon`, `arcfish_parity`,
-  `schicluster_parity`, `hic_structures`, `sc_structures`, the format checks `cd2*_*.py`; `apps/atlas/benchmarks`);
-  those that also make a figure's numbers write `manuscripts/<ms>/figures/<fig>/results/*.json` into the
-  reproducibility checkout (`benchmarks/_paper.py`, `$UCHROM_REPRO`).  Library changes a figure needs are made here
-  first.  Never re-create `paper/` in this repository; a symlink `paper -> ../u-chrom-paper` (ignored) may show the
+  the benchmarks, their results and the figure scripts are in `u-science-lab/uchrom-reproducibility` (both private;
+  check them out next to this repository as `../u-chrom-paper` and `../uchrom-reproducibility`).  This repository
+  holds no benchmarks (2026-10-17): the paper's are there, by topic (`benchmarks/<topic>/`, results in
+  `benchmarks/<topic>/results/`), the checks of the toolkit against the authors' code included
+  (`benchmarks/toolkit_parity/`).  Library changes a figure needs are made here first.
+  Never re-create `paper/` in this repository; a symlink `paper -> ../u-chrom-paper` (ignored) may show the
   paper checkout next to the code.
 - **Docs and tutorials**: `docs/source` has chapters by data type (tracing, seqfish, schic, bulk), each a
   group of pages by analysis step (e.g. tracing/{reading,traces,imputation,structures}) holding the step's
@@ -146,7 +144,7 @@ uchrom/                (packages/uchrom/uchrom)
 - **Tests live in each package** (`packages/<pkg>/tests`, `apps/atlas/tests`); every suite is a
   `tests` package, so run each from its folder: `cd packages/uchrom && pytest tests` (likewise
   chromdata, uchrom-browser, uchrom-discovery; `cd apps/atlas && pytest tests`; `cargo test` in
-  uchrom-recon; benchmark helpers: `pytest benchmarks/<name>/tests`).  A test goes to the package whose code it tests: chromdata's and uchrom-browser's
+  uchrom-recon).  A test goes to the package whose code it tests: chromdata's and uchrom-browser's
   suites run without uchrom installed; tests of the legacy `.h5cd` container / the upgrade are
   uchrom's (`uchrom.io`); integration tests (uchrom + the browser) are uchrom's and skip without
   uchrom-browser.  Shared fixtures (an object with every attribute, a store with linked / embedded
@@ -196,7 +194,7 @@ ChromData (format 2.0)
 - **FOF-CT compatible**: `ChromData.from_fofct(path)` reads the 4DN FISH Omics Format core table. Column mapping: Spot_ID→spot_id, Trace_ID→trace_id, X/Y/Z→coords, Chrom→chrom, Chrom_Start/End→start/end.
 - **Typed results with provenance**: `cd.results` is a `ResultsStore` (dict-like; `cd.results[key]` → value, `cd.results.record(key)` → `ResultRecord(kind, value, params, function, uchrom_version, inputs, created_utc)`).  Unwritable values raise `TypeError` at assignment.  Analysis functions store via `cd.results.set(key, value, kind=, function=, params=, inputs=)`.
 - **Calling convention** (`uchrom/convention.py`): `fn(cd, *, chrom=None, trace_ids=None, cells=None, params=<*Params>, device="auto", key_added="<what>.<method>", copy=False)`.  `chrom=None` runs every chromosome and merges into one table under one key; `copy=False` returns the table, `copy=True` a new ChromData.  Deprecated 1.x forms (positional `chrom`, `store=`, `result_key=`) must keep working with a `DeprecationWarning` and the 1.x key.  `uchrom.tl` / `uchrom.pp` are flat aliases; implementations stay in the domain modules.
-- **Persistence — `.chromdata.zarr` (format 2.3 = the 2.2 layout + optional `tables/cell_shapes/`)**: `cd.write(path)` / `ChromData.read(path)` pick the container from the path.  `*.chromdata.zarr` = Zarr v3 group with Parquet tables (`chromdata/zarrcd.py`; layout in `packages/chromdata/spec.md`); every spot-aligned value is stored **once**: coordinates + keys **partitioned by chromosome** — `tables/coords/chrom=<name>/part-0.parquet` (bin_id, trace_id / cell_id as integer codes, x, y, z), sorted by (cell, trace, bin), 16,384-row groups on cell boundaries; every other spot-aligned column (extra spot columns, `spot_tracks`, `layers`) in **cell-sorted primary tables** `tables/primary/*.parquet` (order cell › trace › chromosome › bin, no key columns, 65,536-row groups on cell boundaries, float columns dictionary-encoded); spot columns that are a function of the bin / cell / trace (probe names, sample ids) once per key in `tables/derived/`.  `index/` holds the primary runs and `index/coords/` the coordinate runs; `index/coords/primary_run` maps (cell, trace, chromosome) runs one to one.  A full read is in primary order; `get_trace` / `get_cell` read one primary slice + their coordinate runs, `get_chrom(columns="coords")` one partition (`get_chrom` with tracks adds a slice of every primary row group).  `get_*` / `iter_*` / `to_memory` / `read` take `columns=` / `tracks=` (`columns="coords"` = xyz + keys).  `iter_traces` / `iter_cells` stream in chromosome › cell › trace order.  Formats 2.0 / 2.1 are still read; older readers cannot read newer stores.  Lossless decimal float encoding (`chromdata.floatcodec`) is opt-in (`float_encoding=`).  Streaming (roadmap step 7): `ChromData.writer(path)` (writes the store the in-memory writer writes), `from_fofct(..., out=)`, `read_seqfish_multiomics(..., out=)`, exact `uchrom.fea.distance_map`, ArcFISH loop / TAD callers with `streaming=True` (default on backed data); `uchrom.settings.memory_budget` bounds their working memory.  Other tables: small tables as Parquet, `cellm` / `binm` / `index/` / result arrays as Zarr arrays, provenance / `uns` / linked records as JSON attrs.  `*.cdz` = the same tree in one uncompressed zip.  **Row order changes on a round trip** (sorted); compare after sorting by a stable key, or read with `original_order=True` (uses `index/source_row`).  `.h5cd` (the HDF5 container of format 1.x / 2.0) is **no longer read or written**: `read` / `write` raise a `ValueError` naming the converter (`python -m uchrom.io.upgrade old.h5cd`); its reader / writer live only in the private `uchrom/io/_h5cd_legacy.py`, used by `upgrade_h5cd` and the format benchmarks (uchrom-reproducibility `benchmarks/fig2`) — nothing else may import it.  Writers are atomic (temp dir + rename).
+- **Persistence — `.chromdata.zarr` (format 2.3 = the 2.2 layout + optional `tables/cell_shapes/`)**: `cd.write(path)` / `ChromData.read(path)` pick the container from the path.  `*.chromdata.zarr` = Zarr v3 group with Parquet tables (`chromdata/zarrcd.py`; layout in `packages/chromdata/spec.md`); every spot-aligned value is stored **once**: coordinates + keys **partitioned by chromosome** — `tables/coords/chrom=<name>/part-0.parquet` (bin_id, trace_id / cell_id as integer codes, x, y, z), sorted by (cell, trace, bin), 16,384-row groups on cell boundaries; every other spot-aligned column (extra spot columns, `spot_tracks`, `layers`) in **cell-sorted primary tables** `tables/primary/*.parquet` (order cell › trace › chromosome › bin, no key columns, 65,536-row groups on cell boundaries, float columns dictionary-encoded); spot columns that are a function of the bin / cell / trace (probe names, sample ids) once per key in `tables/derived/`.  `index/` holds the primary runs and `index/coords/` the coordinate runs; `index/coords/primary_run` maps (cell, trace, chromosome) runs one to one.  A full read is in primary order; `get_trace` / `get_cell` read one primary slice + their coordinate runs, `get_chrom(columns="coords")` one partition (`get_chrom` with tracks adds a slice of every primary row group).  `get_*` / `iter_*` / `to_memory` / `read` take `columns=` / `tracks=` (`columns="coords"` = xyz + keys).  `iter_traces` / `iter_cells` stream in chromosome › cell › trace order.  Formats 2.0 / 2.1 are still read; older readers cannot read newer stores.  Lossless decimal float encoding (`chromdata.floatcodec`) is opt-in (`float_encoding=`).  Streaming (roadmap step 7): `ChromData.writer(path)` (writes the store the in-memory writer writes), `from_fofct(..., out=)`, `read_seqfish_multiomics(..., out=)`, exact `uchrom.fea.distance_map`, ArcFISH loop / TAD callers with `streaming=True` (default on backed data); `uchrom.settings.memory_budget` bounds their working memory.  Other tables: small tables as Parquet, `cellm` / `binm` / `index/` / result arrays as Zarr arrays, provenance / `uns` / linked records as JSON attrs.  `*.cdz` = the same tree in one uncompressed zip.  **Row order changes on a round trip** (sorted); compare after sorting by a stable key, or read with `original_order=True` (uses `index/source_row`).  `.h5cd` (the HDF5 container of format 1.x / 2.0) is **no longer read or written**: `read` / `write` raise a `ValueError` naming the converter (`python -m uchrom.io.upgrade old.h5cd`); its reader / writer live only in the private `uchrom/io/_h5cd_legacy.py`, used by `upgrade_h5cd` and the format benchmarks (uchrom-reproducibility `benchmarks/store`) — nothing else may import it.  Writers are atomic (temp dir + rename).
 - **Atlas**: a bucket / folder of `.chromdata.zarr` stores (embedded, self-contained) plus `catalog.json` (`chromdata/catalog.py`: `python -m chromdata.catalog build apps/atlas/datasets.json --root $UCHROM_DATA`, display text in `apps/atlas/datasets.json` — datasets grouped by `studies` —, counts / modalities read from the stores; the static page `apps/atlas/site` with thumbnails drawn from the stores by `python apps/atlas/build.py figures`, committed in `apps/atlas/site/figures/`).  The web browser lists it in the Open dialog (`--atlas URL`, `UCHROM_ATLAS`, default the public U-Chrom atlas data on Cloudflare R2, `https://uchrom-atlas-r2.u-science.org` — bucket `u-chrom-atlas`; `uchrom-atlas.u-science.org` is kept free for the atlas web page) and opens a card by URL.  Publishing: `aws s3 sync` to the R2 bucket (credentials stay in the user's environment, never in the repo).
 - **Backed mode**: `ChromData.read(path, backed=True)` on a zarr / cdz store → `BackedChromData` (`chromdata/backed.py`): small tables eager; `coords` / `layers` (`BackedArray`) and `spots` / `spot_tracks` (`BackedFrame`) read on access; `get_cell` / `get_trace` / `get_chrom` / `cd[rows]` / `iter_traces(batch)` / `iter_cells(batch)` read only the needed row ranges and return in-memory `ChromData`; `to_memory()` loads all.  Spot-aligned data are read-only on a backed object.  `iter_traces` / `iter_cells` exist on in-memory objects too and yield identical chunks.  The web browser opens stores backed.
 - **Format versioning**: `uchrom_format_version` (MAJOR.MINOR) and `uchrom_version` as root attrs (zarr.json attributes); zarr stores are checked by `_check_zarr_version`. Same MAJOR + higher MINOR warns but reads; unknown MAJOR raises. The zarr container's version is `ZARR_FORMAT_VERSION` in `zarrcd.py` (2.3; `ZARR_LAYOUT_VERSION` 2.2 is the spot layout it writes; `ZARR_LAYOUTS` maps MINOR → layout). Legacy `.h5cd` files (format 1.x / 2.0, `FORMAT_VERSION` in `uchrom/io/_h5cd_legacy.py`) are converted by `uchrom.io.upgrade_h5cd(src[, dst])` / `python -m uchrom.io.upgrade SRC [DST]` (default target `<stem>.chromdata.zarr`; 1.x: bins from spot loci, spot-aligned tracks split into bin/spot tracks). To bump format: update the relevant constant, add a reader for the new MAJOR (a new MINOR layout: read it next to the old ones, as 2.2 reads 2.1 and 2.0).
@@ -253,15 +251,13 @@ re-implementation of a paper):
   body.  If the number is disappointing, say so.
 - The data rules below are the mechanism — every dataset used for
   validation MUST be registered and documented in the same PR.
-- **Keep the numbers.**  Scores and speeds measured during development are results too: a benchmark
-  writes them with `benchmarks/_record.py` (`save`: results + provenance — revision, host, CPU, threads,
-  package versions, datasets, parameters) and the headline files are committed in
-  `benchmarks/<name>/results/` (small JSON, `results/MANIFEST.md`); `python benchmarks/_record.py OLD NEW
+- **Keep the numbers.**  Scores and speeds measured during development are results too: a benchmark (in
+  uchrom-reproducibility) writes them with its `benchmarks/_record.py` (`save`: results + provenance — revisions,
+  host, CPU, threads, package versions, datasets, parameters) and the headline files are committed in
+  `benchmarks/<topic>/results/` there (small JSON, `results/MANIFEST.md`); `python benchmarks/_record.py OLD NEW
   --rtol x` compares a new run with them.  Large outputs (call tables, maps, models) are archived on
-  Sherlock's Oak, `$OAK/uchrom/results/<name>/<date>_<revision>/` (tar per part:
-  `benchmarks/sc_structures/sherlock/archive.sbatch`) — never only on `$SCRATCH` (purged after 90 days)
-  or in a session scratchpad.  Heavy runs go to Sherlock (`benchmarks/sc_structures/sherlock/`), not the
-  laptop.
+  Sherlock's Oak, `$OAK/uchrom/results/<name>/<date>_<revision>/` — never only on `$SCRATCH` (purged after 90
+  days) or in a session scratchpad.  Heavy runs go to Sherlock (`benchmarks/*/sherlock/` there), not the laptop.
 
 ## Data
 

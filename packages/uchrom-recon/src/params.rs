@@ -93,7 +93,7 @@ pub struct Params {
     pub verbose: bool,
     // ---- protocol "robust" only (ignored by the other protocols) ----
     // Defaults: the parameter set recommended from the development set
-    // (benchmarks/screcon/robust_devlog.md: M2 variant es4 + M3 candidate c2 —
+    // (an unpublished design note: M2 variant es4 + M3 candidate c2 —
     // 2,500 MD steps per stage, short cool refinement, sampling at T = 1000,
     // adaptive resolution below 25 kb).
     /// First stage whose restraints are re-weighted (0-based; the weights of
@@ -178,7 +178,7 @@ pub struct Params {
     /// of an ambiguous contact is its own restraint, weighted by its posterior probability
     /// (true contact on that copy pair).  False: the candidates stay one ambiguous restraint
     /// (NucDynamics combined distance) weighted by the probability that the contact is true.
-    /// Default false: chosen on the diploid development set (benchmarks/screcon/diploid_devlog.md:
+    /// Default false: chosen on the diploid development set (an unpublished design note:
     /// splitting the soft responsibilities pulls both homologs together early and loses
     /// ~0.2 cis / ~0.3 whole-genome Spearman on the imaging truths).
     pub robust_dip_split: bool,
@@ -188,7 +188,7 @@ pub struct Params {
     /// development set (diploid_devlog.md §3: phase accuracy +0.06 on the imaging truths, +0.09
     /// on masked GM12878 phases, structure metrics unchanged within 0.01).
     pub robust_dip_nbr_prior: bool,
-    /// EMber, deep low-phasing data (benchmarks/screcon/PREREG.md §11; 0 = off, the frozen
+    /// EMber, deep low-phasing data (an unpublished design note §11; 0 = off, the frozen
     /// behaviour): commit an ambiguous contact to one copy pair when its phase probability is
     /// >= this threshold (hard phasing as hickit `-S`, which uses 0.75).  The probability is the
     /// candidate prior (neighbourhood prior x external prior) before stage

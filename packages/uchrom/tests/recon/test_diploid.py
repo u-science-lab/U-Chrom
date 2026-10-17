@@ -4,7 +4,7 @@
 Synthetic toys only (two homologs of three random-walk chromosomes, a third of the contact
 ends phased): they check the plumbing, the trace layout and that the homologs come out
 separated with the right phases.  The validation on imaging truths and on Dip-C GM12878 is in
-``benchmarks/screcon`` (``diploid_*.py``).
+an unpublished benchmark (``diploid_*.py``).
 """
 
 import gzip

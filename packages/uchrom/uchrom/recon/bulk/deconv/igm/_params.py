@@ -26,7 +26,7 @@ class IgmParams:
     """IGM population modelling parameters.
 
     Defaults: the IGM configuration schema with the annealing protocol of the
-    IGM demo (``benchmarks/bulk/pgs_spec.md`` §2.2, §3.2, §4.3, §5, §6.2);
+    IGM demo (an unpublished design note §2.2, §3.2, §4.3, §5, §6.2);
     the user-level defaults of U-Chrom are 10,000 structures (1 Mb bins) —
     for the IGM paper setting (200 kb, 1,000 structures, 40 % occupancy,
     prolate ellipsoid) see :meth:`boninsegna2022`.
@@ -57,7 +57,7 @@ class IgmParams:
         ``"igm"`` (IGM 1.0) or ``"gp"`` (G. Polles' approximation, IGM_2.0
         ``GP_ActivationDistanceStep``: all copy combinations pooled,
         ``n_possible = min(copies)`` smallest per structure) — for the
-        sensitivity analysis of ``benchmarks/bulk/design.md``.
+        sensitivity analysis of an unpublished design note.
     ``init_noise``
         Gaussian noise (nm, standard deviation) added to every initial
         coordinate (IGM-Plus ``model/init_noise``; with

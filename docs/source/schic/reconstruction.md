@@ -91,7 +91,7 @@ kernel learned from the data, plus local-support evidence) — a short schedule,
 a finite-temperature sampling stage (calibrated ensembles) and adaptive
 resolution below 25 kb.  It was pre-registered, frozen and tested against
 NucDynamics on held-out contacts and imaging-truth simulations
-(`benchmarks/screcon/PREREG.md`, `TEST_RESULTS.md`): better on both primary
+(pre-registered; the test and its results are kept with the unpublished analyses): better on both primary
 endpoints, ~5x faster on one GPU; its real-data ensembles are less tight.
 
 ```python

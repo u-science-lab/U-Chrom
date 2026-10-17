@@ -319,7 +319,7 @@ def deconvolve_igm(
         origin).  Beads between two pinned beads of one chain are linearly
         interpolated; the rest keep the random-territory start.  Only the
         start is set — no positional restraint is added (see the stage-2
-        design in ``benchmarks/bulk/design.md``).
+        design in an unpublished design note).
 
     Returns
     -------
