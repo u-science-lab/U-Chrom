@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { withPhase } from '../activity'
-import { fetchAtlas, filePlaces, listFiles, openDataset } from '../api'
+import { fetchAtlas, fetchHealth, filePlaces, listFiles, openDataset } from '../api'
 import { addRecent, baseName, breadcrumbs, fmtDate, fmtSize, loadRecent, saveRecent } from '../datasets'
 import { useStore } from '../store'
 import type { AtlasDataset, AtlasResponse, FileEntry, FileListing, FilePlace } from '../types'
@@ -14,6 +14,33 @@ const lastDir = () => {
   } catch {
     return null
   }
+}
+
+/** The panel the dialog shows first (per viewer): 'atlas' or 'files'. */
+const PANEL_KEY = 'uchrom.browser.openPanel'
+const lastPanel = (): 'atlas' | 'files' | null => {
+  try {
+    const v = localStorage.getItem(PANEL_KEY)
+    return v === 'atlas' || v === 'files' ? v : null
+  } catch {
+    return null
+  }
+}
+const rememberPanel = (atlas: boolean) => {
+  try {
+    localStorage.setItem(PANEL_KEY, atlas ? 'atlas' : 'files')
+  } catch {
+    /* no storage */
+  }
+}
+
+/**
+ * The panel to open on: a hosted server cannot list its folders, so the atlas; else the one used last
+ * time, the server's folders the first time.
+ */
+export function initialPanel(hosted: boolean, remembered: 'atlas' | 'files' | null): 'atlas' | 'files' {
+  if (hosted) return 'atlas'
+  return remembered ?? 'files'
 }
 
 /**
@@ -38,20 +65,42 @@ export function OpenDialog({ onClose }: { onClose(): void }) {
   // the atlas (catalog.json of an object-storage bucket): listed in its own panel, datasets open by URL
   const [atlas, setAtlas] = useState<AtlasResponse | null>(null)
   const [atlasError, setAtlasError] = useState<string | null>(null)
-  const [atlasOpen, setAtlasOpen] = useState(false)
+  const [atlasOpen, setAtlasOpenState] = useState(false)
   const [atlasFilter, setAtlasFilter] = useState('')
+  // a hosted server has no folders to list (only the atlas); null until /api/health answers
+  const [hosted, setHosted] = useState<boolean | null>(null)
+  const setAtlasOpen = useCallback((v: boolean) => {
+    setAtlasOpenState(v)
+    rememberPanel(v)
+  }, [])
 
   useEffect(() => {
+    let live = true
+    fetchHealth()
+      .then((h) => !!h.hosted)
+      .catch(() => false)
+      .then((isHosted) => {
+        if (!live) return
+        setHosted(isHosted)
+        setAtlasOpenState(initialPanel(isHosted, lastPanel()) === 'atlas')
+      })
+    return () => {
+      live = false
+    }
+  }, [])
+  useEffect(() => {
+    if (hosted !== false) return
     filePlaces()
       .then(setPlaces)
       .catch(() => {})
-  }, [])
+  }, [hosted])
   useEffect(() => {
     fetchAtlas()
       .then(setAtlas)
       .catch((e: Error) => setAtlasError(e.message))
   }, [])
   useEffect(() => {
+    if (hosted !== false || atlasOpen) return // folders: on a local server, when they are shown
     let live = true
     setError(null)
     listFiles(dir, hidden)
@@ -75,7 +124,7 @@ export function OpenDialog({ onClose }: { onClose(): void }) {
     return () => {
       live = false
     }
-  }, [dir, hidden])
+  }, [dir, hidden, hosted, atlasOpen])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -140,8 +189,8 @@ export function OpenDialog({ onClose }: { onClose(): void }) {
                 </button>
               </>
             )}
-            <div className="od-side-title">Places</div>
-            {places.map((p) => (
+            {hosted === false && <div className="od-side-title">Places</div>}
+            {hosted === false && places.map((p) => (
               <button key={p.path} className={`od-place${!atlasOpen && listing?.path === p.path ? ' current' : ''}`} onClick={() => { setAtlasOpen(false); setDir(p.path) }} title={p.path}>
                 <FolderIcon />
                 <span>{p.label}</span>
