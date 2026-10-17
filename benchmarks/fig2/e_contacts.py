@@ -20,8 +20,10 @@ work directory.
 
 **Pseudo-bulk.**  The web browser's group pseudo-bulk
 (``uchrom_browser.data.Dataset.contacts(key, chrom, group=…)`` →
-``_pseudobulk``: per-cell bin1-offset slices read straight from HDF5 and summed
-with ``np.bincount``, LRU-cached).  Region: all of chr1.  For each group size
+``_pseudobulk``: per-cell bin1-offset slices read straight from the ``.scool``
+(HDF5) and summed with ``np.bincount``, LRU-cached) on the ``.chromdata.zarr``
+store with its maps linked only, opened backed as the browser opens it
+(``_common.schicar_linked``).  Region: all of chr1.  For each group size
 (random cells, seed 0) a fresh interpreter opens the dataset, lists the map
 (``contact_maps()``, timed separately as setup), then times the first query
 and the same query again (served from the LRU cache).  3 repeats → median,
@@ -74,12 +76,12 @@ def scool_key(cd):
 
 
 def child_query(n_cells):
-    from uchrom_browser.data import Dataset
-    from uchrom.io._h5cd_legacy import read_h5cd
+    from uchrom_browser.data import Dataset, load_chromdata
 
+    store = C.schicar_linked()
     t0 = time.perf_counter()
-    cd = read_h5cd(SCHICAR)
-    ds = Dataset(id="schicar", name="schicar", path=str(SCHICAR), cd=cd)
+    cd = load_chromdata(store)                     # backed, as the web browser opens it
+    ds = Dataset(id="schicar", name="schicar", path=str(store), cd=cd)
     maps = ds.contact_maps()
     setup_s = time.perf_counter() - t0
     key = next(m["key"] for m in maps if m["kind"] == "scool")
@@ -165,6 +167,7 @@ def main():
     if not STORE.exists():
         raise SystemExit(f"{STORE} missing — run apps/atlas/recipes/build_schicar_mop.py")
     ensure_h5cd()
+    C.schicar_linked()                             # once, before the children
 
     work = C.WORK / "e_contacts"
     work.mkdir(parents=True, exist_ok=True)
@@ -190,6 +193,8 @@ def main():
                         "written uncompressed (as h5cd 1.x's cd.write did) and with gzip-6+shuffle "
                         "(cooler's defaults)"),
         "aggregation": {"implementation": "uchrom_browser.data.Dataset._pseudobulk (via Dataset.contacts, group=)",
+                        "store": "schicar_mop.chromdata.zarr, maps linked only (no embedded copies), opened backed "
+                                 "as the web browser opens it",
                         "region": f"{CHROM} (whole chromosome)", "repeats": args.repeats,
                         "cold": "first query in a fresh process (map listing done beforehand, reported as setup_s); "
                                 "OS page cache warm",

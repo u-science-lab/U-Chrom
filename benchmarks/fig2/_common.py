@@ -47,8 +47,32 @@ from _paper import results_dir  # noqa: E402
 RESULTS = results_dir("fig2")          # u-chrom-paper: manuscripts/full/figures/fig2/results
 WORK = Path(os.environ.get("UCHROM_FIG2_WORK", DATA / "fig2_work"))
 
+SCHICAR = DATA / "schicar_mop" / "schicar_mop.chromdata.zarr"      # apps/atlas/recipes/build_schicar_mop.py
+
 TAKEI_DIR = DATA / "takei2025_cerebellum"
 TAKEI_COMBINED = TAKEI_DIR / "takei2025_cerebellum_rep1.chromdata.zarr"   # build_takei2025_cerebellum.py
+
+
+def schicar_linked() -> Path:
+    """The scHiCAR store with its contact maps linked only, as a user's store would be.
+
+    The data folder's store also carries the atlas's embedded copies (``embedded/``), which readers and the web
+    browser prefer to the linked ``.scool``; the linked-maps benchmarks must read the ``.scool``.  Written once to
+    ``WORK/schicar_linked/`` (a write to a new path leaves ``embedded/`` behind), next to symbolic links to the
+    files of the data folder, so the store's relative link records resolve as in the data folder."""
+    out = WORK / "schicar_linked" / SCHICAR.name
+    if out.exists():
+        return out
+    from chromdata import ChromData
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    for f in SCHICAR.parent.iterdir():
+        if f.suffix in (".scool", ".cool", ".mcool", ".h5ad") and not (out.parent / f.name).exists():
+            (out.parent / f.name).symlink_to(f.resolve())
+    ChromData.read(SCHICAR).write(out)
+    if (out / "embedded").exists():
+        raise RuntimeError(f"{out} still holds embedded copies")
+    return out
 
 
 # ----------------------------------------------------------------------------- measurement
@@ -151,7 +175,8 @@ def machine_info() -> Dict[str, Any]:
     vers["uchrom_h5cd_format"] = FORMAT_VERSION
     vers["uchrom_zarr_format"] = _zarr_version()
     try:
-        vers["uchrom_git"] = sh(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"])
+        vers["uchrom_git"] = (sh(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"])
+                              or os.environ.get("UCHROM_REVISION"))     # a copy of the checkout on a cluster
     except Exception:
         pass
     info["versions"] = vers
