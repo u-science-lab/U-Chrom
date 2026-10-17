@@ -14,7 +14,7 @@ Each request is timed end to end from this client (wall clock, ``time.perf_count
 the first one is the store's first open in the session.  The dataset is closed after each pass
 (``DELETE /api/datasets/{id}``).  The container is woken first (``/api/health``) and that wait is not counted.
 
-Writes ``<u-chrom-paper>/manuscripts/nmeth-bc/figures/results/hosted.json``.
+Writes ``<uchrom-reproducibility>/manuscripts/nmeth-bc/figures/results/hosted.json``.
 
     python apps/atlas/benchmarks/hosted.py [--reps 2] [--only ID ...]
 """
@@ -126,7 +126,7 @@ def main() -> None:
         print(d["id"], json.dumps(passes[0])[:200], flush=True)
     root = paper_root()
     if root is None:
-        raise SystemExit("u-chrom-paper not found (set UCHROM_PAPER)")
+        raise SystemExit("uchrom-reproducibility not found (set UCHROM_REPRO)")
     out = root / "manuscripts" / "nmeth-bc" / "figures" / "results" / "hosted.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     if args.only and out.exists():                        # a partial run replaces only its datasets

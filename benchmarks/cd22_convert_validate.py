@@ -10,7 +10,7 @@ subsets (get_cell / get_trace / get_chrom, with and without
 
     python benchmarks/cd22_convert_validate.py [--data takei,liu]
 
-Writes ``u-chrom-paper/manuscripts/full/figures/fig2/results/cd22_convert_validation.json``.
+Writes ``uchrom-reproducibility/manuscripts/full/figures/fig2/results/cd22_convert_validation.json``.
 """
 
 from __future__ import annotations

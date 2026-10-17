@@ -1,7 +1,7 @@
 """Panels of the U-Chrom paper figures for the atlas' U-Chrom page (apps/atlas/site/uchrom.html) and the
 documentation (docs/source/start/concepts.md, docs/source/index.md).
 
-Renders manuscripts/full/figures/fig1/fig1_final.pdf and .../fig2/fig2.pdf of the u-chrom-paper repository at
+Renders manuscripts/full/figures/fig1/fig1_final.pdf and .../fig2/fig2.pdf of the uchrom-reproducibility repository at
 600 dpi (pdftoppm), crops the panels below and writes them as WebP to apps/atlas/site/paper/ and as PNG / JPEG
 (what Sphinx's HTML builder takes) to docs/source/_static/paper/.  Rerun after a figure changes:
 
@@ -22,7 +22,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]                                   # the repository
 OUT = HERE / "site" / "paper"
 sys.path.insert(0, str(ROOT / "benchmarks"))
-from _paper import paper_root  # noqa: E402  (u-chrom-paper: $UCHROM_PAPER or next to the main checkout)
+from _paper import paper_root  # noqa: E402  (uchrom-reproducibility: $UCHROM_REPRO or next to the main checkout)
 
 PAPER = paper_root() or ROOT / "paper"         # before the move: this repository's paper/ folder
 FIGS = PAPER / "manuscripts" / "full" / "figures"

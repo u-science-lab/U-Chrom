@@ -1,10 +1,12 @@
-"""Where the benchmarks that feed a paper figure write their results: the u-chrom-paper repository.
+"""Where the benchmarks that feed a paper figure write their results: the uchrom-reproducibility repository.
 
-The manuscripts and figures moved from ``paper/`` to ``u-science-lab/u-chrom-paper`` on 2026-10-05.  A figure's
-numbers are ``<paper>/manuscripts/full/figures/<fig>/results/*.json`` there, the only source the figures and manuscripts read.
+The papers' benchmarks, results and figure scripts live in ``u-science-lab/uchrom-reproducibility`` (split out of this
+repository and of u-chrom-paper on 2026-10-17).  The benchmarks that stay here validate the library and also make a
+figure's numbers (``benchmarks/fig3``, ``cd21_streaming_validation.py``, ``cd22_convert_validate.py``); they write
+``<repro>/manuscripts/full/figures/<fig>/results/*.json`` there, the only source its figure scripts read.
 
-The repository is ``$UCHROM_PAPER``, else the folder ``u-chrom-paper`` next to this repository's main checkout
-(found through git, so worktrees resolve to it too) or next to this checkout.  Without one, results go to
+The repository is ``$UCHROM_REPRO``, else the folder ``uchrom-reproducibility`` next to this repository's main
+checkout (found through git, so worktrees resolve to it too) or next to this checkout.  Without one, results go to
 ``benchmarks/results/<fig>/`` here, with a warning.
 """
 
@@ -20,8 +22,8 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 def paper_root() -> Optional[Path]:
-    """The u-chrom-paper checkout, or None."""
-    env = os.environ.get("UCHROM_PAPER")
+    """The uchrom-reproducibility checkout, or None."""
+    env = os.environ.get("UCHROM_REPRO")
     if env:
         return Path(env).expanduser().resolve()
     bases = [REPO]
@@ -32,25 +34,25 @@ def paper_root() -> Optional[Path]:
     except (OSError, subprocess.CalledProcessError):
         pass
     for base in bases:
-        cand = base.parent / "u-chrom-paper"
+        cand = base.parent / "uchrom-reproducibility"
         if (cand / "manuscripts").is_dir():
             return cand
     return None
 
 
 def results_dir(fig: str) -> Path:
-    """``<paper>/manuscripts/full/figures/<fig>/results`` (not created here; writers create it)."""
+    """``<repro>/manuscripts/full/figures/<fig>/results`` (not created here; writers create it)."""
     root = paper_root()
     if root is None:
         out = REPO / "benchmarks" / "results" / fig
-        warnings.warn(f"u-chrom-paper not found (set UCHROM_PAPER): {fig} results go to {out}", stacklevel=2)
+        warnings.warn(f"uchrom-reproducibility not found (set UCHROM_REPRO): {fig} results go to {out}", stacklevel=2)
         return out
     return root / "manuscripts" / "full" / "figures" / fig / "results"
 
 
 def paper_file(rel: str) -> Path:
-    """A file of the paper repository, e.g. ``manuscripts/full/figures/fig2/tableS_capabilities.md``."""
+    """A file of the reproducibility repository, e.g. ``manuscripts/full/figures/fig3/results/x.json``."""
     root = paper_root()
     if root is None:
-        raise SystemExit(f"u-chrom-paper not found (set UCHROM_PAPER) for {rel}")
+        raise SystemExit(f"uchrom-reproducibility not found (set UCHROM_REPRO) for {rel}")
     return root / rel

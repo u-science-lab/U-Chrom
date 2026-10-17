@@ -13,7 +13,7 @@ For every dataset of ``apps/atlas/datasets.json`` (stores under ``$UCHROM_DATA/`
 * **spatial**: the checks of ``benchmarks/spatial_hicrna_validation.py`` and
   ``benchmarks/spatial_hic_chen2026_reprocessed.py`` (their result files, cited, not recomputed).
 
-Writes ``<u-chrom-paper>/manuscripts/nmeth-bc/figures/results/atlas.json`` (``benchmarks/_paper.py``).
+Writes ``<uchrom-reproducibility>/manuscripts/nmeth-bc/figures/results/atlas.json`` (``benchmarks/_paper.py``).
 
     python apps/atlas/benchmarks/validate.py [--only ID ...]
 """
@@ -202,7 +202,7 @@ def main() -> None:
                 cat[d["id"]] = {**describe_store(DATA / d["store"]), "category": studies.get(d.get("study"), {}).get("category")}
     root = paper_root()
     if root is None:
-        raise SystemExit("u-chrom-paper not found (set UCHROM_PAPER)")
+        raise SystemExit("uchrom-reproducibility not found (set UCHROM_REPRO)")
     out_path = root / "manuscripts" / "nmeth-bc" / "figures" / "results" / "atlas.json"
     old = json.loads(out_path.read_text()) if out_path.exists() else {}
     rows = {r["id"]: r for r in old.get("datasets", [])}
