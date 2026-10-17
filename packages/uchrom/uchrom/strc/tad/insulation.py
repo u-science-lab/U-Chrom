@@ -21,7 +21,7 @@ so they are local minima of the score.  The definitions here are those of the co
 The map is read as a band of pixels near the diagonal (:func:`uchrom.fea.band.read_band`), never as a dense
 matrix: the diamond sums are a difference array over the pixels (``O(pixels)``), the valid-pixel counts
 cumulative sums over the bins.  Own implementation, no cooltools dependency; validated against cooltools
-0.7.1 in uchrom-reproducibility ``benchmarks/toolkit_parity/hic_structures/insulation.py`` (scores within 1e-13, identical boundaries).
+0.7.1 in uchrom-reproducibility ``supp_table3/hic_structures/insulation.py`` (scores within 1e-13, identical boundaries).
 
 Deliberate differences from cooltools: ``min_frac_valid_pixels`` is a fraction of a *full* diamond (cooltools:
 of the largest count in its table — the same whenever a chromosome has ``w`` valid bins in a row);
@@ -47,7 +47,7 @@ CHUNK = 2_000_000
 DEFAULT_IGNORE_DIAGS = 2
 #: default diamond side (bp; rounded to whole bins, at least ``MIN_WINDOW_BINS``): the scale at which the
 #: boundaries agree best with the Rao 2014 Arrowhead domain edges at 5, 10 and 25 kb
-#: (uchrom-reproducibility ``benchmarks/toolkit_parity/hic_structures/insulation.py``)
+#: (uchrom-reproducibility ``supp_table3/hic_structures/insulation.py``)
 DEFAULT_WINDOW_BP = 100_000
 MIN_WINDOW_BINS = 3
 

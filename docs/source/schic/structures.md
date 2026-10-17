@@ -39,7 +39,7 @@ the five filters and the clustering of Yu et al. 2021).  The imputation, z-score
 Rust (`uchrom-maps`); without it the numpy code runs, which cannot hold whole chromosomes in memory — use
 `window="auto"` then.
 
-Checked on the paper's data (Nagano 2017 mES cells, uchrom-reproducibility `benchmarks/toolkit_parity/sc_structures/snaphic_*.py`):
+Checked on the paper's data (Nagano 2017 mES cells, uchrom-reproducibility `supp_table3/sc_structures/snaphic_*.py`):
 - **the authors' code**: on the same 100 cells and contacts U-Chrom calls exactly their 479 loops (with their
   sliding-window quirk switched on; z-scores within 1.4e-13) — in 5 s instead of 21 min;
 - **742 cells, genome-wide, vs the paper's reference loops** (HiCCUPS on bulk Hi-C + MAPS): recall 0.60
@@ -79,5 +79,5 @@ loops by the structures — a reconstruction is smoother than an imaged trace an
 treat it as data.  For domains and loops pool the cells or call across them (above).
 
 The structure-caller numbers are those of the tutorial `sc_structures` (re-executed 2026-10-13 with the ArcFISH
-callers that give the authors' results; uchrom-reproducibility `benchmarks/toolkit_parity/arcfish_parity`); the rest, with datasets and Sherlock jobs,
-are in uchrom-reproducibility `benchmarks/toolkit_parity/sc_structures/README.md` (run with the former callers: ArcFISH boundaries at chance there).
+callers that give the authors' results; uchrom-reproducibility `supp_table3/arcfish_parity`); the rest, with datasets and Sherlock jobs,
+are in uchrom-reproducibility `supp_table3/sc_structures/README.md` (run with the former callers: ArcFISH boundaries at chance there).

@@ -37,7 +37,7 @@ comparisons); candidates are ordered by position (start1, start2) where SnapHiC'
 merges — this only decides ties of equal FDR between neighbouring summits and equidistant denser neighbours
 in the clustering; ``window="auto"`` pools the contacts of the cells called on the autosomes.
 
-Validation (uchrom-reproducibility ``benchmarks/toolkit_parity/sc_structures/snaphic_*.py``; Sherlock, AMD EPYC 9754, 32 threads, shared nodes):
+Validation (uchrom-reproducibility ``supp_table3/sc_structures/snaphic_*.py``; Sherlock, AMD EPYC 9754, 32 threads, shared nodes):
 
 * Against the authors' code (SnapHiC v0.2 @782dc2b, its own environment) on the same 100 mES cells and contacts
   (chr17-19, its 10 Mb sliding windows): with ``sliding_window_holes=True`` the z-scores agree to 1.4e-13,

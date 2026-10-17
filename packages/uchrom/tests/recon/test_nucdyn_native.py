@@ -5,7 +5,7 @@ Skipped when the native package is not installed.  Uses chr19 of
 with a short annealing schedule, so each run takes about a second.  These
 are smoke and consistency checks; the real-data validation (all 8 Stevens
 cells at 100 kb vs the published models) is in
-uchrom-reproducibility ``benchmarks/toolkit_parity/nucdyn/a_nucdyn_engine_*.py``.
+uchrom-reproducibility ``supp_table3/nucdyn/a_nucdyn_engine_*.py``.
 """
 
 import warnings

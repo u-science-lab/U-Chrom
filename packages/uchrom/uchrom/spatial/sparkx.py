@@ -1,6 +1,6 @@
 """SPARK-X, the non-parametric covariance test of spatial variation of Zhu, Sun & Zhou (2021), for many features
 at once and with covariates (an implementation of the published method, checked against the authors' R package
-``SPARK::sparkx``; uchrom-reproducibility ``benchmarks/spatial_variable``).
+``SPARK::sparkx``; uchrom-reproducibility ``extended_data_fig2``).
 
 For a feature y on n cells, the covariates X (an intercept first) and a coordinate kernel S (n x d), with
 S_r = (I - H) S the coordinates residualised on X (H the projection on X):

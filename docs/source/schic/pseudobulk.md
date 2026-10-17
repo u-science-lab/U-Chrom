@@ -53,7 +53,7 @@ lowest, microglia highest), while the strength of a map's own eigenvector rises 
 
 At bulk depth, structures are *called*; below it, known loops are *scored* by pileup (`uc.tl.pileup`): 24 deep
 GM12878 single cells (about 1 % of a bulk map's depth) give an APA of 4.96 for the published GM12878 loops
-where HiCCUPS calls 12 loops (uchrom-reproducibility `benchmarks/toolkit_parity/hic_structures/README.md`).
+where HiCCUPS calls 12 loops (uchrom-reproducibility `supp_table3/hic_structures/README.md`).
 
 ## Tutorial
 

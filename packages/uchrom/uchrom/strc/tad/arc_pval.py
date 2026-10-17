@@ -2,7 +2,7 @@
 
 Reference: Yu H. *et al.* ArcFISH: accurate and robust 3D genome feature discovery from chromatin tracing data.
 bioRxiv 2025.11.26.690837 (``TADCaller(method="pval")`` of github.com/hyuyu104/ArcFISH).  U-Chrom's own
-implementation of the published algorithm; uchrom-reproducibility ``benchmarks/toolkit_parity/arcfish_parity/`` checks it against the authors' package
+implementation of the published algorithm; uchrom-reproducibility ``supp_table3/arcfish_parity/`` checks it against the authors' package
 (commit a21d889): the same per-locus statistics and the same domains.
 
 Algorithm (per chromosome)

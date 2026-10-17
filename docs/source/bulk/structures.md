@@ -68,7 +68,7 @@ bins and balances it (`cooler balance` defaults).
 
 ## Validation, in brief
 
-On the same balanced maps the implementations reproduce the reference tools (uchrom-reproducibility `benchmarks/toolkit_parity/hic_structures/`):
+On the same balanced maps the implementations reproduce the reference tools (uchrom-reproducibility `supp_table3/hic_structures/`):
 compartments = cooltools `eigs_cis` / `saddle` to 1e-14; insulation boundaries identical to cooltools
 `insulation` in 20 of 20 map × window cases; HiCCUPS' enriched pixels identical to cooltools `dots` on 6 maps;
 Mustache calls within 2 bins of mustache-hic for 89–96 %.  Against the published Rao 2014 calls on IMR90
@@ -82,7 +82,7 @@ chr21 (92 HiCCUPS loops, 86 Arrowhead domains):
 
 The compartments of the same map agree with chromatin tracing of IMR90 chr21 (Su et al. 2020) on 94 % of
 the imaged loci.  The full tables, the depth series and run times (IMR90 chr1 at 5 kb: insulation 1.5 s,
-compartments 8 s, HiCCUPS 6–16 s, Mustache 16–19 s) are in uchrom-reproducibility `benchmarks/toolkit_parity/hic_structures/README.md`.
+compartments 8 s, HiCCUPS 6–16 s, Mustache 16–19 s) are in uchrom-reproducibility `supp_table3/hic_structures/README.md`.
 
 ## Tutorial
 

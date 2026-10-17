@@ -1,5 +1,5 @@
 """Spatial Hi-C-RNA .pairs → per-spot contacts in the windows of the section's pooled-map structures (boundary
-flanks and crossing squares, loop peaks and donuts: uchrom-reproducibility ``benchmarks/spatial_variable/bulk_calls.py``), the inputs of
+flanks and crossing squares, loop peaks and donuts: uchrom-reproducibility ``extended_data_fig2/bulk_calls.py``), the inputs of
 per-spot insulation and loop strength (``uchrom.io.WindowCounts``).  Same reading and spots as
 ``spatial_pairs_stats.py``; MAPQ >= 30 on both legs (the filter of the pooled maps the structures were called on).
 

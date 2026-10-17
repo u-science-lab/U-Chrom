@@ -12,7 +12,7 @@ Coordinates stay in **hg19** (Rao 2014's build); chromosome names get a
 ``chr`` prefix.  Nothing is normalised here — balance with
 ``cooler balance`` if a method needs it.
 
-Used by Fig. 3 (``uchrom-reproducibility/manuscripts/full/figures/fig3/PLAN.md``): panel b (imaging-derived contacts
+Used by Fig. 3 (`an unpublished design note`): panel b (imaging-derived contacts
 vs Hi-C: IMR90 / K562 chr21 for Bintu 2018), panel a / c (GEM-FISH on
 IMR90 chr20-22, X; MDS on GM12878).
 

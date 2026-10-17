@@ -38,7 +38,7 @@ Testing a feature with the cells' identity as covariates asks the second questio
 The identity can be the spot's RNA principal components, a deconvolved composition or the cell type.  An
 adjustment by noisy covariates is never complete: a spot's RNA is shallow.  So compare what is left of a feature
 with what the same adjustment leaves of genes held out of it.
-uchrom-reproducibility `benchmarks/spatial_variable` (stage `calibrate`) measures this as the share of the smooth spatial variance that
+uchrom-reproducibility `extended_data_fig2` (stage `calibrate`) measures this as the share of the smooth spatial variance that
 remains.
 
 A single boundary or loop has a few contacts per spot.  Score it against the spot's own expected
@@ -95,7 +95,7 @@ destriped, in the two sections of each tissue:
   and loop span).  Pooled over all boundaries or loops, a spot's insulation and loop strength do vary: after RNA
   and copy number, 8-16 % of their variance is smooth, against 4-5 % with the spots shuffled.
 
-The analysis and its numbers are kept with their provenance in uchrom-reproducibility `benchmarks/spatial_variable/results/`.
+The analysis and its numbers are kept with their provenance in uchrom-reproducibility `extended_data_fig2/results/`.
 
 API: [uchrom.spatial](../reference/api/spatial), [uchrom.fea](../reference/api/fea),
 [uchrom.io](../reference/api/io).
