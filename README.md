@@ -1,4 +1,6 @@
-<p align="center"><img alt="U-Chrom — the 3-D genome, cell by cell: a tissue section and, lifted from it, three brain cells with their 3-D genomes" src="docs/source/_static/banner.svg" width="100%"></p>
+<p align="center"><img src="docs/source/_static/logo.svg" alt="U-Chrom" width="110"></p>
+
+<h1 align="center">U-Chrom</h1>
 
 <p align="center"><b>Universal Chromatin</b> — one toolkit for 3-D genome data from sequencing and imaging.</p>
 
