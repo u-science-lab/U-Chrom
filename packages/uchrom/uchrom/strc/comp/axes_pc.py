@@ -3,7 +3,7 @@ per-axis kernels (``ABCaller(method="axes")``).
 
 Reference: Yu H. *et al.* ArcFISH: accurate and robust 3D genome feature discovery from chromatin tracing data.
 bioRxiv 2025.11.26.690837 (github.com/hyuyu104/ArcFISH).  U-Chrom's own implementation of the published algorithm;
-uchrom-reproducibility ``benchmarks/toolkit_parity/arcfish_parity/`` checks it against the authors' package (commit a21d889): the same eigenvectors and
+uchrom-reproducibility ``supp_table3/arcfish_parity/`` checks it against the authors' package (commit a21d889): the same eigenvectors and
 compartments.
 
 Algorithm (per chromosome or arm)
@@ -129,7 +129,7 @@ def call_compartments_axes_pc(
         chromosomes of reconstructed single-cell structures, whose two arms often lie apart, the second
         eigenvector of a metacentric chromosome otherwise separates the arms rather than the compartments
         (Tan et al. 2018 Dip-C GM12878 at 250 kb: per-chromosome r with the E1 of the same cells' contacts
-        -0.36-0.21 on chr2, 3, 4, 5, 8, 10 whole, 0.31-0.78 per arm; uchrom-reproducibility/benchmarks/toolkit_parity/sc_structures).
+        -0.36-0.21 on chr2, 3, 4, 5, 8, 10 whole, 0.31-0.78 per arm; uchrom-reproducibility/supp_table3/sc_structures).
 
     Returns
     -------

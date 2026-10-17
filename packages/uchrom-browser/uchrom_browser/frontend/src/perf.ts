@@ -1,5 +1,5 @@
 /**
- * Performance marks for benchmarks (uchrom-reproducibility `benchmarks/browser`).  Read them in the page with
+ * Performance marks for benchmarks (uchrom-reproducibility `supp_fig6/browser`).  Read them in the page with
  * `performance.getEntriesByType('mark')`; names are prefixed `uchrom:`.
  */
 export function mark(name: string, detail?: Record<string, unknown>) {

@@ -5,7 +5,7 @@ Reference
 ---------
 Yu H. *et al.* ArcFISH: accurate and robust 3D genome feature discovery from chromatin tracing data.  bioRxiv
 2025.11.26.690837 (software: github.com/hyuyu104/ArcFISH).  U-Chrom's own implementation of the published
-algorithm; its output is checked against the authors' package (commit a21d889) by uchrom-reproducibility ``benchmarks/toolkit_parity/arcfish_parity/``
+algorithm; its output is checked against the authors' package (commit a21d889) by uchrom-reproducibility ``supp_table3/arcfish_parity/``
 (per-position statistics and calls on the datasets of the authors' tutorials and others).
 
 Conventions (the authors', so that the results agree)

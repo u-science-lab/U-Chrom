@@ -71,8 +71,8 @@ packages/uchrom-maps/python/uchrom_maps/*.pyd
 
 # Fig. 3 renders: rebuildable inputs and raw pane captures (the cropped PNGs used in the figures are tracked)
 
-# The manuscripts live in u-science-lab/u-chrom-paper (moved out of paper/ on 2026-10-05), the papers' benchmarks
-# and figure scripts in u-science-lab/uchrom-reproducibility (2026-10-17);
+# The manuscripts and their figure scripts live in u-science-lab/u-chrom-paper (moved out of paper/ on 2026-10-05),
+# the papers' benchmarks in u-science-lab/uchrom-reproducibility (2026-10-17);
 # a leftover paper/ folder in an old worktree must not come back; a symlink paper -> ../u-chrom-paper
 # (to browse the paper next to the code) is ignored too.
 /paper

@@ -11,7 +11,7 @@
 #   sbatch contact_stats.sbatch <sample> [max_lines]     (<sample>: a row of samples.tsv; max_lines > 0: a test)
 # Reads the .pairs that process.sbatch downloaded to $SCRATCH (re-downloads from GEO if they are gone).
 # Code: a repo copy synced from the laptop (tracked files + REVISION) at $REPO (default
-# $SCRATCH/uchrom-nd/repo-sv); Python: the venv of uchrom-reproducibility/benchmarks/toolkit_parity/sc_structures/sherlock (numpy, pandas, uchrom deps).
+# $SCRATCH/uchrom-nd/repo-sv); Python: the venv of uchrom-reproducibility/supp_table3/sc_structures/sherlock (numpy, pandas, uchrom deps).
 # One pass over mouse_brain_r1 (129 GB, 5.1e9 pairs) took the earlier per-spot map build 3.5 h of reading.
 set -euo pipefail
 SAMPLE=$1

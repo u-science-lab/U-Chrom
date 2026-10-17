@@ -340,8 +340,8 @@ are always monitored, as in IGM 1.0), `polymer_bonds_style = "none"`.
 
 ## Validation (Stevens et al. 2017, 8 cells, 100 kb)
 
-See the pull request / `uchrom-reproducibility/manuscripts/full/figures/fig3/results/a_nucdyn_engine_*.json` and the
-scripts in uchrom-reproducibility `benchmarks/toolkit_parity/nucdyn/a_nucdyn_engine_*.py`:
+See the pull request / uchrom-reproducibility `supp_table3/nucdyn/results/a_nucdyn_engine_*.json` and the
+scripts in uchrom-reproducibility `supp_table3/nucdyn/a_nucdyn_engine_*.py`:
 
 * `a_nucdyn_engine_crosscheck.py` — stage 1 restraint set vs the original
   (bitwise identical, both branches), and trajectories from identical

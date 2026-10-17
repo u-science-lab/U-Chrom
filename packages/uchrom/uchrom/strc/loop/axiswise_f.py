@@ -3,7 +3,7 @@ background (``LoopCaller`` with ``AxisWiseF``).
 
 Reference: Yu H. *et al.* ArcFISH: accurate and robust 3D genome feature discovery from chromatin tracing data.
 bioRxiv 2025.11.26.690837 (github.com/hyuyu104/ArcFISH).  U-Chrom's own implementation of the published algorithm;
-uchrom-reproducibility ``benchmarks/toolkit_parity/arcfish_parity/`` checks it against the authors' package (commit a21d889): the same test matrices and
+uchrom-reproducibility ``supp_table3/arcfish_parity/`` checks it against the authors' package (commit a21d889): the same test matrices and
 the same loops.
 
 Algorithm (per chromosome; loci and genomic distances as :mod:`uchrom.fea.arc`)

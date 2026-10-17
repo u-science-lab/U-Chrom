@@ -16,7 +16,7 @@ implementations here compute it:
   factorisation of ``M`` in profile storage and the selected inversion of Takahashi et al. (1973) — only the
   entries of ``M^-1`` inside the profile, which holds the band — windows in parallel.  Equal to the
   reference up to rounding: on real cells (Nagano 2017 mES, chr1 / chr19, 10 kb) the bands differ by at most
-  9e-15 relatively and the z-scores by 9e-14 (uchrom-reproducibility ``benchmarks/toolkit_parity/sc_structures/impute_speed.py``); 7x faster on one
+  9e-15 relatively and the z-scores by 9e-14 (uchrom-reproducibility ``supp_table3/sc_structures/impute_speed.py``); 7x faster on one
   thread, ~60x on 16 (chr1; AMD EPYC 9754).
 
 ``BACKEND`` (``"auto"``, ``"native"``, ``"numpy"``) forces either path.
