@@ -41,11 +41,11 @@ The RWR kernel solves the same systems as the numpy reference by another factori
 inverts each window's dense matrix with LAPACK), so it agrees to rounding — on real cells (Nagano 2017 mES,
 10 kb) at most 9e-15 relatively on the bands, 9e-14 on the z-scores, 2e-15 on the sums over cells — and gives
 the same calls (`packages/uchrom/tests/fea/test_impute_maps.py`, `tests/strc/test_snaphic.py`,
-`benchmarks/sc_structures/impute_speed.py`, `snaphic_mesc.py`).  Per cell it is 7x faster than the numpy
+uchrom-reproducibility `benchmarks/toolkit_parity/sc_structures/impute_speed.py`, `snaphic_mesc.py`).  Per cell it is 7x faster than the numpy
 reference on one thread and ~60x on 16 (chr1 at 10 kb, AMD EPYC 9754); SnapHiC on 742 cells genome-wide takes
 4 min (10 Mb windows) or 98 min (whole chromosomes) on 32 threads.  With `holes=True` it reproduces the pixels
 SnapHiC v0.2's own sliding windows leave at 0, and then the authors' code exactly (identical z-scores to
-1e-13 and identical loops; `benchmarks/sc_structures/snaphic_reference.py`).
+1e-13 and identical loops; uchrom-reproducibility `benchmarks/toolkit_parity/sc_structures/snaphic_reference.py`).
 
 Import name `uchrom_maps`, pip name `uchrom-maps`.  U-Chrom uses it whenever it is installed and falls
 back to numpy otherwise; `uchrom.strc.loop.hiccups.BACKEND` / `uchrom.strc.loop.mustache.BACKEND`
@@ -73,7 +73,7 @@ The argument conventions are those of the private functions that call them
 (`uchrom.strc.loop.hiccups._score_chrom`, `uchrom.strc.loop.mustache._scan`,
 `uchrom.fea.impute_rwr.rwr_band`, `uchrom.strc.loop.snaphic.snaphic_sums`); the Python tests in
 `packages/uchrom/tests/strc/test_native_maps.py` compare both paths, and
-`benchmarks/hic_structures/native_speed.py` does so on real maps (Rao 2014 chr21 at 5 / 10 / 25 kb, chr1
+uchrom-reproducibility `benchmarks/toolkit_parity/hic_structures/native_speed.py` does so on real maps (Rao 2014 chr21 at 5 / 10 / 25 kb, chr1
 at 5 kb) and measures time and memory.
 
 ## Licence

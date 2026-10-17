@@ -2,7 +2,7 @@
 
 Synthetic data check correctness only (balancing, block statistics, f_max fit, filters);
 the real-data checks (Juicer KR vectors, Rao 2014 IMR90 plumbing) are in
-``benchmarks/bulk/kr_check.py`` and ``benchmarks/bulk/README.md``.
+an unpublished benchmark and an unpublished design note.
 """
 
 import numpy as np

@@ -17,7 +17,7 @@ profile whose strength passes Li's threshold — the bulk caller's rule applied 
 ``consensus="frequency"``: the peaks of the frequency profile (``scipy.signal.find_peaks``) whose prominence
 passes it.  The stretches between consensus boundaries are the consensus domains.  On the 742 mES cells of
 SnapHiC against the insulation boundaries of bulk mESC Hi-C (Bonev et al. 2017; same 100 kb diamond, 10 kb,
-``benchmarks/sc_structures/impute_domains.py``) the mean-insulation rule gives 7,270 boundaries (bulk: 7,574),
+uchrom-reproducibility ``benchmarks/toolkit_parity/sc_structures/impute_domains.py``) the mean-insulation rule gives 7,270 boundaries (bulk: 7,574),
 60 % within 2 bins of a bulk boundary and 58 % of the bulk ones recovered (chance 16 %), where the frequency
 peaks give 20,414 at 30 % / 74 %: single-cell boundaries scatter around the population ones, their frequency
 stays low (0.058 at bulk boundaries, 0.040 elsewhere), and their mean insulation is the cleaner population

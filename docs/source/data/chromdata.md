@@ -184,7 +184,7 @@ cd.cell_shapes_geodataframe("cell")     # GeoDataFrame (needs u-chrom[spatial])
   now writes the schema); columns written by older versions (`spatial_x`,
   the seqFISH+ loader's `x_centroid`) stay readable by `cell_positions()`.
 
-On real data (`benchmarks/cell_spatial_validation.py`): Takei 2025
+On real data (an unpublished benchmark): Takei 2025
 cerebellum rep 1, 1,799 / 1,799 cells with a 3-D position equal to the
 clustering CSV, 0.86 µm median distance to the mean of the cell's spots
 (xy 0.12 µm); Takei 2021 mESC, 201 / 201 cells (2-D, 0.50 µm to the spot

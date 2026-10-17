@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-#: the repository root (benchmarks/, skills/, apps/)
+#: the repository root (skills/, apps/)
 REPO = Path(__file__).resolve().parents[3]
 
 #: test fixtures (small real data; their sources in fixtures/README.md)

@@ -14,7 +14,7 @@ which stages, under ``$UCHROM_DATA/takei2025_cerebellum/``:
 The builder
 
 1. streams the tarball once and extracts each FOV CSV to ``raw/`` (kept:
-   the allele diagnostic, uchrom-reproducibility ``benchmarks/fig2/allele_qc.py``, re-reads the
+   the allele diagnostic, uchrom-reproducibility ``benchmarks/store/allele_qc.py``, re-reads the
    raw allele columns; ``--drop-raw`` deletes each CSV once its FOV is built);
 2. loads every FOV **in its own subprocess** with
    :func:`uchrom.io.seqfish_multiomics.read_seqfish_multiomics` (default
