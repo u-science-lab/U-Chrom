@@ -43,7 +43,7 @@ Each package has its own `tests` package; run each from its folder:
 (cd packages/uchrom-discovery && pytest tests)
 (cd apps/atlas && pytest tests)
 (cd packages/uchrom-recon && cargo test --release)               # add --features gpu for the GPU backend
-pytest benchmarks/fig2/tests benchmarks/bulk/tests                # benchmark helpers
+pytest uchrom-reproducibility/benchmarks/fig2/tests benchmarks/bulk/tests                # benchmark helpers
 (cd packages/uchrom-browser/uchrom_browser/frontend && npm test)  # the frontend (vitest)
 ```
 

@@ -8,7 +8,7 @@
 # Spatial Hi-C-RNA (GSE311199): per-spot contacts in the windows of the pooled-map boundaries and loops of one
 # sample (spatial_pairs_windows.py), copied to Oak next to the sample's maps.
 #   sbatch window_counts.sbatch <sample> <windows.parquet> [max_lines]
-# windows.parquet: benchmarks/spatial_variable/bulk_calls.py.  Code and Python as contact_stats.sbatch.
+# windows.parquet: uchrom-reproducibility/benchmarks/spatial_variable/bulk_calls.py.  Code and Python as contact_stats.sbatch.
 set -euo pipefail
 SAMPLE=$1
 WINDOWS=$2

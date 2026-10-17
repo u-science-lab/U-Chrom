@@ -1,6 +1,6 @@
-"""Fig. 3 tables of the frozen `robust` method -> u-chrom-paper/manuscripts/full/figures/fig3/results/robust/.
+"""Fig. 3 tables of the frozen `robust` method -> uchrom-reproducibility/manuscripts/full/figures/fig3/results/robust/.
 
-* ``heldout.csv``  : same columns as ``u-chrom-paper/manuscripts/full/figures/fig3/results/screcon/heldout.csv``, method ``robust``, plus
+* ``heldout.csv``  : same columns as ``uchrom-reproducibility/manuscripts/full/figures/fig3/results/screcon/heldout.csv``, method ``robust``, plus
   ``set`` (dev: cells 1-4, the development runs of the frozen parameter set "c2"; test: cells 5-8, the
   frozen-build test runs);
 * ``sim.csv``      : same columns as ``screcon/sim.csv`` (method ``robust``, + ``set``: truth 1-2 dev,
@@ -10,7 +10,7 @@
 * ``score_all.json`` is copied as is from ``robust_fig3_score.sbatch`` (ED Table 2 metrics, cells 1-8).
 
     python benchmarks/screcon/robust_fig3_tables.py --heldout-dev D --heldout-test T --sim-dev D --sim-test T \\
-        --speed-records R [R ...] --score-json S --out u-chrom-paper/manuscripts/full/figures/fig3/results/robust
+        --speed-records R [R ...] --score-json S --out uchrom-reproducibility/manuscripts/full/figures/fig3/results/robust
 """
 
 from __future__ import annotations

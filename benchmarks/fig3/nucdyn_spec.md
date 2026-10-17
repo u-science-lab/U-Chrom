@@ -286,7 +286,7 @@ scan that stops once the distance grows), then the bracketing pair `(p1, p2)` an
 - **Performance notes** (not semantics): the neighbour-list repulsion makes a step O(N); in
   `getRepulsiveForce` the variable `repDist` is not `cdef`-typed, so the per-pair comparisons go
   through Python float objects — the main reason the original is slow. Measured costs are in
-  `u-chrom-paper/manuscripts/full/figures/fig3/results/a_nucdyn_original_timing.json`.
+  `uchrom-reproducibility/manuscripts/full/figures/fig3/results/a_nucdyn_original_timing.json`.
 
 ## 12. Paper (Supplementary Methods) vs `master` code
 
@@ -308,7 +308,7 @@ The GEO models are the paper's final structures (with the extra round). ED Table
 stages (400 kb, 200 kb, 100 kb without and with the ambiguous restraints); the harness
 (`nucdyn_harness.py`) carries the full table.
 
-**Metric calibration on the GEO models** (`u-chrom-paper/manuscripts/full/figures/fig3/results/a_nucdyn_reference_published.json`):
+**Metric calibration on the GEO models** (`uchrom-reproducibility/manuscripts/full/figures/fig3/results/a_nucdyn_reference_published.json`):
 the "precision" of ED Table 2 is reproduced for all eight cells, within 0.01 radii, by the **RMSD of
 each model to the superposed ensemble mean** (Cell 1 0.414 vs 0.41 … Cell 7 1.742 vs 1.75), not by
 the mean pairwise RMSD (≈ 1.5 × larger, 0.615 for Cell 1), although the table's footnote says

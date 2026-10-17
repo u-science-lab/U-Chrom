@@ -307,7 +307,7 @@ DATASETS = {
     },
     # Takei et al. 2025 (Nature) cerebellum DNA seqFISH+, rep 1, all FOVs
     # (Zenodo 7693825, CC-BY-4.0).  Consumed by build_takei2025_cerebellum.py
-    # and benchmarks/fig2/.  The locus map + clustering CSVs come from the
+    # and uchrom-reproducibility/benchmarks/fig2/.  The locus map + clustering CSVs come from the
     # CaiGroup GitHub repo (same URLs as build_takei2025_fov0.py).
     "takei2025_cerebellum": {
         "files": [
@@ -375,7 +375,7 @@ DATASETS = {
         "default": False,
         "description": "Liu 2025 mouse MOp DNA-MERFISH FOF-CT core + cell table (4DN)",
     },
-    # ---- Fig. 3 (u-chrom-paper/manuscripts/full/figures/fig3/PLAN.md): bridges between contacts and geometry ----
+    # ---- Fig. 3 (uchrom-reproducibility/manuscripts/full/figures/fig3/PLAN.md): bridges between contacts and geometry ----
     # Stevens et al. 2017 (Nature 544:59) haploid mESC single-cell Hi-C, GEO
     # GSE80280: per-cell contact pairs + the paper's own 10-model 100 kb
     # structures (.pdb) -- the NucDynamics reference.  GEO gives no md5.
@@ -822,7 +822,7 @@ DATASETS.update({
     },
     # Cell-cycle genes of Tirosh et al. 2016 (Science 352:189), S phase (43) and G2/M (54), with the 2019 HGNC
     # symbols, as Seurat ships them (satijalab/seurat, data/cc.genes.updated.2019.rda, at a fixed commit; an R
-    # list of two character vectors): benchmarks/spatial_variable (stage cellcycle)
+    # list of two character vectors): uchrom-reproducibility/benchmarks/spatial_variable (stage cellcycle)
     "seurat_cc_genes_2019": {
         "files": [("reference/seurat/cc.genes.updated.2019.rda",
                    "https://raw.githubusercontent.com/satijalab/seurat/d28233a843ede385acdee1cae7e9fb9d70e76078/"

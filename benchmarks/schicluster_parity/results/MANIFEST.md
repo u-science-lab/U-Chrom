@@ -13,7 +13,7 @@ random walk) with single-threaded BLAS, as the authors' process pool does.  A 50
 batched implementation (job 47750855) differed in the last bits (1e-15) and in one binarised entry at a percentile tie.
 
 Downstream, the agent benchmark's R4 (all 5,313 cells: features with 20 PCs per chromosome, PCA to 20, kNN purity
-of the 22 published cell types at k = 30; `benchmarks/fig6/agent_bench/v3/truth/schic.py`) gives 0.24019072714724887
+of the 22 published cell types at k = 30; uchrom-reproducibility `benchmarks/fig6/agent_bench/v3/truth/schic.py`) gives 0.24019072714724887
 with U-Chrom's `embed_contacts` and with the authors' code (job 47754119; U-Chrom before the fix: 0.2433).
 
 ## Times

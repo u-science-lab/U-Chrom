@@ -58,16 +58,6 @@ docs/build/
 # Stray nested worktree paths must never be committed
 .claude/worktrees/
 
-# Fig 6c benchmark inputs (replicated Takei 2025 FOV 0; benchmarks/fig6/make_scaled.py)
-benchmarks/fig6/_data/
-
-# Fig 6e agent benchmark: answer key, figure data and grades are tracked; raw agent
-# transcripts (~40 MB per run) stay local (archive with the paper's data).
-!benchmarks/fig6/agent_bench/answers.json
-benchmarks/fig6/agent_bench/runs/**
-!benchmarks/fig6/agent_bench/runs/**/
-!benchmarks/fig6/agent_bench/runs/**/grades.json
-
 # real-data validation results (benchmarks/*_validation.py --out)
 !benchmarks/results/*.json
 
@@ -87,7 +77,8 @@ packages/uchrom-maps/python/uchrom_maps/*.pyd
 
 # Fig. 3 renders: rebuildable inputs and raw pane captures (the cropped PNGs used in the figures are tracked)
 
-# The manuscripts and figures live in u-science-lab/u-chrom-paper (moved out of paper/ on 2026-10-05);
+# The manuscripts live in u-science-lab/u-chrom-paper (moved out of paper/ on 2026-10-05), the papers' benchmarks
+# and figure scripts in u-science-lab/uchrom-reproducibility (2026-10-17);
 # a leftover paper/ folder in an old worktree must not come back; a symlink paper -> ../u-chrom-paper
 # (to browse the paper next to the code) is ignored too.
 /paper
