@@ -91,7 +91,7 @@ loops = call_loops_axiswise_f(
 ### Algorithm
 
 The three tracing callers implement ArcFISH (Yu et al. 2025; github.com/hyuyu104/ArcFISH) and give the authors'
-results: `benchmarks/arcfish_parity/` runs both on the authors' tutorial data and four more datasets and compares the
+results: uchrom-reproducibility `benchmarks/toolkit_parity/arcfish_parity/` runs both on the authors' tutorial data and four more datasets and compares the
 per-locus statistics, test matrices and calls (`results/parity.json`).  For each chromosome separately:
 
 1. **Loci and coordinates** — the chromosome's starts with a finite coordinate; a trace that observed a locus more

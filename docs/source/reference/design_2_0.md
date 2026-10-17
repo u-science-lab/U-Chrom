@@ -798,7 +798,7 @@ takes 45 s at 25 GB peak (the 1.x reader dominates); the store is 2.07 GB
 reads are ~20 % slower than a flat Parquet file: two zstd files instead of
 one snappy file, and building a `ChromData` (loci from `bins`,
 categoricals) instead of returning a flat DataFrame — but at half the peak
-memory.  Full numbers: PR #66 and `u-chrom-paper/manuscripts/full/figures/fig2/results/`.
+memory.  Full numbers: PR #66 and `uchrom-reproducibility/manuscripts/full/figures/fig2/results/`.
 
 ### Format 2.1: chromosome partitions
 
@@ -836,7 +836,7 @@ partition (a plain `concat_tables` doubled the peak: 5.9 → 10.8 GB).
 `columns=` / `tracks=`; `columns="coords"` reads `x, y, z` and the key
 columns only.  The web browser's geometry reads use it.
 
-**Row-group size** (`benchmarks/fig2/rowgroup_sweep.py`, Takei 1e7, 3
+**Row-group size** (uchrom-reproducibility `benchmarks/store/rowgroup_sweep.py`, Takei 1e7, 3
 fresh processes, query times pooled over 20 random ids × 3):
 
 | rows / group | store | full read | get_trace | get_cell | get_chrom | get_cell, coords | get_chrom, coords |
@@ -873,7 +873,7 @@ instead of one; with `columns="coords"` it is faster than before); the
 backed process holds more (the 256 MB row-group cache fills with
 per-chromosome groups); tiny stores carry per-partition overhead (1e4
 spots: 2.6 → 4.6 MB); full reads are 13 % slower; and the Takei store is
-35 % larger.  The size (`benchmarks/fig2/spot_tracks_encoding.py` →
+35 % larger.  The size (uchrom-reproducibility `benchmarks/store/spot_tracks_encoding.py` →
 `results/spot_tracks_encoding.json`, Takei rep 1's 62 tracks, 10.9 M
 rows): with identical Parquet options the same `spot_tracks` take 1.82 GB
 in the 2.0 order and 2.56 GB in the 2.1 order — the per-spot z-scores
@@ -938,8 +938,8 @@ bin) into Python strings.
   derived columns and loci are materialised with multi-threaded gathers;
   the `index/` arrays are fetched concurrently with the small tables.
 
-**Measured** (`benchmarks/fig2/cd22_variants.py` →
-`u-chrom-paper/manuscripts/full/figures/fig2/results/cd22_v2_variants.json`; Takei 2025 rep 1 whole-cell
+**Measured** (uchrom-reproducibility `benchmarks/store/cd22_variants.py` →
+`uchrom-reproducibility/manuscripts/full/figures/fig2/results/cd22_v2_variants.json`; Takei 2025 rep 1 whole-cell
 subsets with 62 spot tracks, Liu 2025 MOp 9.58 M spots; 3 fresh processes,
 median, warm cache; 20 random ids × 3 per query level; streaming = exact
 chr11 median map under a 2 GB budget; Apple M5 Pro, 64 GB):
@@ -976,8 +976,8 @@ stores stay readable in memory and backed.  `python -m uchrom.io.upgrade`
 rewrites a store and keeps its original row order.  The streaming writer
 writes 2.2 (identical to the in-memory writer, derived columns included:
 one extra pass over the spill runs).  The real stores were converted
-(`benchmarks/cd22_convert_validate.py` →
-`u-chrom-paper/manuscripts/full/figures/fig2/results/cd22_convert_validation.json`): Takei rep 1
+(an unpublished benchmark →
+`uchrom-reproducibility/manuscripts/full/figures/fig2/results/cd22_convert_validation.json`): Takei rep 1
 2.94 → 2.05 GB, Liu 285 → 267 MB, both bitwise identical in original
 order, backed subsets equal to in-memory ones.
 
@@ -1018,8 +1018,8 @@ order, backed subsets equal to in-memory ones.
   identical outlier masks, filtered variances equal to the torch path up to
   summation order (≤ 1e-9 relative in tests), same calls.
   `call_compartments_axes_pc` and `fishnet` are not streamed yet.
-- **Real data** (`benchmarks/cd21_streaming_validation.py`,
-  `benchmarks/fig2/d_streaming.py`; M5 Pro, 64 GB):
+- **Real data** (uchrom-reproducibility `benchmarks/store/cd21_streaming_validation.py`,
+  uchrom-reproducibility `benchmarks/store/d_streaming.py`; M5 Pro, 64 GB):
   - Liu 2025 MOp FOF-CT (1.68 GB, 9.58 M spots): in-memory `from_fofct` +
     write 12.6 GB peak / 20 s; `from_fofct(out=, memory_budget="4GB")`
     1.3 GB / 20 s; the two stores are value-identical (stored and original

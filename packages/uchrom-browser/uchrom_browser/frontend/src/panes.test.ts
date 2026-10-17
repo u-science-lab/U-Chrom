@@ -6,7 +6,6 @@ import {
   defaultWorkspace,
   workspaceOf,
   dropUnknownPins,
-  MAX_SPLIT_PANES,
   parseWorkspace,
   pinnedCell,
   setLayout,
@@ -16,7 +15,7 @@ import {
 } from './workspace'
 
 const pinPane = (ws: WorkspaceState, id: string, cell: string | null) => setPaneScope(ws, id, cell ? { kind: 'cell', cell } : { kind: 'focus' })
-const base = (): WorkspaceState => workspaceOf(['3d', 'embedding'], [0.6, 0.4]) // 3D | Embedding
+const base = (): WorkspaceState => workspaceOf(['3d', 'embedding']) // 3D | Embedding
 
 describe('pinning panes to cells', () => {
   it('pins and unpins a pane', () => {
@@ -33,13 +32,9 @@ describe('pinning panes to cells', () => {
       ['3d', 'c7'],
     ])
     expect(ws.activePane).toBe(ws.panes[2].id)
-    expect(ws.layout).toBe('columns')
-    expect(ws.sizes.reduce((a, b) => a + b, 0)).toBeCloseTo(1)
-  })
-  it('switches columns / rows to a grid beyond MAX_SPLIT_PANES; keeps tabs', () => {
-    let ws = base()
-    for (let i = 0; ws.panes.length <= MAX_SPLIT_PANES; i++) ws = addPinnedPane(ws, '3d', `c${i}`)
     expect(ws.layout).toBe('grid')
+  })
+  it('keeps the layout when panes are added', () => {
     const tabs = addPinnedPane(addPinnedPane(setLayout(base(), 'tabs'), '3d', 'a'), '3d', 'b')
     expect(tabs.layout).toBe('tabs')
   })

@@ -11,7 +11,7 @@ temperature (calibrated ensembles) and adaptive resolution below 25 kb.
 
 It was pre-registered, developed on a development set, frozen (tag
 ``robust-frozen``) and tested once against NucDynamics
-(``benchmarks/screcon/PREREG.md``, ``TEST_RESULTS.md``).  The defaults below are
+(an unpublished design note, ``TEST_RESULTS.md``).  The defaults below are
 the frozen method.
 
     from uchrom.recon.sc import reconstruct_ember
@@ -101,7 +101,7 @@ def reconstruct_ember(
         ``"haploid"`` ignores the phases), haplotype names in the trace ids, and whether
         hickit's imputed phase probabilities (when present) are used as an extra prior of the
         copy pairs (default ``False``: the frozen configuration, EMber's own neighbourhood prior
-        only; ``benchmarks/screcon/PREREG.md`` §6).
+        only; an unpublished design note §6).
         Adds the results ``<key>.phase_probs`` / ``<key>.imputed_phase`` and
         ``uns[key]["diploid"]`` (phasing statistics).
 

@@ -21,7 +21,6 @@ import {
   supportedPaneTypes,
   handleWorkspaceKey,
   MIN_FRAC,
-  moveSplitter,
   normalizeSizes,
   parseWorkspace,
   parseWorkspaces,
@@ -40,8 +39,8 @@ describe('default workspace', () => {
     // …but Matrix, whose maps the Genome view's matrix rows already show
     expect(ws.panes.map((p) => p.type)).toEqual(['3d', 'embedding', 'genome', 'stats'])
     expect(defaultWorkspace(false).panes.map((p) => p.type)).toEqual(['3d', 'genome', 'stats'])
-    // one view: no grid
-    expect(defaultWorkspace({ hasCoords: false, hasEmbeddings: false, hasTracks: false })).toMatchObject({ layout: 'columns', panes: [{ type: 'matrix' }] })
+    // one view: a grid of one
+    expect(defaultWorkspace({ hasCoords: false, hasEmbeddings: false, hasTracks: false })).toMatchObject({ layout: 'grid', panes: [{ type: 'matrix' }] })
   })
   it('prefers UMAP > t-SNE > PCA', () => {
     const e = (key: string, method: string) => ({ key, method, source: 'rna', label: key, n_dims: 2 })
@@ -56,17 +55,15 @@ describe('default workspace', () => {
 
 describe('pane actions', () => {
   it('adds, retypes, updates and removes panes with stable ids', () => {
-    let ws = workspaceOf(['3d', 'embedding'], [0.6, 0.4])
+    let ws = workspaceOf(['3d', 'embedding'])
     ws = addPane(ws, 'embedding')
     expect(ws.panes.map((p) => p.id)).toEqual(['P1', 'P2', 'P3'])
     expect(ws.activePane).toBe('P3')
-    expect(sum(ws.sizes)).toBeCloseTo(1)
     ws = updatePane(ws, 'P3', { embeddingKey: 'rna_pca', dims: [1, 2] })
     ws = retypePane(ws, 'P3', '3d')
     expect(ws.panes[2]).toEqual({ id: 'P3', type: '3d', embeddingKey: 'rna_pca', dims: [1, 2] })
     ws = removePane(ws, 'P2')
     expect(ws.panes.map((p) => p.id)).toEqual(['P1', 'P3'])
-    expect(sum(ws.sizes)).toBeCloseTo(1)
     // ids are not reused while in use
     expect(addPane(ws, '3d').panes.map((p) => p.id)).toEqual(['P1', 'P3', 'P4'])
     // the last pane cannot be closed
@@ -74,9 +71,9 @@ describe('pane actions', () => {
     expect(one.panes.map((p) => p.id)).toEqual(['P1'])
   })
   it('switching layout keeps panes and clears maximise', () => {
-    const ws = { ...workspaceOf(['3d', 'embedding'], [0.6, 0.4]), maximized: 'P2' }
-    const g = setLayout(ws, 'grid')
-    expect(g.layout).toBe('grid')
+    const ws = { ...workspaceOf(['3d', 'embedding']), maximized: 'P2' }
+    const g = setLayout(ws, 'tabs')
+    expect(g.layout).toBe('tabs')
     expect(g.panes).toBe(ws.panes)
     expect(g.maximized).toBeNull()
   })
@@ -90,7 +87,7 @@ describe('grid', () => {
     ])
     expect([0, 1, 2, 3, 4].map((i) => gridSpan(i, 5))).toEqual([1, 1, 1, 1, 2]) // the last fills its row
     expect(gridSpan(3, 4)).toBe(1)
-    let ws = workspaceOf(['3d', 'embedding', 'genome', 'matrix', 'stats'], undefined, 'grid') // 5 views: 3 × 2
+    let ws = workspaceOf(['3d', 'embedding', 'genome', 'matrix', 'stats']) // 5 views: 3 × 2
     expect(gridSizes(ws)).toEqual({ cols: [1 / 3, 1 / 3, 1 / 3], rows: [0.5, 0.5] })
     ws = moveGridSplitter(ws, 'cols', 0, 0.5)
     expect(gridSizes(ws).cols[0]).toBeCloseTo(0.5)
@@ -112,34 +109,29 @@ describe('sizes', () => {
     expect(Math.min(...s)).toBeGreaterThanOrEqual(MIN_FRAC - 1e-9)
     expect(normalizeSizes([1, 2], 3)).toEqual([1 / 3, 1 / 3, 1 / 3])
   })
-  it('moves one splitter between its two neighbours only', () => {
-    let ws = addPane(workspaceOf(['3d', 'embedding'], [0.6, 0.4]), '3d')
-    ws = { ...ws, sizes: [0.4, 0.3, 0.3] }
-    const m = moveSplitter(ws, 0, 0.55)
-    expect(m.sizes[0]).toBeCloseTo(0.55)
-    expect(m.sizes[1]).toBeCloseTo(0.15)
-    expect(m.sizes[2]).toBeCloseTo(0.3)
-    expect(moveSplitter(ws, 0, 0.99).sizes[1]).toBeCloseTo(MIN_FRAC)
-  })
 })
 
 describe('persistence', () => {
   it('accepts a saved workspace and rejects junk', () => {
-    const ws = addPane(workspaceOf(['3d', 'embedding'], [0.6, 0.4]), 'embedding')
+    const ws = addPane(workspaceOf(['3d', 'embedding']), 'embedding')
     expect(parseWorkspace(JSON.parse(JSON.stringify(ws)))).toEqual(ws)
     expect(parseWorkspace(null)).toBeNull()
     expect(parseWorkspace({ layout: 'mosaic', panes: [] })).toBeNull()
     expect(parseWorkspace({ layout: 'tabs', panes: [{ id: 'a', type: 'map' }] })).toBeNull()
     const fixed = parseWorkspace({ layout: 'tabs', panes: [{ id: 'a', type: '3d' }], activePane: 'zz', sizes: 'x' })
-    expect(fixed).toMatchObject({ activePane: 'a', sizes: [1], maximized: null })
+    expect(fixed).toEqual({ layout: 'tabs', panes: [{ id: 'a', type: '3d', embeddingKey: null, dims: [0, 1] }], activePane: 'a', maximized: null })
+  })
+  it('layouts saved as columns or rows open as a grid', () => {
+    for (const layout of ['columns', 'rows'])
+      expect(parseWorkspace({ layout, panes: [{ id: 'a', type: '3d' }, { id: 'b', type: 'stats' }], sizes: [0.7, 0.3] })).toMatchObject({ layout: 'grid' })
   })
   it('the store applies the data-dependent default until the user changes the layout', () => {
     useStore.setState({ workspace: defaultWorkspace(false), workspaceTouched: false })
     useStore.getState().ensureDefaultWorkspace(true)
     expect(paneSignature(useStore.getState().workspace)).toBe(paneSignature(defaultWorkspace(true)))
-    useStore.getState().setWorkspace((w) => setLayout(w, 'rows'))
+    useStore.getState().setWorkspace((w) => setLayout(w, 'tabs'))
     useStore.getState().ensureDefaultWorkspace(false)
-    expect(useStore.getState().workspace.layout).toBe('rows')
+    expect(useStore.getState().workspace.layout).toBe('tabs')
     expect(paneSignature(useStore.getState().workspace)).toBe(paneSignature(defaultWorkspace(true)))
   })
   it('each dataset keeps its own layout', () => {
@@ -147,15 +139,15 @@ describe('persistence', () => {
     const st = () => useStore.getState()
     st().ensureDefaultWorkspace(true, 'a')
     expect(paneSignature(st().workspace)).toBe(paneSignature(defaultWorkspace(true)))
-    st().setWorkspace((w) => setLayout(w, 'rows'))
+    st().setWorkspace((w) => setLayout(w, 'tabs'))
     // another dataset: its own default, not a's layout
     st().ensureDefaultWorkspace(false, 'b')
-    expect(st().workspace.layout).not.toBe('rows')
+    expect(st().workspace.layout).not.toBe('tabs')
     expect(st().workspaceTouched).toBe(false)
     expect(st().workspace.panes.map((p) => p.type)).toEqual(defaultWorkspace(false).panes.map((p) => p.type))
     // back to a: its arranged layout
     st().ensureDefaultWorkspace(true, 'a')
-    expect(st().workspace.layout).toBe('rows')
+    expect(st().workspace.layout).toBe('tabs')
     expect(st().workspaceTouched).toBe(true)
     expect(Object.keys(st().savedWorkspaces)).toEqual(['a'])
     expect(parseWorkspaces({ a: st().workspace, junk: { layout: 'x' } })).toEqual({ a: st().workspace })

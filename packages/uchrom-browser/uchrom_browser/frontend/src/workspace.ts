@@ -12,7 +12,7 @@ import type { EmbeddingInfo, Layer, LayerStyle } from './types'
 
 /** 'genome': combined tracks + matrix triangles on one axis (was 'tracks'). */
 export type PaneType = '3d' | 'spatial' | 'embedding' | 'genome' | 'matrix' | 'stats'
-export type WsLayout = 'tabs' | 'columns' | 'rows' | 'grid'
+export type WsLayout = 'tabs' | 'grid'
 export type StatsKind = 'rg' | 'scaling' | 'hist' | 'scatter'
 export type TrackAgg = 'mean' | 'median' | 'max'
 export type DistanceStat = 'median' | 'mean' | 'contact'
@@ -88,8 +88,6 @@ export interface WorkspaceState {
   layout: WsLayout
   panes: Pane[]
   activePane: string
-  /** size fractions of the panes in 'columns' / 'rows' (sum 1) */
-  sizes: number[]
   /** 'grid': column widths / row heights as fractions (sum 1; equal when absent or stale) */
   gridCols?: number[]
   gridRows?: number[]
@@ -97,7 +95,7 @@ export interface WorkspaceState {
   maximized: string | null
 }
 
-export const LAYOUTS: WsLayout[] = ['tabs', 'columns', 'rows', 'grid']
+export const LAYOUTS: WsLayout[] = ['tabs', 'grid']
 export const PANE_TYPES: PaneType[] = ['3d', 'spatial', 'embedding', 'genome', 'matrix', 'stats']
 export const PANE_LABEL: Record<PaneType, string> = {
   '3d': '3D',
@@ -142,18 +140,17 @@ export function defaultWorkspace(kind: boolean | DataKind): WorkspaceState {
   const types = all.includes('genome') ? all.filter((t) => t !== 'matrix') : all
   const panes = (types.length ? types : (['matrix'] as PaneType[])).map((t, i) => pane(`P${i + 1}`, t))
   return {
-    layout: panes.length > 1 ? 'grid' : 'columns',
+    layout: 'grid',
     panes,
     activePane: panes[0].id,
-    sizes: Array(panes.length).fill(1 / panes.length),
     maximized: null,
   }
 }
 
-/** Panes of `types` side by side (columns; `sizes` default equal). */
-export function workspaceOf(types: PaneType[], sizes?: number[], layout: WsLayout = 'columns'): WorkspaceState {
+/** Panes of `types` in a grid (or `layout`). */
+export function workspaceOf(types: PaneType[], layout: WsLayout = 'grid'): WorkspaceState {
   const panes = types.map((t, i) => pane(`P${i + 1}`, t))
-  return { layout, panes, activePane: panes[0].id, sizes: normalizeSizes(sizes ?? [], panes.length), maximized: null }
+  return { layout, panes, activePane: panes[0].id, maximized: null }
 }
 
 /** Columns × rows of the grid layout for `n` panes (⌈√n⌉ columns). */
@@ -236,19 +233,10 @@ function nextId(ws: WorkspaceState): string {
 
 export function addPane(ws: WorkspaceState, type: PaneType, opts: Partial<Omit<Pane, 'id' | 'type'>> = {}): WorkspaceState {
   const id = nextId(ws)
-  const n = ws.panes.length + 1
-  // the new pane gets an equal share; the others shrink proportionally
-  const sizes = normalizeSizes([...ws.sizes.map((x) => x * (1 - 1 / n)), 1 / n], n)
-  return { ...ws, panes: [...ws.panes, { ...pane(id, type), ...opts }], sizes, activePane: id, maximized: null }
+  return { ...ws, panes: [...ws.panes, { ...pane(id, type), ...opts }], activePane: id, maximized: null }
 }
 
-/** Panes side by side (or stacked) before the layout switches to a grid. */
-export const MAX_SPLIT_PANES = 3
-
-/**
- * Open `cell` in a new view of `type` pinned to it.  Columns / rows turn
- * into a grid beyond MAX_SPLIT_PANES panes so views stay usable.
- */
+/** Open `cell` in a new view of `type` pinned to it. */
 export function addPinnedPane(ws: WorkspaceState, type: PaneType, cell: string): WorkspaceState {
   return addScopedPane(ws, type, { kind: 'cell', cell })
 }
@@ -266,9 +254,7 @@ export function addGroupPane(ws: WorkspaceState, type: PaneType, group: string):
 }
 
 function addScopedPane(ws: WorkspaceState, type: PaneType, scope: ScopeSpec): WorkspaceState {
-  const next = addPane(ws, type, { scope })
-  const split = next.layout === 'columns' || next.layout === 'rows'
-  return split && next.panes.length > MAX_SPLIT_PANES ? { ...next, layout: 'grid' } : next
+  return addPane(ws, type, { scope })
 }
 
 /** Set a pane's cells setting. */
@@ -350,9 +336,8 @@ export function removePane(ws: WorkspaceState, id: string): WorkspaceState {
   const i = ws.panes.findIndex((p) => p.id === id)
   if (i < 0 || ws.panes.length <= 1) return ws
   const panes = ws.panes.filter((p) => p.id !== id)
-  const sizes = normalizeSizes(ws.sizes.filter((_, k) => k !== i), panes.length)
   const activePane = ws.activePane === id ? panes[Math.max(0, i - 1)].id : ws.activePane
-  return { ...ws, panes, sizes, activePane, maximized: ws.maximized === id ? null : ws.maximized }
+  return { ...ws, panes, activePane, maximized: ws.maximized === id ? null : ws.maximized }
 }
 
 export function updatePane(ws: WorkspaceState, id: string, patch: Partial<Omit<Pane, 'id'>>): WorkspaceState {
@@ -366,15 +351,6 @@ export function retypePane(ws: WorkspaceState, id: string, type: PaneType): Work
 
 export function setLayout(ws: WorkspaceState, layout: WsLayout): WorkspaceState {
   return { ...ws, layout, maximized: null }
-}
-
-/**
- * Drag the splitter after pane `index` so that pane `index` ends at `frac`
- * of the container (0–1); only the two neighbouring panes change.
- */
-export function moveSplitter(ws: WorkspaceState, index: number, frac: number): WorkspaceState {
-  const s = movePair(normalizeSizes(ws.sizes, ws.panes.length), index, frac)
-  return s ? { ...ws, sizes: s } : ws
 }
 
 /** Pane fields of layouts saved before the explicit cells setting. */
@@ -513,7 +489,10 @@ export function parseWorkspaces(raw: unknown): Record<string, WorkspaceState> {
 export function parseWorkspace(raw: unknown): WorkspaceState | null {
   if (!raw || typeof raw !== 'object') return null
   const w = raw as Partial<WorkspaceState>
-  if (!LAYOUTS.includes(w.layout as WsLayout) || !Array.isArray(w.panes) || !w.panes.length) return null
+  // layouts saved with the former 'columns' / 'rows' open as a grid
+  const saved = w.layout as unknown
+  const layout: WsLayout | null = saved === 'tabs' || saved === 'grid' ? saved : saved === 'columns' || saved === 'rows' ? 'grid' : null
+  if (!layout || !Array.isArray(w.panes) || !w.panes.length) return null
   const panes: Pane[] = []
   for (const raw of w.panes) {
     // saved before the combined view: a 'tracks' pane opens as a genome pane
@@ -530,10 +509,9 @@ export function parseWorkspace(raw: unknown): WorkspaceState | null {
   const gc = fracs(w.gridCols)
   const gr = fracs(w.gridRows)
   return {
-    layout: w.layout as WsLayout,
+    layout,
     panes,
     activePane,
-    sizes: normalizeSizes(Array.isArray(w.sizes) ? w.sizes : [], panes.length),
     maximized,
     ...(gc ? { gridCols: gc.v } : {}),
     ...(gr ? { gridRows: gr.v } : {}),

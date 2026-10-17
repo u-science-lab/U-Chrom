@@ -14,7 +14,7 @@ import { useLocus } from '../useLocus'
 import { useTheme } from '../useTheme'
 import { useGroupChoices, useGroupInfos, usePaneScope } from '../useGroups'
 import { updatePane, type Pane, type StatsKind } from '../workspace'
-import { CHART, drawAxes, rgb, type Box } from './chart'
+import { CHART, drawAxes, plotArea, rgb, type Box } from './chart'
 import { colourableFields, fieldLabel } from './format'
 import { prepareCanvas, useSize } from './useSize'
 import { Select } from './Select'
@@ -238,7 +238,8 @@ export function StatsView({ pane }: { pane: Pane }) {
     const Y = ids.map((id) => num(ys.get(id)))
     return { ids, X, Y }
   }, [kind, xs, ys])
-  const plot: Box = { x: M.left, y: M.top, w: Math.max(10, size.w - M.left - M.right), h: Math.max(10, size.h - M.top - M.bottom) }
+  // between 1:1 and 2:1, centred: the chart does not stretch with a very wide or tall view
+  const plot: Box = plotArea(size.w, size.h, M)
   const scatterPx = useMemo(() => {
     if (!scatter) return null
     const [x0, x1] = extent(scatter.X)

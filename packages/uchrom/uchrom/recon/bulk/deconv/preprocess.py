@@ -2,7 +2,7 @@
 
 Implements the preprocessing of Boninsegna et al. 2022 (Nat Methods 19:938; Supplementary
 Information section 6, "HFFc6 experimental data pre-processing"), as specified in
-``benchmarks/bulk/pgs_spec.md`` section 1.2.  The same input serves every population
+an unpublished design note section 1.2.  The same input serves every population
 deconvolution method (``uchrom.recon.bulk.deconv.deconvolve(method="igm")``).
 
 Protocol (defaults = the paper's values; resolutions are parameters):

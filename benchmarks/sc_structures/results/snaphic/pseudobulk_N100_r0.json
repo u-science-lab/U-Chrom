@@ -1,9 +1,0 @@
-{
- "n_cells": 100,
- "n_cis": 28374622,
- "pseudobulk_s": 11.85205626487732,
- "n_loops_default": 2,
- "hiccups_default_s": 1.5796949863433838,
- "n_loops_sparse": 1,
- "hiccups_sparse_s": 0.9924523830413818
-}

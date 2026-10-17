@@ -46,7 +46,7 @@ describe('left side bar', () => {
 
 describe('active pane', () => {
   it('falls back to the first pane and titles panes by type and position', () => {
-    const ws = addPane(workspaceOf(['3d', 'matrix'], [0.55, 0.45]), 'genome')
+    const ws = addPane(workspaceOf(['3d', 'matrix']), 'genome')
     expect(ensureActivePane(ws)).toBe(ws)
     expect(ensureActivePane({ ...ws, activePane: 'gone' }).activePane).toBe('P1')
     expect(paneTitle(ws, ws.panes[2])).toBe('Genome · pane 3')

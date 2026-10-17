@@ -67,7 +67,7 @@ scaling, restraint weights, 3-D ambiguity resolution, model selection).
 
 `protocol="robust"` (public name **EMber**; alias `protocol="ember"` in the Python
 wrapper; `uchrom.recon.sc.reconstruct_ember`) is **not** NucDynamics: it is the new single-cell
-method of U-Chrom (`benchmarks/screcon/PREREG.md` §7; milestone M2,
+method of U-Chrom (an unpublished design note §7; milestone M2,
 annealing only), built on the 2017 protocol.  Each contact is modelled as a
 true proximity or a false contact (uniform over pairs, rate ε); before every
 stage from `robust_start_stage` on (and `robust_segments` times inside it,
@@ -80,7 +80,7 @@ and a Poisson "no contact" term (`robust_nc_scale`).  With re-weighting
 disabled (`robust_start_stage` beyond the schedule) it equals the 2017
 protocol bit for bit; the existing protocols are unchanged
 (`tests/regression.rs`, golden hashes recorded before `robust` was added).
-Development log: `benchmarks/screcon/robust_devlog.md`.
+Development log: an unpublished design note.
 
 ### Diploid (homolog-resolved) input — protocols `nuc_dynamics_2017` and `robust` (EMber)
 
@@ -111,7 +111,7 @@ or two copies (`ploidy="auto"`: male — X and Y single — when a Y chromosome 
   `phase_prior`, e.g. hickit's own `phase_prob00..11`).  From the first
   re-weighted stage the candidates stay one ambiguous restraint weighted by P(true) (default;
   `robust_dip_split = true`: every candidate its own restraint weighted by P(true, c) — the
-  literal soft M-step, clearly worse on the development set, `benchmarks/screcon/diploid_devlog.md`).  ε and the kernel width are fitted with the marginal likelihood Σ π φ.  The
+  literal soft M-step, clearly worse on the development set, an unpublished design note).  ε and the kernel width are fitted with the marginal likelihood Σ π φ.  The
   posteriors P(c | true) are the structure-inferred phases (the soft counterpart of Dip-C's
   `impute3` and of IGM's A-step).
 * **Output**: copy chains; per input contact `phase_probs` (P(hap_a, hap_b | true): EM
@@ -124,7 +124,7 @@ or two copies (`ploidy="auto"`: male — X and Y single — when a Y chromosome 
   toy for both protocols: per-copy distance r and phase accuracy), `gpu::tests::
   gpu_matches_cpu_ambiguous_groups` (max diff ~2e-5 after 10 steps for 2017, weighted and
   per-model weights) and `gpu_matches_cpu_diploid_protocol`; Python `tests/recon/test_diploid.py`.
-  Validation on imaging truths and Dip-C GM12878: `benchmarks/screcon/diploid_devlog.md`.
+  Validation on imaging truths and Dip-C GM12878: an unpublished design note.
 
 ### Where each element of the original is implemented (2017 protocol)
 
@@ -218,7 +218,7 @@ This is a clean re-implementation of the algorithm of **IGM** and its predecesso
 Original code: github.com/alberlab/igm (GPL-3.0), alabtools (GPL-3.0), lammpgen (the
 modified LAMMPS, GPL-2.0), pgs (GPL-3.0).  **No code of these was copied or
 translated**: the engine was written from the algorithm specification
-`benchmarks/bulk/pgs_spec.md` (which records what the original code does, with
+an unpublished design note (which records what the original code does, with
 citations to its functions) and stays LGPL-3.0-or-later.  Please cite the papers above
 when you use populations computed with this protocol.
 
@@ -269,13 +269,13 @@ CPU f64, hashes recorded before the options existed).
 | IGM-Plus `_preprocess.py:Preprocess` (`model/bead_radius` when `model/occupancy` is absent) | one radius (nm) for every bead instead of radii from the occupancy | `bead_radius` (0 / `None` = off); requires `occupancy = 0` (Rust) / `occupancy=None` (Python; `replace(bead_radius=…)` drops it) | IGM-Plus silently prefers `occupancy` when both are given; here giving both is an error |
 | IGM-Plus `restraints/intra_hic.py:intraHiC` / `inter_hic.py:interHiC`, `ModelingStep.add_hic` | intra- and inter-chromosomal Hi-C bonds as two restraint objects (same `contact_range`, same `contact_kspring`), reported separately in the violation summary | `Violations.hic_inter_imposed / hic_inter_violated` (subset of `hic_*`); round logs' `breakdown` (`hic_intra`, `hic_inter`, `polymer`, `envelope`); GPU: inter flag in bit 31 of the CSR partner word (`igm.wgsl:assign_fill`, `violations_k`) | separate σ lists already existed (`intra_sigma_list` / `inter_sigma_list`, IGM 1.0); IGM-Plus adds no separate force constant or contact range, so neither is added; always reported (reporting only, no effect on the run) |
 | IGM-Plus `ActivationDistanceStep.__init__` / `get_actdist` (`optimization/iter_corr_knob`) | knob = 0: `p = p_wish` instead of `clean(p_wish, clean(p_now, p_last))` | `iterative_correction` (true); `astep.rs:p_and_rank_opt`; GPU host side | — |
-| IGM-Plus `RandomInit.task` (`restraints/tracing/assignment_file`, `model/init_noise`) | selected loci of a structure start at given xyz; loci between two consecutive pinned loci linearly interpolated; Gaussian noise `init_noise · N(0,1)` on every coordinate | `driver.rs:InitPins`, `apply_pins`, `initial_population`; `calc_population(init_pins=…)`; U-Chrom `deconvolve(init_positions=DataFrame)`; `init_noise` (0) | interpolation only between pins of the **same chain** (IGM-Plus interpolates between consecutive pinned bead indices, also across chain ends); noise whenever `init_noise > 0` (IGM-Plus: in tracing mode); the pins set the start only — IGM-Plus' `Tracing` positional restraint is stage 2 (`benchmarks/bulk/design.md`) |
+| IGM-Plus `RandomInit.task` (`restraints/tracing/assignment_file`, `model/init_noise`) | selected loci of a structure start at given xyz; loci between two consecutive pinned loci linearly interpolated; Gaussian noise `init_noise · N(0,1)` on every coordinate | `driver.rs:InitPins`, `apply_pins`, `initial_population`; `calc_population(init_pins=…)`; U-Chrom `deconvolve(init_positions=DataFrame)`; `init_noise` (0) | interpolation only between pins of the **same chain** (IGM-Plus interpolates between consecutive pinned bead indices, also across chain ends); noise whenever `init_noise > 0` (IGM-Plus: in tracing mode); the pins set the start only — IGM-Plus' `Tracing` positional restraint is stage 2 (an unpublished design note) |
 | IGM-Plus `RelaxInit.task` (violations after relaxation), `ModelingStep.log_stats` ("Mostly violated in structure …") | violation counts after the initial relaxation; per restraint kind the structure with the largest violated / imposed ratio (and the number of ties) | `RunOutput.relax_log` (`res["relax_init"]`, `uns["deconv"]["relax_init"]`); `RoundLog.breakdown` (`driver.rs:breakdown`), printed with `verbose` | reporting only |
-| IGM_2.0 `steps/GP_ActivationDistanceStep.py:get_actdist` (G. Polles) | every pair (intra and inter) pools all `len ii · len jj` copy combinations; per structure the `n_possible = min(len ii, len jj)` smallest distances enter `p_now` and the rank selection; rows as IGM 1.0 (intra: same copy, inter: all) | `assignment_pooling = "gp"` ("igm"); `astep.rs:pool_combos`, `actdist_opt`; GPU `astep.wgsl:item` (per-structure rank among ≤ 16 combinations; ≤ 4 copies) | — (for the sensitivity analysis of `benchmarks/bulk/design.md`) |
+| IGM_2.0 `steps/GP_ActivationDistanceStep.py:get_actdist` (G. Polles) | every pair (intra and inter) pools all `len ii · len jj` copy combinations; per structure the `n_possible = min(len ii, len jj)` smallest distances enter `p_now` and the rank selection; rows as IGM 1.0 (intra: same copy, inter: all) | `assignment_pooling = "gp"` ("igm"); `astep.rs:pool_combos`, `actdist_opt`; GPU `astep.wgsl:item` (per-structure rank among ≤ 16 combinations; ≤ 4 copies) | — (for the sensitivity analysis of an unpublished design note) |
 
 Not adopted from IGM-Plus: the imaging-derived restraints (volume maps, lamina DamID with
 imaged laminas, tracing / single-cell FISH restraints; design in
-`benchmarks/bulk/design.md`, "Stage 2"), the `polymer/violations` switch (polymer bonds
+an unpublished design note, "Stage 2"), the `polymer/violations` switch (polymer bonds
 are always monitored, as in IGM 1.0), `polymer_bonds_style = "none"`.
 
 ### Deviations from the original, and why
@@ -336,12 +336,12 @@ are always monitored, as in IGM 1.0), `polymer_bonds_style = "none"`.
   diploid, 200 structures; truth population from a designed matrix, its contact
   probabilities fitted again with another seed): Pearson 0.995 and mean |Δp| 0.02 over
   the pairs ≥ 0.05.  Synthetic data test correctness only; the real-data comparison
-  with the original IGM is `benchmarks/bulk/sherlock/` (`igm_demo_*`).
+  with the original IGM is an unpublished benchmark (`igm_demo_*`).
 
 ## Validation (Stevens et al. 2017, 8 cells, 100 kb)
 
-See the pull request / `u-chrom-paper/manuscripts/full/figures/fig3/results/a_nucdyn_engine_*.json` and the
-scripts in `benchmarks/fig3/a_nucdyn_engine_*.py`:
+See the pull request / `uchrom-reproducibility/manuscripts/full/figures/fig3/results/a_nucdyn_engine_*.json` and the
+scripts in uchrom-reproducibility `benchmarks/toolkit_parity/nucdyn/a_nucdyn_engine_*.py`:
 
 * `a_nucdyn_engine_crosscheck.py` — stage 1 restraint set vs the original
   (bitwise identical, both branches), and trajectories from identical

@@ -202,7 +202,7 @@
     },
     {
       "name": "arrange",
-      "description": "Lay the views out as tabs, columns, rows or a grid.",
+      "description": "Lay the views out as tabs (one at a time) or a grid (all at once).",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -213,8 +213,6 @@
             "type": "string",
             "enum": [
               "tabs",
-              "columns",
-              "rows",
               "grid"
             ]
           }

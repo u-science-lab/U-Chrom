@@ -1,7 +1,7 @@
 """Panels of the U-Chrom paper figures for the atlas' U-Chrom page (apps/atlas/site/uchrom.html) and the
 documentation (docs/source/start/concepts.md, docs/source/index.md).
 
-Renders manuscripts/full/figures/fig1/fig1_final.pdf and .../fig2/fig2.pdf of the u-chrom-paper repository at
+Renders the composite figures fig1_final.pdf and fig2.pdf ($UCHROM_FIGURE_PDFS) at
 600 dpi (pdftoppm), crops the panels below and writes them as WebP to apps/atlas/site/paper/ and as PNG / JPEG
 (what Sphinx's HTML builder takes) to docs/source/_static/paper/.  Rerun after a figure changes:
 
@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import os
 import tempfile
 import sys
 from pathlib import Path
@@ -21,14 +22,10 @@ from PIL import Image
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]                                   # the repository
 OUT = HERE / "site" / "paper"
-sys.path.insert(0, str(ROOT / "benchmarks"))
-from _paper import paper_root  # noqa: E402  (u-chrom-paper: $UCHROM_PAPER or next to the main checkout)
-
-PAPER = paper_root() or ROOT / "paper"         # before the move: this repository's paper/ folder
-FIGS = PAPER / "manuscripts" / "full" / "figures"
-SOURCES = {"fig1": FIGS / "fig1" / "fig1_final.pdf", "fig2": FIGS / "fig2" / "fig2.pdf"}
-if not SOURCES["fig1"].exists():                # the layout before the move
-    SOURCES = {"fig1": ROOT / "paper" / "fig1" / "fig1_final.pdf", "fig2": ROOT / "paper" / "fig2" / "fig2.pdf"}
+#: the two composite figures the panels are cut from (``fig1_final.pdf``, ``fig2.pdf``), in the folder
+#: ``$UCHROM_FIGURE_PDFS`` (kept outside the repositories since 2026-10-17)
+SRC = Path(os.environ.get("UCHROM_FIGURE_PDFS", HERE / "paper_sources")).expanduser()
+SOURCES = {"fig1": SRC / "fig1_final.pdf", "fig2": SRC / "fig2.pdf"}
 #: panel -> (figure, x0, y0, x1, y1 in pixels of the 2007-px-wide 300-dpi page, width written); titles left out
 PANELS = {
     "fig1c": ("fig1", 0, 1270, 2007, 2202, 2400),     # ecosystem: interfaces, methods, formats

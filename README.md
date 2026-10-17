@@ -165,7 +165,7 @@ each with tutorials on real data:
 | `packages/uchrom-maps/` | `uchrom-maps` | native Hi-C map kernels: HiCCUPS, Mustache (Rust) |
 | `packages/uchrom-discovery/` | `uchrom-discovery` | LLM-driven auto-discovery (Python ≥ 3.10); command `uchrom-discovery` |
 | `apps/` | — | the atlas (site, publishing, dataset recipes) and the hosted web browser |
-| `tutorials/`, `docs/`, `skills/`, `benchmarks/` | — | notebooks, documentation, agent skills, benchmarks |
+| `tutorials/`, `docs/`, `skills/` | — | notebooks, documentation, agent skills |
 
 ## Development
 
