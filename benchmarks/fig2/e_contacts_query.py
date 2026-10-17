@@ -1,6 +1,10 @@
 """Figure 2e — linked contacts, queried through the shared index (scHiCAR MOp).
 
-**Correctness.**  ``schicar_mop.chromdata.zarr`` links the per-cell 1 Mb map
+**Store.**  ``schicar_mop.chromdata.zarr`` with its maps linked only (``_common.schicar_linked``: the data
+folder's copy also holds the atlas's embedded copies, which readers prefer), opened **backed** as the web browser
+opens a store (``uchrom_browser.data.load_chromdata``).
+
+**Correctness.**  The store links the per-cell 1 Mb map
 ``contacts_cells_1Mb.scool`` (5,313 cells) and holds the cell table with
 ``cell_type`` (22 types).  For every cell type the group pseudo-bulk is
 computed through the library path the web browser uses —
@@ -53,7 +57,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _common as C  # noqa: E402
 
 SCRIPT = Path(__file__).resolve()
-SCHICAR = C.DATA / "schicar_mop" / "schicar_mop.chromdata.zarr"
 FUNCTION = "uchrom_browser.data.Dataset.contacts(key, chrom, group=...) -> Dataset._pseudobulk"
 
 
@@ -70,14 +73,14 @@ def _coarsen(mat: np.ndarray, starts: np.ndarray, target_starts: np.ndarray) -> 
 def child_identity(window):
     import cooler
 
-    from uchrom import ChromData
-    from uchrom_browser.data import Dataset, decode_matrix
+    from uchrom_browser.data import Dataset, decode_matrix, load_chromdata
 
-    cd = ChromData.read(SCHICAR)
-    ds = Dataset(id="schicar", name="schicar", path=str(SCHICAR), cd=cd)
+    store = C.schicar_linked()
+    cd = load_chromdata(store)                     # backed, as the web browser opens it
+    ds = Dataset(id="schicar", name="schicar", path=str(store), cd=cd)
     maps = ds.contact_maps()
     key = next(m["key"] for m in maps if m["kind"] == "scool")
-    base = SCHICAR.parent
+    base = store.parent
     cells = cd.cells
     types = sorted(cells["cell_type"].astype(str).unique())
     scool = cd.resolve_link_path(cd.uns["linked_scool"]["per_cell"]["path"])
@@ -157,7 +160,7 @@ def child_import(mode, store):
 
     from uchrom import ChromData
 
-    cd = ChromData.read(SCHICAR)
+    cd = ChromData.read(C.schicar_linked())
     rec = cd.uns["linked_scool"]["per_cell"]
     scool = cd.resolve_link_path(rec["path"])
     cd.uns.pop("linked_scool")
@@ -193,8 +196,9 @@ def main():
     if args.child:
         kind, *rest = args.child
         return {"identity": child_identity, "import": child_import}[kind](*rest)
-    if not SCHICAR.exists():
-        raise SystemExit(f"{SCHICAR} missing — run apps/atlas/recipes/build_schicar_mop.py")
+    if not C.SCHICAR.exists():
+        raise SystemExit(f"{C.SCHICAR} missing — run apps/atlas/recipes/build_schicar_mop.py")
+    C.schicar_linked()                             # once, before the children
     ident = C.run_child(SCRIPT, ["--child", "identity", args.window])
     work = C.WORK / "e_query"
     work.mkdir(parents=True, exist_ok=True)
@@ -206,11 +210,13 @@ def main():
                          "store_bytes": trials[0]["store_bytes"], "scool_bytes": trials[0]["scool_bytes"],
                          "user_total_bytes": trials[0]["store_bytes"] + trials[0]["scool_bytes"],
                          "n_pixels": trials[0]["n_pixels"], "trials": trials}
-        print(mode, imports[mode]["seconds"], imports[mode]["store_bytes"] / 2**20, flush=True)
+        print(mode, imports[mode]["seconds"], imports[mode]["store_bytes"] / 1e6, "MB", flush=True)
     n_ok = sum(p["identical"] for p in ident["per_type"])
     C.write_json("e_query", {
         "panel": "e", "machine": C.machine_info(),
-        "dataset": {"name": "scHiCAR mouse brain (GSE305439)", "store": "schicar_mop/schicar_mop.chromdata.zarr",
+        "dataset": {"name": "scHiCAR mouse brain (GSE305439)",
+                    "store": "schicar_mop/schicar_mop.chromdata.zarr, maps linked only (no embedded copies), "
+                             "opened backed as the web browser opens it",
                     "scool": "schicar_mop/contacts_cells_1Mb.scool (5,313 cells, 1 Mb)",
                     "published_per_type": "schicar_mop/contacts_<type>.cool (500 kb)"},
         "function": FUNCTION,
