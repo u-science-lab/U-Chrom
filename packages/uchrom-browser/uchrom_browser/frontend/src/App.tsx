@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { withPhase } from './activity'
 import { fetchHealth, listDatasets, openDataset } from './api'
 import { ActivityBar, ActivityCard } from './components/ActivityCard'
-import { addRecent, loadRecent, openParams, saveRecent } from './datasets'
+import { addRecent, loadRecent, openParams, openSearch, saveRecent } from './datasets'
 import { CellInfoPanel } from './components/CellInfoPanel'
 import { CellPanel } from './components/CellPanel'
 import { GroupPanel } from './components/GroupPanel'
@@ -24,23 +24,43 @@ import { useOmicsLoader } from './useOmicsLoader'
 import { registerWebMcpTools } from './webmcp'
 import { sidebarKey } from './sidebars'
 
+/**
+ * The address names the dataset on show (`?open=<store>`, see `openSearch`), so that a reload reopens it and the address
+ * is a link to it.  Nothing changes before a dataset is on show: a link whose store did not open (and nothing else
+ * open) stays as it is, for a reload to try again.
+ */
+function useOpenAddress() {
+  const path = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId)?.path ?? null)
+  const shown = useRef(false)
+  useEffect(() => {
+    if (path === null && !shown.current) return
+    shown.current = true
+    const search = openSearch(window.location.search, path)
+    if (search !== window.location.search)
+      window.history.replaceState(window.history.state, '', window.location.pathname + search + window.location.hash)
+  }, [path])
+}
+
 export function App() {
   const setDatasets = useStore((s) => s.setDatasets)
   const setError = useStore((s) => s.setError)
   const addDataset = useStore((s) => s.addDataset)
+  const setActiveDataset = useStore((s) => s.setActiveDataset)
   useGeometryLoader()
   useFocusGeometry()
   useCellLoader()
   useOmicsLoader()
   useSystemTheme()
   useEffect(() => {
+    // an atlas page links here with ?open=<store url> (read before the address follows the dataset on show)
+    const linked = openParams(window.location.search)
     withPhase('boot', 'Connecting to the U-Chrom server…', () => listDatasets())
       .then(async (ds) => {
         setDatasets(ds)
-        // an atlas page links here with ?open=<store url>: open it, then drop the parameter (a reload does not re-open)
-        const wanted = openParams(window.location.search).filter((u) => !ds.some((d) => d.path === u))
-        if (!wanted.length) return
-        window.history.replaceState(null, '', window.location.pathname + window.location.hash)
+        // already open in this session: show it; otherwise open it
+        const open = ds.filter((d) => linked.includes(d.path))
+        if (open.length) setActiveDataset(open[open.length - 1].id)
+        const wanted = linked.filter((u) => !ds.some((d) => d.path === u))
         for (const u of wanted) {
           try {
             addDataset(await withPhase('open', `Opening ${u.split('/').pop()?.replace('.chromdata.zarr', '')} from the atlas…`, () => openDataset(u), 'Only what is needed is read from the atlas, but the first open of a dataset takes a few seconds.'))
@@ -57,7 +77,8 @@ export function App() {
         if (isStaleServer(pageBundle(), h.bundle ?? null)) setError(STALE_SERVER_MESSAGE)
       })
       .catch(() => {})
-  }, [setDatasets, setError, addDataset])
+  }, [setDatasets, setError, addDataset, setActiveDataset])
+  useOpenAddress()
   // code and agents drive this page through the same actions as the GUI (control channel, WebMCP).  A hosted
   // server (public atlas) has no agent to drive and must be free to sleep: no long-lived connection there.
   useEffect(() => {
