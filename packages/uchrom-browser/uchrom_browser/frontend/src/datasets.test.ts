@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addRecent, baseName, breadcrumbs, datasetBadges, datasetCounts, fmtSize, openParams, parseRecent, RECENT_MAX } from './datasets'
+import { addRecent, baseName, breadcrumbs, datasetBadges, datasetCounts, fmtSize, openParams, openSearch, parseRecent, RECENT_MAX } from './datasets'
 import type { DatasetSummary } from './types'
 
 describe('dataset helpers', () => {
@@ -48,5 +48,19 @@ describe('openParams', () => {
       ),
     ).toEqual(['https://d.example/a.chromdata.zarr', 's3://b/k.chromdata.zarr'])
     expect(openParams('')).toEqual([])
+  })
+})
+
+describe('openSearch', () => {
+  const store = 'https://uchrom-atlas-r2.u-science.org/hicrna_mouse_brain.chromdata.zarr'
+  it('names the dataset on show, readable, and keeps the other parameters', () => {
+    expect(openSearch('', store)).toBe(`?open=${store}`)
+    expect(openSearch(`?open=https://d.example/old.chromdata.zarr&open=s3://b/k.chromdata.zarr&x=1`, store)).toBe(`?open=${store}&x=1`)
+    expect(openParams(openSearch('?x=1', store))).toEqual([store])
+    expect(openParams(openSearch('', 'https://d.example/a&b#c.chromdata.zarr'))).toEqual(['https://d.example/a&b#c.chromdata.zarr'])
+  })
+  it('drops the parameter for a dataset a link may not name, or none', () => {
+    expect(openSearch(`?open=${store}`, '/Users/a/x.chromdata.zarr')).toBe('')
+    expect(openSearch(`?open=${store}&x=1`, null)).toBe('?x=1')
   })
 })

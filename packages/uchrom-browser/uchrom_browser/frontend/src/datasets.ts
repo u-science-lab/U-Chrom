@@ -87,7 +87,23 @@ export function openParams(search: string): string[] {
   const out: string[] = []
   for (const v of new URLSearchParams(search).getAll('open')) {
     const u = v.trim().replace(/\/+$/, '')
-    if (/^(https?|s3|gs):\/\/[^\s]+\.chromdata\.zarr$/i.test(u) && !out.includes(u)) out.push(u)
+    if (isLinkable(u) && !out.includes(u)) out.push(u)
   }
   return out
+}
+
+/** A store a link may name: a remote `.chromdata.zarr` (http, https, s3, gs). */
+const isLinkable = (u: string) => /^(https?|s3|gs):\/\/[^\s]+\.chromdata\.zarr$/i.test(u)
+
+/**
+ * The page's query naming the dataset on show: `?open=<path>` when it is a store a link may name, no `open` otherwise;
+ * the other parameters stay.  The address then reopens the dataset on a reload (a hosted session expires, its
+ * container sleeps) and is a link to it.  The URL stays readable: only `%`, `&`, `#` and `+` are escaped.
+ */
+export function openSearch(search: string, path: string | null): string {
+  const q = new URLSearchParams(search)
+  q.delete('open')
+  const parts = path && isLinkable(path) ? [`open=${path.replace(/[%&#+]/g, encodeURIComponent)}`] : []
+  if (q.toString()) parts.push(q.toString())
+  return parts.length ? `?${parts.join('&')}` : ''
 }
