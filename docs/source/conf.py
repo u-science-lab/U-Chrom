@@ -133,7 +133,7 @@ html_theme_options = {
     "sidebar_hide_name": False,
     "light_logo": "logo.svg",
     "dark_logo": "logo.svg",
-    "source_repository": "https://github.com/Nanguage/U-Chrom",
+    "source_repository": "https://github.com/u-science-lab/U-Chrom",
     "source_branch": "main",
     "source_directory": "docs/source/",
 }

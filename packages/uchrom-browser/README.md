@@ -5,7 +5,7 @@ linked views -- the tissue, embeddings, 3-D structures and chromatin traces, con
 selection made in one view (a lasso, a cell type) re-scopes every view.
 
 ```bash
-pip install uchrom-browser
+pip install -e packages/chromdata -e packages/uchrom-browser   # from a clone of the repository (not on PyPI yet)
 uchrom-browser data.chromdata.zarr                 # or: python -m uchrom_browser data.chromdata.zarr
 uchrom-browser --atlas https://uchrom-atlas-r2.u-science.org      # the Open dialog lists an atlas
 ```
