@@ -23,8 +23,8 @@ dependencies = [
 [project.optional-dependencies]
 # linked / embedded contact maps (.cool / .mcool / .scool) and their HDF5 trees
 contacts = ["cooler>=0.9.3", "h5py>=3.10.0"]
-# linked AnnData / MuData (RNA, ATAC, ...)
-anndata = ["anndata>=0.9"]
+# linked AnnData / MuData (RNA, ATAC, ...); embedded copies are Zarr v3, which anndata writes from 0.11
+anndata = ["anndata>=0.11"]
 multiome = ["mudata>=0.2.0"]
 # stores over HTTP / S3 / GCS
 remote = ["fsspec>=2023.1", "aiohttp", "s3fs"]
