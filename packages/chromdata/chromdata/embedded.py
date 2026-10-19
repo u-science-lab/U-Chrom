@@ -695,7 +695,8 @@ def embed_anndata(store_path: PathLike, key: str, h5ad: PathLike, *, family: str
         dense = not hasattr(adata.X, "indptr")
         shutil.rmtree(tmp)
         kw = {"chunks": chunks or (min(adata.n_obs, 1024), min(adata.n_vars, 256))} if dense else {}
-        adata.write_zarr(str(tmp), **kw)
+        with ad.settings.override(zarr_write_format=3):     # anndata < 0.13 writes Zarr v2 by default
+            adata.write_zarr(str(tmp), **kw)
         meta = {"key": key, "family": family, "label": label or key, "source": Path(h5ad).name,
                 "n_obs": int(adata.n_obs), "n_vars": int(adata.n_vars), "dense": bool(dense)}
         g = zarr.open_group(str(tmp), mode="r+")

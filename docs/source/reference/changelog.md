@@ -20,6 +20,9 @@
   scHiCluster's compartment score (default `"nan"`, as before).
 - **`UCHROM_MEMORY_BUDGET`** sets `chromdata.settings.memory_budget` from the environment (e.g. inside a container
   that hides the scheduler's variables).
+- **Fix: embedded AnnData with anndata < 0.13** (Python 3.11).  `embed_anndata` wrote the copy in anndata's default
+  Zarr format, v2 before anndata 0.13, which the readers (Zarr v3) did not find; it now writes Zarr v3 whatever the
+  version.  `chromdata[anndata]` needs anndata >= 0.11 (the first to write Zarr v3).
 - **Fix: `load_linked_spatialdata(cells=)` under pandas 3** raised "output array is read-only" when the link names a
   region (the cell mask was a read-only view under copy-on-write).
 
