@@ -401,7 +401,7 @@ def load_spatialdata(cd, record: Mapping[str, Any], *, cells=None, elements: Opt
     if table is None or table not in sdata.tables:
         raise KeyError(f"linked SpatialData has no table {table!r}; cannot subset by cell")
     t = sdata.tables[table]
-    mask = t.obs[record["instance_key"]].astype(str).isin(keep).to_numpy()
+    mask = t.obs[record["instance_key"]].astype(str).isin(keep).to_numpy().copy()
     if record.get("region_key") and record.get("region") is not None:
         regions = [record["region"]] if isinstance(record["region"], str) else list(record["region"])
         mask &= t.obs[record["region_key"]].astype(str).isin([str(r) for r in regions]).to_numpy()

@@ -20,6 +20,8 @@
   scHiCluster's compartment score (default `"nan"`, as before).
 - **`UCHROM_MEMORY_BUDGET`** sets `chromdata.settings.memory_budget` from the environment (e.g. inside a container
   that hides the scheduler's variables).
+- **Fix: `load_linked_spatialdata(cells=)` under pandas 3** raised "output array is read-only" when the link names a
+  region (the cell mask was a read-only view under copy-on-write).
 
 - **The ArcFISH callers now give the authors' results** (behaviour change).  `call_tads_by_pval`,
   `call_loops_axiswise_f`, `call_compartments_axes_pc` and their preprocessing (`uchrom.fea.arc`, `arc_stream`) were
