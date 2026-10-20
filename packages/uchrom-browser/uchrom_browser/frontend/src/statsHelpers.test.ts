@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extent, fmtAxis, histogram, linear, logScale, trackRange } from './stats'
+import { extent, fmtAxis, histogram, linear, logScale, statsChrom, trackRange } from './stats'
 import { binIndexAt, defaultTrackSelection, resolveTracks } from './tracks'
 import { defaultWorkspace, paneSignature, parseWorkspace, addPane, workspaceOf } from './workspace'
 import { resolveSource } from './components/MatrixView'
@@ -26,6 +26,15 @@ describe('histogram / scales', () => {
     expect(trackRange([-1, 0.5, 2])).toEqual({ lo: -2, hi: 2, diverging: true })
     expect(trackRange([1, 5])).toEqual({ lo: 0, hi: 5, diverging: false })
     expect(trackRange([-3, -1])).toEqual({ lo: -3, hi: 0, diverging: false })
+  })
+})
+
+describe('stats chromosome scope', () => {
+  it('uses all chromosomes by default and the whole locus chromosome when requested', () => {
+    expect(statsChrom(undefined, { chrom: 'chr15', start: 100, end: 200 })).toBeNull()
+    expect(statsChrom('all', { chrom: 'chr15', start: 100, end: 200 })).toBeNull()
+    expect(statsChrom('locus', { chrom: 'chr15', start: 100, end: 200 })).toBe('chr15')
+    expect(statsChrom('locus', { chrom: '*', start: 0, end: 10_000 })).toBeNull()
   })
 })
 
