@@ -4,11 +4,11 @@ import { fetchCellValues, fetchRg, fetchScaling } from '../api'
 import { cellRgb } from '../colors'
 import { useFieldColors } from '../useFieldColors'
 import { fmtBp } from '../filters'
-import { GENOME, logTicks, niceTicks } from '../genome'
+import { logTicks, niceTicks } from '../genome'
 import { nearestPoint } from '../render/embedding'
 import { scopeLabel, type GroupInfo } from '../groups'
 import { activeView, fieldKey, useStore } from '../store'
-import { extent, fmtAxis, histogram, linear, logScale } from '../stats'
+import { extent, fmtAxis, histogram, linear, logScale, statsChrom } from '../stats'
 import type { CellField, CellValue, RgStats, ScalingStats } from '../types'
 import { useLocus } from '../useLocus'
 import { useTheme } from '../useTheme'
@@ -178,7 +178,7 @@ export function StatsView({ pane }: { pane: Pane }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const size = useSize(boxRef)
   // the whole-genome window: every chromosome
-  const chrom = (pane.chromScope ?? 'all') === 'locus' && locus?.chrom !== GENOME ? (locus?.chrom ?? null) : null
+  const chrom = statsChrom(pane.chromScope, locus)
   const [rg, setRg] = useState<RgStats | null>(null)
   const [scaling, setScaling] = useState<{ pop: ScalingStats; cell: ScalingStats | null } | null>(null)
   // overlaid groups: ref → stats of the current kind

@@ -9,7 +9,9 @@ import { fetchGroupCells, registerGroup } from './api'
 import { CAPTURE_MIME, capturePane } from './capture'
 import { FIELD_PREFIX, fieldGroupRef, SAME_AS_VIEW, type RowScopeSpec, type ScopeSpec } from './groups'
 import type { GenomeRow } from './genomeRows'
+import { clampLocus, datasetChroms } from './genome'
 import { activeView, useStore } from './store'
+import { resolveLocus } from './useLocus'
 import { LAYOUTS, addPane, removePane, setLayout, type Pane, type PaneType, type StatsKind, type WsLayout } from './workspace'
 import toolDefs from '../../ui_tools.json'
 
@@ -78,7 +80,14 @@ export function genomeRows(rows: unknown, cellIds: ReadonlySet<string>, groupIds
 }
 
 function paneInfo(p: Pane) {
-  return { pane: p.id, type: p.type, cells: p.scope ?? { kind: 'focus' }, stats: p.statsKind ?? null, embedding: p.embeddingKey }
+  return {
+    pane: p.id,
+    type: p.type,
+    cells: p.scope ?? { kind: 'focus' },
+    stats: p.statsKind ?? null,
+    ...(p.type === 'stats' ? { chrom_scope: p.chromScope ?? 'all' } : {}),
+    embedding: p.embeddingKey,
+  }
 }
 
 async function toBase64(blob: Blob): Promise<string> {
@@ -105,7 +114,7 @@ export const ACTIONS: Record<string, Action> = {
       focus: { cell: view.focusCell, group: view.focusGroup },
       selection: view.selection ? { group: view.selection.id, n_cells: view.selection.cells.length } : null,
       saved_groups: (s.savedGroups[ds.name] ?? []).map((g) => ({ group: g.id, name: g.name, n_cells: g.cells.length })),
-      locus: view.locus,
+      locus: resolveLocus(view.locus, datasetChroms(ds)),
     }
   },
 
@@ -127,9 +136,10 @@ export const ACTIONS: Record<string, Action> = {
     const cells = args.cells
     if (!Array.isArray(cells) || !cells.length) throw new Error('cells must be a non-empty list of cell ids')
     const reg = await registerGroup(ds.id, cells.map(String), optStr(args.name))
-    s.setSelection({ id: reg.id, cells: cells.map(String) })
+    const canonical = await fetchGroupCells(ds.id, reg.id)
+    s.setSelection({ id: reg.id, cells: canonical.cells })
     if (optStr(args.name)) useStore.getState().saveSelection(optStr(args.name)!)
-    return { group: reg.id, n_cells: reg.n_cells, n_unknown: reg.n_unknown }
+    return { group: reg.id, cells: canonical.cells, n_cells: canonical.n_cells, n_unknown: reg.n_unknown }
   },
 
   async list_groups() {
@@ -162,13 +172,14 @@ export const ACTIONS: Record<string, Action> = {
   async set_locus(args) {
     const { s, ds } = ctx()
     const chrom = str(args.chrom, 'chrom')
-    const c = ds.chroms.find((x) => x.name === chrom)
+    const c = datasetChroms(ds).find((x) => x.name === chrom)
     if (!c) throw new Error(`unknown chromosome: ${chrom}`)
     const start = typeof args.start === 'number' ? args.start : c.start
     const end = typeof args.end === 'number' ? args.end : c.end
     if (!(end > start)) throw new Error('end must be greater than start')
-    s.setLocus({ chrom, start, end })
-    return { chrom, start, end }
+    const locus = clampLocus({ chrom, start, end }, c)
+    s.setLocus(locus)
+    return locus
   },
 
   async open_view(args) {
@@ -187,6 +198,9 @@ export const ACTIONS: Record<string, Action> = {
     }
     if (type === 'stats') {
       opts.statsKind = (optStr(args.stats) ?? 'rg') as StatsKind
+      if (args.chrom_scope !== undefined && args.chrom_scope !== 'all' && args.chrom_scope !== 'locus')
+        throw new Error(`chrom_scope must be 'all' or 'locus'`)
+      if (args.chrom_scope === 'all' || args.chrom_scope === 'locus') opts.chromScope = args.chrom_scope
       if (Array.isArray(args.compare_groups)) opts.compareGroups = args.compare_groups.map(String)
       if (optStr(args.field_x)) opts.fieldX = optStr(args.field_x)
       if (optStr(args.field_y)) opts.fieldY = optStr(args.field_y)

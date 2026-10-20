@@ -1,5 +1,12 @@
 /** Small numeric helpers for the stats / tracks panes (no DOM). */
 
+import { GENOME, type Locus } from './genome'
+
+/** API chromosome parameter for chromosome-scoped stats; null means all chromosomes. */
+export function statsChrom(scope: 'all' | 'locus' | undefined, locus: Locus | null | undefined): string | null {
+  return scope === 'locus' && locus?.chrom && locus.chrom !== GENOME ? locus.chrom : null
+}
+
 export interface Histogram {
   edges: number[]
   counts: number[]

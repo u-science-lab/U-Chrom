@@ -20,10 +20,10 @@ cd = ws.dataset()                    # the same ChromData, for analysis
 ## Actions (all via `ws.<name>(**args)`; full schema: `ws.tools()`)
 | action | use |
 |---|---|
-| `select_cells(cells=[...], name=None)` | register + focus a group (like a lasso); returns `{"group": ref}` |
+| `select_cells(cells=[...], name=None)` | register + focus a group (like a lasso); returns the canonical server-accepted cell ids, group ref, and counts |
 | `focus(cell=…)` / `focus(group=ref)` / `focus()` | focus / release |
 | `set_locus(chrom, start, end)` | genomic window of Genome / Matrix / Stats views |
-| `open_view(type, cells=…, rows=[…], stats=…, compare_groups=[…], field_x, field_y, embedding)` | new view; returns `{"pane": id}` |
+| `open_view(type, cells=…, rows=[…], stats=…, chrom_scope="all"|"locus", compare_groups=[…], field_x, field_y, embedding)` | new view; returns `{"pane": id}` |
 | `arrange(layout="grid")`, `show_view(pane)`, `close_view(pane)` | layout |
 | `color_by(field)` | colour cells by a field |
 | `capture(pane, path, format=None)` | save a view as PNG, SVG or PDF (format from the suffix of `path`, else `format`, else PNG; SVG / PDF are editable vectors); returns `{"path", "format", "width", "height", "bytes", "notes"}` (never print image bytes) |
@@ -39,12 +39,13 @@ ws.set_locus(chrom="chr15", start=3_000_000, end=33_000_000)
 genome = ws.open_view("genome", cells=g, rows=[{"kind": "track", "track": "H3K27ac"},
                                               {"kind": "distance", "cells": g},
                                               {"kind": "distance", "cells": "field:cell_type=Granule"}])
-stats = ws.open_view("stats", stats="rg", compare_groups=[g, "field:cell_type=Granule"])
+stats = ws.open_view("stats", stats="rg", chrom_scope="locus", compare_groups=[g, "field:cell_type=Granule"])
 ws.arrange(layout="grid")
 ```
 
 ## Checks
-- Show what the answer claims: the views must use the same groups and locus as the numbers.
+- `chrom_scope="locus"` makes Rg / scaling use the current locus chromosome; it still summarizes that whole chromosome, not just the locus start/end interval. The default `"all"` includes every chromosome.
+- Show what the answer claims: the views must use the same groups and chromosome scope as the numbers.
 - Don't close or rearrange the researcher's existing views unless asked; add views.
 - Name the pane ids in the answer so the researcher can find them.
 - No browser open (`BrowserError: 409`/connection refused) → give the result without views and say so.
