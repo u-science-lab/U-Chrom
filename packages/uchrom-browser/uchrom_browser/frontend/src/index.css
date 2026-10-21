@@ -3087,6 +3087,46 @@ button.side-close:hover {
 .atlas-src { margin-top: 4px; }
 .atlas-src a { color: var(--accent); }
 
+/* The start page (no dataset open): example datasets of the atlas, the Open dialog, datasets opened before */
+.welcome { overflow: auto; }
+.welcome-inner { width: 100%; max-width: 1040px; margin: 0 auto; padding: 44px 28px 28px; display: flex; flex-direction: column; gap: 26px; }
+.welcome-head { display: flex; align-items: center; gap: 16px; }
+.welcome-head h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+.welcome-head p { margin: 0; font-size: 13.5px; line-height: 1.5; max-width: 640px; }
+.welcome-section { display: flex; flex-direction: column; gap: 10px; }
+.welcome-section-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; }
+.welcome-section-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.welcome-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.welcome-card {
+  position: relative; display: flex; flex-direction: column; align-items: stretch; padding: 0; overflow: hidden;
+  text-align: left; font: inherit; color: var(--text); background: var(--bg-panel);
+  border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: border-color 0.12s, transform 0.12s;
+}
+.welcome-card:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-1px); }
+.welcome-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.welcome-card:disabled { cursor: progress; }
+.welcome-thumb { display: block; aspect-ratio: 4 / 3; background: var(--viewport-bg); border-bottom: 1px solid var(--border); }
+.welcome-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; padding: 8px; box-sizing: border-box; }
+.welcome-card-body { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px 12px; }
+.welcome-kind { font-size: 11.5px; font-weight: 600; line-height: 1.35; color: var(--accent); }
+.welcome-name { font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+.welcome-paper { margin-top: auto; }
+.welcome-busy {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: var(--overlay-bg); color: var(--text); font-size: 13px;
+}
+.welcome-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.welcome-actions button { padding: 6px 14px; }
+.welcome-recent { display: flex; flex-wrap: wrap; gap: 6px; }
+.welcome-recent button { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.welcome-links { display: flex; flex-wrap: wrap; gap: 6px 18px; padding-top: 14px; border-top: 1px solid var(--row-sep); }
+.welcome-links a { color: var(--text-muted); }
+.welcome-links a:hover { color: var(--accent); }
+@media (max-width: 600px) {
+  .welcome-inner { padding: 24px 16px; }
+  .welcome-head img { display: none; }
+}
+
 /* Loading: the page shows that it is working */
 @keyframes uc-spin { to { transform: rotate(360deg); } }
 @keyframes uc-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }

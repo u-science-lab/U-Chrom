@@ -16,6 +16,11 @@ is transferred.  More files can be opened from the page (paths on the
 machine running the server).  The HTTP API is documented in
 `packages/uchrom-browser/uchrom_browser/API.md`.
 
+Without a dataset, the page opens on a **start page**: example datasets of the atlas with their thumbnails (a click
+opens one, read over the network), the whole atlas and — on a local server — the server's folders in the Open dialog,
+and the datasets opened before.  The examples are the atlas catalog's `featured` list (`apps/atlas/datasets.json`),
+else one dataset of each kind of data.
+
 Navigating imaging data with many cells:
 
 - **Cells** (left) lists every cell.  Click one — or click a nucleus in

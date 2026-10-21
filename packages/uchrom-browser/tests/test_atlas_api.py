@@ -20,7 +20,9 @@ def test_api_atlas_and_off_switch(atlas_dir):
     c = TestClient(create_app(DatasetStore(), atlas=str(atlas_dir)))
     r = c.get("/api/atlas").json()
     assert r["root"] == str(atlas_dir) and r["catalog"]["datasets"][0]["id"] == "toy"
-    assert TestClient(create_app(DatasetStore(), atlas="")).get("/api/atlas").json() == {"root": None, "catalog": None}
+    assert r["figures"] is None                                    # a folder atlas without thumbnails
+    off = {"root": None, "catalog": None, "figures": None}
+    assert TestClient(create_app(DatasetStore(), atlas="")).get("/api/atlas").json() == off
     assert TestClient(create_app(DatasetStore(), atlas="/no/such/atlas")).get("/api/atlas").status_code == 502
 
 

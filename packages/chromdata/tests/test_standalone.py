@@ -58,13 +58,19 @@ def test_cdz_is_the_same_store(tmp_path):
 
 def test_catalog_from_stores(tmp_path):
     _toy().write(tmp_path / "toy.chromdata.zarr")
-    config = {"title": "test", "studies": [{"id": "s", "citation": "Test 2026"}],
+    config = {"title": "test", "studies": [{"id": "s", "citation": "Test 2026"}], "featured": ["toy"],
+              "figures_url": "https://example.org/figures/",
               "datasets": [{"id": "toy", "store": "toy.chromdata.zarr", "path": "toy.chromdata.zarr", "study": "s", "name": "Toy", "download": False}]}
     (tmp_path / "datasets.json").write_text(json.dumps(config))
     cat = catalog.build_catalog(tmp_path / "datasets.json", tmp_path, tmp_path / "catalog.json")
     assert cat["datasets"][0]["n_cells"] == 3
+    assert cat["featured"] == ["toy"] and cat["figures_url"] == "https://example.org/figures/"
     got = catalog.fetch_catalog(str(tmp_path))
     assert got["datasets"][0]["url"].endswith("toy.chromdata.zarr")
+    # where the web browser finds the thumbnails: the catalog's own, the public atlas's page, or none
+    assert catalog.figures_url(str(tmp_path), got) == "https://example.org/figures/"
+    assert catalog.figures_url(catalog.DEFAULT_ATLAS + "/", {}) == catalog.DEFAULT_ATLAS_FIGURES
+    assert catalog.figures_url(str(tmp_path), {}) is None
 
 
 def test_dataset_loaders_say_what_to_install(monkeypatch):
