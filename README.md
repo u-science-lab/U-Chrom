@@ -9,6 +9,7 @@
   <a href="https://uchrom-browser.u-science.org">Web browser (no install)</a> ·
   <a href="https://uchrom-atlas.u-science.org">Data atlas</a> ·
   <a href="tutorials/">Tutorials</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a> ·
   <a href="LICENSE">MIT license</a>
 </p>
 
@@ -154,7 +155,7 @@ each with tutorials on real data:
 - **Getting started** — [install](docs/source/start/install.md) · [quickstart](docs/source/start/quickstart.md) · [concepts](docs/source/start/concepts.md)
 - **By data type** — [chromatin tracing](docs/source/tracing/index.md) · [DNA seqFISH+](docs/source/seqfish/index.md) · [single-cell & spatial Hi-C](docs/source/schic/index.md) · [bulk Hi-C](docs/source/bulk/index.md)
 - **Common to all data** — [datasets & atlas](docs/source/datasets/index.md) · [data model](docs/source/data/index.md) · [features](docs/source/features/index.md) · [visualisation](docs/source/viz/index.md)
-- **Reference** — [API](docs/source/reference/api/index.md) · [file formats](docs/source/reference/formats.md) · [development](docs/source/reference/development.md)
+- **Reference** — [API](docs/source/reference/api/index.md) · [file formats](docs/source/reference/formats.md) · [contributing](docs/source/reference/development.md)
 
 ## Repository layout
 
@@ -169,11 +170,31 @@ each with tutorials on real data:
 | `apps/` | — | the atlas (site, publishing, dataset recipes) and the hosted web browser |
 | `tutorials/`, `docs/`, `skills/` | — | notebooks, documentation, agent skills |
 
-## Development
+## Contributing
 
-Each package has its own tests (`cd packages/<package> && pytest tests`; the browser front end:
-`npm test` in `packages/uchrom-browser/uchrom_browser/frontend`). See
-[development](docs/source/reference/development.md).
+U-Chrom is meant to grow with the field, and contributions are welcome: a method from your paper, a reader for a
+format, a dataset for the atlas, a tutorial, a view of the web browser, a bug report.  Every method takes a
+`ChromData`, so a method added once runs on every dataset it applies to — from any of the assays above, on disk or
+over HTTP — and its results show in the web browser.
+
+Some of the gaps we would like filled:
+
+| Data | Wanted |
+|---|---|
+| Chromatin tracing | SnapFISH loop calling; single-trace domain boundaries; clustering of traces into conformations; spot detection from images |
+| Single-cell Hi-C | haplotype imputation; BandNorm / scVI-3D embeddings; differential loops between cell types (SnapHiC-D); label transfer with scRNA-seq |
+| Spatial Hi-C | deconvolution of spot maps into cell types; spatial domains from 3-D features |
+| Bulk Hi-C | differential contacts, boundaries and loops; sub-compartments (Calder); more TAD and loop callers (TopDom, Peakachu, Chromosight) |
+
+What we ask of a method: it takes a `ChromData` and stores its result there with provenance; a re-implementation
+gives the authors' results on their paper's data, with the numbers in the pull request; every dataset it uses is
+registered; it reads one cell or chromosome at a time.  Propose a method in an
+[issue](https://github.com/u-science-lab/U-Chrom/issues/new?template=method.md) before writing the code.
+
+The [contributing guide](docs/source/reference/development.md) has the full table of the methods that exist and
+that are wanted, where code goes, the calling convention, tests and pull requests ([CONTRIBUTING.md](CONTRIBUTING.md)
+is the short version).  Each package runs its own tests: `cd packages/<package> && pytest tests`; the browser front
+end: `npm test` in `packages/uchrom-browser/uchrom_browser/frontend`.
 
 ## License
 
