@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { withPhase } from '../activity'
-import { fetchAtlas, fetchHealth, filePlaces, listFiles, openDataset } from '../api'
-import { addRecent, baseName, breadcrumbs, fmtDate, fmtSize, loadRecent, saveRecent } from '../datasets'
-import { useStore } from '../store'
+import { fetchAtlas, fetchHealth, filePlaces, listFiles } from '../api'
+import { baseName, breadcrumbs, fmtDate, fmtSize, loadRecent } from '../datasets'
+import { useOpenDataset } from '../useOpenDataset'
 import type { AtlasDataset, AtlasResponse, FileEntry, FileListing, FilePlace } from '../types'
 
 /** Last folder the dialog showed (per viewer), to reopen where one left off. */
@@ -47,10 +46,11 @@ export function initialPanel(hosted: boolean, remembered: 'atlas' | 'files' | nu
  * Open a dataset on the server: places (server folder, home, the loaded datasets' folders) and recently
  * opened datasets on the left; breadcrumbs, a path field and a filter above a listing of the folder.
  * Folders open with a click; datasets (.chromdata.zarr, .cdz, .csv) open with a double-click or
- * Open.  Esc or a click outside closes it.
+ * Open.  Esc or a click outside closes it.  `panel` shows the atlas or the folders first (a hosted server
+ * has only the atlas); else the one used last time.
  */
-export function OpenDialog({ onClose }: { onClose(): void }) {
-  const addDataset = useStore((s) => s.addDataset)
+export function OpenDialog({ onClose, panel }: { onClose(): void; panel?: 'atlas' | 'files' }) {
+  const openDataset = useOpenDataset()
   const [listing, setListing] = useState<FileListing | null>(null)
   const [places, setPlaces] = useState<FilePlace[]>([])
   const [recent, setRecent] = useState<string[]>(loadRecent)
@@ -82,12 +82,12 @@ export function OpenDialog({ onClose }: { onClose(): void }) {
       .then((isHosted) => {
         if (!live) return
         setHosted(isHosted)
-        setAtlasOpenState(initialPanel(isHosted, lastPanel()) === 'atlas')
+        setAtlasOpenState(initialPanel(isHosted, panel ?? lastPanel()) === 'atlas')
       })
     return () => {
       live = false
     }
-  }, [])
+  }, [panel])
   useEffect(() => {
     if (hosted !== false) return
     filePlaces()
@@ -141,10 +141,7 @@ export function OpenDialog({ onClose }: { onClose(): void }) {
       setBusy(path)
       setError(null)
       try {
-        addDataset(await withPhase('open', `Opening ${baseName(path).replace('.chromdata.zarr', '')}…`, () => openDataset(path), 'A dataset on a remote atlas is read over the network: the first open takes a few seconds.'))
-        const r = addRecent(loadRecent(), path)
-        saveRecent(r)
-        setRecent(r)
+        setRecent(await openDataset(path))
         onClose()
       } catch (e) {
         setError((e as Error).message)
@@ -152,7 +149,7 @@ export function OpenDialog({ onClose }: { onClose(): void }) {
         setBusy(null)
       }
     },
-    [addDataset, onClose],
+    [openDataset, onClose],
   )
   const activate = (e: FileEntry) => (e.kind === 'dir' ? setDir(e.path) : e.kind === 'dataset' ? void open(e.path) : undefined)
   const shown = useMemo(() => {

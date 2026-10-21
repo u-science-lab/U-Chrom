@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **The web browser opens on a start page** when no dataset is open, instead of empty views: example datasets of
+  the atlas as cards with their thumbnails (one click opens one), the whole atlas and, on a local server, the server's
+  folders in the Open dialog, and the datasets opened before.  The examples are the catalog's new `featured` list,
+  else one dataset of each kind of data; `/api/atlas` also returns `figures`, where the thumbnails are (the catalog's
+  new `figures_url`, for the public atlas its web page).  `build_catalog` copies `featured` and `figures_url` from
+  the atlas config.
 - **scHiCluster features as the authors compute them** (behaviour change).  `uchrom.emb.hic`
   (`schicluster_impute`, `schicluster_features`, `scool_cell_features`, `embed_contacts`) now follows
   `impute_cpu` / `hicluster_cpu` of the authors' `schicluster` 1.3.2 (github.com/zhoujt1994/scHiCluster): `log2(counts

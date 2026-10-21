@@ -160,21 +160,22 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
 
     @app.get("/api/atlas")
     def atlas_catalog(refresh: bool = False) -> Dict[str, Any]:
-        """The atlas catalog (fetched here, so the page needs no CORS; cached 5 min): ``{"root", "catalog"}``,
-        every dataset with its ``url``; ``{"root": null}`` when no atlas is configured."""
+        """The atlas catalog (fetched here, so the page needs no CORS; cached 5 min): ``{"root", "catalog",
+        "figures"}``, every dataset with its ``url``, ``figures`` where the thumbnails are (or null);
+        ``{"root": null}`` when no atlas is configured."""
         import time
 
-        from chromdata.catalog import fetch_catalog
+        from chromdata.catalog import fetch_catalog, figures_url
 
         if not atlas:
-            return {"root": None, "catalog": None}
+            return {"root": None, "catalog": None, "figures": None}
         hit = _atlas_cache.get("c")
         if hit is None or refresh or time.time() - hit[0] > 300:
             try:
                 _atlas_cache["c"] = hit = (time.time(), fetch_catalog(atlas))
             except Exception as exc:
                 raise HTTPException(502, f"cannot read the atlas catalog at {atlas}: {type(exc).__name__}: {exc}") from None
-        return {"root": atlas, "catalog": hit[1]}
+        return {"root": atlas, "catalog": hit[1], "figures": figures_url(atlas, hit[1])}
 
     @app.get("/api/files/places")
     def file_places() -> List[Dict[str, str]]:

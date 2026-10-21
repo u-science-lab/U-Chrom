@@ -12,6 +12,7 @@ import { SideClose } from './components/SideClose'
 import { StatusBar } from './components/StatusBar'
 import { StorePanel } from './components/StorePanel'
 import { TopBar } from './components/TopBar'
+import { Welcome } from './components/Welcome'
 import { Workspace } from './components/Workspace'
 import { leftSections } from './inspector'
 import { STALE_SERVER_MESSAGE, isStaleServer, pageBundle } from './serverBundle'
@@ -46,6 +47,9 @@ export function App() {
   const setError = useStore((s) => s.setError)
   const addDataset = useStore((s) => s.addDataset)
   const setActiveDataset = useStore((s) => s.setActiveDataset)
+  // the start page waits until the server has said what is open and a linked dataset has opened (no flash of it)
+  const [booted, setBooted] = useState(false)
+  const hasData = useStore((s) => s.datasets.length > 0)
   useGeometryLoader()
   useFocusGeometry()
   useCellLoader()
@@ -71,6 +75,7 @@ export function App() {
         }
       })
       .catch((e: Error) => setError(`Cannot reach the U-Chrom server: ${e.message}`))
+      .finally(() => setBooted(true))
     fetchHealth()
       .then((h) => {
         // a server older than the page lacks its newer routes (405 / 404 on use)
@@ -118,9 +123,9 @@ export function App() {
       <ActivityCard />
       <TopBar />
       <div className="main">
-        {sidebars.left && <LeftSidebar />}
-        <Workspace />
-        {sidebars.right && <Inspector />}
+        {hasData && sidebars.left && <LeftSidebar />}
+        {hasData ? <Workspace /> : booted ? <Welcome /> : <div className="workspace" />}
+        {hasData && sidebars.right && <Inspector />}
       </div>
       <StatusBar />
     </div>

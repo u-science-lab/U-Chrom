@@ -57,6 +57,7 @@ function ThemeMenu() {
 function SidebarToggles() {
   const sidebars = useStore((s) => s.sidebars)
   const toggle = useStore((s) => s.toggleSidebar)
+  const hasData = useStore((s) => s.datasets.length > 0)     // the start page has no side bars
   const icon = (side: 'left' | 'right') => (
     <svg viewBox="0 0 16 14" width="16" height="14" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.3">
       <rect x="1" y="1" width="14" height="12" rx="2" />
@@ -66,11 +67,11 @@ function SidebarToggles() {
   const cmd = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl+'
   return (
     <div className="sidebar-toggles" role="group" aria-label="Side bars">
-      <button className={sidebars.left ? 'on' : ''} onClick={() => toggle('left')} aria-pressed={sidebars.left}
+      <button className={sidebars.left ? 'on' : ''} onClick={() => toggle('left')} aria-pressed={sidebars.left} disabled={!hasData}
               title={`${sidebars.left ? 'Hide' : 'Show'} the left side bar (${cmd}[)`}>
         {icon('left')}
       </button>
-      <button className={sidebars.right ? 'on' : ''} onClick={() => toggle('right')} aria-pressed={sidebars.right}
+      <button className={sidebars.right ? 'on' : ''} onClick={() => toggle('right')} aria-pressed={sidebars.right} disabled={!hasData}
               title={`${sidebars.right ? 'Hide' : 'Show'} the inspector (${cmd}])`}>
         {icon('right')}
       </button>

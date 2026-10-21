@@ -132,9 +132,11 @@ The atlas the server lists (`--atlas URL`, `UCHROM_ATLAS`, default `https://uchr
 value turns it off): `{"root": <URL or folder>, "catalog": {"title", "description", "updated", "datasets": [...]}}`.
 Every dataset carries `url` (what `POST /api/datasets` opens: a `.chromdata.zarr` read over HTTP / S3 on demand),
 `title`, `paper`, `doi`, `source_url`, `license`, `organism`, `assembly`, `tissue`, `n_cells`, `sections`,
-`modalities`, `contact_maps`, `images`, `size_mb`.  Fetched by the server (the page needs no CORS) and cached 5
-minutes (`refresh=true` re-reads).  `{"root": null, "catalog": null}` when no atlas is configured; `502` when the
-catalog cannot be read.  Format and builder: `packages/chromdata/chromdata/catalog.py` (`python -m chromdata.catalog build`).
+`modalities`, `contact_maps`, `images`, `size_mb`; the catalog may name `featured` datasets (the examples of the start
+page) and `studies`.  `figures`: where the datasets' thumbnails are (`<figures><id>.space.webp`; the catalog's
+`figures_url`, for the public atlas its web page), or `null`.  Fetched by the server (the page needs no CORS) and
+cached 5 minutes (`refresh=true` re-reads).  `{"root": null, "catalog": null, "figures": null}` when no atlas is
+configured; `502` when the catalog cannot be read.  Format and builder: `packages/chromdata/chromdata/catalog.py` (`python -m chromdata.catalog build`).
 
 ### `DELETE /api/datasets/{id}`
 

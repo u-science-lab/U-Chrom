@@ -8,6 +8,8 @@ Layout of an atlas root (an ``s3://`` / ``https://`` URL or a directory)::
 ``catalog.json``::
 
     {"version": 1, "title": "...", "updated": "<utc>", "hero": [<id>, ...],
+     "featured": [<id>, ...] (optional: the examples the web browser's start page offers first),
+     "figures_url": "https://.../figures/" (optional: the datasets' thumbnails, ``<figures_url><id>.space.webp``),
      "studies": [{"id", "citation", "journal", "title", "kind", "category", "summary", "doi", "source",
                   "source_url", "license"}],
      "datasets": [
@@ -39,6 +41,8 @@ PathLike = Union[str, Path]
 CATALOG = "catalog.json"
 #: the public atlas the web browser lists unless ``--atlas`` / ``UCHROM_ATLAS`` says otherwise (empty: none)
 DEFAULT_ATLAS = "https://uchrom-atlas-r2.u-science.org"
+#: the thumbnails of the public atlas (``apps/atlas/build.py figures``), served with its web page
+DEFAULT_ATLAS_FIGURES = "https://uchrom-atlas.u-science.org/figures/"
 CATALOG_VERSION = 1
 
 
@@ -109,6 +113,9 @@ def build_catalog(config: PathLike, root: PathLike, out: Optional[PathLike] = No
     cat = {"version": CATALOG_VERSION, "title": cfg.get("title", "U-Chrom Atlas"),
            "description": cfg.get("description", ""), "updated": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
            "studies": cfg.get("studies", []), "hero": cfg.get("hero") or [], "datasets": datasets}
+    for key in ("featured", "figures_url"):
+        if cfg.get(key):
+            cat[key] = cfg[key]
     if out is not None:
         Path(out).write_text(json.dumps(cat, indent=1, ensure_ascii=False) + "\n")
     return cat
@@ -162,6 +169,17 @@ def fetch_catalog(root: str, timeout: float = 20.0) -> Dict[str, Any]:
         if d.get("download"):
             d["download_url"] = base.rstrip("/") + "/" + str(d["download"]).lstrip("/")
     return cat
+
+
+def figures_url(root: Optional[str], catalog: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Where the thumbnails of an atlas's datasets are (``<url><id>.space.webp``): the catalog's ``figures_url``,
+    else the public atlas's page for the public atlas, else ``None``."""
+    url = (catalog or {}).get("figures_url")
+    if url and is_url(url):
+        return url
+    if root and root.rstrip("/") == DEFAULT_ATLAS:
+        return DEFAULT_ATLAS_FIGURES
+    return None
 
 
 if __name__ == "__main__":

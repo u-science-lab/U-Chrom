@@ -390,6 +390,10 @@ export interface AtlasDataset {
   id: string
   url: string
   title: string
+  /** short name within its study (e.g. "Mouse brain") */
+  name?: string
+  /** id of its entry in the catalog's `studies` */
+  study?: string
   description?: string
   paper?: string
   doi?: string
@@ -406,9 +410,31 @@ export interface AtlasDataset {
   size_mb?: number
 }
 
+/** A study of the atlas: the paper its datasets come from. */
+export interface AtlasStudy {
+  id: string
+  citation?: string
+  journal?: string
+  title?: string
+  /** the assay, e.g. "Spatial Hi-C-RNA" */
+  kind?: string
+  /** "Spatial", "Single-cell", "Imaging", … */
+  category?: string
+}
+
 export interface AtlasResponse {
   root: string | null
-  catalog: { title: string; description?: string; updated?: string; datasets: AtlasDataset[] } | null
+  catalog: {
+    title: string
+    description?: string
+    updated?: string
+    studies?: AtlasStudy[]
+    /** ids of the datasets the start page offers first */
+    featured?: string[]
+    datasets: AtlasDataset[]
+  } | null
+  /** where the datasets' thumbnails are (`<figures><id>.space.webp`); null when the atlas has none */
+  figures?: string | null
 }
 
 /** A chromosome in the whole-genome layout: bp before it (offset) and its length. */
