@@ -251,3 +251,113 @@ git add docs/superpowers
  git commit -m "docs: record local agent MVP verification boundary"
 ```
 
+### Task 5: Local companion and stdio MCP bridge
+
+**Files:**
+- Create: `packages/uchrom-agent/pyproject.toml`
+- Create: `packages/uchrom-agent/uchrom_agent/__init__.py`
+- Create: `packages/uchrom-agent/uchrom_agent/__main__.py`
+- Create: `packages/uchrom-agent/uchrom_agent/mcp_stdio.py`
+- Create: `packages/uchrom-agent/uchrom_agent/lifecycle.py`
+- Create: `packages/uchrom-agent/uchrom_agent/client_config.py`
+- Create: `packages/uchrom-agent/tests/test_mcp_stdio.py`
+- Create: `packages/uchrom-agent/tests/test_client_config.py`
+- Modify: `packages/uchrom-browser/uchrom_browser/client.py` only when a bridge helper is needed.
+
+**Interfaces:**
+- Consumes: local `/api/agent/*`, `uchrom_browser.connect()`, `ui_tools.json`, and the handoff payload model from Task 6.
+- Produces: an installable development package with `uchrom-agent` CLI and an MCP stdio server usable by Claude Code/Codex.
+
+- [ ] **Step 1: Write protocol tests first**
+
+Feed newline-delimited JSON-RPC messages to the stdio handler and assert:
+
+- `initialize` returns protocol/capabilities;
+- `tools/list` exposes only the fixed U-Chrom tools from the spec;
+- `tools/call` for `uchrom_setup_status`, `uchrom_workspace_snapshot`, and `uchrom_propose_ui_changes` returns structured text/content;
+- unknown tools and malformed calls return JSON-RPC errors without writing logs to stdout.
+
+Run: `PYTHONPATH=packages/uchrom-agent:packages/uchrom-browser:packages/chromdata ../../.venv/bin/pytest packages/uchrom-agent/tests/test_mcp_stdio.py -q`
+Expected: FAIL before the package exists.
+
+- [ ] **Step 2: Implement the fixed stdio MCP server**
+
+Implement the minimal MCP stdio JSON-RPC loop without arbitrary shell/Python execution. The bridge owns a `Workspace` connection and delegates page reads/proposals to `/api/agent/*`; Apply remains a WebUI approval operation. `uchrom_attach_handoff` accepts a local handoff JSON path or token payload and starts/reuses `uchrom-browser` only after the user's local agent client authorizes the command.
+
+- [ ] **Step 3: Implement client-config preview and explicit write**
+
+Support Claude Code and Codex adapters that first print a diff, require an explicit `--write` flag, make a timestamped backup, atomically merge the U-Chrom server entry, and read back the written JSON. Do not hard-code undocumented paths; use explicit `--config PATH` in MVP and document how users locate their config.
+
+- [ ] **Step 4: Run protocol/config tests and commit**
+
+Run: `PYTHONPATH=packages/uchrom-agent:packages/uchrom-browser:packages/chromdata ../../.venv/bin/pytest packages/uchrom-agent/tests -q`
+
+Commit: `feat(agent): add local stdio MCP bridge`.
+
+### Task 6: Hosted handoff token service
+
+**Files:**
+- Modify: `apps/hosted-browser/src/index.ts`
+- Modify: `apps/hosted-browser/wrangler.jsonc`
+- Modify: `apps/hosted-browser/package.json` and lockfile only for the chosen test/runtime tooling.
+- Create: `apps/hosted-browser/src/handoff.ts`
+- Create: `apps/hosted-browser/src/handoff.test.ts`
+
+**Interfaces:**
+- Consumes: Atlas catalog dataset IDs and hosted WebUI semantic snapshots.
+- Produces: exact-origin, single-use, ten-minute handoff creation/redeem endpoints backed by a dedicated Durable Object; it must not route through the hosted Python container.
+
+- [ ] **Step 1: Write pure handoff tests**
+
+Cover exact origin allowlist, dataset ID/catalog validation, payload size limit, token non-disclosure in logs/URLs, TTL expiry, atomic single redemption, and replay rejection.
+
+- [ ] **Step 2: Implement `UChromHandoff` Durable Object and Worker routing**
+
+Route `/api/agent/handoffs` before container dispatch. Use a high-entropy bearer token in a JSON body for redeem; never put it in a URL. Atlas may create dataset-only payloads; hosted WebUI may include a bounded semantic snapshot. Hosted browser continues to omit `/api/agent/*` and `/api/control/*` from its container.
+
+- [ ] **Step 3: Add TypeScript/build verification**
+
+Add a Worker test script or an explicit `npx tsc --noEmit`/pure-function test command, run it, and commit `feat(hosted): add one-time local-agent handoff`.
+
+### Task 7: Atlas and hosted handoff UI
+
+**Files:**
+- Modify: `apps/atlas/site/app.js`
+- Modify: `apps/atlas/site/index.html` and `apps/atlas/site/style.css`
+- Modify: `apps/atlas/build.py` only to pass the configured handoff endpoint/origin.
+- Modify: hosted WebUI frontend handoff module/component as needed; do not enable hosted control SSE.
+- Test: `apps/atlas/tests/test_build.py` and frontend handoff pure tests.
+
+**Interfaces:**
+- Consumes: Task 6 handoff creation endpoint and current catalog metadata.
+- Produces: Atlas card `Continue locally` dialog and hosted WebUI state-confirmation dialog that copy a one-time token, show the privacy notice, and never probe localhost or run a command.
+
+- [ ] **Step 1: Write static/build tests**
+
+Assert the generated card includes `Open in browser`, `Continue locally`, and download; handoff copy includes dataset ID/question and no local path, credential, or navigable token URL.
+
+- [ ] **Step 2: Implement Atlas dialog and hosted state summary**
+
+Use the existing no-framework Atlas patterns. Keep the primary action clear, show dataset/version and the exact state that will be transferred, and tell users to paste the one-line instruction into an already configured Claude/Codex MCP client.
+
+- [ ] **Step 3: Build and run Atlas tests; commit**
+
+Run the existing Atlas tests plus the new handoff assertions, then commit `feat(atlas): add continue locally handoff entry`.
+
+### Task 8: Full local-to-hosted verification and final review
+
+**Files:**
+- Modify: SDD ledger and documentation only for actual evidence and deferred limitations.
+
+- [ ] **Step 1: Run local real-data E2E**
+
+Use `sim_cell1.cdz` to start localhost WebUI, connect the stdio MCP bridge, read canonical snapshot, propose locus/Stats/Genome changes, approve in AgentPanel, and capture the applied state.
+
+- [ ] **Step 2: Run hosted handoff E2E in a local Worker harness**
+
+Create a dataset-only token from an Atlas-origin request, redeem it once through the companion handler, verify replay/expiry/origin rejection, and confirm no hosted `/api/control/*` or `/api/agent/*` route is reachable in the container.
+
+- [ ] **Step 3: Run complete test/build matrix and whole-branch review**
+
+Run browser pytest, companion pytest, frontend Vitest/build, Atlas tests, and Worker TypeScript/tests. Build the review package, dispatch a fresh whole-branch reviewer, address Critical/Important findings with RED→GREEN tests, then record deferred minors and unresolved environment limitations.
+
