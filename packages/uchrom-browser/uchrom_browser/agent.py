@@ -11,6 +11,7 @@ import asyncio
 import copy
 import itertools
 import json
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -95,6 +96,7 @@ class AgentState:
         self.plans: Dict[str, PendingPlan] = {}
         self._ids = itertools.count(1)
         self._apply_lock = asyncio.Lock()
+        self._plan_lock = threading.RLock()
         tools = load_tools().get("tools", [])
         self._tools = {tool["name"]: tool for tool in tools}
 
@@ -157,11 +159,7 @@ class AgentState:
             tool = self._tools.get(action.name)
             if tool is None:
                 raise AgentInputError(f"unknown action: {action.name}")
-            schema = tool.get("inputSchema", {})
-            required = schema.get("required", [])
-            missing = [name for name in required if name not in action.args]
-            if missing:
-                raise AgentInputError(f"action {action.name} requires: {', '.join(missing)}")
+            _validate_schema(action.args, tool.get("inputSchema", {}), f"{action.name}.args")
             normalized.append({"name": action.name, "args": copy.deepcopy(action.args)})
         plan = PendingPlan(
             plan_id=f"p{next(self._ids)}",
@@ -169,34 +167,42 @@ class AgentState:
             expected_revision=expected_revision,
             actions=normalized,
         )
-        self.plans[plan.plan_id] = plan
-        while len(self.plans) > self.MAX_PLANS:
-            self.plans.pop(next(iter(self.plans)))
+        with self._plan_lock:
+            self.plans[plan.plan_id] = plan
+            while len(self.plans) > self.MAX_PLANS:
+                self.plans.pop(next(iter(self.plans)))
         return plan
 
     def _plan(self, plan_id: str) -> PendingPlan:
-        try:
-            return self.plans[plan_id]
-        except KeyError:
-            raise AgentConflict(f"unknown plan: {plan_id}") from None
+        with self._plan_lock:
+            try:
+                return self.plans[plan_id]
+            except KeyError:
+                raise AgentConflict(f"unknown plan: {plan_id}") from None
 
     async def approve(self, plan_id: str) -> PendingPlan:
-        plan = self._plan(plan_id)
-        if plan.status != "pending":
-            raise AgentConflict(f"plan is {plan.status}")
+        with self._plan_lock:
+            plan = self._plan(plan_id)
+            if plan.status != "pending":
+                raise AgentConflict(f"plan is {plan.status}")
         current = await self._read(plan.page_id)
-        if current["state_revision"] != plan.expected_revision:
-            plan.status = "stale"
-            raise AgentConflict(f"stale revision: expected {plan.expected_revision}, current {current['state_revision']}")
-        plan.status = "approved"
+        with self._plan_lock:
+            # Reject may run on another request thread while the page snapshot is in flight.
+            if plan.status != "pending":
+                raise AgentConflict(f"plan is {plan.status}")
+            if current["state_revision"] != plan.expected_revision:
+                plan.status = "stale"
+                raise AgentConflict(f"stale revision: expected {plan.expected_revision}, current {current['state_revision']}")
+            plan.status = "approved"
         return plan
 
     def reject(self, plan_id: str) -> PendingPlan:
-        plan = self._plan(plan_id)
-        if plan.status != "pending":
-            raise AgentConflict(f"plan is {plan.status}")
-        plan.status = "rejected"
-        return plan
+        with self._plan_lock:
+            plan = self._plan(plan_id)
+            if plan.status != "pending":
+                raise AgentConflict(f"plan is {plan.status}")
+            plan.status = "rejected"
+            return plan
 
     async def apply(self, plan_id: str) -> PendingPlan:
         async with self._apply_lock:
@@ -229,6 +235,35 @@ class AgentState:
 
     def status(self, plan_id: str) -> PendingPlan:
         return self._plan(plan_id)
+
+
+def _validate_schema(value: Any, schema: Dict[str, Any], path: str) -> None:
+    """Validate the JSON Schema subset used by ui_tools.json before accepting a plan."""
+    expected = schema.get("type")
+    matches = {
+        "object": lambda v: isinstance(v, dict),
+        "array": lambda v: isinstance(v, list),
+        "string": lambda v: isinstance(v, str),
+        "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+        "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
+        "boolean": lambda v: isinstance(v, bool),
+    }
+    if expected in matches and not matches[expected](value):
+        raise AgentInputError(f"{path} must be {expected}")
+    if "enum" in schema and value not in schema["enum"]:
+        choices = ", ".join(map(str, schema["enum"]))
+        raise AgentInputError(f"{path} must be one of: {choices}")
+    if isinstance(value, dict):
+        for name in schema.get("required", []):
+            if name not in value:
+                raise AgentInputError(f"{path} requires: {name}")
+        properties = schema.get("properties", {})
+        for name, item in value.items():
+            if name in properties:
+                _validate_schema(item, properties[name], f"{path}.{name}")
+    if isinstance(value, list) and "items" in schema:
+        for index, item in enumerate(value):
+            _validate_schema(item, schema["items"], f"{path}[{index}]")
 
 
 def add_routes(app, state: AgentState) -> None:

@@ -4,6 +4,7 @@ import json
 import socket
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -132,6 +133,18 @@ def test_propose_plan_requires_page_pin_and_expected_revision(server):
     assert c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_99", "actions": actions}).status_code == 409
 
 
+def test_propose_rejects_invalid_action_schema_before_creating_plan(server):
+    page = _page(server, lambda name, args: {"dataset": {}, "views": [], "locus": None})
+    c = API(server)
+    assert c.post("/api/agent/attach", json={"page_id": "ptest"}).status_code == 200
+    r = c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_0", "actions": [
+        {"name": "arrange", "args": {"layout": "sideways"}},
+    ]})
+    assert r.status_code == 422
+    assert "layout" in r.json()["detail"]
+    assert all(message["name"] == "describe_workspace" for message in page.seen)
+
+
 def test_apply_requires_user_approval_and_records_results(server):
     state = {"dataset": {"id": "d1"}, "views": [], "locus": None}
     def handler(name, args):
@@ -175,6 +188,40 @@ def test_reject_and_stale_plan_do_not_execute_actions(server):
     assert c.post(f"/api/agent/plans/{plan2['plan_id']}/approve").status_code == 409
     assert not state.get("mutated")
     assert all(x["name"] == "describe_workspace" for x in page.seen)
+
+
+def test_reject_wins_when_approval_is_waiting_for_page_snapshot(server):
+    pause_snapshot = threading.Event()
+    snapshot_started = threading.Event()
+    release_snapshot = threading.Event()
+
+    def handler(name, args):
+        if name == "describe_workspace":
+            if pause_snapshot.is_set():
+                snapshot_started.set()
+                assert release_snapshot.wait(5)
+            return {"dataset": {}, "views": [], "locus": None}
+        return {"ok": True}
+
+    _page(server, handler)
+    c = API(server)
+    assert c.post("/api/agent/attach", json={"page_id": "ptest"}).status_code == 200
+    plan = c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_0", "actions": [
+        {"name": "arrange", "args": {"layout": "grid"}},
+    ]}).json()
+
+    pause_snapshot.set()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        approving = pool.submit(c.post, f"/api/agent/plans/{plan['plan_id']}/approve")
+        assert snapshot_started.wait(5)
+        rejected = c.post(f"/api/agent/plans/{plan['plan_id']}/reject")
+        assert rejected.status_code == 200
+        assert rejected.json()["status"] == "rejected"
+        release_snapshot.set()
+        approved = approving.result(timeout=5)
+
+    assert approved.status_code == 409
+    assert c.get(f"/api/agent/plans/{plan['plan_id']}").json()["status"] == "rejected"
 
 
 def test_action_failure_does_not_retry(server):
