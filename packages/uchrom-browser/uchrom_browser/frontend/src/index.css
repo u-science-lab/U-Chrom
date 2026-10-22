@@ -156,6 +156,19 @@ button:disabled {
   opacity: 0.45;
   cursor: default;
 }
+
+.hosted-handoff-button { margin-left: auto; color: var(--accent); }
+.handoff-overlay { position: fixed; inset: 0; z-index: var(--z-popover); display: grid; place-items: center; padding: 20px; background: rgba(0, 0, 0, .42); }
+.handoff-modal { position: relative; width: min(560px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 22px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-panel); box-shadow: 0 20px 60px var(--shadow); }
+.handoff-modal h2 { margin: 0 36px 10px 0; font-size: 18px; }
+.handoff-modal-close { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; padding: 0; border: 0; background: transparent; font-size: 22px; }
+.handoff-state-facts { display: grid; gap: 7px; margin: 16px 0; padding: 12px; border: 1px solid var(--border); background: var(--bg-input); }
+.handoff-state-facts span { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 10px; }
+.handoff-state-facts dt { color: var(--text-muted); }
+.handoff-state-facts dd { margin: 0; overflow-wrap: anywhere; }
+.handoff-modal textarea { display: block; width: 100%; margin: 6px 0 10px; resize: vertical; }
+.handoff-command { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.handoff-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 button.active {
   background: var(--bg-active);
   border-color: var(--accent);

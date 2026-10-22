@@ -64,6 +64,33 @@ def test_figures_from_positions_and_a_bulk_map(atlas_dir, tmp_path):
     assert '"hosted": "https://x.test"' in (site / "config.js").read_text()
 
 
+def test_build_site_emits_handoff_endpoint_only_when_configured(tmp_path):
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(json.dumps({"datasets": [{"id": "toy", "path": "toy.zarr"}]}))
+
+    site = build.build_site(tmp_path / "site", catalog)
+    config = json.loads((site / "config.js").read_text().split("=", 1)[1].strip().removesuffix(";"))
+    assert config["agentHandoff"] == ""
+
+    site = build.build_site(tmp_path / "configured-site", catalog,
+                            agent_handoff="https://browser.example/api/agent/handoffs")
+    config = json.loads((site / "config.js").read_text().split("=", 1)[1].strip().removesuffix(";"))
+    assert config["agentHandoff"] == "https://browser.example/api/agent/handoffs"
+
+
+def test_atlas_template_has_safe_local_handoff_entry_copy_and_disabled_help(tmp_path):
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(json.dumps({"datasets": [{"id": "toy", "path": "toy.zarr"}]}))
+    site = build.build_site(tmp_path / "site", catalog)
+    app = (site / "app.js").read_text()
+
+    assert "Continue locally" in app
+    assert "dataset_id" in app and "question" in app
+    assert "current published dataset version" in (site / "index.html").read_text()
+    assert "handoff is not configured" in app.lower()
+    assert "dataRoot + '/' + d.path" not in app
+
+
 def test_figures_fall_back_to_an_embedding_and_cell_sums(atlas_dir, tmp_path):
     import numpy as np
 

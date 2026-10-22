@@ -5,6 +5,7 @@
   var CFG = window.ATLAS_CONFIG || {};
   var DATA = (CFG.dataRoot || '').replace(/\/+$/, '');
   var HOSTED = (CFG.hosted || '').replace(/\/+$/, '');
+  var HANDOFF = (CFG.agentHandoff || '').replace(/\/+$/, '');
   var FIG = 'figures/';
   var $ = function (id) { return document.getElementById(id); };
   var state = { cat: null, q: '', on: {}, page: 0 };   // on: {group: Set(values)}; page: 0-based
@@ -38,6 +39,68 @@
   function unit(d) { var s = study(d); return s && /spatial/i.test(s.category || s.kind || '') ? 'spots' : 'cells'; }
   function study(d) { return state.studies[d.study] || null; }
   function nameOf(d) { return d.name || d.title; }
+
+  var handoffDataset = null;
+  function showHandoff(d) {
+    handoffDataset = d;
+    var dialog = $('handoff-dialog');
+    var studyMeta = study(d) || {};
+    var facts = $('handoff-facts');
+    facts.textContent = '';
+    [['Dataset', nameOf(d)], ['Dataset ID', d.id], ['Current catalog version', state.cat.updated || 'not recorded; resolved when generated'],
+      ['Study', studyMeta.citation || d.paper || '—']].forEach(function (row) {
+      facts.appendChild(el('dt', { text: row[0] }));
+      facts.appendChild(el('dd', { text: row[1] }));
+    });
+    $('handoff-question').value = '';
+    $('handoff-result').hidden = true;
+    $('handoff-error').hidden = true;
+    $('handoff-error').textContent = '';
+    $('handoff-create').disabled = !HANDOFF;
+    $('handoff-unavailable').hidden = !!HANDOFF;
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
+  }
+
+  async function createHandoff() {
+    if (!handoffDataset || !HANDOFF) return;
+    var button = $('handoff-create');
+    var error = $('handoff-error');
+    button.disabled = true;
+    error.hidden = true;
+    try {
+      var question = $('handoff-question').value.trim();
+      var response = await fetch(HANDOFF, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.assign({ dataset_id: handoffDataset.id }, question ? { question: question } : {}))
+      });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) throw new Error(body.error || ('handoff failed (' + response.status + ')'));
+      if (!body.token || typeof body.token !== 'string') throw new Error('handoff response did not include a token');
+      $('handoff-command').value = 'Use the U-Chrom local agent to continue this dataset. HANDOFF: ' + body.token;
+      $('handoff-result').hidden = false;
+    } catch (e) {
+      error.textContent = e.message || String(e);
+      error.hidden = false;
+    } finally {
+      button.disabled = !HANDOFF;
+    }
+  }
+
+  $('handoff-create').addEventListener('click', createHandoff);
+  $('handoff-copy').addEventListener('click', async function () {
+    var text = $('handoff-command').value;
+    if (!text) return;
+    try {
+      if (!navigator.clipboard) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(text);
+      $('handoff-copy').textContent = 'Copied';
+    } catch (e) {
+      $('handoff-command').focus();
+      $('handoff-command').select();
+      $('handoff-copy').textContent = 'Select and copy the instruction';
+    }
+  });
 
   var GROUPS = [
     ['Type', function (d) { var s = study(d); return s && s.category ? [s.category] : []; }],
@@ -93,6 +156,7 @@
           href ? el('a', { class: 'open', href: href, target: '_blank', rel: 'noopener',
                            title: 'Open in the U-Chrom browser (the first open after a quiet spell takes a few seconds)' },
                     ['Open in browser ', el('span', { 'aria-hidden': 'true', text: '→' })]) : null,
+          el('button', { class: 'continue-local', type: 'button', title: HANDOFF ? 'Prepare a one-time handoff for your local agent' : 'Local handoff is not configured' }, ['Continue locally']),
           d.download ? el('a', { class: 'download', href: DATA + '/' + d.download, download: '',
                                  title: 'The whole dataset as one .cdz file (a ChromData store in one zip): open it with the U-Chrom browser or ChromData.read' },
                           [el('span', { class: 'dl-icon', 'aria-hidden': 'true', text: '↓' }), 'Download',
@@ -100,7 +164,9 @@
         ])
       ])
     ];
-    return el('article', { class: 'card', id: d.id }, kids);
+    var article = el('article', { class: 'card', id: d.id }, kids);
+    article.querySelector('.continue-local').addEventListener('click', function () { showHandoff(d); });
+    return article;
   }
 
   function studyBlock(s, ds) {

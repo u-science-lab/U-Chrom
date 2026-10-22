@@ -55,6 +55,31 @@
   </section>
 </main>
 
+<dialog id="handoff-dialog" class="handoff-dialog" aria-labelledby="handoff-title">
+  <form method="dialog" class="handoff-panel">
+    <button class="handoff-close" value="cancel" aria-label="Close">×</button>
+    <p class="kind">LOCAL CONTINUATION</p>
+    <h2 id="handoff-title">Continue locally</h2>
+    <p class="handoff-intro">Give your configured Claude Code or Codex U-Chrom MCP client this dataset and question. Atlas does not access your computer or probe localhost.</p>
+    <dl class="handoff-facts" id="handoff-facts"></dl>
+    <label class="handoff-question" for="handoff-question">Question for your agent</label>
+    <textarea id="handoff-question" rows="3" maxlength="4000" placeholder="Tell the agent what you want to compare, locate, or inspect"></textarea>
+    <p class="handoff-privacy">The service binds the current published dataset version when the handoff is generated. Only the dataset reference and question are sent; no local path, credentials, or raw matrix are included.</p>
+    <p class="handoff-error" id="handoff-error" hidden></p>
+    <div class="handoff-result" id="handoff-result" hidden>
+      <label for="handoff-command">Paste this one-line instruction into Claude Code or Codex</label>
+      <textarea id="handoff-command" rows="2" readonly></textarea>
+      <button type="button" class="handoff-copy" id="handoff-copy">Copy instruction</button>
+      <small>Valid for 10 minutes and redeemable once. The token is not a URL.</small>
+    </div>
+    <div class="handoff-actions">
+      <button type="button" class="handoff-primary" id="handoff-create">Generate handoff</button>
+      <button value="cancel">Done</button>
+    </div>
+    <p class="handoff-unavailable" id="handoff-unavailable" hidden>Local handoff is not configured on this Atlas build.</p>
+  </form>
+</dialog>
+
 <footer class="foot">
   <div class="wrap foot-grid">
     <div>

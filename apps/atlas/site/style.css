@@ -159,6 +159,31 @@ figcaption { margin-top: 14px; color: var(--muted); font-size: 13px; line-height
 .empty button { margin-left: 6px; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
 .err { color: var(--hic); }
 
+.handoff-dialog { width: min(560px, calc(100vw - 32px)); max-width: none; padding: 0; border: 1px solid var(--rule-2); border-radius: 8px; background: var(--paper); color: var(--ink); box-shadow: 0 20px 70px rgba(0,0,0,.25); }
+.handoff-dialog::backdrop { background: rgba(22, 24, 28, .42); backdrop-filter: blur(2px); }
+.handoff-panel { position: relative; padding: 28px; }
+.handoff-close { position: absolute; top: 13px; right: 14px; width: 30px; height: 30px; border: 0; background: none; color: var(--muted); font-size: 25px; line-height: 1; cursor: pointer; }
+.handoff-panel h2 { margin: 0 36px 8px 0; font: 400 32px/1.12 var(--serif); }
+.handoff-intro, .handoff-privacy { color: var(--ink-2); font-size: 13.5px; line-height: 1.55; }
+.handoff-facts { display: grid; grid-template-columns: max-content minmax(0,1fr); gap: 7px 16px; margin: 20px 0; padding: 14px 16px; background: var(--panel); border-radius: 5px; font-size: 13px; }
+.handoff-facts dt { color: var(--muted); }
+.handoff-facts dd { margin: 0; overflow-wrap: anywhere; }
+.handoff-question { display: block; margin: 16px 0 6px; font-size: 13px; font-weight: 600; }
+.handoff-dialog textarea { width: 100%; resize: vertical; padding: 9px 11px; border: 1px solid var(--rule-2); border-radius: 5px; background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; }
+.handoff-dialog textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
+.handoff-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.handoff-actions button, .handoff-copy { padding: 8px 14px; border: 1px solid var(--rule-2); border-radius: 5px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
+.handoff-actions .handoff-primary, .handoff-copy { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.handoff-actions button:hover, .handoff-copy:hover { opacity: .86; }
+.handoff-result { margin-top: 20px; padding: 14px; border: 1px solid var(--rule-2); border-radius: 5px; }
+.handoff-result label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 600; }
+.handoff-result small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; }
+.handoff-copy { margin-top: 9px; }
+.handoff-error { margin: 12px 0 0; color: var(--hic); font-size: 13px; }
+.handoff-unavailable { margin: 14px 0 0; color: var(--muted); font-size: 12.5px; }
+.continue-local { color: var(--accent); font-size: 14px; font-weight: 500; }
+.continue-local::before { content: "⌂"; display: inline-block; margin-right: 5px; font-size: 15px; }
+
 /* footer */
 .foot { margin-top: 32px; padding: 36px 0 56px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 13px; }
 .foot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
