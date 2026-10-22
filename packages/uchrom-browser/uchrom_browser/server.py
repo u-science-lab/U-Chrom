@@ -341,6 +341,10 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
     from .control import ActionBroker, add_routes
     app.state.broker = ActionBroker()
     add_routes(app, app.state.broker)
+    if hosted is None:
+        from .agent import AgentState, add_routes as add_agent_routes
+        app.state.agent_state = AgentState(app.state.broker)
+        add_agent_routes(app, app.state.agent_state)
 
     if (STATIC_DIR / "index.html").is_file():
         app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
