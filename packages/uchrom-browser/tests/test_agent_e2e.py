@@ -49,11 +49,16 @@ def server():
 @pytest.fixture
 def real_page(server):
     page = RealDataPage(server)
-    page.start()
-    assert page.ready.wait(5)
-    yield page
-    page.stop()
-    assert not page.is_alive(), "SSE page adapter did not stop before its server"
+    started = False
+    try:
+        page.start()
+        started = True
+        assert page.ready.wait(5)
+        yield page
+    finally:
+        if started:
+            page.stop()
+            assert not page.is_alive(), "SSE page adapter did not stop before its server"
 
 
 class RealDataPage(threading.Thread):
