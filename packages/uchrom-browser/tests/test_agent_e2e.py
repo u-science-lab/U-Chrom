@@ -46,6 +46,16 @@ def server():
     thread.join(5)
 
 
+@pytest.fixture
+def real_page(server):
+    page = RealDataPage(server)
+    page.start()
+    assert page.ready.wait(5)
+    yield page
+    page.stop()
+    assert not page.is_alive(), "SSE page adapter did not stop before its server"
+
+
 class RealDataPage(threading.Thread):
     """Small deterministic page adapter backed by the real sim_cell1 store."""
 
@@ -54,9 +64,24 @@ class RealDataPage(threading.Thread):
         self.base = base
         self.page = page
         self.ready = threading.Event()
+        self.stopping = threading.Event()
+        self.response = None
         self.seen: list[dict] = []
         self.state: dict = {}
         self.canonical_cells: list[str] = []
+
+    def stop(self):
+        self.stopping.set()
+        response = self.response
+        if response is not None:
+            sock = getattr(getattr(getattr(getattr(response.raw, "_fp", None), "fp", None), "raw", None), "_sock", None)
+            if sock is not None:
+                try:
+                    sock.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+            response.close()
+        self.join(3)
 
     def run(self):
         import base64
@@ -132,32 +157,40 @@ class RealDataPage(threading.Thread):
                 }
             raise ValueError(f"unsupported action: {name}")
 
-        with requests.get(f"{self.base}/api/control/events", params={"page": self.page}, stream=True, timeout=30) as response:
-            event = None
-            for line in response.iter_lines(decode_unicode=True):
-                if line.startswith("event: "):
-                    event = line[7:]
-                elif line.startswith("data: ") and event == "hello":
-                    self.ready.set()
-                elif line.startswith("data: ") and event == "action":
-                    message = json.loads(line[6:])
-                    self.seen.append(message)
-                    try:
-                        body = {"ok": True, "result": action(message["name"], message["args"])}
-                    except Exception as exc:  # noqa: BLE001
-                        body = {"ok": False, "error": str(exc)}
-                    requests.post(f"{self.base}/api/control/results/{message['id']}", json=body, timeout=5)
+        while not self.stopping.is_set():
+            try:
+                with requests.get(f"{self.base}/api/control/events", params={"page": self.page}, stream=True,
+                                  timeout=(5, 30)) as response:
+                    self.response = response
+                    event = None
+                    for line in response.iter_lines(decode_unicode=True):
+                        if self.stopping.is_set():
+                            return
+                        if line.startswith("event: "):
+                            event = line[7:]
+                        elif line.startswith("data: ") and event == "hello":
+                            self.ready.set()
+                        elif line.startswith("data: ") and event == "action":
+                            message = json.loads(line[6:])
+                            self.seen.append(message)
+                            try:
+                                body = {"ok": True, "result": action(message["name"], message["args"])}
+                            except Exception as exc:  # noqa: BLE001
+                                body = {"ok": False, "error": str(exc)}
+                            if not self.stopping.is_set():
+                                requests.post(f"{self.base}/api/control/results/{message['id']}", json=body, timeout=5)
+            except requests.exceptions.RequestException:
+                if not self.stopping.is_set():
+                    self.stopping.wait(0.05)
 
 
-def test_real_data_agent_loop_applies_canonical_locus_stats_and_genome_plan(server, tmp_path):
+def test_real_data_agent_loop_applies_canonical_locus_stats_and_genome_plan(server, real_page, tmp_path):
     """Exercise the real-data API loop; HTTP approval calls stand in for local AgentPanel buttons."""
     import requests
 
     from uchrom_browser import connect
 
-    page = RealDataPage(server)
-    page.start()
-    assert page.ready.wait(5)
+    page = real_page
     ws = connect(server, timeout=5)
     assert ws.agent_pages()[0]["page"] == page.page
     ws._request("POST", "/api/agent/attach", {"page_id": page.page})
@@ -179,9 +212,10 @@ def test_real_data_agent_loop_applies_canonical_locus_stats_and_genome_plan(serv
         expected_revision=snapshot["state_revision"],
     )
     assert plan["status"] == "pending"
-    apply_url = f"{server}/api/agent/plans/{plan['plan_id']}/apply"
+    ui_plan_url = f"{server}/api/agent/ui/plans/{plan['plan_id']}"
+    apply_url = f"{ui_plan_url}/apply"
     assert requests.post(apply_url).status_code == 409
-    assert requests.post(f"{server}/api/agent/plans/{plan['plan_id']}/approve").json()["status"] == "approved"
+    assert requests.post(f"{ui_plan_url}/approve").json()["status"] == "approved"
     result = requests.post(apply_url).json()
     assert result["status"] == "applied"
     assert result["canonical"]["locus"] == page.state["locus"]
@@ -189,7 +223,7 @@ def test_real_data_agent_loop_applies_canonical_locus_stats_and_genome_plan(serv
     assert {view["type"] for view in result["canonical"]["views"]} >= {"stats", "genome"}
     stats = next(view for view in result["canonical"]["views"] if view["type"] == "stats")
     assert stats["chrom_scope"] == "locus"
-    assert result["state_revision"] == "r_1"
+    assert result["state_revision"] == "r_4"
     action_results = result["results"]
     assert action_results[0]["result"] == result["canonical"]["locus"]
     assert action_results[1]["result"]["pane"] == stats["pane"]
