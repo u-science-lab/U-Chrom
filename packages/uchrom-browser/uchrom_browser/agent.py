@@ -302,6 +302,14 @@ def add_routes(app, state: AgentState) -> None:
         except AgentInputError as exc:
             raise HTTPException(422, str(exc)) from None
 
+    @app.get("/api/agent/plans")
+    def agent_plans(page: Optional[str] = Query(None)) -> List[Dict[str, Any]]:
+        with state._plan_lock:
+            plans = list(state.plans.values())
+        if page:
+            plans = [plan for plan in plans if plan.page_id == page]
+        return [plan.as_dict() for plan in plans if plan.status in {"pending", "approved"}]
+
     @app.get("/api/agent/plans/{plan_id}")
     def agent_status(plan_id: str) -> Dict[str, Any]:
         try:

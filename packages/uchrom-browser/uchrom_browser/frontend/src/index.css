@@ -1428,6 +1428,78 @@ body.resizing-rows {
   font-weight: 600;
   color: var(--accent);
 }
+.agent-panel {
+  padding: 6px 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+.agent-head,
+.agent-plan-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.agent-head h2 {
+  margin-bottom: 0;
+}
+.agent-state,
+.agent-status {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.agent-status-pending {
+  color: var(--warn);
+}
+.agent-status-applied {
+  color: var(--accent);
+}
+.agent-status-rejected,
+.agent-status-stale,
+.agent-status-failed {
+  color: var(--error);
+}
+.agent-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  margin: 6px 0;
+  font-size: 12px;
+}
+.agent-facts dt {
+  color: var(--text-muted);
+}
+.agent-facts dd {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-plan {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.agent-plan ol {
+  margin: 5px 0 7px 18px;
+  padding: 0;
+  font-size: 12px;
+}
+.agent-actions {
+  display: flex;
+  gap: 6px;
+}
+.agent-page-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.agent-page-picker select {
+  min-width: 0;
+  flex: 1;
+}
 .inspector .insp-pin {
   margin-bottom: 6px;
 }

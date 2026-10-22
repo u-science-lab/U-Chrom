@@ -19,6 +19,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from urllib.parse import quote
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -81,6 +82,54 @@ class Workspace:
     def pages(self) -> List[Dict[str, Any]]:
         """Connected browser pages (the first is the one that receives actions)."""
         return self._request("GET", "/api/control/pages")
+
+    def agent_pages(self) -> List[Dict[str, Any]]:
+        """Connected pages visible to the local agent control layer."""
+        return self._request("GET", "/api/agent/pages")
+
+    def agent_snapshot(self, page: Optional[str] = None) -> Dict[str, Any]:
+        """Read canonical state from an explicitly pinned page."""
+        path = "/api/agent/snapshot"
+        if page is not None:
+            path += f"?page={quote(page, safe='')}"
+        return self._request("GET", path)
+
+    def propose_ui_changes(self, actions: List[Dict[str, Any]], page: Optional[str],
+                           expected_revision: str) -> Dict[str, Any]:
+        """Create a pending UI mutation plan for an explicitly pinned page."""
+        if not page:
+            raise BrowserError("an explicit page is required to propose UI changes")
+        if not expected_revision:
+            raise BrowserError("an expected_revision is required to propose UI changes")
+        return self._request("POST", "/api/agent/plans", {
+            "page_id": page,
+            "expected_revision": expected_revision,
+            "actions": actions,
+        })
+
+    def plan_status(self, plan_id: str) -> Dict[str, Any]:
+        """Read the status and results of a local agent plan."""
+        if not plan_id:
+            raise BrowserError("plan_id is required")
+        return self._request("GET", f"/api/agent/plans/{quote(plan_id, safe='')}")
+
+    def approve_plan(self, plan_id: str) -> Dict[str, Any]:
+        """Approve a plan through the local control endpoint."""
+        if not plan_id:
+            raise BrowserError("plan_id is required")
+        return self._request("POST", f"/api/agent/plans/{quote(plan_id, safe='')}/approve")
+
+    def reject_plan(self, plan_id: str) -> Dict[str, Any]:
+        """Reject a plan through the local control endpoint."""
+        if not plan_id:
+            raise BrowserError("plan_id is required")
+        return self._request("POST", f"/api/agent/plans/{quote(plan_id, safe='')}/reject")
+
+    def apply_plan(self, plan_id: str) -> Dict[str, Any]:
+        """Apply an approved plan through the local control endpoint."""
+        if not plan_id:
+            raise BrowserError("plan_id is required")
+        return self._request("POST", f"/api/agent/plans/{quote(plan_id, safe='')}/apply")
 
     def __getattr__(self, name: str):
         tools = self.__dict__.get("_tools", {})

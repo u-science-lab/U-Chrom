@@ -169,3 +169,41 @@ def test_capture_formats_through_a_page(server, tmp_path):
 def test_capture_tool_declares_formats():
     tool = next(t for t in load_tools()["tools"] if t["name"] == "capture_view")
     assert tool["inputSchema"]["properties"]["format"]["enum"] == ["png", "svg", "pdf"]
+
+
+def test_workspace_agent_snapshot_and_propose(server):
+    state = {"dataset": {"id": "d1"}, "views": [], "locus": None}
+    page = FakePage(server, lambda name, args: state if name == "describe_workspace" else {"ok": True})
+    page.start()
+    assert page.ready.wait(5)
+    ws = ubc.connect(server, timeout=5)
+    calls = []
+    request = ws._request
+
+    def recorded(method, path, body=None, timeout=None):
+        calls.append((method, path, body))
+        return request(method, path, body, timeout)
+
+    ws._request = recorded
+    ws._request("POST", "/api/agent/attach", {"page_id": "ptest"})
+    calls.clear()
+    snapshot = ws.agent_snapshot(page="ptest")
+    assert snapshot["page_id"] == "ptest"
+    plan = ws.propose_ui_changes(
+        [{"name": "arrange", "args": {"layout": "tabs"}}],
+        page="ptest",
+        expected_revision=snapshot["state_revision"],
+    )
+    assert plan["page_id"] == "ptest"
+    assert calls[-2][0:2] == ("GET", "/api/agent/snapshot?page=ptest")
+    assert calls[-1] == (
+        "POST",
+        "/api/agent/plans",
+        {"page_id": "ptest", "expected_revision": "r_0", "actions": [{"name": "arrange", "args": {"layout": "tabs"}}]},
+    )
+
+
+def test_workspace_does_not_propose_without_page(server):
+    ws = ubc.connect(server, timeout=2)
+    with pytest.raises(ubc.BrowserError, match="page"):
+        ws.propose_ui_changes([], page=None, expected_revision="r_0")
