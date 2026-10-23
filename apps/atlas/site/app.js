@@ -5,7 +5,6 @@
   var CFG = window.ATLAS_CONFIG || {};
   var DATA = (CFG.dataRoot || '').replace(/\/+$/, '');
   var HOSTED = (CFG.hosted || '').replace(/\/+$/, '');
-  var HANDOFF = (CFG.agentHandoff || '').replace(/\/+$/, '');
   var FIG = 'figures/';
   var $ = function (id) { return document.getElementById(id); };
   var state = { cat: null, q: '', on: {}, page: 0 };   // on: {group: Set(values)}; page: 0-based
@@ -40,66 +39,63 @@
   function study(d) { return state.studies[d.study] || null; }
   function nameOf(d) { return d.name || d.title; }
 
-  var handoffDataset = null;
-  function showHandoff(d) {
-    handoffDataset = d;
+  var localDataset = null;
+  function shellQuote(value) {
+    return "'" + String(value).replace(/'/g, "'\\''") + "'";
+  }
+  function localCommand(d) {
+    return 'python -m uchrom_browser ' + shellQuote(urlOf(d));
+  }
+  function localInstruction(d, question) {
+    var prompt = question || 'Inspect this dataset and explain the most useful first analysis.';
+    return 'The U-Chrom browser is running locally with dataset ' + urlOf(d) + '. Use your already-configured Claude Code or Codex '
+      + 'U-Chrom MCP to inspect the active browser session and answer: ' + prompt;
+  }
+  function showLocal(d) {
+    localDataset = d;
     var dialog = $('handoff-dialog');
     var studyMeta = study(d) || {};
     var facts = $('handoff-facts');
     facts.textContent = '';
-    [['Dataset', nameOf(d)], ['Dataset ID', d.id], ['Current catalog version', state.cat.updated || 'not recorded; resolved when generated'],
+    [['Dataset', nameOf(d)], ['Dataset ID', d.id], ['Current catalog version', state.cat.updated || 'not recorded'],
       ['Study', studyMeta.citation || d.paper || '—']].forEach(function (row) {
       facts.appendChild(el('dt', { text: row[0] }));
       facts.appendChild(el('dd', { text: row[1] }));
     });
     $('handoff-question').value = '';
-    $('handoff-result').hidden = true;
-    $('handoff-error').hidden = true;
-    $('handoff-error').textContent = '';
-    $('handoff-create').disabled = !HANDOFF;
-    $('handoff-unavailable').hidden = !!HANDOFF;
+    $('handoff-command').value = localCommand(d);
+    $('handoff-instruction').value = localInstruction(d, '');
+    $('handoff-result').hidden = false;
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
   }
 
-  async function createHandoff() {
-    if (!handoffDataset || !HANDOFF) return;
-    var button = $('handoff-create');
-    var error = $('handoff-error');
-    button.disabled = true;
-    error.hidden = true;
-    try {
-      var question = $('handoff-question').value.trim();
-      var response = await fetch(HANDOFF, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(Object.assign({ dataset_id: handoffDataset.id }, question ? { question: question } : {}))
-      });
-      var body = await response.json().catch(function () { return {}; });
-      if (!response.ok) throw new Error(body.error || ('handoff failed (' + response.status + ')'));
-      if (!body.token || typeof body.token !== 'string') throw new Error('handoff response did not include a token');
-      $('handoff-command').value = 'Use the U-Chrom local agent to continue this dataset. HANDOFF: ' + body.token;
-      $('handoff-result').hidden = false;
-    } catch (e) {
-      error.textContent = e.message || String(e);
-      error.hidden = false;
-    } finally {
-      button.disabled = !HANDOFF;
+  function copyField(fieldId, buttonId, copiedText, fallbackText) {
+    var text = $(fieldId).value;
+    if (!text) return;
+    if (!navigator.clipboard) {
+      $(fieldId).focus();
+      $(fieldId).select();
+      $(buttonId).textContent = fallbackText;
+      return;
     }
+    navigator.clipboard.writeText(text).then(function () {
+      $(buttonId).textContent = copiedText;
+    }).catch(function () {
+      $(fieldId).focus();
+      $(fieldId).select();
+      $(buttonId).textContent = fallbackText;
+    });
   }
 
-  $('handoff-create').addEventListener('click', createHandoff);
-  $('handoff-copy').addEventListener('click', async function () {
-    var text = $('handoff-command').value;
-    if (!text) return;
-    try {
-      if (!navigator.clipboard) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(text);
-      $('handoff-copy').textContent = 'Copied';
-    } catch (e) {
-      $('handoff-command').focus();
-      $('handoff-command').select();
-      $('handoff-copy').textContent = 'Select and copy the instruction';
-    }
+  $('handoff-question').addEventListener('input', function () {
+    if (localDataset) $('handoff-instruction').value = localInstruction(localDataset, $('handoff-question').value.trim());
+  });
+  $('handoff-copy-command').addEventListener('click', function () {
+    copyField('handoff-command', 'handoff-copy-command', 'Copied', 'Select and copy the command');
+  });
+  $('handoff-copy-instruction').addEventListener('click', function () {
+    copyField('handoff-instruction', 'handoff-copy-instruction', 'Copied', 'Select and copy the instruction');
   });
 
   var GROUPS = [
@@ -156,7 +152,7 @@
           href ? el('a', { class: 'open', href: href, target: '_blank', rel: 'noopener',
                            title: 'Open in the U-Chrom browser (the first open after a quiet spell takes a few seconds)' },
                     ['Open in browser ', el('span', { 'aria-hidden': 'true', text: '→' })]) : null,
-          el('button', { class: 'continue-local', type: 'button', title: HANDOFF ? 'Prepare a one-time handoff for your local agent' : 'Local handoff is not configured' }, ['Continue locally']),
+          el('button', { class: 'continue-local', type: 'button', title: 'Prepare a local browser command and MCP instruction' }, ['Continue locally']),
           d.download ? el('a', { class: 'download', href: DATA + '/' + d.download, download: '',
                                  title: 'The whole dataset as one .cdz file (a ChromData store in one zip): open it with the U-Chrom browser or ChromData.read' },
                           [el('span', { class: 'dl-icon', 'aria-hidden': 'true', text: '↓' }), 'Download',
@@ -165,7 +161,7 @@
       ])
     ];
     var article = el('article', { class: 'card', id: d.id }, kids);
-    article.querySelector('.continue-local').addEventListener('click', function () { showHandoff(d); });
+    article.querySelector('.continue-local').addEventListener('click', function () { showLocal(d); });
     return article;
   }
 

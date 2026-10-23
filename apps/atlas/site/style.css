@@ -165,6 +165,7 @@ figcaption { margin-top: 14px; color: var(--muted); font-size: 13px; line-height
 .handoff-close { position: absolute; top: 13px; right: 14px; width: 30px; height: 30px; border: 0; background: none; color: var(--muted); font-size: 25px; line-height: 1; cursor: pointer; }
 .handoff-panel h2 { margin: 0 36px 8px 0; font: 400 32px/1.12 var(--serif); }
 .handoff-intro, .handoff-privacy { color: var(--ink-2); font-size: 13.5px; line-height: 1.55; }
+.handoff-privacy code { padding: 1px 4px; border-radius: 3px; background: var(--panel); font-size: 12px; }
 .handoff-facts { display: grid; grid-template-columns: max-content minmax(0,1fr); gap: 7px 16px; margin: 20px 0; padding: 14px 16px; background: var(--panel); border-radius: 5px; font-size: 13px; }
 .handoff-facts dt { color: var(--muted); }
 .handoff-facts dd { margin: 0; overflow-wrap: anywhere; }
@@ -179,8 +180,7 @@ figcaption { margin-top: 14px; color: var(--muted); font-size: 13px; line-height
 .handoff-result label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 600; }
 .handoff-result small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; }
 .handoff-copy { margin-top: 9px; }
-.handoff-error { margin: 12px 0 0; color: var(--hic); font-size: 13px; }
-.handoff-unavailable { margin: 14px 0 0; color: var(--muted); font-size: 12.5px; }
+.handoff-result label + textarea { margin-bottom: 2px; }
 .continue-local { color: var(--accent); font-size: 14px; font-weight: 500; }
 .continue-local::before { content: "⌂"; display: inline-block; margin-right: 5px; font-size: 15px; }
 

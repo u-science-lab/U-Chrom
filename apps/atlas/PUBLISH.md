@@ -35,9 +35,15 @@ kept in the repository: put an R2 API token (Object Read & Write, this bucket on
 
    The hero animation's data (`apps/atlas/site/hero.json`: a section drawn after a spatial Hi-C cerebellum section and
    three HiRES brain cells' 3-D genomes) is written by `python apps/atlas/hero_data.py`; commit it too.
-   then `python apps/atlas/build.py site dist/site --catalog catalog.json --hosted URL \
-       --agent-handoff https://uchrom-browser.u-science.org/api/agent/handoffs` and deploy `dist/site`
+   then `python apps/atlas/build.py site dist/site --catalog catalog.json --hosted URL` and deploy `dist/site`
    (`apps/README.md`).
+
+The Atlas **Continue locally** dialog is built entirely from the catalog already loaded in the page. It copies a
+`python -m uchrom_browser '<dataset-url>'` command and an instruction for the user's configured local Claude Code or
+Codex U-Chrom MCP. This flow does not need a hosted handoff endpoint, token service, or localhost probe. The local
+browser package is source-only (not on PyPI); from a U-Chrom checkout, install it with
+`uv pip install -e packages/chromdata -e packages/uchrom-browser` before running the copied command. `--hosted URL`
+only enables the separate **Open in browser** link.
 
 Notes learned the hard way: Cloudflare rejects Python's default `urllib` user agent on the public domain (aiohttp /
 fsspec and `chromdata.catalog.fetch_catalog` are fine); the first open of a store reads ~17 small objects, so
