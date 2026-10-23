@@ -9,6 +9,7 @@ import { isPointPick } from './types'
 import type { Locus } from './genome'
 import { addPinnedPane, addTracePane, defaultWorkspace, dropGroupScope, paneSignature, parseWorkspaces, type DataKind, type WorkspaceState } from './workspace'
 import type { CellField, CellInfo, CellValue, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo, PointSet } from './types'
+import { agentMutationAllowed } from './mutationGate'
 
 let nextId = 1
 const newId = () => `L${nextId++}`
@@ -281,7 +282,12 @@ const savedGroups = loadSavedGroups()
 const savedTheme = loadThemeChoice()
 const initialPalette = applyTheme(resolveTheme(savedTheme, systemPrefersDark()))
 
-export const useStore = create<AppState>((set, get) => {
+export const useStore = create<AppState>((rawSet, get) => {
+  const applySet = rawSet as unknown as (partial: any, replace?: boolean) => void
+  const set = (partial: any, replace?: boolean) => {
+    if (get().agentLease && !agentMutationAllowed()) return
+    applySet(partial, replace)
+  }
   const patchView = (patch: Partial<DatasetView>, extra: Partial<AppState> = {}) => {
     const s = get()
     const id = s.activeDatasetId
@@ -305,7 +311,7 @@ export const useStore = create<AppState>((set, get) => {
   pointSets: {},
 
   setAgentLease(active) {
-    set({ agentLease: active })
+    rawSet({ agentLease: active })
   },
 
   setDatasets(ds) {
