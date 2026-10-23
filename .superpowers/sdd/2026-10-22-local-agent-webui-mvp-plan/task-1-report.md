@@ -40,3 +40,14 @@ Output: TypeScript check and Vite production build passed (`332 modules transfor
 
 - No browser-level interaction test was run for clicking the checkbox; the state/prompt behavior is covered by unit tests and TypeScript/build validation.
 - Existing unrelated modifications in `docs/superpowers/...` were preserved and not included in the commit.
+
+## Reviewer fix round 1
+
+- Prompt privacy wording now states only observable facts: no selection means no canonical IDs are included; summary-only selection says IDs are omitted; a state containing IDs says IDs are included without asserting why.
+- Added `hostedHandoffPayload` pure helper and behavior coverage for default unchecked state, explicit checked state, and cancellation back to summary-only state.
+
+Validation:
+
+- `npm test -- --run src/handoff.test.ts src/components/HostedHandoff.test.ts`: 2 files, 15 tests passed.
+- `npm run build`: TypeScript and Vite production build passed.
+- Generated static assets were restored/cleaned and remain outside this source-only task commit.

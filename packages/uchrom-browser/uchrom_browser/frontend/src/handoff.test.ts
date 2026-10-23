@@ -115,4 +115,12 @@ describe('hosted handoff state', () => {
     expect(prompt).toMatch(/only include them after explicit user opt-in/i)
     expect(prompt).not.toContain('"cells"')
   })
+
+  it('describes an absent selection without claiming an opt-in', () => {
+    const prompt = handoffPrompt('https://atlas.example/data.zarr', '', buildHandoffState(DEFAULT_VIEW, defaultWorkspace(false)))
+
+    expect(prompt).toMatch(/no selection is present/i)
+    expect(prompt).toMatch(/no canonical cell IDs are included/i)
+    expect(prompt).not.toMatch(/included because the user explicitly opted in/i)
+  })
 })

@@ -89,9 +89,11 @@ export function handoffCommand(datasetUrl: string): string {
 
 export function handoffPrompt(datasetUrl: string, question: string, state: HandoffState): string {
   const input = JSON.stringify({ dataset_url: datasetUrl, question, semantic_snapshot: state }, null, 2)
-  const privacy = state.selection && !state.selection.cells
-    ? 'Canonical cell IDs are omitted by default; only include them after explicit user opt-in. Review selection privacy before sharing this prompt.'
-    : 'Canonical cell IDs are included because the user explicitly opted in.'
+  const privacy = !state.selection
+    ? 'No selection is present, so no canonical cell IDs are included.'
+    : state.selection.cells
+      ? 'Canonical cell IDs are included in this snapshot. Review selection privacy before sharing this prompt.'
+      : 'Canonical cell IDs are omitted by default; only include them after explicit user opt-in. Review selection privacy before sharing this prompt.'
   return `Use the already-configured U-Chrom MCP on the user’s computer. The user will run this command locally: ${handoffCommand(datasetUrl)}. After the local page is open, read its actual state through MCP, compare it with this reference snapshot, and propose matching changes for approval in the local WebUI. Do not claim the hosted snapshot has already been applied. Do not probe localhost or send this snapshot to any web service. ${privacy}\n\nExact handoff input:\n\`\`\`json\n${input}\n\`\`\``
 }
 

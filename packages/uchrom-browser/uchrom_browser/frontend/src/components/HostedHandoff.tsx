@@ -29,6 +29,10 @@ export function handoffIssueMessage(reason: 'invalid-dataset-url' | 'state-too-l
   return 'The full prompt exceeds 1 MiB UTF-8. Shorten the question or shrink the selection; nothing was truncated.'
 }
 
+export function hostedHandoffPayload(view: Parameters<typeof buildHandoffState>[0], workspace: Parameters<typeof buildHandoffState>[1], includeCellIds = false): { state: HandoffState; includeCellIds: boolean } {
+  return { state: buildHandoffState(view, workspace, { includeCellIds }), includeCellIds }
+}
+
 export function HostedHandoff() {
   const dataset = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
   const view = useStore((s) => activeView(s))
@@ -113,7 +117,7 @@ export function HostedHandoff() {
       }
     }
     void loadCatalog()
-    setState(buildHandoffState(view, workspace))
+    setState(hostedHandoffPayload(view, workspace).state)
     setIncludeCellIds(false)
     setQuestion('')
     setError(null)
@@ -154,7 +158,7 @@ export function HostedHandoff() {
                 onChange={(event) => {
                   const next = event.target.checked
                   setIncludeCellIds(next)
-                  setState(buildHandoffState(view, workspace, { includeCellIds: next }))
+                  setState(hostedHandoffPayload(view, workspace, next).state)
                 }}
               />
               <span><strong>Include canonical cell IDs</strong><br /><span className="muted">Unchecked by default; IDs are omitted from the prompt unless you explicitly opt in.</span></span>

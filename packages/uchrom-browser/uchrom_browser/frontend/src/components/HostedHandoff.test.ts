@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { handoffIssueMessage, isCatalogResponseCurrent, isHandoffDialogEscape, trapHandoffDialogTab } from './HostedHandoff'
+import { handoffPrompt } from '../handoff'
+import { DEFAULT_VIEW } from '../store'
+import { defaultWorkspace } from '../workspace'
+import { handoffIssueMessage, isCatalogResponseCurrent, isHandoffDialogEscape, trapHandoffDialogTab, hostedHandoffPayload } from './HostedHandoff'
 
 describe('hosted handoff dialog helpers', () => {
   it('ignores catalog responses from an older request or dataset', () => {
@@ -34,7 +37,23 @@ describe('hosted handoff dialog helpers', () => {
     expect(handoffIssueMessage('invalid-dataset-url')).toMatch(/public HTTPS/i)
   })
 
-  it('keeps the canonical ID opt-in control unchecked by default in the copy contract', () => {
-    expect('Include canonical cell IDs').toMatch(/Include canonical cell IDs/)
+  it('keeps canonical IDs summary-only by default, includes them when checked, and removes them when unchecked', () => {
+    const view = { ...DEFAULT_VIEW, selection: { id: 'g1', cells: ['c1', 'c2'] } }
+    const workspace = defaultWorkspace(false)
+
+    const defaultPayload = hostedHandoffPayload(view, workspace)
+    expect(defaultPayload.includeCellIds).toBe(false)
+    expect(defaultPayload.state.selection).toEqual({ count: 2, source: 'lasso' })
+    expect(handoffPrompt('https://atlas.example/data.zarr', '', defaultPayload.state)).not.toContain('"cells"')
+
+    const optedInPayload = hostedHandoffPayload(view, workspace, true)
+    expect(optedInPayload.includeCellIds).toBe(true)
+    expect(optedInPayload.state.selection).toEqual({ count: 2, cells: ['c1', 'c2'], source: 'lasso' })
+    expect(handoffPrompt('https://atlas.example/data.zarr', '', optedInPayload.state)).toContain('"cells": [')
+
+    const optedOutPayload = hostedHandoffPayload(view, workspace, false)
+    expect(optedOutPayload.includeCellIds).toBe(false)
+    expect(optedOutPayload.state.selection).toEqual({ count: 2, source: 'lasso' })
+    expect(handoffPrompt('https://atlas.example/data.zarr', '', optedOutPayload.state)).not.toContain('"cells"')
   })
 })
