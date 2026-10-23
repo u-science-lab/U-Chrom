@@ -294,7 +294,8 @@ class AgentState:
                 canonical = await self._read(plan.page_id)
             except AgentConflict as exc:
                 plan.status = "failed"
-                plan.state_revision = self._known_revision(plan.page_id)
+                plan.state_revision = revision
+                plan.canonical = copy.deepcopy(canonical)
                 plan.results.append({"name": "describe_workspace", "ok": False, "error": str(exc)})
                 await self._readback_after_failure(plan)
                 return plan
