@@ -15,7 +15,7 @@ Layout of an atlas root (an ``s3://`` / ``https://`` URL or a directory)::
      "datasets": [
        {"id", "path" (relative to the root), "study", "name", "title", "description", "paper", "doi", "source_url",
         "license", "organism", "assembly", "tissue", "n_cells", "n_bins", "sections": [...],
-        "modalities": ["Hi-C per spot", "Hi-C bulk", "RNA", "A/B per spot", "images", ...],
+        "modalities": ["Hi-C per spot", "Hi-C bulk", "multi-way per spot", "RNA", "A/B per spot", "images", ...],
         "contact_maps": n, "images": n, "size_mb", "files", "format_version", "download" (the .cdz next to the
         store, unless the config says ``"download": false``), "download_mb"}]}
 
@@ -69,6 +69,11 @@ def describe_store(path: PathLike) -> Dict[str, Any]:
         for key, name in emb["contacts"].items():
             kinds.add(per_cell if EmbeddedContacts(str(p), name).kind == "per_cell" else "Hi-C bulk")
     mods: List[str] = sorted(kinds, key=[per_cell, "Hi-C bulk"].index)
+    clusters = getattr(cd, "clusters", None) or {}
+    for t in clusters.values():                      # multi-way contacts (SPRITE, Pore-C, ...)
+        kind = ("multi-way per spot" if spatial else "multi-way per cell") if t.kind == "per_cell" else "multi-way bulk"
+        if kind not in mods:
+            mods.append(kind)
     if uns.get("linked_anndata"):
         mods.append("RNA")
     for key in (uns.get("linked_bin_matrices") or {}):
@@ -92,6 +97,7 @@ def describe_store(path: PathLike) -> Dict[str, Any]:
     size, files = _du(p)
     return {"n_cells": int(cd.n_cells), "n_spots": int(cd.n_spots), "n_bins": int(len(cd.bins)),
             "sections": sections, "modalities": mods, "contact_maps": len(contacts), "images": len(emb["images"]),
+            "cluster_tables": len(clusters),
             "size_mb": size, "files": files,
             "format_version": str(cd._c.meta.get("format_version", ""))}
 

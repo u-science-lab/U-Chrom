@@ -3,7 +3,7 @@
 `uchrom.ChromData` is the central container.  It is conceptually similar
 to [AnnData](https://anndata.readthedocs.io/) but organises the data
 around the chromatin-tracing hierarchy *Cell → Trace → Spot*, plus a
-locus axis, `bins`, shared by all cells (format 2.0; the `.chromdata.zarr` container is at 2.3).
+locus axis, `bins`, shared by all cells (format 2.0; the `.chromdata.zarr` container is at 2.4).
 
 ```text
 spots   tell what was observed      (one row per observation)
@@ -86,6 +86,7 @@ savings on large datasets.
 | `layers` | dict | alternative coordinate sets |
 | `points` | dict of DataFrames | non-genomic 3-D points in the same frame (nascent RNA spots, IF puncta): `x, y, z`, `cell_id`, `gene`, … |
 | `cell_shapes` | dict of DataFrames | cell outlines: `cell_id`, `geometry` (WKB polygons) — see [Cell spatial position](#cell-spatial-position) |
+| `clusters` | dict of `ClusterTable` | multi-way contacts: clusters of genomic fragments (SPRITE, Pore-C, ChIA-Drop) — see [Clusters](#clusters-multi-way-contacts) |
 | `results` | `ResultsStore` | analysis outputs with provenance (loops, TADs, …) — see [Results](#results) |
 | `uns` | dict | unstructured metadata |
 
@@ -191,6 +192,36 @@ clustering CSV, 0.86 µm median distance to the mean of the cell's spots
 mean); Liu 2025 MOp, 14,733 / 14,733 cells in the global frame.  None of
 these data sets ships cell outlines.
 
+## Clusters: multi-way contacts
+
+SPRITE, Pore-C, ChIA-Drop and GAM observe several loci together: a
+barcode cluster, a read, a droplet, a nuclear profile.  A pairwise map
+loses which contacts happened together; `cd.clusters[key]` keeps them, as a
+`ClusterTable` of fragments (chrom, start, end) grouped into clusters, and
+for per-cell or spatial data the cells (spots) the clusters belong to.
+
+```python
+cd.set_clusters("sprite", fragments, cluster="barcode", cell="spot")  # one row per fragment
+t = cd.clusters["sprite"]
+win = t.region("chr2", 5_423_000, 5_460_000, min_size=2, max_size=50)
+# one row per fragment in the window: cluster, cell_id, start, end, size,
+# chrom_size (its fragments on chr2), span_start / span_end (its first and last on chr2)
+for k, frag in win.groupby("cluster"):     # a cluster track: one row per cluster,
+    ...                                     # a line over the span, a box per fragment
+t.get_cell("spot_17")                      # the fragments of one cell's clusters
+t.members([3, 8])                          # all fragments of some clusters (every chromosome)
+```
+
+The table is compressed sparse rows (every cluster's fragments end to end,
+plus offsets), sorted by cell and first fragment, and keeps a second copy of
+each chromosome's fragments sorted by position with their cluster's
+context, so a window — what a browser track draws — is one contiguous read
+of a remote store.  Pairwise maps are derived from the clusters by the
+analysis (with its choice of weights), not stored.  Subsetting spots keeps
+the clusters whole; `t.select_cells(ids)` takes some cells.  Stored as
+`clusters/<key>/` from format 2.4; `chromdata.clusters.add_clusters(store,
+key, t)` adds a table to an existing store.  Layout: `packages/chromdata/spec.md`.
+
 ## Subsetting
 
 Subset operations return **new** `ChromData` instances — they never
@@ -206,6 +237,7 @@ cd[:100]                       # first 100 spots
 
 All children (coords, spots, tracks, layers, cellm, and `points` /
 `cell_shapes` via their `cell_id`) are filtered consistently; traces and cells that become empty are dropped.
+`bins` and `clusters` are kept whole.
 
 ## Results
 
@@ -272,7 +304,7 @@ D = cd.compute_distances(trace_id=0)  # (n_spots_in_trace, n_spots_in_trace)
 | legacy `.h5cd` (HDF5, format 1.x / 2.0) | convert once: `python -m uchrom.io.upgrade old.h5cd` |
 
 ```python
-cd.write("data.chromdata.zarr")        # format 2.3: Zarr + Parquet (a directory)
+cd.write("data.chromdata.zarr")        # format 2.4: Zarr + Parquet (a directory)
 cd.write("data.cdz")                   # the same store as one zip file
 cd2 = ChromData.read("data.chromdata.zarr")
 ```
@@ -289,9 +321,9 @@ columns, `spot_tracks`, `layers` — in **cell-sorted primary tables**
 bin, cell or trace (a probe name, a sample id) once per key
 (`tables/derived/`); the small tables (`bins`,
 `bin_tracks`, `cells`, `traces`, `intervals/`, `points/`) are single
-Parquet files; `cellm`, `binm`, result arrays and the `index/` offsets are
-Zarr arrays; `results` provenance, `uns` and linked-file records are JSON
-attributes.  The full layout is in `packages/chromdata/spec.md`.
+Parquet files; `cellm`, `binm`, result arrays, the `index/` offsets and
+the cluster tables (`clusters/`) are Zarr arrays; `results` provenance,
+`uns` and linked-file records are JSON attributes.  The full layout is in `packages/chromdata/spec.md`.
 
 - **Row order.**  Reading returns spots in the primary order, cell ›
   trace › chromosome › bin; every spot keeps its values.  A cell or a trace

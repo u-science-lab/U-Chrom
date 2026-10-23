@@ -147,7 +147,7 @@ def test_format_2_0_stores_stay_readable(tmp_path):
     pd.testing.assert_frame_equal(ref.to_dataframe(), cd.to_dataframe())
     bk.write(tmp_path / "up.chromdata.zarr")
     assert json.loads((tmp_path / "up.chromdata.zarr" / "zarr.json").read_text())["attributes"]["uchrom"][
-        "format_version"] == "2.3"
+        "format_version"] == "2.4"
     pd.testing.assert_frame_equal(_sorted_df(ChromData.read(tmp_path / "up.chromdata.zarr")), _sorted_df(cd))
 
 

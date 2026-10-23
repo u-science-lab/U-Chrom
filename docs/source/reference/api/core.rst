@@ -7,7 +7,7 @@ deprecated name).
 .. automodule:: chromdata
    :members:
    :undoc-members:
-   :exclude-members: ChromData, ResultRecord, ResultsStore, IntervalTable, IntervalStore, UChromProject
+   :exclude-members: ChromData, ClusterTable, ResultRecord, ResultsStore, IntervalTable, IntervalStore, UChromProject
 
 ChromData
 ---------
@@ -48,6 +48,12 @@ Interval tables
 
 .. automodule:: chromdata.intervals
    :members: IntervalTable, IntervalStore, INTERVAL_KINDS
+
+Multi-way contacts (clusters)
+-----------------------------
+
+.. automodule:: chromdata.clusters
+   :members: ClusterTable, add_clusters
 
 Storage: .chromdata.zarr
 ------------------------
