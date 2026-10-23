@@ -168,6 +168,36 @@ def test_propose_rejects_invalid_action_schema_before_creating_plan(server):
     assert all(message["name"] == "describe_workspace" for message in page.seen)
 
 
+@pytest.mark.parametrize("change", [
+    lambda state: state["view"].update({"hiddenChroms": ["chr2"]}),
+    lambda state: state["view"].update({"overviewColor": "field"}),
+    lambda state: state["workspace"]["panes"][0].update({"source": "distance"}),
+])
+def test_manual_display_state_changes_make_old_plan_stale(server, change):
+    state = {
+        "dataset": {}, "views": [{"pane": "P1", "type": "3d", "source": "bulk"}],
+        "workspace": {"layout": "tabs", "activePane": "P1", "maximized": None,
+                       "panes": [{"id": "P1", "type": "3d", "source": "bulk"}]},
+        "view": {"hiddenChroms": [], "overviewColor": "cell"}, "locus": None,
+    }
+
+    def handler(name, args):
+        if name == "describe_workspace":
+            return state
+        return {"ok": True}
+
+    _page(server, handler)
+    c = API(server)
+    c.post("/api/agent/attach", json={"page_id": "ptest"})
+    plan = c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_0", "actions": [
+        {"name": "arrange", "args": {"layout": "grid"}},
+    ]}).json()
+    change(state)
+    approved = c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/approve")
+    assert approved.status_code == 409
+    assert c.get(f"/api/agent/plans/{plan['plan_id']}").json()["status"] == "stale"
+
+
 def test_propose_rejects_empty_plan(server):
     _page(server, lambda name, args: {"dataset": {}, "views": [], "locus": None})
     c = API(server)
