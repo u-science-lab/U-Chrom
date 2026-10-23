@@ -8,13 +8,22 @@ describe('hosted handoff state', () => {
     const view = { ...DEFAULT_VIEW, focusCell: 'c2', selection: { id: 'g1', cells: ['c1', 'c2'] }, locus: { chrom: 'chr1', start: 10, end: 100 } }
     const workspace = defaultWorkspace(false)
     const state = buildHandoffState(view, workspace)
-    expect(state.selection?.cells).toEqual(['c1', 'c2'])
+    expect(state.selection?.cells).toBeUndefined()
+    expect(state.selection?.count).toBe(2)
     expect(state.selection?.source).toBe('lasso')
     expect(state.focus).toEqual({ cell: 'c2', group: null })
     expect(state.workspace.active_pane).toBe(workspace.activePane)
     expect(state.views[0]).toMatchObject({ id: workspace.panes[0].id, scope: { kind: 'focus' } })
     expect(JSON.stringify(state)).not.toMatch(/localhost|token|password|credential/i)
-    expect(handoffSummary(state, { id: 'catalog-id', name: 'Toy dataset' }, '2026-10-22')).toContainEqual(['Selection', '2 cells · canonical IDs'])
+    expect(handoffSummary(state, { id: 'catalog-id', name: 'Toy dataset' }, '2026-10-22')).toContainEqual(['Selection', '2 cells · lasso · canonical IDs omitted'])
+  })
+
+  it('includes canonical cell IDs only when explicitly opted in', () => {
+    const view = { ...DEFAULT_VIEW, selection: { id: 'g1', cells: ['c1', 'c2'] } }
+    const workspace = defaultWorkspace(false)
+
+    expect(buildHandoffState(view, workspace).selection).toEqual({ count: 2, source: 'lasso' })
+    expect(buildHandoffState(view, workspace, { includeCellIds: true }).selection).toEqual({ count: 2, cells: ['c1', 'c2'], source: 'lasso' })
   })
 
   it('summarizes focus and the active pane', () => {
@@ -78,7 +87,7 @@ describe('hosted handoff state', () => {
     const base = buildHandoffState(DEFAULT_VIEW, defaultWorkspace(false))
     const oversizedState = buildLocalHandoff('https://atlas.example/data.zarr', '', {
       ...base,
-      selection: { cells: ['细'.repeat(Math.ceil(MAX_HANDOFF_BYTES / 3))], source: 'lasso' },
+      selection: { count: 1, cells: ['细'.repeat(Math.ceil(MAX_HANDOFF_BYTES / 3))], source: 'lasso' },
     })
     const oversizedPrompt = buildLocalHandoff('https://atlas.example/data.zarr', '界'.repeat(Math.ceil(MAX_HANDOFF_BYTES / 3)), base)
 
@@ -93,5 +102,17 @@ describe('hosted handoff state', () => {
 
     expect(result).toMatchObject({ ok: false, reason: 'invalid-dataset-url' })
     expect('command' in result).toBe(false)
+  })
+
+  it('makes the default prompt explicit about omitted IDs and opt-in privacy', () => {
+    const state = buildHandoffState(
+      { ...DEFAULT_VIEW, selection: { id: 'g1', cells: ['c1', 'c2'] } },
+      defaultWorkspace(false),
+    )
+    const prompt = handoffPrompt('https://atlas.example/data.zarr', 'Compare the selected cells', state)
+
+    expect(prompt).toMatch(/canonical cell IDs are omitted by default/i)
+    expect(prompt).toMatch(/only include them after explicit user opt-in/i)
+    expect(prompt).not.toContain('"cells"')
   })
 })

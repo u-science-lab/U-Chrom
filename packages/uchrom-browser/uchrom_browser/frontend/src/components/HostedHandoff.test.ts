@@ -33,4 +33,8 @@ describe('hosted handoff dialog helpers', () => {
     expect(handoffIssueMessage('prompt-too-large')).toMatch(/shrink the selection/i)
     expect(handoffIssueMessage('invalid-dataset-url')).toMatch(/public HTTPS/i)
   })
+
+  it('keeps the canonical ID opt-in control unchecked by default in the copy contract', () => {
+    expect('Include canonical cell IDs').toMatch(/Include canonical cell IDs/)
+  })
 })

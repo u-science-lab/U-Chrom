@@ -39,6 +39,7 @@ export function HostedHandoff() {
   const [open, setOpen] = useState(false)
   const [question, setQuestion] = useState('')
   const [state, setState] = useState<HandoffState | null>(null)
+  const [includeCellIds, setIncludeCellIds] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [catalogPending, setCatalogPending] = useState(false)
   const catalogGeneration = useRef(0)
@@ -113,6 +114,7 @@ export function HostedHandoff() {
     }
     void loadCatalog()
     setState(buildHandoffState(view, workspace))
+    setIncludeCellIds(false)
     setQuestion('')
     setError(null)
     setOpen(true)
@@ -144,6 +146,19 @@ export function HostedHandoff() {
             {atlasDataset && <p className="muted small">Public dataset URL: <code>{atlasDataset.url}</code></p>}
             <label className="small" htmlFor="hosted-handoff-question">Question for your agent</label>
             <textarea id="hosted-handoff-question" rows={3} maxLength={4000} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Tell the agent what you want to compare, locate, or inspect" />
+            {state?.selection && <label className="handoff-privacy small" htmlFor="hosted-handoff-cell-ids">
+              <input
+                id="hosted-handoff-cell-ids"
+                type="checkbox"
+                checked={includeCellIds}
+                onChange={(event) => {
+                  const next = event.target.checked
+                  setIncludeCellIds(next)
+                  setState(buildHandoffState(view, workspace, { includeCellIds: next }))
+                }}
+              />
+              <span><strong>Include canonical cell IDs</strong><br /><span className="muted">Unchecked by default; IDs are omitted from the prompt unless you explicitly opt in.</span></span>
+            </label>}
             <p className="muted small">The prompt contains the public dataset URL, your question, and this exact semantic snapshot. No local paths, credentials, or raw matrix are included.</p>
             {error && <p className="error small">{error}</p>}
             {localHandoff && !localHandoff.ok && <p className="error small">{handoffIssueMessage(localHandoff.reason)}</p>}

@@ -5,7 +5,7 @@ import type { Pane, WorkspaceState } from './workspace'
 export type HandoffPane = Omit<Pane, 'scope'> & { scope: ScopeSpec }
 
 export interface HandoffState {
-  selection?: { cells: string[]; source: string }
+  selection?: { count?: number; cells?: string[]; source: string }
   locus?: DatasetView['locus']
   focus: { cell: string | null; group: string | null }
   views: HandoffPane[]
@@ -26,7 +26,7 @@ export type LocalHandoffResult =
   | { ok: false; reason: 'state-too-large'; command: string; stateBytes: number }
   | { ok: false; reason: 'prompt-too-large'; command: string; stateBytes: number; promptBytes: number }
 
-export function buildHandoffState(view: DatasetView, workspace: WorkspaceState): HandoffState {
+export function buildHandoffState(view: DatasetView, workspace: WorkspaceState, options: { includeCellIds?: boolean } = {}): HandoffState {
   const state: HandoffState = {
     focus: { cell: view.focusCell, group: view.focusGroup },
     views: workspace.panes.map((pane) => {
@@ -41,13 +41,21 @@ export function buildHandoffState(view: DatasetView, workspace: WorkspaceState):
     },
     workspace: { active_pane: workspace.activePane },
   }
-  if (view.selection) state.selection = { cells: [...view.selection.cells], source: 'lasso' }
+  if (view.selection) {
+    state.selection = {
+      count: view.selection.cells.length,
+      source: 'lasso',
+      ...(options.includeCellIds ? { cells: [...view.selection.cells] } : {}),
+    }
+  }
   if (view.locus) state.locus = { ...view.locus }
   return state
 }
 
 export function handoffSummary(state: HandoffState, dataset: { id: string; name: string }, version: string): Array<[string, string]> {
-  const selection = state.selection ? `${state.selection.cells.length.toLocaleString()} cells · canonical IDs` : 'None'
+  const selection = state.selection
+    ? `${(state.selection.count ?? state.selection.cells?.length ?? 0).toLocaleString()} cells · ${state.selection.source}${state.selection.cells ? ' · canonical IDs' : ' · canonical IDs omitted'}`
+    : 'None'
   const locus = state.locus ? `${state.locus.chrom}:${state.locus.start.toLocaleString()}–${state.locus.end.toLocaleString()}` : 'Default'
   const stats = state.views.find((view) => view.type === 'stats')
   const statsText = stats ? `Stats${stats.statsKind ? ` · ${stats.statsKind}` : ''}${stats.chromScope ? ` · ${stats.chromScope}` : ''}` : 'Not open'
@@ -81,7 +89,10 @@ export function handoffCommand(datasetUrl: string): string {
 
 export function handoffPrompt(datasetUrl: string, question: string, state: HandoffState): string {
   const input = JSON.stringify({ dataset_url: datasetUrl, question, semantic_snapshot: state }, null, 2)
-  return `Use the already-configured U-Chrom MCP on the user’s computer. The user will run this command locally: ${handoffCommand(datasetUrl)}. After the local page is open, read its actual state through MCP, compare it with this reference snapshot, and propose matching changes for approval in the local WebUI. Do not claim the hosted snapshot has already been applied. Do not probe localhost or send this snapshot to any web service.\n\nExact handoff input:\n\`\`\`json\n${input}\n\`\`\``
+  const privacy = state.selection && !state.selection.cells
+    ? 'Canonical cell IDs are omitted by default; only include them after explicit user opt-in. Review selection privacy before sharing this prompt.'
+    : 'Canonical cell IDs are included because the user explicitly opted in.'
+  return `Use the already-configured U-Chrom MCP on the user’s computer. The user will run this command locally: ${handoffCommand(datasetUrl)}. After the local page is open, read its actual state through MCP, compare it with this reference snapshot, and propose matching changes for approval in the local WebUI. Do not claim the hosted snapshot has already been applied. Do not probe localhost or send this snapshot to any web service. ${privacy}\n\nExact handoff input:\n\`\`\`json\n${input}\n\`\`\``
 }
 
 function utf8ByteLength(value: string): number {

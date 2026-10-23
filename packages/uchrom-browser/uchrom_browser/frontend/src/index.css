@@ -167,6 +167,8 @@ button:disabled {
 .handoff-state-facts dt { color: var(--text-muted); }
 .handoff-state-facts dd { margin: 0; overflow-wrap: anywhere; }
 .handoff-modal textarea { display: block; width: 100%; margin: 6px 0 10px; resize: vertical; }
+.handoff-privacy { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0; }
+.handoff-privacy input { flex: 0 0 auto; margin-top: 3px; }
 .handoff-command { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
 .handoff-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 button.active {
