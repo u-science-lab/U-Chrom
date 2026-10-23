@@ -18,6 +18,7 @@ import {
   type AgentPage,
   type AgentPlan,
   type AgentSnapshot,
+  type AgentSetupStage,
   type AgentSetupStatus,
 } from '../agent'
 
@@ -25,6 +26,20 @@ function statsScope(snapshot: AgentSnapshot): string {
   const stats = snapshot.views?.find((view) => view.type === 'stats')
   const scope = stats?.chrom_scope
   return typeof scope === 'string' ? scope : '—'
+}
+
+export function agentPanelViewModel(
+  stage: AgentSetupStage | string,
+  snapshot: AgentSnapshot | null,
+  plan: Pick<AgentPlan, 'page_id' | 'expected_revision'> | null,
+  busy: boolean = false,
+) {
+  const stale = !snapshot || !plan || plan.page_id !== snapshot.page_id || plan.expected_revision !== snapshot.state_revision
+  return {
+    stageLabel: setupStageLabel(stage),
+    nextAction: nextSetupAction(stage),
+    canApply: !busy && !stale,
+  }
 }
 
 export function AgentPanel() {
@@ -38,6 +53,7 @@ export function AgentPanel() {
   const [setup, setSetup] = useState<AgentSetupStatus>({ stage: 'not_running', pages: [] })
 
   const selectedPage = useMemo(() => pages.find((page) => page.page === pageId), [pages, pageId])
+  const panelView = agentPanelViewModel(setup.stage, snapshot, null)
 
   const refreshPages = useCallback(async () => {
     const status = await agentSetupStatus()
@@ -180,12 +196,12 @@ export function AgentPanel() {
     <details className="agent-panel" open>
       <summary className="agent-head">
         <h2>Agent</h2>
-        <span className="agent-state">{snapshot ? sourceLabel(snapshot.source) : setupStageLabel(setup.stage)}</span>
+        <span className="agent-state">{snapshot ? sourceLabel(snapshot.source) : panelView.stageLabel}</span>
       </summary>
       {error && <p className="error">{error}</p>}
       <div className="agent-setup-status" aria-live="polite">
-        <span className="agent-setup-stage">{setupStageLabel(setup.stage)}</span>
-        <span className="agent-setup-next">{nextSetupAction(setup.stage)}</span>
+        <span className="agent-setup-stage">{panelView.stageLabel}</span>
+        <span className="agent-setup-next">{panelView.nextAction}</span>
       </div>
       {!pages.length && !error && <p className="muted small">No connected agent pages.</p>}
       {pages.length > 0 && (
@@ -209,6 +225,7 @@ export function AgentPanel() {
               </dl>
               {plans.map((plan) => {
                 const stale = plan.page_id !== snapshot.page_id || plan.expected_revision !== snapshot.state_revision
+                const planView = agentPanelViewModel(setup.stage, snapshot, plan, busy !== null)
                 return (
                   <div className="agent-plan" key={plan.plan_id}>
                     <div className="agent-plan-title">
@@ -217,7 +234,7 @@ export function AgentPanel() {
                     </div>
                     <ol>{plan.actions.map((action, index) => <li key={`${plan.plan_id}-${index}`}>{formatAction(action)}</li>)}</ol>
                     <div className="agent-actions">
-                      <button onClick={() => void apply(plan)} disabled={busy !== null || stale} title={stale ? 'The page changed after this plan was proposed' : 'Approve and apply this plan'}>Apply</button>
+                      <button onClick={() => void apply(plan)} disabled={!planView.canApply} title={stale ? 'The page changed after this plan was proposed' : 'Approve and apply this plan'}>Apply</button>
                       <button onClick={() => void reject(plan)} disabled={busy !== null}>Reject</button>
                     </div>
                   </div>
