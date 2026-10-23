@@ -43,7 +43,7 @@
 - Consumes: existing `ActionBroker`, `/api/control/pages`, `/api/control/actions`, and frontend action result payloads.
 - Produces: local `/api/agent/*` endpoints and typed state objects used by the Python client and AgentPanel.
 
-- [ ] **Step 1: Write failing API tests**
+ - [x] **Step 1: Write failing API tests**
 
 Add tests using the existing `server`/`FakePage` pattern and FastAPI client:
 
@@ -134,7 +134,8 @@ Add:
 - `agent_snapshot(page=None)`
 - `propose_ui_changes(actions, page, expected_revision)`
 - `plan_status(plan_id)`
-- `approve_plan(plan_id)`, `reject_plan(plan_id)`, `apply_plan(plan_id)` only as explicit local-control helpers; the agent Skill should use propose/status, while UI approval remains the normal path.
+
+Do not expose approve, reject, apply, or undo helpers through `Workspace` or MCP. The local WebUI owns those user confirmation controls; the agent client may only propose changes and read status/results.
 
 Keep URL/error handling in `_request`; preserve existing `connect()` behavior.
 
@@ -360,4 +361,25 @@ Create a dataset-only token from an Atlas-origin request, redeem it once through
 - [ ] **Step 3: Run complete test/build matrix and whole-branch review**
 
 Run browser pytest, companion pytest, frontend Vitest/build, Atlas tests, and Worker TypeScript/tests. Build the review package, dispatch a fresh whole-branch reviewer, address Critical/Important findings with RED→GREEN tests, then record deferred minors and unresolved environment limitations.
+
+## Execution status (2026-10-23)
+
+The plan was executed in `/Users/bakezq/Coding/U-Chrom/.worktrees/local-agent-webui` on `codex/local-agent-webui`. The implementation commits are:
+
+- `570ab15`–`72bcdcd`: local agent session, revision and approval API;
+- `05cea94`, `18966fa`, `ebd5de6`, `bd5853d`, `8cfa4af`, `a2e6004`: Python client, AgentPanel, complete canonical snapshot, revision conflict handling, mutation lease and local bearer/CSRF/page-token protection;
+- `5328646`, `b601f38`, `68826a4`: real `sim_cell1.cdz` agent-loop test and SSE teardown cleanup;
+- `7605cdf`, `fc58c59`: fixed stdio MCP companion, validated handoff input and explicit Claude/Codex config writes;
+- `5bd0974`: one-time hosted Worker handoff with Durable Object storage and container route isolation;
+- `59478c7`, `f5643fb`, `00aef8e`: Atlas/hosted Continue locally UI, semantic focus/scope handoff, keyboard modal behavior and generated browser bundle.
+
+Verification evidence:
+
+- real-data browser agent loop: `1 passed` using `tests/fixtures/sim_cell1/sim_cell1.cdz`, including canonical locus clamping, Stats `chrom_scope=locus`, Genome view, revision readback and capture;
+- focused browser agent/control/E2E suite: `29 passed`; full browser package suite: `124 passed, 2 skipped` on the final run, with one pre-existing flaky `test_memory_is_bounded` failure in one run (the test passed independently three consecutive times);
+- frontend: `44` test files, `339` tests passed; production Vite build passed and the generated `static/` bundle is committed;
+- companion: `95 passed`; Worker: `23 passed` and `npm run typecheck`; Atlas: `5 passed`;
+- direct local mutation requests without bearer/CSRF proof are rejected; hosted Worker tests verify `/api/agent/*` and `/api/control/*` do not reach the container.
+
+Remaining verification boundaries are explicit: the desktop browser was locked during this run, so a rendered DOM screenshot of clicking AgentPanel Apply was not captured; the Worker Durable Object was tested in a local harness, not deployed to Cloudflare; and `uchrom-agent` remains a repository development package because `uchrom-browser` is not published on PyPI. These are release/acceptance follow-ups, not unreported test results.
 
