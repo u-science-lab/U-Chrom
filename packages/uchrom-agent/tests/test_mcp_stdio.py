@@ -174,3 +174,41 @@ def test_malformed_json_is_reported_as_parse_error_without_logging():
     assert response["error"]["code"] == -32700
     assert response["id"] is None
     assert outgoing.getvalue() == json.dumps(response) + "\n"
+
+
+def test_stdio_eof_closes_the_browser_started_by_the_companion(monkeypatch, tmp_path):
+    from uchrom_agent import lifecycle
+
+    class BrowserProcess:
+        terminated = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout):
+            return 0
+
+    browser = BrowserProcess()
+    dataset_path = str(tmp_path / "sample.cdz")
+    handoff = tmp_path / "handoff.json"
+    handoff.write_text(json.dumps({"dataset": {"path": dataset_path}}))
+
+    class LocalWorkspace(FakeWorkspace):
+        url = "http://127.0.0.1:8765"
+
+        def agent_snapshot(self, page=None):
+            return {**super().agent_snapshot(page), "dataset": {"id": "sample", "path": dataset_path}}
+
+    workspace = LocalWorkspace()
+    monkeypatch.setattr(lifecycle.subprocess, "Popen", lambda *_args, **_kwargs: browser)
+    monkeypatch.setattr(lifecycle, "_wait_for_server", lambda _browser: workspace)
+
+    responses, _ = _run([{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+        "name": "uchrom_attach_handoff", "arguments": {"handoff_token": str(handoff)}}}], workspace=workspace)
+
+    assert responses[0]["result"]["structuredContent"]["attached"] is True
+    assert responses[0]["result"]["structuredContent"]["browser_reused"] is False
+    assert browser.terminated is True

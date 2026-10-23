@@ -3,20 +3,21 @@
 from __future__ import annotations
 
 import json
-import os
+import re
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
 import webbrowser
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
-_HANDOFF_REDEEM_URL = os.environ.get(
-    "UCHROM_HANDOFF_REDEEM_URL",
-    "https://uchrom-browser.u-science.org/api/agent/handoffs/redeem",
-)
+_HANDOFF_REDEEM_URL = "https://uchrom-browser.u-science.org/api/agent/handoffs/redeem"
+_ATLAS_ROOT = "https://uchrom-atlas-r2.u-science.org"
+_CATALOG_URL = _ATLAS_ROOT + "/catalog.json"
 _MAX_HANDOFF_BYTES = 1_048_576
 _started: subprocess.Popen | None = None
 
@@ -27,38 +28,104 @@ def _state_file() -> Path:
 
 
 def _read_handoff(value: str) -> dict[str, Any]:
-    if value.lstrip().startswith("{"):
-        if len(value.encode("utf-8")) > _MAX_HANDOFF_BYTES:
-            raise ValueError("handoff payload exceeds 1 MiB")
-        payload = json.loads(value)
+    if not value or len(value) > 4096 or value.lstrip().startswith("{"):
+        raise ValueError("provide a handoff token or a local handoff file path")
+    candidate = Path(value).expanduser()
+    try:
+        local_file = candidate.is_file()
+    except OSError:
+        raise ValueError("provide a valid handoff token or local handoff file path") from None
+    if local_file:
+        with candidate.open("rb") as source:
+            raw = source.read(_MAX_HANDOFF_BYTES + 1)
+        if len(raw) > _MAX_HANDOFF_BYTES:
+            raise ValueError("handoff file exceeds 1 MiB")
+        payload = _object(json.loads(raw), {"dataset", "question", "page_state"}, "local handoff")
+        dataset = _object(payload.get("dataset"), {"path"}, "local dataset")
+        reference = _string(dataset.get("path"), "local dataset.path")
+        if urlsplit(reference).scheme or reference.startswith("-"):
+            raise ValueError("local dataset.path must be a local filesystem path")
+        path = Path(reference).expanduser()
+        if not path.is_absolute():
+            path = candidate.parent / path
+        payload["dataset"] = {"path": str(path.resolve())}
     else:
-        if len(value) > 4096:
-            raise ValueError("handoff token is empty or too long")
-        candidate = Path(value).expanduser()
-        if candidate.is_file():
-            raw = candidate.read_bytes()
-            if len(raw) > _MAX_HANDOFF_BYTES:
-                raise ValueError("handoff file exceeds 1 MiB")
-            payload = json.loads(raw)
-        else:
-            payload = _redeem(value)
-    if not isinstance(payload, dict):
-        raise ValueError("handoff payload must be a JSON object")
-    dataset = payload.get("dataset")
-    reference = dataset.get("path") or dataset.get("url") if isinstance(dataset, dict) else None
-    if not isinstance(reference, str) or not reference:
-        raise ValueError("handoff must include dataset.url or dataset.path")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", value):
+            raise ValueError("a valid handoff token or local handoff file path is required")
+        payload = _validate_redeemed(_redeem(value))
+    if "question" in payload and (not isinstance(payload["question"], str) or len(payload["question"]) > 4000):
+        raise ValueError("handoff question must be a string of at most 4000 characters")
+    _handoff_actions(payload)
+    return payload
+
+
+def _object(value: Any, allowed: set[str], name: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) - allowed:
+        raise ValueError(f"{name} must be an object with only supported fields")
+    return value
+
+
+def _string(value: Any, name: str) -> str:
+    if not isinstance(value, str) or not value or any(ord(char) < 32 for char in value):
+        raise ValueError(f"{name} must be a non-empty string without control characters")
+    return value
+
+
+def _timestamp(value: Any, name: str) -> float:
+    try:
+        parsed = datetime.fromisoformat(_string(value, name).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            raise ValueError
+        return parsed.timestamp()
+    except ValueError:
+        raise ValueError(f"handoff {name} must be a timestamp with a timezone") from None
+
+
+def _validate_redeemed(payload: Any) -> dict[str, Any]:
+    payload = _object(payload, {"version", "issued_at", "expires_at", "dataset", "question", "page_state"}, "handoff")
+    if type(payload.get("version")) is not int or payload["version"] != 1:
+        raise ValueError("handoff version must be 1")
+    issued = _timestamp(payload.get("issued_at"), "issued_at")
+    expires = _timestamp(payload.get("expires_at"), "expires_at")
+    if not issued <= time.time() < expires or not 0 < expires - issued <= 600:
+        raise ValueError("handoff is expired or outside its ten-minute validity window")
+    dataset = _object(payload.get("dataset"), {"id", "url", "version"}, "dataset")
+    for field in ("id", "url", "version"):
+        _string(dataset.get(field), f"dataset.{field}")
+    request = urllib.request.Request(_CATALOG_URL, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        if response.geturl() != _CATALOG_URL:
+            raise ValueError("Atlas catalog redirected to an unsupported source")
+        raw = response.read(_MAX_HANDOFF_BYTES + 1)
+        if len(raw) > _MAX_HANDOFF_BYTES:
+            raise ValueError("Atlas catalog exceeds 1 MiB")
+        catalog = json.loads(raw)
+        etag = response.headers.get("ETag", "")
+    if not isinstance(catalog, dict) or not isinstance(catalog.get("datasets"), list):
+        raise ValueError("Atlas catalog must contain datasets")
+    version = catalog.get("updated") or etag.removeprefix("W/").strip('"') or str(catalog.get("version", "unknown"))
+    entry = next((item for item in catalog["datasets"]
+                  if isinstance(item, dict) and item.get("id") == dataset["id"]), {})
+    path = entry.get("path")
+    if (not isinstance(path, str) or re.search(r"%(?![0-9a-fA-F]{2})", path)
+            or any(part in ("", ".", "..") for part in unquote(path).split("/"))
+            or any(char in unquote(path) for char in "\\?#:")):
+        raise ValueError("dataset ID is missing from the catalog or has an unsafe path")
+    if dataset["url"] != _ATLAS_ROOT + "/" + path or dataset["version"] != version:
+        raise ValueError("handoff dataset URL/version does not match the current Atlas catalog")
     return payload
 
 
 def _redeem(token: str) -> dict[str, Any]:
-    if not token or len(token) > 4096:
-        raise ValueError("handoff token is empty or too long")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
+        raise ValueError("a valid handoff token is required")
     request = urllib.request.Request(_HANDOFF_REDEEM_URL,
                                     data=json.dumps({"token": token}).encode("utf-8"),
                                     headers={"Content-Type": "application/json"}, method="POST")
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
+            if response.geturl() != _HANDOFF_REDEEM_URL:
+                raise ValueError("handoff redemption redirected to an unsupported source")
             raw = response.read(_MAX_HANDOFF_BYTES + 1)
             if len(raw) > _MAX_HANDOFF_BYTES:
                 raise ValueError("redeemed handoff payload exceeds 1 MiB")
@@ -70,9 +137,13 @@ def _redeem(token: str) -> dict[str, Any]:
 
 
 def _same_dataset(summary: dict[str, Any], reference: str) -> bool:
-    path = summary.get("path")
+    path = summary.get("path") if isinstance(summary, dict) else None
+    if not isinstance(path, str):
+        return False
     if path and path.rstrip("/") == reference.rstrip("/"):
         return True
+    if urlsplit(path).scheme or urlsplit(reference).scheme:
+        return False
     try:
         return bool(path and Path(path).expanduser().resolve() == Path(reference).expanduser().resolve())
     except (OSError, ValueError):
@@ -120,30 +191,55 @@ def _wait_for_page(ws, timeout: float = 60.0):
 
 
 def _handoff_actions(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
-    state = payload.get("page_state")
-    if state is None:
+    if "page_state" not in payload:
         return [], []
-    if not isinstance(state, dict):
-        raise ValueError("handoff page_state must be an object")
+    state = payload["page_state"]
+    state = _object(state, {"selection", "locus", "views", "layout"}, "handoff page_state")
     actions: list[dict[str, Any]] = []
     warnings: list[str] = []
-    selection = state.get("selection") or {}
-    cells = selection.get("cells") if isinstance(selection, dict) else None
+    selection = state.get("selection")
+    cells = None
+    if selection is not None:
+        selection = _object(selection, {"cells", "source"}, "handoff selection")
+        cells = selection.get("cells")
+        if not isinstance(cells, list):
+            raise ValueError("handoff selection.cells must be a list of non-empty cell IDs")
+        for cell in cells:
+            _string(cell, "selection cell ID")
+        if "source" in selection:
+            _string(selection["source"], "selection.source")
     if cells:
         actions.append({"name": "select_cells", "args": {"cells": cells}})
     locus = state.get("locus")
-    if isinstance(locus, dict) and locus.get("chrom"):
+    if locus is not None:
+        locus = _object(locus, {"chrom", "start", "end"}, "handoff locus")
+        _string(locus.get("chrom"), "locus.chrom")
+        for key in ("start", "end"):
+            if key in locus and (type(locus[key]) is not int or locus[key] < 0):
+                raise ValueError(f"locus.{key} must be a non-negative integer")
+        if "start" in locus and "end" in locus and locus["end"] <= locus["start"]:
+            raise ValueError("locus.end must be greater than locus.start")
         actions.append({"name": "set_locus", "args": {key: locus[key] for key in ("chrom", "start", "end") if key in locus}})
-    for view in state.get("views", []):
-        if not isinstance(view, dict) or not isinstance(view.get("type"), str):
-            warnings.append("A handoff view was skipped because its shape was invalid.")
-            continue
+    views = state.get("views", [])
+    if not isinstance(views, list):
+        raise ValueError("handoff views must be a list")
+    for view in views:
+        view = _object(view, {"type", "stats_kind", "chrom_scope"}, "handoff view")
+        if view.get("type") not in ("3d", "spatial", "embedding", "genome", "matrix", "stats"):
+            raise ValueError("unsupported handoff view type")
+        if view["type"] != "stats" and ("stats_kind" in view or "chrom_scope" in view):
+            raise ValueError("stats_kind and chrom_scope require a stats view")
+        if "stats_kind" in view and view["stats_kind"] not in ("rg", "scaling", "hist", "scatter"):
+            raise ValueError("unsupported handoff stats_kind")
+        if "chrom_scope" in view and view["chrom_scope"] not in ("all", "locus"):
+            raise ValueError("unsupported handoff chrom_scope")
         args = dict(view)
         if "stats_kind" in args:
             args["stats"] = args.pop("stats_kind")
-        args.pop("pane", None)
         actions.append({"name": "open_view", "args": args})
-    if state.get("layout"):
+    if "layout" in state:
+        if state["layout"] not in ("tabs", "grid"):
+            raise ValueError("handoff layout must be tabs or grid")
         actions.append({"name": "arrange", "args": {"layout": state["layout"]}})
     if state.get("selection") and not cells:
         warnings.append("Selection was not imported because the handoff contains no canonical cell IDs.")
@@ -178,8 +274,11 @@ def attach_handoff(value: str, *, connect, pin_page):
         if len(active) != 1:
             raise RuntimeError("multiple local browser pages are connected; close tabs or select one explicitly")
         page_id = active[0]["page"]
-    pin_page(page_id)
+    ws._request("POST", "/api/agent/attach", {"page_id": page_id})
     snapshot = ws.agent_snapshot(page_id)
+    if snapshot.get("source") != "page_canonical" or not _same_dataset(snapshot.get("dataset"), reference):
+        raise RuntimeError("local page canonical dataset does not match the handoff dataset; select the matching dataset and obtain a new handoff")
+    pin_page(page_id, ws)
     actions, warnings = _handoff_actions(payload)
     plan = None
     if actions:

@@ -28,7 +28,7 @@ _TOOLS = [
     {"name": "uchrom_setup_status", "description": "Check the local companion and browser server status.",
      "inputSchema": _object_schema(), "annotations": {"readOnlyHint": True}},
     {"name": "uchrom_attach_handoff", "description": "Open or reuse the local U-Chrom browser from a local handoff JSON file or one-time handoff token. UI state is proposed for WebUI approval.",
-     "inputSchema": _object_schema({"handoff_token": {"type": "string", "description": "A handoff token, JSON payload, or path to a local handoff JSON file."}}, ("handoff_token",))},
+     "inputSchema": _object_schema({"handoff_token": {"type": "string", "description": "A one-time handoff token, or path to a local handoff JSON file containing dataset.path."}}, ("handoff_token",))},
     {"name": "uchrom_workspace_snapshot", "description": "Read canonical state from an explicitly pinned local browser page.",
      "inputSchema": _object_schema({"page_id": {"type": "string"}}), "annotations": {"readOnlyHint": True}},
     {"name": "uchrom_get_selection", "description": "Read the canonical page selection, summarizing large selections.",
@@ -137,6 +137,10 @@ class _Bridge:
         pinned = self._pin_page(page_id)
         return ws.agent_snapshot(pinned)
 
+    def _bind_handoff(self, page_id, workspace):
+        self.workspace = workspace
+        self.page_id = page_id
+
     def _page_action(self, name: str, args: dict[str, Any], page_id: str | None = None):
         ws = self._workspace()
         pinned = self._pin_page(page_id)
@@ -162,9 +166,7 @@ class _Bridge:
 
         if name == "uchrom_attach_handoff":
             payload = attach_handoff(args["handoff_token"], connect=self._workspace,
-                                     pin_page=lambda page: self._pin_page(page))
-            self.workspace = payload.pop("workspace", self.workspace)
-            self.page_id = payload.get("page_id", self.page_id)
+                                     pin_page=self._bind_handoff)
             return payload
 
         if name == "uchrom_workspace_snapshot":
