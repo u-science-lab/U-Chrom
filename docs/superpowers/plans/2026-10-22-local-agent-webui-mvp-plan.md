@@ -372,14 +372,15 @@ The plan was executed in `/Users/bakezq/Coding/U-Chrom/.worktrees/local-agent-we
 - `7605cdf`, `fc58c59`: fixed stdio MCP companion, validated handoff input and explicit Claude/Codex config writes;
 - `5bd0974`: one-time hosted Worker handoff with Durable Object storage and container route isolation;
 - `59478c7`, `f5643fb`, `00aef8e`: Atlas/hosted Continue locally UI, semantic focus/scope handoff, keyboard modal behavior and generated browser bundle.
+- `8cfa4af`, `a2e6004`, `ebd5de6`, `bd5853d`, `b1649a4`: loopback/bearer/CSRF/page-token security, full mutable UI state revisions, mutation lease enforcement, safe failure readback, remote-route denial and reserved-marker protection.
 
 Verification evidence:
 
 - real-data browser agent loop: `1 passed` using `tests/fixtures/sim_cell1/sim_cell1.cdz`, including canonical locus clamping, Stats `chrom_scope=locus`, Genome view, revision readback and capture;
-- focused browser agent/control/E2E suite: `29 passed`; full browser package suite: `124 passed, 2 skipped` on the final run, with one pre-existing flaky `test_memory_is_bounded` failure in one run (the test passed independently three consecutive times);
+- focused browser agent/control/E2E suite: `29 passed` before the final security additions; latest `test_agent.py + test_control.py`: `38 passed`; real-data E2E rerun: `1 passed`; full browser package suite: `124 passed, 2 skipped` with one intermittent hosted `test_memory_is_bounded` failure (the test passed independently three consecutive times);
 - frontend: `44` test files, `339` tests passed; production Vite build passed and the generated `static/` bundle is committed;
 - companion: `95 passed`; Worker: `23 passed` and `npm run typecheck`; Atlas: `5 passed`;
 - direct local mutation requests without bearer/CSRF proof are rejected; hosted Worker tests verify `/api/agent/*` and `/api/control/*` do not reach the container.
 
-Remaining verification boundaries are explicit: the desktop browser was locked during this run, so a rendered DOM screenshot of clicking AgentPanel Apply was not captured; the Worker Durable Object was tested in a local harness, not deployed to Cloudflare; and `uchrom-agent` remains a repository development package because `uchrom-browser` is not published on PyPI. These are release/acceptance follow-ups, not unreported test results.
+Task 8 remains **partially verified**, not complete. The local data/API/SSE loop uses the real `sim_cell1.cdz` but a deterministic page adapter, so a rendered DOM screenshot and actual AgentPanel Apply click were not captured; hosted token creation→companion redemption→local attach was not exercised as one end-to-end runtime flow. The desktop browser was locked during this run. The Worker Durable Object was tested in a local harness, not deployed to Cloudflare. `uchrom-agent` remains a repository development package because `uchrom-browser` is not published on PyPI. These are explicit remaining acceptance/release checks, not unreported test results.
 
