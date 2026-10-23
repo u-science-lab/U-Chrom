@@ -34,7 +34,7 @@ def test_convert_h5cd_1x_and_2x(tmp_path, capsys):
     info = upgrade_h5cd(src)                                       # default target
     dst = tmp_path / "old.chromdata.zarr"
     assert info["dst"] == str(dst) and info["to_container"] == "zarr" and info["from_version"] == "1.4"
-    assert file_format_version(dst) == "2.3" and file_format_version(src) == "1.4"
+    assert file_format_version(dst) == "2.4" and file_format_version(src) == "1.4"
     new = ChromData.read(dst, original_order=True)
     pd.testing.assert_frame_equal(new.to_dataframe(), ref.to_dataframe())
     pd.testing.assert_frame_equal(new.tracks_spot_view(), ref.tracks_spot_view())
@@ -46,7 +46,7 @@ def test_convert_h5cd_1x_and_2x(tmp_path, capsys):
     write_h5cd(ref, tmp_path / "two.h5cd")
     assert file_format_version(tmp_path / "two.h5cd") == "2.0"
     convert_chromdata(tmp_path / "two.h5cd", tmp_path / "two.cdz")
-    assert file_format_version(tmp_path / "two.cdz") == "2.3"
+    assert file_format_version(tmp_path / "two.cdz") == "2.4"
     pd.testing.assert_frame_equal(ChromData.read(tmp_path / "two.cdz", original_order=True).to_dataframe(),
                                   read_h5cd(tmp_path / "two.h5cd").to_dataframe())
     assert main([str(src), str(tmp_path / "two.h5cd"), "--out-dir", str(tmp_path / "out")]) == 0
@@ -101,7 +101,7 @@ def test_upgrade_21_to_22_keeps_original_order(tmp_path):
     cd = _decimal_cd()
     write_zarr(cd, tmp_path / "old.chromdata.zarr", _layout="2.1")
     info = upgrade_h5cd(tmp_path / "old.chromdata.zarr", tmp_path / "new.chromdata.zarr")
-    assert info["from_version"] == "2.1" and file_format_version(tmp_path / "new.chromdata.zarr") == "2.3"
+    assert info["from_version"] == "2.1" and file_format_version(tmp_path / "new.chromdata.zarr") == "2.4"
     back = ChromData.read(tmp_path / "new.chromdata.zarr", original_order=True)
     pd.testing.assert_frame_equal(back.spots, cd.spots)
     np.testing.assert_array_equal(_bits(back.coords), _bits(cd.coords))

@@ -133,6 +133,56 @@ outlines, the cell table and `points`.
 Mapping table's `ROI_Boundaries` (OME polygons) into `cell_shapes['cell']`;
 `to_fofct(mapping_table=…)` writes it back.
 
+### Clusters: multi-way contacts (format 2.4)
+
+A *cluster* is a set of genomic fragments observed together: a SPRITE
+barcode cluster, a Pore-C read, a ChIA-Drop GEM, a GAM nuclear profile —
+a hyperedge whose nodes are fragments.  A pairwise contact map loses which
+contacts happened together; a cluster keeps it.  `clusters[key]` is a
+`ClusterTable` (`chromdata.clusters`) in compressed sparse rows:
+
+| Part | Shape | Description |
+|---|---|---|
+| `members` | (3, n_members) unsigned | chrom code (into `chroms`), `start`, `end` of every fragment (0-based, end-exclusive, `end > start`); the fragments of a cluster are contiguous |
+| `member_offsets` | (n_clusters + 1) int64 | cluster `k` = `members[:, member_offsets[k]:member_offsets[k + 1]]` |
+| `cells`, `cell_offsets` | (n_cells), (n_cells + 1) | per-cell tables only: cell `i` owns clusters `cell_offsets[i]:cell_offsets[i + 1]`; bulk tables have neither |
+| `chroms` | list of str | chromosome names |
+| `member_columns` | dict[str, (n_members)] | optional numeric per-fragment values (strand, mapping quality, DNA / RNA read) |
+| `cluster_columns` | DataFrame (n_clusters) | optional per-cluster values; `from_frame` keeps the input labels (barcodes, read ids) as `name` |
+| `attrs` | dict | JSON metadata (assay, source, filters) |
+
+- **Order.**  Clusters are sorted by (cell, first fragment: chrom, start,
+  end, then size), the fragments of a cluster by (chrom, start, end); a
+  cluster id is its position in that order.  A cell's clusters are one
+  contiguous range — for spatial assays a "cell" is a spot (barcode pixel),
+  its position in `cells` (`cell_spatial`).  Cell ids are strings; they name
+  rows of `cells` when the object has them, but the table carries its own
+  list.
+- **Locus index.**  For region queries every chromosome also has its
+  fragments sorted by start, one row each, with the context of their
+  cluster: `start`, `end`, `cluster`, `size` (fragments of the cluster on
+  all chromosomes), `chrom_size` (its fragments on this chromosome),
+  `span_start` / `span_end` (its first and last fragment on this
+  chromosome) and `cell`.  `region(chrom, start, end)` returns the
+  fragments overlapping the window with these columns: everything a cluster
+  track draws (group by `cluster`; a line from `span_start` to `span_end`,
+  a box per fragment; `size > chrom_size` marks clusters that reach other
+  chromosomes).  In memory the index is built on first use; on disk it is
+  stored (below).
+- **Pairwise views are derived**, not stored: the weight of a pair (1,
+  SPRITE's 2/n, …) is a choice of the analysis.
+- Subsetting spots keeps the clusters whole (like `bins`);
+  `table.select_cells(ids)` makes a table of some cells.
+
+```python
+cd.set_clusters("sprite", df, cluster="barcode", cell="spot")   # one row per fragment
+t = cd.clusters["sprite"]                       # ClusterTable
+t.region("chr2", 5_423_000, 5_460_000, min_size=2, max_size=50)  # fragments in a window + context
+t.get_cell("spot_17"); t.members([3, 8]); t.to_frame()
+ClusterTable.from_frame(df, cell=None)          # bulk data
+chromdata.clusters.add_clusters("x.chromdata.zarr", "sprite", t)  # into an existing store
+```
+
 ### Tracks
 
 `bin_tracks` (per locus) and `spot_tracks` (per spot) replace the 1.x
@@ -146,6 +196,7 @@ spot-aligned view of both (`cd.tracks_spot_view()` without the warning).
 | `traces` | DataFrame (n_traces) | Trace-level metadata. Index = trace_id. |
 | `layers` | dict[str, ndarray] | Alternative coordinate representations, each (n_spots, 3). e.g. `layers['raw']` for uncorrected coordinates. |
 | `cell_shapes` | dict[str, DataFrame] | Cell outlines: `cell_id` + `geometry` (WKB), one row per cell; see *Cell spatial position*. Format ≥ 2.3 (zarr). |
+| `clusters` | dict[str, ClusterTable] | Multi-way contacts: clusters of genomic fragments; see *Clusters*. Format ≥ 2.4 (zarr). |
 | `points` | dict[str, DataFrame] | Non-genomic 3-D points in the `coords` frame (columns `x, y, z` + e.g. `cell_id`, `gene`): nascent RNA spots, IF puncta. Subsetting keeps the points of retained cells. Format ≥ 1.3. |
 | `results` | `ResultsStore` | Analysis results with provenance. Dict-like: `cd.results[key]` is the value, `cd.results.record(key)` a `ResultRecord` (`kind, value, params, function, uchrom_version, inputs, created_utc`). Values may be DataFrames, Series, ndarrays, nested dicts of these, or JSON-compatible scalars / lists; anything else raises `TypeError` on assignment. |
 | `uns` | dict | Unstructured metadata (genome assembly, coordinate unit, etc.). |
@@ -223,7 +274,7 @@ df = cd.to_dataframe()   # Flat DataFrame: chrom, start, end, x, y, z, trace_id,
 ### Persistence
 
 ```python
-cd.write('data.chromdata.zarr')                    # format 2.3: Zarr v3 + Parquet (a directory)
+cd.write('data.chromdata.zarr')                    # format 2.4: Zarr v3 + Parquet (a directory)
 cd.write('data.cdz')                               # the same store in one zip file
 cd = ChromData.read('data.chromdata.zarr')         # in memory (spots in stored order)
 cd = ChromData.read('data.chromdata.zarr', original_order=True)   # rows as written
@@ -237,8 +288,8 @@ The format follows the path: `*.zarr` → Zarr directory, `*.cdz` → zip.  An
 existing path without one of these suffixes is sniffed.  The HDF5 `.h5cd`
 container (format 1.x / 2.0) is no longer read or written — `read` / `write`
 raise a `ValueError`; `python -m uchrom.io.upgrade old.h5cd` converts a file
-once to `old.chromdata.zarr` (and rewrites a 2.0 / 2.1 / 2.2
-`.chromdata.zarr` as 2.3).
+once to `old.chromdata.zarr` (and rewrites a 2.0–2.3
+`.chromdata.zarr` as 2.4).
 
 ### Backed mode
 
@@ -246,7 +297,8 @@ once to `old.chromdata.zarr` (and rewrites a 2.0 / 2.1 / 2.2
 returns a `BackedChromData` (`cd.backed is True`):
 
 - **eager** (read on open): `bins`, `bin_tracks`, `binm`, `cells`, `cellm`,
-  `traces`, `intervals`, `points`, `results`, `uns`, `index/`;
+  `traces`, `intervals`, `points`, `results`, `uns`, `index/`, and of each
+  cluster table its attributes, `cells` and `cell_offsets`;
 - **lazy**: `coords` / `layers[...]` (`BackedArray`: `shape`, row slicing,
   `np.asarray`) and `spots` / `spot_tracks` (`BackedFrame`: `columns`,
   `dtypes`, `frame[col]`, `frame.iloc[rows]`, `to_pandas()`), read from
@@ -258,6 +310,8 @@ returns a `BackedChromData` (`cd.backed is True`):
 - `iter_traces(batch, chrom=None)` / `iter_cells(batch)` stream in-memory
   chunks (identical chunks on in-memory objects; `batch="auto"` from
   `uchrom.settings.memory_budget`);
+- cluster tables stay on disk: `region`, `get_cell` and `members` read
+  only their ranges (`to_memory()` / an in-memory read loads them);
 - every one of these, `to_memory()` and `read()` take `columns=` /
   `tracks=`: `columns="coords"` reads coordinates and key columns only,
   `columns=[...]` adds spot columns / spot tracks / layers by name,
@@ -276,7 +330,7 @@ wrote it:
 
 | Attribute | Example | Description |
 |-----------|---------|-------------|
-| `uchrom_format_version` | `"2.3"` | `MAJOR.MINOR` version of the ChromData format (`.chromdata.zarr`: 2.3). MAJOR bumps are breaking; MINOR bumps keep old files readable. |
+| `uchrom_format_version` | `"2.4"` | `MAJOR.MINOR` version of the ChromData format (`.chromdata.zarr`: 2.4). MAJOR bumps are breaking; MINOR bumps keep old files readable. |
 | `uchrom_version` | `"0.2.0"` | Version of the U-Chrom package that wrote the file. For provenance. |
 
 In a `.chromdata.zarr` store they are root-group attributes (plus
@@ -289,7 +343,15 @@ Read semantics (implemented in `ChromData.read`):
 
 A new MINOR layout is read next to the old ones (as 2.2 reads 2.1 and 2.0); a new MAJOR comes with a converter (as `uchrom.io.upgrade` converts the old `.h5cd`).
 
-### `.chromdata.zarr` layout (format 2.3, the default)
+### `.chromdata.zarr` layout (format 2.4, the default)
+
+Format 2.4 is format 2.3 plus the optional multi-way contacts
+(`clusters/<key>/`, see *Clusters on disk*) — additive: a 2.3 reader reads
+a 2.4 store with the higher-MINOR warning and ignores the clusters
+(rewriting it with that reader drops them); a 2.4 store without clusters
+differs from 2.3 only by its version.  2.4 readers read 2.0–2.3 stores
+unchanged.  (`zarrcd.write_zarr(..., _layout="2.2")`, the current layout,
+is written as 2.4.)
 
 Format 2.3 is the 2.2 layout below plus the optional cell outlines
 (`tables/cell_shapes/<key>.parquet`, GeoParquet) and the cell-position
@@ -297,7 +359,6 @@ records (`uns['cell_spatial']`, `uns['cell_shapes']`, `links/` records
 `linked_spatialdata`) — all additive.  A 2.2 reader reads a 2.3 store with
 the usual higher-MINOR warning and ignores the outlines (rewriting it with
 that reader drops them); 2.3 readers read 2.0–2.2 stores unchanged.
-(`zarrcd.write_zarr(..., _layout="2.2")`, the current layout, is written as 2.3.)
 
 A Zarr v3 group; everything with rows is Parquet (zstd), everything
 n-dimensional is a Zarr array (zstd), metadata is JSON attributes.  Every
@@ -308,7 +369,7 @@ bin, the cell or the trace once per key.
 
 ```
 data.chromdata.zarr/
-├── zarr.json               attrs: uchrom_format_version "2.3", uchrom_version,
+├── zarr.json               attrs: uchrom_format_version "2.4", uchrom_version,
 │                           uchrom = {format "chromdata.zarr", format_version,
 │                           layout "primary+coords", spot_order "cell,trace,chrom,bin",
 │                           coords_order "chrom,cell,trace,bin", n_spots, n_bins,
@@ -368,6 +429,7 @@ data.chromdata.zarr/
 │                           (_value_ref = "intervals/<key>")
 ├── uns/                    attrs {values (JSON), nodes, order}; numeric arrays of
 │                           > 64 elements as sub-arrays / groups
+├── clusters/<key>/         multi-way contacts (2.4), see *Clusters on disk*
 ├── contacts/               attrs: uns["linked_cool"] / uns["linked_scool"] records
 └── links/                  attrs: uns["linked_anndata"] / uns["linked_mudata"] /
                             uns["linked_spatialdata"] records
@@ -423,6 +485,52 @@ data.chromdata.zarr/
   (`ZIP_STORED`) with `zarr.json` first; Parquet members are read in place.
 - The writer builds the store in a temporary sibling directory and renames
   it into place, so readers never see a half-written store.
+
+### Clusters on disk (format 2.4)
+
+```
+clusters/                     attrs: keys = {key: node}
+└── <node>/                   attrs: uchrom_clusters = {key, kind: per_cell|bulk, chroms,
+    │                           n_cells, n_clusters, n_members, member_rows, locus_rows,
+    │                           chunk, locus: {chrom: {node, n, max_length}},
+    │                           member_columns: {name: node}, cluster_columns, attrs}
+    ├── members               (3, n_members) uint32 (uint64 when needed): chrom code,
+    │                           start, end; clusters in the stored order
+    ├── member_offsets        int64 (n_clusters + 1)
+    ├── cells                 per_cell: string array, the order of cell_offsets
+    ├── cell_offsets          per_cell: int64 (n_cells + 1)
+    ├── member_columns/<name> (n_members) numeric
+    ├── clusters.parquet      the per-cluster table (optional)
+    └── by_locus/<chrom>/     the locus index of one chromosome (chromosomes with fragments)
+        ├── rows              (8, n) unsigned — start, end, cluster, size, chrom_size,
+        │                       span_start, span_end, cell (bulk: 7 rows, no cell);
+        │                       sorted by (start, end, cluster)
+        └── fence             int64: rows[0, ::chunk], the first start of every chunk
+```
+
+- `members`, `member_offsets`, `member_columns` and the locus `rows` are
+  chunked by 16,384 columns (`chunk` in the attrs; a `(rows, 16384)` chunk
+  holds every row of its columns, each row contiguous) and **sharded** by
+  4,194,304 columns, zstd 9 — the layout of the embedded contact pixels.
+  `fence`, `cells` and `cell_offsets` are one chunk each.  All values of a
+  `rows` array share one unsigned dtype (uint32 unless a value needs
+  uint64).
+- **A window** `[s, e)` of a chromosome: with `L` = its `max_length` (the
+  longest fragment), the fragments that can overlap the window start in
+  `(s − L, e)`.  The fence (read once per chromosome) gives the chunks:
+  from the last whose first start is `≤ s − L` to the last whose first start
+  is `< e`; one range read of `rows`, then keep `s − L < start < e` and
+  `end > s`.  The rows carry the cluster context, so drawing the window
+  reads nothing else.
+- **A cell**: `cell_offsets` → a slice of `member_offsets` → one slice of
+  `members`.  **A cluster**: two offsets, one slice.
+- Every fragment is stored twice (cluster order and position order), as
+  BAM files are shipped sorted by name and by coordinate.
+- `chromdata.clusters.add_clusters(store, key, table[, overwrite=True])`
+  adds a table to an existing directory store without rewriting it (marks
+  the store 2.4 and re-consolidates its metadata); the streaming writer
+  takes `finish(clusters={key: table})`, and chunks of one object
+  (`iter_cells`) carry its tables.
 
 ### Embedded contacts and AnnData (additive part of 2.3)
 

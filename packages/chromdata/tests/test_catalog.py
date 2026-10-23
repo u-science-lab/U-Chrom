@@ -58,3 +58,23 @@ def test_accessibility_of_dissociated_cells(tmp_path):
     ChromData(np.zeros((0, 3)), spots, cells=cells[["cell_type"]]).write(tmp_path / "plain.chromdata.zarr")
     assert "ATAC per cell" in atlas.describe_store(tmp_path / "atac.chromdata.zarr")["modalities"]
     assert "ATAC per cell" not in atlas.describe_store(tmp_path / "plain.chromdata.zarr")["modalities"]
+
+
+def test_describe_store_multiway(tmp_path):
+    """Cluster tables (multi-way contacts) are a modality of their own: per spot on a tissue section."""
+    import numpy as np
+    import pandas as pd
+
+    from chromdata import ChromData
+
+    spots = pd.DataFrame({"chrom": pd.Series(dtype=str), "start": pd.Series(dtype=np.int64),
+                          "end": pd.Series(dtype=np.int64), "trace_id": pd.Series(dtype=str),
+                          "cell_id": pd.Series(dtype=str)})
+    cd = ChromData(np.zeros((0, 3)), spots, cells=pd.DataFrame(index=pd.Index(["s1", "s2"], name="cell_id")))
+    cd.set_cell_positions(np.array([[0.0, 0.0], [50.0, 0.0]]), cell_ids=["s1", "s2"], unit="um", frame="tissue")
+    frags = pd.DataFrame({"cluster": ["a", "a", "b"], "chrom": ["chr1"] * 3, "start": [0, 500, 90],
+                          "end": [100, 600, 190], "spot": ["s1", "s1", "s2"]})
+    cd.set_clusters("spacea", frags, cell="spot")
+    cd.write(tmp_path / "m.chromdata.zarr")
+    d = atlas.describe_store(tmp_path / "m.chromdata.zarr")
+    assert "multi-way per spot" in d["modalities"] and d["cluster_tables"] == 1 and d["format_version"] == "2.4"

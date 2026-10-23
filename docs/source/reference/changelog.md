@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Multi-way contacts: `ChromData.clusters` (`.chromdata.zarr` format 2.4).**  SPRITE barcode clusters, Pore-C
+  reads, ChIA-Drop GEMs — sets of genomic fragments observed together — are stored as they are, not only as pairs:
+  `cd.set_clusters(key, fragments, cluster=, cell=)` / `chromdata.ClusterTable.from_frame` build a table in
+  compressed sparse rows (clusters sorted by cell and first fragment), with per-cell (per-spot) or bulk clusters,
+  optional per-fragment and per-cluster columns.  `region(chrom, start, end)` returns the fragments of a window with
+  their cluster's context (size, fragments and span on the chromosome, cell): what a cluster track draws, read from a
+  per-chromosome locus index in one contiguous range (a fence of chunk starts finds it), so it works over HTTP;
+  `get_cell`, `members`, `select_cells`, `to_frame`.  Stored as `clusters/<key>/` (sharded Zarr, the layout of the
+  embedded contact pixels); backed reads keep the tables on disk; `chromdata.clusters.add_clusters` adds one to an
+  existing store; the streaming writer carries them.  Format 2.4 = 2.3 + this optional part: 2.3 readers read 2.4
+  stores with a warning and ignore the clusters.  Layout in `packages/chromdata/spec.md` (*Clusters*).
 - **The web browser opens on a start page** when no dataset is open, instead of empty views: example datasets of
   the atlas as cards with their thumbnails (one click opens one), the whole atlas and, on a local server, the server's
   folders in the Open dialog, and the datasets opened before.  The examples are the catalog's new `featured` list,

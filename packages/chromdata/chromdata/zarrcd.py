@@ -1,4 +1,4 @@
-"""The ``.chromdata.zarr`` container (format 2.3): Zarr + Parquet.
+"""The ``.chromdata.zarr`` container (format 2.4): Zarr + Parquet.
 
 A ChromData store is a Zarr v3 group whose large tables are Parquet files
 (the SpatialData approach): Parquet for anything with rows (spots, tracks,
@@ -33,6 +33,8 @@ provenance, linked files).  Layout (2.2)::
     ├── results/<key>             zarr groups / arrays; attrs = provenance;
     │                             tables as <key>/table.parquet
     ├── uns/                      attrs (JSON) + arrays
+    ├── clusters/<key>/           multi-way contacts (2.4): CSR members + a locus index per
+    │                             chromosome (:mod:`chromdata.clusters`)
     ├── contacts/                 attrs: linked .cool / .scool records
     └── links/                    attrs: linked .h5ad / .h5mu / SpatialData records
 
@@ -83,18 +85,21 @@ PathLike = Union[str, Path]
 ZARR_SUFFIX = ".chromdata.zarr"
 ZIP_SUFFIX = ".cdz"
 CONTAINER = "chromdata.zarr"
-ZARR_FORMAT_VERSION = "2.3"
+ZARR_FORMAT_VERSION = "2.4"
 #: the spot-table layout the current version writes: 2.3 is the 2.2 layout
 #: plus the optional cell outlines (``tables/cell_shapes/<key>.parquet``,
 #: GeoParquet) and the cell-position records (``uns['cell_spatial']``,
-#: ``uns['cell_shapes']``, ``links`` attrs ``linked_spatialdata``) — additive,
-#: so 2.2 readers read 2.3 stores (with a warning) and ignore the new parts
+#: ``uns['cell_shapes']``, ``links`` attrs ``linked_spatialdata``); 2.4 adds
+#: the optional multi-way contacts (``clusters/<key>/``, :mod:`chromdata.clusters`)
+#: — additive, so older 2.x readers read newer stores (with a warning) and
+#: ignore the new parts
 ZARR_LAYOUT_VERSION = "2.2"
 #: MINOR versions of the container this reader understands (2.0: one file per
 #: spot-aligned table, sorted by cell › trace › bin; 2.1: partitioned by
-#: chromosome; 2.2 / 2.3: coordinates + keys partitioned by chromosome,
+#: chromosome; 2.2–2.4: coordinates + keys partitioned by chromosome,
 #: everything else in cell-sorted primary tables, stored once)
-ZARR_LAYOUTS = {"2.0": "flat", "2.1": "partitioned", "2.2": "primary+coords", "2.3": "primary+coords"}
+ZARR_LAYOUTS = {"2.0": "flat", "2.1": "partitioned", "2.2": "primary+coords", "2.3": "primary+coords",
+                "2.4": "primary+coords"}
 
 #: target rows per Parquet row group of the cell-sorted spot tables (row
 #: groups end on cell boundaries)
@@ -719,8 +724,10 @@ def write_zarr(cd, path: PathLike, *, coord_dtype: Union[str, np.dtype] = "float
     2.2."""
     if _layout not in ZARR_LAYOUTS:
         raise ValueError(f"unknown layout {_layout!r}")
-    if _layout == ZARR_FORMAT_VERSION:
+    if _layout in ("2.3", ZARR_FORMAT_VERSION):
         _layout = ZARR_LAYOUT_VERSION
+    if getattr(cd, "clusters", None) and _layout != ZARR_LAYOUT_VERSION:
+        raise ValueError(f"clusters are stored from format 2.4 on, not in layout {_layout}")
     if row_group_rows is None:
         row_group_rows = DEFAULT_ROW_GROUP_ROWS if _layout != "2.1" else DEFAULT_COORDS_ROW_GROUP_ROWS
     path = Path(path)
@@ -900,7 +907,8 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
     _write_small_parts(root, root_path, tables_meta, level=level, bins=cd.bins,
                        bin_tracks=cd.bin_tracks, cells=cd.cells, traces=cd.traces,
                        intervals=cd.intervals, points=cd.points, cellm=cd.cellm, binm=cd.binm,
-                       results=cd.results, uns=cd.uns, cell_shapes=getattr(cd, "cell_shapes", None))
+                       results=cd.results, uns=cd.uns, cell_shapes=getattr(cd, "cell_shapes", None),
+                       clusters=getattr(cd, "clusters", None))
     seg_trace = index["trace_codes"]
     meta = {
         "n_spots": n,
@@ -916,7 +924,7 @@ def _write_tree(cd, root_path: Path, *, coord_dtype, row_group_rows: int, level:
 
 
 def _write_root_meta(root, meta: Dict[str, Any], *, layout: str = ZARR_LAYOUT_VERSION) -> None:
-    # the current layout is written as the current version (2.3 = layout 2.2 + cell shapes)
+    # the current layout is written as the current version (2.4 = layout 2.2 + cell shapes + clusters)
     version = ZARR_FORMAT_VERSION if layout == ZARR_LAYOUT_VERSION else layout
     from ._version import __version__ as chromdata_version
     full = {"format": CONTAINER, "format_version": version, "uchrom_version": _uchrom_version(),
@@ -1376,7 +1384,8 @@ def _write_tree_v22(cd, root, root_path: Path, *, coord_dtype, row_group_rows: i
     _write_small_parts(root, root_path, tables_meta, level=level, bins=cd.bins,
                        bin_tracks=cd.bin_tracks, cells=cd.cells, traces=cd.traces,
                        intervals=cd.intervals, points=cd.points, cellm=cd.cellm, binm=cd.binm,
-                       results=cd.results, uns=cd.uns, cell_shapes=getattr(cd, "cell_shapes", None))
+                       results=cd.results, uns=cd.uns, cell_shapes=getattr(cd, "cell_shapes", None),
+                       clusters=getattr(cd, "clusters", None))
     meta = {
         "n_spots": n,
         "n_bins": int(cd.n_bins),
@@ -1404,10 +1413,10 @@ def _partition_meta(tables_meta: Dict[str, Any], w: "SpotPartitionWriter", layer
 
 def _write_small_parts(root, root_path: Path, tables_meta: Dict[str, Any], *, level: int, bins,
                        bin_tracks, cells, traces, intervals, points, cellm, binm, results,
-                       uns, cell_shapes=None) -> None:
+                       uns, cell_shapes=None, clusters=None) -> None:
     """Everything but the spot-aligned tables and ``index/``: bins, bin
     tracks, cells, traces, intervals, points, cell shapes (GeoParquet),
-    cellm / binm, results, uns and the linked-file records."""
+    cellm / binm, results, uns, the linked-file records and the clusters."""
     comp = _compressor(level)
     tpath = root_path / "tables"
     tables = root.create_group("tables")
@@ -1473,6 +1482,10 @@ def _write_small_parts(root, root_path: Path, tables_meta: Dict[str, Any], *, le
     for grp, recs in link_records.items():
         root.create_group(grp).attrs.update(
             {"records": _to_json_value(recs), "relpaths": _link_relpaths(recs, root_path)})
+    if clusters:
+        from .clusters import write_clusters
+
+        write_clusters(root, root_path, clusters, level)
 
 
 
@@ -1830,6 +1843,9 @@ def read_small_parts(c: Container) -> Dict[str, Any]:
             source_result=info.get("source_result") or None)
     parts["intervals"] = intervals
     parts["points"] = {k: c.read_frame(f"tables/{f}") for k, f in tmeta.get("points", {}).items()}
+    from .clusters import read_clusters
+
+    parts["clusters"] = read_clusters(c)       # backed tables: attrs and cell offsets only
     if tmeta.get("cell_shapes"):
         from .cellspatial import read_shapes_frame
 
