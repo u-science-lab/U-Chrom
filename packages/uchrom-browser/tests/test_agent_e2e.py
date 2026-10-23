@@ -74,6 +74,7 @@ class RealDataPage(threading.Thread):
         self.seen: list[dict] = []
         self.state: dict = {}
         self.canonical_cells: list[str] = []
+        self.agent_lease = False
 
     def stop(self):
         self.stopping.set()
@@ -122,6 +123,16 @@ class RealDataPage(threading.Thread):
             return json.loads(json.dumps(self.state))
 
         def action(name: str, args: dict):
+            if name == "__agent_lease__":
+                self.agent_lease = args["active"] is True
+                return {"active": self.agent_lease}
+            if name == "__agent_snapshot__":
+                return {"dataset_id": summary["id"], "canonical": describe(), "workspace": {}, "view": {}}
+            if name == "__agent_restore__":
+                if describe() != args["expected_canonical"]:
+                    raise ValueError("page changed before restore")
+                self.state = args["state"]["canonical"]
+                return describe()
             if name == "describe_workspace":
                 return describe()
             if name == "get_selection":

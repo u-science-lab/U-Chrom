@@ -138,6 +138,8 @@ export interface AppState {
   pick: PickInfo | null
   status: string | null
   error: string | null
+  /** true while the local agent is applying an approved UI plan */
+  agentLease: boolean
   /** bumped to ask the viewport to refit the camera */
   resetViewToken: number
   /** bumped to ask the viewport to fly to the current focus */
@@ -168,6 +170,7 @@ export interface AppState {
   setPick(pick: PickInfo | null): void
   setStatus(msg: string | null): void
   setError(msg: string | null): void
+  setAgentLease(active: boolean): void
   resetView(): void
   /** views laid out as equal panes (the layout of the active dataset) */
   workspace: WorkspaceState
@@ -267,8 +270,8 @@ export function orderedCells(s: Pick<AppState, 'views' | 'activeDatasetId' | 'ce
 }
 
 /** View state of the active dataset (defaults when none recorded). */
-export function activeView(s: Pick<AppState, 'views' | 'activeDatasetId'>): DatasetView {
-  return (s.activeDatasetId && s.views[s.activeDatasetId]) || DEFAULT_VIEW
+export function activeView(s: Pick<AppState, 'views' | 'activeDatasetId'>, datasetId = s.activeDatasetId): DatasetView {
+  return (datasetId && s.views[datasetId]) || DEFAULT_VIEW
 }
 
 const patchLayer = (layers: Layer[], id: string, patch: Partial<Layer>) =>
@@ -293,12 +296,17 @@ export const useStore = create<AppState>((set, get) => {
   pick: null,
   status: null,
   error: null,
+  agentLease: false,
   resetViewToken: 0,
   flyToken: 0,
   views: {},
   cells: {},
   cellValues: {},
   pointSets: {},
+
+  setAgentLease(active) {
+    set({ agentLease: active })
+  },
 
   setDatasets(ds) {
     // Create a root layer for every dataset that doesn't have one yet.

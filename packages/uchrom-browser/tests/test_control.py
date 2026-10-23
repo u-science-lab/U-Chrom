@@ -207,3 +207,12 @@ def test_workspace_does_not_propose_without_page(server):
     ws = ubc.connect(server, timeout=2)
     with pytest.raises(ubc.BrowserError, match="page"):
         ws.propose_ui_changes([], page=None, expected_revision="r_0")
+
+
+def test_workspace_agent_snapshot_requires_explicit_page_and_exposes_no_apply_wrappers(server):
+    ws = ubc.connect(server, timeout=2)
+    with pytest.raises(ubc.BrowserError, match="explicit page"):
+        ws.agent_snapshot()
+    assert not hasattr(ws, "approve_plan")
+    assert not hasattr(ws, "reject_plan")
+    assert not hasattr(ws, "apply_plan")

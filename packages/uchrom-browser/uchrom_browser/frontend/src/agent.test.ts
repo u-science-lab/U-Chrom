@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { planStatusLabel, sourceLabel, pendingPlanView, type AgentPlan, type AgentSnapshot } from './agent'
+import { describe, expect, it, vi } from 'vitest'
+import { agentHistory, approveAgentPlan, applyAgentPlan, planStatusLabel, rejectAgentPlan, sourceLabel, pendingPlanView, type AgentPlan, type AgentSnapshot } from './agent'
 
 const snapshot: AgentSnapshot = {
   page_id: 'ptest',
@@ -37,5 +37,24 @@ describe('agent state helpers', () => {
     expect(planStatusLabel('stale')).toBe('Stale')
     expect(planStatusLabel('rejected')).toBe('Rejected')
     expect(planStatusLabel('applied')).toBe('Applied')
+  })
+
+  it('routes approval, rejection, apply, and history through the UI-only endpoints', async () => {
+    const paths: string[] = []
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      paths.push(String(input))
+      return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    await approveAgentPlan('p1')
+    await rejectAgentPlan('p1')
+    await applyAgentPlan('p1')
+    await agentHistory('ptest')
+    expect(paths).toEqual([
+      'api/agent/ui/plans/p1/approve',
+      'api/agent/ui/plans/p1/reject',
+      'api/agent/ui/plans/p1/apply',
+      'api/agent/history?page=ptest',
+    ])
+    vi.unstubAllGlobals()
   })
 })

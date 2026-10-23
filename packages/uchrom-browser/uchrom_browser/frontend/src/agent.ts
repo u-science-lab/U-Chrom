@@ -10,6 +10,8 @@ export interface AgentPlan {
   results?: Array<Record<string, unknown>>
   state_revision?: string
   canonical?: AgentSnapshot
+  can_undo?: boolean
+  undo_reason?: string
 }
 export interface AgentSnapshot {
   page_id: string
@@ -45,17 +47,21 @@ export const pendingAgentPlans = (pageId?: string) =>
   agentRequest<AgentPlan[]>(pageId ? 'api/agent/plans?' + new URLSearchParams({ page: pageId }) : 'api/agent/plans')
 export const loadPlanStatus = (planId: string) => agentRequest<AgentPlan>('api/agent/plans/' + encodeURIComponent(planId))
 export const approveAgentPlan = (planId: string) =>
-  agentRequest<AgentPlan>('api/agent/plans/' + encodeURIComponent(planId) + '/approve', { method: 'POST' })
+  agentRequest<AgentPlan>('api/agent/ui/plans/' + encodeURIComponent(planId) + '/approve', { method: 'POST' })
 export const rejectAgentPlan = (planId: string) =>
-  agentRequest<AgentPlan>('api/agent/plans/' + encodeURIComponent(planId) + '/reject', { method: 'POST' })
+  agentRequest<AgentPlan>('api/agent/ui/plans/' + encodeURIComponent(planId) + '/reject', { method: 'POST' })
 export const applyAgentPlan = (planId: string) =>
-  agentRequest<AgentPlan>('api/agent/plans/' + encodeURIComponent(planId) + '/apply', { method: 'POST' })
+  agentRequest<AgentPlan>('api/agent/ui/plans/' + encodeURIComponent(planId) + '/apply', { method: 'POST' })
+export const agentHistory = (pageId: string) =>
+  agentRequest<AgentPlan[]>('api/agent/history?' + new URLSearchParams({ page: pageId }))
+export const undoAgentPlan = (planId: string, pageId: string, expectedRevision: string) =>
+  agentRequest<AgentPlan>('api/agent/ui/plans/' + encodeURIComponent(planId) + '/undo?' + new URLSearchParams({ page_id: pageId, expected_revision: expectedRevision }), { method: 'POST' })
 
 export function sourceLabel(source: AgentSource): string {
   return { page_canonical: 'Page canonical', handoff_imported: 'Handoff imported', analysis_result: 'Analysis result' }[source] ?? source
 }
 export function planStatusLabel(status: string): string {
-  return { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', stale: 'Stale', applied: 'Applied', failed: 'Failed' }[status] ?? status
+  return { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', stale: 'Stale', applied: 'Applied', failed: 'Failed', undone: 'Undone' }[status] ?? status
 }
 export function formatLocus(locus: AgentSnapshot['locus']): string {
   if (!locus?.chrom) return '—'

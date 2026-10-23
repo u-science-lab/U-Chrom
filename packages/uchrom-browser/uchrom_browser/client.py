@@ -88,10 +88,11 @@ class Workspace:
         return self._request("GET", "/api/agent/pages")
 
     def agent_snapshot(self, page: Optional[str] = None) -> Dict[str, Any]:
-        """Read canonical state from an explicitly pinned page."""
+        """Read canonical state from an explicitly named page."""
+        if not page:
+            raise BrowserError("an explicit page is required to read the agent snapshot")
         path = "/api/agent/snapshot"
-        if page is not None:
-            path += f"?page={quote(page, safe='')}"
+        path += f"?page={quote(page, safe='')}"
         return self._request("GET", path)
 
     def propose_ui_changes(self, actions: List[Dict[str, Any]], page: Optional[str],
@@ -112,24 +113,6 @@ class Workspace:
         if not plan_id:
             raise BrowserError("plan_id is required")
         return self._request("GET", f"/api/agent/plans/{quote(plan_id, safe='')}")
-
-    def approve_plan(self, plan_id: str) -> Dict[str, Any]:
-        """Approve a plan through the local control endpoint."""
-        if not plan_id:
-            raise BrowserError("plan_id is required")
-        return self._request("POST", f"/api/agent/plans/{quote(plan_id, safe='')}/approve")
-
-    def reject_plan(self, plan_id: str) -> Dict[str, Any]:
-        """Reject a plan through the local control endpoint."""
-        if not plan_id:
-            raise BrowserError("plan_id is required")
-        return self._request("POST", f"/api/agent/plans/{quote(plan_id, safe='')}/reject")
-
-    def apply_plan(self, plan_id: str) -> Dict[str, Any]:
-        """Apply an approved plan through the local control endpoint."""
-        if not plan_id:
-            raise BrowserError("plan_id is required")
-        return self._request("POST", f"/api/agent/plans/{quote(plan_id, safe='')}/apply")
 
     def __getattr__(self, name: str):
         tools = self.__dict__.get("_tools", {})

@@ -11,6 +11,7 @@ import { FIELD_PREFIX, fieldGroupRef, SAME_AS_VIEW, type RowScopeSpec, type Scop
 import type { GenomeRow } from './genomeRows'
 import { clampLocus, datasetChroms } from './genome'
 import { activeView, useStore } from './store'
+import type { DatasetView } from './store'
 import { resolveLocus } from './useLocus'
 import { LAYOUTS, addPane, removePane, setLayout, type Pane, type PaneType, type StatsKind, type WsLayout } from './workspace'
 import toolDefs from '../../ui_tools.json'
@@ -275,4 +276,34 @@ export async function runAction(name: string, args: ActionArgs = {}): Promise<un
   const f = ACTIONS[name]
   if (!f) throw new Error(`unknown action: ${name}`)
   return f(args ?? {})
+}
+
+/** Private control-channel snapshot used only for the local AgentPanel undo. */
+export async function captureAgentUiState(): Promise<Record<string, unknown>> {
+  const { s, ds } = ctx()
+  return {
+    dataset_id: ds.id,
+    workspace: structuredClone(s.workspace),
+    view: structuredClone(s.views[ds.id] ?? activeView(s)),
+    canonical: await ACTIONS.describe_workspace({}),
+  }
+}
+
+/** Restore a captured UI snapshot only if the page still matches the reviewed canonical state. */
+export async function restoreAgentUiState(state: unknown, expectedCanonical: unknown): Promise<unknown> {
+  const { s, ds } = ctx()
+  if (!state || typeof state !== 'object') throw new Error('invalid agent UI snapshot')
+  const snapshot = state as { dataset_id?: unknown; workspace?: unknown; view?: unknown }
+  if (snapshot.dataset_id !== ds.id || !snapshot.workspace || !snapshot.view)
+    throw new Error('the active dataset no longer matches the undo snapshot')
+  const currentCanonical = await ACTIONS.describe_workspace({})
+  if (JSON.stringify(currentCanonical) !== JSON.stringify(expectedCanonical))
+    throw new Error('page changed before undo; refresh state and propose a new plan')
+  s.setWorkspace(() => structuredClone(snapshot.workspace as typeof s.workspace))
+  const current = useStore.getState()
+  useStore.setState({
+    views: { ...current.views, [ds.id]: structuredClone(snapshot.view as DatasetView) },
+    flyToken: current.flyToken + 1,
+  })
+  return ACTIONS.describe_workspace({})
 }

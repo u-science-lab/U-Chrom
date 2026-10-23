@@ -3,7 +3,8 @@
  * callers of POST /api/control/actions), run them with `actions.ts` and post the result back.
  */
 
-import { runAction } from './actions'
+import { captureAgentUiState, restoreAgentUiState, runAction } from './actions'
+import { useStore } from './store'
 
 const PAGE_ID = `p${Math.random().toString(36).slice(2, 10)}`
 
@@ -29,7 +30,18 @@ export function startControl(): () => void {
   const es = new EventSource(`/api/control/events?page=${PAGE_ID}`)
   es.addEventListener('action', (ev) => {
     const msg = JSON.parse((ev as MessageEvent).data) as { id: string; name: string; args: Record<string, unknown> }
-    runAction(msg.name, msg.args)
+    const action = msg.name === '__agent_lease__'
+      ? Promise.resolve((() => {
+          const active = msg.args.active === true
+          useStore.getState().setAgentLease(active)
+          return { active }
+        })())
+      : msg.name === '__agent_snapshot__'
+      ? captureAgentUiState()
+      : msg.name === '__agent_restore__'
+        ? restoreAgentUiState(msg.args.state, msg.args.expected_canonical)
+        : runAction(msg.name, msg.args)
+    action
       .then((result) => reply(msg.id, { ok: true, result: result ?? null }))
       .catch((e: unknown) => reply(msg.id, { ok: false, error: e instanceof Error ? e.message : String(e) }))
   })

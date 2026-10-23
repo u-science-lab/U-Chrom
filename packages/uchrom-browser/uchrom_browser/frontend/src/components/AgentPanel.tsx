@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   agentPages,
+  agentHistory,
   applyAgentPlan,
   approveAgentPlan,
   attachAgentPage,
@@ -11,6 +12,7 @@ import {
   planStatusLabel,
   rejectAgentPlan,
   sourceLabel,
+  undoAgentPlan,
   type AgentPage,
   type AgentPlan,
   type AgentSnapshot,
@@ -27,6 +29,7 @@ export function AgentPanel() {
   const [pageId, setPageId] = useState('')
   const [snapshot, setSnapshot] = useState<AgentSnapshot | null>(null)
   const [plans, setPlans] = useState<AgentPlan[]>([])
+  const [history, setHistory] = useState<AgentPlan[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -43,9 +46,10 @@ export function AgentPanel() {
   }, [])
 
   const refreshState = useCallback(async (target: string) => {
-    const [nextSnapshot, nextPlans] = await Promise.all([loadAgentSnapshot(target), pendingAgentPlans(target)])
+    const [nextSnapshot, nextPlans, nextHistory] = await Promise.all([loadAgentSnapshot(target), pendingAgentPlans(target), agentHistory(target)])
     setSnapshot(nextSnapshot)
     setPlans(nextPlans)
+    setHistory(nextHistory)
   }, [])
 
   useEffect(() => {
@@ -80,10 +84,11 @@ export function AgentPanel() {
     let active = true
     const load = async () => {
       try {
-        const [nextSnapshot, nextPlans] = await Promise.all([loadAgentSnapshot(pageId), pendingAgentPlans(pageId)])
+        const [nextSnapshot, nextPlans, nextHistory] = await Promise.all([loadAgentSnapshot(pageId), pendingAgentPlans(pageId), agentHistory(pageId)])
         if (!active) return
         setSnapshot(nextSnapshot)
         setPlans(nextPlans)
+        setHistory(nextHistory)
         setError(null)
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : String(cause))
@@ -149,6 +154,20 @@ export function AgentPanel() {
     }
   }
 
+  const undo = async (plan: AgentPlan) => {
+    if (!snapshot || !plan.state_revision) return
+    setBusy(plan.plan_id)
+    try {
+      await undoAgentPlan(plan.plan_id, plan.page_id, snapshot.state_revision)
+      await refreshState(plan.page_id)
+      setError(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   return (
     <details className="agent-panel" open>
       <summary className="agent-head">
@@ -192,6 +211,26 @@ export function AgentPanel() {
                   </div>
                 )
               })}
+              {history.length > 0 && (
+                <div className="agent-history">
+                  <h3>Recent agent changes</h3>
+                  {history.map((entry) => (
+                    <div className="agent-history-item" key={entry.plan_id}>
+                      <div className="agent-plan-title">
+                        <strong>{entry.plan_id}</strong>
+                        <span className={`agent-status agent-status-${entry.status}`}>{planStatusLabel(entry.status)}</span>
+                      </div>
+                      {entry.results?.map((result, index) => (
+                        <p className="muted small" key={`${entry.plan_id}-${index}`}>
+                          {String(result.name)}: {result.ok ? JSON.stringify(result.result ?? 'ok') : String(result.error ?? 'failed')}
+                        </p>
+                      ))}
+                      {entry.undo_reason && <p className="muted small">Undo unavailable: {entry.undo_reason}</p>}
+                      {entry.can_undo && <button onClick={() => void undo(entry)} disabled={busy !== null || snapshot.state_revision !== entry.state_revision}>Undo last agent change</button>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </>

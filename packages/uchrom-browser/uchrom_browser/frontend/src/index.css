@@ -184,6 +184,10 @@ select:focus,
   flex-direction: column;
   height: 100%;
 }
+
+.app[data-agent-lease='active'] {
+  pointer-events: none;
+}
 .main {
   flex: 1;
   display: flex;
@@ -3267,3 +3271,4 @@ button.side-close:hover {
 .activity-card .spinner { margin-top: 2px; }
 .activity-text { font-size: 13px; font-weight: 600; }
 .activity-hint { margin-top: 3px; line-height: 1.4; }
+:root {
