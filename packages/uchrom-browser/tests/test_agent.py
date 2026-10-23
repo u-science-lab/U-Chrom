@@ -102,6 +102,25 @@ def _page(server, handler):
     return page
 
 
+@pytest.mark.parametrize("path, method, body", [
+    ("/api/agent/pages", "get", None),
+    ("/api/agent/attach", "post", {"page_id": "ptest"}),
+    ("/api/agent/plans", "post", {
+        "page_id": "ptest", "expected_revision": "r_0",
+        "actions": [{"name": "arrange", "args": {"layout": "grid"}}],
+    }),
+])
+@pytest.mark.parametrize("header, value", [
+    ("Host", "evil.example"),
+    ("Forwarded", "for=203.0.113.9;host=127.0.0.1"),
+])
+def test_agent_routes_reject_non_loopback_host_and_forwarded_client(server, path, method, body, header, value):
+    c = API(server)
+    request = getattr(c, method)
+    response = request(path, json=body, headers={header: value}) if body is not None else request(path, headers={header: value})
+    assert response.status_code == 403
+
+
 def test_ui_mutation_rejects_direct_localhost_post_without_page_proof(server):
     _page(server, lambda name, args: {"dataset": {}, "views": [], "locus": None})
     c = API(server)

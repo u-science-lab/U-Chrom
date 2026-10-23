@@ -418,12 +418,14 @@ def add_routes(app, state: AgentState, security=None) -> None:
         return HTTPException(409, str(exc))
 
     @app.get("/api/agent/pages")
-    def agent_pages() -> List[Dict[str, Any]]:
+    def agent_pages(request: Request) -> List[Dict[str, Any]]:
+        security._loopback(request)
         pinned = set(state.sessions)
         return [{**page, "pinned": page.get("page") in pinned} for page in state.broker.pages()]
 
     @app.post("/api/agent/attach")
-    def agent_attach(req: AttachRequest) -> Dict[str, Any]:
+    def agent_attach(request: Request, req: AttachRequest) -> Dict[str, Any]:
+        security._loopback(request)
         try:
             session = state.attach(req.page_id)
         except AgentConflict as exc:
@@ -431,14 +433,16 @@ def add_routes(app, state: AgentState, security=None) -> None:
         return {"page_id": session.page_id, "state_revision": session.revision, "status": "attached"}
 
     @app.get("/api/agent/snapshot")
-    async def agent_snapshot(page: Optional[str] = Query(None)) -> Dict[str, Any]:
+    async def agent_snapshot(request: Request, page: Optional[str] = Query(None)) -> Dict[str, Any]:
+        security._loopback(request)
         try:
             return await state.snapshot(page or "")
         except AgentConflict as exc:
             raise conflict(exc) from None
 
     @app.post("/api/agent/plans")
-    async def agent_propose(req: PlanRequest) -> Dict[str, Any]:
+    async def agent_propose(request: Request, req: PlanRequest) -> Dict[str, Any]:
+        security._loopback(request)
         try:
             return (await state.propose(req.page_id, req.expected_revision, req.actions)).as_dict()
         except AgentConflict as exc:
@@ -449,7 +453,8 @@ def add_routes(app, state: AgentState, security=None) -> None:
             raise HTTPException(422, str(exc)) from None
 
     @app.get("/api/agent/plans")
-    def agent_plans(page: Optional[str] = Query(None)) -> List[Dict[str, Any]]:
+    def agent_plans(request: Request, page: Optional[str] = Query(None)) -> List[Dict[str, Any]]:
+        security._loopback(request)
         with state._plan_lock:
             plans = list(state.plans.values())
         if page:
@@ -457,11 +462,13 @@ def add_routes(app, state: AgentState, security=None) -> None:
         return [plan.as_dict() for plan in plans if plan.status in {"pending", "approved"}]
 
     @app.get("/api/agent/history")
-    def agent_history(page: str) -> List[Dict[str, Any]]:
+    def agent_history(request: Request, page: str) -> List[Dict[str, Any]]:
+        security._loopback(request)
         return state.history(page)
 
     @app.get("/api/agent/plans/{plan_id}")
-    def agent_status(plan_id: str) -> Dict[str, Any]:
+    def agent_status(request: Request, plan_id: str) -> Dict[str, Any]:
+        security._loopback(request)
         try:
             return state.status(plan_id).as_dict()
         except AgentConflict as exc:

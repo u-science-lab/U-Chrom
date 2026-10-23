@@ -8,8 +8,10 @@ also what the page registers as WebMCP tools.
 """
 
 import asyncio
+import ipaddress
 import itertools
 import json
+import re
 import secrets
 import time
 from dataclasses import dataclass, field
@@ -32,10 +34,43 @@ class LocalSecurity:
 
     @staticmethod
     def _loopback(request) -> None:
-        host = getattr(getattr(request, "client", None), "host", None)
+        def local_host(value: str) -> bool:
+            value = value.strip().strip('"').lower()
+            if value.startswith("["):
+                end = value.find("]")
+                value = value[1:end] if end >= 0 else value
+            elif value.count(":") == 1:
+                value, port = value.rsplit(":", 1)
+                if not port.isdigit():
+                    return False
+            if value in {"localhost", "testclient", "testserver"}:
+                return True
+            try:
+                return ipaddress.ip_address(value).is_loopback
+            except ValueError:
+                return False
+
+        client_host = getattr(getattr(request, "client", None), "host", None)
         # Starlette's TestClient uses ``testclient``; real uvicorn listeners are
         # bound to 127.0.0.1 (or ::1) by ``serve``.
-        if host and host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        if client_host and not local_host(client_host):
+            from fastapi import HTTPException
+            raise HTTPException(403, "local control accepts loopback requests only")
+
+        # Do not trust a reverse proxy to turn a non-local request into a local
+        # one.  A local service may receive these headers from a port forwarder,
+        # so every declared client/host hop must still be loopback.
+        host = request.headers.get("host")
+        if host and not local_host(host):
+            from fastapi import HTTPException
+            raise HTTPException(403, "local control accepts loopback requests only")
+        forwarded = request.headers.get("forwarded", "")
+        forwarded_values = re.findall(r"(?:^|[;,])\s*for\s*=\s*([^;,]+)", forwarded, flags=re.I)
+        forwarded_hosts = re.findall(r"(?:^|[;,])\s*host\s*=\s*([^;,]+)", forwarded, flags=re.I)
+        values = forwarded_values + forwarded_hosts
+        values.extend(x.strip() for x in request.headers.get("x-forwarded-for", "").split(",") if x.strip())
+        values.extend(x.strip() for x in request.headers.get("x-real-ip", "").split(",") if x.strip())
+        if any(not local_host(value) for value in values):
             from fastapi import HTTPException
             raise HTTPException(403, "local control accepts loopback requests only")
 
@@ -247,6 +282,8 @@ def add_routes(app, broker: ActionBroker, security: Optional[LocalSecurity] = No
         security.verify(request)
         if req.name not in names:
             raise HTTPException(404, f"unknown action: {req.name}")
+        if "__agent_mutation__" in req.args:
+            raise HTTPException(422, "__agent_mutation__ is reserved for internal agent actions")
         try:
             result = await broker.call(req.name, req.args, req.timeout, req.page)
         except NoPage as exc:

@@ -590,7 +590,8 @@ exit) so that `connect()` finds a server that moved to another port.
 
 The local agent API is available only when the server runs without the hosted configuration. It
 keeps page pins, pending plans and state revisions in process memory; it does not add a public or
-hosted control channel.
+hosted control channel. Agent routes accept loopback clients and reject non-loopback `Host` and
+forwarded client/host headers.
 
 ### `GET /api/agent/pages`
 
@@ -619,7 +620,7 @@ stale revision returns `409`.
 Returns the plan status (`pending`, `approved`, `rejected`, `stale`, `applied` or `failed`), its
 requested actions, and, after execution, per-action results plus the canonical readback.
 
-### `POST /api/agent/plans/{plan_id}/approve`, `/reject`, `/apply`
+### `POST /api/agent/ui/plans/{plan_id}/approve`, `/reject`, `/apply`, `/undo`
 
 These endpoints are reserved for the local WebUI Agent panel. Apply is accepted only for an approved
 plan whose pinned page still has the expected revision; the server sends each action once through
@@ -627,6 +628,9 @@ the existing SSE broker, records each result, then reads `describe_workspace` ag
 failure is recorded as `failed` without retrying later actions. The supported user approval path is
 the local browser Agent panel; external agents should propose and poll, and must not call these
 approval or execution endpoints.
+
+Undo is available to the local Agent panel for the latest reversible applied plan and requires the
+matching `page_id` and current `expected_revision` query parameters.
 
 ### Repeatable local real-data check
 

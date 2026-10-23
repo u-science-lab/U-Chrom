@@ -224,3 +224,11 @@ def test_workspace_agent_snapshot_requires_explicit_page_and_exposes_no_apply_wr
 def test_control_mutation_rejects_direct_localhost_post_without_session(server):
     r = requests.post(server + "/api/control/actions", json={"name": "describe_workspace", "args": {}})
     assert r.status_code == 401
+
+
+def test_control_action_rejects_reserved_agent_mutation_flag(server):
+    proof = requests.get(server + "/api/control/session").json()
+    r = requests.post(server + "/api/control/actions", json={
+        "name": "describe_workspace", "args": {"__agent_mutation__": True},
+    }, headers={"Authorization": f"Bearer {proof['token']}"})
+    assert r.status_code == 422
