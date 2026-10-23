@@ -338,13 +338,15 @@ def create_app(store: Optional[DatasetStore] = None, atlas: Optional[str] = None
             raise HTTPException(422, str(exc)) from None
         return Response(ds.geometry(flt), media_type="application/octet-stream")
 
-    from .control import ActionBroker, add_routes
+    from .control import ActionBroker, LocalSecurity, add_routes
     app.state.broker = ActionBroker()
-    add_routes(app, app.state.broker)
+    if hosted is None:
+        app.state.local_security = LocalSecurity()
+        add_routes(app, app.state.broker, app.state.local_security)
     if hosted is None:
         from .agent import AgentState, add_routes as add_agent_routes
         app.state.agent_state = AgentState(app.state.broker)
-        add_agent_routes(app, app.state.agent_state)
+        add_agent_routes(app, app.state.agent_state, app.state.local_security)
 
     if (STATIC_DIR / "index.html").is_file():
         app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

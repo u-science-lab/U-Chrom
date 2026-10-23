@@ -23,16 +23,19 @@ class FakePage(threading.Thread):
         self.base, self.handler, self.page = base, handler, page
         self.seen = []
         self.ready = threading.Event()
+        self.token = ""
 
     def run(self):
         import requests
 
-        with requests.get(f"{self.base}/api/control/events", params={"page": self.page}, stream=True, timeout=30) as r:
+        with requests.get(f"{self.base}/api/control/events", params={"page": self.page},
+                          headers={"Origin": self.base}, stream=True, timeout=30) as r:
             event = None
             for line in r.iter_lines(decode_unicode=True):
                 if line.startswith("event: "):
                     event = line[7:]
                 elif line.startswith("data: ") and event == "hello":
+                    self.token = json.loads(line[6:]).get("token", "")
                     self.ready.set()
                 elif line.startswith("data: ") and event == "action":
                     msg = json.loads(line[6:])
@@ -41,7 +44,8 @@ class FakePage(threading.Thread):
                         body = {"ok": True, "result": self.handler(msg["name"], msg["args"])}
                     except Exception as exc:  # noqa: BLE001
                         body = {"ok": False, "error": str(exc)}
-                    requests.post(f"{self.base}/api/control/results/{msg['id']}", json=body, timeout=5)
+                    requests.post(f"{self.base}/api/control/results/{msg['id']}", json=body,
+                                   headers={"Origin": self.base, "X-UChrom-Page-Token": self.token}, timeout=5)
 
 
 def _free_port():
@@ -84,11 +88,27 @@ class API:
     def post(self, path, **kwargs):
         return self.session.post(self.base + path, **kwargs)
 
+    def ui_post(self, path, **kwargs):
+        proof = self.session.get(self.base + "/api/control/session").json()
+        headers = {"Origin": self.base, "Authorization": f"Bearer {proof['token']}",
+                   "X-CSRF-Token": proof["csrf_token"]}
+        headers.update(kwargs.pop("headers", {}))
+        return self.session.post(self.base + path, headers=headers, **kwargs)
+
 def _page(server, handler):
     page = FakePage(server, handler)
     page.start()
     assert page.ready.wait(5)
     return page
+
+
+def test_ui_mutation_rejects_direct_localhost_post_without_page_proof(server):
+    _page(server, lambda name, args: {"dataset": {}, "views": [], "locus": None})
+    c = API(server)
+    c.post("/api/agent/attach", json={"page_id": "ptest"})
+    plan = c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_0",
+        "actions": [{"name": "arrange", "args": {"layout": "grid"}}]}).json()
+    assert c.post(f"/api/agent/ui/plans/{plan['plan_id']}/reject").status_code in {401, 403}
 
 
 
@@ -180,9 +200,9 @@ def test_apply_releases_page_lease_when_lease_acquisition_fails(server):
     plan = c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_0", "actions": [
         {"name": "arrange", "args": {"layout": "grid"}},
     ]}).json()
-    c.post(f"/api/agent/ui/plans/{plan['plan_id']}/approve")
+    c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/approve")
 
-    result = c.post(f"/api/agent/ui/plans/{plan['plan_id']}/apply")
+    result = c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/apply")
 
     assert result.status_code == 409
     assert [(args["active"]) for name, args in calls if name == "__agent_lease__"] == [True, False]
@@ -207,9 +227,9 @@ def test_apply_requires_user_approval_and_records_results(server):
     plan = c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_0",
         "actions": [{"name": "set_locus", "args": {"chrom": "chr1"}}, {"name": "arrange", "args": {"layout": "tabs"}}]}).json()
     assert c.post(f"/api/agent/plans/{plan['plan_id']}/apply").status_code == 405
-    assert c.post(f"/api/agent/ui/plans/{plan['plan_id']}/apply").status_code == 409
-    assert c.post(f"/api/agent/ui/plans/{plan['plan_id']}/approve").status_code == 200
-    r = c.post(f"/api/agent/ui/plans/{plan['plan_id']}/apply")
+    assert c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/apply").status_code == 409
+    assert c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/approve").status_code == 200
+    r = c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/apply")
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "applied"
@@ -240,11 +260,11 @@ def test_reject_and_stale_plan_do_not_execute_actions(server):
     c = API(server)
     c.post("/api/agent/attach", json={"page_id": "ptest"})
     plan = c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_0", "actions": [{"name": "arrange", "args": {"layout": "grid"}}]}).json()
-    assert c.post(f"/api/agent/ui/plans/{plan['plan_id']}/reject").json()["status"] == "rejected"
+    assert c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/reject").json()["status"] == "rejected"
     assert not state.get("mutated")
     plan2 = c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_0", "actions": [{"name": "arrange", "args": {"layout": "grid"}}]}).json()
     state["locus"] = {"chrom": "chr2", "start": 0, "end": 10}
-    assert c.post(f"/api/agent/ui/plans/{plan2['plan_id']}/approve").status_code == 409
+    assert c.ui_post(f"/api/agent/ui/plans/{plan2['plan_id']}/approve").status_code == 409
     assert not state.get("mutated")
     assert all(x["name"] == "describe_workspace" for x in page.seen)
 
@@ -271,9 +291,9 @@ def test_reject_wins_when_approval_is_waiting_for_page_snapshot(server):
 
     pause_snapshot.set()
     with ThreadPoolExecutor(max_workers=1) as pool:
-        approving = pool.submit(c.post, f"/api/agent/ui/plans/{plan['plan_id']}/approve")
+        approving = pool.submit(c.ui_post, f"/api/agent/ui/plans/{plan['plan_id']}/approve")
         assert snapshot_started.wait(5)
-        rejected = c.post(f"/api/agent/ui/plans/{plan['plan_id']}/reject")
+        rejected = c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/reject")
         assert rejected.status_code == 200
         assert rejected.json()["status"] == "rejected"
         release_snapshot.set()
@@ -302,8 +322,8 @@ def test_action_failure_does_not_retry(server):
     c.post("/api/agent/attach", json={"page_id": "ptest"})
     plan = c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_0", "actions": [
         {"name": "set_locus", "args": {"chrom": "chr1"}}, {"name": "arrange", "args": {"layout": "grid"}}]}).json()
-    c.post(f"/api/agent/ui/plans/{plan['plan_id']}/approve")
-    r = c.post(f"/api/agent/ui/plans/{plan['plan_id']}/apply")
+    c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/approve")
+    r = c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/apply")
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "failed"
@@ -342,8 +362,8 @@ def test_apply_rechecks_revision_before_each_action_and_stops_when_page_changes(
         {"name": "set_locus", "args": {"chrom": "chr1"}},
         {"name": "arrange", "args": {"layout": "grid"}},
     ]}).json()
-    assert c.post(f"/api/agent/ui/plans/{plan['plan_id']}/approve").status_code == 200
-    result = c.post(f"/api/agent/ui/plans/{plan['plan_id']}/apply")
+    assert c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/approve").status_code == 200
+    result = c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/apply")
     assert result.status_code == 200
     body = result.json()
     assert body["status"] == "stale"
@@ -370,8 +390,8 @@ def test_failed_action_returns_canonical_readback_and_history(server):
     plan = c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_0", "actions": [
         {"name": "arrange", "args": {"layout": "grid"}},
     ]}).json()
-    c.post(f"/api/agent/ui/plans/{plan['plan_id']}/approve")
-    result = c.post(f"/api/agent/ui/plans/{plan['plan_id']}/apply").json()
+    c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/approve")
+    result = c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/apply").json()
     assert result["status"] == "failed"
     assert result["state_revision"] == "r_0"
     assert result["canonical"]["source"] == "page_canonical"
@@ -380,6 +400,70 @@ def test_failed_action_returns_canonical_readback_and_history(server):
     assert history[0]["status"] == "failed"
     assert history[0]["canonical"]["source"] == "page_canonical"
     assert history[0]["state_revision"] == "r_0"
+
+
+def test_final_canonical_read_failure_marks_plan_failed_with_readback_history(server):
+    describes = 0
+
+    def handler(name, args):
+        nonlocal describes
+        if name == "describe_workspace":
+            describes += 1
+            if describes >= 5:
+                raise ValueError("canonical readback unavailable")
+            return {"dataset": {}, "views": [], "locus": None}
+        if name == "__agent_lease__":
+            return {"active": args["active"]}
+        if name == "__agent_snapshot__":
+            return {}
+        return {"ok": True}
+
+    _page(server, handler)
+    c = API(server)
+    c.post("/api/agent/attach", json={"page_id": "ptest"})
+    plan = c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_0", "actions": [
+        {"name": "arrange", "args": {"layout": "grid"}},
+    ]}).json()
+    c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/approve")
+    result = c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/apply")
+    assert result.status_code == 200
+    body = result.json()
+    assert body["status"] == "failed"
+    assert body["results"][-1]["name"] == "describe_workspace"
+    assert body["results"][-1]["ok"] is False
+    history = c.get("/api/agent/history", params={"page": "ptest"}).json()
+    assert history[0]["status"] == "failed"
+    assert history[0]["results"][-1]["name"] == "describe_workspace"
+
+
+def test_release_lease_failure_marks_apply_failed_and_surfaces_error(server):
+    calls = []
+
+    def handler(name, args):
+        calls.append((name, args))
+        if name == "describe_workspace":
+            return {"dataset": {}, "views": [], "locus": None}
+        if name == "__agent_lease__":
+            if args["active"] is False:
+                raise ValueError("lease release unavailable")
+            return {"active": True}
+        if name == "__agent_snapshot__":
+            return {}
+        return {"ok": True}
+
+    _page(server, handler)
+    c = API(server)
+    c.post("/api/agent/attach", json={"page_id": "ptest"})
+    plan = c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_0", "actions": [
+        {"name": "arrange", "args": {"layout": "grid"}},
+    ]}).json()
+    c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/approve")
+    result = c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/apply")
+    assert result.status_code == 200
+    body = result.json()
+    assert body["status"] == "failed"
+    assert body["results"][-1]["name"] == "__agent_lease__"
+    assert "release" in body["results"][-1]["error"]
 
 
 def test_history_supports_revision_checked_undo_for_latest_ui_plan(server):
@@ -408,12 +492,12 @@ def test_history_supports_revision_checked_undo_for_latest_ui_plan(server):
     plan = c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_0", "actions": [
         {"name": "arrange", "args": {"layout": "grid"}},
     ]}).json()
-    c.post(f"/api/agent/ui/plans/{plan['plan_id']}/approve")
-    applied = c.post(f"/api/agent/ui/plans/{plan['plan_id']}/apply").json()
+    c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/approve")
+    applied = c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/apply").json()
     assert applied["status"] == "applied"
     history = c.get("/api/agent/history", params={"page": "ptest"}).json()
     assert history[0]["can_undo"] is True
-    undone = c.post(f"/api/agent/ui/plans/{plan['plan_id']}/undo",
+    undone = c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/undo",
                     params={"page_id": "ptest", "expected_revision": applied["state_revision"]}).json()
     assert undone["status"] == "undone"
     assert state["layout"] == "tabs"

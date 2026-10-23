@@ -52,15 +52,17 @@ class FakePage(threading.Thread):
         self.base, self.handler, self.page = base, handler, page
         self.seen = []
         self.ready = threading.Event()
+        self.token = ""
 
     def run(self):
-        with requests.get(f"{self.base}/api/control/events", params={"page": self.page}, stream=True,
-                          timeout=30) as r:
+        with requests.get(f"{self.base}/api/control/events", params={"page": self.page},
+                          headers={"Origin": self.base}, stream=True, timeout=30) as r:
             event = None
             for line in r.iter_lines(decode_unicode=True):
                 if line.startswith("event: "):
                     event = line[7:]
                 elif line.startswith("data: ") and event == "hello":
+                    self.token = json.loads(line[6:]).get("token", "")
                     self.ready.set()
                 elif line.startswith("data: ") and event == "action":
                     msg = json.loads(line[6:])
@@ -69,7 +71,8 @@ class FakePage(threading.Thread):
                         body = {"ok": True, "result": self.handler(msg["name"], msg["args"])}
                     except Exception as exc:  # noqa: BLE001
                         body = {"ok": False, "error": str(exc)}
-                    requests.post(f"{self.base}/api/control/results/{msg['id']}", json=body, timeout=5)
+                    requests.post(f"{self.base}/api/control/results/{msg['id']}", json=body,
+                                   headers={"Origin": self.base, "X-UChrom-Page-Token": self.token}, timeout=5)
 
 
 def test_tools_file_is_valid():
@@ -216,3 +219,8 @@ def test_workspace_agent_snapshot_requires_explicit_page_and_exposes_no_apply_wr
     assert not hasattr(ws, "approve_plan")
     assert not hasattr(ws, "reject_plan")
     assert not hasattr(ws, "apply_plan")
+
+
+def test_control_mutation_rejects_direct_localhost_post_without_session(server):
+    r = requests.post(server + "/api/control/actions", json={"name": "describe_workspace", "args": {}})
+    assert r.status_code == 401

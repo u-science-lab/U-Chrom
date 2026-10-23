@@ -71,6 +71,7 @@ class RealDataPage(threading.Thread):
         self.ready = threading.Event()
         self.stopping = threading.Event()
         self.response = None
+        self.page_token = ""
         self.seen: list[dict] = []
         self.state: dict = {}
         self.canonical_cells: list[str] = []
@@ -175,8 +176,8 @@ class RealDataPage(threading.Thread):
 
         while not self.stopping.is_set():
             try:
-                with requests.get(f"{self.base}/api/control/events", params={"page": self.page}, stream=True,
-                                  timeout=(5, 30)) as response:
+                with requests.get(f"{self.base}/api/control/events", params={"page": self.page},
+                                  headers={"Origin": self.base}, stream=True, timeout=(5, 30)) as response:
                     self.response = response
                     event = None
                     for line in response.iter_lines(decode_unicode=True):
@@ -185,6 +186,7 @@ class RealDataPage(threading.Thread):
                         if line.startswith("event: "):
                             event = line[7:]
                         elif line.startswith("data: ") and event == "hello":
+                            self.page_token = json.loads(line[6:]).get("token", "")
                             self.ready.set()
                         elif line.startswith("data: ") and event == "action":
                             message = json.loads(line[6:])
@@ -194,7 +196,8 @@ class RealDataPage(threading.Thread):
                             except Exception as exc:  # noqa: BLE001
                                 body = {"ok": False, "error": str(exc)}
                             if not self.stopping.is_set():
-                                requests.post(f"{self.base}/api/control/results/{message['id']}", json=body, timeout=5)
+                                requests.post(f"{self.base}/api/control/results/{message['id']}", json=body,
+                                               headers={"Origin": self.base, "X-UChrom-Page-Token": self.page_token}, timeout=5)
             except requests.exceptions.RequestException:
                 if not self.stopping.is_set():
                     self.stopping.wait(0.05)
@@ -228,11 +231,13 @@ def test_real_data_agent_loop_applies_canonical_locus_stats_and_genome_plan(serv
         expected_revision=snapshot["state_revision"],
     )
     assert plan["status"] == "pending"
+    proof = requests.get(f"{server}/api/control/session").json()
+    ui_headers = {"Origin": server, "Authorization": f"Bearer {proof['token']}", "X-CSRF-Token": proof["csrf_token"]}
     ui_plan_url = f"{server}/api/agent/ui/plans/{plan['plan_id']}"
     apply_url = f"{ui_plan_url}/apply"
-    assert requests.post(apply_url).status_code == 409
-    assert requests.post(f"{ui_plan_url}/approve").json()["status"] == "approved"
-    result = requests.post(apply_url).json()
+    assert requests.post(apply_url, headers=ui_headers).status_code == 409
+    assert requests.post(f"{ui_plan_url}/approve", headers=ui_headers).json()["status"] == "approved"
+    result = requests.post(apply_url, headers=ui_headers).json()
     assert result["status"] == "applied"
     assert result["canonical"]["locus"] == page.state["locus"]
     assert result["canonical"]["layout"] == "grid"

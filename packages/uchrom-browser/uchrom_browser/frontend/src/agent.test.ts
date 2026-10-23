@@ -50,6 +50,7 @@ describe('agent state helpers', () => {
     await applyAgentPlan('p1')
     await agentHistory('ptest')
     expect(paths).toEqual([
+      'api/control/session',
       'api/agent/ui/plans/p1/approve',
       'api/agent/ui/plans/p1/reject',
       'api/agent/ui/plans/p1/apply',

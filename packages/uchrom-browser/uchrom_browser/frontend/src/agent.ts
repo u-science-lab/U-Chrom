@@ -25,8 +25,33 @@ export interface AgentSnapshot {
   [key: string]: unknown
 }
 
+interface AgentSessionProof { token: string; csrf_token: string; expires_in?: number }
+let sessionProof: AgentSessionProof | null = null
+let sessionPromise: Promise<AgentSessionProof> | null = null
+
+export async function initAgentSession(): Promise<AgentSessionProof> {
+  if (sessionProof) return sessionProof
+  if (!sessionPromise) {
+    sessionPromise = fetch('api/control/session')
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
+        return response.json() as Promise<AgentSessionProof>
+      })
+      .then((proof) => { sessionProof = proof; return proof })
+      .finally(() => { sessionPromise = null })
+  }
+  return sessionPromise
+}
+
 async function agentRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } })
+  const method = init?.method ?? 'GET'
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(init?.headers as Record<string, string> ?? {}) }
+  if (method !== 'GET' && method !== 'HEAD') {
+    const proof = await initAgentSession()
+    headers.Authorization = `Bearer ${proof.token}`
+    headers['X-CSRF-Token'] = proof.csrf_token
+  }
+  const response = await fetch(path, { ...init, headers })
   if (!response.ok) {
     let detail = String(response.status) + ' ' + response.statusText
     try {

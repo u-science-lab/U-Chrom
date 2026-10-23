@@ -47,13 +47,19 @@ class Workspace:
     def __init__(self, url: Optional[str] = None, timeout: float = 30.0):
         self.url = (url or _default_url()).rstrip("/")
         self.timeout = timeout
+        self._session_proof: Optional[Dict[str, str]] = None
         self._tools = {t["name"]: t for t in self._request("GET", "/api/control/tools")["tools"]}
 
     # -- transport ---------------------------------------------------------
     def _request(self, method: str, path: str, body: Any = None, timeout: Optional[float] = None) -> Any:
         data = None if body is None else json.dumps(body).encode()
+        headers = {"Content-Type": "application/json"}
+        if method not in {"GET", "HEAD"} and path != "/api/control/session":
+            if self._session_proof is None:
+                self._session_proof = self._request("GET", "/api/control/session")
+            headers["Authorization"] = f"Bearer {self._session_proof['token']}"
         req = urllib.request.Request(self.url + path, data=data, method=method,
-                                     headers={"Content-Type": "application/json"})
+                                     headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=(timeout or self.timeout) + 5) as r:
                 return json.loads(r.read() or b"null")
