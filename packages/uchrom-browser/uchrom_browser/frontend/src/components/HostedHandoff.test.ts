@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isCatalogResponseCurrent, isHandoffDialogEscape, trapHandoffDialogTab } from './HostedHandoff'
+import { handoffIssueMessage, isCatalogResponseCurrent, isHandoffDialogEscape, trapHandoffDialogTab } from './HostedHandoff'
 
 describe('hosted handoff dialog helpers', () => {
   it('ignores catalog responses from an older request or dataset', () => {
@@ -24,5 +24,13 @@ describe('hosted handoff dialog helpers', () => {
     expect(focused).toEqual(['close'])
     expect(trapHandoffDialogTab({ key: 'Tab', shiftKey: true, preventDefault: () => {} }, [close, question, done], close)).toBe(true)
     expect(focused).toEqual(['close', 'done'])
+  })
+
+  it('explains the UTF-8 limit and how to make an oversized prompt fit', () => {
+    expect(handoffIssueMessage('state-too-large')).toMatch(/shrink the selection/i)
+    expect(handoffIssueMessage('state-too-large')).toMatch(/nothing was truncated/i)
+    expect(handoffIssueMessage('prompt-too-large')).toMatch(/1 MiB/i)
+    expect(handoffIssueMessage('prompt-too-large')).toMatch(/shrink the selection/i)
+    expect(handoffIssueMessage('invalid-dataset-url')).toMatch(/public HTTPS/i)
   })
 })

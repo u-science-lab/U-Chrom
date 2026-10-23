@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { buildHandoffState, handoffCommand, handoffSummary } from './handoff'
+import { buildHandoffState, buildLocalHandoff, handoffCommand, handoffPrompt, handoffSummary, MAX_HANDOFF_BYTES } from './handoff'
 import { DEFAULT_VIEW } from './store'
-import { defaultWorkspace } from './workspace'
+import { defaultWorkspace, workspaceOf } from './workspace'
 
 describe('hosted handoff state', () => {
   it('serializes current semantic state without localhost or credentials', () => {
@@ -27,8 +27,71 @@ describe('hosted handoff state', () => {
     ]))
   })
 
-  it('keeps the copied instruction as a non-navigable token command', () => {
-    expect(handoffCommand('abc_token')).toBe('Use the U-Chrom local agent to continue this dataset. HANDOFF: abc_token')
-    expect(handoffCommand('abc_token')).not.toContain('?token=')
+  it('captures all pane configuration and the complete workspace layout', () => {
+    const workspace = {
+      ...workspaceOf(['3d', 'stats'], 'grid'),
+      activePane: 'P2',
+      maximized: 'P1',
+      gridCols: [0.4, 0.6],
+      gridRows: [1],
+      panes: [
+        { ...workspaceOf(['3d']).panes[0], scope: { kind: 'cell' as const, cell: 'c1' } },
+        { ...workspaceOf(['stats']).panes[0], id: 'P2', statsKind: 'rg' as const, chromScope: 'locus' as const, scope: { kind: 'group' as const, group: 'g2' }, compareGroups: ['g1', 'g2'] },
+      ],
+    }
+    const state = buildHandoffState(DEFAULT_VIEW, workspace)
+
+    expect(state.layout).toEqual({ kind: 'grid', maximized: 'P1', grid_cols: [0.4, 0.6], grid_rows: [1] })
+    expect(state.workspace.active_pane).toBe('P2')
+    expect(state.views).toEqual([
+      { id: 'P1', type: '3d', embeddingKey: null, dims: [0, 1], scope: { kind: 'cell', cell: 'c1' } },
+      { id: 'P2', type: 'stats', embeddingKey: null, dims: [0, 1], scope: { kind: 'group', group: 'g2' }, statsKind: 'rg', chromScope: 'locus', compareGroups: ['g1', 'g2'] },
+    ])
+  })
+
+  it('builds a safely quoted local Python command from a public dataset URL', () => {
+    expect(handoffCommand("https://atlas.example/data/it's a dataset.zarr")).toBe("python -m uchrom_browser 'https://atlas.example/data/it'\"'\"'s a dataset.zarr'")
+  })
+
+  it('includes the exact URL, question, and semantic snapshot in the local-agent prompt', () => {
+    const state = buildHandoffState(
+      { ...DEFAULT_VIEW, focusCell: 'c2', selection: { id: 'g1', cells: ['c1', 'c2'] }, locus: { chrom: 'chr1', start: 10, end: 100 } },
+      { ...workspaceOf(['3d', 'stats'], 'grid'), panes: [
+        { ...workspaceOf(['3d']).panes[0], scope: { kind: 'focus' as const } },
+        { ...workspaceOf(['stats']).panes[0], id: 'P2', statsKind: 'rg' as const, chromScope: 'locus' as const, scope: { kind: 'group' as const, group: 'g1' } },
+      ], activePane: 'P2', gridCols: [0.4, 0.6], gridRows: [1], maximized: null },
+    )
+    const prompt = handoffPrompt('https://atlas.example/data.zarr', 'Compare the selected cells', state)
+    const input = prompt.match(/```json\n([\s\S]*?)\n```/)
+
+    expect(prompt).toMatch(/already-configured U-Chrom MCP/i)
+    expect(prompt).toContain('propose matching changes for approval in the local WebUI')
+    expect(input).not.toBeNull()
+    expect(JSON.parse(input![1])).toEqual({
+      dataset_url: 'https://atlas.example/data.zarr',
+      question: 'Compare the selected cells',
+      semantic_snapshot: state,
+    })
+  })
+
+  it('rejects state and prompt above the UTF-8 limit without truncating them', () => {
+    const base = buildHandoffState(DEFAULT_VIEW, defaultWorkspace(false))
+    const oversizedState = buildLocalHandoff('https://atlas.example/data.zarr', '', {
+      ...base,
+      selection: { cells: ['细'.repeat(Math.ceil(MAX_HANDOFF_BYTES / 3))], source: 'lasso' },
+    })
+    const oversizedPrompt = buildLocalHandoff('https://atlas.example/data.zarr', '界'.repeat(Math.ceil(MAX_HANDOFF_BYTES / 3)), base)
+
+    expect(oversizedState).toMatchObject({ ok: false, reason: 'state-too-large' })
+    expect('prompt' in oversizedState).toBe(false)
+    expect(oversizedPrompt).toMatchObject({ ok: false, reason: 'prompt-too-large' })
+    expect('prompt' in oversizedPrompt).toBe(false)
+  })
+
+  it('does not create a local command for a localhost dataset URL', () => {
+    const result = buildLocalHandoff('http://localhost:8765/data.zarr', '', buildHandoffState(DEFAULT_VIEW, defaultWorkspace(false)))
+
+    expect(result).toMatchObject({ ok: false, reason: 'invalid-dataset-url' })
+    expect('command' in result).toBe(false)
   })
 })

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchAtlas, fetchHealth } from '../api'
-import { buildHandoffState, handoffCommand, handoffSummary, type HandoffState } from '../handoff'
+import { buildHandoffState, buildLocalHandoff, handoffSummary, type HandoffState } from '../handoff'
 import { activeView, useStore } from '../store'
 import type { AtlasDataset } from '../types'
 
@@ -23,6 +23,12 @@ export function trapHandoffDialogTab(event: { key: string; shiftKey: boolean; pr
   return true
 }
 
+export function handoffIssueMessage(reason: 'invalid-dataset-url' | 'state-too-large' | 'prompt-too-large'): string {
+  if (reason === 'invalid-dataset-url') return 'The dataset URL must be a public HTTPS URL.'
+  if (reason === 'state-too-large') return 'The semantic snapshot exceeds 1 MiB UTF-8. Shrink the selection and reopen this dialog; nothing was truncated.'
+  return 'The full prompt exceeds 1 MiB UTF-8. Shorten the question or shrink the selection; nothing was truncated.'
+}
+
 export function HostedHandoff() {
   const dataset = useStore((s) => s.datasets.find((d) => d.id === s.activeDatasetId))
   const view = useStore((s) => activeView(s))
@@ -33,9 +39,7 @@ export function HostedHandoff() {
   const [open, setOpen] = useState(false)
   const [question, setQuestion] = useState('')
   const [state, setState] = useState<HandoffState | null>(null)
-  const [command, setCommand] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
   const [catalogPending, setCatalogPending] = useState(false)
   const catalogGeneration = useRef(0)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -80,6 +84,7 @@ export function HostedHandoff() {
   }, [dataset?.id, dataset?.path])
 
   const summary = useMemo(() => state && atlasDataset ? handoffSummary(state, { id: atlasDataset.id, name: atlasDataset.name ?? atlasDataset.title }, version) : [], [state, atlasDataset, version])
+  const localHandoff = useMemo(() => state && atlasDataset ? buildLocalHandoff(atlasDataset.url, question, state) : null, [state, atlasDataset, question])
   if (!hosted || !dataset) return null
 
   const show = () => {
@@ -109,37 +114,16 @@ export function HostedHandoff() {
     void loadCatalog()
     setState(buildHandoffState(view, workspace))
     setQuestion('')
-    setCommand('')
     setError(null)
     setOpen(true)
   }
 
-  const create = async () => {
-    if (!state) return
-    setBusy(true)
-    setError(null)
+  const copy = async (value: string, label: string) => {
+    if (!value) return
     try {
-      const response = await fetch('api/agent/handoffs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dataset_id: atlasDataset?.id, ...(question.trim() ? { question: question.trim() } : {}), page_state: state }),
-      })
-      const body = await response.json().catch(() => ({})) as { token?: string; error?: string }
-      if (!response.ok || !body.token) throw new Error(body.error ?? `handoff failed (${response.status})`)
-      setCommand(handoffCommand(body.token))
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const copy = async () => {
-    if (!command) return
-    try {
-      await navigator.clipboard.writeText(command)
+      await navigator.clipboard.writeText(value)
     } catch {
-      setError('Clipboard access was unavailable. Select and copy the instruction manually.')
+      setError(`Clipboard access was unavailable. Select and copy the ${label} manually.`)
     }
   }
 
@@ -151,18 +135,30 @@ export function HostedHandoff() {
           <section ref={modalRef} className="handoff-modal" role="dialog" aria-modal="true" aria-labelledby="hosted-handoff-title">
             <button ref={closeRef} className="handoff-modal-close" onClick={() => setOpen(false)} aria-label="Close">×</button>
             <h2 id="hosted-handoff-title">Continue locally</h2>
-            <p className="muted small">Confirm the exact semantic state that will be transferred. Atlas and hosted pages never probe localhost.</p>
+            <p className="muted small">Confirm the exact semantic state that will be included in your local prompt. This page never probes localhost or sends the snapshot to a server.</p>
             {summary.length ? (
               <dl className="handoff-state-facts">
                 {summary.map(([label, value]) => <span key={label}><dt>{label}</dt><dd>{value}</dd></span>)}
               </dl>
-            ) : <p className="muted small">Matching this dataset to the public catalog…</p>}
+            ) : <p className="muted small">{catalogPending ? 'Matching this dataset to the public catalog…' : 'No matching public catalog URL was found, so a local command cannot be generated.'}</p>}
+            {atlasDataset && <p className="muted small">Public dataset URL: <code>{atlasDataset.url}</code></p>}
             <label className="small" htmlFor="hosted-handoff-question">Question for your agent</label>
             <textarea id="hosted-handoff-question" rows={3} maxLength={4000} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Tell the agent what you want to compare, locate, or inspect" />
-            <p className="muted small">Only the dataset reference, confirmed page state, and question are sent. No local paths, credentials, or raw matrix are included.</p>
+            <p className="muted small">The prompt contains the public dataset URL, your question, and this exact semantic snapshot. No local paths, credentials, or raw matrix are included.</p>
             {error && <p className="error small">{error}</p>}
-            {command && <div className="handoff-command"><label className="small" htmlFor="hosted-handoff-command">Paste into configured Claude Code or Codex</label><textarea id="hosted-handoff-command" rows={2} readOnly value={command} /><button onClick={copy}>Copy instruction</button><p className="muted small">Valid for 10 minutes and redeemable once. The token is not a URL.</p></div>}
-            <div className="handoff-modal-actions"><button className="primary" onClick={() => void create()} disabled={busy || catalogPending || !atlasDataset}>{busy ? 'Generating…' : 'Generate local handoff'}</button><button onClick={() => setOpen(false)}>Done</button></div>
+            {localHandoff && !localHandoff.ok && <p className="error small">{handoffIssueMessage(localHandoff.reason)}</p>}
+            {localHandoff && 'command' in localHandoff && <div className="handoff-command">
+              <label className="small" htmlFor="hosted-handoff-command">Run this on your computer</label>
+              <textarea id="hosted-handoff-command" rows={2} readOnly value={localHandoff.command} />
+              <button onClick={() => void copy(localHandoff.command, 'command')}>Copy command</button>
+            </div>}
+            {localHandoff?.ok && <div className="handoff-command">
+              <label className="small" htmlFor="hosted-handoff-prompt">Paste this prompt into configured Claude Code or Codex</label>
+              <textarea id="hosted-handoff-prompt" rows={8} readOnly value={localHandoff.prompt} />
+              <button onClick={() => void copy(localHandoff.prompt, 'prompt')}>Copy prompt</button>
+              <p className="muted small">Prompt size: {Math.ceil(localHandoff.promptBytes / 1024)} KiB UTF-8.</p>
+            </div>}
+            <div className="handoff-modal-actions"><button onClick={() => setOpen(false)}>Done</button></div>
           </section>
         </div>
       )}
