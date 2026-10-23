@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { agentHistory, approveAgentPlan, applyAgentPlan, planStatusLabel, rejectAgentPlan, sourceLabel, pendingPlanView, type AgentPlan, type AgentSnapshot } from './agent'
+import { agentHistory, agentSetupStatus, approveAgentPlan, applyAgentPlan, nextSetupAction, planStatusLabel, rejectAgentPlan, setupStageLabel, sourceLabel, pendingPlanView, type AgentPlan, type AgentSnapshot } from './agent'
 
 const snapshot: AgentSnapshot = {
   page_id: 'ptest',
@@ -13,6 +13,27 @@ const snapshot: AgentSnapshot = {
 }
 
 describe('agent state helpers', () => {
+  it('labels setup stages and next actions for the local connection flow', () => {
+    expect(setupStageLabel('not_running')).toContain('Not running')
+    expect(nextSetupAction('not_running')).toBe('Start local WebUI')
+    expect(nextSetupAction('browser_ready')).toBe('Open local page')
+    expect(nextSetupAction('page_connected')).toBe('Pin page')
+    expect(nextSetupAction('page_pinned')).toBe('Ready for analysis')
+  })
+
+  it('reads setup status from health and connected pages through the API boundary', async () => {
+    const paths: string[] = []
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      paths.push(String(input))
+      if (String(input) === 'api/health') return new Response(JSON.stringify({ status: 'ok' }), { status: 200 })
+      return new Response(JSON.stringify([{ page: 'p1', pinned: true }]), { status: 200 })
+    })
+    const status = await agentSetupStatus()
+    expect(status.stage).toBe('page_pinned')
+    expect(paths).toEqual(['api/health', 'api/agent/pages'])
+    vi.unstubAllGlobals()
+  })
+
   it('labels each snapshot source distinctly', () => {
     expect(sourceLabel('page_canonical')).toBe('Page canonical')
     expect(sourceLabel('handoff_imported')).toBe('Handoff imported')

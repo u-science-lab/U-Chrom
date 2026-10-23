@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  agentPages,
+  agentSetupStatus,
   agentHistory,
   applyAgentPlan,
   approveAgentPlan,
@@ -12,10 +12,13 @@ import {
   planStatusLabel,
   rejectAgentPlan,
   sourceLabel,
+  setupStageLabel,
+  nextSetupAction,
   undoAgentPlan,
   type AgentPage,
   type AgentPlan,
   type AgentSnapshot,
+  type AgentSetupStatus,
 } from '../agent'
 
 function statsScope(snapshot: AgentSnapshot): string {
@@ -32,11 +35,14 @@ export function AgentPanel() {
   const [history, setHistory] = useState<AgentPlan[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [setup, setSetup] = useState<AgentSetupStatus>({ stage: 'not_running', pages: [] })
 
   const selectedPage = useMemo(() => pages.find((page) => page.page === pageId), [pages, pageId])
 
   const refreshPages = useCallback(async () => {
-    const next = await agentPages()
+    const status = await agentSetupStatus()
+    const next = status.pages
+    setSetup(status)
     setPages(next)
     setPageId((current) => {
       if (current && next.some((page) => page.page === current)) return current
@@ -57,8 +63,10 @@ export function AgentPanel() {
     const load = async () => {
       try {
         setError(null)
-        const next = await agentPages()
+        const status = await agentSetupStatus()
+        const next = status.pages
         if (!active) return
+        setSetup(status)
         setPages(next)
         setPageId((current) => current && next.some((page) => page.page === current) ? current : next.find((page) => page.pinned)?.page ?? next[0]?.page ?? '')
       } catch (cause) {
@@ -172,9 +180,13 @@ export function AgentPanel() {
     <details className="agent-panel" open>
       <summary className="agent-head">
         <h2>Agent</h2>
-        <span className="agent-state">{snapshot ? sourceLabel(snapshot.source) : selectedPage?.pinned ? 'Loading…' : 'Not attached'}</span>
+        <span className="agent-state">{snapshot ? sourceLabel(snapshot.source) : setupStageLabel(setup.stage)}</span>
       </summary>
       {error && <p className="error">{error}</p>}
+      <div className="agent-setup-status" aria-live="polite">
+        <span className="agent-setup-stage">{setupStageLabel(setup.stage)}</span>
+        <span className="agent-setup-next">{nextSetupAction(setup.stage)}</span>
+      </div>
       {!pages.length && !error && <p className="muted small">No connected agent pages.</p>}
       {pages.length > 0 && (
         <>

@@ -157,12 +157,15 @@ class _Bridge:
                 ws = self._workspace()
                 health = ws._request("GET", "/api/health")
                 pages = ws.agent_pages()
+                stage = "page_pinned" if any(page.get("pinned") for page in pages) else (
+                    "page_connected" if pages else "browser_ready"
+                )
                 return {"companion_version": __version__, "mcp_status": "ready",
                         "browser_status": "running", "browser_url": ws.url,
-                        "connected_pages": len(pages), "health": health}
+                        "connected_pages": len(pages), "health": health, "stage": stage}
             except Exception as exc:
                 return {"companion_version": __version__, "mcp_status": "ready",
-                        "browser_status": "not_running", "detail": str(exc)}
+                        "browser_status": "not_running", "stage": "not_running", "detail": str(exc)}
 
         if name == "uchrom_attach_handoff":
             payload = attach_handoff(args["handoff_token"], connect=self._workspace,

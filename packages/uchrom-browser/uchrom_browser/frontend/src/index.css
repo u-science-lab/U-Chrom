@@ -1466,6 +1466,21 @@ body.resizing-rows {
   color: var(--text-muted);
   font-size: 11px;
 }
+.agent-setup-status {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: 11px;
+}
+.agent-setup-stage {
+  color: var(--text);
+  font-weight: 600;
+}
+.agent-setup-next {
+  color: var(--accent);
+}
 .agent-status-pending {
   color: var(--warn);
 }

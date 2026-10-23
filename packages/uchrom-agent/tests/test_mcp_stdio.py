@@ -6,14 +6,20 @@ from uchrom_agent.mcp_stdio import serve
 
 class FakeWorkspace:
     def __init__(self):
+        self.url = "http://127.0.0.1:8765"
         self.pages = [{"page": "page-1", "active": True, "pinned": True}]
         self.proposals = []
         self.attached_pages = []
+        self.health_ok = True
 
     def agent_pages(self):
         return self.pages
 
     def _request(self, method, path, body=None):
+        if method == "GET" and path == "/api/health":
+            if not self.health_ok:
+                raise RuntimeError("browser is unavailable")
+            return {"status": "ok"}
         assert method == "POST" and path == "/api/agent/attach"
         self.attached_pages.append(body["page_id"])
         return {"page_id": "page-1", "status": "attached"}
@@ -91,6 +97,34 @@ def test_setup_status_returns_structured_content():
     assert result["structuredContent"]["mcp_status"] == "ready"
     assert result["content"][0]["type"] == "text"
     assert json.loads(result["content"][0]["text"]) == result["structuredContent"]
+
+
+def test_setup_status_reports_not_running_when_health_fails():
+    workspace = FakeWorkspace()
+    workspace.health_ok = False
+    responses, _ = _run([{"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                          "params": {"name": "uchrom_setup_status", "arguments": {}}}],
+                        workspace=workspace)
+
+    assert responses[0]["result"]["structuredContent"]["stage"] == "not_running"
+
+
+def test_setup_status_reports_page_connected_for_one_unpinned_page():
+    workspace = FakeWorkspace()
+    workspace.pages = [{"page": "page-1", "active": True, "pinned": False}]
+    responses, _ = _run([{"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                          "params": {"name": "uchrom_setup_status", "arguments": {}}}],
+                        workspace=workspace)
+
+    assert responses[0]["result"]["structuredContent"]["stage"] == "page_connected"
+
+
+def test_setup_status_reports_page_pinned_for_a_pinned_page():
+    responses, _ = _run([{"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                          "params": {"name": "uchrom_setup_status", "arguments": {}}}],
+                        workspace=FakeWorkspace())
+
+    assert responses[0]["result"]["structuredContent"]["stage"] == "page_pinned"
 
 
 def test_workspace_snapshot_returns_page_canonical_state():

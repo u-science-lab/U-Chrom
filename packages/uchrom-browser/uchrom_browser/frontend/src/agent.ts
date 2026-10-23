@@ -1,5 +1,7 @@
 export type AgentSource = 'page_canonical' | 'handoff_imported' | 'analysis_result' | string
 export interface AgentPage { page: string; active?: boolean; pinned?: boolean; since?: number; active_at?: number }
+export type AgentSetupStage = 'not_running' | 'browser_ready' | 'page_connected' | 'page_pinned'
+export interface AgentSetupStatus { stage: AgentSetupStage; pages: AgentPage[] }
 export interface AgentAction { name: string; args: Record<string, unknown> }
 export interface AgentPlan {
   plan_id: string
@@ -64,6 +66,18 @@ async function agentRequest<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const agentPages = () => agentRequest<AgentPage[]>('api/agent/pages')
+export async function agentSetupStatus(): Promise<AgentSetupStatus> {
+  try {
+    await agentRequest<Record<string, unknown>>('api/health')
+  } catch {
+    return { stage: 'not_running', pages: [] }
+  }
+  const pages = await agentPages()
+  const stage: AgentSetupStage = pages.some((page) => page.pinned)
+    ? 'page_pinned'
+    : pages.length > 0 ? 'page_connected' : 'browser_ready'
+  return { stage, pages }
+}
 export const attachAgentPage = (pageId: string) =>
   agentRequest<{ page_id: string; state_revision: string; status: string }>('api/agent/attach', { method: 'POST', body: JSON.stringify({ page_id: pageId }) })
 export const loadAgentSnapshot = (pageId: string) =>
@@ -84,6 +98,22 @@ export const undoAgentPlan = (planId: string, pageId: string, expectedRevision: 
 
 export function sourceLabel(source: AgentSource): string {
   return { page_canonical: 'Page canonical', handoff_imported: 'Handoff imported', analysis_result: 'Analysis result' }[source] ?? source
+}
+export function setupStageLabel(stage: AgentSetupStage | string): string {
+  return {
+    not_running: 'Not running',
+    browser_ready: 'Browser ready',
+    page_connected: 'Page connected',
+    page_pinned: 'Page pinned',
+  }[stage] ?? stage
+}
+export function nextSetupAction(stage: AgentSetupStage | string): string {
+  return {
+    not_running: 'Start local WebUI',
+    browser_ready: 'Open local page',
+    page_connected: 'Pin page',
+    page_pinned: 'Ready for analysis',
+  }[stage] ?? 'Check local WebUI'
 }
 export function planStatusLabel(status: string): string {
   return { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', stale: 'Stale', applied: 'Applied', failed: 'Failed', undone: 'Undone' }[status] ?? status
