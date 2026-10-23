@@ -35,7 +35,8 @@ kept in the repository: put an R2 API token (Object Read & Write, this bucket on
 
    The hero animation's data (`apps/atlas/site/hero.json`: a section drawn after a spatial Hi-C cerebellum section and
    three HiRES brain cells' 3-D genomes) is written by `python apps/atlas/hero_data.py`; commit it too.
-   then `python apps/atlas/build.py site dist/site --catalog catalog.json --hosted URL` and deploy `dist/site`
+   then `python apps/atlas/build.py site dist/site --catalog catalog.json --hosted URL \
+       --agent-handoff https://uchrom-browser.u-science.org/api/agent/handoffs` and deploy `dist/site`
    (`apps/README.md`).
 
 Notes learned the hard way: Cloudflare rejects Python's default `urllib` user agent on the public domain (aiohttp /

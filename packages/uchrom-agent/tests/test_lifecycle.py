@@ -191,6 +191,49 @@ def test_handoff_actions_preserve_stats_scope_as_an_open_view_action():
     ]
 
 
+def test_handoff_actions_restore_focus_pane_scopes_and_active_pane():
+    actions, warnings = _handoff_actions({
+        "page_state": {
+            "focus": {"cell": "c9", "group": None},
+            "workspace": {"active_pane": "P2"},
+            "views": [
+                {"id": "P1", "type": "3d", "scope": {"kind": "all"}},
+                {"id": "P2", "type": "genome", "scope": {"kind": "cell", "cell": "c9"}},
+                {"id": "P3", "type": "stats", "scope": {"kind": "group", "group": "g123"}, "stats_kind": "rg", "chrom_scope": "locus"},
+            ],
+            "layout": "grid",
+        },
+    })
+
+    assert warnings == []
+    assert actions == [
+        {"name": "focus", "args": {"cell": "c9"}},
+        {"name": "open_view", "args": {"type": "3d", "cells": "all"}},
+        {"name": "open_view", "args": {"type": "genome", "cells": "c9"}},
+        {"name": "open_view", "args": {"type": "stats", "cells": "g123", "stats": "rg", "chrom_scope": "locus"}},
+        {"name": "show_view", "args": {"pane": "P2"}},
+        {"name": "arrange", "args": {"layout": "grid"}},
+    ]
+
+
+@pytest.mark.parametrize("state", [
+    {"focus": {"cell": "c1", "group": "g1"}},
+    {"focus": {"cell": 1}},
+    {"focus": {"cell": None, "group": None, "unexpected": "x"}},
+    {"workspace": {"active_pane": 1}},
+    {"workspace": {"active_pane": "P1", "command": "unsafe"}},
+    {"views": [{"id": "P1", "type": "3d", "scope": {"kind": "unknown"}}]},
+    {"views": [{"id": "P1", "type": "3d", "scope": {"kind": "cell"}}]},
+    {"views": [{"id": "P1", "type": "3d", "scope": {"kind": "all", "cell": "c1"}}]},
+    {"views": [{"id": "P1", "type": "3d", "scope": {"kind": "group", "group": ""}}]},
+    {"views": [{"id": "P1", "type": "3d", "scope": {"kind": "focus", "cell": "c1"}}]},
+    {"views": [{"id": "P1", "type": "3d"}, {"id": "P1", "type": "stats"}], "workspace": {"active_pane": "P1"}},
+])
+def test_handoff_actions_reject_invalid_focus_workspace_and_pane_scope(state):
+    with pytest.raises(ValueError):
+        _handoff_actions({"page_state": state})
+
+
 @pytest.mark.parametrize("state", [
     None,
     [],

@@ -194,7 +194,7 @@ def _handoff_actions(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
     if "page_state" not in payload:
         return [], []
     state = payload["page_state"]
-    state = _object(state, {"selection", "locus", "views", "layout"}, "handoff page_state")
+    state = _object(state, {"selection", "locus", "views", "layout", "focus", "workspace"}, "handoff page_state")
     actions: list[dict[str, Any]] = []
     warnings: list[str] = []
     selection = state.get("selection")
@@ -210,6 +210,24 @@ def _handoff_actions(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
             _string(selection["source"], "selection.source")
     if cells:
         actions.append({"name": "select_cells", "args": {"cells": cells}})
+    if "focus" in state:
+        focus = _object(state["focus"], {"cell", "group"}, "handoff focus")
+        if set(focus) != {"cell", "group"}:
+            raise ValueError("handoff focus must contain cell and group")
+        focus_cell = focus.get("cell")
+        focus_group = focus.get("group")
+        if focus_cell is not None:
+            _string(focus_cell, "focus.cell")
+        if focus_group is not None:
+            _string(focus_group, "focus.group")
+        if focus_cell is not None and focus_group is not None:
+            raise ValueError("handoff focus may contain a cell or group, not both")
+        focus_args: dict[str, str] = {}
+        if focus_cell is not None:
+            focus_args["cell"] = focus_cell
+        elif focus_group is not None:
+            focus_args["group"] = focus_group
+        actions.append({"name": "focus", "args": focus_args})
     locus = state.get("locus")
     if locus is not None:
         locus = _object(locus, {"chrom", "start", "end"}, "handoff locus")
@@ -223,8 +241,14 @@ def _handoff_actions(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
     views = state.get("views", [])
     if not isinstance(views, list):
         raise ValueError("handoff views must be a list")
+    view_ids: set[str] = set()
     for view in views:
-        view = _object(view, {"type", "stats_kind", "chrom_scope"}, "handoff view")
+        view = _object(view, {"id", "type", "scope", "stats_kind", "chrom_scope"}, "handoff view")
+        if "id" in view:
+            view_id = _string(view["id"], "view.id")
+            if view_id in view_ids:
+                raise ValueError("handoff view IDs must be unique")
+            view_ids.add(view_id)
         if view.get("type") not in ("3d", "spatial", "embedding", "genome", "matrix", "stats"):
             raise ValueError("unsupported handoff view type")
         if view["type"] != "stats" and ("stats_kind" in view or "chrom_scope" in view):
@@ -233,10 +257,39 @@ def _handoff_actions(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
             raise ValueError("unsupported handoff stats_kind")
         if "chrom_scope" in view and view["chrom_scope"] not in ("all", "locus"):
             raise ValueError("unsupported handoff chrom_scope")
-        args = dict(view)
-        if "stats_kind" in args:
-            args["stats"] = args.pop("stats_kind")
+        args = {"type": view["type"]}
+        scope = view.get("scope")
+        if scope is not None:
+            scope = _object(scope, {"kind", "cell", "group"}, "handoff view scope")
+            kind = scope.get("kind")
+            if kind == "focus":
+                if set(scope) != {"kind"}:
+                    raise ValueError("focus view scope cannot contain a cell or group")
+            elif kind == "all":
+                if set(scope) != {"kind"}:
+                    raise ValueError("all view scope cannot contain a cell or group")
+                args["cells"] = "all"
+            elif kind == "cell":
+                if set(scope) != {"kind", "cell"}:
+                    raise ValueError("cell view scope must contain only cell")
+                args["cells"] = _string(scope.get("cell"), "view scope.cell")
+            elif kind == "group":
+                if set(scope) != {"kind", "group"}:
+                    raise ValueError("group view scope must contain only group")
+                args["cells"] = _string(scope.get("group"), "view scope.group")
+            else:
+                raise ValueError("unsupported handoff view scope")
+        if "stats_kind" in view:
+            args["stats"] = view["stats_kind"]
+        if "chrom_scope" in view:
+            args["chrom_scope"] = view["chrom_scope"]
         actions.append({"name": "open_view", "args": args})
+    if "workspace" in state:
+        workspace = _object(state["workspace"], {"active_pane"}, "handoff workspace")
+        active_pane = _string(workspace.get("active_pane"), "workspace.active_pane")
+        if active_pane not in view_ids:
+            raise ValueError("workspace.active_pane must refer to a handoff view")
+        actions.append({"name": "show_view", "args": {"pane": active_pane}})
     if "layout" in state:
         if state["layout"] not in ("tabs", "grid"):
             raise ValueError("handoff layout must be tabs or grid")
