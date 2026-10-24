@@ -1,7 +1,7 @@
 export type AgentSource = 'page_canonical' | 'handoff_imported' | 'analysis_result' | string
 export interface AgentPage { page: string; active?: boolean; pinned?: boolean; since?: number; active_at?: number }
 export type AgentSetupStage = 'not_running' | 'browser_ready' | 'page_connected' | 'page_pinned'
-export interface AgentSetupStatus { stage: AgentSetupStage; pages: AgentPage[] }
+export interface AgentSetupStatus { stage: AgentSetupStage; pages: AgentPage[]; selected_page_id?: string }
 export interface AgentAction { name: string; args: Record<string, unknown> }
 export interface AgentPlan {
   plan_id: string
@@ -66,17 +66,26 @@ async function agentRequest<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const agentPages = () => agentRequest<AgentPage[]>('api/agent/pages')
-export async function agentSetupStatus(): Promise<AgentSetupStatus> {
+export function setupStageForPage(status: Pick<AgentSetupStatus, 'stage' | 'pages'>, selectedPageId?: string): AgentSetupStage {
+  if (status.stage === 'not_running') return 'not_running'
+  if (!selectedPageId) return status.stage
+  const selected = status.pages.find((page) => page.page === selectedPageId)
+  if (selected) return selected.pinned ? 'page_pinned' : 'page_connected'
+  return status.pages.length > 0 ? 'page_connected' : 'browser_ready'
+}
+
+export async function agentSetupStatus(selectedPageId?: string): Promise<AgentSetupStatus> {
   try {
     await agentRequest<Record<string, unknown>>('api/health')
   } catch {
-    return { stage: 'not_running', pages: [] }
+    return { stage: 'not_running', pages: [], ...(selectedPageId ? { selected_page_id: selectedPageId } : {}) }
   }
   const pages = await agentPages()
-  const stage: AgentSetupStage = pages.some((page) => page.pinned)
+  const globalStage: AgentSetupStage = pages.some((page) => page.pinned)
     ? 'page_pinned'
     : pages.length > 0 ? 'page_connected' : 'browser_ready'
-  return { stage, pages }
+  const stage = setupStageForPage({ stage: globalStage, pages }, selectedPageId)
+  return { stage, pages, ...(selectedPageId ? { selected_page_id: selectedPageId } : {}) }
 }
 export const attachAgentPage = (pageId: string) =>
   agentRequest<{ page_id: string; state_revision: string; status: string }>('api/agent/attach', { method: 'POST', body: JSON.stringify({ page_id: pageId }) })

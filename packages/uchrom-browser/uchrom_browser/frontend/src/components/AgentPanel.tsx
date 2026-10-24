@@ -12,6 +12,7 @@ import {
   planStatusLabel,
   rejectAgentPlan,
   sourceLabel,
+  setupStageForPage,
   setupStageLabel,
   nextSetupAction,
   undoAgentPlan,
@@ -53,7 +54,7 @@ export function AgentPanel() {
   const [setup, setSetup] = useState<AgentSetupStatus>({ stage: 'not_running', pages: [] })
 
   const selectedPage = useMemo(() => pages.find((page) => page.page === pageId), [pages, pageId])
-  const panelView = agentPanelViewModel(setup.stage, snapshot, null)
+  const panelView = agentPanelViewModel(setupStageForPage(setup, pageId), snapshot, null)
 
   const refreshPages = useCallback(async () => {
     const status = await agentSetupStatus()
@@ -225,7 +226,7 @@ export function AgentPanel() {
               </dl>
               {plans.map((plan) => {
                 const stale = plan.page_id !== snapshot.page_id || plan.expected_revision !== snapshot.state_revision
-                const planView = agentPanelViewModel(setup.stage, snapshot, plan, busy !== null)
+                const planView = agentPanelViewModel(setupStageForPage(setup, pageId), snapshot, plan, busy !== null)
                 return (
                   <div className="agent-plan" key={plan.plan_id}>
                     <div className="agent-plan-title">
@@ -235,7 +236,7 @@ export function AgentPanel() {
                     <ol>{plan.actions.map((action, index) => <li key={`${plan.plan_id}-${index}`}>{formatAction(action)}</li>)}</ol>
                     <div className="agent-actions">
                       <button onClick={() => void apply(plan)} disabled={!planView.canApply} title={stale ? 'The page changed after this plan was proposed' : 'Approve and apply this plan'}>Apply</button>
-                      <button onClick={() => void reject(plan)} disabled={busy !== null}>Reject</button>
+                      {plan.status === 'pending' && <button onClick={() => void reject(plan)} disabled={busy !== null}>Reject</button>}
                     </div>
                   </div>
                 )

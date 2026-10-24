@@ -382,6 +382,50 @@ def test_action_failure_does_not_retry(server):
     assert calls.count("arrange") == 1
 
 
+def test_partial_action_failure_attempts_rollback_and_reports_after_state(server):
+    state = {"dataset": {"id": "d1"}, "views": [], "locus": None, "layout": "tabs"}
+    calls = []
+
+    def handler(name, args):
+        calls.append(name)
+        if name == "describe_workspace":
+            return dict(state)
+        if name == "__agent_lease__":
+            return {"active": args["active"]}
+        if name == "__agent_snapshot__":
+            return {"dataset_id": "d1", "canonical": dict(state), "workspace": {"layout": state["layout"]}, "view": {}}
+        if name == "__agent_restore__":
+            expected = args["expected_canonical"]
+            if dict(state) != expected:
+                raise ValueError("page changed before rollback")
+            state.clear()
+            state.update(args["state"]["canonical"])
+            return {"ok": True, "canonical": dict(state)}
+        if name == "arrange":
+            state["layout"] = args["layout"]
+            return {"layout": state["layout"]}
+        if name == "set_locus":
+            raise ValueError("second action failed")
+        return {"ok": True}
+
+    _page(server, handler)
+    c = API(server)
+    c.post("/api/agent/attach", json={"page_id": "ptest"})
+    plan = c.post("/api/agent/plans", json={"page_id": "ptest", "expected_revision": "r_0", "actions": [
+        {"name": "arrange", "args": {"layout": "grid"}},
+        {"name": "set_locus", "args": {"chrom": "chr1"}},
+    ]}).json()
+    c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/approve")
+    result = c.ui_post(f"/api/agent/ui/plans/{plan['plan_id']}/apply").json()
+
+    assert result["status"] == "failed"
+    assert state["layout"] == "tabs"
+    assert [item["name"] for item in result["results"]][-1] == "rollback"
+    assert result["results"][-1]["ok"] is True
+    assert result["canonical"]["layout"] == "tabs"
+    assert "after_state" in result
+
+
 def test_apply_rechecks_revision_before_each_action_and_stops_when_page_changes(server):
     state = {"dataset": {}, "views": [], "locus": None}
     calls = []

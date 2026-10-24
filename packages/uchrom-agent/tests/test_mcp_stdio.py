@@ -129,13 +129,35 @@ def test_setup_status_reports_page_pinned_for_a_pinned_page():
 
 def test_workspace_snapshot_returns_page_canonical_state():
     responses, _ = _run([{"jsonrpc": "2.0", "id": 7, "method": "tools/call",
-                          "params": {"name": "uchrom_workspace_snapshot", "arguments": {}}}],
+                          "params": {"name": "uchrom_workspace_snapshot", "arguments": {"page_id": "page-1"}}}],
                         workspace=FakeWorkspace())
 
     result = responses[0]["result"]["structuredContent"]
     assert result["state_revision"] == "r_4"
     assert result["source"] == "page_canonical"
     assert result["selection"]["cells"] == ["cell-1"]
+
+
+def test_workspace_snapshot_requires_explicit_page_id():
+    responses, _ = _run([{"jsonrpc": "2.0", "id": 7, "method": "tools/call",
+                          "params": {"name": "uchrom_workspace_snapshot", "arguments": {}}}],
+                        workspace=FakeWorkspace())
+
+    assert responses[0]["error"]["code"] == -32602
+    assert "page_id" in responses[0]["error"]["message"]
+
+
+def test_unpinned_page_is_not_silently_attached():
+    workspace = FakeWorkspace()
+    workspace.pages = [{"page": "page-1", "active": True, "pinned": False}]
+    responses, _ = _run([{"jsonrpc": "2.0", "id": 7, "method": "tools/call",
+                          "params": {"name": "uchrom_workspace_snapshot", "arguments": {"page_id": "page-1"}}}],
+                        workspace=workspace)
+
+    result = responses[0]["result"]
+    assert result["isError"] is True
+    assert "pin" in result["structuredContent"]["error"].lower()
+    assert workspace.attached_pages == []
 
 
 def test_disconnected_pinned_page_is_never_replaced_by_another_connected_page():
@@ -159,14 +181,15 @@ def test_disconnected_pinned_page_is_never_replaced_by_another_connected_page():
     responses = [json.loads(line) for line in outgoing.getvalue().splitlines()]
 
     assert responses[0]["result"]["structuredContent"]["page_id"] == "page-1"
-    assert responses[1]["result"]["isError"] is True
-    assert workspace.attached_pages == ["page-1"]
+    assert responses[1]["error"]["code"] == -32602
+    assert workspace.attached_pages == []
 
 
 def test_propose_ui_changes_creates_pending_plan_without_apply_tool():
     workspace = FakeWorkspace()
     responses, _ = _run([{"jsonrpc": "2.0", "id": 8, "method": "tools/call",
                           "params": {"name": "uchrom_propose_ui_changes", "arguments": {
+                              "page_id": "page-1", "expected_revision": "r_4",
                               "changes": [{"name": "arrange", "args": {"layout": "grid"}}]}}}],
                         workspace=workspace)
 
@@ -177,6 +200,18 @@ def test_propose_ui_changes_creates_pending_plan_without_apply_tool():
     tool_names = {tool["name"] for tool in _run([{"jsonrpc": "2.0", "id": 1,
                                                    "method": "tools/list"}])[0][0]["result"]["tools"]}
     assert "uchrom_apply_ui_changes" not in tool_names
+
+
+def test_propose_ui_changes_requires_page_and_expected_revision():
+    for arguments, expected in [
+        ({"expected_revision": "r_4", "changes": []}, "page_id"),
+        ({"page_id": "page-1", "changes": []}, "expected_revision"),
+    ]:
+        responses, _ = _run([{"jsonrpc": "2.0", "id": 8, "method": "tools/call",
+                              "params": {"name": "uchrom_propose_ui_changes", "arguments": arguments}}],
+                            workspace=FakeWorkspace())
+        assert responses[0]["error"]["code"] == -32602
+        assert expected in responses[0]["error"]["message"]
 
 
 def test_unknown_tool_returns_jsonrpc_error_without_stdout_logs():

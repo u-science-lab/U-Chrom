@@ -29,28 +29,28 @@ _TOOLS = [
      "inputSchema": _object_schema(), "annotations": {"readOnlyHint": True}},
     {"name": "uchrom_attach_handoff", "description": "Optional relay/import tool: open or reuse the local U-Chrom browser from an explicitly enabled handoff JSON file or relay token. The default local-first flow starts the page first and reads canonical state; UI state is proposed for WebUI approval.",
      "inputSchema": _object_schema({"handoff_token": {"type": "string", "description": "A one-time handoff token, or path to a local handoff JSON file containing dataset.path."}}, ("handoff_token",))},
-    {"name": "uchrom_workspace_snapshot", "description": "Read canonical state from an explicitly pinned local browser page.",
-     "inputSchema": _object_schema({"page_id": {"type": "string"}}), "annotations": {"readOnlyHint": True}},
+    {"name": "uchrom_workspace_snapshot", "description": "Read canonical state from the explicitly pinned local browser page. The user must pin the page in the local WebUI Agent panel first.",
+     "inputSchema": _object_schema({"page_id": {"type": "string"}}, ("page_id",)), "annotations": {"readOnlyHint": True}},
     {"name": "uchrom_get_selection", "description": "Read the canonical page selection, summarizing large selections.",
-     "inputSchema": _object_schema({"page_id": {"type": "string"}, "max_cells": {"type": "integer", "minimum": 0}}), "annotations": {"readOnlyHint": True}},
+     "inputSchema": _object_schema({"page_id": {"type": "string"}, "max_cells": {"type": "integer", "minimum": 0}}, ("page_id",)), "annotations": {"readOnlyHint": True}},
     {"name": "uchrom_export_selection", "description": "Write canonical selected cell IDs to a private temporary JSON file and return its path and digest.",
-     "inputSchema": _object_schema({"page_id": {"type": "string"}}), "annotations": {"readOnlyHint": True}},
+     "inputSchema": _object_schema({"page_id": {"type": "string"}}, ("page_id",)), "annotations": {"readOnlyHint": True}},
     {"name": "uchrom_list_groups", "description": "List groups available in the explicitly pinned local browser page.",
-     "inputSchema": _object_schema({"page_id": {"type": "string"}}), "annotations": {"readOnlyHint": True}},
+     "inputSchema": _object_schema({"page_id": {"type": "string"}}, ("page_id",)), "annotations": {"readOnlyHint": True}},
     {"name": "uchrom_capture_view", "description": "Capture a local browser view to a temporary file.",
      "inputSchema": _object_schema({"page_id": {"type": "string"}, "pane": {"type": "string"},
-                                     "format": {"type": "string", "enum": ["png", "svg", "pdf"]}}),
+                                     "format": {"type": "string", "enum": ["png", "svg", "pdf"]}}, ("page_id",)),
      "annotations": {"readOnlyHint": True}},
     {"name": "uchrom_plan_status", "description": "Read the status and canonical result of a pending UI plan.",
      "inputSchema": _object_schema({"plan_id": {"type": "string"}}, ("plan_id",)), "annotations": {"readOnlyHint": True}},
     {"name": "uchrom_export_snapshot", "description": "Export canonical workspace state to a private temporary JSON file.",
-     "inputSchema": _object_schema({"page_id": {"type": "string"}}), "annotations": {"readOnlyHint": True}},
+     "inputSchema": _object_schema({"page_id": {"type": "string"}}, ("page_id",)), "annotations": {"readOnlyHint": True}},
     {"name": "uchrom_propose_ui_changes", "description": "Create a pending UI change plan. The user must Apply or Reject it in the local U-Chrom WebUI.",
      "inputSchema": _object_schema({"page_id": {"type": "string"}, "expected_revision": {"type": "string"},
                                      "changes": {"type": "array", "items": {"type": "object",
                                          "required": ["name", "args"], "properties": {
                                              "name": {"type": "string"}, "args": {"type": "object"}}}}},
-                                    ("changes",)),
+                                    ("page_id", "expected_revision", "changes")),
      "annotations": {"readOnlyHint": False, "destructiveHint": False}},
 ]
 _TOOL_BY_NAME = {tool["name"]: tool for tool in _TOOLS}
@@ -109,32 +109,24 @@ class _Bridge:
             self.workspace = connect()
         return self.workspace
 
-    def _pin_page(self, page_id: str | None = None) -> str:
+    def _pin_page(self, page_id: str | None = None, *, allow_bound: bool = False) -> str:
         ws = self._workspace()
-        if page_id:
-            ws._request("POST", "/api/agent/attach", {"page_id": page_id})
-            self.page_id = page_id
-            return page_id
-        if self.page_id:
-            pages = ws.agent_pages()
-            if any(p.get("page") == self.page_id for p in pages):
-                return self.page_id
-            raise RuntimeError(
-                f"pinned page {self.page_id!r} is no longer connected; provide an explicit page_id to attach another page"
-            )
-        pages = ws.agent_pages()
-        if len(pages) != 1:
-            raise RuntimeError("an explicit page_id is required when zero or multiple browser pages are connected")
-        page_id = pages[0].get("page")
         if not page_id:
-            raise RuntimeError("browser returned a page without an id")
-        ws._request("POST", "/api/agent/attach", {"page_id": page_id})
+            if allow_bound and self.page_id:
+                return self.page_id
+            raise RuntimeError("an explicit page_id is required; inspect uchrom_setup_status and pin the page in AgentPanel")
+        pages = ws.agent_pages()
+        page = next((item for item in pages if item.get("page") == page_id), None)
+        if page is None:
+            raise RuntimeError(f"page is not connected: {page_id}")
+        if page.get("pinned") is not True:
+            raise RuntimeError(f"page is not pinned: {page_id}; pin it in AgentPanel before reading or proposing changes")
         self.page_id = page_id
         return page_id
 
-    def _snapshot(self, page_id: str | None = None):
+    def _snapshot(self, page_id: str | None = None, *, allow_bound: bool = True):
         ws = self._workspace()
-        pinned = self._pin_page(page_id)
+        pinned = self._pin_page(page_id, allow_bound=allow_bound)
         return ws.agent_snapshot(pinned)
 
     def _bind_handoff(self, page_id, workspace):
@@ -162,7 +154,7 @@ class _Bridge:
                 )
                 return {"companion_version": __version__, "mcp_status": "ready",
                         "browser_status": "running", "browser_url": ws.url,
-                        "connected_pages": len(pages), "health": health, "stage": stage}
+                        "connected_pages": len(pages), "pages": pages, "health": health, "stage": stage}
             except Exception as exc:
                 return {"companion_version": __version__, "mcp_status": "ready",
                         "browser_status": "not_running", "stage": "not_running", "detail": str(exc)}
@@ -173,9 +165,9 @@ class _Bridge:
             return payload
 
         if name == "uchrom_workspace_snapshot":
-            return self._snapshot(args.get("page_id"))
+            return self._snapshot(args["page_id"])
         if name == "uchrom_get_selection":
-            selection = self._page_action("get_selection", {}, args.get("page_id"))
+            selection = self._page_action("get_selection", {}, args["page_id"])
             cells = selection.get("cells", [])
             limit = args.get("max_cells", _MAX_SELECTION_CELLS)
             result = {key: value for key, value in selection.items() if key != "cells"}
@@ -183,14 +175,14 @@ class _Bridge:
                            "truncated": len(cells) > limit})
             return result
         if name == "uchrom_export_selection":
-            selection = self._page_action("get_selection", {}, args.get("page_id"))
+            selection = self._page_action("get_selection", {}, args["page_id"])
             cells = selection.get("cells", [])
             return {**_write_export({"cells": cells}, ".selection.json"), "n_cells": len(cells)}
         if name == "uchrom_list_groups":
-            return self._page_action("list_groups", {}, args.get("page_id"))
+            return self._page_action("list_groups", {}, args["page_id"])
         if name == "uchrom_capture_view":
             fmt = args.get("format", "png")
-            capture = self._page_action("capture_view", {"pane": args.get("pane"), "format": fmt}, args.get("page_id"))
+            capture = self._page_action("capture_view", {"pane": args.get("pane"), "format": fmt}, args["page_id"])
             encoded = capture.get("data_base64") or capture.get("png_base64")
             if not encoded:
                 raise RuntimeError("browser capture did not include image data")
@@ -205,12 +197,14 @@ class _Bridge:
         if name == "uchrom_plan_status":
             return self._workspace().plan_status(args["plan_id"])
         if name == "uchrom_export_snapshot":
-            snapshot = self._snapshot(args.get("page_id"))
+            snapshot = self._snapshot(args["page_id"])
             return {**_write_export(snapshot, ".snapshot.json"), "state_revision": snapshot.get("state_revision")}
         if name == "uchrom_propose_ui_changes":
-            snapshot = self._snapshot(args.get("page_id"))
+            if not args["expected_revision"]:
+                raise ValueError("expected_revision must be explicit and non-empty")
+            snapshot = self._snapshot(args["page_id"])
             page = snapshot["page_id"]
-            revision = args.get("expected_revision", snapshot["state_revision"])
+            revision = args["expected_revision"]
             changes = args["changes"]
             if any(not isinstance(change, dict) or not isinstance(change.get("name"), str)
                    or not isinstance(change.get("args"), dict) for change in changes):

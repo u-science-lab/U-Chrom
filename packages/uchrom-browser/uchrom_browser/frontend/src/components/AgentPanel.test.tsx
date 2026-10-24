@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { agentPanelViewModel } from './AgentPanel'
+import { setupStageForPage } from '../agent'
 
 const snapshot = { page_id: 'page-1', state_revision: 'r-2', source: 'page_canonical' as const }
 
@@ -25,5 +26,15 @@ describe('AgentPanel setup feedback and mutation guard', () => {
     expect(agentPanelViewModel('page_pinned', snapshot, {
       page_id: 'page-1', expected_revision: 'r-1',
     }).canApply).toBe(false)
+  })
+
+  it('shows Pin page for a selected unpinned page even when another page is pinned', () => {
+    const stage = setupStageForPage({
+      stage: 'page_pinned',
+      pages: [{ page: 'A', pinned: true }, { page: 'B', pinned: false }],
+    }, 'B')
+    const view = agentPanelViewModel(stage, null, null)
+    expect(view.stageLabel).toBe('Page connected')
+    expect(view.nextAction).toBe('Pin page')
   })
 })

@@ -86,6 +86,8 @@ class PendingPlan:
             out["state_revision"] = self.state_revision
         if self.canonical is not None:
             out["canonical"] = copy.deepcopy(self.canonical)
+        if self.after_state is not None:
+            out["after_state"] = copy.deepcopy(self.after_state)
         return out
 
 
@@ -280,7 +282,7 @@ class AgentState:
                 except Exception as exc:  # noqa: BLE001
                     plan.results.append({"name": action["name"], "args": copy.deepcopy(action["args"]), "ok": False, "error": str(exc)})
                     plan.status = "failed"
-                    await self._readback_after_failure(plan)
+                    await self._rollback_after_failure(plan)
                     return plan
                 try:
                     canonical = await self._read(plan.page_id)
@@ -288,7 +290,7 @@ class AgentState:
                 except AgentConflict as exc:
                     plan.status = "failed"
                     plan.results.append({"name": "describe_workspace", "ok": False, "error": str(exc)})
-                    await self._readback_after_failure(plan)
+                    await self._rollback_after_failure(plan)
                     return plan
             try:
                 canonical = await self._read(plan.page_id)
@@ -297,15 +299,12 @@ class AgentState:
                 plan.state_revision = revision
                 plan.canonical = copy.deepcopy(canonical)
                 plan.results.append({"name": "describe_workspace", "ok": False, "error": str(exc)})
-                await self._readback_after_failure(plan)
+                await self._rollback_after_failure(plan)
                 return plan
             plan.status = "applied"
             plan.state_revision = canonical["state_revision"]
             plan.canonical = canonical
-            try:
-                plan.after_state = await self.broker.call("__agent_snapshot__", {}, page_id=plan.page_id)
-            except Exception as exc:  # noqa: BLE001
-                plan.undo_reason = plan.undo_reason or f"The page could not capture the resulting UI snapshot: {exc}"
+            await self._capture_after_state(plan)
             return plan
 
     def _known_revision(self, page_id: str) -> str:
@@ -319,6 +318,49 @@ class AgentState:
             plan.state_revision = canonical["state_revision"]
         except AgentConflict as exc:
             plan.results.append({"name": "describe_workspace", "ok": False, "error": str(exc)})
+
+    @staticmethod
+    def _canonical_payload(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        return {key: copy.deepcopy(value) for key, value in snapshot.items()
+                if key not in {"page_id", "state_revision", "source"}}
+
+    async def _capture_after_state(self, plan: PendingPlan) -> None:
+        try:
+            plan.after_state = await self.broker.call("__agent_snapshot__", {}, page_id=plan.page_id)
+        except Exception as exc:  # noqa: BLE001
+            plan.undo_reason = plan.undo_reason or f"The page could not capture the resulting UI snapshot: {exc}"
+            plan.results.append({"name": "__agent_snapshot__", "ok": False, "error": str(exc)})
+
+    async def _rollback_after_failure(self, plan: PendingPlan) -> None:
+        """Restore the pre-plan UI once after a mutation failure, then read back canonical state."""
+        if plan.before_state is None:
+            plan.results.append({"name": "rollback", "ok": False,
+                                 "error": "no restorable pre-plan UI snapshot was captured"})
+            await self._capture_after_state(plan)
+            await self._readback_after_failure(plan)
+            return
+
+        try:
+            current = await self._read(plan.page_id)
+        except AgentConflict as exc:
+            plan.results.append({"name": "rollback", "ok": False,
+                                 "error": f"cannot read current canonical state before rollback: {exc}"})
+            plan.undo_reason = plan.undo_reason or f"Automatic rollback could not verify the current page state: {exc}"
+            await self._capture_after_state(plan)
+            await self._readback_after_failure(plan)
+            return
+
+        try:
+            restored = await self.broker.call("__agent_restore__", {
+                "state": plan.before_state,
+                "expected_canonical": self._canonical_payload(current),
+            }, page_id=plan.page_id, agent_mutation=True)
+            plan.results.append({"name": "rollback", "ok": True, "result": restored})
+        except Exception as exc:  # noqa: BLE001
+            plan.results.append({"name": "rollback", "ok": False, "error": str(exc)})
+            plan.undo_reason = plan.undo_reason or f"Automatic rollback failed; partial page changes may remain: {exc}"
+        await self._capture_after_state(plan)
+        await self._readback_after_failure(plan)
 
     def status(self, plan_id: str) -> PendingPlan:
         return self._plan(plan_id)

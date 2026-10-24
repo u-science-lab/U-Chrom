@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { agentHistory, agentSetupStatus, approveAgentPlan, applyAgentPlan, nextSetupAction, planStatusLabel, rejectAgentPlan, setupStageLabel, sourceLabel, pendingPlanView, type AgentPlan, type AgentSnapshot } from './agent'
+import { agentHistory, agentSetupStatus, approveAgentPlan, applyAgentPlan, nextSetupAction, planStatusLabel, rejectAgentPlan, setupStageLabel, setupStageForPage, sourceLabel, pendingPlanView, type AgentPlan, type AgentSnapshot } from './agent'
 
 const snapshot: AgentSnapshot = {
   page_id: 'ptest',
@@ -32,6 +32,15 @@ describe('agent state helpers', () => {
     expect(status.stage).toBe('page_pinned')
     expect(paths).toEqual(['api/health', 'api/agent/pages'])
     vi.unstubAllGlobals()
+  })
+
+  it('derives setup stage from the selected page rather than any pinned page', () => {
+    const status = {
+      stage: 'page_pinned' as const,
+      pages: [{ page: 'p1', pinned: true }, { page: 'p2', pinned: false }],
+    }
+    expect(setupStageForPage(status, 'p1')).toBe('page_pinned')
+    expect(setupStageForPage(status, 'p2')).toBe('page_connected')
   })
 
   it('labels each snapshot source distinctly', () => {
