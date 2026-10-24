@@ -1,31 +1,44 @@
 # 本地 Agent 接管 U-Chrom WebUI 设计规格
 
 日期：2026-10-22
-状态：设计草案，等待评审
+状态：按 2026-10-23 用户流程澄清和 UX 复审修订；local-first 为默认产品链路，Worker token relay 为可选增强
 范围：Atlas、托管 WebUI、本地 WebUI、本地 companion、用户自己的 Claude Code / Codex
 
 ## 1. 设计结论
 
-主流程采用“托管页发起 handoff，本地 companion 启动新的 WebUI，本地 agent 实时分析和更新本地 WebUI”。
+主流程采用“公网页面给出本地启动命令和 agent 指令，用户在自己的机器启动 WebUI，自己的 Claude/Codex 通过本地 MCP 操作页面”。启动本地 WebUI 不依赖 Wrangler、Cloudflare Worker 或公网 handoff API。
 
     Atlas / 托管 WebUI
             │ 用户点击“在本地继续”
             ▼
-    一次性 handoff（数据指针 + 规范化页面状态 + 用户问题）
-            │ 用户复制命令或点击本地协议链接
+    页面本地生成：启动命令 + 问题 + 可选语义快照
+            │ 用户复制并运行命令；把指令粘贴到本地 agent
             ▼
-    本地 companion / stdio MCP
-            │ 启动或复用 localhost WebUI
-            ▼
-    本地 U-Chrom WebUI
+    本地 U-Chrom WebUI ←── 本地 companion / stdio MCP
             ▲
             │ live action + canonical state readback
             ▼
     用户自己的 Claude Code / Codex
 
-这条路线不记录点击历史，也不依赖 replay。agent 直接读取本地页面当前状态、执行 action，并读取页面实际接受的结果。
+网页只展示或复制用户本机要运行的命令和 prompt，不启动用户电脑上的进程，不向 U-Chrom 服务上传页面状态，也不要求一次性 token。用户运行命令启动本地页面后，agent 从本地 MCP 重新读取 canonical state；Hosted 页面快照只是迁移建议，必须和本地 state 比较后再提变更计划。
+
+旧版设计中的 Worker + Durable Object one-time token 方案保留为可选 relay：只有当明确需要缩短大状态复制内容、统一跨站一次性领取等能力时才启用；它不是 Atlas → 本地 WebUI 主流程的前置服务。
 
 Chrome DevTools MCP 不作为 MVP 的主链路。它可以作为后续增强，用于用户只想让 agent 直接调整当前浏览器标签页、且浏览器已启用 WebMCP 的场景；它不承担本地 Python 分析、数据下载、页面状态迁移或本地服务启动。
+
+### 1.1 重新设计的产品目标
+
+**目标：** 用户在 Atlas 或托管 WebUI 看到感兴趣的数据后，用自己的 Claude Code 或 Codex 在本机分析同一数据，并通过本地 MCP 让本地 WebUI 显示经过用户确认的结果；页面、agent 和分析使用的范围必须以 canonical readback 为准。
+
+**默认链路的成功条件：**
+
+- 公网页面只提供安装说明、本机启动命令和 MCP 指令；启动本地 WebUI 不依赖 Wrangler、Cloudflare Worker 或公网 handoff API。
+- 首次用户能完成“安装 companion → 配置 MCP → 启动本地 WebUI → 粘贴指令 → 在页面 Apply”；每一步都有明确状态和失败提示。
+- 默认 prompt 只携带 dataset reference、问题和状态摘要，不把完整 cell ID 列表直接送进模型上下文；用户明确选择后才能附加 canonical cell IDs，超过 1 MiB UTF-8 时拒绝生成且不截断。
+- 本地 agent 必须先读取页面 canonical state，再提出带 `page_id` 和 `state_revision` 的计划；页面 mutation 只能由用户在 Agent 面板批准。
+- `attach_handoff(token)` 只属于可选 relay/本地 JSON 导入能力，不能成为默认步骤。
+
+**产品取舍：** local-first 优先保证隐私边界、私有数据和本地 Python 分析能力；可验证的安装/分发是面向普通 Atlas 用户的前置产品工作。Worker relay 只在减少大状态复制、跨站一次性领取或企业受控部署确有收益时启用。
 
 ## 2. 为什么采用本地 continuation
 
@@ -48,19 +61,20 @@ Chrome DevTools MCP 不作为 MVP 的主链路。它可以作为后续增强，�
 
 | 能力 | 当前状态 | 本设计中的变化 |
 | --- | --- | --- |
-| Atlas 将公开 dataset URL 打开到托管 WebUI | 已实现 | Atlas 增加 `Continue locally` 和 handoff 创建 UI |
+| Atlas 将公开 dataset URL 打开到托管 WebUI | 已实现 | Atlas 增加 `Continue locally` 本地命令与 prompt |
 | 本地 WebUI 从 URL 或 `.cdz` 打开数据 | 已实现 | companion 自动启动并打开指定 dataset |
 | Python `uchrom_browser.connect()` 实时控制本地页面 | 已实现 | MCP wrapper 复用同一 action/control 通道 |
 | 页面注册实验性 WebMCP 工具 | 已实现，需运行环境支持 | 保留为可选入口；不是本地 agent 的传输层 |
-| hosted WebUI 向本机传递规范化状态 | 未实现 | 增加短时 handoff 和本地导入差异报告 |
+| hosted WebUI 向本机提供规范化状态 | 本地 prompt/clipboard 方式已实现 | 状态在浏览器客户端序列化，用户复制给本地 agent；超限时不截断 |
+| Worker + Durable Object token relay | 可选实现，非主链路 | 为有需要的托管部署提供一次性 relay，不要求 Atlas 使用 |
 | Claude/Codex 的通用本地 MCP companion | 未实现 | 新增安装、client 配置、session/page pin |
 | Agent 面板、计划确认、状态 revision、撤销 | 未实现 | 按本规格新增 |
 
-当前 checkout 中 `uchrom-browser` README 标注“not on PyPI yet”。因此文中的 `uchrom-agent`、`uvx` 命令均为目标产品命令示例；正式发布并验证安装流程前，不得在 Atlas 上显示为可直接运行的正式命令。首次开发验证从仓库环境安装。
+当前 checkout 中 `uchrom-browser` README 标注“not on PyPI yet”。因此 Atlas 和 Hosted WebUI 只显示从源码安装前置条件与本机启动命令，不显示未经验证的 `uvx` 命令。
 
-Atlas 静态站点和 hosted-browser 是不同 origin。handoff 创建 API 由 hosted-browser Worker 提供；只允许 Atlas 和 hosted WebUI 的精确 origin 调用创建接口，并按 Atlas catalog dataset ID 校验 URL，不接受任意外部 URL。领取接口是用户 agent 的 bearer-token POST，不开放通用跨域读取。
+Atlas 静态站点和 hosted-browser 虽是不同 origin，但主链路不跨 origin 传输状态：Atlas 已有 catalog URL，hosted WebUI 可从当前页面构造 prompt，内容由用户复制到本地 agent。Worker relay 只在显式启用的可选模式中承担精确 origin 校验、目录校验和短时 token 领取。
 
-当前代码定位：Atlas 的数据卡片和托管 URL 在 [app.js](../../../apps/atlas/site/app.js)；hosted WebUI 的 session/container 路由在 [hosted-browser Worker](../../../apps/hosted-browser/src/index.ts)；本地页面启动和 Python client 在 [browser package](../../../packages/uchrom-browser/uchrom_browser/__init__.py) 与 [client.py](../../../packages/uchrom-browser/uchrom_browser/client.py)；SSE 控制 broker 在 [control.py](../../../packages/uchrom-browser/uchrom_browser/control.py)；共享页面动作和 WebMCP 注册分别在 [actions.ts](../../../packages/uchrom-browser/uchrom_browser/frontend/src/actions.ts) 与 [webmcp.ts](../../../packages/uchrom-browser/uchrom_browser/frontend/src/webmcp.ts)。这些路径是现状依据；本规格中的 companion、handoff API 和 Agent UI 均为未实现设计。
+当前代码定位：Atlas 的数据卡片和本地命令在 [app.js](../../../apps/atlas/site/app.js)；Hosted WebUI 的本地命令和语义 prompt 在 [HostedHandoff.tsx](../../../packages/uchrom-browser/uchrom_browser/frontend/src/components/HostedHandoff.tsx)；本地页面启动和 Python client 在 [browser package](../../../packages/uchrom-browser/uchrom_browser/__init__.py) 与 [client.py](../../../packages/uchrom-browser/uchrom_browser/client.py)；SSE 控制 broker 在 [control.py](../../../packages/uchrom-browser/uchrom_browser/control.py)；共享页面动作和 WebMCP 注册分别在 [actions.ts](../../../packages/uchrom-browser/uchrom_browser/frontend/src/actions.ts) 与 [webmcp.ts](../../../packages/uchrom-browser/uchrom_browser/frontend/src/webmcp.ts)。Worker relay 代码是可选部署能力。
 
 ## 3. 目标与非目标
 
@@ -73,6 +87,8 @@ Atlas 静态站点和 hosted-browser 是不同 origin。handoff 创建 API 由 h
 - agent 可以读取当前页面状态、运行分析、提出变更计划、应用变更并回读结果。
 - selection、locus、Stats scope、视图范围和页面实际展示保持一致。
 - 所有改变页面的操作都可审计、可拒绝、可撤销或通过重新加载快照恢复。
+- 首次安装、浏览器启动、MCP 连接、页面 pin、待确认计划和已应用结果均有可见进度状态。
+- 默认交接是摘要模式；完整选择列表通过用户明确勾选或 `uchrom_export_selection` 文件导出获得。
 
 ### 3.2 非目标
 
@@ -114,20 +130,21 @@ Continue locally 是带本地设备图标的文字按钮。按钮旁显示：
 - 数据集名称、论文、版本/更新时间；
 - Atlas 入口只展示 dataset metadata；Atlas 页面没有托管页面状态，不显示“从当前页面带入”；
 - 问题输入框，placeholder 为“告诉 agent 你想比较、定位或查看什么”；
-- 一个主动作：生成 handoff 并复制给 Claude/Codex。
-- 首次使用的本地 companion 安装说明。
+- 一个主动作：生成本地 continuation，并分别复制安装/启动命令和 MCP 指令。
+- 首次使用的本地 companion 安装说明，以及“未安装 → 已启动 → MCP 已连接 → 等待确认 → 已应用”的步骤清单。
 
-复制内容是一行可读指令加一个短时 handoff token。首次配置 MCP 后，后续每次使用只需把这一行粘贴到 Claude Code 或 Codex：
+复制内容由两部分组成：本机安装/启动命令，以及交给 Claude Code/Codex 的本地 MCP 指令。命令示例：
 
-    用 U-Chrom 本地 agent 继续分析这个数据集。HANDOFF: <one-time-token>
+    uv pip install -e packages/chromdata -e packages/uchrom-browser -e packages/uchrom-agent
+    python -m uchrom_browser '<dataset-url>'
 
-如果用户从 Atlas 直接进入而没有托管页面状态，handoff 只包含 dataset reference、版本、问题和默认视图，不伪造 selection 或 locus。
+用户从 Atlas 直接进入时，页面只生成 dataset URL、版本说明和问题；不伪造 selection 或 locus，也不调用 handoff API。
 
 ### 5.2 托管 WebUI：页面内入口
 
 托管 WebUI 顶部增加轻量 Continue locally action，位置在 dataset switcher 附近，不放入 3D 画布内部。
 
-点击后显示两步面板。
+点击后显示三步面板。
 
 第一步：确认交接内容
 
@@ -142,13 +159,21 @@ Continue locally 是带本地设备图标的文字按钮。按钮旁显示：
     [编辑问题……]
     [生成本地 handoff]
 
-第二步：交给本地 agent
+第二步：在本机启动
 
-    复制到已配置 U-Chrom MCP 的 Claude Code 或 Codex：
+    首次使用先在 U-Chrom checkout 中运行：
 
-    用 U-Chrom 本地 agent 继续分析这个数据集。HANDOFF: <one-time-token>
+    uv pip install -e packages/chromdata -e packages/uchrom-browser -e packages/uchrom-agent
 
-    [复制指令] [完成]
+    每次使用再运行：
+
+    python -m uchrom_browser '<dataset-url>'
+
+第三步：交给本地 agent
+
+    把页面生成的 prompt 粘贴到已配置 U-Chrom MCP 的 Claude Code 或 Codex。默认 prompt 只包含状态摘要；只有明确勾选时才包含 canonical cell IDs。
+
+    [复制安装命令] [复制启动命令] [复制 MCP 指令] [完成]
 
 Atlas/托管页面不探测 localhost。agent 完成 attach 后会在对话中回报本地 URL，用户切换到本地 WebUI。
 
@@ -208,13 +233,15 @@ Atlas/托管页面不探测 localhost。agent 完成 attach 后会在对话中�
 
 每次从 Atlas 或托管 WebUI 继续：
 
-1. 用户从 Atlas 发起时，页面只带 dataset reference 和问题；从 hosted WebUI 发起时，还带当前页面 snapshot。两个入口都显示 dataset reference、可带入状态摘要和交接隐私提示。
-2. 用户生成短时 handoff，把系统生成的一行指令复制到已配置的 Claude Code/Codex 对话中。
-3. agent 调用 `uchrom_attach_handoff(handoff_token)`。若客户端没有 MCP 配置，agent 停止并给出 setup 指引；不能假定当前对话可动态注册 MCP。
-4. companion 向托管服务兑换 handoff，并校验有效期、来源和 dataset 版本；启动本地 WebUI、打开公开 dataset URL 前，遵从用户本地 agent 客户端的授权提示。
-5. companion 等待 `/api/health`、页面 hello 和 dataset load 全部完成。
-6. 页面导入状态快照，selection、locus、Stats scope 均经过本地 canonicalization。
-7. companion 返回 attached、本地 URL、page ID、applied state 和导入差异；agent 回读 snapshot 并向用户报告页面当前实际状态。
+1. 用户从 Atlas/Hosted 页面查看安装说明和状态摘要，决定是否附加 canonical cell IDs。
+2. 用户首次在本机安装 `chromdata`、`uchrom-browser` 和 `uchrom-agent`，并显式配置 Claude Code/Codex 的 stdio MCP；后续复用已安装配置。
+3. 用户运行本机启动命令，看到本地 WebUI 后把 MCP prompt 粘贴到 Claude Code/Codex。
+4. agent 调用 `uchrom_setup_status`、`uchrom_workspace_snapshot` 和 `uchrom_get_selection`；没有本地 MCP 配置或页面连接时停止并给出下一步。
+5. agent 将 hosted 摘要/快照视为迁移建议，与本地 canonical state 比较，不直接声称已导入；需要时提出 selection/locus/view 计划。
+6. 页面 canonicalization 处理 unknown IDs、越界 locus 和 Stats scope；用户在本地 AgentPanel 点击 Apply。
+7. agent 回读 snapshot 和 capture，向用户报告分析使用范围与页面最终实际状态。
+
+默认 MCP prompt 固定按以下顺序执行：先 `uchrom_setup_status`，再读取 `uchrom_workspace_snapshot` 与 `uchrom_get_selection`，然后分析问题，调用 `uchrom_propose_ui_changes` 创建待确认计划，最后等待用户在本地 WebUI 点击 Apply。`uchrom_attach_handoff` 不在这条默认链路中。
 
 MCP client 配置不能由网页或运行中的普通对话静默添加；首次配置和客户端重启是一次性前置步骤。handoff 中的 dataset reference、selection、locus、Stats scope 和问题会交给用户选择的 Claude/Codex 服务处理，生成面板必须明确提示。不得将本地文件路径、凭据或原始矩阵写入 handoff。
 
@@ -296,19 +323,19 @@ MCP client 配置不能由网页或运行中的普通对话静默添加；首次
 - 通过 python -m uchrom_browser <path-or-url> 启动已有 browser server，或调用内部 API 启动子进程。
 - 等待 /api/health、页面 hello 和 dataset open 三个条件全部成立后才返回 attached。
 - companion 通过本地 FastAPI 的 /api/agent/* 创建 session；页面与 session 显式绑定 page ID，不默认使用“最近 active page”作为 agent 目标。
-- 本地 API 为 MCP 请求和页面 Apply/Reject 提供不同的 session 权限；只接受 loopback 来源、校验 Origin 和短时 session token。MCP session 断开时撤销 token，关闭本次启动的 server，不删除用户数据。
+- 本地 API 为 MCP 请求和页面 Apply/Reject 提供不同的 session 权限；只接受 loopback 来源、校验 Origin 和短时 session token。用户运行的本地 WebUI 生命周期由用户终端管理；companion 自己启动的子进程按 companion 生命周期策略关闭，不删除用户数据。
 - 本地 FastAPI 持有 canonical page revision、pending plan、approval 和 UI action history；MCP stdio 进程只做 handoff、session 和 MCP 协议适配，不复制页面状态。
 
-### 7.3 hosted handoff API 与载荷
+### 7.3 可选 hosted handoff relay
 
-创建与领取由 hosted-browser Worker 提供：
+Worker relay 仅在显式部署和配置时启用；默认本地命令流程不调用它：
 
 - POST /api/agent/handoffs：Atlas 或 hosted WebUI 提交 dataset ID、问题和可选 page snapshot；Worker 校验 dataset 位于发布 catalog。
 - POST /api/agent/handoffs/redeem：本地 companion 在 JSON body 中提交 one-time token；响应只返回创建时保存的 payload。token 不放在 URL 路径、query、浏览器 history 或 Referer 中。
 - token 是至少 256-bit 随机 bearer secret，有效期 10 分钟、成功领取一次后立即失效；clipboard 放置的是短指令和 token，而非可导航 URL。
 - Worker 把 payload 放在专用 Durable Object 的短时存储中，兑换采用原子 consume；不依赖 hosted browser container 内存，也不记录 token 或 snapshot 到日志。
 - Atlas origin 只可创建 dataset-only handoff；hosted WebUI origin 可创建带当前页面 snapshot 的 handoff。Atlas 仅允许精确配置的静态站点 origin；创建 API 校验 Origin、速率限制请求并验证 dataset ID 属于公开 catalog。
-- 页面 selection 最多交接 1 MiB canonical JSON。超过上限时提示用户缩小 selection 后重试；不截断、不静默丢弃 ID。
+- 页面语义 snapshot 复制到本地 prompt 时最多 1 MiB UTF-8。超过上限时提示用户缩小 selection 后重试；不截断、不静默丢弃 ID。可选 Worker relay 使用同一限制。
 
 兑换后的 payload 示例：
 
@@ -334,12 +361,12 @@ page_state 是用户确认的迁移建议，不是本地事实；本地页面导
 
 ## 8. MCP 工具协议
 
-MVP 提供页面控制、handoff 和状态工具。分析继续使用用户自己的 Python/Skills；companion 不提供任意代码执行工具。
+MVP 提供页面控制、local continuation 状态和可选 relay 导入工具。分析继续使用用户自己的 Python/Skills；companion 不提供任意代码执行工具。
 
 ### 只读和会话工具
 
 - `uchrom_setup_status()`：返回 companion 版本、MCP 状态和本地服务状态。
-- `uchrom_attach_handoff(handoff_token)`：兑换 handoff，启动或复用本地 WebUI，绑定 page，并回报导入差异。
+- `uchrom_attach_handoff(handoff_token_or_file)`：**可选能力**。兑换显式启用的 Worker token，或读取用户本机 handoff JSON 文件；它不是默认 local-first 流程。默认流程由用户运行启动命令后直接读取 canonical state。
 - `uchrom_workspace_snapshot()`：返回页面 canonical state、dataset metadata、agent session 和 warnings。
 - `uchrom_get_selection()`：返回 canonical cell IDs、source、group、数量；大 selection 默认返回摘要。
 - `uchrom_export_selection()`：按用户请求把 canonical cell IDs 写入 companion 临时目录，返回文件句柄、数量和 digest，供本地 Python 直接读取，避免把大量 ID 放入模型上下文。
@@ -388,11 +415,12 @@ MVP 不新增分析 MCP tools。Claude/Codex 使用本地终端、Python 和现�
 
 ## 10. 安全、隐私和授权
 
-- hosted-browser Worker 创建高熵、不可猜测的一次性 handoff token；专用 Durable Object 原子存储和兑换 payload，10 分钟过期、兑换成功后立即删除。不要把完整状态放进 URL，也不要只依赖会随容器休眠丢失的内存。
-- handoff 仅包含公开 Atlas dataset URL/version 和用户确认的最小页面状态；私有数据不通过 hosted handoff 传输，用户在本地 WebUI/agent 中自行打开本地文件。
+- 默认本地 prompt 不经过 U-Chrom Worker；只包含公开 dataset URL、用户问题和用户确认的摘要/最小语义 snapshot。可选 Worker relay 才创建高熵一次性 token，并由 Durable Object 原子兑换。
+- 默认不把完整 canonical cell ID 列表放进 prompt；用户勾选后页面必须显示“这些 ID 会进入所选模型服务上下文”的提示。大 selection 使用 `uchrom_export_selection` 写入本机临时文件，再由本地 Python 读取。
+- 私有数据不通过公网 prompt 或 Worker relay 传输；用户在本地 WebUI/agent 中自行打开本地文件。
 - 本地 companion 只接受 127.0.0.1 请求，校验 Origin、CSRF token 和 session bearer token。
 - MCP tool 不执行任意 shell 或 Python。attach 只可启动 companion 自己管理的固定 U-Chrom browser 命令，并需遵从用户本地 agent 客户端的授权机制；安装依赖、下载数据或写入分析文件时，agent 必须说明本地命令和目标文件。
-- 不默认上传 prompt、cell IDs、分析结果或 capture 到 U-Chrom telemetry。用户明确粘贴到 Claude/Codex 的 handoff 信息会进入其模型服务上下文，页面必须在创建前提示。
+- 不默认上传 prompt、cell IDs、分析结果或 capture 到 U-Chrom telemetry。用户明确复制到 Claude/Codex 的本地 prompt 会进入其模型服务上下文，页面必须在复制前提示。
 - `uchrom_propose_ui_changes` 创建绑定 `page_id` 和 `expected_revision` 的 pending plan；只有用户在该本地 WebUI 的 Agent section 点击 Apply 后，本地 FastAPI 才批准并执行计划。agent 通过 `uchrom_plan_status` 读取结果；不提供可绕过 WebUI 确认的 apply tool。
 - 不把现有 hosted /api/control/* 公开到互联网。
 
@@ -401,8 +429,14 @@ MVP 不新增分析 MCP tools。Claude/Codex 使用本地终端、Python 和现�
 | 状态 | 用户看到的反馈 | agent 行为 |
 | --- | --- | --- |
 | companion 未安装 | 显示一行安装命令和当前平台 | 停止，不假设安装成功 |
+| MCP 未配置 | 显示 Claude Code/Codex 配置入口和重启提示 | 停止，不尝试静默写配置 |
 | 本地服务启动失败 | 显示端口、依赖和日志入口 | 返回可诊断错误 |
-| handoff 过期/兑换失败 | 要求回 Atlas 重新生成 | 不加载任何数据 |
+| 本地启动命令失败 | 显示安装前置条件和 URL/依赖错误 | 不假设 WebUI 已启动 |
+| 本地服务已启动但页面未连接 | 显示“打开本地 WebUI 后再继续” | 只读，不执行 mutation |
+| MCP 已连接但页面未 pin | 显示 page 列表和 Pin 操作 | 只读，不执行 mutation |
+| 页面已连接 | 显示 canonical state 和当前 revision | 可读取、分析和提出计划 |
+| 计划待确认/已应用 | 显示 Apply/Reject、结果和 readback | 不绕过用户确认 |
+| 可选 Worker handoff 过期/兑换失败 | 要求回 Atlas 重新生成 | 不加载任何数据 |
 | dataset 不可访问 | 显示 URL/权限/网络问题 | 可询问用户改为下载 .cdz |
 | 页面未 attach | 显示打开本地页面的提示 | mutation 不执行 |
 | 状态导入有差异 | 展示 unknown cells、clamped locus 等 | 以 applied state 继续，要求确认 |
@@ -419,16 +453,16 @@ MVP 不新增分析 MCP tools。Claude/Codex 使用本地终端、Python 和现�
 
 ### Phase 1：完整本地 continuation MVP
 
-- 新增 companion、stdio MCP、经用户确认的安装和 client 配置流程。
-- 在 hosted-browser Worker 实现 session-scoped、短时、一次性 handoff 签发/兑换。
-- 托管 WebUI 增加状态确认面板；Atlas 增加 Continue locally 入口、setup 引导和复制指令。
+- 新增 companion、stdio MCP、经用户确认的安装和 client 配置流程，并返回稳定的 setup/connection stage。
+- Atlas 增加 Continue locally 入口，直接从 catalog 生成本机启动命令和 MCP 指令；不依赖 Worker API。
+- Hosted WebUI 增加本机安装/启动命令、问题和摘要优先的 prompt；Worker token relay 作为可选增强。
 - 本地 WebUI 增加 Agent section、page pin、pending plan 的 Apply/Reject、action history、undo。
-- 支持 setup_status、attach_handoff、workspace_snapshot、get_selection、export_selection、list_groups、capture_view、propose_ui_changes、plan_status、export_snapshot；分析继续通过用户的本地 Python 与 Skills。
+- 支持 setup_status、workspace_snapshot、get_selection、export_selection、list_groups、capture_view、propose_ui_changes、plan_status、export_snapshot；`attach_handoff` 仅作为可选 relay/本地 JSON 导入；分析继续通过用户的本地 Python 与 Skills。
 
 ### Phase 2：结果 bundle 和分析 provenance
 
 - 导出 result bundle、分析 run manifest 和结构化 provenance。
-- 评估大 selection handoff 的本地文件方案，避免把过多 cell IDs 放入模型上下文。
+- 默认摘要和按需 selection 文件导出已经是 MVP 行为；后续再评估更大数据集的流式导出。
 
 ### Phase 3：可选浏览器直控
 
@@ -440,8 +474,10 @@ MVP 不新增分析 MCP tools。Claude/Codex 使用本地终端、Python 和现�
 
 ### 用户体验
 
-- 已完成一次性 companion/MCP setup 的用户从 Atlas 点击 Continue locally 并粘贴指令后，能打开本地 WebUI；首次用户在安装、MCP 配置和重启步骤有清楚引导。
-- Claude Code 和 Codex 都能使用同一份 handoff 完成 attach。
+- 用户从 Atlas 点击 Continue locally 后能复制本机命令，运行后打开选定 dataset 的本地 WebUI；再把 MCP 指令粘贴到已配置的 Claude/Codex。
+- 首次用户能看到安装、启动、连接、pin、Apply 的阶段状态；失败时知道下一步动作。
+- Hosted WebUI 能在浏览器本地生成语义 snapshot prompt；用户明确复制给自己的模型服务。
+- 默认 prompt 不包含完整 cell ID 列表；用户明确选择后才包含，且 UI 显示隐私提示。
 - 用户能清楚区分“分析使用的 scope”和“页面临时高亮”。
 - agent 的每次页面变更都有计划、确认、结果和实际状态回读。
 
@@ -457,8 +493,8 @@ MVP 不新增分析 MCP tools。Claude/Codex 使用本地终端、Python 和现�
 
 - 使用 Stevens sim_cell1.cdz 和至少一个 Atlas 远程 store。
 - 验证 selection、locus、Stats scope、view layout、capture 与页面 DOM/截图一致。
-- 分别用 Claude Code、Codex 运行完整流程，并保存命令、日志、结果 bundle 和截图。
-- 记录未验证项：首次安装、不同操作系统、私有数据权限、远程网络中断。
+- 分别用 Claude Code、Codex 运行本地 prompt 流程，并保存命令、日志、结果 bundle 和截图；如果客户端未配置，验证 setup 指引而不是宣称连接成功。
+- 记录未验证项：正式 PyPI/桌面安装器、不同操作系统、私有数据权限、远程网络中断、Worker relay 运行时 E2E。
 
 ## 14. 设计决策记录
 

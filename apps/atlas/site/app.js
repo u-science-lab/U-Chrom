@@ -52,7 +52,7 @@
     return 'From a U-Chrom checkout, install the source packages if needed with: ' + localInstall + '. Then run the local browser command. '
       + 'After the page opens, paste this instruction into your already-configured Claude Code or Codex U-Chrom MCP. '
       + 'First run uchrom_setup_status, then read the canonical state with uchrom_workspace_snapshot and uchrom_get_selection. '
-      + 'Only after that, analyze and propose changes for approval in the local WebUI. Dataset: ' + urlOf(d) + '. Question: ' + prompt;
+      + 'Only after that, analyze the question, call uchrom_propose_ui_changes for a pending plan, and wait for the user to Apply it in the local WebUI. Dataset: ' + urlOf(d) + '. Question: ' + prompt;
   }
   function showLocal(d) {
     localDataset = d;

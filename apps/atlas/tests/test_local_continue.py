@@ -53,6 +53,16 @@ def test_local_first_copy_names_source_install_prerequisites_and_protocol_order(
         assert "run" in source.lower() and "paste" in source.lower()
         assert "canonical state" in source.lower()
 
+    for source in (app, handoff):
+        setup = source.index("uchrom_setup_status")
+        snapshot = source.index("uchrom_workspace_snapshot", setup)
+        selection = source.index("uchrom_get_selection", setup)
+        analysis = source.index("analyze", snapshot)
+        propose = source.index("uchrom_propose_ui_changes", analysis)
+        apply = source.index("Apply", propose)
+        assert setup < snapshot < analysis < propose < apply
+        assert setup < selection < analysis
+
     attach = next(line for line in mcp.splitlines() if '"name": "uchrom_attach_handoff"' in line)
     assert "optional" in attach.lower()
 
