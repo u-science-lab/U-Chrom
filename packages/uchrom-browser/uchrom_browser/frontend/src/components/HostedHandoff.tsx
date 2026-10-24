@@ -135,7 +135,7 @@ export function HostedHandoff() {
 
   return (
     <>
-      <button ref={triggerRef} className="hosted-handoff-button" onClick={show} title="Prepare a one-time local agent handoff">Continue locally</button>
+      <button ref={triggerRef} className="hosted-handoff-button" onClick={show} title="Prepare a local agent continuation">Continue locally</button>
       {open && (
         <div className="handoff-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false) }}>
           <section ref={modalRef} className="handoff-modal" role="dialog" aria-modal="true" aria-labelledby="hosted-handoff-title">
@@ -163,10 +163,13 @@ export function HostedHandoff() {
               />
               <span><strong>Include canonical cell IDs</strong><br /><span className="muted">Unchecked by default; IDs are omitted from the prompt unless you explicitly opt in.</span></span>
             </label>}
-            <p className="muted small">The prompt contains the public dataset URL, your question, and this exact semantic snapshot. No local paths, credentials, or raw matrix are included.</p>
+            <p className="muted small">Run the local command first, wait for the page to open, then paste the prompt. It starts by reading the local canonical state before analysis or any proposed change. The prompt contains the public dataset URL, your question, and this exact semantic snapshot. No local paths, credentials, or raw matrix are included.</p>
             {error && <p className="error small">{error}</p>}
             {localHandoff && !localHandoff.ok && <p className="error small">{handoffIssueMessage(localHandoff.reason)}</p>}
             {localHandoff && 'command' in localHandoff && <div className="handoff-command">
+              <label className="small" htmlFor="hosted-handoff-install">Install from a U-Chrom source checkout</label>
+              <textarea id="hosted-handoff-install" rows={2} readOnly value={localHandoff.installCommand} />
+              <button onClick={() => void copy(localHandoff.installCommand, 'install command')}>Copy install command</button>
               <label className="small" htmlFor="hosted-handoff-command">Run this on your computer</label>
               <textarea id="hosted-handoff-command" rows={2} readOnly value={localHandoff.command} />
               <button onClick={() => void copy(localHandoff.command, 'command')}>Copy command</button>

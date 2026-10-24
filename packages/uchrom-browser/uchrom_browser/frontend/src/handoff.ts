@@ -21,10 +21,10 @@ export interface HandoffState {
 export const MAX_HANDOFF_BYTES = 1024 * 1024
 
 export type LocalHandoffResult =
-  | { ok: true; command: string; prompt: string; stateBytes: number; promptBytes: number }
+  | { ok: true; installCommand: string; command: string; prompt: string; stateBytes: number; promptBytes: number }
   | { ok: false; reason: 'invalid-dataset-url'; stateBytes: 0 }
-  | { ok: false; reason: 'state-too-large'; command: string; stateBytes: number }
-  | { ok: false; reason: 'prompt-too-large'; command: string; stateBytes: number; promptBytes: number }
+  | { ok: false; reason: 'state-too-large'; installCommand: string; command: string; stateBytes: number }
+  | { ok: false; reason: 'prompt-too-large'; installCommand: string; command: string; stateBytes: number; promptBytes: number }
 
 export function buildHandoffState(view: DatasetView, workspace: WorkspaceState, options: { includeCellIds?: boolean } = {}): HandoffState {
   const state: HandoffState = {
@@ -87,6 +87,10 @@ export function handoffCommand(datasetUrl: string): string {
   return `python -m uchrom_browser ${shellQuotedUrl}`
 }
 
+export function handoffInstallCommand(): string {
+  return 'uv pip install -e packages/chromdata -e packages/uchrom-browser -e packages/uchrom-agent'
+}
+
 export function handoffPrompt(datasetUrl: string, question: string, state: HandoffState): string {
   const input = JSON.stringify({ dataset_url: datasetUrl, question, semantic_snapshot: state }, null, 2)
   const privacy = !state.selection
@@ -94,7 +98,7 @@ export function handoffPrompt(datasetUrl: string, question: string, state: Hando
     : state.selection.cells
       ? 'Canonical cell IDs are included in this snapshot. Review selection privacy before sharing this prompt.'
       : 'Canonical cell IDs are omitted by default; only include them after explicit user opt-in. Review selection privacy before sharing this prompt.'
-  return `Use the already-configured U-Chrom MCP on the user’s computer. The user will run this command locally: ${handoffCommand(datasetUrl)}. After the local page is open, read its actual state through MCP, compare it with this reference snapshot, and propose matching changes for approval in the local WebUI. Do not claim the hosted snapshot has already been applied. Do not probe localhost or send this snapshot to any web service. ${privacy}\n\nExact handoff input:\n\`\`\`json\n${input}\n\`\`\``
+  return `From a U-Chrom checkout, install the source packages if needed with: ${handoffInstallCommand()}. Then run this local browser command: ${handoffCommand(datasetUrl)}. After the page opens, paste this prompt into the already-configured U-Chrom MCP. First run uchrom_setup_status, then read the canonical state with uchrom_workspace_snapshot and uchrom_get_selection. Only after that, analyze the question and propose matching changes for approval in the local WebUI. Do not claim the hosted snapshot has already been applied. Do not probe localhost or send this snapshot to any web service. ${privacy}\n\nExact handoff input:\n\`\`\`json\n${input}\n\`\`\``
 }
 
 function utf8ByteLength(value: string): number {
@@ -105,12 +109,13 @@ export function buildLocalHandoff(datasetUrl: string, question: string, state: H
   if (!isPublicDatasetUrl(datasetUrl)) return { ok: false, reason: 'invalid-dataset-url', stateBytes: 0 }
 
   const command = handoffCommand(datasetUrl)
+  const installCommand = handoffInstallCommand()
   const stateBytes = utf8ByteLength(JSON.stringify(state))
-  if (stateBytes > MAX_HANDOFF_BYTES) return { ok: false, reason: 'state-too-large', command, stateBytes }
+  if (stateBytes > MAX_HANDOFF_BYTES) return { ok: false, reason: 'state-too-large', installCommand, command, stateBytes }
 
   const prompt = handoffPrompt(datasetUrl, question, state)
   const promptBytes = utf8ByteLength(prompt)
-  if (promptBytes > MAX_HANDOFF_BYTES) return { ok: false, reason: 'prompt-too-large', command, stateBytes, promptBytes }
+  if (promptBytes > MAX_HANDOFF_BYTES) return { ok: false, reason: 'prompt-too-large', installCommand, command, stateBytes, promptBytes }
 
-  return { ok: true, command, prompt, stateBytes, promptBytes }
+  return { ok: true, installCommand, command, prompt, stateBytes, promptBytes }
 }

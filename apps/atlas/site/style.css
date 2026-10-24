@@ -181,6 +181,7 @@ figcaption { margin-top: 14px; color: var(--muted); font-size: 13px; line-height
 .handoff-result small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; }
 .handoff-copy { margin-top: 9px; }
 .handoff-result label + textarea { margin-bottom: 2px; }
+.handoff-result textarea + .handoff-copy { margin-bottom: 13px; }
 .continue-local { color: var(--accent); font-size: 14px; font-weight: 500; }
 .continue-local::before { content: "⌂"; display: inline-block; margin-right: 5px; font-size: 15px; }
 

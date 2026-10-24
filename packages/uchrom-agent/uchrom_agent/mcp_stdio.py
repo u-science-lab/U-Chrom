@@ -27,7 +27,7 @@ def _object_schema(properties=None, required=()):
 _TOOLS = [
     {"name": "uchrom_setup_status", "description": "Check the local companion and browser server status.",
      "inputSchema": _object_schema(), "annotations": {"readOnlyHint": True}},
-    {"name": "uchrom_attach_handoff", "description": "Open or reuse the local U-Chrom browser from a local handoff JSON file or one-time handoff token. UI state is proposed for WebUI approval.",
+    {"name": "uchrom_attach_handoff", "description": "Optional relay/import tool: open or reuse the local U-Chrom browser from an explicitly enabled handoff JSON file or relay token. The default local-first flow starts the page first and reads canonical state; UI state is proposed for WebUI approval.",
      "inputSchema": _object_schema({"handoff_token": {"type": "string", "description": "A one-time handoff token, or path to a local handoff JSON file containing dataset.path."}}, ("handoff_token",))},
     {"name": "uchrom_workspace_snapshot", "description": "Read canonical state from an explicitly pinned local browser page.",
      "inputSchema": _object_schema({"page_id": {"type": "string"}}), "annotations": {"readOnlyHint": True}},

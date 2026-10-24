@@ -40,6 +40,7 @@
   function nameOf(d) { return d.name || d.title; }
 
   var localDataset = null;
+  var localInstall = 'uv pip install -e packages/chromdata -e packages/uchrom-browser -e packages/uchrom-agent';
   function shellQuote(value) {
     return "'" + String(value).replace(/'/g, "'\\''") + "'";
   }
@@ -48,8 +49,10 @@
   }
   function localInstruction(d, question) {
     var prompt = question || 'Inspect this dataset and explain the most useful first analysis.';
-    return 'The U-Chrom browser is running locally with dataset ' + urlOf(d) + '. Use your already-configured Claude Code or Codex '
-      + 'U-Chrom MCP to inspect the active browser session and answer: ' + prompt;
+    return 'From a U-Chrom checkout, install the source packages if needed with: ' + localInstall + '. Then run the local browser command. '
+      + 'After the page opens, paste this instruction into your already-configured Claude Code or Codex U-Chrom MCP. '
+      + 'First run uchrom_setup_status, then read the canonical state with uchrom_workspace_snapshot and uchrom_get_selection. '
+      + 'Only after that, analyze and propose changes for approval in the local WebUI. Dataset: ' + urlOf(d) + '. Question: ' + prompt;
   }
   function showLocal(d) {
     localDataset = d;
@@ -63,6 +66,7 @@
       facts.appendChild(el('dd', { text: row[1] }));
     });
     $('handoff-question').value = '';
+    $('handoff-install').value = localInstall;
     $('handoff-command').value = localCommand(d);
     $('handoff-instruction').value = localInstruction(d, '');
     $('handoff-result').hidden = false;
@@ -93,6 +97,9 @@
   });
   $('handoff-copy-command').addEventListener('click', function () {
     copyField('handoff-command', 'handoff-copy-command', 'Copied', 'Select and copy the command');
+  });
+  $('handoff-copy-install').addEventListener('click', function () {
+    copyField('handoff-install', 'handoff-copy-install', 'Copied', 'Select and copy the command');
   });
   $('handoff-copy-instruction').addEventListener('click', function () {
     copyField('handoff-instruction', 'handoff-copy-instruction', 'Copied', 'Select and copy the instruction');

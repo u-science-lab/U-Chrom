@@ -35,6 +35,28 @@ def test_continue_locally_uses_catalog_url_and_prepares_local_mcp_prompt():
     assert "localhost" in html
 
 
+def test_local_first_copy_names_source_install_prerequisites_and_protocol_order():
+    app = (ATLAS / "site" / "app.js").read_text()
+    html = (ATLAS / "site" / "index.html").read_text()
+    hosted = (REPO / "packages" / "uchrom-browser" / "uchrom_browser" / "frontend" / "src" / "components" / "HostedHandoff.tsx").read_text()
+    handoff = (REPO / "packages" / "uchrom-browser" / "uchrom_browser" / "frontend" / "src" / "handoff.ts").read_text()
+    mcp = (REPO / "packages" / "uchrom-agent" / "uchrom_agent" / "mcp_stdio.py").read_text()
+
+    for source in (app, html, handoff):
+        assert "packages/chromdata" in source
+        assert "packages/uchrom-browser" in source
+        assert "packages/uchrom-agent" in source
+
+    for source in (app, hosted, handoff):
+        assert "one-time handoff" not in source.lower()
+        assert "token" not in source.lower()
+        assert "run" in source.lower() and "paste" in source.lower()
+        assert "canonical state" in source.lower()
+
+    attach = next(line for line in mcp.splitlines() if '"name": "uchrom_attach_handoff"' in line)
+    assert "optional" in attach.lower()
+
+
 def test_atlas_publish_docs_do_not_require_a_handoff_endpoint():
     publish = (ATLAS / "PUBLISH.md").read_text()
     apps_readme = (ATLAS.parent / "README.md").read_text()

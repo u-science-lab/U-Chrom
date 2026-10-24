@@ -64,15 +64,18 @@
     <dl class="handoff-facts" id="handoff-facts"></dl>
     <label class="handoff-question" for="handoff-question">Question for your agent</label>
     <textarea id="handoff-question" rows="3" maxlength="4000" placeholder="Tell the agent what you want to compare, locate, or inspect"></textarea>
-    <p class="handoff-privacy">Prerequisite: the browser package is currently source-only (not on PyPI). From a U-Chrom checkout, install it with <code>uv pip install -e packages/chromdata -e packages/uchrom-browser</code>.</p>
+    <p class="handoff-privacy">Prerequisite: the browser and agent packages are source-only (not on PyPI). From a U-Chrom checkout, install all three packages before starting the local page: <code>uv pip install -e packages/chromdata -e packages/uchrom-browser -e packages/uchrom-agent</code>.</p>
     <div class="handoff-result" id="handoff-result" hidden>
+      <label for="handoff-install">Source checkout install</label>
+      <textarea id="handoff-install" rows="2" readonly></textarea>
+      <button type="button" class="handoff-copy" id="handoff-copy-install">Copy install command</button>
       <label for="handoff-command">Launch command</label>
       <textarea id="handoff-command" rows="2" readonly></textarea>
       <button type="button" class="handoff-copy" id="handoff-copy-command">Copy launch command</button>
       <label for="handoff-instruction">Instruction for Claude Code or Codex</label>
       <textarea id="handoff-instruction" rows="4" readonly></textarea>
       <button type="button" class="handoff-copy" id="handoff-copy-instruction">Copy MCP instruction</button>
-      <small>Run the command first, then paste the instruction into your configured local MCP client.</small>
+      <small>Run the install command once, run the launch command each time, wait for the page to open, then paste the MCP instruction.</small>
     </div>
     <div class="handoff-actions">
       <button value="cancel">Done</button>
