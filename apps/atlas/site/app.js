@@ -39,6 +39,72 @@
   function study(d) { return state.studies[d.study] || null; }
   function nameOf(d) { return d.name || d.title; }
 
+  var localDataset = null;
+  var localInstall = 'uv pip install -e packages/chromdata -e packages/uchrom-browser -e packages/uchrom-agent';
+  function shellQuote(value) {
+    return "'" + String(value).replace(/'/g, "'\\''") + "'";
+  }
+  function localCommand(d) {
+    return 'python -m uchrom_browser ' + shellQuote(urlOf(d));
+  }
+  function localInstruction(d, question) {
+    var prompt = question || 'Inspect this dataset and explain the most useful first analysis.';
+    return 'From a U-Chrom checkout, install the source packages if needed with: ' + localInstall + '. Then run the local browser command. '
+      + 'After the page opens, paste this instruction into your already-configured Claude Code or Codex U-Chrom MCP. '
+      + 'First run uchrom_setup_status, then read the canonical state with uchrom_workspace_snapshot and uchrom_get_selection. '
+      + 'Only after that, analyze the question, call uchrom_propose_ui_changes for a pending plan, and wait for the user to Apply it in the local WebUI. Dataset: ' + urlOf(d) + '. Question: ' + prompt;
+  }
+  function showLocal(d) {
+    localDataset = d;
+    var dialog = $('handoff-dialog');
+    var studyMeta = study(d) || {};
+    var facts = $('handoff-facts');
+    facts.textContent = '';
+    [['Dataset', nameOf(d)], ['Dataset ID', d.id], ['Current catalog version', state.cat.updated || 'not recorded'],
+      ['Study', studyMeta.citation || d.paper || '—']].forEach(function (row) {
+      facts.appendChild(el('dt', { text: row[0] }));
+      facts.appendChild(el('dd', { text: row[1] }));
+    });
+    $('handoff-question').value = '';
+    $('handoff-install').value = localInstall;
+    $('handoff-command').value = localCommand(d);
+    $('handoff-instruction').value = localInstruction(d, '');
+    $('handoff-result').hidden = false;
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
+  }
+
+  function copyField(fieldId, buttonId, copiedText, fallbackText) {
+    var text = $(fieldId).value;
+    if (!text) return;
+    if (!navigator.clipboard) {
+      $(fieldId).focus();
+      $(fieldId).select();
+      $(buttonId).textContent = fallbackText;
+      return;
+    }
+    navigator.clipboard.writeText(text).then(function () {
+      $(buttonId).textContent = copiedText;
+    }).catch(function () {
+      $(fieldId).focus();
+      $(fieldId).select();
+      $(buttonId).textContent = fallbackText;
+    });
+  }
+
+  $('handoff-question').addEventListener('input', function () {
+    if (localDataset) $('handoff-instruction').value = localInstruction(localDataset, $('handoff-question').value.trim());
+  });
+  $('handoff-copy-command').addEventListener('click', function () {
+    copyField('handoff-command', 'handoff-copy-command', 'Copied', 'Select and copy the command');
+  });
+  $('handoff-copy-install').addEventListener('click', function () {
+    copyField('handoff-install', 'handoff-copy-install', 'Copied', 'Select and copy the command');
+  });
+  $('handoff-copy-instruction').addEventListener('click', function () {
+    copyField('handoff-instruction', 'handoff-copy-instruction', 'Copied', 'Select and copy the instruction');
+  });
+
   var GROUPS = [
     ['Type', function (d) { var s = study(d); return s && s.category ? [s.category] : []; }],
     ['Species', function (d) { return d.organism ? [d.organism] : []; }],
@@ -93,6 +159,7 @@
           href ? el('a', { class: 'open', href: href, target: '_blank', rel: 'noopener',
                            title: 'Open in the U-Chrom browser (the first open after a quiet spell takes a few seconds)' },
                     ['Open in browser ', el('span', { 'aria-hidden': 'true', text: '→' })]) : null,
+          el('button', { class: 'continue-local', type: 'button', title: 'Prepare a local browser command and MCP instruction' }, ['Continue locally']),
           d.download ? el('a', { class: 'download', href: DATA + '/' + d.download, download: '',
                                  title: 'The whole dataset as one .cdz file (a ChromData store in one zip): open it with the U-Chrom browser or ChromData.read' },
                           [el('span', { class: 'dl-icon', 'aria-hidden': 'true', text: '↓' }), 'Download',
@@ -100,7 +167,9 @@
         ])
       ])
     ];
-    return el('article', { class: 'card', id: d.id }, kids);
+    var article = el('article', { class: 'card', id: d.id }, kids);
+    article.querySelector('.continue-local').addEventListener('click', function () { showLocal(d); });
+    return article;
   }
 
   function studyBlock(s, ds) {

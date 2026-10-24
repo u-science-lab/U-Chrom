@@ -47,6 +47,7 @@ export function App() {
   const setError = useStore((s) => s.setError)
   const addDataset = useStore((s) => s.addDataset)
   const setActiveDataset = useStore((s) => s.setActiveDataset)
+  const agentLease = useStore((s) => s.agentLease)
   // the start page waits until the server has said what is open and a linked dataset has opened (no flash of it)
   const [booted, setBooted] = useState(false)
   const hasData = useStore((s) => s.datasets.length > 0)
@@ -118,7 +119,7 @@ export function App() {
   }, [toggleSidebar])
 
   return (
-    <div className="app">
+    <div className="app" aria-busy={agentLease} aria-disabled={agentLease} data-agent-lease={agentLease ? 'active' : 'idle'}>
       <ActivityBar />
       <ActivityCard />
       <TopBar />

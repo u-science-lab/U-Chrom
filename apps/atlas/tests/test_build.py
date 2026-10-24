@@ -3,8 +3,10 @@
 Run from apps/atlas: ``pytest tests`` (needs chromdata with cooler / anndata, matplotlib, Pillow)."""
 
 import importlib.util
+import inspect
 import json
 import shutil
+import sys
 from pathlib import Path
 
 import pytest
@@ -62,6 +64,48 @@ def test_figures_from_positions_and_a_bulk_map(atlas_dir, tmp_path):
     assert cat["studies"][0]["id"] == "s1" and cat["hero"] == ["toy"]
     assert cat["datasets"][0]["figures"]["space"] == info["space"] and (site / "figures" / info["map"]).is_file()
     assert '"hosted": "https://x.test"' in (site / "config.js").read_text()
+
+
+def test_build_site_has_no_agent_handoff_endpoint_setting(tmp_path, monkeypatch):
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(json.dumps({"datasets": [{"id": "toy", "path": "toy.zarr"}]}))
+
+    site = build.build_site(tmp_path / "site", catalog)
+    config = json.loads((site / "config.js").read_text().split("=", 1)[1].strip().removesuffix(";"))
+    assert "agentHandoff" not in config
+    assert "agent_handoff" not in inspect.signature(build.build_site).parameters
+
+    monkeypatch.setattr(sys, "argv", ["build.py", "site", str(tmp_path / "cli-site"), "--catalog", str(catalog),
+                                       "--agent-handoff", "https://browser.example/api/agent/handoffs"])
+    with pytest.raises(SystemExit) as exc:
+        build.main()
+    assert exc.value.code == 2
+
+
+def test_atlas_template_builds_local_browser_command_and_mcp_instruction(tmp_path):
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(json.dumps({"datasets": [{"id": "toy", "path": "toy.zarr"}]}))
+    site = build.build_site(tmp_path / "site", catalog)
+    app = (site / "app.js").read_text()
+    html = (site / "index.html").read_text()
+
+    assert "Continue locally" in app
+    assert "python -m uchrom_browser " in app
+    assert "urlOf(d)" in app
+    assert "handoff-instruction" in app and "handoff-copy-command" in app and "handoff-copy-instruction" in app
+    assert "fetch(HANDOFF)" not in app and "agentHandoff" not in app and "token" not in app.lower()
+    assert "dataRoot + '/' + d.path" not in app
+    assert "not on PyPI" in html
+    assert "packages/chromdata" in html and "packages/uchrom-browser" in html
+    assert "U-Chrom MCP" in html and "Claude Code" in html and "Codex" in html
+
+
+def test_atlas_publish_docs_do_not_require_a_handoff_endpoint():
+    publish = (HERE.parent / "PUBLISH.md").read_text()
+    apps_readme = (HERE.parents[1] / "README.md").read_text()
+
+    assert "--agent-handoff" not in publish
+    assert "--agent-handoff" not in apps_readme
 
 
 def test_figures_fall_back_to_an_embedding_and_cell_sums(atlas_dir, tmp_path):

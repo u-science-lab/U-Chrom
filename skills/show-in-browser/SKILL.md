@@ -49,3 +49,41 @@ ws.arrange(layout="grid")
 - Don't close or rearrange the researcher's existing views unless asked; add views.
 - Name the pane ids in the answer so the researcher can find them.
 - No browser open (`BrowserError: 409`/connection refused) → give the result without views and say so.
+
+## Local agent loop
+
+When the browser is running locally, an agent may read and propose UI changes while the researcher
+keeps approval in the WebUI:
+
+```python
+import uchrom_browser as ub
+
+ws = ub.connect()
+page = ws.agent_pages()[0]["page"]       # choose and pin explicitly
+snapshot = ws.agent_snapshot(page=page)   # page canonical state + state_revision
+plan = ws.propose_ui_changes(
+    [
+        {"name": "set_locus", "args": {"chrom": "chr15", "start": 0, "end": 200_000_000}},
+        {"name": "open_view", "args": {"type": "stats", "stats": "rg", "chrom_scope": "locus"}},
+    ],
+    page=page,
+    expected_revision=snapshot["state_revision"],
+)
+print(plan["plan_id"], plan["status"])  # pending; the user applies/rejects in the Agent panel
+```
+
+Before running this flow, pin the selected page with the **Pin** button in the WebUI Agent panel.
+The plan is bound to the explicit page and revision. If the researcher changes the page first, the
+plan becomes stale and must be proposed again from a fresh `agent_snapshot`. `capture()` remains a
+read-only page action and does not create or apply an agent plan. This loop is local and process
+scoped; only the local WebUI Apply/Reject buttons are the supported approval path. Agents should not
+call the `/api/agent/plans/{plan_id}/approve`, `/reject` or `/apply` endpoints directly. The test
+suite uses those endpoints only to simulate the WebUI buttons in a deterministic API-level test;
+it does not automate or verify the rendered UI. This feature does not provide hosted handoff or
+arbitrary code execution. A reproducible real-data check is:
+
+```bash
+uv pip install -e packages/chromdata -e packages/uchrom-browser -e "packages/uchrom[web]"
+python -m uchrom_browser packages/uchrom-browser/tests/fixtures/sim_cell1/sim_cell1.cdz
+cd packages/uchrom-browser && pytest tests/test_agent_e2e.py -q
+```

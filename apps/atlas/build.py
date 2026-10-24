@@ -324,7 +324,8 @@ def build_site(out: PathLike, catalog: PathLike, *, data_root: str = DEFAULT_ATL
         cat["hero"] = [h for h in (cat.get("hero") or [k for k, v in index.items() if "hero.space" in v]) if h in index]
     (out / CATALOG).write_text(json.dumps(cat, ensure_ascii=False, indent=1) + "\n")
     (out / "config.js").write_text("window.ATLAS_CONFIG = " + json.dumps(
-        {"dataRoot": data_root.rstrip("/"), "install": install, "repo": repo, "hosted": hosted.rstrip("/")}, indent=1) + ";\n")
+        {"dataRoot": data_root.rstrip("/"), "install": install, "repo": repo, "hosted": hosted.rstrip("/")},
+        indent=1) + ";\n")
     (out / "_headers").write_text("/catalog.json\n  Cache-Control: public, max-age=300\n/*\n  X-Content-Type-Options: nosniff\n")
     return out
 
