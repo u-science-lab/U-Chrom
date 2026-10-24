@@ -503,3 +503,9 @@ MVP 不新增分析 MCP tools。Claude/Codex 使用本地终端、Python 和现�
 - 模型由用户托管：U-Chrom 提供工具、数据和页面，不托管 Claude/Codex，也不保存用户对话。
 - WebMCP 保留为增强入口：它适合浏览器内 agent 的 live page tool discovery，但不替代本地 companion。
 - 先本地、后 hosted relay：只有在真实使用数据表明用户强烈需要远程页面直控时，才增加公网 relay、租户隔离和审计系统。
+
+## 15. 2026-10-24 验证边界
+
+已用真实 `packages/uchrom-browser/tests/fixtures/sim_cell1/sim_cell1.cdz` 独立跑通本地 agent loop：SSE page attach、canonical selection readback、locus canonicalization、Stats/Genome 计划审批与应用、revision readback 和 capture。浏览器 agent API、control/SSE、companion、frontend Vitest/build、Atlas local continuation/build，以及 Worker tests/typecheck 的实际命令和结果记录在 `.superpowers/sdd/2026-10-22-local-agent-webui-mvp-plan/task-4-report.md`。
+
+这组证据不等于完整浏览器产品 E2E：真实测试通过 HTTP 审批调用模拟 AgentPanel 操作，未验证渲染 DOM 中点击 AgentPanel Apply；Worker 只做回归测试，未验证完整 create→redeem→attach runtime 链路。PyPI、桌面安装器、Claude/Codex 自动配置、私有数据权限、网络中断和跨平台安装也保持未验证。
