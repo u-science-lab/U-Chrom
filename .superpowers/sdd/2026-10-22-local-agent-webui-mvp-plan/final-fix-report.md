@@ -33,13 +33,13 @@ Base reviewed: `b9cd601` (`codex/local-agent-webui`)
 
 - Frontend focused Vitest: 27 tests passed.
 - Frontend full Vitest: 45 files / 361 tests passed after the final nested-row redaction tests.
-- Frontend TypeScript/Vite build: passed, 332 modules transformed; `uchrom_browser/static/` bundle refreshed.
+- Frontend TypeScript/Vite build: passed, 332 modules transformed. The generated hash-based `static/` bundle was removed during final cleanup per the request to remove build/static artifacts; the pre-wave tracked bundle remains in place.
 - Companion MCP focused suite: 16 passed.
 - Companion lifecycle/config suites: 85 passed.
 - Companion complete test directory: 101 passed.
 - Browser agent suite: 27 passed in 103.90s.
 - Browser control and real-data E2E suites: 13 passed; the existing timeout test emitted one teardown thread warning while the assertions passed.
-- `git diff --check`: passed.
+- Source/test/report paths pass `git diff --check`. A full `origin/main...HEAD` check still reports trailing whitespace in pre-existing minified static assets and blank-at-EOF lines in historical plan/E2E files; those paths are outside this fix wave and the generated hash bundle was removed during cleanup.
 
 ## Deferred or unverified boundaries
 
@@ -47,5 +47,9 @@ Base reviewed: `b9cd601` (`codex/local-agent-webui`)
 - Rendered browser DOM interaction for AgentPanel Apply remains unverified; unit/API coverage verifies the selected-page and stale-plan contracts.
 - PyPI/desktop distribution, automatic Claude/Codex setup, cross-platform installation, and private-data/network interruption behavior remain unverified.
 - Session-proof refresh remains a parked minor review item; this fix wave did not broaden auth/session behavior.
+
+## Cleanup commit
+
+The cleanup commit after the implementation restores the pre-wave tracked static bundle and removes the hash-based build output and transient `uv.lock` files. The implementation fix is in `8473342`.
 
 No additional ruling is required for the four Important findings. The existing local-first ruling remains: inspect pages, have the user pin the page in AgentPanel, read local canonical state, compare the hosted reference, then propose a revision-bound plan for WebUI approval.
