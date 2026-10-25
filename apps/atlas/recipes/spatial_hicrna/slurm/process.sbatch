@@ -1,12 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=uchrom-pairs
-#SBATCH --partition=normal
 #SBATCH --time=04:00:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --output=%x-%j.out
 # Spatial Hi-C-RNA (GSE311199): download one sample's .pairs to $SCRATCH, build per-spot .scool +
-# pseudo-bulk .mcool, copy the results to Oak.  Usage: sbatch process.sbatch <sample> [max_lines]
+# pseudo-bulk .mcool, copy the results to the archive.  Usage: sbatch process.sbatch <sample> [max_lines]
 #   <sample> is a row of samples.tsv; max_lines > 0 processes only the first pairs (tests).
 # The #SBATCH defaults fit the small E13.5 r2 (6.6 GB: 22 min, 8.9 GB RSS).  Memory follows the number of
 # per-spot pixels (~240 B each): mouse_brain_r2 (87 GB, 3.4e9 pairs, 6,199 spots, 3.4e8 pixels) took
@@ -16,14 +15,14 @@ set -euo pipefail
 SAMPLE=$1
 MAX_LINES=${2:-0}
 HERE="$HOME/uchrom_spatial"
-ENV="$GROUP_HOME/$USER/envs/uchrom-hic"
+ENV="$HOME/envs/uchrom-hic"
 read -r PAIRS ASM < <(awk -F'\t' -v s="$SAMPLE" '$1==s {print $2, $4}' "$HERE/samples.tsv")
 [ -n "$PAIRS" ] || { echo "unknown sample $SAMPLE"; exit 2; }
 GSM=${PAIRS%%_*}
 URL="https://ftp.ncbi.nlm.nih.gov/geo/samples/${GSM:0:7}nnn/$GSM/suppl/$PAIRS"
 RAW="$SCRATCH/uchrom_spatial/raw"
 OUT="$SCRATCH/uchrom_spatial/out/$SAMPLE"
-DEST="$OAK/uchrom/spatial_3dgenome/$SAMPLE"
+DEST="$UCHROM_ARCHIVE/spatial_3dgenome/$SAMPLE"
 mkdir -p "$RAW" "$OUT"
 echo "[$(date)] $SAMPLE ($ASM) on $(hostname), job $SLURM_JOB_ID"
 if [ ! -s "$RAW/$PAIRS" ]; then

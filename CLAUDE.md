@@ -261,8 +261,9 @@ re-implementation of a paper):
   host, CPU, threads, package versions, datasets, parameters) and the headline files are committed in its folder's
   `results/` there (small JSON, `results/MANIFEST.md`); `python shared/_record.py OLD NEW --rtol x` compares a new
   run with them.  Large outputs (call tables, maps, models) are archived on
-  Sherlock's Oak, `$OAK/uchrom/results/<name>/<date>_<revision>/` — never only on `$SCRATCH` (purged after 90
-  days) or in a session scratchpad.  Heavy runs go to Sherlock (`*/sherlock/` there), not the laptop.
+  the cluster's long-term storage, `$UCHROM_ARCHIVE/results/<name>/<date>_<revision>/` — never only on `$SCRATCH`
+  (purged) or in a session scratchpad.  Heavy runs go to the cluster (`*/slurm/` there), not the laptop.  The
+  public repositories name no site: no cluster name, partition, account, host or user path.
 
 ## Data
 

@@ -1,8 +1,8 @@
 """Link the reprocessed spatial Hi-C-RNA contact maps (GEO GSE311199) into the hicrna_* stores.
 
-The contacts come from our Sherlock pipeline (apps/atlas/recipes/spatial_hicrna/sherlock/: the published
+The contacts come from our cluster pipeline (apps/atlas/recipes/spatial_hicrna/slurm/: the published
 ``.nodups.pairs.gz`` of each sample -> per-spot 1-Mb ``.scool`` + bulk ``.mcool``), one folder per
-sample on Oak.  Copy ``<sample>.spots_1Mb.scool`` and ``<sample>.bulk.mcool`` into
+sample in the archive.  Copy ``<sample>.spots_1Mb.scool`` and ``<sample>.bulk.mcool`` into
 ``$UCHROM_DATA/spatial_hicrna/contacts/`` over the DTN (17.8 GB for the 7 samples; README), then::
 
     python apps/atlas/recipes/link_spatial_hicrna_contacts.py [SAMPLE ...]
@@ -171,7 +171,7 @@ def main(samples: list) -> None:
         for sample in secs:
             scool, mcool = CONTACTS / f"{sample}.spots_1Mb.scool", CONTACTS / f"{sample}.bulk.mcool"
             if not scool.exists() or not mcool.exists():
-                print(f"{sample}: {scool.name} / {mcool.name} missing (copy them from Oak first) — skipped")
+                print(f"{sample}: {scool.name} / {mcool.name} missing (copy them from the archive first) — skipped")
                 continue
             cells = cd.cells[cd.cells["section"] == sample]
             with h5py.File(scool, "r") as f:
@@ -186,7 +186,7 @@ def main(samples: list) -> None:
                           genome_assembly=cd.uns["genome_assembly"], bin_size=1_000_000,
                           label=f"{sample}, per spot",
                           source="published .nodups.pairs.gz of GSE311199, "
-                                 "apps/atlas/recipes/spatial_hicrna/sherlock (cis pairs, MAPQ >= 30)")
+                                 "apps/atlas/recipes/spatial_hicrna/slurm (cis pairs, MAPQ >= 30)")
             cd.link_cool(f"contacts/{mcool.name}", key=f"bulk.{sample}", label=f"{sample}, all spots (merged)",
                          genome_assembly=cd.uns["genome_assembly"])
             log = json.loads((CONTACTS / f"{sample}.log.json").read_text())

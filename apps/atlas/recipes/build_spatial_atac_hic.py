@@ -5,7 +5,7 @@ in the same spots of a 50 x 50 barcode grid (Visium-style positions) on coronal 
 (MouseBrainR6 = GSM9228169, MouseBrainR8 = GSM9228170).  GEO has, per section, cellranger-atac style
 fragments of the ATAC library and of the Hi-C library (one fragment per line: the contact pairing is not
 in the processed files), tissue positions, scale factors and images.  Contact maps need the raw reads (SRA;
-see spatial_atac_hic/sherlock/) and are linked when they exist.
+see spatial_atac_hic/slurm/) and are linked when they exist.
 
 Writes spatial_atac_hic/mouse_brain.chromdata.zarr, a ChromData without 3-D spots, and the files it links:
   cells   one row per in-tissue spot (id "<section>:<barcode>"): section, array_row / array_col,

@@ -90,7 +90,7 @@ fn run_with(protocol: &str, emulate: bool, f: impl Fn(Params) -> Params) -> u64 
 }
 
 /// (protocol, emulate overflow, macOS aarch64 hashes, Linux x86-64 hashes).  libm differs between
-/// Linux distributions, so Linux has one hash per recorded system: Sherlock (CentOS 7, glibc 2.17)
+/// Linux distributions, so Linux has one hash per recorded system: a CentOS 7 cluster (glibc 2.17)
 /// and the GitHub ubuntu-latest runner (recorded on 2026-10-03 by running this test on the
 /// pre-`robust` engine, commit 628746e, in CI).  An empty list = not recorded (hash printed).
 const GOLDEN: [(&str, bool, &[u64], &[u64]); 3] = [
@@ -100,7 +100,7 @@ const GOLDEN: [(&str, bool, &[u64], &[u64]); 3] = [
 ];
 
 /// EMber (protocol "robust") with its frozen defaults (tag `robust-frozen`), on the same toy
-/// contacts and a shortened schedule: (macOS aarch64, Linux x86-64: Sherlock, GitHub
+/// contacts and a shortened schedule: (macOS aarch64, Linux x86-64: a cluster node, GitHub
 /// ubuntu-latest).  Recorded 2026-10-03 on commit 6fcf370, whose CPU engine is that of the tag,
 /// before diploid support was added (diploid input takes a separate path, `diploid.rs`).
 const GOLDEN_ROBUST: (&[u64], &[u64]) = (&[0x0691d3b6eac2a99a], &[0x50d611f3ba255008, 0xa6236727e14c942c]);

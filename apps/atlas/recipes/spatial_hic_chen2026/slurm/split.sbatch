@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=chen-split
-#SBATCH --partition=xiaojie
 #SBATCH --time=12:00:00
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=16G
@@ -11,7 +10,7 @@
 set -euo pipefail
 source "${SLURM_SUBMIT_DIR:-$HOME/uchrom_chen2026}/common.sh"   # jobs are submitted from the scripts folder
 RUN=$1; MAX=${2:-0}
-[ -e "$RAW/$RUN/OK" ] || { echo "fastq of $RUN not downloaded (fetch_dtn.sh)"; exit 2; }
+[ -e "$RAW/$RUN/OK" ] || { echo "fastq of $RUN not downloaded (fetch.sbatch)"; exit 2; }
 OUT="$WORK/$RUN"; mkdir -p "$OUT"
 echo "[$(date)] $RUN on $(hostname), job $SLURM_JOB_ID"
 export PATH="$ENV/bin:$PATH"

@@ -475,7 +475,7 @@ DATASETS = {
         "md5": {"rao2014_imr90/4DNFIR1JDZH7.mcool": "f91b77fa61acdc58360911c80b007646"},
         "size_mb": 4640,
         "default": False,
-        "description": "Rao 2014 IMR90 in situ Hi-C, 4DN GRCh38 mcool (4DNFIR1JDZH7; Sherlock only)",
+        "description": "Rao 2014 IMR90 in situ Hi-C, 4DN GRCh38 mcool (4DNFIR1JDZH7; cluster only)",
     },
     # Bonev et al. 2017 mESC Hi-C (G1-sorted ES), 4DN GRCm38 mcool (set 4DNESDXUWBD9) - Takei 2021's
     # comparison Hi-C; whole-genome input of the mESC deconvolution benchmark.
@@ -486,7 +486,7 @@ DATASETS = {
         "md5": {"bonev2017_mesc/4DNFIC21MG3U.mcool": "dda4ed67a1179f917721fb81b1adebe0"},
         "size_mb": 12551,
         "default": False,
-        "description": "Bonev 2017 mESC Hi-C, 4DN mm10 mcool (4DNFIC21MG3U; Sherlock only)",
+        "description": "Bonev 2017 mESC Hi-C, 4DN mm10 mcool (4DNFIC21MG3U; cluster only)",
     },
     # GEM-FISH (Abbas et al. 2019, Nat Commun 10:2049) repo data, MIT licence,
     # pinned commit: Wang et al. 2016 FISH of chr20/21/22 TADs in IMR90, the
@@ -603,7 +603,7 @@ DATASETS = {
     # Quinodoz et al. 2018 (Cell 174:744, doi:10.1016/j.cell.2018.05.024) SPRITE, mouse ES cells (GEO GSE114242):
     # the clusters of the authors' pipeline, one per line (barcode, then chrom:pos per read; members
     # mouse.mapq-ge10.clusters.gz 3.8 GB and mouse.mapq-ge30.clusters.gz 2.7 GB).  Multi-way contacts of the store
-    # (ChromData.clusters, format 2.4): uchrom-reproducibility extended_data_fig1/g_clusters_sprite.py (Sherlock).
+    # (ChromData.clusters, format 2.4): uchrom-reproducibility extended_data_fig1/g_clusters_sprite.py (cluster).
     "quinodoz2018_sprite": {
         "files": [("quinodoz2018_sprite/GSE114242_mouse_combined_clusters.tar.gz",
                    _gse("GSE114242", "GSE114242_mouse_combined_clusters.tar.gz"))],

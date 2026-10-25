@@ -119,7 +119,7 @@ or two copies (`ploidy="auto"`: male — X and Y single — when a Y chromosome 
   and, for EMber, `contact_weights` = P(true).
 * The dynamics are unchanged; ambiguous groups and weights were already supported on the CPU
   and the GPU.  Haploid input takes the old code path: `tests/regression.rs` pins
-  nuc_dynamics_2017, release_1.3 and EMber's frozen defaults (macOS, Sherlock, GitHub runner).
+  nuc_dynamics_2017, release_1.3 and EMber's frozen defaults (macOS, a CentOS 7 cluster, GitHub runner).
 * Checks: `diploid::tests` (candidates and the cis rule, binning, EM phase inference, end-to-end
   toy for both protocols: per-copy distance r and phase accuracy), `gpu::tests::
   gpu_matches_cpu_ambiguous_groups` (max diff ~2e-5 after 10 steps for 2017, weighted and

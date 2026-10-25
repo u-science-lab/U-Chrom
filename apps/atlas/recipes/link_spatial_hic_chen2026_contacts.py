@@ -1,7 +1,7 @@
 """Link the reprocessed spatial Hi-C contact maps (Chen, Guo et al. 2026; GSA CRA016676) into the stores.
 
-The contacts come from our Sherlock pipeline (apps/atlas/recipes/spatial_hic_chen2026/sherlock/: raw reads
--> bwa -> pairtools -> pairs_to_cool.py), one folder per run on Oak.  Copy each run's
+The contacts come from our cluster pipeline (apps/atlas/recipes/spatial_hic_chen2026/slurm/: raw reads
+-> bwa -> pairtools -> pairs_to_cool.py), one folder per run in the archive.  Copy each run's
 ``<run>.pixels_1Mb.scool``, ``<run>.bulk.mcool``, ``<run>.barcode_stats.tsv`` and ``<run>.log.json``
 into ``$UCHROM_DATA/spatial_hic_chen2026/contacts/`` first (over the DTN; README), then::
 
@@ -46,7 +46,7 @@ from uchrom import ChromData
 from uchrom.datasets import data_dir
 
 HERE = data_dir() / "spatial_hic_chen2026"                          # the data: stores, contacts
-SHERLOCK = Path(__file__).resolve().parent / "spatial_hic_chen2026" / "sherlock"   # the pipeline tables
+PIPELINE = Path(__file__).resolve().parent / "spatial_hic_chen2026" / "slurm"   # the pipeline tables
 SRC = HERE / "contacts"
 RUNS = ["CRR1161506", "CRR1161507", "CRR1161509", "CRR1161510", "CRR1829212", "CRR1829213", "CRR1829214",
         "CRR1829215", "CRR1829216", "CRR1829217", "CRR1829219", "CRR1829220", "CRR1831973"]   # runs.tsv rows with a store
@@ -56,9 +56,9 @@ N_SPOTS = 1500          # spots scored per candidate (random, fixed seed)
 
 def barcode_lists(n: int):
     if n == 50:
-        return (pd.read_csv(SHERLOCK / "barcodes_50_B.tsv", sep="\t").barcode.tolist(),
-                pd.read_csv(SHERLOCK / "barcodes_50_A.tsv", sep="\t").barcode.tolist())
-    b = pd.read_csv(SHERLOCK / "barcodes_96.tsv", sep="\t").barcode.tolist()
+        return (pd.read_csv(PIPELINE / "barcodes_50_B.tsv", sep="\t").barcode.tolist(),
+                pd.read_csv(PIPELINE / "barcodes_50_A.tsv", sep="\t").barcode.tolist())
+    b = pd.read_csv(PIPELINE / "barcodes_96.tsv", sep="\t").barcode.tolist()
     return b, b
 
 
@@ -83,8 +83,8 @@ def candidates(names: pd.Series, cells: pd.DataFrame, n: int) -> dict:
                 out[f"grid swap={int(swap)} flip1={int(f1)} flip2={int(f2)}"] = dict(zip(names[ids.notna()], ids[ids.notna()]))
     if n == 96:
         # the authors' own barcode -> grid index (their plate order, not ours: read off the
-        # brain_embryo_20um store's barcode pairs and spot names; sherlock/barcodes_96_authors_index.tsv)
-        t = pd.read_csv(SHERLOCK / "barcodes_96_authors_index.tsv", sep="\t").set_index("barcode")
+        # brain_embryo_20um store's barcode pairs and spot names; slurm/barcodes_96_authors_index.tsv)
+        t = pd.read_csv(PIPELINE / "barcodes_96_authors_index.tsv", sep="\t").set_index("barcode")
         for roles, (o1, o2) in {"b1=pos1": ("index_pos1", "index_pos2"), "b1=pos2": ("index_pos2", "index_pos1")}.items():
             j1 = b1.map(t[o1]).astype("Float64")
             j2 = b2.map(t[o2]).astype("Float64")
@@ -231,7 +231,7 @@ def rename_scool(src: Path, dst: Path, rename: dict) -> int:
 
 
 def main(runs: list) -> None:
-    table = pd.read_csv(SHERLOCK / "runs.tsv", sep="\t").set_index("run")
+    table = pd.read_csv(PIPELINE / "runs.tsv", sep="\t").set_index("run")
     rng = np.random.default_rng(0)
     by_store: dict = {}
     for run in runs:
@@ -250,7 +250,7 @@ def main(runs: list) -> None:
             sec, n = r["section"], int(r["grid"])
             scool, mcool = SRC / f"{run}.pixels_1Mb.scool", SRC / f"{run}.bulk.mcool"
             if not scool.exists() or not mcool.exists():
-                print(f"{run}: {scool.name} / {mcool.name} missing (copy them from Oak first) — skipped")
+                print(f"{run}: {scool.name} / {mcool.name} missing (copy them from the archive first) — skipped")
                 continue
             cells = cd.cells[cd.cells["section"] == sec]
             with h5py.File(scool, "r") as f:
@@ -282,7 +282,7 @@ def main(runs: list) -> None:
                 key = f"per_spot.{sec}.{run}"
             cd.link_scool(out.name, key=key, cell_name="cell id (store)", genome_assembly="mm10", bin_size=1_000_000,
                           label=f"{label_run}, per spot", run=run,
-                          source="reprocessed from GSA CRA016676 (apps/atlas/recipes/spatial_hic_chen2026/sherlock)")
+                          source="reprocessed from GSA CRA016676 (apps/atlas/recipes/spatial_hic_chen2026/slurm)")
             bkey = key.replace("per_spot.", "bulk.", 1)
             cd.link_cool(f"contacts/{mcool.name}", key=bkey, label=f"{label_run}, all spots (merged)", genome_assembly="mm10", run=run)
             pipe = json.loads((SRC / f"{run}.log.json").read_text())

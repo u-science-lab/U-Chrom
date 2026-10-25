@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=chen-map
-#SBATCH --partition=xiaojie
 #SBATCH --time=12:00:00
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=64G

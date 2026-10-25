@@ -98,5 +98,5 @@ __pycache__/
 *.pyc
 
 
-# code revision of a U-Chrom copy synced to a cluster (read by the Sherlock job scripts)
+# code revision of a U-Chrom copy synced to a cluster (read by the cluster job scripts)
 /REVISION

@@ -15,7 +15,7 @@ Input (``python -m uchrom.datasets fetch spatial_hicrna``, ``spatial_hicrna/raw/
 10x RNA matrix of every barcode of the grid, the Visium-style positions (``tissue_positions_list.csv``:
 barcode, in_tissue, array_row, array_col, pxl_row, pxl_col), the tissue image, and for three samples
 the authors' processed Hi-C + RNA AnnData (cell types, clusters, latent spaces, single-spot A/B).
-Optional ``contacts/<sample>.spot_stats.tsv`` (Sherlock pipeline, ``spatial_hicrna/sherlock/``) adds the
+Optional ``contacts/<sample>.spot_stats.tsv`` (cluster pipeline, ``spatial_hicrna/slurm/``) adds the
 Hi-C contacts per spot.  The contact maps themselves are linked by ``link_spatial_hicrna_contacts.py``.
 
 What a store holds

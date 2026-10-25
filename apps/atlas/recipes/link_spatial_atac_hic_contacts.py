@@ -1,11 +1,11 @@
 """Link the reprocessed spatial ATAC-Hi-C contact maps (GSE307620) into mouse_brain.chromdata.zarr.
 
-The contacts come from our Sherlock pipeline (apps/atlas/recipes/spatial_atac_hic/sherlock/: SRA reads
--> bwa -> pairtools -> pairs_to_cool.py), one folder per section on Oak.  Copy the outputs
+The contacts come from our cluster pipeline (apps/atlas/recipes/spatial_atac_hic/slurm/: SRA reads
+-> bwa -> pairtools -> pairs_to_cool.py), one folder per section in the archive.  Copy the outputs
 here first (they are not public; see apps/atlas/recipes/README.md, "spatial_atac_hic")::
 
     for s in MouseBrainR6 MouseBrainR8; do for f in pixels_1Mb.scool bulk.mcool barcode_stats.tsv log.json; do
-      rsync -a sherlock-dtn:$OAK/uchrom/spatial_atac_hic/$s/$s.$f $UCHROM_DATA/spatial_atac_hic/contacts/; done; done
+      rsync -a <cluster>:$UCHROM_ARCHIVE/spatial_atac_hic/$s/$s.$f $UCHROM_DATA/spatial_atac_hic/contacts/; done; done
 
 then::
 
@@ -64,14 +64,14 @@ def main() -> None:
         src = HERE / "contacts"
         scool, mcool = src / f"{sec}.pixels_1Mb.scool", src / f"{sec}.bulk.mcool"
         if not scool.exists() or not mcool.exists():
-            raise SystemExit(f"{scool.name} / {mcool.name} missing: copy them from Oak first (see the docstring)")
+            raise SystemExit(f"{scool.name} / {mcool.name} missing: copy them from the archive first (see the docstring)")
         c = cells[cells["section"] == sec]
         rename = dict(zip(c["barcode"].astype(str), c.index.astype(str)))
         out = HERE / f"mouse_brain_{sec}.spots_1Mb.scool"
         n = rename_scool(scool, out, rename)
         cd.link_scool(f"{out.name}", key=f"per_spot.{sec}", cell_name="cell id (<section>:<barcode A><barcode B>)",
                       genome_assembly="mm10", bin_size=1_000_000, label=f"{sec}, per spot",
-                      source="reprocessed from SRA (apps/atlas/recipes/spatial_atac_hic/sherlock)")
+                      source="reprocessed from SRA (apps/atlas/recipes/spatial_atac_hic/slurm)")
         cd.link_cool(f"contacts/{mcool.name}", key=f"bulk.{sec}", label=f"{sec}, all spots (merged)", genome_assembly="mm10")
 
         # agreement with the authors' per-spot Hi-C fragment counts

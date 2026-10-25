@@ -30,7 +30,8 @@ an old folder works as `UCHROM_DATA`.
   `takei2025_fov0` is streamed out of the Zenodo tarball.
 - **recipe**: a script in this folder (`apps/atlas/recipes/build_*.py`, `link_*.py`) that builds a
   store or a benchmark input from fetched files, reading from and writing to the data directory.  Some
-  link contact maps made from the raw reads on Sherlock (`*/sherlock/`); those are not public.
+  link contact maps made from the raw reads on a compute cluster (`*/slurm/`: Slurm jobs; `$UCHROM_ARCHIVE` is
+  where the cluster keeps their results); those are not public.
 - **fixture**: a small real file in a package's `tests/fixtures/` (each folder has a README listing
   the sources), read offline by the unit tests.
 
@@ -102,7 +103,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `schicar_mop/raw/merfish_mop/`: MERFISH mouse MOp atlas | 332 MB | fetch `merfish_mop` | scHiCAR to MERFISH mapping (an unpublished benchmark) |
 | `spatial_hic_chen2026/`: Spatial Hi-C, mouse embryo / brain (Chen, Guo 2026) | 15.9 GB download; stores 0.7–16 MB + linked files | fetch `spatial_hic_chen2026`; recipes `build_spatial_hic_chen2026.py` (needs R), `link_spatial_hic_chen2026_contacts.py`; atlas `chen2026_*` | validation benchmarks; an unpublished benchmark; the atlas page's hero animation |
 | `spatial_atac_hic/`: Spatial ATAC-Hi-C, mouse brain (Wang P. 2026) | 9.5 GB download; store + links ~0.3 GB | fetch `spatial_atac_hic`; recipes `build_spatial_atac_hic.py`, `link_spatial_atac_hic_contacts.py`; atlas `atac_hic_mouse_brain` | atlas |
-| `spatial_hicrna/`: Spatial Hi-C-RNA, mouse brain / embryo, human melanoma (Guo 2026) | 2.3 GB download; contacts from 7 `.pairs.gz` of 7–160 GB on Sherlock | fetch `spatial_hicrna`; recipes `build_spatial_hicrna.py`, `link_spatial_hicrna_contacts.py`; atlas `hicrna_*` | uchrom-reproducibility `supp_fig6/atlas/spatial_hicrna_validation.py`, `embedded_contacts.py`, `spatial_composition/` |
+| `spatial_hicrna/`: Spatial Hi-C-RNA, mouse brain / embryo, human melanoma (Guo 2026) | 2.3 GB download; contacts from 7 `.pairs.gz` of 7–160 GB on a compute cluster | fetch `spatial_hicrna`; recipes `build_spatial_hicrna.py`, `link_spatial_hicrna_contacts.py`; atlas `hicrna_*` | uchrom-reproducibility `supp_fig6/atlas/spatial_hicrna_validation.py`, `embedded_contacts.py`, `spatial_composition/` |
 | `hires2023/`: HiRES mouse embryo / brain, contacts + RNA + 3-D | 70 MB + 76 GB | fetch `hires2023_meta`, `hires2023`; recipe `build_hires2023.py`; atlas `hires_embryo`, `hires_brain` | atlas; the atlas page's hero animation |
 | `dschic2025/`: dscHi-C mouse cortex at 3 / 12 / 23 months | 44 GB | fetch `dschic2025_aging`; recipe `build_dschic2025.py`; atlas `dschic_aging_cortex` | atlas; tutorial `pseudobulk`; uchrom-reproducibility `supp_table3/hic_structures/pseudobulk_dschic.py` |
 | `gageseq2024/`: GAGE-seq mouse cortex / human bone marrow CD34+ | 38 GB | fetch `gageseq2024`; recipe `build_gageseq2024.py`; atlas `gageseq_mouse_cortex`, `gageseq_human_bm_cd34` | atlas; an unpublished benchmark |
@@ -136,12 +137,12 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `takei2021_brain/`: Takei 2021 Science mouse cortex seqFISH+ tables | 597 MB | fetch `takei2021_brain` | an unpublished benchmark (brain imaging reference) |
 | `tan2021_cortex/`: Tan 2021 Dip-C adult cortex, 510 cells | 13 GB | fetch `tan2021_cortex` | an unpublished benchmark (brain Dip-C baseline) |
 | `tan2018_gm12878/`: Tan 2018 Dip-C GM12878, 17 cells | ~0.7 GB | fetch `tan2018_gm12878` | diploid EMber / NucDynamics validation |
-| `quinodoz2018_sprite/`: Quinodoz 2018 SPRITE mouse ES cells, the authors' clusters | 6.2 GB | fetch `quinodoz2018_sprite` (**Sherlock**) | multi-way contacts of the store (`ChromData.clusters`, format 2.4): uchrom-reproducibility `extended_data_fig1/g_clusters_sprite.py` |
+| `quinodoz2018_sprite/`: Quinodoz 2018 SPRITE mouse ES cells, the authors' clusters | 6.2 GB | fetch `quinodoz2018_sprite` (**cluster**) | multi-way contacts of the store (`ChromData.clusters`, format 2.4): uchrom-reproducibility `extended_data_fig1/g_clusters_sprite.py` |
 | `wu2025_scmicroc/`: Wu 2025 scMicro-C GM12878, 12 deepest cells | 3.1 GB (102 GB streamed) | fetch `wu2025_scmicroc` | EMber deep development and test (PREREG §11); Fig. 3a / S8 |
-| `rao2014_imr90/4DNFIR1JDZH7.mcool`: Rao 2014 IMR90, 4DN GRCh38 | 4.6 GB | fetch `rao2014_imr90_4dn` (**Sherlock only**; laptops read it over HTTP) | an unpublished benchmark; an unpublished benchmark (range reads) |
-| `bonev2017_mesc/4DNFIC21MG3U.mcool`: Bonev 2017 mESC Hi-C, 4DN mm10 | 12.6 GB | fetch `bonev2017_mesc_4dn` (**Sherlock only**) | an unpublished benchmark; an unpublished benchmark (range reads); tutorial `sc_structures` and uchrom-reproducibility `supp_table3/sc_structures/` (bulk mESC loops and insulation) |
+| `rao2014_imr90/4DNFIR1JDZH7.mcool`: Rao 2014 IMR90, 4DN GRCh38 | 4.6 GB | fetch `rao2014_imr90_4dn` (**cluster only**; laptops read it over HTTP) | an unpublished benchmark; an unpublished benchmark (range reads) |
+| `bonev2017_mesc/4DNFIC21MG3U.mcool`: Bonev 2017 mESC Hi-C, 4DN mm10 | 12.6 GB | fetch `bonev2017_mesc_4dn` (**cluster only**) | an unpublished benchmark; an unpublished benchmark (range reads); tutorial `sc_structures` and uchrom-reproducibility `supp_table3/sc_structures/` (bulk mESC loops and insulation) |
 | `WTC11_HiC_2Mb.hcs`: the IGM demo input (GPL-3) | 3.9 MB | downloaded on demand by an unpublished benchmark into `$UCHROM_IGM_CACHE` | IGM protocol of the native engine vs the original IGM |
-| bulk IGM inputs (`fine_20kb.npz`, `igm_200kb.npz`, `su_3mb.npz`, `su_1mb.npz`, `takei_1mb.npz`) | 0.1–10 GB | **derived** on Sherlock (an unpublished benchmark, `sherlock/build_real.sbatch`) | an unpublished benchmark |
+| bulk IGM inputs (`fine_20kb.npz`, `igm_200kb.npz`, `su_3mb.npz`, `su_1mb.npz`, `takei_1mb.npz`) | 0.1–10 GB | **derived** on a compute cluster (an unpublished benchmark, `slurm/build_real.sbatch`) | an unpublished benchmark |
 | `liu2025_mop/`: Liu 2025 mouse MOp DNA-MERFISH, 4DN FOF-CT core + cell table | 1.68 GB + 17 MB; store 294 MB | fetch `liu2025_mop`; recipe `build_liu2025_mop.py` | Fig. 2 dataset scale; FOF-CT writer, format, streaming and cell-position benchmarks |
 | `4DNFIQXONUUH.csv`: Takei 2021 mESC FOF-CT, replicate 2 | 34 MB | fetch `takei_rep2` | uchrom-reproducibility `supp_table3/arcfish_parity` (ArcFISH's loop / domain tutorial data); tutorials `tad_calling`, `loop_calling` (both replicates, as the ArcFISH paper) |
 | `su2020_imr90/chromosome2_p-arm_replicate.tsv`: Su 2020 chr2 p-arm tracing | 78 MB | fetch `su2020_chr2_parm` | uchrom-reproducibility `supp_table3/arcfish_parity` (ArcFISH's compartment tutorial data) |
@@ -448,10 +449,10 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
   https://ftp.ncbi.nlm.nih.gov/geo/series/GSE114nnn/GSE114242/suppl/GSE114242_mouse_combined_clusters.tar.gz
   ```
   The series also has the authors' pairwise maps (`GSE114242_mouse_intra_*.tar.gz`) and the human clusters.
-- **Used by**: uchrom-reproducibility `extended_data_fig1/g_clusters_sprite.py` (Sherlock job
-  `extended_data_fig1/sherlock/clusters.sbatch`): the clusters as a `ClusterTable` (a read at `pos` → the
+- **Used by**: uchrom-reproducibility `extended_data_fig1/g_clusters_sprite.py` (cluster job
+  `extended_data_fig1/slurm/clusters.sbatch`): the clusters as a `ClusterTable` (a read at `pos` → the
   fragment `[pos, pos + 1)`), written to a store and read back (checksum over clusters), store size, region
-  queries in memory, backed and over HTTP; `g_clusters_layout.py` (`sherlock/clusters_layout.sbatch`): the locus
+  queries in memory, backed and over HTTP; `g_clusters_layout.py` (`slurm/clusters_layout.sbatch`): the locus
   index's chunk and codec.  Not downloaded on laptops.
 
 ### `kim2020_scihic/`: Kim 2020 sci-Hi-C, H1 ES + HFF (128 MB + 92 KB; fetch `kim2020_scihic`)
@@ -555,9 +556,9 @@ brain cells).
 
 | Atlas id | Size (MB) | Store (data directory) | Recipe | Inputs (fetch) |
 | --- | --- | --- | --- | --- |
-| `hicrna_mouse_brain`, `hicrna_mouse_embryo`, `hicrna_human_melanoma` | 2,254 / 4,578 / 2,728 | `spatial_hicrna/<id>.chromdata.zarr` | `build_spatial_hicrna.py`, `link_spatial_hicrna_contacts.py` (contacts from Sherlock) | `spatial_hicrna` |
-| `chen2026_e13_embryo_50um`, `chen2026_brain_embryo_10um`, `chen2026_brain_embryo_20um`, `chen2026_cortex_adult_10um`, `chen2026_hippocampus_adult_10um`, `chen2026_cerebellum_adult_20um` | 711 / 1,887 / 1,446 / 664 / 306 / 165 | `spatial_hic_chen2026/<tissue>.chromdata.zarr` (id without `chen2026_`) | `build_spatial_hic_chen2026.py`, `link_spatial_hic_chen2026_contacts.py` (contacts from Sherlock) | `spatial_hic_chen2026` |
-| `atac_hic_mouse_brain` | 390 | `spatial_atac_hic/mouse_brain.chromdata.zarr` | `build_spatial_atac_hic.py`, `link_spatial_atac_hic_contacts.py` (contacts from Sherlock) | `spatial_atac_hic` |
+| `hicrna_mouse_brain`, `hicrna_mouse_embryo`, `hicrna_human_melanoma` | 2,254 / 4,578 / 2,728 | `spatial_hicrna/<id>.chromdata.zarr` | `build_spatial_hicrna.py`, `link_spatial_hicrna_contacts.py` (contacts from the cluster) | `spatial_hicrna` |
+| `chen2026_e13_embryo_50um`, `chen2026_brain_embryo_10um`, `chen2026_brain_embryo_20um`, `chen2026_cortex_adult_10um`, `chen2026_hippocampus_adult_10um`, `chen2026_cerebellum_adult_20um` | 711 / 1,887 / 1,446 / 664 / 306 / 165 | `spatial_hic_chen2026/<tissue>.chromdata.zarr` (id without `chen2026_`) | `build_spatial_hic_chen2026.py`, `link_spatial_hic_chen2026_contacts.py` (contacts from the cluster) | `spatial_hic_chen2026` |
+| `atac_hic_mouse_brain` | 390 | `spatial_atac_hic/mouse_brain.chromdata.zarr` | `build_spatial_atac_hic.py`, `link_spatial_atac_hic_contacts.py` (contacts from the cluster) | `spatial_atac_hic` |
 | `stevens2017_mesc` | 26 | `stevens2017_mesc/stevens2017_mesc.chromdata.zarr` | `build_stevens2017.py` | `stevens2017` |
 | `hires_brain`, `hires_embryo` | 261 / 3,174 | `hires2023/<id>.chromdata.zarr` | `build_hires2023.py brain`, `build_hires2023.py embryo` | `hires2023_meta`, `hires2023` |
 | `dschic_aging_cortex` | 2,278 | `dschic2025/dschic_aging_cortex.chromdata.zarr` | `build_dschic2025.py` | `dschic2025_aging` |
@@ -720,7 +721,7 @@ is kept with its recorded outputs.
   [17961135](https://zenodo.org/records/17961135) (CC-BY-4.0; 13 files, 15.9 GB: 12 Seurat `.qs`
   objects and one per-read cis BEDPE).  Code: Zenodo [22144954](https://zenodo.org/records/22144954)
   (MIT; its `test_data/stat_cropped.csv` holds the barcode table).  Raw reads (GSA CRA016676) are
-  **not** fetched; the contacts of the other sections are reprocessed from them on Sherlock (below).
+  **not** fetched; the contacts of the other sections are reprocessed from them on a compute cluster (below).
 - **Download**: `python -m uchrom.datasets fetch spatial_hic_chen2026` (md5-checked) →
   `spatial_hic_chen2026/raw/zenodo17961135/`, `raw/code/`.
 - **Build** (~5 min, peak ~14 GB RAM for the BEDPE step):
@@ -774,7 +775,7 @@ is kept with its recorded outputs.
     median |r| = 0.956 (min 0.923, chr3).
   - Every store: links resolve, all spots have positions, the ssA/B and RNA AnnData are aligned with
     the Hi-C / RNA spots.
-- **Contacts of the other sections from the raw reads** (`apps/atlas/recipes/spatial_hic_chen2026/sherlock/`):
+- **Contacts of the other sections from the raw reads** (`apps/atlas/recipes/spatial_hic_chen2026/slurm/`):
   - Source: GSA CRA016676 (2.31 TB, 15 spatial Hi-C runs).  `runs.tsv` maps runs to sections, from the
     GSA metadata (`raw/CRA016676.xlsx`); the mapping agrees with the barcode pixels.
   - Pipeline: read-1 barcodes → bwa mem -5SP → pairtools parse / sort / merge → exact deduplication
@@ -786,7 +787,7 @@ is kept with its recorded outputs.
     - Pairs shorter than 1 kb are almost all inward-facing (+-), i.e. unligated fragments, and are
       dropped as HiCUP does.
   - Validation script: an unpublished benchmark.
-  - Output on Oak (`$OAK/uchrom/spatial_hic_chen2026/<run>/`): dedup pairs, per-spot 1-Mb `.scool`, bulk
+  - Output in the archive (`$UCHROM_ARCHIVE/spatial_hic_chen2026/<run>/`): dedup pairs, per-spot 1-Mb `.scool`, bulk
     `.mcool` (25 kb – 1 Mb), per-barcode statistics.  Not public: copy each run's `pixels_1Mb.scool`,
     `bulk.mcool`, `barcode_stats.tsv` and `log.json` into `spatial_hic_chen2026/contacts/` over the DTN
     (4.6 GB for the 7 runs below).
@@ -797,7 +798,7 @@ is kept with its recorded outputs.
     of the spot it would be (minus their mean), median Pearson r over 1,500 spots.  The right pairing
     scores ~0.3, every other ~0.  A run is linked only when the best beats the runner-up by 0.05.
   - Candidates: the 8 orientations of the grid (swap the barcodes, flip either index) with our barcode
-    order and with the authors' (`sherlock/barcodes_96_authors_index.tsv`, read off the `pixel` / spot
+    order and with the authors' (`slurm/barcodes_96_authors_index.tsv`, read off the `pixel` / spot
     names of brain_embryo_20um: position 2 complete, position 1 91 of 96), and `cells.pixel` (both
     orders) where a store has it.
   - Per section: `per_spot.<section>` (`<store>_<section>.<run>.reprocessed_1Mb.scool`, cells renamed
@@ -869,13 +870,13 @@ is kept with its recorded outputs.
     neighbours was 18–20 against 24 for random.
   - The top 5-kb bins give 14–16, and LSI components 1–5 are spatially smooth (neighbour r 0.6–0.9).
   - The clusters follow the anatomy (striatum, white matter, cortical layers).
-- **Contacts from the raw reads** (SRA, 4 runs, 177 GB; `apps/atlas/recipes/spatial_atac_hic/sherlock/`):
+- **Contacts from the raw reads** (SRA, 4 runs, 177 GB; `apps/atlas/recipes/spatial_atac_hic/slurm/`):
   - All four runs show the same layout and about 10 % ligation junctions (`GATCGATC`): each section's
     two runs are two sequencing rounds of one ATAC-Hi-C library, and they are merged.
   - Read 2 carries the barcodes: read2[22:30] + read2[60:68] = the 16-base spot barcode.  Both linkers
     are required (the authors' `bcsplit.py` / `00.filter-linker.sh`).
   - Mapping, per-spot deduplication and the 1-kb cis cut reuse the Chen 2026 pipeline (above).
-  - Output on Oak (`$OAK/uchrom/spatial_atac_hic/<section>/`, 3.3 GB): dedup pairs, per-spot 1-Mb
+  - Output in the archive (`$UCHROM_ARCHIVE/spatial_atac_hic/<section>/`, 3.3 GB): dedup pairs, per-spot 1-Mb
     `.scool`, bulk `.mcool` (25 kb – 1 Mb), per-barcode statistics.  Not public: copy the four files each
     section needs into `spatial_atac_hic/contacts/` over the DTN (recipe in the script below; 655 MB for
     both sections).
@@ -913,9 +914,9 @@ is kept with its recorded outputs.
     the Hi-C grid barcodes, and all 6,275 in-tissue spots have both RNA (median 3,351 UMI) and contacts.
   - The registry fetches the processed files only (`spatial_hicrna/raw/GSE311199/`: h5ad, RNA,
     images); the per-sample `.pairs` (6.6–159 GB each, ~680 GB) are not fetched.
-- **Processed on Sherlock** (`apps/atlas/recipes/spatial_hicrna/sherlock/`, `process.sbatch`):
+- **Processed on a compute cluster** (`apps/atlas/recipes/spatial_hicrna/slurm/`, `process.sbatch`):
   - Input: the published `.nodups.pairs.gz`.
-  - Output on Oak (`$OAK/uchrom/spatial_3dgenome/<sample>/`, 21 GB): per-spot 1-Mb `.scool`, bulk
+  - Output in the archive (`$UCHROM_ARCHIVE/spatial_3dgenome/<sample>/`, 21 GB): per-spot 1-Mb `.scool`, bulk
     `.mcool` (25 kb – 1 Mb) and per-spot statistics.
   - Kept: 31–47 × 10⁸ pairs per sample (1.2 × 10⁸ for E13.5 r2).
   - In the two E13.5 embryos 37–44 % of the pairs fall on spots outside the published tissue positions
@@ -925,10 +926,10 @@ is kept with its recorded outputs.
   ```bash
   python -m uchrom.datasets fetch spatial_hicrna                  # GEO files, 2.3 GB
   python apps/atlas/recipes/build_spatial_hicrna.py               # ~2 min: RNA, images, positions, published labels / latents
-  # contact maps: copy $OAK/uchrom/spatial_3dgenome/<sample>/ (17.8 GB) to spatial_hicrna/contacts/ (via the DTN)
+  # contact maps: copy $UCHROM_ARCHIVE/spatial_3dgenome/<sample>/ (17.8 GB) to spatial_hicrna/contacts/
   python apps/atlas/recipes/link_spatial_hicrna_contacts.py       # links per-spot .scool + bulk .mcool, mouse-brain ssAB
-  # per-spot contact statistics: sbatch spatial_hicrna/sherlock/contact_stats.sbatch <sample> (one pass over the
-  # .pairs, 2-4.5 h per sample), copy <sample>.contact_stats_q30.npz from Oak to spatial_hicrna/contacts/
+  # per-spot contact statistics: sbatch spatial_hicrna/slurm/contact_stats.sbatch <sample> (one pass over the
+  # .pairs, 2-4.5 h per sample), copy <sample>.contact_stats_q30.npz from the archive to spatial_hicrna/contacts/
   python apps/atlas/recipes/link_spatial_hicrna_contact_stats.py  # cellm contacts.*, cells contacts.n_cis / n_trans
   python uchrom-reproducibility/supp_fig6/atlas/spatial_hicrna_validation.py                  # -> supp_fig6/atlas/results/spatial_hicrna_validation.json
   ```
@@ -943,8 +944,8 @@ is kept with its recorded outputs.
   `uchrom.fea.contact_features(cd)` gives the short / long ratio, bands, decay slopes and cis fraction.
   - Checks: for every spot of the 7 samples (89,984 spots, 2.28 × 10¹⁰ contacts) cis + trans equal the
     per-spot maps' counts (`hic_contacts`); a second filter (`contact_stats_all.npz`, every pair, as the
-    paper's contact lists) stays on Oak.
-  - Oak: `$OAK/uchrom/spatial_3dgenome/<sample>/<sample>.contact_stats_{q30,all}.npz` (21–103 MB each) and
+    paper's contact lists) stays in the archive.
+  - the archive: `$UCHROM_ARCHIVE/spatial_3dgenome/<sample>/<sample>.contact_stats_{q30,all}.npz` (21–103 MB each) and
     `.contact_stats.json` (pair counts, pair types, filters, timings).
 - **Single-spot A/B (ssAB)**: the authors' `X_abcompartment` is linked for mouse brain r1 only
   (`hicrna_mouse_brain_ssab.h5ad`, 6,275 x 4,816 bins).  The bin layout is not given; it is chr1–19 in
@@ -1012,7 +1013,7 @@ Figure 3 datasets.
   particles per copy); RNA = the deposited UMI table.
   - Brain only: fetch `hires2023_brain` (4.5 GB: the 426 brain cells' pairs and 20 kb structures on GEO, names
     `ValaB8w*` / `ValbB8w*`, the 399 of the brain metadata among them; same paths as `hires2023`).  Used by
-    uchrom-reproducibility `fig2` (EMber reconstructions of the brain cells, on Sherlock).
+    uchrom-reproducibility `fig2` (EMber reconstructions of the brain cells, on a compute cluster).
   - Get it: fetch `hires2023_meta` (70 MB: cell metadata + RNA UMI counts) and `hires2023` (75 GB:
     per-cell pairs + 20 kb structures, 7,895 cells, two connections at a time); then
     `python apps/atlas/recipes/build_hires2023.py embryo [--workers 8]` and `... brain` →
@@ -1212,8 +1213,8 @@ DOIs checked against Crossref (2026-09-27).
 | Dataset | Accession / URL | Size | Build | Slice recipe |
 | --- | --- | --- | --- | --- |
 | Rao 2014 GM12878 in situ | GEO GSE63525 `GSE63525_GM12878_insitu_primary+replicate_combined.hic` (also `_combined_30.hic`, MAPQ ≥ 30, on 4DN as [4DNFI1UEG1HD](https://data.4dnucleome.org/files-processed/4DNFI1UEG1HD/)) | 51 GB (`_30.hic` 37 GB) | hg19 | `build_rao2014_slices.py --cell GM12878 --chroms 22 --res 100000` (and 10 kb) |
-| Rao 2014 IMR90 in situ, 4DN | set 4DNES1ZEJNRU: [4DNFIR1JDZH7](https://data.4dnucleome.org/4DNFIR1JDZH7/) (4,639,622,711 B, md5 `f91b77fa…`), [4DNFIJTOIGOI](https://data.4dnucleome.org/4DNFIJTOIGOI/) (8.3 GB) | 4.6–8.3 GB | GRCh38 | range-read one resolution: `h5py.File(fsspec.open(url).open())` → `cooler.Cooler(h['resolutions/5000'])` (~10 s per region; an unpublished benchmark); whole file on Sherlock: fetch `rao2014_imr90_4dn` (bulk benchmark, see below) |
-| Bonev 2017 mESC Hi-C (Takei 2021's comparison) | GEO GSE96107; 4DN set 4DNESDXUWBD9 [4DNFIC21MG3U](https://data.4dnucleome.org/4DNFIC21MG3U/) (12,551,353,248 B, md5 `dda4ed67…`, mm10) | 11–13 GB | mm10 | same fsspec range read, the 20 Takei 2021 loci × 25 kb (an unpublished benchmark); smaller unsorted-ES mcool 4DNFIDA2WGV8 (0.9 GB); whole file on Sherlock: fetch `bonev2017_mesc_4dn` (bulk benchmark, see below) |
+| Rao 2014 IMR90 in situ, 4DN | set 4DNES1ZEJNRU: [4DNFIR1JDZH7](https://data.4dnucleome.org/4DNFIR1JDZH7/) (4,639,622,711 B, md5 `f91b77fa…`), [4DNFIJTOIGOI](https://data.4dnucleome.org/4DNFIJTOIGOI/) (8.3 GB) | 4.6–8.3 GB | GRCh38 | range-read one resolution: `h5py.File(fsspec.open(url).open())` → `cooler.Cooler(h['resolutions/5000'])` (~10 s per region; an unpublished benchmark); whole file on a compute cluster: fetch `rao2014_imr90_4dn` (bulk benchmark, see below) |
+| Bonev 2017 mESC Hi-C (Takei 2021's comparison) | GEO GSE96107; 4DN set 4DNESDXUWBD9 [4DNFIC21MG3U](https://data.4dnucleome.org/4DNFIC21MG3U/) (12,551,353,248 B, md5 `dda4ed67…`, mm10) | 11–13 GB | mm10 | same fsspec range read, the 20 Takei 2021 loci × 25 kb (an unpublished benchmark); smaller unsorted-ES mcool 4DNFIDA2WGV8 (0.9 GB); whole file on a compute cluster: fetch `bonev2017_mesc_4dn` (bulk benchmark, see below) |
 | Stevens 2017 HDF5 + raw | GSE80280 `Cell-<n>.hdf5.gz`, `GSE80280_RAW.tar` | 2.6 GB each / 20 GB | mm10 | not needed (contacts + `.pdb` suffice) |
 
 The GM12878 `.hic` files hold every standard Juicer resolution from 1 kb to 2.5 Mb (primary + replicate
@@ -1283,7 +1284,7 @@ GSM by the GEO sample records (`!Sample_description`).  An identical copy,
 - **Content** (verified): 1,772 haploid cells (2i 982, serum 790); `passed_qc` = 1 for 1,247.  Cell line
   per GEO: haploid ESC20 / H129-1 (ECACC 14040203), 129 background (GEO calls it "hybrid ESC cell line";
   *strain details unverified beyond the GEO text*).
-- **Selection** (stated rules, `sherlock/_matched_env.sh`): serum = `Serum_G1/S`, `passed_qc == 1`,
+- **Selection** (stated rules, `slurm/_matched_env.sh`): serum = `Serum_G1/S`, `passed_qc == 1`,
   group G1 / early-S / late-S/G2 (no mitotic), ≥ 100 k contacts (403 cells); 2i = both 2i conditions,
   same QC, ≥ 50 k contacts, 200 drawn with seed 1.  Unique fend pairs per selected cell after mm10
   liftover: serum median 181,883 (100,509 – 694,393), 2i median 77,415 (50,855 – 384,505); the adj row
@@ -1291,7 +1292,7 @@ GSM by the GEO sample records (`!Sample_description`).  An identical copy,
   the liftover.  The cell-cycle `group` is the authors' inference from contact profiles; cells in S / G2
   carry replicated chromatin and are modelled as haploid anyway (the G1 subset is reported separately).
 - **Download**: `python -m uchrom.datasets fetch nagano2017_hap` (or
-  `sherlock/download_matched.sbatch PART=mesc`).
+  `slurm/download_matched.sbatch PART=mesc`).
 - **Used by**: an unpublished benchmark nagano` → NucDynamics / hickit → `matched.py`
   (step 1); `robust` matched-imaging analysis (serum cells split into development / held-back halves,
   `robust_matched_split.py`, PREREG §6).
@@ -1314,7 +1315,7 @@ GSM by the GEO sample records (`!Sample_description`).  An identical copy,
   7 endothelial, 8 oligodendrocyte lineage, 9 excitatory.  Median 1,678 1 Mb spots per cell (≈ 34 % of
   2 × 2,460); DBSCAN gives two homolog clusters for 30 % of (cell, chromosome).
 - **Download**: `python -m uchrom.datasets fetch takei2021_brain` (or
-  `sherlock/download_matched.sbatch PART=brain`).
+  `slurm/download_matched.sbatch PART=brain`).
 - **Used by**: an unpublished benchmark brain imaging reference (step 2; `matched_data.py`).
 
 ### `tan2021_cortex/`: Tan 2021 Dip-C, adult mouse cortex (510 cells, 13 GB; fetch `tan2021_cortex`)
@@ -1339,7 +1340,7 @@ GSM by the GEO sample records (`!Sample_description`).  An identical copy,
   copies.  *Unverified*: per-cell sex (GEO has none), whether the cell-type labels came from the paper's
   own clustering of these exact structures (the metadata file calls them "structure types").
 - **Download**: `python -m uchrom.datasets fetch tan2021_cortex` (or
-  `sherlock/download_matched.sbatch PART=brain`).
+  `slurm/download_matched.sbatch PART=brain`).
 - **Used by**: an unpublished benchmark brain Dip-C baseline (step 2; `matched_data.py`);
   uchrom-reproducibility `supp_table3/sc_structures/scab_tan2021.py`, `scab_dipc_reference.py` (contacts only: scA/B against Dip-C and
   the paper's structure types).
@@ -1379,10 +1380,10 @@ EMber / NucDynamics benchmarks of an unpublished benchmark (PREREG §6 diploid a
   contacts, 8.0 % of the legs phased, 0.7 % of the contacts phased at both ends, 14.7 % at one end;
   78.7 % cis.  Haplotype 0 = paternal (`pat`), 1 = maternal (Dip-C `classes.Haplotypes`); hickit copy `a`
   = haplotype 0.  GM12878 is female (chrX two copies).
-- **Download**: `python -m uchrom.datasets fetch tan2018_gm12878`; on Sherlock
-  `sherlock/download_diploid.sbatch` (also unpacks the tarballs to `cells/gm12878_<k>/`).
+- **Download**: `python -m uchrom.datasets fetch tan2018_gm12878`; on a compute cluster
+  `slurm/download_diploid.sbatch` (also unpacks the tarballs to `cells/gm12878_<k>/`).
 - **Used by**: diploid EMber / NucDynamics validation (an unpublished benchmark,
-  `diploid_heldout.py`, `sherlock/dip_real.sbatch`, `deep_dipc.sbatch`; PREREG §6 diploid addition).
+  `diploid_heldout.py`, `slurm/dip_real.sbatch`, `deep_dipc.sbatch`; PREREG §6 diploid addition).
   The loader `tan2018_gm12878` (`load`) bins the 14 cells' pairs at 5 kb into
   `tan2018_gm12878/tan2018_gm12878_5kb.scool` (44 MB; ~26 s): the GM12878 pseudo-bulk of
   uchrom-reproducibility `supp_table3/hic_structures/pseudobulk_gm12878.py`.  Since loader version 2 the store also holds the authors'
@@ -1407,7 +1408,7 @@ EMber / NucDynamics benchmarks of an unpublished benchmark (PREREG §6 diploid a
   027, 014, 051.  The authors' structures `3dg/GSM<id>_cell_<nnn>_{5,10,20}kb_{1..5}[.clean].3dg.txt.gz`
   (five hickit runs per resolution, copies `chr1(pat)` / `chr1(mat)`) exist only inside the 102 GB
   series tarball `GSE192759_5kb_10kb_20kb_3dg_files.tar.gz`, which `fetch` streams once, keeping only
-  these cells' members (`3dg/_members.txt` lists the archive; ~25 min on Sherlock, 3.1 GB kept).  The
+  these cells' members (`3dg/_members.txt` lists the archive; ~25 min on a compute cluster, 3.1 GB kept).  The
   tarball has no structures for cells 026 and 051 (the two low-cis cells below), so 10 of the 12 cells
   have them (30 files each).
 - **Content** (verified, an unpublished benchmark count` → `contacts_per_cell.tsv`): contacts are
@@ -1418,10 +1419,10 @@ EMber / NucDynamics benchmarks of an unpublished benchmark (PREREG §6 diploid a
   damaged nuclei or doublets) and are not used.  The deepest public diploid single-cell data with phase
   columns; Uni-C (GSE267873, `unic2025/`) is deeper but has no phase columns.
 - **Download**: `python -m uchrom.datasets fetch wu2025_scmicroc` (`--no-extract`: pairs only); on
-  Sherlock `sherlock/highres_download.sbatch`.
+  the cluster job `slurm/highres_download.sbatch`.
 - **Used by**: EMber deep (PREREG §11: development cells 035, 024, 320; held-back test cells 047, 028,
   017, 049, 032, 027, 014; `DEEP_TEST_RESULTS.md`) and Fig. 3a / S8: an unpublished benchmark,
-  `deep_diploid.py`, `sherlock/deep_dev.sbatch`, `highres_run.sbatch`, `highres_score.sbatch`;
+  `deep_diploid.py`, `slurm/deep_dev.sbatch`, `highres_run.sbatch`, `highres_score.sbatch`;
   unpublished figure scripts (`build_render_scmicroc.py`, `capture_highres.py`,
   `make_figS_fig3_highres.py`).  The loader `wu2025_scmicroc` (`load`; fetches the pairs only) bins the
   12 cells at 5 kb into `wu2025_scmicroc/wu2025_scmicroc_5kb.scool` (57 MB; ~26 s), `qc_pass` false for
@@ -1496,7 +1497,7 @@ requests, no md5 because the cooler records its creation date).
 ## Single-cell structure calling (uchrom-reproducibility `supp_table3/sc_structures/`)
 
 Inputs of the single-cell callers' validation (SnapHiC loops, single-cell boundaries, scA/B, the tracing callers
-on reconstructed structures; results in uchrom-reproducibility `supp_table3/sc_structures/README.md`, run on Sherlock).  Also used there:
+on reconstructed structures; results in uchrom-reproducibility `supp_table3/sc_structures/README.md`, run on a compute cluster).  Also used there:
 `tan2018_gm12878` (with the authors' structures), `wu2025_scmicroc`, `tan2021_cortex`, `kim2020_scihic`, the whole
 genomes `mm10_genome` / `hg19_genome` / `hg38_genome`, Rao 2014 GM12878 slices and annotations, Bonev 2017 mESC
 (4DN mcool), Su 2020 / Takei 2021 tracing, the atlas stores `stevens2017_mesc` and `dschic_aging_cortex`.
@@ -1512,7 +1513,7 @@ genomes `mm10_genome` / `hg19_genome` / `hg38_genome`, Rao 2014 GM12878 slices a
   `f0b506709c078f5ce5252ae4ed17a27a`, GEO); the mm9 `GATC.fends` (streamed out of `schic2_mm9_db.tar.gz`) and the
   mm9 → mm10 chain go to `nagano2017_hap/`, shared with that entry.
 - **Loader** `nagano2017_dip_serum` (`_load_snaphic.py`): each cell's fend pairs placed on mm9 fends, lifted to
-  mm10, binned at 10 kb into one `.scool` (709 MB; built in ~42 min — on Sherlock), linked as `per_cell`; the
+  mm10, binned at 10 kb into one `.scool` (709 MB; built in ~42 min — on a compute cluster), linked as `per_cell`; the
   feature table and contacts per cell in `cells`; `snaphic_top742` marks the 742 cells with the most contacts
   (SnapHiC's selection; the paper's own read counts are not public — ours pick the same cells as the Tanay lab's
   counts).
@@ -1548,17 +1549,17 @@ an unpublished design note sections 6-7, commands an unpublished design note).
 genome-wide truth), Su 2020 chr21 (fetch `su2020_chr21`), Takei 2021 1 Mb (fetch `takei2021_1mb`,
 homologs split heuristically by an unpublished benchmark).
 
-**Real Hi-C** (whole files only on Sherlock; laptop checks use HTTP range reads):
+**Real Hi-C** (whole files only on a compute cluster; laptop checks use HTTP range reads):
 
 - **Rao 2014 IMR90, 4DN GRCh38** — `rao2014_imr90/4DNFIR1JDZH7.mcool` (4,639,622,711 B, md5
   `f91b77fa61acdc58360911c80b007646`, 4DN set 4DNES1ZEJNRU; Rao SSP *et al.* *Cell* 159:1665 (2014), GEO
   GSE63525; 4DN data-use policy: open).  GRCh38 like the Su 2020 loci, so no liftover.  Levels 1 kb–10 Mb
   (no 20 kb): the IGM 20 kb matrix is summed from the 10 kb level.
-  `python -m uchrom.datasets fetch rao2014_imr90_4dn` (Sherlock: an unpublished benchmark).
+  `python -m uchrom.datasets fetch rao2014_imr90_4dn` (on a cluster: an unpublished benchmark).
 - **Bonev 2017 mESC, 4DN mm10** — `bonev2017_mesc/4DNFIC21MG3U.mcool` (12,551,353,248 B, md5
   `dda4ed67a1179f917721fb81b1adebe0`, 4DN set 4DNESDXUWBD9; Bonev B *et al.* *Cell* 171:557 (2017),
   doi:10.1016/j.cell.2017.09.043, GEO GSE96107).  `python -m uchrom.datasets fetch bonev2017_mesc_4dn`
-  (Sherlock); also range-read by an unpublished benchmark and an unpublished benchmark.
+  (cluster); also range-read by an unpublished benchmark and an unpublished benchmark.
 - **Rao 2014 IMR90, GEO hg19** `GSE63525_IMR90_combined.hic` (13 GB) — not downloaded; read over HTTP
   range requests by an unpublished benchmark (its Juicer KR vectors are the reference for
   U-Chrom's KR balancing).
@@ -1570,7 +1571,7 @@ an unpublished benchmark:fetch_igm_demo` downloads it on demand into `$UCHROM_IG
 Used for the IGM protocol of the native engine vs the original IGM
 (an unpublished benchmark, `orig_demo.sbatch`, `compare_demo.sbatch`).
 
-**Derived inputs** (Sherlock, `$SCRATCH/uchrom-nd/runs/bulk/real/<cell>/`, not stored; recipe
+**Derived inputs** (on a cluster, `$WORK/runs/bulk/real/<cell>/`, not stored; recipe
 an unpublished benchmark preprocess`, IGM SI section 6 protocol in
 `uchrom.recon.bulk.deconv.preprocess`): `fine_20kb.npz` (raw 20 kb counts, chr1–22 + X), `igm_200kb.npz`
 (whole genome, 200 kb, 24 contacts per bin), `su_3mb.npz` / `su_1mb.npz` (IMR90 onto 3 Mb / 1 Mb bins
@@ -1614,8 +1615,8 @@ an unpublished benchmark (provenance of the laptop plumbing run:
   `from_fofct(out=)` vs in memory, streaming distance maps vs the dense reference);
   an unpublished benchmark and uchrom-reproducibility `extended_data_fig1/cd22_variants.py` (format 2.2);
   an unpublished benchmark (cell positions); uchrom-reproducibility `fig2/cross_assay.py` (per-cell
-  distances at short / long separations by cell class, `cluster_class` / `cluster_subclass`; on Sherlock fetched
-  and built by uchrom-reproducibility `fig2/sherlock/liu2025.sbatch` into `$SCRATCH/uchrom-nd/data/liu2025_mop/`,
+  distances at short / long separations by cell class, `cluster_class` / `cluster_subclass`; on a compute cluster fetched
+  and built by uchrom-reproducibility `fig2/slurm/liu2025.sbatch` into `$WORK/data/liu2025_mop/`,
   2026-10-11, the same 9,582,069 spots / 188,891 traces / 11,045 cells, `from_fofct` 40 s at 12.0 GB).
 
 ### uchrom-reproducibility `supp_table3/arcfish_parity/`: the inputs of the ArcFISH parity check
@@ -1632,7 +1633,7 @@ package on the same FOF-CT tables, written by `inputs.py` from:
   compartment tutorial;
 - `takei2025_fov0` (chr15 averaged into 1-Mb bins per trace), `bintu_imr90`, `su2020_chr21` (first 1,000 traces).
 
-The FOF-CT tables are written to `$SCRATCH/uchrom-nd/arcfish_parity/inputs/` (not kept in the repository).
+The FOF-CT tables are written to `$WORK/arcfish_parity/inputs/` (not kept in the repository).
 
 ### uchrom-reproducibility `supp_fig6/browser/_data/`: scaled copies of Takei 2025 FOV 0 (derived)
 

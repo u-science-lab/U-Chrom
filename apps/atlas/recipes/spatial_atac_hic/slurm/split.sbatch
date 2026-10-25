@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=atachic-split
-#SBATCH --partition=xiaojie
 #SBATCH --time=12:00:00
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=16G

@@ -1,12 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=chen-setup
-#SBATCH --partition=xiaojie
 #SBATCH --time=04:00:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --output=%x-%j.out
-# One-off: conda env for mapping + pairs (in $GROUP_HOME); mm10 (UCSC, 0.9 GB: small enough for a job)
-# main chromosomes, its bwa index and chrom sizes (on Oak).
+# One-off: conda env for mapping + pairs; mm10 (UCSC, 0.9 GB: small enough for a job)
+# main chromosomes, its bwa index and chrom sizes (in the archive).
 set -euo pipefail
 source "${SLURM_SUBMIT_DIR:-$HOME/uchrom_chen2026}/common.sh"   # jobs are submitted from the scripts folder
 source "$HOME/miniconda3/etc/profile.d/conda.sh"

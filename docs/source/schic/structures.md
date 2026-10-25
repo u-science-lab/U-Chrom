@@ -79,5 +79,5 @@ loops by the structures — a reconstruction is smoother than an imaged trace an
 treat it as data.  For domains and loops pool the cells or call across them (above).
 
 The structure-caller numbers are those of the tutorial `sc_structures` (re-executed 2026-10-13 with the ArcFISH
-callers that give the authors' results; uchrom-reproducibility `supp_table3/arcfish_parity`); the rest, with datasets and Sherlock jobs,
+callers that give the authors' results; uchrom-reproducibility `supp_table3/arcfish_parity`); the rest, with datasets and cluster jobs,
 are in uchrom-reproducibility `supp_table3/sc_structures/README.md` (run with the former callers: ArcFISH boundaries at chance there).

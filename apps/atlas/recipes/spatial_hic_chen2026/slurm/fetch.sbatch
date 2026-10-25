@@ -1,14 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=chen-fetch
-#SBATCH --partition=xiaojie
 #SBATCH --time=2-00:00:00
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=4G
 #SBATCH --output=%x-%j.out
 # Download the fastq of runs from GSA (FTP) to $SCRATCH/chen2026/raw/<run>/ and check their md5
 # (<run>/OK when both files pass).  Resumable (wget -c).  Usage: sbatch fetch.sbatch <run> [<run> …]
-# The DTN only takes transfer commands (scp / rsync / sftp) and GSA offers no Globus endpoint, so the
-# download runs in a small job, as the GEO downloads of the spatial Hi-C-RNA data did.
+# The download runs in a small job, as the GEO downloads of the spatial Hi-C-RNA data did.
 set -euo pipefail
 source "${SLURM_SUBMIT_DIR:-$HOME/uchrom_chen2026}/common.sh"   # jobs are submitted from the scripts folder
 for RUN in "$@"; do

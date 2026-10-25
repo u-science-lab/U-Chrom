@@ -16,7 +16,7 @@ sources (`uchrom.datasets.fetch`, cached in `$UCHROM_DATA`, else `~/.cache/uchro
 | Chromatin tracing › structures | `loop_calling.ipynb`, `tad_calling.ipynb`, `fishnet_domains.ipynb`, `compartment.ipynb` | loops, TADs, per-allele domains, compartments from 3-D distances |
 | DNA seqFISH+ › reading | `import_seqfish_multiomics.ipynb` | DNA seqFISH+ with chromatin marks and RNA (Takei 2025 cerebellum) |
 | Single-cell Hi-C › pseudo-bulk | `pseudobulk.ipynb` | cell-type maps summed from an atlas store over HTTP (dscHi-C); compartments and their strength at matched depth |
-| Single-cell Hi-C › structures | `sc_structures.ipynb` | loops across cells (SnapHiC) against the paper's references, single-cell boundaries against bulk insulation, scA/B per cell, the tracing callers on Dip-C structures (executed on Sherlock) |
+| Single-cell Hi-C › structures | `sc_structures.ipynb` | loops across cells (SnapHiC) against the paper's references, single-cell boundaries against bulk insulation, scA/B per cell, the tracing callers on Dip-C structures (executed on a compute cluster) |
 | Single-cell Hi-C › 3-D structures | `reconstruction.ipynb` | single-cell NucDynamics and EMber on the native engine |
 | Single-cell Hi-C › embeddings | `higashi_embedding.ipynb` | FastHigashi on single-cell Hi-C |
 | | `cell_embeddings.ipynb` | scHiCAR cells by RNA / ATAC / contacts; imaging cells by chromatin marks |

@@ -1,11 +1,11 @@
 """Add the per-spot contact statistics of the spatial Hi-C-RNA samples (GEO GSE311199) to the hicrna_* stores.
 
-The statistics come from one more pass over each sample's ``.nodups.pairs.gz`` on Sherlock
-(``spatial_hicrna/sherlock/contact_stats.sbatch`` -> ``spatial_pairs_stats.py``, ``uchrom.io.ContactStats``):
+The statistics come from one more pass over each sample's ``.nodups.pairs.gz`` on a compute cluster
+(``spatial_hicrna/slurm/contact_stats.sbatch`` -> ``spatial_pairs_stats.py``, ``uchrom.io.ContactStats``):
 per spot, the cis contact-distance histogram in scHiCluster's log2 bins (2.5 kb x 2^(k/8), the bins of Guo et al.
 2026's short / long-range ratio), per read orientation, and the cis and trans contacts per chromosome; MAPQ >= 30
 on both legs, in-tissue spots, main chromosomes — the contacts of the per-spot maps.  Copy
-``<sample>.contact_stats_q30.npz`` from Oak (``$OAK/uchrom/spatial_3dgenome/<sample>/``) into
+``<sample>.contact_stats_q30.npz`` from the archive (``$UCHROM_ARCHIVE/spatial_3dgenome/<sample>/``) into
 ``$UCHROM_DATA/spatial_hicrna/contacts/`` over the DTN, then::
 
     python apps/atlas/recipes/link_spatial_hicrna_contact_stats.py [SAMPLE ...]
@@ -52,7 +52,7 @@ def main(samples: list) -> None:
         for sample in secs:
             f = CONTACTS / f"{sample}.contact_stats_q30.npz"
             if not f.exists():
-                sys.exit(f"{sample}: {f} missing (copy it from Oak first)")
+                sys.exit(f"{sample}: {f} missing (copy it from the archive first)")
             st = ContactStats.load(f)
             st.cells = np.asarray([f"{sample}:{b}" for b in st.cells], dtype=object)
             if merged is None:
@@ -67,7 +67,7 @@ def main(samples: list) -> None:
                 both.meta = merged.meta
                 merged = both
         merged.write(cd, key="contacts", per_chromosome=False, dtype=np.int32,
-                     source="GSE311199 .nodups.pairs.gz, apps/atlas/recipes/spatial_hicrna/sherlock/"
+                     source="GSE311199 .nodups.pairs.gz, apps/atlas/recipes/spatial_hicrna/slurm/"
                             "spatial_pairs_stats.py (MAPQ >= 30, in-tissue spots, main chromosomes)")
         c = cd.cells
         have = c["section"].isin(secs).to_numpy()

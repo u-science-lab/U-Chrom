@@ -1,6 +1,5 @@
 #!/bin/bash -l
 #SBATCH --job-name=atachic-fetch
-#SBATCH --partition=xiaojie
 #SBATCH --time=2-00:00:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
@@ -9,7 +8,7 @@
 # fasterq-dump + pigz); <section>/OK when all runs are done.  Usage: sbatch fetch.sbatch <section>
 set -euo pipefail
 source "${SLURM_SUBMIT_DIR:-$HOME/uchrom_atachic}/common.sh"
-ml biology sra-tools/3.0.7
+command -v prefetch > /dev/null || { echo "sra-tools (prefetch, fasterq-dump) not on PATH"; exit 2; }
 SEC=$1; D="$RAW/$SEC"; mkdir -p "$D"; cd "$D"
 [ -e OK ] && { echo "$SEC already done"; exit 0; }
 for RUN in $(col "$SEC" runs | tr , ' '); do
