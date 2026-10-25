@@ -492,7 +492,7 @@ data.chromdata.zarr/
 clusters/                     attrs: keys = {key: node}
 └── <node>/                   attrs: uchrom_clusters = {key, kind: per_cell|bulk, chroms,
     │                           n_cells, n_clusters, n_members, member_rows, locus_rows,
-    │                           chunk, locus: {chrom: {node, n, max_length}},
+    │                           chunk, locus_chunk, locus: {chrom: {node, n, max_length}},
     │                           member_columns: {name: node}, cluster_columns, attrs}
     ├── members               (3, n_members) uint32 (uint64 when needed): chrom code,
     │                           start, end; clusters in the stored order
@@ -505,13 +505,20 @@ clusters/                     attrs: keys = {key: node}
         ├── rows              (8, n) unsigned — start, end, cluster, size, chrom_size,
         │                       span_start, span_end, cell (bulk: 7 rows, no cell);
         │                       sorted by (start, end, cluster)
-        └── fence             int64: rows[0, ::chunk], the first start of every chunk
+        └── fence             int64: rows[0, ::locus_chunk], the first start of every chunk
 ```
 
 - `members`, `member_offsets`, `member_columns` and the locus `rows` are
   chunked by 16,384 columns (`chunk` in the attrs; a `(rows, 16384)` chunk
   holds every row of its columns, each row contiguous) and **sharded** by
   4,194,304 columns, zstd 9 — the layout of the embedded contact pixels.
+  The locus `rows` take their own chunk size (`locus_chunk`, default 16,384)
+  and codec (`add_clusters(locus_chunk=, locus_compressor=)`); readers use
+  the `locus_chunk` of the attrs (`chunk` when absent) and the codec the
+  array records.  On the full Quinodoz 2018 SPRITE table (406 M fragments)
+  16,384 columns with zstd 9 read 40 kb / 1 Mb windows over HTTP fastest;
+  smaller chunks read fewer bytes in more requests, Blosc bitshuffle saved
+  < 1 % (uchrom-reproducibility `extended_data_fig1/g_clusters_layout.py`).
   `fence`, `cells` and `cell_offsets` are one chunk each.  All values of a
   `rows` array share one unsigned dtype (uint32 unless a value needs
   uint64).

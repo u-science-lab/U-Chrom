@@ -438,7 +438,8 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
   a tar of two gzipped cluster files of the authors' pipeline: `mouse.mapq-ge10.clusters.gz` (3.8 GB; reads with
   MAPQ ≥ 10) and `mouse.mapq-ge30.clusters.gz` (2.7 GB; MAPQ ≥ 30).
 - **Format**: one SPRITE cluster per line, `barcode<TAB>chrom:pos<TAB>chrom:pos…`, one `chrom:pos` per read (the
-  read position as written, 1-based; mm9).  A barcode is the cluster's tag sequence (`…_DPM6.YbotE63.Odd2Bo82…`).
+  read start as the pipeline writes it: pysam's 0-based `reference_start`, positions 0 occur; mm9).  A barcode is
+  the cluster's tag sequence (`…_DPM6.YbotE63.Odd2Bo82…`).
 - **Content**: multi-way contacts of mouse ES cells (bulk, no cells): clusters of 1 to thousands of reads.
 - **Source**: Quinodoz et al. 2018, *Cell* 174:744 (doi:10.1016/j.cell.2018.05.024), "Higher-order
   inter-chromosomal hubs shape 3D genome organization in the nucleus"; GEO
@@ -449,8 +450,9 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
   The series also has the authors' pairwise maps (`GSE114242_mouse_intra_*.tar.gz`) and the human clusters.
 - **Used by**: uchrom-reproducibility `extended_data_fig1/g_clusters_sprite.py` (Sherlock job
   `extended_data_fig1/sherlock/clusters.sbatch`): the clusters as a `ClusterTable` (a read at `pos` → the
-  fragment `[pos − 1, pos)`), written to a store and read back (checksum over clusters), store size, region
-  queries in memory, backed and over HTTP.  Not downloaded on laptops.
+  fragment `[pos, pos + 1)`), written to a store and read back (checksum over clusters), store size, region
+  queries in memory, backed and over HTTP; `g_clusters_layout.py` (`sherlock/clusters_layout.sbatch`): the locus
+  index's chunk and codec.  Not downloaded on laptops.
 
 ### `kim2020_scihic/`: Kim 2020 sci-Hi-C, H1 ES + HFF (128 MB + 92 KB; fetch `kim2020_scihic`)
 
