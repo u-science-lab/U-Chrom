@@ -600,6 +600,18 @@ DATASETS = {
         "default": False,
         "description": "Takei 2021 Science mouse cortex DNA seqFISH+ 1 Mb / 25 kb spots, RNA, radial scores (Zenodo 4708112)",
     },
+    # Quinodoz et al. 2018 (Cell 174:744, doi:10.1016/j.cell.2018.05.024) SPRITE, mouse ES cells (GEO GSE114242):
+    # the clusters of the authors' pipeline, one per line (barcode, then chrom:pos per read; members
+    # mouse.mapq-ge10.clusters.gz 3.8 GB and mouse.mapq-ge30.clusters.gz 2.7 GB).  Multi-way contacts of the store
+    # (ChromData.clusters, format 2.4): uchrom-reproducibility extended_data_fig1/g_clusters_sprite.py (Sherlock).
+    "quinodoz2018_sprite": {
+        "files": [("quinodoz2018_sprite/GSE114242_mouse_combined_clusters.tar.gz",
+                   _gse("GSE114242", "GSE114242_mouse_combined_clusters.tar.gz"))],
+        "md5": {"quinodoz2018_sprite/GSE114242_mouse_combined_clusters.tar.gz": "30f9c1e0a64c7dd011a8876319626e94"},
+        "size_mb": 6229,
+        "default": False,
+        "description": "Quinodoz 2018 SPRITE mouse ES cells: the authors' clusters, MAPQ >= 10 and >= 30 (GEO GSE114242)",
+    },
     "tan2018_gm12878": {
         "files": _tan2018_files,
         "size_mb": 700,
