@@ -138,6 +138,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `tan2021_cortex/`: Tan 2021 Dip-C adult cortex, 510 cells | 13 GB | fetch `tan2021_cortex` | an unpublished benchmark (brain Dip-C baseline) |
 | `tan2018_gm12878/`: Tan 2018 Dip-C GM12878, 17 cells | ~0.7 GB | fetch `tan2018_gm12878` | diploid EMber / NucDynamics validation |
 | `quinodoz2018_sprite/`: Quinodoz 2018 SPRITE mouse ES cells, the authors' clusters | 6.2 GB | fetch `quinodoz2018_sprite` (**cluster**) | multi-way contacts of the store (`ChromData.clusters`, format 2.4): uchrom-reproducibility `extended_data_fig1/g_clusters_sprite.py` |
+| `spacea_ma2026/`: Ma 2026 SpaceA, spatial SPRITE of an E13.5 mouse embryo section (run CRR2725644) | 11.5 GB fastq; clusters 87 MB, store 192 MB | fetch `ma2026_spacea_c6` (GSA, academic use); recipe `spacea_ma2026/slurm/` (a compute cluster) | per-spot check of `ChromData.clusters` (U-Chrom PR #153); not in the atlas |
 | `wu2025_scmicroc/`: Wu 2025 scMicro-C GM12878, 12 deepest cells | 3.1 GB (102 GB streamed) | fetch `wu2025_scmicroc` | EMber deep development and test (PREREG §11); Fig. 3a / S8 |
 | `rao2014_imr90/4DNFIR1JDZH7.mcool`: Rao 2014 IMR90, 4DN GRCh38 | 4.6 GB | fetch `rao2014_imr90_4dn` (**cluster only**; laptops read it over HTTP) | an unpublished benchmark; an unpublished benchmark (range reads) |
 | `bonev2017_mesc/4DNFIC21MG3U.mcool`: Bonev 2017 mESC Hi-C, 4DN mm10 | 12.6 GB | fetch `bonev2017_mesc_4dn` (**cluster only**) | an unpublished benchmark; an unpublished benchmark (range reads); tutorial `sc_structures` and uchrom-reproducibility `supp_table3/sc_structures/` (bulk mESC loops and insulation) |
@@ -454,6 +455,35 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
   fragment `[pos, pos + 1)`), written to a store and read back (checksum over clusters), store size, region
   queries in memory, backed and over HTTP; `g_clusters_layout.py` (`slurm/clusters_layout.sbatch`): the locus
   index's chunk and codec.  Not downloaded on laptops.
+
+### `spacea_ma2026/`: SpaceA, spatial SPRITE of mouse embryo sections (11.5 GB per run; fetch `ma2026_spacea_c6`)
+
+- **Source**: Ma et al. 2026, *Developmental Cell* (doi:10.1016/j.devcel.2026.09.004), SpaceA; Genome Sequence
+  Archive (CNCB-NGDC) [CRA038845](https://ngdc.cncb.ac.cn/gsa/browse/CRA038845), **academic use** under the GSA's
+  terms (not re-hosted; not in the public atlas).  Analysis code: github.com/YuetongXU/SpaceA-Paper (commit
+  `c1e1753`, barcode configs and the Snakefile), the Guttman lab's github.com/GuttmanLab/sprite-pipeline (commit
+  `5e11a58`, BarcodeIdentification and the cluster scripts).
+- **Files**: paired fastq per run, `https://download.cncb.ac.cn/gsa6/CRA038845/<run>/<run>_r{1,2}.fastq.gz`.
+  Registered: run CRR2725644 (E13.5 section C6; 55,643,617 read pairs; r1 5.62 GB, md5
+  `a2290c3529708085737d98769b944001`; r2 5.88 GB, md5 `964eb350ef56d13920c3244ae7d6fe09`).  The section's other
+  runs (CRR2725645, CRR2725646) are not processed yet.  GSA closes transfers after a few minutes:
+  `slurm/fetch.sbatch` resumes them (`wget -c`, up to 200 attempts) and checks the md5s.
+- **Recipe** (`apps/atlas/recipes/spacea_ma2026/slurm/`, Slurm jobs; settings in `common.sh` — `SPACEA_ROOT`,
+  `SPACEA_REF` —, runs in `runs.tsv`): `setup_env.sbatch` (conda environment, the two repositories at their commits,
+  STAR index of mm10 + UCSC refGene, sjdbOverhang 149) → `fetch.sbatch <run>` → `process.sbatch <run>` (the
+  authors' Snakefile step by step: cutadapt, BarcodeIdentification + full barcodes, STAR, Picard duplicates,
+  MAPQ 255, `get_clusters -n 6`; `stats.tsv`; clusters and logs to `$SPACEA_ROOT/out/<run>/`) →
+  `build_store.sbatch <run>` (`build_store.py`: the clusters as `ChromData.clusters["spacea"]`, one cell per spot).
+- **Spots**: read 2 is ODD|EVEN|ODD|Y|LIGTAG|DPM; a spot is the pair of the two orthogonal channel sets
+  (LIGTAG, 50 tags `oddTop1-50`; Y, 100 tags `evenTop1-100`), cell id `oddTopN.evenTopM`, position = the channel
+  pair (`cells` columns `lig` / `y`, unit `channel`).  Inferred from the configs and the authors' file naming (their
+  split script and spot list are not public); confirmed by the fragments-per-spot grid, which shows the embryo.
+- **CRR2725644**: 52.8 M pairs after cutadapt, 18.5 M with a full barcode, 8.0 M uniquely mapped, 7.16 M after
+  duplicates → 1,407,822 clusters; store 192 MB, 4,974 spots (median 994 fragments, 2,475 spots with ≥ 1,000).
+  Every cluster is kept as written; the authors' filters (cluster size 2–1,000, chromosome share, cis share, spot
+  QC) are analysis choices.
+- **Used by**: the per-spot check of `ChromData.clusters` (U-Chrom PR #153: `get_cell`, `region` with size and
+  spot filters, backed and over HTTP, equal to memory).
 
 ### `kim2020_scihic/`: Kim 2020 sci-Hi-C, H1 ES + HFF (128 MB + 92 KB; fetch `kim2020_scihic`)
 

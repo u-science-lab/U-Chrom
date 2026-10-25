@@ -1,0 +1,2 @@
+run	sample	config	r1	r2	r1_md5	r2_md5	read_pairs
+CRR2725644	E13.5C6	config_spaSPRITE_E13.5C6.txt	CRR2725644_r1.fastq.gz	CRR2725644_r2.fastq.gz	a2290c3529708085737d98769b944001	964eb350ef56d13920c3244ae7d6fe09	55643617

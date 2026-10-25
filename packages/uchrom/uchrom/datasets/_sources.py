@@ -612,6 +612,19 @@ DATASETS = {
         "default": False,
         "description": "Quinodoz 2018 SPRITE mouse ES cells: the authors' clusters, MAPQ >= 10 and >= 30 (GEO GSE114242)",
     },
+    # Ma et al. 2026 (Dev Cell, doi:10.1016/j.devcel.2026.09.004) SpaceA, spatial SPRITE of mouse embryo sections (GSA
+    # CRA038845, academic use): the fastq of run CRR2725644 (E13.5 section C6), reprocessed as Slurm jobs with the
+    # authors' pipeline into SPRITE clusters per spot (apps/atlas/recipes/spacea_ma2026/slurm/).  GSA closes long
+    # transfers: the recipe's fetch.sbatch resumes them (wget -c).
+    "ma2026_spacea_c6": {
+        "files": [(f"spacea_ma2026/raw/CRR2725644/CRR2725644_{r}.fastq.gz",
+                   f"https://download.cncb.ac.cn/gsa6/CRA038845/CRR2725644/CRR2725644_{r}.fastq.gz") for r in ("r1", "r2")],
+        "md5": {"spacea_ma2026/raw/CRR2725644/CRR2725644_r1.fastq.gz": "a2290c3529708085737d98769b944001",
+                "spacea_ma2026/raw/CRR2725644/CRR2725644_r2.fastq.gz": "964eb350ef56d13920c3244ae7d6fe09"},
+        "size_mb": 11506,
+        "default": False,
+        "description": "Ma 2026 SpaceA E13.5 mouse embryo section C6: fastq of run CRR2725644 (GSA CRA038845)",
+    },
     "tan2018_gm12878": {
         "files": _tan2018_files,
         "size_mb": 700,
