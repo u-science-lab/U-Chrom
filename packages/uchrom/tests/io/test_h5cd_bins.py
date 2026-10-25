@@ -145,7 +145,7 @@ def test_upgrade_h5cd_and_cli(tmp_path, capsys):
     expected = _write_1x(src)
     new_path = tmp_path / "new.chromdata.zarr"
     info = upgrade_h5cd(src, new_path)
-    assert info["from_version"] == "1.4" and info["to_version"] == "2.3"
+    assert info["from_version"] == "1.4" and info["to_version"] == "2.4"
     assert info["n_bins"] == 3 and info["spot_tracks"] == ["IF"]
     assert file_format_version(src) == "1.4"                       # source untouched
     new = ChromData.read(new_path, original_order=True)
@@ -160,7 +160,7 @@ def test_upgrade_h5cd_and_cli(tmp_path, capsys):
         upgrade_h5cd(src, tmp_path / "again.h5cd")               # no .h5cd target any more
     assert main([str(src), "--out-dir", str(tmp_path / "out")]) == 0
     assert "(1.4, h5cd) ->" in capsys.readouterr().out
-    assert file_format_version(tmp_path / "out" / "old.chromdata.zarr") == "2.3"
+    assert file_format_version(tmp_path / "out" / "old.chromdata.zarr") == "2.4"
 
 
 def test_legacy_h5cd_compression_options(tmp_path):

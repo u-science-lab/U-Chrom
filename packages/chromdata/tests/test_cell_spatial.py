@@ -159,7 +159,7 @@ def test_cell_shapes_round_trip(tmp_path, suffix):
         geo = json.loads(pq.read_schema(f).metadata[b"geo"])
         assert geo["primary_column"] == "geometry" and geo["columns"]["geometry"]["encoding"] == "WKB"
         meta = json.loads((path / "zarr.json").read_text())["attributes"]["uchrom"]
-        assert meta["format_version"] == "2.3"
+        assert meta["format_version"] == "2.4"
 
 
 def test_cell_shapes_subset_and_copy():

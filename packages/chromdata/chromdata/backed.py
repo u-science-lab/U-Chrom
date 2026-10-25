@@ -453,6 +453,7 @@ class BackedChromData(ChromData):
         self.uns = parts["uns"]
         self.points = parts["points"]
         self.cell_shapes = parts.get("cell_shapes") or {}
+        self.clusters = parts.get("clusters") or {}
         self._linked_adata = None
         bt = parts["bin_tracks"]
         if bt is not None and len(bt.columns):
@@ -666,7 +667,8 @@ class BackedChromData(ChromData):
             cellm=cellm or None, binm=self.binm or None, intervals=self._intervals,
             traces=traces if len(traces) or len(traces.columns) else None,
             layers=layers or None, results=self.results, uns=self.uns,
-            points=points or None, cell_shapes=shapes or None, validate=False, _own_spots=True,
+            points=points or None, cell_shapes=shapes or None, clusters=self.clusters or None,
+            validate=False, _own_spots=True,
         )
         out._bin_tracks = self._bin_tracks
         if spot_tracks is not None:
@@ -851,6 +853,7 @@ class BackedChromData(ChromData):
         :class:`ChromData` (the small tables are shared with this object,
         not copied)."""
         out = self._build(subset=False, columns=columns, tracks=tracks)
+        out.clusters = {k: t.to_memory() for k, t in self.clusters.items()}
         out._source_path = self._source_path
         return out
 

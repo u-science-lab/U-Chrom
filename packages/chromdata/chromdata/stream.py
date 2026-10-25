@@ -99,10 +99,10 @@ class ChromDataWriter:
                  layout: str = ZARR_LAYOUT_VERSION):
         from .settings import settings
 
-        if layout == ZARR_FORMAT_VERSION:
+        if layout in ("2.3", ZARR_FORMAT_VERSION):
             layout = ZARR_LAYOUT_VERSION
         if layout not in ("2.1", "2.2"):
-            raise ValueError("the streaming writer writes format 2.1 or 2.3 (the 2.2 layout)")
+            raise ValueError(f"the streaming writer writes format 2.1 or {ZARR_FORMAT_VERSION} (the 2.2 layout)")
         self.layout = layout
         self.float_encoding = float_encoding
         self.float_dictionary = bool(float_dictionary)
@@ -147,6 +147,7 @@ class ChromDataWriter:
         self._layer_keys: Optional[List[str]] = None
         self._parts: Dict[str, List[Any]] = {"cells": [], "cellm": [], "traces": [], "points": [],
                                              "cell_shapes": []}
+        self._clusters: Dict[str, Any] = {}
         self._uns: Dict[str, Any] = {}
         self._run_id = 0
         self._chunk_sorted = True
@@ -206,6 +207,11 @@ class ChromDataWriter:
                 self._parts["points"].append(dict(chunk.points))
             if getattr(chunk, "cell_shapes", None):
                 self._parts["cell_shapes"].append(dict(chunk.cell_shapes))
+            for key, table in (getattr(chunk, "clusters", None) or {}).items():
+                # chunks of one object share its tables (clusters are not split by spot)
+                if key in self._clusters and self._clusters[key] is not table:
+                    raise ValueError(f"chunks carry different clusters[{key!r}]; pass the table to finish(clusters=...)")
+                self._clusters[key] = table
             if not self._uns:
                 self._uns = dict(chunk.uns)
         if spots is None or coords is None:
@@ -358,9 +364,11 @@ class ChromDataWriter:
                cellm: Optional[Mapping[str, np.ndarray]] = None,
                traces: Optional[pd.DataFrame] = None, bin_tracks: Optional[pd.DataFrame] = None,
                binm: Optional[Mapping[str, np.ndarray]] = None, intervals=None, points=None,
-               results=None, uns: Optional[Mapping[str, Any]] = None, cell_shapes=None) -> Path:
+               results=None, uns: Optional[Mapping[str, Any]] = None, cell_shapes=None,
+               clusters=None) -> Path:
         """Write the store (atomically) and remove the spill files.  Small
-        tables given here replace the ones collected from the chunks."""
+        tables given here (and ``clusters``, {key: ClusterTable}) replace the
+        ones collected from the chunks."""
         if self._closed:
             raise RuntimeError("writer is closed")
         import tempfile
@@ -368,6 +376,8 @@ class ChromDataWriter:
         from .intervals import IntervalStore
         from .results import ResultsStore
 
+        if (clusters if clusters is not None else self._clusters) and self.layout != ZARR_LAYOUT_VERSION:
+            raise ValueError(f"clusters are stored from format 2.4 on, not in layout {self.layout}")
         try:
             final_bins, pmap = self._final_bins(bins)
             cats = self._categories()
@@ -399,7 +409,8 @@ class ChromDataWriter:
                             bin_tracks=bin_tracks, binm=dict(binm or {}),
                             intervals=IntervalStore.coerce(intervals or {}), points=dict(points),
                             results=results if results is not None else ResultsStore(), uns=uns,
-                            cell_shapes=dict(cell_shapes))
+                            cell_shapes=dict(cell_shapes),
+                            clusters=dict(clusters if clusters is not None else self._clusters))
                 import os
                 if self.path.exists():
                     old = self.path.parent / f".{self.path.name}.{uuid.uuid4().hex}.old"

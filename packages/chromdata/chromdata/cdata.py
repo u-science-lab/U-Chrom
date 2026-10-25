@@ -59,6 +59,8 @@ Attributes summary
                                               centroids: cells columns +
                                               uns['cell_spatial'] (format 2.3)
                                               (raw / corrected / aligned)
+    clusters    dict[str, ClusterTable]       multi-way contacts: clusters of genomic
+                                              fragments (SPRITE, Pore-C, ChIA-Drop; 2.4)
     results     ResultsStore                  analysis outputs + provenance
                                               (loops, tads, compartments)
     uns         dict                          unstructured metadata
@@ -195,6 +197,7 @@ from .bins import (
     normalise_bins,
     split_spot_tracks,
 )
+from .clusters import ClusterTable
 from .intervals import IntervalStore
 from .results import ResultsStore
 
@@ -290,6 +293,10 @@ class ChromData:
     cell_shapes : dict[str, DataFrame], optional
         Cell outlines: ``cell_id`` + ``geometry`` (WKB bytes), one row per
         cell (see :meth:`set_cell_shapes`); subset with the cells.
+    clusters : dict[str, ClusterTable], optional
+        Multi-way contacts — clusters of genomic fragments observed together
+        (SPRITE, Pore-C, ChIA-Drop; :class:`~chromdata.clusters.ClusterTable`,
+        see :meth:`set_clusters`).  Kept whole when spots are subset.
     results : dict or ResultsStore, optional
         Analysis outputs, stored as a :class:`~chromdata.results.ResultsStore`
         (``cd.results[key]`` returns the value, ``cd.results.record(key)``
@@ -349,6 +356,7 @@ class ChromData:
         uns: Optional[dict] = None,
         points: Optional[Dict[str, pd.DataFrame]] = None,
         cell_shapes: Optional[Dict[str, pd.DataFrame]] = None,
+        clusters: Optional[Dict[str, ClusterTable]] = None,
         linked_adata=None,
         validate: bool = True,
         _own_spots: bool = False,
@@ -368,6 +376,7 @@ class ChromData:
         self.uns = uns if uns is not None else {}
         self.points = {k: v.reset_index(drop=True) for k, v in (points or {}).items()}
         self.cell_shapes = {k: v.reset_index(drop=True) for k, v in (cell_shapes or {}).items()}
+        self.clusters: Dict[str, ClusterTable] = dict(clusters or {})
         self._linked_adata = linked_adata
 
         self._bin_tracks = _empty_frame(self.n_bins, name=BIN_ID)
@@ -1220,6 +1229,43 @@ class ChromData:
         _set_linked_record(self.uns, _cs.SHAPES_FAMILY, key, record)
         return record
 
+    def set_clusters(self, key: str, data, **kwargs) -> ClusterTable:
+        """Store multi-way contacts as ``clusters[key]``.
+
+        ``data`` is a :class:`~chromdata.clusters.ClusterTable` or a frame
+        with one row per fragment (cluster label, ``chrom``, ``start``,
+        ``end`` [, cell id]); a frame goes through
+        :meth:`ClusterTable.from_frame` with ``kwargs`` (``cell=``,
+        ``member_columns=``, …), the chromosome order of :attr:`bins` and,
+        for per-cell data, the cell order of :attr:`cells` (cells absent
+        from it are appended).  Saved as ``clusters/<key>/`` in
+        ``.chromdata.zarr`` / ``.cdz`` (format 2.4); a large table built
+        after the store can be added with
+        :func:`chromdata.clusters.add_clusters`.
+        """
+        if not key or "/" in str(key):
+            raise ValueError(f"clusters key must be non-empty without '/': {key!r}")
+        if isinstance(data, ClusterTable):
+            table = data
+        elif isinstance(data, pd.DataFrame):
+            kw = dict(kwargs)
+            chrom_col = kw.get("chrom", "chrom")
+            if "chroms" not in kw and len(self.bins):
+                known = [str(c) for c in self.bins["chrom"].cat.categories]
+                extra = sorted(set(data[chrom_col].astype(str)) - set(known))
+                kw["chroms"] = known + extra
+            cell_col = kw.get("cell")
+            if cell_col and "cells" not in kw and len(self.cells):
+                known = [str(c) for c in self.cells.index]
+                seen = set(known)
+                extra = sorted({str(c) for c in pd.unique(data[cell_col])} - seen)
+                kw["cells"] = known + extra
+            table = ClusterTable.from_frame(data, **kw)
+        else:
+            raise TypeError(f"clusters need a ClusterTable or a DataFrame, not {type(data).__name__}")
+        self.clusters[str(key)] = table
+        return table
+
     def cell_shapes_geodataframe(self, key: str = "cell"):
         """``cell_shapes[key]`` as a ``geopandas.GeoDataFrame`` indexed by
         ``cell_id`` (needs shapely + geopandas; the record is in
@@ -1603,6 +1649,9 @@ class ChromData:
         for key, df in self.cell_shapes.items():
             if not isinstance(df, pd.DataFrame) or not {"cell_id", "geometry"} <= set(df.columns):
                 raise ValueError(f"cell_shapes['{key}'] must be a DataFrame with cell_id and geometry (WKB)")
+        for key, table in self.clusters.items():
+            if not isinstance(table, ClusterTable):
+                raise TypeError(f"clusters['{key}'] must be a ClusterTable, not {type(table).__name__}")
 
     def _categorify(self):
         for col in _CATEGORICAL_COLUMNS:
@@ -1661,6 +1710,7 @@ class ChromData:
             uns=self.uns,
             points=new_points,
             cell_shapes=new_shapes,
+            clusters=self.clusters,
             linked_adata=None,
             validate=False,
         )
@@ -2740,6 +2790,7 @@ class ChromData:
             uns=deepcopy(self.uns) or None,
             points={k: v.copy() for k, v in self.points.items()} or None,
             cell_shapes={k: v.copy() for k, v in self.cell_shapes.items()} or None,
+            clusters={k: v.copy() for k, v in self.clusters.items()} or None,
             linked_adata=self._linked_adata.copy() if self._linked_adata is not None else None,
             validate=False,
         )
@@ -2792,6 +2843,9 @@ class ChromData:
         if self.cell_shapes:
             sizes = {k: len(v) for k, v in self.cell_shapes.items()}
             parts.append(f"  cell_shapes: {sizes}")
+        if self.clusters:
+            sizes = {k: v.n_clusters for k, v in self.clusters.items()}
+            parts.append(f"  clusters: {sizes}")
         if self.results:
             parts.append(f"  results: {list(self.results.keys())}")
         if self.uns:

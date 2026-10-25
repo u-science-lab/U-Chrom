@@ -136,6 +136,7 @@ a section here in the same PR (see *Adding a new dataset* at the end).
 | `takei2021_brain/`: Takei 2021 Science mouse cortex seqFISH+ tables | 597 MB | fetch `takei2021_brain` | an unpublished benchmark (brain imaging reference) |
 | `tan2021_cortex/`: Tan 2021 Dip-C adult cortex, 510 cells | 13 GB | fetch `tan2021_cortex` | an unpublished benchmark (brain Dip-C baseline) |
 | `tan2018_gm12878/`: Tan 2018 Dip-C GM12878, 17 cells | ~0.7 GB | fetch `tan2018_gm12878` | diploid EMber / NucDynamics validation |
+| `quinodoz2018_sprite/`: Quinodoz 2018 SPRITE mouse ES cells, the authors' clusters | 6.2 GB | fetch `quinodoz2018_sprite` (**Sherlock**) | multi-way contacts of the store (`ChromData.clusters`, format 2.4): uchrom-reproducibility `extended_data_fig1/g_clusters_sprite.py` |
 | `wu2025_scmicroc/`: Wu 2025 scMicro-C GM12878, 12 deepest cells | 3.1 GB (102 GB streamed) | fetch `wu2025_scmicroc` | EMber deep development and test (PREREG §11); Fig. 3a / S8 |
 | `rao2014_imr90/4DNFIR1JDZH7.mcool`: Rao 2014 IMR90, 4DN GRCh38 | 4.6 GB | fetch `rao2014_imr90_4dn` (**Sherlock only**; laptops read it over HTTP) | an unpublished benchmark; an unpublished benchmark (range reads) |
 | `bonev2017_mesc/4DNFIC21MG3U.mcool`: Bonev 2017 mESC Hi-C, 4DN mm10 | 12.6 GB | fetch `bonev2017_mesc_4dn` (**Sherlock only**) | an unpublished benchmark; an unpublished benchmark (range reads); tutorial `sc_structures` and uchrom-reproducibility `supp_table3/sc_structures/` (bulk mESC loops and insulation) |
@@ -430,6 +431,28 @@ datasets (`stevens2017`, `su2020_chr21`, `rao2014_imr90_chr21`) and the atlas (`
   MIT; `data/` at the pinned commit `7f7f1a7`).
 - **Used by**: tutorial `fish_imputation` (the first 5 traces of the 129 allele, the same selection as
   the fixture `mESC_Sox2_5cells_wnan.chromdata.zarr`).
+
+### `quinodoz2018_sprite/`: Quinodoz 2018 SPRITE clusters, mouse ES cells (6.2 GB; fetch `quinodoz2018_sprite`)
+
+- **File**: `quinodoz2018_sprite/GSE114242_mouse_combined_clusters.tar.gz` (md5 `30f9c1e0a64c7dd011a8876319626e94`),
+  a tar of two gzipped cluster files of the authors' pipeline: `mouse.mapq-ge10.clusters.gz` (3.8 GB; reads with
+  MAPQ ≥ 10) and `mouse.mapq-ge30.clusters.gz` (2.7 GB; MAPQ ≥ 30).
+- **Format**: one SPRITE cluster per line, `barcode<TAB>chrom:pos<TAB>chrom:pos…`, one `chrom:pos` per read (the
+  read start as the pipeline writes it: pysam's 0-based `reference_start`, positions 0 occur; mm9).  A barcode is
+  the cluster's tag sequence (`…_DPM6.YbotE63.Odd2Bo82…`).
+- **Content**: multi-way contacts of mouse ES cells (bulk, no cells): clusters of 1 to thousands of reads.
+- **Source**: Quinodoz et al. 2018, *Cell* 174:744 (doi:10.1016/j.cell.2018.05.024), "Higher-order
+  inter-chromosomal hubs shape 3D genome organization in the nucleus"; GEO
+  [GSE114242](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE114242) (public, no restriction on use stated):
+  ```
+  https://ftp.ncbi.nlm.nih.gov/geo/series/GSE114nnn/GSE114242/suppl/GSE114242_mouse_combined_clusters.tar.gz
+  ```
+  The series also has the authors' pairwise maps (`GSE114242_mouse_intra_*.tar.gz`) and the human clusters.
+- **Used by**: uchrom-reproducibility `extended_data_fig1/g_clusters_sprite.py` (Sherlock job
+  `extended_data_fig1/sherlock/clusters.sbatch`): the clusters as a `ClusterTable` (a read at `pos` → the
+  fragment `[pos, pos + 1)`), written to a store and read back (checksum over clusters), store size, region
+  queries in memory, backed and over HTTP; `g_clusters_layout.py` (`sherlock/clusters_layout.sbatch`): the locus
+  index's chunk and codec.  Not downloaded on laptops.
 
 ### `kim2020_scihic/`: Kim 2020 sci-Hi-C, H1 ES + HFF (128 MB + 92 KB; fetch `kim2020_scihic`)
 

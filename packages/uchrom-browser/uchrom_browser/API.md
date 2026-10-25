@@ -402,7 +402,7 @@ tab (`422` for in-memory / CSV datasets, or a URL without a Zarr store).  A nest
 ```json
 {"name": "x.chromdata.zarr", "path": "", "kind": "group", "bytes": 2935369563,
  "container": "zarr",                          // root only: zarr (directory) | cdz (zip) | remote (URL)
- "attrs": {"uchrom": "{\"format_version\":\"2.3\",…}"},   // key → JSON preview (≤160 chars)
+ "attrs": {"uchrom": "{\"format_version\":\"2.4\",…}"},   // key → JSON preview (≤160 chars)
  "children": [
    {"name": "umap", "path": "cellm/umap", "kind": "array", "bytes": 27827,
     "shape": [1799, 2], "dtype": "float64", "chunk_shape": [1799, 2], "n_chunks": 1},

@@ -42,8 +42,9 @@ Every store records two attributes in its root `zarr.json`:
 
 | Attribute | Example |
 |-----------|---------|
-| `uchrom_format_version` | `"2.3"` (`chromdata.zarrcd.ZARR_FORMAT_VERSION`) |
+| `uchrom_format_version` | `"2.4"` (`chromdata.zarrcd.ZARR_FORMAT_VERSION`) |
 | `uchrom_version` | the version of the package that wrote it |
 
 Reading: the same MAJOR is read (a higher MINOR warns; unknown fields are ignored); another MAJOR raises a
-`ValueError` naming the converter.  Formats 2.0–2.2 are read as they are.
+`ValueError` naming the converter.  Formats 2.0–2.3 are read as they are; 2.4 added the optional multi-way
+contacts (`clusters/`), which 2.3 readers ignore.
