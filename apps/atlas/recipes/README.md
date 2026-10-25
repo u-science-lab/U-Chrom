@@ -1571,7 +1571,7 @@ an unpublished benchmark:fetch_igm_demo` downloads it on demand into `$UCHROM_IG
 Used for the IGM protocol of the native engine vs the original IGM
 (an unpublished benchmark, `orig_demo.sbatch`, `compare_demo.sbatch`).
 
-**Derived inputs** (on a cluster, `$WORK/runs/bulk/real/<cell>/`, not stored; recipe
+**Derived inputs** (on a cluster, `$SCRATCH/uchrom/runs/bulk/real/<cell>/`, not stored; recipe
 an unpublished benchmark preprocess`, IGM SI section 6 protocol in
 `uchrom.recon.bulk.deconv.preprocess`): `fine_20kb.npz` (raw 20 kb counts, chr1–22 + X), `igm_200kb.npz`
 (whole genome, 200 kb, 24 contacts per bin), `su_3mb.npz` / `su_1mb.npz` (IMR90 onto 3 Mb / 1 Mb bins
@@ -1616,7 +1616,7 @@ an unpublished benchmark (provenance of the laptop plumbing run:
   an unpublished benchmark and uchrom-reproducibility `extended_data_fig1/cd22_variants.py` (format 2.2);
   an unpublished benchmark (cell positions); uchrom-reproducibility `fig2/cross_assay.py` (per-cell
   distances at short / long separations by cell class, `cluster_class` / `cluster_subclass`; on a compute cluster fetched
-  and built by uchrom-reproducibility `fig2/slurm/liu2025.sbatch` into `$WORK/data/liu2025_mop/`,
+  and built by uchrom-reproducibility `fig2/slurm/liu2025.sbatch` into `$SCRATCH/uchrom/data/liu2025_mop/`,
   2026-10-11, the same 9,582,069 spots / 188,891 traces / 11,045 cells, `from_fofct` 40 s at 12.0 GB).
 
 ### uchrom-reproducibility `supp_table3/arcfish_parity/`: the inputs of the ArcFISH parity check
@@ -1633,7 +1633,7 @@ package on the same FOF-CT tables, written by `inputs.py` from:
   compartment tutorial;
 - `takei2025_fov0` (chr15 averaged into 1-Mb bins per trace), `bintu_imr90`, `su2020_chr21` (first 1,000 traces).
 
-The FOF-CT tables are written to `$WORK/arcfish_parity/inputs/` (not kept in the repository).
+The FOF-CT tables are written to `$SCRATCH/uchrom/arcfish_parity/inputs/` (not kept in the repository).
 
 ### uchrom-reproducibility `supp_fig6/browser/_data/`: scaled copies of Takei 2025 FOV 0 (derived)
 
