@@ -257,6 +257,29 @@ def test_over_http(big_store):
         pd.testing.assert_frame_equal(bt.get_cell("c0"), t.get_cell("c0"))
 
 
+@pytest.mark.parametrize("chunk", [1000, 4096])
+def test_locus_layout_is_read_as_written(tmp_path, chunk):
+    """Another locus chunk size or codec: readers follow the attrs and the array metadata."""
+    import zarr
+
+    t = ClusterTable.from_frame(fragments(n_clusters=8000, seed=11), cluster="barcode", cell="cell")
+    path = tmp_path / "s.chromdata.zarr"
+    example_chromdata().write(path)
+    codec = zarr.codecs.BloscCodec(cname="zstd", clevel=5, shuffle="bitshuffle")
+    add_clusters(path, "x", t, locus_chunk=chunk, locus_compressor=codec)
+    b = ChromData.read(path, backed=True).clusters["x"]
+    assert b._meta["locus_chunk"] == chunk
+    _check_regions(b, t.to_frame(), _windows(seed=4, n=25))
+
+
+def test_search_does_not_cast_the_index():
+    from chromdata.clusters import _search
+
+    s = np.array([5, 5, 9, 4_000_000_000], dtype=np.uint32)
+    assert [_search(s, v, side) for v, side in [(-3, "right"), (5, "right"), (5, "left"), (9, "left"),
+                                                 (2 ** 40, "left"), (4_000_000_000, "right")]] == [0, 2, 0, 2, 4, 4]
+
+
 def test_add_clusters_to_a_store(tmp_path, table):
     cd = example_chromdata()
     path = tmp_path / "s.chromdata.zarr"

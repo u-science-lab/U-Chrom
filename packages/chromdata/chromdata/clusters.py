@@ -31,7 +31,9 @@ import pandas as pd
 PathLike = Union[str, Path]
 
 GROUP = "clusters"
-CHUNK = 1 << 14    # columns per chunk (the unit of a range read); the fence has one start per chunk
+CHUNK = 1 << 14    # columns per chunk of the cluster-order arrays (the unit of a range read)
+LOCUS_CHUNK = 1 << 14   # columns per chunk of a locus index (a window reads whole chunks); its fence has one start
+                        # per chunk, and readers take the value a table was written with (attrs ``locus_chunk``)
 SHARD = 1 << 22    # columns per shard (one object on S3)
 ZSTD_LEVEL = 9
 MEMBER_ROWS = ("chrom", "start", "end")
@@ -51,16 +53,17 @@ def _uint_dtype(*arrays: np.ndarray) -> np.dtype:
     return np.dtype(np.uint32) if hi < 2 ** 32 else np.dtype(np.uint64)
 
 
-def _rows_array(group, name: str, data: np.ndarray) -> None:
-    """A ``(rows, n)`` array chunked ``(rows, CHUNK)`` and sharded: a chunk holds every row of the same
-    columns, each row contiguous (as the contact pixels of :mod:`chromdata.embedded`)."""
+def _rows_array(group, name: str, data: np.ndarray, *, chunk: int = CHUNK, compressor=None) -> None:
+    """A ``(rows, n)`` array chunked ``(rows, chunk)`` and sharded: a chunk holds every row of the same
+    columns, each row contiguous (as the contact pixels of :mod:`chromdata.embedded`).  ``compressor``: a zarr
+    codec (default zstd 9); readers take the codecs from the array's metadata."""
     zarr = _zarr()
     data = np.asarray(data)
     r, n = data.shape
-    ch = max(1, min(CHUNK, n))
-    sh = max(ch, min(SHARD, -(-n // ch) * ch))
+    ch = max(1, min(int(chunk), n))
+    sh = max(ch, min(SHARD - SHARD % ch, -(-n // ch) * ch))
     z = group.create_array(name, shape=(r, n), chunks=(r, ch), shards=(r, sh), dtype=data.dtype,
-                           compressors=zarr.codecs.ZstdCodec(level=ZSTD_LEVEL))
+                           compressors=compressor if compressor is not None else zarr.codecs.ZstdCodec(level=ZSTD_LEVEL))
     if n:
         z[:] = data
 
@@ -535,10 +538,11 @@ class ClusterTable:
             if code not in self._fence:
                 self._fence[code] = np.asarray(g["fence"][:], dtype=np.int64)
             fence = self._fence[code]
+            lc = int(self._meta.get("locus_chunk", self._meta.get("chunk", CHUNK)))
             c0 = max(int(np.searchsorted(fence, lo_value, side="right")) - 1, 0)
             c1 = int(np.searchsorted(fence, hi_value, side="left"))
             n = int(info["n"])
-            a, b = c0 * CHUNK, min(c1 * CHUNK, n)
+            a, b = c0 * lc, min(c1 * lc, n)
             if b <= a:
                 return np.zeros((len(self.locus_rows), 0), np.int64)
             block = np.asarray(g["rows"][:, a:b], dtype=np.int64)
@@ -547,8 +551,8 @@ class ClusterTable:
                 self._locus[code] = self._build_locus(code)
             block = self._locus[code][0]
         s = block[0]
-        i0 = int(np.searchsorted(s, lo_value, side="right"))
-        i1 = int(np.searchsorted(s, hi_value, side="left"))
+        i0 = _search(s, lo_value, "right")
+        i1 = _search(s, hi_value, "left")
         return np.asarray(block[:, i0:i1], dtype=np.int64)
 
     def max_fragment_length(self, chrom: str) -> int:
@@ -604,10 +608,11 @@ class ClusterTable:
     # storage
     # ------------------------------------------------------------------
 
-    def _write(self, parent, node: str, key: str, *, frame_writer: Optional[Callable[[pd.DataFrame, str], None]]
-               ) -> None:
+    def _write(self, parent, node: str, key: str, *, frame_writer: Optional[Callable[[pd.DataFrame, str], None]],
+               locus_chunk: int = LOCUS_CHUNK, locus_compressor=None) -> None:
         """Write this table as the group ``parent/node`` (see spec.md, *Clusters*).  ``frame_writer(df, rel)``
-        writes the per-cluster Parquet table at ``rel`` below the group."""
+        writes the per-cluster Parquet table at ``rel`` below the group; ``locus_chunk`` / ``locus_compressor``
+        set the chunks and codec of the locus index."""
         t = self.to_memory()
         t._validate()
         g = parent.create_group(node)
@@ -632,8 +637,8 @@ class ClusterTable:
                 name = t.chroms[c]
                 rows, lmax = t._build_locus(int(c))
                 sub = lg.create_group(cnodes[name])
-                _rows_array(sub, "rows", rows)
-                _vector(sub, "fence", rows[0, ::CHUNK].astype(np.int64), small=True)
+                _rows_array(sub, "rows", rows, chunk=locus_chunk, compressor=locus_compressor)
+                _vector(sub, "fence", rows[0, ::int(locus_chunk)].astype(np.int64), small=True)
                 locus[name] = {"node": cnodes[name], "n": int(rows.shape[1]), "max_length": int(lmax)}
         ctab = t.cluster_columns
         if ctab is not None and len(ctab.columns):
@@ -643,7 +648,7 @@ class ClusterTable:
         g.attrs.update({"uchrom_clusters": {
             "key": str(key), "kind": t.kind, "chroms": t.chroms, "n_cells": t.n_cells,
             "n_clusters": t.n_clusters, "n_members": t.n_members, "member_rows": list(MEMBER_ROWS),
-            "locus_rows": list(t.locus_rows), "chunk": CHUNK, "locus": locus,
+            "locus_rows": list(t.locus_rows), "chunk": CHUNK, "locus_chunk": int(locus_chunk), "locus": locus,
             "member_columns": {k: mnodes[k] for k in t.member_columns},
             "cluster_columns": CLUSTER_TABLE if ctab is not None and len(ctab.columns) else None,
             "attrs": t.attrs}})
@@ -664,16 +669,26 @@ class ClusterTable:
         if meta.get("cluster_columns") and frame_reader is not None:
             rel = meta["cluster_columns"]
             t._cluster_reader = lambda: frame_reader(rel)
-        if int(meta.get("chunk", CHUNK)) != CHUNK:
-            raise ValueError(f"cluster table written with chunk {meta.get('chunk')}, this reader uses {CHUNK}")
         return t
+
+
+def _search(s: np.ndarray, value: int, side: str) -> int:
+    """``searchsorted`` of an integer in an unsigned array without converting the array (a value out of the
+    dtype's range would make numpy cast the whole array on every query)."""
+    if s.dtype.kind == "u":
+        if value < 0:
+            return 0
+        if value > np.iinfo(s.dtype).max:
+            return len(s)
+        value = s.dtype.type(value)
+    return int(np.searchsorted(s, value, side=side))
 
 
 # ======================================================================
 # store-level helpers
 # ======================================================================
 
-def write_clusters(root, root_path: Path, clusters: Mapping[str, ClusterTable], level: int = 3) -> None:
+def write_clusters(root, root_path: Path, clusters: Mapping[str, ClusterTable], level: int = 3, **layout) -> None:
     """Write ``clusters`` into the store being written (``root``: its zarr group, ``root_path``: its
     directory) as ``clusters/<node>/``, with ``clusters`` attrs ``keys`` = {key: node}."""
     from .zarrcd import _write_frame
@@ -689,7 +704,8 @@ def write_clusters(root, root_path: Path, clusters: Mapping[str, ClusterTable], 
             raise ValueError(f"clusters key must be non-empty without '/': {key!r}")
         node = names[str(key)]
         table._write(grp, node, str(key),
-                     frame_writer=lambda df, rel, node=node: _write_frame(df, root_path / GROUP / node / rel, level))
+                     frame_writer=lambda df, rel, node=node: _write_frame(df, root_path / GROUP / node / rel, level),
+                     **layout)
     grp.attrs.update({"keys": {str(k): names[str(k)] for k in clusters}})
 
 
@@ -704,10 +720,13 @@ def read_clusters(c) -> Dict[str, ClusterTable]:
     return out
 
 
-def add_clusters(store_path: PathLike, key: str, table: ClusterTable, *, overwrite: bool = False) -> None:
+def add_clusters(store_path: PathLike, key: str, table: ClusterTable, *, overwrite: bool = False,
+                 locus_chunk: int = LOCUS_CHUNK, locus_compressor=None) -> None:
     """Add (or with ``overwrite=True`` replace) ``clusters[key]`` in an existing ``.chromdata.zarr`` directory
     without rewriting the rest — for tables built after the store, e.g. from a large cluster file.  The store
-    is marked format 2.4 and its metadata re-consolidated."""
+    is marked format 2.4 and its metadata re-consolidated.  ``locus_chunk`` (columns per chunk: a window reads
+    whole chunks) and ``locus_compressor`` (a zarr codec) set the layout of the locus index; readers follow what
+    was written."""
     import os
     import shutil
     import tempfile
@@ -732,7 +751,8 @@ def add_clusters(store_path: PathLike, key: str, table: ClusterTable, *, overwri
     tmp = Path(tempfile.mkdtemp(prefix=f".{node}.partial-", dir=path / GROUP))
     try:
         tgrp = zarr.open_group(str(tmp), mode="w", zarr_format=3)
-        table._write(tgrp, "t", str(key), frame_writer=lambda df, rel: _write_frame(df, tmp / "t" / rel, 3))
+        table._write(tgrp, "t", str(key), frame_writer=lambda df, rel: _write_frame(df, tmp / "t" / rel, 3),
+                     locus_chunk=locus_chunk, locus_compressor=locus_compressor)
         if final.exists():
             shutil.rmtree(final)
         os.replace(tmp / "t", final)
@@ -749,5 +769,5 @@ def add_clusters(store_path: PathLike, key: str, table: ClusterTable, *, overwri
     _consolidate_root(path)
 
 
-__all__ = ["ClusterTable", "add_clusters", "read_clusters", "write_clusters", "CHUNK", "LOCUS_ROWS",
+__all__ = ["ClusterTable", "add_clusters", "read_clusters", "write_clusters", "CHUNK", "LOCUS_CHUNK", "LOCUS_ROWS",
            "MEMBER_ROWS"]
