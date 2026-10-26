@@ -1265,12 +1265,32 @@ body.resizing-rows {
 .gv-axis {
   flex: none;
 }
+/* the wheel zooms the genome view: its rows scroll with a thin bar that is always there (styled scroll bars are
+   not the overlay kind that hides) */
 .gv-rows {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
+  overflow-y: scroll;
   overflow-x: hidden;
   overscroll-behavior: contain;
+}
+.gv-rows::-webkit-scrollbar {
+  width: 6px;
+}
+.gv-rows::-webkit-scrollbar-track {
+  background: transparent;
+}
+.gv-rows::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+.gv-rows::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+@supports not selector(::-webkit-scrollbar) {
+  .gv-rows {
+    scrollbar-width: thin;
+  }
 }
 .gv-row {
   position: relative;

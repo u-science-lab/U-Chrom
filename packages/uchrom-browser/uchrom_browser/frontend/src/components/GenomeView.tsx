@@ -209,10 +209,7 @@ export function GenomeInspector({ pane }: { pane: Pane }) {
           </li>
         ))}
       </ol>
-      <div className="muted small">
-        Drag a row’s bottom edge in the view to resize it; wheel zooms, drag pans. Rows taller than the view: the wheel scrolls them, ctrl / ⌘ + wheel
-        (or a pinch) zooms, the wheel over the ruler too.
-      </div>
+      <div className="muted small">Drag a row’s bottom edge in the view to resize it; wheel zooms, drag pans, the bar on the right scrolls the rows.</div>
     </section>
   )
 }
@@ -355,7 +352,7 @@ type Describe = (x: number, y: number) => string | null
 /**
  * Combined genome view: matrix triangles (Hi-C / 3-D distance), tracks and
  * intervals stacked on one genomic axis = the shared locus.  Drag pans,
- * wheel zooms (scrolls rows taller than the pane; ctrl / ⌘ + wheel zooms them), every row moves together; a
+ * wheel zooms, every row moves together (rows taller than the pane scroll with the bar on the right); a
  * crosshair follows the mouse.
  */
 export function GenomeView({ pane }: { pane: Pane }) {
@@ -494,9 +491,8 @@ export function GenomeView({ pane }: { pane: Pane }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intervals, ivKey, locus, layout])
 
-  // wheel zoom (non-passive so the page doesn't scroll); not over row tools.  When the rows overflow the pane,
-  // the wheel over them scrolls the stack and zooms with ctrl / ⌘ (a trackpad pinch sends ctrl); over the ruler
-  // it always zooms
+  // wheel zoom (non-passive so the page doesn't scroll); not over row tools.  Rows taller than the pane scroll
+  // with the scroll bar on their right (always shown)
   const currentLocus = useRef<Locus | null>(null)
   currentLocus.current = locus
   const extRef = useRef(ext)
@@ -508,8 +504,6 @@ export function GenomeView({ pane }: { pane: Pane }) {
       const l = currentLocus.current
       const rowsEl = rowsRef.current
       if (!l || !rowsEl || (e.target as HTMLElement).closest('.gv-tools')) return
-      const overflow = rowsEl.scrollHeight > rowsEl.clientHeight + 1
-      if (overflow && rowsEl.contains(e.target as Node) && !e.ctrlKey && !e.metaKey) return // scroll the rows
       e.preventDefault()
       const rect = rowsEl.getBoundingClientRect()
       const center = l.start + ((e.clientX - rect.left) / rowsEl.clientWidth) * (l.end - l.start)
