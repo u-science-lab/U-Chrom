@@ -9,6 +9,7 @@
   <a href="https://uchrom-browser.u-science.org">Web browser (no install)</a> ·
   <a href="https://uchrom-atlas.u-science.org">Data atlas</a> ·
   <a href="tutorials/">Tutorials</a> ·
+  <a href="https://www.biorxiv.org/content/10.64898/2026.10.18.759996v1">Preprint (bioRxiv)</a> ·
   <a href="CONTRIBUTING.md">Contributing</a> ·
   <a href="LICENSE">MIT license</a>
 </p>
@@ -195,6 +196,28 @@ The [contributing guide](docs/source/reference/development.md) has the full tabl
 that are wanted, where code goes, the calling convention, tests and pull requests ([CONTRIBUTING.md](CONTRIBUTING.md)
 is the short version).  Each package runs its own tests: `cd packages/<package> && pytest tests`; the browser front
 end: `npm test` in `packages/uchrom-browser/uchrom_browser/frontend`.
+
+## Citation
+
+If you use U-Chrom, please cite the preprint
+([bioRxiv](https://www.biorxiv.org/content/10.64898/2026.10.18.759996v1)):
+
+> Zhang, L., Chen, Y., Zhong, Q. & Xu, W. U-Chrom: a unified framework for single-cell and spatial 3D genome data.
+> *bioRxiv* (2026). https://doi.org/10.64898/2026.10.18.759996
+
+```bibtex
+@article{zhang2026uchrom,
+  title   = {U-Chrom: a unified framework for single-cell and spatial 3D genome data},
+  author  = {Zhang, Lu and Chen, Yu and Zhong, Quan and Xu, Weize},
+  journal = {bioRxiv},
+  year    = {2026},
+  doi     = {10.64898/2026.10.18.759996},
+  url     = {https://www.biorxiv.org/content/10.64898/2026.10.18.759996v1}
+}
+```
+
+Methods that U-Chrom re-implements or wraps keep their authors' papers: cite those too (each function's docstring
+names its source).
 
 ## License
 
