@@ -15,4 +15,9 @@ SRC="${SPACEA_SRC:-$ROOT/src}"                              # code of others, cl
 SPACEA_COMMIT=c1e1753                                       # YuetongXU/SpaceA-Paper: barcode configs
 SPRITE_COMMIT=5e11a58                                       # GuttmanLab/sprite-pipeline: BarcodeIdentification, scripts
 FTP="https://download.cncb.ac.cn/gsa6/CRA038845"
+# a column of a run (runs.tsv) / of a sample (samples.tsv: one section of a library, told apart by its DPM tag)
 col() { awk -F'\t' -v r="$1" -v c="$2" 'NR==1{for(i=1;i<=NF;i++) h[$i]=i; next} $1==r {print $h[c]}' "$HERE/runs.tsv"; }
+scol() { awk -F'\t' -v r="$1" -v c="$2" 'NR==1{for(i=1;i<=NF;i++) h[$i]=i; next} $1==r {print $h[c]}' "$HERE/samples.tsv"; }
+# the runs of a library; the barcode config of a library (its samples share it)
+lib_runs() { awk -F'\t' -v l="$1" 'NR>1 && $2==l {print $1}' "$HERE/runs.tsv"; }
+lib_config() { awk -F'\t' -v l="$1" 'NR>1 && $2==l {print $3; exit}' "$HERE/samples.tsv"; }

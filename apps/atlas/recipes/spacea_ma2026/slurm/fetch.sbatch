@@ -3,12 +3,16 @@
 #SBATCH --time=2-00:00:00
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=4G
-#SBATCH --output=%x-%j.out
+#SBATCH --output=%x-%A_%a.out
 # Download the fastq of runs from GSA to $RAW/<run>/ and check their md5 (<run>/OK when both pass).  Resumable
-# (wget -c, retried: GSA closes long transfers), in a small job.  Usage: sbatch fetch.sbatch <run> [<run> ...]
+# (wget -c, retried: GSA closes long transfers), in a small job.  Usage: sbatch fetch.sbatch <run> [<run> ...], or
+# an array over runs.tsv without arguments (task i = data row i + 1): sbatch --array=0-16%4 fetch.sbatch
 set -euo pipefail
 source "$SLURM_SUBMIT_DIR/common.sh"
-for RUN in "$@"; do
+RUNS=("$@")
+[ ${#RUNS[@]} -gt 0 ] || RUNS=("$(awk -F'\t' -v i="$((SLURM_ARRAY_TASK_ID + 2))" 'NR==i {print $1}' "$HERE/runs.tsv")")
+for RUN in "${RUNS[@]}"; do
+  [ -n "$RUN" ] || { echo "no run for task ${SLURM_ARRAY_TASK_ID:-}"; exit 2; }
   D="$RAW/$RUN"; mkdir -p "$D"; cd "$D"
   [ -e OK ] && { echo "$RUN already done"; continue; }
   for k in r1 r2; do

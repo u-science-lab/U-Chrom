@@ -1,0 +1,10 @@
+sample	library	config	dpm	ligtag	y
+E13.5C6	C6	config_spaSPRITE_E13.5C6.txt	dpm	oddTop	evenTop
+E11.5L1	L1L2	config_spaSPRITE_E11.5L1&E11.5L2.txt	dpm1	oddBo	evenBo
+E11.5L2	L1L2	config_spaSPRITE_E11.5L1&E11.5L2.txt	dpm2	oddBo	evenBo
+E12.5L5	L5L6	config_spaSPRITE_E12.5L5&E12.5L6.txt	dpm2	oddBo	evenBo
+E12.5L6	L5L6	config_spaSPRITE_E12.5L5&E12.5L6.txt	dpm4	oddBo	evenBo
+E13.5C1	C1C4	config_spaSPRITE_E13.5C1&E13.5C4.txt	dpm3	oddBo	evenBo
+E13.5C4	C1C4	config_spaSPRITE_E13.5C1&E13.5C4.txt	dpm4	oddBo	evenBo
+E14.5F5	F5F6	config_spaSPRITE_E14.5F5&E14.5F6.txt	dpm3	oddBo	evenBo
+E14.5F6	F5F6	config_spaSPRITE_E14.5F5&E14.5F6.txt	dpm4	oddBo	evenBo
