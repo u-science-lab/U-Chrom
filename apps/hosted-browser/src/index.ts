@@ -3,6 +3,9 @@
 // The server keeps each visitor's datasets in memory (a session per cookie), so a visitor must always reach the same
 // instance: the Worker gives every new visitor a session id (cookie), and picks the instance by a hash of it.
 import { Container } from "@cloudflare/containers";
+import { routeHandoffRequest, UChromHandoff, type HandoffEnv } from "./handoff";
+
+export { UChromHandoff };
 
 export class UChromBrowser extends Container {
 	defaultPort = 8000;
@@ -14,7 +17,7 @@ export class UChromBrowser extends Container {
 // of an instance waits up to two minutes instead of answering 503.
 const START_TIMEOUTS = { instanceGetTimeoutMS: 120_000, portReadyTimeoutMS: 120_000, waitInterval: 500 };
 
-interface Env {
+interface Env extends HandoffEnv {
 	UCHROM: DurableObjectNamespace<UChromBrowser>;
 	INSTANCES?: string;
 	// bumped on every deploy: instances are named after it, so a deploy always starts fresh containers on the new image
@@ -50,7 +53,8 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 async function handle(request: Request, env: Env): Promise<Response> {
-	{
+	return routeHandoffRequest(request, env, async (containerRequest) => {
+		request = containerRequest;
 		const n = Math.max(1, parseInt(env.INSTANCES ?? "2", 10) || 1);
 		let sid = sessionOf(request);
 		const fresh = !sid;
@@ -88,5 +92,5 @@ async function handle(request: Request, env: Env): Promise<Response> {
 		const out = new Response(response.body, response);
 		out.headers.append("Set-Cookie", `${COOKIE}=${sid}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=1800`);
 		return out;
-	}
+	});
 }

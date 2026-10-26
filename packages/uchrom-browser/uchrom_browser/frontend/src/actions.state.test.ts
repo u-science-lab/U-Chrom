@@ -10,7 +10,7 @@ vi.mock('./api', async (importOriginal) => {
   return { ...actual, ...groupApi }
 })
 
-import { ACTIONS, TOOLS } from './actions'
+import { ACTIONS, TOOLS, runAction } from './actions'
 import { DEFAULT_VIEW, useStore } from './store'
 import type { DatasetSummary } from './types'
 import { workspaceOf } from './workspace'
@@ -82,6 +82,45 @@ describe('agent action state matches the browser', () => {
     const description = await ACTIONS.describe_workspace({}) as { views: Array<{ type: string; chrom_scope?: string }> }
 
     expect(description.views.filter((view) => view.type === 'stats').map((view) => view.chrom_scope)).toEqual(['locus', 'all'])
+  })
+
+  it('describes every mutable displayed view and pane setting for canonical revisions', async () => {
+    const before = await ACTIONS.describe_workspace({}) as Record<string, any>
+    expect(before.view).toMatchObject({ hiddenChroms: [], overviewColor: 'cell' })
+    expect(before.workspace.panes[0]).toMatchObject({ type: '3d', embeddingKey: null, dims: [0, 1] })
+
+    useStore.getState().setHiddenChroms(['chr15'])
+    useStore.getState().setOverviewColor('field')
+    useStore.getState().setWorkspace((ws) => ({
+      ...ws,
+      panes: ws.panes.map((pane) => ({ ...pane, source: 'distance', scope: { kind: 'all' } })),
+    }))
+
+    const after = await ACTIONS.describe_workspace({}) as Record<string, any>
+    expect(after.view.hiddenChroms).toEqual(['chr15'])
+    expect(after.view.overviewColor).toBe('field')
+    expect(after.workspace.panes[0]).toMatchObject({ source: 'distance', scope: { kind: 'all' } })
+    expect(after).not.toEqual(before)
+  })
+
+  it('blocks direct store mutations while the agent lease is active', () => {
+    useStore.getState().setAgentLease(true)
+    const before = useStore.getState()
+    before.setHiddenChroms(['chr15'])
+    before.setOverviewColor('field')
+    before.setWorkspace((ws) => ({ ...ws, layout: 'tabs' }))
+    const after = useStore.getState()
+    expect(after.views.d1.hiddenChroms).toEqual([])
+    expect(after.views.d1.overviewColor).toBe('cell')
+    expect(after.workspace.layout).toBe(before.workspace.layout)
+    useStore.getState().setAgentLease(false)
+  })
+
+  it('rejects action and WebMCP entry points while the agent lease is active', async () => {
+    useStore.getState().setAgentLease(true)
+    await expect(runAction('arrange', { layout: 'tabs' })).rejects.toThrow(/agent lease active/)
+    expect(useStore.getState().workspace.layout).toBe('grid')
+    useStore.getState().setAgentLease(false)
   })
 
 })

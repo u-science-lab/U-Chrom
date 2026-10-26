@@ -9,6 +9,7 @@ import { isPointPick } from './types'
 import type { Locus } from './genome'
 import { addPinnedPane, addTracePane, defaultWorkspace, dropGroupScope, paneSignature, parseWorkspaces, type DataKind, type WorkspaceState } from './workspace'
 import type { CellField, CellInfo, CellValue, ColorMode, DatasetSummary, Geometry, Layer, LayerFilter, LayerStyle, PickInfo, PointSet } from './types'
+import { agentMutationAllowed } from './mutationGate'
 
 let nextId = 1
 const newId = () => `L${nextId++}`
@@ -138,6 +139,8 @@ export interface AppState {
   pick: PickInfo | null
   status: string | null
   error: string | null
+  /** true while the local agent is applying an approved UI plan */
+  agentLease: boolean
   /** bumped to ask the viewport to refit the camera */
   resetViewToken: number
   /** bumped to ask the viewport to fly to the current focus */
@@ -168,6 +171,7 @@ export interface AppState {
   setPick(pick: PickInfo | null): void
   setStatus(msg: string | null): void
   setError(msg: string | null): void
+  setAgentLease(active: boolean): void
   resetView(): void
   /** views laid out as equal panes (the layout of the active dataset) */
   workspace: WorkspaceState
@@ -267,8 +271,8 @@ export function orderedCells(s: Pick<AppState, 'views' | 'activeDatasetId' | 'ce
 }
 
 /** View state of the active dataset (defaults when none recorded). */
-export function activeView(s: Pick<AppState, 'views' | 'activeDatasetId'>): DatasetView {
-  return (s.activeDatasetId && s.views[s.activeDatasetId]) || DEFAULT_VIEW
+export function activeView(s: Pick<AppState, 'views' | 'activeDatasetId'>, datasetId = s.activeDatasetId): DatasetView {
+  return (datasetId && s.views[datasetId]) || DEFAULT_VIEW
 }
 
 const patchLayer = (layers: Layer[], id: string, patch: Partial<Layer>) =>
@@ -278,7 +282,12 @@ const savedGroups = loadSavedGroups()
 const savedTheme = loadThemeChoice()
 const initialPalette = applyTheme(resolveTheme(savedTheme, systemPrefersDark()))
 
-export const useStore = create<AppState>((set, get) => {
+export const useStore = create<AppState>((rawSet, get) => {
+  const applySet = rawSet as unknown as (partial: any, replace?: boolean) => void
+  const set = (partial: any, replace?: boolean) => {
+    if (get().agentLease && !agentMutationAllowed()) return
+    applySet(partial, replace)
+  }
   const patchView = (patch: Partial<DatasetView>, extra: Partial<AppState> = {}) => {
     const s = get()
     const id = s.activeDatasetId
@@ -293,12 +302,17 @@ export const useStore = create<AppState>((set, get) => {
   pick: null,
   status: null,
   error: null,
+  agentLease: false,
   resetViewToken: 0,
   flyToken: 0,
   views: {},
   cells: {},
   cellValues: {},
   pointSets: {},
+
+  setAgentLease(active) {
+    rawSet({ agentLease: active })
+  },
 
   setDatasets(ds) {
     // Create a root layer for every dataset that doesn't have one yet.

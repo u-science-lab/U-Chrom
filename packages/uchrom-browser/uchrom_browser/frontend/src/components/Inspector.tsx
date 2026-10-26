@@ -15,6 +15,7 @@ import { ScopePicker } from './ScopePicker'
 import { setPaneScope, layerInPane } from '../workspace'
 import { StyleSection } from './PropertiesPanel'
 import { StatsControls } from './StatsView'
+import { AgentPanel } from './AgentPanel'
 
 /** What the active dataset offers, as plain facts for the section helpers. */
 export function useDatasetFacts(): DatasetFacts | null {
@@ -50,6 +51,7 @@ export function Inspector() {
         <span>{paneTitle(ws, pane)}</span>
         <SideClose side="right" />
       </div>
+      <AgentPanel />
       <FocusPanel />
       {sections.has('pin') && (
         <div className="insp-pin">

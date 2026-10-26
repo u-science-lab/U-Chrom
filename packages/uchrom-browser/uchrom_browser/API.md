@@ -585,3 +585,64 @@ The page marks itself active on window focus; `pages` lists connected pages, act
 
 `python -m uchrom_browser` records its URL in `~/.cache/uchrom/browser.json` (removed on
 exit) so that `connect()` finds a server that moved to another port.
+
+## Local agent loop
+
+The local agent API is available only when the server runs without the hosted configuration. It
+keeps page pins, pending plans and state revisions in process memory; it does not add a public or
+hosted control channel. Agent routes accept loopback clients and reject non-loopback `Host` and
+forwarded client/host headers.
+
+### `GET /api/agent/pages`
+
+List connected pages and whether each page is pinned by the local agent session.
+
+### `POST /api/agent/attach`
+
+Body `{"page_id": "<connected-page-id>"}`. Pins an explicit SSE page and returns its initial
+`state_revision` (for example `r_0`). A missing or disconnected page returns `409`.
+
+### `GET /api/agent/snapshot?page=<id>`
+
+Reads `describe_workspace` from the pinned page and adds `page_id`, `state_revision` and
+`source: "page_canonical"`. The returned dataset, selection, locus, panes and Stats scope are
+the page's canonical values, not a pending plan.
+
+### `POST /api/agent/plans`
+
+Body `{"page_id": "<id>", "expected_revision": "r_0", "actions": [{"name": "set_locus", "args": {…}}]}`.
+Actions are validated against `ui_tools.json`. A valid request creates a `pending` plan bound to
+that page and revision. Unknown actions or invalid arguments return `422`; an unpinned page or
+stale revision returns `409`.
+
+### `GET /api/agent/plans/{plan_id}`
+
+Returns the plan status (`pending`, `approved`, `rejected`, `stale`, `applied` or `failed`), its
+requested actions, and, after execution, per-action results plus the canonical readback.
+
+### `POST /api/agent/ui/plans/{plan_id}/approve`, `/reject`, `/apply`, `/undo`
+
+These endpoints are reserved for the local WebUI Agent panel. Apply is accepted only for an approved
+plan whose pinned page still has the expected revision; the server sends each action once through
+the existing SSE broker, records each result, then reads `describe_workspace` again. A mutation
+failure is recorded as `failed` without retrying later actions. The supported user approval path is
+the local browser Agent panel; external agents should propose and poll, and must not call these
+approval or execution endpoints.
+
+Undo is available to the local Agent panel for the latest reversible applied plan and requires the
+matching `page_id` and current `expected_revision` query parameters.
+
+### Repeatable local real-data check
+
+From the repository root, install the local packages and start the browser with the committed
+`sim_cell1.cdz` fixture:
+
+```bash
+uv pip install -e packages/chromdata -e packages/uchrom-browser -e "packages/uchrom[web]"
+python -m uchrom_browser packages/uchrom-browser/tests/fixtures/sim_cell1/sim_cell1.cdz
+```
+
+Claude or Codex uses `uchrom_browser.connect()` and the local Python client/Skills to read a
+canonical snapshot and propose a plan. The WebUI remains the visualization and approval surface;
+there is no hosted Worker, network dependency, Chrome automation, or agent-side apply bypass in
+this loop. The offline regression is `cd packages/uchrom-browser && pytest tests/test_agent_e2e.py -q`.

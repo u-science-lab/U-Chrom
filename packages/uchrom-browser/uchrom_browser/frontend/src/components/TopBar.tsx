@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { THEME_CHOICES } from '../theme'
 import { Popover } from './Popover'
+import { HostedHandoff } from './HostedHandoff'
 import { DatasetSwitcher } from './DatasetSwitcher'
 
 export function TopBar() {
@@ -11,6 +12,7 @@ export function TopBar() {
         <img className="brand-logo" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="U-Chrom Browser" height={30} />
       </div>
       <DatasetSwitcher />
+      <HostedHandoff />
       <SidebarToggles />
       <ThemeMenu />
     </header>

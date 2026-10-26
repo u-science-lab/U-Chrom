@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uchrom-agent"
+version = "0.1.0"
+description = "Local stdio MCP companion for the U-Chrom browser"
+requires-python = ">= 3.11"
+dependencies = ["uchrom-browser>=0.1.0"]
+
+[project.scripts]
+uchrom-agent = "uchrom_agent.__main__:_cli"
+
+[tool.setuptools]
+packages = ["uchrom_agent"]
+
+[tool.uv.sources]
+uchrom-browser = { path = "../uchrom-browser", editable = true }

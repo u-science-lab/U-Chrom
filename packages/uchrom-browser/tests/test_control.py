@@ -52,15 +52,17 @@ class FakePage(threading.Thread):
         self.base, self.handler, self.page = base, handler, page
         self.seen = []
         self.ready = threading.Event()
+        self.token = ""
 
     def run(self):
-        with requests.get(f"{self.base}/api/control/events", params={"page": self.page}, stream=True,
-                          timeout=30) as r:
+        with requests.get(f"{self.base}/api/control/events", params={"page": self.page},
+                          headers={"Origin": self.base}, stream=True, timeout=30) as r:
             event = None
             for line in r.iter_lines(decode_unicode=True):
                 if line.startswith("event: "):
                     event = line[7:]
                 elif line.startswith("data: ") and event == "hello":
+                    self.token = json.loads(line[6:]).get("token", "")
                     self.ready.set()
                 elif line.startswith("data: ") and event == "action":
                     msg = json.loads(line[6:])
@@ -69,7 +71,8 @@ class FakePage(threading.Thread):
                         body = {"ok": True, "result": self.handler(msg["name"], msg["args"])}
                     except Exception as exc:  # noqa: BLE001
                         body = {"ok": False, "error": str(exc)}
-                    requests.post(f"{self.base}/api/control/results/{msg['id']}", json=body, timeout=5)
+                    requests.post(f"{self.base}/api/control/results/{msg['id']}", json=body,
+                                   headers={"Origin": self.base, "X-UChrom-Page-Token": self.token}, timeout=5)
 
 
 def test_tools_file_is_valid():
@@ -169,3 +172,63 @@ def test_capture_formats_through_a_page(server, tmp_path):
 def test_capture_tool_declares_formats():
     tool = next(t for t in load_tools()["tools"] if t["name"] == "capture_view")
     assert tool["inputSchema"]["properties"]["format"]["enum"] == ["png", "svg", "pdf"]
+
+
+def test_workspace_agent_snapshot_and_propose(server):
+    state = {"dataset": {"id": "d1"}, "views": [], "locus": None}
+    page = FakePage(server, lambda name, args: state if name == "describe_workspace" else {"ok": True})
+    page.start()
+    assert page.ready.wait(5)
+    ws = ubc.connect(server, timeout=5)
+    calls = []
+    request = ws._request
+
+    def recorded(method, path, body=None, timeout=None):
+        calls.append((method, path, body))
+        return request(method, path, body, timeout)
+
+    ws._request = recorded
+    ws._request("POST", "/api/agent/attach", {"page_id": "ptest"})
+    calls.clear()
+    snapshot = ws.agent_snapshot(page="ptest")
+    assert snapshot["page_id"] == "ptest"
+    plan = ws.propose_ui_changes(
+        [{"name": "arrange", "args": {"layout": "tabs"}}],
+        page="ptest",
+        expected_revision=snapshot["state_revision"],
+    )
+    assert plan["page_id"] == "ptest"
+    assert calls[-2][0:2] == ("GET", "/api/agent/snapshot?page=ptest")
+    assert calls[-1] == (
+        "POST",
+        "/api/agent/plans",
+        {"page_id": "ptest", "expected_revision": "r_0", "actions": [{"name": "arrange", "args": {"layout": "tabs"}}]},
+    )
+
+
+def test_workspace_does_not_propose_without_page(server):
+    ws = ubc.connect(server, timeout=2)
+    with pytest.raises(ubc.BrowserError, match="page"):
+        ws.propose_ui_changes([], page=None, expected_revision="r_0")
+
+
+def test_workspace_agent_snapshot_requires_explicit_page_and_exposes_no_apply_wrappers(server):
+    ws = ubc.connect(server, timeout=2)
+    with pytest.raises(ubc.BrowserError, match="explicit page"):
+        ws.agent_snapshot()
+    assert not hasattr(ws, "approve_plan")
+    assert not hasattr(ws, "reject_plan")
+    assert not hasattr(ws, "apply_plan")
+
+
+def test_control_mutation_rejects_direct_localhost_post_without_session(server):
+    r = requests.post(server + "/api/control/actions", json={"name": "describe_workspace", "args": {}})
+    assert r.status_code == 401
+
+
+def test_control_action_rejects_reserved_agent_mutation_flag(server):
+    proof = requests.get(server + "/api/control/session").json()
+    r = requests.post(server + "/api/control/actions", json={
+        "name": "describe_workspace", "args": {"__agent_mutation__": True},
+    }, headers={"Authorization": f"Bearer {proof['token']}"})
+    assert r.status_code == 422
